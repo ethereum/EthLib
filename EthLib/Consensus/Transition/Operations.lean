@@ -127,21 +127,44 @@ def checkInclusionDeadline (state : BeaconState preset fork) (slot : Slot) :
 
 /-- From Electra: the total size of some committees of a slot, each with an attester.
 
+The committees are cut from the given active validators and shuffle.
+
+Each index must be below `count`, and each committee is cut with `perSlot` committees per slot. -/
+def attestationCommitteesSizeOf (preset : Preset) (slot : Slot) (bits : Array Bool)
+    (count perSlot : UInt64) (active : Array ValidatorIndex) (shuffled : Array UInt64) :
+    List CommitteeIndex → Nat → Except TransitionError Nat
+  | [], offset => pure offset
+  | index :: rest, offset => do
+    ensure (index < count) (.committeeIndexOutOfRange index count)
+    let committee ← liftAccessor (beaconCommitteeOf preset slot index perSlot active shuffled)
+    let attesters ← liftAccessor (committeeAttesters bits offset committee)
+    ensure (attesters ≠ []) (.noCommitteeAttester index)
+    attestationCommitteesSizeOf preset slot bits count perSlot active shuffled rest
+      (offset + committee.size)
+
+/-- From Electra: the total size of some committees of a slot, each with an attester.
+
 Each committee must be one of the slot, and must have a bit set for at least one member.
 
 The bits of each committee follow those of the committees before it.
 
-The bits must reach past each committee, else the attestation is invalid. -/
+The bits must reach past each committee, else the attestation is invalid.
+
+The committees share one shuffle of the active validators, computed once for the list.
+
+A list that names no committee computes no shuffle. -/
 def attestationCommitteesSize (state : BeaconState preset fork) (data : AttestationData)
     (bits : Array Bool) : List CommitteeIndex → Nat → Except TransitionError Nat
   | [], offset => pure offset
   | index :: rest, offset => do
     let count := getCommitteeCountPerSlot state data.target.epoch
+    -- A first index out of range fails here, before the shuffle is computed.
     ensure (index < count) (.committeeIndexOutOfRange index count)
-    let committee ← liftAccessor (getBeaconCommittee state data.slot index)
-    let attesters ← liftAccessor (committeeAttesters bits offset committee)
-    ensure (attesters ≠ []) (.noCommitteeAttester index)
-    attestationCommitteesSize state data bits rest (offset + committee.size)
+    let epoch := computeEpochAtSlot preset data.slot
+    let (active, shuffled) ← liftAccessor (attesterShuffle state epoch)
+    -- The walk checks the first index again, and that check never fails.
+    attestationCommitteesSizeOf preset data.slot bits count (getCommitteeCountPerSlot state epoch)
+      active shuffled (index :: rest) offset
 
 /-- The check that an attestation has one bit for each member of its committees.
 

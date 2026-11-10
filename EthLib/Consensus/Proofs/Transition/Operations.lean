@@ -14,6 +14,8 @@ An attestation is included in its window, with the justified source of its targe
 
 It then joins the pending attestations of its target epoch, and nothing else changes.
 
+From Electra, the committees of an attestation, cut from one shuffle, are checked each in turn.
+
 A deposit lies in the deposit tree, and moves the next deposit index on by one.
 
 A deposit to a known key adds its amount to the sum of the balances.
@@ -232,6 +234,61 @@ theorem checkInclusionDeadline_of_dencun {slot : Slot} (dencun : .dencun ≤ for
   have notBefore : ¬fork < .dencun := Nat.not_lt.mpr dencun
   simp only [checkInclusionDeadline, notBefore, ↓reduceIte]
   rfl
+
+/-- From Electra: with a shuffle that has a value, the committees are checked on that shuffle.
+
+Each index is checked against the count of committees per slot of the target epoch.
+
+Each committee is cut with that count for the epoch of the slot. -/
+theorem attestationCommitteesSize_of_attesterShuffle {data : AttestationData}
+    {active : Array ValidatorIndex} {shuffled : Array UInt64}
+    (shuffleOk :
+      attesterShuffle state (computeEpochAtSlot preset data.slot) = .ok (active, shuffled))
+    (bits : Array Bool) (committees : List CommitteeIndex) (offset : Nat) :
+    attestationCommitteesSize state data bits committees offset =
+      attestationCommitteesSizeOf preset data.slot bits
+        (getCommitteeCountPerSlot state data.target.epoch)
+        (getCommitteeCountPerSlot state (computeEpochAtSlot preset data.slot)) active shuffled
+        committees offset := by
+  cases committees with
+  | nil => rfl
+  | cons index rest =>
+    simp only [attestationCommitteesSize, attestationCommitteesSizeOf, shuffleOk, liftAccessor,
+      Except.mapError, bind, Except.bind]
+    -- The left side checks the first index twice, and a check that passed passes again.
+    cases ensure (index < getCommitteeCountPerSlot state data.target.epoch)
+      (TransitionError.committeeIndexOutOfRange index
+        (getCommitteeCountPerSlot state data.target.epoch)) <;> rfl
+
+/-- From Electra: the total size of no committee is the offset that it starts from. -/
+theorem attestationCommitteesSize_nil (data : AttestationData) (bits : Array Bool)
+    (offset : Nat) : attestationCommitteesSize state data bits [] offset = .ok offset :=
+  rfl
+
+/-- From Electra: the total size of a list of committees adds the first committee, then the rest.
+
+The committees share one shuffle, and the first committee alone passes the same checks.
+
+The two sides fail with the same error too. -/
+theorem attestationCommitteesSize_cons (data : AttestationData) (bits : Array Bool)
+    (index : CommitteeIndex) (rest : List CommitteeIndex) (offset : Nat) :
+    attestationCommitteesSize state data bits (index :: rest) offset = (do
+      let count := getCommitteeCountPerSlot state data.target.epoch
+      ensure (index < count) (.committeeIndexOutOfRange index count)
+      let committee ← liftAccessor (getBeaconCommittee state data.slot index)
+      let attesters ← liftAccessor (committeeAttesters bits offset committee)
+      ensure (attesters ≠ []) (.noCommitteeAttester index)
+      attestationCommitteesSize state data bits rest (offset + committee.size)) := by
+  rw [getBeaconCommittee_eq]
+  -- A committee reads the shuffle after its index is checked, so both sides fail in one order.
+  cases shuffleOk : attesterShuffle state (computeEpochAtSlot preset data.slot) with
+  | error e =>
+    simp only [attestationCommitteesSize, shuffleOk, liftAccessor, Except.mapError, bind,
+      Except.bind]
+  | ok pair =>
+    obtain ⟨active, shuffled⟩ := pair
+    simp only [attestationCommitteesSize_of_attesterShuffle shuffleOk,
+      attestationCommitteesSizeOf, liftAccessor, Except.mapError, bind, Except.bind]
 
 /-- From Gloas, weighing the payment of a block changes only the pending payments of builders. -/
 theorem recordPaymentWeight_eq {gloas : .glamsterdam ≤ fork} {data : AttestationData}
