@@ -1402,6 +1402,31 @@ So `bls12MapFpToG1_isOk_iff` and `bls12MapFp2ToG2_isOk_iff` (`Map.lean`) prove t
 
 No theorem relates the module to the execution-specs code it follows.
 
+### A transaction whose message fails
+
+`Execution/Proofs/Transactions/Failed.lean` states what a transaction leaves when its message fails, before Hegotá.
+Its first theorems bound the writes to the sender, the beneficiary and the authorities that the authorization signatures name.
+
+`buyGas_sender` in `Settlement.lean` proves that buying gas raises the nonce of the sender by one and takes the fees from its balance.
+`buyGas_keeps` proves that it changes no code hash of the sender, no word of storage and no code.
+`settleGas_accounts` proves that the settlement refunds the sender and pays the priority fee to the beneficiary.
+It changes no nonce, code hash or code.
+Storage stays at the sender when its nonce is not 0, and at the beneficiary unless it is deleted.
+
+`authority_applyAuthorization` proves that one accepted authorization in scope sets the code hash of its authority to that of the delegation code, and raises its nonce by one.
+The authorities after the whole list are given against the state that the authorizations leave; the fold over the list is not unrolled.
+`processMessageCall_of_halt` in `Process.lean` puts the state back to the state before the authorizations when the message halts before its first frame, as EIP-8037 asks.
+`processMessageCall_reads_of_error` proves that a failed frame reads as the state of its first frame, so a failed call keeps its accepted authorizations, as EIP-7702 asks.
+
+`runTransaction_values_of_error` combines these results for one gas meter.
+It names the output of the message call.
+It gives the nonce, the code hash and the balance of every address against the state before settlement.
+It gives the storage of every address but a deleted beneficiary, and of the sender while its nonce is not 0.
+That state reads as the state after the gas purchase when the transaction creates a contract or its first frame never starts.
+When the first frame of a call starts and fails, it reads as the state that the authorizations leave.
+`processTransaction_values_of_error` gives the same conclusion for every fork before Hegotá, with the gas meter of that fork.
+`block_of_output` proves that the block after the transaction reads as the state that the transaction leaves.
+
 ### Transaction gas
 
 Four theorems in `Execution/Proofs/Transactions/Process.lean` give the gas used and the block gas of a transaction that runs, before Hegotá.
@@ -2227,12 +2252,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 360 operations and 49 size constants.
-The Python extension calls 360 of the operations and 49 of the constants.
+Lean exports 363 operations and 49 size constants.
+The Python extension calls 363 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-9591 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (1678), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (303), `engine.c` (77), `enr.c` (177), `eth.c` (225), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (54), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (102), `module.c` (1364), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (102), `vrf.c` (141), `wrappers.h` (641), `x25519.c` (21), `xmss.c` (134).
+9629 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (1707), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (303), `engine.c` (77), `enr.c` (177), `eth.c` (225), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (54), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (102), `module.c` (1370), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (102), `vrf.c` (141), `wrappers.h` (644), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.
