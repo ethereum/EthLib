@@ -14,6 +14,10 @@ So each account appears once, and no key of an account is both read and written.
 A write that leaves a value as its position found it records no change at that position.
 
 It keeps the changes of the other positions.
+
+A write that changes a value records it at the current position.
+
+It keeps every other account and key.
 -/
 
 @[expose] public section
@@ -176,7 +180,9 @@ theorem setField_other {α β : Type} (b : AccessListBuilder) (address other : A
       Std.ExtTreeMap.getD_eq_getD_getElem?, h, h', hget, hempty] <;>
     first | (rintro rfl; simp_all) | (split <;> simp_all)
 
-/-- A change of a record that keeps a field keeps each value of that field. -/
+/-- A change of a record that keeps a field keeps each value of that field.
+
+The empty record must have no value of that field, for an account that is new. -/
 theorem record_at_of_get {β : Type} (b : AccessListBuilder) (address other : Address)
     (f : AccountRecord → AccountRecord) (get : AccountRecord → Std.ExtTreeMap UInt32 β)
     (hget : ∀ r, get (f r) = get r) (hempty : get {} = ∅) (index : UInt32) :
@@ -315,7 +321,11 @@ theorem recordAccountWrite_slot {b b' : AccessListBuilder} {tx : State.Transacti
         (hempty := rfl),
       record_id_at (get := fun r => r.storageChanges.getD key ∅) (hempty := rfl)]
 
-/-- An account write records its nonce at the current position when the nonce changed. -/
+/-- An account write records its nonce at the current position when the nonce changed.
+
+A write that leaves it as the position found it leaves no change there.
+
+Every other position keeps its change. -/
 theorem recordAccountWrite_nonce_at {b b' : AccessListBuilder} {tx : State.TransactionState}
     {address : Address} {written : Option State.Account}
     (h : b.recordAccountWrite tx address written = .ok b') (index : UInt32) :
@@ -338,7 +348,11 @@ theorem recordAccountWrite_nonce_at {b b' : AccessListBuilder} {tx : State.Trans
     simp only [decide_eq_true_eq]
     rfl
 
-/-- An account write records its code at the current position when the code hash changed. -/
+/-- An account write records its code at the current position when the code hash changed.
+
+A write that leaves it as the position found it leaves no change there.
+
+Every other position keeps its change. -/
 theorem recordAccountWrite_code_at {b b' : AccessListBuilder} {tx : State.TransactionState}
     {address : Address} {written : Option State.Account}
     (h : b.recordAccountWrite tx address written = .ok b') (index : UInt32) :
@@ -469,7 +483,9 @@ theorem bind_storageChanges_getD (x : Option AccountRecord) (key : Bytes32) (j :
   | none => rfl
   | some r => cases h : r.storageChanges[key]? <;> simp [Std.ExtTreeMap.getD_eq_getD_getElem?, h]
 
-/-- A storage write records its value at its own key and position, and keeps every other. -/
+/-- A storage write records its value at its key and position, when the start differs.
+
+It keeps every other change. -/
 theorem recordStorageWrite_slot (b : AccessListBuilder) (address : Address)
     (key : Bytes32) (value : U256) (other : Address) (k : Bytes32) (j : UInt32) :
     ((b.recordStorageWrite address key value).accounts[other]?.bind

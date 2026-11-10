@@ -6,31 +6,22 @@ public import EthLib.Execution.Proofs.State.Tracker
 /-!
 # Proofs: the builder follows the last value of each field
 
-The builder of a block access list records a change of a field at the position that made it.
-
 A field is the balance, the nonce or the code of an account, or a word of its storage.
 
-This file shows that the change at the greatest position holds the present value of the field.
+The last change of each field in a built list, or its value before the body, is its present value.
 
-A field with no change still holds its value from before the body.
+This holds for every call that meets three conditions, which the builder cannot check itself.
 
-Three facts about a call make this hold when the call joins the body.
+The list keeps code, not code hashes, so the code hash is the Keccak-256 hash of the last code.
 
-The call ran on the block state of the body.
+The list keeps a nonce in 64 bits, so the nonce is compared in 64 bits.
 
-A key that the call did not write keeps its word, so the call wipes no word that the list misses.
-
-The code that the call reads for an account it wrote has the code hash of that account.
-
-The list keeps the code of each change, so it gives the code hash by its Keccak-256 hash.
-
-It keeps a nonce in 64 bits, as EIP-2681 bounds it.
-
-The list holds the changes of each field sorted by position, so the last one is the present value.
+A nonce is below 2^64 by [EIP-2681][eip2681], so this loses nothing.
 
 Source: [EIP-7928, Recording Semantics by Change Type][eip7928].
 
 [eip7928]: https://eips.ethereum.org/EIPS/eip-7928#recording-semantics-by-change-type
+[eip2681]: https://eips.ethereum.org/EIPS/eip-2681#specification
 -/
 
 @[expose] public section
@@ -94,7 +85,7 @@ EthLib wipes that storage, since it does not apply [EIP-7610][eip7610].
 
 The code that the call reads for an account it wrote has the code hash of that account.
 
-The builder reads only a code that changed, but a code map keyed by hash gives every one.
+A code map is a plain map, so nothing else ties the code that it gives to its hash.
 
 [eip7610]: https://eips.ethereum.org/EIPS/eip-7610#specification -/
 structure Followable (block : BlockState) (tx : TransactionState) : Prop where
@@ -134,7 +125,7 @@ def slotChanges (b : AccessListBuilder) (address : Address) (key : Bytes32) :
     Std.ExtTreeMap UInt32 U256 :=
   (b.accounts[address]?.bind (·.storageChanges[key]?)).getD ∅
 
-/-- The changes `changes` of a field follow it, read through `view`, up to the position `index`.
+/-- The changes of a field follow it, read through `view`, up to the position `index`.
 
 The field is `base` before the body, `start` when the position began, and `now` at present.
 
@@ -142,7 +133,7 @@ No change is past the position.
 
 The last change before the position, or `base`, is `start`.
 
-The position holds a change when the field differs from `start`, and the change is `now`. -/
+The position holds a change exactly when the field differs from `start`, and it is `now`. -/
 structure FieldTracks {α β : Type} (view : α → β) (changes : Std.ExtTreeMap UInt32 α)
     (index : UInt32) (base start now : β) : Prop where
   /-- No change is past the position. -/
@@ -167,7 +158,9 @@ private theorem erase_eq_self_of_getElem? {α : Type} {changes : Std.ExtTreeMap 
     exact h.symm
   · rfl
 
-/-- The last change of a field that the builder follows, or its value before the body, is now. -/
+/-- A field that the builder follows has its present value as its last change.
+
+With no change, its value before the body is its present value. -/
 theorem FieldTracks.lastOr_eq {α β : Type} {view : α → β} {changes : Std.ExtTreeMap UInt32 α}
     {index : UInt32} {base start now : β}
     (h : FieldTracks view changes index base start now) : lastOr view changes base = now := by
@@ -202,7 +195,7 @@ theorem FieldTracks.lastOr_eq {α β : Type} {view : α → β} {changes : Std.E
     cases hmem
     simpa [lastOr, hlast] using hview
 
-/-- A field with no change follows itself at any position. -/
+/-- No changes follow a field that kept one value, at any position. -/
 private theorem FieldTracks.empty {α β : Type} (view : α → β) (index : UInt32) (value : β) :
     FieldTracks view ∅ index value value value :=
   ⟨fun _ h => absurd h Std.ExtTreeMap.not_mem_empty,

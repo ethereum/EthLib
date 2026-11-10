@@ -25,7 +25,7 @@ Lean core proves no such facts for `Except`, and every layer needs them.
 - A failed map fails on some input, and succeeds on every input before it.
 - A property that each step keeps holds after a successful fold.
 - A successful fold reads only inputs that its steps accept.
-- A fold over distinct keys, whose steps each change only their own key, sets each key once.
+- A fold over distinct keys changes the view of a key only in the step of that key.
 - A fold of steps that each succeed with a pure step is the pure fold.
 - A fold whose steps all succeed returns no error.
 - A fold that appends each output returns its start, then the outputs of the map, flattened.
@@ -398,7 +398,7 @@ theorem foldlM_ok_steps {g : β → α → Except ε β} (R : β → β → Prop
 
 /-- A successful fold over inputs with distinct keys changes a view only at the key `k`.
 
-Each step keeps an invariant, and changes the view only when its input has the key `k`.
+Suppose each step keeps an invariant, and changes the view only when its input has the key `k`.
 
 Then the end keeps the invariant.
 
