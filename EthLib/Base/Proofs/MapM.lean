@@ -30,6 +30,10 @@ Lean core proves no such facts for `Except`, and every layer needs them.
 - A fold that appends each output returns its start, then the outputs of the map, flattened.
 
 A mapped error leaves a success unchanged.
+
+A map in `Option` that succeeds has one output per input, each the image of its input.
+
+It succeeds exactly when the function succeeds on every input.
 -/
 
 @[expose] public section
@@ -500,5 +504,43 @@ theorem filterMapM_ok_of_mem {α β ε : Type} {f : α → Except ε (Option β)
       simp only [bind_ok_iff] at mapped
       obtain ⟨_, tailOk, -⟩ := mapped
       exact filterMapM_ok_of_mem tailOk x' member
+
+/-! ## Maps in `Option` -/
+
+/-- A map in `Option` that succeeds has one output for each input. -/
+theorem mapM_some_length {α β : Type} {g : α → Option β} :
+    ∀ {xs : List α} {ys : List β}, xs.mapM g = some ys → ys.length = xs.length
+  | [], ys, h => by simp at h; subst h; simp
+  | x :: xs, ys, h => by
+    simp only [List.mapM_cons, bind, Option.bind, pure] at h
+    cases hx : g x <;> simp only [hx] at h
+    · cases h
+    · cases hr : xs.mapM g <;> simp only [hr, Option.some.injEq] at h
+      · cases h
+      · subst h; simp [mapM_some_length hr]
+
+/-- Output `i` of a map in `Option` that succeeds is the image of input `i`. -/
+theorem mapM_some_getElem? {α β : Type} {g : α → Option β} :
+    ∀ {xs : List α} {ys : List β}, xs.mapM g = some ys → ∀ i : Nat, ys[i]? = xs[i]?.bind g
+  | [], ys, h, i => by simp at h; subst h; simp
+  | x :: xs, ys, h, i => by
+    simp only [List.mapM_cons, bind, Option.bind, pure] at h
+    cases hx : g x <;> simp only [hx] at h
+    · cases h
+    · cases hr : xs.mapM g <;> simp only [hr, Option.some.injEq] at h
+      · cases h
+      · subst h
+        cases i with
+        | zero => simp [hx]
+        | succ i => simpa using mapM_some_getElem? hr i
+
+/-- A map in `Option` succeeds exactly when the function succeeds on every input. -/
+theorem isSome_mapM_iff {α β : Type} {g : α → Option β} :
+    ∀ {xs : List α}, (xs.mapM g).isSome ↔ ∀ x ∈ xs, (g x).isSome
+  | [] => by simp
+  | x :: xs => by
+    have ih := isSome_mapM_iff (g := g) (xs := xs)
+    simp only [List.mapM_cons, bind, Option.bind, pure, List.mem_cons, forall_eq_or_imp]
+    cases hx : g x <;> cases hr : xs.mapM g <;> simp_all
 
 end EthLib.Base

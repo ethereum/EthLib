@@ -9092,7 +9092,8 @@
      "codes":
      [{"constructor": "invalidParams", "code": 32602},
       {"constructor": "unsupportedFork", "code": 38005},
-      {"constructor": "invalidForkchoiceState", "code": 38002}]}],
+      {"constructor": "invalidForkchoiceState", "code": 38002},
+      {"constructor": "tooLargeRequest", "code": 38004}]}],
    "error_class": "EngineError",
    "docstring":
    "The payload status of an `engine_newPayload` request, without the parent's state.\n\nThe arguments are the chain configuration and the request."},
@@ -9135,7 +9136,8 @@
      "codes":
      [{"constructor": "invalidParams", "code": 32602},
       {"constructor": "unsupportedFork", "code": 38005},
-      {"constructor": "invalidForkchoiceState", "code": 38002}]}],
+      {"constructor": "invalidForkchoiceState", "code": 38002},
+      {"constructor": "tooLargeRequest", "code": 38004}]}],
    "error_class": "EngineError",
    "docstring":
    "The payload status of an `engine_newPayload` request, on a chain that holds the parent.\n\nThe arguments are the chain configuration, the state, the recent blocks and the request.\n\nA valid payload also gives the RLP forms of its header and of the accounts after it.\n\nOtherwise both are `None`."},
@@ -9149,10 +9151,26 @@
      "codes":
      [{"constructor": "invalidParams", "code": 32602},
       {"constructor": "unsupportedFork", "code": 38005},
-      {"constructor": "invalidForkchoiceState", "code": 38002}]}],
+      {"constructor": "invalidForkchoiceState", "code": 38002},
+      {"constructor": "tooLargeRequest", "code": 38004}]}],
    "error_class": "EngineError",
    "docstring":
    "The response to an `engine_forkchoiceUpdated` request, against a tree of payloads.\n\nThe arguments are the tree, the finalized block that the execution layer knows, and the request."},
+  {"summary": "The answer to an `engine_getBlobs` request, from a blob pool.",
+   "signature":
+   "(pool: list[tuple[bytes, bytes | None, bytes | None, list[tuple[bytes, bytes] | None] | None]], serving: bool, max_request: int, fork: str, request: dict) -> list | None",
+   "operation": "EthLib.Engine.Exports.getBlobsExport",
+   "method": "engine_get_blobs",
+   "errors":
+   [{"type": "EthLib.Engine.EngineError",
+     "codes":
+     [{"constructor": "invalidParams", "code": 32602},
+      {"constructor": "unsupportedFork", "code": 38005},
+      {"constructor": "invalidForkchoiceState", "code": 38002},
+      {"constructor": "tooLargeRequest", "code": 38004}]}],
+   "error_class": "EngineError",
+   "docstring":
+   "The answer to an `engine_getBlobs` request, from a blob pool.\n\nThe arguments are the pool's entries, whether it serves, its limit, the fork and the request.\n\nEach entry is the versioned hash, the blob, the blob proof and the 128 cells with their proofs.\n\nAny of the last three may be `None`, and so may each cell."},
   {"summary":
    "From Bellatrix to Fulu: the forkchoice update of a proposer, as the value of its JSON.",
    "signature":

@@ -1215,6 +1215,11 @@ def bindings : List Binding := [
   ⟨"engine_forkchoice_updated", `EthLib.Engine.Exports.forkchoiceUpdatedExport,
     "(tree: list, finalized: str | None, request: dict) -> dict",
     [`EthLib.Engine.EngineError], some "EngineError"⟩,
+  ⟨"engine_get_blobs", `EthLib.Engine.Exports.getBlobsExport,
+    "(pool: list[tuple[bytes, bytes | None, bytes | None, " ++
+      "list[tuple[bytes, bytes] | None] | None]], serving: bool, max_request: int, " ++
+      "fork: str, request: dict) -> list | None",
+    [`EthLib.Engine.EngineError], some "EngineError"⟩,
   ⟨"engine_prepare_execution_payload", `EthLib.Engine.Exports.prepareExecutionPayloadExport,
     "(name: str, fork: str, state: bytes, config: dict | None, safe_block_hash: bytes, " ++
       "finalized_block_hash: bytes, suggested_fee_recipient: bytes, pow_chain: list[bytes]) " ++

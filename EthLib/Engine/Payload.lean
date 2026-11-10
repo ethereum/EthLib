@@ -142,6 +142,8 @@ inductive EngineError where
   | unsupportedFork
   /-- The safe or the finalized block is not on the chain of the head. -/
   | invalidForkchoiceState
+  /-- The request names more items than the execution layer takes in one request. -/
+  | tooLargeRequest
   deriving DecidableEq, Repr
 
 /-- The code of an error: its JSON-RPC code is the negative of this number. -/
@@ -149,6 +151,7 @@ def EngineError.code : EngineError → UInt32
   | .invalidParams _ => 32602
   | .unsupportedFork => 38005
   | .invalidForkchoiceState => 38002
+  | .tooLargeRequest => 38004
 
 /-- Why a payload is not valid, before its transactions run or when they run. -/
 inductive PayloadError where

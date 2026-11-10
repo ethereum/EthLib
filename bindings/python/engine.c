@@ -18,6 +18,11 @@ eth_engine_forkchoice_updated(
   lean_object* args
 );
 
+extern lean_object*
+eth_engine_get_blobs(
+  lean_object* args
+);
+
 extern lean_object* eth_engine_jwt_build(lean_object* args);
 extern lean_object* eth_engine_jwt_check(lean_object* args);
 
@@ -37,6 +42,14 @@ py_engine_forkchoice_updated(
   PyObject* args
 ) {
   return call_pyvalue_export(eth_engine_forkchoice_updated, args, 3, ENGINE_ERROR);
+}
+
+PyObject*
+py_engine_get_blobs(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_engine_get_blobs, args, 5, ENGINE_ERROR);
 }
 
 PyObject*
