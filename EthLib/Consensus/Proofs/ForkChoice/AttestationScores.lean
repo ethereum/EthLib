@@ -2,7 +2,7 @@ module
 
 public import EthLib.Consensus.ForkChoice.Head
 import EthLib.Base.Proofs.MapM
-import Std.Data.HashMap.Lemmas
+import Std.Data.TreeMap.Lemmas
 
 /-!
 # Proofs: the votes of a node from a tally
@@ -34,6 +34,23 @@ namespace Store
 
 variable (store : Store preset fork)
 
+/-- The order of nodes is transitive, as an order by root and then by status. -/
+instance : Std.TransCmp ForkChoiceNode.compare :=
+  inferInstanceAs
+    (Std.TransCmp (compareLex (compareOn ForkChoiceNode.root)
+      (compareOn fun node : ForkChoiceNode => node.payloadStatus.code)))
+
+/-- Two nodes that the order finds equal are equal. -/
+instance : Std.LawfulEqCmp ForkChoiceNode.compare where
+  eq_of_compare {a b} same := by
+    obtain ⟨root, status⟩ := a
+    obtain ⟨root', status'⟩ := b
+    simp only [ForkChoiceNode.compare, Ordering.then_eq_eq] at same
+    obtain ⟨roots, codes⟩ := same
+    cases Std.LawfulEqCmp.eq_of_compare roots
+    have codes := Std.LawfulEqCmp.eq_of_compare codes
+    cases status <;> cases status' <;> first | rfl | cases codes
+
 /-- One when the check that a node descends from another passes and holds, and zero otherwise. -/
 private def weightOf (supported node : ForkChoiceNode) : Nat :=
   match store.isAncestor supported node with
@@ -41,7 +58,8 @@ private def weightOf (supported node : ForkChoiceNode) : Nat :=
   | _ => 0
 
 /-- The count over groups that all pass their check adds each sum whose node descends. -/
-private theorem foldlM_groups_ok (node : ForkChoiceNode) (sums : Std.HashMap ForkChoiceNode Nat)
+private theorem foldlM_groups_ok (node : ForkChoiceNode)
+    (sums : Std.TreeMap ForkChoiceNode Nat ForkChoiceNode.compare)
     {nodes : List ForkChoiceNode}
     (pass : ∀ supported ∈ nodes, ∃ descends, store.isAncestor supported node = .ok descends)
     (start : Nat) :
@@ -63,7 +81,8 @@ private theorem foldlM_groups_ok (node : ForkChoiceNode) (sums : Std.HashMap For
 
 Otherwise it gives the sums whose node descends, or an overflow. -/
 private theorem scoreFromTally_of_ok {nodes : List ForkChoiceNode}
-    {sums : Std.HashMap ForkChoiceNode Nat} {failure : Option ForkChoiceError}
+    {sums : Std.TreeMap ForkChoiceNode Nat ForkChoiceNode.compare}
+    {failure : Option ForkChoiceError}
     {node : ForkChoiceNode}
     (pass : ∀ supported ∈ nodes, ∃ descends, store.isAncestor supported node = .ok descends) :
     store.scoreFromTally ⟨nodes.map fun supported => (supported, sums.getD supported 0), failure⟩
@@ -81,7 +100,7 @@ private theorem scoreFromTally_of_ok {nodes : List ForkChoiceNode}
 
 /-- When the groups before it pass, the count fails as the check of the first group that fails. -/
 private theorem scoreFromTally_of_error {before after : List ForkChoiceNode}
-    {supported : ForkChoiceNode} {sums : Std.HashMap ForkChoiceNode Nat}
+    {supported : ForkChoiceNode} {sums : Std.TreeMap ForkChoiceNode Nat ForkChoiceNode.compare}
     {failure : Option ForkChoiceError} {node : ForkChoiceNode} {error : ForkChoiceError}
     (pass : ∀ earlier ∈ before, ∃ descends, store.isAncestor earlier node = .ok descends)
     (fails : store.isAncestor supported node = .error error) :
@@ -93,7 +112,7 @@ private theorem scoreFromTally_of_error {before after : List ForkChoiceNode}
 
 /-- The grouped nodes start with the given nodes, in reverse. -/
 private theorem groupVotes_prefix (votes : List (ValidatorIndex × Gwei))
-    (nodes : List ForkChoiceNode) (sums : Std.HashMap ForkChoiceNode Nat) :
+    (nodes : List ForkChoiceNode) (sums : Std.TreeMap ForkChoiceNode Nat ForkChoiceNode.compare) :
     ∃ rest, (store.groupVotes votes nodes sums).1 = nodes.reverse ++ rest := by
   induction votes generalizing nodes sums with
   | nil => exact ⟨[], by simp [groupVotes]⟩
@@ -117,7 +136,8 @@ omit store in
 /-- A balance added at one node changes a weighted total over a list without repeats.
 
 The total grows by the balance times the weight of that node, when the node is in the list. -/
-private theorem sum_insert (sums : Std.HashMap ForkChoiceNode Nat) (weight : ForkChoiceNode → Nat)
+private theorem sum_insert (sums : Std.TreeMap ForkChoiceNode Nat ForkChoiceNode.compare)
+    (weight : ForkChoiceNode → Nat)
     (supported : ForkChoiceNode) (balance : Nat) {nodes : List ForkChoiceNode}
     (distinct : nodes.Nodup) :
     (nodes.map fun other =>
@@ -129,7 +149,7 @@ private theorem sum_insert (sums : Std.HashMap ForkChoiceNode Nat) (weight : For
   | cons first rest ih =>
     rw [List.nodup_cons] at distinct
     rw [List.map_cons, List.sum_cons, ih distinct.2, List.map_cons, List.sum_cons]
-    simp only [Std.HashMap.getD_insert, List.mem_cons, beq_iff_eq]
+    simp only [Std.TreeMap.getD_insert, Std.LawfulEqCmp.compare_eq_iff_eq, List.mem_cons]
     by_cases same : supported = first
     · subst same
       simp [distinct.1, Nat.add_mul]
@@ -143,13 +163,14 @@ The given nodes pass their check, have no repeats, and are the nodes with a sum.
 The count so far is the total of the sums whose node descends. -/
 private theorem fold_eq_scoreFromTally (node : ForkChoiceNode)
     (votes : List (ValidatorIndex × Gwei)) (seen : List ForkChoiceNode)
-    (sums : Std.HashMap ForkChoiceNode Nat) (start : Nat)
+    (sums : Std.TreeMap ForkChoiceNode Nat ForkChoiceNode.compare) (start : Nat)
     (pass : ∀ supported ∈ seen, ∃ descends, store.isAncestor supported node = .ok descends)
     (weighted : start = (seen.map fun supported =>
       sums.getD supported 0 * store.weightOf supported node).sum)
     (keys : ∀ supported, sums.contains supported = true ↔ supported ∈ seen)
     (distinct : seen.Nodup) {nodes : List ForkChoiceNode}
-    {grouped : Std.HashMap ForkChoiceNode Nat} {failure : Option ForkChoiceError}
+    {grouped : Std.TreeMap ForkChoiceNode Nat ForkChoiceNode.compare}
+    {failure : Option ForkChoiceError}
     (group : store.groupVotes votes seen sums = (nodes, grouped, failure)) :
     (do
       let total ← votes.foldlM (init := start)
@@ -244,14 +265,15 @@ private theorem fold_eq_scoreFromTally (node : ForkChoiceNode)
               cases descends <;> simp [mem]
             · have fresh : supported ∉ seen := fun mem => contained ((keys supported).mpr mem)
               have zero : sums.getD supported 0 = 0 :=
-                Std.HashMap.getD_eq_fallback_of_contains_eq_false (Bool.eq_false_iff.mpr contained)
+                Std.TreeMap.getD_eq_fallback_of_contains_eq_false (Bool.eq_false_iff.mpr contained)
               simp only [contained, Bool.false_eq_true, ↓reduceIte, List.map_cons, List.sum_cons]
-              rw [sum_insert _ _ _ _ distinct, ← weighted, counted, Std.HashMap.getD_insert_self,
+              rw [sum_insert _ _ _ _ distinct, ← weighted, counted, Std.TreeMap.getD_insert_self,
                 zero]
               cases descends <;> simp [fresh] <;> omega
           case keys =>
             intro other
-            rw [Std.HashMap.contains_insert, Bool.or_eq_true, beq_iff_eq, keys]
+            rw [Std.TreeMap.contains_insert, Bool.or_eq_true, beq_iff_eq,
+              Std.LawfulEqCmp.compare_eq_iff_eq, keys]
             by_cases contained : sums.contains supported
             · simp only [contained, ↓reduceIte]
               have mem := (keys supported).mp contained

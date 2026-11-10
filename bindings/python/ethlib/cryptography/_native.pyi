@@ -557,6 +557,10 @@ def consensus_ssz_static(name: str, fork: str, type: str, data: bytes) -> tuple[
     """The root of the value that the bytes encode, and the bytes of that value, as a pair."""
     ...
 
+def consensus_is_valid_builder_signature(name: str, fork: str, config: dict[str, Any] | None, type: str, data: bytes) -> bool:
+    """Whether the signature of a signed message of the Builder API verifies."""
+    ...
+
 def consensus_merkle_proof(name: str, fork: str, type: str, data: bytes, gindex: int) -> tuple[bytes, list[bytes]]:
     """The node at a generalized index of the value that the bytes encode, and its branch, as a pair."""
     ...

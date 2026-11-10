@@ -69,9 +69,9 @@ structure ForkChoiceNode where
   payloadStatus : PayloadStatus := .pending
   deriving DecidableEq, Repr, Inhabited
 
-/-- A hash of a node, from its root and the number of its payload status. -/
-instance : Hashable ForkChoiceNode where
-  hash node := mixHash (hash node.root.toArray) (hash node.payloadStatus.code)
+/-- The order of nodes by root as bytes, then by the number of the payload status. -/
+def ForkChoiceNode.compare (a b : ForkChoiceNode) : Ordering :=
+  (Ord.compare a.root b.root).then (Ord.compare a.payloadStatus.code b.payloadStatus.code)
 
 /-- The latest vote of a validator: when it votes and the root of the block it votes for.
 
