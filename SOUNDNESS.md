@@ -2459,6 +2459,19 @@ Only the lemmas in `Proofs/Bls/PairingLaws.lean` and `Proofs/AltBn128/PairingLaw
 The BLS signature, consensus, KZG, PeerDAS, EIP-2537 and EIP-197 theorems need no such hypothesis.
 `PairingLaws` is a `Prop`, never an axiom, so `lake exe check-decls` still sees only the standard axioms.
 `pairingLaws` proves the law for BLS12-381, and `AltBn128.pairingLaws` proves it for alt_bn128.
+
+The theorems in `Proofs/Transition/Totality/` show that the steps of a run of slots succeed, and each takes hypotheses that the specification does not state.
+Each hypothesis narrows the states, presets or runs that the result covers.
+Justification and finalization need two slots an epoch and a buffer of block roots that reaches the epoch before (`Preset.RootsReachPreviousEpoch`).
+With one slot an epoch the specification itself fails there.
+Before Altair they also assume that the committees of the pending attestations can be computed (`PendingResolved`), which a block checked when it included them.
+From Altair the rewards and penalties need `RewardsFit`, a set of bounds on the preset, the configuration, a budget of Gwei and a bound on the inactivity scores.
+The inactivity penalty multiplies an effective balance by an inactivity score, and a score grows by at most the score bias in each epoch.
+So the bound on the scores limits the length of the run that the theorems cover.
+On mainnet the bounds hold for a budget of `2^57` Gwei, about `1.44 * 10^8` ETH, and scores up to `2^23`.
+A score reaches `2^23` only after `2^21` epochs of missed targets, about 25 years.
+The bound on the reward of a flag does not use the square root of the total active balance.
+The balance that set a flag in the previous epoch can exceed the active balance of the current epoch, so only the budget bounds it.
 Whatever those hypotheses leave unproved is part of what a reader trusts.
 
 ### A3. Side channels
