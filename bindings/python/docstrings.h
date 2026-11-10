@@ -1076,6 +1076,9 @@
 #define DOC_engine_get_blobs \
   "The answer to an `engine_getBlobs` request, from a blob pool."
 
+#define DOC_engine_get_payload_bodies \
+  "The answer to a payload bodies request, from a store of bodies."
+
 #define DOC_engine_prepare_execution_payload \
   "From Bellatrix to Fulu: the forkchoice update of a proposer, as the value of its JSON."
 

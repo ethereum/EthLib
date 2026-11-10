@@ -1273,6 +1273,11 @@ def bindings : List Binding := [
       "list[tuple[bytes, bytes] | None] | None]], serving: bool, max_request: int, " ++
       "fork: str, request: dict) -> list | None",
     [`EthLib.Engine.EngineError], some "EngineError"⟩,
+  ⟨"engine_get_payload_bodies", `EthLib.Engine.Exports.payloadBodiesExport,
+    "(store: list[tuple[bytes, int | None, str, list[bytes], " ++
+      "list[tuple[int, int, bytes, int]] | None, bytes | None]], latest: int, " ++
+      "max_request: int, request: dict) -> list[dict | None]",
+    [`EthLib.Engine.EngineError], some "EngineError"⟩,
   ⟨"engine_prepare_execution_payload", `EthLib.Engine.Exports.prepareExecutionPayloadExport,
     "(name: str, fork: str, state: bytes, config: dict | None, safe_block_hash: bytes, " ++
       "finalized_block_hash: bytes, suggested_fee_recipient: bytes, pow_chain: list[bytes]) " ++
