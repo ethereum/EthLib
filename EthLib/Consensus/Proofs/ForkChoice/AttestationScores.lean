@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.ForkChoice.Head
+import EthLib.Base.Proofs.MapM
 import Std.Data.HashMap.Lemmas
 
 /-!
@@ -15,6 +16,10 @@ It agrees with a count over the validators in order.
 That count adds the balance of each validator whose supported node descends from the node.
 
 The results agree in every case: the same sum, the same overflow and the same first error.
+
+So a computed score is a sum over the counted validators, one balance for each vote that counts.
+
+The node of each such vote is then found, and the check that it descends passes.
 -/
 
 @[expose] public section
@@ -288,6 +293,117 @@ theorem getAttestationScore_eq_fold (node : ForkChoiceNode) (state : BeaconState
     ⟨nodes, grouped, failure⟩
   exact (fold_eq_scoreFromTally store node _ [] ∅ 0 (by simp) (by simp) (by simp) List.nodup_nil
     group).symm
+
+/-- Whether the latest vote of a validator counts for a node.
+
+The validator has a message and does not equivocate.
+
+The node of its vote is found, and the check that it descends from the node passes and holds. -/
+def voteCountsFor (node : ForkChoiceNode) (index : ValidatorIndex) : Bool :=
+  match store.latestMessages[index]? with
+  | none => false
+  | some message =>
+    if store.equivocatingIndices.contains index then false
+    else
+      match store.getSupportedNode message >>= (store.isAncestor · node) with
+      | .ok descends => descends
+      | .error _ => false
+
+/-- The vote of a validator with a message that does not equivocate counts as its check says. -/
+theorem voteCountsFor_of_check {node : ForkChoiceNode} {index : ValidatorIndex}
+    {message : LatestMessage fork} {descends : Bool}
+    (latest : store.latestMessages[index]? = some message)
+    (honest : store.equivocatingIndices.contains index = false)
+    (checked : (store.getSupportedNode message >>= (store.isAncestor · node)) = .ok descends) :
+    store.voteCountsFor node index = descends := by
+  simp only [voteCountsFor, latest, honest, Bool.false_eq_true, ↓reduceIte, checked]
+
+/-- A computed score of a node found the node of each vote that it reads.
+
+Those are the votes of the validators active and not slashed in the given state.
+
+The check that the node of each such vote descends from the node passes too.
+
+A validator without a message, or an equivocator, has no such vote. -/
+theorem getAttestationScore_checked {node : ForkChoiceNode} {state : BeaconState preset fork}
+    {score : Gwei} (computed : store.getAttestationScore node state = .ok score) :
+    ∀ entry ∈ unslashedActiveBalances state, ∀ message,
+      store.latestMessages[entry.1]? = some message →
+      store.equivocatingIndices.contains entry.1 = false →
+      ∃ descends,
+        (store.getSupportedNode message >>= (store.isAncestor · node)) = .ok descends := by
+  rw [getAttestationScore_eq_fold, bind_ok_iff] at computed
+  obtain ⟨total, fold, -⟩ := computed
+  refine foldlM_forall_of_ok (P := fun (entry : ValidatorIndex × Gwei) =>
+      ∀ message, store.latestMessages[entry.1]? = some message →
+        store.equivocatingIndices.contains entry.1 = false →
+        ∃ descends, (store.getSupportedNode message >>= (store.isAncestor · node)) = .ok descends)
+    ?_ _ _ _ fold
+  rintro acc ⟨index, balance⟩ result step message latest honest
+  simp only [latest, honest, Bool.false_eq_true, ↓reduceIte] at step
+  cases supported : store.getSupportedNode message with
+  | error e => simp [supported, bind, Except.bind] at step
+  | ok supported' =>
+    cases check : store.isAncestor supported' node with
+    | error e => simp [supported, check, bind, Except.bind] at step
+    | ok descends => exact ⟨descends, by simp [check, bind, Except.bind]⟩
+
+/-- A computed score of a node is the sum of the balances of the validators whose vote counts.
+
+The validators are those active and not slashed in the given state. -/
+theorem getAttestationScore_toNat_eq_sum {node : ForkChoiceNode}
+    {state : BeaconState preset fork} {score : Gwei}
+    (computed : store.getAttestationScore node state = .ok score) :
+    score.toNat = ((unslashedActiveBalances state).map fun entry =>
+      if store.voteCountsFor node entry.1 then entry.2.toNat else 0).sum := by
+  have checked := store.getAttestationScore_checked computed
+  rw [getAttestationScore_eq_fold, bind_ok_iff] at computed
+  obtain ⟨total, fold, bound⟩ := computed
+  -- Each step adds the balance exactly when the vote counts.
+  rw [foldlM_eq_ok_foldl (L := unslashedActiveBalances state)
+    (step := fun (total : Nat) (entry : ValidatorIndex × Gwei) =>
+      total + if store.voteCountsFor node entry.1 then entry.2.toNat else 0) ?steps 0,
+    Except.ok.injEq] at fold
+  case steps =>
+    rintro acc ⟨index, balance⟩ mem
+    cases latest : store.latestMessages[index]? with
+    | none => simp [latest, voteCountsFor, pure, Except.pure]
+    | some message =>
+      by_cases equivocating : store.equivocatingIndices.contains index
+      · have member : index ∈ store.equivocatingIndices := by simpa using equivocating
+        simp [latest, voteCountsFor, member, pure, Except.pure]
+      have honest := Bool.eq_false_iff.mpr equivocating
+      obtain ⟨descends, found⟩ := checked _ mem message latest honest
+      rw [voteCountsFor_of_check store latest honest found]
+      have absent : index ∉ store.equivocatingIndices := by simpa using equivocating
+      cases supported : store.getSupportedNode message with
+      | error e => simp [supported, bind, Except.bind] at found
+      | ok supported' =>
+        simp only [supported, bind, Except.bind] at found
+        cases descends <;>
+          simp [latest, absent, supported, found, bind, Except.bind, pure, Except.pure]
+  have sum : ∀ (entries : List (ValidatorIndex × Gwei)) (start : Nat),
+      entries.foldl (fun total entry =>
+          total + if store.voteCountsFor node entry.1 then entry.2.toNat else 0) start =
+        start + (entries.map fun entry =>
+          if store.voteCountsFor node entry.1 then entry.2.toNat else 0).sum := by
+    intro entries
+    induction entries with
+    | nil => simp
+    | cons entry rest ih =>
+      intro start
+      rw [List.foldl_cons, ih, List.map_cons, List.sum_cons]
+      omega
+  rw [sum, Nat.zero_add] at fold
+  subst fold
+  by_cases big : 2 ^ 64 ≤ ((unslashedActiveBalances state).map fun entry =>
+      if store.voteCountsFor node entry.1 then entry.2.toNat else 0).sum
+  · have big' : 18446744073709551616 ≤ ((unslashedActiveBalances state).map
+        fun entry => if store.voteCountsFor node entry.1 then entry.2.toNat else 0).sum := big
+    simp [big', throw, throwThe, MonadExceptOf.throw, Functor.map, Except.map] at bound
+  simp only [big, ↓reduceIte, pure, Except.pure, Except.ok.injEq] at bound
+  subst bound
+  exact UInt64.toNat_ofNat_of_lt' (by simp only [UInt64.size]; omega)
 
 end Store
 

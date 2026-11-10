@@ -295,15 +295,19 @@ def computeSafetyThreshold (head : Root) (root : Root) (balanceSource : BeaconSt
 
 /-- Whether a block is safe for LMD-GHOST: its votes exceed its safety threshold.
 
+The votes come from the given tally, which must be the one of the balance source.
+
 Every known block counts as valid here, since the store drops the blocks found invalid. -/
-def isOneConfirmed (head : Root) (balanceSource : BeaconState preset fork) (root : Root) :
-    Except ForkChoiceError Bool := do
-  let support ← store.getAttestationScore ⟨root, .pending⟩ balanceSource
+def isOneConfirmed (head : Root) (balanceSource : BeaconState preset fork) (tally : VoteTally)
+    (root : Root) : Except ForkChoiceError Bool := do
+  let support ← store.scoreFromTally tally ⟨root, .pending⟩
   return support > (← store.computeSafetyThreshold config head root balanceSource)
 
 /-- Whether every block of the confirmed chain is still safe, from the observed justified block.
 
-The chain starts after that block, or at the previous epoch when that block is older. -/
+The chain starts after that block, or at the previous epoch when that block is older.
+
+The votes of the balance source are tallied once, for the whole chain. -/
 def isConfirmedChainSafe (fcr : FastConfirmationStore) (head confirmedRoot : Root) :
     Except ForkChoiceError Bool := do
   let observed := fcr.currentEpochObservedJustifiedCheckpoint
@@ -319,9 +323,10 @@ def isConfirmedChainSafe (fcr : FastConfirmationStore) (head confirmedRoot : Roo
         pure (← store.block ancestor).parentRoot
       else pure ancestor
   let chainRoots ← store.getAncestorRoots confirmedRoot startRootExclusive
+  let source := store.checkpointState fcr.previousEpochObservedJustifiedCheckpoint
+  let tally := source.map store.tallyVotes
   chainRoots.allM fun root => do
-    let balanceSource ← store.checkpointState fcr.previousEpochObservedJustifiedCheckpoint
-    store.isOneConfirmed config head balanceSource root
+    store.isOneConfirmed config head (← source) (← tally) root
 
 /-- An estimate of the votes for the target of the current epoch, from the latest messages.
 
@@ -407,7 +412,9 @@ Blocks of the previous epoch are confirmed while each is safe and the old head h
 
 That needs the justification of the previous epoch to stay within reach.
 
-Later blocks are confirmed while each is safe, and a new epoch needs its target justified. -/
+Later blocks are confirmed while each is safe, and a new epoch needs its target justified.
+
+The votes of the observed justified state are tallied once, for both walks. -/
 def findLatestConfirmedDescendant (fcr : FastConfirmationStore) (head latestConfirmedRoot : Root) :
     Except ForkChoiceError Root := do
   let currentEpoch ← store.getCurrentStoreEpoch config
@@ -416,6 +423,8 @@ def findLatestConfirmedDescendant (fcr : FastConfirmationStore) (head latestConf
   let arith {α : Type} (x : Except ArithError α) : Except ForkChoiceError α := x.mapError .arith
   let recent (epoch : Epoch) (gap : UInt64) : Except ForkChoiceError Bool := do
     return currentEpoch ≤ (← arith (addChecked epoch gap))
+  let source := store.checkpointState fcr.currentEpochObservedJustifiedCheckpoint
+  let tally := source.map store.tallyVotes
   let mut confirmedRoot := latestConfirmedRoot
   -- The blocks of the previous epoch.
   let previousEpochOk ← do
@@ -431,8 +440,7 @@ def findLatestConfirmedDescendant (fcr : FastConfirmationStore) (head latestConf
     for root in ← store.getAncestorRoots head confirmedRoot do
       if (← store.getBlockEpoch root) = currentEpoch then break
       if !(← store.isAncestor ⟨fcr.previousSlotHead, .pending⟩ ⟨root, .pending⟩) then break
-      let balanceSource ← store.checkpointState fcr.currentEpochObservedJustifiedCheckpoint
-      if !(← store.isOneConfirmed config head balanceSource root) then break
+      if !(← store.isOneConfirmed config head (← source) (← tally) root) then break
       confirmedRoot := root
   -- The blocks of the current epoch.
   let currentEpochOk ←
@@ -442,8 +450,7 @@ def findLatestConfirmedDescendant (fcr : FastConfirmationStore) (head latestConf
     for root in ← store.getAncestorRoots head confirmedRoot do
       if (← store.getBlockEpoch root) > (← store.getBlockEpoch tentativeRoot) then
         if !(← store.willCurrentTargetBeJustified config head) then break
-      let balanceSource ← store.checkpointState fcr.currentEpochObservedJustifiedCheckpoint
-      if !(← store.isOneConfirmed config head balanceSource root) then break
+      if !(← store.isOneConfirmed config head (← source) (← tally) root) then break
       tentativeRoot := root
     let accept ← do
       if (← store.getBlockEpoch tentativeRoot) = currentEpoch then pure true
