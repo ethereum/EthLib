@@ -140,8 +140,7 @@ theorem PendingSigned.of_processAttestation {parentSlot : Slot}
     PendingSigned config checks after := by
   have frame := frame_processAttestation computed
   have registry := processAttestation_registry before computed
-  have notElectra : ¬Fork.pectra ≤ fork :=
-    Nat.not_le_of_lt (Nat.lt_trans before (by decide : Fork.altair < Fork.pectra))
+  have beforeElectra : fork < .pectra := Nat.lt_trans before (by decide)
   have committees : ∀ epoch, CommitteesKept epoch state after := CommitteesKept.of_eq
     (congrArg (·.data) registry.1) (congrArg (·.elements) registry.2)
   have keys : KeysKept state after := by
@@ -206,7 +205,7 @@ theorem PendingSigned.of_processAttestation {parentSlot : Slot}
       · simp [beq_iff_eq.mp chosen]
     · obtain ⟨committeeAfter, attestersOk⟩ := attestersAfter attesters attestersOk
       have signers : getAttestingIndices after attestation = .ok (sortedSet attesters) := by
-        simp only [getAttestingIndices, notElectra, ↓reduceDIte, committeeAfter, bind,
+        simp only [getAttestingIndices_of_lt_electra beforeElectra, committeeAfter, bind,
           Except.bind, attestersOk, pure, Except.pure]
       obtain ⟨indexed', indexedOk', indices, data, -⟩ :=
         getIndexedAttestation_of_getAttestingIndices signers

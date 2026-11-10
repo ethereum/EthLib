@@ -293,7 +293,9 @@ The aggregator must have signed the slot and the aggregate, and the participants
 
 Its target and the finalized checkpoint must be ancestors of the block voted for.
 
-From Gloas the payload it sees must pass its checks, with the statuses of payloads. -/
+From Gloas the payload it sees must pass its checks, with the statuses of payloads.
+
+The committee and the participants share one shuffle of the epoch of its slot, computed once. -/
 def validateAggregateInCommittee (config : Config) (checks : SignatureChecks) (seen : Seen)
     (store : Store preset fork) (statuses : PayloadStatuses)
     (signed : SignedAggregateAndProof preset fork)
@@ -317,10 +319,15 @@ def validateAggregateInCommittee (config : Config) (checks : SignatureChecks) (s
     "aggregate epoch is not current or previous epoch").andThenM fun _ =>
   (rejectUnless (data.target.epoch == computeEpochAtSlot preset data.slot)
     "attestation epoch does not match target epoch").andThenM fun _ => do
-  let committee ← (getBeaconCommittee state data.slot index).mapError .accessor
+  let epoch := computeEpochAtSlot preset data.slot
+  -- The committee alone would read this shuffle first, so sharing it changes no error.
+  let (active, shuffled) ← (attesterShuffle state epoch).mapError .accessor
+  let perSlot := getCommitteeCountPerSlot state epoch
+  let committee ← (beaconCommitteeOf preset data.slot index perSlot active shuffled).mapError
+    .accessor
   (rejectUnless (bits.size == committee.size)
     "aggregation bits length does not match committee size").andThenM fun _ => do
-  let participants ← (getAttestingIndices state aggregate).mapError .accessor
+  let participants ← (attestingIndicesOf aggregate perSlot active shuffled).mapError .accessor
   (rejectUnless (!participants.isEmpty) "aggregate has no participants").andThenM fun _ =>
   (rejectUnless (isAggregator committee.size proof.selectionProof)
     "validator is not selected as aggregator").andThenM fun _ =>
@@ -334,7 +341,8 @@ def validateAggregateInCommittee (config : Config) (checks : SignatureChecks) (s
   let signedByAggregator ← isValidSignatureAtEpoch config checks state DOMAIN_AGGREGATE_AND_PROOF
     data.target.epoch proof aggregator.pubkey signed.signature
   (rejectUnless signedByAggregator "invalid aggregator signature").andThenM fun _ => do
-  let indexed ← (getIndexedAttestation state aggregate).mapError .accessor
+  -- The indexed form alone would compute the same participants again.
+  let indexed ← (indexedAttestationOf aggregate participants).mapError .accessor
   let valid ← (isValidIndexedAttestation config checks state indexed).mapError .transition
   (rejectUnless valid "invalid aggregate signature").andThenM fun _ =>
   voteOutcome store statuses data

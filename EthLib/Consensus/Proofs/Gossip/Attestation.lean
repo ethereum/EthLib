@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.Gossip.Attestation
+public import EthLib.Consensus.Proofs.Accessors
 public import EthLib.Consensus.Proofs.Gossip.SyncCommittee
 
 /-!
@@ -19,6 +20,10 @@ From the chain follows which votes each topic accepts and which it ignores.
 A valid vote records its keys, and the same vote is then ignored.
 
 From Gloas a vote whose payload checks pass also passes those of the fork choice.
+
+The checks of an aggregate cut its committee and its participants from one shuffle.
+
+Reading each of them from the state alone gives the same outcome, errors included.
 -/
 
 @[expose] public section
@@ -637,6 +642,72 @@ theorem validateAggregateAndProof_of_electra (electra : .pectra ≤ fork)
         currentTimeMs := by
   simp [validateAggregateAndProof, dataIndexOutcome, electra, validIndex, one]
 
+/-- The checks of an aggregate in its committee equal those that call the accessors.
+
+There the committee, the participants and the indexed form are each read from the state.
+
+The two sides fail with the same error too. -/
+theorem validateAggregateInCommittee_eq_accessors :
+    validateAggregateInCommittee config checks seen store statuses signed index currentTimeMs =
+      (do
+        let proof := signed.message
+        let aggregate := proof.aggregate
+        let data := aggregate.data
+        let bits := aggregate.aggregationBits.bits
+        let root ← (Serialization.Ssz.SszType.hashTreeRoot data).mapError .ssz
+        let seenBits := seen.aggregateBitsFor (aggregateKey fork root index)
+        (ignoreUnless (!isNonStrictSuperset seenBits bits.toList)
+          "already seen aggregate for this data").andThenM fun _ =>
+        (ignoreUnless (!seen.aggregatorEpochs.contains (data.target.epoch, proof.aggregatorIndex))
+          "already seen aggregate for this epoch and aggregator").andThenM fun _ =>
+        (votedBlockOutcome store data.beaconBlockRoot).andThenM fun _ => do
+        let state ← store.headState config
+        (rejectUnless (index < getCommitteeCountPerSlot state data.target.epoch)
+          "committee index out of range").andThenM fun _ => do
+        (← voteTimeOutcome config store data.slot currentTimeMs
+          "aggregate slot is from a future slot"
+          "aggregate epoch is not current or previous epoch").andThenM fun _ =>
+        (rejectUnless (data.target.epoch == computeEpochAtSlot preset data.slot)
+          "attestation epoch does not match target epoch").andThenM fun _ => do
+        let committee ← (getBeaconCommittee state data.slot index).mapError .accessor
+        (rejectUnless (bits.size == committee.size)
+          "aggregation bits length does not match committee size").andThenM fun _ => do
+        let participants ← (getAttestingIndices state aggregate).mapError .accessor
+        (rejectUnless (!participants.isEmpty) "aggregate has no participants").andThenM fun _ =>
+        (rejectUnless (isAggregator committee.size proof.selectionProof)
+          "validator is not selected as aggregator").andThenM fun _ =>
+        (rejectUnless (committee.contains proof.aggregatorIndex)
+          "aggregator is not a member of the committee").andThenM fun _ => do
+        let some aggregator := state.validators.data[proof.aggregatorIndex.toNat]?
+          | throw (.accessor (.indexOutOfRange proof.aggregatorIndex))
+        let selected ← isValidSignatureAtEpoch config checks state DOMAIN_SELECTION_PROOF
+          data.target.epoch data.slot aggregator.pubkey proof.selectionProof
+        (rejectUnless selected "invalid selection proof signature").andThenM fun _ => do
+        let signedByAggregator ← isValidSignatureAtEpoch config checks state
+          DOMAIN_AGGREGATE_AND_PROOF data.target.epoch proof aggregator.pubkey signed.signature
+        (rejectUnless signedByAggregator "invalid aggregator signature").andThenM fun _ => do
+        let indexed ← (getIndexedAttestation state aggregate).mapError .accessor
+        let valid ← (isValidIndexedAttestation config checks state indexed).mapError .transition
+        (rejectUnless valid "invalid aggregate signature").andThenM fun _ =>
+        voteOutcome store statuses data) := by
+  simp only [validateAggregateInCommittee, getBeaconCommittee, getIndexedAttestation]
+  cases store.headState config with
+  | error e => simp only [bind, Except.bind]
+  | ok state =>
+    simp only [bind, Except.bind]
+    cases shuffleOk : attesterShuffle state
+        (computeEpochAtSlot preset signed.message.aggregate.data.slot) with
+    -- Both sides read the shuffle at the committee, so its failure is the same error on both.
+    | error e => simp only [Except.mapError]
+    | ok pair =>
+      obtain ⟨active, shuffled⟩ := pair
+      -- With this shuffle, each read of the participants on the right equals the one on the left.
+      simp only [Except.mapError, getAttestingIndices_of_attesterShuffle shuffleOk]
+      cases attestingIndicesOf signed.message.aggregate
+          (getCommitteeCountPerSlot state
+            (computeEpochAtSlot preset signed.message.aggregate.data.slot)) active shuffled <;>
+        rfl
+
 /-- An aggregate whose bits a valid aggregate for its data and committee covers is ignored.
 
 This needs only the root of its data. -/
@@ -728,7 +799,7 @@ theorem validateAggregateInCommittee_eq
         (rejectUnless byAggregator "invalid aggregator signature").andThen fun _ =>
         (rejectUnless valid "invalid aggregate signature").andThen fun _ =>
         ancestry) := by
-  unfold validateAggregateInCommittee
+  rw [validateAggregateInCommittee_eq_accessors]
   simp only [rootOf, head, clock, committeeOf, participantsOf, found, selectedOf, signedOf,
     indexedOf, signature, ancestryOf, bind, Except.bind, pure, Except.pure, Except.mapError,
     ignoreUnless_andThenM, ignoreUnless_andThen, rejectUnless_andThenM, rejectUnless_andThen,
