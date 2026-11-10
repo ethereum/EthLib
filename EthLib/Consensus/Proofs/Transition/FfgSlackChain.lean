@@ -23,11 +23,11 @@ The set of all votes meets these hypotheses.
 
 So the theorem bounds who voted only for a set as small as the votes of the run.
 
-The sets and weights of the model must match the state for each new current justified checkpoint.
+At each end of an epoch, the sets and weights must match the state for both recent epochs.
 
-The theorem takes the sets and weights as parameters, matched where a step justifies.
+The theorem takes the sets and weights as parameters, matched where a step may justify.
 
-One choice of them can serve a whole chain, as each step that justifies does so for a later epoch.
+One choice of them can serve a whole chain, as a set of weights holds the balances of many states.
 
 Nothing bounds them from below, so a choice far from the active sets and balances gives little.
 
@@ -140,9 +140,9 @@ They are the bounds of a step, and two conditions on the sets, weights and votes
 
 The set of votes must hold each vote that the step casts, when the step is a block.
 
-If the step changes the current justified checkpoint, the sets and weights must match.
+At a slot that ends an epoch, the sets and weights must match the state for both recent epochs.
 
-They must match the state before for the epoch of the new checkpoint.
+The rules of finalization read both as justified, even when the step keeps neither.
 
 The meaningful sets are the active sets of the epoch and the next one.
 
@@ -155,9 +155,12 @@ structure SlackStepHypotheses (config : Config) (checks : SignatureChecks)
     where
   /-- The set holds each vote that a block step casts. -/
   applied : blockStepVotes config checks forked after ⊆ attested
-  /-- The sets and weights match the state for a new current justified checkpoint. -/
-  sets : after.state.currentJustifiedCheckpoint ≠ forked.state.currentJustifiedCheckpoint →
-    TargetSetsMatch V U W block forked.state after.state.currentJustifiedCheckpoint.epoch
+  /-- At a slot that ends an epoch, the sets and weights match the state for both recent epochs.
+  -/
+  sets : after.state.slot ≠ forked.state.slot →
+    (forked.state.slot + 1) % preset.SLOTS_PER_EPOCH = 0 → ∀ current : Bool,
+      TargetSetsMatch V U W block forked.state
+        (if current then getCurrentEpoch forked.state else getPreviousEpoch forked.state)
 
 /-- One step of a chain that meets the hypotheses of a step. -/
 def SlackStep (config : Config) (checks : SignatureChecks)
@@ -193,6 +196,25 @@ theorem ChainStep.getBlockRoot_currentJustified_of_ne
   | block engine signed validateResult applied =>
     obtain ⟨-, blockOk, -⟩ := applySignedBlock_ok applied
     exact absurd (frame_processBlock blockOk).currentJustified changed
+
+/-- A slot that changes the current justified checkpoint ends an epoch. -/
+private theorem advanceSlot_boundary_of_currentJustified_ne {fork : Fork}
+    {state after : BeaconState preset fork} (computed : advanceSlot config checks state = .ok after)
+    (changed : after.currentJustifiedCheckpoint ≠ state.currentJustifiedCheckpoint) :
+    (state.slot + 1) % preset.SLOTS_PER_EPOCH = 0 := by
+  obtain ⟨next, cached, epoched, sum, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok computed
+  have cachedFrame := frame_processSlot cachedOk
+  unfold epochIfLast at epochedOk
+  split at epochedOk
+  · rename_i boundary
+    have nextEq : next = state.slot + 1 := by
+      apply UInt64.toNat_inj.mp
+      rw [UInt64.toNat_add, UInt64.toNat_one, ← sum, Nat.mod_eq_of_lt next.toNat_lt]
+    rw [← nextEq]
+    exact boundary
+  · simp only [pure, Except.pure, Except.ok.injEq] at epochedOk
+    subst epochedOk
+    exact absurd cachedFrame.currentJustified changed
 
 /-- One step of a chain keeps the properties of its states.
 
@@ -230,8 +252,14 @@ theorem SlackChainInvariant.of_chainStep (positive : 0 < preset.SLOTS_PER_EPOCH.
       holds.pendingVoted (hypotheses.large moved) block subset_rfl
       holds.invariant.settled
       holds.separated (fun ne => by
-        rw [← currentKept] at ne ⊢
-        exact hypotheses.sets ne) (fun _ => holds.roots.le_of_getBlockRoot) holds.slack advancedOk
+        have boundary := advanceSlot_boundary_of_currentJustified_ne advancedOk ne
+        rcases (advanceSlot_getBlockRoot_currentJustified_of_ne window advancedOk ne).1 with
+          recent | recent
+        · rw [recent]
+          exact hypotheses.sets moved boundary false
+        · rw [recent]
+          exact hypotheses.sets moved boundary true)
+      (fun _ => holds.roots.le_of_getBlockRoot) holds.slack advancedOk
     refine ⟨(advanceSlotAcross_invariant holds.invariant computed).1,
       early.of_processUpgrades upgraded,
       (holds.separated.of_advanceSlot holds.early holds.invariant.settled

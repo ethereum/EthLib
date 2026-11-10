@@ -2228,7 +2228,7 @@ A constant validator set then gives the model of Casper FFG and Gasper §4.
 A slack link weakens a supermajority link by a second set for its target: the bound adds twice the stake of the target set outside that second set.
 The beacon chain needs that slack, since it weighs the attesters of the previous epoch against the active balance of the current one.
 A slack link also lets each checkpoint have a set of weights, each a stake for every validator, and holds when its bound holds under one of them.
-A refinement from the beacon state puts in that set the effective balances of each state whose step justifies the checkpoint.
+A refinement from the beacon state puts in that set the effective balances of each state whose previous or current epoch is the epoch of the checkpoint, and that records the root of the checkpoint for that epoch.
 So a balance may change from one checkpoint to the next, and two branches that justify one checkpoint from two states both fit, where one stake function could not.
 Nothing excludes other weights from a set, and the zero weights make every ordered link a slack link, so the bounds say something only when every choice of weights in each set stays close to the reference weights.
 `accountable_safety_dynamic_slack`, `accountable_safety_reference_slack` and `accountable_safety_of_change_slack` (`AccountableSafety.lean`) take slack links, with a validator set and a set of weights for each checkpoint.

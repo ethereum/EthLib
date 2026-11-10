@@ -118,6 +118,21 @@ theorem initializeBeaconStateFromEth1_checkpoints {eth1BlockHash : Hash32}
     (Frame.foldlM (fun _ _ _ ok => frame_activateAtGenesis ok) activatedOk)
   exact ⟨frame.slot, frame.previousJustified, frame.currentJustified⟩
 
+/-- The genesis state built from deposits has every bit of justification clear.
+
+Its finalized checkpoint is the genesis epoch with the zero root. -/
+theorem initializeBeaconStateFromEth1_finality {eth1BlockHash : Hash32}
+    {eth1Timestamp : UInt64} {deposits : Array Deposit} {after : BeaconState preset fork}
+    (computed : initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits =
+      .ok after) :
+    after.justificationBits.bits = Vector.replicate _ false ∧
+      after.finalizedCheckpoint = ⟨GENESIS_EPOCH, Vector.replicate 32 0⟩ := by
+  obtain ⟨_, _, _, _, _, _, depositedOk, activatedOk, rfl⟩ :=
+    initializeBeaconStateFromEth1_ok computed
+  have frame := (Frame.foldlM (fun _ _ _ ok => frame_genesisDeposit ok) depositedOk).trans
+    (Frame.foldlM (fun _ _ _ ok => frame_activateAtGenesis ok) activatedOk)
+  exact ⟨congrArg (·.bits) frame.justificationBits, frame.finalized⟩
+
 /-- A candidate genesis state exists only before Altair.
 
 It satisfies the invariant that each valid block keeps.
