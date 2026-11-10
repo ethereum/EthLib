@@ -302,13 +302,13 @@ theorem applyTransaction_of_checkInclusion {env : BlockEnvironment fork} {index 
 
 /-- A body that runs takes each step, in order, and gives the gas counts of its transactions.
 
-The DAO transfer runs first, then the system calls at the start, then the transactions.
+The DAO transfer runs first, then the system calls that start the block, then the transactions.
 
 From Shapella the withdrawals join the body after them, at the position after the transactions.
 
 The requests then run, and the rewards last, which give the block state of the output.
 
-The builder of the output is the builder after the requests, and gives the hash of the output.
+The builder after the requests is the builder of the output, and gives its block access list hash.
 
 The gas counts and the gas used that the receipts add up are those of the transactions. -/
 theorem applyBody_eq_ok {config : ChainConfig} {env : BlockEnvironment fork}

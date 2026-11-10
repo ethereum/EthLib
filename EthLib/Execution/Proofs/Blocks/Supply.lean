@@ -17,7 +17,7 @@ Before Paris, the DAO transfer at the first block of the DAO Fork moves ether, a
 
 The system calls keep or lower the supply, as a message does.
 
-Each transaction lowers it by at least its burned fees, by the theorem on transactions.
+Each transaction lowers it by at least the fees that it burns.
 
 From Shapella, each withdrawal creates its amount in Gwei times `10^9`, by [EIP-4895][e4895].
 
@@ -36,6 +36,8 @@ Before Glamsterdam, SELFDESTRUCT and the deletions can burn more, so only the bo
 The burned fees are the base fee per gas times the gas used after the refunds.
 
 They add the base fee per blob gas times the blob gas, by [EIP-1559][e1559] and [EIP-4844][e4844].
+
+Before London the base fee per gas is 0, and before Dencun the base fee per blob gas is 0.
 
 Before Glamsterdam, the header gives both: its gas used and its blob gas used.
 
@@ -80,7 +82,7 @@ def createdWei (block : Block fork Transaction) : Nat :=
     rewardWei fork block.header.number
       (block.ommers.map fun ommer => (ommer.2.coinbase, ommer.2.number))
 
-/-- The fees that the transactions of a body burn, in wei, from what the body gave.
+/-- The fees that the transactions of a body burn, in wei, from the gas counts of its output.
 
 It is the base fee per gas times their gas used after the refunds.
 
@@ -88,11 +90,11 @@ It adds the base fee per blob gas times their blob gas. -/
 def burnedWei (env : BlockEnvironment fork) (output : BodyOutput fork) : Nat :=
   output.cumulativeGasUsed * baseFeeOf env + output.gas.blob * blobGasPriceOf env
 
-/-- The fees that a block burns, in wei, from its header, in the environment `env` of the block.
+/-- The fees that a header states, in wei, at the base fees of the environment `env`.
 
 It is the gas used at the base fee per gas, plus the blob gas used at the base fee per blob gas.
 
-Before Dencun the blob gas used is 0. -/
+Before Dencun the header has no blob gas used, which counts as 0. -/
 def headerBurnedWei (env : BlockEnvironment fork) (header : Header fork) : Nat :=
   header.gasUsed * baseFeeOf env +
     (if h : .dencun ≤ fork then (header.blobGasUsed h).toNat else 0) * blobGasPriceOf env
@@ -159,8 +161,7 @@ theorem supply_systemCall_join {env : BlockEnvironment fork} {body body' : BodyS
   rw [BodyState.supply_join hjoin]
   exact supply_systemCall hcall
 
-/-- The system calls at the start of a block keep or lower the supply, and keep it from Glamsterdam.
--/
+/-- The system calls that start a block keep or lower the supply, and keep it from Glamsterdam. -/
 theorem supply_startSystemCalls {env : BlockEnvironment fork} {parentHash : Hash32}
     {body body' : BodyState} (h : startSystemCalls env parentHash body = .ok body') :
     (TransactionState.ofBlock body'.block).supply ≤ (TransactionState.ofBlock body.block).supply ∧
@@ -241,7 +242,9 @@ theorem supply_withdrawalState {block : BlockState} {withdrawals : List Withdraw
 
 /-- The rewards add the wei they reward to the supply.
 
-Before Paris, the block must have at most two ommers, as the checks of the block ensure. -/
+Before Paris, at most two ommers keep the reward of the beneficiary below `2^256`.
+
+The checks of the block ensure that bound. -/
 theorem supply_payRewards {tx tx' : TransactionState} {coinbase : Address} {number : Nat}
     {ommers : List (Address × Nat)} (hn : fork < .paris → ommers.length ≤ 2)
     (h : payRewards fork tx coinbase number ommers = .ok tx') :
@@ -303,7 +306,7 @@ theorem applyTransactions_supply {env : BlockEnvironment fork} {body : BodyState
 
 /-- After the body of a block, the supply plus its burned fees is at most the supply before.
 
-The supply before counts the ether that the block creates.
+To the supply before, it adds the ether that the block creates.
 
 From Glamsterdam, the two are equal.
 
@@ -351,7 +354,9 @@ theorem applyBody_supply {config : ChainConfig} {env : BlockEnvironment fork}
 
 /-- After the body of a block, the supply plus its burned fees is at most the supply before.
 
-The supply before counts the ether that the block creates, and the bound holds at every fork.
+To the supply before, it adds the ether that the block creates.
+
+The bound holds at every fork that the transition runs.
 
 Before Paris, the block must have at most two ommers, as the checks of the block ensure. -/
 theorem applyBody_supply_le {config : ChainConfig} {env : BlockEnvironment fork}
@@ -362,9 +367,7 @@ theorem applyBody_supply_le {config : ChainConfig} {env : BlockEnvironment fork}
       (TransactionState.ofBlock start).supply + createdWei block :=
   (applyBody_supply hOmmers h).1
 
-/-- From Glamsterdam, the body of a block changes the supply by its created ether minus its fees.
-
-The fees are those that it burns. -/
+/-- From Glamsterdam, a block body adds the ether it creates and removes the fees it burns. -/
 theorem applyBody_supply_of_glamsterdam {config : ChainConfig} {env : BlockEnvironment fork}
     {block : Block fork Transaction} {start : BlockState} {output : BlockOutput fork}
     (hFork : .glamsterdam ≤ fork) (h : applyBody config env block start = .ok output) :
@@ -398,7 +401,9 @@ private theorem stateTransition_body {chain : BlockChain} {block : Block fork Tr
 
 /-- After a block that passes the transition, the supply plus its burned fees is at most before.
 
-The supply before counts the ether that the block creates, and the bound holds at every fork.
+To the supply before, it adds the ether that the block creates.
+
+The bound holds at every fork that the transition runs, which fails from Hegotá.
 
 The fees come from the body that the transition runs. -/
 theorem stateTransition_supply_le {chain : BlockChain} {block : Block fork Transaction}
@@ -433,14 +438,13 @@ theorem stateTransition_supply_of_glamsterdam {chain : BlockChain}
   rw [← TransactionState.supply_ofBlock, ← TransactionState.supply_ofPreState]
   exact applyBody_supply_of_glamsterdam hFork hOutput
 
-/-- Before Glamsterdam, a block lowers the supply by at least the fees that its header gives.
-
-The block must pass the transition.
+/-- Before Glamsterdam, a block lowers the supply by at least the fees that its header states.
 
 Those are its gas used at the base fee per gas, and its blob gas used at the base fee per blob gas.
 
-It also adds its created ether.
- -/
+It also adds the ether that it creates.
+
+The block must pass the transition. -/
 theorem stateTransition_supply_le_of_lt_glamsterdam {chain : BlockChain}
     {block : Block fork Transaction} {checkSeal : Bool} {post : State}
     (hFork : fork < .glamsterdam) (h : stateTransition chain block checkSeal = .ok post) :
