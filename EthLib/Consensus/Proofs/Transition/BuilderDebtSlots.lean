@@ -22,6 +22,8 @@ That step, with the move to the next slot, keeps the invariant under a positive 
 
 So every slot keeps the invariant, and so does a run of slots.
 
+A run of slots also keeps the builders.
+
 [EIP-7732] adds the builders and the epoch step of their payments.
 
 [EIP-7732]: https://eips.ethereum.org/EIPS/eip-7732#state-transition
@@ -424,6 +426,7 @@ private theorem processEpoch_builderSplit {gloas : .glamsterdam ≤ fork}
 
 /-! ## Slots -/
 
+/-- A slot keeps the builder fields, the slot and the slot of the latest block. -/
 private theorem builderFrame_processSlot (computed : processSlot state = .ok after) :
     BuilderFrame state after := by
   have header : after.latestBlockHeader.slot = state.latestBlockHeader.slot := by
@@ -440,6 +443,44 @@ private theorem builderFrame_processSlot (computed : processSlot state = .ok aft
       split <;> rfl
   obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok computed
   exact ⟨rfl, header, rfl, rfl, rfl, rfl⟩
+
+/-- One slot keeps the builders. -/
+theorem advanceSlot_builders (gloas : .glamsterdam ≤ fork)
+    (computed : advanceSlot config checks state = .ok after) :
+    after.builders gloas = state.builders gloas := by
+  obtain ⟨next, cached, epoched, -, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok computed
+  have cachedFrame := builderFrame_processSlot cachedOk
+  unfold epochIfLast at epochedOk
+  split at epochedOk
+  · obtain ⟨pending, paid, before, paidOk, tail⟩ :=
+      processEpoch_builderSplit (gloas := gloas) epochedOk
+    -- The step of the payments changes only the payments and the queued withdrawals.
+    have paidBuilders : paid.builders = pending.builders := by
+      simp only [processBuilderPendingPayments, bind_ok_iff, pure, Except.pure,
+        Except.ok.injEq] at paidOk
+      obtain ⟨_, _, rfl⟩ := paidOk
+      rfl
+    simp only [tail.builders, paidBuilders, before.builders, cachedFrame.builders]
+  · simp only [pure, Except.pure, Except.ok.injEq] at epochedOk
+    subst epochedOk
+    simp only [cachedFrame.builders]
+
+/-- A run of slots keeps the builders. -/
+theorem processSlots_builders (gloas : .glamsterdam ≤ fork) {slot : Slot}
+    (computed : processSlots config checks state slot = .ok after) :
+    after.builders gloas = state.builders gloas := by
+  simp only [Consensus.processSlots, bind_ok_iff, ensure_ok_iff] at computed
+  obtain ⟨-, -, advanced⟩ := computed
+  generalize slot.toNat - state.slot.toNat = count at advanced
+  induction count generalizing state with
+  | zero =>
+    simp only [advanceSlots, pure, Except.pure, Except.ok.injEq] at advanced
+    subst advanced
+    rfl
+  | succ count step =>
+    simp only [advanceSlots, bind_ok_iff] at advanced
+    obtain ⟨next, nextOk, rest⟩ := advanced
+    exact (step rest).trans (advanceSlot_builders gloas nextOk)
 
 /-- A move to a slot of the same epoch keeps the position of the parent payment. -/
 private theorem parentPaymentPosition_withSlot {next : Slot}

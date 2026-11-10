@@ -152,16 +152,14 @@ private theorem BuilderDebtCovered.toSettled {gloas : .glamsterdam ≤ fork}
 private theorem BuilderDebtCovered.settleParentPayment {gloas : .glamsterdam ≤ fork}
     (holds : BuilderDebtCovered state gloas) (newer : state.latestBlockHeader.slot < state.slot)
     (computed : settleParentPayment state gloas = .ok after) : BuilderDebtSettled after gloas := by
+  have builders := settleParentPayment_builders computed
+  have slot := (payloadInputs_settleParentPayment computed).slot
   unfold Consensus.settleParentPayment at computed
   split at computed
   · rename_i parent found
     have settled := liftAccessor_ok.mp computed
-    obtain ⟨inRange, payments, -⟩ := settleBuilderPayment_spec settled
-    have frame : after.slot = state.slot ∧ after.builders = state.builders := by
-      simp only [settleBuilderPayment, inRange, ↓reduceDIte, Except.ok.injEq] at settled
-      subst settled
-      exact ⟨rfl, rfl⟩
-    refine holds.toSettled newer frame.1 frame.2 (fun index => ?_) fun position before empty => ?_
+    obtain ⟨_, payments, -⟩ := settleBuilderPayment_spec settled
+    refine holds.toSettled newer slot builders (fun index => ?_) fun position before empty => ?_
     · rw [pendingBuilderTotal_settleBuilderPayment settled]
       exact Nat.le_add_right _ _
     · have := before parent found
@@ -440,23 +438,11 @@ theorem BuilderDebtCovered.processParentExecutionPayload {gloas : .glamsterdam �
     (newer : state.latestBlockHeader.slot < state.slot)
     (computed : processParentExecutionPayload config checks state gloas body = .ok after) :
     BuilderDebtSettled after gloas := by
-  unfold Consensus.processParentExecutionPayload at computed
-  dsimp only at computed
-  split at computed
+  rcases processParentExecutionPayload_ok computed with ⟨-, -, rfl⟩ |
+    ⟨-, settled, _, _, _, _, requested, _, settledOk, depositsOk, withdrawalsOk,
+      consolidationsOk, buildersOk, exitsOk, -, rfl⟩
   · -- An empty parent leaves the state as it is.
-    simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-    obtain ⟨_, _, rfl⟩ := computed
     exact holds.toSettled newer rfl rfl (fun _ => Nat.le_add_right _ _) fun _ _ empty => empty
-  simp only [bind_ok_iff] at computed
-  obtain ⟨_, _, _, _, applied⟩ := computed
-  unfold applyParentExecutionPayload at applied
-  simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at applied
-  obtain ⟨_, _, _, _, _, _, _, _, settled, settledOk, requested, requestedOk, _, _, rfl⟩ :=
-    applied
-  unfold processParentRequests at requestedOk
-  simp only [bind_ok_iff, ← Array.foldlM_toList] at requestedOk
-  obtain ⟨_, depositsOk, _, withdrawalsOk, _, consolidationsOk, _, buildersOk, exitsOk⟩ :=
-    requestedOk
   -- The requests of validators keep the builder fields.
   have frame :=
     (BuilderFrame.foldlM (fun _ _ _ ok => builderFrame_processDepositRequest ok)

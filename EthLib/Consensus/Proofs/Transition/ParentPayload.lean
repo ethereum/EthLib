@@ -13,9 +13,11 @@ It rejects a block that carries a request.
 
 A parent payload step succeeds only when four lists of requests fit their limits.
 
+A step that succeeds finds the parent empty, or settles and runs the requests of a full parent.
+
 A full parent records its block hash, and marks its slot as having a payload.
 
-The payment of its builder empties at most one pending payment.
+The payment of its builder empties at most one pending payment, and keeps the builders.
 -/
 
 @[expose] public section
@@ -73,6 +75,63 @@ theorem processParentExecutionPayload_counts {body : BeaconBlockBody preset fork
       computed
     exact ⟨withdrawals, consolidations, builderDeposits, exits⟩
 
+/-- A parent payload step that succeeds finds the parent empty or full.
+
+An empty parent takes no request and leaves the state as it is.
+
+A full parent settles the payment of its builder, then runs each list of its requests in order.
+
+The deposits run first, then the withdrawals, the consolidations, and the requests of builders.
+
+It then marks the slot of the parent as having a payload.
+
+The hash of the parent bid becomes the latest block hash.
+
+The checks of the root and the counts of the requests come before, and are left out here. -/
+theorem processParentExecutionPayload_ok {body : BeaconBlockBody preset fork}
+    (computed : processParentExecutionPayload config checks state gloas body = .ok after) :
+    ((body.signedExecutionPayloadBid gloas).message.parentBlockHash ≠
+        (state.latestExecutionPayloadBid gloas).blockHash ∧
+      (body.parentExecutionRequests gloas).isEmpty gloas = true ∧ after = state) ∨
+    ((body.signedExecutionPayloadBid gloas).message.parentBlockHash =
+        (state.latestExecutionPayloadBid gloas).blockHash ∧
+      ∃ settled deposited withdrawn consolidated builderDeposited exited bits,
+        settleParentPayment state gloas = .ok settled ∧
+        (body.parentExecutionRequests gloas).deposits.data.toList.foldlM
+          (processDepositRequest · (Nat.le_trans (by decide) gloas) ·) settled = .ok deposited ∧
+        (body.parentExecutionRequests gloas).withdrawals.data.toList.foldlM
+          (processWithdrawalRequest config · (Nat.le_trans (by decide) gloas) ·) deposited =
+          .ok withdrawn ∧
+        (body.parentExecutionRequests gloas).consolidations.data.toList.foldlM
+          (processConsolidationRequest config · (Nat.le_trans (by decide) gloas) ·) withdrawn =
+          .ok consolidated ∧
+        ((body.parentExecutionRequests gloas).builderDeposits gloas).data.toList.foldlM
+          (processBuilderDepositRequest config checks · gloas ·) consolidated =
+          .ok builderDeposited ∧
+        ((body.parentExecutionRequests gloas).builderExits gloas).data.toList.foldlM
+          (processBuilderExitRequest config · gloas ·) builderDeposited = .ok exited ∧
+        writeCircular (exited.executionPayloadAvailability gloas).bits
+          state.latestBlockHeader.slot true = .ok bits ∧
+        after = { exited with
+          executionPayloadAvailability := fun _ => ⟨bits⟩
+          latestBlockHash := fun _ => (state.latestExecutionPayloadBid gloas).blockHash }) := by
+  unfold processParentExecutionPayload at computed
+  dsimp only at computed
+  split at computed
+  · rename_i empty
+    obtain ⟨_, noRequest, done⟩ := bind_ok_iff.mp computed
+    simp only [pure, Except.pure, Except.ok.injEq] at done
+    exact .inl ⟨empty, ensure_ok_iff.mp noRequest, done.symm⟩
+  rename_i full
+  simp only [bind_ok_iff, applyParentExecutionPayload, processParentRequests, pure, Except.pure,
+    Except.ok.injEq, ← Array.foldlM_toList] at computed
+  obtain ⟨_, -, _, -, _, -, _, -, _, -, _, -, settled, settledOk, _, ⟨deposited, depositsOk,
+    withdrawn, withdrawalsOk, consolidated, consolidationsOk, builderDeposited, buildersOk,
+    exitsOk⟩, bits, written, rfl⟩ := computed
+  exact .inr ⟨Decidable.of_not_not full, settled, deposited, withdrawn, consolidated,
+    builderDeposited, _, bits, settledOk, depositsOk, withdrawalsOk, consolidationsOk, buildersOk,
+    exitsOk, liftAccessor_ok.mp written, rfl⟩
+
 /-- A full parent makes the hash of its bid the latest block hash. -/
 theorem applyParentExecutionPayload_latestBlockHash {requests : ExecutionRequests preset fork}
     (computed : applyParentExecutionPayload config checks state gloas requests = .ok after) :
@@ -109,6 +168,20 @@ theorem settleParentPayment_payments
     simp only [Option.map_some, ne_eq, Option.some.injEq] at other
     simp only [payments]
     exact Serialization.Ssz.RootedVector.getElem_set_ne _ _ _ _ other
+  · dsimp only at computed
+    split at computed <;> cases computed <;> rfl
+
+/-- The payment of the parent's builder keeps the registry of builders. -/
+theorem settleParentPayment_builders (computed : settleParentPayment state gloas = .ok after) :
+    after.builders = state.builders := by
+  unfold settleParentPayment at computed
+  split at computed
+  · have set := liftAccessor_ok.mp computed
+    unfold settleBuilderPayment at set
+    split at set
+    · cases set
+      rfl
+    · cases set
   · dsimp only at computed
     split at computed <;> cases computed <;> rfl
 
