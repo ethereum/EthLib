@@ -77,14 +77,6 @@ private theorem StepBelow.of_validators
 
 /-! ## Mutators -/
 
-private theorem stepBelow_setValidator {index : ValidatorIndex} {validator old : Validator}
-    (found : getValidator state index = .ok old)
-    (same : ∀ epoch ≤ activityFixedEpoch state,
-      isActiveValidator validator epoch = isActiveValidator old epoch)
-    (set : state.setValidator index validator = .ok after) : StepBelow state after :=
-  StepBelow.of_step (Nat.le_of_eq (sameSizes_setValidator set).1.symm)
-    (activeStep_setValidator found same set)
-
 private theorem stepBelow_setValidatorAt {index : Nat} {validator old : Validator}
     (found : getValidatorAt state index = .ok old)
     (same : ∀ epoch ≤ activityFixedEpoch state,
@@ -92,6 +84,14 @@ private theorem stepBelow_setValidatorAt {index : Nat} {validator old : Validato
     (set : state.setValidatorAt index validator = .ok after) : StepBelow state after :=
   StepBelow.of_step (Nat.le_of_eq (sameSizes_setValidatorAt set).1.symm)
     (activeStep_setValidatorAt found same set)
+
+private theorem stepBelow_setValidator {index : ValidatorIndex} {validator old : Validator}
+    (found : getValidator state index = .ok old)
+    (same : ∀ epoch ≤ activityFixedEpoch state,
+      isActiveValidator validator epoch = isActiveValidator old epoch)
+    (set : state.setValidator index validator = .ok after) : StepBelow state after :=
+  stepBelow_setValidatorAt (by rwa [← getValidator_eq_getValidatorAt]) same
+    (by rwa [← setValidator_eq_setValidatorAt])
 
 private theorem stepBelow_increaseBalance {index : ValidatorIndex} {delta : Gwei}
     (computed : increaseBalance state index delta = .ok after) : StepBelow state after :=

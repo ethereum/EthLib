@@ -40,17 +40,16 @@ variable {preset : Preset} {fork : Base.Fork} {config : Config} {checks : Signat
 
 /-! ## The steps that keep the builder fields -/
 
-/-- Setting a validator keeps the builder fields and the two slots. -/
-theorem builderFrame_setValidator {index : ValidatorIndex} {validator : Validator}
-    (set : state.setValidator index validator = .ok after) : BuilderFrame state after := by
-  obtain ⟨_, rfl⟩ := setValidator_ok set
-  exact ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
-
 /-- Setting a validator at a plain position keeps the builder fields and the two slots. -/
 theorem builderFrame_setValidatorAt {position : Nat} {validator : Validator}
     (set : state.setValidatorAt position validator = .ok after) : BuilderFrame state after := by
   obtain ⟨_, rfl⟩ := setValidatorAt_ok set
   exact ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
+
+/-- Setting a validator keeps the builder fields and the two slots. -/
+theorem builderFrame_setValidator {index : ValidatorIndex} {validator : Validator}
+    (set : state.setValidator index validator = .ok after) : BuilderFrame state after :=
+  builderFrame_setValidatorAt (by rwa [← setValidator_eq_setValidatorAt])
 
 /-- Setting a balance keeps the builder fields and the two slots. -/
 theorem builderFrame_setBalance {index : ValidatorIndex} {balance : Gwei}
@@ -107,7 +106,6 @@ private theorem builderEpochFrameLaws : EpochFrameLaws (@BuilderFrame preset for
     where
   refl := BuilderFrame.refl
   trans := BuilderFrame.trans
-  setValidator := fun set _ _ => builderFrame_setValidator set
   setValidatorAt := fun set _ _ => builderFrame_setValidatorAt set
   increaseBalance := builderFrame_increaseBalance
   decreaseBalance := builderFrame_decreaseBalance

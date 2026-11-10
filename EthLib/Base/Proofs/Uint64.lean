@@ -74,6 +74,10 @@ theorem ofNatChecked_ok_iff {n : Nat} {a : UInt64} :
 theorem ofNatChecked_of_lt {n : Nat} (h : n < 2 ^ 64) : ofNatChecked n = .ok n.toUInt64 :=
   ofNatChecked_ok_iff.mpr ⟨h, by rw [Nat.toUInt64_eq, UInt64.toNat_ofNat_of_lt' h]⟩
 
+/-- The conversion of the value of a 64-bit integer returns that integer. -/
+theorem ofNatChecked_toNat (a : UInt64) : ofNatChecked a.toNat = .ok a :=
+  ofNatChecked_ok_iff.mpr ⟨a.toNat_lt, rfl⟩
+
 /-- The difference succeeds exactly when `b ≤ a`, and then it is the difference on `Nat`. -/
 theorem subChecked_ok_iff {a b c : UInt64} :
     subChecked a b = .ok c ↔ b.toNat ≤ a.toNat ∧ c.toNat = a.toNat - b.toNat := by

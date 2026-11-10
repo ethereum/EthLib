@@ -217,19 +217,6 @@ theorem updatedEffectiveBalance_aligned {largest balance effectiveBalance result
   · exact old
   · exact min_sub_mod_mod_self _ maxAligned
 
-/-- Replacing a validator by an aligned one keeps the effective balances aligned. -/
-theorem effectiveBalancesAligned_setValidator {index : ValidatorIndex} {validator : Validator}
-    (holds : EffectiveBalancesAligned state)
-    (good : validator.effectiveBalance % preset.EFFECTIVE_BALANCE_INCREMENT = 0)
-    (set : state.setValidator index validator = .ok after) :
-    EffectiveBalancesAligned after := by
-  obtain ⟨inside, rfl⟩ := setValidator_ok set
-  intro other member
-  simp only [BeaconState.putValidator, RootedForkList.data_set] at member
-  rcases Array.mem_or_eq_of_mem_set (w := inside) member with old | rfl
-  · exact holds other old
-  · exact good
-
 /-- An aligned validator written at a plain position keeps the effective balances aligned. -/
 theorem effectiveBalancesAligned_setValidatorAt {index : Nat} {validator : Validator}
     (holds : EffectiveBalancesAligned state)
@@ -242,6 +229,14 @@ theorem effectiveBalancesAligned_setValidatorAt {index : Nat} {validator : Valid
   rcases Array.mem_or_eq_of_mem_set (w := inside) member with old | rfl
   · exact holds other old
   · exact good
+
+/-- Replacing a validator by an aligned one keeps the effective balances aligned. -/
+theorem effectiveBalancesAligned_setValidator {index : ValidatorIndex} {validator : Validator}
+    (holds : EffectiveBalancesAligned state)
+    (good : validator.effectiveBalance % preset.EFFECTIVE_BALANCE_INCREMENT = 0)
+    (set : state.setValidator index validator = .ok after) :
+    EffectiveBalancesAligned after :=
+  effectiveBalancesAligned_setValidatorAt holds good (by rwa [← setValidator_eq_setValidatorAt])
 
 /-- The update of one effective balance keeps them aligned.
 

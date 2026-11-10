@@ -76,16 +76,32 @@ theorem setBalance_ok {state after : BeaconState preset fork} {index : Validator
     exact ⟨inside, rfl⟩
   · cases set
 
+/-- A successful write at a plain position uses that position, without reduction modulo `2^64`. -/
+theorem setValidatorAt_ok {state after : BeaconState preset fork} {position : Nat}
+    {validator : Validator} (set : state.setValidatorAt position validator = .ok after) :
+    ∃ inside : position < state.validators.data.size,
+      after = state.putValidator position inside validator := by
+  unfold BeaconState.setValidatorAt at set
+  split at set
+  · cases set
+    exact ⟨_, rfl⟩
+  · simp [bind_ok_iff, throw, throwThe, MonadExceptOf.throw] at set
+
+/-- A write at a validator index is the write at the position that the index names. -/
+theorem setValidator_eq_setValidatorAt (state : BeaconState preset fork) (index : ValidatorIndex)
+    (validator : Validator) :
+    state.setValidator index validator = state.setValidatorAt index.toNat validator := by
+  unfold BeaconState.setValidator BeaconState.setValidatorAt
+  split
+  · rfl
+  · simp [liftArith, ofNatChecked_toNat, bind, Except.bind, Except.mapError, throw, throwThe,
+      MonadExceptOf.throw]
+
 /-- A validator that is set is set in the registry. -/
 theorem setValidator_ok {state after : BeaconState preset fork} {index : ValidatorIndex}
     {validator : Validator} (set : state.setValidator index validator = .ok after) :
-    ∃ inside, after = state.putValidator index.toNat inside validator := by
-  unfold BeaconState.setValidator at set
-  split at set
-  · rename_i inside
-    cases set
-    exact ⟨inside, rfl⟩
-  · cases set
+    ∃ inside, after = state.putValidator index.toNat inside validator :=
+  setValidatorAt_ok (by rwa [← setValidator_eq_setValidatorAt])
 
 /-- Setting a balance keeps the slot. -/
 theorem setBalance_slot {state after : BeaconState preset fork} {index : ValidatorIndex}
@@ -108,30 +124,19 @@ theorem sameSizes_setBalance {state after : BeaconState preset fork} {index : Va
   obtain ⟨inside, rfl⟩ := setBalance_ok set
   exact sameSizes_putBalance state inside balance
 
-/-- Setting a validator keeps the sizes. -/
-theorem sameSizes_setValidator {state after : BeaconState preset fork} {index : ValidatorIndex}
-    {validator : Validator} (set : state.setValidator index validator = .ok after) :
-    SameSizes state after := by
-  obtain ⟨inside, rfl⟩ := setValidator_ok set
-  exact sameSizes_putValidator state inside validator
-
-/-- A successful write at a plain position uses that position, without reduction modulo `2^64`. -/
-theorem setValidatorAt_ok {state after : BeaconState preset fork} {position : Nat}
-    {validator : Validator} (set : state.setValidatorAt position validator = .ok after) :
-    ∃ inside : position < state.validators.data.size,
-      after = state.putValidator position inside validator := by
-  unfold BeaconState.setValidatorAt at set
-  split at set
-  · cases set
-    exact ⟨_, rfl⟩
-  · simp [bind_ok_iff, throw, throwThe, MonadExceptOf.throw] at set
-
 /-- A write at a plain position keeps the registry and balance lengths. -/
 theorem sameSizes_setValidatorAt {state after : BeaconState preset fork} {position : Nat}
     {validator : Validator} (set : state.setValidatorAt position validator = .ok after) :
     SameSizes state after := by
   obtain ⟨inside, rfl⟩ := setValidatorAt_ok set
   exact sameSizes_putValidator state inside validator
+
+/-- Setting a validator keeps the sizes. -/
+theorem sameSizes_setValidator {state after : BeaconState preset fork} {index : ValidatorIndex}
+    {validator : Validator} (set : state.setValidator index validator = .ok after) :
+    SameSizes state after :=
+  sameSizes_setValidatorAt (by rwa [← setValidator_eq_setValidatorAt])
+
 
 /-- A read at a plain position succeeds exactly when that position holds the validator. -/
 theorem getValidatorAt_eq_ok_iff {state : BeaconState preset fork} {position : Nat}
@@ -153,6 +158,24 @@ theorem getBalanceAt_eq_ok_iff {state : BeaconState preset fork} {position : Nat
     getBalanceAt state position = .ok balance ↔ state.balances.data[position]? = some balance := by
   unfold getBalanceAt
   split <;> simp_all [bind_ok_iff, throw, throwThe, MonadExceptOf.throw]
+
+/-- A read at a validator index is the read at the position that the index names. -/
+theorem getValidator_eq_getValidatorAt (state : BeaconState preset fork) (index : ValidatorIndex) :
+    getValidator state index = getValidatorAt state index.toNat := by
+  unfold getValidator getValidatorAt
+  split
+  · rfl
+  · simp [liftArith, ofNatChecked_toNat, bind, Except.bind, Except.mapError, throw, throwThe,
+      MonadExceptOf.throw]
+
+/-- A balance read at a validator index is the read at the position that the index names. -/
+theorem getBalance_eq_getBalanceAt (state : BeaconState preset fork) (index : ValidatorIndex) :
+    getBalance state index = getBalanceAt state index.toNat := by
+  unfold getBalance getBalanceAt
+  split
+  · rfl
+  · simp [liftArith, ofNatChecked_toNat, bind, Except.bind, Except.mapError, throw, throwThe,
+      MonadExceptOf.throw]
 
 /-- Raising a balance sets a balance. -/
 theorem increaseBalance_ok {state after : BeaconState preset fork} {index : ValidatorIndex}
@@ -423,16 +446,16 @@ theorem getValidator_of_validators_eq {state after : BeaconState preset fork}
 theorem getBalance_eq_ok_iff {state : BeaconState preset fork} {index : ValidatorIndex}
     {balance : Gwei} :
     getBalance state index = .ok balance ↔ state.balances.data[index.toNat]? = some balance := by
-  unfold getBalance
-  split <;> simp_all
+  rw [getBalance_eq_getBalanceAt]
+  exact getBalanceAt_eq_ok_iff
 
 /-- The lookup returns a validator exactly when it is the one at its index of the registry. -/
 theorem getValidator_eq_ok_iff {state : BeaconState preset fork} {index : ValidatorIndex}
     {validator : Validator} :
     getValidator state index = .ok validator ↔
       state.validators.data[index.toNat]? = some validator := by
-  unfold getValidator
-  split <;> simp_all
+  rw [getValidator_eq_getValidatorAt]
+  exact getValidatorAt_eq_ok_iff
 
 /-- The slashed flag of a validator, or the error of an index outside the registry. -/
 def slashedFlag (state : BeaconState preset fork) (index : ValidatorIndex) :

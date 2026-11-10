@@ -314,40 +314,6 @@ theorem ExitsOrdered.putValidator {index : Nat} {validator : Validator}
   · exact ordered other old
   · exact le
 
-/-- Replacing a validator forms a mutator frame, if the new one exits no later than it withdraws.
-
-Let the largest values of the preset and the effective balances before be aligned.
-
-Then the new one must have an aligned effective balance. -/
-theorem frame_setValidator_of_whole {index : ValidatorIndex} {validator : Validator}
-    (set : state.setValidator index validator = .ok after)
-    (le : ExitsOrdered state → validator.exitEpoch ≤ validator.withdrawableEpoch)
-    (whole : MaxEffectiveBalancesAligned preset → EffectiveBalancesAligned state →
-      validator.effectiveBalance % preset.EFFECTIVE_BALANCE_INCREMENT = 0) :
-    MutatorFrame state after := by
-  obtain ⟨inside, rfl⟩ := setValidator_ok set
-  have sizes := sameSizes_putValidator state inside validator
-  exact ⟨⟨⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, Nat.le_of_eq sizes.1.symm,
-    balancesMatch_of_sameSizes sizes,
-    fun ordered => ordered.putValidator inside (le ordered),
-    fun maxAligned holds =>
-      effectiveBalancesAligned_setValidator holds (whole maxAligned holds) set⟩,
-    rfl, rfl, rfl, rfl⟩,
-    .of_eq rfl rfl⟩
-
-/-- Replacing a validator by one with the same effective balance forms a mutator frame.
-
-The new one must exit no later than it withdraws. -/
-theorem frame_setValidator {index : ValidatorIndex} {validator old : Validator}
-    (set : state.setValidator index validator = .ok after)
-    (found : getValidator state index = .ok old)
-    (le : ExitsOrdered state → validator.exitEpoch ≤ validator.withdrawableEpoch)
-    (balance : validator.effectiveBalance = old.effectiveBalance := by rfl) :
-    MutatorFrame state after :=
-  frame_setValidator_of_whole set le fun _ holds => by
-    rw [balance]
-    exact holds old (mem_of_getValidator found)
-
 /-- Replacing a validator at a plain position forms a mutator frame.
 
 The new one must exit no later than it withdraws.
@@ -370,18 +336,31 @@ theorem frame_setValidatorAt_of_whole {position : Nat} {validator : Validator}
       effectiveBalancesAligned_setValidatorAt holds (whole maxAligned holds) set⟩,
     rfl, rfl, rfl, rfl⟩, .of_eq rfl rfl⟩
 
-/-- A write at a plain position with the same effective balance forms a mutator frame.
+/-- Replacing a validator forms a mutator frame, if the new one exits no later than it withdraws.
+
+Let the largest values of the preset and the effective balances before be aligned.
+
+Then the new one must have an aligned effective balance. -/
+theorem frame_setValidator_of_whole {index : ValidatorIndex} {validator : Validator}
+    (set : state.setValidator index validator = .ok after)
+    (le : ExitsOrdered state → validator.exitEpoch ≤ validator.withdrawableEpoch)
+    (whole : MaxEffectiveBalancesAligned preset → EffectiveBalancesAligned state →
+      validator.effectiveBalance % preset.EFFECTIVE_BALANCE_INCREMENT = 0) :
+    MutatorFrame state after :=
+  frame_setValidatorAt_of_whole (by rwa [← setValidator_eq_setValidatorAt]) le whole
+
+/-- Replacing a validator by one with the same effective balance forms a mutator frame.
 
 The new one must exit no later than it withdraws. -/
-theorem frame_setValidatorAt {position : Nat} {validator old : Validator}
-    (set : state.setValidatorAt position validator = .ok after)
-    (found : getValidatorAt state position = .ok old)
+theorem frame_setValidator {index : ValidatorIndex} {validator old : Validator}
+    (set : state.setValidator index validator = .ok after)
+    (found : getValidator state index = .ok old)
     (le : ExitsOrdered state → validator.exitEpoch ≤ validator.withdrawableEpoch)
     (balance : validator.effectiveBalance = old.effectiveBalance := by rfl) :
     MutatorFrame state after :=
-  frame_setValidatorAt_of_whole set le fun _ holds => by
+  frame_setValidator_of_whole set le fun _ holds => by
     rw [balance]
-    exact holds old (mem_of_getValidatorAt found)
+    exact holds old (mem_of_getValidator found)
 
 theorem frame_increaseBalance {index : ValidatorIndex} {delta : Gwei}
     (computed : increaseBalance state index delta = .ok after) : MutatorFrame state after := by
@@ -620,7 +599,7 @@ theorem frame_addValidatorToRegistry {pubkey : BLSPubkey}
 
 They leave out justification, the builder payments and the rotation of the flags.
 
-A validator write must relate its states when it meets two conditions.
+A validator write at a plain position must relate its states when it meets two conditions.
 
 Its exit comes no later than its withdrawal, when the exits of the state are ordered.
 
@@ -630,12 +609,6 @@ The other laws cover balance changes, exits, new validators and the record updat
 structure EpochFrameLaws (R : BeaconState preset fork → BeaconState preset fork → Prop) : Prop where
   refl : ∀ state, R state state
   trans : ∀ {first second third}, R first second → R second third → R first third
-  setValidator : ∀ {state after : BeaconState preset fork} {index : ValidatorIndex}
-    {validator : Validator},
-    state.setValidator index validator = .ok after →
-    (ExitsOrdered state → validator.exitEpoch ≤ validator.withdrawableEpoch) →
-    (MaxEffectiveBalancesAligned preset → EffectiveBalancesAligned state →
-      validator.effectiveBalance % preset.EFFECTIVE_BALANCE_INCREMENT = 0) → R state after
   setValidatorAt : ∀ {state after : BeaconState preset fork} {position : Nat}
     {validator : Validator},
     state.setValidatorAt position validator = .ok after →
@@ -672,7 +645,6 @@ structure EpochFrameLaws (R : BeaconState preset fork → BeaconState preset for
 theorem mutatorEpochFrameLaws : EpochFrameLaws (@MutatorFrame preset fork) where
   refl := MutatorFrame.refl
   trans := MutatorFrame.trans
-  setValidator := frame_setValidator_of_whole
   setValidatorAt := frame_setValidatorAt_of_whole
   increaseBalance := frame_increaseBalance
   decreaseBalance := frame_decreaseBalance
@@ -704,6 +676,18 @@ theorem foldlM {α ε : Type} {step : BeaconState preset fork → α → Except 
     (computed : items.foldlM step state = .ok after) : R state after :=
   foldlM_ok_invariant (R state) (fun _ _ _ before ok => laws.trans before (frame _ _ _ ok))
     (laws.refl state) computed
+
+/-- A validator write follows the relation when it meets the two conditions of a write.
+
+Its exit comes no later than its withdrawal, when the exits of the state are ordered.
+
+Its effective balance is a whole number of increments, when the preset and the state are aligned. -/
+theorem setValidator {index : ValidatorIndex} {validator : Validator}
+    (set : state.setValidator index validator = .ok after)
+    (le : ExitsOrdered state → validator.exitEpoch ≤ validator.withdrawableEpoch)
+    (whole : MaxEffectiveBalancesAligned preset → EffectiveBalancesAligned state →
+      validator.effectiveBalance % preset.EFFECTIVE_BALANCE_INCREMENT = 0) : R state after :=
+  laws.setValidatorAt (by rwa [← setValidator_eq_setValidatorAt]) le whole
 
 /-- A validator write that keeps the effective balance follows the relation.
 

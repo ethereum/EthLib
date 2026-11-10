@@ -392,45 +392,6 @@ theorem ActiveStep.of_validators (validators : after.validators.data = state.val
     (slot : after.slot = state.slot) : ActiveStep state after :=
   ⟨slot, ActiveKept.of_validators validators _⟩
 
-/-- A write of one validator changes activity only at its position. -/
-private theorem isActiveAt_setValidator {index : ValidatorIndex} {validator : Validator}
-    (set : state.setValidator index validator = .ok after) (epoch : Epoch) (position : Nat) :
-    isActiveAt after epoch position =
-      if position = index.toNat then isActiveValidator validator epoch
-      else isActiveAt state epoch position := by
-  obtain ⟨inside, rfl⟩ := setValidator_ok set
-  unfold isActiveAt
-  split
-  · rename_i same
-    subst same
-    simp [BeaconState.putValidator, inside]
-  · rename_i other
-    simp [BeaconState.putValidator, Ne.symm other]
-
-/-- A write of a validator with the activity of the old one, up to a bound, keeps activity. -/
-private theorem activeKept_setValidator {bound : Epoch} {index : ValidatorIndex}
-    {validator old : Validator} (found : getValidator state index = .ok old)
-    (same : ∀ epoch ≤ bound, isActiveValidator validator epoch = isActiveValidator old epoch)
-    (set : state.setValidator index validator = .ok after) : ActiveKept bound state after := by
-  intro epoch le position
-  rw [isActiveAt_setValidator set]
-  split
-  · rename_i here
-    subst here
-    rw [same epoch le]
-    simp [isActiveAt, getValidator_eq_ok_iff.mp found]
-  · rfl
-
-/-- A write of a validator with the activity of the old one keeps the slot and activity. -/
-theorem activeStep_setValidator {index : ValidatorIndex} {validator old : Validator}
-    (found : getValidator state index = .ok old)
-    (same : ∀ epoch ≤ activityFixedEpoch state,
-      isActiveValidator validator epoch = isActiveValidator old epoch)
-    (set : state.setValidator index validator = .ok after) : ActiveStep state after := by
-  have active := activeKept_setValidator found same set
-  obtain ⟨_, rfl⟩ := setValidator_ok set
-  exact ⟨rfl, active⟩
-
 /-- A write at a plain position changes activity only at that position. -/
 private theorem isActiveAt_setValidatorAt {index : Nat} {validator : Validator}
     (set : state.setValidatorAt index validator = .ok after) (epoch : Epoch) (position : Nat) :
@@ -469,6 +430,15 @@ theorem activeStep_setValidatorAt {index : Nat} {validator old : Validator}
   have active := activeKept_setValidatorAt found same set
   obtain ⟨_, rfl⟩ := setValidatorAt_ok set
   exact ⟨rfl, active⟩
+
+/-- A write of a validator with the activity of the old one keeps the slot and activity. -/
+theorem activeStep_setValidator {index : ValidatorIndex} {validator old : Validator}
+    (found : getValidator state index = .ok old)
+    (same : ∀ epoch ≤ activityFixedEpoch state,
+      isActiveValidator validator epoch = isActiveValidator old epoch)
+    (set : state.setValidator index validator = .ok after) : ActiveStep state after :=
+  activeStep_setValidatorAt (by rwa [← getValidator_eq_getValidatorAt]) same
+    (by rwa [← setValidator_eq_setValidatorAt])
 
 /-- A new exit epoch after a bound, from the far future, keeps activity up to the bound.
 
@@ -590,15 +560,6 @@ private theorem keeps_decreaseBalance {index : ValidatorIndex} {delta : Gwei}
     (computed : decreaseBalance state index delta = .ok after) : Keeps state after :=
   keeps_setBalance (decreaseBalance_ok computed).choose_spec
 
-private theorem keeps_setValidator {index : ValidatorIndex} {validator old : Validator}
-    (found : getValidator state index = .ok old)
-    (same : ∀ epoch ≤ activityFixedEpoch state,
-      isActiveValidator validator epoch = isActiveValidator old epoch)
-    (set : state.setValidator index validator = .ok after) : Keeps state after := by
-  have step := activeStep_setValidator found same set
-  obtain ⟨_, rfl⟩ := setValidator_ok set
-  exact ⟨⟨rfl, rfl, rfl⟩, step.2, rfl⟩
-
 private theorem keeps_setValidatorAt {index : Nat} {validator old : Validator}
     (found : getValidatorAt state index = .ok old)
     (same : ∀ epoch ≤ activityFixedEpoch state,
@@ -607,6 +568,14 @@ private theorem keeps_setValidatorAt {index : Nat} {validator old : Validator}
   have step := activeStep_setValidatorAt found same set
   obtain ⟨_, rfl⟩ := setValidatorAt_ok set
   exact ⟨⟨rfl, rfl, rfl⟩, step.2, rfl⟩
+
+private theorem keeps_setValidator {index : ValidatorIndex} {validator old : Validator}
+    (found : getValidator state index = .ok old)
+    (same : ∀ epoch ≤ activityFixedEpoch state,
+      isActiveValidator validator epoch = isActiveValidator old epoch)
+    (set : state.setValidator index validator = .ok after) : Keeps state after :=
+  keeps_setValidatorAt (by rwa [← getValidator_eq_getValidatorAt]) same
+    (by rwa [← setValidator_eq_setValidatorAt])
 
 /-- Starting an exit keeps activity up to the fixed epoch, at every fork.
 

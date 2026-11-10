@@ -51,7 +51,8 @@ Not yet released.
   Registry and effective-balance writes use plain integer positions, so an in-range position does not fail merely because it is at least 2^64.
   No C export or Python function signature changes.
   In Lean, `addBuilderToRegistry` now returns an `Except TransitionError`; bind its result, and pass a successful return to `builderBalanceSum_addBuilderToRegistry`.
-  `EpochFrameLaws` gains a `setValidatorAt` field for writes at plain integer positions.
+  `EpochFrameLaws` replaces its `setValidator` field by a `setValidatorAt` field for writes at plain integer positions, and the theorem `EpochFrameLaws.setValidator` gives the index form.
+  The new `getValidator_eq_getValidatorAt`, `getBalance_eq_getBalanceAt` and `setValidator_eq_setValidatorAt` relate the index forms to the position forms; `frame_setValidatorAt` is gone.
   `KeysKept`, `Frame.keysKept` and `UpgradeFrame.keysKept` are gone, as no theorem read them ([#1908](https://github.com/ethereum/EthLib/issues/1908)); `advanceSlot_keys` becomes `advanceSlot_kept`, without the key conjunct.
   The setter laws of `EpochFrameLaws` and the frame lemmas of validator writes no longer take a key equality, and the `_of_whole` forms no longer take the old validator.
   The activity, chain and effective-balance totality theorems lose their registry-size arguments.
