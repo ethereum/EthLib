@@ -18,7 +18,9 @@ Applied to the state before the block, these give the state after the block.
 
 A field with no change in the list keeps its value from before the block.
 
-So a client can apply the list to the state before the block, without running the transactions.
+So a client that holds a list with the hash in the header can apply it to the state before.
+
+That needs no run of the transactions, as long as the hash has no known collision.
 
 This holds when the calls of the body keep a property of block states that makes each one fit.
 
@@ -48,7 +50,8 @@ theorem BodyState.tracks_join {body body' : BodyState} {tx : TransactionState} {
   exact h.recordTransaction hfollow hrecord
 
 /-- A later position keeps the builder of a body following the block. -/
-theorem BodyState.tracks_beginIndex {body : BodyState} {base : BlockState} {index : Nat}
+private theorem BodyState.tracks_beginIndex {body : BodyState} {base : BlockState}
+    {index : Nat}
     (h : body.builder.Tracks base body.block) (hindex : body.builder.index < UInt32.ofNat index) :
     (body.beginIndex index).builder.Tracks base (body.beginIndex index).block :=
   h.beginIndex hindex
@@ -57,11 +60,11 @@ theorem BodyState.tracks_beginIndex {body : BodyState} {base : BlockState} {inde
 
 /-- The calls of a body at `fork` keep a property `P` of block states, and the builder follows each.
 
-A system call runs on a block state with `P`.
+Take a block state with `P`.
 
-So does a transaction that enters the block, and so do the withdrawals.
+A system call on it is one that the builder follows, and the block state after it has `P`.
 
-The builder follows each of them, and the block state after it has `P`.
+So is a transaction that enters the block, and so are the withdrawals.
 
 These are assumptions on the calls, which this file does not prove. -/
 structure KeepsFollowable (env : BlockEnvironment fork) (P : BlockState → Prop) : Prop where
@@ -182,7 +185,9 @@ private theorem onBlock_pure {block block' : BlockState}
 
 /-- From Dencun, the builder at the end of a body follows the block from its start.
 
-Before Dencun, SELFDESTRUCT wipes storage that the list does not name, so no call fits there.
+Before Dencun, a SELFDESTRUCT can wipe storage that the list does not name.
+
+So the property is not expected to hold there, and the theorem starts at Dencun.
 
 The calls of the body keep a property of block states that the start has.
 
@@ -245,7 +250,9 @@ The nonce is in 64 bits, as the list holds it, which loses nothing below 2^64.
 
 The calls of the body keep a property of block states that the state before the block has.
 
-Until EIP-7610 applies, that excludes storage at an account with no nonce and no code.
+That excludes storage at an account that is empty or missing, since deleting it wipes its storage.
+
+Until EIP-7610 applies, it also excludes storage at an account with no nonce and no code.
 
 The block has fewer than 2^32 - 1 transactions.
 

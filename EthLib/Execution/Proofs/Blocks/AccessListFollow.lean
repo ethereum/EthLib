@@ -83,6 +83,8 @@ This excludes a creation at an address with storage but no nonce and no code.
 
 EthLib wipes that storage, since it does not apply [EIP-7610][eip7610].
 
+It also excludes a change that deletes an empty account with storage, which wipes it too.
+
 The code that the call reads for an account it wrote has the code hash of that account.
 
 A code map is a plain map, so nothing else ties the code that it gives to its hash.
