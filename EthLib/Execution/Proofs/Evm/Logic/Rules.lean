@@ -18,11 +18,15 @@ It also hashes memory.
 
 It then reads and writes its storage, and returns a word.
 
-The rule for SSTORE holds from Berlin to the fork before Glamsterdam, by EIP-2200 and EIP-2929.
+The rule for SSTORE holds from Berlin, by EIP-2200 and EIP-2929.
 
 Its price and its refund are those of EIP-2200, with the prices of EIP-2929.
 
+From Glamsterdam, its one counter also pays the state gas of EIP-8037 and ignores its refill.
+
 From London, the refund to clear a slot is that of EIP-3529.
+
+From Glamsterdam, its price and its refund are those of EIP-8038.
 
 Each rule here is a triple for one opcode, from one running frame of a code to the next.
 
@@ -1395,20 +1399,22 @@ theorem instruction_sstore : instruction (Meter := Nat) fork .sstore = some ssto
   simp [instruction, stackOnlyStep, controlFlowStep, memoryDataStep, returnOpStep,
     environmentStep, accountStep, storageStep, HOrElse.hOrElse, OrElse.orElse, Option.orElse]
 
-/-- The step of SSTORE, from Berlin to before Glamsterdam, in a frame that may change the state.
+/-- The step of SSTORE from Berlin, with one counter of gas, in a frame that may change the state.
 
 It pops a key and a word, marks the slot of the current account accessed, and records its read.
 
-It pays the price of the write, from the original, current and new words and the cold flag.
+It pays execution gas and state gas, from the original, current and new words and the cold flag.
+
+Before Glamsterdam, the state gas is zero.
 
 It writes the word, and adds the refund of the write to the refund counter.
 
 The frame keeps its output and its return data. -/
-theorem sstoreStep_eq (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
+theorem sstoreStep_eq (hfork : .berlin ≤ fork)
     {evm : Evm fork Nat} {key new : U256} {rest : List U256} {state' : State.TransactionState}
     (hst : evm.stack.val = key :: new :: rest) (hstatic : evm.message.isStatic = false)
     (hstipend : CALL_STIPEND < evm.gas)
-    (hgas : sstoreCost fork
+    (hgas : sstoreTotalCost fork
       (evm.state.getStorageOriginal evm.message.currentTarget (U256.toBeBytes key))
       (evm.state.getStorage evm.message.currentTarget (U256.toBeBytes key)) new
       (decide (U256.toBeBytes key ∉
@@ -1419,7 +1425,7 @@ theorem sstoreStep_eq (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
       after.code = evm.code ∧ after.validJumpDestinations = evm.validJumpDestinations ∧
       after.message = evm.message ∧ after.pc = evm.pc + 1 ∧ after.stack.val = rest ∧
       after.memory = evm.memory ∧
-      after.gas = evm.gas - sstoreCost fork
+      after.gas = evm.gas - sstoreTotalCost fork
         (evm.state.getStorageOriginal evm.message.currentTarget (U256.toBeBytes key))
         (evm.state.getStorage evm.message.currentTarget (U256.toBeBytes key)) new
         (decide (U256.toBeBytes key ∉
@@ -1433,52 +1439,55 @@ theorem sstoreStep_eq (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
           (evm.state.getStorageOriginal evm.message.currentTarget (U256.toBeBytes key))
           (evm.state.getStorage evm.message.currentTarget (U256.toBeBytes key)) new } ∧
       after.returnData = evm.returnData := by
-  have hng : ¬fork ≥ .glamsterdam := Nat.not_le_of_lt hglam
   have hist : Fork.istanbul ≤ fork := Nat.le_trans (by decide) hfork
   rcases evm with ⟨pc, ⟨l, hl⟩, memory, code, valid, gas, running, message, output, returnData,
     state, substate, error⟩
   simp only at hst hstatic hstipend hgas hset ⊢
   subst hst
-  have hstate : sstoreStateGas fork (state.getStorageOriginal message.currentTarget
-      (U256.toBeBytes key)) (state.getStorage message.currentTarget (U256.toBeBytes key)) new =
-      0 := by simp [sstoreStateGas, hng]
-  have hrefill : ∀ g : Nat, GasMeter.refill g (sstoreStateRefill fork
-      (state.getStorageOriginal message.currentTarget (U256.toBeBytes key))
-      (state.getStorage message.currentTarget (U256.toBeBytes key)) new) = g := fun _ => rfl
-  have hgas' : sstoreCost fork
-      (state.getStorageOriginal message.currentTarget (U256.toBeBytes key))
-      (state.getStorage message.currentTarget (U256.toBeBytes key)) new
-      (!decide (U256.toBeBytes key ∈ substate.accessedStorageKeys.getD message.currentTarget ∅))
-      ≤ gas := by simpa using hgas
-  simp [sstoreStep, hng, popWord, Stack.pop, bind, Except.bind, pure, Except.pure, hist,
+  let original := state.getStorageOriginal message.currentTarget (U256.toBeBytes key)
+  let current := state.getStorage message.currentTarget (U256.toBeBytes key)
+  let cold := !decide (U256.toBeBytes key ∈
+    substate.accessedStorageKeys.getD message.currentTarget ∅)
+  have hgas' : sstoreCost fork original current new cold +
+      sstoreStateGas fork original current new ≤ gas := by
+    simpa [sstoreTotalCost, original, current, cold] using hgas
+  have he : sstoreCost fork original current new cold ≤ gas := by omega
+  have hs : sstoreStateGas fork original current new ≤
+      gas - sstoreCost fork original current new cold := by omega
+  dsimp only [original, current, cold] at he hs
+  simp [sstoreStep, popWord, Stack.pop, bind, Except.bind, pure, Except.pure, hist,
     GasMeter.gasLeft, Nat.not_le.mpr hstipend, accessStorageKey, hfork, recordStorageRead,
-    keepReads, refillStateGas, hrefill, chargeGas, GasMeter.charge, Nat.not_lt.mpr hgas',
-    chargeStateGas, GasMeter.chargeState, hstate, hstatic, hset, Except.mapError, advance]
+    keepReads, refillStateGas, GasMeter.refill, chargeGas, GasMeter.charge, Nat.not_lt.mpr he,
+    chargeStateGas, GasMeter.chargeState, Nat.not_lt.mpr hs, hstatic, hset,
+    Except.mapError, advance, sstoreTotalCost, Nat.sub_sub]
 
-/-- From Berlin to before Glamsterdam, SSTORE writes a word to a slot of the current account.
+/-- From Berlin, with one counter of gas, SSTORE writes a word to a slot of the current account.
 
 The frame may change the state, and holds more than the stipend of 2300 gas, by EIP-2200.
 
 The slot is cold when the transaction has not accessed it yet, by EIP-2929.
 
-It pays the price of the write and adds its refund, from the original, current and new words.
+It pays execution gas and state gas, and adds the refund of the write.
+
+Before Glamsterdam, the state gas is zero.
 
 The write needs the account of the current address, and gives the state `state'`.
 
 It holds over the steps from frames that are monotone in gas. -/
-theorem sstoreG (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam) {key new : U256}
+theorem sstoreG (hfork : .berlin ≤ fork) {key new : U256}
     {rest : List U256} {cold : Bool} {state' : State.TransactionState}
     (hlt : pc < code.size) (hbyte : code[pc] = 0x55) (hstatic : message.isStatic = false)
     (hcold : decide (U256.toBeBytes key ∉
       substate.accessedStorageKeys.getD message.currentTarget ∅) = cold)
     (hstipend : CALL_STIPEND < gas)
-    (hgas : sstoreCost fork (state.getStorageOriginal message.currentTarget (U256.toBeBytes key))
+    (hgas : sstoreTotalCost fork
+      (state.getStorageOriginal message.currentTarget (U256.toBeBytes key))
       (state.getStorage message.currentTarget (U256.toBeBytes key)) new cold ≤ gas)
     (hset : (state.recordStorageRead message.currentTarget (U256.toBeBytes key)).setStorage
       message.currentTarget (U256.toBeBytes key) new = .ok state') :
     HoareG fork (At code message pc (key :: new :: rest) memory gas state substate returnData)
       (At code message (pc + 1) rest memory
-        (gas - sstoreCost fork
+        (gas - sstoreTotalCost fork
           (state.getStorageOriginal message.currentTarget (U256.toBeBytes key))
           (state.getStorage message.currentTarget (U256.toBeBytes key)) new cold)
         state'
@@ -1494,32 +1503,35 @@ theorem sstoreG (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam) {key ne
   rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss, hrd⟩
   subst hm hg hs hss hcold
   obtain ⟨after, h, a1, a2, a3, a4, a5, a6, a7, a8, a9, ao, a10, a11, a12⟩ :=
-    sstoreStep_eq hfork hglam hst hstatic hstipend hgas hset
+    sstoreStep_eq hfork hst hstatic hstipend hgas hset
   exact ⟨after, h, by rw [a1, hcode], by rw [a2, hj], a3, by rw [a4, hpc], a5, by rw [a6, hmem],
     a7, by rw [a8, hrun], by rw [a9, herr], by rw [ao, hout], a10, a11, by rw [a12, hrd]⟩
 
-/-- From Berlin to before Glamsterdam, SSTORE writes a word to a slot of the current account.
+/-- From Berlin, with one counter of gas, SSTORE writes a word to a slot of the current account.
 
 The frame may change the state, and holds more than the stipend of 2300 gas, by EIP-2200.
 
 The slot is cold when the transaction has not accessed it yet, by EIP-2929.
 
-It pays the price of the write and adds its refund, from the original, current and new words.
+It pays execution gas and state gas, and adds the refund of the write.
+
+Before Glamsterdam, the state gas is zero.
 
 The write needs the account of the current address, and gives the state `state'`. -/
-theorem sstore (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam) {key new : U256}
+theorem sstore (hfork : .berlin ≤ fork) {key new : U256}
     {rest : List U256} {cold : Bool} {state' : State.TransactionState}
     (hlt : pc < code.size) (hbyte : code[pc] = 0x55) (hstatic : message.isStatic = false)
     (hcold : decide (U256.toBeBytes key ∉
       substate.accessedStorageKeys.getD message.currentTarget ∅) = cold)
     (hstipend : CALL_STIPEND < gas)
-    (hgas : sstoreCost fork (state.getStorageOriginal message.currentTarget (U256.toBeBytes key))
+    (hgas : sstoreTotalCost fork
+      (state.getStorageOriginal message.currentTarget (U256.toBeBytes key))
       (state.getStorage message.currentTarget (U256.toBeBytes key)) new cold ≤ gas)
     (hset : (state.recordStorageRead message.currentTarget (U256.toBeBytes key)).setStorage
       message.currentTarget (U256.toBeBytes key) new = .ok state') :
     Hoare fork (At code message pc (key :: new :: rest) memory gas state substate returnData)
       (At code message (pc + 1) rest memory
-        (gas - sstoreCost fork
+        (gas - sstoreTotalCost fork
           (state.getStorageOriginal message.currentTarget (U256.toBeBytes key))
           (state.getStorage message.currentTarget (U256.toBeBytes key)) new cold)
         state'
@@ -1530,9 +1542,9 @@ theorem sstore (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam) {key new
           refundCounter := substate.refundCounter + sstoreRefund fork
             (state.getStorageOriginal message.currentTarget (U256.toBeBytes key))
             (state.getStorage message.currentTarget (U256.toBeBytes key)) new } returnData) :=
-  (sstoreG hfork hglam hlt hbyte hstatic hcold hstipend hgas hset).toHoare
+  (sstoreG hfork hlt hbyte hstatic hcold hstipend hgas hset).toHoare
 
-/-- From Berlin to before Glamsterdam, SSTORE to a slot of the current account, which exists.
+/-- From Berlin, with one counter of gas, SSTORE to a slot of the current account, which exists.
 
 The write then gives a state that holds `new` in the slot.
 
@@ -1540,14 +1552,15 @@ That state keeps every other slot of every address.
 
 It also keeps the words before the transaction, the accounts, the codes and the block.
 
-The rest is as for SSTORE: a frame that may change the state, more than 2300 gas, and the price. -/
-theorem sstore_of_account (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
+The rest is as for SSTORE: a frame that may change the state, more than 2300 gas, and the charge. -/
+theorem sstore_of_account (hfork : .berlin ≤ fork)
     {key new : U256} {rest : List U256} {cold : Bool}
     (hlt : pc < code.size) (hbyte : code[pc] = 0x55) (hstatic : message.isStatic = false)
     (hcold : decide (U256.toBeBytes key ∉
       substate.accessedStorageKeys.getD message.currentTarget ∅) = cold)
     (hstipend : CALL_STIPEND < gas)
-    (hgas : sstoreCost fork (state.getStorageOriginal message.currentTarget (U256.toBeBytes key))
+    (hgas : sstoreTotalCost fork
+      (state.getStorageOriginal message.currentTarget (U256.toBeBytes key))
       (state.getStorage message.currentTarget (U256.toBeBytes key)) new cold ≤ gas)
     (hacc : (state.getAccountOptional message.currentTarget).isSome = true) :
     ∃ state' : State.TransactionState,
@@ -1560,7 +1573,7 @@ theorem sstore_of_account (hfork : .berlin ≤ fork) (hglam : fork < .glamsterda
       state'.parent = state.parent ∧
       Hoare fork (At code message pc (key :: new :: rest) memory gas state substate returnData)
         (At code message (pc + 1) rest memory
-          (gas - sstoreCost fork
+          (gas - sstoreTotalCost fork
             (state.getStorageOriginal message.currentTarget (U256.toBeBytes key))
             (state.getStorage message.currentTarget (U256.toBeBytes key)) new cold)
           state'
@@ -1579,7 +1592,7 @@ theorem sstore_of_account (hfork : .berlin ≤ fork) (hglam : fork < .glamsterda
   refine ⟨state', State.TransactionState.getStorage_setStorage_self hset, fun other slot hne => ?_,
     ?_, fun other => ?_, fun codeHash => ?_,
     by rw [State.TransactionState.parent_setStorage hset]; rfl,
-    sstore hfork hglam hlt hbyte hstatic hcold hstipend hgas hset⟩
+    sstore hfork hlt hbyte hstatic hcold hstipend hgas hset⟩
   · rw [State.TransactionState.getStorage_setStorage_of_ne hset hne]
     exact (State.TransactionState.recordStorageRead_reads state _ other _ slot default).2.1
   · rw [State.TransactionState.getStorageOriginal_setStorage hset]

@@ -1044,8 +1044,8 @@ In that second case the write fails and aborts the run.
 `memoryWrite_comm_of_disjoint` proves that two writes within memory to disjoint ranges commute.
 `memoryReadBytes_memoryWrite_memoryWrite_rev` proves the same read when the higher write comes first.
 From Berlin, the rule for SLOAD takes as a hypothesis whether the slot is cold, and charges 2100 or 100 by EIP-2929.
-`Logic.sstore` is the rule for SSTORE from Berlin to before Glamsterdam, in a frame that may change the state and holds more than 2300 gas.
-It charges `sstoreCost` and adds `sstoreRefund` to the refund counter, from the original, current and new words and whether the slot is cold.
+`Logic.sstore` is the rule for SSTORE from Berlin, with one counter of gas, in a frame that may change the state and holds more than 2300 gas.
+It charges `sstoreTotalCost`, the price and the state gas of the write, ignores the refill of state gas, and adds `sstoreRefund` to the refund counter, from the original, current and new words and whether the slot is cold.
 It takes the state that the write gives as a hypothesis, since the write needs the account of the current address.
 `Logic.log` (`Logic/Log.lean`) is the rule for LOG0 to LOG4, at every fork with the one-counter meter, in a frame that may change the state.
 It appends one log of the current address with the topics and the range of memory.
@@ -1351,6 +1351,20 @@ Both hold for every bound on the gas of messages and every runner of messages.
 `Logic.SpecOn.runsOk` proves the same for a specification whose runner may fail only on the messages that it names.
 It assumes a runner that never fails on those messages.
 `Logic.not_runsOk_of_lt` proves that no run with less gas than `cost` succeeds, from a specification to a halt that pays `cost`, as above.
+
+### System contracts
+
+The four modules under `Execution/Proofs/Blocks/SystemCall/` for beacon roots, historical block hashes, withdrawal requests and consolidation requests prove the effects of their deployed bytecode.
+Their `systemCall_set` and `systemCall_dequeue` theorems hold from each contract's activation, with the gas meter of the fork, including the state gas meter from Glamsterdam.
+They require the specified bytecode at the contract's address.
+The queue theorems assume bounds on the storage counters, and the history theorem requires a block number from 1 to below `2^256`.
+
+`Logic.Reaches.followsMeter` lifts a normal one-counter run to the state gas meter when its execution gas initially covers that counter.
+The counter pays execution gas and state gas and ignores refills, so it gives a conservative budget.
+`Logic.SupportedCode` checks each opcode, skipping PUSH data, against a fixed list of instructions.
+The list leaves out GAS and every instruction that sends a message.
+The lifted run has the same fields outside its meter, including its state and output.
+`SystemContract.systemCall_of_writesStorage` applies this result to the actual system-call runner and its initial reservoir.
 
 ### SHA-256 precompile
 

@@ -12,6 +12,15 @@ Not yet released.
 - The safety threshold of the fast confirmation rule now fails when the discount for empty slots exceeds the weight of the committees since the parent ([#1832](https://github.com/ethereum/EthLib/issues/1832)).
   It fails with the new fork choice error `supportDiscountAboveMaximum`, of code 53, where it used to return half of what was left, or 0.
   A block at or before the current slot never reaches that error, and a proof shows it.
+- The theorems on the four system contracts of EIP-4788, EIP-2935, EIP-7002 and EIP-7251 now hold from Glamsterdam too, with the state gas meter of EIP-8037 ([#1861](https://github.com/ethereum/EthLib/pull/1861)).
+  No C export or Python function changes.
+  In Lean, each `systemCall_set` and `systemCall_dequeue`, with its `spec_set` or `spec_dequeue`, no longer requires a fork before Glamsterdam.
+  The one-counter gas premises of `spec_set` and `spec_dequeue` are multiplied by `storageGasScale fork`, which is 1 before Glamsterdam and 5 from it.
+  `RequestQueue.sstore_writes` and `RequestQueue.sstore_then` change the same way, and their continuation must hold with up to 22,100 gas times that factor less.
+  The SSTORE rules `sstoreStep_eq`, `sstoreG`, `sstore` and `sstore_of_account` of the EVM logic now hold from Berlin at every fork.
+  They charge `sstoreTotalCost`, the price and the state gas of the write, where they charged `sstoreCost`.
+  Before Glamsterdam, `sstoreTotalCost_of_lt` turns that charge back into the price.
+  `SystemContract.systemCall_of_spec` and `SystemContract.systemCall_of_writesStorage` no longer require a fork before Glamsterdam, and take a proof that the code passes `SupportedCode` from Glamsterdam.
 - Each fork upgrade now gives one upgrade frame, and the invariant across the upgrade follows from it ([#1841](https://github.com/ethereum/EthLib/pull/1841) and [#1851](https://github.com/ethereum/EthLib/pull/1851)).
   `UpgradeFrame` now also keeps the finalized checkpoint, and it carries the balance count and the exit order of the validators.
   So a caller that builds one supplies the three new fields, and `UpgradeFrame.of_carried` takes the finalized checkpoint and the number of balances as new premises.
