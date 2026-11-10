@@ -119,6 +119,13 @@ where
           else skipPayloadScalar wire rest
         go fuel rest payload
 
+/-- The error of a failure with the local identity secret.
+
+Deriving the public key and signing fail only on an invalid secret or in ECDSA itself. -/
+def identitySecretError : Libp2p.IdentityError → NoiseError
+  | .signing error => .signing error
+  | .privateKey | .publicKey | .peerId | .signature => .identitySecret
+
 /-- Sign the Noise static public key with the secp256k1 identity secret.
 
 The rule is noise-libp2p "Static Key Authentication" and "The libp2p Handshake Payload".
@@ -126,8 +133,8 @@ The rule is noise-libp2p "Static Key Authentication" and "The libp2p Handshake P
 The secret key must stay private, and this function makes no constant-time claim. -/
 def makePayload (identitySecret staticKey : Key) (extensions : Option ByteArray) :
     Except NoiseError ByteArray := do
-  let publicKey ← (Libp2p.publicKey identitySecret).mapError fun _ => .identity
-  let signature ← (Libp2p.sign identitySecret (signedStatic staticKey)).mapError fun _ => .identity
+  let publicKey ← (Libp2p.publicKey identitySecret).mapError identitySecretError
+  let signature ← (Libp2p.sign identitySecret (signedStatic staticKey)).mapError identitySecretError
   encodePayload ⟨publicKey, signature, extensions⟩
 
 /-- Successful authentication carries the real signature check on this static coordinate. -/
@@ -175,18 +182,19 @@ def complete (s : Libp2pState) : Except NoiseError (Key × RemoteInfo) := do
   if s.handshake.step = 3 then
     let (before, message) ← match s.remoteMessage with
       | some value => pure value
-      | none => throw .identity
+      | none => throw .savedRemote
     if before.initiator = s.handshake.initiator ∧
         before.step = (if s.handshake.initiator then 1 else 2) then
-      let (received, payload) ← readMessage before message
+      -- Reading succeeded once, so a failure now means the caller changed the saved message.
+      let (received, payload) ← (readMessage before message).mapError fun _ => .savedRemote
       if received.step = (if s.handshake.initiator then 2 else 3) then
-        let staticKey ← requireKey received.remoteStatic
+        let staticKey ← (requireKey received.remoteStatic).mapError fun _ => .savedRemote
         if s.handshake.remoteStatic = some staticKey then
-          let authenticated ← authenticatePayload staticKey payload
+          let authenticated ← (authenticatePayload staticKey payload).mapError fun _ => .savedRemote
           return (staticKey, remoteInfo authenticated)
-        else throw .identity
-      else throw .wrongPhase
-    else throw .wrongPhase
+        else throw .savedRemote
+      else throw .savedRemote
+    else throw .savedRemote
   else throw .wrongPhase
 
 /-- Write a libp2p message; first-message extensions are forbidden by the payload rules. -/

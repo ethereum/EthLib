@@ -13,6 +13,8 @@ Its note calls this function HKDF of [RFC 5869](https://www.rfc-editor.org/rfc/r
 There the chaining key is the salt, and the info is empty.
 
 So the two outputs are the first 64 bytes of that HKDF.
+
+Distinct kinds of handshake error have distinct codes.
 -/
 
 @[expose] public section
@@ -34,5 +36,12 @@ theorem hkdf_eq_hkdf2 (chainingKey : Key) (input : ByteArray) :
     rw [Hkdf.blocks_size]; rfl, ByteArray.extract_zero_size]
   -- The two blocks of RFC 5869 are the two outputs, with the empty info dropped.
   congr 1
+
+/-- Two errors with one code are of the same kind. -/
+theorem NoiseError.code_injective (e₁ e₂ : NoiseError) (h : e₁.code = e₂.code) :
+    e₁.ctorIdx = e₂.ctorIdx := by
+  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
+  cases e₁ <;> cases e₂ <;>
+    first | rfl | (simp only [NoiseError.code] at h; exact absurd h (by decide))
 
 end EthLib.Networking.Noise
