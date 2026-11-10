@@ -14,6 +14,10 @@ For a total active balance `t` and a churn `c`, it is the withdrawal delay plus 
 
 The 64-bit computation gives that value exactly when nothing reaches `2^64` and `c` is not zero.
 
+Its epochs of churn, the period less the delay, times `c` are at most `SAFETY_DECAY / 200` of `t`.
+
+So a change of at most `3 c` for each of them, in total, keeps a margin of `1/3 - SAFETY_DECAY/100`.
+
 In Phase 0, a computed period is one of the two expressions of the rule, on natural numbers.
 
 In Phase 0, the period is at most the delay plus the larger of two terms.
@@ -90,6 +94,39 @@ theorem le_of_balanceChurnPeriod_eq_ok {minDelay total churn period : UInt64}
   obtain ⟨-, -, -, -, hperiod⟩ := balanceChurnPeriod_eq_ok_iff.mp h
   exact UInt64.le_iff_toNat_le.mpr (hperiod ▸ Nat.le_add_right _ _)
 
+/-- From Electra: the epochs of churn of a period, the period less the delay, are few enough.
+
+That many epochs, at `churn` each, total at most `SAFETY_DECAY / 200` of the total balance. -/
+theorem churn_le_of_balanceChurnPeriod_eq_ok {minDelay total churn period : UInt64}
+    (h : balanceChurnPeriod minDelay total churn = .ok period) :
+    200 * ((period.toNat - minDelay.toNat) * churn.toNat) ≤ SAFETY_DECAY.toNat * total.toNat := by
+  obtain ⟨-, -, -, -, hperiod⟩ := balanceChurnPeriod_eq_ok_iff.mp h
+  have hD : SAFETY_DECAY.toNat = 10 := rfl
+  rw [hperiod, Nat.add_sub_cancel_left, hD, ← Nat.mul_assoc, Nat.mul_comm 200, Nat.mul_assoc]
+  exact Nat.div_mul_le_self _ _
+
+/-- From Electra: the period keeps a safety margin of `1/3 - SAFETY_DECAY/100` of the balance.
+
+Take a stake `x` and the epochs `n` of churn of the period, the period less the delay.
+
+Assume the total balance is at most `3 x + 2 n k`, with `k` three times the churn.
+
+Accountable safety gives that bound when each set changes by at most `n k` since the checkpoint.
+
+Then `x` is at least `1/3 - SAFETY_DECAY/100` of the total balance.
+
+With `SAFETY_DECAY` at 10 that is `7/30`, about 23.3%. -/
+theorem safetyMargin_of_balanceChurnPeriod_eq_ok {minDelay total churn period : UInt64} {x : Nat}
+    (h : balanceChurnPeriod minDelay total churn = .ok period)
+    (bound : total.toNat ≤
+      3 * x + 2 * ((period.toNat - minDelay.toNat) * (3 * churn.toNat))) :
+    (100 - 3 * SAFETY_DECAY.toNat) * total.toNat ≤ 300 * x := by
+  have hchurn := churn_le_of_balanceChurnPeriod_eq_ok h
+  have hD : SAFETY_DECAY.toNat = 10 := rfl
+  rw [hD] at hchurn ⊢
+  rw [Nat.mul_left_comm (period.toNat - minDelay.toNat)] at bound
+  omega
+
 /-- Electra and Fulu: the period is the closed form, for the total active balance and its churn.
 
 It succeeds exactly when both have values and the closed form does. -/
@@ -146,6 +183,28 @@ theorem computeWeakSubjectivityPeriodGloas_eq_ok_iff {config : Config}
   unfold computeWeakSubjectivityPeriodGloas
   simp only [bind_ok_iff, mapError_ok_iff]
   exact ⟨fun ⟨a, ha, b, hb, hc⟩ => ⟨a, b, ha, hb, hc⟩, fun ⟨a, b, ha, hb, hc⟩ => ⟨a, ha, b, hb, hc⟩⟩
+
+/-- From Electra: the period is the balance churn period of the total active balance.
+
+Its churn is the weighted churn from Gloas, and the balance churn in Electra and Fulu. -/
+theorem balanceChurnPeriod_of_computeWeakSubjectivityPeriod_eq_ok {config : Config}
+    {state : BeaconState preset fork} (electra : .pectra ≤ fork) {period churn : UInt64}
+    (periodOk : computeWeakSubjectivityPeriod config state = .ok period)
+    (churnOk : if .glamsterdam ≤ fork then gloasWeightedChurn config state = .ok churn
+      else getBalanceChurnLimit config state = .ok churn) :
+    ∃ total, getTotalActiveBalance state = .ok total ∧
+      balanceChurnPeriod config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY total churn = .ok period := by
+  unfold computeWeakSubjectivityPeriod at periodOk
+  -- The split also discharges the Phase 0 branch with `electra`.
+  split at periodOk <;> rename_i gloas <;> simp only [gloas, ↓reduceIte] at churnOk
+  · obtain ⟨total, churn', totalOk, churnOk', periodOk⟩ :=
+      computeWeakSubjectivityPeriodGloas_eq_ok_iff.mp periodOk
+    rw [churnOk, Except.ok.injEq] at churnOk'
+    exact ⟨total, totalOk, churnOk' ▸ periodOk⟩
+  · obtain ⟨total, churn', totalOk, churnOk', periodOk⟩ :=
+      computeWeakSubjectivityPeriodElectra_eq_ok_iff.mp periodOk
+    rw [churnOk, Except.ok.injEq] at churnOk'
+    exact ⟨total, totalOk, churnOk' ▸ periodOk⟩
 
 /-- Phase 0: computed epochs are one of the two expressions of the rule, on natural numbers.
 

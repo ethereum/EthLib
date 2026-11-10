@@ -298,6 +298,35 @@ theorem accountable_safety_reference [DecidableEq ν] {c₁ c₂ : Checkpoint β
   omega
 
 open scoped Classical in
+/-- Accountable safety when the validator sets change little since a reference set `V₀`.
+
+Take two finalized checkpoints whose blocks conflict.
+
+Take each justified checkpoint whose epoch lies between theirs.
+
+Assume the stake that joined its set since `V₀`, plus twice the stake that left, is at most `b`.
+
+Then two such justified checkpoints `l` and `r` have slashable validators of both sets.
+
+Their stake `x` satisfies `w(V₀) ≤ 3 * x + 2 * b`. -/
+theorem accountable_safety_of_change [DecidableEq ν] {c₁ c₂ : Checkpoint β}
+    (h₁ : Finalized V w genesis votes c₁) (h₂ : Finalized V w genesis votes c₂)
+    (hc : Conflicting c₁.block c₂.block) (V₀ : Finset ν) (b : ℕ)
+    (change : ∀ c : Checkpoint β, min c₁.epoch c₂.epoch ≤ c.epoch →
+      c.epoch ≤ max c₁.epoch c₂.epoch → Justified V w genesis votes c →
+      stake w (V c \ V₀) + 2 * stake w (V₀ \ V c) ≤ b) :
+    ∃ l r : Checkpoint β, min c₁.epoch c₂.epoch ≤ l.epoch ∧ l.epoch ≤ max c₁.epoch c₂.epoch ∧
+      min c₁.epoch c₂.epoch ≤ r.epoch ∧ r.epoch ≤ max c₁.epoch c₂.epoch ∧
+      Justified V w genesis votes l ∧ Justified V w genesis votes r ∧
+      stake w V₀ ≤ 3 * stake w {v ∈ V l ∩ V r | Slashable votes v} + 2 * b := by
+  obtain ⟨l, r, lo₁, hi₁, lo₂, hi₂, hl, hr, h⟩ := accountable_safety_reference h₁ h₂ hc
+  have h := h V₀
+  refine ⟨l, r, lo₁, hi₁, lo₂, hi₂, hl, hr, ?_⟩
+  have := change l lo₁ hi₁ hl
+  have := change r lo₂ hi₂ hr
+  omega
+
+open scoped Classical in
 /-- Accountable safety when the validator sets change slowly after a reference set `V₀`.
 
 Take two finalized checkpoints whose blocks conflict.
@@ -330,20 +359,11 @@ theorem accountable_safety_of_steps [DecidableEq ν] {c₁ c₂ : Checkpoint β}
       min c₁.epoch c₂.epoch ≤ r.epoch ∧ r.epoch ≤ max c₁.epoch c₂.epoch ∧
       Justified V w genesis votes l ∧ Justified V w genesis votes r ∧
       stake w V₀ ≤ 3 * stake w {v ∈ V l ∩ V r | Slashable votes v} + 2 * (n * d) := by
-  obtain ⟨l, r, lo₁, hi₁, lo₂, hi₂, hl, hr, h⟩ := accountable_safety_reference h₁ h₂ hc
-  have h := h V₀
-  refine ⟨l, r, lo₁, hi₁, lo₂, hi₂, hl, hr, ?_⟩
   -- The change of each set since `V₀` is at most the changes of its steps, so at most `n * d`.
-  have change : ∀ c : Checkpoint β, min c₁.epoch c₂.epoch ≤ c.epoch →
-      c.epoch ≤ max c₁.epoch c₂.epoch → Justified V w genesis votes c →
-      stake w (V c \ V₀) + 2 * stake w (V₀ \ V c) ≤ n * d := by
-    intro c lo hi hj
-    obtain ⟨S, m, hm, h0, hS, hstep⟩ := steps c lo hi hj
-    rw [← h0, ← hS]
-    exact (stake_sdiff_add_two_mul_le S hstep).trans (Nat.mul_le_mul_right d hm)
-  have := change l lo₁ hi₁ hl
-  have := change r lo₂ hi₂ hr
-  omega
+  refine accountable_safety_of_change h₁ h₂ hc V₀ (n * d) fun c lo hi hj => ?_
+  obtain ⟨S, m, hm, h0, hS, hstep⟩ := steps c lo hi hj
+  rw [← h0, ← hS]
+  exact (stake_sdiff_add_two_mul_le S hstep).trans (Nat.mul_le_mul_right d hm)
 
 /-- Accountable safety with one validator set `V` for every vote.
 
