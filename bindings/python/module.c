@@ -93,6 +93,11 @@ PyObject* RLP_ERROR;
 PyObject* SSZ_ERROR;
 PyObject* SNAPPY_ERROR;
 PyObject* VARINT_ERROR;
+PyObject* UVARINT_ERROR;
+PyObject* MULTISTREAM_ERROR;
+PyObject* MPLEX_ERROR;
+PyObject* YAMUX_ERROR;
+PyObject* LIBP2P_IDENTITY_ERROR;
 PyObject* GOSSIP_ERROR;
 PyObject* DISCV5_ERROR;
 PyObject* RLPX_ERROR;
@@ -1054,6 +1059,17 @@ static PyMethodDef methods[] = {
   {"snappy_masked_crc", py_snappy_masked_crc, METH_VARARGS, DOC_snappy_masked_crc},
   {"varint_encode", py_varint_encode, METH_VARARGS, DOC_varint_encode},
   {"varint_decode", py_varint_decode, METH_VARARGS, DOC_varint_decode},
+  {"uvarint_encode", py_uvarint_encode, METH_VARARGS, DOC_uvarint_encode},
+  {"uvarint_decode", py_uvarint_decode, METH_VARARGS, DOC_uvarint_decode},
+  {"multistream_encode", py_multistream_encode, METH_VARARGS, DOC_multistream_encode},
+  {"multistream_decode", py_multistream_decode, METH_VARARGS, DOC_multistream_decode},
+  {"mplex_encode", py_mplex_encode, METH_VARARGS, DOC_mplex_encode},
+  {"mplex_decode", py_mplex_decode, METH_VARARGS, DOC_mplex_decode},
+  {"yamux_encode", py_yamux_encode, METH_VARARGS, DOC_yamux_encode},
+  {"yamux_decode", py_yamux_decode, METH_VARARGS, DOC_yamux_decode},
+  {"libp2p_public_key", py_libp2p_public_key, METH_VARARGS, DOC_libp2p_public_key},
+  {"libp2p_peer_id", py_libp2p_peer_id, METH_VARARGS, DOC_libp2p_peer_id},
+  {"libp2p_decode_peer_id", py_libp2p_decode_peer_id, METH_VARARGS, DOC_libp2p_decode_peer_id},
   {"gossip_message_id", py_gossip_message_id, METH_VARARGS, DOC_gossip_message_id},
   {"gossip_decode_payload", py_gossip_decode_payload, METH_VARARGS, DOC_gossip_decode_payload},
   {"receipt_reencode", py_receipt_reencode, METH_VARARGS, DOC_receipt_reencode},
@@ -1152,6 +1168,11 @@ PyInit__native(void) {
     SSZ_ERROR = PyObject_GetAttrString(errors, "SszError");
     SNAPPY_ERROR = PyObject_GetAttrString(errors, "SnappyError");
     VARINT_ERROR = PyObject_GetAttrString(errors, "VarintError");
+    UVARINT_ERROR = PyObject_GetAttrString(errors, "UvarintError");
+    MULTISTREAM_ERROR = PyObject_GetAttrString(errors, "MultistreamError");
+    MPLEX_ERROR = PyObject_GetAttrString(errors, "MplexError");
+    YAMUX_ERROR = PyObject_GetAttrString(errors, "YamuxError");
+    LIBP2P_IDENTITY_ERROR = PyObject_GetAttrString(errors, "Libp2pIdentityError");
     GOSSIP_ERROR = PyObject_GetAttrString(errors, "GossipError");
     DISCV5_ERROR = PyObject_GetAttrString(errors, "Discv5Error");
     RLPX_ERROR = PyObject_GetAttrString(errors, "RlpxError");

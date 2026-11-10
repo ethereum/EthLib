@@ -7,6 +7,7 @@ public import EthLib.Networking.Exports.ForkId
 public import EthLib.Networking.Exports.Enr
 public import EthLib.Networking.Exports.Noise
 public import EthLib.Networking.Exports.Gossip
+public import EthLib.Networking.Exports.Libp2p
 public import EthLib.Networking.Exports.ReqResp
 public import EthLib.Networking.Exports.Rlpx
 public import EthLib.Networking.Exports.Snappy

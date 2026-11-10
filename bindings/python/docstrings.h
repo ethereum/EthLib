@@ -914,6 +914,39 @@
 #define DOC_varint_decode \
   "The 64-bit value a varint denotes, or why it is not a valid varint."
 
+#define DOC_uvarint_encode \
+  "The unsigned varint of a value below `2^63`."
+
+#define DOC_uvarint_decode \
+  "The value of the unsigned varint at the start of the bytes, and the bytes after it."
+
+#define DOC_multistream_encode \
+  "The bytes of one multistream-select message: its length, its bytes, then a newline."
+
+#define DOC_multistream_decode \
+  "The multistream-select message at the start of the bytes, and the bytes after it."
+
+#define DOC_mplex_encode \
+  "The bytes of a valid mplex frame."
+
+#define DOC_mplex_decode \
+  "The mplex frame at the start of the bytes, and the bytes after it."
+
+#define DOC_yamux_encode \
+  "The bytes of a valid yamux frame."
+
+#define DOC_yamux_decode \
+  "The yamux frame at the start of the bytes, and the bytes after it."
+
+#define DOC_libp2p_public_key \
+  "The public-key protobuf of a 32-byte big-endian secp256k1 secret in [1, n)."
+
+#define DOC_libp2p_peer_id \
+  "The peer ID of a canonical secp256k1 key protobuf."
+
+#define DOC_libp2p_decode_peer_id \
+  "The key protobuf that a binary secp256k1 peer ID names."
+
 #define DOC_gossip_message_id \
   "The message ID of a message on a topic of a fork: the first 20 bytes of a SHA-256 digest."
 

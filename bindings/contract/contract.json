@@ -8213,6 +8213,140 @@
    "error_class": "VarintError",
    "docstring":
    "The 64-bit value a varint denotes, or why it is not a valid varint.\n\nThe rules are checked in this order:\n\n1. The ten-byte cap, while reading, so the work stays bounded.\n2. Minimal encoding.\n3. The 64-bit range.\n\n# Why minimality is enforced\n\nThe specification only says SHOULD.\n\nRejecting padding means each length has exactly one encoding.\n\nSo a message cannot be re-sent with a different prefix that differs only in padding."},
+  {"summary": "The unsigned varint of a value below `2^63`.",
+   "signature": "(value: int) -> bytes",
+   "operation": "EthLib.Networking.Encoding.Uvarint.Exports.encodeExport",
+   "method": "uvarint_encode",
+   "errors": [],
+   "error_class": "UvarintError",
+   "docstring": "The unsigned varint of a value below `2^63`."},
+  {"summary":
+   "The value of the unsigned varint at the start of the bytes, and the bytes after it.",
+   "signature": "(data: bytes) -> tuple[int, bytes]",
+   "operation": "EthLib.Networking.Encoding.Uvarint.Exports.decodeExport",
+   "method": "uvarint_decode",
+   "errors":
+   [{"type": "EthLib.Networking.Encoding.Uvarint.UvarintError",
+     "codes":
+     [{"constructor": "varint", "code": 1},
+      {"constructor": "tooLarge", "code": 2}]}],
+   "error_class": "UvarintError",
+   "docstring":
+   "The value of the unsigned varint at the start of the bytes, and the bytes after it."},
+  {"summary":
+   "The bytes of one multistream-select message: its length, its bytes, then a newline.",
+   "signature": "(message: bytes) -> bytes",
+   "operation": "EthLib.Networking.Libp2p.Exports.multistreamEncodeExport",
+   "method": "multistream_encode",
+   "errors": [],
+   "error_class": "MultistreamError",
+   "docstring":
+   "The bytes of one multistream-select message: its length, its bytes, then a newline.\n\nThe length counts the newline.\n\nThe message must be shorter than `2^63 - 1` bytes, so that its length fits an unsigned varint."},
+  {"summary":
+   "The multistream-select message at the start of the bytes, and the bytes after it.",
+   "signature": "(data: bytes) -> tuple[bytes, bytes]",
+   "operation": "EthLib.Networking.Libp2p.Exports.multistreamDecodeExport",
+   "method": "multistream_decode",
+   "errors":
+   [{"type": "EthLib.Networking.Libp2p.Multistream.MultistreamError",
+     "codes":
+     [{"constructor": "length", "code": 1},
+      {"constructor": "empty", "code": 2},
+      {"constructor": "truncated", "code": 3},
+      {"constructor": "missingNewline", "code": 4}]}],
+   "error_class": "MultistreamError",
+   "docstring":
+   "The multistream-select message at the start of the bytes, and the bytes after it."},
+  {"summary": "The bytes of a valid mplex frame.",
+   "signature": "(frame: dict[str, Any]) -> bytes",
+   "operation": "EthLib.Networking.Libp2p.Exports.mplexEncodeExport",
+   "method": "mplex_encode",
+   "errors": [],
+   "error_class": "MplexError",
+   "docstring": "The bytes of a valid mplex frame."},
+  {"summary":
+   "The mplex frame at the start of the bytes, and the bytes after it.",
+   "signature": "(data: bytes) -> tuple[dict[str, Any], bytes]",
+   "operation": "EthLib.Networking.Libp2p.Exports.mplexDecodeExport",
+   "method": "mplex_decode",
+   "errors":
+   [{"type": "EthLib.Networking.Libp2p.Mplex.MplexError",
+     "codes":
+     [{"constructor": "header", "code": 1},
+      {"constructor": "unknownFlag", "code": 2},
+      {"constructor": "length", "code": 3},
+      {"constructor": "tooLong", "code": 4},
+      {"constructor": "dataOnEnd", "code": 5},
+      {"constructor": "truncated", "code": 6}]}],
+   "error_class": "MplexError",
+   "docstring":
+   "The mplex frame at the start of the bytes, and the bytes after it."},
+  {"summary": "The bytes of a valid yamux frame.",
+   "signature": "(frame: dict[str, Any]) -> bytes",
+   "operation": "EthLib.Networking.Libp2p.Exports.yamuxEncodeExport",
+   "method": "yamux_encode",
+   "errors": [],
+   "error_class": "YamuxError",
+   "docstring": "The bytes of a valid yamux frame."},
+  {"summary":
+   "The yamux frame at the start of the bytes, and the bytes after it.",
+   "signature": "(data: bytes) -> tuple[dict[str, Any], bytes]",
+   "operation": "EthLib.Networking.Libp2p.Exports.yamuxDecodeExport",
+   "method": "yamux_decode",
+   "errors":
+   [{"type": "EthLib.Networking.Libp2p.Yamux.YamuxError",
+     "codes":
+     [{"constructor": "shortHeader", "code": 1},
+      {"constructor": "version", "code": 2},
+      {"constructor": "unknownKind", "code": 3},
+      {"constructor": "truncated", "code": 4}]}],
+   "error_class": "YamuxError",
+   "docstring":
+   "The yamux frame at the start of the bytes, and the bytes after it."},
+  {"summary":
+   "The public-key protobuf of a 32-byte big-endian secp256k1 secret in [1, n).",
+   "signature": "(secret: bytes) -> bytes",
+   "operation": "EthLib.Networking.Libp2p.Exports.publicKeyExport",
+   "method": "libp2p_public_key",
+   "errors":
+   [{"type": "EthLib.Networking.Libp2p.IdentityError",
+     "codes":
+     [{"constructor": "publicKey", "code": 1},
+      {"constructor": "peerId", "code": 2},
+      {"constructor": "privateKey", "code": 3},
+      {"constructor": "signature", "code": 4},
+      {"constructor": "signing", "code": 5}]}],
+   "error_class": "Libp2pIdentityError",
+   "docstring":
+   "The public-key protobuf of a 32-byte big-endian secp256k1 secret in [1, n).\n\nHere n is the order of the group.\n\nThe secret key must stay private, and this function makes no constant-time claim."},
+  {"summary": "The peer ID of a canonical secp256k1 key protobuf.",
+   "signature": "(public_key: bytes) -> bytes",
+   "operation": "EthLib.Networking.Libp2p.Exports.peerIdExport",
+   "method": "libp2p_peer_id",
+   "errors":
+   [{"type": "EthLib.Networking.Libp2p.IdentityError",
+     "codes":
+     [{"constructor": "publicKey", "code": 1},
+      {"constructor": "peerId", "code": 2},
+      {"constructor": "privateKey", "code": 3},
+      {"constructor": "signature", "code": 4},
+      {"constructor": "signing", "code": 5}]}],
+   "error_class": "Libp2pIdentityError",
+   "docstring": "The peer ID of a canonical secp256k1 key protobuf."},
+  {"summary": "The key protobuf that a binary secp256k1 peer ID names.",
+   "signature": "(peer_id: bytes) -> bytes",
+   "operation": "EthLib.Networking.Libp2p.Exports.decodePeerIdExport",
+   "method": "libp2p_decode_peer_id",
+   "errors":
+   [{"type": "EthLib.Networking.Libp2p.IdentityError",
+     "codes":
+     [{"constructor": "publicKey", "code": 1},
+      {"constructor": "peerId", "code": 2},
+      {"constructor": "privateKey", "code": 3},
+      {"constructor": "signature", "code": 4},
+      {"constructor": "signing", "code": 5}]}],
+   "error_class": "Libp2pIdentityError",
+   "docstring": "The key protobuf that a binary secp256k1 peer ID names."},
   {"summary":
    "The message ID of a message on a topic of a fork: the first 20 bytes of a SHA-256 digest.",
    "signature": "(fork: str, topic: bytes, data: bytes) -> bytes",
