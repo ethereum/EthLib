@@ -490,7 +490,9 @@ It pays each payment of the previous epoch whose weight is at least the quorum t
 
 The hypothesis on the parent payment is part of the builder debt invariant.
 
-The hypotheses on the weights and the genesis epoch are assumptions, which no lemma proves yet.
+The hypothesis on the weights holds along a chain from the upgrade to Gloas.
+
+The hypothesis on the genesis epoch is an assumption, which no lemma proves yet.
 -/
 theorem processBuilderPendingPayments_release (positive : preset.PaymentQuorumPositive)
     {gloas : .glamsterdam ≤ fork} (fresh : ParentPaymentFresh state gloas)

@@ -969,6 +969,18 @@ theorem applyExpectedWithdrawals_builderQueues {state after : BeaconState preset
     exact holds
   exact ⟨payments.trans kept.1, by rw [queue gloas, kept.2]⟩
 
+/-- From Gloas, the withdrawals of a block keep the pending payments. -/
+theorem processWithdrawals_payments {state after : BeaconState preset fork}
+    (gloas : .glamsterdam ≤ fork)
+    {capella : .shapella ≤ fork} {payload : Until .glamsterdam fork (ExecutionPayload preset fork)}
+    (computed : processWithdrawals state capella payload = .ok after) :
+    after.builderPendingPayments = state.builderPendingPayments := by
+  cases full : isParentBlockFull state gloas
+  · rw [processWithdrawals_of_parentEmpty payload gloas full, Except.ok.injEq] at computed
+    rw [computed]
+  · obtain ⟨_, -, appliedOk, -⟩ := processWithdrawals_recorded gloas full computed
+    exact (applyExpectedWithdrawals_builderQueues gloas appliedOk).1
+
 section
 
 variable {state : BeaconState preset fork}
