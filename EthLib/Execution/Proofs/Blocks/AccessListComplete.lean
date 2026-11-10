@@ -25,13 +25,11 @@ A header commits to that list from Glamsterdam, so a block that passes the trans
 
 Completeness is relative to the reads and writes that the state of each call records.
 
-The DAO transfer and the block rewards before Paris write the state without a call.
+The DAO transfer and the block rewards write the state without a call.
 
 The builder leaves them out.
 
-The rewards stop at Paris, before any block commits to a list.
-
-The DAO transfer runs only at the block that the chain configuration names for it.
+Both run only before Paris, before any block commits to a list.
 
 Source: [EIP-7928, Scope and Inclusion][eip7928].
 
@@ -213,7 +211,9 @@ theorem blockRequests_covers {depositContract : Address} {env : BlockEnvironment
 
 /-- The builder at the end of a body covers every call of the body.
 
-The system calls at the start run on the block state after the DAO transfer, if any.
+The system calls at the start run on the block state after the DAO transfer.
+
+From Paris that transfer leaves the state as it was.
 
 The transactions then run, and the builder after them keeps every record to the end.
 
@@ -224,8 +224,7 @@ theorem applyBody_covers {config : ChainConfig} {env : BlockEnvironment fork}
     {block : Block fork Transaction} {start : BlockState} {output : BlockOutput fork}
     (h : applyBody config env block start = .ok output) :
     ∃ state body txOutput withdrawn,
-      (if daoForkBlock config = some block.header.number then onBlock start (applyDaoFork fork)
-        else pure start) = .ok state ∧
+      daoTransfer config fork block.header.number start = .ok state ∧
       startSystemCalls env block.header.parentHash (.init state) = .ok body ∧
       (BodyState.init state).builder.Extends output.body.builder ∧
       (∀ hDencun : .dencun ≤ fork, ∃ out mid,
@@ -249,61 +248,56 @@ theorem applyBody_covers {config : ChainConfig} {env : BlockEnvironment fork}
         output.body.builder.Covers out.state) := by
   unfold applyBody at h
   dsimp only at h
-  split at h <;> rename_i hDao
+  obtain ⟨state, hState, h⟩ := bind_ok_iff.mp h
+  obtain ⟨body, hBody, h⟩ := bind_ok_iff.mp h
+  have hBody := mapError_ok_iff.mp hBody
+  obtain ⟨txOutput, hTx, h⟩ := bind_ok_iff.mp h
+  split at h <;> rename_i hShapella
+  all_goals first
+    | obtain ⟨tx, hTxState, h⟩ := bind_ok_iff.mp h
+      have hTxState := mapError_ok_iff.mp hTxState
+      obtain ⟨withdrawn, hJoin, h⟩ := bind_ok_iff.mp h
+      have hJoin := mapError_ok_iff.mp hJoin
+      have hW := BodyState.join_covers hJoin
+      have withdrawals : txOutput.body.builder.Extends withdrawn.builder ∧
+          (∀ hShapella : .shapella ≤ fork, ∃ tx,
+            withdrawalState fork txOutput.body.block (block.withdrawals hShapella) = .ok tx ∧
+            (txOutput.body.beginIndex (block.transactions.length + 1)).join tx =
+              .ok withdrawn ∧
+            withdrawn.builder.Covers tx) ∧
+          (¬.shapella ≤ fork →
+            withdrawn = txOutput.body.beginIndex (block.transactions.length + 1)) :=
+        ⟨hW.1, fun _ => ⟨tx, hTxState, hJoin, hW.2⟩, fun h => absurd hShapella h⟩
+    | obtain ⟨withdrawn, hEq, h⟩ := bind_ok_iff.mp h
+      have hEq := Except.ok.inj hEq
+      have withdrawals : txOutput.body.builder.Extends withdrawn.builder ∧
+          (∀ hShapella : .shapella ≤ fork, ∃ tx,
+            withdrawalState fork txOutput.body.block (block.withdrawals hShapella) = .ok tx ∧
+            (txOutput.body.beginIndex (block.transactions.length + 1)).join tx =
+              .ok withdrawn ∧
+            withdrawn.builder.Covers tx) ∧
+          (¬.shapella ≤ fork →
+            withdrawn = txOutput.body.beginIndex (block.transactions.length + 1)) :=
+        ⟨by subst hEq; exact Extends.refl _, fun h => absurd h hShapella,
+          fun _ => hEq.symm⟩
   all_goals
-    obtain ⟨state, hState, h⟩ := bind_ok_iff.mp h
-    replace hState : (if daoForkBlock config = some block.header.number then
-        onBlock start (applyDaoFork fork) else pure start) = .ok state := by
-      simpa only [hDao, ↓reduceIte] using hState
-    obtain ⟨body, hBody, h⟩ := bind_ok_iff.mp h
-    have hBody := mapError_ok_iff.mp hBody
-    obtain ⟨txOutput, hTx, h⟩ := bind_ok_iff.mp h
-    split at h <;> rename_i hShapella
-    all_goals first
-      | obtain ⟨tx, hTxState, h⟩ := bind_ok_iff.mp h
-        have hTxState := mapError_ok_iff.mp hTxState
-        obtain ⟨withdrawn, hJoin, h⟩ := bind_ok_iff.mp h
-        have hJoin := mapError_ok_iff.mp hJoin
-        have hW := BodyState.join_covers hJoin
-        have withdrawals : txOutput.body.builder.Extends withdrawn.builder ∧
-            (∀ hShapella : .shapella ≤ fork, ∃ tx,
-              withdrawalState fork txOutput.body.block (block.withdrawals hShapella) = .ok tx ∧
-              (txOutput.body.beginIndex (block.transactions.length + 1)).join tx =
-                .ok withdrawn ∧
-              withdrawn.builder.Covers tx) ∧
-            (¬.shapella ≤ fork →
-              withdrawn = txOutput.body.beginIndex (block.transactions.length + 1)) :=
-          ⟨hW.1, fun _ => ⟨tx, hTxState, hJoin, hW.2⟩, fun h => absurd hShapella h⟩
-      | obtain ⟨withdrawn, hEq, h⟩ := bind_ok_iff.mp h
-        have hEq := Except.ok.inj hEq
-        have withdrawals : txOutput.body.builder.Extends withdrawn.builder ∧
-            (∀ hShapella : .shapella ≤ fork, ∃ tx,
-              withdrawalState fork txOutput.body.block (block.withdrawals hShapella) = .ok tx ∧
-              (txOutput.body.beginIndex (block.transactions.length + 1)).join tx =
-                .ok withdrawn ∧
-              withdrawn.builder.Covers tx) ∧
-            (¬.shapella ≤ fork →
-              withdrawn = txOutput.body.beginIndex (block.transactions.length + 1)) :=
-          ⟨by subst hEq; exact Extends.refl _, fun h => absurd h hShapella,
-            fun _ => hEq.symm⟩
-    all_goals
-      obtain ⟨⟨requested, requests⟩, hRequests, h⟩ := bind_ok_iff.mp h
-      dsimp only at h
-      obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-      obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-      cases h
-      obtain ⟨hReqExt, hReqCovers⟩ := blockRequests_covers hRequests
-      have hTxExt := withdrawals.1.trans hReqExt
-      obtain ⟨hStartExt, hStart⟩ := startSystemCalls_covers hBody
-      have hBodyExt := (applyTransactions_covers hTx).1.trans hTxExt
-      refine ⟨state, body, txOutput, withdrawn, hState, hBody, hStartExt.trans hBodyExt,
-        fun hDencun => ?_, hTx, hTxExt, fun hS => ?_, withdrawals.2.2, hReqCovers⟩
-      · obtain ⟨out, mid, hOut, hMid, hCovers, hSecond⟩ := hStart hDencun
-        refine ⟨out, mid, hOut, hMid, hCovers.mono hBodyExt, fun hPectra => ?_⟩
-        obtain ⟨out', hOut', hCovers'⟩ := hSecond hPectra
-        exact ⟨out', hOut', hCovers'.mono hBodyExt⟩
-      · obtain ⟨tx, hTxState, hJoin, hCovers⟩ := withdrawals.2.1 hS
-        exact ⟨tx, hTxState, hJoin, hCovers.mono hReqExt⟩
+    obtain ⟨⟨requested, requests⟩, hRequests, h⟩ := bind_ok_iff.mp h
+    dsimp only at h
+    obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
+    obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
+    cases h
+    obtain ⟨hReqExt, hReqCovers⟩ := blockRequests_covers hRequests
+    have hTxExt := withdrawals.1.trans hReqExt
+    obtain ⟨hStartExt, hStart⟩ := startSystemCalls_covers hBody
+    have hBodyExt := (applyTransactions_covers hTx).1.trans hTxExt
+    refine ⟨state, body, txOutput, withdrawn, hState, hBody, hStartExt.trans hBodyExt,
+      fun hDencun => ?_, hTx, hTxExt, fun hS => ?_, withdrawals.2.2, hReqCovers⟩
+    · obtain ⟨out, mid, hOut, hMid, hCovers, hSecond⟩ := hStart hDencun
+      refine ⟨out, mid, hOut, hMid, hCovers.mono hBodyExt, fun hPectra => ?_⟩
+      obtain ⟨out', hOut', hCovers'⟩ := hSecond hPectra
+      exact ⟨out', hOut', hCovers'.mono hBodyExt⟩
+    · obtain ⟨tx, hTxState, hJoin, hCovers⟩ := withdrawals.2.1 hS
+      exact ⟨tx, hTxState, hJoin, hCovers.mono hReqExt⟩
 
 /-- The builder at the end of a body covers the run of each of its transactions.
 
@@ -312,8 +306,7 @@ theorem applyBody_covers_transaction {config : ChainConfig} {env : BlockEnvironm
     {block : Block fork Transaction} {start : BlockState} {output : BlockOutput fork}
     (h : applyBody config env block start = .ok output) :
     ∃ state body,
-      (if daoForkBlock config = some block.header.number then onBlock start (applyDaoFork fork)
-        else pure start) = .ok state ∧
+      daoTransfer config fork block.header.number start = .ok state ∧
       startSystemCalls env block.header.parentHash (.init state) = .ok body ∧
       ∀ i (hi : i < block.transactions.length), ∃ before included out,
         applyTransactions env body (block.transactions.take i) = .ok before ∧
@@ -337,12 +330,10 @@ theorem applyBody_accessListHash {config : ChainConfig} {env : BlockEnvironment 
       BlockAccessList.hash output.body.builder.build = .ok value := by
   unfold applyBody at h
   dsimp only at h
-  split at h
-  all_goals
-    obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-    obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-    obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-    split at h <;> rename_i hShapella
+  obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
+  obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
+  obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
+  split at h <;> rename_i hShapella
   all_goals first
     | have _ : Fork.shapella ≤ fork := hShapella
       obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
