@@ -347,6 +347,37 @@ theorem accountExists_destroyTouchedEmptyAccounts {fork : Fork} {tx : Transactio
           exact h
       · exact h
 
+/-- The removal of the empty touched accounts keeps an account with a nonce above 0. -/
+theorem getAccount_destroyTouchedEmptyAccounts {fork : Fork} {tx : TransactionState}
+    {touched : List Address} {address : Address} (nonce : 1 ≤ (tx.getAccount address).nonce) :
+    (tx.destroyTouchedEmptyAccounts fork touched).getAccount address = tx.getAccount address := by
+  unfold destroyTouchedEmptyAccounts
+  split
+  · rfl
+  · induction touched generalizing tx with
+    | nil => rfl
+    | cons other rest ih =>
+      have step : (if tx.accountExistsAndIsEmpty other then tx.destroyAccount other
+          else tx).getAccount address = tx.getAccount address := by
+        split
+        · rename_i hempty
+          rw [getAccount_destroyAccount]
+          split
+          · rename_i heq
+            subst heq
+            rw [eq_empty_of_accountExistsAndIsEmpty hempty] at nonce
+            simp [EMPTY_ACCOUNT] at nonce
+          · rfl
+        · rfl
+      rw [List.foldl_cons, ih (step ▸ nonce), step]
+
+/-- An address where an account can be deployed has nonce 0. -/
+theorem nonce_eq_zero_of_accountDeployable {tx : TransactionState} {address : Address}
+    (h : tx.accountDeployable address = true) : (tx.getAccount address).nonce = 0 := by
+  unfold accountDeployable at h
+  simp only [Bool.and_eq_true, decide_eq_true_eq] at h
+  exact h.1
+
 /-- A change by `f` succeeds exactly when `f` does on the account.
 
 The result then records the read and sets the account that `f` computes.

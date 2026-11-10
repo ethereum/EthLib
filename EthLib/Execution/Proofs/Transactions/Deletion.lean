@@ -57,7 +57,7 @@ variable {Meter : Type} [GasMeter Meter]
 
 It keeps the touched accounts of that substate too.
 
-It sends its message to the target of the message it is given. -/
+It sends its message to the target of the message it is given, and runs it at the same address. -/
 theorem substate_prepareFirstFrame {chainId : Nat} {message : Message fork}
     {state : State.TransactionState} {substate : Substate} {auths : List Authorization}
     {paid : Std.ExtTreeSet Address} {first : FirstFrame fork Meter}
@@ -65,7 +65,8 @@ theorem substate_prepareFirstFrame {chainId : Nat} {message : Message fork}
       .ok first) :
     first.substate.accountsToDelete = substate.accountsToDelete ∧
       first.substate.touchedAccounts = substate.touchedAccounts ∧
-      first.message.target = message.target := by
+      first.message.target = message.target ∧
+      first.message.currentTarget = message.currentTarget := by
   unfold prepareFirstFrame at h
   split at h
   · dsimp only at h
@@ -73,10 +74,10 @@ theorem substate_prepareFirstFrame {chainId : Nat} {message : Message fork}
     · split at h
       · obtain ⟨m, -, h⟩ := bind_ok_iff.mp h
         cases h
-        exact ⟨rfl, rfl, rfl⟩
+        exact ⟨rfl, rfl, rfl, rfl⟩
       · obtain ⟨m, -, h⟩ := bind_ok_iff.mp h
         cases h
-        exact ⟨rfl, rfl, rfl⟩
+        exact ⟨rfl, rfl, rfl, rfl⟩
     · obtain ⟨m, h, -⟩ := bind_ok_iff.mp h
       cases h
   · dsimp only at h
@@ -88,13 +89,29 @@ theorem substate_prepareFirstFrame {chainId : Nat} {message : Message fork}
       generalize (if fork ≥ .pectra then delegatedAddress code else none) = delegate at h
       rcases delegate with _ | delegate
       · cases h
-        exact ⟨rfl, rfl, rfl⟩
+        exact ⟨rfl, rfl, rfl, rfl⟩
       · dsimp only at h
         split at h <;>
         · obtain ⟨m', -, h⟩ := bind_ok_iff.mp h
           obtain ⟨code', -, h⟩ := bind_ok_iff.mp h
           cases h
-          exact ⟨rfl, rfl, rfl⟩
+          exact ⟨rfl, rfl, rfl, rfl⟩
+
+/-- The output of a frame has the state of that frame. -/
+theorem state_ofFrame (evm : Evm fork Meter) (refund : Nat) (touched : Std.ExtTreeSet Address) :
+    (CallOutput.ofFrame evm refund touched).state = evm.state := by
+  unfold CallOutput.ofFrame
+  split <;> rfl
+
+/-- The output of a frame leaves to delete only accounts that the frame marks. -/
+theorem accountsToDelete_ofFrame_subset (evm : Evm fork Meter) (refund : Nat)
+    (touched : Std.ExtTreeSet Address) :
+    ∀ address ∈ (CallOutput.ofFrame evm refund touched).accountsToDelete,
+      address ∈ evm.substate.accountsToDelete := by
+  unfold CallOutput.ofFrame
+  split
+  · exact fun _ h => by simp at h
+  · exact fun _ h => h
 
 /-- From Cancun, the message of a transaction leaves only created accounts to delete.
 
@@ -185,7 +202,7 @@ theorem processMessageCall_of_error_eq_none [LawfulGasMeter Meter] {chainId : Na
       | none => processCreateMessage fork first.message first.state first.substate first.meter
           first.held) = .ok ended ∧
       ended.val.error = none ∧ output.accountsToDelete = ended.val.substate.accountsToDelete := by
-  have htarget := (substate_prepareFirstFrame hfirst).2.2
+  have htarget := (substate_prepareFirstFrame hfirst).2.2.1
   unfold processMessageCall at h
   split at h
   · split at h
@@ -242,12 +259,15 @@ theorem createdAccounts_settleGas {env : BlockEnvironment fork}
     split <;> rfl
   · exact credit hpay
 
-/-- The deletions at the end of a transaction change no address outside two sets.
+/-- The deletions at the end of a transaction first clear its accounts to delete.
 
-Those are its accounts to delete and its touched accounts. -/
-theorem sameOutside_deleteAccounts {state state' : State.TransactionState}
-    {output : CallOutput} (h : deleteAccounts fork state output = .ok state') :
-    SameOutside (output.accountsToDelete.toList ++ output.touchedAccounts.toList) state state' := by
+That clearing changes no address outside the accounts to delete.
+
+The empty touched accounts then go. -/
+theorem deleteAccounts_eq_ok {state state' : State.TransactionState} {output : CallOutput}
+    (h : deleteAccounts fork state output = .ok state') :
+    ∃ deleted, SameOutside output.accountsToDelete.toList state deleted ∧
+      state' = deleted.destroyTouchedEmptyAccounts fork output.touchedAccounts.toList := by
   have fold : ∀ (l : List Address) (init final : State.TransactionState),
       l.foldlM (fun state address =>
         if fork ≥ .glamsterdam then state.clearAccountPreservingBalance fork address
@@ -272,8 +292,30 @@ theorem sameOutside_deleteAccounts {state state' : State.TransactionState}
   obtain ⟨deleted, hdeleted, h⟩ := bind_ok_iff.mp h
   cases h
   rw [Std.ExtTreeSet.foldlM_eq_foldlM_toList] at hdeleted
-  exact (fold _ _ _ hdeleted).trans
-    (State.TransactionState.sameOutside_destroyTouchedEmptyAccounts fork _ _)
+  exact ⟨deleted, fold _ _ _ hdeleted, rfl⟩
+
+/-- The deletions at the end of a transaction change no address outside two sets.
+
+Those are its accounts to delete and its touched accounts. -/
+theorem sameOutside_deleteAccounts {state state' : State.TransactionState}
+    {output : CallOutput} (h : deleteAccounts fork state output = .ok state') :
+    SameOutside (output.accountsToDelete.toList ++ output.touchedAccounts.toList) state state' := by
+  obtain ⟨deleted, same, rfl⟩ := deleteAccounts_eq_ok h
+  exact same.trans (State.TransactionState.sameOutside_destroyTouchedEmptyAccounts fork _ _)
+
+/-- The deletions at the end of a transaction keep an account that is not marked.
+
+The account must have a nonce above 0. -/
+theorem getAccount_deleteAccounts {state state' : State.TransactionState} {output : CallOutput}
+    {address : Address} (h : deleteAccounts fork state output = .ok state')
+    (nonce : 1 ≤ (state.getAccount address).nonce)
+    (unmarked : address ∉ output.accountsToDelete) :
+    state'.getAccount address = state.getAccount address := by
+  obtain ⟨deleted, same, rfl⟩ := deleteAccounts_eq_ok h
+  have kept : deleted.getAccount address = state.getAccount address := by
+    unfold State.TransactionState.getAccount
+    rw [(same address (by simpa using unmarked)).1]
+  rw [State.TransactionState.getAccount_destroyTouchedEmptyAccounts (kept ▸ nonce), kept]
 
 /-- A transaction starts with no account to delete. -/
 @[simp] theorem accountsToDelete_startSubstate (coinbase sender target : Address) :

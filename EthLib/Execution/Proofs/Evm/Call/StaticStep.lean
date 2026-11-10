@@ -145,6 +145,22 @@ theorem message_incorporateChild (caller child : Evm fork Meter) :
   unfold incorporateChild
   split <;> rfl
 
+/-- The caller that takes in a child marks an address for deletion when one of two things holds.
+
+The caller marks it, or the child ends without an error and marks it. -/
+theorem mem_accountsToDelete_incorporateChild {caller child : Evm fork Meter} {address : Address} :
+    address ∈ (incorporateChild fork caller child).substate.accountsToDelete ↔
+      address ∈ caller.substate.accountsToDelete ∨
+        (child.error = none ∧ address ∈ child.substate.accountsToDelete) := by
+  unfold incorporateChild
+  split
+  · rename_i ok
+    rw [Std.ExtTreeSet.mem_insertMany_list, Option.isNone_iff_eq_none.mp ok]
+    simp
+  · rename_i failed
+    have : child.error ≠ none := fun h => failed (Option.isNone_iff_eq_none.mpr h)
+    simp [this]
+
 /-- A message whose code runs at an account that holds code, or whose code is empty. -/
 def StaticCode (state : State.TransactionState) (message : Message fork) : Prop :=
   message.code.size ≠ 0 →

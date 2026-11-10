@@ -55,9 +55,12 @@ structure StepRules (fork : Fork) (R : Evm fork Meter → Evm fork Meter → Pro
   /-- A write of transient storage keeps the relation. -/
   tstore : ∀ (evm : Evm fork Meter) (address : Address) (key : Bytes32) (value : U256),
     R evm (advance { evm with state := evm.state.setTransientStorage address key value })
-  /-- A step that keeps the state and appends a log keeps the relation. -/
+  /-- A step that appends a log keeps the relation.
+
+  It must keep the message, the code and the state. -/
   log : ∀ {a b : Evm fork Meter} (log : Blocks.Log), b.state = a.state →
-    b.substate = { a.substate with logs := a.substate.logs.push log } → R a b
+    b.substate = { a.substate with logs := a.substate.logs.push log } → b.message = a.message →
+    b.code = a.code → R a b
   /-- The end of a successful SELFDESTRUCT keeps the relation. -/
   selfdestruct : ∀ {evm after : Evm fork Meter} (beneficiary : Address) (refund : Nat),
     finishSelfdestruct fork beneficiary refund evm = .ok after → R evm after
@@ -78,6 +81,18 @@ omit [GasMeter Meter] in
 theorem sameContext_returnData (evm : Evm fork Meter) (returnData : ByteArray) :
     SameContext evm { evm with returnData } :=
   ⟨rfl, rfl, rfl, rfl⟩
+
+/-- Each write of a step keeps the message and the code. -/
+theorem stepRules_messageCode :
+    StepRules fork (fun a b : Evm fork Meter => b.message = a.message ∧ b.code = a.code) where
+  trans hab hbc := ⟨hbc.1.trans hab.1, hbc.2.trans hab.2⟩
+  static h := ⟨h.message, h.code⟩
+  sstore _ _ _ _ _ _ _ := ⟨rfl, rfl⟩
+  tstore _ _ _ _ := ⟨rfl, rfl⟩
+  log _ _ _ hm hc := ⟨hm, hc⟩
+  selfdestruct _ _ h := ⟨message_finishSelfdestruct h, code_finishSelfdestruct h⟩
+  incrementNonce _ _ _ _ := ⟨rfl, rfl⟩
+  incorporate _ := ⟨message_incorporateChild _ _, code_incorporateChild _ _⟩
 
 namespace StepRules
 
@@ -100,7 +115,7 @@ theorem and {S : Evm fork Meter → Evm fork Meter → Prop} (r : StepRules fork
   sstore evm address key value state gain h :=
     ⟨r.sstore evm address key value state gain h, s.sstore evm address key value state gain h⟩
   tstore evm address key value := ⟨r.tstore evm address key value, s.tstore evm address key value⟩
-  log log hs hsub := ⟨r.log log hs hsub, s.log log hs hsub⟩
+  log log hs hsub hm hc := ⟨r.log log hs hsub hm hc, s.log log hs hsub hm hc⟩
   selfdestruct beneficiary refund h :=
     ⟨r.selfdestruct beneficiary refund h, s.selfdestruct beneficiary refund h⟩
   incrementNonce evm address state h :=
@@ -210,8 +225,8 @@ theorem instruction (rules : StepRules fork R) {op : Op}
   rcases orElse_eq_some hrun with hf | hf
   · cases op <;> simp only [logOpStep, Option.some.injEq, reduceCtorEq] at hf
     subst hf
-    obtain ⟨log, -, -, -, hs, hsub⟩ := logStep_eq_ok h
-    exact rules.log log hs hsub
+    obtain ⟨log, -, -, hm, hc, hs, hsub⟩ := logStep_eq_ok h
+    exact rules.log log hs hsub hm hc
   · cases op <;> simp only [selfdestructOpStep, Option.some.injEq, reduceCtorEq] at hf
     subst hf
     exact rules.selfdestructStep h
@@ -492,123 +507,189 @@ theorem processMessage [LawfulGasMeter Meter] (rules : StepRules fork R)
 
 end StepRules
 
-/-! ## The resume of a message -/
+/-! ## The messages that a step sends -/
 
-/-- The message of a result, if it sends one, resumes its caller as a call or as a creation. -/
-private def ResumesCaller : StepResult fork Meter → Prop
+/-- What a result of a step from `evm` says of the message it sends, if it sends one.
+
+The caller resumes as a call or as a creation.
+
+A creation goes to an address where a contract may be deployed in the state of `evm`.
+
+A call runs at the current target of `evm`, or runs code only at an account that holds code. -/
+private def Sends (evm : Evm fork Meter) : StepResult fork Meter → Prop
   | .next _ => True
-  | .child caller _ resume =>
-    (∃ newAccount outputStart outputSize,
+  | .child caller message resume =>
+    ((∃ newAccount outputStart outputSize,
       resume = resumeCall fork caller newAccount outputStart outputSize) ∨
-    ∃ newAccount address, resume = resumeCreate fork caller newAccount address
+      ∃ newAccount address, resume = resumeCreate fork caller newAccount address) ∧
+    (message.target = none → evm.state.accountDeployable message.currentTarget = true) ∧
+    (message.target ≠ none → message.currentTarget = evm.message.currentTarget ∨
+      StaticCode evm.state message)
 
-/-- A successful send of a message resumes its caller as a call or a creation.
+/-- A result that says what it sends from a frame says it from a frame with the same accounts.
 
-That holds whenever it sends a message. -/
-private theorem resumesCaller_genericCall {evm : Evm fork Meter} {message : Message fork}
-    {newAccount : Nat} {outputStart outputSize : U256} {result : StepResult fork Meter}
-    (h : genericCall evm message newAccount outputStart outputSize = .ok result) :
-    ResumesCaller result := by
-  unfold Evm.genericCall at h
-  dsimp only at h
-  split at h
-  · obtain ⟨after, -, rfl⟩ := Base.map_ok_iff.mp h
-    trivial
-  · cases h
-    exact .inl ⟨_, _, _, rfl⟩
+The two frames must also have the same current target. -/
+private theorem Sends.lift {evm evm' : Evm fork Meter} {result : StepResult fork Meter}
+    (h : StaticStep evm evm') (r : Sends evm' result) : Sends evm result := by
+  cases result with
+  | next _ => trivial
+  | child caller message resume =>
+    obtain ⟨r1, r2, r3⟩ := r
+    have hd : ∀ a, evm'.state.accountDeployable a = evm.state.accountDeployable a := by
+      intro a
+      unfold State.TransactionState.accountDeployable
+      rw [getAccount_of_staticStep h]
+    refine ⟨r1, fun c => ?_, fun c => ?_⟩
+    · rw [← hd]
+      exact r2 c
+    · rcases r3 c with hc | hc
+      · exact .inl (by rw [← h.message]; exact hc)
+      · refine .inr fun nonempty => ?_
+        rw [← getAccount_of_staticStep h]
+        exact hc nonempty
 
-/-- The successful end of a call instruction resumes its caller as a call or a creation.
+/-- The successful end of a call instruction says what it sends.
 
-That holds whenever it sends a message. -/
-private theorem resumesCaller_finishCall {kind : CallKind} {call : CallOperands}
+The callee comes from an access to the called address in a frame with the accounts of `evm`. -/
+private theorem sends_finishCall {kind : CallKind} {call : CallOperands}
     {callee : Callee} {subCall newAccount expandBy : Nat} {evm : Evm fork Meter}
     {result : StepResult fork Meter}
+    (hcallee : callee.code.size ≠ 0 →
+      (evm.state.getAccount call.address).codeHash ≠ State.EMPTY_CODE_HASH)
     (h : finishCall kind call callee subCall newAccount expandBy evm = .ok result) :
-    ResumesCaller result := by
+    Sends evm result := by
   unfold Evm.finishCall at h
   split at h
   · cases h
   dsimp only at h
+  have pre : StaticStep evm (recordAccountRead { evm with
+      memory := memoryExtend evm.memory expandBy, gas := GasMeter.drain evm.gas }
+      evm.message.currentTarget) := ⟨StateKept.refl _, rfl, rfl, rfl, rfl, rfl, rfl⟩
   split at h
   · obtain ⟨after, -, rfl⟩ := Base.map_ok_iff.mp h
     trivial
-  · exact resumesCaller_genericCall h
+  · refine Sends.lift pre ?_
+    unfold Evm.genericCall at h
+    dsimp only at h
+    split at h
+    · obtain ⟨after, -, rfl⟩ := Base.map_ok_iff.mp h
+      trivial
+    · cases h
+      refine ⟨.inl ⟨_, _, _, rfl⟩, ?_, ?_⟩
+      · intro c
+        simp at c
+      intro _
+      by_cases hk : kind = .call ∨ kind = .staticcall
+      · refine .inr fun nonempty => ?_
+        simp only [hk, ↓reduceIte] at nonempty ⊢
+        rw [getAccount_of_staticStep pre]
+        exact hcallee nonempty
+      · exact .inl (by simp [hk, pre.message])
 
-/-- A successful step of a call instruction resumes its caller as a call or a creation.
-
-That holds whenever it sends a message. -/
-private theorem resumesCaller_callStep {kind : CallKind} {evm : Evm fork Meter}
+/-- A successful step of a call instruction says what it sends. -/
+private theorem sends_callStep {kind : CallKind} {evm : Evm fork Meter}
     {result : StepResult fork Meter} (h : callStep kind evm = .ok result) :
-    ResumesCaller result := by
+    Sends evm result := by
   unfold Evm.callStep at h
-  obtain ⟨⟨call, e1⟩, -, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨call, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+  have c1 := (staticStep_popCallOperands h1).1
   dsimp only at h
   split at h
   · simp only [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
     cases h
   rcases hacc : accessAddress e1 call.address with ⟨cold, e2⟩
   simp only [hacc] at h
+  have ha := staticStep_accessAddress e1 call.address
+  rw [hacc] at ha
+  have s3 : StaticStep evm (recordAccountRead e2 call.address) :=
+    (c1.trans ha).trans (staticStep_recordAccountRead e2 call.address)
   obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
   rcases keepReads_eq_ok h with h | ⟨e, rfl⟩
-  · obtain ⟨⟨callee, e4⟩, -, h⟩ := Base.bind_ok_iff.mp h
+  · obtain ⟨⟨callee, e4⟩, h4, h⟩ := Base.bind_ok_iff.mp h
+    have s4 : StaticStep evm e4 := s3.trans (staticStep_accessDelegation h4)
     dsimp only at h
     rcases keepReads_eq_ok h with h | ⟨e, rfl⟩
-    · obtain ⟨⟨subCall, e5⟩, -, h⟩ := Base.bind_ok_iff.mp h
-      exact resumesCaller_finishCall h
+    · obtain ⟨⟨subCall, e5⟩, h5, h⟩ := Base.bind_ok_iff.mp h
+      refine Sends.lift (s4.trans (staticStep_payCall h5)) (sends_finishCall ?_ h)
+      intro nonempty
+      have := accessDelegation_codeHash_ne h4 nonempty
+      rw [getAccount_of_staticStep (staticStep_payCall h5),
+        getAccount_of_staticStep (staticStep_accessDelegation h4)]
+      exact this
     · trivial
   · trivial
 
-/-- A successful launch of a creation resumes its caller as a call or a creation.
-
-That holds whenever it sends a message. -/
-private theorem resumesCaller_launchCreate {evm : Evm fork Meter} {value : U256}
+/-- A successful launch of a creation says what it sends. -/
+private theorem sends_launchCreate {evm : Evm fork Meter} {value : U256}
     {initCode : ByteArray} {salt : Option U256} {result : StepResult fork Meter}
-    (h : launchCreate evm value initCode salt = .ok result) : ResumesCaller result := by
+    (h : launchCreate evm value initCode salt = .ok result) : Sends evm result := by
   unfold Evm.launchCreate at h
   dsimp only at h
   split at h
   · obtain ⟨after, -, rfl⟩ := Base.map_ok_iff.mp h
     trivial
   obtain ⟨address, -, h⟩ := Base.bind_ok_iff.mp h
+  have pre : StaticStep evm
+      (recordAccountRead { evm with returnData := .empty } evm.message.currentTarget) :=
+    (StaticStep.of_sameContext (sameContext_returnData evm .empty)).trans
+      (staticStep_recordAccountRead _ _)
+  have c0 : StaticStep evm (recordAccountRead (accessAddress (recordAccountRead
+      { evm with returnData := .empty } evm.message.currentTarget) address).2 address) :=
+    (pre.trans (staticStep_accessAddress _ address)).trans (staticStep_recordAccountRead _ address)
   rcases keepReads_eq_ok h with hr | ⟨e, rfl⟩
-  · obtain ⟨e1, -, hr⟩ := Base.bind_ok_iff.mp hr
-    obtain ⟨e2, -, hr⟩ := Base.bind_ok_iff.mp hr
+  · obtain ⟨e1, h1, hr⟩ := Base.bind_ok_iff.mp hr
+    obtain ⟨e2, h2, hr⟩ := Base.bind_ok_iff.mp hr
     obtain ⟨state, -, hr⟩ := Base.bind_ok_iff.mp hr
+    have c2 : StaticStep evm e2 := c0.trans (.of_sameContext
+      ((chargeStateGas_sameContext h1).trans (chargeGas_sameContext h2)))
     split at hr
-    · cases hr
-      exact .inr ⟨_, _, rfl⟩
+    · rename_i hd
+      cases hr
+      refine ⟨.inr ⟨_, _, rfl⟩, fun _ => ?_, fun c => absurd rfl c⟩
+      unfold State.TransactionState.accountDeployable at hd ⊢
+      rw [getAccount_of_staticStep c2] at hd
+      exact hd
     · obtain ⟨e3, -, hr⟩ := Base.bind_ok_iff.mp hr
       cases hr
       trivial
   · trivial
 
-/-- A successful step of CREATE or CREATE2 resumes its caller as a call or a creation.
-
-That holds whenever it sends a message. -/
-private theorem resumesCaller_createStep {create2 : Bool} {evm : Evm fork Meter}
+/-- A successful step of CREATE or CREATE2 says what it sends. -/
+private theorem sends_createStep {create2 : Bool} {evm : Evm fork Meter}
     {result : StepResult fork Meter} (h : createStep create2 evm = .ok result) :
-    ResumesCaller result := by
+    Sends evm result := by
   unfold Evm.createStep at h
   by_cases hs : fork ≥ .glamsterdam ∧ evm.message.isStatic = true
   · simp [hs, bind, Except.bind, throw, throwThe, MonadExceptOf.throw] at h
   rw [ite_eq_right_of_eq_false _ _ (eq_false hs)] at h
-  obtain ⟨⟨_, e1⟩, -, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨⟨_, e2⟩, -, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨⟨_, e3⟩, -, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨⟨salt, e4⟩, -, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨e5, -, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨_, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨_, e2⟩, h2, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨_, e3⟩, h3, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨salt, e4⟩, h4, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨e5, h5, h⟩ := Base.bind_ok_iff.mp h
+  have m4 : SameContext e3 e4 := by
+    unfold popSalt at h4
+    split at h4
+    · obtain ⟨⟨_, e⟩, he, h4⟩ := Base.bind_ok_iff.mp h4
+      cases h4
+      exact popWord_sameContext he
+    · cases h4
+      exact SameContext.refl _
+  have m5 : StaticStep evm e5 := .of_sameContext (((((popWord_sameContext h1).trans
+    (popWord_sameContext h2)).trans (popWord_sameContext h3)).trans m4).trans
+    (chargeGasAndMemory_sameContext h5))
   unfold genericCreate at h
   split at h
   · cases h
   split at h
   · cases h
-  exact resumesCaller_launchCreate h
+  exact Sends.lift m5 (sends_launchCreate h)
 
-/-- A successful instruction that may send a message resumes its caller as a call or a creation. -/
-private theorem resumesCaller_messageInstruction {op : Op}
+/-- A successful instruction that may send a message says what it sends. -/
+private theorem sends_messageInstruction {op : Op}
     {run : Evm fork Meter → Except EvmError (StepResult fork Meter)} {evm : Evm fork Meter}
     {result : StepResult fork Meter} (hrun : messageInstruction fork op = some run)
-    (h : run evm = .ok result) : ResumesCaller result := by
+    (h : run evm = .ok result) : Sends evm result := by
   unfold Evm.messageInstruction at hrun
   cases hc : callInstruction (Meter := Meter) fork op with
   | some call =>
@@ -616,32 +697,26 @@ private theorem resumesCaller_messageInstruction {op : Op}
     subst hrun
     cases op <;> simp only [callInstruction, Option.some.injEq, reduceCtorEq] at hc
     all_goals first
-      | (subst hc; exact resumesCaller_callStep h)
+      | (subst hc; exact sends_callStep h)
       | (split at hc
          · simp only [Option.some.injEq] at hc
            subst hc
-           exact resumesCaller_callStep h
+           exact sends_callStep h
          · cases hc)
   | none =>
     simp only [hc, HOrElse.hOrElse, OrElse.orElse, Option.orElse] at hrun
     cases op <;> simp only [createInstruction, Option.some.injEq, reduceCtorEq] at hrun
     all_goals first
-      | (subst hrun; exact resumesCaller_createStep h)
+      | (subst hrun; exact sends_createStep h)
       | (split at hrun
          · simp only [Option.some.injEq] at hrun
            subst hrun
-           exact resumesCaller_createStep h
+           exact sends_createStep h
          · cases hrun)
 
-/-- Each message that a successful step sends resumes its caller as a call or as a creation. -/
-theorem step_eq_child_resume {evm caller : Evm fork Meter} {message : Message fork}
-    {resume : Evm fork Meter → Except EvmError (Evm fork Meter)}
-    (h : step fork evm = .ok (.child caller message resume)) :
-    (∃ newAccount outputStart outputSize,
-      resume = resumeCall fork caller newAccount outputStart outputSize) ∨
-    ∃ newAccount address, resume = resumeCreate fork caller newAccount address := by
-  suffices ∀ result, step fork evm = .ok result → ResumesCaller result from this _ h
-  intro result h
+/-- Every successful step says what it sends. -/
+private theorem sends_step {evm : Evm fork Meter} {result : StepResult fork Meter}
+    (h : step fork evm = .ok result) : Sends evm result := by
   unfold Evm.step at h
   split at h
   · dsimp only at h
@@ -656,10 +731,55 @@ theorem step_eq_child_resume {evm caller : Evm fork Meter} {message : Message fo
           trivial
       · split at h
         · rename_i hcall
-          exact resumesCaller_messageInstruction hcall h
+          exact sends_messageInstruction hcall h
         · cases h
   · simp only [stopStep, Functor.map, Except.map, Except.ok.injEq] at h
     subst h
     trivial
+
+/-- Each message that a successful step sends resumes its caller as a call or as a creation. -/
+theorem step_eq_child_resume {evm caller : Evm fork Meter} {message : Message fork}
+    {resume : Evm fork Meter → Except EvmError (Evm fork Meter)}
+    (h : step fork evm = .ok (.child caller message resume)) :
+    (∃ newAccount outputStart outputSize,
+      resume = resumeCall fork caller newAccount outputStart outputSize) ∨
+    ∃ newAccount address, resume = resumeCreate fork caller newAccount address :=
+  (sends_step h).1
+
+/-- Each creation that a successful step sends goes to an address where a contract may be deployed.
+
+That holds in the state of the frame that takes the step, so the address has nonce 0. -/
+theorem step_eq_child_deployable {evm caller : Evm fork Meter} {message : Message fork}
+    {resume : Evm fork Meter → Except EvmError (Evm fork Meter)}
+    (h : step fork evm = .ok (.child caller message resume)) (create : message.target = none) :
+    evm.state.accountDeployable message.currentTarget = true :=
+  (sends_step h).2.1 create
+
+/-- Each call that a successful step sends runs at the current target of the frame that sends it.
+
+Otherwise it runs code only at an account that holds code, in the state of that frame. -/
+theorem step_eq_child_staticCode {evm caller : Evm fork Meter} {message : Message fork}
+    {resume : Evm fork Meter → Except EvmError (Evm fork Meter)}
+    (h : step fork evm = .ok (.child caller message resume)) (call : message.target ≠ none) :
+    message.currentTarget = evm.message.currentTarget ∨ StaticCode evm.state message :=
+  (sends_step h).2.2 call
+
+/-- The frame that resumes after a message has the context of the caller that takes in the child.
+
+So it has the message, the state, the substate and the code of that caller. -/
+theorem sameContext_of_step_eq_child {evm caller child after : Evm fork Meter}
+    {message : Message fork} {resume : Evm fork Meter → Except EvmError (Evm fork Meter)}
+    (h : step fork evm = .ok (.child caller message resume)) (resumed : resume child = .ok after) :
+    SameContext (incorporateChild fork caller child) after := by
+  rcases (sends_step h).1 with ⟨newAccount, outputStart, outputSize, rfl⟩ |
+    ⟨newAccount, address, rfl⟩
+  · obtain ⟨e, h1, h⟩ := Base.bind_ok_iff.mp resumed
+    cases h
+    refine SameContext.trans ?_ ((pushWord_sameContext h1).trans ⟨rfl, rfl, rfl, rfl⟩)
+    constructor <;> split <;> rfl
+  · obtain ⟨e, h1, h⟩ := Base.bind_ok_iff.mp resumed
+    cases h
+    refine SameContext.trans ?_ ((pushWord_sameContext h1).trans ⟨rfl, rfl, rfl, rfl⟩)
+    constructor <;> split <;> rfl
 
 end EthLib.Execution.Evm
