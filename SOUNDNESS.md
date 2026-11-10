@@ -1626,6 +1626,13 @@ The first trie may be fixed before the run, so the same bound covers a second tr
 That bound is still `Q^2 / N`, not a sharper fixed-target bound.
 `Q` counts every hash call of the experiment, repeats included, and the extraction makes many: each proof level rebuilds its subtree.
 
+`verifyAccountRange_complete` and `verifyStorageRanges_complete` (`Execution/Proofs/Network/SnapRangeComplete.lean`) prove that honest snap answers from secured tries pass their checks, or `findCrossCollision` returns a Keccak-256 collision among proof nodes.
+The keys are listed by increasing hash, and the proof contains the proofs of the start and the last entry.
+The account theorem uses successful slim and full encodings of each account; `fullAccount_encode_slimAccount` proves that the conversion returns the full form.
+The storage theorem checks whole tries before the last range, starting at the requested hash for one account and at zero for several.
+Empty-range and whole-trie variants cover those replies too; whole tries need no proof or collision qualification.
+An empty AccountRange with no proof is the empty reply `noState`, rather than a claim about the trie.
+
 An answer of `eth_getProof` (EIP-1186) is checked against a state root by `AccountProof.verify` (`Execution/State/AccountProof.lean`).
 It checks the account proof, then each slot proof against the storage root of the answer.
 `verifyAccount_sound` and `verifySlot_sound` (`Execution/Proofs/State/AccountProof.lean`) carry `verifyProof_sound` over to the fields of the answer.

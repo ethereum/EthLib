@@ -56,6 +56,22 @@ theorem ofSlimAccount_slimAccount (account : State.Account) (root : Hash32) :
     simp [ofSlimAccount, slimAccount, hr, hc, toItem_hash_ne_empty, Item.fields, Item.toItems,
       Item.field_toItem, bind, Except.bind, pure, Except.pure]
 
+/-- The encoded slim form reads back to its account and storage root. -/
+theorem ofSlimAccount_decode_encode {account : State.Account} {root : Hash32} {body : ByteArray}
+    (h : encode (slimAccount account root) = .ok body) :
+    (decode body).bind ofSlimAccount = .ok (account, root) := by
+  rw [decode_encode _ _ h]
+  exact ofSlimAccount_slimAccount account root
+
+/-- The encoded slim form converts to the full encoding of its account. -/
+theorem fullAccount_encode_slimAccount {account : State.Account} {root : Hash32}
+    {body full : ByteArray} (hbody : encode (slimAccount account root) = .ok body)
+    (hfull : State.encodeAccount account root = .ok full) :
+    fullAccount body = some full := by
+  simp [fullAccount, decode_encode _ _ hbody, ofSlimAccount_slimAccount, hbody, hfull,
+    bne, BEq.beq, ByteArray.beq, Except.toOption]
+  exact Array.isEqv_self _
+
 namespace SnapVersion
 
 /-- The number of a version reads back to that version. -/
