@@ -155,16 +155,22 @@ From Fusaka, proof `i * CELLS_PER_EXT_BLOB + j` is for cell `j` of the extended 
 
 The batch check of cells then runs on every cell of every extended blob.
 -/
-def proofsVerify (setup : TrustedSetup) (fork : Fork) (w : NetworkBlobTransaction) :
+def verifyBlobBundle (setup : TrustedSetup) (fork : Fork) (blobs : List Blob)
+    (commitments : List KZGCommitment) (proofs : List KZGProof) :
     Except KzgError Bool :=
   if fork ≥ .fusaka then do
-    let cells ← w.blobs.mapM computeCells
+    let cells ← blobs.mapM computeCells
     let indices := (List.range CELLS_PER_EXT_BLOB).toArray
     verifyCellKzgProofBatch setup
-      (w.commitments.toArray.flatMap fun c => Array.replicate CELLS_PER_EXT_BLOB c)
-      (Array.flatten (Array.replicate w.blobs.length indices))
-      cells.toArray.flatten w.proofs.toArray
-  else verifyBlobKzgProofBatch setup w.blobs.toArray w.commitments.toArray w.proofs.toArray
+      (commitments.toArray.flatMap fun c => Array.replicate CELLS_PER_EXT_BLOB c)
+      (Array.flatten (Array.replicate blobs.length indices))
+      cells.toArray.flatten proofs.toArray
+  else verifyBlobKzgProofBatch setup blobs.toArray commitments.toArray proofs.toArray
+
+/-- Whether the network form's proofs show that its commitments match its blobs. -/
+def proofsVerify (setup : TrustedSetup) (fork : Fork) (w : NetworkBlobTransaction) :
+    Except KzgError Bool :=
+  verifyBlobBundle setup fork w.blobs w.commitments w.proofs
 
 /--
 Check the blobs of the network form of a blob transaction at `fork`, as its "Networking" asks.

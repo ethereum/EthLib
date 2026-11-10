@@ -1136,6 +1136,7 @@ static PyMethodDef methods[] = {
   {"engine_forkchoice_updated", py_engine_forkchoice_updated, METH_VARARGS,
    DOC_engine_forkchoice_updated},
   {"engine_get_blobs", py_engine_get_blobs, METH_VARARGS, DOC_engine_get_blobs},
+  {"engine_get_payload", py_engine_get_payload, METH_VARARGS, DOC_engine_get_payload},
   {"engine_get_payload_bodies", py_engine_get_payload_bodies, METH_VARARGS,
    DOC_engine_get_payload_bodies},
   {"engine_prepare_execution_payload", py_engine_prepare_execution_payload, METH_VARARGS,

@@ -146,6 +146,8 @@ inductive EngineError where
   | tooLargeRequest
   /-- The payload attributes do not have a structure that the version of the method takes. -/
   | invalidPayloadAttributes
+  /-- No build process has the requested payload ID. -/
+  | unknownPayload
   deriving DecidableEq, Repr
 
 /-- The code of an error: its JSON-RPC code is the negative of this number. -/
@@ -155,6 +157,7 @@ def EngineError.code : EngineError → UInt32
   | .invalidForkchoiceState => 38002
   | .tooLargeRequest => 38004
   | .invalidPayloadAttributes => 38003
+  | .unknownPayload => 38001
 
 /-- Why a payload is not valid, before its transactions run or when they run. -/
 inductive PayloadError where

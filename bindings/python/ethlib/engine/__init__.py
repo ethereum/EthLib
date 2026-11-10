@@ -105,6 +105,30 @@ def get_payload_bodies(
     return _native.engine_get_payload_bodies(entries, latest, max_request, request)
 
 
+# An ID, fork, payload JSON value, block value, network blob transactions, requests and override.
+PayloadEntry: TypeAlias = tuple[
+    bytes, str, dict, int, Sequence[bytes], Sequence[bytes] | None, bool
+]
+
+
+def get_payload(config: dict, store: Sequence[PayloadEntry], method: str, params: list) -> dict:
+    """The latest completed payload of a build, with its checked blobs bundle."""
+    request = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
+    entries = [
+        (
+            identifier,
+            fork,
+            payload,
+            value,
+            list(network),
+            None if requests is None else list(requests),
+            override,
+        )
+        for identifier, fork, payload, value, network, requests, override in store
+    ]
+    return _native.engine_get_payload(config, entries, request)
+
+
 def prepare_execution_payload(
     name: str,
     fork: str,
@@ -194,6 +218,8 @@ __all__ = [
     "get_blobs",
     "PoolEntry",
     "get_payload_bodies",
+    "get_payload",
+    "PayloadEntry",
     "BodyEntry",
     "WithdrawalEntry",
     "prepare_execution_payload",
