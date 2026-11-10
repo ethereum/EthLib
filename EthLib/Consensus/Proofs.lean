@@ -143,6 +143,7 @@ public import EthLib.Consensus.Proofs.Transition.TargetPending
 public import EthLib.Consensus.Proofs.Transition.TargetSlots
 public import EthLib.Consensus.Proofs.Transition.TargetUpgrades
 public import EthLib.Consensus.Proofs.Transition.TargetVotes
+public import EthLib.Consensus.Proofs.Transition.Totality.EffectiveBalances
 public import EthLib.Consensus.Proofs.Transition.Totality.Slot
 public import EthLib.Consensus.Proofs.Transition.Upgrade
 public import EthLib.Consensus.Proofs.Transition.WeakSubjectivitySafety

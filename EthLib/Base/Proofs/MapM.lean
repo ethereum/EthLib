@@ -365,6 +365,19 @@ theorem foldlM_ok_invariant {g : β → α → Except ε β} (P : β → Prop)
     obtain ⟨middle, first, rest⟩ := computed
     exact foldlM_ok_invariant P step (step b x middle holds first) rest
 
+/-- A fold succeeds when each step succeeds and keeps an invariant that holds at the start. -/
+theorem foldlM_exists_ok_of_invariant {σ : Type} {g : σ → α → Except ε σ}
+    (P : σ → Prop) {xs : List α} (step : ∀ acc, ∀ x ∈ xs, P acc → ∃ r, g acc x = .ok r ∧ P r) :
+    ∀ init, P init → ∃ out, xs.foldlM g init = .ok out := by
+  induction xs with
+  | nil => exact fun init _ => ⟨init, rfl⟩
+  | cons x xs ih =>
+    intro init holds
+    obtain ⟨middle, first, kept⟩ := step init x List.mem_cons_self holds
+    obtain ⟨out, rest⟩ :=
+      ih (fun acc y member => step acc y (List.mem_cons_of_mem x member)) middle kept
+    exact ⟨out, by simp only [List.foldlM_cons, bind, Except.bind, first, rest]⟩
+
 /-- A successful fold reaches each of its steps, and the result of each step relates to the end.
 
 The relation must be reflexive and transitive, and each successful step must meet it.
