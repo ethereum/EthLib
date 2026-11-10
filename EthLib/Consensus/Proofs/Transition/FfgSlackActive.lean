@@ -44,9 +44,9 @@ So the voters of a link are validators whose attestations a block of some run ap
 
 The step asks only the stake, the order of the blocks, the size of the registry and the preset.
 
-The blocks of the model can also be the roots themselves, ordered by the links of the run.
+The blocks of the model can also be the roots themselves, ordered by the links of the chain.
 
-Two roots are linked when a state of a run records them at consecutive slots.
+Two roots are linked when a state that genesis reaches records them at consecutive slots.
 
 The zero root is also linked to the root recorded at slot zero.
 
@@ -187,31 +187,9 @@ theorem slackJustifiedCheckpoints_activeSetAt_of_chainSteps
       kept.getActiveValidatorIndices_eq (UInt64.le_refl _)]
     exact Finset.inter_subset_right
 
-/-- The roots, ordered by the links that the states of the runs between two states record.
-
-A run of steps from the first state reaches the state of each link, which reaches the last one. -/
-def RunRoot (_config : Config) (_checks : SignatureChecks)
-    (_first _last : ForkedBeaconState preset) : Type :=
-  Root
-
-/-- Two roots are in order when a chain of links of the runs leads from the first to the second. -/
-instance (first last : ForkedBeaconState preset) : Preorder (RunRoot config checks first last)
-    where
-  le older newer := Relation.ReflTransGen (fun older newer => ∃ forked,
-    Relation.ReflTransGen (ChainStep config checks) first forked ∧
-      Relation.ReflTransGen (ChainStep config checks) forked last ∧
-      (older, newer) ∈ rootLinks forked.state) older newer
-  le_refl _ := .refl
-  le_trans _ _ _ := Relation.ReflTransGen.trans
-
-/-- Each root as a root of the runs between two states. -/
-def RunRoot.of (config : Config) (checks : SignatureChecks) (first last : ForkedBeaconState preset)
-    (root : Root) : RunRoot config checks first last :=
-  root
-
 /-- Along a run of steps of a chain from genesis, both justified checkpoints are slack-justified.
 
-The blocks of the model are the roots, ordered by the links of the runs from genesis to the last.
+The blocks of the model are the roots, ordered by the links of the states that genesis reaches.
 
 The sets are the active sets, the weights the effective balances, and the votes those of the run.
 
@@ -222,7 +200,7 @@ An epoch must have at least one slot, and the buffer of roots must cover two epo
 The seed lookahead must leave room in the buffer of RANDAO mixes.
 
 The genesis block of the model is the zero root. -/
-theorem slackJustifiedCheckpoints_runRoot_of_chainSteps
+theorem slackJustifiedCheckpoints_chainRoot_of_chainSteps
     (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
     (window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
     (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
@@ -248,12 +226,12 @@ theorem slackJustifiedCheckpoints_runRoot_of_chainSteps
       after.state.validators.data.size < 2 ^ 64) :
     SlackJustifiedCheckpoints (fun c => activeSetAt last.state c.epoch)
       (fun c => activeSetAt last.state (c.epoch + 1))
-      (justifyingBalances config checks (RunRoot.of config checks ⟨fork, state⟩ last)
+      (justifyingBalances config checks (toChainRoot config checks ⟨fork, state⟩)
         ⟨fork, state⟩ last)
-      (RunRoot.of config checks ⟨fork, state⟩ last (Vector.replicate 32 0))
-      (ffgVotes (RunRoot.of config checks ⟨fork, state⟩ last)
+      (toChainRoot config checks ⟨fork, state⟩ (Vector.replicate 32 0))
+      (ffgVotes (toChainRoot config checks ⟨fork, state⟩)
         (runVotes config checks ⟨fork, state⟩ last))
-      (RunRoot.of config checks ⟨fork, state⟩ last) last.state :=
+      (toChainRoot config checks ⟨fork, state⟩) last.state :=
   slackJustifiedCheckpoints_activeSetAt_of_chainSteps positive window apart computed steps
     fun forked after reach step rest =>
       ⟨large forked after reach step rest,

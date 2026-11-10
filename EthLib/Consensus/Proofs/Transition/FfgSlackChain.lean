@@ -35,7 +35,9 @@ Another module instantiates them with the active sets and balances that the chai
 
 An empty second set, or the zero weights, makes every ordered link a slack link.
 
-Each step asks that the map from roots to blocks keeps in order the roots of consecutive slots.
+Each step asks the map from roots to blocks to keep in order the roots of consecutive slots.
+
+It also asks the zero root before the root of slot zero.
 
 Each justified block is then in the chain of the block of its recent epoch.
 
@@ -111,11 +113,13 @@ Then the active stake of the current epoch must be more than one and a half incr
 
 The map from roots to blocks must keep in order the roots of consecutive slots after the step.
 
+It must also keep the zero root before the root of slot zero.
+
 After the step, the registry must stay below 2^64 validators.
 
 The order of the blocks of the model is an assumption on the map from roots to blocks.
 
-The meaningful choice orders the roots by the links that the states of the chain record. -/
+The meaningful choice orders the roots by the links that the states of the chains record. -/
 structure SlackStepBounds (block : Root → β) (forked after : ForkedBeaconState preset) : Prop where
   /-- At the end of an epoch, the active stake is more than one and a half increments.
 

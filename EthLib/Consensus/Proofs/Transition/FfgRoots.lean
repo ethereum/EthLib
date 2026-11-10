@@ -11,6 +11,10 @@ A state records the root of the latest block at each recent slot.
 
 At two consecutive slots it records the same root, or a block and its child.
 
+The parent root of a block is the root recorded at the slot before it, by the check of its header.
+
+No theorem here states that, and it reads a root as a block only if header roots do not collide.
+
 So the pairs of roots at consecutive slots order the roots by ancestry.
 
 Each step of a chain keeps each justified checkpoint below the roots recorded from its epoch on.
@@ -21,9 +25,9 @@ The genesis checkpoints have the zero root, which comes before the root recorded
 
 Justification then compares the block of each justified checkpoint with the block of a recent epoch.
 
-Gasper §4.4, Definition 4.5, asks the source of a link to be an ancestor of its target.
+Casper FFG §2 ignores a vote whose source is not an ancestor of its target.
 
-The paper is [arXiv 2003.03052v3](https://arxiv.org/abs/2003.03052v3).
+The paper is [arXiv 1710.09437v4](https://arxiv.org/abs/1710.09437v4).
 -/
 
 @[expose] public section
@@ -35,7 +39,7 @@ open Base Uint64
 variable {preset : Preset} {config : Config} {checks : SignatureChecks} {β : Type*} [Preorder β]
   {block : Root → β}
 
-/-- The justified checkpoint of the current epoch, or else of the previous one. -/
+/-- The current justified checkpoint when the flag is set, and the previous one otherwise. -/
 def recentJustified {fork : Fork} (state : BeaconState preset fork) (current : Bool) :
     Checkpoint :=
   if current then state.currentJustifiedCheckpoint else state.previousJustifiedCheckpoint
@@ -48,9 +52,34 @@ def rootLinks {fork : Fork} (state : BeaconState preset fork) : Set (Root × Roo
       getBlockRootAtSlot state (slot + 1) = .ok link.2) ∨
     (link.1 = Vector.replicate 32 0 ∧ getBlockRootAtSlot state 0 = .ok link.2)}
 
-/-- Each justified checkpoint of a state is below the roots that it records from its epoch on.
+/-- The roots, ordered by the links that the states a chain reaches from a first state record.
+
+The order holds the links of every branch from that state, so two branches share it. -/
+def ChainRoot (_config : Config) (_checks : SignatureChecks) (_first : ForkedBeaconState preset) :
+    Type :=
+  Root
+
+/-- Two roots are in order when links of reached states lead from the first to the second. -/
+instance ChainRoot.instPreorder (first : ForkedBeaconState preset) :
+    Preorder (ChainRoot config checks first) where
+  le older newer := Relation.ReflTransGen (fun older newer => ∃ forked,
+    Relation.ReflTransGen (ChainStep config checks) first forked ∧
+      (older, newer) ∈ rootLinks forked.state) older newer
+  le_refl _ := .refl
+  le_trans _ _ _ := Relation.ReflTransGen.trans
+
+/-- Each root as a root of the chains from a first state. -/
+def toChainRoot (config : Config) (checks : SignatureChecks) (first : ForkedBeaconState preset)
+    (root : Root) : ChainRoot config checks first :=
+  root
+
+/-- Each justified checkpoint of a state is below the roots that the state records from its epoch.
 
 The order is that of the blocks of a map from roots.
+
+The recent epoch of the current justified checkpoint is the current epoch.
+
+That of the previous justified checkpoint is the previous epoch.
 
 The epoch of the checkpoint is at most its recent epoch.
 
