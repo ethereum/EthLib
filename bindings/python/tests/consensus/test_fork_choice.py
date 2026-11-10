@@ -316,3 +316,88 @@ def test_anchor_state_mismatch():
     ) as info:
         consensus.fork_choice("minimal", "altair", _read(case, "anchor_state"), bytes(block), [])
     assert info.value.code == 1
+
+
+def test_fast_confirmation_discount_bound():
+    # The vector has blocks at slots 1 and 2, none at slots 3 to 6, and votes for block 2.
+    case = (
+        FILES
+        / "minimal/altair/fast_confirmation/empty_slots/pyspec_tests"
+        / "fcr_slot_head_tracking_during_empty_slots"
+    )
+    steps = _load(case / "steps.yaml")
+    anchor_state = _read(case, "anchor_state")
+    anchor_block = _read(case, "anchor_block")
+    blocks = [_read(case, step["block"]) for step in steps if "block" in step]
+    state = consensus.state_transitions("minimal", "altair", anchor_state, blocks, verify=False)
+    # A signed block is the offset of its message, its 96-byte signature, then the message.
+    prefix, message = blocks[0][:100], blocks[0][100:]
+    parent_root = consensus.ssz_static("minimal", "altair", "BeaconBlock", blocks[-1][100:])[0]
+    parent_slot, child_slot = 2, 7
+    # A slot of the minimal preset lasts 6 seconds.
+    seconds_per_slot = 6
+    pre_state = consensus.process_slots("minimal", "altair", state, child_slot - parent_slot)
+    # The minimal genesis has 64 validators.
+    proposer = next(
+        index for index in range(64) if consensus.is_proposer("minimal", "altair", pre_state, index)
+    )
+    # Add a child at slot 7, reusing the first block's body and skipping signature checks.
+    # The message holds its slot, its proposer, its parent root and its state root, then its body.
+    child = bytearray(message)
+    child[:8] = child_slot.to_bytes(8, "little")
+    child[8:16] = proposer.to_bytes(8, "little")
+    child[16:48] = parent_root
+    child[48:80] = consensus.compute_new_state_root(
+        "minimal", "altair", state, bytes(child), verify=False
+    )
+    child_root = consensus.ssz_static("minimal", "altair", "BeaconBlock", bytes(child))[0]
+    # Moved to slot 7, the full votes of slot 6 come from the committees of slot 7, for the child.
+    # An attestation holds the offset of its bits, then its slot, its index and its block root.
+    attestations: list[consensus.ForkChoiceStep] = []
+    for step in steps:
+        if "attestation" not in step:
+            continue
+        vote = bytearray(_read(case, step["attestation"]))
+        if int.from_bytes(vote[4:12], "little") == child_slot - 1:
+            vote[4:12] = child_slot.to_bytes(8, "little")
+            vote[20:52] = child_root
+            attestations.append(("attestation", bytes(vote)))
+    assert len(attestations) == 2
+    # The votes of slot 7 count from slot 8 on, so the clock reaches slot 8 before it moves back.
+    inputs: list[consensus.ForkChoiceStep] = [one for step in steps for one in _inputs(case, step)]
+    inputs += [("block", prefix + bytes(child)), ("tick", 8 * seconds_per_slot), *attestations]
+
+    def confirm(current_slot: int, boost: int = 0) -> list:
+        """The outcomes of the steps, with the clock set back to a slot, then a confirmation."""
+        outcomes = consensus.fork_choice(
+            "minimal",
+            "altair",
+            anchor_state,
+            anchor_block,
+            [*inputs, ("tick", current_slot * seconds_per_slot), ("fast_confirmation", None)],
+            verify=False,
+            config={"CONFIRMATION_BYZANTINE_THRESHOLD": 0, "PROPOSER_SCORE_BOOST": boost},
+        )
+        assert len(outcomes) == len(inputs) + 2
+        assert all(outcome is None or isinstance(outcome, dict) for outcome in outcomes[:-1])
+        return outcomes
+
+    # With no adversary and no boost, the threshold is half of the maximum minus the discount.
+    # A slot holds 8 validators of 32 ETH, so the votes of slots 3 to 6 give a 1024 ETH discount.
+    # At slot 7 the maximum is the weight of slots 3 to 6, 1024 ETH: equality is valid.
+    confirmation = confirm(7)[-1]
+    assert isinstance(confirmation, dict)
+    assert confirmation["confirmed_root"] == child_root
+    # At slot 6 the child is from the future, and the maximum is the 768 ETH of slots 3 to 5.
+    # Only a clock that moves back reaches such a store.
+    error = confirm(6)[-1]
+    assert isinstance(error, consensus.ForkChoiceError)
+    assert error.code == 53
+    # The message wraps the root over several lines.
+    assert " ".join(str(error).split()) == (
+        f"EthLib.Consensus.ForkChoiceError.supportDiscountAboveMaximum #v{list(child_root)}"
+    )
+    # A boost of a full committee, 256 ETH, lifts the bound to the discount; the maximum stays.
+    boosted = confirm(6, 100)[-1]
+    assert isinstance(boosted, consensus.ForkChoiceError)
+    assert boosted.code == 53
