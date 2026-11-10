@@ -36,15 +36,21 @@ From Deneb, a request names the blob sidecars of a range of slots.
 
 From Fulu, a request names the column sidecars of a range of slots, for some columns.
 
+Each check assumes a fork at which its protocol exists.
+
 - The response has at most the count times the most sidecars of one block.
 - It has at most the request limit, which is the most sidecars of the most blocks.
 - Each sidecar lies in the requested slots.
 - The sidecars are in increasing order of slot, then of index.
 - The sidecars of one slot name the same block.
 - For blobs, the indices of the sidecars of one block are 0, 1, 2 and so on.
-- For columns, the index of each sidecar is a requested column.
+- For blobs, each index is below the most blobs of one block.
+- For columns, each block has each requested column once, and no other.
+- For columns, each index is below the number of columns.
 
-A column request lists its columns, so a block has at most one sidecar for each column.
+A response holds every sidecar of each block it serves, but a blob check cannot see how many.
+
+So the last block of a blob response may lack its last blobs.
 
 ## Sidecars by root
 
@@ -52,6 +58,8 @@ The request names sidecars by the root of their block and their index.
 
 - The response has at most as many sidecars as the request names.
 - Each sidecar is one that the request names.
+
+The text does not forbid a sidecar twice in one response, so these checks allow it.
 
 [EIP-4844] adds the blob protocols, and [EIP-7594] the column protocols.
 
@@ -164,26 +172,30 @@ def allAdjacent {α : Type} (r : α → α → Bool) : List α → Bool
 
 /-- Whether a blob sidecar may follow another in a response by range.
 
-Either it is the next blob of the same block, or it is the first blob of a block at a later slot.
--/
+It is the next blob of the same block, or the first blob of a block at a later slot. -/
 def ResponseSidecar.nextBlob (a b : ResponseSidecar) : Bool :=
   if a.slot = b.slot then b.blockRoot == a.blockRoot && b.index.toNat == a.index.toNat + 1
   else a.slot < b.slot && b.index == 0
 
 /-- Whether a column sidecar may follow another in a response by range.
 
-Either it is a later column of the same block, or it belongs to a block at a later slot. -/
+It is a later column of the same block, or it belongs to a block at a later slot. -/
 def ResponseSidecar.nextColumn (a b : ResponseSidecar) : Bool :=
   if a.slot = b.slot then b.blockRoot == a.blockRoot && a.index < b.index else a.slot < b.slot
 
 /-- Whether the sidecars of a response are valid for a request for blob sidecars by range.
 
-The fork is the one in effect when the request is served; it sets the limits. -/
+The fork is the one in effect when the request is served; it sets the limits.
+
+A block served under Electra may have the Electra count of blobs, even at an older slot.
+
+From Fulu no new blob sidecars exist, so the Electra count stays the limit. -/
 def isValidBlobSidecarsByRangeResponse (config : Config) (fork : Fork)
     (request : BlobSidecarsByRangeRequest) (sidecars : List ResponseSidecar) : Bool :=
   sidecars.length ≤ request.count.toNat * (config.maxRequestBlobsPerBlock fork).toNat &&
     sidecars.length ≤ (computeMaxRequestBlobSidecars config fork).toNat &&
-    sidecars.all (fun sidecar => slotInRange request.startSlot request.count sidecar.slot) &&
+    sidecars.all (fun sidecar => slotInRange request.startSlot request.count sidecar.slot &&
+      sidecar.index.toNat < (config.maxRequestBlobsPerBlock fork).toNat) &&
     sidecars.head?.all (fun first => first.index == 0) &&
     allAdjacent ResponseSidecar.nextBlob sidecars
 
@@ -193,14 +205,22 @@ def isValidBlobSidecarsByRootResponse {config : Config} {fork : Fork}
   sidecars.length ≤ request.data.size &&
     sidecars.all (fun sidecar => request.data.contains ⟨sidecar.blockRoot, sidecar.index⟩)
 
-/-- Whether the sidecars of a response are valid for a request for column sidecars by range. -/
+/-- The sidecars of a response grouped by slot: each group is a longest run with one slot. -/
+def ResponseSidecar.groupBySlot (sidecars : List ResponseSidecar) : List (List ResponseSidecar) :=
+  sidecars.splitBy (fun a b => a.slot == b.slot)
+
+/-- Whether the sidecars of a response are valid for a request for column sidecars by range.
+
+Each block of the response has every requested column. -/
 def isValidDataColumnSidecarsByRangeResponse (preset : Preset) (config : Config)
     (request : DataColumnSidecarsByRangeRequest preset) (sidecars : List ResponseSidecar) : Bool :=
   sidecars.length ≤ request.count.toNat * preset.NUMBER_OF_COLUMNS.toNat &&
     sidecars.length ≤ (computeMaxRequestDataColumnSidecars preset config).toNat &&
     sidecars.all (fun sidecar => slotInRange request.startSlot request.count sidecar.slot &&
-      request.columns.data.contains sidecar.index) &&
-    allAdjacent ResponseSidecar.nextColumn sidecars
+      sidecar.index < preset.NUMBER_OF_COLUMNS && request.columns.data.contains sidecar.index) &&
+    allAdjacent ResponseSidecar.nextColumn sidecars &&
+    (ResponseSidecar.groupBySlot sidecars).all (fun block =>
+      request.columns.data.all (fun column => block.any (·.index == column)))
 
 /-- The number of column sidecars that a request by root names. -/
 def DataColumnSidecarsByRootRequest.columnCount {preset : Preset} {config : Config}

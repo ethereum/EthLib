@@ -169,9 +169,9 @@ theorem slotInRange_iff (startSlot : Slot) (count : UInt64) (slot : Slot) :
       startSlot.toNat ≤ slot.toNat ∧ slot.toNat < startSlot.toNat + count.toNat := by
   simp [slotInRange, UInt64.le_iff_toNat_le]
 
-/-- A blob sidecar may follow another exactly when it is the next blob of the same block.
+/-- A blob sidecar may follow another when it is the next blob of its block or opens a later one.
 
-It may also be the first blob of a block at a later slot. -/
+The later block starts at index 0. -/
 theorem nextBlob_iff (a b : ResponseSidecar) :
     ResponseSidecar.nextBlob a b = true ↔
       (a.slot = b.slot ∧ b.blockRoot = a.blockRoot ∧ b.index.toNat = a.index.toNat + 1) ∨
@@ -181,9 +181,8 @@ theorem nextBlob_iff (a b : ResponseSidecar) :
   · simp [same]
   · simp [same]
 
-/-- A column sidecar may follow another exactly when it is a later column of the same block.
-
-It may also belong to a block at a later slot. -/
+/-- A column sidecar may follow another when it is a later column of its block or of a later one.
+-/
 theorem nextColumn_iff (a b : ResponseSidecar) :
     ResponseSidecar.nextColumn a b = true ↔
       (a.slot = b.slot ∧ b.blockRoot = a.blockRoot ∧ a.index < b.index) ∨ a.slot < b.slot := by
@@ -205,14 +204,26 @@ theorem sidecarBefore_trans (a b c : ResponseSidecar) :
   · exact Or.inl (ab ▸ bc)
   · exact Or.inr ⟨ab.trans bc, rab.trans rbc, UInt64.lt_trans iab ibc⟩
 
+/-- When each sidecar of a list comes before the later ones, two at one slot name one block.
+
+They also differ in index, so no pair of block root and index repeats. -/
+theorem sameBlock_of_pairwise {sidecars : List ResponseSidecar}
+    (ordered : sidecars.Pairwise SidecarBefore) {i j : Nat} (before : i < j)
+    (h : j < sidecars.length) (slot : sidecars[i].slot = sidecars[j].slot) :
+    sidecars[i].blockRoot = sidecars[j].blockRoot ∧ sidecars[i].index < sidecars[j].index := by
+  rcases List.pairwise_iff_getElem.mp ordered i j (by omega) h before with lower | ⟨-, root, index⟩
+  · exact absurd slot (UInt64.ne_of_lt lower)
+  · exact ⟨root, index⟩
+
 /-- The rules that a valid response to a request for blob sidecars by range meets, and no others. -/
 theorem isValidBlobSidecarsByRangeResponse_iff (config : Config) (fork : Base.Fork)
     (request : BlobSidecarsByRangeRequest) (sidecars : List ResponseSidecar) :
     isValidBlobSidecarsByRangeResponse config fork request sidecars = true ↔
       sidecars.length ≤ request.count.toNat * (config.maxRequestBlobsPerBlock fork).toNat ∧
       sidecars.length ≤ (computeMaxRequestBlobSidecars config fork).toNat ∧
-      (∀ sidecar ∈ sidecars, request.startSlot.toNat ≤ sidecar.slot.toNat ∧
+      (∀ sidecar ∈ sidecars, (request.startSlot.toNat ≤ sidecar.slot.toNat ∧
         sidecar.slot.toNat < request.startSlot.toNat + request.count.toNat) ∧
+        sidecar.index.toNat < (config.maxRequestBlobsPerBlock fork).toNat) ∧
       (∀ h : 0 < sidecars.length, sidecars[0].index = 0) ∧
       (∀ i (h : i + 1 < sidecars.length),
         (sidecars[i].slot = sidecars[i + 1].slot ∧
@@ -225,10 +236,8 @@ theorem isValidBlobSidecarsByRangeResponse_iff (config : Config) (fork : Base.Fo
   | nil => simp
   | cons first rest => simp
 
-/-- In a valid response to a request for blob sidecars by range, each sidecar comes before the
-sidecars after it.
-
-So the sidecars of one slot name one block. -/
+/-- In a valid response to a request for blob sidecars by range, each sidecar precedes later ones.
+-/
 theorem pairwise_of_isValidBlobSidecarsByRangeResponse {config : Config} {fork : Base.Fork}
     {request : BlobSidecarsByRangeRequest} {sidecars : List ResponseSidecar}
     (valid : isValidBlobSidecarsByRangeResponse config fork request sidecars = true) :
@@ -241,8 +250,9 @@ theorem pairwise_of_isValidBlobSidecarsByRangeResponse {config : Config} {fork :
     omega
   · exact Or.inl slot
 
-/-- The rules that a valid response to a request for column sidecars by range meets, and no
-others. -/
+/-- The rules that a valid response to a request for column sidecars by range meets, and no others.
+
+The last rule asks each run of sidecars at one slot to hold every requested column. -/
 theorem isValidDataColumnSidecarsByRangeResponse_iff (preset : Preset) (config : Config)
     (request : DataColumnSidecarsByRangeRequest preset) (sidecars : List ResponseSidecar) :
     isValidDataColumnSidecarsByRangeResponse preset config request sidecars = true ↔
@@ -250,26 +260,26 @@ theorem isValidDataColumnSidecarsByRangeResponse_iff (preset : Preset) (config :
       sidecars.length ≤ (computeMaxRequestDataColumnSidecars preset config).toNat ∧
       (∀ sidecar ∈ sidecars, (request.startSlot.toNat ≤ sidecar.slot.toNat ∧
         sidecar.slot.toNat < request.startSlot.toNat + request.count.toNat) ∧
-        sidecar.index ∈ request.columns.data) ∧
+        sidecar.index < preset.NUMBER_OF_COLUMNS ∧ sidecar.index ∈ request.columns.data) ∧
       (∀ i (h : i + 1 < sidecars.length),
         (sidecars[i].slot = sidecars[i + 1].slot ∧
           sidecars[i + 1].blockRoot = sidecars[i].blockRoot ∧
           sidecars[i].index < sidecars[i + 1].index) ∨
-        sidecars[i].slot < sidecars[i + 1].slot) := by
+        sidecars[i].slot < sidecars[i + 1].slot) ∧
+      (∀ block ∈ ResponseSidecar.groupBySlot sidecars, ∀ column ∈ request.columns.data,
+        ∃ sidecar ∈ block, sidecar.index = column) := by
   simp only [isValidDataColumnSidecarsByRangeResponse, Bool.and_eq_true, decide_eq_true_eq,
     List.all_eq_true, slotInRange_iff, allAdjacent_iff, nextColumn_iff, Array.contains_iff_mem,
-    and_assoc]
+    Array.all_eq_true', List.any_eq_true, beq_iff_eq, and_assoc]
 
-/-- In a valid response to a request for column sidecars by range, each sidecar comes before the
-sidecars after it.
-
-So the sidecars of one slot name one block, and no column repeats in a block. -/
+/-- In a valid response to a request for column sidecars by range, each sidecar precedes later ones.
+-/
 theorem pairwise_of_isValidDataColumnSidecarsByRangeResponse {preset : Preset} {config : Config}
     {request : DataColumnSidecarsByRangeRequest preset} {sidecars : List ResponseSidecar}
     (valid : isValidDataColumnSidecarsByRangeResponse preset config request sidecars = true) :
     sidecars.Pairwise SidecarBefore := by
   simp only [isValidDataColumnSidecarsByRangeResponse, Bool.and_eq_true] at valid
-  refine pairwise_of_allAdjacent (fun a b next => ?_) sidecarBefore_trans valid.2
+  refine pairwise_of_allAdjacent (fun a b next => ?_) sidecarBefore_trans valid.1.2
   rcases (nextColumn_iff a b).mp next with ⟨slot, root, index⟩ | slot
   · exact Or.inr ⟨slot, root.symm, index⟩
   · exact Or.inl slot

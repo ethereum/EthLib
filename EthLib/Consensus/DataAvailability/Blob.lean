@@ -89,6 +89,8 @@ def verifyBlobSidecarInclusionProof (preset : Preset) (fork : Fork)
 
 From Electra a block may carry more blobs, as [EIP-7691] specifies.
 
+The bound of a response by range also uses this count, so a block of nine blobs fits it.
+
 [EIP-7691]: https://eips.ethereum.org/EIPS/eip-7691#parameters -/
 def Config.maxRequestBlobsPerBlock (config : Config) (fork : Fork) : UInt64 :=
   if .pectra ≤ fork then config.MAX_BLOBS_PER_BLOCK_ELECTRA else config.MAX_BLOBS_PER_BLOCK
