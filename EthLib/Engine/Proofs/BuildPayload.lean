@@ -9,11 +9,11 @@ public import EthLib.Execution.Proofs.Blocks.Transition
 
 A built block passes the state transition of its chain, with the state that the build gives.
 
-So `engine_newPayload` answers valid, when its parameters decode to a built block.
+So `engine_newPayload` answers valid for a built block whose parameters pass its checks.
 
 A header filled from a body passes every check against what that body gave.
 
-The built block carries each field of the attributes and of the builder's choices.
+The built block carries the timestamp, RANDAO mix, withdrawals, beacon root, slot and choices.
 
 From Pectra, its header commits to the requests that the build gives.
 -/
@@ -130,7 +130,7 @@ theorem stateTransition_of_buildPayload
     toNat_ofNat_timestamp attributes.timestamp]
   exact hA
 
-/-- A built block carries the fields of the attributes and of the builder's choices.
+/-- A built block carries these fields of the attributes and of the builder's choices.
 
 It holds the timestamp, the RANDAO mix, the withdrawals, the parent beacon block root and the slot.
 
@@ -161,7 +161,8 @@ theorem buildPayload_fields
 
 /-- From Pectra, the header of a built block commits to the requests that the build gives. -/
 theorem requestsHash_of_buildPayload
-    (h : buildPayload chain attributes choices transactions = .ok built) (hPectra : .pectra ≤ fork) :
+    (h : buildPayload chain attributes choices transactions = .ok built)
+    (hPectra : .pectra ≤ fork) :
     built.block.header.requestsHash hPectra = requestsHash built.requests := by
   obtain ⟨-, _, _, _, -, -, -, -, -, -, hBlock, -, hRequests⟩ := buildPayload_spec h
   rw [hBlock, hRequests]

@@ -1,8 +1,8 @@
 module
 
+public import EthLib.Base.Proofs.GasLimit
 public import EthLib.Consensus.Gossip.Bid
 public import EthLib.Base.Proofs.Uint64
-public import EthLib.Base.Proofs.GasLimit
 public import EthLib.Networking.Proofs.Gossip.Validation
 
 /-!

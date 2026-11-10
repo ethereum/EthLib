@@ -356,12 +356,11 @@ def outputChecks {fork : Fork} (header : Header fork) (output : BlockOutput fork
       .wrongBlockAccessListHash)]
   else [])
 
-/-- What the body of a block gives on its chain: its output, and the roots from the state after it.
--/
+/-- What the body of a block gives on its chain: its output, and the roots of the header. -/
 structure BodyResult (fork : Fork) where
   /-- What the body gave. -/
   output : BlockOutput fork
-  /-- The roots of the transactions, of the state after the block, of the receipts and more. -/
+  /-- The roots of the transactions, the state after the block, the receipts and the withdrawals. -/
   roots : OutputRoots
 
 /-- The state after a block whose body gave `result`. -/
@@ -372,9 +371,11 @@ def BodyResult.post {fork : Fork} (result : BodyResult fork) : State :=
 
 The body runs in the environment of its header and of the recent hashes of the chain.
 
-The body reads none of the header fields that it gives: roots, gas counts, logs Bloom, hashes.
+The body reads none of the header fields that it gives: the roots, the gas used and the logs Bloom.
 
-So a builder can run it before it fills those fields, and the Engine proofs show it. -/
+Nor does it read the requests hash and the block access list hash.
+
+So a builder can run it before it fills those fields. -/
 def runBody (chain : BlockChain) {fork : Fork} (block : Block fork Transaction) :
     Except BlockError (BodyResult fork) := do
   let hashes ← recentHashes chain.recent

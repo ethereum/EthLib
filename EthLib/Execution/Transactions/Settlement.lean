@@ -190,6 +190,12 @@ structure Settlement where
   burned : Nat
   deriving DecidableEq, Repr
 
+/-- The priority fee of a transaction that used `used` gas, at the base fee `baseFee`, in wei.
+
+It is the gas used times the price per gas above the base fee. -/
+def priorityFeeOf (baseFee used : Nat) (tx : Transaction) : Nat :=
+  used * (effectiveGasPrice baseFee tx - baseFee)
+
 /-- Where the wei of a transaction from `sender` go at `fork` and at a base fee of `baseFee`. -/
 def settlement (fork : Fork) (baseFee : Nat) (sender : Address) (tx : Transaction)
     (gasLeft refundCounter : Nat) : Settlement :=
@@ -197,7 +203,7 @@ def settlement (fork : Fork) (baseFee : Nat) (sender : Address) (tx : Transactio
   let price := effectiveGasPrice baseFee tx
   { gasUsed := used
     senderRefund := (tx.gas.toNat - used) * price
-    priorityFee := used * (price - baseFee)
+    priorityFee := priorityFeeOf baseFee used tx
     burned := used * baseFee }
 
 /-! ## The gas of the block -/

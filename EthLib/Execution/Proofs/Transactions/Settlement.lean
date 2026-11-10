@@ -144,7 +144,7 @@ theorem settlement_conserves {fork : Fork} {sender : Address} {tx : Transaction}
     let s := settlement fork baseFee sender tx gasLeft refundCounter
     s.senderRefund + s.priorityFee + s.burned = tx.gas.toNat * effectiveGasPrice baseFee tx := by
   have hUsed := gasUsed_le_gas hGas gasLeft refundCounter
-  simp only [settlement]
+  simp only [settlement, priorityFeeOf]
   generalize gasUsed fork sender tx gasLeft refundCounter = used at hUsed
   generalize effectiveGasPrice baseFee tx = price at hPrice
   rw [Nat.add_assoc, ← Nat.mul_add, Nat.sub_add_cancel hPrice,
@@ -155,7 +155,7 @@ theorem settlement_zero_baseFee (fork : Fork) (sender : Address) (tx : Transacti
     (gasLeft refundCounter : Nat) :
     let s := settlement fork 0 sender tx gasLeft refundCounter
     s.burned = 0 ∧ s.priorityFee = s.gasUsed * effectiveGasPrice 0 tx := by
-  simp [settlement]
+  simp [settlement, priorityFeeOf]
 
 /-- Before London, a block has a base fee of 0. -/
 theorem baseFeeOf_of_lt_london {fork : Fork} (hFork : fork < .london)

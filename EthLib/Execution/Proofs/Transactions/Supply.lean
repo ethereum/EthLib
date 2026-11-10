@@ -340,7 +340,7 @@ theorem runTransaction_supply {Meter : Type} [GasMeter Meter] [LawfulGasMeter Me
   have conserve := settlement_conserves hMin hPrice (output.gasLeft + output.reservoir)
     output.refund
   dsimp only at hset conserve
-  simp only [settlement] at hset conserve
+  simp only [settlement, priorityFeeOf] at hset conserve
   simp only [burnedFees]
   rw [hused]
   generalize gasUsed fork included.sender tx (output.gasLeft + output.reservoir) output.refund =

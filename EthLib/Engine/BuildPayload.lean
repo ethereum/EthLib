@@ -23,41 +23,25 @@ The source leaves the choice of the transactions to the builder, so they are an 
 
 The parent fixes the number, the base fee and the excess blob gas.
 
-The excess blob gas follows the blob schedule of the chain at the number and the timestamp.
-
 The gas limit moves from the parent's toward a target, by one step of the header check at most.
 
 From Glamsterdam the target is the target gas limit of the attributes, as the source asks.
-
-Before Glamsterdam the builder chooses the target.
-
-A target below 5000, the smallest gas limit, counts as 5000.
 
 The source does not say how far one block moves toward the target; that step is a choice here.
 
 From Glamsterdam a bid of Gloas must take the same step, so the choice matches it.
 
-Only a parent near 5000 with a target below 5000 can make the two disagree, by the floor above.
+A parent of at most 5002 with a target below 5000 makes them differ.
 
-The block then runs on the state of the chain.
+The build raises such a target to 5000, the smallest gas limit, and the bid does not.
 
-Its roots, gas used, blob gas used, logs Bloom and hashes are those that its body gives.
-
-The body reads none of those fields, so it runs on the header before they are filled.
+The body runs on the state of the chain, and the header then takes the fields it gives.
 
 Last, the build checks its block as the state transition does, so it gives no block that fails it.
 
-The header holds what the body gave, so those checks guard against a value that does not fit.
-
-The checks against the parent can fail, for instance on a timestamp not above the parent's.
-
-They also fail on extra data of more than 32 bytes, or on a block above the size limit of EIP-7934.
-
 The build gives the block, the state after it, its requests and its value to the fee recipient.
 
-The value is the sum of the priority fees, which [`engine_getPayloadV2`][v2] recommends.
-
-Before Paris it always fails, since its header has a difficulty of 0.
+The value is the sum of the priority fees, one rule that [`engine_getPayloadV2`][v2] allows.
 
 The source states the build in [Payload building][build], at commit `3284ee8` of execution-apis.
 
@@ -75,7 +59,7 @@ namespace EthLib.Engine
 open EthLib.Base
 open EthLib.Execution.Blocks
 open EthLib.Execution.Fees.GasLimit (LIMIT_MINIMUM parentGasLimitForCheck)
-open EthLib.Execution.Transactions (Transaction effectiveGasPrice)
+open EthLib.Execution.Transactions (Transaction priorityFeeOf)
 
 variable {fork : Fork}
 
@@ -148,15 +132,14 @@ def fillHeader (header : Header fork) (output : BlockOutput fork) (roots : Outpu
 
 /-- The priority fees that transactions pay to the fee recipient of their block, in wei.
 
-Each transaction pays its gas used times its gas price above the base fee `baseFee`.
+Each transaction pays its gas used times its gas price above the base fee.
 
-The gas used of a transaction is the step of the cumulative gas used of its receipt. -/
+The gas used of a transaction is its receipt's cumulative gas used minus the one before. -/
 def priorityFees (baseFee : Nat) (transactions : List Transaction)
     (receipts : List (UInt8 × Receipt fork)) : Nat :=
   let cumulative := receipts.map (·.2.cumulativeGasUsed)
   let used := List.zipWith (· - ·) cumulative (0 :: cumulative)
-  (List.zipWith (fun tx gas => gas * (effectiveGasPrice baseFee tx - baseFee)) transactions
-    used).sum
+  (List.zipWith (fun tx gas => priorityFeeOf baseFee gas tx) transactions used).sum
 
 /-- A payload that the execution layer built, with what `engine_getPayload` returns beside it. -/
 structure BuiltPayload (fork : Fork) where
@@ -169,13 +152,23 @@ structure BuiltPayload (fork : Fork) where
   /-- The value of the block to its fee recipient, in wei: the sum of its priority fees. -/
   blockValue : Nat
 
-/-- Build a payload at `fork` from payload attributes and transactions, on the last block of a chain.
+/-- Build a payload at `fork` from attributes and transactions, on the last block of a chain.
 
 The fork must be the active fork at the number after the parent and at the timestamp.
 
 The result is the block, the state after it, its requests and its value.
 
-It fails when the block cannot be built, or when it would fail the state transition. -/
+It fails when the block cannot be built, or when it would fail the state transition.
+
+The checks against the parent can fail, for instance on a timestamp not above the parent's.
+
+They also fail on extra data of more than 32 bytes.
+
+From Fusaka they fail on a block above the size limit of [EIP-7934][eip-7934].
+
+Before Paris the build always fails, since its header has a difficulty of 0.
+
+[eip-7934]: https://eips.ethereum.org/EIPS/eip-7934#specification -/
 def buildPayload (chain : BlockChain) (attributes : PayloadAttributes fork)
     (choices : BuildChoices) (transactions : List Transaction) :
     Except BlockError (BuiltPayload fork) := do

@@ -123,7 +123,7 @@ Each layer is a directory under `EthLib/`, which `CONTRIBUTING.md` calls a domai
 | Networking | the messages peers exchange, with their framing and compression | `EthLib/Networking/` |
 | Serialization | the encodings the protocol sends, hashes and stores | `EthLib/Serialization/` |
 | Cryptography | hashes and Merkle trees, then the schemes built on them | `EthLib/Cryptography/` |
-| Base | the bytes, the integers and the forks that every layer uses | `EthLib/Base/` |
+| Base | the bytes, the integers and the forks that every layer uses, and the protocol rules that Execution and Consensus share, such as the blob schedule and the gas limit step | `EthLib/Base/` |
 
 Models sit above all of them, under `Proofs/` in the layer they are about, as [Packages](#packages) describes.
 

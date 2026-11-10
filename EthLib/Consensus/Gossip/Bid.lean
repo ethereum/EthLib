@@ -1,8 +1,8 @@
 module
 
+public import EthLib.Base.GasLimit
 public import EthLib.Consensus.Gossip.Payload
 public import EthLib.Consensus.Gossip.ProposerPreferences
-public import EthLib.Base.GasLimit
 
 /-!
 # `Consensus.Gossip.Bid`
