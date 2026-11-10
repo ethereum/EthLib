@@ -30,9 +30,11 @@ From Glamsterdam the target is the target gas limit of the attributes, as the so
 
 Before Glamsterdam the builder chooses the target.
 
+The source does not say how far one block moves toward the target; that step is a choice here.
+
 The block then runs on the state of the chain.
 
-Its roots, gas used, logs Bloom, requests hash and access list hash are those that its body gives.
+Its roots, gas used, blob gas used, logs Bloom and hashes are those that its body gives.
 
 The body reads none of those fields, so it runs on the header before they are filled.
 
@@ -43,6 +45,10 @@ The header holds what the body gave, so those checks guard against a value that 
 The checks against the parent can fail, for instance on a timestamp not above the parent's.
 
 They also fail on extra data of more than 32 bytes, or on a block above the size limit of EIP-7934.
+
+The build gives the block and the state after it, not the response of `engine_getPayload`.
+
+Before Paris it always fails, since its header has a difficulty of 0.
 
 The source states the build in [Payload building][build], at commit `3284ee8` of execution-apis.
 
@@ -78,7 +84,7 @@ def gasLimitToward (parentGasLimit target : Nat) : Nat :=
 structure BuildChoices where
   /-- The account that receives the fees of the block. -/
   feeRecipient : Address
-  /-- The extra data of the block, at most 32 bytes. -/
+  /-- The extra data of the block; the build fails on more than 32 bytes. -/
   extraData : ByteArray
   /-- The target of the gas limit, which counts only before Glamsterdam. -/
   gasLimitTarget : Nat
@@ -143,7 +149,7 @@ The fork must be the active fork at the number after the parent and at the times
 
 The result is the block and the state after it.
 
-It fails as the state transition of the block would. -/
+It fails when the block cannot be built, or when it would fail the state transition. -/
 def buildBlock (chain : BlockChain) (attributes : PayloadAttributes fork) (choices : BuildChoices)
     (transactions : List Transaction) :
     Except BlockError (Block fork Transaction × Execution.State.State) := do

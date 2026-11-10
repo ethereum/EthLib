@@ -3,13 +3,16 @@ module
 public import EthLib.Engine.BuildPayload
 public import EthLib.Engine.Proofs.NewPayload
 public import EthLib.Base.Except
+public import EthLib.Execution.Proofs.Blocks.Validate
 
 /-!
 # Proofs: the block that the execution layer builds
 
 A built block passes the state transition of its chain, with the state that the build gives.
 
-So `engine_newPayload` answers that the payload of a built block is valid.
+So `engine_newPayload` answers valid, when its parameters decode to a built block.
+
+A header filled from a body passes every check against what that body gave.
 
 The built block carries each field of the attributes and of the builder's choices.
 -/
@@ -58,6 +61,47 @@ theorem gasLimitToward_of_checkGasLimit {parentGasLimit target : Nat}
     simp only [Execution.Fees.GasLimit.LIMIT_ADJUSTMENT_FACTOR,
       Execution.Fees.GasLimit.LIMIT_MINIMUM] at *
     omega
+
+/-- A header filled from a body passes every check against what that body gave.
+
+The blob gas used must fit 64 bits.
+
+From Shapella the withdrawals root must exist, and from Glamsterdam the access list hash. -/
+theorem outputChecks_fillHeader {header : Header fork} {output : BlockOutput fork}
+    {roots : OutputRoots} (hb : output.gas.blob < 2 ^ 64)
+    (hw : .shapella ≤ fork → roots.withdrawals.isSome)
+    (ha : .glamsterdam ≤ fork → output.accessListHash.isSome) :
+    firstFailure (outputChecks (fillHeader header output roots) output roots) = .ok () := by
+  rw [firstFailure_eq_ok_iff]
+  intro c hc
+  simp only [outputChecks, fillHeader, List.mem_append, List.mem_cons, List.not_mem_nil,
+    or_false] at hc
+  rcases hc with ((((hc | hc | hc | hc | hc) | hc) | hc) | hc) | hc <;>
+    (try subst hc) <;> (try simp only [decide_true])
+  · split at hc
+    · next h =>
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hc
+      subst hc
+      obtain ⟨r, hr⟩ := Option.isSome_iff_exists.mp (hw h)
+      simp [hr]
+    · simp at hc
+  · split at hc
+    · simp only [List.mem_cons, List.not_mem_nil, or_false] at hc
+      subst hc
+      simp [Nat.mod_eq_of_lt hb]
+    · simp at hc
+  · split at hc
+    · simp only [List.mem_cons, List.not_mem_nil, or_false] at hc
+      subst hc
+      simp
+    · simp at hc
+  · split at hc
+    · next h =>
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hc
+      subst hc
+      obtain ⟨r, hr⟩ := Option.isSome_iff_exists.mp (ha h)
+      simp [hr]
+    · simp at hc
 
 /-- A build that succeeds went through each of its steps.
 
