@@ -4,6 +4,7 @@ public import EthLib.Execution.Proofs.Blocks.BodyGas
 public import EthLib.Execution.Proofs.Blocks.Ommers
 public import EthLib.Execution.Proofs.Blocks.Rewards
 public import EthLib.Execution.Proofs.Blocks.SystemCall
+public import EthLib.Execution.Proofs.Blocks.Transition
 public import EthLib.Execution.Proofs.Blocks.Withdrawal
 public import EthLib.Execution.Proofs.Transactions.Supply
 
@@ -26,7 +27,7 @@ Section 11.3 of the Yellow Paper, Berlin version, sets them: [`Paper.tex`][yp].
 
 [EIP-3675][e3675] removes them from Paris.
 
-So the supply after a block plus the burned fees is at most the supply before plus the created ether.
+So a block leaves at most the supply before it, plus its created ether, minus its burned fees.
 
 From Glamsterdam it is exactly that, since nothing burns ether beyond the fees there.
 
@@ -53,7 +54,6 @@ open EthLib.Base
 open EthLib.Execution.Evm
 open EthLib.Execution.State (BlockState State TransactionState)
 open EthLib.Execution.Transactions
-open EthLib.Execution.Fees.BlobBaseFee (calculateTotalBlobGas)
 
 variable {fork : Fork}
 
@@ -80,7 +80,7 @@ def createdWei (block : Block fork Transaction) : Nat :=
     rewardWei fork block.header.number
       (block.ommers.map fun ommer => (ommer.2.coinbase, ommer.2.number))
 
-/-- The wei that the transactions of a body burn, from what the body gave.
+/-- The fees that the transactions of a body burn, in wei, from what the body gave.
 
 It is the base fee per gas times their gas used after the refunds.
 
@@ -88,7 +88,7 @@ It adds the base fee per blob gas times their blob gas. -/
 def burnedWei (env : BlockEnvironment fork) (output : BodyOutput fork) : Nat :=
   output.cumulativeGasUsed * baseFeeOf env + output.gas.blob * blobGasPriceOf env
 
-/-- The wei that a block burns, from its header, in the environment `env` of the block.
+/-- The fees that a block burns, in wei, from its header, in the environment `env` of the block.
 
 It is the gas used at the base fee per gas, plus the blob gas used at the base fee per blob gas.
 
@@ -103,14 +103,15 @@ def headerBurnedWei (env : BlockEnvironment fork) (header : Header fork) : Nat :
 theorem supply_onBlock {block block' : BlockState}
     {step : TransactionState → Except State.StateError TransactionState}
     (h : onBlock block step = .ok block') :
-    ∃ tx, step (.ofBlock block) = .ok tx ∧ (TransactionState.ofBlock block').supply = tx.supply := by
+    ∃ tx, step (.ofBlock block) = .ok tx ∧
+      (TransactionState.ofBlock block').supply = tx.supply := by
   unfold onBlock at h
   obtain ⟨tx, htx, h⟩ := bind_ok_iff.mp h
   cases h
   exact ⟨tx, mapError_ok_iff.mp htx, TransactionState.supply_incorporateTxIntoBlock tx⟩
 
 /-- A call that joins the body leaves the supply of its end state. -/
-theorem supply_join {body body' : BodyState} {tx : TransactionState}
+theorem BodyState.supply_join {body body' : BodyState} {tx : TransactionState}
     (h : body.join tx = .ok body') : (TransactionState.ofBlock body'.block).supply = tx.supply := by
   unfold BodyState.join at h
   obtain ⟨builder, -, h⟩ := bind_ok_iff.mp h
@@ -155,7 +156,7 @@ theorem supply_systemCall_join {env : BlockEnvironment fork} {body body' : BodyS
     (TransactionState.ofBlock body'.block).supply ≤ (TransactionState.ofBlock body.block).supply ∧
       (.glamsterdam ≤ fork → (TransactionState.ofBlock body'.block).supply =
         (TransactionState.ofBlock body.block).supply) := by
-  rw [supply_join hjoin]
+  rw [BodyState.supply_join hjoin]
   exact supply_systemCall hcall
 
 /-- The system calls at the start of a block keep or lower the supply, and keep it from Glamsterdam.
@@ -226,8 +227,8 @@ theorem supply_blockRequests {depositContract : Address} {env : BlockEnvironment
   · obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
     obtain ⟨read, hread, h⟩ := bind_ok_iff.mp h
     cases h
-    have := reads hread
-    exact this
+    have hrest := reads hread
+    exact hrest
   · cases h
     exact start
 
@@ -236,7 +237,7 @@ theorem supply_withdrawalState {block : BlockState} {withdrawals : List Withdraw
     {tx : TransactionState} (h : withdrawalState fork block withdrawals = .ok tx) :
     tx.supply = (TransactionState.ofBlock block).supply + withdrawnWei withdrawals := by
   rw [TransactionState.supply_foldlM_createEther _ _ withdrawals h]
-  simp only [toNat_wei, withdrawnWei]
+  simp only [toNat_withdrawalWei, withdrawnWei]
 
 /-- The rewards add the wei they reward to the supply.
 
@@ -286,7 +287,7 @@ theorem applyTransactions_supply {env : BlockEnvironment fork} {body : BodyState
     (le_effectiveGasPrice hFee) hOut
   have hBlob := processTransaction_blockGas_blob hOut
   have hAfter : (TransactionState.ofBlock after.block).supply = out.state.supply :=
-    supply_join hJoin
+    BodyState.supply_join hJoin
   have hBurned : burnedWei env after = burnedWei env before + burnedFees env tx out.gasUsed := by
     simp only [burnedWei, burnedFees, hGas, hCumulative, BlockGas.add, hBlob, Nat.add_mul]
     omega
@@ -300,9 +301,11 @@ theorem applyTransactions_supply {env : BlockEnvironment fork} {body : BodyState
 
 /-! ## The body -/
 
-/-- The body of a block lowers the supply by at least its burned fees, plus its created ether.
+/-- After the body of a block, the supply plus its burned fees is at most the supply before.
 
-From Glamsterdam, it changes the supply by exactly the created ether minus the burned fees.
+The supply before counts the ether that the block creates.
+
+From Glamsterdam, the two are equal.
 
 Before Paris, the block must have at most two ommers, as the checks of the block ensure. -/
 theorem applyBody_supply {config : ChainConfig} {env : BlockEnvironment fork}
@@ -315,7 +318,7 @@ theorem applyBody_supply {config : ChainConfig} {env : BlockEnvironment fork}
         burnedWei env output.toBodyOutput = (TransactionState.ofBlock start).supply +
           createdWei block) := by
   obtain ⟨dao, system, txs, withdrawn, requested, hdao, hsystem, htxs, hShapella, hNot,
-    hrequests, hrewarded, hGas, hCumulative⟩ := applyBody_eq_ok h
+    hrequests, hrewarded, -, -, hGas, hCumulative⟩ := applyBody_eq_ok h
   have sDao := supply_daoTransfer hdao
   obtain ⟨sSysLe, sSysEq⟩ := supply_startSystemCalls hsystem
   obtain ⟨sTxLe, sTxEq⟩ := applyTransactions_supply htxs
@@ -328,7 +331,7 @@ theorem applyBody_supply {config : ChainConfig} {env : BlockEnvironment fork}
         (if h : .shapella ≤ fork then withdrawnWei (block.withdrawals h) else 0) := by
     by_cases hS : .shapella ≤ fork
     · obtain ⟨wtx, hwtx, hjoin⟩ := hShapella hS
-      rw [supply_join hjoin, supply_withdrawalState hwtx]
+      rw [BodyState.supply_join hjoin, supply_withdrawalState hwtx]
       simp only [hS, ↓reduceDIte]
       rfl
     · rw [hNot hS]
@@ -346,9 +349,9 @@ theorem applyBody_supply {config : ChainConfig} {env : BlockEnvironment fork}
   have := sReqEq hglam
   omega
 
-/-- The body of a block lowers the supply by at least its burned fees, plus its created ether.
+/-- After the body of a block, the supply plus its burned fees is at most the supply before.
 
-That holds at every fork.
+The supply before counts the ether that the block creates, and the bound holds at every fork.
 
 Before Paris, the block must have at most two ommers, as the checks of the block ensure. -/
 theorem applyBody_supply_le {config : ChainConfig} {env : BlockEnvironment fork}
@@ -372,14 +375,12 @@ theorem applyBody_supply_of_glamsterdam {config : ChainConfig} {env : BlockEnvir
 
 /-! ## The state transition -/
 
-/-- A block that passes the transition runs its body on the state after its parent.
-
-The state after it is the state that the body gives.
+/-- A block that passes the transition gives the state after its body, which runs as follows.
 
 Before Paris it has at most two ommers.
 
 Its header states the gas that the body used, and from Dencun the blob gas. -/
-theorem stateTransition_eq_ok_applyBody {chain : BlockChain} {block : Block fork Transaction}
+private theorem stateTransition_body {chain : BlockChain} {block : Block fork Transaction}
     {checkSeal : Bool} {post : State} (h : stateTransition chain block checkSeal = .ok post) :
     ∃ hashes output,
       recentHashes chain.recent = .ok hashes ∧
@@ -389,26 +390,15 @@ theorem stateTransition_eq_ok_applyBody {chain : BlockChain} {block : Block fork
       (fork < .paris → block.ommers.length ≤ 2) ∧
       output.gas.gasUsed = block.header.gasUsed ∧
       ∀ hFork : .dencun ≤ fork, output.gas.blob = (block.header.blobGasUsed hFork).toNat := by
-  unfold stateTransition at h
-  have hNotHegota : ¬.hegota ≤ fork := fun hH => by
-    simp [hH, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
-  simp only [hNotHegota, ↓reduceIte] at h
-  split at h
-  · obtain ⟨_, hCheck, h⟩ := bind_ok_iff.mp h
-    obtain ⟨hashes, hHashes, h⟩ := bind_ok_iff.mp h
-    obtain ⟨output, hOutput, h⟩ := bind_ok_iff.mp h
-    obtain ⟨roots, -, h⟩ := bind_ok_iff.mp h
-    obtain ⟨_, hChecks, h⟩ := bind_ok_iff.mp h
-    cases h
-    refine ⟨hashes, output, hHashes, hOutput, rfl, fun hParis => ?_,
-      (of_outputChecks hChecks).1, fun hFork => blobGasUsed_of_outputChecks hFork hChecks⟩
-    -- Before Paris, the ommers pass their checks, which allow at most two.
-    exact (validateOmmers_spec (checkBlock_validateOmmers hParis hCheck)).2.1
-  · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
+  obtain ⟨-, -, hCheck, hashes, output, _, hHashes, hOutput, -, hChecks, hPost⟩ :=
+    stateTransition_eq_ok h
+  exact ⟨hashes, output, hHashes, hOutput, hPost,
+    fun hParis => (validateOmmers_spec (checkBlock_validateOmmers hParis hCheck)).2.1,
+    (of_outputChecks hChecks).1, fun hFork => blobGasUsed_of_outputChecks hFork hChecks⟩
 
-/-- A block that passes the transition lowers the supply by at least its burned fees.
+/-- After a block that passes the transition, the supply plus its burned fees is at most before.
 
-It also adds its created ether, at every fork.
+The supply before counts the ether that the block creates, and the bound holds at every fork.
 
 The fees come from the body that the transition runs. -/
 theorem stateTransition_supply_le {chain : BlockChain} {block : Block fork Transaction}
@@ -419,7 +409,7 @@ theorem stateTransition_supply_le {chain : BlockChain} {block : Block fork Trans
         ⟨chain.state, ∅, ∅, ∅, ∅⟩ = .ok output ∧
       post.supply + burnedWei (blockEnvironment chain.config hashes block.header)
           output.toBodyOutput ≤ chain.state.supply + createdWei block := by
-  obtain ⟨hashes, output, hHashes, hOutput, rfl, hOmmers, -⟩ := stateTransition_eq_ok_applyBody h
+  obtain ⟨hashes, output, hHashes, hOutput, rfl, hOmmers, -⟩ := stateTransition_body h
   refine ⟨hashes, output, hHashes, hOutput, ?_⟩
   rw [← TransactionState.supply_ofBlock, ← TransactionState.supply_ofPreState]
   exact applyBody_supply_le hOmmers hOutput
@@ -438,19 +428,19 @@ theorem stateTransition_supply_of_glamsterdam {chain : BlockChain}
         ⟨chain.state, ∅, ∅, ∅, ∅⟩ = .ok output ∧
       post.supply + burnedWei (blockEnvironment chain.config hashes block.header)
           output.toBodyOutput = chain.state.supply + createdWei block := by
-  obtain ⟨hashes, output, hHashes, hOutput, rfl, -⟩ := stateTransition_eq_ok_applyBody h
+  obtain ⟨hashes, output, hHashes, hOutput, rfl, -⟩ := stateTransition_body h
   refine ⟨hashes, output, hHashes, hOutput, ?_⟩
   rw [← TransactionState.supply_ofBlock, ← TransactionState.supply_ofPreState]
   exact applyBody_supply_of_glamsterdam hFork hOutput
 
-/-- Before Glamsterdam, a block that passes the transition lowers the supply by its header's fees.
+/-- Before Glamsterdam, a block lowers the supply by at least the fees that its header gives.
+
+The block must pass the transition.
 
 Those are its gas used at the base fee per gas, and its blob gas used at the base fee per blob gas.
 
 It also adds its created ether.
-
-The base fees come from the environment of the block, which reads the hashes of the recent blocks.
--/
+ -/
 theorem stateTransition_supply_le_of_lt_glamsterdam {chain : BlockChain}
     {block : Block fork Transaction} {checkSeal : Bool} {post : State}
     (hFork : fork < .glamsterdam) (h : stateTransition chain block checkSeal = .ok post) :
@@ -458,7 +448,7 @@ theorem stateTransition_supply_le_of_lt_glamsterdam {chain : BlockChain}
       post.supply + headerBurnedWei (blockEnvironment chain.config hashes block.header)
           block.header ≤ chain.state.supply + createdWei block := by
   obtain ⟨hashes, output, hHashes, hOutput, rfl, hOmmers, hGasUsed, hBlob⟩ :=
-    stateTransition_eq_ok_applyBody h
+    stateTransition_body h
   refine ⟨hashes, hHashes, ?_⟩
   rw [← TransactionState.supply_ofBlock, ← TransactionState.supply_ofPreState]
   have hle := applyBody_supply_le hOmmers hOutput
@@ -467,7 +457,7 @@ theorem stateTransition_supply_le_of_lt_glamsterdam {chain : BlockChain}
         block.header by
     rwa [← burned]
   -- The gas of the body is the gas used that its receipts add up, with no state gas.
-  obtain ⟨-, body, txs, -, -, -, -, hTxs, -, -, -, -, hGas, hCumulative⟩ :=
+  obtain ⟨-, body, txs, -, -, -, -, hTxs, -, -, -, -, -, -, hGas, hCumulative⟩ :=
     applyBody_eq_ok hOutput
   have hExecution := applyTransactions_execution_of_lt hFork hTxs
   have hState := applyTransactions_state_of_lt hFork hTxs

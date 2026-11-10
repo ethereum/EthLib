@@ -329,17 +329,9 @@ theorem runTransaction_supply {Meter : Type} [GasMeter Meter] [LawfulGasMeter Me
       (BurnsNone fork out.state →
         out.state.supply + burnedFees env tx out.gasUsed =
           (State.TransactionState.ofBlock block).supply) := by
-  unfold runTransaction at h
-  obtain ⟨target, -, h⟩ := bind_ok_iff.mp h
-  obtain ⟨bought, hbought, h⟩ := bind_ok_iff.mp h
-  obtain ⟨message, -, h⟩ := bind_ok_iff.mp h
-  obtain ⟨output, houtput, h⟩ := bind_ok_iff.mp h
-  obtain ⟨⟨settled, used⟩, hsettle, h⟩ := bind_ok_iff.mp h
-  obtain ⟨deleted, hdeleted, h⟩ := bind_ok_iff.mp h
-  cases h
-  have hs := mapError_ok_iff.mp hsettle
-  have hd := mapError_ok_iff.mp hdeleted
-  obtain ⟨hbuy, -⟩ := supply_buyGas (mapError_ok_iff.mp hbought)
+  obtain ⟨target, bought, message, output, settled, -, hbought, -, houtput, -, hs, hd⟩ :=
+    runTransaction_eq_ok h
+  obtain ⟨hbuy, -⟩ := supply_buyGas hbought
   have hmsg := supplyLe_processMessageCall houtput
   have hset := supply_settleGas hs
   have cset := createdAccounts_settleGas hs
@@ -359,7 +351,7 @@ theorem runTransaction_supply {Meter : Type} [GasMeter Meter] [LawfulGasMeter Me
     unfold BurnsNone at burns ⊢
     rwa [cdel, cset] at burns
   have hmsgEq := hmsg.2.2 burnsOut
-  have hdelSame : deleted.supply = settled.supply := by
+  have hdelSame : out.state.supply = settled.supply := by
     refine hdelEq ?_
     rcases burnsOut with hglam | ⟨hdencun, hnone⟩
     · exact .inl hglam

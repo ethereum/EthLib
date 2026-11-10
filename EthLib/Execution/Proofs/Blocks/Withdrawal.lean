@@ -25,7 +25,7 @@ def withdrawnTo (withdrawals : List Withdrawal) (address : Address) : Nat :=
   ((withdrawals.filter (·.address = address)).map (·.amount.toNat)).sum * GWEI_TO_WEI
 
 /-- The amount of a withdrawal in wei is below `2^256`, since its amount in Gwei is below `2^64`. -/
-theorem toNat_wei (amount : UInt64) :
+theorem toNat_withdrawalWei (amount : UInt64) :
     (BitVec.ofNat 256 (amount.toNat * GWEI_TO_WEI)).toNat = amount.toNat * GWEI_TO_WEI := by
   have hlt : amount.toNat * GWEI_TO_WEI < 2 ^ 64 * GWEI_TO_WEI :=
     Nat.mul_lt_mul_of_pos_right amount.toNat_lt (by decide)
@@ -51,7 +51,7 @@ private theorem withdrawnTo_eq_sum (withdrawals : List Withdrawal) (address : Ad
     rw [withdrawnTo_cons, ih]
     by_cases hsame : w.address = address
     · simp only [hsame, ↓reduceIte, List.filter_cons, decide_true, List.map_cons, List.sum_cons,
-        toNat_wei]
+        toNat_withdrawalWei]
     · simp [hsame]
 
 /-- After the withdrawals of a block, each account holds its balance plus its withdrawn wei.

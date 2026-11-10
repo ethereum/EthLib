@@ -308,6 +308,8 @@ From Shapella the withdrawals join the body after them, at the position after th
 
 The requests then run, and the rewards last, which give the block state of the output.
 
+The builder of the output is the builder after the requests, and gives the hash of the output.
+
 The gas counts and the gas used that the receipts add up are those of the transactions. -/
 theorem applyBody_eq_ok {config : ChainConfig} {env : BlockEnvironment fork}
     {block : Block fork Transaction} {start : BlockState} {output : BlockOutput fork}
@@ -325,6 +327,8 @@ theorem applyBody_eq_ok {config : ChainConfig} {env : BlockEnvironment fork}
       onBlock requested.block (fun tx => payRewards fork tx block.header.coinbase
         block.header.number (block.ommers.map fun ommer => (ommer.2.coinbase, ommer.2.number))) =
         .ok output.block ∧
+      output.body.builder = requested.builder ∧
+      accessListHashOf fork requested block.header.gasLimit = .ok output.accessListHash ∧
       output.gas = txs.gas ∧ output.cumulativeGasUsed = txs.cumulativeGasUsed := by
   unfold applyBody at h
   dsimp only at h
@@ -338,21 +342,22 @@ theorem applyBody_eq_ok {config : ChainConfig} {env : BlockEnvironment fork}
     obtain ⟨⟨requested, requests⟩, hRequests, h⟩ := bind_ok_iff.mp h
     dsimp only at h
     obtain ⟨rewarded, hRewarded, h⟩ := bind_ok_iff.mp h
-    obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
+    obtain ⟨_, hHash, h⟩ := bind_ok_iff.mp h
     cases h
     exact ⟨state, body, txs, withdrawn, requested, hState, mapError_ok_iff.mp hBody, hTxs,
       fun _ => ⟨tx, mapError_ok_iff.mp hTx, mapError_ok_iff.mp hJoin⟩,
-      fun hNot => absurd hShapella hNot, hRequests, hRewarded, rfl, rfl⟩
+      fun hNot => absurd hShapella hNot, hRequests, hRewarded, rfl, hHash, rfl, rfl⟩
   · rename_i hShapella
     obtain ⟨withdrawn, hWithdrawn, h⟩ := bind_ok_iff.mp h
     cases hWithdrawn
     obtain ⟨⟨requested, requests⟩, hRequests, h⟩ := bind_ok_iff.mp h
     dsimp only at h
     obtain ⟨rewarded, hRewarded, h⟩ := bind_ok_iff.mp h
-    obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
+    obtain ⟨_, hHash, h⟩ := bind_ok_iff.mp h
     cases h
     exact ⟨state, body, txs, _, requested, hState, mapError_ok_iff.mp hBody, hTxs,
-      fun hYes => absurd hYes hShapella, fun _ => rfl, hRequests, hRewarded, rfl, rfl⟩
+      fun hYes => absurd hYes hShapella, fun _ => rfl, hRequests, hRewarded, rfl, hHash, rfl,
+      rfl⟩
 
 /-! ## The transition -/
 
@@ -363,6 +368,44 @@ theorem stateTransition_of_hegota_le {chain : BlockChain} {block : Block fork Tr
   simp only [stateTransition, h, ↓reduceIte]
   rfl
 
+/-- A block that passes the transition takes each step of it, in order.
+
+Its fork is before Hegotá and is the active fork of its chain, and it passes its own checks.
+
+Its body runs on the state after its parent, in the environment of the recent hashes.
+
+The roots of the output pass the checks against the header.
+
+The state after the block is the state that the body gives. -/
+theorem stateTransition_eq_ok {chain : BlockChain} {block : Block fork Transaction}
+    {checkSeal : Bool} {post : State} (h : stateTransition chain block checkSeal = .ok post) :
+    ¬.hegota ≤ fork ∧
+      chain.config.activeFork block.header.number block.header.timestamp.toNat = some fork ∧
+      checkBlock chain.config checkSeal chain.recent block = .ok () ∧
+      ∃ hashes output roots,
+        recentHashes chain.recent = .ok hashes ∧
+        applyBody chain.config (blockEnvironment chain.config hashes block.header) block
+          ⟨chain.state, ∅, ∅, ∅, ∅⟩ = .ok output ∧
+        outputRoots block.transactions block.withdrawals output output.block.applyChanges =
+          .ok roots ∧
+        firstFailure (outputChecks block.header output roots) = .ok () ∧
+        post = output.block.applyChanges := by
+  unfold stateTransition at h
+  have hNotHegota : ¬.hegota ≤ fork := fun hH => by
+    simp [hH, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
+  simp only [hNotHegota, ↓reduceIte] at h
+  split at h
+  · rename_i hActive
+    obtain ⟨_, hCheck, h⟩ := bind_ok_iff.mp h
+    obtain ⟨hashes, hHashes, h⟩ := bind_ok_iff.mp h
+    obtain ⟨output, hOutput, h⟩ := bind_ok_iff.mp h
+    obtain ⟨roots, hRoots, h⟩ := bind_ok_iff.mp h
+    obtain ⟨_, hChecks, h⟩ := bind_ok_iff.mp h
+    cases h
+    exact ⟨hNotHegota, hActive, hCheck, hashes, output, roots, hHashes, hOutput, hRoots, hChecks,
+      rfl⟩
+  · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
+
 /-- A block that passes the transition is at the active fork of its chain.
 
 Its header commits to the state after it. -/
@@ -370,22 +413,9 @@ theorem of_stateTransition {chain : BlockChain} {block : Block fork Transaction}
     {checkSeal : Bool} {post : State} (h : stateTransition chain block checkSeal = .ok post) :
     chain.config.activeFork block.header.number block.header.timestamp.toNat = some fork ∧
       stateRoot keccak256 post = .ok block.header.stateRoot := by
-  unfold stateTransition at h
-  by_cases hFork : .hegota ≤ fork
-  · simp [hFork, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
-  · simp only [hFork, ↓reduceIte] at h
-    split at h
-    · rename_i hActive
-      obtain ⟨_, _, h⟩ := bind_ok_iff.mp h
-      obtain ⟨_, _, h⟩ := bind_ok_iff.mp h
-      obtain ⟨output, _, h⟩ := bind_ok_iff.mp h
-      obtain ⟨roots, hRoots, h⟩ := bind_ok_iff.mp h
-      obtain ⟨_, hChecks, h⟩ := bind_ok_iff.mp h
-      cases h
-      have hState := (of_outputChecks hChecks).2.1
-      refine ⟨hActive, ?_⟩
-      rw [← hState]
-      exact outputRoots_state hRoots
-    · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
+  obtain ⟨-, hActive, -, _, output, roots, -, -, hRoots, hChecks, rfl⟩ := stateTransition_eq_ok h
+  refine ⟨hActive, ?_⟩
+  rw [← (of_outputChecks hChecks).2.1]
+  exact outputRoots_state hRoots
 
 end EthLib.Execution.Blocks

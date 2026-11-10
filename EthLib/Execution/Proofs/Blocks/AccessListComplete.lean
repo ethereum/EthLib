@@ -246,58 +246,28 @@ theorem applyBody_covers {config : ChainConfig} {env : BlockEnvironment fork}
         ((requestContracts fork).take j).foldlM (readRequest env) (withdrawn, []) = .ok mid ∧
         checkedSystemCall env mid.1.block (requestContracts fork)[j].2 .empty = .ok out ∧
         output.body.builder.Covers out.state) := by
-  unfold applyBody at h
-  dsimp only at h
-  obtain ⟨state, hState, h⟩ := bind_ok_iff.mp h
-  obtain ⟨body, hBody, h⟩ := bind_ok_iff.mp h
-  have hBody := mapError_ok_iff.mp hBody
-  obtain ⟨txOutput, hTx, h⟩ := bind_ok_iff.mp h
-  split at h <;> rename_i hShapella
-  all_goals first
-    | obtain ⟨tx, hTxState, h⟩ := bind_ok_iff.mp h
-      have hTxState := mapError_ok_iff.mp hTxState
-      obtain ⟨withdrawn, hJoin, h⟩ := bind_ok_iff.mp h
-      have hJoin := mapError_ok_iff.mp hJoin
-      have hW := BodyState.join_covers hJoin
-      have withdrawals : txOutput.body.builder.Extends withdrawn.builder ∧
-          (∀ hShapella : .shapella ≤ fork, ∃ tx,
-            withdrawalState fork txOutput.body.block (block.withdrawals hShapella) = .ok tx ∧
-            (txOutput.body.beginIndex (block.transactions.length + 1)).join tx =
-              .ok withdrawn ∧
-            withdrawn.builder.Covers tx) ∧
-          (¬.shapella ≤ fork →
-            withdrawn = txOutput.body.beginIndex (block.transactions.length + 1)) :=
-        ⟨hW.1, fun _ => ⟨tx, hTxState, hJoin, hW.2⟩, fun h => absurd hShapella h⟩
-    | obtain ⟨withdrawn, hEq, h⟩ := bind_ok_iff.mp h
-      have hEq := Except.ok.inj hEq
-      have withdrawals : txOutput.body.builder.Extends withdrawn.builder ∧
-          (∀ hShapella : .shapella ≤ fork, ∃ tx,
-            withdrawalState fork txOutput.body.block (block.withdrawals hShapella) = .ok tx ∧
-            (txOutput.body.beginIndex (block.transactions.length + 1)).join tx =
-              .ok withdrawn ∧
-            withdrawn.builder.Covers tx) ∧
-          (¬.shapella ≤ fork →
-            withdrawn = txOutput.body.beginIndex (block.transactions.length + 1)) :=
-        ⟨by subst hEq; exact Extends.refl _, fun h => absurd h hShapella,
-          fun _ => hEq.symm⟩
-  all_goals
-    obtain ⟨⟨requested, requests⟩, hRequests, h⟩ := bind_ok_iff.mp h
-    dsimp only at h
-    obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-    obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-    cases h
-    obtain ⟨hReqExt, hReqCovers⟩ := blockRequests_covers hRequests
-    have hTxExt := withdrawals.1.trans hReqExt
-    obtain ⟨hStartExt, hStart⟩ := startSystemCalls_covers hBody
-    have hBodyExt := (applyTransactions_covers hTx).1.trans hTxExt
-    refine ⟨state, body, txOutput, withdrawn, hState, hBody, hStartExt.trans hBodyExt,
-      fun hDencun => ?_, hTx, hTxExt, fun hS => ?_, withdrawals.2.2, hReqCovers⟩
-    · obtain ⟨out, mid, hOut, hMid, hCovers, hSecond⟩ := hStart hDencun
-      refine ⟨out, mid, hOut, hMid, hCovers.mono hBodyExt, fun hPectra => ?_⟩
-      obtain ⟨out', hOut', hCovers'⟩ := hSecond hPectra
-      exact ⟨out', hOut', hCovers'.mono hBodyExt⟩
-    · obtain ⟨tx, hTxState, hJoin, hCovers⟩ := withdrawals.2.1 hS
-      exact ⟨tx, hTxState, hJoin, hCovers.mono hReqExt⟩
+  obtain ⟨state, body, txOutput, withdrawn, requested, hState, hBody, hTx, hW, hNotW, hRequests,
+    -, hBuilder, -⟩ := applyBody_eq_ok h
+  obtain ⟨hReqExt, hReqCovers⟩ := blockRequests_covers hRequests
+  rw [← hBuilder] at hReqExt hReqCovers
+  -- The withdrawals extend the builder after the transactions, and their state is covered.
+  have hWExt : txOutput.body.builder.Extends withdrawn.builder := by
+    by_cases hShapella : .shapella ≤ fork
+    · obtain ⟨tx, -, hJoin⟩ := hW hShapella
+      exact (BodyState.join_covers hJoin).1
+    · rw [hNotW hShapella]
+      exact Extends.refl _
+  have hTxExt := hWExt.trans hReqExt
+  obtain ⟨hStartExt, hStart⟩ := startSystemCalls_covers hBody
+  have hBodyExt := (applyTransactions_covers hTx).1.trans hTxExt
+  refine ⟨state, body, txOutput, withdrawn, hState, hBody, hStartExt.trans hBodyExt,
+    fun hDencun => ?_, hTx, hTxExt, fun hS => ?_, hNotW, hReqCovers⟩
+  · obtain ⟨out, mid, hOut, hMid, hCovers, hSecond⟩ := hStart hDencun
+    refine ⟨out, mid, hOut, hMid, hCovers.mono hBodyExt, fun hPectra => ?_⟩
+    obtain ⟨out', hOut', hCovers'⟩ := hSecond hPectra
+    exact ⟨out', hOut', hCovers'.mono hBodyExt⟩
+  · obtain ⟨tx, hTxState, hJoin⟩ := hW hS
+    exact ⟨tx, hTxState, hJoin, (BodyState.join_covers hJoin).2.mono hReqExt⟩
 
 /-- The builder at the end of a body covers the run of each of its transactions.
 
@@ -328,23 +298,9 @@ theorem applyBody_accessListHash {config : ChainConfig} {env : BlockEnvironment 
     (h : applyBody config env block start = .ok output) (hFork : .glamsterdam ≤ fork) :
     ∃ value, output.accessListHash = some value ∧
       BlockAccessList.hash output.body.builder.build = .ok value := by
-  unfold applyBody at h
-  dsimp only at h
-  obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-  obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-  obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-  split at h <;> rename_i hShapella
-  all_goals first
-    | have _ : Fork.shapella ≤ fork := hShapella
-      obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-      obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-    | obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-  all_goals
-    obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-    obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-    obtain ⟨hash, hHash, h⟩ := bind_ok_iff.mp h
-    cases h
-    exact (accessListHashOf_eq_ok hHash hFork).2
+  obtain ⟨-, -, -, -, requested, -, -, -, -, -, -, -, hBuilder, hHash, -⟩ := applyBody_eq_ok h
+  rw [hBuilder]
+  exact (accessListHashOf_eq_ok hHash hFork).2
 
 /-- From Glamsterdam, a block that passes the transition commits to the list that its builder built.
 
@@ -362,21 +318,11 @@ theorem stateTransition_accessList {chain : BlockChain} {block : Block fork Tran
         ⟨chain.state, ∅, ∅, ∅, ∅⟩ = .ok output ∧
       BlockAccessList.hash output.body.builder.build =
         .ok (block.header.blockAccessListHash hFork) := by
-  unfold stateTransition at h
-  have hNotHegota : ¬.hegota ≤ fork := fun hH => by
-    simp [hH, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
-  simp only [hNotHegota, ↓reduceIte] at h
-  split at h
-  · obtain ⟨_, _, h⟩ := bind_ok_iff.mp h
-    obtain ⟨hashes, hHashes, h⟩ := bind_ok_iff.mp h
-    obtain ⟨output, hOutput, h⟩ := bind_ok_iff.mp h
-    obtain ⟨roots, -, h⟩ := bind_ok_iff.mp h
-    obtain ⟨_, hChecks, -⟩ := bind_ok_iff.mp h
-    obtain ⟨value, hValue, hHash⟩ := applyBody_accessListHash hOutput hFork
-    rw [accessListHash_of_outputChecks hFork hChecks] at hValue
-    cases hValue
-    exact ⟨hashes, output, hHashes, hOutput, hHash⟩
-  · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
+  obtain ⟨-, -, -, hashes, output, _, hHashes, hOutput, -, hChecks, -⟩ := stateTransition_eq_ok h
+  obtain ⟨value, hValue, hHash⟩ := applyBody_accessListHash hOutput hFork
+  rw [accessListHash_of_outputChecks hFork hChecks] at hValue
+  cases hValue
+  exact ⟨hashes, output, hHashes, hOutput, hHash⟩
 
 /-- From Glamsterdam, a block that passes the transition commits to a list that covers its body.
 

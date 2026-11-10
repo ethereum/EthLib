@@ -1494,7 +1494,7 @@ The DAO transfer only moves wei, and a system call keeps or lowers the supply, a
 `stateTransition_supply_le` proves that the supply after the block plus the burned fees is at most the supply before plus the created wei, at every fork.
 `stateTransition_supply_of_glamsterdam` proves the equality from Glamsterdam.
 `stateTransition_supply_le_of_lt_glamsterdam` writes the burned fees from the header before Glamsterdam: the gas used and the blob gas used, each at its base fee.
-From Glamsterdam the gas used of the header counts the gas before the refunds, by EIP-7778, so it no longer gives the burned fees.
+From Glamsterdam the gas used of the header is the larger of the execution gas before the refunds, by EIP-7778, and the state gas, by EIP-8037, so it does not give the burned fees.
 There the theorems take the fees from the body that the transition runs.
 Before Glamsterdam the block theorems give only the bound, for the reasons above, even from Cancun.
 A block form of the Cancun equality would need every transaction and every system call to end with no created account; [#1793](https://github.com/ethereum/EthLib/issues/1793) tracks the exact accounting before Glamsterdam.
