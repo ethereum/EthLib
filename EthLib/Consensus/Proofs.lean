@@ -108,6 +108,7 @@ public import EthLib.Consensus.Proofs.Transition.BuilderDebtSlots
 public import EthLib.Consensus.Proofs.Transition.BuilderDebtWithdrawals
 public import EthLib.Consensus.Proofs.Transition.BuilderPayments
 public import EthLib.Consensus.Proofs.Transition.BuilderRequests
+public import EthLib.Consensus.Proofs.Transition.Chain
 public import EthLib.Consensus.Proofs.Transition.Committees
 public import EthLib.Consensus.Proofs.Transition.ConsolidationWindow
 public import EthLib.Consensus.Proofs.Transition.EpochJustification
@@ -118,6 +119,7 @@ public import EthLib.Consensus.Proofs.Transition.EpochUpdates
 public import EthLib.Consensus.Proofs.Transition.Execution
 public import EthLib.Consensus.Proofs.Transition.FfgJustification
 public import EthLib.Consensus.Proofs.Transition.FfgSlack
+public import EthLib.Consensus.Proofs.Transition.FfgSlackChain
 public import EthLib.Consensus.Proofs.Transition.FfgStake
 public import EthLib.Consensus.Proofs.Transition.FfgVotes
 public import EthLib.Consensus.Proofs.Transition.ForkBoundary

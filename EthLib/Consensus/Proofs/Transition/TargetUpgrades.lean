@@ -221,56 +221,77 @@ theorem TargetFlagsSigned.of_upgradeToAltair {pre : BeaconState preset .phase0}
 /-- The upgrades due at a slot never shrink the registry. -/
 theorem processUpgrades_registryGrows {forked after : ForkedBeaconState preset}
     (computed : processUpgrades config checks forked = .ok after) :
-    forked.state.validators.data.size ≤ after.state.validators.data.size := by
-  fun_induction processUpgrades config checks forked generalizing after with
-  | case1 forked _ more =>
-    obtain ⟨step, stepOk, rest⟩ := bind_ok_iff.mp computed
-    exact Nat.le_trans (upgradeFrame_upgradeNext stepOk).registryGrows (more step rest)
-  | case2 forked _ =>
-    cases computed
-    exact Nat.le_refl _
+    forked.state.validators.data.size ≤ after.state.validators.data.size :=
+  processUpgrades_induction
+    (property := fun state => forked.state.validators.data.size ≤ state.state.validators.data.size)
+    (fun le stepOk => Nat.le_trans le (upgradeFrame_upgradeNext stepOk).registryGrows)
+    (Nat.le_refl _) computed
 
 /-- The upgrades due at a slot keep the fork versions those of forks of the chain. -/
 theorem ForkVersionsKnown.of_processUpgrades {forked after : ForkedBeaconState preset}
     (known : ForkVersionsKnown config forked.state)
     (computed : processUpgrades config checks forked = .ok after) :
-    ForkVersionsKnown config after.state := by
-  fun_induction processUpgrades config checks forked generalizing after with
-  | case1 forked _ more =>
-    obtain ⟨step, stepOk, rest⟩ := bind_ok_iff.mp computed
-    exact more step (known.of_upgradeFrame (upgradeFrame_upgradeNext stepOk)) rest
-  | case2 forked _ =>
-    cases computed
-    exact known
+    ForkVersionsKnown config after.state :=
+  processUpgrades_induction (property := fun state => ForkVersionsKnown config state.state)
+    (fun known stepOk => known.of_upgradeFrame (upgradeFrame_upgradeNext stepOk)) known computed
 
 /-- The upgrades due at a slot keep the two justified checkpoints equal in the first two epochs.
 -/
 theorem JustifiedEarly.of_processUpgrades {forked after : ForkedBeaconState preset}
     (early : JustifiedEarly forked.state)
     (computed : processUpgrades config checks forked = .ok after) :
-    JustifiedEarly after.state := by
-  fun_induction processUpgrades config checks forked generalizing after with
-  | case1 forked _ more =>
-    obtain ⟨step, stepOk, rest⟩ := bind_ok_iff.mp computed
-    exact more step (early.of_upgradeFrame (upgradeFrame_upgradeNext (checks := checks) stepOk))
-      rest
-  | case2 forked _ =>
-    cases computed
-    exact early
+    JustifiedEarly after.state :=
+  processUpgrades_induction (property := fun state => JustifiedEarly state.state)
+    (fun early stepOk => early.of_upgradeFrame (upgradeFrame_upgradeNext stepOk)) early computed
 
 /-- The upgrades due at a slot keep the previous justified epoch below the previous epoch. -/
 theorem JustifiedSeparated.of_processUpgrades {forked after : ForkedBeaconState preset}
     (separated : JustifiedSeparated forked.state)
     (computed : processUpgrades config checks forked = .ok after) :
-    JustifiedSeparated after.state := by
-  fun_induction processUpgrades config checks forked generalizing after with
-  | case1 forked _ more =>
-    obtain ⟨step, stepOk, rest⟩ := bind_ok_iff.mp computed
-    exact more step
-      (separated.of_upgradeFrame (upgradeFrame_upgradeNext (checks := checks) stepOk)) rest
-  | case2 forked _ =>
-    cases computed
-    exact separated
+    JustifiedSeparated after.state :=
+  processUpgrades_induction (property := fun state => JustifiedSeparated state.state)
+    (fun separated stepOk => separated.of_upgradeFrame (upgradeFrame_upgradeNext stepOk))
+    separated computed
+
+/-- The upgrades due at a slot keep both justified checkpoints. -/
+theorem processUpgrades_justified {forked after : ForkedBeaconState preset}
+    (computed : processUpgrades config checks forked = .ok after) :
+    after.state.previousJustifiedCheckpoint = forked.state.previousJustifiedCheckpoint ∧
+      after.state.currentJustifiedCheckpoint = forked.state.currentJustifiedCheckpoint :=
+  processUpgrades_induction
+    (property := fun state =>
+      state.state.previousJustifiedCheckpoint = forked.state.previousJustifiedCheckpoint ∧
+        state.state.currentJustifiedCheckpoint = forked.state.currentJustifiedCheckpoint)
+    (fun ⟨previous, current⟩ stepOk =>
+      ⟨(upgradeFrame_upgradeNext stepOk).previousJustified.trans previous,
+        (upgradeFrame_upgradeNext stepOk).currentJustified.trans current⟩)
+    ⟨rfl, rfl⟩ computed
+
+/-- An upgrade reaches Altair or a later fork.
+
+Before Altair, only a state of Phase 0 upgrades. -/
+private theorem upgradeNext_altair {pre : ForkedBeaconState preset}
+    {post : {post : ForkedBeaconState preset // pre.fork < post.fork}}
+    (computed : upgradeNext config checks pre = .ok post) :
+    .altair ≤ post.val.fork ∧ (pre.fork < .altair → pre.fork = .phase0) := by
+  obtain ⟨fork, state⟩ := pre
+  cases fork <;>
+    simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq, throw,
+      throwThe, MonadExceptOf.throw, reduceCtorEq] at computed <;>
+    first
+      | (obtain ⟨_, -, rfl⟩ := computed; dsimp only; decide)
+      | (subst computed; dsimp only; decide)
+
+/-- The upgrades due at a slot keep each pending attestation a signed vote for its link.
+
+An upgrade moves the state to Altair or later, where no pending attestation remains. -/
+theorem PendingSigned.of_processUpgrades {forked after : ForkedBeaconState preset}
+    (holds : PendingSigned config checks forked.state)
+    (computed : processUpgrades config checks forked = .ok after) :
+    PendingSigned config checks after.state :=
+  processUpgrades_induction (property := fun state => PendingSigned config checks state.state)
+    (fun _ stepOk before => absurd (upgradeNext_altair stepOk).1 (Nat.not_le_of_lt before))
+    holds computed
 
 /-- The upgrades due at a slot, from Altair on, keep each target flag backed by a signed vote.
 
@@ -319,6 +340,28 @@ theorem TargetFlagsSigned.of_processUpgrades_of_phase0 {forked after : ForkedBea
     intro altair
     exact absurd altair (by decide : ¬Fork.altair ≤ Fork.phase0)
 
+/-- The upgrades due at a slot, before Altair, give each target flag a signed vote.
+
+That vote is for the link of the epoch of the flag.
+
+Each pending attestation must be a signed vote for the link of its epoch.
+
+The registry must stay below 2^64 validators after the upgrades. -/
+theorem TargetFlagsSigned.of_processUpgrades_of_lt_altair {forked after : ForkedBeaconState preset}
+    (before : forked.fork < .altair) (small : after.state.validators.data.size < 2 ^ 64)
+    (holds : PendingSigned config checks forked.state)
+    (computed : processUpgrades config checks forked = .ok after) :
+    TargetFlagsSigned config checks after.state := by
+  by_cases phase0 : forked.fork = .phase0
+  · exact TargetFlagsSigned.of_processUpgrades_of_phase0 phase0 small holds computed
+  unfold processUpgrades at computed
+  split at computed
+  · obtain ⟨step, stepOk, -⟩ := bind_ok_iff.mp computed
+    exact absurd ((upgradeNext_altair stepOk).2 before) phase0
+  · cases computed
+    intro altair
+    exact absurd altair (Nat.not_le_of_lt before)
+
 /-! ## Genesis, slots and blocks -/
 
 /-- A frame keeps the fork versions those of forks of the chain. -/
@@ -359,14 +402,9 @@ theorem initializeBeaconStateFromEth1_target {fork : Fork} {after : BeaconState 
     (computed : initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits =
       .ok after) :
     ForkVersionsKnown config after ∧ JustifiedEarly after := by
-  unfold initializeBeaconStateFromEth1 at computed
-  split at computed
-  · cases computed
-  rename_i altair
-  simp only [bind_ok_iff, ensure_ok_iff, liftSsz_ok, pure, Except.pure,
-    Except.ok.injEq] at computed
-  obtain ⟨_, _, _, _, _, _, deposited, depositedOk, activated, activatedOk, root, _, rfl⟩ :=
-    computed
+  obtain ⟨before, _, _, _, activated, _, depositedOk, activatedOk, rfl⟩ :=
+    initializeBeaconStateFromEth1_ok computed
+  have altair : ¬Fork.altair ≤ fork := Nat.not_le_of_lt before
   have frame := (Frame.foldlM (fun _ _ _ ok => frame_genesisDeposit ok) depositedOk).trans
     (Frame.foldlM (fun _ _ _ ok => frame_activateAtGenesis ok) activatedOk)
   have later : ∀ next : Fork, Fork.altair ≤ next → ¬next ≤ fork :=
@@ -383,5 +421,34 @@ theorem initializeBeaconStateFromEth1_target {fork : Fork} {after : BeaconState 
   · show activated.previousJustifiedCheckpoint = activated.currentJustifiedCheckpoint
     rw [frame.previousJustified, frame.currentJustified]
     rfl
+
+/-- Before Altair, the genesis state built from deposits has no pending attestations. -/
+theorem initializeBeaconStateFromEth1_pending {fork : Fork} {after : BeaconState preset fork}
+    {eth1BlockHash : Hash32} {eth1Timestamp : UInt64} {deposits : Array Deposit}
+    (computed : initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits =
+      .ok after) (before : fork < .altair) (current : Bool) :
+    recentPending after before current = #[] := by
+  obtain ⟨_, _, _, deposited, activated, _, depositedOk, activatedOk, rfl⟩ :=
+    initializeBeaconStateFromEth1_ok computed
+  let Empty : BeaconState preset fork → Prop := fun state =>
+    (state.previousEpochAttestations before).data = #[] ∧
+      (state.currentEpochAttestations before).data = #[]
+  have afterDeposits : Empty deposited := by
+    refine foldlM_ok_invariant Empty (fun state entry next empty ok => ?_) ⟨rfl, rfl⟩ depositedOk
+    simp only [genesisDeposit, bind_ok_iff] at ok
+    obtain ⟨_, _, ok⟩ := ok
+    have frame := pendingFrame_processDeposit before ok
+    exact ⟨by rw [funext frame.previousPending]; exact empty.1,
+      by rw [funext frame.currentPending]; exact empty.2⟩
+  have afterActivation : Empty activated := by
+    refine foldlM_ok_invariant Empty (fun state index next empty ok => ?_) afterDeposits
+      activatedOk
+    simp only [activateAtGenesis, bind_ok_iff, liftAccessor_ok] at ok
+    obtain ⟨_, _, _, _, set⟩ := ok
+    obtain ⟨_, rfl⟩ := setValidator_ok set
+    exact empty
+  cases current
+  · exact afterActivation.1
+  · exact afterActivation.2
 
 end EthLib.Consensus
