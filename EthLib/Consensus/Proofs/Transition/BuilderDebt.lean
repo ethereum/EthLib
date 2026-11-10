@@ -13,13 +13,13 @@ A bid passes only if the balance of its builder covers the bid, that debt and a 
 
 The invariant here says that the balance always covers the debt.
 
-So no withdrawal of a builder falls short.
+With it, no withdrawal of a builder falls short.
 
 The payment of the parent block can leave the pending payments with no block between.
 
 That happens when the parent is older than the previous epoch.
 
-The child then queues the value of the parent bid again, by the late path of the parent payload.
+The child then queues the value of the parent bid, by the late path of the parent payload.
 
 So the invariant also reserves that value, from when the payment leaves until the child comes.
 
@@ -30,7 +30,7 @@ The late path reads the bid, and not the payment.
 The invariant has four parts.
 
 * For each builder, the debt plus the reserved value is at most the balance.
-* The payment of the parent has no weight, and it is the payment of the latest bid or has no amount.
+* In the window, the parent payment has no weight, and it pays the latest bid or has no amount.
 * A builder that has started to exit owes nothing and has no reserved value.
 * Each position of the window after that of the parent holds the payment of no bid.
 
@@ -46,7 +46,7 @@ The fourth part keeps the second one true after a block whose bid has no value.
 
 Such a bid records no payment, so the position of the block keeps what it held.
 
-The invariant holds between blocks and slots, and not after each step inside them.
+The proofs that follow show that blocks and slots keep it, not each step inside them.
 
 Inside a block, the settled parent payment and the reserve both count the same value until the bid.
 
@@ -122,7 +122,9 @@ def LaterPaymentsEmpty (state : BeaconState preset fork) (gloas : .glamsterdam â
 
 A builder that has started to exit owes nothing, and the late path adds nothing for it.
 
-The payment of the parent has no weight, and pays the latest bid or has no amount.
+While the payment of the parent is in the window, it has no weight.
+
+It then pays the latest bid or has no amount.
 
 Each position after it holds the payment of no bid. -/
 structure BuilderDebtCovered (state : BeaconState preset fork) (gloas : .glamsterdam â‰¤ fork) :
