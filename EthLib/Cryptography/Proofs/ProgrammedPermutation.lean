@@ -97,6 +97,26 @@ theorem ProgrammedCache.notMem_map_snd_of_not_conflict_cons {c : ProgrammedCache
     b ∉ (TaggedCache.untag c).map Prod.snd :=
   ((PermCache.isPartialBijection_cons_iff _ _).1 (not_not.1 h)).2.1
 
+/-- The cache holds its relayed pairs and its programmed pairs. -/
+theorem ProgrammedCache.length_eq_length_relayed_add (c : ProgrammedCache A) :
+    c.length = c.relayed.length + (c.filter fun e => e.2).length := by
+  have := List.length_eq_length_filter_add (l := c) fun e => e.2
+  simp only [ProgrammedCache.relayed, TaggedCache.untag, List.length_map]
+  omega
+
+/-- A part of a cached pair that no relayed pair has is the part of a programmed pair. -/
+theorem ProgrammedCache.mem_programmed_of_mem (c : ProgrammedCache A) (f : A × A → A) {b : A}
+    (hb : b ∈ (TaggedCache.untag c).map f) (hr : b ∉ c.relayed.map f) :
+    b ∈ (c.filter fun e => e.2).map fun e => f e.1 := by
+  simp only [TaggedCache.untag, List.map_map, List.mem_map, Function.comp_apply] at hb
+  obtain ⟨e, he, rfl⟩ := hb
+  cases ht : e.2
+  · refine absurd ?_ hr
+    simp only [ProgrammedCache.relayed, TaggedCache.untag, List.map_map, List.mem_map,
+      List.mem_filter, Function.comp_apply]
+    exact ⟨e, ⟨he, by simp [ht]⟩, rfl⟩
+  · exact List.mem_map.2 ⟨e, List.mem_filter.2 ⟨he, by simp [ht]⟩, rfl⟩
+
 variable [FinEnum A]
 
 /-- A query missing from the cache is missing from the relayed pairs. -/
@@ -294,6 +314,56 @@ theorem preservesInv_programPermImpl_conflict :
     obtain ⟨p, h⟩ := programPermOracle_step q s z hz
     rw [h]
     exact ProgrammedCache.conflict_cons _ hs
+
+/-! ## The chance of a new conflict -/
+
+/-- A query to the overlay makes a conflict with a bounded chance.
+
+The cache has no conflict, and the lazy cache holds its relayed pairs.
+
+Let `r` be the number of relayed pairs.
+
+The bound is the number of programmed pairs over `|A| - r`. -/
+theorem prEvent_overlayLazyOracle_conflict_le (q : (PermSpec A).Domain)
+    (c : ProgrammedCache A) (hc : ¬c.Conflict) :
+    Pr{let z ← (overlayLazyOracle q).run (c, c.relayed)}[z.2.1.Conflict] ≤
+      ((c.filter fun e => e.2).length : ℝ≥0∞) /
+        ((FinEnum.card A - c.relayed.length : ℕ) : ℝ≥0∞) := by
+  have hbij := not_not.1 hc
+  have hfst : (c.relayed.map Prod.fst).Nodup := hbij.1.sublist (c.relayed_sublist.map _)
+  have hsnd : (c.relayed.map Prod.snd).Nodup := hbij.2.sublist (c.relayed_sublist.map _)
+  rcases q with a | b
+  · rw [overlayLazyOracle_inl_run]
+    rcases h : (TaggedCache.untag c).lookup a with _ | b
+    · simp only [lazyPermOracle_inl_run, ProgrammedCache.relayed_lookup_eq_none h, prEvent_map]
+      have ha := notMem_map_fst_of_lookup_eq_none h
+      have hlt : (c.relayed.map Prod.snd).length < FinEnum.card A := by
+        rw [List.length_map, ← List.length_map (f := Prod.fst)]
+        exact length_lt_card_of_nodup hfst fun h' => ha ((c.relayed_sublist.map _).subset h')
+      refine (prEvent_mono_of_support _ _
+        (fun b => b ∈ (c.filter fun e => e.2).map fun e => e.1.2) fun b hb hcb => ?_).trans ?_
+      · refine c.mem_programmed_of_mem Prod.snd ?_ (notMem_of_mem_support_uniformOutside hlt hb)
+        by_contra hb'
+        exact hcb ((PermCache.isPartialBijection_cons_iff _ _).2 ⟨ha, hb', hbij⟩)
+      · refine (prEvent_uniformOutside_mem_le _ _ a).trans ?_
+        simp only [List.length_map, le_refl]
+    · simp [hc]
+  · rw [overlayLazyOracle_inr_run]
+    rcases h : ((TaggedCache.untag c).map Prod.swap).lookup b with _ | a
+    · simp only [lazyPermOracle_inr_run, ProgrammedCache.relayed_swap_lookup_eq_none h,
+        prEvent_map]
+      have hb := notMem_map_snd_of_lookup_swap_eq_none h
+      have hlt : (c.relayed.map Prod.fst).length < FinEnum.card A := by
+        rw [List.length_map, ← List.length_map (f := Prod.snd)]
+        exact length_lt_card_of_nodup hsnd fun h' => hb ((c.relayed_sublist.map _).subset h')
+      refine (prEvent_mono_of_support _ _
+        (fun a => a ∈ (c.filter fun e => e.2).map fun e => e.1.1) fun a ha hca => ?_).trans ?_
+      · refine c.mem_programmed_of_mem Prod.fst ?_ (notMem_of_mem_support_uniformOutside hlt ha)
+        by_contra ha'
+        exact hca ((PermCache.isPartialBijection_cons_iff _ _).2 ⟨ha', hb, hbij⟩)
+      · refine (prEvent_uniformOutside_mem_le _ _ b).trans ?_
+        simp only [List.length_map, le_refl]
+    · simp [hc]
 
 /-! ## Domination until a conflict -/
 

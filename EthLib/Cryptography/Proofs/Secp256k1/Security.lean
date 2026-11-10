@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.Collision
+public import EthLib.Cryptography.Proofs.Secp256k1.Security.Conflict
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.DivisionResistance
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.ForwardCase
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.ForwardSolver
