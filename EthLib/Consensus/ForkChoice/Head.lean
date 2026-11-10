@@ -1,7 +1,6 @@
 module
 
 public import EthLib.Consensus.ForkChoice.PayloadVotes
-public import Std.Data.HashMap.Basic
 
 /-!
 # `Consensus.ForkChoice.Head`
@@ -153,8 +152,9 @@ It gives the sums, and the given nodes in reverse followed by the new nodes by f
 
 It stops at the first vote whose node cannot be found, and gives its error. -/
 def groupVotes : List (ValidatorIndex × Gwei) → List ForkChoiceNode →
-    Std.HashMap ForkChoiceNode Nat →
-    List ForkChoiceNode × Std.HashMap ForkChoiceNode Nat × Option ForkChoiceError
+    Std.TreeMap ForkChoiceNode Nat ForkChoiceNode.compare →
+    List ForkChoiceNode × Std.TreeMap ForkChoiceNode Nat ForkChoiceNode.compare ×
+      Option ForkChoiceError
   | [], nodes, sums => (nodes.reverse, sums, none)
   | (index, balance) :: rest, nodes, sums =>
     match store.latestMessages[index]? with
