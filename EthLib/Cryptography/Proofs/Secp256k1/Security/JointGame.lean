@@ -17,16 +17,21 @@ So here every oracle of the lazy game reads and writes both caches at once.
 
 The signer is a parameter, which may change the cache of `Π` as it likes.
 
+A signer that breaks the partial bijection of that cache leaves the model of a permutation.
+
 With the real signer, run against the lazy permutation, this is the lazy game.
 
-The run also returns both final caches.
+The run also returns the forgery and both final caches.
 
-With `Π` drawn at the end from its final cache, the result, the signing cache and `Π` have the
-joint law of the game.
+Draw `Π` at the end, uniform among the permutations that agree with its final cache.
+
+Then the forgery, the result, the signing cache and `Π` have the joint law of the game.
 
 The source is [Fersch, Kiltz, Poettering](https://doi.org/10.1145/2976749.2978413).
 
-Theorem 1 and its games G2 and G3 are in their §5 and Figure 5.
+The signer that sets `Π` is the one of their Theorem 1, in its games G2 and G3.
+
+The joint state is the challenger's side of those games.
 -/
 
 @[expose] public section
@@ -65,18 +70,9 @@ It reads and writes the cache of `Π` only through its queries. -/
 def liftSigner [FinEnum A] (signer : SignerQ F A M) : JointSigner F A M := fun m s =>
   (fun z => (z.1.1, (z.1.2, z.2))) <$> (simulateQ lazyPermImpl ((signer m).run s.1)).run s.2
 
-/-- Running a computation of coins alone against the lazy permutation leaves the cache. -/
-theorem simulateQ_lazyPermImpl_liftM_run [FinEnum A] {α : Type} (oa : ProbComp α)
-    (c : PermCache A) :
-    (simulateQ lazyPermImpl (liftM oa : PermComp A α)).run c = (·, c) <$> oa := by
-  rw [QueryImpl.simulateQ_liftM_eq_of_query lazyPermImpl
-    ((QueryImpl.id' unifSpec).liftTarget (StateT (PermCache A) ProbComp))
-    (fun t => by simp [lazyPermImpl]) oa]
-  simp [StateT.run_monadLift]
+/-- Take a signer that asks for `Π`, and run its oracles against the lazy permutation.
 
-/-- The real signer's oracles, run against the lazy permutation, are the joint oracles.
-
-The signer is lifted to the joint state. -/
+Those are the joint oracles with that signer lifted to the joint state. -/
 theorem flattenStateT_mapStateTBase_implQ [FinEnum A] (signer : SignerQ F A M) :
     (lazyPermImpl.mapStateTBase (implQ signer)).flattenStateT =
       jointImpl (liftSigner signer) := by
@@ -101,16 +97,17 @@ variable [Field F] [DecidableEq F] [AddCommGroup G] [Module F G] [DecidableEq G]
 
 /-- Run the adversary on the key `X` with a signing oracle, and check its forgery.
 
-It keeps the result and the final signing cache. -/
+It keeps the forgery, the result and the final signing cache. -/
 def runCacheQ [DecidableEq M] (scheme : Scheme F G A M) (adversary : Adversary F G A M) (X : G)
-    (signer : SignerQ F A M) : PermComp A (Bool × Cache F M) := do
+    (signer : SignerQ F A M) : PermComp A ((M × F × F) × Bool × Cache F M) := do
   let ((m, t, s), cache) ← (simulateQ (implQ signer) (adversary.main X)).run []
-  if signed cache m then return (false, cache) else (·, cache) <$> verifyQ scheme X m t s
+  if signed cache m then return ((m, t, s), false, cache) else
+    (((m, t, s), ·, cache)) <$> verifyQ scheme X m t s
 
-/-- The run with the signing cache, without it, is the run of the lazy game. -/
-theorem fst_map_runCacheQ [DecidableEq M] (scheme : Scheme F G A M)
+/-- The run that keeps the forgery and the signing cache, keeping only the result, is the run. -/
+theorem result_map_runCacheQ [DecidableEq M] (scheme : Scheme F G A M)
     (adversary : Adversary F G A M) (X : G) (signer : SignerQ F A M) :
-    Prod.fst <$> runCacheQ scheme adversary X signer = runQ scheme adversary X signer := by
+    (fun z => z.2.1) <$> runCacheQ scheme adversary X signer = runQ scheme adversary X signer := by
   simp only [runCacheQ, runQ, map_bind]
   refine bind_congr fun z => ?_
   split_ifs <;> simp
@@ -123,45 +120,51 @@ Both caches start empty.
 
 The check asks the lazy permutation for `Π` on the second cache, once or never.
 
-It returns the result and both final caches. -/
+It returns the forgery, the result and both final caches. -/
 def jointRun [DecidableEq M] (scheme : Scheme F G A M) (adversary : Adversary F G A M) (X : G)
-    (signer : JointSigner F A M) : ProbComp (Bool × JointState F A M) := do
+    (signer : JointSigner F A M) : ProbComp ((M × F × F) × Bool × JointState F A M) := do
   let ((m, t, s), (cache, perm)) ← (simulateQ (jointImpl signer) (adversary.main X)).run ([], [])
-  if signed cache m then return (false, (cache, perm)) else
-    (fun z => (z.1, (cache, z.2))) <$> (simulateQ lazyPermImpl (verifyQ scheme X m t s)).run perm
+  if signed cache m then return ((m, t, s), false, (cache, perm)) else
+    (fun z => ((m, t, s), z.1, (cache, z.2))) <$>
+      (simulateQ lazyPermImpl (verifyQ scheme X m t s)).run perm
 
 variable [SampleableType F] [DecidableEq M]
 
 /-- The lazy game over the joint state: draw the key, then run with the real signer.
 
-It returns the result and both final caches. -/
+It returns the forgery, the result and both final caches. -/
 def jointExperiment (scheme : Scheme F G A M) (fuel : ℕ) (adversary : Adversary F G A M) :
-    ProbComp (Bool × JointState F A M) := do
+    ProbComp ((M × F × F) × Bool × JointState F A M) := do
   let x ← $ᵗ F
   jointRun scheme adversary (x • scheme.g) (liftSigner (signQ scheme fuel x))
 
-/-- The game, keeping the result, the final signing cache and the permutation `Π`. -/
+/-- The game, keeping the forgery, the result, the final signing cache and the permutation `Π`. -/
 def experimentView (scheme : Scheme F G A M) (fuel : ℕ) (adversary : Adversary F G A M) :
-    ProbComp ((Bool × Cache F M) × Equiv.Perm A) := do
+    ProbComp ((M × F × F) × Bool × Cache F M × Equiv.Perm A) := do
   let π ← $ᵗ (Equiv.Perm A)
   let x ← $ᵗ F
   let X := x • scheme.g
   let ((m, t, s), cache) ← (simulateQ (impl scheme fuel π x) (adversary.main X)).run []
-  return ((!signed cache m && verify scheme π X m t s, cache), π)
+  return ((m, t, s), !signed cache m && verify scheme π X m t s, cache, π)
 
-/-- The game, keeping only the result, is the game. -/
-theorem fst_fst_map_experimentView (scheme : Scheme F G A M) (fuel : ℕ)
+/-- The game that also returns the forgery, its signing cache and `Π` is the game.
+
+That holds once all but the result is dropped. -/
+theorem result_map_experimentView (scheme : Scheme F G A M) (fuel : ℕ)
     (adversary : Adversary F G A M) :
-    (fun z => z.1.1) <$> experimentView scheme fuel adversary = experiment scheme fuel adversary := by
+    (fun z => z.2.1) <$> experimentView scheme fuel adversary =
+      experiment scheme fuel adversary := by
   simp [experimentView, experiment]
 
 omit [SampleableType F] in
-/-- The run with the signing cache, against the lazy permutation from the empty cache, is the
-joint run with the signer lifted. -/
+/-- Run against the lazy permutation from the empty cache, keeping the forgery and signing cache.
+
+That is the joint run with the signer lifted. -/
 theorem simulateQ_lazyPermImpl_runCacheQ (scheme : Scheme F G A M)
     (adversary : Adversary F G A M) (X : G) (signer : SignerQ F A M) :
     (simulateQ lazyPermImpl (runCacheQ scheme adversary X signer)).run [] =
-      (fun z => ((z.1, z.2.1), z.2.2)) <$> jointRun scheme adversary X (liftSigner signer) := by
+      (fun z => ((z.1, z.2.1, z.2.2.1), z.2.2.2)) <$>
+        jointRun scheme adversary X (liftSigner signer) := by
   simp only [runCacheQ, jointRun, simulateQ_bind, StateT.run_bind,
     simulateQ_mapStateTBase_run_eq_map_flattenStateT, flattenStateT_mapStateTBase_implQ,
     bind_map_left, map_bind]
@@ -172,33 +175,35 @@ theorem simulateQ_lazyPermImpl_runCacheQ (scheme : Scheme F G A M)
   · simp [h]
 
 /-- The lazy game is the joint game, keeping only the result. -/
-theorem lazyExperiment_eq_fst_map_jointExperiment (scheme : Scheme F G A M) (fuel : ℕ)
+theorem lazyExperiment_eq_result_map_jointExperiment (scheme : Scheme F G A M) (fuel : ℕ)
     (adversary : Adversary F G A M) :
-    lazyExperiment scheme fuel adversary = Prod.fst <$> jointExperiment scheme fuel adversary := by
+    lazyExperiment scheme fuel adversary =
+      (fun z => z.2.1) <$> jointExperiment scheme fuel adversary := by
   simp only [lazyExperiment, experimentQ, jointExperiment, StateT.run'_eq, simulateQ_bind,
     StateT.run_bind, simulateQ_lazyPermImpl_liftM_run, bind_map_left, map_bind]
   refine bind_congr fun x => ?_
-  rw [← fst_map_runCacheQ, simulateQ_map, StateT.run_map, simulateQ_lazyPermImpl_runCacheQ]
+  rw [← result_map_runCacheQ, simulateQ_map, StateT.run_map, simulateQ_lazyPermImpl_runCacheQ]
   simp [Functor.map_map]
 
-/-- The game with its signing cache and `Π` has the law of the joint game.
+/-- The game with its forgery, signing cache and `Π` has the law of the joint game.
 
-The joint game draws `Π` at the end, uniform among the permutations that agree with its final
-cache of `Π`. -/
+The joint game draws `Π` at the end, from its final cache of `Π`.
+
+It draws it uniformly among the permutations that agree with that cache. -/
 theorem experimentView_evalDistEq_jointExperiment (scheme : Scheme F G A M) (fuel : ℕ)
     (adversary : Adversary F G A M) :
     experimentView scheme fuel adversary =ᵈ
       (do
-        let (b, cache, perm) ← jointExperiment scheme fuel adversary
+        let (σ, b, cache, perm) ← jointExperiment scheme fuel adversary
         let π ← uniformExtension perm
-        pure ((b, cache), π)) := by
-  let oa : PermComp A (Bool × Cache F M) := do
+        pure (σ, b, cache, π)) := by
+  let oa : PermComp A ((M × F × F) × Bool × Cache F M) := do
     let x ← ($ᵗ F : ProbComp F)
     runCacheQ scheme adversary (x • scheme.g) (signQ scheme fuel x)
   have heager : experimentView scheme fuel adversary = (do
       let π ← $ᵗ (Equiv.Perm A)
       let z ← simulateQ (permImpl π) oa
-      pure (z, π)) := by
+      pure (z.1, z.2.1, z.2.2, π)) := by
     simp only [experimentView, oa, simulateQ_bind, simulateQ_permImpl_liftM, bind_assoc]
     refine bind_congr fun π => bind_congr fun x => ?_
     simp only [runCacheQ, simulateQ_bind, bind_assoc]
@@ -212,12 +217,15 @@ theorem experimentView_evalDistEq_jointExperiment (scheme : Scheme F G A M) (fue
       simp only [h, Bool.false_eq_true, ite_false, simulateQ_map, hv]
       simp
   have hlazy : (simulateQ lazyPermImpl oa).run [] =
-      (fun z => ((z.1, z.2.1), z.2.2)) <$> jointExperiment scheme fuel adversary := by
+      (fun z => ((z.1, z.2.1, z.2.2.1), z.2.2.2)) <$> jointExperiment scheme fuel adversary := by
     simp only [oa, jointExperiment, simulateQ_bind, StateT.run_bind,
       simulateQ_lazyPermImpl_liftM_run, bind_map_left, map_bind, simulateQ_lazyPermImpl_runCacheQ]
   rw [heager]
-  refine (uniformSample_bind_simulateQ_permImpl_joint_evalDistEq oa).trans (EvalDistEq.of_eq ?_)
-  rw [hlazy]
-  simp
+  refine (EvalDistEq.of_eq ?_).trans
+    (((uniformSample_bind_simulateQ_permImpl_joint_evalDistEq oa).map
+      fun w => (w.1.1, w.1.2.1, w.1.2.2, w.2)).trans (EvalDistEq.of_eq ?_))
+  · simp
+  · rw [hlazy]
+    simp
 
 end EthLib.Cryptography.Secp256k1.Security
