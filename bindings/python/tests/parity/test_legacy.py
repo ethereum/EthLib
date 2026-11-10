@@ -23,7 +23,7 @@ ROOT = (
     else None
 )
 CASES = catalogue.legacy_cases(ROOT) if ROOT else []
-DISAGREEMENTS = harness.disagreements(SUITE)
+DISAGREEMENTS = archives.disagreements(SUITE)
 
 # The cases that the run on each change reads, at their path in the archive.
 VENDORED = archives.REPO / "tests" / "execution" / "legacytests"

@@ -3,7 +3,6 @@
 import hashlib
 import json
 import os
-import sys
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
@@ -15,28 +14,9 @@ import archives
 from .catalogue import Case
 from .runners import RUNNERS, plan, reads, runner
 
-# The test of each wheel runs the suites on Python 3.10 too.
-if sys.version_info >= (3, 11):
-    import tomllib
-else:
-    import tomli as tomllib
-
-DISAGREEMENTS_FILE = archives.REPO / "tests" / "parity" / "disagreements.toml"
-
 # The environment variable that names the shard of a run, as `k/n` with 1 <= k <= n.
 # Without it a run takes every case, as the one shard of one.
 SHARD = "ETHLIB_PARITY_SHARD"
-
-
-def disagreements(suite: str) -> dict[tuple[str, str | None], dict]:
-    """The listed disagreements of a suite, by case and group.
-
-    An entry without a group holds for every group of its case.
-    """
-    entries = tomllib.loads(DISAGREEMENTS_FILE.read_text()).get("disagreement", [])
-    return {
-        (entry["case"], entry.get("group")): entry for entry in entries if entry["suite"] == suite
-    }
 
 
 def runnable(cases: list[Case]) -> list[Case]:
