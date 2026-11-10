@@ -29,10 +29,12 @@ public import EthLib.Consensus.Proofs.DataAvailability.Column
 public import EthLib.Consensus.Proofs.DataAvailability.Custody
 public import EthLib.Consensus.Proofs.DepositTree
 public import EthLib.Consensus.Proofs.ForkChoice.AttestationScores
+public import EthLib.Consensus.Proofs.ForkChoice.BlockStates
 public import EthLib.Consensus.Proofs.ForkChoice.Checkpoints
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmationIndicators
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmationSets
+public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmationSupporters
 public import EthLib.Consensus.Proofs.ForkChoice.ForwardClock
 public import EthLib.Consensus.Proofs.ForkChoice.Ghost
 public import EthLib.Consensus.Proofs.ForkChoice.Handlers
@@ -120,6 +122,7 @@ public import EthLib.Consensus.Proofs.Transition.EpochPending
 public import EthLib.Consensus.Proofs.Transition.EpochRewards
 public import EthLib.Consensus.Proofs.Transition.EpochUpdates
 public import EthLib.Consensus.Proofs.Transition.Execution
+public import EthLib.Consensus.Proofs.Transition.FfgFinality
 public import EthLib.Consensus.Proofs.Transition.FfgJustification
 public import EthLib.Consensus.Proofs.Transition.FfgRoots
 public import EthLib.Consensus.Proofs.Transition.FfgSlack
@@ -129,7 +132,9 @@ public import EthLib.Consensus.Proofs.Transition.FfgStake
 public import EthLib.Consensus.Proofs.Transition.FfgVotes
 public import EthLib.Consensus.Proofs.Transition.ForkBoundary
 public import EthLib.Consensus.Proofs.Transition.Genesis
+public import EthLib.Consensus.Proofs.Transition.InactivityLeak
 public import EthLib.Consensus.Proofs.Transition.Invariants
+public import EthLib.Consensus.Proofs.Transition.MixesKept
 public import EthLib.Consensus.Proofs.Transition.Operations
 public import EthLib.Consensus.Proofs.Transition.ParentPayload
 public import EthLib.Consensus.Proofs.Transition.Payload
@@ -137,6 +142,7 @@ public import EthLib.Consensus.Proofs.Transition.PaymentRelease
 public import EthLib.Consensus.Proofs.Transition.PaymentReleaseBlock
 public import EthLib.Consensus.Proofs.Transition.PaymentReleaseChain
 public import EthLib.Consensus.Proofs.Transition.PaymentReleaseInvariants
+public import EthLib.Consensus.Proofs.Transition.PaymentReleaseRun
 public import EthLib.Consensus.Proofs.Transition.PaymentReleaseWithdrawals
 public import EthLib.Consensus.Proofs.Transition.Requests
 public import EthLib.Consensus.Proofs.Transition.RewardDeltas
@@ -151,7 +157,9 @@ public import EthLib.Consensus.Proofs.Transition.TargetVotes
 public import EthLib.Consensus.Proofs.Transition.Totality.Bound
 public import EthLib.Consensus.Proofs.Transition.Totality.EffectiveBalances
 public import EthLib.Consensus.Proofs.Transition.Totality.Genesis
+public import EthLib.Consensus.Proofs.Transition.Totality.Inactivity
 public import EthLib.Consensus.Proofs.Transition.Totality.Justification
+public import EthLib.Consensus.Proofs.Transition.Totality.Rewards
 public import EthLib.Consensus.Proofs.Transition.Totality.Slashings
 public import EthLib.Consensus.Proofs.Transition.Totality.Slot
 public import EthLib.Consensus.Proofs.Transition.Upgrade

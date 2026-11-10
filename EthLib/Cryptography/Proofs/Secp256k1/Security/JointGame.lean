@@ -57,8 +57,11 @@ Its answer `none` means that signing failed, and the message stays fresh.
 
 Over the lazy permutation, a signer may write a pair that no permutation agrees with.
 
-The draw at the end then gives the identity, and the joint law of the game no longer holds. -/
-abbrev FreshSigner (F M σ : Type) := M → StateT σ ProbComp (Option (F × F))
+The draw at the end then gives the identity, and the joint law of the game no longer holds.
+
+It runs over coins alone, unless another base monad is given. -/
+abbrev FreshSigner (F M σ : Type) (μ : Type → Type := ProbComp) :=
+  M → StateT σ μ (Option (F × F))
 
 variable [DecidableEq M]
 
@@ -72,10 +75,14 @@ They leave the signing cache unchanged.
 
 A repeated message gets the answer it got first.
 
-A new message goes to the signer, and its answer joins the signing cache. -/
-def jointImpl (perm : QueryImpl (PermSpec A) (StateT σ ProbComp)) (fresh : FreshSigner F M σ) :
-    QueryImpl (Spec F A M) (StateT (JointState F M σ) ProbComp)
-  | .inl n => fun s => (·, s) <$> (query (spec := unifSpec) n : ProbComp (Fin (n + 1)))
+A new message goes to the signer, and its answer joins the signing cache.
+
+The base monad lifts the coins, so the oracles may themselves ask an outer oracle for `Π`. -/
+def jointImpl {μ : Type → Type} [Monad μ] [MonadLiftT ProbComp μ]
+    (perm : QueryImpl (PermSpec A) (StateT σ μ)) (fresh : FreshSigner F M σ μ) :
+    QueryImpl (Spec F A M) (StateT (JointState F M σ) μ)
+  | .inl n => fun s =>
+    (·, s) <$> (liftM (query (spec := unifSpec) n : ProbComp (Fin (n + 1))) : μ _)
   | .inr (.inl α) => fun s => (fun z => (z.1, (s.1, z.2))) <$> (perm (.inl α)).run s.2
   | .inr (.inr (.inl β)) => fun s => (fun z => (z.1, (s.1, z.2))) <$> (perm (.inr β)).run s.2
   | .inr (.inr (.inr m)) => fun s =>
@@ -143,6 +150,61 @@ theorem map_run_liftFresh_of_proj {σ₁ σ₂ : Type}
   rcases t with n | q
   · simp [StateT.run_monadLift, Functor.map_map]
   · exact hperm q s
+
+/-- Joint oracles that ask for `Π`, run against an oracle of `Π`, are joint oracles on both states.
+
+The oracle of `Π` keeps its own state, beside the state of the permutation oracle.
+
+It suffices that each query of `Π`, and each call of the signer, runs that way to the new one. -/
+theorem map_run_simulateQ_jointImpl {τ : Type} (base : QueryImpl (PermSpec A) (StateT τ ProbComp))
+    (perm : QueryImpl (PermSpec A) (StateT σ (PermComp A)))
+    (fresh : FreshSigner F M σ (PermComp A))
+    (perm' : QueryImpl (PermSpec A) (StateT (σ × τ) ProbComp)) (fresh' : FreshSigner F M (σ × τ))
+    (hperm : ∀ q s l, (fun z => (z.1.1, (z.1.2, z.2))) <$>
+      (simulateQ (unifSpec.passthrough + base) ((perm q).run s)).run l = (perm' q).run (s, l))
+    (hfresh : ∀ m s l, (fun z => (z.1.1, (z.1.2, z.2))) <$>
+      (simulateQ (unifSpec.passthrough + base) ((fresh m).run s)).run l = (fresh' m).run (s, l))
+    {α : Type} (oa : OracleComp (Spec F A M) α) (cache : Cache F M) (s : σ) (l : τ) :
+    (fun y => (y.1.1, (y.1.2.1, (y.1.2.2, y.2)))) <$>
+        (simulateQ (unifSpec.passthrough + base)
+          ((simulateQ (jointImpl perm fresh) oa).run (cache, s))).run l =
+      (simulateQ (jointImpl perm' fresh') oa).run (cache, (s, l)) := by
+  rw [simulateQ_mapStateTBase_run_eq_map_flattenStateT, Functor.map_map]
+  refine Eq.trans ?_ (map_run_simulateQ_eq_of_query_map_eq
+    ((unifSpec.passthrough + base).mapStateTBase (jointImpl perm fresh)).flattenStateT _
+    (fun s : (Cache F M × σ) × τ => (s.1.1, (s.1.2, s.2))) (fun t s => ?_) oa ((cache, s), l))
+  · rfl
+  obtain ⟨⟨c, p⟩, l⟩ := s
+  rw [QueryImpl.flattenStateT_mapStateTBase_apply_run, Functor.map_map]
+  rcases t with n | α | β | m
+  · change (fun a => Prod.map id (fun s => (s.1.1, s.1.2, s.2)) (a.1.1, a.1.2, a.2)) <$>
+        (simulateQ (unifSpec.passthrough + base) ((·, (c, p)) <$>
+          (liftM (query (spec := unifSpec) n : ProbComp (Fin (n + 1))) : PermComp A _))).run l =
+      (·, (c, (p, l))) <$> (query (spec := unifSpec) n : ProbComp (Fin (n + 1)))
+    rw [simulateQ_map, StateT.run_map, simulateQ_passthrough_add_liftM_run]
+    simp [Functor.map_map]
+  · change (fun a => Prod.map id (fun s => (s.1.1, s.1.2, s.2)) (a.1.1, a.1.2, a.2)) <$>
+        (simulateQ (unifSpec.passthrough + base) ((fun z => (z.1, (c, z.2))) <$>
+          (perm (.inl α)).run p)).run l = (fun z => (z.1, (c, z.2))) <$> (perm' (.inl α)).run (p, l)
+    rw [← hperm]
+    simp [Functor.map_map]
+  · change (fun a => Prod.map id (fun s => (s.1.1, s.1.2, s.2)) (a.1.1, a.1.2, a.2)) <$>
+        (simulateQ (unifSpec.passthrough + base) ((fun z => (z.1, (c, z.2))) <$>
+          (perm (.inr β)).run p)).run l = (fun z => (z.1, (c, z.2))) <$> (perm' (.inr β)).run (p, l)
+    rw [← hperm]
+    simp [Functor.map_map]
+  · change (fun a => Prod.map id (fun s => (s.1.1, s.1.2, s.2)) (a.1.1, a.1.2, a.2)) <$>
+        (simulateQ (unifSpec.passthrough + base) (match c.lookup m with
+          | some a => pure (a, (c, p))
+          | none => (fun z => (z.1, (c ++ [(m, z.1)], z.2))) <$> (fresh m).run p)).run l =
+      match c.lookup m with
+      | some a => pure (a, (c, (p, l)))
+      | none => (fun z => (z.1, (c ++ [(m, z.1)], z.2))) <$> (fresh' m).run (p, l)
+    cases c.lookup m with
+    | some a => simp
+    | none =>
+      rw [← hfresh]
+      simp [Functor.map_map]
 
 /-! ## Domination until a bad event -/
 

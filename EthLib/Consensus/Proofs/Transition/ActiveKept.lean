@@ -1214,4 +1214,16 @@ theorem currentEpoch_le_of_chainSteps {first last : ForkedBeaconState preset}
   | refl => exact UInt64.le_refl _
   | tail _ step more => exact UInt64.le_trans more step.currentEpoch_le
 
+/-- One step of a chain never shrinks the registry. -/
+theorem ChainStep.registryGrows {forked after : ForkedBeaconState preset}
+    (step : ChainStep config checks forked after) :
+    forked.state.validators.data.size ≤ after.state.validators.data.size :=
+  (chainStep_kept step).1
+
+/-- A run of steps of a chain never shrinks the registry. -/
+theorem registryGrows_of_chainSteps {first last : ForkedBeaconState preset}
+    (steps : Relation.ReflTransGen (ChainStep config checks) first last) :
+    first.state.validators.data.size ≤ last.state.validators.data.size :=
+  (chainSteps_kept steps).1
+
 end EthLib.Consensus

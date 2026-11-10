@@ -506,7 +506,11 @@ The signer tries up to `fuel` nonces per request where the source's tries one, s
 `keylessExperiment_evalDistEq_programmedExperiment` (`Proofs/Secp256k1/Security/Keyless.lean`) is the step from Game G2 to Game G3 of Figure 5: the game with a signer that reads only the public key has the same law, forgery, check result and final states, when the base point is nonzero.
 The source's claim that the forger wins as often in both games does not follow as written: its Game G2 records a pair of the bijection before its checks (line 14), while its Game G3 records one only when a nonce signs (line 40).
 The signer without the key here records the pairs of failed nonces too.
-The rest of Theorem 1, the forger of Figure 6, has no theorem yet.
+`prEvent_keylessExperiment_win_le` (`Proofs/Secp256k1/Security/KeylessForger.lean`) charges a win of that game to two adversaries built from the forger: the key-only forger of Figure 6 of the source, which runs the game with its own bijection oracle, and a solver of the discrete logarithm.
+The two checks agree unless the most recent pair at the forgery's point is one that the signer programmed; that case gives the key, and the solver tries each candidate and keeps the one that gives the public key.
+Figure 6 of the source signs again at line 30 when the point is programmed, which may fail, so its claim that the key-only forger wins as often as Game G3 does not hold exactly; the bound here charges that case to the named solver instead, which adds one discrete-logarithm term to Theorem 1.
+The solver runs the game itself, with a lazy bijection; no theorem states its running time or the forger's.
+The rest of Theorem 1, the assembly of these steps, has no theorem yet.
 `ecdsa_verify_eq_verify_ecdsaScheme` (`Proofs/Secp256k1/Security/Refinement.lean`) proves that `verify` is the game's verification, with the bijection the identity, for `r` and `s` below `n`.
 `exists_signNonce_of_sign` proves that every signature from `sign` is the game's signature for some nonzero nonce; that is correctness of signing, and says nothing about how RFC 6979 draws the nonces.
 The game draws the bijection uniformly, so a bound on it would apply to EthLib, where the bijection is the identity, only under the heuristic of the source that the identity behaves as a bijective random oracle.
@@ -2466,6 +2470,45 @@ Only the lemmas in `Proofs/Bls/PairingLaws.lean` and `Proofs/AltBn128/PairingLaw
 The BLS signature, consensus, KZG, PeerDAS, EIP-2537 and EIP-197 theorems need no such hypothesis.
 `PairingLaws` is a `Prop`, never an axiom, so `lake exe check-decls` still sees only the standard axioms.
 `pairingLaws` proves the law for BLS12-381, and `AltBn128.pairingLaws` proves it for alt_bn128.
+
+The theorems in `Proofs/Transition/Totality/` show that the steps of a run of slots succeed, and each takes hypotheses that the specification does not state.
+Each hypothesis narrows the states, presets or runs that the result covers.
+Justification and finalization need two slots an epoch and a buffer of block roots that reaches the epoch before (`Preset.RootsReachPreviousEpoch`).
+With one slot an epoch the specification itself can fail there.
+Before Altair they also assume that the committees of the pending attestations can be computed (`PendingResolved`), which a block checked when it included them.
+From Altair the rewards and penalties need `RewardsFit`, a set of bounds on the preset, the configuration, a budget of Gwei and a bound on the inactivity scores that the step reads.
+They also need each effective balance at most the largest cap, the finalized epoch at most the previous epoch, and each balance and the sum of the effective balances within the budget.
+The inactivity penalty multiplies an effective balance by an inactivity score, and a score grows by at most the score bias in each epoch.
+So the bound on the scores limits the length of the run that the theorems cover.
+On mainnet the bounds hold for a budget of `2^57` Gwei, about `1.44 * 10^8` ETH, and scores up to `2^23`.
+From a score of zero, a score reaches `2^23` only after `2^21` epochs of missed targets, about 25 years at 32 slots of 12 seconds an epoch.
+The specification itself overflows there: at 2048 ETH the product fails once a score passes about `9.0 * 10^6`.
+The bound on the reward of a flag does not use the square root of the total active balance.
+The validators that set a flag in the previous epoch include those whose exit epoch is the current epoch.
+So their effective balance can exceed the total active balance of the current epoch, and only the budget bounds it.
+The budget of `2^57` Gwei is about 84% of the largest that this bound allows.
+
+The builder payments of Gloas carry four hypotheses and one restriction.
+`chainSteps_paysQuorum` proves that along a chain through the last slot of an epoch, each payment of the previous epoch that reaches its quorum is paid exactly once.
+Paid means that the withdrawal of the payment joins the queue of the withdrawals of the builders.
+The last slot of the epoch queues the withdrawals of exactly those payments.
+A run of slots and blocks over the whole chain (`PaymentChain`) releases each of them, and releases no payment twice.
+The withdrawals of such a run are fixed by the states that each step computes.
+Its payments are fixed too, up to their order: a slot lists only payments that reach the quorum, and a block only the payment of its parent.
+`paymentChain_of_chainSteps` proves that every chain inside one fork is such a run, and `PaymentChain.nodup` gives "at most once" for any such run.
+The facts on the payments must hold at the first state, as `paymentFacts_upgradeToGloas` proves for the upgrade to Gloas.
+These theorems also take a positive payment quorum (`PaymentQuorumPositive`), at least two slots in an epoch, and at most 2^40 entries in each registry at the last state.
+`paymentQuorumPositive_presets` and `twoSlotsPerEpoch_presets` prove the first two for the mainnet and minimal presets.
+For the validators, 2^40 is `VALIDATOR_REGISTRY_LIMIT`.
+The registry of the builders has no limit in the specification, so for it the bound is an assumption, which matches `BUILDER_INDEX_FLAG`.
+No theorem proves either bound along a chain.
+The chain must stay inside one fork, from Gloas on, so a chain across the upgrade to Heze is not covered.
+A run of payment steps relates two states of one fork, and carrying open payments through that upgrade needs a run across forks.
+The four facts that the runs assume do hold through that upgrade, by `PaymentFacts.upgradeToHeze`.
+The "at least once" half is stated for a chain split at the epoch step, which fixes the step that pays.
+The quorum is read on the state that the epoch transition reaches before its step of the payments.
+A bid whose payment a slashing cancels may still be paid by the late path of the bid, and then the run releases it once.
+
 Whatever those hypotheses leave unproved is part of what a reader trusts.
 
 ### A3. Side channels

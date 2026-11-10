@@ -248,6 +248,10 @@ def ParticipationMatches (state : BeaconState preset fork) : Prop :=
     (state.previousEpochParticipation altair).data.size = state.validators.data.size ∧
       (state.currentEpochParticipation altair).data.size = state.validators.data.size
 
+/-- From Altair, the list of inactivity scores has one entry for each validator. -/
+def InactivityScoresMatch (state : BeaconState preset fork) : Prop :=
+  ∀ altair : .altair ≤ fork, (state.inactivityScores altair).data.size = state.validators.data.size
+
 /-- The sum over the registry of the larger of each balance and its effective balance.
 
 The registry and the balances are read in step, so an entry past the shorter list does not count. -/

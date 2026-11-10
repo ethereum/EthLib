@@ -488,6 +488,8 @@ The slots it pays are distinct, and each payment it pays is closed after it.
 
 It pays each payment of the previous epoch whose weight is at least the quorum that it computes.
 
+It pays no other payment.
+
 The hypothesis on the parent payment is part of the builder debt invariant.
 
 The hypotheses on the weights and the genesis epoch hold along a chain from the upgrade to Gloas.
@@ -502,7 +504,10 @@ theorem processBuilderPendingPayments_release (positive : preset.PaymentQuorumPo
       (∀ slot ∈ released, ¬ PaymentOpen { after with slot := next } gloas slot) ∧
       (∀ slot position, slotPaymentPosition state slot = some position →
         position.toNat < preset.SLOTS_PER_EPOCH.toNat →
-        quorum ≤ (paymentAt state gloas position.toNat).weight → slot ∈ released) := by
+        quorum ≤ (paymentAt state gloas position.toNat).weight → slot ∈ released) ∧
+      (∀ slot ∈ released, ∃ position, slotPaymentPosition state slot = some position ∧
+        position.toNat < preset.SLOTS_PER_EPOCH.toNat ∧
+        quorum ≤ (paymentAt state gloas position.toNat).weight) := by
   have bounds := positive.slotsPerEpoch_bounds
   have one := bounds.1
   obtain ⟨quorum, found, queue, shifted⟩ := processBuilderPendingPayments_spec computed
@@ -650,7 +655,7 @@ theorem processBuilderPendingPayments_release (positive : preset.PaymentQuorumPo
         exact early _ (by rw [offset]; exact Nat.mod_lt _ one)
       · cases onNat
   refine ⟨quorum, chosen.map fun i => UInt64.ofNat (i + (epoch - 1) * preset.SLOTS_PER_EPOCH.toNat),
-    found, ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_⟩, ?_, ?_⟩
+    found, ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_⟩, ?_, ?_, ?_⟩
   · rw [List.Nodup, List.pairwise_map]
     refine chosenNodup.imp_of_mem fun {a b} memA memB differ same => differ ?_
     have := congrArg UInt64.toNat same
@@ -721,6 +726,11 @@ theorem processBuilderPendingPayments_release (positive : preset.PaymentQuorumPo
         rw [slotNat _ inside, ← offset, ← previous]
         exact Nat.mod_add_div' _ _
       · cases onNat
+  · intro slot member
+    obtain ⟨i, picked, rfl⟩ := List.mem_map.mp member
+    obtain ⟨p, located, atIndex⟩ := chosenPosition i picked
+    obtain ⟨inside, reached⟩ := (chosenIff i).mp picked
+    exact ⟨p, located, atIndex ▸ inside, atIndex ▸ reached⟩
 
 /-- After the header of a block, a payment is open only in the window or at the slot of the state.
 
