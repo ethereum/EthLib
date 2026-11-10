@@ -496,7 +496,11 @@ The solver's game is the discrete-logarithm game of the oracle framework, which 
 The two advantages differ by at most `1 / n`, where `n` is the number of scalars; no theorem states it.
 `keyOnlyAdvantage_le` (`Proofs/Secp256k1/Security/KeyOnlyBound.lean`) assembles these parts into the bound of Theorem 2 of the source, for a key-only forger with at most `q` queries to the bijection or its inverse on every key.
 The bound charges three adversaries built from the forger: the two discrete-logarithm solvers and the reduction to division resistance.
-It is a bound on the key-only game only; Theorem 1 of the source, from chosen messages to key only, has no theorem yet.
+It is a bound on the key-only game only.
+`forgeAdvantage_le_noCollisionAdvantage_add_collisionAdvantage` (`Proofs/Secp256k1/Security/Collision.lean`) is the first step of Theorem 1 of the source, from Game G0 to Game G1 of Figure 4.
+It charges a forgery on a new message with the hash of a signed one to a finder of collisions built from the forger, which samples the bijection lazily.
+The hash is fixed, so the bound charges that named finder and no adversary against collisions in general.
+The rest of Theorem 1, from chosen messages to key only, has no theorem yet.
 `ecdsa_verify_eq_verify_ecdsaScheme` (`Proofs/Secp256k1/Security/Refinement.lean`) proves that `verify` is the game's verification, with the bijection the identity, for `r` and `s` below `n`.
 `exists_signNonce_of_sign` proves that every signature from `sign` is the game's signature for some nonzero nonce; that is correctness of signing, and says nothing about how RFC 6979 draws the nonces.
 The game draws the bijection uniformly, so a bound on it would apply to EthLib, where the bijection is the identity, only under the heuristic of the source that the identity behaves as a bijective random oracle.

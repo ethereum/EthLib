@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Cryptography.Proofs.Secp256k1.Security.Collision
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.DivisionResistance
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.ForwardCase
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.ForwardSolver
@@ -98,5 +99,9 @@ That term is `q + 1` times the advantage of a reduction to division resistance.
 
 This is their Theorem 2.
 
-No theorem bounds a forger with a signing oracle yet; that is their Theorem 1.
+A forgery on a new message with the hash of a signed one is charged to a finder of collisions.
+
+That is the first step of their Theorem 1.
+
+No theorem bounds a forger with a signing oracle yet; that is the rest of their Theorem 1.
 -/
