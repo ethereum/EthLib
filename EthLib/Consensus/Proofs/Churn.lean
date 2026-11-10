@@ -343,4 +343,24 @@ theorem computeExitEpochAndUpdateChurn_first {config : Config}
   split at placed <;> rename_i order <;> simp only [UInt64.le_iff_toNat_le] at order ⊢ <;>
     omega
 
+/-- A consolidation from Electra lands no earlier than the first epoch an exit may take.
+
+It also lands no earlier than the earliest consolidation epoch of the state. -/
+theorem computeConsolidationEpochAndUpdateChurn_first {config : Config}
+    {state after : BeaconState preset fork} {electra : .pectra ≤ fork} {balance : Gwei}
+    {epoch firstEpoch : Epoch}
+    (first : computeActivationExitEpoch preset (getCurrentEpoch state) = .ok firstEpoch)
+    (computed :
+      computeConsolidationEpochAndUpdateChurn config state electra balance = .ok (after, epoch)) :
+    firstEpoch ≤ epoch ∧ state.earliestConsolidationEpoch electra ≤ epoch := by
+  simp only [computeConsolidationEpochAndUpdateChurn, bind_ok_iff, liftArith, mapError_ok_iff,
+    first, pure, Except.pure, Except.ok.injEq, exists_eq_left'] at computed
+  obtain ⟨_, _, ⟨queued, left⟩, queue, final⟩ := computed
+  simp only [Prod.mk.injEq] at final
+  obtain ⟨_, rfl⟩ := final
+  have placed := UInt64.le_iff_toNat_le.mp (churnQueue_spend queue).1
+  rw [UInt64.max_def] at placed
+  split at placed <;> rename_i order <;> simp only [UInt64.le_iff_toNat_le] at order ⊢ <;>
+    omega
+
 end EthLib.Consensus
