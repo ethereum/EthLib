@@ -16,7 +16,11 @@ That block must carry the versioned hashes of the request from Deneb, and pass t
 
 A payload whose block decodes holds no transaction of no bytes.
 
-The beacon chain calls a version of the method at each fork from Bellatrix to Fulu.
+The beacon chain calls a version of the method at each fork from Bellatrix to Gloas.
+
+At Gloas, the block of a payload is a block of Amsterdam.
+
+Its header holds the slot number of the payload and the hash of its block access list.
 
 A payload takes a fork exactly when its optional fields are present from their forks on.
 
@@ -90,6 +94,40 @@ theorem common_transactions {p : Consensus.ExecutionPayload preset fork} {any : 
     rfl
   · cases h
 
+/-- A payload with a block passes the version check of its fork.
+
+Its block is built from the block access list and the slot number of the payload. -/
+private theorem payloadBlock_spec {config : ChainConfig}
+    {p : Consensus.ExecutionPayload preset fork} {root : Since .dencun fork Consensus.Root}
+    {requests : Since .pectra fork (List ByteArray)} {f : Fork} {b : Block f Transaction}
+    (h : payloadBlock config p root requests = some ⟨f, b⟩) :
+    acceptsFork (newPayloadVersion fork) f = true ∧
+      ∃ (payload : ExecutionPayload f) (beacon : Since .dencun f Hash32)
+        (lists : Since .pectra f (List ByteArray)) (accessList : Since .glamsterdam f ByteArray)
+        (slot : Since .glamsterdam f UInt64),
+        (Json.since (f := .glamsterdam) (fork := f) "blockAccessList"
+          ((sinceValue p.blockAccessList).map fun list => ⟨list.data⟩)).toOption =
+            some accessList ∧
+        (Json.since (f := .glamsterdam) (fork := f) "slotNumber"
+          (sinceValue p.slotNumber)).toOption = some slot ∧
+        payload.toBlock beacon lists accessList slot = .ok b := by
+  unfold payloadBlock at h
+  cases hAny : anyPayloadOf p with
+  | none => simp [hAny] at h
+  | some any =>
+  cases hActive : config.activeFork p.blockNumber.toNat p.timestamp.toNat with
+  | none => simp [hAny, hActive] at h
+  | some active =>
+  simp only [hAny, hActive, Option.bind_eq_bind, Option.bind_some] at h
+  split at h
+  · rename_i hacc
+    simp only [Option.bind_eq_some_iff] at h
+    obtain ⟨payload, hPayload, beacon, -, lists, -, accessList, hAcc, slot, hSlot, block, hBlock,
+      result⟩ := h
+    cases result
+    exact ⟨hacc, payload, beacon, lists, accessList, slot, hAcc, hSlot, toOption_eq_some hBlock⟩
+  · cases h
+
 /-- The transactions of the block of a payload of the beacon chain are those of the payload. -/
 theorem decodeTransactions_of_payloadBlock {config : ChainConfig}
     {p : Consensus.ExecutionPayload preset fork} {root : Since .dencun fork Consensus.Root}
@@ -106,7 +144,8 @@ theorem decodeTransactions_of_payloadBlock {config : ChainConfig}
   simp only [hAny, hActive, Option.bind_eq_bind, Option.bind_some] at h
   split at h
   · simp only [Option.bind_eq_some_iff] at h
-    obtain ⟨payload, hPayload, beacon, -, lists, -, block, hBlock, result⟩ := h
+    obtain ⟨payload, hPayload, beacon, -, lists, -, accessList, -, slot, -, block, hBlock,
+      result⟩ := h
     cases result
     have decoded := decodeTransactions_of_toBlock (toOption_eq_some hBlock)
     rwa [atFork_transactions (toOption_eq_some hPayload), common_transactions hAny] at decoded
@@ -165,8 +204,8 @@ theorem executionEngine_accepts_iff {chain : BlockChain}
     · simp [found, hBlock, sinceValue, deneb, hashes deneb]
     · simp [hBlock, transition, Except.toBool]
 
-/-- From Bellatrix to Fulu, the version of the method at a fork takes some fork. -/
-theorem exists_acceptsFork_newPayloadVersion (h : .bellatrix ≤ fork ∧ fork < .glamsterdam) :
+/-- From Bellatrix to Gloas, the version of the method at a fork takes some fork. -/
+theorem exists_acceptsFork_newPayloadVersion (h : .bellatrix ≤ fork ∧ fork < .hegota) :
     ∃ f, acceptsFork (newPayloadVersion fork) f = true := by
   obtain ⟨low, high⟩ := h
   cases fork <;> first
@@ -176,9 +215,10 @@ theorem exists_acceptsFork_newPayloadVersion (h : .bellatrix ≤ fork ∧ fork <
     | exact ⟨.shapella, by decide⟩
     | exact ⟨.dencun, by decide⟩
     | exact ⟨.pectra, by decide⟩
+    | exact ⟨.glamsterdam, by decide⟩
 
-/-- From Gloas, no payload of the beacon chain has a block here. -/
-theorem payloadBlock_of_glamsterdam (h : .glamsterdam ≤ fork) {config : ChainConfig}
+/-- From Heze, no payload of the beacon chain has a block here. -/
+theorem payloadBlock_of_hegota_le (h : .hegota ≤ fork) {config : ChainConfig}
     {p : Consensus.ExecutionPayload preset fork} {root : Since .dencun fork Consensus.Root}
     {requests : Since .pectra fork (List ByteArray)} :
     payloadBlock config p root requests = none := by
@@ -186,6 +226,77 @@ theorem payloadBlock_of_glamsterdam (h : .glamsterdam ≤ fork) {config : ChainC
   unfold payloadBlock
   cases anyPayloadOf p <;> cases config.activeFork p.blockNumber.toNat p.timestamp.toNat <;>
     simp [zero, acceptsFork]
+
+/-- A payload with a block has it at a fork that the version of the method takes. -/
+theorem acceptsFork_of_payloadBlock {config : ChainConfig}
+    {p : Consensus.ExecutionPayload preset fork} {root : Since .dencun fork Consensus.Root}
+    {requests : Since .pectra fork (List ByteArray)} {f : Fork} {b : Block f Transaction}
+    (h : payloadBlock config p root requests = some ⟨f, b⟩) :
+    acceptsFork (newPayloadVersion fork) f = true :=
+  (payloadBlock_spec h).1
+
+/-- From Gloas, a payload with a block has a block of Amsterdam. -/
+theorem fork_of_payloadBlock_of_gloas (gloas : .glamsterdam ≤ fork) {config : ChainConfig}
+    {p : Consensus.ExecutionPayload preset fork}
+    {root : Since .dencun fork Consensus.Root} {requests : Since .pectra fork (List ByteArray)}
+    {f : Fork} {b : Block f Transaction} (h : payloadBlock config p root requests = some ⟨f, b⟩) :
+    f = .glamsterdam := by
+  -- From Heze no payload has a block, so the fork is Gloas.
+  by_cases heze : .hegota ≤ fork
+  · rw [payloadBlock_of_hegota_le heze] at h
+    cases h
+  have version : newPayloadVersion fork = 5 := by simp [newPayloadVersion, heze, gloas]
+  have accepted := acceptsFork_of_payloadBlock h
+  rw [version] at accepted
+  simpa [acceptsFork] using accepted
+
+/-- From Gloas, the header of the block of a payload holds the slot number of the payload.
+
+It also holds the Keccak-256 hash of the block access list of the payload. -/
+theorem header_of_payloadBlock_of_gloas (gloas : .glamsterdam ≤ fork) {config : ChainConfig}
+    {p : Consensus.ExecutionPayload preset fork} {root : Since .dencun fork Consensus.Root}
+    {requests : Since .pectra fork (List ByteArray)} {b : Block .glamsterdam Transaction}
+    (h : payloadBlock config p root requests = some ⟨.glamsterdam, b⟩) :
+    b.header.slotNumber (Nat.le_refl _) = p.slotNumber gloas ∧
+      b.header.blockAccessListHash (Nat.le_refl _) =
+        Cryptography.Hash.Keccak.keccak256 ⟨(p.blockAccessList gloas).data⟩ := by
+  obtain ⟨-, payload, beacon, lists, accessList, slot, hAcc, hSlot, hBlock⟩ := payloadBlock_spec h
+  have acc := Json.sinceValue_of_since (toOption_eq_some hAcc)
+  have sl := Json.sinceValue_of_since (toOption_eq_some hSlot)
+  have pa : sinceValue p.blockAccessList = some (p.blockAccessList gloas) := by
+    simp [sinceValue, gloas]
+  have ps : sinceValue p.slotNumber = some (p.slotNumber gloas) := by simp [sinceValue, gloas]
+  rw [pa] at acc
+  rw [ps] at sl
+  have acc' : accessList (Nat.le_refl _) = ⟨(p.blockAccessList gloas).data⟩ := by
+    simpa [sinceValue] using acc
+  have sl' : slot (Nat.le_refl _) = p.slotNumber gloas := by simpa [sinceValue] using sl
+  exact ⟨(ExecutionPayload.toBlock_slotNumber hBlock (Nat.le_refl _)).trans sl',
+    (ExecutionPayload.toBlock_accessList hBlock (Nat.le_refl _)).2.trans (congrArg _ acc')⟩
+
+/-- From Gloas, the execution layer accepts exactly the requests whose Amsterdam block passes.
+
+The request lists must be well formed, and the block of the payload must exist.
+
+The blob transactions of that block must carry the versioned hashes of the request, in order.
+
+The block must pass the state transition of the chain. -/
+theorem executionEngine_accepts_iff_of_gloas (gloas : .glamsterdam ≤ fork) {chain : BlockChain}
+    {request : Consensus.NewPayloadRequest preset fork} :
+    (executionEngine chain).verifyAndNotifyNewPayload request = .ok true ↔
+      ∃ requests, request.requestsList = .ok requests ∧ ∃ b : Block .glamsterdam Transaction,
+        payloadBlock chain.config request.executionPayload request.parentBeaconBlockRoot
+          requests = some ⟨.glamsterdam, b⟩ ∧
+        ExecutionPayload.blobVersionedHashes b.transactions =
+          (request.versionedHashes (Nat.le_trans (by decide) gloas)).data.toList ∧
+        ∃ post, stateTransition chain b (checkSeal := false) = .ok post := by
+  rw [executionEngine_accepts_iff]
+  constructor
+  · rintro ⟨requests, found, f, b, hBlock, hashes, post, transition⟩
+    obtain rfl := fork_of_payloadBlock_of_gloas gloas hBlock
+    exact ⟨requests, found, b, hBlock, hashes _, post, transition⟩
+  · rintro ⟨requests, found, b, hBlock, hashes, post, transition⟩
+    exact ⟨requests, found, _, b, hBlock, fun _ => hashes, post, transition⟩
 
 /-! ## A payload at a fork -/
 

@@ -10,13 +10,19 @@ The execution layer of the beacon chain, built from the checks of `engine_newPay
 
 The beacon chain calls one version of the method at each of its forks.
 
-Bellatrix calls version 1, Capella version 2, Deneb version 3, and Electra and Fulu version 4.
+Bellatrix calls version 1, Capella version 2, Deneb version 3, Electra and Fulu version 4.
+
+Gloas calls version 5, which takes the payloads of Amsterdam.
 
 The execution layer reads the payload at its own active fork, which that version must take.
 
 The payload must decode into a block whose hash is the block hash of the payload.
 
 From Deneb, its blob transactions must carry the versioned hashes of the request, in order.
+
+From Gloas, the block access list of the payload must decode.
+
+The header of the block then holds its hash and the slot number of the payload.
 
 The block must then pass the state transition of the execution layer on its chain.
 
@@ -26,12 +32,14 @@ The method specifications state these rules, at commit `3284ee8` of execution-ap
 - [`engine_newPayloadV2`][v2]
 - [`engine_newPayloadV3`][v3]
 - [`engine_newPayloadV4`][v4], and its update by Amsterdam in [`amsterdam.md`][v4-amsterdam]
+- [`engine_newPayloadV5`][v5]
 
 [v1]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#engine_newpayloadv1
 [v2]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/shanghai.md#engine_newpayloadv2
 [v3]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/cancun.md#engine_newpayloadv3
 [v4]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/prague.md#engine_newpayloadv4
 [v4-amsterdam]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/amsterdam.md#update-the-methods-of-previous-forks
+[v5]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/amsterdam.md#engine_newpayloadv5
 -/
 
 @[expose] public section
@@ -47,9 +55,10 @@ variable {preset : Consensus.Preset} {fork : Fork}
 
 /-- The version of the method that the beacon chain calls at a fork, or 0 for none.
 
-No version here takes a payload of Gloas or later. -/
+No version here takes a payload of Heze or later. -/
 def newPayloadVersion (fork : Fork) : Nat :=
-  if .glamsterdam ≤ fork then 0
+  if .hegota ≤ fork then 0
+  else if .glamsterdam ≤ fork then 5
   else if .pectra ≤ fork then 4
   else if .dencun ≤ fork then 3
   else if .shapella ≤ fork then 2
@@ -92,6 +101,10 @@ The version of the method at the fork of the beacon chain must take that fork.
 
 The payload must have exactly the fields of that fork, and so must the parameters of the method.
 
+From Gloas, the block access list of the payload must decode.
+
+The header holds its hash and the slot number of the payload.
+
 The block of the payload must decode, and its hash must be the block hash of the payload.
 
 It has none when one of these fails. -/
@@ -101,15 +114,15 @@ def payloadBlock (config : ChainConfig) (p : Consensus.ExecutionPayload preset f
     Option ((f : Fork) × Block f Transaction) := do
   let any ← anyPayloadOf p
   let executionFork ← config.activeFork p.blockNumber.toNat p.timestamp.toNat
-  if accepted : acceptsFork (newPayloadVersion fork) executionFork = true ∧
-      executionFork < .glamsterdam then
+  if acceptsFork (newPayloadVersion fork) executionFork then
     let payload ← (any.atFork executionFork).toOption
     let beacon ← (Json.since (f := .dencun) "parentBeaconBlockRoot"
       (sinceValue parentBeaconBlockRoot)).toOption
     let lists ← (Json.since (f := .pectra) "executionRequests" (sinceValue requests)).toOption
-    let absent {α : Type} : Since .glamsterdam executionFork α :=
-      fun h => absurd (Nat.lt_of_lt_of_le accepted.2 h) (Nat.lt_irrefl _)
-    let block ← (payload.toBlock beacon lists absent absent).toOption
+    let accessList ← (Json.since (f := .glamsterdam) "blockAccessList"
+      ((sinceValue p.blockAccessList).map fun list => ⟨list.data⟩)).toOption
+    let slot ← (Json.since (f := .glamsterdam) "slotNumber" (sinceValue p.slotNumber)).toOption
+    let block ← (payload.toBlock beacon lists accessList slot).toOption
     return ⟨executionFork, block⟩
   else none
 
