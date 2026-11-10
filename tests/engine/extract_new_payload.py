@@ -26,10 +26,17 @@ MAX_PARAMS = 8_000
 AMSTERDAM: Final = ("Amsterdam", "BPO2ToAmsterdamAtTime15k")
 
 
+def _typed(payload: dict) -> bool:
+    """Whether a payload holds a typed transaction, whose first byte is a type below 0x80."""
+    return any(int(tx[2:4], 16) < 0x80 for tx in payload["params"][0].get("transactions", []))
+
+
 def main(fixtures: Path, out: Path) -> None:
     """Keep each case that a check before execution decides, and a few valid payloads."""
     cases = []
     valid: dict[str, int] = {}
+    # The versions of the method that a kept valid payload with a typed transaction covers.
+    typed: set[int] = set()
     large: set[tuple[bool, str]] = set()
     for path in sorted(fixtures.rglob("*.json")):
         relative = path.relative_to(fixtures.parent).as_posix()
@@ -51,8 +58,13 @@ def main(fixtures: Path, out: Path) -> None:
                 elif not error and size <= MAX_PARAMS and valid.get(network, 0) < VALID_PER_NETWORK:
                     valid[network] = valid.get(network, 0) + 1
                     keep = True
+                elif not error and size <= MAX_PARAMS:
+                    # Keep the first valid payload with a typed transaction of each version.
+                    keep = _typed(payload) and payload["newPayloadVersion"] not in typed
                 else:
                     keep = False
+                if keep and not error and "errorCode" not in payload and _typed(payload):
+                    typed.add(payload["newPayloadVersion"])
                 if keep:
                     cases.append(
                         {
