@@ -15,20 +15,16 @@ The first theorems say only where those writes land.
 
 The later ones say their values.
 
-The sender pays the gas limit times the price, plus the blob fee, and gets the unused gas back.
-
-Its nonce grows by one.
-
-The beneficiary gets the priority fee of the gas that the transaction used.
-
-A halt before the first frame undoes the authorizations, as EIP-8037 asks.
-
-A frame that fails keeps each accepted authorization, as EIP-7702 asks.
-
 - The sender buys the gas: its nonce grows by one and it pays the fee.
+- The fee is the gas limit times the price, plus the blob fee.
 - From Pectra, each valid authorization sets the code and the nonce of its authority.
-- The sender gets back the gas left, and the beneficiary gets the priority fee.
-- From Spurious Dragon to Paris, an empty beneficiary paid a fee of 0 is deleted.
+- The sender gets back the price of the gas it did not use.
+- The beneficiary gets the priority fee of the gas that the transaction used.
+- From Spurious Dragon, an empty beneficiary paid a fee of 0 is deleted.
+
+A halt before the first frame undoes the authorizations, as [EIP-8037][e8037] asks.
+
+A frame that fails keeps each accepted authorization, as [EIP-7702][e7702] asks.
 
 So the state after the transaction reads as the state before it at every other address.
 
@@ -38,9 +34,8 @@ It holds up to Glamsterdam, whether the message fails in its first frame or befo
 
 From Hegotá a transaction is not yet specified, so none runs.
 
-[EIP-7702][e7702] keeps the authorizations when the message fails in its frame.
-
 [e7702]: https://eips.ethereum.org/EIPS/eip-7702#behavior
+[e8037]: https://eips.ethereum.org/EIPS/eip-8037#gas-accounting-for-halts-and-reverts
 -/
 
 @[expose] public section
@@ -322,54 +317,45 @@ theorem processTransaction_sameOutside_of_error {env : BlockEnvironment fork}
 
 open State.TransactionState
 
-/-- The purchase of gas leaves the sender with one more nonce and the fee taken from its balance.
+/-- The purchase of gas keeps the code hash of the sender.
 
-Its code hash stays.
+Every word of storage stays, because the higher nonce keeps the account.
 
-Every word of storage stays, because the higher nonce keeps the account. -/
-theorem buyGas_sender_keeps {env : BlockEnvironment fork} {state state' : State.TransactionState}
+No code changes. -/
+theorem buyGas_keeps {env : BlockEnvironment fork} {state state' : State.TransactionState}
     {sender : Address} (h : buyGas env state sender tx = .ok state') :
-    (state'.getAccount sender).nonce = (state.getAccount sender).nonce + 1 ∧
-      (state'.getAccount sender).codeHash = (state.getAccount sender).codeHash ∧
-      (state'.getAccount sender).balance.toNat =
-        (state.getAccount sender).balance.toNat -
-          (tx.gas.toNat * effectiveGasPrice (baseFeeOf env) tx +
-            Fees.BlobBaseFee.calculateTotalBlobGas tx * blobGasPriceOf env) ∧
+    (state'.getAccount sender).codeHash = (state.getAccount sender).codeHash ∧
       (∀ address key, state'.getStorage address key = state.getStorage address key) ∧
       (∀ codeHash, state'.getCode codeHash = state.getCode codeHash) := by
+  have hnonce' := (buyGas_sender rfl h).2.2
   obtain ⟨bumped, hnonce, hfee⟩ := bind_ok_iff.mp h
   obtain ⟨hself, -⟩ := getAccount_incrementNonce hnonce
-  obtain ⟨account, hf, hread, -⟩ := modifyState_eq_ok hfee
-  rw [hself] at hf
-  dsimp only at hf
-  split at hf
-  · rename_i hle
-    cases hf
-    have hlive : state'.getAccountOptional sender ≠ none := by
-      intro hnone
-      have := congrArg State.Account.nonce hread
-      simp [getAccount, hnone, State.EMPTY_ACCOUNT] at this
-    have hbumped : bumped.getAccountOptional sender ≠ none := by
-      intro hnone
-      have := congrArg State.Account.nonce hself
-      simp [getAccount, hnone, State.EMPTY_ACCOUNT] at this
-    refine ⟨by rw [hread], by rw [hread], ?_, ?_, ?_⟩
-    · rw [hread]
-      simp only [BitVec.toNat_ofNat]
-      exact Nat.mod_eq_of_lt
-        (Nat.lt_of_le_of_lt (Nat.sub_le _ _) (state.getAccount sender).balance.isLt)
-    · intro address key
-      rw [getStorage_modifyState hfee, ite_eq_right_iff.mpr (fun h => absurd h.2 hlive),
-        getStorage_modifyState hnonce, ite_eq_right_iff.mpr (fun h => absurd h.2 hbumped)]
-    · intro codeHash
-      rw [getCode_modifyState hfee, getCode_modifyState hnonce]
-  · cases hf
+  have hlive : state'.getAccountOptional sender ≠ none := by
+    intro hnone
+    simp [getAccount, hnone, State.EMPTY_ACCOUNT] at hnonce'
+  have hbumped : bumped.getAccountOptional sender ≠ none := by
+    intro hnone
+    have := congrArg State.Account.nonce hself
+    simp [getAccount, hnone, State.EMPTY_ACCOUNT] at this
+  refine ⟨?_, fun address key => ?_, fun codeHash => ?_⟩
+  · obtain ⟨account, hf, hread, -⟩ := modifyState_eq_ok hfee
+    rw [hself] at hf
+    dsimp only at hf
+    split at hf
+    · cases hf
+      rw [hread]
+    · cases hf
+  · rw [getStorage_modifyState hfee, ite_eq_right_iff.mpr (fun h => absurd h.2 hlive),
+      getStorage_modifyState hnonce, ite_eq_right_iff.mpr (fun h => absurd h.2 hbumped)]
+  · rw [getCode_modifyState hfee, getCode_modifyState hnonce]
 
 /-- A credit adds the amount to one balance.
 
-It changes no nonce, no code hash, no code and no storage.
+It changes no nonce, no code hash and no code.
 
-A credit of 0 can still delete an empty account at Paris, whose storage is only read outside it. -/
+From Paris, a credit of 0 to an empty account deletes it, and with it its storage.
+
+Every other word of storage stays. -/
 private theorem creditEther_values {state state' : State.TransactionState} {target : Address}
     {amount : Nat} (h : creditEther fork state target amount = .ok state') (address : Address) :
     (state'.getAccount address).nonce = (state.getAccount address).nonce ∧
@@ -379,15 +365,10 @@ private theorem creditEther_values {state state' : State.TransactionState} {targ
       (∀ key, address ≠ target ∨ state'.getAccountOptional target ≠ none →
         state'.getStorage address key = state.getStorage address key) ∧
       (∀ codeHash, state'.getCode codeHash = state.getCode codeHash) := by
-  have hlt : amount < 2 ^ 256 := by
-    unfold creditEther at h
-    split at h
-    · assumption
-    · cases h
+  obtain ⟨hlt, hbal⟩ := creditEther_balance h address
   rw [creditEther_of_lt hlt] at h
-  obtain ⟨hbal, hnonce, hcode⟩ := getAccount_createEther h address
-  refine ⟨hnonce, hcode, ?_, ?_, fun codeHash => by rw [getCode_modifyState h]⟩
-  · simpa [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hlt] using hbal
+  obtain ⟨-, hnonce, hcode⟩ := getAccount_createEther h address
+  refine ⟨hnonce, hcode, hbal, ?_, fun codeHash => by rw [getCode_modifyState h]⟩
   · intro key hkeep
     rw [getStorage_modifyState h]
     refine ite_eq_right_iff.mpr ?_
@@ -398,7 +379,9 @@ private theorem creditEther_values {state state' : State.TransactionState} {targ
 
 /-- Paying the beneficiary adds the priority fee to its balance.
 
-A fee of 0 paid to an empty beneficiary deletes it, and its balance stays 0.
+From Spurious Dragon, a fee of 0 paid to an empty beneficiary deletes it.
+
+Its balance then stays 0.
 
 No other balance, nonce or code hash changes.
 
@@ -495,7 +478,9 @@ section Meter
 
 variable {Meter : Type} [GasMeter Meter]
 
-/-- An accepted authorization in scope sets the delegation and bumps the nonce of its authority.
+/-- An accepted authorization in scope adds one to the nonce of its authority.
+
+It sets the code of the authority to the delegation indicator, and keeps its balance.
 
 The payment changes no account, so the authority is read as it was before the authorization. -/
 theorem authority_applyAuthorization {chainId : Nat} {done done' : Delegations Meter}
@@ -529,23 +514,6 @@ theorem authority_applyAuthorization {chainId : Nat} {done done' : Delegations M
     dsimp only
     rw [haccount]
     exact ⟨rfl, rfl, rfl⟩
-
-/-- A halt before the first frame puts back the state from before the authorizations.
-
-It keeps only the reads of the preparation. -/
-theorem processMessageCall_state_of_halt [LawfulGasMeter Meter] {chainId : Nat}
-    {message : Message fork} {state : State.TransactionState} {substate : Substate}
-    {auths : List Authorization} {paid : Std.ExtTreeSet Address} {output : CallOutput}
-    {e : EvmError} {read : State.TransactionState}
-    (h : prepareFirstFrame (Meter := Meter) chainId message state substate auths paid =
-      .error (e, read))
-    (halts : e.aborts = false)
-    (hout : processMessageCall (Meter := Meter) chainId message state substate auths paid =
-      .ok output) :
-    output.state = state.withReadsOf read ∧ output.error = some e := by
-  rw [processMessageCall_of_halt h halts] at hout
-  cases hout
-  exact ⟨rfl, rfl⟩
 
 /-- A failed message either halts before its first frame or rolls back to the state of that frame.
 
@@ -716,8 +684,8 @@ section Values
 
 variable {env : BlockEnvironment fork} {included : Included} {out : TransactionOutput}
 
-/-- The account, balance and storage that settlement leaves, against the state of the message. -/
-abbrev settledAccounts (fork : Fork) (tx : Transaction) (env : BlockEnvironment fork)
+/-- The nonce, code hash, balance and storage that settlement leaves, against the message state. -/
+abbrev SettledAccounts (tx : Transaction) (env : BlockEnvironment fork)
     (included : Included) (out : TransactionOutput) (base : State.TransactionState)
     (gasLeft refund : Nat) : Prop :=
   ∀ address,
@@ -735,7 +703,7 @@ abbrev settledAccounts (fork : Fork) (tx : Transaction) (env : BlockEnvironment 
       out.state.getStorage address key = base.getStorage address key)
 
 /-- The authorizations of a call that fails, read as the state before settlement. -/
-abbrev keptAuthorizations {Meter : Type} [GasMeter Meter] (fork : Fork) (tx : Transaction)
+abbrev KeptAuthorizations {Meter : Type} [GasMeter Meter] (tx : Transaction)
     (env : BlockEnvironment fork) (included : Included) (bought base : State.TransactionState)
     (target : Address) (done : Delegations Meter) (refund : Nat) : Prop :=
   applyAuthorizations fork env.chainId.toNat bought
@@ -749,11 +717,13 @@ abbrev keptAuthorizations {Meter : Type} [GasMeter Meter] (fork : Fork) (tx : Tr
 
 /-- A failed run leaves the fees, the nonce of the sender and any committed authorizations.
 
-When the first frame never starts, or the transaction is a creation, the authorizations do not stay.
+The state before settlement reads as the state after the gas purchase.
 
-When the first frame of a call fails, the state before settlement reads as the authorizations left.
+Or, for a call, it reads as the state that the authorizations leave.
 
-No log is kept, and every address outside the sender, the beneficiary and the authorities stays. -/
+The theorem does not say which case a message takes.
+
+No log is kept. -/
 theorem runTransaction_values_of_error {Meter : Type} [GasMeter Meter] [LawfulGasMeter Meter]
     {block : State.BlockState} (h : runTransaction Meter env block included tx = .ok out)
     (failed : out.error.isSome = true) :
@@ -762,12 +732,12 @@ theorem runTransaction_values_of_error {Meter : Type} [GasMeter Meter] [LawfulGa
       buyGas env pre included.sender tx = .ok bought ∧
       out.logs = #[] ∧
       out.gasUsed = (settlement fork (baseFeeOf env) included.sender tx gasLeft refund).gasUsed ∧
-      settledAccounts fork tx env included out base gasLeft refund ∧
+      SettledAccounts tx env included out base gasLeft refund ∧
       (∀ codeHash, out.state.getCode codeHash = base.getCode codeHash) ∧
       ((SameOutside [] bought base ∧
           (∀ codeHash, base.getCode codeHash = bought.getCode codeHash) ∧ refund = 0) ∨
         ∃ target, ∃ done : Delegations Meter, tx.to = some target ∧
-          keptAuthorizations fork tx env included bought base target done refund) := by
+          KeptAuthorizations tx env included bought base target done refund) := by
   unfold runTransaction at h
   obtain ⟨target, htarget, h⟩ := bind_ok_iff.mp h
   obtain ⟨bought, hbought, h⟩ := bind_ok_iff.mp h
@@ -853,14 +823,15 @@ theorem runTransaction_values_of_error {Meter : Type} [GasMeter Meter] [LawfulGa
         · rename_i herr'
           simp [herr'] at failed
 
-/-- A transaction whose message fails leaves only the fees and the nonce of the sender.
+/-- Before Hegotá, a transaction whose message fails leaves the fees and the nonce of the sender.
 
-It also leaves the authorizations that its first frame commits.
+It leaves no other write, except the authorizations that its first frame commits.
 
-When the first frame never starts, or the transaction creates a contract, no authorization stays.
+The state before settlement reads as the state after the gas purchase.
 
-When the first frame of a call fails, the authorizations stay in the state that settlement runs on.
--/
+Or, for a call, it reads as the state that the authorizations leave.
+
+The theorem does not say which case a message takes. -/
 theorem processTransaction_values_of_error {block : State.BlockState}
     (h : processTransaction env block included tx = .ok out) (failed : out.error.isSome = true) :
     let pre := State.TransactionState.ofBlock block
@@ -868,15 +839,15 @@ theorem processTransaction_values_of_error {block : State.BlockState}
       buyGas env pre included.sender tx = .ok bought ∧
       out.logs = #[] ∧
       out.gasUsed = (settlement fork (baseFeeOf env) included.sender tx gasLeft refund).gasUsed ∧
-      settledAccounts fork tx env included out base gasLeft refund ∧
+      SettledAccounts tx env included out base gasLeft refund ∧
       (∀ codeHash, out.state.getCode codeHash = base.getCode codeHash) ∧
       ((SameOutside [] bought base ∧
           (∀ codeHash, base.getCode codeHash = bought.getCode codeHash) ∧ refund = 0) ∨
         (∃ target, tx.to = some target ∧
           ((fork < .glamsterdam ∧ ∃ done : Delegations Nat,
-              keptAuthorizations fork tx env included bought base target done refund) ∨
+              KeptAuthorizations tx env included bought base target done refund) ∨
             (.glamsterdam ≤ fork ∧ fork < .hegota ∧ ∃ done : Delegations StateGasMeter,
-              keptAuthorizations fork tx env included bought base target done refund)))) := by
+              KeptAuthorizations tx env included bought base target done refund)))) := by
   unfold processTransaction at h
   split at h
   · cases h

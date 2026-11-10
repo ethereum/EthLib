@@ -1405,16 +1405,22 @@ No theorem relates the module to the execution-specs code it follows.
 ### A transaction whose message fails
 
 `Execution/Proofs/Transactions/Failed.lean` states what a transaction leaves when its message fails, before Hegotá.
-The location theorems bound the writes to the sender, the beneficiary and the authorities named by the authorization signatures.
-`buyGas_sender_keeps` proves that buying gas raises the nonce of the sender by one and takes the fees from its balance.
-It changes none of its storage or code.
-`settleGas_accounts` proves that the settlement refunds the sender and pays the priority fee to the beneficiary, and changes no nonce or code.
+Its first theorems bound the writes to the sender, the beneficiary and the authorities that the authorization signatures name.
+
+`buyGas_sender` in `Settlement.lean` proves that buying gas raises the nonce of the sender by one and takes the fees from its balance.
+`buyGas_keeps` proves that it changes no code hash of the sender, no word of storage and no code.
+`settleGas_accounts` proves that the settlement refunds the sender and pays the priority fee to the beneficiary.
+It changes no nonce, code hash or code, and storage only at a deleted empty account.
+
 `authority_applyAuthorization` proves that one accepted authorization in scope sets the delegation code and raises the nonce of its authority by one.
-`processMessageCall_state_of_halt` proves that a halt before the first frame puts the state back to the state before the authorizations, as EIP-8037 asks.
+The authorities after the whole list are given against the state that the authorizations leave; the fold over the list is not unrolled.
+`processMessageCall_of_halt` in `Process.lean` puts the state back to the state before the authorizations when the message halts before its first frame, as EIP-8037 asks.
 `processMessageCall_reads_of_error` proves that a failed frame reads as the state of its first frame, so a failed call keeps its accepted authorizations, as EIP-7702 asks.
-`processTransaction_values_of_error` joins the two.
-It gives the nonce, the code hash, the balance and the storage of every address after the transaction.
-It also says which branch keeps the authorizations.
+
+`processTransaction_values_of_error` combines these results.
+It gives the nonce, the code hash, the balance and the storage of every address against the state before settlement.
+That state reads as the state after the gas purchase, or, for a call, as the state that its authorizations leave.
+The theorem does not say which of the two cases a given message takes.
 `block_of_output` proves that the block after the transaction reads as the state that the transaction leaves.
 
 ### Transaction gas
