@@ -382,10 +382,7 @@ private theorem readsAttestation_firstSeat {config : Config} {store : Store pres
     · rintro rfl
       exact ⟨0, seated, member, by simp [seated]⟩
   have indicesOk : getAttestingIndices state attestation = .ok [v] := by
-    unfold getAttestingIndices
-    dsimp only
-    split
-    · exact absurd ‹_› notElectra
+    rw [getAttestingIndices_of_lt_electra before]
     simp only [slotZero, indexZero, committeeOk, attestersOk, bind, Except.bind, pure,
       Except.pure, attestersEq]
   obtain ⟨indexed, indexedOk, indices, -, -⟩ :=
