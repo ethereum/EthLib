@@ -12,6 +12,7 @@ public import EthLib.Cryptography.Proofs.Secp256k1.Security.KeyOnlyBound
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.KeyOnlyOutside
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.LazyGame
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.Origin
+public import EthLib.Cryptography.Proofs.Secp256k1.Security.Programmed
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.QueryBound
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.Redraw
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.Refinement
@@ -102,6 +103,14 @@ This is their Theorem 2.
 A forgery on a new message with the hash of a signed one is charged to a finder of collisions.
 
 That is the first step of their Theorem 1.
+
+In the next game, the signer programs `Π`.
+
+The adversary's queries go to an overlay in front of the lazy permutation.
+
+Until two pairs of the overlay's cache conflict, the lazy game dominates that game.
+
+No theorem bounds the chance of a conflict yet; their bound needs `φ` semi-injective.
 
 No theorem bounds a forger with a signing oracle yet; that is the rest of their Theorem 1.
 -/
