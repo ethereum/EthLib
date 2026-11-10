@@ -47,4 +47,13 @@ def hmac (key message : ByteArray) : ByteArray :=
   let k := blockKey key
   Sha256.hash (xorPad k OPAD ++ Sha256.hash (xorPad k IPAD ++ message))
 
+/--
+HMAC-SHA-256 of a message under a secret key, as its 32 bytes.
+
+The key is secret, and this function makes no constant-time claim.
+-/
+def hmac32 (key message : ByteArray) : Vector UInt8 32 :=
+  -- The tag is the output of SHA-256, which has 32 bytes.
+  ⟨(hmac key message).data, (Sha256.hash32 _).size_toArray⟩
+
 end EthLib.Cryptography.Hash.Hmac

@@ -5,7 +5,7 @@ public import EthLib.Base.BigEndian
 public import EthLib.Base.LittleEndian
 public import EthLib.Cryptography.X25519
 public import EthLib.Cryptography.ChaCha20Poly1305
-public import EthLib.Cryptography.Hash.Hkdf
+public import EthLib.Cryptography.Hash.Hmac
 
 /-!
 # Noise XX
@@ -106,17 +106,19 @@ def decryptWithAd (s : CipherState) (aad ciphertext : ByteArray) :
       return (⟨s.key, s.nonce + 1⟩, plaintext)
     else throw .truncated
 
-/-- Two HKDF outputs, with the chaining key as salt and empty info, Noise §4.3. -/
+/--
+The two outputs of `HKDF(chaining_key, input_key_material, 2)`, Noise §4.3.
+
+The temporary key is `HMAC-HASH(chaining_key, input_key_material)`.
+
+The first output is `HMAC-HASH(temp_key, byte(0x01))`.
+
+The second output is `HMAC-HASH(temp_key, output1 || byte(0x02))`.
+-/
 def hkdf2 (chainingKey : Key) (input : ByteArray) : Key × Key :=
-  let output := Hash.Hkdf.expandBlocks (Hash.Hkdf.extract (packBytes chainingKey) input)
-    .empty .empty 1 2
-  have hmacSize (key message : ByteArray) : (Hash.Hmac.hmac key message).size = 32 := by
-    unfold Hash.Hmac.hmac
-    exact (Hash.Sha256.hash32 _).size_toArray
-  have size : output.size = 64 := by
-    simp only [output, Hash.Hkdf.expandBlocks, ByteArray.size_append, hmacSize]
-    rfl
-  (readBytes output 0 32 (by omega), readBytes output 32 32 (by omega))
+  let tempKey := Hash.Hmac.hmac (packBytes chainingKey) input
+  let first := Hash.Hmac.hmac32 tempKey ⟨#[0x01]⟩
+  (first, Hash.Hmac.hmac32 tempKey (packBytes first ++ ⟨#[0x02]⟩))
 
 /-- The chaining key, transcript hash and handshake cipher, Noise §5.2. -/
 structure SymmetricState where
