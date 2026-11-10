@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Proofs.Bls.Security.PopEager
 public import EthLib.Cryptography.Proofs.Bls.Security.PopExtract
+public import EthLib.Cryptography.Proofs.Bls.Security.PopReduction
 public import EthLib.Cryptography.Proofs.Bls.Security.Refinement
 
 /-!
@@ -26,6 +27,10 @@ A valid aggregate with valid proofs on key hashes `r x • Z` gives `a • Z`, f
 That needs every key to be a multiple of `g1`, no `r x` to be zero, and a nonzero honest count.
 
 The game is unchanged in distribution when one message hash scalar is drawn right after the key.
+
+The reduction answers every oracle without the secret key.
+
+When the scalar drawn first is nonzero, its run follows the game's until that message is signed.
 
 No bound on the aggregate game is proved yet.
 -/
