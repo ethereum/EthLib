@@ -9,7 +9,8 @@ public import EthLib.Networking.Proofs.Encoding.Varint
 - Reading a varint, a key or a record back from its encoding returns it, whatever bytes follow.
 - Reading the records of an encoded sequence returns the sequence.
 - The key needs a field number in range; a record also needs a value shorter than `2^64` bytes.
-- Reading a serialized message returns its records, for fields in range and under `2^64` bytes.
+- Reading a serialized message returns its records, for fields in range and a short message.
+- Short means fewer than `2^64` bytes.
 - The values of one field follow the order of the records.
 - Two errors with one code come from one constructor.
 -/
@@ -202,7 +203,7 @@ theorem records_serialize {rs : List Record}
     | _ => trivial
   rw [toList_serialize, records_encodeRecords hw]
 
-/-- No record holds a value of any field. -/
+/-- With no records, a field has no values. -/
 theorem valuesOf_nil (field : Nat) : valuesOf [] field = [] := rfl
 
 /-- A record of the field puts its value first; a record of another field adds nothing. -/

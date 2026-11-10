@@ -17,21 +17,21 @@ So a message must not hold the field `from`, `seqno`, `signature` or `key`, not 
 
 A message must hold a topic, since [the message schema][message] makes it required.
 
-The consensus layer makes topics UTF-8 strings, as [proto2][string] asks of every string.
+Topics are UTF-8 strings, and [proto2][string] asks every string to be UTF-8.
 
-So every topic must be valid UTF-8, or the whole RPC is rejected.
+An RPC is rejected when any topic or topic ID is not valid UTF-8, which is a choice of EthLib.
 
 A field the schema does not name is skipped.
 
-A field the schema names must have the wire type of its type, which is a choice of EthLib.
+A field the schema names but with another wire type is rejected, which is a choice of EthLib.
 
 The four forbidden fields are rejected whatever their wire type.
 
-A missing singular field reads as its default: false, zero or empty.
+A missing optional field reads as its default: false, zero or empty.
 
 A singular field that occurs twice keeps its last value, as [the encoding guide][last] says.
 
-Two control messages are decoded one by one, then merged, so their lists join.
+Each occurrence of the control field is decoded alone, then their lists are joined in order.
 
 [rpc]: https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/pubsub/README.md#the-rpc
 [message]: https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/pubsub/README.md#the-message
@@ -40,7 +40,7 @@ Two control messages are decoded one by one, then merged, so their lists join.
 [v11]: https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/pubsub/gossipsub/gossipsub-v1.1.md#protobuf
 [v12]: https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/pubsub/gossipsub/gossipsub-v1.2.md#protobuf-extension
 [string]: https://github.com/protocolbuffers/protocolbuffers.github.io/blob/bc2f346991e20631ed0a884e345110738228bfae/content/programming-guides/proto2.md#scalar-value-types-scalar
-[last]: https://github.com/protocolbuffers/protocolbuffers.github.io/blob/bc2f346991e20631ed0a884e345110738228bfae/content/programming-guides/encoding.md#last-one-wins
+[last]: https://github.com/protocolbuffers/protocolbuffers.github.io/blob/bc2f346991e20631ed0a884e345110738228bfae/content/programming-guides/encoding.md#last-one-wins-last-one-wins
 -/
 
 @[expose] public section
@@ -131,7 +131,7 @@ inductive RpcError where
 
 A protobuf error keeps one code; which one it is shows only in the message.
 
-The codes start at 101, since the Python class of these errors also holds the payload errors. -/
+The codes start at 101, so they never collide with the codes 1 to 4 of the payload errors. -/
 def RpcError.code : RpcError → UInt32
   | .protobuf _ => 101
   | .signed _ => 102
@@ -160,7 +160,7 @@ def uint64Of (field : Nat) : Value → Except RpcError UInt64
   | .varint v => .ok v
   | v => .error (.wireType field v.wireType)
 
-/-- Every value of a repeated field, each read by `read`. -/
+/-- Every value of a repeated field, each read by the given reader. -/
 def repeated (read : Nat → Value → Except RpcError α) (rs : List Record) (field : Nat) :
     Except RpcError (List α) :=
   (valuesOf rs field).mapM (read field)
@@ -250,7 +250,9 @@ def decodeRpc (bytes : ByteArray) : Except RpcError Rpc := do
 
 /-! ## Encoding
 
-The encoder writes every singular field, and the control field only when it holds a message.
+The encoder writes every singular field.
+
+It writes the control field only when a control list is not empty.
 -/
 
 /-- The bytes of a subscription change. -/

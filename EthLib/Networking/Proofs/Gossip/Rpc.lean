@@ -9,8 +9,8 @@ public import EthLib.Networking.Proofs.Encoding.Protobuf
 
 - Decoding the encoding of an RPC returns it, for an encoding shorter than `2^64` bytes.
 - A message whose records parse is rejected for signing exactly when it holds a forbidden field.
-- So is every RPC that publishes such a message.
-- Such messages exist for each forbidden field: any message with that field written first.
+- An RPC that publishes such a message is rejected.
+- For each forbidden field, a message with that field written first is rejected, even empty.
 - Two errors with one code come from one constructor.
 -/
 
@@ -124,7 +124,7 @@ private theorem decodePrune_encode (m : Prune) (h : m.encode.size < 2 ^ 64) :
       Except.bind, pure, Except.pure]
   · simp [stringRecord, lenRecord, maxField, or_imp, forall_and]
 
-/-- Merging into no control messages returns the second ones. -/
+/-- Merging empty control messages with others returns the others. -/
 private theorem merge_empty_left (c : Control) : Control.merge {} c = c := by
   cases c; simp [Control.merge]
 
@@ -203,7 +203,7 @@ theorem decodeRpc_encode (rpc : Rpc) (h : rpc.encode.size < 2 ^ 64) :
 
 /-! ## `StrictNoSign` -/
 
-/-- A message whose records hold a forbidden field is rejected, naming one of its records. -/
+/-- A message whose records hold a forbidden field is rejected with the number of one. -/
 theorem decodeMessage_signed {bytes : ByteArray} {rs : List Record}
     (h : records bytes.data.toList = .ok rs) (hs : ∃ r ∈ rs, r.field ∈ signedFields) :
     ∃ r ∈ rs, r.field ∈ signedFields ∧ decodeMessage bytes = .error (.signed r.field) := by
@@ -292,7 +292,7 @@ theorem decodeRpc_signed {frame message : ByteArray} {rs ms : List Record}
       rw [hn] at hp
       nomatch hp
 
-/-- The records of a message with a forbidden field written first, even an empty one. -/
+/-- The records of a message with a given field written first, then its data and its topic. -/
 def signedRecords (n : Nat) (value : ByteArray) (m : Message) : List Record :=
   [lenRecord n value, lenRecord 2 m.data, stringRecord 4 m.topic]
 
