@@ -26,6 +26,12 @@ Only an attestation adds weight to a payment, and only to a payment with an amou
 
 The epoch step moves the payments of the second half of the window to the first.
 
+In the genesis epoch, the first half of the window is empty.
+
+A block adds a bid only in the second half, and otherwise empties a payment or weighs one.
+
+The last slot of the genesis epoch leaves it.
+
 The upgrade to Heze carries each fact over.
 
 [EIP-7732] adds the builders, their bids and their payments.
@@ -183,16 +189,12 @@ theorem WeightedPaymentsFunded.advanceSlot {gloas : .glamsterdam ≤ fork}
     (holds : WeightedPaymentsFunded state gloas)
     (computed : advanceSlot config checks state = .ok after) :
     WeightedPaymentsFunded after gloas := by
-  obtain ⟨next, cached, epoched, -, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok computed
-  have cachedHolds := holds.of_frame (builderFrame_processSlot cachedOk)
-  unfold epochIfLast at epochedOk
-  split at epochedOk
-  · obtain ⟨pending, paid, -, before, paidOk, tail⟩ := processEpoch_builderSplit epochedOk
-    exact ((cachedHolds.of_frame before).processBuilderPendingPayments paidOk).of_frame
-      (tail.withSlot next)
-  · simp only [pure, Except.pure, Except.ok.injEq] at epochedOk
-    subst epochedOk
-    exact cachedHolds
+  obtain ⟨next, cached, -, -, cachedFrame, ⟨-, rfl⟩ |
+    ⟨-, pending, paid, -, before, paidOk, tail⟩⟩ :=
+      advanceSlot_builderSplit (gloas := gloas) computed
+  · exact (holds.of_frame cachedFrame :)
+  · exact (((holds.of_frame cachedFrame).of_frame before).processBuilderPendingPayments
+      paidOk).of_frame tail
 
 /-- From Gloas, a block rewrites the payments up to its operations.
 
@@ -233,6 +235,74 @@ theorem WeightedPaymentsFunded.processBlock {gloas : .glamsterdam ≤ fork}
     {block : BeaconBlock preset fork} (holds : WeightedPaymentsFunded state gloas)
     (computed : Consensus.processBlock config checks engine state block = .ok after) :
     WeightedPaymentsFunded after gloas := by
+  obtain ⟨_, _, writes, operatedOk, syncedFrame⟩ := processBlock_paymentWrites gloas computed
+  exact ((holds.of_writes writes).processOperations operatedOk).of_frame syncedFrame
+
+/-! ## The genesis epoch -/
+
+/-- The upgrade to Gloas starts with no payment, so the first half of the window is empty. -/
+theorem genesisFirstHalfEmpty_upgradeToGloas {pre : BeaconState preset .fusaka}
+    {post : BeaconState preset .glamsterdam}
+    (computed : upgradeToGloas config checks pre = .ok post) :
+    GenesisFirstHalfEmpty post (by decide) := fun _ position _ =>
+  paymentAt_of_replicate (upgradeToGloas_builderFields computed).1 position
+
+/-- The upgrade to Heze keeps the first half of the genesis window empty. -/
+theorem GenesisFirstHalfEmpty.upgradeToHeze {pre : BeaconState preset .glamsterdam}
+    {post : BeaconState preset .hegota} (holds : GenesisFirstHalfEmpty pre (by decide))
+    (computed : upgradeToHeze config pre = .ok post) :
+    GenesisFirstHalfEmpty post (by decide) := by
+  obtain ⟨-, rfl⟩ := upgradeToHeze_ok_iff.mp computed
+  exact holds
+
+/-- From Gloas, one slot keeps the first half of the genesis window empty.
+
+A slot inside the genesis epoch keeps the window, and the last one leaves that epoch. -/
+theorem GenesisFirstHalfEmpty.advanceSlot {gloas : .glamsterdam ≤ fork}
+    (holds : GenesisFirstHalfEmpty state gloas)
+    (computed : advanceSlot config checks state = .ok after) :
+    GenesisFirstHalfEmpty after gloas := by
+  obtain ⟨next, cached, sum, -, cachedFrame, ⟨inside, rfl⟩ |
+    ⟨boundary, pending, paid, -, -, -, tail⟩⟩ := advanceSlot_builderSplit (gloas := gloas) computed
+  · intro genesis
+    refine (holds.of_frame cachedFrame :) (UInt64.toNat_inj.mp ?_)
+    have epoch := congrArg UInt64.toNat genesis
+    rw [getCurrentEpoch_toNat] at epoch
+    rw [getCurrentEpoch_toNat, cachedFrame.slot, ← nextSlot_epoch_of_inside sum inside]
+    exact epoch
+  · -- The last slot of an epoch leaves the genesis epoch.
+    intro genesis
+    have epoch := congrArg UInt64.toNat genesis
+    rw [getCurrentEpoch_toNat, tail.slot] at epoch
+    simp only [GENESIS_EPOCH, UInt64.toNat_zero] at epoch
+    exact absurd ((nextSlot_epoch_of_boundary sum boundary).symm.trans epoch)
+      (Nat.succ_ne_zero _)
+
+/-- The operations of a block keep the first half of the genesis window empty. -/
+private theorem GenesisFirstHalfEmpty.processOperations {gloas : .glamsterdam ≤ fork}
+    {body : BeaconBlockBody preset fork} {parentSlot : Slot}
+    (holds : GenesisFirstHalfEmpty state gloas)
+    (computed : processOperations config checks state body parentSlot = .ok after) :
+    GenesisFirstHalfEmpty after gloas :=
+  processOperations_of_steps (gloas := gloas)
+    (fun first second => GenesisFirstHalfEmpty first gloas → GenesisFirstHalfEmpty second gloas)
+    (fun one two kept => two (one kept)) (fun frame kept => kept.of_frame frame)
+    (fun slashed kept => kept.of_writes (paymentWrites_slashValidator slashed))
+    (fun weighed kept genesis position early =>
+      paymentAt_recordPaymentWeight_empty weighed (kept (by
+        rwa [getCurrentEpoch, congrArg BeaconState.slot (recordPaymentWeight_eq weighed)]
+          at genesis) position early))
+    computed holds
+
+/-- From Gloas, a block keeps the first half of the genesis window empty.
+
+The bid writes its payment in the second half, and the other steps empty a payment or weigh it.
+
+An attestation adds weight only to a payment with an amount, which an empty payment lacks. -/
+theorem GenesisFirstHalfEmpty.processBlock {gloas : .glamsterdam ≤ fork}
+    {block : BeaconBlock preset fork} (holds : GenesisFirstHalfEmpty state gloas)
+    (computed : Consensus.processBlock config checks engine state block = .ok after) :
+    GenesisFirstHalfEmpty after gloas := by
   obtain ⟨_, _, writes, operatedOk, syncedFrame⟩ := processBlock_paymentWrites gloas computed
   exact ((holds.of_writes writes).processOperations operatedOk).of_frame syncedFrame
 

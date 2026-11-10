@@ -338,13 +338,22 @@ theorem WeightedPaymentsFunded.of_frame {gloas : .glamsterdam ≤ fork}
     WeightedPaymentsFunded after gloas :=
   paid.of_writes (.of_frame frame)
 
+/-- A step that rewrites payments keeps the first half of the genesis window empty. -/
+theorem GenesisFirstHalfEmpty.of_writes {gloas : .glamsterdam ≤ fork}
+    (writes : PaymentWrites state after gloas) (holds : GenesisFirstHalfEmpty state gloas) :
+    GenesisFirstHalfEmpty after gloas := by
+  intro genesisEpoch position early
+  rcases writes.each position with same | empty | ⟨late, -⟩
+  · rw [same]
+    exact holds (by rwa [getCurrentEpoch, writes.slot] at genesisEpoch) position early
+  · exact empty
+  · omega
+
 /-- A step that keeps the builder fields keeps the first half of the genesis window empty. -/
 theorem GenesisFirstHalfEmpty.of_frame {gloas : .glamsterdam ≤ fork}
     (frame : BuilderFrame state after) (genesis : GenesisFirstHalfEmpty state gloas) :
-    GenesisFirstHalfEmpty after gloas := by
-  intro genesisEpoch position early
-  rw [frame.paymentAt gloas]
-  exact genesis (by rwa [getCurrentEpoch, frame.slot] at genesisEpoch) position early
+    GenesisFirstHalfEmpty after gloas :=
+  genesis.of_writes (.of_frame frame)
 
 /-- The position of the payment of a slot on natural numbers.
 
