@@ -1524,6 +1524,22 @@ theorem getBlockRootAtSlot_read {state : BeaconState preset fork} {slot : Slot} 
     obtain ⟨_, thrown, _⟩ := computed
     cases thrown
 
+/-- A read of the root of an epoch is a read of the root at the first slot of the epoch. -/
+theorem getBlockRoot_ok_iff {state : BeaconState preset fork} {epoch : Epoch} {root : Root} :
+    getBlockRoot state epoch = .ok root ↔ ∃ start,
+      computeStartSlotAtEpoch preset epoch = .ok start ∧
+        getBlockRootAtSlot state start = .ok root := by
+  unfold getBlockRoot
+  simp only [bind_ok_iff, liftArith, mapError_ok_iff]
+
+/-- A read of the root of an epoch reads a slot before the slot of the state. -/
+theorem getBlockRoot_start_lt {state : BeaconState preset fork} {epoch : Epoch} {root : Root}
+    (computed : getBlockRoot state epoch = .ok root) :
+    epoch.toNat * preset.SLOTS_PER_EPOCH.toNat < state.slot.toNat := by
+  obtain ⟨start, startOk, read⟩ := getBlockRoot_ok_iff.mp computed
+  rw [← (mulChecked_ok_iff.mp startOk).2]
+  exact UInt64.lt_iff_toNat_lt.mp (getBlockRootAtSlot_read read).1
+
 /-- A read of a recorded root succeeds exactly when the slot is recent and its bound fits.
 
 The read of the buffer must then succeed too. -/
@@ -1571,6 +1587,24 @@ theorem getBlockRootAtSlot_exists {state : BeaconState preset fork}
   have : NeZero preset.SLOTS_PER_HISTORICAL_ROOT.toNat := ⟨Nat.pos_iff_ne_zero.mp nonempty⟩
   obtain ⟨root, read⟩ := readCircular_total state.blockRoots.elements slot
   exact ⟨root, getBlockRootAtSlot_ok_iff.mpr ⟨before, fits, within, read⟩⟩
+
+/-- A read of the root of an epoch succeeds when the first slot of the epoch is recent.
+
+The bound of that slot must not overflow. -/
+theorem getBlockRoot_exists {state : BeaconState preset fork} {epoch : Epoch}
+    (before : epoch.toNat * preset.SLOTS_PER_EPOCH.toNat < state.slot.toNat)
+    (fits : epoch.toNat * preset.SLOTS_PER_EPOCH.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat <
+      2 ^ 64)
+    (within : state.slot.toNat ≤
+      epoch.toNat * preset.SLOTS_PER_EPOCH.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat) :
+    ∃ root, getBlockRoot state epoch = .ok root := by
+  obtain ⟨start, startEq⟩ := exists_toNat_eq
+    (n := epoch.toNat * preset.SLOTS_PER_EPOCH.toNat) (by omega)
+  have startOk : computeStartSlotAtEpoch preset epoch = .ok start :=
+    mulChecked_ok_iff.mpr ⟨by omega, startEq⟩
+  obtain ⟨root, read⟩ := getBlockRootAtSlot_exists (state := state) (slot := start)
+    (by omega) (by omega) (by omega) (by omega)
+  exact ⟨root, getBlockRoot_ok_iff.mpr ⟨start, startOk, read⟩⟩
 
 /-- A read of a recorded root succeeds at each slot between two slots where it succeeds. -/
 theorem getBlockRootAtSlot_between {state : BeaconState preset fork}

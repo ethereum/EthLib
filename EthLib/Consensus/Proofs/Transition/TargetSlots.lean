@@ -231,6 +231,26 @@ theorem advanceSlot_previousJustified (computed : advanceSlot config checks stat
     subst epochedOk
     exact .inl cachedFrame.previousJustified
 
+/-- The first slot of a recent epoch stays in the buffer of roots at the next slot.
+
+The epoch must be at most some distance before the current epoch.
+
+The buffer must cover one epoch more than that distance. -/
+theorem slot_lt_epoch_add_historical_of_le (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
+    (distance : Nat)
+    (window : (distance + 1) * preset.SLOTS_PER_EPOCH.toNat ≤
+      preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
+    {epoch : Epoch} (near : (getCurrentEpoch state).toNat ≤ epoch.toNat + distance) :
+    state.slot.toNat <
+      epoch.toNat * preset.SLOTS_PER_EPOCH.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat := by
+  have split := Nat.div_add_mod state.slot.toNat preset.SLOTS_PER_EPOCH.toNat
+  have small := Nat.mod_lt state.slot.toNat positive
+  rw [← getCurrentEpoch_toNat] at split
+  have scaled := Nat.mul_le_mul_right preset.SLOTS_PER_EPOCH.toNat near
+  rw [Nat.add_mul, Nat.mul_comm] at scaled
+  rw [Nat.add_mul, Nat.one_mul] at window
+  omega
+
 /-- The first slot of the current or the previous epoch is less than two epochs back.
 
 So it stays in a buffer of roots that covers two epochs, at the next slot. -/
@@ -239,17 +259,9 @@ theorem slot_lt_epoch_add_historical (positive : 0 < preset.SLOTS_PER_EPOCH.toNa
     {epoch : Epoch} (near : epoch = getCurrentEpoch state ∨ epoch = getPreviousEpoch state) :
     state.slot.toNat <
       epoch.toNat * preset.SLOTS_PER_EPOCH.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat := by
-  have split := Nat.div_add_mod state.slot.toNat preset.SLOTS_PER_EPOCH.toNat
-  have small := Nat.mod_lt state.slot.toNat positive
-  have current := getCurrentEpoch_toNat state
+  refine slot_lt_epoch_add_historical_of_le positive 1 (by omega) ?_
   have previous := getPreviousEpoch_toNat state
-  rw [current] at previous
-  rw [Nat.mul_comm] at split
-  rcases near with rfl | rfl
-  · rw [current]
-    omega
-  · rw [previous, Nat.sub_one_mul]
-    omega
+  rcases near with rfl | rfl <;> omega
 
 /-- The caching of a slot keeps each target flag backed by a vote of the set for its link.
 
