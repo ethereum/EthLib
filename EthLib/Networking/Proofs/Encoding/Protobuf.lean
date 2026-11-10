@@ -8,7 +8,7 @@ public import EthLib.Networking.Proofs.Encoding.Varint
 
 - Reading a varint, a key or a record back from its encoding returns it, whatever bytes follow.
 - Reading the records of an encoded sequence returns the sequence.
-- Each holds for a well-formed record: a field number in range, and a short enough value.
+- The key needs a field number in range; a record also needs a value shorter than `2^64` bytes.
 - Two errors with one code come from one constructor.
 -/
 
@@ -34,7 +34,7 @@ theorem readVarint_encode (v : UInt64) (rest : List UInt8) :
   simp [readVarint, Proofs.Encoding.Varint.split_encode, hg, hv, hs, Except.mapError, bind,
     Except.bind, pure, Except.pure]
 
-/-- Reading a key back from its encoding returns its field number and wire type. -/
+/-- Reading a key back from its encoding returns its field number and its wire type below 8. -/
 theorem readKey_encodeKey {field wire : Nat} (h0 : 0 < field) (hmax : field ≤ maxField)
     (hw : wire < 8) (rest : List UInt8) :
     readKey (encodeKey field wire ++ rest) = .ok (field, wire, rest) := by
@@ -128,7 +128,7 @@ theorem two_le_length_encodeRecord (r : Record) : 2 ≤ (encodeRecord r).length 
     simp only [encodeValue]; omega
   | i32 bytes => simp only [encodeValue, Vector.length_toList]; omega
 
-/-- The loop reads back well-formed records from their encoding, given a budget per byte. -/
+/-- The loop reads back well-formed records from their encoding, given one step per input byte. -/
 theorem records_go_encodeRecords {rs : List Record} (h : ∀ r ∈ rs, r.WellFormed)
     (fuel : Nat) (hfuel : (encodeRecords rs).length ≤ fuel) (acc : List Record) :
     records.go fuel (encodeRecords rs) acc = .ok (acc.reverse ++ rs) := by

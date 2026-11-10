@@ -15,18 +15,16 @@ The key is a varint: the field number times eight, plus the wire type.
 
 The wire type says how long the value is, so a reader can skip a field it does not know.
 
-This module reads and writes records; a message schema gives them a meaning.
+The guide's "Base 128 Varints" asks for no shortest form.
 
-The guide does not ask for minimal varints, so a reader here accepts padding groups.
+So a reader accepts a varint longer than its value needs.
 
 A reader skips a group, and checks that its end matches its start, as "Groups" says.
 
-A reader rejects field numbers outside 1 to `2^29 - 1`.
-
-That is the range that [the proto2 guide][fields] lets a schema assign.
+A reader rejects field numbers outside 1 to `2^29 - 1`, the range of [the proto2 guide][fields].
 
 [encoding]: https://github.com/protocolbuffers/protocolbuffers.github.io/blob/bc2f346991e20631ed0a884e345110738228bfae/content/programming-guides/encoding.md
-[fields]: https://github.com/protocolbuffers/protocolbuffers.github.io/blob/bc2f346991e20631ed0a884e345110738228bfae/content/programming-guides/proto2.md#assigning
+[fields]: https://github.com/protocolbuffers/protocolbuffers.github.io/blob/bc2f346991e20631ed0a884e345110738228bfae/content/programming-guides/proto2.md#assigning-field-numbers-assigning
 -/
 
 @[expose] public section
@@ -40,11 +38,11 @@ def maxField : Nat := 2 ^ 29 - 1
 
 /-- Every way reading records can fail. -/
 inductive ProtobufError where
-  /-- A key, a length or a varint value is not a varint of at most ten bytes below `2^64`. -/
+  /-- A key, a length or a varint value ends early, runs past ten bytes, or is at least `2^64`. -/
   | varint (error : VarintError)
   /-- A key holds the field number 0, or one above `2^29 - 1`. -/
   | fieldNumber (field : Nat)
-  /-- A key holds the wire type 6 or 7, or a group end outside its group. -/
+  /-- A key holds the wire type 6 or 7, or a group end outside any group. -/
   | wireType (wire : Nat)
   /-- The input ends inside a value or inside a group. -/
   | truncated
@@ -90,7 +88,7 @@ structure Record where
   value : Value
   deriving DecidableEq
 
-/-- A record that its encoding carries: its field number is in range.
+/-- A record that the encoding can carry: its field number is in range.
 
 A length-delimited value must also be shorter than `2^64` bytes, so that its length is a varint. -/
 def Record.WellFormed (r : Record) : Prop :=
@@ -138,7 +136,9 @@ def readScalar (wire : Nat) (bytes : List UInt8) : Except ProtobufError (Value �
   | 5 => (readFixed 4 bytes).map fun (b, rest) => (.i32 b, rest)
   | _ => .error (.wireType wire)
 
-/-- The bytes after the groups still open, innermost first, checking that their ends match.
+/-- The bytes after every open group, checking that each end matches its start.
+
+The list holds the field numbers of the open groups, innermost first.
 
 Each step reads a key, so a budget of one step per input byte never runs out. -/
 def skipGroup : Nat → List Nat → List UInt8 → Except ProtobufError (List UInt8)
@@ -177,7 +177,7 @@ where
 def encodeKey (field wire : Nat) : List UInt8 :=
   Varint.encode (UInt64.ofNat (field * 8 + wire))
 
-/-- The bytes of a value after its key; a group is written empty, so as its end key. -/
+/-- The bytes of a value after its key; a group writes only its end key. -/
 def encodeValue (field : Nat) : Value → List UInt8
   | .varint v => Varint.encode v
   | .i64 bytes => bytes.toList
