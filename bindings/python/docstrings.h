@@ -711,7 +711,7 @@
   "The smallest and the largest length of the payload of a successful response chunk, as a pair."
 
 #define DOC_consensus_reqresp_response_valid \
-  "Whether a response is valid for its request, under the protocol that an ID names."
+  "Whether a response is valid for its request, as a Boolean."
 
 #define DOC_consensus_gossip_topic_bound \
   "The largest length of the payload of a gossip topic at a fork."

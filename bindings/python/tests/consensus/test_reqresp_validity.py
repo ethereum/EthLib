@@ -3,7 +3,12 @@
 import pytest
 
 from ethlib import consensus
-from ethlib.consensus import ResponseItem
+from ethlib.consensus import (
+    ResponseBlock,
+    ResponseEnvelope,
+    ResponseInclusionList,
+    ResponseSidecar,
+)
 from ethlib.errors import ConsensusError
 from raising import raises
 
@@ -21,6 +26,10 @@ from raising import raises
 # - MAX_BLOBS_PER_BLOCK is 6, and MAX_BLOBS_PER_BLOCK_ELECTRA 9 from Electra.
 # - NUMBER_OF_COLUMNS is 128.
 # - INCLUSION_LIST_COMMITTEE_SIZE and MAX_REQUEST_INCLUSION_LIST are both 16.
+#
+# The minimal preset and configuration change none of the values that a response check reads:
+# the limits above and the number of columns and seats are the same as on mainnet.
+# So no case runs under the name minimal, as its result could not differ from mainnet.
 
 PREFIX = "/eth2/beacon_chain/req/"
 
@@ -41,17 +50,17 @@ def _offset(n: int) -> bytes:
     return n.to_bytes(4, "little")
 
 
-def _chain(start_slot: int, length: int) -> list[tuple[int, bytes, bytes]]:
+def _chain(start_slot: int, length: int) -> list[ResponseBlock]:
     # Blocks at consecutive slots, each naming the one before it as its parent.
     return [(start_slot + i, _root(i), _root(i + 1)) for i in range(length)]
 
 
-def _envelopes(start_slot: int, length: int) -> list[tuple[int, bytes, bytes, bytes]]:
+def _envelopes(start_slot: int, length: int) -> list[ResponseEnvelope]:
     # Envelopes at consecutive slots, each payload naming the one before it as its parent.
     return [(start_slot + i, _root(1000 + i), _root(i), _root(i + 1)) for i in range(length)]
 
 
-def _blob_slots(start_slot: int, slots: int, blobs: int) -> list[tuple[int, bytes, int]]:
+def _blob_slots(start_slot: int, slots: int, blobs: int) -> list[ResponseSidecar]:
     # Each slot has one block, with blobs of indices 0 to blobs - 1.
     return [(start_slot + s, _root(s), i) for s in range(slots) for i in range(blobs)]
 
@@ -77,37 +86,40 @@ BLOCKS_BY_RANGE = _u64(10, 4, 1)
         pytest.param([(10, A, B), (11, A, C)], False, id="parent-not-linked"),
     ],
 )
-def test_blocks_by_range(items: list[ResponseItem], valid: bool) -> None:
+def test_blocks_by_range(items: list[ResponseBlock], valid: bool) -> None:
     protocol = _id("beacon_blocks_by_range", 2)
-    assert consensus.reqresp_response_is_valid("pectra", protocol, BLOCKS_BY_RANGE, items) is valid
+    assert consensus.reqresp_is_valid_response("pectra", protocol, BLOCKS_BY_RANGE, items) is valid
 
 
 def test_blocks_by_range_step_two_skips_the_parent_link() -> None:
     # A step other than 1 keeps the range of slots, and drops only the parent link.
     request = _u64(10, 4, 2)
-    protocol = _id("beacon_blocks_by_range")
+    protocol = _id("beacon_blocks_by_range", 2)
     unlinked = [(10, A, B), (11, A, C)]
-    assert consensus.reqresp_response_is_valid("pectra", protocol, request, unlinked)
-    assert not consensus.reqresp_response_is_valid("pectra", protocol, request, [(14, A, B)])
+    assert consensus.reqresp_is_valid_response("pectra", protocol, request, unlinked)
+    assert not consensus.reqresp_is_valid_response("pectra", protocol, request, [(14, A, B)])
     descending = [(11, A, B), (10, A, C)]
-    assert not consensus.reqresp_response_is_valid("pectra", protocol, request, descending)
+    assert not consensus.reqresp_is_valid_response("pectra", protocol, request, descending)
 
 
-@pytest.mark.parametrize("fork, limit", [("phase0", 1024), ("dencun", 128), ("hegota", 128)])
-def test_blocks_by_range_request_limit(fork: str, limit: int) -> None:
+@pytest.mark.parametrize(
+    "fork, version, limit", [("phase0", 1, 1024), ("dencun", 2, 128), ("hegota", 2, 128)]
+)
+def test_blocks_by_range_request_limit(fork: str, version: int, limit: int) -> None:
     # The count of 2000 slots allows more blocks than the request limit of the fork.
-    request, protocol = _u64(0, 2000, 1), _id("beacon_blocks_by_range")
-    assert consensus.reqresp_response_is_valid(fork, protocol, request, _chain(0, limit))
-    assert not consensus.reqresp_response_is_valid(fork, protocol, request, _chain(0, limit + 1))
+    # Phase0 has only the first version of the protocol.
+    request, protocol = _u64(0, 2000, 1), _id("beacon_blocks_by_range", version)
+    assert consensus.reqresp_is_valid_response(fork, protocol, request, _chain(0, limit))
+    assert not consensus.reqresp_is_valid_response(fork, protocol, request, _chain(0, limit + 1))
 
 
-def test_blocks_by_range_count_bound() -> None:
-    # Blocks with ascending slots inside a range of count slots number at most the count.
+def test_blocks_by_range_ascending_slots_imply_count_bound() -> None:
+    # Blocks at ascending slots inside a range of count slots number at most the count.
     # So a response over the count also breaks the order, and the count has no case of its own.
-    request, protocol = _u64(10, 2, 1), _id("beacon_blocks_by_range")
-    assert consensus.reqresp_response_is_valid("pectra", protocol, request, _chain(10, 2))
+    request, protocol = _u64(10, 2, 1), _id("beacon_blocks_by_range", 2)
+    assert consensus.reqresp_is_valid_response("pectra", protocol, request, _chain(10, 2))
     over = [*_chain(10, 2), (11, _root(2), _root(3))]
-    assert not consensus.reqresp_response_is_valid("pectra", protocol, request, over)
+    assert not consensus.reqresp_is_valid_response("pectra", protocol, request, over)
 
 
 # Blocks by root: the roots A and B.
@@ -125,14 +137,16 @@ def test_blocks_by_range_count_bound() -> None:
     ],
 )
 @pytest.mark.parametrize("version", [1, 2])
-def test_blocks_by_root(items: list[ResponseItem], valid: bool, version: int) -> None:
+def test_blocks_by_root(items: list[ResponseBlock], valid: bool, version: int) -> None:
     protocol = _id("beacon_blocks_by_root", version)
-    assert consensus.reqresp_response_is_valid("pectra", protocol, A + B, items) is valid
+    assert consensus.reqresp_is_valid_response("pectra", protocol, A + B, items) is valid
 
 
 # Blob sidecars by range: start slot 100, count 3, so slots 100 to 102.
 
 BLOBS_BY_RANGE = _u64(100, 3)
+
+# The count has no case of its own: the other rules imply it.
 
 
 @pytest.mark.parametrize(
@@ -147,15 +161,15 @@ BLOBS_BY_RANGE = _u64(100, 3)
         pytest.param([(100, A, 1)], False, id="first-index-not-zero"),
         pytest.param([(100, A, 0), (101, B, 1)], False, id="next-block-not-at-zero"),
         pytest.param([(100, A, 0), (100, A, 2)], False, id="index-skipped"),
-        pytest.param([(100, A, 1), (100, A, 0)], False, id="index-descends"),
+        pytest.param([(100, A, 0), (100, A, 1), (100, A, 0)], False, id="index-descends"),
         pytest.param([(100, A, 0), (100, A, 0)], False, id="index-repeats"),
         pytest.param([(100, A, 0), (100, B, 1)], False, id="other-root-same-slot"),
         pytest.param([(101, A, 0), (100, B, 0)], False, id="slots-descend"),
     ],
 )
-def test_blob_sidecars_by_range(items: list[ResponseItem], valid: bool) -> None:
+def test_blob_sidecars_by_range(items: list[ResponseSidecar], valid: bool) -> None:
     protocol = _id("blob_sidecars_by_range")
-    assert consensus.reqresp_response_is_valid("dencun", protocol, BLOBS_BY_RANGE, items) is valid
+    assert consensus.reqresp_is_valid_response("dencun", protocol, BLOBS_BY_RANGE, items) is valid
 
 
 @pytest.mark.parametrize("fork, blobs", [("dencun", 6), ("pectra", 9), ("fusaka", 9)])
@@ -163,9 +177,9 @@ def test_blob_sidecars_by_range_index_bound(fork: str, blobs: int) -> None:
     # The indices of one block run from 0 to the most blobs of one block, less one.
     protocol = _id("blob_sidecars_by_range")
     full = _blob_slots(100, 1, blobs)
-    assert consensus.reqresp_response_is_valid(fork, protocol, BLOBS_BY_RANGE, full)
+    assert consensus.reqresp_is_valid_response(fork, protocol, BLOBS_BY_RANGE, full)
     over = _blob_slots(100, 1, blobs + 1)
-    assert not consensus.reqresp_response_is_valid(fork, protocol, BLOBS_BY_RANGE, over)
+    assert not consensus.reqresp_is_valid_response(fork, protocol, BLOBS_BY_RANGE, over)
 
 
 @pytest.mark.parametrize("fork, blobs", [("dencun", 6), ("pectra", 9)])
@@ -173,9 +187,9 @@ def test_blob_sidecars_by_range_request_limit(fork: str, blobs: int) -> None:
     # The request limit is 128 blocks of the most blobs; a count of 200 allows more.
     request, protocol = _u64(0, 200), _id("blob_sidecars_by_range")
     full = _blob_slots(0, 128, blobs)
-    assert consensus.reqresp_response_is_valid(fork, protocol, request, full)
+    assert consensus.reqresp_is_valid_response(fork, protocol, request, full)
     over = _blob_slots(0, 129, blobs)
-    assert not consensus.reqresp_response_is_valid(fork, protocol, request, over)
+    assert not consensus.reqresp_is_valid_response(fork, protocol, request, over)
 
 
 # Blob sidecars by root: the identifiers (A, 0) and (B, 3), each a root and an index.
@@ -194,15 +208,17 @@ BLOBS_BY_ROOT = A + _u64(0) + B + _u64(3)
         pytest.param([(5, A, 0), (5, A, 0), (7, B, 3)], False, id="over-length"),
     ],
 )
-def test_blob_sidecars_by_root(items: list[ResponseItem], valid: bool) -> None:
+def test_blob_sidecars_by_root(items: list[ResponseSidecar], valid: bool) -> None:
     protocol = _id("blob_sidecars_by_root")
-    assert consensus.reqresp_response_is_valid("pectra", protocol, BLOBS_BY_ROOT, items) is valid
+    assert consensus.reqresp_is_valid_response("pectra", protocol, BLOBS_BY_ROOT, items) is valid
 
 
 # Column sidecars by range: start slot 50, count 2, columns 3 and 7.
 # The columns follow the two integers as a list, at offset 20.
 
 COLUMNS_BY_RANGE = _u64(50, 2) + _offset(20) + _u64(3, 7)
+
+# The count has no case of its own: the other rules imply it.
 
 
 @pytest.mark.parametrize(
@@ -221,9 +237,9 @@ COLUMNS_BY_RANGE = _u64(50, 2) + _offset(20) + _u64(3, 7)
         pytest.param([(51, B, 3), (51, B, 7), (50, A, 3), (50, A, 7)], False, id="slots-descend"),
     ],
 )
-def test_data_column_sidecars_by_range(items: list[ResponseItem], valid: bool) -> None:
+def test_data_column_sidecars_by_range(items: list[ResponseSidecar], valid: bool) -> None:
     protocol = _id("data_column_sidecars_by_range")
-    assert consensus.reqresp_response_is_valid("fusaka", protocol, COLUMNS_BY_RANGE, items) is valid
+    assert consensus.reqresp_is_valid_response("fusaka", protocol, COLUMNS_BY_RANGE, items) is valid
 
 
 def test_data_column_sidecars_by_range_index_bound() -> None:
@@ -231,9 +247,9 @@ def test_data_column_sidecars_by_range_index_bound() -> None:
     # So the only valid response is empty.
     request = _u64(50, 2) + _offset(20) + _u64(3, 128)
     protocol = _id("data_column_sidecars_by_range")
-    assert consensus.reqresp_response_is_valid("fusaka", protocol, request, [])
+    assert consensus.reqresp_is_valid_response("fusaka", protocol, request, [])
     served = [(50, A, 3), (50, A, 128)]
-    assert not consensus.reqresp_response_is_valid("fusaka", protocol, request, served)
+    assert not consensus.reqresp_is_valid_response("fusaka", protocol, request, served)
 
 
 def test_data_column_sidecars_by_range_request_limit() -> None:
@@ -242,9 +258,9 @@ def test_data_column_sidecars_by_range_request_limit() -> None:
     request = _u64(0, 200) + _offset(20) + _u64(*columns)
     protocol = _id("data_column_sidecars_by_range")
     full = [(s, _root(s), c) for s in range(128) for c in columns]
-    assert consensus.reqresp_response_is_valid("fusaka", protocol, request, full)
+    assert consensus.reqresp_is_valid_response("fusaka", protocol, request, full)
     over = [(s, _root(s), c) for s in range(129) for c in columns]
-    assert not consensus.reqresp_response_is_valid("fusaka", protocol, request, over)
+    assert not consensus.reqresp_is_valid_response("fusaka", protocol, request, over)
 
 
 # Column sidecars by root: block A for columns 1 and 2, block B for column 5.
@@ -267,15 +283,17 @@ COLUMNS_BY_ROOT = _offset(8) + _offset(8 + len(FIRST)) + FIRST + SECOND
         pytest.param([(8, A, 1), (8, A, 2), (9, B, 5), (8, A, 1)], False, id="over-length"),
     ],
 )
-def test_data_column_sidecars_by_root(items: list[ResponseItem], valid: bool) -> None:
+def test_data_column_sidecars_by_root(items: list[ResponseSidecar], valid: bool) -> None:
     protocol = _id("data_column_sidecars_by_root")
-    assert consensus.reqresp_response_is_valid("fusaka", protocol, COLUMNS_BY_ROOT, items) is valid
+    assert consensus.reqresp_is_valid_response("fusaka", protocol, COLUMNS_BY_ROOT, items) is valid
 
 
 # Payload envelopes by range: start slot 20, count 5, so slots 20 to 24.
 # An envelope is its slot, its block root, the parent hash and the hash of its payload.
 
 ENVELOPES_BY_RANGE = _u64(20, 5)
+
+# The count has no case of its own: the other rules imply it.
 
 
 @pytest.mark.parametrize(
@@ -291,9 +309,9 @@ ENVELOPES_BY_RANGE = _u64(20, 5)
         pytest.param([(20, A, B, C), (22, B, B, A)], False, id="parent-not-linked"),
     ],
 )
-def test_execution_payload_envelopes_by_range(items: list[ResponseItem], valid: bool) -> None:
+def test_execution_payload_envelopes_by_range(items: list[ResponseEnvelope], valid: bool) -> None:
     protocol = _id("execution_payload_envelopes_by_range")
-    result = consensus.reqresp_response_is_valid("glamsterdam", protocol, ENVELOPES_BY_RANGE, items)
+    result = consensus.reqresp_is_valid_response("glamsterdam", protocol, ENVELOPES_BY_RANGE, items)
     assert result is valid
 
 
@@ -301,9 +319,9 @@ def test_execution_payload_envelopes_by_range_request_limit() -> None:
     # The request limit is 128 envelopes; a count of 200 allows more.
     request, protocol = _u64(0, 200), _id("execution_payload_envelopes_by_range")
     full = _envelopes(0, 128)
-    assert consensus.reqresp_response_is_valid("glamsterdam", protocol, request, full)
+    assert consensus.reqresp_is_valid_response("glamsterdam", protocol, request, full)
     over = _envelopes(0, 129)
-    assert not consensus.reqresp_response_is_valid("glamsterdam", protocol, request, over)
+    assert not consensus.reqresp_is_valid_response("glamsterdam", protocol, request, over)
 
 
 # Payload envelopes by root: the block roots A and B.
@@ -319,9 +337,9 @@ def test_execution_payload_envelopes_by_range_request_limit() -> None:
         pytest.param([(2, A, C, C), (2, A, C, C), (3, B, C, C)], False, id="over-length"),
     ],
 )
-def test_execution_payload_envelopes_by_root(items: list[ResponseItem], valid: bool) -> None:
+def test_execution_payload_envelopes_by_root(items: list[ResponseEnvelope], valid: bool) -> None:
     protocol = _id("execution_payload_envelopes_by_root")
-    assert consensus.reqresp_response_is_valid("hegota", protocol, A + B, items) is valid
+    assert consensus.reqresp_is_valid_response("glamsterdam", protocol, A + B, items) is valid
 
 
 # Inclusion lists by indices: slot 96, dependent root C, and a bit for each of the 16 seats.
@@ -350,9 +368,9 @@ def _lists_request(*seats: int) -> bytes:
         pytest.param([(96, 1000, C), (96, 1000, C), (96, 1002, C)], False, id="over-seats"),
     ],
 )
-def test_inclusion_lists_by_indices(items: list[ResponseItem], valid: bool) -> None:
+def test_inclusion_lists_by_indices(items: list[ResponseInclusionList], valid: bool) -> None:
     protocol, request = _id("inclusion_lists_by_indices"), _lists_request(0, 2)
-    result = consensus.reqresp_response_is_valid("hegota", protocol, request, items, COMMITTEE)
+    result = consensus.reqresp_is_valid_response("hegota", protocol, request, items, COMMITTEE)
     assert result is valid
 
 
@@ -361,20 +379,20 @@ def test_inclusion_lists_validator_with_several_seats() -> None:
     committee = [7, 1001, 1002, 7, *COMMITTEE[4:]]
     protocol, request = _id("inclusion_lists_by_indices"), _lists_request(3)
     lists = [(96, 7, C)]
-    assert consensus.reqresp_response_is_valid("hegota", protocol, request, lists, committee)
+    assert consensus.reqresp_is_valid_response("hegota", protocol, request, lists, committee)
     # One requested seat bounds the response at one list.
     twice = [(96, 7, C), (96, 7, C)]
-    assert not consensus.reqresp_response_is_valid("hegota", protocol, request, twice, committee)
+    assert not consensus.reqresp_is_valid_response("hegota", protocol, request, twice, committee)
 
 
-def test_inclusion_lists_request_limit() -> None:
+def test_inclusion_lists_seats_imply_request_limit() -> None:
     # The 16 seats of the committee meet the request limit of 16 lists.
-    # So a response over the limit also asks for more seats than there are, and has no case alone.
+    # So a response over the limit also exceeds the seats asked, and the limit has no case alone.
     protocol, request = _id("inclusion_lists_by_indices"), _lists_request(*range(16))
     lists = [(96, validator, C) for validator in COMMITTEE]
-    assert consensus.reqresp_response_is_valid("hegota", protocol, request, lists, COMMITTEE)
+    assert consensus.reqresp_is_valid_response("hegota", protocol, request, lists, COMMITTEE)
     over = [*lists, (96, 1000, C)]
-    assert not consensus.reqresp_response_is_valid("hegota", protocol, request, over, COMMITTEE)
+    assert not consensus.reqresp_is_valid_response("hegota", protocol, request, over, COMMITTEE)
 
 
 @pytest.mark.parametrize("size", [0, 15, 17])
@@ -382,14 +400,14 @@ def test_inclusion_lists_committee_size(size: int) -> None:
     protocol, request = _id("inclusion_lists_by_indices"), _lists_request(0)
     committee = list(range(size))
     with raises(ConsensusError, f"the committee has {size} seats, not 16") as info:
-        consensus.reqresp_response_is_valid("hegota", protocol, request, [], committee)
+        consensus.reqresp_is_valid_response("hegota", protocol, request, [], committee)
     assert info.value.code == 0
 
 
 def test_committee_read_only_for_inclusion_lists() -> None:
     # Any other protocol ignores the committee, whatever its size.
-    protocol = _id("beacon_blocks_by_range")
-    assert consensus.reqresp_response_is_valid("pectra", protocol, BLOCKS_BY_RANGE, [], [1, 2])
+    protocol = _id("beacon_blocks_by_range", 2)
+    assert consensus.reqresp_is_valid_response("pectra", protocol, BLOCKS_BY_RANGE, [], [1, 2])
 
 
 @pytest.mark.parametrize(
@@ -406,48 +424,62 @@ def test_committee_read_only_for_inclusion_lists() -> None:
 )
 def test_protocol_without_check(fork: str, protocol: str) -> None:
     with raises(ConsensusError, f"{protocol} has no response check") as info:
-        consensus.reqresp_response_is_valid(fork, protocol, b"", [])
+        consensus.reqresp_is_valid_response(fork, protocol, b"", [])
     assert info.value.code == 0
 
 
 def test_unknown_protocol() -> None:
     protocol = _id("blocks_by_nothing")
     with raises(ConsensusError, f"{protocol} names no protocol") as info:
-        consensus.reqresp_response_is_valid("pectra", protocol, b"", [])
+        consensus.reqresp_is_valid_response("pectra", protocol, b"", [])
     assert info.value.code == 0
 
 
 def test_protocol_not_at_fork() -> None:
     protocol = _id("blob_sidecars_by_range")
     with raises(ConsensusError, f"{protocol} is not a protocol of shapella") as info:
-        consensus.reqresp_response_is_valid("shapella", protocol, _u64(0, 1), [])
+        consensus.reqresp_is_valid_response("shapella", protocol, _u64(0, 1), [])
     assert info.value.code == 301
 
 
 def test_unknown_fork() -> None:
-    with raises(ConsensusError, "no fork named nofork"):
-        consensus.reqresp_response_is_valid("nofork", _id("beacon_blocks_by_range"), b"", [])
+    with raises(ConsensusError, "no fork named nofork") as info:
+        consensus.reqresp_is_valid_response("nofork", _id("beacon_blocks_by_range"), b"", [])
+    assert info.value.code == 0
 
 
 def test_malformed_request() -> None:
     # The request has three integers, so 24 bytes; 23 are too few.
-    protocol = _id("beacon_blocks_by_range")
-    with raises(ConsensusError, "request rejected: EthLib.Serialization.Ssz.Err.scope 24 23"):
-        consensus.reqresp_response_is_valid("pectra", protocol, bytes(23), [])
+    protocol = _id("beacon_blocks_by_range", 2)
+    with raises(
+        ConsensusError, "request rejected: EthLib.Serialization.Ssz.Err.scope 24 23"
+    ) as info:
+        consensus.reqresp_is_valid_response("pectra", protocol, bytes(23), [])
+    assert info.value.code == 3
 
 
 def test_request_over_its_limit() -> None:
     # From Deneb, a request names at most 128 roots.
     protocol = _id("beacon_blocks_by_root")
-    with raises(ConsensusError, "request rejected: EthLib.Serialization.Ssz.Err.overLimit 128 129"):
-        consensus.reqresp_response_is_valid("pectra", protocol, bytes(32 * 129), [])
+    with raises(
+        ConsensusError, "request rejected: EthLib.Serialization.Ssz.Err.overLimit 128 129"
+    ) as info:
+        consensus.reqresp_is_valid_response("pectra", protocol, bytes(32 * 129), [])
+    assert info.value.code == 2
 
 
 def test_malformed_item() -> None:
-    # A root of 31 bytes, or a sidecar where a block is due.
-    protocol = _id("beacon_blocks_by_range")
+    # A root of 31 bytes, a sidecar where a block is due, and a tuple of the wrong length.
+    protocol = _id("beacon_blocks_by_range", 2)
     with raises(ConsensusError, "expected 32 bytes, got 31") as info:
-        consensus.reqresp_response_is_valid("pectra", protocol, BLOCKS_BY_RANGE, [(10, A, A[1:])])
+        consensus.reqresp_is_valid_response("pectra", protocol, BLOCKS_BY_RANGE, [(10, A, A[1:])])
     assert info.value.code == 0
-    with raises(ConsensusError, "expected bytes"):
-        consensus.reqresp_response_is_valid("pectra", protocol, BLOCKS_BY_RANGE, [(10, A, 0)])
+    with raises(ConsensusError, "expected bytes") as info:
+        consensus.reqresp_is_valid_response("pectra", protocol, BLOCKS_BY_RANGE, [(10, A, 0)])
+    assert info.value.code == 0
+    with raises(ConsensusError, "a tuple has more items than expected") as info:
+        consensus.reqresp_is_valid_response("pectra", protocol, BLOCKS_BY_RANGE, [(10, A, B, C)])
+    assert info.value.code == 0
+    with raises(ConsensusError, "a tuple has fewer items than expected") as info:
+        consensus.reqresp_is_valid_response("pectra", protocol, BLOCKS_BY_RANGE, [(10, A)])  # ty: ignore[invalid-argument-type]  # a tuple of the wrong length
+    assert info.value.code == 0

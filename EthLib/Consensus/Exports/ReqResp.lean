@@ -172,7 +172,7 @@ That fork is the one that the context bytes of the chunk name, and it must defin
 def reqRespResponseBoundsExport (args : PyValue) : Result PyValue :=
   pyExport reqRespResponseBoundsOf args
 
-/-- Decode the SSZ bytes of a request, or fail with code 0. -/
+/-- Decode the SSZ bytes of a request, or fail with the code of its SSZ error. -/
 def decodeRequest (α : Type) [SszType α] (data : ByteArray) : Result α :=
   runSsz "request rejected" (SszType.deserialize α data)
 
@@ -184,19 +184,7 @@ def decodeItems {β : Type} (α : Type) [EthLib.Exports.FromPy α] (make : α �
 
 /-- Whether a response is valid for its request, under the protocol that an ID names.
 
-The fork is the one in effect when the request is served, and it must define the protocol.
-
-Each item is the tuple of what the check reads, in the order of the fields of its form.
-
-A block is its slot, parent root and root; a sidecar its slot, block root and index.
-
-An envelope is its slot, block root, parent hash and block hash.
-
-An inclusion list is its slot, validator index and dependent root.
-
-The committee is read only for inclusion lists, and must then have one validator per seat.
-
-A protocol without a check of its response, such as status, has code 0. -/
+The fork is the one in effect when the request is served, and it must define the protocol. -/
 def reqRespResponseValidOf
     (args : String × String × String × ByteArray × List PyValue × List UInt64) :
     Result Bool := do
@@ -255,7 +243,19 @@ def reqRespResponseValidOf
 
 The arguments are the name of the preset and the configuration, the fork and the protocol ID.
 
-They go on with the request as SSZ bytes, the items of the response and the committee. -/
+They go on with the request as SSZ bytes, the items of the response and the committee.
+
+Each item is the tuple of what the check reads, in the order of the fields of its form.
+
+A block is its slot, parent root and root; a sidecar its slot, block root and index.
+
+An envelope is its slot, block root, parent hash and block hash.
+
+An inclusion list is its slot, validator index and dependent root.
+
+The committee is read only for inclusion lists, and must then have one validator per seat.
+
+A protocol without a check of its response, such as status, has code 0. -/
 @[export eth_consensus_reqresp_response_valid]
 def reqRespResponseValidExport (args : PyValue) : Result PyValue :=
   pyExport reqRespResponseValidOf args

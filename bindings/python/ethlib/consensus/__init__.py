@@ -138,21 +138,27 @@ ResponseSidecar: TypeAlias = tuple[int, bytes, int]
 ResponseEnvelope: TypeAlias = tuple[int, bytes, bytes, bytes]
 # An inclusion list: its slot, its validator index and its dependent root.
 ResponseInclusionList: TypeAlias = tuple[int, int, bytes]
-ResponseItem: TypeAlias = ResponseBlock | ResponseSidecar | ResponseEnvelope | ResponseInclusionList
+ResponseItems: TypeAlias = (
+    Sequence[ResponseBlock]
+    | Sequence[ResponseSidecar]
+    | Sequence[ResponseEnvelope]
+    | Sequence[ResponseInclusionList]
+)
 
 
-def reqresp_response_is_valid(
+def reqresp_is_valid_response(
     fork: str,
     protocol: str,
     request: bytes,
-    items: Sequence[ResponseItem],
+    items: ResponseItems,
     committee: Sequence[int] = (),
     name: str = "mainnet",
 ) -> bool:
     """Whether the items of a response are valid for the SSZ request of a protocol ID at a fork."""
     # The committee counts only for inclusion lists, as the validator of each seat.
+    native_items: list[tuple[int | bytes, ...]] = list(items)
     return _native.consensus_reqresp_response_valid(
-        name, fork, protocol, request, list(items), list(committee)
+        name, fork, protocol, request, native_items, list(committee)
     )
 
 
@@ -1214,8 +1220,8 @@ __all__ = [
     "ResponseSidecar",
     "ResponseEnvelope",
     "ResponseInclusionList",
-    "ResponseItem",
-    "reqresp_response_is_valid",
+    "ResponseItems",
+    "reqresp_is_valid_response",
     "compute_subnet_for_attestation",
     "compute_subnet_for_blob_sidecar",
     "compute_subnet_for_data_column_sidecar",

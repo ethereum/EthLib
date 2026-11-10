@@ -6966,11 +6966,10 @@
    "error_class": "ConsensusError",
    "docstring":
    "The smallest and the largest length of the payload of a successful response chunk, as a pair.\n\nThe arguments are the name of the preset and the configuration, the fork of the chunk and the ID.\n\nThat fork is the one that the context bytes of the chunk name, and it must define the protocol."},
-  {"summary":
-   "Whether a response is valid for its request, under the protocol that an ID names.",
+  {"summary": "Whether a response is valid for its request, as a Boolean.",
    "signature":
-   "(name: str, fork: str, protocol: str, request: bytes, items: list[tuple[int, bytes, bytes] | tuple[int, bytes, int] | tuple[int, bytes, bytes, bytes] | tuple[int, int, bytes]], committee: list[int]) -> bool",
-   "operation": "EthLib.Consensus.Exports.reqRespResponseValidOf",
+   "(name: str, fork: str, protocol: str, request: bytes, items: list[tuple[int | bytes, ...]], committee: list[int]) -> bool",
+   "operation": "EthLib.Consensus.Exports.reqRespResponseValidExport",
    "method": "consensus_reqresp_response_valid",
    "errors":
    [{"type": "EthLib.Consensus.BoundsError",
@@ -7057,7 +7056,7 @@
       {"constructor": "undeclaredSelector", "code": 75}]}],
    "error_class": "ConsensusError",
    "docstring":
-   "Whether a response is valid for its request, under the protocol that an ID names.\n\nThe fork is the one in effect when the request is served, and it must define the protocol.\n\nEach item is the tuple of what the check reads, in the order of the fields of its form.\n\nA block is its slot, parent root and root; a sidecar its slot, block root and index.\n\nAn envelope is its slot, block root, parent hash and block hash.\n\nAn inclusion list is its slot, validator index and dependent root.\n\nThe committee is read only for inclusion lists, and must then have one validator per seat.\n\nA protocol without a check of its response, such as status, has code 0."},
+   "Whether a response is valid for its request, as a Boolean.\n\nThe arguments are the name of the preset and the configuration, the fork and the protocol ID.\n\nThey go on with the request as SSZ bytes, the items of the response and the committee.\n\nEach item is the tuple of what the check reads, in the order of the fields of its form.\n\nA block is its slot, parent root and root; a sidecar its slot, block root and index.\n\nAn envelope is its slot, block root, parent hash and block hash.\n\nAn inclusion list is its slot, validator index and dependent root.\n\nThe committee is read only for inclusion lists, and must then have one validator per seat.\n\nA protocol without a check of its response, such as status, has code 0."},
   {"summary": "The largest length of the payload of a gossip topic at a fork.",
    "signature": "(name: str, fork: str, topic: str) -> int",
    "operation": "EthLib.Consensus.Exports.gossipTopicBoundExport",
