@@ -29,9 +29,9 @@ def withdrawals_root(fork: str, block: bytes) -> bytes:
     return _native.block_withdrawals_root(fork, block)
 
 
-def deposit_requests(logs: bytes) -> bytes:
-    """The data of the deposit requests of logs, given as the RLP list of the logs, in order."""
-    return _native.block_deposit_requests(logs)
+def deposit_requests(deposit_contract: bytes, logs: bytes) -> bytes:
+    """The data of the deposit requests of logs, from the deposit contract at this address."""
+    return _native.block_deposit_requests(deposit_contract, logs)
 
 
 def requests_hash(requests: bytes) -> bytes:

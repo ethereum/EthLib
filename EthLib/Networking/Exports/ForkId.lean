@@ -64,7 +64,10 @@ def readSchedule (bytes : ByteArray) : Result Schedule := do
     | _ => throw (0, "merge fork is not a list of at most one block")
   let .ok forks := forks.toItems | throw (0, "forks are not a list")
   let activations ← forks.mapM readActivation
-  return ⟨hash, time, { chainId := 0, activations }, mergeForkBlock⟩
+  -- The chain ID and the deposit contract play no part in a fork ID.
+  let config : ChainConfig :=
+    { chainId := 0, depositContractAddress := Vector.replicate 20 0, activations := activations }
+  return ⟨hash, time, config, mergeForkBlock⟩
 
 /-- The hash and the next fork of a fork identifier. -/
 def forkIdFields (id : ForkId) : Vector UInt8 4 × UInt64 :=

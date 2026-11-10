@@ -61,11 +61,6 @@ def BUILDER_EXIT_REQUEST_TYPE : UInt8 := 4
 
 /-! ## Deposits -/
 
-/-- The address of the deposit contract on mainnet. -/
-def DEPOSIT_CONTRACT_ADDRESS : Address :=
-  #v[0x00, 0x00, 0x00, 0x00, 0x21, 0x9a, 0xb5, 0x40, 0x35, 0x6c, 0xbb, 0x83, 0x9c, 0xbe, 0x05,
-    0x30, 0x3d, 0x77, 0x05, 0xfa]
-
 /-- The first topic of a deposit log: the Keccak-256 hash of the signature of the event. -/
 def DEPOSIT_EVENT_SIGNATURE_HASH : Hash32 :=
   #v[0x64, 0x9b, 0xbc, 0x62, 0xd0, 0xe3, 0x13, 0x42, 0xaf, 0xea, 0x4e, 0x5c, 0xd8, 0x2d, 0x40,
@@ -128,15 +123,23 @@ def depositRequestOfEvent (data : ByteArray) : Except DepositError ByteArray := 
       throw (.wrongSize field (wordAt bytes offset))
   return ⟨(DEPOSIT_EVENT_FIELDS.flatMap fun (offset, size) => fieldAt bytes offset size).toArray⟩
 
-/-- Whether a log is a deposit: it comes from the deposit contract, with the deposit topic first. -/
-def isDepositLog (log : Log) : Bool :=
-  log.address = DEPOSIT_CONTRACT_ADDRESS && log.topics.head? = some DEPOSIT_EVENT_SIGNATURE_HASH
+/-- Whether a log is a deposit: it comes from the deposit contract, with the deposit topic first.
+
+The deposit contract is the one of the chain, at `depositContract`.
+
+It can emit other events, and their logs are not deposits. -/
+def isDepositLog (depositContract : Address) (log : Log) : Bool :=
+  log.address = depositContract && log.topics.head? = some DEPOSIT_EVENT_SIGNATURE_HASH
 
 /-- The data of the deposit requests of a block: the request of each deposit log, in order.
 
+The deposit contract of the chain is at `depositContract`.
+
 The logs are those of the receipts of the block, in order. -/
-def depositRequests (logs : List Log) : Except DepositError ByteArray := do
-  let requests ← (logs.filter isDepositLog).mapM fun log => depositRequestOfEvent log.data
+def depositRequests (depositContract : Address) (logs : List Log) :
+    Except DepositError ByteArray := do
+  let requests ← (logs.filter (isDepositLog depositContract)).mapM fun log =>
+    depositRequestOfEvent log.data
   return requests.foldl (· ++ ·) .empty
 
 /-! ## The requests hash -/

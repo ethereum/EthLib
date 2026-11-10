@@ -45,20 +45,20 @@ namespace ChainConfig
 variable {config : ChainConfig} {n t : Nat} {f : Fork}
 
 /-- The active fork of a configuration with one more fork in front. -/
-private theorem activeFork_cons (id : UInt64) (g : Fork) (a : Activation)
+private theorem activeFork_cons (id : UInt64) (d : Address) (g : Fork) (a : Activation)
     (l : List (Fork × Activation)) (bs : List (Activation × BlobSchedule)) :
-    activeFork ⟨id, (g, a) :: l, bs⟩ n t =
+    activeFork ⟨id, d, (g, a) :: l, bs⟩ n t =
       if a.reached n t then
-        match activeFork ⟨id, l, bs⟩ n t with
+        match activeFork ⟨id, d, l, bs⟩ n t with
         | some other => if g ≤ other then some other else some g
         | none => some g
-      else activeFork ⟨id, l, bs⟩ n t := rfl
+      else activeFork ⟨id, d, l, bs⟩ n t := rfl
 
 /-- No fork is active exactly when the block has reached no activation. -/
 theorem activeFork_eq_none_iff :
     config.activeFork n t = none ↔
       ∀ g a, (g, a) ∈ config.activations → a.reached n t = false := by
-  obtain ⟨id, l, bs⟩ := config
+  obtain ⟨id, d, l, bs⟩ := config
   induction l with
   | nil => simp [activeFork]
   | cons x l ih =>
@@ -84,7 +84,7 @@ theorem activeFork_eq_some_iff :
     config.activeFork n t = some f ↔
       (∃ a, (f, a) ∈ config.activations ∧ a.reached n t) ∧
       ∀ g a, (g, a) ∈ config.activations → a.reached n t → g ≤ f := by
-  obtain ⟨id, l, bs⟩ := config
+  obtain ⟨id, d, l, bs⟩ := config
   induction l generalizing f with
   | nil => simp [activeFork]
   | cons x l ih =>
@@ -93,7 +93,7 @@ theorem activeFork_eq_some_iff :
     simp only [List.mem_cons, Prod.mk.injEq]
     by_cases hr : a.reached n t
     · simp only [hr, ite_true]
-      cases hl : activeFork ⟨id, l, bs⟩ n t with
+      cases hl : activeFork ⟨id, d, l, bs⟩ n t with
       | none =>
         have hnone := activeFork_eq_none_iff.mp hl
         constructor
@@ -188,9 +188,9 @@ theorem mem_of_blobScheduleAt_eq_some {s : BlobSchedule}
 /-- A schedule at the end of the list that the block has reached holds, whatever comes before.
 -/
 theorem blobScheduleAt_append_of_reached {a : Activation} {s : BlobSchedule}
-    (id : UInt64) (fs : List (Fork × Activation)) (l : List (Activation × BlobSchedule))
-    (hr : a.reached n t = true) :
-    blobScheduleAt ⟨id, fs, l ++ [(a, s)]⟩ n t = some s := by
+    (id : UInt64) (d : Address) (fs : List (Fork × Activation))
+    (l : List (Activation × BlobSchedule)) (hr : a.reached n t = true) :
+    blobScheduleAt ⟨id, d, fs, l ++ [(a, s)]⟩ n t = some s := by
   simp [blobScheduleAt, hr]
 
 /-- The forks are ordered exactly when no fork by block is later than a fork by timestamp. -/

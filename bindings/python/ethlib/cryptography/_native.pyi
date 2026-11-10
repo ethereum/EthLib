@@ -963,7 +963,7 @@ def block_withdrawals_root(fork: str, block: bytes) -> bytes:
     """The withdrawals root of the withdrawals of a block, decoded at a fork from Shapella."""
     ...
 
-def block_deposit_requests(logs: bytes) -> bytes:
+def block_deposit_requests(deposit_contract: bytes, logs: bytes) -> bytes:
     """The data of the deposit requests of logs, given as the RLP list of the logs, in order."""
     ...
 

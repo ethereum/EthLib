@@ -868,7 +868,7 @@ def bindings : List Binding := [
     "(fork: str, block: bytes) -> bytes",
     [`EthLib.Serialization.Rlp.RlpError], some "BlockError"⟩,
   ⟨"block_deposit_requests", `EthLib.Execution.Blocks.Exports.depositRequestsExport,
-    "(logs: bytes) -> bytes",
+    "(deposit_contract: bytes, logs: bytes) -> bytes",
     [`EthLib.Serialization.Rlp.RlpError, `EthLib.Execution.Blocks.DepositError],
     some "BlockError"⟩,
   ⟨"block_requests_hash", `EthLib.Execution.Blocks.Exports.requestsHashExport,

@@ -71,6 +71,10 @@ NOT_YET_AT = {
 
 _YAML = YAML(typ="safe")
 
+# The fixtures use the deposit contract of mainnet, at the address of EIP-6110.
+# It is given as the checksummed text of a genesis file, so the deposits read that form too.
+DEPOSIT_CONTRACT_ADDRESS = "0x00000000219ab540356cBB839Cbe05303d7705Fa"
+
 
 def _yaml(path: Path):
     return _YAML.load(path.read_text())
@@ -338,6 +342,7 @@ def chain_of(fixture: dict) -> tuple[dict, list]:
         )
     config = {
         "chainId": int(fixture["config"]["chainid"], 16),
+        "depositContractAddress": DEPOSIT_CONTRACT_ADDRESS,
         "activations": [list(a) for a in activations],
         "blobSchedules": sorted(schedules, key=lambda s: s[1]),
     }

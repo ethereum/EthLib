@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Address
 public import EthLib.Base.BlobSchedule
 public import EthLib.Base.Fork
 
@@ -61,12 +62,16 @@ instance : (a b : Activation) → Decidable (a ≤ b)
 
 end Activation
 
-/-- The chain ID of an execution chain, the activations of its forks, and its blob schedules. -/
+/-- The chain ID, deposit contract, fork activations and blob schedules of an execution chain. -/
 structure ChainConfig where
   /-- The chain ID that a transaction signs, as EIP-155 introduces.
 
   It is a 64-bit number. -/
   chainId : UInt64
+  /-- The address of the deposit contract of the chain.
+
+  From Pectra, its deposit logs give the deposit requests of a block, as EIP-6110 configures. -/
+  depositContractAddress : Address
   /-- Each fork of the chain with its activation, in the order of the timeline. -/
   activations : List (Fork × Activation)
   /-- The blob schedules that the chain sets itself, each with its activation, in order.
@@ -150,6 +155,9 @@ The meta EIP of each later fork gives its time: EIP-7569, EIP-7600, EIP-7607, EI
 
 Mainnet sets no blob schedule of its own: each fork keeps the schedule of its EIPs.
 
+[EIP-6110][eip-6110] gives the address of its deposit contract.
+
+[eip-6110]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-6110.md#configuration
 [eip-6953-pow]: https://eips.ethereum.org/EIPS/eip-6953#proof-of-work-network-upgrades
 [eip-3675]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-3675.md#transition-block-validity
 [eip-7643]: https://eips.ethereum.org/EIPS/eip-7643#pre-pos-root
@@ -157,6 +165,8 @@ Mainnet sets no blob schedule of its own: each fork keeps the schedule of its EI
 -/
 def mainnet : ChainConfig where
   chainId := 1
+  depositContractAddress := #v[0x00, 0x00, 0x00, 0x00, 0x21, 0x9a, 0xb5, 0x40, 0x35, 0x6c, 0xbb,
+    0x83, 0x9c, 0xbe, 0x05, 0x30, 0x3d, 0x77, 0x05, 0xfa]
   activations := [
     (.frontier, .block 0),
     (.homestead, .block 1150000),
@@ -184,6 +194,8 @@ def mainnet : ChainConfig where
 
 Its chain ID is 560048, as its [genesis file][hoodi] gives.
 
+The genesis file gives the address of its deposit contract, the same as on mainnet.
+
 The genesis file activates every fork up to London at block 0.
 
 Its terminal total difficulty is 0, so Paris activates at block 0 too.
@@ -201,6 +213,8 @@ So Hoodi sets no blob schedule of its own.
 [hoodi]: https://github.com/eth-clients/hoodi/blob/2a7efb3c530cce7c71702cc98d0f965df2411c11/metadata/genesis.json -/
 def hoodi : ChainConfig where
   chainId := 560048
+  depositContractAddress := #v[0x00, 0x00, 0x00, 0x00, 0x21, 0x9a, 0xb5, 0x40, 0x35, 0x6c, 0xbb,
+    0x83, 0x9c, 0xbe, 0x05, 0x30, 0x3d, 0x77, 0x05, 0xfa]
   activations := [
     (.frontier, .block 0),
     (.homestead, .block 0),

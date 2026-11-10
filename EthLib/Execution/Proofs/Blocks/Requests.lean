@@ -121,9 +121,9 @@ private theorem size_foldl_append (requests : List ByteArray) (start : ByteArray
     omega
 
 /-- The deposit requests of a block succeed exactly when the parser accepts every deposit log. -/
-theorem depositRequests_isOk_iff (logs : List Log) :
-    (∃ data, depositRequests logs = .ok data) ↔
-      ∀ log ∈ logs, isDepositLog log = true →
+theorem depositRequests_isOk_iff (depositContract : Address) (logs : List Log) :
+    (∃ data, depositRequests depositContract logs = .ok data) ↔
+      ∀ log ∈ logs, isDepositLog depositContract log = true →
         ∃ request, depositRequestOfEvent log.data = .ok request := by
   unfold depositRequests
   constructor
@@ -136,9 +136,9 @@ theorem depositRequests_isOk_iff (logs : List Log) :
     exact ⟨_, by simp only [hrequests, bind, Except.bind, pure, Except.pure]; rfl⟩
 
 /-- When the deposit requests of a block succeed, they hold 192 bytes for each deposit log. -/
-theorem size_of_depositRequests {logs : List Log} {data : ByteArray}
-    (h : depositRequests logs = .ok data) :
-    data.size = 192 * (logs.filter isDepositLog).length := by
+theorem size_of_depositRequests {depositContract : Address} {logs : List Log} {data : ByteArray}
+    (h : depositRequests depositContract logs = .ok data) :
+    data.size = 192 * (logs.filter (isDepositLog depositContract)).length := by
   unfold depositRequests at h
   obtain ⟨requests, hrequests, h⟩ := bind_ok_iff.mp h
   simp only [pure, Except.pure, Except.ok.injEq] at h
@@ -151,5 +151,28 @@ theorem size_of_depositRequests {logs : List Log} {data : ByteArray}
     exact size_of_depositRequestOfEvent hlog
   rw [size_foldl_append, hsizes, ← mapM_ok_length hrequests, List.map_const']
   simp [Nat.mul_comm]
+
+/-- A log that is not a deposit adds nothing to the deposit requests, wherever it stands. -/
+theorem depositRequests_of_not_isDepositLog (depositContract : Address) (before after : List Log)
+    {log : Log} (h : isDepositLog depositContract log = false) :
+    depositRequests depositContract (before ++ log :: after) =
+      depositRequests depositContract (before ++ after) := by
+  simp [depositRequests, h]
+
+/-- A log whose first topic is not the deposit event adds no request, wherever it comes from.
+
+The deposit contract can emit other events, such as a transfer, and their logs are not deposits. -/
+theorem depositRequests_of_topic_ne (depositContract : Address) (before after : List Log)
+    {log : Log} (h : log.topics.head? ≠ some DEPOSIT_EVENT_SIGNATURE_HASH) :
+    depositRequests depositContract (before ++ log :: after) =
+      depositRequests depositContract (before ++ after) :=
+  depositRequests_of_not_isDepositLog depositContract before after (by simp [isDepositLog, h])
+
+/-- A log from another address than the deposit contract adds no deposit request. -/
+theorem depositRequests_of_address_ne (depositContract : Address) (before after : List Log)
+    {log : Log} (h : log.address ≠ depositContract) :
+    depositRequests depositContract (before ++ log :: after) =
+      depositRequests depositContract (before ++ after) :=
+  depositRequests_of_not_isDepositLog depositContract before after (by simp [isDepositLog, h])
 
 end EthLib.Execution.Blocks

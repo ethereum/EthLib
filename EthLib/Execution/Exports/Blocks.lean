@@ -77,7 +77,7 @@ def reencodeExport (fork block : ByteArray) : Result ByteArray := do
 
 The first fork starts at block 0, so each block has a fork.
 
-The chain ID and the blob schedules play no part. -/
+The chain ID, the deposit contract and the blob schedules play no part. -/
 def chainOfForks (forks : ByteArray) : Result ChainConfig := do
   let entries : List (List Item) ← runRlp "forks rejected" (Codec.decode forks)
   let activations ← entries.mapM fun
@@ -86,7 +86,9 @@ def chainOfForks (forks : ByteArray) : Result ChainConfig := do
       let first : Nat ← runRlp "fork block rejected" (Codec.ofItem first)
       pure (fork, Activation.block first)
     | _ => throw (0, "a fork is not a list of a name and a block number")
-  let config : ChainConfig := { chainId := 0, activations }
+  -- The chain ID and the deposit contract play no part in the order of the forks.
+  let config : ChainConfig :=
+    { chainId := 0, depositContractAddress := Vector.replicate 20 0, activations := activations }
   if !decide config.Ordered then throw (0, "the forks are not in the order of the timeline")
   match activations with
   | (_, .block 0) :: _ => pure config
@@ -160,9 +162,11 @@ def headerCheckInputs (args : HeaderCheckArgs) :
   let fork ← forkUpTo .glamsterdam fork.toUTF8
   let parent : Header parentFork ← runRlp "parent rejected" (Codec.decode parent)
   let header : Header fork ← runRlp "header rejected" (Codec.decode header)
-  -- The chain's forks and chain ID play no part in the blob schedule of the header.
+  -- The chain's forks, chain ID and deposit contract play no part in the blob schedule.
+  let schedules ← blobSchedulesOf schedules
   let config : ChainConfig :=
-    { chainId := 0, activations := [], blobSchedules := (← blobSchedulesOf schedules) }
+    { chainId := 0, depositContractAddress := Vector.replicate 20 0, activations := [],
+      blobSchedules := schedules }
   return ⟨parentFork, fork, parent, header,
     Fees.BlobBaseFee.chainBlobSchedule config fork header.number header.timestamp.toNat⟩
 
@@ -217,7 +221,9 @@ A header outside those ten blocks passes. -/
 def daoExtraDataValidExport (daoBlock : UInt64) (fork header : ByteArray) : Result UInt8 := do
   let fork ← forkUpTo .glamsterdam fork
   let header : Header fork ← runRlp "header rejected" (Codec.decode header)
-  let config : ChainConfig := { chainId := 1, activations := [(.daoFork, .block daoBlock.toNat)] }
+  let config : ChainConfig :=
+    { chainId := 1, depositContractAddress := Vector.replicate 20 0,
+      activations := [(.daoFork, .block daoBlock.toNat)] }
   pure (if daoExtraDataValid config header then 1 else 0)
 
 /-- The transaction that an item of a block holds at the fork. -/
@@ -247,11 +253,15 @@ def withdrawalsRootExport (fork block : ByteArray) : Result ByteArray := do
   if h : .shapella ≤ fork then runTrie (withdrawalsRoot (b.withdrawals h))
   else throw (0, "the fork is before Shapella")
 
-/-- The data of the deposit requests of logs, given as the RLP list of the logs, in order. -/
+/-- The data of the deposit requests of logs, given as the RLP list of the logs, in order.
+
+The first argument is the 20-byte address of the deposit contract of the chain. -/
 @[export eth_block_deposit_requests]
-def depositRequestsExport (logs : ByteArray) : Result ByteArray := do
+def depositRequestsExport (depositContract logs : ByteArray) : Result ByteArray := do
+  let address : Address ← if h : depositContract.data.size = 20 then pure ⟨depositContract.data, h⟩
+    else throw (0, "the deposit contract address is not 20 bytes")
   let logs : List Log ← runRlp "logs rejected" (Codec.decode logs)
-  (depositRequests logs).mapError fun e => (e.code, s!"deposit log rejected: {reprStr e}")
+  (depositRequests address logs).mapError fun e => (e.code, s!"deposit log rejected: {reprStr e}")
 
 /-- The requests hash of request lists, given as an RLP list of byte strings.
 
