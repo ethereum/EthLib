@@ -10,7 +10,7 @@ from parity import catalogue, harness, legacy
 
 VENDORED = archives.REPO / "tests" / "execution" / "legacytests"
 CASES = harness.runnable(catalogue.legacy_cases(VENDORED))
-DISAGREEMENTS = harness.disagreements("legacytests")
+DISAGREEMENTS = archives.disagreements("legacytests")
 
 # A sealed block builds the 16 MiB Ethash cache of epoch 0, which takes seconds, so it runs weekly.
 SLOW = os.environ.get("ETHLIB_SLOW_VECTORS") == "1"

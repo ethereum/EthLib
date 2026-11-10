@@ -22,7 +22,7 @@ For CREATE it hashes the sender and its nonce.
 
 For CREATE2 it hashes the sender, the salt and the init code.
 
-The address must hold no code and a nonce of 0, as EIP-684 asks.
+The address must hold no code and a nonce of 0, as EIP-684 asks, and no storage, as EIP-7610 asks.
 
 The creation accesses the new address, by EIP-2929.
 
@@ -219,7 +219,9 @@ Its depth leaves room for one more frame.
 
 From Shanghai, the init code is at most the greatest size, by EIP-3860.
 
-The new address is the one that the specification derives, and holds no code and a nonce of 0.
+The new address is the one that the specification derives.
+
+It holds no code, a nonce of 0 and no storage.
 
 The creation pays its price and the growth of memory, and it accesses the new address.
 

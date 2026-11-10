@@ -38,7 +38,7 @@ def root(preset: str) -> Path:
     return harness.unpack(name, [case for case in CASES if case.preset == preset], 5)
 
 
-DISAGREEMENTS = harness.disagreements(SUITE)
+DISAGREEMENTS = archives.disagreements(SUITE)
 
 pytestmark = pytest.mark.archive(catalogue.CONSENSUS["mainnet"])
 

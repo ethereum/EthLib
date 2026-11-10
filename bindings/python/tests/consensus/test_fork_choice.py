@@ -244,6 +244,7 @@ def _archive_cases() -> list:
     """Every case of the archives for a handler that EthLib runs, when the cache is set."""
     if archives.CACHE is None:
         return []
+    disagreements = archives.disagreements("consensus-spec-tests")
     cases = []
     for preset, name in ARCHIVES.items():
         paths = [f"tests/{preset}/{fork}/fork_choice" for fork in SPECIFIED]
@@ -263,15 +264,20 @@ def _archive_cases() -> list:
             case = steps.parent
             fork, runner, handler = case.relative_to(base).parts[:3]
             if runs(fork, runner, handler):
-                cases.append(
-                    pytest.param(
-                        preset,
-                        fork,
-                        case,
-                        id=f"{preset}/{case.relative_to(base).as_posix()}",
-                        marks=pytest.mark.archive(name),
-                    )
+                path = f"{preset}/{case.relative_to(base).as_posix()}"
+                marks = [pytest.mark.archive(name)]
+                # A case on which EthLib knowingly disagrees must fail.
+                key = f"tests/{path}"
+                listed = disagreements.get((key, f"{runner}/{handler}")) or disagreements.get(
+                    (key, None)
                 )
+                if listed is not None:
+                    marks.append(
+                        pytest.mark.xfail(
+                            strict=True, raises=AssertionError, reason=listed["reason"]
+                        )
+                    )
+                cases.append(pytest.param(preset, fork, case, id=path, marks=marks))
     # An empty list would skip the test in silence, so a wrong path in an archive fails here.
     if not cases:
         raise LookupError("the archives hold no fork choice case")
