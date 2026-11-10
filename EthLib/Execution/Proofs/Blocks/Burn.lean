@@ -14,6 +14,8 @@ A surviving burn is a burn of SELFDESTRUCT that no rollback of its frame drops.
 
 Two certificates of the same run give the same total of those losses.
 
+That needs at most two ommers before Paris, which the checks of the block ensure.
+
 System calls also have surviving burn logs, since their stored code is arbitrary.
 
 They pay no fees and perform no transaction-end deletion.

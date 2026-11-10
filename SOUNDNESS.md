@@ -1581,7 +1581,8 @@ It adds the created wei and subtracts the burned fees, the surviving SELFDESTRUC
 `BodyBurns` certifies the system calls before the transactions, each transaction in order, and the calls that read requests.
 The system calls also carry burn logs, since the theorem assumes no particular code at their addresses.
 `BlockLosses.transactions` retains each transaction's burn log and deleted balances.
-`BodyBurns.total_eq` shows that two certificates of the same body give the same total of losses, so the run fixes that total.
+`BodyBurns.total_eq` shows that two certificates of the same body give the same total of losses, when the block has at most two ommers before Paris, as its checks ensure.
+So the run fixes that total.
 
 ### The authorizations of EIP-7702
 
