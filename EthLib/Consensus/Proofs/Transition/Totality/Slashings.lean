@@ -20,7 +20,9 @@ The registry must hold one balance for each validator, and stay within its limit
 
 Before Electra the step multiplies the effective balance in increments by the capped slashed sum.
 
-That sum is at most one increment or the sum of the effective balances.
+That sum is at most the total active balance.
+
+The total is one increment, or at most the sum of the effective balances.
 
 The product with the sum of the effective balances must fit in 64 bits.
 
@@ -182,7 +184,7 @@ private theorem applySlashingPenalty_exists_ok (within : state.RegistryWithinLim
 
 The sum of the effective balances must be below 2^64 Gwei, and each one below 2^63 Gwei.
 
-Only the step from Electra needs the second bound.
+The theorem asks for the second bound at every fork, though only the step from Electra uses it.
 
 The sum of the slashed balances of the recent epochs must fit, and so must its scaled value.
 

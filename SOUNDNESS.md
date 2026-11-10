@@ -2396,7 +2396,7 @@ In Lean a division of 64-bit integers by zero returns zero and a remainder retur
 `Preset.DivisorsPositive` and `Config.DivisorsPositive` (`Proofs/Transition/Totality/Bound.lean`) name the presets and configurations whose divisors in a run of slots are positive, and the mainnet and minimal ones are proved to be such.
 Block processing divides by further constants, such as the quotients of the slashing penalty and of the whistleblower reward, which these predicates do not list.
 A theorem that a step succeeds takes a predicate only where its proof needs a positive divisor.
-For a preset or configuration with a zero divisor, the other such theorems describe EthLib's transition, not the specification's.
+For a preset or configuration with a zero divisor, any theorem about a step that divides by it describes EthLib's transition, not the specification's.
 
 Some official vectors expect more than a source says.
 The transaction tests of ethereum/tests reject 43 results whose gas limit is `2^64`, or whose gas limit times gas price exceeds `2^256 - 1`.

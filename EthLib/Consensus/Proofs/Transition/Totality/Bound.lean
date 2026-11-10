@@ -47,7 +47,7 @@ The update of an effective balance divides the increment by the hysteresis quoti
 
 The run also starts the periods of deposit votes, of history and of sync committees.
 
-The size of a committee divides the active validators of a slot.
+The target size of a committee divides the active validators of a slot, to count the committees.
 
 The base rewards divide by the quotient of the proposer reward.
 
@@ -81,7 +81,7 @@ theorem Preset.divisorsPositive_minimal : Preset.minimal.DivisorsPositive := by
 
 The limits of churn divide the active validators or the active balance by a quotient.
 
-From Gloas the churn has its own quotient, and the consolidations have one from Electra.
+From Gloas the churn of exits and the churn of consolidations each have their own quotient.
 
 The inactivity penalty divides by the score bias times a quotient, with a check. -/
 structure Config.DivisorsPositive (config : Config) : Prop where
