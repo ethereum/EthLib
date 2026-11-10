@@ -384,10 +384,7 @@ theorem getAttestingIndices_constructAttestation {config : Config}
   obtain ⟨attesters, attestersOk⟩ :=
     committeeAttesters_ok (bits := attestation.aggregationBits.bits) (committee := committee)
       (by simp [bits])
-  unfold getAttestingIndices
-  dsimp only
-  split
-  · exact absurd ‹_› (Nat.not_le_of_lt before)
+  rw [getAttestingIndices_of_lt_electra before]
   simp only [sameData, committeeOk, attestersOk, bind, Except.bind, pure, Except.pure]
   congr 1
   refine eq_singleton_of_pairwise_lt (sortedSet_sorted _) fun index => ?_
@@ -442,10 +439,7 @@ theorem mem_getAttestingIndices_of_lt_electra {state : BeaconState preset fork}
           attestation.aggregationBits.bits.getD seat false = true := by
   obtain ⟨attesters, attestersOk⟩ := committeeAttesters_ok sized
   refine ⟨sortedSet attesters, ?_, fun validatorIndex => ?_⟩
-  · unfold getAttestingIndices
-    dsimp only
-    split
-    · exact absurd ‹_› (Nat.not_le_of_lt before)
+  · rw [getAttestingIndices_of_lt_electra before]
     simp only [committeeOk, attestersOk, bind, Except.bind, pure, Except.pure]
   · rw [mem_sortedSet, mem_committeeAttesters_iff attestersOk]
     simp only [Nat.zero_add]
@@ -686,13 +680,12 @@ theorem mem_getAttestingIndices_constructAggregateOfSingleAttestations
     committeeAttesters_ok (bits := aggregate.aggregationBits.bits) (committee := committee)
       (by simp [bits])
   refine ⟨sortedSet attesters, ?_, fun validatorIndex => ?_⟩
-  · unfold getAttestingIndices
-    dsimp only
-    split
-    · rw [getCommitteeIndices_constructAggregateOfSingleAttestations electra built]
-      simp only [committeesAttesters_cons, committeesAttesters_nil, sameData, committeeOk,
-        attestersOk, bind, Except.bind, pure, Except.pure, List.append_nil]
-    · exact absurd electra ‹_›
+  · obtain ⟨active, shuffled, shuffleOk⟩ := attesterShuffle_ok_of_getBeaconCommittee committeeOk
+    rw [getAttestingIndices_of_attesterShuffle (by rw [sameData]; exact shuffleOk)]
+    simp only [attestingIndicesOf, electra, ↓reduceDIte,
+      getCommitteeIndices_constructAggregateOfSingleAttestations electra built, sameData,
+      committeesAttestersOf_cons shuffleOk, committeeOk, attestersOk, committeesAttestersOf, bind,
+      Except.bind, pure, Except.pure, List.append_nil]
   · rw [mem_sortedSet, mem_committeeAttesters_iff attestersOk]
     constructor
     · rintro ⟨seat, inside, rfl, set⟩

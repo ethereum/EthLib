@@ -25,7 +25,7 @@ The members of the committees of a slot are cut from one shuffle, computed once 
 
 From Electra, the committees of one attestation are cut from one shuffle too.
 
-The signers of an attestation can be cut from a held shuffle of the epoch of its slot.
+A caller that holds the shuffle of the epoch of the slot of an attestation can cut its signers.
 
 A failed assertion of the rule, or a read past the end of a list, is an error.
 
@@ -488,28 +488,11 @@ def committeesAttestersOf (preset : Preset) (slot : Slot) (bits : Array Bool) (p
     return here ++ (← committeesAttestersOf preset slot bits perSlot active shuffled rest
       (offset + committee.size))
 
-/-- From Electra: the attesters of each committee in a list, whose bits follow one another.
+/-- The validators that an attestation shows as signers, cut from a given shuffle, as a set.
 
-The committees share one shuffle of the active validators, computed once for the list.
+The committees are cut from the given active validators, shuffle and count of committees per slot.
 
-A list that names no committee computes no shuffle. -/
-def committeesAttesters (state : BeaconState preset fork) (slot : Slot) (bits : Array Bool) :
-    List CommitteeIndex → Nat → Except AccessorError (List ValidatorIndex)
-  | [], _ => .ok []
-  | index :: rest, offset => do
-    let epoch := computeEpochAtSlot preset slot
-    -- Each committee alone reads the shuffle before its cut, so reading it first changes no error.
-    let (active, shuffled) ← attesterShuffle state epoch
-    committeesAttestersOf preset slot bits (getCommitteeCountPerSlot state epoch) active shuffled
-      (index :: rest) offset
-
-/-- The validators that an attestation shows as signers, as a set.
-
-The committees are cut from the given active validators and shuffle.
-
-The count of committees per slot is given too.
-
-With the inputs of the epoch of the slot of the attestation, it is the set of the rule. -/
+When these are the inputs of the epoch of the slot of the attestation, it is the set of the rule. -/
 def attestingIndicesOf (attestation : Attestation preset fork) (perSlot : UInt64)
     (active : Array ValidatorIndex) (shuffled : Array UInt64) :
     Except AccessorError (List ValidatorIndex) := do
@@ -529,17 +512,22 @@ Before Electra, the bits run over one committee.
 
 From Electra, they run over each committee of the committee bits in turn, as [EIP-7549] specifies.
 
+The committees share one shuffle of the epoch of the slot, computed once.
+
+From Electra, an attestation that names no committee computes no shuffle.
+
 [EIP-7549]: https://eips.ethereum.org/EIPS/eip-7549#consensus-layer
 -/
 def getAttestingIndices (state : BeaconState preset fork) (attestation : Attestation preset fork) :
-    Except AccessorError (List ValidatorIndex) := do
-  let bits := attestation.aggregationBits.bits
-  if electra : .pectra ≤ fork then
-    let committees := getCommitteeIndices (attestation.committeeBits electra)
-    return sortedSet (← committeesAttesters state attestation.data.slot bits committees 0)
-  else
-    let committee ← getBeaconCommittee state attestation.data.slot attestation.data.index
-    return sortedSet (← committeeAttesters bits 0 committee)
+    Except AccessorError (List ValidatorIndex) :=
+  -- The rule reads no committee for an empty list, so it reads no shuffle either.
+  if ∃ electra : .pectra ≤ fork, getCommitteeIndices (attestation.committeeBits electra) = [] then
+    .ok []
+  else do
+    let epoch := computeEpochAtSlot preset attestation.data.slot
+    -- Each committee alone reads the shuffle before its cut, so reading it first changes no error.
+    let (active, shuffled) ← attesterShuffle state epoch
+    attestingIndicesOf attestation (getCommitteeCountPerSlot state epoch) active shuffled
 
 /-- An attestation with the given indices of its signers in place of its bits.
 
