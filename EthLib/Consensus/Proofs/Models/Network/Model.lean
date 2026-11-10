@@ -12,21 +12,25 @@ Each validator is a node with a view: the set of messages that it has received.
 
 Honest validators follow a protocol, and Byzantine validators send what they like.
 
-No validator can forge the signature of an honest one.
+The protocol names the signed statements of each message, each with its signer.
 
-An execution is a sequence of events from an initial world, each allowed in the world before it.
+No validator can carry such a statement of an honest validator unless a sent message had it.
+
+An execution starts with nothing sent, and each of its events is allowed in the world before it.
+
+The protocol only allows actions; a duty to act is a further condition on executions.
 
 Partial synchrony bounds the delay after a global stabilisation time, written GST.
 
 A message in the view of an honest validator at time `t` reaches every honest validator by
 `max t GST + Δ`.
 
-That is the network model of §2 together with its assumption that honest validators gossip.
+That is the network rule of §2 together with its assumption that honest validators gossip.
 
-It is the second form of partial synchrony of Dwork, Lynch and Stockmeyer, Section 1 of
+Footnote 1 of §2 compares it with the partial synchrony of Dwork, Lynch and Stockmeyer,
 [doi:10.1145/42282.42283](https://doi.org/10.1145/42282.42283).
 
-There the bound `Δ` is known but holds only from an unknown time on.
+Partial synchrony also asks that time grows without bound, so that GST comes.
 
 Synchrony is the case where GST is zero.
 
@@ -41,7 +45,7 @@ namespace EthLib.Consensus.Models.Network
 
 Each message carries signed statements, each with the validator that signed it.
 
-An honest validator sends and moves only as the protocol allows.
+An honest validator sends and moves only as the protocol allows, but need not act.
 
 Both choices may read the time, the view and the state of the validator. -/
 structure Protocol (ν μ σ κ : Type*) where
@@ -121,14 +125,18 @@ def worldAt (init : World ν μ σ) (events : ℕ → Event ν μ σ) : ℕ → 
 
 /-- An execution of a protocol, with the set `J` of honest validators.
 
-It starts from a world, and each event is allowed in the world before it. -/
+It starts at a time with a state for each validator, and with nothing sent or received.
+
+Each event is allowed in the world before it. -/
 structure Execution (P : Protocol ν μ σ κ) (J : Set ν) where
-  /-- The world at the start. -/
-  init : World ν μ σ
+  /-- The time at the start. -/
+  startTime : ℕ
+  /-- The state of each validator at the start. -/
+  start : ν → σ
   /-- The events, in order. -/
   events : ℕ → Event ν μ σ
   /-- Each event is allowed in the world before it. -/
-  allowed : ∀ n, Allowed P J (worldAt init events n) (events n)
+  allowed : ∀ n, Allowed P J (worldAt (World.initial startTime start) events n) (events n)
 
 variable {P : Protocol ν μ σ κ} {J : Set ν}
 
@@ -136,15 +144,20 @@ namespace Execution
 
 /-- The world after the first `n` events. -/
 def world (e : Execution P J) (n : ℕ) : World ν μ σ :=
-  worldAt e.init e.events n
+  worldAt (World.initial e.startTime e.start) e.events n
 
 /-- Partial synchrony with a stabilisation time `GST` and a delay `Δ`.
 
+Time grows without bound.
+
 A message in the view of an honest validator at time `t` is in the view of every honest validator
-at each time from `max t GST + Δ` on. -/
+at each time from `max t GST + Δ` on.
+
+With a zero delay, every honest validator must hold the message in the world where it is sent. -/
 def PartiallySynchronous (e : Execution P J) (GST Δ : ℕ) : Prop :=
-  ∀ n k, ∀ v ∈ J, ∀ u ∈ J, ∀ m ∈ (e.world n).view v,
-    max (e.world n).time GST + Δ ≤ (e.world k).time → m ∈ (e.world k).view u
+  (∀ T, ∃ n, T ≤ (e.world n).time) ∧
+    ∀ n k, ∀ v ∈ J, ∀ u ∈ J, ∀ m ∈ (e.world n).view v,
+      max (e.world n).time GST + Δ ≤ (e.world k).time → m ∈ (e.world k).view u
 
 /-- Synchrony with a delay `Δ`: partial synchrony from time zero. -/
 def Synchronous (e : Execution P J) (Δ : ℕ) : Prop :=
@@ -152,54 +165,47 @@ def Synchronous (e : Execution P J) (Δ : ℕ) : Prop :=
 
 variable (e : Execution P J)
 
-theorem world_zero : e.world 0 = e.init :=
+theorem world_zero : e.world 0 = World.initial e.startTime e.start :=
   rfl
 
 theorem world_succ (n : ℕ) : e.world (n + 1) = (e.world n).apply (e.events n) :=
   rfl
 
+theorem allowed_world (n : ℕ) : Allowed P J (e.world n) (e.events n) :=
+  e.allowed n
+
 /-- Time never goes back. -/
-theorem time_mono {n k : ℕ} (le : n ≤ k) : (e.world n).time ≤ (e.world k).time := by
-  induction le with
-  | refl => exact le_rfl
-  | @step k _ ih =>
-    refine ih.trans ?_
-    have allowed := e.allowed k
-    rw [world_succ]
-    cases events : e.events k <;> rw [events] at allowed <;> simp [World.apply, Allowed] at *
-    exact allowed
+theorem monotone_time : Monotone fun n => (e.world n).time := by
+  refine monotone_nat_of_le_succ fun n => ?_
+  have allowed := e.allowed_world n
+  simp only [world_succ]
+  cases events : e.events n <;> rw [events] at allowed <;> simp [World.apply, Allowed] at *
+  exact allowed
 
 /-- The sent messages only grow. -/
-theorem sent_mono {n k : ℕ} (le : n ≤ k) : (e.world n).sent ⊆ (e.world k).sent := by
-  induction le with
-  | refl => exact le_rfl
-  | @step k _ ih =>
-    refine ih.trans ?_
-    rw [world_succ]
-    cases e.events k <;> simp [World.apply, Set.subset_insert]
+theorem monotone_sent : Monotone fun n => (e.world n).sent := by
+  refine monotone_nat_of_le_succ fun n => ?_
+  simp only [world_succ]
+  cases e.events n <;> simp [World.apply, Set.subset_insert]
 
 /-- The view of each validator only grows. -/
-theorem view_mono {n k : ℕ} (le : n ≤ k) (v : ν) : (e.world n).view v ⊆ (e.world k).view v := by
-  induction le with
-  | refl => exact le_rfl
-  | @step k _ ih =>
-    refine ih.trans ?_
-    rw [world_succ]
-    cases e.events k with
-    | send sender message =>
-      by_cases same : v = sender
-      · subst same
-        simp [World.apply, Set.subset_insert]
-      · simp [World.apply, Function.update_of_ne same]
-    | _ => simp [World.apply]
+theorem monotone_view (v : ν) : Monotone fun n => (e.world n).view v := by
+  refine monotone_nat_of_le_succ fun n => ?_
+  simp only [world_succ]
+  cases e.events n with
+  | send sender message =>
+    by_cases same : v = sender
+    · subst same
+      simp [World.apply, Set.subset_insert]
+    · simp [World.apply, Function.update_of_ne same]
+  | _ => simp [World.apply]
 
-/-- A validator receives only sent messages, when that holds at the start. -/
-theorem view_subset_sent (start : ∀ v, e.init.view v ⊆ e.init.sent) (n : ℕ) (v : ν) :
-    (e.world n).view v ⊆ (e.world n).sent := by
+/-- A validator receives only sent messages. -/
+theorem view_subset_sent (n : ℕ) (v : ν) : (e.world n).view v ⊆ (e.world n).sent := by
   induction n generalizing v with
-  | zero => exact start v
+  | zero => simp [world_zero, World.initial]
   | succ n ih =>
-    have allowed := e.allowed n
+    have allowed := e.allowed_world n
     rw [world_succ]
     cases events : e.events n with
     | wait time => exact ih v
@@ -217,7 +223,7 @@ theorem view_subset_sent (start : ∀ v, e.init.view v ⊆ e.init.sent) (n : ℕ
 theorem state_succ (n : ℕ) (v : ν) : (e.world (n + 1)).state v = (e.world n).state v ∨
     v ∈ J ∧ P.Moves v (e.world n).time ((e.world n).view v) ((e.world n).state v)
       ((e.world (n + 1)).state v) := by
-  have allowed : Allowed P J (e.world n) (e.events n) := e.allowed n
+  have allowed := e.allowed_world n
   rw [world_succ]
   cases events : e.events n with
   | move validator state =>
@@ -228,32 +234,51 @@ theorem state_succ (n : ℕ) (v : ν) : (e.world (n + 1)).state v = (e.world n).
     · exact .inl (by simp [World.apply, Function.update_of_ne same])
   | _ => exact .inl rfl
 
+/-- A property of states that holds at the start and that every move keeps holds throughout.
+
+It holds for the state of each honest validator, in every world. -/
+theorem state_induction {I : ν → σ → Prop} (start : ∀ v ∈ J, I v (e.start v))
+    (moves : ∀ v ∈ J, ∀ time view s s', I v s → P.Moves v time view s s' → I v s') (n : ℕ) :
+    ∀ v ∈ J, I v ((e.world n).state v) := by
+  induction n with
+  | zero => exact start
+  | succ n ih =>
+    intro v honest
+    rcases e.state_succ n v with same | ⟨-, moved⟩
+    · exact same ▸ ih v honest
+    · exact moves v honest _ _ _ _ (ih v honest) moved
+
 /-- After GST, a message that an honest validator sends reaches every honest validator.
 
-It is in their views at each time from the time of sending plus `Δ` on, or from GST plus `Δ`. -/
-theorem delivered {GST Δ : ℕ} (sync : e.PartiallySynchronous GST Δ) {n k : ℕ} {v u : ν} {m : μ}
-    (sends : e.events n = .send v m) (honest : v ∈ J) (receiver : u ∈ J)
+It is in their views at each time from the later of its sending time and GST, plus `Δ`, on. -/
+theorem mem_view_of_send {GST Δ : ℕ} (sync : e.PartiallySynchronous GST Δ) {n k : ℕ} {v u : ν}
+    {m : μ} (sends : e.events n = .send v m) (honest : v ∈ J) (receiver : u ∈ J)
     (late : max (e.world n).time GST + Δ ≤ (e.world k).time) : m ∈ (e.world k).view u := by
   have own : m ∈ (e.world (n + 1)).view v := by
     simp [world_succ, sends, World.apply]
   have same : (e.world (n + 1)).time = (e.world n).time := by
     simp [world_succ, sends, World.apply]
-  exact sync (n + 1) k v honest u receiver m own (same ▸ late)
+  exact sync.2 (n + 1) k v honest u receiver m own (same ▸ late)
 
 end Execution
 
-open scoped Classical in
 /-- The Byzantine validators of `V` hold at most `β` percent of its stake.
 
-The validators outside `J` are the Byzantine ones. -/
-def ByzantineStakeAtMost (w : ν → ℕ) (V : Finset ν) (J : Set ν) (β : ℕ) : Prop :=
+The validators outside `J` are the Byzantine ones.
+
+The bound is meant for a percentage, at most 100. -/
+def ByzantineStakeAtMost (w : ν → ℕ) (V : Finset ν) (J : Set ν) [DecidablePred (· ∈ J)]
+    (β : ℕ) : Prop :=
   100 * stake w {v ∈ V | v ∉ J} ≤ β * stake w V
 
-omit [DecidableEq ν] in
-open scoped Classical in
+namespace ByzantineStakeAtMost
+
+omit [DecidableEq ν]
+
+variable {w : ν → ℕ} {V : Finset ν} [DecidablePred (· ∈ J)] {β : ℕ}
+
 /-- The honest validators of `V` then hold at least `100 - β` percent of its stake. -/
-theorem ByzantineStakeAtMost.honest {w : ν → ℕ} {V : Finset ν} {β : ℕ}
-    (bound : ByzantineStakeAtMost w V J β) :
+theorem honest (bound : ByzantineStakeAtMost w V J β) :
     (100 - β) * stake w V ≤ 100 * stake w {v ∈ V | v ∈ J} := by
   have split : stake w {v ∈ V | v ∈ J} + stake w {v ∈ V | v ∉ J} = stake w V :=
     Finset.sum_filter_add_sum_filter_not V (· ∈ J) w
@@ -261,29 +286,27 @@ theorem ByzantineStakeAtMost.honest {w : ν → ℕ} {V : Finset ν} {β : ℕ}
   rw [Nat.sub_mul]
   omega
 
-omit [DecidableEq ν] in
-open scoped Classical in
 /-- The bound holds for every `β` when every validator of `V` is honest. -/
-theorem ByzantineStakeAtMost.of_subset {w : ν → ℕ} {V : Finset ν} (β : ℕ) (all : ↑V ⊆ J) :
-    ByzantineStakeAtMost w V J β := by
+theorem of_subset (β : ℕ) (all : ↑V ⊆ J) : ByzantineStakeAtMost w V J β := by
   have : ({v ∈ V | v ∉ J} : Finset ν) = ∅ :=
     Finset.filter_eq_empty_iff.mpr fun v member => not_not.mpr (all member)
   simp [ByzantineStakeAtMost, this, stake]
 
-omit [DecidableEq ν] in
 /-- The bound fails below 100 percent when every validator is Byzantine and `V` has stake. -/
-theorem not_byzantineStakeAtMost_empty {w : ν → ℕ} {V : Finset ν} {β : ℕ} (below : β < 100)
-    (positive : 0 < stake w V) : ¬ByzantineStakeAtMost w V ∅ β := by
+theorem not_of_empty (below : β < 100) (positive : 0 < stake w V) :
+    ¬ByzantineStakeAtMost w V ∅ β := by
   intro bound
   simp only [ByzantineStakeAtMost, Set.mem_empty_iff_false, not_false_eq_true,
     Finset.filter_true] at bound
   have := Nat.mul_lt_mul_of_pos_right below positive
   omega
 
+end ByzantineStakeAtMost
+
 /-! ## An execution that delivers a message -/
 
 /-- The events of the witness: a validator sends a message, all receive it, then time goes on. -/
-def floodEvents (time : ℕ) (v : ν) (m : μ) : ℕ → Event ν μ σ
+private def floodEvents (time : ℕ) (v : ν) (m : μ) : ℕ → Event ν μ σ
   | 0 => .send v m
   | 1 => .deliver fun _ => {m}
   | n + 2 => .wait (time + n + 1)
@@ -318,18 +341,16 @@ An honest validator `v` sends a message `m` that the protocol allows from an emp
 The message carries no statement of another honest validator.
 
 Every validator then has `m`, and the execution is partially synchronous for every GST and every
-positive delay.
-
-Its time also grows without bound. -/
+positive delay. -/
 theorem exists_partiallySynchronous {time : ℕ} {state : ν → σ} {v : ν} {m : μ} (honest : v ∈ J)
     (sends : P.Sends v time ∅ (state v) m) (own : ∀ x ∈ P.signed m, x.1 ∈ J → x.1 = v)
     {Δ : ℕ} (positive : 0 < Δ) :
-    ∃ e : Execution P J, e.init = World.initial time state ∧ e.events 0 = .send v m ∧
-      (∀ u, m ∈ (e.world 2).view u) ∧ (∀ GST, e.PartiallySynchronous GST Δ) ∧
-      ∀ T, ∃ n, T ≤ (e.world n).time := by
+    ∃ e : Execution P J, e.startTime = time ∧ e.start = state ∧ e.events 0 = .send v m ∧
+      (∀ u, m ∈ (e.world 2).view u) ∧ ∀ GST, e.PartiallySynchronous GST Δ := by
   let e : Execution P J :=
-    { init := World.initial time state
-      events := floodEvents (σ := σ) time v m
+    { startTime := time
+      start := state
+      events := floodEvents time v m
       allowed := fun n => by
         match n with
         | 0 =>
@@ -353,7 +374,9 @@ theorem exists_partiallySynchronous {time : ℕ} {state : ν → σ} {v : ν} {m
     match n, lt with
     | 0, _ => rfl
     | 1, _ => exact congrArg World.time worldAt_flood_one
-  refine ⟨e, rfl, rfl, fun u => by simp [later 2 le_rfl], fun GST => ?_, fun T => ?_⟩
+  refine ⟨e, rfl, rfl, rfl, fun u => by simp [later 2 le_rfl], fun GST => ⟨fun T => ?_, ?_⟩⟩
+  · refine ⟨T + 2, ?_⟩
+    simp [later (T + 2) (by omega)]
   · intro n k w _ u _ m' member bound
     -- The view at `n` is empty before the send, so `n` is past it.
     have past : 1 ≤ n := by
@@ -380,7 +403,5 @@ theorem exists_partiallySynchronous {time : ℕ} {state : ν → σ} {v : ν} {m
     · rw [early k lt] at bound
       omega
     · simp [later k le]
-  · refine ⟨T + 2, ?_⟩
-    simp [later (T + 2) (by omega)]
 
 end EthLib.Consensus.Models.Network

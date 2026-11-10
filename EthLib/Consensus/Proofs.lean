@@ -33,6 +33,7 @@ public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation
 public import EthLib.Consensus.Proofs.ForkChoice.Ghost
 public import EthLib.Consensus.Proofs.ForkChoice.Handlers
 public import EthLib.Consensus.Proofs.ForkChoice.Head
+public import EthLib.Consensus.Proofs.ForkChoice.Network
 public import EthLib.Consensus.Proofs.ForkChoice.Optimistic
 public import EthLib.Consensus.Proofs.ForkChoice.OptimisticSync
 public import EthLib.Consensus.Proofs.ForkChoice.PayloadGhost
@@ -76,7 +77,6 @@ public import EthLib.Consensus.Proofs.Models.Ffg.AccountableSafety
 public import EthLib.Consensus.Proofs.Models.Ffg.PlausibleLiveness
 public import EthLib.Consensus.Proofs.Models.ForkChoice.LmdGhost
 public import EthLib.Consensus.Proofs.Models.ForkChoice.PayloadTree
-public import EthLib.Consensus.Proofs.Models.Network.ForkChoice
 public import EthLib.Consensus.Proofs.PqKeys.Containers
 public import EthLib.Consensus.Proofs.PqKeys.Gossip
 public import EthLib.Consensus.Proofs.PqKeys.Possession
