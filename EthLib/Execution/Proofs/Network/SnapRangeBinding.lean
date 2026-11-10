@@ -143,19 +143,6 @@ private theorem verifyRange_nil {hash : ByteArray → Hash32} {root start : Hash
   all_goals simp_all [throw, throwThe, MonadExcept.throw, MonadExceptOf.throw, pure,
     Except.pure, bind, Except.bind]
 
-/-- A list of zero nibbles is at most any list that is no shorter. -/
-private theorem zeros_le : (zeros path : List Nibble) → (∀ nibble ∈ zeros, nibble = 0) →
-    zeros.length ≤ path.length → zeros ≤ path
-  | [], _, _, _ => List.nil_le _
-  | _ :: _, [], _, hlength => by simp at hlength
-  | zero :: zeros, nibble :: path, hzeros, hlength => by
-    rw [List.forall_mem_cons] at hzeros
-    obtain ⟨rfl, hzeros⟩ := hzeros
-    rw [List.cons_le_cons_iff]
-    by_cases hnibble : nibble = 0
-    · exact .inr ⟨hnibble.symm, zeros_le zeros path hzeros (by simpa using hlength)⟩
-    · exact .inl (Fin.pos_iff_ne_zero.mpr hnibble)
-
 /-- A step whose value is dropped succeeds only when the step succeeds. -/
 private theorem exists_ok_of_discard {ε α : Type} {x : Except ε α}
     (h : discard x = .ok ()) : ∃ value, x = .ok value := by
@@ -274,9 +261,7 @@ theorem verifyStorageRanges_sound {roots : List Hash32} {start : Hash32}
     refine hsound [] more hcheck ?_ (.inl (verifyRange_nil hcheck))
     -- Several accounts start at the zero hash, which no hash precedes.
     simp only [show roots.length ≠ 1 by omega, ↓reduceIte]
-    apply zeros_le
-    · simp [bytesToNibbleList, highNibble, lowNibble]
-    · simp [length_bytesToNibbleList, ByteArray.size]
+    exact zeroHash_path_le key
   · -- The last range is checked with the proof.
     have hget : (roots.zip ranges).getLast? = some (root', range) := by
       rw [List.getLast?_eq_getElem?, hlength, show ranges.length - 1 = index by omega]

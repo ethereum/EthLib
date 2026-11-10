@@ -1,27 +1,37 @@
 module
 
 public import EthLib.Execution.Proofs.Network.Snap
-public import EthLib.Execution.Proofs.Network.SnapRangeBinding
+public import EthLib.Execution.Proofs.Network.SnapRange
 public import EthLib.Execution.Proofs.Trie.RangeComplete
 
 /-!
 # Proofs: honest snap ranges pass the checks
 
-An honest AccountRange answer sends the slim encodings of accounts in their secured trie.
+An honest AccountRange answer sends the slim encodings of accounts of a secured state trie.
 
 The check converts them to their full encodings before checking the range.
 
 An honest StorageRanges answer sends whole tries before its last, possibly partial, range.
 
-The sources are [`caps/snap.md`][snap], sections "AccountRange (0x01)" and "StorageRanges (0x03)".
-
-[snap]: https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/snap.md
-
 The keys are listed by increasing hash, the order of a secured trie.
 
-As in the trie-level completeness theorem, acceptance can fail only with a named hash collision.
+So the keys of each trie have distinct hashes.
+
+As for the range check of a trie, acceptance fails only when the node search returns a collision.
 
 Whole tries need no proof and pass without that qualification.
+
+The requests are [GetAccountRange (0x00)][get-account] and [GetStorageRanges (0x02)][get-storage].
+
+The answers are in [AccountRange (0x01)][account] and [StorageRanges (0x03)][storage].
+
+The slim form of an account is in [Data format][format].
+
+[get-account]: https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/snap.md#getaccountrange-0x00
+[account]: https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/snap.md#accountrange-0x01
+[get-storage]: https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/snap.md#getstorageranges-0x02
+[storage]: https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/snap.md#storageranges-0x03
+[format]: https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/snap.md#data-format
 -/
 
 @[expose] public section
@@ -151,11 +161,11 @@ theorem verifyAccountRange_complete {data sent : List AccountRangeWitness} {root
       exact hcheck
   · exact .inr hcollision
 
-/-- An empty honest AccountRange passes when the trie has no account from the start on.
+/-- An empty honest AccountRange passes, or the node search returns a collision.
 
-The proof is the proof of the start, possibly with other nodes.
+The trie holds no account at or after the start.
 
-Otherwise the node search returns a collision. -/
+The proof contains the proof of the start, possibly with other nodes. -/
 theorem verifyAccountRange_complete_nil {data : List AccountRangeWitness} {root' : Hash32}
     (start : Hash32) {first proof : List ByteArray}
     (hroot : root keccak256 ⟨true, data.map AccountRangeWitness.trieEntry⟩ = .ok root')
@@ -191,9 +201,11 @@ theorem verifyAccountRange_complete_nil {data : List AccountRangeWitness} {root'
     exact .inl (verifyAccountRange_of_checks (.inr hne) rfl hcheck)
   · exact .inr hcollision
 
-/-- An honest whole state trie needs no proof.
+/-- An honest whole state trie passes without a proof.
 
-An empty trie with no proof is the protocol's empty reply, which the check reads as `noState`. -/
+Every account must be at or after the start.
+
+An empty trie sent with no proof is the empty reply, read as a peer without the root's state. -/
 theorem verifyAccountRange_whole {data : List AccountRangeWitness} {root' : Hash32}
     (start : Hash32)
     (hroot : root keccak256 ⟨true, data.map AccountRangeWitness.trieEntry⟩ = .ok root')
@@ -222,7 +234,7 @@ theorem verifyAccountRange_whole {data : List AccountRangeWitness} {root' : Hash
 
 /-! ## Storage ranges -/
 
-/-- The slots of a secured storage trie, in its given hash order. -/
+/-- The slots of a storage trie with hashed keys, as a StorageRanges answer sends them. -/
 def storageRangeEntries (data : List (ByteArray × ByteArray)) : List RangeEntry :=
   data.map fun entry => ⟨keccak256 entry.1, entry.2⟩
 
@@ -284,19 +296,6 @@ private theorem verifyStorageRanges_of_checks {roots : List Hash32} {start first
   simp [hlast, hcheck, Except.mapError, bind, Except.bind]
   rfl
 
-/-- Zero nibbles precede every path that is no shorter. -/
-private theorem zeros_le : (zeros path : List Nibble) → (∀ nibble ∈ zeros, nibble = 0) →
-    zeros.length ≤ path.length → zeros ≤ path
-  | [], _, _, _ => List.nil_le _
-  | _ :: _, [], _, hlength => by simp at hlength
-  | zero :: zeros, nibble :: path, hzeros, hlength => by
-    rw [List.forall_mem_cons] at hzeros
-    obtain ⟨rfl, hzeros⟩ := hzeros
-    rw [List.cons_le_cons_iff]
-    by_cases hnibble : nibble = 0
-    · exact .inr ⟨hnibble.symm, zeros_le zeros path hzeros (by simpa using hlength)⟩
-    · exact .inl (Fin.pos_iff_ne_zero.mpr hnibble)
-
 /-- Whole secured tries before a checked last range pass the storage check. -/
 private theorem verifyStorageRanges_of_secured_last
     (whole : List (Hash32 × List (ByteArray × ByteArray)))
@@ -333,17 +332,17 @@ private theorem verifyStorageRanges_of_secured_last
       simp only [List.length_append, List.length_map, List.length_cons]
       omega
     rw [hfirst, ite_eq_right hmany]
-    apply zeros_le
-    · simp [bytesToNibbleList, highNibble, lowNibble]
-    · simp [length_bytesToNibbleList, ByteArray.size, DIGEST_LEN]
+    exact zeroHash_path_le _
 
 /-- Honest StorageRanges pass for one account or several, or a node collision is found.
 
-`whole` lists the whole tries before the last answer.
+`whole` lists the whole tries before the last range.
 
-The last answer sends the first `count` slots of `data` from `first`, in increasing hash order.
+The last range sends the first `count` slots of `data` from `first`, in increasing hash order.
 
-`remaining` lists requested accounts after the last answer.
+The proof contains the proofs of `first` and of the last slot.
+
+`remaining` lists requested accounts after the last range.
 
 For one requested account, `first` is `start`; for several, it is the zero hash. -/
 theorem verifyStorageRanges_complete
@@ -439,7 +438,7 @@ theorem verifyStorageRanges_complete_nil
 
 For one requested account, every sent slot must be at or after the requested start.
 
-For several requested accounts the start is zero, so this condition holds for every hash. -/
+For several requested accounts each range starts at the zero hash, so every slot meets it. -/
 theorem verifyStorageRanges_whole
     (whole : List (Hash32 × List (ByteArray × ByteArray)))
     (root' start first : Hash32) (remaining : List Hash32)

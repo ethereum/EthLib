@@ -13,6 +13,8 @@ The count of message IDs for snap and eth is nonzero exactly on the capabilities
 
 An account reads back from its slim form.
 
+The encoded slim form of an account converts to its full encoding.
+
 Each message reads back from its ID and its RLP item on the versions that use its ID.
 
 snap/2 rejects the trie node messages of snap/1, and snap/1 the access list messages of snap/2.
@@ -55,13 +57,6 @@ theorem ofSlimAccount_slimAccount (account : State.Account) (root : Hash32) :
   by_cases hr : root = EMPTY_TRIE_ROOT <;> by_cases hc : code = State.EMPTY_CODE_HASH <;>
     simp [ofSlimAccount, slimAccount, hr, hc, toItem_hash_ne_empty, Item.fields, Item.toItems,
       Item.field_toItem, bind, Except.bind, pure, Except.pure]
-
-/-- The encoded slim form reads back to its account and storage root. -/
-theorem ofSlimAccount_decode_encode {account : State.Account} {root : Hash32} {body : ByteArray}
-    (h : encode (slimAccount account root) = .ok body) :
-    (decode body).bind ofSlimAccount = .ok (account, root) := by
-  rw [decode_encode _ _ h]
-  exact ofSlimAccount_slimAccount account root
 
 /-- The encoded slim form converts to the full encoding of its account. -/
 theorem fullAccount_encode_slimAccount {account : State.Account} {root : Hash32}
