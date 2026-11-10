@@ -112,13 +112,62 @@ def runQ (scheme : Scheme F G A M) (adversary : Adversary F G A M) (X : G)
   let ((m, t, s), cache) ← (simulateQ (implQ signer) (adversary.main X)).run []
   if signed cache m then return false else verifyQ scheme X m t s
 
+/-- Run the adversary on the key `X` with a signing oracle, and check its forgery.
+
+It keeps the forgery, the result and the final signing cache. -/
+def runCacheQ (scheme : Scheme F G A M) (adversary : Adversary F G A M) (X : G)
+    (signer : SignerQ F A M) : PermComp A ((M × F × F) × Bool × Cache F M) := do
+  let ((m, t, s), cache) ← (simulateQ (implQ signer) (adversary.main X)).run []
+  if signed cache m then return ((m, t, s), false, cache) else
+    (((m, t, s), ·, cache)) <$> verifyQ scheme X m t s
+
+omit [SampleableType F] in
+/-- Keep only the result of the run with the forgery and the signing cache, and it is the run. -/
+theorem result_map_runCacheQ (scheme : Scheme F G A M) (adversary : Adversary F G A M) (X : G)
+    (signer : SignerQ F A M) :
+    (fun z => z.2.1) <$> runCacheQ scheme adversary X signer = runQ scheme adversary X signer := by
+  simp only [runCacheQ, runQ, map_bind]
+  refine bind_congr fun z => ?_
+  split_ifs <;> simp
+
 /-- The game, as a program of the permutation oracle: draw the key, run, and check the forgery. -/
 def experimentQ (scheme : Scheme F G A M) (fuel : ℕ) (adversary : Adversary F G A M) :
     PermComp A Bool := do
   let x ← ($ᵗ F : ProbComp F)
   runQ scheme adversary (x • scheme.g) (signQ scheme fuel x)
 
+/-- The game as a program of the permutation oracle, keeping the forgery and the signing cache. -/
+def experimentViewQ (scheme : Scheme F G A M) (fuel : ℕ) (adversary : Adversary F G A M) :
+    PermComp A ((M × F × F) × Bool × Cache F M) := do
+  let x ← ($ᵗ F : ProbComp F)
+  runCacheQ scheme adversary (x • scheme.g) (signQ scheme fuel x)
+
+/-- The program that also keeps the forgery and the signing cache is the program of the game.
+
+That holds once all but the result is dropped. -/
+theorem result_map_experimentViewQ (scheme : Scheme F G A M) (fuel : ℕ)
+    (adversary : Adversary F G A M) :
+    (fun z => z.2.1) <$> experimentViewQ scheme fuel adversary =
+      experimentQ scheme fuel adversary := by
+  simp only [experimentViewQ, experimentQ, map_bind, result_map_runCacheQ]
+
 variable [FinEnum A]
+
+/-- The game, keeping the forgery, the result, the final signing cache and the permutation `Π`. -/
+def experimentView (scheme : Scheme F G A M) (fuel : ℕ) (adversary : Adversary F G A M) :
+    ProbComp ((M × F × F) × Bool × Cache F M × Equiv.Perm A) := do
+  let π ← $ᵗ (Equiv.Perm A)
+  let x ← $ᵗ F
+  let X := x • scheme.g
+  let ((m, t, s), cache) ← (simulateQ (impl scheme fuel π x) (adversary.main X)).run []
+  return ((m, t, s), !signed cache m && verify scheme π X m t s, cache, π)
+
+/-- Keep only the result of the game with its forgery, signing cache and `Π`, and it is the game. -/
+theorem result_map_experimentView (scheme : Scheme F G A M) (fuel : ℕ)
+    (adversary : Adversary F G A M) :
+    (fun z => z.2.1) <$> experimentView scheme fuel adversary =
+      experiment scheme fuel adversary := by
+  simp [experimentView, experiment]
 
 /-- The game with `Π` sampled one answer at a time. -/
 def lazyExperiment (scheme : Scheme F G A M) (fuel : ℕ) (adversary : Adversary F G A M) :
@@ -128,13 +177,13 @@ def lazyExperiment (scheme : Scheme F G A M) (fuel : ℕ) (adversary : Adversary
 omit [Field F] [DecidableEq F] [AddCommGroup G] [Module F G] [DecidableEq G] [SampleableType F]
   [DecidableEq M] [FinEnum A] in
 /-- With `π`, the conversion asked of the oracle is the conversion by `π`. -/
-private theorem simulateQ_permImpl_conversionQ (scheme : Scheme F G A M) (π : Equiv.Perm A)
+theorem simulateQ_permImpl_conversionQ (scheme : Scheme F G A M) (π : Equiv.Perm A)
     (R : G) : simulateQ (permImpl π) (conversionQ scheme R) = pure (conversion scheme π R) := by
   simp [conversionQ, conversion, permImpl, permOracle]
 
 omit [DecidableEq G] [SampleableType F] [DecidableEq M] [FinEnum A] in
 /-- With `π`, the signature from a nonce asked of the oracle is the signature by `π`. -/
-private theorem simulateQ_permImpl_signNonceQ (scheme : Scheme F G A M) (π : Equiv.Perm A)
+theorem simulateQ_permImpl_signNonceQ (scheme : Scheme F G A M) (π : Equiv.Perm A)
     (x : F) (m : M) (k : F) :
     simulateQ (permImpl π) (signNonceQ scheme x m k) = pure (signNonce scheme π x m k) := by
   unfold signNonceQ
@@ -161,7 +210,7 @@ theorem simulateQ_permImpl_verifyQ (scheme : Scheme F G A M) (π : Equiv.Perm A)
 
 omit [DecidableEq G] [DecidableEq M] [FinEnum A] in
 /-- With `π`, signing with fresh nonces asked of the oracle is signing by `π`. -/
-private theorem simulateQ_permImpl_signFreshQ (scheme : Scheme F G A M) (π : Equiv.Perm A)
+theorem simulateQ_permImpl_signFreshQ (scheme : Scheme F G A M) (π : Equiv.Perm A)
     (x : F) (m : M) (fuel : ℕ) :
     simulateQ (permImpl π) (signFreshQ scheme x m fuel) = signFresh scheme π x m fuel := by
   induction fuel with
@@ -191,6 +240,29 @@ theorem simulateQ_permImpl_implQ (scheme : Scheme F G A M) (fuel : ℕ)
     | some σ => simp
     | none => simp only [simulateQ_map, simulateQ_permImpl_signFreshQ]
 
+/-- Draw `Π` up front and give it to the oracle.
+
+Then the program with the forgery and the signing cache is the game with them. -/
+theorem experimentView_eq_permImpl (scheme : Scheme F G A M) (fuel : ℕ)
+    (adversary : Adversary F G A M) :
+    experimentView scheme fuel adversary =
+      (do
+        let π ← $ᵗ (Equiv.Perm A)
+        let z ← simulateQ (permImpl π) (experimentViewQ scheme fuel adversary)
+        pure (z.1, z.2.1, z.2.2, π)) := by
+  simp only [experimentView, experimentViewQ, simulateQ_bind, simulateQ_permImpl_liftM, bind_assoc]
+  refine bind_congr fun π => bind_congr fun x => ?_
+  simp only [runCacheQ, simulateQ_bind, bind_assoc]
+  rw [simulateQ_StateT_compose (implQ (signQ scheme fuel x)) (permImpl π) (impl scheme fuel π x)
+    (simulateQ_permImpl_implQ scheme fuel π x)]
+  refine bind_congr fun z => ?_
+  obtain ⟨⟨m, t, s⟩, cache⟩ := z
+  by_cases h : signed cache m
+  · simp [h]
+  · simp only [h, Bool.false_eq_true, ite_false, simulateQ_map,
+      simulateQ_permImpl_verifyQ scheme π (x • scheme.g) m t s]
+    simp
+
 /-- With `Π` drawn up front and given to the oracle, the program is the game. -/
 theorem experiment_evalDistEq_permImpl (scheme : Scheme F G A M) (fuel : ℕ)
     (adversary : Adversary F G A M) :
@@ -198,17 +270,9 @@ theorem experiment_evalDistEq_permImpl (scheme : Scheme F G A M) (fuel : ℕ)
       (do
         let π ← $ᵗ (Equiv.Perm A)
         simulateQ (permImpl π) (experimentQ scheme fuel adversary)) := by
-  refine EvalDistEq.of_eq (bind_congr fun π => ?_)
-  simp only [experimentQ, runQ, simulateQ_bind, simulateQ_permImpl_liftM]
-  refine bind_congr fun x => ?_
-  rw [simulateQ_StateT_compose (implQ (signQ scheme fuel x)) (permImpl π) (impl scheme fuel π x)
-    (simulateQ_permImpl_implQ scheme fuel π x)]
-  refine bind_congr fun z => ?_
-  obtain ⟨⟨m, t, s⟩, cache⟩ := z
-  by_cases h : signed cache m
-  · simp [h]
-  · simp only [h]
-    simpa using (simulateQ_permImpl_verifyQ scheme π (x • scheme.g) m t s).symm
+  refine EvalDistEq.of_eq ?_
+  rw [← result_map_experimentView, experimentView_eq_permImpl, ← result_map_experimentViewQ]
+  simp [simulateQ_map]
 
 /-- The game with `Π` sampled lazily has the same distribution as the game. -/
 theorem experiment_evalDistEq_lazyExperiment (scheme : Scheme F G A M) (fuel : ℕ)

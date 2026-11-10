@@ -187,7 +187,7 @@ def lazyPermOracle : QueryImpl (PermSpec A) (StateT (PermCache A) ProbComp)
 abbrev lazyPermImpl : QueryImpl (unifSpec + PermSpec A) (StateT (PermCache A) ProbComp) :=
   unifSpec.passthrough + lazyPermOracle
 
-/-- Running a computation of coins alone against the lazy permutation leaves the cache. -/
+/-- A run of coins alone against the lazy permutation leaves the cache unchanged. -/
 theorem simulateQ_lazyPermImpl_liftM_run {α : Type} (oa : ProbComp α)
     (c : PermCache A) :
     (simulateQ lazyPermImpl (liftM oa : PermComp A α)).run c = (·, c) <$> oa := by

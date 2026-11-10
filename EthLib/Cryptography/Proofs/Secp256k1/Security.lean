@@ -20,7 +20,9 @@ Every signature from EthLib's signing is the game's signature for some nonzero n
 
 With the bijection sampled lazily, every adversary wins with the same chance as in the game.
 
-The lazy game also runs over the joint state of its two caches, with the signer as a parameter.
+The game also runs over the joint state of its oracles, with the signer as a parameter.
+
+Drawing `Π` from the final cache gives the forgery, the signing cache and `Π` the game's joint law.
 
 No theorem bounds the advantage of a forger yet.
 -/
