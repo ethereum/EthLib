@@ -65,10 +65,12 @@ src = ["bindings/python", "bindings/python/tests", "scripts"]
 # The scripts run on Python 3.12. The package supports Python 3.10, and the test of each wheel
 # runs the suites, the vector check and the archive fetcher on the Python of the wheel.
 target-version = "py312"
-# `lake exe gen-bindings` writes the stub, and its check compares it byte for byte.
+# `lake exe gen-bindings` writes the stub and the type aliases.
+# Its check compares them byte for byte.
 # tests/consensus/pq_keys/SHA256SUMS pins the key generator by its digest.
 extend-exclude = [
   "bindings/python/ethlib/cryptography/_native.pyi",
+  "bindings/python/ethlib/networking/noise/_types.py",
   "tests/consensus/pq_keys/generate.py",
   "tests/consensus/large_amounts/generator/",
 ]
