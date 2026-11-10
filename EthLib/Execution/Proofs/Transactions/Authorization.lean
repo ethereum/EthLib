@@ -62,6 +62,14 @@ That holds for the meter up to BPO5 and for the meter of EIP-8037.
 Each authorization then takes at most 227790 execution gas.
 
 The theorems that the authorizations succeed hold for any recovery of an authority.
+
+Up to BPO5, the authorizations fail only when a code is missing, which aborts the whole run.
+
+Take an authority whose code is empty or a delegation indicator.
+
+After the list, it has one more nonce per authorization it accepts.
+
+It has the code that the last one sets, and the rest of its account stays.
 -/
 
 @[expose] public section
@@ -1000,6 +1008,272 @@ theorem foldlM_applyAuthorization_isOk_of_lt_glamsterdam (hfork : fork < .glamst
   obtain ⟨done, h, -⟩ := foldlM_applyAuthorization_isOk (chainId := chainId) (absurd · hpre) auths
     (absurd · hpre) hcodes (absurd · hpre)
   exact ⟨done, h⟩
+
+/-- Up to BPO5, an authorization fails only when the state lacks a code.
+
+That error aborts the whole run. -/
+theorem aborts_of_applyAuthorization_of_lt_glamsterdam (hfork : fork < .glamsterdam)
+    {e : Evm.EvmError × TransactionState}
+    (h : applyAuthorization fork chainId done auth = .error e) : e.1.aborts = true := by
+  cases hscope : authorizationInScope chainId auth
+  · rw [applyAuthorization_of_not_inScope hscope] at h
+    cases h
+  cases hrecover : recoverAuthority auth with
+  | none =>
+    rw [applyAuthorization_of_recoverAuthority_none hrecover] at h
+    cases h
+  | some authority =>
+    cases haccept : authorityAccepts done.state authority auth with
+    | error e' =>
+      rw [applyAuthorization_of_authorityAccepts_error hscope hrecover haccept] at h
+      cases h
+      rfl
+    | ok accepts =>
+      cases accepts
+      · rw [applyAuthorization_of_refused hscope hrecover haccept] at h
+        cases h
+      · obtain ⟨state, hdelegate⟩ := delegate_isOk (fork := fork) (authority := authority)
+          (auth := auth) (done.state.recordAccountRead authority)
+        rw [applyAuthorization_of_accepts hfork hscope hrecover haccept, hdelegate] at h
+        simp [Except.mapError, Except.map] at h
+
+/-- Up to BPO5, the authorizations of a list fail only when the state lacks a code.
+
+That error aborts the whole run. -/
+theorem aborts_of_foldlM_applyAuthorization_of_lt_glamsterdam (hfork : fork < .glamsterdam) :
+    ∀ {auths : List Authorization} {start : Delegations Meter}
+      {e : Evm.EvmError × TransactionState},
+      auths.foldlM (applyAuthorization fork chainId) start = .error e → e.1.aborts = true
+  | [], _, _, h => by cases h
+  | auth :: rest, start, e, h => by
+    rcases bind_eq_error h with hstep | ⟨next, -, h⟩
+    · exact aborts_of_applyAuthorization_of_lt_glamsterdam hfork hstep
+    · exact aborts_of_foldlM_applyAuthorization_of_lt_glamsterdam hfork h
+
+/-! ## One authority across a list
+
+An authority whose code is empty or a delegation indicator keeps code of that kind.
+
+Each authorization sets code of that kind, so the code under its hash always reads back so.
+
+The account of the authority after the list then depends only on its own account at the start. -/
+
+/-- The authorizations of a list that the authority `authority` accepts, in order.
+
+The authority starts with the nonce `nonce`, and its code must be empty or a delegation indicator.
+
+An authorization counts when it is in scope on the chain `chainId` and is signed by the authority.
+
+Its nonce must also be the nonce of the authority at that point.
+
+Each one that counts adds one to that nonce. -/
+def acceptedBy (chainId : Nat) (authority : Address) : Nat → List Authorization →
+    List Authorization
+  | _, [] => []
+  | nonce, auth :: rest =>
+    if authorizationInScope chainId auth = true ∧ recoverAuthority auth = some authority ∧
+        nonce = auth.nonce.toNat then
+      auth :: acceptedBy chainId authority (nonce + 1) rest
+    else acceptedBy chainId authority nonce rest
+
+/-- The code hash after a list of accepted authorizations, from the code hash `codeHash`.
+
+It is the hash of the code that the last one sets, or `codeHash` for an empty list. -/
+def delegatedCodeHash (accepted : List Authorization) (codeHash : Hash32) : Hash32 :=
+  accepted.foldl (fun _ auth => Cryptography.Hash.Keccak.keccak256 (delegationCode auth)) codeHash
+
+/-- The code that an authorization sets is empty or a delegation indicator. -/
+theorem delegationCode_delegable (auth : Authorization) :
+    ((delegationCode auth).size = 0 || isValidDelegation (delegationCode auth)) = true := by
+  unfold delegationCode
+  split
+  · rfl
+  · simp [Evm.isValidDelegation_delegationIndicator]
+
+/-- The code under a hash reads back, and it is empty or a delegation indicator. -/
+private def ReadsDelegable (state : TransactionState) (codeHash : Hash32) : Prop :=
+  ∃ code, state.getCode codeHash = .ok code ∧ (code.size = 0 || isValidDelegation code) = true
+
+/-- After a delegation, the code under the hash of the code it sets is of the right kind.
+
+The code under any other hash reads as before. -/
+private theorem readsDelegable_delegate {state state' : TransactionState} {refund : Nat}
+    (h : delegate fork state authority auth = .ok (state', refund)) (codeHash : Hash32)
+    (hold : codeHash ≠ Cryptography.Hash.Keccak.keccak256 (delegationCode auth) →
+      ReadsDelegable state codeHash) :
+    ReadsDelegable state' codeHash := by
+  by_cases hset : codeHash = Cryptography.Hash.Keccak.keccak256 (delegationCode auth)
+  · subst hset
+    by_cases hempty : Cryptography.Hash.Keccak.keccak256 (delegationCode auth) = EMPTY_CODE_HASH
+    · refine ⟨.empty, ?_, rfl⟩
+      rw [hempty]
+      simp [getCode]
+    · exact ⟨_, getCode_delegate_self h hempty, delegationCode_delegable auth⟩
+  · obtain ⟨code, hcode, hok⟩ := hold hset
+    exact ⟨code, (getCode_delegate_of_ne h hset).trans hcode, hok⟩
+
+/-- An authority that accepts an authorization has the nonce of the authorization. -/
+theorem nonce_of_authorityAccepts {state : TransactionState}
+    (h : authorityAccepts state authority auth = .ok true) :
+    (state.getAccount authority).nonce = auth.nonce.toNat := by
+  unfold authorityAccepts at h
+  cases hcode : state.getCode (state.getAccount authority).codeHash with
+  | error e => simp [hcode, bind, Except.bind] at h
+  | ok code =>
+    simp only [hcode, bind, Except.bind, pure, Except.pure, Except.ok.injEq, Bool.and_eq_true,
+      decide_eq_true_eq] at h
+    exact h.2
+
+/-- An authorization that its authority accepts pays, then delegates the authority. -/
+private theorem applyAuthorization_of_accepts_eq_ok
+    (h : applyAuthorization fork chainId done auth = .ok done')
+    (hscope : authorizationInScope chainId auth = true)
+    (hrecover : recoverAuthority auth = some authority)
+    (haccept : authorityAccepts done.state authority auth = .ok true) :
+    ∃ paid state refund,
+      payAuthorization fork { done with
+        state := done.state.recordAccountRead authority
+        accessed := done.accessed.insert authority } authority auth = .ok paid ∧
+      delegate fork paid.state authority auth = .ok (state, refund) ∧
+      done' = { paid with state := state, refund := paid.refund + refund } := by
+  cases hpay : payAuthorization fork { done with
+      state := done.state.recordAccountRead authority
+      accessed := done.accessed.insert authority } authority auth with
+  | error e =>
+    rw [applyAuthorization_of_payAuthorization_error hscope hrecover haccept hpay] at h
+    cases h
+  | ok paid =>
+    obtain ⟨state, hdelegate⟩ := delegate_isOk (fork := fork) (authority := authority)
+      (auth := auth) paid.state
+    rw [applyAuthorization_of_accepts_of_pay hscope hrecover haccept hpay, hdelegate] at h
+    exact ⟨paid, state, _, rfl, hdelegate, (Except.ok.inj h).symm⟩
+
+/-- An accepted authorization in scope adds one to the nonce of its authority.
+
+It sets the code that the authorization names, and keeps the rest of the account.
+
+That code is the delegation indicator, or no code for the zero address.
+
+The payment changes no account, so the authority is read as it was before the authorization. -/
+theorem authority_applyAuthorization (h : applyAuthorization fork chainId done auth = .ok done')
+    (hscope : authorizationInScope chainId auth = true)
+    (hrecover : recoverAuthority auth = some authority)
+    (haccept : authorityAccepts done.state authority auth = .ok true) :
+    done'.state.getAccount authority = { done.state.getAccount authority with
+      nonce := (done.state.getAccount authority).nonce + 1
+      codeHash := Cryptography.Hash.Keccak.keccak256 (delegationCode auth) } := by
+  obtain ⟨paid, state, refund, hpay, hdelegate, rfl⟩ :=
+    applyAuthorization_of_accepts_eq_ok h hscope hrecover haccept
+  obtain ⟨hstate, -, -⟩ := state_payAuthorization hpay
+  obtain ⟨-, haccount, -⟩ := delegate_eq_ok hdelegate
+  rw [hstate] at haccount
+  exact haccount
+
+/-- An authorization keeps the code of the right kind under each hash. -/
+private theorem readsDelegable_applyAuthorization
+    (h : applyAuthorization fork chainId done auth = .ok done') {codeHash : Hash32}
+    (hcode : ReadsDelegable done.state codeHash) : ReadsDelegable done'.state codeHash := by
+  rcases applyAuthorization_cases h with rfl | ⟨authority, -, -, ⟨-, rfl⟩ |
+    ⟨-, paid, state, refund, hpay, hdelegate, rfl⟩⟩
+  · exact hcode
+  · exact hcode
+  · obtain ⟨hstate, -, -⟩ := state_payAuthorization hpay
+    exact readsDelegable_delegate hdelegate codeHash fun _ => hstate ▸ hcode
+
+/-- One authorization, seen from an authority whose code is empty or a delegation indicator.
+
+When the authorization counts for the authority, it delegates it and adds one to its nonce.
+
+Otherwise the account of the authority stays. -/
+private theorem account_applyAuthorization
+    (h : applyAuthorization fork chainId done auth = .ok done')
+    (hcode : ReadsDelegable done.state (done.state.getAccount authority).codeHash) :
+    (authorizationInScope chainId auth = true ∧ recoverAuthority auth = some authority ∧
+        (done.state.getAccount authority).nonce = auth.nonce.toNat →
+      done'.state.getAccount authority = { done.state.getAccount authority with
+        nonce := (done.state.getAccount authority).nonce + 1
+        codeHash := Cryptography.Hash.Keccak.keccak256 (delegationCode auth) } ∧
+      ReadsDelegable done'.state (Cryptography.Hash.Keccak.keccak256 (delegationCode auth))) ∧
+    (¬(authorizationInScope chainId auth = true ∧ recoverAuthority auth = some authority ∧
+        (done.state.getAccount authority).nonce = auth.nonce.toNat) →
+      done'.state.getAccount authority = done.state.getAccount authority) := by
+  refine ⟨fun ⟨hscope, hrecover, hnonce⟩ => ?_, fun hnot => ?_⟩
+  · obtain ⟨code, hget, hok⟩ := hcode
+    have haccept : authorityAccepts done.state authority auth = .ok true := by
+      simp only [authorityAccepts, hget, bind, Except.bind, pure, Except.pure, hok, hnonce,
+        decide_true, Bool.and_self]
+    refine ⟨authority_applyAuthorization h hscope hrecover haccept, ?_⟩
+    obtain ⟨paid, state, refund, -, hdelegate, rfl⟩ :=
+      applyAuthorization_of_accepts_eq_ok h hscope hrecover haccept
+    exact readsDelegable_delegate hdelegate _ fun hne => absurd rfl hne
+  · rcases applyAuthorization_cases h with rfl | ⟨other, hscope, hrecover, ⟨-, rfl⟩ |
+      ⟨haccept, paid, state, refund, hpay, hdelegate, rfl⟩⟩
+    · rfl
+    · rfl
+    · by_cases hsame : other = authority
+      · subst hsame
+        exact absurd ⟨hscope, hrecover, nonce_of_authorityAccepts haccept⟩ hnot
+      · obtain ⟨hstate, -, -⟩ := state_payAuthorization hpay
+        have hkeep := (delegate_eq_ok hdelegate).2.2 authority (Ne.symm hsame)
+        rw [hstate] at hkeep
+        unfold getAccount
+        rw [hkeep]
+        rfl
+
+/-- Authorizations that succeed, seen from an authority with code of the right kind. -/
+private theorem foldlM_applyAuthorization_account :
+    ∀ {auths : List Authorization} {start done : Delegations Meter},
+      auths.foldlM (applyAuthorization fork chainId) start = .ok done →
+      ReadsDelegable start.state (start.state.getAccount authority).codeHash →
+      done.state.getAccount authority = { start.state.getAccount authority with
+        nonce := (start.state.getAccount authority).nonce +
+          (acceptedBy chainId authority (start.state.getAccount authority).nonce auths).length
+        codeHash := delegatedCodeHash
+          (acceptedBy chainId authority (start.state.getAccount authority).nonce auths)
+          (start.state.getAccount authority).codeHash }
+  | [], _, _, h, _ => by
+    cases h
+    rfl
+  | auth :: rest, start, done, h, hcode => by
+    obtain ⟨next, hnext, h⟩ := bind_ok_iff.mp h
+    obtain ⟨hyes, hno⟩ := account_applyAuthorization hnext hcode
+    by_cases hcount : authorizationInScope chainId auth = true ∧
+        recoverAuthority auth = some authority ∧
+        (start.state.getAccount authority).nonce = auth.nonce.toNat
+    · obtain ⟨haccount, hreads⟩ := hyes hcount
+      have ih := foldlM_applyAuthorization_account h (by rw [haccount]; exact hreads)
+      rw [ih, haccount]
+      simp only [acceptedBy, ite_eq_left_of_eq_true _ _ (eq_true hcount), List.length_cons,
+        delegatedCodeHash]
+      congr 1
+      omega
+    · have haccount := hno hcount
+      have ih := foldlM_applyAuthorization_account h
+        (by rw [haccount]; exact readsDelegable_applyAuthorization hnext hcode)
+      rw [ih, haccount]
+      simp only [acceptedBy, hcount, ↓reduceIte]
+
+/-- Authorizations that succeed leave an authority with one more nonce per accepted one.
+
+The code of the authority must be empty or a delegation indicator at the start.
+
+Its code hash is then the hash of the code that the last accepted one sets.
+
+It stays when the authority accepts none.
+
+The rest of its account stays. -/
+theorem foldlM_applyAuthorization_authority {code : ByteArray} {auths : List Authorization}
+    {start done : Delegations Meter}
+    (h : auths.foldlM (applyAuthorization fork chainId) start = .ok done)
+    (hcode : start.state.getCode (start.state.getAccount authority).codeHash = .ok code)
+    (hdelegable : (code.size = 0 || isValidDelegation code) = true) :
+    done.state.getAccount authority = { start.state.getAccount authority with
+      nonce := (start.state.getAccount authority).nonce +
+        (acceptedBy chainId authority (start.state.getAccount authority).nonce auths).length
+      codeHash := delegatedCodeHash
+        (acceptedBy chainId authority (start.state.getAccount authority).nonce auths)
+        (start.state.getAccount authority).codeHash } :=
+  foldlM_applyAuthorization_account h ⟨code, hcode, hdelegable⟩
 
 /-! ## The hash that an authority signs -/
 
