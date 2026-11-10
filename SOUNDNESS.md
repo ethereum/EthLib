@@ -2061,10 +2061,14 @@ The source of that attestation is the justified checkpoint of the epoch of the f
 Its target is the checkpoint of that epoch, with the block root that the state records for its first slot.
 `voteFrame_processBlock` (`Consensus/Proofs/Transition/TargetVotes.lean`) carries that fact across a whole block.
 A block sets a target flag only from a vote, a pair of a validator and attestation data, for the link of the epoch of the flag at the position of the flag.
-Each such vote holds the data of an attestation of the block, and passes the attestation checks in the state after the block.
-With the BLS checks, that means the validator signed it, if BLS aggregates with proofs of possession cannot be forged.
+Each such vote holds the data of an attestation of the block, and is signed in the state after the block.
+A vote is signed in a state when an aggregate signature over its data verifies under keys of the state that include the validator's key.
+The domain is the attester domain at the version of a fork of the chain, up to the fork of the state, with the state's genesis validators root.
+The attestation check implies this when the two fork versions of the state are such versions, which `ForkVersionsKnown` states.
+The version stays free among those forks, since two upgrades in one epoch change the version that the state gives to the previous epoch.
+With the BLS checks, a signed vote means that the validator signed the data, if BLS aggregates with proofs of possession cannot be forged.
 The block keeps the slot, the block roots, the justified checkpoints, the fork versions, the genesis validators root and the key of each validator.
-So `TargetFlagsSigned.of_voteFrame` keeps each target flag backed by a vote that passes the checks in the current state.
+So `TargetFlagsSigned.of_voteFrame` keeps each target flag backed by a signed vote for its link.
 From Gloas the theorem assumes the registry within its limit, since its type does not bound its size.
 `TargetFlagsSigned.of_stateTransition` (`Consensus/Proofs/Transition/TargetSlots.lean`) carries the same fact across the slots, the epoch step included, and then the block.
 The slot step writes one block root, so the roots at the first slots of the current and previous epochs stay.
@@ -2072,13 +2076,11 @@ That needs at least one slot per epoch, and a buffer of roots that covers two ep
 The epoch step moves the flags of the current epoch to the previous one, and justification moves the current justified checkpoint to the previous one.
 Justification does not run in the first two epochs, so the theorem assumes the two justified checkpoints equal there, and the slots keep that.
 The theorem also assumes the registry below 2^64 validators after the block, which its type already bounds before Gloas.
+It also assumes `ForkVersionsKnown` after the block.
+The genesis state built from deposits satisfies that and the equal justified checkpoints, and the slots, the blocks and every upgrade keep both (`Consensus/Proofs/Transition/TargetUpgrades.lean`).
+`TargetFlagsSigned.of_processUpgrades` carries the target-flag fact across the upgrades from Altair on.
 At least five gaps remain before a refinement.
-It also assumes that the two fork versions of the state are versions of forks of the chain, up to the fork of the state.
-There a vote counts as signed when its aggregate signature verifies in the attester domain of such a version.
-The attestation check uses one of the two versions of the state, so it implies this.
-The version stays free among those forks, since two upgrades in one epoch change the version that the state gives to the previous epoch.
-`TargetFlagsSigned.of_processUpgrades` (`Consensus/Proofs/Transition/TargetUpgrades.lean`) carries the fact across the upgrades from Altair on.
-No theorem yet establishes it at the first Altair state, which the upgrade from Phase 0 builds from the pending attestations, nor the equal justified checkpoints of the first two epochs there.
+No theorem yet establishes the target-flag fact at the first Altair state, which the upgrade from Phase 0 builds from the pending attestations.
 None covers the forks before Altair.
 So none yet shows that the attesters of an epoch signed the link that the model counts.
 The attesters of the previous epoch are filtered by activity in that epoch, but the total counts the active validators of the current one.
