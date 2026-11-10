@@ -114,9 +114,13 @@ private theorem paymentStep_of_fields {gloas : .glamsterdam ≤ fork}
 
 They release the payment of the parent's slot or nothing, and each released payment is closed.
 
-The parent payment must have no weight, and pay the latest bid or have no amount.
+The parent payment, while it is in the window, must have no weight.
 
-A latest bid with a value must be at the slot of the parent. -/
+It must pay the latest bid or have no amount.
+
+A latest bid with a value must be at the slot of the parent.
+
+Those hypotheses are assumptions, which the builder debt invariant and a later step provide. -/
 theorem processParentExecutionPayload_processBlockHeader_paymentStep
     {gloas : .glamsterdam ≤ fork} {block : BeaconBlock preset fork}
     {parented : BeaconState preset fork} (fresh : ParentPaymentFresh state gloas)

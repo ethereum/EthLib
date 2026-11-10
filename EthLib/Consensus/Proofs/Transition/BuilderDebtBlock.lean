@@ -207,7 +207,7 @@ private theorem builderFrame_processSyncAggregate {altair : .altair ≤ fork}
 
 Except the operations, the rest keeps the builder fields.
 
-It also keeps the slot and the slot of the latest block.
+Except the operations, the rest also keeps the slot and the slot of the latest block.
 
 The validators after the header are at most those after the block.
 
@@ -268,7 +268,7 @@ theorem processBlock_buildersGrow (gloas : .glamsterdam ≤ fork) {block : Beaco
   rw [← size, kept]
   exact builders_size_processParentExecutionPayload parentOk
 
-/-- From Gloas, the parent payload and the header of a block leave the invariant inside a block.
+/-- From Gloas, after the parent payload and the header, the builder debt is settled.
 
 The latest block is then at the slot of the state, which is not the first slot. -/
 theorem BuilderDebtCovered.headed {gloas : .glamsterdam ≤ fork}
