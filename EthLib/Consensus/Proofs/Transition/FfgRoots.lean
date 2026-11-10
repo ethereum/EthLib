@@ -110,7 +110,7 @@ structure RootsAbove {fork : Fork} (block : Root → β) (state : BeaconState pr
         block (recentJustified state current).root ≤ block root
 
 /-- Ordered links order the roots that a state records at two slots, the earlier one first. -/
-private theorem le_of_rootLinks {fork : Fork} {state : BeaconState preset fork}
+theorem le_of_rootLinks {fork : Fork} {state : BeaconState preset fork}
     (links : ∀ link ∈ rootLinks state, block link.1 ≤ block link.2) {low : Slot} {lowRoot : Root}
     (lowRead : getBlockRootAtSlot state low = .ok lowRoot) :
     ∀ (distance : Nat) {high : Slot} {highRoot : Root}, high.toNat = low.toNat + distance →

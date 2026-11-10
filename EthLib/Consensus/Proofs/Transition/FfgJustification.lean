@@ -277,34 +277,118 @@ private theorem linkWithChurn_of_weigh (large : 3 * preset.EFFECTIVE_BALANCE_INC
         ∃ vote, LinkVote state recent index.toNat vote ∧ vote ∈ attested)
     (weighed : weighJustificationAndFinalization state total previousBalance currentBalance =
       .ok after) :
-    after.currentJustifiedCheckpoint = state.currentJustifiedCheckpoint ∨
-      ∃ current : Bool,
-        after.currentJustifiedCheckpoint.epoch =
-            (if current then getCurrentEpoch state else getPreviousEpoch state) ∧
-          getBlockRoot state after.currentJustifiedCheckpoint.epoch =
-            .ok after.currentJustifiedCheckpoint.root ∧
-          LinkWithChurn state votes
-            (if current then getCurrentEpoch state else getPreviousEpoch state)
-            ((if current then state.currentJustifiedCheckpoint
-              else state.previousJustifiedCheckpoint).toFfg block)
-            (after.currentJustifiedCheckpoint.toFfg block) := by
-  rcases weighJustificationAndFinalization_currentJustified weighed with ⟨same, -⟩ | ⟨recent,
-    threshold, weight, thresholdOk, weightOk, passed, epoch, rootOk⟩
-  · exact .inl same
-  refine .inr ⟨recent, epoch, rootOk, ?_⟩
+    ∃ total previousBalance currentBalance : Gwei,
+      weighJustificationAndFinalization state total previousBalance currentBalance = .ok after ∧
+        ∀ (recent : Bool) (threshold weight : Gwei) (root : Root),
+          mulChecked total 2 = .ok threshold →
+          mulChecked (if recent then currentBalance else previousBalance) 3 = .ok weight →
+          threshold ≤ weight →
+          getBlockRoot state
+              (if recent then getCurrentEpoch state else getPreviousEpoch state) = .ok root →
+            LinkWithChurn state votes
+              (if recent then getCurrentEpoch state else getPreviousEpoch state)
+              ((if recent then state.currentJustifiedCheckpoint
+                else state.previousJustifiedCheckpoint).toFfg block)
+              (Checkpoint.toFfg block
+                ⟨if recent then getCurrentEpoch state else getPreviousEpoch state, root⟩) := by
+  refine ⟨total, previousBalance, currentBalance, weighed,
+    fun recent threshold weight root thresholdOk weightOk passed rootOk => ?_⟩
   have balanceOk : getTotalBalance state (if recent then current else previous) =
       .ok (if recent then currentBalance else previousBalance) := by
     cases recent
     · exact previousOk
     · exact currentOk
-  rw [epoch] at rootOk
-  have checkpoint : after.currentJustifiedCheckpoint =
-      ⟨if recent then getCurrentEpoch state else getPreviousEpoch state,
-        after.currentJustifiedCheckpoint.root⟩ := by
-    rw [← epoch]
-  rw [checkpoint]
   exact linkWithChurn_of_test large block contains totalOk balanceOk thresholdOk weightOk passed
     rootOk (counted recent)
+
+/-- Justification changes nothing, or weighs target balances that bound the links of passing tests.
+
+From Altair each target flag must come from a vote of a set for the link of its epoch.
+
+Before Altair each pending attestation of the two epochs must be a vote of the set for its link.
+
+The active stake of the current epoch must be more than one and a half increments.
+
+The votes of the model must hold those of the data that the state signs, with blocks for roots.
+
+In the first two epochs the step leaves the state as it is.
+
+Otherwise it weighs a total and two target balances.
+
+Each recent epoch whose test passes then gives the stake bound of its link, with churn.
+
+A test passes when twice the total balance is at most three times the target balance.
+
+The source of the link is the justified checkpoint of the epoch.
+
+Its target is the checkpoint of the epoch, with the root the state records for its first slot. -/
+theorem processJustificationAndFinalization_weighed
+    (flagsVoted : TargetFlagsVoted attested state)
+    (pendingVoted : PendingVoted attested state)
+    (large : 3 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat <
+      2 * stake (fun index => balanceAt state index.toNat)
+        (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset)
+    (block : Root → β) {votes : Set (Vote ValidatorIndex β)}
+    (contains : ffgVotes block attested ⊆ votes)
+    (computed : processJustificationAndFinalization state = .ok after) :
+    (getCurrentEpoch state ≤ GENESIS_EPOCH + 1 ∧ after = state) ∨
+      ∃ total previousBalance currentBalance : Gwei,
+        weighJustificationAndFinalization state total previousBalance currentBalance = .ok after ∧
+          ∀ (recent : Bool) (threshold weight : Gwei) (root : Root),
+            mulChecked total 2 = .ok threshold →
+            mulChecked (if recent then currentBalance else previousBalance) 3 = .ok weight →
+            threshold ≤ weight →
+            getBlockRoot state
+                (if recent then getCurrentEpoch state else getPreviousEpoch state) = .ok root →
+              LinkWithChurn state votes
+                (if recent then getCurrentEpoch state else getPreviousEpoch state)
+                ((if recent then state.currentJustifiedCheckpoint
+                  else state.previousJustifiedCheckpoint).toFfg block)
+                (Checkpoint.toFfg block
+                  ⟨if recent then getCurrentEpoch state else getPreviousEpoch state, root⟩) := by
+  unfold processJustificationAndFinalization at computed
+  split at computed
+  · rename_i altair
+    unfold processJustificationAndFinalizationAltair at computed
+    split at computed
+    · rename_i early
+      simp only [pure, Except.pure, Except.ok.injEq] at computed
+      exact .inl ⟨early, computed.symm⟩
+    rename_i late
+    simp only [bind_ok_iff, liftAccessor_ok] at computed
+    obtain ⟨previous, previousOk, current, currentOk, total, totalOk, previousBalance,
+      previousBalanceOk, currentBalance, currentBalanceOk, weighed⟩ := computed
+    refine .inr (linkWithChurn_of_weigh large block contains totalOk previousBalanceOk
+      currentBalanceOk (fun recent index member => ?_) weighed)
+    -- From Altair the counted attesters hold the target flag of the epoch.
+    cases recent
+    · exact TargetFlagsVoted.attester altair flagsVoted late false previousOk member
+    · exact TargetFlagsVoted.attester altair flagsVoted late true currentOk member
+  · rename_i notAltair
+    split at computed
+    · rename_i early
+      simp only [pure, Except.pure, Except.ok.injEq] at computed
+      exact .inl ⟨early, computed.symm⟩
+    rename_i late
+    simp only [bind_ok_iff, liftAccessor_ok, getAttestingBalance] at computed
+    obtain ⟨previous, previousOk, current, currentOk, total, totalOk, previousBalance,
+      ⟨previousIndices, previousIndicesOk, previousBalanceOk⟩, currentBalance,
+      ⟨currentIndices, currentIndicesOk, currentBalanceOk⟩, weighed⟩ := computed
+    refine .inr (linkWithChurn_of_weigh large block contains totalOk previousBalanceOk
+      currentBalanceOk (fun recent index member => ?_) weighed)
+    -- Before Altair the counted attesters cast a pending attestation of the epoch.
+    have early : JustifiedEarly state := fun first => absurd first late
+    have attester : index ∈ getActiveValidatorIndices state
+          (if recent then getCurrentEpoch state else getPreviousEpoch state) ∧
+        ∃ data, LinkVote state recent index.toNat (index, data) ∧
+          (index, data) ∈ attested := by
+      cases recent
+      · exact PendingVoted.attester (Nat.lt_of_not_le notAltair) pendingVoted early false
+          previousOk previousIndicesOk member
+      · exact PendingVoted.attester (Nat.lt_of_not_le notAltair) pendingVoted early true
+          currentOk currentIndicesOk member
+    obtain ⟨active, data, link, signed⟩ := attester
+    exact ⟨active, (index, data), link, signed⟩
 
 /-- Justification in the beacon chain gives the stake bound of a supermajority link of Casper FFG.
 
@@ -351,46 +435,19 @@ theorem processJustificationAndFinalization_linkWithChurn
             ((if current then state.currentJustifiedCheckpoint
               else state.previousJustifiedCheckpoint).toFfg block)
             (after.currentJustifiedCheckpoint.toFfg block) := by
-  unfold processJustificationAndFinalization at computed
-  split at computed
-  · rename_i altair
-    unfold processJustificationAndFinalizationAltair at computed
-    split at computed
-    · simp only [pure, Except.pure, Except.ok.injEq] at computed
-      exact .inl (computed ▸ rfl)
-    rename_i late
-    simp only [bind_ok_iff, liftAccessor_ok] at computed
-    obtain ⟨previous, previousOk, current, currentOk, total, totalOk, previousBalance,
-      previousBalanceOk, currentBalance, currentBalanceOk, weighed⟩ := computed
-    refine linkWithChurn_of_weigh large block contains totalOk previousBalanceOk
-      currentBalanceOk (fun recent index member => ?_) weighed
-    -- From Altair the counted attesters hold the target flag of the epoch.
-    cases recent
-    · exact TargetFlagsVoted.attester altair flagsVoted late false previousOk member
-    · exact TargetFlagsVoted.attester altair flagsVoted late true currentOk member
-  · rename_i notAltair
-    split at computed
-    · simp only [pure, Except.pure, Except.ok.injEq] at computed
-      exact .inl (computed ▸ rfl)
-    rename_i late
-    simp only [bind_ok_iff, liftAccessor_ok, getAttestingBalance] at computed
-    obtain ⟨previous, previousOk, current, currentOk, total, totalOk, previousBalance,
-      ⟨previousIndices, previousIndicesOk, previousBalanceOk⟩, currentBalance,
-      ⟨currentIndices, currentIndicesOk, currentBalanceOk⟩, weighed⟩ := computed
-    refine linkWithChurn_of_weigh large block contains totalOk previousBalanceOk
-      currentBalanceOk (fun recent index member => ?_) weighed
-    -- Before Altair the counted attesters cast a pending attestation of the epoch.
-    have early : JustifiedEarly state := fun first => absurd first late
-    have attester : index ∈ getActiveValidatorIndices state
-          (if recent then getCurrentEpoch state else getPreviousEpoch state) ∧
-        ∃ data, LinkVote state recent index.toNat (index, data) ∧
-          (index, data) ∈ attested := by
-      cases recent
-      · exact PendingVoted.attester (Nat.lt_of_not_le notAltair) pendingVoted early false
-          previousOk previousIndicesOk member
-      · exact PendingVoted.attester (Nat.lt_of_not_le notAltair) pendingVoted early true
-          currentOk currentIndicesOk member
-    obtain ⟨active, data, link, signed⟩ := attester
-    exact ⟨active, (index, data), link, signed⟩
+  rcases processJustificationAndFinalization_weighed (votes := votes) flagsVoted pendingVoted
+    large block contains computed with ⟨-, same⟩ | ⟨_, _, _, weighed, link⟩
+  · exact .inl (same ▸ rfl)
+  rcases weighJustificationAndFinalization_currentJustified weighed with ⟨same, -⟩ | ⟨recent,
+    threshold, weight, thresholdOk, weightOk, passed, epoch, rootOk⟩
+  · exact .inl same
+  refine .inr ⟨recent, epoch, rootOk, ?_⟩
+  rw [epoch] at rootOk
+  have checkpoint : after.currentJustifiedCheckpoint =
+      ⟨if recent then getCurrentEpoch state else getPreviousEpoch state,
+        after.currentJustifiedCheckpoint.root⟩ := by
+    rw [← epoch]
+  rw [checkpoint]
+  exact link recent threshold weight _ thresholdOk weightOk passed rootOk
 
 end EthLib.Consensus

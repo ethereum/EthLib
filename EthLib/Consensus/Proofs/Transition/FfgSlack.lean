@@ -208,7 +208,7 @@ theorem processJustificationAndFinalization_slackJustifiedCheckpoints
       before)
 
 /-- An epoch has at least one slot when the slot after another one starts an epoch. -/
-private theorem slotsPerEpoch_pos_of_mod {slot next : Slot} (sum : next.toNat = slot.toNat + 1)
+theorem slotsPerEpoch_pos_of_mod {slot next : Slot} (sum : next.toNat = slot.toNat + 1)
     (boundary : next % preset.SLOTS_PER_EPOCH = 0) : 0 < preset.SLOTS_PER_EPOCH.toNat := by
   apply Nat.pos_of_ne_zero
   intro zero
