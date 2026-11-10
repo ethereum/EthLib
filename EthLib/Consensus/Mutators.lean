@@ -82,7 +82,9 @@ def getValidator (state : BeaconState preset fork) (index : ValidatorIndex) :
   | some validator => .ok validator
   | none => .error (.indexOutOfRange index)
 
-/-- The balance at a plain integer position. -/
+/-- The balance at a plain integer position.
+
+A missing position is out of range, or an overflow at `2^64` or more. -/
 def getBalanceAt (state : BeaconState preset fork) (position : Nat) : Except AccessorError Gwei :=
   match state.balances.data[position]? with
   | some balance => .ok balance
@@ -90,7 +92,9 @@ def getBalanceAt (state : BeaconState preset fork) (position : Nat) : Except Acc
     let index ← liftArith (ofNatChecked position)
     throw (.indexOutOfRange index)
 
-/-- The validator at a plain integer position. -/
+/-- The validator at a plain integer position.
+
+A missing position is out of range, or an overflow at `2^64` or more. -/
 def getValidatorAt (state : BeaconState preset fork) (position : Nat) :
     Except AccessorError Validator :=
   match state.validators.data[position]? with

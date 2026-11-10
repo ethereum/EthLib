@@ -812,6 +812,8 @@ theorem eq_of_mem_getBeaconCommittee {state : BeaconState preset fork}
 
 The committee has a slot of the epoch and an index below the committees of a slot.
 
+The checked read of the active indices of the epoch must succeed.
+
 The seed of the epoch must have a value, and an epoch must have at least one slot.
 
 The slots of the epoch must fit in 64 bits.

@@ -95,7 +95,9 @@ def getCurrentEpoch (state : BeaconState preset fork) : Epoch :=
 
 /-- The indices of the validators active in an epoch, in increasing order.
 
-The positions must fit in 64 bits; transition steps use `getActiveValidatorIndicesChecked`. -/
+An active position of `2^64` or more wraps modulo `2^64`, where the specification fails.
+
+The transition reads the active indices through a checked form instead. -/
 def getActiveValidatorIndices (state : BeaconState preset fork) (epoch : Epoch) :
     List ValidatorIndex :=
   state.validators.data.toList.zipIdx.filterMap fun (validator, index) =>
@@ -319,7 +321,9 @@ def beaconCommitteeOf (preset : Preset) (slot : Slot) (index : CommitteeIndex) (
 
 /-- The active validators of an epoch, and their shuffle for the beacon committees.
 
-It fails as the shuffle does, for more than `2^40` active validators. -/
+It fails as the shuffle does, for more than `2^40` active validators.
+
+It also fails at an active position or an active count of `2^64` or more. -/
 def attesterShuffle (state : BeaconState preset fork) (epoch : Epoch) :
     Except AccessorError (Array ValidatorIndex × Array UInt64) := do
   let seed ← getSeed state epoch DOMAIN_BEACON_ATTESTER
