@@ -69,6 +69,7 @@ public import EthLib.Consensus.Proposers
 public import EthLib.Consensus.ReqResp.Bounds
 public import EthLib.Consensus.ReqResp.Messages
 public import EthLib.Consensus.ReqResp.ResponseBounds
+public import EthLib.Consensus.ReqResp.Validity
 public import EthLib.Consensus.Shuffle
 public import EthLib.Consensus.SlashingProtection
 public import EthLib.Consensus.Signing

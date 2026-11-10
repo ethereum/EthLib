@@ -340,6 +340,124 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
+  # Whether a change reaches the execution parity suite, and the shard of 200 that samples it.
+  # scripts/parity_sample.py decides from the imports of the suite and from a list of fixed files.
+  # The hash of the pull request's head commit, or of the pushed commit, picks the shard.
+  parity-plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      run: ${{ steps.sample.outputs.run }}
+      shard: ${{ steps.sample.outputs.shard }}
+
+    steps:
+      # The first parent of a pull request's merge commit is the base branch.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.13.6"
+          enable-cache: false
+
+      # A push compares the last commit before it with the pushed commit, so every commit of the push counts.
+      # A pull request compares its merge commit with the base branch.
+      - name: reached paths
+        id: sample
+        shell: bash
+        env:
+          COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+          BEFORE: ${{ github.event_name == 'push' && github.event.before || '' }}
+        run: |
+          base=HEAD^1
+          if [ -n "$BEFORE" ] && git fetch --quiet --depth=1 origin "$BEFORE"; then
+            base=$BEFORE
+          fi
+          git diff --name-only "$base" HEAD \
+            | uv run --no-project --python 3.12 python scripts/parity_sample.py "$COMMIT" 200 \
+            >> "$GITHUB_OUTPUT"
+
+  # One shard of the execution parity suite, which vectors-slow.yml runs whole each week.
+  # A shard holds about 1,800 cases.
+  # On GitHub runners in November 2026, a run that downloaded the archive took about 6 minutes.
+  # Of those, the build took 2 minutes, and the download and the shard together 2.6 minutes.
+  # A change that breaks 1,000 cases escapes the sample with probability 0.7 percent.
+  parity-sample:
+    needs: parity-plan
+    if: needs.parity-plan.outputs.run == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.13.6"
+          enable-cache: false
+
+      - name: restore EthLib build
+        if: inputs.clean_build != true
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .lake/build
+          key: ethlib-build-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            ethlib-build-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-
+
+      - name: install Lean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          bash scripts/install_elan.sh
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      # The library and the exports import no module of Mathlib or of the other packages.
+      # So this step only clones the packages, which Lake needs to load the workspace.
+      - name: fetch the dependencies
+        run: lake env true
+
+      - name: library
+        run: lake build --wfail EthLib Exports
+
+      - name: bindings
+        run: uv sync --frozen --extra test
+
+      # The pinned release of execution-spec-tests, about 940 MB, which the fetcher checks.
+      # A new pin changes the key, so a run never reads a stale archive.
+      - name: restore the archive
+        id: archive
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/archives/*.tar.gz
+          key: ethlib-execution-archive-${{ hashFiles('tests/sources.toml') }}
+
+      # To replay a failure, set ETHLIB_ARCHIVES to a cache directory and run this command with the printed shard.
+      - name: execution parity sample
+        env:
+          ETHLIB_ARCHIVES: ${{ runner.temp }}/archives
+          ETHLIB_PARITY_SHARD: ${{ needs.parity-plan.outputs.shard }}
+        run: |
+          echo "ETHLIB_PARITY_SHARD=$ETHLIB_PARITY_SHARD"
+          uv run --no-sync pytest -n auto --dist worksteal -m archive \
+            bindings/python/tests/parity/test_execution.py
+
+      # Only master saves the archive, in the one cache entry that every pull request can read.
+      - name: save the archive
+        if: >-
+          !cancelled() && steps.archive.outputs.cache-hit != 'true'
+          && github.event_name == 'push' && github.ref == 'refs/heads/master'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/archives/*.tar.gz
+          key: ethlib-execution-archive-${{ hashFiles('tests/sources.toml') }}
+
   vectors:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -410,6 +528,9 @@ jobs:
 
       - name: parity shard merge, unit tests
         run: uv run --no-sync python -m unittest scripts/test_merge_parity.py
+
+      - name: parity sample selection, unit tests
+        run: uv run --no-sync python -m unittest scripts/test_parity_sample.py
 
       # A module docstring is one line, and no docstring wraps a sentence onto a second line.
       - name: docstrings
