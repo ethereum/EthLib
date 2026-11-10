@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Cryptography.Proofs.Bls.Security.PopEager
 public import EthLib.Cryptography.Proofs.Bls.Security.PopExtract
 public import EthLib.Cryptography.Proofs.Bls.Security.Refinement
 
@@ -23,6 +24,8 @@ The algebraic step of its reduction is proved, on programmed hashes.
 A valid aggregate with valid proofs on key hashes `r x • Z` gives `a • Z`, for the key `a • g1`.
 
 That needs every key to be a multiple of `g1`, no `r x` to be zero, and a nonzero honest count.
+
+The game is unchanged in distribution when one message hash scalar is drawn before the run.
 
 No bound on that game is proved yet.
 -/
