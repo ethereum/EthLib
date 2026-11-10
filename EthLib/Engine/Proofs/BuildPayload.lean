@@ -2,11 +2,10 @@ module
 
 public import EthLib.Engine.BuildPayload
 public import EthLib.Engine.Proofs.NewPayload
-public import EthLib.Base.Except
-public import EthLib.Execution.Proofs.Blocks.Validate
+public import EthLib.Execution.Proofs.Blocks.Transition
 
 /-!
-# Proofs: the block that the execution layer builds
+# Proofs: the payload that the execution layer builds
 
 A built block passes the state transition of its chain, with the state that the build gives.
 
@@ -15,6 +14,8 @@ So `engine_newPayload` answers valid, when its parameters decode to a built bloc
 A header filled from a body passes every check against what that body gave.
 
 The built block carries each field of the attributes and of the builder's choices.
+
+From Pectra, its header commits to the requests that the build gives.
 -/
 
 public section
@@ -26,41 +27,7 @@ open EthLib.Execution.Blocks
 open EthLib.Execution.Transactions (Transaction)
 
 variable {fork : Fork} {chain : BlockChain} {attributes : PayloadAttributes fork}
-  {choices : BuildChoices} {transactions : List Transaction} {block : Block fork Transaction}
-  {post : Execution.State.State}
-
-private theorem toNat_ofNat_timestamp (t : UInt64) :
-    (BitVec.ofNat 256 t.toNat).toNat = t.toNat := by
-  have := t.toNat_lt
-  rw [BitVec.toNat_ofNat]
-  exact Nat.mod_eq_of_lt (by omega)
-
-/-- The gas limit toward a target passes the check against a parent of at least 5000 gas. -/
-theorem checkGasLimit_gasLimitToward {parentGasLimit : Nat} (target : Nat)
-    (h : Execution.Fees.GasLimit.LIMIT_MINIMUM ≤ parentGasLimit) :
-    Execution.Fees.GasLimit.checkGasLimit (gasLimitToward parentGasLimit target)
-      parentGasLimit = true := by
-  simp only [gasLimitToward, Execution.Fees.GasLimit.checkGasLimit,
-    Execution.Fees.GasLimit.LIMIT_ADJUSTMENT_FACTOR, Execution.Fees.GasLimit.LIMIT_MINIMUM] at *
-  by_cases hc : parentGasLimit < max target 5000 <;>
-    simp only [hc, reduceIte, Bool.and_eq_true, decide_eq_true_eq] <;> omega
-
-/-- A target that the check allows is the gas limit itself, so the builder can reach any of them.
--/
-theorem gasLimitToward_of_checkGasLimit {parentGasLimit target : Nat}
-    (h : Execution.Fees.GasLimit.checkGasLimit target parentGasLimit = true) :
-    gasLimitToward parentGasLimit target = target := by
-  simp only [Execution.Fees.GasLimit.checkGasLimit, Bool.and_eq_true, decide_eq_true_eq] at h
-  dsimp only [gasLimitToward]
-  by_cases hc : parentGasLimit < max target Execution.Fees.GasLimit.LIMIT_MINIMUM
-  · simp only [hc, reduceIte]
-    simp only [Execution.Fees.GasLimit.LIMIT_ADJUSTMENT_FACTOR,
-      Execution.Fees.GasLimit.LIMIT_MINIMUM] at *
-    omega
-  · simp only [hc, reduceIte]
-    simp only [Execution.Fees.GasLimit.LIMIT_ADJUSTMENT_FACTOR,
-      Execution.Fees.GasLimit.LIMIT_MINIMUM] at *
-    omega
+  {choices : BuildChoices} {transactions : List Transaction} {built : BuiltPayload fork}
 
 /-- A header filled from a body passes every check against what that body gave.
 
@@ -107,64 +74,56 @@ theorem outputChecks_fillHeader {header : Header fork} {output : BlockOutput for
 
 The parent is the last recent block, and the fork is the active fork after it at the timestamp.
 
-The block is the header filled from its body, with the transactions and the withdrawals. -/
-private theorem buildBlock_spec
-    (h : buildBlock chain attributes choices transactions = .ok (block, post)) :
-    ¬ .hegota ≤ fork ∧ ∃ parent parentHash hashes output roots,
+The body ran on the header before it was filled, and the block holds the filled header. -/
+private theorem buildPayload_spec
+    (h : buildPayload chain attributes choices transactions = .ok built) :
+    ¬ .hegota ≤ fork ∧ ∃ parent parentHash result,
       chain.recent.getLast? = some parent ∧
       chain.config.activeFork (parent.header.number + 1) attributes.timestamp.toNat = some fork ∧
-      parent.header.hash = .ok parentHash ∧ recentHashes chain.recent = .ok hashes ∧
-      applyBody chain.config
-        (blockEnvironment chain.config hashes
-          (buildHeader chain.config parent parentHash attributes choices))
-        ⟨buildHeader chain.config parent parentHash attributes choices, transactions, [],
-          attributes.withdrawals⟩ ⟨chain.state, ∅, ∅, ∅, ∅⟩ = .ok output ∧
-      outputRoots transactions attributes.withdrawals output output.block.applyChanges =
-        .ok roots ∧
-      checkBlock chain.config false chain.recent block = .ok () ∧
-      firstFailure (outputChecks block.header output roots) = .ok () ∧
-      block = ⟨fillHeader (buildHeader chain.config parent parentHash attributes choices) output
-        roots, transactions, [], attributes.withdrawals⟩ ∧
-      post = output.block.applyChanges := by
+      parent.header.hash = .ok parentHash ∧
+      runBody chain ⟨buildHeader chain.config parent parentHash attributes choices, transactions,
+        [], attributes.withdrawals⟩ = .ok result ∧
+      checkBlock chain.config false chain.recent built.block = .ok () ∧
+      firstFailure (outputChecks built.block.header result.output result.roots) = .ok () ∧
+      built.block = ⟨fillHeader (buildHeader chain.config parent parentHash attributes choices)
+        result.output result.roots, transactions, [], attributes.withdrawals⟩ ∧
+      built.state = result.post ∧ built.requests = result.output.requests := by
   have hH : ¬ .hegota ≤ fork := by
-    intro hc; simp [buildBlock, hc, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
-  simp only [buildBlock, hH, reduceIte] at h
+    intro hc; simp [buildPayload, hc, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
+  simp only [buildPayload, hH, reduceIte] at h
   split at h
   next parent hP =>
     split at h
     next hA =>
       simp only [bind_ok_iff] at h
-      obtain ⟨parentHash, hHash, hashes, hR, output, hB, roots, hO, u, hC, v, hF, hEq⟩ := h
-      simp only [pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at hEq
-      obtain ⟨rfl, rfl⟩ := hEq
+      obtain ⟨parentHash, hHash, result, hR, u, hC, v, hF, hEq⟩ := h
+      simp only [pure, Except.pure, Except.ok.injEq] at hEq
+      subst hEq
       have hHash' : parent.header.hash = .ok parentHash := by
         cases hp : parent.header.hash <;> simp_all [Except.mapError]
-      exact ⟨hH, parent, parentHash, hashes, output, roots, hP, hA, hHash', hR, hB, hO, hC, hF,
-        rfl, rfl⟩
+      exact ⟨hH, parent, parentHash, result, hP, hA, hHash', hR, hC, hF, rfl, rfl, rfl⟩
     · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
   · simp [throw, throwThe, MonadExceptOf.throw] at h
 
 /-- A built block passes the state transition of its chain, without the proof of work.
 
 The state after it is the state that the build gives. -/
-theorem stateTransition_of_buildBlock
-    (h : buildBlock chain attributes choices transactions = .ok (block, post)) :
-    stateTransition chain block false = .ok post := by
-  obtain ⟨hH, parent, parentHash, hashes, output, roots, -, hA, -, hR, hB, hO, hC, hF, rfl, rfl⟩ :=
-    buildBlock_spec h
-  have hB' : applyBody chain.config (blockEnvironment chain.config hashes
-      (fillHeader (buildHeader chain.config parent parentHash attributes choices) output roots))
-      ⟨fillHeader (buildHeader chain.config parent parentHash attributes choices) output roots,
-        transactions, [], attributes.withdrawals⟩ ⟨chain.state, ∅, ∅, ∅, ∅⟩ = .ok output :=
-    hB
-  simp only [stateTransition, hH, reduceIte, bind, Except.bind, pure, Except.pure]
-  have hNum : (fillHeader (buildHeader chain.config parent parentHash attributes choices)
-      output roots).number = parent.header.number + 1 := rfl
-  have hTs : (fillHeader (buildHeader chain.config parent parentHash attributes choices)
-      output roots).timestamp.toNat = attributes.timestamp.toNat :=
-    toNat_ofNat_timestamp attributes.timestamp
-  rw [hNum, hTs]
-  simp only [hA, reduceIte, hC, hR, hB', hO, hF]
+theorem stateTransition_of_buildPayload
+    (h : buildPayload chain attributes choices transactions = .ok built) :
+    stateTransition chain built.block false = .ok built.state := by
+  obtain ⟨hH, parent, parentHash, result, -, hA, -, hR, hC, hF, hBlock, hState, -⟩ :=
+    buildPayload_spec h
+  rw [hState]
+  rw [hBlock] at hC hF ⊢
+  -- The body reads none of the fields that the fill sets, so it runs alike on the filled header.
+  have hR' : runBody chain ⟨fillHeader (buildHeader chain.config parent parentHash attributes
+      choices) result.output result.roots, transactions, [], attributes.withdrawals⟩ =
+      .ok result := hR
+  refine stateTransition_of_runBody hH ?_ hC hR' hF
+  rw [show (fillHeader (buildHeader chain.config parent parentHash attributes choices)
+      result.output result.roots).timestamp.toNat = attributes.timestamp.toNat from
+    toNat_ofNat_timestamp attributes.timestamp]
+  exact hA
 
 /-- A built block carries the fields of the attributes and of the builder's choices.
 
@@ -174,26 +133,34 @@ It holds the fee recipient, the extra data and the transactions that the builder
 
 Its parent is the last recent block, and its gas limit moves from the parent's toward the target.
 -/
-theorem buildBlock_fields
-    (h : buildBlock chain attributes choices transactions = .ok (block, post)) :
-    block.header.timestamp.toNat = attributes.timestamp.toNat ∧
-      block.header.prevRandao = attributes.prevRandao ∧
-      block.withdrawals = attributes.withdrawals ∧
-      block.header.parentBeaconBlockRoot = attributes.parentBeaconBlockRoot ∧
-      block.header.slotNumber = attributes.slotNumber ∧
-      block.header.coinbase = choices.feeRecipient ∧
-      block.header.extraData = choices.extraData ∧
-      block.transactions = transactions ∧
+theorem buildPayload_fields
+    (h : buildPayload chain attributes choices transactions = .ok built) :
+    built.block.header.timestamp.toNat = attributes.timestamp.toNat ∧
+      built.block.header.prevRandao = attributes.prevRandao ∧
+      built.block.withdrawals = attributes.withdrawals ∧
+      built.block.header.parentBeaconBlockRoot = attributes.parentBeaconBlockRoot ∧
+      built.block.header.slotNumber = attributes.slotNumber ∧
+      built.block.header.coinbase = choices.feeRecipient ∧
+      built.block.header.extraData = choices.extraData ∧
+      built.block.transactions = transactions ∧
       ∃ parent, chain.recent.getLast? = some parent ∧
-        parent.header.hash = .ok block.header.parentHash ∧
-        block.header.number = parent.header.number + 1 ∧
-        block.header.gasLimit = gasLimitToward
+        parent.header.hash = .ok built.block.header.parentHash ∧
+        built.block.header.number = parent.header.number + 1 ∧
+        built.block.header.gasLimit = gasLimitToward
           (Execution.Fees.GasLimit.parentGasLimitForCheck parent.fork fork parent.header.gasLimit)
           (gasTarget attributes choices) := by
-  obtain ⟨-, parent, parentHash, -, -, -, hP, -, hHash, -, -, -, -, -, rfl, rfl⟩ :=
-    buildBlock_spec h
+  obtain ⟨-, parent, parentHash, _, hP, -, hHash, -, -, -, hBlock, -, -⟩ := buildPayload_spec h
+  rw [hBlock]
   exact ⟨toNat_ofNat_timestamp attributes.timestamp, rfl, rfl, rfl, rfl, rfl, rfl, rfl, parent,
     hP, hHash, rfl, rfl⟩
+
+/-- From Pectra, the header of a built block commits to the requests that the build gives. -/
+theorem requestsHash_of_buildPayload
+    (h : buildPayload chain attributes choices transactions = .ok built) (hPectra : .pectra ≤ fork) :
+    built.block.header.requestsHash hPectra = requestsHash built.requests := by
+  obtain ⟨-, _, _, _, -, -, -, -, -, -, hBlock, -, hRequests⟩ := buildPayload_spec h
+  rw [hBlock, hRequests]
+  rfl
 
 /-- `engine_newPayload` answers that a built block is valid, on the chain that it was built on.
 
@@ -201,14 +168,18 @@ The payload must pass the checks of the method before execution, with the built 
 
 The latest valid hash is the block's own hash, and the state after it is the state of the build.
 -/
-theorem newPayloadOnChain_of_buildBlock {version : Nat} {params : Lean.Json}
+theorem newPayloadOnChain_of_buildPayload {version : Nat} {params : Lean.Json}
     {checked : CheckedBlock version} {attributes : PayloadAttributes checked.fork}
+    {built : BuiltPayload checked.fork}
     (hCheck : checkNewPayload chain.config version params = .ok (.ok checked))
-    (h : buildBlock chain attributes choices transactions = .ok (checked.block, post)) :
+    (h : buildPayload chain attributes choices transactions = .ok built)
+    (hBlock : built.block = checked.block) :
     newPayloadOnChain chain version params =
       .ok (⟨.valid, checked.block.header.hash.toOption⟩, none,
-        some (⟨checked.fork, checked.block.header, []⟩, post)) := by
-  obtain ⟨-, -, -, -, -, -, -, -, parent, hP, hHash, -⟩ := buildBlock_fields h
-  exact newPayloadOnChain_of_stateTransition_ok hCheck hP hHash (stateTransition_of_buildBlock h)
+        some (⟨checked.fork, checked.block.header, []⟩, built.state)) := by
+  obtain ⟨-, -, -, -, -, -, -, -, parent, hP, hHash, -⟩ := buildPayload_fields h
+  rw [hBlock] at hHash
+  exact newPayloadOnChain_of_stateTransition_ok hCheck hP hHash
+    (hBlock ▸ stateTransition_of_buildPayload h)
 
 end EthLib.Engine

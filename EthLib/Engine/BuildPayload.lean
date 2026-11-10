@@ -1,16 +1,19 @@
 module
 
+public import EthLib.Base.GasLimit
 public import EthLib.Engine.ForkchoiceUpdated
 public import EthLib.Execution.Blocks.Transition
 
 /-!
 # `Engine.BuildPayload`
 
-The block that the execution layer builds from payload attributes, on the last block of its chain.
+The payload that the execution layer builds from payload attributes, on the last block of its chain.
 
 The attributes fix the timestamp and the RANDAO mix.
 
-From their forks on, they fix the withdrawals, the parent beacon block root and the slot.
+The withdrawals join them from Shapella, the parent beacon block root from Dencun.
+
+The slot and the target gas limit join them from Glamsterdam.
 
 The builder chooses the fee recipient, the extra data and the transactions.
 
@@ -20,15 +23,17 @@ The source leaves the choice of the transactions to the builder, so they are an 
 
 The parent fixes the number, the base fee and the excess blob gas.
 
-The gas limit moves from the parent's toward a target, as far as the header check allows.
+The excess blob gas follows the blob schedule of the chain at the number and the timestamp.
 
-That check keeps it strictly within a 1024th of the parent's, and at least 5000.
+The gas limit moves from the parent's toward a target, by one step of the header check at most.
 
-So each step moves it by at most a 1024th of the parent's, minus one.
+At the first London block, that check reads twice the parent's gas limit, and so does the step.
 
 From Glamsterdam the target is the target gas limit of the attributes, as the source asks.
 
 Before Glamsterdam the builder chooses the target.
+
+A target below 5000, the smallest gas limit, counts as 5000.
 
 The source does not say how far one block moves toward the target; that step is a choice here.
 
@@ -46,7 +51,9 @@ The checks against the parent can fail, for instance on a timestamp not above th
 
 They also fail on extra data of more than 32 bytes, or on a block above the size limit of EIP-7934.
 
-The build gives the block and the state after it, not the response of `engine_getPayload`.
+The build gives the block, the state after it, its requests and its value to the fee recipient.
+
+The value is the sum of the priority fees, which [`engine_getPayloadV2`][v2] recommends.
 
 Before Paris it always fails, since its header has a difficulty of 0.
 
@@ -55,6 +62,7 @@ The source states the build in [Payload building][build], at commit `3284ee8` of
 [`engine_forkchoiceUpdatedV4`][v4] adds the target gas limit.
 
 [build]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#payload-building
+[v2]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/shanghai.md#engine_getpayloadv2
 [v4]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/amsterdam.md#engine_forkchoiceupdatedv4
 -/
 
@@ -64,21 +72,10 @@ namespace EthLib.Engine
 
 open EthLib.Base
 open EthLib.Execution.Blocks
-open EthLib.Execution.Fees.GasLimit (LIMIT_ADJUSTMENT_FACTOR LIMIT_MINIMUM parentGasLimitForCheck)
-open EthLib.Execution.Transactions (Transaction)
+open EthLib.Execution.Fees.GasLimit (LIMIT_MINIMUM parentGasLimitForCheck)
+open EthLib.Execution.Transactions (Transaction effectiveGasPrice)
 
 variable {fork : Fork}
-
-/-- The gas limit after a parent's that moves toward a target as far as the header check allows.
-
-The target is at least the smallest gas limit, 5000.
-
-The step is a 1024th of the parent's gas limit, minus one, since the check's bounds are strict. -/
-def gasLimitToward (parentGasLimit target : Nat) : Nat :=
-  let step := parentGasLimit / LIMIT_ADJUSTMENT_FACTOR - 1
-  let target := max target LIMIT_MINIMUM
-  if parentGasLimit < target then min (parentGasLimit + step) target
-  else max (parentGasLimit - step) target
 
 /-- What the builder of a payload chooses. -/
 structure BuildChoices where
@@ -86,12 +83,16 @@ structure BuildChoices where
   feeRecipient : Address
   /-- The extra data of the block; the build fails on more than 32 bytes. -/
   extraData : ByteArray
-  /-- The target of the gas limit, which counts only before Glamsterdam. -/
-  gasLimitTarget : Nat
+  /-- The target gas limit, which counts only before Glamsterdam. -/
+  targetGasLimit : Nat
 
-/-- The target of the gas limit: that of the attributes from Glamsterdam, else the builder's. -/
+/-- The target gas limit: that of the attributes from Glamsterdam, else the builder's.
+
+A target below the smallest gas limit, 5000, counts as 5000. -/
 def gasTarget (attributes : PayloadAttributes fork) (choices : BuildChoices) : Nat :=
-  if h : .glamsterdam ≤ fork then (attributes.targetGasLimit h).toNat else choices.gasLimitTarget
+  max LIMIT_MINIMUM
+    (if h : .glamsterdam ≤ fork then (attributes.targetGasLimit h).toNat
+    else choices.targetGasLimit)
 
 /-- The header of a built block before its body runs, on a parent.
 
@@ -143,16 +144,39 @@ def fillHeader (header : Header fork) (output : BlockOutput fork) (roots : Outpu
     requestsHash := fun _ => requestsHash output.requests
     blockAccessListHash := fun _ => output.accessListHash.getD 0 }
 
-/-- Build a block at `fork` from payload attributes and transactions, on the last block of a chain.
+/-- The priority fees that transactions pay to the fee recipient of their block, in wei.
+
+Each transaction pays its gas used times its gas price above the base fee `baseFee`.
+
+The gas used of a transaction is the step of the cumulative gas used of its receipt. -/
+def priorityFees (baseFee : Nat) (transactions : List Transaction)
+    (receipts : List (UInt8 × Receipt fork)) : Nat :=
+  let cumulative := receipts.map (·.2.cumulativeGasUsed)
+  let used := List.zipWith (· - ·) cumulative (0 :: cumulative)
+  (List.zipWith (fun tx gas => gas * (effectiveGasPrice baseFee tx - baseFee)) transactions
+    used).sum
+
+/-- A payload that the execution layer built, with what `engine_getPayload` returns beside it. -/
+structure BuiltPayload (fork : Fork) where
+  /-- The block of the payload. -/
+  block : Block fork Transaction
+  /-- The state after the block. -/
+  state : Execution.State.State
+  /-- The requests of the block, each list with its type byte first; none before Pectra. -/
+  requests : List ByteArray
+  /-- The value of the block to its fee recipient, in wei: the sum of its priority fees. -/
+  blockValue : Nat
+
+/-- Build a payload at `fork` from payload attributes and transactions, on the last block of a chain.
 
 The fork must be the active fork at the number after the parent and at the timestamp.
 
-The result is the block and the state after it.
+The result is the block, the state after it, its requests and its value.
 
 It fails when the block cannot be built, or when it would fail the state transition. -/
-def buildBlock (chain : BlockChain) (attributes : PayloadAttributes fork) (choices : BuildChoices)
-    (transactions : List Transaction) :
-    Except BlockError (Block fork Transaction × Execution.State.State) := do
+def buildPayload (chain : BlockChain) (attributes : PayloadAttributes fork)
+    (choices : BuildChoices) (transactions : List Transaction) :
+    Except BlockError (BuiltPayload fork) := do
   if .hegota ≤ fork then throw (.aborted (.forkNotYetSpecified fork))
   let some parent := chain.recent.getLast? | throw .noParent
   let number := parent.header.number + 1
@@ -160,16 +184,13 @@ def buildBlock (chain : BlockChain) (attributes : PayloadAttributes fork) (choic
     throw .wrongFork
   let parentHash ← parent.header.hash.mapError .encoding
   let header := buildHeader chain.config parent parentHash attributes choices
-  let hashes ← recentHashes chain.recent
-  let env := blockEnvironment chain.config hashes header
-  let output ← applyBody chain.config env ⟨header, transactions, [], attributes.withdrawals⟩
-    ⟨chain.state, ∅, ∅, ∅, ∅⟩
-  let post := output.block.applyChanges
-  let roots ← outputRoots transactions attributes.withdrawals output post
+  let result ← runBody chain ⟨header, transactions, [], attributes.withdrawals⟩
   let block : Block fork Transaction :=
-    ⟨fillHeader header output roots, transactions, [], attributes.withdrawals⟩
+    ⟨fillHeader header result.output result.roots, transactions, [], attributes.withdrawals⟩
   checkBlock chain.config false chain.recent block
-  firstFailure (outputChecks block.header output roots)
-  return (block, post)
+  firstFailure (outputChecks block.header result.output result.roots)
+  let baseFee := if h : .london ≤ fork then header.baseFeePerGas h else 0
+  return { block, state := result.post, requests := result.output.requests
+           blockValue := priorityFees baseFee transactions result.output.receipts }
 
 end EthLib.Engine

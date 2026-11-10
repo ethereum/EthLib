@@ -356,6 +356,33 @@ def outputChecks {fork : Fork} (header : Header fork) (output : BlockOutput fork
       .wrongBlockAccessListHash)]
   else [])
 
+/-- What the body of a block gives on its chain: its output, and the roots from the state after it.
+-/
+structure BodyResult (fork : Fork) where
+  /-- What the body gave. -/
+  output : BlockOutput fork
+  /-- The roots of the transactions, of the state after the block, of the receipts and more. -/
+  roots : OutputRoots
+
+/-- The state after a block whose body gave `result`. -/
+def BodyResult.post {fork : Fork} (result : BodyResult fork) : State :=
+  result.output.block.applyChanges
+
+/-- Run the body of `block` on the state of the chain `chain`, and compute the roots it gives.
+
+The body runs in the environment of its header and of the recent hashes of the chain.
+
+The body reads none of the header fields that it gives: roots, gas counts, logs Bloom, hashes.
+
+So a builder can run it before it fills those fields. -/
+def runBody (chain : BlockChain) {fork : Fork} (block : Block fork Transaction) :
+    Except BlockError (BodyResult fork) := do
+  let hashes ← recentHashes chain.recent
+  let env := blockEnvironment chain.config hashes block.header
+  let output ← applyBody chain.config env block ⟨chain.state, ∅, ∅, ∅, ∅⟩
+  let roots ← outputRoots block.transactions block.withdrawals output output.block.applyChanges
+  return ⟨output, roots⟩
+
 /-! ## The transition -/
 
 /-- Run the state transition of `block` at `fork` on the chain `chain`, and give the state after.
@@ -371,12 +398,8 @@ def stateTransition (chain : BlockChain) {fork : Fork} (block : Block fork Trans
   unless chain.config.activeFork block.header.number block.header.timestamp.toNat = some fork do
     throw .wrongFork
   checkBlock chain.config checkSeal chain.recent block
-  let hashes ← recentHashes chain.recent
-  let env := blockEnvironment chain.config hashes block.header
-  let output ← applyBody chain.config env block ⟨chain.state, ∅, ∅, ∅, ∅⟩
-  let post := output.block.applyChanges
-  let roots ← outputRoots block.transactions block.withdrawals output post
-  firstFailure (outputChecks block.header output roots)
-  return post
+  let result ← runBody chain block
+  firstFailure (outputChecks block.header result.output result.roots)
+  return result.post
 
 end EthLib.Execution.Blocks

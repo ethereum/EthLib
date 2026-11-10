@@ -8,6 +8,7 @@ public import EthLib.Base.Bytes
 public import EthLib.Base.ChainConfig
 public import EthLib.Base.Except
 public import EthLib.Base.Fork
+public import EthLib.Base.GasLimit
 public import EthLib.Base.Hash32
 public import EthLib.Base.Hex
 public import EthLib.Base.Length

@@ -10,6 +10,7 @@ public import EthLib.Base.Proofs.ExceptT
 public import EthLib.Base.Proofs.FilterM
 public import EthLib.Base.Proofs.Forall2
 public import EthLib.Base.Proofs.Fork
+public import EthLib.Base.Proofs.GasLimit
 public import EthLib.Base.Proofs.Hex
 public import EthLib.Base.Proofs.LittleEndian
 public import EthLib.Base.Proofs.List
