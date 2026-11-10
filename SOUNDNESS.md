@@ -1513,9 +1513,13 @@ The equality holds in two cases.
 `processTransaction_supply_of_dencun` gives it from Cancun for a transaction that creates no account.
 
 Before Cancun, a SELFDESTRUCT whose beneficiary is its own account burns that balance inside the message, and the deletions burn what a marked account received after it.
-The state does not record that amount, so the theorems give only the bound there.
 The same holds from Cancun until Glamsterdam for a transaction that creates an account.
-An exact form there needs a term that tracks the burned balance through the whole run.
+`processTransaction_supply_eq` in `Execution/Proofs/Transactions/Burn.lean` gives the exact change at every fork that runs.
+The end supply plus burned fees, surviving message burns and deleted balances equals the starting supply.
+`TransactionBurns` supplies the actual transaction steps and a structural `RunBurns` certificate of its message.
+Its burn log records SELFDESTRUCT amounts and discards them on a rollback, including a failed code deposit.
+The deleted balances are read after gas settlement, before any deletion, and counted once each.
+The gas-limit and price hypotheses are those of `processTransaction_supply_le`.
 
 `Execution/Proofs/Blocks/Supply.lean` extends the bound to a whole block.
 The block creates the wei of its withdrawals from Shapella, by EIP-4895, and of its rewards before Paris.
@@ -1527,7 +1531,7 @@ From Glamsterdam the gas used of the header is the larger of the execution gas b
 There the theorems take the fees from the body that the transition runs.
 Before Glamsterdam the block theorems give only the bound, for the reasons above, even from Cancun.
 A block form of the Cancun equality would need every transaction and every system call to end with no created account.
-The exact change for one transaction before Cancun is tracked in [#1793](https://github.com/ethereum/EthLib/issues/1793); a block form would rest on it.
+A block form that counts every SELFDESTRUCT burn and deleted balance remains to be proved.
 
 ### The authorizations of EIP-7702
 
