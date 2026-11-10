@@ -224,9 +224,9 @@ private theorem getSeed_eq_of_mixesKeptBut {post : Base.Fork} {other : BeaconSta
 
 /-- Two states agree on the committees of an epoch, when two facts hold.
 
-They agree on activity in that epoch.
+They agree on activity in each epoch up to that one.
 
-Their RANDAO mixes differ at most at the position of that epoch or of the next one.
+Their RANDAO mixes differ at most at one position, of that epoch or of the next one.
 
 There must be more than `MIN_SEED_LOOKAHEAD + 2` epochs of mixes. -/
 theorem CommitteesKept.of_activeKept {post : Base.Fork} {other : BeaconState preset post}
@@ -264,9 +264,9 @@ theorem getAttestingIndices_eq_of_eq {other : BeaconState preset fork}
 
 /-- Two states agree on the attesters of an attestation, when two facts hold.
 
-They agree on activity in the epoch of its slot.
+They agree on activity in each epoch up to the epoch of its slot.
 
-Their RANDAO mixes differ at most at the position of that epoch or of the next one.
+Their RANDAO mixes differ at most at one position, of that epoch or of the next one.
 
 There must be more than `MIN_SEED_LOOKAHEAD + 2` epochs of mixes. -/
 theorem getAttestingIndices_eq_of_activeKept {other : BeaconState preset fork}
@@ -770,7 +770,9 @@ theorem processAttestation_registry {parentSlot : Slot} {attestation : Attestati
       rw [← rest]
       exact ⟨rfl, rfl⟩
 
-/-- The slot of a valid attestation is in the previous or the current epoch, at every fork. -/
+/-- An attestation that the step accepts has its slot in the previous or the current epoch.
+
+That holds at every fork. -/
 theorem processAttestation_slotEpoch {parentSlot : Slot} {attestation : Attestation preset fork}
     (computed : processAttestation config checks state parentSlot attestation = .ok after) :
     computeEpochAtSlot preset attestation.data.slot = getPreviousEpoch state ∨

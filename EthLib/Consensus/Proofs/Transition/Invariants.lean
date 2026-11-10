@@ -1087,22 +1087,38 @@ theorem frame_processSyncAggregate {altair : .altair ≤ fork} {aggregate : Sync
 
 /-! ## Blocks -/
 
-/-- The operations of a block are a block frame, its attestations in order, then a block frame. -/
-theorem processOperations_split {body : BeaconBlockBody preset fork} {parentSlot : Slot}
+/-- The operations of a block are a step, its attestations in order, then a block frame.
+
+The step holds of the two kinds of slashings, which run before the attestations.
+
+It must hold of each state to itself, and chain. -/
+theorem processOperations_split_of
+    (step : BeaconState preset fork → BeaconState preset fork → Prop)
+    (refl : ∀ state, step state state)
+    (trans : ∀ {first second third}, step first second → step second third → step first third)
+    (proposer : ∀ {state after} {slashing : ProposerSlashing},
+      processProposerSlashing config checks state slashing = .ok after → step state after)
+    (attester : ∀ {state after} {slashing : AttesterSlashing preset fork},
+      processAttesterSlashing config checks state slashing = .ok after → step state after)
+    {body : BeaconBlockBody preset fork} {parentSlot : Slot}
     (computed : processOperations config checks state body parentSlot = .ok after) :
-    ∃ first last, BlockFrame state first ∧
+    ∃ first last, step state first ∧
       body.attestations.data.toList.foldlM (processAttestation config checks · parentSlot ·)
         first = .ok last ∧ BlockFrame last after := by
+  have slashed : ∀ {middle : BeaconState preset fork}
+      {proposers : List ProposerSlashing} {attesters : List (AttesterSlashing preset fork)},
+      proposers.foldlM (processProposerSlashing config checks) state = .ok middle →
+      ∀ {first}, attesters.foldlM (processAttesterSlashing config checks) middle = .ok first →
+        step state first := fun proposersOk _ attestersOk =>
+    trans (foldlM_ok_steps step refl trans (fun _ _ _ ok => proposer ok) proposersOk).1
+      (foldlM_ok_steps step refl trans (fun _ _ _ ok => attester ok) attestersOk).1
   unfold processOperations at computed
   split at computed
   · unfold processOperationsGloas at computed
     simp only [bind_ok_iff, ← Array.foldlM_toList] at computed
     obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, proposersOk, _, attestersOk, _,
       attestedOk, _, exitsOk, _, changesOk, paid⟩ := computed
-    refine ⟨_, _, (BlockFrame.foldlM (fun _ _ _ ok => frame_processProposerSlashing ok)
-      proposersOk).trans
-      (BlockFrame.foldlM (fun _ _ _ ok => frame_processAttesterSlashing ok) attestersOk),
-      attestedOk, ?_⟩
+    refine ⟨_, _, slashed proposersOk attestersOk, attestedOk, ?_⟩
     exact (BlockFrame.foldlM (fun _ _ _ ok => frame_processVoluntaryExit ok) exitsOk).trans <|
       (BlockFrame.foldlM (fun _ _ _ ok => frame_processBlsToExecutionChange ok) changesOk).trans <|
       BlockFrame.foldlM (fun _ _ _ ok => by
@@ -1123,13 +1139,82 @@ theorem processOperations_split {body : BeaconBlockBody preset fork} {parentSlot
     · exact frame_processExecutionRequests requestsOk
     · simp only [pure, Except.pure, Except.ok.injEq] at requestsOk
       exact requestsOk ▸ BlockFrame.refl _
-  refine ⟨_, _, (BlockFrame.foldlM (fun _ _ _ ok => frame_processProposerSlashing ok)
-    proposersOk).trans
-    (BlockFrame.foldlM (fun _ _ _ ok => frame_processAttesterSlashing ok) attestersOk),
-    attestedOk, ?_⟩
+  refine ⟨_, _, slashed proposersOk attestersOk, attestedOk, ?_⟩
   exact (BlockFrame.foldlM (fun _ _ _ ok => frame_processDeposit ok) depositedOk).trans <|
     (BlockFrame.foldlM (fun _ _ _ ok => frame_processVoluntaryExit ok) exitsOk).trans <|
     changes.trans requests
+
+/-- The operations of a block are a block frame, its attestations in order, then a block frame. -/
+theorem processOperations_split {body : BeaconBlockBody preset fork} {parentSlot : Slot}
+    (computed : processOperations config checks state body parentSlot = .ok after) :
+    ∃ first last, BlockFrame state first ∧
+      body.attestations.data.toList.foldlM (processAttestation config checks · parentSlot ·)
+        first = .ok last ∧ BlockFrame last after :=
+  processOperations_split_of BlockFrame BlockFrame.refl BlockFrame.trans
+    frame_processProposerSlashing frame_processAttesterSlashing computed
+
+/-- A block is a step, its operations, then a block frame.
+
+The step holds of each part of the block that runs before its operations.
+
+Those are the payload of the parent from Gloas, the header and the execution part from Bellatrix.
+
+They are also the RANDAO reveal and the vote on the deposit contract before Heze.
+
+It must hold of each state to itself, and chain.
+
+The operations read the parent slot from the latest block header before the block. -/
+theorem processBlock_split_of
+    (step : BeaconState preset fork → BeaconState preset fork → Prop)
+    (refl : ∀ state, step state state)
+    (trans : ∀ {first second third}, step first second → step second third → step first third)
+    {block : BeaconBlock preset fork}
+    (paid : ∀ {state after} (gloas : .glamsterdam ≤ fork),
+      processParentExecutionPayload config checks state gloas block.body = .ok after →
+        step state after)
+    (header : ∀ {state after}, processBlockHeader state block = .ok after → step state after)
+    (execution : ∀ {state after} (bellatrix : .bellatrix ≤ fork),
+      processBlockExecution config checks engine state block.body bellatrix = .ok after →
+        step state after)
+    (randao : ∀ {state after},
+      processRandao config checks state block.body = .ok after → step state after)
+    (eth1 : ∀ {state after} (before : fork < .hegota),
+      processEth1Data before state block.body = .ok after → step state after)
+    (computed : processBlock config checks engine state block = .ok after) :
+    ∃ first last, step state first ∧
+      processOperations config checks first block.body state.latestBlockHeader.slot = .ok last ∧
+      BlockFrame last after := by
+  unfold processBlock at computed
+  split at computed
+  · unfold processBlockAltair at computed
+    simp only [bind_ok_iff] at computed
+    obtain ⟨paid', paidOk, headed, headedOk, executed, executedOk, revealed, revealedOk, voted,
+      votedOk, _, operatedOk, synced⟩ := computed
+    -- From Gloas the payload of the parent runs before the header.
+    have paidStep : step state paid' := by
+      split at paidOk
+      · exact paid _ paidOk
+      · cases paidOk
+        exact refl _
+    -- From Bellatrix the execution part runs between the header and the RANDAO reveal.
+    have executedStep : step headed executed := by
+      split at executedOk
+      · exact execution _ executedOk
+      · cases executedOk
+        exact refl _
+    -- Heze drops the vote on the deposit contract.
+    have votedStep : step revealed voted := by
+      split at votedOk
+      · exact eth1 _ votedOk
+      · cases votedOk
+        exact refl _
+    exact ⟨_, _, trans paidStep <| trans (header headedOk) <|
+      trans executedStep <| trans (randao revealedOk) votedStep, operatedOk,
+      frame_processSyncAggregate synced⟩
+  simp only [bind_ok_iff] at computed
+  obtain ⟨_, headerOk, _, randaoOk, _, eth1Ok, operationsOk⟩ := computed
+  exact ⟨_, _, trans (header headerOk) <| trans (randao randaoOk) <|
+    eth1 _ eth1Ok, operationsOk, BlockFrame.refl _⟩
 
 /-- A block is a block frame, its operations, then a block frame.
 
@@ -1138,38 +1223,11 @@ theorem processBlock_split {block : BeaconBlock preset fork}
     (computed : processBlock config checks engine state block = .ok after) :
     ∃ first last, BlockFrame state first ∧
       processOperations config checks first block.body state.latestBlockHeader.slot = .ok last ∧
-      BlockFrame last after := by
-  unfold processBlock at computed
-  split at computed
-  · unfold processBlockAltair at computed
-    simp only [bind_ok_iff] at computed
-    obtain ⟨paid, paidOk, headed, headedOk, executed, executedOk, revealed, revealedOk, voted,
-      votedOk, _, operatedOk, synced⟩ := computed
-    -- From Gloas the payload of the parent runs before the header.
-    have paidFrame : BlockFrame state paid := by
-      split at paidOk
-      · exact frame_processParentExecutionPayload paidOk
-      · cases paidOk
-        exact BlockFrame.refl _
-    -- From Bellatrix the execution part runs between the header and the RANDAO reveal.
-    have executedFrame : BlockFrame headed executed := by
-      split at executedOk
-      · exact frame_processBlockExecution executedOk
-      · cases executedOk
-        exact BlockFrame.refl _
-    -- Heze drops the vote on the deposit contract.
-    have votedFrame : BlockFrame revealed voted := by
-      split at votedOk
-      · exact frame_processEth1Data votedOk
-      · cases votedOk
-        exact BlockFrame.refl _
-    exact ⟨_, _, paidFrame.trans <| (frame_processBlockHeader headedOk).trans <|
-      executedFrame.trans <| (frame_processRandao revealedOk).trans votedFrame, operatedOk,
-      frame_processSyncAggregate synced⟩
-  simp only [bind_ok_iff] at computed
-  obtain ⟨_, headerOk, _, randaoOk, _, eth1Ok, operationsOk⟩ := computed
-  exact ⟨_, _, (frame_processBlockHeader headerOk).trans <| (frame_processRandao randaoOk).trans <|
-    frame_processEth1Data eth1Ok, operationsOk, BlockFrame.refl _⟩
+      BlockFrame last after :=
+  processBlock_split_of BlockFrame BlockFrame.refl BlockFrame.trans
+    (fun _ ok => frame_processParentExecutionPayload ok) frame_processBlockHeader
+    (fun _ ok => frame_processBlockExecution ok) frame_processRandao
+    (fun _ ok => frame_processEth1Data ok) computed
 
 /-- The operations of a block form a frame. -/
 theorem frame_processOperations {body : BeaconBlockBody preset fork} {parentSlot : Slot}

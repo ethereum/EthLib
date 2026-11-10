@@ -635,6 +635,36 @@ theorem payloadInputs_processExecutionPayloadBid {signed : SignedExecutionPayloa
     subst recordedOk
     exact PayloadInputs.refl _
 
+/-- A payload before Gloas keeps the RANDAO mixes. -/
+theorem randaoMixes_processExecutionPayload {body : BeaconBlockBody preset fork}
+    {bellatrix : .bellatrix ≤ fork ∧ fork < .glamsterdam}
+    (computed : processExecutionPayload config engine state body bellatrix = .ok after) :
+    after.randaoMixes = state.randaoMixes := by
+  obtain ⟨_, _, _, rfl⟩ := processExecutionPayload_ok computed
+  rfl
+
+/-- The execution part of a block keeps the mixes. -/
+theorem randaoMixes_processBlockExecution {body : BeaconBlockBody preset fork}
+    {bellatrix : .bellatrix ≤ fork}
+    (computed : processBlockExecution config checks engine state body bellatrix = .ok after) :
+    after.randaoMixes = state.randaoMixes := by
+  unfold processBlockExecution at computed
+  split at computed
+  · simp only [bind_ok_iff] at computed
+    obtain ⟨_, withdrawnOk, bid⟩ := computed
+    exact (payloadInputs_processExecutionPayloadBid bid).randaoMixes.trans
+      (payloadInputs_processWithdrawals withdrawnOk).randaoMixes
+  split at computed
+  · simp only [bind_ok_iff] at computed
+    obtain ⟨_, withdrawnOk, paid⟩ := computed
+    exact (randaoMixes_processExecutionPayload paid).trans
+      (payloadInputs_processWithdrawals withdrawnOk).randaoMixes
+  · dsimp only at computed
+    split at computed
+    · exact randaoMixes_processExecutionPayload computed
+    · cases computed
+      rfl
+
 /-- From Gloas, a block that succeeds runs each of its steps, each on the state of the last one.
 
 The parent payload runs first, then the header, the withdrawals, the bid and the RANDAO reveal.
