@@ -1,0 +1,6 @@
+preset: minimal
+fork: deneb
+runner: epoch_processing
+handler: rewards_and_penalties
+suite: pyspec_tests
+case: balances_above_float

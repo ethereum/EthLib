@@ -70,6 +70,7 @@ target-version = "py312"
 extend-exclude = [
   "bindings/python/ethlib/cryptography/_native.pyi",
   "tests/consensus/pq_keys/generate.py",
+  "tests/consensus/large_amounts/generator/",
 ]
 
 [tool.ruff.per-file-target-version]
@@ -119,12 +120,14 @@ python-version = "3.12"
 root = ["bindings/python", "bindings/python/tests", "scripts"]
 
 [tool.ty.src]
-# The two generators import ssz-specs as `ssz`, a name that resolves here to the test package.
+# The key and SSZ limit generators import ssz-specs as `ssz`, which resolves here to the tests.
 # Only their own environments install ssz-specs.
+# The generator of the large-amount vectors runs inside the consensus specification.
 exclude = [
   ".claude/",
   "tests/consensus/pq_keys/generate.py",
   "tests/serialization/ssz_limits/generate.py",
+  "tests/consensus/large_amounts/generator",
 ]
 
 [tool.ty.analysis]
