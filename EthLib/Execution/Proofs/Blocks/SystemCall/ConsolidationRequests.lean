@@ -31,7 +31,7 @@ From Pectra up to BPO5, a system call to the contract succeeds.
 
 It returns the requests and leaves the storage that the EIP describes.
 
-At every fork from Pectra, reading this contract with no code rejects the block.
+At every fork from Pectra, the request phase of a block fails if this contract has no code.
 
 This holds once the withdrawal request call before it succeeds.
 

@@ -39,7 +39,7 @@ From Pectra up to BPO5, a system call to the contract succeeds.
 
 It returns the requests and leaves the storage that the EIP describes.
 
-At every fork from Pectra, reading requests rejects a block if this contract has no code.
+At every fork from Pectra, the request phase of a block fails if this contract has no code.
 
 [eip-7002-deployment]: https://eips.ethereum.org/EIPS/eip-7002#deployment
 [eip-7002-contract]: https://eips.ethereum.org/EIPS/eip-7002#withdrawal-request-contract
@@ -1327,7 +1327,9 @@ theorem systemCall_dequeue {env : BlockEnvironment fork} {block : State.BlockSta
 
 /-- Empty withdrawal request code rejects the request phase of a block from Pectra.
 
-A block with no code there is invalid, as [EIP-7002][eip7002] requires.
+Reading the requests then fails with the empty-contract error.
+
+This is the rejection that [EIP-7002][eip7002] requires.
 
 [eip7002]: https://eips.ethereum.org/EIPS/eip-7002#system-call -/
 theorem readRequests_of_empty {env : BlockEnvironment fork} {body : BodyState}

@@ -30,7 +30,9 @@ Up to BPO5 it has no reservoir and runs with one counter of the gas left.
 
 From Glamsterdam it has a reservoir of 1,566,720 state gas, and runs with the meter of EIP-8037.
 
-Joining that call keeps the block state and adds the address to the block access list builder.
+Joining a call that only read its target keeps the block state.
+
+It adds that address to the block access list builder.
 -/
 
 @[expose] public section

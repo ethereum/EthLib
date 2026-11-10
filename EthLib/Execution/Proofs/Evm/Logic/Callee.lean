@@ -184,7 +184,7 @@ theorem rollbackOnError_of_error_eq_none {snapshot : TransactionState} {evm : Ev
     (h : evm.error = none) : rollbackOnError snapshot evm = evm := by
   simp [rollbackOnError, h]
 
-/-- A frame of no code stops at once, with any gas meter.
+/-- A frame of no code stops at once, with any lawful gas meter.
 
 The frame it ends with is its start frame, advanced and stopped. -/
 theorem runFrame_startFrame_of_code_empty {Meter : Type} [GasMeter Meter] [LawfulGasMeter Meter]

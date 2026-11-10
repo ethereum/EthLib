@@ -414,7 +414,7 @@ theorem systemCall_set {env : BlockEnvironment fork} {block : State.BlockState} 
       exact spec_set (Nat.le_trans (by decide) hfork) hglam hcaller hstatic (htarget ▸ hacc)
         (by rw [hgas]; decide)
 
-/-- With no beacon roots code, the start calls record its address and change no block state.
+/-- With no beacon roots code, the beacon roots call records its address and changes no block state.
 
 From Pectra the history storage call follows; before Pectra the start calls end there.
 
