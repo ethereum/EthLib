@@ -97,8 +97,11 @@ public import EthLib.Consensus.Proofs.Time
 public import EthLib.Consensus.Proofs.Transition.Block
 public import EthLib.Consensus.Proofs.Transition.BlockRewards
 public import EthLib.Consensus.Proofs.Transition.BuilderDebt
+public import EthLib.Consensus.Proofs.Transition.BuilderDebtBid
 public import EthLib.Consensus.Proofs.Transition.BuilderDebtEpoch
+public import EthLib.Consensus.Proofs.Transition.BuilderDebtOperations
 public import EthLib.Consensus.Proofs.Transition.BuilderDebtSlots
+public import EthLib.Consensus.Proofs.Transition.BuilderDebtWithdrawals
 public import EthLib.Consensus.Proofs.Transition.BuilderPayments
 public import EthLib.Consensus.Proofs.Transition.BuilderRequests
 public import EthLib.Consensus.Proofs.Transition.Committees

@@ -14,6 +14,11 @@ eth_engine_new_payload_on_chain(
 );
 
 extern lean_object*
+eth_engine_build_payload(
+  lean_object* args
+);
+
+extern lean_object*
 eth_engine_forkchoice_updated(
   lean_object* args
 );
@@ -31,6 +36,8 @@ eth_engine_get_payload_bodies(
 extern lean_object* eth_engine_jwt_build(lean_object* args);
 extern lean_object* eth_engine_jwt_check(lean_object* args);
 
+extern lean_object* eth_engine_get_payload(lean_object* args);
+
 /* ---- Wrappers --------------------------------------------------------- */
 
 PyObject*
@@ -39,6 +46,14 @@ py_engine_new_payload(
   PyObject* args
 ) {
   return call_pyvalue_export(eth_engine_new_payload, args, 2, ENGINE_ERROR);
+}
+
+PyObject*
+py_engine_build_payload(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_engine_build_payload, args, 9, ENGINE_ERROR);
 }
 
 PyObject*
@@ -87,4 +102,12 @@ py_engine_jwt_check(
   PyObject* args
 ) {
   return call_pyvalue_export(eth_engine_jwt_check, args, 3, JWT_ERROR);
+}
+
+PyObject*
+py_engine_get_payload(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_engine_get_payload, args, 3, ENGINE_ERROR);
 }

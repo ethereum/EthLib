@@ -102,10 +102,7 @@ theorem advanceSlot_keys (computed : advanceSlot config checks state = .ok after
       processJustificationAndFinalization_keeps justifiedOk
     refine ⟨frame.forkVersions.trans forkVersions, frame.genesisValidatorsRoot.trans root,
       validators ▸ frame.registryGrows, fun small => ?_⟩
-    refine KeysKept.trans (fun index validator found => ⟨validator, ?_, rfl⟩)
-      (frame.keysKept small)
-    rw [getValidator, validators]
-    exact found
+    exact (KeysKept.of_validators (by simp only [validators])).trans (frame.keysKept small)
   · simp only [pure, Except.pure, Except.ok.injEq] at epochedOk
     subst epochedOk
     exact ⟨rfl, rfl, Nat.le_refl _, fun _ => KeysKept.refl _⟩

@@ -78,6 +78,12 @@ theorem KeysKept.trans {middle last : Base.Fork} {first : BeaconState preset for
   obtain ⟨kept, keptOk, same'⟩ := two index middle middleOk
   exact ⟨kept, keptOk, same'.trans same⟩
 
+/-- A state with the same registry keeps each key, at any fork. -/
+theorem KeysKept.of_validators {post : Base.Fork} {state : BeaconState preset fork}
+    {after : BeaconState preset post} (same : after.validators.data = state.validators.data) :
+    KeysKept state after := fun _ validator found =>
+  ⟨validator, by unfold getValidator at found ⊢; rw [same]; exact found, rfl⟩
+
 /-- A step that keeps the slot, the three checkpoints and the justification bits.
 
 It also keeps the genesis time, the fork versions and the genesis validators root.
