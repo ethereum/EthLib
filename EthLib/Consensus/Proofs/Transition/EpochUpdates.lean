@@ -50,13 +50,6 @@ theorem updatedEffectiveBalance_cases {largest balance effectiveBalance result :
   · exact .inl rfl
   · exact .inr rfl
 
-/-- Every effective balance is a whole number of increments, and at most its largest at the fork.
--/
-def EffectiveBalancesAligned (state : BeaconState preset fork) : Prop :=
-  ∀ validator ∈ state.validators.data.toList,
-    validator.effectiveBalance % preset.EFFECTIVE_BALANCE_INCREMENT = 0 ∧
-      validator.effectiveBalance ≤ withdrawalMaxEffectiveBalance preset fork validator
-
 /-- An updated effective balance is aligned when the old one and the largest are. -/
 theorem updatedEffectiveBalance_aligned {largest balance effectiveBalance result : Gwei}
     (maxAligned : largest % preset.EFFECTIVE_BALANCE_INCREMENT = 0)

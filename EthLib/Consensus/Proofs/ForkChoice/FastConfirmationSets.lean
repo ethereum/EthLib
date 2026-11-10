@@ -1,9 +1,7 @@
 module
 
-public import EthLib.Consensus.Proofs.ForkChoice.AttestationScores
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmationIndicators
-public import EthLib.Consensus.Proofs.Transition.EpochUpdates
-import EthLib.Consensus.Proofs.Accessors
+public import EthLib.Consensus.Proofs.ForkChoice.Supporters
 
 /-!
 # Proofs: the sets of validators behind the numbers of the fast confirmation rule
@@ -32,7 +30,9 @@ With these sets, Lemmas 4 and 3 of the paper hold for a block that the store con
 
 They need each supporter to be a member of the committees of the range.
 
-The store does not record the slot of a latest vote, so that hypothesis stays.
+Before Gloas the store does not record the slot of a latest vote, so that hypothesis stays.
+
+From Gloas it records the slot, but the committees of the vote must still match those of the head.
 
 [fcr]: https://arxiv.org/abs/2405.00549v4
 -/
@@ -45,25 +45,27 @@ open Base Uint64 Models Models.ForkChoice
 
 variable {preset : Preset} {fork : Fork}
 
-/-- Whether a state holds a validator at an index, active in the epoch of that state. -/
-def activeAt (state : BeaconState preset fork) (index : ValidatorIndex) : Bool :=
-  state.validators.data[index.toNat]?.any (isActiveValidator · (getCurrentEpoch state))
+namespace Store
 
 /-- The members of some committees that are active in a source of balances. -/
 def activeMembers (balanceSource : BeaconState preset fork)
     (participants : Std.TreeSet ValidatorIndex) : Finset ValidatorIndex :=
-  participants.toList.toFinset.filter (activeAt balanceSource ·)
+  participants.toList.toFinset.filter
+    (isActiveAt balanceSource (getCurrentEpoch balanceSource) ·.toNat)
 
-namespace Store
+/-- A validator is an active member of some committees when it is one of them, held by the source.
+
+It must be active there in the epoch of that source. -/
+theorem mem_activeMembers {balanceSource : BeaconState preset fork}
+    {participants : Std.TreeSet ValidatorIndex} {v : ValidatorIndex} :
+    v ∈ activeMembers balanceSource participants ↔ v ∈ participants ∧ ∃ validator,
+      balanceSource.validators.data[v.toNat]? = some validator ∧
+        isActiveValidator validator (getCurrentEpoch balanceSource) = true := by
+  rw [activeMembers, Finset.mem_filter, List.mem_toFinset, Std.TreeSet.mem_toList]
+  refine and_congr_right fun _ => ?_
+  cases found : balanceSource.validators.data[v.toNat]? <;> simp [isActiveAt, found]
 
 variable (store : Store preset fork)
-
-/-- The validators whose votes the store counts for a node, from a state.
-
-They are active and not slashed in that state, and their latest vote counts for the node. -/
-def supportersOf (state : BeaconState preset fork) (node : ForkChoiceNode) :
-    Finset ValidatorIndex :=
-  (((unslashedActiveBalances state).filter (store.voteCountsFor node ·.1)).map (·.1)).toFinset
 
 /-- The known equivocators among the members of some committees active in a source of balances.
 -/
@@ -72,59 +74,6 @@ def equivocatorsOf (balanceSource : BeaconState preset fork)
   (activeMembers balanceSource participants).filter (· ∈ store.equivocatingIndices)
 
 variable {store}
-
-/-- A sum over the entries of a list that pass a test is a sum over all of them, with zeros. -/
-private theorem sum_map_filter {α : Type} (entries : List α) (test : α → Bool) (value : α → ℕ) :
-    ((entries.filter test).map value).sum =
-      (entries.map fun entry => if test entry then value entry else 0).sum := by
-  induction entries with
-  | nil => rfl
-  | cons entry rest ih =>
-    by_cases passes : test entry <;> simp [passes, ih]
-
-/-- The votes that the store counts for a node are the stake of its supporters.
-
-A validator weighs its effective balance in the state.
-
-The registry of the state must stay within the limit of the preset. -/
-theorem stake_supportersOf {node : ForkChoiceNode} {state : BeaconState preset fork}
-    {score : Gwei} (within : state.RegistryWithinLimit)
-    (computed : store.getAttestationScore node state = .ok score) :
-    stake (fun v => balanceAt state v.toNat) (store.supportersOf state node) = score.toNat := by
-  set entries := unslashedActiveBalances state
-  -- Each entry is a position of the registry with its effective balance.
-  have balance : ∀ entry ∈ entries, balanceAt state entry.1.toNat = entry.2.toNat := by
-    rintro ⟨index, gwei⟩ member
-    simp only [entries, unslashedActiveBalances, List.mem_filterMap, Option.ite_none_right_eq_some,
-      Option.some.injEq, Prod.mk.injEq, Prod.exists] at member
-    obtain ⟨validator, i, inZip, -, rfl, rfl⟩ := member
-    have found := (List.mem_zipIdx_iff_getElem?.mp inZip)
-    have lt : i < state.validators.data.size := by
-      simpa using (List.getElem?_eq_some_iff.mp found).1
-    rw [toNat_toUInt64_of_lt within lt]
-    simp [balanceAt, by simpa using found]
-  -- The positions are distinct.
-  have distinct : (entries.map (·.1)).Nodup := by
-    have sorted := validatorPositions_sorted within
-      fun validator => isActiveValidator validator (getCurrentEpoch state) && !validator.slashed
-    have same : entries.map (·.1) = state.validators.data.toList.zipIdx.filterMap
-        fun (validator, index) =>
-          if isActiveValidator validator (getCurrentEpoch state) && !validator.slashed then
-            some index.toUInt64
-          else none := by
-      simp only [entries, unslashedActiveBalances, List.map_filterMap]
-      congr 1
-      funext entry
-      split <;> rfl
-    rw [same]
-    exact sorted.imp UInt64.ne_of_lt
-  have chosen := ((List.filter_sublist (p := fun entry : ValidatorIndex × Gwei =>
-    store.voteCountsFor node entry.1) (l := entries)).map (·.1)).nodup distinct
-  rw [supportersOf, stake, List.sum_toFinset _ chosen, List.map_map,
-    store.getAttestationScore_toNat_eq_sum computed]
-  exact (congrArg List.sum (List.map_congr_left (g := fun entry => entry.2.toNat)
-    fun entry member => balance entry (List.mem_of_mem_filter member))).trans
-      (sum_map_filter entries _ _)
 
 /-- The store's weight of the known equivocators of some committees is their stake.
 
@@ -139,26 +88,23 @@ theorem stake_equivocatorsOf {balanceSource : BeaconState preset fork}
   -- The filter keeps the known equivocators of the committees that are active.
   have members : active.toFinset = store.equivocatorsOf balanceSource participants := by
     ext v
-    simp only [List.mem_toFinset, equivocatorsOf, activeMembers, Finset.mem_filter]
+    simp only [List.mem_toFinset, equivocatorsOf, Finset.mem_filter, mem_activeMembers]
     constructor
     · intro member
       have kept := mem_of_filterM_ok activeOk member
       have passes := passes_of_mem_filterM_ok activeOk member
       simp only [List.mem_filter, decide_eq_true_eq] at kept
-      refine ⟨⟨kept.1, ?_⟩, kept.2⟩
+      refine ⟨⟨Std.TreeSet.mem_toList.mp kept.1, ?_⟩, kept.2⟩
       cases found : balanceSource.validators.data[v.toNat]? with
       | none => simp [validatorAt, found, throw, throwThe, MonadExceptOf.throw, bind,
           Except.bind] at passes
       | some validator =>
-        simpa [activeAt, validatorAt, found, bind, Except.bind, pure, Except.pure] using passes
-    · rintro ⟨⟨inside, isActive⟩, equivocating⟩
+        exact ⟨validator, rfl, by
+          simpa [validatorAt, found, bind, Except.bind, pure, Except.pure] using passes⟩
+    · rintro ⟨⟨inside, validator, found, isActive⟩, equivocating⟩
       refine mem_filterM_ok_of_test activeOk
-        (List.mem_filter.mpr ⟨inside, by simpa using equivocating⟩) ?_
-      cases found : balanceSource.validators.data[v.toNat]? with
-      | none => simp [activeAt, found] at isActive
-      | some validator =>
-        simp only [activeAt, found, Option.any_some] at isActive
-        simp [validatorAt, found, isActive, bind, Except.bind, pure, Except.pure]
+        (List.mem_filter.mpr ⟨Std.TreeSet.mem_toList.mpr inside, by simpa using equivocating⟩) ?_
+      simp [validatorAt, found, isActive, bind, Except.bind, pure, Except.pure]
   have distinct : active.Nodup :=
     ((sublist_of_filterM_ok activeOk).trans List.filter_sublist).nodup
       (Std.TreeSet.distinct_toList.imp fun different same =>
@@ -170,7 +116,7 @@ theorem stake_equivocatorsOf {balanceSource : BeaconState preset fork}
   simp [balanceAt, validatorAt_ok_iff.mp found]
 
 /-- The known equivocators of some committees are among their active members. -/
-theorem equivocatorsOf_subset {balanceSource : BeaconState preset fork}
+theorem equivocatorsOf_subset_activeMembers {balanceSource : BeaconState preset fork}
     {participants : Std.TreeSet ValidatorIndex} :
     store.equivocatorsOf balanceSource participants ⊆ activeMembers balanceSource participants :=
   Finset.filter_subset _ _
@@ -194,7 +140,7 @@ variable {config : Config}
 
 /-- Lemmas 4 and 3 for a block that the store confirms, with the sets that the store weighs.
 
-Here `Φ` is the store's: the committee weight since the parent, plus the boost.
+The committee weight since the parent, plus the boost, is the store's `Φ`.
 
 The discount is taken off it, and is added to the other side so that nothing truncates.
 
@@ -204,7 +150,11 @@ The votes come from the tally of that source, as the handler of the rule takes t
 
 The supporters are the validators that this tally counts for the block.
 
-`W` is the set of members of the committees of the range of the adversary that are active.
+The range ends at the last slot, and its adversary must be the adversary of the block.
+
+The range that the rule uses for the block is one such range.
+
+`W` is the set of members of the committees of that range that are active.
 
 The equivocators are the members of `W` that the store knows to equivocate.
 
@@ -212,9 +162,15 @@ Assume that each supporter is a member of those committees.
 
 Assume that the Byzantine validators hold at most β of the stake of `W`, Assumption 2.
 
-Here β is the threshold of the configuration, in percent, and no known equivocator is honest.
+Here β is the threshold of the configuration, in percent.
+
+Assume that no known equivocator is honest.
 
 Assume also that each effective balance of the source is a whole number of increments.
+
+It also assumes each is at most the largest effective balance of its credentials.
+
+The update of effective balances keeps both, and only the first is used here.
 
 An increment must be a whole number of 100 Gwei, as 10^9 Gwei in the presets is.
 
@@ -241,8 +197,7 @@ theorem lt_two_mul_honest_supportersOf_of_isOneConfirmed {J : Set ValidatorIndex
     (participantsOk : store.getCommitteesBetweenSlots head startSlot lastSlot = .ok participants)
     (confirmed : store.isOneConfirmed config head balanceSource (store.tallyVotes balanceSource)
       root = .ok true)
-    (supportersIn : store.supportersOf balanceSource ⟨root, .pending⟩ ⊆
-      activeMembers balanceSource participants)
+    (supportersIn : ∀ v ∈ store.supportersOf balanceSource ⟨root, .pending⟩, v ∈ participants)
     (aligned : EffectiveBalancesAligned balanceSource)
     (increment : preset.EFFECTIVE_BALANCE_INCREMENT.toNat % 100 = 0)
     (dishonest : ∀ v ∈ store.equivocatingIndices, v ∉ J)
@@ -259,32 +214,18 @@ theorem lt_two_mul_honest_supportersOf_of_isOneConfirmed {J : Set ValidatorIndex
   have equivocationOfOk :
       store.getEquivocationScoreOf balanceSource participants = .ok equivocation := by
     simpa [getEquivocationScore, participantsOk, bind, Except.bind] using equivocationOk
-  -- Each member of `W` is a member of the committees, active in the source of balances.
-  have inside : ∀ v ∈ activeMembers balanceSource participants, v ∈ participants ∧
-      ∃ validator, balanceSource.validators.data[v.toNat]? = some validator ∧
-        isActiveValidator validator (getCurrentEpoch balanceSource) = true := by
-    intro v member
-    rw [activeMembers, Finset.mem_filter, List.mem_toFinset, Std.TreeSet.mem_toList] at member
-    obtain ⟨inParticipants, isActive⟩ := member
-    refine ⟨inParticipants, ?_⟩
-    cases found : balanceSource.validators.data[v.toNat]? with
-    | none => simp [activeAt, found] at isActive
-    | some validator => exact ⟨validator, rfl, by simpa [activeAt, found] using isActive⟩
   -- Each effective balance is a whole number of increments, so of 100 Gwei.
   have whole : ∀ v ∈ activeMembers balanceSource participants,
-      balanceAt balanceSource v.toNat % 100 = 0 := by
-    intro v member
-    obtain ⟨-, validator, found, -⟩ := inside v member
-    have increments := (aligned validator
-      (Array.mem_toList_iff.mpr (Array.mem_of_getElem? found))).1
-    rw [← UInt64.toNat_inj, UInt64.toNat_mod] at increments
-    simp only [balanceAt, found, Option.map_some, Option.getD_some]
-    exact Nat.mod_eq_zero_of_dvd (Nat.dvd_trans (Nat.dvd_of_mod_eq_zero increment)
-      (Nat.dvd_of_mod_eq_zero increments))
+      balanceAt balanceSource v.toNat % 100 = 0 := fun v _ =>
+    Nat.mod_eq_zero_of_dvd (dvd_balanceAt_of_aligned aligned (Nat.dvd_of_mod_eq_zero increment) _)
   exact lt_two_mul_honest_support_of_isOneConfirmed slotOk blockOk parentOk boostOk firstOk lastOk
     maximumOk discountOk adversaryOk rangeOk participantsOk weightOk equivocationOk thresholdOk
     supportOk confirmed (stake_supportersOf within supportOk)
-    (stake_equivocatorsOf equivocationOfOk) supportersIn equivocatorsOf_subset inside whole
+    (stake_equivocatorsOf equivocationOfOk)
+    (fun v member => Finset.mem_filter.mpr ⟨List.mem_toFinset.mpr
+      (Std.TreeSet.mem_toList.mpr (supportersIn v member)),
+        isActiveAt_of_mem_supportersOf within member⟩) equivocatorsOf_subset_activeMembers
+    (fun v member => mem_activeMembers.mp member) whole
     disjoint_supportersOf_equivocatorsOf
     (fun v member => dishonest v (Finset.mem_filter.mp member).2) byzantine
 
