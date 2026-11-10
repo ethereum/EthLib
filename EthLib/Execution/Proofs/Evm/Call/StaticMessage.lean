@@ -60,7 +60,7 @@ theorem staticStep_runPrecompile {address : Nat} {evm after : Evm fork Meter}
     · cases h
       exact staticStep_exceptionalHalt _ _
     · cases h
-      exact ⟨StateKept.refl _, rfl, rfl, rfl, rfl⟩
+      exact ⟨StateKept.refl _, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 omit [GasMeter Meter] in
 /-- The frame that starts a static message is a static frame. -/
@@ -438,14 +438,14 @@ theorem staticTouchResult_genericCall {evm : Evm fork Meter} {message : Message 
     | ok after =>
       simp only [hs, Functor.map, Except.map, Except.ok.injEq] at h
       subst h
-      exact (⟨StateKept.refl _, rfl, rfl, rfl, rfl⟩ : StaticStep evm
+      exact (⟨StateKept.refl _, rfl, rfl, rfl, rfl, rfl, rfl⟩ : StaticStep evm
         (refillStateGas { evm with returnData := .empty } newAccount)).trans
         (staticStep_skipCall hs)
   · cases h
-    refine ⟨⟨StateKept.refl _, rfl, rfl, rfl, rfl⟩, hmsg, ?_⟩
+    refine ⟨⟨StateKept.refl _, rfl, rfl, rfl, rfl, rfl, rfl⟩, hmsg, ?_⟩
     intro touched child after hres kept parent hrec
     have pre : StaticStep evm { evm with returnData := .empty } :=
-      ⟨StateKept.refl _, rfl, rfl, rfl, rfl⟩
+      ⟨StateKept.refl _, rfl, rfl, rfl, rfl, rfl, rfl⟩
     exact pre.trans_touchStep (staticTouchStep_resumeCall hres kept parent hrec)
 
 /-- A paid call in a static frame gives a static step, or a static touch child.
@@ -468,7 +468,7 @@ theorem staticTouchResult_finishCall {kind : CallKind} {call : CallOperands} {ca
   dsimp only at h
   have pre : StaticStep evm (recordAccountRead { evm with
       memory := memoryExtend evm.memory expandBy, gas := GasMeter.drain evm.gas }
-      evm.message.currentTarget) := ⟨StateKept.refl _, rfl, rfl, rfl, rfl⟩
+      evm.message.currentTarget) := ⟨StateKept.refl _, rfl, rfl, rfl, rfl, rfl, rfl⟩
   split at h
   · cases hs : skipCall (refillStateGas (recordAccountRead { evm with
         memory := memoryExtend evm.memory expandBy, gas := GasMeter.drain evm.gas }
@@ -482,7 +482,7 @@ theorem staticTouchResult_finishCall {kind : CallKind} {call : CallOperands} {ca
           evm.message.currentTarget)
           (refillStateGas (recordAccountRead { evm with
           memory := memoryExtend evm.memory expandBy, gas := GasMeter.drain evm.gas }
-          evm.message.currentTarget) newAccount) := ⟨StateKept.refl _, rfl, rfl, rfl, rfl⟩
+          evm.message.currentTarget) newAccount) := ⟨StateKept.refl _, rfl, rfl, rfl, rfl, rfl, rfl⟩
       exact (pre.trans refill).trans (staticStep_skipCall hs)
   · refine StaticTouchResult.lift pre (staticTouchResult_genericCall ?_ h)
     have hcall : kind = .call → call.value = 0 := by
@@ -752,14 +752,15 @@ theorem processMessage_touchesOnly_static [LawfulGasMeter Meter] :
           split at hdo
           · cases hdo
             exact stepCore h1 hp1
-              (.of_staticStep ⟨TransactionState.SameOutside.refl _ _, rfl, rfl, rfl, rfl⟩)
+              (.of_staticStep ⟨TransactionState.SameOutside.refl _ _, rfl, rfl, rfl, rfl, rfl, rfl⟩)
           · split at hdo
             · rename_i after hrp
               cases hdo
               exact stepCore h1 hp1 (.of_staticStep (staticStep_runPrecompile hrp))
             · cases hdo
               exact stepCore h1 hp1
-                (.of_staticStep ⟨TransactionState.SameOutside.refl _ _, rfl, rfl, rfl, rfl⟩)
+                (.of_staticStep
+                  ⟨TransactionState.SameOutside.refl _ _, rfl, rfl, rfl, rfl, rfl, rfl⟩)
     have hval := congrArg Subtype.val rolled
     simp only at hval
     rw [← hval]

@@ -110,6 +110,7 @@ PyObject* TRANSITION_ERROR;
 PyObject* LIGHT_CLIENT_ERROR;
 PyObject* FORK_CHOICE_ERROR;
 PyObject* WEAK_SUBJECTIVITY_ERROR;
+PyObject* DEPOSIT_TREE_ERROR;
 PyObject* VALIDATOR_DUTY_ERROR;
 PyObject* PROPOSER_ERROR;
 PyObject* SLASHING_PROTECTION_ERROR;
@@ -821,6 +822,24 @@ static PyMethodDef methods[] = {
    DOC_consensus_initialize_genesis},
   {"consensus_is_valid_genesis_state", py_consensus_is_valid_genesis_state, METH_VARARGS,
    DOC_consensus_is_valid_genesis_state},
+  {"consensus_deposit_tree_new", py_consensus_deposit_tree_new, METH_VARARGS,
+   DOC_consensus_deposit_tree_new},
+  {"consensus_deposit_tree_push_leaf", py_consensus_deposit_tree_push_leaf, METH_VARARGS,
+   DOC_consensus_deposit_tree_push_leaf},
+  {"consensus_deposit_tree_push_leaves", py_consensus_deposit_tree_push_leaves, METH_VARARGS,
+   DOC_consensus_deposit_tree_push_leaves},
+  {"consensus_deposit_tree_get_root", py_consensus_deposit_tree_get_root, METH_VARARGS,
+   DOC_consensus_deposit_tree_get_root},
+  {"consensus_deposit_tree_finalize", py_consensus_deposit_tree_finalize, METH_VARARGS,
+   DOC_consensus_deposit_tree_finalize},
+  {"consensus_deposit_tree_get_proof", py_consensus_deposit_tree_get_proof, METH_VARARGS,
+   DOC_consensus_deposit_tree_get_proof},
+  {"consensus_deposit_tree_get_snapshot", py_consensus_deposit_tree_get_snapshot, METH_VARARGS,
+   DOC_consensus_deposit_tree_get_snapshot},
+  {"consensus_deposit_tree_from_snapshot", py_consensus_deposit_tree_from_snapshot, METH_VARARGS,
+   DOC_consensus_deposit_tree_from_snapshot},
+  {"consensus_deposit_tree_snapshot_calculate_root", py_consensus_deposit_tree_snapshot_calculate_root, METH_VARARGS,
+   DOC_consensus_deposit_tree_snapshot_calculate_root},
   {"consensus_compute_weak_subjectivity_period", py_consensus_compute_weak_subjectivity_period,
    METH_VARARGS, DOC_consensus_compute_weak_subjectivity_period},
   {"consensus_is_within_weak_subjectivity_period",
@@ -1152,6 +1171,7 @@ PyInit__native(void) {
     FORK_CHOICE_ERROR = PyObject_GetAttrString(errors, "ForkChoiceError");
     CHAIN_ERROR = PyObject_GetAttrString(errors, "ChainError");
     WEAK_SUBJECTIVITY_ERROR = PyObject_GetAttrString(errors, "WeakSubjectivityError");
+    DEPOSIT_TREE_ERROR = PyObject_GetAttrString(errors, "DepositTreeError");
     VALIDATOR_DUTY_ERROR = PyObject_GetAttrString(errors, "ValidatorDutyError");
     PROPOSER_ERROR = PyObject_GetAttrString(errors, "ProposerError");
     SLASHING_PROTECTION_ERROR = PyObject_GetAttrString(errors, "SlashingProtectionError");

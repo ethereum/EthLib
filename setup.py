@@ -150,6 +150,7 @@ def _make_extension() -> Extension:
             "bindings/python/x25519.c",
             "bindings/python/chacha20_poly1305.c",
             "bindings/python/noise.c",
+            "bindings/python/deposit_tree.c",
             "bindings/python/keystore.c",
             "bindings/python/secp256k1.c",
             "bindings/python/secp256r1.c",

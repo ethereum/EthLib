@@ -41,13 +41,16 @@ RESULT_MARKERS = {
 
 
 def arity(method) -> int:
-    """The number of arguments a wrapper takes, read from the TypeError of a short call."""
+    """The number of arguments of a wrapper: from the TypeError of a call with none, or zero."""
     try:
         method()
     except TypeError as error:
         found = re.search(r"(?:exactly|expected) (\d+) arguments?", str(error))
         if found:
             return int(found.group(1))
+    else:
+        # A wrapper that answers a call with no argument takes none.
+        return 0
     raise AssertionError(f"{method.__name__} does not state its arity")
 
 

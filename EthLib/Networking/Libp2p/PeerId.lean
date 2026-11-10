@@ -11,6 +11,8 @@ Ethereum's libp2p identity uses the secp256k1 profile of [peer IDs][peerids].
 
 Its public-key protobuf is deterministic, and its peer ID is an identity multihash.
 
+So a peer ID holds the key itself, and decodes back to it.
+
 Message signatures use SHA-256, low-s ECDSA and strict DER, without a transaction sighash byte.
 
 The DER and low-s rules are rules 1 and 5 of [BIP 62, "New rules"][bip62], which the profile cites.
@@ -25,9 +27,10 @@ namespace EthLib.Networking.Libp2p
 
 open EthLib.Cryptography.Secp256k1
 
-/-- A malformed key, secret or DER signature. -/
+/-- A malformed key, peer ID, secret or DER signature. -/
 inductive IdentityError where
   | publicKey
+  | peerId
   | privateKey
   | signature
   | signing (error : Secp256k1Error)
@@ -43,10 +46,24 @@ def decodePublicKey (key : ByteArray) : Except IdentityError Point := do
   let point ← (Point.decode (key.extract 4 37)).mapError fun _ => .publicKey
   if encodePublicKey point = key then return point else throw .publicKey
 
-/-- The identity multihash of a canonical secp256k1 public-key protobuf, peer-IDs "Peer Ids".
+/-- The peer ID of a secp256k1 public key, peer-IDs "Peer Ids".
 
-The multihash length byte is 0x25 = 37, so the input must be a canonical 37-byte key protobuf. -/
-def peerId (publicKey : ByteArray) : ByteArray := ⟨#[0x00, 0x25]⟩ ++ publicKey
+The key is a point of the curve other than infinity, as every public key is.
+
+Its protobuf has 37 bytes, which is at most 42, so the peer ID is its identity multihash.
+
+That multihash is the identity code 0, the length 37, then the protobuf. -/
+def peerId (point : Point) : ByteArray := ⟨#[0x00, 0x25]⟩ ++ encodePublicKey point
+
+/-- The public key that a secp256k1 peer ID names.
+
+The peer ID must be the binary identity multihash of a canonical 37-byte key protobuf.
+
+Text forms and hashed peer IDs of longer keys are not read. -/
+def decodePeerId (id : ByteArray) : Except IdentityError Point :=
+  match id.data.toList with
+  | 0x00 :: 0x25 :: key => decodePublicKey ⟨key.toArray⟩
+  | _ => .error .peerId
 
 /-- Derive and serialize the public key of a secret in [1, n), with n the secp256k1 group order.
 

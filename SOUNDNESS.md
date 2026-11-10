@@ -1904,14 +1904,22 @@ The new votes come from justified sources, and no honest validator becomes slash
 A vote names the validator that signed it, so both theorems assume that no one forges a vote.
 No theorem derives the votes of the model from the beacon chain yet, so neither theorem is about what a client runs.
 
-Two pieces of that link exist.
+Three pieces of that link exist.
 `FfgVotes.lean` relates the slashing conditions of the beacon chain to those of the model.
 `justificationTest_iff_stake` (`Consensus/Proofs/Transition/FfgStake.lean`) reads the test of justification as a comparison of stakes.
 There the stake of a validator is its effective balance, and the indices count as a set.
 It needs an active stake of more than one and a half increments.
 Up to that bound, the beacon chain can justify with no vote at all, since a total balance is never below one increment.
-At least four gaps remain before a refinement.
-No theorem yet shows that the attesters of an epoch signed the link that the model counts.
+`processAttestationAltair_targetFlag` (`Consensus/Proofs/Transition/TargetFlags.lean`) covers one attestation from Altair.
+A timely target flag that it sets belongs to an attester of an indexed attestation that passed the checks of the step.
+With the BLS checks, the aggregate signature verifies under keys that include the key of that attester.
+Reading this as a signature by that attester assumes that BLS aggregate signatures cannot be forged.
+The source of that attestation is the justified checkpoint of the epoch of the flags.
+Its target is the checkpoint of that epoch, with the block root that the state records for its first slot.
+At least five gaps remain before a refinement.
+No theorem yet carries that fact across a whole block, the slots, the epoch step and the upgrades.
+None covers the forks before Altair.
+So none yet shows that the attesters of an epoch signed the link that the model counts.
 The attesters of the previous epoch are filtered by activity in that epoch, but the total counts the active validators of the current one.
 So a validator that exits at the current epoch counts as an attester but not in the total, and the model would leave it out.
 The beacon chain leaves slashed attesters out, and the model counts them, so the two tests agree only in one direction.
@@ -2143,12 +2151,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 339 operations and 49 size constants.
-The Python extension calls 339 of the operations and 49 of the constants.
+Lean exports 348 operations and 49 size constants.
+The Python extension calls 348 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-9323 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (1678), `crc32.c` (34), `crc32c.c` (34), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (303), `engine.c` (64), `enr.c` (177), `eth.c` (225), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (54), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `module.c` (1322), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (102), `vrf.c` (141), `wrappers.h` (614), `x25519.c` (21), `xmss.c` (134).
+9437 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (1678), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (303), `engine.c` (64), `enr.c` (177), `eth.c` (225), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (54), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `module.c` (1342), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (102), `vrf.c` (141), `wrappers.h` (624), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.
