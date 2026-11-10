@@ -8,6 +8,8 @@ public import Mathlib.Algebra.Order.BigOperators.Group.Finset
 The consensus models weigh a set of validators by the sum of their stakes.
 
 The stake of each validator is a natural number.
+
+Along a sequence of sets, the stake that joins or leaves is at most the sum over the steps.
 -/
 
 @[expose] public section
@@ -30,6 +32,39 @@ theorem stake_union_le [DecidableEq ν] (S T : Finset ν) :
   have hsum : stake w (S ∪ T) + stake w (S ∩ T) = stake w S + stake w T :=
     Finset.sum_union_inter
   omega
+
+/-- A set and what it lacks of another weigh as much as the other and what it lacks of the set. -/
+theorem stake_add_stake_sdiff [DecidableEq ν] (s t : Finset ν) :
+    stake w s + stake w (t \ s) = stake w t + stake w (s \ t) := by
+  -- Both sides weigh the union of the two sets.
+  have hs : stake w (s ∪ t) = stake w s + stake w (t \ s) := by
+    rw [← Finset.union_sdiff_self_eq_union]
+    exact Finset.sum_union Finset.disjoint_sdiff
+  have ht : stake w (s ∪ t) = stake w t + stake w (s \ t) := by
+    rw [Finset.union_comm, ← Finset.union_sdiff_self_eq_union]
+    exact Finset.sum_union Finset.disjoint_sdiff
+  rw [← hs, ht]
+
+/-- Along a sequence of sets, the change since the first set is at most the change of each step.
+
+The change counts the stake that joins once and the stake that leaves twice.
+
+A member of the last set outside the first joined at some step.
+
+A member of the first set outside the last left at some step. -/
+theorem stake_sdiff_add_two_mul_le [DecidableEq ν] (S : ℕ → Finset ν) {d : ℕ} :
+    ∀ {n : ℕ}, (∀ i < n, stake w (S (i + 1) \ S i) + 2 * stake w (S i \ S (i + 1)) ≤ d) →
+      stake w (S n \ S 0) + 2 * stake w (S 0 \ S n) ≤ n * d
+  | 0, _ => by simp [stake]
+  | n + 1, h => by
+    have before := stake_sdiff_add_two_mul_le (n := n) S fun i hi => h i (by omega)
+    have last := h n (by omega)
+    have joined := (stake_mono (w := w) (sdiff_triangle (S (n + 1)) (S n) (S 0))).trans
+      (stake_union_le _ _)
+    have left := (stake_mono (w := w) (sdiff_triangle (S 0) (S n) (S (n + 1)))).trans
+      (stake_union_le _ _)
+    have : (n + 1) * d = n * d + d := Nat.succ_mul n d
+    omega
 
 /-- Two quorums of two validator sets share stake, up to the change between the two sets.
 

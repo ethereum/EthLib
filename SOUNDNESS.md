@@ -1989,7 +1989,18 @@ Gasper states it with a maximum and divisions by three; the theorem states its t
 If one of the two sets has no stake, both bounds hold with no slashable validator.
 The reader does not choose the two checkpoints, so the theorem says something only when every justified checkpoint between the two finalized epochs has a set with positive stake.
 
-`accountable_safety` (`AccountableSafety.lean`) takes one validator set for every vote, and follows from the theorem above.
+`accountable_safety_reference` (`AccountableSafety.lean`) restates the first bound against one fixed reference set `V₀`, such as the set of a trusted checkpoint.
+The stake of `V₀` is at most three times the slashable stake, plus the change of each of the two sets since `V₀`.
+The change of a set counts the stake that joined once and the stake that left twice.
+`accountable_safety_of_steps` assumes that every justified checkpoint between the two finalized epochs has a set reached from `V₀` in at most `n` steps.
+Each step changes the set by at most `d` in that measure, so the stake of `V₀` is at most three times the slashable stake plus `2 n d`.
+As above, the reader does not choose the two checkpoints, so the hypothesis covers every justified checkpoint between the two finalized epochs.
+A step of one epoch has `d` at most the stake that activates plus twice the stake that exits, the source of a consolidation included.
+The model does not follow withdrawals; the specification covers them with the withdrawability delay in the weak subjectivity period.
+The model also fixes the stake of each validator, so a top-up, a consolidation or a penalty of a validator that stays in the set is outside these theorems.
+No theorem yet derives those steps from the beacon state.
+
+`accountable_safety` (`AccountableSafety.lean`) takes one validator set for every vote, and follows from `accountable_safety_dynamic`.
 Then validators with at least one third of the stake broke a slashing condition.
 With a total stake of zero this holds for every set of votes, so the theorem says something only for positive stake.
 
