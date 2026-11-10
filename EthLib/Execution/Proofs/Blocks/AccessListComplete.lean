@@ -388,7 +388,9 @@ The list covers the beacon roots call there, and the history storage call after 
 
 It covers the run of each transaction, from the body after the transactions before it.
 
-It covers the withdrawals, and then each call to a request contract. -/
+It covers the withdrawals, and then each call to a request contract.
+
+From Hegota the transition is not yet specified, so this holds from Glamsterdam up to Hegota. -/
 theorem stateTransition_accessList_covers {chain : BlockChain} {block : Block fork Transaction}
     {checkSeal : Bool} {post : State} (hFork : .glamsterdam ≤ fork)
     (h : stateTransition chain block checkSeal = .ok post) :
