@@ -83,12 +83,9 @@ private theorem BuilderDebtCovered.of_empty {gloas : .glamsterdam ≤ fork}
 theorem builderDebtCovered_upgradeToGloas {pre : BeaconState preset .fusaka}
     {post : BeaconState preset .glamsterdam}
     (computed : upgradeToGloas config checks pre = .ok post) :
-    BuilderDebtCovered post (by decide) := by
-  unfold upgradeToGloas at computed
-  obtain ⟨root, -, rest⟩ := bind_ok_iff.mp computed
-  obtain ⟨window, -, onboarded⟩ := bind_ok_iff.mp rest
-  obtain ⟨⟨builders, pending, rfl⟩, -⟩ := onboardBuildersFromPendingDeposits_spec onboarded
-  exact .of_empty rfl rfl rfl
+    BuilderDebtCovered post (by decide) :=
+  have ⟨payments, withdrawals, value⟩ := upgradeToGloas_builderFields computed
+  .of_empty payments withdrawals value
 
 /-- The upgrade to Heze keeps each builder's debt covered. -/
 theorem BuilderDebtCovered.upgradeToHeze {pre : BeaconState preset .glamsterdam}

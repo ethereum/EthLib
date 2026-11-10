@@ -41,7 +41,7 @@ It keeps the genesis time.
 From Gloas it also keeps the latest block hash and the latest bid.
 
 It moves to the next slot. -/
-private theorem advanceSlot_cachedRoots
+theorem advanceSlot_cachedRoots
     (computed : advanceSlot config checks state = .ok after) :
     ∃ cached, processSlot state = .ok cached ∧ after.genesisTime = cached.genesisTime ∧
       after.blockRoots = cached.blockRoots ∧
