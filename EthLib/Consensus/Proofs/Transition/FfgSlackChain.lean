@@ -205,7 +205,60 @@ theorem SlackChainInvariant.of_chainStep (positive : 0 < preset.SLOTS_PER_EPOCH.
     (hypotheses : SlackStepHypotheses config checks V U W attested block forked after)
     (step : ChainStep config checks forked after) :
     SlackChainInvariant V U W genesis attested block after := by
-  sorry
+  cases step with
+  | slot computed =>
+    obtain ⟨advanced, advancedOk, upgraded⟩ := bind_ok_iff.mp computed
+    have small : advanced.validators.data.size < 2 ^ 64 :=
+      Nat.lt_of_le_of_lt (processUpgrades_registryGrows upgraded) hypotheses.small
+    have early := holds.early.of_advanceSlot advancedOk
+    -- The slot moves on by one, and the upgrades keep it.
+    have moved : after.state.slot ≠ forked.state.slot := by
+      have kept : after.state.slot = advanced.slot :=
+        processUpgrades_induction (property := fun state => state.state.slot = advanced.slot)
+          (fun same stepOk => (upgradeFrame_upgradeNext stepOk).slot.trans same) rfl upgraded
+      intro same
+      have next := advanceSlot_slot advancedOk
+      rw [← kept, same] at next
+      omega
+    obtain ⟨previousKept, currentKept⟩ := processUpgrades_justified upgraded
+    have pending : PendingVoted attested advanced := by
+      by_cases before : forked.fork < .altair
+      · exact holds.pendingVoted.of_advanceSlot before apart holds.early advancedOk
+      · exact fun before' => absurd before' before
+    have flags := holds.flagsVoted.of_advanceSlot positive window holds.early advancedOk
+    have slack := advanceSlot_slackJustifiedCheckpoints window holds.flagsVoted
+      holds.pendingVoted (hypotheses.large moved) block subset_rfl
+      holds.invariant.settled
+      holds.separated (fun ne => by
+        rw [← currentKept] at ne ⊢
+        exact hypotheses.sets ne) (hypotheses.chain moved) holds.slack advancedOk
+    refine ⟨(advanceSlotAcross_invariant holds.invariant computed).1,
+      early.of_processUpgrades upgraded,
+      (holds.separated.of_advanceSlot holds.early holds.invariant.settled
+        advancedOk).of_processUpgrades upgraded, ?_, pending.of_processUpgrades upgraded, ?_⟩
+    · by_cases altair : .altair ≤ forked.fork
+      · exact TargetFlagsVoted.of_processUpgrades (forked := ⟨forked.fork, advanced⟩) altair
+          flags upgraded
+      · exact TargetFlagsVoted.of_processUpgrades_of_lt_altair (forked := ⟨forked.fork, advanced⟩)
+          (Nat.lt_of_not_le altair) pending upgraded
+    · unfold SlackJustifiedCheckpoints
+      rw [previousKept, currentKept]
+      exact slack
+  | block engine signed validateResult applied =>
+    rename_i _ pre _
+    obtain ⟨-, blockOk, -⟩ := applySignedBlock_ok applied
+    have frame := frame_processBlock blockOk
+    have voteFrame := voteFrame_processBlock apart hypotheses.small blockOk
+    have sub : blockVotes pre signed.message ⊆ attested := fun vote member =>
+      hypotheses.applied ⟨engine, signed, validateResult, _, rfl, applied, member⟩
+    refine ⟨frame.invariant holds.invariant, holds.early.of_frame frame,
+      holds.separated.of_frame frame,
+      (holds.flagsVoted.of_voteFrame voteFrame).mono (Set.union_subset subset_rfl sub),
+      fun before => (PendingVoted.of_processBlock before apart holds.pendingVoted blockOk).mono
+        (Set.union_subset subset_rfl sub) before, ?_⟩
+    unfold SlackJustifiedCheckpoints
+    rw [frame.previousJustified, frame.currentJustified]
+    exact holds.slack
 
 /-- A chain keeps the properties of its states, from its first state to its last.
 
@@ -231,7 +284,16 @@ theorem initializeBeaconStateFromEth1_slackChainInvariant {fork : Fork}
       .ok state) :
     SlackChainInvariant V U W (block (Vector.replicate 32 0)) attested block
       ⟨fork, state⟩ := by
-  sorry
+  obtain ⟨before, holds⟩ := initializeBeaconStateFromEth1_invariant computed
+  obtain ⟨slot, previous, current⟩ := initializeBeaconStateFromEth1_checkpoints computed
+  refine ⟨holds, (initializeBeaconStateFromEth1_target computed).2, fun later => ?_,
+    fun altair => absurd altair (Nat.not_le_of_lt before), fun _ current pending member => ?_, ?_⟩
+  · simp [getCurrentEpoch, slot, computeEpochAtSlot, GENESIS_SLOT, GENESIS_EPOCH] at later
+  · rw [initializeBeaconStateFromEth1_pending computed] at member
+    simp at member
+  · unfold SlackJustifiedCheckpoints
+    rw [previous, current]
+    exact ⟨JustifiedBy.root, JustifiedBy.root⟩
 
 /-- Along a chain from genesis, the two justified checkpoints are slack-justified in the model.
 
