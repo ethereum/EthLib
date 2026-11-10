@@ -23,6 +23,10 @@ So `ψ(β_j) = t`, where `β_j` is the answer of the pair at the fork index `j`.
 
 The log lists the first query first, and its positions count from `0`.
 
+The fork returns two such runs, at the same fork index.
+
+Their forgeries share their point, their answers there differ, and `ψ` maps each to its own `t`.
+
 The source is [Fersch, Kiltz, Poettering, CCS 2016](https://doi.org/10.1145/2976749.2978413).
 
 This is the fact behind the forward case of the proof of their Theorem 2.
@@ -144,5 +148,41 @@ theorem reduce_forward_eq_of_forkIndex_eq_some (scheme : Scheme F G A M)
   have h2 := congrArg Prod.snd heq
   simp only at h2
   simpa only [Fin.getElem_fin, h2] using hr
+
+/-! ## Both runs of the fork -/
+
+/-- **The two forgeries of a fork share their point, and `ψ` maps each answer there to its `t`.**
+
+Take two runs that the fork returns, on the key `X`, with the common fork index `j`.
+
+The pairs of their logs at position `j` are at the point of each forgery, and that point is shared.
+
+Their answers there differ, and `ψ` maps each to the `t` of its own forgery.
+
+Both checks passed, so the two forgeries have the same point. -/
+theorem forward_eq_of_mem_support_contextFork (scheme : Scheme F G A M)
+    (adversary : KeyOnlyAdversary F G A M) (X : G) (q : ℕ) {tr₁ tr₂ : KeyOnlyTrace F A M}
+    (h : some (tr₁, tr₂) ∈ support
+      (contextFork (keyOnlyOutsideRun scheme adversary X) (forkBound q) (.inr ())
+        (forkIndex scheme X q))) :
+    ∃ j, forkIndex scheme X q tr₁ = some j ∧ forkIndex scheme X q tr₂ = some j ∧
+      ∃ (h₁ : (j : ℕ) < tr₁.forward.length) (h₂ : (j : ℕ) < tr₂.forward.length),
+        tr₁.forward[j].1 = forgeryPoint scheme X tr₁.forgery ∧
+        tr₂.forward[j].1 = forgeryPoint scheme X tr₂.forgery ∧
+        tr₁.forward[j].1 = tr₂.forward[j].1 ∧ tr₁.forward[j].2 ≠ tr₂.forward[j].2 ∧
+        scheme.reduce tr₁.forward[j].2 = tr₁.forgery.2.1 ∧
+        scheme.reduce tr₂.forward[j].2 = tr₂.forgery.2.1 ∧
+        forgeryPoint scheme X tr₁.forgery = forgeryPoint scheme X tr₂.forgery ∧
+        tr₁.verified = true ∧ tr₂.verified = true := by
+  obtain ⟨j, hj₁, hj₂, h₁, h₂, hpt, hne⟩ :=
+    forward_point_eq_answer_ne_of_mem_support_contextFork scheme adversary X q h
+  obtain ⟨ht₁, ht₂⟩ :=
+    mem_support_keyOnlyOutsideRun_of_mem_support_contextFork scheme adversary X q h
+  obtain ⟨_, e₁, r₁⟩ := reduce_forward_eq_of_forkIndex_eq_some scheme adversary ht₁ hj₁
+  obtain ⟨_, e₂, r₂⟩ := reduce_forward_eq_of_forkIndex_eq_some scheme adversary ht₂ hj₂
+  obtain ⟨v₁, -⟩ := verified_and_forward_of_forkIndex_eq_some hj₁
+  obtain ⟨v₂, -⟩ := verified_and_forward_of_forkIndex_eq_some hj₂
+  exact ⟨j, hj₁, hj₂, h₁, h₂, e₁, e₂, hpt, hne, r₁, r₂, e₁.symm.trans (hpt.trans e₂), v₁,
+    v₂⟩
 
 end EthLib.Cryptography.Secp256k1.Security

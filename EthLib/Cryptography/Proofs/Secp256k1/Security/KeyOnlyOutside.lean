@@ -25,7 +25,15 @@ The new forward queries of both runs at that index then share the point and diff
 
 The forking lemma bounds the chance of such a fork from below.
 
-A later proof can split forgeries from forward and inverse pairs on this run.
+A forger with at most `q` queries to `Π` or its inverse logs at most `q + 1` pairs.
+
+So a win with no flag raised has a fork index, or its point is not in the log.
+
+With a uniform key, the chance to win with independent answers is then at most a sum.
+
+It is the chance of a fork index plus the chance that the check passes on a point not in the log.
+
+This is the split of their Game G3, which stops with `0` in line 12 on an inverse pair.
 
 The source is [Fersch, Kiltz, Poettering, CCS 2016](https://doi.org/10.1145/2976749.2978413).
 
@@ -254,6 +262,73 @@ theorem le_prEvent_isSome_contextFork_keyOnlyOutsideRun
     rfl
   simpa only [forkBound, Nat.cast_add, Nat.cast_one, hcard] using h
 
+/-! ## Runs of the fork -/
+
+omit [FinEnum A] in
+/-- The output of every path through a run with the outside oracles is a possible output of it. -/
+theorem output_mem_support_of_path {α : Type}
+    (main : OracleComp (OutsideSpec A) α) (path : PFunctor.FreeM.Path main) :
+    PFunctor.FreeM.output main path ∈ support main := by
+  have h : PFunctor.FreeM.output main path ∈
+      support (PFunctor.FreeM.output main <$> replayFirstPath main) := by
+    rw [support_map]
+    exact ⟨path, mem_support_replayFirstPath main path, rfl⟩
+  rwa [map_output_replayFirstPath] at h
+
+/-- Both runs that the fork returns are runs of the key-only forger on the key `X`. -/
+theorem mem_support_keyOnlyOutsideRun_of_mem_support_contextFork (scheme : Scheme F G A M)
+    (adversary : KeyOnlyAdversary F G A M) (X : G) (q : ℕ) {tr₁ tr₂ : KeyOnlyTrace F A M}
+    (h : some (tr₁, tr₂) ∈ support
+      (contextFork (keyOnlyOutsideRun scheme adversary X) (forkBound q) (.inr ())
+        (forkIndex scheme X q))) :
+    tr₁ ∈ support (keyOnlyOutsideRun scheme adversary X) ∧
+      tr₂ ∈ support (keyOnlyOutsideRun scheme adversary X) := by
+  obtain ⟨path, s, located, second, hpath, hcf₁, -, hne, hcf₂, rfl, rfl⟩ :=
+    contextFork_success (keyOnlyOutsideRun scheme adversary X) (forkBound q) (.inr ())
+      (forkIndex scheme X q) h
+  exact ⟨output_mem_support_of_path _ path, output_mem_support_of_path _ second.path⟩
+
+/-! ## The split of a win -/
+
+/-- On a run with no flag raised, a passed check has a fork index or a point outside the log. -/
+private theorem forkIndex_isSome_or_notMem (scheme : Scheme F G A M)
+    (adversary : KeyOnlyAdversary F G A M) (X : G) {q : ℕ}
+    (hq : IsQueryBoundP (adversary.main X) (·.isRight = true) q) {tr : KeyOnlyTrace F A M}
+    (htr : tr ∈ support (keyOnlyOutsideRun scheme adversary X))
+    (h : tr.verified = true ∧ tr.bad = false) :
+    (forkIndex scheme X q tr).isSome ∨
+      (tr.verified = true ∧ forgeryPoint scheme X tr.forgery ∉ tr.forward.map Prod.fst) := by
+  obtain ⟨hv, hb⟩ := h
+  by_cases hm : forgeryPoint scheme X tr.forgery ∈ tr.forward.map Prod.fst
+  · left
+    have hlen := length_forward_le_of_mem_support_keyOnlyOutsideRun scheme adversary X hq htr
+    have hsome : (tr.forward.findIdx? fun p => decide (p.1 = forgeryPoint scheme X tr.forgery)
+        ).isSome := by
+      rw [List.findIdx?_isSome]
+      simpa using hm
+    obtain ⟨k, hk⟩ := Option.isSome_iff_exists.mp hsome
+    obtain ⟨hlt, -, -⟩ := List.findIdx?_eq_some_iff_getElem.mp hk
+    simp [forkIndex, hv, hb, hk, show k < q + 1 by omega]
+  · exact Or.inr ⟨hv, hm⟩
+
+/-- **A win with no flag raised has a fork index, or its point is not in the log.**
+
+Take a forger that asks for `Π` or its inverse at most `q` times on the key `X`.
+
+The log then has at most `q + 1` pairs, so a point in the log is at a position the fork reads. -/
+theorem prEvent_verified_and_not_bad_le_forkIndex_add_notMem
+    [UniformAnswerMeasure (Unit →ₒ A)] (scheme : Scheme F G A M)
+    (adversary : KeyOnlyAdversary F G A M) (X : G) {q : ℕ}
+    (hq : IsQueryBoundP (adversary.main X) (·.isRight = true) q) :
+    Pr{let tr ← keyOnlyOutsideRun scheme adversary X}[tr.verified = true ∧ tr.bad = false] ≤
+      Pr{let tr ← keyOnlyOutsideRun scheme adversary X}[(forkIndex scheme X q tr).isSome] +
+        Pr{let tr ← keyOnlyOutsideRun scheme adversary X}[tr.verified = true ∧
+          forgeryPoint scheme X tr.forgery ∉ tr.forward.map Prod.fst] := by
+  refine (prEvent_mono_of_support _ _ (fun tr => (forkIndex scheme X q tr).isSome ∨
+    (tr.verified = true ∧ forgeryPoint scheme X tr.forgery ∉ tr.forward.map Prod.fst))
+    fun tr htr h => forkIndex_isSome_or_notMem scheme adversary X hq htr h).trans
+    (prEvent_or_le _ _ _)
+
 variable [SampleableType F]
 
 variable [SampleableType A] [UniformAnswerMeasure (Unit →ₒ A)]
@@ -295,5 +370,30 @@ theorem keyOnlyIndepAdvantage_eq_outside (scheme : Scheme F G A M)
   rw [keyOnlyIndepAdvantage, hL, prEvent_map, ← hR.prEvent_eq]
   congr 1
   simp [map_bind, Functor.map_map, Bool.and_eq_true]
+
+/-- **The key-only game with independent answers splits into the forward and inverse cases.**
+
+Take a forger that asks for `Π` or its inverse at most `q` times, on every key.
+
+Its chance to win with independent answers is at most the sum of two chances, with a uniform key.
+
+The first is the chance that the run has a fork index.
+
+The second is the chance that the check passes on a point that is not in the log. -/
+theorem keyOnlyIndepAdvantage_le_forkIndex_add_notMem (scheme : Scheme F G A M)
+    (adversary : KeyOnlyAdversary F G A M) {q : ℕ}
+    (hq : ∀ X, IsQueryBoundP (adversary.main X) (·.isRight = true) q) :
+    keyOnlyIndepAdvantage scheme adversary ≤
+      Pr{let x ← liftComp ($ᵗ F : ProbComp F) (OutsideSpec A)
+         let tr ← keyOnlyOutsideRun scheme adversary (x • scheme.g)}[
+        (forkIndex scheme (x • scheme.g) q tr).isSome] +
+      Pr{let x ← liftComp ($ᵗ F : ProbComp F) (OutsideSpec A)
+         let tr ← keyOnlyOutsideRun scheme adversary (x • scheme.g)}[
+        tr.verified = true ∧
+          forgeryPoint scheme (x • scheme.g) tr.forgery ∉ tr.forward.map Prod.fst] := by
+  rw [keyOnlyIndepAdvantage_eq_outside]
+  simp only [prEvent_bind_eq_tsum_prEvent, ← ENNReal.tsum_add, ← mul_add]
+  refine ENNReal.tsum_le_tsum fun x => mul_le_mul_right ?_ _
+  exact prEvent_verified_and_not_bad_le_forkIndex_add_notMem scheme adversary _ (hq _)
 
 end EthLib.Cryptography.Secp256k1.Security

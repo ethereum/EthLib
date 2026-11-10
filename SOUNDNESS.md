@@ -477,7 +477,11 @@ So its advantage is the source's times `(n - 1) / n`, where `n` is the number of
 Unlike Figure 2 of the source, the fork draws the coins after the fork point again.
 `reduce_forward_eq_of_forkIndex_eq_some` (`Proofs/Secp256k1/Security/ForwardCase.lean`) proves that the check of a run with a fork index read the logged answer at that index, so `ψ` maps that answer to the forgery's `t`.
 It rests on an invariant of the run: each logged pair stays cached, and while no flag is raised the cache is a partial bijection.
-No theorem yet extracts the key from the two forgeries, states the ψ-relative division resistance of the hash (Definition 5 of the source) or bounds by it the abort of line 10 of Figure 9, splits a win into the forward and inverse cases, or averages the fork's bound over the key.
+`forward_eq_of_mem_support_contextFork` (`Proofs/Secp256k1/Security/ForwardCase.lean`) gives, for both runs of the fork, the shared point and the two different answers, with `ψ` mapping each answer to the `t` of its forgery.
+For a forger with at most `q` queries to the bijection or its inverse on every key, `keyOnlyIndepAdvantage_le_forkIndex_add_notMem` (`Proofs/Secp256k1/Security/KeyOnlyOutside.lean`) bounds its chance to win with independent answers, over a uniform key, by the chance of a fork index plus the chance that the check passes on a point that was not a new forward query.
+`prEvent_inverse_le_dlog`, below, bounds the second chance.
+The reduction of Figure 10 to division resistance plants its challenge at one query of a single run, so it will also need a fact on the law of the fork, not only on its support.
+No theorem yet extracts the key from the two forgeries, states the ψ-relative division resistance of the hash (Definition 5 of the source) or bounds by it the abort of line 10 of Figure 9, or averages the fork's bound over the key.
 `redrawInverse_fst_evalDistEq` (`Proofs/Secp256k1/Security/Redraw.lean`) proves the step of lines 25 to 28 of Figure 7 of the source: a uniform answer that encodes a nonzero multiple of the base point, redrawn as the encoding of `a g` for a uniform nonzero `a`, is still uniform.
 It assumes that the base point is nonzero, that `2` is nonzero in the scalars, that the encoding is semi-injective, and that opposite points share their encoding; the encoding is then exactly 2-to-1 on those points.
 So it covers ECDSA, not the injective case of Definition 2 (b) of the source.

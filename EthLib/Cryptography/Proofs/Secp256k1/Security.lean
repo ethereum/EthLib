@@ -75,5 +75,9 @@ The redrawn answer is still uniform.
 
 A forgery whose point came from an inverse query then gives the discrete logarithm of the key.
 
+Take a forger with at most `q` queries to `Π` or its inverse.
+
+A win with no flag raised then has a fork index, or its point is not in the log of forward pairs.
+
 No theorem bounds the advantage of a forger yet.
 -/
