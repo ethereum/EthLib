@@ -75,6 +75,7 @@ public import EthLib.Consensus.Proofs.LightClient.Unforgeable
 public import EthLib.Consensus.Proofs.LightClient.Upgrade
 public import EthLib.Consensus.Proofs.Models.Ffg.AccountableSafety
 public import EthLib.Consensus.Proofs.Models.Ffg.PlausibleLiveness
+public import EthLib.Consensus.Proofs.Models.ForkChoice.HonestSupport
 public import EthLib.Consensus.Proofs.Models.ForkChoice.LmdGhost
 public import EthLib.Consensus.Proofs.Models.ForkChoice.PayloadTree
 public import EthLib.Consensus.Proofs.PqKeys.Containers
