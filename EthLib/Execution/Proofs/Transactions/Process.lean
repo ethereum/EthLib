@@ -224,7 +224,7 @@ omit [LawfulGasMeter Meter] in
 
 That error comes from a missing code.
 
-So a call that fails up to BPO5 always starts its first frame. -/
+So up to BPO5, a call in a transaction that runs to its end starts its first frame. -/
 theorem aborts_of_prepareFirstFrame_of_lt_glamsterdam (hfork : fork < .glamsterdam)
     {target : Address} {e : EvmError} {read : State.TransactionState}
     (htarget : message.target = some target)

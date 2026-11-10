@@ -1457,7 +1457,6 @@ Storage stays at the sender when its nonce is not 0, and at the beneficiary unle
 After the list, the authority has one more nonce for each of them and the code of the last one, and the rest of its account stays.
 The hypothesis on the code matters: an authority with other code refuses every authorization.
 `foldlM_applyAuthorization_keeps` covers such an authority, under the hypothesis that no authorization sets a code with its code hash.
-No theorem at the transaction level covers it yet.
 `processMessageCall_of_halt` in `Process.lean` puts the state back to the state before the authorizations when the message halts before its first frame, as EIP-8037 asks.
 `processMessageCall_reads_of_error` proves that a failed frame reads as the state of its first frame, so a failed call keeps its accepted authorizations, as EIP-7702 asks.
 
@@ -1471,12 +1470,14 @@ When the first frame of a call starts and fails, it reads as the state that the 
 `processTransaction_authority_of_error` gives each authority whose code is empty or a delegation indicator its values after the transaction.
 Its nonce is its nonce before the transaction, plus one for the sender, plus one per accepted authorization.
 Its code hash is that of the code the last one sets.
-Up to BPO5 this always holds, since `aborts_of_prepareFirstFrame_of_lt_glamsterdam` in `Process.lean` shows that a call halts before its first frame only with an error that aborts the run.
-From Glamsterdam the theorem allows a second case, only when the first frame never starts (`FirstFrameHalts`).
-That halt undoes the authorizations, and the authority keeps its code hash and that starting nonce.
-So from Glamsterdam too, a call whose first frame starts and fails keeps its authorizations.
-`processTransaction_selfAuthorization_of_error` in `Replay.lean` applies it to a sender that signs its only authorization with the nonce of the transaction plus one.
-It ends two nonces above the transaction, or one above from Glamsterdam when the first frame never starts.
+From Glamsterdam it needs the first frame of the call to start, which `FirstFrameHalts` denies.
+Up to BPO5 it needs nothing more, since `aborts_of_prepareFirstFrame_of_lt_glamsterdam` in `Process.lean` shows that a call halts before its first frame only with an error that aborts the run.
+`processTransaction_authority_of_firstFrameHalts` covers the halt from Glamsterdam: every authority keeps its code hash and its nonce, plus one for the sender, as EIP-8037 asks.
+`processTransaction_authority_keeps_of_error` covers an authority with other code, which refuses every authorization: its account and its storage stay.
+It assumes that no authorization sets a code with the code hash of the authority.
+No theorem yet gives the storage of an authority that takes a delegation.
+`processTransaction_selfAuthorization_of_error` in `Replay.lean` applies the first theorem to a sender that signs its only authorization with the nonce of the transaction plus one.
+It ends two nonces above the transaction.
 `block_of_output` proves that the block after the transaction reads as the state that the transaction leaves.
 
 ### Transaction gas

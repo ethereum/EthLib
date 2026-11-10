@@ -39,6 +39,8 @@ So the nonce is at least the nonce of the transaction plus one, not exactly that
 
 A failed call whose only authorization is the sender's own, with the next nonce, ends two above.
 
+From Glamsterdam, that needs the first frame of the call to start.
+
 Before Pectra, a transaction holds no authorization, since its type must exist at its fork.
 
 Section 6 of the [Yellow Paper][yp], Shanghai version, gives the nonce check.
@@ -380,7 +382,6 @@ theorem processTransaction_codeHash_of_lt_dencun {env : BlockEnvironment fork}
   · have := (buyGas_sender rfl hbought).2.2
     omega
 
-
 /-! ## A sender that authorizes itself -/
 
 /-- A sender that signs its own authorization ends a failed call two nonces above its transaction.
@@ -389,19 +390,18 @@ The authorization is the only one of the transaction, and it is in scope.
 
 Its nonce is the nonce of the transaction plus one, since the gas purchase comes first.
 
-From Glamsterdam, a halt before the first frame undoes it, and the sender ends one nonce above. -/
+From Glamsterdam, the first frame of the call must start. -/
 theorem processTransaction_selfAuthorization_of_error {env : BlockEnvironment fork}
     {block : State.BlockState} {chainId : UInt64} {used : BlockGas} {included : Included}
     {out : TransactionOutput} {auth : Authorization}
     (hcheck : checkInclusion chainId env used (.ofBlock block) tx = .ok included)
     (h : processTransaction env block included tx = .ok out) (failed : out.error.isSome = true)
+    (hstarts : .glamsterdam ≤ fork → ¬FirstFrameHalts StateGasMeter tx env block included)
     (hauths : tx.authorizations = [auth])
     (hscope : authorizationInScope env.chainId.toNat auth = true)
     (hrecover : recoverAuthority auth = some included.sender)
     (hnonce : auth.nonce.toNat = tx.nonce.toNat + 1) :
-    (out.state.getAccount included.sender).nonce = tx.nonce.toNat + 2 ∨
-      (.glamsterdam ≤ fork ∧ FirstFrameHalts StateGasMeter tx env block included ∧
-        (out.state.getAccount included.sender).nonce = tx.nonce.toNat + 1) := by
+    (out.state.getAccount included.sender).nonce = tx.nonce.toNat + 2 := by
   obtain ⟨_, _, _, _, _, _, _, _, _, _, _, hsender, _, code, hcode, hkind⟩ :=
     checkInclusion_eq_ok_iff.mp hcheck
   have hdelegable : (code.size = 0 || isValidDelegation code) = true := by
@@ -411,14 +411,12 @@ theorem processTransaction_selfAuthorization_of_error {env : BlockEnvironment fo
       subst hcode
       rfl
     · simp [hvalid]
-  have hvalues := (processTransaction_authority_of_error h failed hcode hdelegable).1
+  have hn := (processTransaction_authority_of_error h failed hstarts hcode hdelegable).1
   have haccepted : acceptedBy env.chainId.toNat included.sender (tx.nonce.toNat + 1) [auth] =
       [auth] := by
     simp [acceptedBy, hscope, hrecover, hnonce]
-  simp only [↓reduceIte, hauths, ← hsender] at hvalues
-  simp only [haccepted, List.length_singleton] at hvalues
-  rcases hvalues with ⟨hn, -⟩ | ⟨hglam, hhalts, hn, -⟩
-  · exact .inl hn
-  · exact .inr ⟨hglam, hhalts, hn⟩
+  simp only [↓reduceIte, hauths, ← hsender] at hn
+  simp only [haccepted, List.length_singleton] at hn
+  exact hn
 
 end EthLib.Execution.Transactions
