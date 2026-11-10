@@ -196,12 +196,20 @@ def containerOf (preset : Preset) (fork : Fork) : String → Option Container
     if HasBuilderApi fork then some ⟨BlindedBeaconBlock preset fork⟩ else none
   | "SignedBlindedBeaconBlock" =>
     if HasBuilderApi fork then some ⟨SignedBlindedBeaconBlock preset fork⟩ else none
+  | "BuilderRequestAuth" => if .glamsterdam ≤ fork then some ⟨BuilderRequestAuth⟩ else none
+  | "SignedBuilderRequestAuth" =>
+    if .glamsterdam ≤ fork then some ⟨SignedBuilderRequestAuth⟩ else none
+  | "BuilderPreferences" => if .glamsterdam ≤ fork then some ⟨BuilderPreferences⟩ else none
+  | "BuilderPreferencesRequest" =>
+    if .glamsterdam ≤ fork then some ⟨BuilderPreferencesRequest⟩ else none
   | _ => none
 
 /-- The containers whose form EthLib holds from Glamsterdam on.
 
 Gloas and Heze change some containers, and EthLib holds those forms only as specified. -/
 def specifiedFromGlamsterdam : List String := [
+  "BuilderRequestAuth", "SignedBuilderRequestAuth", "BuilderPreferences",
+  "BuilderPreferencesRequest",
   "Fork", "ForkData", "SigningData", "Checkpoint", "Validator", "AttestationData", "Eth1Data",
   "DepositMessage", "DepositData", "BeaconBlockHeader", "SignedBeaconBlockHeader", "Eth1Block",
   "ProposerSlashing", "Deposit", "VoluntaryExit", "SignedVoluntaryExit", "SingleAttestation",

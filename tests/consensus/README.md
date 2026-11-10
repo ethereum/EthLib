@@ -226,8 +226,12 @@ Their SHA-256 digests are:
 - `minimal.tar.gz`: `26d09aea70c62ed235a120a95082d544ab1c2e6fe36bd35ea1bd5da62f3b7b68`, 468,730,308 bytes.
 
 The directory `builder_api/` holds the examples of the Builder API, from `ethereum/builder-specs` at commit `fce64468a81a87892d7cb9b4858272bb3d010e50`.
-They are the files `examples/<fork>/signed_*.ssz` and their JSON forms, copied byte for byte under their fork, from Bellatrix to Fulu.
-Bellatrix also has a signed validator registration, and every fork has a signed bid and a signed blinded block.
-`bindings/python/tests/consensus/test_builder_api.py` decodes each one, encodes it again, and checks its root against the roots of its message and its signature.
+They are SSZ examples and their JSON forms in `examples/<fork>/`, copied byte for byte under their fork.
+From Bellatrix to Fulu, they are the files `signed_*`: every fork has a signed bid and a signed blinded block.
+Bellatrix also has a signed validator registration.
+For Gloas they are every file of `examples/gloas/`: a signed request authentication, builder preferences and a preferences request.
+
+`bindings/python/tests/consensus/test_builder_api.py` decodes each example and encodes it again.
+It checks signed roots against the roots of their message and signature, and Gloas roots with independent SSZ calculations.
 It also compares a few fields with the JSON form.
 The signatures of the examples are placeholders, so the tests of the signature checks sign their own messages.
