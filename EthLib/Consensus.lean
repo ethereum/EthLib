@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.Accessors
+public import EthLib.Consensus.BuilderApi
 public import EthLib.Consensus.Builders
 public import EthLib.Consensus.Churn
 public import EthLib.Consensus.Mutators
@@ -11,6 +12,7 @@ public import EthLib.Consensus.Constants
 public import EthLib.Consensus.Containers.Attestation
 public import EthLib.Consensus.Containers.Bid
 public import EthLib.Consensus.Containers.Block
+public import EthLib.Consensus.Containers.BuilderApi
 public import EthLib.Consensus.Containers.Builder
 public import EthLib.Consensus.Containers.Execution
 public import EthLib.Consensus.Containers.InclusionList
@@ -27,6 +29,7 @@ public import EthLib.Consensus.Credentials
 public import EthLib.Consensus.DataAvailability.Blob
 public import EthLib.Consensus.DataAvailability.Column
 public import EthLib.Consensus.DataAvailability.Custody
+public import EthLib.Consensus.DataAvailability.CustodyColumns
 public import EthLib.Consensus.DepositTree
 public import EthLib.Consensus.ForkChoice.FastConfirmation
 public import EthLib.Consensus.ForkChoice.Handlers
@@ -50,6 +53,7 @@ public import EthLib.Consensus.Gossip.Seen
 public import EthLib.Consensus.Gossip.Sidecar
 public import EthLib.Consensus.Gossip.SyncCommittee
 public import EthLib.Consensus.Gossip.Topics
+public import EthLib.Consensus.History.Era
 public import EthLib.Consensus.InclusionList
 public import EthLib.Consensus.HonestBuilder
 public import EthLib.Consensus.HonestAggregation

@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.Proofs.Accessors
+public import EthLib.Consensus.Proofs.BuilderApi
 public import EthLib.Consensus.Proofs.Builders
 public import EthLib.Consensus.Proofs.Churn
 public import EthLib.Consensus.Proofs.Mutators
@@ -12,6 +13,7 @@ public import EthLib.Consensus.Proofs.Constants
 public import EthLib.Consensus.Proofs.Containers.Attestation
 public import EthLib.Consensus.Proofs.Containers.Bid
 public import EthLib.Consensus.Proofs.Containers.Block
+public import EthLib.Consensus.Proofs.Containers.BuilderApi
 public import EthLib.Consensus.Proofs.Containers.Builder
 public import EthLib.Consensus.Proofs.Containers.Execution
 public import EthLib.Consensus.Proofs.Containers.InclusionList
@@ -31,6 +33,7 @@ public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation
 public import EthLib.Consensus.Proofs.ForkChoice.Ghost
 public import EthLib.Consensus.Proofs.ForkChoice.Handlers
 public import EthLib.Consensus.Proofs.ForkChoice.Head
+public import EthLib.Consensus.Proofs.ForkChoice.Network
 public import EthLib.Consensus.Proofs.ForkChoice.Optimistic
 public import EthLib.Consensus.Proofs.ForkChoice.OptimisticSync
 public import EthLib.Consensus.Proofs.ForkChoice.PayloadGhost
@@ -55,6 +58,7 @@ public import EthLib.Consensus.Proofs.Gossip.Sidecar
 public import EthLib.Consensus.Proofs.Gossip.SidecarInclusion
 public import EthLib.Consensus.Proofs.Gossip.SyncCommittee
 public import EthLib.Consensus.Proofs.Gossip.Topics
+public import EthLib.Consensus.Proofs.History.Era
 public import EthLib.Consensus.Proofs.InclusionList
 public import EthLib.Consensus.Proofs.HonestBuilder
 public import EthLib.Consensus.Proofs.HonestAggregation
@@ -68,9 +72,11 @@ public import EthLib.Consensus.Proofs.LightClient.Containers
 public import EthLib.Consensus.Proofs.LightClient.Execution
 public import EthLib.Consensus.Proofs.LightClient.FullNode
 public import EthLib.Consensus.Proofs.LightClient.Sync
+public import EthLib.Consensus.Proofs.LightClient.Unforgeable
 public import EthLib.Consensus.Proofs.LightClient.Upgrade
 public import EthLib.Consensus.Proofs.Models.Ffg.AccountableSafety
 public import EthLib.Consensus.Proofs.Models.Ffg.PlausibleLiveness
+public import EthLib.Consensus.Proofs.Models.ForkChoice.HonestSupport
 public import EthLib.Consensus.Proofs.Models.ForkChoice.LmdGhost
 public import EthLib.Consensus.Proofs.Models.ForkChoice.PayloadTree
 public import EthLib.Consensus.Proofs.PqKeys.Containers
@@ -88,8 +94,12 @@ public import EthLib.Consensus.Proofs.Signing
 public import EthLib.Consensus.Proofs.Time
 public import EthLib.Consensus.Proofs.Transition.Block
 public import EthLib.Consensus.Proofs.Transition.BlockRewards
+public import EthLib.Consensus.Proofs.Transition.BuilderDebt
+public import EthLib.Consensus.Proofs.Transition.BuilderDebtEpoch
+public import EthLib.Consensus.Proofs.Transition.BuilderDebtSlots
 public import EthLib.Consensus.Proofs.Transition.BuilderPayments
 public import EthLib.Consensus.Proofs.Transition.BuilderRequests
+public import EthLib.Consensus.Proofs.Transition.Committees
 public import EthLib.Consensus.Proofs.Transition.ConsolidationWindow
 public import EthLib.Consensus.Proofs.Transition.EpochJustification
 public import EthLib.Consensus.Proofs.Transition.EpochParticipation
@@ -111,7 +121,9 @@ public import EthLib.Consensus.Proofs.Transition.Slot
 public import EthLib.Consensus.Proofs.Transition.StateTransition
 public import EthLib.Consensus.Proofs.Transition.SyncAggregate
 public import EthLib.Consensus.Proofs.Transition.TargetFlags
+public import EthLib.Consensus.Proofs.Transition.TargetPending
 public import EthLib.Consensus.Proofs.Transition.TargetSlots
+public import EthLib.Consensus.Proofs.Transition.TargetUpgrades
 public import EthLib.Consensus.Proofs.Transition.TargetVotes
 public import EthLib.Consensus.Proofs.Transition.Upgrade
 public import EthLib.Consensus.Proofs.Transition.WeakSubjectivitySafety

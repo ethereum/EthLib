@@ -162,13 +162,20 @@ theorem applyDaoFork_isOk_iff {fork : Fork} {tx : TransactionState} :
 /-- Mainnet activates the DAO Fork at block 1,920,000. -/
 theorem daoForkBlock_mainnet : daoForkBlock ChainConfig.mainnet = some 1920000 := rfl
 
-/-- On mainnet, a header in blocks 1,920,000 to 1,920,009 passes exactly with the fork's extra data.
+/-- Before Paris on mainnet, blocks 1,920,000 to 1,920,009 pass exactly with the DAO extra data.
 
 Every other header passes. -/
-theorem daoExtraDataValid_mainnet {fork : Fork} (header : Header fork) :
+theorem daoExtraDataValid_mainnet {fork : Fork} (hFork : fork < .paris) (header : Header fork) :
     daoExtraDataValid ChainConfig.mainnet header = true ↔
       (1920000 ≤ header.number ∧ header.number < 1920010 → header.extraData = DAO_EXTRA_DATA) := by
-  simp only [daoExtraDataValid, daoForkBlock_mainnet, DAO_EXTRA_DATA_BLOCKS, Nat.reduceAdd]
+  simp only [daoExtraDataValid, hFork, ↓reduceIte, daoForkBlock_mainnet, DAO_EXTRA_DATA_BLOCKS,
+    Nat.reduceAdd]
   by_cases h : 1920000 ≤ header.number ∧ header.number < 1920010 <;> simp [h]
+
+/-- From Paris every header passes the extra data rule of the DAO Fork, on every chain. -/
+theorem daoExtraDataValid_of_paris_le {config : ChainConfig} {fork : Fork} (hFork : .paris ≤ fork)
+    (header : Header fork) : daoExtraDataValid config header = true := by
+  have hNot : ¬fork < .paris := Nat.not_lt.mpr hFork
+  simp only [daoExtraDataValid, hNot, ↓reduceIte]
 
 end EthLib.Execution.Blocks

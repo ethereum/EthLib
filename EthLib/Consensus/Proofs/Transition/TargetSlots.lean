@@ -183,10 +183,10 @@ theorem TargetFlagsSigned.of_advanceSlot
     (holds : TargetFlagsSigned config checks state)
     (computed : advanceSlot config checks state = .ok after) :
     TargetFlagsSigned config checks after := by
-  obtain ⟨forkVersions, genesisRoot, -, keys⟩ := advanceSlot_keys computed
+  obtain ⟨-, genesisRoot, -, keys⟩ := advanceSlot_keys computed
   have signed : ∀ vote, SignedVote config checks state vote →
       SignedVote config checks after vote :=
-    fun _ one => one.of_keys forkVersions genesisRoot (keys small)
+    fun _ one => one.of_keys (Nat.le_refl _) genesisRoot (keys small)
   have roots : ∀ {epoch : Epoch} {root : Root}, getBlockRoot state epoch = .ok root →
       (epoch = getCurrentEpoch state ∨ epoch = getPreviousEpoch state) →
       getBlockRoot after epoch = .ok root :=
@@ -332,12 +332,15 @@ An epoch must have at least one slot, and the roots must cover two epochs, as in
 
 The two justified checkpoints must be equal in the first two epochs before the block.
 
-The registry must stay below 2^64 validators after the block. -/
+The registry must stay below 2^64 validators after the block.
+
+The fork versions after the block must be those of forks of the chain. -/
 theorem TargetFlagsSigned.of_stateTransition {engine : ExecutionEngine preset fork}
     {signed : SignedBeaconBlock preset fork} {validateResult : Bool}
     (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
     (window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
     (early : JustifiedEarly state) (small : after.validators.data.size < 2 ^ 64)
+    (known : ForkVersionsKnown config after)
     (holds : TargetFlagsSigned config checks state)
     (computed : stateTransition config checks engine state signed validateResult = .ok after) :
     TargetFlagsSigned config checks after := by
@@ -346,6 +349,6 @@ theorem TargetFlagsSigned.of_stateTransition {engine : ExecutionEngine preset fo
   obtain ⟨_, -, slotsOk⟩ := slotsOk
   obtain ⟨votes, frame, -⟩ := voteFrame_processBlock blockOk
   exact (TargetFlagsSigned.of_advanceSlots positive window early
-    (Nat.lt_of_le_of_lt frame.registryGrows small) holds slotsOk).of_voteFrame small frame
+    (Nat.lt_of_le_of_lt frame.registryGrows small) holds slotsOk).of_voteFrame small known frame
 
 end EthLib.Consensus

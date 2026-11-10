@@ -15,8 +15,10 @@ def _scalar(value: int) -> bytes:
     return value.to_bytes((value.bit_length() + 7) // 8, "big")
 
 
-def _header(number: int, extra_data: bytes) -> bytes:
+def _header(number: int, extra_data: bytes, base_fee: int | None = None) -> bytes:
     # A Homestead header: 15 fields, with every hash, address, bloom and nonce zero.
+    # From London a 16th field, the base fee, follows.
+    london = [] if base_fee is None else [_scalar(base_fee)]
     return rlp.encode(
         [
             bytes(32),  # parent hash
@@ -34,6 +36,7 @@ def _header(number: int, extra_data: bytes) -> bytes:
             extra_data,
             bytes(32),  # mix hash
             bytes(8),  # nonce
+            *london,
         ]
     )
 
@@ -53,3 +56,16 @@ def test_dao_extra_data_valid(number: int, extra_data: bytes, valid: bool) -> No
     """A header from the fork block on, for ten blocks, needs the extra data; others pass."""
     header = _header(number, extra_data)
     assert blocks.dao_extra_data_valid(DAO_BLOCK, "homestead", header) is valid
+
+
+@pytest.mark.parametrize(
+    ("fork", "valid"),
+    [
+        pytest.param("grayGlacier", False, id="last-fork-before-paris"),
+        pytest.param("paris", True, id="paris"),
+    ],
+)
+def test_dao_extra_data_ends_at_paris(fork: str, valid: bool) -> None:
+    """From Paris the rule ends, so the fork block passes with other extra data."""
+    header = _header(DAO_BLOCK, b"other", base_fee=7)
+    assert blocks.dao_extra_data_valid(DAO_BLOCK, fork, header) is valid

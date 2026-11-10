@@ -1,6 +1,8 @@
 module
 
 public import EthLib.Execution.Proofs.Blocks.AccessListBuilder
+public import EthLib.Execution.Proofs.Blocks.AccessListComplete
+public import EthLib.Execution.Proofs.Blocks.AccessListCoverage
 public import EthLib.Execution.Proofs.Blocks.Block
 public import EthLib.Execution.Proofs.Blocks.BlockAccessList
 public import EthLib.Execution.Proofs.Blocks.BodyGas
@@ -16,6 +18,9 @@ public import EthLib.Execution.Proofs.Blocks.Rewards
 public import EthLib.Execution.Proofs.Blocks.Requests
 public import EthLib.Execution.Proofs.Blocks.Roots
 public import EthLib.Execution.Proofs.Blocks.SystemCall
+public import EthLib.Execution.Proofs.Blocks.SystemCall.BeaconRoots
+public import EthLib.Execution.Proofs.Blocks.SystemCall.Contract
+public import EthLib.Execution.Proofs.Blocks.SystemCall.HistoryStorage
 public import EthLib.Execution.Proofs.Blocks.Transition
 public import EthLib.Execution.Proofs.Blocks.TypedRoots
 public import EthLib.Execution.Proofs.Blocks.Validate

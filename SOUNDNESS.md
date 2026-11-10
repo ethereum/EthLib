@@ -396,16 +396,30 @@ The test is sound (`blsScheme_sound`).
 There `H(m)` is the hash to G2 of `m` under the message tag.
 Aggregation and proofs of possession lie outside that game.
 
-A second game (`Proofs/Bls/Security/PopGame.lean`) states unforgeability of aggregates with proofs of possession, after §3.3 of [draft-irtf-cfrg-bls-signature-05](https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signature-05#section-3.3).
+A second game (`Proofs/Bls/Security/PopGame.lean`) states unforgeability of aggregates with proofs of possession, after §3.3 of [draft-irtf-cfrg-bls-signature-04](https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signature-04#section-3.3).
 One key is honest; the adversary chooses the others.
 It wins with an aggregate on a message it never asked to be signed, verifying under the sum of keys that include the honest one and all carry valid proofs.
 The counts below include the calls of signing, of the honest proof and of verification.
 `Pop.forgeAdvantage_le` (`Proofs/Bls/Security/PopBound.lean`) bounds a forger within `q` message and `qK` key hash calls by `q` times a named solver of the same problem, plus `(q + qK - 1) / |F|`.
 It assumes the test is sound, every element of `G1` is a multiple of `g1`, and `qK` is at most the characteristic of the scalars.
 Without the last, enough copies of the honest key sum to zero.
-The bound is not yet stated over EthLib's bytes, and the light client still assumes `SignatureChecks.AggregateSound`.
+`Pop.byteForgeAdvantage_le_coCdhAdvantage` (`Proofs/Bls/Security/PopByteGame.lean`) carries the bound to EthLib's bytes.
+The forger sees compressed keys, hashes, signatures and proofs, and returns bytes.
+It must pass EthLib's proof verification for every key and EthLib's fast aggregate verification, each with the oracle's hash in place of the hash to G2 (`Proofs/Bls/Security/PopRefinement.lean`).
+`byteVerify_eq_popVerify` and `byteFastAggregateVerify_hashPoint` show that with the real hashes these checks are `popVerify` and `fastAggregateVerify`, and `popProve_eq` that the honest proof is `popProve`.
+The key hash of bytes that decode to a multiple of `g1` is the group oracle on the decoded element; other bytes get independent uniform answers.
+The key-call count leaves those other bytes out, since verification never hashes them.
+`LightClientForgery.forgeAdvantage_le` (`Consensus/Proofs/LightClient/Unforgeable.lean`) applies the bound to the light client.
+One sync committee member is honest; the forger chooses the configuration, the store, the update and the clock, and gives a proof of possession for each signer.
+It wins if `validateLightClientUpdate` accepts the update with the honest member's bit set, with the oracle's hash of the signing root, and the honest member never signed that root.
+Its advantage is at most the byte bound above.
+`validateLightClientUpdate_oracleChecks` shows that with the real hash of the signing root, the game's check is the light client's check with the BLS checks.
+The light client theorems of `Authenticate.lean` still take `SignatureChecks.AggregateSound`, because they reason about one accepted update, not a probability.
+The game requires a proof of possession that passes PopVerify, §3.3.3, under the key tag.
+Ethereum registers a validator key with a deposit signature instead, a signature on a message that holds the key, under the message tag and the deposit domain.
+The bound does not cover that form of proof.
 
-`byteForgeAdvantage_le` (`Proofs/Bls/Security/Refinement.lean`) turns a forger on byte encodings into a named group-element forger with at least the same advantage.
+`Security.byteForgeAdvantage_le` (`Proofs/Bls/Security/Refinement.lean`) turns a forger on byte encodings into a named group-element forger with at least the same advantage.
 The byte forger receives a compressed key and compressed hash and signing answers, and returns arbitrary message and signature bytes.
 The game runs EthLib's G2 decompression, signature subgroup check and key validation before the pairing check.
 This step needs no pairing law, because the byte check and the group test pair the same group elements.
@@ -419,7 +433,7 @@ EthLib's secret keys exclude zero, and a zero key always loses.
 `nonzeroByteForgeAdvantage_eq` (`Proofs/Bls/Security/Refinement.lean`) draws a uniform nonzero key instead.
 Against that key, a forger wins exactly `r / (r - 1)` times its byte advantage.
 `nonzeroByteForgeAdvantage_le_coCdhAdvantage` carries this factor into the co-CDH bound below.
-`byteForgeAdvantage_le_coCdhAdvantage` gives the same `q`-factor co-CDH bound when the decoded forger makes at most `q` hash calls.
+`Security.byteForgeAdvantage_le_coCdhAdvantage` gives the same `q`-factor co-CDH bound when the decoded forger makes at most `q` hash calls.
 `byteForgeAdvantage_le_coCdhAdvantage_of_byteHashCallBound` states the bound with the hash-call bound on the byte forger itself.
 `byteHashCallBound_iff` proves that the two bounds are equivalent, because the encoding forwards each query once.
 
@@ -1458,6 +1472,22 @@ From Hegotá a run fails as not yet specified, so there is no gas used to state.
 `prepareFirstFrame_of_applyAuthorizations_error` proves that an error of the authorizations is the error of the first frame.
 `prepareFirstFrame_of_value_eq_zero` gives the first frame of a call that moves no ether and applies no authorization.
 
+### The supply of ether
+
+`Execution/Proofs/State/Supply.lean` defines the supply of a transaction state as the sum of the balances of all its accounts.
+`Execution/Proofs/Evm/Call/Supply.lean` proves that no call or creation raises it, at every fork.
+`processTransaction_supply_le` in `Execution/Proofs/Transactions/Supply.lean` proves that a transaction lowers it by at least its burned fees: the base fee times the gas used, and the blob fee.
+It assumes that the gas limit covers the least gas and that the price per gas covers the base fee, which the checks of the block ensure.
+
+The equality holds in two cases.
+`processTransaction_supply_of_glamsterdam` gives it from Glamsterdam, where SELFDESTRUCT and the deletions keep every balance.
+`processTransaction_supply_of_dencun` gives it from Cancun for a transaction that creates no account.
+
+Before Cancun, a SELFDESTRUCT whose beneficiary is its own account burns that balance inside the message, and the deletions burn what a marked account received after it.
+The state does not record that amount, so the theorems give only the bound there.
+The same holds from Cancun until Glamsterdam for a transaction that creates an account.
+An exact form there needs a term that tracks the burned balance through the whole run.
+
 ### The authorizations of EIP-7702
 
 `Execution/Proofs/Transactions/Authorization.lean` covers every case of one authorization, at every fork.
@@ -1611,7 +1641,21 @@ The queues carry unused churn to later epochs, so the bound can hold over the wi
 No theorem yet derives it from the state transition, and the model fixes the effective balances over the window.
 The rule spends the withdrawal delay on keeping exits slashable and the other epochs of the period on churn, and the assumption takes the change over those epochs as given.
 Activations have no such delay, and a validator outside the registry of the checkpoint weighs zero in the model.
-No theorem covers the Phase 0 period, which counts validators and top-ups.
+The beacon chain weighs the votes of each epoch at the effective balances of that epoch.
+Top-ups, the balance that a consolidation moves to its target, rewards and penalties all change those balances during the window.
+The theorems weigh every vote at the balances of the checkpoint, so they reach a chain only once those changes are bounded, and no theorem bounds them yet.
+
+From Phase 0 to Deneb, `accountable_safety_of_weakSubjectivityPeriod_of_lt_electra` covers the period in part.
+The rule counts `N` active validators of average balance `t` ether, rounded down, a largest effective balance `T` ether, a churn of `delta` validators and `Delta` top-ups per epoch.
+The theorem assumes each justified set gains and loses at most `delta` validators for each of the `n` epochs of churn, with `delta` the churn at the checkpoint.
+It also assumes every effective balance at most `T`, with `T` a whole number of ether.
+With large balances, `230 T < 320 t`, the rule's epochs for churn always satisfy `20 n delta T ≤ N t`, and so keep the margin.
+`churn_le_of_phase0PeriodEpochs_eq_ok` gives that inequality for the epochs of the rule.
+The rule takes the longer of those and its epochs for top-ups, so the theorem also assumes that the epochs for top-ups satisfy the same inequality.
+Top-ups change a balance, which the model leaves out, and in the model a longer period only allows more churn.
+The rule does not imply that hypothesis: with `N = 2^23` validators of 32 ether, `delta = 128` and `Delta = 512`, the rule takes 6280 epochs for top-ups, while the churn allows 3276.
+Over 6280 epochs, the churn of validators alone lowers the bound of Gasper Theorem 8.3 to about 14% of the stake.
+With small balances, `230 T ≥ 320 t`, no theorem relates the period to the margin.
 The Python suite checks the periods against the three tables of the rule, except for the rows whose states take minutes to build.
 
 ### Honest validator duties
@@ -1991,6 +2035,15 @@ The signature theorems assume `SignatureChecks.AggregateSound`, listed in A4.
 Under it, `validateLightClientUpdate_signed` shows that every member whose bit is set signed the signing root.
 `validateLightClientUpdate_signed_outside` adds that a set of keys holding fewer seats of the committee than there are signers leaves a signer outside the set.
 `SignatureChecks.not_aggregateSound_acceptAll` shows that the assumption has content: the checks that accept every signature do not meet it.
+`LightClientForgery.forgeAdvantage_le` bounds how often a forger makes the light client accept an aggregate with one designated honest member's bit set, on a root that member never signed.
+It assumes the random oracle model, a proof of possession for every signer, and at most `q` and `qK` hash calls; the bound is small if co-CDH is hard and the solver built from the forger is efficient, which no theorem bounds.
+It is not a proof of `AggregateSound`, and Ethereum's keys carry deposit signatures, not those proofs.
+The bound protects that member's bit only.
+Covering every honest member of a committee needs a guess among them, losing up to a factor of the number of honest seats; that step is not proved.
+Updates signed by corrupted members alone are still accepted, so the safety of headers also needs an honest supermajority of the committee.
+The reduction loses a factor `q`, the number of all message hash calls, and no theorem bounds its running time.
+A deposit signature cannot simply count as a proof of possession here: it is a signature under the message hash, and Ristenpart and Yilek ([ePrint 2007/264](https://eprint.iacr.org/2007/264)) show that such proofs fail when the honest key signs chosen messages.
+With the signing oracle of this game, the honest key's signature on the deposit message of a rogue key `x g1 - pk` gives that key a valid deposit signature.
 The header slots of the store never move back.
 `applyLightClientUpdate_finalizedSlot_le`, `processLightClientUpdate_finalizedSlot_le` and `processLightClientStoreForceUpdate_finalizedSlot_le` show that the finalized slot never decreases.
 `applyLightClientUpdate_optimisticSlot_le`, `processLightClientUpdate_optimisticSlot_le` and `processLightClientStoreForceUpdate_optimisticSlot_le` show the same for the optimistic slot.
@@ -2061,10 +2114,14 @@ The source of that attestation is the justified checkpoint of the epoch of the f
 Its target is the checkpoint of that epoch, with the block root that the state records for its first slot.
 `voteFrame_processBlock` (`Consensus/Proofs/Transition/TargetVotes.lean`) carries that fact across a whole block.
 A block sets a target flag only from a vote, a pair of a validator and attestation data, for the link of the epoch of the flag at the position of the flag.
-Each such vote holds the data of an attestation of the block, and passes the attestation checks in the state after the block.
-With the BLS checks, that means the validator signed it, if BLS aggregates with proofs of possession cannot be forged.
+Each such vote holds the data of an attestation of the block, and is signed in the state after the block.
+A vote is signed in a state when an aggregate signature over its data verifies under keys of the state that include the validator's key.
+The domain is the attester domain at the version of a fork of the chain, up to the fork of the state, with the state's genesis validators root.
+The attestation check implies this when the two fork versions of the state are such versions, which `ForkVersionsKnown` states.
+The version stays free among those forks, since two upgrades in one epoch change the version that the state gives to the previous epoch.
+With the BLS checks, a signed vote means that the validator signed the data, if BLS aggregates with proofs of possession cannot be forged.
 The block keeps the slot, the block roots, the justified checkpoints, the fork versions, the genesis validators root and the key of each validator.
-So `TargetFlagsSigned.of_voteFrame` keeps each target flag backed by a vote that passes the checks in the current state.
+So `TargetFlagsSigned.of_voteFrame` keeps each target flag backed by a signed vote for its link.
 From Gloas the theorem assumes the registry within its limit, since its type does not bound its size.
 `TargetFlagsSigned.of_stateTransition` (`Consensus/Proofs/Transition/TargetSlots.lean`) carries the same fact across the slots, the epoch step included, and then the block.
 The slot step writes one block root, so the roots at the first slots of the current and previous epochs stay.
@@ -2072,9 +2129,12 @@ That needs at least one slot per epoch, and a buffer of roots that covers two ep
 The epoch step moves the flags of the current epoch to the previous one, and justification moves the current justified checkpoint to the previous one.
 Justification does not run in the first two epochs, so the theorem assumes the two justified checkpoints equal there, and the slots keep that.
 The theorem also assumes the registry below 2^64 validators after the block, which its type already bounds before Gloas.
+It also assumes `ForkVersionsKnown` after the block.
+The genesis state built from deposits satisfies that and the equal justified checkpoints, and the slots, the blocks and every upgrade keep both (`Consensus/Proofs/Transition/TargetUpgrades.lean`).
+`TargetFlagsSigned.of_processUpgrades` carries the target-flag fact across the upgrades from Altair on.
+It assumes the registry below 2^64 validators after the upgrades.
 At least five gaps remain before a refinement.
-No theorem yet carries that fact across the upgrades.
-None establishes it at the first Altair state, nor the equal justified checkpoints of the first two epochs there.
+No theorem yet establishes the target-flag fact at the first Altair state, which the upgrade from Phase 0 builds from the pending attestations.
 None covers the forks before Altair.
 So none yet shows that the attesters of an epoch signed the link that the model counts.
 The attesters of the previous epoch are filtered by activity in that epoch, but the total counts the active validators of the current one.
@@ -2116,6 +2176,12 @@ The theorems about `engine_forkchoiceUpdated` are in `Proofs/ForkchoiceUpdated.l
 The exception is step 2 of the method, which `forkchoiceUpdated_of_belowFinalized` covers.
 A valid head below the finalized block that the execution layer knows is `VALID` there, and the head does not change.
 `forkchoiceUpdated_of_invalid` gives the answer for an invalid head, and `latestValid_eq_some_iff` with `getElem?_succ_chainOf` shows that its latest valid hash is the valid ancestor nearest the head.
+In version 4, custody columns that decode never change the answer (`forkchoiceUpdatedCall_custody`), and without payload attributes every version gives the same answer (`forkchoiceUpdatedCall_of_null`).
+The model has no timestamps, so it checks neither the fork of the payload attributes nor that their timestamp is above the head's.
+For the same reason, version 2 takes both structures of the attributes at any time.
+When the update applies a valid head, attributes whose fields fit no structure of the version give `-38003` (`forkchoiceUpdatedCall_eq_error_of_attributes`, with `payloadAttributesOfVersion_eq_error_iff` and `payloadAttributesOfJson_wrong_fields`), and when it applies none they are not read (`forkchoiceUpdatedCall_of_no_head`).
+Version 1 names no code for a wrong structure, and the model gives it `-38003`, the answer of its step 9 for invalid attributes.
+The OpenRPC description of the method makes the payload attributes optional, but the model asks for them, as `null` when there are none.
 
 `executionEngine_accepts_iff` (`Proofs/ExecutionEngine.lean`) states when the execution engine accepts a payload request of the beacon chain.
 The request lists must be well formed, and the payload must have a block at the active fork of the chain, which must be before Glamsterdam.
@@ -2233,13 +2299,17 @@ The binding of a proof of possession shares the bullet of leanXMSS, and the code
   No other input of the VRF has 74 bytes, so the mix shares no input with the tree; that is necessary for the assumption, not a proof of it.
   The randomness is uniform, drawn after the holder registers its tree, and independent of the holder.
   The bound counts classical mix queries only, and says nothing about an attack that uses the structure of Keccak.
-- BLS: the hash to G2 under the message tag is a random oracle onto the multiples of `g2`.
+- BLS: the hash to G2 under the message tag is a random oracle onto the multiples of `g2`, and the hash under the key tag of the proof-of-possession scheme is an independent random oracle onto the same group.
+  The two tags differ, as §3.3.1 of the BLS draft requires.
   [RFC 9380](https://www.rfc-editor.org/rfc/rfc9380), §3, calls its `hash_to_curve` suitable where a random oracle onto the group is needed, and §8.8.2 gives the suite that encoding.
   Nothing in EthLib proves that the hash behaves as such an oracle.
 - Light client: an aggregate signature check accepts a message only if every key in its set signed it (`SignatureChecks.AggregateSound`).
-  BLS signatures with proofs of possession are meant to give this, except with negligible probability, and EthLib proves no such bound.
-  `Proofs/Bls/Security/PopGame.lean` states the unforgeability game of such aggregates, with both hashes as random oracles; no theorem bounds its advantage yet.
-  The theorems say nothing about a forged aggregate signature.
+  BLS signatures with proofs of possession are meant to give this, except with small probability, and EthLib proves only the bound below.
+  `Pop.byteForgeAdvantage_le_coCdhAdvantage` bounds the forger of such aggregates on EthLib's bytes, with both hashes as random oracles.
+  That is the draft's scheme, whose proofs of possession hash the key under the key tag.
+  Ethereum registers keys with deposit signatures under the message tag instead, which that game does not model.
+  `LightClientForgery.forgeAdvantage_le` bounds the probability that the light client accepts a forged signature of one designated honest member, when every signer carries a proof of possession that passes PopVerify, §3.3.3.
+  The theorems on one accepted update say nothing about a forged aggregate signature; the bound gives its probability.
 - ECDSA: the bijection in the middle of the conversion `x_R mod n` is a uniform permutation, which the adversary evaluates in both directions.
   In ECDSA that bijection is the identity on integers below `2^256`, so the model idealises the conversion, as §4 of [Fersch, Kiltz and Poettering](https://doi.org/10.1145/2976749.2978413) does.
   The model draws the deterministic nonces of RFC 6979 as a random function of the message, so each message has one signature.
@@ -2314,12 +2384,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 369 operations and 49 size constants.
-The Python extension calls 369 of the operations and 49 of the constants.
+Lean exports 376 operations and 49 size constants.
+The Python extension calls 376 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-9719 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (1730), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (303), `engine.c` (90), `enr.c` (177), `eth.c` (225), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (54), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (102), `module.c` (1379), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (140), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (650), `x25519.c` (21), `xmss.c` (134).
+9827 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (1765), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (303), `engine.c` (90), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (225), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (80), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (102), `module.c` (1393), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (140), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (659), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

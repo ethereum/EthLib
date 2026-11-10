@@ -553,8 +553,16 @@ def consensus_compute_columns_for_custody_group(name: str, custody_group: int) -
     """The columns of a custody group, as a list."""
     ...
 
+def consensus_get_custody_column_bits(name: str, node_id: int, custody_group_count: int) -> bytes:
+    """The columns that a node custodies, one bit per column, as the bytes of an SSZ bitvector."""
+    ...
+
 def consensus_ssz_static(name: str, fork: str, type: str, data: bytes) -> tuple[bytes, bytes]:
     """The root of the value that the bytes encode, and the bytes of that value, as a pair."""
+    ...
+
+def consensus_is_valid_builder_signature(name: str, fork: str, config: dict[str, Any] | None, type: str, data: bytes) -> bool:
+    """Whether the signature of a signed message of the Builder API verifies."""
     ...
 
 def consensus_merkle_proof(name: str, fork: str, type: str, data: bytes, gindex: int) -> tuple[bytes, list[bytes]]:
@@ -1221,6 +1229,14 @@ def snap_verify_storage_ranges(roots: list[bytes], start: bytes, slots: list[lis
     """Check the ranges of a StorageRanges answer, against the storage roots of the request."""
     ...
 
+def era1_decode(data: bytes) -> tuple[int, list[tuple[bytes, bytes, bytes, int]], list[tuple[int, bytes]], bytes]:
+    """The contents of an era1 file, as plain values."""
+    ...
+
+def era_decode(name: str, config: dict[str, Any] | None, data: bytes) -> tuple[str | None, list[tuple[int, list[tuple[int, str, bytes, bytes]], str, bytes, list[tuple[int, bytes]]]]]:
+    """The name of the file and its groups, as plain values."""
+    ...
+
 def snappy_decompress(block: bytes) -> bytes:
     """The bytes a Snappy block decompresses to, or why it is not a valid block."""
     ...
@@ -1303,6 +1319,14 @@ def gossip_message_id(fork: str, topic: bytes, data: bytes) -> bytes:
 
 def gossip_decode_payload(type_bound: int, data: bytes) -> bytes:
     """The SSZ bytes of the data of a gossip message, given the size bound of its SSZ type."""
+    ...
+
+def gossip_rpc_decode(data: bytes) -> dict[str, Any]:
+    """The RPC that the bytes encode, under the `StrictNoSign` policy."""
+    ...
+
+def gossip_rpc_encode(rpc: dict[str, Any]) -> bytes:
+    """The bytes of an RPC."""
     ...
 
 def receipt_reencode(fork: str, receipt: bytes) -> bytes:
@@ -1465,8 +1489,12 @@ def engine_prepare_execution_payload(name: str, fork: str, state: bytes, config:
     """From Bellatrix to Fulu: the forkchoice update of a proposer, as the value of its JSON."""
     ...
 
-def engine_prepare_execution_payload_gloas(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, head_root: bytes, head_status: int, state: bytes, safe_block_hash: bytes, finalized_block_hash: bytes, suggested_fee_recipient: bytes, target_gas_limit: int, verify: bool, config: dict | None) -> dict:
+def engine_prepare_execution_payload_gloas(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, head_root: bytes, head_status: int, state: bytes, safe_block_hash: bytes, suggested_fee_recipient: bytes, target_gas_limit: int, custody_columns: bytes | None, verify: bool, config: dict | None) -> dict:
     """From Gloas: the forkchoice update of a proposer, as the value of its JSON."""
+    ...
+
+def engine_finalized_execution_block_hash(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, config: dict | None) -> bytes:
+    """From Bellatrix: the 32 bytes of the finalized block hash of a store."""
     ...
 
 def pyvalue_echo(value: object) -> object:

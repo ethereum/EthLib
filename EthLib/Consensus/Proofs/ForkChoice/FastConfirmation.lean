@@ -159,24 +159,56 @@ theorem onFastConfirmation_heads {fcr after : FastConfirmationStore}
   subst confirmed
   exact ⟨head, found, updateFastConfirmationVariables_heads (after := updated) update⟩
 
+/-- Before Gloas the execution block of a block of the store is its payload. -/
+theorem executionBlockHashAt_of_lt {root : Root} {bellatrix : .bellatrix ≤ fork}
+    (before : fork < .glamsterdam) :
+    store.executionBlockHashAt root bellatrix =
+      (fun block => (block.body.executionPayload ⟨bellatrix, before⟩).blockHash) <$>
+        store.block root := by
+  have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le.mpr before
+  simp only [executionBlockHashAt, notGloas, ↓reduceDIte, bind, Except.bind, pure,
+    Except.pure, Functor.map, Except.map]
+
+/-- From Gloas the execution block of a block of the store is the parent payload of its bid. -/
+theorem executionBlockHashAt_of_gloas {root : Root} {bellatrix : .bellatrix ≤ fork}
+    (gloas : .glamsterdam ≤ fork) :
+    store.executionBlockHashAt root bellatrix =
+      (fun block => (block.body.signedExecutionPayloadBid gloas).message.parentBlockHash) <$>
+        store.block root := by
+  simp only [executionBlockHashAt, gloas, ↓reduceDIte, bind, Except.bind, pure,
+    Except.pure, Functor.map, Except.map]
+
 /-- Before Gloas the safe execution block is the payload of the confirmed block. -/
 theorem getSafeExecutionBlockHash_of_lt {fcr : FastConfirmationStore}
     {bellatrix : .bellatrix ≤ fork} (before : fork < .glamsterdam) :
     store.getSafeExecutionBlockHash fcr bellatrix =
       (fun block => (block.body.executionPayload ⟨bellatrix, before⟩).blockHash) <$>
-        store.block fcr.confirmedRoot := by
-  have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le.mpr before
-  simp only [getSafeExecutionBlockHash, notGloas, ↓reduceDIte, bind, Except.bind, pure,
-    Except.pure, Functor.map, Except.map]
+        store.block fcr.confirmedRoot :=
+  store.executionBlockHashAt_of_lt before
 
 /-- From Gloas the safe execution block is the parent payload of the bid of the confirmed block. -/
 theorem getSafeExecutionBlockHash_of_gloas {fcr : FastConfirmationStore}
     {bellatrix : .bellatrix ≤ fork} (gloas : .glamsterdam ≤ fork) :
     store.getSafeExecutionBlockHash fcr bellatrix =
       (fun block => (block.body.signedExecutionPayloadBid gloas).message.parentBlockHash) <$>
-        store.block fcr.confirmedRoot := by
-  simp only [getSafeExecutionBlockHash, gloas, ↓reduceDIte, bind, Except.bind, pure,
-    Except.pure, Functor.map, Except.map]
+        store.block fcr.confirmedRoot :=
+  store.executionBlockHashAt_of_gloas gloas
+
+/-- Before Gloas the finalized execution block is the payload of the finalized block. -/
+theorem getFinalizedExecutionBlockHash_of_lt {bellatrix : .bellatrix ≤ fork}
+    (before : fork < .glamsterdam) :
+    store.getFinalizedExecutionBlockHash bellatrix =
+      (fun block => (block.body.executionPayload ⟨bellatrix, before⟩).blockHash) <$>
+        store.block store.finalizedCheckpoint.root :=
+  store.executionBlockHashAt_of_lt before
+
+/-- From Gloas the finalized execution block is the parent payload of the finalized bid. -/
+theorem getFinalizedExecutionBlockHash_of_gloas {bellatrix : .bellatrix ≤ fork}
+    (gloas : .glamsterdam ≤ fork) :
+    store.getFinalizedExecutionBlockHash bellatrix =
+      (fun block => (block.body.signedExecutionPayloadBid gloas).message.parentBlockHash) <$>
+        store.block store.finalizedCheckpoint.root :=
+  store.executionBlockHashAt_of_gloas gloas
 
 end Store
 

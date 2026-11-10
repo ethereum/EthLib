@@ -251,6 +251,18 @@ def requestContracts (fork : Fork) : List (UInt8 × Address) :=
 def requestList (type : UInt8) (data : ByteArray) : List ByteArray :=
   if data.size = 0 then [] else [⟨#[type]⟩ ++ data]
 
+/-- Call a request contract after the body and the requests so far, and add its requests.
+
+The contract comes with the type of its requests, which starts each of them.
+
+The call joins the body at the current position, and its requests follow those read so far. -/
+def readRequest {fork : Fork} (env : BlockEnvironment fork)
+    (state : BodyState × List ByteArray) (contract : UInt8 × Address) :
+    Except BlockError (BodyState × List ByteArray) := do
+  let out ← checkedSystemCall env state.1.block contract.2 .empty
+  let body ← (state.1.join out.state).mapError .state
+  return (body, state.2 ++ requestList contract.1 out.output)
+
 /-- The withdrawal and consolidation requests of a block at `fork`, after its withdrawals.
 
 From Glamsterdam, the builder deposit and exit requests follow them.
@@ -265,12 +277,7 @@ Each call joins the body at the current position. -/
 def readRequests {fork : Fork} (env : BlockEnvironment fork) (body : BodyState) :
     Except BlockError (BodyState × List ByteArray) :=
   if .pectra ≤ fork then
-    (requestContracts fork).foldlM
-      (fun (body, requests) (type, target) => do
-        let out ← checkedSystemCall env body.block target .empty
-        let body ← (body.join out.state).mapError .state
-        return (body, requests ++ requestList type out.output))
-      (body, [])
+    (requestContracts fork).foldlM (readRequest env) (body, [])
   else .ok (body, [])
 
 end EthLib.Execution.Blocks

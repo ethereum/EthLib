@@ -13,6 +13,8 @@ The opcodes that the fork gives such an instruction run by the rules for one, tw
 
 POP drops the top word, for 2 gas.
 
+From Shapella, PUSH0 pushes the word 0, for 2 gas, by [EIP-3855][eip-3855].
+
 The rule for DUP1 to DUP16 sits with the other rules, and pushes a copy of the word at a depth.
 
 SWAP1 to SWAP16 exchange the top word with the word at their depth.
@@ -30,6 +32,8 @@ That rule gives the rule over the steps of the logic.
 The rules work out the charge of one counter of gas, at every fork.
 
 DUPN, SWAPN and EXCHANGE of Glamsterdam have no rule yet.
+
+[eip-3855]: https://eips.ethereum.org/EIPS/eip-3855#specification
 -/
 
 @[expose] public section
@@ -123,6 +127,45 @@ theorem pop {x : U256} {rest : List U256} (hlt : pc < code.size) (hbyte : code[p
     Hoare fork (At code message pc (x :: rest) memory gas state substate returnData)
       (At code message (pc + 1) rest memory (gas - 2) state substate returnData) :=
   (popG hlt hbyte hgas).toHoare
+
+/-- From Shapella, PUSH0 pushes the word 0, for 2 gas, by EIP-3855.
+
+The stack needs room for one more word.
+
+It holds over the steps from frames that are monotone in gas and never abort with less gas. -/
+theorem push0GA (hfork : .shapella ≤ fork) (hlt : pc < code.size) (hbyte : code[pc] = 0x5f)
+    (hgas : 2 ≤ gas) (hstack : stack.length < STACK_LIMIT) :
+    HoareGA fork (At code message pc stack memory gas state substate returnData)
+      (At code message (pc + 1) (0 :: stack) memory (gas - 2) state substate returnData) := by
+  apply At.ruleGA hlt hbyte (ofByte_of_decode (op := .push 0) rfl (by simpa [Op.since] using hfork))
+    (instruction_push 0) (runMono_pushN 0) (noAbort_pushN 0)
+  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss, hrd⟩
+  rw [pushN_of_length_lt (by rw [hst]; exact hstack)]
+  simp only [Fin.val_zero, ↓reduceIte, OPCODE_PUSH0, BASE]
+  rw [charge_nat (by rw [hg]; exact hgas)]
+  exact ⟨_, rfl, hcode, hj, hm, by simp [hpc],
+    by simp [hst, pushData, bufferRead, EthLib.Base.bytesToNat], hmem, by simp [hg], hrun, herr,
+    hout, hs, hss, hrd⟩
+
+/-- From Shapella, PUSH0 pushes the word 0, for 2 gas, by EIP-3855.
+
+The stack needs room for one more word.
+
+It holds over the steps from frames that are monotone in gas. -/
+theorem push0G (hfork : .shapella ≤ fork) (hlt : pc < code.size) (hbyte : code[pc] = 0x5f)
+    (hgas : 2 ≤ gas) (hstack : stack.length < STACK_LIMIT) :
+    HoareG fork (At code message pc stack memory gas state substate returnData)
+      (At code message (pc + 1) (0 :: stack) memory (gas - 2) state substate returnData) :=
+  (push0GA hfork hlt hbyte hgas hstack).toG
+
+/-- From Shapella, PUSH0 pushes the word 0, for 2 gas, by EIP-3855.
+
+The stack needs room for one more word. -/
+theorem push0 (hfork : .shapella ≤ fork) (hlt : pc < code.size) (hbyte : code[pc] = 0x5f)
+    (hgas : 2 ≤ gas) (hstack : stack.length < STACK_LIMIT) :
+    Hoare fork (At code message pc stack memory gas state substate returnData)
+      (At code message (pc + 1) (0 :: stack) memory (gas - 2) state substate returnData) :=
+  (push0G hfork hlt hbyte hgas hstack).toHoare
 
 /-- SWAP(n + 1), for the `n` that the byte at the program counter decodes to.
 

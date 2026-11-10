@@ -10,6 +10,7 @@
 # The README of the directory names the pinned commit of each repository.
 #
 # A release archive that is too large to vendor is pinned in the table `archives`.
+# An entry can also pin a single file, which a test reads as it is, without unpacking it.
 # Its entry gives the URL, the size in bytes and the sha256 of the file.
 # An archive can come from an older release than the pin of its repository.
 # An archive of another release line, such as a devnet release, names its release.
@@ -41,6 +42,10 @@ directories = [
   "tests/cryptography/bls",
 ]
 
+[repositories."ethereum/builder-specs"]
+commit = "fce64468a81a87892d7cb9b4858272bb3d010e50"
+directories = ["tests/consensus/builder_api"]
+
 [repositories."ethereum/c-kzg-4844"]
 commit = "a751e2d92abcd63b01d1400789789f5ea289a8b0"
 directories = ["tests/cryptography/kzg"]
@@ -65,6 +70,10 @@ directories = ["bindings/python/tests/precompile/blake2"]
 # The Snappy block and frame formats, which the independent decoders of the tests follow.
 [repositories."google/snappy"]
 commit = "7406111ac4ae539ea0db8b7ea2dc76730cd957f4"
+
+# The e2store, era1 and era formats, which the history file tests follow.
+[repositories."eth-clients/e2store-format-specs"]
+commit = "31cf6b577123bf1703eb3713f0b242f65fea806a"
 
 [repositories."ethereum/devp2p"]
 commit = "88f1c80800d622cc3a542a2125bbe33cc18c9f9c"
@@ -151,7 +160,7 @@ commit = "9a1fbe8edadebea223f47102f1913b8026c23a1c"
 [repositories."libp2p/specs"]
 commit = "c750236de43cd8b246a824b377dfdb26bae686db"
 
-# The release archives, each from a repository above or from the source it names.
+# The release archives and single files, each from a repository above or from the source it names.
 [archives."consensus-specs/v1.7.0-alpha.12/general"]
 repository = "ethereum/consensus-specs"
 url = "https://github.com/ethereum/consensus-specs/releases/download/v1.7.0-alpha.12/general.tar.gz"
@@ -215,6 +224,13 @@ repository = "eth-clients/slashing-protection-interchange-tests"
 url = "https://github.com/eth-clients/slashing-protection-interchange-tests/archive/bb7900688eecd287d8723154faac6addb5e63336.tar.gz"
 size = 7867
 sha256 = "f59908e927db1e5ceefec3a4d224cc6434b1a0e24eb5a57c8f31fc1b157cbfaf"
+
+# Era 0 of the mainnet pre-Merge history, an era1 file used as it is, without unpacking.
+[archives."era1/mainnet-00000-5ec1ffb8"]
+source = "The era1 files of the Portal network history, at era1.ethportal.net"
+url = "https://era1.ethportal.net/mainnet-00000-5ec1ffb8.era1"
+size = 3891337
+sha256 = "9c3f42e0247d5503533f437ada2d44e7e9661170421c1b7844687c8dcfc0eb9b"
 
 # The pinned vector directories whose cases come from no repository, with their source.
 [other]

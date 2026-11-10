@@ -144,6 +144,8 @@ inductive EngineError where
   | invalidForkchoiceState
   /-- The request names more items than the execution layer takes in one request. -/
   | tooLargeRequest
+  /-- The payload attributes do not have a structure that the version of the method takes. -/
+  | invalidPayloadAttributes
   deriving DecidableEq, Repr
 
 /-- The code of an error: its JSON-RPC code is the negative of this number. -/
@@ -152,6 +154,7 @@ def EngineError.code : EngineError → UInt32
   | .unsupportedFork => 38005
   | .invalidForkchoiceState => 38002
   | .tooLargeRequest => 38004
+  | .invalidPayloadAttributes => 38003
 
 /-- Why a payload is not valid, before its transactions run or when they run. -/
 inductive PayloadError where

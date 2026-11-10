@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Execution.Proofs.Evm.Call.Parent
+public import EthLib.Execution.Proofs.Evm.Call.Nonce
 public import EthLib.Execution.Proofs.Transactions.Authorization
 public import EthLib.Execution.Proofs.Transactions.Process
 
@@ -84,6 +84,68 @@ theorem sameOutside_foldlM_applyAuthorization {chainId : Nat} :
     refine ((sameOutside_applyAuthorization hnext).trans
       (sameOutside_foldlM_applyAuthorization h)).mono ?_
     cases hrecover : recoverAuthority auth <;> simp [hrecover]
+
+/-- Applying an authorization lowers no nonce. -/
+theorem nonceLe_applyAuthorization {chainId : Nat} {done done' : Delegations Meter}
+    {auth : Authorization} (h : applyAuthorization fork chainId done auth = .ok done') :
+    NonceLe done.state done'.state := by
+  rcases applyAuthorization_cases h with rfl | ⟨authority, -, -, ⟨-, rfl⟩ |
+    ⟨-, paid, state, refund, hpay, hdelegate, rfl⟩⟩
+  · exact NonceLe.refl _
+  · exact NonceLe.refl _
+  · obtain ⟨hstate, -, -⟩ := state_payAuthorization hpay
+    unfold delegate at hdelegate
+    obtain ⟨coded, hcode, hdelegate⟩ := bind_ok_iff.mp hdelegate
+    obtain ⟨bumped, hnonce, hdelegate⟩ := bind_ok_iff.mp hdelegate
+    cases hdelegate
+    rw [hstate] at hcode
+    intro address
+    have h1 := nonceLe_setCode hcode address
+    simp only [State.TransactionState.getAccount_recordAccountRead] at h1
+    exact Nat.le_trans h1 (nonceLe_incrementNonce hnonce address)
+
+/-- Applying an authorization keeps the created accounts. -/
+theorem createdAccounts_applyAuthorization {chainId : Nat} {done done' : Delegations Meter}
+    {auth : Authorization} (h : applyAuthorization fork chainId done auth = .ok done') :
+    done'.state.createdAccounts = done.state.createdAccounts := by
+  rcases applyAuthorization_cases h with rfl | ⟨authority, -, -, ⟨-, rfl⟩ |
+    ⟨-, paid, state, refund, hpay, hdelegate, rfl⟩⟩
+  · rfl
+  · rfl
+  · obtain ⟨hstate, -, -⟩ := state_payAuthorization hpay
+    unfold delegate at hdelegate
+    obtain ⟨coded, hcode, hdelegate⟩ := bind_ok_iff.mp hdelegate
+    obtain ⟨bumped, hnonce, hdelegate⟩ := bind_ok_iff.mp hdelegate
+    cases hdelegate
+    rw [hstate] at hcode
+    rw [State.TransactionState.createdAccounts_modifyState hnonce,
+      State.TransactionState.createdAccounts_setCode hcode,
+      State.TransactionState.createdAccounts_recordAccountRead]
+
+/-- Authorizations that succeed lower no nonce. -/
+theorem nonceLe_foldlM_applyAuthorization {chainId : Nat} :
+    ∀ {auths : List Authorization} {start done : Delegations Meter},
+      auths.foldlM (applyAuthorization fork chainId) start = .ok done →
+      NonceLe start.state done.state
+  | [], _, _, h => by
+    cases h
+    exact NonceLe.refl _
+  | _ :: _, _, _, h => by
+    obtain ⟨next, hnext, h⟩ := bind_ok_iff.mp h
+    exact (nonceLe_applyAuthorization hnext).trans (nonceLe_foldlM_applyAuthorization h)
+
+/-- Authorizations that succeed keep the created accounts. -/
+theorem createdAccounts_foldlM_applyAuthorization {chainId : Nat} :
+    ∀ {auths : List Authorization} {start done : Delegations Meter},
+      auths.foldlM (applyAuthorization fork chainId) start = .ok done →
+      done.state.createdAccounts = start.state.createdAccounts
+  | [], _, _, h => by
+    cases h
+    rfl
+  | _ :: _, _, _, h => by
+    obtain ⟨next, hnext, h⟩ := bind_ok_iff.mp h
+    exact (createdAccounts_foldlM_applyAuthorization h).trans
+      (createdAccounts_applyAuthorization hnext)
 
 /-! ## The frame -/
 
@@ -682,6 +744,63 @@ theorem prepareFirstFrame_reads {chainId : Nat} {message : Message fork}
           exact ⟨done, hdone, rfl, read _ (read _ base.1), fun codeHash => by
             change read0.getCode codeHash = done.state.getCode codeHash
             exact base.2 codeHash⟩
+
+/-- The first frame of a transaction lowers no nonce. -/
+theorem nonceLe_prepareFirstFrame {chainId : Nat} {message : Message fork}
+    {state : State.TransactionState} {substate : Substate} {auths : List Authorization}
+    {paid : Std.ExtTreeSet Address} {first : FirstFrame fork Meter}
+    (h : prepareFirstFrame (Meter := Meter) chainId message state substate auths paid =
+      .ok first) :
+    NonceLe state first.state := by
+  have reads := prepareFirstFrame_reads h
+  intro address
+  unfold State.TransactionState.getAccount
+  split at reads
+  · rw [(reads.1 address List.not_mem_nil).1]
+    exact Nat.le_refl _
+  · obtain ⟨done, hdone, -, same, -⟩ := reads
+    rw [(same address List.not_mem_nil).1]
+    exact nonceLe_foldlM_applyAuthorization hdone address
+
+/-- The first frame of a transaction keeps the created accounts. -/
+theorem createdAccounts_prepareFirstFrame {chainId : Nat} {message : Message fork}
+    {state : State.TransactionState} {substate : Substate} {auths : List Authorization}
+    {paid : Std.ExtTreeSet Address} {first : FirstFrame fork Meter}
+    (h : prepareFirstFrame (Meter := Meter) chainId message state substate auths paid =
+      .ok first) :
+    first.state.createdAccounts = state.createdAccounts := by
+  unfold prepareFirstFrame at h
+  split at h
+  · dsimp only at h
+    split at h
+    · split at h <;>
+      · obtain ⟨m, -, h⟩ := bind_ok_iff.mp h
+        cases h
+        rfl
+    · obtain ⟨m, h, -⟩ := bind_ok_iff.mp h
+      cases h
+  · rename_i target _
+    dsimp only at h
+    obtain ⟨done, hdone, h⟩ := bind_ok_iff.mp h
+    have hcreated := createdAccounts_foldlM_applyAuthorization hdone
+    generalize hread : (if message.value ≠ 0 then done.state.recordAccountRead target
+      else done.state) = read0 at h
+    have base : read0.createdAccounts = state.createdAccounts := by
+      subst hread
+      split <;> exact hcreated
+    split at h <;>
+    · obtain ⟨m, -, h⟩ := bind_ok_iff.mp h
+      obtain ⟨code, -, h⟩ := bind_ok_iff.mp h
+      generalize (if fork ≥ .pectra then delegatedAddress code else none) = delegate at h
+      rcases delegate with _ | delegate
+      · cases h
+        exact base
+      · dsimp only at h
+        split at h <;>
+        · obtain ⟨m', -, h⟩ := bind_ok_iff.mp h
+          obtain ⟨code', -, h⟩ := bind_ok_iff.mp h
+          cases h
+          exact base
 
 end Meter
 

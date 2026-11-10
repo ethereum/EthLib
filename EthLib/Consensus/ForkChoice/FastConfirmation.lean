@@ -546,6 +546,22 @@ def onFastConfirmation (fcr : FastConfirmationStore) :
   let fcr ← store.updateFastConfirmationVariables config fcr head
   return { fcr with confirmedRoot := ← store.getLatestConfirmed config fcr head }
 
+/-- From Bellatrix: the hash of the execution block that a block of the store stands for.
+
+Before Gloas it is the block hash of the payload of the block.
+
+From Gloas a block carries a bid instead of a payload.
+
+The hash is then the parent payload that the bid builds on.
+
+It fails when the store does not hold the block. -/
+def executionBlockHashAt (root : Root) (bellatrix : .bellatrix ≤ fork) :
+    Except ForkChoiceError Hash32 := do
+  let block ← store.block root
+  if gloas : .glamsterdam ≤ fork then
+    return (block.body.signedExecutionPayloadBid gloas).message.parentBlockHash
+  else return (block.body.executionPayload ⟨bellatrix, Nat.lt_of_not_le gloas⟩).blockHash
+
 /-- The hash of the execution block that the execution layer takes as safe.
 
 The rule starts at Bellatrix, with the payload of the confirmed block.
@@ -554,11 +570,19 @@ From Gloas a block carries a bid instead of a payload.
 
 Only the parent payload that the bid builds on is safe then. -/
 def getSafeExecutionBlockHash (fcr : FastConfirmationStore) (bellatrix : .bellatrix ≤ fork) :
-    Except ForkChoiceError Hash32 := do
-  let safeBlock ← store.block fcr.confirmedRoot
-  if gloas : .glamsterdam ≤ fork then
-    return (safeBlock.body.signedExecutionPayloadBid gloas).message.parentBlockHash
-  else return (safeBlock.body.executionPayload ⟨bellatrix, Nat.lt_of_not_le gloas⟩).blockHash
+    Except ForkChoiceError Hash32 :=
+  store.executionBlockHashAt fcr.confirmedRoot bellatrix
+
+/-- The hash of the execution block that the execution layer takes as finalized.
+
+The rule starts at Bellatrix, with the payload of the finalized block.
+
+Before the merge that payload is the default one, whose block hash is zero.
+
+From Gloas only the parent payload that the bid of the finalized block builds on is finalized. -/
+def getFinalizedExecutionBlockHash (bellatrix : .bellatrix ≤ fork) :
+    Except ForkChoiceError Hash32 :=
+  store.executionBlockHashAt store.finalizedCheckpoint.root bellatrix
 
 end Store
 

@@ -174,6 +174,8 @@ extern PyObject* DISCV4_ERROR;
 extern PyObject* FORK_ID_ERROR;
 extern PyObject* ETH_WIRE_ERROR;
 extern PyObject* SNAP_ERROR;
+extern PyObject* ERA1_ERROR;
+extern PyObject* ERA_ERROR;
 extern PyObject* TRANSACTION_ERROR;
 extern PyObject* VRF_ERROR;
 extern PyObject* TRIE_ERROR;
@@ -379,8 +381,10 @@ PyObject* py_consensus_preset                             (PyObject* self, PyObj
 PyObject* py_consensus_config                             (PyObject* self, PyObject* args);
 PyObject* py_consensus_parameters                         (PyObject* self, PyObject* args);
 PyObject* py_consensus_get_custody_groups                 (PyObject* self, PyObject* args);
+PyObject* py_consensus_get_custody_column_bits            (PyObject* self, PyObject* args);
 PyObject* py_consensus_compute_columns_for_custody_group  (PyObject* self, PyObject* args);
 PyObject* py_consensus_ssz_static                         (PyObject* self, PyObject* args);
+PyObject* py_consensus_is_valid_builder_signature (PyObject* self, PyObject* args);
 PyObject* py_consensus_merkle_proof                       (PyObject* self, PyObject* args);
 PyObject* py_consensus_upgrade_operation (PyObject* self, PyObject* args);
 PyObject* py_consensus_verify_blob_sidecar_inclusion_proof (PyObject* self, PyObject* args);
@@ -543,6 +547,8 @@ PyObject* py_libp2p_peer_id                               (PyObject* self, PyObj
 PyObject* py_libp2p_decode_peer_id                        (PyObject* self, PyObject* args);
 PyObject* py_gossip_message_id                            (PyObject* self, PyObject* args);
 PyObject* py_gossip_decode_payload                        (PyObject* self, PyObject* args);
+PyObject* py_gossip_rpc_decode                            (PyObject* self, PyObject* args);
+PyObject* py_gossip_rpc_encode                            (PyObject* self, PyObject* args);
 
 PyObject* py_rlpx_ecies_encrypt                           (PyObject* self, PyObject* args);
 PyObject* py_rlpx_ecies_decrypt                           (PyObject* self, PyObject* args);
@@ -570,6 +576,8 @@ PyObject* py_snap_access_lists_answer                     (PyObject* self, PyObj
 PyObject* py_snap_full_account                            (PyObject* self, PyObject* args);
 PyObject* py_snap_verify_account_range                    (PyObject* self, PyObject* args);
 PyObject* py_snap_verify_storage_ranges                   (PyObject* self, PyObject* args);
+PyObject* py_era1_decode                                  (PyObject* self, PyObject* args);
+PyObject* py_era_decode                                   (PyObject* self, PyObject* args);
 PyObject* py_receipt_reencode                             (PyObject* self, PyObject* args);
 PyObject* py_receipt_logs_bloom                           (PyObject* self, PyObject* args);
 PyObject* py_block_make_receipts                          (PyObject* self, PyObject* args);
@@ -615,6 +623,7 @@ PyObject* py_engine_get_blobs                            (PyObject* self, PyObje
 PyObject* py_engine_get_payload_bodies                   (PyObject* self, PyObject* args);
 PyObject* py_engine_prepare_execution_payload            (PyObject* self, PyObject* args);
 PyObject* py_engine_prepare_execution_payload_gloas      (PyObject* self, PyObject* args);
+PyObject* py_engine_finalized_execution_block_hash       (PyObject* self, PyObject* args);
 
 /* ---- Typed values (`pyvalue.c`) --------------------------------------- */
 

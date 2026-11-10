@@ -1,6 +1,7 @@
 module
 
-public import EthLib.Consensus.DataAvailability.Custody
+public import EthLib.Base.Proofs.MapM
+public import EthLib.Consensus.DataAvailability.CustodyColumns
 
 /-!
 # Proofs: custody groups and their columns
@@ -12,6 +13,8 @@ A request for every group returns all of them, and a request for more fails.
 A node that asks for more groups, with the same fuel, keeps every group it had.
 
 The groups split the columns: a column belongs to the group of its residue.
+
+A custody column bit is set exactly when its column belongs to one of the groups of the node.
 -/
 
 @[expose] public section
@@ -277,5 +280,76 @@ theorem mem_computeColumnsForCustodyGroup {preset : Preset} {group : CustodyInde
       apply UInt64.toNat_inj.mp
       rw [(hval _ hi).1, ← hmod, Nat.div_add_mod]
   · cases h
+
+/-! ## The custody column bits -/
+
+/-- Custody column bits come from a choice of groups that succeeds. -/
+theorem getCustodyColumnBits_groups {preset : Preset} {nodeId : NodeID} {count : UInt64}
+    {fuel : Nat} {bits : Serialization.Ssz.Bitvector preset.NUMBER_OF_COLUMNS.toNat}
+    (computed : getCustodyColumnBits config preset nodeId count fuel = .ok bits) :
+    ∃ groups, getCustodyGroups config nodeId count fuel = .ok groups := by
+  simp only [getCustodyColumnBits, bind, Except.bind] at computed
+  split at computed
+  · cases computed
+  · exact ⟨_, by assumption⟩
+
+/-- A custody column bit is set exactly when a group of the node has that column. -/
+theorem getCustodyColumnBits_getElem_iff {preset : Preset} {nodeId : NodeID} {count : UInt64}
+    {fuel : Nat} {bits : Serialization.Ssz.Bitvector preset.NUMBER_OF_COLUMNS.toNat}
+    {groups : List CustodyIndex}
+    (computed : getCustodyColumnBits config preset nodeId count fuel = .ok bits)
+    (chosen : getCustodyGroups config nodeId count fuel = .ok groups)
+    (column : Fin preset.NUMBER_OF_COLUMNS.toNat) :
+    bits.bits[column] = true ↔ ∃ group ∈ groups, ∃ columns,
+      computeColumnsForCustodyGroup config preset group = .ok columns ∧
+        UInt64.ofNat column ∈ columns := by
+  simp only [getCustodyColumnBits, chosen, bind, Except.bind] at computed
+  split at computed
+  · cases computed
+  · rename_i all made
+    obtain rfl := (Except.ok.inj computed).symm
+    simp only [Fin.getElem_fin, Vector.getElem_ofFn, List.any_eq_true, List.contains_iff_mem]
+    constructor
+    · rintro ⟨columns, held, member⟩
+      obtain ⟨group, mem, found⟩ := Base.mapM_ok_mem made columns held
+      exact ⟨group, mem, columns, found, member⟩
+    · rintro ⟨group, mem, columns, found, member⟩
+      obtain ⟨other, held, found'⟩ := Base.exists_mem_of_mapM_ok made mem
+      obtain rfl := Except.ok.inj (found.symm.trans found')
+      exact ⟨columns, held, member⟩
+
+/-- Let `N` be the number of custody groups of the configuration.
+
+Let `C` be the number of columns.
+
+A custody column bit is set exactly when the column is below `N * (C / N)`.
+
+It also needs a residue modulo `N` among the groups of the node. -/
+theorem getCustodyColumnBits_getElem_iff_mod {preset : Preset} {nodeId : NodeID} {count : UInt64}
+    {fuel : Nat} {bits : Serialization.Ssz.Bitvector preset.NUMBER_OF_COLUMNS.toNat}
+    {groups : List CustodyIndex}
+    (computed : getCustodyColumnBits config preset nodeId count fuel = .ok bits)
+    (chosen : getCustodyGroups config nodeId count fuel = .ok groups)
+    (column : Fin preset.NUMBER_OF_COLUMNS.toNat) :
+    bits.bits[column] = true ↔ column.val < config.NUMBER_OF_CUSTODY_GROUPS.toNat *
+        (preset.NUMBER_OF_COLUMNS / config.NUMBER_OF_CUSTODY_GROUPS).toNat ∧
+      ∃ group ∈ groups, column.val % config.NUMBER_OF_CUSTODY_GROUPS.toNat = group.toNat := by
+  have noWrap : (UInt64.ofNat column.val).toNat = column.val :=
+    Nat.mod_eq_of_lt (Nat.lt_trans column.isLt (UInt64.toNat_lt _))
+  rw [getCustodyColumnBits_getElem_iff computed chosen column]
+  have inRange := (getCustodyGroups_ok chosen).2.2
+  constructor
+  · rintro ⟨group, mem, columns, found, member⟩
+    have := (mem_computeColumnsForCustodyGroup found _).mp member
+    rw [noWrap] at this
+    exact ⟨this.1, group, mem, this.2⟩
+  · rintro ⟨below, group, mem, residue⟩
+    have found : computeColumnsForCustodyGroup config preset group =
+        .ok (((List.range (preset.NUMBER_OF_COLUMNS / config.NUMBER_OF_CUSTODY_GROUPS).toNat).map
+          fun i => config.NUMBER_OF_CUSTODY_GROUPS * UInt64.ofNat i + group)) := by
+      simp only [computeColumnsForCustodyGroup, inRange group mem, ↓reduceIte]
+    refine ⟨group, mem, _, found, ?_⟩
+    rw [mem_computeColumnsForCustodyGroup found, noWrap]
+    exact ⟨below, residue⟩
 
 end EthLib.Consensus.DataAvailability

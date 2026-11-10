@@ -20,6 +20,8 @@ The first ten blocks of the fork carry the extra data `dao-hard-fork`.
 
 The fork changes no other rule.
 
+Both rules apply only before Paris, a choice of this specification.
+
 [EIP-779](https://eips.ethereum.org/EIPS/eip-779#specification) lists the accounts and both rules.
 -/
 
@@ -172,14 +174,18 @@ def daoForkBlock (config : ChainConfig) : Option Nat :=
 
 A header outside those blocks, or on a chain without the fork, passes.
 
+From Paris every header passes: this specification ends the rule at Paris, as it does the transfer.
+
 The header check takes no chain configuration, so a caller with one applies this rule as well. -/
 def daoExtraDataValid (config : ChainConfig) {fork : Fork} (header : Header fork) : Bool :=
-  match daoForkBlock config with
-  | some first =>
-    if first ≤ header.number ∧ header.number < first + DAO_EXTRA_DATA_BLOCKS then
-      decide (header.extraData = DAO_EXTRA_DATA)
-    else true
-  | none => true
+  if fork < .paris then
+    match daoForkBlock config with
+    | some first =>
+      if first ≤ header.number ∧ header.number < first + DAO_EXTRA_DATA_BLOCKS then
+        decide (header.extraData = DAO_EXTRA_DATA)
+      else true
+    | none => true
+  else true
 
 /-- Move the ether of every DAO account to the recovery contract, in the order of the list.
 

@@ -202,7 +202,7 @@ class Libp2pIdentityError(EthLibError, ValueError):
 
 
 class GossipError(EthLibError, ValueError):
-    """A gossip message was rejected, or its fork has no name."""
+    """A gossip message or RPC was rejected, or its fork has no name; code 0 is a bad argument."""
 
 
 class Discv5Error(EthLibError, ValueError):
@@ -239,6 +239,14 @@ class EthWireError(EthLibError, ValueError):
 
 class SnapError(EthLibError, ValueError):
     """A snap message or range answer was rejected, with its error code, or 0 for a bad argument."""
+
+
+class Era1Error(EthLibError, ValueError):
+    """An era1 file was rejected, with the code of its fault, or 0 for a bad argument."""
+
+
+class EraError(EthLibError, ValueError):
+    """An era file was rejected, with the code of its fault, or 0 for a bad argument."""
 
 
 class TransactionError(EthLibError, ValueError):
@@ -346,6 +354,8 @@ __all__ = [
     "ForkIdError",
     "EthWireError",
     "SnapError",
+    "Era1Error",
+    "EraError",
     "TransactionError",
     "VrfError",
     "TrieError",

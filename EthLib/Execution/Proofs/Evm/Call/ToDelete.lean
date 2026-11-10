@@ -103,14 +103,11 @@ A child that succeeds passes its accounts to delete, and one that fails passes n
 theorem deletesCreated_incorporateChild {caller child : Evm fork Meter}
     (h : DeletesCreated caller child) :
     DeletesCreated caller (incorporateChild fork caller child) := by
-  unfold incorporateChild
-  split
-  · refine ⟨h.1, fun x hx => ?_⟩
-    rw [Std.ExtTreeSet.mem_insertMany_list] at hx
-    rcases hx with hx | hx
-    · exact .inl hx
-    · exact h.2 x (by simpa using hx)
-  · exact ⟨h.1, fun _ hx => .inl hx⟩
+  rw [DeletesCreated, state_incorporateChild]
+  refine ⟨h.1, fun x hx => ?_⟩
+  rcases mem_accountsToDelete_incorporateChild.mp hx with hx | ⟨-, hx⟩
+  · exact .inl hx
+  · exact h.2 x hx
 
 omit [GasMeter Meter] in
 /-- From Cancun, the end of a successful SELFDESTRUCT keeps the relation.
@@ -145,7 +142,7 @@ theorem stepRules_deletesCreated (hfork : .dencun ≤ fork) :
   static := .of_staticStep
   sstore _ _ _ _ _ _ h := .of_eq (TransactionState.createdAccounts_setStorage h) rfl
   tstore _ _ _ _ := .of_eq rfl rfl
-  log _ hs hsub := .of_eq (by rw [hs]) (by rw [hsub])
+  log _ hs hsub _ _ := .of_eq (by rw [hs]) (by rw [hsub])
   selfdestruct _ _ h := deletesCreated_finishSelfdestruct hfork h
   incrementNonce _ _ _ h := .of_eq (TransactionState.createdAccounts_modifyState h) rfl
   incorporate h := deletesCreated_incorporateChild h

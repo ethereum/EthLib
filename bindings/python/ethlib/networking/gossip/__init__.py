@@ -1,4 +1,4 @@
-"""Gossip on the consensus layer: the message ID and the payload of a message."""
+"""Gossip on the consensus layer: the message ID, the payload of a message and the RPC."""
 
 # Every domain links into one extension module.
 # That module lives in the `cryptography` package.

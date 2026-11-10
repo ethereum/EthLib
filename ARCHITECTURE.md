@@ -57,6 +57,7 @@ Each part names the EIPs that define it where they exist, and a later fork adds 
 - State: accounts, storage and code, committed by the Merkle Patricia Trie, and the trees proposed to replace it, such as the binary tree of EIP-7864.
 - Blocks: the header, receipts and their logs bloom, withdrawals of EIP-4895, the block-level access lists of EIP-7928, and the state transition of a block from Frontier to the latest fork.
 - The eth wire protocol of devp2p, which carries blocks, transactions and receipts between peers.
+- History files: the era1 files of the blocks before the Merge, with their accumulator and block index.
 
 ### Consensus layer
 
@@ -70,6 +71,7 @@ Each part names the EIPs that define it where they exist, and a later fork adds 
 - Weak subjectivity: how long a checkpoint stays safe to start from.
 - Data availability: the sidecars that carry blobs, and the custody and sampling of data columns of EIP-7594.
 - Proposer-builder separation of EIP-7732, and fork-choice enforced inclusion lists of EIP-7805.
+- History files: the era files of the beacon blocks and states, one group per era, with their slot indices.
 - The protocols proposed to replace the current ones: faster finality, available chains with a finality gadget, and a consensus layer built on post-quantum signatures.
 
 ### Models

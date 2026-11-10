@@ -88,8 +88,8 @@ def getBlobsOf (args : List PoolEntry × Bool × Nat × String × PyValue) : Res
   unless (entries.map (·.1)).Nodup do throw (0, "pool: two entries with one versioned hash")
   -- The method is specified up to Glamsterdam, the fork of its version 4.
   let fork ← EthLib.Exports.forkUpTo .glamsterdam forkName.toUTF8
-  if below : maxRequest < MIN_REQUEST_LIMIT then
-    throw (0, s!"pool: a limit of {maxRequest}, below {MIN_REQUEST_LIMIT}")
+  if below : maxRequest < MIN_BLOBS_REQUEST_LIMIT then
+    throw (0, s!"pool: a limit of {maxRequest}, below {MIN_BLOBS_REQUEST_LIMIT}")
   else
   let pool : BlobPool := {
     lookup := fun hash => (entries.find? (·.1 == hash)).map (·.2)

@@ -19,6 +19,8 @@ Its fork is the active fork of its chain at its number and its time.
 
 A transaction that cannot enter the block makes the block invalid, with its own error.
 
+The DAO transfer runs only before Paris, at the block that the chain configuration names.
+
 Before Glamsterdam a body gives no block access list.
 
 From Glamsterdam, the list that a body builds is well formed and fits the gas limit.
@@ -208,7 +210,51 @@ theorem accessListHashOf_eq_ok {body : BodyState} {gasLimit : Nat} {hash : Optio
   cases h
   rfl
 
+/-! ## The DAO transfer -/
+
+/-- From Paris the DAO transfer leaves the block state as it was, whatever the configuration. -/
+theorem daoTransfer_of_paris_le {config : ChainConfig} {number : Nat} {start : BlockState}
+    (h : .paris ≤ fork) : daoTransfer config fork number start = .ok start := by
+  have hNot : ¬fork < .paris := Nat.not_lt.mpr h
+  simp only [daoTransfer, hNot, false_and, ↓reduceIte]
+  rfl
+
+/-- At a block that the configuration does not name for the DAO Fork, the state stays. -/
+theorem daoTransfer_of_daoForkBlock_ne {config : ChainConfig} {number : Nat} {start : BlockState}
+    (h : daoForkBlock config ≠ some number) :
+    daoTransfer config fork number start = .ok start := by
+  simp only [daoTransfer, h, and_false, ↓reduceIte]
+  rfl
+
+/-- Before Paris, at the DAO Fork block of the configuration, the DAO ether moves. -/
+theorem daoTransfer_of_lt_paris {config : ChainConfig} {number : Nat} {start : BlockState}
+    (h : fork < .paris) (hBlock : daoForkBlock config = some number) :
+    daoTransfer config fork number start = onBlock start (applyDaoFork fork) := by
+  simp only [daoTransfer, h, hBlock, and_self, ↓reduceIte]
+
 /-! ## The transactions -/
+
+/-- A transaction that enters the body passes the inclusion check, and its run succeeds.
+
+The gas counts of the block then grow by those of that run.
+
+The body before it begins position `index + 1`, and the run then joins it. -/
+theorem applyTransaction_eq_ok {env : BlockEnvironment fork} {index : Nat}
+    {before after : BodyOutput fork} {tx : Transaction}
+    (h : applyTransaction env index before tx = .ok after) :
+    ∃ included out,
+      checkInclusion env.chainId env before.gas (.ofBlock before.block) tx = .ok included ∧
+      processTransaction env before.block included tx = .ok out ∧
+      after.gas = before.gas.add out.blockGas ∧
+      (before.body.beginIndex (index + 1)).join out.state = .ok after.body := by
+  unfold applyTransaction at h
+  obtain ⟨included, hIncluded, h⟩ := bind_ok_iff.mp h
+  obtain ⟨out, hOut, h⟩ := bind_ok_iff.mp h
+  obtain ⟨body, hBody, h⟩ := bind_ok_iff.mp h
+  refine ⟨included, out, mapError_ok_iff.mp hIncluded, mapError_ok_iff.mp hOut, ?_⟩
+  dsimp only at h
+  split at h <;>
+    (obtain ⟨_, -, h⟩ := bind_ok_iff.mp h; cases h; exact ⟨rfl, mapError_ok_iff.mp hBody⟩)
 
 /-- A transaction that cannot enter its block makes the block invalid, with its error. -/
 theorem applyTransaction_of_checkInclusion {env : BlockEnvironment fork} {index : Nat}

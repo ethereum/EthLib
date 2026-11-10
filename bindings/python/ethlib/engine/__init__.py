@@ -135,9 +135,9 @@ def prepare_execution_payload_gloas(
     head_status: int,
     state: bytes,
     safe_block_hash: bytes,
-    finalized_block_hash: bytes,
     suggested_fee_recipient: bytes,
     target_gas_limit: int,
+    custody_columns: bytes | None = None,
     verify: bool = True,
     # `Any`, because `dict` is invariant in its values.
     config: dict[str, Any] | None = None,
@@ -145,6 +145,8 @@ def prepare_execution_payload_gloas(
     """From Gloas: the forkchoice update and payload attributes of a proposer on a store."""
     # The steps take the form of those of `consensus.fork_choice`, which build the store.
     # The head status is 0 for empty, 1 for full and 2 for pending.
+    # The finalized block hash is that of the store.
+    # The custody columns are the 16 bytes of `consensus.get_custody_column_bits`, or None.
     return _native.engine_prepare_execution_payload_gloas(
         name,
         fork,
@@ -155,11 +157,28 @@ def prepare_execution_payload_gloas(
         head_status,
         state,
         safe_block_hash,
-        finalized_block_hash,
         suggested_fee_recipient,
         target_gas_limit,
+        custody_columns,
         verify,
         config,
+    )
+
+
+def finalized_execution_block_hash(
+    name: str,
+    fork: str,
+    anchor_state: bytes,
+    anchor_block: bytes,
+    steps: list[ForkChoiceStep],
+    verify: bool = True,
+    # `Any`, because `dict` is invariant in its values.
+    config: dict[str, Any] | None = None,
+) -> bytes:
+    """From Bellatrix: the finalized block hash of an update on a store, or ForkChoiceError."""
+    # The steps take the form of those of `consensus.fork_choice`, which build the store.
+    return _native.engine_finalized_execution_block_hash(
+        name, fork, anchor_state, anchor_block, steps, verify, config
     )
 
 
@@ -176,6 +195,7 @@ __all__ = [
     "WithdrawalEntry",
     "prepare_execution_payload",
     "prepare_execution_payload_gloas",
+    "finalized_execution_block_hash",
     "EngineError",
     "JwtError",
     "ProposerError",

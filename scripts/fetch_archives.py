@@ -1,4 +1,4 @@
-"""Download the release archives of `tests/sources.toml` into a cache, and unpack parts of them."""
+"""Download the pinned archives and files of `tests/sources.toml`, and unpack parts of archives."""
 
 import argparse
 import contextlib
@@ -8,6 +8,7 @@ import os
 import shutil
 import sys
 import tarfile
+import urllib.parse
 import urllib.request
 import zipfile
 from dataclasses import dataclass
@@ -33,7 +34,7 @@ class ArchiveError(Exception):
 
 @dataclass(frozen=True)
 class Archive:
-    """One pinned release archive."""
+    """One pinned archive or file."""
 
     name: str
     url: str
@@ -76,13 +77,26 @@ def _digest(path: Path) -> str:
 
 
 def _is_zip(archive: Archive) -> bool:
-    # Any other archive is a tar file, compressed or not.
     return archive.url.endswith(".zip")
 
 
+def _is_tar(archive: Archive) -> bool:
+    # A tar file may be compressed, as in `.tar.gz`, or not.
+    return ".tar" in PurePosixPath(urllib.parse.urlparse(archive.url).path).name
+
+
+def _suffix(archive: Archive) -> str:
+    """The suffix of the cached file: `.zip`, `.tar.gz`, or that of a single pinned file."""
+    if _is_zip(archive):
+        return ".zip"
+    if _is_tar(archive):
+        return ".tar.gz"
+    return PurePosixPath(urllib.parse.urlparse(archive.url).path).suffix
+
+
 def _download(archive: Archive, cache: Path) -> Path:
-    """The file `<sha256>.tar.gz` or `<sha256>.zip` of the cache, checked against the pin."""
-    path = cache / (archive.sha256 + (".zip" if _is_zip(archive) else ".tar.gz"))
+    """The file `<sha256><suffix>` of the cache, checked against the pin."""
+    path = cache / (archive.sha256 + _suffix(archive))
     if path.is_file() and path.stat().st_size == archive.size and _digest(path) == archive.sha256:
         return path
     part = path.with_suffix(".part")
@@ -134,6 +148,8 @@ _ZIP_LINK = 0o120000
 
 def _entries(archive: Archive, source: Path):
     """Each member of the archive file: its name, its kind, and a function that opens it."""
+    if not (_is_zip(archive) or _is_tar(archive)):
+        raise ArchiveError(f"{archive.name}: a single file, which has no members to unpack")
     if _is_zip(archive):
         with zipfile.ZipFile(source) as zipped:
             for info in zipped.infolist():

@@ -46,7 +46,7 @@ theorem stepRules_toDeleteLe : StepRules fork (ToDeleteLe (fork := fork) (Meter 
   static h x hx := h.toDelete ▸ hx
   sstore _ _ _ _ _ _ _ _ hx := hx
   tstore _ _ _ _ _ hx := hx
-  log _ _ hsub x hx := by rw [hsub]; exact hx
+  log _ _ hsub _ _ x hx := by rw [hsub]; exact hx
   selfdestruct _ _ h := by
     unfold finishSelfdestruct at h
     split at h
@@ -59,12 +59,7 @@ theorem stepRules_toDeleteLe : StepRules fork (ToDeleteLe (fork := fork) (Meter 
       · exact Std.ExtTreeSet.mem_insert.mpr (.inr hx)
       · exact hx
   incrementNonce _ _ _ _ _ hx := hx
-  incorporate _ := by
-    intro x hx
-    unfold incorporateChild
-    split
-    · exact Std.ExtTreeSet.mem_insertMany_list.mpr (.inl hx)
-    · exact hx
+  incorporate _ _ hx := mem_accountsToDelete_incorporateChild.mpr (.inl hx)
 
 /-- Every call and creation that returns a frame keeps the accounts to delete of its start.
 
@@ -101,10 +96,8 @@ theorem toDeleteLe_processMessage_induction [LawfulGasMeter Meter] (n : Nat) :
 /-- A caller that takes in a child without an error marks every account that the child marks. -/
 theorem toDeleteLe_incorporateChild {caller child : Evm fork Meter} (ok : child.error = none) :
     ToDeleteLe child (incorporateChild fork caller child) := by
-  intro x hx
-  unfold incorporateChild
-  simp only [ok, Option.isNone_none, ↓reduceIte]
-  exact Std.ExtTreeSet.mem_insertMany_list.mpr (.inr (by simpa using hx))
+  intro _ hx
+  exact mem_accountsToDelete_incorporateChild.mpr (.inr ⟨ok, hx⟩)
 
 /-- A caller that resumes after a call without an error marks every account the child marks. -/
 theorem toDeleteLe_resumeCall {caller child after : Evm fork Meter} {newAccount : Nat}

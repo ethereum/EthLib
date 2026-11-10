@@ -139,7 +139,7 @@ theorem calldataFloor_le_minimumGas {fork : Fork} (hFork : fork ≥ .pectra) (se
 
 /-! ## A valid transaction -/
 
-/-- A transaction passes the gas, nonce and fee rules exactly when it satisfies each of them.
+/-- A transaction passes the type, gas, nonce and fee rules exactly when it satisfies each of them.
 
 It then returns its intrinsic gas.
 
@@ -153,7 +153,9 @@ From Glamsterdam its gas limit is at most `2^32 - 1`, and its least gas limit at
 
 From Glamsterdam its blobs and its authorizations pass their rules.
 
-Its priority fee per gas is at most its maximum fee per gas. -/
+Its priority fee per gas is at most its maximum fee per gas.
+
+Its type exists at the fork. -/
 theorem validateTransaction_eq_ok_iff {fork : Fork} {sender : Address} {tx : Transaction}
     {gas : Nat} :
     validateTransaction fork sender tx = .ok gas ↔
@@ -164,25 +166,25 @@ theorem validateTransaction_eq_ok_iff {fork : Fork} {sender : Address} {tx : Tra
         (fork ≥ .glamsterdam →
           tx.gas.toNat ≤ TX_MAX_TOTAL_GAS_LIMIT ∧ minimumGas fork sender tx ≤ TX_MAX_GAS_LIMIT ∧
             checkContents fork tx = .ok ()) ∧
-        validateTransaction.feesInverted tx = false := by
+        validateTransaction.feesInverted tx = false ∧ tx.fork ≤ fork := by
   unfold validateTransaction
   by_cases hg : fork ≥ .glamsterdam
   · have hlt : ¬ fork < .glamsterdam := Nat.not_lt.mpr hg
     simp only [hg, ↓reduceIte, bind_unit_ok_iff, ensure_ok_iff, pure, Except.pure,
       Except.ok.injEq, hlt, false_implies, implies_true, forall_const, true_and]
     constructor
-    · rintro ⟨hNonce, hInit, hTotal, hFees, hContents, hMin, hBound, rfl⟩
-      exact ⟨rfl, hMin, hNonce, hInit, ⟨hTotal, hBound, hContents⟩, hFees⟩
-    · rintro ⟨rfl, hMin, hNonce, hInit, ⟨hTotal, hBound, hContents⟩, hFees⟩
-      exact ⟨hNonce, hInit, hTotal, hFees, hContents, hMin, hBound, rfl⟩
+    · rintro ⟨hType, hNonce, hInit, hTotal, hFees, hContents, hMin, hBound, rfl⟩
+      exact ⟨rfl, hMin, hNonce, hInit, ⟨hTotal, hBound, hContents⟩, hFees, hType⟩
+    · rintro ⟨rfl, hMin, hNonce, hInit, ⟨hTotal, hBound, hContents⟩, hFees, hType⟩
+      exact ⟨hType, hNonce, hInit, hTotal, hFees, hContents, hMin, hBound, rfl⟩
   · have hlt : fork < .glamsterdam := Nat.lt_of_not_le hg
     simp only [hg, ↓reduceIte, bind_unit_ok_iff, ensure_ok_iff, pure, Except.pure,
       Except.ok.injEq, hlt, false_implies, forall_const, true_and]
     constructor
-    · rintro ⟨hMin, hInit, hCap, hNonce, hFees, rfl⟩
-      exact ⟨rfl, hMin, hNonce, hInit, hCap, hFees⟩
-    · rintro ⟨rfl, hMin, hNonce, hInit, hCap, hFees⟩
-      exact ⟨hMin, hInit, hCap, hNonce, hFees, rfl⟩
+    · rintro ⟨hType, hMin, hInit, hCap, hNonce, hFees, rfl⟩
+      exact ⟨rfl, hMin, hNonce, hInit, hCap, hFees, hType⟩
+    · rintro ⟨rfl, hMin, hNonce, hInit, hCap, hFees, hType⟩
+      exact ⟨hType, hMin, hInit, hCap, hNonce, hFees, rfl⟩
 
 /-- Before Glamsterdam, the gas, nonce and fee rules give the same result for every sender. -/
 theorem validateTransaction_sender_of_lt_glamsterdam {fork : Fork} (h : fork < .glamsterdam)
@@ -213,6 +215,12 @@ theorem validateTransaction_ok {fork : Fork} {sender : Address} {tx : Transactio
         tx.gas.toNat ≤ TX_MAX_TOTAL_GAS_LIMIT ∧ minimumGas fork sender tx ≤ TX_MAX_GAS_LIMIT) := by
   obtain ⟨hGas, hMin, hNonce, hInit, hCap, hAfter, -⟩ := validateTransaction_eq_ok_iff.mp h
   exact ⟨hGas, hMin, hNonce, hInit, hCap, fun hg => ⟨(hAfter hg).1, (hAfter hg).2.1⟩⟩
+
+/-- A transaction that passes the type, gas, nonce and fee rules has a type that the fork has. -/
+theorem validateTransaction_fork_le {fork : Fork} {sender : Address} {tx : Transaction}
+    {gas : Nat} (h : validateTransaction fork sender tx = .ok gas) : tx.fork ≤ fork := by
+  obtain ⟨-, -, -, -, -, -, -, hType⟩ := validateTransaction_eq_ok_iff.mp h
+  exact hType
 
 /-- A valid transaction has a gas limit of at least 12000, the price of its sender. -/
 theorem validateTransaction_gas_ge {fork : Fork} {sender : Address} {tx : Transaction} {gas : Nat}

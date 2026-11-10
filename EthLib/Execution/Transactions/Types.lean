@@ -255,7 +255,7 @@ end Transaction
 inductive TransactionError where
   /-- The input is empty, so it holds no transaction. -/
   | emptyTransaction
-  /-- The first byte names a type of transaction that the fork does not have. -/
+  /-- The type of the transaction, the first byte of its bytes, does not exist at the fork. -/
   | unsupportedType (type : UInt8)
   /-- The RLP of the transaction holds no value of its kind. -/
   | decoding (error : RlpError)

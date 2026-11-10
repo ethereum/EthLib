@@ -413,8 +413,14 @@
 #define DOC_consensus_compute_columns_for_custody_group \
   "The columns of a custody group, as a list."
 
+#define DOC_consensus_get_custody_column_bits \
+  "The columns that a node custodies, one bit per column, as the bytes of an SSZ bitvector."
+
 #define DOC_consensus_ssz_static \
   "The root of the value that the bytes encode, and the bytes of that value, as a pair."
+
+#define DOC_consensus_is_valid_builder_signature \
+  "Whether the signature of a signed message of the Builder API verifies."
 
 #define DOC_consensus_merkle_proof \
   "The node at a generalized index of the value that the bytes encode, and its branch, as a pair."
@@ -914,6 +920,12 @@
 #define DOC_snap_verify_storage_ranges \
   "Check the ranges of a StorageRanges answer, against the storage roots of the request."
 
+#define DOC_era1_decode \
+  "The contents of an era1 file, as plain values."
+
+#define DOC_era_decode \
+  "The name of the file and its groups, as plain values."
+
 #define DOC_snappy_decompress \
   "The bytes a Snappy block decompresses to, or why it is not a valid block."
 
@@ -976,6 +988,12 @@
 
 #define DOC_gossip_decode_payload \
   "The SSZ bytes of the data of a gossip message, given the size bound of its SSZ type."
+
+#define DOC_gossip_rpc_decode \
+  "The RPC that the bytes encode, under the `StrictNoSign` policy."
+
+#define DOC_gossip_rpc_encode \
+  "The bytes of an RPC."
 
 #define DOC_receipt_reencode \
   "The bytes of a receipt, decoded at the fork and encoded again with its transaction type."
@@ -1099,6 +1117,9 @@
 
 #define DOC_engine_prepare_execution_payload_gloas \
   "From Gloas: the forkchoice update of a proposer, as the value of its JSON."
+
+#define DOC_engine_finalized_execution_block_hash \
+  "From Bellatrix: the 32 bytes of the finalized block hash of a store."
 
 #define DOC_pyvalue_echo \
   "The value that Python passes, back to Python, with each failure tuple read as a failure."

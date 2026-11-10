@@ -77,7 +77,7 @@ theorem stepRules_parent :
   static h := h.parent
   sstore _ _ _ _ _ _ h := TransactionState.parent_setStorage h
   tstore _ _ _ _ := rfl
-  log _ hs _ := by rw [hs]
+  log _ hs _ _ _ := by rw [hs]
   selfdestruct _ _ h := parent_finishSelfdestruct h
   incrementNonce _ _ _ h := TransactionState.parent_incrementNonce h
   incorporate h := by rw [state_incorporateChild]; exact h
@@ -154,6 +154,12 @@ theorem parent_startState (message : Message fork) (state : TransactionState) :
 /-- The rollback of a frame keeps the block of that frame. -/
 theorem parent_rollbackOnError (snapshot : TransactionState) (evm : Evm fork Meter) :
     (rollbackOnError snapshot evm).state.parent = evm.state.parent := by
+  unfold rollbackOnError
+  split <;> rfl
+
+/-- The rollback of a frame keeps the message of that frame. -/
+theorem message_rollbackOnError (snapshot : TransactionState) (evm : Evm fork Meter) :
+    (rollbackOnError snapshot evm).message = evm.message := by
   unfold rollbackOnError
   split <;> rfl
 

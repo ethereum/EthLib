@@ -45,9 +45,26 @@ def compute_columns_for_custody_group(custody_group: int, name: str = "mainnet")
     return _native.consensus_compute_columns_for_custody_group(name, custody_group)
 
 
+def get_custody_column_bits(node_id: int, custody_group_count: int, name: str = "mainnet") -> bytes:
+    """The SSZ bitvector of the columns that a node custodies, or ConsensusError."""
+    return _native.consensus_get_custody_column_bits(name, node_id, custody_group_count)
+
+
 def ssz_static(name: str, fork: str, type_name: str, data: bytes) -> tuple[bytes, bytes]:
     """The root of the beacon container that SSZ bytes encode, and its bytes encoded again."""
     return _native.consensus_ssz_static(name, fork, type_name, data)
+
+
+def is_valid_builder_signature(
+    name: str,
+    fork: str,
+    type_name: str,
+    data: bytes,
+    # `Any`, because `dict` is invariant in its values.
+    config: dict[str, Any] | None = None,
+) -> bool:
+    """Whether a signed registration or bid of the Builder API verifies."""
+    return _native.consensus_is_valid_builder_signature(name, fork, config, type_name, data)
 
 
 def upgrade_operation(name: str, type_name: str, data: bytes) -> tuple[bytes, bytes]:
@@ -1200,8 +1217,10 @@ __all__ = [
     "parameters",
     "ConsensusError",
     "get_custody_groups",
+    "get_custody_column_bits",
     "compute_columns_for_custody_group",
     "ssz_static",
+    "is_valid_builder_signature",
     "upgrade_operation",
     "pq_keys_ssz",
     "pq_keys_possession_signing_root",

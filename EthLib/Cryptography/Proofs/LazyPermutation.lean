@@ -5,6 +5,7 @@ public import VCVio.OracleComp.Constructions.UniformSelectMeasure
 public import VCVio.OracleComp.SimSemantics.Append.Core
 public import VCVio.OracleComp.SimSemantics.QueryImpl.Basic
 public import VCVio.OracleComp.SimSemantics.StateT.Basic
+public import VCVio.OracleComp.QueryTracking.QueryBound.Simulation
 
 /-!
 # Proofs: a random permutation sampled one answer at a time
@@ -160,6 +161,17 @@ theorem simulateQ_permImpl_liftM {α : Type} (π : Equiv.Perm A) (oa : ProbComp 
   rw [QueryImpl.simulateQ_liftM_eq_of_query (permImpl π) (QueryImpl.id' unifSpec)
     (fun t => by simp [permImpl]) oa, simulateQ_id']
 
+/-- A run of coins alone asks the permutation oracle nothing.
+
+The queries to that oracle are the right part of the sum of oracles. -/
+theorem isQueryBoundP_liftM_permComp {α : Type} (oa : ProbComp α) :
+    IsQueryBoundP (liftM oa : PermComp A α) (·.isRight = true) 0 := by
+  rw [← liftComp_eq_liftM]
+  exact isQueryBoundP_simulateQ_zero oa fun t => by
+    change IsQueryBoundP (liftM ((unifSpec + PermSpec A).query (.inl t))) _ 0
+    rw [isQueryBoundP_query_iff]
+    simp
+
 variable [FinEnum A]
 
 /-- A uniform element of `A` outside the list, or `d` when there is none. -/
@@ -186,6 +198,15 @@ def lazyPermOracle : QueryImpl (PermSpec A) (StateT (PermCache A) ProbComp)
 /-- The lazy oracles: coins, passed through, then the permutation sampled one answer at a time. -/
 abbrev lazyPermImpl : QueryImpl (unifSpec + PermSpec A) (StateT (PermCache A) ProbComp) :=
   unifSpec.passthrough + lazyPermOracle
+
+/-- A run of coins alone against the lazy permutation leaves the cache unchanged. -/
+theorem simulateQ_lazyPermImpl_liftM_run {α : Type} (oa : ProbComp α)
+    (c : PermCache A) :
+    (simulateQ lazyPermImpl (liftM oa : PermComp A α)).run c = (·, c) <$> oa := by
+  rw [QueryImpl.simulateQ_liftM_eq_of_query lazyPermImpl
+    ((QueryImpl.id' unifSpec).liftTarget (StateT (PermCache A) ProbComp))
+    (fun t => by simp [lazyPermImpl]) oa]
+  simp [StateT.run_monadLift]
 
 /-- Whether the permutation agrees with every pair of the cache. -/
 def Agrees (c : PermCache A) (π : Equiv.Perm A) : Prop :=

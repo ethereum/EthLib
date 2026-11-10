@@ -106,6 +106,8 @@ PyObject* DISCV4_ERROR;
 PyObject* FORK_ID_ERROR;
 PyObject* ETH_WIRE_ERROR;
 PyObject* SNAP_ERROR;
+PyObject* ERA1_ERROR;
+PyObject* ERA_ERROR;
 PyObject* TRANSACTION_ERROR;
 PyObject* VRF_ERROR;
 PyObject* TRIE_ERROR;
@@ -779,7 +781,11 @@ static PyMethodDef methods[] = {
   {"consensus_get_custody_groups", py_consensus_get_custody_groups, METH_VARARGS, DOC_consensus_get_custody_groups},
   {"consensus_compute_columns_for_custody_group", py_consensus_compute_columns_for_custody_group,
    METH_VARARGS, DOC_consensus_compute_columns_for_custody_group},
+  {"consensus_get_custody_column_bits", py_consensus_get_custody_column_bits, METH_VARARGS,
+   DOC_consensus_get_custody_column_bits},
   {"consensus_ssz_static", py_consensus_ssz_static, METH_VARARGS, DOC_consensus_ssz_static},
+  {"consensus_is_valid_builder_signature", py_consensus_is_valid_builder_signature,
+   METH_VARARGS, DOC_consensus_is_valid_builder_signature},
   {"consensus_merkle_proof", py_consensus_merkle_proof, METH_VARARGS, DOC_consensus_merkle_proof},
   {"consensus_upgrade_operation", py_consensus_upgrade_operation, METH_VARARGS,
    DOC_consensus_upgrade_operation},
@@ -1064,6 +1070,8 @@ static PyMethodDef methods[] = {
   {"snap_full_account", py_snap_full_account, METH_VARARGS, DOC_snap_full_account},
   {"snap_verify_account_range", py_snap_verify_account_range, METH_VARARGS, DOC_snap_verify_account_range},
   {"snap_verify_storage_ranges", py_snap_verify_storage_ranges, METH_VARARGS, DOC_snap_verify_storage_ranges},
+  {"era1_decode", py_era1_decode, METH_VARARGS, DOC_era1_decode},
+  {"era_decode", py_era_decode, METH_VARARGS, DOC_era_decode},
   {"snappy_decompress", py_snappy_decompress, METH_VARARGS, DOC_snappy_decompress},
   {"snappy_compress", py_snappy_compress, METH_VARARGS, DOC_snappy_compress},
   {"snappy_decode_frames", py_snappy_decode_frames, METH_VARARGS, DOC_snappy_decode_frames},
@@ -1085,6 +1093,8 @@ static PyMethodDef methods[] = {
   {"libp2p_decode_peer_id", py_libp2p_decode_peer_id, METH_VARARGS, DOC_libp2p_decode_peer_id},
   {"gossip_message_id", py_gossip_message_id, METH_VARARGS, DOC_gossip_message_id},
   {"gossip_decode_payload", py_gossip_decode_payload, METH_VARARGS, DOC_gossip_decode_payload},
+  {"gossip_rpc_decode", py_gossip_rpc_decode, METH_VARARGS, DOC_gossip_rpc_decode},
+  {"gossip_rpc_encode", py_gossip_rpc_encode, METH_VARARGS, DOC_gossip_rpc_encode},
   {"receipt_reencode", py_receipt_reencode, METH_VARARGS, DOC_receipt_reencode},
   {"receipt_logs_bloom", py_receipt_logs_bloom, METH_VARARGS, DOC_receipt_logs_bloom},
   {"block_make_receipts", py_block_make_receipts, METH_VARARGS, DOC_block_make_receipts},
@@ -1132,6 +1142,8 @@ static PyMethodDef methods[] = {
    DOC_engine_prepare_execution_payload},
   {"engine_prepare_execution_payload_gloas", py_engine_prepare_execution_payload_gloas,
    METH_VARARGS, DOC_engine_prepare_execution_payload_gloas},
+  {"engine_finalized_execution_block_hash", py_engine_finalized_execution_block_hash,
+   METH_VARARGS, DOC_engine_finalized_execution_block_hash},
   {"pyvalue_echo", py_pyvalue_echo, METH_VARARGS, DOC_pyvalue_echo},
   {NULL, NULL, 0, NULL},
 };
@@ -1196,6 +1208,8 @@ PyInit__native(void) {
     FORK_ID_ERROR = PyObject_GetAttrString(errors, "ForkIdError");
     ETH_WIRE_ERROR = PyObject_GetAttrString(errors, "EthWireError");
     SNAP_ERROR = PyObject_GetAttrString(errors, "SnapError");
+    ERA1_ERROR = PyObject_GetAttrString(errors, "Era1Error");
+    ERA_ERROR = PyObject_GetAttrString(errors, "EraError");
     TRANSACTION_ERROR = PyObject_GetAttrString(errors, "TransactionError");
     VRF_ERROR = PyObject_GetAttrString(errors, "VrfError");
     TRIE_ERROR = PyObject_GetAttrString(errors, "TrieError");

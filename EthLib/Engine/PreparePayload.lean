@@ -56,6 +56,14 @@ From Heze the proposer also reads the transactions of the inclusion lists of the
 
 The safe and the finalized block of the update come from the fork choice, through the caller.
 
+The caller reads the finalized block from the store: the payload of the finalized beacon block.
+
+From Gloas it is the parent payload that the bid of that block builds on.
+
+From Gloas the update may also name the columns that the node custodies, one bit per column.
+
+The guide of the proposer names none, while the fork choice says that a node should name them.
+
 The call to the execution layer, and the payload that it builds, are not specified here.
 
 [EIP-3675]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-3675.md#definitions
@@ -260,7 +268,7 @@ From Heze the result also holds the transactions of the inclusion lists of the s
 
 The payload attributes of the Engine API here have no field for them.
 
-The update names no custody columns, which these types do not carry.
+The custody columns of the update are not part of these types.
 
 It fails when the parent fails, a 64-bit operation overflows, or the mix, root or lists fail. -/
 def prepareExecutionPayloadGloas (config : Config) (checks : SignatureChecks)

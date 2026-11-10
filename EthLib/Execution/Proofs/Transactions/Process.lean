@@ -330,6 +330,20 @@ theorem gas_transactionMessage {env : BlockEnvironment fork} {txEnv : Transactio
   · cases h
     rfl
 
+/-- The message of a transaction keeps its recipient, and runs at the address it is given. -/
+theorem target_transactionMessage {env : BlockEnvironment fork}
+    {txEnv : TransactionEnvironment fork} {state : State.TransactionState}
+    {sender target : Address} {gas : Nat} {tx : Transaction} {message : Message fork}
+    (h : transactionMessage env txEnv state sender target gas tx = .ok message) :
+    message.target = tx.to ∧ message.currentTarget = target := by
+  unfold transactionMessage at h
+  split at h
+  · obtain ⟨_, -, h⟩ := map_ok_iff.mp h
+    rw [← h]
+    exact ⟨rfl, rfl⟩
+  · cases h
+    exact ⟨rfl, rfl⟩
+
 /-- With one counter of gas, a message given no reservoir hands back none. -/
 private theorem processMessageCall_reservoir {chainId : Nat} {message : Message fork}
     {state : State.TransactionState} {substate : Substate} {auths : List Authorization}

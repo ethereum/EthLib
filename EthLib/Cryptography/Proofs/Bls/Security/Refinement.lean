@@ -148,6 +148,13 @@ theorem G2Sub.ofFr_dlog (x : G2Sub) : G2.ofFr (G2Sub.dlog x) = x := by
   rw [G2Sub.dlog, Scalar.coe_ofFr]
   exact (G2Sub.exists_ofFr x).choose_spec
 
+/-- Every multiple of `g1` is a scalar times `g1`. -/
+theorem G1Sub.exists_eq_smul_g1 (x : G1Sub) : ∃ sk : Scalar, x = sk • g1 := by
+  obtain ⟨k, hk⟩ := G1Sub.exists_ofFr x
+  refine ⟨Scalar.ofFr k, Subtype.ext ?_⟩
+  rw [G1Sub.coe_smul, Scalar.val_ofFr, ← hk]
+  rfl
+
 /-- A valid point of `G2` for a multiple of `g2`. -/
 noncomputable def G2Sub.rep (x : G2Sub) : G2 := G2.mul G2.generator (G2Sub.dlog x)
 
@@ -161,6 +168,20 @@ noncomputable def G1Sub.rep (x : G1Sub) : G1 := G1.mul G1.generator (G1Sub.dlog 
 /-- The chosen point of `G1` represents the scalar of the multiple. -/
 theorem G1Sub.represents_rep (x : G1Sub) : G1.Represents (G1Sub.rep x) (G1Sub.dlog x) :=
   G1.represents_mul_generator _
+
+/-- A valid point of `G1` that passes the subgroup check is a multiple of `g1`. -/
+theorem G1Sub.toPoint_mem_of_inSubgroup {P : G1} (hP : G1.Valid P)
+    (hs : G1.inSubgroup P = true) : G1.toPoint P ∈ G1Sub := by
+  obtain ⟨k, hk⟩ := G1.exists_mul_generator_of_inSubgroup hP hs
+  rw [hk, G1.toPoint_mul_generator]
+  exact AddSubgroup.nsmul_mem _ (AddSubgroup.mem_zmultiples _) _
+
+/-- A valid point of `G2` that passes the subgroup check is a multiple of `g2`. -/
+theorem G2Sub.toPoint_mem_of_inSubgroup {Q : G2} (hQ : G2.Valid Q)
+    (hs : G2.inSubgroup Q = true) : G2.toPoint Q ∈ G2Sub := by
+  obtain ⟨k, hk⟩ := G2.exists_mul_generator_of_inSubgroup hQ hs
+  rw [hk, G2.toPoint_mul_generator]
+  exact AddSubgroup.nsmul_mem _ (AddSubgroup.mem_zmultiples _) _
 
 /-! ## The scheme -/
 
@@ -199,25 +220,35 @@ theorem blsScheme_sound : blsScheme.Sound Scalar := by
 
 /-! ## EthLib's signing and verification -/
 
+/-- The point that the hash to `G2` gives a message under the tag `dst`. -/
+noncomputable def hashRepWith (dst msg : ByteArray) : G2 :=
+  (HashToCurve.hashToG2_total_inSubgroup msg dst).choose
+
+/-- The hash to `G2` never fails, and its point is valid and in the subgroup. -/
+theorem hashRepWith_spec (dst msg : ByteArray) :
+    HashToCurve.hashToG2 msg dst = .ok (hashRepWith dst msg) ∧ G2.Valid (hashRepWith dst msg) ∧
+      G2.inSubgroup (hashRepWith dst msg) = true :=
+  (HashToCurve.hashToG2_total_inSubgroup msg dst).choose_spec
+
+/-- The hash to `G2` of a message under the tag `dst`, as a multiple of `g2`. -/
+noncomputable def hashPointWith (dst msg : ByteArray) : G2Sub :=
+  ⟨G2.toPoint (hashRepWith dst msg),
+    G2Sub.toPoint_mem_of_inSubgroup (hashRepWith_spec dst msg).2.1
+      (hashRepWith_spec dst msg).2.2⟩
+
 /-- The point that the hash to `G2` gives a message under the message tag. -/
-noncomputable def hashRep (msg : ByteArray) : G2 :=
-  (HashToCurve.hashToG2_total_inSubgroup msg DST).choose
+noncomputable def hashRep (msg : ByteArray) : G2 := hashRepWith DST msg
 
 /-- The hash to `G2` never fails, and its point is valid and in the subgroup. -/
 theorem hashRep_spec (msg : ByteArray) :
     HashToCurve.hashToG2 msg DST = .ok (hashRep msg) ∧ G2.Valid (hashRep msg) ∧
       G2.inSubgroup (hashRep msg) = true :=
-  (HashToCurve.hashToG2_total_inSubgroup msg DST).choose_spec
+  hashRepWith_spec DST msg
 
 /-- The hash to `G2` of a message under the message tag, as a multiple of `g2`.
 
 It is the hash `H` of the scheme. -/
-noncomputable def hashPoint (msg : ByteArray) : G2Sub :=
-  ⟨G2.toPoint (hashRep msg), by
-    obtain ⟨-, hv, hs⟩ := hashRep_spec msg
-    obtain ⟨k, hk⟩ := G2.exists_mul_generator_of_inSubgroup hv hs
-    rw [hk, G2.toPoint_mul_generator]
-    exact AddSubgroup.nsmul_mem _ (AddSubgroup.mem_zmultiples _) _⟩
+noncomputable def hashPoint (msg : ByteArray) : G2Sub := hashPointWith DST msg
 
 /-- EthLib's public key of `sk` compresses a point of the group element `sk • g1`. -/
 theorem toPoint_skToPk (sk : SecretKey) :
@@ -299,10 +330,7 @@ noncomputable def decodeSignature (sig : ByteArray) : Option G2Sub :=
   | .error _ => none
   | .ok R =>
     if hs : G2.inSubgroup R = true then
-      some ⟨G2.toPoint R, by
-        obtain ⟨k, hk⟩ := G2.exists_mul_generator_of_inSubgroup (G2.valid_of_uncompress hu) hs
-        rw [hk, G2.toPoint_mul_generator]
-        exact AddSubgroup.nsmul_mem _ (AddSubgroup.mem_zmultiples _) _⟩
+      some ⟨G2.toPoint R, G2Sub.toPoint_mem_of_inSubgroup (G2.valid_of_uncompress hu) hs⟩
     else none
 
 /-- The representative of a subgroup element has that group element. -/
@@ -382,6 +410,64 @@ theorem encode_eq_of_decodeSignature {sig : ByteArray} {Q : G2Sub}
       exact (G2Sub.toPoint_rep Q).trans hp.symm
     · cases hd
 
+/-- Decode a key: decompress it and require a point of the subgroup of order `r`.
+
+Unlike key validation, it accepts the point at infinity, as the zero of the group. -/
+noncomputable def decodeKey (pk : ByteArray) : Option G1Sub :=
+  match hu : G1.uncompress pk with
+  | .error _ => none
+  | .ok P =>
+    if hs : G1.inSubgroup P = true then
+      some ⟨G1.toPoint P, G1Sub.toPoint_mem_of_inSubgroup (G1.uncompress_valid hu) hs⟩
+    else none
+
+/-- Successful decompression and a subgroup check give the decoded group element. -/
+private theorem decodeKey_of_uncompress {pk : ByteArray} {P : G1}
+    (hu : G1.uncompress pk = .ok P) (hs : G1.inSubgroup P = true)
+    (x : G1Sub) (hp : G1.toPoint P = x) : decodeKey pk = some x := by
+  unfold decodeKey
+  split
+  · rename_i he'
+    rw [hu] at he'
+    cases he'
+  · rename_i R' he'
+    have hRR : R' = P := Except.ok.inj (he'.symm.trans hu)
+    subst R'
+    simp only [hs, dite_true, Option.some.injEq, Subtype.ext_iff]
+    exact hp
+
+/-- Decoding the encoding of a multiple of `g1` returns it, including zero. -/
+theorem decodeKey_encode (x : G1Sub) : decodeKey (G1Sub.encode x) = some x := by
+  obtain ⟨R, hu, he⟩ := G1.uncompress_compress (G1Sub.represents_rep x).1
+  have hR : G1.Valid R := G1.uncompress_valid hu
+  have hs : G1.inSubgroup R = true :=
+    (G1.inSubgroup_iff_exists_represents hR).mpr
+      ⟨G1Sub.dlog x, hR, he.trans (G1Sub.represents_rep x).2⟩
+  exact decodeKey_of_uncompress hu hs x (he.trans (G1Sub.toPoint_rep x))
+
+/-- Bytes that decode are the encoding of the decoded element.
+
+So distinct bytes that both decode give distinct elements. -/
+theorem encode_eq_of_decodeKey {pk : ByteArray} {x : G1Sub} (hd : decodeKey pk = some x) :
+    G1Sub.encode x = pk := by
+  unfold decodeKey at hd
+  split at hd
+  · cases hd
+  · rename_i R hu
+    split at hd
+    · have hp : G1.toPoint R = x := congrArg Subtype.val (Option.some.inj hd)
+      change G1.compress (G1Sub.rep x) = pk
+      apply Eq.trans _ (G1.compress_uncompress hu)
+      apply G1.compress_congr (G1Sub.represents_rep x).1 (G1.uncompress_valid hu)
+      exact (G1Sub.toPoint_rep x).trans hp.symm
+    · cases hd
+
+/-- A decoded point in the subgroup is a group element that its bytes decode to. -/
+theorem exists_decodeKey_of_uncompress {pk : ByteArray} {P : G1} (hu : G1.uncompress pk = .ok P)
+    (hs : G1.inSubgroup P = true) : ∃ x, decodeKey pk = some x ∧ G1.toPoint P = x :=
+  ⟨⟨G1.toPoint P, G1Sub.toPoint_mem_of_inSubgroup (G1.uncompress_valid hu) hs⟩,
+    decodeKey_of_uncompress hu hs _ rfl, rfl⟩
+
 /-- A byte forger sees only encodings and returns arbitrary message and signature bytes.
 
 The two message oracles return compressed hashes and compressed signatures.
@@ -423,7 +509,7 @@ noncomputable def byteVerify (pk sig : ByteArray) (h : G2Sub) : Bool :=
     | .ok P => pairingCheck #[(G1.generator, R), (G1.neg P, G2Sub.rep h)]
 
 /-- The pairing check of verification reads only the group elements of its valid points. -/
-private theorem two_pairs_congr {P P' : G1} {R R' Q Q' : G2}
+theorem two_pairs_congr {P P' : G1} {R R' Q Q' : G2}
     (hP : G1.Valid P) (hP' : G1.Valid P') (hPe : G1.toPoint (G1.neg P) = G1.toPoint (G1.neg P'))
     (hR : G2.Valid R) (hR' : G2.Valid R') (hRe : G2.toPoint R = G2.toPoint R')
     (hQ : G2.Valid Q) (hQ' : G2.Valid Q') (hQe : G2.toPoint Q = G2.toPoint Q') :
@@ -441,14 +527,14 @@ private theorem two_pairs_congr {P P' : G1} {R R' Q Q' : G2}
     subst i
     exact ⟨G1.valid_neg hP, G1.valid_neg hP', hPe, hQ, hQ', hQe⟩
 
-/-- Replacing the random oracle with EthLib's hash gives EthLib's byte verification.
+/-- The check of one signature, with the hash under `dst` in place of the oracle, is EthLib's.
 
 No pairing law is needed: the pairing check depends only on valid group elements.
 -/
-theorem byteVerify_hashPoint (pk msg sig : ByteArray) :
-    byteVerify pk sig (hashPoint msg) = verify pk msg sig := by
-  obtain ⟨hQ, hv, -⟩ := hashRep_spec msg
-  unfold byteVerify verify coreVerify
+theorem byteVerify_hashPointWith (dst pk msg sig : ByteArray) :
+    byteVerify pk sig (hashPointWith dst msg) = coreVerify pk msg sig dst := by
+  obtain ⟨hQ, hv, -⟩ := hashRepWith_spec dst msg
+  unfold byteVerify coreVerify
   rw [hQ]
   cases hu : G2.uncompress sig with
   | error e => rfl
@@ -459,8 +545,14 @@ theorem byteVerify_hashPoint (pk msg sig : ByteArray) :
       apply congrArg (fun b => signatureSubgroupCheck R && b)
       have hPv := (G1.keyValidatePoint_eq_ok_iff.mp hp).2.1
       have hRv := G2.valid_of_uncompress hu
-      exact two_pairs_congr hPv hPv rfl hRv hRv rfl (G2Sub.represents_rep (hashPoint msg)).1 hv
-        (G2Sub.toPoint_rep (hashPoint msg))
+      exact two_pairs_congr hPv hPv rfl hRv hRv rfl
+        (G2Sub.represents_rep (hashPointWith dst msg)).1 hv
+        (G2Sub.toPoint_rep (hashPointWith dst msg))
+
+/-- Replacing the random oracle with EthLib's hash gives EthLib's byte verification. -/
+theorem byteVerify_hashPoint (pk msg sig : ByteArray) :
+    byteVerify pk sig (hashPoint msg) = verify pk msg sig :=
+  byteVerify_hashPointWith DST pk msg sig
 
 /-- The byte game for the secret scalar `a`.
 
@@ -491,44 +583,56 @@ noncomputable def byteExperiment (adversary : ByteAdversary) :
 noncomputable def byteForgeAdvantage (adversary : ByteAdversary) : ℝ≥0∞ :=
   Pr{let z ← byteExperiment adversary}[z.1 = true]
 
-/-- Every accepted byte signature gives a winning group signature for the same key and hash.
+/-- A passing pairing check on decoded points is the scheme's test on their group elements. -/
+private theorem isDh_of_check {sig : ByteArray} {R : G2} {P : G1} {x : G1Sub} {h : G2Sub}
+    (hu : G2.uncompress sig = .ok R) (hs : G2.inSubgroup R = true) (hPv : G1.Valid P)
+    (hx : G1.toPoint P = x)
+    (hv : pairingCheck #[(G1.generator, R), (G1.neg P, G2Sub.rep h)] = true) :
+    blsScheme.isDh x h ((decodeSignature sig).getD 0) = true := by
+  have hRv := G2.valid_of_uncompress hu
+  have hd : ((decodeSignature sig).getD 0).val = G2.toPoint R := by
+    rw [decodeSignature_of_uncompress hu hs
+      ⟨G2.toPoint R, G2Sub.toPoint_mem_of_inSubgroup hRv hs⟩ rfl]
+    simp only [Option.getD_some]
+  -- The group test pairs the same group elements as the byte check.
+  refine Eq.trans ?_ hv
+  exact two_pairs_congr (G1Sub.represents_rep x).1 hPv
+    (by rw [G1.toPoint_neg (G1Sub.represents_rep x).1, G1.toPoint_neg hPv, G1Sub.toPoint_rep, hx])
+    (G2Sub.represents_rep _).1 hRv ((G2Sub.toPoint_rep _).trans hd)
+    (G2Sub.represents_rep h).1 (G2Sub.represents_rep h).1 rfl
+
+/-- Every key that the signature check accepts decodes, and the check is the scheme's test.
 
 No pairing law is needed: both checks pair the same group elements.
 -/
-theorem isDh_of_byteVerify (a : Scalar) (sig : ByteArray) (h : G2Sub)
-    (hv : byteVerify (G1Sub.encode (a • g1)) sig h = true) :
-    blsScheme.isDh (a • g1) h (decodeSignature sig |>.getD 0) = true := by
+theorem exists_decodeKey_isDh_of_byteVerify {pk sig : ByteArray} {h : G2Sub}
+    (hv : byteVerify pk sig h = true) :
+    ∃ x, decodeKey pk = some x ∧ blsScheme.isDh x h ((decodeSignature sig).getD 0) = true := by
   cases hu : G2.uncompress sig with
   | error e => simp [byteVerify, hu] at hv
   | ok R =>
-    have hRv := G2.valid_of_uncompress hu
     have hs : G2.inSubgroup R = true :=
       (Bool.and_eq_true_iff.mp
         (by simpa only [byteVerify, hu, signatureSubgroupCheck] using hv)).1
-    cases hp : G1.keyValidatePoint (G1Sub.encode (a • g1)) with
+    cases hp : G1.keyValidatePoint pk with
     | error e => simp [byteVerify, hu, hp] at hv
     | ok P =>
-      have hPv := (G1.keyValidatePoint_eq_ok_iff.mp hp).2.1
-      have hrep := G1Sub.represents_rep (a • g1)
-      obtain ⟨P', hp', he⟩ := G1.uncompress_compress hrep.1
-      have hPP : P = P' := Except.ok.inj
-        (((G1.keyValidatePoint_eq_ok_iff.mp hp).1).symm.trans hp')
-      have hPa : G1.Represents P (G1Sub.dlog (a • g1)) := by
-        refine ⟨hPv, ?_⟩
-        rw [hPP, he, hrep.2]
+      obtain ⟨hpu, hPv, -, hord⟩ := G1.keyValidatePoint_eq_ok_iff.mp hp
+      have hsP : G1.inSubgroup P = true :=
+        (G1.inSubgroup_iff_modulus_smul_eq_zero hPv).mpr hord
+      obtain ⟨x, hdk, hx⟩ := exists_decodeKey_of_uncompress hpu hsP
       have hv' : pairingCheck #[(G1.generator, R), (G1.neg P, G2Sub.rep h)] = true := by
         simpa [byteVerify, hu, hp, signatureSubgroupCheck, hs] using hv
-      have hd : (decodeSignature sig |>.getD 0).val = G2.toPoint R := by
-        rw [decodeSignature_of_uncompress hu hs ⟨G2.toPoint R, by
-          obtain ⟨k, hk⟩ := G2.exists_mul_generator_of_inSubgroup hRv hs
-          rw [hk, G2.toPoint_mul_generator]
-          exact AddSubgroup.nsmul_mem _ (AddSubgroup.mem_zmultiples _) _⟩ rfl]
-        simp only [Option.getD_some]
-      -- The group test pairs the same group elements as the byte check.
-      refine Eq.trans ?_ hv'
-      exact two_pairs_congr hrep.1 hPv (hrep.neg.2.trans hPa.neg.2.symm)
-        (G2Sub.represents_rep _).1 hRv ((G2Sub.toPoint_rep _).trans hd)
-        (G2Sub.represents_rep h).1 (G2Sub.represents_rep h).1 rfl
+      exact ⟨x, hdk, isDh_of_check hu hs hPv hx hv'⟩
+
+/-- Every accepted byte signature gives a winning group signature for the same key and hash. -/
+theorem isDh_of_byteVerify (a : Scalar) (sig : ByteArray) (h : G2Sub)
+    (hv : byteVerify (G1Sub.encode (a • g1)) sig h = true) :
+    blsScheme.isDh (a • g1) h (decodeSignature sig |>.getD 0) = true := by
+  obtain ⟨x, hx, hd⟩ := exists_decodeKey_isDh_of_byteVerify hv
+  rw [decodeKey_encode, Option.some.injEq] at hx
+  rw [hx]
+  exact hd
 
 /-- A byte forger's advantage is at most that of its decoded group forger.
 
@@ -572,18 +676,24 @@ theorem snd_map_byteExperiment (adversary : ByteAdversary) :
     bind_pure_comp, map_bind, Functor.map_map]
   rfl
 
-/-- A byte forger has a hash-call bound exactly when its decoded forger has the same bound. -/
-theorem byteHashCallBound_iff (adversary : ByteAdversary) (q : ℕ) :
-    ByteHashCallBound adversary q ↔ HashCallBound Scalar blsScheme adversary.toGroup q := by
-  have h := congrArg support (snd_map_byteExperiment adversary)
-  simp only [support_map] at h
+/-- Two runs that end in the same states satisfy the same properties of their final states. -/
+theorem forall_mem_support_snd_iff {α β γ : Type} {A : ProbComp (α × γ)} {B : ProbComp (β × γ)}
+    (h : Prod.snd <$> A = Prod.snd <$> B) (P : γ → Prop) :
+    (∀ z ∈ support A, P z.2) ↔ ∀ z ∈ support B, P z.2 := by
+  have h' := congrArg support h
+  simp only [support_map] at h'
   constructor
   · intro hb z hz
-    obtain ⟨y, hy, hyz⟩ := (Set.ext_iff.mp h z.2).mpr ⟨z, hz, rfl⟩
+    obtain ⟨y, hy, hyz⟩ := (Set.ext_iff.mp h' z.2).mpr ⟨z, hz, rfl⟩
     exact hyz ▸ hb y hy
   · intro hb z hz
-    obtain ⟨y, hy, hyz⟩ := (Set.ext_iff.mp h z.2).mp ⟨z, hz, rfl⟩
+    obtain ⟨y, hy, hyz⟩ := (Set.ext_iff.mp h' z.2).mp ⟨z, hz, rfl⟩
     exact hyz ▸ hb y hy
+
+/-- A byte forger has a hash-call bound exactly when its decoded forger has the same bound. -/
+theorem byteHashCallBound_iff (adversary : ByteAdversary) (q : ℕ) :
+    ByteHashCallBound adversary q ↔ HashCallBound Scalar blsScheme adversary.toGroup q :=
+  forall_mem_support_snd_iff (snd_map_byteExperiment adversary) fun s => s.calls ≤ q
 
 /-- The byte-game bound follows from the same named co-CDH solver as the group-game bound. -/
 theorem byteForgeAdvantage_le_coCdhAdvantage (adversary : ByteAdversary)

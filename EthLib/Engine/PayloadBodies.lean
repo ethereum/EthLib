@@ -185,18 +185,14 @@ def getPayloadBodiesByRangeV2 (store : BodyStore) (start count : UInt64) :
 
 /-- The parameters of a request by hash: one array of 32-byte block hashes. -/
 def bodiesByHashParams (params : Json) : Decode (List Hash32) := do
-  let params ← match params with
-    | .arr items => pure items.toList
-    | _ => invalid "params: not an array"
+  let params ← paramsArray params
   match params with
   | [hashes] => array "hashes" (fixed "block hash" 32) hashes
   | _ => invalid s!"params: got {params.length}, expected 1"
 
 /-- The parameters of a request by range: `start` and `count`, two 64-bit numbers. -/
 def bodiesByRangeParams (params : Json) : Decode (UInt64 × UInt64) := do
-  let params ← match params with
-    | .arr items => pure items.toList
-    | _ => invalid "params: not an array"
+  let params ← paramsArray params
   match params with
   | [start, count] => return (← uint64 "start" start, ← uint64 "count" count)
   | _ => invalid s!"params: got {params.length}, expected 2"

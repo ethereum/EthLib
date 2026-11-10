@@ -78,9 +78,28 @@ theorem IsChild.height_lt {b c : β} (h : T.IsChild c b) : T.height b < T.height
   rw [← h.2]
   exact T.height_parent c h.1
 
+/-- A child is not its parent. -/
+theorem IsChild.ne {b c : β} (h : T.IsChild c b) : c ≠ b :=
+  fun same => (same ▸ h.height_lt).false
+
 /-- The genesis block is its only ancestor. -/
 theorem iterate_genesis (n : ℕ) : T.parent^[n] T.genesis = T.genesis :=
   Function.iterate_fixed T.parent_genesis n
+
+/-- A block in the chain of the genesis block is the genesis block. -/
+theorem Ancestor.eq_genesis {a : β} (h : T.Ancestor a T.genesis) : a = T.genesis := by
+  obtain ⟨n, rfl⟩ := h
+  exact iterate_genesis n
+
+/-- A block that differs from one of its ancestors is not the genesis block. -/
+theorem Ancestor.ne_genesis {a c : β} (h : T.Ancestor a c) (hne : c ≠ a) : c ≠ T.genesis := by
+  rintro rfl
+  exact hne h.eq_genesis.symm
+
+/-- A block that differs from one of its ancestors is a child of its parent. -/
+theorem Ancestor.isChild_parent {a c : β} (h : T.Ancestor a c) (hne : c ≠ a) :
+    T.IsChild c (T.parent c) :=
+  ⟨h.ne_genesis hne, rfl⟩
 
 /-- No ancestor is higher than its descendant. -/
 theorem height_iterate_le (n : ℕ) (b : β) : T.height (T.parent^[n] b) ≤ T.height b := by
@@ -219,6 +238,8 @@ end BlockTree
 The view holds the parent of each block it holds.
 
 A validator without a message has none as its latest message.
+
+So does a validator whose votes the fork choice drops, such as one that has equivocated.
 
 A latest message can name a block outside the view. -/
 structure View (ν β : Type*) (T : BlockTree β) where
@@ -373,6 +394,83 @@ theorem ghost_mem {b : β} (hb : b ∈ G.blocks) : ghost V w G root b ∈ G.bloc
     exact ih (mem_children.mp (heaviestChild_spec V w G root b h).1).1
   | case2 b h => rwa [ghost_of_not_nonempty V w G root h]
 
+/-- If each block of a chain outweighs its siblings, LMD-GHOST stays on that chain.
+
+Take a block `b` of the view, and a block `a` in its chain.
+
+Suppose that each block of the chain of `b` above `a` outweighs its siblings.
+
+Then LMD-GHOST from `a` returns a block in the subtree of `b`. -/
+theorem ancestor_ghost_of_heavier {a b : β} (hb : b ∈ G.blocks) (hab : T.Ancestor a b)
+    (heavier : ∀ c, T.Ancestor a c → T.Ancestor c b → c ≠ a →
+      ∀ c' ∈ children G (T.parent c), c' ≠ c → weight V w G c' < weight V w G c) :
+    T.Ancestor b (ghost V w G root a) := by
+  induction a using ghost.induct V w G root with
+  | case1 a h ih =>
+    by_cases hba : a = b
+    · subst hba
+      exact ancestor_ghost V w G root a
+    obtain ⟨c, hc, hcb⟩ := hab.exists_child hba
+    have hcmem : c ∈ children G a := mem_children.mpr ⟨G.mem_of_ancestor hb hcb, hc⟩
+    have hca : c ≠ a := hc.ne
+    -- The child towards `b` outweighs every other child, so the rule picks it.
+    have hpick : heaviestChild V w G root a h = c := by
+      obtain ⟨hmem, hmax⟩ := heaviestChild_spec V w G root a h
+      by_contra hne
+      have hlt := heavier c hc.ancestor hcb hca _ (hc.2 ▸ hmem) hne
+      have hle := hmax c hcmem
+      rw [Prod.Lex.toLex_le_toLex] at hle
+      rcases hle with hle | ⟨hle, -⟩ <;> dsimp only at hle <;> omega
+    rw [ghost_of_nonempty V w G root h]
+    refine hpick ▸ ih (hpick ▸ hcb) fun d hcd hdb hdc => ?_
+    refine heavier d ((hpick ▸ hc.ancestor).trans hcd) hdb fun same => ?_
+    subst same
+    exact hdc (hcd.antisymm (hpick ▸ hc.ancestor)).symm
+  | case2 a h =>
+    by_cases hba : a = b
+    · subst hba
+      exact ancestor_ghost V w G root a
+    -- A block above `b` has a child in the view, so the rule does not stop there.
+    obtain ⟨c, hc, hcb⟩ := hab.exists_child hba
+    exact absurd ⟨c, mem_children.mpr ⟨G.mem_of_ancestor hb hcb, hc⟩⟩ h
+
+/-- The tree part of Lemma 2 in Appendix A.1 of the fast confirmation paper.
+
+The paper is [arXiv 2405.00549v4](https://arxiv.org/abs/2405.00549v4).
+
+Take a block `b` of the view, a block `a` in its chain, and any set `J` of validators.
+
+The paper takes `J` to be the honest validators.
+
+Each block of the chain of `b` above `a` comes with a bound, that of hypothesis 4 of the lemma.
+
+Assume that the bound caps the weight of the block together with any one of its siblings.
+
+The paper derives that cap from its vote filters and from honest validators never equivocating.
+
+Assume also that the validators of `J` that support the block hold more than half of the bound.
+
+Then LMD-GHOST from `a` returns a block in the subtree of `b`.
+
+The model has no time, so the paper's conditions on GST and on the slot of `b` have no part here.
+
+The majority lemma below is the case where `J` holds everyone and the bound is all the stake. -/
+theorem ancestor_ghost_of_honest_support {a b : β} (J : Set ν) [DecidablePred (· ∈ J)]
+    (Φ : β → ℕ) (hb : b ∈ G.blocks) (hab : T.Ancestor a b)
+    (fits : ∀ c, T.Ancestor a c → T.Ancestor c b → c ≠ a →
+      ∀ c' ∈ children G (T.parent c), c' ≠ c →
+        weight V w G c + weight V w G c' ≤ Φ c)
+    (honest : ∀ c, T.Ancestor a c → T.Ancestor c b → c ≠ a →
+      Φ c < 2 * stake w {v ∈ supporters V G c | v ∈ J}) :
+    T.Ancestor b (ghost V w G root a) := by
+  refine ancestor_ghost_of_heavier V w G root hb hab fun c hac hcb hca c' hc' hne => ?_
+  -- The honest supporters of the block are some of its supporters.
+  have lower : stake w {v ∈ supporters V G c | v ∈ J} ≤ weight V w G c :=
+    stake_mono (Finset.filter_subset _ _)
+  have := fits c hac hcb hca c' hc' hne
+  have := honest c hac hcb hca
+  omega
+
 /-- The majority lemma.
 
 Take a block `b` of the view.
@@ -382,32 +480,15 @@ Suppose that more than half of the stake of `V` has its latest message in the su
 Then LMD-GHOST from any block in the chain of `b` returns a block in the subtree of `b`. -/
 theorem ancestor_ghost_of_majority {a b : β} (hb : b ∈ G.blocks) (hab : T.Ancestor a b)
     (hmaj : stake w V < 2 * weight V w G b) : T.Ancestor b (ghost V w G root a) := by
-  induction a using ghost.induct V w G root with
-  | case1 a h ih =>
-    by_cases hba : a = b
-    · subst hba
-      exact ancestor_ghost V w G root a
-    obtain ⟨c, hc, hcb⟩ := hab.exists_child hba
-    have hcmem : c ∈ children G a := mem_children.mpr ⟨G.mem_of_ancestor hb hcb, hc⟩
-    -- The child towards `b` has more than half of the stake, so it outweighs every other child.
-    have hpick : heaviestChild V w G root a h = c := by
-      obtain ⟨hmem, hmax⟩ := heaviestChild_spec V w G root a h
-      by_contra hne
-      have hsum := weight_add_le (V := V) (w := w) (G := G) hc (mem_children.mp hmem).2
-        (Ne.symm hne)
-      have hcw := weight_mono (V := V) (w := w) (G := G) hcb
-      have hle := hmax c hcmem
-      rw [Prod.Lex.toLex_le_toLex] at hle
-      rcases hle with hle | ⟨hle, -⟩ <;> dsimp only at hle <;> omega
-    rw [ghost_of_nonempty V w G root h]
-    exact hpick ▸ ih (hpick ▸ hcb)
-  | case2 a h =>
-    by_cases hba : a = b
-    · subst hba
-      exact ancestor_ghost V w G root a
-    -- A block above `b` has a child in the view, so the rule does not stop there.
-    obtain ⟨c, hc, hcb⟩ := hab.exists_child hba
-    exact absurd ⟨c, mem_children.mpr ⟨G.mem_of_ancestor hb hcb, hc⟩⟩ h
+  -- Every validator counts as honest, and the bound is the stake of all validators.
+  classical
+  refine ancestor_ghost_of_honest_support V w G root Set.univ (fun _ => stake w V) hb hab
+    (fun c hac _ hca c' hc' hne => ?_) fun c _ hcb _ => ?_
+  · exact weight_add_le (hac.isChild_parent hca) (mem_children.mp hc').2 hne.symm
+  · have := weight_mono (V := V) (w := w) (G := G) hcb
+    simp only [Set.mem_univ, Finset.filter_true]
+    unfold weight at this hmaj
+    omega
 
 /-! ## Proposer boost
 
