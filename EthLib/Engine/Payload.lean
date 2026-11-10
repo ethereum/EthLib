@@ -88,6 +88,9 @@ structure ExecutionPayload (fork : Fork) : Type where
   /-- The blob gas above the target before the block, from Dencun. -/
   excessBlobGas : Since .dencun fork UInt64
 
+/-- The eight-byte identifier of a payload build process. -/
+abbrev PayloadId := Bytes8
+
 /-- The three blocks that the consensus layer names to the execution layer. -/
 structure ForkchoiceState where
   /-- The head of the canonical chain. -/

@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Engine.BuildPayload
 public import EthLib.Engine.NewPayload
 public import EthLib.Execution.Transactions.Network
 
@@ -8,21 +9,31 @@ public import EthLib.Execution.Transactions.Network
 
 The latest completed payload of a build process, read by its eight-byte ID.
 
-The store is a snapshot: its lookup gives the latest available payload immediately.
+The store is a snapshot of completed builds.
 
 The method neither waits for more building nor changes the store.
 
-The chain configuration determines the fork at the payload's number and timestamp.
+Each build is what the payload build gives: the block, the state after it, requests and value.
 
-Versions 1 and 2 serve Paris and Paris–Shapella respectively.
+The chain configuration determines the fork at the block's number and timestamp.
 
-Versions 3, 4, 5 and 6 serve Dencun, Pectra, Fusaka–BPO5 and Glamsterdam respectively.
+Version 1 serves Paris, and version 2 serves Paris and Shapella.
 
-The bundle's commitments must hash to the payload's blob hashes, in order.
+Version 3 serves Dencun, version 4 Pectra, version 5 Fusaka to BPO5, and version 6 Glamsterdam.
+
+The source does not say what version 1 returns for a payload after Paris.
+
+EthLib rejects it as an unsupported fork, as `engine_newPayloadV1` does.
+
+From version 3, the bundle's commitments must hash to the block's blob hashes, in order.
 
 Its proofs are checked, with one per blob before Fusaka and 128 cell proofs per blob from it.
 
 The method follows [version 1][v1], [2][v2], [3][v3], [4][v4], [5][v5] and [6][v6].
+
+The upper bounds of versions 2 to 5 come from the updates of later forks.
+
+They are in [Cancun][c], [Prague][p], [Osaka][o] and [Amsterdam][a].
 
 [v1]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#engine_getpayloadv1
 [v2]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/shanghai.md#engine_getpayloadv2
@@ -30,6 +41,10 @@ The method follows [version 1][v1], [2][v2], [3][v3], [4][v4], [5][v5] and [6][v
 [v4]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/prague.md#engine_getpayloadv4
 [v5]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/osaka.md#engine_getpayloadv5
 [v6]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/amsterdam.md#engine_getpayloadv6
+[c]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/cancun.md#update-the-methods-of-previous-forks
+[p]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/prague.md#update-the-methods-of-previous-forks
+[o]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/osaka.md#update-the-methods-of-previous-forks
+[a]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/amsterdam.md#update-the-methods-of-previous-forks
 -/
 
 @[expose] public section
@@ -38,10 +53,8 @@ namespace EthLib.Engine
 
 open EthLib.Base
 open EthLib.Cryptography.Kzg
+open EthLib.Execution.Blocks (Block)
 open EthLib.Execution.Transactions
-
-/-- The identifier of a payload build process. -/
-abbrev PayloadId := Vector UInt8 8
 
 /-- The blobs, commitments and proofs of the payload's network blob transactions, in order. -/
 structure BlobsBundle where
@@ -57,84 +70,100 @@ def BlobsBundle.ofNetwork (transactions : List NetworkBlobTransaction) : BlobsBu
   ⟨transactions.flatMap (·.blobs), transactions.flatMap (·.commitments),
     transactions.flatMap (·.proofs)⟩
 
-/-- The latest completed payload of one build, with the fields returned beside it. -/
+/-- A completed build, with the fields that the method returns beside its payload. -/
 structure StoredPayload where
   /-- The fork at which the payload was built. -/
   fork : Fork
-  /-- The execution payload at that fork. -/
-  payload : ExecutionPayload fork
-  /-- The expected value to the fee recipient, in wei. -/
-  blockValue : U256
-  /-- The blobs of the network transactions included in the payload. -/
+  /-- The block of the build, with its requests and its value. -/
+  built : BuiltPayload fork
+  /-- The blobs of the network forms of the block's blob transactions. -/
   bundle : BlobsBundle
-  /-- The requests of the executed payload, present from Pectra. -/
-  requests : Since .pectra fork (List ByteArray)
   /-- Whether the builder recommends its payload over an external builder's. -/
   shouldOverrideBuilder : Bool
-  /-- The block access list, from Glamsterdam. -/
+  /-- The block access list from Glamsterdam, whose hash the header holds. -/
   blockAccessList : Since .glamsterdam fork ByteArray
-  /-- The beacon slot of the payload, from Glamsterdam. -/
-  slotNumber : Since .glamsterdam fork UInt64
 
 /-- A snapshot of build processes, each identified by its payload ID. -/
 abbrev PayloadStore := PayloadId → Option StoredPayload
+
+/-- What the method returns: the stored build and the execution payload of its block. -/
+structure GetPayloadResponse where
+  /-- The stored build. -/
+  stored : StoredPayload
+  /-- The execution payload of its block. -/
+  payload : ExecutionPayload stored.fork
 
 /-- A request error, or malformed data in the supplied snapshot of completed builds. -/
 inductive GetPayloadError where
   /-- A request with no build, or for a fork that its version does not support. -/
   | engine (error : EngineError)
-  /-- The stored payload's transactions do not decode. -/
-  | transaction (error : PayloadError)
+  /-- The stored fork is not the fork of the configuration at the block. -/
+  | wrongFork
+  /-- The stored execution requests are out of order, have no data, or precede Pectra. -/
+  | requests
+  /-- The stored block value does not fit in 256 bits. -/
+  | blockValue
+  /-- The block has no payload form, since a field does not fit or has no encoding. -/
+  | noPayload
+  /-- A transaction does not decode, or the payload does not give the stored block hash. -/
+  | header (error : PayloadError)
   /-- The stored bundle fails a count, hash or KZG check. -/
   | bundle (error : NetworkError)
-  /-- The stored execution requests are out of order or have no data. -/
-  | requests
 
 /-- The forks whose payloads a version of the method returns. -/
 def acceptsGetPayloadFork (version : Nat) (fork : Fork) : Bool :=
   match version with
-  | 1 => decide (.paris ≤ fork ∧ fork < .shapella)
-  | 2 => decide (.paris ≤ fork ∧ fork < .dencun)
-  | 3 => decide (.dencun ≤ fork ∧ fork < .pectra)
-  | 4 => decide (.pectra ≤ fork ∧ fork < .fusaka)
-  | 5 => decide (.fusaka ≤ fork ∧ fork < .glamsterdam)
+  | 1 => fork == .paris
+  | 2 => fork == .paris || fork == .shapella
+  | 3 => fork == .dencun
+  | 4 => fork == .pectra
+  | 5 => decide (.fusaka ≤ fork) && decide (fork < .glamsterdam)
   | 6 => fork == .glamsterdam
   | _ => false
 
-/-- Check the counts, ordered versioned hashes and proofs of a returned bundle. -/
-def checkPayloadBundle (setup : TrustedSetup) (fork : Fork) (hashes : List Bytes32)
-    (bundle : BlobsBundle) : Except NetworkError Unit := do
-  unless hashes.length = bundle.blobs.length ∧
-      bundle.commitments.length = bundle.blobs.length ∧
-      bundle.proofs.length = proofCount fork bundle.blobs.length do
-    throw (.countMismatch hashes.length bundle.blobs.length bundle.commitments.length
-      bundle.proofs.length)
-  unless bundle.commitments.map versionedHash = hashes do throw .versionedHashMismatch
-  unless ← (verifyBlobBundle setup fork bundle.blobs bundle.commitments bundle.proofs).mapError
-      .kzg do throw .proofRejected
+/-- Whether requests have the shape of their fork: none before Pectra, valid lists from it. -/
+def requestsOfFork (fork : Fork) (requests : List ByteArray) : Bool :=
+  if .pectra ≤ fork then validRequests requests else requests.isEmpty
 
-/-- Read the latest payload of an ID, checking its fork and the bundle that it returns.
+/-- The payload form of a block, which exists only from Paris. -/
+def payloadOfBlock {fork : Fork} (block : Block fork Transaction) :
+    Option (ExecutionPayload fork) :=
+  if h : .paris ≤ fork then ExecutionPayload.ofBlock h block else none
 
-The snapshot supplies the output of execution, including the requests and the builder's value.
+/-- The block that a payload gives back, with the stored requests and access list.
 
-This method checks the requests' shape, and does not execute the payload again. -/
+The parent beacon block root and the slot are those of the stored header. -/
+def StoredPayload.blockOfPayload (stored : StoredPayload)
+    (payload : ExecutionPayload stored.fork) :
+    Except PayloadError (Block stored.fork Transaction) :=
+  let header := stored.built.block.header
+  payload.toBlock header.parentBeaconBlockRoot (fun _ => stored.built.requests)
+    stored.blockAccessList header.slotNumber
+
+/-- Read the latest build of an ID, checking its fork and, from version 3, its bundle.
+
+The snapshot supplies the output of the build, including the requests and the block value.
+
+This method checks their shape against the fork, and does not execute the block again.
+
+The payload must give back a block with the stored block hash, as `engine_newPayload` checks.
+
+So that hash commits to the transactions, the requests and the access list it returns. -/
 def getPayload (config : ChainConfig) (setup : TrustedSetup) (store : PayloadStore)
-    (version : Nat) (id : PayloadId) : Except GetPayloadError StoredPayload :=
-  match store id with
-  | none => .error (.engine .unknownPayload)
-  | some built =>
-    if config.activeFork built.payload.blockNumber.toNat built.payload.timestamp.toNat =
-        some built.fork ∧ acceptsGetPayloadFork version built.fork = true then
-      if (if h : .pectra ≤ built.fork then validRequests (built.requests h) else true) then
-        if version ≥ 3 then do
-          let transactions ← (decodeTransactions built.fork 0 built.payload.transactions).mapError
-            .transaction
-          (checkPayloadBundle setup built.fork (ExecutionPayload.blobVersionedHashes transactions)
-            built.bundle).mapError .bundle
-          return built
-        else .ok built
-      else .error .requests
-    else .error (.engine .unsupportedFork)
+    (version : Nat) (id : PayloadId) : Except GetPayloadError GetPayloadResponse := do
+  let some stored := store id | throw (.engine .unknownPayload)
+  let block := stored.built.block
+  unless config.activeFork block.header.number block.header.timestamp.toNat = some stored.fork do
+    throw .wrongFork
+  unless acceptsGetPayloadFork version stored.fork do throw (.engine .unsupportedFork)
+  unless requestsOfFork stored.fork stored.built.requests do throw .requests
+  unless stored.built.blockValue < 2 ^ 256 do throw .blockValue
+  let some payload := payloadOfBlock block | throw .noPayload
+  if let .error e := stored.blockOfPayload payload then throw (.header e)
+  if 3 ≤ version then
+    (validateBlobs setup stored.fork (ExecutionPayload.blobVersionedHashes block.transactions)
+      stored.bundle.blobs stored.bundle.commitments stored.bundle.proofs).mapError .bundle
+  return ⟨stored, payload⟩
 
 /-- The single eight-byte payload ID of the request. -/
 def getPayloadParams (params : Lean.Json) : Json.Decode PayloadId := do
