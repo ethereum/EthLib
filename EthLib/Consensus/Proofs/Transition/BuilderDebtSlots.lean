@@ -96,7 +96,7 @@ theorem builderFrame_addValidatorToRegistry {pubkey withdrawalCredentials amount
     exact ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
   · cases computed
 
-/-- The builder frame has the leaf facts needed by the epoch steps. -/
+/-- Keeping the builder fields and the two slots satisfies the laws of the epoch steps. -/
 private theorem builderEpochFrameLaws : EpochFrameLaws (@BuilderFrame preset fork)
     where
   refl := BuilderFrame.refl

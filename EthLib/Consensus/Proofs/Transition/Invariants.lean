@@ -672,11 +672,17 @@ theorem frame_addValidatorToRegistry {pubkey : BLSPubkey}
       rfl, rfl, rfl, rfl⟩, .of_eq rfl rfl⟩
   · cases computed
 
-/-- Leaf facts that let a reflexive, transitive relation follow the steps of an epoch.
+/-- The laws that carry a reflexive, transitive relation through most steps of an epoch.
 
-Validator writes retain the key, exit order and alignment hypotheses of a mutator frame.
+They leave out justification, the builder payments and the rotation of the flags.
 
-The other leaves are balance changes, exits, deposits and plain record updates. -/
+A validator write must relate its states only when it keeps the key.
+
+It must also exit no later than it withdraws, when the exits of the state are ordered.
+
+Its effective balance must also be a whole number of increments, when the balances are aligned.
+
+The other laws cover balance changes, exits, new validators and replacements of one field. -/
 structure EpochFrameLaws (R : BeaconState preset fork → BeaconState preset fork → Prop) : Prop where
   refl : ∀ state, R state state
   trans : ∀ {first second third}, R first second → R second third → R first third
@@ -713,7 +719,7 @@ structure EpochFrameLaws (R : BeaconState preset fork → BeaconState preset for
   proposerLookahead : ∀ state lookahead, R state { state with proposerLookahead := lookahead }
   ptcWindow : ∀ state window, R state { state with ptcWindow := window }
 
-/-- The mutator frame has the leaf facts needed by the epoch steps. -/
+/-- The mutator frame satisfies the laws of the epoch steps. -/
 theorem mutatorEpochFrameLaws : EpochFrameLaws (@MutatorFrame preset fork) where
   refl := MutatorFrame.refl
   trans := MutatorFrame.trans
@@ -742,13 +748,16 @@ variable {R : BeaconState preset fork → BeaconState preset fork → Prop}
 
 include laws
 
-/-- A fold follows the relation when each of its steps does. -/
+/-- A fold relates its start to its result when each step relates its input to its output. -/
 theorem foldlM {α ε : Type} {step : BeaconState preset fork → α → Except ε _}
     (frame : ∀ s x s', step s x = .ok s' → R s s') {items : List α}
     (computed : items.foldlM step state = .ok after) : R state after :=
   foldlM_ok_invariant (R state) (fun _ _ _ before ok => laws.trans before (frame _ _ _ ok))
     (laws.refl state) computed
 
+/-- A validator write that keeps the key and the effective balance follows the relation.
+
+It must also exit no later than it withdraws, when the exits of the state are ordered. -/
 theorem setValidator_of_sameBalance {index : ValidatorIndex} {validator old : Validator}
     (set : state.setValidator index validator = .ok after)
     (found : getValidator state index = .ok old) (same : validator.pubkey = old.pubkey)
@@ -1720,7 +1729,11 @@ theorem processPtcWindow {gloas : .glamsterdam ≤ fork}
   obtain ⟨_, _, _, _, rfl⟩ := computed
   exact (laws.ptcWindow _ _)
 
-/-- The shared epoch walk separates justification, builder payments and flag rotation. -/
+/-- From Altair, the epoch transition is justification, then steps in the relation.
+
+The builder payments follow, which change nothing before Gloas, then more steps in the relation.
+
+The rotation of the participation flags comes next, then the last steps in the relation. -/
 theorem processEpochAltair_split {altair : .altair ≤ fork}
     (computed : Consensus.processEpochAltair config checks state altair = .ok after) :
     ∃ justified pending paid rooted,
