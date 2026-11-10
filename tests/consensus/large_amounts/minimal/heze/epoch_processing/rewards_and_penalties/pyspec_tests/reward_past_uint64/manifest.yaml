@@ -1,0 +1,6 @@
+preset: minimal
+fork: heze
+runner: epoch_processing
+handler: rewards_and_penalties
+suite: pyspec_tests
+case: reward_past_uint64
