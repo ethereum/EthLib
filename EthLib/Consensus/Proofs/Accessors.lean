@@ -1216,4 +1216,19 @@ theorem writeCircularRooted_elements {α : Type} [SszType α] {n : UInt64}
   unfold writeCircularRooted writeCircular
   split <;> rfl
 
+/-- A read of a block root is before the slot of the state, and reads the buffer of roots. -/
+theorem getBlockRootAtSlot_read {state : BeaconState preset fork} {slot : Slot} {root : Root}
+    (computed : getBlockRootAtSlot state slot = .ok root) :
+    slot < state.slot ∧ readCircular state.blockRoots.elements slot = .ok root := by
+  unfold getBlockRootAtSlot at computed
+  by_cases lt : slot < state.slot
+  · simp only [lt, ↓reduceIte, bind_ok_iff] at computed
+    obtain ⟨_, _, computed⟩ := computed
+    split at computed
+    · exact ⟨lt, computed⟩
+    · cases computed
+  · simp only [lt, ↓reduceIte, bind_ok_iff] at computed
+    obtain ⟨_, thrown, _⟩ := computed
+    cases thrown
+
 end EthLib.Consensus

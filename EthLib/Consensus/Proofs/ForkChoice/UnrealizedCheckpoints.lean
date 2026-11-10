@@ -235,21 +235,6 @@ private def KeepsRoots (state moved : BeaconState preset fork) : Prop :=
     ((getCurrentEpoch state).toNat - 1) * preset.SLOTS_PER_EPOCH.toNat ≤ slot.toNat →
     readCircular moved.blockRoots.elements slot = readCircular state.blockRoots.elements slot
 
-/-- A read of a block root is before the slot of the state, and reads the buffer of roots. -/
-private theorem getBlockRootAtSlot_read {slot : Slot} {root : Root}
-    (computed : getBlockRootAtSlot state slot = .ok root) :
-    slot < state.slot ∧ readCircular state.blockRoots.elements slot = .ok root := by
-  unfold getBlockRootAtSlot at computed
-  by_cases lt : slot < state.slot
-  · simp only [lt, ↓reduceIte, bind_ok_iff] at computed
-    obtain ⟨_, _, computed⟩ := computed
-    split at computed
-    · exact ⟨lt, computed⟩
-    · cases computed
-  · simp only [lt, ↓reduceIte, bind_ok_iff] at computed
-    obtain ⟨_, thrown, _⟩ := computed
-    cases thrown
-
 /-- Roots kept from the start of the previous epoch are the same roots for justification. -/
 private theorem sameRoots_of (keeps : KeepsRoots state moved) : SameRoots state moved := by
   intro target root root' recent one two
@@ -268,24 +253,6 @@ private theorem sameRoots_of (keeps : KeepsRoots state moved) : SameRoots state 
     · exact Nat.sub_le _ _
   rw [keeps slot (UInt64.lt_iff_toNat_lt.mp lt) low, read] at read'
   exact (Except.ok.inj read').symm
-
-/-- The caching of a slot writes one block root, at the position of the slot. -/
-private theorem processSlot_blockRoots {cached : BeaconState preset fork}
-    (computed : processSlot moved = .ok cached) :
-    ∃ root, writeCircular moved.blockRoots.elements moved.slot root =
-      .ok cached.blockRoots.elements := by
-  unfold processSlot at computed
-  simp only [bind_ok_iff, liftSsz_ok, liftAccessor_ok] at computed
-  obtain ⟨_, _, _, _, root, _, blockRoots, written, computed⟩ := computed
-  have elements := writeCircularRooted_elements moved.blockRoots moved.slot root
-  rw [written] at elements
-  refine ⟨root, ?_⟩
-  split at computed
-  · obtain ⟨_, _, _, _, rfl⟩ := unsetNextPayloadAvailability_ok (liftAccessor_ok.mp computed)
-    exact elements.symm
-  · simp only [pure, Except.pure, Except.ok.injEq] at computed
-    subst computed
-    exact elements.symm
 
 /-- The caching of a slot keeps a moved state moved. -/
 private theorem Moved.processSlot {cached : BeaconState preset fork} (same : Moved state moved)
@@ -324,7 +291,7 @@ private theorem KeepsRoots.processSlot {cached : BeaconState preset fork}
     (high : moved.slot.toNat < ((getCurrentEpoch state).toNat + 1) * preset.SLOTS_PER_EPOCH.toNat) :
     KeepsRoots state cached := by
   intro slot lt lo
-  obtain ⟨root, written⟩ := processSlot_blockRoots computed
+  obtain ⟨root, -, written⟩ := processSlot_blockRoots computed
   rw [readCircular_writeCircular_of_ne written, keeps slot lt lo]
   intro same
   have same' := congrArg UInt64.toNat same

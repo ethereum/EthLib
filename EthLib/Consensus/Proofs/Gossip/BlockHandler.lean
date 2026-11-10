@@ -4,6 +4,7 @@ public import EthLib.Consensus.Gossip.Block
 public import EthLib.Consensus.Proofs.ForkChoice.Handlers
 public import EthLib.Consensus.Proofs.Gossip.Block
 public import EthLib.Consensus.Proofs.Gossip.Payload
+public import EthLib.Consensus.Proofs.Transition.BlockRoots
 public import EthLib.Consensus.Proofs.Transition.Operations
 public import EthLib.Consensus.Proofs.Transition.PayloadInputs
 public import EthLib.Consensus.Proofs.Transition.StateTransition
@@ -32,6 +33,8 @@ The topic rejects or ignores a block whose parent has no state in the store.
 
 It checks the proposer that the parent state expects at the slot of the block.
 
+From Gloas it checks that the bid of the block names the parent of the block.
+
 The block handler checks the size of each list of operations against the same limit.
 
 On a full parent it checks the four counts of the requests, and an empty parent takes no request.
@@ -45,6 +48,12 @@ The handler fails on a block whose parent has no state in the store.
 Its header step checks the same proposer, on the parent state advanced to that slot.
 
 From Gloas the parent payload runs before that step, and keeps the proposer.
+
+From Gloas its bid step checks the parent root of the bid against the root at the slot before.
+
+The slots leave the root of the latest block header there, and the steps before the bid keep it.
+
+The header step checks that this root is the parent root of the block.
 
 A new block that the handler accepts passes the block step of the transition.
 
@@ -197,5 +206,43 @@ theorem expectedProposer_of_onBlock {after : Store preset fork}
     obtain ⟨-, -, proposer, -⟩ := processBlockHeader_checks headedOk
     -- The topic advances that state as the handler does, then reads the same proposer.
     simp only [expectedProposer, slots, proposer, bind, Except.bind, Except.mapError]
+
+/-- From Gloas, a new block that the handler accepts carries a bid on its own parent.
+
+The bid step reads the root at the slot before the block.
+
+The header step checks the parent root against the root of the latest header.
+
+The slots leave the root of the latest block header at that slot, so the two roots agree. -/
+theorem bidParentRoot_of_onBlock (gloas : .glamsterdam ≤ fork) {after : Store preset fork}
+    (root : SszType.hashTreeRoot signed.message = .ok blockRoot)
+    (new : ¬ store.blocks.contains blockRoot)
+    (added : store.onBlock config checks sources signed = .ok after) :
+    (signed.message.body.signedExecutionPayloadBid gloas).message.parentBlockRoot =
+      signed.message.parentRoot := by
+  obtain ⟨_, advanced, _, -, slots, slot, computed⟩ := processBlock_of_onBlock root new added
+  obtain ⟨parented, headed, withdrawn, _, _, parentOk, headedOk, withdrawnOk, biddedOk, -⟩ :=
+    processBlock_steps gloas computed
+  -- The bid step reads the root at the slot before, in the buffer of the state it runs on.
+  obtain ⟨-, -, -, -, -, -, rootOk, -⟩ :=
+    checkExecutionPayloadBid_ok_iff.mp (processExecutionPayloadBid_ok biddedOk).1
+  obtain ⟨-, read⟩ := getBlockRootAtSlot_read rootOk
+  -- The header step reads the root of the latest block header as the parent root.
+  have parentRoot := (processBlockHeader_checks headedOk).2.2.2.1
+  -- The parent, header and withdrawal steps keep the slot and the buffer of block roots.
+  have parent := payloadInputs_processParentExecutionPayload parentOk
+  have header := payloadInputs_processBlockHeader headedOk
+  have withdrawal := payloadInputs_processWithdrawals withdrawnOk
+  have sameSlot : withdrawn.slot = advanced.slot :=
+    withdrawal.slot.trans (header.slot.trans parent.slot)
+  have sameRoots : withdrawn.blockRoots = advanced.blockRoots :=
+    withdrawal.blockRoots.trans (header.blockRoots.trans parent.blockRoots)
+  have sameHeader : parented.latestBlockHeader = advanced.latestBlockHeader :=
+    parent.latestBlockHeader
+  -- The slots leave the root of the latest block header at the slot before the block.
+  obtain ⟨latest, hashed, written⟩ := processSlots_latestBlockRoot slots
+  rw [sameRoots, sameSlot, slot, written] at read
+  rw [sameHeader, hashed] at parentRoot
+  exact (Except.ok.inj read).symm.trans (Except.ok.inj parentRoot)
 
 end EthLib.Consensus
