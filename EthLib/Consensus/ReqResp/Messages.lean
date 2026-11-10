@@ -362,11 +362,27 @@ abbrev SignedInclusionLists (config : Config) :=
 abbrev ErrorMessage := SszList UInt8 256
 
 /--
-The fewest epochs back from the current one over which a node must serve blocks.
+The fewest epochs back from the current one over which a node must serve blocks, at a fork.
 
-It covers the time a validator needs to withdraw, plus half the churn quotient.
+It covers the time a validator needs to withdraw, plus half of a churn quotient.
+
+Before Gloas, that quotient is `CHURN_LIMIT_QUOTIENT`.
+
+From Gloas, EIP-8061 takes it from the weak subjectivity arithmetic.
+
+Let `E` be `CHURN_LIMIT_QUOTIENT_GLOAS` and `C` be `CONSOLIDATION_CHURN_LIMIT_QUOTIENT`.
+
+The churn per epoch is the stake over `E`, weighted 2/3, plus the stake over `C`.
+
+The stake over that churn is the quotient `3 * E * C / (2 * C + 3 * E)`.
 -/
-def Config.computeMinEpochsForBlockRequests (config : Config) : Epoch :=
-  config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY + config.CHURN_LIMIT_QUOTIENT / 2
+def Config.computeMinEpochsForBlockRequests (config : Config) (fork : Fork) : Epoch :=
+  if .glamsterdam ≤ fork then
+    let exit := config.CHURN_LIMIT_QUOTIENT_GLOAS.toNat
+    let consolidation := config.CONSOLIDATION_CHURN_LIMIT_QUOTIENT.toNat
+    let quotient := 3 * exit * consolidation / (2 * consolidation + 3 * exit)
+    config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY + (quotient / 2).toUInt64
+  else
+    config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY + config.CHURN_LIMIT_QUOTIENT / 2
 
 end EthLib.Consensus

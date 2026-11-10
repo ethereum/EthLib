@@ -923,8 +923,8 @@ def consensus_reqresp_message(name: str, fork: str, type: str, data: bytes) -> t
     """The root of the message that the bytes encode, and the bytes of that message, as a pair."""
     ...
 
-def consensus_compute_min_epochs_for_block_requests(name: str) -> int:
-    """The fewest epochs back from the current one over which a node must serve blocks."""
+def consensus_compute_min_epochs_for_block_requests(name: str, fork: str) -> int:
+    """The fewest epochs back from the current one over which a node must serve blocks, at a fork."""
     ...
 
 def consensus_gossip_topics(name: str, fork: str) -> list[str]:

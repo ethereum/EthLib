@@ -693,7 +693,7 @@
   "The root of the message that the bytes encode, and the bytes of that message, as a pair."
 
 #define DOC_consensus_compute_min_epochs_for_block_requests \
-  "The fewest epochs back from the current one over which a node must serve blocks."
+  "The fewest epochs back from the current one over which a node must serve blocks, at a fork."
 
 #define DOC_consensus_gossip_topics \
   "The gossip topics of a fork, in the order of the fork that adds each one."

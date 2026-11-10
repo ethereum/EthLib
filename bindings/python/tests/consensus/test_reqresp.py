@@ -335,8 +335,25 @@ def test_error_message_limit() -> None:
         consensus.reqresp_message("mainnet", "phase0", "ErrorMessage", bytes(257))
 
 
+def _min_epochs_for_block_requests(config: dict, fork: str) -> int:
+    """compute_min_epochs_for_block_requests, from phase0 and from gloas/p2p-interface.md."""
+    if fork in ("glamsterdam", "hegota"):
+        exit_quotient = config["CHURN_LIMIT_QUOTIENT_GLOAS"]
+        consolidation = config["CONSOLIDATION_CHURN_LIMIT_QUOTIENT"]
+        numerator = 3 * exit_quotient * consolidation
+        denominator = 2 * consolidation + 3 * exit_quotient
+        return config["MIN_VALIDATOR_WITHDRAWABILITY_DELAY"] + (numerator // denominator) // 2
+    return config["MIN_VALIDATOR_WITHDRAWABILITY_DELAY"] + config["CHURN_LIMIT_QUOTIENT"] // 2
+
+
 @pytest.mark.parametrize("name", ["mainnet", "minimal"])
-def test_min_epochs_for_block_requests(name: str) -> None:
-    config = consensus.config(name)
-    expected = config["MIN_VALIDATOR_WITHDRAWABILITY_DELAY"] + config["CHURN_LIMIT_QUOTIENT"] // 2
-    assert consensus.compute_min_epochs_for_block_requests(name) == expected
+@pytest.mark.parametrize("fork", ["phase0", "fusaka", "glamsterdam", "hegota"])
+def test_min_epochs_for_block_requests(name: str, fork: str) -> None:
+    expected = _min_epochs_for_block_requests(consensus.config(name), fork)
+    assert consensus.compute_min_epochs_for_block_requests(fork, name) == expected
+
+
+def test_min_epochs_for_block_requests_mainnet() -> None:
+    # Phase 0: 256 + 65536 // 2. Gloas: 256 + (3 * 32768 * 65536 // (2 * 65536 + 3 * 32768)) // 2.
+    assert consensus.compute_min_epochs_for_block_requests("fusaka") == 33024
+    assert consensus.compute_min_epochs_for_block_requests("glamsterdam") == 14299

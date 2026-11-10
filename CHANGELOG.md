@@ -18,6 +18,11 @@ Not yet released.
   The latest verified ancestor and the optimistic node now run at Gloas.
   The theorem `latestVerifiedAncestor_of_glamsterdam` now states the Gloas answer, no longer a failure.
   The optimistic node then fails when the head is not optimistic, since its second case is not yet specified.
+- `compute_min_epochs_for_block_requests` now takes the fork, and from Gloas it applies the EIP-8061 formula of `gloas/p2p-interface.md`.
+  Before, every fork got the Phase 0 value: 33024 epochs on mainnet, where Gloas serves 14299.
+  `Config.computeMinEpochsForBlockRequests` takes the fork as a new argument.
+  The C export `eth_consensus_compute_min_epochs_for_block_requests` reads the configuration and the fork as a pair, as `eth_consensus_gossip_topics` does.
+  In Python, `consensus.compute_min_epochs_for_block_requests` takes the fork first, then the configuration, `mainnet` by default.
 - A chain configuration now holds the address of its deposit contract, and the deposit requests of a block come from that address ([#1486](https://github.com/ethereum/EthLib/issues/1486)).
   Before, every chain read deposits from the mainnet address, so a chain with another deposit contract, such as Sepolia, got no deposit request.
   The configuration that the exports read as JSON, or as a Python `dict`, must give `depositContractAddress`: `0x` and forty hex digits, or 20 bytes in Python.
