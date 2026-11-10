@@ -345,6 +345,11 @@ eth_consensus_latest_verified_ancestor(
 );
 
 extern lean_object*
+eth_consensus_is_optimistic_node(
+  lean_object* args
+);
+
+extern lean_object*
 eth_consensus_on_valid_payload(
   lean_object* args
 );
@@ -1433,6 +1438,14 @@ py_consensus_is_optimistic_candidate_block(
     eth_consensus_is_optimistic_candidate_block(a[0], a[1], a[2], current, safe,
       mk_bytearray(block, block_len)),
     FORK_CHOICE_ERROR);
+}
+
+PyObject*
+py_consensus_is_optimistic_node(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_is_optimistic_node, args, 9, FORK_CHOICE_ERROR);
 }
 
 PyObject*

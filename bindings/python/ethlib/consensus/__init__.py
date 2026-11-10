@@ -831,6 +831,32 @@ def on_invalidated_payload(
     )
 
 
+def is_optimistic_node(
+    name: str,
+    fork: str,
+    anchor_state: bytes,
+    anchor_block: bytes,
+    steps: Sequence[ForkChoiceStep],
+    optimistic_roots: Sequence[bytes],
+    head: bytes,
+    verify: bool = True,
+    # `Any`, because `dict` is invariant in its values.
+    config: dict[str, Any] | None = None,
+) -> bool:
+    """From Bellatrix, whether a node is optimistic after the steps of a fork choice run."""
+    return _native.consensus_is_optimistic_node(
+        name,
+        fork,
+        anchor_state,
+        anchor_block,
+        list(steps),
+        verify,
+        config,
+        list(optimistic_roots),
+        head,
+    )
+
+
 def is_optimistic_restricted_domain(domain_type: bytes) -> bool:
     """Whether an optimistic validator may not sign under a domain type of 4 bytes."""
     return _native.consensus_is_optimistic_restricted_domain(domain_type)
@@ -1047,6 +1073,7 @@ __all__ = [
     "get_validator_signature",
     "is_execution_block",
     "is_optimistic_candidate_block",
+    "is_optimistic_node",
     "latest_verified_ancestor",
     "on_valid_payload",
     "on_invalidated_payload",

@@ -1,10 +1,14 @@
-"""The optimistic sync of Bellatrix against blocks built in the test."""
+"""The optimistic sync of Bellatrix against blocks built in the test and a vector case."""
 
 import struct
+from collections.abc import Sequence
+from pathlib import Path
 
 import pytest
+from ruamel.yaml import YAML
 
 from ethlib import consensus
+from ethlib.networking import snappy
 from raising import raises
 
 ERROR = consensus.ForkChoiceError
@@ -159,6 +163,86 @@ def test_restricted_domain_of_another_length():
     assert info.value.code == 0
 
 
+# A case of the consensus-specs optimistic sync vectors, pinned in tests/sources.toml.
+SYNC_CASE = (
+    Path(__file__).resolve().parents[4]
+    / "tests/consensus/fork_choice/minimal/bellatrix/sync/optimistic/pyspec_tests"
+    / "from_syncing_to_invalid"
+)
+
+
+def _case_file(name: str) -> bytes:
+    """The SSZ bytes of a file of the case, without the Snappy framing."""
+    return snappy.decompress((SYNC_CASE / f"{name}.ssz_snappy").read_bytes())
+
+
+def _case_steps() -> list[consensus.ForkChoiceStep]:
+    """The ticks, blocks and payload verdicts of the case, as fork choice steps."""
+    steps: list[consensus.ForkChoiceStep] = []
+    for step in YAML(typ="safe").load((SYNC_CASE / "steps.yaml").read_text()):
+        if "tick" in step:
+            steps.append(("tick", step["tick"]))
+        elif "block" in step:
+            steps.append(("block", _case_file(step["block"])))
+        elif "payload_status" in step:
+            status = step["payload_status"]
+            latest = status["latest_valid_hash"]
+            steps.append(("payload", (status["status"], latest and bytes.fromhex(latest[2:]))))
+        elif "checks" not in step:
+            raise ValueError(f"no runner for the step {step}")
+    return steps
+
+
+def _signed(block: bytes) -> bytes:
+    """A signed block in SSZ: the offset of the block, a zero signature, then the block."""
+    return struct.pack("<I", 4 + 96) + bytes(96) + block
+
+
+def _optimistic_node(
+    steps: Sequence[consensus.ForkChoiceStep], roots: list[bytes], head: bytes
+) -> bool:
+    """Whether the node of the case is optimistic after the steps."""
+    anchor_state, anchor_block = _case_file("anchor_state"), _case_file("anchor_block")
+    return consensus.is_optimistic_node(
+        "minimal", FORK, anchor_state, anchor_block, steps, roots, head, verify=False
+    )
+
+
+# A head root of the node; only its membership in the optimistic roots matters.
+HEAD = bytes([1]) * 32
+
+
+def test_optimistic_head_makes_an_optimistic_node():
+    assert _optimistic_node([], [HEAD], HEAD) is True
+    assert _optimistic_node(_case_steps(), [HEAD], HEAD) is True
+
+
+def test_viable_branch_left():
+    # After the case, the invalid blocks left the store and a valid branch remains.
+    assert _optimistic_node(_case_steps(), [], ZERO) is False
+    assert _optimistic_node([], [HEAD], ZERO) is False
+
+
+def test_nothing_invalidated():
+    # Without an invalid verdict, no block was dropped, so the second case cannot hold.
+    steps = [step for step in _case_steps() if step[0] != "payload"]
+    assert _optimistic_node(steps, [], ZERO) is False
+
+
+def test_no_viable_branch_once_the_justified_block_is_invalid():
+    # A verdict without a latest valid hash drops the anchor, which is the justified block.
+    # Every descendant goes with it, so no branch is left.
+    # No vector empties the tree while the justified block stays.
+    # The theorem on the filtered tree covers that way.
+    anchor = _signed(_case_file("anchor_block"))
+    steps: list[consensus.ForkChoiceStep] = [
+        *_case_steps(),
+        ("payload", ("INVALID", None)),
+        ("block", anchor),
+    ]
+    assert _optimistic_node(steps, [], ZERO) is True
+
+
 _EXPORTS = [
     lambda fork, data: consensus.is_execution_block("mainnet", fork, data),
     lambda fork, data: consensus.is_optimistic_candidate_block("mainnet", fork, [data], 0, data),
@@ -174,6 +258,20 @@ _IDS = ["execution", "candidate", "ancestor", "valid", "invalidated"]
 def test_no_optimistic_sync_outside_bellatrix_to_fulu(call, fork: str):
     with raises(ERROR, f"no optimistic sync at {fork}") as info:
         call(fork, G)
+    assert info.value.code == 0
+
+
+@pytest.mark.parametrize("fork", ["phase0", "altair", "glamsterdam"])
+def test_no_optimistic_node_outside_bellatrix_to_fulu(fork: str):
+    with raises(ERROR, f"no optimistic sync at {fork}") as info:
+        consensus.is_optimistic_node("minimal", fork, b"", b"", [], [], ZERO)
+    assert info.value.code == 0
+
+
+def test_optimistic_node_head_of_another_length():
+    anchor_state, anchor_block = _case_file("anchor_state"), _case_file("anchor_block")
+    with raises(ERROR, "expected 32 bytes, got 31") as info:
+        consensus.is_optimistic_node("minimal", FORK, anchor_state, anchor_block, [], [], bytes(31))
     assert info.value.code == 0
 
 
