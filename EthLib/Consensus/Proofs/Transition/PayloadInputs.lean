@@ -266,31 +266,31 @@ theorem payloadInputs_processBuilderExitRequest {request : BuilderExitRequest}
 
 theorem payloadInputs_settleParentPayment
     (computed : settleParentPayment state gloas = .ok after) : PayloadInputs state after := by
-  unfold settleParentPayment at computed
-  split at computed
-  · have settled := liftAccessor_ok.mp computed
-    unfold settleBuilderPayment at settled
-    split at settled
-    · cases settled
-      exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
-    · cases settled
-  · simp only at computed
-    split at computed <;> cases computed <;> exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  rw [settleParentPayment_eq computed]
+  exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
-/-- A full parent changes only the latest block hash among the inputs of a payload.
+/-- The payment and the requests of a full parent keep the inputs of a payload.
 
-Its payment and its requests keep them, and it then records the hash of the latest bid. -/
-theorem payloadInputs_applyParentExecutionPayload {requests : ExecutionRequests preset fork}
-    (computed : applyParentExecutionPayload config checks state gloas requests = .ok after) :
-    PayloadInputs state { after with latestBlockHash := state.latestBlockHash } := by
-  unfold applyParentExecutionPayload at computed
-  simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-  obtain ⟨_, _, _, _, _, _, _, _, settled, settledOk, requested, requestedOk, _, _, rfl⟩ :=
-    computed
-  unfold processParentRequests at requestedOk
-  simp only [bind_ok_iff, ← Array.foldlM_toList] at requestedOk
-  obtain ⟨_, depositsOk, _, withdrawalsOk, _, consolidationsOk, _, buildersOk, exitsOk⟩ :=
-    requestedOk
+Only its last step records a latest block hash. -/
+private theorem payloadInputs_parentSteps {requests : ExecutionRequests preset fork}
+    {settled deposited withdrawn consolidated builderDeposited exited : BeaconState preset fork}
+    (settledOk : settleParentPayment state gloas = .ok settled)
+    (depositsOk : requests.deposits.data.toList.foldlM
+      (processDepositRequest · (Nat.le_trans (by decide) gloas) ·) settled = .ok deposited)
+    (withdrawalsOk : requests.withdrawals.data.toList.foldlM
+      (processWithdrawalRequest config · (Nat.le_trans (by decide) gloas) ·) deposited =
+      .ok withdrawn)
+    (consolidationsOk : requests.consolidations.data.toList.foldlM
+      (processConsolidationRequest config · (Nat.le_trans (by decide) gloas) ·) withdrawn =
+      .ok consolidated)
+    (buildersOk : (requests.builderDeposits gloas).data.toList.foldlM
+      (processBuilderDepositRequest config checks · gloas ·) consolidated = .ok builderDeposited)
+    (exitsOk : (requests.builderExits gloas).data.toList.foldlM
+      (processBuilderExitRequest config · gloas ·) builderDeposited = .ok exited)
+    {bits : Vector Bool preset.SLOTS_PER_HISTORICAL_ROOT.toNat} {hash : Hash32} :
+    PayloadInputs state { { exited with
+      executionPayloadAvailability := fun _ => ⟨bits⟩
+      latestBlockHash := fun _ => hash } with latestBlockHash := state.latestBlockHash } := by
   have kept := (payloadInputs_settleParentPayment settledOk).trans <|
     (PayloadInputs.foldlM (fun _ _ _ ok => payloadInputs_processDepositRequest ok)
       depositsOk).trans <|
@@ -305,6 +305,17 @@ theorem payloadInputs_applyParentExecutionPayload {requests : ExecutionRequests 
     kept.latestExecutionPayloadHeader, kept.latestBlockHeader, rfl,
     kept.latestExecutionPayloadBid, kept.proposerLookahead⟩
 
+/-- A full parent changes only the latest block hash among the inputs of a payload.
+
+Its payment and its requests keep them, and it then records the hash of the latest bid. -/
+theorem payloadInputs_applyParentExecutionPayload {requests : ExecutionRequests preset fork}
+    (computed : applyParentExecutionPayload config checks state gloas requests = .ok after) :
+    PayloadInputs state { after with latestBlockHash := state.latestBlockHash } := by
+  obtain ⟨_, _, _, _, _, _, _, settledOk, depositsOk, withdrawalsOk, consolidationsOk, buildersOk,
+    exitsOk, -, rfl⟩ := applyParentExecutionPayload_ok computed
+  exact payloadInputs_parentSteps settledOk depositsOk withdrawalsOk consolidationsOk buildersOk
+    exitsOk
+
 /-- A full parent keeps the latest bid.
 
 Its payment and its requests leave the bid as it was. -/
@@ -318,15 +329,12 @@ theorem applyParentExecutionPayload_latestExecutionPayloadBid
 theorem payloadInputs_processParentExecutionPayload {body : BeaconBlockBody preset fork}
     (computed : processParentExecutionPayload config checks state gloas body = .ok after) :
     PayloadInputs state { after with latestBlockHash := state.latestBlockHash } := by
-  unfold processParentExecutionPayload at computed
-  dsimp only at computed
-  split at computed
-  · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-    obtain ⟨_, _, rfl⟩ := computed
-    exact PayloadInputs.refl _
-  simp only [bind_ok_iff] at computed
-  obtain ⟨_, _, _, _, applied⟩ := computed
-  exact payloadInputs_applyParentExecutionPayload applied
+  rcases processParentExecutionPayload_ok computed with ⟨-, -, rfl⟩ |
+    ⟨-, _, _, _, _, _, _, bits, settledOk, depositsOk, withdrawalsOk, consolidationsOk, buildersOk,
+      exitsOk, -, rfl⟩
+  · exact PayloadInputs.refl _
+  · exact payloadInputs_parentSteps settledOk depositsOk withdrawalsOk consolidationsOk buildersOk
+      exitsOk
 
 /-- From Gloas, the parent step keeps the proposer of the slot of the state.
 
@@ -348,12 +356,8 @@ theorem getBeaconProposerIndex_processParentExecutionPayload
 /-- A withdrawal changes a balance, and none of the inputs of a payload. -/
 theorem payloadInputs_applyWithdrawal {withdrawal : Withdrawal}
     (computed : applyWithdrawal state withdrawal = .ok after) : PayloadInputs state after := by
-  unfold applyWithdrawal at computed
-  split at computed
-  · obtain ⟨_, _, set⟩ := bind_ok_iff.mp computed
-    obtain ⟨_, rfl⟩ := setBuilder_ok set
-    exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
-  · exact payloadInputs_decreaseBalance computed
+  rw [applyWithdrawal_eq computed]
+  exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 /-- Applying the expected withdrawals changes none of the inputs of a payload. -/
 theorem payloadInputs_applyExpectedWithdrawals {capella : .shapella ≤ fork}

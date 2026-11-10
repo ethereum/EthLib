@@ -17,7 +17,9 @@ A step that succeeds finds the parent empty, or settles and runs the requests of
 
 A full parent records its block hash, and marks its slot as having a payload.
 
-The payment of its builder empties at most one pending payment, and keeps the builders.
+The payment of its builder changes only the queues of builder payments and withdrawals.
+
+It empties at most one pending payment, and keeps the builders.
 -/
 
 @[expose] public section
@@ -75,6 +77,46 @@ theorem processParentExecutionPayload_counts {body : BeaconBlockBody preset fork
       computed
     exact ⟨withdrawals, consolidations, builderDeposits, exits⟩
 
+/-- A full parent settles the payment of its builder, then runs each list of its requests in order.
+
+The deposits run first, then the withdrawals, the consolidations, and the requests of builders.
+
+It then marks the slot of the parent as having a payload.
+
+The hash of the parent bid becomes the latest block hash.
+
+The checks of the counts of the requests come before, and are left out here. -/
+theorem applyParentExecutionPayload_ok {requests : ExecutionRequests preset fork}
+    (computed : applyParentExecutionPayload config checks state gloas requests = .ok after) :
+    ∃ settled deposited withdrawn consolidated builderDeposited exited bits,
+      settleParentPayment state gloas = .ok settled ∧
+      requests.deposits.data.toList.foldlM
+        (processDepositRequest · (Nat.le_trans (by decide) gloas) ·) settled = .ok deposited ∧
+      requests.withdrawals.data.toList.foldlM
+        (processWithdrawalRequest config · (Nat.le_trans (by decide) gloas) ·) deposited =
+        .ok withdrawn ∧
+      requests.consolidations.data.toList.foldlM
+        (processConsolidationRequest config · (Nat.le_trans (by decide) gloas) ·) withdrawn =
+        .ok consolidated ∧
+      (requests.builderDeposits gloas).data.toList.foldlM
+        (processBuilderDepositRequest config checks · gloas ·) consolidated =
+        .ok builderDeposited ∧
+      (requests.builderExits gloas).data.toList.foldlM
+        (processBuilderExitRequest config · gloas ·) builderDeposited = .ok exited ∧
+      writeCircular (exited.executionPayloadAvailability gloas).bits
+        state.latestBlockHeader.slot true = .ok bits ∧
+      after = { exited with
+        executionPayloadAvailability := fun _ => ⟨bits⟩
+        latestBlockHash := fun _ => (state.latestExecutionPayloadBid gloas).blockHash } := by
+  simp only [bind_ok_iff, applyParentExecutionPayload, processParentRequests, pure, Except.pure,
+    Except.ok.injEq, ← Array.foldlM_toList] at computed
+  obtain ⟨_, -, _, -, _, -, _, -, settled, settledOk, _, ⟨deposited, depositsOk,
+    withdrawn, withdrawalsOk, consolidated, consolidationsOk, builderDeposited, buildersOk,
+    exitsOk⟩, bits, written, rfl⟩ := computed
+  exact ⟨settled, deposited, withdrawn, consolidated, builderDeposited, _, bits, settledOk,
+    depositsOk, withdrawalsOk, consolidationsOk, buildersOk, exitsOk, liftAccessor_ok.mp written,
+    rfl⟩
+
 /-- A parent payload step that succeeds finds the parent empty or full.
 
 An empty parent takes no request and leaves the state as it is.
@@ -123,21 +165,16 @@ theorem processParentExecutionPayload_ok {body : BeaconBlockBody preset fork}
     simp only [pure, Except.pure, Except.ok.injEq] at done
     exact .inl ⟨empty, ensure_ok_iff.mp noRequest, done.symm⟩
   rename_i full
-  simp only [bind_ok_iff, applyParentExecutionPayload, processParentRequests, pure, Except.pure,
-    Except.ok.injEq, ← Array.foldlM_toList] at computed
-  obtain ⟨_, -, _, -, _, -, _, -, _, -, _, -, settled, settledOk, _, ⟨deposited, depositsOk,
-    withdrawn, withdrawalsOk, consolidated, consolidationsOk, builderDeposited, buildersOk,
-    exitsOk⟩, bits, written, rfl⟩ := computed
-  exact .inr ⟨Decidable.of_not_not full, settled, deposited, withdrawn, consolidated,
-    builderDeposited, _, bits, settledOk, depositsOk, withdrawalsOk, consolidationsOk, buildersOk,
-    exitsOk, liftAccessor_ok.mp written, rfl⟩
+  simp only [bind_ok_iff, ensure_ok_iff] at computed
+  obtain ⟨_, -, -, -, applied⟩ := computed
+  exact .inr ⟨Decidable.of_not_not full, applyParentExecutionPayload_ok applied⟩
 
 /-- A full parent makes the hash of its bid the latest block hash. -/
 theorem applyParentExecutionPayload_latestBlockHash {requests : ExecutionRequests preset fork}
     (computed : applyParentExecutionPayload config checks state gloas requests = .ok after) :
     after.latestBlockHash gloas = (state.latestExecutionPayloadBid gloas).blockHash := by
-  simp only [applyParentExecutionPayload, bind, Except.bind, pure, Except.pure] at computed
-  repeat' (split at computed <;> try cases computed)
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ :=
+    applyParentExecutionPayload_ok computed
   rfl
 
 /-- A full parent marks its slot as having a payload.
@@ -147,10 +184,26 @@ theorem applyParentExecutionPayload_available {requests : ExecutionRequests pres
     (computed : applyParentExecutionPayload config checks state gloas requests = .ok after) :
     (after.executionPayloadAvailability gloas).bits[
       (state.latestBlockHeader.slot % preset.SLOTS_PER_HISTORICAL_ROOT).toNat]? = some true := by
-  simp only [applyParentExecutionPayload, bind, Except.bind, pure, Except.pure] at computed
-  repeat' (split at computed <;> try cases computed)
-  rename_i written
-  exact getElem?_writeCircular (liftAccessor_ok.mp written)
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, written, rfl⟩ :=
+    applyParentExecutionPayload_ok computed
+  exact getElem?_writeCircular written
+
+/-- The payment of the parent's builder changes only the queues of builder payments and withdrawals.
+-/
+theorem settleParentPayment_eq (computed : settleParentPayment state gloas = .ok after) :
+    after = { state with
+      builderPendingWithdrawals := after.builderPendingWithdrawals
+      builderPendingPayments := after.builderPendingPayments } := by
+  unfold settleParentPayment at computed
+  split at computed
+  · have set := liftAccessor_ok.mp computed
+    unfold settleBuilderPayment at set
+    split at set
+    · cases set
+      rfl
+    · cases set
+  · dsimp only at computed
+    split at computed <;> cases computed <;> rfl
 
 /-- The payment of the parent's builder changes no pending payment but the one it settles.
 
@@ -174,15 +227,6 @@ theorem settleParentPayment_payments
 /-- The payment of the parent's builder keeps the registry of builders. -/
 theorem settleParentPayment_builders (computed : settleParentPayment state gloas = .ok after) :
     after.builders = state.builders := by
-  unfold settleParentPayment at computed
-  split at computed
-  · have set := liftAccessor_ok.mp computed
-    unfold settleBuilderPayment at set
-    split at set
-    · cases set
-      rfl
-    · cases set
-  · dsimp only at computed
-    split at computed <;> cases computed <;> rfl
+  rw [settleParentPayment_eq computed]
 
 end EthLib.Consensus
