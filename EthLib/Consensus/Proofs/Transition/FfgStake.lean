@@ -43,8 +43,7 @@ theorem dvd_balanceAt_of_aligned {state : BeaconState preset fork} {divisor : ‚Ñ
   cases found : state.validators.data[index]? with
   | none => simp [balanceAt, found]
   | some validator =>
-    have increments := (aligned validator
-      (Array.mem_toList_iff.mpr (Array.mem_of_getElem? found))).1
+    have increments := aligned validator (Array.mem_of_getElem? found)
     rw [‚Üê UInt64.toNat_inj, UInt64.toNat_mod] at increments
     simp only [balanceAt, found, Option.map_some, Option.getD_some]
     exact Nat.dvd_trans divides (Nat.dvd_of_mod_eq_zero increments)
