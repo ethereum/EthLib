@@ -27,9 +27,7 @@ The length is little-endian, and the reserved bytes are zero.
 
 The documents of the [Version][version] and [SlotIndex][slotindex] types give the header 8 bytes.
 
-The documents do not lay out those 8 bytes, and the base text they point to has changed it.
-
-So EthLib states the layout as its own definition.
+The documents do not lay out those 8 bytes, so EthLib states the layout as its own definition.
 
 A type is written as its two bytes in order, so the Version type `0x6532` is `e2` in ASCII.
 

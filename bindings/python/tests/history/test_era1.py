@@ -4,7 +4,7 @@
 # https://github.com/eth-clients/e2store-format-specs/blob/31cf6b577123bf1703eb3713f0b242f65fea806a/formats/era1.md
 # Where that document leaves the layout open, the built files take EthLib's reading.
 # The pinned public file checks that reading.
-# The test writes the records, the block index and the accumulator apart from EthLib.
+# The test writes the records, the block index and the accumulator without EthLib.
 # It takes only Keccak-256 and the Snappy framing from EthLib, which have suites of their own.
 
 import dataclasses
@@ -36,7 +36,7 @@ MAINNET_GENESIS_HASH = "d4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0d
 
 
 def _rlp(item: bytes | list) -> bytes:
-    """The RLP of a byte string or a list, from section B of the Yellow Paper."""
+    """The RLP of a byte string or a list, from Appendix B of the Yellow Paper."""
     if isinstance(item, bytes):
         if len(item) == 1 and item[0] < 0x80:
             return item
@@ -103,6 +103,7 @@ def _accumulator(blocks: list[tuple[bytes, int]]) -> bytes:
 def _chain(start: int, count: int) -> list[Era1Block]:
     """Blocks from the number `start`, each with difficulty 1000 more than its number."""
     blocks: list[Era1Block] = []
+    # After genesis, the first total difficulty is free, so a later era starts from any total.
     parent, td = bytes(32), 0 if start == 0 else 10**9
     for number in range(start, start + count):
         header = _header(parent, 1000 + number, number)

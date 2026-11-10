@@ -1,4 +1,4 @@
-"""Download the release archives of `tests/sources.toml` into a cache, and unpack parts of them."""
+"""Download the pinned archives and files of `tests/sources.toml`, and unpack parts of archives."""
 
 import argparse
 import contextlib
@@ -34,7 +34,7 @@ class ArchiveError(Exception):
 
 @dataclass(frozen=True)
 class Archive:
-    """One pinned release archive."""
+    """One pinned archive or file."""
 
     name: str
     url: str
@@ -148,6 +148,8 @@ _ZIP_LINK = 0o120000
 
 def _entries(archive: Archive, source: Path):
     """Each member of the archive file: its name, its kind, and a function that opens it."""
+    if not (_is_zip(archive) or _is_tar(archive)):
+        raise ArchiveError(f"{archive.name}: a single file, which has no members to unpack")
     if _is_zip(archive):
         with zipfile.ZipFile(source) as zipped:
             for info in zipped.infolist():
@@ -188,8 +190,6 @@ def unpack(archive: Archive, cache: Path, paths: list[str]) -> Path:
     prefixes = [p for p in members if p is not None and p.parts]
     if not prefixes or len(prefixes) != len(members):
         raise ArchiveError(f"{archive.name}: give paths inside the archive, without '..'")
-    if not (_is_zip(archive) or _is_tar(archive)):
-        raise ArchiveError(f"{archive.name}: a single file, which has no members to unpack")
     target = cache / archive.sha256
     with locked(cache, archive):
         record = target / UNPACKED

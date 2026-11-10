@@ -10,6 +10,7 @@
 # The README of the directory names the pinned commit of each repository.
 #
 # A release archive that is too large to vendor is pinned in the table `archives`.
+# An entry can also pin a single file, which a test reads as it is, without unpacking it.
 # Its entry gives the URL, the size in bytes and the sha256 of the file.
 # An archive can come from an older release than the pin of its repository.
 # An archive of another release line, such as a devnet release, names its release.
@@ -159,7 +160,7 @@ commit = "9a1fbe8edadebea223f47102f1913b8026c23a1c"
 [repositories."libp2p/specs"]
 commit = "c750236de43cd8b246a824b377dfdb26bae686db"
 
-# The release archives, each from a repository above or from the source it names.
+# The release archives and single files, each from a repository above or from the source it names.
 [archives."consensus-specs/v1.7.0-alpha.12/general"]
 repository = "ethereum/consensus-specs"
 url = "https://github.com/ethereum/consensus-specs/releases/download/v1.7.0-alpha.12/general.tar.gz"
