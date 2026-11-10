@@ -1,6 +1,7 @@
 module
 
 public import Lean.Data.Json
+public import EthLib.Base.Hex
 public import EthLib.Engine.Payload
 
 /-!
@@ -224,6 +225,10 @@ def payloadV4 (j : Json) : Decode (AnyPayload × ByteArray × UInt64) := do
   let blockAccessList ← bytes "blockAccessList" (← field "payload" fs "blockAccessList")
   let slotNumber ← uint64 "slotNumber" (← field "payload" fs "slotNumber")
   return (any, blockAccessList, slotNumber)
+
+/-- Bytes as Engine API data: `0x`, then two hex digits per byte. -/
+def dataJson (bytes : List UInt8) : Json :=
+  .str (hexString bytes)
 
 /-- A field from fork `f`, which must be present exactly when the fork has it. -/
 def since {α : Type} {f fork : Fork} (what : String) : Option α → Decode (Since f fork α)

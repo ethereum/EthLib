@@ -51,10 +51,7 @@ open EthLib.Exports (Result PyValue pyExport)
 open EthLib.Base
 open EthLib.Consensus
 open EthLib.Consensus.Exports
-
-/-- Bytes as Engine API data: `0x`, then two hex digits per byte. -/
-def dataJson (bytes : List UInt8) : Json :=
-  .str (hexString bytes)
+open EthLib.Engine.Json (dataJson)
 
 /-- A number as an Engine API quantity: `0x`, then its hex digits without leading zeros. -/
 def quantityJson (n : Nat) : Json :=

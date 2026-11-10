@@ -1375,6 +1375,10 @@ def engine_forkchoice_updated(tree: list, finalized: str | None, request: dict) 
     """The response to an `engine_forkchoiceUpdated` request, against a tree of payloads."""
     ...
 
+def engine_get_blobs(pool: list[tuple[bytes, bytes | None, bytes | None, list[tuple[bytes, bytes] | None] | None]], serving: bool, max_request: int, fork: str, request: dict) -> list | None:
+    """The answer to an `engine_getBlobs` request, from a blob pool."""
+    ...
+
 def engine_prepare_execution_payload(name: str, fork: str, state: bytes, config: dict | None, safe_block_hash: bytes, finalized_block_hash: bytes, suggested_fee_recipient: bytes, pow_chain: list[bytes]) -> dict | None:
     """From Bellatrix to Fulu: the forkchoice update of a proposer, as the value of its JSON."""
     ...

@@ -1031,6 +1031,9 @@
 #define DOC_engine_forkchoice_updated \
   "The response to an `engine_forkchoiceUpdated` request, against a tree of payloads."
 
+#define DOC_engine_get_blobs \
+  "The answer to an `engine_getBlobs` request, from a blob pool."
+
 #define DOC_engine_prepare_execution_payload \
   "From Bellatrix to Fulu: the forkchoice update of a proposer, as the value of its JSON."
 

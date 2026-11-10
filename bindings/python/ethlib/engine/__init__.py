@@ -1,7 +1,7 @@
 """The Engine API between the consensus and the execution layers."""
 
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, TypeAlias
 
 # Every domain links into one extension module.
 # That module lives in the `cryptography` package.
@@ -42,6 +42,33 @@ def forkchoice_updated(tree: list, method: str, params: list, finalized: str | N
     # The execution layer may know a finalized block, the latest one an earlier update named.
     request = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
     return _native.engine_forkchoice_updated(tree, finalized, request)
+
+
+# One entry of a blob pool: the versioned hash, the blob, the blob proof, and the 128 cells.
+# Each item of the cells is a cell and its proof, or None where the pool lacks it.
+# None in place of the cells means that the pool holds no cell of the blob.
+# A pool holds each versioned hash once, and takes requests of at least 128 hashes.
+PoolEntry: TypeAlias = tuple[
+    bytes, bytes | None, bytes | None, Sequence[tuple[bytes, bytes] | None] | None
+]
+
+
+def get_blobs(
+    pool: Sequence[PoolEntry],
+    fork: str,
+    method: str,
+    params: list,
+    *,
+    serving: bool = True,
+    max_request: int = 128,
+) -> list[dict[str, Any] | None] | None:
+    """The answer to an `engine_getBlobs` call, from a blob pool at the active fork of the node."""
+    request = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
+    entries = [
+        (versioned_hash, blob, proof, None if cells is None else list(cells))
+        for versioned_hash, blob, proof, cells in pool
+    ]
+    return _native.engine_get_blobs(entries, serving, max_request, fork, request)
 
 
 def prepare_execution_payload(
@@ -111,6 +138,8 @@ __all__ = [
     "new_payload",
     "new_payload_on_chain",
     "forkchoice_updated",
+    "get_blobs",
+    "PoolEntry",
     "prepare_execution_payload",
     "prepare_execution_payload_gloas",
     "EngineError",
