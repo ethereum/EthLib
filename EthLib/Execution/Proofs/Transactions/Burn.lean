@@ -12,19 +12,15 @@ The burns of the message come from a certificate of its run, whose log drops eac
 
 The deletions remove the balance of each account to delete, read after the gas is settled.
 
-Before Cancun, both can be above 0.
-
-From Cancun until Glamsterdam, both can be above 0 only for an account created in the transaction.
-
 From Glamsterdam, both are 0.
 
 Each successful run of a transaction has a certificate.
 
 The deleted balances are a function of the run.
 
-The supplies, the fees and the deleted balances fix the total of burns, whatever the certificate.
+The certificate follows the interpreter, so the total of its burns is a function of the run too.
 
-The log splits it into burns, each from a step of SELFDESTRUCT with its burn.
+The log splits that total into burns, each from a step of SELFDESTRUCT with its burn.
 -/
 
 @[expose] public section

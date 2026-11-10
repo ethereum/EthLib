@@ -1545,14 +1545,15 @@ Before Cancun, a SELFDESTRUCT whose beneficiary is its own account burns that ba
 The same holds from Cancun until Glamsterdam for a transaction that creates an account.
 `processTransaction_supply_eq` in `Execution/Proofs/Transactions/Burn.lean` gives the exact change at every fork that the transaction runs, these cases included.
 The supply after the transaction, plus the burned fees, the burns of SELFDESTRUCT and the deleted balances, is the supply before.
-The burns come from a certificate of the run of the message, `RunBurns` in `Execution/Proofs/Evm/Call/BurnRun.lean`, built from the step equations of the interpreter.
+The burns come from a certificate of the run of the message, `RunBurns` in `Execution/Proofs/Evm/Call/BurnRun.lean`.
+Each rule of the certificate is one equation of the interpreter: a step from a running frame, a halt, a stop, a resume, the choice of a precompile, the entry of a call, its rollback, or the deposit of code.
+So a certificate follows the run step by step, and cannot skip a step or invent one.
+`RunBurns.ended_eq` proves that two certificates from the same start end in the same frame, and `RunBurns.total_eq` that they have the same total.
 Its log records each burn of SELFDESTRUCT, and a frame that rolls back, or a creation whose deposit of code fails, drops what it burned.
+`RunBurns.counted` proves that each burn the log counts is the burn of a step that runs SELFDESTRUCT from a running frame, above 0, in the account the burn is from.
+That lemma names the frame but not its place in the run; the rule of the certificate that adds the burn gives that place.
 The deleted balances are read after the gas is settled and before any account is deleted, once for each account.
 `processTransaction_transactionBurns` proves that every transaction that runs has a certificate, and `TransactionBurns.unique` proves that all its certificates give the same two amounts.
-The deleted balances are a function of the run.
-The total of the burns is fixed by the equation itself, so its uniqueness says no more than the equation does.
-What the certificate adds is the split of that total: `RunBurns.counted` proves that each burn it counts is the burn of a step that runs SELFDESTRUCT, above 0, in the account the burn is from.
-A certificate may skip steps that keep the state up to the records of reads, so it does not pin the run step by step.
 From Glamsterdam, `TransactionBurns.eq_zero_of_glamsterdam` proves that both amounts are 0.
 The theorem makes the same two assumptions as `processTransaction_supply_le`.
 

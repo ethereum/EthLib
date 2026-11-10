@@ -5,13 +5,17 @@ public import EthLib.Execution.Proofs.Evm.Call.Burn
 /-!
 # Proofs: the log of burns of a run of a frame, a call or a creation
 
-A certificate of a run gives its log of burns, from the steps of the interpreter.
+A certificate of a run gives its log of burns, and follows the interpreter.
 
-Each step that gives the next frame adds the log of the step.
+Each rule of a frame takes one step of the interpreter from a running frame, or stops the run.
 
-Each step that sends a message adds the log of that message, once the caller resumes.
+A step that gives the next frame adds the log of the step.
 
-A step that keeps the state up to the records of its reads adds nothing.
+A step that sends a message adds the log of the run of that message, once the caller resumes.
+
+A step that halts with an error adds nothing.
+
+A message runs its code, or a precompile, from the state that it enters.
 
 A call that ends with an error rolls back, and so does a creation that fails to deposit its code.
 
@@ -19,9 +23,9 @@ Their logs then count for nothing.
 
 The supply at the end plus the total of the log is the supply at the start.
 
-So the supplies at the two ends fix the total, whatever the certificate.
+A run from a given start has one end, so every certificate from that start has the same total.
 
-The log splits that total into burns, and each burn it counts comes from a step of SELFDESTRUCT.
+Each burn that a log counts comes from a step of SELFDESTRUCT, with the burn of that step.
 
 From Glamsterdam, no step burns, so the total is 0.
 
@@ -37,15 +41,19 @@ open EthLib.Execution.State (TransactionState)
 
 variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
-/-- Where a certified run starts: a frame, or a call or a creation from its start. -/
+/-- Where a certified run starts.
+
+It starts from a frame, from the frame of a message that may run a precompile, or from a call or a
+creation. -/
 inductive BurnStart (fork : Fork) (Meter : Type) where
   | frame (evm : Evm fork Meter)
+  | body (evm : Evm fork Meter)
   | call (message : Message fork) (state : TransactionState) (substate : Substate) (meter : Meter)
   | create (message : Message fork) (state : TransactionState) (substate : Substate) (meter : Meter)
 
 /-- The state at the start of the run. -/
 def BurnStart.state : BurnStart fork Meter → TransactionState
-  | .frame evm => evm.state
+  | .frame evm | .body evm => evm.state
   | .call _ state _ _ | .create _ state _ _ => state
 
 /-- The start of a message that a caller sends: a call when it has a target, else a creation.
@@ -66,9 +74,19 @@ theorem BurnStart.state_child (caller : Evm fork Meter) (message : Message fork)
 
 /-- A certificate that a run from `start` ends in a frame, with a log of its burns.
 
-A run of a frame is made of steps that keep the state up to reads, and steps of the interpreter.
+A frame that is not running ends the run.
 
-A step that sends a message adds nothing, and the frame that resumes adds the log of the message.
+A running frame takes a step, and halts when the step fails with an error that does not abort.
+
+A step that gives the next frame adds its log, and the run goes on from that frame.
+
+A step that sends a message adds the log of the run of the message, and the caller resumes.
+
+A resume that fails with an error that does not abort halts the frame, and rolls back that log.
+
+A message that runs no precompile runs its frame.
+
+A precompile runs unless the message disables precompiles, and the frame stops when none runs.
 
 A call starts from the state it enters, and rolls back when it ends with an error.
 
@@ -77,28 +95,46 @@ A creation prepares its account, runs as a call, and deposits its code.
 A creation whose deposit rolls back the state counts nothing of its log. -/
 inductive RunBurns (fork : Fork) (Meter : Type) [GasMeter Meter] :
     BurnStart fork Meter → Evm fork Meter → BurnLog → Prop
-  | static {evm after : Evm fork Meter} (h : StaticStep evm after) :
-      RunBurns fork Meter (.frame evm) after .empty
-  | append {evm middle after : Evm fork Meter} {first second : BurnLog}
-      (head : RunBurns fork Meter (.frame evm) middle first)
-      (tail : RunBurns fork Meter (.frame middle) after second) :
-      RunBurns fork Meter (.frame evm) after (.append first second)
-  | next {evm after : Evm fork Meter} (h : step fork evm = .ok (.next after)) :
-      RunBurns fork Meter (.frame evm) after (stepBurnLog evm after)
-  | send {evm caller : Evm fork Meter} {message : Message fork}
-      {resume : Evm fork Meter → Except EvmError (Evm fork Meter)}
-      (h : step fork evm = .ok (.child caller message resume)) :
-      RunBurns fork Meter (.frame evm) caller .empty
-  | resume {evm caller child after : Evm fork Meter} {message : Message fork}
-      {resume : Evm fork Meter → Except EvmError (Evm fork Meter)} {log : BurnLog}
-      (h : step fork evm = .ok (.child caller message resume))
-      (run : RunBurns fork Meter (BurnStart.child caller message) child log)
-      (resumed : resume child = .ok after) :
-      RunBurns fork Meter (.frame evm) after log
+  | stopped (evm : Evm fork Meter) (h : evm.running = false) :
+      RunBurns fork Meter (.frame evm) evm .empty
+  | halt {evm : Evm fork Meter} {error : EvmError} (running : evm.running = true)
+      (h : step fork evm = .error error) (notAborts : error.aborts = false) :
+      RunBurns fork Meter (.frame evm) (exceptionalHalt evm error) .empty
+  | next {evm after ended : Evm fork Meter} {rest : BurnLog} (running : evm.running = true)
+      (h : step fork evm = .ok (.next after))
+      (tail : RunBurns fork Meter (.frame after) ended rest) :
+      RunBurns fork Meter (.frame evm) ended (.append (stepBurnLog evm after) rest)
+  | child {evm caller child after ended : Evm fork Meter} {message : Message fork}
+      {resume : Evm fork Meter → Except EvmError (Evm fork Meter)} {middle rest : BurnLog}
+      (running : evm.running = true) (h : step fork evm = .ok (.child caller message resume))
+      (run : RunBurns fork Meter (BurnStart.child caller message) child middle)
+      (resumed : resume child = .ok after)
+      (tail : RunBurns fork Meter (.frame after) ended rest) :
+      RunBurns fork Meter (.frame evm) ended (.append middle rest)
+  | failedResume {evm caller child : Evm fork Meter} {message : Message fork}
+      {resume : Evm fork Meter → Except EvmError (Evm fork Meter)} {middle : BurnLog}
+      {error : EvmError}
+      (running : evm.running = true) (h : step fork evm = .ok (.child caller message resume))
+      (run : RunBurns fork Meter (BurnStart.child caller message) child middle)
+      (resumed : resume child = .error error) (notAborts : error.aborts = false) :
+      RunBurns fork Meter (.frame evm) (exceptionalHalt evm error) (.rollback middle)
+  | bodyFrame {evm ended : Evm fork Meter} {log : BurnLog}
+      (selected : precompileAddress fork evm.message = none)
+      (run : RunBurns fork Meter (.frame evm) ended log) :
+      RunBurns fork Meter (.body evm) ended log
+  | skipPrecompile (evm : Evm fork Meter) (address : Nat)
+      (selected : precompileAddress fork evm.message = some address)
+      (skipped : evm.message.disablePrecompiles = true ∨ runPrecompile fork address evm = none) :
+      RunBurns fork Meter (.body evm) { evm with running := false } .empty
+  | precompile {address : Nat} {evm after : Evm fork Meter}
+      (selected : precompileAddress fork evm.message = some address)
+      (enabled : evm.message.disablePrecompiles = false)
+      (h : runPrecompile fork address evm = some after) :
+      RunBurns fork Meter (.body evm) after .empty
   | call {message : Message fork} {state entry : TransactionState}
       {substate entrySubstate : Substate} {meter : Meter} {ended : Evm fork Meter} {log : BurnLog}
       (entered : Entered fork message state substate entry entrySubstate)
-      (run : RunBurns fork Meter (.frame (startFrame message entry entrySubstate meter)) ended log)
+      (run : RunBurns fork Meter (.body (startFrame message entry entrySubstate meter)) ended log)
       (parent : ended.state.parent = state.parent) :
       RunBurns fork Meter (.call message state substate meter) (rollbackOnError state ended)
         (if ended.error.isSome then .rollback log else log)
@@ -124,22 +160,25 @@ theorem RunBurns.supply {start : BurnStart fork Meter} {ended : Evm fork Meter} 
     (h : RunBurns fork Meter start ended log) :
     ended.state.supply + log.total = start.state.supply := by
   induction h with
-  | static h =>
-    simpa only [BurnLog.total, BurnStart.state, Nat.add_zero] using
-      TransactionState.supply_eq_of_sameOutside h.state
-  | append _ _ ih1 ih2 =>
+  | stopped => rfl
+  | halt => rfl
+  | next _ step _ ih =>
+    have := supply_of_step_eq_next step
     simp only [BurnLog.total, BurnStart.state] at *
     omega
-  | next h => exact supply_of_step_eq_next h
-  | send h => simpa only [BurnLog.total, BurnStart.state, Nat.add_zero] using
-      supply_of_step_eq_child h
-  | resume h _ resumed ih =>
-    have hw := supply_of_step_eq_child h
-    have hc := sameContext_of_step_eq_child h resumed
-    rw [BurnStart.state_child] at ih
-    rw [hc.state, state_incorporateChild] at *
-    simp only [BurnStart.state]
+  | child _ step _ resumed _ ihChild ihTail =>
+    have hw := supply_of_step_eq_child step
+    have hc := sameContext_of_step_eq_child step resumed
+    simp only [BurnStart.state] at ihTail
+    rw [hc.state, state_incorporateChild] at ihTail
+    rw [BurnStart.state_child] at ihChild
+    simp only [BurnLog.total, BurnStart.state] at *
     omega
+  | failedResume => rfl
+  | bodyFrame _ _ ih => exact ih
+  | skipPrecompile => rfl
+  | precompile _ _ h =>
+    exact TransactionState.supply_eq_of_sameOutside (staticStep_runPrecompile h).state
   | @call message state entry substate entrySubstate meter ended log entered _ hp ih =>
     have entrySupply := supply_entered entered
     unfold rollbackOnError
@@ -160,26 +199,99 @@ theorem RunBurns.supply {start : BurnStart fork Meter} {ended : Evm fork Meter} 
     · rw [TransactionState.supply_setCode coded]
       exact ih.trans startSupply
 
+/-- Two certified runs from the same start end in the same frame. -/
+theorem RunBurns.ended_eq {start : BurnStart fork Meter} {ended ended' : Evm fork Meter}
+    {log log' : BurnLog} (h : RunBurns fork Meter start ended log)
+    (h' : RunBurns fork Meter start ended' log') : ended' = ended := by
+  induction h generalizing ended' log' with
+  | stopped | halt | skipPrecompile | precompile => cases h' <;> simp_all
+  | next _ _ _ ih | bodyFrame _ _ ih => cases h' <;> simp_all <;> exact ih ‹_›
+  | child _ hs _ resumed _ ihRun ihTail =>
+    cases h' with
+    | child _ hs' run' resumed' tail' =>
+      rw [hs] at hs'
+      cases hs'
+      cases ihRun run'
+      rw [resumed] at resumed'
+      cases resumed'
+      exact ihTail tail'
+    | failedResume _ hs' run' resumed' =>
+      rw [hs] at hs'
+      cases hs'
+      cases ihRun run'
+      rw [resumed] at resumed'
+      cases resumed'
+    | _ => simp_all
+  | failedResume _ hs _ resumed _ ihRun =>
+    cases h' with
+    | child _ hs' run' resumed' =>
+      rw [hs] at hs'
+      cases hs'
+      cases ihRun run'
+      rw [resumed] at resumed'
+      cases resumed'
+    | failedResume _ hs' run' resumed' =>
+      rw [hs] at hs'
+      cases hs'
+      cases ihRun run'
+      rw [resumed] at resumed'
+      cases resumed'
+      rfl
+    | _ => simp_all
+  | call entered _ _ ih =>
+    cases h' with
+    | call entered' run' =>
+      obtain ⟨rfl, rfl⟩ := entered.unique entered'
+      rw [ih run']
+  | createRollback preparation _ deposit _ _ ih | createKeep preparation _ deposit _ ih =>
+    cases h' with
+    | createRollback preparation' run' deposit' | createKeep preparation' run' deposit' =>
+      rw [preparation] at preparation'
+      cases preparation'
+      cases ih run'
+      rw [deposit] at deposit'
+      cases deposit'
+      rfl
+
+/-- Two certified runs from the same start have the same total.
+
+So the total is a function of the run, whatever the certificate. -/
+theorem RunBurns.total_eq {start : BurnStart fork Meter} {ended ended' : Evm fork Meter}
+    {log log' : BurnLog} (h : RunBurns fork Meter start ended log)
+    (h' : RunBurns fork Meter start ended' log') : log'.total = log.total := by
+  have same := h.ended_eq h'
+  subst same
+  have := h.supply
+  have := h'.supply
+  omega
+
 /-- Each burn that a certified log counts is the burn of a step of SELFDESTRUCT.
 
-That step runs SELFDESTRUCT in the account the burn is from, and the burn is above 0. -/
+That step runs SELFDESTRUCT from a running frame, in the account the burn is from.
+
+The burn is above 0. -/
 theorem RunBurns.counted {start : BurnStart fork Meter} {ended : Evm fork Meter} {log : BurnLog}
     {originator beneficiary : Address} {amount : Nat} (h : RunBurns fork Meter start ended log)
     (counted : log.Counted originator beneficiary amount) :
-    ∃ evm after : Evm fork Meter, step fork evm = .ok (.next after) ∧ RunsSelfdestruct evm ∧
-      originator = evm.message.currentTarget ∧
+    ∃ evm after : Evm fork Meter, evm.running = true ∧ step fork evm = .ok (.next after) ∧
+      RunsSelfdestruct evm ∧ originator = evm.message.currentTarget ∧
       amount = selfdestructBurn fork evm.state originator beneficiary ∧ amount ≠ 0 := by
   induction h with
-  | static => exact counted.elim
-  | append _ _ ih1 ih2 =>
+  | stopped => exact counted.elim
+  | halt => exact counted.elim
+  | next running step _ ih =>
     rcases counted with c | c
-    · exact ih1 c
-    · exact ih2 c
-  | next h =>
-    obtain ⟨runs, o, a, nonzero⟩ := counted_stepBurnLog (Meter := Meter) counted
-    exact ⟨_, _, h, runs, o, a, nonzero⟩
-  | send => exact counted.elim
-  | resume _ _ _ ih => exact ih counted
+    · obtain ⟨runs, o, a, nonzero⟩ := counted_stepBurnLog (Meter := Meter) c
+      exact ⟨_, _, running, step, runs, o, a, nonzero⟩
+    · exact ih c
+  | child _ _ _ _ _ ihChild ihTail =>
+    rcases counted with c | c
+    · exact ihChild c
+    · exact ihTail c
+  | failedResume => exact counted.elim
+  | bodyFrame _ _ ih => exact ih counted
+  | skipPrecompile => exact counted.elim
+  | precompile => exact counted.elim
   | call _ _ _ ih =>
     split at counted
     · exact counted.elim
@@ -188,13 +300,49 @@ theorem RunBurns.counted {start : BurnStart fork Meter} {ended : Evm fork Meter}
   | createKeep _ _ _ _ ih => exact ih counted
 
 /-- From Glamsterdam, a certified log counts no burn, so its total is 0. -/
-theorem RunBurns.total_eq_zero_of_glamsterdam {start : BurnStart fork Meter} {ended : Evm fork Meter}
-    {log : BurnLog} (hfork : .glamsterdam ≤ fork) (h : RunBurns fork Meter start ended log) :
-    log.total = 0 := by
+theorem RunBurns.total_eq_zero_of_glamsterdam {start : BurnStart fork Meter}
+    {ended : Evm fork Meter} {log : BurnLog} (hfork : .glamsterdam ≤ fork)
+    (h : RunBurns fork Meter start ended log) : log.total = 0 := by
   refine BurnLog.total_eq_zero_of_not_counted fun originator beneficiary amount counted => ?_
-  obtain ⟨_, _, _, _, _, hamount, nonzero⟩ := h.counted counted
+  obtain ⟨_, _, _, _, _, _, hamount, nonzero⟩ := h.counted counted
   have early := (of_selfdestructBurn_ne_zero fun zero => nonzero (hamount.trans zero)).2
   exact Nat.lt_irrefl _ (Nat.lt_of_lt_of_le early hfork)
+
+/-- Every successful run of a frame has a certificate.
+
+The runner of its messages must give a certificate of each message that it runs. -/
+theorem runBurns_runFrame [LawfulGasMeter Meter] {bound : Nat}
+    {runChild : MessageRunner fork Meter bound}
+    (runs : RunnerEnsures (fun caller message child =>
+      ∃ log, RunBurns fork Meter (BurnStart.child caller message) child log) runChild)
+    {evm ended : Evm fork Meter} {within : GasMeter.gasHeld evm.gas ≤ bound}
+    (h : runFrame (step fork) (step_decreases fork) bound runChild evm within = .ok ended) :
+    ∃ log, RunBurns fork Meter (.frame evm) ended log := by
+  fun_induction runFrame (step fork) (step_decreases fork) bound runChild evm within
+  case case1 => cases h
+  case case2 =>
+    cases h
+    exact ⟨.empty, .halt (by assumption) (by assumption) (Bool.eq_false_iff.mpr (by assumption))⟩
+  case case3 =>
+    rename_i result _ ih
+    obtain ⟨rest, tail⟩ := ih h
+    exact ⟨_, .next (by assumption) result tail⟩
+  case case4 => cases h
+  case case5 => cases h
+  case case6 =>
+    rename_i hstep _ _ _ hchild _ resumed _
+    cases h
+    obtain ⟨middle, run⟩ := runs _ _ _ _ hchild
+    exact ⟨.rollback middle,
+      .failedResume (by assumption) hstep run resumed (Bool.eq_false_iff.mpr (by assumption))⟩
+  case case7 =>
+    rename_i hstep _ _ _ hchild _ resumed _ ih
+    obtain ⟨middle, run⟩ := runs _ _ _ _ hchild
+    obtain ⟨rest, tail⟩ := ih h
+    exact ⟨.append middle rest, .child (by assumption) hstep run resumed tail⟩
+  case case8 =>
+    cases h
+    exact ⟨.empty, .stopped _ (Bool.eq_false_iff.mpr (by assumption))⟩
 
 private theorem childRelByKind_burns {caller : Evm fork Meter} {message : Message fork}
     {child : Evm fork Meter}
@@ -223,35 +371,28 @@ theorem processMessage_runBurns [LawfulGasMeter Meter] (n : Nat) :
       (held : GasMeter.gasHeld meter ≤ message.gas), message.gas = n →
       ∀ ended, processCreateMessage fork message state substate meter held = .ok ended →
         ∃ log, RunBurns fork Meter (.create message state substate meter) ended.val log) := by
-  have key := processMessage_rel_byKind (fork := fork) (Meter := Meter)
-    (R := fun a b => (∃ log, RunBurns fork Meter (.frame a) b log) ∧
+  have key := processMessage_frame_byKind (fork := fork) (Meter := Meter)
+    (F := fun a b => (∃ log, RunBurns fork Meter (.body a) b log) ∧
       b.state.parent = a.state.parent)
-    (Inv := fun _ => True)
     (Mcall := fun message state substate meter ended =>
       (∃ log, RunBurns fork Meter (.call message state substate meter) ended log) ∧
         ended.state.parent = state.parent)
     (Mcreate := fun message state substate meter ended =>
       (∃ log, RunBurns fork Meter (.create message state substate meter) ended log) ∧
         ended.state.parent = state.parent)
-    (fun _ => ⟨⟨_, .static (.refl _)⟩, rfl⟩)
-    (fun {_ _ _} ⟨⟨_, l1⟩, p1⟩ ⟨⟨_, l2⟩, p2⟩ => ⟨⟨_, .append l1 l2⟩, p2.trans p1⟩)
-    (fun _ r => trivial)
-    (fun _ e _ => ⟨⟨_, .static (staticStep_exceptionalHalt _ _)⟩,
-      (staticStep_exceptionalHalt _ _).parent⟩)
     (by
-      intro evm result _ h
-      have p := stepRules_parent.step h
-      cases result with
-      | next after => exact ⟨⟨_, .next h⟩, p⟩
-      | child caller message resume =>
-        refine ⟨⟨⟨_, .send h⟩, p.1⟩, fun child after hres c => ?_⟩
-        obtain ⟨⟨log, run⟩, cparent⟩ := childRelByKind_burns c
-        exact ⟨⟨log, .resume h run hres⟩, p.2 child after hres cparent⟩)
-    (fun evm _ => ⟨⟨_, .static (.of_sameContext ⟨rfl, rfl, rfl, rfl⟩)⟩, rfl⟩)
-    (fun h _ => ⟨⟨_, .static (staticStep_runPrecompile h)⟩, (staticStep_runPrecompile h).parent⟩)
+      intro _ _ _ _ _ runs selected h
+      have both := fun caller message lt ended hran =>
+        childRelByKind_burns (runs caller message lt ended hran)
+      obtain ⟨log, run⟩ := runBurns_runFrame (fun c m lt e hr => (both c m lt e hr).1) h
+      exact ⟨⟨log, .bodyFrame selected run⟩,
+        parent_runFrame (fun c m lt e hr => (both c m lt e hr).2) h⟩)
+    (fun evm selected skipped => ⟨⟨_, .skipPrecompile evm _ selected skipped⟩, rfl⟩)
+    (fun selected enabled h =>
+      ⟨⟨_, .precompile selected enabled h⟩, (staticStep_runPrecompile h).parent⟩)
     (by
       intro message state entry substate entrySubstate meter ended hentry hrun
-      obtain ⟨⟨log, run⟩, hp⟩ := hrun trivial
+      obtain ⟨⟨log, run⟩, hp⟩ := hrun
       have hp' : ended.state.parent = state.parent := hp.trans (parent_entered hentry)
       exact ⟨⟨_, .call hentry run hp'⟩, (parent_rollbackOnError state ended).trans hp'⟩)
     (by

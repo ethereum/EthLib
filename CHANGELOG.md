@@ -17,6 +17,7 @@ Not yet released.
   `OrdinaryStepRules.instruction` takes a proof that the opcode is not SELFDESTRUCT, and `StepRules.instruction` is gone; `StepRules.step` covers every instruction.
   The new `OrdinaryStepRules.step` concludes that a step either runs SELFDESTRUCT, as the new `RunsSelfdestruct` says, or keeps the relation.
   `runTransaction_eq_ok` now concludes `TransactionRun`, a definition that unfolds to the same seven equations, and `TransactionRun.unique` proves that its values are fixed by the transaction and its output.
+  The new `processMessage_frame_byKind` runs the induction over messages for any fact about the frame of a call, and `processMessage_rel_byKind` keeps its statement and now follows from it.
 - The safety threshold of the fast confirmation rule now fails when the discount for empty slots exceeds the weight of the committees since the parent ([#1832](https://github.com/ethereum/EthLib/issues/1832)).
   It fails with the new fork choice error `supportDiscountAboveMaximum`, of code 53, where it used to return half of what was left, or 0.
   A block at or before the current slot never reaches that error, and a proof shows it.
