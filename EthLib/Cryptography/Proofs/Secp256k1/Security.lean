@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Cryptography.Proofs.Secp256k1.Security.DivisionResistance
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.ForwardCase
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.Game
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.InverseCase
@@ -78,6 +79,10 @@ A forgery whose point came from an inverse query then gives the discrete logarit
 Take a forger with at most `q` queries to `Π` or its inverse.
 
 A win with no flag raised then has a fork index, or its point is not in the log of forward pairs.
+
+Take a fork whose two forgeries divide to the same scalar.
+
+A reduction wins a game of division resistance at least that often, divided by `q + 1`.
 
 No theorem bounds the advantage of a forger yet.
 -/
