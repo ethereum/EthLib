@@ -70,7 +70,9 @@ Version 1 names no code for that case.
 
 This model gives it `-38003` too, the answer that step 9 of version 1 gives for invalid attributes.
 
-The forkchoice state stays applied after that error, as step 8 of version 1 asks.
+Step 8 of version 1 keeps the forkchoice state applied after that error.
+
+This model holds no state, so the error carries no head.
 
 Versions 1, 3 and 4 of the method each take the version of the structure with their own number.
 
@@ -88,7 +90,9 @@ Nor does it check that the timestamp is above that of the head.
 
 Attributes that pass start a payload build.
 
-That build is not specified here, so such a request is refused.
+That build is not specified here, so the C export refuses such a request.
+
+The model returns the decoded attributes.
 
 When the update applies no valid head, no build begins, so the attributes change nothing.
 
