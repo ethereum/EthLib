@@ -1472,6 +1472,22 @@ From Hegotá a run fails as not yet specified, so there is no gas used to state.
 `prepareFirstFrame_of_applyAuthorizations_error` proves that an error of the authorizations is the error of the first frame.
 `prepareFirstFrame_of_value_eq_zero` gives the first frame of a call that moves no ether and applies no authorization.
 
+### The supply of ether
+
+`Execution/Proofs/State/Supply.lean` defines the supply of a transaction state as the sum of the balances of all its accounts.
+`Execution/Proofs/Evm/Call/Supply.lean` proves that no call or creation raises it, at every fork.
+`processTransaction_supply_le` in `Execution/Proofs/Transactions/Supply.lean` proves that a transaction lowers it by at least its burned fees: the base fee times the gas used, and the blob fee.
+It assumes that the gas limit covers the least gas and that the price per gas covers the base fee, which the checks of the block ensure.
+
+The equality holds in two cases.
+`processTransaction_supply_of_glamsterdam` gives it from Glamsterdam, where SELFDESTRUCT and the deletions keep every balance.
+`processTransaction_supply_of_dencun` gives it from Cancun for a transaction that creates no account.
+
+Before Cancun, a SELFDESTRUCT whose beneficiary is its own account burns that balance inside the message, and the deletions burn what a marked account received after it.
+The state does not record that amount, so the theorems give only the bound there.
+The same holds from Cancun until Glamsterdam for a transaction that creates an account.
+An exact form there needs a term that tracks the burned balance through the whole run.
+
 ### The authorizations of EIP-7702
 
 `Execution/Proofs/Transactions/Authorization.lean` covers every case of one authorization, at every fork.
