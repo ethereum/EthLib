@@ -28,7 +28,7 @@ theorem decryptWithKey_of_checksum_mismatch (store : Store) (key : ByteArray)
   simp [decryptWithKey, hsize, hcheck]
   rfl
 
-/-- A key derivation beyond the caller's limits gives the limit error, whatever the key. -/
+/-- A key derivation beyond the limits gives the limit error, for any checksum and ciphertext. -/
 theorem decryptStore_of_not_admits (limits : KdfLimits) (store : Store) (password : String)
     (h : limits.admits (passwordBytes password).size store.kdf = false) :
     decryptStore limits store password =

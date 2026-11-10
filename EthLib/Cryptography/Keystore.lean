@@ -49,7 +49,7 @@ inductive KeystoreError where
   | scrypt (error : Hash.Scrypt.ScryptError)
   /-- The checksum did not match, so the password was not verified. -/
   | checksumMismatch
-  /-- Key derivation would need more memory or work than the caller allows; both are given. -/
+  /-- The modeled memory or work of key derivation exceeds the caller's limits; both are given. -/
   | limitExceeded (memory work : Nat)
   deriving Repr
 
@@ -74,17 +74,19 @@ inductive Kdf where
 
 /-- A model of the memory of a key derivation, in bytes of its buffers.
 
-PBKDF2 holds its output and a copy of it.
+PBKDF2 holds its whole 32-byte output blocks, and the key cut from them.
 
-scrypt holds `N` blocks of `128 * r` bytes in ROMix, four buffers of `p` blocks, and two keys.
+scrypt holds `N` blocks of `128 * r` bytes in ROMix, four buffers of `p` blocks, and its output.
 
 Those buffers are the expanded password, the mixed blocks, and two copies that hashing makes.
 
-It counts no allocator overhead, and no theorem relates it to the memory that the code uses.
+It counts payload bytes only: no object headers, pointers or temporary blocks of ROMix.
+
+No theorem relates it to the memory that the code uses.
 -/
 def Kdf.memory : Kdf → Nat
-  | .pbkdf2 _ length _ => 2 * length
-  | .scrypt n r p length _ => 128 * r * n + 4 * (128 * r * p) + 2 * length
+  | .pbkdf2 _ length _ => (length + 31) / 32 * 32 + length
+  | .scrypt n r p length _ => 128 * r * n + 4 * (128 * r * p) + (length + 31) / 32 * 32 + length
 
 /-- The SHA-256 compressions that hash a message of `n` bytes, padding included (FIPS 180-4). -/
 def shaBlocks (n : Nat) : Nat :=
@@ -110,7 +112,7 @@ def pbkdf2Blocks (password salt iterations length : Nat) : Nat :=
 
 It counts calls of a function on one 64-byte block: the SHA-256 compression and the Salsa20/8 core.
 
-It is a count and not a time; the other steps of BlockMix make a call cost more when `r` is small.
+It is a count, not a time: the other steps of BlockMix and ROMix weigh more when `r` is small.
 
 scrypt makes `2 * r` Salsa20/8 calls per BlockMix, and `2 * N` BlockMix calls per block.
 
@@ -262,7 +264,7 @@ def decryptWithKey (store : Store) (key : ByteArray) : Except KeystoreError Byte
     return Aes.ctr (Aes.ciph .aes128 aesKey) 128 store.iv store.message
   else throw (.shortKey key.size)
 
-/-- Decrypt a parsed keystore with its prepared password, within the caller's limits. -/
+/-- Prepare the password, check the caller's limits, then decrypt a parsed keystore. -/
 def decryptStore (limits : KdfLimits) (store : Store) (password : String) :
     Except KeystoreError ByteArray := do
   let password := passwordBytes password
