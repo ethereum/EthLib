@@ -82,7 +82,8 @@ private theorem parentPaymentPosition_lt (newer : state.latestBlockHeader.slot <
       position) (parent : UInt64) (found : parentPaymentPosition state = some parent) :
     parent.toNat < position := by
   have lt := UInt64.lt_iff_toNat_lt.mp newer
-  unfold parentPaymentPosition getPreviousEpoch getCurrentEpoch computeEpochAtSlot at found
+  unfold parentPaymentPosition slotPaymentPosition getPreviousEpoch getCurrentEpoch
+    computeEpochAtSlot at found
   dsimp only at found
   split at found
   · rename_i same
@@ -107,22 +108,6 @@ private theorem parentPaymentPosition_lt (newer : state.latestBlockHeader.slot <
       · have := Nat.mod_lt state.latestBlockHeader.slot.toNat pos
         omega
     · cases found
-
-/-- A write at one position of the pending payments keeps the payment at each other position. -/
-private theorem paymentAt_of_set {gloas : .glamsterdam ≤ fork} {k position : Nat}
-    {entry : BuilderPendingPayment} {inside : k < 2 * preset.SLOTS_PER_EPOCH.toNat}
-    (payments : after.builderPendingPayments gloas =
-      (state.builderPendingPayments gloas).set k entry inside) (differ : k ≠ position) :
-    paymentAt after gloas position = paymentAt state gloas position := by
-  simp [paymentAt, payments, differ]
-
-/-- A write at one position of the pending payments puts the entry there. -/
-private theorem paymentAt_of_set_self {gloas : .glamsterdam ≤ fork} {k : Nat}
-    {entry : BuilderPendingPayment} {inside : k < 2 * preset.SLOTS_PER_EPOCH.toNat}
-    (payments : after.builderPendingPayments gloas =
-      (state.builderPendingPayments gloas).set k entry inside) :
-    paymentAt after gloas k = entry := by
-  simp [paymentAt, payments, inside]
 
 /-- The invariant gives the form inside a block to a step that adds at most the reserve.
 
@@ -163,7 +148,7 @@ private theorem BuilderDebtCovered.settleParentPayment {gloas : .glamsterdam ≤
     · rw [pendingBuilderTotal_settleBuilderPayment settled]
       exact Nat.le_add_right _ _
     · have := before parent found
-      rw [paymentAt_of_set payments (by omega)]
+      rw [paymentAt_set payments, ite_eq_right (by omega)]
       exact empty
   · rename_i found
     dsimp only at computed
@@ -497,8 +482,8 @@ private theorem BuilderDebtSettled.recordBid {gloas : .glamsterdam ≤ fork}
     (found : parentPaymentPosition after = some parent) (parentAt : parent.toNat = place.val) :
     BuilderDebtCovered after gloas := by
   have empty := holds.laterEmpty place (Nat.le_of_eq placed.symm)
-  have recorded : paymentAt after gloas place = bidPayment bid proposer :=
-    paymentAt_of_set_self payments
+  have recorded : paymentAt after gloas place = bidPayment bid proposer := by
+    rw [paymentAt_set payments, ite_eq_left rfl]
   -- The payment of the bid owes its value, at a position that owed nothing.
   have total : ∀ index, pendingBuilderTotal after gloas index =
       pendingBuilderTotal state gloas index +
@@ -556,7 +541,7 @@ private theorem BuilderDebtSettled.recordBid {gloas : .glamsterdam ≤ fork}
     rw [parentAt, recorded]
     exact ⟨rfl, .inr (by rw [latestBidWithdrawal, latest]; rfl)⟩
   · have := past parent found
-    rw [paymentAt_of_set payments (by omega)]
+    rw [paymentAt_set payments, ite_eq_right (by omega)]
     exact holds.laterEmpty k (by omega)
 
 /-- From Gloas, the bid of a block restores the builder debt invariant.
@@ -584,7 +569,7 @@ theorem BuilderDebtSettled.processExecutionPayloadBid (positive : preset.Payment
     exact Nat.mod_eq_of_lt (by omega)
   have parentAt : parentPaymentPosition state =
       some (preset.SLOTS_PER_EPOCH + state.slot % preset.SLOTS_PER_EPOCH) := by
-    simp [parentPaymentPosition, getCurrentEpoch, header]
+    simp [parentPaymentPosition, slotPaymentPosition, getCurrentEpoch, header]
   -- Each position from that of the parent payment is empty before the bid.
   have later : ∀ k, (preset.SLOTS_PER_EPOCH + state.slot % preset.SLOTS_PER_EPOCH).toNat ≤ k →
       paymentAt state gloas k = .empty :=

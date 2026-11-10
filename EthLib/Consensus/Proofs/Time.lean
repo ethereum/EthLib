@@ -17,6 +17,8 @@ Each conversion fails exactly when its result leaves the 64-bit range.
 A part of a slot grows with its basis points and stays below the slot.
 
 From Gloas, the attestation, the payload and the payload attestation fall due in that order.
+
+The slot after a slot is in the next epoch at a boundary, and in the same epoch otherwise.
 -/
 
 @[expose] public section
@@ -442,5 +444,27 @@ theorem epochSlots_eq_ok_of_start {epoch : Epoch} {start : Slot} {slots : List S
   | ok v =>
     simp only [sum, bind, Except.bind, pure, Except.pure, Except.ok.injEq] at h
     exact ⟨(addChecked_ok_iff.mp sum).1, h.symm⟩
+
+/-- The slot after the last slot of an epoch is in the next epoch. -/
+theorem nextSlot_epoch_of_boundary {slot next : Slot} (sum : next.toNat = slot.toNat + 1)
+    (boundary : next % preset.SLOTS_PER_EPOCH = 0) :
+    next.toNat / preset.SLOTS_PER_EPOCH.toNat =
+      slot.toNat / preset.SLOTS_PER_EPOCH.toNat + 1 := by
+  have boundary' : next.toNat % preset.SLOTS_PER_EPOCH.toNat = 0 := by
+    simpa [UInt64.toNat_mod] using congrArg UInt64.toNat boundary
+  rw [sum]
+  exact Nat.succ_div_of_dvd (Nat.dvd_of_mod_eq_zero (sum ▸ boundary'))
+
+/-- The slot after a slot that does not end an epoch is in the same epoch. -/
+theorem nextSlot_epoch_of_inside {slot next : Slot} (sum : next.toNat = slot.toNat + 1)
+    (inside : ¬next % preset.SLOTS_PER_EPOCH = 0) :
+    next.toNat / preset.SLOTS_PER_EPOCH.toNat = slot.toNat / preset.SLOTS_PER_EPOCH.toNat := by
+  have notDvd : ¬preset.SLOTS_PER_EPOCH.toNat ∣ slot.toNat + 1 := by
+    intro divides
+    apply inside
+    apply UInt64.toNat_inj.mp
+    simpa [UInt64.toNat_mod, sum] using Nat.mod_eq_zero_of_dvd divides
+  rw [sum]
+  exact Nat.succ_div_of_not_dvd notDvd
 
 end EthLib.Consensus

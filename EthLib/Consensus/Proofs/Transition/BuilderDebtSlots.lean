@@ -389,7 +389,7 @@ private theorem builderFrame_processPtcWindow {gloas : .glamsterdam ≤ fork}
   exact ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 /-- From Gloas, the epoch transition keeps the builder fields, except the step of the payments. -/
-private theorem processEpoch_builderSplit {gloas : .glamsterdam ≤ fork}
+theorem processEpoch_builderSplit {gloas : .glamsterdam ≤ fork}
     (computed : processEpoch config checks state = .ok after) :
     ∃ pending paid, BuilderFrame state pending ∧
       processBuilderPendingPayments pending gloas = .ok paid ∧ BuilderFrame paid after := by
@@ -454,12 +454,8 @@ theorem advanceSlot_builders (gloas : .glamsterdam ≤ fork)
   split at epochedOk
   · obtain ⟨pending, paid, before, paidOk, tail⟩ :=
       processEpoch_builderSplit (gloas := gloas) epochedOk
-    -- The step of the payments changes only the payments and the queued withdrawals.
     have paidBuilders : paid.builders = pending.builders := by
-      simp only [processBuilderPendingPayments, bind_ok_iff, pure, Except.pure,
-        Except.ok.injEq] at paidOk
-      obtain ⟨_, _, rfl⟩ := paidOk
-      rfl
+      rw [processBuilderPendingPayments_eq paidOk]
     simp only [tail.builders, paidBuilders, before.builders, cachedFrame.builders]
   · simp only [pure, Except.pure, Except.ok.injEq] at epochedOk
     subst epochedOk
@@ -490,7 +486,7 @@ private theorem parentPaymentPosition_withSlot {next : Slot}
   have epoch : computeEpochAtSlot preset next = computeEpochAtSlot preset state.slot := by
     apply UInt64.toNat_inj.mp
     simpa only [computeEpochAtSlot, UInt64.toNat_div] using same
-  unfold parentPaymentPosition getPreviousEpoch getCurrentEpoch
+  unfold parentPaymentPosition slotPaymentPosition getPreviousEpoch getCurrentEpoch
   dsimp only
   rw [epoch]
 
