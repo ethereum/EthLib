@@ -38,6 +38,7 @@ Not yet released.
 - The Engine API now models `engine_getPayloadV1` to `engine_getPayloadV6` ([#1848](https://github.com/ethereum/EthLib/pull/1848)).
   `EngineError` has a new constructor, `unknownPayload`, with code 38001, so an exhaustive match on it needs a new case.
   A store of completed builds holds the result of the payload build, its blobs bundle, the override flag and, from Glamsterdam, the block access list.
+  The returned payload must give back the stored block hash, with the stored requests and access list.
   From version 3 the commitments of the bundle must hash to the blob hashes of the block, in order, and its proofs must verify.
   The C export `eth_engine_get_payload` takes the configuration, the store and the request.
   Each entry of the store holds the payload ID, the fork and the four results of `eth_engine_build_payload`.

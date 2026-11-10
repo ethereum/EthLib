@@ -40,10 +40,18 @@ theorem of_getPayload_eq_ok {config : ChainConfig} {setup : TrustedSetup}
       config.activeFork r.stored.built.block.header.number
         r.stored.built.block.header.timestamp.toNat = some r.stored.fork ∧
       acceptsGetPayloadFork version r.stored.fork = true ∧
+      requestsOfFork r.stored.fork r.stored.built.requests = true ∧
+      r.stored.built.blockValue < 2 ^ 256 ∧
       payloadOfBlock r.stored.built.block = some r.payload ∧
+      (∃ block, r.stored.blockOfPayload r.payload = .ok block) ∧
       (3 ≤ version → validateBlobs setup r.stored.fork
         (ExecutionPayload.blobVersionedHashes r.stored.built.block.transactions)
         r.stored.bundle.blobs r.stored.bundle.commitments r.stored.bundle.proofs = .ok ()) := by
+  have ok_of_ne_error {α ε : Type} {x : Except ε α} (H : ∀ e, x = .error e → False) :
+      ∃ a, x = .ok a := by
+    cases x with
+    | error e => exact (H e rfl).elim
+    | ok a => exact ⟨a, rfl⟩
   unfold getPayload at h
   cases hs : store id with
   | none => simp [hs, throw, throwThe, MonadExceptOf.throw] at h
@@ -52,10 +60,10 @@ theorem of_getPayload_eq_ok {config : ChainConfig} {setup : TrustedSetup}
       Except.mapError] at h
     repeat' split at h
     all_goals cases h
-    · refine ⟨rfl, ‹_›, ‹_›, ‹_›, fun _ => ?_⟩
+    · refine ⟨rfl, ‹_›, ‹_›, ‹_›, ‹_›, ‹_›, ok_of_ne_error ‹_›, fun _ => ?_⟩
       rename_i hb _
       split at hb <;> simp_all
-    · exact ⟨rfl, ‹_›, ‹_›, ‹_›, fun hv => absurd hv ‹_›⟩
+    · exact ⟨rfl, ‹_›, ‹_›, ‹_›, ‹_›, ‹_›, ok_of_ne_error ‹_›, fun hv => absurd hv ‹_›⟩
 
 /-- From version 3, the bundle has the block's hashes in order, its counts, and verifies. -/
 theorem getPayload_bundle {config : ChainConfig} {setup : TrustedSetup}
@@ -69,7 +77,7 @@ theorem getPayload_bundle {config : ChainConfig} {setup : TrustedSetup}
       verifyBlobBundle setup r.stored.fork r.stored.bundle.blobs r.stored.bundle.commitments
         r.stored.bundle.proofs = .ok true := by
   obtain ⟨hc, hh, hp⟩ := (validateBlobs_eq_ok_iff _ _ _ _ _ _).mp
-    ((of_getPayload_eq_ok h).2.2.2.2 hv)
+    ((of_getPayload_eq_ok h).2.2.2.2.2.2.2 hv)
   obtain ⟨h₁, h₂, h₃⟩ := (blobCountsMatch_iff _ _ _ _ _).mp hc
   exact ⟨(hashesMatch_iff_map (h₁.trans h₂.symm)).mp hh, h₂, h₃, hp⟩
 

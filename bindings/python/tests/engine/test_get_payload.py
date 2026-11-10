@@ -17,6 +17,7 @@ from ruamel.yaml import YAML
 
 from ethlib import engine
 from ethlib.cryptography.keccak import keccak256
+from ethlib.execution import blocks
 from ethlib.serialization import rlp
 from raising import raises
 
@@ -38,7 +39,7 @@ _PAYLOADS = json.loads((_TESTS / "engine" / "new_payload.json").read_text())
 
 ID = b"\x01" * 8
 UNKNOWN = b"\x02" * 8
-BAL_HASH = 21
+TRANSACTIONS_ROOT, REQUESTS_HASH, BAL_HASH = 4, 20, 21
 CELL_NETWORKS = {"Osaka", "Amsterdam"}
 # The version that serves each network with a bundle, or Paris and Shanghai with version 2.
 VERSION_OF = {"Paris": 2, "Shanghai": 2, "Cancun": 3, "Prague": 4, "Osaka": 5, "Amsterdam": 6}
@@ -118,10 +119,20 @@ def _built(network: str) -> tuple[bytes, bytes, tuple[bytes, ...], int]:
     return block, accounts, tuple(requests), value
 
 
-def _with_transactions(block: bytes, transactions: list[bytes]) -> bytes:
-    """The block with its typed transactions replaced, and the same header."""
+def _with_transactions(network: str, block: bytes, transactions: list[bytes]) -> bytes:
+    """The block with its typed transactions replaced, and its header's transactions root."""
     items = rlp.decode(block)
     items[1] = transactions
+    items[0][TRANSACTIONS_ROOT] = blocks.transactions_root(
+        FORK_OF_NETWORK[network], rlp.encode(items)
+    )
+    return rlp.encode(items)
+
+
+def _with_requests(block: bytes, requests: list[bytes]) -> bytes:
+    """The block with its header's requests hash replaced by that of other requests."""
+    items = rlp.decode(block)
+    items[0][REQUESTS_HASH] = blocks.requests_hash(rlp.encode(requests))
     return rlp.encode(items)
 
 
@@ -299,7 +310,9 @@ def _bundle(network: str) -> tuple[bytes, list[bytes], dict[str, list[str]]]:
         _blob_transaction([_versioned_hash(blob[1])], nonce)
         for nonce, (blob, _) in enumerate(pairs)
     ]
-    block = _with_transactions(_built(network)[0], [b"\x03" + rlp.encode(b) for b in bodies])
+    block = _with_transactions(
+        network, _built(network)[0], [b"\x03" + rlp.encode(b) for b in bodies]
+    )
     sidecars = [
         _network_form(network, body, [blob[0]], [blob[1]], proofs)
         for body, (blob, proofs) in zip(bodies, pairs, strict=True)
@@ -348,7 +361,7 @@ def test_missing_sidecar(version: int, network: str) -> None:
 def test_wrong_hash() -> None:
     """A commitment that does not hash to the block's versioned hash fails the hash check."""
     body = _blob_transaction([b"\x01" + b"\x00" * 31])
-    block = _with_transactions(_built("Cancun")[0], [b"\x03" + rlp.encode(body)])
+    block = _with_transactions("Cancun", _built("Cancun")[0], [b"\x03" + rlp.encode(body)])
     sidecar = _network_form("Cancun", body, [FIRST[0]], [FIRST[1]], [FIRST[2]])
     _bundle_error("Cancun", 3, _entry("Cancun", block=block, sidecars=[sidecar]), 103)
 
@@ -356,7 +369,7 @@ def test_wrong_hash() -> None:
 def _single(network: str, blob: bytes, proofs: list[bytes]) -> engine.PayloadEntry:
     """An entry whose one blob transaction commits to the zero commitment, with given contents."""
     body = _blob_transaction([_versioned_hash(ZERO[1])])
-    block = _with_transactions(_built(network)[0], [b"\x03" + rlp.encode(body)])
+    block = _with_transactions(network, _built(network)[0], [b"\x03" + rlp.encode(body)])
     sidecar = _network_form(network, body, [blob], [ZERO[1]], proofs)
     return _entry(network, block=block, sidecars=[sidecar])
 
@@ -385,8 +398,27 @@ def test_wrong_proof_count(network: str, count: int) -> None:
 
 def test_requests() -> None:
     """From Prague the stored execution requests are returned as they are."""
-    result = _call("Prague", 4, [_entry("Prague", requests=[b"\x00a", b"\x02b"])])
+    requests = [b"\x00a", b"\x02b"]
+    block = _with_requests(_built("Prague")[0], requests)
+    result = _call("Prague", 4, [_entry("Prague", block=block, requests=requests)])
     assert result["executionRequests"] == ["0x0061", "0x0262"]
+    assert result["executionPayload"] == _payload_json("Prague", block)
+
+
+def test_requests_not_in_the_header() -> None:
+    """Requests whose hash is not the header's do not give back the stored block."""
+    with raises(engine.EngineError, "store: the payload does not give the block: error 403") as e:
+        _call("Prague", 4, [_entry("Prague", requests=[b"\x00a"])])
+    assert e.value.code == 0
+
+
+def test_transactions_not_in_the_header() -> None:
+    """Transactions that the header's root does not commit to do not give back the block."""
+    items = rlp.decode(_built("Cancun")[0])
+    items[1] = []
+    with raises(engine.EngineError, "store: the payload does not give the block: error 403") as e:
+        _call("Cancun", 3, [_entry("Cancun", block=rlp.encode(items))])
+    assert e.value.code == 0
 
 
 @pytest.mark.parametrize(
@@ -443,7 +475,7 @@ def test_requests() -> None:
         pytest.param(
             "Amsterdam",
             lambda: _entry("Amsterdam", access_list=b"\xc0"),
-            "store: block access list does not match the header",
+            "store: the payload does not give the block: error 403",
             id="access-list-mismatch",
         ),
         pytest.param(

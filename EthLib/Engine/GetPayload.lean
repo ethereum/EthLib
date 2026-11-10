@@ -13,7 +13,7 @@ The store is a snapshot of completed builds.
 
 The method neither waits for more building nor changes the store.
 
-Each build is the block, requests and value that the payload build gives.
+Each build is what the payload build gives: the block, the state after it, requests and value.
 
 The chain configuration determines the fork at the block's number and timestamp.
 
@@ -101,10 +101,12 @@ inductive GetPayloadError where
   | wrongFork
   /-- The stored execution requests are out of order, have no data, or precede Pectra. -/
   | requests
-  /-- The stored block access list does not hash to the one in the header. -/
-  | blockAccessList
+  /-- The stored block value does not fit in 256 bits. -/
+  | blockValue
   /-- The block has no payload form, since a field does not fit or has no encoding. -/
   | noPayload
+  /-- The payload, its requests and its access list do not give the stored header. -/
+  | header (error : PayloadError)
   /-- The stored bundle fails a count, hash or KZG check. -/
   | bundle (error : NetworkError)
 
@@ -123,24 +125,30 @@ def acceptsGetPayloadFork (version : Nat) (fork : Fork) : Bool :=
 def requestsOfFork (fork : Fork) (requests : List ByteArray) : Bool :=
   if .pectra ≤ fork then validRequests requests else requests.isEmpty
 
-/-- Whether the stored block access list hashes to the one in the header, from Glamsterdam. -/
-def blockAccessListMatches (stored : StoredPayload) : Bool :=
-  if h : .glamsterdam ≤ stored.fork then
-    match ExecutionPayload.blockAccessListHashOf (stored.blockAccessList h) with
-    | .ok hash => hash == stored.built.block.header.blockAccessListHash h
-    | .error _ => false
-  else true
-
 /-- The payload form of a block, which exists only from Paris. -/
 def payloadOfBlock {fork : Fork} (block : Block fork Transaction) :
     Option (ExecutionPayload fork) :=
   if h : .paris ≤ fork then ExecutionPayload.ofBlock h block else none
 
+/-- The block that a payload gives back, with the stored requests and access list.
+
+The parent beacon block root and the slot are those of the stored header. -/
+def StoredPayload.blockOfPayload (stored : StoredPayload)
+    (payload : ExecutionPayload stored.fork) :
+    Except PayloadError (Block stored.fork Transaction) :=
+  let header := stored.built.block.header
+  payload.toBlock header.parentBeaconBlockRoot (fun _ => stored.built.requests)
+    stored.blockAccessList header.slotNumber
+
 /-- Read the latest build of an ID, checking its fork and, from version 3, its bundle.
 
 The snapshot supplies the output of the build, including the requests and the block value.
 
-This method checks their shape against the fork, and does not execute the block again. -/
+This method checks their shape against the fork, and does not execute the block again.
+
+The payload must give back a block with the stored block hash, as `engine_newPayload` checks.
+
+So that hash commits to the transactions, the requests and the access list it returns. -/
 def getPayload (config : ChainConfig) (setup : TrustedSetup) (store : PayloadStore)
     (version : Nat) (id : PayloadId) : Except GetPayloadError GetPayloadResponse := do
   let some stored := store id | throw (.engine .unknownPayload)
@@ -149,8 +157,9 @@ def getPayload (config : ChainConfig) (setup : TrustedSetup) (store : PayloadSto
     throw .wrongFork
   unless acceptsGetPayloadFork version stored.fork do throw (.engine .unsupportedFork)
   unless requestsOfFork stored.fork stored.built.requests do throw .requests
-  unless blockAccessListMatches stored do throw .blockAccessList
+  unless stored.built.blockValue < 2 ^ 256 do throw .blockValue
   let some payload := payloadOfBlock block | throw .noPayload
+  if let .error e := stored.blockOfPayload payload then throw (.header e)
   if 3 ≤ version then
     (validateBlobs setup stored.fork (ExecutionPayload.blobVersionedHashes block.transactions)
       stored.bundle.blobs stored.bundle.commitments stored.bundle.proofs).mapError .bundle

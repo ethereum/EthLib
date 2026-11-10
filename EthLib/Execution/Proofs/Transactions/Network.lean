@@ -210,7 +210,7 @@ theorem validateBlobs_eq_ok_iff (setup : TrustedSetup) (fork : Fork) (hashes : L
     simp [Except.mapError, bind, Except.bind, pure, Except.pure, throw, throwThe,
       MonadExceptOf.throw]
 
-/-- The counts match exactly when there is one hash and one commitment per blob, and the proofs. -/
+/-- The counts match exactly with one hash and one commitment per blob, and the fork's proofs. -/
 theorem blobCountsMatch_iff (fork : Fork) (hashes : List Bytes32) (blobs : List Blob)
     (commitments : List KZGCommitment) (proofs : List KZGProof) :
     blobCountsMatch fork hashes blobs commitments proofs = true ↔

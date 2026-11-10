@@ -51,7 +51,6 @@ def storedPayloadOf (entry : PayloadEntry) : Result (PayloadId × StoredPayload)
   let (id, forkName, block, accounts, requests, blockValue, sidecars, shouldOverrideBuilder,
     accessList) := entry
   let fork ← EthLib.Exports.forkUpTo .glamsterdam forkName.toUTF8
-  unless blockValue < 2 ^ 256 do throw (0, "store: block value above 2^256")
   let items : Block fork Serialization.Rlp.Item ← (Block.decode (fun _ => fork) block).mapError
     fun e => (0, s!"store: block rejected: {reprStr e}")
   let transactions ← items.transactions.mapM fun item =>
@@ -133,8 +132,9 @@ def getPayloadOf (args : PyValue × List PayloadEntry × PyValue) : Result PyVal
     | .engine e => (e.code, s!"engine error: {reprStr e}")
     | .wrongFork => (0, "store: the fork is not the configured fork at the block")
     | .requests => (0, "store: execution requests out of order, too short or before Pectra")
-    | .blockAccessList => (0, "store: block access list does not match the header")
+    | .blockValue => (0, "store: block value above 2^256")
     | .noPayload => (0, "store: the block has no payload form")
+    | .header e => (0, s!"store: the payload does not give the block: error {e.code}")
     | .bundle e => (0, s!"store: bundle error {e.code}")
   return .ofJson (getPayloadResultJson version r)
 
