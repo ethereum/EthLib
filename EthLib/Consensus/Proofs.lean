@@ -121,6 +121,7 @@ public import EthLib.Consensus.Proofs.Transition.EpochRewards
 public import EthLib.Consensus.Proofs.Transition.EpochUpdates
 public import EthLib.Consensus.Proofs.Transition.Execution
 public import EthLib.Consensus.Proofs.Transition.FfgJustification
+public import EthLib.Consensus.Proofs.Transition.FfgRoots
 public import EthLib.Consensus.Proofs.Transition.FfgSlack
 public import EthLib.Consensus.Proofs.Transition.FfgSlackActive
 public import EthLib.Consensus.Proofs.Transition.FfgSlackChain

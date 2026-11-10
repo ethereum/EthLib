@@ -1,8 +1,6 @@
 module
 
-public import EthLib.Consensus.Proofs.Transition.Chain
-public import EthLib.Consensus.Proofs.Transition.FfgSlack
-public import EthLib.Consensus.Proofs.Transition.TargetUpgrades
+public import EthLib.Consensus.Proofs.Transition.FfgRoots
 
 /-!
 # Proofs: a chain of beacon states keeps its justified checkpoints slack-justified
@@ -37,9 +35,9 @@ Another module instantiates them with the active sets and balances that the chai
 
 An empty second set, or the zero weights, makes every ordered link a slack link.
 
-Each step at the end of an epoch also asks that each justified block is in the chain of its target.
+Each step asks that the map from roots to blocks keeps in order the roots of consecutive slots.
 
-That is a hypothesis on the map from roots to blocks of the model, which no theorem gives yet.
+Each justified block is then in the chain of the block of its recent epoch.
 
 Gasper §4.4, Definitions 4.5 and 4.6, justify a checkpoint by a supermajority link.
 
@@ -83,6 +81,8 @@ Once justification runs, its previous justified epoch is below its previous epoc
 
 Its target flags and pending attestations come from votes of a set for their links.
 
+Its justified checkpoints are below the roots it records from their epochs on.
+
 Its two justified checkpoints are slack-justified in the model, for the votes of that set. -/
 structure SlackChainInvariant (V U : Models.Ffg.Checkpoint β → Finset ValidatorIndex)
     (W : Models.Ffg.Checkpoint β → Set (ValidatorIndex → ℕ)) (genesis : β)
@@ -98,24 +98,24 @@ structure SlackChainInvariant (V U : Models.Ffg.Checkpoint β → Finset Validat
   flagsVoted : TargetFlagsVoted attested forked.state
   /-- Before Altair, each pending attestation is a vote of the set for its link. -/
   pendingVoted : PendingVoted attested forked.state
+  /-- The justified checkpoints are below the roots recorded from their epochs on. -/
+  roots : RootsAbove block forked.state
   /-- The two justified checkpoints are slack-justified in the model. -/
   slack : SlackJustifiedCheckpoints V U W genesis (ffgVotes block attested) block forked.state
 
 /-- The bounds that one step of a chain needs, apart from its sets, weights and votes.
 
-Two of them are asked only of a step that moves the slot, when that slot ends an epoch.
+The bound on the stake is asked only of a step that moves the slot, when that slot ends an epoch.
 
 Then the active stake of the current epoch must be more than one and a half increments.
 
-The block of each justified checkpoint must be in the chain of the block of its recent epoch.
+The map from roots to blocks must keep in order the roots of consecutive slots after the step.
 
 After the step, the registry must stay below 2^64 validators.
 
-A block keeps the slot and the justified checkpoints, so it is asked only the size of the registry.
-
 The order of the blocks of the model is an assumption on the map from roots to blocks.
 
-The meaningful choice takes roots ordered by ancestry, with the zero root lowest. -/
+The meaningful choice orders the roots by the links that the states of the chain record. -/
 structure SlackStepBounds (block : Root → β) (forked after : ForkedBeaconState preset) : Prop where
   /-- At the end of an epoch, the active stake is more than one and a half increments.
 
@@ -125,14 +125,8 @@ structure SlackStepBounds (block : Root → β) (forked after : ForkedBeaconStat
     3 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat <
       2 * stake (fun index => balanceAt forked.state index.toNat)
         (getActiveValidatorIndices forked.state (getCurrentEpoch forked.state)).toFinset
-  /-- At the end of an epoch, each justified block is below the block of its recent epoch. -/
-  chain : after.state.slot ≠ forked.state.slot →
-    (forked.state.slot + 1) % preset.SLOTS_PER_EPOCH = 0 → ∀ (current : Bool) (root : Root),
-    getBlockRoot forked.state
-        (if current then getCurrentEpoch forked.state else getPreviousEpoch forked.state) =
-      .ok root →
-    block (if current then forked.state.currentJustifiedCheckpoint
-      else forked.state.previousJustifiedCheckpoint).root ≤ block root
+  /-- The map from roots to blocks keeps the roots of consecutive slots in order. -/
+  links : ∀ link ∈ rootLinks after.state, block link.1 ≤ block link.2
   /-- The registry stays below 2^64 validators. -/
   small : after.state.validators.data.size < 2 ^ 64
 
@@ -235,7 +229,7 @@ theorem SlackChainInvariant.of_chainStep (positive : 0 < preset.SLOTS_PER_EPOCH.
       holds.invariant.settled
       holds.separated (fun ne => by
         rw [← currentKept] at ne ⊢
-        exact hypotheses.sets ne) (hypotheses.chain moved) holds.slack advancedOk
+        exact hypotheses.sets ne) (fun _ => holds.roots.le_of_getBlockRoot) holds.slack advancedOk
     refine ⟨(advanceSlotAcross_invariant holds.invariant computed).1,
       early.of_processUpgrades upgraded,
       (holds.separated.of_advanceSlot holds.early holds.invariant.settled
