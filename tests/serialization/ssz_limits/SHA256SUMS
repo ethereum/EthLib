@@ -1,0 +1,3 @@
+# Source: Derived with the Python SSZ of ethereum/ssz-specs release v0.1.0
+42002b1aea5d989b4b4cbc02e711f3029021167f5c18f2a7860ebf1046680de7  cases.json
+df3d40e1d03acb87fe0e2fad245d9e3aff2974c6779adf8c973231552931e2da  generate.py
