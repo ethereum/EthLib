@@ -50,7 +50,7 @@ Each check assumes a fork at which its protocol exists.
 
 A response holds every sidecar of each block it serves, but a blob check cannot see how many.
 
-So the last block of a blob response may lack its last blobs.
+So any block of a blob response may lack its last blobs.
 
 ## Sidecars by root
 
@@ -59,7 +59,7 @@ The request names sidecars by the root of their block and their index.
 - The response has at most as many sidecars as the request names.
 - Each sidecar is one that the request names.
 
-The text does not forbid a sidecar twice in one response, so these checks allow it.
+The protocol does not forbid a sidecar twice in one response, so these checks allow it.
 
 [EIP-4844] adds the blob protocols, and [EIP-7594] the column protocols.
 
@@ -93,15 +93,18 @@ def ResponseBlock.ofSigned {preset : Preset} {fork : Fork} (block : SignedBeacon
   let root ← SszType.hashTreeRoot block.message
   return { slot := block.message.slot, parentRoot := block.message.parentRoot, root }
 
-/-- Whether each block of a list has a higher slot than the block before it. -/
-def ResponseBlock.slotsAscending : List ResponseBlock → Bool
-  | a :: b :: rest => a.slot < b.slot && slotsAscending (b :: rest)
+/-- Whether a relation holds between each item of a list and the item after it. -/
+def allAdjacent {α : Type} (r : α → α → Bool) : List α → Bool
+  | a :: tail@(b :: _) => r a b && allAdjacent r tail
   | _ => true
 
+/-- Whether each block of a list has a higher slot than the block before it. -/
+def ResponseBlock.slotsAscending (blocks : List ResponseBlock) : Bool :=
+  allAdjacent (fun a b => a.slot < b.slot) blocks
+
 /-- Whether each block of a list names the block before it as its parent. -/
-def ResponseBlock.parentsLinked : List ResponseBlock → Bool
-  | a :: b :: rest => b.parentRoot == a.root && parentsLinked (b :: rest)
-  | _ => true
+def ResponseBlock.parentsLinked (blocks : List ResponseBlock) : Bool :=
+  allAdjacent (fun a b => b.parentRoot == a.root) blocks
 
 /-- Whether a slot lies in the range of a count of slots from a start slot.
 
@@ -165,11 +168,6 @@ def ResponseSidecar.ofColumn {preset : Preset} {fork : Fork}
     let blockRoot ← SszType.hashTreeRoot header
     return { slot := header.slot, blockRoot, index := sidecar.index }
 
-/-- Whether a relation holds between each item of a list and the item after it. -/
-def allAdjacent {α : Type} (r : α → α → Bool) : List α → Bool
-  | a :: b :: rest => r a b && allAdjacent r (b :: rest)
-  | _ => true
-
 /-- Whether a blob sidecar may follow another in a response by range.
 
 It is the next blob of the same block, or the first blob of a block at a later slot. -/
@@ -187,15 +185,15 @@ def ResponseSidecar.nextColumn (a b : ResponseSidecar) : Bool :=
 
 The fork is the one in effect when the request is served; it sets the limits.
 
-A block served under Electra may have the Electra count of blobs, even at an older slot.
+Served under Electra, the check allows the Electra count of blobs, even at an older slot.
 
 From Fulu no new blob sidecars exist, so the Electra count stays the limit. -/
 def isValidBlobSidecarsByRangeResponse (config : Config) (fork : Fork)
     (request : BlobSidecarsByRangeRequest) (sidecars : List ResponseSidecar) : Bool :=
-  sidecars.length ≤ request.count.toNat * (config.maxRequestBlobsPerBlock fork).toNat &&
+  sidecars.length ≤ request.count.toNat * (blobSidecarLimit config fork).toNat &&
     sidecars.length ≤ (computeMaxRequestBlobSidecars config fork).toNat &&
     sidecars.all (fun sidecar => slotInRange request.startSlot request.count sidecar.slot &&
-      sidecar.index.toNat < (config.maxRequestBlobsPerBlock fork).toNat) &&
+      sidecar.index.toNat < (blobSidecarLimit config fork).toNat) &&
     sidecars.head?.all (fun first => first.index == 0) &&
     allAdjacent ResponseSidecar.nextBlob sidecars
 
@@ -225,7 +223,7 @@ def isValidDataColumnSidecarsByRangeResponse (preset : Preset) (config : Config)
 /-- The number of column sidecars that a request by root names. -/
 def DataColumnSidecarsByRootRequest.columnCount {preset : Preset} {config : Config}
     (request : DataColumnSidecarsByRootRequest preset config) : Nat :=
-  request.data.foldl (fun total identifier => total + identifier.columns.data.size) 0
+  (request.data.map (·.columns.data.size)).sum
 
 /-- Whether the sidecars of a response are valid for a request for column sidecars by root. -/
 def isValidDataColumnSidecarsByRootResponse {preset : Preset} {config : Config}
