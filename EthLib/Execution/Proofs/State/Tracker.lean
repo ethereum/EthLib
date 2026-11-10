@@ -313,6 +313,40 @@ theorem getAccount_destroyAccount (tx : TransactionState) (address other : Addre
   · rename_i hne
     rw [getAccountOptional_setAccount_of_ne _ _ hne, getAccountOptional_destroyStorage]
 
+/-- The removal of an account leaves no account at its address. -/
+theorem accountExists_destroyAccount_self (tx : TransactionState) (address : Address) :
+    (tx.destroyAccount address).accountExists address = false := by
+  unfold accountExists destroyAccount
+  rw [getAccountOptional_setAccount_self]
+  rfl
+
+/-- The removal of an account does not change whether another address has an account. -/
+theorem accountExists_destroyAccount_of_ne (tx : TransactionState) {address other : Address}
+    (hne : other ≠ address) :
+    (tx.destroyAccount address).accountExists other = tx.accountExists other := by
+  unfold accountExists destroyAccount
+  rw [getAccountOptional_setAccount_of_ne _ _ hne, getAccountOptional_destroyStorage]
+
+/-- The removal of the empty touched accounts leaves no account where there was none. -/
+theorem accountExists_destroyTouchedEmptyAccounts {fork : Fork} {tx : TransactionState}
+    {touched : List Address} {address : Address} (h : tx.accountExists address = false) :
+    (tx.destroyTouchedEmptyAccounts fork touched).accountExists address = false := by
+  unfold destroyTouchedEmptyAccounts
+  split
+  · exact h
+  · induction touched generalizing tx with
+    | nil => exact h
+    | cons removed rest ih =>
+      refine ih ?_
+      dsimp only
+      split
+      · by_cases hne : address = removed
+        · subst hne
+          exact accountExists_destroyAccount_self _ _
+        · rw [accountExists_destroyAccount_of_ne _ hne]
+          exact h
+      · exact h
+
 /-- A change by `f` succeeds exactly when `f` does on the account.
 
 The result then records the read and sets the account that `f` computes.

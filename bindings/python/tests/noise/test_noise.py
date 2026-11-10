@@ -3,6 +3,8 @@
 import hashlib
 import json
 from pathlib import Path
+from types import UnionType
+from typing import TypeAlias, get_args, get_origin
 
 import pytest
 from py_ecc.secp256k1 import secp256k1 as reference
@@ -10,20 +12,29 @@ from py_ecc.secp256k1 import secp256k1 as reference
 from ethlib.cryptography.x25519 import x25519_public_key
 from ethlib.errors import NoiseError
 from ethlib.networking.noise import (
-    noise_cipher_decrypt,
-    noise_cipher_encrypt,
-    noise_frame,
-    noise_initialize,
-    noise_libp2p_complete,
-    noise_libp2p_initialize,
-    noise_libp2p_read,
-    noise_libp2p_write,
-    noise_read_message,
-    noise_transport,
-    noise_unframe,
-    noise_write_message,
+    CipherState,
+    Completion,
+    HandshakeState,
+    Identity,
+    Libp2pState,
+    Remote,
+    cipher_decrypt,
+    cipher_encrypt,
+    frame,
+    initialize,
+    libp2p_complete,
+    libp2p_initialize,
+    libp2p_read,
+    libp2p_write,
+    read_message,
+    transport,
+    unframe,
+    write_message,
 )
 from raising import raises
+
+# The two final states of an authenticated handshake, and its three messages.
+Exchange: TypeAlias = tuple[Libp2pState, Libp2pState, bytes, bytes, bytes]
 
 # The published XX vector, pinned in tests/sources.toml.
 VECTOR_FILE = Path(__file__).parent / "published_vector" / "noise_xx_vector.json"
@@ -52,23 +63,37 @@ def der_integers(signature: bytes) -> tuple[int, int]:
     return r, s
 
 
-def raw_pair() -> tuple[tuple, tuple]:
+def conforms(value: object, alias: object) -> bool:
+    """Whether a value has the shape of a type: a tuple, a union or an exact class."""
+    if get_origin(alias) is tuple:
+        args = get_args(alias)
+        return (
+            isinstance(value, tuple)
+            and len(value) == len(args)
+            and all(conforms(item, arg) for item, arg in zip(value, args, strict=True))
+        )
+    if isinstance(alias, UnionType):
+        return any(conforms(value, arg) for arg in get_args(alias))
+    return type(value) is alias
+
+
+def raw_pair() -> tuple[HandshakeState, HandshakeState]:
     return (
-        noise_initialize(True, STATIC_I, EPHEMERAL_I, b""),
-        noise_initialize(False, STATIC_R, EPHEMERAL_R, b""),
+        initialize(True, STATIC_I, EPHEMERAL_I, b""),
+        initialize(False, STATIC_R, EPHEMERAL_R, b""),
     )
 
 
-def libp2p_pair() -> tuple[tuple, tuple]:
+def libp2p_pair() -> tuple[Libp2pState, Libp2pState]:
     return (
-        noise_libp2p_initialize(True, STATIC_I, EPHEMERAL_I),
-        noise_libp2p_initialize(False, STATIC_R, EPHEMERAL_R),
+        libp2p_initialize(True, STATIC_I, EPHEMERAL_I),
+        libp2p_initialize(False, STATIC_R, EPHEMERAL_R),
     )
 
 
 def test_published_noise_vector() -> None:
-    def start(role: str, initiator: bool) -> tuple:
-        return noise_initialize(
+    def start(role: str, initiator: bool) -> HandshakeState:
+        return initialize(
             initiator,
             bytes.fromhex(VECTOR[f"{role}_static"]),
             bytes.fromhex(VECTOR[f"{role}_ephemeral"]),
@@ -79,46 +104,46 @@ def test_published_noise_vector() -> None:
     for index, case in enumerate(VECTOR["messages"][:3]):
         payload = bytes.fromhex(case["payload"])
         if index % 2 == 0:
-            initiator, message = noise_write_message(initiator, payload)
-            responder, received = noise_read_message(responder, message)
+            initiator, message = write_message(initiator, payload)
+            responder, received = read_message(responder, message)
         else:
-            responder, message = noise_write_message(responder, payload)
-            initiator, received = noise_read_message(initiator, message)
+            responder, message = write_message(responder, payload)
+            initiator, received = read_message(initiator, message)
         assert message == bytes.fromhex(case["ciphertext"])
         assert received == payload
-    send_i, receive_i, hash_i = noise_transport(initiator)
-    send_r, receive_r, hash_r = noise_transport(responder)
+    send_i, receive_i, hash_i = transport(initiator)
+    send_r, receive_r, hash_r = transport(responder)
     assert hash_i == hash_r == bytes.fromhex(VECTOR["handshake_hash"])
     assert send_i == receive_r
     assert send_r == receive_i
     for index, case in enumerate(VECTOR["messages"][3:]):
         payload = bytes.fromhex(case["payload"])
         if index % 2 == 0:
-            send_r, ciphertext = noise_cipher_encrypt(send_r, b"", payload)
-            receive_i, received = noise_cipher_decrypt(receive_i, b"", ciphertext)
+            send_r, ciphertext = cipher_encrypt(send_r, b"", payload)
+            receive_i, received = cipher_decrypt(receive_i, b"", ciphertext)
         else:
-            send_i, ciphertext = noise_cipher_encrypt(send_i, b"", payload)
-            receive_r, received = noise_cipher_decrypt(receive_r, b"", ciphertext)
+            send_i, ciphertext = cipher_encrypt(send_i, b"", payload)
+            receive_r, received = cipher_decrypt(receive_r, b"", ciphertext)
         assert ciphertext == bytes.fromhex(case["ciphertext"])
         assert received == payload
 
 
 @pytest.fixture(scope="module")
-def exchange() -> tuple:
+def exchange() -> Exchange:
     initiator, responder = libp2p_pair()
-    initiator, m1 = noise_libp2p_write(initiator, IDENTITY_I, None)
-    responder = noise_libp2p_read(responder, m1)
-    responder, m2 = noise_libp2p_write(responder, IDENTITY_R, EXT_R)
-    initiator = noise_libp2p_read(initiator, m2)
-    initiator, m3 = noise_libp2p_write(initiator, IDENTITY_I, EXT_I)
-    responder = noise_libp2p_read(responder, m3)
+    initiator, m1 = libp2p_write(initiator, IDENTITY_I, None)
+    responder = libp2p_read(responder, m1)
+    responder, m2 = libp2p_write(responder, IDENTITY_R, EXT_R)
+    initiator = libp2p_read(initiator, m2)
+    initiator, m3 = libp2p_write(initiator, IDENTITY_I, EXT_I)
+    responder = libp2p_read(responder, m3)
     return initiator, responder, m1, m2, m3
 
 
-def test_authenticated_exchange(exchange: tuple) -> None:
+def test_authenticated_exchange(exchange: Exchange) -> None:
     initiator, responder, *_ = exchange
-    static_r, identity_r, send_i, receive_i, h_i = noise_libp2p_complete(initiator)
-    static_i, identity_i, send_r, receive_r, h_r = noise_libp2p_complete(responder)
+    static_r, identity_r, send_i, receive_i, h_i = libp2p_complete(initiator)
+    static_i, identity_i, send_r, receive_r, h_r = libp2p_complete(responder)
     assert h_i == h_r
     assert static_r == x25519_public_key(STATIC_R)
     assert static_i == x25519_public_key(STATIC_I)
@@ -139,38 +164,38 @@ def test_authenticated_exchange(exchange: tuple) -> None:
     assert identity_r[3] == EXT_R
     assert send_i == receive_r
     assert send_r == receive_i
-    send_i, ciphertext = noise_cipher_encrypt(send_i, b"", b"initiator to responder")
-    receive_r, plaintext = noise_cipher_decrypt(receive_r, b"", ciphertext)
+    send_i, ciphertext = cipher_encrypt(send_i, b"", b"initiator to responder")
+    receive_r, plaintext = cipher_decrypt(receive_r, b"", ciphertext)
     assert plaintext == b"initiator to responder"
-    send_r, ciphertext = noise_cipher_encrypt(send_r, b"", b"responder to initiator")
-    receive_i, plaintext = noise_cipher_decrypt(receive_i, b"", ciphertext)
+    send_r, ciphertext = cipher_encrypt(send_r, b"", b"responder to initiator")
+    receive_i, plaintext = cipher_decrypt(receive_i, b"", ciphertext)
     assert plaintext == b"responder to initiator"
 
 
-def responder_payload(exchange: tuple) -> bytes:
+def responder_payload(exchange: Exchange) -> bytes:
     initiator, _ = raw_pair()
-    initiator, _ = noise_write_message(initiator, b"")
-    _, payload = noise_read_message(initiator, exchange[3])
+    initiator, _ = write_message(initiator, b"")
+    _, payload = read_message(initiator, exchange[3])
     return payload
 
 
 def send_modified_payload(payload: bytes, static: bytes = STATIC_R) -> None:
     initiator, responder = libp2p_pair()
-    initiator, m1 = noise_libp2p_write(initiator, IDENTITY_I, None)
-    raw = noise_initialize(False, static, EPHEMERAL_R, b"")
-    raw, _ = noise_read_message(raw, m1)
-    _, message = noise_write_message(raw, payload)
-    noise_libp2p_read(initiator, message)
+    initiator, m1 = libp2p_write(initiator, IDENTITY_I, None)
+    raw = initialize(False, static, EPHEMERAL_R, b"")
+    raw, _ = read_message(raw, m1)
+    _, message = write_message(raw, payload)
+    libp2p_read(initiator, message)
 
 
-def test_signature_binds_received_static(exchange: tuple) -> None:
+def test_signature_binds_received_static(exchange: Exchange) -> None:
     payload = responder_payload(exchange)
     with raises(NoiseError, ERROR + "identity"):
         send_modified_payload(payload, bytes([0x71]) * 32)
 
 
 @pytest.mark.parametrize("field", ["public_key", "signature"])
-def test_identity_tampering(exchange: tuple, field: str) -> None:
+def test_identity_tampering(exchange: Exchange, field: str) -> None:
     payload = bytearray(responder_payload(exchange))
     if field == "public_key":
         payload[7] ^= 1
@@ -185,7 +210,7 @@ def test_identity_tampering(exchange: tuple, field: str) -> None:
 
 
 @pytest.mark.parametrize("encoding", ["redundant_zero", "high_s", "sighash_flag"])
-def test_strict_signature_encoding(exchange: tuple, encoding: str) -> None:
+def test_strict_signature_encoding(exchange: Exchange, encoding: str) -> None:
     payload = responder_payload(exchange)
     signature_field = 2 + payload[1]
     signature_size = payload[signature_field + 1]
@@ -219,7 +244,7 @@ def test_malformed_protobuf(payload: bytes) -> None:
         send_modified_payload(payload)
 
 
-def test_unknown_fields_and_field_order(exchange: tuple) -> None:
+def test_unknown_fields_and_field_order(exchange: Exchange) -> None:
     payload = responder_payload(exchange)
     key_end = 2 + payload[1]
     key, rest = payload[:key_end], payload[key_end:]
@@ -234,97 +259,164 @@ def test_unknown_fields_and_field_order(exchange: tuple) -> None:
 def test_first_message_extensions() -> None:
     initiator, responder = libp2p_pair()
     with raises(NoiseError, ERROR + "firstMessageExtensions"):
-        noise_libp2p_write(initiator, IDENTITY_I, b"")
+        libp2p_write(initiator, IDENTITY_I, b"")
     raw, _ = raw_pair()
-    _, message = noise_write_message(raw, b"\x22\x00")
+    _, message = write_message(raw, b"\x22\x00")
     with raises(NoiseError, ERROR + "firstMessageExtensions"):
-        noise_libp2p_read(responder, message)
-    _, message = noise_write_message(raw, b"\x48\x01")
-    noise_libp2p_read(responder, message)
+        libp2p_read(responder, message)
+    _, message = write_message(raw, b"\x48\x01")
+    libp2p_read(responder, message)
 
 
-def test_incomplete_and_wrong_order(exchange: tuple) -> None:
+def test_incomplete_and_wrong_order(exchange: Exchange) -> None:
     initiator, responder = libp2p_pair()
     with raises(NoiseError, ERROR + "wrongPhase"):
-        noise_libp2p_complete(initiator)
+        libp2p_complete(initiator)
     with raises(NoiseError, ERROR + "wrongPhase"):
-        noise_libp2p_write(responder, IDENTITY_R, None)
-    initiator, _ = noise_libp2p_write(initiator, IDENTITY_I, None)
-    initiator = noise_libp2p_read(initiator, exchange[3])
+        libp2p_write(responder, IDENTITY_R, None)
+    initiator, _ = libp2p_write(initiator, IDENTITY_I, None)
+    initiator = libp2p_read(initiator, exchange[3])
     with raises(NoiseError, ERROR + "wrongPhase"):
-        noise_libp2p_complete(initiator)
+        libp2p_complete(initiator)
     with raises(NoiseError, ERROR + "wrongPhase"):
-        noise_libp2p_read(initiator, exchange[3])
+        libp2p_read(initiator, exchange[3])
 
 
-@pytest.mark.parametrize("component", ["static", "phase"])
-def test_completion_rechecks_saved_message(exchange: tuple, component: str) -> None:
-    handshake, saved = exchange[0]
-    if component == "static":
+@pytest.mark.parametrize("secret", [0, reference.N, 2**256 - 1])
+def test_invalid_identity_secret(secret: int) -> None:
+    initiator, responder = libp2p_pair()
+    _, m1 = libp2p_write(initiator, IDENTITY_I, None)
+    responder = libp2p_read(responder, m1)
+    with raises(NoiseError, ERROR + "identitySecret") as error:
+        libp2p_write(responder, secret.to_bytes(32, "big"), None)
+    assert error.value.code == 11
+
+
+@pytest.mark.parametrize("secret", [0, reference.N, 2**256 - 1])
+def test_identity_secret_checked_first(secret: int) -> None:
+    initiator, responder = libp2p_pair()
+    invalid = secret.to_bytes(32, "big")
+    # Message 1 carries no signature, but the secret is checked before the phase and extensions.
+    for state, extensions in ((initiator, None), (initiator, b""), (responder, None)):
+        with raises(NoiseError, ERROR + "identitySecret") as error:
+            libp2p_write(state, invalid, extensions)
+        assert error.value.code == 11
+
+
+def test_state_holds_authenticated_remote(exchange: Exchange) -> None:
+    initiator, responder, *_ = exchange
+    for state, static, secret in (
+        (initiator, STATIC_R, IDENTITY_R),
+        (responder, STATIC_I, IDENTITY_I),
+    ):
+        static_key, identity, *_ = libp2p_complete(state)
+        assert state[1] == (static_key, identity[0], identity[2], identity[3])
+        assert static_key == x25519_public_key(static)
+        x, y = reference.multiply(reference.G, int.from_bytes(secret, "big"))
+        assert identity[0] == b"\x08\x02\x12\x21" + bytes([2 + y % 2]) + x.to_bytes(32, "big")
+
+
+@pytest.mark.parametrize("component", ["missing", "static", "public_key"])
+def test_completion_needs_stored_remote(exchange: Exchange, component: str) -> None:
+    handshake, remote = exchange[0]
+    if component == "missing":
+        remote = None
+    elif component == "static":
         h = handshake
         handshake = (h[0], h[1], h[2], bytes(32), h[4], h[5], h[6], h[7], h[8], h[9])
-        error = "identity"
     else:
-        b, ciphertext = saved
-        saved = ((b[0], b[1], b[2], b[3], b[4], 0, b[6], b[7], b[8], b[9]), ciphertext)
-        error = "wrongPhase"
-    with raises(NoiseError, ERROR + error):
-        noise_libp2p_complete((handshake, saved))
+        assert remote is not None
+        static_key, public_key, signature, extensions = remote
+        # The prefix 05 is not that of a compressed point, so the key protobuf does not decode.
+        remote = (static_key, public_key[:4] + b"\x05" + public_key[5:], signature, extensions)
+    with raises(NoiseError, ERROR + "savedRemote") as error:
+        libp2p_complete((handshake, remote))
+    assert error.value.code == 13
 
 
 @pytest.mark.parametrize("length", [0, 1, 31, 32, 63, 79, 80, 95])
-def test_truncated_second_message(exchange: tuple, length: int) -> None:
+def test_truncated_second_message(exchange: Exchange, length: int) -> None:
     initiator, _ = libp2p_pair()
-    initiator, _ = noise_libp2p_write(initiator, IDENTITY_I, None)
+    initiator, _ = libp2p_write(initiator, IDENTITY_I, None)
     with raises(NoiseError, ERROR + "truncated"):
-        noise_libp2p_read(initiator, exchange[3][:length])
+        libp2p_read(initiator, exchange[3][:length])
 
 
 def test_cipher_failure_and_nonce() -> None:
-    state = (bytes(32), 0)
-    next_state, ciphertext = noise_cipher_encrypt(state, b"aad", b"message")
+    state: CipherState = (bytes(32), 0)
+    next_state, ciphertext = cipher_encrypt(state, b"aad", b"message")
     with raises(
         NoiseError,
         ERROR
         + "cipher\n  (EthLib.Cryptography.ChaCha20Poly1305"
         + ".ChaCha20Poly1305Error.authenticationFailed)",
     ):
-        noise_cipher_decrypt(state, b"wrong aad", ciphertext)
-    recovered, plaintext = noise_cipher_decrypt(state, b"aad", ciphertext)
+        cipher_decrypt(state, b"wrong aad", ciphertext)
+    recovered, plaintext = cipher_decrypt(state, b"aad", ciphertext)
     assert recovered == next_state
     assert plaintext == b"message"
     final = (bytes(32), (1 << 64) - 2)
-    reserved, ciphertext = noise_cipher_encrypt(final, b"", b"last message")
+    reserved, ciphertext = cipher_encrypt(final, b"", b"last message")
     assert reserved[1] == (1 << 64) - 1
-    assert noise_cipher_decrypt(final, b"", ciphertext)[0] == reserved
+    assert cipher_decrypt(final, b"", ciphertext)[0] == reserved
     with raises(NoiseError, ERROR + "nonceExhausted"):
-        noise_cipher_encrypt(reserved, b"", b"")
+        cipher_encrypt(reserved, b"", b"")
     with raises(NoiseError, ERROR + "nonceExhausted"):
-        noise_cipher_decrypt(reserved, b"", ciphertext)
+        cipher_decrypt(reserved, b"", ciphertext)
 
 
 def test_transport_size_limit() -> None:
     with raises(NoiseError, ERROR + "messageTooLong"):
-        noise_cipher_encrypt((bytes(32), 0), b"", bytes(65520))
+        cipher_encrypt((bytes(32), 0), b"", bytes(65520))
     with raises(NoiseError, ERROR + "messageTooLong"):
-        noise_cipher_decrypt((bytes(32), 0), b"", bytes(65536))
+        cipher_decrypt((bytes(32), 0), b"", bytes(65536))
     with raises(NoiseError, ERROR + "messageTooLong"):
-        noise_cipher_encrypt((None, 0), b"", bytes(65536))
+        cipher_encrypt((None, 0), b"", bytes(65536))
 
 
 @pytest.mark.parametrize("size", [0, 1, 255, 256, 65535])
 def test_framing(size: int) -> None:
     message = bytes(size)
-    assert noise_frame(message) == size.to_bytes(2, "big") + message
-    assert noise_unframe(noise_frame(message)) == message
+    assert frame(message) == size.to_bytes(2, "big") + message
+    assert unframe(frame(message)) == message
 
 
 def test_bad_frames() -> None:
     with raises(NoiseError, ERROR + "messageTooLong"):
-        noise_frame(bytes(65536))
+        frame(bytes(65536))
     with raises(NoiseError, ERROR + "truncated"):
-        noise_unframe(b"\x00")
+        unframe(b"\x00")
     with raises(NoiseError, ERROR + "frameLength"):
-        noise_unframe(b"\x00\x02x")
+        unframe(b"\x00\x02x")
     with raises(NoiseError, ERROR + "frameLength"):
-        noise_unframe(b"\x00\x00x")
+        unframe(b"\x00\x00x")
+
+
+def test_values_have_their_alias_types(exchange: Exchange) -> None:
+    initiator, responder, *_ = exchange
+    assert all(conforms(state, HandshakeState) for state in raw_pair())
+    # The initiator writes messages 1 and 3, and the responder message 2.
+    states = list(raw_pair())
+    for index in range(3):
+        writer, reader = index % 2, 1 - index % 2
+        written = write_message(states[writer], b"")
+        read = read_message(states[reader], written[1])
+        assert conforms(written, tuple[HandshakeState, bytes])
+        assert conforms(read, tuple[HandshakeState, bytes])
+        states[writer], states[reader] = written[0], read[0]
+    raw_i, raw_r = states
+    send, receive, _ = transport(raw_i)
+    assert conforms(transport(raw_i), tuple[CipherState, CipherState, bytes])
+    sealed = cipher_encrypt(send, b"", b"x")
+    assert conforms(sealed, tuple[CipherState, bytes])
+    assert conforms(cipher_decrypt(transport(raw_r)[1], b"", sealed[1]), tuple[CipherState, bytes])
+    assert conforms(receive, CipherState)
+    for state in (*libp2p_pair(), initiator, responder):
+        assert conforms(state, Libp2pState)
+    for state in (initiator, responder):
+        assert conforms(state[1], Remote)
+        completion = libp2p_complete(state)
+        assert conforms(completion, Completion)
+        assert conforms(completion[1], Identity)
+        assert conforms(completion[2], CipherState)
+        assert conforms(completion[3], CipherState)

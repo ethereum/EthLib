@@ -153,6 +153,16 @@ theorem processJustificationAndFinalization_early_altair (altair : .altair ≤ f
   simp [processJustificationAndFinalization, processJustificationAndFinalizationAltair, altair,
     early, pure, Except.pure]
 
+/-- In the first two epochs, justification and finalization change nothing, at every fork. -/
+theorem processJustificationAndFinalization_early_eq
+    (early : getCurrentEpoch state ≤ GENESIS_EPOCH + 1)
+    (computed : processJustificationAndFinalization state = .ok after) : after = state := by
+  by_cases altair : Fork.altair ≤ fork
+  · rw [processJustificationAndFinalization_early_altair altair early] at computed
+    exact (Except.ok.inj computed).symm
+  · rw [processJustificationAndFinalization_early (Nat.lt_of_not_le altair) early] at computed
+    exact (Except.ok.inj computed).symm
+
 /-- Justification and finalization keep the checkpoints in order.
 
 The current justified epoch must be at most the previous epoch.

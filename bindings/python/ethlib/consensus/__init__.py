@@ -50,6 +50,18 @@ def ssz_static(name: str, fork: str, type_name: str, data: bytes) -> tuple[bytes
     return _native.consensus_ssz_static(name, fork, type_name, data)
 
 
+def is_valid_builder_signature(
+    name: str,
+    fork: str,
+    type_name: str,
+    data: bytes,
+    # `Any`, because `dict` is invariant in its values.
+    config: dict[str, Any] | None = None,
+) -> bool:
+    """Whether a signed registration or bid of the Builder API verifies."""
+    return _native.consensus_is_valid_builder_signature(name, fork, config, type_name, data)
+
+
 def upgrade_operation(name: str, type_name: str, data: bytes) -> tuple[bytes, bytes]:
     """The Gloas root and bytes of a Fulu attestation, indexed attestation or attester slashing."""
     return _native.consensus_upgrade_operation(name, type_name, data)
@@ -107,9 +119,9 @@ def reqresp_message(name: str, fork: str, type_name: str, data: bytes) -> tuple[
     return _native.consensus_reqresp_message(name, fork, type_name, data)
 
 
-def compute_min_epochs_for_block_requests(name: str = "mainnet") -> int:
-    """The fewest epochs back from the current one over which a node must serve blocks."""
-    return _native.consensus_compute_min_epochs_for_block_requests(name)
+def compute_min_epochs_for_block_requests(fork: str, name: str = "mainnet") -> int:
+    """The fewest epochs back from the current one that a node must serve blocks for, at a fork."""
+    return _native.consensus_compute_min_epochs_for_block_requests(name, fork)
 
 
 def gossip_topics(fork: str, name: str = "mainnet") -> list[str]:
@@ -127,6 +139,39 @@ def reqresp_response_bounds(
 ) -> tuple[int, int]:
     """The smallest and the largest length of a successful response chunk at its fork."""
     return _native.consensus_reqresp_response_bounds(name, chunk_fork, protocol)
+
+
+# What a response check reads from each item, field by field.
+# A block: its slot, the root of its parent and its own root.
+ResponseBlock: TypeAlias = tuple[int, bytes, bytes]
+# A blob or column sidecar: the slot and root of its block, and its index.
+ResponseSidecar: TypeAlias = tuple[int, bytes, int]
+# A payload envelope: its slot, its block root, the parent hash and the block hash of its payload.
+ResponseEnvelope: TypeAlias = tuple[int, bytes, bytes, bytes]
+# An inclusion list: its slot, its validator index and its dependent root.
+ResponseInclusionList: TypeAlias = tuple[int, int, bytes]
+ResponseItems: TypeAlias = (
+    Sequence[ResponseBlock]
+    | Sequence[ResponseSidecar]
+    | Sequence[ResponseEnvelope]
+    | Sequence[ResponseInclusionList]
+)
+
+
+def reqresp_is_valid_response(
+    fork: str,
+    protocol: str,
+    request: bytes,
+    items: ResponseItems,
+    committee: Sequence[int] = (),
+    name: str = "mainnet",
+) -> bool:
+    """Whether the items of a response are valid for the SSZ request of a protocol ID at a fork."""
+    # The committee counts only for inclusion lists, as the validator of each seat.
+    native_items: list[tuple[int | bytes, ...]] = list(items)
+    return _native.consensus_reqresp_response_valid(
+        name, fork, protocol, request, native_items, list(committee)
+    )
 
 
 def gossip_topic_bound(fork: str, topic: str, name: str = "mainnet") -> int:
@@ -989,6 +1034,41 @@ def is_optimistic_node(
     )
 
 
+def inclusion_list_satisfaction(
+    name: str,
+    fork: str,
+    anchor_state: bytes,
+    anchor_block: bytes,
+    steps: Sequence[ForkChoiceStep],
+    validation_status: int,
+    satisfied: bool,
+    roots: Sequence[bytes],
+    *,
+    validated_root: bytes | None = None,
+    verify: bool = True,
+    # `Any`, because `dict` is invariant in its values.
+    config: dict[str, Any] | None = None,
+) -> list[bool | None]:
+    """From Heze, the recorded inclusion list answers for the roots after a fork choice run."""
+    # Every payload has one validation status, 0 valid, 1 invalidated or 2 not validated.
+    # The execution layer gives every payload the same answer, `satisfied`.
+    # Only a payload kept not validated is optimistic, so only it can turn valid.
+    # `validated_root`, if given, names such a payload, which then turns valid with `satisfied`.
+    return _native.consensus_inclusion_list_satisfaction(
+        name,
+        fork,
+        anchor_state,
+        anchor_block,
+        list(steps),
+        verify,
+        config,
+        validation_status,
+        satisfied,
+        validated_root,
+        list(roots),
+    )
+
+
 def is_optimistic_restricted_domain(domain_type: bytes) -> bool:
     """Whether an optimistic validator may not sign under a domain type of 4 bytes."""
     return _native.consensus_is_optimistic_restricted_domain(domain_type)
@@ -1134,6 +1214,7 @@ __all__ = [
     "get_custody_groups",
     "compute_columns_for_custody_group",
     "ssz_static",
+    "is_valid_builder_signature",
     "upgrade_operation",
     "pq_keys_ssz",
     "pq_keys_possession_signing_root",
@@ -1148,6 +1229,12 @@ __all__ = [
     "gossip_topic_bound",
     "reqresp_request_bounds",
     "reqresp_response_bounds",
+    "ResponseBlock",
+    "ResponseSidecar",
+    "ResponseEnvelope",
+    "ResponseInclusionList",
+    "ResponseItems",
+    "reqresp_is_valid_response",
     "compute_subnet_for_attestation",
     "compute_subnet_for_blob_sidecar",
     "compute_subnet_for_data_column_sidecar",
@@ -1225,6 +1312,7 @@ __all__ = [
     "is_execution_block",
     "is_optimistic_candidate_block",
     "is_optimistic_node",
+    "inclusion_list_satisfaction",
     "latest_verified_ancestor",
     "on_valid_payload",
     "on_invalidated_payload",

@@ -33,6 +33,7 @@ public import EthLib.Execution.Proofs.Evm.Logic.NoAbort
 public import EthLib.Execution.Proofs.Evm.Logic.Fault
 public import EthLib.Execution.Proofs.Evm.Logic.LessGas
 public import EthLib.Execution.Proofs.Evm.Logic.RunsOk
+public import EthLib.Execution.Proofs.Evm.Logic.Marks
 
 /-!
 # `EthLib.Execution.Proofs.Evm.Logic`

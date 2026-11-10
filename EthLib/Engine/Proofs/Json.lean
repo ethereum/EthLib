@@ -1213,3 +1213,23 @@ theorem since_eq_ok_iff {α : Type} {f : Fork} {what : String} {o : Option α}
 end Since
 
 end EthLib.Engine.Json
+
+namespace EthLib.Engine
+
+/-- A request passes the size check exactly when it asks for at most as many items as allowed. -/
+theorem checkRequestSize_eq_ok_iff (maxRequest count : Nat) :
+    checkRequestSize maxRequest count = .ok () ↔ count ≤ maxRequest := by
+  unfold checkRequestSize
+  by_cases h : maxRequest < count
+  · simp [h, throw, throwThe, MonadExceptOf.throw]
+  · simp [h, pure, Except.pure]; omega
+
+/-- A request is too large exactly when it asks for more items than the node takes. -/
+theorem checkRequestSize_eq_error_iff (maxRequest count : Nat) (e : EngineError) :
+    checkRequestSize maxRequest count = .error e ↔ maxRequest < count ∧ e = .tooLargeRequest := by
+  unfold checkRequestSize
+  by_cases h : maxRequest < count
+  · simp [h, throw, throwThe, MonadExceptOf.throw, eq_comm]
+  · simp [h, pure, Except.pure]
+
+end EthLib.Engine

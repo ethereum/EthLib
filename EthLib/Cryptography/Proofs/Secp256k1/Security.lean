@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.Game
+public import EthLib.Cryptography.Proofs.Secp256k1.Security.LazyGame
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.Refinement
 
 /-!
@@ -15,6 +16,8 @@ With the bijection the identity, EthLib's verification is the game's, for `r` an
 A bound on the game applies to EthLib only if the identity behaves as a random bijection.
 
 Every signature from EthLib's signing is the game's signature for some nonzero nonce.
+
+With the bijection sampled lazily, every adversary wins with the same chance as in the game.
 
 No theorem bounds the advantage of a forger yet.
 -/

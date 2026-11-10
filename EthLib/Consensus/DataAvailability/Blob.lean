@@ -85,14 +85,19 @@ def verifyBlobSidecarInclusionProof (preset : Preset) (fork : Fork)
     | .error _ => false
   | _, _ => false
 
-/-- The largest number of blob sidecars in one request: the most blobs of the most blocks.
+/-- The most blob sidecars of one block: Electra raises the limit of Deneb.
 
-From Electra a block may carry more blobs, as [EIP-7691] specifies.
+From Fulu blocks carry no blob sidecars, so the Electra limit stays.
+
+The limits of gossip and of requests for blob sidecars both use it.
 
 [EIP-7691]: https://eips.ethereum.org/EIPS/eip-7691#parameters -/
+def blobSidecarLimit (config : Config) (fork : Fork) : UInt64 :=
+  if .pectra ≤ fork then config.MAX_BLOBS_PER_BLOCK_ELECTRA else config.MAX_BLOBS_PER_BLOCK
+
+/-- The largest number of blob sidecars in one request: the most blobs of the most blocks. -/
 def computeMaxRequestBlobSidecars (config : Config) (fork : Fork) : UInt64 :=
-  config.MAX_REQUEST_BLOCKS_DENEB *
-    if .pectra ≤ fork then config.MAX_BLOBS_PER_BLOCK_ELECTRA else config.MAX_BLOBS_PER_BLOCK
+  config.MAX_REQUEST_BLOCKS_DENEB * blobSidecarLimit config fork
 
 /-- The header of a signed block, with the signature of the block. -/
 def SignedBeaconBlock.signedHeader {preset : Preset} {fork : Fork}

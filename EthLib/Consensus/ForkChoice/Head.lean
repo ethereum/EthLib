@@ -1,7 +1,6 @@
 module
 
 public import EthLib.Consensus.ForkChoice.PayloadVotes
-public import Std.Data.HashMap.Basic
 
 /-!
 # `Consensus.ForkChoice.Head`
@@ -153,8 +152,9 @@ It gives the sums, and the given nodes in reverse followed by the new nodes by f
 
 It stops at the first vote whose node cannot be found, and gives its error. -/
 def groupVotes : List (ValidatorIndex × Gwei) → List ForkChoiceNode →
-    Std.HashMap ForkChoiceNode Nat →
-    List ForkChoiceNode × Std.HashMap ForkChoiceNode Nat × Option ForkChoiceError
+    Std.TreeMap ForkChoiceNode Nat ForkChoiceNode.compare →
+    List ForkChoiceNode × Std.TreeMap ForkChoiceNode Nat ForkChoiceNode.compare ×
+      Option ForkChoiceError
   | [], nodes, sums => (nodes.reverse, sums, none)
   | (index, balance) :: rest, nodes, sums =>
     match store.latestMessages[index]? with
@@ -198,6 +198,12 @@ Only the validators active and not slashed in the given state count, and no equi
 def getAttestationScore (node : ForkChoiceNode) (state : BeaconState preset fork) :
     Except ForkChoiceError Gwei :=
   store.scoreFromTally (store.tallyVotes state) node
+
+/-- The votes that count in the justified state, or an error when the store holds no such state.
+
+The head computation builds it once, and every weight it compares reads it. -/
+def justifiedTally : Except ForkChoiceError VoteTally :=
+  return store.tallyVotes (← store.checkpointState store.justifiedCheckpoint)
 
 /-- The boost of a timely block, from the state of the justified checkpoint. -/
 def getProposerScore : Except ForkChoiceError Gwei := do
@@ -263,17 +269,21 @@ def shouldApplyProposerBoost (gloas : .glamsterdam ≤ fork) : Except ForkChoice
 
 /-- The weight of a node: its votes in the justified state, plus the boost if it applies.
 
+The votes come from the given tally, and the head computation passes the one of the justified state.
+
+Its error, when the store holds no justified state, comes only once the votes are needed.
+
 The boost applies when the boosted block descends from the node.
 
 From Gloas the empty and the full node of a block from the previous slot weigh nothing.
 
 From Gloas the boost also needs the consent of the boosted block's parent. -/
-def getWeight (node : ForkChoiceNode) : Except ForkChoiceError Gwei := do
+def getWeight (tally : Except ForkChoiceError VoteTally) (node : ForkChoiceNode) :
+    Except ForkChoiceError Gwei := do
   let decision ← if .glamsterdam ≤ fork then store.isPreviousSlotPayloadDecision config node
     else pure false
   if decision then return 0 else
-  let state ← store.checkpointState store.justifiedCheckpoint
-  let attestationScore ← store.getAttestationScore node state
+  let attestationScore ← store.scoreFromTally (← tally) node
   let boost ← if gloas : .glamsterdam ≤ fork then store.shouldApplyProposerBoost config gloas
     else pure (store.proposerBoostRoot ≠ Vector.replicate 32 0)
   if !boost then return attestationScore else
@@ -375,38 +385,44 @@ def tiebreaker (node : ForkChoiceNode) : Except ForkChoiceError UInt8 :=
   if gloas : .glamsterdam ≤ fork then store.getPayloadStatusTiebreaker config gloas node
   else pure 0
 
-/-- A node with its weight and its tiebreaker. -/
-def weighNode (node : ForkChoiceNode) : Except ForkChoiceError WeightedNode :=
-  return (node, ← store.getWeight config node, ← store.tiebreaker config node)
+/-- A node with its weight from the given tally, and its tiebreaker. -/
+def weighNode (tally : Except ForkChoiceError VoteTally) (node : ForkChoiceNode) :
+    Except ForkChoiceError WeightedNode :=
+  return (node, ← store.getWeight config tally node, ← store.tiebreaker config node)
 
 /-- The heaviest child of a node among the given nodes, by weight, then root, then tiebreaker.
 
 It is none when the node has no child among them. -/
-def heaviestChild (nodes : List ForkChoiceNode) (node : ForkChoiceNode) :
-    Except ForkChoiceError (Option ForkChoiceNode) := do
+def heaviestChild (tally : Except ForkChoiceError VoteTally) (nodes : List ForkChoiceNode)
+    (node : ForkChoiceNode) : Except ForkChoiceError (Option ForkChoiceNode) := do
   let children := (← store.getNodeChildren node).filter (· ∈ nodes)
-  let weighted ← children.mapM (store.weighNode config)
+  let weighted ← children.mapM (store.weighNode config tally)
   return chooseHeaviest weighted
 
 /-- LMD-GHOST from a node among the given nodes: move to the heaviest child until there is none.
 
+Every weight reads the given tally.
+
 A child whose rank is not below its parent's is an error, so that the walk ends. -/
-def getHeadFrom (nodes : List ForkChoiceNode) (head : ForkChoiceNode) :
-    Except ForkChoiceError ForkChoiceNode := do
-  match ← store.heaviestChild config nodes head with
+def getHeadFrom (tally : Except ForkChoiceError VoteTally) (nodes : List ForkChoiceNode)
+    (head : ForkChoiceNode) : Except ForkChoiceError ForkChoiceNode := do
+  match ← store.heaviestChild config tally nodes head with
   | none => return head
   | some child =>
-    if _lower : store.nodeRank child < store.nodeRank head then getHeadFrom nodes child
+    if _lower : store.nodeRank child < store.nodeRank head then getHeadFrom tally nodes child
     else throw (.parentSlotNotLower child.root)
 termination_by store.nodeRank head
 
 /-- The head of the chain: LMD-GHOST from the justified block, over the viable nodes.
 
-From Gloas, when no node is viable, the head is the empty node of the justified block. -/
+From Gloas, when no node is viable, the head is the empty node of the justified block.
+
+The votes of the justified state are tallied once, for every weight of the walk. -/
 def getHead : Except ForkChoiceError ForkChoiceNode := do
   let nodes ← store.getFilteredNodeTree config
   if .glamsterdam ≤ fork ∧ nodes.isEmpty then return ⟨store.justifiedCheckpoint.root, .empty⟩
-  else store.getHeadFrom config nodes ⟨store.justifiedCheckpoint.root, .pending⟩
+  else
+    store.getHeadFrom config store.justifiedTally nodes ⟨store.justifiedCheckpoint.root, .pending⟩
 
 end Store
 

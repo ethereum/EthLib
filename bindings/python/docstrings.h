@@ -158,6 +158,9 @@
 #define DOC_trie_hex_prefix \
   "The hex-prefix encoding of a path of nibbles, for a leaf or an extension."
 
+#define DOC_trie_verify_range \
+  "Check a range of the trie of a 32-byte root from a 32-byte start, with Keccak-256."
+
 #define DOC_trie_verify_account_proof \
   "Check an answer of `eth_getProof` against a 32-byte state root, with Keccak-256."
 
@@ -413,6 +416,9 @@
 #define DOC_consensus_ssz_static \
   "The root of the value that the bytes encode, and the bytes of that value, as a pair."
 
+#define DOC_consensus_is_valid_builder_signature \
+  "Whether the signature of a signed message of the Builder API verifies."
+
 #define DOC_consensus_merkle_proof \
   "The node at a generalized index of the value that the bytes encode, and its branch, as a pair."
 
@@ -566,6 +572,9 @@
 #define DOC_consensus_is_optimistic_node \
   "From Bellatrix: whether a node is optimistic, after a run of fork choice steps."
 
+#define DOC_consensus_inclusion_list_satisfaction \
+  "From Heze: the answers on the inclusion lists after a run of fork choice steps."
+
 #define DOC_consensus_is_optimistic_restricted_domain \
   "Whether an optimistic validator may not sign under a domain type of 4 bytes."
 
@@ -693,7 +702,7 @@
   "The root of the message that the bytes encode, and the bytes of that message, as a pair."
 
 #define DOC_consensus_compute_min_epochs_for_block_requests \
-  "The fewest epochs back from the current one over which a node must serve blocks."
+  "The fewest epochs back from the current one over which a node must serve blocks, at a fork."
 
 #define DOC_consensus_gossip_topics \
   "The gossip topics of a fork, in the order of the fork that adds each one."
@@ -703,6 +712,9 @@
 
 #define DOC_consensus_reqresp_response_bounds \
   "The smallest and the largest length of the payload of a successful response chunk, as a pair."
+
+#define DOC_consensus_reqresp_response_valid \
+  "Whether a response is valid for its request, as a Boolean."
 
 #define DOC_consensus_gossip_topic_bound \
   "The largest length of the payload of a gossip topic at a fork."
@@ -899,6 +911,12 @@
 #define DOC_snap_full_account \
   "The full RLP form of an account in slim form."
 
+#define DOC_snap_verify_account_range \
+  "Check the accounts of an AccountRange answer, from a root and a start of 32 bytes each."
+
+#define DOC_snap_verify_storage_ranges \
+  "Check the ranges of a StorageRanges answer, against the storage roots of the request."
+
 #define DOC_snappy_decompress \
   "The bytes a Snappy block decompresses to, or why it is not a valid block."
 
@@ -1075,6 +1093,9 @@
 
 #define DOC_engine_get_blobs \
   "The answer to an `engine_getBlobs` request, from a blob pool."
+
+#define DOC_engine_get_payload_bodies \
+  "The answer to a payload bodies request, from a store of bodies."
 
 #define DOC_engine_prepare_execution_payload \
   "From Bellatrix to Fulu: the forkchoice update of a proposer, as the value of its JSON."

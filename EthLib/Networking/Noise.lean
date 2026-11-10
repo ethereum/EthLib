@@ -6,6 +6,7 @@ public import EthLib.Base.LittleEndian
 public import EthLib.Cryptography.X25519
 public import EthLib.Cryptography.ChaCha20Poly1305
 public import EthLib.Cryptography.Hash.Hmac
+public import EthLib.Cryptography.Secp256k1.Errors
 
 /-!
 # Noise XX
@@ -33,22 +34,58 @@ namespace EthLib.Networking.Noise
 open EthLib.Base
 open EthLib.Cryptography
 
+/-- An X25519 private key, public coordinate or shared secret, Noise §12.1. -/
 abbrev Key := X25519.Key
 
-/-- A malformed message, exhausted nonce, invalid phase, or primitive failure. -/
+/-- The chaining key `ck` of Noise §5.2: `HASHLEN` bytes, 32 for SHA256 by §12.5. -/
+structure ChainingKey where
+  bytes : Vector UInt8 32
+deriving DecidableEq
+
+/-- The handshake hash `h` of Noise §5.2: `HASHLEN` bytes, 32 for SHA256 by §12.5. -/
+structure HandshakeHash where
+  bytes : Vector UInt8 32
+deriving DecidableEq
+
+/-- A malformed message, exhausted nonce, invalid phase or state, primitive or identity failure. -/
 inductive NoiseError where
+  /-- The operation does not belong to the current phase of the handshake. -/
   | wrongPhase
+  /-- A remote public key that the message pattern needs has not been received. -/
   | missingKey
+  /-- A message or frame is shorter than its fixed fields, or a decrypted key is not 32 bytes. -/
   | truncated
+  /-- A message or its payload would be longer than 65535 bytes, the limit of Noise §3. -/
   | messageTooLong
+  /-- A frame length does not match the bytes that follow it. -/
   | frameLength
+  /-- The nonce reached `2^64 - 1`, after which Noise §5.1 signals an error. -/
   | nonceExhausted
+  /-- ChaCha20-Poly1305 rejected its input or the authentication tag. -/
   | cipher (error : ChaCha20Poly1305.ChaCha20Poly1305Error)
+  /-- The libp2p payload is not well-formed protobuf. -/
   | protobuf
+  /-- The remote identity key, or its signature on the received static key, does not verify. -/
   | identity
+  /-- The first message carries libp2p extensions, which only later payloads may carry. -/
   | firstMessageExtensions
+  /-- The local identity secret is 0.
+
+  In the exports, it is also 32 bytes whose value is at least the secp256k1 group order. -/
+  | identitySecret
+  /-- ECDSA signing with the local identity secret failed. -/
+  | signing (error : Secp256k1.Secp256k1Error)
+  /-- At completion, the state holds no remote, or one without the handshake's remote static key.
+
+  In the exports, it is also a stored remote whose key protobuf does not decode. -/
+  | savedRemote
 deriving DecidableEq, Repr
 
+/-- The stable code of an error, one per constructor, for the C exports.
+
+The code ignores the arguments of the constructor, which the message carries.
+
+A new constructor takes a new code, so that each code keeps its meaning. -/
 def NoiseError.code : NoiseError → UInt32
   | .wrongPhase => 1
   | .missingKey => 2
@@ -60,6 +97,9 @@ def NoiseError.code : NoiseError → UInt32
   | .protobuf => 8
   | .identity => 9
   | .firstMessageExtensions => 10
+  | .identitySecret => 11
+  | .signing _ => 12
+  | .savedRemote => 13
 
 /-- The exact concrete protocol name, Noise §8 and noise-libp2p "Noise Protocol Name". -/
 def protocolName : ByteArray := "Noise_XX_25519_ChaChaPoly_SHA256".toUTF8
@@ -71,11 +111,11 @@ def cipherNonce (n : UInt64) : ChaCha20Poly1305.Nonce :=
 
 /-- A key, which may be absent during the handshake, and its next nonce, Noise §5.1. -/
 structure CipherState where
-  key : Option Key
+  key : Option ChaCha20Poly1305.Key
   nonce : UInt64
 
 /-- Install a key and reset the nonce, Noise §5.1. -/
-def initializeKey (key : Option Key) : CipherState := ⟨key, 0⟩
+def initializeKey (key : Option ChaCha20Poly1305.Key) : CipherState := ⟨key, 0⟩
 
 /-- Encrypt, appending the tag and advancing only a keyed nonce, Noise §5.1. -/
 def encryptWithAd (s : CipherState) (aad plaintext : ByteArray) :
@@ -115,15 +155,16 @@ The first output is `HMAC-HASH(temp_key, byte(0x01))`.
 
 The second output is `HMAC-HASH(temp_key, output1 || byte(0x02))`.
 -/
-def hkdf2 (chainingKey : Key) (input : ByteArray) : Key × Key :=
-  let tempKey := Hash.Hmac.hmac (packBytes chainingKey) input
+def hkdf2 (chainingKey : ChainingKey) (input : ByteArray) :
+    Vector UInt8 32 × Vector UInt8 32 :=
+  let tempKey := Hash.Hmac.hmac (packBytes chainingKey.bytes) input
   let first := Hash.Hmac.hmac32 tempKey ⟨#[0x01]⟩
   (first, Hash.Hmac.hmac32 tempKey (packBytes first ++ ⟨#[0x02]⟩))
 
 /-- The chaining key, transcript hash and handshake cipher, Noise §5.2. -/
 structure SymmetricState where
-  chainingKey : Key
-  hash : Key
+  chainingKey : ChainingKey
+  hash : HandshakeHash
   cipher : CipherState
 
 /-- Set the padded protocol name, chaining key and empty cipher key, Noise §5.2. -/
@@ -132,27 +173,27 @@ def initializeSymmetric : SymmetricState :=
       Vector.ofFn fun i : Fin 32 =>
         if hi : i.val < protocolName.size then protocolName[i.val] else 0
     else Hash.Sha256.hash32 protocolName
-  ⟨hash, hash, initializeKey none⟩
+  ⟨⟨hash⟩, ⟨hash⟩, initializeKey none⟩
 
 /-- Hash the old transcript hash and the supplied bytes, Noise §5.2. -/
 def mixHash (s : SymmetricState) (bytes : ByteArray) : SymmetricState :=
-  { s with hash := Hash.Sha256.hash32 (packBytes s.hash ++ bytes) }
+  { s with hash := ⟨Hash.Sha256.hash32 (packBytes s.hash.bytes ++ bytes)⟩ }
 
 /-- Derive a new chaining key and cipher key, resetting the nonce, Noise §5.2. -/
 def mixKey (s : SymmetricState) (input : Key) : SymmetricState :=
   let (chainingKey, key) := hkdf2 s.chainingKey (packBytes input)
-  ⟨chainingKey, s.hash, initializeKey (some key)⟩
+  ⟨⟨chainingKey⟩, s.hash, initializeKey (some key)⟩
 
 /-- Encrypt with the transcript as AAD, then hash the ciphertext, Noise §5.2. -/
 def encryptAndHash (s : SymmetricState) (plaintext : ByteArray) :
     Except NoiseError (SymmetricState × ByteArray) := do
-  let (cipher, ciphertext) ← encryptWithAd s.cipher (packBytes s.hash) plaintext
+  let (cipher, ciphertext) ← encryptWithAd s.cipher (packBytes s.hash.bytes) plaintext
   return (mixHash { s with cipher := cipher } ciphertext, ciphertext)
 
 /-- Decrypt with the transcript as AAD, then hash the ciphertext, Noise §5.2. -/
 def decryptAndHash (s : SymmetricState) (ciphertext : ByteArray) :
     Except NoiseError (SymmetricState × ByteArray) := do
-  let (cipher, plaintext) ← decryptWithAd s.cipher (packBytes s.hash) ciphertext
+  let (cipher, plaintext) ← decryptWithAd s.cipher (packBytes s.hash.bytes) ciphertext
   return (mixHash { s with cipher := cipher } ciphertext, plaintext)
 
 /-- Transport ciphers, ordered initiator-to-responder then responder-to-initiator, Noise §5. -/

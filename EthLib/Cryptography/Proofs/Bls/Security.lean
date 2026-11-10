@@ -1,8 +1,12 @@
 module
 
+public import EthLib.Cryptography.Proofs.Bls.Security.PopBound
+public import EthLib.Cryptography.Proofs.Bls.Security.PopByteGame
 public import EthLib.Cryptography.Proofs.Bls.Security.PopEager
 public import EthLib.Cryptography.Proofs.Bls.Security.PopExtract
 public import EthLib.Cryptography.Proofs.Bls.Security.PopReduction
+public import EthLib.Cryptography.Proofs.Bls.Security.PopRefinement
+public import EthLib.Cryptography.Proofs.Bls.Security.PopWins
 public import EthLib.Cryptography.Proofs.Bls.Security.PopZeroKey
 public import EthLib.Cryptography.Proofs.Bls.Security.Refinement
 
@@ -43,5 +47,13 @@ Fix the secret and the scalar of the honest key hash, in a game within `qK` key 
 
 Then some other key gets the scalar 0 with probability at most `(qK - 1) / |F|`.
 
-No bound on the aggregate game is proved yet.
+A winning forgery at the guessed position gives the reduction its answer.
+
+That needs `z ≠ 0`, every key a multiple of `g1`, no other key of scalar 0, and a nonzero count.
+
+So such a win is at most as likely as a success of the reduction.
+
+Take a forger on aggregates within `q` message and `qK` key hash calls.
+
+It wins at most `q` times as often as the reduction at co-CDH, plus `(q + qK - 1) / |F|`.
 -/

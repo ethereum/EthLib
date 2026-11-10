@@ -8,6 +8,7 @@ public import EthLib.Engine.Json
 public import EthLib.Engine.Jwt
 public import EthLib.Engine.NewPayload
 public import EthLib.Engine.Payload
+public import EthLib.Engine.PayloadBodies
 public import EthLib.Engine.PreparePayload
 
 /-!

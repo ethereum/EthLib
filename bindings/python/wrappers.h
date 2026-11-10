@@ -290,6 +290,7 @@ PyObject* py_keccak_f1600                                 (PyObject* self, PyObj
 PyObject* py_trie_root                                    (PyObject* self, PyObject* args);
 PyObject* py_trie_verify_proof                            (PyObject* self, PyObject* args);
 PyObject* py_trie_hex_prefix                              (PyObject* self, PyObject* args);
+PyObject* py_trie_verify_range                            (PyObject* self, PyObject* args);
 PyObject* py_trie_verify_account_proof                    (PyObject* self, PyObject* args);
 PyObject* py_vrf_verify                                   (PyObject* self, PyObject* args);
 PyObject* py_vrf_secret                                   (PyObject* self, PyObject* args);
@@ -380,6 +381,7 @@ PyObject* py_consensus_parameters                         (PyObject* self, PyObj
 PyObject* py_consensus_get_custody_groups                 (PyObject* self, PyObject* args);
 PyObject* py_consensus_compute_columns_for_custody_group  (PyObject* self, PyObject* args);
 PyObject* py_consensus_ssz_static                         (PyObject* self, PyObject* args);
+PyObject* py_consensus_is_valid_builder_signature (PyObject* self, PyObject* args);
 PyObject* py_consensus_merkle_proof                       (PyObject* self, PyObject* args);
 PyObject* py_consensus_upgrade_operation (PyObject* self, PyObject* args);
 PyObject* py_consensus_verify_blob_sidecar_inclusion_proof (PyObject* self, PyObject* args);
@@ -419,6 +421,7 @@ PyObject* py_consensus_get_eth1_vote (PyObject* self, PyObject* args);
 PyObject* py_consensus_is_execution_block (PyObject* self, PyObject* args);
 PyObject* py_consensus_is_optimistic_candidate_block (PyObject* self, PyObject* args);
 PyObject* py_consensus_is_optimistic_node (PyObject* self, PyObject* args);
+PyObject* py_consensus_inclusion_list_satisfaction (PyObject* self, PyObject* args);
 PyObject* py_consensus_latest_verified_ancestor (PyObject* self, PyObject* args);
 PyObject* py_consensus_on_valid_payload (PyObject* self, PyObject* args);
 PyObject* py_consensus_on_invalidated_payload (PyObject* self, PyObject* args);
@@ -477,6 +480,7 @@ PyObject* py_consensus_compute_min_epochs_for_block_requests(PyObject* self, PyO
 PyObject* py_consensus_gossip_topics                      (PyObject* self, PyObject* args);
 PyObject* py_consensus_reqresp_request_bounds             (PyObject* self, PyObject* args);
 PyObject* py_consensus_reqresp_response_bounds            (PyObject* self, PyObject* args);
+PyObject* py_consensus_reqresp_response_valid             (PyObject* self, PyObject* args);
 PyObject* py_consensus_gossip_topic_bound                 (PyObject* self, PyObject* args);
 PyObject* py_consensus_compute_subnet_for_attestation     (PyObject* self, PyObject* args);
 PyObject* py_consensus_compute_subnet_for_blob_sidecar    (PyObject* self, PyObject* args);
@@ -565,6 +569,8 @@ PyObject* py_snap_message_decode                          (PyObject* self, PyObj
 PyObject* py_snap_codes_answer                            (PyObject* self, PyObject* args);
 PyObject* py_snap_access_lists_answer                     (PyObject* self, PyObject* args);
 PyObject* py_snap_full_account                            (PyObject* self, PyObject* args);
+PyObject* py_snap_verify_account_range                    (PyObject* self, PyObject* args);
+PyObject* py_snap_verify_storage_ranges                   (PyObject* self, PyObject* args);
 PyObject* py_receipt_reencode                             (PyObject* self, PyObject* args);
 PyObject* py_receipt_logs_bloom                           (PyObject* self, PyObject* args);
 PyObject* py_block_make_receipts                          (PyObject* self, PyObject* args);
@@ -607,6 +613,7 @@ PyObject* py_engine_jwt_check                            (PyObject* self, PyObje
 PyObject* py_engine_new_payload_on_chain                 (PyObject* self, PyObject* args);
 PyObject* py_engine_forkchoice_updated                   (PyObject* self, PyObject* args);
 PyObject* py_engine_get_blobs                            (PyObject* self, PyObject* args);
+PyObject* py_engine_get_payload_bodies                   (PyObject* self, PyObject* args);
 PyObject* py_engine_prepare_execution_payload            (PyObject* self, PyObject* args);
 PyObject* py_engine_prepare_execution_payload_gloas      (PyObject* self, PyObject* args);
 

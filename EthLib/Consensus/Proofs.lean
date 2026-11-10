@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.Proofs.Accessors
+public import EthLib.Consensus.Proofs.BuilderApi
 public import EthLib.Consensus.Proofs.Builders
 public import EthLib.Consensus.Proofs.Churn
 public import EthLib.Consensus.Proofs.Mutators
@@ -12,6 +13,7 @@ public import EthLib.Consensus.Proofs.Constants
 public import EthLib.Consensus.Proofs.Containers.Attestation
 public import EthLib.Consensus.Proofs.Containers.Bid
 public import EthLib.Consensus.Proofs.Containers.Block
+public import EthLib.Consensus.Proofs.Containers.BuilderApi
 public import EthLib.Consensus.Proofs.Containers.Builder
 public import EthLib.Consensus.Proofs.Containers.Execution
 public import EthLib.Consensus.Proofs.Containers.InclusionList
@@ -80,6 +82,7 @@ public import EthLib.Consensus.Proofs.PqKeys.PossessionBinding
 public import EthLib.Consensus.Proofs.ReqResp.Bounds
 public import EthLib.Consensus.Proofs.ReqResp.Messages
 public import EthLib.Consensus.Proofs.ReqResp.ResponseBounds
+public import EthLib.Consensus.Proofs.ReqResp.Validity
 public import EthLib.Consensus.Proofs.Shuffle
 public import EthLib.Consensus.Proofs.SlashingProtection
 public import EthLib.Consensus.Proofs.ShufflePermutation
@@ -87,6 +90,7 @@ public import EthLib.Consensus.Proofs.Signing
 public import EthLib.Consensus.Proofs.Time
 public import EthLib.Consensus.Proofs.Transition.Block
 public import EthLib.Consensus.Proofs.Transition.BlockRewards
+public import EthLib.Consensus.Proofs.Transition.BuilderDebt
 public import EthLib.Consensus.Proofs.Transition.BuilderPayments
 public import EthLib.Consensus.Proofs.Transition.BuilderRequests
 public import EthLib.Consensus.Proofs.Transition.ConsolidationWindow
@@ -110,8 +114,11 @@ public import EthLib.Consensus.Proofs.Transition.Slot
 public import EthLib.Consensus.Proofs.Transition.StateTransition
 public import EthLib.Consensus.Proofs.Transition.SyncAggregate
 public import EthLib.Consensus.Proofs.Transition.TargetFlags
+public import EthLib.Consensus.Proofs.Transition.TargetSlots
+public import EthLib.Consensus.Proofs.Transition.TargetUpgrades
 public import EthLib.Consensus.Proofs.Transition.TargetVotes
 public import EthLib.Consensus.Proofs.Transition.Upgrade
+public import EthLib.Consensus.Proofs.Transition.WeakSubjectivitySafety
 public import EthLib.Consensus.Proofs.Transition.WithdrawalAmounts
 public import EthLib.Consensus.Proofs.Transition.Withdrawals
 public import EthLib.Consensus.Proofs.WeakSubjectivity

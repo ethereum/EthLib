@@ -97,10 +97,6 @@ def blobSidecarKey (sidecar : BlobSidecar preset) : Slot × ValidatorIndex × Bl
   (sidecar.signedBlockHeader.message.slot, sidecar.signedBlockHeader.message.proposerIndex,
     sidecar.index)
 
-/-- The number of blobs that a block may carry: Electra raises the limit of Deneb. -/
-def blobSidecarLimit (config : Config) (fork : Fork) : UInt64 :=
-  if .pectra ≤ fork then config.MAX_BLOBS_PER_BLOCK_ELECTRA else config.MAX_BLOBS_PER_BLOCK
-
 /-- The proofs of a blob sidecar: its branch to the body root, then its KZG proof. -/
 def blobSidecarProofs (setup : TrustedSetup) (fork : Fork) (sidecar : BlobSidecar preset) :
     Except ForkChoiceError ValidationResult :=

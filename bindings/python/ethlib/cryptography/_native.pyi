@@ -2,6 +2,8 @@
 
 from typing import Any, Literal
 
+from ethlib.networking.noise._types import CipherState, Completion, HandshakeState, Identity, Libp2pState, Remote
+
 
 def eth_aggregate_pubkeys(pubkeys: list[bytes]) -> bytes:
     """The aggregation of Ethereum public keys: the sum of the validated keys."""
@@ -211,6 +213,10 @@ def trie_hex_prefix(nibbles: list[int], is_leaf: bool) -> bytes:
     """The hex-prefix encoding of a path of nibbles, for a leaf or an extension."""
     ...
 
+def trie_verify_range(root: bytes, start: bytes, entries: list[tuple[bytes, bytes]], proof: list[bytes]) -> bool:
+    """Check a range of the trie of a 32-byte root from a 32-byte start, with Keccak-256."""
+    ...
+
 def trie_verify_account_proof(root: bytes, answer: dict) -> list[bool] | None:
     """Check an answer of `eth_getProof` against a 32-byte state root, with Keccak-256."""
     ...
@@ -383,27 +389,27 @@ def enr_from_text(text: str) -> bytes:
     """The record of a text form."""
     ...
 
-def noise_initialize(initiator: bool, static_key: bytes, ephemeral_key: bytes, prologue: bytes) -> tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int]:
+def noise_initialize(initiator: bool, static_key: bytes, ephemeral_key: bytes, prologue: bytes) -> HandshakeState:
     """Initialize the raw XX state with explicit private keys and prologue, Noise §5.3."""
     ...
 
-def noise_write_message(state: tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], payload: bytes) -> tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], bytes]:
+def noise_write_message(state: HandshakeState, payload: bytes) -> tuple[HandshakeState, bytes]:
     """Write the next raw XX message and return the updated state, Noise §5.3."""
     ...
 
-def noise_read_message(state: tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], message: bytes) -> tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], bytes]:
+def noise_read_message(state: HandshakeState, message: bytes) -> tuple[HandshakeState, bytes]:
     """Read the next raw XX message and return its payload and updated state, Noise §5.3."""
     ...
 
-def noise_transport(state: tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int]) -> tuple[tuple[bytes | None, int], tuple[bytes | None, int], bytes]:
+def noise_transport(state: HandshakeState) -> tuple[CipherState, CipherState, bytes]:
     """Split a completed raw XX state into its send cipher, receive cipher and hash."""
     ...
 
-def noise_cipher_encrypt(state: tuple[bytes | None, int], aad: bytes, plaintext: bytes) -> tuple[tuple[bytes | None, int], bytes]:
+def noise_cipher_encrypt(state: CipherState, aad: bytes, plaintext: bytes) -> tuple[CipherState, bytes]:
     """Encrypt with a cipher state and associated data, returning its next state, Noise §5.1."""
     ...
 
-def noise_cipher_decrypt(state: tuple[bytes | None, int], aad: bytes, ciphertext: bytes) -> tuple[tuple[bytes | None, int], bytes]:
+def noise_cipher_decrypt(state: CipherState, aad: bytes, ciphertext: bytes) -> tuple[CipherState, bytes]:
     """Authenticate and decrypt, advancing the nonce only on success, Noise §5.1."""
     ...
 
@@ -415,19 +421,19 @@ def noise_unframe(frame: bytes) -> bytes:
     """Read exactly one complete 16-bit frame, noise-libp2p "Wire Format"."""
     ...
 
-def noise_libp2p_initialize(initiator: bool, static_key: bytes, ephemeral_key: bytes) -> tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], bytes] | None]:
+def noise_libp2p_initialize(initiator: bool, static_key: bytes, ephemeral_key: bytes) -> Libp2pState:
     """Initialize libp2p XX with explicit X25519 private keys and an empty prologue."""
     ...
 
-def noise_libp2p_write(state: tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], bytes] | None], identity_secret: bytes, extensions: bytes | None) -> tuple[tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], bytes] | None], bytes]:
+def noise_libp2p_write(state: Libp2pState, identity_secret: bytes, extensions: bytes | None) -> tuple[Libp2pState, bytes]:
     """Write the next libp2p message with a signed identity payload."""
     ...
 
-def noise_libp2p_read(state: tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], bytes] | None], message: bytes) -> tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], bytes] | None]:
+def noise_libp2p_read(state: Libp2pState, message: bytes) -> Libp2pState:
     """Read the next libp2p message, and authenticate the static key of message 2 or 3."""
     ...
 
-def noise_libp2p_complete(state: tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], tuple[tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int], bytes] | None]) -> tuple[bytes, tuple[bytes, bytes, bytes, bytes | None], tuple[bytes | None, int], tuple[bytes | None, int], bytes]:
+def noise_libp2p_complete(state: Libp2pState) -> Completion:
     """Return the authenticated peer and transport keys only after completion."""
     ...
 
@@ -549,6 +555,10 @@ def consensus_compute_columns_for_custody_group(name: str, custody_group: int) -
 
 def consensus_ssz_static(name: str, fork: str, type: str, data: bytes) -> tuple[bytes, bytes]:
     """The root of the value that the bytes encode, and the bytes of that value, as a pair."""
+    ...
+
+def consensus_is_valid_builder_signature(name: str, fork: str, config: dict[str, Any] | None, type: str, data: bytes) -> bool:
+    """Whether the signature of a signed message of the Builder API verifies."""
     ...
 
 def consensus_merkle_proof(name: str, fork: str, type: str, data: bytes, gindex: int) -> tuple[bytes, list[bytes]]:
@@ -755,6 +765,10 @@ def consensus_is_optimistic_node(name: str, fork: str, anchor_state: bytes, anch
     """From Bellatrix: whether a node is optimistic, after a run of fork choice steps."""
     ...
 
+def consensus_inclusion_list_satisfaction(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, config: dict | None, validation_status: int, satisfied: bool, validated_root: bytes | None, roots: list[bytes]) -> list[bool | None]:
+    """From Heze: the answers on the inclusion lists after a run of fork choice steps."""
+    ...
+
 def consensus_is_optimistic_restricted_domain(domain_type: bytes) -> bool:
     """Whether an optimistic validator may not sign under a domain type of 4 bytes."""
     ...
@@ -923,8 +937,8 @@ def consensus_reqresp_message(name: str, fork: str, type: str, data: bytes) -> t
     """The root of the message that the bytes encode, and the bytes of that message, as a pair."""
     ...
 
-def consensus_compute_min_epochs_for_block_requests(name: str) -> int:
-    """The fewest epochs back from the current one over which a node must serve blocks."""
+def consensus_compute_min_epochs_for_block_requests(name: str, fork: str) -> int:
+    """The fewest epochs back from the current one over which a node must serve blocks, at a fork."""
     ...
 
 def consensus_gossip_topics(name: str, fork: str) -> list[str]:
@@ -937,6 +951,10 @@ def consensus_reqresp_request_bounds(name: str, fork: str, protocol: str) -> tup
 
 def consensus_reqresp_response_bounds(name: str, chunk_fork: str, protocol: str) -> tuple[int, int]:
     """The smallest and the largest length of the payload of a successful response chunk, as a pair."""
+    ...
+
+def consensus_reqresp_response_valid(name: str, fork: str, protocol: str, request: bytes, items: list[tuple[int | bytes, ...]], committee: list[int]) -> bool:
+    """Whether a response is valid for its request, as a Boolean."""
     ...
 
 def consensus_gossip_topic_bound(name: str, fork: str, topic: str) -> int:
@@ -1199,6 +1217,14 @@ def snap_full_account(slim: bytes) -> bytes:
     """The full RLP form of an account in slim form."""
     ...
 
+def snap_verify_account_range(root: bytes, start: bytes, accounts: list[tuple[bytes, bytes]], proof: list[bytes]) -> bool | None:
+    """Check the accounts of an AccountRange answer, from a root and a start of 32 bytes each."""
+    ...
+
+def snap_verify_storage_ranges(roots: list[bytes], start: bytes, slots: list[list[tuple[bytes, bytes]]], proof: list[bytes]) -> bool | None:
+    """Check the ranges of a StorageRanges answer, against the storage roots of the request."""
+    ...
+
 def snappy_decompress(block: bytes) -> bytes:
     """The bytes a Snappy block decompresses to, or why it is not a valid block."""
     ...
@@ -1433,6 +1459,10 @@ def engine_forkchoice_updated(tree: list, finalized: str | None, request: dict) 
 
 def engine_get_blobs(pool: list[tuple[bytes, bytes | None, bytes | None, list[tuple[bytes, bytes] | None] | None]], serving: bool, max_request: int, fork: str, request: dict) -> list | None:
     """The answer to an `engine_getBlobs` request, from a blob pool."""
+    ...
+
+def engine_get_payload_bodies(store: list[tuple[bytes, int | None, str, list[bytes], list[tuple[int, int, bytes, int]] | None, bytes | None]], latest: int, max_request: int, request: dict) -> list[dict | None]:
+    """The answer to a payload bodies request, from a store of bodies."""
     ...
 
 def engine_prepare_execution_payload(name: str, fork: str, state: bytes, config: dict | None, safe_block_hash: bytes, finalized_block_hash: bytes, suggested_fee_recipient: bytes, pow_chain: list[bytes]) -> dict | None:

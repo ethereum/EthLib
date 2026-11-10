@@ -39,16 +39,73 @@ def depositTreeSnapshotType : String := "tuple[list[bytes], bytes, int, bytes, i
 def gossipOutcomesType : String :=
   "list[tuple[Literal['valid'], None] | tuple[Literal['ignore', 'reject'], str]]"
 
-/-- The Python type of a Noise cipher state: its key, if set, and its next nonce. -/
-def noiseCipherType : String := "tuple[bytes | None, int]"
+/-- A Python type alias, which the generator writes into a module of the package.
+
+The stub of the extension imports it, so a signature can name it. -/
+structure PythonAlias where
+  /-- The dotted name of the module that defines the alias. -/
+  pyModule : String
+  /-- The name of the alias, unique among all aliases. -/
+  name : String
+  /-- What a value of the type holds, written as the comment above the alias. -/
+  doc : String
+  /-- The Python type, which may name aliases defined before it in the same module. -/
+  type : String
+
+/-- The module of the Noise state aliases. -/
+def noiseTypesModule : String := "ethlib.networking.noise._types"
+
+/-- The Python type of a Noise cipher state. -/
+def noiseCipherAlias : PythonAlias := ⟨noiseTypesModule, "CipherState",
+  "A Noise cipher state: its key, if set, and its next nonce.",
+  "tuple[bytes | None, int]"⟩
 
 /-- The Python type of a Noise XX handshake state, in the field order of its export. -/
-def noiseStateType : String :=
-  "tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int]"
+def noiseStateAlias : PythonAlias := ⟨noiseTypesModule, "HandshakeState",
+  "A Noise XX state: role, private keys, remote keys, step, chaining key, hash, cipher key " ++
+    "and nonce.",
+  "tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int]"⟩
 
-/-- The Python type of a libp2p Noise state: the XX state, and the saved message and reader. -/
-def noiseLibp2pType : String :=
-  "tuple[" ++ noiseStateType ++ ", tuple[" ++ noiseStateType ++ ", bytes] | None]"
+/-- The Python type of the authenticated remote that a libp2p Noise state stores. -/
+def noiseRemoteAlias : PythonAlias := ⟨noiseTypesModule, "Remote",
+  "An authenticated remote: static key, identity key protobuf, signature and extensions; " ++
+    "an Identity has the same shape in another order.",
+  "tuple[bytes, bytes, bytes, bytes | None]"⟩
+
+/-- The Python type of a libp2p Noise state. -/
+def noiseLibp2pAlias : PythonAlias := ⟨noiseTypesModule, "Libp2pState",
+  "A libp2p Noise state: the XX state, and its authenticated remote once read.",
+  "tuple[" ++ noiseStateAlias.name ++ ", " ++ noiseRemoteAlias.name ++ " | None]"⟩
+
+/-- The Python type of the remote identity that completion reports. -/
+def noiseIdentityAlias : PythonAlias := ⟨noiseTypesModule, "Identity",
+  "A remote identity: key protobuf, peer ID, signature and extensions; " ++
+    "a Remote has the same shape in another order.",
+  "tuple[bytes, bytes, bytes, bytes | None]"⟩
+
+/-- The Python type of the result of libp2p completion. -/
+def noiseCompletionAlias : PythonAlias := ⟨noiseTypesModule, "Completion",
+  "A completed libp2p handshake: remote static key, identity, send and receive ciphers, " ++
+    "and handshake hash.",
+  "tuple[bytes, " ++ noiseIdentityAlias.name ++ ", " ++ noiseCipherAlias.name ++ ", " ++
+    noiseCipherAlias.name ++ ", bytes]"⟩
+
+/-- Every Python type alias, in the order of definition. -/
+def pythonAliases : List PythonAlias := [noiseCipherAlias, noiseStateAlias, noiseRemoteAlias,
+  noiseLibp2pAlias, noiseIdentityAlias, noiseCompletionAlias]
+
+/-- The aliases as plain data: the module, the name, the comment and the type. -/
+def pythonAliasesData : List (String × String × String × String) :=
+  pythonAliases.map fun a => (a.pyModule, a.name, a.doc, a.type)
+
+/-- The name of the Python type of a Noise cipher state. -/
+def noiseCipherType : String := noiseCipherAlias.name
+
+/-- The name of the Python type of a Noise XX handshake state. -/
+def noiseStateType : String := noiseStateAlias.name
+
+/-- The name of the Python type of a libp2p Noise state. -/
+def noiseLibp2pType : String := noiseLibp2pAlias.name
 
 /-- Every method of the Python extension, in the order of its method table. -/
 def bindings : List Binding := [
@@ -212,6 +269,9 @@ def bindings : List Binding := [
   ⟨"trie_hex_prefix", `EthLib.Execution.Trie.Exports.hexPrefixExport,
     "(nibbles: list[int], is_leaf: bool) -> bytes",
     [], some "TrieError"⟩,
+  ⟨"trie_verify_range", `EthLib.Execution.Trie.Exports.verifyRangeOf,
+    "(root: bytes, start: bytes, entries: list[tuple[bytes, bytes]], proof: list[bytes]) -> bool",
+    [`EthLib.Execution.Trie.RangeError], some "TrieError"⟩,
   ⟨"trie_verify_account_proof", `EthLib.Engine.Exports.verifyAccountProofExport,
     "(root: bytes, answer: dict) -> list[bool] | None",
     [`EthLib.Execution.State.AccountProofError], some "TrieError"⟩,
@@ -372,9 +432,7 @@ def bindings : List Binding := [
     "(state: " ++ noiseLibp2pType ++ ", message: bytes) -> " ++ noiseLibp2pType,
     [`EthLib.Networking.Noise.NoiseError], some "NoiseError"⟩,
   ⟨"noise_libp2p_complete", `EthLib.Networking.Noise.Exports.completeExport,
-    "(state: " ++ noiseLibp2pType ++ ") -> tuple[bytes, " ++
-      "tuple[bytes, bytes, bytes, bytes | None], " ++
-      noiseCipherType ++ ", " ++ noiseCipherType ++ ", bytes]",
+    "(state: " ++ noiseLibp2pType ++ ") -> " ++ noiseCompletionAlias.name,
     [`EthLib.Networking.Noise.NoiseError], some "NoiseError"⟩,
   ⟨"enr_seq", `EthLib.Networking.Enr.Exports.seqExport,
     "(record: bytes) -> int",
@@ -481,6 +539,10 @@ def bindings : List Binding := [
     [`EthLib.Consensus.DataAvailability.CustodyError], some "ConsensusError"⟩,
   ⟨"consensus_ssz_static", `EthLib.Consensus.Exports.sszStaticExport,
     "(name: str, fork: str, type: str, data: bytes) -> tuple[bytes, bytes]",
+    [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
+  ⟨"consensus_is_valid_builder_signature",
+    `EthLib.Consensus.Exports.isValidBuilderSignatureExport,
+    "(name: str, fork: str, config: dict[str, Any] | None, type: str, data: bytes) -> bool",
     [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
   ⟨"consensus_merkle_proof", `EthLib.Consensus.Exports.merkleProofExport,
     "(name: str, fork: str, type: str, data: bytes, gindex: int) -> tuple[bytes, list[bytes]]",
@@ -682,6 +744,12 @@ def bindings : List Binding := [
       "verify: bool, config: dict | None, optimistic_roots: list[bytes], head: bytes, " ++
       "head_payload_status: int) -> bool",
     [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
+  ⟨"consensus_inclusion_list_satisfaction",
+    `EthLib.Consensus.Exports.inclusionListSatisfactionExport,
+    "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, " ++
+      "verify: bool, config: dict | None, validation_status: int, satisfied: bool, " ++
+      "validated_root: bytes | None, roots: list[bytes]) -> list[bool | None]",
+    [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
   ⟨"consensus_is_optimistic_restricted_domain",
     `EthLib.Consensus.Exports.isOptimisticRestrictedDomainExport,
     "(domain_type: bytes) -> bool", [], some "ForkChoiceError"⟩,
@@ -856,7 +924,7 @@ def bindings : List Binding := [
     [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
   ⟨"consensus_compute_min_epochs_for_block_requests",
     `EthLib.Consensus.Config.computeMinEpochsForBlockRequests,
-    "(name: str) -> int",
+    "(name: str, fork: str) -> int",
     [], some "ConsensusError"⟩,
   ⟨"consensus_gossip_topics", `EthLib.Consensus.Config.gossipTopics,
     "(name: str, fork: str) -> list[str]",
@@ -867,6 +935,11 @@ def bindings : List Binding := [
   ⟨"consensus_reqresp_response_bounds", `EthLib.Consensus.Exports.reqRespResponseBoundsExport,
     "(name: str, chunk_fork: str, protocol: str) -> tuple[int, int]",
     [`EthLib.Consensus.BoundsError], some "ConsensusError"⟩,
+  ⟨"consensus_reqresp_response_valid", `EthLib.Consensus.Exports.reqRespResponseValidExport,
+    "(name: str, fork: str, protocol: str, request: bytes, " ++
+      "items: list[tuple[int | bytes, ...]], " ++
+      "committee: list[int]) -> bool",
+    [`EthLib.Consensus.BoundsError, `EthLib.Serialization.Ssz.Err], some "ConsensusError"⟩,
   ⟨"consensus_gossip_topic_bound", `EthLib.Consensus.Exports.gossipTopicBoundExport,
     "(name: str, fork: str, topic: str) -> int",
     [`EthLib.Consensus.BoundsError], some "ConsensusError"⟩,
@@ -1073,6 +1146,16 @@ def bindings : List Binding := [
   ⟨"snap_full_account", `EthLib.Execution.Network.Snap.Exports.fullAccountExport,
     "(slim: bytes) -> bytes",
     [], some "SnapError"⟩,
+  ⟨"snap_verify_account_range", `EthLib.Execution.Network.Snap.Exports.verifyAccountRangeOf,
+    "(root: bytes, start: bytes, accounts: list[tuple[bytes, bytes]], proof: list[bytes]) -> " ++
+      "bool | None",
+    [`EthLib.Execution.Network.SnapRangeError, `EthLib.Execution.Trie.RangeError],
+    some "SnapError"⟩,
+  ⟨"snap_verify_storage_ranges", `EthLib.Execution.Network.Snap.Exports.verifyStorageRangesOf,
+    "(roots: list[bytes], start: bytes, slots: list[list[tuple[bytes, bytes]]], " ++
+      "proof: list[bytes]) -> bool | None",
+    [`EthLib.Execution.Network.SnapRangeError, `EthLib.Execution.Trie.RangeError],
+    some "SnapError"⟩,
   ⟨"snappy_decompress", `EthLib.Networking.Snappy.decompress,
     "(block: bytes) -> bytes",
     [`EthLib.Networking.Snappy.SnappyError], some "SnappyError"⟩,
@@ -1272,6 +1355,11 @@ def bindings : List Binding := [
     "(pool: list[tuple[bytes, bytes | None, bytes | None, " ++
       "list[tuple[bytes, bytes] | None] | None]], serving: bool, max_request: int, " ++
       "fork: str, request: dict) -> list | None",
+    [`EthLib.Engine.EngineError], some "EngineError"⟩,
+  ⟨"engine_get_payload_bodies", `EthLib.Engine.Exports.payloadBodiesExport,
+    "(store: list[tuple[bytes, int | None, str, list[bytes], " ++
+      "list[tuple[int, int, bytes, int]] | None, bytes | None]], latest: int, " ++
+      "max_request: int, request: dict) -> list[dict | None]",
     [`EthLib.Engine.EngineError], some "EngineError"⟩,
   ⟨"engine_prepare_execution_payload", `EthLib.Engine.Exports.prepareExecutionPayloadExport,
     "(name: str, fork: str, state: bytes, config: dict | None, safe_block_hash: bytes, " ++

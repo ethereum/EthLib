@@ -6,7 +6,7 @@ public import Mathlib.Data.List.Forall2
 /-!
 # `Base.Proofs.Forall2`
 
-A successful map over a list in `Except` relates its inputs and outputs pairwise.
+A successful map over a list in `Except` or `Option` relates its inputs and outputs pairwise.
 
 Each input is related to its output, and is a member of the list.
 
@@ -38,6 +38,19 @@ theorem forall₂_of_mapM_ok {α β ε : Type} {f : α → Except ε β} :
         simp only [first, rest, pure, Except.pure, Except.ok.injEq] at made
         subst made
         exact .cons first (forall₂_of_mapM_ok rest)
+
+/-- The results of a monadic map in `Option` that succeeds, one for each input. -/
+theorem forall₂_of_mapM_some {α β : Type} {f : α → Option β} :
+    ∀ {inputs : List α} {outputs : List β}, inputs.mapM f = some outputs →
+      List.Forall₂ (fun input output => f input = some output) inputs outputs
+  | [], outputs, made => by
+    simp only [List.mapM_nil, pure, Option.some.injEq] at made
+    exact made ▸ .nil
+  | input :: inputs, outputs, made => by
+    simp only [List.mapM_cons, Option.bind_eq_bind, Option.bind_eq_some_iff, pure,
+      Option.some.injEq] at made
+    obtain ⟨output, first, others, rest, rfl⟩ := made
+    exact .cons first (forall₂_of_mapM_some rest)
 
 /-- A successful map pairs each input, a member of the list, with its output. -/
 theorem forall₂_mem_of_mapM_ok {α β ε : Type} {f : α → Except ε β} {xs : List α} {ys : List β}

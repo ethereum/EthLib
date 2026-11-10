@@ -238,7 +238,7 @@ class EthWireError(EthLibError, ValueError):
 
 
 class SnapError(EthLibError, ValueError):
-    """A snap message was rejected, with the code of its error, or 0 for a bad argument."""
+    """A snap message or range answer was rejected, with its error code, or 0 for a bad argument."""
 
 
 class TransactionError(EthLibError, ValueError):
@@ -259,9 +259,10 @@ class FeesError(EthLibError, ValueError):
 
 class TrieError(EthLibError, ValueError):
     """
-    A trie has no root, a proof does not verify, or an RLP input is malformed.
+    A trie has no root, a proof or a range does not verify, or an RLP input is malformed.
 
-    Trie errors have codes from 1, proof errors codes from 101, and a malformed input code 0.
+    Trie errors have codes from 1, proof errors from 101 and range errors from 201.
+    Account proof errors have codes from 501, and a malformed input code 0.
     """
 
 

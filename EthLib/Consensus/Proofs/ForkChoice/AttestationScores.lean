@@ -1,7 +1,8 @@
 module
 
 public import EthLib.Consensus.ForkChoice.Head
-import Std.Data.HashMap.Lemmas
+import EthLib.Base.Proofs.MapM
+import Std.Data.TreeMap.Lemmas
 
 /-!
 # Proofs: the votes of a node from a tally
@@ -15,6 +16,10 @@ It agrees with a count over the validators in order.
 That count adds the balance of each validator whose supported node descends from the node.
 
 The results agree in every case: the same sum, the same overflow and the same first error.
+
+So a computed score is a sum over the counted validators, one balance for each vote that counts.
+
+The node of each such vote is then found, and the check that it descends passes.
 -/
 
 @[expose] public section
@@ -29,6 +34,23 @@ namespace Store
 
 variable (store : Store preset fork)
 
+/-- The order of nodes is transitive, as an order by root and then by status. -/
+instance : Std.TransCmp ForkChoiceNode.compare :=
+  inferInstanceAs
+    (Std.TransCmp (compareLex (compareOn ForkChoiceNode.root)
+      (compareOn fun node : ForkChoiceNode => node.payloadStatus.code)))
+
+/-- Two nodes that the order finds equal are equal. -/
+instance : Std.LawfulEqCmp ForkChoiceNode.compare where
+  eq_of_compare {a b} same := by
+    obtain ⟨root, status⟩ := a
+    obtain ⟨root', status'⟩ := b
+    simp only [ForkChoiceNode.compare, Ordering.then_eq_eq] at same
+    obtain ⟨roots, codes⟩ := same
+    cases Std.LawfulEqCmp.eq_of_compare roots
+    have codes := Std.LawfulEqCmp.eq_of_compare codes
+    cases status <;> cases status' <;> first | rfl | cases codes
+
 /-- One when the check that a node descends from another passes and holds, and zero otherwise. -/
 private def weightOf (supported node : ForkChoiceNode) : Nat :=
   match store.isAncestor supported node with
@@ -36,7 +58,8 @@ private def weightOf (supported node : ForkChoiceNode) : Nat :=
   | _ => 0
 
 /-- The count over groups that all pass their check adds each sum whose node descends. -/
-private theorem foldlM_groups_ok (node : ForkChoiceNode) (sums : Std.HashMap ForkChoiceNode Nat)
+private theorem foldlM_groups_ok (node : ForkChoiceNode)
+    (sums : Std.TreeMap ForkChoiceNode Nat ForkChoiceNode.compare)
     {nodes : List ForkChoiceNode}
     (pass : ∀ supported ∈ nodes, ∃ descends, store.isAncestor supported node = .ok descends)
     (start : Nat) :
@@ -58,7 +81,8 @@ private theorem foldlM_groups_ok (node : ForkChoiceNode) (sums : Std.HashMap For
 
 Otherwise it gives the sums whose node descends, or an overflow. -/
 private theorem scoreFromTally_of_ok {nodes : List ForkChoiceNode}
-    {sums : Std.HashMap ForkChoiceNode Nat} {failure : Option ForkChoiceError}
+    {sums : Std.TreeMap ForkChoiceNode Nat ForkChoiceNode.compare}
+    {failure : Option ForkChoiceError}
     {node : ForkChoiceNode}
     (pass : ∀ supported ∈ nodes, ∃ descends, store.isAncestor supported node = .ok descends) :
     store.scoreFromTally ⟨nodes.map fun supported => (supported, sums.getD supported 0), failure⟩
@@ -76,7 +100,7 @@ private theorem scoreFromTally_of_ok {nodes : List ForkChoiceNode}
 
 /-- When the groups before it pass, the count fails as the check of the first group that fails. -/
 private theorem scoreFromTally_of_error {before after : List ForkChoiceNode}
-    {supported : ForkChoiceNode} {sums : Std.HashMap ForkChoiceNode Nat}
+    {supported : ForkChoiceNode} {sums : Std.TreeMap ForkChoiceNode Nat ForkChoiceNode.compare}
     {failure : Option ForkChoiceError} {node : ForkChoiceNode} {error : ForkChoiceError}
     (pass : ∀ earlier ∈ before, ∃ descends, store.isAncestor earlier node = .ok descends)
     (fails : store.isAncestor supported node = .error error) :
@@ -88,7 +112,7 @@ private theorem scoreFromTally_of_error {before after : List ForkChoiceNode}
 
 /-- The grouped nodes start with the given nodes, in reverse. -/
 private theorem groupVotes_prefix (votes : List (ValidatorIndex × Gwei))
-    (nodes : List ForkChoiceNode) (sums : Std.HashMap ForkChoiceNode Nat) :
+    (nodes : List ForkChoiceNode) (sums : Std.TreeMap ForkChoiceNode Nat ForkChoiceNode.compare) :
     ∃ rest, (store.groupVotes votes nodes sums).1 = nodes.reverse ++ rest := by
   induction votes generalizing nodes sums with
   | nil => exact ⟨[], by simp [groupVotes]⟩
@@ -112,7 +136,8 @@ omit store in
 /-- A balance added at one node changes a weighted total over a list without repeats.
 
 The total grows by the balance times the weight of that node, when the node is in the list. -/
-private theorem sum_insert (sums : Std.HashMap ForkChoiceNode Nat) (weight : ForkChoiceNode → Nat)
+private theorem sum_insert (sums : Std.TreeMap ForkChoiceNode Nat ForkChoiceNode.compare)
+    (weight : ForkChoiceNode → Nat)
     (supported : ForkChoiceNode) (balance : Nat) {nodes : List ForkChoiceNode}
     (distinct : nodes.Nodup) :
     (nodes.map fun other =>
@@ -124,7 +149,7 @@ private theorem sum_insert (sums : Std.HashMap ForkChoiceNode Nat) (weight : For
   | cons first rest ih =>
     rw [List.nodup_cons] at distinct
     rw [List.map_cons, List.sum_cons, ih distinct.2, List.map_cons, List.sum_cons]
-    simp only [Std.HashMap.getD_insert, List.mem_cons, beq_iff_eq]
+    simp only [Std.TreeMap.getD_insert, Std.LawfulEqCmp.compare_eq_iff_eq, List.mem_cons]
     by_cases same : supported = first
     · subst same
       simp [distinct.1, Nat.add_mul]
@@ -138,13 +163,14 @@ The given nodes pass their check, have no repeats, and are the nodes with a sum.
 The count so far is the total of the sums whose node descends. -/
 private theorem fold_eq_scoreFromTally (node : ForkChoiceNode)
     (votes : List (ValidatorIndex × Gwei)) (seen : List ForkChoiceNode)
-    (sums : Std.HashMap ForkChoiceNode Nat) (start : Nat)
+    (sums : Std.TreeMap ForkChoiceNode Nat ForkChoiceNode.compare) (start : Nat)
     (pass : ∀ supported ∈ seen, ∃ descends, store.isAncestor supported node = .ok descends)
     (weighted : start = (seen.map fun supported =>
       sums.getD supported 0 * store.weightOf supported node).sum)
     (keys : ∀ supported, sums.contains supported = true ↔ supported ∈ seen)
     (distinct : seen.Nodup) {nodes : List ForkChoiceNode}
-    {grouped : Std.HashMap ForkChoiceNode Nat} {failure : Option ForkChoiceError}
+    {grouped : Std.TreeMap ForkChoiceNode Nat ForkChoiceNode.compare}
+    {failure : Option ForkChoiceError}
     (group : store.groupVotes votes seen sums = (nodes, grouped, failure)) :
     (do
       let total ← votes.foldlM (init := start)
@@ -239,14 +265,15 @@ private theorem fold_eq_scoreFromTally (node : ForkChoiceNode)
               cases descends <;> simp [mem]
             · have fresh : supported ∉ seen := fun mem => contained ((keys supported).mpr mem)
               have zero : sums.getD supported 0 = 0 :=
-                Std.HashMap.getD_eq_fallback_of_contains_eq_false (Bool.eq_false_iff.mpr contained)
+                Std.TreeMap.getD_eq_fallback_of_contains_eq_false (Bool.eq_false_iff.mpr contained)
               simp only [contained, Bool.false_eq_true, ↓reduceIte, List.map_cons, List.sum_cons]
-              rw [sum_insert _ _ _ _ distinct, ← weighted, counted, Std.HashMap.getD_insert_self,
+              rw [sum_insert _ _ _ _ distinct, ← weighted, counted, Std.TreeMap.getD_insert_self,
                 zero]
               cases descends <;> simp [fresh] <;> omega
           case keys =>
             intro other
-            rw [Std.HashMap.contains_insert, Bool.or_eq_true, beq_iff_eq, keys]
+            rw [Std.TreeMap.contains_insert, Bool.or_eq_true, beq_iff_eq,
+              Std.LawfulEqCmp.compare_eq_iff_eq, keys]
             by_cases contained : sums.contains supported
             · simp only [contained, ↓reduceIte]
               have mem := (keys supported).mp contained
@@ -288,6 +315,117 @@ theorem getAttestationScore_eq_fold (node : ForkChoiceNode) (state : BeaconState
     ⟨nodes, grouped, failure⟩
   exact (fold_eq_scoreFromTally store node _ [] ∅ 0 (by simp) (by simp) (by simp) List.nodup_nil
     group).symm
+
+/-- Whether the latest vote of a validator counts for a node.
+
+The validator has a message and does not equivocate.
+
+The node of its vote is found, and the check that it descends from the node passes and holds. -/
+def voteCountsFor (node : ForkChoiceNode) (index : ValidatorIndex) : Bool :=
+  match store.latestMessages[index]? with
+  | none => false
+  | some message =>
+    if store.equivocatingIndices.contains index then false
+    else
+      match store.getSupportedNode message >>= (store.isAncestor · node) with
+      | .ok descends => descends
+      | .error _ => false
+
+/-- The vote of a validator with a message that does not equivocate counts as its check says. -/
+theorem voteCountsFor_of_check {node : ForkChoiceNode} {index : ValidatorIndex}
+    {message : LatestMessage fork} {descends : Bool}
+    (latest : store.latestMessages[index]? = some message)
+    (honest : store.equivocatingIndices.contains index = false)
+    (checked : (store.getSupportedNode message >>= (store.isAncestor · node)) = .ok descends) :
+    store.voteCountsFor node index = descends := by
+  simp only [voteCountsFor, latest, honest, Bool.false_eq_true, ↓reduceIte, checked]
+
+/-- A computed score of a node found the node of each vote that it reads.
+
+Those are the votes of the validators active and not slashed in the given state.
+
+The check that the node of each such vote descends from the node passes too.
+
+A validator without a message, or an equivocator, has no such vote. -/
+theorem getAttestationScore_checked {node : ForkChoiceNode} {state : BeaconState preset fork}
+    {score : Gwei} (computed : store.getAttestationScore node state = .ok score) :
+    ∀ entry ∈ unslashedActiveBalances state, ∀ message,
+      store.latestMessages[entry.1]? = some message →
+      store.equivocatingIndices.contains entry.1 = false →
+      ∃ descends,
+        (store.getSupportedNode message >>= (store.isAncestor · node)) = .ok descends := by
+  rw [getAttestationScore_eq_fold, bind_ok_iff] at computed
+  obtain ⟨total, fold, -⟩ := computed
+  refine foldlM_forall_of_ok (P := fun (entry : ValidatorIndex × Gwei) =>
+      ∀ message, store.latestMessages[entry.1]? = some message →
+        store.equivocatingIndices.contains entry.1 = false →
+        ∃ descends, (store.getSupportedNode message >>= (store.isAncestor · node)) = .ok descends)
+    ?_ _ _ _ fold
+  rintro acc ⟨index, balance⟩ result step message latest honest
+  simp only [latest, honest, Bool.false_eq_true, ↓reduceIte] at step
+  cases supported : store.getSupportedNode message with
+  | error e => simp [supported, bind, Except.bind] at step
+  | ok supported' =>
+    cases check : store.isAncestor supported' node with
+    | error e => simp [supported, check, bind, Except.bind] at step
+    | ok descends => exact ⟨descends, by simp [check, bind, Except.bind]⟩
+
+/-- A computed score of a node is the sum of the balances of the validators whose vote counts.
+
+The validators are those active and not slashed in the given state. -/
+theorem getAttestationScore_toNat_eq_sum {node : ForkChoiceNode}
+    {state : BeaconState preset fork} {score : Gwei}
+    (computed : store.getAttestationScore node state = .ok score) :
+    score.toNat = ((unslashedActiveBalances state).map fun entry =>
+      if store.voteCountsFor node entry.1 then entry.2.toNat else 0).sum := by
+  have checked := store.getAttestationScore_checked computed
+  rw [getAttestationScore_eq_fold, bind_ok_iff] at computed
+  obtain ⟨total, fold, bound⟩ := computed
+  -- Each step adds the balance exactly when the vote counts.
+  rw [foldlM_eq_ok_foldl (L := unslashedActiveBalances state)
+    (step := fun (total : Nat) (entry : ValidatorIndex × Gwei) =>
+      total + if store.voteCountsFor node entry.1 then entry.2.toNat else 0) ?steps 0,
+    Except.ok.injEq] at fold
+  case steps =>
+    rintro acc ⟨index, balance⟩ mem
+    cases latest : store.latestMessages[index]? with
+    | none => simp [latest, voteCountsFor, pure, Except.pure]
+    | some message =>
+      by_cases equivocating : store.equivocatingIndices.contains index
+      · have member : index ∈ store.equivocatingIndices := by simpa using equivocating
+        simp [latest, voteCountsFor, member, pure, Except.pure]
+      have honest := Bool.eq_false_iff.mpr equivocating
+      obtain ⟨descends, found⟩ := checked _ mem message latest honest
+      rw [voteCountsFor_of_check store latest honest found]
+      have absent : index ∉ store.equivocatingIndices := by simpa using equivocating
+      cases supported : store.getSupportedNode message with
+      | error e => simp [supported, bind, Except.bind] at found
+      | ok supported' =>
+        simp only [supported, bind, Except.bind] at found
+        cases descends <;>
+          simp [latest, absent, supported, found, bind, Except.bind, pure, Except.pure]
+  have sum : ∀ (entries : List (ValidatorIndex × Gwei)) (start : Nat),
+      entries.foldl (fun total entry =>
+          total + if store.voteCountsFor node entry.1 then entry.2.toNat else 0) start =
+        start + (entries.map fun entry =>
+          if store.voteCountsFor node entry.1 then entry.2.toNat else 0).sum := by
+    intro entries
+    induction entries with
+    | nil => simp
+    | cons entry rest ih =>
+      intro start
+      rw [List.foldl_cons, ih, List.map_cons, List.sum_cons]
+      omega
+  rw [sum, Nat.zero_add] at fold
+  subst fold
+  by_cases big : 2 ^ 64 ≤ ((unslashedActiveBalances state).map fun entry =>
+      if store.voteCountsFor node entry.1 then entry.2.toNat else 0).sum
+  · have big' : 18446744073709551616 ≤ ((unslashedActiveBalances state).map
+        fun entry => if store.voteCountsFor node entry.1 then entry.2.toNat else 0).sum := big
+    simp [big', throw, throwThe, MonadExceptOf.throw, Functor.map, Except.map] at bound
+  simp only [big, ↓reduceIte, pure, Except.pure, Except.ok.injEq] at bound
+  subst bound
+  exact UInt64.toNat_ofNat_of_lt' (by simp only [UInt64.size]; omega)
 
 end Store
 

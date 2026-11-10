@@ -44,7 +44,7 @@ theorem syncAggregateVerify_empty {message signature : ByteArray}
 /-- The checks of BLS reject an empty key list. -/
 theorem bls_fastAggregateVerify_empty (message signature : ByteArray) :
     SignatureChecks.bls.fastAggregateVerify #[] message signature = false := by
-  simp [SignatureChecks.bls, Signatures.fastAggregateVerify, Id.run]
+  simp [SignatureChecks.bls, Signatures.fastAggregateVerify]
   rfl
 
 /-- What a successful sync aggregate step checked.

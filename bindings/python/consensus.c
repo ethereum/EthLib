@@ -56,6 +56,11 @@ eth_consensus_compute_columns_for_custody_group(
 );
 
 extern lean_object*
+eth_consensus_is_valid_builder_signature(
+  lean_object* args
+);
+
+extern lean_object*
 eth_consensus_ssz_static(
   lean_object* args
 );
@@ -109,7 +114,7 @@ eth_consensus_reqresp_message(
 
 extern lean_object*
 eth_consensus_compute_min_epochs_for_block_requests(
-  lean_object* name
+  lean_object* args
 );
 
 extern lean_object*
@@ -124,6 +129,11 @@ eth_consensus_reqresp_request_bounds(
 
 extern lean_object*
 eth_consensus_reqresp_response_bounds(
+  lean_object* args
+);
+
+extern lean_object*
+eth_consensus_reqresp_response_valid(
   lean_object* args
 );
 
@@ -350,6 +360,11 @@ eth_consensus_is_optimistic_node(
 );
 
 extern lean_object*
+eth_consensus_inclusion_list_satisfaction(
+  lean_object* args
+);
+
+extern lean_object*
 eth_consensus_on_valid_payload(
   lean_object* args
 );
@@ -497,6 +512,14 @@ py_consensus_ssz_static(
   PyObject* args
 ) {
   return call_pyvalue_export(eth_consensus_ssz_static, args, 4, SSZ_ERROR);
+}
+
+PyObject*
+py_consensus_is_valid_builder_signature(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_is_valid_builder_signature, args, 5, SSZ_ERROR);
 }
 
 PyObject*
@@ -667,12 +690,8 @@ py_consensus_compute_min_epochs_for_block_requests(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject* name_obj;
-  if (!PyArg_ParseTuple(args, "O", &name_obj)) return NULL;
-  lean_object* name = str_arg(name_obj, "name");
-  if (!name) return NULL;
-  return except_into_pyint(
-    eth_consensus_compute_min_epochs_for_block_requests(name), CONSENSUS_ERROR);
+  return call_pyvalue_export(
+    eth_consensus_compute_min_epochs_for_block_requests, args, 2, CONSENSUS_ERROR);
 }
 
 PyObject*
@@ -1478,6 +1497,15 @@ py_consensus_is_optimistic_node(
 }
 
 PyObject*
+py_consensus_inclusion_list_satisfaction(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(
+    eth_consensus_inclusion_list_satisfaction, args, 11, FORK_CHOICE_ERROR);
+}
+
+PyObject*
 py_consensus_latest_verified_ancestor(
   PyObject* self,
   PyObject* args
@@ -1627,6 +1655,14 @@ py_consensus_reqresp_response_bounds(
   PyObject* args
 ) {
   return call_pyvalue_export(eth_consensus_reqresp_response_bounds, args, 3, CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_reqresp_response_valid(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_reqresp_response_valid, args, 6, CONSENSUS_ERROR);
 }
 
 PyObject*

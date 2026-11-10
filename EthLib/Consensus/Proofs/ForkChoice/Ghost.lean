@@ -360,40 +360,30 @@ structure ReadsVotes (store : Store preset fork) (T : BlockTree γ)
     store.isAncestor supported node = .ok result →
     (result = true ↔ ∃ m, vote index = some m ∧ T.Ancestor target m)
 
-open scoped Classical in
-/-- One step of the vote count adds the balance of a validator whose vote is in the subtree. -/
-private theorem countStep_ok {total total' : ℕ} {index : ValidatorIndex} {balance : Gwei}
+/-- A vote counts for the node exactly when it is in the subtree of the target.
+
+The node of the vote, if the validator has one and does not equivocate, must be found and checked.
+-/
+private theorem voteCountsFor_iff {index : ValidatorIndex}
     (reads : ReadsVotes store T vote node target)
-    (step : (match store.latestMessages[index]? with
-        | none => pure total
-        | some message => do
-          if store.equivocatingIndices.contains index then return total
-          if ← store.isAncestor (← store.getSupportedNode message) node then
-            return total + balance.toNat
-          return total : Except ForkChoiceError ℕ) = .ok total') :
-    total' = total + if ∃ m, vote index = some m ∧ T.Ancestor target m then balance.toNat
-      else 0 := by
-  cases message : store.latestMessages[index]? with
-  | none =>
-    simp only [message, pure, Except.pure, Except.ok.injEq] at step
-    simp [reads.silent index message, step]
-  | some message' =>
-    simp only [message] at step
+    (checked : ∀ message, store.latestMessages[index]? = some message →
+      store.equivocatingIndices.contains index = false →
+      ∃ descends, (store.getSupportedNode message >>= (store.isAncestor · node)) = .ok descends) :
+    store.voteCountsFor node index = true ↔ ∃ m, vote index = some m ∧ T.Ancestor target m := by
+  cases latest : store.latestMessages[index]? with
+  | none => simp [voteCountsFor, latest, reads.silent index latest]
+  | some message =>
     by_cases equivocating : store.equivocatingIndices.contains index
-    · simp only [equivocating, ↓reduceIte, pure, Except.pure, Except.ok.injEq] at step
-      simp [reads.equivocator index equivocating, step]
-    · simp only [equivocating, Bool.false_eq_true, ↓reduceIte, bind, Except.bind, pure,
-        Except.pure] at step
-      cases supported : store.getSupportedNode message' with
-      | error e => simp [supported] at step
-      | ok supported' =>
-        cases computed : store.isAncestor supported' node with
-        | error e => simp [supported, computed] at step
-        | ok result =>
-          have iff := reads.supports index message' supported' result message
-            (Bool.eq_false_iff.mpr equivocating) supported computed
-          simp only [supported, computed] at step
-          cases result <;> simp_all
+    · have member : index ∈ store.equivocatingIndices := by simpa using equivocating
+      simp [voteCountsFor, latest, member, reads.equivocator index equivocating]
+    have honest := Bool.eq_false_iff.mpr equivocating
+    obtain ⟨descends, found⟩ := checked message latest honest
+    rw [voteCountsFor_of_check store latest honest found]
+    cases supported : store.getSupportedNode message with
+    | error e => simp [supported, bind, Except.bind] at found
+    | ok supported' =>
+      simp only [supported, bind, Except.bind] at found
+      exact reads.supports index message supported' descends latest honest supported found
 
 /-- The votes for a known node are its weight in a tree that reads the votes of the store.
 
@@ -404,41 +394,17 @@ theorem getAttestationScore_eq_weight_of_reads {state : BeaconState preset fork}
     (computed : store.getAttestationScore node state = .ok score) :
     score.toNat = weight (voters state) (balanceAt state) G target := by
   classical
-  -- The vote count is a sum of one term per validator that counts.
-  let term : ValidatorIndex × Gwei → ℕ := fun (index, balance) =>
-    if ∃ m, vote index = some m ∧ T.Ancestor target m then balance.toNat else 0
-  have sum : ∀ (entries : List (ValidatorIndex × Gwei)) (start total : ℕ),
-      entries.foldlM (init := start) (fun (total : ℕ) (index, balance) =>
-        match store.latestMessages[index]? with
-        | none => pure total
-        | some message => do
-          if store.equivocatingIndices.contains index then return total
-          if ← store.isAncestor (← store.getSupportedNode message) node then
-            return total + balance.toNat
-          return total : ℕ → ValidatorIndex × Gwei → Except ForkChoiceError ℕ) = .ok total →
-      total = start + (entries.map term).sum := by
-    intro entries
-    induction entries with
-    | nil =>
-      intro start total fold
-      simp only [List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at fold
-      simp [fold]
-    | cons entry rest ih =>
-      intro start total fold
-      rw [List.foldlM_cons, bind_ok_iff] at fold
-      obtain ⟨middle, first, fold⟩ := fold
-      rw [ih middle total fold, countStep_ok reads first, List.map_cons, List.sum_cons,
-        Nat.add_assoc]
-  rw [getAttestationScore_eq_fold] at computed
-  rw [bind_ok_iff] at computed
-  obtain ⟨total, fold, bound⟩ := computed
-  have total_eq := sum _ 0 total fold
-  by_cases big : 2 ^ 64 ≤ total
-  · have big' : 18446744073709551616 ≤ total := big
-    simp [big', throw, throwThe, MonadExceptOf.throw] at bound
-  simp only [big, ↓reduceIte, pure, Except.pure, Except.ok.injEq] at bound
-  subst bound
-  rw [UInt64.toNat_ofNat_of_lt' (by simp only [UInt64.size]; omega), total_eq, Nat.zero_add]
+  -- The votes are a sum of one term per validator that counts.
+  let term : ValidatorIndex × Gwei → ℕ := fun entry =>
+    if ∃ m, vote entry.1 = some m ∧ T.Ancestor target m then entry.2.toNat else 0
+  have total := store.getAttestationScore_toNat_eq_sum computed
+  have checked := store.getAttestationScore_checked computed
+  have terms : ((unslashedActiveBalances state).map fun entry =>
+      if store.voteCountsFor node entry.1 then entry.2.toNat else 0) =
+        (unslashedActiveBalances state).map term :=
+    List.map_congr_left fun entry mem => by
+      simp only [term, voteCountsFor_iff reads (checked entry mem)]
+  rw [total, terms]
   -- Both sides sum over the positions of the registry.
   simp only [weight, Models.stake, supporters, voters, Finset.sum_filter, unslashedActiveBalances,
     List.map_filterMap, sum_filterMap_zipIdx, Array.length_toList]
@@ -749,6 +715,8 @@ theorem toLex_le_of_compareWeighted {x y : WeightedNode}
 
 variable {config : Config} {state : BeaconState preset fork}
 
+variable {tally : Except ForkChoiceError VoteTally}
+
 variable (store) in
 /-- The block that the store boosts, as a root of the tree.
 
@@ -775,43 +743,46 @@ def boostScore : ℕ :=
     | .error _ => 0
 
 /-- Before Gloas and without a boost, the weight of a known pending node is its weight in the model.
--/
+
+The weights read a tally of the votes of the given state. -/
 theorem getWeight_eq_weight {node : ForkChoiceNode} {block : BeaconBlock preset fork}
     {weightValue : Gwei} (before : fork < .glamsterdam)
     (noBoost : store.proposerBoostRoot = Vector.replicate 32 0)
-    (justifiedState : store.checkpointState store.justifiedCheckpoint = .ok state)
+    (tallied : tally = .ok (store.tallyVotes state))
     (found : store.blocks[node.root]? = some block) (pending : node.payloadStatus = .pending)
-    (nodes : List ForkChoiceNode) (computed : store.getWeight config node = .ok weightValue) :
+    (nodes : List ForkChoiceNode) (computed : store.getWeight config tally node = .ok weightValue) :
     weightValue.toNat =
       weight (voters state) (balanceAt state) (view lower nodes) (some node.root) := by
-  rw [getWeight_of_no_boost before noBoost, justifiedState] at computed
+  rw [getWeight_of_no_boost before noBoost, tallied] at computed
   exact getAttestationScore_eq_weight before found pending nodes computed
 
 /-- Before Gloas, the weight of a known pending node is its weight in the model with the boost.
 
-The boost is a vote for the boosted block, with the score of the boost as its stake. -/
+The boost is a vote for the boosted block, with the score of the boost as its stake.
+
+The weights read a tally of the votes of the given state. -/
 theorem getWeight_eq_weight_withBoost {node : ForkChoiceNode} {block : BeaconBlock preset fork}
     {weightValue : Gwei} (before : fork < .glamsterdam)
-    (justifiedState : store.checkpointState store.justifiedCheckpoint = .ok state)
+    (tallied : tally = .ok (store.tallyVotes state))
     (found : store.blocks[node.root]? = some block) (pending : node.payloadStatus = .pending)
-    (nodes : List ForkChoiceNode) (computed : store.getWeight config node = .ok weightValue) :
+    (nodes : List ForkChoiceNode) (computed : store.getWeight config tally node = .ok weightValue) :
     weightValue.toNat =
       weight (voters state).insertNone (boostStake (balanceAt state) (store.boostScore config))
         ((view lower nodes).withBoost store.boostedRoot) (some node.root) := by
   rw [weight_withBoost]
   by_cases zero : store.proposerBoostRoot = Vector.replicate 32 0
-  · rw [getWeight_eq_weight (lower := lower) before zero justifiedState found pending nodes
+  · rw [getWeight_eq_weight (lower := lower) before zero tallied found pending nodes
       computed]
     simp [boostedRoot, zero]
   have later : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
-  cases votes : store.getAttestationScore node state with
+  cases votes : store.scoreFromTally (store.tallyVotes state) node with
   | error e =>
-    simp [getWeight, later, justifiedState, votes, bind, Except.bind, pure, Except.pure] at computed
+    simp [getWeight, later, tallied, votes, bind, Except.bind, pure, Except.pure] at computed
   | ok votesValue =>
   rw [← getAttestationScore_eq_weight (lower := lower) before found pending nodes votes]
   cases check : store.isAncestor ⟨store.proposerBoostRoot, .pending⟩ node with
   | error e =>
-    simp [getWeight, later, justifiedState, votes, zero, check, bind, Except.bind, pure,
+    simp [getWeight, later, tallied, votes, zero, check, bind, Except.bind, pure,
       Except.pure] at computed
   | ok result =>
   -- The boost counts exactly when the boosted block descends from the node.
@@ -821,7 +792,7 @@ theorem getWeight_eq_weight_withBoost {node : ForkChoiceNode} {block : BeaconBlo
   cases result with
   | false =>
     simp only [Bool.false_eq_true, iff_false] at counts
-    simp [getWeight, later, justifiedState, votes, zero, check, bind, Except.bind, pure,
+    simp [getWeight, later, tallied, votes, zero, check, bind, Except.bind, pure,
       Except.pure, Except.mapError] at computed
     cases add : Uint64.addChecked votesValue 0 with
     | error e => simp [add] at computed
@@ -832,7 +803,7 @@ theorem getWeight_eq_weight_withBoost {node : ForkChoiceNode} {block : BeaconBlo
       rfl
   | true =>
     simp only [iff_true] at counts
-    simp [getWeight, later, justifiedState, votes, zero, check, bind, Except.bind, pure,
+    simp [getWeight, later, tallied, votes, zero, check, bind, Except.bind, pure,
       Except.pure, Except.mapError] at computed
     cases score : store.getProposerScore config with
     | error e => simp [score] at computed
@@ -889,11 +860,11 @@ private theorem getHeadFrom_eq_ghost_of_weights {ν : Type} {V : Finset ν} {w :
     (blocks : G.blocks = (view lower nodes).blocks)
     (weighs : ∀ {node : ForkChoiceNode} {block : BeaconBlock preset fork} {weightValue : Gwei},
       store.blocks[node.root]? = some block → node.payloadStatus = .pending →
-      store.getWeight config node = .ok weightValue →
+      store.getWeight config tally node = .ok weightValue →
         weightValue.toNat = weight V w G (some node.root)) :
     ∀ {start head : ForkChoiceNode}, start.payloadStatus = .pending →
       (blockTree lower).Ancestor (some store.justifiedCheckpoint.root) (some start.root) →
-      store.getHeadFrom config nodes start = .ok head →
+      store.getHeadFrom config tally nodes start = .ok head →
       ghost V w G rootValue (some start.root) = some head.root := by
   -- The model has the children of the view.
   have sameChildren : ∀ b, Models.ForkChoice.children G b =
@@ -906,7 +877,7 @@ private theorem getHeadFrom_eq_ghost_of_weights {ν : Type} {V : Finset ν} {w :
   | _ start ih =>
   intro head pending below walk
   rw [getHeadFrom] at walk
-  cases found : store.heaviestChild config nodes start with
+  cases found : store.heaviestChild config tally nodes start with
   | error e => simp [found, bind, Except.bind] at walk
   | ok result =>
   obtain ⟨children, weighted, childrenOk, weightedOk, choice⟩ := heaviestChild_eq found
@@ -976,37 +947,41 @@ private theorem getHeadFrom_eq_ghost_of_weights {ν : Type} {V : Finset ν} {w :
 
 /-- Before Gloas and without a boost, the walk of the store ends where LMD-GHOST ends.
 
-It starts from a pending node in the subtree of the justified block. -/
+It starts from a pending node in the subtree of the justified block.
+
+The weights read a tally of the votes of the given state. -/
 theorem getHeadFrom_eq_ghost {nodes : List ForkChoiceNode} (before : fork < .glamsterdam)
     (noBoost : store.proposerBoostRoot = Vector.replicate 32 0)
-    (justifiedState : store.checkpointState store.justifiedCheckpoint = .ok state)
+    (tallied : tally = .ok (store.tallyVotes state))
     (tree : store.getFilteredNodeTree config = .ok nodes) :
     ∀ {start head : ForkChoiceNode}, start.payloadStatus = .pending →
       (blockTree lower).Ancestor (some store.justifiedCheckpoint.root) (some start.root) →
-      store.getHeadFrom config nodes start = .ok head →
+      store.getHeadFrom config tally nodes start = .ok head →
       ghost (voters state) (balanceAt state) (view lower nodes) rootValue (some start.root) =
         some head.root :=
   getHeadFrom_eq_ghost_of_weights before tree rfl fun found pending computed =>
-    getWeight_eq_weight before noBoost justifiedState found pending nodes computed
+    getWeight_eq_weight before noBoost tallied found pending nodes computed
 
 /-- Before Gloas, the walk of the store ends where LMD-GHOST with the boost ends.
 
 The boost is a vote for the boosted block, with the score of the boost as its stake.
 
-The walk starts from a pending node in the subtree of the justified block. -/
+The walk starts from a pending node in the subtree of the justified block.
+
+The weights read a tally of the votes of the given state. -/
 theorem getHeadFrom_eq_ghost_withBoost {nodes : List ForkChoiceNode}
     (before : fork < .glamsterdam)
-    (justifiedState : store.checkpointState store.justifiedCheckpoint = .ok state)
+    (tallied : tally = .ok (store.tallyVotes state))
     (tree : store.getFilteredNodeTree config = .ok nodes) :
     ∀ {start head : ForkChoiceNode}, start.payloadStatus = .pending →
       (blockTree lower).Ancestor (some store.justifiedCheckpoint.root) (some start.root) →
-      store.getHeadFrom config nodes start = .ok head →
+      store.getHeadFrom config tally nodes start = .ok head →
       ghost (voters state).insertNone (boostStake (balanceAt state) (store.boostScore config))
         ((view lower nodes).withBoost store.boostedRoot) rootValue (some start.root) =
         some head.root :=
   getHeadFrom_eq_ghost_of_weights (G := (view lower nodes).withBoost store.boostedRoot) before tree
     rfl fun found pending computed =>
-      getWeight_eq_weight_withBoost before justifiedState found pending nodes computed
+      getWeight_eq_weight_withBoost before tallied found pending nodes computed
 
 /-- Before Gloas, the head is a pending node. -/
 theorem getHead_pending {head : ForkChoiceNode} (before : fork < .glamsterdam)
@@ -1028,14 +1003,14 @@ theorem getHeadFrom_descends {nodes : List ForkChoiceNode} {ancestor : ForkChoic
     (before : fork < .glamsterdam) :
     ∀ {start head : ForkChoiceNode}, start.payloadStatus = .pending →
       store.isAncestor start ancestor = .ok true →
-      store.getHeadFrom config nodes start = .ok head →
+      store.getHeadFrom config tally nodes start = .ok head →
       store.isAncestor head ancestor = .ok true := by
   intro start
   induction start using getHeadFrom.induct store with
   | _ start ih =>
   intro head pending descends walk
   rw [getHeadFrom] at walk
-  cases found : store.heaviestChild config nodes start with
+  cases found : store.heaviestChild config tally nodes start with
   | error e => simp [found, bind, Except.bind] at walk
   | ok result =>
   cases result with
@@ -1131,7 +1106,8 @@ theorem getHead_eq_ghost {nodes : List ForkChoiceNode} {head : ForkChoiceNode}
       (some store.justifiedCheckpoint.root) = some head.root := by
   have later : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
   simp only [getHead, later, false_and, ↓reduceIte, tree, bind, Except.bind] at found
-  exact getHeadFrom_eq_ghost before noBoost justifiedState tree rfl (.refl _) found
+  exact getHeadFrom_eq_ghost before noBoost (justifiedTally_of_state justifiedState) tree rfl
+    (.refl _) found
 
 variable (lower) in
 /-- Before Gloas, the head of the store is the head of LMD-GHOST with the boost.
@@ -1159,7 +1135,8 @@ theorem getHead_eq_ghost_withBoost {nodes : List ForkChoiceNode} {head : ForkCho
       (some store.justifiedCheckpoint.root) = some head.root := by
   have later : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
   simp only [getHead, later, false_and, ↓reduceIte, tree, bind, Except.bind] at found
-  exact getHeadFrom_eq_ghost_withBoost before justifiedState tree rfl (.refl _) found
+  exact getHeadFrom_eq_ghost_withBoost before (justifiedTally_of_state justifiedState) tree rfl
+    (.refl _) found
 
 /-- Before Gloas, the walk from a viable node reaches the slot of each viable ancestor. -/
 private theorem getAncestor_ok_of_viable_ancestor {nodes : List ForkChoiceNode}

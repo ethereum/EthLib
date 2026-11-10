@@ -204,6 +204,28 @@ theorem runFrame_of_step_eq_child_error {evm caller : Evm fork Meter} {message :
     split <;> rename_i hresume <;> rw [failed] at hresume <;> cases hresume
     simp [halts]
 
+/-- A step that sends a message, whose resume fails with an error that aborts, makes the run fail.
+
+The run fails with that error. -/
+theorem runFrame_of_step_eq_child_abort {evm caller : Evm fork Meter} {message : Message fork}
+    {resume : Evm fork Meter → Except EvmError (Evm fork Meter)}
+    {child : { child : Evm fork Meter // GasMeter.gasHeld child.gas ≤ message.gas }}
+    {within : GasMeter.gasHeld evm.gas ≤ bound} {e : EvmError} (running : evm.running = true)
+    (sent : step evm = .ok (.child caller message resume)) (lt : message.gas < bound)
+    (ran : runChild caller message lt = .ok child) (failed : resume child.1 = .error e)
+    (aborts : e.aborts = true) :
+    runFrame step decreases bound runChild evm within = .error e := by
+  rw [runFrame]
+  simp only [running, dite_true]
+  split <;> rename_i heq <;> rw [sent] at heq <;> cases heq
+  split <;> rename_i hchild
+  · rw [ran] at hchild
+    cases hchild
+  · rw [ran] at hchild
+    cases hchild
+    split <;> rename_i hresume <;> rw [failed] at hresume <;> cases hresume
+    simp [aborts]
+
 /-- A step that sends a message, which the runner fails to run, makes the run fail.
 
 The run fails with the error of the runner. -/

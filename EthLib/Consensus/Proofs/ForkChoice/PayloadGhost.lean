@@ -273,19 +273,23 @@ theorem getAttestationScore_eq_weight_of_gloas {node : ForkChoiceNode}
 
 variable {config : Config} {state : BeaconState preset fork}
 
+variable {tally : Except ForkChoiceError VoteTally}
+
 /-- From Gloas, a known node weighs its weight in the model of nodes.
 
-The node must not be a payload decision of the previous slot, and the boost must not apply. -/
+The node must not be a payload decision of the previous slot, and the boost must not apply.
+
+The weights read a tally of the votes of the given state. -/
 theorem getWeight_eq_weight_of_gloas {node : ForkChoiceNode} {block : BeaconBlock preset fork}
     {weightValue : Gwei} (gloas : .glamsterdam ≤ fork)
     (noBoost : store.shouldApplyProposerBoost config gloas = .ok false)
     (decision : store.isPreviousSlotPayloadDecision config node = .ok false)
-    (justifiedState : store.checkpointState store.justifiedCheckpoint = .ok state)
+    (tallied : tally = .ok (store.tallyVotes state))
     (found : store.blocks[node.root]? = some block) (nodes : List ForkChoiceNode)
-    (computed : store.getWeight config node = .ok weightValue) :
+    (computed : store.getWeight config tally node = .ok weightValue) :
     weightValue.toNat =
       weight (voters state) (balanceAt state) (nodeView lower nodes) node.toModel := by
-  rw [getWeight_of_not_boost gloas decision noBoost, justifiedState] at computed
+  rw [getWeight_of_not_boost gloas decision noBoost, tallied] at computed
   exact getAttestationScore_eq_weight_of_gloas gloas found nodes computed
 
 variable (store config) in
@@ -324,13 +328,15 @@ The node must not be a payload decision of the previous slot.
 
 The boost is a vote for the pending node of the boosted block.
 
-Its stake is the score of the boost. -/
+Its stake is the score of the boost.
+
+The weights read a tally of the votes of the given state. -/
 theorem getWeight_eq_weight_withBoost_of_gloas {node : ForkChoiceNode}
     {block : BeaconBlock preset fork} {weightValue : Gwei} (gloas : .glamsterdam ≤ fork)
     (decision : store.isPreviousSlotPayloadDecision config node = .ok false)
-    (justifiedState : store.checkpointState store.justifiedCheckpoint = .ok state)
+    (tallied : tally = .ok (store.tallyVotes state))
     (found : store.blocks[node.root]? = some block) (nodes : List ForkChoiceNode)
-    (computed : store.getWeight config node = .ok weightValue) :
+    (computed : store.getWeight config tally node = .ok weightValue) :
     weightValue.toNat =
       weight (voters state).insertNone
         (boostStake (balanceAt state) (store.boostScoreOfGloas config gloas))
@@ -338,23 +344,23 @@ theorem getWeight_eq_weight_withBoost_of_gloas {node : ForkChoiceNode}
   rw [weight_withBoost]
   cases boost : store.shouldApplyProposerBoost config gloas with
   | error e =>
-    cases votes : store.getAttestationScore node state <;>
-      simp [getWeight, gloas, decision, justifiedState, votes, boost, bind, Except.bind] at computed
+    cases votes : store.scoreFromTally (store.tallyVotes state) node <;>
+      simp [getWeight, gloas, decision, tallied, votes, boost, bind, Except.bind] at computed
   | ok applies =>
   cases applies with
   | false =>
-    rw [getWeight_eq_weight_of_gloas (lower := lower) gloas boost decision justifiedState found
+    rw [getWeight_eq_weight_of_gloas (lower := lower) gloas boost decision tallied found
       nodes computed]
     simp [boostedNode, boost]
   | true =>
-  cases votes : store.getAttestationScore node state with
+  cases votes : store.scoreFromTally (store.tallyVotes state) node with
   | error e =>
-    simp [getWeight, gloas, decision, justifiedState, votes, bind, Except.bind] at computed
+    simp [getWeight, gloas, decision, tallied, votes, bind, Except.bind] at computed
   | ok votesValue =>
   rw [← getAttestationScore_eq_weight_of_gloas (lower := lower) gloas found nodes votes]
   cases check : store.isAncestor ⟨store.proposerBoostRoot, .pending⟩ node with
   | error e =>
-    simp [getWeight, gloas, decision, justifiedState, votes, boost, check, bind, Except.bind]
+    simp [getWeight, gloas, decision, tallied, votes, boost, check, bind, Except.bind]
       at computed
   | ok result =>
   -- The boost counts exactly when the pending node of the boosted block descends from the node.
@@ -365,7 +371,7 @@ theorem getWeight_eq_weight_withBoost_of_gloas {node : ForkChoiceNode}
   cases result with
   | false =>
     simp only [Bool.false_eq_true, iff_false] at counts
-    simp [getWeight, gloas, decision, justifiedState, votes, boost, check, bind, Except.bind,
+    simp [getWeight, gloas, decision, tallied, votes, boost, check, bind, Except.bind,
       pure, Except.pure, Except.mapError] at computed
     cases add : Uint64.addChecked votesValue 0 with
     | error e => simp [add] at computed
@@ -376,7 +382,7 @@ theorem getWeight_eq_weight_withBoost_of_gloas {node : ForkChoiceNode}
       rfl
   | true =>
     simp only [iff_true] at counts
-    simp [getWeight, gloas, decision, justifiedState, votes, boost, check, bind, Except.bind,
+    simp [getWeight, gloas, decision, tallied, votes, boost, check, bind, Except.bind,
       Except.mapError] at computed
     cases score : store.getProposerScore config with
     | error e => simp [score] at computed
@@ -445,11 +451,11 @@ private theorem getHeadFrom_eq_ghost_of_gloas_of_weights {ν : Type} {V : Finset
     (tree : store.getFilteredNodeTree config = .ok nodes)
     (blocks : G.blocks = (nodeView lower nodes).blocks)
     (weighs : ∀ {node : ForkChoiceNode} {weightValue : Gwei}, node ∈ nodes →
-      store.getWeight config node = .ok weightValue →
+      store.getWeight config tally node = .ok weightValue →
         weightValue.toNat = weight V w G node.toModel) :
     ∀ {start head : ForkChoiceNode},
       (nodeTree lower).Ancestor (some store.justifiedCheckpoint.root, none) start.toModel →
-      store.getHeadFrom config nodes start = .ok head →
+      store.getHeadFrom config tally nodes start = .ok head →
       ghost V w G nodeOrder start.toModel = head.toModel := by
   -- The model has the children of the view.
   have sameChildren : ∀ b, Models.ForkChoice.children G b =
@@ -462,7 +468,7 @@ private theorem getHeadFrom_eq_ghost_of_gloas_of_weights {ν : Type} {V : Finset
   | _ start ih =>
   intro head below walk
   rw [getHeadFrom] at walk
-  cases found : store.heaviestChild config nodes start with
+  cases found : store.heaviestChild config tally nodes start with
   | error e => simp [found, bind, Except.bind] at walk
   | ok result =>
   obtain ⟨children, weighted, childrenOk, weightedOk, choice⟩ := heaviestChild_eq found
@@ -508,7 +514,7 @@ private theorem getHeadFrom_eq_ghost_of_gloas_of_weights {ν : Type} {V : Finset
       exact (mem_children_nodeView gloas tree below childrenOk).mpr sourceMem
     -- A weighed child is known, weighs its model weight, and breaks ties by its status number.
     have weighed : ∀ c ∈ children.filter (· ∈ nodes), ∀ {y : WeightedNode},
-        store.weighNode config c = .ok y →
+        store.weighNode config tally c = .ok y →
         toLex (y.2.1.toNat, toLex (rootValue (some y.1.root), y.2.2.toNat)) =
           toLex (weight V w G c.toModel, nodeOrder c.toModel) := by
       intro c cMem y yOk
@@ -553,20 +559,22 @@ private theorem getHeadFrom_eq_ghost_of_gloas_of_weights {ν : Type} {V : Finset
 
 No viable node may be a payload decision of the previous slot, and the boost must not apply.
 
-It starts from a node in the subtree of the pending node of the justified block. -/
+It starts from a node in the subtree of the pending node of the justified block.
+
+The weights read a tally of the votes of the given state. -/
 theorem getHeadFrom_eq_ghost_of_gloas {nodes : List ForkChoiceNode} (gloas : .glamsterdam ≤ fork)
     (noBoost : store.shouldApplyProposerBoost config gloas = .ok false)
     (noDecision : ∀ n ∈ nodes, store.isPreviousSlotPayloadDecision config n = .ok false)
-    (justifiedState : store.checkpointState store.justifiedCheckpoint = .ok state)
+    (tallied : tally = .ok (store.tallyVotes state))
     (tree : store.getFilteredNodeTree config = .ok nodes) :
     ∀ {start head : ForkChoiceNode},
       (nodeTree lower).Ancestor (some store.justifiedCheckpoint.root, none) start.toModel →
-      store.getHeadFrom config nodes start = .ok head →
+      store.getHeadFrom config tally nodes start = .ok head →
       ghost (voters state) (balanceAt state) (nodeView lower nodes) nodeOrder start.toModel =
         head.toModel :=
   getHeadFrom_eq_ghost_of_gloas_of_weights gloas noDecision tree rfl fun inNodes computed =>
     have ⟨_, ⟨_, found⟩, _⟩ := filterNodeTree_mem tree _ inNodes
-    getWeight_eq_weight_of_gloas gloas noBoost (noDecision _ inNodes) justifiedState found nodes
+    getWeight_eq_weight_of_gloas gloas noBoost (noDecision _ inNodes) tallied found nodes
       computed
 
 /-- From Gloas, the walk of the store ends where LMD-GHOST over nodes with the boost ends.
@@ -577,15 +585,17 @@ The boost is a vote for the pending node of the boosted block.
 
 Its stake is the score of the boost.
 
-It starts from a node in the subtree of the pending node of the justified block. -/
+It starts from a node in the subtree of the pending node of the justified block.
+
+The weights read a tally of the votes of the given state. -/
 theorem getHeadFrom_eq_ghost_withBoost_of_gloas {nodes : List ForkChoiceNode}
     (gloas : .glamsterdam ≤ fork)
     (noDecision : ∀ n ∈ nodes, store.isPreviousSlotPayloadDecision config n = .ok false)
-    (justifiedState : store.checkpointState store.justifiedCheckpoint = .ok state)
+    (tallied : tally = .ok (store.tallyVotes state))
     (tree : store.getFilteredNodeTree config = .ok nodes) :
     ∀ {start head : ForkChoiceNode},
       (nodeTree lower).Ancestor (some store.justifiedCheckpoint.root, none) start.toModel →
-      store.getHeadFrom config nodes start = .ok head →
+      store.getHeadFrom config tally nodes start = .ok head →
       ghost (voters state).insertNone
         (boostStake (balanceAt state) (store.boostScoreOfGloas config gloas))
         ((nodeView lower nodes).withBoost (store.boostedNode config gloas)) nodeOrder
@@ -594,7 +604,7 @@ theorem getHeadFrom_eq_ghost_withBoost_of_gloas {nodes : List ForkChoiceNode}
     (G := (nodeView lower nodes).withBoost (store.boostedNode config gloas)) gloas noDecision tree
     rfl fun inNodes computed =>
     have ⟨_, ⟨_, found⟩, _⟩ := filterNodeTree_mem tree _ inNodes
-    getWeight_eq_weight_withBoost_of_gloas gloas (noDecision _ inNodes) justifiedState found nodes
+    getWeight_eq_weight_withBoost_of_gloas gloas (noDecision _ inNodes) tallied found nodes
       computed
 
 variable (lower) in
@@ -623,7 +633,8 @@ theorem getHead_eq_ghost_of_gloas {nodes : List ForkChoiceNode} {head : ForkChoi
   have notEmpty : ¬ (.glamsterdam ≤ fork ∧ nodes.isEmpty = true) :=
     fun ⟨_, empty⟩ => someViable (List.isEmpty_iff.mp empty)
   simp only [getHead, tree, notEmpty, ↓reduceIte, bind, Except.bind] at found
-  exact getHeadFrom_eq_ghost_of_gloas gloas noBoost noDecision justifiedState tree (.refl _) found
+  exact getHeadFrom_eq_ghost_of_gloas gloas noBoost noDecision
+    (justifiedTally_of_state justifiedState) tree (.refl _) found
 
 variable (lower) in
 /-- From Gloas, the head of the store is the head of LMD-GHOST over nodes with the boost.
@@ -660,7 +671,8 @@ theorem getHead_eq_ghost_withBoost_of_gloas {nodes : List ForkChoiceNode} {head 
   have notEmpty : ¬ (.glamsterdam ≤ fork ∧ nodes.isEmpty = true) :=
     fun ⟨_, empty⟩ => someViable (List.isEmpty_iff.mp empty)
   simp only [getHead, tree, notEmpty, ↓reduceIte, bind, Except.bind] at found
-  exact getHeadFrom_eq_ghost_withBoost_of_gloas gloas noDecision justifiedState tree (.refl _) found
+  exact getHeadFrom_eq_ghost_withBoost_of_gloas gloas noDecision
+    (justifiedTally_of_state justifiedState) tree (.refl _) found
 
 /-! ## Every payload present -/
 

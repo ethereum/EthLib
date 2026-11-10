@@ -18,6 +18,42 @@ Not yet released.
   The latest verified ancestor and the optimistic node now run at Gloas.
   The theorem `latestVerifiedAncestor_of_glamsterdam` now states the Gloas answer, no longer a failure.
   The optimistic node then fails when the head is not optimistic, since its second case is not yet specified.
+- `compute_min_epochs_for_block_requests` now takes the fork, and from Gloas it applies a formula derived from the [weak subjectivity period of EIP-8061](https://eips.ethereum.org/EIPS/eip-8061#weak-subjectivity-period).
+  Before, every fork got the Phase 0 value: 33024 epochs on mainnet, where Gloas asks for 14299.
+  `Config.computeMinEpochsForBlockRequests` takes the fork as a new argument.
+  The C export `eth_consensus_compute_min_epochs_for_block_requests` reads the configuration and the fork as a pair, as `eth_consensus_gossip_topics` does.
+  In Python, `consensus.compute_min_epochs_for_block_requests` takes the fork first, then the configuration, `mainnet` by default.
+- `NoiseError` now gives its own code to each failure of the local identity secret, of signing and of the saved remote message, in the libp2p Noise handshake ([#1657](https://github.com/ethereum/EthLib/issues/1657)).
+  Before, a failure of the secret or of signing had code 9, the code of an invalid remote identity.
+  An identity secret that is 0, or at least the secp256k1 group order, now gives code 11, `identitySecret`.
+  A failure of ECDSA signing with that secret gives code 12, `signing`.
+  Completion of a state whose saved remote message is missing, or does not match the state, gives code 13, `savedRemote`.
+  Before, such a state gave the error of the failed step: code 1, 3, 4, 6, 7, 8 or 9.
+  Code 9 now means only a remote identity that fails to authenticate.
+- The libp2p Noise handshake gives the identity secret, the chaining key and the handshake hash their own types, apart from the type of the X25519 keys ([#1657](https://github.com/ethereum/EthLib/issues/1657)).
+  The secp256k1 identity secret of `writeLibp2p` and `makePayload` is a scalar `Secp256k1.Fn`, in place of 32 bytes.
+  `Libp2p.publicKey` and `Libp2p.sign` take that scalar too, and the exports read it from 32 big-endian bytes whose value must be below the group order.
+  The chaining key and the handshake hash of `SymmetricState` have the types `ChainingKey` and `HandshakeHash`, and `hkdf2` takes a `ChainingKey`.
+  The C exports and the Python functions keep their signatures: they take the secret and return the chaining key and the hash as 32 bytes.
+  `writeLibp2p` now rejects a zero identity secret before every other check, on every message, message 1 included.
+  The C export `eth_noise_libp2p_write`, and `noise_libp2p_write` in Python, give code 11 for a secret of 0 or at least the group order.
+  Before, a write at step 0 ignored the secret: message 1 succeeded, and a responder writing out of turn got code 1, `wrongPhase`, or code 10, `firstMessageExtensions`.
+- The libp2p Noise state now stores the authenticated remote, in place of the encrypted remote message and the state before it ([#1657](https://github.com/ethereum/EthLib/issues/1657)).
+  Completion returns that remote with the transport ciphers, and reads no message.
+  It returns `Remote × CipherState × CipherState`.
+  `Libp2pState.remoteMessage` is now `Libp2pState.remote`, a `Remote` with the static key, the identity point, the signature and the extensions.
+  `AuthenticatedRemote`, `RemoteInfo` and `remoteInfo` are removed, and `authenticatePayload` returns a `Remote`.
+  `writeLibp2p` no longer runs completion after message 3.
+  The Python state of `noise_libp2p_*` holds the remote as `(static_key, public_key, signature, extensions)`, or `None`, in place of the saved message and its state.
+  Completion checks that the stored remote has the remote static key of the handshake, and no longer verifies its signature.
+  Code 13, `savedRemote`, now means that at completion the state holds no remote, or one whose static key is not the remote static key of the handshake.
+  `readLibp2p_authenticates` now concludes that the new state stores the authenticated `Remote`.
+  The theorems `complete_authenticates` and `complete_peerId` are replaced by `complete_ok` and the `Produced` theorems, and `authenticatePayload_decode` by `authenticatePayload_ok`.
+  The C exports and Python functions that take a libp2p state, to write, read or complete, also give code 13 when the stored public key does not decode.
+- `ethlib.networking.noise` now exports short typed wrappers in place of the raw `noise_*` names of the extension ([#1657](https://github.com/ethereum/EthLib/issues/1657)).
+  `noise_initialize` is now `initialize`, `noise_cipher_encrypt` is `cipher_encrypt`, `noise_libp2p_complete` is `libp2p_complete`, and so on; `libp2p_write` takes `extensions=None` by default.
+  The package also exports the type aliases of its states, `CipherState`, `HandshakeState`, `Remote`, `Libp2pState`, `Identity` and `Completion`, which `lake exe gen-bindings` writes from Lean, and `NoiseError`.
+  The extension methods keep their names and signatures.
 - A chain configuration now holds the address of its deposit contract, and the deposit requests of a block come from that address ([#1486](https://github.com/ethereum/EthLib/issues/1486)).
   Before, every chain read deposits from the mainnet address, so a chain with another deposit contract, such as Sepolia, got no deposit request.
   The configuration that the exports read as JSON, or as a Python `dict`, must give `depositContractAddress`: `0x` and forty hex digits, or 20 bytes in Python.

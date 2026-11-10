@@ -14,6 +14,10 @@ For a total active balance `t` and a churn `c`, it is the withdrawal delay plus 
 
 The 64-bit computation gives that value exactly when nothing reaches `2^64` and `c` is not zero.
 
+Its epochs of churn, the period less the delay, times `c` are at most `SAFETY_DECAY / 200` of `t`.
+
+So a change of at most `3 c` for each of them, in total, keeps a margin of `1/3 - SAFETY_DECAY/100`.
+
 In Phase 0, a computed period is one of the two expressions of the rule, on natural numbers.
 
 In Phase 0, the period is at most the delay plus the larger of two terms.
@@ -90,6 +94,39 @@ theorem le_of_balanceChurnPeriod_eq_ok {minDelay total churn period : UInt64}
   obtain ⟨-, -, -, -, hperiod⟩ := balanceChurnPeriod_eq_ok_iff.mp h
   exact UInt64.le_iff_toNat_le.mpr (hperiod ▸ Nat.le_add_right _ _)
 
+/-- From Electra: the epochs of churn of a period, the period less the delay, are few enough.
+
+That many epochs, at `churn` each, total at most `SAFETY_DECAY / 200` of the total balance. -/
+theorem churn_le_of_balanceChurnPeriod_eq_ok {minDelay total churn period : UInt64}
+    (h : balanceChurnPeriod minDelay total churn = .ok period) :
+    200 * ((period.toNat - minDelay.toNat) * churn.toNat) ≤ SAFETY_DECAY.toNat * total.toNat := by
+  obtain ⟨-, -, -, -, hperiod⟩ := balanceChurnPeriod_eq_ok_iff.mp h
+  have hD : SAFETY_DECAY.toNat = 10 := rfl
+  rw [hperiod, Nat.add_sub_cancel_left, hD, ← Nat.mul_assoc, Nat.mul_comm 200, Nat.mul_assoc]
+  exact Nat.div_mul_le_self _ _
+
+/-- From Electra: the period keeps a safety margin of `1/3 - SAFETY_DECAY/100` of the balance.
+
+Take a stake `x` and the epochs `n` of churn of the period, the period less the delay.
+
+Assume the total balance is at most `3 x + 2 n k`, with `k` three times the churn.
+
+Accountable safety gives that bound when each set changes by at most `n k` since the checkpoint.
+
+Then `x` is at least `1/3 - SAFETY_DECAY/100` of the total balance.
+
+With `SAFETY_DECAY` at 10 that is `7/30`, about 23.3%. -/
+theorem safetyMargin_of_balanceChurnPeriod_eq_ok {minDelay total churn period : UInt64} {x : Nat}
+    (h : balanceChurnPeriod minDelay total churn = .ok period)
+    (bound : total.toNat ≤
+      3 * x + 2 * ((period.toNat - minDelay.toNat) * (3 * churn.toNat))) :
+    (100 - 3 * SAFETY_DECAY.toNat) * total.toNat ≤ 300 * x := by
+  have hchurn := churn_le_of_balanceChurnPeriod_eq_ok h
+  have hD : SAFETY_DECAY.toNat = 10 := rfl
+  rw [hD] at hchurn ⊢
+  rw [Nat.mul_left_comm (period.toNat - minDelay.toNat)] at bound
+  omega
+
 /-- Electra and Fulu: the period is the closed form, for the total active balance and its churn.
 
 It succeeds exactly when both have values and the closed form does. -/
@@ -146,6 +183,28 @@ theorem computeWeakSubjectivityPeriodGloas_eq_ok_iff {config : Config}
   unfold computeWeakSubjectivityPeriodGloas
   simp only [bind_ok_iff, mapError_ok_iff]
   exact ⟨fun ⟨a, ha, b, hb, hc⟩ => ⟨a, b, ha, hb, hc⟩, fun ⟨a, b, ha, hb, hc⟩ => ⟨a, ha, b, hb, hc⟩⟩
+
+/-- From Electra: the period is the balance churn period of the total active balance.
+
+Its churn is the weighted churn from Gloas, and the balance churn in Electra and Fulu. -/
+theorem balanceChurnPeriod_of_computeWeakSubjectivityPeriod_eq_ok {config : Config}
+    {state : BeaconState preset fork} (electra : .pectra ≤ fork) {period churn : UInt64}
+    (periodOk : computeWeakSubjectivityPeriod config state = .ok period)
+    (churnOk : if .glamsterdam ≤ fork then gloasWeightedChurn config state = .ok churn
+      else getBalanceChurnLimit config state = .ok churn) :
+    ∃ total, getTotalActiveBalance state = .ok total ∧
+      balanceChurnPeriod config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY total churn = .ok period := by
+  unfold computeWeakSubjectivityPeriod at periodOk
+  -- The split also discharges the Phase 0 branch with `electra`.
+  split at periodOk <;> rename_i gloas <;> simp only [gloas, ↓reduceIte] at churnOk
+  · obtain ⟨total, churn', totalOk, churnOk', periodOk⟩ :=
+      computeWeakSubjectivityPeriodGloas_eq_ok_iff.mp periodOk
+    rw [churnOk, Except.ok.injEq] at churnOk'
+    exact ⟨total, totalOk, churnOk' ▸ periodOk⟩
+  · obtain ⟨total, churn', totalOk, churnOk', periodOk⟩ :=
+      computeWeakSubjectivityPeriodElectra_eq_ok_iff.mp periodOk
+    rw [churnOk, Except.ok.injEq] at churnOk'
+    exact ⟨total, totalOk, churnOk' ▸ periodOk⟩
 
 /-- Phase 0: computed epochs are one of the two expressions of the rule, on natural numbers.
 
@@ -290,6 +349,66 @@ theorem computeWeakSubjectivityPeriodPhase0_le {config : Config}
   have hbound := phase0PeriodEpochs_le hepochs
   rw [hsum, (mulChecked_ok_iff.mp hDelta).2] at *
   exact Nat.add_le_add_left hbound _
+
+/-- Phase 0: with large balances, the rule's epochs for the churn of validators are few enough.
+
+Take `N` validators of average balance `t` and largest balance `T`, in ether, with `t ≤ T`.
+
+Take the rule's epochs for a churn of `delta` validators, with large balances: `230 T < 320 t`.
+
+That many epochs, at `delta` validators of `T` ether each, move at most `N t / 20` ether. -/
+private theorem churnEpochs_le {N t T delta : Nat} (largeBalances : 230 * T < 320 * t)
+    (averageLe : t ≤ T) :
+    20 * (N * (320 * t - 230 * T) / (600 * delta * (2 * t + T)) * delta * T) ≤ N * t := by
+  -- With `t ≤ T`, `T (320 t - 230 T) ≤ 30 t (2 t + T)`: write `T = t + s`.
+  have key : T * (320 * t - 230 * T) ≤ 30 * t * (2 * t + T) := by
+    obtain ⟨s, rfl⟩ := Nat.exists_eq_add_of_le averageLe
+    have expand :
+        (t + s) * (320 * t) ≤ 30 * t * (2 * t + (t + s)) + (t + s) * (230 * (t + s)) := by
+      grind
+    rw [Nat.mul_sub]
+    omega
+  have quotient := Nat.div_mul_le_self (N * (320 * t - 230 * T)) (600 * delta * (2 * t + T))
+  generalize N * (320 * t - 230 * T) / (600 * delta * (2 * t + T)) = q at quotient ⊢
+  -- Both sides times `30 (2 t + T)`, which is positive since `t` is.
+  refine Nat.le_of_mul_le_mul_right (c := 30 * (2 * t + T)) ?_ (by omega)
+  calc 20 * (q * delta * T) * (30 * (2 * t + T))
+      = T * (q * (20 * 30 * delta * (2 * t + T))) := by ac_rfl
+    _ = T * (q * (600 * delta * (2 * t + T))) := rfl
+    _ ≤ T * (N * (320 * t - 230 * T)) := Nat.mul_le_mul_left T quotient
+    _ = N * (T * (320 * t - 230 * T)) := by ac_rfl
+    _ ≤ N * (30 * t * (2 * t + T)) := Nat.mul_le_mul_left N key
+    _ = N * t * (30 * (2 * t + T)) := by ac_rfl
+
+/-- Phase 0: with large balances, the epochs of the rule are few enough when the top-ups are.
+
+Take `N` validators of average balance `t` and largest balance `T`, in ether, with `t ≤ T`.
+
+With large balances the rule takes the longer of its epochs for churn and for top-ups.
+
+The epochs for churn always move at most `N t / 20` ether, at `delta` validators of `T` each.
+
+Assume the epochs for top-ups do too.
+
+Then the epochs of the rule move at most `N t / 20` ether.
+
+That is `SAFETY_DECAY / 200` of the balance, with `SAFETY_DECAY` at 10. -/
+theorem churn_le_of_phase0PeriodEpochs_eq_ok {N t T delta Delta epochs : UInt64}
+    (h : phase0PeriodEpochs N t T delta Delta = .ok epochs)
+    (largeBalances : 230 * T.toNat < 320 * t.toNat) (averageLe : t.toNat ≤ T.toNat)
+    (topUps : 20 * (230 * N.toNat / (600 * Delta.toNat) * delta.toNat * T.toNat) ≤
+      N.toNat * t.toNat) :
+    20 * (epochs.toNat * delta.toNat * T.toNat) ≤ N.toNat * t.toNat := by
+  have closed := phase0PeriodEpochs_eq_ok h
+  simp only [largeBalances, ↓reduceIte] at closed
+  rw [closed]
+  rcases Nat.le_total (N.toNat * (320 * t.toNat - 230 * T.toNat) /
+      (600 * delta.toNat * (2 * t.toNat + T.toNat))) (230 * N.toNat / (600 * Delta.toNat))
+    with order | order
+  · rw [Nat.max_eq_right order]
+    exact topUps
+  · rw [Nat.max_eq_left order]
+    exact churnEpochs_le largeBalances averageLe
 
 /-! ## The withdrawal delay is a lower bound -/
 

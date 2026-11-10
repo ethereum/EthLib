@@ -3,6 +3,7 @@ module
 public import EthLib.Base.Proofs.MapM
 public import EthLib.Base.Proofs.Uint64
 public import EthLib.Consensus.Builders
+public import EthLib.Consensus.Proofs.Accessors
 public import EthLib.Serialization.Proofs.Ssz.Typed.Rooted
 
 /-!
@@ -21,6 +22,8 @@ What a builder owes fits in 64 bits exactly when its sum does, and then it is th
 A builder can cover a bid exactly when its balance holds the bid, its debt and the minimum deposit.
 
 With at least six slots in an epoch, the quorum of a payment never overflows.
+
+On a preset whose increment per slot is large enough, every quorum is at least one gwei.
 
 A builder that starts to exit is no longer active, unless its withdrawable epoch is the far future.
 
@@ -176,6 +179,47 @@ theorem canBuilderCoverBid_eq_ok_true_iff {state : BeaconState preset fork}
     simp only [pure, Except.pure, Except.ok.injEq, decide_eq_true_eq]
     rw [UInt64.le_iff_toNat_le, UInt64.toNat_sub_of_le _ _ fits, sum]
     omega
+
+/-- A preset whose payment quorum is at least one gwei on every state.
+
+Every total active balance is at least one effective balance increment.
+
+So the quorum is at least the share of one slot in that increment, times six, divided by ten.
+
+Each division rounds down, so the preset needs that share, times six, to be at least ten. -/
+abbrev Preset.PaymentQuorumPositive (preset : Preset) : Prop :=
+  BUILDER_PAYMENT_THRESHOLD_DENOMINATOR.toNat ≤
+    preset.EFFECTIVE_BALANCE_INCREMENT.toNat / preset.SLOTS_PER_EPOCH.toNat *
+      BUILDER_PAYMENT_THRESHOLD_NUMERATOR.toNat
+
+/-- The mainnet and minimal presets have a payment quorum of at least one gwei. -/
+theorem paymentQuorumPositive_presets :
+    Preset.mainnet.PaymentQuorumPositive ∧ Preset.minimal.PaymentQuorumPositive := by
+  decide
+
+/-- On a preset with this property, every quorum that is computed is at least one gwei.
+
+So a payment of zero weight, which no attester voted for, is never released. -/
+theorem getBuilderPaymentQuorumThreshold_pos {state : BeaconState preset fork}
+    (positive : preset.PaymentQuorumPositive) {quorum : Gwei}
+    (computed : getBuilderPaymentQuorumThreshold state = .ok quorum) : 0 < quorum := by
+  simp only [getBuilderPaymentQuorumThreshold, bind_ok_iff, liftArith, mapError_ok_iff,
+    mulChecked_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+  obtain ⟨total, totalOk, product, ⟨-, productIs⟩, rfl⟩ := computed
+  have least := UInt64.le_iff_toNat_le.mp (le_getTotalBalance totalOk)
+  -- The share of one slot in the total is at least its share in one increment.
+  have share : preset.EFFECTIVE_BALANCE_INCREMENT.toNat / preset.SLOTS_PER_EPOCH.toNat ≤
+      (total / preset.SLOTS_PER_EPOCH).toNat := by
+    rw [UInt64.toNat_div]
+    exact Nat.div_le_div_right least
+  have enough : BUILDER_PAYMENT_THRESHOLD_DENOMINATOR.toNat ≤ product.toNat := by
+    rw [productIs]
+    exact Nat.le_trans positive (Nat.mul_le_mul_right _ share)
+  rw [UInt64.lt_iff_toNat_lt, UInt64.toNat_div]
+  have ten : BUILDER_PAYMENT_THRESHOLD_DENOMINATOR.toNat = 10 := rfl
+  rw [ten] at enough ⊢
+  simp only [UInt64.toNat_zero]
+  omega
 
 /-- With at least six slots in an epoch, the quorum of a payment never overflows.
 

@@ -13,11 +13,21 @@ The bound loses the stake that activated and exited since a reference set.
 
 That result is Theorem 8.3 of Gasper §8.6, [arXiv 2003.03052v3](https://arxiv.org/abs/2003.03052v3).
 
+Against one reference set, such as the set of a trusted checkpoint, the bound has a simple form.
+
+The slashable stake is at least a third of the reference stake.
+
+It loses a third of the change of both sets since the reference set.
+
+There an exit counts twice and an activation once.
+
+When the sets change by at most `d` in each of `n` steps, the loss is at most `2 n d / 3`.
+
 With one validator set for all votes, the slashable validators hold one third of its stake.
 
 That result is Theorem 1 of Casper FFG §2.1 and Theorem 5.2 of Gasper.
 
-Both hold for `k`-finalization with every `k ≥ 1`.
+Accountable safety holds for `k`-finalization with every `k ≥ 1`.
 
 The proof follows Gasper Lemma 4.11, Lemma 5.1 and Lemma 8.2.
 -/
@@ -242,6 +252,118 @@ theorem accountable_safety_dynamic {c₁ c₂ : Checkpoint β}
     ⟨hl₁.two_mul_stake_le_of_slashable hl₂ hboth V₀, ?_⟩⟩
   rw [Finset.inter_comm]
   exact hl₂.two_mul_stake_le_of_slashable hl₁ (fun v hv₂ hv₁ => hboth v hv₁ hv₂) V₀
+
+open scoped Classical in
+/-- Accountable safety against a fixed reference set `V₀`, such as the set of a trusted checkpoint.
+
+Take two finalized checkpoints whose blocks conflict.
+
+Then two justified checkpoints `l` and `r` have the property below.
+
+Their epochs lie between the epochs of the two finalized checkpoints.
+
+Take the validator sets `L` and `R` of `l` and `r`.
+
+Measure the change of `L` since `V₀` as the stake that joined plus twice the stake that left.
+
+The slashable validators of both sets hold stake `x` with the bound below.
+
+The bound: `w(V₀) ≤ 3 * x + (w(L \ V₀) + 2 * w(V₀ \ L)) + (w(R \ V₀) + 2 * w(V₀ \ R))`.
+
+So `x` is at least a third of the stake of `V₀`, less a third of the two changes.
+
+An exit lowers the stake of its set, which the bound counts twice, so an exit counts twice.
+
+The two checkpoints do not depend on the reference set.
+
+The bound follows from the first bound of Gasper Theorem 8.3. -/
+theorem accountable_safety_reference [DecidableEq ν] {c₁ c₂ : Checkpoint β}
+    (h₁ : Finalized V w genesis votes c₁) (h₂ : Finalized V w genesis votes c₂)
+    (hc : Conflicting c₁.block c₂.block) :
+    ∃ l r : Checkpoint β, min c₁.epoch c₂.epoch ≤ l.epoch ∧ l.epoch ≤ max c₁.epoch c₂.epoch ∧
+      min c₁.epoch c₂.epoch ≤ r.epoch ∧ r.epoch ≤ max c₁.epoch c₂.epoch ∧
+      Justified V w genesis votes l ∧ Justified V w genesis votes r ∧ ∀ V₀ : Finset ν,
+      stake w V₀ ≤ 3 * stake w {v ∈ V l ∩ V r | Slashable votes v} +
+        (stake w (V l \ V₀) + 2 * stake w (V₀ \ V l)) +
+        (stake w (V r \ V₀) + 2 * stake w (V₀ \ V r)) := by
+  obtain ⟨l, r, lo₁, hi₁, lo₂, hi₂, hl, hr, h⟩ := accountable_safety_dynamic h₁ h₂ hc
+  refine ⟨l, r, lo₁, hi₁, lo₂, hi₂, hl, hr, fun V₀ => ?_⟩
+  -- The theorem above decides equality classically; this statement uses the given test.
+  have hbound : 2 * stake w (V l) ≤ 3 * stake w {v ∈ V l ∩ V r | Slashable votes v} +
+      stake w (V r) + 3 * (stake w (V l \ V₀) + stake w (V₀ \ V r)) := by
+    convert (h V₀).1
+  -- Each set and what left `V₀` weigh as much as `V₀` and what joined.
+  have hL := stake_add_stake_sdiff (w := w) (V l) V₀
+  have hR := stake_add_stake_sdiff (w := w) (V r) V₀
+  omega
+
+open scoped Classical in
+/-- Accountable safety when the validator sets change little since a reference set `V₀`.
+
+Take two finalized checkpoints whose blocks conflict.
+
+Take each justified checkpoint whose epoch lies between theirs.
+
+Assume the stake that joined its set since `V₀`, plus twice the stake that left, is at most `b`.
+
+Then two such justified checkpoints `l` and `r` have slashable validators of both sets.
+
+Their stake `x` satisfies `w(V₀) ≤ 3 * x + 2 * b`. -/
+theorem accountable_safety_of_change [DecidableEq ν] {c₁ c₂ : Checkpoint β}
+    (h₁ : Finalized V w genesis votes c₁) (h₂ : Finalized V w genesis votes c₂)
+    (hc : Conflicting c₁.block c₂.block) (V₀ : Finset ν) (b : ℕ)
+    (change : ∀ c : Checkpoint β, min c₁.epoch c₂.epoch ≤ c.epoch →
+      c.epoch ≤ max c₁.epoch c₂.epoch → Justified V w genesis votes c →
+      stake w (V c \ V₀) + 2 * stake w (V₀ \ V c) ≤ b) :
+    ∃ l r : Checkpoint β, min c₁.epoch c₂.epoch ≤ l.epoch ∧ l.epoch ≤ max c₁.epoch c₂.epoch ∧
+      min c₁.epoch c₂.epoch ≤ r.epoch ∧ r.epoch ≤ max c₁.epoch c₂.epoch ∧
+      Justified V w genesis votes l ∧ Justified V w genesis votes r ∧
+      stake w V₀ ≤ 3 * stake w {v ∈ V l ∩ V r | Slashable votes v} + 2 * b := by
+  obtain ⟨l, r, lo₁, hi₁, lo₂, hi₂, hl, hr, h⟩ := accountable_safety_reference h₁ h₂ hc
+  have h := h V₀
+  refine ⟨l, r, lo₁, hi₁, lo₂, hi₂, hl, hr, ?_⟩
+  have := change l lo₁ hi₁ hl
+  have := change r lo₂ hi₂ hr
+  omega
+
+open scoped Classical in
+/-- Accountable safety when the validator sets change slowly after a reference set `V₀`.
+
+Take two finalized checkpoints whose blocks conflict.
+
+Take each justified checkpoint whose epoch lies between theirs.
+
+Assume its set is reached from `V₀` in at most `n` steps of sets.
+
+At each step, the stake that joins plus twice the stake that leaves is at most `d`.
+
+Then two such justified checkpoints `l` and `r` have slashable validators of both sets.
+
+Their stake `x` satisfies `w(V₀) ≤ 3 * x + 2 * n * d`.
+
+So `x` is at least a third of the stake of `V₀`, less two thirds of `n * d`.
+
+A step can stand for one epoch.
+
+Then `d` bounds the stake that activates plus twice the stake that exits in an epoch.
+
+The sequence of steps may depend on the checkpoint, as each branch has its own sets. -/
+theorem accountable_safety_of_steps [DecidableEq ν] {c₁ c₂ : Checkpoint β}
+    (h₁ : Finalized V w genesis votes c₁) (h₂ : Finalized V w genesis votes c₂)
+    (hc : Conflicting c₁.block c₂.block) (V₀ : Finset ν) (n d : ℕ)
+    (steps : ∀ c : Checkpoint β, min c₁.epoch c₂.epoch ≤ c.epoch →
+      c.epoch ≤ max c₁.epoch c₂.epoch → Justified V w genesis votes c →
+      ∃ S : ℕ → Finset ν, ∃ m ≤ n, S 0 = V₀ ∧ S m = V c ∧
+        ∀ i < m, stake w (S (i + 1) \ S i) + 2 * stake w (S i \ S (i + 1)) ≤ d) :
+    ∃ l r : Checkpoint β, min c₁.epoch c₂.epoch ≤ l.epoch ∧ l.epoch ≤ max c₁.epoch c₂.epoch ∧
+      min c₁.epoch c₂.epoch ≤ r.epoch ∧ r.epoch ≤ max c₁.epoch c₂.epoch ∧
+      Justified V w genesis votes l ∧ Justified V w genesis votes r ∧
+      stake w V₀ ≤ 3 * stake w {v ∈ V l ∩ V r | Slashable votes v} + 2 * (n * d) := by
+  -- The change of each set since `V₀` is at most the changes of its steps, so at most `n * d`.
+  refine accountable_safety_of_change h₁ h₂ hc V₀ (n * d) fun c lo hi hj => ?_
+  obtain ⟨S, m, hm, h0, hS, hstep⟩ := steps c lo hi hj
+  rw [← h0, ← hS]
+  exact (stake_sdiff_add_two_mul_le S hstep).trans (Nat.mul_le_mul_right d hm)
 
 /-- Accountable safety with one validator set `V` for every vote.
 

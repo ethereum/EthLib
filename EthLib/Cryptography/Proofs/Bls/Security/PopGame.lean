@@ -7,7 +7,7 @@ public import EthLib.Cryptography.Proofs.Bls.Security.Game
 
 This is the proof-of-possession scheme of the BLS draft, §3.3.
 
-<https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signature-05#section-3.3>
+<https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signature-04#section-3.3>
 
 A proof of possession of the key `a • g1` is `a • H'(a • g1)`, with `H'` a second hash into `G2`.
 
@@ -34,7 +34,7 @@ Accepting more outputs only makes the adversary's task easier.
 A bound will need two more hypotheses, which the game itself does not impose.
 
 - Every key is a multiple of `g1`, as in a group of prime order.
-- The number of key hash calls stays below the characteristic of the scalars.
+- The number of key hash calls is at most the characteristic of the scalars.
 
 Without the second, enough copies of the honest key sum to zero.
 

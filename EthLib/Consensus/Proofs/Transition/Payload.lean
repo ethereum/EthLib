@@ -17,6 +17,8 @@ A bid with a value records one payment, at the position of its slot in the next 
 That payment pays the bid's value from its builder to the proposer of the slot.
 
 An envelope passes its checks exactly when each check of the specification holds.
+
+An execution layer that rejects every payload rejects every envelope.
 -/
 
 @[expose] public section
@@ -193,5 +195,14 @@ theorem verifyExecutionPayloadEnvelope_ok_iff {engine : ExecutionEngine preset f
       randao, gas, hash, _, requestsOk, rfl, slot, parentHash, _, timeOk, rfl, _, withdrawalsOk,
       _, expectedOk, rfl, ?_⟩
     simp [bound, accepted, bind, Except.bind, liftSsz, Except.mapError, ensure]
+
+/-- An execution layer that rejects every payload rejects every envelope. -/
+theorem verifyExecutionPayloadEnvelope_constant_false
+    {signed : SignedExecutionPayloadEnvelope preset fork} :
+    verifyExecutionPayloadEnvelope config checks (.constant false) state gloas signed ≠ .ok () := by
+  intro verified
+  obtain ⟨-, -, -, -, -, -, -, -, -, -, -, -, _, accepted⟩ :=
+    verifyExecutionPayloadEnvelope_ok_iff.mp verified
+  simp [ExecutionEngine.constant] at accepted
 
 end EthLib.Consensus
