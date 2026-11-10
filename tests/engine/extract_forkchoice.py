@@ -21,6 +21,8 @@ def main(fixtures: Path, out: Path) -> None:
                 {
                     "blockHash": p["params"][0]["blockHash"],
                     "parentHash": p["params"][0]["parentHash"],
+                    "number": p["params"][0]["blockNumber"],
+                    "timestamp": p["params"][0]["timestamp"],
                     "valid": not p.get("validationError") and "errorCode" not in p,
                     "forkchoiceUpdatedVersion": p["forkchoiceUpdatedVersion"],
                 }
@@ -34,6 +36,8 @@ def main(fixtures: Path, out: Path) -> None:
                     "test": name,
                     "network": network,
                     "genesisHash": test["genesisBlockHeader"]["hash"],
+                    "genesisNumber": test["genesisBlockHeader"]["number"],
+                    "genesisTimestamp": test["genesisBlockHeader"]["timestamp"],
                     "payloads": payloads,
                     "lastblockhash": test["lastblockhash"],
                 }

@@ -1367,7 +1367,7 @@ def bindings : List Binding := [
       "request: dict) -> tuple[dict, bytes, bytes] | tuple[dict, None, None]",
     [`EthLib.Engine.EngineError], some "EngineError"⟩,
   ⟨"engine_forkchoice_updated", `EthLib.Engine.Exports.forkchoiceUpdatedExport,
-    "(tree: list, finalized: str | None, request: dict) -> dict",
+    "(config: dict, tree: list, finalized: str | None, request: dict) -> dict",
     [`EthLib.Engine.EngineError], some "EngineError"⟩,
   ⟨"engine_get_blobs", `EthLib.Engine.Exports.getBlobsExport,
     "(pool: list[tuple[bytes, bytes | None, bytes | None, " ++
