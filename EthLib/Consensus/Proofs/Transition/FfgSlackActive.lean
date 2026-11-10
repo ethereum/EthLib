@@ -44,7 +44,7 @@ So the voters of a link are validators whose attestations a block of some run ap
 
 The step asks only the stake, the order of the blocks, the size of the registry and the preset.
 
-The blocks of the model can also be the roots themselves, ordered by the links of the chain.
+The blocks of the model can also be the roots themselves, ordered by the links of reached states.
 
 Two roots are linked when a state that genesis reaches records them at consecutive slots.
 

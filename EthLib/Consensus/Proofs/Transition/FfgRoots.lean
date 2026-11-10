@@ -13,9 +13,9 @@ At two consecutive slots it records the same root, or a block and its child.
 
 The parent root of a block is the root recorded at the slot before it, by the check of its header.
 
-No theorem here states that, and it reads a root as a block only if header roots do not collide.
+No theorem here states that.
 
-So the pairs of roots at consecutive slots order the roots by ancestry.
+Without a collision of header roots, these pairs order the roots by ancestry.
 
 Each step of a chain keeps each justified checkpoint below the roots recorded from its epoch on.
 
@@ -52,14 +52,20 @@ def rootLinks {fork : Fork} (state : BeaconState preset fork) : Set (Root × Roo
       getBlockRootAtSlot state (slot + 1) = .ok link.2) ∨
     (link.1 = Vector.replicate 32 0 ∧ getBlockRootAtSlot state 0 = .ok link.2)}
 
-/-- The roots, ordered by the links that the states a chain reaches from a first state record.
+/-- The roots, ordered by the links that each state reachable from a first state records.
 
-The order holds the links of every branch from that state, so two branches share it. -/
+The order holds the links of every branch from that state, so two branches share it.
+
+So it also holds every collision of header roots among reachable headers, which exist by counting.
+
+It is ancestry only up to those collisions, so it does not serve a safety theorem for two chains.
+
+Such a theorem needs the order of the states of the given runs, with a named collision search. -/
 def ChainRoot (_config : Config) (_checks : SignatureChecks) (_first : ForkedBeaconState preset) :
     Type :=
   Root
 
-/-- Two roots are in order when links of reached states lead from the first to the second. -/
+/-- Two roots are in order when links of reached states lead from the older to the newer one. -/
 instance ChainRoot.instPreorder (first : ForkedBeaconState preset) :
     Preorder (ChainRoot config checks first) where
   le older newer := Relation.ReflTransGen (fun older newer => ∃ forked,
@@ -73,7 +79,7 @@ def toChainRoot (config : Config) (checks : SignatureChecks) (first : ForkedBeac
     (root : Root) : ChainRoot config checks first :=
   root
 
-/-- Each justified checkpoint of a state is below the roots that the state records from its epoch.
+/-- Each justified checkpoint is below the roots the state records from the first slot of its epoch.
 
 The order is that of the blocks of a map from roots.
 
@@ -96,7 +102,8 @@ structure RootsAbove {fork : Fork} (block : Root → β) (state : BeaconState pr
     (recentJustified state current).epoch.toNat * preset.SLOTS_PER_EPOCH.toNat < state.slot.toNat ∨
       ((recentJustified state current).epoch = 0 ∧
         (recentJustified state current).root = Vector.replicate 32 0)
-  /-- The block of each justified checkpoint is below that of each root recorded from its epoch. -/
+  /-- The block of each justified checkpoint is below that of each root recorded from its epoch on.
+  -/
   below : ∀ (current : Bool) (slot : Slot) (root : Root),
     (recentJustified state current).epoch.toNat * preset.SLOTS_PER_EPOCH.toNat ≤ slot.toNat →
       getBlockRootAtSlot state slot = .ok root →
