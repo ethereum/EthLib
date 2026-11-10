@@ -27,6 +27,8 @@ From Gloas the slot number and the target gas limit appear.
 
 The custody columns are 16 bytes of an SSZ bitvector that the caller gives, else `null`.
 
+The Engine API gives no bit order, so EthLib takes that of the bitvector, as for blob cells.
+
 The export from Gloas builds its store from an anchor state, an anchor block and steps.
 
 It reads the finalized block hash from that store.

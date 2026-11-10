@@ -54,13 +54,17 @@ From Gloas the attributes add the slot of the state and a target gas limit that 
 
 From Heze the proposer also reads the transactions of the inclusion lists of the slot before.
 
-The safe block of the update comes from the fast confirmation, through the caller.
+The safe and the finalized block of the update come from the fork choice, through the caller.
 
-The finalized block is the payload of the finalized checkpoint, read from the fork choice store.
+The caller reads the finalized block from the store, with the rule of this module.
+
+That block is the payload of the finalized checkpoint.
 
 From Gloas it is the parent payload that the bid of that block builds on.
 
 From Gloas the update may also name the columns that the node custodies, one bit per column.
+
+The guide of the proposer names none, while the fork choice says that a node should name them.
 
 The call to the execution layer, and the payload that it builds, are not specified here.
 

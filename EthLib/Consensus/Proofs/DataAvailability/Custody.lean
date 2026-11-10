@@ -283,6 +283,16 @@ theorem mem_computeColumnsForCustodyGroup {preset : Preset} {group : CustodyInde
 
 /-! ## The custody column bits -/
 
+/-- Custody column bits come from a choice of groups that succeeds. -/
+theorem getCustodyColumnBits_groups {preset : Preset} {nodeId : NodeID} {count : UInt64}
+    {fuel : Nat} {bits : Serialization.Ssz.Bitvector preset.NUMBER_OF_COLUMNS.toNat}
+    (computed : getCustodyColumnBits config preset nodeId count fuel = .ok bits) :
+    ∃ groups, getCustodyGroups config nodeId count fuel = .ok groups := by
+  simp only [getCustodyColumnBits, bind, Except.bind] at computed
+  split at computed
+  · cases computed
+  · exact ⟨_, by assumption⟩
+
 /-- A custody column bit is set exactly when a group of the node has that column. -/
 theorem getCustodyColumnBits_get_iff {preset : Preset} {nodeId : NodeID} {count : UInt64}
     {fuel : Nat} {bits : Serialization.Ssz.Bitvector preset.NUMBER_OF_COLUMNS.toNat}
@@ -308,9 +318,11 @@ theorem getCustodyColumnBits_get_iff {preset : Preset} {nodeId : NodeID} {count 
       obtain rfl := Except.ok.inj (found.symm.trans found')
       exact ⟨columns, held, member⟩
 
-/-- Let `N` be the number of groups.
+/-- Let `N` be the number of custody groups of the configuration.
 
-A custody column bit is set exactly when the column is below `N * (NUMBER_OF_COLUMNS / N)`.
+Let `C` be the number of columns.
+
+A custody column bit is set exactly when the column is below `N * (C / N)`.
 
 Its residue modulo `N` must also be one of the groups of the node. -/
 theorem getCustodyColumnBits_get_iff_mod {preset : Preset} {nodeId : NodeID} {count : UInt64}

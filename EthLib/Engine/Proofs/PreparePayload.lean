@@ -44,7 +44,7 @@ The hashes of the latest bid must differ, and the latest block hash must be its 
 
 The state must also record the root of its latest block header as the root of the slot before.
 
-The finalized hash of an update is the hash of the finalized payload before Gloas.
+The finalized hash that a store gives is the hash of the finalized payload before Gloas.
 
 From Gloas it is the parent hash in the bid of the finalized block.
 -/
