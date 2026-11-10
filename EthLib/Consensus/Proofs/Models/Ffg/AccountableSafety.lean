@@ -39,13 +39,13 @@ With slack links, each stake bound also loses twice the slack of two links.
 
 Each checkpoint then has a set of weights, and its links hold under some weights of that set.
 
-The bounds measure every stake under reference weights.
+The bounds measure every stake but the slack under reference weights.
 
 They lose the change from the reference weights to the weights of each of the two links.
 
 In the reference form, a gain of weight counts like an activation, and a loss like an exit.
 
-With one stake function as reference weights that change is zero, which gives the bounds of Gasper.
+With one stake function in each set and as reference weights, that change is zero.
 
 With no slack, a slack link is a supermajority link, which gives the bounds without slack.
 -/
@@ -220,7 +220,7 @@ The same holds for `R` under weights `w₂`.
 
 `V₀` is any reference set, and the stake of `L \ V₀` and `V₀ \ R` counts the change since it.
 
-Every stake is measured under any reference weights `w₀`.
+Every other stake is measured under any reference weights `w₀`.
 
 The slashable validators of both sets then hold stake `x` with the bound below.
 

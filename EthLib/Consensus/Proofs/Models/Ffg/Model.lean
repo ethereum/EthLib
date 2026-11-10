@@ -55,7 +55,7 @@ A set of weights holds them both, where a single weights function could not.
 
 Nothing bounds `W` either: with the zero weights in `W t`, every ordered link is a slack link.
 
-So the safety bounds say something only when each weights of each set stays close to a reference.
+So the bounds say something only when every choice of weights in each set stays near a reference.
 
 With `U = V` and the single stake function `w` in each set, a slack link is a supermajority link.
 
