@@ -18,6 +18,8 @@ The node composition picks the first key in two places, and neither pick matters
 
 So the composition gives the same node for any reordering of keys with distinct paths.
 
+A secured trie also has the root of the plain trie keyed by the hashes of its keys.
+
 The root then depends only on the map:
 
 - A plain trie needs distinct keys.
@@ -380,5 +382,27 @@ theorem root_secured_eq (hash : ByteArray → Hash32) {data data' : List (ByteAr
   have hbytes := nodup_map_of_injective hashBytes_injective hhashes
   simpa [keyPath_eq, List.map_map, Function.comp_def] using
     nodup_map_of_injective (fun _ _ h => bytesToNibbleList_injective h) hbytes
+
+/-- A secured trie has the root of the plain trie keyed by the hashes of its keys. -/
+theorem root_secured_eq_plain (hash : ByteArray → Hash32) (data : List (ByteArray × ByteArray)) :
+    root hash ⟨true, data⟩ =
+      root hash ⟨false, data.map fun entry => (⟨(hash entry.1).toArray⟩, entry.2)⟩ := by
+  by_cases hempty : ∃ entry ∈ data, entry.2.size = 0
+  · -- Both tries hold the empty value, so neither has a root.
+    obtain ⟨entry, hmem, hsize⟩ := hempty
+    rw [root_emptyValue hash _ ⟨entry, hmem, hsize⟩,
+      root_emptyValue hash _ ⟨(⟨(hash entry.1).toArray⟩, entry.2),
+        List.mem_map.mpr ⟨entry, hmem, rfl⟩, hsize⟩]
+  · -- Both tries prepare to the same paths and values.
+    have hfull : ∀ entry ∈ data, entry.2.size ≠ 0 := fun entry hmem hsize =>
+      hempty ⟨entry, hmem, hsize⟩
+    have hfull' : ∀ entry ∈ data.map (fun entry => ((⟨(hash entry.1).toArray⟩ : ByteArray),
+        entry.2)), entry.2.size ≠ 0 := by
+      intro hashed hhashed
+      obtain ⟨entry, hmem, rfl⟩ := List.mem_map.mp hhashed
+      exact hfull entry hmem
+    rw [root_of_prepareData (prepareData_eq_keyPath hash true hfull),
+      root_of_prepareData (prepareData_eq_keyPath hash false hfull')]
+    simp only [List.map_map, Function.comp_def, keyPath_eq, ↓reduceIte, Bool.false_eq_true]
 
 end EthLib.Execution.Trie
