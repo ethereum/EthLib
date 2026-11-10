@@ -85,14 +85,17 @@ def verifyBlobSidecarInclusionProof (preset : Preset) (fork : Fork)
     | .error _ => false
   | _, _ => false
 
-/-- The largest number of blob sidecars in one request: the most blobs of the most blocks.
+/-- The most blobs of one block, as the requests for blob sidecars count them.
 
 From Electra a block may carry more blobs, as [EIP-7691] specifies.
 
 [EIP-7691]: https://eips.ethereum.org/EIPS/eip-7691#parameters -/
+def Config.maxRequestBlobsPerBlock (config : Config) (fork : Fork) : UInt64 :=
+  if .pectra ≤ fork then config.MAX_BLOBS_PER_BLOCK_ELECTRA else config.MAX_BLOBS_PER_BLOCK
+
+/-- The largest number of blob sidecars in one request: the most blobs of the most blocks. -/
 def computeMaxRequestBlobSidecars (config : Config) (fork : Fork) : UInt64 :=
-  config.MAX_REQUEST_BLOCKS_DENEB *
-    if .pectra ≤ fork then config.MAX_BLOBS_PER_BLOCK_ELECTRA else config.MAX_BLOBS_PER_BLOCK
+  config.MAX_REQUEST_BLOCKS_DENEB * config.maxRequestBlobsPerBlock fork
 
 /-- The header of a signed block, with the signature of the block. -/
 def SignedBeaconBlock.signedHeader {preset : Preset} {fork : Fork}
