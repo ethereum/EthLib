@@ -364,6 +364,37 @@ theorem foldlM_ok_invariant {g : β → α → Except ε β} (P : β → Prop)
     obtain ⟨middle, first, rest⟩ := computed
     exact foldlM_ok_invariant P step (step b x middle holds first) rest
 
+/-- A successful fold reaches each of its steps, and the result of each step relates to the end.
+
+The relation must be reflexive and transitive, and each successful step must meet it.
+
+Then the start relates to the end.
+
+For the step at index `i`, from 0, the fold of the first `i` inputs succeeds.
+
+That step succeeds, and its result relates to the end. -/
+theorem foldlM_ok_steps {g : β → α → Except ε β} (R : β → β → Prop)
+    (refl : ∀ b, R b b) (trans : ∀ {a b c}, R a b → R b c → R a c)
+    (step : ∀ b x b', g b x = .ok b' → R b b') :
+    ∀ {xs : List α} {b b' : β}, xs.foldlM g b = .ok b' →
+      R b b' ∧ ∀ i (hi : i < xs.length), ∃ mid next,
+        (xs.take i).foldlM g b = .ok mid ∧ g mid xs[i] = .ok next ∧ R next b'
+  | [], b, _, computed => by
+    simp only [List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at computed
+    exact ⟨computed ▸ refl b, fun i hi => absurd hi (Nat.not_lt_zero i)⟩
+  | x :: _, b, _, computed => by
+    rw [List.foldlM_cons, bind_ok_iff] at computed
+    obtain ⟨middle, first, rest⟩ := computed
+    obtain ⟨hRest, hSteps⟩ := foldlM_ok_steps R refl trans step rest
+    refine ⟨trans (step b x middle first) hRest, fun i hi => ?_⟩
+    cases i with
+    | zero => exact ⟨b, middle, rfl, first, hRest⟩
+    | succ i =>
+      obtain ⟨mid, next, hMid, hNext, hEnd⟩ := hSteps i (Nat.lt_of_succ_lt_succ hi)
+      refine ⟨mid, next, ?_, hNext, hEnd⟩
+      rw [List.take_succ_cons, List.foldlM_cons, first]
+      exact hMid
+
 /-- Every input of a successful fold meets a condition that each successful step checks. -/
 theorem foldlM_forall_of_ok {σ : Type} {g : σ → α → Except ε σ} {P : α → Prop}
     (step : ∀ acc x r, g acc x = .ok r → P x) :
