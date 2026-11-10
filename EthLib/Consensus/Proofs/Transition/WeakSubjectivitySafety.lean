@@ -113,12 +113,12 @@ theorem accountable_safety_of_weakSubjectivityPeriod {config : Config}
         (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset)
     {V : Models.Ffg.Checkpoint β → Finset ValidatorIndex} {genesis : β}
     {votes : Set (Vote ValidatorIndex β)} {c₁ c₂ : Models.Ffg.Checkpoint β}
-    (h₁ : Finalized V (fun _ index => balanceAt state index.toNat) genesis votes c₁)
-    (h₂ : Finalized V (fun _ index => balanceAt state index.toNat) genesis votes c₂)
+    (h₁ : Finalized V (fun index => balanceAt state index.toNat) genesis votes c₁)
+    (h₂ : Finalized V (fun index => balanceAt state index.toNat) genesis votes c₂)
     (hc : Conflicting c₁.block c₂.block)
     (change : ∀ c : Models.Ffg.Checkpoint β, min c₁.epoch c₂.epoch ≤ c.epoch →
       c.epoch ≤ max c₁.epoch c₂.epoch →
-      Justified V (fun _ index => balanceAt state index.toNat) genesis votes c →
+      Justified V (fun index => balanceAt state index.toNat) genesis votes c →
       stake (fun index => balanceAt state index.toNat)
           (V c \ (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset) +
         2 * stake (fun index => balanceAt state index.toNat)
@@ -127,8 +127,8 @@ theorem accountable_safety_of_weakSubjectivityPeriod {config : Config}
     ∃ l r : Models.Ffg.Checkpoint β,
       min c₁.epoch c₂.epoch ≤ l.epoch ∧ l.epoch ≤ max c₁.epoch c₂.epoch ∧
       min c₁.epoch c₂.epoch ≤ r.epoch ∧ r.epoch ≤ max c₁.epoch c₂.epoch ∧
-      Justified V (fun _ index => balanceAt state index.toNat) genesis votes l ∧
-      Justified V (fun _ index => balanceAt state index.toNat) genesis votes r ∧
+      Justified V (fun index => balanceAt state index.toNat) genesis votes l ∧
+      Justified V (fun index => balanceAt state index.toNat) genesis votes r ∧
       (100 - 3 * SAFETY_DECAY.toNat) *
           stake (fun index => balanceAt state index.toNat)
             (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset ≤
@@ -191,12 +191,12 @@ theorem accountable_safety_of_weakSubjectivityPeriod_of_lt_electra {config : Con
       (getValidatorChurnLimit config state).toNat * T) ≤ N * t)
     {V : Models.Ffg.Checkpoint β → Finset ValidatorIndex} {genesis : β}
     {votes : Set (Vote ValidatorIndex β)} {c₁ c₂ : Models.Ffg.Checkpoint β}
-    (h₁ : Finalized V (fun _ index => balanceAt state index.toNat) genesis votes c₁)
-    (h₂ : Finalized V (fun _ index => balanceAt state index.toNat) genesis votes c₂)
+    (h₁ : Finalized V (fun index => balanceAt state index.toNat) genesis votes c₁)
+    (h₂ : Finalized V (fun index => balanceAt state index.toNat) genesis votes c₂)
     (hc : Conflicting c₁.block c₂.block)
     (change : ∀ c : Models.Ffg.Checkpoint β, min c₁.epoch c₂.epoch ≤ c.epoch →
       c.epoch ≤ max c₁.epoch c₂.epoch →
-      Justified V (fun _ index => balanceAt state index.toNat) genesis votes c →
+      Justified V (fun index => balanceAt state index.toNat) genesis votes c →
       (V c \ (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset).card ≤
           (period.toNat - config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat) *
             (getValidatorChurnLimit config state).toNat ∧
@@ -206,8 +206,8 @@ theorem accountable_safety_of_weakSubjectivityPeriod_of_lt_electra {config : Con
     ∃ l r : Models.Ffg.Checkpoint β,
       min c₁.epoch c₂.epoch ≤ l.epoch ∧ l.epoch ≤ max c₁.epoch c₂.epoch ∧
       min c₁.epoch c₂.epoch ≤ r.epoch ∧ r.epoch ≤ max c₁.epoch c₂.epoch ∧
-      Justified V (fun _ index => balanceAt state index.toNat) genesis votes l ∧
-      Justified V (fun _ index => balanceAt state index.toNat) genesis votes r ∧
+      Justified V (fun index => balanceAt state index.toNat) genesis votes l ∧
+      Justified V (fun index => balanceAt state index.toNat) genesis votes r ∧
       (100 - 3 * SAFETY_DECAY.toNat) *
           stake (fun index => balanceAt state index.toNat)
             (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset ≤

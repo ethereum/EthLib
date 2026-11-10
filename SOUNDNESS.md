@@ -2122,19 +2122,21 @@ No theorem links an honest signer to the canonical chain; that is a property of 
 Casper FFG finalizes checkpoints, each a block with an epoch, from the votes of validators.
 The model in `Consensus/Proofs/Models/Ffg/` follows Casper FFG §2 and Gasper §4 and §8.6.
 Each checkpoint has its own validator set, as each block has in Gasper §8.6, and a link counts the stake of the set of its target.
-Each checkpoint also has its own weights, the stake of each validator for the links that end there.
-Gasper §8.6 keeps one stake for each validator instead; constant weights give its model.
-On one chain, a refinement from the beacon state takes the weights of a checkpoint from the effective balances of the state that justifies it, so a balance may change from one checkpoint to the next.
-A constant validator set with constant weights gives the model of Casper FFG and Gasper §4.
+A supermajority link weighs its voters with one stake for each validator, as Gasper §8.6 assumes.
+A constant validator set then gives the model of Casper FFG and Gasper §4.
 
 A slack link weakens a supermajority link by a second set for its target: the bound adds twice the stake of the target set outside that second set.
 The beacon chain needs that slack, since it weighs the attesters of the previous epoch against the active balance of the current one.
-`accountable_safety_dynamic_slack`, `accountable_safety_reference_slack` and `accountable_safety_of_change_slack` (`AccountableSafety.lean`) take slack links, a set and weights for each checkpoint.
-They measure every stake under reference weights, and lose the slack of the two links that they find and the change from the reference weights to the weights of those links.
+A slack link also lets each checkpoint have a set of weights, each a stake for every validator, and holds when its bound holds under one of them.
+A refinement from the beacon state puts in that set the effective balances of each state whose step justifies the checkpoint.
+So a balance may change from one checkpoint to the next, and two branches that justify one checkpoint from two states both fit, where one stake function could not.
+`accountable_safety_dynamic_slack`, `accountable_safety_reference_slack` and `accountable_safety_of_change_slack` (`AccountableSafety.lean`) take slack links, with a validator set and a set of weights for each checkpoint.
+They measure every stake under reference weights, and lose the slack of the two links that they find and the change from the reference weights to the weights under which those links hold.
 In that change a gain of weight counts once, like an activation, and a loss twice, like an exit.
 Nothing ties the second sets to the validator sets, so these bounds say something only when the slack is bounded, as the exit churn would bound it; no theorem states that bound yet.
+The churn would not bound the change of weights alone: the inactivity leak, penalties and slashings lower effective balances outside any churn, so a bound over a window also needs a budget for those losses.
 
-`accountable_safety_dynamic` (`AccountableSafety.lean`) is Gasper Theorem 8.3, with constant weights.
+`accountable_safety_dynamic` (`AccountableSafety.lean`) is Gasper Theorem 8.3.
 It takes two finalized checkpoints whose blocks conflict.
 Then two justified checkpoints, with epochs between those of the two finalized ones, have the following property.
 Validators of both their sets broke a slashing condition, and their stake is bounded below.
@@ -2153,7 +2155,7 @@ As above, the reader does not choose the two checkpoints, so the hypothesis cove
 For a step of one epoch, `d` bounds the stake that activates plus twice the stake that exits, the source of a consolidation included.
 The churn queues carry unused churn to later epochs, so such a bound can fail in one epoch while the total over a window holds; `accountable_safety_of_change` takes that total.
 The model does not follow withdrawals; the specification covers them with the withdrawability delay in the weak subjectivity period.
-These theorems take constant weights, so a top-up, a consolidation or a penalty of a validator that stays in the set is outside them; the slack forms above count it as a change of weights.
+These theorems take one stake for each validator, so a top-up, a consolidation or a penalty of a validator that stays in the set is outside them; the slack forms above count it as a change of weights.
 No theorem yet derives those steps from the beacon state.
 
 `accountable_safety` (`AccountableSafety.lean`) takes one validator set for every vote, and follows from `accountable_safety_dynamic`.
@@ -2230,9 +2232,10 @@ The beacon chain leaves slashed attesters out, and the model counts them, so the
 `processJustificationAndFinalization_slackJustifiedCheckpoints` (`Consensus/Proofs/Transition/FfgSlack.lean`) turns one step into a slack link of the model.
 If the two justified checkpoints of the state before the step are slack-justified, so are those of the state after it.
 A new current justified checkpoint must match the state of that step.
-Its set is the active set of its epoch, its weights are the effective balances on that set, and each member of both of its sets is active in the current epoch.
+Its set is the active set of its epoch, its set of weights holds the effective balances, and each member of both of its sets is active in the current epoch.
 On one chain only the step that changes the current justified checkpoint reads them, so the effective balances may change before a later step.
-Two branches can justify the same checkpoint in different states, and then one set and one weights for that checkpoint need those states to agree on its active set and effective balances; no theorem shows that yet.
+Two branches can justify the same checkpoint in different states; its set of weights holds the balances of both, but its validator set must be the active set of its epoch in both states, and no theorem shows that yet.
+The step asks a match only for the new current justified checkpoint; finalization also reads a previous target that the same step justifies, which a refinement of finality will need to match too.
 The step also needs the previous justified epoch below the previous epoch once justification runs, and the source block of each recent link in the chain of its target block.
 No theorem yet turns these steps into a justified or finalized checkpoint of the model along a chain.
 
