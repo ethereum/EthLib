@@ -180,6 +180,44 @@ theorem hashesMatch_iff {hashes : List Bytes32} {commitments : List KZGCommitmen
     obtain ⟨rfl, rfl⟩ := he
     exact H i hi.1
 
+/-- With one commitment per hash, the commitments match exactly when they hash to the list. -/
+theorem hashesMatch_iff_map {hashes : List Bytes32} {commitments : List KZGCommitment}
+    (hlen : hashes.length = commitments.length) :
+    hashesMatch hashes commitments = true ↔ commitments.map versionedHash = hashes := by
+  rw [hashesMatch_iff hlen, List.ext_getElem_iff]
+  simp only [List.length_map, List.getElem_map]
+  constructor
+  · intro H
+    exact ⟨hlen.symm, fun i h₁ h₂ => H i h₂⟩
+  · intro ⟨_, H⟩ i hi
+    exact H i (hlen ▸ hi) hi
+
+/--
+The check of blobs succeeds exactly when three conditions hold.
+
+The counts match, each commitment hashes to its versioned hash, and the proofs verify.
+-/
+theorem validateBlobs_eq_ok_iff (setup : TrustedSetup) (fork : Fork) (hashes : List Bytes32)
+    (blobs : List Blob) (commitments : List KZGCommitment) (proofs : List KZGProof) :
+    validateBlobs setup fork hashes blobs commitments proofs = .ok () ↔
+      blobCountsMatch fork hashes blobs commitments proofs = true ∧
+        hashesMatch hashes commitments = true ∧
+        verifyBlobBundle setup fork blobs commitments proofs = .ok true := by
+  unfold validateBlobs
+  cases blobCountsMatch fork hashes blobs commitments proofs <;>
+    cases hashesMatch hashes commitments <;>
+    cases verifyBlobBundle setup fork blobs commitments proofs <;>
+    simp [Except.mapError, bind, Except.bind, pure, Except.pure, throw, throwThe,
+      MonadExceptOf.throw]
+
+/-- The counts match exactly when there is one hash and one commitment per blob, and the proofs. -/
+theorem blobCountsMatch_iff (fork : Fork) (hashes : List Bytes32) (blobs : List Blob)
+    (commitments : List KZGCommitment) (proofs : List KZGProof) :
+    blobCountsMatch fork hashes blobs commitments proofs = true ↔
+      hashes.length = blobs.length ∧ commitments.length = blobs.length ∧
+        proofs.length = proofCount fork blobs.length := by
+  simp [blobCountsMatch, and_assoc]
+
 /--
 The check of the blobs succeeds exactly when three conditions hold.
 
@@ -189,12 +227,8 @@ theorem validateNetwork_eq_ok_iff (setup : TrustedSetup) (fork : Fork)
     (w : NetworkBlobTransaction) :
     validateNetwork setup fork w = .ok () ↔
       countsMatch fork w = true ∧ hashesMatch w.tx.blobVersionedHashes w.commitments = true ∧
-        proofsVerify setup fork w = .ok true := by
-  unfold validateNetwork
-  cases countsMatch fork w <;> cases hashesMatch w.tx.blobVersionedHashes w.commitments <;>
-    cases proofsVerify setup fork w <;>
-    simp [Except.mapError, bind, Except.bind, pure, Except.pure, throw, throwThe,
-      MonadExceptOf.throw]
+        proofsVerify setup fork w = .ok true :=
+  validateBlobs_eq_ok_iff setup fork _ _ _ _
 
 /-! ## Error codes -/
 

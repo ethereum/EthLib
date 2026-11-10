@@ -35,6 +35,16 @@ Not yet released.
   `accountDeployable` also requires empty storage, through the new `accountHasStorage`.
   The rules `createKind_stored`, `create_stored` and `create2_stored` take a new hypothesis: no fact of a slot gives the new address a word other than zero.
   The new theorems `accountHasStorage_eq_true_iff`, `accountDeployable_eq_true_iff` and `accountDeployable_congr` state the rule.
+- The Engine API now models `engine_getPayloadV1` to `engine_getPayloadV6` ([#1848](https://github.com/ethereum/EthLib/pull/1848)).
+  `EngineError` has a new constructor, `unknownPayload`, with code 38001, so an exhaustive match on it needs a new case.
+  A store of completed builds holds the result of the payload build, its blobs bundle, the override flag and, from Glamsterdam, the block access list.
+  From version 3 the commitments of the bundle must hash to the blob hashes of the block, in order, and its proofs must verify.
+  The C export `eth_engine_get_payload` takes the configuration, the store and the request.
+  Each entry of the store holds the payload ID, the fork and the four results of `eth_engine_build_payload`.
+  Then come the network forms of the blob transactions, the flag and the access list.
+  In Python, `engine.get_payload` takes the configuration, the store, the method and its parameters.
+  The payload ID has one type, `PayloadId`, which the forkchoice update also returns.
+  The network check of a blob transaction now runs `validateBlobs` on its lists, so `countsMatch` is `blobCountsMatch` on its fields.
 - The forkchoice update now checks the timestamp of payload attributes, on an applied valid head ([#1479](https://github.com/ethereum/EthLib/issues/1479)).
   A known payload holds the number and the timestamp of its block, so `KnownPayload` has two new fields, `number` and `timestamp`.
   `forkchoiceUpdatedCall` takes the chain configuration first, and returns the attributes at the fork of their timestamp.

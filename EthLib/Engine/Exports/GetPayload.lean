@@ -4,6 +4,7 @@ public import EthLib.Base.Exports.ChainConfig
 public import EthLib.Cryptography.Exports.Kzg
 public import EthLib.Engine.Exports.PayloadBodies
 public import EthLib.Engine.GetPayload
+public import EthLib.Execution.Exports.Transition
 
 /-!
 # `Exports.GetPayload`
@@ -12,17 +13,21 @@ The C export of `engine_getPayloadV1` through `engine_getPayloadV6`.
 
 The supplied store is a snapshot of completed builds, with no payload ID twice.
 
-An entry holds an ID, a fork name, the payload's JSON value and its block value in wei.
+An entry holds an ID, a fork name, and the four results of the payload build export.
 
-Then come the network blob transactions, the execution requests and the override flag.
+They are the block in RLP form, the accounts after it, the requests and the block value in wei.
+
+Then come the network blob transactions, the override flag and the block access list.
 
 Lean decodes the network transactions and joins their sidecars in order.
 
-The method checks this bundle against the payload, using the embedded trusted setup.
+The method checks this bundle against the block, using the embedded trusted setup.
 
-The configuration determines the fork at the payload's timestamp, as for `engine_newPayload`.
+The configuration determines the fork at the block's number and timestamp.
 
-A malformed store has code 0; a request error has code 32602, 38001 or 38005.
+A malformed store or method name has code 0.
+
+A parameter or request error has code 32602, 38001 or 38005.
 -/
 
 public section
@@ -33,40 +38,35 @@ open Lean (Json)
 open EthLib.Exports (Result PyValue pyExport)
 open EthLib.Base
 open EthLib.Base.ChainConfig.Exports (configOfJson)
+open EthLib.Execution.Blocks (Block)
 open EthLib.Execution.Transactions
 open EthLib.Engine.Json (dataJson quantityJson listJson withdrawalJson)
 
-/-- An ID, fork, payload, block value, network transactions, execution requests and override. -/
-abbrev PayloadEntry := PayloadId × String × PyValue × Nat × List ByteArray ×
-  Option (List ByteArray) × Bool
+/-- An ID, a fork, a block, accounts, requests, a value, network forms, an override and a list. -/
+abbrev PayloadEntry := PayloadId × String × ByteArray × ByteArray × List ByteArray × Nat ×
+  List ByteArray × Bool × Option ByteArray
 
-/-- Decode one snapshot entry; the payload must have exactly the fields of its fork. -/
+/-- Decode one snapshot entry; the block access list must be given exactly from Glamsterdam. -/
 def storedPayloadOf (entry : PayloadEntry) : Result (PayloadId × StoredPayload) := do
-  let (id, forkName, value, blockValue, sidecars, requests, shouldOverrideBuilder) := entry
+  let (id, forkName, block, accounts, requests, blockValue, sidecars, shouldOverrideBuilder,
+    accessList) := entry
   let fork ← EthLib.Exports.forkUpTo .glamsterdam forkName.toUTF8
-  unless .paris ≤ fork do throw (0, "store: payload before Paris")
   unless blockValue < 2 ^ 256 do throw (0, "store: block value above 2^256")
-  let decode {α : Type} (act : Json.Decode α) : Result α :=
-    act.mapError fun e => (0, s!"store: {reprStr e}")
-  let (any, extra) ← if .glamsterdam ≤ fork then do
-      let (any, accessList, slot) ← decode (Json.payloadV4 value.toJson)
-      pure (any, some (accessList, slot))
-    else do
-      let any ← decode (Json.anyPayload value.toJson)
-      pure (any, none)
-  let payload ← decode (any.atFork fork)
+  let items : Block fork Serialization.Rlp.Item ← (Block.decode (fun _ => fork) block).mapError
+    fun e => (0, s!"store: block rejected: {reprStr e}")
+  let transactions ← items.transactions.mapM fun item =>
+    (decodeBodyTransaction fork item).mapError fun e =>
+      (0, s!"store: transaction rejected: {reprStr e}")
+  let state ← (Execution.State.Exports.ofInput accounts).mapError
+    fun e => (0, s!"store: {e.message}")
   let blockAccessList ← storeField (f := .glamsterdam) (fork := fork) "block access list"
-    (extra.map (·.1))
-  let slotNumber ← storeField (f := .glamsterdam) (fork := fork) "slot number" (extra.map (·.2))
-  let requests ← storeField (f := .pectra) (fork := fork) "execution requests" requests
-  let transactions ← sidecars.mapM fun bytes =>
+    accessList
+  let network ← sidecars.mapM fun bytes =>
     (decodeNetwork fork bytes).mapError fun e => (0, s!"store: network error {e.code}")
-  let built : StoredPayload := {
-    fork, payload
-    blockValue := BitVec.ofNat 256 blockValue
-    bundle := .ofNetwork transactions
-    requests, shouldOverrideBuilder, blockAccessList, slotNumber }
-  return (id, built)
+  let built : BuiltPayload fork :=
+    { block := ⟨items.header, transactions, items.ommers, items.withdrawals⟩
+      state, requests, blockValue }
+  return (id, { fork, built, bundle := .ofNetwork network, shouldOverrideBuilder, blockAccessList })
 
 /-- The version of an `engine_getPayloadV1` through `engine_getPayloadV6` method name. -/
 def getPayloadVersion (method : String) : Option Nat :=
@@ -74,8 +74,9 @@ def getPayloadVersion (method : String) : Option Nat :=
     "engine_getPayloadV5", "engine_getPayloadV6"].idxOf? method |>.map (· + 1)
 
 /-- The JSON fields of the execution payload, including only fields of its fork. -/
-def storedPayloadJson (built : StoredPayload) : Json :=
-  let p := built.payload
+def payloadJson (r : GetPayloadResponse) : Json :=
+  let p := r.payload
+  let header := r.stored.built.block.header
   Json.mkObj (
     [("parentHash", dataJson p.parentHash.toList),
       ("feeRecipient", dataJson p.feeRecipient.toList), ("stateRoot", dataJson p.stateRoot.toList),
@@ -88,30 +89,31 @@ def storedPayloadJson (built : StoredPayload) : Json :=
       ("baseFeePerGas", quantityJson p.baseFeePerGas.toNat),
       ("blockHash", dataJson p.blockHash.toList),
       ("transactions", listJson (dataJson ·.data.toList) p.transactions)] ++
-    (if h : .shapella ≤ built.fork then
+    (if h : .shapella ≤ r.stored.fork then
       [("withdrawals", listJson withdrawalJson (p.withdrawals h))] else []) ++
-    (if h : .dencun ≤ built.fork then
+    (if h : .dencun ≤ r.stored.fork then
       [("blobGasUsed", quantityJson (p.blobGasUsed h).toNat),
         ("excessBlobGas", quantityJson (p.excessBlobGas h).toNat)] else []) ++
-    (if h : .glamsterdam ≤ built.fork then
-      [("blockAccessList", dataJson (built.blockAccessList h).data.toList),
-        ("slotNumber", quantityJson (built.slotNumber h).toNat)] else []))
+    (if h : .glamsterdam ≤ r.stored.fork then
+      [("blockAccessList", dataJson (r.stored.blockAccessList h).data.toList),
+        ("slotNumber", quantityJson (header.slotNumber h).toNat)] else []))
 
-/-- The JSON fields of the blobs bundle, with its proof layout determined by the fork. -/
+/-- The JSON fields of the blobs bundle: its blobs, commitments and proofs, in order. -/
 def blobsBundleJson (bundle : BlobsBundle) : Json :=
   Json.mkObj [("blobs", listJson (dataJson ·.toList) bundle.blobs),
     ("commitments", listJson (dataJson ·.toList) bundle.commitments),
     ("proofs", listJson (dataJson ·.toList) bundle.proofs)]
 
 /-- Version 1 returns the payload alone; later versions append their fields in order. -/
-def getPayloadResultJson (version : Nat) (built : StoredPayload) : Json :=
-  if version = 1 then storedPayloadJson built else
-  Json.mkObj ([("executionPayload", storedPayloadJson built),
-    ("blockValue", quantityJson built.blockValue.toNat)] ++
-    (if version ≥ 3 then [("blobsBundle", blobsBundleJson built.bundle),
-      ("shouldOverrideBuilder", .bool built.shouldOverrideBuilder)] else []) ++
-    (if h : .pectra ≤ built.fork then
-      [("executionRequests", listJson (dataJson ·.data.toList) (built.requests h))] else []))
+def getPayloadResultJson (version : Nat) (r : GetPayloadResponse) : Json :=
+  if version = 1 then payloadJson r else
+  Json.mkObj ([("executionPayload", payloadJson r),
+    ("blockValue", quantityJson r.stored.built.blockValue)] ++
+    (if version ≥ 3 then [("blobsBundle", blobsBundleJson r.stored.bundle),
+      ("shouldOverrideBuilder", .bool r.stored.shouldOverrideBuilder)] else []) ++
+    (if version ≥ 4 then
+      [("executionRequests", listJson (dataJson ·.data.toList) r.stored.built.requests)]
+    else []))
 
 /-- The answer to a get-payload request, from a snapshot of build processes. -/
 def getPayloadOf (args : PyValue × List PayloadEntry × PyValue) : Result PyValue := do
@@ -127,14 +129,22 @@ def getPayloadOf (args : PyValue × List PayloadEntry × PyValue) : Result PyVal
     fun e => (e.code, s!"engine error: {reprStr e}")
   let setup ← Cryptography.Kzg.Exports.embeddedSetup.mapError
     fun e => (0, s!"setup: {e.message}")
-  let built ← (getPayload config setup (fun id => entries.lookup id) version id).mapError fun
+  let r ← (getPayload config setup (fun id => entries.lookup id) version id).mapError fun
     | .engine e => (e.code, s!"engine error: {reprStr e}")
-    | .transaction e => (0, s!"store: payload error {e.code}")
+    | .wrongFork => (0, "store: the fork is not the configured fork at the block")
+    | .requests => (0, "store: execution requests out of order, too short or before Pectra")
+    | .blockAccessList => (0, "store: block access list does not match the header")
+    | .noPayload => (0, "store: the block has no payload form")
     | .bundle e => (0, s!"store: bundle error {e.code}")
-    | .requests => (0, "store: execution requests out of order or too short")
-  return .ofJson (getPayloadResultJson version built)
+  return .ofJson (getPayloadResultJson version r)
 
-/-- The answer to a get-payload request, from the configuration and a store snapshot. -/
+/-- The answer to an `engine_getPayload` request, from the configuration and a store snapshot.
+
+The arguments are the chain configuration, the entries of the store and the request.
+
+Each entry is the payload ID, the fork name and the four results of the payload build export.
+
+Then come its network blob transactions, the override flag and the block access list or `None`. -/
 @[export eth_engine_get_payload]
 def getPayloadExport (args : PyValue) : Result PyValue := pyExport getPayloadOf args
 

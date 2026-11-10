@@ -1113,7 +1113,7 @@
   "The answer to an `engine_getBlobs` request, from a blob pool."
 
 #define DOC_engine_get_payload \
-  "The answer to a get-payload request, from the configuration and a store snapshot."
+  "The answer to an `engine_getPayload` request, from the configuration and a store snapshot."
 
 #define DOC_engine_get_payload_bodies \
   "The answer to a payload bodies request, from a store of bodies."
