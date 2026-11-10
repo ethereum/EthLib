@@ -66,6 +66,17 @@ theorem wordBytes_eq_append (w : U256) {a b : Nat} (h : a + b = 32) :
   rw [← h, natToBytes_add]
   simp
 
+/-- Byte `i` of a word is the word over `256 ^ (31 - i)`, modulo 256. -/
+theorem byteAt_wordBytes (w : U256) {i : Nat} (hi : i < 32) :
+    EthLib.Base.byteAt (wordBytes w) i = UInt8.ofNat (w.toNat / 256 ^ (31 - i)) := by
+  rw [wordBytes_eq_append w (a := i + 1) (b := 31 - i) (by omega), EthLib.Base.byteAt_append]
+  generalize w.toNat / 256 ^ (31 - i) = n
+  have hs : (⟨(EthLib.Base.natToBytes (i + 1) n).toArray⟩ : ByteArray).size = i + 1 := by
+    simp [ByteArray.size, EthLib.Base.natToBytes_length]
+  rw [hs, ite_eq_left (by omega), EthLib.Base.byteAt_eq_getD, EthLib.Base.natToBytes_succ]
+  simp [EthLib.Base.natToBytes_length]
+  exact UInt8.ofNat_mod_size
+
 /-- The word of 32 bytes that a write of a word puts in memory is that word. -/
 theorem loadWord_memoryWrite_wordBytes {memory : ByteArray} {start : Nat} (word : U256)
     (h : start + 32 ≤ memory.size) :

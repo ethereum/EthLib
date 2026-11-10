@@ -15,7 +15,7 @@ SHARD = harness.in_shard(CASES)
 # Only the files that this shard reads are unpacked, which is less than the whole release.
 # None without the archives, and then the mark `archive` skips every test of this file.
 ROOT = harness.unpack_read(catalogue.EXECUTION, SHARD) if archives.CACHE else None
-DISAGREEMENTS = harness.disagreements(SUITE)
+DISAGREEMENTS = archives.disagreements(SUITE)
 
 pytestmark = pytest.mark.archive(catalogue.EXECUTION)
 

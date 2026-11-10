@@ -107,27 +107,8 @@ theorem memory_runPrecompile {address : Nat} {evm after : Evm fork Meter}
 
 /-- The deposit of the code keeps the memory of the frame that ends the init code. -/
 theorem memory_depositCode {snapshot : TransactionState} {evm after : Evm fork Meter}
-    (h : depositCode fork snapshot evm = .ok after) : after.memory = evm.memory := by
-  unfold depositCode at h
-  dsimp only at h
-  split at h
-  · cases h
-    rfl
-  split at h
-  · cases h
-    rfl
-  split at h
-  · cases h
-    rfl
-  split at h
-  · cases h
-    split <;> rfl
-  split at h
-  · cases h
-    rfl
-  obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
-  cases h
-  rfl
+    (h : depositCode fork snapshot evm = .ok after) : after.memory = evm.memory :=
+  (depositCode_cases h).2.1
 
 /-- The frame that ends a message has a size of memory that is a multiple of 32.
 

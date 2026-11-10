@@ -243,10 +243,26 @@ def getTransientStorage (tx : TransactionState) (address : Address) (key : Bytes
 def accountExists (tx : TransactionState) (address : Address) : Bool :=
   (tx.getAccountOptional address).isSome
 
-/-- Whether a contract may be deployed at the address: its account has nonce 0 and no code. -/
+/-- Whether the storage of the address holds a word other than zero.
+
+It reads every key that the transaction, the block or the state before the block holds. -/
+def accountHasStorage (tx : TransactionState) (address : Address) : Bool :=
+  let keys := (tx.storageWrites.getD address ∅).keys ++
+    (tx.parent.storageWrites.getD address ∅).keys ++
+    (tx.parent.preState.storage.getD address ∅).keys
+  keys.any fun key => tx.getStorage address key != 0
+
+/-- Whether a contract may be deployed at the address.
+
+Its account must have nonce 0 and no code, by [EIP-684][eip684].
+
+Its storage must be empty, by [EIP-7610][eip7610], at every fork.
+
+[eip684]: https://eips.ethereum.org/EIPS/eip-684#specification
+[eip7610]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-7610.md#specification -/
 def accountDeployable (tx : TransactionState) (address : Address) : Bool :=
   let account := tx.getAccount address
-  account.nonce = 0 && account.codeHash = EMPTY_CODE_HASH
+  account.nonce = 0 && account.codeHash = EMPTY_CODE_HASH && !tx.accountHasStorage address
 
 /-- Whether the address has an account with nonce 0, no code and balance 0. -/
 def accountExistsAndIsEmpty (tx : TransactionState) (address : Address) : Bool :=

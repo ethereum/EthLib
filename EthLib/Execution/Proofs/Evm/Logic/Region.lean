@@ -185,4 +185,56 @@ theorem holds_extend_write {M value : ByteArray} {t e : Nat} (hfit : t + value.s
     Holds (memoryWrite (memoryExtend M e) t value) t value :=
   holds_memoryWrite (by rw [size_memoryExtend]; exact hfit)
 
+section Mstore8
+
+open EthLib.Execution.State (TransactionState)
+
+variable {fork : EthLib.Base.Fork} {message : Message fork} {returnData : ByteArray}
+
+/-- MSTORE8 within memory, followed by a specification from the frame after it, for 3 gas. -/
+theorem mstore8_within {code : ByteArray} {pc t : Nat} {start value : U256}
+    {rest : List U256} {M : ByteArray} {gas : Nat} {S : TransactionState} {ss : Substate}
+    {Q : Evm fork Nat → Prop} (hlt : pc < code.size) (hbyte : code[pc] = 0x53)
+    (ht : start.toNat = t) (hfit : t + 1 ≤ M.size) (hgas : 3 ≤ gas)
+    (next : Spec fork (At code message (pc + 1) rest (memoryWrite M t ⟨#[UInt8.ofNat value.toNat]⟩)
+      (gas - 3) S ss returnData) Q) :
+    Spec fork (At code message pc (start :: value :: rest) M gas S ss returnData) Q := by
+  have hle : extendMemory M.size [(start, 1)] = ⟨0, 0⟩ :=
+    extendMemory_of_le (by rw [ht]; exact hfit)
+  refine Triple.seq (mstore8 hlt hbyte (by rw [hle]; omega)) ?_
+  rw [hle]
+  dsimp only
+  rw [memoryExtend_zero, ht, Nat.add_zero]
+  exact next
+
+/-- MSTORE8 of a byte just before the bytes `l`, followed by a specification after it.
+
+Memory holds `R` from offset 0, below the byte, and `l` from the byte after it.
+
+It then holds `R`, and the byte followed by `l`. -/
+theorem mstore8_step {code : ByteArray} {pc t s : Nat} {start value : U256}
+    {rest : List U256} {M R : ByteArray} {l : List UInt8} {gas : Nat} {S : TransactionState}
+    {ss : Substate} {Q : Evm fork Nat → Prop} (hlt : pc < code.size) (hbyte : code[pc] = 0x53)
+    (ht : start.toNat = t) (hR : Holds M 0 R) (hRs : R.size ≤ t)
+    (hD : Holds M s ⟨l.toArray⟩) (hs : t + 1 = s) (hgas : 3 ≤ gas)
+    (next : ∀ M', Holds M' 0 R → Holds M' t ⟨(UInt8.ofNat value.toNat :: l).toArray⟩ →
+      M'.size = M.size → Spec fork (At code message (pc + 1) rest M' (gas - 3) S ss returnData) Q) :
+    Spec fork (At code message pc (start :: value :: rest) M gas S ss returnData) Q := by
+  subst hs
+  have h1 : (⟨#[UInt8.ofNat value.toNat]⟩ : ByteArray).size = 1 := rfl
+  have hw : t + (⟨#[UInt8.ofNat value.toNat]⟩ : ByteArray).size ≤ M.size := by
+    have := hD.1
+    omega
+  refine mstore8_within hlt hbyte ht (by omega) hgas
+    (next _ (hR.memoryWrite_of_disjoint hw (.inl (by omega))) ?_ (size_memoryWrite hw))
+  have h := (holds_memoryWrite hw).append (hD.memoryWrite_of_disjoint hw (.inr (by omega)))
+  have e : (⟨#[UInt8.ofNat value.toNat]⟩ : ByteArray) ++ ⟨l.toArray⟩ =
+      ⟨(UInt8.ofNat value.toNat :: l).toArray⟩ := by
+    apply ByteArray.ext
+    simp
+  rw [e] at h
+  exact h
+
+end Mstore8
+
 end EthLib.Execution.Evm.Logic

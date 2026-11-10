@@ -122,26 +122,11 @@ theorem parent_runFrame [LawfulGasMeter Meter] {bound : Nat}
 theorem parent_depositCode {snapshot : TransactionState} {evm after : Evm fork Meter}
     (h : depositCode fork snapshot evm = .ok after) :
     after.state.parent = evm.state.parent := by
-  unfold depositCode at h
-  dsimp only at h
-  split at h
-  · cases h
+  rcases (depositCode_cases h).2.2 with hs | hs | hs
+  · rw [hs]
     rfl
-  split at h
-  · cases h
-    rfl
-  split at h
-  · cases h
-    rfl
-  split at h
-  · cases h
-    split <;> rfl
-  split at h
-  · cases h
-    rfl
-  obtain ⟨st, hst, h⟩ := Base.bind_ok_iff.mp h
-  cases h
-  exact TransactionState.parent_setCode (Base.mapError_ok_iff.mp hst)
+  · rw [hs]
+  · exact TransactionState.parent_setCode hs
 
 /-- The state that a message starts its frame from has the block of the state it is sent from. -/
 theorem parent_startState (message : Message fork) (state : TransactionState) :
