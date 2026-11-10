@@ -13,8 +13,8 @@ Each signing query on a new message asks at most once per nonce, so at most `fue
 
 The final check asks at most once.
 
-So an adversary with `q_Π` queries to `Π` or its inverse and `q_S` signing queries gives at most
-`q_Π + fuel · q_S + 1` queries to `Π` or its inverse.
+Take an adversary with `q_Π` queries to `Π` or its inverse and `q_S` signing queries.
+So the game asks `Π` or its inverse at most `q_Π + fuel · q_S + 1` times.
 
 The bounds are the framework's bounds on the queries of a program to some of its oracles.
 
