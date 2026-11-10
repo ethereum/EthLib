@@ -1608,6 +1608,8 @@ theorem passPendingDeposits {stop : PendingDeposit → Bool} {nextEpoch : Epoch}
     · cases computed
       exact laws.refl _
     split at computed
+    · cases computed
+    split at computed
     · split at computed
       · cases computed
       rename_i credited

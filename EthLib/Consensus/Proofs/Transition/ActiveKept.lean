@@ -716,6 +716,8 @@ private theorem stepBelow_passPendingDeposits {stop : PendingDeposit → Bool} {
     · cases computed
       exact StepBelow.refl _
     split at computed
+    · cases computed
+    split at computed
     · split at computed
       · cases computed
       rename_i credited
