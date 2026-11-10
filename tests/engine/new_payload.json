@@ -4295,6 +4295,40 @@
   "errorCode": null
  },
  {
+  "file": "blockchain_tests_engine/for_cancun/berlin/eip2929_gas_cost_increases/warm_status_revert/access_list_slot_warmth_survives_failed_create2.json",
+  "test": "tests/berlin/eip2929_gas_cost_increases/test_warm_status_revert.py::test_access_list_slot_warmth_survives_failed_create2[fork_Cancun-blockchain_test_engine_from_state_test]",
+  "payload": 0,
+  "network": "Cancun",
+  "method": "engine_newPayloadV3",
+  "params": [
+   {
+    "parentHash": "0x75c14e9e679a2e3dd21f1d88857f23331406fd8ebddbbeca925e0f6805d6a05e",
+    "feeRecipient": "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
+    "stateRoot": "0x30fdb9f93e71647a7c8c6adb787d713c37eb5227639b6df6bf969c5e69f12afc",
+    "receiptsRoot": "0x5490398c792ed41aaf039272f46222a69bf90067bf5fa305f7d2424b0dca3e30",
+    "logsBloom": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+    "blockNumber": "0x1",
+    "gasLimit": "0x7270e00",
+    "gasUsed": "0x1be6e",
+    "timestamp": "0x3e8",
+    "extraData": "0x00",
+    "prevRandao": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "baseFeePerGas": "0x7",
+    "blobGasUsed": "0x0",
+    "excessBlobGas": "0x0",
+    "blockHash": "0x0a95b3a5d87ec9372b0e954faa0c6dad0cbee5b2e1ecb5246ae194cd2e004e5e",
+    "transactions": [
+     "0x01f89c01800a8407270e0094fb405d48f38f5f7ed972ed47e6ee83d14ba5be708080f838f794ebb61238cee915a248ede3233597931ad1a4afd5e1a0000000000000000000000000000000000000000000000000000000000000000080a037ef9b41970257da055460579c523c1babeb6e7f87da8646735a800b8b01ad43a008f13494b9c0dba5f726cf813071e39e0bab763f71e985e125da5a7cbca908fb"
+    ],
+    "withdrawals": []
+   },
+   [],
+   "0x0000000000000000000000000000000000000000000000000000000000000000"
+  ],
+  "validationError": null,
+  "errorCode": null
+ },
+ {
   "file": "blockchain_tests_engine/for_cancun/cancun/eip4844_blobs/blob_txs/invalid_blob_tx_contract_creation.json",
   "test": "tests/cancun/eip4844_blobs/test_blob_txs.py::test_invalid_blob_tx_contract_creation[fork_Cancun-blockchain_test_engine-]",
   "payload": 0,
@@ -6999,6 +7033,35 @@
   "errorCode": null
  },
  {
+  "file": "blockchain_tests_engine/for_paris/berlin/eip2929_gas_cost_increases/warm_status_revert/access_list_slot_warmth_survives_failed_create2.json",
+  "test": "tests/berlin/eip2929_gas_cost_increases/test_warm_status_revert.py::test_access_list_slot_warmth_survives_failed_create2[fork_Paris-blockchain_test_engine_from_state_test]",
+  "payload": 0,
+  "network": "Paris",
+  "method": "engine_newPayloadV1",
+  "params": [
+   {
+    "parentHash": "0x3663ae4ac58074b60da18afbbf614c9a0a215651495d595a596029f5deb9c97e",
+    "feeRecipient": "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
+    "stateRoot": "0xdc5b0f92434d929191b74b316fe5efc5692cecd7bbccfcb0c031066dc4cd1dfc",
+    "receiptsRoot": "0xe0c33f6ba7e352481345c5980d441005555b2d509c3d1439870c8785aea29127",
+    "logsBloom": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+    "blockNumber": "0x1",
+    "gasLimit": "0x7270e00",
+    "gasUsed": "0x1be66",
+    "timestamp": "0x3e8",
+    "extraData": "0x00",
+    "prevRandao": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "baseFeePerGas": "0x7",
+    "blockHash": "0x84bf18c1f863a39cb9366ed71d4bda565afd39bfe0440c04c8ff9fb77bdc0814",
+    "transactions": [
+     "0x01f89c01800a8407270e0094fb405d48f38f5f7ed972ed47e6ee83d14ba5be708080f838f794ebb61238cee915a248ede3233597931ad1a4afd5e1a0000000000000000000000000000000000000000000000000000000000000000080a037ef9b41970257da055460579c523c1babeb6e7f87da8646735a800b8b01ad43a008f13494b9c0dba5f726cf813071e39e0bab763f71e985e125da5a7cbca908fb"
+    ]
+   }
+  ],
+  "validationError": null,
+  "errorCode": null
+ },
+ {
   "file": "blockchain_tests_engine/for_paristoshanghaiattime15k/berlin/eip2929_gas_cost_increases/precompile_warming/precompile_warming.json",
   "test": "tests/berlin/eip2929_gas_cost_increases/test_precompile_warming.py::test_precompile_warming[fork_ParisToShanghaiAtTime15k-address_0x0000000000000000000000000000000000000001-precompile_in_successor_True-precompile_in_predecessor_True-blockchain_test_engine]",
   "payload": 0,
@@ -9212,6 +9275,36 @@
     "blockHash": "0x92f90a048fa44f38d0359584224513d606e36c78a462a7015705caef61ce01db",
     "transactions": [
      "0xf861800a8407270e00948db76b2a7ba18f86698ece46452684e36a72907c808025a0ccb281ec615f5a1ec90287e50e2467109eb84f6f2f0cf64da97dc666237268b3a07d591009b3275426804e455300e16dab4dc6eb1de319271364886477b94ce9d3"
+    ],
+    "withdrawals": []
+   }
+  ],
+  "validationError": null,
+  "errorCode": null
+ },
+ {
+  "file": "blockchain_tests_engine/for_shanghai/berlin/eip2929_gas_cost_increases/warm_status_revert/access_list_slot_warmth_survives_failed_create2.json",
+  "test": "tests/berlin/eip2929_gas_cost_increases/test_warm_status_revert.py::test_access_list_slot_warmth_survives_failed_create2[fork_Shanghai-blockchain_test_engine_from_state_test]",
+  "payload": 0,
+  "network": "Shanghai",
+  "method": "engine_newPayloadV2",
+  "params": [
+   {
+    "parentHash": "0x1fce1d278eee43f5a273c9672db57052dc138f6278d44d0c43304f036c7eef4f",
+    "feeRecipient": "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
+    "stateRoot": "0x731b17d5dc8c19fefb4c7d2eca9fa86f000d69165ca78d7d483ffebd51f1a03d",
+    "receiptsRoot": "0x5490398c792ed41aaf039272f46222a69bf90067bf5fa305f7d2424b0dca3e30",
+    "logsBloom": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+    "blockNumber": "0x1",
+    "gasLimit": "0x7270e00",
+    "gasUsed": "0x1be6e",
+    "timestamp": "0x3e8",
+    "extraData": "0x00",
+    "prevRandao": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "baseFeePerGas": "0x7",
+    "blockHash": "0x885b13d963491dffa7bedb10ebd718307a3d8aa11e7b61b0bc9d641d0d9bf438",
+    "transactions": [
+     "0x01f89c01800a8407270e0094fb405d48f38f5f7ed972ed47e6ee83d14ba5be708080f838f794ebb61238cee915a248ede3233597931ad1a4afd5e1a0000000000000000000000000000000000000000000000000000000000000000080a037ef9b41970257da055460579c523c1babeb6e7f87da8646735a800b8b01ad43a008f13494b9c0dba5f726cf813071e39e0bab763f71e985e125da5a7cbca908fb"
     ],
     "withdrawals": []
    }

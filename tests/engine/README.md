@@ -11,6 +11,8 @@ The cases hold every payload that expects a JSON-RPC error.
 They hold every payload whose expected exception a check before execution can find: a wrong block hash, a transaction that does not decode, or a wrong structure.
 For two block access lists of Amsterdam, with accounts out of order or listed twice, EthLib finds the exception only when the block runs.
 They also hold the first six valid payloads of each network whose parameters have at most 8,000 bytes of JSON.
+For each version of the method, they also hold the first valid payload with a typed transaction and at most 8,000 bytes.
+They skip it when a valid payload of that version kept before it has one.
 Of the large rejected payloads, they keep the first one for each expected exception, once among the networks of Amsterdam and once among the others.
 
 Each case keeps the path of its file in the archive, the name of its test, the index of the payload and its network.
