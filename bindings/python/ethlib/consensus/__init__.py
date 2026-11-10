@@ -856,7 +856,7 @@ def record_attestation_signing(
 
 
 def is_execution_block(name: str, fork: str, block: bytes) -> bool:
-    """From Bellatrix, whether a block carries a payload other than the empty one."""
+    """From Bellatrix, whether a block has a non-empty payload; from Gloas, a nonzero bid hash."""
     return _native.consensus_is_execution_block(name, fork, block)
 
 
@@ -872,7 +872,7 @@ def is_optimistic_candidate_block(
 def latest_verified_ancestor(
     name: str, fork: str, blocks: Sequence[bytes], optimistic_roots: Sequence[bytes], root: bytes
 ) -> bytes:
-    """From Bellatrix, the root of the latest block of a chain that is not optimistic."""
+    """From Bellatrix to Fulu, the root of the latest block of a chain that is not optimistic."""
     return _native.consensus_latest_verified_ancestor(
         name, fork, list(blocks), list(optimistic_roots), root
     )
@@ -908,7 +908,7 @@ def is_optimistic_node(
     # `Any`, because `dict` is invariant in its values.
     config: dict[str, Any] | None = None,
 ) -> bool:
-    """From Bellatrix, whether a node is optimistic after the steps of a fork choice run."""
+    """From Bellatrix to Fulu, whether a node is optimistic after the steps of a fork choice run."""
     return _native.consensus_is_optimistic_node(
         name,
         fork,

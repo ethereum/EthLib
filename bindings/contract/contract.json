@@ -4567,7 +4567,7 @@
       {"constructor": "invalidInclusionListSignature", "code": 51}]}],
    "error_class": "ForkChoiceError",
    "docstring":
-   "From Bellatrix: whether a block carries a payload other than the empty one."},
+   "From Bellatrix: whether a block carries a payload other than the empty one.\n\nFrom Gloas: whether the bid of the block names a nonzero block hash."},
   {"summary":
    "From Bellatrix: whether a block may be imported optimistically, given the known blocks.",
    "signature":

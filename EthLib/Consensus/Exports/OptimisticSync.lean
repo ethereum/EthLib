@@ -7,9 +7,11 @@ public import EthLib.Consensus.ForkChoice.OptimisticSync
 /-!
 # `Exports.OptimisticSync`
 
-C-ABI exports of the optimistic sync of Bellatrix.
+C-ABI exports of the optimistic sync, from Bellatrix.
 
-The preset and the fork are named, at a fork from Bellatrix to Fulu.
+The preset and the fork are named, at a fork from Bellatrix.
+
+The latest verified ancestor and the optimistic node stop at Fulu, and the other exports do not.
 
 They are named by `str` in the exports that take typed values, and in UTF-8 in the others.
 
@@ -39,10 +41,13 @@ open EthLib.Exports (Result PyValue pyExport)
 def runOptimistic {α : Type} (result : Except ForkChoiceError α) : Result α :=
   result.mapError fun e => (e.code, s!"optimistic sync failed with code {e.code}")
 
-/-- The preset and the fork, which must be from Bellatrix to Fulu, or code 0. -/
-def optimisticPresetAndFork (name fork : ByteArray) : Result (Preset × Fork) := do
+/-- The preset and the fork, which must be from Bellatrix, or code 0.
+
+The fork must also be before Gloas unless the rule is defined from Gloas. -/
+def optimisticPresetAndFork (name fork : ByteArray) (fromGloas : Bool) :
+    Result (Preset × Fork) := do
   let (preset, fork) ← transitionPresetAndFork name fork
-  unless .bellatrix ≤ fork ∧ fork < .glamsterdam do
+  unless .bellatrix ≤ fork ∧ (fromGloas || fork < .glamsterdam) do
     throw (0, s!"no optimistic sync at {fork.name}")
   return (preset, fork)
 
@@ -60,10 +65,12 @@ def optimisticStoreOf (preset : Preset) (fork : Fork) (blocks : Array ByteArray)
     headBlockRoot := Vector.replicate 32 0
     blocks := Std.TreeMap.ofList decoded }
 
-/-- From Bellatrix: whether a block carries a payload other than the empty one. -/
+/-- From Bellatrix: whether a block carries a payload other than the empty one.
+
+From Gloas: whether the bid of the block names a nonzero block hash. -/
 @[export eth_consensus_is_execution_block]
 def isExecutionBlockExport (name fork block : ByteArray) : Result Bool := do
-  let (preset, fork) ← optimisticPresetAndFork name fork
+  let (preset, fork) ← optimisticPresetAndFork name fork (fromGloas := true)
   return isExecutionBlock (← decodeInput (BeaconBlock preset fork) block)
 
 /-- From Bellatrix: whether a block may be imported optimistically, given the known blocks.
@@ -72,7 +79,7 @@ The clock is at a slot, and the user sets the number of slots to wait. -/
 @[export eth_consensus_is_optimistic_candidate_block]
 def isOptimisticCandidateBlockExport (name fork : ByteArray) (blocks : Array ByteArray)
     (currentSlot safeSlots : UInt64) (block : ByteArray) : Result Bool := do
-  let (preset, fork) ← optimisticPresetAndFork name fork
+  let (preset, fork) ← optimisticPresetAndFork name fork (fromGloas := true)
   let store ← optimisticStoreOf preset fork blocks []
   let block ← decodeInput (BeaconBlock preset fork) block
   runOptimistic (store.isOptimisticCandidateBlock currentSlot block safeSlots)
@@ -81,7 +88,7 @@ def isOptimisticCandidateBlockExport (name fork : ByteArray) (blocks : Array Byt
 def latestVerifiedAncestorOf (args : String × String × Array ByteArray × List Root × Root) :
     Result Root := do
   let (name, fork, blocks, optimisticRoots, root) := args
-  let (preset, fork) ← optimisticPresetAndFork name.toUTF8 fork.toUTF8
+  let (preset, fork) ← optimisticPresetAndFork name.toUTF8 fork.toUTF8 (fromGloas := false)
   let store ← optimisticStoreOf preset fork blocks optimisticRoots
   runOptimistic (store.latestVerifiedAncestor root)
 
@@ -95,11 +102,13 @@ Then comes the root of a block.
 def latestVerifiedAncestorExport (args : PyValue) : Result PyValue :=
   pyExport latestVerifiedAncestorOf args
 
-/-- From Bellatrix: the optimistic roots after the payload of a block is found valid. -/
+/-- From Bellatrix: the optimistic roots after the payload of a block is found valid.
+
+From Gloas the payload clears itself and only the payloads that it builds on. -/
 def onValidPayloadOf (args : String × String × Array ByteArray × List Root × Root) :
     Result (List Root) := do
   let (name, fork, blocks, optimisticRoots, root) := args
-  let (preset, fork) ← optimisticPresetAndFork name.toUTF8 fork.toUTF8
+  let (preset, fork) ← optimisticPresetAndFork name.toUTF8 fork.toUTF8 (fromGloas := true)
   let store ← optimisticStoreOf preset fork blocks optimisticRoots
   return (← runOptimistic (store.onValidPayload root)).optimisticRoots
 
@@ -112,11 +121,13 @@ Then comes the root of a block.
 @[export eth_consensus_on_valid_payload]
 def onValidPayloadExport (args : PyValue) : Result PyValue := pyExport onValidPayloadOf args
 
-/-- From Bellatrix: the optimistic roots after a block is found to be the first invalid one. -/
+/-- From Bellatrix: the optimistic roots after a block is found to be the first invalid one.
+
+From Gloas it clears only the payload of that block and the payloads that build on it. -/
 def onInvalidatedPayloadOf (args : String × String × Array ByteArray × List Root × Root) :
     Result (List Root) := do
   let (name, fork, blocks, optimisticRoots, first) := args
-  let (preset, fork) ← optimisticPresetAndFork name.toUTF8 fork.toUTF8
+  let (preset, fork) ← optimisticPresetAndFork name.toUTF8 fork.toUTF8 (fromGloas := true)
   let store ← optimisticStoreOf preset fork blocks optimisticRoots
   return (← runOptimistic (store.onInvalidatedPayload first)).optimisticRoots
 
@@ -137,7 +148,7 @@ The optimistic store holds the anchor and every block that the store accepted. -
 def isOptimisticNodeOf (args : String × String × ByteArray × ByteArray × List ForkChoiceStep ×
     Bool × Option PyValue × List Root × Root) : Result Bool := do
   let (name, fork, anchorState, anchorBlock, steps, verify, replacements, roots, head) := args
-  let (preset, fork) ← optimisticPresetAndFork name.toUTF8 fork.toUTF8
+  let (preset, fork) ← optimisticPresetAndFork name.toUTF8 fork.toUTF8 (fromGloas := false)
   let config ← configWithValue name replacements
   let checks := if verify then SignatureChecks.bls else SignatureChecks.acceptAll
   let anchorState ← decodeInput (BeaconState preset fork) anchorState

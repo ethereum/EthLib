@@ -1,4 +1,4 @@
-"""The optimistic sync of Bellatrix against blocks built in the test and a vector case."""
+"""The optimistic sync of Bellatrix and Gloas against blocks built in the test or from vectors."""
 
 import struct
 from collections.abc import Sequence
@@ -148,6 +148,113 @@ def test_transitions_rejected():
     assert info.value.code == 2
 
 
+# A Gloas block of the minimal preset, from the consensus-specs vectors of tests/sources.toml.
+GLOAS_FORK = "glamsterdam"
+GLOAS_ANCHOR = snappy.decompress(
+    (
+        Path(__file__).resolve().parents[4]
+        / "tests/consensus/fork_choice/minimal/gloas/fork_choice/on_block/pyspec_tests"
+        / "on_block_parent_full_accepts_verified_payload/anchor_block.ssz_snappy"
+    ).read_bytes()
+)
+
+# The Gloas body of the minimal preset: where the offset of the signed bid sits in its fixed part.
+# Before it come the randao reveal, the eth1 data, the graffiti and five offsets.
+# Then the sync aggregate of 4 + 96 bytes for 32 members, and the offset of the credential changes.
+BID_OFFSET = 96 + 72 + 32 + 5 * 4 + 4 + 96 + 4
+# A signed bid starts with the offset of its message and the signature.
+BID_MESSAGE = 4 + 96
+
+
+def gloas_block(slot: int, parent: bytes, parent_hash: int, block_hash: int) -> bytes:
+    """A minimal Gloas block of a slot on a parent, whose bid names two block hashes."""
+    data = bytearray(GLOAS_ANCHOR)
+    data[0:8] = struct.pack("<Q", slot)
+    data[16:48] = parent
+    body = struct.unpack_from("<I", data, 8 + 8 + 32 + 32)[0]
+    bid = body + struct.unpack_from("<I", data, body + BID_OFFSET)[0] + BID_MESSAGE
+    assert struct.unpack_from("<I", data, bid - BID_MESSAGE)[0] == BID_MESSAGE
+    # The bid holds the parent block hash, the parent block root, then the block hash.
+    # Its other fields keep the values of the anchor, which no rule under test reads.
+    data[bid : bid + 32] = bytes([parent_hash]) * 32
+    data[bid + 64 : bid + 96] = bytes([block_hash]) * 32
+    return bytes(data)
+
+
+def gloas_root(data: bytes) -> bytes:
+    """The root of a minimal Gloas block, which also checks that the bytes decode."""
+    found, again = consensus.ssz_static("minimal", GLOAS_FORK, "BeaconBlock", data)
+    assert again == data
+    return found
+
+
+# The block g names hash 1; a builds on its payload, and names hash 2.
+# Then b builds on a without its payload, so on hash 1, and c builds on the payload of b.
+# The block z names the zero hash; the late candidates below build on it.
+GLOAS_G = gloas_block(1, ZERO, 0, 1)
+GLOAS_A = gloas_block(2, gloas_root(GLOAS_G), 1, 2)
+GLOAS_B = gloas_block(3, gloas_root(GLOAS_A), 1, 3)
+GLOAS_C = gloas_block(4, gloas_root(GLOAS_B), 3, 4)
+GLOAS_Z = gloas_block(1, ZERO, 0, 0)
+GLOAS_BLOCKS = [GLOAS_G, GLOAS_A, GLOAS_B, GLOAS_C, GLOAS_Z]
+GG, GA, GB, GC, GZ = (gloas_root(x) for x in GLOAS_BLOCKS)
+
+
+def test_gloas_execution_block():
+    assert consensus.is_execution_block("minimal", GLOAS_FORK, GLOAS_G)
+    assert not consensus.is_execution_block("minimal", GLOAS_FORK, GLOAS_Z)
+
+
+@pytest.mark.parametrize(
+    ("current_slot", "candidate", "expected"),
+    [
+        # The bid of the parent names a payload, so the block is a candidate at once.
+        (2, gloas_block(2, GG, 1, 5), True),
+        # The bid of the parent names the zero hash: the block waits 128 slots.
+        (2 + 127, gloas_block(2, GZ, 0, 5), False),
+        (2 + 128, gloas_block(2, GZ, 0, 5), True),
+    ],
+    ids=["parent payload", "too early", "far enough"],
+)
+def test_gloas_optimistic_candidate(current_slot: int, candidate: bytes, expected: bool):
+    got = consensus.is_optimistic_candidate_block(
+        "minimal", GLOAS_FORK, GLOAS_BLOCKS, current_slot, candidate
+    )
+    assert got is expected
+
+
+@pytest.mark.parametrize(
+    ("valid", "expected"),
+    [
+        # The payload of c builds on those of b and g, and not on the payload of a.
+        (GC, [GA]),
+        (GB, [GA, GC]),
+        (GA, [GB, GC]),
+    ],
+    ids=["c", "b", "a"],
+)
+def test_gloas_valid_payload(valid: bytes, expected: list[bytes]):
+    optimistic = [GG, GA, GB, GC]
+    got = consensus.on_valid_payload("minimal", GLOAS_FORK, GLOAS_BLOCKS, optimistic, valid)
+    assert got == expected
+
+
+@pytest.mark.parametrize(
+    ("first", "expected"),
+    [
+        # The blocks b and c descend from a, but their payloads do not build on its payload.
+        (GA, [GG, GB, GC]),
+        (GB, [GG, GA]),
+        (GG, []),
+    ],
+    ids=["a", "b", "g"],
+)
+def test_gloas_invalidated_payload(first: bytes, expected: list[bytes]):
+    optimistic = [GG, GA, GB, GC]
+    got = consensus.on_invalidated_payload("minimal", GLOAS_FORK, GLOAS_BLOCKS, optimistic, first)
+    assert got == expected
+
+
 RESTRICTED = [0, 1, 5, 6, 7, 8, 9]
 
 
@@ -254,10 +361,16 @@ _IDS = ["execution", "candidate", "ancestor", "valid", "invalidated"]
 
 
 @pytest.mark.parametrize("call", _EXPORTS, ids=_IDS)
-@pytest.mark.parametrize("fork", ["phase0", "altair", "glamsterdam"])
-def test_no_optimistic_sync_outside_bellatrix_to_fulu(call, fork: str):
+@pytest.mark.parametrize("fork", ["phase0", "altair"])
+def test_no_optimistic_sync_before_bellatrix(call, fork: str):
     with raises(ERROR, f"no optimistic sync at {fork}") as info:
         call(fork, G)
+    assert info.value.code == 0
+
+
+def test_no_latest_verified_ancestor_from_gloas():
+    with raises(ERROR, "no optimistic sync at glamsterdam") as info:
+        consensus.latest_verified_ancestor("minimal", GLOAS_FORK, GLOAS_BLOCKS, [], GG)
     assert info.value.code == 0
 
 
