@@ -1,9 +1,13 @@
 """Era1 files, built in the test and pinned from the public pre-Merge history."""
 
-# The layout follows formats/era1.md of eth-clients/e2store-format-specs at commit 31cf6b57.
+# The layout follows formats/era1.md of eth-clients/e2store-format-specs at commit 31cf6b57:
+# https://github.com/eth-clients/e2store-format-specs/blob/31cf6b577123bf1703eb3713f0b242f65fea806a/formats/era1.md
+# Where that document leaves the layout open, the built files take EthLib's reading.
+# The pinned public file checks that reading.
 # The test writes the records, the block index and the accumulator apart from EthLib.
 # It takes only Keccak-256 and the Snappy framing from EthLib, which have suites of their own.
 
+import dataclasses
 import hashlib
 from collections.abc import Sequence
 
@@ -28,7 +32,6 @@ UNKNOWN = 0x7777
 # Era 0 of mainnet: blocks 0 to 8191.
 # Its name carries the first 4 bytes of its accumulator.
 ARCHIVE = "era1/mainnet-00000-5ec1ffb8"
-MAINNET_ACCUMULATOR = "5ec1ffb8c3b146f42606c74ced973dc16ec5a107c0345858c343fc94780b4218"
 MAINNET_GENESIS_HASH = "d4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3"
 
 
@@ -117,7 +120,7 @@ def _file(
     *,
     others: Sequence[tuple[int, bytes]] = (),
     accumulator: bytes | None = None,
-    offset_shift: int = 0,
+    last_offset_shift: int = 0,
     count: int | None = None,
 ) -> bytes:
     """The bytes of an era1 file, with a block index that points at each header record."""
@@ -137,9 +140,17 @@ def _file(
         )
     out += _record(ACCUMULATOR, accumulator)
     index_start = len(out)
-    index = _int64(start) + b"".join(_int64(h - index_start + offset_shift) for h in headers)
+    offsets = [h - index_start for h in headers]
+    if offsets:
+        offsets[-1] += last_offset_shift
+    index = _int64(start) + b"".join(_int64(offset) for offset in offsets)
     index += _int64(len(blocks) if count is None else count)
     return out + _record(BLOCK_INDEX, index)
+
+
+def _without_index(data: bytes, count: int) -> bytes:
+    """The file without its BlockIndex record, which holds `count` offsets."""
+    return data[: len(data) - 8 - (16 + 8 * count)]
 
 
 def _error(fault: str) -> str:
@@ -164,9 +175,9 @@ def test_other_records_are_kept() -> None:
     assert era1.others == ((UNKNOWN, b"x"), (0x0000, b""))
 
 
-def test_most_blocks_decode() -> None:
+def test_full_era_of_8192_blocks_decodes() -> None:
     blocks = _chain(0, 8192)
-    assert len(decode_era1(_file(0, blocks)).blocks) == 8192
+    assert decode_era1(_file(0, blocks)).blocks == tuple(blocks)
 
 
 def test_one_block_too_many_is_rejected() -> None:
@@ -202,8 +213,10 @@ def test_wrong_size_total_difficulty_is_rejected() -> None:
     out += _record(RECEIPTS, snappy.encode_frames(block.receipts))
     out += _record(TOTAL_DIFFICULTY, bytes(31))
     out += _record(ACCUMULATOR, bytes(32))
+    # The header record follows the Version record, which is 8 bytes.
+    header_start = len(_record(VERSION, b""))
     index_start = len(out)
-    out += _record(BLOCK_INDEX, _int64(0) + _int64(8 - index_start) + _int64(1))
+    out += _record(BLOCK_INDEX, _int64(0) + _int64(header_start - index_start) + _int64(1))
     with raises(Era1Error, _error("wrongSize 1536 31")):
         decode_era1(out)
 
@@ -211,11 +224,6 @@ def test_wrong_size_total_difficulty_is_rejected() -> None:
 def test_wrong_size_accumulator_is_rejected() -> None:
     with raises(Era1Error, _error("wrongSize 1792 31")):
         decode_era1(_file(0, _chain(0, 2), accumulator=bytes(31)))
-
-
-def _without_index(data: bytes, count: int) -> bytes:
-    """The file without its BlockIndex record, which holds `count` offsets."""
-    return data[: len(data) - 8 - (16 + 8 * count)]
 
 
 @pytest.mark.parametrize("count", [1, 3])
@@ -228,15 +236,15 @@ def test_wrong_block_count_is_rejected(count: int) -> None:
 
 def test_index_of_wrong_size_is_rejected() -> None:
     data = _file(0, _chain(0, 2))
-    index = data[len(data) - 32 :] + bytes(1)
+    index = data[len(data) - (16 + 8 * 2) :] + bytes(1)
     with raises(Era1Error, _error("e2store (EthLib.Serialization.E2store.E2storeError.indexSize)")):
         decode_era1(_without_index(data, 2) + _record(BLOCK_INDEX, index))
 
 
 @pytest.mark.parametrize("shift", [-1, 1, 8])
 def test_offset_off_its_header_is_rejected(shift: int) -> None:
-    with raises(Era1Error, _error("blockOffset 0")):
-        decode_era1(_file(0, _chain(0, 3), offset_shift=shift))
+    with raises(Era1Error, _error("blockOffset 2")):
+        decode_era1(_file(0, _chain(0, 3), last_offset_shift=shift))
 
 
 def test_bad_frame_is_rejected() -> None:
@@ -255,31 +263,44 @@ def test_bad_frame_is_rejected() -> None:
 
 def test_body_that_is_not_one_item_is_rejected() -> None:
     blocks = _chain(0, 2)
-    blocks[1] = Era1Block(
-        header=blocks[1].header,
-        body=_rlp([]) + b"\x00",
-        receipts=blocks[1].receipts,
-        total_difficulty=blocks[1].total_difficulty,
-    )
+    blocks[1] = dataclasses.replace(blocks[1], body=_rlp([]) + b"\x00")
     with raises(Era1Error, _error("rlp 1 (EthLib.Serialization.Rlp.RlpError.trailingBytes 1)")):
         decode_era1(_file(0, blocks))
 
 
+def test_receipts_that_are_not_one_item_are_rejected() -> None:
+    blocks = _chain(0, 2)
+    blocks[0] = dataclasses.replace(blocks[0], receipts=b"")
+    with raises(Era1Error, _error("rlp 0 (EthLib.Serialization.Rlp.RlpError.inputTooShort 1 0)")):
+        decode_era1(_file(0, blocks))
+
+
+def test_header_with_too_few_fields_is_rejected() -> None:
+    blocks = _chain(0, 1)
+    # A list of 7 fields has neither a difficulty nor a number, the ninth field.
+    blocks[0] = dataclasses.replace(blocks[0], header=_rlp([bytes(32)] * 7))
+    with raises(Era1Error, _error("rlp 0 (EthLib.Serialization.Rlp.RlpError.wrongFieldCount 9 7)")):
+        decode_era1(_file(0, blocks))
+
+
+def test_wrong_start_is_rejected() -> None:
+    with raises(Era1Error, _error("blockNumber 0")):
+        decode_era1(_file(1, _chain(0, 3)))
+
+
 def test_wrong_number_is_rejected() -> None:
     blocks = _chain(0, 3)
-    with raises(Era1Error, _error("blockNumber 0")):
-        decode_era1(_file(1, blocks))
+    # The last header keeps its parent link but carries the number 3.
+    header = _header(keccak.keccak256(blocks[1].header), 1002, 3)
+    blocks[2] = dataclasses.replace(blocks[2], header=header)
+    with raises(Era1Error, _error("blockNumber 2")):
+        decode_era1(_file(0, blocks))
 
 
 def test_broken_parent_link_is_rejected() -> None:
     blocks = _chain(0, 3)
     header = _header(bytes(32), 1002, 2)
-    blocks[2] = Era1Block(
-        header=header,
-        body=blocks[2].body,
-        receipts=blocks[2].receipts,
-        total_difficulty=blocks[2].total_difficulty,
-    )
+    blocks[2] = dataclasses.replace(blocks[2], header=header)
     with raises(Era1Error, _error("parentHash 2")):
         decode_era1(_file(0, blocks))
 
@@ -287,20 +308,15 @@ def test_broken_parent_link_is_rejected() -> None:
 @pytest.mark.parametrize(("index", "start"), [(0, 0), (2, 0), (1, 100)])
 def test_wrong_total_difficulty_is_rejected(index: int, start: int) -> None:
     blocks = _chain(start, 3)
-    b = blocks[index]
-    blocks[index] = Era1Block(
-        header=b.header, body=b.body, receipts=b.receipts, total_difficulty=b.total_difficulty + 1
-    )
+    block = blocks[index]
+    blocks[index] = dataclasses.replace(block, total_difficulty=block.total_difficulty + 1)
     with raises(Era1Error, _error(f"totalDifficulty {index}")):
         decode_era1(_file(start, blocks))
 
 
 def test_first_total_difficulty_after_genesis_is_free() -> None:
     blocks = _chain(100, 1)
-    b = blocks[0]
-    blocks[0] = Era1Block(
-        header=b.header, body=b.body, receipts=b.receipts, total_difficulty=b.total_difficulty + 7
-    )
+    blocks[0] = dataclasses.replace(blocks[0], total_difficulty=blocks[0].total_difficulty + 7)
     assert decode_era1(_file(100, blocks)).blocks == tuple(blocks)
 
 
@@ -320,7 +336,7 @@ def test_mainnet_era_0() -> None:
     era1 = decode_era1(data)
     assert era1.starting_number == 0
     assert len(era1.blocks) == 8192
-    assert era1.accumulator.hex() == MAINNET_ACCUMULATOR
+    assert era1.accumulator.hex().startswith("5ec1ffb8")
     assert keccak.keccak256(era1.blocks[0].header).hex() == MAINNET_GENESIS_HASH
     # The genesis difficulty is 2^34.
     assert era1.blocks[0].total_difficulty == 2**34

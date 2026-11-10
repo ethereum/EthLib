@@ -149,6 +149,16 @@ def headerNumber (header : Item) : Except RlpError Nat := do
   | some n => Codec.ofItem n
   | none => throw (.wrongFieldCount (HEADER_NUMBER_INDEX + 1) fields.length)
 
+/-- The index of the difficulty in a header, the eighth field at every fork. -/
+def HEADER_DIFFICULTY_INDEX : Nat := 7
+
+/-- The difficulty of a header, its eighth field. -/
+def headerDifficulty (header : Item) : Except RlpError Nat := do
+  let fields ← header.toItems
+  match fields[HEADER_DIFFICULTY_INDEX]? with
+  | some d => Codec.ofItem d
+  | none => throw (.wrongFieldCount (HEADER_DIFFICULTY_INDEX + 1) fields.length)
+
 /-- The parent hash of a header, its first field. -/
 def headerParent (header : Item) : Except RlpError Hash32 := do
   match ← header.toItems with

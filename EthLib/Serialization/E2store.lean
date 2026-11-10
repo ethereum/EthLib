@@ -3,6 +3,7 @@ module
 public import EthLib.Base.BigEndian
 public import EthLib.Base.Bytes
 public import EthLib.Base.LittleEndian
+public import EthLib.Serialization.Ssz.Codec.Deserialize
 
 /-!
 # `Serialization.E2store`
@@ -26,7 +27,9 @@ The length is little-endian, and the reserved bytes are zero.
 
 The documents of the [Version][version] and [SlotIndex][slotindex] types give the header 8 bytes.
 
-EthLib states the layout of those 8 bytes, which the documents do not spell out.
+The documents do not lay out those 8 bytes, and the base text they point to has changed it.
+
+So EthLib states the layout as its own definition.
 
 A type is written as its two bytes in order, so the Version type `0x6532` is `e2` in ASCII.
 
@@ -35,6 +38,8 @@ The Version record must come first, as [its document][version] says.
 Every Version record has no data, as that document also says.
 
 A later Version record applies to the records after it, as when two files are concatenated.
+
+An index record gives the position of each entry of a file, as an offset from the record.
 -/
 
 @[expose] public section
@@ -172,16 +177,11 @@ structure Index where
   offsets : List Int
   deriving Repr, DecidableEq
 
-/-- The 8 little-endian bytes at the position `pos` of `data`, as an unsigned integer. -/
-def readUint64 (data : ByteArray) (pos : Nat) : Nat :=
-  bytesToUint (Vector.ofFn fun i : Fin 8 => byteAt data (pos + i))
-
 /-- The 8 little-endian bytes at the position `pos` of `data`, as a signed integer.
 
 The integer is in two's complement, so a top bit of 1 makes it negative. -/
 def readInt64 (data : ByteArray) (pos : Nat) : Int :=
-  let n := readUint64 data pos
-  if n < 2 ^ 63 then n else n - 2 ^ 64
+  (BitVec.ofNat 64 (Ssz.readUint data.data pos 8)).toInt
 
 /-- The index that the data of an index record holds.
 
@@ -199,10 +199,10 @@ def readIndex (data : ByteArray) : Except E2storeError Index :=
   if data.size < 16 then
     .error .indexSize
   else
-    let count := readUint64 data (data.size - 8)
+    let count := Ssz.readUint data.data (data.size - 8) 8
     if data.size ≠ 16 + 8 * count then
       .error .indexSize
     else
-      .ok ⟨readUint64 data 0, (List.range count).map fun i => readInt64 data (8 + 8 * i)⟩
+      .ok ⟨Ssz.readUint data.data 0 8, (List.range count).map fun i => readInt64 data (8 + 8 * i)⟩
 
 end EthLib.Serialization.E2store

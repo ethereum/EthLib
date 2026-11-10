@@ -55,7 +55,11 @@ def ACCUMULATOR : UInt16 := 0x0700
 /-- The type of a BlockIndex record, `f2` in ASCII. -/
 def BLOCK_INDEX : UInt16 := 0x6632
 
-/-- The record types of the era1 document, which no other record of a file may take. -/
+/-- The record types of the era1 document.
+
+EthLib reads its grammar so that no other record of a file takes one of them.
+
+So a second Version record, as in two files put together, is not an era1 file. -/
 def ERA1_TYPES : List UInt16 :=
   [E2store.VERSION, COMPRESSED_HEADER, COMPRESSED_BODY, COMPRESSED_RECEIPTS, TOTAL_DIFFICULTY,
     ACCUMULATOR, BLOCK_INDEX]
@@ -180,23 +184,12 @@ def bytes32Of (record : Record) : Except Era1Error Bytes32 :=
   else .error (.wrongSize record.type record.data.size)
 
 /-- The data of the compressed record of the block `i`. -/
-def decompress (i : Nat) (record : Record) : Except Era1Error ByteArray :=
+def decompressRecord (i : Nat) (record : Record) : Except Era1Error ByteArray :=
   (Networking.Snappy.decodeFrames record.data).mapError (.frame i)
 
 /-- The one RLP item of the bytes of a record of the block `i`. -/
 def rlpItem (i : Nat) (bytes : ByteArray) : Except Era1Error Rlp.Item :=
   (Rlp.decode bytes).mapError (.rlp i)
-
-/-- The index of the difficulty in a header, the eighth field at every fork. -/
-def HEADER_DIFFICULTY_INDEX : Nat := 7
-
-/-- The difficulty of a header of the block `i`, its eighth field. -/
-def headerDifficulty (i : Nat) (header : Rlp.Item) : Except Era1Error Nat :=
-  Except.mapError (.rlp i) do
-    let fields ← header.toItems
-    match fields[HEADER_DIFFICULTY_INDEX]? with
-    | some d => Rlp.Codec.ofItem d
-    | none => throw (.wrongFieldCount (HEADER_DIFFICULTY_INDEX + 1) fields.length)
 
 /-- The block `i` of a file whose first block has the number `start`, checked alone.
 
@@ -208,15 +201,15 @@ The result also gives the difficulty and the parent hash of the header. -/
 def readBlock (start i : Nat) (records : Record × Record × Record × Record) :
     Except Era1Error (Era1Block × Nat × Hash32) := do
   let (h, b, r, t) := records
-  let header ← decompress i h
-  let body ← decompress i b
-  let receipts ← decompress i r
+  let header ← decompressRecord i h
+  let body ← decompressRecord i b
+  let receipts ← decompressRecord i r
   let item ← rlpItem i header
   discard <| rlpItem i body
   discard <| rlpItem i receipts
   let number ← (Execution.Network.headerNumber item).mapError (.rlp i)
   unless number = start + i do throw (.blockNumber i)
-  let difficulty ← headerDifficulty i item
+  let difficulty ← (Execution.Network.headerDifficulty item).mapError (.rlp i)
   let parent ← (Execution.Network.headerParent item).mapError (.rlp i)
   let td := BitVec.ofNat 256 (Base.bytesToUint (← bytes32Of t))
   return (⟨header, body, receipts, td⟩, difficulty, parent)
@@ -224,6 +217,8 @@ def readBlock (start i : Nat) (records : Record × Record × Record × Record) :
 /-- The blocks of a file, from the block `i` on, after the block before them.
 
 The block before is its hash and total difficulty, or none at the first block.
+
+The era1 document asks none of the checks below, which EthLib adds so that the blocks form a chain.
 
 Each block must name the hash of the block before as its parent.
 
@@ -266,11 +261,17 @@ The block index must count the blocks and point at the header of each.
 
 Each offset counts from the start of the BlockIndex record.
 
-Its layout is that of a SlotIndex record, which the era1 document leaves unstated.
+The era1 document gives the order of its fields, but not their width or sign.
+
+It gives where the offsets count from only loosely.
+
+EthLib takes the layout of a SlotIndex record: 8 bytes each, little-endian, offsets signed.
 
 The blocks must form a chain from the first number of the index, with their total difficulties.
 
-The total difficulty is a 256-bit little-endian integer, as SSZ writes it.
+The TotalDifficulty document gives no byte order.
+
+EthLib takes that of SSZ, little-endian, which the accumulator also uses.
 
 The accumulator must be the root of the hashes and total difficulties of the blocks. -/
 def decodeEra1 (bytes : ByteArray) : Except Era1Error Era1 := do
@@ -288,8 +289,9 @@ def decodeEra1 (bytes : ByteArray) : Except Era1Error Era1 := do
     throw (.blockCount index.offsets.length tuples.length)
   -- The BlockIndex record is the last one, and the header of the block `i` the record `1 + 4 i`.
   let indexStart := bytes.size - 8 - idx.data.size
+  let offsets := index.offsets.toArray
   let misplaced := (List.range tuples.length).find? fun i =>
-    (indexStart : Int) + index.offsets.getD i 0 ≠ starts.getD (1 + 4 * i) 0
+    (indexStart : Int) + offsets.getD i 0 ≠ starts.getD (1 + 4 * i) 0
   if let some i := misplaced then throw (.blockOffset i)
   let blocks ← readBlocks index.start 0 none tuples
   let accumulator ← bytes32Of acc

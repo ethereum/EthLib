@@ -63,7 +63,7 @@ private theorem readBlock_header {start i : Nat}
     {result : Era1Block × Nat × Base.Hash32} (h : readBlock start i records = .ok result) :
     Networking.Snappy.decodeFrames records.1.data = .ok result.1.header := by
   obtain ⟨hr, b, r, t⟩ := records
-  unfold readBlock decompress at h
+  unfold readBlock decompressRecord at h
   cases hd : Networking.Snappy.decodeFrames hr.data with
   | error e => simp [hd, bind, Except.bind, Except.mapError] at h
   | ok header =>
@@ -187,9 +187,9 @@ theorem decodeEra1_offsets_length {bytes : ByteArray} {era1 : Era1}
 
 /-- In an accepted file, the offset of each block finds its header record.
 
-The offset counts from the start of the BlockIndex record, the last record of the file.
+The offset counts from 24 bytes plus 8 bytes per block before the end of the file.
 
-That record has 24 bytes plus 8 bytes per block.
+The decoder reads the BlockIndex record, the last one, from there.
 
 The data of the header record decompresses to the header of the block. -/
 theorem decodeEra1_offset {bytes : ByteArray} {era1 : Era1} (h : decodeEra1 bytes = .ok era1)

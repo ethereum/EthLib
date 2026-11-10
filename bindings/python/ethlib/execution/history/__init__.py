@@ -35,8 +35,10 @@ def decode_era1(data: bytes) -> Era1File:
     return Era1File(
         starting_number=starting_number,
         blocks=tuple(
-            Era1Block(header=header, body=body, receipts=receipts, total_difficulty=td)
-            for header, body, receipts, td in blocks
+            Era1Block(
+                header=header, body=body, receipts=receipts, total_difficulty=total_difficulty
+            )
+            for header, body, receipts, total_difficulty in blocks
         ),
         others=tuple(others),
         accumulator=accumulator,
