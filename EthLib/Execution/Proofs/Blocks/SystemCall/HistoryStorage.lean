@@ -358,21 +358,14 @@ theorem systemCall_set {env : BlockEnvironment fork} {block : State.BlockState} 
       out.output = .empty ∧
       WritesStorage HISTORY_STORAGE_ADDRESS
         (setHash env.number data (storageOf (.ofBlock block) HISTORY_STORAGE_ADDRESS))
-        (.ofBlock block) out.state := by
-  obtain ⟨out, hcall, herr, hout, hwrites⟩ :=
-    systemCall_of_spec (env := env) (block := block) (target := HISTORY_STORAGE_ADDRESS)
-      (data := data) (Q := fun S post output => output = .empty ∧
-        WritesStorage HISTORY_STORAGE_ADDRESS
-          (setHash env.number data (storageOf S HISTORY_STORAGE_ADDRESS)) S post)
-      (Nat.le_trans (by decide) hfork) hglam hcode
-      (by simp [CODE, NatCode.size_ofNat]) addedAt_HISTORY_STORAGE_ADDRESS delegatedAddress_CODE
-      (fun message state substate hcaller htarget hstatic henv hdata hgas hacc => by
-        subst henv hdata
-        rw [← htarget]
-        refine Spec.consequence (spec_set (Nat.le_trans (by decide) hfork) hglam hcaller hstatic
-          (htarget ▸ hacc) hnumber hbound
-          (by rw [hgas]; decide)) (fun _ h => h) ?_
-        exact fun evm ⟨herr, hout, hw⟩ => ⟨herr, hout, hw⟩)
-  exact ⟨out, hcall, herr, hout, hwrites⟩
+        (.ofBlock block) out.state :=
+  systemCall_of_writesStorage (P := fun _ => True) (fun _ => .empty) _
+    (Nat.le_trans (by decide) hfork) hglam hcode (by simp [CODE, NatCode.size_ofNat])
+    addedAt_HISTORY_STORAGE_ADDRESS delegatedAddress_CODE trivial
+    fun message _ _ hcaller htarget hstatic henv hdata hgas hacc _ => by
+      subst henv hdata
+      rw [← htarget]
+      exact spec_set (Nat.le_trans (by decide) hfork) hglam hcaller hstatic (htarget ▸ hacc)
+        hnumber hbound (by rw [hgas]; decide)
 
 end EthLib.Execution.Blocks.HistoryStorage
