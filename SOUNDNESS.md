@@ -1948,7 +1948,7 @@ The new votes come from justified sources, and no honest validator becomes slash
 A vote names the validator that signed it, so both theorems assume that no one forges a vote.
 No theorem derives the votes of the model from the beacon chain yet, so neither theorem is about what a client runs.
 
-Three pieces of that link exist.
+Four pieces of that link exist.
 `FfgVotes.lean` relates the slashing conditions of the beacon chain to those of the model.
 `justificationTest_iff_stake` (`Consensus/Proofs/Transition/FfgStake.lean`) reads the test of justification as a comparison of stakes.
 There the stake of a validator is its effective balance, and the indices count as a set.
@@ -1960,8 +1960,15 @@ With the BLS checks, the aggregate signature verifies under keys that include th
 Reading this as a signature by that attester assumes that BLS aggregate signatures cannot be forged.
 The source of that attestation is the justified checkpoint of the epoch of the flags.
 Its target is the checkpoint of that epoch, with the block root that the state records for its first slot.
+`voteFrame_processBlock` (`Consensus/Proofs/Transition/TargetVotes.lean`) carries that fact across a whole block.
+A block sets a target flag only from a vote, a pair of a validator and attestation data, for the link of the epoch of the flag at the position of the flag.
+Each such vote holds the data of an attestation of the block, and passes the attestation checks in the state after the block.
+With the BLS checks, that means the validator signed it, if BLS aggregates with proofs of possession cannot be forged.
+The block keeps the slot, the block roots, the justified checkpoints, the fork versions, the genesis validators root and the key of each validator.
+So `TargetFlagsSigned.of_voteFrame` keeps each target flag backed by a vote that passes the checks in the current state.
+From Gloas the theorem assumes the registry within its limit, since its type does not bound its size.
 At least five gaps remain before a refinement.
-No theorem yet carries that fact across a whole block, the slots, the epoch step and the upgrades.
+No theorem yet carries that fact across the slots, the epoch step and the upgrades, or establishes it at the first Altair state.
 None covers the forks before Altair.
 So none yet shows that the attesters of an epoch signed the link that the model counts.
 The attesters of the previous epoch are filtered by activity in that epoch, but the total counts the active validators of the current one.
