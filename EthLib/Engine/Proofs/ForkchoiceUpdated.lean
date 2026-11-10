@@ -49,7 +49,7 @@ Custody columns that decode never change the answer.
 
 Without payload attributes, every version gives the same answer.
 
-When the update applies a valid head, attributes of no layout of the version give `-38003`.
+When the update applies a valid head, attributes that fit no structure of the version give `-38003`.
 
 When it applies none, the attributes are not read.
 -/
@@ -381,7 +381,7 @@ theorem forkchoiceUpdatedParams_eq_ok_iff {version : Nat} {params : Lean.Json}
 
 That holds for every version and every forkchoice state that decodes.
 
-No rule reads the payload tree before. -/
+The error comes before any rule reads the payload tree. -/
 theorem forkchoiceUpdatedParams_not_object {version : Nat} {stateJson attributes : Lean.Json}
     {s : ForkchoiceState} (hs : forkchoiceStateOfJson stateJson = .ok s)
     (hNull : attributes ≠ .null) (hObj : ∀ kvs, attributes ≠ .obj kvs) :
@@ -420,15 +420,16 @@ theorem forkchoiceUpdatedCall_of_null {version version' : Nat} {stateJson : Lean
     simp [forkchoiceUpdatedCall, forkchoiceUpdatedParams, Json.paramsArray, custodyColumnsOfJson,
       hs, bind, Except.bind, pure, Except.pure]
 
-/-- When the update applies a valid head, attributes of no layout of the version give `-38003`.
+/-- When the update applies a valid head, attributes that fit no structure of the version fail.
 
-The answer is the error of invalid payload attributes, not the status of the head. -/
-theorem forkchoiceUpdatedCall_invalidPayloadAttributes {version : Nat}
+The answer is then the error of invalid payload attributes, `-38003`, not the status of the head.
+-/
+theorem forkchoiceUpdatedCall_eq_error_of_attributes {version : Nat}
     {stateJson : Lean.Json} {kvs : Std.TreeMap.Raw String Lean.Json compare}
     {s : ForkchoiceState} {status : PayloadStatus} {head : Hash32}
     (hs : forkchoiceStateOfJson stateJson = .ok s)
     (hf : forkchoiceUpdated tree finalized s = .ok (status, some head))
-    (hm : methodPayloadAttributes version (.obj kvs) = .error .invalidPayloadAttributes) :
+    (hm : payloadAttributesOfVersion version (.obj kvs) = .error .invalidPayloadAttributes) :
     forkchoiceUpdatedCall version tree finalized (.arr #[stateJson, .obj kvs]) =
       .error .invalidPayloadAttributes := by
   simp [forkchoiceUpdatedCall, forkchoiceUpdatedParams, Json.paramsArray, custodyColumnsOfJson,

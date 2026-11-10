@@ -24,9 +24,9 @@ The result is the value of the JSON of the response: the payload status, and no 
 
 A JSON-RPC error has the code of its Engine API error: 32602, 38002 or 38003.
 
-Payload attributes on an applied valid head that fit the version have code 0.
+Payload attributes on an applied valid head that fit the version ask for a build.
 
-They ask for a build, which is not specified.
+That build is not specified, so they have code 0.
 
 So do an unknown method and an argument that Lean cannot read.
 -/

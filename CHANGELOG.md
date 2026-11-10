@@ -14,6 +14,7 @@ Not yet released.
   Attributes that fit still give code 0, since no payload build is specified.
   A wrong number of parameters now has the reason `params: got N, expected 2`, or `2 or 3` for version 4, in place of `params: not 2 values`.
   `forkchoiceUpdatedParams` takes the version first and returns the attributes as JSON, or `none`, in place of a flag.
+  `EngineError` has a new constructor, `invalidPayloadAttributes`, with code 38003.
 - `MIN_REQUEST_LIMIT`, the fewest versioned hashes that `engine_getBlobs` must take in one request, is now `MIN_BLOBS_REQUEST_LIMIT`.
   Its value stays 128, and no C export or Python function changes.
 - The optimistic store now holds its head as a fork choice node, a root and the status of its payload, in place of the root of the head block ([#1475](https://github.com/ethereum/EthLib/issues/1475)).

@@ -76,7 +76,7 @@ The payload tree has no timestamps, so this model takes both at any time.
 
 For the same reason it does not check that the timestamp falls in the fork of the method.
 
-That check has error `-38005`.
+Versions 3 and 4 give that check the error `-38005`.
 
 Nor does it check that the timestamp is above that of the head.
 
@@ -84,7 +84,7 @@ Attributes that pass start a payload build.
 
 That build is not specified here, so such a request is refused.
 
-With any other answer no build begins, so attributes that are an object or `null` change nothing.
+When the update applies no valid head, no build begins, so the attributes change nothing.
 
 The method specifications state these rules, at commit `3284ee8` of execution-apis:
 
@@ -225,63 +225,70 @@ def attributesFields : Nat → List String
   | 3 => attributesFieldsV3
   | _ => attributesFieldsV4
 
-/-- Payload attributes of any version, each field of a later version present or not. -/
-structure AnyPayloadAttributes where
-  /-- The timestamp of the payload. -/
-  timestamp : UInt64
-  /-- The RANDAO mix of the payload. -/
-  prevRandao : Bytes32
-  /-- The fee recipient that the consensus layer suggests. -/
-  suggestedFeeRecipient : Address
-  /-- The withdrawals, from version 2. -/
-  withdrawals : Option (List Withdrawal)
-  /-- The root of the parent beacon block, from version 3. -/
-  parentBeaconBlockRoot : Option Hash32
-  /-- The slot number, from version 4. -/
-  slotNumber : Option UInt64
-  /-- The target gas limit, from version 4. -/
-  targetGasLimit : Option UInt64
+/-- The fork whose payload attributes have the fields of a version of their structure.
+
+Version 1 is that of Paris, 2 of Shapella, 3 of Dencun and 4 of Glamsterdam.
+
+Version 0 reads as 1, and a version above 4 reads as 4. -/
+def attributesFork : Nat → Fork
+  | 0 | 1 => .paris
+  | 2 => .shapella
+  | 3 => .dencun
+  | _ => .glamsterdam
+
+/-- The value of a field of an object, decoded by `f`, or none when the object lacks it. -/
+def optionalField {α : Type} (fs : List (String × Json)) (name : String)
+    (f : Json → Decode α) : Decode (Option α) :=
+  match fs.lookup name with
+  | some v => some <$> f v
+  | none => pure none
 
 /-- Payload attributes with exactly the fields of a version of their structure.
 
 A field whose value is `null` counts as absent.
 
-Each field holds a value of its type. -/
-def payloadAttributesOfJson (layout : Nat) (j : Json) : Decode AnyPayloadAttributes := do
+Each field holds a value of its type.
+
+The attributes are those of the fork of that version. -/
+def payloadAttributesOfJson (version : Nat) (j : Json) :
+    Decode (PayloadAttributes (attributesFork version)) := do
   let fs ← fields "payloadAttributes" j
-  unless hasExactly fs (attributesFields layout) do invalid "payloadAttributes: wrong fields"
+  unless hasExactly fs (attributesFields version) do invalid "payloadAttributes: wrong fields"
   let get := field "payloadAttributes" fs
   return {
     timestamp := ← uint64 "timestamp" (← get "timestamp")
     prevRandao := ← fixed "prevRandao" 32 (← get "prevRandao")
     suggestedFeeRecipient := ← address "suggestedFeeRecipient" (← get "suggestedFeeRecipient")
-    withdrawals := ← if 2 ≤ layout then
-      some <$> array "withdrawals" withdrawal (← get "withdrawals") else pure none
-    parentBeaconBlockRoot := ← if 3 ≤ layout then
-      some <$> fixed "parentBeaconBlockRoot" 32 (← get "parentBeaconBlockRoot") else pure none
-    slotNumber := ← if 4 ≤ layout then
-      some <$> uint64 "slotNumber" (← get "slotNumber") else pure none
-    targetGasLimit := ← if 4 ≤ layout then
-      some <$> uint64 "targetGasLimit" (← get "targetGasLimit") else pure none }
+    withdrawals := ← since "withdrawals"
+      (← optionalField fs "withdrawals" (array "withdrawals" withdrawal))
+    parentBeaconBlockRoot := ← since "parentBeaconBlockRoot"
+      (← optionalField fs "parentBeaconBlockRoot" (fixed "parentBeaconBlockRoot" 32))
+    slotNumber := ← since "slotNumber" (← optionalField fs "slotNumber" (uint64 "slotNumber"))
+    targetGasLimit := ← since "targetGasLimit"
+      (← optionalField fs "targetGasLimit" (uint64 "targetGasLimit")) }
 
-/-- The versions of the payload attributes that a version of the method takes.
+/-- The versions of the structure of the payload attributes that a version of the method takes.
 
 Version 2 takes version 1 before Shapella and version 2 from it, so it takes both here. -/
-def attributesLayouts : Nat → List Nat
+def attributesVersions : Nat → List Nat
   | 2 => [1, 2]
   | version => [version]
 
-/-- The payload attributes that a version of the method takes, in the first layout that fits.
+/-- The payload attributes that a version of the method takes, with the fork of their structure.
 
-Attributes of no layout that the method takes are invalid payload attributes. -/
-def methodPayloadAttributes (version : Nat) (j : Json) :
-    Except EngineError AnyPayloadAttributes :=
-  match (attributesLayouts version).findSome?
-      (fun layout => (payloadAttributesOfJson layout j).toOption) with
+The first structure that fits gives them.
+
+Attributes that fit no structure that the method takes are invalid payload attributes. -/
+def payloadAttributesOfVersion (version : Nat) (j : Json) :
+    Except EngineError (Σ fork, PayloadAttributes fork) :=
+  match (attributesVersions version).findSome?
+      (fun v => (payloadAttributesOfJson v j).toOption.map fun a => ⟨attributesFork v, a⟩) with
   | some attributes => .ok attributes
   | none => .error .invalidPayloadAttributes
 
-/-- The custody columns of version 4: 16 bytes, one bit for each column, or `null` for none. -/
+/-- The custody columns of version 4: 16 bytes, one bit for each column.
+
+They are `null` when the consensus layer gives no custody set. -/
 def custodyColumnsOfJson : Json → Decode (Option (Vector UInt8 16))
   | .null => pure none
   | j => some <$> fixed "custodyColumns" 16 j
@@ -313,16 +320,19 @@ def forkchoiceUpdatedParams (version : Nat) (params : Json) :
 
 /-- A version of the method: its status, the new head, and the payload attributes of a build.
 
-Attributes count only when a valid head is applied, and they must then fit a layout of the version.
+Attributes count only when a valid head is applied.
 
-The versions are 1 to 4. -/
+They must then fit a structure of the version.
+
+The versions of the method are 1 to 4; the C export passes no other. -/
 def forkchoiceUpdatedCall (version : Nat) (tree : PayloadTree) (finalized : Option Hash32)
     (params : Json) :
-    Except EngineError (PayloadStatus × Option Hash32 × Option AnyPayloadAttributes) := do
+    Except EngineError
+      (PayloadStatus × Option Hash32 × Option (Σ fork, PayloadAttributes fork)) := do
   let (state, attributes) ← forkchoiceUpdatedParams version params
   let (status, head) ← forkchoiceUpdated tree finalized state
   match attributes, head with
-  | some j, some _ => return (status, head, some (← methodPayloadAttributes version j))
+  | some j, some _ => return (status, head, some (← payloadAttributesOfVersion version j))
   | _, _ => return (status, head, none)
 
 end EthLib.Engine
