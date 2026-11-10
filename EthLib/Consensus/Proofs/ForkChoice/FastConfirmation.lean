@@ -11,7 +11,7 @@ public import EthLib.Consensus.Proofs.ForkChoice.Store
 
 An empty range of slots weighs nothing, and so does a sum over no items.
 
-A sum is at most the sum of bounds on its weights.
+A sum is the sum of its weights, so at most the sum of bounds on them.
 
 A range of slots that ends later has every member of the committees of a shorter one.
 
@@ -43,17 +43,18 @@ theorem sumGwei_nil {α : Type} {weight : α → Except ForkChoiceError Gwei} :
     sumGwei [] weight = .ok 0 := by
   simp [sumGwei, bind, Except.bind, pure, Except.pure]
 
-/-- A sum that the store computes is at most the sum of bounds on its weights. -/
-theorem toNat_le_of_sumGwei {α : Type} {items : List α}
-    {weight : α → Except ForkChoiceError Gwei} {bound : α → Nat} {total : Gwei}
+/-- A sum that the store computes is the sum of its weights. -/
+theorem toNat_eq_of_sumGwei {α : Type} {items : List α}
+    {weight : α → Except ForkChoiceError Gwei} {value : α → Nat} {total : Gwei}
     (summed : sumGwei items weight = .ok total)
-    (each : ∀ item ∈ items, ∀ value, weight item = .ok value → value.toNat ≤ bound item) :
-    total.toNat ≤ (items.map bound).sum := by
+    (each : ∀ item ∈ items, ∀ computed, weight item = .ok computed →
+      computed.toNat = value item) :
+    total.toNat = (items.map value).sum := by
   -- The fold adds each weight to the running sum.
   have fold : ∀ (rest : List α) (start sum : Nat),
-      (∀ item ∈ rest, ∀ value, weight item = .ok value → value.toNat ≤ bound item) →
+      (∀ item ∈ rest, ∀ computed, weight item = .ok computed → computed.toNat = value item) →
       rest.foldlM (fun sum item => return sum + (← weight item).toNat) start = .ok sum →
-      sum ≤ start + (rest.map bound).sum := by
+      sum = start + (rest.map value).sum := by
     intro rest
     induction rest with
     | nil =>
@@ -63,17 +64,17 @@ theorem toNat_le_of_sumGwei {α : Type} {items : List α}
     | cons first rest ih =>
       intro start sum each folded
       simp only [List.foldlM_cons, bind_ok_iff, pure, Except.pure] at folded
-      obtain ⟨next, ⟨value, valueOk, nextOk⟩, folded⟩ := folded
+      obtain ⟨next, ⟨computed, computedOk, nextOk⟩, folded⟩ := folded
       simp only [Except.ok.injEq] at nextOk
       subst nextOk
-      have head := each first List.mem_cons_self value valueOk
+      have head := each first List.mem_cons_self computed computedOk
       have tail := ih _ _ (fun item member => each item (List.mem_cons_of_mem first member))
         folded
       simp only [List.map_cons, List.sum_cons]
       omega
   simp only [sumGwei, bind_ok_iff] at summed
   obtain ⟨sum, sumOk, summed⟩ := summed
-  have bounded := fold items 0 sum each sumOk
+  have exact := fold items 0 sum each sumOk
   split at summed
   · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at summed
   · rename_i small
@@ -81,6 +82,29 @@ theorem toNat_le_of_sumGwei {α : Type} {items : List α}
     subst summed
     rw [Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.mod_eq_of_lt (by omega)]
     omega
+
+/-- A sum that the store computes is at most the sum of bounds on its weights. -/
+theorem toNat_le_of_sumGwei {α : Type} {items : List α}
+    {weight : α → Except ForkChoiceError Gwei} {bound : α → Nat} {total : Gwei}
+    (summed : sumGwei items weight = .ok total)
+    (each : ∀ item ∈ items, ∀ value, weight item = .ok value → value.toNat ≤ bound item) :
+    total.toNat ≤ (items.map bound).sum := by
+  let value : α → Nat := fun item => match weight item with
+    | .ok computed => computed.toNat
+    | .error _ => 0
+  rw [toNat_eq_of_sumGwei (value := value) summed fun item _ computed computedOk => by
+    simp only [value, computedOk]]
+  clear summed
+  induction items with
+  | nil => simp
+  | cons first rest ih =>
+    simp only [List.map_cons, List.sum_cons]
+    refine Nat.add_le_add ?_ (ih fun item member => each item (List.mem_cons_of_mem _ member))
+    · cases computed : weight first with
+      | error _ => simp only [value, computed, Nat.zero_le]
+      | ok computed' =>
+        simpa only [value, computed] using each first List.mem_cons_self computed' computed
+
 /-- The validator at an index is the one that the registry holds there. -/
 theorem validatorAt_ok_iff {state : BeaconState preset fork} {index : ValidatorIndex}
     {validator : Validator} :
