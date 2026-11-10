@@ -233,7 +233,8 @@ theorem SlackChainInvariant.of_chainStep (positive : 0 < preset.SLOTS_PER_EPOCH.
     refine ⟨(advanceSlotAcross_invariant holds.invariant computed).1,
       early.of_processUpgrades upgraded,
       (holds.separated.of_advanceSlot holds.early holds.invariant.settled
-        advancedOk).of_processUpgrades upgraded, ?_, pending.of_processUpgrades upgraded, ?_⟩
+        advancedOk).of_processUpgrades upgraded, ?_, pending.of_processUpgrades upgraded,
+      RootsAbove.of_chainStep positive window holds.roots hypotheses.links (.slot computed), ?_⟩
     · by_cases altair : .altair ≤ forked.fork
       · exact TargetFlagsVoted.of_processUpgrades (forked := ⟨forked.fork, advanced⟩) altair
           flags upgraded
@@ -252,7 +253,9 @@ theorem SlackChainInvariant.of_chainStep (positive : 0 < preset.SLOTS_PER_EPOCH.
       holds.separated.of_frame frame,
       (holds.flagsVoted.of_voteFrame voteFrame).mono (Set.union_subset subset_rfl sub),
       fun before => (PendingVoted.of_processBlock before apart holds.pendingVoted blockOk).mono
-        (Set.union_subset subset_rfl sub) before, ?_⟩
+        (Set.union_subset subset_rfl sub) before,
+      RootsAbove.of_chainStep positive window holds.roots hypotheses.links
+        (.block engine signed validateResult applied), ?_⟩
     unfold SlackJustifiedCheckpoints
     rw [frame.previousJustified, frame.currentJustified]
     exact holds.slack
@@ -284,7 +287,8 @@ theorem initializeBeaconStateFromEth1_slackChainInvariant {fork : Fork}
   obtain ⟨before, holds⟩ := initializeBeaconStateFromEth1_invariant computed
   obtain ⟨slot, previous, current⟩ := initializeBeaconStateFromEth1_checkpoints computed
   refine ⟨holds, JustifiedEarly.of_initializeBeaconStateFromEth1 computed, fun later => ?_,
-    fun altair => absurd altair (Nat.not_le_of_lt before), fun _ current pending member => ?_, ?_⟩
+    fun altair => absurd altair (Nat.not_le_of_lt before), fun _ current pending member => ?_,
+    RootsAbove.of_initializeBeaconStateFromEth1 computed, ?_⟩
   · simp [getCurrentEpoch, slot, computeEpochAtSlot, GENESIS_SLOT, GENESIS_EPOCH] at later
   · rw [initializeBeaconStateFromEth1_pending computed] at member
     simp at member
