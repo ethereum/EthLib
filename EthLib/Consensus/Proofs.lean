@@ -98,6 +98,7 @@ public import EthLib.Consensus.Proofs.SlashingProtection
 public import EthLib.Consensus.Proofs.ShufflePermutation
 public import EthLib.Consensus.Proofs.Signing
 public import EthLib.Consensus.Proofs.Time
+public import EthLib.Consensus.Proofs.Transition.ActiveKept
 public import EthLib.Consensus.Proofs.Transition.Block
 public import EthLib.Consensus.Proofs.Transition.BlockRewards
 public import EthLib.Consensus.Proofs.Transition.BuilderDebt
