@@ -142,15 +142,12 @@ theorem disjoint_supportersOf_equivocatorsOf {state balanceSource : BeaconState 
     {node : ForkChoiceNode} {participants : Std.TreeSet ValidatorIndex} :
     Disjoint (store.supportersOf state node) (store.equivocatorsOf balanceSource participants) := by
   refine Finset.disjoint_left.mpr fun v supporter equivocator => ?_
-  simp only [supportersOf, List.mem_toFinset, List.mem_map, List.mem_filter] at supporter
-  obtain ⟨⟨index, gwei⟩, ⟨-, counts⟩, rfl⟩ := supporter
-  have known : store.equivocatingIndices.contains index = true := by
+  have known : store.equivocatingIndices.contains v = true := by
     simpa using (Finset.mem_filter.mp equivocator).2
-  simp only [voteCountsFor] at counts
-  split at counts
-  · cases counts
-  · simp at counts
-    exact counts.1 (by simpa using known)
+  obtain ⟨-, -, -, honest, -⟩ :=
+    store.exists_of_voteCountsFor (store.voteCountsFor_of_mem_supportersOf supporter)
+  rw [honest] at known
+  exact absurd known (by simp)
 
 variable {config : Config}
 
