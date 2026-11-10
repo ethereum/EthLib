@@ -2073,8 +2073,12 @@ The epoch step moves the flags of the current epoch to the previous one, and jus
 Justification does not run in the first two epochs, so the theorem assumes the two justified checkpoints equal there, and the slots keep that.
 The theorem also assumes the registry below 2^64 validators after the block, which its type already bounds before Gloas.
 At least five gaps remain before a refinement.
-No theorem yet carries that fact across the upgrades.
-None establishes it at the first Altair state, nor the equal justified checkpoints of the first two epochs there.
+It also assumes that the two fork versions of the state are versions of forks of the chain, up to the fork of the state.
+There a vote counts as signed when its aggregate signature verifies in the attester domain of such a version.
+The attestation check uses one of the two versions of the state, so it implies this.
+The version stays free among those forks, since two upgrades in one epoch change the version that the state gives to the previous epoch.
+`TargetFlagsSigned.of_processUpgrades` (`Consensus/Proofs/Transition/TargetUpgrades.lean`) carries the fact across the upgrades from Altair on.
+No theorem yet establishes it at the first Altair state, which the upgrade from Phase 0 builds from the pending attestations, nor the equal justified checkpoints of the first two epochs there.
 None covers the forks before Altair.
 So none yet shows that the attesters of an epoch signed the link that the model counts.
 The attesters of the previous epoch are filtered by activity in that epoch, but the total counts the active validators of the current one.

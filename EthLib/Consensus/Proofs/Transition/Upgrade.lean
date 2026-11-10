@@ -561,32 +561,38 @@ theorem upgradeToAltair_invariant {pre : BeaconState preset .phase0}
   obtain ⟨participation, rfl, -⟩ := foldlM_translateAttestation folded
   exact ⟨holds.of_carried rfl rfl rfl rfl rfl rfl, rfl⟩
 
-/-- Queueing a validator that is not yet active changes no exit epoch. -/
+/-- Queueing a validator that is not yet active changes no exit epoch.
+
+It keeps the block roots and the flags. -/
 theorem frame_queuePreActivation {fork : Fork} {state after : BeaconState preset fork}
     {electra : .pectra ≤ fork} {index : ValidatorIndex}
-    (computed : queuePreActivation state electra index = .ok after) : Frame state after := by
+    (computed : queuePreActivation state electra index = .ok after) :
+    BlockFrame state after := by
   simp only [queuePreActivation, bind_ok_iff, liftAccessor_ok, pure, Except.pure,
     Except.ok.injEq] at computed
   obtain ⟨validator, found, _, -, _, -, _, set₁, _, set₂, rfl⟩ := computed
   have sizes := sameSizes_setBalance set₁
   obtain ⟨_, rfl⟩ := setBalance_ok set₁
-  have zeroed := Frame.of_validators sizes
+  have zeroed := BlockFrame.of_validators sizes
   have reset := frame_setValidator set₂ found rfl fun ordered =>
     ordered validator (mem_of_getValidator found)
-  exact (zeroed.trans reset.toFrame).trans (Frame.of_validators ⟨rfl, rfl⟩)
+  exact (zeroed.trans reset.toBlockFrame).trans (BlockFrame.of_validators ⟨rfl, rfl⟩)
 
-/-- Queueing the excess balance of a validator with compounding credentials keeps the frame. -/
+/-- Queueing the excess balance of a validator with compounding credentials keeps the frame.
+
+It keeps the block roots and the flags. -/
 theorem frame_queueCompoundingExcess {fork : Fork} {state after : BeaconState preset fork}
     {electra : .pectra ≤ fork} {index : Nat}
-    (computed : queueCompoundingExcess state electra index = .ok after) : Frame state after := by
+    (computed : queueCompoundingExcess state electra index = .ok after) :
+    BlockFrame state after := by
   unfold queueCompoundingExcess at computed
   split at computed
   · split at computed
-    · exact (frame_queueExcessActiveBalance (liftAccessor_ok.mp computed)).toFrame
+    · exact frame_queueExcessActiveBalance (liftAccessor_ok.mp computed)
     · cases computed
-      exact Frame.refl _
+      exact BlockFrame.refl _
   · cases computed
-    exact Frame.refl _
+    exact BlockFrame.refl _
 
 /-- The upgrade to Electra keeps the invariant and the finalized checkpoint.
 
@@ -597,8 +603,8 @@ theorem upgradeToElectra_invariant {pre : BeaconState preset .dencun}
     Invariant after ∧ after.finalizedCheckpoint = pre.finalizedCheckpoint := by
   simp only [upgradeToElectra, bind_ok_iff] at computed
   obtain ⟨_, -, _, -, _, -, _, -, _, queued, compounded⟩ := computed
-  have frame := (Frame.foldlM (fun _ _ _ ok => frame_queuePreActivation ok) queued).trans
-    (Frame.foldlM (fun _ _ _ ok => frame_queueCompoundingExcess ok) compounded)
+  have frame := (Frame.foldlM (fun _ _ _ ok => (frame_queuePreActivation ok).toFrame) queued).trans
+    (Frame.foldlM (fun _ _ _ ok => (frame_queueCompoundingExcess ok).toFrame) compounded)
   exact ⟨frame.invariant (holds.of_carried rfl rfl rfl rfl rfl rfl), frame.finalized⟩
 
 /-- The upgrade to Fulu keeps the invariant and the finalized checkpoint. -/

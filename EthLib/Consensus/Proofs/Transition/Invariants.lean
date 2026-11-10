@@ -61,15 +61,17 @@ variable {preset : Preset} {fork : Base.Fork} {config : Config} {checks : Signat
 def ExitsOrdered (state : BeaconState preset fork) : Prop :=
   ∀ validator ∈ state.validators.data, validator.exitEpoch ≤ validator.withdrawableEpoch
 
-/-- Each validator of the state keeps its key in the state after a step. -/
-def KeysKept (state after : BeaconState preset fork) : Prop :=
+/-- Each validator of the state keeps its key in the state after a step, or after an upgrade. -/
+def KeysKept {post : Base.Fork} (state : BeaconState preset fork)
+    (after : BeaconState preset post) : Prop :=
   ∀ index validator, getValidator state index = .ok validator →
     ∃ kept, getValidator after index = .ok kept ∧ kept.pubkey = validator.pubkey
 
 theorem KeysKept.refl (state : BeaconState preset fork) : KeysKept state state :=
   fun _ validator found => ⟨validator, found, rfl⟩
 
-theorem KeysKept.trans {first second third : BeaconState preset fork}
+theorem KeysKept.trans {middle last : Base.Fork} {first : BeaconState preset fork}
+    {second : BeaconState preset middle} {third : BeaconState preset last}
     (one : KeysKept first second) (two : KeysKept second third) : KeysKept first third := by
   intro index validator found
   obtain ⟨middle, middleOk, same⟩ := one index validator found

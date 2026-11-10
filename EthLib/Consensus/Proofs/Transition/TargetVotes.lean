@@ -14,11 +14,15 @@ Justification counts the stake of the unslashed validators whose byte holds the 
 
 A vote here is a pair of a validator index and attestation data, as in the model of Casper FFG.
 
-A vote is signed in a state when an indexed attestation holds the validator and the data.
+A vote is signed in a state when an aggregate signature over its data verifies.
 
-That indexed attestation must pass the checks of an attestation in that state.
+It verifies under keys of the state that include the validator's key.
 
-With the BLS checks, its aggregate signature then verifies under keys that include the validator's.
+Its domain is that of attestations, at the version of a fork of the chain up to the state's fork.
+
+An indexed attestation that passes the checks of an attestation gives such a signature.
+
+Those checks use one of the two fork versions of the state, which are versions of the chain.
 
 Reading that as the validator's signature assumes that no one forges a BLS aggregate.
 
@@ -44,7 +48,7 @@ So the proofs keep the keys, and the signatures of the votes, while the registry
 
 The registry never shrinks, so a bound on the last state covers each state before it.
 
-A vote signed in a state stays signed while the fork versions, the root and the keys stay.
+A vote signed in a state stays signed while the genesis validators root and the keys stay.
 
 So each target flag still comes from a signed vote for its link after the step.
 
@@ -62,16 +66,40 @@ open Base Uint64 Serialization.Ssz Cryptography.Bls
 variable {preset : Preset} {fork : Base.Fork} {config : Config} {checks : SignatureChecks}
   {engine : ExecutionEngine preset fork} {state after : BeaconState preset fork}
 
-/-- An indexed attestation that passes the checks of the state holds the validator and the data.
+/-- The two fork versions of the state are versions of forks of the chain, up to its own fork.
+
+Genesis and each upgrade set them so, and nothing else changes them. -/
+def ForkVersionsKnown (config : Config) (state : BeaconState preset fork) : Prop :=
+  (∃ signer ≤ fork, state.forkVersions.previousVersion = config.forkVersion signer) ∧
+    ∃ signer ≤ fork, state.forkVersions.currentVersion = config.forkVersion signer
+
+/-- A vote signed in a state, under the version of a fork of the chain up to the state's fork.
+
+A list of validator indices holds the validator, and an aggregate signature verifies.
+
+It verifies under the keys that the state holds for those indices.
+
+Its message is the data, in the attester domain of that version and the genesis validators root.
 
 With the BLS checks, and no forged aggregate, the validator signed the data.
 
-That reading assumes that BLS aggregates with proofs of possession of the keys cannot be forged. -/
+That reading assumes that BLS aggregates with proofs of possession of the keys cannot be forged.
+
+The attestation checks use one of the two versions of the state, for the target epoch.
+
+Two upgrades in one epoch change the version of the previous epoch, so any earlier fork counts. -/
 def SignedVote (config : Config) (checks : SignatureChecks) (state : BeaconState preset fork)
     (vote : ValidatorIndex × AttestationData) : Prop :=
-  ∃ indexed : IndexedAttestation preset fork,
-    isValidIndexedAttestation config checks state indexed = .ok true ∧
-      vote.1 ∈ indexed.attestingIndices.data ∧ indexed.data = vote.2
+  ∃ (indices : List ValidatorIndex) (signer : Base.Fork) (signature : BLSSignature)
+    (pubkeys : Array ByteArray) (domain : Domain) (root : Root),
+    signer ≤ fork ∧ vote.1 ∈ indices ∧
+      (indices.toArray.mapM fun index => do
+        return packBytes (← liftAccessor (getValidator state index)).pubkey) =
+        (.ok pubkeys : Except TransitionError (Array ByteArray)) ∧
+      computeDomain config DOMAIN_BEACON_ATTESTER (config.forkVersion signer)
+        state.genesisValidatorsRoot = .ok domain ∧
+      computeSigningRoot vote.2 domain = .ok root ∧
+      checks.fastAggregateVerify pubkeys (packBytes root) (packBytes signature) = true
 
 /-- A vote for the link of the current epoch, or else of the previous one, at a position.
 
@@ -131,7 +159,7 @@ structure VoteFrame (config : Config) (checks : SignatureChecks)
     TargetFlagAt (recentParticipation after altair current) position →
       TargetFlagAt (recentParticipation state altair current) position ∨
         ∃ vote, votes vote ∧ LinkVote state current position vote
-  signed : after.validators.data.size < 2 ^ 64 →
+  signed : after.validators.data.size < 2 ^ 64 → ForkVersionsKnown config after →
     ∀ vote, votes vote → SignedVote config checks after vote
 
 /-- A vote for a link is one in a state with the same slot, block roots and checkpoints. -/
@@ -153,47 +181,75 @@ theorem LinkVote.of_voteFrame {votes : ValidatorIndex × AttestationData → Pro
   (LinkVote.congr frame.slot frame.blockRoots frame.previousJustified frame.currentJustified).mpr
     link
 
-/-- A vote signed in a state is signed in one with the same fork versions, root and keys. -/
-theorem SignedVote.of_keys {vote : ValidatorIndex × AttestationData}
-    (forkVersions : after.forkVersions = state.forkVersions)
-    (genesisValidatorsRoot : after.genesisValidatorsRoot = state.genesisValidatorsRoot)
-    (pubkeys : KeysKept state after)
-    (signed : SignedVote config checks state vote) : SignedVote config checks after vote := by
-  obtain ⟨indexed, valid, member, data⟩ := signed
-  refine ⟨indexed, ?_, member, data⟩
-  unfold isValidIndexedAttestation at valid ⊢
-  dsimp only at valid ⊢
+/-- An indexed attestation that passes the checks signs each vote of its validators and data.
+
+The fork versions of the state must be those of forks of the chain. -/
+theorem SignedVote.of_valid {indexed : IndexedAttestation preset fork}
+    {vote : ValidatorIndex × AttestationData} (known : ForkVersionsKnown config state)
+    (valid : isValidIndexedAttestation config checks state indexed = .ok true)
+    (member : vote.1 ∈ indexed.attestingIndices.data) (data : indexed.data = vote.2) :
+    SignedVote config checks state vote := by
+  unfold isValidIndexedAttestation at valid
+  dsimp only at valid
   split at valid
   · cases valid
-  rename_i shape
-  rw [ite_eq_right shape]
-  simp only [bind_ok_iff, liftAccessor_ok, liftSsz_ok, pure, Except.pure] at valid ⊢
+  simp only [bind_ok_iff, liftAccessor_ok, liftSsz_ok, pure, Except.pure,
+    Except.ok.injEq] at valid
   obtain ⟨keys, keysOk, domain, domainOk, root, rootOk, final⟩ := valid
-  refine ⟨keys, ?_, domain, ?_, root, rootOk, final⟩
-  · rw [Array.mapM_eq_mapM_toList] at keysOk ⊢
-    simp only [Functor.map, Except.map] at keysOk ⊢
-    split at keysOk
-    · cases keysOk
-    rename_i list listOk
-    obtain ⟨length, each⟩ := mapM_eq_ok_iff.mp listOk
-    rw [mapM_eq_ok_iff.mpr ⟨length, fun position inside => ?_⟩]
-    · exact keysOk
-    have one := each position inside
-    simp only [bind_ok_iff, liftAccessor_ok] at one ⊢
-    obtain ⟨validator, found, packed⟩ := one
-    obtain ⟨kept, keptOk, same⟩ := pubkeys _ _ found
-    exact ⟨kept, keptOk, by rw [same]; exact packed⟩
-  · simpa only [getDomain, Option.getD_some, forkVersions, genesisValidatorsRoot] using domainOk
+  simp only [getDomain, Option.getD_some, mapError_ok_iff] at domainOk
+  have signer : ∃ signer ≤ fork,
+      computeDomain config DOMAIN_BEACON_ATTESTER (config.forkVersion signer)
+        state.genesisValidatorsRoot = .ok domain := by
+    split at domainOk
+    · obtain ⟨signer, le, same⟩ := known.1
+      exact ⟨signer, le, same ▸ domainOk⟩
+    · obtain ⟨signer, le, same⟩ := known.2
+      exact ⟨signer, le, same ▸ domainOk⟩
+  obtain ⟨signer, le, domainOk⟩ := signer
+  refine ⟨indexed.attestingIndices.data.toList, signer, indexed.signature, keys, domain, root, le,
+    Array.mem_toList_iff.mpr member, keysOk, domainOk, data ▸ rootOk, final⟩
+
+/-- Two states with the same fork versions both have known versions, or neither has. -/
+theorem ForkVersionsKnown.congr (same : after.forkVersions = state.forkVersions) :
+    ForkVersionsKnown config after ↔ ForkVersionsKnown config state := by
+  unfold ForkVersionsKnown
+  rw [same]
+
+/-- A vote signed in a state is signed after a step or an upgrade that keeps the root and keys.
+
+The fork of the state after must be at least the fork before. -/
+theorem SignedVote.of_keys {post : Base.Fork} {later : BeaconState preset post}
+    {vote : ValidatorIndex × AttestationData} (forward : fork ≤ post)
+    (genesisValidatorsRoot : later.genesisValidatorsRoot = state.genesisValidatorsRoot)
+    (pubkeys : KeysKept state later)
+    (signed : SignedVote config checks state vote) : SignedVote config checks later vote := by
+  obtain ⟨indices, signer, signature, keys, domain, root, le, member, keysOk, domainOk, rootOk,
+    final⟩ := signed
+  refine ⟨indices, signer, signature, keys, domain, root, Nat.le_trans le forward, member, ?_,
+    genesisValidatorsRoot ▸ domainOk, rootOk, final⟩
+  rw [Array.mapM_eq_mapM_toList] at keysOk ⊢
+  simp only [Functor.map, Except.map] at keysOk ⊢
+  split at keysOk
+  · cases keysOk
+  rename_i list listOk
+  obtain ⟨length, each⟩ := mapM_eq_ok_iff.mp listOk
+  rw [mapM_eq_ok_iff.mpr ⟨length, fun position inside => ?_⟩]
+  · exact keysOk
+  have one := each position inside
+  simp only [bind_ok_iff, liftAccessor_ok] at one ⊢
+  obtain ⟨validator, found, packed⟩ := one
+  obtain ⟨kept, keptOk, same⟩ := pubkeys _ _ found
+  exact ⟨kept, keptOk, by rw [same]; exact packed⟩
 
 /-- A vote signed before a frame is signed after it, if then fewer than 2^64 validators exist. -/
 theorem SignedVote.of_frame {vote : ValidatorIndex × AttestationData} (frame : Frame state after)
     (small : after.validators.data.size < 2 ^ 64)
     (signed : SignedVote config checks state vote) : SignedVote config checks after vote :=
-  signed.of_keys frame.forkVersions frame.genesisValidatorsRoot (frame.keysKept small)
+  signed.of_keys (Nat.le_refl _) frame.genesisValidatorsRoot (frame.keysKept small)
 
 theorem VoteFrame.refl (state : BeaconState preset fork) :
     VoteFrame config checks (fun _ => False) state state :=
-  ⟨Frame.refl state, rfl, fun _ _ _ flagged => .inl flagged, fun _ _ chosen => chosen.elim⟩
+  ⟨Frame.refl state, rfl, fun _ _ _ flagged => .inl flagged, fun _ _ _ chosen => chosen.elim⟩
 
 /-- Two steps chain, with the union of their votes. -/
 theorem VoteFrame.trans {first second third : BeaconState preset fork}
@@ -202,7 +258,7 @@ theorem VoteFrame.trans {first second third : BeaconState preset fork}
     (two : VoteFrame config checks votes' second third) :
     VoteFrame config checks (fun vote => votes vote ∨ votes' vote) first third := by
   refine ⟨one.toFrame.trans two.toFrame, two.blockRoots.trans one.blockRoots,
-    fun altair current position flagged => ?_, fun small vote chosen => ?_⟩
+    fun altair current position flagged => ?_, fun small known vote chosen => ?_⟩
   · rcases two.flags altair current position flagged with old | ⟨vote, chosen, link⟩
     · exact (one.flags altair current position old).imp_right
         fun ⟨vote, chosen, link⟩ => ⟨vote, .inl chosen, link⟩
@@ -210,9 +266,10 @@ theorem VoteFrame.trans {first second third : BeaconState preset fork}
       exact (LinkVote.congr one.slot one.blockRoots one.previousJustified
         one.currentJustified).mp link
   · rcases chosen with first | second
-    · exact (one.signed (Nat.lt_of_le_of_lt two.registryGrows small) vote first).of_frame
+    · exact (one.signed (Nat.lt_of_le_of_lt two.registryGrows small)
+        ((ForkVersionsKnown.congr two.forkVersions).mp known) vote first).of_frame
         two.toFrame small
-    · exact two.signed small vote second
+    · exact two.signed small known vote second
 
 /-- A block frame is a step that sets no target flag, since a zero byte holds no flag. -/
 theorem VoteFrame.of_blockFrame (frame : BlockFrame state after) :
@@ -230,7 +287,7 @@ theorem VoteFrame.of_blockFrame (frame : BlockFrame state after) :
     · rcases kept.2 found with old | rfl
       · exact ⟨flags, old, set⟩
       · exact absurd set (by decide)
-  signed _ _ chosen := chosen.elim
+  signed _ _ _ chosen := chosen.elim
 
 /-- After a step, each target flag comes from a vote of the earlier set or of the step. -/
 theorem TargetFlagsVoted.of_voteFrame {votes added : ValidatorIndex × AttestationData → Prop}
@@ -244,9 +301,11 @@ theorem TargetFlagsVoted.of_voteFrame {votes added : ValidatorIndex × Attestati
 
 /-- After a step, each target flag still comes from a vote for its link, signed after the step.
 
-It needs the registry below 2^64 validators after the step. -/
+It needs the registry below 2^64 validators after the step.
+
+It also needs the fork versions after the step to be those of forks of the chain. -/
 theorem TargetFlagsSigned.of_voteFrame {votes : ValidatorIndex × AttestationData → Prop}
-    (small : after.validators.data.size < 2 ^ 64)
+    (small : after.validators.data.size < 2 ^ 64) (known : ForkVersionsKnown config after)
     (holds : TargetFlagsSigned config checks state)
     (frame : VoteFrame config checks votes state after) :
     TargetFlagsSigned config checks after := by
@@ -254,7 +313,7 @@ theorem TargetFlagsSigned.of_voteFrame {votes : ValidatorIndex × AttestationDat
   rcases frame.flags altair current position flagged with old | ⟨vote, chosen, link⟩
   · obtain ⟨vote, link, signed⟩ := holds altair current position old
     exact ⟨vote, link.of_voteFrame frame, signed.of_frame frame.toFrame small⟩
-  · exact ⟨vote, link.of_voteFrame frame, frame.signed small vote chosen⟩
+  · exact ⟨vote, link.of_voteFrame frame, frame.signed small known vote chosen⟩
 
 /-- A step with votes that hold the same votes as another set. -/
 private theorem VoteFrame.congr {votes votes' : ValidatorIndex × AttestationData → Prop}
@@ -263,7 +322,7 @@ private theorem VoteFrame.congr {votes votes' : ValidatorIndex × AttestationDat
   ⟨frame.toFrame, frame.blockRoots,
     fun altair current position flagged => (frame.flags altair current position flagged).imp_right
       fun ⟨vote, chosen, link⟩ => ⟨vote, (same vote).mp chosen, link⟩,
-    fun small vote chosen => frame.signed small vote ((same vote).mpr chosen)⟩
+    fun small known vote chosen => frame.signed small known vote ((same vote).mpr chosen)⟩
 
 /-! ## Attestations
 
@@ -302,8 +361,9 @@ private theorem voteFrame_processAttestationAltair {attestation : Attestation pr
   generalize (attestation.data.target.epoch == getCurrentEpoch state) = same at kept
   refine ⟨fun vote => vote.1 ∈ indexed.attestingIndices.data ∧ vote.2 = attestation.data,
     ⟨frame, ?_, fun altair' current position flagged => ?_,
-      fun small vote ⟨member, data⟩ =>
-        SignedVote.of_frame frame small ⟨indexed, validOk, member, by rw [data, dataEq]⟩⟩,
+      fun small known vote ⟨member, data⟩ =>
+        (SignedVote.of_valid ((ForkVersionsKnown.congr frame.forkVersions).mp known) validOk
+          member (by rw [data, dataEq])).of_frame frame small⟩,
     fun _ chosen => chosen.2⟩
   · rw [kept.blockRoots]
     unfold setEpochParticipation
