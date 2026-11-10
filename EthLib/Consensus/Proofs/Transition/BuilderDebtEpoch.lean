@@ -329,7 +329,9 @@ private theorem processBuilderPendingPayments_of_noWrap (positive : preset.Payme
       have := releasedLe index
       omega
 
-/-- With a positive quorum, the epoch step and the move to the next slot keep the debt invariant.
+/-- With a positive quorum, the step of the builder payments keeps the debt invariant.
+
+It holds for the state after the step, moved to the next slot.
 
 The next slot follows the slot of the state, and it is the first slot of an epoch. -/
 theorem BuilderDebtCovered.processBuilderPendingPayments (positive : preset.PaymentQuorumPositive)

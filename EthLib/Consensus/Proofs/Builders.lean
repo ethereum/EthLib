@@ -221,7 +221,9 @@ theorem getBuilderPaymentQuorumThreshold_pos {state : BeaconState preset fork}
   simp only [UInt64.toNat_zero]
   omega
 
-/-- Under this property an epoch has at least one slot, and twice its slots fit in 64 bits. -/
+/-- With a payment quorum of at least one gwei, an epoch has at least one slot.
+
+Twice its slots then fit in 64 bits. -/
 theorem Preset.PaymentQuorumPositive.slotsPerEpoch_bounds
     (positive : preset.PaymentQuorumPositive) :
     1 ≤ preset.SLOTS_PER_EPOCH.toNat ∧ 2 * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64 := by
