@@ -62,7 +62,7 @@ private theorem bind_exists_ok {ε α β : Type} {x : Except ε α} {g : α → 
   exact rest a
 
 /-- At the last slot of an epoch, the slot is one less than a whole number of epochs after. -/
-private theorem slot_mod_eq_of_last (epochSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat)
+theorem slot_mod_eq_of_last (epochSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat)
     (last : (state.slot.toNat + 1) % preset.SLOTS_PER_EPOCH.toNat = 0) :
     state.slot.toNat % preset.SLOTS_PER_EPOCH.toNat = preset.SLOTS_PER_EPOCH.toNat - 1 := by
   have below := Nat.mod_lt state.slot.toNat (by omega : 0 < preset.SLOTS_PER_EPOCH.toNat)
@@ -73,14 +73,16 @@ private theorem slot_mod_eq_of_last (epochSlots : 2 ≤ preset.SLOTS_PER_EPOCH.t
     omega
   · omega
 
-/-- At the last slot of an epoch, the root of the first block of a recent epoch succeeds.
+/-- At the last slot of an epoch, the block root at the first slot of a recent epoch succeeds.
 
-A recent epoch is the previous or the current one, and the current one must be the third or later.
--/
-private theorem getBlockRoot_exists_ok (roots : preset.RootsReachPreviousEpoch)
+A recent epoch is the previous or the current one.
+
+An epoch must have two slots at least, and the buffer of block roots must reach the epoch before.
+
+The slot plus the length of the buffer of block roots must be below 2^64. -/
+theorem getBlockRoot_exists_ok (roots : preset.RootsReachPreviousEpoch)
     (last : (state.slot.toNat + 1) % preset.SLOTS_PER_EPOCH.toNat = 0)
-    (room : state.slot.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat < 2 ^ 64)
-    (late : 2 ≤ (getCurrentEpoch state).toNat) {epoch : Epoch}
+    (room : state.slot.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat < 2 ^ 64) {epoch : Epoch}
     (recent : epoch = getPreviousEpoch state ∨ epoch = getCurrentEpoch state) :
     ∃ root, getBlockRoot state epoch = .ok root := by
   have twoSlots := roots.twoSlots
@@ -104,9 +106,6 @@ private theorem getBlockRoot_exists_ok (roots : preset.RootsReachPreviousEpoch)
   have start : (epoch * preset.SLOTS_PER_EPOCH).toNat =
       epoch.toNat * preset.SLOTS_PER_EPOCH.toNat := by
     rw [UInt64.toNat_mul, Nat.mod_eq_of_lt small]
-  have late' : preset.SLOTS_PER_EPOCH.toNat ≤
-      (getCurrentEpoch state).toNat * preset.SLOTS_PER_EPOCH.toNat :=
-    Nat.le_mul_of_pos_left _ (by omega)
   obtain ⟨root, read⟩ := getBlockRootAtSlot_exists (state := state)
     (slot := epoch * preset.SLOTS_PER_EPOCH) (by rw [start]; omega) (by rw [start]; omega)
     (by rw [start]; omega) nonempty
@@ -228,21 +227,19 @@ private theorem pendingSigners_lt (within : state.RegistryWithinLimit)
   obtain ⟨_, found, -⟩ := (mem_getActiveValidatorIndices within).mp active
   exact (Array.getElem?_eq_some_iff.mp found).1
 
-/-- Before Altair, the balance of the signers of some pending attestations succeeds.
+/-- The unslashed signers of some pending attestations succeed.
 
 The signers of each attestation must succeed.
 
 The registry must stay within its limit.
 
-The sum of the effective balances must be below 2^64.
-
-The balance is then at most one increment or that sum, whichever is larger. -/
-private theorem getAttestingBalance_exists_ok (summed : effectiveBalanceSum state < 2 ^ 64)
-    (within : state.RegistryWithinLimit) {attestations : Array (PendingAttestation preset)}
+The unslashed signers are then validators of the registry. -/
+theorem getUnslashedAttestingIndices_exists_ok (within : state.RegistryWithinLimit)
+    {attestations : Array (PendingAttestation preset)}
     (resolved : ∀ attestation ∈ attestations,
       ∃ signers, getPendingAttestingIndices state attestation = .ok signers) :
-    ∃ total, getAttestingBalance state attestations = .ok total ∧
-      total.toNat ≤ max preset.EFFECTIVE_BALANCE_INCREMENT.toNat (effectiveBalanceSum state) := by
+    ∃ attesters, getUnslashedAttestingIndices state attestations = .ok attesters ∧
+      ∀ index ∈ attesters, index.toNat < state.validators.data.size := by
   obtain ⟨lists, listsOk⟩ := mapM_exists_ok (xs := attestations.toList)
     (f := getPendingAttestingIndices state) fun attestation member =>
       resolved attestation (Array.mem_toList_iff.mp member)
@@ -258,48 +255,79 @@ private theorem getAttestingBalance_exists_ok (summed : effectiveBalanceSum stat
           .ok (state.validators.data[index.toNat]'(inside index (mem_sortedSet.mp member))) :=
         getValidator_eq_ok_iff.mpr (Array.getElem?_eq_getElem _)
       exact ⟨_, by rw [found]; rfl⟩
-  obtain ⟨total, totalOk, bounded⟩ := getTotalBalance_exists_ok (state := state)
-    (indices := unslashed)
-    (fun index member => inside index (mem_sortedSet.mp (mem_of_filterM_ok unslashedOk member)))
-    summed
-  refine ⟨total, ?_, bounded⟩
-  unfold getAttestingBalance getUnslashedAttestingIndices unslashedAmong
+  refine ⟨unslashed, ?_, fun index member =>
+    inside index (mem_sortedSet.mp (mem_of_filterM_ok unslashedOk member))⟩
+  unfold getUnslashedAttestingIndices unslashedAmong
   rw [listsOk]
-  exact bind_ok_iff.mpr ⟨unslashed, unslashedOk, totalOk⟩
+  exact bind_ok_iff.mpr ⟨_, rfl, unslashedOk⟩
+
+/-- Before Altair, the balance of the signers of some pending attestations succeeds.
+
+The signers of each attestation must succeed.
+
+The registry must stay within its limit.
+
+The sum of the effective balances must be below 2^64.
+
+The balance is then at most one increment or that sum, whichever is larger. -/
+private theorem getAttestingBalance_exists_ok (summed : effectiveBalanceSum state < 2 ^ 64)
+    (within : state.RegistryWithinLimit) {attestations : Array (PendingAttestation preset)}
+    (resolved : ∀ attestation ∈ attestations,
+      ∃ signers, getPendingAttestingIndices state attestation = .ok signers) :
+    ∃ total, getAttestingBalance state attestations = .ok total ∧
+      total.toNat ≤ max preset.EFFECTIVE_BALANCE_INCREMENT.toNat (effectiveBalanceSum state) := by
+  obtain ⟨attesters, attestersOk, inside⟩ := getUnslashedAttestingIndices_exists_ok within resolved
+  obtain ⟨total, totalOk, bounded⟩ := getTotalBalance_exists_ok inside summed
+  refine ⟨total, ?_, bounded⟩
+  unfold getAttestingBalance
+  rw [attestersOk]
+  exact totalOk
+
+/-- Before Altair, the pending attestations with a matching source in a recent epoch succeed.
+
+A recent epoch is the previous or the current one.
+
+They are the list of the current epoch if the epoch is current, else that of the previous one. -/
+theorem getMatchingSourceAttestations_eq_ok (before : fork < .altair) {epoch : Epoch}
+    (recent : epoch = getPreviousEpoch state ∨ epoch = getCurrentEpoch state) :
+    getMatchingSourceAttestations state before epoch =
+      .ok (if epoch = getCurrentEpoch state then (state.currentEpochAttestations before).data
+        else (state.previousEpochAttestations before).data) :=
+  bind_ok_iff.mpr ⟨(), ensure_ok_iff.mpr recent, rfl⟩
+
+/-- A member of the list that the source match picks is in a list of a recent epoch. -/
+theorem mem_recent_of_mem_source {before : fork < .altair} {epoch : Epoch}
+    {attestation : PendingAttestation preset}
+    (member : attestation ∈ (if epoch = getCurrentEpoch state then
+      (state.currentEpochAttestations before).data
+      else (state.previousEpochAttestations before).data)) :
+    attestation ∈ (state.previousEpochAttestations before).data ∨
+      attestation ∈ (state.currentEpochAttestations before).data := by
+  split at member
+  · exact .inr member
+  · exact .inl member
 
 /-- Before Altair, the pending attestations with a matching target in a recent epoch succeed.
 
-The root of the first block of the epoch must succeed.
+The block root at the first slot of the epoch must succeed.
 
-Each such attestation is a pending attestation of the previous or the current epoch. -/
-private theorem getMatchingTargetAttestations_exists_ok (before : fork < .altair) {epoch : Epoch}
+Each such attestation is one with a matching source in that epoch. -/
+theorem getMatchingTargetAttestations_exists_ok (before : fork < .altair) {epoch : Epoch}
     (recent : epoch = getPreviousEpoch state ∨ epoch = getCurrentEpoch state)
     (rooted : ∃ root, getBlockRoot state epoch = .ok root) :
     ∃ result, getMatchingTargetAttestations state before epoch = .ok result ∧
-      ∀ attestation ∈ result, attestation ∈ (state.previousEpochAttestations before).data ∨
-        attestation ∈ (state.currentEpochAttestations before).data := by
-  have sourceOk : getMatchingSourceAttestations state before epoch =
-      .ok (if epoch = getCurrentEpoch state then (state.currentEpochAttestations before).data
-        else (state.previousEpochAttestations before).data) :=
-    bind_ok_iff.mpr ⟨(), ensure_ok_iff.mpr recent, rfl⟩
-  have members : ∀ attestation ∈ (if epoch = getCurrentEpoch state then
-      (state.currentEpochAttestations before).data
-      else (state.previousEpochAttestations before).data),
-      attestation ∈ (state.previousEpochAttestations before).data ∨
-        attestation ∈ (state.currentEpochAttestations before).data := by
-    intro attestation member
-    split at member
-    · exact .inr member
-    · exact .inl member
-  generalize (if epoch = getCurrentEpoch state then (state.currentEpochAttestations before).data
-    else (state.previousEpochAttestations before).data) = source at sourceOk members
+      ∀ attestation ∈ result, attestation ∈ (if epoch = getCurrentEpoch state then
+        (state.currentEpochAttestations before).data
+        else (state.previousEpochAttestations before).data) := by
   obtain ⟨root, read⟩ := rooted
   unfold getMatchingTargetAttestations
-  rw [sourceOk]
+  rw [getMatchingSourceAttestations_eq_ok before recent]
+  generalize (if epoch = getCurrentEpoch state then (state.currentEpochAttestations before).data
+    else (state.previousEpochAttestations before).data) = source
   by_cases empty : source.isEmpty
   · exact ⟨#[], by simp [empty, bind, Except.bind, pure, Except.pure], by simp⟩
   · refine ⟨source.filter (·.data.target.root == root), ?_,
-      fun attestation member => members attestation (Array.mem_of_mem_filter member)⟩
+      fun attestation member => Array.mem_of_mem_filter member⟩
     simp [empty, read, liftAccessor, Except.mapError, bind, Except.bind, pure, Except.pure]
 
 /-- Justification and finalization succeed at the last slot of an epoch, under bounds.
@@ -331,13 +359,8 @@ theorem processJustificationAndFinalization_total (roots : preset.RootsReachPrev
   · by_cases altair : .altair ≤ fork
     · exact ⟨state, processJustificationAndFinalization_early_altair altair early⟩
     · exact ⟨state, processJustificationAndFinalization_early (Nat.lt_of_not_le altair) early⟩
-  have late : 2 ≤ (getCurrentEpoch state).toNat := by
-    rw [UInt64.le_iff_toNat_le] at early
-    simp only [GENESIS_EPOCH] at early
-    change ¬(getCurrentEpoch state).toNat ≤ 1 at early
-    omega
-  have previousRoot := getBlockRoot_exists_ok roots last room late (.inl rfl)
-  have currentRoot := getBlockRoot_exists_ok roots last room late (.inr rfl)
+  have previousRoot := getBlockRoot_exists_ok roots last room (.inl rfl)
+  have currentRoot := getBlockRoot_exists_ok roots last room (.inr rfl)
   have fitsSum : effectiveBalanceSum state < 2 ^ 64 := by omega
   have capped : max preset.EFFECTIVE_BALANCE_INCREMENT.toNat (effectiveBalanceSum state) ≤
       preset.EFFECTIVE_BALANCE_INCREMENT.toNat + effectiveBalanceSum state :=
@@ -388,9 +411,11 @@ theorem processJustificationAndFinalization_total (roots : preset.RootsReachPrev
     obtain ⟨current, currentOk, currentIn⟩ :=
       getMatchingTargetAttestations_exists_ok before (.inr rfl) currentRoot
     obtain ⟨previousBalance, previousBalanceOk, previousLe⟩ := getAttestingBalance_exists_ok
-      fitsSum within fun attestation member => resolved before attestation (previousIn _ member)
+      fitsSum within fun attestation member =>
+        resolved before attestation (mem_recent_of_mem_source (previousIn _ member))
     obtain ⟨currentBalance, currentBalanceOk, currentLe⟩ := getAttestingBalance_exists_ok
-      fitsSum within fun attestation member => resolved before attestation (currentIn _ member)
+      fitsSum within fun attestation member =>
+        resolved before attestation (mem_recent_of_mem_source (currentIn _ member))
     obtain ⟨after, weighOk⟩ := weighed previousBalance currentBalance (by omega) (by omega)
     exact ⟨after, bind_ok_iff.mpr ⟨_, previousOk,
       bind_ok_iff.mpr ⟨_, currentOk,
