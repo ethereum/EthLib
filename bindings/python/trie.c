@@ -25,6 +25,11 @@ eth_trie_hex_prefix(
 );
 
 extern lean_object*
+eth_trie_verify_range(
+  lean_object* args
+);
+
+extern lean_object*
 eth_trie_verify_account_proof(
   lean_object* args
 );
@@ -91,6 +96,14 @@ py_trie_hex_prefix(
   PyObject* args
 ) {
   return call_pyvalue_export(eth_trie_hex_prefix, args, 2, TRIE_ERROR);
+}
+
+PyObject*
+py_trie_verify_range(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_trie_verify_range, args, 4, TRIE_ERROR);
 }
 
 PyObject*

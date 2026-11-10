@@ -26,6 +26,17 @@ def verify_proof(
     return _native.trie_verify_proof(root, secured, key, rlp.encode(list(proof)))
 
 
+def verify_range(
+    root: bytes, start: bytes, entries: Sequence[tuple[bytes, bytes]], proof: Sequence[bytes]
+) -> bool:
+    """Check a range of the trie of a 32-byte root from `start`, and whether keys follow it."""
+    # Each entry is a 32-byte key, not hashed again, and its value, in increasing key order.
+    # The proof holds the nodes on the paths of the start and of the last key, in any order.
+    # With no proof, the entries must be the whole trie.
+    # A range that does not verify raises TrieError with the code of its fault.
+    return _native.trie_verify_range(root, start, list(entries), list(proof))
+
+
 def verify_account_proof(state_root: bytes, answer: dict) -> list[bool] | None:
     """Check an answer of `eth_getProof` against a 32-byte state root, slot by slot."""
     # The answer is the `result` object of the response.
@@ -48,4 +59,11 @@ def hex_prefix(nibbles: Sequence[int], is_leaf: bool) -> bytes:
     return _native.trie_hex_prefix(list(nibbles), is_leaf)
 
 
-__all__ = ["root", "verify_proof", "verify_account_proof", "hex_prefix", "TrieError"]
+__all__ = [
+    "root",
+    "verify_proof",
+    "verify_range",
+    "verify_account_proof",
+    "hex_prefix",
+    "TrieError",
+]

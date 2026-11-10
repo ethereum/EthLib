@@ -158,6 +158,9 @@
 #define DOC_trie_hex_prefix \
   "The hex-prefix encoding of a path of nibbles, for a leaf or an extension."
 
+#define DOC_trie_verify_range \
+  "Check a range of the trie of a 32-byte root from a 32-byte start, with Keccak-256."
+
 #define DOC_trie_verify_account_proof \
   "Check an answer of `eth_getProof` against a 32-byte state root, with Keccak-256."
 
@@ -898,6 +901,12 @@
 
 #define DOC_snap_full_account \
   "The full RLP form of an account in slim form."
+
+#define DOC_snap_verify_account_range \
+  "Check the accounts of an AccountRange answer, from a root and a start of 32 bytes each."
+
+#define DOC_snap_verify_storage_ranges \
+  "Check the ranges of a StorageRanges answer, against the storage roots of the request."
 
 #define DOC_snappy_decompress \
   "The bytes a Snappy block decompresses to, or why it is not a valid block."

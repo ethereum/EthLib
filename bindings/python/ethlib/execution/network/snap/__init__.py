@@ -1,5 +1,7 @@
 """The messages of the snap capability of devp2p, snap/1 and snap/2."""
 
+from collections.abc import Sequence
+
 # Every domain links into one extension module.
 # That module lives in the `cryptography` package.
 from ethlib.cryptography import _native
@@ -38,6 +40,36 @@ def full_account(slim: bytes) -> bytes:
     return _native.snap_full_account(slim)
 
 
+def verify_account_range(
+    root: bytes, start: bytes, accounts: Sequence[tuple[bytes, bytes]], proof: Sequence[bytes]
+) -> bool | None:
+    """Check an AccountRange answer from `start` in the state trie of `root`."""
+    # Each account is the hash of its address and its body in slim form.
+    # None is the empty reply of a peer without the state, so test the result with `is None`.
+    # Otherwise the result says whether the trie holds an account after the last one.
+    # An answer that does not verify raises SnapError with the code of its fault.
+    return _native.snap_verify_account_range(root, start, list(accounts), list(proof))
+
+
+def verify_storage_ranges(
+    roots: Sequence[bytes],
+    start: bytes,
+    slots: Sequence[Sequence[tuple[bytes, bytes]]],
+    proof: Sequence[bytes],
+) -> bool | None:
+    """Check a StorageRanges answer against the storage roots of the requested accounts."""
+    # Each range holds the hash of each slot and its value in the storage trie.
+    # The start has 32 bytes, or none for the zero hash.
+    # Any other start applies only when one account is requested.
+    # With several, each range starts at the zero hash.
+    # None is the empty reply of a peer without the state of the root or of a requested account.
+    # Otherwise the result says whether the last account holds a slot after its range.
+    # An answer that does not verify raises SnapError with the code of its fault.
+    return _native.snap_verify_storage_ranges(
+        list(roots), start, [list(range_) for range_ in slots], list(proof)
+    )
+
+
 __all__ = [
     "ACCOUNT_RANGE",
     "BLOCK_ACCESS_LISTS",
@@ -54,4 +86,6 @@ __all__ = [
     "codes_answer",
     "decode_message",
     "full_account",
+    "verify_account_range",
+    "verify_storage_ranges",
 ]
