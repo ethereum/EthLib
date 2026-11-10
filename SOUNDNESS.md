@@ -394,7 +394,14 @@ The groups are the multiples of the generators of G1 and G2, and the test is the
 The test is sound (`blsScheme_sound`).
 `sign_eq` and `verify_iff_isDh` prove that EthLib's `sign` and `verify` compute the scheme.
 There `H(m)` is the hash to G2 of `m` under the message tag.
-Aggregation and proofs of possession lie outside the game.
+Aggregation and proofs of possession lie outside that game.
+
+A second game (`Proofs/Bls/Security/PopGame.lean`) states unforgeability of aggregates with proofs of possession, after §3.3 of [draft-irtf-cfrg-bls-signature-05](https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signature-05#section-3.3).
+One key is honest; the adversary chooses the others, and wins with an aggregate that verifies under the sum of keys that all carry valid proofs.
+`Pop.forgeAdvantage_le` (`Proofs/Bls/Security/PopBound.lean`) bounds a forger within `q` message and `qK` key hash calls by `q` times a named solver of the same problem, plus `(q + qK - 1) / |F|`.
+It assumes the test is sound, every element of `G1` is a multiple of `g1`, and `qK` is at most the characteristic of the scalars.
+Without the last, enough copies of the honest key sum to zero.
+The bound is not yet stated over EthLib's bytes, and the light client still assumes `SignatureChecks.AggregateSound`.
 
 `byteForgeAdvantage_le` (`Proofs/Bls/Security/Refinement.lean`) turns a forger on byte encodings into a named group-element forger with at least the same advantage.
 The byte forger receives a compressed key and compressed hash and signing answers, and returns arbitrary message and signature bytes.

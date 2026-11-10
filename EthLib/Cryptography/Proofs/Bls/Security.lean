@@ -51,7 +51,7 @@ That needs `z ≠ 0`, every key a multiple of `g1`, no other key of scalar 0, an
 
 So such a win is at most as likely as a success of the reduction.
 
-Together, a forger on aggregates wins at most `q` times as often as the reduction at co-CDH.
+Take a forger on aggregates within `q` message and `qK` key hash calls.
 
-The bound adds `(q + qK - 1) / |F|`, for `q` message and `qK` key hash calls.
+It wins at most `q` times as often as the reduction at co-CDH, plus `(q + qK - 1) / |F|`.
 -/

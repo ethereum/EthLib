@@ -39,12 +39,11 @@ The game checks each proof against the key hash at its position in a list.
 
 The reduction will read `r x` from its table of key hashes, so a function of the key suffices here.
 
-No bound is proved here; the planned one would pay three terms around this step.
+The bound of the game, in its own module, pays three terms around this step.
 
 - A factor `q` for guessing which message hash is `Z`.
 - `(qK - 1) / |F|`, for a key hash scalar other than the honest one that is zero.
-  This term is proved in its own module, for a fixed secret and honest scalar.
-- One over the number of scalars in the simulation, for `c = 0`, which zeroes every programmed hash.
+- `q / |F|`, one `1 / |F|` per guess, for a zero challenge, which zeroes every programmed hash.
 -/
 
 @[expose] public section

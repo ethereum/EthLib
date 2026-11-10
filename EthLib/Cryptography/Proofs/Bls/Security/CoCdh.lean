@@ -23,7 +23,7 @@ The end of their §3.1 needs it when no computable map from `G1` to `G2` is know
 
 namespace EthLib.Cryptography.Bls.Security
 
-open OracleComp ENNReal
+open OracleComp ENNReal MeasureTheory
 
 /-- An adversary against co-CDH: from `(a • g1, a • g2, c • g2)` it returns a guess. -/
 abbrev CoCdhAdversary (G₁ G₂ : Type) := G₁ → G₂ → G₂ → ProbComp G₂
@@ -42,5 +42,19 @@ def coCdhExperiment (g₁ : G₁) (g₂ : G₂) (adversary : CoCdhAdversary G₁
 noncomputable def coCdhAdvantage (g₁ : G₁) (g₂ : G₂) (adversary : CoCdhAdversary G₁ G₂) :
     ℝ≥0∞ :=
   Pr{let b ← coCdhExperiment F g₁ g₂ adversary}[b = true]
+
+/-- The advantage at co-CDH averages the solver's success over the scalars `a` and `c`. -/
+theorem coCdhAdvantage_eq_lintegral (g₁ : G₁) (g₂ : G₂)
+    (adversary : CoCdhAdversary G₁ G₂) :
+    letI : MeasurableSpace F := ⊤
+    coCdhAdvantage F g₁ g₂ adversary = ∫⁻ a, ∫⁻ c,
+      Pr{let g ← adversary (a • g₁) (a • g₂) (c • g₂)}[g = (a * c) • g₂] ∂𝒟[$ᵗ F] ∂𝒟[$ᵗ F] := by
+  let : MeasurableSpace F := ⊤
+  rw [coCdhAdvantage, coCdhExperiment, prEvent_bind_eq_lintegral_of_discrete]
+  refine lintegral_congr fun a => ?_
+  rw [prEvent_bind_eq_lintegral_of_discrete]
+  refine lintegral_congr fun c => ?_
+  rw [bind_pure_comp, prEvent_map]
+  simp
 
 end EthLib.Cryptography.Bls.Security

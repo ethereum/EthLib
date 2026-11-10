@@ -9,7 +9,13 @@ This is the bound for the game of aggregates with proofs of possession, in the r
 
 The reduction guesses the position `j` of the forged message among at most `q` message hashes.
 
-It programs that hash to the challenge, and every other key hash to a known multiple of it.
+It programs that hash to the challenge.
+
+It programs the hash of every key other than the honest one to a known multiple of it.
+
+The problem also gives `a • g2`, a stronger assumption than the co-CDH of Boneh, Lynn and Shacham.
+
+The reduction signs, and proves possession of the honest key, with it.
 
 A forgery at position `j` then gives the answer, unless one of two events happens.
 
@@ -18,9 +24,15 @@ A forgery at position `j` then gives the answer, unless one of two events happen
 
 So a forger wins at most `q` times as often as the reduction, plus `(q + qK - 1) / |F|`.
 
-The bound needs every element of `G1` to be a multiple of `g1`, as in a group of prime order.
+The bound needs the scheme to accept exactly the co-Diffie-Hellman tuples.
 
-It needs `qK` at most the characteristic of the scalars, so that the honest count is not zero.
+It needs every element of `G1` to be a multiple of `g1`, as in a group of prime order.
+
+It needs `qK` at most the characteristic of the scalars.
+
+Then the number of copies of the honest key among the keys, the honest count, is not zero.
+
+The coupling needs the challenge scalar to be nonzero, so the proof pays `1 / |F|` per guess.
 -/
 
 @[expose] public section
@@ -31,61 +43,6 @@ open OracleComp OracleSpec ENNReal MeasureTheory
 
 variable {F G₁ G₂ M : Type} [DecidableEq M] [DecidableEq G₁] [Field F] [SampleableType F]
   [AddCommGroup G₁] [Module F G₁] [AddCommGroup G₂] [Module F G₂]
-
-omit [AddCommGroup G₁] [Module F G₁] in
-/-- The message table never has more entries than there were message hash calls. -/
-theorem impl_preservesInv_msgLength (g₂ : G₂) (a : F) :
-    QueryImpl.PreservesInv (impl (M := M) (G₁ := G₁) g₂ a)
-      fun st => st.msg.table.length ≤ st.msg.calls := by
-  intro t st hst x hx
-  rcases t with n | (m | m) | y
-  · change x ∈ support ((·, st) <$> _) at hx
-    simp only [support_map, Set.mem_image] at hx
-    obtain ⟨_, -, rfl⟩ := hx
-    exact hst
-  · change x ∈ support ((fun w => _) <$> hash g₂ m st.msg) at hx
-    simp only [support_map, Set.mem_image] at hx
-    obtain ⟨w, hw, rfl⟩ := hx
-    exact Security.impl_preservesInv_length g₂ a (.inr (.inl m)) st.msg hst w hw
-  · change x ∈ support ((fun w => _) <$> ((fun w => _) <$> hash g₂ m st.msg)) at hx
-    simp only [support_map, Set.mem_image] at hx
-    obtain ⟨_, ⟨w, hw, rfl⟩, rfl⟩ := hx
-    exact Security.impl_preservesInv_length g₂ a (.inr (.inl m)) st.msg hst w hw
-  · change x ∈ support (keyHash g₂ y st) at hx
-    rw [(mem_support_keyHash hx).2.2.2.1]
-    exact hst
-
-omit [AddCommGroup G₁] [Module F G₁] in
-/-- An output of the game's oracles is an output of the oracles with some scalar fixed at `j`.
-
-The game's run is distributed as that run with a uniform scalar, so both reach the same outputs. -/
-theorem exists_mem_support_implAt {α : Type} {g₂ : G₂} {a : F} (j : ℕ)
-    {oa : OracleComp (Spec M G₁ G₂) α} {st : State F G₁ M} {p : α × State F G₁ M}
-    (hp : p ∈ support ((simulateQ (impl g₂ a) oa).run st)) :
-    ∃ z, p ∈ support ((simulateQ (implAt g₂ a j z) oa).run st) := by
-  rw [support_eq_of_evalDistEq (run_impl_eq_uniform_implAt g₂ a j oa st),
-    mem_support_bind_iff] at hp
-  obtain ⟨z, -, hz⟩ := hp
-  exact ⟨z, hz⟩
-
-/-- A run after the honest key hash stays within the bounds on hash calls.
-
-Its outputs are outputs of the game, whose runs make at most `q` and `qK` calls. -/
-theorem callBound_of_mem_support {scheme : Scheme G₁ G₂} {adversary : Adversary G₁ G₂ M}
-    {q qK : ℕ} (hq : HashCallBound F scheme adversary q qK) {a t : F}
-    {p : Output G₁ G₂ M × State F G₁ M}
-    (hp : p ∈ support ((simulateQ (impl scheme.g₂ a)
-      (run adversary (a • scheme.g₁) (a • (t • scheme.g₂)))).run
-        (State.withKey (a • scheme.g₁) t))) :
-    p.2.msg.calls ≤ q ∧ p.2.keyCalls ≤ qK := by
-  refine hq (wins scheme (a • scheme.g₁) p.2.msg.signed p.1, p.2) ?_
-  unfold experiment
-  rw [mem_support_bind_iff]
-  refine ⟨a, by simp, ?_⟩
-  rw [mem_support_bind_iff]
-  refine ⟨p, ?_, by simp⟩
-  rw [StateT.run_bind, keyHash_run_init, bind_map_left, mem_support_bind_iff]
-  exact ⟨t, by simp, hp⟩
 
 /-- In a game within `qK` key hash calls, a winning run has a nonzero honest count in `F`.
 
@@ -108,7 +65,7 @@ theorem honestCount_ne_zero {scheme : Scheme G₁ G₂} {adversary : Adversary G
     (List.count_le_length).trans (List.length_map _).le
   obtain ⟨z, hz⟩ := exists_mem_support_implAt 0 hp
   have hcalls := keyCalls_of_mem_support hz
-  have hbound := (callBound_of_mem_support hq hp).2
+  have hbound := (hq.calls_le_of_mem_support hp).2
   have hlt : honestCount (a • scheme.g₁) p < ringChar F := by
     simp only [State.withKey] at hcalls
     omega
@@ -173,7 +130,7 @@ theorem prEvent_wins_le_zeroKey_add_sum {scheme : Scheme G₁ G₂} {adversary :
   have hlen : p.2.msg.table.length ≤ p.2.msg.calls :=
     simulateQ_run_preservesInv _ _ (impl_preservesInv_msgLength scheme.g₂ a) _ _
       (by simp [State.withKey, Security.State.init]) p hp
-  have hcalls := (callBound_of_mem_support hq hp).1
+  have hcalls := (hq.calls_le_of_mem_support hp).1
   exact ⟨⟨k, by omega⟩, Finset.mem_univ _, ⟨s, hk⟩, hw, hz, honestCount_ne_zero hchar hq hp hw⟩
 
 /-- A win at position `j` is at most `1 / |F|` plus the reduction's average success.
@@ -238,25 +195,10 @@ theorem prEvent_reduction_eq (g₂ : G₂) (adversary : Adversary G₁ G₂ M) (
       pure (extract X₁ j x.1 x.2))}[g = T] = _
   rw [bind_pure_comp, prEvent_map]
 
-omit [DecidableEq M] [DecidableEq G₁] in
-/-- The advantage at co-CDH averages the solver's success over the scalars `a` and `c`. -/
-theorem coCdhAdvantage_eq_lintegral [DecidableEq G₂] (g₁ : G₁) (g₂ : G₂)
-    (adversary : CoCdhAdversary G₁ G₂) :
-    letI : MeasurableSpace F := ⊤
-    coCdhAdvantage F g₁ g₂ adversary = ∫⁻ a, ∫⁻ c,
-      Pr{let g ← adversary (a • g₁) (a • g₂) (c • g₂)}[g = (a * c) • g₂] ∂𝒟[$ᵗ F] ∂𝒟[$ᵗ F] := by
-  let : MeasurableSpace F := ⊤
-  rw [coCdhAdvantage, coCdhExperiment, prEvent_bind_eq_lintegral_of_discrete]
-  refine lintegral_congr fun a => ?_
-  rw [prEvent_bind_eq_lintegral_of_discrete]
-  refine lintegral_congr fun c => ?_
-  rw [bind_pure_comp, prEvent_map]
-  simp
-
 omit [DecidableEq M] [DecidableEq G₁] [Field F] [AddCommGroup G₁] [Module F G₁]
   [AddCommGroup G₂] [Module F G₂] in
 /-- Two uniform averages over the scalars commute, also across a finite sum. -/
-theorem lintegral_sum_lintegral_comm {q : ℕ} (f : F → F → Fin q → ℝ≥0∞) :
+private theorem lintegral_sum_lintegral_comm {q : ℕ} (f : F → F → Fin q → ℝ≥0∞) :
     letI : MeasurableSpace F := ⊤
     ∫⁻ t, ∑ j, ∫⁻ z, f t z j ∂𝒟[$ᵗ F] ∂𝒟[$ᵗ F] =
       ∫⁻ z, ∑ j, ∫⁻ t, f t z j ∂𝒟[$ᵗ F] ∂𝒟[$ᵗ F] := by
@@ -269,7 +211,7 @@ theorem lintegral_sum_lintegral_comm {q : ℕ} (f : F → F → Fin q → ℝ≥
 omit [DecidableEq M] [DecidableEq G₁] [Field F] [AddCommGroup G₁] [Module F G₁]
   [AddCommGroup G₂] [Module F G₂] in
 /-- The uniform average of a constant plus a function is the constant plus the average. -/
-theorem lintegral_uniform_const_add (c : ℝ≥0∞) (f : F → ℝ≥0∞) :
+private theorem lintegral_uniform_const_add (c : ℝ≥0∞) (f : F → ℝ≥0∞) :
     letI : MeasurableSpace F := ⊤
     ∫⁻ x, (c + f x) ∂𝒟[$ᵗ F] = c + ∫⁻ x, f x ∂𝒟[$ᵗ F] := by
   let : MeasurableSpace F := ⊤
@@ -277,13 +219,13 @@ theorem lintegral_uniform_const_add (c : ℝ≥0∞) (f : F → ℝ≥0∞) :
 
 /-- **Unforgeability of BLS aggregates with proofs of possession, from co-CDH.**
 
-Let every run of the game make at most `q` message hash calls and `qK` key hash calls.
+Let every run of the game make at most `q >= 1` message hash calls and `qK` key hash calls.
 
-Let every element of `G1` be a multiple of `g1`, and `qK` be at most the characteristic of `F`.
+Let the scheme be sound, and every element of `G1` be a multiple of `g1`.
 
-Then the forger's advantage is at most `q` times the advantage of the reduction at co-CDH.
+Let `qK` be at most the characteristic of `F`.
 
-The bound adds `(q + qK - 1) / |F|`. -/
+Then the forger's advantage is at most `q` times the reduction's, plus `(q + qK - 1) / |F|`. -/
 theorem forgeAdvantage_le [DecidableEq G₂] (scheme : Scheme G₁ G₂) (hsound : scheme.Sound F)
     (hgen : ∀ x : G₁, ∃ sk : F, x = sk • scheme.g₁) (adversary : Adversary G₁ G₂ M)
     {q qK : ℕ} (hq0 : 0 < q) (hchar : qK ≤ ringChar F)
@@ -300,7 +242,7 @@ theorem forgeAdvantage_le [DecidableEq G₂] (scheme : Scheme G₁ G₂) (hsound
         (State.withKey ((0 : F) • scheme.g₁) 0))
     obtain ⟨z, hz⟩ := exists_mem_support_implAt 0 hp
     have h₁ := keyCalls_of_mem_support hz
-    have h₂ := (callBound_of_mem_support hq hp).2
+    have h₂ := (hq.calls_le_of_mem_support hp).2
     simp only [State.withKey] at h₁
     omega
   -- The reduction's success with the guess `j`, the honest scalar `t` and the challenge `z`.
