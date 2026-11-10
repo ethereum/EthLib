@@ -45,6 +45,11 @@ def compute_columns_for_custody_group(custody_group: int, name: str = "mainnet")
     return _native.consensus_compute_columns_for_custody_group(name, custody_group)
 
 
+def get_custody_column_bits(node_id: int, custody_group_count: int, name: str = "mainnet") -> bytes:
+    """The SSZ bitvector of the columns that a node custodies, or ConsensusError."""
+    return _native.consensus_get_custody_column_bits(name, node_id, custody_group_count)
+
+
 def ssz_static(name: str, fork: str, type_name: str, data: bytes) -> tuple[bytes, bytes]:
     """The root of the beacon container that SSZ bytes encode, and its bytes encoded again."""
     return _native.consensus_ssz_static(name, fork, type_name, data)
@@ -1212,6 +1217,7 @@ __all__ = [
     "parameters",
     "ConsensusError",
     "get_custody_groups",
+    "get_custody_column_bits",
     "compute_columns_for_custody_group",
     "ssz_static",
     "is_valid_builder_signature",

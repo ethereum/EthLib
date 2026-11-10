@@ -413,6 +413,9 @@
 #define DOC_consensus_compute_columns_for_custody_group \
   "The columns of a custody group, as a list."
 
+#define DOC_consensus_get_custody_column_bits \
+  "The columns that a node custodies, one bit per column, as the bytes of an SSZ bitvector."
+
 #define DOC_consensus_ssz_static \
   "The root of the value that the bytes encode, and the bytes of that value, as a pair."
 
@@ -1102,6 +1105,9 @@
 
 #define DOC_engine_prepare_execution_payload_gloas \
   "From Gloas: the forkchoice update of a proposer, as the value of its JSON."
+
+#define DOC_engine_finalized_execution_block_hash \
+  "From Bellatrix: the 32 bytes of the finalized block hash of a store."
 
 #define DOC_pyvalue_echo \
   "The value that Python passes, back to Python, with each failure tuple read as a failure."

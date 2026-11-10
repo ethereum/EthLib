@@ -2584,6 +2584,20 @@
    "docstring":
    "The columns of a custody group, as a list.\n\nThe arguments are the name of the preset and the configuration, and the custody group."},
   {"summary":
+   "The columns that a node custodies, one bit per column, as the bytes of an SSZ bitvector.",
+   "signature": "(name: str, node_id: int, custody_group_count: int) -> bytes",
+   "operation": "EthLib.Consensus.Exports.getCustodyColumnBitsExport",
+   "method": "consensus_get_custody_column_bits",
+   "errors":
+   [{"type": "EthLib.Consensus.DataAvailability.CustodyError",
+     "codes":
+     [{"constructor": "tooManyGroups", "code": 1},
+      {"constructor": "groupOutOfRange", "code": 2},
+      {"constructor": "outOfFuel", "code": 3}]}],
+   "error_class": "ConsensusError",
+   "docstring":
+   "The columns that a node custodies, one bit per column, as the bytes of an SSZ bitvector.\n\nThe arguments are the name of the preset and the configuration, the node ID and the group count."},
+  {"summary":
    "The root of the value that the bytes encode, and the bytes of that value, as a pair.",
    "signature":
    "(name: str, fork: str, type: str, data: bytes) -> tuple[bytes, bytes]",
@@ -9794,7 +9808,7 @@
   {"summary":
    "From Gloas: the forkchoice update of a proposer, as the value of its JSON.",
    "signature":
-   "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, head_root: bytes, head_status: int, state: bytes, safe_block_hash: bytes, finalized_block_hash: bytes, suggested_fee_recipient: bytes, target_gas_limit: int, verify: bool, config: dict | None) -> dict",
+   "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, head_root: bytes, head_status: int, state: bytes, safe_block_hash: bytes, suggested_fee_recipient: bytes, target_gas_limit: int, custody_columns: bytes | None, verify: bool, config: dict | None) -> dict",
    "operation": "EthLib.Engine.Exports.prepareExecutionPayloadGloasExport",
    "method": "engine_prepare_execution_payload_gloas",
    "errors":
@@ -9818,7 +9832,71 @@
       {"constructor": "duty", "code": 16}]}],
    "error_class": "ProposerError",
    "docstring":
-   "From Gloas: the forkchoice update of a proposer, as the value of its JSON.\n\nThe arguments are the preset, the fork, the anchor state and the anchor block, and the steps.\n\nThen come the head root and status, the state, the safe and finalized hashes and the fee recipient.\n\nThen come the target gas limit, whether the signature checks run, and configuration replacements."},
+   "From Gloas: the forkchoice update of a proposer, as the value of its JSON.\n\nThe arguments are the preset, the fork, the anchor state and the anchor block, and the steps.\n\nThen come the head root and status, the state, the safe hash and the fee recipient.\n\nThen come the target gas limit and the custody columns in SSZ, or `None`.\n\nLast come whether the signature checks run, and configuration replacements.\n\nThe finalized hash is that of the store."},
+  {"summary":
+   "From Bellatrix: the 32 bytes of the finalized block hash of a store.",
+   "signature":
+   "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, config: dict | None) -> bytes",
+   "operation": "EthLib.Engine.Exports.finalizedExecutionBlockHashExport",
+   "method": "engine_finalized_execution_block_hash",
+   "errors":
+   [{"type": "EthLib.Consensus.ForkChoiceError",
+     "codes":
+     [{"constructor": "anchorStateMismatch", "code": 1},
+      {"constructor": "unknownBlock", "code": 2},
+      {"constructor": "unknownCheckpointState", "code": 3},
+      {"constructor": "unknownBlockState", "code": 4},
+      {"constructor": "unknownUnrealizedJustification", "code": 5},
+      {"constructor": "parentSlotNotLower", "code": 6},
+      {"constructor": "arith", "code": 7},
+      {"constructor": "ssz", "code": 8},
+      {"constructor": "accessor", "code": 9},
+      {"constructor": "transition", "code": 10},
+      {"constructor": "unknownBlockTimeliness", "code": 11},
+      {"constructor": "futureBlock", "code": 12},
+      {"constructor": "blockNotAfterFinalized", "code": 13},
+      {"constructor": "notDescendantOfFinalized", "code": 14},
+      {"constructor": "targetEpochNotRecent", "code": 15},
+      {"constructor": "targetEpochMismatch", "code": 16},
+      {"constructor": "futureVote", "code": 17},
+      {"constructor": "targetNotCheckpointBlock", "code": 18},
+      {"constructor": "attestationNotYetDue", "code": 19},
+      {"constructor": "invalidIndexedAttestation", "code": 20},
+      {"constructor": "notSlashable", "code": 21},
+      {"constructor": "boostNotWornOff", "code": 22},
+      {"constructor": "tickNotAdvancing", "code": 23},
+      {"constructor": "forkNotYetSpecified", "code": 24},
+      {"constructor": "unknownPowBlock", "code": 25},
+      {"constructor": "notTerminalPowBlock", "code": 26},
+      {"constructor": "terminalBlockHashNotActive", "code": 27},
+      {"constructor": "notTerminalBlockHash", "code": 28},
+      {"constructor": "blobsUnavailable", "code": 29},
+      {"constructor": "kzg", "code": 30},
+      {"constructor": "blobsNotMatching", "code": 31},
+      {"constructor": "columnsUnavailable", "code": 32},
+      {"constructor": "invalidColumns", "code": 33},
+      {"constructor": "unknownPayloadVotes", "code": 34},
+      {"constructor": "pendingNode", "code": 35},
+      {"constructor": "notPreviousSlot", "code": 36},
+      {"constructor": "invalidAttestationIndex", "code": 37},
+      {"constructor": "sameSlotPayloadVote", "code": 38},
+      {"constructor": "payloadNotVerified", "code": 39},
+      {"constructor": "notInPtc", "code": 40},
+      {"constructor": "ptcVoteNotCurrent", "code": 41},
+      {"constructor": "invalidPayloadAttestation", "code": 42},
+      {"constructor": "unknownInclusionListSatisfaction", "code": 43},
+      {"constructor": "futureInclusionList", "code": 44},
+      {"constructor": "inclusionListTooOld", "code": 45},
+      {"constructor": "invalidInclusionListSize", "code": 46},
+      {"constructor": "emptyInclusionListTransaction", "code": 47},
+      {"constructor": "dependentBlockTooLate", "code": 48},
+      {"constructor": "notPossibleDependentBlock", "code": 49},
+      {"constructor": "notInInclusionListCommittee", "code": 50},
+      {"constructor": "invalidInclusionListSignature", "code": 51},
+      {"constructor": "payloadNotOptimistic", "code": 52}]}],
+   "error_class": "ForkChoiceError",
+   "docstring":
+   "From Bellatrix: the 32 bytes of the finalized block hash of a store.\n\nThe arguments are the preset, the fork, the anchor state and the anchor block, and the steps.\n\nThen come whether the signature checks run, and replacements of values of the configuration."},
   {"summary":
    "The value that Python passes, back to Python, with each failure tuple read as a failure.",
    "signature": "(value: object) -> object",

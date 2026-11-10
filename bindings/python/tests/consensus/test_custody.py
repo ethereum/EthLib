@@ -121,3 +121,27 @@ def test_non_integer(value):
     with raises(consensus.ConsensusError, "expected an int") as caught:
         consensus.compute_columns_for_custody_group(value)
     assert caught.value.code == 0
+
+
+@pytest.mark.parametrize(("preset", "case"), _cases("get_custody_groups"))
+def test_get_custody_column_bits(preset, case):
+    # Column `i` is bit `i % 8` of byte `i // 8`, as in an SSZ bitvector.
+    meta = _meta(case)
+    node_id, count = int(meta["node_id"]), meta["custody_group_count"]
+    bits = consensus.get_custody_column_bits(node_id, count, preset)
+    columns = {
+        column
+        for group in consensus.get_custody_groups(node_id, count, preset)
+        for column in consensus.compute_columns_for_custody_group(group, preset)
+    }
+    # Both presets have 128 columns, so the bitvector takes 16 bytes.
+    assert len(bits) == 16
+    assert {i for i in range(128) if bits[i // 8] >> (i % 8) & 1} == columns
+
+
+def test_custody_column_bits_of_too_many_groups():
+    with raises(
+        consensus.ConsensusError, "custody group count 129 exceeds the number of groups"
+    ) as caught:
+        consensus.get_custody_column_bits(0, 129)
+    assert caught.value.code == 1

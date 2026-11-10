@@ -14,6 +14,12 @@ extern lean_object*
 eth_engine_prepare_execution_payload_gloas(lean_object* args);
 
 extern lean_object*
+eth_engine_finalized_execution_block_hash(lean_object* args);
+
+extern lean_object*
+eth_consensus_get_custody_column_bits(lean_object* args);
+
+extern lean_object*
 eth_consensus_get_execution_payload_bid(
   lean_object* name, lean_object* fork, lean_object* state, lean_object* payload,
   lean_object* requests, lean_object* commitments, lean_object* fee_recipient,
@@ -495,6 +501,14 @@ py_consensus_get_custody_groups(
   PyObject* args
 ) {
   return call_pyvalue_export(eth_consensus_get_custody_groups, args, 3, CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_get_custody_column_bits(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_get_custody_column_bits, args, 3, CONSENSUS_ERROR);
 }
 
 PyObject*
@@ -1689,6 +1703,14 @@ py_engine_prepare_execution_payload_gloas(
   PyObject* args
 ) {
   return call_pyvalue_export(eth_engine_prepare_execution_payload_gloas, args, 14, PROPOSER_ERROR);
+}
+
+PyObject*
+py_engine_finalized_execution_block_hash(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_engine_finalized_execution_block_hash, args, 7, FORK_CHOICE_ERROR);
 }
 
 PyObject*

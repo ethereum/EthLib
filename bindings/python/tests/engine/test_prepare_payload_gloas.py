@@ -20,7 +20,6 @@ CASE = "fork_choice/on_execution_payload_envelope/pyspec_tests/on_execution_payl
 SECONDS_PER_SLOT = 6
 
 SAFE = bytes([0x0A]) * 32
-FINALIZED = bytes([0x0B]) * 32
 FEE_RECIPIENT = bytes([0xFE]) * 20
 GAS_LIMIT = 60_000_000
 
@@ -90,6 +89,7 @@ def prepare(
     state: bytes | None = None,
     taken: list | None = None,
     root: bytes | None = None,
+    custody_columns: bytes | None = None,
 ) -> dict:
     """The update of a proposer on the store of the case, with the defaults of the case."""
     return engine.prepare_execution_payload_gloas(
@@ -102,9 +102,9 @@ def prepare(
         status,
         proposer_state(fork) if state is None else state,
         SAFE,
-        FINALIZED,
         FEE_RECIPIENT,
         GAS_LIMIT,
+        custody_columns,
     )
 
 
@@ -115,10 +115,19 @@ def _hex(data: bytes) -> str:
 def check_update(fork: str, update: dict, head: bytes) -> None:
     """Compare an update with the values worked out from the guide, and the length of the mix."""
     genesis_time = int.from_bytes(_read(fork, "anchor_state")[:8], "little")
+    # The store finalizes only its anchor, so the export of a store gives the hash of that block.
+    # That export is checked against block files in `test_finalized_hash.py`.
+    finalized = engine.finalized_execution_block_hash(
+        "minimal",
+        NAMES[fork],
+        _read(fork, "anchor_state"),
+        _read(fork, "anchor_block"),
+        steps(fork),
+    )
     assert update["forkchoiceState"] == {
         "headBlockHash": _hex(head),
         "safeBlockHash": _hex(SAFE),
-        "finalizedBlockHash": _hex(FINALIZED),
+        "finalizedBlockHash": _hex(finalized),
     }
     attributes = update["payloadAttributes"]
     assert attributes["timestamp"] == hex(genesis_time + 2 * SECONDS_PER_SLOT)
@@ -145,6 +154,11 @@ def test_full_parent(fork: str) -> None:
 def test_empty_parent(fork: str) -> None:
     parent_hash, _ = payload_hashes(fork)
     check_update(fork, prepare(fork, EMPTY), parent_hash)
+
+
+def test_custody_columns() -> None:
+    bits = consensus.get_custody_column_bits(1, 4, "minimal")
+    assert prepare("gloas", FULL, custody_columns=bits)["custodyColumns"] == _hex(bits)
 
 
 def test_inclusion_lists_from_heze() -> None:
@@ -187,7 +201,7 @@ def test_inclusion_lists_at_slot_0() -> None:
 def test_fork_without_this_preparation(fork: str) -> None:
     with raises(PROPOSER_ERROR, f"no payload preparation on a store at {fork}") as info:
         engine.prepare_execution_payload_gloas(
-            "minimal", fork, b"", b"", [], bytes(32), EMPTY, b"", SAFE, FINALIZED, FEE_RECIPIENT, 0
+            "minimal", fork, b"", b"", [], bytes(32), EMPTY, b"", SAFE, FEE_RECIPIENT, 0
         )
     assert info.value.code == 0
 
@@ -199,17 +213,18 @@ def test_unknown_payload_status() -> None:
 
 
 @pytest.mark.parametrize(
-    ("root", "safe", "finalized", "fee", "message"),
+    ("root", "safe", "fee", "custody", "message"),
     [
-        (bytes(31), SAFE, FINALIZED, FEE_RECIPIENT, "Err.scope 32 31"),
-        (bytes(32), SAFE[:31], FINALIZED, FEE_RECIPIENT, "Err.scope 32 31"),
-        (bytes(32), SAFE, FINALIZED[:31], FEE_RECIPIENT, "Err.scope 32 31"),
-        (bytes(32), SAFE, FINALIZED, FEE_RECIPIENT[:19], "Err.scope 20 19"),
+        (bytes(31), SAFE, FEE_RECIPIENT, None, "Err.scope 32 31"),
+        (bytes(32), SAFE[:31], FEE_RECIPIENT, None, "Err.scope 32 31"),
+        (bytes(32), SAFE, FEE_RECIPIENT[:19], None, "Err.scope 20 19"),
+        (bytes(32), SAFE, FEE_RECIPIENT, bytes(15), "Err.scope 16 15"),
+        (bytes(32), SAFE, FEE_RECIPIENT, bytes(17), "Err.scope 16 17"),
     ],
-    ids=["head", "safe", "finalized", "fee recipient"],
+    ids=["head", "safe", "fee recipient", "short custody", "long custody"],
 )
 def test_input_of_the_wrong_length(
-    root: bytes, safe: bytes, finalized: bytes, fee: bytes, message: str
+    root: bytes, safe: bytes, fee: bytes, custody: bytes | None, message: str
 ) -> None:
     with raises(PROPOSER_ERROR, f"input rejected: EthLib.Serialization.Ssz.{message}") as info:
         engine.prepare_execution_payload_gloas(
@@ -222,9 +237,9 @@ def test_input_of_the_wrong_length(
             EMPTY,
             proposer_state("gloas"),
             safe,
-            finalized,
             fee,
             GAS_LIMIT,
+            custody,
         )
     assert info.value.code == 0
 

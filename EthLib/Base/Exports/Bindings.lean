@@ -537,6 +537,9 @@ def bindings : List Binding := [
     `EthLib.Consensus.Exports.computeColumnsForCustodyGroupExport,
     "(name: str, custody_group: int) -> list[int]",
     [`EthLib.Consensus.DataAvailability.CustodyError], some "ConsensusError"⟩,
+  ⟨"consensus_get_custody_column_bits", `EthLib.Consensus.Exports.getCustodyColumnBitsExport,
+    "(name: str, node_id: int, custody_group_count: int) -> bytes",
+    [`EthLib.Consensus.DataAvailability.CustodyError], some "ConsensusError"⟩,
   ⟨"consensus_ssz_static", `EthLib.Consensus.Exports.sszStaticExport,
     "(name: str, fork: str, type: str, data: bytes) -> tuple[bytes, bytes]",
     [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
@@ -1370,9 +1373,14 @@ def bindings : List Binding := [
     `EthLib.Engine.Exports.prepareExecutionPayloadGloasExport,
     "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, " ++
       "head_root: bytes, head_status: int, state: bytes, safe_block_hash: bytes, " ++
-      "finalized_block_hash: bytes, suggested_fee_recipient: bytes, target_gas_limit: int, " ++
+      "suggested_fee_recipient: bytes, target_gas_limit: int, custody_columns: bytes | None, " ++
       "verify: bool, config: dict | None) -> dict",
     [`EthLib.Consensus.ProposerError], some "ProposerError"⟩,
+  ⟨"engine_finalized_execution_block_hash",
+    `EthLib.Engine.Exports.finalizedExecutionBlockHashExport,
+    "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, " ++
+      "verify: bool, config: dict | None) -> bytes",
+    [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
   ⟨"pyvalue_echo", `EthLib.Exports.pyValueEcho,
     "(value: object) -> object",
     [], some "BindingError"⟩

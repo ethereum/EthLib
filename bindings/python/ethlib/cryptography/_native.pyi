@@ -553,6 +553,10 @@ def consensus_compute_columns_for_custody_group(name: str, custody_group: int) -
     """The columns of a custody group, as a list."""
     ...
 
+def consensus_get_custody_column_bits(name: str, node_id: int, custody_group_count: int) -> bytes:
+    """The columns that a node custodies, one bit per column, as the bytes of an SSZ bitvector."""
+    ...
+
 def consensus_ssz_static(name: str, fork: str, type: str, data: bytes) -> tuple[bytes, bytes]:
     """The root of the value that the bytes encode, and the bytes of that value, as a pair."""
     ...
@@ -1469,8 +1473,12 @@ def engine_prepare_execution_payload(name: str, fork: str, state: bytes, config:
     """From Bellatrix to Fulu: the forkchoice update of a proposer, as the value of its JSON."""
     ...
 
-def engine_prepare_execution_payload_gloas(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, head_root: bytes, head_status: int, state: bytes, safe_block_hash: bytes, finalized_block_hash: bytes, suggested_fee_recipient: bytes, target_gas_limit: int, verify: bool, config: dict | None) -> dict:
+def engine_prepare_execution_payload_gloas(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, head_root: bytes, head_status: int, state: bytes, safe_block_hash: bytes, suggested_fee_recipient: bytes, target_gas_limit: int, custody_columns: bytes | None, verify: bool, config: dict | None) -> dict:
     """From Gloas: the forkchoice update of a proposer, as the value of its JSON."""
+    ...
+
+def engine_finalized_execution_block_hash(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, config: dict | None) -> bytes:
+    """From Bellatrix: the 32 bytes of the finalized block hash of a store."""
     ...
 
 def pyvalue_echo(value: object) -> object:
