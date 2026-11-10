@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Cryptography.Proofs.Secp256k1.Security.ChosenMessageBound
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.Collision
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.Conflict
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.DivisionResistance
@@ -121,5 +122,9 @@ A key-only forger runs that game.
 
 A solver of the discrete logarithm covers a forgery at a point that the signer programmed.
 
-No theorem yet assembles these steps into the bound of their Theorem 1.
+These steps give the bound of their Theorem 1.
+
+It has one more term than theirs, for a solver of the discrete logarithm.
+
+With their Theorem 2, they give a bound with no key-only forger.
 -/
