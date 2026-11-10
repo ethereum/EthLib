@@ -279,6 +279,17 @@ theorem Tracks.beginIndex {b : AccessListBuilder} {base now : BlockState} {index
   ⟨fun a => (h.balance a).begin hindex, fun a => (h.nonce a).begin hindex,
     fun a => (h.code a).begin hindex, fun a k => (h.storage a k).begin hindex⟩
 
+/-- A builder follows a block state with the same accounts and storage as one it follows. -/
+theorem Tracks.congr {b : AccessListBuilder} {base now now' : BlockState}
+    (h : b.Tracks base now)
+    (hacc : ∀ address, (TransactionState.ofBlock now').getAccount address =
+      (TransactionState.ofBlock now).getAccount address)
+    (hsto : ∀ address key, (TransactionState.ofBlock now').getStorage address key =
+      (TransactionState.ofBlock now).getStorage address key) :
+    b.Tracks base now' :=
+  ⟨fun a => by rw [hacc a]; exact h.balance a, fun a => by rw [hacc a]; exact h.nonce a,
+    fun a => by rw [hacc a]; exact h.code a, fun a k => by rw [hsto a k]; exact h.storage a k⟩
+
 /-! ## One call -/
 
 /-- Changes equal at every position follow the same field, now at the same value. -/
@@ -477,6 +488,27 @@ private theorem getAccount_incorporate_none {tx : TransactionState} {address : A
   rw [TransactionState.getAccountOptional_incorporateTxIntoBlock]
   simp [TransactionState.getAccountOptional, TransactionState.ofBlock, hw]
 
+/-- An account write keeps the position of the builder and its start. -/
+private theorem accountWrite_index {b c c' : AccessListBuilder} {tx : TransactionState}
+    {x : Address × Option Account} (hc : c.index = b.index ∧ c.start = b.start)
+    (h : c.recordAccountWrite tx x.1 x.2 = .ok c') : c'.index = b.index ∧ c'.start = b.start :=
+  ⟨(recordAccountWrite_index h).1.trans hc.1, (recordAccountWrite_index h).2.trans hc.2⟩
+
+/-- Recording a call keeps the position of the builder and its start. -/
+theorem recordTransaction_index {b b' : AccessListBuilder} {tx : TransactionState}
+    (h : b.recordTransaction tx = .ok b') : b'.index = b.index ∧ b'.start = b.start := by
+  obtain ⟨b₂, b₃, hkeep, h₃, hb'⟩ := recordTransaction_eq h
+  have hP₂ : b₂.index = b.index ∧ b₂.start = b.start :=
+    Prod.mk.inj (hkeep (fun c => (c.index, c.start)) (fun _ _ => rfl) (fun _ _ _ => rfl))
+  have hP₃ : b₃.index = b.index ∧ b₃.start = b.start :=
+    foldlM_ok_invariant (fun c : AccessListBuilder => c.index = b.index ∧ c.start = b.start)
+      (fun _ _ _ => accountWrite_index) hP₂ h₃
+  have := storageWrites_keep tx b₃ (fun c => (c.index, c.start))
+    (fun d a k v => Prod.ext (recordStorageWrite_index d a k v).1
+      (recordStorageWrite_index d a k v).2)
+  rw [← hb'] at this
+  exact ⟨(Prod.mk.inj this).1.trans hP₃.1, (Prod.mk.inj this).2.trans hP₃.2⟩
+
 /-- A builder that records a call it can follow then follows the block state after the call. -/
 theorem Tracks.recordTransaction {b b' : AccessListBuilder} {base block : BlockState}
     {tx : TransactionState} (h : b.Tracks base block) (hfollow : Followable block tx)
@@ -488,17 +520,11 @@ theorem Tracks.recordTransaction {b b' : AccessListBuilder} {base block : BlockS
     Prod.mk.inj (hkeep (fun c => (c.index, c.start)) (fun _ _ => rfl) (fun _ _ _ => rfl))
   have hstepP : ∀ (c : AccessListBuilder) (x : Address × Option Account) c',
       c.index = b.index ∧ c.start = b.start → c.recordAccountWrite tx x.1 x.2 = .ok c' →
-      c'.index = b.index ∧ c'.start = b.start := fun _ _ _ hc h =>
-    ⟨(recordAccountWrite_index h).1.trans hc.1, (recordAccountWrite_index h).2.trans hc.2⟩
+      c'.index = b.index ∧ c'.start = b.start := fun _ _ _ => accountWrite_index
   have hP₃ : b₃.index = b.index ∧ b₃.start = b.start :=
     foldlM_ok_invariant (fun c : AccessListBuilder => c.index = b.index ∧ c.start = b.start)
       hstepP hP₂ h₃
-  have hidx : b'.index = b.index ∧ b'.start = b.start := by
-    have := storageWrites_keep tx b₃ (fun c => (c.index, c.start))
-      (fun d a k v => Prod.ext (recordStorageWrite_index d a k v).1
-        (recordStorageWrite_index d a k v).2)
-    rw [← hb'] at this
-    exact ⟨(Prod.mk.inj this).1.trans hP₃.1, (Prod.mk.inj this).2.trans hP₃.2⟩
+  have hidx := recordTransaction_index hrecord
   -- The reads and the storage writes keep the balance, nonce and code changes.
   have hacc : ∀ {β : Type} (get : AccountRecord → Std.ExtTreeMap UInt32 β), get {} = ∅ →
       (∀ r s c, get { r with storageChanges := s, storageReads := c } = get r) →

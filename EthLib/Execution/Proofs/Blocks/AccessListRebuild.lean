@@ -1,8 +1,8 @@
 module
 
-public import EthLib.Execution.Proofs.Blocks.AccessListComplete
 public import EthLib.Execution.Proofs.Blocks.AccessListFollow
 public import EthLib.Execution.Proofs.Blocks.Rewards
+public import EthLib.Execution.Proofs.Blocks.SystemCall
 public import EthLib.Execution.Proofs.Blocks.Transition
 
 /-!
@@ -18,13 +18,9 @@ Applied to the state before the block, these give the state after the block.
 
 A field with no change in the list keeps its value from before the block.
 
-So a client can check the list without running the transactions in order.
+So a client can apply the list to the state before the block, without running the transactions.
 
-This holds when each call of the body is one that the builder follows.
-
-A property of block states that every call keeps gives it.
-
-A block with fewer than 2^32 - 1 transactions keeps its positions apart in 32 bits.
+This holds when the calls of the body keep a property of block states that makes each one fit.
 
 Source: [EIP-7928, Recording Semantics by Change Type][eip7928].
 
@@ -44,53 +40,11 @@ variable {fork : Fork}
 
 /-! ## One step of the body -/
 
-/-- Recording a call keeps the position of the builder. -/
-private theorem recordTransaction_index {b b' : AccessListBuilder} {tx : TransactionState}
-    (h : b.recordTransaction tx = .ok b') : b'.index = b.index := by
-  unfold AccessListBuilder.recordTransaction at h
-  obtain ⟨b₃, h₃, h⟩ := bind_ok_iff.mp h
-  cases h
-  rw [Std.ExtTreeMap.foldlM_eq_foldlM_toList] at h₃
-  have h₃' := foldlM_ok_invariant (fun c : AccessListBuilder => c.index = b.index)
-    (fun _ _ _ hc hs => (AccessListBuilder.recordAccountWrite_index hs).1.trans hc) ?_ h₃
-  · rw [Std.ExtTreeMap.foldl_eq_foldl_toList]
-    refine List.foldlRecOn _ _ (motive := fun c : AccessListBuilder => c.index = b.index) h₃'
-      fun c hc x _ => ?_
-    rw [Std.ExtTreeMap.foldl_eq_foldl_toList]
-    exact List.foldlRecOn _ _ (motive := fun e : AccessListBuilder => e.index = b.index) hc
-      fun e he y _ => (AccessListBuilder.recordStorageWrite_index e _ _ _).1.trans he
-  · rw [Std.ExtTreeMap.foldl_eq_foldl_toList, Std.ExtTreeSet.foldl_eq_foldl_toList]
-    refine List.foldlRecOn _ _ (motive := fun c : AccessListBuilder => c.index = b.index) ?_
-      fun c hc x _ => hc
-    exact List.foldlRecOn _ _ (motive := fun c : AccessListBuilder => c.index = b.index) rfl
-      fun c hc x _ => hc
-
-/-- A call that joins the body records it, and its writes join the block. -/
-private theorem BodyState.join_eq {body body' : BodyState} {tx : TransactionState}
-    (h : body.join tx = .ok body') :
-    ∃ builder, body.builder.recordTransaction tx = .ok builder ∧
-      body' = ⟨tx.incorporateTxIntoBlock.parent, builder⟩ := by
-  unfold BodyState.join at h
-  obtain ⟨b, hb, h⟩ := bind_ok_iff.mp h
-  cases h
-  exact ⟨b, hb, rfl⟩
-
-/-- A builder follows a block state with the same accounts and storage as one it follows. -/
-private theorem Tracks.congr {b : AccessListBuilder} {base now now' : BlockState}
-    (h : b.Tracks base now)
-    (hacc : ∀ address, (TransactionState.ofBlock now').getAccount address =
-      (TransactionState.ofBlock now).getAccount address)
-    (hsto : ∀ address key, (TransactionState.ofBlock now').getStorage address key =
-      (TransactionState.ofBlock now).getStorage address key) :
-    b.Tracks base now' :=
-  ⟨fun a => by rw [hacc a]; exact h.balance a, fun a => by rw [hacc a]; exact h.nonce a,
-    fun a => by rw [hacc a]; exact h.code a, fun a k => by rw [hsto a k]; exact h.storage a k⟩
-
 /-- A call that the builder follows keeps the builder of a body following the block. -/
 theorem BodyState.tracks_join {body body' : BodyState} {tx : TransactionState} {base : BlockState}
     (h : body.builder.Tracks base body.block) (hfollow : Followable body.block tx)
     (hjoin : body.join tx = .ok body') : body'.builder.Tracks base body'.block := by
-  obtain ⟨builder, hrecord, rfl⟩ := BodyState.join_eq hjoin
+  obtain ⟨builder, hrecord, rfl⟩ := BodyState.join_eq_ok hjoin
   exact h.recordTransaction hfollow hrecord
 
 /-- A later position keeps the builder of a body following the block. -/
@@ -107,7 +61,9 @@ A system call runs on a block state with `P`.
 
 So does a transaction that enters the block, and so do the withdrawals.
 
-The builder follows each of them, and the block state after it has `P`. -/
+The builder follows each of them, and the block state after it has `P`.
+
+These are assumptions on the calls, which this file does not prove. -/
 structure KeepsFollowable (env : BlockEnvironment fork) (P : BlockState → Prop) : Prop where
   /-- Each system call. -/
   systemCall : ∀ block target data out, P block →
@@ -130,9 +86,9 @@ private theorem BodyState.join_keeps {P : BlockState → Prop} {body body' : Bod
     P body'.block ∧ body'.builder.Tracks base body'.block ∧
       body'.builder.index = body.builder.index := by
   refine ⟨?_, BodyState.tracks_join h hfollow hjoin, ?_⟩ <;>
-    obtain ⟨builder, hrecord, rfl⟩ := BodyState.join_eq hjoin
+    obtain ⟨builder, hrecord, rfl⟩ := BodyState.join_eq_ok hjoin
   · exact hP
-  · exact recordTransaction_index hrecord
+  · exact (AccessListBuilder.recordTransaction_index hrecord).1
 
 /-- The system calls at the start keep the property and the builder, at the same position. -/
 private theorem startSystemCalls_tracks {env : BlockEnvironment fork} {P : BlockState → Prop}
@@ -213,30 +169,31 @@ private theorem readRequests_tracks {env : BlockEnvironment fork} {P : BlockStat
     exact ⟨hP, h⟩
 
 /-- A block state reads each account and word as it did after a step that wrote nothing. -/
-private theorem onBlock_pure (block : BlockState) {block' : BlockState}
+private theorem onBlock_pure {block block' : BlockState}
     (h : onBlock block (fun tx => .ok tx) = .ok block') :
     (∀ address, (TransactionState.ofBlock block').getAccount address =
       (TransactionState.ofBlock block).getAccount address) ∧
     ∀ address key, (TransactionState.ofBlock block').getStorage address key =
       (TransactionState.ofBlock block).getStorage address key := by
-  unfold onBlock at h
-  obtain ⟨tx, htx, h⟩ := bind_ok_iff.mp h
-  cases h
-  cases mapError_ok_iff.mp htx
+  obtain ⟨tx, htx, rfl⟩ := onBlock_eq_ok h
+  cases htx
   exact ⟨State.TransactionState.getAccount_ofBlock_incorporateTxIntoBlock _,
     State.TransactionState.getStorage_incorporateTxIntoBlock _⟩
 
-/-- From Paris, the builder at the end of a body follows the block from its start.
+/-- From Dencun, the builder at the end of a body follows the block from its start.
+
+Before Dencun, SELFDESTRUCT wipes storage that the list does not name, so no call fits there.
 
 The calls of the body keep a property of block states that the start has.
 
 The block has fewer than 2^32 - 1 transactions, so each position fits in 32 bits. -/
 theorem applyBody_tracks {config : ChainConfig} {env : BlockEnvironment fork}
     {block : Block fork Transaction} {start : BlockState} {output : BlockOutput fork}
-    {P : BlockState → Prop} (hParis : .paris ≤ fork) (hkeep : KeepsFollowable env P)
+    {P : BlockState → Prop} (hDencun : .dencun ≤ fork) (hkeep : KeepsFollowable env P)
     (hstart : P start) (hlength : block.transactions.length < 2 ^ 32 - 1)
     (h : applyBody config env block start = .ok output) :
     output.body.builder.Tracks start output.block := by
+  have hParis : Fork.paris ≤ fork := Nat.le_trans (by decide) hDencun
   obtain ⟨state, body, txs, withdrawn, requested, hState, hBody, hTxs, hW, hNotW, hRequests,
     hRewards, hBuilder, -⟩ := applyBody_eq_ok h
   rw [daoTransfer_of_paris_le hParis] at hState
@@ -272,9 +229,9 @@ theorem applyBody_tracks {config : ChainConfig} {env : BlockEnvironment fork}
       exact hW'.2
   -- From Paris the rewards write nothing.
   simp only [payRewards_of_paris_le hParis] at hRewards
-  obtain ⟨hacc, hsto⟩ := onBlock_pure _ hRewards
+  obtain ⟨hacc, hsto⟩ := onBlock_pure hRewards
   rw [hBuilder]
-  exact Tracks.congr hR hacc hsto
+  exact hR.congr hacc hsto
 
 /-- From Glamsterdam, the list that a block commits to rebuilds the state after the block.
 
@@ -282,16 +239,21 @@ The hash in the header is the hash of the list that the builder built after the 
 
 The last change of each field in that list, or its value before the block, is its value after.
 
-An account with no entry reads as the empty account, and its storage as zero.
+An account missing from a state reads as the empty account, so an empty account counts as none.
 
-The nonce is in 64 bits, as the list holds it.
+The nonce is in 64 bits, as the list holds it, which loses nothing below 2^64.
 
 The calls of the body keep a property of block states that the state before the block has.
 
-The block has fewer than 2^32 - 1 transactions. -/
+Until EIP-7610 applies, that excludes storage at an account with no nonce and no code.
+
+The block has fewer than 2^32 - 1 transactions.
+
+From Hegota the transition is not yet specified, so this holds from Glamsterdam up to Hegota. -/
 theorem stateTransition_rebuild {chain : BlockChain} {block : Block fork Transaction}
     {checkSeal : Bool} {post : State} {P : BlockState → Prop} (hFork : .glamsterdam ≤ fork)
-    (hkeep : ∀ hashes, KeepsFollowable (blockEnvironment chain.config hashes block.header) P)
+    (hkeep : ∀ hashes, recentHashes chain.recent = .ok hashes →
+      KeepsFollowable (blockEnvironment chain.config hashes block.header) P)
     (hstart : P ⟨chain.state, ∅, ∅, ∅, ∅⟩) (hlength : block.transactions.length < 2 ^ 32 - 1)
     (h : stateTransition chain block checkSeal = .ok post) :
     ∃ hashes output,
@@ -318,8 +280,8 @@ theorem stateTransition_rebuild {chain : BlockChain} {block : Block fork Transac
   obtain ⟨value, hValue, hHash⟩ := applyBody_accessListHash hOutput hFork
   rw [accessListHash_of_outputChecks hFork hChecks] at hValue
   cases hValue
-  have hT := applyBody_tracks (Nat.le_trans (by decide) hFork) (hkeep hashes) hstart hlength
-    hOutput
+  have hT := applyBody_tracks (Nat.le_trans (by decide) hFork) (hkeep hashes hHashes) hstart
+    hlength hOutput
   refine ⟨hashes, output, hHashes, hOutput, hHash, fun address => ?_⟩
   have hacc : (output.block.applyChanges.getAccountOptional address).getD EMPTY_ACCOUNT =
       (TransactionState.ofBlock output.block).getAccount address := by
