@@ -258,6 +258,17 @@ theorem experiment_evalDistEq_lazyExperiment (scheme : Scheme F G A M) (fuel : �
   (experiment_evalDistEq_permImpl scheme fuel adversary).trans
     (uniformSample_bind_simulateQ_permImpl_evalDistEq _)
 
+/-- The forgery, result and signing cache of the game have their law in the lazy game. -/
+theorem experimentView_evalDistEq_lazy (scheme : Scheme F G A M) (fuel : ℕ)
+    (adversary : Adversary F G A M) :
+    (fun z : (M × F × F) × Bool × Cache F M × Equiv.Perm A => (z.1, z.2.1, z.2.2.1)) <$>
+        experimentView scheme fuel adversary =ᵈ
+      (simulateQ lazyPermImpl (experimentViewQ scheme fuel adversary)).run' [] := by
+  refine EvalDistEq.trans (EvalDistEq.of_eq ?_)
+    (uniformSample_bind_simulateQ_permImpl_evalDistEq _)
+  rw [experimentView_eq_permImpl]
+  simp
+
 /-- The advantage of every adversary is its chance to win the lazy game. -/
 theorem forgeAdvantage_eq_lazyExperiment (scheme : Scheme F G A M) (fuel : ℕ)
     (adversary : Adversary F G A M) :
