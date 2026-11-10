@@ -9,6 +9,13 @@ Not yet released.
 
 ### Changes that break callers
 
+- The fast confirmation rule now weighs the committees of a range of slots exactly, in place of an average per slot ([#1828](https://github.com/ethereum/EthLib/issues/1828)).
+  Each active member of the committees counts once, by its effective balance in the source of balances, and a range with a whole epoch still weighs the total active balance.
+  The average did not bound a given committee, so the rule could confirm a block that an attack then reorgs.
+  The rule can now confirm fewer blocks, or more, than before, and some pinned fast confirmation vectors expect the old answers.
+  `estimateCommitteeWeightBetweenSlots`, `adjustCommitteeWeightEstimateToEnsureSafety` and `COMMITTEE_WEIGHT_ESTIMATION_ADJUSTMENT_FACTOR` are gone; the new `Store.computeCommitteeWeightBetweenSlots` replaces them, and takes the head and the source of balances.
+  `Store.computeCommitteeWeightAndMembers` also returns the members it reads, and `Store.getEquivocationScoreOf` weighs the equivocators of a given set.
+  No C export or Python function changes.
 - A contract creation now fails at an address with non-empty storage, at every fork, as [EIP-7610](https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-7610.md#specification) asks ([#1823](https://github.com/ethereum/EthLib/issues/1823)).
   Before, such a creation wiped the storage and ran the init code.
   It now fails exactly like a creation at an address with code or a nonce, as [EIP-684](https://eips.ethereum.org/EIPS/eip-684#specification) asks: a creation transaction ends with `addressCollision`, and CREATE or CREATE2 takes the gas of the message and pushes 0.
