@@ -904,6 +904,11 @@ private theorem advanceSlot_kept (computed : advanceSlot config checks state = .
     subst epochedOk
     exact ⟨Nat.le_refl _, fun _ => ActiveKept.refl _ _⟩
 
+/-- One slot never shrinks the registry. -/
+theorem advanceSlot_registryGrows (computed : advanceSlot config checks state = .ok after) :
+    state.validators.data.size ≤ after.validators.data.size :=
+  (advanceSlot_kept computed).1
+
 /-- Queueing a validator that is not yet active keeps its activation and exit epochs. -/
 private theorem stepBelow_queuePreActivation {electra : .pectra ≤ fork} {index : ValidatorIndex}
     (computed : queuePreActivation state electra index = .ok after) : StepBelow state after := by

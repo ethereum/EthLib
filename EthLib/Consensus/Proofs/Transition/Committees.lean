@@ -210,8 +210,9 @@ theorem CommitteesKept.trans {middle last : Base.Fork} {epoch : Epoch}
     (two : CommitteesKept epoch second third) : CommitteesKept epoch first third :=
   fun slot index inside => (two slot index inside).trans (one slot index inside)
 
-/-- Two states with the same active indices and seed of an epoch have its committees. -/
-private theorem committeesKept_of_seed {post : Base.Fork} {other : BeaconState preset post}
+/-- Two states with the same active indices and attester seed of an epoch agree on its committees.
+-/
+theorem CommitteesKept.of_seed {post : Base.Fork} {other : BeaconState preset post}
     {epoch : Epoch}
     (active : getActiveValidatorIndices other epoch = getActiveValidatorIndices state epoch)
     (seed :
@@ -227,19 +228,18 @@ theorem CommitteesKept.of_eq {post : Base.Fork} {other : BeaconState preset post
     (validators : other.validators.data = state.validators.data)
     (mixes : other.randaoMixes.elements = state.randaoMixes.elements) (epoch : Epoch) :
     CommitteesKept epoch state other :=
-  committeesKept_of_seed (by unfold getActiveValidatorIndices; rw [validators])
+  CommitteesKept.of_seed (by unfold getActiveValidatorIndices; rw [validators])
     (by unfold getSeed getRandaoMix; rw [mixes])
 
-/-- The seed of an epoch reads only the mix of one position, which a nearby write misses.
+/-- The seed of an epoch is the same in two states with the same mix at the position it reads.
 
-The write is at the position of that epoch or of the next one.
-
-There must be more than `MIN_SEED_LOOKAHEAD + 2` epochs of mixes. -/
-private theorem getSeed_eq_of_mixesKeptBut {post : Base.Fork} {other : BeaconState preset post}
-    {epoch written : Epoch}
-    (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
-    (mixes : MixesKeptBut written state other) (low : epoch ≤ written)
-    (high : written.toNat ≤ epoch.toNat + 1) (domainType : DomainType) :
+That position is the epoch plus the length of the ring, less `MIN_SEED_LOOKAHEAD + 1`. -/
+theorem getSeed_eq_of_mix {post : Base.Fork} {other : BeaconState preset post} {epoch : Epoch}
+    (domainType : DomainType)
+    (same : ∀ shifted : Epoch, shifted.toNat + preset.MIN_SEED_LOOKAHEAD.toNat + 1 =
+        epoch.toNat + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat →
+      readCircular other.randaoMixes.elements shifted =
+        readCircular state.randaoMixes.elements shifted) :
     getSeed other epoch domainType = getSeed state epoch domainType := by
   unfold getSeed getRandaoMix
   -- Both seeds read the same position, and the mix there is the same.
@@ -256,14 +256,28 @@ private theorem getSeed_eq_of_mixesKeptBut {post : Base.Fork} {other : BeaconSta
       show readCircular other.randaoMixes.elements shifted >>= finish =
         readCircular state.randaoMixes.elements shifted >>= finish
       rw [same shifted rfl]
-  refine reads _ _ fun shifted computed => mixes shifted fun same => ?_
+  refine reads _ _ fun shifted computed => same shifted ?_
   simp only [liftArith, mapError_ok_iff, bind_ok_iff] at computed
   obtain ⟨sum, sumOk, lower, lowerOk, shiftedOk⟩ := computed
   obtain ⟨-, sumEq⟩ := addChecked_ok_iff.mp sumOk
   obtain ⟨-, lowerEq⟩ := subChecked_ok_iff.mp lowerOk
   obtain ⟨above, shiftedEq⟩ := subChecked_ok_iff.mp shiftedOk
-  have lowLe := UInt64.le_iff_toNat_le.mp low
   simp only [UInt64.reduceToNat] at above shiftedEq
+  omega
+
+/-- The seed of an epoch reads only the mix of one position, which a nearby write misses.
+
+The write is at the position of that epoch or of the next one.
+
+There must be more than `MIN_SEED_LOOKAHEAD + 2` epochs of mixes. -/
+private theorem getSeed_eq_of_mixesKeptBut {post : Base.Fork} {other : BeaconState preset post}
+    {epoch written : Epoch}
+    (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    (mixes : MixesKeptBut written state other) (low : epoch ≤ written)
+    (high : written.toNat ≤ epoch.toNat + 1) (domainType : DomainType) :
+    getSeed other epoch domainType = getSeed state epoch domainType := by
+  refine getSeed_eq_of_mix domainType fun shifted shiftedEq => mixes shifted fun same => ?_
+  have lowLe := UInt64.le_iff_toNat_le.mp low
   -- The seed reads the mix `MIN_SEED_LOOKAHEAD + 1` epochs back, never that of the write.
   have same := congrArg UInt64.toNat same
   rw [UInt64.toNat_mod, UInt64.toNat_mod] at same
@@ -283,7 +297,7 @@ theorem CommitteesKept.of_activeKept {post : Base.Fork} {other : BeaconState pre
     (active : ActiveKept epoch state other) (mixes : MixesKeptBut written state other)
     (low : epoch ≤ written) (high : written.toNat ≤ epoch.toNat + 1) :
     CommitteesKept epoch state other :=
-  committeesKept_of_seed (active.getActiveValidatorIndices_eq (UInt64.le_refl _))
+  CommitteesKept.of_seed (active.getActiveValidatorIndices_eq (UInt64.le_refl _))
     (getSeed_eq_of_mixesKeptBut apart mixes low high _)
 
 /-- Two states agree on the attesters of an attestation, given the same active indices and seed.
