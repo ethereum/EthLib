@@ -7,7 +7,9 @@ public import EthLib.Consensus.Proofs.Transition.FfgRoots
 
 The epoch step finalizes by four rules on the bits of justification.
 
-Bit `i` of a state stands for the epoch `i + 1` before the current one.
+Between two slots, bit `i` of a state stands for the epoch `i + 1` before the current one.
+
+Within the step, after the shift, bit `i` stands for the epoch `i` before the current one.
 
 Each rule finalizes an old justified checkpoint one, two or three epochs back.
 
@@ -33,7 +35,11 @@ So the bits carry facts of the model from one step to the next.
 - A set bit 0 means a slack link from the previous to the current justified checkpoint.
 - A set bit 1 means that the checkpoint of its epoch is slack-justified.
 
-The step reads the root of the epoch two back, so the buffer of roots must cover three epochs.
+Bits 2 and 3 need no fact: the rule on bits 1 to 3 finalizes a checkpoint already justified.
+
+The proof names the middle checkpoint of the rule on bits 1 to 3 by the root of the epoch two back.
+
+So the buffer of roots must cover three epochs, while the step itself needs two.
 
 Both presets meet that.
 
@@ -66,7 +72,7 @@ structure SlackBits (V U : Models.Ffg.Checkpoint β → Finset ValidatorIndex)
     (W : Models.Ffg.Checkpoint β → Set (ValidatorIndex → ℕ)) (genesis : β)
     (votes : Set (Vote ValidatorIndex β)) (block : Root → β) (epoch : ℕ)
     (state : BeaconState preset fork) : Prop where
-  /-- Up to the second epoch, justification has not run, and the two newest bits are clear. -/
+  /-- Up to epoch 2, justification has not run, and the two newest bits are clear. -/
   early : epoch ≤ 2 →
     state.justificationBits.bits[0] = false ∧ state.justificationBits.bits[1] = false
   /-- A set bit 0 gives a slack link from the previous to the current justified checkpoint.
@@ -87,161 +93,46 @@ structure SlackBits (V U : Models.Ffg.Checkpoint β → Finset ValidatorIndex)
     older.toNat + 2 = epoch → getBlockRoot state older = .ok root →
       SlackJustified V U W genesis votes ⟨block root, older.toNat⟩
 
-/-- A rule of finalization applies only when its epochs are justified and its gap matches. -/
-private theorem finalizes_true {justified : Bool} {source gap currentEpoch : Epoch}
-    (computed : finalizes justified source gap currentEpoch = .ok true) :
-    justified = true ∧ source.toNat + gap.toNat = currentEpoch.toNat := by
-  cases justified
-  · simp [finalizes, pure, Except.pure] at computed
-  · simp only [finalizes, ↓reduceIte, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
-      pure, Except.pure, Except.ok.injEq, beq_iff_eq] at computed
-    obtain ⟨sum, sumOk, rfl⟩ := computed
-    exact ⟨rfl, ((addChecked_ok_iff.mp sumOk).2).symm⟩
+/-- The epoch after genesis is epoch 1. -/
+private theorem toNat_genesisEpoch_add_one : (GENESIS_EPOCH + 1 : Epoch).toNat = 1 := by
+  decide
 
-/-- What weighing the votes does to the two newest bits and to the finalized checkpoint.
-
-A set bit 0 means that the test of the current epoch passed, and that epoch is justified.
-
-A set bit 1 means that the test of the previous epoch passed, or that the old bit 0 was set.
-
-Bit 2 is the old bit 1.
-
-The new finalized checkpoint is the old one, or an old justified one by one of the four rules. -/
-private theorem weigh_spec {total previousBalance currentBalance : Gwei}
-    (computed : weighJustificationAndFinalization state total previousBalance currentBalance =
-      .ok after) :
-    ∃ threshold previousWeight currentWeight : Gwei, mulChecked total 2 = .ok threshold ∧
-      mulChecked previousBalance 3 = .ok previousWeight ∧
-      mulChecked currentBalance 3 = .ok currentWeight ∧
-      (after.justificationBits.bits[0] = true → threshold ≤ currentWeight ∧
-        ∃ root, getBlockRoot state (getCurrentEpoch state) = .ok root ∧
-          after.currentJustifiedCheckpoint = ⟨getCurrentEpoch state, root⟩) ∧
-      (after.justificationBits.bits[1] = true →
-        (threshold ≤ previousWeight ∧
-            ∃ root, getBlockRoot state (getPreviousEpoch state) = .ok root) ∨
-          state.justificationBits.bits[0] = true) ∧
-      after.justificationBits.bits[2] = state.justificationBits.bits[1] ∧
-      (after.finalizedCheckpoint = state.finalizedCheckpoint ∨
-        (after.finalizedCheckpoint = state.currentJustifiedCheckpoint ∧
-          after.justificationBits.bits[0] = true ∧
-          (state.currentJustifiedCheckpoint.epoch.toNat + 1 = (getCurrentEpoch state).toNat ∨
-            (after.justificationBits.bits[1] = true ∧
-              state.currentJustifiedCheckpoint.epoch.toNat + 2 = (getCurrentEpoch state).toNat))) ∨
-        (after.finalizedCheckpoint = state.previousJustifiedCheckpoint ∧
-          after.justificationBits.bits[1] = true ∧
-          (state.previousJustifiedCheckpoint.epoch.toNat + 2 = (getCurrentEpoch state).toNat ∨
-            (after.justificationBits.bits[2] = true ∧
-              state.previousJustifiedCheckpoint.epoch.toNat + 3 =
-                (getCurrentEpoch state).toNat)))) := by
-  simp only [weighJustificationAndFinalization, bind_ok_iff, liftAccessor_ok, liftArith,
-    mapError_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-  obtain ⟨previousWeight, previousOk, threshold, thresholdOk, first, firstOk, currentWeight,
-    currentOk, second, secondOk, a, aOk, b, bOk, c, cOk, d, dOk, afterEq⟩ := computed
-  set bits := ((shiftJustificationBits state.justificationBits).set 1
-    (decide (threshold ≤ previousWeight) || (shiftJustificationBits state.justificationBits)[1])
-    (by decide)).set 0 (decide (threshold ≤ currentWeight)) (by decide) with bitsEq
-  have bitsAfter : after.justificationBits.bits = bits := by rw [← afterEq]
-  have bit0 : bits[0] = decide (threshold ≤ currentWeight) := by
-    simp [bitsEq]
-  have bit1 : bits[1] = (decide (threshold ≤ previousWeight) ||
-      state.justificationBits.bits[0]) := by
-    simp [bitsEq, shiftJustificationBits]
-  have bit2 : bits[2] = state.justificationBits.bits[1] := by
-    simp [bitsEq, shiftJustificationBits]
-  refine ⟨threshold, previousWeight, currentWeight, thresholdOk, previousOk, currentOk, ?_, ?_,
-    ?_, ?_⟩
-  · rw [bitsAfter, bit0]
-    intro passed
-    refine ⟨of_decide_eq_true passed, ?_⟩
-    rcases justifyCheckpoint_ok secondOk with ⟨-, epoch, rootOk⟩ | ⟨failed, -⟩
-    · refine ⟨second.root, epoch ▸ rootOk, ?_⟩
-      rw [← afterEq, ← epoch]
-    · rw [passed] at failed
-      cases failed
-  · rw [bitsAfter, bit1]
-    intro set
-    rcases Bool.or_eq_true_iff.mp set with passed | old
-    · refine .inl ⟨of_decide_eq_true passed, ?_⟩
-      rcases justifyCheckpoint_ok firstOk with ⟨-, -, rootOk⟩ | ⟨failed, -⟩
-      · exact ⟨first.root, rootOk⟩
-      · rw [passed] at failed
-        cases failed
-    · exact .inr old
-  · rw [bitsAfter, bit2]
-  have finalizedEq : after.finalizedCheckpoint =
-      if c || d then state.currentJustifiedCheckpoint
-      else if a || b then state.previousJustifiedCheckpoint
-      else state.finalizedCheckpoint := by
-    rw [← afterEq]
-  rw [bitsAfter]
-  by_cases byCurrent : (c || d) = true
-  · simp only [byCurrent, ↓reduceIte] at finalizedEq
-    refine .inr (.inl ⟨finalizedEq, ?_⟩)
-    rcases Bool.or_eq_true_iff.mp byCurrent with two | one
-    · obtain ⟨set, sum⟩ := finalizes_true (two ▸ cOk)
-      simp only [Bool.and_eq_true] at set
-      exact ⟨set.1.1, .inr ⟨set.1.2, by simpa using sum⟩⟩
-    · obtain ⟨set, sum⟩ := finalizes_true (one ▸ dOk)
-      simp only [Bool.and_eq_true] at set
-      exact ⟨set.1, .inl (by simpa using sum)⟩
-  simp only [byCurrent, Bool.false_eq_true, ↓reduceIte] at finalizedEq
-  by_cases byPrevious : (a || b) = true
-  · simp only [byPrevious, ↓reduceIte] at finalizedEq
-    refine .inr (.inr ⟨finalizedEq, ?_⟩)
-    rcases Bool.or_eq_true_iff.mp byPrevious with three | two
-    · obtain ⟨set, sum⟩ := finalizes_true (three ▸ aOk)
-      simp only [Bool.and_eq_true] at set
-      exact ⟨set.1.1, .inr ⟨set.1.2, by simpa using sum⟩⟩
-    · obtain ⟨set, sum⟩ := finalizes_true (two ▸ bOk)
-      simp only [Bool.and_eq_true] at set
-      exact ⟨set.1, .inl (by simpa using sum)⟩
-  simp only [byPrevious, Bool.false_eq_true, ↓reduceIte] at finalizedEq
-  exact .inl finalizedEq
-
-/-- A justified checkpoint with a link to the next epoch is finalized, with `k = 1`. -/
-private theorem finalizedBy_of_one {link : Models.Ffg.Checkpoint β → Models.Ffg.Checkpoint β → Prop}
-    {c t : Models.Ffg.Checkpoint β} (justified : JustifiedBy link genesis c)
-    (order : c.block ≤ t.block) (epochs : t.epoch = c.epoch + 1) (linked : link c t) :
-    FinalizedBy link genesis c := by
-  refine .inr ⟨1, le_rfl, fun i => if i = 0 then c.block else t.block, rfl, ?_, ?_, ?_⟩
-  · intro i small
-    obtain rfl : i = 0 := by omega
-    simpa using order
-  · intro i small
-    obtain rfl : i = 0 := by omega
-    simpa using justified
-  · have target : (⟨t.block, c.epoch + 1⟩ : Models.Ffg.Checkpoint β) = t := by
-      rw [← epochs]
-    simpa [target] using linked
-
-/-- A justified checkpoint is finalized with `k = 2`.
-
-The checkpoint of the next epoch must be justified, and a link must reach the epoch after. -/
-private theorem finalizedBy_of_two {link : Models.Ffg.Checkpoint β → Models.Ffg.Checkpoint β → Prop}
-    {c m t : Models.Ffg.Checkpoint β} (justified : JustifiedBy link genesis c)
-    (middle : JustifiedBy link genesis m) (first : c.block ≤ m.block) (second : m.block ≤ t.block)
-    (middleEpoch : m.epoch = c.epoch + 1) (epochs : t.epoch = c.epoch + 2) (linked : link c t) :
-    FinalizedBy link genesis c := by
-  refine .inr ⟨2, by omega,
-    fun i => if i = 0 then c.block else if i = 1 then m.block else t.block, rfl, ?_, ?_, ?_⟩
-  · intro i small
-    rcases (by omega : i = 0 ∨ i = 1) with rfl | rfl
-    · simpa using first
-    · simpa using second
-  · intro i small
-    rcases (by omega : i = 0 ∨ i = 1) with rfl | rfl
-    · simpa using justified
-    · have target : (⟨m.block, c.epoch + 1⟩ : Models.Ffg.Checkpoint β) = m := by
-        rw [← middleEpoch]
-      simpa [target] using middle
-  · have target : (⟨t.block, c.epoch + 2⟩ : Models.Ffg.Checkpoint β) = t := by
-      rw [← epochs]
-    simpa [target] using linked
+/-- Two epochs before an epoch past the first two is two less as a number. -/
+private theorem toNat_sub_two {epoch : Epoch} (late : GENESIS_EPOCH + 1 < epoch) :
+    (epoch - 2).toNat = epoch.toNat - 2 := by
+  have late' := UInt64.lt_iff_toNat_lt.mp late
+  rw [toNat_genesisEpoch_add_one] at late'
+  rw [UInt64.toNat_sub_of_le _ _ (UInt64.le_iff_toNat_le.mpr (by simp; omega))]
+  simp
 
 /-- Justification keeps the facts of the bits and the finalized checkpoint slack-finalized.
 
-The root of the epoch two back need only be recorded when that of the previous epoch is. -/
-private theorem slackBits_of_recorded
+The hypotheses on the votes and the stake are those of the bound of a link up to churn.
+
+The current justified epoch must be at most the previous epoch.
+
+Once justification runs, the previous justified epoch must be below the previous epoch.
+
+The sets and weights of the model must match the state for both recent epochs.
+
+Take a justified checkpoint and an epoch, from its own epoch on and at most two back.
+
+The block of the checkpoint must be below that of the root the state records for that epoch.
+
+The blocks of the roots that the state records for epochs at most two back must be in order.
+
+Once justification runs, a root recorded for the previous epoch needs one for the epoch two back.
+
+The two justified checkpoints must be slack-justified.
+
+The bits must carry their facts for the current epoch.
+
+The finalized checkpoint must be slack-finalized.
+
+Then the bits carry their facts for the next epoch after the step.
+
+The finalized checkpoint after the step is slack-finalized. -/
+theorem processJustificationAndFinalization_slackBits
     (flagsVoted : TargetFlagsVoted attested state)
     (pendingVoted : PendingVoted attested state)
     (large : 3 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat <
@@ -271,27 +162,23 @@ private theorem slackBits_of_recorded
     (computed : processJustificationAndFinalization state = .ok after) :
     SlackBits V U W genesis votes block ((getCurrentEpoch state).toNat + 1) after ∧
       SlackFinalized V U W genesis votes (after.finalizedCheckpoint.toFfg block) := by
-  have one : (GENESIS_EPOCH + 1 : Epoch).toNat = 1 := by decide
-  by_cases early : getCurrentEpoch state ≤ GENESIS_EPOCH + 1
+  rcases processJustificationAndFinalization_weighed (votes := votes) flagsVoted pendingVoted
+    large block contains computed with ⟨early, rfl⟩ | ⟨late, total, previousBalance,
+      currentBalance, -, weighed, link⟩
   · -- The first two epochs change nothing, and the bits stay clear.
-    obtain rfl := processJustificationAndFinalization_early_eq early computed
     have small := UInt64.le_iff_toNat_le.mp early
-    rw [one] at small
+    rw [toNat_genesisEpoch_add_one] at small
     obtain ⟨clear0, clear1⟩ := bits.early (by omega)
     refine ⟨⟨fun _ => ⟨clear0, clear1⟩, fun set => ?_, fun set => ?_⟩, finalized⟩
     · rw [clear0] at set
       cases set
     · rw [clear1] at set
       cases set
-  have late : 2 ≤ (getCurrentEpoch state).toNat := by
-    have := mt UInt64.le_iff_toNat_le.mpr early
-    omega
-  rcases processJustificationAndFinalization_weighed (votes := votes) flagsVoted pendingVoted
-    large block contains computed with ⟨stays, -⟩ | ⟨total, previousBalance, currentBalance,
-      weighed, link⟩
-  · exact absurd stays early
+  have two := toNat_sub_two late
+  have late' := UInt64.lt_iff_toNat_lt.mp late
+  rw [toNat_genesisEpoch_add_one] at late'
   obtain ⟨threshold, previousWeight, currentWeight, thresholdOk, previousOk, currentOk, newCurrent,
-    newPrevious, newOlder, finalizedCases⟩ := weigh_spec weighed
+    newPrevious, newOlder, finalizedCases⟩ := weighJustificationAndFinalization_bits weighed
   obtain ⟨previousJustified, -, -, rest⟩ := weighJustificationAndFinalization_checkpoints weighed
   -- The step keeps the slot and the buffer of roots.
   have rootsEq : ∀ epoch, getBlockRoot after epoch = getBlockRoot state epoch := by
@@ -301,8 +188,7 @@ private theorem slackBits_of_recorded
     simp only [getBlockRoot, getBlockRootAtSlot_congr slot roots]
   have previousNat := getPreviousEpoch_toNat state
   have settled' := UInt64.le_iff_toNat_le.mp settled
-  have below := UInt64.lt_iff_toNat_lt.mp
-    (separated (UInt64.lt_iff_toNat_lt.mpr (by rw [one]; omega)))
+  have below := UInt64.lt_iff_toNat_lt.mp (separated late)
   -- A passing test of the current epoch gives a slack link from the old current justified one.
   have currentLink : ∀ root, threshold ≤ currentWeight →
       getBlockRoot state (getCurrentEpoch state) = .ok root →
@@ -367,9 +253,9 @@ private theorem slackBits_of_recorded
     obtain ⟨passed, rootE, rootEOk, -⟩ := newCurrent set0
     have linkE := currentLink rootE passed rootEOk
     rcases rule with sum | ⟨set1, sum⟩
-    · exact finalizedBy_of_one holds.2 linkE.2.1 (by simp only [Checkpoint.toFfg]; omega) linkE
+    · exact FinalizedBy.of_one holds.2 linkE.2.1 (by simp only [Checkpoint.toFfg]; omega) linkE
     obtain ⟨rootP, rootPOk, linkP⟩ := newPreviousLink set1
-    exact finalizedBy_of_two holds.2 (.link holds.1 linkP)
+    exact FinalizedBy.of_two holds.2 (.link holds.1 linkP)
       (chain true (getPreviousEpoch state) rootP settled (by omega) rootPOk)
       (ordered _ _ rootP rootE (getPreviousEpoch_le state) (by omega) rootPOk rootEOk)
       (by simp only [Checkpoint.toFfg]; omega) (by simp only [Checkpoint.toFfg]; omega) linkE
@@ -377,153 +263,16 @@ private theorem slackBits_of_recorded
     rw [same]
     obtain ⟨rootP, rootPOk, linkP⟩ := newPreviousLink set1
     rcases rule with sum | ⟨set2, sum⟩
-    · exact finalizedBy_of_one holds.1 linkP.2.1 (by simp only [Checkpoint.toFfg]; omega) linkP
+    · exact FinalizedBy.of_one holds.1 linkP.2.1 (by simp only [Checkpoint.toFfg]; omega) linkP
     -- The checkpoint two epochs back is justified by the old bit 1.
-    obtain ⟨rootO, rootOOk⟩ := recorded (UInt64.lt_iff_toNat_lt.mpr (by rw [one]; omega))
-      ⟨rootP, rootPOk⟩
-    have two : (getCurrentEpoch state - 2).toNat = (getCurrentEpoch state).toNat - 2 := by
-      rw [UInt64.toNat_sub_of_le _ _ (UInt64.le_iff_toNat_le.mpr (by simp; omega))]
-      simp
+    obtain ⟨rootO, rootOOk⟩ := recorded late ⟨rootP, rootPOk⟩
     have justifiedO := bits.previous (newOlder ▸ set2) _ rootO (by omega) rootOOk
-    exact finalizedBy_of_two holds.1 justifiedO
+    exact FinalizedBy.of_two holds.1 justifiedO
       (chain false _ rootO (UInt64.le_iff_toNat_le.mpr (by
         simp only [recentJustified, Bool.false_eq_true, ↓reduceIte]; omega)) (by omega) rootOOk)
       (ordered _ _ rootO rootP (UInt64.le_iff_toNat_le.mpr (by omega)) (by omega) rootOOk rootPOk)
       (by simp only [Checkpoint.toFfg]; omega) (by simp only [Checkpoint.toFfg]; omega) linkP
 
-/-- Justification keeps the facts of the bits and the finalized checkpoint slack-finalized.
-
-The hypotheses on the votes and the stake are those of the bound of a link up to churn.
-
-The current justified epoch must be at most the previous epoch.
-
-Once justification runs, the previous justified epoch must be below the previous epoch.
-
-The sets and weights of the model must match the state for both recent epochs.
-
-Take a justified checkpoint and an epoch, from its own epoch on and at most two back.
-
-The block of the checkpoint must be below that of the root the state records for that epoch.
-
-The blocks of the roots that the state records for epochs at most two back must be in order.
-
-Once justification runs, the state must record a root for the epoch two back.
-
-The two justified checkpoints must be slack-justified.
-
-The bits must carry their facts for the current epoch.
-
-The finalized checkpoint must be slack-finalized.
-
-Then the bits carry their facts for the next epoch after the step.
-
-The finalized checkpoint after the step is slack-finalized. -/
-theorem processJustificationAndFinalization_slackBits
-    (flagsVoted : TargetFlagsVoted attested state)
-    (pendingVoted : PendingVoted attested state)
-    (large : 3 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat <
-      2 * stake (fun index => balanceAt state index.toNat)
-        (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset)
-    (block : Root → β)
-    (contains : ffgVotes block attested ⊆ votes)
-    (settled : JustifiedSettled state)
-    (separated : JustifiedSeparated state)
-    (sets : ∀ current : Bool, TargetSetsMatch V U W block state
-      (if current then getCurrentEpoch state else getPreviousEpoch state))
-    (chain : ∀ (current : Bool) (epoch : Epoch) (root : Root),
-      (recentJustified state current).epoch ≤ epoch →
-      (getCurrentEpoch state).toNat ≤ epoch.toNat + 2 →
-      getBlockRoot state epoch = .ok root →
-        block (recentJustified state current).root ≤ block root)
-    (ordered : ∀ (older newer : Epoch) (olderRoot newerRoot : Root), older ≤ newer →
-      (getCurrentEpoch state).toNat ≤ older.toNat + 2 →
-      getBlockRoot state older = .ok olderRoot → getBlockRoot state newer = .ok newerRoot →
-        block olderRoot ≤ block newerRoot)
-    (recorded : GENESIS_EPOCH + 1 < getCurrentEpoch state →
-      ∃ root, getBlockRoot state (getCurrentEpoch state - 2) = .ok root)
-    (holds : SlackJustifiedCheckpoints V U W genesis votes block state)
-    (bits : SlackBits V U W genesis votes block (getCurrentEpoch state).toNat state)
-    (finalized : SlackFinalized V U W genesis votes (state.finalizedCheckpoint.toFfg block))
-    (computed : processJustificationAndFinalization state = .ok after) :
-    SlackBits V U W genesis votes block ((getCurrentEpoch state).toNat + 1) after ∧
-      SlackFinalized V U W genesis votes (after.finalizedCheckpoint.toFfg block) := by
-  exact slackBits_of_recorded flagsVoted pendingVoted large block contains settled separated sets
-    chain ordered (fun late _ => recorded late) holds bits finalized computed
-
-/-- The first slot of an epoch at most two back is less than three epochs back.
-
-So it stays in a buffer of roots that covers three epochs, at the next slot. -/
-private theorem slot_lt_epoch_add_historical_three (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
-    (window : 3 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
-    {epoch : Epoch} (near : (getCurrentEpoch state).toNat ≤ epoch.toNat + 2) :
-    state.slot.toNat <
-      epoch.toNat * preset.SLOTS_PER_EPOCH.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat := by
-  have split := Nat.div_add_mod state.slot.toNat preset.SLOTS_PER_EPOCH.toNat
-  have small := Nat.mod_lt state.slot.toNat positive
-  rw [← getCurrentEpoch_toNat] at split
-  have scaled := Nat.mul_le_mul_right preset.SLOTS_PER_EPOCH.toNat near
-  rw [Nat.add_mul, Nat.mul_comm] at scaled
-  omega
-
-/-- A read of the root of an epoch reads a slot before the slot of the state. -/
-private theorem start_lt_of_getBlockRoot {epoch : Epoch} {root : Root}
-    (read : getBlockRoot state epoch = .ok root) :
-    epoch.toNat * preset.SLOTS_PER_EPOCH.toNat < state.slot.toNat := by
-  unfold getBlockRoot at read
-  simp only [bind_ok_iff, liftArith, mapError_ok_iff] at read
-  obtain ⟨start, startOk, read⟩ := read
-  rw [← (mulChecked_ok_iff.mp startOk).2]
-  exact (getBlockRootAtSlot_ok_iff.mp read).1
-
-/-- A state one slot later with the same roots reads the same root of an epoch.
-
-The first slot of the epoch must be before the slot of the earlier state and stay in the buffer. -/
-private theorem getBlockRoot_succ_iff {other : BeaconState preset fork}
-    (roots : other.blockRoots = state.blockRoots) (slot : other.slot.toNat = state.slot.toNat + 1)
-    {epoch : Epoch} {root : Root}
-    (before : epoch.toNat * preset.SLOTS_PER_EPOCH.toNat < state.slot.toNat)
-    (recent : state.slot.toNat <
-      epoch.toNat * preset.SLOTS_PER_EPOCH.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat) :
-    getBlockRoot other epoch = .ok root ↔ getBlockRoot state epoch = .ok root := by
-  unfold getBlockRoot
-  simp only [bind_ok_iff, liftArith, mapError_ok_iff]
-  refine exists_congr fun start => and_congr_right fun startOk => ?_
-  have startEq := (mulChecked_ok_iff.mp startOk).2
-  rw [getBlockRootAtSlot_ok_iff, getBlockRootAtSlot_ok_iff, roots, slot]
-  constructor
-  · rintro ⟨-, fits, -, read⟩
-    exact ⟨by omega, fits, by omega, read⟩
-  · rintro ⟨-, fits, -, read⟩
-    exact ⟨by omega, fits, by omega, read⟩
-
-/-- The block of each justified checkpoint is below the block of each epoch from its own on. -/
-private theorem RootsAbove.le_of_le {block : Root → β} (holds : RootsAbove block state)
-    (current : Bool) {epoch : Epoch} {root : Root}
-    (le : (recentJustified state current).epoch ≤ epoch)
-    (read : getBlockRoot state epoch = .ok root) :
-    block (recentJustified state current).root ≤ block root := by
-  unfold getBlockRoot at read
-  simp only [bind_ok_iff, liftArith, mapError_ok_iff] at read
-  obtain ⟨start, startOk, read⟩ := read
-  refine holds.below current start root ?_ read
-  rw [(mulChecked_ok_iff.mp startOk).2]
-  exact Nat.mul_le_mul_right _ (UInt64.le_iff_toNat_le.mp le)
-
-/-- Ordered links order the roots that a state records for two epochs, the earlier one first. -/
-private theorem le_of_getBlockRoot {block : Root → β}
-    (links : ∀ link ∈ rootLinks state, block link.1 ≤ block link.2) {older newer : Epoch}
-    {olderRoot newerRoot : Root} (le : older ≤ newer)
-    (olderRead : getBlockRoot state older = .ok olderRoot)
-    (newerRead : getBlockRoot state newer = .ok newerRoot) :
-    block olderRoot ≤ block newerRoot := by
-  unfold getBlockRoot at olderRead newerRead
-  simp only [bind_ok_iff, liftArith, mapError_ok_iff] at olderRead newerRead
-  obtain ⟨low, lowOk, lowRead⟩ := olderRead
-  obtain ⟨high, highOk, highRead⟩ := newerRead
-  have lowEq := (mulChecked_ok_iff.mp lowOk).2
-  have highEq := (mulChecked_ok_iff.mp highOk).2
-  have scaled := Nat.mul_le_mul_right preset.SLOTS_PER_EPOCH.toNat (UInt64.le_iff_toNat_le.mp le)
-  exact le_of_rootLinks links lowRead (high.toNat - low.toNat) (by omega) highRead
 
 /-- One slot keeps the facts of the bits and the finalized checkpoint slack-finalized.
 
@@ -589,7 +338,7 @@ theorem advanceSlot_slackBits
   have cachedRoots : ∀ epoch : Epoch, 0 < preset.SLOTS_PER_EPOCH.toNat →
       (getCurrentEpoch state).toNat ≤ epoch.toNat + 2 →
         getBlockRoot cached epoch = getBlockRoot state epoch := fun epoch positive near =>
-    getBlockRoot_processSlot cachedOk (slot_lt_epoch_add_historical_three positive window near)
+    getBlockRoot_processSlot cachedOk (slot_lt_epoch_add_historical_of_le positive 2 window near)
   -- The state after the slot reads the roots of the cached state, before its slot.
   have afterIff : ∀ (epoch : Epoch) (root : Root), 0 < preset.SLOTS_PER_EPOCH.toNat →
       epoch.toNat * preset.SLOTS_PER_EPOCH.toNat < state.slot.toNat →
@@ -600,7 +349,7 @@ theorem advanceSlot_slackBits
     · rw [cachedFrame.slot]
       exact before
     · rw [cachedFrame.slot]
-      exact slot_lt_epoch_add_historical_three positive window near
+      exact slot_lt_epoch_add_historical_of_le positive 2 window near
   unfold epochIfLast at epochedOk
   split at epochedOk
   · rename_i boundary
@@ -649,7 +398,8 @@ theorem advanceSlot_slackBits
     have justifiedReads : ∀ epoch, getBlockRoot justified epoch = getBlockRoot cached epoch := by
       intro epoch
       simp only [getBlockRoot, getBlockRootAtSlot_congr justifiedSlot justifiedRoots]
-    have step := slackBits_of_recorded (flagsVoted.of_processSlot positive window' cachedOk)
+    have step := processJustificationAndFinalization_slackBits
+      (flagsVoted.of_processSlot positive window' cachedOk)
       (pendingVoted.of_processSlot cachedOk) (by
         simp only [balances, active, currentEq]
         exact large last) block contains (by
@@ -690,7 +440,7 @@ theorem advanceSlot_slackBits
         refine ⟨epoch, ?_, slack⟩
         rw [justifiedReads] at read
         rw [afterIff _ _ positive
-          (by rw [← cachedFrame.slot]; exact start_lt_of_getBlockRoot read) (by omega)]
+          (by rw [← cachedFrame.slot]; exact getBlockRoot_start_lt read) (by omega)]
         exact read
       · rw [bitsEq] at set
         have scaled : (older.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat =
@@ -716,7 +466,7 @@ theorem advanceSlot_slackBits
       rw [currentEq] at near
       rw [cachedRoots _ positive near] at read
       rw [recentEq] at le ⊢
-      exact roots.le_of_le current le read
+      exact roots.le_of_epoch_le current le read
     · -- The cached state records roots in order.
       rw [currentEq] at near
       have newerNear : (getCurrentEpoch state).toNat ≤ newer.toNat + 2 := by
@@ -724,46 +474,37 @@ theorem advanceSlot_slackBits
         omega
       rw [cachedRoots _ positive near] at olderRead
       rw [cachedRoots _ positive newerNear] at newerRead
-      exact le_of_getBlockRoot links le olderRead newerRead
+      exact le_of_rootLinks_getBlockRoot links le olderRead newerRead
     · -- A read of the previous epoch shows that the epoch two back fits in the buffer too.
       obtain ⟨rootP, readP⟩ := previous
-      have one : (GENESIS_EPOCH + 1 : Epoch).toNat = 1 := by decide
-      have late' := UInt64.lt_iff_toNat_lt.mp late
-      rw [one, currentEq] at late'
-      rw [currentEq]
+      rw [currentEq] at late ⊢
       rw [previousEq] at readP
-      have two : (getCurrentEpoch state - 2).toNat = (getCurrentEpoch state).toNat - 2 := by
-        rw [UInt64.toNat_sub_of_le _ _ (UInt64.le_iff_toNat_le.mpr (by simp; omega))]
-        simp
+      have two := toNat_sub_two late
+      have late' := UInt64.lt_iff_toNat_lt.mp late
+      rw [toNat_genesisEpoch_add_one] at late'
       have previousNat := getPreviousEpoch_toNat state
-      unfold getBlockRoot at readP
-      simp only [bind_ok_iff, liftArith, mapError_ok_iff] at readP
-      obtain ⟨startP, startPOk, readP⟩ := readP
+      have beforeP := getBlockRoot_start_lt readP
+      obtain ⟨startP, startPOk, readP⟩ := getBlockRoot_ok_iff.mp readP
       have startPEq := (mulChecked_ok_iff.mp startPOk).2
-      rw [previousNat] at startPEq
       obtain ⟨-, fitsP, -, -⟩ := getBlockRootAtSlot_ok_iff.mp readP
-      have twoBack : ((getCurrentEpoch state).toNat - 2) * preset.SLOTS_PER_EPOCH.toNat +
-          2 * preset.SLOTS_PER_EPOCH.toNat =
-            (getCurrentEpoch state).toNat * preset.SLOTS_PER_EPOCH.toNat := by
-        rw [← Nat.add_mul]
-        congr 1
-        omega
+      rw [cachedFrame.slot, previousNat] at beforeP
+      rw [previousNat] at startPEq
+      -- The epoch two back starts one epoch before the previous one, and two before the current.
       have oneBack : ((getCurrentEpoch state).toNat - 1) * preset.SLOTS_PER_EPOCH.toNat =
           ((getCurrentEpoch state).toNat - 2) * preset.SLOTS_PER_EPOCH.toNat +
-            1 * preset.SLOTS_PER_EPOCH.toNat := by
+            preset.SLOTS_PER_EPOCH.toNat := by
+        rw [← Nat.succ_mul]
+        congr 1
+        omega
+      have twoBack : (getCurrentEpoch state).toNat * preset.SLOTS_PER_EPOCH.toNat =
+          ((getCurrentEpoch state).toNat - 2) * preset.SLOTS_PER_EPOCH.toNat +
+            2 * preset.SLOTS_PER_EPOCH.toNat := by
         rw [← Nat.add_mul]
         congr 1
         omega
-      obtain ⟨start, startEq⟩ := exists_toNat_eq
-        (n := ((getCurrentEpoch state).toNat - 2) * preset.SLOTS_PER_EPOCH.toNat) (by omega)
-      have startOk : mulChecked (getCurrentEpoch state - 2) preset.SLOTS_PER_EPOCH = .ok start :=
-        mulChecked_ok_iff.mpr ⟨by rw [two]; omega, by rw [startEq, two]⟩
-      obtain ⟨root, read⟩ := getBlockRootAtSlot_exists (state := cached) (slot := start)
-        (by rw [cachedFrame.slot]; omega) (by omega) (by rw [cachedFrame.slot]; omega) (by omega)
-      refine ⟨root, ?_⟩
-      unfold getBlockRoot
-      simp only [bind_ok_iff, liftArith, mapError_ok_iff]
-      exact ⟨start, startOk, read⟩
+      rw [← two] at oneBack twoBack
+      exact getBlockRoot_exists (by rw [cachedFrame.slot]; omega) (by omega)
+        (by rw [cachedFrame.slot]; omega) (by omega)
     · -- The bits carry their facts at the cached state.
       rw [currentEq]
       refine ⟨fun small => ?_, fun set => ?_, fun set older root epoch read => ?_⟩
@@ -813,7 +554,7 @@ theorem advanceSlot_slackBits
       obtain ⟨epoch, read, slack⟩ := bits.current set
       refine ⟨epoch, ?_, slack⟩
       have positive' := positive (by omega)
-      rw [afterIff _ _ positive' (start_lt_of_getBlockRoot read) (by omega),
+      rw [afterIff _ _ positive' (getBlockRoot_start_lt read) (by omega),
         cachedRoots _ positive' (by omega)]
       exact read
     · -- The root of the epoch two back stays.

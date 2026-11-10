@@ -154,6 +154,126 @@ theorem weighJustificationAndFinalization_checkpoints {total previous current : 
       · exact .inr (.inl rfl)
       · exact .inl rfl
 
+/-- A rule of finalization applies only when its epochs are justified and its gap matches. -/
+theorem finalizes_eq_true {justified : Bool} {source gap currentEpoch : Epoch}
+    (computed : finalizes justified source gap currentEpoch = .ok true) :
+    justified = true ∧ source.toNat + gap.toNat = currentEpoch.toNat := by
+  cases justified
+  · simp [finalizes, pure, Except.pure] at computed
+  · simp only [finalizes, ↓reduceIte, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
+      pure, Except.pure, Except.ok.injEq, beq_iff_eq] at computed
+    obtain ⟨sum, sumOk, rfl⟩ := computed
+    exact ⟨rfl, ((addChecked_ok_iff.mp sumOk).2).symm⟩
+
+/-- What weighing the votes does to the two newest bits and to the finalized checkpoint.
+
+A set bit 0 means that the test of the current epoch passed.
+
+Its checkpoint is then the new current justified one, with the root recorded for the epoch.
+
+A set bit 1 means that the test of the previous epoch passed, or that the old bit 0 was set.
+
+In the first case the state records a root for the previous epoch.
+
+Bit 2 is the old bit 1.
+
+The new finalized checkpoint is the old one, or an old justified one by one of the four rules.
+
+The old current justified checkpoint needs bit 0, and bit 1 too when it is two epochs back.
+
+The old previous justified checkpoint needs bit 1, and bit 2 too when it is three epochs back. -/
+theorem weighJustificationAndFinalization_bits {total previousBalance currentBalance : Gwei}
+    (computed : weighJustificationAndFinalization state total previousBalance currentBalance =
+      .ok after) :
+    ∃ threshold previousWeight currentWeight : Gwei, mulChecked total 2 = .ok threshold ∧
+      mulChecked previousBalance 3 = .ok previousWeight ∧
+      mulChecked currentBalance 3 = .ok currentWeight ∧
+      (after.justificationBits.bits[0] = true → threshold ≤ currentWeight ∧
+        ∃ root, getBlockRoot state (getCurrentEpoch state) = .ok root ∧
+          after.currentJustifiedCheckpoint = ⟨getCurrentEpoch state, root⟩) ∧
+      (after.justificationBits.bits[1] = true →
+        (threshold ≤ previousWeight ∧
+            ∃ root, getBlockRoot state (getPreviousEpoch state) = .ok root) ∨
+          state.justificationBits.bits[0] = true) ∧
+      after.justificationBits.bits[2] = state.justificationBits.bits[1] ∧
+      (after.finalizedCheckpoint = state.finalizedCheckpoint ∨
+        (after.finalizedCheckpoint = state.currentJustifiedCheckpoint ∧
+          after.justificationBits.bits[0] = true ∧
+          (state.currentJustifiedCheckpoint.epoch.toNat + 1 = (getCurrentEpoch state).toNat ∨
+            (after.justificationBits.bits[1] = true ∧
+              state.currentJustifiedCheckpoint.epoch.toNat + 2 = (getCurrentEpoch state).toNat))) ∨
+        (after.finalizedCheckpoint = state.previousJustifiedCheckpoint ∧
+          after.justificationBits.bits[1] = true ∧
+          (state.previousJustifiedCheckpoint.epoch.toNat + 2 = (getCurrentEpoch state).toNat ∨
+            (after.justificationBits.bits[2] = true ∧
+              state.previousJustifiedCheckpoint.epoch.toNat + 3 =
+                (getCurrentEpoch state).toNat)))) := by
+  simp only [weighJustificationAndFinalization, bind_ok_iff, liftAccessor_ok, liftArith,
+    mapError_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+  obtain ⟨previousWeight, previousOk, threshold, thresholdOk, first, firstOk, currentWeight,
+    currentOk, second, secondOk, a, aOk, b, bOk, c, cOk, d, dOk, afterEq⟩ := computed
+  obtain ⟨bits, bitsEq⟩ : ∃ bits, bits = ((shiftJustificationBits state.justificationBits).set 1
+      (decide (threshold ≤ previousWeight) || (shiftJustificationBits state.justificationBits)[1])
+      (by decide)).set 0 (decide (threshold ≤ currentWeight)) (by decide) := ⟨_, rfl⟩
+  have bitsAfter : after.justificationBits.bits = bits := by rw [bitsEq, ← afterEq]
+  rw [← bitsEq] at aOk bOk cOk dOk
+  have bit0 : bits[0] = decide (threshold ≤ currentWeight) := by
+    simp [bitsEq]
+  have bit1 : bits[1] = (decide (threshold ≤ previousWeight) ||
+      state.justificationBits.bits[0]) := by
+    simp [bitsEq, shiftJustificationBits]
+  have bit2 : bits[2] = state.justificationBits.bits[1] := by
+    simp [bitsEq, shiftJustificationBits]
+  refine ⟨threshold, previousWeight, currentWeight, thresholdOk, previousOk, currentOk, ?_, ?_,
+    ?_, ?_⟩
+  · rw [bitsAfter, bit0]
+    intro passed
+    refine ⟨of_decide_eq_true passed, ?_⟩
+    rcases justifyCheckpoint_ok secondOk with ⟨-, epoch, rootOk⟩ | ⟨failed, -⟩
+    · refine ⟨second.root, epoch ▸ rootOk, ?_⟩
+      rw [← afterEq, ← epoch]
+    · rw [passed] at failed
+      cases failed
+  · rw [bitsAfter, bit1]
+    intro set
+    rcases Bool.or_eq_true_iff.mp set with passed | old
+    · refine .inl ⟨of_decide_eq_true passed, ?_⟩
+      rcases justifyCheckpoint_ok firstOk with ⟨-, -, rootOk⟩ | ⟨failed, -⟩
+      · exact ⟨first.root, rootOk⟩
+      · rw [passed] at failed
+        cases failed
+    · exact .inr old
+  · rw [bitsAfter, bit2]
+  have finalizedEq : after.finalizedCheckpoint =
+      if c || d then state.currentJustifiedCheckpoint
+      else if a || b then state.previousJustifiedCheckpoint
+      else state.finalizedCheckpoint := by
+    rw [← afterEq]
+  rw [bitsAfter]
+  by_cases byCurrent : (c || d) = true
+  · simp only [byCurrent, ↓reduceIte] at finalizedEq
+    refine .inr (.inl ⟨finalizedEq, ?_⟩)
+    rcases Bool.or_eq_true_iff.mp byCurrent with two | one
+    · obtain ⟨set, sum⟩ := finalizes_eq_true (two ▸ cOk)
+      simp only [Bool.and_eq_true] at set
+      exact ⟨set.1.1, .inr ⟨set.1.2, by simpa using sum⟩⟩
+    · obtain ⟨set, sum⟩ := finalizes_eq_true (one ▸ dOk)
+      simp only [Bool.and_eq_true] at set
+      exact ⟨set.1, .inl (by simpa using sum)⟩
+  simp only [byCurrent, Bool.false_eq_true, ↓reduceIte] at finalizedEq
+  by_cases byPrevious : (a || b) = true
+  · simp only [byPrevious, ↓reduceIte] at finalizedEq
+    refine .inr (.inr ⟨finalizedEq, ?_⟩)
+    rcases Bool.or_eq_true_iff.mp byPrevious with three | two
+    · obtain ⟨set, sum⟩ := finalizes_eq_true (three ▸ aOk)
+      simp only [Bool.and_eq_true] at set
+      exact ⟨set.1.1, .inr ⟨set.1.2, by simpa using sum⟩⟩
+    · obtain ⟨set, sum⟩ := finalizes_eq_true (two ▸ bOk)
+      simp only [Bool.and_eq_true] at set
+      exact ⟨set.1, .inl (by simpa using sum)⟩
+  simp only [byPrevious, Bool.false_eq_true, ↓reduceIte] at finalizedEq
+  exact .inl finalizedEq
+
 /-- Weighing the votes keeps the checkpoints in order.
 
 The current justified epoch must be at most the previous epoch.
