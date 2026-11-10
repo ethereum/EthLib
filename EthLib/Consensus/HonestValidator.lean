@@ -141,11 +141,13 @@ The epoch must be at most the next one, since later committees are not known yet
 
 A validator that is not active in the epoch has no committee.
 
-It fails for an epoch after the next one, and when a committee of the epoch has no value.
+It fails for an epoch after the next one.
 
-It also fails when the next epoch, the first slot or that slot plus an epoch overflows 64 bits.
+It also fails when a committee it reads, up to the one with the validator, has no value.
 
-The committees share one shuffle of the active validators, computed once per call. -/
+It fails too when the next epoch, the first slot or that slot plus an epoch overflows 64 bits.
+
+The committees share one shuffle of the active validators, computed at most once per call. -/
 def getCommitteeAssignment (state : BeaconState preset fork) (epoch : Epoch)
     (validatorIndex : ValidatorIndex) :
     Except ValidatorDutyError (Option (Array ValidatorIndex × CommitteeIndex × Slot)) := do
