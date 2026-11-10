@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Cryptography.Proofs.Bls.Security.PopGame
 public import EthLib.Cryptography.Proofs.Bls.Security.Refinement
 
 /-!
@@ -14,4 +15,6 @@ EthLib's signing and verification compute the scheme of that game.
 The byte game reduces a forger on compressed encodings to a group-element forger.
 
 Freshness excludes every message submitted to signing, regardless of signature bytes.
+
+A second game states unforgeability of aggregates with proofs of possession; no bound is proved yet.
 -/
