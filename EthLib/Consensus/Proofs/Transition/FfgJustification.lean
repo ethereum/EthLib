@@ -205,10 +205,12 @@ theorem TargetFlagsVoted.attester (altair : .altair ≤ fork)
     rw [getPreviousEpoch_toNat] at this
     exact late (UInt64.le_iff_toNat_le.mpr (by simp [GENESIS_EPOCH]; omega))
   obtain ⟨active, -, flags, read, set⟩ := mem_getUnslashedParticipatingIndices counted index member
-  refine ⟨active, holds altair current index.toNat ⟨flags, ?_, set⟩⟩
-  cases current
-  · simpa [recentParticipation, distinct] using read
-  · simpa [recentParticipation] using read
+  have link := holds altair current index.toNat ⟨flags, ?_, set⟩
+  · obtain ⟨vote, cast, linked⟩ := link
+    exact ⟨active, vote, linked, cast⟩
+  · cases current
+    · simpa [recentParticipation, distinct] using read
+    · simpa [recentParticipation] using read
 
 /-- A passing test of justification for an epoch gives the stake bound of its link, with churn.
 
