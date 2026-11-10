@@ -11,6 +11,7 @@ public import EthLib.Cryptography.Proofs.Secp256k1.Security.JointGame
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.KeyOnly
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.KeyOnlyBound
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.KeyOnlyOutside
+public import EthLib.Cryptography.Proofs.Secp256k1.Security.Keyless
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.LazyGame
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.Origin
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.Programmed
@@ -111,7 +112,9 @@ The adversary's queries go to an overlay in front of the lazy permutation.
 
 Until two pairs of the overlay's cache conflict, the lazy game dominates that game.
 
-No theorem bounds the chance of a conflict yet; their bound needs `φ` semi-injective.
+The chance of a conflict is bounded, with a nonzero base point and a semi-injective `φ`.
+
+A signer that reads only the public key gives that game the same law.
 
 No theorem bounds a forger with a signing oracle yet; that is the rest of their Theorem 1.
 -/
