@@ -9,13 +9,9 @@ This is the algebraic step of the reduction for aggregates with proofs of posses
 
 The game is in the module of the aggregate game; this step only needs the scheme.
 
-It follows Ristenpart and Yilek, where a proof of possession signs the key under a separate hash.
+Keys lie in `G1` and signatures in `G2`.
 
-<https://eprint.iacr.org/2007/264>
-
-Their groups are symmetric; here keys lie in `G1` and signatures in `G2`.
-
-The co-CDH problem here also gives `a • g2`, which signs on the honest key hash.
+The co-CDH problem also gives `a • g2`, which signs on the honest key hash.
 
 The reduction programs the hash of the forged message to an element `Z`.
 
@@ -35,17 +31,19 @@ The step needs three facts that the game does not give.
 - No scalar `r x` is zero; a zero hash makes every proof on it the zero element.
 - The count `n` is not zero in the scalars; it is at most the number of keys.
 
-The count is nonzero when the number of keys is below the characteristic of the scalars.
+The count is nonzero when the honest key is a key and the characteristic exceeds the key count.
+
+The characteristic zero also suffices.
 
 The game checks each proof against the key hash at its position in a list.
 
 The reduction will read `r x` from its table of key hashes, so a function of the key suffices here.
 
-The bound will pay for this step in three terms.
+No bound is proved here; the planned one would pay three terms around this step.
 
 - A factor `q` for guessing which message hash is `Z`.
 - About `qK` over the number of scalars, for a key hash scalar that is zero.
-- One over the number of scalars, for the challenge `c = 0`, which makes every programmed hash zero.
+- One over the number of scalars in the simulation, for `c = 0`, which zeroes every programmed hash.
 -/
 
 @[expose] public section
@@ -150,25 +148,30 @@ theorem extractAggregate_eq {scheme : Scheme G₁ G₂} (hsound : scheme.Sound F
 
 /-! ## The hypotheses can hold together -/
 
-omit [DecidableEq G₁] in
-/-- Honest keys meet the hypotheses of the extraction step on keys, proofs and aggregate.
+/-- Honest keys meet the hypotheses of the extraction step on keys, proofs, count and aggregate.
 
 Each secret `sk` gives the key `sk • g1` and the proof `sk • (r (sk • g1) • Z)`.
 
-The sum of `sk • Z` over the secrets then verifies on `Z` under the sum of the keys. -/
-theorem hypotheses_of_secrets {scheme : Scheme G₁ G₂} (hsound : scheme.Sound F) (pk : G₁)
-    (r : G₁ → F) (Z : G₂) {sks : List F} (hr : ∀ sk ∈ sks, r (sk • scheme.g₁) ≠ 0) :
+The sum of `sk • Z` over the secrets then verifies on `Z` under the sum of the keys.
+
+The honest secret `a` appears once among the secrets, so its key has a count of at least one. -/
+theorem hypotheses_of_secrets {scheme : Scheme G₁ G₂} (hsound : scheme.Sound F) (a : F)
+    (r : G₁ → F) (Z : G₂) {sks : List F} (ha : a ∈ sks)
+    (hr : ∀ sk ∈ sks, r (sk • scheme.g₁) ≠ 0) :
     let keys := sks.map fun sk => (sk • scheme.g₁, sk • (r (sk • scheme.g₁) • Z))
     (∀ k ∈ keys, ∃ sk : F, k.1 = sk • scheme.g₁) ∧
-      (∀ k ∈ keys, k.1 ≠ pk → r k.1 ≠ 0 ∧ scheme.isDh k.1 (r k.1 • Z) k.2 = true) ∧
+      (∀ k ∈ keys, r k.1 ≠ 0 ∧ scheme.isDh k.1 (r k.1 • Z) k.2 = true) ∧
+      0 < (keys.map Prod.fst).count (a • scheme.g₁) ∧
       scheme.isDh (keys.map Prod.fst).sum Z (sks.map (· • Z)).sum = true := by
-  refine ⟨?_, ?_, ?_⟩
+  refine ⟨?_, ?_, ?_, ?_⟩
   · intro k hk
     obtain ⟨sk, -, rfl⟩ := List.mem_map.mp hk
     exact ⟨sk, rfl⟩
-  · intro k hk _
+  · intro k hk
     obtain ⟨sk, hsk, rfl⟩ := List.mem_map.mp hk
     exact ⟨hr sk hsk, (hsound _ _ _).mpr rfl⟩
+  · rw [List.count_pos_iff, List.map_map]
+    exact List.mem_map_of_mem ha
   · have hkeys : ((sks.map fun sk => (sk • scheme.g₁, sk • (r (sk • scheme.g₁) • Z))).map
         Prod.fst).sum = sks.sum • scheme.g₁ := by
       simp [List.map_map, Function.comp_def, List.sum_smul]
@@ -186,7 +189,9 @@ def scalarScheme (F : Type) [Field F] [DecidableEq F] : Scheme F F where
 omit [DecidableEq G₁] in
 /-- The scheme over the scalars decides co-Diffie-Hellman tuples.
 
-So a sound scheme exists, and with the lemma above every hypothesis of the step can hold. -/
+So a sound scheme exists.
+
+With the lemma above, every hypothesis of the step holds when the count is nonzero in `F`. -/
 theorem scalarScheme_sound [DecidableEq F] : (scalarScheme F).Sound F := by
   intro a h σ
   simp [scalarScheme]
