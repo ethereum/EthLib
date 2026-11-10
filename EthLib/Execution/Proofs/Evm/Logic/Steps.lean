@@ -20,7 +20,7 @@ For a code stored as one number, they are the equation of the code and the defin
 
 The tactic rewrites each fact with that list, and evaluates it on the numbers.
 
-It steps over PUSH1 to PUSH32, POP, DUP1 to DUP16 and SWAP1 to SWAP16.
+It steps over PUSH0 to PUSH32, POP, DUP1 to DUP16 and SWAP1 to SWAP16.
 
 It steps over each opcode of one, two or three operands that the fork runs on the stack alone.
 
@@ -119,7 +119,8 @@ macro_rules
       OPCODE_SIGNEXTEND, OPCODE_LT, OPCODE_GT, OPCODE_SLT, OPCODE_SGT, OPCODE_EQ, OPCODE_ISZERO,
       OPCODE_AND, OPCODE_OR, OPCODE_XOR, OPCODE_NOT, OPCODE_BYTE, OPCODE_SHL, OPCODE_SHR,
       OPCODE_SAR, OPCODE_CLZ, OPCODE_ADDRESS, OPCODE_ORIGIN, OPCODE_CALLER, OPCODE_CALLVALUE,
-      OPCODE_CALLDATASIZE, OPCODE_CODESIZE, OPCODE_PC, OPCODE_MSIZE, BASE, VERY_LOW, LOW, MID])
+      OPCODE_CALLDATASIZE, OPCODE_CODESIZE, OPCODE_PC, OPCODE_MSIZE, OPCODE_TIMESTAMP,
+      OPCODE_NUMBER, BASE, VERY_LOW, LOW, MID])
 
 /-- Proves that the frame holds enough gas for a step, by linear arithmetic.
 
@@ -166,6 +167,12 @@ macro_rules
          case dec => rfl
          case n => decide
          case word => evm_code [$ls,*]
+         case gas => evm_gas
+         case room => evm_room)
+      | (refine' Triple.seq (push0 ?fork ?lt ?op ?gas ?room) ?next
+         case fork => evm_fork
+         case lt => evm_code [$ls,*]
+         case op => evm_code [$ls,*]
          case gas => evm_gas
          case room => evm_room)
       | (refine' Triple.seq (binary ?lt ?op ?dec ?run ?gas) ?next
