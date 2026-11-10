@@ -149,10 +149,16 @@ def invalidStatuses : List String := ["INVALID", "INVALID_BLOCK_HASH"]
 
 /-- The store after each step of a fork choice case, and the outcome of each step.
 
-The store starts from an anchor state and an anchor block. -/
+The store starts from an anchor state and an anchor block.
+
+The caller may change the sources that each step reads.
+
+The change to the sources does not change which blocks an invalid verdict removes. -/
 def replayForkChoice {preset : Preset} {fork : Fork} (config : Config) (checks : SignatureChecks)
     (anchorState : BeaconState preset fork) (anchorBlock : BeaconBlock preset fork)
-    (steps : List ForkChoiceStep) : Result (Store preset fork × List StepOutcome) := do
+    (steps : List ForkChoiceStep)
+    (adjust : BlockSources preset fork → BlockSources preset fork := id) :
+    Result (Store preset fork × List StepOutcome) := do
   let mut store ← runForkChoice (getForkchoiceStore config anchorState anchorBlock)
   let mut fcr := getFastConfirmationStore store
   let mut outcomes : Array StepOutcome := #[]
@@ -202,7 +208,7 @@ def replayForkChoice {preset : Preset} {fork : Fork} (config : Config) (checks :
       setup
       -- The execution layer of the vectors finds that every payload satisfies its lists.
       inclusionListSatisfied := fun _ _ => true }
-    let mut outcome ← runForkChoiceStep config checks sources store step
+    let mut outcome ← runForkChoiceStep config checks (adjust sources) store step
     -- An invalid verdict removes blocks, whether the block itself fails or not.
     if let some latestValidHash := invalid then
       if let .block input := step then

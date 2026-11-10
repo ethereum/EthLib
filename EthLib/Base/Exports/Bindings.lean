@@ -685,6 +685,12 @@ def bindings : List Binding := [
       "verify: bool, config: dict | None, optimistic_roots: list[bytes], head: bytes, " ++
       "head_payload_status: int) -> bool",
     [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
+  ⟨"consensus_inclusion_list_satisfaction",
+    `EthLib.Consensus.Exports.inclusionListSatisfactionExport,
+    "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, " ++
+      "verify: bool, config: dict | None, validation_status: int, satisfied: bool, " ++
+      "validated_root: bytes | None, roots: list[bytes]) -> list[bool | None]",
+    [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
   ⟨"consensus_is_optimistic_restricted_domain",
     `EthLib.Consensus.Exports.isOptimisticRestrictedDomainExport,
     "(domain_type: bytes) -> bool", [], some "ForkChoiceError"⟩,

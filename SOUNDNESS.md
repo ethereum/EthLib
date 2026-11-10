@@ -1896,10 +1896,24 @@ That case needs the removal of an invalid payload from the store of the fork cho
 `isOptimisticNode_of_glamsterdam` shows that the rule then fails when the head is not optimistic.
 `isOptimisticNode_of_isHeadOptimistic_error` shows that it fails as the optimism of the head does.
 The store holds the blocks of one fork, so a payload chain does not cross from Gloas into Fulu.
-The Heze record of whether a payload satisfies the inclusion lists is not modelled here.
+From Heze the store also records whether a payload satisfies the inclusion lists of the slot before.
+The Heze guide derives that answer from the status that the execution layer gives a payload.
+The verdict of the execution layer follows from the same status.
+`BlockSources.withPayloadStatus` puts the status into the sources that the handlers read.
+For a payload not yet validated, its execution layer accepts every payload and the payload satisfies its lists.
+For an invalidated one, it rejects every payload and the payload does not satisfy them.
+`Store.isPayloadInclusionListSatisfied_of_notValidated` shows the answer `true` for an envelope that the handler accepts.
+`Store.onExecutionPayloadEnvelope_ne_ok_of_invalidated` shows that an invalidated payload is never kept.
+A status outside the three of the guide counts as invalidated, a choice of EthLib: such a payload is never kept.
+The export rejects such a status before any step runs.
+`Store.recordValidatedInclusionListSatisfaction_satisfied` shows that a payload that turns valid takes the answer that the execution layer gives with its verdict.
+`Store.recordValidatedInclusionListSatisfaction_eq` shows that nothing else in the store changes, and `Store.recordValidatedInclusionListSatisfaction_other` that every other answer stays, those of its ancestors among them.
+The store of the fork choice does not keep the status of a payload, but the optimistic store does.
+`OptimisticStore.onValidatedPayload_ok` shows that the move to valid succeeds only for an optimistic payload, which then leaves the optimistic set as a valid payload does.
 The Python suite checks each rule on Bellatrix blocks built in the test, with roots from the SSZ export.
 At Gloas it checks the execution block, the candidate rule, the two payload answers and the latest verified ancestor.
 It checks the optimistic head of each status on a pinned Gloas fork choice case, and that the second case is refused.
+At Heze it checks the answer on the inclusion lists for each status, and once the payload turns valid, on a pinned Heze case.
 
 ### Light client
 
@@ -2276,12 +2290,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 367 operations and 49 size constants.
-The Python extension calls 367 of the operations and 49 of the constants.
+Lean exports 368 operations and 49 size constants.
+The Python extension calls 368 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-9686 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (1703), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (303), `engine.c` (90), `enr.c` (177), `eth.c` (225), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (54), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (102), `module.c` (1375), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (140), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (648), `x25519.c` (21), `xmss.c` (134).
+9703 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (1717), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (303), `engine.c` (90), `enr.c` (177), `eth.c` (225), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (54), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (102), `module.c` (1377), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (140), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (649), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

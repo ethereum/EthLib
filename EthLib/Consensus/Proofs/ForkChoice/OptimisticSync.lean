@@ -3,6 +3,8 @@ module
 public import EthLib.Base.Except
 public import EthLib.Base.Proofs.MapM
 public import EthLib.Consensus.ForkChoice.OptimisticSync
+public import EthLib.Consensus.Proofs.ForkChoice.Handlers
+public import EthLib.Consensus.Proofs.Transition.Payload
 public import EthLib.Consensus.Proofs.ForkChoice.Optimistic
 
 /-!
@@ -45,6 +47,14 @@ Otherwise, before Gloas, it needs a dropped block at or above the justified bloc
 From Gloas that second case is not yet specified, and fails.
 
 An optimistic validator may not sign exactly under seven domain types.
+
+From Heze a payload kept before it is validated satisfies its inclusion lists.
+
+An invalidated payload is never kept.
+
+Once an optimistic payload turns valid, the answer of the execution layer is recorded for its block.
+
+The answers of the other blocks stay.
 -/
 
 @[expose] public section
@@ -1123,6 +1133,119 @@ theorem isOptimisticNode_of_not_isHeadOptimistic {config : Config}
   · simp [isOptimisticNode, head, notGloas, found, bind, Except.bind]
     rfl
   · simp [isOptimisticNode, head, notGloas, found, bind, Except.bind]
+
+/-- The execution layer of the sources of a payload whose status is not valid.
+
+It accepts every payload exactly when the payload is not yet validated. -/
+@[simp]
+theorem BlockSources.withPayloadStatus_engine_of_ne (sources : BlockSources preset fork)
+    {status : PayloadValidationStatus} (notValid : status ≠ PAYLOAD_STATUS_VALID) :
+    (sources.withPayloadStatus status).engine =
+      .constant (decide (status = PAYLOAD_STATUS_NOT_VALIDATED)) := by
+  simp [BlockSources.withPayloadStatus, notValid]
+
+/-- The answer on the inclusion lists of the sources of a payload whose status is not valid.
+
+The payload satisfies its lists exactly when it is not yet validated. -/
+@[simp]
+theorem BlockSources.withPayloadStatus_inclusionListSatisfied_of_ne
+    (sources : BlockSources preset fork) {status : PayloadValidationStatus}
+    (notValid : status ≠ PAYLOAD_STATUS_VALID) :
+    (sources.withPayloadStatus status).inclusionListSatisfied =
+      fun _ _ => decide (status = PAYLOAD_STATUS_NOT_VALIDATED) := by
+  simp [BlockSources.withPayloadStatus, notValid]
+
+/-- An invalidated payload counts as not satisfying its inclusion lists. -/
+theorem BlockSources.withPayloadStatus_invalidated (sources : BlockSources preset fork) :
+    (sources.withPayloadStatus PAYLOAD_STATUS_INVALIDATED).inclusionListSatisfied =
+      fun _ _ => false := by
+  simp [BlockSources.withPayloadStatus, PAYLOAD_STATUS_INVALIDATED, PAYLOAD_STATUS_VALID,
+    PAYLOAD_STATUS_NOT_VALIDATED]
+
+/-- From Gloas: an envelope whose payload is invalidated is rejected. -/
+theorem Store.onExecutionPayloadEnvelope_ne_ok_of_invalidated {config : Config}
+    {store : Store preset fork} {checks : SignatureChecks} {sources : BlockSources preset fork}
+    {gloas : .glamsterdam ≤ fork} {signed : SignedExecutionPayloadEnvelope preset fork}
+    (after : Store preset fork) :
+    store.onExecutionPayloadEnvelope config checks
+      (sources.withPayloadStatus PAYLOAD_STATUS_INVALIDATED) gloas signed ≠ .ok after := by
+  intro accepted
+  obtain ⟨_, _, _, verified, _⟩ := Store.onExecutionPayloadEnvelope_ok accepted
+  rw [BlockSources.withPayloadStatus_engine_of_ne sources (by decide)] at verified
+  exact verifyExecutionPayloadEnvelope_constant_false verified
+
+/-- From Heze: a payload kept before it is validated counts as satisfying its inclusion lists. -/
+theorem Store.isPayloadInclusionListSatisfied_of_notValidated {config : Config}
+    {store : Store preset fork} {checks : SignatureChecks} {sources : BlockSources preset fork}
+    {gloas : .glamsterdam ≤ fork} (heze : .hegota ≤ fork)
+    {signed : SignedExecutionPayloadEnvelope preset fork} {after : Store preset fork}
+    (accepted : store.onExecutionPayloadEnvelope config checks
+      (sources.withPayloadStatus PAYLOAD_STATUS_NOT_VALIDATED) gloas signed = .ok after) :
+    after.isPayloadInclusionListSatisfied heze signed.message.beaconBlockRoot = .ok true := by
+  obtain ⟨_, _, _, _, _, _, satisfied⟩ :=
+    Store.onExecutionPayloadEnvelope_inclusionListSatisfied heze accepted
+  rw [satisfied, BlockSources.withPayloadStatus_inclusionListSatisfied_of_ne sources (by decide)]
+  rfl
+
+/-- From Heze: once a payload turns valid, the store holds the answer of the execution layer.
+
+The store keeps the payload of the block, so the answer is also what the fork choice reads. -/
+theorem Store.recordValidatedInclusionListSatisfaction_satisfied {store : Store preset fork}
+    {heze : .hegota ≤ fork} {root : Root} {satisfied : Bool} {after : Store preset fork}
+    (recorded : store.recordValidatedInclusionListSatisfaction heze root satisfied = .ok after) :
+    (after.payloadInclusionListSatisfaction heze)[root]? = some satisfied ∧
+      after.isPayloadInclusionListSatisfied heze root = .ok satisfied := by
+  unfold recordValidatedInclusionListSatisfaction at recorded
+  by_cases held : store.isPayloadVerified (Nat.le_trans (by decide) heze) root = true
+  · simp only [held, ↓reduceIte, pure, Except.pure, Except.ok.injEq] at recorded
+    subst recorded
+    refine ⟨by simp, ?_⟩
+    simp_all [isPayloadInclusionListSatisfied, isPayloadVerified, pure, Except.pure]
+  · simp [held, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at recorded
+
+/-- From Heze: once a payload turns valid, only the answer for its block changes.
+
+The store takes that answer for the block, and nothing else in the store changes. -/
+theorem Store.recordValidatedInclusionListSatisfaction_eq {store : Store preset fork}
+    {heze : .hegota ≤ fork} {root : Root} {satisfied : Bool} {after : Store preset fork}
+    (recorded : store.recordValidatedInclusionListSatisfaction heze root satisfied = .ok after) :
+    after = { store with payloadInclusionListSatisfaction := fun _ =>
+      (store.payloadInclusionListSatisfaction heze).insert root satisfied } := by
+  unfold recordValidatedInclusionListSatisfaction at recorded
+  by_cases held : store.isPayloadVerified (Nat.le_trans (by decide) heze) root = true
+  · simp only [held, ↓reduceIte, pure, Except.pure, Except.ok.injEq] at recorded
+    exact recorded.symm
+  · simp [held, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at recorded
+
+/-- From Heze: once a payload turns valid, the answers for the other blocks stay as they were.
+
+Its ancestors are among them. -/
+theorem Store.recordValidatedInclusionListSatisfaction_other {store : Store preset fork}
+    {heze : .hegota ≤ fork} {root : Root} {satisfied : Bool} {after : Store preset fork}
+    (recorded : store.recordValidatedInclusionListSatisfaction heze root satisfied = .ok after)
+    {other : Root} (different : other ≠ root) :
+    (after.payloadInclusionListSatisfaction heze)[other]? =
+      (store.payloadInclusionListSatisfaction heze)[other]? := by
+  rw [recordValidatedInclusionListSatisfaction_eq recorded]
+  simp [Std.TreeMap.getElem?_insert, Ne.symm different]
+
+/-- From Heze: a payload that moves from not validated to valid was optimistic.
+
+It then leaves the optimistic set as a valid payload does.
+
+The store of the fork choice records the answer of the execution layer for its block. -/
+theorem OptimisticStore.onValidatedPayload_ok {optimistic : OptimisticStore preset fork}
+    {store : Store preset fork} {heze : .hegota ≤ fork} {root : Root} {satisfied : Bool}
+    {after : OptimisticStore preset fork × Store preset fork}
+    (moved : optimistic.onValidatedPayload store heze root satisfied = .ok after) :
+    optimistic.isOptimistic root = true ∧ optimistic.onValidPayload root = .ok after.1 ∧
+      store.recordValidatedInclusionListSatisfaction heze root satisfied = .ok after.2 := by
+  unfold onValidatedPayload at moved
+  by_cases held : optimistic.isOptimistic root = true
+  · simp only [held, ↓reduceIte, pure, Except.pure, bind_ok_iff, Except.ok.injEq] at moved
+    obtain ⟨recorded, record, valid, onValid, rfl⟩ := moved
+    exact ⟨held, onValid, record⟩
+  · simp [held, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at moved
 
 /-- An optimistic validator may not sign exactly under the seven domain types of the rule.
 
