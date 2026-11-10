@@ -58,7 +58,7 @@ def BurnLog.total : BurnLog → Nat
   | .append first second => first.total + second.total
   | .rollback _ => 0
 
-/-- The log counts a burn of `amount` from `originator` to `beneficiary` that no rollback discards. -/
+/-- The log counts a burn of `amount` from `originator` to `beneficiary` that no rollback drops. -/
 def BurnLog.Counted (originator beneficiary : Address) (amount : Nat) : BurnLog → Prop
   | .empty => False
   | .selfdestruct o b a => o = originator ∧ b = beneficiary ∧ a = amount
@@ -145,8 +145,10 @@ theorem supply_selfdestructStep {evm after : Evm fork Meter}
         rw [hpaid.message] at cleared
         simp only [cleared, ↓reduceIte, total_selfdestructLog]
         omega
-  · have unchanged := TransactionState.supply_eq_of_sameOutside halted.state
-    have balance : after.state.balanceOf evm.message.currentTarget =
+  · obtain ⟨error, rfl⟩ := halted
+    have halted := hpaid.trans (staticStep_exceptionalHalt paid error)
+    have unchanged := TransactionState.supply_eq_of_sameOutside halted.state
+    have balance : (exceptionalHalt paid error).state.balanceOf evm.message.currentTarget =
         evm.state.balanceOf evm.message.currentTarget := by
       unfold TransactionState.balanceOf
       rw [getAccount_of_staticStep halted]

@@ -93,7 +93,11 @@ A call starts from the state it enters, and rolls back when it ends with an erro
 
 A creation prepares its account, runs as a call, and deposits its code.
 
-A creation whose deposit rolls back the state counts nothing of its log. -/
+A creation whose deposit rolls back the state counts nothing of its log.
+
+When that rollback leaves the state as it was, the rule that keeps the log applies too.
+
+That log then has a total of 0, as the supply is unchanged. -/
 inductive RunBurns (fork : Fork) (Meter : Type) [GasMeter Meter] :
     BurnStart fork Meter → Evm fork Meter → BurnLog → Prop
   | stopped (evm : Evm fork Meter) (h : evm.running = false) :
@@ -175,7 +179,8 @@ inductive RunReaches (fork : Fork) (Meter : Type) [GasMeter Meter] :
     BurnStart fork Meter → Evm fork Meter → Prop
   | here (evm : Evm fork Meter) : RunReaches fork Meter (.frame evm) evm
   | next {evm after reached : Evm fork Meter} (running : evm.running = true)
-      (h : step fork evm = .ok (.next after)) (tail : RunReaches fork Meter (.frame after) reached) :
+      (h : step fork evm = .ok (.next after))
+      (tail : RunReaches fork Meter (.frame after) reached) :
       RunReaches fork Meter (.frame evm) reached
   | childRun {evm caller reached : Evm fork Meter} {message : Message fork}
       {resume : Evm fork Meter → Except EvmError (Evm fork Meter)} (running : evm.running = true)

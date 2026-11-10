@@ -476,7 +476,8 @@ theorem selfdestructStep (rules : StepRules fork R) {evm after : Evm fork Meter}
     (h : selfdestructStep fork evm = .ok after) : R evm after := by
   obtain ⟨word, -, paid, -, hpaid, ⟨refund, finished⟩ | halted⟩ := selfdestructStep_eq_ok h
   · exact rules.trans (rules.static hpaid) (rules.selfdestruct _ refund finished)
-  · exact rules.static halted
+  · obtain ⟨error, rfl⟩ := halted
+    exact rules.static (hpaid.trans (staticStep_exceptionalHalt _ _))
 
 /-- Every successful step of every frame keeps the relation.
 

@@ -348,14 +348,12 @@ theorem staticStep_storageStep_of_isStatic {op : Op}
 
 It then reaches a frame with the state of the step's start, up to the records of reads.
 
-From that frame, it either ends SELFDESTRUCT with some refund, or halts with an error.
-
-The halt keeps the state up to the records of reads. -/
+From that frame, it either ends SELFDESTRUCT with some refund, or halts with an error. -/
 theorem selfdestructStep_eq_ok {evm after : Evm fork Meter}
     (h : selfdestructStep fork evm = .ok after) :
     ∃ word rest paid, evm.stack.val = word :: rest ∧ StaticStep evm paid ∧
       ((∃ refund, finishSelfdestruct fork (toAddressMasked word) refund paid = .ok after) ∨
-        StaticStep evm after) := by
+        ∃ error, after = exceptionalHalt paid error) := by
   unfold Evm.selfdestructStep at h
   by_cases hs : fork ≥ .glamsterdam ∧ evm.message.isStatic = true
   · simp only [hs, and_self, ↓reduceIte] at h
@@ -377,7 +375,7 @@ theorem selfdestructStep_eq_ok {evm after : Evm fork Meter}
     obtain ⟨e4, h4, h⟩ := Base.bind_ok_iff.mp h
     exact ⟨w, _, e4, stack, c.trans (.of_sameContext
       ((chargeGas_sameContext h3).trans (chargeStateGas_sameContext h4))), .inl ⟨_, h⟩⟩
-  · exact ⟨w, _, _, stack, c, .inr (c.trans (staticStep_exceptionalHalt _ _))⟩
+  · exact ⟨w, _, _, stack, c, .inr ⟨e, rfl⟩⟩
 
 /-- SELFDESTRUCT in a static frame is a static step.
 
@@ -390,7 +388,8 @@ theorem staticStep_selfdestructStep_of_isStatic {evm after : Evm fork Meter}
   obtain ⟨word, rest, paid, stack, hpaid, ⟨refund, finished⟩ | halted⟩ := selfdestructStep_eq_ok h
   · unfold finishSelfdestruct at finished
     simp [hpaid.message, static] at finished
-  · exact halted
+  · obtain ⟨error, rfl⟩ := halted
+    exact hpaid.trans (staticStep_exceptionalHalt _ _)
 
 /-- Each instruction of transient storage is a static step in a static frame. -/
 theorem staticStep_transientStorageStep_of_isStatic {op : Op}

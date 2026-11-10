@@ -37,7 +37,9 @@ variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
 /-- A certificate of the run of the message call of a transaction, with the state it ends in.
 
-A message call whose first frame fails to start burns nothing, and keeps the state up to reads.
+A message call whose first frame fails to start, with an error that does not abort, burns nothing.
+
+It keeps the state up to reads.
 
 Otherwise its first frame runs as a creation or a call, with a certificate of that run. -/
 inductive MessageCallBurns [LawfulGasMeter Meter] (chainId : Nat) (message : Message fork)
@@ -45,7 +47,7 @@ inductive MessageCallBurns [LawfulGasMeter Meter] (chainId : Nat) (message : Mes
     (paid : Std.ExtTreeSet Address) : TransactionState → BurnLog → Prop
   | halt {error read}
       (preparation : prepareFirstFrame (Meter := Meter) chainId message state substate auths paid =
-        .error (error, read)) :
+        .error (error, read)) (notAborts : error.aborts = false) :
       MessageCallBurns chainId message state substate auths paid (state.withReadsOf read) .empty
   | create {first : FirstFrame fork Meter} {evm : Evm fork Meter} {log : BurnLog}
       (preparation : prepareFirstFrame (Meter := Meter) chainId message state substate auths paid =
@@ -109,7 +111,7 @@ theorem processMessageCall_messageCallBurns [LawfulGasMeter Meter] {chainId : Na
     split at h
     · cases h
     · cases h
-      exact ⟨.empty, .halt preparation⟩
+      exact ⟨.empty, .halt preparation (Bool.eq_false_iff.mpr ‹_›)⟩
   · rename_i first preparation
     split at h
     · rename_i target
