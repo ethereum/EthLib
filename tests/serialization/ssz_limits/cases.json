@@ -1,0 +1,1372 @@
+[
+ {
+  "name": "list_uint64_2p29/empty",
+  "kind": "list",
+  "width": 8,
+  "limit": 536870912,
+  "limit_reaches": "2^32 bytes",
+  "value": [],
+  "serialized": "0x",
+  "root": "0xfcada1ce97f6629a9b31bd46dc9824a4ee18e91bb76243e16387616176e1d899"
+ },
+ {
+  "name": "list_uint64_2p29/two",
+  "kind": "list",
+  "width": 8,
+  "limit": 536870912,
+  "limit_reaches": "2^32 bytes",
+  "value": [
+   1,
+   18446744073709551615
+  ],
+  "serialized": "0x0100000000000000ffffffffffffffff",
+  "root": "0xefbe11c9c69807162e11db297d6dd644be53e5b5b712e54c3e17b3379b2db86c"
+ },
+ {
+  "name": "list_uint64_2p29/three",
+  "kind": "list",
+  "width": 8,
+  "limit": 536870912,
+  "limit_reaches": "2^32 bytes",
+  "value": [
+   0,
+   9007199254740993,
+   18446744073709551615
+  ],
+  "serialized": "0x00000000000000000100000000002000ffffffffffffffff",
+  "root": "0x9300e6f706e1869ff6e457a826e375038fbdaa2092222b853e09a0598d8f0e2d"
+ },
+ {
+  "name": "list_uint64_2p29/invalid_one_byte_more",
+  "kind": "list",
+  "width": 8,
+  "limit": 536870912,
+  "limit_reaches": "2^32 bytes",
+  "value": null,
+  "serialized": "0x0000000000000000000000000000000000",
+  "root": null,
+  "reason": "partial_element"
+ },
+ {
+  "name": "list_uint64_2p29/invalid_one_byte_less",
+  "kind": "list",
+  "width": 8,
+  "limit": 536870912,
+  "limit_reaches": "2^32 bytes",
+  "value": null,
+  "serialized": "0x00000000000000",
+  "root": null,
+  "reason": "partial_element"
+ },
+ {
+  "name": "list_uint64_2p29_plus1/empty",
+  "kind": "list",
+  "width": 8,
+  "limit": 536870913,
+  "limit_reaches": "2^32 + 8 bytes",
+  "value": [],
+  "serialized": "0x",
+  "root": "0x5861fe5fd8261a2c806773eebef6b77a0a17c1bfb8fe13eca3922b4a9f779c1b"
+ },
+ {
+  "name": "list_uint64_2p29_plus1/two",
+  "kind": "list",
+  "width": 8,
+  "limit": 536870913,
+  "limit_reaches": "2^32 + 8 bytes",
+  "value": [
+   1,
+   18446744073709551615
+  ],
+  "serialized": "0x0100000000000000ffffffffffffffff",
+  "root": "0x40d0c2e7088e79442cd7c9731a1ce4a72e867a4672f7de84b53f765d618beb42"
+ },
+ {
+  "name": "list_uint64_2p29_plus1/three",
+  "kind": "list",
+  "width": 8,
+  "limit": 536870913,
+  "limit_reaches": "2^32 + 8 bytes",
+  "value": [
+   0,
+   9007199254740993,
+   18446744073709551615
+  ],
+  "serialized": "0x00000000000000000100000000002000ffffffffffffffff",
+  "root": "0x55537d83f2f18f65a3c85ea09f6259e2faf7b85d158ea74bef6d606a48f60c71"
+ },
+ {
+  "name": "list_uint64_2p29_plus1/invalid_one_byte_more",
+  "kind": "list",
+  "width": 8,
+  "limit": 536870913,
+  "limit_reaches": "2^32 + 8 bytes",
+  "value": null,
+  "serialized": "0x0000000000000000000000000000000000",
+  "root": null,
+  "reason": "partial_element"
+ },
+ {
+  "name": "list_uint64_2p29_plus1/invalid_one_byte_less",
+  "kind": "list",
+  "width": 8,
+  "limit": 536870913,
+  "limit_reaches": "2^32 + 8 bytes",
+  "value": null,
+  "serialized": "0x00000000000000",
+  "root": null,
+  "reason": "partial_element"
+ },
+ {
+  "name": "list_uint64_2p61/empty",
+  "kind": "list",
+  "width": 8,
+  "limit": 2305843009213693952,
+  "limit_reaches": "2^64 bytes",
+  "value": [],
+  "serialized": "0x",
+  "root": "0xe1333deae0abf892b5d30616076d9219b4580ee1c848e0bc95d82e42a820b4ce"
+ },
+ {
+  "name": "list_uint64_2p61/two",
+  "kind": "list",
+  "width": 8,
+  "limit": 2305843009213693952,
+  "limit_reaches": "2^64 bytes",
+  "value": [
+   1,
+   18446744073709551615
+  ],
+  "serialized": "0x0100000000000000ffffffffffffffff",
+  "root": "0x667acebbb58ee067930da14bbe8db39d180485f957200d7d3457d11492642787"
+ },
+ {
+  "name": "list_uint64_2p61/three",
+  "kind": "list",
+  "width": 8,
+  "limit": 2305843009213693952,
+  "limit_reaches": "2^64 bytes",
+  "value": [
+   0,
+   9007199254740993,
+   18446744073709551615
+  ],
+  "serialized": "0x00000000000000000100000000002000ffffffffffffffff",
+  "root": "0xeccef92710c89d4c3f1f0fe3cc9d7b3310f817a8707adf5d1a7de7834f84ce44"
+ },
+ {
+  "name": "list_uint64_2p61/invalid_one_byte_more",
+  "kind": "list",
+  "width": 8,
+  "limit": 2305843009213693952,
+  "limit_reaches": "2^64 bytes",
+  "value": null,
+  "serialized": "0x0000000000000000000000000000000000",
+  "root": null,
+  "reason": "partial_element"
+ },
+ {
+  "name": "list_uint64_2p61/invalid_one_byte_less",
+  "kind": "list",
+  "width": 8,
+  "limit": 2305843009213693952,
+  "limit_reaches": "2^64 bytes",
+  "value": null,
+  "serialized": "0x00000000000000",
+  "root": null,
+  "reason": "partial_element"
+ },
+ {
+  "name": "list_uint64_2p61_plus1/empty",
+  "kind": "list",
+  "width": 8,
+  "limit": 2305843009213693953,
+  "limit_reaches": "2^64 + 8 bytes",
+  "value": [],
+  "serialized": "0x",
+  "root": "0xeff5c2fbf0bb2aca3d378ee35a0a449a1558caef76dafbf75244cf2d5319f94c"
+ },
+ {
+  "name": "list_uint64_2p61_plus1/two",
+  "kind": "list",
+  "width": 8,
+  "limit": 2305843009213693953,
+  "limit_reaches": "2^64 + 8 bytes",
+  "value": [
+   1,
+   18446744073709551615
+  ],
+  "serialized": "0x0100000000000000ffffffffffffffff",
+  "root": "0xea1c0b73d24e2146fd0f70f5e27f0d9cb4f0ccaf39f058805d558ab5821c4b43"
+ },
+ {
+  "name": "list_uint64_2p61_plus1/three",
+  "kind": "list",
+  "width": 8,
+  "limit": 2305843009213693953,
+  "limit_reaches": "2^64 + 8 bytes",
+  "value": [
+   0,
+   9007199254740993,
+   18446744073709551615
+  ],
+  "serialized": "0x00000000000000000100000000002000ffffffffffffffff",
+  "root": "0x6007c55427ea6ea1dc9275848a491cbc1ee2d34cebb2008dcfe4d934f751ffdc"
+ },
+ {
+  "name": "list_uint64_2p61_plus1/invalid_one_byte_more",
+  "kind": "list",
+  "width": 8,
+  "limit": 2305843009213693953,
+  "limit_reaches": "2^64 + 8 bytes",
+  "value": null,
+  "serialized": "0x0000000000000000000000000000000000",
+  "root": null,
+  "reason": "partial_element"
+ },
+ {
+  "name": "list_uint64_2p61_plus1/invalid_one_byte_less",
+  "kind": "list",
+  "width": 8,
+  "limit": 2305843009213693953,
+  "limit_reaches": "2^64 + 8 bytes",
+  "value": null,
+  "serialized": "0x00000000000000",
+  "root": null,
+  "reason": "partial_element"
+ },
+ {
+  "name": "list_uint8_2p32/empty",
+  "kind": "list",
+  "width": 1,
+  "limit": 4294967296,
+  "limit_reaches": "2^32 bytes",
+  "value": [],
+  "serialized": "0x",
+  "root": "0xfcada1ce97f6629a9b31bd46dc9824a4ee18e91bb76243e16387616176e1d899"
+ },
+ {
+  "name": "list_uint8_2p32/two",
+  "kind": "list",
+  "width": 1,
+  "limit": 4294967296,
+  "limit_reaches": "2^32 bytes",
+  "value": [
+   1,
+   255
+  ],
+  "serialized": "0x01ff",
+  "root": "0x6ea1c28a6174c3130479037a24b749d71eac7dd323efc66e7b2ab1ffc2be3bd2"
+ },
+ {
+  "name": "list_uint8_2p32/three",
+  "kind": "list",
+  "width": 1,
+  "limit": 4294967296,
+  "limit_reaches": "2^32 bytes",
+  "value": [
+   0,
+   7,
+   255
+  ],
+  "serialized": "0x0007ff",
+  "root": "0x715208c2f552b5a981b99cfdaf7f389352a0e263c360eed8d830e2886e8650a0"
+ },
+ {
+  "name": "list_uint8_2p37/empty",
+  "kind": "list",
+  "width": 1,
+  "limit": 137438953472,
+  "limit_reaches": "2^32 chunks",
+  "value": [],
+  "serialized": "0x",
+  "root": "0xd70a234731285c6804c2a4f56711ddb8c82c99740f207854891028af34e27e5e"
+ },
+ {
+  "name": "list_uint8_2p37/two",
+  "kind": "list",
+  "width": 1,
+  "limit": 137438953472,
+  "limit_reaches": "2^32 chunks",
+  "value": [
+   1,
+   255
+  ],
+  "serialized": "0x01ff",
+  "root": "0x8e45b170c042c64bce01292a46e70f12b59443cf34e01996a146f6c5cabf37ca"
+ },
+ {
+  "name": "list_uint8_2p37/three",
+  "kind": "list",
+  "width": 1,
+  "limit": 137438953472,
+  "limit_reaches": "2^32 chunks",
+  "value": [
+   0,
+   7,
+   255
+  ],
+  "serialized": "0x0007ff",
+  "root": "0x1a6612b3752be97584b9502a173967d004cb968439036361f6e18e9bad8bdddf"
+ },
+ {
+  "name": "list_uint256_2p32/empty",
+  "kind": "list",
+  "width": 32,
+  "limit": 4294967296,
+  "limit_reaches": "2^32 chunks",
+  "value": [],
+  "serialized": "0x",
+  "root": "0xd70a234731285c6804c2a4f56711ddb8c82c99740f207854891028af34e27e5e"
+ },
+ {
+  "name": "list_uint256_2p32/two",
+  "kind": "list",
+  "width": 32,
+  "limit": 4294967296,
+  "limit_reaches": "2^32 chunks",
+  "value": [
+   1,
+   115792089237316195423570985008687907853269984665640564039457584007913129639935
+  ],
+  "serialized": "0x0100000000000000000000000000000000000000000000000000000000000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  "root": "0x485f2cb2a1e7174a625424ddbd33aa5d2892c9268b73589b7e2b4c97ea560818"
+ },
+ {
+  "name": "list_uint256_2p32/three",
+  "kind": "list",
+  "width": 32,
+  "limit": 4294967296,
+  "limit_reaches": "2^32 chunks",
+  "value": [
+   0,
+   9007199254740993,
+   115792089237316195423570985008687907853269984665640564039457584007913129639935
+  ],
+  "serialized": "0x00000000000000000000000000000000000000000000000000000000000000000100000000002000000000000000000000000000000000000000000000000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  "root": "0xe72e979dceecb4cbd25c9b3389697ad7431481de9f558fc3d90ece13de911c18"
+ },
+ {
+  "name": "list_uint256_2p32/invalid_one_byte_more",
+  "kind": "list",
+  "width": 32,
+  "limit": 4294967296,
+  "limit_reaches": "2^32 chunks",
+  "value": null,
+  "serialized": "0x0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+  "root": null,
+  "reason": "partial_element"
+ },
+ {
+  "name": "list_uint256_2p32/invalid_one_byte_less",
+  "kind": "list",
+  "width": 32,
+  "limit": 4294967296,
+  "limit_reaches": "2^32 chunks",
+  "value": null,
+  "serialized": "0x00000000000000000000000000000000000000000000000000000000000000",
+  "root": null,
+  "reason": "partial_element"
+ },
+ {
+  "name": "list_uint256_2p59/empty",
+  "kind": "list",
+  "width": 32,
+  "limit": 576460752303423488,
+  "limit_reaches": "2^64 bytes",
+  "value": [],
+  "serialized": "0x",
+  "root": "0xe1333deae0abf892b5d30616076d9219b4580ee1c848e0bc95d82e42a820b4ce"
+ },
+ {
+  "name": "list_uint256_2p59/two",
+  "kind": "list",
+  "width": 32,
+  "limit": 576460752303423488,
+  "limit_reaches": "2^64 bytes",
+  "value": [
+   1,
+   115792089237316195423570985008687907853269984665640564039457584007913129639935
+  ],
+  "serialized": "0x0100000000000000000000000000000000000000000000000000000000000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  "root": "0x6d87057acdbbc8ee6193d30e02602ab3bfeae10b796bee026b7d2db77ad1d3b7"
+ },
+ {
+  "name": "list_uint256_2p59/three",
+  "kind": "list",
+  "width": 32,
+  "limit": 576460752303423488,
+  "limit_reaches": "2^64 bytes",
+  "value": [
+   0,
+   9007199254740993,
+   115792089237316195423570985008687907853269984665640564039457584007913129639935
+  ],
+  "serialized": "0x00000000000000000000000000000000000000000000000000000000000000000100000000002000000000000000000000000000000000000000000000000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  "root": "0x4aa13172f79cac1724cedee004f7fad0b922377ab1f21da9e2109033db3bd359"
+ },
+ {
+  "name": "list_uint256_2p59/invalid_one_byte_more",
+  "kind": "list",
+  "width": 32,
+  "limit": 576460752303423488,
+  "limit_reaches": "2^64 bytes",
+  "value": null,
+  "serialized": "0x0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+  "root": null,
+  "reason": "partial_element"
+ },
+ {
+  "name": "list_uint256_2p59/invalid_one_byte_less",
+  "kind": "list",
+  "width": 32,
+  "limit": 576460752303423488,
+  "limit_reaches": "2^64 bytes",
+  "value": null,
+  "serialized": "0x00000000000000000000000000000000000000000000000000000000000000",
+  "root": null,
+  "reason": "partial_element"
+ },
+ {
+  "name": "list_uint256_2p64/empty",
+  "kind": "list",
+  "width": 32,
+  "limit": 18446744073709551616,
+  "limit_reaches": "2^64 chunks",
+  "value": [],
+  "serialized": "0x",
+  "root": "0x027661a79b28f0737159d10f402568111e12d3abdc6fe496260a38b7f77979ba"
+ },
+ {
+  "name": "list_uint256_2p64/two",
+  "kind": "list",
+  "width": 32,
+  "limit": 18446744073709551616,
+  "limit_reaches": "2^64 chunks",
+  "value": [
+   1,
+   115792089237316195423570985008687907853269984665640564039457584007913129639935
+  ],
+  "serialized": "0x0100000000000000000000000000000000000000000000000000000000000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  "root": "0xbebb4fc848e09ecc9984a51d31482163550e1635bc58e748db962f2e8dcfc0ce"
+ },
+ {
+  "name": "list_uint256_2p64/three",
+  "kind": "list",
+  "width": 32,
+  "limit": 18446744073709551616,
+  "limit_reaches": "2^64 chunks",
+  "value": [
+   0,
+   9007199254740993,
+   115792089237316195423570985008687907853269984665640564039457584007913129639935
+  ],
+  "serialized": "0x00000000000000000000000000000000000000000000000000000000000000000100000000002000000000000000000000000000000000000000000000000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  "root": "0xa1ea85a54718417767ef3abaaebd400237bd7338e7c91227681230be31e6ac07"
+ },
+ {
+  "name": "list_uint256_2p64/invalid_one_byte_more",
+  "kind": "list",
+  "width": 32,
+  "limit": 18446744073709551616,
+  "limit_reaches": "2^64 chunks",
+  "value": null,
+  "serialized": "0x0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+  "root": null,
+  "reason": "partial_element"
+ },
+ {
+  "name": "list_uint256_2p64/invalid_one_byte_less",
+  "kind": "list",
+  "width": 32,
+  "limit": 18446744073709551616,
+  "limit_reaches": "2^64 chunks",
+  "value": null,
+  "serialized": "0x00000000000000000000000000000000000000000000000000000000000000",
+  "root": null,
+  "reason": "partial_element"
+ },
+ {
+  "name": "byte_list_2p32/empty",
+  "kind": "byte_list",
+  "width": 1,
+  "limit": 4294967296,
+  "limit_reaches": "2^32 bytes",
+  "value": [],
+  "serialized": "0x",
+  "root": "0xfcada1ce97f6629a9b31bd46dc9824a4ee18e91bb76243e16387616176e1d899"
+ },
+ {
+  "name": "byte_list_2p32/two",
+  "kind": "byte_list",
+  "width": 1,
+  "limit": 4294967296,
+  "limit_reaches": "2^32 bytes",
+  "value": [
+   1,
+   255
+  ],
+  "serialized": "0x01ff",
+  "root": "0x6ea1c28a6174c3130479037a24b749d71eac7dd323efc66e7b2ab1ffc2be3bd2"
+ },
+ {
+  "name": "byte_list_2p32/three",
+  "kind": "byte_list",
+  "width": 1,
+  "limit": 4294967296,
+  "limit_reaches": "2^32 bytes",
+  "value": [
+   0,
+   7,
+   255
+  ],
+  "serialized": "0x0007ff",
+  "root": "0x715208c2f552b5a981b99cfdaf7f389352a0e263c360eed8d830e2886e8650a0"
+ },
+ {
+  "name": "byte_list_2p64/empty",
+  "kind": "byte_list",
+  "width": 1,
+  "limit": 18446744073709551616,
+  "limit_reaches": "2^64 bytes",
+  "value": [],
+  "serialized": "0x",
+  "root": "0xe1333deae0abf892b5d30616076d9219b4580ee1c848e0bc95d82e42a820b4ce"
+ },
+ {
+  "name": "byte_list_2p64/two",
+  "kind": "byte_list",
+  "width": 1,
+  "limit": 18446744073709551616,
+  "limit_reaches": "2^64 bytes",
+  "value": [
+   1,
+   255
+  ],
+  "serialized": "0x01ff",
+  "root": "0xc0ada8cc9d7a7177dd4409817542ad6db6c82b62bb3a6d7a4200247a827a47e5"
+ },
+ {
+  "name": "byte_list_2p64/three",
+  "kind": "byte_list",
+  "width": 1,
+  "limit": 18446744073709551616,
+  "limit_reaches": "2^64 bytes",
+  "value": [
+   0,
+   7,
+   255
+  ],
+  "serialized": "0x0007ff",
+  "root": "0xee0d53a1feb48c9c6ea5b6bc19f02515f19002a04c56844c9c6ae19e66e574c4"
+ },
+ {
+  "name": "byte_list_2p69/empty",
+  "kind": "byte_list",
+  "width": 1,
+  "limit": 590295810358705651712,
+  "limit_reaches": "2^64 chunks",
+  "value": [],
+  "serialized": "0x",
+  "root": "0x027661a79b28f0737159d10f402568111e12d3abdc6fe496260a38b7f77979ba"
+ },
+ {
+  "name": "byte_list_2p69/two",
+  "kind": "byte_list",
+  "width": 1,
+  "limit": 590295810358705651712,
+  "limit_reaches": "2^64 chunks",
+  "value": [
+   1,
+   255
+  ],
+  "serialized": "0x01ff",
+  "root": "0x11ec289a46c4c6e1b146edf24ea0b091d222b45473958acbe81054ab4fae77ca"
+ },
+ {
+  "name": "byte_list_2p69/three",
+  "kind": "byte_list",
+  "width": 1,
+  "limit": 590295810358705651712,
+  "limit_reaches": "2^64 chunks",
+  "value": [
+   0,
+   7,
+   255
+  ],
+  "serialized": "0x0007ff",
+  "root": "0x8fdfe06111c5b28d3e2efa978f892b7341b18eb9839f905599717c42f798781a"
+ },
+ {
+  "name": "bitlist_2p35/empty",
+  "kind": "bitlist",
+  "width": 0,
+  "limit": 34359738368,
+  "limit_reaches": "2^32 bytes",
+  "value": [],
+  "serialized": "0x01",
+  "root": "0xfcada1ce97f6629a9b31bd46dc9824a4ee18e91bb76243e16387616176e1d899"
+ },
+ {
+  "name": "bitlist_2p35/three",
+  "kind": "bitlist",
+  "width": 0,
+  "limit": 34359738368,
+  "limit_reaches": "2^32 bytes",
+  "value": [
+   true,
+   false,
+   true
+  ],
+  "serialized": "0x0d",
+  "root": "0xd31cb8cad6d77b46d43fb2f516ef0085a66503cfbee9c5fd4925bbb4752486cf"
+ },
+ {
+  "name": "bitlist_2p35/nine",
+  "kind": "bitlist",
+  "width": 0,
+  "limit": 34359738368,
+  "limit_reaches": "2^32 bytes",
+  "value": [
+   true,
+   true,
+   true,
+   true,
+   true,
+   true,
+   true,
+   true,
+   true
+  ],
+  "serialized": "0xff03",
+  "root": "0xe3ae6d5dd2e47276f19f7bdc3179ef5f1bc5b8c6fee63a86691d0d0368648f31"
+ },
+ {
+  "name": "bitlist_2p35/invalid_no_bytes",
+  "kind": "bitlist",
+  "width": 0,
+  "limit": 34359738368,
+  "limit_reaches": "2^32 bytes",
+  "value": null,
+  "serialized": "0x",
+  "root": null,
+  "reason": "empty"
+ },
+ {
+  "name": "bitlist_2p35/invalid_zero_last_byte",
+  "kind": "bitlist",
+  "width": 0,
+  "limit": 34359738368,
+  "limit_reaches": "2^32 bytes",
+  "value": null,
+  "serialized": "0x0500",
+  "root": null,
+  "reason": "no_delimiter"
+ },
+ {
+  "name": "bitlist_2p40/empty",
+  "kind": "bitlist",
+  "width": 0,
+  "limit": 1099511627776,
+  "limit_reaches": "2^32 chunks",
+  "value": [],
+  "serialized": "0x01",
+  "root": "0xd70a234731285c6804c2a4f56711ddb8c82c99740f207854891028af34e27e5e"
+ },
+ {
+  "name": "bitlist_2p40/three",
+  "kind": "bitlist",
+  "width": 0,
+  "limit": 1099511627776,
+  "limit_reaches": "2^32 chunks",
+  "value": [
+   true,
+   false,
+   true
+  ],
+  "serialized": "0x0d",
+  "root": "0x109a52257c2a39bab0818a345b19d1cd06a61b827677d2d872db1d6b045a887f"
+ },
+ {
+  "name": "bitlist_2p40/nine",
+  "kind": "bitlist",
+  "width": 0,
+  "limit": 1099511627776,
+  "limit_reaches": "2^32 chunks",
+  "value": [
+   true,
+   true,
+   true,
+   true,
+   true,
+   true,
+   true,
+   true,
+   true
+  ],
+  "serialized": "0xff03",
+  "root": "0x3a36f71854a87b7e5cd1b05fea2ad0dcd023192e7035850c870fc9af51fc882e"
+ },
+ {
+  "name": "bitlist_2p40/invalid_no_bytes",
+  "kind": "bitlist",
+  "width": 0,
+  "limit": 1099511627776,
+  "limit_reaches": "2^32 chunks",
+  "value": null,
+  "serialized": "0x",
+  "root": null,
+  "reason": "empty"
+ },
+ {
+  "name": "bitlist_2p40/invalid_zero_last_byte",
+  "kind": "bitlist",
+  "width": 0,
+  "limit": 1099511627776,
+  "limit_reaches": "2^32 chunks",
+  "value": null,
+  "serialized": "0x0500",
+  "root": null,
+  "reason": "no_delimiter"
+ },
+ {
+  "name": "bitlist_2p67/empty",
+  "kind": "bitlist",
+  "width": 0,
+  "limit": 147573952589676412928,
+  "limit_reaches": "2^64 bytes",
+  "value": [],
+  "serialized": "0x01",
+  "root": "0xe1333deae0abf892b5d30616076d9219b4580ee1c848e0bc95d82e42a820b4ce"
+ },
+ {
+  "name": "bitlist_2p67/three",
+  "kind": "bitlist",
+  "width": 0,
+  "limit": 147573952589676412928,
+  "limit_reaches": "2^64 bytes",
+  "value": [
+   true,
+   false,
+   true
+  ],
+  "serialized": "0x0d",
+  "root": "0x7c52792ea65cc75c3f1e8ba578776f89f0b4f2fe5b0f903c9306e92cf842b553"
+ },
+ {
+  "name": "bitlist_2p67/nine",
+  "kind": "bitlist",
+  "width": 0,
+  "limit": 147573952589676412928,
+  "limit_reaches": "2^64 bytes",
+  "value": [
+   true,
+   true,
+   true,
+   true,
+   true,
+   true,
+   true,
+   true,
+   true
+  ],
+  "serialized": "0xff03",
+  "root": "0x746cfb920050b86d9c161a519db47eb7cc7ba8980d51ae198bd8ae9277b9eb43"
+ },
+ {
+  "name": "bitlist_2p67/invalid_no_bytes",
+  "kind": "bitlist",
+  "width": 0,
+  "limit": 147573952589676412928,
+  "limit_reaches": "2^64 bytes",
+  "value": null,
+  "serialized": "0x",
+  "root": null,
+  "reason": "empty"
+ },
+ {
+  "name": "bitlist_2p67/invalid_zero_last_byte",
+  "kind": "bitlist",
+  "width": 0,
+  "limit": 147573952589676412928,
+  "limit_reaches": "2^64 bytes",
+  "value": null,
+  "serialized": "0x0500",
+  "root": null,
+  "reason": "no_delimiter"
+ },
+ {
+  "name": "bitlist_2p72/empty",
+  "kind": "bitlist",
+  "width": 0,
+  "limit": 4722366482869645213696,
+  "limit_reaches": "2^64 chunks",
+  "value": [],
+  "serialized": "0x01",
+  "root": "0x027661a79b28f0737159d10f402568111e12d3abdc6fe496260a38b7f77979ba"
+ },
+ {
+  "name": "bitlist_2p72/three",
+  "kind": "bitlist",
+  "width": 0,
+  "limit": 4722366482869645213696,
+  "limit_reaches": "2^64 chunks",
+  "value": [
+   true,
+   false,
+   true
+  ],
+  "serialized": "0x0d",
+  "root": "0x0994f544e5f088db8ed083b8e4ece2ff761c3c292dc2d03042fa8587d24440ce"
+ },
+ {
+  "name": "bitlist_2p72/nine",
+  "kind": "bitlist",
+  "width": 0,
+  "limit": 4722366482869645213696,
+  "limit_reaches": "2^64 chunks",
+  "value": [
+   true,
+   true,
+   true,
+   true,
+   true,
+   true,
+   true,
+   true,
+   true
+  ],
+  "serialized": "0xff03",
+  "root": "0xe2da260187bb7fb4429a71b206530492b897870f1031e444cc0d9b0c33bb6124"
+ },
+ {
+  "name": "bitlist_2p72/invalid_no_bytes",
+  "kind": "bitlist",
+  "width": 0,
+  "limit": 4722366482869645213696,
+  "limit_reaches": "2^64 chunks",
+  "value": null,
+  "serialized": "0x",
+  "root": null,
+  "reason": "empty"
+ },
+ {
+  "name": "bitlist_2p72/invalid_zero_last_byte",
+  "kind": "bitlist",
+  "width": 0,
+  "limit": 4722366482869645213696,
+  "limit_reaches": "2^64 chunks",
+  "value": null,
+  "serialized": "0x0500",
+  "root": null,
+  "reason": "no_delimiter"
+ },
+ {
+  "name": "list_uint64_2p64_minus1/empty",
+  "kind": "list",
+  "width": 8,
+  "limit": 18446744073709551615,
+  "limit_reaches": "the largest 64-bit limit",
+  "value": [],
+  "serialized": "0x",
+  "root": "0x80ed00af0ef59e2292c2b3f168ad330f5731e323e8e4873b623459320076d51b"
+ },
+ {
+  "name": "list_uint64_2p64_minus1/two",
+  "kind": "list",
+  "width": 8,
+  "limit": 18446744073709551615,
+  "limit_reaches": "the largest 64-bit limit",
+  "value": [
+   1,
+   18446744073709551615
+  ],
+  "serialized": "0x0100000000000000ffffffffffffffff",
+  "root": "0x0101ea0ebe1c498a8575124d16d37810bacd2da64b3b9c269abb289cae2cdbf5"
+ },
+ {
+  "name": "list_uint64_2p64_minus1/three",
+  "kind": "list",
+  "width": 8,
+  "limit": 18446744073709551615,
+  "limit_reaches": "the largest 64-bit limit",
+  "value": [
+   0,
+   9007199254740993,
+   18446744073709551615
+  ],
+  "serialized": "0x00000000000000000100000000002000ffffffffffffffff",
+  "root": "0x56292e1ebd6f7034cc9dc99d32aa9596a1701539f548af5cffd72eaaae9550ab"
+ },
+ {
+  "name": "list_uint64_2p64_minus1/invalid_one_byte_more",
+  "kind": "list",
+  "width": 8,
+  "limit": 18446744073709551615,
+  "limit_reaches": "the largest 64-bit limit",
+  "value": null,
+  "serialized": "0x0000000000000000000000000000000000",
+  "root": null,
+  "reason": "partial_element"
+ },
+ {
+  "name": "list_uint64_2p64_minus1/invalid_one_byte_less",
+  "kind": "list",
+  "width": 8,
+  "limit": 18446744073709551615,
+  "limit_reaches": "the largest 64-bit limit",
+  "value": null,
+  "serialized": "0x00000000000000",
+  "root": null,
+  "reason": "partial_element"
+ },
+ {
+  "name": "list_uint256_2p32_minus1/empty",
+  "kind": "list",
+  "width": 32,
+  "limit": 4294967295,
+  "limit_reaches": "2^32 - 1 chunks",
+  "value": [],
+  "serialized": "0x",
+  "root": "0xd70a234731285c6804c2a4f56711ddb8c82c99740f207854891028af34e27e5e"
+ },
+ {
+  "name": "list_uint256_2p32_minus1/two",
+  "kind": "list",
+  "width": 32,
+  "limit": 4294967295,
+  "limit_reaches": "2^32 - 1 chunks",
+  "value": [
+   1,
+   115792089237316195423570985008687907853269984665640564039457584007913129639935
+  ],
+  "serialized": "0x0100000000000000000000000000000000000000000000000000000000000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  "root": "0x485f2cb2a1e7174a625424ddbd33aa5d2892c9268b73589b7e2b4c97ea560818"
+ },
+ {
+  "name": "list_uint256_2p32_minus1/three",
+  "kind": "list",
+  "width": 32,
+  "limit": 4294967295,
+  "limit_reaches": "2^32 - 1 chunks",
+  "value": [
+   0,
+   9007199254740993,
+   115792089237316195423570985008687907853269984665640564039457584007913129639935
+  ],
+  "serialized": "0x00000000000000000000000000000000000000000000000000000000000000000100000000002000000000000000000000000000000000000000000000000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  "root": "0xe72e979dceecb4cbd25c9b3389697ad7431481de9f558fc3d90ece13de911c18"
+ },
+ {
+  "name": "list_uint256_2p32_minus1/invalid_one_byte_more",
+  "kind": "list",
+  "width": 32,
+  "limit": 4294967295,
+  "limit_reaches": "2^32 - 1 chunks",
+  "value": null,
+  "serialized": "0x0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+  "root": null,
+  "reason": "partial_element"
+ },
+ {
+  "name": "list_uint256_2p32_minus1/invalid_one_byte_less",
+  "kind": "list",
+  "width": 32,
+  "limit": 4294967295,
+  "limit_reaches": "2^32 - 1 chunks",
+  "value": null,
+  "serialized": "0x00000000000000000000000000000000000000000000000000000000000000",
+  "root": null,
+  "reason": "partial_element"
+ },
+ {
+  "name": "list_uint256_2p32_plus1/empty",
+  "kind": "list",
+  "width": 32,
+  "limit": 4294967297,
+  "limit_reaches": "2^32 + 1 chunks",
+  "value": [],
+  "serialized": "0x",
+  "root": "0x68fc7ab818e3792721a94180252a86ef993136c76b6af449c3f086da80145cce"
+ },
+ {
+  "name": "list_uint256_2p32_plus1/two",
+  "kind": "list",
+  "width": 32,
+  "limit": 4294967297,
+  "limit_reaches": "2^32 + 1 chunks",
+  "value": [
+   1,
+   115792089237316195423570985008687907853269984665640564039457584007913129639935
+  ],
+  "serialized": "0x0100000000000000000000000000000000000000000000000000000000000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  "root": "0x129965ccbcab2df5a0c40fc5d2c3a23a18391e30d2633b213c133b445bf6943f"
+ },
+ {
+  "name": "list_uint256_2p32_plus1/three",
+  "kind": "list",
+  "width": 32,
+  "limit": 4294967297,
+  "limit_reaches": "2^32 + 1 chunks",
+  "value": [
+   0,
+   9007199254740993,
+   115792089237316195423570985008687907853269984665640564039457584007913129639935
+  ],
+  "serialized": "0x00000000000000000000000000000000000000000000000000000000000000000100000000002000000000000000000000000000000000000000000000000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  "root": "0x8975d1060b97d5eb4da496646ef774342f1e0c385e3feb90da3fe290f1623ff4"
+ },
+ {
+  "name": "list_uint256_2p32_plus1/invalid_one_byte_more",
+  "kind": "list",
+  "width": 32,
+  "limit": 4294967297,
+  "limit_reaches": "2^32 + 1 chunks",
+  "value": null,
+  "serialized": "0x0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+  "root": null,
+  "reason": "partial_element"
+ },
+ {
+  "name": "list_uint256_2p32_plus1/invalid_one_byte_less",
+  "kind": "list",
+  "width": 32,
+  "limit": 4294967297,
+  "limit_reaches": "2^32 + 1 chunks",
+  "value": null,
+  "serialized": "0x00000000000000000000000000000000000000000000000000000000000000",
+  "root": null,
+  "reason": "partial_element"
+ },
+ {
+  "name": "list_uint256_2p64_minus1/empty",
+  "kind": "list",
+  "width": 32,
+  "limit": 18446744073709551615,
+  "limit_reaches": "2^64 - 1 chunks",
+  "value": [],
+  "serialized": "0x",
+  "root": "0x027661a79b28f0737159d10f402568111e12d3abdc6fe496260a38b7f77979ba"
+ },
+ {
+  "name": "list_uint256_2p64_minus1/two",
+  "kind": "list",
+  "width": 32,
+  "limit": 18446744073709551615,
+  "limit_reaches": "2^64 - 1 chunks",
+  "value": [
+   1,
+   115792089237316195423570985008687907853269984665640564039457584007913129639935
+  ],
+  "serialized": "0x0100000000000000000000000000000000000000000000000000000000000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  "root": "0xbebb4fc848e09ecc9984a51d31482163550e1635bc58e748db962f2e8dcfc0ce"
+ },
+ {
+  "name": "list_uint256_2p64_minus1/three",
+  "kind": "list",
+  "width": 32,
+  "limit": 18446744073709551615,
+  "limit_reaches": "2^64 - 1 chunks",
+  "value": [
+   0,
+   9007199254740993,
+   115792089237316195423570985008687907853269984665640564039457584007913129639935
+  ],
+  "serialized": "0x00000000000000000000000000000000000000000000000000000000000000000100000000002000000000000000000000000000000000000000000000000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  "root": "0xa1ea85a54718417767ef3abaaebd400237bd7338e7c91227681230be31e6ac07"
+ },
+ {
+  "name": "list_uint256_2p64_minus1/invalid_one_byte_more",
+  "kind": "list",
+  "width": 32,
+  "limit": 18446744073709551615,
+  "limit_reaches": "2^64 - 1 chunks",
+  "value": null,
+  "serialized": "0x0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+  "root": null,
+  "reason": "partial_element"
+ },
+ {
+  "name": "list_uint256_2p64_minus1/invalid_one_byte_less",
+  "kind": "list",
+  "width": 32,
+  "limit": 18446744073709551615,
+  "limit_reaches": "2^64 - 1 chunks",
+  "value": null,
+  "serialized": "0x00000000000000000000000000000000000000000000000000000000000000",
+  "root": null,
+  "reason": "partial_element"
+ },
+ {
+  "name": "byte_list_2p32_minus1/empty",
+  "kind": "byte_list",
+  "width": 1,
+  "limit": 4294967295,
+  "limit_reaches": "2^32 - 1 bytes",
+  "value": [],
+  "serialized": "0x",
+  "root": "0xfcada1ce97f6629a9b31bd46dc9824a4ee18e91bb76243e16387616176e1d899"
+ },
+ {
+  "name": "byte_list_2p32_minus1/two",
+  "kind": "byte_list",
+  "width": 1,
+  "limit": 4294967295,
+  "limit_reaches": "2^32 - 1 bytes",
+  "value": [
+   1,
+   255
+  ],
+  "serialized": "0x01ff",
+  "root": "0x6ea1c28a6174c3130479037a24b749d71eac7dd323efc66e7b2ab1ffc2be3bd2"
+ },
+ {
+  "name": "byte_list_2p32_minus1/three",
+  "kind": "byte_list",
+  "width": 1,
+  "limit": 4294967295,
+  "limit_reaches": "2^32 - 1 bytes",
+  "value": [
+   0,
+   7,
+   255
+  ],
+  "serialized": "0x0007ff",
+  "root": "0x715208c2f552b5a981b99cfdaf7f389352a0e263c360eed8d830e2886e8650a0"
+ },
+ {
+  "name": "byte_list_2p64_minus1/empty",
+  "kind": "byte_list",
+  "width": 1,
+  "limit": 18446744073709551615,
+  "limit_reaches": "2^64 - 1 bytes",
+  "value": [],
+  "serialized": "0x",
+  "root": "0xe1333deae0abf892b5d30616076d9219b4580ee1c848e0bc95d82e42a820b4ce"
+ },
+ {
+  "name": "byte_list_2p64_minus1/two",
+  "kind": "byte_list",
+  "width": 1,
+  "limit": 18446744073709551615,
+  "limit_reaches": "2^64 - 1 bytes",
+  "value": [
+   1,
+   255
+  ],
+  "serialized": "0x01ff",
+  "root": "0xc0ada8cc9d7a7177dd4409817542ad6db6c82b62bb3a6d7a4200247a827a47e5"
+ },
+ {
+  "name": "byte_list_2p64_minus1/three",
+  "kind": "byte_list",
+  "width": 1,
+  "limit": 18446744073709551615,
+  "limit_reaches": "2^64 - 1 bytes",
+  "value": [
+   0,
+   7,
+   255
+  ],
+  "serialized": "0x0007ff",
+  "root": "0xee0d53a1feb48c9c6ea5b6bc19f02515f19002a04c56844c9c6ae19e66e574c4"
+ },
+ {
+  "name": "bitlist_2p32_minus1/empty",
+  "kind": "bitlist",
+  "width": 0,
+  "limit": 4294967295,
+  "limit_reaches": "the largest 32-bit limit",
+  "value": [],
+  "serialized": "0x01",
+  "root": "0xa75b0948052d091c3cb41f390e76fc7cb987b787bf4063c563e09266a357dea1"
+ },
+ {
+  "name": "bitlist_2p32_minus1/three",
+  "kind": "bitlist",
+  "width": 0,
+  "limit": 4294967295,
+  "limit_reaches": "the largest 32-bit limit",
+  "value": [
+   true,
+   false,
+   true
+  ],
+  "serialized": "0x0d",
+  "root": "0x74a21374bdada550b6206087c8ec1a82a88aee0c62549da6ad60c00304ce92c0"
+ },
+ {
+  "name": "bitlist_2p32_minus1/nine",
+  "kind": "bitlist",
+  "width": 0,
+  "limit": 4294967295,
+  "limit_reaches": "the largest 32-bit limit",
+  "value": [
+   true,
+   true,
+   true,
+   true,
+   true,
+   true,
+   true,
+   true,
+   true
+  ],
+  "serialized": "0xff03",
+  "root": "0x5f24dfcdb905df16b29d18fb5bd4347c19b0704f51f7b71dea9dc591348dc322"
+ },
+ {
+  "name": "bitlist_2p32_minus1/invalid_no_bytes",
+  "kind": "bitlist",
+  "width": 0,
+  "limit": 4294967295,
+  "limit_reaches": "the largest 32-bit limit",
+  "value": null,
+  "serialized": "0x",
+  "root": null,
+  "reason": "empty"
+ },
+ {
+  "name": "bitlist_2p32_minus1/invalid_zero_last_byte",
+  "kind": "bitlist",
+  "width": 0,
+  "limit": 4294967295,
+  "limit_reaches": "the largest 32-bit limit",
+  "value": null,
+  "serialized": "0x0500",
+  "root": null,
+  "reason": "no_delimiter"
+ },
+ {
+  "name": "bitlist_2p35_minus1/empty",
+  "kind": "bitlist",
+  "width": 0,
+  "limit": 34359738367,
+  "limit_reaches": "an encoding of up to 2^32 bytes",
+  "value": [],
+  "serialized": "0x01",
+  "root": "0xfcada1ce97f6629a9b31bd46dc9824a4ee18e91bb76243e16387616176e1d899"
+ },
+ {
+  "name": "bitlist_2p35_minus1/three",
+  "kind": "bitlist",
+  "width": 0,
+  "limit": 34359738367,
+  "limit_reaches": "an encoding of up to 2^32 bytes",
+  "value": [
+   true,
+   false,
+   true
+  ],
+  "serialized": "0x0d",
+  "root": "0xd31cb8cad6d77b46d43fb2f516ef0085a66503cfbee9c5fd4925bbb4752486cf"
+ },
+ {
+  "name": "bitlist_2p35_minus1/nine",
+  "kind": "bitlist",
+  "width": 0,
+  "limit": 34359738367,
+  "limit_reaches": "an encoding of up to 2^32 bytes",
+  "value": [
+   true,
+   true,
+   true,
+   true,
+   true,
+   true,
+   true,
+   true,
+   true
+  ],
+  "serialized": "0xff03",
+  "root": "0xe3ae6d5dd2e47276f19f7bdc3179ef5f1bc5b8c6fee63a86691d0d0368648f31"
+ },
+ {
+  "name": "bitlist_2p35_minus1/invalid_no_bytes",
+  "kind": "bitlist",
+  "width": 0,
+  "limit": 34359738367,
+  "limit_reaches": "an encoding of up to 2^32 bytes",
+  "value": null,
+  "serialized": "0x",
+  "root": null,
+  "reason": "empty"
+ },
+ {
+  "name": "bitlist_2p35_minus1/invalid_zero_last_byte",
+  "kind": "bitlist",
+  "width": 0,
+  "limit": 34359738367,
+  "limit_reaches": "an encoding of up to 2^32 bytes",
+  "value": null,
+  "serialized": "0x0500",
+  "root": null,
+  "reason": "no_delimiter"
+ },
+ {
+  "name": "bitlist_2p64_minus1/empty",
+  "kind": "bitlist",
+  "width": 0,
+  "limit": 18446744073709551615,
+  "limit_reaches": "the largest 64-bit limit",
+  "value": [],
+  "serialized": "0x01",
+  "root": "0xdcf7563399797bebfab6db83e29685b2d00b2a972ca848cc62ca83c7bffc7ba1"
+ },
+ {
+  "name": "bitlist_2p64_minus1/three",
+  "kind": "bitlist",
+  "width": 0,
+  "limit": 18446744073709551615,
+  "limit_reaches": "the largest 64-bit limit",
+  "value": [
+   true,
+   false,
+   true
+  ],
+  "serialized": "0x0d",
+  "root": "0x7bf3fc27afe4aac8b62eab5246e564830ed6e7ca5ca6caa1532c51e4b857b6b3"
+ },
+ {
+  "name": "bitlist_2p64_minus1/nine",
+  "kind": "bitlist",
+  "width": 0,
+  "limit": 18446744073709551615,
+  "limit_reaches": "the largest 64-bit limit",
+  "value": [
+   true,
+   true,
+   true,
+   true,
+   true,
+   true,
+   true,
+   true,
+   true
+  ],
+  "serialized": "0xff03",
+  "root": "0x6df8425b875a0870c08ba5e668ac124a439e0ca2c6344f4640cc1ba9564dce3d"
+ },
+ {
+  "name": "bitlist_2p64_minus1/invalid_no_bytes",
+  "kind": "bitlist",
+  "width": 0,
+  "limit": 18446744073709551615,
+  "limit_reaches": "the largest 64-bit limit",
+  "value": null,
+  "serialized": "0x",
+  "root": null,
+  "reason": "empty"
+ },
+ {
+  "name": "bitlist_2p64_minus1/invalid_zero_last_byte",
+  "kind": "bitlist",
+  "width": 0,
+  "limit": 18446744073709551615,
+  "limit_reaches": "the largest 64-bit limit",
+  "value": null,
+  "serialized": "0x0500",
+  "root": null,
+  "reason": "no_delimiter"
+ }
+]
