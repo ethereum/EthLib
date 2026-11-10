@@ -22,6 +22,7 @@ public import EthLib.Consensus.Exports.SlashingProtection
 public import EthLib.Consensus.Exports.Ssz
 public import EthLib.Consensus.Exports.Transition
 public import EthLib.Consensus.Exports.LightClient
+public import EthLib.Consensus.Exports.LightClientGossip
 public import EthLib.Consensus.Exports.WeakSubjectivity
 
 /-!

@@ -35,6 +35,10 @@ def depositTreeType : String :=
 /-- The Python type of a deposit tree snapshot: its five fields, in order. -/
 def depositTreeSnapshotType : String := "tuple[list[bytes], bytes, int, bytes, int]"
 
+/-- The Python type of gossip outcomes: valid with no reason, or ignore or reject with one. -/
+def gossipOutcomesType : String :=
+  "list[tuple[Literal['valid'], None] | tuple[Literal['ignore', 'reject'], str]]"
+
 /-- The Python type of a Noise cipher state: its key, if set, and its next nonce. -/
 def noiseCipherType : String := "tuple[bytes | None, int]"
 
@@ -766,6 +770,21 @@ def bindings : List Binding := [
     "(name: str, fork: str, attested_fork: str, finalized_fork: str, type: str, " ++
       "config: dict[str, Any] | None, state: bytes, block: bytes, attested_state: bytes, " ++
       "attested_block: bytes, finalized_block: bytes | None) -> bytes",
+    [`EthLib.Consensus.LightClientError], some "LightClientError"⟩,
+  ⟨"consensus_light_client_update_as", `EthLib.Consensus.Exports.lightClientUpdateAsExport,
+    "(name: str, fork: str, type: Literal['LightClientUpdate', 'LightClientFinalityUpdate', " ++
+      "'LightClientOptimisticUpdate'], data: bytes) -> bytes",
+    [`EthLib.Consensus.LightClientError], some "LightClientError"⟩,
+  ⟨"consensus_light_client_gossip_full_node",
+    `EthLib.Consensus.Exports.lightClientGossipFullNodeExport,
+    "(name: str, fork: str, config: dict[str, Any] | None, genesis_time_ms: int, " ++
+      "messages: list[tuple[str, int, bytes, bytes | None]]) -> " ++ gossipOutcomesType,
+    [`EthLib.Consensus.LightClientError], some "LightClientError"⟩,
+  ⟨"consensus_light_client_gossip_light_client",
+    `EthLib.Consensus.Exports.lightClientGossipLightClientExport,
+    "(name: str, fork: str, config: dict[str, Any] | None, genesis_time_ms: int, " ++
+      "trusted: bytes, genesis_validators_root: bytes, bootstrap: bytes, verify: bool, " ++
+      "messages: list[tuple[str, int, bytes]]) -> " ++ gossipOutcomesType,
     [`EthLib.Consensus.LightClientError], some "LightClientError"⟩,
   ⟨"consensus_compute_fork_digest", `EthLib.Consensus.Exports.computeForkDigestExport,
     "(name: str, config: dict[str, Any] | None, genesis_validators_root: bytes, " ++

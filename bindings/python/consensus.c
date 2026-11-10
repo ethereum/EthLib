@@ -427,6 +427,9 @@ extern lean_object* eth_consensus_genesis_block(
   lean_object* name, lean_object* fork, lean_object* state);
 extern lean_object* eth_consensus_create_light_client_bootstrap(lean_object* args);
 extern lean_object* eth_consensus_create_light_client_update(lean_object* args);
+extern lean_object* eth_consensus_light_client_update_as(lean_object* args);
+extern lean_object* eth_consensus_light_client_gossip_full_node(lean_object* args);
+extern lean_object* eth_consensus_light_client_gossip_light_client(lean_object* args);
 extern lean_object* eth_consensus_compute_fork_digest(lean_object* args);
 
 /* ---- Wrappers --------------------------------------------------------- */
@@ -968,6 +971,32 @@ py_consensus_create_light_client_update(
 ) {
   return call_pyvalue_export(
     eth_consensus_create_light_client_update, args, 11, LIGHT_CLIENT_ERROR);
+}
+
+PyObject*
+py_consensus_light_client_update_as(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_light_client_update_as, args, 4, LIGHT_CLIENT_ERROR);
+}
+
+PyObject*
+py_consensus_light_client_gossip_full_node(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(
+    eth_consensus_light_client_gossip_full_node, args, 5, LIGHT_CLIENT_ERROR);
+}
+
+PyObject*
+py_consensus_light_client_gossip_light_client(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(
+    eth_consensus_light_client_gossip_light_client, args, 9, LIGHT_CLIENT_ERROR);
 }
 
 PyObject*

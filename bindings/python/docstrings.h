@@ -629,6 +629,15 @@
 #define DOC_consensus_create_light_client_update \
   "The update that a full node serves for a block, from the blocks and their post states."
 
+#define DOC_consensus_light_client_update_as \
+  "The SSZ bytes of a light client update, or of its finality or optimistic update."
+
+#define DOC_consensus_light_client_gossip_full_node \
+  "The outcomes of light client messages at a full node, in turn."
+
+#define DOC_consensus_light_client_gossip_light_client \
+  "The outcomes of light client messages at a light client, in turn."
+
 #define DOC_consensus_compute_fork_digest \
   "The fork digest at an epoch, on the chain with the given root of the genesis validators."
 

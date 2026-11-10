@@ -312,6 +312,62 @@ def create_light_client_update(
     )
 
 
+# The light client containers that a light client update gives.
+UpdateType: TypeAlias = Literal[
+    "LightClientUpdate", "LightClientFinalityUpdate", "LightClientOptimisticUpdate"
+]
+
+
+def light_client_update_as(name: str, fork: str, type_name: UpdateType, update: bytes) -> bytes:
+    """The SSZ bytes of a light client update, or of its finality or optimistic update."""
+    return _native.consensus_light_client_update_as(name, fork, type_name, update)
+
+
+# The outcome of a gossip message: valid with no reason, or ignore or reject with its reason.
+GossipOutcome: TypeAlias = tuple[Literal["valid"], None] | tuple[Literal["ignore", "reject"], str]
+
+
+def light_client_gossip_full_node(
+    name: str,
+    fork: str,
+    genesis_time_ms: int,
+    messages: Sequence[tuple[str, int, bytes, bytes | None]],
+    config: dict[str, Any] | None = None,
+) -> list[GossipOutcome]:
+    """The outcome of each light client update on gossip at a full node, in turn."""
+    # A message is (topic, arrival time in ms, SSZ bytes, the node's latest update or None).
+    return _native.consensus_light_client_gossip_full_node(
+        name, fork, config, genesis_time_ms, list(messages)
+    )
+
+
+def light_client_gossip_light_client(
+    name: str,
+    fork: str,
+    genesis_time_ms: int,
+    trusted_block_root: bytes,
+    genesis_validators_root: bytes,
+    bootstrap: bytes,
+    messages: Sequence[tuple[str, int, bytes]],
+    verify: bool = True,
+    config: dict[str, Any] | None = None,
+) -> list[GossipOutcome]:
+    """The outcome of each light client update on gossip at a light client, in turn."""
+    # A message is (topic, arrival time in milliseconds, SSZ bytes).
+    # The store starts from the bootstrap and processes every update, whatever its outcome.
+    return _native.consensus_light_client_gossip_light_client(
+        name,
+        fork,
+        config,
+        genesis_time_ms,
+        trusted_block_root,
+        genesis_validators_root,
+        bootstrap,
+        verify,
+        list(messages),
+    )
+
+
 def compute_fork_digest(
     name: str, genesis_validators_root: bytes, epoch: int, config: dict[str, Any] | None = None
 ) -> bytes:
@@ -1122,6 +1178,11 @@ __all__ = [
     "genesis_block",
     "create_light_client_bootstrap",
     "create_light_client_update",
+    "light_client_update_as",
+    "GossipOutcome",
+    "UpdateType",
+    "light_client_gossip_full_node",
+    "light_client_gossip_light_client",
     "compute_fork_digest",
     "process_epoch",
     "rewards_deltas",

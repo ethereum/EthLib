@@ -839,6 +839,18 @@ def consensus_create_light_client_update(name: str, fork: str, attested_fork: st
     """The update that a full node serves for a block, from the blocks and their post states."""
     ...
 
+def consensus_light_client_update_as(name: str, fork: str, type: Literal['LightClientUpdate', 'LightClientFinalityUpdate', 'LightClientOptimisticUpdate'], data: bytes) -> bytes:
+    """The SSZ bytes of a light client update, or of its finality or optimistic update."""
+    ...
+
+def consensus_light_client_gossip_full_node(name: str, fork: str, config: dict[str, Any] | None, genesis_time_ms: int, messages: list[tuple[str, int, bytes, bytes | None]]) -> list[tuple[Literal['valid'], None] | tuple[Literal['ignore', 'reject'], str]]:
+    """The outcomes of light client messages at a full node, in turn."""
+    ...
+
+def consensus_light_client_gossip_light_client(name: str, fork: str, config: dict[str, Any] | None, genesis_time_ms: int, trusted: bytes, genesis_validators_root: bytes, bootstrap: bytes, verify: bool, messages: list[tuple[str, int, bytes]]) -> list[tuple[Literal['valid'], None] | tuple[Literal['ignore', 'reject'], str]]:
+    """The outcomes of light client messages at a light client, in turn."""
+    ...
+
 def consensus_compute_fork_digest(name: str, config: dict[str, Any] | None, genesis_validators_root: bytes, epoch: int) -> bytes:
     """The fork digest at an epoch, on the chain with the given root of the genesis validators."""
     ...
