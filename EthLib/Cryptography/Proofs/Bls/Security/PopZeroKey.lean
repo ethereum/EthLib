@@ -20,6 +20,8 @@ In a game within `qK` key hash calls, the key table has at most `qK` entries.
 So some other key gets the scalar 0 with probability at most `(qK - 1) / |F|`.
 
 The bound is the union bound over the new entries of a table, proved for any stateful oracle.
+
+It also bounds the message table and the hash calls of a run after the honest key hash.
 -/
 
 @[expose] public section
@@ -156,7 +158,6 @@ theorem impl_preservesInv_msgLength (g₂ : G₂) (a : F) :
   · change x ∈ support (keyHash g₂ y st) at hx
     rw [(mem_support_keyHash hx).2.2.2.1]
     exact hst
-
 
 /-- A run after the honest key hash stays within the bounds on hash calls.
 

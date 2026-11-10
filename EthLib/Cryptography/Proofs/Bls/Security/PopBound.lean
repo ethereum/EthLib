@@ -13,7 +13,7 @@ It programs that hash to the challenge.
 
 It programs the hash of every key other than the honest one to a known multiple of it.
 
-The problem also gives `a • g2`, a stronger assumption than the co-CDH of Boneh, Lynn and Shacham.
+The co-CDH problem here also gives `a • g2`, stronger than the co-CDH of Boneh, Lynn and Shacham.
 
 The reduction signs, and proves possession of the honest key, with it.
 
@@ -30,7 +30,7 @@ It needs every element of `G1` to be a multiple of `g1`, as in a group of prime 
 
 It needs `qK` at most the characteristic of the scalars.
 
-Then the number of copies of the honest key among the keys, the honest count, is not zero.
+Then the number of copies of the honest key among the keys, the honest count, is not zero in `F`.
 
 The coupling needs the challenge scalar to be nonzero, so the proof pays `1 / |F|` per guess.
 -/
