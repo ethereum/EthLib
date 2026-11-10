@@ -354,6 +354,21 @@ theorem getCurrentEpoch_toNat (state : BeaconState preset fork) :
     (getCurrentEpoch state).toNat = state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat := by
   simp [getCurrentEpoch, computeEpochAtSlot, UInt64.toNat_div]
 
+/-- The current epoch is at most the slot, at every length of an epoch. -/
+theorem getCurrentEpoch_toNat_le_slot (state : BeaconState preset fork) :
+    (getCurrentEpoch state).toNat ≤ state.slot.toNat := by
+  rw [getCurrentEpoch_toNat]
+  exact Nat.div_le_self _ _
+
+/-- The epoch after the current one exists when a next slot exists.
+
+A next epoch alone would be enough for a caller that needs only that epoch. -/
+theorem addChecked_getCurrentEpoch_one_total (state : BeaconState preset fork)
+    (fits : state.slot.toNat + 1 < 2 ^ 64) :
+    ∃ next, addChecked (getCurrentEpoch state) 1 = .ok next := by
+  have le := getCurrentEpoch_toNat_le_slot state
+  exact ⟨_, addChecked_of_lt (by simp; omega)⟩
+
 /-- The previous epoch is at most the current epoch. -/
 theorem getPreviousEpoch_le (state : BeaconState preset fork) :
     getPreviousEpoch state ≤ getCurrentEpoch state := by
@@ -1366,6 +1381,22 @@ theorem writeCircularRooted_elements {α : Type} [SszType α] {n : UInt64}
       = writeCircular buffer.elements i value := by
   unfold writeCircularRooted writeCircular
   split <;> rfl
+
+/-- A read of a circular buffer of positive length succeeds. -/
+theorem readCircular_total {α : Type} {n : UInt64} [NeZero n.toNat] (buffer : Vector α n.toNat)
+    (i : UInt64) : ∃ value, readCircular buffer i = .ok value :=
+  ⟨_, by rw [readCircular, dite_eq_right ne_zero_of_neZero_toNat]⟩
+
+/-- A write to a circular buffer of positive length succeeds. -/
+theorem writeCircular_total {α : Type} {n : UInt64} [NeZero n.toNat] (buffer : Vector α n.toNat)
+    (i : UInt64) (value : α) : ∃ written, writeCircular buffer i value = .ok written :=
+  ⟨_, writeCircular_of_ne_zero buffer i value ne_zero_of_neZero_toNat⟩
+
+/-- A write to a circular buffer of positive length that keeps its tree succeeds. -/
+theorem writeCircularRooted_total {α : Type} [SszType α] {n : UInt64} [NeZero n.toNat]
+    (buffer : RootedVector α n.toNat) (i : UInt64) (value : α) :
+    ∃ written, writeCircularRooted buffer i value = .ok written := by
+  simp [writeCircularRooted, ne_zero_of_neZero_toNat (n := n)]
 
 /-- A read of a block root is before the slot of the state, and reads the buffer of roots. -/
 theorem getBlockRootAtSlot_read {state : BeaconState preset fork} {slot : Slot} {root : Root}

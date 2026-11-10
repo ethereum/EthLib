@@ -139,7 +139,7 @@ theorem PendingSigned.of_processAttestation {parentSlot : Slot}
     (computed : processAttestation config checks state parentSlot attestation = .ok after) :
     PendingSigned config checks after := by
   have frame := frame_processAttestation computed
-  have registry := processAttestation_registry before computed
+  have registry := processAttestation_registry computed
   have beforeElectra : fork < .pectra := Nat.lt_trans before (by decide)
   have committees : ∀ epoch, CommitteesKept epoch state after := CommitteesKept.of_eq
     (congrArg (·.data) registry.1) (congrArg (·.elements) registry.2)

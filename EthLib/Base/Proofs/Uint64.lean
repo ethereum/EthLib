@@ -50,6 +50,30 @@ theorem addChecked_of_lt {a b : UInt64} (h : a.toNat + b.toNat < 2 ^ 64) :
     addChecked a b = .ok (a + b) :=
   addChecked_ok_iff.mpr ⟨h, toNat_add_of_lt h⟩
 
+/-- A 64-bit integer that is nonzero on naturals is nonzero. -/
+theorem ne_zero_of_neZero_toNat {n : UInt64} [NeZero n.toNat] : n ≠ 0 :=
+  fun zero => NeZero.ne n.toNat (by rw [zero]; rfl)
+
+/-- The conversion succeeds exactly below `2^64`, and then it keeps the value. -/
+theorem ofNatChecked_ok_iff {n : Nat} {a : UInt64} :
+    ofNatChecked n = .ok a ↔ n < 2 ^ 64 ∧ a.toNat = n := by
+  unfold ofNatChecked
+  split
+  · rename_i h
+    simp only [Except.ok.injEq, h, true_and]
+    constructor
+    · rintro rfl
+      rfl
+    · intro value
+      exact UInt64.toNat_inj.mp value.symm
+  · rename_i h
+    simp only [reduceCtorEq, false_iff, not_and]
+    omega
+
+/-- Below `2^64` the conversion succeeds, and it returns the plain conversion. -/
+theorem ofNatChecked_of_lt {n : Nat} (h : n < 2 ^ 64) : ofNatChecked n = .ok n.toUInt64 :=
+  ofNatChecked_ok_iff.mpr ⟨h, by rw [Nat.toUInt64_eq, UInt64.toNat_ofNat_of_lt' h]⟩
+
 /-- The difference succeeds exactly when `b ≤ a`, and then it is the difference on `Nat`. -/
 theorem subChecked_ok_iff {a b c : UInt64} :
     subChecked a b = .ok c ↔ b.toNat ≤ a.toNat ∧ c.toNat = a.toNat - b.toNat := by

@@ -206,6 +206,28 @@ theorem processJustificationAndFinalization_ok
     obtain ⟨_, _, _, _, total, _, previous, _, current, _, weighed⟩ := computed
     exact .inr ⟨total, previous, current, weighed⟩
 
+/-- Justification and finalization keep the current justified checkpoint, or justify a recent one.
+
+A recent epoch is the previous or the current epoch of the state before.
+
+The root of the new checkpoint is the block root that this state records for the epoch. -/
+theorem processJustificationAndFinalization_currentJustified
+    (computed : processJustificationAndFinalization state = .ok after) :
+    after.currentJustifiedCheckpoint = state.currentJustifiedCheckpoint ∨
+      (after.currentJustifiedCheckpoint.epoch = getPreviousEpoch state ∨
+          after.currentJustifiedCheckpoint.epoch = getCurrentEpoch state) ∧
+        getBlockRoot state after.currentJustifiedCheckpoint.epoch =
+          .ok after.currentJustifiedCheckpoint.root := by
+  rcases processJustificationAndFinalization_ok computed with rfl | ⟨_, _, _, weighed⟩
+  · exact .inl rfl
+  rcases weighJustificationAndFinalization_currentJustified weighed with ⟨same, -⟩ |
+    ⟨current, -, -, -, -, -, epoch, rootOk⟩
+  · exact .inl same
+  refine .inr ⟨?_, rootOk⟩
+  cases current
+  · exact .inl epoch
+  · exact .inr epoch
+
 /-- From Altair, in the first two epochs, justification and finalization change nothing. -/
 theorem processJustificationAndFinalization_early_altair (altair : .altair ≤ fork)
     (early : getCurrentEpoch state ≤ GENESIS_EPOCH + 1) :

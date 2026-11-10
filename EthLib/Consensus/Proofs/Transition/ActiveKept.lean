@@ -2,6 +2,7 @@ module
 
 public import EthLib.Consensus.Proofs.Transition.Chain
 public import EthLib.Consensus.Proofs.Transition.Committees
+public import EthLib.Consensus.Proofs.Transition.PayloadInputs
 
 /-!
 # Proofs: the active validators of past epochs stay fixed along a chain
@@ -18,7 +19,7 @@ From Electra, the exit and consolidation queues of [EIP-7251] give no epoch befo
 
 A new validator has no activation epoch yet, so it is active in no epoch.
 
-That needs fewer than 2^64 validators, so that no 64-bit index lands on another validator.
+The theorems of a step still assume fewer than 2^64 validators, though no step needs it now.
 
 So each step of a chain keeps which validators are active in each epoch up to its current epoch.
 
@@ -62,11 +63,6 @@ private theorem StepBelow.foldlM {α ε : Type} {step : BeaconState preset fork 
     (computed : items.foldlM step state = .ok after) : StepBelow state after :=
   foldlM_ok_invariant (StepBelow state) (fun _ _ _ before ok => before.trans (keeps _ _ _ ok))
     (StepBelow.refl state) computed
-
-/-- A step that keeps the slot and activity below 2^64 validators before it. -/
-private theorem StepBelow.of_small (grows : state.validators.data.size ≤ after.validators.data.size)
-    (step : state.validators.data.size < 2 ^ 64 → ActiveStep state after) : StepBelow state after :=
-  ⟨grows, fun small => step (Nat.lt_of_le_of_lt grows small)⟩
 
 private theorem StepBelow.of_step (grows : state.validators.data.size ≤ after.validators.data.size)
     (step : ActiveStep state after) : StepBelow state after :=
@@ -114,8 +110,8 @@ private theorem stepBelow_addValidatorToRegistry {pubkey : Cryptography.Bls.BLSP
     {withdrawalCredentials : Bytes32} {amount : Gwei}
     (computed : addValidatorToRegistry state pubkey withdrawalCredentials amount = .ok after) :
     StepBelow state after :=
-  StepBelow.of_small (frame_addValidatorToRegistry computed).registryGrows
-    fun small => activeStep_addValidatorToRegistry small computed
+  StepBelow.of_step (frame_addValidatorToRegistry computed).registryGrows
+    (activeStep_addValidatorToRegistry computed)
 
 /-! ## Deposits -/
 
@@ -133,7 +129,9 @@ private theorem stepBelow_applyPendingDeposit {deposit : PendingDeposit}
     · exact stepBelow_addValidatorToRegistry computed
     · simp only [pure, Except.pure, Except.ok.injEq] at computed
       exact computed ▸ StepBelow.refl _
-  · exact stepBelow_increaseBalance (liftAccessor_ok.mp computed)
+  · simp only [liftAccessor_ok, bind_ok_iff] at computed
+    obtain ⟨_, _, computed⟩ := computed
+    exact stepBelow_increaseBalance computed
 
 private theorem stepBelow_applyDepositElectra {electra : .pectra ≤ fork}
     {pubkey : Cryptography.Bls.BLSPubkey} {withdrawalCredentials : Bytes32} {amount : Gwei}
@@ -250,13 +248,13 @@ private theorem consolidationEpoch_lt {electra : .pectra ≤ fork} {balance : Gw
 
 /-- The source of a consolidation had not started to exit, and exits after the current epoch.
 
-It must be the validator at its position, in a registry below 2^64 validators. -/
-private theorem stepBelow_queueConsolidation {electra : .pectra ≤ fork} {sourcePosition : Nat}
-    {source : Validator} {targetIndex : ValidatorIndex}
-    (found : state.validators.data[sourcePosition]? = some source)
+It must be the validator at its index. -/
+private theorem stepBelow_queueConsolidation {electra : .pectra ≤ fork}
+    {sourceIndex : ValidatorIndex} {source : Validator} {targetIndex : ValidatorIndex}
+    (found : state.validators.data[sourceIndex.toNat]? = some source)
     (far : source.exitEpoch = FAR_FUTURE_EPOCH)
     (computed :
-      queueConsolidation config state electra sourcePosition source targetIndex = .ok after) :
+      queueConsolidation config state electra sourceIndex source targetIndex = .ok after) :
     StepBelow state after := by
   simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
     addChecked_ok_iff, pure, Except.pure] at computed
@@ -268,14 +266,10 @@ private theorem stepBelow_queueConsolidation {electra : .pectra ≤ fork} {sourc
   obtain ⟨-, validators, -⟩ := computeConsolidationEpochAndUpdateChurn_earliest churned
   have slot := (frame_computeConsolidationEpochAndUpdateChurn churned).slot
   have first : StepBelow state churnedState := StepBelow.of_validators (by rw [validators]) slot
-  refine first.trans ((StepBelow.of_small (Nat.le_of_eq (sameSizes_setValidator set).1.symm)
-    fun small => ?_).trans StepBelow.of_validators)
-  -- Below 2^64 validators, the position names the source.
-  have found' : getValidator churnedState sourcePosition.toUInt64 = .ok source := by
-    have inside := (Array.getElem?_eq_some_iff.mp found).1
-    rw [getValidator, validators, Nat.toUInt64_eq,
-      UInt64.toNat_ofNat_of_lt' (Nat.lt_trans inside (validators ▸ small)), found]
-  refine (activeStep_setValidator found' (fun _ le => ?_) set)
+  have found' : getValidator churnedState sourceIndex = .ok source := by
+    rw [getValidator, validators, found]
+  refine first.trans ((stepBelow_setValidator found' (fun _ le => ?_) set).trans
+    StepBelow.of_validators)
   have epochEq : getCurrentEpoch churnedState = getCurrentEpoch state := by
     simp only [getCurrentEpoch, slot]
   exact isActiveValidator_eq_of_exit rfl far
@@ -294,7 +288,7 @@ private theorem stepBelow_processConsolidationRequest {electra : .pectra ≤ for
     | exact stepBelow_switchToCompoundingValidator (liftAccessor_ok.mp computed)
   -- The source had not started to exit.
   rename_i bothFar _ _ _ _ _ _ _ _
-  exact stepBelow_queueConsolidation (Array.getElem?_eq_getElem _)
+  exact stepBelow_queueConsolidation (getElem?_toNat_of_ofNatChecked (by assumption))
     (beq_iff_eq.mp ((Bool.and_eq_true _ _).mp bothFar).1) computed
 
 private theorem stepBelow_processExecutionRequests {body : BeaconBlockBody preset fork}
@@ -549,28 +543,9 @@ private theorem stepBelow_processAttesterSlashing {slashing : AttesterSlashing p
 private theorem stepBelow_processAttestation {attestation : Attestation preset fork}
     {parentSlot : Slot}
     (computed : processAttestation config checks state parentSlot attestation = .ok after) :
-    StepBelow state after := by
-  have slot := (frame_processAttestation computed).slot
-  refine if altair : Fork.altair ≤ fork then ?_ else StepBelow.of_validators
-    (by rw [(processAttestation_registry (Nat.lt_of_not_le altair) computed).1]) slot
-  unfold processAttestation at computed
-  simp only [altair, ↓reduceDIte] at computed
-  unfold processAttestationAltair at computed
-  simp only [bind_ok_iff, liftAccessor_ok] at computed
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
-    _, _, raised, raisedOk, final⟩ := computed
-  -- The flags and the proposer reward leave the registry alone, and so does a payment.
-  have last : raised.validators = after.validators := by
-    split at final
-    · rw [recordPaymentWeight_eq final]
-    · cases final
-      rfl
-  obtain ⟨_, set⟩ := increaseBalance_ok raisedOk
-  obtain ⟨_, rfl⟩ := setBalance_ok set
-  refine StepBelow.of_validators ?_ slot
-  rw [← last]
-  unfold setEpochParticipation
-  split <;> rfl
+    StepBelow state after :=
+  StepBelow.of_validators (by rw [(processAttestation_registry computed).1])
+    (frame_processAttestation computed).slot
 
 private theorem stepBelow_processVoluntaryExit {signed : SignedVoluntaryExit}
     (computed : processVoluntaryExit config checks state signed = .ok after) :
@@ -964,6 +939,139 @@ theorem activeKept_processBlock {block : BeaconBlock preset fork}
     (computed : processBlock config checks engine state block = .ok after) :
     ActiveKept (getCurrentEpoch state) state after :=
   ((stepBelow_processBlock computed).2 small).2
+
+/-! ## The attestations of a block -/
+
+/-- A step of a block before its attestations.
+
+It is a block frame, and it never shrinks the registry.
+
+While the registry after it stays below 2^64 validators, it keeps the slot and activity.
+
+Of the RANDAO mixes, it writes at most the one of the current epoch. -/
+private structure BeforeVotes (state after : BeaconState preset fork) : Prop where
+  frame : BlockFrame state after
+  step : StepBelow state after
+  mixes : MixesKeptBut (getCurrentEpoch state) state after
+
+/-- Every state is a step before votes to itself. -/
+private theorem BeforeVotes.refl (state : BeaconState preset fork) : BeforeVotes state state :=
+  ⟨BlockFrame.refl state, StepBelow.refl state, fun _ _ => rfl⟩
+
+/-- Two steps before votes in a row are one. -/
+private theorem BeforeVotes.trans {first second third : BeaconState preset fork}
+    (one : BeforeVotes first second) (two : BeforeVotes second third) :
+    BeforeVotes first third := by
+  have epoch : getCurrentEpoch second = getCurrentEpoch first := by
+    simp only [getCurrentEpoch, one.frame.slot]
+  exact ⟨one.frame.trans two.frame, one.step.trans two.step,
+    fun other apart => (two.mixes other (epoch ▸ apart)).trans (one.mixes other apart)⟩
+
+/-- A block frame that never shrinks the registry and keeps the mixes is a step before votes. -/
+private theorem BeforeVotes.of_mixes (frame : BlockFrame state after)
+    (step : StepBelow state after) (mixes : after.randaoMixes = state.randaoMixes) :
+    BeforeVotes state after :=
+  ⟨frame, step, fun _ _ => by rw [mixes]⟩
+
+/-- A proposer slashing is a step before votes. -/
+private theorem beforeVotes_processProposerSlashing {slashing : ProposerSlashing}
+    (computed : processProposerSlashing config checks state slashing = .ok after) :
+    BeforeVotes state after :=
+  BeforeVotes.of_mixes (frame_processProposerSlashing computed)
+    (stepBelow_processProposerSlashing computed)
+    (payloadInputs_processProposerSlashing computed).randaoMixes
+
+/-- An attester slashing is a step before votes. -/
+private theorem beforeVotes_processAttesterSlashing {slashing : AttesterSlashing preset fork}
+    (computed : processAttesterSlashing config checks state slashing = .ok after) :
+    BeforeVotes state after :=
+  BeforeVotes.of_mixes (frame_processAttesterSlashing computed)
+    (stepBelow_processAttesterSlashing computed)
+    (payloadInputs_processAttesterSlashing computed).randaoMixes
+
+/-- The header step is a step before votes. -/
+private theorem beforeVotes_processBlockHeader {block : BeaconBlock preset fork}
+    (computed : processBlockHeader state block = .ok after) : BeforeVotes state after :=
+  BeforeVotes.of_mixes (frame_processBlockHeader computed) (stepBelow_processBlockHeader computed)
+    (payloadInputs_processBlockHeader computed).randaoMixes
+
+/-- The RANDAO step is a step before votes. -/
+private theorem beforeVotes_processRandao {body : BeaconBlockBody preset fork}
+    (computed : processRandao config checks state body = .ok after) : BeforeVotes state after :=
+  ⟨frame_processRandao computed, stepBelow_processRandao computed,
+    mixesKeptBut_processRandao computed⟩
+
+/-- The vote on the deposit contract is a step before votes. -/
+private theorem beforeVotes_processEth1Data {before : fork < .hegota}
+    {body : BeaconBlockBody preset fork}
+    (computed : processEth1Data before state body = .ok after) : BeforeVotes state after :=
+  BeforeVotes.of_mixes (frame_processEth1Data computed) (stepBelow_processEth1Data computed)
+    (payloadInputs_processEth1Data computed).randaoMixes
+
+/-- A block runs its attestations in order, between two block frames.
+
+Where they start, the attesters of each of them are those of the state before the block.
+
+There must be more than `MIN_SEED_LOOKAHEAD + 2` epochs of mixes.
+
+The registry after the block must hold fewer than 2^64 validators. -/
+theorem processBlock_attestationSplit
+    (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    {block : BeaconBlock preset fork} (small : after.validators.data.size < 2 ^ 64)
+    (computed : processBlock config checks engine state block = .ok after) :
+    ∃ first last, BlockFrame state first ∧
+      (∀ attestation ∈ block.body.attestations.data,
+        getAttestingIndices first attestation = getAttestingIndices state attestation) ∧
+      block.body.attestations.data.toList.foldlM
+        (processAttestation config checks · state.latestBlockHeader.slot ·) first = .ok last ∧
+      BlockFrame last after := by
+  obtain ⟨operatedFirst, operatedLast, blockHead, operated, blockTail⟩ :=
+    processBlock_split_of BeforeVotes BeforeVotes.refl BeforeVotes.trans
+      (fun _ ok => BeforeVotes.of_mixes (frame_processParentExecutionPayload ok)
+        (stepBelow_processParentExecutionPayload ok)
+        (payloadInputs_processParentExecutionPayload ok).randaoMixes)
+      beforeVotes_processBlockHeader
+      (fun _ ok => BeforeVotes.of_mixes (frame_processBlockExecution ok)
+        (stepBelow_processBlockExecution ok) (randaoMixes_processBlockExecution ok))
+      beforeVotes_processRandao (fun _ ok => beforeVotes_processEth1Data ok) computed
+  obtain ⟨first, last, operationsHead, attested, operationsTail⟩ :=
+    processOperations_split_of BeforeVotes BeforeVotes.refl BeforeVotes.trans
+      beforeVotes_processProposerSlashing beforeVotes_processAttesterSlashing operated
+  have head := blockHead.trans operationsHead
+  have tail := operationsTail.trans blockTail
+  -- The attestations keep the registry, so the registry where they start is below 2^64.
+  have kept : last.validators = first.validators :=
+    foldlM_ok_invariant (fun next : BeaconState preset fork => next.validators = first.validators)
+      (fun _ _ _ holds ok => (processAttestation_registry ok).1.trans holds) rfl attested
+  have below : first.validators.data.size < 2 ^ 64 := by
+    rw [← kept]
+    exact Nat.lt_of_le_of_lt tail.registryGrows small
+  have active := (head.step.2 below).2
+  refine ⟨first, last, head.frame, fun attestation member => ?_, attested, tail⟩
+  -- The fold runs the attestation at a state with the slot of the state before the block.
+  obtain ⟨index, bound, found⟩ := List.getElem_of_mem (Array.mem_toList_iff.mpr member)
+  obtain ⟨mid, _, prefixOk, ok, -⟩ := (foldlM_ok_steps (fun _ _ => True) (fun _ => trivial)
+    (fun _ _ => trivial) (fun _ _ _ _ => trivial) attested).2 index bound
+  rw [found] at ok
+  have slot : mid.slot = state.slot :=
+    foldlM_ok_invariant (fun next : BeaconState preset fork => next.slot = state.slot)
+      (fun _ _ _ holds ok => (frame_processAttestation ok).slot.trans holds) head.frame.slot
+      prefixOk
+  have current : getCurrentEpoch mid = getCurrentEpoch state := by
+    simp only [getCurrentEpoch, slot]
+  have previous : getPreviousEpoch mid = getPreviousEpoch state := by
+    simp only [getPreviousEpoch, current]
+  have previousNat := getPreviousEpoch_toNat state
+  have recent := processAttestation_slotEpoch ok
+  rw [previous, current] at recent
+  have low : computeEpochAtSlot preset attestation.data.slot ≤ getCurrentEpoch state := by
+    rcases recent with same | same <;> rw [same]
+    · exact getPreviousEpoch_le state
+    · exact UInt64.le_refl _
+  have high : (getCurrentEpoch state).toNat ≤
+      (computeEpochAtSlot preset attestation.data.slot).toNat + 1 := by
+    rcases recent with same | same <;> rw [same] <;> omega
+  exact getAttestingIndices_eq_of_activeKept apart (active.mono low) head.mixes low high
 
 /-- One slot keeps activity in each epoch up to its current epoch, at every fork.
 

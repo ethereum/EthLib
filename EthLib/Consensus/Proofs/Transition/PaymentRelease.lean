@@ -127,6 +127,34 @@ theorem latestBidWithdrawal_congr {gloas : .glamsterdam ≤ fork}
     latestBidWithdrawal after gloas = latestBidWithdrawal state gloas := by
   simp only [latestBidWithdrawal, bid]
 
+/-- Whether a payment is open reads only a few fields of the state.
+
+They are the positions, the slot of the latest block, the latest bid and each pending withdrawal.
+-/
+theorem paymentOpen_congr {gloas : .glamsterdam ≤ fork}
+    (positions : ∀ slot, slotPaymentPosition after slot = slotPaymentPosition state slot)
+    (header : after.latestBlockHeader.slot = state.latestBlockHeader.slot)
+    (bid : after.latestExecutionPayloadBid gloas = state.latestExecutionPayloadBid gloas)
+    (read : ∀ position,
+      (paymentAt after gloas position).withdrawal = (paymentAt state gloas position).withdrawal)
+    (paid : Slot) : PaymentOpen after gloas paid ↔ PaymentOpen state gloas paid := by
+  have parent : parentPaymentPosition after = parentPaymentPosition state := by
+    unfold parentPaymentPosition
+    rw [header]
+    exact positions _
+  simp only [PaymentOpen, PaymentInWindow, positions, read, header, bid,
+    latePaymentOpen_congr parent read]
+
+/-- The withdrawal that pays a bid reads only the positions, the latest bid and the withdrawals.
+-/
+theorem openWithdrawal_congr {gloas : .glamsterdam ≤ fork}
+    (positions : ∀ slot, slotPaymentPosition after slot = slotPaymentPosition state slot)
+    (bid : after.latestExecutionPayloadBid gloas = state.latestExecutionPayloadBid gloas)
+    (read : ∀ position,
+      (paymentAt after gloas position).withdrawal = (paymentAt state gloas position).withdrawal)
+    (paid : Slot) : openWithdrawal after gloas paid = openWithdrawal state gloas paid := by
+  simp only [openWithdrawal, positions, read, latestBidWithdrawal_congr bid]
+
 /-- A step that keeps what the payments read releases no payment.
 
 It keeps the position of each slot, the slot of the latest block, the latest bid and the queue.
@@ -141,21 +169,10 @@ theorem PaymentRelease.of_fields {gloas : .glamsterdam ≤ fork}
       (paymentAt after gloas position).withdrawal = (paymentAt state gloas position).withdrawal)
     (withdrawals :
       after.builderPendingWithdrawals gloas = state.builderPendingWithdrawals gloas) :
-    PaymentRelease state after gloas [] := by
-  have parent : parentPaymentPosition after = parentPaymentPosition state := by
-    unfold parentPaymentPosition
-    rw [header]
-    exact positions _
-  have late : latePaymentOpen after gloas = latePaymentOpen state gloas := by
-    simp only [latePaymentOpen, parent, read]
-  have opens : ∀ slot, PaymentOpen after gloas slot ↔ PaymentOpen state gloas slot := by
-    intro slot
-    simp only [PaymentOpen, PaymentInWindow, positions, read, header, bid, late]
-  have same : ∀ slot, openWithdrawal after gloas slot = openWithdrawal state gloas slot := by
-    intro slot
-    simp only [openWithdrawal, positions, read, latestBidWithdrawal_congr bid]
-  exact ⟨List.nodup_nil, by simp [withdrawals], by simp, by simp,
-    fun slot opened => Or.inl ((opens slot).mp opened), fun slot _ _ => same slot, forward⟩
+    PaymentRelease state after gloas [] :=
+  ⟨List.nodup_nil, by simp [withdrawals], nofun, nofun,
+    fun slot opened => Or.inl ((paymentOpen_congr positions header bid read slot).mp opened),
+    fun slot _ _ => openWithdrawal_congr positions bid read slot, forward⟩
 
 /-- A step that keeps the builder fields releases no payment. -/
 theorem PaymentRelease.of_frame {gloas : .glamsterdam ≤ fork} (frame : BuilderFrame state after) :
@@ -163,13 +180,43 @@ theorem PaymentRelease.of_frame {gloas : .glamsterdam ≤ fork} (frame : Builder
   .of_fields (frame.slot.symm ▸ UInt64.le_refl _) (slotPaymentPosition_congr frame.slot)
     frame.headerSlot
     (congrFun frame.bid gloas)
-    (fun position => by simp only [paymentAt, frame.payments])
+    (fun position => congrArg _ (frame.paymentAt gloas position))
     (congrFun frame.withdrawals gloas)
 
 /-- A state releases no payment to itself. -/
 theorem PaymentRelease.refl (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork) :
     PaymentRelease state state gloas [] :=
   .of_frame (.refl state)
+
+/-- Steps that keep the builder fields, before a step and after it, keep what it releases. -/
+theorem PaymentRelease.of_frames {gloas : .glamsterdam ≤ fork}
+    {first last : BeaconState preset fork}
+    {released : List Slot} (before : BuilderFrame first state)
+    (release : PaymentRelease state after gloas released) (behind : BuilderFrame after last) :
+    PaymentRelease first last gloas released := by
+  have opensBefore := paymentOpen_congr (slotPaymentPosition_congr before.slot)
+    before.headerSlot (congrFun before.bid gloas)
+    (fun position => congrArg _ (before.paymentAt gloas position))
+  have opensBehind := paymentOpen_congr (slotPaymentPosition_congr behind.slot)
+    behind.headerSlot (congrFun behind.bid gloas)
+    (fun position => congrArg _ (behind.paymentAt gloas position))
+  have sameBefore := openWithdrawal_congr (slotPaymentPosition_congr before.slot)
+    (congrFun before.bid gloas) (fun position => congrArg _ (before.paymentAt gloas position))
+  have sameBehind := openWithdrawal_congr (slotPaymentPosition_congr behind.slot)
+    (congrFun behind.bid gloas) (fun position => congrArg _ (behind.paymentAt gloas position))
+  refine ⟨release.nodup, ?_, fun slot member => (opensBefore slot).mp (release.opened slot member),
+    fun slot member => before.slot ▸ release.past slot member, ?_, ?_, ?_⟩
+  · rw [congrFun behind.withdrawals gloas, release.queue, congrFun before.withdrawals gloas,
+      ← funext sameBefore]
+  · intro slot opened
+    rw [← opensBefore, ← before.slot]
+    exact release.noReopen slot ((opensBehind slot).mp opened)
+  · intro slot openedLast openedFirst
+    rw [sameBehind, ← sameBefore]
+    exact release.stable slot ((opensBehind slot).mp openedLast)
+      ((opensBefore slot).mpr openedFirst)
+  · rw [← before.slot, behind.slot]
+    exact release.forward
 
 /-- A slot at the position of the parent payment is paid by the withdrawal of the latest bid.
 
@@ -191,6 +238,76 @@ theorem openWithdrawal_eq_latestBidWithdrawal {gloas : .glamsterdam ≤ fork}
         exact absurd amount (by decide)
       · exact settles
     · rw [ite_eq_right_of_eq_false _ _ (eq_false amount)]
+
+/-- A step that may only empty pending payments releases no payment.
+
+The parent payment must have no weight, and pay the latest bid or have no amount.
+
+That hypothesis is part of the builder debt invariant.
+
+An emptied parent payment may open the late path, which then pays the same withdrawal. -/
+theorem PaymentRelease.of_cancel {gloas : .glamsterdam ≤ fork}
+    (fresh : ParentPaymentFresh state gloas) (cancel : PaymentCancel state after gloas) :
+    PaymentRelease state after gloas [] := by
+  have positions := slotPaymentPosition_congr cancel.slot
+  have bidW := latestBidWithdrawal_congr cancel.bid
+  refine ⟨List.nodup_nil, by simp [cancel.withdrawals], nofun, nofun, ?_, ?_,
+    cancel.slot.symm ▸ UInt64.le_refl _⟩
+  · intro slot opened
+    rcases opened with ⟨p, located, amount⟩ | ⟨isHeader, bidSlot, late, value⟩
+    · refine Or.inl (Or.inl ⟨p, (positions slot).symm.trans located, ?_⟩)
+      rcases cancel.read p.toNat with same | zero
+      · rwa [← same]
+      · rw [zero] at amount
+        exact absurd amount (by decide)
+    · have hdr : slot = state.latestBlockHeader.slot := isHeader.trans cancel.headerSlot
+      have bidSlot' : (state.latestExecutionPayloadBid gloas).slot = slot := by
+        rw [← cancel.bid]
+        exact bidSlot
+      have value' : 0 < (state.latestExecutionPayloadBid gloas).value := by
+        rw [← cancel.bid]
+        exact value
+      by_cases lateBefore : latePaymentOpen state gloas = true
+      · exact Or.inl (Or.inr ⟨hdr, bidSlot', lateBefore, value'⟩)
+      · unfold latePaymentOpen at lateBefore
+        cases located : parentPaymentPosition state with
+        | none => simp [located] at lateBefore
+        | some p =>
+          simp only [located, beq_iff_eq] at lateBefore
+          refine Or.inl (Or.inl ⟨p, by rw [hdr]; exact located, ?_⟩)
+          exact UInt64.pos_iff_ne_zero.mpr lateBefore
+  · intro slot openedAfter openedBefore
+    unfold openWithdrawal
+    rw [positions slot, bidW]
+    cases located : slotPaymentPosition state slot with
+    | none => rfl
+    | some p =>
+      dsimp only
+      by_cases amount : 0 < (paymentAt after gloas p.toNat).withdrawal.amount
+      · rcases cancel.read p.toNat with same | zero
+        · have before : 0 < (paymentAt state gloas p.toNat).withdrawal.amount := by
+            rwa [← same]
+          rw [ite_eq_left_of_eq_true _ _ (eq_true amount),
+            ite_eq_left_of_eq_true _ _ (eq_true before), same]
+        · rw [zero] at amount
+          exact absurd amount (by decide)
+      · rw [ite_eq_right_of_eq_false _ _ (eq_false amount)]
+        by_cases before : 0 < (paymentAt state gloas p.toNat).withdrawal.amount
+        · rw [ite_eq_left_of_eq_true _ _ (eq_true before)]
+          have atHeader : slot = state.latestBlockHeader.slot := by
+            rcases openedAfter with ⟨q, located', positive⟩ | ⟨isHeader, _⟩
+            · rw [positions slot, located] at located'
+              cases Option.some.inj located'
+              exact absurd positive amount
+            · exact isHeader.trans cancel.headerSlot
+          have atParent := openWithdrawal_eq_latestBidWithdrawal fresh (slot := slot)
+            (by rw [atHeader]; rfl)
+          unfold openWithdrawal at atParent
+          rw [located] at atParent
+          dsimp only at atParent
+          rw [ite_eq_left_of_eq_true _ _ (eq_true before)] at atParent
+          exact atParent.symm
+        · rw [ite_eq_right_of_eq_false _ _ (eq_false before)]
 
 /-- The late path is open when the window does not hold the parent payment with a positive amount.
 -/
@@ -331,7 +448,7 @@ theorem settleParentPayment_release {gloas : .glamsterdam ≤ fork}
         cases found
     · rename_i valueless
       cases computed
-      refine ⟨[], ⟨List.nodup_nil, by simp, by simp, by simp, fun _ opened => Or.inl opened,
+      refine ⟨[], ⟨List.nodup_nil, by simp, nofun, nofun, fun _ opened => Or.inl opened,
         fun _ _ _ => rfl, forward⟩, List.nil_sublist _, ?_, ?_⟩
       · rintro (⟨position, found, -⟩ | ⟨-, ⟨position, found, -⟩ | ⟨-, -, -, value⟩⟩)
         · rw [atParent] at found
@@ -355,7 +472,7 @@ It pays each payment of the previous epoch whose weight is at least the quorum t
 
 The hypothesis on the parent payment is part of the builder debt invariant.
 
-The hypotheses on the weights and the genesis epoch are assumptions, which a later step proves.
+The hypotheses on the weights and the genesis epoch are assumptions, which no lemma proves yet.
 -/
 theorem processBuilderPendingPayments_release (positive : preset.PaymentQuorumPositive)
     {gloas : .glamsterdam ≤ fork} (fresh : ParentPaymentFresh state gloas)
@@ -606,7 +723,7 @@ theorem processBlockHeader_release {gloas : .glamsterdam ≤ fork} {block : Beac
     PaymentRelease state after gloas [] := by
   have lateSlot := processBlockHeader_paymentOpen (gloas := gloas) computed
   obtain ⟨_, -, rfl⟩ := processBlockHeader_eq computed
-  refine ⟨List.nodup_nil, by simp, by simp, by simp, fun slot opened => ?_,
+  refine ⟨List.nodup_nil, by simp, nofun, nofun, fun slot opened => ?_,
     fun slot _ _ => ?_, UInt64.le_refl _⟩
   · rcases lateSlot slot opened with window | atSlot
     · exact Or.inl (Or.inl window)
@@ -656,7 +773,7 @@ theorem processExecutionPayloadBid_release (positive : preset.PaymentQuorumPosit
       refine ⟨p, found, positive, other _ fun same => differ ?_⟩
       exact slotPaymentPosition_injective bounds found
         (by rw [atOwn, UInt64.toNat_inj.mp same])
-    refine ⟨List.nodup_nil, by simp [queue], by simp, by simp, ?_, ?_, ?_⟩
+    refine ⟨List.nodup_nil, by simp [queue], nofun, nofun, ?_, ?_, ?_⟩
     · intro slot opened
       rcases lateOnly slot opened with window | atSlot
       · by_cases atState : slot = state.slot

@@ -104,8 +104,6 @@ While the registry stays below 2^64 validators, each validator keeps its key.
 
 With 2^64 validators or more, a 64-bit index can name another validator.
 
-A new validator can then overwrite it.
-
 When they hold before it, it also keeps one balance for each validator.
 
 It then also keeps each exit no later than its withdrawal.
@@ -601,7 +599,7 @@ private theorem registryGrows_addValidatorToRegistry {pubkey : BLSPubkey}
   split at computed
   · simp only [addValidatorToRegistryAltair, liftAccessor_ok, bind_ok_iff, pure, Except.pure,
       Except.ok.injEq] at computed
-    obtain ⟨_, validatorsOk, _, _, _, _, _, _, _, _, rfl⟩ := computed
+    obtain ⟨_, _, _, validatorsOk, _, _, _, _, _, _, _, _, rfl⟩ := computed
     rw [setOrAppendRooted_size validatorsOk]
     split <;> omega
   split at computed
@@ -609,13 +607,12 @@ private theorem registryGrows_addValidatorToRegistry {pubkey : BLSPubkey}
     simp
   · cases computed
 
-/-- A new validator keeps each key, while the registry stays below 2^64 validators. -/
+/-- A new validator keeps each key. -/
 private theorem keysKept_addValidatorToRegistry {pubkey : BLSPubkey}
     {withdrawalCredentials : Bytes32} {amount : Gwei}
-    (computed : addValidatorToRegistry state pubkey withdrawalCredentials amount = .ok after)
-    (small : after.validators.data.size < 2 ^ 64) : KeysKept state after := by
+    (computed : addValidatorToRegistry state pubkey withdrawalCredentials amount = .ok after) :
+    KeysKept state after := by
   have pushed := addValidatorToRegistry_validators_eq_push computed
-    (Nat.lt_of_le_of_lt (registryGrows_addValidatorToRegistry computed) small)
   intro index validator found
   refine ⟨validator, ?_, rfl⟩
   unfold getValidator at found ⊢
@@ -651,12 +648,13 @@ theorem frame_addValidatorToRegistry {pubkey : BLSPubkey}
     · exact holds validator (Array.mem_of_getElem? old)
     · exact getValidatorFromDeposit_aligned maxAligned _ _ _
   have grows := registryGrows_addValidatorToRegistry computed
-  have keys := keysKept_addValidatorToRegistry computed
+  have keys : after.validators.data.size < 2 ^ 64 → KeysKept state after :=
+    fun _ => keysKept_addValidatorToRegistry computed
   unfold addValidatorToRegistry at computed
   split at computed
   · simp only [addValidatorToRegistryAltair, liftAccessor_ok, bind_ok_iff, pure, Except.pure,
       Except.ok.injEq] at computed
-    obtain ⟨_, _, _, _, previous, previousOk, current, currentOk, _, _, rfl⟩ := computed
+    obtain ⟨_, _, _, _, _, _, previous, previousOk, current, currentOk, _, _, rfl⟩ := computed
     -- The new validator gets a zero byte of flags, and each other byte stays.
     refine ⟨⟨⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, grows, keys, balances, exits, aligned⟩,
       rfl, rfl, rfl, rfl⟩, fun _ position flags => ⟨fun found => ?_, fun found => ?_⟩⟩
@@ -708,7 +706,8 @@ theorem frame_applyPendingDeposit {deposit : PendingDeposit}
     · exact frame_addValidatorToRegistry computed
     · simp only [pure, Except.pure, Except.ok.injEq] at computed
       exact computed ▸ MutatorFrame.refl _
-  · rw [liftAccessor_ok] at computed
+  · simp only [liftAccessor_ok, bind_ok_iff] at computed
+    obtain ⟨_, _, computed⟩ := computed
     exact frame_increaseBalance computed
 
 theorem frame_applyDeposit {pubkey : BLSPubkey} {withdrawalCredentials : Bytes32}
@@ -824,12 +823,12 @@ theorem frame_switchToCompoundingValidator {electra : .pectra ≤ fork} {index :
 
 /-- The source of a consolidation exits, and may withdraw a checked delay later.
 
-The source must be the validator at its position, so that it keeps its key. -/
-theorem frame_queueConsolidation {electra : .pectra ≤ fork} {sourcePosition : Nat}
+The source must be the validator at its index, so that it keeps its key. -/
+theorem frame_queueConsolidation {electra : .pectra ≤ fork} {sourceIndex : ValidatorIndex}
     {source : Validator} {targetIndex : ValidatorIndex}
-    (found : state.validators.data[sourcePosition]? = some source)
+    (found : state.validators.data[sourceIndex.toNat]? = some source)
     (computed :
-      queueConsolidation config state electra sourcePosition source targetIndex = .ok after) :
+      queueConsolidation config state electra sourceIndex source targetIndex = .ok after) :
     BlockFrame state after := by
   simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
     addChecked_ok_iff, pure, Except.pure] at computed
@@ -843,16 +842,11 @@ theorem frame_queueConsolidation {electra : .pectra ≤ fork} {sourcePosition : 
   have validators : churnedState.validators = state.validators :=
     (computeConsolidationEpochAndUpdateChurn_earliest churned).2.1
   refine (frame_computeConsolidationEpochAndUpdateChurn churned).trans <|
-    (frame_setValidator_of_small set
-      (fun small => ⟨state.validators.data[sourcePosition], ?_, rfl⟩)
-      (fun _ => le) fun _ holds => holds state.validators.data[sourcePosition] (by
+    (frame_setValidator_of_whole set (old := state.validators.data[sourceIndex.toNat]) ?_ rfl
+      (fun _ => le) fun _ holds => holds state.validators.data[sourceIndex.toNat] (by
         rw [validators]; exact Array.getElem_mem inside)
       ).toBlockFrame.trans (BlockFrame.of_validators ⟨rfl, rfl⟩)
-  -- The registry keeps its size, so below 2^64 validators after, the position names the source.
-  obtain ⟨inside', rfl⟩ := setValidator_ok set
-  rw [(sameSizes_putValidator _ inside' _).1, validators] at small
-  rw [getValidator, validators, Nat.toUInt64_eq,
-    UInt64.toNat_ofNat_of_lt' (Nat.lt_trans inside small), Array.getElem?_eq_getElem inside]
+  rw [getValidator, validators, Array.getElem?_eq_getElem inside]
 
 theorem frame_processConsolidationRequest {electra : .pectra ≤ fork}
     {request : ConsolidationRequest}
@@ -865,7 +859,7 @@ theorem frame_processConsolidationRequest {electra : .pectra ≤ fork}
     | (cases computed; done)
     | (cases computed; exact BlockFrame.refl _)
     | exact frame_switchToCompoundingValidator (liftAccessor_ok.mp computed)
-    | exact frame_queueConsolidation (Array.getElem?_eq_getElem _) computed
+    | exact frame_queueConsolidation (getElem?_toNat_of_ofNatChecked (by assumption)) computed
 
 theorem frame_processExecutionRequests {body : BeaconBlockBody preset fork}
     {electra : .pectra ≤ fork ∧ fork < .glamsterdam}
@@ -1093,22 +1087,38 @@ theorem frame_processSyncAggregate {altair : .altair ≤ fork} {aggregate : Sync
 
 /-! ## Blocks -/
 
-/-- The operations of a block are a block frame, its attestations in order, then a block frame. -/
-theorem processOperations_split {body : BeaconBlockBody preset fork} {parentSlot : Slot}
+/-- The operations of a block are a step, its attestations in order, then a block frame.
+
+The step holds of the two kinds of slashings, which run before the attestations.
+
+It must hold of each state to itself, and chain. -/
+theorem processOperations_split_of
+    (step : BeaconState preset fork → BeaconState preset fork → Prop)
+    (refl : ∀ state, step state state)
+    (trans : ∀ {first second third}, step first second → step second third → step first third)
+    (proposer : ∀ {state after} {slashing : ProposerSlashing},
+      processProposerSlashing config checks state slashing = .ok after → step state after)
+    (attester : ∀ {state after} {slashing : AttesterSlashing preset fork},
+      processAttesterSlashing config checks state slashing = .ok after → step state after)
+    {body : BeaconBlockBody preset fork} {parentSlot : Slot}
     (computed : processOperations config checks state body parentSlot = .ok after) :
-    ∃ first last, BlockFrame state first ∧
+    ∃ first last, step state first ∧
       body.attestations.data.toList.foldlM (processAttestation config checks · parentSlot ·)
         first = .ok last ∧ BlockFrame last after := by
+  have slashed : ∀ {middle : BeaconState preset fork}
+      {proposers : List ProposerSlashing} {attesters : List (AttesterSlashing preset fork)},
+      proposers.foldlM (processProposerSlashing config checks) state = .ok middle →
+      ∀ {first}, attesters.foldlM (processAttesterSlashing config checks) middle = .ok first →
+        step state first := fun proposersOk _ attestersOk =>
+    trans (foldlM_ok_steps step refl trans (fun _ _ _ ok => proposer ok) proposersOk).1
+      (foldlM_ok_steps step refl trans (fun _ _ _ ok => attester ok) attestersOk).1
   unfold processOperations at computed
   split at computed
   · unfold processOperationsGloas at computed
     simp only [bind_ok_iff, ← Array.foldlM_toList] at computed
     obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, proposersOk, _, attestersOk, _,
       attestedOk, _, exitsOk, _, changesOk, paid⟩ := computed
-    refine ⟨_, _, (BlockFrame.foldlM (fun _ _ _ ok => frame_processProposerSlashing ok)
-      proposersOk).trans
-      (BlockFrame.foldlM (fun _ _ _ ok => frame_processAttesterSlashing ok) attestersOk),
-      attestedOk, ?_⟩
+    refine ⟨_, _, slashed proposersOk attestersOk, attestedOk, ?_⟩
     exact (BlockFrame.foldlM (fun _ _ _ ok => frame_processVoluntaryExit ok) exitsOk).trans <|
       (BlockFrame.foldlM (fun _ _ _ ok => frame_processBlsToExecutionChange ok) changesOk).trans <|
       BlockFrame.foldlM (fun _ _ _ ok => by
@@ -1129,13 +1139,84 @@ theorem processOperations_split {body : BeaconBlockBody preset fork} {parentSlot
     · exact frame_processExecutionRequests requestsOk
     · simp only [pure, Except.pure, Except.ok.injEq] at requestsOk
       exact requestsOk ▸ BlockFrame.refl _
-  refine ⟨_, _, (BlockFrame.foldlM (fun _ _ _ ok => frame_processProposerSlashing ok)
-    proposersOk).trans
-    (BlockFrame.foldlM (fun _ _ _ ok => frame_processAttesterSlashing ok) attestersOk),
-    attestedOk, ?_⟩
+  refine ⟨_, _, slashed proposersOk attestersOk, attestedOk, ?_⟩
   exact (BlockFrame.foldlM (fun _ _ _ ok => frame_processDeposit ok) depositedOk).trans <|
     (BlockFrame.foldlM (fun _ _ _ ok => frame_processVoluntaryExit ok) exitsOk).trans <|
     changes.trans requests
+
+/-- The operations of a block are a block frame, its attestations in order, then a block frame. -/
+theorem processOperations_split {body : BeaconBlockBody preset fork} {parentSlot : Slot}
+    (computed : processOperations config checks state body parentSlot = .ok after) :
+    ∃ first last, BlockFrame state first ∧
+      body.attestations.data.toList.foldlM (processAttestation config checks · parentSlot ·)
+        first = .ok last ∧ BlockFrame last after :=
+  processOperations_split_of BlockFrame BlockFrame.refl BlockFrame.trans
+    frame_processProposerSlashing frame_processAttesterSlashing computed
+
+/-- A block is a step, its operations, then a block frame.
+
+The step holds of each part of the block that runs before its operations.
+
+Those are the header and the RANDAO reveal, at every fork.
+
+They are also the payload of the parent from Gloas and the execution part from Bellatrix.
+
+The last is the vote on the deposit contract, before Heze.
+
+It must hold of each state to itself, and chain.
+
+The operations read the parent slot from the latest block header before the block. -/
+theorem processBlock_split_of
+    (step : BeaconState preset fork → BeaconState preset fork → Prop)
+    (refl : ∀ state, step state state)
+    (trans : ∀ {first second third}, step first second → step second third → step first third)
+    {block : BeaconBlock preset fork}
+    (paid : ∀ {state after} (gloas : .glamsterdam ≤ fork),
+      processParentExecutionPayload config checks state gloas block.body = .ok after →
+        step state after)
+    (header : ∀ {state after}, processBlockHeader state block = .ok after → step state after)
+    (execution : ∀ {state after} (bellatrix : .bellatrix ≤ fork),
+      processBlockExecution config checks engine state block.body bellatrix = .ok after →
+        step state after)
+    (randao : ∀ {state after},
+      processRandao config checks state block.body = .ok after → step state after)
+    (eth1 : ∀ {state after} (before : fork < .hegota),
+      processEth1Data before state block.body = .ok after → step state after)
+    (computed : processBlock config checks engine state block = .ok after) :
+    ∃ first last, step state first ∧
+      processOperations config checks first block.body state.latestBlockHeader.slot = .ok last ∧
+      BlockFrame last after := by
+  unfold processBlock at computed
+  split at computed
+  · unfold processBlockAltair at computed
+    simp only [bind_ok_iff] at computed
+    obtain ⟨paid', paidOk, headed, headedOk, executed, executedOk, revealed, revealedOk, voted,
+      votedOk, _, operatedOk, synced⟩ := computed
+    -- From Gloas the payload of the parent runs before the header.
+    have paidStep : step state paid' := by
+      split at paidOk
+      · exact paid _ paidOk
+      · cases paidOk
+        exact refl _
+    -- From Bellatrix the execution part runs between the header and the RANDAO reveal.
+    have executedStep : step headed executed := by
+      split at executedOk
+      · exact execution _ executedOk
+      · cases executedOk
+        exact refl _
+    -- Heze drops the vote on the deposit contract.
+    have votedStep : step revealed voted := by
+      split at votedOk
+      · exact eth1 _ votedOk
+      · cases votedOk
+        exact refl _
+    exact ⟨_, _, trans paidStep <| trans (header headedOk) <|
+      trans executedStep <| trans (randao revealedOk) votedStep, operatedOk,
+      frame_processSyncAggregate synced⟩
+  simp only [bind_ok_iff] at computed
+  obtain ⟨_, headerOk, _, randaoOk, _, eth1Ok, operationsOk⟩ := computed
+  exact ⟨_, _, trans (header headerOk) <| trans (randao randaoOk) <|
+    eth1 _ eth1Ok, operationsOk, BlockFrame.refl _⟩
 
 /-- A block is a block frame, its operations, then a block frame.
 
@@ -1144,38 +1225,11 @@ theorem processBlock_split {block : BeaconBlock preset fork}
     (computed : processBlock config checks engine state block = .ok after) :
     ∃ first last, BlockFrame state first ∧
       processOperations config checks first block.body state.latestBlockHeader.slot = .ok last ∧
-      BlockFrame last after := by
-  unfold processBlock at computed
-  split at computed
-  · unfold processBlockAltair at computed
-    simp only [bind_ok_iff] at computed
-    obtain ⟨paid, paidOk, headed, headedOk, executed, executedOk, revealed, revealedOk, voted,
-      votedOk, _, operatedOk, synced⟩ := computed
-    -- From Gloas the payload of the parent runs before the header.
-    have paidFrame : BlockFrame state paid := by
-      split at paidOk
-      · exact frame_processParentExecutionPayload paidOk
-      · cases paidOk
-        exact BlockFrame.refl _
-    -- From Bellatrix the execution part runs between the header and the RANDAO reveal.
-    have executedFrame : BlockFrame headed executed := by
-      split at executedOk
-      · exact frame_processBlockExecution executedOk
-      · cases executedOk
-        exact BlockFrame.refl _
-    -- Heze drops the vote on the deposit contract.
-    have votedFrame : BlockFrame revealed voted := by
-      split at votedOk
-      · exact frame_processEth1Data votedOk
-      · cases votedOk
-        exact BlockFrame.refl _
-    exact ⟨_, _, paidFrame.trans <| (frame_processBlockHeader headedOk).trans <|
-      executedFrame.trans <| (frame_processRandao revealedOk).trans votedFrame, operatedOk,
-      frame_processSyncAggregate synced⟩
-  simp only [bind_ok_iff] at computed
-  obtain ⟨_, headerOk, _, randaoOk, _, eth1Ok, operationsOk⟩ := computed
-  exact ⟨_, _, (frame_processBlockHeader headerOk).trans <| (frame_processRandao randaoOk).trans <|
-    frame_processEth1Data eth1Ok, operationsOk, BlockFrame.refl _⟩
+      BlockFrame last after :=
+  processBlock_split_of BlockFrame BlockFrame.refl BlockFrame.trans
+    (fun _ ok => frame_processParentExecutionPayload ok) frame_processBlockHeader
+    (fun _ ok => frame_processBlockExecution ok) frame_processRandao
+    (fun _ ok => frame_processEth1Data ok) computed
 
 /-- The operations of a block form a frame. -/
 theorem frame_processOperations {body : BeaconBlockBody preset fork} {parentSlot : Slot}

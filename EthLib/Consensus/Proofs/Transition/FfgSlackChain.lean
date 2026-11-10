@@ -25,6 +25,8 @@ One choice of them can serve a whole chain, as each step that justifies does so 
 
 Nothing bounds them from below, so a choice far from the active sets and balances gives little.
 
+Another module instantiates them with the active sets and balances that the chain reads.
+
 An empty second set, or the zero weights, makes every ordered link a slack link.
 
 Each step at the end of an epoch also asks that each justified block is in the chain of its target.
@@ -80,19 +82,13 @@ structure SlackChainInvariant (config : Config) (checks : SignatureChecks)
   /-- The two justified checkpoints are slack-justified in the model. -/
   slack : SlackJustifiedCheckpoints V U W genesis votes block forked.state
 
-/-- The hypotheses that one step of a chain needs, on the states before and after it.
+/-- The bounds that one step of a chain needs, apart from the sets, weights and votes of the model.
 
-Some of them are asked only of a step that moves the slot, when that slot ends an epoch.
+Two of them are asked only of a step that moves the slot, when that slot ends an epoch.
 
 Then the active stake of the current epoch must be more than one and a half increments.
 
-The votes of the model must also hold those of the data that the state before signs.
-
 The block of each justified checkpoint must be in the chain of the block of its recent epoch.
-
-If the step changes the current justified checkpoint, the sets and weights must match.
-
-They must match the state before for the epoch of the new checkpoint.
 
 After the step, the registry must stay below 2^64 validators.
 
@@ -100,28 +96,16 @@ A block keeps the slot and the justified checkpoints, so it is asked only the si
 
 The order of the blocks of the model is an assumption on the map from roots to blocks.
 
-The meaningful choice takes roots ordered by ancestry, with the zero root lowest.
-
-The meaningful sets are the active sets of the epoch and the next one.
-
-The meaningful weights are the effective balances. -/
-structure SlackStepHypotheses (config : Config) (checks : SignatureChecks)
-    (V U : Models.Ffg.Checkpoint β → Finset ValidatorIndex)
-    (W : Models.Ffg.Checkpoint β → Set (ValidatorIndex → ℕ))
-    (votes : Set (Vote ValidatorIndex β)) (block : Root → β)
-    (forked after : ForkedBeaconState preset) : Prop where
+The meaningful choice takes roots ordered by ancestry, with the zero root lowest. -/
+structure SlackStepBounds (block : Root → β) (forked after : ForkedBeaconState preset) : Prop where
   /-- At the end of an epoch, the active stake is more than one and a half increments.
 
-  It is asked only when the slot moves, as are the next two. -/
+  It is asked only when the slot moves, as is the next one. -/
   large : after.state.slot ≠ forked.state.slot →
     (forked.state.slot + 1) % preset.SLOTS_PER_EPOCH = 0 →
     3 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat <
       2 * stake (fun index => balanceAt forked.state index.toNat)
         (getActiveValidatorIndices forked.state (getCurrentEpoch forked.state)).toFinset
-  /-- At the end of an epoch, the votes of the model hold the data that the state signs. -/
-  contains : after.state.slot ≠ forked.state.slot →
-    (forked.state.slot + 1) % preset.SLOTS_PER_EPOCH = 0 →
-    ffgVotes block {vote | SignedVote config checks forked.state vote} ⊆ votes
   /-- At the end of an epoch, each justified block is below the block of its recent epoch. -/
   chain : after.state.slot ≠ forked.state.slot →
     (forked.state.slot + 1) % preset.SLOTS_PER_EPOCH = 0 → ∀ (current : Bool) (root : Root),
@@ -130,11 +114,35 @@ structure SlackStepHypotheses (config : Config) (checks : SignatureChecks)
       .ok root →
     block (if current then forked.state.currentJustifiedCheckpoint
       else forked.state.previousJustifiedCheckpoint).root ≤ block root
+  /-- The registry stays below 2^64 validators. -/
+  small : after.state.validators.data.size < 2 ^ 64
+
+/-- The hypotheses that one step of a chain needs, on the states before and after it.
+
+They are the bounds of a step, and two conditions on the sets, weights and votes of the model.
+
+At the end of an epoch, the votes of the model must hold those of the data that the state signs.
+
+If the step changes the current justified checkpoint, the sets and weights must match.
+
+They must match the state before for the epoch of the new checkpoint.
+
+The meaningful sets are the active sets of the epoch and the next one.
+
+The meaningful weights are the effective balances. -/
+structure SlackStepHypotheses (config : Config) (checks : SignatureChecks)
+    (V U : Models.Ffg.Checkpoint β → Finset ValidatorIndex)
+    (W : Models.Ffg.Checkpoint β → Set (ValidatorIndex → ℕ))
+    (votes : Set (Vote ValidatorIndex β)) (block : Root → β)
+    (forked after : ForkedBeaconState preset) : Prop extends SlackStepBounds block forked after
+    where
+  /-- At the end of an epoch, the votes of the model hold the data that the state signs. -/
+  contains : after.state.slot ≠ forked.state.slot →
+    (forked.state.slot + 1) % preset.SLOTS_PER_EPOCH = 0 →
+    ffgVotes block {vote | SignedVote config checks forked.state vote} ⊆ votes
   /-- The sets and weights match the state for a new current justified checkpoint. -/
   sets : after.state.currentJustifiedCheckpoint ≠ forked.state.currentJustifiedCheckpoint →
     TargetSetsMatch V U W block forked.state after.state.currentJustifiedCheckpoint.epoch
-  /-- The registry stays below 2^64 validators. -/
-  small : after.state.validators.data.size < 2 ^ 64
 
 /-- One step of a chain that meets the hypotheses of a step. -/
 def SlackStep (config : Config) (checks : SignatureChecks)
@@ -144,6 +152,32 @@ def SlackStep (config : Config) (checks : SignatureChecks)
     (forked after : ForkedBeaconState preset) : Prop :=
   ChainStep config checks forked after ∧
     SlackStepHypotheses config checks V U W votes block forked after
+
+/-- A step that changes the current justified checkpoint makes it that of a recent epoch.
+
+That epoch is the previous or the current epoch of the state before the step.
+
+The root of the new checkpoint is the root that this state records for the epoch.
+
+The buffer of roots must cover two epochs. -/
+theorem ChainStep.getBlockRoot_currentJustified_of_ne
+    (window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
+    {forked after : ForkedBeaconState preset} (step : ChainStep config checks forked after)
+    (changed : after.state.currentJustifiedCheckpoint ≠ forked.state.currentJustifiedCheckpoint) :
+    (after.state.currentJustifiedCheckpoint.epoch = getPreviousEpoch forked.state ∨
+        after.state.currentJustifiedCheckpoint.epoch = getCurrentEpoch forked.state) ∧
+      getBlockRoot forked.state after.state.currentJustifiedCheckpoint.epoch =
+        .ok after.state.currentJustifiedCheckpoint.root := by
+  cases step with
+  | slot computed =>
+    obtain ⟨advanced, advancedOk, upgraded⟩ := bind_ok_iff.mp computed
+    have currentKept := (processUpgrades_justified upgraded).2
+    dsimp only at currentKept
+    rw [currentKept] at changed ⊢
+    exact advanceSlot_getBlockRoot_currentJustified_of_ne window advancedOk changed
+  | block engine signed validateResult applied =>
+    obtain ⟨-, blockOk, -⟩ := applySignedBlock_ok applied
+    exact absurd (frame_processBlock blockOk).currentJustified changed
 
 /-- One step of a chain keeps the properties of its states.
 
@@ -258,7 +292,9 @@ The genesis block of the model is the block of the zero root.
 
 The sets, weights and votes are bounded from one side only.
 
-So the result is meaningful for the active sets, the effective balances and the signed votes. -/
+So the result is meaningful for the active sets and the effective balances.
+
+The signed votes do not yet bound who voted. -/
 theorem slackJustifiedCheckpoints_of_chain (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
     (window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
     (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
