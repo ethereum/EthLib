@@ -22,6 +22,10 @@ The later ones say their values.
 - The sender gets back the price of the gas it did not use.
 - The beneficiary gets the priority fee of the gas that the transaction used.
 - Storage stays at the beneficiary unless the payment deletes it.
+- Storage stays at an authority with delegable code, unless the payment deletes it.
+- From Paris, the first authorization that such an authority accepts may empty it and delete it.
+
+The block after the transaction reads the same way as the state that the transaction leaves.
 
 The values read a missing account as empty, so they do not say which of these accounts exist.
 
@@ -1282,6 +1286,99 @@ theorem processTransaction_authority_keeps_of_error {block : State.BlockState}
   · exact failedRun_authority_keeps hrun hcode hsize hindicator hhash
   · exact failedRun_authority_keeps hrun hcode hsize hindicator hhash
 
+/-- A failed run keeps the storage of an authority whose code is empty or a delegation indicator.
+
+From Paris, the first authorization that it accepts deletes it if it leaves the account empty.
+
+The deletion needs an authority other than the sender, with nonce 0 and balance 0 before it.
+
+It also needs a code set with the empty code hash.
+
+Storage stays unless the payment to the beneficiary deletes it. -/
+private theorem failedRun_authority_storage {Meter : Type} [GasMeter Meter]
+    [LawfulGasMeter Meter] {block : State.BlockState}
+    (hrun : FailedRun Meter tx env block included out) {authority : Address} {code : ByteArray}
+    (hcode : (State.TransactionState.ofBlock block).getCode
+      ((State.TransactionState.ofBlock block).getAccount authority).codeHash = .ok code)
+    (hdelegable : (code.size = 0 || isValidDelegation code) = true)
+    (hkeep : fork < .paris ∨
+      ((State.TransactionState.ofBlock block).getAccount authority).nonce +
+        (if authority = included.sender then 1 else 0) ≠ 0 ∨
+      ((State.TransactionState.ofBlock block).getAccount authority).balance ≠ 0 ∨
+      ∀ first ∈ (acceptedBy env.chainId.toNat authority
+          (((State.TransactionState.ofBlock block).getAccount authority).nonce +
+            (if authority = included.sender then 1 else 0)) tx.authorizations).head?,
+        Cryptography.Hash.Keccak.keccak256 (delegationCode first) ≠ State.EMPTY_CODE_HASH)
+    (key : Bytes32)
+    (hcoinbase : authority ≠ env.coinbase ∨ out.state.getAccountOptional env.coinbase ≠ none) :
+    out.state.getStorage authority key =
+      (State.TransactionState.ofBlock block).getStorage authority key := by
+  obtain ⟨target, bought, message, output, base, gasLeft, refund, -, hbought, -, -,
+    rfl, -, -, -, -, hsettled, -, hcases⟩ := hrun
+  have hstore := (hsettled authority).2.2.2
+  obtain ⟨hb_hash, hb_nonce, hb_bal⟩ := buyGas_authority hbought authority
+  have hkept : output.state.getStorage authority key = bought.getStorage authority key := by
+    rcases hcases with ⟨-, hsame, -, -⟩ | ⟨first, done, -, -, hdone, hsame_done, -, -⟩
+    · exact (hsame authority List.not_mem_nil).2.1 key
+    · have hb_code : bought.getCode (bought.getAccount authority).codeHash = .ok code := by
+        rw [hb_hash, (buyGas_keeps hbought).2.2]
+        exact hcode
+      refine ((hsame_done authority List.not_mem_nil).2.1 key).trans
+        (foldlM_applyAuthorization_storage hdone hb_code hdelegable ?_ key)
+      rcases hkeep with hp | hs | hb | hf
+      · exact .inl hp
+      · exact .inr (.inl (by rw [hb_nonce]; exact hs))
+      · by_cases hsender : authority = included.sender
+        · exact .inr (.inl (by rw [hb_nonce]; simp [hsender]))
+        · exact .inr (.inr (.inl (by rw [hb_bal hsender]; exact hb)))
+      · exact .inr (.inr (.inr (by rw [hb_nonce]; exact hf)))
+  rw [hstore key hcoinbase, hkept, (buyGas_keeps hbought).2.1 authority key]
+
+/-- Before Hegotá, a transaction whose message fails keeps the storage of a delegable authority.
+
+Its code before the transaction must be empty or a delegation indicator.
+
+From Paris, a write that leaves an account empty deletes it, with its storage.
+
+So the first authorization that the authority accepts deletes its storage if it leaves it empty.
+
+The deletion needs an authority other than the sender, with nonce 0 and balance 0 before it.
+
+It also needs a code set with the empty code hash.
+
+An authorization to the zero address sets the empty code, by [EIP-7702][e7702].
+
+Another address gets a delegation indicator, whose hash differs unless Keccak-256 collides.
+
+That is not proved here, so the hypothesis names the hash.
+
+The nonce then grows, so no later authorization deletes the account.
+
+The storage also stays unless the payment to the beneficiary deletes it.
+
+[e7702]: https://eips.ethereum.org/EIPS/eip-7702#behavior -/
+theorem processTransaction_authority_storage_of_error {block : State.BlockState}
+    (h : processTransaction env block included tx = .ok out) (failed : out.error.isSome = true)
+    {authority : Address} {code : ByteArray}
+    (hcode : (State.TransactionState.ofBlock block).getCode
+      ((State.TransactionState.ofBlock block).getAccount authority).codeHash = .ok code)
+    (hdelegable : (code.size = 0 || isValidDelegation code) = true)
+    (hkeep : fork < .paris ∨
+      ((State.TransactionState.ofBlock block).getAccount authority).nonce +
+        (if authority = included.sender then 1 else 0) ≠ 0 ∨
+      ((State.TransactionState.ofBlock block).getAccount authority).balance ≠ 0 ∨
+      ∀ first ∈ (acceptedBy env.chainId.toNat authority
+          (((State.TransactionState.ofBlock block).getAccount authority).nonce +
+            (if authority = included.sender then 1 else 0)) tx.authorizations).head?,
+        Cryptography.Hash.Keccak.keccak256 (delegationCode first) ≠ State.EMPTY_CODE_HASH)
+    (key : Bytes32)
+    (hcoinbase : authority ≠ env.coinbase ∨ out.state.getAccountOptional env.coinbase ≠ none) :
+    out.state.getStorage authority key =
+      (State.TransactionState.ofBlock block).getStorage authority key := by
+  rcases processTransaction_values_of_error h failed with ⟨-, hrun⟩ | ⟨-, -, hrun⟩
+  · exact failedRun_authority_storage hrun hcode hdelegable hkeep key hcoinbase
+  · exact failedRun_authority_storage hrun hcode hdelegable hkeep key hcoinbase
+
 end Values
 
 /-! ## The block -/
@@ -1312,5 +1409,29 @@ theorem block_of_output (out : TransactionOutput) (address : Address) (key : Byt
       getAccountOptional_incorporateTxIntoBlock]
   · rw [State.BlockState.getStorage_applyChanges, hparent, getStorage_incorporateTxIntoBlock]
   · rw [State.BlockState.getCode_applyChanges, hparent, getCode_incorporateTxIntoBlock]
+
+/-- A transaction whose message fails changes the block only at a few addresses.
+
+They are its sender, its beneficiary and its authorities.
+
+The authorities are the addresses that the signatures of its authorizations name.
+
+The block after it reads as the block before it at every other address.
+
+That holds for the account, every word of storage and every word of transient storage. -/
+theorem processTransaction_block_sameOutside_of_error {env : BlockEnvironment fork}
+    {block : State.BlockState} {included : Included} {out : TransactionOutput}
+    (h : processTransaction env block included tx = .ok out) (failed : out.error.isSome = true) :
+    State.TransactionState.SameOutside
+      (included.sender :: env.coinbase :: tx.authorizations.filterMap recoverAuthority)
+      (State.TransactionState.ofBlock block) (State.TransactionState.ofBlock out.block) := by
+  intro address hnot
+  obtain ⟨haccount, hstorage, -⟩ := processTransaction_sameOutside_of_error h failed address hnot
+  have hparent : State.TransactionState.ofBlock out.block = out.state.incorporateTxIntoBlock := rfl
+  refine ⟨?_, fun key => ?_, fun key => ?_⟩
+  · rw [hparent, getAccountOptional_incorporateTxIntoBlock, haccount]
+  · rw [hparent, getStorage_incorporateTxIntoBlock, hstorage key]
+  · rw [hparent, getTransientStorage_incorporateTxIntoBlock]
+    rfl
 
 end EthLib.Execution.Transactions
