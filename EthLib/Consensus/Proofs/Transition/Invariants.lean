@@ -1157,9 +1157,11 @@ theorem processOperations_split {body : BeaconBlockBody preset fork} {parentSlot
 
 The step holds of each part of the block that runs before its operations.
 
-Those are the payload of the parent from Gloas, the header and the execution part from Bellatrix.
+Those are the header and the RANDAO reveal, at every fork.
 
-They are also the RANDAO reveal and the vote on the deposit contract before Heze.
+They are also the payload of the parent from Gloas and the execution part from Bellatrix.
+
+The last is the vote on the deposit contract, before Heze.
 
 It must hold of each state to itself, and chain.
 
