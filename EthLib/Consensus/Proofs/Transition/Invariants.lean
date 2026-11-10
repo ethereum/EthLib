@@ -1500,6 +1500,8 @@ theorem frame_passPendingDeposits {stop : PendingDeposit → Bool} {nextEpoch : 
     · cases computed
       exact MutatorFrame.refl _
     split at computed
+    · cases computed
+    split at computed
     · split at computed
       · cases computed
       rename_i credited
