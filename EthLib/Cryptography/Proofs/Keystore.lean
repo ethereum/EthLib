@@ -7,7 +7,7 @@ public import EthLib.Cryptography.Keystore
 
 A mismatched checksum prevents secret decryption.
 
-A key derivation beyond the caller's limits is refused before it runs.
+A key derivation beyond the caller's limits gives the limit error.
 -/
 
 @[expose] public section
@@ -28,7 +28,7 @@ theorem decryptWithKey_of_checksum_mismatch (store : Store) (key : ByteArray)
   simp [decryptWithKey, hsize, hcheck]
   rfl
 
-/-- A key derivation beyond the caller's limits is refused, so it never runs. -/
+/-- A key derivation beyond the caller's limits gives the limit error, whatever the key. -/
 theorem decryptStore_of_not_admits (limits : KdfLimits) (store : Store) (password : String)
     (h : limits.admits (passwordBytes password).size store.kdf = false) :
     decryptStore limits store password =

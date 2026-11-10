@@ -3,7 +3,8 @@
 from ethlib.cryptography import _native
 from ethlib.errors import KeystoreError
 
-# Default memory bound of key derivation: 2^30 bytes, about four times the ERC-2335 scrypt example.
+# Default bound on the modeled buffers of key derivation: 2^30 bytes.
+# The ERC-2335 scrypt example needs about a quarter of it.
 MAX_MEMORY = 2**30
 
 # Default work bound of key derivation, in SHA-256 compressions and Salsa20/8 cores of 64 bytes.

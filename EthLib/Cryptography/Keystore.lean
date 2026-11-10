@@ -72,15 +72,19 @@ inductive Kdf where
   /-- scrypt, with cost, block size, parallelization, output length and salt. -/
   | scrypt (n r p length : Nat) (salt : ByteArray)
 
-/-- The payload memory, in bytes, that a key derivation holds at once, before runtime overhead.
+/-- A model of the memory of a key derivation, in bytes of its buffers.
 
-PBKDF2 holds its output.
+PBKDF2 holds its output and a copy of it.
 
-scrypt holds `N` blocks of `128 * r` bytes in ROMix, two buffers of `p` such blocks, and its output.
+scrypt holds `N` blocks of `128 * r` bytes in ROMix, four buffers of `p` blocks, and two keys.
+
+Those buffers are the expanded password, the mixed blocks, and two copies that hashing makes.
+
+It counts no allocator overhead, and no theorem relates it to the memory that the code uses.
 -/
 def Kdf.memory : Kdf → Nat
-  | .pbkdf2 _ length _ => length
-  | .scrypt n r p length _ => 128 * r * (n + 2 * p) + length
+  | .pbkdf2 _ length _ => 2 * length
+  | .scrypt n r p length _ => 128 * r * n + 4 * (128 * r * p) + 2 * length
 
 /-- The SHA-256 compressions that hash a message of `n` bytes, padding included (FIPS 180-4). -/
 def shaBlocks (n : Nat) : Nat :=
@@ -102,9 +106,11 @@ It then makes one HMAC call on the previous 32-byte value for each further itera
 def pbkdf2Blocks (password salt iterations length : Nat) : Nat :=
   (length + 31) / 32 * (hmacBlocks password (salt + 4) + (iterations - 1) * hmacBlocks password 32)
 
-/-- The work of a key derivation with a password of the given size, in 64-byte block functions.
+/-- A model of the work of a key derivation with a password of the given size.
 
-Those functions are the SHA-256 compression and the Salsa20/8 core.
+It counts calls of a function on one 64-byte block: the SHA-256 compression and the Salsa20/8 core.
+
+It is a count and not a time; the other steps of BlockMix make a call cost more when `r` is small.
 
 scrypt makes `2 * r` Salsa20/8 calls per BlockMix, and `2 * N` BlockMix calls per block.
 
@@ -223,12 +229,11 @@ def readStore (value : Json) : Except KeystoreError Store := do
   return ⟨kdf, checksum, ← fixed "cipher.iv" 16 (← field "cipher.params" params "iv"),
     ← bytes "cipher.message" message⟩
 
-/-- Derive the intermediate key ("Decryption key").
+/-- Derive the intermediate key from the prepared password ("Decryption key").
 
 This runs the derivation at any cost, so decryption checks the caller's limits first.
 -/
-def deriveKey (password : String) (kdf : Kdf) : Except KeystoreError ByteArray :=
-  let password := passwordBytes password
+def deriveKey (password : ByteArray) (kdf : Kdf) : Except KeystoreError ByteArray :=
   match kdf with
   | .pbkdf2 iterations length salt =>
     if length < 32 then .error (.shortKey length)
@@ -260,9 +265,9 @@ def decryptWithKey (store : Store) (key : ByteArray) : Except KeystoreError Byte
 /-- Decrypt a parsed keystore with its prepared password, within the caller's limits. -/
 def decryptStore (limits : KdfLimits) (store : Store) (password : String) :
     Except KeystoreError ByteArray := do
-  let size := (passwordBytes password).size
-  unless limits.admits size store.kdf do
-    throw (.limitExceeded store.kdf.memory (store.kdf.work size))
+  let password := passwordBytes password
+  unless limits.admits password.size store.kdf do
+    throw (.limitExceeded store.kdf.memory (store.kdf.work password.size))
   decryptWithKey store (← deriveKey password store.kdf)
 
 /-- Decrypt an ERC-2335 keystore value, or report the step that failed.

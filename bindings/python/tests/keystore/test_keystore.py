@@ -266,7 +266,7 @@ def pbkdf2_blocks(password: int, salt: int, iterations: int, length: int) -> int
 
 def scrypt_cost(password: int, salt: int, n: int, r: int, p: int, dklen: int) -> tuple[int, int]:
     """Memory and work of RFC 7914 scrypt: its buffers, then Salsa20/8 cores and PBKDF2 blocks."""
-    memory = 128 * r * (n + 2 * p) + dklen
+    memory = 128 * r * n + 4 * (128 * r * p) + 2 * dklen
     work = (
         4 * n * r * p
         + pbkdf2_blocks(password, salt, 1, 128 * r * p)
@@ -279,10 +279,11 @@ def scrypt_cost(password: int, salt: int, n: int, r: int, p: int, dklen: int) ->
     "name, memory, work",
     [
         # c = 262144 with a 16-byte password, a 32-byte salt and one block: four compressions each.
-        ("pbkdf2", 32, 4 * 262144),
-        # n = 262144, r = 8, p = 1: the table, two buffers and the key take the memory.
+        # The key and its copy take 64 bytes.
+        ("pbkdf2", 64, 4 * 262144),
+        # n = 262144, r = 8, p = 1: the table, four buffers and two keys take the memory.
         # Work: the Salsa20/8 cores, 32 expansion blocks of 4, and 20 over the 1024-byte blocks.
-        ("scrypt", 128 * 8 * (262144 + 2) + 32, 4 * 262144 * 8 + 32 * 4 + 20),
+        ("scrypt", 128 * 8 * 262144 + 4 * 1024 + 64, 4 * 262144 * 8 + 32 * 4 + 20),
     ],
 )
 def test_erc2335_limits(name: str, memory: int, work: int) -> None:
