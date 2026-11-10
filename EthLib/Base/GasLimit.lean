@@ -9,7 +9,7 @@ A block may change the gas limit by less than a 1024th of the parent's.
 
 So one block moves it by at most that 1024th minus one, and stops at the target if it is closer.
 
-A builder of the execution layer follows this step, and a bid of Gloas must follow it too.
+The payload build of this library follows this step, and a bid of Gloas must follow it.
 
 Both layers share the step, so it sits below them.
 -/

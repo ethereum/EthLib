@@ -70,6 +70,15 @@ theorem outputChecks_fillHeader {header : Header fork} {output : BlockOutput for
       simp [hr]
     · simp at hc
 
+/-- The body of a block runs alike before and after its header is filled.
+
+The body reads none of the fields that the fill sets. -/
+theorem runBody_fillHeader {header : Header fork} {output : BlockOutput fork}
+    {roots : OutputRoots} {withdrawals : Since .shapella fork (List Execution.Blocks.Withdrawal)} :
+    runBody chain ⟨fillHeader header output roots, transactions, [], withdrawals⟩ =
+      runBody chain ⟨header, transactions, [], withdrawals⟩ :=
+  rfl
+
 /-- A build that succeeds went through each of its steps.
 
 The parent is the last recent block, and the fork is the active fork after it at the timestamp.
@@ -115,11 +124,7 @@ theorem stateTransition_of_buildPayload
     buildPayload_spec h
   rw [hState]
   rw [hBlock] at hC hF ⊢
-  -- The body reads none of the fields that the fill sets, so it runs alike on the filled header.
-  have hR' : runBody chain ⟨fillHeader (buildHeader chain.config parent parentHash attributes
-      choices) result.output result.roots, transactions, [], attributes.withdrawals⟩ =
-      .ok result := hR
-  refine stateTransition_of_runBody hH ?_ hC hR' hF
+  refine stateTransition_of_runBody hH ?_ hC (by rw [runBody_fillHeader]; exact hR) hF
   rw [show (fillHeader (buildHeader chain.config parent parentHash attributes choices)
       result.output result.roots).timestamp.toNat = attributes.timestamp.toNat from
     toNat_ofNat_timestamp attributes.timestamp]

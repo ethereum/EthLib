@@ -27,8 +27,6 @@ The excess blob gas follows the blob schedule of the chain at the number and the
 
 The gas limit moves from the parent's toward a target, by one step of the header check at most.
 
-At the first London block, that check reads twice the parent's gas limit, and so does the step.
-
 From Glamsterdam the target is the target gas limit of the attributes, as the source asks.
 
 Before Glamsterdam the builder chooses the target.
@@ -36,6 +34,10 @@ Before Glamsterdam the builder chooses the target.
 A target below 5000, the smallest gas limit, counts as 5000.
 
 The source does not say how far one block moves toward the target; that step is a choice here.
+
+From Glamsterdam a bid of Gloas must take the same step, so the choice matches it.
+
+Only a parent near 5000 with a target below 5000 can make the two disagree, by the floor above.
 
 The block then runs on the state of the chain.
 
@@ -84,7 +86,7 @@ structure BuildChoices where
   /-- The extra data of the block; the build fails on more than 32 bytes. -/
   extraData : ByteArray
   /-- The target gas limit, which counts only before Glamsterdam. -/
-  targetGasLimit : Nat
+  targetGasLimit : UInt64
 
 /-- The target gas limit: that of the attributes from Glamsterdam, else the builder's.
 
@@ -92,7 +94,7 @@ A target below the smallest gas limit, 5000, counts as 5000. -/
 def gasTarget (attributes : PayloadAttributes fork) (choices : BuildChoices) : Nat :=
   max LIMIT_MINIMUM
     (if h : .glamsterdam ≤ fork then (attributes.targetGasLimit h).toNat
-    else choices.targetGasLimit)
+    else choices.targetGasLimit.toNat)
 
 /-- The header of a built block before its body runs, on a parent.
 

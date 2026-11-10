@@ -17,7 +17,7 @@ At the first London block, the rule reads twice the parent's gas limit.
 
 So that block may double the gas limit, which no other block may do.
 
-A gas limit that moves toward a target of at least 5000 follows the rule.
+After a parent of at least 5000, a gas limit toward a target of at least 5000 follows the rule.
 
 A target that the rule allows is the gas limit itself.
 -/

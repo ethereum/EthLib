@@ -374,7 +374,7 @@ The body runs in the environment of its header and of the recent hashes of the c
 
 The body reads none of the header fields that it gives: roots, gas counts, logs Bloom, hashes.
 
-So a builder can run it before it fills those fields. -/
+So a builder can run it before it fills those fields, and the Engine proofs show it. -/
 def runBody (chain : BlockChain) {fork : Fork} (block : Block fork Transaction) :
     Except BlockError (BodyResult fork) := do
   let hashes ← recentHashes chain.recent
