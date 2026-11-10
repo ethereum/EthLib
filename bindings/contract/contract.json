@@ -8853,6 +8853,28 @@
    "error_class": "GossipError",
    "docstring":
    "The SSZ bytes of the data of a gossip message, given the size bound of its SSZ type.\n\nThe data may be at most `32 + n + n / 6` bytes long, for the payload cap `n`.\n\nThe payload must decompress, and be at most the smaller of the cap and the bound.\n\nA length above that is rejected from the preamble of the data, before anything is decompressed.\n\nThe caller deserializes the bytes, since it knows their SSZ type."},
+  {"summary": "The RPC that the bytes encode, under the `StrictNoSign` policy.",
+   "signature": "(data: bytes) -> dict[str, Any]",
+   "operation": "EthLib.Networking.Gossip.Exports.rpcDecodeExport",
+   "method": "gossip_rpc_decode",
+   "errors":
+   [{"type": "EthLib.Networking.Gossip.RpcError",
+     "codes":
+     [{"constructor": "protobuf", "code": 101},
+      {"constructor": "signed", "code": 102},
+      {"constructor": "missingTopic", "code": 103},
+      {"constructor": "wireType", "code": 104},
+      {"constructor": "utf8", "code": 105}]}],
+   "error_class": "GossipError",
+   "docstring":
+   "The RPC that the bytes encode, under the `StrictNoSign` policy."},
+  {"summary": "The bytes of an RPC.",
+   "signature": "(rpc: dict[str, Any]) -> bytes",
+   "operation": "EthLib.Networking.Gossip.Rpc.encode",
+   "method": "gossip_rpc_encode",
+   "errors": [],
+   "error_class": "GossipError",
+   "docstring": "The bytes of an RPC."},
   {"summary":
    "The bytes of a receipt, decoded at the fork and encoded again with its transaction type.",
    "signature": "(fork: str, receipt: bytes) -> bytes",

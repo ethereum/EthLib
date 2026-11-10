@@ -986,6 +986,12 @@
 #define DOC_gossip_decode_payload \
   "The SSZ bytes of the data of a gossip message, given the size bound of its SSZ type."
 
+#define DOC_gossip_rpc_decode \
+  "The RPC that the bytes encode, under the `StrictNoSign` policy."
+
+#define DOC_gossip_rpc_encode \
+  "The bytes of an RPC."
+
 #define DOC_receipt_reencode \
   "The bytes of a receipt, decoded at the fork and encoded again with its transaction type."
 

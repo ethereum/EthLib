@@ -1317,6 +1317,14 @@ def gossip_decode_payload(type_bound: int, data: bytes) -> bytes:
     """The SSZ bytes of the data of a gossip message, given the size bound of its SSZ type."""
     ...
 
+def gossip_rpc_decode(data: bytes) -> dict[str, Any]:
+    """The RPC that the bytes encode, under the `StrictNoSign` policy."""
+    ...
+
+def gossip_rpc_encode(rpc: dict[str, Any]) -> bytes:
+    """The bytes of an RPC."""
+    ...
+
 def receipt_reencode(fork: str, receipt: bytes) -> bytes:
     """The bytes of a receipt, decoded at the fork and encoded again with its transaction type."""
     ...

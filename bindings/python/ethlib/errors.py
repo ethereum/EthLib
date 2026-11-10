@@ -202,7 +202,7 @@ class Libp2pIdentityError(EthLibError, ValueError):
 
 
 class GossipError(EthLibError, ValueError):
-    """A gossip message was rejected, or its fork has no name."""
+    """A gossip message or RPC was rejected, or its fork has no name; code 0 is a bad argument."""
 
 
 class Discv5Error(EthLibError, ValueError):
