@@ -398,7 +398,7 @@ theorem onAttestation_frame {checks : SignatureChecks} {attestation : Attestatio
     store.EpochsLe after ∧ after.blocks = store.blocks ∧ after.blockStates = store.blockStates := by
   unfold onAttestation at attested
   simp only [bind_ok_iff] at attested
-  obtain ⟨_, _, stored, storing, _, _, _, _, valid, _, attested⟩ := attested
+  obtain ⟨_, _, stored, storing, _, _, _, _, _, _, valid, _, attested⟩ := attested
   obtain ⟨le, b, bs, -⟩ := storeTargetCheckpointState_frame storing
   split at attested
   · simp only [pure, Except.pure, Except.ok.injEq] at attested
@@ -424,7 +424,7 @@ theorem onAttestation_sameClock {checks : SignatureChecks} {attestation : Attest
     SameClock store after := by
   unfold onAttestation at attested
   simp only [bind_ok_iff] at attested
-  obtain ⟨_, _, stored, storing, _, _, _, _, valid, _, attested⟩ := attested
+  obtain ⟨_, _, stored, storing, _, _, _, _, _, _, valid, _, attested⟩ := attested
   have first := (storeTargetCheckpointState_frame storing).2.2.2
   split at attested
   · simp only [pure, Except.pure, Except.ok.injEq] at attested
@@ -1157,6 +1157,27 @@ theorem foldl_recordVote {equivocating : List ValidatorIndex} {message : LatestM
       exact keep rest _ m found late
     · exact ih _ voted
 
+/-- An attestation that the store takes has the committees of its slot, as in a block.
+
+They are read in the state of its target, which the store then keeps. -/
+theorem onAttestation_committees {checks : SignatureChecks}
+    {attestation : Attestation preset fork} {isFromBlock : Bool} {after : Store preset fork}
+    (attested : store.onAttestation config checks attestation isFromBlock = .ok after) :
+    ∃ targetState, after.checkpointStates[attestation.data.target]? = some targetState ∧
+      checkAttestationCommittees targetState attestation = .ok () := by
+  unfold onAttestation at attested
+  simp only [bind_ok_iff] at attested
+  obtain ⟨_, _, stored, _, targetState, found, _, mapped, indexed, _, valid, _, attested⟩ :=
+    attested
+  split at attested
+  · simp only [pure, Except.pure, Except.ok.injEq] at attested
+    subst attested
+    refine ⟨targetState, ?_, ?_⟩
+    · simpa [updateLatestMessages] using checkpointState_ok_iff.mp found
+    · cases g : checkAttestationCommittees targetState attestation <;>
+        simp_all [Except.mapError]
+  · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at attested
+
 /-- After an attestation, each of its voters that does not equivocate has a recent vote.
 
 That vote is at the rank of the attestation's vote or later.
@@ -1172,7 +1193,8 @@ theorem onAttestation_voted {checks : SignatureChecks} {attestation : Attestatio
           (LatestMessage.ofAttestation attestation).rank ≤ m.rank := by
   unfold onAttestation at attested
   simp only [bind_ok_iff] at attested
-  obtain ⟨_, _, stored, _, targetState, found, indexed, mapped, valid, _, attested⟩ := attested
+  obtain ⟨_, _, stored, _, targetState, found, _, _, indexed, mapped, valid, _, attested⟩ :=
+    attested
   split at attested
   · simp only [pure, Except.pure, Except.ok.injEq] at attested
     subst attested

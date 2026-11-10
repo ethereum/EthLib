@@ -18,6 +18,14 @@ Not yet released.
   The new `OrdinaryStepRules.step` concludes that a step either runs SELFDESTRUCT, as the new `RunsSelfdestruct` says, or keeps the relation.
   `runTransaction_eq_ok` now concludes `TransactionRun`, a definition that unfolds to the same seven equations, and `TransactionRun.unique` proves that its values are fixed by the transaction and its output.
   The new `processMessage_frame_byKind` runs the induction over messages for any fact about the frame of a call, and `processMessage_rel_byKind` keeps its statement and now follows from it.
+- The fork choice now rejects an attestation whose committees are not those of its slot, a step of the safety proof of the fast confirmation rule ([#1458](https://github.com/ethereum/EthLib/issues/1458)).
+  It runs the committee check of block processing in the state of the target, with one aggregation bit for each member of the committees.
+  Before Electra the index must be below the count of committees of the slot.
+  From Electra each index of the committee bits must be below that count, each of those committees must have a bit set, and the index of the attestation must be 0 before Gloas.
+  Before, a committee index past that count named a committee of a later slot of the same epoch, or none, so a validator could vote for a slot before its own.
+  Gossip validation and block processing already rejected such an attestation.
+  The rejection is the fork choice error `transition`, which carries the error of the check, such as `committeeIndexOutOfRange`; a failed shuffle is now reported there too.
+  No signature of a C export or Python function changes, but an `attestation` step of `fork_choice` now rejects these attestations, and so does a `block` step that carries one.
 - The safety threshold of the fast confirmation rule now fails when the discount for empty slots exceeds the weight of the committees since the parent ([#1832](https://github.com/ethereum/EthLib/issues/1832)).
   It fails with the new fork choice error `supportDiscountAboveMaximum`, of code 53, where it used to return half of what was left, or 0.
   A block at or before the current slot never reaches that error, and a proof shows it.
