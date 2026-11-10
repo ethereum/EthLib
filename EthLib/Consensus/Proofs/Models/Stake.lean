@@ -74,7 +74,9 @@ theorem stake_sdiff_add_two_mul_le [DecidableEq ν] (S : ℕ → Finset ν) {d :
 
 /-- Two quorums up to slacks of two validator sets share stake, up to the change between the sets.
 
-The quorum `A` holds two thirds of the stake of `L` less `a`, and `B` of `R` less `b`.
+The quorum `A` holds two thirds of what is left of the stake of `L` once `a` is removed.
+
+The quorum `B` holds the same share of the stake of `R` once `b` is removed.
 
 The stake of `L \ V₀` and `V₀ \ R` measures that change against any reference set `V₀`.
 
