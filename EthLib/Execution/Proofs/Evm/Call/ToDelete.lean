@@ -3,11 +3,11 @@ module
 public import EthLib.Execution.Proofs.Evm.Call.StaticMessage
 
 /-!
-# Proofs: from Cancun, a message marks for deletion only the accounts created in its transaction
+# Proofs: from Cancun, a message marks for deletion only accounts created in its transaction
 
-From Cancun, [EIP-6780][e6780] lets SELFDESTRUCT mark its account for deletion.
+From Cancun, SELFDESTRUCT marks its account for deletion only when its transaction created it.
 
-It does so only when the same transaction created that account.
+[EIP-6780][e6780] sets this rule.
 
 The created accounts of a transaction only grow.
 
@@ -615,5 +615,17 @@ theorem deletesCreated_processCreateMessage [LawfulGasMeter Meter] (hfork : .den
         address ∈ substate.accountsToDelete ∨ address ∈ ended.val.state.createdAccounts :=
   (deletesCreated_processMessage_induction hfork message.gas).2 message state substate meter held
     rfl ended h
+
+/-- From Cancun, a call that starts with no account to delete marks only created accounts.
+
+That holds whether or not the call ends with an error. -/
+theorem mem_createdAccounts_of_processMessage [LawfulGasMeter Meter] (hfork : .dencun ≤ fork)
+    {message : Message fork} {state : TransactionState} {substate : Substate} {meter : Meter}
+    {held : GasMeter.gasHeld meter ≤ message.gas} {ended}
+    (h : processMessage fork message state substate meter held = .ok ended)
+    (empty : ∀ address, address ∉ substate.accountsToDelete) :
+    ∀ address ∈ ended.val.substate.accountsToDelete, address ∈ ended.val.state.createdAccounts :=
+  fun address mem => ((deletesCreated_processMessage hfork h).2 address mem).resolve_left
+    (empty address)
 
 end EthLib.Execution.Evm
