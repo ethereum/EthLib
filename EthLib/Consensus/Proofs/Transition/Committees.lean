@@ -224,9 +224,9 @@ private theorem getSeed_eq_of_mixesKeptBut {post : Base.Fork} {other : BeaconSta
 
 /-- Two states agree on the committees of an epoch, when two facts hold.
 
-They agree on activity in that epoch.
+They agree on activity in each epoch up to that one.
 
-Their RANDAO mixes differ at most at the position of that epoch or of the next one.
+Their RANDAO mixes differ at most at one position, of that epoch or of the next one.
 
 There must be more than `MIN_SEED_LOOKAHEAD + 2` epochs of mixes. -/
 theorem CommitteesKept.of_activeKept {post : Base.Fork} {other : BeaconState preset post}
@@ -236,6 +236,48 @@ theorem CommitteesKept.of_activeKept {post : Base.Fork} {other : BeaconState pre
     (low : epoch ≤ written) (high : written.toNat ≤ epoch.toNat + 1) :
     CommitteesKept epoch state other :=
   committeesKept_of_seed (active.getActiveValidatorIndices_eq (UInt64.le_refl _))
+    (getSeed_eq_of_mixesKeptBut apart mixes low high _)
+
+/-- Two states agree on the attesters of an attestation, given the same active indices and seed.
+
+Both are those of the epoch of its slot. -/
+private theorem getAttestingIndices_eq_of_seed {other : BeaconState preset fork}
+    {attestation : Attestation preset fork}
+    (active : getActiveValidatorIndices other (computeEpochAtSlot preset attestation.data.slot) =
+      getActiveValidatorIndices state (computeEpochAtSlot preset attestation.data.slot))
+    (seed : getSeed other (computeEpochAtSlot preset attestation.data.slot)
+        DOMAIN_BEACON_ATTESTER =
+      getSeed state (computeEpochAtSlot preset attestation.data.slot) DOMAIN_BEACON_ATTESTER) :
+    getAttestingIndices other attestation = getAttestingIndices state attestation := by
+  unfold getAttestingIndices attesterShuffle getCommitteeCountPerSlot
+  simp only [active, seed]
+
+/-- Two states with the same registry and RANDAO mixes agree on the attesters of an attestation.
+-/
+theorem getAttestingIndices_eq_of_eq {other : BeaconState preset fork}
+    (validators : other.validators.data = state.validators.data)
+    (mixes : other.randaoMixes.elements = state.randaoMixes.elements)
+    (attestation : Attestation preset fork) :
+    getAttestingIndices other attestation = getAttestingIndices state attestation :=
+  getAttestingIndices_eq_of_seed (by unfold getActiveValidatorIndices; rw [validators])
+    (by unfold getSeed getRandaoMix; rw [mixes])
+
+/-- Two states agree on the attesters of an attestation, when two facts hold.
+
+They agree on activity in each epoch up to the epoch of its slot.
+
+Their RANDAO mixes differ at most at one position, of that epoch or of the next one.
+
+There must be more than `MIN_SEED_LOOKAHEAD + 2` epochs of mixes. -/
+theorem getAttestingIndices_eq_of_activeKept {other : BeaconState preset fork}
+    {attestation : Attestation preset fork} {written : Epoch}
+    (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    (active : ActiveKept (computeEpochAtSlot preset attestation.data.slot) state other)
+    (mixes : MixesKeptBut written state other)
+    (low : computeEpochAtSlot preset attestation.data.slot ≤ written)
+    (high : written.toNat ≤ (computeEpochAtSlot preset attestation.data.slot).toNat + 1) :
+    getAttestingIndices other attestation = getAttestingIndices state attestation :=
+  getAttestingIndices_eq_of_seed (active.getActiveValidatorIndices_eq (UInt64.le_refl _))
     (getSeed_eq_of_mixesKeptBut apart mixes low high _)
 
 /-! ## Exits and slashings -/
@@ -514,17 +556,25 @@ private theorem pendingFrame_processEth1Data {before : fork < .hegota}
   exact PendingFrame.of_keeps frame (Keeps.of_eq (by rw [← rest]) (by rw [← rest])
     (by rw [← rest]) (by rw [← rest]) (by rw [← rest]))
 
-private theorem pendingFrame_processRandao {body : BeaconBlockBody preset fork}
-    (computed : processRandao config checks state body = .ok after) : PendingFrame state after := by
-  have frame := frame_processRandao computed
+/-- The RANDAO step writes only the mix of the current epoch. -/
+theorem mixesKeptBut_processRandao {body : BeaconBlockBody preset fork}
+    (computed : processRandao config checks state body = .ok after) :
+    MixesKeptBut (getCurrentEpoch state) state after := by
   obtain ⟨_, _, _, _, mix, randaoMixes, _, _, _, _, _, _, written, rfl⟩ :=
     processRandao_eq computed
-  refine ⟨frame, ActiveKept.of_validators rfl _, fun other apart => ?_, fun _ => rfl, fun _ => rfl⟩
+  intro other apart
   have plain := writeCircularRooted_elements state.randaoMixes (getCurrentEpoch state)
     (Vector.zipWith (· ^^^ ·) mix
       (Cryptography.Hash.Sha256.hash32 (Base.packBytes body.randaoReveal)))
   rw [written] at plain
   exact readCircular_writeCircular_of_ne plain.symm (Ne.symm apart)
+
+private theorem pendingFrame_processRandao {body : BeaconBlockBody preset fork}
+    (computed : processRandao config checks state body = .ok after) : PendingFrame state after := by
+  have frame := frame_processRandao computed
+  have mixes := mixesKeptBut_processRandao computed
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq computed
+  exact ⟨frame, ActiveKept.of_validators rfl _, mixes, fun _ => rfl, fun _ => rfl⟩
 
 private theorem pendingFrame_processProposerSlashing {slashing : ProposerSlashing}
     (computed : processProposerSlashing config checks state slashing = .ok after) :
@@ -689,17 +739,53 @@ theorem processBlock_pendingSplit (before : fork < .altair) {block : BeaconBlock
     (pendingFrame_processRandao randaoOk).trans <| (pendingFrame_processEth1Data eth1Ok).trans
       attesters, attestedOk, exits⟩
 
-/-- Before Altair, an attestation keeps the registry and the RANDAO mixes. -/
-theorem processAttestation_registry (before : fork < .altair) {parentSlot : Slot}
-    {attestation : Attestation preset fork}
+/-- An attestation keeps the registry and the RANDAO mixes, at every fork. -/
+theorem processAttestation_registry {parentSlot : Slot} {attestation : Attestation preset fork}
     (computed : processAttestation config checks state parentSlot attestation = .ok after) :
     after.validators = state.validators ∧ after.randaoMixes = state.randaoMixes := by
-  obtain ⟨_, -, -, -, -, recorded, -⟩ := processAttestation_records before computed
-  have kept := recordPendingAttestation_ok recorded
-  split at kept <;>
-  · obtain ⟨_, rest⟩ := kept
-    rw [← rest]
-    exact ⟨rfl, rfl⟩
+  by_cases altair : Fork.altair ≤ fork
+  · unfold processAttestation at computed
+    simp only [altair, ↓reduceDIte] at computed
+    unfold processAttestationAltair at computed
+    simp only [bind_ok_iff, liftAccessor_ok] at computed
+    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
+      _, _, raised, raisedOk, final⟩ := computed
+    -- The flags and the proposer reward leave the registry alone, and so does a payment.
+    have last : after.validators = raised.validators ∧ after.randaoMixes = raised.randaoMixes := by
+      split at final
+      · rw [recordPaymentWeight_eq final]
+        exact ⟨rfl, rfl⟩
+      · cases final
+        exact ⟨rfl, rfl⟩
+    obtain ⟨_, set⟩ := increaseBalance_ok raisedOk
+    obtain ⟨_, rfl⟩ := setBalance_ok set
+    rw [last.1, last.2]
+    unfold setEpochParticipation
+    split <;> exact ⟨rfl, rfl⟩
+  · obtain ⟨_, -, -, -, -, recorded, -⟩ :=
+      processAttestation_records (Nat.lt_of_not_le altair) computed
+    have kept := recordPendingAttestation_ok recorded
+    split at kept <;>
+    · obtain ⟨_, rest⟩ := kept
+      rw [← rest]
+      exact ⟨rfl, rfl⟩
+
+/-- An attestation that the step accepts has its slot in the previous or the current epoch.
+
+That holds at every fork. -/
+theorem processAttestation_slotEpoch {parentSlot : Slot} {attestation : Attestation preset fork}
+    (computed : processAttestation config checks state parentSlot attestation = .ok after) :
+    computeEpochAtSlot preset attestation.data.slot = getPreviousEpoch state ∨
+      computeEpochAtSlot preset attestation.data.slot = getCurrentEpoch state := by
+  by_cases altair : Fork.altair ≤ fork
+  · unfold processAttestation at computed
+    simp only [altair, ↓reduceDIte] at computed
+    unfold processAttestationAltair at computed
+    simp only [bind_ok_iff, ensure_ok_iff] at computed
+    obtain ⟨_, recent, _, slotEpoch, -⟩ := computed
+    exact slotEpoch ▸ recent
+  · obtain ⟨recent, slotEpoch, -⟩ := processAttestation_checks (Nat.lt_of_not_le altair) computed
+    exact slotEpoch ▸ recent
 
 /-! ## The steps of an epoch before Altair -/
 
@@ -1030,8 +1116,8 @@ theorem committeesKept_processBlock (before : fork < .altair)
     foldlM_ok_invariant
       (fun next : BeaconState preset fork =>
         next.validators = first.validators ∧ next.randaoMixes = first.randaoMixes)
-      (fun _ _ _ holds ok => ⟨(processAttestation_registry before ok).1.trans holds.1,
-        (processAttestation_registry before ok).2.trans holds.2⟩) ⟨rfl, rfl⟩ attested
+      (fun _ _ _ holds ok => ⟨(processAttestation_registry ok).1.trans holds.1,
+        (processAttestation_registry ok).2.trans holds.2⟩) ⟨rfl, rfl⟩ attested
   have slots : last.slot = state.slot :=
     (Frame.foldlM (fun _ _ _ ok => frame_processAttestation ok) attested).slot.trans head.slot
   have epochLast : getCurrentEpoch last = getCurrentEpoch state := by
