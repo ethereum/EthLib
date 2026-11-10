@@ -1583,9 +1583,9 @@ The deleted balances are read after the gas is settled and before any account is
 From Glamsterdam, `TransactionBurns.eq_zero_of_glamsterdam` proves that both amounts are 0.
 `processTransaction_supply_eq` makes the same two assumptions as `processTransaction_supply_le`.
 
-`Execution/Proofs/Blocks/Supply.lean` extends the bound to a whole block.
+`Execution/Proofs/Blocks/Burn.lean` and `Execution/Proofs/Blocks/Supply.lean` extend the exact change and the bound to a whole block.
 The block creates the wei of its withdrawals from Shapella, by EIP-4895, and of its rewards before Paris.
-The DAO transfer only moves wei, and a system call keeps or lowers the supply, as a message does.
+The DAO transfer only moves wei.
 `stateTransition_supply_le` proves that the supply after the block plus the burned fees is at most the supply before plus the created wei, at every fork that the transition runs; it fails from Hegotá.
 `stateTransition_supply_of_glamsterdam` proves the equality from Glamsterdam.
 `stateTransition_supply_le_of_lt_glamsterdam` writes the burned fees from the header before Glamsterdam: the gas used and the blob gas used, each at its base fee.
@@ -1596,8 +1596,10 @@ It adds the created wei and subtracts the burned fees, the surviving SELFDESTRUC
 `BodyBurns` certifies the system calls before the transactions, each transaction in order, and the calls that read requests.
 The system calls also carry burn logs, since the theorem assumes no particular code at their addresses.
 `BlockLosses.transactions` retains each transaction's burn log and deleted balances.
-`BodyBurns.total_eq` shows that two certificates of the same body give the same total of losses, when the block has at most two ommers before Paris, as its checks ensure.
+`BodyBurns.total_eq` shows that two certificates of the same body give the same total of losses, when the block has at most two ommers before Paris, as its checks enforce.
 So the run fixes that total.
+From Glamsterdam, `BodyBurns.total_eq_zero_of_glamsterdam` proves that the total of losses is 0.
+`Execution/Proofs/Blocks/Supply.lean` derives the block bound and the Glamsterdam equality from `stateTransition_supply_eq`.
 
 ### The authorizations of EIP-7702
 

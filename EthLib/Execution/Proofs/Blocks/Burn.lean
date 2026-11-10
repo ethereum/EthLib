@@ -1,6 +1,11 @@
 module
 
-public import EthLib.Execution.Proofs.Blocks.Supply
+public import EthLib.Execution.Proofs.Blocks.BodyGas
+public import EthLib.Execution.Proofs.Blocks.Ommers
+public import EthLib.Execution.Proofs.Blocks.Rewards
+public import EthLib.Execution.Proofs.Blocks.SystemCall
+public import EthLib.Execution.Proofs.Blocks.Transition
+public import EthLib.Execution.Proofs.Blocks.Withdrawal
 public import EthLib.Execution.Proofs.Transactions.Burn
 
 /-!
@@ -8,19 +13,44 @@ public import EthLib.Execution.Proofs.Transactions.Burn
 
 A block changes the supply by its created wei, its burned fees and its other losses.
 
+From Shapella, each withdrawal creates its amount in Gwei times `10^9`, by [EIP-4895][e4895].
+
+Before Paris, the rewards of the beneficiary and of the ommers create ether.
+
+Section 11.3 of the Yellow Paper, Berlin version, sets them: [`Paper.tex`][yp].
+
+[EIP-3675][e3675] removes them from Paris.
+
+Before Paris, the DAO transfer at the first block of the DAO Fork moves ether, and keeps the supply.
+
+The burned fees are the base fee per gas times the gas used after the refunds.
+
+They add the base fee per blob gas times the blob gas, by [EIP-1559][e1559] and [EIP-4844][e4844].
+
+Before London the base fee per gas is 0, and before Dencun the base fee per blob gas is 0.
+
 The other losses are the surviving burns of SELFDESTRUCT and the balances that transactions delete.
 
 A surviving burn is a burn of SELFDESTRUCT that no rollback of its frame drops.
 
+From Glamsterdam, every surviving burn and every deleted balance is 0, by [EIP-8246][e8246].
+
 Two certificates of the same run give the same total of those losses.
 
-That needs at most two ommers before Paris, which the checks of the block ensure.
+That needs at most two ommers before Paris, which the checks of the block enforce.
 
 System calls also have surviving burn logs, since their stored code is arbitrary.
 
 They pay no fees and perform no transaction-end deletion.
 
 The certificates below keep those calls and each transaction in their execution order.
+
+[e1559]: https://eips.ethereum.org/EIPS/eip-1559#specification
+[e3675]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-3675.md#specification
+[e4844]: https://eips.ethereum.org/EIPS/eip-4844#gas-accounting
+[e4895]: https://eips.ethereum.org/EIPS/eip-4895#specification
+[e8246]: https://eips.ethereum.org/EIPS/eip-8246#specification
+[yp]: https://github.com/ethereum/yellowpaper/blob/beacfbd29ccc04dfd790f2282d4c4b1c0afc9b5a/Paper.tex
 -/
 
 @[expose] public section
@@ -33,6 +63,123 @@ open EthLib.Execution.State (BlockState State TransactionState)
 open EthLib.Execution.Transactions
 
 variable {fork : Fork}
+
+/-! ## What a block creates and burns -/
+
+/-- The wei that withdrawals create: the sum of their amounts in Gwei, times `10^9`. -/
+def withdrawnWei (withdrawals : List Withdrawal) : Nat :=
+  (withdrawals.map fun w => w.amount.toNat * GWEI_TO_WEI).sum
+
+/-- The wei that the rewards of a block at `number` create, at `fork`.
+
+Each ommer comes with its beneficiary and its number.
+
+Before Paris, it is the reward of the beneficiary plus the reward of each ommer.
+
+From Paris, it is 0. -/
+def rewardWei (fork : Fork) (number : Nat) (ommers : List (Address × Nat)) : Nat :=
+  if .paris ≤ fork then 0
+  else minerReward fork ommers.length + (ommers.map fun o => ommerReward fork (number - o.2)).sum
+
+/-- The wei that a block creates: its withdrawals from Shapella, and its rewards before Paris. -/
+def createdWei (block : Block fork Transaction) : Nat :=
+  (if h : .shapella ≤ fork then withdrawnWei (block.withdrawals h) else 0) +
+    rewardWei fork block.header.number
+      (block.ommers.map fun ommer => (ommer.2.coinbase, ommer.2.number))
+
+/-- The fees that the transactions of a body burn, in wei, from the gas counts of its output.
+
+It is the base fee per gas times their gas used after the refunds.
+
+It adds the base fee per blob gas times their blob gas. -/
+def burnedWei (env : BlockEnvironment fork) (output : BodyOutput fork) : Nat :=
+  output.cumulativeGasUsed * baseFeeOf env + output.gas.blob * blobGasPriceOf env
+
+/-! ## The steps on the block state -/
+
+/-- A step that runs on a block state as a transaction leaves the supply of its end state. -/
+theorem supply_onBlock {block block' : BlockState}
+    {step : TransactionState → Except State.StateError TransactionState}
+    (h : onBlock block step = .ok block') :
+    ∃ tx, step (.ofBlock block) = .ok tx ∧
+      (TransactionState.ofBlock block').supply = tx.supply := by
+  obtain ⟨tx, htx, rfl⟩ := onBlock_eq_ok h
+  exact ⟨tx, htx, TransactionState.supply_incorporateTxIntoBlock tx⟩
+
+/-- A call that joins the body leaves the supply of its end state. -/
+theorem BodyState.supply_join {body body' : BodyState} {tx : TransactionState}
+    (h : body.join tx = .ok body') : (TransactionState.ofBlock body'.block).supply = tx.supply := by
+  obtain ⟨builder, -, rfl⟩ := BodyState.join_eq_ok h
+  exact TransactionState.supply_incorporateTxIntoBlock tx
+
+/-- The DAO transfer moves ether, and so keeps the supply. -/
+theorem supply_applyDaoFork {tx tx' : TransactionState} (h : applyDaoFork fork tx = .ok tx') :
+    tx'.supply = tx.supply :=
+  foldlM_ok_invariant (fun mid : TransactionState => mid.supply = tx.supply)
+    (fun _ _ _ hmid hstep => (TransactionState.supply_moveEther hstep).trans hmid) rfl h
+
+/-- The DAO transfer of a block keeps the supply, whether it runs or not. -/
+theorem supply_daoTransfer {config : ChainConfig} {number : Nat} {start state : BlockState}
+    (h : daoTransfer config fork number start = .ok state) :
+    (TransactionState.ofBlock state).supply = (TransactionState.ofBlock start).supply := by
+  unfold daoTransfer at h
+  split at h
+  · obtain ⟨tx, htx, hsupply⟩ := supply_onBlock h
+    rw [hsupply, supply_applyDaoFork htx]
+  · cases h
+    rfl
+
+/-- The withdrawals add the wei they withdraw to the supply. -/
+theorem supply_withdrawalState {block : BlockState} {withdrawals : List Withdrawal}
+    {tx : TransactionState} (h : withdrawalState fork block withdrawals = .ok tx) :
+    tx.supply = (TransactionState.ofBlock block).supply + withdrawnWei withdrawals := by
+  rw [TransactionState.supply_foldlM_createEther _ _ withdrawals h]
+  simp only [toNat_withdrawalWei, withdrawnWei]
+
+/-- The withdrawals of a block add their wei to the supply after its transactions.
+
+They run from Shapella, and before it the body keeps its supply. -/
+theorem supply_withdrawals {block : Block fork Transaction} {txs : BodyOutput fork}
+    {withdrawn : BodyState}
+    (hShapella : ∀ hShapella : .shapella ≤ fork, ∃ tx,
+      withdrawalState fork txs.body.block (block.withdrawals hShapella) = .ok tx ∧
+      (txs.body.beginIndex (block.transactions.length + 1)).join tx = .ok withdrawn)
+    (hNot : ¬.shapella ≤ fork → withdrawn = txs.body.beginIndex (block.transactions.length + 1)) :
+    (TransactionState.ofBlock withdrawn.block).supply =
+      (TransactionState.ofBlock txs.block).supply +
+        (if h : .shapella ≤ fork then withdrawnWei (block.withdrawals h) else 0) := by
+  by_cases hS : .shapella ≤ fork
+  · obtain ⟨wtx, hwtx, hjoin⟩ := hShapella hS
+    rw [BodyState.supply_join hjoin, supply_withdrawalState hwtx]
+    simp only [hS, ↓reduceDIte]
+    rfl
+  · rw [hNot hS]
+    simp only [hS, ↓reduceDIte, Nat.add_zero]
+    rfl
+
+/-- The rewards add the wei they reward to the supply.
+
+Before Paris, at most two ommers keep the reward of the beneficiary below `2^256`.
+
+The checks of the block enforce that bound. -/
+theorem supply_payRewards {tx tx' : TransactionState} {coinbase : Address} {number : Nat}
+    {ommers : List (Address × Nat)} (hn : fork < .paris → ommers.length ≤ 2)
+    (h : payRewards fork tx coinbase number ommers = .ok tx') :
+    tx'.supply = tx.supply + rewardWei fork number ommers := by
+  unfold payRewards at h
+  unfold rewardWei
+  split at h
+  · rename_i hparis
+    cases h
+    simp [hparis]
+  · rename_i hparis
+    simp only [hparis, ↓reduceIte]
+    obtain ⟨mid, hmid, h⟩ := bind_ok_iff.mp h
+    rw [TransactionState.supply_foldlM_createEther Prod.fst
+        (fun o => BitVec.ofNat 256 (ommerReward fork (number - o.2))) ommers h,
+      TransactionState.supply_createEther hmid, BitVec.toNat_ofNat,
+      Nat.mod_eq_of_lt (minerReward_lt (hn (Nat.lt_of_not_le hparis)))]
+    simp only [toNat_ommerReward, Nat.add_assoc]
 
 /-! ## System calls -/
 
@@ -67,6 +214,15 @@ theorem SystemCallBurns.supply_eq {env : BlockEnvironment fork} {block : BlockSt
     out.state.supply + log.total = (TransactionState.ofBlock block).supply := by
   unfold SystemCallBurns at h
   split at h <;> exact h.supply
+
+/-- From Glamsterdam, a certified system call burns nothing. -/
+theorem SystemCallBurns.total_eq_zero_of_glamsterdam {env : BlockEnvironment fork}
+    {block : BlockState} {target : Address} {data : ByteArray} {out : SystemCallOutput}
+    {log : BurnLog} (hfork : .glamsterdam ≤ fork)
+    (h : SystemCallBurns env block target data out log) : log.total = 0 := by
+  unfold SystemCallBurns at h
+  simp only [hfork, ↓reduceIte] at h
+  exact h.total_eq_zero_of_glamsterdam hfork
 
 /-- The beacon root call from Dencun and the parent hash call from Pectra, with their burns. -/
 def StartSystemCallsBurns (env : BlockEnvironment fork) (parentHash : Hash32)
@@ -140,6 +296,25 @@ theorem StartSystemCallsBurns.supply_eq {env : BlockEnvironment fork} {parentHas
   · obtain ⟨rfl, rfl⟩ := hsecond
     simpa only [BurnLog.total, Nat.add_zero] using firstSupply
 
+/-- From Glamsterdam, the certified system calls at the start of a block burn nothing. -/
+theorem StartSystemCallsBurns.total_eq_zero_of_glamsterdam {env : BlockEnvironment fork}
+    {parentHash : Hash32} {body after : BodyState} {log : BurnLog} (hfork : .glamsterdam ≤ fork)
+    (h : StartSystemCallsBurns env parentHash body after log) : log.total = 0 := by
+  obtain ⟨mid, first, second, hfirst, hsecond, rfl⟩ := h
+  have firstZero : first.total = 0 := by
+    split at hfirst
+    · obtain ⟨_, -, -, burns⟩ := hfirst
+      exact burns.total_eq_zero_of_glamsterdam hfork
+    · rw [hfirst.2]
+      rfl
+  have secondZero : second.total = 0 := by
+    split at hsecond
+    · obtain ⟨_, -, -, burns⟩ := hsecond
+      exact burns.total_eq_zero_of_glamsterdam hfork
+    · rw [hsecond.2]
+      rfl
+  simp only [BurnLog.total, firstZero, secondZero]
+
 /-! ## Transactions -/
 
 /-- The surviving burn log and deleted balances of each transaction, in order. -/
@@ -206,6 +381,18 @@ theorem TransactionsBurns.supply_eq {env : BlockEnvironment fork}
     change (TransactionState.ofBlock after.block).supply = out.state.supply at joined
     omega
 
+/-- From Glamsterdam, the certified transactions have no burns and no deleted balances. -/
+theorem TransactionsBurns.total_eq_zero_of_glamsterdam {env : BlockEnvironment fork}
+    {transactions : List (Transaction × Nat)} {before after : BodyOutput fork}
+    {losses : TransactionLosses} (hfork : .glamsterdam ≤ fork)
+    (h : TransactionsBurns env before transactions after losses) : losses.total = 0 := by
+  induction h with
+  | nil => rfl
+  | cons _ _ _ burns _ ih =>
+    obtain ⟨hlog, hdeleted⟩ := burns.eq_zero_of_glamsterdam hfork
+    simp only [TransactionLosses.total] at ih ⊢
+    simp only [List.map_cons, List.sum_cons, hlog, hdeleted, ih]
+
 /-! ## Requests -/
 
 /-- The request calls in order, with a surviving burn log for each call. -/
@@ -250,6 +437,16 @@ theorem RequestsBurns.supply_eq {env : BlockEnvironment fork}
     simp only [BurnLog.total]
     omega
 
+/-- From Glamsterdam, the certified request calls burn nothing. -/
+theorem RequestsBurns.total_eq_zero_of_glamsterdam {env : BlockEnvironment fork}
+    {contracts : List (UInt8 × Address)} {before after : BodyState × List ByteArray}
+    {log : BurnLog} (hfork : .glamsterdam ≤ fork)
+    (h : RequestsBurns env before contracts after log) : log.total = 0 := by
+  induction h with
+  | nil => rfl
+  | cons _ _ burns _ ih =>
+    simp only [BurnLog.total, burns.total_eq_zero_of_glamsterdam hfork, ih]
+
 /-- From Pectra, a certificate of each call that reads requests; before Pectra, no call. -/
 def BlockRequestsBurns (env : BlockEnvironment fork) (body after : BodyState)
     (log : BurnLog) : Prop :=
@@ -281,6 +478,17 @@ theorem BlockRequestsBurns.supply_eq {env : BlockEnvironment fork} {body after :
   · obtain ⟨requests, certificate⟩ := h
     exact certificate.supply_eq
   · obtain ⟨rfl, rfl⟩ := h
+    rfl
+
+/-- From Glamsterdam, the certified requests of a block burn nothing. -/
+theorem BlockRequestsBurns.total_eq_zero_of_glamsterdam {env : BlockEnvironment fork}
+    {body after : BodyState} {log : BurnLog} (hfork : .glamsterdam ≤ fork)
+    (h : BlockRequestsBurns env body after log) : log.total = 0 := by
+  unfold BlockRequestsBurns at h
+  split at h
+  · obtain ⟨_, certificate⟩ := h
+    exact certificate.total_eq_zero_of_glamsterdam hfork
+  · rw [h.2]
     rfl
 
 /-! ## The block -/
@@ -338,7 +546,7 @@ theorem applyBody_bodyBurns {config : ChainConfig} {env : BlockEnvironment fork}
 
 The block adds its withdrawals and rewards, and loses its fees and certified losses.
 
-Before Paris, the block must have at most two ommers, as its checks ensure. -/
+Before Paris, the block must have at most two ommers, as the checks of the block enforce. -/
 theorem BodyBurns.supply_eq {config : ChainConfig} {env : BlockEnvironment fork}
     {block : Block fork Transaction} {start : BlockState} {output : BlockOutput fork}
     {losses : BlockLosses} (hom : fork < .paris → block.ommers.length ≤ 2)
@@ -372,7 +580,7 @@ theorem BodyBurns.supply_eq {config : ChainConfig} {env : BlockEnvironment fork}
 
 /-- Two certificates of a block body give the same total of losses.
 
-Before Paris, the block must have at most two ommers, as its checks ensure. -/
+Before Paris, the block must have at most two ommers, as the checks of the block enforce. -/
 theorem BodyBurns.total_eq {config : ChainConfig} {env : BlockEnvironment fork}
     {block : Block fork Transaction} {start : BlockState} {output : BlockOutput fork}
     {losses losses' : BlockLosses} (hom : fork < .paris → block.ommers.length ≤ 2)
@@ -382,6 +590,15 @@ theorem BodyBurns.total_eq {config : ChainConfig} {env : BlockEnvironment fork}
   have := h.supply_eq hom
   have := h'.supply_eq hom
   omega
+
+/-- From Glamsterdam, the losses of a block certificate total 0. -/
+theorem BodyBurns.total_eq_zero_of_glamsterdam {config : ChainConfig} {env : BlockEnvironment fork}
+    {block : Block fork Transaction} {start : BlockState} {output : BlockOutput fork}
+    {losses : BlockLosses} (hfork : .glamsterdam ≤ fork)
+    (h : BodyBurns config env block start output losses) : losses.total = 0 := by
+  obtain ⟨_, _, _, _, _, -, hsystem, htxs, -, hrequests, -⟩ := h
+  simp only [BlockLosses.total, hsystem.total_eq_zero_of_glamsterdam hfork,
+    htxs.total_eq_zero_of_glamsterdam hfork, hrequests.total_eq_zero_of_glamsterdam hfork]
 
 /-- A block that the transition accepts changes the supply exactly as its run gives.
 
