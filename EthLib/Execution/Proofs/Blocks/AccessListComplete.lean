@@ -378,4 +378,70 @@ theorem stateTransition_accessList {chain : BlockChain} {block : Block fork Tran
     exact ⟨hashes, output, hHashes, hOutput, hHash⟩
   · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
 
+/-- From Glamsterdam, a block that passes the transition commits to a list that covers its body.
+
+The hash in its header is the hash of the list that the builder built after the body.
+
+The body starts from the state after the parent, since the DAO transfer runs only before Paris.
+
+The list covers the beacon roots call there, and the history storage call after it.
+
+It covers the run of each transaction, from the body after the transactions before it.
+
+It covers the withdrawals, and then each call to a request contract. -/
+theorem stateTransition_accessList_covers {chain : BlockChain} {block : Block fork Transaction}
+    {checkSeal : Bool} {post : State} (hFork : .glamsterdam ≤ fork)
+    (h : stateTransition chain block checkSeal = .ok post) :
+    ∃ hashes env output body txOutput withdrawn,
+      recentHashes chain.recent = .ok hashes ∧
+      env = blockEnvironment chain.config hashes block.header ∧
+      applyBody chain.config env block ⟨chain.state, ∅, ∅, ∅, ∅⟩ = .ok output ∧
+      BlockAccessList.hash output.body.builder.build =
+        .ok (block.header.blockAccessListHash hFork) ∧
+      (∃ out mid out',
+        systemCall env ⟨chain.state, ∅, ∅, ∅, ∅⟩ BEACON_ROOTS_ADDRESS
+          ⟨(block.header.parentBeaconBlockRoot (Nat.le_trans (by decide) hFork)).toArray⟩ =
+          .ok out ∧
+        (BodyState.init ⟨chain.state, ∅, ∅, ∅, ∅⟩).join out.state = .ok mid ∧
+        systemCall env mid.block HISTORY_STORAGE_ADDRESS ⟨block.header.parentHash.toArray⟩ =
+          .ok out' ∧
+        output.body.builder.build.Covers out.state ∧
+        output.body.builder.build.Covers out'.state) ∧
+      startSystemCalls env block.header.parentHash (.init ⟨chain.state, ∅, ∅, ∅, ∅⟩) = .ok body ∧
+      applyTransactions env body block.transactions = .ok txOutput ∧
+      (∀ i (hi : i < block.transactions.length), ∃ before included out,
+        applyTransactions env body (block.transactions.take i) = .ok before ∧
+        checkInclusion env.chainId env before.gas (.ofBlock before.block)
+          block.transactions[i] = .ok included ∧
+        processTransaction env before.block included block.transactions[i] = .ok out ∧
+        output.body.builder.build.Covers out.state) ∧
+      (∃ tx,
+        withdrawalState fork txOutput.body.block
+          (block.withdrawals (Nat.le_trans (by decide) hFork)) = .ok tx ∧
+        (txOutput.body.beginIndex (block.transactions.length + 1)).join tx = .ok withdrawn ∧
+        output.body.builder.build.Covers tx) ∧
+      ∀ j (hj : j < (requestContracts fork).length), ∃ mid out,
+        ((requestContracts fork).take j).foldlM (readRequest env) (withdrawn, []) = .ok mid ∧
+        checkedSystemCall env mid.1.block (requestContracts fork)[j].2 .empty = .ok out ∧
+        output.body.builder.build.Covers out.state := by
+  obtain ⟨hashes, output, hHashes, hOutput, hHash⟩ := stateTransition_accessList hFork h
+  have hShapella : Fork.shapella ≤ fork := Nat.le_trans (by decide) hFork
+  have hDencun : Fork.dencun ≤ fork := Nat.le_trans (by decide) hFork
+  have hPectra : Fork.pectra ≤ fork := Nat.le_trans (by decide) hFork
+  obtain ⟨state, body, txOutput, withdrawn, hState, hBody, -, hStart, hTx, hExt, hWithdrawn, -,
+    hRequests⟩ := applyBody_covers hOutput
+  rw [daoTransfer_of_paris_le (Nat.le_trans (by decide) hFork)] at hState
+  cases hState
+  obtain ⟨out, mid, hOut, hMid, hCovers, hSecond⟩ := hStart hDencun
+  obtain ⟨out', hOut', hCovers'⟩ := hSecond hPectra
+  obtain ⟨tx, hTxState, hJoin, hCoversTx⟩ := hWithdrawn hShapella
+  refine ⟨hashes, _, output, body, txOutput, withdrawn, hHashes, rfl, hOutput, hHash,
+    ⟨out, mid, out', hOut, hMid, hOut', hCovers.build, hCovers'.build⟩, hBody, hTx,
+    fun i hi => ?_, ⟨tx, hTxState, hJoin, hCoversTx.build⟩, fun j hj => ?_⟩
+  · obtain ⟨before, included, out, hBefore, hIncluded, hRun, hCoversRun⟩ :=
+      (applyTransactions_covers hTx).2 i hi
+    exact ⟨before, included, out, hBefore, hIncluded, hRun, (hCoversRun.mono hExt).build⟩
+  · obtain ⟨mid, out, hMid, hCall, hCoversCall⟩ := hRequests hPectra j hj
+    exact ⟨mid, out, hMid, hCall, hCoversCall.build⟩
+
 end EthLib.Execution.Blocks
