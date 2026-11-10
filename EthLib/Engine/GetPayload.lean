@@ -105,7 +105,7 @@ inductive GetPayloadError where
   | blockValue
   /-- The block has no payload form, since a field does not fit or has no encoding. -/
   | noPayload
-  /-- The payload, its requests and its access list do not give the stored header. -/
+  /-- A transaction does not decode, or the payload does not give the stored block hash. -/
   | header (error : PayloadError)
   /-- The stored bundle fails a count, hash or KZG check. -/
   | bundle (error : NetworkError)
