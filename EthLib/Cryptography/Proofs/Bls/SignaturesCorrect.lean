@@ -34,6 +34,20 @@ theorem G1.represents_zero : G1.Represents G1.zero 0 :=
 theorem G2.represents_zero : G2.Represents G2.zero 0 :=
   ⟨G2.valid_zero, by rw [G2.toPoint_zero, G2.toPoint_mul_generator, G2.ofFr_zero]⟩
 
+/-- Two valid points with the same group element have the same compressed form. -/
+theorem G1.compress_congr {P P' : G1} (hP : G1.Valid P) (hP' : G1.Valid P')
+    (h : G1.toPoint P = G1.toPoint P') : G1.compress P = G1.compress P' := by
+  obtain ⟨hi, ha⟩ := G1.toAffine_congr hP hP' h
+  unfold G1.compress
+  rw [hi, ha]
+
+/-- Two valid points with the same group element have the same compressed form. -/
+theorem G2.compress_congr {Q Q' : G2} (hQ : G2.Valid Q) (hQ' : G2.Valid Q')
+    (h : G2.toPoint Q = G2.toPoint Q') : G2.compress Q = G2.compress Q' := by
+  obtain ⟨hi, ha⟩ := G2.toAffine_congr hQ hQ' h
+  unfold G2.compress
+  rw [hi, ha]
+
 namespace Signatures
 
 /-- The bytes of a vector built from a byte array are that byte array. -/
@@ -239,12 +253,10 @@ theorem fastAggregateVerify_of_represents {sks : List SecretKey}
   rw [hP]
   exact coreVerify_of_represents hPrep hsum hQ hb hS
 
-/-- The compressed key of a point that represents a scalar is the compressed multiple of `g1`. -/
+/-- A point that represents a scalar compresses to the bytes of that multiple of `g1`. -/
 private theorem compress_eq_of_represents {P : G1} {s : Fr} (hP : G1.Represents P s) :
-    G1.compress P = G1.compress (G1.mul G1.generator s) := by
-  obtain ⟨hi, ha⟩ := G1.toAffine_congr hP.1 (G1.valid_mul G1.valid_generator s) hP.2
-  unfold G1.compress
-  rw [hi, ha]
+    G1.compress P = G1.compress (G1.mul G1.generator s) :=
+  G1.compress_congr hP.1 (G1.valid_mul G1.valid_generator s) hP.2
 
 /-- Fast verification of honest keys is verification under the key of their scalar sum.
 
@@ -254,7 +266,8 @@ theorem fastAggregateVerify_eq_verify (sks : List SecretKey) (hne : sks ≠ [])
     fastAggregateVerify (sks.map pkBytes).toArray msg sig =
       verify (G1.compress (G1.mul G1.generator (sks.map (·.val)).sum)) msg sig := by
   obtain ⟨P, hP, hPrep⟩ := aggregatePubkeyPoint_pkBytes sks hne
-  simp [fastAggregateVerify, hP, compress_eq_of_represents hPrep]
+  simp only [fastAggregateVerify, hP]
+  rw [compress_eq_of_represents hPrep]
 
 /-- Honest signatures on one message aggregate to a signature that verifies under the key sum.
 

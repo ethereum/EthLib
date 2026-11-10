@@ -52,7 +52,7 @@ theorem fastAggregateVerify_empty (msg sig : ByteArray) :
 /-- The Ethereum key aggregation rejects an empty list. -/
 theorem ethAggregatePubkeys_empty : ethAggregatePubkeys #[] = .error .emptyPubkeyList := rfl
 
-/-- Adding one key rejects a public key that is not 48 bytes. -/
+/-- Adding one key rejects a public key that is not 48 bytes, and reports its size. -/
 theorem addPubkeyPoint_badPubkeySize {pk : ByteArray} (h : pk.size ≠ 48) (agg : G1) (i : Nat) :
     addPubkeyPoint agg (pk, i) = .error (.badPubkeySize pk.size) := by
   simp [addPubkeyPoint, h, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
