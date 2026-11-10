@@ -1337,6 +1337,19 @@ Both hold for every bound on the gas of messages and every runner of messages.
 It assumes a runner that never fails on those messages.
 `Logic.not_runsOk_of_lt` proves that no run with less gas than `cost` succeeds, from a specification to a halt that pays `cost`, as above.
 
+### System contracts
+
+The four modules under `Execution/Proofs/Blocks/SystemCall/` for beacon roots, historical block hashes, withdrawal requests and consolidation requests prove the effects of their deployed bytecode.
+Their `systemCall_set` and `systemCall_dequeue` theorems hold from each contract's activation, with the gas meter of the fork, including the state gas meter from Glamsterdam.
+They require the specified bytecode at the contract's address.
+The queue theorems retain their storage bounds, and the history theorem requires a block number from 1 to below `2^256`.
+
+`Logic.Reaches.followsMeter` lifts a normal one-counter run to the state gas meter when its execution gas initially covers that counter.
+The counter pays execution gas and state gas and ignores refills, so it gives a conservative budget.
+`Logic.SupportedCode` checks the opcodes, skipping PUSH data; it excludes GAS and instructions that send messages.
+The lifted run has the same fields outside its meter, including its state and output.
+`SystemContract.systemCall_of_writesStorage_all` applies this result to the actual system-call runner and its initial reservoir.
+
 ### SHA-256 precompile
 
 The precompile reuses the SHA-256 of the cryptography layer, so its theorems are about the gas and the failure.

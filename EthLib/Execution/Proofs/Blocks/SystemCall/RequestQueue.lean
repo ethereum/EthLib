@@ -465,32 +465,33 @@ open EthLib.Execution.Blocks.SystemContract (storageOf WritesStorage sloadPrice_
 variable {fork : EthLib.Base.Fork} {code : ByteArray} {message : Message fork}
   {memory : ByteArray} {substate : Substate} {returnData : ByteArray}
 
-/-- From Berlin to before Glamsterdam, SSTORE writes `new` at the slot `key` of the contract.
+/-- From Berlin, SSTORE writes `new` at the slot `key` with a conservative one-counter budget.
 
 The frame may change the state, and the account of the contract exists.
 
-The frame has at least 25,000 gas.
+The budget is 25,000 gas before Glamsterdam and 125,000 from Glamsterdam.
 
-The write gives a state with that one slot changed, and pays at most 22,100 gas.
+The write changes one slot and pays at most 22,100 gas times the storage-gas scale.
 
 It keeps the logs. -/
-theorem sstore_writes (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam) {pc : Nat}
+theorem sstore_writes (hfork : .berlin ≤ fork) {pc : Nat}
     {key new : U256} {rest : List U256} {gas : Nat} {S : State.TransactionState}
     (hlt : pc < code.size) (hbyte : code[pc] = 0x55) (hstatic : message.isStatic = false)
-    (hacc : (S.getAccountOptional message.currentTarget).isSome = true) (hgas : 25000 ≤ gas) :
+    (hacc : (S.getAccountOptional message.currentTarget).isSome = true)
+    (hgas : 25000 * storageGasScale fork ≤ gas) :
     ∃ S', WritesStorage message.currentTarget
         (setSlot (storageOf S message.currentTarget) key new) S S' ∧
       Hoare fork (At code message pc (key :: new :: rest) memory gas S substate returnData)
-        fun evm => ∃ g ss, gas ≤ g + 22100 ∧ ss.logs = substate.logs ∧
+        fun evm => ∃ g ss, gas ≤ g + 22100 * storageGasScale fork ∧ ss.logs = substate.logs ∧
           At code message (pc + 1) rest memory g S' ss returnData evm := by
-  have hcost := sstoreCost_le hfork hglam
+  have hscale := one_le_storageGasScale fork
+  have hcost := sstoreTotalCost_le hfork
     (S.getStorageOriginal message.currentTarget (U256.toBeBytes key))
     (S.getStorage message.currentTarget (U256.toBeBytes key)) new
     (decide (U256.toBeBytes key ∉ substate.accessedStorageKeys.getD message.currentTarget ∅))
-  simp only [GasCosts.COLD_STORAGE_ACCESS, GasCosts.STORAGE_SET] at hcost
-  obtain ⟨S', hs, ho, -, ha, hc, -, h⟩ := sstore_of_account (code := code) (pc := pc)
+  obtain ⟨S', hs, ho, -, ha, hc, -, h⟩ := sstore_of_account_total (code := code) (pc := pc)
     (gas := gas) (rest := rest) (key := key) (new := new) (memory := memory)
-    (substate := substate) (returnData := returnData) hfork hglam hlt hbyte hstatic rfl
+    (substate := substate) (returnData := returnData) hfork hlt hbyte hstatic rfl
     (by simp only [GasCosts.CALL_STIPEND]; omega) (by omega) hacc
   refine ⟨S', ⟨fun slot => ?_, fun o k hne => ho o k (.inl hne), ha, hc⟩,
     Triple.consequence h (fun _ h => h) fun evm h => by
@@ -507,20 +508,21 @@ theorem sstore_writes (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam) {
 
 /-- SSTORE of `new` at the slot `key`, followed by a specification from the frame after it.
 
-It holds from each state that writes the slot, with at most 22,100 gas less. -/
-theorem sstore_then (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam) {pc : Nat}
+It holds from each state that writes the slot, with the scaled write budget charged. -/
+theorem sstore_then (hfork : .berlin ≤ fork) {pc : Nat}
     {key new : U256} {rest : List U256} {gas : Nat} {S : State.TransactionState}
     {Q : Evm fork Nat → Prop} (hlt : pc < code.size) (hbyte : code[pc] = 0x55)
     (hstatic : message.isStatic = false)
-    (hacc : (S.getAccountOptional message.currentTarget).isSome = true) (hgas : 25000 ≤ gas)
+    (hacc : (S.getAccountOptional message.currentTarget).isSome = true)
+    (hgas : 25000 * storageGasScale fork ≤ gas)
     (next : ∀ S', WritesStorage message.currentTarget
         (setSlot (storageOf S message.currentTarget) key new) S S' →
       (S'.getAccountOptional message.currentTarget).isSome = true → ∀ g ss,
-      gas ≤ g + 22100 → ss.logs = substate.logs →
+      gas ≤ g + 22100 * storageGasScale fork → ss.logs = substate.logs →
       Spec fork (At code message (pc + 1) rest memory g S' ss returnData) Q) :
     Spec fork (At code message pc (key :: new :: rest) memory gas S substate returnData) Q := by
   obtain ⟨S', hw, h⟩ := sstore_writes (rest := rest) (memory := memory) (substate := substate)
-    (returnData := returnData) hfork hglam hlt hbyte hstatic hacc hgas
+    (returnData := returnData) hfork hlt hbyte hstatic hacc hgas
   exact Triple.seq h (Triple.of_gas_logs fun g ss hg hl =>
     next S' hw (by rw [hw.2.2.1]; exact hacc) g ss hg hl)
 

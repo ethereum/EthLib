@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Proofs.Address
+public import EthLib.Execution.Proofs.Evm.Logic.StateGas
 public import EthLib.Execution.Proofs.Evm.Logic.Steps
 public import EthLib.Execution.Proofs.Evm.Logic.Callee
 public import EthLib.Execution.Proofs.Evm.Logic.Region
