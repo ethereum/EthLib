@@ -13,7 +13,8 @@ Not yet released.
   Before, such a creation wiped the storage and ran the init code.
   It now fails exactly like a creation at an address with code or a nonce, as [EIP-684](https://eips.ethereum.org/EIPS/eip-684#specification) asks: a creation transaction ends with `addressCollision`, and CREATE or CREATE2 takes the gas of the message and pushes 0.
   So a block with such a creation can now have another gas used, another state root, or be rejected.
-  From Glamsterdam, CREATE or CREATE2 that collides gets back the state gas of the new account that it paid, as [EIP-8037](https://eips.ethereum.org/EIPS/eip-8037#gas-accounting-for-new-accounts) asks of a collision; only a storage-only target that is not alive pays any.
+  From Glamsterdam, CREATE or CREATE2 that collides gets back the state gas of the new account that it paid, as [EIP-8037](https://eips.ethereum.org/EIPS/eip-8037#gas-accounting-for-new-accounts) asks of a collision.
+  Only a target with storage but no nonce, code or balance paid any.
   `accountDeployable` also requires empty storage, through the new `accountHasStorage`.
   The rules `createKind_stored`, `create_stored` and `create2_stored` take a new hypothesis: no fact of a slot gives the new address a word other than zero.
   The new theorems `accountHasStorage_eq_true_iff`, `accountDeployable_eq_true_iff` and `accountDeployable_congr` state the rule.

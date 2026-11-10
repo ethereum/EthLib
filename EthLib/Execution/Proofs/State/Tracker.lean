@@ -371,13 +371,6 @@ theorem getAccount_destroyTouchedEmptyAccounts {fork : Fork} {tx : TransactionSt
         · rfl
       rw [List.foldl_cons, ih (step ▸ nonce), step]
 
-/-- An address where an account can be deployed has nonce 0. -/
-theorem nonce_eq_zero_of_accountDeployable {tx : TransactionState} {address : Address}
-    (h : tx.accountDeployable address = true) : (tx.getAccount address).nonce = 0 := by
-  unfold accountDeployable at h
-  simp only [Bool.and_eq_true, decide_eq_true_eq] at h
-  exact h.1.1
-
 /-- A key that a storage map holds at an address is a key of the slots at that address. -/
 private theorem mem_keys_of_slot {storage : StorageMap} {address : Address} {key : Bytes32}
     {value : U256} (h : storage.slot address key = some value) :
@@ -422,6 +415,11 @@ theorem accountDeployable_eq_true_iff {tx : TransactionState} {address : Address
   simp only [Bool.and_eq_true, decide_eq_true_eq, Bool.not_eq_true', and_assoc]
   rw [← Bool.not_eq_true, accountHasStorage_eq_true_iff]
   simp
+
+/-- An address where an account can be deployed has nonce 0. -/
+theorem nonce_eq_zero_of_accountDeployable {tx : TransactionState} {address : Address}
+    (h : tx.accountDeployable address = true) : (tx.getAccount address).nonce = 0 :=
+  (accountDeployable_eq_true_iff.mp h).1
 
 /-- Two states agree on whether a contract may be deployed at an address they read alike.
 

@@ -39,7 +39,7 @@ The frame's nonce still grows.
 
 It applies at every fork back to Frontier.
 
-Such a collision gets back the state gas of the new account, as EIP-8037 asks of a collision.
+From Glamsterdam, such a collision gets back the state gas of the new account, as EIP-8037 asks.
 
 EIP-8037 says that storage alone causes no collision; EthLib follows EIP-7610 there.
 
