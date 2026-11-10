@@ -169,7 +169,7 @@ theorem onAttestation_ordered {checks : SignatureChecks} {attestation : Attestat
     after.EpochsOrdered := by
   unfold onAttestation at attested
   simp only [bind_ok_iff] at attested
-  obtain ⟨_, _, stored, storing, _, _, _, _, valid, _, attested⟩ := attested
+  obtain ⟨_, _, stored, storing, _, _, _, _, _, _, valid, _, attested⟩ := attested
   have kept : stored.EpochsOrdered := by
     unfold storeTargetCheckpointState at storing
     split at storing
@@ -436,7 +436,7 @@ private theorem onAttestation_checkpointStatesHold {checks : SignatureChecks}
     after.CheckpointStatesHold := by
   unfold onAttestation at attested
   simp only [bind_ok_iff] at attested
-  obtain ⟨_, _, stored, storing, _, _, _, _, valid, _, attested⟩ := attested
+  obtain ⟨_, _, stored, storing, _, _, _, _, _, _, valid, _, attested⟩ := attested
   have storedHolds : stored.CheckpointStatesHold := by
     unfold storeTargetCheckpointState at storing
     split at storing
