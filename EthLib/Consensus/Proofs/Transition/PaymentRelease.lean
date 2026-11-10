@@ -81,9 +81,9 @@ def PaymentOpen (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork
     (slot = state.latestBlockHeader.slot ∧ (state.latestExecutionPayloadBid gloas).slot = slot ∧
       latePaymentOpen state gloas = true ∧ 0 < (state.latestExecutionPayloadBid gloas).value)
 
-/-- A latest bid with a value is the bid of the latest block.
+/-- A latest bid with a value is at the slot of the latest block.
 
-The bid after the upgrade to Gloas has no value, and its slot names no block. -/
+Only a bid with a value opens a payment, so the slot of a bid without one does not matter. -/
 def ValuedBidAtLatestBlock (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork) :
     Prop :=
   0 < (state.latestExecutionPayloadBid gloas).value →

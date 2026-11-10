@@ -203,25 +203,15 @@ private theorem builderFrame_processSyncAggregate {altair : .altair ≤ fork}
     exact (builderFrame_increaseBalance raised).trans (builderFrame_increaseBalance paid)
   · exact builderFrame_decreaseBalance (liftAccessor_ok.mp ok)
 
-/-- With at least two slots in an epoch, the current epoch is never the far future one. -/
-theorem getCurrentEpoch_ne_farFuture (twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat)
-    (state : BeaconState preset fork) : getCurrentEpoch state ≠ FAR_FUTURE_EPOCH := by
-  intro far
-  have epoch := congrArg UInt64.toNat far
-  rw [getCurrentEpoch_toNat] at epoch
-  have farNat : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
-  have half := Nat.div_le_div_left (a := state.slot.toNat) twoSlots (by decide)
-  have := state.slot.toNat_lt_size
-  simp only [UInt64.size] at this
-  omega
-
 /-- From Gloas, a block runs its parent, header, withdrawal and bid steps, then the rest.
 
 Except the operations, the rest keeps the builder fields.
 
 It also keeps the slot and the slot of the latest block.
 
-After the header, no step shrinks a registry, and the steps keep the number of builders. -/
+The validators after the header are at most those after the block.
+
+The number of builders after the header is that after the block. -/
 theorem processBlock_gloas_steps (gloas : .glamsterdam ≤ fork)
     {block : BeaconBlock preset fork}
     (computed : Consensus.processBlock config checks engine state block = .ok after) :
