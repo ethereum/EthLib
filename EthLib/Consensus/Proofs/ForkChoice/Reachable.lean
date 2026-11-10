@@ -42,7 +42,7 @@ There no viable block may sit at the slot before the current one.
 
 All the states of a reachable store have one genesis time.
 
-From Gloas each state has the bid of its block, or a latest block hash equal to the hash of its bid.
+From Gloas each state has the bid hash of its block, or a latest block hash equal to its bid hash.
 -/
 
 @[expose] public section
@@ -359,12 +359,14 @@ def OneGenesisTime (store : Store preset fork) : Prop :=
 
 /-- Each state that the store keeps has a block at its root.
 
-From Gloas the state has the bid of that block, or its latest block hash is the hash of its bid. -/
+From Gloas the latest bid of the state has the block hash of the bid of that block.
+
+Otherwise the latest block hash of the state is the block hash of its latest bid. -/
 def StatesKeepBids (store : Store preset fork) : Prop :=
   ∀ {root : Root} {state : BeaconState preset fork}, store.blockStates[root]? = some state →
     ∃ block, store.blocks[root]? = some block ∧ ∀ gloas : .glamsterdam ≤ fork,
-      state.latestExecutionPayloadBid gloas =
-          (block.body.signedExecutionPayloadBid gloas).message ∨
+      (state.latestExecutionPayloadBid gloas).blockHash =
+          (block.body.signedExecutionPayloadBid gloas).message.blockHash ∨
         state.latestBlockHash gloas = (state.latestExecutionPayloadBid gloas).blockHash
 
 /-- A store with the same states keeps one genesis time. -/
@@ -425,16 +427,19 @@ theorem Reachable.oneGenesisTime (reachable : Reachable config anchorState ancho
 
 /-- Each state of a reachable store has a block at its root.
 
-From Gloas the state has the bid of that block, or its latest block hash is the hash of its bid.
+From Gloas its latest bid has the block hash of that block's bid, or its latest block hash.
 
 The anchor state must meet the same condition with the anchor block.
 
-A state from genesis or from the upgrade has a latest block hash equal to the hash of its bid.
+A state from the upgrade to Gloas meets the second case, with any anchor block.
+
+A genesis block with a default body meets the first case, when the bid of the state has no hash.
 
 A block leaves its own bid as the latest bid of the state after it. -/
 theorem Reachable.statesKeepBids (reachable : Reachable config anchorState anchorBlock store)
-    (anchorBid : ∀ gloas : .glamsterdam ≤ fork, anchorState.latestExecutionPayloadBid gloas =
-        (anchorBlock.body.signedExecutionPayloadBid gloas).message ∨
+    (anchorBid : ∀ gloas : .glamsterdam ≤ fork,
+      (anchorState.latestExecutionPayloadBid gloas).blockHash =
+          (anchorBlock.body.signedExecutionPayloadBid gloas).message.blockHash ∨
       anchorState.latestBlockHash gloas = (anchorState.latestExecutionPayloadBid gloas).blockHash) :
     store.StatesKeepBids := by
   induction reachable with
@@ -476,7 +481,8 @@ theorem Reachable.statesKeepBids (reachable : Reachable config anchorState ancho
     · simp only [same, ↓reduceIte, Option.some.injEq] at found ⊢
       obtain ⟨_, -, -, -, blockOk, -⟩ := stateTransition_ok transition
       exact ⟨_, rfl, fun gloas =>
-        .inl (found ▸ latestExecutionPayloadBid_processBlock gloas blockOk)⟩
+        .inl (found ▸
+          congrArg (·.blockHash) (latestExecutionPayloadBid_processBlock gloas blockOk))⟩
     · simp only [same, ↓reduceIte] at found ⊢
       exact holds found
 

@@ -66,13 +66,15 @@ The last three checks read the parent block, the head state, or the bid of the p
 
 The handler reads the state that the store keeps for the parent.
 
-In a store reached from an anchor at or before the slot of its state, take a kept state.
+Take a store reached from an anchor block at or before the slot of the anchor state.
 
-It comes at or after the slot of its block.
+Each kept state comes at or after the slot of its block.
 
 All kept states have one genesis time.
 
-From Gloas each kept state has the bid of its block, or a latest block hash equal to its bid hash.
+From Gloas each kept state has the bid hash of its block.
+
+Otherwise its latest block hash is the block hash of its own bid.
 
 That needs the anchor state to meet the same condition with the anchor block.
 
@@ -344,7 +346,7 @@ theorem bidParentHash_of_onBlock (gloas : .glamsterdam ≤ fork) {after : Store 
   subst samePre
   have sameAdvanced : advanced = advanced' := Except.ok.inj (advancedOk.symm.trans slots)
   subst sameAdvanced
-  -- The parent state has the bid of the parent block, or a latest block hash equal to its hash.
+  -- The parent state has the bid hash of the parent block, or a latest hash equal to its own.
   obtain ⟨block, blockFound, sameBid⟩ := bids stored
   have sameBlock : parent = block := Option.some.inj (parentKnown.symm.trans blockFound)
   subst sameBlock
