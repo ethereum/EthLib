@@ -1476,6 +1476,7 @@ Up to BPO5 it needs nothing more, since `aborts_of_prepareFirstFrame_of_lt_glams
 `processTransaction_authority_keeps_of_error` covers an authority with other code, which refuses every authorization: its account and its storage stay.
 It assumes that no authorization sets a code with the code hash of the authority.
 No theorem yet gives the storage of an authority that takes a delegation.
+From Paris, an authority left empty by an authorization to the zero address is deleted with its storage, so that claim needs a condition.
 `processTransaction_selfAuthorization_of_error` in `Replay.lean` applies the first theorem to a sender that signs its only authorization with the nonce of the transaction plus one.
 It ends two nonces above the transaction.
 `block_of_output` proves that the block after the transaction reads as the state that the transaction leaves.

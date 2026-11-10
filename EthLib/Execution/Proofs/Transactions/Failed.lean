@@ -1133,7 +1133,7 @@ private theorem failedRun_authority_of_starts {Meter : Type} [GasMeter Meter]
 
 Real code is neither empty nor a delegation indicator, so the authority refuses every authorization.
 
-No authorization may set a code whose hash is the code hash of the authority.
+No authorization may set a code whose hash is the code hash of the authority, an assumption.
 
 Storage stays unless the payment to the beneficiary deletes it. -/
 private theorem failedRun_authority_keeps {Meter : Type} [GasMeter Meter]
@@ -1254,7 +1254,7 @@ Real code is neither empty nor a delegation indicator, so the authority refuses 
 
 No authorization may set a code whose hash is the code hash of the authority.
 
-Only a collision of Keccak-256 could break that hypothesis.
+That is an assumption; when each code sits under its own hash, only a collision breaks it.
 
 The authority keeps its code hash, and its nonce, plus one for the sender.
 

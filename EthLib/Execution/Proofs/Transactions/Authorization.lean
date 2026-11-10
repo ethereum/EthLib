@@ -1073,7 +1073,9 @@ The account of the authority after the list then depends only on its own account
 
 The authority starts with the nonce `nonce`.
 
-The list is what it accepts when its code is empty or a delegation indicator; no code is read here.
+That list holds when its code is empty or a delegation indicator.
+
+No code is read here.
 
 An authorization counts when it is in scope on the chain `chainId` and is signed by the authority.
 
