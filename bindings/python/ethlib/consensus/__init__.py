@@ -8,6 +8,7 @@ from typing import Any, Literal, TypeAlias
 from ethlib.cryptography import _native
 from ethlib.errors import (
     ConsensusError,
+    DepositTreeError,
     ForkChoiceError,
     LightClientError,
     ProposerError,
@@ -590,6 +591,70 @@ def is_within_weak_subjectivity_period(
     )
 
 
+# An item of a deposit tree in preorder: "node", which its two subtrees follow.
+# Or a subtree: ("zero", height), ("leaf", root) or ("finalized", count, root).
+DepositSubtree: TypeAlias = (
+    Literal["node"]
+    | tuple[Literal["zero"], int]
+    | tuple[Literal["leaf"], bytes]
+    | tuple[Literal["finalized"], int, bytes]
+)
+# A tree is its subtrees in preorder, its count of deposits, and its finalized block.
+# Every function that reads a tree raises DepositTreeError when it has not that shape.
+DepositTree: TypeAlias = tuple[list[DepositSubtree], int, tuple[bytes, int] | None]
+# The finalized roots, the deposit root, the count, and the hash and height of the block.
+DepositTreeSnapshot: TypeAlias = tuple[list[bytes], bytes, int, bytes, int]
+# Deposit data of the chain: the deposit root, the deposit count and the block hash.
+Eth1Data: TypeAlias = tuple[bytes, int, bytes]
+
+
+def deposit_tree_new() -> DepositTree:
+    """The deposit tree with no deposit."""
+    return _native.consensus_deposit_tree_new()
+
+
+def deposit_tree_push_leaf(tree: DepositTree, leaf: bytes) -> DepositTree:
+    """The tree with one more deposit, by the root of its data, or DepositTreeError."""
+    return _native.consensus_deposit_tree_push_leaf(tree, leaf)
+
+
+def deposit_tree_push_leaves(tree: DepositTree, leaves: list[bytes]) -> DepositTree:
+    """The tree after pushing deposits in order, by the roots of their data, or DepositTreeError."""
+    return _native.consensus_deposit_tree_push_leaves(tree, leaves)
+
+
+def deposit_tree_get_root(tree: DepositTree) -> bytes:
+    """The deposit root of a tree, or DepositTreeError."""
+    return _native.consensus_deposit_tree_get_root(tree)
+
+
+def deposit_tree_finalize(
+    tree: DepositTree, eth1_data: Eth1Data, execution_block_height: int
+) -> DepositTree:
+    """The tree finalized at deposit data and the height of its block, or DepositTreeError."""
+    return _native.consensus_deposit_tree_finalize(tree, eth1_data, execution_block_height)
+
+
+def deposit_tree_get_proof(tree: DepositTree, index: int) -> tuple[bytes, list[bytes]]:
+    """The leaf at an index and its proof: 32 sibling roots, then the count, or DepositTreeError."""
+    return _native.consensus_deposit_tree_get_proof(tree, index)
+
+
+def deposit_tree_get_snapshot(tree: DepositTree) -> DepositTreeSnapshot:
+    """The EIP-4881 snapshot of a finalized tree, or DepositTreeError."""
+    return _native.consensus_deposit_tree_get_snapshot(tree)
+
+
+def deposit_tree_from_snapshot(snapshot: DepositTreeSnapshot) -> DepositTree:
+    """The tree rebuilt from an EIP-4881 snapshot, or DepositTreeError."""
+    return _native.consensus_deposit_tree_from_snapshot(snapshot)
+
+
+def deposit_tree_snapshot_calculate_root(snapshot: DepositTreeSnapshot) -> bytes:
+    """The deposit root that a snapshot's finalized roots and count compute, or DepositTreeError."""
+    return _native.consensus_deposit_tree_snapshot_calculate_root(snapshot)
+
+
 def get_committee_assignment(
     name: str,
     fork: str,
@@ -1064,6 +1129,20 @@ __all__ = [
     "upgrade_state",
     "compute_weak_subjectivity_period",
     "is_within_weak_subjectivity_period",
+    "DepositTreeError",
+    "DepositSubtree",
+    "DepositTree",
+    "DepositTreeSnapshot",
+    "Eth1Data",
+    "deposit_tree_push_leaves",
+    "deposit_tree_new",
+    "deposit_tree_push_leaf",
+    "deposit_tree_get_root",
+    "deposit_tree_finalize",
+    "deposit_tree_get_proof",
+    "deposit_tree_get_snapshot",
+    "deposit_tree_from_snapshot",
+    "deposit_tree_snapshot_calculate_root",
     "get_committee_assignment",
     "is_proposer",
     "is_assigned_to_sync_committee",

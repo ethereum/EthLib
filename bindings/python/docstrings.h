@@ -455,6 +455,33 @@
 #define DOC_consensus_is_valid_genesis_state \
   "Whether a candidate genesis state launches the chain."
 
+#define DOC_consensus_deposit_tree_new \
+  "The tree with no deposit."
+
+#define DOC_consensus_deposit_tree_push_leaf \
+  "The tree with one more deposit, by the root of its data."
+
+#define DOC_consensus_deposit_tree_push_leaves \
+  "The tree after pushing deposits in order, by the roots of their data."
+
+#define DOC_consensus_deposit_tree_get_root \
+  "The deposit root of a tree."
+
+#define DOC_consensus_deposit_tree_finalize \
+  "The tree finalized at deposit data, given as its root, count and block hash, and a height."
+
+#define DOC_consensus_deposit_tree_get_proof \
+  "The leaf at an index of a tree, and its proof against the deposit root."
+
+#define DOC_consensus_deposit_tree_get_snapshot \
+  "The snapshot of a finalized tree."
+
+#define DOC_consensus_deposit_tree_from_snapshot \
+  "The tree rebuilt from a snapshot."
+
+#define DOC_consensus_deposit_tree_snapshot_calculate_root \
+  "The deposit root that the finalized roots and the count of a snapshot compute."
+
 #define DOC_consensus_compute_weak_subjectivity_period \
   "The weak subjectivity period of a state, in epochs."
 

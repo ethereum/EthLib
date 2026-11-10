@@ -74,7 +74,10 @@ directories = ["bindings/python/tests/secp256k1/tiny_secp256k1"]
 
 [repositories."ethereum/EIPs"]
 commit = "46976b2a9bf99f727fb87dc8c809e3a3cdc6b445"
-directories = ["bindings/python/tests/state/dao"]
+directories = [
+  "bindings/python/tests/consensus/deposit_tree",
+  "bindings/python/tests/state/dao",
+]
 
 [repositories."ethereum/ERCs"]
 commit = "be307c948f28897adb8f25afcc253c2c909de35d"
