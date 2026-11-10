@@ -2,7 +2,7 @@ module
 
 public import EthLib.Consensus.Proofs.Transition.BuilderRequests
 public import EthLib.Consensus.Proofs.Transition.Invariants
-public import EthLib.Consensus.Transition.ForkBoundary
+public import EthLib.Consensus.Proofs.Transition.TargetVotes
 public import EthLib.Consensus.Transition.Upgrade
 
 /-!
@@ -32,6 +32,12 @@ It then keeps every Gloas field that Heze keeps, each list as the same sequence.
 
 The latest bid differs from the Gloas bid only by its inclusion list bits, which are all unset.
 
+Each upgrade keeps the slot, the three checkpoints and the block roots.
+
+It keeps the keys while the registry stays below 2^64 validators.
+
+From Altair, an upgrade adds no target flag.
+
 Each upgrade keeps the invariant that each valid block keeps, and the finalized checkpoint.
 -/
 
@@ -42,6 +48,121 @@ namespace EthLib.Consensus
 open Base Uint64 Cryptography.Bls Serialization.Ssz
 
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
+
+/-! ## Upgrade frames -/
+
+/-- An upgrade to a fork no earlier than the fork before.
+
+It keeps the slot, the three checkpoints, the block roots and the genesis validators root.
+
+The current fork version becomes the previous one, and the new one is that of the fork after.
+
+It never shrinks the registry, and keeps the keys while the registry stays below 2^64 validators.
+
+When each validator has one balance before it, each has one after it.
+
+When each validator may withdraw no earlier than it exits before it, the same holds after it.
+
+From Altair, a target flag after it was a target flag at its position before. -/
+structure UpgradeFrame (config : Config) {fork post : Fork} (pre : BeaconState preset fork)
+    (after : BeaconState preset post) : Prop where
+  forward : fork ≤ post
+  slot : after.slot = pre.slot
+  finalized : after.finalizedCheckpoint = pre.finalizedCheckpoint
+  previousJustified : after.previousJustifiedCheckpoint = pre.previousJustifiedCheckpoint
+  currentJustified : after.currentJustifiedCheckpoint = pre.currentJustifiedCheckpoint
+  blockRoots : after.blockRoots = pre.blockRoots
+  genesisValidatorsRoot : after.genesisValidatorsRoot = pre.genesisValidatorsRoot
+  previousVersion : after.forkVersions.previousVersion = pre.forkVersions.currentVersion
+  currentVersion : after.forkVersions.currentVersion = config.forkVersion post
+  registryGrows : pre.validators.data.size ≤ after.validators.data.size
+  keysKept : after.validators.data.size < 2 ^ 64 → KeysKept pre after
+  balancesMatch : BalancesMatch pre → BalancesMatch after
+  exitsOrdered : ExitsOrdered pre → ExitsOrdered after
+  flags : ∀ (altair : .altair ≤ fork) (current : Bool) (position : Nat),
+    TargetFlagAt (recentParticipation after (Nat.le_trans altair forward) current) position →
+      TargetFlagAt (recentParticipation pre altair current) position
+
+/-- An upgrade that carries the registry and both lists of flags as the same sequences.
+
+It also keeps the number of balances. -/
+theorem UpgradeFrame.of_carried {fork post : Fork} {pre : BeaconState preset fork}
+    {after : BeaconState preset post} (forward : fork ≤ post) (slot : after.slot = pre.slot)
+    (finalized : after.finalizedCheckpoint = pre.finalizedCheckpoint)
+    (previousJustified : after.previousJustifiedCheckpoint = pre.previousJustifiedCheckpoint)
+    (currentJustified : after.currentJustifiedCheckpoint = pre.currentJustifiedCheckpoint)
+    (blockRoots : after.blockRoots = pre.blockRoots)
+    (genesisValidatorsRoot : after.genesisValidatorsRoot = pre.genesisValidatorsRoot)
+    (previousVersion : after.forkVersions.previousVersion = pre.forkVersions.currentVersion)
+    (currentVersion : after.forkVersions.currentVersion = config.forkVersion post)
+    (validators : after.validators.data = pre.validators.data)
+    (balances : after.balances.data.size = pre.balances.data.size)
+    (participation : ∀ (altair : .altair ≤ fork) (current : Bool),
+      (recentParticipation after (Nat.le_trans altair forward) current).data =
+        (recentParticipation pre altair current).data) :
+    UpgradeFrame config pre after where
+  forward := forward
+  slot := slot
+  finalized := finalized
+  previousJustified := previousJustified
+  currentJustified := currentJustified
+  blockRoots := blockRoots
+  genesisValidatorsRoot := genesisValidatorsRoot
+  previousVersion := previousVersion
+  currentVersion := currentVersion
+  registryGrows := by rw [validators]; exact Nat.le_refl _
+  keysKept _ := KeysKept.of_validators validators
+  balancesMatch holds := by
+    unfold BalancesMatch at holds ⊢
+    rw [balances, validators]
+    exact holds
+  exitsOrdered holds := by
+    unfold ExitsOrdered at holds ⊢
+    rw [validators]
+    exact holds
+  flags altair current position flagged := by
+    obtain ⟨flags, found, set⟩ := flagged
+    exact ⟨flags, by rw [← participation altair current]; exact found, set⟩
+
+/-- An upgrade frame followed by a block frame of the new fork is an upgrade frame. -/
+theorem UpgradeFrame.trans_blockFrame {fork post : Fork} {pre : BeaconState preset fork}
+    {middle after : BeaconState preset post} (one : UpgradeFrame config pre middle)
+    (two : BlockFrame middle after) : UpgradeFrame config pre after where
+  forward := one.forward
+  slot := two.slot.trans one.slot
+  finalized := two.finalized.trans one.finalized
+  previousJustified := two.previousJustified.trans one.previousJustified
+  currentJustified := two.currentJustified.trans one.currentJustified
+  blockRoots := two.blockRoots.trans one.blockRoots
+  genesisValidatorsRoot := two.genesisValidatorsRoot.trans one.genesisValidatorsRoot
+  previousVersion := by rw [two.forkVersions]; exact one.previousVersion
+  currentVersion := by rw [two.forkVersions]; exact one.currentVersion
+  registryGrows := Nat.le_trans one.registryGrows two.registryGrows
+  keysKept small :=
+    (one.keysKept (Nat.lt_of_le_of_lt two.registryGrows small)).trans (two.keysKept small)
+  balancesMatch := two.balancesMatch ∘ one.balancesMatch
+  exitsOrdered := two.exitsOrdered ∘ one.exitsOrdered
+  flags altair current position flagged :=
+    one.flags altair current position (flagged.of_flagsKeptOrZero two.flags)
+
+/-- An upgrade frame carries the invariant from the state before to the state after. -/
+theorem UpgradeFrame.invariant {fork post : Fork} {pre : BeaconState preset fork}
+    {after : BeaconState preset post} (frame : UpgradeFrame config pre after)
+    (holds : Invariant pre) : Invariant after where
+  balancesMatch := frame.balancesMatch holds.balancesMatch
+  exitsOrdered := frame.exitsOrdered holds.exitsOrdered
+  ordered := by
+    have := holds.ordered
+    unfold CheckpointsOrdered at this ⊢
+    rw [frame.finalized, frame.previousJustified, frame.currentJustified]
+    exact this
+  settled := by
+    have := holds.settled
+    unfold JustifiedSettled getPreviousEpoch getCurrentEpoch at this ⊢
+    rw [frame.currentJustified, frame.slot]
+    exact this
+
+/-! ## The upgrades -/
 
 /-- An upgrade before Gloas carries the registry, the balances, the slot and the checkpoints.
 
@@ -111,6 +232,21 @@ theorem foldlM_translateAttestation {fork : Fork} {altair : .altair ≤ fork}
   obtain ⟨participation', rfl, same'⟩ := translateAttestation_spec step
   exact ⟨participation', rfl, same'.trans same⟩
 
+/-- The upgrade to Altair translates the pending attestations, from the carried fields.
+
+It then sets both sync committees to one committee. -/
+theorem upgradeToAltair_ok {pre : BeaconState preset .phase0}
+    {after : BeaconState preset .altair} (computed : upgradeToAltair config pre = .ok after) :
+    ∃ middle, (pre.previousEpochAttestations (by decide)).data.toList.foldlM
+        (fun state attestation => translateAttestation state (by decide) attestation)
+        (carryFields config .altair pre (by decide) (by decide)) = .ok middle ∧
+      ∃ committee, after = { middle with
+        currentSyncCommittee := fun _ => committee, nextSyncCommittee := fun _ => committee } := by
+  simp only [upgradeToAltair, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+  obtain ⟨middle, folded, _, -, rfl⟩ := computed
+  rw [← Array.foldlM_toList] at folded
+  exact ⟨middle, folded, _, rfl⟩
+
 private theorem upgradeToAltair_frame_spec {pre : BeaconState preset .phase0}
     {after : BeaconState preset .altair} (computed : upgradeToAltair config pre = .ok after) :
     UpgradeFrame config pre after ∧
@@ -121,9 +257,7 @@ private theorem upgradeToAltair_frame_spec {pre : BeaconState preset .phase0}
       after.currentSyncCommittee (by decide) = after.nextSyncCommittee (by decide) ∧
       after.forkVersions =
         ⟨pre.forkVersions.currentVersion, config.ALTAIR_FORK_VERSION, getCurrentEpoch pre⟩ := by
-  simp only [upgradeToAltair, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-  obtain ⟨_, folded, _, -, rfl⟩ := computed
-  rw [← Array.foldlM_toList] at folded
+  obtain ⟨_, folded, _, rfl⟩ := upgradeToAltair_ok computed
   obtain ⟨participation, rfl, same⟩ := foldlM_translateAttestation folded
   obtain ⟨previous, current, scores⟩ := carryFields_of_lt_altair (config := config)
     (post := .altair) pre (by decide) (by decide) (by decide) (by decide)
@@ -601,14 +735,15 @@ theorem upgradeToHeze_error_iff {pre : BeaconState preset .glamsterdam}
   · simp [equal, bind, Except.bind, pure, Except.pure]
   · simp [equal, bind, Except.bind, eq_comm]
 
-/-! ## The upgrades from Altair on -/
+/-! ## Each upgrade is an upgrade frame -/
 
-/-- An upgrade that carries the fields, from Altair on and before Gloas, is an upgrade frame. -/
+/-- An upgrade that carries the fields before Gloas is an upgrade frame. -/
 theorem upgradeFrame_carryFields {fork post : Fork} (pre : BeaconState preset fork)
-    (upgrade : fork < post) (before : post < .glamsterdam) (altair : .altair ≤ fork) :
+    (upgrade : fork < post) (before : post < .glamsterdam) :
     UpgradeFrame config pre (carryFields config post pre upgrade before) :=
   UpgradeFrame.of_carried (Nat.le_of_lt upgrade) rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl
-    fun _ current => by cases current <;> simp [recentParticipation, carryFields, altair, carryList]
+    fun altair current => by
+      cases current <;> simp [recentParticipation, carryFields, altair, carryList]
 
 /-- The upgrade to Altair is an upgrade frame, with no flags before it to keep. -/
 theorem upgradeFrame_upgradeToAltair {pre : BeaconState preset .phase0}
@@ -642,41 +777,6 @@ theorem upgradeFrame_upgradeToHeze {pre : BeaconState preset .glamsterdam}
   exact UpgradeFrame.of_carried (by decide) rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl
     fun _ current => by cases current <;> rfl
 
-/-- Each upgrade is an upgrade frame. -/
-theorem upgradeFrame_upgradeNext {pre : ForkedBeaconState preset}
-    {post : {post : ForkedBeaconState preset // pre.fork < post.fork}}
-    (computed : upgradeNext config checks pre = .ok post) :
-    UpgradeFrame config pre.state post.val.state := by
-  obtain ⟨fork, state⟩ := pre
-  cases fork
-  case phase0 =>
-    simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-    obtain ⟨_, upgraded, rfl⟩ := computed
-    exact upgradeFrame_upgradeToAltair upgraded
-  case altair | bellatrix | shapella =>
-    simp only [upgradeNext, pure, Except.pure, Except.ok.injEq] at computed
-    subst computed
-    refine upgradeFrame_carryFields state ?_ ?_ (by decide) <;> (dsimp only; decide)
-  case dencun =>
-    simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-    obtain ⟨_, upgraded, rfl⟩ := computed
-    exact upgradeFrame_upgradeToElectra upgraded
-  case pectra =>
-    simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-    obtain ⟨_, upgraded, rfl⟩ := computed
-    exact upgradeFrame_upgradeToFulu upgraded
-  case fusaka =>
-    simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-    obtain ⟨_, upgraded, rfl⟩ := computed
-    exact upgradeFrame_upgradeToGloas upgraded
-  case glamsterdam =>
-    simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-    obtain ⟨_, upgraded, rfl⟩ := computed
-    exact upgradeFrame_upgradeToHeze upgraded
-  all_goals
-    simp only [upgradeNext] at computed
-    cases computed
-
 /-! ## The invariant across an upgrade -/
 
 /-- A carry-over upgrade before Gloas keeps the invariant and the finalized checkpoint. -/
@@ -684,7 +784,8 @@ theorem carryFields_invariant {fork post : Fork} {pre : BeaconState preset fork}
     (upgrade : fork < post) (before : post < .glamsterdam) (holds : Invariant pre) :
     Invariant (carryFields config post pre upgrade before) ∧
       (carryFields config post pre upgrade before).finalizedCheckpoint = pre.finalizedCheckpoint :=
-  ⟨holds.of_carried rfl rfl rfl rfl rfl rfl, rfl⟩
+  have frame := upgradeFrame_carryFields (config := config) pre upgrade before
+  ⟨frame.invariant holds, frame.finalized⟩
 
 /-- The upgrade to Altair keeps the invariant and the finalized checkpoint. -/
 theorem upgradeToAltair_invariant {pre : BeaconState preset .phase0}

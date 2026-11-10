@@ -166,6 +166,41 @@ theorem stateTransitionAcross_of_before {fork : Fork} {engine : ExecutionEngine 
 
 /-! ## The invariant across fork boundaries -/
 
+/-- Each upgrade is an upgrade frame. -/
+theorem upgradeFrame_upgradeNext {pre : ForkedBeaconState preset}
+    {post : {post : ForkedBeaconState preset // pre.fork < post.fork}}
+    (computed : upgradeNext config checks pre = .ok post) :
+    UpgradeFrame config pre.state post.val.state := by
+  obtain ⟨fork, state⟩ := pre
+  cases fork
+  case phase0 =>
+    simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+    obtain ⟨_, upgraded, rfl⟩ := computed
+    exact upgradeFrame_upgradeToAltair upgraded
+  case altair | bellatrix | shapella =>
+    simp only [upgradeNext, pure, Except.pure, Except.ok.injEq] at computed
+    subst computed
+    refine upgradeFrame_carryFields state ?_ ?_ <;> (dsimp only; decide)
+  case dencun =>
+    simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+    obtain ⟨_, upgraded, rfl⟩ := computed
+    exact upgradeFrame_upgradeToElectra upgraded
+  case pectra =>
+    simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+    obtain ⟨_, upgraded, rfl⟩ := computed
+    exact upgradeFrame_upgradeToFulu upgraded
+  case fusaka =>
+    simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+    obtain ⟨_, upgraded, rfl⟩ := computed
+    exact upgradeFrame_upgradeToGloas upgraded
+  case glamsterdam =>
+    simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+    obtain ⟨_, upgraded, rfl⟩ := computed
+    exact upgradeFrame_upgradeToHeze upgraded
+  all_goals
+    simp only [upgradeNext] at computed
+    cases computed
+
 /-- An upgrade keeps the invariant and the finalized checkpoint. -/
 theorem upgradeNext_invariant {pre : ForkedBeaconState preset}
     {post : {post : ForkedBeaconState preset // pre.fork < post.fork}}
