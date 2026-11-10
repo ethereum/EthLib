@@ -988,6 +988,8 @@ static PyMethodDef methods[] = {
    DOC_consensus_reqresp_request_bounds},
   {"consensus_reqresp_response_bounds", py_consensus_reqresp_response_bounds, METH_VARARGS,
    DOC_consensus_reqresp_response_bounds},
+  {"consensus_reqresp_response_valid", py_consensus_reqresp_response_valid, METH_VARARGS,
+   DOC_consensus_reqresp_response_valid},
   {"consensus_gossip_topic_bound", py_consensus_gossip_topic_bound, METH_VARARGS,
    DOC_consensus_gossip_topic_bound},
   {"consensus_compute_subnet_for_attestation", py_consensus_compute_subnet_for_attestation,
