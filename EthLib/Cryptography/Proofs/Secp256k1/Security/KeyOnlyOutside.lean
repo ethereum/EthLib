@@ -34,6 +34,12 @@ The new forward queries of both runs at that index then share the point and diff
 
 The forking lemma bounds the chance of such a fork from below.
 
+On the key `x g`, the forgery's point is the encoding of `((H(m) + t x) / s) g`.
+
+Say two forgeries `(m, t, s)` and `(m', t', s')` have these scalars equal up to a sign `η`.
+
+Then they give the key, when `H(m) / t ≠ H(m') / t'`.
+
 A forger with at most `q` queries to `Π` or its inverse logs at most `q + 1` pairs.
 
 So a win with no flag raised has a fork index, or its point is not in the log.
@@ -122,6 +128,51 @@ theorem length_forward_le_of_mem_support_keyOnlyOutsideRun (scheme : Scheme F G 
 It is the encoding of `U / s`, where `U = H(m) g + t X`. -/
 def forgeryPoint (scheme : Scheme F G A M) (X : G) (z : M × F × F) : A :=
   scheme.encode (z.2.2⁻¹ • (scheme.hash z.1 • scheme.g + z.2.1 • X))
+
+omit [DecidableEq F] [DecidableEq G] [FinEnum A] in
+/-- The forgery's point on the key `x g` is the encoding of `((H(m) + t x) / s) g`. -/
+theorem forgeryPoint_smul (scheme : Scheme F G A M) (x t s : F) (m : M) :
+    forgeryPoint scheme (x • scheme.g) (m, t, s) =
+      scheme.encode ((s⁻¹ * (scheme.hash m + t * x)) • scheme.g) := by
+  simp only [forgeryPoint, smul_smul, ← add_smul, mul_add]
+
+/-- The key from two forgeries `(m, t, s)` and `(m', t', s')` on one point, for a sign `η`.
+
+It is `(s r - H(m)) / t`, where `r = (H(m) / t - H(m') / t') / (s / t - η s' / t')`. -/
+def forwardKey (scheme : Scheme F G A M) (z z' : M × F × F) (η : F) : F :=
+  let r := (scheme.hash z.1 / z.2.1 - scheme.hash z'.1 / z'.2.1) /
+    (z.2.2 / z.2.1 - η * z'.2.2 / z'.2.1)
+  (z.2.2 * r - scheme.hash z.1) / z.2.1
+
+omit [DecidableEq F] [DecidableEq G] [AddCommGroup G] [Module F G] [FinEnum A] in
+/-- Take two forgeries on the key `x g` whose scalars `(H(m) + t x) / s` agree up to a sign `η`.
+
+Then the key for `η` is `x`, when `t`, `s`, `t'` and `s'` are nonzero.
+
+It also needs `H(m) / t` and `H(m') / t'` to differ. -/
+theorem forwardKey_eq_of {scheme : Scheme F G A M} {x η : F} {z z' : M × F × F}
+    (ht : z.2.1 ≠ 0) (hs : z.2.2 ≠ 0) (ht' : z'.2.1 ≠ 0) (hs' : z'.2.2 ≠ 0)
+    (hη : z'.2.2⁻¹ * (scheme.hash z'.1 + z'.2.1 * x) =
+      η * (z.2.2⁻¹ * (scheme.hash z.1 + z.2.1 * x)))
+    (hdiv : scheme.hash z.1 / z.2.1 ≠ scheme.hash z'.1 / z'.2.1) :
+    forwardKey scheme z z' η = x := by
+  obtain ⟨m, t, s⟩ := z
+  obtain ⟨m', t', s'⟩ := z'
+  simp only at ht hs ht' hs' hη hdiv
+  set r := s⁻¹ * (scheme.hash m + t * x) with hr
+  have h1 : scheme.hash m = s * r - t * x := by rw [hr]; field_simp; ring
+  have h2 : scheme.hash m' = s' * (η * r) - t' * x := by rw [← hη]; field_simp; ring
+  have hden : s / t - η * s' / t' ≠ 0 := by
+    intro h0
+    apply hdiv
+    have : (s * r - t * x) / t - (s' * (η * r) - t' * x) / t' = r * (s / t - η * s' / t') := by
+      field_simp; ring
+    rw [h1, h2]
+    exact sub_eq_zero.mp (by rw [this, h0, mul_zero])
+  have hrr : (scheme.hash m / t - scheme.hash m' / t') / (s / t - η * s' / t') = r := by
+    rw [div_eq_iff hden, h1, h2]; field_simp; ring
+  simp only [forwardKey]
+  rw [hrr, h1]; field_simp; ring
 
 /-- The bound on each oracle index that the fork reads: `q` for the outside oracle.
 

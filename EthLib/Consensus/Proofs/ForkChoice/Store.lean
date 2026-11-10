@@ -14,6 +14,8 @@ The ancestor of a node at a slot is a known block at or below that slot.
 
 A node at or below the slot is its own ancestor, so every known node descends from itself.
 
+A node that descends from a known node sits at the slot of that node or later.
+
 The walk to a lower slot can stop at a higher slot on the way, and go on from there.
 
 From Gloas the walk gives each parent an empty or full status.
@@ -300,6 +302,35 @@ theorem isAncestor_self {node : ForkChoiceNode} {block : BeaconBlock preset fork
   by_cases gloas : .glamsterdam ≤ fork <;>
     simp [isAncestor, known, getAncestor_of_le found (UInt64.le_refl _), gloas, bind,
       Except.bind, pure, Except.pure]
+
+/-- A node that descends from a known node is a known block, at the slot of that node or later. -/
+theorem slot_le_of_isAncestor {node ancestor : ForkChoiceNode} {block : BeaconBlock preset fork}
+    (found : store.blocks[ancestor.root]? = some block)
+    (descends : store.isAncestor node ancestor = .ok true) :
+    ∃ nodeBlock, store.blocks[node.root]? = some nodeBlock ∧ block.slot ≤ nodeBlock.slot := by
+  have known : store.block ancestor.root = .ok block := block_ok_iff.mpr found
+  simp only [isAncestor, known, bind, Except.bind] at descends
+  cases walk : store.getAncestor node block.slot with
+  | error e => simp [walk] at descends
+  | ok r =>
+    rw [walk] at descends
+    obtain ⟨nodeBlock, nodeFound⟩ : ∃ nodeBlock, store.blocks[node.root]? = some nodeBlock := by
+      rw [getAncestor] at walk
+      split at walk
+      · simp [throw, throwThe, MonadExceptOf.throw] at walk
+      · rename_i b same
+        exact ⟨b, same⟩
+    refine ⟨nodeBlock, nodeFound, ?_⟩
+    by_cases le : nodeBlock.slot ≤ block.slot
+    · rw [getAncestor_of_le nodeFound le] at walk
+      cases walk
+      have sameRoot : node.root = ancestor.root := by
+        by_cases gloas : .glamsterdam ≤ fork <;>
+          simp_all [pure, Except.pure]
+      rw [sameRoot, found] at nodeFound
+      cases nodeFound
+      exact UInt64.le_refl _
+    · exact UInt64.le_of_lt (UInt64.not_le.mp le)
 
 /-- From Gloas a node descends from a pending node when its walk reaches the same root.
 

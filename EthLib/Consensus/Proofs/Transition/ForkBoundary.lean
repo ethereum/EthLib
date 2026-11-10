@@ -67,6 +67,18 @@ theorem processUpgrades_fork_le {forked after : ForkedBeaconState preset}
     cases computed
     exact Nat.le_refl _
 
+/-- Upgrades that end no later than the fork they start from leave the state as it is. -/
+theorem processUpgrades_eq_of_fork_le {forked after : ForkedBeaconState preset}
+    (computed : processUpgrades config checks forked = .ok after)
+    (stays : after.fork ≤ forked.fork) : after = forked := by
+  rw [processUpgrades] at computed
+  split at computed
+  · obtain ⟨next, -, rest⟩ := bind_ok_iff.mp computed
+    exact absurd (Nat.lt_of_lt_of_le next.property
+      (Nat.le_trans (processUpgrades_fork_le rest) stays)) (Nat.lt_irrefl _)
+  · cases computed
+    rfl
+
 /-- Before the first slot of the next fork epoch, no upgrade is due. -/
 theorem upgradeDue_of_before {forked : ForkedBeaconState preset}
     (before : ∀ next ∈ config.nextFork forked.fork,

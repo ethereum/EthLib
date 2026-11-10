@@ -114,8 +114,9 @@ Every private key has an address.
 
 Three properties are outside the proofs.
 
-- Unforgeability is not proved.
-  It rests on the hardness of the discrete logarithm problem, which no proof here assumes.
+- Unforgeability of this ECDSA is not proved.
+  It rests on the hardness of the discrete logarithm problem, and on properties of the hash.
+  A bound is proved only in an idealised model, where the bijection inside the conversion is a uniform permutation.
 - Nothing is proved about timing, because the specification is not constant-time.
   So signing and the exchange can leak the private key through timing.
 - No theorem bounds how often signing fails.

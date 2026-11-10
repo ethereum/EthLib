@@ -254,6 +254,48 @@ theorem FinalizedBy.imp (weaker : ∀ {s t}, link s t → link' s t) {c : Checkp
   · exact .inl rfl
   · exact .inr ⟨k, hk, b, hb, hchain, fun i hi => (hj i hi).imp weaker, weaker hl⟩
 
+/-- A justified checkpoint with a link to the next epoch is finalized, with `k = 1`.
+
+The block of the target must be above that of the checkpoint. -/
+theorem FinalizedBy.of_one {c t : Checkpoint β} (justified : JustifiedBy link genesis c)
+    (order : c.block ≤ t.block) (epochs : t.epoch = c.epoch + 1) (linked : link c t) :
+    FinalizedBy link genesis c := by
+  refine .inr ⟨1, le_rfl, fun i => if i = 0 then c.block else t.block, rfl, ?_, ?_, ?_⟩
+  · intro i small
+    obtain rfl : i = 0 := by omega
+    simpa using order
+  · intro i small
+    obtain rfl : i = 0 := by omega
+    simpa using justified
+  · have target : (⟨t.block, c.epoch + 1⟩ : Checkpoint β) = t := by
+      rw [← epochs]
+    simpa [target] using linked
+
+/-- A justified checkpoint is finalized with `k = 2`.
+
+The checkpoint of the next epoch must be justified, and a link must reach the epoch after.
+
+The blocks of the three checkpoints must be in order. -/
+theorem FinalizedBy.of_two {c m t : Checkpoint β} (justified : JustifiedBy link genesis c)
+    (middle : JustifiedBy link genesis m) (first : c.block ≤ m.block) (second : m.block ≤ t.block)
+    (middleEpoch : m.epoch = c.epoch + 1) (epochs : t.epoch = c.epoch + 2) (linked : link c t) :
+    FinalizedBy link genesis c := by
+  refine .inr ⟨2, by omega,
+    fun i => if i = 0 then c.block else if i = 1 then m.block else t.block, rfl, ?_, ?_, ?_⟩
+  · intro i small
+    rcases (by omega : i = 0 ∨ i = 1) with rfl | rfl
+    · simpa using first
+    · simpa using second
+  · intro i small
+    rcases (by omega : i = 0 ∨ i = 1) with rfl | rfl
+    · simpa using justified
+    · have target : (⟨m.block, c.epoch + 1⟩ : Checkpoint β) = m := by
+        rw [← middleEpoch]
+      simpa [target] using middle
+  · have target : (⟨t.block, c.epoch + 2⟩ : Checkpoint β) = t := by
+      rw [← epochs]
+    simpa [target] using linked
+
 /-- A slack link with one stake function is a supermajority link when it has no slack.
 
 That holds when its target set lies in its second set. -/

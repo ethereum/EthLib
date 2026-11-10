@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Base.Proofs.FilterM
-public import EthLib.Consensus.Proofs.Transition.Committees
+public import EthLib.Consensus.Proofs.Transition.MixesKept
 public import EthLib.Consensus.Proofs.Transition.TargetSlots
 
 /-!
@@ -271,8 +271,8 @@ theorem PendingVoted.of_advanceSlot {votes : Set (ValidatorIndex × AttestationD
     (early : JustifiedEarly state) (holds : PendingVoted votes state)
     (computed : advanceSlot config checks state = .ok after) :
     PendingVoted votes after := by
-  have committees := fun {epoch : Epoch} => committeesKept_advanceSlot (epoch := epoch) before apart
-    computed
+  have committees := fun {epoch : Epoch} =>
+    committeesKept_advanceSlot (epoch := epoch) apart computed
   obtain ⟨next, cached, epoched, sum, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok computed
   have cachedFrame := frame_processSlot cachedOk
   obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk

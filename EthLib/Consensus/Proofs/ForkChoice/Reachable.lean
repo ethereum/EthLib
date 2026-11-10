@@ -313,6 +313,73 @@ theorem Reachable.root (reachable : Reachable config anchorState anchorBlock sto
     · simp only [same, ↓reduceIte] at found
       exact holds found
 
+/-- A reachable store keeps a state only for a known block. -/
+theorem Reachable.known_of_blockState
+    (reachable : Reachable config anchorState anchorBlock store) {root : Root}
+    {state : BeaconState preset fork} (found : store.blockStates[root]? = some state) :
+    ∃ block, store.blocks[root]? = some block := by
+  induction reachable generalizing root state with
+  | anchor made =>
+    obtain ⟨anchorRoot, -, blocks, states⟩ := getForkchoiceStore_maps made
+    rw [states, getElem?_insert_root] at found
+    rw [blocks, getElem?_insert_root]
+    by_cases same : anchorRoot = root
+    · simp only [same, ↓reduceIte]
+      exact ⟨_, rfl⟩
+    · simp [same] at found
+  | tick _ ticked ih =>
+    obtain ⟨-, -, blocks, states⟩ := onTick_frame ticked
+    rw [states] at found
+    rw [blocks]
+    exact ih found
+  | attestation _ attested ih =>
+    obtain ⟨-, blocks, states⟩ := onAttestation_frame attested
+    rw [states] at found
+    rw [blocks]
+    exact ih found
+  | attesterSlashing _ slashed ih =>
+    obtain ⟨-, blocks, states⟩ := onAttesterSlashing_frame slashed
+    rw [states] at found
+    rw [blocks]
+    exact ih found
+  | payloadAttestation _ voted ih =>
+    obtain ⟨-, blocks, states⟩ := (onPayloadAttestationMessage_onlyPtcVotes voted).frame
+    rw [states] at found
+    rw [blocks]
+    exact ih found
+  | envelope _ accepted ih =>
+    obtain ⟨-, blocks, states⟩ := onExecutionPayloadEnvelope_frame accepted
+    rw [states] at found
+    rw [blocks]
+    exact ih found
+  | inclusionList _ accepted ih =>
+    obtain ⟨-, blocks, states⟩ := onInclusionList_frame accepted
+    rw [states] at found
+    rw [blocks]
+    exact ih found
+  | block _ added ih =>
+    rcases onBlock_same_or_insert added with
+      same | ⟨blockRoot, -, -, blocks, -, state', -, -, states⟩
+    · subst same
+      exact ih found
+    rw [states, getElem?_insert_root] at found
+    rw [blocks, getElem?_insert_root]
+    by_cases same : blockRoot = root
+    · simp only [same, ↓reduceIte]
+      exact ⟨_, rfl⟩
+    · simp only [same, ↓reduceIte] at found ⊢
+      exact ih found
+
+/-- A reachable store keeps no state at a root without a known block. -/
+theorem Reachable.blockState_eq_none
+    (reachable : Reachable config anchorState anchorBlock store) {root : Root}
+    (unknown : store.blocks[root]? = none) : store.blockStates[root]? = none := by
+  by_contra kept
+  obtain ⟨state, found⟩ := Option.ne_none_iff_exists'.mp kept
+  obtain ⟨block, known⟩ := reachable.known_of_blockState found
+  rw [unknown] at known
+  cases known
+
 /-- A reachable store is linked under the parent root of the anchor, unless it knows that root.
 
 That needs the anchor block at or before the slot of the anchor state. -/

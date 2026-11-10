@@ -11,9 +11,9 @@ That mix is the one `MIN_SEED_LOOKAHEAD + 1` epochs before.
 
 A step keeps activity up to the current epoch plus `MAX_SEED_LOOKAHEAD`, capped at 2^64 - 1.
 
-Before Altair, a block keeps the committees of the previous and the current epoch.
+Before Altair, the steps of a block and of an epoch keep activity and write at most one mix.
 
-A slot keeps those of its current epoch, which the next slot sees as the previous one.
+Before Altair, the epoch step also moves the pending attestations of the current epoch.
 -/
 
 @[expose] public section
@@ -251,8 +251,9 @@ theorem CommitteesKept.trans {middle last : Base.Fork} {epoch : Epoch}
     (two : CommitteesKept epoch second third) : CommitteesKept epoch first third :=
   fun slot index inside => (two slot index inside).trans (one slot index inside)
 
-/-- Two states with the same active indices and seed of an epoch have its committees. -/
-private theorem committeesKept_of_seed {post : Base.Fork} {other : BeaconState preset post}
+/-- Two states with the same active indices and attester seed of an epoch agree on its committees.
+-/
+theorem CommitteesKept.of_seed {post : Base.Fork} {other : BeaconState preset post}
     {epoch : Epoch}
     (active : getActiveValidatorIndices other epoch = getActiveValidatorIndices state epoch)
     (checked : getActiveValidatorIndicesChecked other epoch =
@@ -270,20 +271,19 @@ theorem CommitteesKept.of_eq {post : Base.Fork} {other : BeaconState preset post
     (validators : other.validators.data = state.validators.data)
     (mixes : other.randaoMixes.elements = state.randaoMixes.elements) (epoch : Epoch) :
     CommitteesKept epoch state other :=
-  committeesKept_of_seed (by unfold getActiveValidatorIndices; rw [validators])
+  CommitteesKept.of_seed (by unfold getActiveValidatorIndices; rw [validators])
     (by unfold getActiveValidatorIndicesChecked getActiveValidatorIndices; rw [validators])
     (by unfold getSeed getRandaoMix; rw [mixes])
 
-/-- The seed of an epoch reads only the mix of one position, which a nearby write misses.
+/-- The seed of an epoch is the same in two states with the same mix at the position it reads.
 
-The write is at the position of that epoch or of the next one.
-
-There must be more than `MIN_SEED_LOOKAHEAD + 2` epochs of mixes. -/
-private theorem getSeed_eq_of_mixesKeptBut {post : Base.Fork} {other : BeaconState preset post}
-    {epoch written : Epoch}
-    (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
-    (mixes : MixesKeptBut written state other) (low : epoch ≤ written)
-    (high : written.toNat ≤ epoch.toNat + 1) (domainType : DomainType) :
+That position is the epoch plus the length of the ring, less `MIN_SEED_LOOKAHEAD + 1`. -/
+theorem getSeed_eq_of_mix {post : Base.Fork} {other : BeaconState preset post} {epoch : Epoch}
+    (domainType : DomainType)
+    (same : ∀ shifted : Epoch, shifted.toNat + preset.MIN_SEED_LOOKAHEAD.toNat + 1 =
+        epoch.toNat + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat →
+      readCircular other.randaoMixes.elements shifted =
+        readCircular state.randaoMixes.elements shifted) :
     getSeed other epoch domainType = getSeed state epoch domainType := by
   unfold getSeed getRandaoMix
   -- Both seeds read the same position, and the mix there is the same.
@@ -300,14 +300,28 @@ private theorem getSeed_eq_of_mixesKeptBut {post : Base.Fork} {other : BeaconSta
       show readCircular other.randaoMixes.elements shifted >>= finish =
         readCircular state.randaoMixes.elements shifted >>= finish
       rw [same shifted rfl]
-  refine reads _ _ fun shifted computed => mixes shifted fun same => ?_
+  refine reads _ _ fun shifted computed => same shifted ?_
   simp only [liftArith, mapError_ok_iff, bind_ok_iff] at computed
   obtain ⟨sum, sumOk, lower, lowerOk, shiftedOk⟩ := computed
   obtain ⟨-, sumEq⟩ := addChecked_ok_iff.mp sumOk
   obtain ⟨-, lowerEq⟩ := subChecked_ok_iff.mp lowerOk
   obtain ⟨above, shiftedEq⟩ := subChecked_ok_iff.mp shiftedOk
-  have lowLe := UInt64.le_iff_toNat_le.mp low
   simp only [UInt64.reduceToNat] at above shiftedEq
+  omega
+
+/-- The seed of an epoch reads only the mix of one position, which a nearby write misses.
+
+The write is at the position of that epoch or of the next one.
+
+There must be more than `MIN_SEED_LOOKAHEAD + 2` epochs of mixes. -/
+private theorem getSeed_eq_of_mixesKeptBut {post : Base.Fork} {other : BeaconState preset post}
+    {epoch written : Epoch}
+    (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    (mixes : MixesKeptBut written state other) (low : epoch ≤ written)
+    (high : written.toNat ≤ epoch.toNat + 1) (domainType : DomainType) :
+    getSeed other epoch domainType = getSeed state epoch domainType := by
+  refine getSeed_eq_of_mix domainType fun shifted shiftedEq => mixes shifted fun same => ?_
+  have lowLe := UInt64.le_iff_toNat_le.mp low
   -- The seed reads the mix `MIN_SEED_LOOKAHEAD + 1` epochs back, never that of the write.
   have same := congrArg UInt64.toNat same
   rw [UInt64.toNat_mod, UInt64.toNat_mod] at same
@@ -327,7 +341,7 @@ theorem CommitteesKept.of_activeKept {post : Base.Fork} {other : BeaconState pre
     (active : ActiveKept epoch state other) (mixes : MixesKeptBut written state other)
     (low : epoch ≤ written) (high : written.toNat ≤ epoch.toNat + 1) :
     CommitteesKept epoch state other :=
-  committeesKept_of_seed (active.getActiveValidatorIndices_eq (UInt64.le_refl _))
+  CommitteesKept.of_seed (active.getActiveValidatorIndices_eq (UInt64.le_refl _))
     (active.getActiveValidatorIndicesChecked_eq (UInt64.le_refl _))
     (getSeed_eq_of_mixesKeptBut apart mixes low high _)
 
@@ -1115,6 +1129,49 @@ private theorem keeps_processJustificationAndFinalization
     exact Keeps.of_eq (by rw [← rest]) (by rw [← rest]) (by rw [← rest]) (by rw [← rest])
       (by rw [← rest])
 
+/-! ## Steps that keep the RANDAO mixes and the slot, at every fork -/
+
+/-- Justification and finalization keep the RANDAO mixes and the slot. -/
+theorem randaoMixes_slot_processJustificationAndFinalization
+    (computed : processJustificationAndFinalization state = .ok after) :
+    after.randaoMixes = state.randaoMixes ∧ after.slot = state.slot :=
+  have keeps := keeps_processJustificationAndFinalization computed
+  ⟨keeps.1.1, keeps.2.2⟩
+
+/-- The rewards and penalties of an epoch keep the RANDAO mixes and the slot. -/
+theorem randaoMixes_slot_processRewardsAndPenalties
+    (computed : processRewardsAndPenalties config state = .ok after) :
+    after.randaoMixes = state.randaoMixes ∧ after.slot = state.slot :=
+  have keeps := keeps_processRewardsAndPenalties computed
+  ⟨keeps.1.1, keeps.2.2⟩
+
+/-- The slashing penalties of an epoch keep the RANDAO mixes and the slot. -/
+theorem randaoMixes_slot_processSlashings (computed : processSlashings state = .ok after) :
+    after.randaoMixes = state.randaoMixes ∧ after.slot = state.slot :=
+  have keeps := keeps_processSlashings computed
+  ⟨keeps.1.1, keeps.2.2⟩
+
+/-- The reset of the deposit votes keeps the RANDAO mixes and the slot. -/
+theorem randaoMixes_slot_processEth1DataReset {hegota : fork < .hegota}
+    (computed : processEth1DataReset hegota state = .ok after) :
+    after.randaoMixes = state.randaoMixes ∧ after.slot = state.slot :=
+  have keeps := keeps_processEth1DataReset computed
+  ⟨keeps.1.1, keeps.2.2⟩
+
+/-- The updates of the effective balances keep the RANDAO mixes and the slot. -/
+theorem randaoMixes_slot_processEffectiveBalanceUpdates
+    (computed : processEffectiveBalanceUpdates state = .ok after) :
+    after.randaoMixes = state.randaoMixes ∧ after.slot = state.slot :=
+  have keeps := keeps_processEffectiveBalanceUpdates computed
+  ⟨keeps.1.1, keeps.2.2⟩
+
+/-- The update of the historical roots keeps the RANDAO mixes and the slot. -/
+theorem randaoMixes_slot_processHistoricalRootsUpdate
+    (computed : processHistoricalRootsUpdate state = .ok after) :
+    after.randaoMixes = state.randaoMixes ∧ after.slot = state.slot :=
+  have keeps := keeps_processHistoricalRootsUpdate computed
+  ⟨keeps.1.1, keeps.2.2⟩
+
 /-! ## Steps that keep the slot and activity, at every fork -/
 
 /-- A balance increase keeps the slot and activity. -/
@@ -1232,7 +1289,7 @@ theorem activeKept_processEpoch_of_lt_altair (before : fork < .altair)
   (processEpoch_kept before computed).1
 
 /-- Before Altair, the epoch step writes at most the RANDAO mix of the next epoch. -/
-theorem processEpoch_mixesKeptBut (before : fork < .altair)
+theorem mixesKeptBut_processEpoch_of_lt_altair (before : fork < .altair)
     (computed : processEpoch config checks state = .ok after) :
     ∃ next : Epoch, next.toNat = (getCurrentEpoch state).toNat + 1 ∧
       MixesKeptBut next state after :=
@@ -1246,85 +1303,5 @@ theorem processEpoch_pendingRotation (before : fork < .altair)
     after.previousEpochAttestations before = state.currentEpochAttestations before ∧
       (after.currentEpochAttestations before).data = #[] :=
   (processEpoch_kept before computed).2.2
-
-/-- Before Altair, a block keeps the committees of the previous and of the current epoch.
-
-There must be more than `MIN_SEED_LOOKAHEAD + 2` epochs of mixes. -/
-theorem committeesKept_processBlock (before : fork < .altair)
-    (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
-    {block : BeaconBlock preset fork}
-    (computed : processBlock config checks engine state block = .ok after) (current : Bool) :
-    CommitteesKept (if current then getCurrentEpoch state else getPreviousEpoch state) state
-      after := by
-  obtain ⟨first, last, head, attested, tail⟩ := processBlock_pendingSplit before computed
-  have middle : last.validators = first.validators ∧ last.randaoMixes = first.randaoMixes :=
-    foldlM_ok_invariant
-      (fun next : BeaconState preset fork =>
-        next.validators = first.validators ∧ next.randaoMixes = first.randaoMixes)
-      (fun _ _ _ holds ok => ⟨(processAttestation_registry ok).1.trans holds.1,
-        (processAttestation_registry ok).2.trans holds.2⟩) ⟨rfl, rfl⟩ attested
-  have slots : last.slot = state.slot :=
-    (Frame.foldlM (fun _ _ _ ok => frame_processAttestation ok) attested).slot.trans head.slot
-  have epochLast : getCurrentEpoch last = getCurrentEpoch state := by
-    simp only [getCurrentEpoch, slots]
-  -- The epoch is the current one or the one before, so neither write reaches its seed.
-  have previous := getPreviousEpoch_toNat state
-  have low : (if current then getCurrentEpoch state else getPreviousEpoch state) ≤
-      getCurrentEpoch state := by
-    cases current
-    · exact getPreviousEpoch_le state
-    · exact UInt64.le_refl _
-  have high : (getCurrentEpoch state).toNat ≤
-      (if current then getCurrentEpoch state else getPreviousEpoch state).toNat + 1 := by
-    cases current <;> simp only [Bool.false_eq_true, ↓reduceIte] <;> omega
-  refine (CommitteesKept.of_activeKept apart (head.active.mono low) head.mixes low high).trans <|
-    (CommitteesKept.of_eq (congrArg (·.data) middle.1) (congrArg (·.elements) middle.2) _).trans ?_
-  exact CommitteesKept.of_activeKept apart (tail.active.mono (epochLast ▸ low))
-    (epochLast ▸ tail.mixes) low high
-
-/-- Before Altair, one slot keeps the committees of each epoch that both states see as recent.
-
-Such an epoch is at most the current epoch before the slot.
-
-It is at least the previous epoch after it.
-
-There must be more than `MIN_SEED_LOOKAHEAD + 2` epochs of mixes. -/
-theorem committeesKept_advanceSlot (before : fork < .altair)
-    (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
-    (computed : advanceSlot config checks state = .ok after) {epoch : Epoch}
-    (low : getPreviousEpoch after ≤ epoch) (high : epoch ≤ getCurrentEpoch state) :
-    CommitteesKept epoch state after := by
-  obtain ⟨next, cached, epoched, sum, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok computed
-  obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
-  have cachedSlot : cached.slot = state.slot := by rw [cachedEq]
-  have cachedEpoch : getCurrentEpoch cached = getCurrentEpoch state := by
-    simp only [getCurrentEpoch, cachedSlot]
-  -- The slot step writes neither the registry nor the mixes.
-  refine (CommitteesKept.of_eq (other := cached) (by rw [cachedEq]) (by rw [cachedEq])
-    epoch).trans ?_
-  unfold epochIfLast at epochedOk
-  split at epochedOk
-  · rename_i boundary
-    have epochs := nextSlot_epoch_of_boundary sum boundary
-    have afterEpoch := getCurrentEpoch_toNat { epoched with slot := next }
-    have stateEpoch := getCurrentEpoch_toNat state
-    have previousEq := getPreviousEpoch_toNat { epoched with slot := next }
-    dsimp only at afterEpoch
-    have lowNat := UInt64.le_iff_toNat_le.mp low
-    have highNat := UInt64.le_iff_toNat_le.mp high
-    obtain ⟨active, ⟨written, writtenEq, mixes⟩, -, -⟩ := processEpoch_kept before epochedOk
-    have active := active.mono (getCurrentEpoch_le_activityFixedEpoch _)
-    rw [cachedEpoch] at active writtenEq
-    rw [previousEq, afterEpoch] at lowNat
-    have nextNat : next.toNat / preset.SLOTS_PER_EPOCH.toNat =
-        state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat + 1 := by
-      exact epochs
-    refine (CommitteesKept.of_activeKept apart (active.mono high) mixes ?_ ?_).trans
-      (CommitteesKept.of_eq rfl rfl epoch)
-    · exact UInt64.le_iff_toNat_le.mpr (by omega)
-    · omega
-  · simp only [pure, Except.pure, Except.ok.injEq] at epochedOk
-    subst epochedOk
-    exact CommitteesKept.of_eq rfl rfl epoch
 
 end EthLib.Consensus

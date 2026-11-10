@@ -37,6 +37,8 @@ From Altair, a validator with a timely target pays no inactivity penalty.
 
 The first epoch has no rewards, and the step keeps one balance for each validator.
 
+The step changes no field but the balances.
+
 The finality delay is the distance from the finalized epoch, and the leak is a delay above a limit.
 
 The earliest inclusions have one entry for each validator, and each comes from a signed attestation.
@@ -700,6 +702,40 @@ theorem applyDeltas_eq_ok_iff {rewards penalties : Array Gwei} {position : Nat} 
     refine ⟨position.toUInt64, by rw [liftArith, ofNatChecked_of_lt small]; rfl, _,
       ⟨inside', by simpa [same] using fits, rfl⟩, by simpa [BeaconState.putBalance] using inside',
       by simp [BeaconState.putBalance, same]⟩
+
+/-- Applying the deltas of one validator changes only the balances. -/
+theorem applyDeltas_frame {rewards penalties : Array Gwei} {index : Nat}
+    (computed : applyDeltas rewards penalties state index = .ok after) :
+    after = { state with balances := after.balances } := by
+  obtain ⟨_, _, _, rfl⟩ := applyDeltas_eq_ok_iff.mp computed
+  rfl
+
+/-- Applying some deltas to every validator changes only the balances. -/
+theorem applyAllDeltas_frame {deltas : Array Gwei × Array Gwei}
+    (computed : applyAllDeltas state deltas = .ok after) :
+    after = { state with balances := after.balances } :=
+  foldlM_ok_invariant (fun s : BeaconState preset fork => s = { state with balances := s.balances })
+    (fun _ _ _ before step => by
+      rw [applyDeltas_frame step, before]) rfl computed
+
+/-- Rewards and penalties change only the balances, at every fork. -/
+theorem processRewardsAndPenalties_frame {config : Config}
+    (computed : processRewardsAndPenalties config state = .ok after) :
+    after = { state with balances := after.balances } := by
+  unfold processRewardsAndPenalties at computed
+  split at computed
+  · simp only [pure, Except.pure, Except.ok.injEq] at computed
+    subst computed
+    rfl
+  split at computed
+  · simp only [bind_ok_iff] at computed
+    obtain ⟨_, _, _, _, applied⟩ := computed
+    exact foldlM_ok_invariant
+      (fun s : BeaconState preset fork => s = { state with balances := s.balances })
+      (fun _ _ _ before step => by rw [applyAllDeltas_frame step, before]) rfl applied
+  · simp only [bind_ok_iff] at computed
+    obtain ⟨_, _, applied⟩ := computed
+    exact applyAllDeltas_frame applied
 
 /-- A fold over the first positions whose step acts on the balance at its own position.
 

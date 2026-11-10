@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Cryptography.Proofs.Secp256k1.Security.ChosenMessageBound
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.Collision
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.Conflict
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.DivisionResistance
@@ -12,6 +13,7 @@ public import EthLib.Cryptography.Proofs.Secp256k1.Security.KeyOnly
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.KeyOnlyBound
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.KeyOnlyOutside
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.Keyless
+public import EthLib.Cryptography.Proofs.Secp256k1.Security.KeylessForger
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.LazyGame
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.Origin
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.Programmed
@@ -116,5 +118,13 @@ The chance of a conflict is bounded, with a nonzero base point and a semi-inject
 
 A signer that reads only the public key gives that game the same law.
 
-No theorem bounds a forger with a signing oracle yet; that is the rest of their Theorem 1.
+A key-only forger runs that game.
+
+A solver of the discrete logarithm covers a forgery at a point that the signer programmed.
+
+These steps give the bound of their Theorem 1.
+
+It has one more term than theirs, for a solver of the discrete logarithm.
+
+With their Theorem 2, they give a bound with no key-only forger.
 -/

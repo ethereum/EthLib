@@ -78,6 +78,19 @@ theorem TaggedCache.map_fst_lookupTagged (c : TaggedCache A τ) (a : A) :
         List.map_cons, List.lookup, hne] at ih ⊢
       exact ih
 
+/-- A tagged lookup returns a pair of the cache. -/
+theorem TaggedCache.mem_of_lookupTagged_eq_some {c : TaggedCache A τ} {a b : A} {o : τ}
+    (h : c.lookupTagged a = some (b, o)) : ((a, b), o) ∈ c := by
+  simp only [TaggedCache.lookupTagged, Option.map_eq_some_iff] at h
+  obtain ⟨e, he, hbe⟩ := h
+  have ha := List.find?_some he
+  simp only [decide_eq_true_eq] at ha
+  obtain ⟨⟨a', b'⟩, o'⟩ := e
+  simp only [Prod.mk.injEq] at hbe ha
+  obtain ⟨rfl, rfl⟩ := hbe
+  subst ha
+  exact List.mem_of_find?_eq_some he
+
 /-- The lazy permutation as an oracle, with each new pair tagged.
 
 A new forward query tags its pair with `fwd`, and a new inverse query with `inv`.
