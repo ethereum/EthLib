@@ -25,6 +25,8 @@ The members of the committees of a slot are cut from one shuffle, computed once 
 
 From Electra, the committees of one attestation are cut from one shuffle too.
 
+The signers of an attestation can be cut from a held shuffle of the epoch of its slot.
+
 A failed assertion of the rule, or a read past the end of a list, is an error.
 
 A division by a parameter of the preset or the configuration assumes that it is not zero.
@@ -503,6 +505,26 @@ def committeesAttesters (state : BeaconState preset fork) (slot : Slot) (bits : 
 
 /-- The validators that an attestation shows as signers, as a set.
 
+The committees are cut from the given active validators and shuffle.
+
+The count of committees per slot is given too.
+
+With the inputs of the epoch of the slot of the attestation, it is the set of the rule. -/
+def attestingIndicesOf (attestation : Attestation preset fork) (perSlot : UInt64)
+    (active : Array ValidatorIndex) (shuffled : Array UInt64) :
+    Except AccessorError (List ValidatorIndex) := do
+  let bits := attestation.aggregationBits.bits
+  if electra : .pectra ≤ fork then
+    let committees := getCommitteeIndices (attestation.committeeBits electra)
+    return sortedSet (← committeesAttestersOf preset attestation.data.slot bits perSlot active
+      shuffled committees 0)
+  else
+    let committee ← beaconCommitteeOf preset attestation.data.slot attestation.data.index perSlot
+      active shuffled
+    return sortedSet (← committeeAttesters bits 0 committee)
+
+/-- The validators that an attestation shows as signers, as a set.
+
 Before Electra, the bits run over one committee.
 
 From Electra, they run over each committee of the committee bits in turn, as [EIP-7549] specifies.
@@ -519,16 +541,24 @@ def getAttestingIndices (state : BeaconState preset fork) (attestation : Attesta
     let committee ← getBeaconCommittee state attestation.data.slot attestation.data.index
     return sortedSet (← committeeAttesters bits 0 committee)
 
+/-- An attestation with the given indices of its signers in place of its bits.
+
+The indices keep their given order.
+
+Before Gloas a list of indices past its limit is an error, and from Gloas the list has no limit. -/
+def indexedAttestationOf (attestation : Attestation preset fork) (indices : List ValidatorIndex) :
+    Except AccessorError (IndexedAttestation preset fork) := do
+  if fits : fork < .glamsterdam → indices.length ≤ maxAttesters preset fork then
+    return ⟨⟨indices.toArray, fun before => by simpa using fits before⟩, attestation.data,
+      attestation.signature⟩
+  else throw (.tooManyAttesters indices.length (maxAttesters preset fork))
+
 /-- An attestation with the sorted indices of its signers in place of its bits.
 
 Before Gloas the list of indices has a limit, and from Gloas it has none. -/
 def getIndexedAttestation (state : BeaconState preset fork)
     (attestation : Attestation preset fork) :
     Except AccessorError (IndexedAttestation preset fork) := do
-  let indices ← getAttestingIndices state attestation
-  if fits : fork < .glamsterdam → indices.length ≤ maxAttesters preset fork then
-    return ⟨⟨indices.toArray, fun before => by simpa using fits before⟩, attestation.data,
-      attestation.signature⟩
-  else throw (.tooManyAttesters indices.length (maxAttesters preset fork))
+  indexedAttestationOf attestation (← getAttestingIndices state attestation)
 
 end EthLib.Consensus

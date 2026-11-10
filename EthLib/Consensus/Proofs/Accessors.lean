@@ -38,6 +38,10 @@ A validator is among those members exactly when one of the committees holds it.
 
 From Electra, the attesters of some committees, cut from one shuffle, are those of each in turn.
 
+The signers of an attestation are those cut from the shuffle of the epoch of its slot.
+
+This holds when that shuffle has a value.
+
 The indices of an attestation increase strictly, as the check of an indexed attestation asks.
 
 An attestation has at most as many signers as bits, so its indexed form never exceeds its limit.
@@ -848,6 +852,23 @@ theorem mem_of_committeesAttesters {state : BeaconState preset fork} {slot : Slo
         (mem_of_committeeAttesters hereOk inHere)
     · exact ih laterOk inLater
 
+/-- With a shuffle that has a value, an attestation shows the signers cut from that shuffle.
+
+The shuffle is that of the epoch of its slot, with its count of committees per slot. -/
+theorem getAttestingIndices_of_attesterShuffle {state : BeaconState preset fork}
+    {attestation : Attestation preset fork} {active : Array ValidatorIndex}
+    {shuffled : Array UInt64}
+    (shuffleOk : attesterShuffle state (computeEpochAtSlot preset attestation.data.slot) =
+      .ok (active, shuffled)) :
+    getAttestingIndices state attestation =
+      attestingIndicesOf attestation
+        (getCommitteeCountPerSlot state (computeEpochAtSlot preset attestation.data.slot)) active
+        shuffled := by
+  unfold getAttestingIndices attestingIndicesOf
+  split
+  · simp only [committeesAttesters_of_attesterShuffle shuffleOk]
+  · simp only [getBeaconCommittee_eq, shuffleOk, bind, Except.bind]
+
 /-- Each validator that an attestation shows as a signer is active in the epoch of its slot. -/
 theorem mem_getActiveValidatorIndices_of_getAttestingIndices {state : BeaconState preset fork}
     {attestation : Attestation preset fork} {attesters : List ValidatorIndex}
@@ -891,7 +912,7 @@ theorem getIndexedAttestation_sorted {state : BeaconState preset fork}
     {attestation : Attestation preset fork} {indexed : IndexedAttestation preset fork}
     (computed : getIndexedAttestation state attestation = .ok indexed) :
     indexed.attestingIndices.data.toList.Pairwise (· < ·) := by
-  simp only [getIndexedAttestation, bind, Except.bind] at computed
+  simp only [getIndexedAttestation, indexedAttestationOf, bind, Except.bind] at computed
   split at computed
   · cases computed
   rename_i attesters attestersOk
@@ -1010,7 +1031,7 @@ theorem getIndexedAttestation_eq_error_iff {state : BeaconState preset fork}
     {attestation : Attestation preset fork} {error : AccessorError} :
     getIndexedAttestation state attestation = .error error ↔
       getAttestingIndices state attestation = .error error := by
-  simp only [getIndexedAttestation, bind, Except.bind]
+  simp only [getIndexedAttestation, indexedAttestationOf, bind, Except.bind]
   split
   · rename_i failure
     simp [failure]
@@ -1029,7 +1050,7 @@ theorem getIndexedAttestation_of_getAttestingIndices {state : BeaconState preset
     ∃ indexed, getIndexedAttestation state attestation = .ok indexed ∧
       indexed.attestingIndices.data = attesters.toArray ∧ indexed.data = attestation.data ∧
       indexed.signature = attestation.signature := by
-  simp only [getIndexedAttestation, bind, Except.bind, computed]
+  simp only [getIndexedAttestation, indexedAttestationOf, bind, Except.bind, computed]
   split
   · exact ⟨_, rfl, rfl, rfl, rfl⟩
   · rename_i over
