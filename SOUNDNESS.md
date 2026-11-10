@@ -2151,14 +2151,16 @@ It relies on the beacon committees of those epochs staying fixed while the epoch
 
 `processJustificationAndFinalization_linkWithChurn` (`Consensus/Proofs/Transition/FfgJustification.lean`) refines one epoch step.
 It takes the target-flag fact from Altair, the pending-attestation fact before Altair, and an active stake of more than one and a half increments.
+The two facts are needed at the state after the slot step where justification runs, which no public theorem reaches yet.
 The validator set of a target is the active set of its epoch, as each checkpoint has its own set in Gasper §8.6.
 Each validator weighs its effective balance in the state before the step.
 The votes of the model must hold those of the data that the state signs.
 The step keeps the current justified checkpoint, or replaces it by the checkpoint of the previous or the current epoch, whose test passes; the link goes from the justified checkpoint of that epoch to the new checkpoint.
-`linkWithChurn_of_test` gives the same bound for one epoch whose test passes, when each counted attester is active in that epoch and signed a vote for its link.
-`TargetFlagsSigned.attester` from Altair and `PendingSigned.attester` before it give that fact, so the bound also holds for the previous epoch when both pass, whose bit the finalization rules read.
 Then twice the stake of the set of the target is at most three times the stake of the voters of the link, plus a term of churn.
 The term is twice the stake of that set outside the active set of the current epoch, because the step divides by the active balance of the current epoch.
+`linkWithChurn_of_test` gives the same bound for one epoch whose test passes, when each counted attester is active in that epoch and signed a vote for its link.
+`TargetFlagsSigned.attester` from Altair and `PendingSigned.attester` before it give that fact.
+With them, `linkWithChurn_of_test` would give the bound for the previous epoch when both pass, whose bit the finalization rules read; no theorem states that yet.
 For the current epoch the term is zero.
 For the previous epoch, `exists_exitEpoch_eq_of_mem_sdiff_active` shows that it counts only validators that exit at the current epoch, while the registry stays below 2^64 validators.
 The exit churn bounds that stake, but no theorem states that bound yet.

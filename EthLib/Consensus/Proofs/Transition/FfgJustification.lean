@@ -23,6 +23,10 @@ Its root is the block root that the state records for the first slot of the epoc
 
 From Altair the target flags give that, and before Altair the pending attestations do.
 
+A verified aggregate counts here as the signature of the validator.
+
+That reading assumes that no one forges a BLS aggregate.
+
 The step drops slashed attesters, so the attesters are a subset of the voters of the model.
 
 The step divides by the active stake of the current epoch, not of the epoch of the target.
@@ -35,7 +39,7 @@ For the current epoch that term is the stake of the empty set, zero.
 
 Gasper §4.4, Definitions 4.5 and 4.6, justify a checkpoint by a supermajority link.
 
-Gasper §8.6, Lemma 8.2, gives each justified checkpoint its own validator set.
+Gasper §8.6 lets the validator set change, with a set for each block.
 
 The term of churn is the stake of the exited set of Gasper §8.6, Definition 8.1.
 
@@ -65,7 +69,9 @@ Twice the stake of that set is at most three times the stake of its voters for t
 
 The term of churn adds twice the stake of that set outside the active set of the current epoch.
 
-The model asks for the bound without that term, and also orders the source before the target. -/
+The model asks for the bound without that term, and a source epoch below the target epoch.
+
+It also asks for the source block in the chain of the target block. -/
 def LinkWithChurn (state : BeaconState preset fork) (votes : Set (Vote ValidatorIndex β))
     (epoch : Epoch) (source target : Models.Ffg.Checkpoint β) : Prop :=
   2 * stake (fun index => balanceAt state index.toNat)
