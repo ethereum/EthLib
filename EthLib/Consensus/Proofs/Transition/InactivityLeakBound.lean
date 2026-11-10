@@ -166,6 +166,22 @@ private theorem add_le_of_lt_of_aligned {inc a b : Nat} (ha : a % inc = 0) (hb :
   calc inc * y + inc = inc * (y + 1) := by rw [Nat.mul_succ]
     _ ≤ inc * x := Nat.mul_le_mul_left _ this
 
+/-- The number of epochs that a leak needs grows with the amount it must take. -/
+theorem leakEpochs_mono {floor bias divisor amount larger : Nat} (le : amount ≤ larger) :
+    leakEpochs floor bias divisor amount ≤ leakEpochs floor bias divisor larger := by
+  unfold leakEpochs
+  -- The monotonicity of the square root is not in core, so compare the squares instead.
+  have grows := Nat.div_le_div_right (c := floor * bias) (Nat.mul_le_mul_left (2 * divisor) le)
+  have below := Nat.sqrt_le (2 * divisor * amount / (floor * bias))
+  have above := Nat.lt_succ_sqrt (2 * divisor * larger / (floor * bias))
+  generalize Nat.sqrt (2 * divisor * amount / (floor * bias)) = small at *
+  generalize Nat.sqrt (2 * divisor * larger / (floor * bias)) = large at *
+  have : small ≤ large := by
+    refine Nat.le_of_not_lt fun bigger => ?_
+    have := Nat.mul_le_mul (Nat.succ_le_of_lt bigger) (Nat.succ_le_of_lt bigger)
+    omega
+  omega
+
 /-- An absent validator in a leak: its effective balance falls to a threshold.
 
 Absent means eligible and without the timely target flag, while its effective balance is high.
