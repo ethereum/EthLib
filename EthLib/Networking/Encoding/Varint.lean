@@ -156,6 +156,16 @@ def groups : Nat → List UInt8 → Except VarintError (List UInt8)
         -- A continued byte: keep it, and read the rest with one byte less of budget.
         (groups fuel bs).map (b :: ·)
 
+/-- The bytes of a varint at the start of the input, and the bytes after them.
+
+A varint ends at its first byte below `0x80`.
+
+The prefix holds at most eleven bytes, so the decoder still sees an overlong prefix.
+-/
+def split (bs : List UInt8) : List UInt8 × List UInt8 :=
+  let k := (bs.take maxLength).findIdx (·.toNat < continuation) + 1
+  (bs.take k, bs.drop k)
+
 /-- Whether a varint is longer than its value needs.
 
 The shortest encoding never ends in a zero group.

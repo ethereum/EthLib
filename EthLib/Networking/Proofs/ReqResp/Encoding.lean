@@ -34,55 +34,6 @@ open EthLib.Networking.Encoding.Varint
 open EthLib.Networking.Proofs.Encoding.Varint
 open EthLib.Networking.Proofs
 
-/-! ## The varint prefix -/
-
-/-- The split finds the last byte of an encoding, whatever follows it. -/
-theorem findIdx_encodeAux {n fuel m : Nat} (rest : List UInt8) (hf : 0 < fuel)
-    (hn : n < groupSize ^ fuel) (hm : (encodeAux n fuel).length ≤ m) :
-    ((encodeAux n fuel ++ rest).take m).findIdx (·.toNat < continuation) + 1 =
-      (encodeAux n fuel).length := by
-  induction fuel generalizing n m with
-  | zero => omega
-  | succ fuel ih =>
-    obtain ⟨m, rfl⟩ : ∃ k, m = k + 1 := ⟨m - 1, by
-      have := encodeAux_ne_nil (n := n) hf
-      cases h : encodeAux n (fuel + 1) <;> simp_all; omega⟩
-    by_cases hlt : n < groupSize
-    · -- One byte, below 128.
-      simp [encodeAux, hlt, toNat_terminator_byte hlt, List.findIdx_cons]
-      rw [groupSize_eq, continuation_eq] at *
-      omega
-    · -- A continued byte, then the encoding of the rest.
-      have hf' : 0 < fuel := by
-        rcases fuel with _ | _
-        · simp at hn; omega
-        · omega
-      have hn' : n / groupSize < groupSize ^ fuel := by
-        rw [Nat.pow_succ] at hn
-        exact Nat.div_lt_of_lt_mul (by rwa [Nat.mul_comm])
-      simp only [encodeAux, hlt, ite_false, List.cons_append, List.take_succ_cons,
-        List.length_cons] at hm ⊢
-      rw [List.findIdx_cons]
-      have hc : ¬ (UInt8.ofNat (n % groupSize + continuation)).toNat < continuation := by
-        rw [toNat_continued_byte]; omega
-      have := ih hf' hn' (m := m) (by omega)
-      simp only [hc, decide_false, Bool.false_eq_true, ite_false]
-      omega
-
-/-- The split of an encoded length followed by any bytes returns the encoding and those bytes. -/
-theorem splitVarint_encode (v : UInt64) (rest : List UInt8) :
-    splitVarint (encode v ++ rest) = (encode v, rest) := by
-  have hlt : v.toNat < groupSize ^ maxLength := by
-    have := v.toNat_lt_size
-    simp only [UInt64.size, groupSize, payloadBits, maxLength] at *
-    omega
-  have h := findIdx_encodeAux rest (by decide) hlt (encode_length_le v)
-  simp only [splitVarint]
-  rw [show encodeAux v.toNat maxLength = encode v from rfl] at h
-  rw [h]
-  simp
-
-
 /-! ## The bound on the compressed size -/
 
 /-- Below 2^63, the bound `32 + n + n / 6` does not overflow. -/
@@ -112,13 +63,13 @@ The compressed bytes after the prefix are within the bound for that length.
 They decompress to the payload. -/
 theorem decodePayload_ok {typeMin typeBound : UInt64} {bs d : ByteArray}
     (h : decodePayload typeMin typeBound bs = .ok d) :
-    ∃ declared b, decode (splitVarint bs.data.toList).1 = .ok declared ∧
+    ∃ declared b, decode (split bs.data.toList).1 = .ok declared ∧
       d.size = declared.toNat ∧ declared ≤ typeBound ∧ declared ≤ MAX_PAYLOAD_SIZE ∧
       typeMin ≤ declared ∧ maxCompressedLen declared = .ok b ∧
-      (splitVarint bs.data.toList).2.length ≤ b.toNat ∧
-      Snappy.decodeFrames ⟨(splitVarint bs.data.toList).2.toArray⟩ = .ok d := by
+      (split bs.data.toList).2.length ≤ b.toNat ∧
+      Snappy.decodeFrames ⟨(split bs.data.toList).2.toArray⟩ = .ok d := by
   simp only [decodePayload] at h
-  generalize splitVarint bs.data.toList = sp at h ⊢
+  generalize split bs.data.toList = sp at h ⊢
   obtain ⟨header, rest⟩ := sp
   cases hv : decode header with
   | error e => simp [hv, bind, Except.bind, Except.mapError] at h
@@ -180,7 +131,7 @@ theorem decodePayload_eq_ok_iff {typeMin typeBound : UInt64} {bs d : ByteArray} 
     have hcap' := UInt64.le_iff_toNat_le.mp hcap
     obtain ⟨b', hb', hbv⟩ := maxCompressedLen_eq (n := declared) (by omega)
     obtain rfl : b = b' := Except.ok.inj (hb.symm.trans hb')
-    refine ⟨?_, ?_, (splitVarint bs.data.toList).2, ?_, ?_, hf⟩
+    refine ⟨?_, ?_, (split bs.data.toList).2, ?_, ?_, hf⟩
     · rw [hs, UInt64.min_def]
       split
       · exact UInt64.le_iff_toNat_le.mp hty
@@ -212,31 +163,31 @@ theorem decodePayload_eq_ok_iff {typeMin typeBound : UInt64} {bs d : ByteArray} 
       omega
     have hc : ¬ b.toNat < rest.length := by omega
     have hsize : ¬ d.size ≠ (UInt64.ofNat d.size).toNat := by omega
-    simp only [decodePayload, hbs, splitVarint_encode, decode_encode, hb, hf, bind, Except.bind,
+    simp only [decodePayload, hbs, split_encode, decode_encode, hb, hf, bind, Except.bind,
       Except.mapError, hgt, hlt, hc, hsize, ite_false, pure, Except.pure]
 
 /-- A payload with more compressed bytes than the bound for its declared length is rejected. -/
 theorem decodePayload_compressedTooLong {typeMin typeBound declared b : UInt64}
-    {bs : ByteArray} (hv : decode (splitVarint bs.data.toList).1 = .ok declared)
+    {bs : ByteArray} (hv : decode (split bs.data.toList).1 = .ok declared)
     (hle : declared ≤ min typeBound MAX_PAYLOAD_SIZE) (hmin : typeMin ≤ declared)
     (hb : maxCompressedLen declared = .ok b)
-    (hlong : b.toNat < (splitVarint bs.data.toList).2.length) :
+    (hlong : b.toNat < (split bs.data.toList).2.length) :
     decodePayload typeMin typeBound bs =
-      .error (.compressedTooLong (splitVarint bs.data.toList).2.length b.toNat) := by
+      .error (.compressedTooLong (split bs.data.toList).2.length b.toNat) := by
   simp only [decodePayload]
-  generalize splitVarint bs.data.toList = sp at hv hlong ⊢
+  generalize split bs.data.toList = sp at hv hlong ⊢
   obtain ⟨header, rest⟩ := sp
   simp [hv, hb, bind, Except.bind, Except.mapError, UInt64.not_lt.mpr hle,
     UInt64.not_lt.mpr hmin, hlong, throw, throwThe, MonadExceptOf.throw]
 
 /-- A payload whose declared length is above either bound is rejected. -/
 theorem decodePayload_lengthOutOfBounds {typeMin typeBound declared : UInt64}
-    {bs : ByteArray} (hv : decode (splitVarint bs.data.toList).1 = .ok declared)
+    {bs : ByteArray} (hv : decode (split bs.data.toList).1 = .ok declared)
     (hgt : min typeBound MAX_PAYLOAD_SIZE < declared) :
     decodePayload typeMin typeBound bs =
       .error (.lengthOutOfBounds declared (min typeBound MAX_PAYLOAD_SIZE)) := by
   simp only [decodePayload]
-  generalize splitVarint bs.data.toList = sp at hv ⊢
+  generalize split bs.data.toList = sp at hv ⊢
   obtain ⟨header, rest⟩ := sp
   simp [hv, bind, Except.bind, Except.mapError, hgt, throw, throwThe, MonadExceptOf.throw]
 
@@ -244,11 +195,11 @@ theorem decodePayload_lengthOutOfBounds {typeMin typeBound declared : UInt64}
 
 The decoder checks the upper bounds first, so the length must pass them. -/
 theorem decodePayload_lengthBelowMinimum {typeMin typeBound declared : UInt64}
-    {bs : ByteArray} (hv : decode (splitVarint bs.data.toList).1 = .ok declared)
+    {bs : ByteArray} (hv : decode (split bs.data.toList).1 = .ok declared)
     (hle : declared ≤ min typeBound MAX_PAYLOAD_SIZE) (hlt : declared < typeMin) :
     decodePayload typeMin typeBound bs = .error (.lengthBelowMinimum declared typeMin) := by
   simp only [decodePayload]
-  generalize splitVarint bs.data.toList = sp at hv ⊢
+  generalize split bs.data.toList = sp at hv ⊢
   obtain ⟨header, rest⟩ := sp
   simp [hv, bind, Except.bind, Except.mapError, UInt64.not_lt.mpr hle, hlt, throw, throwThe,
     MonadExceptOf.throw]

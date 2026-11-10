@@ -133,15 +133,6 @@ def ReqRespError.code : ReqRespError → UInt32
   | .contextTruncated => 8
   | .lengthBelowMinimum .. => 9
 
-/-- The bytes of a varint at the start of the input, and the bytes after them.
-
-A varint ends at its first byte below `0x80`.
-
-The split looks at no more than eleven bytes, so the varint decoder sees an overlong prefix. -/
-def splitVarint (bs : List UInt8) : List UInt8 × List UInt8 :=
-  let k := (bs.take Varint.maxLength).findIdx (·.toNat < Varint.continuation) + 1
-  (bs.take k, bs.drop k)
-
 /-- The SSZ bytes of a payload, given the smallest and the largest encoding of its SSZ type.
 
 The declared length must be at most the smaller of the largest encoding and the payload cap.
@@ -159,7 +150,7 @@ The stream must decode to exactly `n` bytes, so a stream that ends early or runs
 The caller deserializes the bytes, since it knows their SSZ type. -/
 def decodePayload (typeMin typeBound : UInt64) (bs : ByteArray) :
     Except ReqRespError ByteArray := do
-  let (header, rest) := splitVarint bs.data.toList
+  let (header, rest) := Varint.split bs.data.toList
   let declared ← (Varint.decode header).mapError .varint
   let bound := min typeBound MAX_PAYLOAD_SIZE
   if bound < declared then throw (.lengthOutOfBounds declared bound)
