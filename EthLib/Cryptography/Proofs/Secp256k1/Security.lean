@@ -1,12 +1,14 @@
 module
 
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.Game
+public import EthLib.Cryptography.Proofs.Secp256k1.Security.InverseCase
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.JointGame
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.KeyOnly
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.KeyOnlyOutside
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.LazyGame
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.Origin
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.QueryBound
+public import EthLib.Cryptography.Proofs.Secp256k1.Security.Redraw
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.Refinement
 
 /-!
@@ -59,6 +61,14 @@ With independent answers, each new forward answer can be one query to an outside
 The chance to win stays, and a replay fork can rewind the run at the forgery's query.
 
 Both runs of the fork then queried the same point, with different answers.
+
+A new inverse answer that encodes a nonzero multiple of the base point can be redrawn.
+
+The redraw knows its discrete logarithm.
+
+The redrawn answer is still uniform.
+
+A forgery whose point came from an inverse query then gives the discrete logarithm of the key.
 
 No theorem bounds the advantage of a forger yet.
 -/
