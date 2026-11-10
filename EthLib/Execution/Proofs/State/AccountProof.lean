@@ -3,6 +3,7 @@ module
 public import EthLib.Execution.State.AccountProof
 public import EthLib.Execution.Proofs.State.Root
 public import EthLib.Execution.Proofs.Trie.Binding
+public import EthLib.Execution.Trie.Range
 
 /-!
 # Proofs: the check of an answer of `eth_getProof`
@@ -472,5 +473,11 @@ theorem AccountProofError.code_ne_proof (e : AccountProofError) (r : Trie.ProofE
 theorem AccountProofError.code_ne_trie (e : AccountProofError) (r : Trie.TrieError) :
     e.code ≠ r.code := by
   cases e <;> cases r <;> simp only [AccountProofError.code, Trie.TrieError.code] <;> decide
+
+/-- An account proof error never has the code of a range error, so one Python class carries both.
+-/
+theorem AccountProofError.code_ne_range (e : AccountProofError) (r : Trie.RangeError) :
+    e.code ≠ r.code := by
+  cases e <;> cases r <;> simp only [AccountProofError.code, Trie.RangeError.code] <;> decide
 
 end EthLib.Execution.State

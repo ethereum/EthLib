@@ -290,6 +290,7 @@ PyObject* py_keccak_f1600                                 (PyObject* self, PyObj
 PyObject* py_trie_root                                    (PyObject* self, PyObject* args);
 PyObject* py_trie_verify_proof                            (PyObject* self, PyObject* args);
 PyObject* py_trie_hex_prefix                              (PyObject* self, PyObject* args);
+PyObject* py_trie_verify_range                            (PyObject* self, PyObject* args);
 PyObject* py_trie_verify_account_proof                    (PyObject* self, PyObject* args);
 PyObject* py_vrf_verify                                   (PyObject* self, PyObject* args);
 PyObject* py_vrf_secret                                   (PyObject* self, PyObject* args);
@@ -565,6 +566,8 @@ PyObject* py_snap_message_decode                          (PyObject* self, PyObj
 PyObject* py_snap_codes_answer                            (PyObject* self, PyObject* args);
 PyObject* py_snap_access_lists_answer                     (PyObject* self, PyObject* args);
 PyObject* py_snap_full_account                            (PyObject* self, PyObject* args);
+PyObject* py_snap_verify_account_range                    (PyObject* self, PyObject* args);
+PyObject* py_snap_verify_storage_ranges                   (PyObject* self, PyObject* args);
 PyObject* py_receipt_reencode                             (PyObject* self, PyObject* args);
 PyObject* py_receipt_logs_bloom                           (PyObject* self, PyObject* args);
 PyObject* py_block_make_receipts                          (PyObject* self, PyObject* args);

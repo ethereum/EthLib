@@ -1158,6 +1158,25 @@
    "docstring":
    "The hex-prefix encoding of a path of nibbles, for a leaf or an extension.\n\nThe arguments are the list of the nibbles and whether the path ends at a leaf.\n\nA value of 16 or more is not a nibble, and fails with code 0."},
   {"summary":
+   "Check a range of the trie of a 32-byte root from a 32-byte start, with Keccak-256.",
+   "signature":
+   "(root: bytes, start: bytes, entries: list[tuple[bytes, bytes]], proof: list[bytes]) -> bool",
+   "operation": "EthLib.Execution.Trie.Exports.verifyRangeOf",
+   "method": "trie_verify_range",
+   "errors":
+   [{"type": "EthLib.Execution.Trie.RangeError",
+     "codes":
+     [{"constructor": "unsorted", "code": 201},
+      {"constructor": "beforeStart", "code": 202},
+      {"constructor": "emptyValue", "code": 203},
+      {"constructor": "proof", "code": 204},
+      {"constructor": "rlp", "code": 205},
+      {"constructor": "branchValue", "code": 206},
+      {"constructor": "mismatch", "code": 207}]}],
+   "error_class": "TrieError",
+   "docstring":
+   "Check a range of the trie of a 32-byte root from a 32-byte start, with Keccak-256.\n\nIt returns whether the trie holds a key after the last entry."},
+  {"summary":
    "Check an answer of `eth_getProof` against a 32-byte state root, with Keccak-256.",
    "signature": "(root: bytes, answer: dict) -> list[bool] | None",
    "operation": "EthLib.Engine.Exports.verifyAccountProofExport",
@@ -8234,6 +8253,54 @@
    "errors": [],
    "error_class": "SnapError",
    "docstring": "The full RLP form of an account in slim form."},
+  {"summary":
+   "Check the accounts of an AccountRange answer, from a root and a start of 32 bytes each.",
+   "signature":
+   "(root: bytes, start: bytes, accounts: list[tuple[bytes, bytes]], proof: list[bytes]) -> bool | None",
+   "operation": "EthLib.Execution.Network.Snap.Exports.verifyAccountRangeOf",
+   "method": "snap_verify_account_range",
+   "errors":
+   [{"type": "EthLib.Execution.Network.SnapRangeError",
+     "codes":
+     [{"constructor": "range", "code": null},
+      {"constructor": "slimAccount", "code": 3},
+      {"constructor": "tooManyRanges", "code": 4}]},
+    {"type": "EthLib.Execution.Trie.RangeError",
+     "codes":
+     [{"constructor": "unsorted", "code": 201},
+      {"constructor": "beforeStart", "code": 202},
+      {"constructor": "emptyValue", "code": 203},
+      {"constructor": "proof", "code": 204},
+      {"constructor": "rlp", "code": 205},
+      {"constructor": "branchValue", "code": 206},
+      {"constructor": "mismatch", "code": 207}]}],
+   "error_class": "SnapError",
+   "docstring":
+   "Check the accounts of an AccountRange answer, from a root and a start of 32 bytes each.\n\n`None` means the empty reply of a peer without the state.\n\nOtherwise it says whether the state trie holds an account after the last one."},
+  {"summary":
+   "Check the ranges of a StorageRanges answer, against the storage roots of the request.",
+   "signature":
+   "(roots: list[bytes], start: bytes, slots: list[list[tuple[bytes, bytes]]], proof: list[bytes]) -> bool | None",
+   "operation": "EthLib.Execution.Network.Snap.Exports.verifyStorageRangesOf",
+   "method": "snap_verify_storage_ranges",
+   "errors":
+   [{"type": "EthLib.Execution.Network.SnapRangeError",
+     "codes":
+     [{"constructor": "range", "code": null},
+      {"constructor": "slimAccount", "code": 3},
+      {"constructor": "tooManyRanges", "code": 4}]},
+    {"type": "EthLib.Execution.Trie.RangeError",
+     "codes":
+     [{"constructor": "unsorted", "code": 201},
+      {"constructor": "beforeStart", "code": 202},
+      {"constructor": "emptyValue", "code": 203},
+      {"constructor": "proof", "code": 204},
+      {"constructor": "rlp", "code": 205},
+      {"constructor": "branchValue", "code": 206},
+      {"constructor": "mismatch", "code": 207}]}],
+   "error_class": "SnapError",
+   "docstring":
+   "Check the ranges of a StorageRanges answer, against the storage roots of the request.\n\nAn empty start is the zero hash.\n\n`None` means the empty reply of a peer without the state.\n\nOtherwise it says whether the last account holds a slot after its range."},
   {"summary":
    "The bytes a Snappy block decompresses to, or why it is not a valid block.",
    "signature": "(block: bytes) -> bytes",

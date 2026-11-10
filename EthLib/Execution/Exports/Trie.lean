@@ -4,6 +4,7 @@ public import EthLib.Base.Exports.Proofs.PyValue
 public import EthLib.Cryptography.Hash.Keccak
 public import EthLib.Execution.Trie.HexPrefix
 public import EthLib.Execution.Trie.Proof
+public import EthLib.Execution.Trie.Range
 public import EthLib.Serialization.Rlp.Codec
 
 /-!
@@ -80,6 +81,30 @@ def verifyProofExport (root : ByteArray) (secured : UInt8) (key proof : ByteArra
     | .error e => throw (e.code, s!"proof does not verify: {repr e}")
   else
     throw (0, s!"bad root size: {root.size}, expected 32")
+
+/-- Check a range of the trie of a 32-byte root from a 32-byte start, with Keccak-256.
+
+It returns whether the trie holds a key after the last entry. -/
+def verifyRangeOf (args : Hash32 × Hash32 × List (Hash32 × ByteArray) × List ByteArray) :
+    Result Bool := do
+  let (root, start, entries, proof) := args
+  (verifyRange Cryptography.Hash.Keccak.keccak256 root start entries proof).mapError fun e =>
+    (e.code, s!"range does not verify: {repr e}")
+
+/-- Check a range of the trie of a 32-byte root from a 32-byte start, with Keccak-256.
+
+The arguments are the root, the start, the entries and the encodings of the proof nodes.
+
+Each entry is a pair of a 32-byte key and its value.
+
+It returns whether the trie holds a key after the last entry.
+
+An argument of the wrong shape has code 0.
+
+A range that does not verify has the code of its fault. -/
+@[export eth_trie_verify_range]
+def verifyRangeExport (args : PyValue) : Result PyValue :=
+  pyExport verifyRangeOf args
 
 /-- The hex-prefix encoding of a path of nibbles, for a leaf or an extension.
 

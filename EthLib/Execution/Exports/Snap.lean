@@ -1,7 +1,8 @@
 module
 
 public import EthLib.Base.Exports
-public import EthLib.Execution.Network.Snap
+public import EthLib.Base.Exports.Proofs.PyValue
+public import EthLib.Execution.Network.SnapRange
 
 /-!
 # `Exports.Snap`
@@ -19,7 +20,7 @@ public section
 
 namespace EthLib.Execution.Network.Snap.Exports
 
-open EthLib.Exports (Result)
+open EthLib.Exports (Result PyValue pyExport)
 open EthLib.Execution.Network
 
 /-- A message for a rejected message, phrased for someone reading a Python traceback. -/
@@ -79,5 +80,81 @@ def accessListsAnswerExport (request response : ByteArray) (expected : Array Byt
 def fullAccountExport (slim : ByteArray) : Result ByteArray := do
   let some bytes := fullAccount slim | throw (0, "account is not in slim form")
   return bytes
+
+/-- An answer as a Python value: `None` for the empty reply, else whether keys remain. -/
+def answerToOption : RangeAnswer → Option Bool
+  | .noState => none
+  | .toEnd => some false
+  | .more => some true
+
+/-- Run a check of a range answer, with its error as a code and a message. -/
+def runRange (act : Except SnapRangeError RangeAnswer) : Result (Option Bool) :=
+  answerToOption <$> act.mapError fun e => (e.code, s!"range answer does not verify: {repr e}")
+
+/-- An entry of a range from a pair of a key hash and its data. -/
+def toRangeEntry (pair : Base.Hash32 × ByteArray) : RangeEntry := ⟨pair.1, pair.2⟩
+
+/-- Check the accounts of an AccountRange answer, from a root and a start of 32 bytes each.
+
+`None` means the empty reply of a peer without the state.
+
+Otherwise it says whether the state trie holds an account after the last one. -/
+def verifyAccountRangeOf
+    (args : Base.Hash32 × Base.Hash32 × List (Base.Hash32 × ByteArray) × List ByteArray) :
+    Result (Option Bool) := do
+  let (root, start, accounts, proof) := args
+  runRange (verifyAccountRange root start (accounts.map toRangeEntry) proof)
+
+/-- Check the accounts of an AccountRange answer, from a root and a start of 32 bytes each.
+
+The arguments are the state root, the start, the accounts and the encodings of the proof nodes.
+
+Each account is a pair of the hash of its address and its body in slim form.
+
+`None` means the empty reply of a peer without the state.
+
+Otherwise it says whether the state trie holds an account after the last one.
+
+An argument of the wrong shape has code 0.
+
+An answer that does not verify has the code of its fault. -/
+@[export eth_snap_verify_account_range]
+def verifyAccountRangeExport (args : PyValue) : Result PyValue :=
+  pyExport verifyAccountRangeOf args
+
+/-- Check the ranges of a StorageRanges answer, against the storage roots of the request.
+
+An empty start is the zero hash.
+
+`None` means the empty reply of a peer without the state.
+
+Otherwise it says whether the last account holds a slot after its range. -/
+def verifyStorageRangesOf
+    (args : List Base.Hash32 × ByteArray × List (List (Base.Hash32 × ByteArray)) ×
+      List ByteArray) : Result (Option Bool) := do
+  let (roots, start, slots, proof) := args
+  let start ← if start.size = 0 then pure (Vector.replicate 32 0)
+    else if h : start.size = 32 then pure ⟨start.data, h⟩
+    else throw (0, s!"bad start size: {start.size}, expected 0 or 32")
+  runRange (verifyStorageRanges roots start (slots.map (·.map toRangeEntry)) proof)
+
+/-- Check the ranges of a StorageRanges answer, against the storage roots of the request.
+
+The arguments are the storage roots, the start, the ranges and the encodings of the proof nodes.
+
+Each range lists pairs of the hash of a slot and its value in the storage trie.
+
+An empty start is the zero hash, and any other start has 32 bytes.
+
+`None` means the empty reply of a peer without the state.
+
+Otherwise it says whether the last account holds a slot after its range.
+
+An argument of the wrong shape has code 0.
+
+An answer that does not verify has the code of its fault. -/
+@[export eth_snap_verify_storage_ranges]
+def verifyStorageRangesExport (args : PyValue) : Result PyValue :=
+  pyExport verifyStorageRangesOf args
 
 end EthLib.Execution.Network.Snap.Exports

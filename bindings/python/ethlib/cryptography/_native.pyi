@@ -211,6 +211,10 @@ def trie_hex_prefix(nibbles: list[int], is_leaf: bool) -> bytes:
     """The hex-prefix encoding of a path of nibbles, for a leaf or an extension."""
     ...
 
+def trie_verify_range(root: bytes, start: bytes, entries: list[tuple[bytes, bytes]], proof: list[bytes]) -> bool:
+    """Check a range of the trie of a 32-byte root from a 32-byte start, with Keccak-256."""
+    ...
+
 def trie_verify_account_proof(root: bytes, answer: dict) -> list[bool] | None:
     """Check an answer of `eth_getProof` against a 32-byte state root, with Keccak-256."""
     ...
@@ -1197,6 +1201,14 @@ def snap_access_lists_answer(request: bytes, response: bytes, expected: list[byt
 
 def snap_full_account(slim: bytes) -> bytes:
     """The full RLP form of an account in slim form."""
+    ...
+
+def snap_verify_account_range(root: bytes, start: bytes, accounts: list[tuple[bytes, bytes]], proof: list[bytes]) -> bool | None:
+    """Check the accounts of an AccountRange answer, from a root and a start of 32 bytes each."""
+    ...
+
+def snap_verify_storage_ranges(roots: list[bytes], start: bytes, slots: list[list[tuple[bytes, bytes]]], proof: list[bytes]) -> bool | None:
+    """Check the ranges of a StorageRanges answer, against the storage roots of the request."""
     ...
 
 def snappy_decompress(block: bytes) -> bytes:

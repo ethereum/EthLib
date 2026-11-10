@@ -31,6 +31,16 @@ eth_snap_full_account(
   lean_object* slim
 );
 
+extern lean_object*
+eth_snap_verify_account_range(
+  lean_object* args
+);
+
+extern lean_object*
+eth_snap_verify_storage_ranges(
+  lean_object* args
+);
+
 /* ---- Wrappers --------------------------------------------------------- */
 
 /* Copy the Python `bytes` object `obj` into a Lean `ByteArray`, or set a TypeError naming it. */
@@ -111,4 +121,20 @@ py_snap_full_account(
   lean_object* slim;
   if (parse_bytes(slim_obj, "slim", &slim)) return NULL;
   return except_into_pybytes(eth_snap_full_account(slim), SNAP_ERROR);
+}
+
+PyObject*
+py_snap_verify_account_range(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_snap_verify_account_range, args, 4, SNAP_ERROR);
+}
+
+PyObject*
+py_snap_verify_storage_ranges(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_snap_verify_storage_ranges, args, 4, SNAP_ERROR);
 }
