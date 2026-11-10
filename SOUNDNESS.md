@@ -2412,16 +2412,18 @@ Block processing divides by further constants, such as the quotients of the slas
 A theorem that a step succeeds takes a predicate only where its proof needs a positive divisor.
 For a preset or configuration with a zero divisor, any theorem about a step that divides by it describes EthLib's transition, not the specification's.
 
-One accessor of the beacon chain keeps a result where its source fails.
+The accessor that lists the active validators keeps a result where the specification fails.
 The specification lists the active validators of an epoch by their indices, and builds each index as a `ValidatorIndex`, a 64-bit integer.
-That construction rejects a value of 2^64 or more, so the specification fails when a validator at a registry position of 2^64 or more is active.
-`getActiveValidatorIndices` returns a plain list and never fails; at such a position it would take the position modulo 2^64.
-Before Gloas the registry stays within its limit, 2^40 in the mainnet and minimal presets, so the two always agree.
-From Gloas the registry has no length limit ([EIP-7688](https://eips.ethereum.org/EIPS/eip-7688#converted-types)), and this case remains open in principle.
-It is out of reach in practice.
-Every validator enters the registry with a deposit, the deposit contract accepts no deposit below 1 ETH, and 2^64 such deposits would need far more ether than exists.
-`getActiveValidatorIndices_eq_mapM_ofNatChecked` states the divergence exactly.
-The checked conversion of the active positions, which is what the specification computes, succeeds and gives the list of EthLib exactly when every active position is below 2^64.
+That construction rejects a value of `2^64` or more, so the specification fails when a validator at a registry position of `2^64` or more is active.
+`getActiveValidatorIndices` returns a plain list and never fails; at such a position it would take the position modulo `2^64`.
+Before Gloas the type of the registry bounds it by the limit of the preset, a 64-bit integer (`2^40` in the mainnet and minimal presets), so no position reaches `2^64`.
+From Gloas the type of the registry has no length limit ([EIP-7688](https://eips.ethereum.org/EIPS/eip-7688#converted-types)).
+A new validator still gets the size of the registry as its index, and that index must be below `2^64` (`getIndexForNewValidator_ok_iff`).
+So a transition never adds a validator at a position of `2^64` or more, and only a starting state built outside the transition can hold one.
+
+`getActiveValidatorIndices_eq_mapM_ofNatChecked` in `Consensus/Proofs/Accessors.lean` states the divergence exactly.
+The checked conversion of the active positions, which the specification computes, succeeds and gives EthLib's list exactly when every active position is below `2^64`.
+The churn limits also convert the number of active validators to a 64-bit integer without a check, where the specification fails at `2^64` active validators.
 
 Some official vectors expect more than a source says.
 The transaction tests of ethereum/tests reject 43 results whose gas limit is `2^64`, or whose gas limit times gas price exceeds `2^256 - 1`.

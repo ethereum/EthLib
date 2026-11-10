@@ -178,9 +178,9 @@ theorem validatorPositions_sorted {state : BeaconState preset fork}
   rw [UInt64.lt_iff_toNat_lt, toNat_toUInt64_of_lt within hi, toNat_toUInt64_of_lt within hj]
   exact lt
 
-/-- Converting the positions that pass a test, with a check at `2^64`, gives their wrapped indices.
+/-- Converting the positions that pass a test with a check agrees with converting them without one.
 
-It does so exactly when each position that passes is below `2^64`. -/
+They agree exactly when each position that passes is below `2^64`. -/
 private theorem mapM_ofNatChecked_filterMap {α : Type} (test : α → Bool) :
     ∀ entries : List (α × Nat),
       (entries.filterMap fun (value, position) =>
@@ -207,7 +207,9 @@ private theorem mapM_ofNatChecked_filterMap {α : Type} (test : α → Bool) :
 
 That conversion gives the active indices exactly when each active position is below `2^64`.
 
-Otherwise the active indices take a position modulo `2^64` where the specification fails. -/
+Otherwise the specification gives no such result.
+
+The active indices then take some active position modulo `2^64`. -/
 theorem getActiveValidatorIndices_eq_mapM_ofNatChecked {state : BeaconState preset fork}
     {epoch : Epoch} :
     (state.validators.data.toList.zipIdx.filterMap fun (validator, position) =>
@@ -215,6 +217,7 @@ theorem getActiveValidatorIndices_eq_mapM_ofNatChecked {state : BeaconState pres
       .ok (getActiveValidatorIndices state epoch) ↔
     ∀ position (inside : position < state.validators.data.size),
       isActiveValidator state.validators.data[position] epoch = true → position < 2 ^ 64 := by
+  rw [getActiveValidatorIndices]
   refine (mapM_ofNatChecked_filterMap (isActiveValidator · epoch) _).trans ?_
   constructor
   · intro below position inside active
