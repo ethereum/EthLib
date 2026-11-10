@@ -1,7 +1,7 @@
 module
 
-public import EthLib.Base.Proofs.List
 public import EthLib.Execution.Proofs.Blocks.AccessListCoverage
+public import EthLib.Execution.Proofs.Blocks.SystemCall
 public import EthLib.Execution.Proofs.Blocks.Transition
 
 /-!
@@ -88,18 +88,14 @@ theorem applyTransactions_covers {env : BlockEnvironment fork} {body : BodyState
           .ok included ∧
         processTransaction env before.block included transactions[i] = .ok out ∧
         output.body.builder.Covers out.state := by
-  obtain ⟨hExt, hSteps⟩ := foldlM_ok_steps
+  obtain ⟨hExt, hSteps⟩ := applyTransactions_steps
     (fun a b : BodyOutput fork => a.body.builder.Extends b.body.builder)
     (fun _ => Extends.refl _) (fun h h' => h.trans h')
-    (fun _ _ _ hStep => (applyTransaction_covers hStep).choose_spec.choose_spec.2.2.1) h
+    (fun hStep => by obtain ⟨-, -, -, -, hExt, -⟩ := applyTransaction_covers hStep; exact hExt) h
   refine ⟨hExt, fun i hi => ?_⟩
-  obtain ⟨before, next, hBefore, hNext, hEnd⟩ := hSteps i (by simpa using hi)
-  simp only [List.getElem_zipIdx, Nat.zero_add] at hNext
+  obtain ⟨before, next, hBefore, hNext, hEnd⟩ := hSteps i hi
   obtain ⟨included, out, hIncluded, hOut, -, hCovers⟩ := applyTransaction_covers hNext
-  refine ⟨before, included, out, ?_, hIncluded, hOut, hCovers.mono hEnd⟩
-  unfold applyTransactions
-  rw [zipIdx_take]
-  exact hBefore
+  exact ⟨before, included, out, hBefore, hIncluded, hOut, hCovers.mono hEnd⟩
 
 /-! ## The system calls -/
 
@@ -118,37 +114,24 @@ theorem startSystemCalls_covers {env : BlockEnvironment fork} {parentHash : Hash
         (.pectra ≤ fork → ∃ out',
           systemCall env mid.block HISTORY_STORAGE_ADDRESS ⟨parentHash.toArray⟩ = .ok out' ∧
           body'.builder.Covers out'.state) := by
+  obtain ⟨mid, hFirst, hNoFirst, hSecond, hNoSecond⟩ := startSystemCalls_eq_ok h
   -- The second call, from the body after the first.
-  have second : ∀ mid : BodyState,
-      (if Fork.pectra ≤ fork then do
-          let out ← systemCall env mid.block HISTORY_STORAGE_ADDRESS ⟨parentHash.toArray⟩
-          (mid.join out.state).mapError EvmError.state
-        else pure mid) = .ok body' →
-      mid.builder.Extends body'.builder ∧
-        (.pectra ≤ fork → ∃ out',
-          systemCall env mid.block HISTORY_STORAGE_ADDRESS ⟨parentHash.toArray⟩ = .ok out' ∧
-          body'.builder.Covers out'.state) := by
-    intro mid h
-    split at h
-    · obtain ⟨out', hOut', h⟩ := bind_ok_iff.mp h
-      obtain ⟨hExt, hCovers⟩ := BodyState.join_covers (mapError_ok_iff.mp h)
+  have second : mid.builder.Extends body'.builder ∧
+      (.pectra ≤ fork → ∃ out',
+        systemCall env mid.block HISTORY_STORAGE_ADDRESS ⟨parentHash.toArray⟩ = .ok out' ∧
+        body'.builder.Covers out'.state) := by
+    by_cases hPectra : .pectra ≤ fork
+    · obtain ⟨out', hOut', hJoin⟩ := hSecond hPectra
+      obtain ⟨hExt, hCovers⟩ := BodyState.join_covers hJoin
       exact ⟨hExt, fun _ => ⟨out', hOut', hCovers⟩⟩
-    · rename_i hPectra
-      cases h
+    · rw [hNoSecond hPectra]
       exact ⟨Extends.refl _, fun h => absurd h hPectra⟩
-  unfold startSystemCalls at h
-  dsimp only at h
-  split at h
-  · obtain ⟨out, hOut, h⟩ := bind_ok_iff.mp h
-    obtain ⟨mid, hMid, h⟩ := bind_ok_iff.mp h
-    have hJoin := mapError_ok_iff.mp hMid
+  by_cases hDencun : .dencun ≤ fork
+  · obtain ⟨out, hOut, hJoin⟩ := hFirst hDencun
     obtain ⟨hExt, hCovers⟩ := BodyState.join_covers hJoin
-    obtain ⟨hRest, hSecond⟩ := second mid h
-    exact ⟨hExt.trans hRest, fun _ => ⟨out, mid, hOut, hJoin, hCovers.mono hRest, hSecond⟩⟩
-  · rename_i hDencun
-    obtain ⟨mid, hMid, h⟩ := bind_ok_iff.mp h
-    cases hMid
-    exact ⟨(second _ h).1, fun h => absurd h hDencun⟩
+    exact ⟨hExt.trans second.1, fun _ => ⟨out, mid, hOut, hJoin, hCovers.mono second.1, second.2⟩⟩
+  · obtain rfl := hNoFirst hDencun
+    exact ⟨second.1, fun h => absurd h hDencun⟩
 
 /-- The call to one request contract extends the builder, which then covers the call. -/
 theorem readRequest_covers {env : BlockEnvironment fork}
@@ -157,11 +140,8 @@ theorem readRequest_covers {env : BlockEnvironment fork}
     state.1.builder.Extends state'.1.builder ∧ ∃ out,
       checkedSystemCall env state.1.block contract.2 .empty = .ok out ∧
       state'.1.builder.Covers out.state := by
-  unfold readRequest at h
-  obtain ⟨out, hOut, h⟩ := bind_ok_iff.mp h
-  obtain ⟨joined, hJoined, h⟩ := bind_ok_iff.mp h
-  cases h
-  obtain ⟨hExt, hCovers⟩ := BodyState.join_covers (mapError_ok_iff.mp hJoined)
+  obtain ⟨out, hOut, hJoin, -⟩ := readRequest_eq_ok h
+  obtain ⟨hExt, hCovers⟩ := BodyState.join_covers hJoin
   exact ⟨hExt, out, hOut, hCovers⟩
 
 /-- Reading the requests extends the builder, which then covers each call to a contract.
@@ -174,9 +154,9 @@ theorem readRequests_covers {env : BlockEnvironment fork} {body body' : BodyStat
         ((requestContracts fork).take j).foldlM (readRequest env) (body, []) = .ok mid ∧
         checkedSystemCall env mid.1.block (requestContracts fork)[j].2 .empty = .ok out ∧
         body'.builder.Covers out.state) := by
-  unfold readRequests at h
-  split at h
-  · obtain ⟨hExt, hSteps⟩ := foldlM_ok_steps
+  by_cases hPectra : .pectra ≤ fork
+  · rw [readRequests_of_pectra hPectra] at h
+    obtain ⟨hExt, hSteps⟩ := foldlM_ok_steps
       (fun a b : BodyState × List ByteArray => a.1.builder.Extends b.1.builder)
       (fun _ => Extends.refl _) (fun h h' => h.trans h')
       (fun _ _ _ hStep => (readRequest_covers hStep).1) h
@@ -184,7 +164,7 @@ theorem readRequests_covers {env : BlockEnvironment fork} {body body' : BodyStat
     obtain ⟨mid, next, hMid, hNext, hEnd⟩ := hSteps j hj
     obtain ⟨-, out, hOut, hCovers⟩ := readRequest_covers hNext
     exact ⟨mid, out, hMid, hOut, hCovers.mono hEnd⟩
-  · rename_i hPectra
+  · rw [readRequests_of_lt_pectra (Nat.lt_of_not_le hPectra)] at h
     cases h
     exact ⟨Extends.refl _, fun h => absurd h hPectra⟩
 
@@ -197,15 +177,13 @@ theorem blockRequests_covers {depositContract : Address} {env : BlockEnvironment
         ((requestContracts fork).take j).foldlM (readRequest env) (body, []) = .ok mid ∧
         checkedSystemCall env mid.1.block (requestContracts fork)[j].2 .empty = .ok out ∧
         body'.builder.Covers out.state) := by
-  unfold blockRequests at h
-  split at h
-  · obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-    obtain ⟨⟨mid, read⟩, hRead, h⟩ := bind_ok_iff.mp h
-    cases h
-    exact readRequests_covers hRead
-  · rename_i hPectra
-    cases h
-    exact ⟨Extends.refl _, fun h => absurd h hPectra⟩
+  obtain ⟨hNoPectra, hPectra⟩ := blockRequests_eq_ok h
+  by_cases hp : .pectra ≤ fork
+  · obtain ⟨_, ⟨mid, read⟩, -, hRead, hResult⟩ := hPectra hp
+    obtain ⟨rfl, -⟩ := Prod.mk.inj hResult
+    exact readRequests_covers ((readRequests_of_pectra hp).trans hRead)
+  · obtain ⟨rfl, -⟩ := Prod.mk.inj (hNoPectra hp)
+    exact ⟨Extends.refl _, fun h => absurd h hp⟩
 
 /-! ## The body -/
 

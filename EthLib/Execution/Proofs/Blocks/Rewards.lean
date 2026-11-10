@@ -144,6 +144,28 @@ theorem toNat_ommerReward (fork : Fork) (age : Nat) :
     (BitVec.ofNat 256 (ommerReward fork age)).toNat = ommerReward fork age := by
   rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (ommerReward_lt fork age)]
 
+/-- Paying the rewards keeps every nonce and every code hash, at every fork.
+
+The number of ommers is not bounded. -/
+theorem payRewards_nonce_codeHash {fork : Fork} {tx tx' : TransactionState}
+    {coinbase : Address} {number : Nat} {ommers : List (Address × Nat)}
+    (hp : payRewards fork tx coinbase number ommers = .ok tx') (address : Address) :
+    (tx'.getAccount address).nonce = (tx.getAccount address).nonce ∧
+      (tx'.getAccount address).codeHash = (tx.getAccount address).codeHash := by
+  unfold payRewards at hp
+  split at hp
+  · cases hp
+    exact ⟨rfl, rfl⟩
+  · simp only [bind, Except.bind] at hp
+    cases hmine : tx.createEther fork coinbase (BitVec.ofNat 256 (minerReward fork ommers.length))
+      with
+    | error e => simp [hmine] at hp
+    | ok mid =>
+      rw [hmine] at hp
+      obtain ⟨-, hnonce, hcode⟩ := getAccount_createEther hmine address
+      obtain ⟨-, hnonce', hcode'⟩ := getAccount_foldlM_createEther _ _ ommers hp address
+      exact ⟨hnonce'.trans hnonce, hcode'.trans hcode⟩
+
 /-- Before Paris, with at most two ommers, each address gains the sum of its rewards.
 
 The beneficiaries need not be distinct.
@@ -158,6 +180,7 @@ theorem getAccount_payRewards {fork : Fork} (h : fork < .paris) {tx tx' : Transa
         ((ommers.filter (·.1 = address)).map fun o => ommerReward fork (number - o.2)).sum ∧
       (tx'.getAccount address).nonce = (tx.getAccount address).nonce ∧
       (tx'.getAccount address).codeHash = (tx.getAccount address).codeHash := by
+  refine ⟨?_, payRewards_nonce_codeHash hp address⟩
   have hnot : ¬ .paris ≤ fork := fun hle => Nat.lt_irrefl _ (Nat.lt_of_lt_of_le h hle)
   simp only [payRewards, hnot, ↓reduceIte, bind, Except.bind] at hp
   cases hmine : tx.createEther fork coinbase (BitVec.ofNat 256 (minerReward fork ommers.length))
@@ -165,10 +188,8 @@ theorem getAccount_payRewards {fork : Fork} (h : fork < .paris) {tx tx' : Transa
   | error e => simp [hmine] at hp
   | ok mid =>
     rw [hmine] at hp
-    obtain ⟨hb, hnonce, hcode⟩ := getAccount_createEther hmine address
-    obtain ⟨hb', hnonce', hcode'⟩ :=
-      getAccount_foldlM_createEther _ _ ommers hp address
-    refine ⟨?_, hnonce'.trans hnonce, hcode'.trans hcode⟩
+    obtain ⟨hb, -, -⟩ := getAccount_createEther hmine address
+    obtain ⟨hb', -, -⟩ := getAccount_foldlM_createEther _ _ ommers hp address
     rw [hb', hb, BitVec.toNat_ofNat, Nat.mod_eq_of_lt (minerReward_lt hn)]
     simp only [toNat_ommerReward]
 

@@ -129,6 +129,41 @@ theorem recoverSender_eq_ok {fork : Fork} {tx : Transaction} {sender : Address}
       · cases h
   · cases h
 
+/-- The recovery of a legacy `v` gives one result at every fork where it succeeds. -/
+theorem legacyRecovery_eq_of_ok {fork fork' : Fork} {v : U256} {r r' : Option U256 × Fin 2}
+    (h : legacyRecovery fork v = .ok r) (h' : legacyRecovery fork' v = .ok r') : r = r' := by
+  unfold legacyRecovery at h h'
+  split_ifs at h h' <;> simp_all
+
+/-- The signing input of a transaction is one at every fork where it succeeds. -/
+theorem signingInput_eq_of_ok {fork fork' : Fork} {tx : Transaction} {i i' : Hash32 × Fin 2}
+    (h : signingInput fork tx = .ok i) (h' : signingInput fork' tx = .ok i') : i = i' := by
+  cases tx with
+  | legacy tx =>
+    simp only [signingInput, bind, Except.bind] at h h'
+    cases hr : legacyRecovery fork tx.v with
+    | error e => simp [hr] at h
+    | ok r =>
+      cases hr' : legacyRecovery fork' tx.v with
+      | error e => simp [hr'] at h'
+      | ok r' =>
+        obtain rfl := legacyRecovery_eq_of_ok hr hr'
+        simp only [hr, hr'] at h h'
+        rw [h] at h'
+        exact Except.ok.inj h'
+  | _ => simp only [signingInput] at h h'; rw [h] at h'; exact Except.ok.inj h'
+
+/-- A signature names one sender at every fork where it names one. -/
+theorem recoverSender_eq_of_ok {fork fork' : Fork} {tx : Transaction} {sender sender' : Address}
+    (h : recoverSender fork tx = .ok sender) (h' : recoverSender fork' tx = .ok sender') :
+    sender = sender' := by
+  obtain ⟨hash, id, x, y, hi, hr, rfl⟩ := recoverSender_eq_ok h
+  obtain ⟨hash', id', x', y', hi', hr', rfl⟩ := recoverSender_eq_ok h'
+  cases signingInput_eq_of_ok hi hi'
+  rw [hr] at hr'
+  cases hr'
+  rfl
+
 /-- A sender is the address of a key that verifies the signature on the signing hash. -/
 theorem recoverSender_verify {fork : Fork} {tx : Transaction} {sender : Address}
     (h : recoverSender fork tx = .ok sender) :

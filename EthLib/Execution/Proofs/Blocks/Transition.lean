@@ -1,10 +1,12 @@
 module
 
 public import EthLib.Base.Except
+public import EthLib.Base.Proofs.List
 public import EthLib.Base.Proofs.MapM
 public import EthLib.Execution.Blocks.Transition
 public import EthLib.Execution.Proofs.Blocks.AccessListBuilder
 public import EthLib.Execution.Proofs.Blocks.Validate
+public import EthLib.Execution.Proofs.State.Tracker
 
 /-!
 # Proofs: the state transition of a block
@@ -298,6 +300,45 @@ theorem applyTransaction_of_checkInclusion {env : BlockEnvironment fork} {index 
     applyTransaction env index before tx = .error (.invalidTransaction index e) := by
   simp [applyTransaction, h, Except.mapError, bind, Except.bind]
 
+/-- A call that joins the body leaves each account as the call left it. -/
+theorem BodyState.getAccount_join {body body' : BodyState} {tx : State.TransactionState}
+    (h : body.join tx = .ok body') (address : Address) :
+    (State.TransactionState.ofBlock body'.block).getAccount address = tx.getAccount address := by
+  unfold BodyState.join at h
+  obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
+  cases h
+  exact State.TransactionState.getAccount_ofBlock_incorporateTxIntoBlock tx address
+
+/-- A run of transactions reaches each of them, and the result of each relates to the end.
+
+The relation must be reflexive and transitive.
+
+Each transaction that enters the body relates the output before it to the output after it.
+
+Then the body before the first transaction is related to the end.
+
+For the transaction at index `i`, from 0, the transactions before it run.
+
+That transaction then enters the body, and its result is related to the end. -/
+theorem applyTransactions_steps {env : BlockEnvironment fork} {body : BodyState}
+    {transactions : List Transaction} {output : BodyOutput fork}
+    (R : BodyOutput fork → BodyOutput fork → Prop) (refl : ∀ a, R a a)
+    (trans : ∀ {a b c}, R a b → R b c → R a c)
+    (step : ∀ {index before after tx}, applyTransaction env index before tx = .ok after →
+      R before after)
+    (h : applyTransactions env body transactions = .ok output) :
+    R ⟨body, .zero, 0, [], []⟩ output ∧ ∀ i (hi : i < transactions.length), ∃ before next,
+      applyTransactions env body (transactions.take i) = .ok before ∧
+      applyTransaction env i before transactions[i] = .ok next ∧ R next output := by
+  obtain ⟨hStart, hSteps⟩ := foldlM_ok_steps R refl trans (fun _ _ _ hStep => step hStep) h
+  refine ⟨hStart, fun i hi => ?_⟩
+  obtain ⟨before, next, hBefore, hNext, hEnd⟩ := hSteps i (by simpa using hi)
+  simp only [List.getElem_zipIdx, Nat.zero_add] at hNext
+  refine ⟨before, next, ?_, hNext, hEnd⟩
+  unfold applyTransactions
+  rw [zipIdx_take]
+  exact hBefore
+
 /-! ## The body -/
 
 /-- A body that runs takes each step, in order, and gives the gas counts of its transactions.
@@ -405,6 +446,31 @@ theorem stateTransition_eq_ok {chain : BlockChain} {block : Block fork Transacti
     exact ⟨hNotHegota, hActive, hCheck, hashes, output, roots, hHashes, hOutput, hRoots, hChecks,
       rfl⟩
   · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
+
+/-- A block that passes its checks has a parent, the last recent block.
+
+The fork of the parent is at most the fork of the block. -/
+theorem checkBlock_parent {config : ChainConfig} {checkSeal : Bool} {recent : List RecentBlock}
+    {block : Block fork Transaction} (h : checkBlock config checkSeal recent block = .ok ()) :
+    ∃ parent, recent.getLast? = some parent ∧ parent.fork ≤ fork := by
+  unfold checkBlock at h
+  obtain ⟨_, _, h⟩ := bind_ok_iff.mp h
+  obtain ⟨_, _, h⟩ := bind_ok_iff.mp h
+  split at h
+  · rename_i parent hp
+    refine ⟨parent, hp, ?_⟩
+    by_cases hle : parent.fork ≤ fork
+    · exact hle
+    · simp [hle, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
+  · simp [throw, throwThe, MonadExceptOf.throw] at h
+
+/-- A block that passes its transition has a parent, the last recent block of its chain.
+
+The fork of the parent is at most the fork of the block. -/
+theorem stateTransition_parent {chain : BlockChain} {block : Block fork Transaction}
+    {checkSeal : Bool} {post : State} (h : stateTransition chain block checkSeal = .ok post) :
+    ∃ parent, chain.recent.getLast? = some parent ∧ parent.fork ≤ fork :=
+  checkBlock_parent (stateTransition_eq_ok h).2.2.1
 
 /-- A block that passes the transition is at the active fork of its chain.
 

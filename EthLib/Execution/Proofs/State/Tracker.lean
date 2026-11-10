@@ -884,6 +884,30 @@ theorem moveEther_balance {fork : Fork} {tx tx' : TransactionState} {sender reci
     Nat.mod_eq_of_lt hfit]
   omega
 
+/-- A move of ether keeps every nonce and every code hash, even from an address to itself. -/
+theorem moveEther_nonce_codeHash {fork : Fork} {tx tx' : TransactionState}
+    {sender recipient : Address} {amount : U256}
+    (h : tx.moveEther fork sender recipient amount = .ok tx') (address : Address) :
+    (tx'.getAccount address).nonce = (tx.getAccount address).nonce ∧
+      (tx'.getAccount address).codeHash = (tx.getAccount address).codeHash := by
+  by_cases hne : sender = recipient
+  · subst hne
+    obtain ⟨hs, hrest⟩ := moveEther_self h
+    by_cases ha : address = sender
+    · rw [ha, hs]
+      exact ⟨rfl, rfl⟩
+    · rw [hrest address ha]
+      exact ⟨rfl, rfl⟩
+  · obtain ⟨-, -, hs, hrec, hrest⟩ := moveEther_eq_ok hne h
+    by_cases ha : address = sender
+    · rw [ha, hs]
+      exact ⟨rfl, rfl⟩
+    · by_cases hb : address = recipient
+      · rw [hb, hrec]
+        exact ⟨rfl, rfl⟩
+      · rw [hrest address ha hb]
+        exact ⟨rfl, rfl⟩
+
 /-- Moving ether between two addresses fails exactly in two cases, each with its error.
 
 The sender holds less than the amount.
@@ -1546,6 +1570,14 @@ theorem getAccountOptional_applyChanges (block : BlockState) (address : Address)
     by_cases hk : k = k' <;> cases v <;> simp_all [Std.ExtTreeMap.getElem?_erase,
       Std.ExtTreeMap.getElem?_insert]
 
+/-- A block that starts from the state after a block reads each account as that block does. -/
+theorem getAccount_applyChanges (block : BlockState) (address : Address) :
+    (TransactionState.ofBlock ⟨block.applyChanges, ∅, ∅, ∅, ∅⟩).getAccount address =
+      (TransactionState.ofBlock block).getAccount address := by
+  unfold TransactionState.getAccount
+  rw [← getAccountOptional_applyChanges block address]
+  simp [TransactionState.getAccountOptional, TransactionState.ofBlock]
+
 /-- After a block, each code reads as it does at the start of a transaction of the block. -/
 theorem getCode_applyChanges (block : BlockState) (codeHash : Hash32) :
     block.applyChanges.getCode codeHash = (TransactionState.ofBlock block).getCode codeHash := by
@@ -1620,6 +1652,13 @@ theorem getAccountOptional_incorporateTxIntoBlock (tx : TransactionState) (addre
   · cases tx.accountWrites[address]? <;> rfl
   · intro acc k v k'
     by_cases hk : k = k' <;> simp_all [Std.ExtTreeMap.getElem?_insert]
+
+/-- The block that a transaction joins reads each account as the transaction left it. -/
+theorem getAccount_ofBlock_incorporateTxIntoBlock (tx : TransactionState) (address : Address) :
+    (ofBlock tx.incorporateTxIntoBlock.parent).getAccount address = tx.getAccount address := by
+  unfold getAccount
+  rw [← getAccountOptional_incorporateTxIntoBlock tx address]
+  rfl
 
 /-- After the end of a transaction, each code reads as it did in the transaction. -/
 theorem getCode_incorporateTxIntoBlock (tx : TransactionState) (codeHash : Hash32) :
