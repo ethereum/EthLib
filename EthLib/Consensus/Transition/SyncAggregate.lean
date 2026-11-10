@@ -98,11 +98,13 @@ def applySyncReward (reward proposerReward : Gwei)
     liftAccessor (increaseBalance state proposer proposerReward)
   else liftAccessor (decreaseBalance state member.1 reward)
 
-/-- From Altair: the index of the first validator with a key, or an error when none has it. -/
+/-- From Altair: the index of the first validator with a key, or an error when none has it.
+
+A key at a position of `2^64` or more has no index, an overflow. -/
 def validatorIndexOfPubkey (state : BeaconState preset fork) (pubkey : BLSPubkey) :
     Except TransitionError ValidatorIndex :=
   match state.validators.data.findIdx? (·.pubkey == pubkey) with
-  | some index => .ok index.toUInt64
+  | some position => liftAccessor (liftArith (ofNatChecked position))
   | none => .error .unknownSyncCommitteeMember
 
 /-- From Altair: the state after the sync aggregate of a block.

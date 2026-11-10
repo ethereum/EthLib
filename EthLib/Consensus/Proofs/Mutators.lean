@@ -380,6 +380,13 @@ theorem getValidator_of_validators_eq {state after : BeaconState preset fork}
     getValidator after index = getValidator state index := by
   simp [getValidator, same]
 
+/-- A read of a balance returns the balance at its position of the list. -/
+theorem getBalance_eq_ok_iff {state : BeaconState preset fork} {index : ValidatorIndex}
+    {balance : Gwei} :
+    getBalance state index = .ok balance ↔ state.balances.data[index.toNat]? = some balance := by
+  unfold getBalance
+  split <;> simp_all
+
 /-- The lookup returns a validator exactly when it is the one at its index of the registry. -/
 theorem getValidator_eq_ok_iff {state : BeaconState preset fork} {index : ValidatorIndex}
     {validator : Validator} :

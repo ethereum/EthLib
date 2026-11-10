@@ -104,8 +104,6 @@ While the registry stays below 2^64 validators, each validator keeps its key.
 
 With 2^64 validators or more, a 64-bit index can name another validator.
 
-A new validator can then overwrite it.
-
 When they hold before it, it also keeps one balance for each validator.
 
 It then also keeps each exit no later than its withdrawal.
@@ -601,7 +599,7 @@ private theorem registryGrows_addValidatorToRegistry {pubkey : BLSPubkey}
   split at computed
   · simp only [addValidatorToRegistryAltair, liftAccessor_ok, bind_ok_iff, pure, Except.pure,
       Except.ok.injEq] at computed
-    obtain ⟨_, validatorsOk, _, _, _, _, _, _, _, _, rfl⟩ := computed
+    obtain ⟨_, _, _, validatorsOk, _, _, _, _, _, _, _, _, rfl⟩ := computed
     rw [setOrAppendRooted_size validatorsOk]
     split <;> omega
   split at computed
@@ -609,13 +607,12 @@ private theorem registryGrows_addValidatorToRegistry {pubkey : BLSPubkey}
     simp
   · cases computed
 
-/-- A new validator keeps each key, while the registry stays below 2^64 validators. -/
+/-- A new validator keeps each key. -/
 private theorem keysKept_addValidatorToRegistry {pubkey : BLSPubkey}
     {withdrawalCredentials : Bytes32} {amount : Gwei}
-    (computed : addValidatorToRegistry state pubkey withdrawalCredentials amount = .ok after)
-    (small : after.validators.data.size < 2 ^ 64) : KeysKept state after := by
+    (computed : addValidatorToRegistry state pubkey withdrawalCredentials amount = .ok after) :
+    KeysKept state after := by
   have pushed := addValidatorToRegistry_validators_eq_push computed
-    (Nat.lt_of_le_of_lt (registryGrows_addValidatorToRegistry computed) small)
   intro index validator found
   refine ⟨validator, ?_, rfl⟩
   unfold getValidator at found ⊢
@@ -651,12 +648,13 @@ theorem frame_addValidatorToRegistry {pubkey : BLSPubkey}
     · exact holds validator (Array.mem_of_getElem? old)
     · exact getValidatorFromDeposit_aligned maxAligned _ _ _
   have grows := registryGrows_addValidatorToRegistry computed
-  have keys := keysKept_addValidatorToRegistry computed
+  have keys : after.validators.data.size < 2 ^ 64 → KeysKept state after :=
+    fun _ => keysKept_addValidatorToRegistry computed
   unfold addValidatorToRegistry at computed
   split at computed
   · simp only [addValidatorToRegistryAltair, liftAccessor_ok, bind_ok_iff, pure, Except.pure,
       Except.ok.injEq] at computed
-    obtain ⟨_, _, _, _, previous, previousOk, current, currentOk, _, _, rfl⟩ := computed
+    obtain ⟨_, _, _, _, _, _, previous, previousOk, current, currentOk, _, _, rfl⟩ := computed
     -- The new validator gets a zero byte of flags, and each other byte stays.
     refine ⟨⟨⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, grows, keys, balances, exits, aligned⟩,
       rfl, rfl, rfl, rfl⟩, fun _ position flags => ⟨fun found => ?_, fun found => ?_⟩⟩
@@ -774,7 +772,8 @@ theorem applyPendingDeposit {deposit : PendingDeposit}
     · exact laws.addValidatorToRegistry computed
     · simp only [pure, Except.pure, Except.ok.injEq] at computed
       exact computed ▸ laws.refl _
-  · rw [liftAccessor_ok] at computed
+  · simp only [liftAccessor_ok, bind_ok_iff] at computed
+    obtain ⟨_, _, computed⟩ := computed
     exact laws.increaseBalance computed
 
 end EpochFrameLaws
@@ -917,12 +916,12 @@ theorem frame_switchToCompoundingValidator {electra : .pectra ≤ fork} {index :
 
 /-- The source of a consolidation exits, and may withdraw a checked delay later.
 
-The source must be the validator at its position, so that it keeps its key. -/
-theorem frame_queueConsolidation {electra : .pectra ≤ fork} {sourcePosition : Nat}
+The source must be the validator at its index, so that it keeps its key. -/
+theorem frame_queueConsolidation {electra : .pectra ≤ fork} {sourceIndex : ValidatorIndex}
     {source : Validator} {targetIndex : ValidatorIndex}
-    (found : state.validators.data[sourcePosition]? = some source)
+    (found : state.validators.data[sourceIndex.toNat]? = some source)
     (computed :
-      queueConsolidation config state electra sourcePosition source targetIndex = .ok after) :
+      queueConsolidation config state electra sourceIndex source targetIndex = .ok after) :
     BlockFrame state after := by
   simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
     addChecked_ok_iff, pure, Except.pure] at computed
@@ -936,16 +935,11 @@ theorem frame_queueConsolidation {electra : .pectra ≤ fork} {sourcePosition : 
   have validators : churnedState.validators = state.validators :=
     (computeConsolidationEpochAndUpdateChurn_earliest churned).2.1
   refine (frame_computeConsolidationEpochAndUpdateChurn churned).trans <|
-    (frame_setValidator_of_small set
-      (fun small => ⟨state.validators.data[sourcePosition], ?_, rfl⟩)
-      (fun _ => le) fun _ holds => holds state.validators.data[sourcePosition] (by
+    (frame_setValidator_of_whole set (old := state.validators.data[sourceIndex.toNat]) ?_ rfl
+      (fun _ => le) fun _ holds => holds state.validators.data[sourceIndex.toNat] (by
         rw [validators]; exact Array.getElem_mem inside)
       ).toBlockFrame.trans (BlockFrame.of_validators ⟨rfl, rfl⟩)
-  -- The registry keeps its size, so below 2^64 validators after, the position names the source.
-  obtain ⟨inside', rfl⟩ := setValidator_ok set
-  rw [(sameSizes_putValidator _ inside' _).1, validators] at small
-  rw [getValidator, validators, Nat.toUInt64_eq,
-    UInt64.toNat_ofNat_of_lt' (Nat.lt_trans inside small), Array.getElem?_eq_getElem inside]
+  rw [getValidator, validators, Array.getElem?_eq_getElem inside]
 
 theorem frame_processConsolidationRequest {electra : .pectra ≤ fork}
     {request : ConsolidationRequest}
@@ -958,7 +952,7 @@ theorem frame_processConsolidationRequest {electra : .pectra ≤ fork}
     | (cases computed; done)
     | (cases computed; exact BlockFrame.refl _)
     | exact frame_switchToCompoundingValidator (liftAccessor_ok.mp computed)
-    | exact frame_queueConsolidation (Array.getElem?_eq_getElem _) computed
+    | exact frame_queueConsolidation (getElem?_toNat_of_ofNatChecked (by assumption)) computed
 
 theorem frame_processExecutionRequests {body : BeaconBlockBody preset fork}
     {electra : .pectra ≤ fork ∧ fork < .glamsterdam}
@@ -1283,6 +1277,47 @@ theorem frame_processBlock {block : BeaconBlock preset fork}
     (computed : processBlock config checks engine state block = .ok after) : Frame state after := by
   obtain ⟨_, _, first, operated, last⟩ := processBlock_split computed
   exact first.toFrame.trans <| (frame_processOperations operated).trans last.toFrame
+
+/-- The state that the epoch transition reaches before the step of the payments.
+
+It runs the steps of the epoch transition that come before that step, in their order.
+
+Before Altair it skips the inactivity scores, as the epoch transition does. -/
+def epochBeforePayments (config : Config) (checks : SignatureChecks)
+    (state : BeaconState preset fork) : Except TransitionError (BeaconState preset fork) := do
+  let state ← processJustificationAndFinalization state
+  let state ← (if altair : .altair ≤ fork then processInactivityUpdates config state altair
+    else pure state)
+  let state ← processRewardsAndPenalties config state
+  let state ← processRegistryUpdates config state
+  let state ← processSlashings state
+  let state ← (if before : fork < .hegota then processEth1DataReset before state else pure state)
+  processPendingBalances config checks state
+
+/-- From Altair, the epoch transition first runs the steps that come before the payments.
+
+It then runs the rest of its steps in their order.
+
+So those first steps are a factor of the epoch transition, and not a second form of it. -/
+theorem processEpochAltair_eq_epochBeforePayments_bind (config : Config) (checks : SignatureChecks)
+    (state : BeaconState preset fork) (altair : .altair ≤ fork) :
+    processEpochAltair config checks state altair = (do
+      let state ← epochBeforePayments config checks state
+      let state ← (if gloas : .glamsterdam ≤ fork then
+          liftAccessor (processBuilderPendingPayments state gloas)
+        else pure state)
+      let state ← processEffectiveBalanceUpdates state
+      let state ← processSlashingsReset state
+      let state ← processRandaoMixesReset state
+      let state ← if capella : .shapella ≤ fork then processHistoricalSummariesUpdate state capella
+        else processHistoricalRootsUpdate state
+      let state := processParticipationFlagUpdates state altair
+      let state ← processSyncCommitteeUpdates state altair
+      let state ← (if fulu : .fusaka ≤ fork then liftAccessor (processProposerLookahead state fulu)
+        else pure state)
+      if gloas : .glamsterdam ≤ fork then liftAccessor (processPtcWindow state gloas)
+      else pure state) := by
+  simp only [processEpochAltair, epochBeforePayments, altair, ↓reduceDIte, bind_assoc]
 
 /-! ## Relations through the steps of an epoch -/
 
@@ -1670,16 +1705,20 @@ theorem processPtcWindow {gloas : .glamsterdam ≤ fork}
 theorem processEpochAltair_split {altair : .altair ≤ fork}
     (computed : Consensus.processEpochAltair config checks state altair = .ok after) :
     ∃ justified pending paid rooted,
-      processJustificationAndFinalization state = .ok justified ∧ R justified pending ∧
+      processJustificationAndFinalization state = .ok justified ∧
+      epochBeforePayments config checks state = .ok pending ∧ R justified pending ∧
       (if gloas : .glamsterdam ≤ fork then
         liftAccessor (processBuilderPendingPayments pending gloas) else pure pending) =
           (Except.ok paid : Except TransitionError _) ∧
       R paid rooted ∧ R (processParticipationFlagUpdates rooted altair) after := by
-  unfold Consensus.processEpochAltair at computed
+  rw [processEpochAltair_eq_epochBeforePayments_bind] at computed
   simp only [bind_ok_iff] at computed
+  obtain ⟨pending, pendingOk, paid, paidOk, balanced, balancedOk, cleared, clearedOk, mixed,
+    mixedOk, computed⟩ := computed
+  have prefixComputed := pendingOk
+  simp only [epochBeforePayments, bind_ok_iff, altair, ↓reduceDIte] at prefixComputed
   obtain ⟨justified, justifiedOk, scored, scoredOk, rewarded, rewardedOk, registered,
-    registeredOk, slashed, slashedOk, reset, resetOk, pending, pendingOk, paid, paidOk, balanced,
-    balancedOk, cleared, clearedOk, mixed, mixedOk, computed⟩ := computed
+    registeredOk, slashed, slashedOk, reset, resetOk, depositedOk⟩ := prefixComputed
   have resetFrame : R slashed reset := by
     split at resetOk
     · exact laws.processEth1DataReset resetOk
@@ -1690,7 +1729,7 @@ theorem processEpochAltair_split {altair : .altair ≤ fork}
     laws.trans (laws.processRewardsAndPenalties rewardedOk) <|
     laws.trans (laws.processRegistryUpdates registeredOk) <|
     laws.trans (laws.processSlashings slashedOk) <|
-    laws.trans resetFrame (laws.processPendingBalances pendingOk)
+    laws.trans resetFrame (laws.processPendingBalances depositedOk)
   have middle : R paid mixed :=
     laws.trans (laws.processEffectiveBalanceUpdates balancedOk) <|
     laws.trans (laws.processSlashingsReset clearedOk) (laws.processRandaoMixesReset mixedOk)
@@ -1707,7 +1746,7 @@ theorem processEpochAltair_split {altair : .altair ≤ fork}
       · exact laws.processPtcWindow (liftAccessor_ok.mp windowed)
       · simp only [pure, Except.pure, Except.ok.injEq] at windowed
         exact windowed ▸ laws.refl _
-    refine ⟨justified, pending, paid, rooted, justifiedOk, head, paidOk, ?_, ?_⟩
+    refine ⟨justified, pending, paid, rooted, justifiedOk, pendingOk, head, paidOk, ?_, ?_⟩
     · first
       | exact laws.trans middle (laws.processHistoricalSummariesUpdate rootedOk)
       | exact laws.trans middle (laws.processHistoricalRootsUpdate rootedOk)
@@ -1866,7 +1905,7 @@ theorem processEpochAltair_split {altair : .altair ≤ fork}
     ∃ justified rooted, processJustificationAndFinalization state = .ok justified ∧
       MutatorFrame justified rooted ∧
       MutatorFrame (processParticipationFlagUpdates rooted altair) after := by
-  obtain ⟨justified, pending, paid, rooted, justifiedOk, head, paidOk, middle, tail⟩ :=
+  obtain ⟨justified, pending, paid, rooted, justifiedOk, -, head, paidOk, middle, tail⟩ :=
     mutatorEpochFrameLaws.processEpochAltair_split computed
   have paidFrame : MutatorFrame pending paid := by
     split at paidOk

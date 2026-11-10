@@ -314,11 +314,19 @@ theorem sameSizes_processWithdrawalRequest {electra : .pectra ≤ fork} {request
     | exact sameSizes_initiateValidatorExit (liftAccessor_ok.mp computed)
     | exact sameSizes_requestPartialWithdrawal computed
 
+/-- The checked index of a position of the registry names the validator at that position. -/
+theorem getElem?_toNat_of_ofNatChecked {position : Fin state.validators.data.size}
+    {index : ValidatorIndex}
+    (checked : liftAccessor (liftArith (ofNatChecked position.val)) = .ok index) :
+    state.validators.data[index.toNat]? = some state.validators.data[position] := by
+  rw [liftAccessor_ok, liftArith, mapError_ok_iff, ofNatChecked_ok_iff] at checked
+  simp [checked.2]
+
 /-- Queueing a consolidation keeps the sizes of the registry and the balances. -/
-theorem sameSizes_queueConsolidation {electra : .pectra ≤ fork} {sourcePosition : Nat}
+theorem sameSizes_queueConsolidation {electra : .pectra ≤ fork} {sourceIndex : ValidatorIndex}
     {source : Validator} {targetIndex : ValidatorIndex}
     (computed :
-      queueConsolidation config state electra sourcePosition source targetIndex = .ok after) :
+      queueConsolidation config state electra sourceIndex source targetIndex = .ok after) :
     SameSizes state after := by
   simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, pure, Except.pure] at computed
   obtain ⟨⟨_, _⟩, churned, computed⟩ := computed
