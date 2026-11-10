@@ -13,6 +13,8 @@ Not yet released.
   No C export or Python function changes.
   In Lean, `supply_systemCall`, `supply_systemCall_join`, `supply_startSystemCalls`, `supply_blockRequests` and `applyTransactions_supply` are gone from `EthLib.Execution.Proofs.Blocks.Supply`.
   The new `SystemCallBurns.total_eq_zero_of_glamsterdam`, `StartSystemCallsBurns.total_eq_zero_of_glamsterdam`, `TransactionsBurns.total_eq_zero_of_glamsterdam`, `RequestsBurns.total_eq_zero_of_glamsterdam`, `BlockRequestsBurns.total_eq_zero_of_glamsterdam` and `BodyBurns.total_eq_zero_of_glamsterdam` in `EthLib.Execution.Proofs.Blocks.Burn` prove that the certified losses are 0 from Glamsterdam.
+  `withdrawnWei`, `rewardWei`, `createdWei`, `burnedWei` and the supply lemmas of the DAO transfer, the withdrawals and the rewards move to `EthLib.Execution.Proofs.Blocks.Burn`, with the same names.
+  `EthLib.Execution.Proofs.Blocks.Burn` no longer imports `EthLib.Execution.Proofs.Blocks.Supply`, so import the latter for `headerBurnedWei`, the `applyBody_supply` theorems and the `stateTransition_supply` bounds.
 - From Gloas, the rewards and penalties and the inactivity updates of an epoch now fail where a registry position of 2^64 or more would become a validator index ([#1883](https://github.com/ethereum/EthLib/issues/1883)).
   The specification builds a `ValidatorIndex` for each position when it applies the deltas, and for each eligible validator when it lists the eligible indices.
   EthLib took such a position modulo 2^64, so it credited the balance, or updated the inactivity score, of another validator.

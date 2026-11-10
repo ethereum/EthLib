@@ -9,9 +9,9 @@ The exact block supply equation counts created wei, burned fees and other losses
 
 Those losses are the surviving burns of SELFDESTRUCT and the balances that transactions delete.
 
-The total of those losses is a natural number, so it is at least 0 at every fork.
+Those losses are never negative, so dropping them gives a bound at every fork.
 
-So a block leaves at most the supply before it, plus its created ether, minus its burned fees.
+So a block leaves at most the supply before it, plus its created wei, minus its burned fees.
 
 From Glamsterdam, every surviving burn and every deleted balance is 0, by [EIP-8246][e8246].
 

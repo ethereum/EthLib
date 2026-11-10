@@ -381,7 +381,7 @@ theorem TransactionsBurns.supply_eq {env : BlockEnvironment fork}
     change (TransactionState.ofBlock after.block).supply = out.state.supply at joined
     omega
 
-/-- From Glamsterdam, the certified transactions have no burns and no deleted balances. -/
+/-- From Glamsterdam, certified transactions have no surviving burns and no deleted balances. -/
 theorem TransactionsBurns.total_eq_zero_of_glamsterdam {env : BlockEnvironment fork}
     {transactions : List (Transaction × Nat)} {before after : BodyOutput fork}
     {losses : TransactionLosses} (hfork : .glamsterdam ≤ fork)

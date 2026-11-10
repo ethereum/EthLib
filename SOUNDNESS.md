@@ -1583,7 +1583,7 @@ The deleted balances are read after the gas is settled and before any account is
 From Glamsterdam, `TransactionBurns.eq_zero_of_glamsterdam` proves that both amounts are 0.
 `processTransaction_supply_eq` makes the same two assumptions as `processTransaction_supply_le`.
 
-`Execution/Proofs/Blocks/Burn.lean` and `Execution/Proofs/Blocks/Supply.lean` extend the exact change and the bound to a whole block.
+`Execution/Proofs/Blocks/Burn.lean` gives the exact change of the supply across a whole block, and `Execution/Proofs/Blocks/Supply.lean` derives the bound and the Glamsterdam equality from it.
 The block creates the wei of its withdrawals from Shapella, by EIP-4895, and of its rewards before Paris.
 The DAO transfer only moves wei.
 `stateTransition_supply_le` proves that the supply after the block plus the burned fees is at most the supply before plus the created wei, at every fork that the transition runs; it fails from Hegotá.
@@ -1599,7 +1599,6 @@ The system calls also carry burn logs, since the theorem assumes no particular c
 `BodyBurns.total_eq` shows that two certificates of the same body give the same total of losses, when the block has at most two ommers before Paris, as its checks enforce.
 So the run fixes that total.
 From Glamsterdam, `BodyBurns.total_eq_zero_of_glamsterdam` proves that the total of losses is 0.
-`Execution/Proofs/Blocks/Supply.lean` derives the block bound and the Glamsterdam equality from `stateTransition_supply_eq`.
 
 ### The authorizations of EIP-7702
 
