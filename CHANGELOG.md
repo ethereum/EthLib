@@ -9,6 +9,13 @@ Not yet released.
 
 ### Changes that break callers
 
+- From Gloas, the rewards and penalties of an epoch now fail where a registry position of 2^64 or more would become a validator index ([#1883](https://github.com/ethereum/EthLib/issues/1883)).
+  The specification builds a `ValidatorIndex` for each position when it applies the deltas, and for each eligible validator when it lists the eligible indices.
+  EthLib took such a position modulo 2^64, so it credited the balance of another validator.
+  Before Gloas the registry stays within its limit, which is below 2^64, so nothing changes there.
+  No C export or Python function changes.
+  In Lean, `applyDeltas_eq_ok_iff` now states the position directly, with a bound of 2^64 on it.
+  `applyAllDeltas_balances`, `foldlM_applyAllDeltas_balances` and `processRewardsAndPenalties_balances_of_altair` no longer take a bound on the size of the registry.
 - From Gloas, the pending deposits of an epoch now fail at every deposit they read to a key whose first validator sits at a registry position of 2^64 or more ([#1883](https://github.com/ethereum/EthLib/issues/1883)).
   The specification builds a `ValidatorIndex` from that position before it tests the validator, so it fails there.
   EthLib failed only when it credited such a deposit, and missed the deposit to a validator that exits and is not withdrawn, and the deposit beyond the churn.

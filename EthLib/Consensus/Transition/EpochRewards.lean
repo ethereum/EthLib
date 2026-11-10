@@ -69,12 +69,15 @@ def isEligibleValidator (previousEpoch : Epoch) (validator : Validator) :
     return (← liftAccessor (liftArith (addChecked previousEpoch 1))) < validator.withdrawableEpoch
   else pure false
 
-/-- The validators that earn rewards and penalties for the previous epoch, in increasing order. -/
+/-- The validators that earn rewards and penalties for the previous epoch, in increasing order.
+
+An eligible validator at a position of `2^64` or more has no validator index, an overflow. -/
 def getEligibleValidatorIndices (state : BeaconState preset fork) :
     Except TransitionError (List ValidatorIndex) :=
-  state.validators.data.toList.zipIdx.filterMapM fun (validator, index) => do
-    return if ← isEligibleValidator (getPreviousEpoch state) validator then some index.toUInt64
-      else none
+  state.validators.data.toList.zipIdx.filterMapM fun (validator, position) => do
+    if ← isEligibleValidator (getPreviousEpoch state) validator then
+      return some (← liftAccessor (liftArith (ofNatChecked position)))
+    else return none
 
 /-- The deltas with an amount added at an index.
 
@@ -329,11 +332,14 @@ def getAttestationDeltas (config : Config) (state : BeaconState preset fork)
   let penalties ← sumDeltas sourcePenalties targetPenalties headPenalties inactivityPenalties
   return (rewards, penalties)
 
-/-- The state with the reward and then the penalty of one validator applied. -/
-def applyDeltas (rewards penalties : Array Gwei) (state : BeaconState preset fork) (index : Nat) :
-    Except TransitionError (BeaconState preset fork) := do
-  let state ← liftAccessor (increaseBalance state index.toUInt64 (rewards.getD index 0))
-  liftAccessor (decreaseBalance state index.toUInt64 (penalties.getD index 0))
+/-- The state with the reward and then the penalty of the validator at a position applied.
+
+A position of `2^64` or more has no validator index, an overflow. -/
+def applyDeltas (rewards penalties : Array Gwei) (state : BeaconState preset fork)
+    (position : Nat) : Except TransitionError (BeaconState preset fork) := liftAccessor do
+  let index ← liftArith (ofNatChecked position)
+  let state ← increaseBalance state index (rewards.getD position 0)
+  decreaseBalance state index (penalties.getD position 0)
 
 /-- The state with the rewards and then the penalties of some deltas applied, index by index. -/
 def applyAllDeltas (state : BeaconState preset fork) (deltas : Array Gwei × Array Gwei) :

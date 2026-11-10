@@ -795,7 +795,7 @@ private theorem keeps_processRewardsAndPenalties
       applyAllDeltas state all = .ok after → Keeps state after := fun computed =>
     Keeps.foldlM (fun _ _ _ ok => by
       simp only [applyDeltas, bind_ok_iff, liftAccessor_ok] at ok
-      obtain ⟨_, raised, lowered⟩ := ok
+      obtain ⟨_, _, _, raised, lowered⟩ := ok
       exact (keeps_increaseBalance raised).trans (keeps_decreaseBalance lowered)) computed
   unfold processRewardsAndPenalties at computed
   split at computed
