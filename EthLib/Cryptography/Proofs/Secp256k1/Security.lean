@@ -3,6 +3,7 @@ module
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.Game
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.JointGame
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.LazyGame
+public import EthLib.Cryptography.Proofs.Secp256k1.Security.Origin
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.Refinement
 
 /-!
@@ -27,6 +28,12 @@ The permutation oracle and the signer of new messages are parameters there.
 Run the lazy game that way, then draw `Π` from the final cache of `Π`.
 
 The forgery, the result, the signing cache and `Π` then have the joint law of the game.
+
+Each pair of the cache of `Π` can also carry its origin: a forward or inverse query, or signing.
+
+A forgery that wins has its pair in the final cache.
+
+Its tag is `forward` if the final check asked first, and otherwise the tag it had before.
 
 No theorem bounds the advantage of a forger yet.
 -/
