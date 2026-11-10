@@ -3,6 +3,7 @@ module
 public import EthLib.Cryptography.Proofs.Bls.Security.PopEager
 public import EthLib.Cryptography.Proofs.Bls.Security.PopExtract
 public import EthLib.Cryptography.Proofs.Bls.Security.PopReduction
+public import EthLib.Cryptography.Proofs.Bls.Security.PopZeroKey
 public import EthLib.Cryptography.Proofs.Bls.Security.Refinement
 
 /-!
@@ -37,6 +38,8 @@ Let `z ≠ 0`.
 Then an event of the game, read on the state the reduction sees, is at most as likely in its run.
 
 This holds until the message at position `j` is signed.
+
+A key hash other than the honest one is zero with probability at most `(qK - 1) / |F|`.
 
 No bound on the aggregate game is proved yet.
 -/
