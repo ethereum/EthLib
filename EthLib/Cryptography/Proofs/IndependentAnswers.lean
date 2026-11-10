@@ -30,7 +30,9 @@ This is the birthday bound between a random permutation and independent answers.
 
 The source is [Fersch, Kiltz, Poettering, CCS 2016](https://doi.org/10.1145/2976749.2978413).
 
-The swap is the step from Game G0 to Game G1 in the proof of their Theorem 2.
+The swap is the step from Game G0 to Game G1 of their §4.2, in the proof of their Theorem 2.
+
+Their Game G1 is in their Figure 7.
 
 Their bound there is `Q² / 2^L`; the bound here is half of it, or less.
 -/
@@ -44,17 +46,6 @@ open OracleComp OracleSpec ENNReal
 variable {A : Type} [FinEnum A]
 
 /-! ## Uniform draws that avoid a list -/
-
-/-- A draw from a nonempty list has the chance of an event as the share of the list in it. -/
-theorem prEvent_uniformFrom_eq_countP {X : Type} {l : List X} (hl : l ≠ []) (d : X)
-    (p : X → Prop) [DecidablePred p] :
-    Pr{let y ← uniformFrom l d}[p y] = (l.countP (fun y => decide (p y)) : ℝ≥0∞) / l.length := by
-  cases l with
-  | nil => exact absurd rfl hl
-  | cons b bs =>
-    rw [uniformFrom, ProbComp.prEvent_uniformSelectListVector]
-    simp only [List.length_cons, Nat.cast_add, Nat.cast_one]
-    rfl
 
 /-- A uniform value of `A` that avoids a list puts at least the mass of a uniform value of `A`.
 
@@ -89,9 +80,22 @@ theorem prEvent_uniformOutside_nil_mem_le (used : List A) (d : A) :
   exact_mod_cast ((List.subperm_of_subset ((FinEnum.nodup_toList).filter _)
     fun y hy => by simpa using (List.mem_filter.1 hy).2).length_le)
 
+/-- A uniform value of `A` avoiding nothing is the framework's uniform sample of `A`. -/
+theorem uniformOutside_nil_evalDistEq [SampleableType A] (d : A) :
+    uniformOutside [] d =ᵈ ($ᵗ A : ProbComp A) := by
+  refine evalDistEq_of_forall_prEvent_eq_output fun x => ?_
+  have hnil : ((FinEnum.toList A).filter fun b => b ∉ []) = FinEnum.toList A := by simp
+  rw [uniformOutside, hnil,
+    prEvent_uniformFrom_eq_of_mem FinEnum.nodup_toList d (FinEnum.mem_toList x),
+    SampleableType.prEvent_uniformSample_eq_singleton_natCard, Nat.card_eq_fintype_card,
+    ← FinEnum.card_eq_fintypeCard]
+  simp [FinEnum.toList]
+
 /-! ## The oracle -/
 
-/-- The state: the pairs answered so far, the most recent first, and the flag. -/
+/-- The state: the pairs answered so far, the most recent first, and the flag.
+
+The most recent pair comes first, so a position in the cache counts back from the last query. -/
 abbrev IndepState (A : Type) := PermCache A × Bool
 
 /-- The permutation oracle answered by independent uniform values.
@@ -121,39 +125,62 @@ def indepPermOracle : QueryImpl (PermSpec A) (StateT (IndepState A) ProbComp)
 abbrev indepPermImpl : QueryImpl (unifSpec + PermSpec A) (StateT (IndepState A) ProbComp) :=
   unifSpec.passthrough + indepPermOracle
 
-omit [FinEnum A] in
-/-- Coins pass through an oracle of the permutation, and leave its state unchanged. -/
-theorem passthrough_add_inl_run {σ : Type} (perm : QueryImpl (PermSpec A) (StateT σ ProbComp))
-    (n : ℕ) (s : σ) :
-    ((unifSpec.passthrough + perm) (.inl n)).run s =
-      (·, s) <$> (query (spec := unifSpec) n : ProbComp (Fin (n + 1))) := by
-  simp [StateT.run_monadLift]
+/-- A query of the permutation goes to the oracle with independent answers. -/
+theorem indepPermImpl_inr (t : (PermSpec A).Domain) :
+    (indepPermImpl (.inr t) : StateT (IndepState A) ProbComp _) = indepPermOracle t := rfl
+
+/-- A forward query reads the cache, or draws a uniform value and checks it against the images. -/
+theorem indepPermOracle_inl_run (a : A) (c : PermCache A) (f : Bool) :
+    (indepPermOracle (.inl a)).run (c, f) =
+      match c.lookup a with
+      | some b => pure (b, (c, f))
+      | none => (fun b => (b, ((a, b) :: c, f || decide (b ∈ c.map Prod.snd)))) <$>
+        (uniformOutside [] a : ProbComp A) := rfl
+
+/-- An inverse query reads the cache, or draws a uniform value and checks it against the queries. -/
+theorem indepPermOracle_inr_run (b : A) (c : PermCache A) (f : Bool) :
+    (indepPermOracle (.inr b)).run (c, f) =
+      match (c.map Prod.swap).lookup b with
+      | some a => pure (a, (c, f))
+      | none => (fun a => (a, ((a, b) :: c, f || decide (a ∈ c.map Prod.fst)))) <$>
+        (uniformOutside [] b : ProbComp A) := rfl
+
+/-- A forward query to the lazy permutation reads the cache, or draws outside the images. -/
+theorem lazyPermOracle_inl_run (a : A) (c : PermCache A) :
+    (lazyPermOracle (.inl a)).run c =
+      match c.lookup a with
+      | some b => pure (b, c)
+      | none => (fun b => (b, (a, b) :: c)) <$>
+        (uniformOutside (c.map Prod.snd) a : ProbComp A) := rfl
+
+/-- An inverse query to the lazy permutation reads the cache, or draws outside the queries. -/
+theorem lazyPermOracle_inr_run (b : A) (c : PermCache A) :
+    (lazyPermOracle (.inr b)).run c =
+      match (c.map Prod.swap).lookup b with
+      | some a => pure (a, c)
+      | none => (fun a => (a, (a, b) :: c)) <$>
+        (uniformOutside (c.map Prod.fst) b : ProbComp A) := rfl
 
 /-- A query of the permutation keeps the state, or adds one pair and keeps a raised flag. -/
 theorem indepPermOracle_step (q : (PermSpec A).Domain) (s : IndepState A) (z)
     (hz : z ∈ support ((indepPermOracle q).run s)) :
     z.2 = s ∨ ∃ p, z.2.1 = p :: s.1 ∧ (s.2 = true → z.2.2 = true) := by
+  obtain ⟨c, f⟩ := s
   rcases q with a | b
-  · change z ∈ support (match s.1.lookup a with
-      | some b => pure (b, s)
-      | none => (fun b => (b, ((a, b) :: s.1, s.2 || decide (b ∈ s.1.map Prod.snd)))) <$>
-        (uniformOutside [] a : ProbComp A)) at hz
+  · rw [indepPermOracle_inl_run] at hz
     split at hz
     · simp only [support_pure, Set.mem_singleton_iff] at hz
       exact Or.inl (by rw [hz])
     · simp only [support_map, Set.mem_image] at hz
       obtain ⟨b, -, rfl⟩ := hz
-      exact Or.inr ⟨(a, b), rfl, fun h => by simp [h]⟩
-  · change z ∈ support (match (s.1.map Prod.swap).lookup b with
-      | some a => pure (a, s)
-      | none => (fun a => (a, ((a, b) :: s.1, s.2 || decide (a ∈ s.1.map Prod.fst)))) <$>
-        (uniformOutside [] b : ProbComp A)) at hz
+      exact Or.inr ⟨(a, b), rfl, fun h => by simp only at h; simp [h]⟩
+  · rw [indepPermOracle_inr_run] at hz
     split at hz
     · simp only [support_pure, Set.mem_singleton_iff] at hz
       exact Or.inl (by rw [hz])
     · simp only [support_map, Set.mem_image] at hz
       obtain ⟨a, -, rfl⟩ := hz
-      exact Or.inr ⟨(a, b), rfl, fun h => by simp [h]⟩
+      exact Or.inr ⟨(a, b), rfl, fun h => by simp only at h; simp [h]⟩
 
 /-- Once raised, the flag stays. -/
 theorem indepPermImpl_preservesInv_flag :
@@ -190,28 +217,14 @@ theorem dominatedUntilBad_indepPermImpl :
   rintro (n | a | b) ⟨c, f⟩ - hf P
   · rw [passthrough_add_inl_run, passthrough_add_inl_run, prEvent_map, prEvent_map]
     exact prEvent_mono _ _ _ fun _ h => h.1
-  · change Pr{let z ← (match c.lookup a with
-        | some b => pure (b, (c, f))
-        | none => (fun b => (b, ((a, b) :: c, f || decide (b ∈ c.map Prod.snd)))) <$>
-          (uniformOutside [] a : ProbComp A))}[P (z.1, z.2.1) ∧ ¬z.2.2 = true] ≤
-      Pr{let z ← (match c.lookup a with
-        | some b => pure (b, c)
-        | none => (fun b => (b, (a, b) :: c)) <$>
-          (uniformOutside (c.map Prod.snd) a : ProbComp A))}[P z]
+  · rw [indepPermImpl_inr, lazyPermImpl_inr, indepPermOracle_inl_run, lazyPermOracle_inl_run]
     simp only [Bool.not_eq_true] at hf
     cases c.lookup a with
     | some b => exact prEvent_pure_le_pure _ _ _ _ fun h => h.1
     | none =>
       simp only [prEvent_map, hf, Bool.false_or, decide_eq_true_eq]
       exact prEvent_uniformOutside_nil_and_notMem_le _ a a _
-  · change Pr{let z ← (match (c.map Prod.swap).lookup b with
-        | some a => pure (a, (c, f))
-        | none => (fun a => (a, ((a, b) :: c, f || decide (a ∈ c.map Prod.fst)))) <$>
-          (uniformOutside [] b : ProbComp A))}[P (z.1, z.2.1) ∧ ¬z.2.2 = true] ≤
-      Pr{let z ← (match (c.map Prod.swap).lookup b with
-        | some a => pure (a, c)
-        | none => (fun a => (a, (a, b) :: c)) <$>
-          (uniformOutside (c.map Prod.fst) b : ProbComp A))}[P z]
+  · rw [indepPermImpl_inr, lazyPermImpl_inr, indepPermOracle_inr_run, lazyPermOracle_inr_run]
     simp only [Bool.not_eq_true] at hf
     cases (c.map Prod.swap).lookup b with
     | some a => exact prEvent_pure_le_pure _ _ _ _ fun h => h.1
@@ -242,18 +255,7 @@ theorem badOnGrowthBy_indepPermImpl :
     simp only [support_map, Set.mem_image] at hz
     obtain ⟨_, -, rfl⟩ := hz
     simp
-  · change (∀ z ∈ support (match c.lookup a with
-        | some b => pure (b, (c, false))
-        | none => (fun b => (b, ((a, b) :: c, false || decide (b ∈ c.map Prod.snd)))) <$>
-          (uniformOutside [] a : ProbComp A)), _) ∨
-      ((∀ z ∈ support (match c.lookup a with
-        | some b => pure (b, (c, false))
-        | none => (fun b => (b, ((a, b) :: c, false || decide (b ∈ c.map Prod.snd)))) <$>
-          (uniformOutside [] a : ProbComp A)), _) ∧
-        Pr{let z ← (match c.lookup a with
-        | some b => pure (b, (c, false))
-        | none => (fun b => (b, ((a, b) :: c, false || decide (b ∈ c.map Prod.snd)))) <$>
-          (uniformOutside [] a : ProbComp A))}[z.2.2 = true] ≤ _)
+  · rw [indepPermImpl_inr, indepPermOracle_inl_run]
     cases c.lookup a with
     | some b => exact Or.inl fun z hz => by simp_all
     | none =>
@@ -264,18 +266,7 @@ theorem badOnGrowthBy_indepPermImpl :
       · simp only [prEvent_map, Bool.false_or, decide_eq_true_eq]
         refine (prEvent_uniformOutside_nil_mem_le (c.map Prod.snd) a).trans ?_
         rw [List.length_map]
-  · change (∀ z ∈ support (match (c.map Prod.swap).lookup b with
-        | some a => pure (a, (c, false))
-        | none => (fun a => (a, ((a, b) :: c, false || decide (a ∈ c.map Prod.fst)))) <$>
-          (uniformOutside [] b : ProbComp A)), _) ∨
-      ((∀ z ∈ support (match (c.map Prod.swap).lookup b with
-        | some a => pure (a, (c, false))
-        | none => (fun a => (a, ((a, b) :: c, false || decide (a ∈ c.map Prod.fst)))) <$>
-          (uniformOutside [] b : ProbComp A)), _) ∧
-        Pr{let z ← (match (c.map Prod.swap).lookup b with
-        | some a => pure (a, (c, false))
-        | none => (fun a => (a, ((a, b) :: c, false || decide (a ∈ c.map Prod.fst)))) <$>
-          (uniformOutside [] b : ProbComp A))}[z.2.2 = true] ≤ _)
+  · rw [indepPermImpl_inr, indepPermOracle_inr_run]
     cases (c.map Prod.swap).lookup b with
     | some a => exact Or.inl fun z hz => by simp_all
     | none =>
@@ -287,12 +278,12 @@ theorem badOnGrowthBy_indepPermImpl :
         refine (prEvent_uniformOutside_nil_mem_le (c.map Prod.fst) b).trans ?_
         rw [List.length_map]
 
-/-- The sum of `i / |A|` for `i < Q` is the number of pairs among `Q` over `|A|`. -/
-theorem sum_range_div_card (Q : ℕ) :
-    ∑ i ∈ Finset.Ico 0 Q, (i : ℝ≥0∞) / FinEnum.card A = (Q.choose 2 : ℝ≥0∞) / FinEnum.card A := by
+omit [FinEnum A] in
+/-- The sum of `i / N` for `i < Q` is the number of pairs among `Q` values over `N`. -/
+theorem sum_range_natCast_div (Q : ℕ) (N : ℝ≥0∞) :
+    ∑ i ∈ Finset.range Q, (i : ℝ≥0∞) / N = (Q.choose 2 : ℝ≥0∞) / N := by
   simp only [div_eq_mul_inv]
-  rw [← Finset.sum_mul, ← Nat.cast_sum, ← Finset.range_eq_Ico, Finset.sum_range_id,
-    Nat.choose_two_right]
+  rw [← Finset.sum_mul, ← Nat.cast_sum, Finset.sum_range_id, Nat.choose_two_right]
 
 /-- **The birthday bound between a random permutation and independent answers.**
 
@@ -321,7 +312,8 @@ theorem prEvent_lazyPermImpl_le_indepPermImpl {α : Type} (oa : PermComp A α) {
       ([], false) z hz
     simpa using this
   have hbad := badOnGrowthBy_indepPermImpl.prEvent_bad_le oa ([], false) (by simp) hn
-  rw [show List.length ([] : PermCache A) = 0 from rfl, sum_range_div_card] at hbad
+  rw [show List.length ([] : PermCache A) = 0 from rfl, ← Finset.range_eq_Ico,
+    sum_range_natCast_div] at hbad
   refine (prEvent_mono _ _ (fun z => (P z.1 ∧ z.2.2 = false) ∨ z.2.2 = true) fun z h => ?_).trans
     ((prEvent_or_le _ _ _).trans (add_le_add le_rfl hbad))
   cases hb : z.2.2 <;> simp_all

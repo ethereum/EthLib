@@ -36,23 +36,6 @@ variable {ι : Type} {spec : OracleSpec ι} {σ : Type}
 
 From a good state, a step keeps `size` and stays good, or adds one to `size`.
 
-In the second case, it turns bad with probability at most `ε`. -/
-structure BadOnGrowth (impl : QueryImpl spec (StateT σ ProbComp)) (size : σ → ℕ)
-    (bad : σ → Prop) (ε : ℝ≥0∞) : Prop where
-  /-- No step shrinks the size. -/
-  mono : ∀ t s, ∀ z ∈ support ((impl t).run s), size s ≤ size z.2
-  /-- From a good state, a step stays good at the same size, or grows by one.
-
-  A step that grows turns bad with probability at most `ε`. -/
-  step : ∀ t s, ¬bad s →
-    (∀ z ∈ support ((impl t).run s), size z.2 = size s ∧ ¬bad z.2) ∨
-      ((∀ z ∈ support ((impl t).run s), size z.2 = size s + 1) ∧
-        Pr{let z ← (impl t).run s}[bad z.2] ≤ ε)
-
-/-- The steps of `impl` never shrink `size`, and only a step that adds one to it turns bad.
-
-From a good state, a step keeps `size` and stays good, or adds one to `size`.
-
 In the second case, it turns bad with probability at most `ε` of the size before the step. -/
 structure BadOnGrowthBy (impl : QueryImpl spec (StateT σ ProbComp)) (size : σ → ℕ)
     (bad : σ → Prop) (ε : ℕ → ℝ≥0∞) : Prop where
@@ -66,11 +49,12 @@ structure BadOnGrowthBy (impl : QueryImpl spec (StateT σ ProbComp)) (size : σ 
       ((∀ z ∈ support ((impl t).run s), size z.2 = size s + 1) ∧
         Pr{let z ← (impl t).run s}[bad z.2] ≤ ε (size s))
 
-/-- A chance that does not depend on the size is a chance for each size. -/
-theorem BadOnGrowth.badOnGrowthBy {impl : QueryImpl spec (StateT σ ProbComp)} {size : σ → ℕ}
-    {bad : σ → Prop} {ε : ℝ≥0∞} (h : BadOnGrowth impl size bad ε) :
-    BadOnGrowthBy impl size bad fun _ ↦ ε :=
-  ⟨h.mono, h.step⟩
+/-- The steps of `impl` never shrink `size`, and only a step that adds one to it turns bad.
+
+A step that adds one turns bad with probability at most `ε`, whatever the size. -/
+abbrev BadOnGrowth (impl : QueryImpl spec (StateT σ ProbComp)) (size : σ → ℕ)
+    (bad : σ → Prop) (ε : ℝ≥0∞) : Prop :=
+  BadOnGrowthBy impl size bad fun _ ↦ ε
 
 /-- No run of a handler that never shrinks the size ends smaller than it starts. -/
 theorem BadOnGrowthBy.le_size_of_mem_support {impl : QueryImpl spec (StateT σ ProbComp)}
@@ -80,12 +64,6 @@ theorem BadOnGrowthBy.le_size_of_mem_support {impl : QueryImpl spec (StateT σ P
   simulateQ_run_preservesInv impl (fun st ↦ size s ≤ size st)
     (fun t s₀ hs₀ z hz ↦ hs₀.trans (h.mono t s₀ z hz)) oa s le_rfl
 
-/-- No run of a handler that never shrinks the size ends smaller than it starts. -/
-theorem BadOnGrowth.le_size_of_mem_support {impl : QueryImpl spec (StateT σ ProbComp)}
-    {size : σ → ℕ} {bad : σ → Prop} {ε : ℝ≥0∞} (h : BadOnGrowth impl size bad ε) {α : Type}
-    (oa : OracleComp spec α) (s : σ) :
-    ∀ z ∈ support ((simulateQ impl oa).run s), size s ≤ size z.2 :=
-  h.badOnGrowthBy.le_size_of_mem_support oa s
 
 /-- **The union bound over new entries, with a chance for each size.**
 
@@ -131,7 +109,7 @@ theorem BadOnGrowth.prEvent_bad_le {impl : QueryImpl spec (StateT σ ProbComp)} 
     (oa : OracleComp spec α) (s : σ) (hs : ¬bad s) {n : ℕ}
     (hn : ∀ z ∈ support ((simulateQ impl oa).run s), size z.2 ≤ n) :
     Pr{let z ← (simulateQ impl oa).run s}[bad z.2] ≤ ((n - size s : ℕ) : ℝ≥0∞) * ε := by
-  refine (h.badOnGrowthBy.prEvent_bad_le oa s hs hn).trans (le_of_eq ?_)
+  refine (BadOnGrowthBy.prEvent_bad_le h oa s hs hn).trans (le_of_eq ?_)
   rw [Finset.sum_const, Nat.card_Ico, nsmul_eq_mul]
 
 end EthLib.Cryptography

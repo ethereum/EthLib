@@ -47,9 +47,11 @@ The key-only game gives the forger no signing oracle.
 
 It is the chosen-message game of a forger that never asks for a signature.
 
-Swap `Π` there for independent uniform answers, and stop counting a win once one repeats.
+Swap `Π` there for independent uniform answers.
 
-The advantage grows by at most `q_Π (q_Π + 1) / 2` over `|A|`.
+Stop counting a win once a new answer repeats a cached value in the direction of its query.
+
+The advantage falls by at most `q_Π (q_Π + 1) / 2` over `|A|`.
 
 No theorem bounds the advantage of a forger yet.
 -/

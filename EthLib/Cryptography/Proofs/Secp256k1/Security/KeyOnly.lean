@@ -28,17 +28,19 @@ Compare its chance to win the game with its chance to win with independent answe
 
 The first exceeds the second by at most `q (q + 1) / 2` over `|A|`.
 
-The source is [Fersch, Kiltz, Poettering](https://doi.org/10.1145/2976749.2978413).
+The source is [Fersch, Kiltz, Poettering, CCS 2016](https://doi.org/10.1145/2976749.2978413).
 
 The key-only game is the variant of their Figure 1 named in their Definition 4.
 
-The swap is the step from Game G0 to Game G1 in the proof of their Theorem 2.
+Their key generation avoids the scalar `0`, and the key here may be `0`, which never verifies.
 
-Their Game G1 stops with `0` where the flag rises here.
+The swap is the step from Game G0 to Game G1 of their §4.2, in the proof of their Theorem 2.
 
-Their `Q` counts the forger's queries, which by their Definition 4 include the final check's.
+Their Game G1 is in their Figure 7, and stops with `0` where the flag rises here.
 
-So their `Q` is the `q + 1` here, and their bound `Q² / 2^L` is at least the one here.
+Their `Q` bounds every query of the game, as `q + 1` does here.
+
+So their bound `Q² / 2^L` is at least the one here.
 -/
 
 @[expose] public section
@@ -114,7 +116,9 @@ variable [FinEnum A]
 
 /-- The key-only game: draw `Π` and the key, run the forger with its oracles, check the forgery.
 
-The key is uniform over all scalars, as in the chosen-message game. -/
+The key is uniform over all scalars, as in the chosen-message game.
+
+The source's key generation avoids `0`; the key `0` gives the point `0`, which never verifies. -/
 def keyOnlyExperiment (scheme : Scheme F G A M) (adversary : KeyOnlyAdversary F G A M) :
     ProbComp Bool := do
   let π ← $ᵗ (Equiv.Perm A)
@@ -155,29 +159,41 @@ theorem keyOnlyExperiment_eq_permImpl (scheme : Scheme F G A M)
 theorem keyOnlyAdvantage_eq_lazy (scheme : Scheme F G A M)
     (adversary : KeyOnlyAdversary F G A M) :
     keyOnlyAdvantage scheme adversary =
-      Pr{let b ← (simulateQ lazyPermImpl (keyOnlyExperimentQ scheme adversary)).run' []}[
-        b = true] := by
+      Pr{let b ←
+        (simulateQ lazyPermImpl (keyOnlyExperimentQ scheme adversary)).run' []}[b = true] := by
   rw [keyOnlyAdvantage, keyOnlyExperiment_eq_permImpl]
   exact (uniformSample_bind_simulateQ_permImpl_evalDistEq _).prEvent_eq _
 
+/-- The key-only game with independent answers, as their Game G1.
+
+It runs the program from the empty cache, and wins when the check passes and no flag rose. -/
+def keyOnlyIndepExperiment (scheme : Scheme F G A M) (adversary : KeyOnlyAdversary F G A M) :
+    ProbComp Bool :=
+  (fun z => z.1 && !z.2.2) <$>
+    (simulateQ indepPermImpl (keyOnlyExperimentQ scheme adversary)).run ([], false)
+
+/-- The probability that the key-only forger wins with independent answers. -/
+noncomputable def keyOnlyIndepAdvantage (scheme : Scheme F G A M)
+    (adversary : KeyOnlyAdversary F G A M) : ℝ≥0∞ :=
+  Pr{let b ← keyOnlyIndepExperiment scheme adversary}[b = true]
 
 /-- **The key-only game with `Π` swapped for independent answers.**
 
 The forger asks for `Π` or its inverse at most `q` times, on every key.
 
-Compare its chance to win the key-only game with its chance to win with independent answers.
+Its chance to win the key-only game exceeds its chance to win with independent answers.
 
-The second counts only runs that raise no flag.
-
-The first exceeds the second by at most `q (q + 1) / 2` over `|A|`. -/
+The excess is at most `q (q + 1) / 2` over `|A|`. -/
 theorem keyOnlyAdvantage_le_indep (scheme : Scheme F G A M)
     (adversary : KeyOnlyAdversary F G A M) {q : ℕ}
     (hq : ∀ X, IsQueryBoundP (adversary.main X) (·.isRight = true) q) :
     keyOnlyAdvantage scheme adversary ≤
-      Pr{let z ← (simulateQ indepPermImpl (keyOnlyExperimentQ scheme adversary)).run ([], false)}[
-        z.1 = true ∧ z.2.2 = false] + ((q + 1).choose 2 : ℝ≥0∞) / FinEnum.card A := by
-  rw [keyOnlyAdvantage_eq_lazy]
-  exact prEvent_lazyPermImpl_le_indepPermImpl _
-    (isQueryBoundP_keyOnlyExperimentQ scheme adversary hq) _
+      keyOnlyIndepAdvantage scheme adversary + ((q + 1).choose 2 : ℝ≥0∞) / FinEnum.card A := by
+  rw [keyOnlyAdvantage_eq_lazy, keyOnlyIndepAdvantage, keyOnlyIndepExperiment, prEvent_map]
+  refine (prEvent_lazyPermImpl_le_indepPermImpl _
+    (isQueryBoundP_keyOnlyExperimentQ scheme adversary hq) (· = true)).trans (le_of_eq ?_)
+  congr 1
+  refine prEvent_congr _ _ _ fun z => ?_
+  cases z.1 <;> cases z.2.2 <;> simp
 
 end EthLib.Cryptography.Secp256k1.Security

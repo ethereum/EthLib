@@ -80,6 +80,17 @@ theorem mem_of_mem_support_uniformFrom {X : Type} {l : List X} (hne : l ≠ []) 
   by_contra h
   exact (mem_support_iff_prEvent_ne_zero _ x).1 hx (prEvent_uniformFrom_eq_of_notMem hne d h)
 
+/-- A draw from a nonempty list gives an event the share of the list in it as chance. -/
+theorem prEvent_uniformFrom_eq_countP {X : Type} {l : List X} (hl : l ≠ []) (d : X)
+    (p : X → Prop) [DecidablePred p] :
+    Pr{let y ← uniformFrom l d}[p y] = (l.countP (fun y => decide (p y)) : ℝ≥0∞) / l.length := by
+  cases l with
+  | nil => exact absurd rfl hl
+  | cons b bs =>
+    rw [uniformFrom, ProbComp.prEvent_uniformSelectListVector]
+    simp only [List.length_cons, Nat.cast_add, Nat.cast_one]
+    rfl
+
 /-- A finite set whose image lies in a list without repeats, with fibres of one size over it.
 
 Its size is the length of the list times the size of each fibre. -/
@@ -171,6 +182,13 @@ theorem isQueryBoundP_liftM_permComp {α : Type} (oa : ProbComp α) :
     change IsQueryBoundP (liftM ((unifSpec + PermSpec A).query (.inl t))) _ 0
     rw [isQueryBoundP_query_iff]
     simp
+
+/-- Coins pass through an oracle of the permutation, and leave its state unchanged. -/
+theorem passthrough_add_inl_run {σ : Type} (perm : QueryImpl (PermSpec A) (StateT σ ProbComp))
+    (n : ℕ) (s : σ) :
+    ((unifSpec.passthrough + perm) (.inl n)).run s =
+      (·, s) <$> (query (spec := unifSpec) n : ProbComp (Fin (n + 1))) := by
+  simp [StateT.run_monadLift]
 
 variable [FinEnum A]
 
@@ -434,7 +452,7 @@ private theorem permImpl_inr (π : Equiv.Perm A) (t : (PermSpec A).Domain) :
     permImpl π (.inr t) = permOracle π t := rfl
 
 /-- A permutation query goes to the lazy permutation oracle. -/
-private theorem lazyPermImpl_inr (t : (PermSpec A).Domain) :
+theorem lazyPermImpl_inr (t : (PermSpec A).Domain) :
     (lazyPermImpl (.inr t) : StateT (PermCache A) ProbComp _) = lazyPermOracle t := rfl
 
 /-- One lazy query only adds pairs to the cache, and keeps it a partial bijection. -/

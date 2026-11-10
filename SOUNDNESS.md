@@ -465,9 +465,11 @@ So the game counts only messages that were never signed.
 `forgeAdvantage_collision_pos` shows that a collision of the message hash wins that game with positive probability.
 `Proofs/Secp256k1/Security/KeyOnly.lean` states the key-only game of the source's Definition 4, with no signing oracle.
 `forgeAdvantage_toAdversary` proves that it is the chosen-message game of a forger that never asks for a signature.
-`keyOnlyAdvantage_le_indep` replaces the bijection by independent uniform answers in that game, and counts no win once an answer repeats a cached one.
+`keyOnlyAdvantage_le_indep` replaces the bijection by independent uniform answers in that game.
+It counts no win once a new answer repeats a cached value in the direction of its query.
 The cost is at most `q (q + 1) / 2` over the size of the bijection's domain, for a forger with at most `q` queries to the bijection or its inverse.
-That is the step from Game G0 to Game G1 in the proof of Theorem 2 of the source, whose bound `Q² / 2^L` is larger.
+That is the step from Game G0 to Game G1 of §4.2 of the source, in the proof of its Theorem 2, whose bound `Q² / 2^L` is larger.
+The source draws the key from the nonzero scalars; the key-only game here draws it from all scalars, and the key `0` never verifies.
 `ecdsa_verify_eq_verify_ecdsaScheme` (`Proofs/Secp256k1/Security/Refinement.lean`) proves that `verify` is the game's verification, with the bijection the identity, for `r` and `s` below `n`.
 `exists_signNonce_of_sign` proves that every signature from `sign` is the game's signature for some nonzero nonce; that is correctness of signing, and says nothing about how RFC 6979 draws the nonces.
 The game draws the bijection uniformly, so a bound on it would apply to EthLib, where the bijection is the identity, only under the heuristic of the source that the identity behaves as a bijective random oracle.
