@@ -2052,6 +2052,7 @@ The binding of a proof of possession shares the bullet of leanXMSS, and the code
   Nothing in EthLib proves that the hash behaves as such an oracle.
 - Light client: an aggregate signature check accepts a message only if every key in its set signed it (`SignatureChecks.AggregateSound`).
   BLS signatures with proofs of possession are meant to give this, except with negligible probability, and EthLib proves no such bound.
+  `Proofs/Bls/Security/PopGame.lean` states the unforgeability game of such aggregates, with both hashes as random oracles; no theorem bounds its advantage yet.
   The theorems say nothing about a forged aggregate signature.
 - Casper FFG: a vote names its signer, so no one can forge a vote.
   The theorems of accountable safety and plausible liveness say nothing about an attack on the signatures.
