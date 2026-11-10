@@ -20,6 +20,7 @@ public import EthLib.Networking.Enr.V4
 public import EthLib.Networking.Gossip.MessageId
 public import EthLib.Networking.Gossip.Parameters
 public import EthLib.Networking.Gossip.Payload
+public import EthLib.Networking.Gossip.Rpc
 public import EthLib.Networking.Gossip.Subnet
 public import EthLib.Networking.Gossip.Topic
 public import EthLib.Networking.Gossip.Validation
