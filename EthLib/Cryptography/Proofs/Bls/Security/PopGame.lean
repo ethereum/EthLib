@@ -34,7 +34,7 @@ Accepting more outputs only makes the adversary's task easier.
 A bound will need two more hypotheses, which the game itself does not impose.
 
 - Every key is a multiple of `g1`, as in a group of prime order.
-- The number of key hash calls stays below the characteristic of the scalars.
+- The number of key hash calls is at most the characteristic of the scalars.
 
 Without the second, enough copies of the honest key sum to zero.
 

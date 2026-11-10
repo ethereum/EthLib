@@ -285,6 +285,19 @@ theorem run_impl_eq_uniform_implAt {α : Type} (g₂ : G₂) (a : F) (j : ℕ)
       (($ᵗ F) >>= fun z => (simulateQ (implAt g₂ a j z) oa).run st) :=
   (eagerAt_implAt g₂ a j).evalDist_run oa st
 
+omit [AddCommGroup G₁] [Module F G₁] in
+/-- An output of the game's oracles is an output of the oracles with some scalar fixed at `j`.
+
+The game's run is distributed as that run with a uniform scalar, so both reach the same outputs. -/
+theorem exists_mem_support_implAt {α : Type} {g₂ : G₂} {a : F} (j : ℕ)
+    {oa : OracleComp (Spec M G₁ G₂) α} {st : State F G₁ M} {p : α × State F G₁ M}
+    (hp : p ∈ support ((simulateQ (impl g₂ a) oa).run st)) :
+    ∃ z, p ∈ support ((simulateQ (implAt g₂ a j z) oa).run st) := by
+  rw [support_eq_of_evalDistEq (run_impl_eq_uniform_implAt g₂ a j oa st),
+    mem_support_bind_iff] at hp
+  obtain ⟨z, -, hz⟩ := hp
+  exact ⟨z, hz⟩
+
 /-- The aggregate game, with the message hash scalar at `j` drawn right after the secret key. -/
 def experimentAt (scheme : Scheme G₁ G₂) (adversary : Adversary G₁ G₂ M) (j : ℕ) :
     ProbComp (Bool × State F G₁ M) := do
