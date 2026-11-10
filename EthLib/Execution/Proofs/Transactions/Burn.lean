@@ -90,7 +90,7 @@ theorem MessageCallBurns.total_eq [LawfulGasMeter Meter] {chainId : Nat}
     {log log' : BurnLog}
     (h : MessageCallBurns (Meter := Meter) chainId message state substate auths paid ended log)
     (h' : MessageCallBurns (Meter := Meter) chainId message state substate auths paid ended log') :
-    log.total = log'.total := by
+    log'.total = log.total := by
   have := h.supply
   have := h'.supply
   omega
@@ -179,7 +179,7 @@ theorem TransactionBurnsWith.supply_eq [LawfulGasMeter Meter] {env : BlockEnviro
   rw [hdel]
   omega
 
-/-- Two certificates of a run of a transaction give the same burns and deleted balances. -/
+/-- Two certificates of a run of a transaction give the same total of burns and deleted balances. -/
 theorem TransactionBurnsWith.unique [LawfulGasMeter Meter] {env : BlockEnvironment fork}
     {block : State.BlockState} {included : Included} {tx : Transaction} {out : TransactionOutput}
     {log log' : BurnLog} {deleted deleted' : Nat}
@@ -190,7 +190,7 @@ theorem TransactionBurnsWith.unique [LawfulGasMeter Meter] {env : BlockEnvironme
   obtain ⟨t', b', m', o', st', run', trace', hdel'⟩ := h'
   obtain ⟨rt, rb, rm, ro, rs⟩ := TransactionRun.unique run run'
   subst rt rb rm ro rs
-  exact ⟨(MessageCallBurns.total_eq trace trace').symm, hdel'.trans hdel.symm⟩
+  exact ⟨MessageCallBurns.total_eq trace trace', hdel'.trans hdel.symm⟩
 
 /-- A certificate of a run of a transaction with the gas meter that it runs with at its fork. -/
 def TransactionBurns (env : BlockEnvironment fork) (block : State.BlockState)
@@ -241,7 +241,8 @@ theorem TransactionBurns.unique {env : BlockEnvironment fork} {block : State.Blo
     exact TransactionBurnsWith.unique h h'
 
 /-- From Glamsterdam, a certificate of a transaction has no burns and no deleted balances. -/
-theorem TransactionBurns.eq_zero_of_glamsterdam {env : BlockEnvironment fork} {block : State.BlockState}
+theorem TransactionBurns.eq_zero_of_glamsterdam {env : BlockEnvironment fork}
+    {block : State.BlockState}
     {included : Included} {tx : Transaction} {out : TransactionOutput} {log : BurnLog}
     {deleted : Nat} (hfork : .glamsterdam ≤ fork)
     (h : TransactionBurns env block included tx out log deleted) :

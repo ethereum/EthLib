@@ -25,7 +25,7 @@ The supply at the end plus the total of the log is the supply at the start.
 
 A run from a given start has one end, so every certificate from that start has the same total.
 
-Each burn that a log counts comes from a step of SELFDESTRUCT, with the burn of that step.
+Each burn that a log counts comes from a step of SELFDESTRUCT that the run takes, with its burn.
 
 From Glamsterdam, no step burns, so the total is 0.
 
@@ -43,8 +43,9 @@ variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
 /-- Where a certified run starts.
 
-It starts from a frame, from the frame of a message that may run a precompile, or from a call or a
-creation. -/
+It starts from a frame, or from the frame of a message that may run a precompile.
+
+It may also start from a call or a creation. -/
 inductive BurnStart (fork : Fork) (Meter : Type) where
   | frame (evm : Evm fork Meter)
   | body (evm : Evm fork Meter)
@@ -84,7 +85,7 @@ A step that sends a message adds the log of the run of the message, and the call
 
 A resume that fails with an error that does not abort halts the frame, and rolls back that log.
 
-A message that runs no precompile runs its frame.
+A message that selects no precompile runs its frame.
 
 A precompile runs unless the message disables precompiles, and the frame stops when none runs.
 
@@ -154,6 +155,52 @@ inductive RunBurns (fork : Fork) (Meter : Type) [GasMeter Meter] :
       (kept : after.state = evm.state ∨
         evm.state.setCode fork evm.message.currentTarget evm.output = .ok after.state) :
       RunBurns fork Meter (.create message state substate meter) after log
+
+/-- The frames that a run from `start` reaches, by the same steps as a certificate.
+
+A run of a frame reaches that frame.
+
+It reaches what the next frame of a running step reaches.
+
+A step that sends a message reaches what the run of that message reaches.
+
+When a certified run of the message ends and the caller resumes, it reaches what that frame does.
+
+A message that selects no precompile reaches what its frame reaches.
+
+A call reaches what the frame of the state it enters reaches.
+
+A creation reaches what the call of its init code reaches, after the account is prepared. -/
+inductive RunReaches (fork : Fork) (Meter : Type) [GasMeter Meter] :
+    BurnStart fork Meter → Evm fork Meter → Prop
+  | here (evm : Evm fork Meter) : RunReaches fork Meter (.frame evm) evm
+  | next {evm after reached : Evm fork Meter} (running : evm.running = true)
+      (h : step fork evm = .ok (.next after)) (tail : RunReaches fork Meter (.frame after) reached) :
+      RunReaches fork Meter (.frame evm) reached
+  | childRun {evm caller reached : Evm fork Meter} {message : Message fork}
+      {resume : Evm fork Meter → Except EvmError (Evm fork Meter)} (running : evm.running = true)
+      (h : step fork evm = .ok (.child caller message resume))
+      (run : RunReaches fork Meter (BurnStart.child caller message) reached) :
+      RunReaches fork Meter (.frame evm) reached
+  | childTail {evm caller child after reached : Evm fork Meter} {message : Message fork}
+      {resume : Evm fork Meter → Except EvmError (Evm fork Meter)} {middle : BurnLog}
+      (running : evm.running = true) (h : step fork evm = .ok (.child caller message resume))
+      (run : RunBurns fork Meter (BurnStart.child caller message) child middle)
+      (resumed : resume child = .ok after) (tail : RunReaches fork Meter (.frame after) reached) :
+      RunReaches fork Meter (.frame evm) reached
+  | body {evm reached : Evm fork Meter} (selected : precompileAddress fork evm.message = none)
+      (run : RunReaches fork Meter (.frame evm) reached) :
+      RunReaches fork Meter (.body evm) reached
+  | call {message : Message fork} {state entry : TransactionState}
+      {substate entrySubstate : Substate} {meter : Meter} {reached : Evm fork Meter}
+      (entered : Entered fork message state substate entry entrySubstate)
+      (run : RunReaches fork Meter (.body (startFrame message entry entrySubstate meter)) reached) :
+      RunReaches fork Meter (.call message state substate meter) reached
+  | create {message : Message fork} {state prepared : TransactionState}
+      {substate : Substate} {meter : Meter} {reached : Evm fork Meter}
+      (preparation : prepareCreation fork state message.currentTarget = .ok prepared)
+      (run : RunReaches fork Meter (.call message prepared substate meter) reached) :
+      RunReaches fork Meter (.create message state substate meter) reached
 
 /-- A certified run ends with the supply of its start, less the total of its log. -/
 theorem RunBurns.supply {start : BurnStart fork Meter} {ended : Evm fork Meter} {log : BurnLog}
@@ -265,16 +312,17 @@ theorem RunBurns.total_eq {start : BurnStart fork Meter} {ended ended' : Evm for
   have := h'.supply
   omega
 
-/-- Each burn that a certified log counts is the burn of a step of SELFDESTRUCT.
+/-- Each burn that a certified log counts is the burn of a step of SELFDESTRUCT that the run takes.
 
-That step runs SELFDESTRUCT from a running frame, in the account the burn is from.
+The run reaches a running frame whose step runs SELFDESTRUCT, in the account the burn is from.
 
-The burn is above 0. -/
+The burn is the burn of that step, and it is above 0. -/
 theorem RunBurns.counted {start : BurnStart fork Meter} {ended : Evm fork Meter} {log : BurnLog}
     {originator beneficiary : Address} {amount : Nat} (h : RunBurns fork Meter start ended log)
     (counted : log.Counted originator beneficiary amount) :
-    ∃ evm after : Evm fork Meter, evm.running = true ∧ step fork evm = .ok (.next after) ∧
-      RunsSelfdestruct evm ∧ originator = evm.message.currentTarget ∧
+    ∃ evm after : Evm fork Meter, RunReaches fork Meter start evm ∧ evm.running = true ∧
+      step fork evm = .ok (.next after) ∧ RunsSelfdestruct evm ∧
+      originator = evm.message.currentTarget ∧
       amount = selfdestructBurn fork evm.state originator beneficiary ∧ amount ≠ 0 := by
   induction h with
   | stopped => exact counted.elim
@@ -282,29 +330,37 @@ theorem RunBurns.counted {start : BurnStart fork Meter} {ended : Evm fork Meter}
   | next running step _ ih =>
     rcases counted with c | c
     · obtain ⟨runs, o, a, nonzero⟩ := counted_stepBurnLog (Meter := Meter) c
-      exact ⟨_, _, running, step, runs, o, a, nonzero⟩
-    · exact ih c
-  | child _ _ _ _ _ ihChild ihTail =>
+      exact ⟨_, _, .here _, running, step, runs, o, a, nonzero⟩
+    · obtain ⟨evm, after, reached, rest⟩ := ih c
+      exact ⟨evm, after, .next running step reached, rest⟩
+  | child running step run resumed _ ihChild ihTail =>
     rcases counted with c | c
-    · exact ihChild c
-    · exact ihTail c
+    · obtain ⟨evm, after, reached, rest⟩ := ihChild c
+      exact ⟨evm, after, .childRun running step reached, rest⟩
+    · obtain ⟨evm, after, reached, rest⟩ := ihTail c
+      exact ⟨evm, after, .childTail running step run resumed reached, rest⟩
   | failedResume => exact counted.elim
-  | bodyFrame _ _ ih => exact ih counted
+  | bodyFrame selected _ ih =>
+    obtain ⟨evm, after, reached, rest⟩ := ih counted
+    exact ⟨evm, after, .body selected reached, rest⟩
   | skipPrecompile => exact counted.elim
   | precompile => exact counted.elim
-  | call _ _ _ ih =>
+  | call entered _ _ ih =>
     split at counted
     · exact counted.elim
-    · exact ih counted
+    · obtain ⟨evm, after, reached, rest⟩ := ih counted
+      exact ⟨evm, after, .call entered reached, rest⟩
   | createRollback => exact counted.elim
-  | createKeep _ _ _ _ ih => exact ih counted
+  | createKeep preparation _ _ _ ih =>
+    obtain ⟨evm, after, reached, rest⟩ := ih counted
+    exact ⟨evm, after, .create preparation reached, rest⟩
 
 /-- From Glamsterdam, a certified log counts no burn, so its total is 0. -/
 theorem RunBurns.total_eq_zero_of_glamsterdam {start : BurnStart fork Meter}
     {ended : Evm fork Meter} {log : BurnLog} (hfork : .glamsterdam ≤ fork)
     (h : RunBurns fork Meter start ended log) : log.total = 0 := by
   refine BurnLog.total_eq_zero_of_not_counted fun originator beneficiary amount counted => ?_
-  obtain ⟨_, _, _, _, _, _, hamount, nonzero⟩ := h.counted counted
+  obtain ⟨_, _, _, _, _, _, _, hamount, nonzero⟩ := h.counted counted
   have early := (of_selfdestructBurn_ne_zero fun zero => nonzero (hamount.trans zero)).2
   exact Nat.lt_irrefl _ (Nat.lt_of_lt_of_le early hfork)
 

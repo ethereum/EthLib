@@ -83,45 +83,9 @@ structure StepRules (fork : Fork) (R : Evm fork Meter → Evm fork Meter → Pro
 def RunsSelfdestruct (evm : Evm fork Meter) : Prop :=
   ∃ within : evm.pc < evm.code.size, Op.ofByte fork evm.code[evm.pc] = some .selfdestruct
 
-instance (evm : Evm fork Meter) : Decidable (RunsSelfdestruct evm) :=
-  if within : evm.pc < evm.code.size then
-    if decoded : Op.ofByte fork evm.code[evm.pc] = some .selfdestruct then
-      isTrue ⟨within, decoded⟩
-    else isFalse fun ⟨_, d⟩ => decoded d
-  else isFalse fun ⟨w, _⟩ => within w
-
-/-- A successful step of SELFDESTRUCT pops its beneficiary, then keeps the state up to reads.
-
-From the frame it reaches, it either ends SELFDESTRUCT with some refund, or halts with an error.
-
-The halt keeps the state up to the records of reads. -/
-theorem selfdestructStep_eq_ok {evm after : Evm fork Meter}
-    (h : selfdestructStep fork evm = .ok after) :
-    ∃ word rest paid, evm.stack.val = word :: rest ∧ StaticStep evm paid ∧
-      ((∃ refund, finishSelfdestruct fork (toAddressMasked word) refund paid = .ok after) ∨
-        StaticStep evm after) := by
-  unfold Evm.selfdestructStep at h
-  by_cases hs : fork ≥ .glamsterdam ∧ evm.message.isStatic = true
-  · simp only [hs, and_self, ↓reduceIte] at h
-    cases h
-  simp only [hs, ↓reduceIte] at h
-  obtain ⟨⟨w, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
-  dsimp only at h
-  rcases hacc : accessAddress e1 (toAddressMasked w) with ⟨cold, e2⟩
-  simp only [hacc] at h
-  have ha := staticStep_accessAddress e1 (toAddressMasked w)
-  rw [hacc] at ha
-  obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
-  have c : StaticStep evm (recordAccountRead e2 (toAddressMasked w)) :=
-    ((StaticStep.of_sameContext (popWord_sameContext h1)).trans ha).trans
-      (staticStep_recordAccountRead _ _)
-  have stack := (popWord_eq_ok h1).1
-  rcases keepReads_eq_ok h with h | ⟨e, rfl⟩
-  · obtain ⟨e3, h3, h⟩ := Base.bind_ok_iff.mp h
-    obtain ⟨e4, h4, h⟩ := Base.bind_ok_iff.mp h
-    exact ⟨w, _, e4, stack, c.trans (.of_sameContext
-      ((chargeGas_sameContext h3).trans (chargeStateGas_sameContext h4))), .inl ⟨_, h⟩⟩
-  · exact ⟨w, _, _, stack, c, .inr (c.trans (staticStep_exceptionalHalt _ _))⟩
+instance instDecidableRunsSelfdestruct (evm : Evm fork Meter) :
+    Decidable (RunsSelfdestruct evm) :=
+  inferInstanceAs (Decidable (∃ _ : _, _))
 
 /-- A refill of state gas keeps the message, the state, the substate and the code. -/
 theorem sameContext_refillStateGas (evm : Evm fork Meter) (amount : Nat) :

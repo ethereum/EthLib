@@ -7,7 +7,9 @@ public import EthLib.Execution.Proofs.Evm.Call.Supply
 
 Only SELFDESTRUCT burns ether in a message, when the account it runs in is its own beneficiary.
 
-From Cancun, only an account created in the transaction burns, and from Glamsterdam none does.
+From Cancun, only an account created in the transaction burns, by [EIP-6780][e6780].
+
+From Glamsterdam, none does, by [EIP-8246][e8246].
 
 A log of burns records each such burn, in the order of the run.
 
@@ -24,6 +26,9 @@ So the next frame of a step has the supply of the frame before, less the burn of
 A step that sends a message gives a caller frame with the supply of the frame before.
 
 Each burn that a log counts comes from a step of SELFDESTRUCT, with the burn of that step.
+
+[e6780]: https://eips.ethereum.org/EIPS/eip-6780#specification
+[e8246]: https://eips.ethereum.org/EIPS/eip-8246#specification
 -/
 
 @[expose] public section
@@ -53,7 +58,7 @@ def BurnLog.total : BurnLog → Nat
   | .append first second => first.total + second.total
   | .rollback _ => 0
 
-/-- The burns of the log that no rollback discards: one from `originator` to `beneficiary`. -/
+/-- The log counts a burn of `amount` from `originator` to `beneficiary` that no rollback discards. -/
 def BurnLog.Counted (originator beneficiary : Address) (amount : Nat) : BurnLog → Prop
   | .empty => False
   | .selfdestruct o b a => o = originator ∧ b = beneficiary ∧ a = amount
@@ -105,7 +110,7 @@ theorem selfdestructBurn_of_staticStep {evm paid : Evm fork Meter}
 
 It reads the beneficiary at the top of the stack of `evm`, and the burn in the state of `evm`.
 
-A step that halts with an error keeps the balance, so the log counts the burn only at balance 0.
+The log counts the burn only when the step leaves the account with balance 0, as a halt keeps it.
 
 A balance that starts at 0 burns nothing anyway. -/
 def selfdestructStepLog (evm after : Evm fork Meter) : BurnLog :=

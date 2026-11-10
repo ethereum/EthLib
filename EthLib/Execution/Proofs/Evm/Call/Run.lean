@@ -212,7 +212,7 @@ That holds at every fork.
 
 A fact `F` relates the start frame of a call to the frame that ends its code or its precompile.
 
-It must hold of each run of a frame whose message runs no precompile.
+It must hold of each run of a frame whose message selects no precompile.
 
 That run may use a runner that ends each call by `Mcall` and each creation by `Mcreate`.
 
