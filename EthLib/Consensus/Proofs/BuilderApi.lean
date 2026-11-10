@@ -9,11 +9,13 @@ public import EthLib.Consensus.Transition.Block
 /-!
 # Proofs: the Builder API
 
-The domain type of the Builder API sets the bit of the application mask.
+The two domain types of the Builder API set the bit of the application mask.
 
-No domain type of a fork sets it, so none of them equals that type.
+No domain type of a fork sets it, so none of them equals either type.
 
-So no domain of a fork equals the domain of the Builder API, at any fork version or validators root.
+So no domain of a fork equals a domain of the Builder API, at any fork version or validators root.
+
+The two domains of the Builder API also differ from each other.
 
 From Bellatrix to Fulu, blinding a body or a block always succeeds and keeps its root.
 
@@ -21,9 +23,9 @@ So a signature over a blinded block is a signature over the full block.
 
 When the block names the proposer of the state, the two checks of a signature agree.
 
-Request authentication has its own application domain, distinct from every protocol domain.
+From Gloas, a bid's execution payment adds at most the proposer's cap to its value.
 
-A bid's execution payment contributes no more than the proposer's cap to its value.
+A payment at or above the cap adds the cap, and a payment below it adds itself.
 -/
 
 @[expose] public section
@@ -39,39 +41,92 @@ theorem DOMAIN_APPLICATION_BUILDER_masked :
 
 /-- No domain type of a fork is the domain type of the Builder API. -/
 theorem DOMAIN_APPLICATION_BUILDER_not_mem :
-    DOMAIN_APPLICATION_BUILDER ∉ protocolDomainTypes := fun mem =>
-  DOMAIN_APPLICATION_BUILDER_masked (domainTypes_not_application _ mem 3)
+    DOMAIN_APPLICATION_BUILDER ∉ protocolDomainTypes :=
+  not_mem_protocolDomainTypes_of_masked 3 DOMAIN_APPLICATION_BUILDER_masked
 
-/-- The request authentication domain type sets the bit of the application mask. -/
+/-- The domain type of request authentication sets the bit of the application mask. -/
 theorem DOMAIN_BUILDER_REQUEST_AUTH_masked :
     DOMAIN_BUILDER_REQUEST_AUTH[3] &&& DOMAIN_APPLICATION_MASK[3] ≠ 0 := by
   decide
 
-/-- No protocol domain type is the domain type for request authentication. -/
+/-- No domain type of a fork is the domain type of request authentication. -/
 theorem DOMAIN_BUILDER_REQUEST_AUTH_not_mem :
-    DOMAIN_BUILDER_REQUEST_AUTH ∉ protocolDomainTypes := fun mem =>
-  DOMAIN_BUILDER_REQUEST_AUTH_masked (domainTypes_not_application _ mem 3)
+    DOMAIN_BUILDER_REQUEST_AUTH ∉ protocolDomainTypes :=
+  not_mem_protocolDomainTypes_of_masked 3 DOMAIN_BUILDER_REQUEST_AUTH_masked
 
-/-- The request authentication domain type differs from the older Builder API domain type. -/
-theorem DOMAIN_BUILDER_REQUEST_AUTH_ne_APPLICATION_BUILDER :
+/-- The domain type of request authentication is not the protocol domain type of builders.
+
+The builder specification warns that the two must not be confused. -/
+theorem DOMAIN_BUILDER_REQUEST_AUTH_ne_DOMAIN_BEACON_BUILDER :
+    DOMAIN_BUILDER_REQUEST_AUTH ≠ DOMAIN_BEACON_BUILDER := by
+  decide
+
+/-- The domain type of request authentication is not that of registrations and bids. -/
+theorem DOMAIN_BUILDER_REQUEST_AUTH_ne_DOMAIN_APPLICATION_BUILDER :
     DOMAIN_BUILDER_REQUEST_AUTH ≠ DOMAIN_APPLICATION_BUILDER := by
   decide
 
-/-- The signature domain of request authentication differs from every protocol domain. -/
-theorem builderRequestAuthDomain_ne {config : Config} {domainType : DomainType} {version : Version}
-    {root : Root} {auth domain : Domain} (protocol : domainType ∈ protocolDomainTypes)
-    (built : builderRequestAuthDomain config = .ok auth)
-    (computed : computeDomain config domainType version root = .ok domain) :
-    auth ≠ domain := by
-  refine computeDomain_ne (first := DOMAIN_BUILDER_REQUEST_AUTH) ?_ built computed
-  intro same
-  exact DOMAIN_BUILDER_REQUEST_AUTH_not_mem (same ▸ protocol)
+/-- No domain of a fork is a domain of the Builder API whose type sets a bit of the mask.
 
-/-- The execution payment contributes at most the cap to the value of a bid. -/
+This holds whatever the fork version and the validators root of the domain of the fork. -/
+theorem builderDomain_ne_of_masked {config : Config} {builderType domainType : DomainType}
+    {version : Version} {root : Root} {builder domain : Domain} (i : Fin 4)
+    (masked : builderType[i] &&& DOMAIN_APPLICATION_MASK[i] ≠ 0)
+    (protocol : domainType ∈ protocolDomainTypes)
+    (built : builderDomain config builderType = .ok builder)
+    (computed : computeDomain config domainType version root = .ok domain) :
+    builder ≠ domain := by
+  refine computeDomain_ne (first := builderType) ?_ built computed
+  intro same
+  exact not_mem_protocolDomainTypes_of_masked i masked (same ▸ protocol)
+
+/-- No domain of a fork is the domain of the Builder API, whatever its fork version and chain. -/
+theorem builderDomain_ne {config : Config} {domainType : DomainType} {version : Version}
+    {root : Root} {builder domain : Domain} (protocol : domainType ∈ protocolDomainTypes)
+    (built : builderDomain config = .ok builder)
+    (computed : computeDomain config domainType version root = .ok domain) :
+    builder ≠ domain :=
+  builderDomain_ne_of_masked 3 DOMAIN_APPLICATION_BUILDER_masked protocol built computed
+
+/-- No domain of a fork is the domain of request authentication, whatever its version and chain. -/
+theorem builderDomain_requestAuth_ne {config : Config} {domainType : DomainType}
+    {version : Version} {root : Root} {auth domain : Domain}
+    (protocol : domainType ∈ protocolDomainTypes)
+    (built : builderDomain config DOMAIN_BUILDER_REQUEST_AUTH = .ok auth)
+    (computed : computeDomain config domainType version root = .ok domain) :
+    auth ≠ domain :=
+  builderDomain_ne_of_masked 3 DOMAIN_BUILDER_REQUEST_AUTH_masked protocol built computed
+
+/-- The domain of request authentication is never that of registrations and bids.
+
+This holds whatever the fork version and the validators root of the second domain. -/
+theorem builderDomain_requestAuth_ne_builderDomain {config : Config} {version : Version}
+    {root : Root} {auth domain : Domain}
+    (built : builderDomain config DOMAIN_BUILDER_REQUEST_AUTH = .ok auth)
+    (computed : computeDomain config DOMAIN_APPLICATION_BUILDER version root = .ok domain) :
+    auth ≠ domain :=
+  computeDomain_ne DOMAIN_BUILDER_REQUEST_AUTH_ne_DOMAIN_APPLICATION_BUILDER built computed
+
+/-- The execution payment adds at most the cap to the value of a bid. -/
 theorem builderBidValue_le (value executionPayment : Gwei) (preferences : BuilderPreferences) :
     builderBidValue value executionPayment preferences ≤
       value.toNat + preferences.maxExecutionPayment.toNat :=
   Nat.add_le_add_left (Nat.min_le_right _ _) _
+
+/-- An execution payment at or above the cap adds exactly the cap to the value of a bid. -/
+theorem builderBidValue_of_cap_le {value executionPayment : Gwei}
+    {preferences : BuilderPreferences}
+    (above : preferences.maxExecutionPayment.toNat ≤ executionPayment.toNat) :
+    builderBidValue value executionPayment preferences =
+      value.toNat + preferences.maxExecutionPayment.toNat := by
+  rw [builderBidValue, Nat.min_eq_right above]
+
+/-- An execution payment at or below the cap adds itself in full to the value of a bid. -/
+theorem builderBidValue_of_le_cap {value executionPayment : Gwei}
+    {preferences : BuilderPreferences}
+    (below : executionPayment.toNat ≤ preferences.maxExecutionPayment.toNat) :
+    builderBidValue value executionPayment preferences = value.toNat + executionPayment.toNat := by
+  rw [builderBidValue, Nat.min_eq_left below]
 
 /-- A zero cap leaves the bid valued at its beacon-chain payment alone. -/
 theorem builderBidValue_zero_cap (value executionPayment : Gwei) :
@@ -82,21 +137,11 @@ theorem builderBidValue_zero_cap (value executionPayment : Gwei) :
 theorem builderBidValue_max_cap (value executionPayment : Gwei) :
     builderBidValue value executionPayment ⟨MAX_EXECUTION_PAYMENT⟩ =
       value.toNat + executionPayment.toNat := by
-  unfold builderBidValue
-  rw [Nat.min_eq_left]
+  apply builderBidValue_of_le_cap
+  have max : MAX_EXECUTION_PAYMENT.toNat = 2 ^ 64 - 1 := by decide
   have bound := executionPayment.toNat_lt
-  change executionPayment.toNat ≤ 18446744073709551615
+  change executionPayment.toNat ≤ MAX_EXECUTION_PAYMENT.toNat
   omega
-
-/-- No domain of a fork is the domain of the Builder API, whatever its fork version and chain. -/
-theorem builderDomain_ne {config : Config} {domainType : DomainType} {version : Version}
-    {root : Root} {builder domain : Domain} (protocol : domainType ∈ protocolDomainTypes)
-    (built : builderDomain config = .ok builder)
-    (computed : computeDomain config domainType version root = .ok domain) :
-    builder ≠ domain := by
-  refine computeDomain_ne (first := DOMAIN_APPLICATION_BUILDER) ?_ built computed
-  intro same
-  exact DOMAIN_APPLICATION_BUILDER_not_mem (same ▸ protocol)
 
 variable {preset : Preset} {fork : Fork}
 

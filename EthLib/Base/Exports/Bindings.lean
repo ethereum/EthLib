@@ -553,7 +553,7 @@ def bindings : List Binding := [
     [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
   ⟨"consensus_builder_bid_value", `EthLib.Consensus.Exports.builderBidValueExport,
     "(value: int, execution_payment: int, max_execution_payment: int) -> int",
-    [], some "SszError"⟩,
+    [], some "ConsensusError"⟩,
   ⟨"consensus_merkle_proof", `EthLib.Consensus.Exports.merkleProofExport,
     "(name: str, fork: str, type: str, data: bytes, gindex: int) -> tuple[bytes, list[bytes]]",
     [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,

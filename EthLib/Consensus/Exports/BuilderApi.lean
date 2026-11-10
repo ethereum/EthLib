@@ -11,7 +11,7 @@ C-ABI exports for Builder API signature checks and capped bid valuation.
 
 From Bellatrix to Fulu, a signed registration or bid carries the key that signed it.
 
-From Gloas, request authentication receives the proposer's key separately.
+From Gloas, a request names the proposer's key outside the signed authentication.
 
 The configuration names the chain, whose genesis fork version enters the domain.
 
@@ -56,7 +56,7 @@ Then come the name of the container and its SSZ bytes. -/
 def isValidBuilderSignatureExport (args : PyValue) : Result PyValue :=
   pyExport isValidBuilderSignatureOf args
 
-/-- Whether a Gloas request authentication carries a signature of the endpoint's proposer key. -/
+/-- Whether a proposer key signed a Gloas request authentication. -/
 def verifyBuilderRequestAuthSignatureOf
     (args : String × String × Option PyValue × Cryptography.Bls.BLSPubkey × ByteArray) :
     Result Bool := do
@@ -68,7 +68,7 @@ def verifyBuilderRequestAuthSignatureOf
   let signed ← runSsz "input rejected" (SszType.deserialize SignedBuilderRequestAuth data)
   runSsz "root rejected" (verifyBuilderRequestAuthSignature config .bls signed pubkey)
 
-/-- Check a Gloas request signature from its chain, fork, replacements, proposer key and SSZ. -/
+/-- Whether a proposer key signed a Gloas request authentication given in SSZ. -/
 @[export eth_consensus_verify_builder_request_auth_signature]
 def verifyBuilderRequestAuthSignatureExport (args : PyValue) : Result PyValue :=
   pyExport verifyBuilderRequestAuthSignatureOf args

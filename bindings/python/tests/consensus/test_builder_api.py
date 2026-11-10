@@ -278,7 +278,7 @@ def _auth_message(data: bytes = b"builder.example.com", slot: int = 1) -> bytes:
 
 
 def _auth_root(message: bytes) -> bytes:
-    """The authentication root from the byte-list limit, its length and the slot."""
+    """The root of request authentication: its padded data and length, then its slot."""
     data = message[12:]
     chunks = [data[i : i + 32].ljust(32, b"\0") for i in range(0, len(data), 32)]
     chunks += [ZERO] * (128 - len(chunks))
@@ -287,7 +287,7 @@ def _auth_root(message: bytes) -> bytes:
 
 
 def _auth_domain(kind: bytes = bytes([11, 0, 0, 1])) -> bytes:
-    """The Gloas request domain with compute_domain's default fork version and validators root."""
+    """A domain at the mainnet genesis fork version, with a zero validators root."""
     return kind + _builder_domain()[4:]
 
 
@@ -297,12 +297,12 @@ def _signed_auth(message: bytes | None = None, domain: bytes | None = None) -> b
         message = _auth_message()
     if domain is None:
         domain = _auth_domain()
-    return struct.pack("<I", 100) + _sign(_auth_root(message), domain) + message
+    return struct.pack("<I", 4 + 96) + _sign(_auth_root(message), domain) + message
 
 
 @pytest.mark.parametrize("fork", ["glamsterdam", "hegota"])
 def test_gloas_examples(fork: str):
-    # Published SSZ and JSON examples, byte for byte at the existing builder-specs pin.
+    # The Gloas examples of the builder specification, against roots computed here.
     signed = _example("gloas", "signed_builder_request_auth")
     message, signature = _split(signed)
     expected = _example_json("gloas", "signed_builder_request_auth")
@@ -332,7 +332,11 @@ def test_builder_request_auth_signature(fork: str):
     assert consensus.verify_builder_request_auth_signature("mainnet", fork, PUBKEY, _signed_auth())
 
 
-@pytest.mark.parametrize("kind", [bytes(4), bytes([0, 0, 0, 1]), bytes([11, 0, 0, 0])])
+@pytest.mark.parametrize(
+    "kind",
+    [bytes(4), bytes([0, 0, 0, 1]), bytes([11, 0, 0, 0])],
+    ids=["beacon proposer", "registrations and bids", "beacon builder"],
+)
 def test_builder_request_auth_wrong_domain(kind: bytes):
     signed = _signed_auth(domain=_auth_domain(kind))
     assert not consensus.verify_builder_request_auth_signature(
@@ -392,13 +396,30 @@ def test_builder_request_auth_data_limit():
     ],
 )
 def test_no_gloas_builder_container_before_gloas(kind: str):
-    with raises(ERROR, f"no container {kind} at fusaka"):
+    with raises(ERROR, f"no container {kind} at fusaka") as info:
         consensus.ssz_static("mainnet", "fusaka", kind, b"")
+    assert info.value.code == 0
 
 
 def test_no_request_authentication_before_gloas():
-    with raises(ERROR, "no builder request authentication at fusaka"):
+    with raises(ERROR, "no builder request authentication at fusaka") as info:
         consensus.verify_builder_request_auth_signature("mainnet", "fusaka", PUBKEY, b"")
+    assert info.value.code == 0
+
+
+def test_builder_request_auth_short_key():
+    with raises(ERROR, "expected 48 bytes, got 47") as info:
+        consensus.verify_builder_request_auth_signature(
+            "mainnet", "glamsterdam", PUBKEY[:47], _signed_auth()
+        )
+    assert info.value.code == 0
+
+
+def test_builder_request_auth_over_limit():
+    with raises(ERROR, "input rejected: EthLib.Serialization.Ssz.Err.overLimit 4096 4097"):
+        consensus.verify_builder_request_auth_signature(
+            "mainnet", "glamsterdam", PUBKEY, _signed_auth(_auth_message(bytes(4097)))
+        )
 
 
 @pytest.mark.parametrize(
@@ -412,3 +433,14 @@ def test_no_request_authentication_before_gloas():
 )
 def test_builder_bid_value(value: int, payment: int, cap: int, expected: int):
     assert consensus.builder_bid_value(value, payment, cap) == expected
+
+
+@pytest.mark.parametrize("value", [2**64, 2**64 + 1])
+@pytest.mark.parametrize("position", range(3))
+def test_builder_bid_value_out_of_range(value: int, position: int):
+    # Lean reads each amount as a 64-bit number, and rejects a larger one instead of reducing it.
+    amounts = [1, 5, 3]
+    amounts[position] = value
+    with raises(consensus.ConsensusError, f"expected an int below {2**64}, got {value}") as info:
+        consensus.builder_bid_value(*amounts)
+    assert info.value.code == 0

@@ -423,7 +423,7 @@
   "Whether the signature of a signed message of the Builder API verifies."
 
 #define DOC_consensus_verify_builder_request_auth_signature \
-  "Check a Gloas request signature from its chain, fork, replacements, proposer key and SSZ."
+  "Whether a proposer key signed a Gloas request authentication given in SSZ."
 
 #define DOC_consensus_builder_bid_value \
   "The value of a builder's bid from its two payments and the proposer's execution payment cap."

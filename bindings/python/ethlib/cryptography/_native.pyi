@@ -566,7 +566,7 @@ def consensus_is_valid_builder_signature(name: str, fork: str, config: dict[str,
     ...
 
 def consensus_verify_builder_request_auth_signature(name: str, fork: str, config: dict[str, Any] | None, pubkey: bytes, data: bytes) -> bool:
-    """Check a Gloas request signature from its chain, fork, replacements, proposer key and SSZ."""
+    """Whether a proposer key signed a Gloas request authentication given in SSZ."""
     ...
 
 def consensus_builder_bid_value(value: int, execution_payment: int, max_execution_payment: int) -> int:

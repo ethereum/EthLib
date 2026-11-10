@@ -30,14 +30,19 @@ The proposer signs the same root for both, so one signature serves the two block
 
 From Gloas the protocol carries the bids of builders, and the Builder API has other messages.
 
-Its request authentication uses a separate application domain.
+A proposer signs the authentication of its requests under a second application domain.
 
-The [Gloas builder] document gives that domain and the cap on a bid's execution payment.
+That domain also reads the genesis fork version and a zero root, so one check serves both domains.
 
 The [signing] rules come from the builder specification.
 
+Its [Gloas signing] rules add the second domain.
+
+A proposer counts a bid's execution payment up to its own cap, as the [Gloas valuation] rules say.
+
 [signing]: https://github.com/ethereum/builder-specs/blob/fce64468a81a87892d7cb9b4858272bb3d010e50/specs/bellatrix/builder.md#signing
-[Gloas builder]: https://github.com/ethereum/builder-specs/blob/fce64468a81a87892d7cb9b4858272bb3d010e50/specs/gloas/builder.md
+[Gloas signing]: https://github.com/ethereum/builder-specs/blob/fce64468a81a87892d7cb9b4858272bb3d010e50/specs/gloas/builder.md#signing
+[Gloas valuation]: https://github.com/ethereum/builder-specs/blob/fce64468a81a87892d7cb9b4858272bb3d010e50/specs/gloas/builder.md#max_execution_payment
 -/
 
 @[expose] public section
@@ -74,47 +79,55 @@ def BeaconBlock.blind (block : BeaconBlock preset fork) (range : HasBuilderApi f
 It is the single bit of the application mask, so no domain type of a fork equals it. -/
 def DOMAIN_APPLICATION_BUILDER : DomainType := #v[0x00, 0x00, 0x00, 0x01]
 
-/-- From Gloas: the application domain type for request authentication. -/
+/-- From Gloas: the application domain type of the authentication of a request to a builder.
+
+It sets the bit of the application mask, so no domain type of a fork equals it. -/
 def DOMAIN_BUILDER_REQUEST_AUTH : DomainType := #v[0x0B, 0x00, 0x00, 0x01]
 
-/-- The request authentication domain at the genesis fork version, with a zero validators root. -/
-def builderRequestAuthDomain (config : Config) : Except Err Domain :=
-  computeDomain config DOMAIN_BUILDER_REQUEST_AUTH
+/-- The domain of a type of messages of the Builder API on a chain.
 
-/-- Whether the endpoint's proposer key signed the request authentication.
-
-This checks the signature alone; the endpoint also checks the agreed data and the proposal slot. -/
-def verifyBuilderRequestAuthSignature (config : Config) (checks : SignatureChecks)
-    (signed : SignedBuilderRequestAuth) (pubkey : BLSPubkey) : Except Err Bool := do
-  let signingRoot ← computeSigningRoot signed.message (← builderRequestAuthDomain config)
-  return checks.verify (packBytes pubkey) (packBytes signingRoot) (packBytes signed.signature)
-
-/-- A bid's value to the proposer, in Gwei, with its execution payment capped by preferences.
-
-The sum is a natural number, so two 64-bit payments do not wrap when compared. -/
-def builderBidValue (value executionPayment : Gwei) (preferences : BuilderPreferences) : Nat :=
-  value.toNat + min executionPayment.toNat preferences.maxExecutionPayment.toNat
-
-/-- A Gloas bid's value to the proposer under its per-builder preferences, in Gwei. -/
-def ExecutionPayloadBid.proposerValue (bid : ExecutionPayloadBid preset fork)
-    (preferences : BuilderPreferences) : Nat :=
-  builderBidValue bid.value bid.executionPayment preferences
-
-/-- The domain of the messages of the Builder API on a chain.
+By default the type is that of registrations and bids.
 
 It is the domain of its type at the genesis fork version, with a zero root of the validators.
 
 The builder specification passes no fork version and no root, at every fork. -/
-def builderDomain (config : Config) : Except Err Domain :=
-  computeDomain config DOMAIN_APPLICATION_BUILDER
+def builderDomain (config : Config) (domainType : DomainType := DOMAIN_APPLICATION_BUILDER) :
+    Except Err Domain :=
+  computeDomain config domainType
 
-/-- Whether a key signed an object under the domain of the Builder API.
+/-- Whether a key signed an object under a domain of the Builder API.
+
+By default the domain is that of registrations and bids.
 
 It fails when the root of the object or of the domain fails. -/
 def verifyBuilderApiSignature {α : Type} [SszType α] (config : Config) (checks : SignatureChecks)
-    (object : α) (pubkey : BLSPubkey) (signature : BLSSignature) : Except Err Bool := do
-  let signingRoot ← computeSigningRoot object (← builderDomain config)
+    (object : α) (pubkey : BLSPubkey) (signature : BLSSignature)
+    (domainType : DomainType := DOMAIN_APPLICATION_BUILDER) : Except Err Bool := do
+  let signingRoot ← computeSigningRoot object (← builderDomain config domainType)
   return checks.verify (packBytes pubkey) (packBytes signingRoot) (packBytes signature)
+
+/-- From Gloas: whether a proposer key signed the authentication of a request.
+
+The request names that key outside the signed message.
+
+This checks the signature alone, and the builder also checks the agreed data and the slot.
+
+The signature covers the data and the slot, not the preferences that a request may carry. -/
+def verifyBuilderRequestAuthSignature (config : Config) (checks : SignatureChecks)
+    (signed : SignedBuilderRequestAuth) (pubkey : BLSPubkey) : Except Err Bool :=
+  verifyBuilderApiSignature config checks signed.message pubkey signed.signature
+    DOMAIN_BUILDER_REQUEST_AUTH
+
+/-- From Gloas: a bid's value to the proposer, in Gwei, with its execution payment capped.
+
+The sum is a natural number, so two 64-bit amounts add without wrapping. -/
+def builderBidValue (value executionPayment : Gwei) (preferences : BuilderPreferences) : Nat :=
+  value.toNat + min executionPayment.toNat preferences.maxExecutionPayment.toNat
+
+/-- From Gloas: a bid's value to the proposer under its preferences for the builder, in Gwei. -/
+def ExecutionPayloadBid.proposerValue (bid : ExecutionPayloadBid preset fork)
+    (preferences : BuilderPreferences) : Nat :=
+  builderBidValue bid.value bid.executionPayment preferences
 
 /-- Whether the key of a registration signed it, under the domain of the Builder API.
 

@@ -559,7 +559,7 @@ py_consensus_builder_bid_value(
   PyObject* self,
   PyObject* args
 ) {
-  return call_pyvalue_export(eth_consensus_builder_bid_value, args, 3, SSZ_ERROR);
+  return call_pyvalue_export(eth_consensus_builder_bid_value, args, 3, CONSENSUS_ERROR);
 }
 
 PyObject*

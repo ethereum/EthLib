@@ -227,9 +227,9 @@ Their SHA-256 digests are:
 
 The directory `builder_api/` holds the examples of the Builder API, from `ethereum/builder-specs` at commit `fce64468a81a87892d7cb9b4858272bb3d010e50`.
 They are SSZ examples and their JSON forms in `examples/<fork>/`, copied byte for byte under their fork.
-From Bellatrix to Fulu, every fork has a signed bid and a signed blinded block.
+From Bellatrix to Fulu, they are the files `signed_*`: every fork has a signed bid and a signed blinded block.
 Bellatrix also has a signed validator registration.
-Gloas has request authentication, builder preferences and a preferences request, in their SSZ and JSON forms.
+For Gloas they are every file of `examples/gloas/`: a signed request authentication, builder preferences and a preferences request.
 
 `bindings/python/tests/consensus/test_builder_api.py` decodes each example and encodes it again.
 It checks signed roots against the roots of their message and signature, and Gloas roots with independent SSZ calculations.

@@ -5,7 +5,7 @@ public import EthLib.Consensus.Containers.Block
 /-!
 # `Consensus.Containers.BuilderApi`
 
-The containers of the Builder API, from Bellatrix to Gloas.
+The containers of the Builder API, from Bellatrix on.
 
 A validator registers its fee recipient and its gas limit with builders.
 
@@ -19,7 +19,11 @@ Its documents for [Capella], [Deneb] and [Electra] extend the bid and the blinde
 
 The [Fulu] document changes only the blobs bundle, so Fulu keeps the bid and body of Electra.
 
-From Gloas, request authentication and per-builder preferences replace these messages.
+From Gloas the bid is part of the protocol.
+
+The proposer preferences of the protocol replace registrations.
+
+The Builder API then adds the authentication of a request and preferences for one builder.
 
 The [Gloas validator] document gives their containers.
 
@@ -42,7 +46,7 @@ open Base Cryptography.Bls Serialization.Ssz
 
 variable {preset : Preset} {fork : Fork}
 
-/-- Whether a fork has the Builder API of this module: from Bellatrix to Fulu. -/
+/-- Whether a fork has the Builder API of registrations and bids: from Bellatrix to Fulu. -/
 abbrev HasBuilderApi (fork : Fork) : Prop := .bellatrix ≤ fork ∧ fork < .glamsterdam
 
 /-- The largest authentication data of a Gloas builder request, in bytes. -/
@@ -53,7 +57,7 @@ def MAX_EXECUTION_PAYMENT : Gwei := UINT64_MAX
 
 /-- From Gloas: the agreed authentication data and the proposal slot of a builder request. -/
 structure BuilderRequestAuth where
-  /-- The data agreed with the builder, or its default hostname. -/
+  /-- The data agreed with the builder, or by default the hostname of the builder's URL. -/
   data : SszList UInt8 MAX_BUILDER_AUTH_DATA_SIZE
   /-- The proposal slot the request authenticates. -/
   slot : Slot
@@ -86,7 +90,9 @@ instance : SszType BuilderPreferences :=
 structure BuilderPreferencesRequest where
   /-- The preferences submitted to this builder. -/
   preferences : BuilderPreferences
-  /-- The authentication data and the proposal slot that the preferences apply to. -/
+  /-- The signed authentication, whose slot is the proposal slot the preferences apply to.
+
+  Its signature does not cover the preferences. -/
   auth : SignedBuilderRequestAuth
 
 instance : SszType BuilderPreferencesRequest :=
