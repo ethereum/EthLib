@@ -39,9 +39,9 @@ Then an event of the game, read on the state the reduction sees, is at most as l
 
 This holds until the message at position `j` is signed.
 
-In a game within `qK` key hash calls, a key other than the honest one has the scalar 0 rarely.
+Fix the secret and the scalar of the honest key hash, in a game within `qK` key hash calls.
 
-That probability is at most `(qK - 1) / |F|`.
+Then some other key gets the scalar 0 with probability at most `(qK - 1) / |F|`.
 
 No bound on the aggregate game is proved yet.
 -/
