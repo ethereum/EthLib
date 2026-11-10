@@ -5,6 +5,7 @@ public import EthLib.Engine.Proofs.BuildPayload
 public import EthLib.Engine.Proofs.ExecutionEngine
 public import EthLib.Engine.Proofs.ForkchoiceUpdated
 public import EthLib.Engine.Proofs.GetBlobs
+public import EthLib.Engine.Proofs.GetPayload
 public import EthLib.Engine.Proofs.Json
 public import EthLib.Engine.Proofs.Jwt
 public import EthLib.Engine.Proofs.NewPayload

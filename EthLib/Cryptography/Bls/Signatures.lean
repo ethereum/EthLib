@@ -162,29 +162,37 @@ def popProve (sk : SecretKey) : Except BlsError BLSSignature :=
 It is the core verification of the public key as message, under the public key tag. -/
 def popVerify (pk proof : ByteArray) : Bool := coreVerify pk pk proof POP_DST
 
-/-- The sum of the public keys, after the size check, key validation and decompression of each.
+/-- Add one validated public key to a running point sum.
+
+It rejects a key that is not 48 bytes, and reports its size.
+
+It rejects a key that fails key validation (§2.5), and reports its position in the list. -/
+def addPubkeyPoint (agg : G1) (entry : ByteArray × Nat) : Except BlsError G1 := do
+  let (pk, i) := entry
+  if pk.size ≠ 48 then throw (.badPubkeySize pk.size)
+  match G1.keyValidatePoint pk with
+  | .error _ => throw (.invalidPubkey (some i))
+  | .ok p => return G1.add agg p
+
+/-- The sum of the validated public keys, as a point of `G1`.
 
 These are the first steps of fast aggregate verification, §3.3.4, with key validation added.
 
-It returns nothing on an empty list and on any key that fails a check. -/
-def aggregatePubkeyPoint (pubkeys : Array ByteArray) : Option G1 := Id.run do
-  if pubkeys.isEmpty then return none
-  let mut agg : G1 := G1.zero
-  for pk in pubkeys do
-    if pk.size ≠ 48 || !(G1.keyValidate pk).isOk then return none
-    match G1.uncompress pk with
-    | .error _ => return none
-    | .ok p => agg := G1.add agg p
-  return some agg
+It fails on an empty list, on a key that is not 48 bytes and on a key that fails key validation. -/
+def aggregatePubkeyPoint (pubkeys : Array ByteArray) : Except BlsError G1 := do
+  if pubkeys.isEmpty then throw .emptyPubkeyList
+  pubkeys.zipIdx.foldlM addPubkeyPoint G1.zero
 
 /-- Sum the public keys, then verify the signature under the sum (§3.3.4).
 
-It returns `false` on an empty list and on any key that fails key validation. -/
+It returns `false` on an empty list and on a key that is not 48 bytes.
+
+It also returns `false` on a key that fails key validation. -/
 def fastAggregateVerify
     (pubkeys : Array ByteArray) (msg : ByteArray) (sigBytes : ByteArray) : Bool :=
   match aggregatePubkeyPoint pubkeys with
-  | none => false
-  | some agg => verify (G1.compress agg) msg sigBytes
+  | .error _ => false
+  | .ok agg => verify (G1.compress agg) msg sigBytes
 
 /-! ## Ethereum wrappers -/
 
@@ -192,19 +200,7 @@ def fastAggregateVerify
 
 It fails on an empty list and on any invalid key. -/
 def ethAggregatePubkeys (pubkeys : Array ByteArray) : Except BlsError ByteArray := do
-  if pubkeys.isEmpty then
-    throw .emptyPubkeyList
-  let mut agg : G1 := G1.zero
-  for h : i in [:pubkeys.size] do
-    let pk := pubkeys[i]
-    if pk.size ≠ 48 then
-      throw (.badPubkeySize pk.size)
-    if !(G1.keyValidate pk).isOk then
-      throw (.invalidPubkey (some i))
-    match G1.uncompress pk with
-    | .error _ => throw (.invalidPubkey (some i))
-    | .ok p => agg := G1.add agg p
-  return G1.compress agg
+  return G1.compress (← aggregatePubkeyPoint pubkeys)
 
 /-- The fast aggregate verification of Ethereum.
 

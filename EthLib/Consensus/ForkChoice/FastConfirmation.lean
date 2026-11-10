@@ -284,6 +284,8 @@ It starts from the weight of the committees since its parent, plus the boost.
 
 It takes off the votes for the parent from the empty slots before the block, less the adversary.
 
+That discount exceeding the weight of the committees since the parent is an error.
+
 It halves the result.
 
 It adds the weight of the adversary. -/
@@ -298,10 +300,11 @@ def computeSafetyThreshold (head : Root) (root : Root) (balanceSource : BeaconSt
     (← (subChecked currentSlot 1).mapError .arith)
   let supportDiscount ← store.computeEmptySlotSupportDiscount config head balanceSource root
   let adversarialWeight ← store.getAdversarialWeight config head balanceSource root
+  if supportDiscount > maximumSupport then throw (.supportDiscountAboveMaximum root)
   let withBoost ← (addChecked maximumSupport proposerScore).mapError .arith
   let doubled ← (mulChecked 2 adversarialWeight).mapError .arith
   let bound ← (addChecked withBoost doubled).mapError .arith
-  return if supportDiscount < bound then (bound - supportDiscount) / 2 else 0
+  return (bound - supportDiscount) / 2
 
 /-- Whether a block is safe for LMD-GHOST: its votes exceed its safety threshold.
 

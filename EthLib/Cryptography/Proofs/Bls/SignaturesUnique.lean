@@ -27,20 +27,6 @@ namespace EthLib.Cryptography.Bls
 
 open scoped EthLib.Cryptography.Bls.Fr
 
-/-- Two valid points with the same group element have the same compressed form. -/
-theorem G1.compress_congr {P P' : G1} (hP : G1.Valid P) (hP' : G1.Valid P')
-    (h : G1.toPoint P = G1.toPoint P') : G1.compress P = G1.compress P' := by
-  obtain ⟨hi, ha⟩ := G1.toAffine_congr hP hP' h
-  unfold G1.compress
-  rw [hi, ha]
-
-/-- Two valid points with the same group element have the same compressed form. -/
-theorem G2.compress_congr {Q Q' : G2} (hQ : G2.Valid Q) (hQ' : G2.Valid Q')
-    (h : G2.toPoint Q = G2.toPoint Q') : G2.compress Q = G2.compress Q' := by
-  obtain ⟨hi, ha⟩ := G2.toAffine_congr hQ hQ' h
-  unfold G2.compress
-  rw [hi, ha]
-
 namespace Signatures
 
 /-- The scalar equation of a verification fixes the signature scalar. -/

@@ -33,7 +33,13 @@ A discount is then taken off.
 
 It comes from the votes for the parent in the empty slots before the block.
 
-Its share of the adversary is the committee weight of `W`, divided by 100 and rounded down.
+A discount above the committee weight since the parent is an error of the store.
+
+For a block at or before the current slot, those empty slots lie in that range.
+
+Their votes then weigh no more than the range, so that error never occurs.
+
+The store's share of the adversary is the committee weight of `W`, divided by 100 and rounded down.
 
 That share is then multiplied by the threshold in percent, and the equivocators are taken off.
 
@@ -162,6 +168,66 @@ theorem getAdversarialWeight_of_not_lt {head root : Root} {balanceSource : Beaco
   simp [getAdversarialWeight, slotOk, blockOk, epochOk, parentEpochOk, notLater, lastOk,
     bind, Except.bind, pure, Except.pure, Except.mapError]
 
+/-- The store's safety threshold from its terms, each from its own step.
+
+A discount above the committee weight since the parent is an error.
+
+Otherwise the threshold adds the weight, the boost and twice the adversary, less the discount.
+
+It then halves that sum, rounding down.
+
+Each addition and the doubling can still fail, by leaving 64 bits. -/
+theorem computeSafetyThreshold_of_steps {head root : Root}
+    {balanceSource : BeaconState preset fork} {currentSlot firstSlot lastSlot : Slot}
+    {block parentBlock : BeaconBlock preset fork}
+    {proposerScore maximumSupport discount adversary : Gwei}
+    (slotOk : store.getCurrentSlot config = .ok currentSlot)
+    (blockOk : store.block root = .ok block)
+    (parentOk : store.block block.parentRoot = .ok parentBlock)
+    (boostOk : computeProposerScore config balanceSource = .ok proposerScore)
+    (firstOk : addChecked parentBlock.slot 1 = .ok firstSlot)
+    (lastOk : subChecked currentSlot 1 = .ok lastSlot)
+    (weightOk : store.computeCommitteeWeightBetweenSlots head balanceSource firstSlot lastSlot =
+      .ok maximumSupport)
+    (discountOk :
+      store.computeEmptySlotSupportDiscount config head balanceSource root = .ok discount)
+    (adversaryOk : store.getAdversarialWeight config head balanceSource root = .ok adversary) :
+    store.computeSafetyThreshold config head root balanceSource =
+      if discount > maximumSupport then .error (.supportDiscountAboveMaximum root) else do
+        let withBoost ← (addChecked maximumSupport proposerScore).mapError .arith
+        let doubled ← (mulChecked 2 adversary).mapError .arith
+        let bound ← (addChecked withBoost doubled).mapError .arith
+        return (bound - discount) / 2 := by
+  simp only [computeSafetyThreshold, slotOk, blockOk, parentOk, boostOk, firstOk, lastOk,
+    weightOk, discountOk, adversaryOk, Except.mapError, bind, Except.bind]
+  split <;> rfl
+
+/-- A safety threshold that the store computes has a discount at most the weight since the parent.
+-/
+theorem discount_le_of_computeSafetyThreshold {head root : Root}
+    {balanceSource : BeaconState preset fork} {currentSlot firstSlot lastSlot : Slot}
+    {block parentBlock : BeaconBlock preset fork}
+    {proposerScore maximumSupport discount adversary threshold : Gwei}
+    (slotOk : store.getCurrentSlot config = .ok currentSlot)
+    (blockOk : store.block root = .ok block)
+    (parentOk : store.block block.parentRoot = .ok parentBlock)
+    (boostOk : computeProposerScore config balanceSource = .ok proposerScore)
+    (firstOk : addChecked parentBlock.slot 1 = .ok firstSlot)
+    (lastOk : subChecked currentSlot 1 = .ok lastSlot)
+    (weightOk : store.computeCommitteeWeightBetweenSlots head balanceSource firstSlot lastSlot =
+      .ok maximumSupport)
+    (discountOk :
+      store.computeEmptySlotSupportDiscount config head balanceSource root = .ok discount)
+    (adversaryOk : store.getAdversarialWeight config head balanceSource root = .ok adversary)
+    (result : store.computeSafetyThreshold config head root balanceSource = .ok threshold) :
+    discount ≤ maximumSupport := by
+  rw [computeSafetyThreshold_of_steps slotOk blockOk parentOk boostOk firstOk lastOk weightOk
+    discountOk adversaryOk] at result
+  split at result
+  · cases result
+  · rename_i notAbove
+    exact UInt64.not_lt.mp notAbove
+
 /-- The store's safety threshold, doubled, covers its terms, up to the discount and one Gwei.
 
 The terms are the committee weight since the parent, the boost and twice the adversary.
@@ -184,40 +250,23 @@ theorem computeSafetyThreshold_bound {head root : Root} {balanceSource : BeaconS
     (result : store.computeSafetyThreshold config head root balanceSource = .ok threshold) :
     maximumSupport.toNat + proposerScore.toNat + 2 * adversary.toNat ≤
       2 * threshold.toNat + discount.toNat + 1 := by
-  simp only [computeSafetyThreshold, bind_ok_iff, mapError_ok_iff] at result
-  obtain ⟨c, cOk, b, bOk, pb, pbOk, ps, psOk, f, fOk, l, lOk, m, mOk, d, dOk, a, aOk,
-    wb, wbOk, db, dbOk, bd, bdOk, done⟩ := result
-  rw [slotOk, Except.ok.injEq] at cOk
-  subst cOk
-  rw [blockOk, Except.ok.injEq] at bOk
-  subst bOk
-  rw [parentOk, Except.ok.injEq] at pbOk
-  subst pbOk
-  rw [boostOk, Except.ok.injEq] at psOk
-  subst psOk
-  rw [firstOk, Except.ok.injEq] at fOk
-  subst fOk
-  rw [lastOk, Except.ok.injEq] at lOk
-  subst lOk
-  rw [weightOk, Except.ok.injEq] at mOk
-  subst mOk
-  rw [discountOk, Except.ok.injEq] at dOk
-  subst dOk
-  rw [adversaryOk, Except.ok.injEq] at aOk
-  subst aOk
-  rw [addChecked_ok_iff] at wbOk bdOk
-  rw [mulChecked_ok_iff] at dbOk
-  simp only [pure, Except.pure, Except.ok.injEq] at done
-  subst done
+  rw [computeSafetyThreshold_of_steps slotOk blockOk parentOk boostOk firstOk lastOk weightOk
+    discountOk adversaryOk] at result
+  split at result
+  · cases result
+  rename_i notAbove
+  simp only [bind_ok_iff, mapError_ok_iff, pure, Except.pure, Except.ok.injEq] at result
+  obtain ⟨withBoost, withBoostOk, doubled, doubledOk, bound, boundOk, rfl⟩ := result
+  rw [addChecked_ok_iff] at withBoostOk boundOk
+  rw [mulChecked_ok_iff] at doubledOk
   have two : UInt64.toNat 2 = 2 := rfl
-  rw [two] at dbOk
-  split_ifs with lower
-  · rw [UInt64.toNat_div, UInt64.toNat_sub_of_le _ _ (UInt64.le_of_lt lower), two]
-    rw [UInt64.lt_iff_toNat_lt] at lower
+  rw [two] at doubledOk
+  rw [gt_iff_lt, UInt64.lt_iff_toNat_lt] at notAbove
+  have le : discount ≤ bound := by
+    rw [UInt64.le_iff_toNat_le]
     omega
-  · rw [UInt64.lt_iff_toNat_lt] at lower
-    simp only [UInt64.toNat_zero]
-    omega
+  rw [UInt64.toNat_div, UInt64.toNat_sub_of_le _ _ le, two]
+  omega
 
 /-- The terms of a safety threshold that the store computes, each from its own step.
 
@@ -317,6 +366,57 @@ theorem stake_le_of_getTotalBalance {balanceSource : BeaconState preset fork}
   rw [total]
   exact le_max_of_le_right (stake_mono fun v member => List.mem_toFinset.mpr (among v member))
 
+/-- The store's weight of the committees of a range covers the stake of active members.
+
+A member weighs its effective balance in the source of balances.
+
+It is active when that source holds it, active in the epoch of that source.
+
+Each member of the set must be in every set of members that the store reads for the range. -/
+theorem stake_le_computeCommitteeWeightBetweenSlots_of_reads {head : Root}
+    {balanceSource : BeaconState preset fork} {startSlot endSlot : Slot} {weight : Gwei}
+    {W : Finset ValidatorIndex}
+    (weightOk : store.computeCommitteeWeightBetweenSlots head balanceSource startSlot endSlot =
+      .ok weight)
+    (inside : ∀ v ∈ W, (∀ participants,
+      store.getCommitteesBetweenSlots head startSlot endSlot = .ok participants →
+        v ∈ participants) ∧ ∃ validator,
+      balanceSource.validators.data[v.toNat]? = some validator ∧
+        isActiveValidator validator (getCurrentEpoch balanceSource) = true) :
+    stake (fun v => balanceAt balanceSource v.toNat) W ≤ weight.toNat := by
+  by_cases empty : endSlot < startSlot
+  · have : W = ∅ := Finset.eq_empty_of_forall_notMem fun v member => by
+      have := (inside v member).1 ∅ (getCommitteesBetweenSlots_of_gt empty)
+      simp at this
+    simp [this, stake_empty]
+  have notGt : ¬startSlot > endSlot := empty
+  simp only [computeCommitteeWeightBetweenSlots, bind_ok_iff, pure, Except.pure,
+    Except.ok.injEq] at weightOk
+  obtain ⟨⟨_, members⟩, weightOk, rfl⟩ := weightOk
+  simp only [computeCommitteeWeightAndMembers, notGt, ↓reduceIte, bind_ok_iff] at weightOk
+  obtain ⟨covered, -, weightOk⟩ := weightOk
+  cases covered
+  · -- The members of the committees count once each, when active.
+    simp only [Bool.false_eq_true, ↓reduceIte, bind_ok_iff, mapError_ok_iff] at weightOk
+    obtain ⟨found, foundOk, active, activeOk, total, totalOk, final⟩ := weightOk
+    simp only [pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at final
+    obtain ⟨rfl, -⟩ := final
+    refine stake_le_of_getTotalBalance totalOk fun v member => ?_
+    obtain ⟨inParticipants, validator, atIndex, isActive⟩ := inside v member
+    refine mem_filterM_ok_of_test activeOk
+      (Std.TreeSet.mem_toList.mpr (inParticipants found foundOk)) ?_
+    simp [validatorAt, atIndex, isActive, bind, Except.bind, pure, Except.pure]
+  · -- A whole epoch weighs the total active balance, which counts every active validator.
+    simp only [↓reduceIte, bind_ok_iff, mapError_ok_iff] at weightOk
+    obtain ⟨total, totalOk, final⟩ := weightOk
+    simp only [pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at final
+    obtain ⟨rfl, -⟩ := final
+    refine stake_le_of_getTotalBalance totalOk fun v member => ?_
+    obtain ⟨-, validator, atIndex, isActive⟩ := inside v member
+    simp only [getActiveValidatorIndices, List.mem_filterMap, Option.ite_none_right_eq_some,
+      Option.some.injEq, List.mem_zipIdx_iff_getElem?, Prod.exists]
+    exact ⟨validator, v.toNat, by simpa using atIndex, isActive, by simp⟩
+
 /-- The store's weight of the committees of a range covers the stake of their active members.
 
 A member weighs its effective balance in the source of balances.
@@ -332,40 +432,134 @@ theorem stake_le_computeCommitteeWeightBetweenSlots {head : Root}
       balanceSource.validators.data[v.toNat]? = some validator ∧
         isActiveValidator validator (getCurrentEpoch balanceSource) = true) :
     stake (fun v => balanceAt balanceSource v.toNat) W ≤ weight.toNat := by
-  by_cases empty : endSlot < startSlot
-  · rw [getCommitteesBetweenSlots_of_gt empty, Except.ok.injEq] at participantsOk
-    have : W = ∅ := Finset.eq_empty_of_forall_notMem fun v member => by
-      have := (inside v member).1
-      simp [← participantsOk] at this
-    simp [this, stake_empty]
-  have notGt : ¬startSlot > endSlot := empty
-  simp only [computeCommitteeWeightBetweenSlots, bind_ok_iff, pure, Except.pure,
-    Except.ok.injEq] at weightOk
-  obtain ⟨⟨_, members⟩, weightOk, rfl⟩ := weightOk
-  simp only [computeCommitteeWeightAndMembers, notGt, ↓reduceIte, bind_ok_iff] at weightOk
-  obtain ⟨covered, -, weightOk⟩ := weightOk
-  cases covered
-  · -- The members of the committees count once each, when active.
-    simp only [Bool.false_eq_true, ↓reduceIte, bind_ok_iff, mapError_ok_iff] at weightOk
-    obtain ⟨found, foundOk, active, activeOk, total, totalOk, final⟩ := weightOk
-    simp only [pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at final
-    obtain ⟨rfl, -⟩ := final
-    rw [participantsOk, Except.ok.injEq] at foundOk
-    subst foundOk
-    refine stake_le_of_getTotalBalance totalOk fun v member => ?_
-    obtain ⟨inParticipants, validator, atIndex, isActive⟩ := inside v member
-    refine mem_filterM_ok_of_test activeOk (Std.TreeSet.mem_toList.mpr inParticipants) ?_
-    simp [validatorAt, atIndex, isActive, bind, Except.bind, pure, Except.pure]
-  · -- A whole epoch weighs the total active balance, which counts every active validator.
-    simp only [↓reduceIte, bind_ok_iff, mapError_ok_iff] at weightOk
-    obtain ⟨total, totalOk, final⟩ := weightOk
-    simp only [pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at final
-    obtain ⟨rfl, -⟩ := final
-    refine stake_le_of_getTotalBalance totalOk fun v member => ?_
-    obtain ⟨-, validator, atIndex, isActive⟩ := inside v member
-    simp only [getActiveValidatorIndices, List.mem_filterMap, Option.ite_none_right_eq_some,
-      Option.some.injEq, List.mem_zipIdx_iff_getElem?, Prod.exists]
-    exact ⟨validator, v.toNat, by simpa using atIndex, isActive, by simp⟩
+  refine stake_le_computeCommitteeWeightBetweenSlots_of_reads weightOk fun v member => ?_
+  refine ⟨fun read readOk => ?_, (inside v member).2⟩
+  rw [participantsOk, Except.ok.injEq] at readOk
+  exact readOk ▸ (inside v member).1
+
+/-- The store's votes for a node from the committees of a range weigh at most those committees.
+
+The weight may be that of a range from the same slot that ends later. -/
+theorem getNodeSupportBetweenSlots_le {head : Root} {balanceSource : BeaconState preset fork}
+    {node : ForkChoiceNode} {startSlot shortEnd endSlot : Slot} {support weight : Gwei}
+    (supportOk :
+      store.getNodeSupportBetweenSlots head balanceSource node startSlot shortEnd = .ok support)
+    (weightOk : store.computeCommitteeWeightBetweenSlots head balanceSource startSlot endSlot =
+      .ok weight)
+    (le : shortEnd ≤ endSlot) : support.toNat ≤ weight.toNat := by
+  simp only [getNodeSupportBetweenSlots, bind_ok_iff] at supportOk
+  obtain ⟨short, shortOk, counted, countedOk, summed⟩ := supportOk
+  -- Each counted voter adds its effective balance, or nothing.
+  have bounded := toNat_le_of_sumGwei
+    (bound := fun v : ValidatorIndex => balanceAt balanceSource v.toNat) summed
+    fun index _ value valueOk => by
+      split at valueOk
+      · simp only [pure, Except.pure, Except.ok.injEq] at valueOk
+        simp [← valueOk]
+      · simp only [bind_ok_iff] at valueOk
+        obtain ⟨_, -, valueOk⟩ := valueOk
+        split at valueOk
+        · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at valueOk
+          obtain ⟨validator, found, rfl⟩ := valueOk
+          simp [balanceAt, validatorAt_ok_iff.mp found]
+        · simp only [pure, Except.pure, Except.ok.injEq] at valueOk
+          simp [← valueOk]
+  -- The counted voters are distinct, active members of the committees.
+  have distinct : counted.Nodup := by
+    refine List.Nodup.sublist (sublist_of_filterM_ok countedOk) ?_
+    exact Std.TreeSet.distinct_toList.imp fun different same =>
+      different (Std.LawfulEqCmp.compare_eq_iff_eq.mpr same)
+  rw [← List.sum_toFinset _ distinct] at bounded
+  refine bounded.trans (stake_le_computeCommitteeWeightBetweenSlots_of_reads weightOk
+    fun v member => ?_)
+  have listed := List.mem_toFinset.mp member
+  refine ⟨fun long longOk => mem_getCommitteesBetweenSlots_of_le shortOk longOk le
+    (Std.TreeSet.mem_toList.mp (mem_of_filterM_ok countedOk listed)), ?_⟩
+  have passes := passes_of_mem_filterM_ok countedOk listed
+  simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq, Bool.and_eq_true] at passes
+  obtain ⟨validator, found, -, isActive⟩ := passes
+  exact ⟨validator, validatorAt_ok_iff.mp found, isActive⟩
+
+/-- The store's discount of a block is at most the weight of the committees since its parent.
+
+That needs the block at or before the current slot.
+
+The discount counts the votes for the parent from the committees of the empty slots before it.
+
+Those slots then lie in the range since the parent, which ends at the slot before the current one.
+-/
+theorem computeEmptySlotSupportDiscount_le {head root : Root}
+    {balanceSource : BeaconState preset fork} {currentSlot firstSlot lastSlot : Slot}
+    {block parentBlock : BeaconBlock preset fork} {maximumSupport discount : Gwei}
+    (blockOk : store.block root = .ok block)
+    (parentOk : store.block block.parentRoot = .ok parentBlock)
+    (firstOk : addChecked parentBlock.slot 1 = .ok firstSlot)
+    (lastOk : subChecked currentSlot 1 = .ok lastSlot)
+    (maximumOk : store.computeCommitteeWeightBetweenSlots head balanceSource firstSlot lastSlot =
+      .ok maximumSupport)
+    (discountOk :
+      store.computeEmptySlotSupportDiscount config head balanceSource root = .ok discount)
+    (notFuture : block.slot ≤ currentSlot) : discount ≤ maximumSupport := by
+  simp only [computeEmptySlotSupportDiscount, bind_ok_iff, mapError_ok_iff] at discountOk
+  obtain ⟨b, bOk, pb, pbOk, f, fOk, discountOk⟩ := discountOk
+  rw [blockOk, Except.ok.injEq] at bOk
+  subst bOk
+  rw [parentOk, Except.ok.injEq] at pbOk
+  subst pbOk
+  rw [firstOk, Except.ok.injEq] at fOk
+  subst fOk
+  split at discountOk
+  · simp only [pure, Except.pure, Except.ok.injEq] at discountOk
+    subst discountOk
+    exact UInt64.zero_le
+  simp only [bind_ok_iff, mapError_ok_iff] at discountOk
+  obtain ⟨parentNode, -, lastEmpty, lastEmptyOk, parentSupport, supportOk, adversary, -, final⟩ :=
+    discountOk
+  simp only [pure, Except.pure, Except.ok.injEq] at final
+  subst final
+  rw [subChecked_ok_iff] at lastEmptyOk lastOk
+  have le : lastEmpty ≤ lastSlot := by
+    rw [UInt64.le_iff_toNat_le] at notFuture ⊢
+    omega
+  have bounded := getNodeSupportBetweenSlots_le supportOk maximumOk le
+  rw [UInt64.le_iff_toNat_le, toNat_saturatingSub]
+  omega
+
+/-- The store's check on the discount of a block passes when the block is not in the future.
+
+The block must be at or before the current slot, as the handler of blocks requires.
+
+The threshold then adds the weight since the parent, the boost and twice the adversary.
+
+It takes off the discount and halves the result, rounding down.
+
+Only an addition or the doubling can still fail, by leaving 64 bits. -/
+theorem computeSafetyThreshold_of_le_currentSlot {head root : Root}
+    {balanceSource : BeaconState preset fork} {currentSlot firstSlot lastSlot : Slot}
+    {block parentBlock : BeaconBlock preset fork}
+    {proposerScore maximumSupport discount adversary : Gwei}
+    (slotOk : store.getCurrentSlot config = .ok currentSlot)
+    (blockOk : store.block root = .ok block)
+    (parentOk : store.block block.parentRoot = .ok parentBlock)
+    (boostOk : computeProposerScore config balanceSource = .ok proposerScore)
+    (firstOk : addChecked parentBlock.slot 1 = .ok firstSlot)
+    (lastOk : subChecked currentSlot 1 = .ok lastSlot)
+    (weightOk : store.computeCommitteeWeightBetweenSlots head balanceSource firstSlot lastSlot =
+      .ok maximumSupport)
+    (discountOk :
+      store.computeEmptySlotSupportDiscount config head balanceSource root = .ok discount)
+    (adversaryOk : store.getAdversarialWeight config head balanceSource root = .ok adversary)
+    (notFuture : block.slot ≤ currentSlot) :
+    store.computeSafetyThreshold config head root balanceSource = (do
+      let withBoost ← (addChecked maximumSupport proposerScore).mapError .arith
+      let doubled ← (mulChecked 2 adversary).mapError .arith
+      let bound ← (addChecked withBoost doubled).mapError .arith
+      return (bound - discount) / 2) := by
+  have le := computeEmptySlotSupportDiscount_le blockOk parentOk firstOk lastOk weightOk
+    discountOk notFuture
+  rw [computeSafetyThreshold_of_steps slotOk blockOk parentOk boostOk firstOk lastOk weightOk
+    discountOk adversaryOk]
+  simp only [gt_iff_lt, UInt64.not_lt.mpr le, ↓reduceIte]
 
 /-- Lemmas 4 and 3 for a block that the store confirms: honest support above half of `Φ`.
 
@@ -401,7 +595,7 @@ The store rounds the weight down to 100 Gwei for its adversary, and this keeps �
 
 Effective balances are whole increments, and an increment is 10^9 Gwei in the presets.
 
-When the discount exceeds the committee weight and the boost, this says nothing on the support. -/
+The discount is at most the committee weight, since the store checks it. -/
 theorem lt_two_mul_honest_support_of_isOneConfirmed {J : Set ValidatorIndex}
     [DecidablePred (· ∈ J)] {W supporters equivocators : Finset ValidatorIndex} {head root : Root}
     {balanceSource : BeaconState preset fork} {tally : VoteTally}
@@ -466,10 +660,11 @@ theorem lt_two_mul_honest_support_of_isOneConfirmed {J : Set ValidatorIndex}
           Nat.mul_le_mul_left _ cover
       _ = 100 * (weight.toNat / 100 * config.CONFIRMATION_BYZANTINE_THRESHOLD.toNat) := by
           ring
-  -- A discount above the other terms makes the bound hold at once.
-  by_cases large : maximumSupport.toNat + proposerScore.toNat < discount.toNat
-  · omega
-  have phi := Nat.sub_add_cancel (Nat.le_of_not_lt large)
+  -- The discount is at most the committee weight, so nothing truncates.
+  have small := UInt64.le_iff_toNat_le.mp (discount_le_of_computeSafetyThreshold slotOk blockOk
+    parentOk boostOk firstOk lastOk maximumOk discountOk adversaryOk thresholdOk)
+  have phi := Nat.sub_add_cancel (show discount.toNat ≤
+    maximumSupport.toNat + proposerScore.toNat by omega)
   suffices maximumSupport.toNat + proposerScore.toNat - discount.toNat <
       2 * stake w {v ∈ supporters | v ∈ J} by omega
   generalize maximumSupport.toNat + proposerScore.toNat - discount.toNat = Φ at phi ⊢
