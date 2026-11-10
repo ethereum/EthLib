@@ -1576,12 +1576,12 @@ The DAO transfer only moves wei, and a system call keeps or lowers the supply, a
 `stateTransition_supply_le_of_lt_glamsterdam` writes the burned fees from the header before Glamsterdam: the gas used and the blob gas used, each at its base fee.
 From Glamsterdam the gas used of the header is the larger of the execution gas before the refunds, by EIP-7778, and the state gas, by EIP-8037, so it does not give the burned fees.
 There the theorems take the fees from the body that the transition runs.
-A block form of the Cancun equality would need every transaction and every system call to end with no created account.
 `stateTransition_supply_eq` in `Execution/Proofs/Blocks/Burn.lean` gives the exact change at every fork that the transition accepts.
 It adds the created wei and subtracts the burned fees, the surviving SELFDESTRUCT burns and the deleted balances.
 `BodyBurns` certifies the system calls before the transactions, each transaction in order, and the calls that read requests.
 The system calls also carry burn logs, since the theorem assumes no particular code at their addresses.
 `BlockLosses.transactions` retains each transaction's burn log and deleted balances.
+`BodyBurns.total_eq` shows that two certificates of the same body give the same total of losses, so the run fixes that total.
 
 ### The authorizations of EIP-7702
 

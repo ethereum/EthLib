@@ -31,7 +31,9 @@ So a block leaves at most the supply before it, plus its created ether, minus it
 
 From Glamsterdam it is exactly that, since nothing burns ether beyond the fees there.
 
-Before Glamsterdam, SELFDESTRUCT and the deletions can burn more, so only the bound holds.
+Before Glamsterdam, SELFDESTRUCT and the deletions can burn more, so here only the bound holds.
+
+The exact form before Glamsterdam also counts those burns and deletions, from the run of the block.
 
 The burned fees are the base fee per gas times the gas used after the refunds.
 
@@ -218,6 +220,27 @@ theorem supply_withdrawalState {block : BlockState} {withdrawals : List Withdraw
   rw [TransactionState.supply_foldlM_createEther _ _ withdrawals h]
   simp only [toNat_withdrawalWei, withdrawnWei]
 
+/-- The withdrawals of a block add their wei to the supply after its transactions.
+
+They run from Shapella, and before it the body keeps its supply. -/
+theorem supply_withdrawals {block : Block fork Transaction} {txs : BodyOutput fork}
+    {withdrawn : BodyState}
+    (hShapella : ∀ hShapella : .shapella ≤ fork, ∃ tx,
+      withdrawalState fork txs.body.block (block.withdrawals hShapella) = .ok tx ∧
+      (txs.body.beginIndex (block.transactions.length + 1)).join tx = .ok withdrawn)
+    (hNot : ¬.shapella ≤ fork → withdrawn = txs.body.beginIndex (block.transactions.length + 1)) :
+    (TransactionState.ofBlock withdrawn.block).supply =
+      (TransactionState.ofBlock txs.block).supply +
+        (if h : .shapella ≤ fork then withdrawnWei (block.withdrawals h) else 0) := by
+  by_cases hS : .shapella ≤ fork
+  · obtain ⟨wtx, hwtx, hjoin⟩ := hShapella hS
+    rw [BodyState.supply_join hjoin, supply_withdrawalState hwtx]
+    simp only [hS, ↓reduceDIte]
+    rfl
+  · rw [hNot hS]
+    simp only [hS, ↓reduceDIte, Nat.add_zero]
+    rfl
+
 /-- The rewards add the wei they reward to the supply.
 
 Before Paris, at most two ommers keep the reward of the beneficiary below `2^256`.
@@ -306,18 +329,7 @@ theorem applyBody_supply {config : ChainConfig} {env : BlockEnvironment fork}
   obtain ⟨sReqLe, sReqEq⟩ := supply_blockRequests hrequests
   obtain ⟨tx, hpay, sRew⟩ := supply_onBlock hrewarded
   rw [supply_payRewards (by simpa using hOmmers) hpay] at sRew
-  -- The withdrawals add their wei from Shapella.
-  have sWd : (TransactionState.ofBlock withdrawn.block).supply =
-      (TransactionState.ofBlock txs.block).supply +
-        (if h : .shapella ≤ fork then withdrawnWei (block.withdrawals h) else 0) := by
-    by_cases hS : .shapella ≤ fork
-    · obtain ⟨wtx, hwtx, hjoin⟩ := hShapella hS
-      rw [BodyState.supply_join hjoin, supply_withdrawalState hwtx]
-      simp only [hS, ↓reduceDIte]
-      rfl
-    · rw [hNot hS]
-      simp only [hS, ↓reduceDIte, Nat.add_zero]
-      rfl
+  have sWd := supply_withdrawals hShapella hNot
   have hBurned : burnedWei env output.toBodyOutput = burnedWei env txs := by
     simp only [burnedWei, hGas, hCumulative]
   have hdaoInit : (TransactionState.ofBlock (BodyState.init dao).block).supply =

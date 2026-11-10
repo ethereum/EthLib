@@ -6,7 +6,13 @@ public import EthLib.Execution.Proofs.Transactions.Burn
 /-!
 # Proofs: the exact change of the supply of ether across a block
 
-The run fixes each loss beyond the burned fees: the surviving burns and the deleted balances.
+A block changes the supply by its created wei, its burned fees and its other losses.
+
+The other losses are the surviving burns of SELFDESTRUCT and the balances that transactions delete.
+
+A surviving burn is a burn of SELFDESTRUCT that no rollback of its frame drops.
+
+Two certificates of the same run give the same total of those losses.
 
 System calls also have surviving burn logs, since their stored code is arbitrary.
 
@@ -38,7 +44,7 @@ def SystemCallBurns (env : BlockEnvironment fork) (block : BlockState) (target :
     MessageCallBurns (Meter := Nat) env.chainId.toNat (systemMessage env target data)
       (.ofBlock block) .empty [] ∅ out.state log
 
-/-- Each system call that runs has a surviving burn log certified by its message. -/
+/-- Each system call that runs has a certificate of the surviving burns of its message. -/
 theorem systemCall_systemCallBurns {env : BlockEnvironment fork} {block : BlockState}
     {target : Address} {data : ByteArray} {out : SystemCallOutput}
     (h : systemCall env block target data = .ok out) :
@@ -60,7 +66,7 @@ theorem SystemCallBurns.supply_eq {env : BlockEnvironment fork} {block : BlockSt
   unfold SystemCallBurns at h
   split at h <;> exact h.supply
 
-/-- The two optional calls at the start of a block, with their surviving burns. -/
+/-- The beacon root call from Dencun and the parent hash call from Pectra, with their burns. -/
 def StartSystemCallsBurns (env : BlockEnvironment fork) (parentHash : Hash32)
     (body after : BodyState) (log : BurnLog) : Prop :=
   ∃ mid first second,
@@ -79,7 +85,7 @@ def StartSystemCallsBurns (env : BlockEnvironment fork) (parentHash : Hash32)
     log = .append first second
 
 /-- The system calls at the start of a block have certificates of their surviving burns. -/
-theorem startSystemCalls_burns {env : BlockEnvironment fork} {parentHash : Hash32}
+theorem startSystemCalls_startSystemCallsBurns {env : BlockEnvironment fork} {parentHash : Hash32}
     {body after : BodyState} (h : startSystemCalls env parentHash body = .ok after) :
     ∃ log, StartSystemCallsBurns env parentHash body after log := by
   obtain ⟨mid, first, noFirst, second, noSecond⟩ := startSystemCalls_eq_ok h
@@ -137,11 +143,11 @@ theorem StartSystemCallsBurns.supply_eq {env : BlockEnvironment fork} {parentHas
 /-- The surviving burn log and deleted balances of each transaction, in order. -/
 abbrev TransactionLosses := List (BurnLog × Nat)
 
-/-- The total losses beyond fees, retaining the two amounts of each transaction. -/
+/-- The sum, over the transactions, of their surviving burns and their deleted balances. -/
 def TransactionLosses.total (losses : TransactionLosses) : Nat :=
   (losses.map fun loss => loss.1.total + loss.2).sum
 
-/-- The actual transaction fold, with one certificate for each transaction it runs. -/
+/-- The transaction fold, with one certificate for each transaction it runs. -/
 inductive TransactionsBurns (env : BlockEnvironment fork) :
     BodyOutput fork → List (Transaction × Nat) → BodyOutput fork → TransactionLosses → Prop
   | nil (body) : TransactionsBurns env body [] body []
@@ -200,7 +206,7 @@ theorem TransactionsBurns.supply_eq {env : BlockEnvironment fork}
 
 /-! ## Requests -/
 
-/-- The actual ordered request calls, with a surviving burn log for each call. -/
+/-- The request calls in order, with a surviving burn log for each call. -/
 inductive RequestsBurns (env : BlockEnvironment fork) :
     BodyState × List ByteArray → List (UInt8 × Address) → BodyState × List ByteArray →
       BurnLog → Prop
@@ -242,28 +248,38 @@ theorem RequestsBurns.supply_eq {env : BlockEnvironment fork}
     simp only [BurnLog.total]
     omega
 
-/-- The requests of a block keep their actual call certificates, or have no calls before Pectra. -/
+/-- From Pectra, a certificate of each call that reads requests; before Pectra, no call. -/
 def BlockRequestsBurns (env : BlockEnvironment fork) (body after : BodyState)
     (log : BurnLog) : Prop :=
   if .pectra ≤ fork then ∃ requests,
     RequestsBurns env (body, []) (requestContracts fork) (after, requests) log
   else after = body ∧ log = .empty
 
-/-- The requests of a block lose exactly their certified surviving burns. -/
-theorem blockRequests_burns {depositContract : Address} {env : BlockEnvironment fork}
-    {body : BodyState} {logs : List Log} {result : BodyState × List ByteArray}
+/-- The requests of a block that run have a certificate of their surviving burns. -/
+theorem blockRequests_blockRequestsBurns {depositContract : Address}
+    {env : BlockEnvironment fork} {body : BodyState} {logs : List Log}
+    {result : BodyState × List ByteArray}
     (h : blockRequests depositContract env body logs = .ok result) :
-    ∃ log, BlockRequestsBurns env body result.1 log ∧
-      (TransactionState.ofBlock result.1.block).supply + log.total =
-        (TransactionState.ofBlock body.block).supply := by
+    ∃ log, BlockRequestsBurns env body result.1 log := by
   obtain ⟨noPectra, pectra⟩ := blockRequests_eq_ok h
   by_cases hp : .pectra ≤ fork
   · obtain ⟨deposits, read, -, hread, rfl⟩ := pectra hp
     obtain ⟨log, certificate⟩ := fold_requestsBurns hread
-    exact ⟨log, by simpa only [BlockRequestsBurns, hp, ↓reduceIte] using ⟨_, certificate⟩,
-      certificate.supply_eq⟩
+    exact ⟨log, by simpa only [BlockRequestsBurns, hp, ↓reduceIte] using ⟨_, certificate⟩⟩
   · rw [noPectra hp]
-    exact ⟨.empty, by simp [BlockRequestsBurns, hp], rfl⟩
+    exact ⟨.empty, by simp [BlockRequestsBurns, hp]⟩
+
+/-- The certified requests of a block lose exactly their surviving burns. -/
+theorem BlockRequestsBurns.supply_eq {env : BlockEnvironment fork} {body after : BodyState}
+    {log : BurnLog} (h : BlockRequestsBurns env body after log) :
+    (TransactionState.ofBlock after.block).supply + log.total =
+      (TransactionState.ofBlock body.block).supply := by
+  unfold BlockRequestsBurns at h
+  split at h
+  · obtain ⟨requests, certificate⟩ := h
+    exact certificate.supply_eq
+  · obtain ⟨rfl, rfl⟩ := h
+    rfl
 
 /-! ## The block -/
 
@@ -276,11 +292,11 @@ structure BlockLosses where
   /-- Surviving burns of the calls that read requests. -/
   requests : BurnLog
 
-/-- All the surviving message burns and transaction-end deletions of a block. -/
+/-- The sum of the surviving burns and the deleted balances of a block. -/
 def BlockLosses.total (losses : BlockLosses) : Nat :=
   losses.start.total + losses.transactions.total + losses.requests.total
 
-/-- The supply-changing phases of the actual block body, with certificates of its losses. -/
+/-- The phases of a block body that change the supply, with certificates of its losses. -/
 def BodyBurns (config : ChainConfig) (env : BlockEnvironment fork)
     (block : Block fork Transaction) (start : BlockState) (output : BlockOutput fork)
     (losses : BlockLosses) : Prop :=
@@ -299,16 +315,16 @@ def BodyBurns (config : ChainConfig) (env : BlockEnvironment fork)
       .ok output.block ∧
     output.gas = txs.gas ∧ output.cumulativeGasUsed = txs.cumulativeGasUsed
 
-/-- Every body that runs has certificates for its system calls and each transaction. -/
+/-- Every body that runs certifies its system calls, its transactions and its request calls. -/
 theorem applyBody_bodyBurns {config : ChainConfig} {env : BlockEnvironment fork}
     {block : Block fork Transaction} {start : BlockState} {output : BlockOutput fork}
     (h : applyBody config env block start = .ok output) :
     ∃ losses, BodyBurns config env block start output losses := by
   obtain ⟨dao, system, txs, withdrawn, requested, hdao, hsystem, htxs, hshapella, hnot,
     hrequests, hrewarded, -, -, hgas, hcumulative⟩ := applyBody_eq_ok h
-  obtain ⟨startLog, startBurns⟩ := startSystemCalls_burns hsystem
+  obtain ⟨startLog, startBurns⟩ := startSystemCalls_startSystemCallsBurns hsystem
   obtain ⟨txLosses, txBurns⟩ := fold_transactionsBurns htxs
-  obtain ⟨requestLog, requestBurns, -⟩ := blockRequests_burns hrequests
+  obtain ⟨requestLog, requestBurns⟩ := blockRequests_blockRequestsBurns hrequests
   refine ⟨⟨startLog, txLosses, requestLog⟩,
     dao, system, txs, withdrawn, requested, hdao, startBurns, txBurns, ?_, requestBurns,
     hrewarded, hgas, hcumulative⟩
@@ -332,27 +348,10 @@ theorem BodyBurns.supply_eq {config : ChainConfig} {env : BlockEnvironment fork}
   have daoSupply := supply_daoTransfer hdao
   have startSupply := hsystem.supply_eq
   have txSupply := htxs.supply_eq
-  have withdrawnSupply : (TransactionState.ofBlock withdrawn.block).supply =
-      (TransactionState.ofBlock txs.block).supply +
-        (if h : .shapella ≤ fork then withdrawnWei (block.withdrawals h) else 0) := by
-    split at hwithdrawn
-    · rename_i hs
-      obtain ⟨tx, run, join⟩ := hwithdrawn
-      rw [BodyState.supply_join join, supply_withdrawalState run]
-      simp only [hs, ↓reduceDIte]
-    · rename_i hs
-      rw [hwithdrawn]
-      simp only [hs, ↓reduceDIte, Nat.add_zero]
-      rfl
-  have requestSupply : (TransactionState.ofBlock requested.block).supply +
-      losses.requests.total = (TransactionState.ofBlock withdrawn.block).supply := by
-    unfold BlockRequestsBurns at hrequests
-    split at hrequests
-    · obtain ⟨requests, certificate⟩ := hrequests
-      exact certificate.supply_eq
-    · obtain ⟨rfl, hz⟩ := hrequests
-      rw [hz]
-      rfl
+  have withdrawnSupply := supply_withdrawals (block := block)
+    (fun hs => by simpa only [hs, ↓reduceDIte, BodyOutput.block] using hwithdrawn)
+    (fun hs => by simpa only [hs, ↓reduceDIte] using hwithdrawn)
+  have requestSupply := hrequests.supply_eq
   obtain ⟨rewarded, hpay, rewardSupply⟩ := supply_onBlock hrewarded
   rw [supply_payRewards (by simpa using hom) hpay] at rewardSupply
   have fees : burnedWei env output.toBodyOutput = burnedWei env txs := by
@@ -369,13 +368,28 @@ theorem BodyBurns.supply_eq {config : ChainConfig} {env : BlockEnvironment fork}
   simp only [BlockLosses.total, createdWei, burnedWei]
   omega
 
-/-- A block accepted by the transition has the exact supply change given by its actual run.
+/-- Two certificates of a block body give the same total of losses.
+
+Before Paris, the block must have at most two ommers, as its checks ensure. -/
+theorem BodyBurns.total_eq {config : ChainConfig} {env : BlockEnvironment fork}
+    {block : Block fork Transaction} {start : BlockState} {output : BlockOutput fork}
+    {losses losses' : BlockLosses} (hom : fork < .paris → block.ommers.length ≤ 2)
+    (h : BodyBurns config env block start output losses)
+    (h' : BodyBurns config env block start output losses') :
+    losses'.total = losses.total := by
+  have := h.supply_eq hom
+  have := h'.supply_eq hom
+  omega
+
+/-- A block that the transition accepts changes the supply exactly as its run gives.
 
 The created wei includes withdrawals from Shapella and block and ommer rewards before Paris.
 
-The losses retain the surviving burns of all system calls and each transaction's deletions.
+The losses are the surviving burns of every system call and every transaction.
 
-The fees come from the gas counts of the body, including from Glamsterdam. -/
+They also count the balances that each transaction deletes.
+
+The fees come from the gas counts of the body, so the form also holds from Glamsterdam. -/
 theorem stateTransition_supply_eq {chain : BlockChain} {block : Block fork Transaction}
     {checkSeal : Bool} {post : State} (h : stateTransition chain block checkSeal = .ok post) :
     ∃ hashes output losses,
