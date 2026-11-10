@@ -39,16 +39,73 @@ def depositTreeSnapshotType : String := "tuple[list[bytes], bytes, int, bytes, i
 def gossipOutcomesType : String :=
   "list[tuple[Literal['valid'], None] | tuple[Literal['ignore', 'reject'], str]]"
 
-/-- The Python type of a Noise cipher state: its key, if set, and its next nonce. -/
-def noiseCipherType : String := "tuple[bytes | None, int]"
+/-- A Python type alias, which the generator writes into a module of the package.
+
+The stub of the extension imports it, so a signature can name it. -/
+structure PythonAlias where
+  /-- The dotted name of the module that defines the alias. -/
+  pyModule : String
+  /-- The name of the alias, unique among all aliases. -/
+  name : String
+  /-- What a value of the type holds, written as the comment above the alias. -/
+  doc : String
+  /-- The Python type, which may name aliases defined before it in the same module. -/
+  type : String
+
+/-- The module of the Noise state aliases. -/
+def noiseTypesModule : String := "ethlib.networking.noise._types"
+
+/-- The Python type of a Noise cipher state. -/
+def noiseCipherAlias : PythonAlias := ⟨noiseTypesModule, "CipherState",
+  "A Noise cipher state: its key, if set, and its next nonce.",
+  "tuple[bytes | None, int]"⟩
 
 /-- The Python type of a Noise XX handshake state, in the field order of its export. -/
-def noiseStateType : String :=
-  "tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int]"
+def noiseStateAlias : PythonAlias := ⟨noiseTypesModule, "HandshakeState",
+  "A Noise XX state: role, private keys, remote keys, step, chaining key, hash, cipher key " ++
+    "and nonce.",
+  "tuple[bool, bytes, bytes, bytes | None, bytes | None, int, bytes, bytes, bytes | None, int]"⟩
 
-/-- The Python type of a libp2p Noise state: the XX state and its authenticated remote. -/
-def noiseLibp2pType : String :=
-  "tuple[" ++ noiseStateType ++ ", tuple[bytes, bytes, bytes, bytes | None] | None]"
+/-- The Python type of the authenticated remote that a libp2p Noise state stores. -/
+def noiseRemoteAlias : PythonAlias := ⟨noiseTypesModule, "Remote",
+  "An authenticated remote: static key, identity key protobuf, signature and extensions; " ++
+    "an Identity has the same shape in another order.",
+  "tuple[bytes, bytes, bytes, bytes | None]"⟩
+
+/-- The Python type of a libp2p Noise state. -/
+def noiseLibp2pAlias : PythonAlias := ⟨noiseTypesModule, "Libp2pState",
+  "A libp2p Noise state: the XX state, and its authenticated remote once read.",
+  "tuple[" ++ noiseStateAlias.name ++ ", " ++ noiseRemoteAlias.name ++ " | None]"⟩
+
+/-- The Python type of the remote identity that completion reports. -/
+def noiseIdentityAlias : PythonAlias := ⟨noiseTypesModule, "Identity",
+  "A remote identity: key protobuf, peer ID, signature and extensions; " ++
+    "a Remote has the same shape in another order.",
+  "tuple[bytes, bytes, bytes, bytes | None]"⟩
+
+/-- The Python type of the result of libp2p completion. -/
+def noiseCompletionAlias : PythonAlias := ⟨noiseTypesModule, "Completion",
+  "A completed libp2p handshake: remote static key, identity, send and receive ciphers, " ++
+    "and handshake hash.",
+  "tuple[bytes, " ++ noiseIdentityAlias.name ++ ", " ++ noiseCipherAlias.name ++ ", " ++
+    noiseCipherAlias.name ++ ", bytes]"⟩
+
+/-- Every Python type alias, in the order of definition. -/
+def pythonAliases : List PythonAlias := [noiseCipherAlias, noiseStateAlias, noiseRemoteAlias,
+  noiseLibp2pAlias, noiseIdentityAlias, noiseCompletionAlias]
+
+/-- The aliases as plain data: the module, the name, the comment and the type. -/
+def pythonAliasesData : List (String × String × String × String) :=
+  pythonAliases.map fun a => (a.pyModule, a.name, a.doc, a.type)
+
+/-- The name of the Python type of a Noise cipher state. -/
+def noiseCipherType : String := noiseCipherAlias.name
+
+/-- The name of the Python type of a Noise XX handshake state. -/
+def noiseStateType : String := noiseStateAlias.name
+
+/-- The name of the Python type of a libp2p Noise state. -/
+def noiseLibp2pType : String := noiseLibp2pAlias.name
 
 /-- Every method of the Python extension, in the order of its method table. -/
 def bindings : List Binding := [
@@ -375,9 +432,7 @@ def bindings : List Binding := [
     "(state: " ++ noiseLibp2pType ++ ", message: bytes) -> " ++ noiseLibp2pType,
     [`EthLib.Networking.Noise.NoiseError], some "NoiseError"⟩,
   ⟨"noise_libp2p_complete", `EthLib.Networking.Noise.Exports.completeExport,
-    "(state: " ++ noiseLibp2pType ++ ") -> tuple[bytes, " ++
-      "tuple[bytes, bytes, bytes, bytes | None], " ++
-      noiseCipherType ++ ", " ++ noiseCipherType ++ ", bytes]",
+    "(state: " ++ noiseLibp2pType ++ ") -> " ++ noiseCompletionAlias.name,
     [`EthLib.Networking.Noise.NoiseError], some "NoiseError"⟩,
   ⟨"enr_seq", `EthLib.Networking.Enr.Exports.seqExport,
     "(record: bytes) -> int",
