@@ -48,6 +48,8 @@ namespace Store
 
 variable {config : Config} {store : Store preset fork}
 
+variable {tally : Except ForkChoiceError VoteTally}
+
 /-- A verified payload of the previous slot is extended when it is timely and its data available.
 
 More than half of the committee must vote that it came on time.
@@ -82,12 +84,12 @@ theorem shouldExtendPayload_of_timely {gloas : .glamsterdam ≤ fork} {root : Ro
 /-- From Gloas the walk goes down the tree of nodes: its end descends from its start. -/
 private theorem ancestor_getHeadFrom (lower : store.ParentsBelow) (gloas : .glamsterdam ≤ fork)
     {nodes : List ForkChoiceNode} {start head : ForkChoiceNode}
-    (walk : store.getHeadFrom config nodes start = .ok head) :
+    (walk : store.getHeadFrom config tally nodes start = .ok head) :
     (nodeTree lower).Ancestor start.toModel head.toModel := by
   induction start using getHeadFrom.induct store with
   | _ start ih =>
     rw [getHeadFrom] at walk
-    cases chosen : store.heaviestChild config nodes start with
+    cases chosen : store.heaviestChild config tally nodes start with
     | error e => simp [chosen, bind, Except.bind] at walk
     | ok result =>
       cases result with
@@ -115,13 +117,13 @@ The end of the walk must descend from that pending node.
 When the walk then steps to the full node, it ends where the walk from the full node ends. -/
 private theorem getHeadFrom_full (lower : store.ParentsBelow) (gloas : .glamsterdam ≤ fork)
     {nodes : List ForkChoiceNode} {root : Root} {head : ForkChoiceNode}
-    (step : store.heaviestChild config nodes ⟨root, .pending⟩ = .ok (some ⟨root, .full⟩))
+    (step : store.heaviestChild config tally nodes ⟨root, .pending⟩ = .ok (some ⟨root, .full⟩))
     (rank : store.nodeRank ⟨root, .full⟩ < store.nodeRank ⟨root, .pending⟩)
     (below : (nodeTree lower).Ancestor (ForkChoiceNode.toModel ⟨root, .pending⟩)
       head.toModel) :
-    ∀ {start : ForkChoiceNode}, store.getHeadFrom config nodes start = .ok head →
+    ∀ {start : ForkChoiceNode}, store.getHeadFrom config tally nodes start = .ok head →
       (nodeTree lower).Ancestor start.toModel (ForkChoiceNode.toModel ⟨root, .pending⟩) →
-      store.getHeadFrom config nodes ⟨root, .full⟩ = .ok head := by
+      store.getHeadFrom config tally nodes ⟨root, .full⟩ = .ok head := by
   intro start
   induction start using getHeadFrom.induct store with
   | _ start ih =>
@@ -131,7 +133,7 @@ private theorem getHeadFrom_full (lower : store.ParentsBelow) (gloas : .glamster
     rw [getHeadFrom, step] at walk
     simpa only [bind, Except.bind, rank, dite_true] using walk
   rw [getHeadFrom] at walk
-  cases chosen : store.heaviestChild config nodes start with
+  cases chosen : store.heaviestChild config tally nodes start with
   | error e => simp [chosen, bind, Except.bind] at walk
   | ok result =>
     cases result with
@@ -169,12 +171,12 @@ private theorem heaviestChild_full {gloas : .glamsterdam ≤ fork}
     (verified : store.isPayloadVerified gloas root = true)
     (extend : store.shouldExtendPayload config gloas root = .ok true)
     (fullIn : ⟨root, .full⟩ ∈ nodes) :
-    store.heaviestChild config nodes ⟨root, .pending⟩ = .ok (some ⟨root, .full⟩) := by
+    store.heaviestChild config tally nodes ⟨root, .pending⟩ = .ok (some ⟨root, .full⟩) := by
   by_cases emptyIn : (⟨root, .empty⟩ : ForkChoiceNode) ∈ nodes
   · simpa using heaviestChild_of_previousSlot found nextOk current verified emptyIn fullIn extend
   have fullDecision := isPreviousSlotPayloadDecision_of_previous (status := .full) found nextOk
     current (by decide)
-  have fullWeighed : store.weighNode config ⟨root, .full⟩ = .ok (⟨root, .full⟩, 0, 2) :=
+  have fullWeighed : store.weighNode config tally ⟨root, .full⟩ = .ok (⟨root, .full⟩, 0, 2) :=
     weighNode_ok_iff.mpr ⟨rfl, getWeight_of_payloadDecision gloas fullDecision, by
       simp [tiebreaker, gloas, getPayloadStatusTiebreaker, fullDecision, extend, bind,
         Except.bind, pure, Except.pure]⟩

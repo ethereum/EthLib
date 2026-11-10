@@ -60,8 +60,9 @@ def storeRead {preset : Preset} {fork : Fork} (config : Config) (store : Store p
     else pure none
   let viable ← if read.viable then
       let leaves ← viableLeaves config store
+      let tally := store.justifiedTally
       some <$> leaves.mapM fun leaf => do
-        return ⟨leaf.root, ← store.getWeight config leaf, leaf.payloadStatus.code⟩
+        return ⟨leaf.root, ← store.getWeight config tally leaf, leaf.payloadStatus.code⟩
     else pure none
   let votes ← match read.root with
     | none => pure (none, none)
