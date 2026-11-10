@@ -856,7 +856,7 @@ def bindings : List Binding := [
     [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
   ⟨"consensus_compute_min_epochs_for_block_requests",
     `EthLib.Consensus.Config.computeMinEpochsForBlockRequests,
-    "(name: str) -> int",
+    "(name: str, fork: str) -> int",
     [], some "ConsensusError"⟩,
   ⟨"consensus_gossip_topics", `EthLib.Consensus.Config.gossipTopics,
     "(name: str, fork: str) -> list[str]",

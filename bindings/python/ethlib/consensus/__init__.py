@@ -107,9 +107,9 @@ def reqresp_message(name: str, fork: str, type_name: str, data: bytes) -> tuple[
     return _native.consensus_reqresp_message(name, fork, type_name, data)
 
 
-def compute_min_epochs_for_block_requests(name: str = "mainnet") -> int:
-    """The fewest epochs back from the current one over which a node must serve blocks."""
-    return _native.consensus_compute_min_epochs_for_block_requests(name)
+def compute_min_epochs_for_block_requests(fork: str, name: str = "mainnet") -> int:
+    """The fewest epochs back from the current one that a node must serve blocks for, at a fork."""
+    return _native.consensus_compute_min_epochs_for_block_requests(name, fork)
 
 
 def gossip_topics(fork: str, name: str = "mainnet") -> list[str]:

@@ -6799,14 +6799,14 @@
    "docstring":
    "The root of the message that the bytes encode, and the bytes of that message, as a pair.\n\nThe arguments are the name of the preset and the configuration, the fork, the message and its bytes."},
   {"summary":
-   "The fewest epochs back from the current one over which a node must serve blocks.",
-   "signature": "(name: str) -> int",
+   "The fewest epochs back from the current one over which a node must serve blocks, at a fork.",
+   "signature": "(name: str, fork: str) -> int",
    "operation": "EthLib.Consensus.Config.computeMinEpochsForBlockRequests",
    "method": "consensus_compute_min_epochs_for_block_requests",
    "errors": [],
    "error_class": "ConsensusError",
    "docstring":
-   "The fewest epochs back from the current one over which a node must serve blocks.\n\nIt covers the time a validator needs to withdraw, plus half the churn quotient."},
+   "The fewest epochs back from the current one over which a node must serve blocks, at a fork.\n\nIt covers the time a validator needs to withdraw, plus half of a churn quotient, rounded down.\n\nBefore Gloas, that quotient is `CHURN_LIMIT_QUOTIENT`.\n\nFrom Gloas, it comes from the weak subjectivity arithmetic of [EIP-8061].\n\nLet `E` be `CHURN_LIMIT_QUOTIENT_GLOAS` and `C` be `CONSOLIDATION_CHURN_LIMIT_QUOTIENT`.\n\nFor a large validator set the capped activation churn is negligible, so it drops out.\n\nThe exit churn is the stake over `E`, and the consolidation churn is the stake over `C`.\n\nExits weigh 2/3 against 1 for consolidations.\n\nThe stake over that weighted churn is `3 * E * C / (2 * C + 3 * E)`, rounded down.\n\n[EIP-8061]: https://eips.ethereum.org/EIPS/eip-8061#weak-subjectivity-period"},
   {"summary":
    "The gossip topics of a fork, in the order of the fork that adds each one.",
    "signature": "(name: str, fork: str) -> list[str]",
