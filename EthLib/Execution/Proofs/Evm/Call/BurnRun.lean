@@ -119,7 +119,42 @@ inductive RunBurns (fork : Fork) (Meter : Type) [GasMeter Meter] :
 theorem RunBurns.supply {start : BurnStart fork Meter} {ended : Evm fork Meter} {log : BurnLog}
     (h : RunBurns fork Meter start ended log) :
     ended.state.supply + log.total = start.state.supply := by
-  sorry
+  induction h with
+  | static h =>
+    simpa only [BurnLog.total, BurnStart.state, Nat.add_zero] using
+      TransactionState.supply_eq_of_sameOutside h.state
+  | append _ _ ih1 ih2 =>
+    simp only [BurnLog.total, BurnStart.state] at *
+    omega
+  | next h => exact supply_of_step_eq_next h
+  | send h => simpa only [BurnLog.total, BurnStart.state, Nat.add_zero] using
+      supply_of_step_eq_child h
+  | resume h _ resumed ih =>
+    have hw := supply_of_step_eq_child h
+    have hc := sameContext_of_step_eq_child h resumed
+    rw [BurnStart.state_child] at ih
+    rw [hc.state, state_incorporateChild] at *
+    simp only [BurnStart.state]
+    omega
+  | @call message state entry substate entrySubstate meter ended log entered _ hp ih =>
+    have entrySupply := supply_of_entered entered
+    unfold rollbackOnError
+    split
+    · simp only [BurnLog.total, BurnStart.state, Nat.add_zero]
+      exact TransactionState.supply_restoreTxState hp
+    · change ended.state.supply + log.total = entry.supply at ih
+      simp only [BurnStart.state]
+      omega
+  | createRollback _ _ _ rolled hp _ =>
+    rw [rolled]
+    exact TransactionState.supply_restoreTxState hp
+  | @createKeep message state preparedState substate meter evm after log prepared _ _ kept ih =>
+    have startSupply := supply_prepareCreation prepared
+    rcases kept with kept | coded
+    · rw [kept]
+      exact ih.trans startSupply
+    · rw [TransactionState.supply_setCode coded]
+      exact ih.trans startSupply
 
 /-- Two certificates of a run from the same start to the same end have the same total. -/
 theorem RunBurns.total_eq {start : BurnStart fork Meter} {ended : Evm fork Meter}
@@ -128,6 +163,21 @@ theorem RunBurns.total_eq {start : BurnStart fork Meter} {ended : Evm fork Meter
   have := h.supply
   have := h'.supply
   omega
+
+private theorem childRelByKind_burns {caller : Evm fork Meter} {message : Message fork}
+    {child : Evm fork Meter}
+    (c : ChildRelByKind
+      (fun (message : Message fork) state substate (meter : Meter) ended =>
+        (∃ log, RunBurns fork Meter (.call message state substate meter) ended log) ∧
+          ended.state.parent = state.parent)
+      (fun (message : Message fork) state substate (meter : Meter) ended =>
+        (∃ log, RunBurns fork Meter (.create message state substate meter) ended log) ∧
+          ended.state.parent = state.parent) caller message child) :
+    (∃ log, RunBurns fork Meter (BurnStart.child caller message) child log) ∧
+      child.state.parent = caller.state.parent := by
+  unfold ChildRelByKind ChildRel at c
+  unfold BurnStart.child
+  split at c <;> rename_i h <;> simp only [h] <;> exact c
 
 /-- Every successful call and creation has a certificate of its run, and keeps its block.
 
@@ -141,6 +191,50 @@ theorem processMessage_runBurns [LawfulGasMeter Meter] (n : Nat) :
       (held : GasMeter.gasHeld meter ≤ message.gas), message.gas = n →
       ∀ ended, processCreateMessage fork message state substate meter held = .ok ended →
         ∃ log, RunBurns fork Meter (.create message state substate meter) ended.val log) := by
-  sorry
+  have key := processMessage_rel_byKind (fork := fork) (Meter := Meter)
+    (R := fun a b => (∃ log, RunBurns fork Meter (.frame a) b log) ∧
+      b.state.parent = a.state.parent)
+    (Inv := fun _ => True)
+    (Mcall := fun message state substate meter ended =>
+      (∃ log, RunBurns fork Meter (.call message state substate meter) ended log) ∧
+        ended.state.parent = state.parent)
+    (Mcreate := fun message state substate meter ended =>
+      (∃ log, RunBurns fork Meter (.create message state substate meter) ended log) ∧
+        ended.state.parent = state.parent)
+    (fun _ => ⟨⟨_, .static (.refl _)⟩, rfl⟩)
+    (fun {_ _ _} ⟨⟨_, l1⟩, p1⟩ ⟨⟨_, l2⟩, p2⟩ => ⟨⟨_, .append l1 l2⟩, p2.trans p1⟩)
+    (fun _ r => trivial)
+    (fun _ e _ => ⟨⟨_, .static (staticStep_exceptionalHalt _ _)⟩,
+      (staticStep_exceptionalHalt _ _).parent⟩)
+    (by
+      intro evm result _ h
+      have p := stepRules_parent.step h
+      cases result with
+      | next after => exact ⟨⟨_, .next h⟩, p⟩
+      | child caller message resume =>
+        refine ⟨⟨⟨_, .send h⟩, p.1⟩, fun child after hres c => ?_⟩
+        obtain ⟨⟨log, run⟩, cparent⟩ := childRelByKind_burns c
+        exact ⟨⟨log, .resume h run hres⟩, p.2 child after hres cparent⟩)
+    (fun evm _ => ⟨⟨_, .static (.of_sameContext ⟨rfl, rfl, rfl, rfl⟩)⟩, rfl⟩)
+    (fun h _ => ⟨⟨_, .static (staticStep_runPrecompile h)⟩, (staticStep_runPrecompile h).parent⟩)
+    (by
+      intro message state entry substate entrySubstate meter ended hentry hrun
+      obtain ⟨⟨log, run⟩, hp⟩ := hrun trivial
+      have hp' : ended.state.parent = state.parent := hp.trans (parent_of_entered hentry)
+      exact ⟨⟨_, .call hentry run hp'⟩, (parent_rollbackOnError state ended).trans hp'⟩)
+    (by
+      intro message state prepared substate meter evm after hprep hm hd
+      obtain ⟨⟨log, run⟩, hp⟩ := hm
+      have hp' := hp.trans (parent_prepareCreation hprep)
+      refine ⟨?_, (parent_depositCode hd).trans hp'⟩
+      rcases (depositCode_cases hd).2.2 with rolled | kept | coded
+      · exact ⟨_, .createRollback hprep run hd rolled hp'⟩
+      · exact ⟨_, .createKeep hprep run hd (.inl kept)⟩
+      · exact ⟨_, .createKeep hprep run hd (.inr coded)⟩)
+    n
+  exact ⟨fun message state substate meter held hn ended h =>
+      (key.1 message state substate meter held hn ended h).1,
+    fun message state substate meter held hn ended h =>
+      (key.2 message state substate meter held hn ended h).1⟩
 
 end EthLib.Execution.Evm

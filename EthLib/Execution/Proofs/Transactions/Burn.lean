@@ -71,7 +71,14 @@ theorem MessageCallBurns.supply [LawfulGasMeter Meter] {chainId : Nat} {message 
     {paid : Std.ExtTreeSet Address} {output : CallOutput} {log : BurnLog}
     (h : MessageCallBurns (Meter := Meter) chainId message state substate auths paid output log) :
     output.state.supply + log.total = state.supply := by
-  sorry
+  cases h with
+  | halt => rfl
+  | create preparation _ run =>
+    rw [state_ofFrame]
+    exact run.supply.trans (supply_prepareFirstFrame preparation)
+  | call preparation _ run =>
+    rw [state_ofFrame]
+    exact run.supply.trans (supply_prepareFirstFrame preparation)
 
 /-- Two certificates of a message call with the same output have the same total. -/
 theorem MessageCallBurns.total_eq [LawfulGasMeter Meter] {chainId : Nat}
@@ -93,7 +100,27 @@ theorem processMessageCall_messageCallBurns [LawfulGasMeter Meter] {chainId : Na
       .ok output) :
     ∃ log,
       MessageCallBurns (Meter := Meter) chainId message state substate auths paid output log := by
-  sorry
+  unfold processMessageCall at h
+  split at h
+  · rename_i error read preparation
+    split at h
+    · cases h
+    · cases h
+      exact ⟨.empty, .halt preparation (Bool.eq_false_iff.mpr (by assumption))⟩
+  · rename_i first preparation
+    split at h
+    · rename_i target
+      obtain ⟨⟨evm, used⟩, hrun, h⟩ := bind_ok_iff.mp h
+      cases h
+      obtain ⟨log, trace⟩ := (processMessage_runBurns first.message.gas).2 first.message first.state
+        first.substate first.meter first.held rfl ⟨evm, used⟩ hrun
+      exact ⟨log, .create preparation target trace⟩
+    · rename_i target selected
+      obtain ⟨⟨evm, used⟩, hrun, h⟩ := bind_ok_iff.mp h
+      cases h
+      obtain ⟨log, trace⟩ := (processMessage_runBurns first.message.gas).1 first.message first.state
+        first.substate first.meter first.held rfl ⟨evm, used⟩ hrun
+      exact ⟨log, .call preparation selected trace⟩
 
 /-! ## The transaction -/
 
@@ -119,7 +146,10 @@ theorem runTransaction_transactionBurnsWith [LawfulGasMeter Meter]
     {tx : Transaction} {out : TransactionOutput}
     (h : runTransaction Meter env block included tx = .ok out) :
     ∃ log deleted, TransactionBurnsWith Meter env block included tx out log deleted := by
-  sorry
+  obtain ⟨target, bought, message, output, settled, run⟩ := runTransaction_eq_ok h
+  obtain ⟨log, trace⟩ := processMessageCall_messageCallBurns run.2.2.2.1
+  exact ⟨log, deletedBalances fork settled output,
+    ⟨target, bought, message, output, settled, run, trace, rfl⟩⟩
 
 /-- A certificate of a run of a transaction gives the exact change of the supply.
 
@@ -136,7 +166,21 @@ theorem TransactionBurnsWith.supply_eq [LawfulGasMeter Meter] {env : BlockEnviro
     (h : TransactionBurnsWith Meter env block included tx out log deleted) :
     out.state.supply + burnedFees env tx out.gasUsed + log.total + deleted =
       (TransactionState.ofBlock block).supply := by
-  sorry
+  obtain ⟨target, bought, message, output, settled, ⟨ht, hb, hm, ho, -, hs, hd⟩, trace, hdel⟩ := h
+  obtain ⟨hbuy, -⟩ := supply_buyGas hb
+  have hmsg := trace.supply
+  have hset := supply_settleGas hs
+  have hdelete := supply_deleteAccounts_eq hd
+  have hused := settleGas_gasUsed hs
+  have conserve := settlement_conserves hMin hPrice (output.gasLeft + output.reservoir)
+    output.refund
+  dsimp only at hset conserve
+  simp only [settlement, priorityFeeOf] at hset conserve
+  simp only [burnedFees]
+  rw [hused, hdel]
+  generalize gasUsed fork included.sender tx (output.gasLeft + output.reservoir) output.refund =
+    g at hset conserve ⊢
+  omega
 
 /-- Two certificates of a run of a transaction give the same burns and deleted balances. -/
 theorem TransactionBurnsWith.unique [LawfulGasMeter Meter] {env : BlockEnvironment fork}
@@ -145,7 +189,11 @@ theorem TransactionBurnsWith.unique [LawfulGasMeter Meter] {env : BlockEnvironme
     (h : TransactionBurnsWith Meter env block included tx out log deleted)
     (h' : TransactionBurnsWith Meter env block included tx out log' deleted') :
     log'.total = log.total ∧ deleted' = deleted := by
-  sorry
+  obtain ⟨t, b, m, o, st, run, trace, hdel⟩ := h
+  obtain ⟨t', b', m', o', st', run', trace', hdel'⟩ := h'
+  obtain ⟨rt, rb, rm, ro, rs⟩ := TransactionRun.unique run run'
+  subst rt rb rm ro rs
+  exact ⟨(MessageCallBurns.total_eq trace trace').symm, hdel'.trans hdel.symm⟩
 
 /-- A certificate of a run of a transaction with the gas meter that it runs with at its fork. -/
 def TransactionBurns (env : BlockEnvironment fork) (block : State.BlockState)
@@ -160,7 +208,14 @@ theorem processTransaction_transactionBurns {env : BlockEnvironment fork}
     {block : State.BlockState} {included : Included} {tx : Transaction} {out : TransactionOutput}
     (h : processTransaction env block included tx = .ok out) :
     ∃ log deleted, TransactionBurns env block included tx out log deleted := by
-  sorry
+  unfold processTransaction at h
+  split at h
+  · cases h
+  split at h
+  · rename_i hfork
+    simpa only [TransactionBurns, hfork, ↓reduceIte] using runTransaction_transactionBurnsWith h
+  · rename_i hfork
+    simpa only [TransactionBurns, hfork, ↓reduceIte] using runTransaction_transactionBurnsWith h
 
 /-- A certificate of a transaction gives the exact change of the supply, at every fork.
 
@@ -172,7 +227,8 @@ theorem TransactionBurns.supply_eq {env : BlockEnvironment fork} {block : State.
     (h : TransactionBurns env block included tx out log deleted) :
     out.state.supply + burnedFees env tx out.gasUsed + log.total + deleted =
       (TransactionState.ofBlock block).supply := by
-  sorry
+  unfold TransactionBurns at h
+  split at h <;> exact h.supply_eq hMin hPrice
 
 /-- Two certificates of a transaction have the same total and the same deleted balances. -/
 theorem TransactionBurns.unique {env : BlockEnvironment fork} {block : State.BlockState}
@@ -180,7 +236,13 @@ theorem TransactionBurns.unique {env : BlockEnvironment fork} {block : State.Blo
     {deleted deleted' : Nat} (h : TransactionBurns env block included tx out log deleted)
     (h' : TransactionBurns env block included tx out log' deleted') :
     log'.total = log.total ∧ deleted' = deleted := by
-  sorry
+  unfold TransactionBurns at h h'
+  by_cases hfork : fork ≥ .glamsterdam
+  · simp only [hfork, ↓reduceIte] at h h'
+    exact TransactionBurnsWith.unique h h'
+  · simp only [hfork, ↓reduceIte] at h h'
+    exact TransactionBurnsWith.unique h h'
+
 
 /-- A transaction that runs lowers the supply by exactly its losses, at every fork.
 

@@ -472,7 +472,26 @@ theorem TransactionRun.unique {env : BlockEnvironment fork} {block : State.Block
       settled') :
     target' = target ∧ bought' = bought ∧ message' = message ∧ output' = output ∧
       settled' = settled := by
-  sorry
+  obtain ⟨t, b, m, o, -, s, -⟩ := h
+  obtain ⟨t', b', m', o', -, s', -⟩ := h'
+  have ht : target' = target := by
+    rw [t] at t'
+    exact (Except.ok.inj t').symm
+  subst ht
+  have hb : bought' = bought := by
+    rw [b] at b'
+    exact (Except.ok.inj b').symm
+  subst hb
+  have hm : message' = message := by
+    rw [m] at m'
+    exact (Except.ok.inj m').symm
+  subst hm
+  have ho : output' = output := by
+    rw [o] at o'
+    exact (Except.ok.inj o').symm
+  subst ho
+  rw [s] at s'
+  exact ⟨rfl, rfl, rfl, rfl, (Prod.mk.inj (Except.ok.inj s')).1.symm⟩
 
 /-- Up to BPO5, a transaction that runs takes each step of the run, in order.
 
