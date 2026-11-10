@@ -8,6 +8,10 @@ public import EthLib.Consensus.Transition.EpochUpdates
 
 An updated effective balance is the old one, or the balance rounded down to an increment and capped.
 
+It is at most the balance plus the downward band of hysteresis.
+
+It does not rise while the balance stays within the upward band of it.
+
 The effective balances are aligned when each is a whole number of increments.
 
 When the largest values of the preset are aligned too, the update keeps them aligned.
@@ -49,6 +53,159 @@ theorem updatedEffectiveBalance_cases {largest balance effectiveBalance result :
   cases leaves
   · exact .inl rfl
   · exact .inr rfl
+
+/-- The downward band of hysteresis, in Gwei: a quarter of an increment on mainnet. -/
+abbrev Preset.downwardBand (preset : Preset) : Nat :=
+  (preset.EFFECTIVE_BALANCE_INCREMENT / preset.HYSTERESIS_QUOTIENT).toNat *
+    preset.HYSTERESIS_DOWNWARD_MULTIPLIER.toNat
+
+/-- The upward band of hysteresis, in Gwei: five quarters of an increment on mainnet. -/
+abbrev Preset.upwardBand (preset : Preset) : Nat :=
+  (preset.EFFECTIVE_BALANCE_INCREMENT / preset.HYSTERESIS_QUOTIENT).toNat *
+    preset.HYSTERESIS_UPWARD_MULTIPLIER.toNat
+
+/-- A successful update either keeps the old value inside the band, or leaves the band.
+
+Inside the band, the balance is at most the old value plus the upward band.
+
+Also inside the band, the old value is at most the balance plus the downward band.
+
+Outside the band, the result is the balance rounded down to an increment, at most the largest. -/
+theorem updatedEffectiveBalance_split {largest balance effectiveBalance result : Gwei}
+    (computed : updatedEffectiveBalance preset largest balance effectiveBalance = .ok result) :
+    (result = effectiveBalance ∧
+      balance.toNat ≤ effectiveBalance.toNat + preset.upwardBand ∧
+      effectiveBalance.toNat ≤ balance.toNat + preset.downwardBand) ∨
+    (result = min (balance - balance % preset.EFFECTIVE_BALANCE_INCREMENT) largest ∧
+      (balance.toNat + preset.downwardBand < effectiveBalance.toNat ∨
+        effectiveBalance.toNat + preset.upwardBand < balance.toNat)) := by
+  simp only [updatedEffectiveBalance, leavesBand, liftAccessor, liftArith, Except.mapError, bind,
+    Except.bind, pure, Except.pure] at computed
+  rcases hd : mulChecked (preset.EFFECTIVE_BALANCE_INCREMENT / preset.HYSTERESIS_QUOTIENT)
+    preset.HYSTERESIS_DOWNWARD_MULTIPLIER with _ | down
+  · simp [hd] at computed
+  rcases hu : mulChecked (preset.EFFECTIVE_BALANCE_INCREMENT / preset.HYSTERESIS_QUOTIENT)
+    preset.HYSTERESIS_UPWARD_MULTIPLIER with _ | up
+  · simp [hd, hu] at computed
+  have downNat := (mulChecked_ok_iff.mp hd).2
+  have upNat := (mulChecked_ok_iff.mp hu).2
+  simp [hd, hu] at computed
+  have dBand : down.toNat = preset.downwardBand := downNat
+  have uBand : up.toNat = preset.upwardBand := upNat
+  rcases hs : addChecked balance down with _ | sum
+  · simp [hs] at computed
+  have sumNat := (addChecked_ok_iff.mp hs).2
+  simp only [hs] at computed
+  by_cases lt : sum < effectiveBalance
+  · simp [lt] at computed
+    have := UInt64.lt_iff_toNat_lt.mp lt
+    exact .inr ⟨computed.symm, .inl (by omega)⟩
+  · simp [lt] at computed
+    rcases hs2 : addChecked effectiveBalance up with _ | sum2
+    · simp [hs2] at computed
+    have sum2Nat := (addChecked_ok_iff.mp hs2).2
+    simp only [hs2] at computed
+    have := Nat.not_lt.mp (fun h => lt (UInt64.lt_iff_toNat_lt.mpr h))
+    by_cases lt2 : sum2 < balance
+    · simp [lt2] at computed
+      have := UInt64.lt_iff_toNat_lt.mp lt2
+      exact .inr ⟨computed.symm, .inr (by omega)⟩
+    · simp [lt2] at computed
+      have := Nat.not_lt.mp (fun h => lt2 (UInt64.lt_iff_toNat_lt.mpr h))
+      exact .inl ⟨computed.symm, by omega, by omega⟩
+
+/-- The balance rounded down to an increment is that balance less the remainder. -/
+private theorem toNat_rounded {balance : Gwei} :
+    (balance - balance % preset.EFFECTIVE_BALANCE_INCREMENT).toNat =
+      balance.toNat - balance.toNat % preset.EFFECTIVE_BALANCE_INCREMENT.toNat := by
+  have le : balance % preset.EFFECTIVE_BALANCE_INCREMENT ≤ balance :=
+    UInt64.le_iff_toNat_le.mpr (by rw [UInt64.toNat_mod]; exact Nat.mod_le _ _)
+  rw [UInt64.toNat_sub_of_le _ _ le, UInt64.toNat_mod]
+
+/-- The rounded balance capped at the largest is either the rounded balance or the largest. -/
+private theorem toNat_min_rounded {balance largest : Gwei} :
+    (min (balance - balance % preset.EFFECTIVE_BALANCE_INCREMENT) largest).toNat =
+      min (balance.toNat - balance.toNat % preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
+        largest.toNat := by
+  rw [UInt64.min_def, ← toNat_rounded (preset := preset)]
+  split
+  · rename_i h
+    rw [Nat.min_eq_left (UInt64.le_iff_toNat_le.mp h)]
+  · rename_i h
+    rw [Nat.min_eq_right (Nat.le_of_lt (UInt64.lt_iff_toNat_lt.mp (UInt64.not_le.mp h)))]
+
+/-- The increment of a preset is positive and at most its upward band, as the hysteresis needs. -/
+abbrev Preset.IncrementWithinUpwardBand (preset : Preset) : Prop :=
+  0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat ∧
+    preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ preset.upwardBand
+
+/-- An updated effective balance is at most the balance plus the downward band. -/
+theorem updatedEffectiveBalance_le_add {largest balance effectiveBalance result : Gwei}
+    (computed : updatedEffectiveBalance preset largest balance effectiveBalance = .ok result) :
+    result.toNat ≤ balance.toNat + preset.downwardBand := by
+  rcases updatedEffectiveBalance_split computed with ⟨rfl, _, below⟩ | ⟨rfl, _⟩
+  · exact below
+  · rw [toNat_min_rounded (preset := preset)]
+    have := Nat.mod_le balance.toNat preset.EFFECTIVE_BALANCE_INCREMENT.toNat
+    have := Nat.min_le_left
+      (balance.toNat - balance.toNat % preset.EFFECTIVE_BALANCE_INCREMENT.toNat) largest.toNat
+    omega
+
+/-- An updated effective balance is at most the old one in two cases.
+
+The balance may be at most the old one plus the upward band.
+
+Or the old one may already be at least the largest. -/
+theorem updatedEffectiveBalance_le_of_band {largest balance effectiveBalance result : Gwei}
+    (band : balance.toNat ≤ effectiveBalance.toNat + preset.upwardBand ∨
+      largest ≤ effectiveBalance)
+    (computed : updatedEffectiveBalance preset largest balance effectiveBalance = .ok result) :
+    result ≤ effectiveBalance := by
+  rcases updatedEffectiveBalance_split computed with ⟨rfl, _⟩ | ⟨rfl, out⟩
+  · exact UInt64.le_refl _
+  · rw [UInt64.le_iff_toNat_le, toNat_min_rounded (preset := preset)]
+    have := Nat.mod_le balance.toNat preset.EFFECTIVE_BALANCE_INCREMENT.toNat
+    have := Nat.min_le_left
+      (balance.toNat - balance.toNat % preset.EFFECTIVE_BALANCE_INCREMENT.toNat) largest.toNat
+    have := Nat.min_le_right
+      (balance.toNat - balance.toNat % preset.EFFECTIVE_BALANCE_INCREMENT.toNat) largest.toNat
+    rcases band with band | big
+    · omega
+    · have := UInt64.le_iff_toNat_le.mp big
+      omega
+
+/-- After an update, the balance is at most the new effective balance plus the upward band.
+
+Otherwise the new effective balance is at least the largest.
+
+The increment must be positive and at most the upward band. -/
+theorem updatedEffectiveBalance_band {largest balance effectiveBalance result : Gwei}
+    (bands : preset.IncrementWithinUpwardBand)
+    (computed : updatedEffectiveBalance preset largest balance effectiveBalance = .ok result) :
+    balance.toNat ≤ result.toNat + preset.upwardBand ∨ largest ≤ result := by
+  obtain ⟨positive, narrow⟩ := bands
+  rcases updatedEffectiveBalance_split computed with ⟨rfl, inside, _⟩ | ⟨rfl, _⟩
+  · exact .inl inside
+  · rw [UInt64.le_iff_toNat_le, toNat_min_rounded (preset := preset)]
+    have := Nat.mod_lt balance.toNat positive
+    have := Nat.min_le_left
+      (balance.toNat - balance.toNat % preset.EFFECTIVE_BALANCE_INCREMENT.toNat) largest.toNat
+    rcases Nat.le_total largest.toNat
+      (balance.toNat - balance.toNat % preset.EFFECTIVE_BALANCE_INCREMENT.toNat) with le | le
+    · right
+      have := Nat.min_eq_right le
+      omega
+    · left
+      have := Nat.min_eq_left le
+      omega
+
+/-- The increment of the mainnet preset is positive and at most its upward band. -/
+theorem Preset.incrementWithinUpwardBand_mainnet : Preset.mainnet.IncrementWithinUpwardBand := by
+  decide
+
+/-- The increment of the minimal preset is positive and at most its upward band. -/
+theorem Preset.incrementWithinUpwardBand_minimal : Preset.minimal.IncrementWithinUpwardBand := by
+  decide
 
 /-- An updated effective balance is aligned when the old one and the largest are. -/
 theorem updatedEffectiveBalance_aligned {largest balance effectiveBalance result : Gwei}

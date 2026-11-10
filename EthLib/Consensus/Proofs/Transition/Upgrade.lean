@@ -69,7 +69,9 @@ theorem TargetFlagAt.of_flagsKeptOrZero {fork : Fork} {state after : BeaconState
 
 /-- An upgrade to a fork no earlier than the fork before.
 
-It keeps the slot, the three checkpoints, the block roots and the genesis validators root.
+It keeps the slot, the three checkpoints, the bits of justification and the block roots.
+
+It also keeps the genesis validators root.
 
 The current fork version becomes the previous one, and the new one is that of the fork after.
 
@@ -91,6 +93,7 @@ structure UpgradeFrame (config : Config) {fork post : Fork} (pre : BeaconState p
   finalized : after.finalizedCheckpoint = pre.finalizedCheckpoint
   previousJustified : after.previousJustifiedCheckpoint = pre.previousJustifiedCheckpoint
   currentJustified : after.currentJustifiedCheckpoint = pre.currentJustifiedCheckpoint
+  justificationBits : after.justificationBits = pre.justificationBits
   blockRoots : after.blockRoots = pre.blockRoots
   genesisValidatorsRoot : after.genesisValidatorsRoot = pre.genesisValidatorsRoot
   previousVersion : after.forkVersions.previousVersion = pre.forkVersions.currentVersion
@@ -113,6 +116,7 @@ theorem UpgradeFrame.of_carried {fork post : Fork} {pre : BeaconState preset for
     (finalized : after.finalizedCheckpoint = pre.finalizedCheckpoint)
     (previousJustified : after.previousJustifiedCheckpoint = pre.previousJustifiedCheckpoint)
     (currentJustified : after.currentJustifiedCheckpoint = pre.currentJustifiedCheckpoint)
+    (justificationBits : after.justificationBits = pre.justificationBits)
     (blockRoots : after.blockRoots = pre.blockRoots)
     (genesisValidatorsRoot : after.genesisValidatorsRoot = pre.genesisValidatorsRoot)
     (previousVersion : after.forkVersions.previousVersion = pre.forkVersions.currentVersion)
@@ -128,6 +132,7 @@ theorem UpgradeFrame.of_carried {fork post : Fork} {pre : BeaconState preset for
   finalized := finalized
   previousJustified := previousJustified
   currentJustified := currentJustified
+  justificationBits := justificationBits
   blockRoots := blockRoots
   genesisValidatorsRoot := genesisValidatorsRoot
   previousVersion := previousVersion
@@ -159,6 +164,7 @@ theorem UpgradeFrame.trans_blockFrame {fork post : Fork} {pre : BeaconState pres
   finalized := two.finalized.trans one.finalized
   previousJustified := two.previousJustified.trans one.previousJustified
   currentJustified := two.currentJustified.trans one.currentJustified
+  justificationBits := two.justificationBits.trans one.justificationBits
   blockRoots := two.blockRoots.trans one.blockRoots
   genesisValidatorsRoot := two.genesisValidatorsRoot.trans one.genesisValidatorsRoot
   previousVersion := by rw [two.forkVersions]; exact one.previousVersion
@@ -289,7 +295,7 @@ private theorem upgradeToAltair_frame_spec {pre : BeaconState preset .phase0}
   obtain ⟨previous, current, scores⟩ := carryFields_of_lt_altair (config := config)
     (post := .altair) pre (by decide) (by decide) (by decide) (by decide)
   refine ⟨?_, rfl, rfl, ?_, ?_, ?_, rfl, rfl⟩
-  · exact UpgradeFrame.of_carried (by decide) rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl
+  · exact UpgradeFrame.of_carried (by decide) rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl
       fun altair => absurd altair (by decide)
   · show participation.data.size = _
     rw [same, previous, Array.size_replicate]
@@ -410,7 +416,7 @@ private theorem upgradeToElectra_frame_spec {pre : BeaconState preset .dencun}
       (BlockFrame.foldlM (fun _ _ _ ok => frame_queuePreActivation ok) queued)).trans_blockFrame
       (BlockFrame.foldlM (fun _ _ _ ok => frame_queueCompoundingExcess ok) compounded))
     have altair : Fork.altair ≤ Fork.dencun := by decide
-    exact UpgradeFrame.of_carried (by decide) rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl
+    exact UpgradeFrame.of_carried (by decide) rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl
       fun _ current => by cases current <;>
         simp [recentParticipation, carryFields, carryList, altair]
   have first := foldlM_ok_invariant (ElectraKept _)
@@ -444,7 +450,7 @@ private theorem upgradeToFulu_frame_spec {pre : BeaconState preset .pectra}
   obtain ⟨_, -, rfl⟩ := computed
   have altair : Fork.altair ≤ Fork.pectra := by decide
   refine ⟨?_, rfl, rfl, rfl⟩
-  exact UpgradeFrame.of_carried (by decide) rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl
+  exact UpgradeFrame.of_carried (by decide) rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl
     fun _ current => by cases current <;> simp [recentParticipation, carryFields, carryList, altair]
 
 /-- The upgrade to Fulu keeps the registry and the balances.
@@ -621,7 +627,7 @@ private theorem upgradeToGloas_frame_spec {pre : BeaconState preset .fusaka}
   obtain ⟨window, -, onboarded⟩ := bind_ok_iff.mp rest
   obtain ⟨⟨builders, pending, rfl⟩, -⟩ := onboardBuildersFromPendingDeposits_spec onboarded
   refine ⟨?_, rfl, rfl, rfl, rfl, rfl⟩
-  exact UpgradeFrame.of_carried (by decide) rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl
+  exact UpgradeFrame.of_carried (by decide) rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl
     fun _ current => by cases current <;> rfl
 
 /-- The upgrade of a Fulu state keeps its registry and balances, and the hash of its payload.
@@ -787,7 +793,7 @@ theorem upgradeToHeze_error_iff {pre : BeaconState preset .glamsterdam}
 theorem upgradeFrame_carryFields {fork post : Fork} (pre : BeaconState preset fork)
     (upgrade : fork < post) (before : post < .glamsterdam) :
     UpgradeFrame config pre (carryFields config post pre upgrade before) :=
-  UpgradeFrame.of_carried (Nat.le_of_lt upgrade) rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl
+  UpgradeFrame.of_carried (Nat.le_of_lt upgrade) rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl
     fun altair current => by
       cases current <;> simp [recentParticipation, carryFields, altair, carryList]
 
@@ -820,7 +826,7 @@ theorem upgradeFrame_upgradeToHeze {pre : BeaconState preset .glamsterdam}
     {after : BeaconState preset .hegota} (computed : upgradeToHeze config pre = .ok after) :
     UpgradeFrame config pre after := by
   obtain ⟨-, rfl⟩ := upgradeToHeze_ok_iff.mp computed
-  exact UpgradeFrame.of_carried (by decide) rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl
+  exact UpgradeFrame.of_carried (by decide) rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl
     fun _ current => by cases current <;> rfl
 
 /-! ## The invariant across an upgrade -/

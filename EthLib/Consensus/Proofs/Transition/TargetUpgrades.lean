@@ -234,6 +234,15 @@ theorem processUpgrades_justified {forked after : ForkedBeaconState preset}
         (upgradeFrame_upgradeNext stepOk).currentJustified.trans current⟩)
     ⟨rfl, rfl⟩ computed
 
+/-- The upgrades due at a slot keep the bits of justification. -/
+theorem processUpgrades_justificationBits {forked after : ForkedBeaconState preset}
+    (computed : processUpgrades config checks forked = .ok after) :
+    after.state.justificationBits = forked.state.justificationBits :=
+  processUpgrades_induction
+    (property := fun state => state.state.justificationBits = forked.state.justificationBits)
+    (fun same stepOk => (upgradeFrame_upgradeNext stepOk).justificationBits.trans same) rfl
+    computed
+
 /-- The upgrades due at a slot keep the slot. -/
 theorem processUpgrades_slot {forked after : ForkedBeaconState preset}
     (computed : processUpgrades config checks forked = .ok after) :
@@ -343,10 +352,7 @@ theorem JustifiedEarly.of_initializeBeaconStateFromEth1 {fork : Fork}
     (computed : initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits =
       .ok after) :
     JustifiedEarly after := by
-  obtain ⟨_, _, _, _, activated, _, depositedOk, activatedOk, rfl⟩ :=
-    initializeBeaconStateFromEth1_ok computed
-  have frame := (Frame.foldlM (fun _ _ _ ok => frame_genesisDeposit ok) depositedOk).trans
-    (Frame.foldlM (fun _ _ _ ok => frame_activateAtGenesis ok) activatedOk)
+  obtain ⟨_, _, _, activated, _, frame, rfl⟩ := initializeBeaconStateFromEth1_frame computed
   intro _
   show activated.previousJustifiedCheckpoint = activated.currentJustifiedCheckpoint
   rw [frame.previousJustified, frame.currentJustified]

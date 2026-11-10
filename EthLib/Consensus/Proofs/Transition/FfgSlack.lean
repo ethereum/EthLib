@@ -223,6 +223,8 @@ A recent epoch is the previous or the current epoch of the state before.
 
 The root of the new checkpoint is the root that the state before records for the epoch.
 
+The slot ends an epoch, as only the epoch step changes the checkpoint.
+
 The buffer of roots must cover two epochs. -/
 theorem advanceSlot_getBlockRoot_currentJustified_of_ne
     (window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
@@ -231,7 +233,8 @@ theorem advanceSlot_getBlockRoot_currentJustified_of_ne
     (after.currentJustifiedCheckpoint.epoch = getPreviousEpoch state ∨
         after.currentJustifiedCheckpoint.epoch = getCurrentEpoch state) ∧
       getBlockRoot state after.currentJustifiedCheckpoint.epoch =
-        .ok after.currentJustifiedCheckpoint.root := by
+        .ok after.currentJustifiedCheckpoint.root ∧
+      (state.slot + 1) % preset.SLOTS_PER_EPOCH = 0 := by
   obtain ⟨next, cached, epoched, sum, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok computed
   have cachedFrame := frame_processSlot cachedOk
   dsimp only at changed ⊢
@@ -254,7 +257,11 @@ theorem advanceSlot_getBlockRoot_currentJustified_of_ne
     -- The caching keeps the root of the recent epoch.
     rw [getBlockRoot_processSlot cachedOk (slot_lt_epoch_add_historical
       (slotsPerEpoch_pos_of_mod sum boundary) window recent.symm)] at rootOk
-    exact ⟨recent, rootOk⟩
+    have nextEq : next = state.slot + 1 := by
+      apply UInt64.toNat_inj.mp
+      rw [UInt64.toNat_add, UInt64.toNat_one, ← sum, Nat.mod_eq_of_lt next.toNat_lt]
+    rw [← nextEq]
+    exact ⟨recent, rootOk, boundary⟩
   · simp only [pure, Except.pure, Except.ok.injEq] at epochedOk
     subst epochedOk
     exact absurd cachedFrame.currentJustified changed

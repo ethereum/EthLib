@@ -99,6 +99,11 @@ theorem payloadInputs_setValidator {index : ValidatorIndex} {validator : Validat
   obtain ⟨_, rfl⟩ := setValidator_ok set
   exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
+theorem payloadInputs_setValidatorAt {position : Nat} {validator : Validator}
+    (set : state.setValidatorAt position validator = .ok after) : PayloadInputs state after := by
+  obtain ⟨_, rfl⟩ := setValidatorAt_ok set
+  exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+
 theorem payloadInputs_setBalance {index : ValidatorIndex} {balance : Gwei}
     (set : state.setBalance index balance = .ok after) : PayloadInputs state after := by
   obtain ⟨_, rfl⟩ := setBalance_ok set

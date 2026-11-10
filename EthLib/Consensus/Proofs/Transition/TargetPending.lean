@@ -271,9 +271,8 @@ theorem PendingVoted.of_advanceSlot {votes : Set (ValidatorIndex × AttestationD
     (early : JustifiedEarly state) (holds : PendingVoted votes state)
     (computed : advanceSlot config checks state = .ok after) :
     PendingVoted votes after := by
-  have committees := fun {epoch : Epoch} => committeesKept_advanceSlot (epoch := epoch) apart
-    (BeaconState.validators_size_lt_of_lt_glamsterdam (Nat.lt_trans before (by decide)) after)
-    computed
+  have committees := fun {epoch : Epoch} =>
+    committeesKept_advanceSlot (epoch := epoch) apart computed
   obtain ⟨next, cached, epoched, sum, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok computed
   have cachedFrame := frame_processSlot cachedOk
   obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
