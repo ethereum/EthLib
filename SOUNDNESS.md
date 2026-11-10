@@ -2176,6 +2176,12 @@ The theorems about `engine_forkchoiceUpdated` are in `Proofs/ForkchoiceUpdated.l
 The exception is step 2 of the method, which `forkchoiceUpdated_of_belowFinalized` covers.
 A valid head below the finalized block that the execution layer knows is `VALID` there, and the head does not change.
 `forkchoiceUpdated_of_invalid` gives the answer for an invalid head, and `latestValid_eq_some_iff` with `getElem?_succ_chainOf` shows that its latest valid hash is the valid ancestor nearest the head.
+In version 4, custody columns that decode never change the answer (`forkchoiceUpdatedCall_custody`), and without payload attributes every version gives the same answer (`forkchoiceUpdatedCall_of_null`).
+The model has no timestamps, so it checks neither the fork of the payload attributes nor that their timestamp is above the head's.
+For the same reason, version 2 takes both structures of the attributes at any time.
+When the update applies a valid head, attributes whose fields fit no structure of the version give `-38003` (`forkchoiceUpdatedCall_eq_error_of_attributes`, with `payloadAttributesOfVersion_eq_error_iff` and `payloadAttributesOfJson_wrong_fields`), and when it applies none they are not read (`forkchoiceUpdatedCall_of_no_head`).
+Version 1 names no code for a wrong structure, and the model gives it `-38003`, the answer of its step 9 for invalid attributes.
+The OpenRPC description of the method makes the payload attributes optional, but the model asks for them, as `null` when there are none.
 
 `executionEngine_accepts_iff` (`Proofs/ExecutionEngine.lean`) states when the execution engine accepts a payload request of the beacon chain.
 The request lists must be well formed, and the payload must have a block at the active fork of the chain, which must be before Glamsterdam.

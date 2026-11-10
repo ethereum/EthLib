@@ -39,13 +39,19 @@ The forkchoice state decodes exactly when its object holds exactly its three fie
 
 Each of them is a hash of 32 bytes.
 
-The parameters decode exactly when they are a JSON array of two values.
+The parameters decode exactly when they are a JSON array of the state and the attributes.
 
-The first value must also decode as a forkchoice state.
+From version 4 custody columns may follow, and they must then decode.
 
-The second value must be `null` or an object.
+The state must decode, and the attributes must be `null` or an object.
 
-The result is that state, and whether the payload attributes are an object.
+Custody columns that decode never change the answer.
+
+Without payload attributes, every version gives the same answer.
+
+When the update applies a valid head, attributes that fit no structure of the version give `-38003`.
+
+When it applies none, the attributes are not read.
 -/
 
 public section
@@ -328,44 +334,163 @@ theorem forkchoiceStateOfJson_eq_ok_iff {j : Lean.Json} {s : ForkchoiceState} :
     simp only [bind_ok_iff, Json.field_eq_ok_iff]
     exact ⟨head, hl1, _, hf1, safe, hl2, _, hf2, fin, hl3, _, hf3, rfl⟩
 
-/-- The parameters decode exactly when they are a JSON array of two values.
+/-- The parameters decode exactly when they are a JSON array of the state and the attributes.
 
-The first value must also decode as a forkchoice state.
+From version 4 the custody columns may follow them.
+
+The first value must decode as a forkchoice state.
 
 The second value must be `null` or an object.
 
-The result is that state, and whether the payload attributes are an object. -/
-theorem forkchoiceUpdatedParams_eq_ok_iff {params : Lean.Json} {r : ForkchoiceState × Bool} :
-    forkchoiceUpdatedParams params = .ok r ↔
-      ∃ stateJson attributes s, params = .arr #[stateJson, attributes] ∧
+The custody columns, `null` when absent, must decode.
+
+The result is that state, and the payload attributes when they are an object. -/
+theorem forkchoiceUpdatedParams_eq_ok_iff {version : Nat} {params : Lean.Json}
+    {r : ForkchoiceState × Option Lean.Json} :
+    forkchoiceUpdatedParams version params = .ok r ↔
+      ∃ stateJson attributes custody s,
+        (params = .arr #[stateJson, attributes] ∧ custody = .null ∨
+          4 ≤ version ∧ params = .arr #[stateJson, attributes, custody]) ∧
         forkchoiceStateOfJson stateJson = .ok s ∧
-          (attributes = .null ∧ r = (s, false) ∨
-            ∃ kvs, attributes = .obj kvs ∧ r = (s, true)) := by
+        (∃ columns, custodyColumnsOfJson custody = .ok columns) ∧
+        (attributes = .null ∧ r = (s, none) ∨
+          ∃ kvs, attributes = .obj kvs ∧ r = (s, some (.obj kvs))) := by
+  have hNull : custodyColumnsOfJson .null = .ok none := rfl
   unfold forkchoiceUpdatedParams
   cases params with
   | arr items =>
     obtain ⟨l⟩ := items
-    -- Only a list of two values gets past the shape check.
     match l with
     | [stateJson, attributes] =>
-      simp only [bind_ok_iff]
-      -- The attributes decide the flag: `null`, an object, or any other value, which fails.
-      cases attributes <;> simp [pure, Except.pure, eq_comm, and_assoc]
-    | [] => simp
-    | [_] => simp
-    | _ :: _ :: _ :: _ => simp
-  -- Any other JSON value is not an array.
-  | _ => simp
+      cases hs : forkchoiceStateOfJson stateJson <;> cases attributes <;>
+        simp [Json.paramsArray, hs, hNull, bind, Except.bind, pure, Except.pure, eq_comm,
+          and_assoc]
+    | [stateJson, attributes, custody] =>
+      by_cases h4 : 4 ≤ version
+      · cases hs : forkchoiceStateOfJson stateJson <;> cases hc : custodyColumnsOfJson custody <;>
+          cases attributes <;>
+          simp [Json.paramsArray, h4, hs, hc, bind, Except.bind, pure, Except.pure, eq_comm,
+            and_assoc]
+      · simp [Json.paramsArray, h4, bind, Except.bind, pure, Except.pure]
+    | [] => simp [Json.paramsArray, bind, Except.bind, pure, Except.pure]
+    | [_] => simp [Json.paramsArray, bind, Except.bind, pure, Except.pure]
+    | _ :: _ :: _ :: _ :: _ => simp [Json.paramsArray, bind, Except.bind, pure, Except.pure]
+  | _ => simp [Json.paramsArray, bind, Except.bind]
 
 /-- Payload attributes that are neither `null` nor an object are an invalid parameter.
 
-That holds for every forkchoice state that decodes, before any rule reads the payload tree. -/
-theorem forkchoiceUpdatedParams_not_object {stateJson attributes : Lean.Json}
+That holds for every version and every forkchoice state that decodes.
+
+The error comes before any rule reads the payload tree. -/
+theorem forkchoiceUpdatedParams_not_object {version : Nat} {stateJson attributes : Lean.Json}
     {s : ForkchoiceState} (hs : forkchoiceStateOfJson stateJson = .ok s)
     (hNull : attributes ≠ .null) (hObj : ∀ kvs, attributes ≠ .obj kvs) :
-    forkchoiceUpdatedParams (.arr #[stateJson, attributes]) =
+    forkchoiceUpdatedParams version (.arr #[stateJson, attributes]) =
       .error (.invalidParams "payloadAttributes: not an object") := by
   unfold forkchoiceUpdatedParams
-  cases attributes <;> simp_all [bind, Except.bind]
+  cases attributes <;> simp_all [Json.paramsArray, bind, Except.bind, pure, Except.pure]
+
+/-- From version 4, custody columns that decode leave the parameters as they are without them. -/
+theorem forkchoiceUpdatedParams_custody {version : Nat} (four : 4 ≤ version)
+    {stateJson attributes custody : Lean.Json} {columns : Option (Vector UInt8 16)}
+    (decoded : custodyColumnsOfJson custody = .ok columns) :
+    forkchoiceUpdatedParams version (.arr #[stateJson, attributes, custody]) =
+      forkchoiceUpdatedParams version (.arr #[stateJson, attributes]) := by
+  have hNull : custodyColumnsOfJson .null = .ok none := rfl
+  cases hs : forkchoiceStateOfJson stateJson <;> cases attributes <;>
+    simp [forkchoiceUpdatedParams, Json.paramsArray, four, decoded, hNull, hs, bind, Except.bind,
+      pure, Except.pure]
+
+/-- In version 4, custody columns that decode never change the answer of the method.
+
+The answer is the same as without them. -/
+theorem forkchoiceUpdatedCall_custody {stateJson attributes custody : Lean.Json}
+    {columns : Option (Vector UInt8 16)} (decoded : custodyColumnsOfJson custody = .ok columns) :
+    forkchoiceUpdatedCall 4 tree finalized (.arr #[stateJson, attributes, custody]) =
+      forkchoiceUpdatedCall 4 tree finalized (.arr #[stateJson, attributes]) := by
+  simp only [forkchoiceUpdatedCall, forkchoiceUpdatedParams_custody (Nat.le_refl 4) decoded]
+
+/-- Without payload attributes, every version of the method gives the same answer.
+
+So version 4 answers as version 3. -/
+theorem forkchoiceUpdatedCall_of_null {version version' : Nat} {stateJson : Lean.Json} :
+    forkchoiceUpdatedCall version tree finalized (.arr #[stateJson, .null]) =
+      forkchoiceUpdatedCall version' tree finalized (.arr #[stateJson, .null]) := by
+  cases hs : forkchoiceStateOfJson stateJson <;>
+    simp [forkchoiceUpdatedCall, forkchoiceUpdatedParams, Json.paramsArray, custodyColumnsOfJson,
+      hs, bind, Except.bind, pure, Except.pure]
+
+/-- Version 4 with custody columns that decode and no attributes answers as version 3. -/
+theorem forkchoiceUpdatedCall_four_of_null {stateJson custody : Lean.Json}
+    {columns : Option (Vector UInt8 16)} (decoded : custodyColumnsOfJson custody = .ok columns) :
+    forkchoiceUpdatedCall 4 tree finalized (.arr #[stateJson, .null, custody]) =
+      forkchoiceUpdatedCall 3 tree finalized (.arr #[stateJson, .null]) := by
+  rw [forkchoiceUpdatedCall_custody decoded, forkchoiceUpdatedCall_of_null]
+
+/-- Attributes without exactly the fields of a version of their structure do not decode at it. -/
+theorem payloadAttributesOfJson_wrong_fields {v : Nat} {j : Lean.Json}
+    {fs : List (String × Lean.Json)} (hf : Json.fields "payloadAttributes" j = .ok fs)
+    (hx : Json.hasExactly fs (attributesFields v) = false) :
+    payloadAttributesOfJson v j = .error (.invalidParams "payloadAttributes: wrong fields") := by
+  simp [payloadAttributesOfJson, hf, hx, bind, Except.bind, Json.invalid, throw, throwThe,
+    MonadExceptOf.throw]
+
+/-- The attributes of a version of the method fail exactly when no structure that it takes decodes.
+
+The error is then that of invalid payload attributes. -/
+theorem payloadAttributesOfVersion_eq_error_iff {version : Nat} {j : Lean.Json}
+    {e : EngineError} :
+    payloadAttributesOfVersion version j = .error e ↔
+      e = .invalidPayloadAttributes ∧
+        ∀ v ∈ attributesVersions version, ∃ e', payloadAttributesOfJson v j = .error e' := by
+  unfold payloadAttributesOfVersion
+  constructor
+  · intro h
+    split at h
+    · cases h
+    · next hn =>
+      cases h
+      refine ⟨rfl, fun v hv => ?_⟩
+      have := List.findSome?_eq_none_iff.mp hn v hv
+      cases hj : payloadAttributesOfJson v j <;> simp_all [Except.toOption]
+  · rintro ⟨rfl, h⟩
+    split
+    · next a ha =>
+      obtain ⟨v, hv, hf⟩ := List.exists_of_findSome?_eq_some ha
+      obtain ⟨e', he⟩ := h v hv
+      simp [he, Except.toOption] at hf
+    · rfl
+
+/-- On an applied valid head, attributes whose fields fit no structure of the version fail.
+
+The answer is then the error of invalid payload attributes, `-38003`, not the status of the head.
+-/
+theorem forkchoiceUpdatedCall_eq_error_of_attributes {version : Nat}
+    {stateJson : Lean.Json} {kvs : Std.TreeMap.Raw String Lean.Json compare}
+    {fs : List (String × Lean.Json)} {s : ForkchoiceState} {status : PayloadStatus}
+    {head : Hash32} (hs : forkchoiceStateOfJson stateJson = .ok s)
+    (hf : forkchoiceUpdated tree finalized s = .ok (status, some head))
+    (hfs : Json.fields "payloadAttributes" (.obj kvs) = .ok fs)
+    (hx : ∀ v ∈ attributesVersions version, Json.hasExactly fs (attributesFields v) = false) :
+    forkchoiceUpdatedCall version tree finalized (.arr #[stateJson, .obj kvs]) =
+      .error .invalidPayloadAttributes := by
+  have hm : payloadAttributesOfVersion version (.obj kvs) = .error .invalidPayloadAttributes :=
+    payloadAttributesOfVersion_eq_error_iff.mpr ⟨rfl, fun v hv =>
+      ⟨_, payloadAttributesOfJson_wrong_fields hfs (hx v hv)⟩⟩
+  simp [forkchoiceUpdatedCall, forkchoiceUpdatedParams, Json.paramsArray, custodyColumnsOfJson,
+    hs, hf, hm, bind, Except.bind, pure, Except.pure]
+
+/-- When the update applies no head, the payload attributes are not read.
+
+The answer is that of the update, whatever object the attributes are. -/
+theorem forkchoiceUpdatedCall_of_no_head {version : Nat}
+    {stateJson : Lean.Json} {kvs : Std.TreeMap.Raw String Lean.Json compare}
+    {s : ForkchoiceState} {status : PayloadStatus}
+    (hs : forkchoiceStateOfJson stateJson = .ok s)
+    (hf : forkchoiceUpdated tree finalized s = .ok (status, none)) :
+    forkchoiceUpdatedCall version tree finalized (.arr #[stateJson, .obj kvs]) =
+      .ok (status, none, none) := by
+  simp [forkchoiceUpdatedCall, forkchoiceUpdatedParams, Json.paramsArray, custodyColumnsOfJson,
+    hs, hf, bind, Except.bind, pure, Except.pure]
 
 end EthLib.Engine
