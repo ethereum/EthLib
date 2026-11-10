@@ -9,6 +9,19 @@ Not yet released.
 
 ### Changes that break callers
 
+- The theorem that an attestation keeps the registry and the RANDAO mixes now holds at every fork ([#1888](https://github.com/ethereum/EthLib/issues/1888)).
+  No C export or Python function changes.
+  In Lean, `processAttestation_registry` drops its argument `before : fork < .altair`, so a caller removes it.
+- From Gloas, a deposit, a withdrawal or consolidation request, or a sync aggregate now fails where a registry position of 2^64 or more would become a validator index ([#1883](https://github.com/ethereum/EthLib/issues/1883)).
+  Such a position used to wrap modulo 2^64, so a deposit at 2^64 validators overwrote validator 0.
+  The step now fails with the accessor error `arith overflow`, as the specification fails to build a `ValidatorIndex` there.
+  Before Gloas the registry holds at most 2^40 validators, so nothing changes there.
+  No C export or Python function changes.
+  In Lean, the new `Base.Uint64.ofNatChecked` converts a natural number to a `UInt64`, and fails with an overflow at 2^64 or more.
+  `getIndexForNewValidator` now returns an `Except AccessorError ValidatorIndex`, and `queueConsolidation` takes the index of the source in place of its position.
+  `addValidatorToRegistry_validators_eq_push`, `addValidatorToRegistry_push`, `activeStep_addValidatorToRegistry` and the deposit theorems of `Proofs.Transition.Operations` and `Proofs.Transition.EpochPending` no longer take a bound on the size of the registry.
+  The fields `used`, `appliedFilter` and `movedFilter` of `PassPendingDepositsFacts` no longer take a bound either.
+  `frame_queueConsolidation`, `sameSizes_queueConsolidation` and `payloadInputs_queueConsolidation` take the index of the source in place of its position.
 - The exact change of the supply of ether across a transaction is now proved at every fork, with the burns of SELFDESTRUCT and the deleted balances as terms fixed by the run ([#1793](https://github.com/ethereum/EthLib/issues/1793)).
   No C export or Python function changes.
   In Lean, the rules of a relation of frames split in two: `OrdinaryStepRules` holds the rules of every write but SELFDESTRUCT, and `StepRules` extends it with the rule of SELFDESTRUCT.

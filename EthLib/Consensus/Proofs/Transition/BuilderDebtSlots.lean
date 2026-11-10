@@ -89,7 +89,7 @@ theorem builderFrame_addValidatorToRegistry {pubkey withdrawalCredentials amount
   split at computed
   · simp only [addValidatorToRegistryAltair, liftAccessor_ok, bind_ok_iff, pure, Except.pure,
       Except.ok.injEq] at computed
-    obtain ⟨_, _, _, _, _, _, _, _, _, _, rfl⟩ := computed
+    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := computed
     exact ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
   split at computed
   · cases computed
@@ -125,32 +125,99 @@ theorem builderFrame_applyPendingDeposit {deposit : PendingDeposit}
     BuilderFrame state after :=
   builderEpochFrameLaws.applyPendingDeposit computed
 
-/-- From Gloas, the epoch transition keeps the builder fields, except the step of the payments. -/
+/-- The state that the epoch transition reaches before the step of the payments.
+
+It runs the steps of the epoch transition that come before that step, in their order.
+
+Before Altair it skips the inactivity scores, as the epoch transition does. -/
+def epochBeforePayments (config : Config) (checks : SignatureChecks)
+    (state : BeaconState preset fork) : Except TransitionError (BeaconState preset fork) := do
+  let state ← processJustificationAndFinalization state
+  let state ← (if altair : .altair ≤ fork then processInactivityUpdates config state altair
+    else pure state)
+  let state ← processRewardsAndPenalties config state
+  let state ← processRegistryUpdates config state
+  let state ← processSlashings state
+  let state ← (if before : fork < .hegota then processEth1DataReset before state else pure state)
+  processPendingBalances config checks state
+
+/-- From Altair, the epoch transition first runs the steps that come before the payments.
+
+It then runs the rest of its steps in their order.
+
+So those first steps are a factor of the epoch transition, and not a second form of it. -/
+theorem processEpochAltair_eq_epochBeforePayments_bind (config : Config) (checks : SignatureChecks)
+    (state : BeaconState preset fork) (altair : .altair ≤ fork) :
+    processEpochAltair config checks state altair = (do
+      let state ← epochBeforePayments config checks state
+      let state ← (if gloas : .glamsterdam ≤ fork then
+          liftAccessor (processBuilderPendingPayments state gloas)
+        else pure state)
+      let state ← processEffectiveBalanceUpdates state
+      let state ← processSlashingsReset state
+      let state ← processRandaoMixesReset state
+      let state ← if capella : .shapella ≤ fork then processHistoricalSummariesUpdate state capella
+        else processHistoricalRootsUpdate state
+      let state := processParticipationFlagUpdates state altair
+      let state ← processSyncCommitteeUpdates state altair
+      let state ← (if fulu : .fusaka ≤ fork then liftAccessor (processProposerLookahead state fulu)
+        else pure state)
+      if gloas : .glamsterdam ≤ fork then liftAccessor (processPtcWindow state gloas)
+      else pure state) := by
+  simp only [processEpochAltair, epochBeforePayments, altair, ↓reduceDIte, bind_assoc]
+
+/-- From Gloas, the epoch transition keeps the builder fields, except the step of the payments.
+
+The step of the payments reads the state that the epoch transition reaches before it. -/
 theorem processEpoch_builderSplit {gloas : .glamsterdam ≤ fork}
     (computed : processEpoch config checks state = .ok after) :
-    ∃ pending paid, BuilderFrame state pending ∧
+    ∃ pending paid, epochBeforePayments config checks state = .ok pending ∧
+      BuilderFrame state pending ∧
       processBuilderPendingPayments pending gloas = .ok paid ∧ BuilderFrame paid after := by
   have altair : .altair ≤ fork := Nat.le_trans (by decide) gloas
+  have capella : .shapella ≤ fork := Nat.le_trans (by decide) gloas
+  have fulu : .fusaka ≤ fork := Nat.le_trans (by decide) gloas
   unfold processEpoch at computed
-  simp only [altair, ↓reduceDIte] at computed
-  obtain ⟨justified, pending, paid, rooted, justifiedOk, head, paidOk, middle, tail⟩ :=
-    builderEpochFrameLaws.processEpochAltair_split computed
-  have justifiedFrame : BuilderFrame state justified := by
-    obtain rfl | ⟨_, _, _, weighed⟩ := processJustificationAndFinalization_ok justifiedOk
-    · exact BuilderFrame.refl _
-    · obtain ⟨_, _, _, rest⟩ := weighJustificationAndFinalization_checkpoints weighed
-      exact ⟨by rw [← rest], by rw [← rest], by rw [← rest], by rw [← rest], by rw [← rest],
-        by rw [← rest]⟩
+  rw [dite_eq_left altair, processEpochAltair_eq_epochBeforePayments_bind] at computed
+  simp only [bind_ok_iff, capella, fulu, gloas, ↓reduceDIte, liftAccessor_ok] at computed
+  obtain ⟨pending, pendingOk, paid, paidOk, balanced, balancedOk, cleared, clearedOk, mixed,
+    mixedOk, rooted, rootedOk, synced, syncedOk, looked, lookedOk, windowed⟩ := computed
+  refine ⟨pending, paid, pendingOk, ?_, paidOk, ?_⟩
+  · simp only [epochBeforePayments, bind_ok_iff, altair, ↓reduceDIte] at pendingOk
+    obtain ⟨justified, justifiedOk, scored, scoredOk, rewarded, rewardedOk, registered,
+      registeredOk, slashed, slashedOk, reset, resetOk, pendingOk⟩ := pendingOk
+    have justifiedFrame : BuilderFrame state justified := by
+      obtain rfl | ⟨_, _, _, weighed⟩ := processJustificationAndFinalization_ok justifiedOk
+      · exact BuilderFrame.refl _
+      · obtain ⟨_, _, _, rest⟩ := weighJustificationAndFinalization_checkpoints weighed
+        exact ⟨by rw [← rest], by rw [← rest], by rw [← rest], by rw [← rest], by rw [← rest],
+          by rw [← rest]⟩
+    have resetFrame : BuilderFrame slashed reset := by
+      split at resetOk
+      · exact builderEpochFrameLaws.processEth1DataReset resetOk
+      · simp only [pure, Except.pure, Except.ok.injEq] at resetOk
+        exact resetOk ▸ BuilderFrame.refl _
+    exact justifiedFrame.trans <|
+      (builderEpochFrameLaws.processInactivityUpdates scoredOk).trans <|
+      (builderEpochFrameLaws.processRewardsAndPenalties rewardedOk).trans <|
+      (builderEpochFrameLaws.processRegistryUpdates registeredOk).trans <|
+      (builderEpochFrameLaws.processSlashings slashedOk).trans <|
+      resetFrame.trans (builderEpochFrameLaws.processPendingBalances pendingOk)
   have rotated : BuilderFrame rooted (processParticipationFlagUpdates rooted altair) :=
     ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
-  exact ⟨pending, paid, justifiedFrame.trans head,
-    by simpa only [gloas, ↓reduceDIte, liftAccessor_ok] using paidOk,
-    middle.trans (rotated.trans tail)⟩
+  exact (builderEpochFrameLaws.processEffectiveBalanceUpdates balancedOk).trans <|
+    (builderEpochFrameLaws.processSlashingsReset clearedOk).trans <|
+    (builderEpochFrameLaws.processRandaoMixesReset mixedOk).trans <|
+    (builderEpochFrameLaws.processHistoricalSummariesUpdate rootedOk).trans <|
+    rotated.trans <|
+    (builderEpochFrameLaws.processSyncCommitteeUpdates syncedOk).trans <|
+    (builderEpochFrameLaws.processProposerLookahead lookedOk).trans
+      (builderEpochFrameLaws.processPtcWindow windowed)
 
 /-! ## Slots -/
 
 /-- A slot keeps the builder fields, the slot and the slot of the latest block. -/
-private theorem builderFrame_processSlot (computed : processSlot state = .ok after) :
+theorem builderFrame_processSlot (computed : processSlot state = .ok after) :
     BuilderFrame state after := by
   have header : after.latestBlockHeader.slot = state.latestBlockHeader.slot := by
     unfold processSlot at computed
@@ -175,7 +242,7 @@ theorem advanceSlot_builders (gloas : .glamsterdam ≤ fork)
   have cachedFrame := builderFrame_processSlot cachedOk
   unfold epochIfLast at epochedOk
   split at epochedOk
-  · obtain ⟨pending, paid, before, paidOk, tail⟩ :=
+  · obtain ⟨pending, paid, -, before, paidOk, tail⟩ :=
       processEpoch_builderSplit (gloas := gloas) epochedOk
     have paidBuilders : paid.builders = pending.builders := by
       rw [processBuilderPendingPayments_eq paidOk]
@@ -201,25 +268,14 @@ theorem processSlots_builders (gloas : .glamsterdam ≤ fork) {slot : Slot}
     obtain ⟨next, nextOk, rest⟩ := advanced
     exact (step rest).trans (advanceSlot_builders gloas nextOk)
 
-/-- A move to a slot of the same epoch keeps the position of the parent payment. -/
-private theorem parentPaymentPosition_withSlot {next : Slot}
-    (same : next.toNat / preset.SLOTS_PER_EPOCH.toNat =
-      state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat) :
-    parentPaymentPosition { state with slot := next } = parentPaymentPosition state := by
-  have epoch : computeEpochAtSlot preset next = computeEpochAtSlot preset state.slot := by
-    apply UInt64.toNat_inj.mp
-    simpa only [computeEpochAtSlot, UInt64.toNat_div] using same
-  unfold parentPaymentPosition slotPaymentPosition getPreviousEpoch getCurrentEpoch
-  dsimp only
-  rw [epoch]
-
 /-- A move to a slot of the same epoch keeps the builder debt invariant. -/
 private theorem BuilderDebtCovered.withSlot {gloas : .glamsterdam ≤ fork} {next : Slot}
     (same : next.toNat / preset.SLOTS_PER_EPOCH.toNat =
       state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat)
     (holds : BuilderDebtCovered state gloas) :
     BuilderDebtCovered { state with slot := next } gloas :=
-  .of_position (parentPaymentPosition_withSlot same) rfl rfl rfl rfl holds
+  .of_position (slotPaymentPosition_congr_epoch (after := { state with slot := next }) same _)
+    rfl rfl rfl rfl holds
 
 /-- With a positive quorum, one slot keeps the builder debt invariant. -/
 theorem BuilderDebtCovered.advanceSlot (positive : preset.PaymentQuorumPositive)
@@ -231,12 +287,10 @@ theorem BuilderDebtCovered.advanceSlot (positive : preset.PaymentQuorumPositive)
   unfold epochIfLast at epochedOk
   split at epochedOk
   · rename_i boundary
-    obtain ⟨pending, paid, before, paidOk, tail⟩ := processEpoch_builderSplit epochedOk
+    obtain ⟨pending, paid, -, before, paidOk, tail⟩ := processEpoch_builderSplit epochedOk
     have paidHolds := (cachedHolds.of_frame before).processBuilderPendingPayments positive paidOk
       (by rw [before.slot, cachedFrame.slot]; exact sum) boundary
-    have frame : BuilderFrame { paid with slot := next } { epoched with slot := next } :=
-      ⟨rfl, tail.headerSlot, tail.builders, tail.payments, tail.withdrawals, tail.bid⟩
-    exact paidHolds.of_frame frame
+    exact paidHolds.of_frame (tail.withSlot next)
   · rename_i inside
     simp only [pure, Except.pure, Except.ok.injEq] at epochedOk
     subst epochedOk

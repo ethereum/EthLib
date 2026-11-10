@@ -393,6 +393,23 @@ private theorem builderFrame_setEpochParticipation {current : Bool}
   unfold setEpochParticipation
   split <;> exact ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
 
+/-- From Gloas, an attestation keeps the builder fields, then weighs a payment. -/
+private theorem processAttestation_eq_recordPaymentWeight {gloas : .glamsterdam ≤ fork}
+    {parentSlot : Slot} {attestation : Attestation preset fork}
+    (computed : processAttestation config checks state parentSlot attestation = .ok after) :
+    ∃ (raised : BeaconState preset fork) (data : AttestationData) (current : Bool)
+      (before updated : EpochParticipation preset fork) (attesters : List ValidatorIndex),
+      BuilderFrame state raised ∧
+        recordPaymentWeight raised gloas data current before updated attesters = .ok after := by
+  have altair : .altair ≤ fork := Nat.le_trans (by decide) gloas
+  unfold Consensus.processAttestation processAttestationAltair at computed
+  simp only [altair, gloas, ↓reduceDIte, bind_ok_iff, ensure_ok_iff, liftAccessor_ok]
+    at computed
+  obtain ⟨_, -, _, -, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
+    _, _, raised, raisedOk, recorded⟩ := computed
+  exact ⟨raised, _, _, _, _, _,
+    builderFrame_setEpochParticipation.trans (builderFrame_increaseBalance raisedOk), recorded⟩
+
 /-- From Gloas, an attestation keeps the builder debt invariant once a block has run its header.
 
 The latest block must be at the slot of the state, and that slot must not be the first.
@@ -421,20 +438,6 @@ theorem BuilderDebtCovered.processAttestation (positive : preset.PaymentQuorumPo
   rw [epochs, ← slotEpoch]
   simpa using current
 
-/-- From Gloas, an attestation keeps the builders. -/
-private theorem builders_processAttestation {gloas : .glamsterdam ≤ fork} {parentSlot : Slot}
-    {attestation : Attestation preset fork}
-    (computed : processAttestation config checks state parentSlot attestation = .ok after) :
-    after.builders = state.builders := by
-  have altair : .altair ≤ fork := Nat.le_trans (by decide) gloas
-  unfold Consensus.processAttestation processAttestationAltair at computed
-  simp only [altair, gloas, ↓reduceDIte, bind_ok_iff, ensure_ok_iff, liftAccessor_ok]
-    at computed
-  obtain ⟨_, -, _, -, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
-    _, _, raised, raisedOk, recorded⟩ := computed
-  rw [recordPaymentWeight_eq recorded]
-  exact (builderFrame_setEpochParticipation.trans (builderFrame_increaseBalance raisedOk)).builders
-
 /-! ## The operations -/
 
 /-- A step of an attester slashing keeps the builder debt invariant. -/
@@ -453,20 +456,73 @@ private theorem BuilderDebtCovered.slashIfSlashable {gloas : .glamsterdam ≤ fo
   · simp only [pure, Except.pure, Except.ok.injEq] at computed
     exact computed ▸ holds
 
-/-- From Gloas, a step of an attester slashing keeps the builders. -/
-private theorem builders_slashIfSlashable {gloas : .glamsterdam ≤ fork}
-    {step next : BeaconState preset fork × Bool} {index : ValidatorIndex}
-    (computed : slashIfSlashable config step index = .ok next) :
-    next.1.builders = step.1.builders := by
-  obtain ⟨state, slashedAny⟩ := step
-  simp only [Consensus.slashIfSlashable, bind_ok_iff, liftAccessor_ok] at computed
-  obtain ⟨_, _, computed⟩ := computed
-  split at computed
-  · simp only [bind_ok_iff, liftAccessor_ok, pure, Except.pure, Except.ok.injEq] at computed
-    obtain ⟨_, slashed, rfl⟩ := computed
-    exact builders_slashValidator (gloas := gloas) slashed
-  · simp only [pure, Except.pure, Except.ok.injEq] at computed
-    exact computed ▸ rfl
+/-- From Gloas, a relation that each step of the operations keeps holds across them.
+
+The steps are a slashing, the weighing of a payment, and the steps that keep the builder fields.
+
+The relation must be transitive. -/
+private theorem processOperations_of_steps {gloas : .glamsterdam ≤ fork}
+    {body : BeaconBlockBody preset fork} {parentSlot : Slot}
+    (keeps : BeaconState preset fork → BeaconState preset fork → Prop)
+    (trans : ∀ {first second third}, keeps first second → keeps second third →
+      keeps first third)
+    (frame : ∀ {first second}, BuilderFrame first second → keeps first second)
+    (slash : ∀ {first second} {slashedIndex : ValidatorIndex}
+      {whistleblowerIndex : Option ValidatorIndex},
+      slashValidator config first slashedIndex whistleblowerIndex = .ok second →
+        keeps first second)
+    (weigh : ∀ {first second} {data : AttestationData} {current : Bool}
+      {before updated : EpochParticipation preset fork} {attesters : List ValidatorIndex},
+      recordPaymentWeight first gloas data current before updated attesters = .ok second →
+        keeps first second)
+    (computed : processOperations config checks state body parentSlot = .ok after) :
+    keeps state after := by
+  simp only [Consensus.processOperations, gloas, ↓reduceDIte, processOperationsGloas,
+    bind_ok_iff, ← Array.foldlM_toList] at computed
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, proposersOk, _, attestersOk, _,
+    attestedOk, _, exitsOk, _, changesOk, paid⟩ := computed
+  have proposers := foldlM_ok_invariant (fun s => keeps state s)
+    (fun _ _ _ kept ok => by
+      simp only [processProposerSlashing, bind_ok_iff, ensure_ok_iff, liftAccessor_ok] at ok
+      obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, slashed⟩ := ok
+      exact trans kept (slash slashed)) (frame (BuilderFrame.refl state)) proposersOk
+  have attesters := foldlM_ok_invariant (fun s => keeps state s)
+    (fun s _ _ kept ok => by
+      simp only [processAttesterSlashing, bind_ok_iff, ensure_ok_iff, pure, Except.pure,
+        Except.ok.injEq] at ok
+      obtain ⟨_, _, _, _, _, _, _, _, _, _, _, folded, _, _, rfl⟩ := ok
+      exact trans kept (foldlM_ok_invariant (fun step => keeps s step.1)
+        (fun step _ index before ok => by
+          obtain ⟨current, slashedAny⟩ := step
+          simp only [Consensus.slashIfSlashable, bind_ok_iff, liftAccessor_ok] at ok
+          obtain ⟨_, _, ok⟩ := ok
+          split at ok
+          · simp only [bind_ok_iff, liftAccessor_ok, pure, Except.pure, Except.ok.injEq] at ok
+            obtain ⟨_, slashed, rfl⟩ := ok
+            exact trans before (slash slashed)
+          · simp only [pure, Except.pure, Except.ok.injEq] at ok
+            exact ok ▸ before)
+        (show keeps s (s, false).1 from frame (BuilderFrame.refl s)) folded))
+      proposers attestersOk
+  have attested := foldlM_ok_invariant (fun s => keeps state s)
+    (fun _ _ _ kept ok => by
+      obtain ⟨_, _, _, _, _, _, framed, recorded⟩ :=
+        processAttestation_eq_recordPaymentWeight (gloas := gloas) ok
+      exact trans kept (trans (frame framed) (weigh recorded))) attesters attestedOk
+  have exited := foldlM_ok_invariant (fun s => keeps state s)
+    (fun _ _ _ kept ok => by
+      unfold processVoluntaryExit at ok
+      simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok, liftSsz_ok] at ok
+      obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, exited⟩ := ok
+      exact trans kept (frame (builderFrame_initiateValidatorExit exited))) attested exitsOk
+  have changed := foldlM_ok_invariant (fun s => keeps state s)
+    (fun _ _ _ kept ok => by
+      obtain ⟨_, _, _, _, _, set⟩ := processBlsToExecutionChange_ok ok
+      exact trans kept (frame (builderFrame_setValidator set))) exited changesOk
+  exact foldlM_ok_invariant (fun s => keeps state s)
+    (fun _ _ _ kept ok => by
+      rw [processPayloadAttestation_eq ok]
+      exact kept) changed paid
 
 /-- From Gloas, the operations of a block keep the builder debt invariant.
 
@@ -528,40 +584,44 @@ theorem BuilderDebtCovered.processOperations (positive : preset.PaymentQuorumPos
 theorem processOperations_builders (gloas : .glamsterdam ≤ fork)
     {body : BeaconBlockBody preset fork} {parentSlot : Slot}
     (computed : processOperations config checks state body parentSlot = .ok after) :
-    after.builders = state.builders := by
-  simp only [Consensus.processOperations, gloas, ↓reduceDIte, processOperationsGloas,
-    bind_ok_iff, ← Array.foldlM_toList] at computed
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, proposersOk, _, attestersOk, _,
-    attestedOk, _, exitsOk, _, changesOk, paid⟩ := computed
-  have proposers := foldlM_ok_invariant (fun s => s.builders = state.builders)
-    (fun _ _ _ kept ok => by
-      simp only [processProposerSlashing, bind_ok_iff, ensure_ok_iff, liftAccessor_ok] at ok
-      obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, slashed⟩ := ok
-      exact (builders_slashValidator (gloas := gloas) slashed).trans kept) rfl proposersOk
-  have attesters := foldlM_ok_invariant (fun s => s.builders = state.builders)
-    (fun s _ _ kept ok => by
-      simp only [processAttesterSlashing, bind_ok_iff, ensure_ok_iff, pure, Except.pure,
-        Except.ok.injEq] at ok
-      obtain ⟨_, _, _, _, _, _, _, _, _, _, _, folded, _, _, rfl⟩ := ok
-      exact foldlM_ok_invariant (fun step => step.1.builders = state.builders)
-        (fun _ _ _ before ok => (builders_slashIfSlashable (gloas := gloas) ok).trans before)
-        (show (s, false).1.builders = state.builders from kept) folded) proposers attestersOk
-  have attested := foldlM_ok_invariant (fun s => s.builders = state.builders)
-    (fun _ _ _ kept ok => (builders_processAttestation (gloas := gloas) ok).trans kept)
-    attesters attestedOk
-  have exited := foldlM_ok_invariant (fun s => s.builders = state.builders)
-    (fun _ _ _ kept ok => by
-      unfold processVoluntaryExit at ok
-      simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok, liftSsz_ok] at ok
-      obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, exited⟩ := ok
-      exact (builderFrame_initiateValidatorExit exited).builders.trans kept) attested exitsOk
-  have changed := foldlM_ok_invariant (fun s => s.builders = state.builders)
-    (fun _ _ _ kept ok => by
-      obtain ⟨_, _, _, _, _, set⟩ := processBlsToExecutionChange_ok ok
-      exact (builderFrame_setValidator set).builders.trans kept) exited changesOk
-  exact foldlM_ok_invariant (fun s => s.builders = state.builders)
-    (fun _ _ _ kept ok => by
-      rw [processPayloadAttestation_eq ok]
-      exact kept) changed paid
+    after.builders = state.builders :=
+  processOperations_of_steps (gloas := gloas) (fun first second => second.builders = first.builders)
+    (fun one two => two.trans one) (fun frame => frame.builders)
+    (fun slashed => builders_slashValidator (gloas := gloas) slashed)
+    (fun weighed => by rw [recordPaymentWeight_eq weighed]) computed
+
+/-! ## Emptied payments -/
+
+/-- From Gloas, slashing a validator may only empty pending payments. -/
+private theorem PaymentCancel.slashValidator {gloas : .glamsterdam ≤ fork}
+    {slashedIndex : ValidatorIndex} {whistleblowerIndex : Option ValidatorIndex}
+    (computed : slashValidator config state slashedIndex whistleblowerIndex = .ok after) :
+    PaymentCancel state after gloas := by
+  obtain ⟨last, proposer, frame, rfl⟩ :=
+    slashValidator_eq_cancelProposerPayments (gloas := gloas) computed
+  refine (PaymentCancel.of_frame frame).trans ⟨rfl, rfl, rfl, rfl, fun position => ?_⟩
+  rw [paymentAt_cancelProposerPayments]
+  split
+  · exact Or.inr (by simp [BuilderPendingPayment.empty])
+  · exact Or.inl rfl
+
+/-- From Gloas, the operations of a block may only empty pending payments.
+
+A slashing empties the payments of the blocks of the slashed proposer.
+
+An attestation adds weight to a payment, and keeps its withdrawal. -/
+theorem PaymentCancel.processOperations {gloas : .glamsterdam ≤ fork}
+    {body : BeaconBlockBody preset fork} {parentSlot : Slot}
+    (computed : processOperations config checks state body parentSlot = .ok after) :
+    PaymentCancel state after gloas :=
+  processOperations_of_steps (gloas := gloas) (fun first second => PaymentCancel first second gloas)
+    PaymentCancel.trans PaymentCancel.of_frame
+    PaymentCancel.slashValidator
+    (fun weighed => by
+      have fields := recordPaymentWeight_eq weighed
+      exact ⟨congrArg (·.slot) fields, congrArg (·.latestBlockHeader.slot) fields,
+        congrArg (·.latestExecutionPayloadBid gloas) fields,
+        congrArg (·.builderPendingWithdrawals gloas) fields, fun position =>
+          Or.inl (paymentAt_recordPaymentWeight_withdrawal weighed position)⟩) computed
 
 end EthLib.Consensus

@@ -226,9 +226,9 @@ private theorem builderFrame_switchToCompoundingValidator {electra : .pectra ≤
     exact BuilderFrame.refl _
 
 private theorem builderFrame_queueConsolidation {electra : .pectra ≤ fork}
-    {sourcePosition : Nat} {source : Validator} {targetIndex : ValidatorIndex}
+    {sourceIndex : ValidatorIndex} {source : Validator} {targetIndex : ValidatorIndex}
     (computed :
-      queueConsolidation config state electra sourcePosition source targetIndex = .ok after) :
+      queueConsolidation config state electra sourceIndex source targetIndex = .ok after) :
     BuilderFrame state after := by
   simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
     pure, Except.pure] at computed

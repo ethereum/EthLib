@@ -24,13 +24,6 @@ open Base Uint64
 
 variable {preset : Preset} {fork : Base.Fork} {state after : BeaconState preset fork}
 
-/-- A read of a balance returns the balance at its position of the list. -/
-private theorem getBalance_eq_ok_iff' {state : BeaconState preset fork} {index : ValidatorIndex}
-    {balance : Gwei} :
-    getBalance state index = .ok balance ↔ state.balances.data[index.toNat]? = some balance := by
-  unfold getBalance
-  split <;> simp_all
-
 /-- A pass never lowers the balance of a validator that cannot yet withdraw in its epoch.
 
 So that validator is never a source whose balance moves. -/
@@ -75,7 +68,7 @@ private theorem passPendingConsolidations_balance_le {nextEpoch : Epoch}
           rw [same, atIndex, Option.some.injEq] at atSource
           subst atSource
           exact early window
-        have found := getBalance_eq_ok_iff'.mp current
+        have found := getBalance_eq_ok_iff.mp current
         obtain ⟨down, downFound, downEq⟩ := balance_decreaseBalance loweredOk found
         obtain ⟨up, upFound, upEq⟩ := balance_increaseBalance raisedOk downFound
         simp only [different, ↓reduceIte] at downEq
@@ -83,7 +76,7 @@ private theorem passPendingConsolidations_balance_le {nextEpoch : Epoch}
           (decreaseBalance_validators loweredOk)
         obtain ⟨later, laterOk, le⟩ := ih passed
           ((getValidator_of_validators_eq sameValidators index).trans read')
-          (getBalance_eq_ok_iff'.mpr upFound) window
+          (getBalance_eq_ok_iff.mpr upFound) window
         refine ⟨later, laterOk, UInt64.le_trans ?_ le⟩
         rw [UInt64.le_iff_toNat_le]
         have : balance.toNat ≤ up.toNat := by
