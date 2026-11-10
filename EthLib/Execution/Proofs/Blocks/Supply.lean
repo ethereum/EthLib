@@ -167,32 +167,26 @@ theorem supply_startSystemCalls {env : BlockEnvironment fork} {parentHash : Hash
     (TransactionState.ofBlock body'.block).supply ≤ (TransactionState.ofBlock body.block).supply ∧
       (.glamsterdam ≤ fork → (TransactionState.ofBlock body'.block).supply =
         (TransactionState.ofBlock body.block).supply) := by
-  -- The second call, from the body after the first.
-  have second : ∀ mid : BodyState,
-      (if Fork.pectra ≤ fork then do
-          let out ← systemCall env mid.block HISTORY_STORAGE_ADDRESS ⟨parentHash.toArray⟩
-          (mid.join out.state).mapError EvmError.state
-        else pure mid) = .ok body' →
-      (TransactionState.ofBlock body'.block).supply ≤ (TransactionState.ofBlock mid.block).supply ∧
-        (.glamsterdam ≤ fork → (TransactionState.ofBlock body'.block).supply =
-          (TransactionState.ofBlock mid.block).supply) := by
-    intro mid h
-    split at h
-    · obtain ⟨out, hout, h⟩ := bind_ok_iff.mp h
-      exact supply_systemCall_join hout (mapError_ok_iff.mp h)
-    · cases h
+  obtain ⟨mid, hFirst, hNoFirst, hSecond, hNoSecond⟩ := startSystemCalls_eq_ok h
+  have first : (TransactionState.ofBlock mid.block).supply ≤
+      (TransactionState.ofBlock body.block).supply ∧
+      (.glamsterdam ≤ fork → (TransactionState.ofBlock mid.block).supply =
+        (TransactionState.ofBlock body.block).supply) := by
+    by_cases hDencun : .dencun ≤ fork
+    · obtain ⟨out, hout, hjoin⟩ := hFirst hDencun
+      exact supply_systemCall_join hout hjoin
+    · rw [hNoFirst hDencun]
       exact ⟨Nat.le_refl _, fun _ => rfl⟩
-  unfold startSystemCalls at h
-  dsimp only at h
-  split at h
-  · obtain ⟨out, hout, h⟩ := bind_ok_iff.mp h
-    obtain ⟨mid, hmid, h⟩ := bind_ok_iff.mp h
-    obtain ⟨le1, eq1⟩ := supply_systemCall_join hout (mapError_ok_iff.mp hmid)
-    obtain ⟨le2, eq2⟩ := second mid h
-    exact ⟨Nat.le_trans le2 le1, fun hglam => (eq2 hglam).trans (eq1 hglam)⟩
-  · obtain ⟨mid, hmid, h⟩ := bind_ok_iff.mp h
-    cases hmid
-    exact second _ h
+  have second : (TransactionState.ofBlock body'.block).supply ≤
+      (TransactionState.ofBlock mid.block).supply ∧
+      (.glamsterdam ≤ fork → (TransactionState.ofBlock body'.block).supply =
+        (TransactionState.ofBlock mid.block).supply) := by
+    by_cases hPectra : .pectra ≤ fork
+    · obtain ⟨out, hout, hjoin⟩ := hSecond hPectra
+      exact supply_systemCall_join hout hjoin
+    · rw [hNoSecond hPectra]
+      exact ⟨Nat.le_refl _, fun _ => rfl⟩
+  exact ⟨Nat.le_trans second.1 first.1, fun hglam => (second.2 hglam).trans (first.2 hglam)⟩
 
 /-- The requests of a block keep or lower the supply, and keep it from Glamsterdam. -/
 theorem supply_blockRequests {depositContract : Address} {env : BlockEnvironment fork}
@@ -207,30 +201,18 @@ theorem supply_blockRequests {depositContract : Address} {env : BlockEnvironment
       (.glamsterdam ≤ fork → (TransactionState.ofBlock state.1.block).supply =
         (TransactionState.ofBlock body.block).supply)
   have start : P (body, []) := ⟨Nat.le_refl _, fun _ => rfl⟩
-  have reads : ∀ {read : BodyState × List ByteArray}, readRequests env body = .ok read →
-      P read := by
-    intro read hread
-    unfold readRequests at hread
-    split at hread
-    · refine foldlM_ok_invariant P ?_ start hread
+  obtain ⟨hNoPectra, hPectra⟩ := blockRequests_eq_ok h
+  by_cases hp : .pectra ≤ fork
+  · obtain ⟨deposits, read, -, hread, rfl⟩ := hPectra hp
+    have step : ∀ state contract next, P state → readRequest env state contract = .ok next →
+        P next := by
       rintro state contract next ⟨hle, heq⟩ hstep
-      unfold readRequest at hstep
-      obtain ⟨out, hout, hstep⟩ := bind_ok_iff.mp hstep
-      obtain ⟨joined, hjoin, hstep⟩ := bind_ok_iff.mp hstep
-      cases hstep
-      obtain ⟨le1, eq1⟩ :=
-        supply_systemCall_join (checkedSystemCall_ok hout).2.1 (mapError_ok_iff.mp hjoin)
+      obtain ⟨out, hout, hjoin, -⟩ := readRequest_eq_ok hstep
+      obtain ⟨le1, eq1⟩ := supply_systemCall_join (checkedSystemCall_ok hout).2.1 hjoin
       exact ⟨Nat.le_trans le1 hle, fun hglam => (eq1 hglam).trans (heq hglam)⟩
-    · cases hread
-      exact start
-  unfold blockRequests at h
-  split at h
-  · obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-    obtain ⟨read, hread, h⟩ := bind_ok_iff.mp h
-    cases h
-    have hrest := reads hread
-    exact hrest
-  · cases h
+    have hread_supply := foldlM_ok_invariant P step start hread
+    exact hread_supply
+  · rw [hNoPectra hp]
     exact start
 
 /-- The withdrawals add the wei they withdraw to the supply. -/
