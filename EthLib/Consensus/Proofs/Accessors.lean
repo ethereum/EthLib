@@ -788,8 +788,8 @@ theorem mem_of_committeeAttesters {bits : Array Bool} {offset : Nat}
 The shuffle is that of the epoch of the slot, with its count of committees per slot.
 
 The attesters of the list are those of the first committee, then those of the rest. -/
-theorem committeesAttestersOf_cons {state : BeaconState preset fork} {slot : Slot}
-    {active : Array ValidatorIndex} {shuffled : Array UInt64}
+theorem committeesAttestersOf_cons_of_attesterShuffle {state : BeaconState preset fork}
+    {slot : Slot} {active : Array ValidatorIndex} {shuffled : Array UInt64}
     (shuffleOk : attesterShuffle state (computeEpochAtSlot preset slot) = .ok (active, shuffled))
     (bits : Array Bool) (index : CommitteeIndex) (rest : List CommitteeIndex) (offset : Nat) :
     committeesAttestersOf preset slot bits
@@ -820,8 +820,8 @@ theorem mem_of_committeesAttestersOf {state : BeaconState preset fork} {slot : S
     cases computed
     simp at mem
   | cons index rest ih =>
-    simp only [committeesAttestersOf_cons shuffleOk, bind, Except.bind, pure, Except.pure]
-      at computed
+    simp only [committeesAttestersOf_cons_of_attesterShuffle shuffleOk, bind, Except.bind, pure,
+      Except.pure] at computed
     split at computed
     · cases computed
     rename_i committee committeeOk

@@ -684,8 +684,8 @@ theorem mem_getAttestingIndices_constructAggregateOfSingleAttestations
     rw [getAttestingIndices_of_attesterShuffle (by rw [sameData]; exact shuffleOk)]
     simp only [attestingIndicesOf, electra, ↓reduceDIte,
       getCommitteeIndices_constructAggregateOfSingleAttestations electra built, sameData,
-      committeesAttestersOf_cons shuffleOk, committeeOk, attestersOk, committeesAttestersOf, bind,
-      Except.bind, pure, Except.pure, List.append_nil]
+      committeesAttestersOf_cons_of_attesterShuffle shuffleOk, committeeOk, attestersOk,
+      committeesAttestersOf, bind, Except.bind, pure, Except.pure, List.append_nil]
   · rw [mem_sortedSet, mem_committeeAttesters_iff attestersOk]
     constructor
     · rintro ⟨seat, inside, rfl, set⟩
