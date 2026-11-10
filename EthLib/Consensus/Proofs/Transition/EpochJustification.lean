@@ -65,16 +65,21 @@ theorem justifyCheckpoint_ok {justified : Bool} {epoch : Epoch} {checkpoint resu
 
 /-- Weighing the votes justifies a new checkpoint only for an epoch whose test passes.
 
-The new current justified checkpoint is the old one, or that of the previous or the current epoch.
+The new current justified checkpoint stays when neither test passes.
 
-For that epoch, twice the total balance is at most three times its target balance.
+Otherwise it is that of the previous or the current epoch, whose test passes.
+
+A test passes when twice the total balance is at most three times the target balance.
 
 The root of the checkpoint is the block root that the state records for the epoch. -/
 theorem weighJustificationAndFinalization_currentJustified
     {total previousBalance currentBalance : Gwei}
     (computed : weighJustificationAndFinalization state total previousBalance currentBalance =
       .ok after) :
-    after.currentJustifiedCheckpoint = state.currentJustifiedCheckpoint ∨
+    (after.currentJustifiedCheckpoint = state.currentJustifiedCheckpoint ∧
+        ∀ (current : Bool) (threshold weight : Gwei), mulChecked total 2 = .ok threshold →
+          mulChecked (if current then currentBalance else previousBalance) 3 = .ok weight →
+          weight < threshold) ∨
       ∃ (current : Bool) (threshold weight : Gwei), mulChecked total 2 = .ok threshold ∧
         mulChecked (if current then currentBalance else previousBalance) 3 = .ok weight ∧
         threshold ≤ weight ∧
@@ -87,15 +92,26 @@ theorem weighJustificationAndFinalization_currentJustified
   obtain ⟨previousWeight, previousOk, threshold, thresholdOk, first, firstOk, currentWeight,
     currentOk, second, secondOk, _, _, _, _, _, _, _, _, rfl⟩ := computed
   dsimp only
-  rcases justifyCheckpoint_ok secondOk with ⟨passed, epoch, rootOk⟩ | ⟨_, rfl⟩
+  rcases justifyCheckpoint_ok secondOk with ⟨passed, epoch, rootOk⟩ | ⟨failedCurrent, rfl⟩
   · rw [epoch]
     exact .inr ⟨true, threshold, currentWeight, thresholdOk, currentOk,
       of_decide_eq_true passed, rfl, rootOk⟩
-  rcases justifyCheckpoint_ok firstOk with ⟨passed, epoch, rootOk⟩ | ⟨_, rfl⟩
+  rcases justifyCheckpoint_ok firstOk with ⟨passed, epoch, rootOk⟩ | ⟨failedPrevious, rfl⟩
   · rw [epoch]
     exact .inr ⟨false, threshold, previousWeight, thresholdOk, previousOk,
       of_decide_eq_true passed, rfl, rootOk⟩
-  exact .inl rfl
+  refine .inl ⟨rfl, fun current threshold' weight thresholdOk' weightOk => ?_⟩
+  rw [thresholdOk, Except.ok.injEq] at thresholdOk'
+  subst thresholdOk'
+  cases current
+  · simp only [Bool.false_eq_true, ↓reduceIte] at weightOk
+    rw [previousOk, Except.ok.injEq] at weightOk
+    subst weightOk
+    exact UInt64.not_le.mp (of_decide_eq_false failedPrevious)
+  · simp only [↓reduceIte] at weightOk
+    rw [currentOk, Except.ok.injEq] at weightOk
+    subst weightOk
+    exact UInt64.not_le.mp (of_decide_eq_false failedCurrent)
 
 /-- The checkpoints that weighing the votes sets.
 
@@ -125,7 +141,7 @@ theorem weighJustificationAndFinalization_checkpoints {total previous current : 
     Except.ok.injEq] at computed
   obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := computed
   refine ⟨rfl, ?_, ?_, rfl⟩
-  · rcases justified with same | ⟨current, -, -, -, -, -, epoch, -⟩
+  · rcases justified with ⟨same, -⟩ | ⟨current, -, -, -, -, -, epoch, -⟩
     · exact .inl same
     · cases current
       · exact .inr (.inl epoch)

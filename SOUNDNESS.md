@@ -2154,8 +2154,8 @@ It takes the target-flag fact from Altair, the pending-attestation fact before A
 The validator set of a target is the active set of its epoch, as each checkpoint has its own set in Gasper §8.6.
 Each validator weighs its effective balance in the state before the step.
 The votes of the model must hold those of the data that the state signs.
-If the step makes the previous or the current epoch the new current justified checkpoint, the link goes from the justified checkpoint of that epoch to the new checkpoint.
-When both epochs pass the test, the current one wins, and the theorem says nothing of the previous one, whose bit the finalization rules still read.
+The step keeps the current justified checkpoint, or replaces it by the checkpoint of the newest epoch whose test passes; the link goes from the justified checkpoint of that epoch to the new checkpoint.
+`linkWithChurn_of_test` gives the same bound for each epoch whose test passes, so also for the previous epoch when both pass, whose bit the finalization rules read.
 Then twice the stake of the set of the target is at most three times the stake of the voters of the link, plus a term of churn.
 The term is twice the stake of that set outside the active set of the current epoch, because the step divides by the active balance of the current epoch.
 For the current epoch the term is zero.

@@ -31,7 +31,7 @@ For the previous epoch, the validators that exit at the current epoch count in t
 
 They do not count in that total, so their stake enters the bound as a term of churn.
 
-For the current epoch that term is zero.
+For the current epoch that term is the stake of the empty set, zero.
 
 Gasper §4.4, Definitions 4.5 and 4.6, justify a checkpoint by a supermajority link.
 
@@ -51,9 +51,11 @@ variable {preset : Preset} {fork : Base.Fork} {config : Config} {checks : Signat
 
 /-- The stake bound of a supermajority link of Casper FFG, up to a term of churn.
 
-The validator set of the target is the active set of an epoch.
+The validator set is the active set of the given epoch, which should be the epoch of the target.
 
 Each validator weighs its effective balance in the state.
+
+The model needs that set and those stakes fixed across states, which this does not show.
 
 Twice the stake of that set is at most three times the stake of its voters for the link.
 
@@ -73,6 +75,8 @@ def LinkWithChurn (state : BeaconState preset fork) (votes : Set (Vote Validator
 /-- A signed vote for the link of an epoch, by an active validator, is a voter of the model.
 
 The vote of the model goes from the justified checkpoint of the epoch to its checkpoint.
+
+The root of that checkpoint is the block root that the state records for its first slot.
 
 The voter belongs to the active set of that epoch. -/
 theorem mem_signers_of_linkVote {block : Root → β} {votes : Set (Vote ValidatorIndex β)}
@@ -158,6 +162,51 @@ private theorem stake_le_of_justificationTest {attesting : List ValidatorIndex}
     (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset target
   omega
 
+/-- A passing test of justification for an epoch gives the stake bound of its link, with churn.
+
+The epoch is the current one when asked, and the previous one otherwise.
+
+The test passes when twice the total active balance is at most three times the target balance.
+
+The target balance is the total balance of a list of attesters.
+
+Each of them must be active in that epoch, and have signed a vote for the link of the epoch.
+
+The active stake of the current epoch must be more than one and a half increments.
+
+The votes of the model must hold those of the data that the state signs, with blocks for roots.
+
+The link goes from the justified checkpoint of the epoch to the checkpoint of the epoch.
+
+The root of that checkpoint is the block root that the state records for its first slot. -/
+theorem linkWithChurn_of_test (large : 3 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat <
+      2 * stake (fun index => balanceAt state index.toNat)
+        (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset)
+    (block : Root → β) {votes : Set (Vote ValidatorIndex β)}
+    (contains : ffgVotes block {vote | SignedVote config checks state vote} ⊆ votes)
+    {current : Bool} {attesting : List ValidatorIndex} {total balance threshold weight : Gwei}
+    {root : Root} (totalOk : getTotalActiveBalance state = .ok total)
+    (balanceOk : getTotalBalance state attesting = .ok balance)
+    (thresholdOk : mulChecked total 2 = .ok threshold)
+    (weightOk : mulChecked balance 3 = .ok weight) (passed : threshold ≤ weight)
+    (rootOk : getBlockRoot state
+      (if current then getCurrentEpoch state else getPreviousEpoch state) = .ok root)
+    (counted : ∀ index ∈ attesting,
+      index ∈ getActiveValidatorIndices state
+          (if current then getCurrentEpoch state else getPreviousEpoch state) ∧
+        ∃ vote, LinkVote state current index.toNat vote ∧ SignedVote config checks state vote) :
+    LinkWithChurn state votes
+      (if current then getCurrentEpoch state else getPreviousEpoch state)
+      ((if current then state.currentJustifiedCheckpoint
+        else state.previousJustifiedCheckpoint).toFfg block)
+      (Checkpoint.toFfg block
+        ⟨if current then getCurrentEpoch state else getPreviousEpoch state, root⟩) := by
+  unfold LinkWithChurn
+  refine stake_le_of_justificationTest totalOk balanceOk thresholdOk weightOk passed large
+    fun index member => ?_
+  obtain ⟨active, vote, link, signed⟩ := counted index (List.mem_toFinset.mp member)
+  exact mem_signers_of_linkVote contains rootOk active link signed
+
 /-- The counted attesters of each epoch whose test passes are voters of the link of that epoch.
 
 The total is the active balance, and the two lists of attesters give the two target balances.
@@ -189,7 +238,7 @@ private theorem linkWithChurn_of_weigh (large : 3 * preset.EFFECTIVE_BALANCE_INC
             ((if current then state.currentJustifiedCheckpoint
               else state.previousJustifiedCheckpoint).toFfg block)
             (after.currentJustifiedCheckpoint.toFfg block) := by
-  rcases weighJustificationAndFinalization_currentJustified weighed with same | ⟨recent,
+  rcases weighJustificationAndFinalization_currentJustified weighed with ⟨same, -⟩ | ⟨recent,
     threshold, weight, thresholdOk, weightOk, passed, epoch, rootOk⟩
   · exact .inl same
   refine .inr ⟨recent, epoch, rootOk, ?_⟩
@@ -198,17 +247,14 @@ private theorem linkWithChurn_of_weigh (large : 3 * preset.EFFECTIVE_BALANCE_INC
     cases recent
     · exact previousOk
     · exact currentOk
-  unfold LinkWithChurn
-  refine stake_le_of_justificationTest totalOk balanceOk thresholdOk weightOk passed large
-    fun index member => ?_
-  obtain ⟨active, vote, link, signed⟩ := counted recent index (List.mem_toFinset.mp member)
   rw [epoch] at rootOk
   have checkpoint : after.currentJustifiedCheckpoint =
       ⟨if recent then getCurrentEpoch state else getPreviousEpoch state,
         after.currentJustifiedCheckpoint.root⟩ := by
     rw [← epoch]
   rw [checkpoint]
-  exact mem_signers_of_linkVote contains rootOk active link signed
+  exact linkWithChurn_of_test large block contains totalOk balanceOk thresholdOk weightOk passed
+    rootOk (counted recent)
 
 /-- Justification in the beacon chain gives the stake bound of a supermajority link of Casper FFG.
 
@@ -220,9 +266,9 @@ The active stake of the current epoch must be more than one and a half increment
 
 The votes of the model must hold those of the data that the state signs, with blocks for roots.
 
-Then the step keeps the current justified checkpoint, or makes the newest justified epoch its own.
+Then the step keeps the current justified checkpoint.
 
-That epoch is the previous or the current one.
+Or it replaces it by the checkpoint of the newest epoch whose test passes, the previous or current.
 
 In the second case, take the active set of that epoch as the validator set of the target.
 
