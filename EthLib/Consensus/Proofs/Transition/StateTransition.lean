@@ -115,9 +115,9 @@ theorem processSlot_participation (computed : processSlot state = .ok after) :
   obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok computed
   exact ⟨rfl, rfl⟩
 
-/-- What one slot step did.
+/-- One slot step caches the roots of the slot, then runs the epoch step if that slot ends an epoch.
 
-It cached the roots of the slot, ran the epoch step if the slot ends an epoch, and moved on. -/
+It then moves the slot on by one. -/
 theorem advanceSlot_ok (computed : advanceSlot config checks state = .ok after) :
     ∃ next cached epoched, next.toNat = state.slot.toNat + 1 ∧ processSlot state = .ok cached ∧
       epochIfLast config checks next cached = .ok epoched ∧

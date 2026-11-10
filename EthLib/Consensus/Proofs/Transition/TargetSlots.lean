@@ -10,11 +10,11 @@ From Altair each target flag of the state comes from a vote for the link of its 
 
 That vote is signed, and each slot keeps this, the epoch step included.
 
-The slot step writes only the block root at the current slot.
+In the buffer of block roots, the slot step writes only the entry at the current slot.
 
 The root at the first slot of a recent epoch stays while it is in the buffer of roots.
 
-The buffer must cover two epochs, as both presets do, and an epoch must have a slot.
+The buffer must cover two epochs, as both presets do, and an epoch must have at least one slot.
 
 The epoch step makes the flags of the current epoch those of the previous epoch.
 
@@ -26,7 +26,9 @@ It does not run in the first two epochs.
 
 So the proof needs the two justified checkpoints equal in those epochs, which the slots keep.
 
-Gasper §4.4, Definition 4.5, justifies a checkpoint by the stake of the votes for one link.
+Gasper §4.4, Definitions 4.5 and 4.6, justify a checkpoint by a supermajority link.
+
+The votes for that link carry more than 2/3 of the stake.
 
 The paper is [arXiv 2003.03052v3](https://arxiv.org/abs/2003.03052v3).
 -/
@@ -73,7 +75,9 @@ theorem JustifiedEarly.previousJustified_of_justification (early : JustifiedEarl
 
 /-- One slot keeps the fork versions, the genesis validators root and the keys.
 
-It never shrinks the registry, and the keys need it below 2^64 validators after the slot. -/
+It never shrinks the registry.
+
+It keeps the keys while the registry stays below 2^64 validators after the slot. -/
 theorem advanceSlot_keys (computed : advanceSlot config checks state = .ok after) :
     after.forkVersions = state.forkVersions ∧
       after.genesisValidatorsRoot = state.genesisValidatorsRoot ∧
@@ -167,7 +171,7 @@ private theorem recent_of_epoch (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
 
 /-- One slot keeps each target flag backed by a signed vote for the link of its epoch.
 
-The epochs must have slots, and the buffer of roots must cover two epochs.
+An epoch must have at least one slot, and the buffer of roots must cover two epochs.
 
 The two justified checkpoints must be equal in the first two epochs.
 
@@ -285,7 +289,7 @@ theorem JustifiedEarly.of_advanceSlots :
 
 /-- Slots keep each target flag backed by a signed vote for its link.
 
-The epochs must have slots, and the buffer of roots must cover two epochs.
+An epoch must have at least one slot, and the buffer of roots must cover two epochs.
 
 The two justified checkpoints must be equal in the first two epochs before the slots.
 
@@ -305,9 +309,9 @@ theorem TargetFlagsSigned.of_advanceSlots (positive : 0 < preset.SLOTS_PER_EPOCH
       (holds.of_advanceSlot positive window early
         (Nat.lt_of_le_of_lt (advanceSlots_registryGrows rest) small) nextOk) rest
 
-/-- A block that the transition accepts keeps the justified checkpoints equal in early epochs.
+/-- A block that the transition accepts keeps the two justified checkpoints equal in early epochs.
 
-That holds in the first two epochs, through the slots before the block and the block itself. -/
+Those are the first two epochs, and the slots before the block keep that, as the block does. -/
 theorem JustifiedEarly.of_stateTransition {engine : ExecutionEngine preset fork}
     {signed : SignedBeaconBlock preset fork} {validateResult : Bool}
     (early : JustifiedEarly state)
@@ -324,7 +328,7 @@ That vote is for the link of the epoch of the flag.
 
 The slots before the block keep that, and so does the block itself.
 
-The epochs must have slots, and the buffer of roots must cover two epochs, as in both presets.
+An epoch must have at least one slot, and the roots must cover two epochs, as in both presets.
 
 The two justified checkpoints must be equal in the first two epochs before the block.
 

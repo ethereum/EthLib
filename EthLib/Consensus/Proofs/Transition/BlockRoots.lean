@@ -63,7 +63,7 @@ private theorem advanceSlot_cachedRoots
     subst epochedOk
     exact ⟨rfl, rfl, rfl, rfl, rfl, sum⟩
 
-/-- One slot keeps the root of a block while it stays in the buffer of roots at the next slot. -/
+/-- One slot keeps the root recorded at a slot while that slot stays in the buffer of roots. -/
 theorem getBlockRootAtSlot_advanceSlot {slot : Slot} {root : Root}
     (computed : advanceSlot config checks state = .ok after)
     (read : getBlockRootAtSlot state slot = .ok root)

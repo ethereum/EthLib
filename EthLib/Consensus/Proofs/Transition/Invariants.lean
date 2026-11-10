@@ -1614,7 +1614,7 @@ They also keep the latest block header, and from Gloas the latest block hash and
 
 They keep the registry, the fork versions and the genesis validators root.
 
-From Altair they also keep the flags of both epochs. -/
+They also keep the flags of both epochs. -/
 theorem processJustificationAndFinalization_keeps
     (computed : processJustificationAndFinalization state = .ok after) :
     after.genesisTime = state.genesisTime ∧ after.blockRoots = state.blockRoots ∧
