@@ -145,7 +145,7 @@ private theorem simulateQ_permImpl_signNonceQ (scheme : Scheme F G A M) (π : Eq
 
 omit [SampleableType F] [DecidableEq M] [FinEnum A] in
 /-- With `π`, verification asked of the oracle is verification by `π`. -/
-private theorem simulateQ_permImpl_verifyQ (scheme : Scheme F G A M) (π : Equiv.Perm A)
+theorem simulateQ_permImpl_verifyQ (scheme : Scheme F G A M) (π : Equiv.Perm A)
     (X : G) (m : M) (t s : F) :
     simulateQ (permImpl π) (verifyQ scheme X m t s) = pure (verify scheme π X m t s) := by
   unfold verifyQ
@@ -176,7 +176,7 @@ private theorem simulateQ_permImpl_signFreshQ (scheme : Scheme F G A M) (π : Eq
 
 omit [DecidableEq G] [FinEnum A] in
 /-- With `π`, each oracle of the program answers as the oracle of the game. -/
-private theorem simulateQ_permImpl_implQ (scheme : Scheme F G A M) (fuel : ℕ)
+theorem simulateQ_permImpl_implQ (scheme : Scheme F G A M) (fuel : ℕ)
     (π : Equiv.Perm A) (x : F) (q : (Spec F A M).Domain) (cache : Cache F M) :
     simulateQ (permImpl π) ((implQ (signQ scheme fuel x) q).run cache) =
       (impl scheme fuel π x q).run cache := by
