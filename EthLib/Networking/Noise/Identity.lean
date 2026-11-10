@@ -2,7 +2,7 @@ module
 
 public import EthLib.Networking.Noise
 public import EthLib.Networking.Libp2p.PeerId
-public import EthLib.Networking.Encoding.Varint
+public import EthLib.Networking.Encoding.Protobuf
 
 /-!
 # The libp2p Noise identity payload
@@ -57,53 +57,6 @@ def encodePayload (p : Payload) : Except NoiseError ByteArray := do
   let encoded := payloadField 0x0a p.publicKey ++ payloadField 0x12 p.signature ++ extension
   if encoded.size ≤ 65535 then return encoded else throw .messageTooLong
 
-/-- Read one protobuf varint and retain the suffix, with the 64-bit bound of the wire format. -/
-def payloadVarint (bytes : List UInt8) : Except NoiseError (Nat × List UInt8) := do
-  let result ← go 10 bytes
-  if result.1 < 2 ^ 64 then return result else throw .protobuf
-where
-  go : Nat → List UInt8 → Except NoiseError (Nat × List UInt8)
-    | 0, _ => .error .protobuf
-    | _, [] => .error .protobuf
-    | fuel + 1, byte :: rest => do
-      if byte.toNat < 128 then return (byte.toNat, rest)
-      let (high, rest) ← go fuel rest
-      return (byte.toNat % 128 + 128 * high, rest)
-
-/-- Read a bounded length-delimited field without accepting a truncated value. -/
-def payloadBytes (bytes : List UInt8) : Except NoiseError (ByteArray × List UInt8) := do
-  let (size, rest) ← payloadVarint bytes
-  if size ≤ rest.length then return (⟨(rest.take size).toArray⟩, rest.drop size)
-  else throw .protobuf
-
-/-- Skip one nongroup field of an unknown protobuf field number. -/
-def skipPayloadScalar (wire : Nat) (bytes : List UInt8) : Except NoiseError (List UInt8) := do
-  match wire with
-  | 0 => return (← payloadVarint bytes).2
-  | 1 => if 8 ≤ bytes.length then return bytes.drop 8 else throw .protobuf
-  | 2 => return (← payloadBytes bytes).2
-  | 5 => if 4 ≤ bytes.length then return bytes.drop 4 else throw .protobuf
-  | _ => throw .protobuf
-
-/-- Skip an unknown group, checking matched end tags without parsing extension contents. -/
-def skipPayloadGroup : Nat → List Nat → List UInt8 → Except NoiseError (List UInt8)
-  | 0, _, _ => .error .protobuf
-  | _, [], rest => .ok rest
-  | fuel + 1, expected :: stack, bytes => do
-    let (tag, rest) ← payloadVarint bytes
-    let field := tag / 8
-    let wire := tag % 8
-    if field = 0 ∨ field ≥ 2 ^ 29 then throw .protobuf
-    match wire with
-    | 3 => skipPayloadGroup fuel (field :: expected :: stack) rest
-    | 4 =>
-      if field = expected then
-        match stack with
-        | [] => return rest
-        | _ => skipPayloadGroup fuel stack rest
-      else throw .protobuf
-    | _ => skipPayloadGroup fuel (expected :: stack) (← skipPayloadScalar wire rest)
-
 /-- Decode protobuf singular bytes by last value and merge extension messages by concatenation. -/
 def decodePayload (bytes : ByteArray) : Except NoiseError Payload :=
   if bytes.size ≤ 65535 then go bytes.size bytes.data.toList {} else .error .messageTooLong
@@ -112,20 +65,14 @@ where
     | _, [], payload => .ok payload
     | 0, _ :: _, _ => .error .protobuf
     | fuel + 1, bytes@(_ :: _), payload => do
-      let (tag, rest) ← payloadVarint bytes
-      let field := tag / 8
-      let wire := tag % 8
-      if field = 0 ∨ field ≥ 2 ^ 29 then throw .protobuf
-      if wire = 2 ∧ (field = 1 ∨ field = 2 ∨ field = 4) then
-        let (value, rest) ← payloadBytes rest
-        let payload := if field = 1 then { payload with publicKey := value }
-          else if field = 2 then { payload with signature := value }
-          else { payload with extensions := some ((payload.extensions.getD .empty) ++ value) }
-        go fuel rest payload
-      else
-        let rest ← if wire = 3 then skipPayloadGroup fuel [field] rest
-          else skipPayloadScalar wire rest
-        go fuel rest payload
+      let (record, rest) ← (Encoding.Protobuf.readRecord fuel bytes).mapError fun _ => .protobuf
+      let payload := match record with
+        | ⟨1, .len value⟩ => { payload with publicKey := ⟨value.toArray⟩ }
+        | ⟨2, .len value⟩ => { payload with signature := ⟨value.toArray⟩ }
+        | ⟨4, .len value⟩ =>
+          { payload with extensions := some ((payload.extensions.getD .empty) ++ ⟨value.toArray⟩) }
+        | _ => payload
+      go fuel rest payload
 
 /-- The error of a failure with the local identity secret.
 
