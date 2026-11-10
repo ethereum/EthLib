@@ -2423,7 +2423,8 @@ So a transition never adds a validator at a position of `2^64` or more, and only
 
 `getActiveValidatorIndices_eq_mapM_ofNatChecked` in `Consensus/Proofs/Accessors.lean` states the divergence exactly.
 The checked conversion of the active positions, which the specification computes, succeeds and gives EthLib's list exactly when every active position is below `2^64`.
-The churn limits also convert the number of active validators to a 64-bit integer without a check, where the specification fails at `2^64` active validators.
+The number of committees per slot, the churn limit of validators before Electra and the Phase 0 weak subjectivity period also convert the number of active validators to a 64-bit integer without a check.
+The specification fails there at `2^64` active validators, a count that a registry of `2^64` positions allows, so that case can arise through the transition, at least in principle.
 
 Some official vectors expect more than a source says.
 The transaction tests of ethereum/tests reject 43 results whose gas limit is `2^64`, or whose gas limit times gas price exceeds `2^256 - 1`.
