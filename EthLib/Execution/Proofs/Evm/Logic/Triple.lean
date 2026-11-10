@@ -78,6 +78,15 @@ theorem cases {P₁ P₂ Q : Evm fork Meter → Prop} (h₁ : Triple S P₁ Q) (
     Triple S (fun evm => P₁ evm ∨ P₂ evm) Q :=
   fun evm hp => hp.elim (h₁ evm) (h₂ evm)
 
+/-- A precondition that names a gas that meets `R` and a substate with the logs `logs`.
+
+It is met when each such gas and substate meets it. -/
+theorem of_gas_logs {P : Nat → Substate → Evm fork Meter → Prop} {Q : Evm fork Meter → Prop}
+    {R : Nat → Prop} {logs : Array Blocks.Log}
+    (h : ∀ g ss, R g → ss.logs = logs → Triple S (P g ss) Q) :
+    Triple S (fun evm => ∃ g ss, R g ∧ ss.logs = logs ∧ P g ss evm) Q :=
+  fun evm ⟨g, ss, h1, h2, hp⟩ => h g ss h1 h2 evm hp
+
 end Triple
 
 variable [GasMeter Meter]

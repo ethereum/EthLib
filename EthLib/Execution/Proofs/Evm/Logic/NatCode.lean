@@ -148,4 +148,16 @@ theorem not_valid_of_natByte {n size d : Nat} (hb : natByte n size d ≠ 0x5b) :
   | false => rfl
   | true => exact absurd (by rw [← byteAt_ofNat]; exact byteAt_of_isValidJumpDest h) hb
 
+/-- The `w` bits of a number from bit `s` depend only on its bits below bit `W`.
+
+It holds when `s + w ≤ W`. -/
+theorem shiftRight_mod_two_pow (n s w W : Nat) (h : s + w ≤ W) :
+    (n >>> s) % 2 ^ w = ((n % 2 ^ W) >>> s) % 2 ^ w := by
+  apply Nat.eq_of_testBit_eq
+  intro i
+  simp only [Nat.testBit_mod_two_pow, Nat.testBit_shiftRight]
+  by_cases hi : i < w
+  · simp [hi, show s + i < W by omega]
+  · simp [hi]
+
 end EthLib.Execution.Evm.Logic.NatCode

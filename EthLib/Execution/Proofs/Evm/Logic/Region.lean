@@ -174,4 +174,15 @@ theorem size_memoryExtend_extendMemory {memory : ByteArray} {start length : U256
     simp only
     omega
 
+/-- Growth then a write past a range keeps the bytes of the range. -/
+theorem Holds.extend_write {M bytes value : ByteArray} {s t e : Nat} (h : Holds M s bytes)
+    (hfit : t + value.size ≤ M.size + e) (hd : s + bytes.size ≤ t) :
+    Holds (memoryWrite (EthLib.Execution.Evm.memoryExtend M e) t value) s bytes :=
+  (h.memoryExtend e).memoryWrite_of_disjoint (by rw [size_memoryExtend]; exact hfit) (.inl hd)
+
+/-- Growth then a write holds the written bytes. -/
+theorem holds_extend_write {M value : ByteArray} {t e : Nat} (hfit : t + value.size ≤ M.size + e) :
+    Holds (memoryWrite (memoryExtend M e) t value) t value :=
+  holds_memoryWrite (by rw [size_memoryExtend]; exact hfit)
+
 end EthLib.Execution.Evm.Logic

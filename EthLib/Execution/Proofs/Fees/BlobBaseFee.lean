@@ -214,6 +214,16 @@ theorem partialSum_mono {factor numerator numerator' denominator : Nat} (h : num
   | zero => exact Nat.le_refl _
   | succ k ih => exact Nat.add_le_add ih (accum_mono h k)
 
+/-- A partial sum is at most each later one. -/
+theorem partialSum_le_of_le {factor numerator denominator j k : Nat} (h : j ≤ k) :
+    partialSum factor numerator denominator j ≤ partialSum factor numerator denominator k := by
+  induction k with
+  | zero => rw [Nat.le_zero.mp h]; exact Nat.le_refl _
+  | succ k ih =>
+    rcases Nat.lt_or_eq_of_le h with h | h
+    · exact Nat.le_trans (ih (Nat.le_of_lt_succ h)) (Nat.le_add_right _ _)
+    · rw [h]; exact Nat.le_refl _
+
 /-- `fake_exponential` is monotone in its numerator.
 
 Both values are sums up to the later of the two bounds, and each term grows with the numerator. -/

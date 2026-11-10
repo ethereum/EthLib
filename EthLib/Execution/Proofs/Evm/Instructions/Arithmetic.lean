@@ -65,6 +65,14 @@ theorem div_eq (x y : U256) : div x y = x / y := by
     rw [BitVec.toNat_ofNat, BitVec.toNat_udiv]
     exact Nat.mod_eq_of_lt (Nat.lt_of_le_of_lt (Nat.div_le_self _ _) x.isLt)
 
+/-- DIV of two words below `2^256` is the quotient of their numbers. -/
+theorem div_ofNat {a b : Nat} (ha : a < 2 ^ 256) (hb : b < 2 ^ 256) :
+    div (BitVec.ofNat 256 a) (BitVec.ofNat 256 b) = BitVec.ofNat 256 (a / b) := by
+  rw [div_eq]
+  apply BitVec.eq_of_toNat_eq
+  simp only [BitVec.toNat_udiv, BitVec.toNat_ofNat, Nat.mod_eq_of_lt ha, Nat.mod_eq_of_lt hb]
+  exact (Nat.mod_eq_of_lt (Nat.lt_of_le_of_lt (Nat.div_le_self _ _) ha)).symm
+
 /-- MOD is the unsigned bit vector remainder, except for a divisor of 0.
 
 There the bit vector remainder returns the dividend. -/

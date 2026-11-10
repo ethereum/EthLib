@@ -53,6 +53,29 @@ def WritesStorage (target : Address) (store : U256 → U256) (S post : Transacti
     (∀ other, post.getAccountOptional other = S.getAccountOptional other) ∧
     ∀ codeHash, post.getCode codeHash = S.getCode codeHash
 
+/-- A state holds its own storage at an address, and keeps the rest of itself. -/
+theorem WritesStorage.refl (target : Address) (S : TransactionState) :
+    WritesStorage target (storageOf S target) S S :=
+  ⟨fun _ => rfl, fun _ _ _ => rfl, fun _ => rfl, fun _ => rfl⟩
+
+/-- Two writes in turn: the second gives the storage, and both keep the rest. -/
+theorem WritesStorage.trans {target : Address} {f g : U256 → U256}
+    {S S' S'' : TransactionState} (h : WritesStorage target f S S')
+    (h' : WritesStorage target g S' S'') : WritesStorage target g S S'' :=
+  ⟨h'.1, fun o k hne => (h'.2.1 o k hne).trans (h.2.1 o k hne),
+    fun o => (h'.2.2.1 o).trans (h.2.2.1 o), fun c => (h'.2.2.2 c).trans (h.2.2.2 c)⟩
+
+/-- A record of a read keeps the storage. -/
+theorem storageOf_recordStorageRead (S : TransactionState) (target address : Address)
+    (key : EthLib.Base.Bytes32) :
+    storageOf (S.recordStorageRead address key) target = storageOf S target := rfl
+
+/-- A record of a read keeps the storage and the rest of the state. -/
+theorem WritesStorage.recordStorageRead (target : Address) (S : TransactionState)
+    (address : Address) (key : EthLib.Base.Bytes32) :
+    WritesStorage target (storageOf S target) S (S.recordStorageRead address key) :=
+  ⟨fun _ => rfl, fun _ _ _ => rfl, fun _ => rfl, fun _ => rfl⟩
+
 /-- The word of the system address is `0xff…fe`. -/
 theorem toU256_SYSTEM_ADDRESS :
     SYSTEM_ADDRESS.toU256 = BitVec.ofNat 256 0xfffffffffffffffffffffffffffffffffffffffe := by
