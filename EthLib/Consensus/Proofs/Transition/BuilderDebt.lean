@@ -241,6 +241,28 @@ theorem slotPaymentPosition_map_toNat
     exact Nat.mod_eq_of_lt (by omega)
   · split <;> simp [offset]
 
+/-- Two slots with the same position of their payment are the same slot.
+
+The epoch must have one slot or more, and the window must fit in 64 bits. -/
+theorem slotPaymentPosition_injective
+    (bounds : 1 ≤ preset.SLOTS_PER_EPOCH.toNat ∧ 2 * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64)
+    {first second : Slot} {position : UInt64}
+    (atFirst : slotPaymentPosition state first = some position)
+    (atSecond : slotPaymentPosition state second = some position) : first = second := by
+  have firstNat := slotPaymentPosition_map_toNat bounds state first
+  have secondNat := slotPaymentPosition_map_toNat bounds state second
+  rw [atFirst] at firstNat
+  rw [atSecond] at secondNat
+  have firstSplit := Nat.div_add_mod first.toNat preset.SLOTS_PER_EPOCH.toNat
+  have secondSplit := Nat.div_add_mod second.toNat preset.SLOTS_PER_EPOCH.toNat
+  have firstBelow := Nat.mod_lt first.toNat bounds.1
+  have secondBelow := Nat.mod_lt second.toNat bounds.1
+  apply UInt64.toNat_inj.mp
+  simp only [Option.map_some] at firstNat secondNat
+  split at firstNat <;> split at secondNat <;> (try split at firstNat) <;>
+    (try split at secondNat) <;>
+    simp only [Option.some.injEq, reduceCtorEq] at firstNat secondNat <;> grind
+
 /-- A read of the pending payments inside the window is the read of their elements. -/
 theorem paymentAt_of_lt {gloas : .glamsterdam ≤ fork} {position : Nat}
     (inside : position < 2 * preset.SLOTS_PER_EPOCH.toNat) :

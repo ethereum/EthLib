@@ -3,6 +3,7 @@ module
 public import EthLib.Consensus.Proofs.Time
 public import EthLib.Consensus.Proofs.Transition.BuilderDebt
 public import EthLib.Consensus.Proofs.Transition.ParentPayload
+public import EthLib.Consensus.Proofs.Transition.Payload
 
 /-!
 # Proofs: the steps that pay the bid of a block
@@ -43,7 +44,9 @@ The payment of the parent closes the payment in the window.
 
 The parent slot may stay open through the late path, until the header moves to the new block.
 
-A later step shows that the header step closes it.
+The header step closes it, since the latest block then has the slot of the state.
+
+The header and the bid of a block release no payment.
 
 [EIP-7732] adds the builders, their bids and their payments.
 
@@ -56,7 +59,8 @@ namespace EthLib.Consensus
 
 open Base
 
-variable {preset : Preset} {fork : Base.Fork} {state after : BeaconState preset fork}
+variable {preset : Preset} {fork : Base.Fork} {config : Config} {checks : SignatureChecks}
+  {state after : BeaconState preset fork}
 
 /-- Whether the window holds the payment of the block at a slot, with a positive amount. -/
 def PaymentInWindow (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork)
@@ -582,5 +586,112 @@ theorem processBuilderPendingPayments_release (positive : preset.PaymentQuorumPo
         rw [slotNat _ inside, ← offset, ← previous]
         exact Nat.mod_add_div' _ _
       · cases onNat
+
+/-- After the header of a block, a payment is open only in the window or at the slot of the state.
+
+The latest block then has the slot of the state, which the late path reads. -/
+theorem processBlockHeader_paymentOpen {gloas : .glamsterdam ≤ fork}
+    {block : BeaconBlock preset fork} (computed : processBlockHeader state block = .ok after) :
+    ∀ slot, PaymentOpen after gloas slot →
+      PaymentInWindow after gloas slot ∨ slot = state.slot := by
+  obtain ⟨slotEq, -⟩ := processBlockHeader_checks computed
+  obtain ⟨_, -, rfl⟩ := processBlockHeader_eq computed
+  rintro slot (window | ⟨atHeader, -, -, -⟩)
+  · exact Or.inl window
+  · exact Or.inr (atHeader.trans slotEq)
+
+/-- The header of a block releases no payment. -/
+theorem processBlockHeader_release {gloas : .glamsterdam ≤ fork} {block : BeaconBlock preset fork}
+    (computed : processBlockHeader state block = .ok after) :
+    PaymentRelease state after gloas [] := by
+  have lateSlot := processBlockHeader_paymentOpen (gloas := gloas) computed
+  obtain ⟨_, -, rfl⟩ := processBlockHeader_eq computed
+  refine ⟨List.nodup_nil, by simp, by simp, by simp, fun slot opened => ?_,
+    fun slot _ _ => ?_, UInt64.le_refl _⟩
+  · rcases lateSlot slot opened with window | atSlot
+    · exact Or.inl (Or.inl window)
+    · exact Or.inr (atSlot ▸ UInt64.le_refl _)
+  · simp only [openWithdrawal, paymentAt, latestBidWithdrawal]
+    rfl
+
+/-- With a positive quorum, the bid of a block releases no payment.
+
+The positive quorum is an assumption on the preset, which both presets meet.
+
+The bid step reads it only for the bounds on the slots of an epoch that it gives.
+
+The payment of the slot of the state must not be open before the step.
+
+That hypothesis is an assumption, which a later step proves for the bid inside a block. -/
+theorem processExecutionPayloadBid_release (positive : preset.PaymentQuorumPositive)
+    {gloas : .glamsterdam ≤ fork} {signed : SignedExecutionPayloadBid preset fork}
+    (fresh : ¬ PaymentOpen state gloas state.slot)
+    (computed : processExecutionPayloadBid config checks state gloas signed = .ok after) :
+    PaymentRelease state after gloas [] := by
+  have bounds := positive.slotsPerEpoch_bounds
+  obtain ⟨checked, recorded, record, rfl⟩ := processExecutionPayloadBid_ok computed
+  obtain ⟨-, -, bidSlot, -⟩ := checkExecutionPayloadBid_ok_iff.mp checked
+  -- Whatever the bid writes, it writes at the position of the slot of the state only.
+  have common : ∀ (written : BeaconState preset fork) (own : UInt64),
+      written.slot = state.slot → written.latestBlockHeader = state.latestBlockHeader →
+      written.latestExecutionPayloadBid gloas = signed.message →
+      written.builderPendingWithdrawals gloas = state.builderPendingWithdrawals gloas →
+      slotPaymentPosition state state.slot = some own →
+      (∀ n, n ≠ own.toNat → paymentAt written gloas n = paymentAt state gloas n) →
+      PaymentRelease state written gloas [] := by
+    intro written own slotEq headerEq bidEq queue atOwn other
+    have positions := slotPaymentPosition_congr (state := state) (after := written) slotEq
+    have lateOnly : ∀ slot, PaymentOpen written gloas slot →
+        PaymentInWindow written gloas slot ∨ slot = state.slot := by
+      rintro slot (window | ⟨-, atBid, -, -⟩)
+      · exact Or.inl window
+      · rw [bidEq] at atBid
+        exact Or.inr (atBid.symm.trans bidSlot)
+    have windowOff : ∀ slot, PaymentInWindow written gloas slot → slot ≠ state.slot →
+        ∃ p, slotPaymentPosition state slot = some p ∧
+          0 < (paymentAt written gloas p.toNat).withdrawal.amount ∧
+          paymentAt written gloas p.toNat = paymentAt state gloas p.toNat := by
+      rintro slot ⟨p, found, positive⟩ differ
+      rw [positions] at found
+      refine ⟨p, found, positive, other _ fun same => differ ?_⟩
+      exact slotPaymentPosition_injective bounds found
+        (by rw [atOwn, UInt64.toNat_inj.mp same])
+    refine ⟨List.nodup_nil, by simp [queue], by simp, by simp, ?_, ?_, ?_⟩
+    · intro slot opened
+      rcases lateOnly slot opened with window | atSlot
+      · by_cases atState : slot = state.slot
+        · exact Or.inr (atState ▸ UInt64.le_refl _)
+        · obtain ⟨p, found, positive, same⟩ := windowOff slot window atState
+          exact Or.inl (Or.inl ⟨p, found, same ▸ positive⟩)
+      · exact Or.inr (atSlot ▸ UInt64.le_refl _)
+    · intro slot opened before
+      have differ : slot ≠ state.slot := fun atState => fresh (atState ▸ before)
+      rcases lateOnly slot opened with window | atSlot
+      · obtain ⟨p, found, positive, same⟩ := windowOff slot window differ
+        have kept : 0 < (paymentAt state gloas p.toNat).withdrawal.amount := same ▸ positive
+        simp only [openWithdrawal, positions, found, same, kept, ↓reduceIte]
+      · exact absurd atSlot differ
+    · rw [slotEq]
+      exact UInt64.le_refl _
+  have atState : ∃ own, slotPaymentPosition state state.slot = some own ∧
+      own.toNat =
+        preset.SLOTS_PER_EPOCH.toNat + state.slot.toNat % preset.SLOTS_PER_EPOCH.toNat := by
+    have := slotPaymentPosition_map_toNat bounds state state.slot
+    simp only [↓reduceIte] at this
+    obtain ⟨own, found, value⟩ := Option.map_eq_some_iff.mp this
+    exact ⟨own, found, value⟩
+  obtain ⟨own, atOwn, ownValue⟩ := atState
+  by_cases paid : 0 < signed.message.value
+  · obtain ⟨proposer, position, -, placed, rfl⟩ := recordBidPayment_of_pos paid record
+    refine common _ own rfl rfl rfl rfl atOwn fun n differ => ?_
+    rw [paymentAt_set (state := state) (inside := position.isLt) rfl n]
+    refine ite_eq_right_of_eq_false _ _ (eq_false fun same => ?_)
+    rw [placed, bidSlot, UInt64.toNat_mod] at same
+    omega
+  · have free : signed.message.value = 0 :=
+      UInt64.le_zero_iff.mp (UInt64.not_lt.mp paid)
+    rw [recordBidPayment_of_value_eq_zero free, Except.ok.injEq] at record
+    subst record
+    exact common _ own rfl rfl rfl rfl atOwn fun n _ => rfl
 
 end EthLib.Consensus
