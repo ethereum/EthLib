@@ -45,13 +45,13 @@ So the safety bounds say something only when the slack is bounded, as the exit c
 
 A slack link also lets each checkpoint `c` have a set `W c` of weights, not one stake function.
 
-The link holds when its bound holds under one weights of `W t` for its target `t`.
+The link holds when its bound holds under one choice of weights in `W t`, for its target `t`.
 
 A balance can change from one checkpoint to the next, and between two branches.
 
 Two branches can justify one checkpoint from two states, each with its own balances.
 
-A set of weights holds them both, where one weights could not.
+A set of weights holds them both, where a single weights function could not.
 
 With `U = V` and the single stake function `w` in each set, a slack link is a supermajority link.
 

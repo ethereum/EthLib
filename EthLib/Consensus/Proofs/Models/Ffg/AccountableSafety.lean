@@ -265,7 +265,9 @@ Then two slack-justified checkpoints `l` and `r` have the property below.
 
 Their epochs lie between the epochs of the two finalized checkpoints.
 
-Their links hold under some weights `wl` of the set of `l` and `wr` of the set of `r`.
+They come with weights `wl` from the set of `l` and `wr` from the set of `r`.
+
+The bounds below hold under those weights.
 
 Take the validator sets `L` and `R` of `l` and `r`, a reference set `V₀` and reference weights `w₀`.
 
@@ -371,7 +373,9 @@ Then two slack-justified checkpoints `l` and `r` have the property below.
 
 Their epochs lie between the epochs of the two finalized checkpoints.
 
-Their links hold under some weights `wl` of the set of `l` and `wr` of the set of `r`.
+They come with weights `wl` from the set of `l` and `wr` from the set of `r`.
+
+The bound below holds under those weights.
 
 Take the validator sets `L` and `R` of `l` and `r`.
 
