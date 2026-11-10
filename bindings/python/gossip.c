@@ -16,6 +16,16 @@ eth_gossip_decode_payload(
   lean_object* data
 );
 
+extern lean_object*
+eth_gossip_rpc_decode(
+  lean_object* args
+);
+
+extern lean_object*
+eth_gossip_rpc_encode(
+  lean_object* args
+);
+
 /* ---- Wrappers --------------------------------------------------------- */
 
 /* The bytes of a `bytes` object, or NULL with a TypeError set. */
@@ -51,4 +61,20 @@ py_gossip_decode_payload(
   lean_object* data = bytes_arg(data_obj, "data");
   if (!data) return NULL;
   return except_into_pybytes(eth_gossip_decode_payload(type_bound, data), GOSSIP_ERROR);
+}
+
+PyObject*
+py_gossip_rpc_decode(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_gossip_rpc_decode, args, 1, GOSSIP_ERROR);
+}
+
+PyObject*
+py_gossip_rpc_encode(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_gossip_rpc_encode, args, 1, GOSSIP_ERROR);
 }

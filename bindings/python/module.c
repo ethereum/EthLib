@@ -1091,6 +1091,8 @@ static PyMethodDef methods[] = {
   {"libp2p_decode_peer_id", py_libp2p_decode_peer_id, METH_VARARGS, DOC_libp2p_decode_peer_id},
   {"gossip_message_id", py_gossip_message_id, METH_VARARGS, DOC_gossip_message_id},
   {"gossip_decode_payload", py_gossip_decode_payload, METH_VARARGS, DOC_gossip_decode_payload},
+  {"gossip_rpc_decode", py_gossip_rpc_decode, METH_VARARGS, DOC_gossip_rpc_decode},
+  {"gossip_rpc_encode", py_gossip_rpc_encode, METH_VARARGS, DOC_gossip_rpc_encode},
   {"receipt_reencode", py_receipt_reencode, METH_VARARGS, DOC_receipt_reencode},
   {"receipt_logs_bloom", py_receipt_logs_bloom, METH_VARARGS, DOC_receipt_logs_bloom},
   {"block_make_receipts", py_block_make_receipts, METH_VARARGS, DOC_block_make_receipts},
