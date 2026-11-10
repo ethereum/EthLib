@@ -6,7 +6,7 @@ public import EthLib.Execution.Blocks.Withdrawal
 /-!
 # `Engine.ForkchoiceUpdated`
 
-The choice of the head in `engine_forkchoiceUpdated`, versions 1 to 3, without a payload build.
+The choice of the head in `engine_forkchoiceUpdated`, versions 1 to 4, without a payload build.
 
 The consensus layer names a head, a safe block and a finalized block.
 
@@ -38,7 +38,37 @@ The parameters are the forkchoice state, with exactly its three fields, and the 
 
 The payload attributes are an object or `null`; any other value is an invalid parameter.
 
-Payload attributes start a payload build only when the update selects a new valid head.
+From version 4 the custody columns may follow, as 16 bytes or `null`.
+
+Any other value of them is an invalid parameter.
+
+EIP-8070 makes them optional, so version 4 also takes two parameters.
+
+The source runs the update of the custody set apart from the forkchoice update.
+
+So custody columns that decode never change the answer.
+
+Payload attributes count only when the update selects a new valid head.
+
+They must then have the fields of a version of their structure that the method takes.
+
+Otherwise the error is `-38003`, invalid payload attributes.
+
+Versions 1, 3 and 4 of the method take the same version of the structure.
+
+Version 2 takes versions 1 and 2 of the structure.
+
+Its source takes version 1 only before Shapella, and version 2 only from Shapella.
+
+The payload tree has no timestamps, so this model takes both at any time.
+
+For the same reason it does not check that the timestamp falls in the fork of the method.
+
+That check has error `-38005`.
+
+Nor does it check that the timestamp is above that of the head.
+
+Attributes that pass start a payload build.
 
 That build is not specified here, so such a request is refused.
 
@@ -48,6 +78,7 @@ The method specifications state these rules, at commit `3284ee8` of execution-ap
 
 - [`engine_forkchoiceUpdatedV1`][v1], steps 2, 4, 5, 7, 8 and 9
 - [`engine_forkchoiceUpdatedV2`][v2] and [`engine_forkchoiceUpdatedV3`][v3]
+- [`engine_forkchoiceUpdatedV4`][v4], and the custody columns of [EIP-8070][eip8070]
 
 Each version has its payload attributes: [version 1][a1], [version 2][a2] and [version 3][a3].
 
@@ -56,6 +87,8 @@ From Glamsterdam, [version 4][a4] adds the slot number of EIP-7843 and a target 
 [v1]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#engine_forkchoiceupdatedv1
 [v2]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/shanghai.md#engine_forkchoiceupdatedv2
 [v3]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/cancun.md#engine_forkchoiceupdatedv3
+[v4]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/amsterdam.md#engine_forkchoiceupdatedv4
+[eip8070]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-8070.md#engine-api-extensions
 [a1]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#payloadattributesv1
 [a2]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/shanghai.md#payloadattributesv2
 [a3]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/cancun.md#payloadattributesv3
@@ -159,20 +192,119 @@ def forkchoiceStateOfJson (j : Json) : Decode ForkchoiceState := do
     safeBlockHash := ← fixed "safeBlockHash" 32 (← get "safeBlockHash")
     finalizedBlockHash := ← fixed "finalizedBlockHash" 32 (← get "finalizedBlockHash") }
 
-/-- The parameters of a version of the method: the forkchoice state, then the payload attributes.
+/-- The fields of version 1 of the payload attributes. -/
+def attributesFieldsV1 : List String := ["timestamp", "prevRandao", "suggestedFeeRecipient"]
 
-The attributes are an object or `null`, as the method types them; any other value is invalid.
+/-- The fields of version 2: those of version 1, and the withdrawals. -/
+def attributesFieldsV2 : List String := attributesFieldsV1 ++ ["withdrawals"]
 
-The source checks their fields only on a new valid head, where this model refuses the build.
+/-- The fields of version 3: those of version 2, and the root of the parent beacon block. -/
+def attributesFieldsV3 : List String := attributesFieldsV2 ++ ["parentBeaconBlockRoot"]
 
-It returns the state, and whether the attributes are an object. -/
-def forkchoiceUpdatedParams (params : Json) : Decode (ForkchoiceState × Bool) := do
-  let .arr items := params | invalid "params: not an array"
-  let [state, attributes] := items.toList | invalid "params: not 2 values"
+/-- The fields of version 4: those of version 3, the slot number and the target gas limit. -/
+def attributesFieldsV4 : List String := attributesFieldsV3 ++ ["slotNumber", "targetGasLimit"]
+
+/-- The fields of a version of the payload attributes, from 1 to 4; a later one reads as 4. -/
+def attributesFields : Nat → List String
+  | 0 | 1 => attributesFieldsV1
+  | 2 => attributesFieldsV2
+  | 3 => attributesFieldsV3
+  | _ => attributesFieldsV4
+
+/-- Payload attributes of any version, each field of a later version present or not. -/
+structure AnyPayloadAttributes where
+  /-- The timestamp of the payload. -/
+  timestamp : UInt64
+  /-- The RANDAO mix of the payload. -/
+  prevRandao : Bytes32
+  /-- The fee recipient that the consensus layer suggests. -/
+  suggestedFeeRecipient : Address
+  /-- The withdrawals, from version 2. -/
+  withdrawals : Option (List Withdrawal)
+  /-- The root of the parent beacon block, from version 3. -/
+  parentBeaconBlockRoot : Option Hash32
+  /-- The slot number, from version 4. -/
+  slotNumber : Option UInt64
+  /-- The target gas limit, from version 4. -/
+  targetGasLimit : Option UInt64
+
+/-- Payload attributes with exactly the fields of a version of their structure.
+
+Each field holds a value of its type. -/
+def payloadAttributesOfJson (layout : Nat) (j : Json) : Decode AnyPayloadAttributes := do
+  let fs ← fields "payloadAttributes" j
+  unless hasExactly fs (attributesFields layout) do invalid "payloadAttributes: wrong fields"
+  let get := field "payloadAttributes" fs
+  return {
+    timestamp := ← uint64 "timestamp" (← get "timestamp")
+    prevRandao := ← fixed "prevRandao" 32 (← get "prevRandao")
+    suggestedFeeRecipient := ← address "suggestedFeeRecipient" (← get "suggestedFeeRecipient")
+    withdrawals := ← if 2 ≤ layout then
+      some <$> array "withdrawals" withdrawal (← get "withdrawals") else pure none
+    parentBeaconBlockRoot := ← if 3 ≤ layout then
+      some <$> fixed "parentBeaconBlockRoot" 32 (← get "parentBeaconBlockRoot") else pure none
+    slotNumber := ← if 4 ≤ layout then
+      some <$> uint64 "slotNumber" (← get "slotNumber") else pure none
+    targetGasLimit := ← if 4 ≤ layout then
+      some <$> uint64 "targetGasLimit" (← get "targetGasLimit") else pure none }
+
+/-- The versions of the payload attributes that a version of the method takes.
+
+Version 2 takes version 1 before Shapella and version 2 from it, so it takes both here. -/
+def attributesLayouts : Nat → List Nat
+  | 2 => [1, 2]
+  | version => [version]
+
+/-- The payload attributes that a version of the method takes, in the first layout that fits.
+
+Attributes of no layout that the method takes are invalid payload attributes. -/
+def methodPayloadAttributes (version : Nat) (j : Json) :
+    Except EngineError AnyPayloadAttributes :=
+  match (attributesLayouts version).findSome?
+      (fun layout => (payloadAttributesOfJson layout j).toOption) with
+  | some attributes => .ok attributes
+  | none => .error .invalidPayloadAttributes
+
+/-- The custody columns of version 4: 16 bytes, one bit for each column, or `null` for none. -/
+def custodyColumnsOfJson : Json → Decode (Option (Vector UInt8 16))
+  | .null => pure none
+  | j => some <$> fixed "custodyColumns" 16 j
+
+/-- The parameters of a version of the method.
+
+They are the forkchoice state, then the payload attributes, an object or `null`.
+
+From version 4 the custody columns may follow, as 16 bytes or `null`.
+
+The source checks the fields of the attributes only on a new valid head.
+
+The result is the state, and the attributes when they are an object. -/
+def forkchoiceUpdatedParams (version : Nat) (params : Json) :
+    Decode (ForkchoiceState × Option Json) := do
+  let params ← paramsArray params
+  let (state, attributes, custody) ← match params, decide (4 ≤ version) with
+    | [state, attributes], _ => pure (state, attributes, Json.null)
+    | [state, attributes, custody], true => pure (state, attributes, custody)
+    | _, four => invalid s!"params: got {params.length}, expected {if four then "2 or 3" else "2"}"
   let state ← forkchoiceStateOfJson state
-  match attributes with
-  | .null => return (state, false)
-  | .obj _ => return (state, true)
-  | _ => invalid "payloadAttributes: not an object"
+  let attributes ← match attributes with
+    | .null => pure none
+    | .obj kvs => pure (some (Json.obj kvs))
+    | _ => invalid "payloadAttributes: not an object"
+  -- The custody set changes the blob pool only, never the answer, so its value is dropped.
+  let _ ← custodyColumnsOfJson custody
+  return (state, attributes)
+
+/-- A version of the method: its status, the new head, and the payload attributes of a build.
+
+Attributes count only on a new valid head, where they must fit a layout of the version. -/
+def forkchoiceUpdatedCall (version : Nat) (tree : PayloadTree) (finalized : Option Hash32)
+    (params : Json) :
+    Except EngineError (PayloadStatus × Option Hash32 × Option AnyPayloadAttributes) := do
+  let (state, attributes) ← forkchoiceUpdatedParams version params
+  let (status, head) ← forkchoiceUpdated tree finalized state
+  match attributes, head with
+  | some j, some _ => return (status, head, some (← methodPayloadAttributes version j))
+  | _, _ => return (status, head, none)
 
 end EthLib.Engine

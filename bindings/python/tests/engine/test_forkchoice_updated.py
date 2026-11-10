@@ -113,14 +113,119 @@ def test_wrong_fields() -> None:
     assert error.value.code == 32602
 
 
-def test_payload_attributes() -> None:
-    """Payload attributes on a new valid head ask for a build, which is not specified, so code 0."""
-    state = {"headBlockHash": _hash(3), "safeBlockHash": ZERO, "finalizedBlockHash": ZERO}
+# The attributes of each version of their structure, with valid values.
+ATTRIBUTES_V1 = {
+    "timestamp": "0x1",
+    "prevRandao": "0x" + "00" * 32,
+    "suggestedFeeRecipient": "0x" + "00" * 20,
+}
+ATTRIBUTES_V2 = ATTRIBUTES_V1 | {"withdrawals": []}
+ATTRIBUTES_V3 = ATTRIBUTES_V2 | {"parentBeaconBlockRoot": ZERO}
+ATTRIBUTES_V4 = ATTRIBUTES_V3 | {"slotNumber": "0x1", "targetGasLimit": "0x1c9c380"}
+# Block 3 is the tip of the valid chain, so an update to it selects a new valid head.
+NEW_HEAD = {"headBlockHash": _hash(3), "safeBlockHash": ZERO, "finalizedBlockHash": ZERO}
+CUSTODY = "0x" + "ff" * 16
+
+
+@pytest.mark.parametrize(
+    ("version", "attributes"),
+    [
+        (1, ATTRIBUTES_V1),
+        (2, ATTRIBUTES_V1),
+        (2, ATTRIBUTES_V2),
+        (3, ATTRIBUTES_V3),
+        (4, ATTRIBUTES_V4),
+    ],
+)
+def test_build_not_specified(version: int, attributes: dict) -> None:
+    """Attributes that the version takes, on a new valid head, ask for an unspecified build."""
     with raises(
         engine.EngineError, "payload attributes: building a payload is not specified"
     ) as error:
-        engine.forkchoice_updated(TREE, "engine_forkchoiceUpdatedV1", [state, {"timestamp": "0x1"}])
+        engine.forkchoice_updated(
+            TREE, f"engine_forkchoiceUpdatedV{version}", [NEW_HEAD, attributes]
+        )
     assert error.value.code == 0
+
+
+@pytest.mark.parametrize(
+    ("version", "attributes"),
+    [
+        (1, {"timestamp": "0x1"}),
+        (1, ATTRIBUTES_V2),
+        (2, ATTRIBUTES_V3),
+        (3, ATTRIBUTES_V2),
+        (3, ATTRIBUTES_V4),
+        (4, ATTRIBUTES_V3),
+        (4, {key: value for key, value in ATTRIBUTES_V4.items() if key != "slotNumber"}),
+        (4, ATTRIBUTES_V4 | {"timestamp": "0x01"}),
+        (4, ATTRIBUTES_V4 | {"withdrawals": {}}),
+    ],
+)
+def test_invalid_payload_attributes(version: int, attributes: dict) -> None:
+    """On a new valid head, attributes that fit no structure of the version give -38003."""
+    with raises(
+        engine.EngineError, "engine error: EthLib.Engine.EngineError.invalidPayloadAttributes"
+    ) as error:
+        engine.forkchoice_updated(
+            TREE, f"engine_forkchoiceUpdatedV{version}", [NEW_HEAD, attributes]
+        )
+    assert error.value.code == 38003
+
+
+@pytest.mark.parametrize("custody", [None, CUSTODY, "0x" + "00" * 16])
+def test_version_4_is_version_3_without_attributes(custody: str | None) -> None:
+    """Without attributes, version 4 answers as version 3, whatever the custody columns."""
+    want = engine.forkchoice_updated(TREE, "engine_forkchoiceUpdatedV3", [NEW_HEAD, None])
+    got = engine.forkchoice_updated(TREE, "engine_forkchoiceUpdatedV4", [NEW_HEAD, None, custody])
+    assert got == want
+    assert engine.forkchoice_updated(TREE, "engine_forkchoiceUpdatedV4", [NEW_HEAD, None]) == want
+
+
+def test_custody_columns_with_attributes() -> None:
+    """Custody columns that decode leave the answer to the attributes."""
+    with raises(
+        engine.EngineError, "engine error: EthLib.Engine.EngineError.invalidPayloadAttributes"
+    ) as error:
+        engine.forkchoice_updated(
+            TREE, "engine_forkchoiceUpdatedV4", [NEW_HEAD, ATTRIBUTES_V3, CUSTODY]
+        )
+    assert error.value.code == 38003
+
+
+@pytest.mark.parametrize(
+    ("custody", "reason"),
+    [
+        ("0x" + "ff" * 15, "custodyColumns: 15 bytes, not 16"),
+        ("0x" + "ff" * 17, "custodyColumns: 17 bytes, not 16"),
+        ("ff" * 16, "custodyColumns: no 0x marker"),
+        (16, "custodyColumns: not a string"),
+    ],
+)
+def test_custody_columns_not_16_bytes(custody: object, reason: str) -> None:
+    """Custody columns that are not 16 bytes of hex are an invalid parameter."""
+    with raises(
+        engine.EngineError, f'engine error: EthLib.Engine.EngineError.invalidParams "{reason}"'
+    ) as error:
+        engine.forkchoice_updated(TREE, "engine_forkchoiceUpdatedV4", [NEW_HEAD, None, custody])
+    assert error.value.code == 32602
+
+
+@pytest.mark.parametrize(
+    ("version", "params", "reason"),
+    [
+        (3, [NEW_HEAD, None, CUSTODY], "params: got 3, expected 2"),
+        (4, [NEW_HEAD, None, CUSTODY, None], "params: got 4, expected 2 or 3"),
+        (4, [NEW_HEAD], "params: got 1, expected 2 or 3"),
+    ],
+)
+def test_wrong_parameter_count(version: int, params: list, reason: str) -> None:
+    """Versions 1 to 3 take two parameters, and version 4 two or three."""
+    with raises(
+        engine.EngineError, f'engine error: EthLib.Engine.EngineError.invalidParams "{reason}"'
+    ) as error:
+        engine.forkchoice_updated(TREE, f"engine_forkchoiceUpdatedV{version}", params)
+    assert error.value.code == 32602
 
 
 def test_head_below_finalized() -> None:
@@ -226,7 +331,7 @@ def test_duplicate_block_hash() -> None:
 
 @pytest.mark.parametrize("attributes", [1, "0x1", [], True], ids=repr)
 @pytest.mark.parametrize("head", [3, 9], ids=["new-head", "unknown-head"])
-@pytest.mark.parametrize("version", [1, 2, 3])
+@pytest.mark.parametrize("version", [1, 2, 3, 4])
 def test_attributes_not_an_object(attributes: object, head: int, version: int) -> None:
     """Payload attributes that are neither an object nor null are an invalid parameter."""
     # Block 3 is a new valid head, and block 9 an unknown one that would answer syncing.

@@ -6,7 +6,7 @@ public import EthLib.Engine.ForkchoiceUpdated
 /-!
 # `Exports.ForkchoiceUpdated`
 
-The C export of `engine_forkchoiceUpdated`, versions 1 to 3, without a payload build.
+The C export of `engine_forkchoiceUpdated`, versions 1 to 4, without a payload build.
 
 The payload tree, the finalized block and the request cross as typed Python values.
 
@@ -22,9 +22,9 @@ The request is a JSON-RPC request object, with its method and its parameters.
 
 The result is the value of the JSON of the response: the payload status, and no payload ID.
 
-A JSON-RPC error has the code of its Engine API error: 32602 or 38002.
+A JSON-RPC error has the code of its Engine API error: 32602, 38002 or 38003.
 
-Payload attributes on a new head have code 0.
+Payload attributes on a new head that fit the version have code 0, since no build is specified.
 
 So do an unknown method and an argument that Lean cannot read.
 -/
@@ -44,10 +44,10 @@ def knownOfJson (j : Json) : Result (Hash32 × KnownPayload) := do
     (Json.fixed name 32 (j.getObjValD name)).mapError fun e => (0, s!"tree: {reprStr e}")
   return (← hash "blockHash", ⟨← hash "parentHash", valid⟩)
 
-/-- The version of a method name `engine_forkchoiceUpdatedV1` to `engine_forkchoiceUpdatedV3`. -/
+/-- The version of a method name `engine_forkchoiceUpdatedV1` to `engine_forkchoiceUpdatedV4`. -/
 def forkchoiceUpdatedVersion (method : String) : Option Nat :=
   ["engine_forkchoiceUpdatedV1", "engine_forkchoiceUpdatedV2",
-    "engine_forkchoiceUpdatedV3"].idxOf? method |>.map (· + 1)
+    "engine_forkchoiceUpdatedV3", "engine_forkchoiceUpdatedV4"].idxOf? method |>.map (· + 1)
 
 /-- The response to an `engine_forkchoiceUpdated` request, against a tree of payloads.
 
@@ -65,13 +65,11 @@ def forkchoiceUpdatedOf (args : PyValue × PyValue × PyValue) : Result PyValue 
   let request := request.toJson
   let some method := (request.getObjValAs? String "method").toOption
     | throw (0, "request: no method")
-  let some _ := forkchoiceUpdatedVersion method | throw (0, s!"no method {method}")
-  let engine {α : Type} (act : Except EngineError α) : Result α :=
-    act.mapError fun e => (e.code, s!"engine error: {reprStr e}")
-  let (state, attributes) ← engine (forkchoiceUpdatedParams (request.getObjValD "params"))
-  let (status, head) ← engine (forkchoiceUpdated tree finalized state)
-  -- Step 8: payload attributes start a build only on a new valid head, and no build is specified.
-  if attributes && head.isSome then
+  let some version := forkchoiceUpdatedVersion method | throw (0, s!"no method {method}")
+  let answer := forkchoiceUpdatedCall version tree finalized (request.getObjValD "params")
+  let (status, _, attributes) ← answer.mapError fun e => (e.code, s!"engine error: {reprStr e}")
+  -- Step 8: valid attributes on a new valid head start a build, and no build is specified.
+  if attributes.isSome then
     throw (0, "payload attributes: building a payload is not specified")
   let response := Json.mkObj [
     ("payloadStatus", statusJson status none),
