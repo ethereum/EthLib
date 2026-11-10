@@ -109,12 +109,14 @@ def yamuxDecodeExport (args : PyValue) : Result PyValue :=
 def identityResult {α : Type} (r : Except IdentityError α) : Result α :=
   r.mapError fun e => (e.code, s!"libp2p identity rejected: {reprStr e}")
 
-/-- Read 32 big-endian bytes as a secp256k1 secret scalar in [1, n), with n the group order.
+/-- Read 32 big-endian bytes as a secp256k1 scalar, whose value must be below the group order.
+
+A larger value gives the private-key error; the functions that take the scalar reject 0.
 
 The secret key must stay private, and this function makes no constant-time claim. -/
 def secretOfBytes (bytes : Vector UInt8 32) : Except IdentityError Fn :=
   let n := EthLib.Base.bytesToNat bytes.toList
-  if h : 0 < n ∧ n < Fn.modulus then .ok ⟨n, h.2⟩ else .error .privateKey
+  if h : n < Fn.modulus then .ok ⟨n, h⟩ else .error .privateKey
 
 /-- The public-key protobuf of a 32-byte big-endian secp256k1 secret in [1, n).
 

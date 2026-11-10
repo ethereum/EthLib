@@ -30,14 +30,14 @@ Not yet released.
   Completion of a state whose saved remote message is missing, or does not match the state, gives code 13, `savedRemote`.
   Before, such a state gave the error of the failed step: code 1, 3, 4, 6, 7, 8 or 9.
   Code 9 now means only a remote identity that fails to authenticate.
-- The libp2p Noise handshake now gives the identity secret, the X25519 keys and the chaining key distinct types ([#1657](https://github.com/ethereum/EthLib/issues/1657)).
+- The libp2p Noise handshake gives the identity secret, the chaining key and the handshake hash their own types, apart from the type of the X25519 keys ([#1657](https://github.com/ethereum/EthLib/issues/1657)).
   The secp256k1 identity secret of `writeLibp2p` and `makePayload` is a scalar `Secp256k1.Fn`, in place of 32 bytes.
-  `Libp2p.publicKey` and `Libp2p.sign` take that scalar too, and the exports read it from 32 big-endian bytes in [1, n), with n the group order.
+  `Libp2p.publicKey` and `Libp2p.sign` take that scalar too, and the exports read it from 32 big-endian bytes whose value must be below the group order.
   The chaining key and the handshake hash of `SymmetricState` have the types `ChainingKey` and `HandshakeHash`, and `hkdf2` takes a `ChainingKey`.
-  The cipher key of `CipherState` is written with the ChaCha20-Poly1305 key name, which is the same 32-byte type.
   The C exports and the Python functions keep their signatures: they take the secret and return the chaining key and the hash as 32 bytes.
-  `noise_libp2p_write` now checks the identity secret on every message, message 1 included, before the phase and the extensions.
-  A secret of 0, or at least the group order, gives code 11 there, where message 1 used to ignore the secret.
+  `writeLibp2p` now rejects a zero identity secret before every other check, on every message, message 1 included.
+  The C export `eth_noise_libp2p_write`, and `noise_libp2p_write` in Python, give code 11 for a secret of 0 or at least the group order.
+  Before, message 1 ignored the secret, and a write out of turn gave code 1, `wrongPhase`, or code 10, `firstMessageExtensions`.
 - A chain configuration now holds the address of its deposit contract, and the deposit requests of a block come from that address ([#1486](https://github.com/ethereum/EthLib/issues/1486)).
   Before, every chain read deposits from the mainnet address, so a chain with another deposit contract, such as Sepolia, got no deposit request.
   The configuration that the exports read as JSON, or as a Python `dict`, must give `depositContractAddress`: `0x` and forty hex digits, or 20 bytes in Python.

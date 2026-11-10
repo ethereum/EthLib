@@ -29,11 +29,11 @@ namespace EthLib.Networking.Noise.Exports
 open EthLib.Exports (Result PyValue pyExport)
 
 /-- A cipher key, possibly absent during the handshake, and the next nonce. -/
-abbrev CipherValue := Option Key × UInt64
+abbrev CipherValue := Option Cryptography.ChaCha20Poly1305.Key × UInt64
 
 /-- Role, private keys, remote keys, phase, chaining key, hash, cipher key and nonce. -/
-abbrev StateValue := Bool × Key × Key × Option Key × Option Key × Nat × Key × Key ×
-  Option Key × UInt64
+abbrev StateValue := Bool × Key × Key × Option Key × Option Key × Nat × Vector UInt8 32 ×
+  Vector UInt8 32 × Option Cryptography.ChaCha20Poly1305.Key × UInt64
 
 /-- An XX state and the original encrypted message with its pre-read state. -/
 abbrev Libp2pValue := StateValue × Option (StateValue × ByteArray)
@@ -125,7 +125,11 @@ def initializeLibp2pExport (args : PyValue) : Result PyValue :=
   pyExport (fun (initiator, staticKey, ephemeralKey) =>
     pure (libp2pToValue (initializeLibp2p initiator staticKey ephemeralKey))) args
 
-/-- Write the next libp2p message with a signed identity payload. -/
+/-- Write the next libp2p message with a signed identity payload.
+
+The identity secret is 32 big-endian bytes whose value is in [1, n), with n the group order.
+
+It is checked before every other check, on every message. -/
 @[export eth_noise_libp2p_write]
 def writeLibp2pExport (args : PyValue) : Result PyValue :=
   pyExport (fun (value, identitySecret, extensions) => result (do

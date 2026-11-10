@@ -33,7 +33,7 @@ inductive IdentityError where
   | publicKey
   /-- The bytes do not start with the identity code 0 and the length 37. -/
   | peerId
-  /-- The secret is 0, or its bytes are at least the group order. -/
+  /-- The secret is 0, or its 32 big-endian bytes encode a number at least the group order. -/
   | privateKey
   /-- The bytes are not a strict DER signature with r in [1, n) and s in [1, n/2]. -/
   | signature
@@ -78,7 +78,7 @@ def decodePeerId (id : ByteArray) : Except IdentityError Point :=
   | 0x00 :: 0x25 :: key => decodePublicKey ⟨key.toArray⟩
   | _ => .error .peerId
 
-/-- Derive and serialize the public key of a nonzero secp256k1 secret scalar.
+/-- Derive and serialize the public key of a secp256k1 secret scalar, which must be nonzero.
 
 The secret key must stay private, and this function makes no constant-time claim. -/
 def publicKey (secret : Fn) : Except IdentityError ByteArray :=

@@ -34,15 +34,15 @@ namespace EthLib.Networking.Noise
 open EthLib.Base
 open EthLib.Cryptography
 
-/-- An X25519 private key or public coordinate, Noise §12.1. -/
+/-- An X25519 private key, public coordinate or shared secret, Noise §12.1. -/
 abbrev Key := X25519.Key
 
-/-- The chaining key `ck` of Noise §5.2, of `HASHLEN` = 32 bytes. -/
+/-- The chaining key `ck` of Noise §5.2: `HASHLEN` bytes, 32 for SHA256 by §12.5. -/
 structure ChainingKey where
   bytes : Vector UInt8 32
 deriving DecidableEq
 
-/-- The handshake hash `h` of Noise §5.2, of `HASHLEN` = 32 bytes. -/
+/-- The handshake hash `h` of Noise §5.2: `HASHLEN` bytes, 32 for SHA256 by §12.5. -/
 structure HandshakeHash where
   bytes : Vector UInt8 32
 deriving DecidableEq
@@ -69,7 +69,7 @@ inductive NoiseError where
   | identity
   /-- The first message carries libp2p extensions, which only later payloads may carry. -/
   | firstMessageExtensions
-  /-- The local identity secret is 0, or its bytes are at least the secp256k1 group order. -/
+  /-- The local identity secret is 0, or its big-endian value is at least the group order. -/
   | identitySecret
   /-- ECDSA signing with the local identity secret failed. -/
   | signing (error : Secp256k1.Secp256k1Error)
