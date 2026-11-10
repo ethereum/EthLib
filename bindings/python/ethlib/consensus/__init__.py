@@ -129,6 +129,39 @@ def reqresp_response_bounds(
     return _native.consensus_reqresp_response_bounds(name, chunk_fork, protocol)
 
 
+# What a response check reads from each item, field by field.
+# A block: its slot, the root of its parent and its own root.
+ResponseBlock: TypeAlias = tuple[int, bytes, bytes]
+# A blob or column sidecar: the slot and root of its block, and its index.
+ResponseSidecar: TypeAlias = tuple[int, bytes, int]
+# A payload envelope: its slot, its block root, the parent hash and the block hash of its payload.
+ResponseEnvelope: TypeAlias = tuple[int, bytes, bytes, bytes]
+# An inclusion list: its slot, its validator index and its dependent root.
+ResponseInclusionList: TypeAlias = tuple[int, int, bytes]
+ResponseItems: TypeAlias = (
+    Sequence[ResponseBlock]
+    | Sequence[ResponseSidecar]
+    | Sequence[ResponseEnvelope]
+    | Sequence[ResponseInclusionList]
+)
+
+
+def reqresp_is_valid_response(
+    fork: str,
+    protocol: str,
+    request: bytes,
+    items: ResponseItems,
+    committee: Sequence[int] = (),
+    name: str = "mainnet",
+) -> bool:
+    """Whether the items of a response are valid for the SSZ request of a protocol ID at a fork."""
+    # The committee counts only for inclusion lists, as the validator of each seat.
+    native_items: list[tuple[int | bytes, ...]] = list(items)
+    return _native.consensus_reqresp_response_valid(
+        name, fork, protocol, request, native_items, list(committee)
+    )
+
+
 def gossip_topic_bound(fork: str, topic: str, name: str = "mainnet") -> int:
     """The largest payload length of a gossip topic at a fork."""
     return _native.consensus_gossip_topic_bound(name, fork, topic)
@@ -1183,6 +1216,12 @@ __all__ = [
     "gossip_topic_bound",
     "reqresp_request_bounds",
     "reqresp_response_bounds",
+    "ResponseBlock",
+    "ResponseSidecar",
+    "ResponseEnvelope",
+    "ResponseInclusionList",
+    "ResponseItems",
+    "reqresp_is_valid_response",
     "compute_subnet_for_attestation",
     "compute_subnet_for_blob_sidecar",
     "compute_subnet_for_data_column_sidecar",

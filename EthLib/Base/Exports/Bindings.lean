@@ -876,6 +876,11 @@ def bindings : List Binding := [
   ⟨"consensus_reqresp_response_bounds", `EthLib.Consensus.Exports.reqRespResponseBoundsExport,
     "(name: str, chunk_fork: str, protocol: str) -> tuple[int, int]",
     [`EthLib.Consensus.BoundsError], some "ConsensusError"⟩,
+  ⟨"consensus_reqresp_response_valid", `EthLib.Consensus.Exports.reqRespResponseValidExport,
+    "(name: str, fork: str, protocol: str, request: bytes, " ++
+      "items: list[tuple[int | bytes, ...]], " ++
+      "committee: list[int]) -> bool",
+    [`EthLib.Consensus.BoundsError, `EthLib.Serialization.Ssz.Err], some "ConsensusError"⟩,
   ⟨"consensus_gossip_topic_bound", `EthLib.Consensus.Exports.gossipTopicBoundExport,
     "(name: str, fork: str, topic: str) -> int",
     [`EthLib.Consensus.BoundsError], some "ConsensusError"⟩,

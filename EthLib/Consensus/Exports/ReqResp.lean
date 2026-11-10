@@ -5,6 +5,7 @@ public import EthLib.Consensus.Exports.Parameters
 public import EthLib.Consensus.Exports.Ssz
 public import EthLib.Consensus.ReqResp.Messages
 public import EthLib.Consensus.ReqResp.ResponseBounds
+public import EthLib.Consensus.ReqResp.Validity
 
 /-!
 # `Exports.ReqResp`
@@ -20,6 +21,8 @@ An unknown name, a fork with no rules yet, or an ID that names no protocol has c
 A protocol that the fork does not define, or one without a request, has the code of its error.
 
 A preset and a configuration are named together, by `mainnet` or `minimal`.
+
+A response check takes the request as SSZ bytes, and each item as the tuple of what the check reads.
 -/
 
 public section
@@ -168,5 +171,93 @@ That fork is the one that the context bytes of the chunk name, and it must defin
 @[export eth_consensus_reqresp_response_bounds]
 def reqRespResponseBoundsExport (args : PyValue) : Result PyValue :=
   pyExport reqRespResponseBoundsOf args
+
+/-- Decode the SSZ bytes of a request, or fail with the code of its SSZ error. -/
+def decodeRequest (α : Type) [SszType α] (data : ByteArray) : Result α :=
+  runSsz "request rejected" (SszType.deserialize α data)
+
+/-- Decode each item of a response from its tuple, or fail with code 0. -/
+def decodeItems {β : Type} (α : Type) [EthLib.Exports.FromPy α] (make : α → β)
+    (items : List PyValue) : Result (List β) :=
+  items.mapM fun item => do
+    return make (← (EthLib.Exports.FromPy.fromPy item).mapError fun error => (0, error))
+
+/-- Whether a response is valid for its request, under the protocol that an ID names.
+
+The fork is the one in effect when the request is served, and it must define the protocol. -/
+def reqRespResponseValidOf
+    (args : String × String × String × ByteArray × List PyValue × List UInt64) :
+    Result Bool := do
+  let (name, fork, protocol, request, items, committee) := args
+  let preset ← presetOf name
+  let config ← configOf name
+  let fork ← forkUpTo .hegota fork.toUTF8
+  let id ← protocolAtFork fork protocol
+  let block := decodeItems (Slot × Root × Root) fun (slot, parentRoot, root) =>
+    ResponseBlock.mk slot parentRoot root
+  let sidecar := decodeItems (Slot × Root × UInt64) fun (slot, blockRoot, index) =>
+    ResponseSidecar.mk slot blockRoot index
+  let envelope := decodeItems (Slot × Root × Hash32 × Hash32)
+    fun (slot, beaconBlockRoot, parentHash, blockHash) =>
+      ResponseEnvelope.mk slot beaconBlockRoot parentHash blockHash
+  match id.protocol with
+  | .beaconBlocksByRange =>
+    return isValidBlocksByRangeResponse config fork
+      (← decodeRequest BeaconBlocksByRangeRequest request) (← block items)
+  | .beaconBlocksByRoot =>
+    return isValidBlocksByRootResponse
+      (← decodeRequest (BeaconBlocksByRootRequest config fork) request) (← block items)
+  | .blobSidecarsByRange =>
+    return isValidBlobSidecarsByRangeResponse config fork
+      (← decodeRequest BlobSidecarsByRangeRequest request) (← sidecar items)
+  | .blobSidecarsByRoot =>
+    return isValidBlobSidecarsByRootResponse
+      (← decodeRequest (BlobSidecarsByRootRequest config fork) request) (← sidecar items)
+  | .dataColumnSidecarsByRange =>
+    return isValidDataColumnSidecarsByRangeResponse preset config
+      (← decodeRequest (DataColumnSidecarsByRangeRequest preset) request) (← sidecar items)
+  | .dataColumnSidecarsByRoot =>
+    return isValidDataColumnSidecarsByRootResponse
+      (← decodeRequest (DataColumnSidecarsByRootRequest preset config) request)
+      (← sidecar items)
+  | .executionPayloadEnvelopesByRange =>
+    return isValidExecutionPayloadEnvelopesByRangeResponse config fork
+      (← decodeRequest ExecutionPayloadEnvelopesByRangeRequest request) (← envelope items)
+  | .executionPayloadEnvelopesByRoot =>
+    return isValidExecutionPayloadEnvelopesByRootResponse
+      (← decodeRequest (ExecutionPayloadEnvelopesByRootRequest config) request)
+      (← envelope items)
+  | .inclusionListsByIndices =>
+    let request ← decodeRequest (InclusionListsByIndicesRequest preset) request
+    let seats := preset.INCLUSION_LIST_COMMITTEE_SIZE.toNat
+    let committee ← if h : committee.length = seats then
+        pure (committee.toArray.toVector.cast (by simpa using h))
+      else throw (0, s!"the committee has {committee.length} seats, not {seats}")
+    let lists ← decodeItems (Slot × ValidatorIndex × Root)
+      (fun (slot, validatorIndex, dependentRoot) =>
+        InclusionList.mk slot validatorIndex dependentRoot ⟨#[]⟩) items
+    return isValidInclusionListsByIndicesResponse config request committee lists
+  | _ => throw (0, s!"{id.toString} has no response check")
+
+/-- Whether a response is valid for its request, as a Boolean.
+
+The arguments are the name of the preset and the configuration, the fork and the protocol ID.
+
+They go on with the request as SSZ bytes, the items of the response and the committee.
+
+Each item is the tuple of what the check reads, in the order of the fields of its form.
+
+A block is its slot, parent root and root; a sidecar its slot, block root and index.
+
+An envelope is its slot, block root, parent hash and block hash.
+
+An inclusion list is its slot, validator index and dependent root.
+
+The committee is read only for inclusion lists, and must then have one validator per seat.
+
+A protocol without a check of its response, such as status, has code 0. -/
+@[export eth_consensus_reqresp_response_valid]
+def reqRespResponseValidExport (args : PyValue) : Result PyValue :=
+  pyExport reqRespResponseValidOf args
 
 end EthLib.Consensus.Exports
