@@ -22,6 +22,8 @@ The later ones say their values.
 - The beneficiary gets the priority fee of the gas that the transaction used.
 - From Spurious Dragon, an empty beneficiary paid a fee of 0 is deleted.
 
+The values read a missing account as empty, so they do not say which of these accounts exist.
+
 A halt before the first frame undoes the authorizations, as [EIP-8037][e8037] asks.
 
 A frame that fails keeps each accepted authorization, as [EIP-7702][e7702] asks.
@@ -737,16 +739,22 @@ The state before settlement then reads as the state after the gas purchase.
 When the first frame of a call starts and fails, that state reads as the authorizations left it.
 
 No log is kept. -/
-abbrev FailedRun (Meter : Type) [GasMeter Meter] (tx : Transaction) (env : BlockEnvironment fork)
-    (block : State.BlockState) (included : Included) (out : TransactionOutput) : Prop :=
+abbrev FailedRun (Meter : Type) [GasMeter Meter] [LawfulGasMeter Meter] (tx : Transaction)
+    (env : BlockEnvironment fork) (block : State.BlockState) (included : Included)
+    (out : TransactionOutput) : Prop :=
   let pre := State.TransactionState.ofBlock block
-  ∃ target bought message base gasLeft refund,
+  ∃ target bought message output base gasLeft refund,
     messageTarget included.sender (pre.getAccount included.sender).nonce tx = .ok target ∧
     buyGas env pre included.sender tx = .ok bought ∧
     transactionMessage env
       { origin := included.sender, gasPrice := included.gasPrice,
         blobVersionedHashes := fun _ => tx.blobHashes } bought included.sender target
       (allocateGas fork tx included.intrinsicGas).execution tx = .ok message ∧
+    processMessageCall (Meter := Meter) env.chainId.toNat
+      { message with reservoir := (allocateGas fork tx included.intrinsicGas).reservoir } bought
+      (startSubstate fork env.coinbase included.sender target tx) tx.authorizations
+      (paidWrites included.sender target tx) = .ok output ∧
+    base = output.state ∧ gasLeft = output.gasLeft + output.reservoir ∧ refund = output.refund ∧
     out.logs = #[] ∧
     out.gasUsed = (settlement fork (baseFeeOf env) included.sender tx gasLeft refund).gasUsed ∧
     SettledAccounts tx env included out base gasLeft refund ∧
@@ -801,8 +809,8 @@ theorem runTransaction_values_of_error {Meter : Type} [GasMeter Meter] [LawfulGa
       obtain ⟨code, -, hmessage⟩ := map_ok_iff.mp hmessage
       cases hmessage
       exact ⟨rfl, rfl⟩
-  refine ⟨target, bought, message, output.state, output.gasLeft + output.reservoir, output.refund,
-    htarget, hbought', hmessage, hlogs,
+  refine ⟨target, bought, message, output, output.state, output.gasLeft + output.reservoir,
+    output.refund, htarget, hbought', hmessage, houtput, rfl, rfl, rfl, hlogs,
     (settleGas_accounts hsettle' included.sender).1, fun address => ?_,
     (settleGas_accounts hsettle' included.sender).2.2.2.2.2, ?_⟩
   · obtain ⟨-, hnonce, hcode, hbal, hstore, -⟩ := settleGas_accounts hsettle' address

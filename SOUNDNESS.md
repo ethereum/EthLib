@@ -1419,7 +1419,9 @@ The authorities after the whole list are given against the state that the author
 `processMessageCall_reads_of_error` proves that a failed frame reads as the state of its first frame, so a failed call keeps its accepted authorizations, as EIP-7702 asks.
 
 `runTransaction_values_of_error` combines these results for one gas meter.
-It gives the nonce, the code hash, the balance and the storage of every address against the state before settlement.
+It names the output of the message call.
+It gives the nonce, the code hash and the balance of every address against the state before settlement.
+It gives the storage of every address but a deleted beneficiary, and of the sender while its nonce is not 0.
 That state reads as the state after the gas purchase when the transaction creates a contract or its first frame never starts.
 When the first frame of a call starts and fails, it reads as the state that the authorizations leave.
 `processTransaction_values_of_error` gives the same conclusion for every fork before Hegotá, with the gas meter of that fork.
