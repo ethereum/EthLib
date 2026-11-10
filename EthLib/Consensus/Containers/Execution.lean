@@ -118,6 +118,7 @@ structure ExecutionPayload (preset : Preset) (fork : Fork) where
   blockAccessList : Since .glamsterdam fork BlockAccessList
   /-- From Gloas: the slot of the beacon chain at which the block is proposed. -/
   slotNumber : Since .glamsterdam fork UInt64
+  deriving DecidableEq
 
 namespace ExecutionPayload
 
@@ -190,6 +191,7 @@ structure ExecutionPayloadHeader (preset : Preset) (fork : Fork) where
   blobGasUsed : Since .dencun fork UInt64
   /-- From Deneb: the blob gas above the target, summed over the blocks before this one. -/
   excessBlobGas : Since .dencun fork UInt64
+  deriving DecidableEq
 
 namespace ExecutionPayloadHeader
 

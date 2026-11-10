@@ -253,4 +253,23 @@ From `f` until `l`, the field holds one value of `α`.
 Elsewhere no such proof exists, so the field has one value and holds nothing. -/
 def During (f l fork : Fork) (α : Type) : Type := f ≤ fork ∧ fork < l → α
 
+/-- Equality of values that exist only under a condition that can be decided.
+
+Two such values are equal when they agree under the condition.
+
+Without the condition each holds nothing, so any two are equal. -/
+def decEqUnder {p : Prop} [Decidable p] {α : Type} [DecidableEq α] : DecidableEq (p → α) :=
+  fun a b =>
+    if present : p then
+      if same : a present = b present then .isTrue (funext fun _ => same)
+      else .isFalse fun eq => same (eq ▸ rfl)
+    else .isTrue (funext fun holds => absurd holds present)
+
+instance {f fork : Fork} {α : Type} [DecidableEq α] : DecidableEq (Since f fork α) := decEqUnder
+
+instance {f fork : Fork} {α : Type} [DecidableEq α] : DecidableEq (Until f fork α) := decEqUnder
+
+instance {f l fork : Fork} {α : Type} [DecidableEq α] : DecidableEq (During f l fork α) :=
+  decEqUnder
+
 end EthLib.Base
