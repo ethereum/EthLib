@@ -17,7 +17,9 @@ Each attester that the step counts is active in the epoch of the target.
 
 It signed a vote whose source is the justified checkpoint of that epoch.
 
-The target of that vote is the checkpoint of the epoch, with the root of its first block.
+The target of that vote is the checkpoint of the epoch.
+
+Its root is the block root that the state records for the first slot of the epoch.
 
 From Altair the target flags give that, and before Altair the pending attestations do.
 
@@ -31,9 +33,9 @@ They do not count in that total, so their stake enters the bound as a term of ch
 
 For the current epoch that term is zero.
 
-Gasper §4.4, Definition 4.5, justifies a checkpoint by two thirds of the stake.
+Gasper §4.4, Definitions 4.5 and 4.6, justify a checkpoint by a supermajority link.
 
-Gasper §8.6 gives each checkpoint its own validator set.
+Gasper §8.6, Lemma 8.2, gives each justified checkpoint its own validator set.
 
 The paper is [arXiv 2003.03052v3](https://arxiv.org/abs/2003.03052v3).
 -/
@@ -218,9 +220,13 @@ The active stake of the current epoch must be more than one and a half increment
 
 The votes of the model must hold those of the data that the state signs, with blocks for roots.
 
-Then the step keeps the current justified checkpoint, or justifies the previous or current epoch.
+Then the step keeps the current justified checkpoint, or makes the newest justified epoch its own.
+
+That epoch is the previous or the current one.
 
 In the second case, take the active set of that epoch as the validator set of the target.
+
+When both epochs pass, this says nothing of the previous one.
 
 The source is the justified checkpoint of that epoch, and the target is the new checkpoint.
 

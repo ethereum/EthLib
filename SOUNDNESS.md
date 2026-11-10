@@ -2154,17 +2154,19 @@ It takes the target-flag fact from Altair, the pending-attestation fact before A
 The validator set of a target is the active set of its epoch, as each checkpoint has its own set in Gasper §8.6.
 Each validator weighs its effective balance in the state before the step.
 The votes of the model must hold those of the data that the state signs.
-If the step justifies the previous or the current epoch, the link goes from the justified checkpoint of that epoch to the new checkpoint.
+If the step makes the previous or the current epoch the new current justified checkpoint, the link goes from the justified checkpoint of that epoch to the new checkpoint.
+When both epochs pass the test, the current one wins, and the theorem says nothing of the previous one, whose bit the finalization rules still read.
 Then twice the stake of the set of the target is at most three times the stake of the voters of the link, plus a term of churn.
 The term is twice the stake of that set outside the active set of the current epoch, because the step divides by the active balance of the current epoch.
 For the current epoch the term is zero.
-For the previous epoch, `exists_exitEpoch_eq_of_mem_sdiff_active` shows that it counts only validators that exit at the current epoch.
+For the previous epoch, `exists_exitEpoch_eq_of_mem_sdiff_active` shows that it counts only validators that exit at the current epoch, while the registry stays below 2^64 validators.
 The exit churn bounds that stake, but no theorem states that bound yet.
-So one step gives the stake bound of a supermajority link of the model only up to that term.
-It does not give the order of the source before the target, which a link of the model also asks.
+So one step gives the stake condition of a supermajority link of the model, up to that term.
+The order of the epochs and the ancestry of the blocks of the link are not shown yet.
 The beacon chain leaves slashed attesters out, and the model counts them, so the converse does not hold.
 No theorem yet turns these steps into a justified or finalized checkpoint of the model along a chain.
 The effective balances also change between epochs, while the model keeps one stake for every vote.
+The theorem reads the active set of an epoch from the state before the step, and no theorem yet shows that later states give the same set, which one validator set for each checkpoint of the model needs.
 
 ### Engine API
 

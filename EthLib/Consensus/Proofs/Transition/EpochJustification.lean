@@ -12,7 +12,9 @@ The old current justified checkpoint becomes the previous one.
 
 The new current justified checkpoint is the old one, or that of the previous or the current epoch.
 
-It is that of an epoch only when the test of that epoch passes, with the root of its first block.
+It is that of an epoch only when the test of that epoch passes.
+
+Its root is then the block root that the state records for the first slot of that epoch.
 
 The checkpoints of a state are in order when finalized, previous and current justified epochs grow.
 
@@ -43,7 +45,9 @@ theorem getMatchingSourceAttestations_epoch {before : fork < .altair} {epoch : E
   obtain ⟨_, recent, _⟩ := computed
   exact recent
 
-/-- A justified checkpoint is that of its epoch, with the root of its first block.
+/-- A justified checkpoint is that of its epoch.
+
+Its root is the block root that the state records for the first slot of the epoch.
 
 Otherwise the checkpoint stays. -/
 theorem justifyCheckpoint_ok {justified : Bool} {epoch : Epoch} {checkpoint result : Checkpoint}
