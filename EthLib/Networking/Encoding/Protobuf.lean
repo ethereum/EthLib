@@ -171,7 +171,17 @@ where
       let (record, rest) ← readRecord bytes
       go fuel rest (record :: acc)
 
+/-- The values of one field, in the order of the records. -/
+def valuesOf (rs : List Record) (field : Nat) : List Value :=
+  rs.filterMap fun r => if r.field = field then some r.value else none
+
 /-! ## Writing -/
+
+/-- A length-delimited record. -/
+def lenRecord (field : Nat) (bytes : ByteArray) : Record := ⟨field, .len bytes⟩
+
+/-- A string record, in UTF-8. -/
+def stringRecord (field : Nat) (s : String) : Record := lenRecord field s.toUTF8
 
 /-- The key of a field number and a wire type. -/
 def encodeKey (field wire : Nat) : List UInt8 :=

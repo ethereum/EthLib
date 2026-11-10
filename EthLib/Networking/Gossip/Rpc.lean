@@ -45,7 +45,7 @@ Two control messages are decoded one by one, then merged, so their lists join.
 
 @[expose] public section
 
-namespace EthLib.Networking.Gossip.Rpc
+namespace EthLib.Networking.Gossip
 
 open EthLib.Networking.Encoding.Protobuf
 
@@ -129,6 +129,8 @@ inductive RpcError where
 
 /-- The stable code of an error, one per constructor, for the C exports.
 
+A protobuf error keeps one code; which one it is shows only in the message.
+
 The codes start at 101, since the Python class of these errors also holds the payload errors. -/
 def RpcError.code : RpcError → UInt32
   | .protobuf _ => 101
@@ -141,10 +143,6 @@ def RpcError.code : RpcError → UInt32
 def signedFields : List Nat := [1, 3, 5, 6]
 
 /-! ## Decoding -/
-
-/-- The values of one field, in the order of the records. -/
-def valuesOf (rs : List Record) (field : Nat) : List Value :=
-  rs.filterMap fun r => if r.field = field then some r.value else none
 
 /-- The bytes of a length-delimited value. -/
 def bytesOf (field : Nat) : Value → Except RpcError ByteArray
@@ -242,7 +240,7 @@ def Control.merge (a b : Control) : Control :=
 
 /-- An RPC.
 
-The control field is singular, so each occurrence is decoded alone, then they merge. -/
+The control field is singular: each occurrence is decoded alone, then they merge. -/
 def decodeRpc (bytes : ByteArray) : Except RpcError Rpc := do
   let rs ← recordsOf bytes
   let subscriptions ← (← repeated bytesOf rs 1).mapM decodeSubOpts
@@ -254,12 +252,6 @@ def decodeRpc (bytes : ByteArray) : Except RpcError Rpc := do
 
 The encoder writes every singular field, and the control field only when it holds a message.
 -/
-
-/-- A length-delimited record. -/
-def lenRecord (field : Nat) (bytes : ByteArray) : Record := ⟨field, .len bytes⟩
-
-/-- A string record, in UTF-8. -/
-def stringRecord (field : Nat) (s : String) : Record := lenRecord field s.toUTF8
 
 /-- The bytes of a subscription change. -/
 def SubOpts.encode (s : SubOpts) : ByteArray :=
@@ -306,4 +298,4 @@ def Rpc.encode (rpc : Rpc) : ByteArray :=
     rpc.publish.map (lenRecord 2 ∘ Message.encode) ++
     if rpc.control = {} then [] else [lenRecord 3 rpc.control.encode])
 
-end EthLib.Networking.Gossip.Rpc
+end EthLib.Networking.Gossip
