@@ -2149,7 +2149,7 @@ Before Altair, `PendingSigned` (`Consensus/Proofs/Transition/TargetPending.lean`
 It relies on the beacon committees of those epochs staying fixed while the epoch is recent (`Committees.lean`), which needs more than `MIN_SEED_LOOKAHEAD + 2` epochs of RANDAO mixes.
 `TargetFlagsSigned.of_upgradeToAltair` (`TargetUpgrades.lean`) builds the target flags of the first Altair state from such pending attestations.
 
-`processJustificationAndFinalization_currentJustified` (`Consensus/Proofs/Transition/FfgJustification.lean`) refines one epoch step.
+`processJustificationAndFinalization_linkWithChurn` (`Consensus/Proofs/Transition/FfgJustification.lean`) refines one epoch step.
 It takes the target-flag fact from Altair, the pending-attestation fact before Altair, and an active stake of more than one and a half increments.
 The validator set of a target is the active set of its epoch, as each checkpoint has its own set in Gasper §8.6.
 Each validator weighs its effective balance in the state before the step.
@@ -2158,9 +2158,10 @@ If the step justifies the previous or the current epoch, the link goes from the 
 Then twice the stake of the set of the target is at most three times the stake of the voters of the link, plus a term of churn.
 The term is twice the stake of that set outside the active set of the current epoch, because the step divides by the active balance of the current epoch.
 For the current epoch the term is zero.
-For the previous epoch, `exitEpoch_of_mem_sdiff_active` shows that it counts only validators that exit at the current epoch.
+For the previous epoch, `exists_exitEpoch_eq_of_mem_sdiff_active` shows that it counts only validators that exit at the current epoch.
 The exit churn bounds that stake, but no theorem states that bound yet.
-So one step gives a supermajority link of the model only up to that term.
+So one step gives the stake bound of a supermajority link of the model only up to that term.
+It does not give the order of the source before the target, which a link of the model also asks.
 The beacon chain leaves slashed attesters out, and the model counts them, so the converse does not hold.
 No theorem yet turns these steps into a justified or finalized checkpoint of the model along a chain.
 The effective balances also change between epochs, while the model keeps one stake for every vote.

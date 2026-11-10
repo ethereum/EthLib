@@ -12,6 +12,8 @@ The old current justified checkpoint becomes the previous one.
 
 The new current justified checkpoint is the old one, or that of the previous or the current epoch.
 
+It is that of an epoch only when the test of that epoch passes, with the root of its first block.
+
 The checkpoints of a state are in order when finalized, previous and current justified epochs grow.
 
 The step keeps them in order when the current justified epoch is at most the previous epoch.
@@ -41,18 +43,55 @@ theorem getMatchingSourceAttestations_epoch {before : fork < .altair} {epoch : E
   obtain ⟨_, recent, _⟩ := computed
   exact recent
 
-/-- A justified checkpoint is that of its epoch; otherwise the checkpoint stays. -/
+/-- A justified checkpoint is that of its epoch, with the root of its first block.
+
+Otherwise the checkpoint stays. -/
 theorem justifyCheckpoint_ok {justified : Bool} {epoch : Epoch} {checkpoint result : Checkpoint}
     (computed : justifyCheckpoint state justified epoch checkpoint = .ok result) :
-    (justified = true ∧ result.epoch = epoch) ∨ (justified = false ∧ result = checkpoint) := by
+    (justified = true ∧ result.epoch = epoch ∧ getBlockRoot state epoch = .ok result.root) ∨
+      (justified = false ∧ result = checkpoint) := by
   cases justified
   · simp only [justifyCheckpoint, Bool.false_eq_true, ↓reduceIte, pure, Except.pure,
       Except.ok.injEq] at computed
     exact .inr ⟨rfl, computed.symm⟩
   · simp only [justifyCheckpoint, ↓reduceIte, bind_ok_iff, liftAccessor_ok, pure, Except.pure,
       Except.ok.injEq] at computed
-    obtain ⟨_, _, rfl⟩ := computed
-    exact .inl ⟨rfl, rfl⟩
+    obtain ⟨_, rootOk, rfl⟩ := computed
+    exact .inl ⟨rfl, rfl, rootOk⟩
+
+/-- Weighing the votes justifies a new checkpoint only for an epoch whose test passes.
+
+The new current justified checkpoint is the old one, or that of the previous or the current epoch.
+
+For that epoch, twice the total balance is at most three times its target balance.
+
+The root of the checkpoint is the block root that the state records for the epoch. -/
+theorem weighJustificationAndFinalization_currentJustified
+    {total previousBalance currentBalance : Gwei}
+    (computed : weighJustificationAndFinalization state total previousBalance currentBalance =
+      .ok after) :
+    after.currentJustifiedCheckpoint = state.currentJustifiedCheckpoint ∨
+      ∃ (current : Bool) (threshold weight : Gwei), mulChecked total 2 = .ok threshold ∧
+        mulChecked (if current then currentBalance else previousBalance) 3 = .ok weight ∧
+        threshold ≤ weight ∧
+        after.currentJustifiedCheckpoint.epoch =
+          (if current then getCurrentEpoch state else getPreviousEpoch state) ∧
+        getBlockRoot state after.currentJustifiedCheckpoint.epoch =
+          .ok after.currentJustifiedCheckpoint.root := by
+  simp only [weighJustificationAndFinalization, bind_ok_iff, liftAccessor_ok, liftArith,
+    mapError_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+  obtain ⟨previousWeight, previousOk, threshold, thresholdOk, first, firstOk, currentWeight,
+    currentOk, second, secondOk, _, _, _, _, _, _, _, _, rfl⟩ := computed
+  dsimp only
+  rcases justifyCheckpoint_ok secondOk with ⟨passed, epoch, rootOk⟩ | ⟨_, rfl⟩
+  · rw [epoch]
+    exact .inr ⟨true, threshold, currentWeight, thresholdOk, currentOk,
+      of_decide_eq_true passed, rfl, rootOk⟩
+  rcases justifyCheckpoint_ok firstOk with ⟨passed, epoch, rootOk⟩ | ⟨_, rfl⟩
+  · rw [epoch]
+    exact .inr ⟨false, threshold, previousWeight, thresholdOk, previousOk,
+      of_decide_eq_true passed, rfl, rootOk⟩
+  exact .inl rfl
 
 /-- The checkpoints that weighing the votes sets.
 
@@ -77,16 +116,16 @@ theorem weighJustificationAndFinalization_checkpoints {total previous current : 
         currentJustifiedCheckpoint := state.currentJustifiedCheckpoint,
         justificationBits := state.justificationBits,
         finalizedCheckpoint := state.finalizedCheckpoint } = state := by
+  have justified := weighJustificationAndFinalization_currentJustified computed
   simp only [weighJustificationAndFinalization, bind_ok_iff, liftAccessor_ok, pure, Except.pure,
     Except.ok.injEq] at computed
-  obtain ⟨_, _, _, _, first, firstOk, _, _, second, secondOk, _, _, _, _, _, _, _, _, rfl⟩ :=
-    computed
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := computed
   refine ⟨rfl, ?_, ?_, rfl⟩
-  · rcases justifyCheckpoint_ok secondOk with ⟨_, epoch⟩ | ⟨_, rfl⟩
-    · exact .inr (.inr epoch)
-    · rcases justifyCheckpoint_ok firstOk with ⟨_, epoch⟩ | ⟨_, rfl⟩
+  · rcases justified with same | ⟨current, -, -, -, -, -, epoch, -⟩
+    · exact .inl same
+    · cases current
       · exact .inr (.inl epoch)
-      · exact .inl rfl
+      · exact .inr (.inr epoch)
   · dsimp only
     split
     · exact .inr (.inr rfl)
