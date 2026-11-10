@@ -815,6 +815,34 @@ theorem getStorage_modifyState {fork : Fork} {tx tx' : TransactionState} {addres
     by_cases ho : other = address <;> simp [ho, hnone]
   · simp [getAccountOptional_setAccount_self]
 
+/-- A change of an account keeps its storage when it leaves an account that is not empty.
+
+Before Paris no change deletes an account, so the storage stays whatever the account. -/
+theorem getStorage_modifyState_self {fork : Fork} {tx tx' : TransactionState}
+    {address : Address} {f : Account → Except StateError Account}
+    (h : tx.modifyState fork address f = .ok tx')
+    (hkeep : fork < .paris ∨ tx'.getAccount address ≠ EMPTY_ACCOUNT) (key : Bytes32) :
+    tx'.getStorage address key = tx.getStorage address key := by
+  rw [getStorage_modifyState h]
+  split
+  · rename_i hc
+    exfalso
+    rcases hkeep with hp | hne
+    · obtain ⟨account, hf, -⟩ := modifyState_eq_ok_iff.mp h
+      simp [getAccountOptional_modifyState hp hf h] at hc
+    · exact hne (by simp [getAccount, hc.2])
+  · rfl
+
+/-- Setting the code of an address keeps its storage when it leaves an account that is not empty.
+
+Before Paris it always keeps it. -/
+theorem getStorage_setCode_self {fork : Fork} {tx tx' : TransactionState} {address : Address}
+    {code : ByteArray} (h : tx.setCode fork address code = .ok tx')
+    (hkeep : fork < .paris ∨ tx'.getAccount address ≠ EMPTY_ACCOUNT) (key : Bytes32) :
+    tx'.getStorage address key = tx.getStorage address key := by
+  dsimp only [setCode] at h
+  split at h <;> exact getStorage_modifyState_self h hkeep key
+
 /-- A change of an account changes no code. -/
 theorem getCode_modifyState {fork : Fork} {tx tx' : TransactionState} {address : Address}
     {f : Account → Except StateError Account} (h : tx.modifyState fork address f = .ok tx') :
