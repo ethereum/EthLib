@@ -31,6 +31,8 @@ The total active balance never fails on an index, only on a sum of 2^64 or more.
 
 The previous epoch is the current one minus one, or the genesis epoch at genesis.
 
+On natural numbers, the current epoch is the slot over the epoch length, less one for the previous.
+
 Each slot has from one committee up to the most committees of the preset.
 
 Each member of a committee, and each validator that an attestation shows, is active in its epoch.
@@ -330,6 +332,27 @@ theorem getTotalActiveBalance_ne_indexOutOfRange {state : BeaconState preset for
   · simp [big, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
   · simp [big, pure, Except.pure]
 
+
+/--
+The previous epoch on natural numbers is the current epoch less one, and zero in the genesis epoch.
+-/
+theorem getPreviousEpoch_toNat (state : BeaconState preset fork) :
+    (getPreviousEpoch state).toNat = (getCurrentEpoch state).toNat - 1 := by
+  unfold getPreviousEpoch saturatingSub
+  split
+  · rename_i lt
+    rw [UInt64.toNat_sub_of_le _ _ (UInt64.le_of_lt lt)]
+    rfl
+  · rename_i notLt
+    rw [UInt64.lt_iff_toNat_lt] at notLt
+    simp only [UInt64.toNat_one] at notLt
+    simp only [UInt64.toNat_zero]
+    omega
+
+/-- The current epoch on natural numbers is the slot divided by the length of an epoch. -/
+theorem getCurrentEpoch_toNat (state : BeaconState preset fork) :
+    (getCurrentEpoch state).toNat = state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat := by
+  simp [getCurrentEpoch, computeEpochAtSlot, UInt64.toNat_div]
 
 /-- The previous epoch is at most the current epoch. -/
 theorem getPreviousEpoch_le (state : BeaconState preset fork) :

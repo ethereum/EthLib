@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Consensus.Proofs.Transition.BuilderPayments
 public import EthLib.Consensus.Proofs.Transition.EpochJustification
 public import EthLib.Consensus.Proofs.Transition.EpochRewards
 public import EthLib.Consensus.Proofs.Transition.EpochUpdates
@@ -1535,9 +1536,7 @@ theorem frame_processPendingBalances
 theorem frame_processBuilderPendingPayments {gloas : .glamsterdam ≤ fork}
     (computed : processBuilderPendingPayments state gloas = .ok after) :
     MutatorFrame state after := by
-  simp only [processBuilderPendingPayments, bind_ok_iff, pure, Except.pure,
-    Except.ok.injEq] at computed
-  obtain ⟨_, _, rfl⟩ := computed
+  rw [processBuilderPendingPayments_eq computed]
   exact ⟨EpochFrame.of_validators ⟨rfl, rfl⟩, .of_eq rfl rfl⟩
 
 theorem frame_processHistoricalSummariesUpdate {capella : .shapella ≤ fork}
@@ -1714,19 +1713,6 @@ structure Invariant (state : BeaconState preset fork) : Prop where
   settled : JustifiedSettled state
   aligned : MaxEffectiveBalancesAligned preset → EffectiveBalancesAligned state
 
-theorem getPreviousEpoch_toNat (state : BeaconState preset fork) :
-    (getPreviousEpoch state).toNat = (getCurrentEpoch state).toNat - 1 := by
-  unfold getPreviousEpoch saturatingSub
-  split
-  · rename_i lt
-    rw [UInt64.toNat_sub_of_le _ _ (UInt64.le_of_lt lt)]
-    rfl
-  · rename_i notLt
-    rw [UInt64.lt_iff_toNat_lt] at notLt
-    simp only [UInt64.toNat_one] at notLt
-    simp only [UInt64.toNat_zero]
-    omega
-
 theorem Frame.invariant (frame : Frame state after) (holds : Invariant state) :
     Invariant after where
   balancesMatch := frame.balancesMatch holds.balancesMatch
@@ -1831,32 +1817,6 @@ theorem processEpoch_invariant (holds : Invariant state)
   exact epoch_invariant holds justifiedOk frame.toFrame
 
 /-! ## Slots and blocks -/
-
-theorem getCurrentEpoch_toNat (state : BeaconState preset fork) :
-    (getCurrentEpoch state).toNat = state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat := by
-  simp [getCurrentEpoch, computeEpochAtSlot, UInt64.toNat_div]
-
-/-- The slot after the last slot of an epoch is in the next epoch. -/
-theorem nextSlot_epoch_of_boundary {slot next : Slot} (sum : next.toNat = slot.toNat + 1)
-    (boundary : next % preset.SLOTS_PER_EPOCH = 0) :
-    next.toNat / preset.SLOTS_PER_EPOCH.toNat =
-      slot.toNat / preset.SLOTS_PER_EPOCH.toNat + 1 := by
-  have boundary' : next.toNat % preset.SLOTS_PER_EPOCH.toNat = 0 := by
-    simpa [UInt64.toNat_mod] using congrArg UInt64.toNat boundary
-  rw [sum]
-  exact Nat.succ_div_of_dvd (Nat.dvd_of_mod_eq_zero (sum ▸ boundary'))
-
-/-- The slot after a slot that does not end an epoch is in the same epoch. -/
-theorem nextSlot_epoch_of_inside {slot next : Slot} (sum : next.toNat = slot.toNat + 1)
-    (inside : ¬next % preset.SLOTS_PER_EPOCH = 0) :
-    next.toNat / preset.SLOTS_PER_EPOCH.toNat = slot.toNat / preset.SLOTS_PER_EPOCH.toNat := by
-  have notDvd : ¬preset.SLOTS_PER_EPOCH.toNat ∣ slot.toNat + 1 := by
-    intro divides
-    apply inside
-    apply UInt64.toNat_inj.mp
-    simpa [UInt64.toNat_mod, sum] using Nat.mod_eq_zero_of_dvd divides
-  rw [sum]
-  exact Nat.succ_div_of_not_dvd notDvd
 
 theorem frame_processSlot (computed : processSlot state = .ok after) : Frame state after := by
   obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok computed

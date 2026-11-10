@@ -339,7 +339,7 @@ private theorem BuilderDebtCovered.recordPaymentWeight (positive : preset.Paymen
     fun _ => by simp only [builderBalance, builders]
   have parentAt : parentPaymentPosition state =
       some (preset.SLOTS_PER_EPOCH + state.slot % preset.SLOTS_PER_EPOCH) := by
-    simp [parentPaymentPosition, header, getCurrentEpoch]
+    simp [parentPaymentPosition, slotPaymentPosition, header, getCurrentEpoch]
   -- The weighed position is not that of the parent.
   have apart : (preset.SLOTS_PER_EPOCH + state.slot % preset.SLOTS_PER_EPOCH).toNat ≠
       attestationPaymentPosition preset current data.slot := by
