@@ -118,6 +118,11 @@ def bytesMax (what : String) (n : Nat) (j : Json) : Decode ByteArray := do
 def uint64 (what : String) (j : Json) : Decode UInt64 :=
   return (← quantity what 64 j).toUInt64
 
+/-- The parameters of a request, which must be a JSON array. -/
+def paramsArray : Json → Decode (List Json)
+  | .arr items => pure items.toList
+  | _ => invalid "params: not an array"
+
 /-- A list of values, each decoded by `f`. -/
 def array {α : Type} (what : String) (f : Json → Decode α) : Json → Decode (List α)
   | .arr items => items.toList.mapM f

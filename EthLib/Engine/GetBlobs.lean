@@ -96,7 +96,7 @@ open EthLib.Cryptography.Kzg.Constants
 open EthLib.Engine.Json
 
 /-- The fewest versioned hashes that every pool must take in one request. -/
-def MIN_REQUEST_LIMIT : Nat := 128
+def MIN_BLOBS_REQUEST_LIMIT : Nat := 128
 
 /-- The bytes of a bitarray with one bit per cell of an extended blob. -/
 def CELL_BITARRAY_BYTES : Nat := CELLS_PER_EXT_BLOB / 8
@@ -122,7 +122,7 @@ structure BlobPool where
   /-- The most versioned hashes that one request may name. -/
   maxRequest : Nat
   /-- The source requires that a pool take every request of up to 128 hashes. -/
-  le_maxRequest : MIN_REQUEST_LIMIT ≤ maxRequest
+  le_maxRequest : MIN_BLOBS_REQUEST_LIMIT ≤ maxRequest
 
 /-- A blob and its proof, as version 1 answers them. -/
 structure BlobAndProofV1 where
@@ -189,9 +189,7 @@ def getBlobsParamCount (version : Nat) : Nat := if version ≥ 4 then 2 else 1
 /-- The parameters of a version: the versioned hashes, and from version 4 the bitarray. -/
 def getBlobsParams (version : Nat) (params : Json) :
     Decode (List Bytes32 × Option CellBitarray) := do
-  let params ← match params with
-    | .arr items => pure items.toList
-    | _ => invalid "params: not an array"
+  let params ← paramsArray params
   let count := getBlobsParamCount version
   match params, decide (count = 2) with
   | [hashes], false => return (← array "hashes" (fixed "versioned hash" 32) hashes, none)

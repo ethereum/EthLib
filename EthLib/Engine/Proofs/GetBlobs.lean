@@ -56,7 +56,7 @@ theorem selectedCells_sorted (bits : CellBitarray) :
 
 /-- A request of at most 128 hashes is never too large. -/
 theorem checkRequestSize_eq_ok_of_length_le (pool : BlobPool) (hashes : List Bytes32)
-    (h : hashes.length ≤ MIN_REQUEST_LIMIT) :
+    (h : hashes.length ≤ MIN_BLOBS_REQUEST_LIMIT) :
     checkRequestSize pool.maxRequest hashes.length = .ok () :=
   (checkRequestSize_eq_ok_iff _ _).2 (Nat.le_trans h pool.le_maxRequest)
 
