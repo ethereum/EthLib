@@ -8,7 +8,7 @@ public import EthLib.Networking.Proofs.Encoding.Varint
 
 - Reading a varint, a key or a record back from its encoding returns it, whatever bytes follow.
 - Reading the records of an encoded sequence returns the sequence.
-- Each holds for a well-formed record: a field number in range and a value of the right size.
+- Each holds for a well-formed record: a field number in range, and a short enough value.
 - Two errors with one code come from one constructor.
 -/
 
@@ -18,19 +18,6 @@ namespace EthLib.Networking.Proofs.Encoding.Protobuf
 
 open EthLib.Networking.Encoding.Protobuf
 open EthLib.Networking.Encoding
-
-/-- A record that its encoding can carry.
-
-Its field number is in range.
-
-A fixed value has its size, and a length-delimited value is shorter than `2^64` bytes. -/
-def WellFormed (r : Record) : Prop :=
-  0 < r.field ∧ r.field ≤ maxField ∧
-    match r.value with
-    | .i64 bytes => bytes.length = 8
-    | .i32 bytes => bytes.length = 4
-    | .len bytes => bytes.length < 2 ^ 64
-    | .varint _ | .group => True
 
 /-- Reading a varint back from its encoding returns it, and the bytes after it. -/
 theorem readVarint_encode (v : UInt64) (rest : List UInt8) :
@@ -64,24 +51,35 @@ theorem readKey_encodeKey {field wire : Nat} (h0 : 0 < field) (hmax : field ≤ 
   rfl
 
 /-- Reading `n` bytes from `n` bytes and more returns them, and the bytes after them. -/
-theorem readFixed_append {n : Nat} {bytes : List UInt8} (h : bytes.length = n)
-    (rest : List UInt8) : readFixed n (bytes ++ rest) = .ok (bytes, rest) := by
-  subst h
-  simp [readFixed]
+theorem readFixed_append {n : Nat} (bytes : Vector UInt8 n) (rest : List UInt8) :
+    readFixed n (bytes.toList ++ rest) = .ok (bytes, rest) := by
+  have hl : bytes.toList.length = n := bytes.length_toList
+  have hle : n ≤ (bytes.toList ++ rest).length := by simp [hl]
+  simp only [readFixed, dite_eq_left_of_eq_true (eq_true hle)]
+  congr 2
+  · apply Vector.ext
+    intro i hi
+    simp [Vector.getElem_toList, hl]
+  · simp [hl]
 
 /-- Reading a length-delimited value back from its encoding returns it. -/
-theorem readLen_encode {bytes : List UInt8} (h : bytes.length < 2 ^ 64) (rest : List UInt8) :
-    readLen (Varint.encode (UInt64.ofNat bytes.length) ++ (bytes ++ rest)) = .ok (bytes, rest) := by
-  have hn : (UInt64.ofNat bytes.length).toNat = bytes.length := by
+theorem readLen_encodeValue {field : Nat} {bytes : ByteArray} (h : bytes.size < 2 ^ 64)
+    (rest : List UInt8) : readLen (encodeValue field (.len bytes) ++ rest) = .ok (bytes, rest) := by
+  have hn : (UInt64.ofNat bytes.size).toNat = bytes.size := by
     rw [UInt64.toNat_ofNat_of_lt']
     simpa [UInt64.size] using h
-  simp only [readLen, readVarint_encode, bind, Except.bind, hn]
-  exact readFixed_append rfl rest
+  have hle : bytes.size ≤ (bytes.data.toList ++ rest).length := by simp
+  simp only [encodeValue, List.append_assoc, readLen, readVarint_encode, bind, Except.bind, hn,
+    readFixed, dite_eq_left_of_eq_true (eq_true hle)]
+  simp [pure, Except.pure]
 
-/-- Reading a well-formed record back from its encoding returns it, given one step of budget. -/
-theorem readRecord_encodeRecord {r : Record} (h : WellFormed r) (fuel : Nat)
-    (rest : List UInt8) :
-    readRecord (fuel + 1) (encodeRecord r ++ rest) = .ok (r, rest) := by
+/-- A key takes at least one byte. -/
+theorem encodeKey_ne_nil (field wire : Nat) : encodeKey field wire ≠ [] :=
+  Proofs.Encoding.Varint.encodeAux_ne_nil (by decide)
+
+/-- Reading a well-formed record back from its encoding returns it. -/
+theorem readRecord_encodeRecord {r : Record} (h : r.WellFormed) (rest : List UInt8) :
+    readRecord (encodeRecord r ++ rest) = .ok (r, rest) := by
   obtain ⟨field, value⟩ := r
   obtain ⟨h0, hmax, hv⟩ := h
   cases value with
@@ -91,69 +89,69 @@ theorem readRecord_encodeRecord {r : Record} (h : WellFormed r) (fuel : Nat)
       Except.pure, Except.map]
   | i64 bytes =>
     simp [readRecord, encodeRecord, encodeValue, Value.wireType, List.append_assoc,
-      readKey_encodeKey h0 hmax, readScalar, readFixed_append hv, bind, Except.bind, pure,
+      readKey_encodeKey h0 hmax, readScalar, readFixed_append, bind, Except.bind, pure,
       Except.pure, Except.map]
   | len bytes =>
+    simp only [readRecord, encodeRecord, Value.wireType, List.append_assoc]
+    rw [readKey_encodeKey h0 hmax (by decide)]
+    simp [readScalar, readLen_encodeValue hv, bind, Except.bind, pure, Except.pure, Except.map]
+  | group =>
+    have hk := List.length_pos_iff.mpr (encodeKey_ne_nil field 4)
+    obtain ⟨k, hk'⟩ : ∃ k, (encodeKey field 4 ++ rest).length = k + 1 :=
+      ⟨_, (Nat.succ_pred_eq_of_pos (by simp; omega)).symm⟩
     simp only [readRecord, encodeRecord, encodeValue, Value.wireType, List.append_assoc]
     rw [readKey_encodeKey h0 hmax (by decide)]
-    simp [readScalar, readLen_encode hv, bind, Except.bind, pure, Except.pure, Except.map]
-  | group =>
-    simp [readRecord, encodeRecord, encodeValue, Value.wireType, List.append_assoc,
-      readKey_encodeKey h0 hmax, skipGroup, bind, Except.bind, pure, Except.pure]
+    simp only [bind, Except.bind, ite_true, hk', skipGroup]
+    rw [readKey_encodeKey h0 hmax (by decide)]
+    simp [pure, Except.pure]
   | i32 bytes =>
     simp [readRecord, encodeRecord, encodeValue, Value.wireType, List.append_assoc,
-      readKey_encodeKey h0 hmax, readScalar, readFixed_append hv, bind, Except.bind, pure,
+      readKey_encodeKey h0 hmax, readScalar, readFixed_append, bind, Except.bind, pure,
       Except.pure, Except.map]
 
-/-- A key takes at least one byte. -/
-theorem encodeKey_ne_nil (field wire : Nat) : encodeKey field wire ≠ [] :=
-  Proofs.Encoding.Varint.encodeAux_ne_nil (by decide)
-
-/-- A well-formed record takes at least two bytes: its key, and a value or an end key. -/
-theorem two_le_length_encodeRecord {r : Record} (h : WellFormed r) :
-    2 ≤ (encodeRecord r).length := by
+/-- A record takes at least two bytes: its key, and a value or an end key. -/
+theorem two_le_length_encodeRecord (r : Record) : 2 ≤ (encodeRecord r).length := by
   obtain ⟨field, value⟩ := r
-  obtain ⟨-, -, hv⟩ := h
   have hk := List.length_pos_iff.mpr (encodeKey_ne_nil field value.wireType)
   have hvar (v : UInt64) : 0 < (Varint.encode v).length := List.length_pos_iff.mpr
     (Proofs.Encoding.Varint.encodeAux_ne_nil (n := v.toNat) (fuel := Varint.maxLength) (by decide))
   simp only [encodeRecord, List.length_append]
   cases value with
   | varint v => have := hvar v; simp only [encodeValue]; exact Nat.add_le_add hk this
-  | i64 bytes => simp only [encodeValue]; omega
+  | i64 bytes => simp only [encodeValue, Vector.length_toList]; omega
   | len bytes =>
-    have := hvar (UInt64.ofNat bytes.length)
+    have := hvar (UInt64.ofNat bytes.size)
     simp only [encodeValue, List.length_append]
     exact Nat.le_trans (Nat.add_le_add hk this) (by omega)
   | group =>
     have := List.length_pos_iff.mpr (encodeKey_ne_nil field 4)
     simp only [encodeValue]; omega
-  | i32 bytes => simp only [encodeValue]; omega
+  | i32 bytes => simp only [encodeValue, Vector.length_toList]; omega
 
 /-- The loop reads back well-formed records from their encoding, given a budget per byte. -/
-theorem records_go_encodeRecords {rs : List Record} (h : ∀ r ∈ rs, WellFormed r)
+theorem records_go_encodeRecords {rs : List Record} (h : ∀ r ∈ rs, r.WellFormed)
     (fuel : Nat) (hfuel : (encodeRecords rs).length ≤ fuel) (acc : List Record) :
     records.go fuel (encodeRecords rs) acc = .ok (acc.reverse ++ rs) := by
   induction rs generalizing fuel acc with
   | nil => simp [encodeRecords, records.go]
   | cons r rs ih =>
     have hr := h r (by simp)
-    have h2 := two_le_length_encodeRecord hr
+    have h2 := two_le_length_encodeRecord r
     have he : encodeRecords (r :: rs) = encodeRecord r ++ encodeRecords rs := by
       simp [encodeRecords]
     rw [he, List.length_append] at hfuel
-    obtain ⟨fuel, rfl⟩ : ∃ k, fuel = k + 2 := ⟨fuel - 2, by omega⟩
+    obtain ⟨fuel, rfl⟩ : ∃ k, fuel = k + 1 := ⟨fuel - 1, by omega⟩
     have hne : encodeRecord r ≠ [] := List.ne_nil_of_length_pos (by omega)
     obtain ⟨b, bs, hb⟩ := List.exists_cons_of_ne_nil hne
     rw [he, hb]
     simp only [List.cons_append, records.go]
     rw [← List.cons_append, ← hb, readRecord_encodeRecord hr]
     simp only [bind, Except.bind]
-    rw [ih (fun r' hr' => h r' (by simp [hr'])) (fuel + 1) (by omega)]
+    rw [ih (fun r' hr' => h r' (by simp [hr'])) fuel (by omega)]
     simp
 
 /-- Reading the records of an encoded sequence of well-formed records returns the sequence. -/
-theorem records_encodeRecords {rs : List Record} (h : ∀ r ∈ rs, WellFormed r) :
+theorem records_encodeRecords {rs : List Record} (h : ∀ r ∈ rs, r.WellFormed) :
     records (encodeRecords rs) = .ok rs := by
   have := records_go_encodeRecords h _ (Nat.le_refl _) []
   simpa [records] using this

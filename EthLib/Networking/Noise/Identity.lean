@@ -43,36 +43,28 @@ The rule is noise-libp2p "The libp2p Handshake Payload". -/
 def signedStatic (staticKey : Key) : ByteArray :=
   "noise-libp2p-static-key:".toUTF8 ++ EthLib.Base.packBytes staticKey
 
-/-- A length-delimited protobuf field: its tag byte, varint length and value. -/
-def payloadField (tag : UInt8) (value : ByteArray) : ByteArray :=
-  ⟨#[tag]⟩ ++ ⟨(Encoding.Varint.encode value.size.toUInt64).toArray⟩ ++ value
-
 /-- Serialize the payload, noise-libp2p "The libp2p Handshake Payload". -/
 def encodePayload (p : Payload) : Except NoiseError ByteArray := do
   if p.publicKey.size + p.signature.size +
       (p.extensions.map ByteArray.size).getD 0 > 65535 then throw .messageTooLong
   let extension := match p.extensions with
-    | none => .empty
-    | some value => payloadField 0x22 value
-  let encoded := payloadField 0x0a p.publicKey ++ payloadField 0x12 p.signature ++ extension
+    | none => []
+    | some value => [⟨4, .len value⟩]
+  let encoded := Encoding.Protobuf.serialize
+    (⟨1, .len p.publicKey⟩ :: ⟨2, .len p.signature⟩ :: extension)
   if encoded.size ≤ 65535 then return encoded else throw .messageTooLong
 
 /-- Decode protobuf singular bytes by last value and merge extension messages by concatenation. -/
-def decodePayload (bytes : ByteArray) : Except NoiseError Payload :=
-  if bytes.size ≤ 65535 then go bytes.size bytes.data.toList {} else .error .messageTooLong
-where
-  go : Nat → List UInt8 → Payload → Except NoiseError Payload
-    | _, [], payload => .ok payload
-    | 0, _ :: _, _ => .error .protobuf
-    | fuel + 1, bytes@(_ :: _), payload => do
-      let (record, rest) ← (Encoding.Protobuf.readRecord fuel bytes).mapError fun _ => .protobuf
-      let payload := match record with
-        | ⟨1, .len value⟩ => { payload with publicKey := ⟨value.toArray⟩ }
-        | ⟨2, .len value⟩ => { payload with signature := ⟨value.toArray⟩ }
-        | ⟨4, .len value⟩ =>
-          { payload with extensions := some ((payload.extensions.getD .empty) ++ ⟨value.toArray⟩) }
-        | _ => payload
-      go fuel rest payload
+def decodePayload (bytes : ByteArray) : Except NoiseError Payload := do
+  if 65535 < bytes.size then throw .messageTooLong
+  let records ← (Encoding.Protobuf.records bytes.data.toList).mapError fun _ => .protobuf
+  return records.foldl (init := {}) fun payload record =>
+    match record with
+    | ⟨1, .len value⟩ => { payload with publicKey := value }
+    | ⟨2, .len value⟩ => { payload with signature := value }
+    | ⟨4, .len value⟩ =>
+      { payload with extensions := some (payload.extensions.getD .empty ++ value) }
+    | _ => payload
 
 /-- The error of a failure with the local identity secret.
 

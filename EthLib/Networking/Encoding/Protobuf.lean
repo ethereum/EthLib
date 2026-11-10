@@ -21,7 +21,9 @@ The guide does not ask for minimal varints, so a reader here accepts padding gro
 
 A reader skips a group, and checks that its end matches its start, as "Groups" says.
 
-Field numbers run from 1 to `2^29 - 1`, as [the proto2 guide][fields] says.
+A reader rejects field numbers outside 1 to `2^29 - 1`.
+
+That is the range that [the proto2 guide][fields] lets a schema assign.
 
 [encoding]: https://github.com/protocolbuffers/protocolbuffers.github.io/blob/bc2f346991e20631ed0a884e345110738228bfae/content/programming-guides/encoding.md
 [fields]: https://github.com/protocolbuffers/protocolbuffers.github.io/blob/bc2f346991e20631ed0a884e345110738228bfae/content/programming-guides/proto2.md#assigning
@@ -44,13 +46,13 @@ inductive ProtobufError where
   | fieldNumber (field : Nat)
   /-- A key holds the wire type 6 or 7, or a group end outside its group. -/
   | wireType (wire : Nat)
-  /-- The input ends inside a value. -/
+  /-- The input ends inside a value or inside a group. -/
   | truncated
   /-- A group ends with the number of another field. -/
   | groupEnd (field : Nat)
   deriving Repr, DecidableEq
 
-/-- The stable code of an error, one per constructor, for the C exports. -/
+/-- The stable code of an error, one per constructor. -/
 def ProtobufError.code : ProtobufError → UInt32
   | .varint _ => 1
   | .fieldNumber _ => 2
@@ -65,14 +67,14 @@ inductive Value where
   /-- Wire type 0, a varint. -/
   | varint (value : UInt64)
   /-- Wire type 1, eight bytes. -/
-  | i64 (bytes : List UInt8)
+  | i64 (bytes : Vector UInt8 8)
   /-- Wire type 2, a varint length and that many bytes. -/
-  | len (bytes : List UInt8)
+  | len (bytes : ByteArray)
   /-- Wire types 3 and 4, the start and the end of a group. -/
   | group
   /-- Wire type 5, four bytes. -/
-  | i32 (bytes : List UInt8)
-  deriving Repr, DecidableEq
+  | i32 (bytes : Vector UInt8 4)
+  deriving DecidableEq
 
 /-- The wire type of a value; a group is written with its start type. -/
 def Value.wireType : Value → Nat
@@ -86,7 +88,16 @@ def Value.wireType : Value → Nat
 structure Record where
   field : Nat
   value : Value
-  deriving Repr, DecidableEq
+  deriving DecidableEq
+
+/-- A record that its encoding carries: its field number is in range.
+
+A length-delimited value must also be shorter than `2^64` bytes, so that its length is a varint. -/
+def Record.WellFormed (r : Record) : Prop :=
+  0 < r.field ∧ r.field ≤ maxField ∧
+    match r.value with
+    | .len bytes => bytes.size < 2 ^ 64
+    | _ => True
 
 /-! ## Reading -/
 
@@ -107,13 +118,16 @@ def readKey (bytes : List UInt8) : Except ProtobufError (Nat × Nat × List UInt
   return (field, key.toNat % 8, rest)
 
 /-- The first `n` bytes of the input, and the bytes after them. -/
-def readFixed (n : Nat) (bytes : List UInt8) : Except ProtobufError (List UInt8 × List UInt8) :=
-  if n ≤ bytes.length then .ok (bytes.take n, bytes.drop n) else .error .truncated
+def readFixed (n : Nat) (bytes : List UInt8) : Except ProtobufError (Vector UInt8 n × List UInt8) :=
+  if h : n ≤ bytes.length then
+    .ok (⟨(bytes.take n).toArray, by simp [Nat.min_eq_left h]⟩, bytes.drop n)
+  else .error .truncated
 
 /-- A length-delimited value: a varint length, then that many bytes. -/
-def readLen (bytes : List UInt8) : Except ProtobufError (List UInt8 × List UInt8) := do
+def readLen (bytes : List UInt8) : Except ProtobufError (ByteArray × List UInt8) := do
   let (size, rest) ← readVarint bytes
-  readFixed size.toNat rest
+  let (value, rest) ← readFixed size.toNat rest
+  return (⟨value.toArray⟩, rest)
 
 /-- The value of a wire type other than a group, and the bytes after it. -/
 def readScalar (wire : Nat) (bytes : List UInt8) : Except ProtobufError (Value × List UInt8) :=
@@ -137,13 +151,11 @@ def skipGroup : Nat → List Nat → List UInt8 → Except ProtobufError (List U
     | 4 => if field = expected then skipGroup fuel outer rest else throw (.groupEnd field)
     | _ => skipGroup fuel (expected :: outer) (← readScalar wire rest).2
 
-/-- The record at the start of the input, and the bytes after it.
-
-The budget bounds the steps spent skipping a group. -/
-def readRecord (fuel : Nat) (bytes : List UInt8) : Except ProtobufError (Record × List UInt8) := do
+/-- The record at the start of the input, and the bytes after it. -/
+def readRecord (bytes : List UInt8) : Except ProtobufError (Record × List UInt8) := do
   let (field, wire, rest) ← readKey bytes
   if wire = 3 then
-    return (⟨field, .group⟩, ← skipGroup fuel [field] rest)
+    return (⟨field, .group⟩, ← skipGroup rest.length [field] rest)
   let (value, rest) ← readScalar wire rest
   return (⟨field, value⟩, rest)
 
@@ -156,7 +168,7 @@ where
     | _, [], acc => .ok acc.reverse
     | 0, _ :: _, _ => .error .truncated
     | fuel + 1, bytes@(_ :: _), acc => do
-      let (record, rest) ← readRecord fuel bytes
+      let (record, rest) ← readRecord bytes
       go fuel rest (record :: acc)
 
 /-! ## Writing -/
@@ -168,8 +180,9 @@ def encodeKey (field wire : Nat) : List UInt8 :=
 /-- The bytes of a value after its key; a group is written empty, so as its end key. -/
 def encodeValue (field : Nat) : Value → List UInt8
   | .varint v => Varint.encode v
-  | .i64 bytes | .i32 bytes => bytes
-  | .len bytes => Varint.encode (UInt64.ofNat bytes.length) ++ bytes
+  | .i64 bytes => bytes.toList
+  | .i32 bytes => bytes.toList
+  | .len bytes => Varint.encode (UInt64.ofNat bytes.size) ++ bytes.data.toList
   | .group => encodeKey field 4
 
 /-- The bytes of a record. -/
@@ -179,5 +192,9 @@ def encodeRecord (r : Record) : List UInt8 :=
 /-- The bytes of a sequence of records. -/
 def encodeRecords (rs : List Record) : List UInt8 :=
   rs.flatMap encodeRecord
+
+/-- The bytes of a message made of a sequence of records. -/
+def serialize (rs : List Record) : ByteArray :=
+  ⟨(encodeRecords rs).toArray⟩
 
 end EthLib.Networking.Encoding.Protobuf
