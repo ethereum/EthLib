@@ -42,7 +42,9 @@ There no viable block may sit at the slot before the current one.
 
 All the states of a reachable store have one genesis time.
 
-From Gloas each state has the bid hash of its block, or a latest block hash equal to its bid hash.
+From Gloas each state has the block hash of the bid of its block.
+
+Otherwise its latest block hash is the block hash of its latest bid.
 -/
 
 @[expose] public section
@@ -427,13 +429,17 @@ theorem Reachable.oneGenesisTime (reachable : Reachable config anchorState ancho
 
 /-- Each state of a reachable store has a block at its root.
 
-From Gloas its latest bid has the block hash of that block's bid, or its latest block hash.
+From Gloas its latest bid has the block hash of the bid of that block.
+
+Otherwise its latest block hash is the block hash of its latest bid.
 
 The anchor state must meet the same condition with the anchor block.
 
 A state from the upgrade to Gloas meets the second case, with any anchor block.
 
-A genesis block with a default body meets the first case, when the bid of the state has no hash.
+A genesis block with a default body meets the first case.
+
+That needs the bid of the genesis state to have a zero block hash.
 
 A block leaves its own bid as the latest bid of the state after it. -/
 theorem Reachable.statesKeepBids (reachable : Reachable config anchorState anchorBlock store)

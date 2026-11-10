@@ -72,7 +72,7 @@ Each kept state comes at or after the slot of its block.
 
 All kept states have one genesis time.
 
-From Gloas each kept state has the bid hash of its block.
+From Gloas each kept state has the block hash of the bid of its block.
 
 Otherwise its latest block hash is the block hash of its own bid.
 
@@ -323,11 +323,15 @@ It bids on the execution head of the parent.
 
 The topic finds the parent empty from the bid of the parent block.
 
-The handler finds it empty from the latest bid of the parent state, which is the same bid.
+The handler reads the latest bid of the parent state, which has the same block hash.
 
-The parent payload step then leaves the latest block hash as it is.
+It then finds the parent empty too, and its parent payload step keeps the latest block hash.
 
-That hash is the one of the parent state, advanced to the slot of the block. -/
+Otherwise the latest block hash of that state is the block hash of its bid.
+
+The handler's test of a full parent is then the topic's test of the hash.
+
+Either way the bid builds on the latest block hash of the advanced parent state. -/
 theorem bidParentHash_of_onBlock (gloas : .glamsterdam ≤ fork) {after : Store preset fork}
     (bids : store.StatesKeepBids)
     (root : SszType.hashTreeRoot signed.message = .ok blockRoot)
