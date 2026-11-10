@@ -169,7 +169,7 @@ def shiftState (c : F) (j : ℕ) (st : State F M) : State F M :=
 def Bad (j : ℕ) (st : State F M) : Prop := ∃ e, st.table[j]? = some e ∧ e.1 ∈ st.signed
 
 omit [DecidableEq M] [CommRing F] [SampleableType F] in
-/-- A state that only appends to the table and to the signed messages keeps the bad event. -/
+/-- A state that appends to the table and keeps every signed message keeps the bad event. -/
 theorem Bad.mono {j : ℕ} {st st' : State F M} {r : List (M × F)}
     (htable : st'.table = st.table ++ r) (hsigned : st.signed ⊆ st'.signed) (h : Bad j st) :
     Bad j st' := by

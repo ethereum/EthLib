@@ -123,7 +123,9 @@ def scaleKeys (pk : G₁) (u : F) (l : List (G₁ × F)) : List (G₁ × F) :=
 
 The message scalar at `j` becomes 0.
 
-The scalar of every key other than `pk` is divided by `z`. -/
+The scalar of every key other than `pk` is divided by `z`.
+
+This is meant for `z ≠ 0`; at `z = 0` those scalars become 0. -/
 def projectState (pk : G₁) (j : ℕ) (z : F) (st : State F G₁ M) : State F G₁ M :=
   ⟨shiftState z j st.msg, scaleKeys pk z⁻¹ st.keyTable, st.keyCalls⟩
 
@@ -168,6 +170,8 @@ theorem embedHashAt_of_new {g₂ Y : G₂} {j : ℕ} {m : M} {st : Security.Stat
   simp [hl, hj]
 
 /-- One message hash call of the game with the scalar `z` at `j` is one call of the reduction.
+
+The reduction gets `Y = z • g2`.
 
 This holds once the game's table is shifted by `z` at `j`. -/
 theorem prEvent_hashAt_shift (g₂ : G₂) (j : ℕ) (z : F) (m : M) (st : Security.State F M)
