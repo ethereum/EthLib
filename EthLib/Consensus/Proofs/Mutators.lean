@@ -190,6 +190,24 @@ theorem exitQueue_validators {config : Config} {state after : BeaconState preset
     obtain ⟨_, _, rfl, _⟩ := computed
     exact ⟨rfl, rfl⟩
 
+/-- The exit queue changes the state only in its exit churn, which exists from Electra.
+
+Before Electra it keeps the state. -/
+theorem exitQueue_eq {config : Config} {state after : BeaconState preset fork}
+    {exitBalance : Gwei} {exitEpoch : Epoch}
+    (computed : exitQueue config state exitBalance = .ok (after, exitEpoch)) :
+    ∃ left earliest,
+      after = { state with exitBalanceToConsume := left, earliestExitEpoch := earliest } := by
+  unfold exitQueue at computed
+  split at computed
+  · simp only [computeExitEpochAndUpdateChurn, bind_ok_iff, pure, Except.pure,
+      Except.ok.injEq, Prod.mk.injEq] at computed
+    obtain ⟨_, _, _, _, _, _, rfl, _⟩ := computed
+    exact ⟨_, _, rfl⟩
+  · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at computed
+    obtain ⟨_, _, rfl, _⟩ := computed
+    exact ⟨_, _, rfl⟩
+
 /-- The steps of an exit.
 
 A validator that has started to exit stays the same.
