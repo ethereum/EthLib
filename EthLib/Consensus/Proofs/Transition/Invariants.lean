@@ -601,7 +601,7 @@ private theorem registryGrows_addValidatorToRegistry {pubkey : BLSPubkey}
   split at computed
   · simp only [addValidatorToRegistryAltair, liftAccessor_ok, bind_ok_iff, pure, Except.pure,
       Except.ok.injEq] at computed
-    obtain ⟨_, validatorsOk, _, _, _, _, _, _, _, _, rfl⟩ := computed
+    obtain ⟨_, _, _, validatorsOk, _, _, _, _, _, _, _, _, rfl⟩ := computed
     rw [setOrAppendRooted_size validatorsOk]
     split <;> omega
   split at computed
@@ -609,13 +609,12 @@ private theorem registryGrows_addValidatorToRegistry {pubkey : BLSPubkey}
     simp
   · cases computed
 
-/-- A new validator keeps each key, while the registry stays below 2^64 validators. -/
+/-- A new validator keeps each key. -/
 private theorem keysKept_addValidatorToRegistry {pubkey : BLSPubkey}
     {withdrawalCredentials : Bytes32} {amount : Gwei}
-    (computed : addValidatorToRegistry state pubkey withdrawalCredentials amount = .ok after)
-    (small : after.validators.data.size < 2 ^ 64) : KeysKept state after := by
+    (computed : addValidatorToRegistry state pubkey withdrawalCredentials amount = .ok after) :
+    KeysKept state after := by
   have pushed := addValidatorToRegistry_validators_eq_push computed
-    (Nat.lt_of_le_of_lt (registryGrows_addValidatorToRegistry computed) small)
   intro index validator found
   refine ⟨validator, ?_, rfl⟩
   unfold getValidator at found ⊢
@@ -651,12 +650,13 @@ theorem frame_addValidatorToRegistry {pubkey : BLSPubkey}
     · exact holds validator (Array.mem_of_getElem? old)
     · exact getValidatorFromDeposit_aligned maxAligned _ _ _
   have grows := registryGrows_addValidatorToRegistry computed
-  have keys := keysKept_addValidatorToRegistry computed
+  have keys : after.validators.data.size < 2 ^ 64 → KeysKept state after :=
+    fun _ => keysKept_addValidatorToRegistry computed
   unfold addValidatorToRegistry at computed
   split at computed
   · simp only [addValidatorToRegistryAltair, liftAccessor_ok, bind_ok_iff, pure, Except.pure,
       Except.ok.injEq] at computed
-    obtain ⟨_, _, _, _, previous, previousOk, current, currentOk, _, _, rfl⟩ := computed
+    obtain ⟨_, _, _, _, _, _, previous, previousOk, current, currentOk, _, _, rfl⟩ := computed
     -- The new validator gets a zero byte of flags, and each other byte stays.
     refine ⟨⟨⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, grows, keys, balances, exits, aligned⟩,
       rfl, rfl, rfl, rfl⟩, fun _ position flags => ⟨fun found => ?_, fun found => ?_⟩⟩
@@ -708,7 +708,8 @@ theorem frame_applyPendingDeposit {deposit : PendingDeposit}
     · exact frame_addValidatorToRegistry computed
     · simp only [pure, Except.pure, Except.ok.injEq] at computed
       exact computed ▸ MutatorFrame.refl _
-  · rw [liftAccessor_ok] at computed
+  · simp only [liftAccessor_ok, bind_ok_iff] at computed
+    obtain ⟨_, _, computed⟩ := computed
     exact frame_increaseBalance computed
 
 theorem frame_applyDeposit {pubkey : BLSPubkey} {withdrawalCredentials : Bytes32}
@@ -824,12 +825,12 @@ theorem frame_switchToCompoundingValidator {electra : .pectra ≤ fork} {index :
 
 /-- The source of a consolidation exits, and may withdraw a checked delay later.
 
-The source must be the validator at its position, so that it keeps its key. -/
-theorem frame_queueConsolidation {electra : .pectra ≤ fork} {sourcePosition : Nat}
+The source must be the validator at its index, so that it keeps its key. -/
+theorem frame_queueConsolidation {electra : .pectra ≤ fork} {sourceIndex : ValidatorIndex}
     {source : Validator} {targetIndex : ValidatorIndex}
-    (found : state.validators.data[sourcePosition]? = some source)
+    (found : state.validators.data[sourceIndex.toNat]? = some source)
     (computed :
-      queueConsolidation config state electra sourcePosition source targetIndex = .ok after) :
+      queueConsolidation config state electra sourceIndex source targetIndex = .ok after) :
     BlockFrame state after := by
   simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
     addChecked_ok_iff, pure, Except.pure] at computed
@@ -843,16 +844,11 @@ theorem frame_queueConsolidation {electra : .pectra ≤ fork} {sourcePosition : 
   have validators : churnedState.validators = state.validators :=
     (computeConsolidationEpochAndUpdateChurn_earliest churned).2.1
   refine (frame_computeConsolidationEpochAndUpdateChurn churned).trans <|
-    (frame_setValidator_of_small set
-      (fun small => ⟨state.validators.data[sourcePosition], ?_, rfl⟩)
-      (fun _ => le) fun _ holds => holds state.validators.data[sourcePosition] (by
+    (frame_setValidator_of_whole set (old := state.validators.data[sourceIndex.toNat]) ?_ rfl
+      (fun _ => le) fun _ holds => holds state.validators.data[sourceIndex.toNat] (by
         rw [validators]; exact Array.getElem_mem inside)
       ).toBlockFrame.trans (BlockFrame.of_validators ⟨rfl, rfl⟩)
-  -- The registry keeps its size, so below 2^64 validators after, the position names the source.
-  obtain ⟨inside', rfl⟩ := setValidator_ok set
-  rw [(sameSizes_putValidator _ inside' _).1, validators] at small
-  rw [getValidator, validators, Nat.toUInt64_eq,
-    UInt64.toNat_ofNat_of_lt' (Nat.lt_trans inside small), Array.getElem?_eq_getElem inside]
+  rw [getValidator, validators, Array.getElem?_eq_getElem inside]
 
 theorem frame_processConsolidationRequest {electra : .pectra ≤ fork}
     {request : ConsolidationRequest}
@@ -865,7 +861,7 @@ theorem frame_processConsolidationRequest {electra : .pectra ≤ fork}
     | (cases computed; done)
     | (cases computed; exact BlockFrame.refl _)
     | exact frame_switchToCompoundingValidator (liftAccessor_ok.mp computed)
-    | exact frame_queueConsolidation (Array.getElem?_eq_getElem _) computed
+    | exact frame_queueConsolidation (getElem?_toNat_of_ofNatChecked (by assumption)) computed
 
 theorem frame_processExecutionRequests {body : BeaconBlockBody preset fork}
     {electra : .pectra ≤ fork ∧ fork < .glamsterdam}

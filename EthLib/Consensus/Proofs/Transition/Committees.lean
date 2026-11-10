@@ -570,15 +570,14 @@ theorem isActiveValidator_getValidatorFromDeposit {pubkey : Cryptography.Bls.BLS
     UInt64.lt_iff_toNat_lt, farNat, Bool.and_eq_false_iff, decide_eq_false_iff_not]
   omega
 
-/-- Below 2^64 validators, a new validator keeps the slot and activity, at every fork.
+/-- A new validator keeps the slot and activity, at every fork.
 
-Its index is then the size of the registry, so it replaces no validator. -/
+Its index is the size of the registry, so it replaces no validator. -/
 theorem activeStep_addValidatorToRegistry {pubkey : Cryptography.Bls.BLSPubkey}
     {withdrawalCredentials : Bytes32} {amount : Gwei}
-    (small : state.validators.data.size < 2 ^ 64)
     (computed : addValidatorToRegistry state pubkey withdrawalCredentials amount = .ok after) :
     ActiveStep state after := by
-  have pushed := addValidatorToRegistry_validators_eq_push computed small
+  have pushed := addValidatorToRegistry_validators_eq_push computed
   refine ⟨(frame_addValidatorToRegistry computed).slot, fun epoch _ position => ?_⟩
   unfold isActiveAt
   rw [pushed, Array.getElem?_push]
@@ -594,8 +593,7 @@ private theorem keeps_addValidatorToRegistry (before : fork < .altair)
     {withdrawalCredentials : Bytes32} {amount : Gwei}
     (computed : addValidatorToRegistry state pubkey withdrawalCredentials amount = .ok after) :
     Keeps state after := by
-  have step := activeStep_addValidatorToRegistry
-    (state.validators_size_lt_of_lt_glamsterdam (Nat.lt_trans before (by decide))) computed
+  have step := activeStep_addValidatorToRegistry computed
   have notAltair : ¬Fork.altair ≤ fork := Nat.not_le_of_lt before
   unfold addValidatorToRegistry at computed
   simp only [notAltair, ↓reduceDIte] at computed
@@ -635,7 +633,8 @@ theorem pendingFrame_processDeposit (before : fork < .altair) {deposit : Deposit
       · simp only [pure, Except.pure, Except.ok.injEq] at applied
         subst applied
         exact Keeps.refl _
-    · rw [liftAccessor_ok] at applied
+    · simp only [liftAccessor_ok, bind_ok_iff] at applied
+      obtain ⟨_, _, applied⟩ := applied
       exact keeps_increaseBalance applied
   exact PendingFrame.of_keeps frame (kept.trans parts)
 

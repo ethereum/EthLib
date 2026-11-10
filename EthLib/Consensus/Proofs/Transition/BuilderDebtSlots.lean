@@ -216,7 +216,7 @@ theorem builderFrame_addValidatorToRegistry {pubkey withdrawalCredentials amount
   split at computed
   · simp only [addValidatorToRegistryAltair, liftAccessor_ok, bind_ok_iff, pure, Except.pure,
       Except.ok.injEq] at computed
-    obtain ⟨_, _, _, _, _, _, _, _, _, _, rfl⟩ := computed
+    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := computed
     exact ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
   split at computed
   · cases computed
@@ -238,7 +238,8 @@ theorem builderFrame_applyPendingDeposit {deposit : PendingDeposit}
     · exact builderFrame_addValidatorToRegistry computed
     · simp only [pure, Except.pure, Except.ok.injEq] at computed
       exact computed ▸ BuilderFrame.refl _
-  · rw [liftAccessor_ok] at computed
+  · simp only [liftAccessor_ok, bind_ok_iff] at computed
+    obtain ⟨_, _, computed⟩ := computed
     exact builderFrame_increaseBalance computed
 
 private theorem builderFrame_passPendingDeposits {stop : PendingDeposit → Bool}

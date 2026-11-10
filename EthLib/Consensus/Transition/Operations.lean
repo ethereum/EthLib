@@ -382,12 +382,12 @@ def getValidatorFromDeposit (preset : Preset) (fork : Base.Fork) (pubkey : BLSPu
 
 It gets its balance, no participation flag in either epoch, and an inactivity score of zero.
 
-A list at its limit is an error. -/
+A list at its limit is an error, and so is a registry of `2^64` validators or more. -/
 def addValidatorToRegistryAltair (state : BeaconState preset fork) (altair : .altair ≤ fork)
     (pubkey : BLSPubkey) (withdrawalCredentials : Bytes32) (amount : Gwei) :
     Except TransitionError (BeaconState preset fork) :=
   liftAccessor do
-    let index := getIndexForNewValidator state
+    let index ← getIndexForNewValidator state
     let validator := getValidatorFromDeposit preset fork pubkey withdrawalCredentials amount
     let validators ← setOrAppendRooted state.validators index validator
     let balances ← setOrAppendList state.balances index amount
@@ -430,6 +430,8 @@ A deposit to a new key with an invalid signature changes nothing.
 
 A key that a validator has adds the amount to the balance of the first such validator.
 
+A position of `2^64` or more has no validator index, an overflow.
+
 Before Electra a deposit is credited at once; from Electra it waits in the pending deposits.
 
 From Heze a deposit to a new key with BLS withdrawal credentials changes nothing.
@@ -450,7 +452,8 @@ def applyPendingDeposit (config : Config) (checks : SignatureChecks)
           deposit.amount deposit.signature then
         addValidatorToRegistry state deposit.pubkey deposit.withdrawalCredentials deposit.amount
       else return state
-  | some index => liftAccessor (increaseBalance state index.toUInt64 deposit.amount)
+  | some position => liftAccessor do
+    increaseBalance state (← liftArith (ofNatChecked position)) deposit.amount
 
 /-- From Electra: the state after the deposit of an amount to a key, as [EIP-7251] specifies.
 
