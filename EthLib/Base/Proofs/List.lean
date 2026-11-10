@@ -16,6 +16,8 @@ A factor of every term comes out of the sum.
 The quotients of the terms sum to at most the quotient of the sum.
 
 Dropping the front where a test holds keeps each member that fails the test.
+
+Numbering the front of a list gives the front of the numbered list.
 -/
 
 @[expose] public section
@@ -115,5 +117,12 @@ theorem mem_dropWhile_of_eq_false {α : Type} {test : α → Bool} {member : α}
     rw [failed] at passed
     cases passed
   · exact kept
+
+/-- Numbering the first `i` elements of a list gives the first `i` elements of the numbered list. -/
+theorem zipIdx_take {α : Type} (l : List α) (i : Nat) : (l.take i).zipIdx = l.zipIdx.take i := by
+  apply List.ext_getElem?
+  intro n
+  simp only [List.getElem?_zipIdx, List.getElem?_take]
+  split <;> simp
 
 end EthLib.Base

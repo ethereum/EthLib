@@ -13,18 +13,20 @@ Every storage key that it read or wrote is then named by the record of its accou
 
 A key is named when it has a change at some position, or when it counts as read.
 
-A write that leaves a slot as its position found it records no change there, only a read.
+A write that leaves a slot as its position found it drops any change at that position.
 
-So a written key may appear among the reads of its account rather than among its changes.
+It counts as a read, so a written key may appear among the reads of its account.
 
 A later call never drops a record or a named key.
 
 The list that the builder gives holds an entry for each record, with each named key.
 
-Source: [EIP-7928][eip7928], which asks the list to hold every account and key that the block
-accessed.
+Source: [EIP-7928, Scope and Inclusion][scope], which asks the list to hold every accessed account.
 
-[eip7928]: https://eips.ethereum.org/EIPS/eip-7928#recording-semantics-by-change-type
+A write that changes nothing counts as a read by [EIP-7928, Storage][storage].
+
+[scope]: https://eips.ethereum.org/EIPS/eip-7928#scope-and-inclusion
+[storage]: https://eips.ethereum.org/EIPS/eip-7928#storage
 -/
 
 @[expose] public section
@@ -37,6 +39,53 @@ open EthLib.Execution.State (TransactionState)
 /-- The record of an account names a storage key when the key has a change, or was read. -/
 def AccountRecord.NamesKey (r : AccountRecord) (key : Bytes32) : Prop :=
   (r.storageChanges.getD key ∅).isEmpty = false ∨ key ∈ r.storageReads
+
+/-- Every account that the call `tx` read or wrote meets `account`.
+
+Every storage key that it read or wrote meets `key`, with its address. -/
+structure CoveredBy (account : Address → Prop) (key : Address → Bytes32 → Prop)
+    (tx : TransactionState) : Prop where
+  /-- Each account that the call read. -/
+  accountRead : ∀ address, address ∈ tx.accountReads → account address
+  /-- Each account whose storage the call read. -/
+  storageRead : ∀ address, address ∈ tx.storageReads → account address
+  /-- Each account that the call wrote. -/
+  accountWritten : ∀ address, address ∈ tx.accountWrites → account address
+  /-- Each storage key that the call read. -/
+  keyRead : ∀ address keys k, tx.storageReads[address]? = some keys → k ∈ keys → key address k
+  /-- Each storage key that the call wrote. -/
+  keyWritten : ∀ address slots k, tx.storageWrites[address]? = some slots → k ∈ slots →
+    key address k
+
+/-- Weaker conditions on the accounts and the keys hold for every call that meets stronger ones. -/
+theorem CoveredBy.mono {account account' : Address → Prop} {key key' : Address → Bytes32 → Prop}
+    {tx : TransactionState} (h : CoveredBy account key tx)
+    (haccount : ∀ a, account a → account' a) (hkey : ∀ a k, key a k → key' a k) :
+    CoveredBy account' key' tx :=
+  ⟨fun a ha => haccount a (h.accountRead a ha), fun a ha => haccount a (h.storageRead a ha),
+    fun a ha => haccount a (h.accountWritten a ha),
+    fun a ks k hks hk => hkey a k (h.keyRead a ks k hks hk),
+    fun a s k hs hk => hkey a k (h.keyWritten a s k hs hk)⟩
+
+namespace BlockAccessList
+
+/-- The list has an entry for an account. -/
+def NamesAccount (bal : BlockAccessList) (address : Address) : Prop :=
+  ∃ entry ∈ bal, entry.address = address
+
+/-- The entry of an account in the list holds a storage key, among its changed slots or reads. -/
+def NamesKey (bal : BlockAccessList) (address : Address) (key : Bytes32) : Prop :=
+  ∃ entry ∈ bal, entry.address = address ∧
+    (U256.fromBeBytes key ∈ entry.storageChanges.map (·.slot) ∨
+      U256.fromBeBytes key ∈ entry.storageReads)
+
+/-- The list has an entry for each account that the call `tx` read or wrote.
+
+That entry holds each storage key that the call read or wrote. -/
+def Covers (bal : BlockAccessList) (tx : TransactionState) : Prop :=
+  CoveredBy (NamesAccount bal) (NamesKey bal) tx
+
+end BlockAccessList
 
 namespace AccessListBuilder
 
@@ -53,17 +102,13 @@ def Extends (b b' : AccessListBuilder) : Prop :=
 
 It also names every storage key that the call read or wrote. -/
 def Covers (b : AccessListBuilder) (tx : TransactionState) : Prop :=
-  (∀ address, address ∈ tx.accountReads → address ∈ b.accounts) ∧
-    (∀ address, address ∈ tx.storageReads → address ∈ b.accounts) ∧
-    (∀ address, address ∈ tx.accountWrites → address ∈ b.accounts) ∧
-    (∀ address keys key, tx.storageReads[address]? = some keys → key ∈ keys →
-      b.NamesKey address key) ∧
-    (∀ address slots key, tx.storageWrites[address]? = some slots → key ∈ slots →
-      b.NamesKey address key)
+  CoveredBy (· ∈ b.accounts) b.NamesKey tx
 
-theorem extends_refl (b : AccessListBuilder) : b.Extends b :=
+/-- Every builder extends itself. -/
+theorem Extends.refl (b : AccessListBuilder) : b.Extends b :=
   ⟨fun _ h => h, fun _ _ h => h⟩
 
+/-- A builder that extends one that extends a third extends the third. -/
 theorem Extends.trans {b b' b'' : AccessListBuilder} (h : b.Extends b') (h' : b'.Extends b'') :
     b.Extends b'' :=
   ⟨fun a ha => h'.1 a (h.1 a ha), fun a k hk => h'.2 a k (h.2 a k hk)⟩
@@ -71,9 +116,7 @@ theorem Extends.trans {b b' b'' : AccessListBuilder} (h : b.Extends b') (h' : b'
 /-- A builder that extends one that covers a call covers it too. -/
 theorem Covers.mono {b b' : AccessListBuilder} {tx : TransactionState} (h : b.Covers tx)
     (hb : b.Extends b') : b'.Covers tx :=
-  ⟨fun a ha => hb.1 a (h.1 a ha), fun a ha => hb.1 a (h.2.1 a ha),
-    fun a ha => hb.1 a (h.2.2.1 a ha), fun a ks k hks hk => hb.2 a k (h.2.2.2.1 a ks k hks hk),
-    fun a s k hs hk => hb.2 a k (h.2.2.2.2 a s k hs hk)⟩
+  CoveredBy.mono h hb.1 hb.2
 
 /-! ## One step of the builder -/
 
@@ -138,7 +181,7 @@ theorem recordAccountWrite_extends {b b' : AccessListBuilder} {tx : TransactionS
     fun hchanges hreads hc => hc.trans (setField_extends _ _ _ _ _ _ hchanges hreads)
   split at h
   all_goals
-    obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
     cases h
     exact keep (fun _ _ => rfl) (fun _ _ => rfl) (keep (fun _ _ => rfl) (fun _ _ => rfl)
       (keep (fun _ _ => rfl) (fun _ _ => rfl) hid))
@@ -155,7 +198,9 @@ theorem dropSlotChange_getD_of_ne (changes : Std.ExtTreeMap Bytes32 (Std.ExtTree
 
 /-- A storage write extends the builder, and names its key in the record of its account.
 
-The key has a change when the write changed the slot, and counts as read otherwise. -/
+The key has a change when the new value differs from the slot at the start of the position.
+
+Otherwise the key counts as read, and any earlier change at that position is dropped. -/
 theorem recordStorageWrite_extends (b : AccessListBuilder) (address : Address) (key : Bytes32)
     (value : U256) :
     b.Extends (b.recordStorageWrite address key value) ∧
@@ -183,42 +228,37 @@ theorem recordStorageWrite_extends (b : AccessListBuilder) (address : Address) (
 
 /-! ## The folds of a call -/
 
-/-- A fold whose every step extends the builder and meets a lasting goal meets it for all. -/
+/-- A fold that can fail, whose every step extends the builder and meets a goal.
+
+The goal must hold on for any later extension of the builder.
+
+When the fold succeeds, its result extends the start and meets the goal for every element. -/
+theorem foldlM_extends {α ε : Type} {f : AccessListBuilder → α → Except ε AccessListBuilder}
+    (goal : AccessListBuilder → α → Prop)
+    (hgoal : ∀ b b' x, b.Extends b' → goal b x → goal b' x)
+    (hf : ∀ b x b', f b x = .ok b' → b.Extends b' ∧ goal b' x) {l : List α}
+    {b b' : AccessListBuilder} (h : l.foldlM f b = .ok b') :
+    b.Extends b' ∧ ∀ x ∈ l, goal b' x := by
+  obtain ⟨hext, hsteps⟩ :=
+    foldlM_ok_steps Extends Extends.refl Extends.trans (fun b x b' h => (hf b x b' h).1) h
+  refine ⟨hext, fun x hx => ?_⟩
+  obtain ⟨i, hi, rfl⟩ := List.getElem_of_mem hx
+  obtain ⟨_, next, -, hnext, hend⟩ := hsteps i hi
+  exact hgoal _ _ _ hend (hf _ _ _ hnext).2
+
+/-- A fold whose every step extends the builder and meets a goal meets it for every element.
+
+The goal must hold on for any later extension of the builder. -/
 theorem foldl_extends {α : Type} (f : AccessListBuilder → α → AccessListBuilder)
     (goal : AccessListBuilder → α → Prop)
     (hgoal : ∀ b b' x, b.Extends b' → goal b x → goal b' x)
-    (hf : ∀ b x, b.Extends (f b x) ∧ goal (f b x) x) :
-    ∀ (l : List α) (b : AccessListBuilder),
-      b.Extends (l.foldl f b) ∧ ∀ x ∈ l, goal (l.foldl f b) x
-  | [], b => ⟨extends_refl b, by simp⟩
-  | x :: l, b => by
-    obtain ⟨hext, hall⟩ := foldl_extends f goal hgoal hf l (f b x)
-    refine ⟨(hf b x).1.trans hext, fun y hy => ?_⟩
-    rcases List.mem_cons.mp hy with rfl | hy
-    · exact hgoal _ _ _ hext (hf b y).2
-    · exact hall y hy
-
-/-- A fold that can fail, whose every step extends the builder and meets a lasting goal. -/
-theorem foldlM_extends {α ε : Type} (f : AccessListBuilder → α → Except ε AccessListBuilder)
-    (goal : AccessListBuilder → α → Prop)
-    (hgoal : ∀ b b' x, b.Extends b' → goal b x → goal b' x)
-    (hf : ∀ b x b', f b x = .ok b' → b.Extends b' ∧ goal b' x) :
-    ∀ (l : List α) (b b' : AccessListBuilder), l.foldlM f b = .ok b' →
-      b.Extends b' ∧ ∀ x ∈ l, goal b' x
-  | [], b, b', h => by
-    cases h
-    exact ⟨extends_refl b, by simp⟩
-  | x :: l, b, b', h => by
-    rw [List.foldlM_cons, bind_ok_iff] at h
-    obtain ⟨mid, hmid, h⟩ := h
-    obtain ⟨hext, hall⟩ := foldlM_extends f goal hgoal hf l mid b' h
-    refine ⟨(hf b x mid hmid).1.trans hext, fun y hy => ?_⟩
-    rcases List.mem_cons.mp hy with rfl | hy
-    · exact hgoal _ _ _ hext (hf b y mid hmid).2
-    · exact hall y hy
+    (hf : ∀ b x, b.Extends (f b x) ∧ goal (f b x) x) (l : List α) (b : AccessListBuilder) :
+    b.Extends (l.foldl f b) ∧ ∀ x ∈ l, goal (l.foldl f b) x :=
+  foldlM_extends (ε := Empty) (f := fun b x => .ok (f b x)) goal hgoal
+    (fun b x _ h => by cases h; exact hf b x) (foldlM_eq_ok_foldl (fun _ _ _ => rfl) b)
 
 /-- The writes to the storage of one account name every written key. -/
-theorem foldl_recordStorageWrite (b : AccessListBuilder) (address : Address)
+theorem extends_foldl_recordStorageWrite (b : AccessListBuilder) (address : Address)
     (slots : Std.ExtTreeMap Bytes32 U256) :
     b.Extends (slots.foldl (fun b key value => b.recordStorageWrite address key value) b) ∧
       ∀ key ∈ slots,
@@ -265,10 +305,8 @@ theorem recordTransaction_covers {b b' : AccessListBuilder} {tx : TransactionSta
     tx.storageReads.toList _
   -- The accounts written.
   rw [Std.ExtTreeMap.foldlM_eq_foldlM_toList] at h₃
-  obtain ⟨e₃, c₃⟩ := foldlM_extends
-    (fun b (x : Address × Option State.Account) => b.recordAccountWrite tx x.1 x.2)
-    (fun b x => x.1 ∈ b.accounts) (fun _ _ _ h ha => h.1 _ ha)
-    (fun _ _ _ hx => recordAccountWrite_extends hx) _ _ _ h₃
+  obtain ⟨e₃, c₃⟩ := foldlM_extends (fun b (x : Address × Option State.Account) => x.1 ∈ b.accounts)
+    (fun _ _ _ h ha => h.1 _ ha) (fun _ _ _ hx => recordAccountWrite_extends hx) h₃
   -- The storage keys written.
   rw [Std.ExtTreeMap.foldl_eq_foldl_toList]
   obtain ⟨e₄, c₄⟩ := foldl_extends
@@ -277,7 +315,7 @@ theorem recordTransaction_covers {b b' : AccessListBuilder} {tx : TransactionSta
     (fun b x => ∀ key ∈ x.2, b.NamesKey x.1 key)
     (fun _ _ (x : Address × Std.ExtTreeMap Bytes32 U256) h hk key hkey =>
       h.2 x.1 key (hk key hkey))
-    (fun b x => foldl_recordStorageWrite b x.1 x.2) tx.storageWrites.toList b₃
+    (fun b x => extends_foldl_recordStorageWrite b x.1 x.2) tx.storageWrites.toList b₃
   have e₂₄ := e₃.trans e₄
   have e₁₄ := e₂.trans e₂₄
   refine ⟨e₁.trans e₁₄, fun a ha => ?_, fun a ha => ?_, fun a ha => ?_, ?_, ?_⟩
@@ -296,22 +334,23 @@ theorem recordTransaction_covers {b b' : AccessListBuilder} {tx : TransactionSta
 
 /-! ## The list -/
 
+/-- The entry of each record is in the list. -/
+theorem toChanges_mem_build {b : AccessListBuilder} {address : Address} {r : AccountRecord}
+    (h : b.accounts[address]? = some r) : r.toChanges address ∈ b.build :=
+  List.mem_mergeSort.mpr (List.mem_map.mpr
+    ⟨(address, r), Std.ExtTreeMap.mem_toList_iff_getElem?_eq_some.mpr h, rfl⟩)
+
 /-- Each account with a record has an entry in the list. -/
-theorem mem_build {b : AccessListBuilder} {address : Address} (h : address ∈ b.accounts) :
-    ∃ entry ∈ b.build, entry.address = address := by
+theorem namesAccount_build {b : AccessListBuilder} {address : Address}
+    (h : address ∈ b.accounts) : BlockAccessList.NamesAccount b.build address := by
   obtain ⟨r, hr⟩ := Option.isSome_iff_exists.mp (Std.ExtTreeMap.mem_iff_isSome_getElem?.mp h)
-  refine ⟨r.toChanges address, List.mem_mergeSort.mpr (List.mem_map.mpr
-    ⟨(address, r), Std.ExtTreeMap.mem_toList_iff_getElem?_eq_some.mpr hr, rfl⟩), rfl⟩
+  exact ⟨r.toChanges address, toChanges_mem_build hr, rfl⟩
 
 /-- Each named key is in the entry of its account: among its changed slots, or its reads. -/
 theorem namesKey_build {b : AccessListBuilder} {address : Address} {key : Bytes32}
-    (h : b.NamesKey address key) :
-    ∃ entry ∈ b.build, entry.address = address ∧
-      (U256.fromBeBytes key ∈ entry.storageChanges.map (·.slot) ∨
-        U256.fromBeBytes key ∈ entry.storageReads) := by
+    (h : b.NamesKey address key) : BlockAccessList.NamesKey b.build address key := by
   obtain ⟨r, hr, hk⟩ := h
-  refine ⟨r.toChanges address, List.mem_mergeSort.mpr (List.mem_map.mpr
-    ⟨(address, r), Std.ExtTreeMap.mem_toList_iff_getElem?_eq_some.mpr hr, rfl⟩), rfl, ?_⟩
+  refine ⟨r.toChanges address, toChanges_mem_build hr, rfl, ?_⟩
   simp only [AccountRecord.toChanges]
   by_cases hempty : (r.storageChanges.getD key ∅).isEmpty = false
   · left
@@ -329,6 +368,11 @@ theorem namesKey_build {b : AccessListBuilder} {address : Address} {key : Bytes3
     refine List.mem_mergeSort.mpr (List.mem_map.mpr ⟨key, List.mem_filter.mpr
       ⟨Std.ExtTreeSet.mem_toList.mpr hread, ?_⟩, rfl⟩)
     simpa using hempty
+
+/-- The list of a builder that covers a call covers the call. -/
+theorem Covers.build {b : AccessListBuilder} {tx : TransactionState} (h : b.Covers tx) :
+    BlockAccessList.Covers b.build tx :=
+  CoveredBy.mono h (fun _ ha => namesAccount_build ha) fun _ _ hk => namesKey_build hk
 
 end AccessListBuilder
 

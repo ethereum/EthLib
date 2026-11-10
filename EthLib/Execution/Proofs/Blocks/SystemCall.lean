@@ -176,12 +176,7 @@ theorem mem_requestList {type : UInt8} {r : ByteArray} (h : r ∈ requestList ty
 /-- The requests that a fold over request contracts adds come in the order of the contracts. -/
 theorem foldlM_requests {contracts : List (UInt8 × Address)} {start : BodyState × List ByteArray}
     {result : BodyState × List ByteArray}
-    (h : contracts.foldlM
-      (fun (acc : BodyState × List ByteArray) (contract : UInt8 × Address) => do
-        let out ← checkedSystemCall env acc.1.block contract.2 .empty
-        let body ← (acc.1.join out.state).mapError .state
-        return (body, acc.2 ++ requestList contract.1 out.output))
-      start = .ok result) :
+    (h : contracts.foldlM (readRequest env) start = .ok result) :
     ∃ added, result.2 = start.2 ++ added ∧ (∀ r ∈ added, 1 < r.size) ∧
       (added.map (·.data[0]?)).Sublist ((contracts.map Prod.fst).map some) := by
   induction contracts generalizing start with
@@ -192,6 +187,7 @@ theorem foldlM_requests {contracts : List (UInt8 × Address)} {start : BodyState
   | cons contract rest ih =>
     simp only [List.foldlM_cons] at h
     obtain ⟨next, hNext, hRest⟩ := bind_ok_iff.mp h
+    unfold readRequest at hNext
     obtain ⟨out, hOut, hNext⟩ := bind_ok_iff.mp hNext
     obtain ⟨body, hBody, hEq⟩ := bind_ok_iff.mp hNext
     cases hEq

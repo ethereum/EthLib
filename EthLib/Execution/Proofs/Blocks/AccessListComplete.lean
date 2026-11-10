@@ -1,12 +1,13 @@
 module
 
+public import EthLib.Base.Proofs.List
 public import EthLib.Execution.Proofs.Blocks.AccessListCoverage
 public import EthLib.Execution.Proofs.Blocks.Transition
 
 /-!
-# Proofs: the block access list names everything that the body touched
+# Proofs: the block access list covers every call of the body
 
-The body of a block runs system calls, transactions and withdrawals.
+The body of a block runs system calls, transactions, withdrawals and calls to request contracts.
 
 Each of them ends with a state that records what it read and what it wrote.
 
@@ -18,14 +19,21 @@ That is, it records each account that one of them read or wrote.
 
 It also names each storage key that one of them read or wrote, as a change or as a read.
 
-The list that the block commits to from Glamsterdam holds each such account and key.
+With the facts on the list of a builder, the list that the block commits to holds them too.
 
-These facts hold at every fork, although a header commits to the list only from Glamsterdam.
+A header commits to that list from Glamsterdam, so a block that passes the transition names them.
 
-Source: [EIP-7928][eip7928], which asks the list to hold every account and key that the block
-accessed, with the system calls before and after the transactions.
+Completeness is relative to the reads and writes that the state of each call records.
 
-[eip7928]: https://eips.ethereum.org/EIPS/eip-7928#recording-semantics-by-change-type
+The DAO transfer and the block rewards before Paris write the state without a call.
+
+The builder leaves them out, and neither runs in a block that commits to a list.
+
+Source: [EIP-7928, Scope and Inclusion][eip7928].
+
+It asks the list to hold every account that the block accessed, system contracts included.
+
+[eip7928]: https://eips.ethereum.org/EIPS/eip-7928#scope-and-inclusion
 -/
 
 @[expose] public section
@@ -34,9 +42,9 @@ namespace EthLib.Execution.Blocks
 
 open EthLib.Base
 open EthLib.Execution.Evm
-open EthLib.Execution.State (BlockState)
+open EthLib.Execution.State (BlockState State)
 open EthLib.Execution.Transactions
-open AccessListBuilder (Covers Extends extends_refl)
+open AccessListBuilder (Covers Extends)
 
 variable {fork : Fork}
 
@@ -51,11 +59,6 @@ theorem BodyState.join_covers {body body' : BodyState} {tx : State.TransactionSt
   cases h
   exact AccessListBuilder.recordTransaction_covers hb
 
-/-- A new position keeps every record of the builder. -/
-theorem BodyState.beginIndex_extends (body : BodyState) (index : Nat) :
-    body.builder.Extends (body.beginIndex index).builder :=
-  extends_refl _
-
 /-- A transaction that enters the body extends the builder, which then covers its run. -/
 theorem applyTransaction_covers {env : BlockEnvironment fork} {index : Nat}
     {before after : BodyOutput fork} {tx : Transaction}
@@ -64,58 +67,11 @@ theorem applyTransaction_covers {env : BlockEnvironment fork} {index : Nat}
       checkInclusion env.chainId env before.gas (.ofBlock before.block) tx = .ok included ∧
       processTransaction env before.block included tx = .ok out ∧
       before.body.builder.Extends after.body.builder ∧ after.body.builder.Covers out.state := by
-  unfold applyTransaction at h
-  obtain ⟨included, hIncluded, h⟩ := bind_ok_iff.mp h
-  obtain ⟨out, hOut, h⟩ := bind_ok_iff.mp h
-  obtain ⟨body, hBody, h⟩ := bind_ok_iff.mp h
-  have hAfter : after.body = body := by
-    dsimp only at h
-    split at h <;> (obtain ⟨_, -, h⟩ := bind_ok_iff.mp h; cases h; rfl)
-  obtain ⟨hExt, hCovers⟩ := BodyState.join_covers (mapError_ok_iff.mp hBody)
-  rw [hAfter]
-  exact ⟨included, out, mapError_ok_iff.mp hIncluded, mapError_ok_iff.mp hOut, hExt, hCovers⟩
+  obtain ⟨included, out, hIncluded, hOut, -, hJoin⟩ := applyTransaction_eq_ok h
+  obtain ⟨hExt, hCovers⟩ := BodyState.join_covers hJoin
+  exact ⟨included, out, hIncluded, hOut, hExt, hCovers⟩
 
 /-! ## The transactions -/
-
-/-- The fold of the transactions extends the builder, and covers the run of each of them.
-
-Each transaction runs on the output of the fold of the transactions before it. -/
-theorem foldlM_applyTransaction_covers {env : BlockEnvironment fork} :
-    ∀ (l : List (Transaction × Nat)) (start output : BodyOutput fork),
-      l.foldlM (fun before (tx, index) => applyTransaction env index before tx) start =
-        .ok output →
-      start.body.builder.Extends output.body.builder ∧
-        ∀ i (hi : i < l.length), ∃ before included out,
-          (l.take i).foldlM (fun before (tx, index) => applyTransaction env index before tx)
-            start = .ok before ∧
-          checkInclusion env.chainId env before.gas (.ofBlock before.block) l[i].1 =
-            .ok included ∧
-          processTransaction env before.block included l[i].1 = .ok out ∧
-          output.body.builder.Covers out.state
-  | [], start, output, h => by
-    cases h
-    exact ⟨extends_refl _, fun i hi => absurd hi (Nat.not_lt_zero i)⟩
-  | (tx, index) :: l, start, output, h => by
-    rw [List.foldlM_cons, bind_ok_iff] at h
-    obtain ⟨mid, hmid, h⟩ := h
-    obtain ⟨hRest, hAll⟩ := foldlM_applyTransaction_covers l mid output h
-    obtain ⟨included, out, hIncluded, hOut, hExt, hCovers⟩ := applyTransaction_covers hmid
-    refine ⟨hExt.trans hRest, fun i hi => ?_⟩
-    cases i with
-    | zero => exact ⟨start, included, out, rfl, hIncluded, hOut, hCovers.mono hRest⟩
-    | succ i =>
-      obtain ⟨before, included', out', hBefore, hIncluded', hOut', hCovers'⟩ :=
-        hAll i (Nat.lt_of_succ_lt_succ hi)
-      refine ⟨before, included', out', ?_, hIncluded', hOut', hCovers'⟩
-      rw [List.take_succ_cons, List.foldlM_cons, hmid]
-      exact hBefore
-
-/-- The first `i` transactions with their indices are the transactions of the first `i`. -/
-theorem zipIdx_take {α : Type} (l : List α) (i : Nat) : (l.take i).zipIdx = l.zipIdx.take i := by
-  apply List.ext_getElem?
-  intro n
-  simp only [List.getElem?_zipIdx, List.getElem?_take]
-  split <;> simp
 
 /-- The builder at the end of the transactions covers the run of each of them.
 
@@ -130,12 +86,15 @@ theorem applyTransactions_covers {env : BlockEnvironment fork} {body : BodyState
           .ok included ∧
         processTransaction env before.block included transactions[i] = .ok out ∧
         output.body.builder.Covers out.state := by
-  obtain ⟨hExt, hAll⟩ := foldlM_applyTransaction_covers _ _ _ h
+  obtain ⟨hExt, hSteps⟩ := foldlM_ok_steps
+    (fun a b : BodyOutput fork => a.body.builder.Extends b.body.builder)
+    (fun _ => Extends.refl _) (fun h h' => h.trans h')
+    (fun _ _ _ hStep => (applyTransaction_covers hStep).choose_spec.choose_spec.2.2.1) h
   refine ⟨hExt, fun i hi => ?_⟩
-  obtain ⟨before, included, out, hBefore, hIncluded, hOut, hCovers⟩ :=
-    hAll i (by simpa using hi)
-  simp only [List.getElem_zipIdx] at hIncluded hOut
-  refine ⟨before, included, out, ?_, hIncluded, hOut, hCovers⟩
+  obtain ⟨before, next, hBefore, hNext, hEnd⟩ := hSteps i (by simpa using hi)
+  simp only [List.getElem_zipIdx, Nat.zero_add] at hNext
+  obtain ⟨included, out, hIncluded, hOut, -, hCovers⟩ := applyTransaction_covers hNext
+  refine ⟨before, included, out, ?_, hIncluded, hOut, hCovers.mono hEnd⟩
   unfold applyTransactions
   rw [zipIdx_take]
   exact hBefore
@@ -144,7 +103,7 @@ theorem applyTransactions_covers {env : BlockEnvironment fork} {body : BodyState
 
 /-- The system calls at the start of a block extend the builder, which then covers each call.
 
-From Dencun, the beacon roots contract runs on the block state before the calls.
+From Dencun, the beacon roots contract runs on the block state that the body starts from.
 
 From Pectra, the history storage contract then runs on the block state after it. -/
 theorem startSystemCalls_covers {env : BlockEnvironment fork} {parentHash : Hash32}
@@ -174,7 +133,7 @@ theorem startSystemCalls_covers {env : BlockEnvironment fork} {parentHash : Hash
       exact ⟨hExt, fun _ => ⟨out', hOut', hCovers⟩⟩
     · rename_i hPectra
       cases h
-      exact ⟨extends_refl _, fun h => absurd h hPectra⟩
+      exact ⟨Extends.refl _, fun h => absurd h hPectra⟩
   unfold startSystemCalls at h
   dsimp only at h
   split at h
@@ -189,59 +148,52 @@ theorem startSystemCalls_covers {env : BlockEnvironment fork} {parentHash : Hash
     cases hMid
     exact ⟨(second _ h).1, fun h => absurd h hDencun⟩
 
+/-- The call to one request contract extends the builder, which then covers the call. -/
+theorem readRequest_covers {env : BlockEnvironment fork}
+    {state state' : BodyState × List ByteArray} {contract : UInt8 × Address}
+    (h : readRequest env state contract = .ok state') :
+    state.1.builder.Extends state'.1.builder ∧ ∃ out,
+      checkedSystemCall env state.1.block contract.2 .empty = .ok out ∧
+      state'.1.builder.Covers out.state := by
+  unfold readRequest at h
+  obtain ⟨out, hOut, h⟩ := bind_ok_iff.mp h
+  obtain ⟨joined, hJoined, h⟩ := bind_ok_iff.mp h
+  cases h
+  obtain ⟨hExt, hCovers⟩ := BodyState.join_covers (mapError_ok_iff.mp hJoined)
+  exact ⟨hExt, out, hOut, hCovers⟩
+
 /-- The calls to the request contracts extend the builder, which then covers each call.
 
-From Pectra, each contract of the fork is called, and the call joins the body. -/
+From Pectra, the contract at index `j` runs on the body after the calls before it. -/
 theorem readRequests_covers {env : BlockEnvironment fork} {body body' : BodyState}
     {requests : List ByteArray} (h : readRequests env body = .ok (body', requests)) :
     body.builder.Extends body'.builder ∧
-      (.pectra ≤ fork → ∀ contract ∈ requestContracts fork, ∃ block out,
-        checkedSystemCall env block contract.2 .empty = .ok out ∧
+      (.pectra ≤ fork → ∀ j (hj : j < (requestContracts fork).length), ∃ mid out,
+        ((requestContracts fork).take j).foldlM (readRequest env) (body, []) = .ok mid ∧
+        checkedSystemCall env mid.1.block (requestContracts fork)[j].2 .empty = .ok out ∧
         body'.builder.Covers out.state) := by
   unfold readRequests at h
   split at h
-  · rename_i hPectra
-    -- Each call extends the builder, and the builder covers each call made so far.
-    have step : ∀ (l : List (UInt8 × Address)) (start result : BodyState × List ByteArray),
-        l.foldlM (fun (body, requests) (type, target) => do
-            let out ← checkedSystemCall env body.block target .empty
-            let body ← (body.join out.state).mapError BlockError.state
-            return (body, requests ++ requestList type out.output)) start = .ok result →
-        start.1.builder.Extends result.1.builder ∧ ∀ contract ∈ l, ∃ block out,
-          checkedSystemCall env block contract.2 .empty = .ok out ∧
-          result.1.builder.Covers out.state := by
-      intro l
-      induction l with
-      | nil =>
-        intro start result h
-        cases h
-        exact ⟨extends_refl _, by simp⟩
-      | cons c l ih =>
-        intro start result h
-        rw [List.foldlM_cons, bind_ok_iff] at h
-        obtain ⟨mid, hmid, h⟩ := h
-        obtain ⟨hRest, hAll⟩ := ih mid result h
-        obtain ⟨out, hOut, hmid⟩ := bind_ok_iff.mp hmid
-        obtain ⟨joined, hJoined, hmid⟩ := bind_ok_iff.mp hmid
-        cases hmid
-        obtain ⟨hExt, hCovers⟩ := BodyState.join_covers (mapError_ok_iff.mp hJoined)
-        refine ⟨hExt.trans hRest, fun contract hc => ?_⟩
-        rcases List.mem_cons.mp hc with rfl | hc
-        · exact ⟨_, out, hOut, hCovers.mono hRest⟩
-        · exact hAll contract hc
-    obtain ⟨hExt, hAll⟩ := step _ _ _ h
-    exact ⟨hExt, fun _ => hAll⟩
+  · obtain ⟨hExt, hSteps⟩ := foldlM_ok_steps
+      (fun a b : BodyState × List ByteArray => a.1.builder.Extends b.1.builder)
+      (fun _ => Extends.refl _) (fun h h' => h.trans h')
+      (fun _ _ _ hStep => (readRequest_covers hStep).1) h
+    refine ⟨hExt, fun _ j hj => ?_⟩
+    obtain ⟨mid, next, hMid, hNext, hEnd⟩ := hSteps j hj
+    obtain ⟨-, out, hOut, hCovers⟩ := readRequest_covers hNext
+    exact ⟨mid, out, hMid, hOut, hCovers.mono hEnd⟩
   · rename_i hPectra
     cases h
-    exact ⟨extends_refl _, fun h => absurd h hPectra⟩
+    exact ⟨Extends.refl _, fun h => absurd h hPectra⟩
 
 /-- The requests of a block extend the builder, which then covers each call to a contract. -/
 theorem blockRequests_covers {depositContract : Address} {env : BlockEnvironment fork}
     {body body' : BodyState} {logs : List Log} {requests : List ByteArray}
     (h : blockRequests depositContract env body logs = .ok (body', requests)) :
     body.builder.Extends body'.builder ∧
-      (.pectra ≤ fork → ∀ contract ∈ requestContracts fork, ∃ block out,
-        checkedSystemCall env block contract.2 .empty = .ok out ∧
+      (.pectra ≤ fork → ∀ j (hj : j < (requestContracts fork).length), ∃ mid out,
+        ((requestContracts fork).take j).foldlM (readRequest env) (body, []) = .ok mid ∧
+        checkedSystemCall env mid.1.block (requestContracts fork)[j].2 .empty = .ok out ∧
         body'.builder.Covers out.state) := by
   unfold blockRequests at h
   split at h
@@ -251,7 +203,7 @@ theorem blockRequests_covers {depositContract : Address} {env : BlockEnvironment
     exact readRequests_covers hRead
   · rename_i hPectra
     cases h
-    exact ⟨extends_refl _, fun h => absurd h hPectra⟩
+    exact ⟨Extends.refl _, fun h => absurd h hPectra⟩
 
 /-! ## The body -/
 
@@ -259,26 +211,37 @@ theorem blockRequests_covers {depositContract : Address} {env : BlockEnvironment
 
 The system calls at the start run on the block state after the DAO transfer, if any.
 
-The transactions then run, and each of them is covered as the fold of the transactions says.
+The transactions then run, and the builder after them keeps every record to the end.
 
 From Shapella, the withdrawals then run as one call on the block state after the transactions.
 
-From Pectra, each request contract is then called. -/
+From Pectra, each request contract is then called, from the body after the withdrawals. -/
 theorem applyBody_covers {config : ChainConfig} {env : BlockEnvironment fork}
     {block : Block fork Transaction} {start : BlockState} {output : BlockOutput fork}
     (h : applyBody config env block start = .ok output) :
-    ∃ state body txOutput,
+    ∃ state body txOutput withdrawn,
       (if daoForkBlock config = some block.header.number then onBlock start (applyDaoFork fork)
         else pure start) = .ok state ∧
       startSystemCalls env block.header.parentHash (.init state) = .ok body ∧
+      (BodyState.init state).builder.Extends output.body.builder ∧
+      (∀ hDencun : .dencun ≤ fork, ∃ out mid,
+        systemCall env state BEACON_ROOTS_ADDRESS
+          ⟨(env.parentBeaconBlockRoot hDencun).toArray⟩ = .ok out ∧
+        (BodyState.init state).join out.state = .ok mid ∧ output.body.builder.Covers out.state ∧
+        (.pectra ≤ fork → ∃ out',
+          systemCall env mid.block HISTORY_STORAGE_ADDRESS
+            ⟨block.header.parentHash.toArray⟩ = .ok out' ∧
+          output.body.builder.Covers out'.state)) ∧
       applyTransactions env body block.transactions = .ok txOutput ∧
-      body.builder.Extends output.body.builder ∧
       txOutput.body.builder.Extends output.body.builder ∧
       (∀ hShapella : .shapella ≤ fork, ∃ tx,
         withdrawalState fork txOutput.body.block (block.withdrawals hShapella) = .ok tx ∧
+        (txOutput.body.beginIndex (block.transactions.length + 1)).join tx = .ok withdrawn ∧
         output.body.builder.Covers tx) ∧
-      (.pectra ≤ fork → ∀ contract ∈ requestContracts fork, ∃ block out,
-        checkedSystemCall env block contract.2 .empty = .ok out ∧
+      (¬.shapella ≤ fork → withdrawn = txOutput.body.beginIndex (block.transactions.length + 1)) ∧
+      (.pectra ≤ fork → ∀ j (hj : j < (requestContracts fork).length), ∃ mid out,
+        ((requestContracts fork).take j).foldlM (readRequest env) (withdrawn, []) = .ok mid ∧
+        checkedSystemCall env mid.1.block (requestContracts fork)[j].2 .empty = .ok out ∧
         output.body.builder.Covers out.state) := by
   unfold applyBody at h
   dsimp only at h
@@ -289,25 +252,36 @@ theorem applyBody_covers {config : ChainConfig} {env : BlockEnvironment fork}
         onBlock start (applyDaoFork fork) else pure start) = .ok state := by
       simpa only [hDao, ↓reduceIte] using hState
     obtain ⟨body, hBody, h⟩ := bind_ok_iff.mp h
+    have hBody := mapError_ok_iff.mp hBody
     obtain ⟨txOutput, hTx, h⟩ := bind_ok_iff.mp h
     split at h <;> rename_i hShapella
     all_goals first
       | obtain ⟨tx, hTxState, h⟩ := bind_ok_iff.mp h
         have hTxState := mapError_ok_iff.mp hTxState
         obtain ⟨withdrawn, hJoin, h⟩ := bind_ok_iff.mp h
-        have hW := BodyState.join_covers (mapError_ok_iff.mp hJoin)
+        have hJoin := mapError_ok_iff.mp hJoin
+        have hW := BodyState.join_covers hJoin
         have withdrawals : txOutput.body.builder.Extends withdrawn.builder ∧
-            ∀ hShapella : .shapella ≤ fork, ∃ tx,
+            (∀ hShapella : .shapella ≤ fork, ∃ tx,
               withdrawalState fork txOutput.body.block (block.withdrawals hShapella) = .ok tx ∧
-              withdrawn.builder.Covers tx :=
-          ⟨hW.1, fun _ => ⟨tx, hTxState, hW.2⟩⟩
+              (txOutput.body.beginIndex (block.transactions.length + 1)).join tx =
+                .ok withdrawn ∧
+              withdrawn.builder.Covers tx) ∧
+            (¬.shapella ≤ fork →
+              withdrawn = txOutput.body.beginIndex (block.transactions.length + 1)) :=
+          ⟨hW.1, fun _ => ⟨tx, hTxState, hJoin, hW.2⟩, fun h => absurd hShapella h⟩
       | obtain ⟨withdrawn, hEq, h⟩ := bind_ok_iff.mp h
         have hEq := Except.ok.inj hEq
         have withdrawals : txOutput.body.builder.Extends withdrawn.builder ∧
-            ∀ hShapella : .shapella ≤ fork, ∃ tx,
+            (∀ hShapella : .shapella ≤ fork, ∃ tx,
               withdrawalState fork txOutput.body.block (block.withdrawals hShapella) = .ok tx ∧
-              withdrawn.builder.Covers tx :=
-          ⟨by subst hEq; exact extends_refl _, fun h => absurd h hShapella⟩
+              (txOutput.body.beginIndex (block.transactions.length + 1)).join tx =
+                .ok withdrawn ∧
+              withdrawn.builder.Covers tx) ∧
+            (¬.shapella ≤ fork →
+              withdrawn = txOutput.body.beginIndex (block.transactions.length + 1)) :=
+          ⟨by subst hEq; exact Extends.refl _, fun h => absurd h hShapella,
+            fun _ => hEq.symm⟩
     all_goals
       obtain ⟨⟨requested, requests⟩, hRequests, h⟩ := bind_ok_iff.mp h
       dsimp only at h
@@ -316,10 +290,16 @@ theorem applyBody_covers {config : ChainConfig} {env : BlockEnvironment fork}
       cases h
       obtain ⟨hReqExt, hReqCovers⟩ := blockRequests_covers hRequests
       have hTxExt := withdrawals.1.trans hReqExt
-      refine ⟨state, body, txOutput, hState, mapError_ok_iff.mp hBody, hTx,
-        (applyTransactions_covers hTx).1.trans hTxExt, hTxExt, fun hS => ?_, hReqCovers⟩
-      obtain ⟨tx, hTxState, hCovers⟩ := withdrawals.2 hS
-      exact ⟨tx, hTxState, hCovers.mono hReqExt⟩
+      obtain ⟨hStartExt, hStart⟩ := startSystemCalls_covers hBody
+      have hBodyExt := (applyTransactions_covers hTx).1.trans hTxExt
+      refine ⟨state, body, txOutput, withdrawn, hState, hBody, hStartExt.trans hBodyExt,
+        fun hDencun => ?_, hTx, hTxExt, fun hS => ?_, withdrawals.2.2, hReqCovers⟩
+      · obtain ⟨out, mid, hOut, hMid, hCovers, hSecond⟩ := hStart hDencun
+        refine ⟨out, mid, hOut, hMid, hCovers.mono hBodyExt, fun hPectra => ?_⟩
+        obtain ⟨out', hOut', hCovers'⟩ := hSecond hPectra
+        exact ⟨out', hOut', hCovers'.mono hBodyExt⟩
+      · obtain ⟨tx, hTxState, hJoin, hCovers⟩ := withdrawals.2.1 hS
+        exact ⟨tx, hTxState, hJoin, hCovers.mono hReqExt⟩
 
 /-- The builder at the end of a body covers the run of each of its transactions.
 
@@ -337,10 +317,68 @@ theorem applyBody_covers_transaction {config : ChainConfig} {env : BlockEnvironm
           block.transactions[i] = .ok included ∧
         processTransaction env before.block included block.transactions[i] = .ok out ∧
         output.body.builder.Covers out.state := by
-  obtain ⟨state, body, txOutput, hState, hBody, hTx, -, hExt, -, -⟩ := applyBody_covers h
+  obtain ⟨state, body, txOutput, -, hState, hBody, -, -, hTx, hExt, -⟩ := applyBody_covers h
   refine ⟨state, body, hState, hBody, fun i hi => ?_⟩
   obtain ⟨before, included, out, hBefore, hIncluded, hOut, hCovers⟩ :=
     (applyTransactions_covers hTx).2 i hi
   exact ⟨before, included, out, hBefore, hIncluded, hOut, hCovers.mono hExt⟩
+
+/-! ## The list of the block -/
+
+/-- From Glamsterdam, a body gives the hash of the list that its builder built. -/
+theorem applyBody_accessListHash {config : ChainConfig} {env : BlockEnvironment fork}
+    {block : Block fork Transaction} {start : BlockState} {output : BlockOutput fork}
+    (h : applyBody config env block start = .ok output) (hFork : .glamsterdam ≤ fork) :
+    ∃ value, output.accessListHash = some value ∧
+      BlockAccessList.hash output.body.builder.build = .ok value := by
+  unfold applyBody at h
+  dsimp only at h
+  split at h
+  all_goals
+    obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
+    obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
+    obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
+    split at h <;> rename_i hShapella
+  all_goals first
+    | have _ : Fork.shapella ≤ fork := hShapella
+      obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
+      obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
+    | obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
+  all_goals
+    obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
+    obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
+    obtain ⟨hash, hHash, h⟩ := bind_ok_iff.mp h
+    cases h
+    exact (accessListHashOf_eq_ok hHash hFork).2
+
+/-- From Glamsterdam, a block that passes the transition commits to a list that its body covers.
+
+The hash in its header is the hash of the list that the builder built after the body.
+
+The builder covers each call of the body, so that list holds what each call touched. -/
+theorem stateTransition_accessList {chain : BlockChain} {block : Block fork Transaction}
+    {checkSeal : Bool} {post : State} (hFork : .glamsterdam ≤ fork)
+    (h : stateTransition chain block checkSeal = .ok post) :
+    ∃ hashes output,
+      recentHashes chain.recent = .ok hashes ∧
+      applyBody chain.config (blockEnvironment chain.config hashes block.header) block
+        ⟨chain.state, ∅, ∅, ∅, ∅⟩ = .ok output ∧
+      BlockAccessList.hash output.body.builder.build =
+        .ok (block.header.blockAccessListHash hFork) := by
+  unfold stateTransition at h
+  have hNotHegota : ¬.hegota ≤ fork := fun hH => by
+    simp [hH, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
+  simp only [hNotHegota, ↓reduceIte] at h
+  split at h
+  · obtain ⟨_, _, h⟩ := bind_ok_iff.mp h
+    obtain ⟨hashes, hHashes, h⟩ := bind_ok_iff.mp h
+    obtain ⟨output, hOutput, h⟩ := bind_ok_iff.mp h
+    obtain ⟨roots, -, h⟩ := bind_ok_iff.mp h
+    obtain ⟨_, hChecks, -⟩ := bind_ok_iff.mp h
+    obtain ⟨value, hValue, hHash⟩ := applyBody_accessListHash hOutput hFork
+    rw [accessListHash_of_outputChecks hFork hChecks] at hValue
+    cases hValue
+    exact ⟨hashes, output, hHashes, hOutput, hHash⟩
+  · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
 
 end EthLib.Execution.Blocks
