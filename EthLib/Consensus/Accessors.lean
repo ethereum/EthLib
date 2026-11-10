@@ -285,20 +285,22 @@ def getSeed (state : BeaconState preset fork) (epoch : Epoch) (domainType : Doma
   return Cryptography.Hash.Sha256.hash32
     ⟨domainType.toArray ++ (uintToBytes 8 epoch.toNat).toArray ++ mix.toArray⟩
 
-/-- The number of committees in each slot of an epoch.
+/-- The number of committees in each slot, for a number of active validators.
 
 It aims at a target size of committee, from one up to the most committees in a slot. -/
-def getCommitteeCountPerSlot (state : BeaconState preset fork) (epoch : Epoch) : UInt64 :=
+def committeeCountOf (preset : Preset) (active : UInt64) : UInt64 :=
   max 1 (min preset.MAX_COMMITTEES_PER_SLOT
-    ((getActiveValidatorIndices state epoch).length.toUInt64 / preset.SLOTS_PER_EPOCH /
-      preset.TARGET_COMMITTEE_SIZE))
+    (active / preset.SLOTS_PER_EPOCH / preset.TARGET_COMMITTEE_SIZE))
 
-/-- The committee count, after checking every active index and the number of active validators. -/
+/-- The number of committees in each slot of an epoch. -/
+def getCommitteeCountPerSlot (state : BeaconState preset fork) (epoch : Epoch) : UInt64 :=
+  committeeCountOf preset (getActiveValidatorIndices state epoch).length.toUInt64
+
+/-- The committee count, or an error when an active position or the active count needs 65 bits. -/
 def getCommitteeCountPerSlotChecked (state : BeaconState preset fork) (epoch : Epoch) :
     Except AccessorError UInt64 := do
   let active ← getActiveValidatorIndicesChecked state epoch
-  let _ ← liftArith (ofNatChecked active.length)
-  return getCommitteeCountPerSlot state epoch
+  return committeeCountOf preset (← liftArith (ofNatChecked active.length))
 
 /-- The committee of a slot with a given index, cut from active validators in a shuffled order.
 
@@ -322,9 +324,8 @@ def attesterShuffle (state : BeaconState preset fork) (epoch : Epoch) :
     Except AccessorError (Array ValidatorIndex × Array UInt64) := do
   let seed ← getSeed state epoch DOMAIN_BEACON_ATTESTER
   let active := (← getActiveValidatorIndicesChecked state epoch).toArray
-  unless active.size < 2 ^ 64 do throw (.arith .overflow)
-  return (active,
-    ← (computeShuffledPermutation preset (UInt64.ofNat active.size) seed).mapError .shuffle)
+  let count ← liftArith (ofNatChecked active.size)
+  return (active, ← (computeShuffledPermutation preset count seed).mapError .shuffle)
 
 /-- The committee of a slot with a given index, cut from the shuffled active validators.
 

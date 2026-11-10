@@ -604,7 +604,7 @@ theorem toNat_length_getActiveValidatorIndices {state : BeaconState preset fork}
 /-- Each slot has at least one committee. -/
 theorem one_le_getCommitteeCountPerSlot (state : BeaconState preset fork) (epoch : Epoch) :
     1 ≤ getCommitteeCountPerSlot state epoch := by
-  simp only [getCommitteeCountPerSlot, max, min]
+  simp only [getCommitteeCountPerSlot, committeeCountOf, max, min]
   repeat' split
   all_goals simp_all [UInt64.le_iff_toNat_le]
   all_goals omega
@@ -612,7 +612,7 @@ theorem one_le_getCommitteeCountPerSlot (state : BeaconState preset fork) (epoch
 /-- A slot has at most the most committees of the preset, or one if that is zero. -/
 theorem getCommitteeCountPerSlot_le (state : BeaconState preset fork) (epoch : Epoch) :
     getCommitteeCountPerSlot state epoch ≤ max 1 preset.MAX_COMMITTEES_PER_SLOT := by
-  simp only [getCommitteeCountPerSlot, max, min]
+  simp only [getCommitteeCountPerSlot, committeeCountOf, max, min]
   repeat' split
   all_goals simp_all [UInt64.le_iff_toNat_le]
   all_goals omega
@@ -638,12 +638,14 @@ theorem attesterShuffle_ok {state : BeaconState preset fork} {epoch : Epoch}
   obtain ⟨seed, seedOk, indices, indicesOk, rest⟩ := computed
   have same := getActiveValidatorIndicesChecked_ok indicesOk
   subst indices
-  split at rest
-  · simp only [bind_ok_iff, mapError_ok_iff, pure, Except.pure, Except.ok.injEq,
-      Prod.mk.injEq] at rest
-    obtain ⟨_, shuffleOk, activeEq, rfl⟩ := rest
-    exact ⟨seed, seedOk, shuffleOk, activeEq.symm⟩
-  · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at rest
+  simp only [liftArith, mapError_ok_iff, pure, Except.pure, Except.ok.injEq,
+    Prod.mk.injEq] at rest
+  obtain ⟨count, countOk, _, shuffleOk, activeEq, rfl⟩ := rest
+  obtain ⟨-, value⟩ := ofNatChecked_ok_iff.mp countOk
+  have same : count = UInt64.ofNat (getActiveValidatorIndices state epoch).toArray.size := by
+    rw [← value, UInt64.ofNat_toNat]
+  subst same
+  exact ⟨seed, seedOk, shuffleOk, activeEq.symm⟩
 
 /-- A successful shuffle has checked every active registry position. -/
 theorem getActiveValidatorIndicesChecked_of_attesterShuffle
@@ -660,18 +662,21 @@ theorem getActiveValidatorIndicesChecked_of_attesterShuffle
 theorem getCommitteeCountPerSlotChecked_of_within {state : BeaconState preset fork}
     (within : state.RegistryWithinLimit) (epoch : Epoch) :
     getCommitteeCountPerSlotChecked state epoch = .ok (getCommitteeCountPerSlot state epoch) := by
-  simp [getCommitteeCountPerSlotChecked, getActiveValidatorIndicesChecked_of_within within,
-    liftArith, ofNatChecked_of_lt (length_getActiveValidatorIndices_lt within epoch),
-    Except.mapError, bind, Except.bind, pure, Except.pure]
+  simp [getCommitteeCountPerSlotChecked, getCommitteeCountPerSlot,
+    getActiveValidatorIndicesChecked_of_within within, liftArith,
+    ofNatChecked_of_lt (length_getActiveValidatorIndices_lt within epoch), Except.mapError, bind,
+    Except.bind, pure, Except.pure]
 
 /-- A successful checked count agrees with the pure committee count. -/
 theorem getCommitteeCountPerSlotChecked_ok {state : BeaconState preset fork} {epoch : Epoch}
     {count : UInt64} (computed : getCommitteeCountPerSlotChecked state epoch = .ok count) :
     count = getCommitteeCountPerSlot state epoch := by
-  simp only [getCommitteeCountPerSlotChecked, bind_ok_iff, pure, Except.pure,
-    Except.ok.injEq] at computed
-  obtain ⟨_, _, _, _, same⟩ := computed
-  exact same.symm
+  simp only [getCommitteeCountPerSlotChecked, bind_ok_iff, liftArith, mapError_ok_iff, pure,
+    Except.pure, Except.ok.injEq] at computed
+  obtain ⟨active, checked, converted, convertedOk, rfl⟩ := computed
+  obtain rfl := getActiveValidatorIndicesChecked_ok checked
+  obtain ⟨-, value⟩ := ofNatChecked_ok_iff.mp convertedOk
+  rw [getCommitteeCountPerSlot, ← value, Nat.toUInt64_eq, UInt64.ofNat_toNat]
 
 /-- A beacon committee that has a value is one committee cut from the active indices.
 
@@ -907,11 +912,13 @@ theorem exists_mem_getBeaconCommittee {state : BeaconState preset fork} {epoch :
     (count := UInt64.ofNat (getActiveValidatorIndices state epoch).toArray.size)
     (by rw [activeSize]; simpa using small)
   rw [computeCommittee_of_le (by simpa using small)] at computed
-  have lengthFits : (getActiveValidatorIndices state epoch).toArray.size < 2 ^ 64 :=
-    Nat.lt_of_le_of_lt (by simpa using small) (by decide)
+  have lengthOk : ofNatChecked (getActiveValidatorIndices state epoch).toArray.size =
+      .ok (UInt64.ofNat (getActiveValidatorIndices state epoch).toArray.size) := by
+    rw [ofNatChecked_of_lt (Nat.lt_of_le_of_lt (by simpa using small) (by decide)),
+      Nat.toUInt64_eq]
   simp only [getBeaconCommittee, attesterShuffle, beaconCommitteeOf, epochEq, seedOk, indicesFit,
-    lengthFits, ↓reduceIte, shuffleOk, activeSize, liftArith, productOk, sumOk, countOk, bind,
-    Except.bind, Except.mapError, pure, Except.pure, positionEq]
+    lengthOk, shuffleOk, activeSize, liftArith, productOk, sumOk, countOk, bind, Except.bind,
+    Except.mapError, pure, Except.pure, positionEq]
   rw [computed]
 
 /-- A beacon committee is cut from the shuffle of the epoch of its slot.
