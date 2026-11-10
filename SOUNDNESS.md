@@ -440,7 +440,13 @@ No theorem bounds the probability of forging a signature, which rests on the dis
 There, `verify_neg` shows that `(r, -s)` verifies whenever `(r, s)` does, when opposite points share their encoding, as `x` coordinates do.
 So the game counts only messages that were never signed.
 `forgeAdvantage_collision_pos` shows that a collision of the message hash wins that game with positive probability.
-No theorem connects that game to EthLib's signing and verification.
+`ecdsa_verify_eq_verify_ecdsaScheme` (`Proofs/Secp256k1/Security/Refinement.lean`) proves that `verify` is the game's verification, with the bijection the identity, for `r` and `s` below `n`.
+`exists_signNonce_of_sign` proves that every signature from `sign` is the game's signature for some nonzero nonce; that is correctness of signing, and says nothing about how RFC 6979 draws the nonces.
+The game draws the bijection uniformly, so a bound on it would apply to EthLib, where the bijection is the identity, only under the heuristic of the source that the identity behaves as a bijective random oracle.
+Such a bound would also need the pseudorandomness of RFC 6979, which no theorem states, and it ignores the 16-nonce limit and the failure of `sign` when `x_R >= n`.
+A forger of transactions only needs a key with the right address, so a bound for them also needs a term for the Keccak-256 hash of the key.
+The low-s rule of transactions only restricts the forger, so it needs no term.
+The model's encoding, the `x` coordinate as a 256-bit string, meets part (b) of Definition 2 of the source (`ecdsaScheme_semiInjective`), which their Lemma 2 proves.
 
 `ecdh_eq_ok_iff` (`Proofs/Secp256k1/Ecdh.lean`) states ECDH in the group of the curve.
 It is the Diffie-Hellman primitive of SEC 1 v2 §3.3.1, with no key derivation function.
