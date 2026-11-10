@@ -275,37 +275,13 @@ theorem mem_getActiveValidatorIndices {state : BeaconState preset fork}
   mem_iff_of_getActiveValidatorIndicesChecked_ok
     (getActiveValidatorIndicesChecked_of_within within epoch)
 
-/-- After a successful checked read, the active indices increase strictly. -/
-theorem sorted_of_getActiveValidatorIndicesChecked_ok {state : BeaconState preset fork}
-    {epoch : Epoch} {indices : List ValidatorIndex}
-    (computed : getActiveValidatorIndicesChecked state epoch = .ok indices) :
-    indices.Pairwise (· < ·) := by
-  rw [getActiveValidatorIndicesChecked, liftArith, mapError_ok_iff,
-    mapM_ofNatChecked_eq_ok_iff] at computed
-  obtain ⟨small, rfl⟩ := computed
-  have base : state.validators.data.toList.zipIdx.Pairwise (fun a b => a.2 < b.2) := by
-    have := List.pairwise_lt_range' (s := 0) (n := state.validators.data.toList.length)
-    rw [← List.zipIdx_map_snd 0] at this
-    exact List.pairwise_map.mp this
-  have positions : (state.validators.data.toList.zipIdx.filterMap fun (validator, position) =>
-      if isActiveValidator validator epoch then some position else none).Pairwise (· < ·) := by
-    refine List.Pairwise.filterMap _ ?_ base
-    rintro ⟨v, i⟩ ⟨w, j⟩ lt a ha b hb
-    simp only [Option.ite_none_right_eq_some, Option.some.injEq] at ha hb
-    obtain ⟨-, rfl⟩ := ha
-    obtain ⟨-, rfl⟩ := hb
-    exact lt
-  rw [List.pairwise_map]
-  refine positions.imp_of_mem fun {i j} mi mj lt => ?_
-  rw [UInt64.lt_iff_toNat_lt, Nat.toUInt64_eq, Nat.toUInt64_eq,
-    UInt64.toNat_ofNat_of_lt' (small i mi), UInt64.toNat_ofNat_of_lt' (small j mj)]
-  exact lt
-
 /-- The positions of the validators that pass a test increase strictly, as 64-bit indices.
 
-That needs a registry within its limit. -/
-theorem validatorPositions_sorted {state : BeaconState preset fork}
-    (within : state.RegistryWithinLimit) (test : Validator → Bool) :
+That needs each position that passes to be below `2^64`. -/
+theorem validatorPositions_sorted_of_fits {state : BeaconState preset fork}
+    (test : Validator → Bool)
+    (fits : ∀ entry ∈ state.validators.data.toList.zipIdx, test entry.1 = true →
+      entry.2 < 2 ^ 64) :
     (state.validators.data.toList.zipIdx.filterMap fun (validator, index) =>
       if test validator then some index.toUInt64 else none).Pairwise (· < ·) := by
   have base : state.validators.data.toList.zipIdx.Pairwise (fun a b => a.2 < b.2) := by
@@ -315,12 +291,36 @@ theorem validatorPositions_sorted {state : BeaconState preset fork}
   refine List.Pairwise.filterMap _ ?_ (List.Pairwise.and_mem.mp base)
   rintro ⟨v, i⟩ ⟨w, j⟩ ⟨mi, mj, lt⟩ a ha b hb
   simp only [Option.ite_none_right_eq_some, Option.some.injEq] at ha hb
-  obtain ⟨-, rfl⟩ := ha
-  obtain ⟨-, rfl⟩ := hb
-  have hi : i < state.validators.data.size := by simpa using (List.mem_zipIdx' mi).1
-  have hj : j < state.validators.data.size := by simpa using (List.mem_zipIdx' mj).1
-  rw [UInt64.lt_iff_toNat_lt, toNat_toUInt64_of_lt within hi, toNat_toUInt64_of_lt within hj]
+  obtain ⟨vi, rfl⟩ := ha
+  obtain ⟨wj, rfl⟩ := hb
+  rw [UInt64.lt_iff_toNat_lt, Nat.toUInt64_eq, Nat.toUInt64_eq,
+    UInt64.toNat_ofNat_of_lt' (fits _ mi vi), UInt64.toNat_ofNat_of_lt' (fits _ mj wj)]
   exact lt
+
+/-- The positions of the validators that pass a test increase strictly, as 64-bit indices.
+
+That needs a registry within its limit. -/
+theorem validatorPositions_sorted {state : BeaconState preset fork}
+    (within : state.RegistryWithinLimit) (test : Validator → Bool) :
+    (state.validators.data.toList.zipIdx.filterMap fun (validator, index) =>
+      if test validator then some index.toUInt64 else none).Pairwise (· < ·) :=
+  validatorPositions_sorted_of_fits test fun entry member _ => by
+    have inside : entry.2 < state.validators.data.size := by
+      simpa using (List.mem_zipIdx' member).1
+    have limit := preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt
+    have bound : state.validators.data.size ≤ _ := within
+    omega
+
+/-- After a successful checked read, the active indices increase strictly. -/
+theorem sorted_of_getActiveValidatorIndicesChecked_ok {state : BeaconState preset fork}
+    {epoch : Epoch} {indices : List ValidatorIndex}
+    (computed : getActiveValidatorIndicesChecked state epoch = .ok indices) :
+    indices.Pairwise (· < ·) := by
+  obtain rfl := getActiveValidatorIndicesChecked_ok computed
+  refine validatorPositions_sorted_of_fits (isActiveValidator · epoch) fun entry member active => ?_
+  obtain ⟨inside, read⟩ := Array.getElem?_eq_some_iff.mp
+    (by simpa using List.mem_zipIdx_iff_getElem?.mp member)
+  exact getActiveValidatorIndicesChecked_eq_ok_iff.mp computed entry.2 inside (read ▸ active)
 
 /-- The active indices increase strictly. -/
 theorem getActiveValidatorIndices_sorted {state : BeaconState preset fork}

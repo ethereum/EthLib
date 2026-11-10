@@ -412,16 +412,35 @@ theorem getEligibleValidatorIndices_eq {eligible : List ValidatorIndex}
     obtain ⟨_, same⟩ := ofNatChecked_ok_iff.mp (mapError_ok_iff.mp (liftAccessor_ok.mp converted))
     rw [← same, Nat.toUInt64_eq, UInt64.ofNat_toNat]
 
-/-- The eligible indices increase strictly, for a registry within its limit. -/
+/-- A successful computation leaves each eligible position below `2^64`. -/
+theorem getEligibleValidatorIndices_fits {eligible : List ValidatorIndex}
+    (computed : getEligibleValidatorIndices state = .ok eligible) :
+    ∀ entry ∈ state.validators.data.toList.zipIdx,
+      (match isEligibleValidator (getPreviousEpoch state) entry.1 with
+        | .ok passes => passes
+        | .error _ => false) = true → entry.2 < 2 ^ 64 := by
+  rintro ⟨validator, position⟩ member eligible
+  unfold getEligibleValidatorIndices at computed
+  obtain ⟨_, step⟩ := filterMapM_ok_of_mem computed _ member
+  dsimp only at step eligible
+  rw [bind_ok_iff] at step
+  obtain ⟨decided, tested, step⟩ := step
+  rw [tested] at eligible
+  subst eligible
+  simp only [↓reduceIte, bind_ok_iff] at step
+  obtain ⟨index, converted, -⟩ := step
+  exact (ofNatChecked_ok_iff.mp (mapError_ok_iff.mp (liftAccessor_ok.mp converted))).1
+
+/-- The eligible indices increase strictly. -/
 theorem getEligibleValidatorIndices_sorted {eligible : List ValidatorIndex}
-    (within : state.RegistryWithinLimit)
     (computed : getEligibleValidatorIndices state = .ok eligible) :
     eligible.Pairwise (· < ·) := by
+  have fits := getEligibleValidatorIndices_fits computed
   rw [getEligibleValidatorIndices_eq computed]
-  exact validatorPositions_sorted within fun validator =>
+  exact validatorPositions_sorted_of_fits (fun validator =>
     match isEligibleValidator (getPreviousEpoch state) validator with
     | .ok passes => passes
-    | .error _ => false
+    | .error _ => false) fits
 
 /-- Each validator active in the previous epoch is eligible for the rewards of that epoch. -/
 theorem mem_getEligibleValidatorIndices_of_active {eligible : List ValidatorIndex}
@@ -470,7 +489,7 @@ theorem getFlagIndexDeltas_reward {altair : .altair ≤ fork}
   obtain ⟨activeBefore, -, -⟩ := mem_getUnslashedParticipatingIndices flagged index present
   obtain ⟨validator, read, isActive⟩ := (mem_getActiveValidatorIndices within).mp activeBefore
   have inside : index.toNat < state.validators.data.size := (Array.getElem?_eq_some_iff.mp read).1
-  have sorted := getEligibleValidatorIndices_sorted within listed
+  have sorted := getEligibleValidatorIndices_sorted listed
   obtain ⟨first, last, rfl⟩ :=
     List.append_of_mem (mem_getEligibleValidatorIndices_of_active listed read isActive)
   rw [List.pairwise_append, List.pairwise_cons] at sorted

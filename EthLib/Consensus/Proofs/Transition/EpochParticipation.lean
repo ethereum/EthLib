@@ -278,11 +278,9 @@ A hit loses one point, and a miss gains the score bias.
 
 Outside a leak the score then loses the recovery rate, stopping at zero.
 
-The other scores stay.
-
-That needs a registry within its limit. -/
+The other scores stay. -/
 theorem processInactivityUpdates_scores {config : Config} {altair : .altair ≤ fork}
-    (within : state.RegistryWithinLimit) (later : getCurrentEpoch state ≠ GENESIS_EPOCH)
+    (later : getCurrentEpoch state ≠ GENESIS_EPOCH)
     (computed : processInactivityUpdates config state altair = .ok after) :
     ∃ eligible, getEligibleValidatorIndices state = .ok eligible ∧
       (∀ i, (∀ index ∈ eligible, index.toNat ≠ i) →
@@ -300,7 +298,7 @@ theorem processInactivityUpdates_scores {config : Config} {altair : .altair ≤ 
   simp only [later, ↓reduceIte, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
   obtain ⟨eligible, listed, scores, folded, rfl⟩ := computed
   -- The eligible indices name each validator once, so the fold sets each eligible score once.
-  have distinct := (getEligibleValidatorIndices_ok within listed).1
+  have distinct := (getEligibleValidatorIndices_ok listed).1
   have entry (j : Nat) := foldlM_entry (entry := fun scores : InactivityScores preset fork =>
     scores.data[j]?) (j := j)
     (fun _ _ _ step other => (updateInactivityScore_getElem? step).2 j (Ne.symm other))

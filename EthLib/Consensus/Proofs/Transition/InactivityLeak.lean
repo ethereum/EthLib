@@ -173,7 +173,7 @@ theorem processRewardsAndPenalties_of_leak {config : Config} (altair : .altair �
                     (config.INACTIVITY_SCORE_BIAS.toNat *
                       (parameters preset fork).INACTIVITY_PENALTY_QUOTIENT.toNat)))) := by
   have later := getCurrentEpoch_ne_genesis_of_leak leak
-  have scoresOf := processInactivityUpdates_scores within later updated
+  have scoresOf := processInactivityUpdates_scores later updated
   unfold processInactivityUpdates at updated
   simp only [later, ↓reduceIte, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at updated
   obtain ⟨_, _, scores, _, rfl⟩ := updated
@@ -203,7 +203,7 @@ theorem processRewardsAndPenalties_of_leak {config : Config} (altair : .altair �
   obtain rfl : target = matching :=
     (Except.ok.inj (matchingOk.symm.trans (by exact targetOk'))).symm
   obtain ⟨eligibleList, eligibleOk, unlisted, listed⟩ := scoresOf
-  obtain ⟨-, decided⟩ := getEligibleValidatorIndices_ok within eligibleOk
+  obtain ⟨-, decided⟩ := getEligibleValidatorIndices_ok eligibleOk
   refine ⟨total, source, target, totalOk, sourceOk', targetOk',
     fun j inside => ?_⟩
   obtain ⟨eligible, eligibleOk', sourceNo, sourceYes⟩ := sourceFacts j inside
