@@ -33,7 +33,7 @@ From Pectra up to BPO5, a system call to the contract succeeds.
 
 It leaves the storage that the EIP describes.
 
-A system call to an address with no code is not covered here.
+A call to empty code keeps the block state and records the address, at every fork from Pectra.
 
 [eip-2935-bytecode]: https://eips.ethereum.org/EIPS/eip-2935#bytecode
 [eip-2935-contract]: https://eips.ethereum.org/EIPS/eip-2935#block-hash-history-contract
@@ -367,5 +367,28 @@ theorem systemCall_set {env : BlockEnvironment fork} {block : State.BlockState} 
       rw [← htarget]
       exact spec_set (Nat.le_trans (by decide) hfork) hglam hcaller hstatic (htarget ▸ hacc)
         hnumber hbound (by rw [hgas]; decide)
+
+/-- Empty history storage code keeps the body after the beacon call and records the address.
+
+The empty-code condition is on that intermediate state, not on the state before the beacon call.
+
+This is the silent failure required by [EIP-2935][eip2935].
+
+It holds at every fork from Pectra, with either gas meter.
+
+[eip2935]: https://eips.ethereum.org/EIPS/eip-2935#block-processing -/
+theorem startSystemCalls_of_empty {env : BlockEnvironment fork} {body mid : BodyState}
+    {out : SystemCallOutput} {parentHash : EthLib.Base.Hash32} (hfork : .pectra ≤ fork)
+    (hbeacon : systemCall env body.block BEACON_ROOTS_ADDRESS
+      ⟨(env.parentBeaconBlockRoot (Nat.le_trans (by decide) hfork)).toArray⟩ = .ok out)
+    (hjoin : body.join out.state = .ok mid)
+    (hcode : codeAt mid.block HISTORY_STORAGE_ADDRESS = .ok .empty) :
+    startSystemCalls env parentHash body =
+      .ok { mid with builder := mid.builder.record HISTORY_STORAGE_ADDRESS id } := by
+  have hdencun : .dencun ≤ fork := Nat.le_trans (by decide) hfork
+  simp only [startSystemCalls, hdencun, ↓reduceDIte, hbeacon, bind, Except.bind, hjoin,
+    Except.mapError, hfork, ↓reduceIte,
+    systemCall_of_empty (Nat.le_trans (by decide) hfork) hcode addedAt_HISTORY_STORAGE_ADDRESS,
+    BodyState.join_recordAccountRead]
 
 end EthLib.Execution.Blocks.HistoryStorage
