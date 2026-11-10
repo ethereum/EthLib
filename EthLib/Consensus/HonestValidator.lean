@@ -17,8 +17,6 @@ They are what it computes to propose, attest, aggregate and serve on a sync comm
 
 A validator finds its committee for an epoch, and whether it proposes a block.
 
-The committees that it searches are cut from one shuffle, computed once for the epoch.
-
 From Altair, it finds whether it serves on a sync committee, and on which subnets.
 
 From Gloas, it finds the slot of its payload timeliness committee, and the slots it will propose.
@@ -112,23 +110,13 @@ def ValidatorDutyError.code : ValidatorDutyError → UInt32
 
 /-- The first committee of some slots and indices that holds a validator.
 
-It comes with its index and its slot. -/
-def findCommittee (state : BeaconState preset fork) (validatorIndex : ValidatorIndex) :
-    List (Slot × CommitteeIndex) →
-      Except ValidatorDutyError (Option (Array ValidatorIndex × CommitteeIndex × Slot))
-  | [] => return none
-  | (slot, index) :: rest => do
-    let committee ← (getBeaconCommittee state slot index).mapError .accessor
-    if validatorIndex ∈ committee then return some (committee, index, slot)
-    findCommittee state validatorIndex rest
-
-/-- The first committee of some slots and indices that holds a validator.
-
 It comes with its index and its slot.
 
 The committees are cut from the given active validators and shuffle.
 
-Each committee is cut with the given count of committees per slot. -/
+Each committee is cut with the given count of committees per slot.
+
+A caller computes the shuffle and the count once, for all the committees of an epoch. -/
 def findCommitteeOf (preset : Preset) (validatorIndex : ValidatorIndex) (perSlot : UInt64)
     (active : Array ValidatorIndex) (shuffled : Array UInt64) :
     List (Slot × CommitteeIndex) →
@@ -157,18 +145,22 @@ It fails for an epoch after the next one, and when a committee of the epoch has 
 
 It also fails when the next epoch, the first slot or that slot plus an epoch overflows 64 bits.
 
-The committees share one shuffle of the active validators, computed once for the epoch. -/
+The committees share one shuffle of the active validators, computed once per call. -/
 def getCommitteeAssignment (state : BeaconState preset fork) (epoch : Epoch)
     (validatorIndex : ValidatorIndex) :
     Except ValidatorDutyError (Option (Array ValidatorIndex × CommitteeIndex × Slot)) := do
   let nextEpoch ← (addChecked (getCurrentEpoch state) 1).mapError .arith
   if epoch ≤ nextEpoch then
     match ← committeePositions state epoch with
-    -- With no slot there is no committee to cut, and the shuffle could fail, so it is not read.
-    | [] => return none
-    -- The slots of the positions are in the epoch, so their committees come from its shuffle.
+    -- Only a preset with no slot in an epoch lists no committee.
     --
-    -- Each committee alone reads the shuffle before its cut, so reading it first changes no error.
+    -- There a failing shuffle would turn the empty answer into an error, so it is not read.
+    | [] => return none
+    -- The listed slots are all in the epoch, so their committees come from its shuffle.
+    --
+    -- The first committee alone reads the same shuffle before its cut.
+    --
+    -- So reading the shuffle first changes no error.
     | positions@(_ :: _) =>
       let (active, shuffled) ← (attesterShuffle state epoch).mapError .accessor
       findCommitteeOf preset validatorIndex (getCommitteeCountPerSlot state epoch) active shuffled
