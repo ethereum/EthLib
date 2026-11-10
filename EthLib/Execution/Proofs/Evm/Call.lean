@@ -12,6 +12,7 @@ public import EthLib.Execution.Proofs.Evm.Call.StaticMessage
 public import EthLib.Execution.Proofs.Evm.Call.StaticStep
 public import EthLib.Execution.Proofs.Evm.Call.StepRules
 public import EthLib.Execution.Proofs.Evm.Call.ToDelete
+public import EthLib.Execution.Proofs.Evm.Call.Touched
 public import EthLib.Execution.Proofs.Evm.Call.TransferLog
 
 /-!

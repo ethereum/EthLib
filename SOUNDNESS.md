@@ -1217,6 +1217,12 @@ A step that sends a message keeps it once the frame that ends the message has th
 `processMessage_sameOutside_of_error` proves that a call that ends with an error reads as the state it is sent from at every address, at every fork.
 That covers the account, the storage and the transient storage, and `getStorage_processMessage_of_error` states it for one storage word.
 
+From Cancun, `deletesCreated_processMessage` (`Execution/Proofs/Evm/Call/ToDelete.lean`) proves that a call marks for deletion only accounts already marked or created in the transaction.
+From Paris, `touchedAccounts_processMessage` (`Execution/Proofs/Evm/Call/Touched.lean`) proves that a call touches no account beyond those of its substate.
+`sameOutside_deleteAccounts` (`Execution/Proofs/Transactions/Deletion.lean`) proves that the deletions at the end of a transaction change only its accounts to delete and its touched accounts.
+`sameOutside_deleteAccounts_of_dencun` proves that, from Cancun, the deletions after the settlement of gas change only the created accounts of the settled state, when its message starts from the substate of a transaction.
+`runTransaction_deletes_created` states this for the run of a transaction, with each of its steps named; there the created accounts are those the transaction created.
+
 The facts of `Logic/GasMono.lean` and `Logic/LessGas.lean` are for the one-counter meter, the meter of every fork before Glamsterdam.
 `Logic.addGas k` adds `k` to the gas of a frame.
 `Logic.RunMono` says that an instruction, on each frame, fails or gives a frame `b`.
