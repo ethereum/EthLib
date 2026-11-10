@@ -1410,17 +1410,18 @@ Its first theorems bound the writes to the sender, the beneficiary and the autho
 `buyGas_sender` in `Settlement.lean` proves that buying gas raises the nonce of the sender by one and takes the fees from its balance.
 `buyGas_keeps` proves that it changes no code hash of the sender, no word of storage and no code.
 `settleGas_accounts` proves that the settlement refunds the sender and pays the priority fee to the beneficiary.
-It changes no nonce, code hash or code, and storage only at a deleted empty account.
+It changes no nonce, code hash or code, and storage only at a deleted sender or beneficiary.
 
 `authority_applyAuthorization` proves that one accepted authorization in scope sets the delegation code and raises the nonce of its authority by one.
 The authorities after the whole list are given against the state that the authorizations leave; the fold over the list is not unrolled.
 `processMessageCall_of_halt` in `Process.lean` puts the state back to the state before the authorizations when the message halts before its first frame, as EIP-8037 asks.
 `processMessageCall_reads_of_error` proves that a failed frame reads as the state of its first frame, so a failed call keeps its accepted authorizations, as EIP-7702 asks.
 
-`processTransaction_values_of_error` combines these results.
+`runTransaction_values_of_error` combines these results for one gas meter.
 It gives the nonce, the code hash, the balance and the storage of every address against the state before settlement.
-That state reads as the state after the gas purchase, or, for a call, as the state that its authorizations leave.
-The theorem does not say which of the two cases a given message takes.
+That state reads as the state after the gas purchase when the transaction creates a contract or its first frame never starts.
+When the first frame of a call starts and fails, it reads as the state that the authorizations leave.
+`processTransaction_values_of_error` restates it for every fork before Hegotá, without the case that the message takes.
 `block_of_output` proves that the block after the transaction reads as the state that the transaction leaves.
 
 ### Transaction gas
