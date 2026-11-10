@@ -102,7 +102,9 @@ def checkExport (args : PyValue) : Result PyValue :=
 
 The forks of the chain are an RLP list of `[name, first block]`, the first one from block 0.
 
-The recent blocks are an RLP list of blocks, the last seven of the chain, ending with the parent.
+The recent blocks are an RLP list of blocks, oldest first, ending with the parent.
+
+The last seven blocks are enough.
 
 A check seal of 0 leaves out the proof of work of the ommers, as for test chains. -/
 @[export eth_pow_validate_ommers]
