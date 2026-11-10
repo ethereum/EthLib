@@ -161,6 +161,14 @@ theorem lazyPermOracle_inr_run (b : A) (c : PermCache A) :
       | none => (fun a => (a, (a, b) :: c)) <$>
         (uniformOutside (c.map Prod.fst) b : ProbComp A) := rfl
 
+/-- A run of coins alone with independent answers leaves the state unchanged. -/
+theorem simulateQ_indepPermImpl_liftM_run {α : Type} (oa : ProbComp α) (s : IndepState A) :
+    (simulateQ indepPermImpl (liftM oa : PermComp A α)).run s = (·, s) <$> oa := by
+  rw [QueryImpl.simulateQ_liftM_eq_of_query indepPermImpl
+    ((QueryImpl.id' unifSpec).liftTarget (StateT (IndepState A) ProbComp))
+    (fun t => by simp [indepPermImpl]) oa]
+  simp [StateT.run_monadLift]
+
 /-- A query of the permutation keeps the state, or adds one pair and keeps a raised flag. -/
 theorem indepPermOracle_step (q : (PermSpec A).Domain) (s : IndepState A) (z)
     (hz : z ∈ support ((indepPermOracle q).run s)) :

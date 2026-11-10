@@ -8,21 +8,31 @@ public import EthLib.Cryptography.Proofs.IndependentOverlay
 
 Run the key-only forger on a fixed key, with independent answers to `Π`.
 
-Ask each new forward answer of one outside oracle with no input, and log the query.
+Ask each new forward answer of one outside oracle with no input, and log it with its query.
 
 The run then ends with the forgery, the result of the check, the cache, the flag and the log.
 
 With the key drawn uniformly, it wins with the chance of the game with independent answers.
 
-The forking lemma can rewind this run at the query that answered the forgery's conversion.
+The run logs at most one more pair than the forger asks for `Π` or its inverse.
 
-The run asks the outside oracle at most once more than the forger asks `Π` or its inverse.
+When the outside oracle answered the conversion of a forgery, a replay fork can rewind there.
+
+The split between forgeries from forward and inverse pairs is made on this run.
 
 The source is [Fersch, Kiltz, Poettering, CCS 2016](https://doi.org/10.1145/2976749.2978413).
 
-This is their algorithm `A` of Figure 8, in the proof of their Theorem 2, before its aborts.
+The run is their Game G1 of Figure 7, in the proof of their Theorem 2.
 
-Its answers to new forward queries are their values `β_1, …, β_Q`, asked one at a time.
+It takes the forward change of their Game G2, lines 01 and 19: the values `β_1, …, β_Q`.
+
+Here each is asked of the outside oracle when needed.
+
+Their Game G2 also changes the inverse answers, in lines 26 to 28, which this run leaves out.
+
+Their `Q` counts the query of the conversion, which their forger asks first.
+
+Here the check may ask it, hence one more pair.
 -/
 
 @[expose] public section
@@ -43,8 +53,10 @@ structure KeyOnlyTrace (F A M : Type) where
   cache : PermCache A
   /-- Whether a new answer repeated a cached value in the direction of its query. -/
   bad : Bool
-  /-- The new forward queries, the first one first. -/
-  forward : List A
+  /-- The new forward queries with their answers, the first one first.
+
+  With no flag raised, a pair of the cache came from a forward query exactly when it is here. -/
+  forward : List (A × A)
 
 variable [Field F] [DecidableEq F] [AddCommGroup G] [Module F G] [DecidableEq G]
 
@@ -74,7 +86,9 @@ def keyOnlyOverlay (scheme : Scheme F G A M) (adversary : KeyOnlyAdversary F G A
   (fun r => ⟨r.1.1, r.1.2, r.2.1.1, r.2.1.2, r.2.2⟩) <$>
     (simulateQ overlayImpl (keyOnlyRunQ scheme adversary X)).run (([], false), [])
 
-/-- The run logs at most `q + 1` new forward queries, when the forger asks `Π` at most `q` times. -/
+/-- The run logs at most `q + 1` pairs.
+
+The forger must ask for `Π` or its inverse at most `q` times. -/
 theorem length_forward_le (scheme : Scheme F G A M) (adversary : KeyOnlyAdversary F G A M)
     (X : G) {q : ℕ} (hq : IsQueryBoundP (adversary.main X) (·.isRight = true) q)
     {tr : KeyOnlyTrace F A M} (htr : tr ∈ support (keyOnlyOverlay scheme adversary X)) :
