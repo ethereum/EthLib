@@ -235,7 +235,7 @@ theorem slackJustifiedCheckpoints_chainRoot_of_chainSteps
   slackJustifiedCheckpoints_activeSetAt_of_chainSteps positive window apart computed steps
     fun forked after reach step rest =>
       ⟨large forked after reach step rest,
-        fun _ member => Relation.ReflTransGen.single ⟨after, reach.tail step, rest, member⟩,
+        fun _ member => Relation.ReflTransGen.single ⟨after, reach.tail step, member⟩,
         small forked after reach step rest⟩
 
 end EthLib.Consensus
