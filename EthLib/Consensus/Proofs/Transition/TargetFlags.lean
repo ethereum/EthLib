@@ -56,7 +56,7 @@ def TargetFlagAt (participation : EpochParticipation preset fork) (position : Na
     hasFlag flags TIMELY_TARGET_FLAG_INDEX = true
 
 /-- Setting a flag other than the target flag never sets the target flag. -/
-private theorem hasFlag_addFlag_target (flags : ParticipationFlags) (flag : Fin 3)
+theorem hasFlag_addFlag_target (flags : ParticipationFlags) (flag : Fin 3)
     (set : hasFlag (addFlag flags flag.val.toUInt64) TIMELY_TARGET_FLAG_INDEX = true) :
     hasFlag flags TIMELY_TARGET_FLAG_INDEX = true ∨
       flag.val.toUInt64 = TIMELY_TARGET_FLAG_INDEX := by
