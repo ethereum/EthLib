@@ -475,7 +475,13 @@ So its advantage is the source's times `(n - 1) / n`, where `n` is the number of
 `forward_point_eq_answer_ne_of_mem_support_contextFork` proves that the two runs returned by a replay fork at the new forward query of the forgery's point share that point and got different answers there.
 `le_prEvent_isSome_contextFork_keyOnlyOutsideRun` bounds the chance of the fork from below on each fixed key, in the form of Lemma 1 of the source; Lemma 1 draws the key at random, and no theorem averages over the key yet.
 Unlike Figure 2 of the source, the fork draws the coins after the fork point again.
-No theorem yet proves that the check's answer from the bijection is the logged answer at the fork index, nor extracts the key from the two forgeries.
+`reduce_forward_eq_of_forkIndex_eq_some` (`Proofs/Secp256k1/Security/ForwardCase.lean`) proves that the check of a run with a fork index read the logged answer at that index, so `ψ` maps that answer to the forgery's `t`.
+It rests on an invariant of the run: each logged pair stays cached, and while no flag is raised the cache is a partial bijection.
+`forward_eq_of_mem_support_contextFork` (`Proofs/Secp256k1/Security/ForwardCase.lean`) gives, for both runs of the fork, the shared point and the two different answers, with `ψ` mapping each answer to the `t` of its forgery.
+For a forger with at most `q` queries to the bijection or its inverse on every key, `keyOnlyIndepAdvantage_le_forkIndex_add_notMem` (`Proofs/Secp256k1/Security/KeyOnlyOutside.lean`) bounds its chance to win with independent answers, over a uniform key, by the chance of a fork index plus the chance that the check passes on a point that was not a new forward query.
+`prEvent_inverse_le_dlog`, below, bounds the second chance.
+The reduction of Figure 10 to division resistance plants its challenge at one query of a single run, so it will also need a fact on the law of the fork, not only on its support.
+No theorem yet extracts the key from the two forgeries, states the ψ-relative division resistance of the hash (Definition 5 of the source) or bounds by it the abort of line 10 of Figure 9, or averages the fork's bound over the key.
 `redrawInverse_fst_evalDistEq` (`Proofs/Secp256k1/Security/Redraw.lean`) proves the step of lines 25 to 28 of Figure 7 of the source: a uniform answer that encodes a nonzero multiple of the base point, redrawn as the encoding of `a g` for a uniform nonzero `a`, is still uniform.
 It assumes that the base point is nonzero, that `2` is nonzero in the scalars, that the encoding is semi-injective, and that opposite points share their encoding; the encoding is then exactly 2-to-1 on those points.
 So it covers ECDSA, not the injective case of Definition 2 (b) of the source.
@@ -1038,8 +1044,8 @@ In that second case the write fails and aborts the run.
 `memoryWrite_comm_of_disjoint` proves that two writes within memory to disjoint ranges commute.
 `memoryReadBytes_memoryWrite_memoryWrite_rev` proves the same read when the higher write comes first.
 From Berlin, the rule for SLOAD takes as a hypothesis whether the slot is cold, and charges 2100 or 100 by EIP-2929.
-`Logic.sstore` is the rule for SSTORE from Berlin to before Glamsterdam, in a frame that may change the state and holds more than 2300 gas.
-It charges `sstoreCost` and adds `sstoreRefund` to the refund counter, from the original, current and new words and whether the slot is cold.
+`Logic.sstore` is the rule for SSTORE from Berlin, with one counter of gas, in a frame that may change the state and holds more than 2300 gas.
+It charges `sstoreTotalCost`, the price and the state gas of the write, ignores the refill of state gas, and adds `sstoreRefund` to the refund counter, from the original, current and new words and whether the slot is cold.
 It takes the state that the write gives as a hypothesis, since the write needs the account of the current address.
 `Logic.log` (`Logic/Log.lean`) is the rule for LOG0 to LOG4, at every fork with the one-counter meter, in a frame that may change the state.
 It appends one log of the current address with the topics and the range of memory.
@@ -1345,6 +1351,20 @@ Both hold for every bound on the gas of messages and every runner of messages.
 `Logic.SpecOn.runsOk` proves the same for a specification whose runner may fail only on the messages that it names.
 It assumes a runner that never fails on those messages.
 `Logic.not_runsOk_of_lt` proves that no run with less gas than `cost` succeeds, from a specification to a halt that pays `cost`, as above.
+
+### System contracts
+
+The four modules under `Execution/Proofs/Blocks/SystemCall/` for beacon roots, historical block hashes, withdrawal requests and consolidation requests prove the effects of their deployed bytecode.
+Their `systemCall_set` and `systemCall_dequeue` theorems hold from each contract's activation, with the gas meter of the fork, including the state gas meter from Glamsterdam.
+They require the specified bytecode at the contract's address.
+The queue theorems assume bounds on the storage counters, and the history theorem requires a block number from 1 to below `2^256`.
+
+`Logic.Reaches.followsMeter` lifts a normal one-counter run to the state gas meter when its execution gas initially covers that counter.
+The counter pays execution gas and state gas and ignores refills, so it gives a conservative budget.
+`Logic.SupportedCode` checks each opcode, skipping PUSH data, against a fixed list of instructions.
+The list leaves out GAS and every instruction that sends a message.
+The lifted run has the same fields outside its meter, including its state and output.
+`SystemContract.systemCall_of_writesStorage` applies this result to the actual system-call runner and its initial reservoir.
 
 ### SHA-256 precompile
 

@@ -5,6 +5,7 @@ public import EthLib.Consensus.Proofs.Transition.EpochRewards
 public import EthLib.Consensus.Proofs.Transition.EpochUpdates
 public import EthLib.Consensus.Proofs.Transition.Execution
 public import EthLib.Consensus.Proofs.Transition.Operations
+public import EthLib.Consensus.Proofs.Transition.ParentPayload
 public import EthLib.Consensus.Proofs.Transition.Payload
 public import EthLib.Consensus.Proofs.Transition.Requests
 public import EthLib.Consensus.Proofs.Transition.StateTransition
@@ -951,46 +952,26 @@ theorem frame_processBuilderExitRequest {gloas : .glamsterdam ≤ fork}
 
 theorem frame_settleParentPayment {gloas : .glamsterdam ≤ fork}
     (computed : settleParentPayment state gloas = .ok after) : BlockFrame state after := by
-  unfold settleParentPayment at computed
-  split at computed
-  · have settled := liftAccessor_ok.mp computed
-    unfold settleBuilderPayment at settled
-    split at settled
-    · cases settled
-      exact BlockFrame.of_validators ⟨rfl, rfl⟩
-    · cases settled
-  · simp only at computed
-    split at computed <;> cases computed <;>
-      exact BlockFrame.of_validators ⟨rfl, rfl⟩
+  rw [settleParentPayment_eq computed]
+  exact BlockFrame.of_validators ⟨rfl, rfl⟩
 
 theorem frame_processParentExecutionPayload {gloas : .glamsterdam ≤ fork}
     {body : BeaconBlockBody preset fork}
     (computed : processParentExecutionPayload config checks state gloas body = .ok after) :
     BlockFrame state after := by
-  unfold processParentExecutionPayload at computed
-  dsimp only at computed
-  split at computed
-  · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-    obtain ⟨_, _, rfl⟩ := computed
-    exact BlockFrame.refl _
-  simp only [bind_ok_iff] at computed
-  obtain ⟨_, _, _, _, applied⟩ := computed
-  unfold applyParentExecutionPayload at applied
-  simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at applied
-  obtain ⟨_, _, _, _, _, _, _, _, settled, settledOk, requested, requestedOk, _, _, rfl⟩ :=
-    applied
-  unfold processParentRequests at requestedOk
-  simp only [bind_ok_iff, ← Array.foldlM_toList] at requestedOk
-  obtain ⟨_, depositsOk, _, withdrawalsOk, _, consolidationsOk, _, buildersOk, exitsOk⟩ :=
-    requestedOk
-  exact (frame_settleParentPayment settledOk).trans <|
-    (BlockFrame.foldlM (fun _ _ _ ok => frame_processDepositRequest ok) depositsOk).trans <|
-    (BlockFrame.foldlM (fun _ _ _ ok => frame_processWithdrawalRequest ok) withdrawalsOk).trans <|
-    (BlockFrame.foldlM (fun _ _ _ ok => frame_processConsolidationRequest ok)
-      consolidationsOk).trans <|
-    (BlockFrame.foldlM (fun _ _ _ ok => frame_processBuilderDepositRequest ok) buildersOk).trans <|
-    (BlockFrame.foldlM (fun _ _ _ ok => frame_processBuilderExitRequest ok) exitsOk).trans
-      (BlockFrame.of_validators ⟨rfl, rfl⟩)
+  rcases processParentExecutionPayload_ok computed with ⟨-, -, rfl⟩ |
+    ⟨-, _, _, _, _, _, _, _, settledOk, depositsOk, withdrawalsOk, consolidationsOk, buildersOk,
+      exitsOk, -, rfl⟩
+  · exact BlockFrame.refl _
+  · exact (frame_settleParentPayment settledOk).trans <|
+      (BlockFrame.foldlM (fun _ _ _ ok => frame_processDepositRequest ok) depositsOk).trans <|
+      (BlockFrame.foldlM (fun _ _ _ ok => frame_processWithdrawalRequest ok) withdrawalsOk).trans <|
+      (BlockFrame.foldlM (fun _ _ _ ok => frame_processConsolidationRequest ok)
+        consolidationsOk).trans <|
+      (BlockFrame.foldlM (fun _ _ _ ok => frame_processBuilderDepositRequest ok)
+        buildersOk).trans <|
+      (BlockFrame.foldlM (fun _ _ _ ok => frame_processBuilderExitRequest ok) exitsOk).trans
+        (BlockFrame.of_validators ⟨rfl, rfl⟩)
 
 theorem frame_processExecutionPayloadBid {gloas : .glamsterdam ≤ fork}
     {signed : SignedExecutionPayloadBid preset fork}

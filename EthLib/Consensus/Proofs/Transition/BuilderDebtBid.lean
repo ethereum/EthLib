@@ -605,13 +605,7 @@ theorem BuilderDebtSettled.processExecutionPayloadBid (positive : preset.Payment
     simp only [isActiveBuilder, found, bind_ok_iff, pure, Except.pure, Except.ok.injEq,
       Bool.and_eq_true, beq_iff_eq, exists_eq_left'] at activeOk
     have stored : (state.builders gloas).data[signed.message.builderIndex.toNat]? =
-        some builder := by
-      unfold getBuilder at found
-      split at found
-      · rename_i stored
-        cases found
-        exact stored
-      · cases found
+        some builder := getBuilder_eq_ok_iff.mp found
     rw [slotEq, mod] at placed
     exact holds.recordBid paid placed stored activeOk.2 (by omega) rfl rfl rfl rfl
       ((parentPaymentPosition_congr rfl rfl).trans parentAt) (position.trans placed.symm)

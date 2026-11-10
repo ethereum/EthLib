@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Execution.Proofs.Blocks.SystemCall.Contract
 public import EthLib.Execution.Proofs.Blocks.SystemCall.WithdrawalRequests.Record
 
 /-!
@@ -33,9 +34,13 @@ Each operation of [the EIP][eip-7002-contract] is a function here.
 
 A theorem runs the code and shows that it computes that function.
 
-It holds from Shapella, which adds PUSH0, up to BPO5, for a frame that counts gas as one number.
+The fee and addition specifications use a one-counter frame from Shapella up to BPO5.
 
-From Pectra up to BPO5, a system call to the contract succeeds.
+The dequeue specification uses a conservative one-counter budget from Shapella.
+
+From Glamsterdam, that one-counter frame is a model for the proof, not the meter of EIP-8037.
+
+From Pectra, a system call to the contract succeeds with the gas meter of its fork.
 
 It returns the requests and leaves the storage that the EIP describes.
 
@@ -97,6 +102,10 @@ def CODE_NUMBER : Nat :=
 
 /-- The code of the withdrawal request contract, 504 bytes, by EIP-7002. -/
 def CODE : ByteArray := NatCode.ofNat CODE_NUMBER 504
+
+/-- The opcode scan skips PUSH data and finds only instructions supported by both meters. -/
+theorem supportedCode_CODE : SupportedCode CODE = true := by
+  decide +kernel
 
 /-! ## The operations -/
 
@@ -273,7 +282,7 @@ private theorem user_fee {m : Nat} {Q : Evm fork Nat → Prop} (hfork : .shapell
 
 /-- A call from another address, whose input is not 56 bytes, gets the fee or reverts.
 
-It holds from Shapella up to BPO5, like the other operations.
+It holds from Shapella up to BPO5, with the one-counter meter.
 
 The loop of the fee stops within `m` steps with no overflow, unless the inhibitor holds.
 
@@ -359,13 +368,14 @@ private theorem add_tail {S : TransactionState} {ss : Substate} {g : Nat}
     Spec fork (At CODE message 143 [] .empty g S ss returnData)
       (Added SLOTS_PER_REQUEST message.currentTarget (requestWords message.caller message.data)
         (logData message.caller message.data) S ss) := by
+  have hscale := storageGasScale_of_lt hglam
   evm_step [CODE, CODE_NUMBER_eq]
   refine sload_then (Nat.le_trans (by decide) hfork) (by evm_code [CODE, CODE_NUMBER_eq])
     (by evm_code [CODE, CODE_NUMBER_eq]) (by omega) fun g0 ss0 hg0 hl0 => ?_
   evm_step [CODE, CODE_NUMBER_eq]
   evm_step [CODE, CODE_NUMBER_eq]
   evm_step [CODE, CODE_NUMBER_eq]
-  refine sstore_then (Nat.le_trans (by decide) hfork) hglam (by evm_code [CODE, CODE_NUMBER_eq])
+  refine sstore_then (Nat.le_trans (by decide) hfork) (by evm_code [CODE, CODE_NUMBER_eq])
     (by evm_code [CODE, CODE_NUMBER_eq]) hstatic hacc (by omega)
     fun S1 hw1 hacc1 g1 ss1 hg1 hl1 => ?_
   have hw1 := WritesStorage.trans (WritesStorage.recordStorageRead _ _ _ _) hw1
@@ -387,7 +397,7 @@ private theorem add_tail {S : TransactionState} {ss : Substate} {g : Nat}
   evm_step [CODE, CODE_NUMBER_eq]
   evm_step [CODE, CODE_NUMBER_eq]
   generalize ht : storageOf S message.currentTarget 3#256 = t at hw2 ⊢
-  refine sstore_then (Nat.le_trans (by decide) hfork) hglam (by evm_code [CODE, CODE_NUMBER_eq])
+  refine sstore_then (Nat.le_trans (by decide) hfork) (by evm_code [CODE, CODE_NUMBER_eq])
     (by evm_code [CODE, CODE_NUMBER_eq]) hstatic hacc1 (by omega)
     fun S3 hw3 hacc3 g3 ss3 hg3 hl3 => ?_
   have hw3 := WritesStorage.trans hw2 hw3
@@ -396,7 +406,7 @@ private theorem add_tail {S : TransactionState} {ss : Substate} {g : Nat}
   evm_step [CODE, CODE_NUMBER_eq]
   evm_step [CODE, CODE_NUMBER_eq]
   evm_step [CODE, CODE_NUMBER_eq]
-  refine sstore_then (Nat.le_trans (by decide) hfork) hglam (by evm_code [CODE, CODE_NUMBER_eq])
+  refine sstore_then (Nat.le_trans (by decide) hfork) (by evm_code [CODE, CODE_NUMBER_eq])
     (by evm_code [CODE, CODE_NUMBER_eq]) hstatic hacc3 (by omega)
     fun S4 hw4 hacc4 g4 ss4 hg4 hl4 => ?_
   have hw4 := WritesStorage.trans hw3 hw4
@@ -405,7 +415,7 @@ private theorem add_tail {S : TransactionState} {ss : Substate} {g : Nat}
   evm_step [CODE, CODE_NUMBER_eq]
   evm_step [CODE, CODE_NUMBER_eq]
   evm_step [CODE, CODE_NUMBER_eq]
-  refine sstore_then (Nat.le_trans (by decide) hfork) hglam (by evm_code [CODE, CODE_NUMBER_eq])
+  refine sstore_then (Nat.le_trans (by decide) hfork) (by evm_code [CODE, CODE_NUMBER_eq])
     (by evm_code [CODE, CODE_NUMBER_eq]) hstatic hacc4 (by omega)
     fun S5 hw5 hacc5 g5 ss5 hg5 hl5 => ?_
   have hw5 := WritesStorage.trans hw4 hw5
@@ -464,7 +474,7 @@ private theorem add_tail {S : TransactionState} {ss : Substate} {g : Nat}
     (by evm_code [CODE, CODE_NUMBER_eq]) (ofByte_of_decode rfl (Fork.frontier_le _))
     (instruction_of_stackOnlyStep rfl) (by simp only [OPCODE_ADD, VERY_LOW]; omega)) ?_
   evm_step [CODE, CODE_NUMBER_eq]
-  refine sstore_then (Nat.le_trans (by decide) hfork) hglam (by evm_code [CODE, CODE_NUMBER_eq])
+  refine sstore_then (Nat.le_trans (by decide) hfork) (by evm_code [CODE, CODE_NUMBER_eq])
     (by evm_code [CODE, CODE_NUMBER_eq]) hstatic hacc5 (by omega)
     fun S6 hw6 _ g6 ss6 _ hl6 => ?_
   have hw6 := WritesStorage.trans hw5 hw6
@@ -834,21 +844,22 @@ private theorem deq_loop {read : U256 → U256} {tail : U256} {c : Nat} {Q : Evm
 
 It then returns the records, `76` bytes for each request taken. -/
 private theorem deq_end {S : TransactionState} {ss : Substate} {M : ByteArray} {g : Nat}
-    {v x : U256} (hfork : .shapella ≤ fork) (hglam : fork < .glamsterdam)
+    {v x : U256} (hfork : .shapella ≤ fork)
     (hstatic : message.isStatic = false)
     (hacc : (S.getAccountOptional message.currentTarget).isSome = true)
-    (hM : (mul 76#256 x).toNat ≤ M.size) (hg : 50000 ≤ g) :
+    (hM : (mul 76#256 x).toNat ≤ M.size) (hg : 50000 * storageGasScale fork ≤ g) :
     Spec fork (At CODE message 488 [v, x] M g S ss returnData)
       (Returned message.currentTarget M (mul 76#256 x).toNat
         (setSlot (setSlot (storageOf S message.currentTarget) 0 v) 1 0) S) := by
+  have hscale := one_le_storageGasScale fork
   evm_step [CODE, CODE_NUMBER_eq]
   evm_step [CODE, CODE_NUMBER_eq]
-  refine sstore_then (Nat.le_trans (by decide) hfork) hglam (by evm_code [CODE, CODE_NUMBER_eq])
+  refine sstore_then (Nat.le_trans (by decide) hfork) (by evm_code [CODE, CODE_NUMBER_eq])
     (by evm_code [CODE, CODE_NUMBER_eq]) hstatic hacc (by omega)
     fun S₁ hw₁ hacc₁ g₁ ss₁ hg₁ _ => ?_
   evm_step [CODE, CODE_NUMBER_eq]
   evm_step [CODE, CODE_NUMBER_eq]
-  refine sstore_then (Nat.le_trans (by decide) hfork) hglam (by evm_code [CODE, CODE_NUMBER_eq])
+  refine sstore_then (Nat.le_trans (by decide) hfork) (by evm_code [CODE, CODE_NUMBER_eq])
     (by evm_code [CODE, CODE_NUMBER_eq]) hstatic hacc₁ (by omega)
     fun S₂ hw₂ _ g₂ ss₂ hg₂ _ => ?_
   evm_step [CODE, CODE_NUMBER_eq]
@@ -873,16 +884,17 @@ private theorem deq_end {S : TransactionState} {ss : Substate} {M : ByteArray} {
 
 The previous excess plus the count is below `2^256`. -/
 private theorem deq_count {S : TransactionState} {ss : Substate} {M : ByteArray} {g p : Nat}
-    {x : U256} (hfork : .shapella ≤ fork) (hglam : fork < .glamsterdam)
+    {x : U256} (hfork : .shapella ≤ fork)
     (hstatic : message.isStatic = false)
     (hacc : (S.getAccountOptional message.currentTarget).isSome = true)
     (hp : p + (storageOf S message.currentTarget 1#256).toNat < 2 ^ 256)
-    (hM : (mul 76#256 x).toNat ≤ M.size) (hg : 60000 ≤ g) :
+    (hM : (mul 76#256 x).toNat ≤ M.size) (hg : 60000 * storageGasScale fork ≤ g) :
     Spec fork (At CODE message 461 [BitVec.ofNat 256 p, x] M g S ss returnData)
       (Returned message.currentTarget M (mul 76#256 x).toNat
         (setSlot (setSlot (storageOf S message.currentTarget) 0
           (BitVec.ofNat 256 (if p + (storageOf S message.currentTarget 1#256).toNat > 2 then
             p + (storageOf S message.currentTarget 1#256).toNat - 2 else 0))) 1 0) S) := by
+  have hscale := one_le_storageGasScale fork
   generalize hn : (storageOf S message.currentTarget 1#256).toNat = n at hp
   have hs : add (storageOf S message.currentTarget 1#256) (BitVec.ofNat 256 p) =
       BitVec.ofNat 256 (p + n) := by
@@ -928,7 +940,7 @@ private theorem deq_count {S : TransactionState} {ss : Substate} {M : ByteArray}
     evm_step [CODE, CODE_NUMBER_eq]
     rw [hsub (by omega)]
     simp only [hgt, ite_true]
-    exact Spec.consequence (deq_end hfork hglam hstatic hacc₁ hM (by omega)) (fun _ h => h)
+    exact Spec.consequence (deq_end hfork hstatic hacc₁ hM (by omega)) (fun _ h => h)
       (post _)
   · have hz : greaterThan (BitVec.ofNat 256 (p + n)) 2#256 = 0 := by
       simp [greaterThan, Nat.mod_eq_of_lt hp, hgt]
@@ -941,24 +953,25 @@ private theorem deq_count {S : TransactionState} {ss : Substate} {M : ByteArray}
     evm_step [CODE, CODE_NUMBER_eq]
     evm_step [CODE, CODE_NUMBER_eq]
     simp only [hgt, ite_false]
-    exact Spec.consequence (deq_end hfork hglam hstatic hacc₁ hM (by omega)) (fun _ h => h)
+    exact Spec.consequence (deq_end hfork hstatic hacc₁ hM (by omega)) (fun _ h => h)
       (post _)
 
 /-- From byte 416, the code updates the excess for a target of 2 per block, and resets the count.
 
 It then returns the records, `76` bytes for each request taken. -/
 private theorem deq_excess {S : TransactionState} {ss : Substate} {M : ByteArray} {g : Nat}
-    {x : U256} (hfork : .shapella ≤ fork) (hglam : fork < .glamsterdam)
+    {x : U256} (hfork : .shapella ≤ fork)
     (hstatic : message.isStatic = false)
     (hacc : (S.getAccountOptional message.currentTarget).isSome = true)
     (hb : previousExcess (storageOf S message.currentTarget 0) +
       (storageOf S message.currentTarget 1#256).toNat < 2 ^ 256)
-    (hM : (mul 76#256 x).toNat ≤ M.size) (hg : 70000 ≤ g) :
+    (hM : (mul 76#256 x).toNat ≤ M.size) (hg : 70000 * storageGasScale fork ≤ g) :
     Spec fork (At CODE message 416 [x] M g S ss returnData)
       (Returned message.currentTarget M (mul 76#256 x).toNat
         (setSlot (setSlot (storageOf S message.currentTarget) 0
           (BitVec.ofNat 256 (newExcess 2 (storageOf S message.currentTarget 0)
             (storageOf S message.currentTarget 1)))) 1 0) S) := by
+  have hscale := one_le_storageGasScale fork
   evm_step [CODE, CODE_NUMBER_eq]
   evm_step [CODE, CODE_NUMBER_eq]
   refine sload_then (Nat.le_trans (by decide) hfork) (by evm_code [CODE, CODE_NUMBER_eq])
@@ -994,7 +1007,7 @@ private theorem deq_excess {S : TransactionState} {ss : Substate} {M : ByteArray
       unfold previousExcess
       rw [ite_eq_left hinh]
     rw [hp] at hb
-    refine Spec.consequence (deq_count (p := 0) hfork hglam hstatic hacc₁ hb hM (by omega))
+    refine Spec.consequence (deq_count (p := 0) hfork hstatic hacc₁ hb hM (by omega))
       (fun _ h => h) fun evm h => post evm ?_
     unfold newExcess
     rw [hp]
@@ -1019,7 +1032,7 @@ private theorem deq_excess {S : TransactionState} {ss : Substate} {M : ByteArray
     rw [hp] at hb
     refine Spec.reshape (s' := [BitVec.ofNat 256 (storageOf S message.currentTarget 0).toNat, x])
       (by simp) rfl rfl ?_
-    refine Spec.consequence (deq_count hfork hglam hstatic hacc₁ hb hM (by omega))
+    refine Spec.consequence (deq_count hfork hstatic hacc₁ hb hM (by omega))
       (fun _ h => h) fun evm h => post evm ?_
     unfold newExcess
     rw [hp]
@@ -1029,14 +1042,15 @@ private theorem deq_excess {S : TransactionState} {ss : Substate} {M : ByteArray
 
 It returns the records of the requests it took, which memory holds. -/
 private theorem deq_head {S : TransactionState} {ss : Substate} {M : ByteArray} {g : Nat}
-    {r : U256 → U256} (hfork : .shapella ≤ fork) (hglam : fork < .glamsterdam)
+    {r : U256 → U256} (hfork : .shapella ≤ fork)
     (hstatic : message.isStatic = false)
     (hacc : (S.getAccountOptional message.currentTarget).isSome = true)
     (hr : storageOf S message.currentTarget = r) (hb : Bounded r)
-    (hMs : 76 * numDequeued 16 r ≤ M.size) (hg : 120000 ≤ g) :
+    (hMs : 76 * numDequeued 16 r ≤ M.size) (hg : 120000 * storageGasScale fork ≤ g) :
     Spec fork (At CODE message 387 [BitVec.ofNat 256 (numDequeued 16 r),
         BitVec.ofNat 256 (numDequeued 16 r), r 2, r 3] M g S ss returnData)
       (Returned message.currentTarget M (76 * numDequeued 16 r) (afterDequeue 16 2 r) S) := by
+  have hscale := one_le_storageGasScale fork
   obtain ⟨hht, hex⟩ := hb
   have hc2 : numDequeued 16 r ≤ 16 := Nat.min_le_right _ _
   have hle : (r 2).toNat + numDequeued 16 r ≤ (r 3).toNat := by
@@ -1086,18 +1100,18 @@ private theorem deq_head {S : TransactionState} {ss : Substate} {M : ByteArray} 
     evm_step [CODE, CODE_NUMBER_eq]
     evm_step [CODE, CODE_NUMBER_eq]
     evm_step [CODE, CODE_NUMBER_eq]
-    refine sstore_then (Nat.le_trans (by decide) hfork) hglam (by evm_code [CODE, CODE_NUMBER_eq])
+    refine sstore_then (Nat.le_trans (by decide) hfork) (by evm_code [CODE, CODE_NUMBER_eq])
       (by evm_code [CODE, CODE_NUMBER_eq]) hstatic hacc (by omega)
       fun S₁ hw₁ hacc₁ g₁ ss₁ hg₁ _ => ?_
     evm_step [CODE, CODE_NUMBER_eq]
     evm_step [CODE, CODE_NUMBER_eq]
-    refine sstore_then (Nat.le_trans (by decide) hfork) hglam (by evm_code [CODE, CODE_NUMBER_eq])
+    refine sstore_then (Nat.le_trans (by decide) hfork) (by evm_code [CODE, CODE_NUMBER_eq])
       (by evm_code [CODE, CODE_NUMBER_eq]) hstatic hacc₁ (by omega)
       fun S₂ hw₂ hacc₂ g₂ ss₂ hg₂ _ => ?_
     have eF : storageOf S₂ message.currentTarget = setSlot (setSlot r 2 0) 3 0 := by
       rw [funext hw₂.1, funext hw₁.1, hr]
       rfl
-    refine Spec.consequence (deq_excess hfork hglam hstatic hacc₂
+    refine Spec.consequence (deq_excess hfork hstatic hacc₂
       (hr0 _ (by rw [eF]; simp [setSlot]) (by rw [eF]; simp [setSlot])) hM (by omega))
       (fun _ h => h) fun evm h => ?_
     obtain ⟨h1, h2, h3⟩ := h
@@ -1112,7 +1126,7 @@ private theorem deq_head {S : TransactionState} {ss : Substate} {M : ByteArray} 
     evm_step [CODE, CODE_NUMBER_eq]
     evm_step [CODE, CODE_NUMBER_eq]
     evm_step [CODE, CODE_NUMBER_eq]
-    refine sstore_then (Nat.le_trans (by decide) hfork) hglam
+    refine sstore_then (Nat.le_trans (by decide) hfork)
       (by evm_code [CODE, CODE_NUMBER_eq]) (by evm_code [CODE, CODE_NUMBER_eq]) hstatic hacc
       (by omega) fun S₁ hw₁ hacc₁ g₁ ss₁ hg₁ _ => ?_
     evm_step [CODE, CODE_NUMBER_eq]
@@ -1121,7 +1135,7 @@ private theorem deq_head {S : TransactionState} {ss : Substate} {M : ByteArray} 
         setSlot r 2 (BitVec.ofNat 256 ((r 2).toNat + c)) := by
       rw [funext hw₁.1, hr]
       rfl
-    refine Spec.consequence (deq_excess hfork hglam hstatic hacc₁
+    refine Spec.consequence (deq_excess hfork hstatic hacc₁
       (hr0 _ (by rw [eF]; simp [setSlot]) (by rw [eF]; simp [setSlot])) hM (by omega))
       (fun _ h => h) fun evm h => ?_
     obtain ⟨h1, h2, h3⟩ := h
@@ -1144,14 +1158,16 @@ private theorem deqGas_le {n : Nat} (hn : n ≤ 16) : deqGas n ≤ 144030 := by
 
 It returns their records, and holds the storage after the requests are taken. -/
 private theorem deq_rest {S : TransactionState} {ss : Substate} {g : Nat} {r : U256 → U256}
-    (hfork : .shapella ≤ fork) (hglam : fork < .glamsterdam)
+    (hfork : .shapella ≤ fork)
     (hstatic : message.isStatic = false)
     (hacc : (S.getAccountOptional message.currentTarget).isSome = true)
-    (hr : storageOf S message.currentTarget = r) (hb : Bounded r) (hg : 265000 ≤ g) :
+    (hr : storageOf S message.currentTarget = r) (hb : Bounded r)
+    (hg : 265000 * storageGasScale fork ≤ g) :
     Spec fork (At CODE message 225 [BitVec.ofNat 256 0, BitVec.ofNat 256 (numDequeued 16 r), r 2,
         r 3] .empty g S ss returnData) fun evm =>
       evm.error = none ∧ evm.output = taken record r (numDequeued 16 r) ∧
       WritesStorage message.currentTarget (afterDequeue 16 2 r) S evm.state := by
+  have hscale := one_le_storageGasScale fork
   have hc2 : numDequeued 16 r ≤ 16 := Nat.min_le_right _ _
   have hdg := deqGas_le hc2
   refine deq_loop hfork hc2 (numDequeued 16 r) (by omega) hr (holds_empty (Nat.le_refl _)) rfl
@@ -1160,7 +1176,7 @@ private theorem deq_rest {S : TransactionState} {ss : Substate} {g : Nat} {r : U
     rw [hw'.2.2.1]; exact hacc
   have hMs := hM'.1
   rw [Nat.zero_add, size_taken size_record] at hMs
-  refine Spec.consequence (deq_head hfork hglam hstatic hacc' (funext hw'.1) hb hMs
+  refine Spec.consequence (deq_head hfork hstatic hacc' (funext hw'.1) hb hMs
     (by omega)) (fun _ h => h) fun evm ⟨h1, h2, h3⟩ => ⟨h1, ?_, WritesStorage.trans hw' h3⟩
   rw [h2]
   have := hM'.2
@@ -1169,9 +1185,11 @@ private theorem deq_rest {S : TransactionState} {ss : Substate} {g : Nat} {r : U
 
 /-- A call from the system address takes requests from the queue, as EIP-7002 describes.
 
-It holds from Shapella up to BPO5, on a frame that may change the state.
+It holds from Shapella, on a frame that may change the state.
 
-The account of the contract exists, and the frame has at least 300,000 gas.
+The account of the contract exists.
+
+The one-counter budget is 300,000 gas before Glamsterdam and 1,500,000 from Glamsterdam.
 
 The counters of the storage meet the bounds under which the code computes as the EIP.
 
@@ -1180,10 +1198,11 @@ The frame stops with no error, and returns the records of at most 16 requests fr
 The state holds the storage after the requests are taken, the excess updated and the count reset.
 
 It keeps the storage of every other account, the accounts and the codes. -/
-theorem spec_dequeue (hfork : .shapella ≤ fork) (hglam : fork < .glamsterdam)
+theorem spec_dequeue (hfork : .shapella ≤ fork)
     (hcaller : message.caller = SYSTEM_ADDRESS) (hstatic : message.isStatic = false)
     (hacc : (state.getAccountOptional message.currentTarget).isSome = true)
-    (hbounded : Bounded (storageOf state message.currentTarget)) (hgas : 300000 ≤ gas) :
+    (hbounded : Bounded (storageOf state message.currentTarget))
+    (hgas : 300000 * storageGasScale fork ≤ gas) :
     Spec fork (At CODE message 0 [] .empty gas state substate returnData) fun evm =>
       evm.error = none ∧
       evm.output = dequeued MAX_WITHDRAWAL_REQUESTS_PER_BLOCK record
@@ -1192,6 +1211,7 @@ theorem spec_dequeue (hfork : .shapella ≤ fork) (hglam : fork < .glamsterdam)
         (afterDequeue MAX_WITHDRAWAL_REQUESTS_PER_BLOCK TARGET_WITHDRAWAL_REQUESTS_PER_BLOCK
           (storageOf state message.currentTarget))
         state evm.state := by
+  have hscale := one_le_storageGasScale fork
   generalize hr : storageOf state message.currentTarget = r
   have hb := hbounded
   rw [hr] at hb
@@ -1261,7 +1281,7 @@ theorem spec_dequeue (hfork : .shapella ≤ fork) (hglam : fork < .glamsterdam)
     evm_step [CODE, CODE_NUMBER_eq]
     evm_step [CODE, CODE_NUMBER_eq]
     rw [← hn]
-    refine Spec.consequence (deq_rest hfork hglam hstatic hacc' hS ⟨hht, hex⟩ ?_)
+    refine Spec.consequence (deq_rest hfork hstatic hacc' hS ⟨hht, hex⟩ ?_)
       (fun _ h => h) post
     omega
   · have hz : greaterThan 16#256 (BitVec.ofNat 256 ((r 3).toNat - (r 2).toNat)) = 0 := by
@@ -1280,7 +1300,7 @@ theorem spec_dequeue (hfork : .shapella ≤ fork) (hglam : fork < .glamsterdam)
     evm_step [CODE, CODE_NUMBER_eq]
     refine Spec.reshape (s' := [BitVec.ofNat 256 0, BitVec.ofNat 256 (numDequeued 16 r), r 2, r 3])
       (by rw [hn]; rfl) rfl rfl ?_
-    refine Spec.consequence (deq_rest hfork hglam hstatic hacc' hS ⟨hht, hex⟩ ?_)
+    refine Spec.consequence (deq_rest hfork hstatic hacc' hS ⟨hht, hex⟩ ?_)
       (fun _ h => h) post
     omega
 
@@ -1294,7 +1314,7 @@ theorem addedAt_WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS :
 theorem delegatedAddress_CODE : delegatedAddress CODE = none := by
   simp [delegatedAddress, isValidDelegation, CODE, NatCode.size_ofNat, DELEGATION_SIZE]
 
-/-- From Pectra up to BPO5, the system call of a block to the contract takes its requests.
+/-- From Pectra, the system call of a block to the contract takes its requests.
 
 The account at the withdrawal request address must hold the code of EIP-7002.
 
@@ -1306,7 +1326,7 @@ The storage of the contract is then the storage after the requests are taken.
 
 The call keeps the storage of every other account, the accounts and the codes. -/
 theorem systemCall_dequeue {env : BlockEnvironment fork} {block : State.BlockState}
-    {data : ByteArray} (hfork : .pectra ≤ fork) (hglam : fork < .glamsterdam)
+    {data : ByteArray} (hfork : .pectra ≤ fork)
     (hcode : codeAt block WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS = .ok CODE)
     (hbounded : Bounded (storageOf (.ofBlock block) WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS)) :
     ∃ out, systemCall env block WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS data = .ok out ∧
@@ -1317,13 +1337,18 @@ theorem systemCall_dequeue {env : BlockEnvironment fork} {block : State.BlockSta
         (afterDequeue MAX_WITHDRAWAL_REQUESTS_PER_BLOCK TARGET_WITHDRAWAL_REQUESTS_PER_BLOCK
           (storageOf (.ofBlock block) WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS))
         (.ofBlock block) out.state :=
-  systemCall_of_writesStorage (P := Bounded) _ _ (Nat.le_trans (by decide) hfork) hglam hcode
+  systemCall_of_writesStorage (P := Bounded) _ _ (Nat.le_trans (by decide) hfork)
+    (fun _ => supportedCode_CODE) hcode
     (by simp [CODE, NatCode.size_ofNat]) addedAt_WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS
     delegatedAddress_CODE hbounded
     fun message _ _ hcaller htarget hstatic _ _ hgas hacc hread => by
       rw [← htarget]
-      exact spec_dequeue (Nat.le_trans (by decide) hfork) hglam hcaller hstatic (htarget ▸ hacc)
-        (htarget ▸ hread) (by rw [hgas]; decide)
+      exact spec_dequeue (Nat.le_trans (by decide) hfork) hcaller hstatic (htarget ▸ hacc)
+        (htarget ▸ hread) (by
+          rw [hgas]
+          have := storageGasScale_le fork
+          simp only [SYSTEM_TRANSACTION_GAS]
+          omega)
 
 /-- Empty withdrawal request code rejects the request phase of a block from Pectra.
 

@@ -15,6 +15,8 @@ Below 2^40, clearing the flag gives the builder index back.
 
 An index that names a builder comes back from its builder index.
 
+So below 2^40 the index of a builder names it alone.
+
 No index below 2^40 names a builder, so no validator of a registry within a limit of 2^40 does.
 
 What a builder owes fits in 64 bits exactly when its sum does, and then it is that sum.
@@ -108,6 +110,39 @@ theorem isBuilderIndex_eq_false_of_lt {index : ValidatorIndex} (small : index.to
     simp [getElem_forty_eq_false small]
   · simp [forty, inRange]
 
+/-- Below 2^40, two builder indices give the same index exactly when they are equal. -/
+theorem convertBuilderIndexToValidatorIndex_inj {first second : BuilderIndex}
+    (one : first.toNat < 2 ^ 40) (two : second.toNat < 2 ^ 40) :
+    convertBuilderIndexToValidatorIndex first = convertBuilderIndexToValidatorIndex second ↔
+      first = second := by
+  constructor
+  · intro same
+    rw [← convertValidatorIndexToBuilderIndex_convertBuilderIndexToValidatorIndex one, same,
+      convertValidatorIndexToBuilderIndex_convertBuilderIndexToValidatorIndex two]
+  · intro same
+    rw [same]
+
+/-- An index below 2^40 is the index of no builder. -/
+theorem ne_convertBuilderIndexToValidatorIndex_of_lt {named : ValidatorIndex}
+    (small : named.toNat < 2 ^ 40) (index : BuilderIndex) :
+    named ≠ convertBuilderIndexToValidatorIndex index := by
+  intro same
+  have flag := isBuilderIndex_convertBuilderIndexToValidatorIndex index
+  rw [← same, isBuilderIndex_eq_false_of_lt small] at flag
+  cases flag
+
+/-- An index that names a builder clears to a builder index below 2^40 exactly when it is its index.
+-/
+theorem convertValidatorIndexToBuilderIndex_eq_iff {named : ValidatorIndex} {index : BuilderIndex}
+    (builder : isBuilderIndex named = true) (small : index.toNat < 2 ^ 40) :
+    convertValidatorIndexToBuilderIndex named = index ↔
+      named = convertBuilderIndexToValidatorIndex index := by
+  constructor
+  · intro same
+    rw [← same, convertBuilderIndexToValidatorIndex_convertValidatorIndexToBuilderIndex builder]
+  · intro same
+    rw [same, convertValidatorIndexToBuilderIndex_convertBuilderIndexToValidatorIndex small]
+
 /-- The registry limit of both presets is 2^40. -/
 theorem registryLimit_presets :
     Preset.mainnet.VALIDATOR_REGISTRY_LIMIT.toNat = 2 ^ 40 ∧
@@ -123,6 +158,14 @@ theorem isBuilderIndex_eq_false_of_registry {state : BeaconState preset fork}
     {index : ValidatorIndex} (member : index.toNat < state.validators.data.size) :
     isBuilderIndex index = false :=
   isBuilderIndex_eq_false_of_lt (Nat.lt_of_lt_of_le member (Nat.le_trans within limit))
+
+/-- The lookup returns a builder exactly when it is the one at its index of the registry. -/
+theorem getBuilder_eq_ok_iff {state : BeaconState preset fork} {gloas : .glamsterdam ≤ fork}
+    {index : BuilderIndex} {builder : Builder} :
+    getBuilder state gloas index = .ok builder ↔
+      (state.builders gloas).data[index.toNat]? = some builder := by
+  unfold getBuilder
+  split <;> simp_all
 
 /-- What a builder owes succeeds exactly when its sum is below 2^64, and then it is that sum. -/
 theorem getPendingBalanceToWithdrawForBuilder_ok_iff {state : BeaconState preset fork}

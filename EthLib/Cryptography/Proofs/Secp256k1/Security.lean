@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Cryptography.Proofs.Secp256k1.Security.ForwardCase
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.Game
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.InverseCase
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.JointGame
@@ -62,6 +63,10 @@ The chance to win stays, and a replay fork can rewind the run at the forgery's q
 
 Both runs of the fork then queried the same point, with different answers.
 
+With no flag raised, the check of a forgery read the logged answer at the fork index.
+
+The map `ψ` sends that answer to `t`.
+
 A new inverse answer that encodes a nonzero multiple of the base point can be redrawn.
 
 The redraw knows its discrete logarithm.
@@ -69,6 +74,10 @@ The redraw knows its discrete logarithm.
 The redrawn answer is still uniform.
 
 A forgery whose point came from an inverse query then gives the discrete logarithm of the key.
+
+Take a forger with at most `q` queries to `Π` or its inverse.
+
+A win with no flag raised then has a fork index, or its point is not in the log of forward pairs.
 
 No theorem bounds the advantage of a forger yet.
 -/
