@@ -187,11 +187,32 @@ theorem BuilderFrame.foldlM {α ε : Type} {step : BeaconState preset fork → �
   foldlM_ok_invariant (BuilderFrame state)
     (fun _ _ _ before ok => before.trans (frame _ _ _ ok)) (BuilderFrame.refl state) computed
 
+/-- A step that keeps the builder fields keeps each pending payment. -/
+theorem BuilderFrame.paymentAt (frame : BuilderFrame state after) (gloas : .glamsterdam ≤ fork)
+    (position : Nat) : paymentAt after gloas position = paymentAt state gloas position := by
+  simp only [EthLib.Consensus.paymentAt, frame.payments]
+
+/-- A move of both states to the same slot keeps a step that keeps the builder fields. -/
+theorem BuilderFrame.withSlot (frame : BuilderFrame state after) (next : Slot) :
+    BuilderFrame { state with slot := next } { after with slot := next } :=
+  ⟨rfl, frame.headerSlot, frame.builders, frame.payments, frame.withdrawals, frame.bid⟩
+
 /-- The position of the payment of each slot reads only the slot of the state. -/
 theorem slotPaymentPosition_congr (same : after.slot = state.slot) (slot : Slot) :
     slotPaymentPosition after slot = slotPaymentPosition state slot := by
   unfold slotPaymentPosition getPreviousEpoch getCurrentEpoch
   rw [same]
+
+/-- The position of the payment of each slot reads only the epoch of the state. -/
+theorem slotPaymentPosition_congr_epoch
+    (same : after.slot.toNat / preset.SLOTS_PER_EPOCH.toNat =
+      state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat) (slot : Slot) :
+    slotPaymentPosition after slot = slotPaymentPosition state slot := by
+  have epoch : computeEpochAtSlot preset after.slot = computeEpochAtSlot preset state.slot := by
+    apply UInt64.toNat_inj.mp
+    simpa only [computeEpochAtSlot, UInt64.toNat_div] using same
+  unfold slotPaymentPosition getPreviousEpoch getCurrentEpoch
+  rw [epoch]
 
 /-- The position of the parent payment reads only the slot and the slot of the latest block. -/
 theorem parentPaymentPosition_congr (slot : after.slot = state.slot)
@@ -200,6 +221,40 @@ theorem parentPaymentPosition_congr (slot : after.slot = state.slot)
   unfold parentPaymentPosition
   rw [header]
   exact slotPaymentPosition_congr slot _
+
+/-- Whether the late path is open reads only the parent position and the withdrawals. -/
+theorem latePaymentOpen_congr {gloas : .glamsterdam ≤ fork}
+    (parent : parentPaymentPosition after = parentPaymentPosition state)
+    (read : ∀ position,
+      (paymentAt after gloas position).withdrawal = (paymentAt state gloas position).withdrawal) :
+    latePaymentOpen after gloas = latePaymentOpen state gloas := by
+  unfold latePaymentOpen
+  rw [parent]
+  split <;> simp only [read]
+
+/-- A step that keeps the builder fields keeps the parent payment fresh. -/
+theorem ParentPaymentFresh.of_frame {gloas : .glamsterdam ≤ fork}
+    (frame : BuilderFrame state after) (fresh : ParentPaymentFresh state gloas) :
+    ParentPaymentFresh after gloas := by
+  intro position found
+  simp only [frame.paymentAt gloas, latestBidWithdrawal, frame.bid]
+  exact fresh position (parentPaymentPosition_congr frame.slot frame.headerSlot ▸ found)
+
+/-- A step that keeps the builder fields keeps an amount for each payment with weight. -/
+theorem WeightedPaymentsFunded.of_frame {gloas : .glamsterdam ≤ fork}
+    (frame : BuilderFrame state after) (paid : WeightedPaymentsFunded state gloas) :
+    WeightedPaymentsFunded after gloas := by
+  intro position weighted
+  rw [frame.paymentAt gloas] at weighted ⊢
+  exact paid position weighted
+
+/-- A step that keeps the builder fields keeps the first half of the genesis window empty. -/
+theorem GenesisFirstHalfEmpty.of_frame {gloas : .glamsterdam ≤ fork}
+    (frame : BuilderFrame state after) (genesis : GenesisFirstHalfEmpty state gloas) :
+    GenesisFirstHalfEmpty after gloas := by
+  intro genesisEpoch position early
+  rw [frame.paymentAt gloas]
+  exact genesis (by rwa [getCurrentEpoch, frame.slot] at genesisEpoch) position early
 
 /-- The position of the payment of a slot on natural numbers.
 

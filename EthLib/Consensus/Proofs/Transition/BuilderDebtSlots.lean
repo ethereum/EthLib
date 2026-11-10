@@ -388,10 +388,29 @@ private theorem builderFrame_processPtcWindow {gloas : .glamsterdam ≤ fork}
   obtain ⟨_, _, _, _, rfl⟩ := computed
   exact ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
 
-/-- From Gloas, the epoch transition keeps the builder fields, except the step of the payments. -/
+/-- The state that the epoch transition reaches before the step of the payments.
+
+It runs the steps of the epoch transition that come before that step, in their order.
+
+Before Altair it skips the inactivity scores, as the epoch transition does. -/
+def epochBeforePayments (config : Config) (checks : SignatureChecks)
+    (state : BeaconState preset fork) : Except TransitionError (BeaconState preset fork) := do
+  let state ← processJustificationAndFinalization state
+  let state ← (if altair : .altair ≤ fork then processInactivityUpdates config state altair
+    else pure state)
+  let state ← processRewardsAndPenalties config state
+  let state ← processRegistryUpdates config state
+  let state ← processSlashings state
+  let state ← (if before : fork < .hegota then processEth1DataReset before state else pure state)
+  processPendingBalances config checks state
+
+/-- From Gloas, the epoch transition keeps the builder fields, except the step of the payments.
+
+The step of the payments reads the state that the epoch transition reaches before it. -/
 theorem processEpoch_builderSplit {gloas : .glamsterdam ≤ fork}
     (computed : processEpoch config checks state = .ok after) :
-    ∃ pending paid, BuilderFrame state pending ∧
+    ∃ pending paid, epochBeforePayments config checks state = .ok pending ∧
+      BuilderFrame state pending ∧
       processBuilderPendingPayments pending gloas = .ok paid ∧ BuilderFrame paid after := by
   have altair : .altair ≤ fork := Nat.le_trans (by decide) gloas
   have capella : .shapella ≤ fork := Nat.le_trans (by decide) gloas
@@ -407,7 +426,10 @@ theorem processEpoch_builderSplit {gloas : .glamsterdam ≤ fork}
     · exact builderFrame_processEth1DataReset resetOk
     · simp only [pure, Except.pure, Except.ok.injEq] at resetOk
       exact resetOk ▸ BuilderFrame.refl _
-  refine ⟨pending, paid, ?_, paidOk, ?_⟩
+  refine ⟨pending, paid, ?_, ?_, paidOk, ?_⟩
+  · simp only [epochBeforePayments, bind_ok_iff, altair, ↓reduceDIte]
+    exact ⟨justified, justifiedOk, scored, scoredOk, rewarded, rewardedOk, registered,
+      registeredOk, slashed, slashedOk, reset, resetOk, pendingOk⟩
   · exact (builderFrame_processJustificationAndFinalization justifiedOk).trans <|
       (builderFrame_processInactivityUpdates scoredOk).trans <|
       (builderFrame_processRewardsAndPenalties rewardedOk).trans <|
@@ -427,7 +449,7 @@ theorem processEpoch_builderSplit {gloas : .glamsterdam ≤ fork}
 /-! ## Slots -/
 
 /-- A slot keeps the builder fields, the slot and the slot of the latest block. -/
-private theorem builderFrame_processSlot (computed : processSlot state = .ok after) :
+theorem builderFrame_processSlot (computed : processSlot state = .ok after) :
     BuilderFrame state after := by
   have header : after.latestBlockHeader.slot = state.latestBlockHeader.slot := by
     unfold processSlot at computed
@@ -452,7 +474,7 @@ theorem advanceSlot_builders (gloas : .glamsterdam ≤ fork)
   have cachedFrame := builderFrame_processSlot cachedOk
   unfold epochIfLast at epochedOk
   split at epochedOk
-  · obtain ⟨pending, paid, before, paidOk, tail⟩ :=
+  · obtain ⟨pending, paid, -, before, paidOk, tail⟩ :=
       processEpoch_builderSplit (gloas := gloas) epochedOk
     have paidBuilders : paid.builders = pending.builders := by
       rw [processBuilderPendingPayments_eq paidOk]
@@ -478,25 +500,14 @@ theorem processSlots_builders (gloas : .glamsterdam ≤ fork) {slot : Slot}
     obtain ⟨next, nextOk, rest⟩ := advanced
     exact (step rest).trans (advanceSlot_builders gloas nextOk)
 
-/-- A move to a slot of the same epoch keeps the position of the parent payment. -/
-private theorem parentPaymentPosition_withSlot {next : Slot}
-    (same : next.toNat / preset.SLOTS_PER_EPOCH.toNat =
-      state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat) :
-    parentPaymentPosition { state with slot := next } = parentPaymentPosition state := by
-  have epoch : computeEpochAtSlot preset next = computeEpochAtSlot preset state.slot := by
-    apply UInt64.toNat_inj.mp
-    simpa only [computeEpochAtSlot, UInt64.toNat_div] using same
-  unfold parentPaymentPosition slotPaymentPosition getPreviousEpoch getCurrentEpoch
-  dsimp only
-  rw [epoch]
-
 /-- A move to a slot of the same epoch keeps the builder debt invariant. -/
 private theorem BuilderDebtCovered.withSlot {gloas : .glamsterdam ≤ fork} {next : Slot}
     (same : next.toNat / preset.SLOTS_PER_EPOCH.toNat =
       state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat)
     (holds : BuilderDebtCovered state gloas) :
     BuilderDebtCovered { state with slot := next } gloas :=
-  .of_position (parentPaymentPosition_withSlot same) rfl rfl rfl rfl holds
+  .of_position (slotPaymentPosition_congr_epoch (after := { state with slot := next }) same _)
+    rfl rfl rfl rfl holds
 
 /-- With a positive quorum, one slot keeps the builder debt invariant. -/
 theorem BuilderDebtCovered.advanceSlot (positive : preset.PaymentQuorumPositive)
@@ -508,12 +519,10 @@ theorem BuilderDebtCovered.advanceSlot (positive : preset.PaymentQuorumPositive)
   unfold epochIfLast at epochedOk
   split at epochedOk
   · rename_i boundary
-    obtain ⟨pending, paid, before, paidOk, tail⟩ := processEpoch_builderSplit epochedOk
+    obtain ⟨pending, paid, -, before, paidOk, tail⟩ := processEpoch_builderSplit epochedOk
     have paidHolds := (cachedHolds.of_frame before).processBuilderPendingPayments positive paidOk
       (by rw [before.slot, cachedFrame.slot]; exact sum) boundary
-    have frame : BuilderFrame { paid with slot := next } { epoched with slot := next } :=
-      ⟨rfl, tail.headerSlot, tail.builders, tail.payments, tail.withdrawals, tail.bid⟩
-    exact paidHolds.of_frame frame
+    exact paidHolds.of_frame (tail.withSlot next)
   · rename_i inside
     simp only [pure, Except.pure, Except.ok.injEq] at epochedOk
     subst epochedOk
