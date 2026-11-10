@@ -37,6 +37,7 @@ Each part names the EIPs that define it where they exist, and a later fork adds 
 
 ### Serialization
 
+- e2store: the typed records of history files. The era1 and era files built on them belong to the execution and consensus layers.
 - RLP: the encoding of execution-layer objects, and its canonical form.
 - SSZ: basic and composite types, the progressive lists and containers of EIP-7916 and EIP-7495, merkleization, and Merkle proofs by generalized index.
 
@@ -118,7 +119,7 @@ Each layer is a directory under `EthLib/`, which `CONTRIBUTING.md` calls a domai
 | Consensus | the state transition and the fork choice of the consensus layer | `EthLib/Consensus/` |
 | Execution | the EVM with its precompiles, the fees, and the state transition of the execution layer | `EthLib/Execution/` |
 | Networking | the messages peers exchange, with their framing and compression | `EthLib/Networking/` |
-| Serialization | the encodings the protocol sends and hashes | `EthLib/Serialization/` |
+| Serialization | the encodings the protocol sends, hashes and stores | `EthLib/Serialization/` |
 | Cryptography | hashes and Merkle trees, then the schemes built on them | `EthLib/Cryptography/` |
 | Base | the bytes, the integers and the forks that every layer uses | `EthLib/Base/` |
 
