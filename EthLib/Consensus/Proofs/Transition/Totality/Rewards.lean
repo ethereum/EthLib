@@ -206,19 +206,24 @@ private theorem getBaseReward_le (altair : .altair ≤ fork) {total per : Gwei}
   · rw [UInt64.toNat_mul, Nat.mod_eq_of_lt (Nat.lt_of_le_of_lt bound fits)]
     exact bound
 
-/-- Adding an amount to a zero entry of the deltas succeeds. -/
-private theorem addDelta_exists_ok_of_zero {deltas : Array Gwei} {index : ValidatorIndex}
-    (amount : Gwei) (inside : index.toNat < deltas.size)
-    (zero : deltas.getD index.toNat 0 = 0) :
+/-- Adding an amount to the deltas succeeds when the index is inside and the sum fits. -/
+theorem addDelta_exists_ok {deltas : Array Gwei} {index : ValidatorIndex}
+    {amount : Gwei} (inside : index.toNat < deltas.size)
+    (fits : (deltas.getD index.toNat 0).toNat + amount.toNat < 2 ^ 64) :
     ∃ result, addDelta deltas index amount = .ok result := by
-  have entry : deltas[index.toNat] = 0 := by
-    simpa [Array.getD_eq_getD_getElem?, inside] using zero
-  have fits : deltas[index.toNat].toNat + amount.toNat < 2 ^ 64 := by
-    rw [entry, UInt64.toNat_zero, Nat.zero_add]
-    exact amount.toNat_lt
+  have entry : deltas.getD index.toNat 0 = deltas[index.toNat] := by
+    simp [Array.getD_eq_getD_getElem?, inside]
+  rw [entry] at fits
   refine ⟨deltas.set index.toNat (deltas[index.toNat] + amount) inside, ?_⟩
   simp only [addDelta, inside, ↓reduceDIte, liftAccessor, liftArith, addChecked_of_lt fits,
     Except.mapError, bind, Except.bind, pure, Except.pure]
+
+/-- Adding an amount to a zero entry of the deltas succeeds. -/
+theorem addDelta_exists_ok_of_zero {deltas : Array Gwei} {index : ValidatorIndex}
+    (amount : Gwei) (inside : index.toNat < deltas.size)
+    (zero : deltas.getD index.toNat 0 = 0) :
+    ∃ result, addDelta deltas index amount = .ok result :=
+  addDelta_exists_ok inside (by rw [zero, UInt64.toNat_zero, Nat.zero_add]; exact amount.toNat_lt)
 
 /-- One step of the deltas of a flag succeeds at an index whose two entries are zero.
 
@@ -325,7 +330,7 @@ private theorem addInactivityScorePenalty_exists_ok {config : Config} (altair : 
 /-- Some deltas apply when each balance of the registry plus its reward fits in 64 bits.
 
 The registry must have one balance for each validator, and fewer than 2^64 validators. -/
-private theorem applyAllDeltas_exists_ok {rewards penalties : Array Gwei}
+theorem applyAllDeltas_exists_ok {rewards penalties : Array Gwei}
     (matched : BalancesMatch state) (small : state.validators.data.size < 2 ^ 64)
     (fits : ∀ i (inside : i < state.balances.data.size),
       state.balances.data[i].toNat + (rewards.getD i 0).toNat < 2 ^ 64) :
@@ -379,14 +384,14 @@ private theorem foldlM_applyAllDeltas_exists_ok :
     exact ⟨out, by rw [List.foldlM_cons, applied]; exact folded⟩
 
 /-- The whole increments of a budget are at least one, for a positive increment. -/
-private theorem one_le_budgetIncrements (positive : preset.EFFECTIVE_BALANCE_INCREMENT ≠ 0)
+theorem one_le_budgetIncrements (positive : preset.EFFECTIVE_BALANCE_INCREMENT ≠ 0)
     (budget : Nat) : 1 ≤ preset.budgetIncrements budget := by
   have incPos : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat :=
     Nat.pos_of_ne_zero fun zero => positive (UInt64.toNat_inj.mp (by simpa using zero))
   exact Nat.div_pos (Nat.le_max_left _ _) incPos
 
 /-- An amount up to the budget or one increment has at most the whole increments of the budget. -/
-private theorem toNat_div_le_budgetIncrements {amount : Gwei} {budget : Nat}
+theorem toNat_div_le_budgetIncrements {amount : Gwei} {budget : Nat}
     (bounded : amount.toNat ≤ max preset.EFFECTIVE_BALANCE_INCREMENT.toNat budget) :
     (amount / preset.EFFECTIVE_BALANCE_INCREMENT).toNat ≤ preset.budgetIncrements budget := by
   rw [UInt64.toNat_div]

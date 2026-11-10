@@ -2490,6 +2490,17 @@ The bound on the reward of a flag does not use the square root of the total acti
 The validators that set a flag in the previous epoch include those whose exit epoch is the current epoch.
 So their effective balance can exceed the total active balance of the current epoch, and only the budget bounds it.
 The budget of `2^57` Gwei is about 84% of the largest that this bound allows.
+Before Altair the rewards and penalties need `RewardsFitBeforeAltair`, a set of bounds on the preset, a budget of Gwei and a bound on the current epoch.
+They read the root of the block at the slot of each vote that matches the target.
+So they assume that each recent pending attestation is as inclusion in a block stored it (`PendingWellFormed`).
+Its slot is then in the epoch of its list, its inclusion delay is not zero, and its proposer is a validator of the registry.
+No theorem yet shows that this holds along a run: the preservation must be stated over the slot advance and block processing, and the nonzero delay needs a least inclusion delay of one slot, as mainnet and minimal have.
+The inactivity penalty before Altair multiplies an effective balance by the delay of finality, which is at most the current epoch.
+So the bound on the current epoch limits the length of the run that the theorem covers.
+A proposer can earn a share of the base reward of each signer that it included.
+So the bound on its reward is the bound on base rewards at the whole budget, as the effective balances of its signers sum to at most that.
+On mainnet and minimal these bounds hold for a budget of `2^57` Gwei and `2^21` epochs.
+The bound on the current epoch multiplies it by the largest cap at any fork, 2048 ETH, so it is conservative before Altair, where the cap is 32 ETH.
 
 The builder payments of Gloas carry four hypotheses and one restriction.
 `chainSteps_paysQuorum` proves that along a chain through the last slot of an epoch, each payment of the previous epoch that reaches its quorum is paid exactly once.
