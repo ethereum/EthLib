@@ -22,7 +22,9 @@ The store computes each term in Gwei, with its own estimates and roundings.
 
 Its estimate of `Φ` is the estimated committee weight since the parent, plus the boost.
 
-Its discount comes from the votes for the parent in the empty slots before the block.
+A discount is taken off that estimate.
+
+It comes from the votes for the parent in the empty slots before the block.
 
 Its share of the adversary is the estimated weight of `W`, divided by 100 and rounded down.
 
@@ -199,23 +201,27 @@ theorem threshold_lt_of_isOneConfirmed {head root : Root} {balanceSource : Beaco
 
 /-- Lemmas 4 and 3 for a block that the store confirms: honest support above half of `Φ`.
 
-Here `Φ` is the store's estimate: the committee weight since the parent and the boost.
+Here `Φ` is the store's estimate: the committee weight since the parent, plus the boost.
 
-The discount is taken off it.
+The discount is taken off it, and is added to the other side so that nothing truncates.
 
 The supporters are validators whose stake is the support of the block in the store.
 
 The equivocators are validators whose stake is that of the known equivocators in the store.
 
-Both lie in the committees `W` of the range of slots of the store's adversary, and apart.
+Both lie in the committees `W` of a range of slots, and they are apart.
 
-The Byzantine validators hold at most `num` percent of the stake of `W`, as in Assumption 2.
+The store's adversary over that range must be its adversary for the block.
 
-Here `num` is the threshold of the configuration, and no equivocator is honest.
+The range of the block itself is one such range, as the two theorems above give.
 
-The store's share of the adversary covers `num` percent of the stake of `W`.
+Assume that the Byzantine validators hold at most β of the stake of `W`, as in Assumption 2.
 
-The discount is at most the committee weight and the boost, so that `Φ` is their difference. -/
+Here β is the threshold of the configuration, in percent, and no equivocator is honest.
+
+Assume also that the store's share of the adversary covers β of the stake of `W`.
+
+The store does not check that cover, and it can fail within one epoch. -/
 theorem lt_two_mul_honest_support_of_isOneConfirmed {ν : Type*} {w : ν → ℕ} {J : Set ν}
     [DecidablePred (· ∈ J)] {W supporters equivocators : Finset ν} {head root : Root}
     {balanceSource : BeaconState preset fork} {tally : VoteTally}
@@ -249,15 +255,19 @@ theorem lt_two_mul_honest_support_of_isOneConfirmed {ν : Type*} {w : ν → ℕ
     (apart : Disjoint supporters equivocators) (dishonest : ∀ v ∈ equivocators, v ∉ J)
     (byzantine : ByzantineStakeAtMost w W J config.CONFIRMATION_BYZANTINE_THRESHOLD.toNat 100)
     (cover : config.CONFIRMATION_BYZANTINE_THRESHOLD.toNat * stake w W ≤
-      100 * (estimate.toNat / 100 * config.CONFIRMATION_BYZANTINE_THRESHOLD.toNat))
-    (discountLe : discount.toNat ≤ maximumSupport.toNat + proposerScore.toNat) :
-    maximumSupport.toNat + proposerScore.toNat - discount.toNat <
-      2 * stake w {v ∈ supporters | v ∈ J} := by
+      100 * (estimate.toNat / 100 * config.CONFIRMATION_BYZANTINE_THRESHOLD.toNat)) :
+    maximumSupport.toNat + proposerScore.toNat <
+      discount.toNat + 2 * stake w {v ∈ supporters | v ∈ J} := by
   have bound := computeSafetyThreshold_bound slotOk blockOk parentOk totalOk boostOk firstOk lastOk
     maximumOk discountOk adversaryOk thresholdOk
   have above := threshold_lt_of_isOneConfirmed supportOk thresholdOk confirmed
   have share := computeAdversarialWeight_share totalOk estimateOk equivocationOk rangeOk
-  have phi := Nat.sub_add_cancel discountLe
+  -- A discount above the other terms makes the bound hold at once.
+  by_cases large : maximumSupport.toNat + proposerScore.toNat < discount.toNat
+  · omega
+  have phi := Nat.sub_add_cancel (Nat.le_of_not_lt large)
+  suffices maximumSupport.toNat + proposerScore.toNat - discount.toNat <
+      2 * stake w {v ∈ supporters | v ∈ J} by omega
   generalize maximumSupport.toNat + proposerScore.toNat - discount.toNat = Φ at phi ⊢
   refine lt_two_mul_honest_support byzantine supportersIn equivocatorsIn apart dishonest ?_
   rw [supportStake, equivocationStake, Nat.mul_assoc 2]
