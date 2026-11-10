@@ -513,6 +513,11 @@ build: pin ssz-specs to a23a239
 docs: add AGENTS.md
 ```
 
+CI builds `tests/downstream`, a separate Lake package that requires EthLib, as a downstream project does.
+Its file `Consumer.lean` states the declarations that such projects rely on, and unfolds the definitions whose bodies their proofs read.
+When it fails, the change has altered that public surface.
+Either keep the old declaration, statement or exposed body, or update `Consumer.lean` and mark the change breaking as above.
+
 ### Bodies
 
 The commit body says why, when the subject cannot.
