@@ -88,6 +88,17 @@ The source also asks that the image be efficiently decidable, which a predicate 
 def Scheme.SemiInjective (scheme : Scheme F G A M) [AddGroup G] : Prop :=
   ∀ X Y : G, X ≠ 0 → Y ≠ 0 → scheme.encode X = scheme.encode Y → Y = X ∨ Y = -X
 
+/-- Two nonzero scalars whose multiples of a nonzero `g` share an encoding are equal or opposite.
+
+It holds when the encoding is semi-injective. -/
+theorem Scheme.eq_or_eq_neg_of_encode_smul_eq [Field F] [AddCommGroup G] [Module F G]
+    {scheme : Scheme F G A M} (hsemi : scheme.SemiInjective) (hg : scheme.g ≠ 0) {a b : F}
+    (ha : a ≠ 0) (hb : b ≠ 0) (h : scheme.encode (b • scheme.g) = scheme.encode (a • scheme.g)) :
+    b = a ∨ b = -a := by
+  rcases hsemi _ _ (smul_ne_zero ha hg) (smul_ne_zero hb hg) h.symm with h' | h'
+  · exact Or.inl (smul_left_injective F hg h')
+  · exact Or.inr (smul_left_injective F hg (h'.trans (neg_smul a scheme.g).symm))
+
 /-- Opposite points have the same encoding, as the `x` coordinate of a curve point does. -/
 def Scheme.EncodeNeg (scheme : Scheme F G A M) [Neg G] : Prop :=
   ∀ X : G, scheme.encode (-X) = scheme.encode X

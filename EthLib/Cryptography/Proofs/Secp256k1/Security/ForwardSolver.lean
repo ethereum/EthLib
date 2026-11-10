@@ -53,40 +53,6 @@ variable {F G A M : Type}
 
 variable [Field F] [DecidableEq F] [AddCommGroup G] [Module F G] [DecidableEq G]
 
-/-- The key from two forgeries `(m, t, s)` and `(m', t', s')` on one point, for a sign `η`.
-
-It is `(s r - H(m)) / t`, where `r = (H(m) / t - H(m') / t') / (s / t - η s' / t')`. -/
-def forwardKey (scheme : Scheme F G A M) (z z' : M × F × F) (η : F) : F :=
-  let r := (scheme.hash z.1 / z.2.1 - scheme.hash z'.1 / z'.2.1) /
-    (z.2.2 / z.2.1 - η * z'.2.2 / z'.2.1)
-  (z.2.2 * r - scheme.hash z.1) / z.2.1
-
-omit [DecidableEq F] [DecidableEq G] [AddCommGroup G] [Module F G] in
-/-- The key for a sign `η` is the key when the second scalar is `η` times the first. -/
-private theorem forwardKey_eq_of {scheme : Scheme F G A M} {x η : F} {z z' : M × F × F}
-    (ht : z.2.1 ≠ 0) (hs : z.2.2 ≠ 0) (ht' : z'.2.1 ≠ 0) (hs' : z'.2.2 ≠ 0)
-    (hη : z'.2.2⁻¹ * (scheme.hash z'.1 + z'.2.1 * x) =
-      η * (z.2.2⁻¹ * (scheme.hash z.1 + z.2.1 * x)))
-    (hdiv : scheme.hash z.1 / z.2.1 ≠ scheme.hash z'.1 / z'.2.1) :
-    forwardKey scheme z z' η = x := by
-  obtain ⟨m, t, s⟩ := z
-  obtain ⟨m', t', s'⟩ := z'
-  simp only at ht hs ht' hs' hη hdiv
-  set r := s⁻¹ * (scheme.hash m + t * x) with hr
-  have h1 : scheme.hash m = s * r - t * x := by rw [hr]; field_simp; ring
-  have h2 : scheme.hash m' = s' * (η * r) - t' * x := by rw [← hη]; field_simp; ring
-  have hden : s / t - η * s' / t' ≠ 0 := by
-    intro h0
-    apply hdiv
-    have : (s * r - t * x) / t - (s' * (η * r) - t' * x) / t' = r * (s / t - η * s' / t') := by
-      field_simp; ring
-    rw [h1, h2]
-    exact sub_eq_zero.mp (by rw [this, h0, mul_zero])
-  have hrr : (scheme.hash m / t - scheme.hash m' / t') / (s / t - η * s' / t') = r := by
-    rw [div_eq_iff hden, h1, h2]; field_simp; ring
-  simp only [forwardKey]
-  rw [hrr, h1]; field_simp; ring
-
 /-- The key from two forgeries on one point and the key `X`.
 
 The key for the sign `1` is kept if it gives `X`, and the key for the sign `-1` is taken if not. -/

@@ -1157,6 +1157,120 @@ theorem foldl_recordVote {equivocating : List ValidatorIndex} {message : LatestM
       exact keep rest _ m found late
     · exact ih _ voted
 
+/-- One vote leaves a vote as it was, or sets it to the new vote for the voter. -/
+private theorem recordVote_cases {equivocating : List ValidatorIndex}
+    {message : LatestMessage fork} {messages : Std.TreeMap ValidatorIndex (LatestMessage fork)}
+    {index validator : ValidatorIndex} {latest : LatestMessage fork}
+    (found : (recordVote equivocating message messages index)[validator]? = some latest) :
+    messages[validator]? = some latest ∨ (validator = index ∧ latest = message) := by
+  have inserted : (messages.insert index message)[validator]? = some latest →
+      messages[validator]? = some latest ∨ (validator = index ∧ latest = message) := by
+    intro found
+    rw [Std.TreeMap.getElem?_insert] at found
+    simp only [Std.LawfulEqCmp.compare_eq_iff_eq] at found
+    split at found
+    · rename_i same
+      cases found
+      exact .inr ⟨same.symm, rfl⟩
+    · exact .inl found
+  unfold recordVote at found
+  split at found
+  · exact .inl found
+  · split at found
+    · split at found
+      · exact inserted found
+      · exact .inl found
+    · exact inserted found
+
+/-- A run of votes leaves a vote as it was, or sets it to the new vote for one of the voters. -/
+theorem foldl_recordVote_cases {equivocating : List ValidatorIndex} {message : LatestMessage fork}
+    (indices : List ValidatorIndex) (messages : Std.TreeMap ValidatorIndex (LatestMessage fork))
+    {validator : ValidatorIndex} {latest : LatestMessage fork}
+    (found : (indices.foldl (recordVote equivocating message) messages)[validator]? =
+      some latest) :
+    messages[validator]? = some latest ∨ (validator ∈ indices ∧ latest = message) := by
+  induction indices generalizing messages with
+  | nil => exact .inl found
+  | cons index rest ih =>
+    rw [List.foldl_cons] at found
+    rcases ih _ found with kept | ⟨voter, rfl⟩
+    · rcases recordVote_cases kept with kept | ⟨rfl, rfl⟩
+      · exact .inl kept
+      · exact .inr ⟨List.mem_cons_self, rfl⟩
+    · exact .inr ⟨List.mem_cons_of_mem _ voter, rfl⟩
+
+/-- A step that throws before the rest passes only when its condition fails. -/
+private theorem ite_throw_bind_ok {ε α β : Type} {c : Prop} [Decidable c] {e : ε}
+    {f : α → Except ε β} {k : Except ε β} {y : β} :
+    (if c then throw e >>= f else k) = .ok y ↔ ¬ c ∧ k = .ok y := by
+  by_cases h : c <;> simp [h, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
+
+/-- A check that throws passes only when its condition fails. -/
+private theorem ite_throw_ok {ε : Type} {c : Prop} [Decidable c] {e : ε} :
+    (if c then throw e else pure () : Except ε Unit) = .ok () ↔ ¬ c := by
+  by_cases h : c <;> simp [h, throw, throwThe, MonadExceptOf.throw, pure, Except.pure]
+
+/-- The checks that an attestation passes give the facts on its vote, target and slot. -/
+private theorem validateOnAttestation_facts {attestation : Attestation preset fork}
+    {voted : BeaconBlock preset fork} {checkpoint : Root} {due current : Slot}
+    (epoch : ¬ attestation.data.target.epoch ≠ computeEpochAtSlot preset attestation.data.slot)
+    (votedOk : store.block attestation.data.beaconBlockRoot = .ok voted)
+    (notFuture : ¬ attestation.data.slot < voted.slot)
+    (checkpointOk : store.getCheckpointBlock attestation.data.beaconBlockRoot
+      attestation.data.target.epoch = .ok checkpoint)
+    (same : ¬ attestation.data.target.root ≠ checkpoint)
+    (dueOk : (addChecked attestation.data.slot 1).mapError ForkChoiceError.arith = .ok due)
+    (currentOk : store.getCurrentSlot config = .ok current) (notLate : ¬ current < due) :
+    (∃ block, store.blocks[attestation.data.beaconBlockRoot]? = some block ∧
+      block.slot ≤ attestation.data.slot) ∧
+    attestation.data.target.epoch = computeEpochAtSlot preset attestation.data.slot ∧
+    store.getCheckpointBlock attestation.data.beaconBlockRoot attestation.data.target.epoch =
+      .ok attestation.data.target.root ∧
+    ∃ current, store.getCurrentSlot config = .ok current ∧ attestation.data.slot < current := by
+  refine ⟨⟨voted, block_ok_iff.mp votedOk, UInt64.not_lt.mp notFuture⟩, Classical.not_not.mp epoch,
+    by rw [checkpointOk, Classical.not_not.mp same], current, currentOk, ?_⟩
+  obtain ⟨-, dueNat⟩ := addChecked_ok_iff.mp (mapError_ok_iff.mp dueOk)
+  have le := UInt64.le_iff_toNat_le.mp (UInt64.not_lt.mp notLate)
+  rw [UInt64.lt_iff_toNat_lt]
+  simp only [UInt64.toNat_one] at dueNat
+  omega
+
+/-- An attestation that passes its checks votes for a known block.
+
+Its slot is the slot of that block or later.
+
+Its target is in the epoch of its slot, with the checkpoint block of the chain of its vote as root.
+
+The current slot is after its slot. -/
+theorem validateOnAttestation_ok {attestation : Attestation preset fork} {isFromBlock : Bool}
+    (valid : store.validateOnAttestation config attestation isFromBlock = .ok ()) :
+    (∃ block, store.blocks[attestation.data.beaconBlockRoot]? = some block ∧
+      block.slot ≤ attestation.data.slot) ∧
+    attestation.data.target.epoch = computeEpochAtSlot preset attestation.data.slot ∧
+    store.getCheckpointBlock attestation.data.beaconBlockRoot attestation.data.target.epoch =
+      .ok attestation.data.target.root ∧
+    ∃ current, store.getCurrentSlot config = .ok current ∧ attestation.data.slot < current := by
+  unfold validateOnAttestation at valid
+  cases isFromBlock <;> by_cases gloas : Fork.glamsterdam ≤ fork <;>
+    simp only [gloas, Bool.false_eq_true, ↓reduceIte, ↓reduceDIte, bind_ok_iff,
+      ite_throw_bind_ok, ite_throw_ok] at valid
+  · obtain ⟨-, -, epoch, -, -, voted, votedOk, notFuture, -, -, checkpoint, checkpointOk, same,
+      due, dueOk, current, currentOk, notLate⟩ := valid
+    exact validateOnAttestation_facts epoch votedOk notFuture checkpointOk same dueOk currentOk
+      notLate
+  · obtain ⟨-, -, epoch, -, -, voted, votedOk, notFuture, checkpoint, checkpointOk, same,
+      due, dueOk, current, currentOk, notLate⟩ := valid
+    exact validateOnAttestation_facts epoch votedOk notFuture checkpointOk same dueOk currentOk
+      notLate
+  · obtain ⟨epoch, -, -, voted, votedOk, notFuture, -, -, checkpoint, checkpointOk, same,
+      due, dueOk, current, currentOk, notLate⟩ := valid
+    exact validateOnAttestation_facts epoch votedOk notFuture checkpointOk same dueOk currentOk
+      notLate
+  · obtain ⟨epoch, -, -, voted, votedOk, notFuture, checkpoint, checkpointOk, same,
+      due, dueOk, current, currentOk, notLate⟩ := valid
+    exact validateOnAttestation_facts epoch votedOk notFuture checkpointOk same dueOk currentOk
+      notLate
+
 /-- An attestation that the store takes has the committees of its slot, as in a block.
 
 They are read in the state of its target, which the store then keeps. -/

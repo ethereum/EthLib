@@ -61,7 +61,8 @@ private theorem owedBy_le_of_forall {index : BuilderIndex} :
       List.getElem_cons_zero] at head tail ⊢
     omega
 
-private theorem paymentAt_cancelProposerPayments {gloas : .glamsterdam ≤ fork}
+/-- Cancelling the payments of a proposer empties each of its payments and keeps the others. -/
+theorem paymentAt_cancelProposerPayments {gloas : .glamsterdam ≤ fork}
     {proposer : ValidatorIndex} (position : Nat) :
     paymentAt (cancelProposerPayments state gloas proposer) gloas position =
       if (paymentAt state gloas position).proposerIndex = proposer then .empty
@@ -205,7 +206,7 @@ theorem BuilderDebtCovered.cancelProposerPayments {gloas : .glamsterdam ≤ fork
 
 /-- From Gloas, slashing a validator keeps the builder fields, then cancels payments of a proposer.
 -/
-private theorem slashValidator_eq_cancelProposerPayments {gloas : .glamsterdam ≤ fork}
+theorem slashValidator_eq_cancelProposerPayments {gloas : .glamsterdam ≤ fork}
     {slashedIndex : ValidatorIndex} {whistleblowerIndex : Option ValidatorIndex}
     (computed : slashValidator config state slashedIndex whistleblowerIndex = .ok after) :
     ∃ last proposer, BuilderFrame state last ∧
@@ -240,6 +241,27 @@ private theorem builders_slashValidator {gloas : .glamsterdam ≤ fork}
   obtain ⟨_, _, frame, rfl⟩ := slashValidator_eq_cancelProposerPayments (gloas := gloas) computed
   exact frame.builders
 
+/-- A slashing keeps each payment, or empties it. -/
+theorem paymentAt_slashValidator {gloas : .glamsterdam ≤ fork}
+    {slashedIndex : ValidatorIndex} {whistleblowerIndex : Option ValidatorIndex}
+    (computed : slashValidator config state slashedIndex whistleblowerIndex = .ok after)
+    (position : Nat) :
+    paymentAt after gloas position = paymentAt state gloas position ∨
+      paymentAt after gloas position = .empty := by
+  obtain ⟨_, _, frame, rfl⟩ := slashValidator_eq_cancelProposerPayments (gloas := gloas) computed
+  rw [paymentAt_cancelProposerPayments, frame.paymentAt gloas]
+  split
+  · exact .inr rfl
+  · exact .inl rfl
+
+/-- A slashing keeps the slot, and keeps or empties each pending payment. -/
+theorem paymentWrites_slashValidator {gloas : .glamsterdam ≤ fork}
+    {slashedIndex : ValidatorIndex} {whistleblowerIndex : Option ValidatorIndex}
+    (computed : slashValidator config state slashedIndex whistleblowerIndex = .ok after) :
+    PaymentWrites state after gloas :=
+  ⟨(payloadInputs_slashValidator computed).slot, fun position =>
+    (paymentAt_slashValidator computed position).imp_right .inl⟩
+
 /-! ## Weighed payments -/
 
 /-- Weighing a payment keeps the withdrawal of each payment. -/
@@ -267,7 +289,7 @@ private theorem recordPaymentWeight_withdrawals {gloas : .glamsterdam ≤ fork}
   · rfl
 
 /-- Weighing a payment keeps the withdrawal at each position. -/
-private theorem paymentAt_recordPaymentWeight_withdrawal {gloas : .glamsterdam ≤ fork}
+theorem paymentAt_recordPaymentWeight_withdrawal {gloas : .glamsterdam ≤ fork}
     {data : AttestationData} {current : Bool} {before updated : EpochParticipation preset fork}
     {attesters : List ValidatorIndex}
     (computed : recordPaymentWeight state gloas data current before updated attesters = .ok after)
@@ -281,7 +303,7 @@ private theorem paymentAt_recordPaymentWeight_withdrawal {gloas : .glamsterdam �
     cases (state.builderPendingPayments gloas).elements[position]? <;> simp
 
 /-- Weighing a payment keeps each payment at another position. -/
-private theorem paymentAt_recordPaymentWeight_other {gloas : .glamsterdam ≤ fork}
+theorem paymentAt_recordPaymentWeight_other {gloas : .glamsterdam ≤ fork}
     {data : AttestationData} {current : Bool} {before updated : EpochParticipation preset fork}
     {attesters : List ValidatorIndex} {position : Nat}
     (computed : recordPaymentWeight state gloas data current before updated attesters = .ok after)
@@ -290,6 +312,31 @@ private theorem paymentAt_recordPaymentWeight_other {gloas : .glamsterdam ≤ fo
   have kept := recordPaymentWeight_other computed other
   simp only [Serialization.Ssz.RootedVector.getElem?_eq] at kept
   simp only [paymentAt, kept]
+
+/-- Weighing a payment with no amount leaves the state as it was. -/
+theorem recordPaymentWeight_of_amount_eq_zero {gloas : .glamsterdam ≤ fork}
+    {data : AttestationData} {current : Bool} {before updated : EpochParticipation preset fork}
+    {attesters : List ValidatorIndex}
+    (computed : recordPaymentWeight state gloas data current before updated attesters = .ok after)
+    (zero : (paymentAt state gloas
+      (attestationPaymentPosition preset current data.slot)).withdrawal.amount = 0) :
+    after = state :=
+  recordPaymentWeight_of_noWeight computed (.inr fun payment found => by
+    rw [Serialization.Ssz.RootedVector.getElem?_eq] at found
+    simpa only [paymentAt, found, Option.getD_some] using zero)
+
+/-- Weighing a payment keeps each payment of no bid empty. -/
+theorem paymentAt_recordPaymentWeight_empty {gloas : .glamsterdam ≤ fork}
+    {data : AttestationData} {current : Bool} {before updated : EpochParticipation preset fork}
+    {attesters : List ValidatorIndex} {position : Nat}
+    (computed : recordPaymentWeight state gloas data current before updated attesters = .ok after)
+    (empty : paymentAt state gloas position = .empty) :
+    paymentAt after gloas position = .empty := by
+  by_cases weighed : position = attestationPaymentPosition preset current data.slot
+  · rw [recordPaymentWeight_of_amount_eq_zero computed (by rw [← weighed, empty]; rfl)]
+    exact empty
+  · rw [paymentAt_recordPaymentWeight_other computed weighed]
+    exact empty
 
 /-- Weighing a payment reads whether the vote is for the block of its own slot. -/
 private theorem recordPaymentWeight_sameSlot {gloas : .glamsterdam ≤ fork}
@@ -374,17 +421,8 @@ private theorem BuilderDebtCovered.recordPaymentWeight (positive : preset.Paymen
     cases found
     rw [paymentAt_recordPaymentWeight_other computed apart]
     simpa only [latestBidWithdrawal, bid] using holds.parentFresh _ parentAt
-  · have kept := holds.laterEmpty k fun parent found => later parent (position ▸ found)
-    by_cases weighed : k = attestationPaymentPosition preset current data.slot
-    · have same := recordPaymentWeight_of_noWeight computed (.inr fun payment found => by
-        rw [← weighed, Serialization.Ssz.RootedVector.getElem?_eq] at found
-        simp only [paymentAt, found, Option.getD_some] at kept
-        rw [kept]
-        rfl)
-      rw [same]
-      exact kept
-    · rw [paymentAt_recordPaymentWeight_other computed weighed]
-      exact kept
+  · exact paymentAt_recordPaymentWeight_empty computed
+      (holds.laterEmpty k fun parent found => later parent (position ▸ found))
 
 /-- Setting the participation flags of an epoch keeps the builder fields. -/
 private theorem builderFrame_setEpochParticipation {current : Bool}
@@ -461,7 +499,7 @@ private theorem BuilderDebtCovered.slashIfSlashable {gloas : .glamsterdam ≤ fo
 The steps are a slashing, the weighing of a payment, and the steps that keep the builder fields.
 
 The relation must be transitive. -/
-private theorem processOperations_of_steps {gloas : .glamsterdam ≤ fork}
+theorem processOperations_of_steps {gloas : .glamsterdam ≤ fork}
     {body : BeaconBlockBody preset fork} {parentSlot : Slot}
     (keeps : BeaconState preset fork → BeaconState preset fork → Prop)
     (trans : ∀ {first second third}, keeps first second → keeps second third →

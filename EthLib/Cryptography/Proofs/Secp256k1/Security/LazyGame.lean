@@ -31,6 +31,28 @@ open OracleComp OracleSpec ENNReal LazyPermutation
 
 variable {F G A M : Type}
 
+/-- A computation that asks only coins and `Π`, as one of the chosen-message game. -/
+def keyOnlyLift : QueryImpl (unifSpec + PermSpec A) (OracleComp (Spec F A M))
+  | .inl n => query (spec := Spec F A M) (.inl n)
+  | .inr (.inl a) => query (spec := Spec F A M) (.inr (.inl a))
+  | .inr (.inr b) => query (spec := Spec F A M) (.inr (.inr (.inl b)))
+
+/-- A query of coins asks the same coins. -/
+@[simp] theorem keyOnlyLift_inl (n : ℕ) :
+    keyOnlyLift (F := F) (A := A) (M := M) (.inl n) = query (spec := Spec F A M) (.inl n) :=
+  rfl
+
+/-- A forward query of `Π` asks `Π` forward. -/
+@[simp] theorem keyOnlyLift_inr_inl (a : A) :
+    keyOnlyLift (F := F) (M := M) (.inr (.inl a)) = query (spec := Spec F A M) (.inr (.inl a)) :=
+  rfl
+
+/-- An inverse query of `Π` asks `Π` backward. -/
+@[simp] theorem keyOnlyLift_inr_inr (b : A) :
+    keyOnlyLift (F := F) (M := M) (.inr (.inr b)) =
+      query (spec := Spec F A M) (.inr (.inr (.inl b))) :=
+  rfl
+
 variable [Field F] [DecidableEq F] [AddCommGroup G] [Module F G] [DecidableEq G]
 
 /-- The conversion `f = ψ ∘ Π ∘ φ`, with `Π` asked of the oracle. -/
@@ -60,6 +82,23 @@ def verifyQ (scheme : Scheme F G A M) (X : G) (m : M) (t s : F) : PermComp A Boo
   if X ≠ 0 ∧ t ≠ 0 ∧ s ≠ 0 ∧ U ≠ 0 then
     (fun c => decide (c = t)) <$> conversionQ scheme (s⁻¹ • U)
   else pure false
+
+/-- The check of a forgery `(m, t, s)` asks `Π` once, when its guard holds.
+
+It asks at the encoding of `U / s`, where `U = H(m) g + t X`. -/
+theorem simulateQ_verifyQ_run {σ : Type}
+    (perm : QueryImpl (PermSpec A) (StateT σ ProbComp)) (scheme : Scheme F G A M) (X : G)
+    (m : M) (t s : F) (st : σ) :
+    (simulateQ (unifSpec.passthrough + perm) (verifyQ scheme X m t s)).run st =
+      if X ≠ 0 ∧ t ≠ 0 ∧ s ≠ 0 ∧ scheme.hash m • scheme.g + t • X ≠ 0 then
+        (fun w => (decide (scheme.reduce w.1 = t), w.2)) <$>
+          (perm (.inl (scheme.encode (s⁻¹ • (scheme.hash m • scheme.g + t • X))))).run st
+      else pure (false, st) := by
+  unfold verifyQ conversionQ
+  dsimp only
+  split_ifs
+  · simp [Functor.map_map]
+  · simp
 
 variable [SampleableType F]
 

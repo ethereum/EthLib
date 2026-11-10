@@ -137,6 +137,22 @@ theorem checkpointState_ok_iff {checkpoint : Checkpoint} {state : BeaconState pr
   cases store.checkpointStates[checkpoint]? <;>
     simp [throw, throwThe, MonadExceptOf.throw, pure, Except.pure]
 
+/-- The node that a vote supports is a node of the block of the vote. -/
+theorem getSupportedNode_root {message : LatestMessage fork} {node : ForkChoiceNode}
+    (supported : store.getSupportedNode message = .ok node) : node.root = message.root := by
+  unfold getSupportedNode at supported
+  by_cases gloas : .glamsterdam ≤ fork
+  · simp only [gloas, ↓reduceDIte, bind, Except.bind] at supported
+    cases known : store.block message.root with
+    | error e => simp [known] at supported
+    | ok block =>
+      rw [known] at supported
+      by_cases lt : block.slot < message.slot gloas <;>
+        simp only [lt, ↓reduceIte, pure, Except.pure, Except.ok.injEq] at supported <;>
+        rw [← supported]
+  · simp only [gloas, ↓reduceDIte, pure, Except.pure, Except.ok.injEq] at supported
+    rw [← supported]
+
 /-- Before Gloas a vote supports the pending node of its block. -/
 theorem getSupportedNode_of_lt {message : LatestMessage fork} (before : fork < .glamsterdam) :
     store.getSupportedNode message = .ok ⟨message.root, .pending⟩ := by

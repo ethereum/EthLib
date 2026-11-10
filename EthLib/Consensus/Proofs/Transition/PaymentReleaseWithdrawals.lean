@@ -73,6 +73,37 @@ theorem PaymentStep.of_release {gloas : .glamsterdam ≤ fork} {released : List 
     release.forward⟩
   simp [release.queue]
 
+/-- A release, then a step that releases nothing, form one step.
+
+The released payments must be closed after the second step.
+
+That step may drop a prefix of the queue. -/
+theorem PaymentStep.of_release_trans {gloas : .glamsterdam ≤ fork}
+    {middle : BeaconState preset fork} {released : List Slot}
+    (release : PaymentRelease state middle gloas released)
+    (step : PaymentStep middle after gloas [])
+    (closes : ∀ slot ∈ released, ¬ PaymentOpen after gloas slot) :
+    PaymentStep state after gloas released := by
+  obtain ⟨count, queue⟩ := step.queue
+  refine ⟨release.nodup, ⟨count, ?_⟩, release.opened, release.past, closes, ?_,
+    UInt64.le_trans release.forward step.forward⟩
+  · rw [queue, release.queue]
+    simp
+  · intro slot open_after
+    rcases step.noReopen slot open_after with open_middle | later
+    · exact release.noReopen slot open_middle
+    · exact Or.inr (UInt64.le_trans release.forward later)
+
+/-- A payment closed before a step and older than its slot stays closed after the step. -/
+theorem PaymentStep.keepsClosed {gloas : .glamsterdam ≤ fork} {released : List Slot}
+    {slot : Slot} (step : PaymentStep state after gloas released)
+    (closed : ¬ PaymentOpen state gloas slot) (past : slot < state.slot) :
+    ¬ PaymentOpen after gloas slot := by
+  intro open_after
+  rcases step.noReopen slot open_after with open_before | later
+  · exact closed open_before
+  · exact absurd later (UInt64.not_le.mpr past)
+
 /-- A step that releases payments, then a step that releases none, release those payments.
 
 The second step may drop more of the queue, and it keeps each released payment closed. -/
@@ -86,11 +117,8 @@ theorem PaymentStep.trans_nil {gloas : .glamsterdam ≤ fork}
     UInt64.le_trans one.forward two.forward⟩
   · rw [two_queue, one_queue]
     simp [List.drop_drop]
-  · intro slot mem open_third
-    rcases two.noReopen slot open_third with open_second | later
-    · exact one.closes slot mem open_second
-    · exact absurd later (UInt64.not_le.mpr
-        (UInt64.lt_of_lt_of_le (one.past slot mem) one.forward))
+  · exact fun slot mem => two.keepsClosed (one.closes slot mem)
+      (UInt64.lt_of_lt_of_le (one.past slot mem) one.forward)
   · intro slot open_third
     rcases two.noReopen slot open_third with open_second | later
     · rcases one.noReopen slot open_second with open_first | later
@@ -104,9 +132,10 @@ theorem processWithdrawals_paymentStep {gloas : .glamsterdam ≤ fork}
     (computed : processWithdrawals state capella payload = .ok after) :
     PaymentStep state after gloas [] := by
   have inputs := payloadInputs_processWithdrawals computed
+  have payments := processWithdrawals_payments gloas computed
   by_cases full : isParentBlockFull state gloas = true
   · obtain ⟨expected, -, applied, -⟩ := processWithdrawals_recorded gloas full computed
-    obtain ⟨payments, queue⟩ := applyExpectedWithdrawals_builderQueues gloas applied
+    have queue := (applyExpectedWithdrawals_builderQueues gloas applied).2
     have positions := slotPaymentPosition_congr inputs.slot
     have header : after.latestBlockHeader.slot = state.latestBlockHeader.slot := by
       rw [inputs.latestBlockHeader]

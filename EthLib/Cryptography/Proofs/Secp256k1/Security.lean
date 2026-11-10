@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.Collision
+public import EthLib.Cryptography.Proofs.Secp256k1.Security.Conflict
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.DivisionResistance
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.ForwardCase
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.ForwardSolver
@@ -10,8 +11,11 @@ public import EthLib.Cryptography.Proofs.Secp256k1.Security.JointGame
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.KeyOnly
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.KeyOnlyBound
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.KeyOnlyOutside
+public import EthLib.Cryptography.Proofs.Secp256k1.Security.Keyless
+public import EthLib.Cryptography.Proofs.Secp256k1.Security.KeylessForger
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.LazyGame
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.Origin
+public import EthLib.Cryptography.Proofs.Secp256k1.Security.Programmed
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.QueryBound
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.Redraw
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.Refinement
@@ -103,5 +107,19 @@ A forgery on a new message with the hash of a signed one is charged to a finder 
 
 That is the first step of their Theorem 1.
 
-No theorem bounds a forger with a signing oracle yet; that is the rest of their Theorem 1.
+In the next game, the signer programs `Π`.
+
+The adversary's queries go to an overlay in front of the lazy permutation.
+
+Until two pairs of the overlay's cache conflict, the lazy game dominates that game.
+
+The chance of a conflict is bounded, with a nonzero base point and a semi-injective `φ`.
+
+A signer that reads only the public key gives that game the same law.
+
+A key-only forger runs that game.
+
+A solver of the discrete logarithm covers a forgery at a point that the signer programmed.
+
+No theorem yet assembles these steps into the bound of their Theorem 1.
 -/

@@ -9,6 +9,41 @@ Not yet released.
 
 ### Changes that break callers
 
+- From Gloas, the rewards and penalties and the inactivity updates of an epoch now fail where a registry position of 2^64 or more would become a validator index ([#1883](https://github.com/ethereum/EthLib/issues/1883)).
+  The specification builds a `ValidatorIndex` for each position when it applies the deltas, and for each eligible validator when it lists the eligible indices.
+  EthLib took such a position modulo 2^64, so it credited the balance, or updated the inactivity score, of another validator.
+  Before Gloas the registry stays within its limit, which is below 2^64, so nothing changes there.
+  No C export or Python function changes.
+  In Lean, `applyDeltas_eq_ok_iff` now reads the balance at the position itself, not at the position modulo 2^64, and adds the condition that the position is below 2^64.
+  `applyAllDeltas_balances`, `foldlM_applyAllDeltas_balances` and `processRewardsAndPenalties_balances_of_altair` no longer take a bound on the size of the registry.
+- The FFG chain theorems now derive that the block of each justified checkpoint is in the chain of the block of its recent epoch from the order of the roots at consecutive slots, instead of assuming it ([#1420](https://github.com/ethereum/EthLib/issues/1420)).
+  No C export or Python function changes.
+  In Lean, the field `chain` of `SlackStepBounds` becomes `links`, which asks the map from roots to blocks to keep in order the roots of consecutive slots (`rootLinks`).
+  `SlackChainInvariant` gains the field `roots`, a `RootsAbove` fact that the new `FfgRoots.lean` keeps along each chain step.
+  The new `ChainRoot` orders the roots by the links of the states that genesis reaches, and `slackJustifiedCheckpoints_chainRoot_of_chainSteps` uses it, so it asks no order hypothesis.
+  The new `recentJustified` names the justified checkpoint of a recent epoch, and `RootsAbove.le_of_getBlockRoot` gives the order that justification reads; `RootsAbove.of_chainStep`, `RootsAbove.of_initializeBeaconStateFromEth1` and `toChainRoot` are new too.
+  New shared lemmas: `getBlockRootAtSlot_ok_iff`, `getBlockRootAtSlot_exists`, `getBlockRootAtSlot_between` and `getBlockRootAtSlot_congr` (`Accessors.lean`), `advanceSlot_previousJustified`, `processBlock_blockRoots`, `processUpgrades_slot` and `processUpgrades_blockRoots`.
+- From Gloas, the pending deposits of an epoch now fail at every deposit they read to a key whose first validator sits at a registry position of 2^64 or more ([#1883](https://github.com/ethereum/EthLib/issues/1883)).
+  The specification builds a `ValidatorIndex` from that position before it tests the validator, so it fails there.
+  EthLib failed only when it credited such a deposit, and missed the deposit to a validator that exits and is not withdrawn, and the deposit beyond the churn.
+  Before Gloas the registry stays within its limit, which is below 2^64, so nothing changes there.
+  No C export or Python function changes.
+  In Lean, `depositTargetStatus` now returns an `Except AccessorError (Bool × Bool)`.
+  The fields `stops`, `used`, `appliedFilter` and `movedFilter` of `PassPendingDepositsFacts`, and `processPendingDeposits_postponed`, test that result.
+  The new field `statusOk`, and a new conclusion of `processPendingDeposits_postponed`, say that the status of each deposit read succeeds.
+  The new `addValidatorToRegistry_size_lt` says that a new validator joins a registry of fewer than 2^64 validators.
+- The FFG theorems on the beacon chain now take their votes from the attestations that blocks apply, instead of from any data that some signature verifies on ([#1888](https://github.com/ethereum/EthLib/issues/1888)).
+  Under the BLS checks a verifying signature exists for every data that a registered key can sign, so the old votes did not say who voted.
+  No C export or Python function changes.
+  In Lean, `SignedVote`, `TargetFlagsSigned` and `PendingSigned` are gone, with their lemmas, `voteFrame_processOperations` and the two `of_stateTransition` lemmas of the flags and the pending attestations.
+  The new `attestationVotes` and `blockVotes` name the votes that an attestation and a block cast, and `TargetFlagsVoted` and the new `PendingVoted` take a set of such votes.
+  `VoteFrame` drops its configuration, its signature checks and its field `signed`, and `voteFrame_processAttestation` and `voteFrame_processBlock` give the votes of the step by name; the latter takes the preset bound `apart` and a registry below 2^64.
+  The slot and upgrade lemmas of the flags and the pending attestations no longer take a bound on the registry.
+  The link and slack theorems of `FfgJustification.lean` and `FfgSlack.lean` take the vote set and a hypothesis that the votes of the model hold it, with no slot condition.
+  `SlackChainInvariant` drops its configuration, its signature checks and its field `known`, takes the vote set, and uses its votes in the model; `SlackStepHypotheses` replaces `contains` by `applied`, on the new `blockStepVotes`.
+  `runVotes` drops its argument `block` and now holds the beacon votes that the block steps of a run cast, so a caller wraps it in `ffgVotes block`.
+  `ForkVersionsKnown` is gone with its lemmas, and `initializeBeaconStateFromEth1_target` becomes `JustifiedEarly.of_initializeBeaconStateFromEth1`, which gives only the equal justified checkpoints.
+  `TargetFlagAt.of_flagsKeptOrZero` moves to `Upgrade.lean`.
 - The theorem that an attestation keeps the registry and the RANDAO mixes now holds at every fork ([#1888](https://github.com/ethereum/EthLib/issues/1888)).
   No C export or Python function changes.
   In Lean, `processAttestation_registry` drops its argument `before : fork < .altair`, so a caller removes it.
