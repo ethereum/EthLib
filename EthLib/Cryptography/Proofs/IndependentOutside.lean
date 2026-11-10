@@ -79,7 +79,7 @@ def outsideImpl :
     (·, s) <$> (query (spec := OutsideSpec A) (.inl n) : OracleComp (OutsideSpec A) (Fin (n + 1)))
   | .inr t => outsideOracle t
 
-/-- Each step adds at most one pair to the log, and only a new forward query adds one. -/
+/-- Each step adds at most one pair to the log, and a coin query adds none. -/
 theorem length_log_le_of_mem_support_outsideImpl (t : (unifSpec + PermSpec A).Domain)
     (s : OutsideState A) (z) (hz : z ∈ support ((outsideImpl t).run s)) :
     z.2.2.length ≤ s.2.length + if t.isRight = true then 1 else 0 := by

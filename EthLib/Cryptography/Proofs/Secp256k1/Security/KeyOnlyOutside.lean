@@ -16,7 +16,9 @@ With the key drawn uniformly, it wins with the chance of the game with independe
 
 The run logs at most one more pair than the forger asks for `Π` or its inverse.
 
-When the outside oracle answered the conversion of a forgery, a replay fork can rewind there.
+When the outside oracle answered the conversion of a forgery, a later proof can rewind there.
+
+No theorem forks the run yet.
 
 A later proof can split forgeries from forward and inverse pairs on this run.
 
@@ -68,9 +70,10 @@ def keyOnlyOutsideRun (scheme : Scheme F G A M) (adversary : KeyOnlyAdversary F 
 
 /-- The run logs at most `q + 1` pairs.
 
-The forger must ask for `Π` or its inverse at most `q` times. -/
-theorem length_forward_le_of_mem_support_keyOnlyOutsideRun (scheme : Scheme F G A M) (adversary : KeyOnlyAdversary F G A M)
-    (X : G) {q : ℕ} (hq : IsQueryBoundP (adversary.main X) (·.isRight = true) q)
+Take a forger that asks for `Π` or its inverse at most `q` times on the key `X`. -/
+theorem length_forward_le_of_mem_support_keyOnlyOutsideRun (scheme : Scheme F G A M)
+    (adversary : KeyOnlyAdversary F G A M) (X : G) {q : ℕ}
+    (hq : IsQueryBoundP (adversary.main X) (·.isRight = true) q)
     {tr : KeyOnlyTrace F A M} (htr : tr ∈ support (keyOnlyOutsideRun scheme adversary X)) :
     tr.forward.length ≤ q + 1 := by
   simp only [keyOnlyOutsideRun, support_map, Set.mem_image] at htr
