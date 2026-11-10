@@ -251,7 +251,9 @@ def requestContracts (fork : Fork) : List (UInt8 × Address) :=
 def requestList (type : UInt8) (data : ByteArray) : List ByteArray :=
   if data.size = 0 then [] else [⟨#[type]⟩ ++ data]
 
-/-- Call a request contract, with the type of its requests, after the body and requests so far.
+/-- Call a request contract after the body and the requests so far, and add its requests.
+
+The contract comes with the type of its requests, which starts each of them.
 
 The call joins the body at the current position, and its requests follow those read so far. -/
 def readRequest {fork : Fork} (env : BlockEnvironment fork)

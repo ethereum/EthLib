@@ -42,7 +42,9 @@ def AccountRecord.NamesKey (r : AccountRecord) (key : Bytes32) : Prop :=
 
 /-- Every account that the call `tx` read or wrote meets `account`.
 
-Every storage key that it read or wrote meets `key`, with its address. -/
+Every storage key that it read or wrote meets `key`, with its address.
+
+An account counts as having written storage through the keys that it wrote. -/
 structure CoveredBy (account : Address → Prop) (key : Address → Bytes32 → Prop)
     (tx : TransactionState) : Prop where
   /-- Each account that the call read. -/
@@ -147,7 +149,7 @@ theorem amend_extends (b : AccessListBuilder) (address : Address)
       exact ⟨f r, by simp [amend, hr], hf r k hk⟩
     · exact ⟨r, by simp [amend, Std.ExtTreeMap.getElem?_modify, hEq, hr], hk⟩
 
-/-- A change of the balance, the nonce or the code extends the builder. -/
+/-- Recording the balance, the nonce or the code at the current position extends the builder. -/
 theorem setField_extends {α : Type} (b : AccessListBuilder) (address : Address) (changed : Bool)
     (value : α) (field : AccountRecord → Std.ExtTreeMap UInt32 α)
     (update : AccountRecord → Std.ExtTreeMap UInt32 α → AccountRecord)
@@ -230,7 +232,7 @@ theorem recordStorageWrite_extends (b : AccessListBuilder) (address : Address) (
 
 /-- A fold that can fail, whose every step extends the builder and meets a goal.
 
-The goal must hold on for any later extension of the builder.
+The goal must keep holding on every later extension of the builder.
 
 When the fold succeeds, its result extends the start and meets the goal for every element. -/
 theorem foldlM_extends {α ε : Type} {f : AccessListBuilder → α → Except ε AccessListBuilder}
@@ -248,7 +250,7 @@ theorem foldlM_extends {α ε : Type} {f : AccessListBuilder → α → Except �
 
 /-- A fold whose every step extends the builder and meets a goal meets it for every element.
 
-The goal must hold on for any later extension of the builder. -/
+The goal must keep holding on every later extension of the builder. -/
 theorem foldl_extends {α : Type} (f : AccessListBuilder → α → AccessListBuilder)
     (goal : AccessListBuilder → α → Prop)
     (hgoal : ∀ b b' x, b.Extends b' → goal b x → goal b' x)
@@ -257,7 +259,7 @@ theorem foldl_extends {α : Type} (f : AccessListBuilder → α → AccessListBu
   foldlM_extends (ε := Empty) (f := fun b x => .ok (f b x)) goal hgoal
     (fun b x _ h => by cases h; exact hf b x) (foldlM_eq_ok_foldl (fun _ _ _ => rfl) b)
 
-/-- The writes to the storage of one account name every written key. -/
+/-- The writes to the storage of one account extend the builder and name every written key. -/
 theorem extends_foldl_recordStorageWrite (b : AccessListBuilder) (address : Address)
     (slots : Std.ExtTreeMap Bytes32 U256) :
     b.Extends (slots.foldl (fun b key value => b.recordStorageWrite address key value) b) ∧

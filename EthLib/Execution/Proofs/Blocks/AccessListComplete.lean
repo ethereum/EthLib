@@ -11,7 +11,7 @@ The body of a block runs system calls, transactions, withdrawals and calls to re
 
 Each of them ends with a state that records what it read and what it wrote.
 
-The builder records each of these states when it joins the body.
+When one of these states joins the body, the builder records it.
 
 So the builder at the end of the body covers every one of them.
 
@@ -19,7 +19,7 @@ That is, it records each account that one of them read or wrote.
 
 It also names each storage key that one of them read or wrote, as a change or as a read.
 
-With the facts on the list of a builder, the list that the block commits to holds them too.
+The list of a builder that covers a call covers that call too, and the block commits to that list.
 
 A header commits to that list from Glamsterdam, so a block that passes the transition names them.
 
@@ -27,7 +27,11 @@ Completeness is relative to the reads and writes that the state of each call rec
 
 The DAO transfer and the block rewards before Paris write the state without a call.
 
-The builder leaves them out, and neither runs in a block that commits to a list.
+The builder leaves them out.
+
+The rewards stop at Paris, before any block commits to a list.
+
+The DAO transfer runs only at the block that the chain configuration names for it.
 
 Source: [EIP-7928, Scope and Inclusion][eip7928].
 
@@ -75,7 +79,7 @@ theorem applyTransaction_covers {env : BlockEnvironment fork} {index : Nat}
 
 /-- The builder at the end of the transactions covers the run of each of them.
 
-The transaction at index `i` runs on the output of the transactions before it. -/
+The transaction at index `i` of the list, from 0, runs after the transactions before it. -/
 theorem applyTransactions_covers {env : BlockEnvironment fork} {body : BodyState}
     {transactions : List Transaction} {output : BodyOutput fork}
     (h : applyTransactions env body transactions = .ok output) :
@@ -162,7 +166,7 @@ theorem readRequest_covers {env : BlockEnvironment fork}
   obtain ⟨hExt, hCovers⟩ := BodyState.join_covers (mapError_ok_iff.mp hJoined)
   exact ⟨hExt, out, hOut, hCovers⟩
 
-/-- The calls to the request contracts extend the builder, which then covers each call.
+/-- Reading the requests extends the builder, which then covers each call to a contract.
 
 From Pectra, the contract at index `j` runs on the body after the calls before it. -/
 theorem readRequests_covers {env : BlockEnvironment fork} {body body' : BodyState}
@@ -213,7 +217,7 @@ The system calls at the start run on the block state after the DAO transfer, if 
 
 The transactions then run, and the builder after them keeps every record to the end.
 
-From Shapella, the withdrawals then run as one call on the block state after the transactions.
+From Shapella, the withdrawals then join as one state at the position after the transactions.
 
 From Pectra, each request contract is then called, from the body after the withdrawals. -/
 theorem applyBody_covers {config : ChainConfig} {env : BlockEnvironment fork}
@@ -303,7 +307,7 @@ theorem applyBody_covers {config : ChainConfig} {env : BlockEnvironment fork}
 
 /-- The builder at the end of a body covers the run of each of its transactions.
 
-The transaction at index `i` runs on the output of the transactions before it. -/
+The transaction at index `i` of the list, from 0, runs after the transactions before it. -/
 theorem applyBody_covers_transaction {config : ChainConfig} {env : BlockEnvironment fork}
     {block : Block fork Transaction} {start : BlockState} {output : BlockOutput fork}
     (h : applyBody config env block start = .ok output) :
@@ -351,11 +355,13 @@ theorem applyBody_accessListHash {config : ChainConfig} {env : BlockEnvironment 
     cases h
     exact (accessListHashOf_eq_ok hHash hFork).2
 
-/-- From Glamsterdam, a block that passes the transition commits to a list that its body covers.
+/-- From Glamsterdam, a block that passes the transition commits to the list that its builder built.
 
 The hash in its header is the hash of the list that the builder built after the body.
 
-The builder covers each call of the body, so that list holds what each call touched. -/
+With the coverage of the body, that list holds what each call touched.
+
+From Hegota the transition is not yet specified, so this holds from Glamsterdam up to Hegota. -/
 theorem stateTransition_accessList {chain : BlockChain} {block : Block fork Transaction}
     {checkSeal : Bool} {post : State} (hFork : .glamsterdam ≤ fork)
     (h : stateTransition chain block checkSeal = .ok post) :

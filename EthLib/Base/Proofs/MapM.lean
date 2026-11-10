@@ -364,11 +364,15 @@ theorem foldlM_ok_invariant {g : β → α → Except ε β} (P : β → Prop)
     obtain ⟨middle, first, rest⟩ := computed
     exact foldlM_ok_invariant P step (step b x middle holds first) rest
 
-/-- A successful fold reaches each of its steps, and every later step keeps a relation.
+/-- A successful fold reaches each of its steps, and the result of each step relates to the end.
 
 The relation must be reflexive and transitive, and each successful step must meet it.
 
-Then the fold before step `i` succeeds, step `i` succeeds, and the end relates to its result. -/
+Then the start relates to the end.
+
+For the step at index `i`, from 0, the fold of the first `i` inputs succeeds.
+
+That step succeeds, and its result relates to the end. -/
 theorem foldlM_ok_steps {g : β → α → Except ε β} (R : β → β → Prop)
     (refl : ∀ b, R b b) (trans : ∀ {a b c}, R a b → R b c → R a c)
     (step : ∀ b x b', g b x = .ok b' → R b b') :

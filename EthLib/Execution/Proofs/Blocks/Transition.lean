@@ -212,9 +212,9 @@ theorem accessListHashOf_eq_ok {body : BodyState} {gasLimit : Nat} {hash : Optio
 
 /-- A transaction that enters the body passes the inclusion check, and its run succeeds.
 
-The counts of the block then grow by the counts of that run.
+The gas counts of the block then grow by those of that run.
 
-The body after it is the body before, at the position of the transaction, once the run joins it. -/
+The body before it begins position `index + 1`, and the run then joins it. -/
 theorem applyTransaction_eq_ok {env : BlockEnvironment fork} {index : Nat}
     {before after : BodyOutput fork} {tx : Transaction}
     (h : applyTransaction env index before tx = .ok after) :
