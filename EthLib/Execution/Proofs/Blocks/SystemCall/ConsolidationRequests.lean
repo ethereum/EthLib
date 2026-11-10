@@ -31,6 +31,8 @@ From Pectra up to BPO5, a system call to the contract succeeds.
 
 It returns the requests and leaves the storage that the EIP describes.
 
+At every fork from Pectra, reading this contract with no code rejects the block.
+
 [eip-7251-deployment]: https://eips.ethereum.org/EIPS/eip-7251#deployment
 [eip-7251-contract]: https://eips.ethereum.org/EIPS/eip-7251#consolidation-request-contract
 -/
@@ -1257,5 +1259,37 @@ theorem systemCall_dequeue {env : BlockEnvironment fork} {block : State.BlockSta
       rw [← htarget]
       exact spec_dequeue (Nat.le_trans (by decide) hfork) hglam hcaller hstatic (htarget ▸ hacc)
         (htarget ▸ hread) (by rw [hgas]; decide)
+
+/-- Empty consolidation code after the withdrawal request call rejects the request phase.
+
+The preceding call must succeed; an earlier failure takes precedence.
+
+This is the empty-code rejection required by [EIP-7251][eip7251].
+
+[eip7251]: https://eips.ethereum.org/EIPS/eip-7251#system-call -/
+theorem readRequests_of_empty {env : BlockEnvironment fork} {body : BodyState}
+    {mid : BodyState × List ByteArray} (hfork : .pectra ≤ fork)
+    (hwithdrawal : readRequest env (body, [])
+      (WITHDRAWAL_REQUEST_TYPE, WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS) = .ok mid)
+    (hcode : codeAt mid.1.block CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS = .ok .empty) :
+    readRequests env body =
+      .error (.systemContractEmpty CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS) := by
+  have hread := readRequest_of_empty (env := env)
+    (contract := (CONSOLIDATION_REQUEST_TYPE, CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS)) hcode
+  rw [readRequests_of_pectra hfork]
+  unfold requestContracts
+  split <;> simp [REQUEST_CONTRACTS, List.foldlM_cons, hwithdrawal, hread, bind, Except.bind]
+
+/-- No block request result succeeds when consolidation code is empty after withdrawals.
+
+EIP-7251 requires rejection, not an empty list of consolidation requests. -/
+theorem blockRequests_ne_ok_of_empty {env : BlockEnvironment fork} {body : BodyState}
+    {mid : BodyState × List ByteArray} {depositContract : Address} {logs : List Log}
+    {result : BodyState × List ByteArray} (hfork : .pectra ≤ fork)
+    (hwithdrawal : readRequest env (body, [])
+      (WITHDRAWAL_REQUEST_TYPE, WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS) = .ok mid)
+    (hcode : codeAt mid.1.block CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS = .ok .empty) :
+    blockRequests depositContract env body logs ≠ .ok result :=
+  blockRequests_ne_ok_of_readRequests_error hfork (readRequests_of_empty hfork hwithdrawal hcode)
 
 end EthLib.Execution.Blocks.ConsolidationRequests

@@ -4,6 +4,8 @@ public import EthLib.Base.Except
 public import EthLib.Base.Proofs.MapM
 public import EthLib.Execution.Blocks.SystemCall
 public import EthLib.Execution.Blocks.Transition
+public import EthLib.Execution.Proofs.Evm.Logic.Callee
+public import EthLib.Execution.Proofs.Transactions.Process
 
 /-!
 # Proofs: the system calls of a block
@@ -29,6 +31,10 @@ A system call has 30,000,000 gas at every fork.
 Up to BPO5 it has no reservoir and runs with one counter of the gas left.
 
 From Glamsterdam it has a reservoir of 1,566,720 state gas, and runs with the meter of EIP-8037.
+
+From Paris, an unchecked call to empty code outside the precompiles only records its target.
+
+Joining that call keeps the block state and adds the address to the block access list builder.
 -/
 
 @[expose] public section
@@ -77,6 +83,69 @@ theorem systemCall_of_glamsterdam (h : .glamsterdam ≤ fork) :
   simp only [systemCall, h, ↓reduceIte]
   cases processMessageCall (Meter := StateGasMeter) env.chainId.toNat
     (systemMessage env target data) (.ofBlock block) Substate.empty <;> rfl
+
+private theorem processSystemMessage_empty (Meter : Type) [GasMeter Meter] [LawfulGasMeter Meter]
+    (hfork : .paris ≤ fork) (hcode : codeAt block target = .ok .empty)
+    (hpre : Precompiles.addedAt target.toU256.toNat = none) :
+    (processMessageCall (Meter := Meter) env.chainId.toNat (systemMessage env target data)
+      (.ofBlock block) Substate.empty).map (fun out =>
+        SystemCallOutput.mk out.state out.output out.error) =
+      .ok ⟨(State.TransactionState.ofBlock block).recordAccountRead target, .empty, none⟩ := by
+  have hfirst := Transactions.prepareFirstFrame_of_value_eq_zero (Meter := Meter)
+    (chainId := env.chainId.toNat) (message := systemMessage env target data)
+    (state := .ofBlock block) (substate := Substate.empty) (paid := ∅) rfl rfl
+    (EthLib.Base.mapError_ok_iff.mp hcode) (fun _ => Evm.delegatedAddress_empty)
+  generalize hF : Transactions.FirstFrame.ofMeter (Meter := Meter) _ _ _ _ _ = first at hfirst
+  have hstart : startState fork first.message first.state = first.state := by
+    have hnot : ¬fork < .paris := Nat.not_lt.mpr hfork
+    simp only [startState, hnot, ↓reduceIte]
+  have hpre' : precompileAddress fork first.message = none := by
+    subst hF
+    simp [Transactions.FirstFrame.ofMeter, precompileAddress, systemMessage,
+      Precompiles.isPrecompile, hpre]
+  have hs : step fork (startFrame first.message first.state first.substate first.meter) =
+      .ok (.next (advance { startFrame first.message first.state first.substate first.meter
+        with running := false })) := by
+    apply step_of_size_le
+    subst hF
+    exact Nat.le_refl 0
+  have ran := runFrame_of_step_eq_next (runChild := Evm.Logic.processRunner fork first.message.gas)
+    (decreases := step_decreases fork) (within := first.held) rfl hs
+  rw [runFrame_of_running_eq_false rfl] at ran
+  have hp := Evm.Logic.processMessage_map_val
+    (state := first.state) (substate := first.substate) (meter := first.meter) (held := first.held)
+    (result := .ok (advance { startFrame first.message first.state first.substate first.meter
+      with running := false }))
+    (by subst hF; simp [Transactions.FirstFrame.ofMeter, systemMessage]) hpre'
+    (by simpa only [hstart] using ran)
+  cases hc : processMessage fork first.message first.state first.substate first.meter
+      first.held with
+  | error e => rw [hc] at hp; cases hp
+  | ok ended =>
+    rw [hc] at hp
+    have he := Except.ok.inj hp
+    have ht : (systemMessage env target data).target = some target := rfl
+    simp only [processMessageCall, hfirst, ht, hc, bind, Except.bind, pure,
+      Except.pure, Except.map]
+    rw [he]
+    subst hF
+    rfl
+
+/-- From Paris, an unchecked call to empty code outside the precompiles succeeds without writes.
+
+It returns no output and records only the read of its target, with either gas meter.
+
+The code lookup must succeed: unavailable code is not empty code. -/
+theorem systemCall_of_empty (hfork : .paris ≤ fork)
+    (hcode : codeAt block target = .ok .empty)
+    (hpre : Precompiles.addedAt target.toU256.toNat = none) :
+    systemCall env block target data =
+      .ok ⟨(State.TransactionState.ofBlock block).recordAccountRead target, .empty, none⟩ := by
+  by_cases hglam : .glamsterdam ≤ fork
+  · rw [systemCall_of_glamsterdam hglam]
+    exact processSystemMessage_empty StateGasMeter hfork hcode hpre
+  · rw [systemCall_of_lt_glamsterdam (Nat.lt_of_not_le hglam)]
+    exact processSystemMessage_empty Nat hfork hcode hpre
 
 /-- A checked system call to a contract with no code makes the block invalid. -/
 theorem checkedSystemCall_of_size_eq_zero {code : ByteArray}
@@ -173,6 +242,18 @@ theorem BodyState.join_eq_ok {body body' : BodyState} {tx : State.TransactionSta
   cases h
   exact ⟨b, hb, rfl⟩
 
+/-- Joining a call that only read its target keeps the block and records that address. -/
+theorem BodyState.join_recordAccountRead (body : BodyState) (target : Address) :
+    body.join ((State.TransactionState.ofBlock body.block).recordAccountRead target) =
+      .ok { body with builder := body.builder.record target id } := by
+  have hlist : ((∅ : Std.ExtTreeSet Address).insert target).toList = [target] := rfl
+  simp [BodyState.join, AccessListBuilder.recordTransaction, State.TransactionState.ofBlock,
+    State.TransactionState.recordAccountRead, State.TransactionState.incorporateTxIntoBlock,
+    Std.ExtTreeMap.foldl_eq_foldl_toList, Std.ExtTreeMap.foldlM_eq_foldlM_toList,
+    Std.ExtTreeSet.foldl_eq_foldl_toList, Std.ExtTreeMap.toList_eq_nil_iff.mpr,
+    Std.ExtTreeSet.toList_eq_nil_iff.mpr, hlist,
+    bind, Except.bind, pure, Except.pure]
+
 /-! ## The calls at the start of a block -/
 
 /-- The system calls at the start of a block pass through one body between the two calls.
@@ -227,6 +308,12 @@ theorem startSystemCalls_eq_ok {parentHash : Hash32} {body body' : BodyState}
     exact ⟨body, fun h => absurd h hDencun, fun _ => rfl, second _ h⟩
 
 /-! ## The requests -/
+
+/-- Reading a request contract with empty code rejects the block before joining any state. -/
+theorem readRequest_of_empty {state : BodyState × List ByteArray} {contract : UInt8 × Address}
+    (hcode : codeAt state.1.block contract.2 = .ok .empty) :
+    readRequest env state contract = .error (.systemContractEmpty contract.2) := by
+  simp [readRequest, checkedSystemCall_of_size_eq_zero hcode rfl, bind, Except.bind]
 
 /-- The call to one request contract must succeed on the body so far, and then joins it.
 
@@ -360,5 +447,15 @@ theorem blockRequests_eq_ok {depositContract : Address} {body : BodyState} {logs
     obtain ⟨read, hRead, h⟩ := bind_ok_iff.mp h
     rw [readRequests_of_pectra hPectra] at hRead
     exact ⟨deposits, read, mapError_ok_iff.mp hDeposits, hRead, (Except.ok.inj h).symm⟩
+
+/-- A failed request call prevents success, even if the deposits fail first. -/
+theorem blockRequests_ne_ok_of_readRequests_error {depositContract : Address} {body : BodyState}
+    {logs : List Log} {result : BodyState × List ByteArray} {error : BlockError}
+    (hfork : .pectra ≤ fork) (hread : readRequests env body = .error error) :
+    blockRequests depositContract env body logs ≠ .ok result := by
+  intro h
+  obtain ⟨_, read, _, hr, _⟩ := (blockRequests_eq_ok h).2 hfork
+  rw [← readRequests_of_pectra hfork, hread] at hr
+  cases hr
 
 end EthLib.Execution.Blocks
