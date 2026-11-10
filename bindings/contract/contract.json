@@ -9454,7 +9454,7 @@
       {"constructor": "inField", "code": 14}]}],
    "error_class": "BlockError",
    "docstring":
-   "Whether a header has the extra data that the DAO Fork asks of its first ten blocks.\n\nThe chain activates the DAO Fork at block `daoBlock`, which is 1,920,000 on mainnet.\n\nA header outside those ten blocks passes."},
+   "Whether a header has the extra data that the DAO Fork asks of its first ten blocks.\n\nThe chain activates the DAO Fork at block `daoBlock`, which is 1,920,000 on mainnet.\n\nA header outside those ten blocks passes, and from Paris every header passes."},
   {"summary":
    "Run the state transition of a block on a chain, and give the state after it.",
    "signature":
