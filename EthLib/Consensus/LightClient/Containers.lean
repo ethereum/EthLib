@@ -106,6 +106,7 @@ structure LightClientHeader (preset : Preset) (fork : Fork) where
   executionBlockHash : Since .glamsterdam fork Hash32
   /-- From Capella: the branch from the execution data up to the body root. -/
   executionBranch : Since .shapella fork (Vector Bytes32 (Nat.log2 (executionBranchGindex fork)))
+  deriving DecidableEq
 
 namespace LightClientHeader
 
@@ -181,6 +182,7 @@ structure LightClientFinalityUpdate (preset : Preset) (fork : Fork) where
   syncAggregate : SyncAggregate preset
   /-- The slot at which the committee signed. -/
   signatureSlot : Slot
+  deriving DecidableEq
 
 instance {preset : Preset} {fork : Fork} : SszType (LightClientFinalityUpdate preset fork) :=
   .container ["attested_header", "finalized_header", "finality_branch", "sync_aggregate",
@@ -198,6 +200,7 @@ structure LightClientOptimisticUpdate (preset : Preset) (fork : Fork) where
   syncAggregate : SyncAggregate preset
   /-- The slot at which the committee signed. -/
   signatureSlot : Slot
+  deriving DecidableEq
 
 instance {preset : Preset} {fork : Fork} : SszType (LightClientOptimisticUpdate preset fork) :=
   .container ["attested_header", "sync_aggregate", "signature_slot"]

@@ -52,17 +52,6 @@ variable {preset : Preset} {fork : Base.Fork}
 
 /-! ## Empty payloads -/
 
-/-- Two fields from a fork are equal when they hold equal values, or when the fork has neither. -/
-local instance {f fork : Base.Fork} {α : Type} [DecidableEq α] : DecidableEq (Since f fork α) :=
-  fun a b =>
-    if present : f ≤ fork then
-      if same : a present = b present then .isTrue (funext fun _ => same)
-      else .isFalse fun eq => same (eq ▸ rfl)
-    else .isTrue (funext fun later => absurd later present)
-
-deriving instance DecidableEq for ExecutionPayloadHeader
-deriving instance DecidableEq for ExecutionPayload
-
 /-- The payload with every field zero and every list empty. -/
 def ExecutionPayload.empty (preset : Preset) (fork : Base.Fork) :
     ExecutionPayload preset fork where
