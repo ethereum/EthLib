@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.LazyGame
+public import VCVio.OracleComp.SimSemantics.StateT.StateProjection
 
 /-!
 # Proofs: the ECDSA game over the joint state of its oracles
@@ -88,6 +89,60 @@ def liftFresh (perm : QueryImpl (PermSpec A) (StateT σ ProbComp))
     (fresh : M → PermComp A (Option (F × F))) : FreshSigner F M σ := fun m ps =>
   (simulateQ (unifSpec.passthrough + perm) (fresh m)).run ps
 
+/-- Map the state of the permutation oracle, and the joint oracles commute with the map.
+
+It suffices that each query of `Π`, and each call of the signer, commutes with it. -/
+theorem map_run_jointImpl_of_proj {σ₁ σ₂ : Type}
+    (perm₁ : QueryImpl (PermSpec A) (StateT σ₁ ProbComp))
+    (perm₂ : QueryImpl (PermSpec A) (StateT σ₂ ProbComp)) (fresh₁ : FreshSigner F M σ₁)
+    (fresh₂ : FreshSigner F M σ₂) (proj : σ₁ → σ₂)
+    (hperm : ∀ q s, Prod.map id proj <$> (perm₁ q).run s = (perm₂ q).run (proj s))
+    (hfresh : ∀ m s, Prod.map id proj <$> (fresh₁ m).run s = (fresh₂ m).run (proj s))
+    (q : (Spec F A M).Domain) (s : JointState F M σ₁) :
+    Prod.map id (Prod.map id proj) <$> (jointImpl perm₁ fresh₁ q).run s =
+      (jointImpl perm₂ fresh₂ q).run (Prod.map id proj s) := by
+  obtain ⟨cache, c⟩ := s
+  rcases q with n | α | β | m
+  · change Prod.map id (Prod.map id proj) <$>
+        (·, (cache, c)) <$> (query (spec := unifSpec) n : ProbComp (Fin (n + 1))) =
+      (·, (cache, proj c)) <$> (query (spec := unifSpec) n : ProbComp (Fin (n + 1)))
+    simp [Functor.map_map]
+  · change Prod.map id (Prod.map id proj) <$> (fun z => (z.1, (cache, z.2))) <$>
+        (perm₁ (.inl α)).run c = (fun z => (z.1, (cache, z.2))) <$> (perm₂ (.inl α)).run (proj c)
+    rw [← hperm]
+    simp [Functor.map_map]
+  · change Prod.map id (Prod.map id proj) <$> (fun z => (z.1, (cache, z.2))) <$>
+        (perm₁ (.inr β)).run c = (fun z => (z.1, (cache, z.2))) <$> (perm₂ (.inr β)).run (proj c)
+    rw [← hperm]
+    simp [Functor.map_map]
+  · change Prod.map id (Prod.map id proj) <$> (match cache.lookup m with
+        | some a => pure (a, (cache, c))
+        | none => (fun z : Option (F × F) × σ₁ => (z.1, (cache ++ [(m, z.1)], z.2))) <$>
+          (fresh₁ m).run c) =
+      (match cache.lookup m with
+        | some a => pure (a, (cache, proj c))
+        | none => (fun z : Option (F × F) × σ₂ => (z.1, (cache ++ [(m, z.1)], z.2))) <$>
+          (fresh₂ m).run (proj c))
+    cases cache.lookup m with
+    | some a => simp
+    | none =>
+      rw [← hfresh]
+      simp [Functor.map_map]
+
+omit [DecidableEq M] in
+/-- A signer lifted against `Π`'s oracle commutes with a map of the state, when each query does. -/
+theorem map_run_liftFresh_of_proj {σ₁ σ₂ : Type}
+    (perm₁ : QueryImpl (PermSpec A) (StateT σ₁ ProbComp))
+    (perm₂ : QueryImpl (PermSpec A) (StateT σ₂ ProbComp)) (proj : σ₁ → σ₂)
+    (hperm : ∀ q s, Prod.map id proj <$> (perm₁ q).run s = (perm₂ q).run (proj s))
+    (fresh : M → PermComp A (Option (F × F))) (m : M) (s : σ₁) :
+    Prod.map id proj <$> (liftFresh perm₁ fresh m).run s =
+      (liftFresh perm₂ fresh m).run (proj s) := by
+  refine map_run_simulateQ_eq_of_query_map_eq _ _ proj (fun t s => ?_) (fresh m) s
+  rcases t with n | q
+  · simp [StateT.run_monadLift, Functor.map_map]
+  · exact hperm q s
+
 variable [Field F] [DecidableEq F] [AddCommGroup G] [Module F G] [DecidableEq G]
 
 /-- Run the adversary on the key `X` over the joint state, and check its forgery.
@@ -105,6 +160,35 @@ def jointRun (scheme : Scheme F G A M) (adversary : Adversary F G A M) (X : G)
   if signed cache m then return (((m, t, s), false, cache), ps) else
     (fun z => (((m, t, s), z.1, cache), z.2)) <$>
       (simulateQ (unifSpec.passthrough + perm) (verifyQ scheme X m t s)).run ps
+
+/-- Map the state of the permutation oracle, and the joint run commutes with the map.
+
+It suffices that each query of `Π`, and each call of the signer, commutes with it. -/
+theorem map_jointRun_of_proj {σ₁ σ₂ : Type} (scheme : Scheme F G A M)
+    (adversary : Adversary F G A M) (X : G) (perm₁ : QueryImpl (PermSpec A) (StateT σ₁ ProbComp))
+    (perm₂ : QueryImpl (PermSpec A) (StateT σ₂ ProbComp)) (init : σ₁)
+    (fresh₁ : FreshSigner F M σ₁) (fresh₂ : FreshSigner F M σ₂) (proj : σ₁ → σ₂)
+    (hperm : ∀ q s, Prod.map id proj <$> (perm₁ q).run s = (perm₂ q).run (proj s))
+    (hfresh : ∀ m s, Prod.map id proj <$> (fresh₁ m).run s = (fresh₂ m).run (proj s)) :
+    Prod.map id proj <$> jointRun scheme adversary X perm₁ init fresh₁ =
+      jointRun scheme adversary X perm₂ (proj init) fresh₂ := by
+  have hrun := map_run_simulateQ_eq_of_query_map_eq _ _ (Prod.map id proj)
+    (map_run_jointImpl_of_proj perm₁ perm₂ fresh₁ fresh₂ proj hperm hfresh) (adversary.main X)
+    ([], init)
+  simp only [jointRun]
+  rw [show (([] : Cache F M), proj init) = Prod.map id proj ([], init) from rfl, ← hrun,
+    map_bind, bind_map_left]
+  refine bind_congr fun z => ?_
+  obtain ⟨⟨m, t, s⟩, cache, c⟩ := z
+  by_cases h : signed cache m
+  · simp [h]
+  · simp only [h, Bool.false_eq_true, ite_false, Prod.map_snd, Prod.map_fst, id_eq]
+    rw [← map_run_simulateQ_eq_of_query_map_eq (unifSpec.passthrough + perm₁)
+      (unifSpec.passthrough + perm₂) proj (fun t s => by
+        rcases t with n | q
+        · simp [StateT.run_monadLift, Functor.map_map]
+        · exact hperm q s)]
+    simp [Functor.map_map]
 
 variable [SampleableType F]
 
