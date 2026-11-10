@@ -1618,7 +1618,21 @@ The queues carry unused churn to later epochs, so the bound can hold over the wi
 No theorem yet derives it from the state transition, and the model fixes the effective balances over the window.
 The rule spends the withdrawal delay on keeping exits slashable and the other epochs of the period on churn, and the assumption takes the change over those epochs as given.
 Activations have no such delay, and a validator outside the registry of the checkpoint weighs zero in the model.
-No theorem covers the Phase 0 period, which counts validators and top-ups.
+The beacon chain weighs the votes of each epoch at the effective balances of that epoch.
+Top-ups, the balance that a consolidation moves to its target, rewards and penalties all change those balances during the window.
+The theorems weigh every vote at the balances of the checkpoint, so they reach a chain only once those changes are bounded, and no theorem bounds them yet.
+
+From Phase 0 to Deneb, `accountable_safety_of_weakSubjectivityPeriod_of_lt_electra` covers the period in part.
+The rule counts `N` active validators of average balance `t` ether, rounded down, a largest effective balance `T` ether, a churn of `delta` validators and `Delta` top-ups per epoch.
+The theorem assumes each justified set gains and loses at most `delta` validators for each of the `n` epochs of churn, with `delta` the churn at the checkpoint.
+It also assumes every effective balance at most `T`, with `T` a whole number of ether.
+With large balances, `230 T < 320 t`, the rule's epochs for churn always satisfy `20 n delta T ≤ N t`, and so keep the margin.
+`churn_le_of_phase0PeriodEpochs_eq_ok` gives that inequality for the epochs of the rule.
+The rule takes the longer of those and its epochs for top-ups, so the theorem also assumes that the epochs for top-ups satisfy the same inequality.
+Top-ups change a balance, which the model leaves out, and in the model a longer period only allows more churn.
+The rule does not imply that hypothesis: with `N = 2^23` validators of 32 ether, `delta = 128` and `Delta = 512`, the rule takes 6280 epochs for top-ups, while the churn allows 3276.
+Over 6280 epochs, the churn of validators alone lowers the bound of Gasper Theorem 8.3 to about 14% of the stake.
+With small balances, `230 T ≥ 320 t`, no theorem relates the period to the margin.
 The Python suite checks the periods against the three tables of the rule, except for the rows whose states take minutes to build.
 
 ### Honest validator duties

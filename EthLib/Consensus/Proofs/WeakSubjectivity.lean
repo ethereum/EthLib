@@ -350,6 +350,66 @@ theorem computeWeakSubjectivityPeriodPhase0_le {config : Config}
   rw [hsum, (mulChecked_ok_iff.mp hDelta).2] at *
   exact Nat.add_le_add_left hbound _
 
+/-- Phase 0: with large balances, the rule's epochs for the churn of validators are few enough.
+
+Take `N` validators of average balance `t` and largest balance `T`, in ether, with `t ≤ T`.
+
+Take the rule's epochs for a churn of `delta` validators, with large balances: `230 T < 320 t`.
+
+That many epochs, at `delta` validators of `T` ether each, move at most `N t / 20` ether. -/
+private theorem churnEpochs_le {N t T delta : Nat} (largeBalances : 230 * T < 320 * t)
+    (averageLe : t ≤ T) :
+    20 * (N * (320 * t - 230 * T) / (600 * delta * (2 * t + T)) * delta * T) ≤ N * t := by
+  -- With `t ≤ T`, `T (320 t - 230 T) ≤ 30 t (2 t + T)`: write `T = t + s`.
+  have key : T * (320 * t - 230 * T) ≤ 30 * t * (2 * t + T) := by
+    obtain ⟨s, rfl⟩ := Nat.exists_eq_add_of_le averageLe
+    have expand :
+        (t + s) * (320 * t) ≤ 30 * t * (2 * t + (t + s)) + (t + s) * (230 * (t + s)) := by
+      grind
+    rw [Nat.mul_sub]
+    omega
+  have quotient := Nat.div_mul_le_self (N * (320 * t - 230 * T)) (600 * delta * (2 * t + T))
+  generalize N * (320 * t - 230 * T) / (600 * delta * (2 * t + T)) = q at quotient ⊢
+  -- Both sides times `30 (2 t + T)`, which is positive since `t` is.
+  refine Nat.le_of_mul_le_mul_right (c := 30 * (2 * t + T)) ?_ (by omega)
+  calc 20 * (q * delta * T) * (30 * (2 * t + T))
+      = T * (q * (20 * 30 * delta * (2 * t + T))) := by ac_rfl
+    _ = T * (q * (600 * delta * (2 * t + T))) := rfl
+    _ ≤ T * (N * (320 * t - 230 * T)) := Nat.mul_le_mul_left T quotient
+    _ = N * (T * (320 * t - 230 * T)) := by ac_rfl
+    _ ≤ N * (30 * t * (2 * t + T)) := Nat.mul_le_mul_left N key
+    _ = N * t * (30 * (2 * t + T)) := by ac_rfl
+
+/-- Phase 0: with large balances, the epochs of the rule are few enough when the top-ups are.
+
+Take `N` validators of average balance `t` and largest balance `T`, in ether, with `t ≤ T`.
+
+With large balances the rule takes the longer of its epochs for churn and for top-ups.
+
+The epochs for churn always move at most `N t / 20` ether, at `delta` validators of `T` each.
+
+Assume the epochs for top-ups do too.
+
+Then the epochs of the rule move at most `N t / 20` ether.
+
+That is `SAFETY_DECAY / 200` of the balance, with `SAFETY_DECAY` at 10. -/
+theorem churn_le_of_phase0PeriodEpochs_eq_ok {N t T delta Delta epochs : UInt64}
+    (h : phase0PeriodEpochs N t T delta Delta = .ok epochs)
+    (largeBalances : 230 * T.toNat < 320 * t.toNat) (averageLe : t.toNat ≤ T.toNat)
+    (topUps : 20 * (230 * N.toNat / (600 * Delta.toNat) * delta.toNat * T.toNat) ≤
+      N.toNat * t.toNat) :
+    20 * (epochs.toNat * delta.toNat * T.toNat) ≤ N.toNat * t.toNat := by
+  have closed := phase0PeriodEpochs_eq_ok h
+  simp only [largeBalances, ↓reduceIte] at closed
+  rw [closed]
+  rcases Nat.le_total (N.toNat * (320 * t.toNat - 230 * T.toNat) /
+      (600 * delta.toNat * (2 * t.toNat + T.toNat))) (230 * N.toNat / (600 * Delta.toNat))
+    with order | order
+  · rw [Nat.max_eq_right order]
+    exact topUps
+  · rw [Nat.max_eq_left order]
+    exact churnEpochs_le largeBalances averageLe
+
 /-! ## The withdrawal delay is a lower bound -/
 
 /-- At every fork, a period is at least the delay before a validator can withdraw. -/
