@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Networking.Proofs.Noise
+public import EthLib.Networking.Proofs.Noise.Identity
 
 public import EthLib.Networking.Proofs.Discv5.Distance
 public import EthLib.Networking.Proofs.Discv5.Handshake

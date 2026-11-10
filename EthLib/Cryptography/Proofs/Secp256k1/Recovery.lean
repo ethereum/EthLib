@@ -35,8 +35,8 @@ open Point
 private theorem val_ofNat_of_lt {r : Nat} (hr : r < Fn.modulus) : (Fin.ofNat Fp.modulus r : Fp).val = r :=
   Nat.mod_eq_of_lt (Nat.lt_trans hr (by decide))
 
-/-- A nonzero scalar is a unit in `ZMod n`. -/
-private theorem toZMod_ne_zero {a : Fn} (h : a ≠ 0) : Fn.toZMod a ≠ 0 :=
+/-- A nonzero scalar stays nonzero in `ZMod n`. -/
+theorem toZMod_ne_zero {a : Fn} (h : a ≠ 0) : Fn.toZMod a ≠ 0 :=
   fun h0 => h (Fn.toZMod.injective (h0.trans (map_zero _).symm))
 
 /-- The point recovery computes, in the group: `r^(-1) s R - r^(-1) e G`. -/
@@ -228,7 +228,7 @@ theorem verify_rebuilt {q : Point} {hash : Vector UInt8 32} {r s : Nat} (hv : ve
     exact ⟨x, y, hR, by simpa using hv⟩
 
 /-- A scalar read from a natural number is that number in `ZMod n`. -/
-private theorem toZMod_ofNat (e : Nat) : Fn.toZMod (Fin.ofNat _ e) = (e : ZMod Fn.modulus) := by
+theorem toZMod_ofNat (e : Nat) : Fn.toZMod (Fin.ofNat _ e) = (e : ZMod Fn.modulus) := by
   apply ZMod.val_injective
   simp [Fn.toZMod, ZMod.val_natCast]
   rfl

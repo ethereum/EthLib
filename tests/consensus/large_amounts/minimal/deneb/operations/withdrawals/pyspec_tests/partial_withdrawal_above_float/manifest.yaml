@@ -1,0 +1,6 @@
+preset: minimal
+fork: deneb
+runner: operations
+handler: withdrawals
+suite: pyspec_tests
+case: partial_withdrawal_above_float

@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Proofs.BigEndian
+public import EthLib.Consensus.Proofs.ForkChoice.AttestationScores
 public import EthLib.Consensus.Proofs.ForkChoice.Head
 public import EthLib.Consensus.Proofs.Models.ForkChoice.LmdGhost
 public import EthLib.Consensus.Proofs.Transition.FfgStake
@@ -428,7 +429,7 @@ theorem getAttestationScore_eq_weight_of_reads {state : BeaconState preset fork}
       obtain ⟨middle, first, fold⟩ := fold
       rw [ih middle total fold, countStep_ok reads first, List.map_cons, List.sum_cons,
         Nat.add_assoc]
-  unfold getAttestationScore at computed
+  rw [getAttestationScore_eq_fold] at computed
   rw [bind_ok_iff] at computed
   obtain ⟨total, fold, bound⟩ := computed
   have total_eq := sum _ 0 total fold

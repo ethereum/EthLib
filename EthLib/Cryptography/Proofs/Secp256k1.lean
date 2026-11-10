@@ -11,7 +11,7 @@ public import EthLib.Cryptography.Proofs.Secp256k1.Malleability
 public import EthLib.Cryptography.Proofs.Secp256k1.Sign
 public import EthLib.Cryptography.Proofs.Secp256k1.Ecdh
 public import EthLib.Cryptography.Proofs.Secp256k1.Errors
-public import EthLib.Cryptography.Proofs.Secp256k1.Security.Game
+public import EthLib.Cryptography.Proofs.Secp256k1.Security
 
 /-!
 # `EthLib.Cryptography.Proofs.Secp256k1`

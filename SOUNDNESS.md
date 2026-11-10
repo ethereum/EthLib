@@ -440,7 +440,13 @@ No theorem bounds the probability of forging a signature, which rests on the dis
 There, `verify_neg` shows that `(r, -s)` verifies whenever `(r, s)` does, when opposite points share their encoding, as `x` coordinates do.
 So the game counts only messages that were never signed.
 `forgeAdvantage_collision_pos` shows that a collision of the message hash wins that game with positive probability.
-No theorem connects that game to EthLib's signing and verification.
+`ecdsa_verify_eq_verify_ecdsaScheme` (`Proofs/Secp256k1/Security/Refinement.lean`) proves that `verify` is the game's verification, with the bijection the identity, for `r` and `s` below `n`.
+`exists_signNonce_of_sign` proves that every signature from `sign` is the game's signature for some nonzero nonce; that is correctness of signing, and says nothing about how RFC 6979 draws the nonces.
+The game draws the bijection uniformly, so a bound on it would apply to EthLib, where the bijection is the identity, only under the heuristic of the source that the identity behaves as a bijective random oracle.
+Such a bound would also need the pseudorandomness of RFC 6979, which no theorem states, and it ignores the 16-nonce limit and the failure of `sign` when `x_R >= n`.
+A forger of transactions only needs a key with the right address, so a bound for them also needs a term for the Keccak-256 hash of the key.
+The low-s rule of transactions only restricts the forger, so it needs no term.
+The model's encoding, the `x` coordinate as a 256-bit string, meets part (b) of Definition 2 of the source (`ecdsaScheme_semiInjective`), which their Lemma 2 proves.
 
 `ecdh_eq_ok_iff` (`Proofs/Secp256k1/Ecdh.lean`) states ECDH in the group of the curve.
 It is the Diffie-Hellman primitive of SEC 1 v2 §3.3.1, with no key derivation function.
@@ -586,7 +592,7 @@ The million-iteration X25519 vector requires `ETHLIB_SLOW_VECTORS=1`.
 
 ### Noise XX and libp2p identities
 
-`complete_authenticates` (`Networking/Proofs/Noise.lean`) ties successful completion to an incoming message that the XX reader accepts.
+`complete_authenticates` (`Networking/Proofs/Noise/Identity.lean`) ties successful completion to an incoming message that the XX reader accepts.
 The reported public key, signature and extensions are the fields of the payload decrypted from that message.
 The signature verifies against the static key read from that message, and the reported peer ID derives from the signing public key.
 `readLibp2p_authenticates` states the same check for the read of message 2 or 3.
@@ -1822,7 +1828,7 @@ The rule of the latest valid hash in `Consensus/ForkChoice/Optimistic.lean` name
 The theorems here take that block as given.
 No theorem relates the optimistic set to the blocks that the store of the fork choice removes.
 A node is optimistic when its head is optimistic, or when invalid payloads left its block tree with no viable branch.
-`isOptimisticNode_of_isHeadOptimistic` shows that, before Gloas, the first case alone makes an optimistic node.
+`isOptimisticNode_of_isHeadOptimistic` shows that, at every fork, the first case alone makes an optimistic node.
 `isOptimisticNode_of_not_isHeadOptimistic` shows that, before Gloas, the second case needs a block that the fork choice dropped at or above the justified block.
 So a tree that empties with nothing invalidated does not count.
 This assumes that the optimistic store holds only blocks that the fork choice accepted.
@@ -1847,11 +1853,30 @@ So it reaches every payload that the block builds on among the known blocks of i
 A payload that builds on an invalid payload in that way leaves the set.
 A block built on its parent without the payload of the parent does not hold that payload on its payload chain.
 So its own optimistic payload stays when only the payload of the parent is invalid.
-From Gloas the rule of the latest valid hash, the latest verified ancestor and the optimistic node are not yet specified, and the last two fail.
+From Gloas the head of the fork choice is a block with or without its payload, so the optimistic store keeps the status of the head.
+A full head reads the payload of its block, an empty head the payload its block builds on, and a pending head both; `isHeadOptimistic_of_full`, `isHeadOptimistic_of_empty_of_named` and `isHeadOptimistic_of_pending_of_optimistic` and `isHeadOptimistic_of_pending_of_not_optimistic` state it.
+The search of the head never stops at a pending node, so reading both for a pending head is a choice of EthLib, the cautious one.
+`isHeadOptimistic_of_empty_of_unnamed` shows that an empty head whose bid names no known payload fails with `payloadNotVerified`.
+That is the case of an empty first block of Gloas, whose bid builds on a payload of Fulu, which a store of one fork never holds.
+The rule fails there rather than call that payload verified, so the head rule and the latest verified ancestor agree.
+From Gloas the latest verified ancestor takes a node, and reads only the payloads that the node holds.
+A full node holds every payload of its payload chain, and an empty or pending node holds all but its own.
+`latestVerifiedAncestor_ne_root` shows that a node without its own payload is never its own verified ancestor.
+So a pending node reads as full or empty for the head, and as empty for the ancestor: each reading is the cautious one.
+The status of a node is an assumption: a full node must name a payload that the store holds, and the rules do not check it.
+The optimistic store follows the fields of the guide, which do not record the payloads held; the search of the head returns a full node only for a held payload.
+`latestVerifiedAncestor_of_glamsterdam` shows that the answer is the first of those payloads that is not optimistic, with every one before it optimistic.
+`latestVerifiedAncestor_eq_error_of_optimistic` shows that it fails with `payloadNotVerified` when all of them are optimistic, or when there is none.
+Before Gloas the walk returns an optimistic genesis block; from Gloas it never returns an optimistic payload, a choice of EthLib.
+From Gloas the rule of the latest valid hash is not defined, and the second case of an optimistic node is not yet specified.
+That case needs the removal of an invalid payload from the store of the fork choice, which is not defined from Gloas.
+`isOptimisticNode_of_glamsterdam` shows that the rule then fails when the head is not optimistic.
+`isOptimisticNode_of_isHeadOptimistic_error` shows that it fails as the optimism of the head does.
 The store holds the blocks of one fork, so a payload chain does not cross from Gloas into Fulu.
 The Heze record of whether a payload satisfies the inclusion lists is not modelled here.
 The Python suite checks each rule on Bellatrix blocks built in the test, with roots from the SSZ export.
-At Gloas it checks the execution block, the candidate rule and the two payload answers, and that the latest verified ancestor and the optimistic node are refused.
+At Gloas it checks the execution block, the candidate rule, the two payload answers and the latest verified ancestor.
+It checks the optimistic head of each status on a pinned Gloas fork choice case, and that the second case is refused.
 
 ### Light client
 
@@ -1957,7 +1982,7 @@ The new votes come from justified sources, and no honest validator becomes slash
 A vote names the validator that signed it, so both theorems assume that no one forges a vote.
 No theorem derives the votes of the model from the beacon chain yet, so neither theorem is about what a client runs.
 
-Three pieces of that link exist.
+Four pieces of that link exist.
 `FfgVotes.lean` relates the slashing conditions of the beacon chain to those of the model.
 `justificationTest_iff_stake` (`Consensus/Proofs/Transition/FfgStake.lean`) reads the test of justification as a comparison of stakes.
 There the stake of a validator is its effective balance, and the indices count as a set.
@@ -1969,8 +1994,15 @@ With the BLS checks, the aggregate signature verifies under keys that include th
 Reading this as a signature by that attester assumes that BLS aggregate signatures cannot be forged.
 The source of that attestation is the justified checkpoint of the epoch of the flags.
 Its target is the checkpoint of that epoch, with the block root that the state records for its first slot.
+`voteFrame_processBlock` (`Consensus/Proofs/Transition/TargetVotes.lean`) carries that fact across a whole block.
+A block sets a target flag only from a vote, a pair of a validator and attestation data, for the link of the epoch of the flag at the position of the flag.
+Each such vote holds the data of an attestation of the block, and passes the attestation checks in the state after the block.
+With the BLS checks, that means the validator signed it, if BLS aggregates with proofs of possession cannot be forged.
+The block keeps the slot, the block roots, the justified checkpoints, the fork versions, the genesis validators root and the key of each validator.
+So `TargetFlagsSigned.of_voteFrame` keeps each target flag backed by a vote that passes the checks in the current state.
+From Gloas the theorem assumes the registry within its limit, since its type does not bound its size.
 At least five gaps remain before a refinement.
-No theorem yet carries that fact across a whole block, the slots, the epoch step and the upgrades.
+No theorem yet carries that fact across the slots, the epoch step and the upgrades, or establishes it at the first Altair state.
 None covers the forks before Altair.
 So none yet shows that the attesters of an epoch signed the link that the model counts.
 The attesters of the previous epoch are filtered by activity in that epoch, but the total counts the active validators of the current one.

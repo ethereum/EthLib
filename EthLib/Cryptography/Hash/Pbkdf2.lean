@@ -47,9 +47,8 @@ def Pbkdf2Error.code : Pbkdf2Error → UInt32
   | .outputTooLong _ => 3
   | .inputTooLong => 4
 
-/-- The pseudorandom function of RFC 8018 §5.2 with its output size in the type. -/
-def prf (password message : ByteArray) : Vector UInt8 32 :=
-  ⟨(Hmac.hmac password message).data, by simp [Hmac.hmac, Sha256.hash, Sha256.digest]⟩
+/-- The pseudorandom function of RFC 8018 §5.2, HMAC-SHA-256 with its output size in the type. -/
+def prf (password message : ByteArray) : Vector UInt8 32 := Hmac.hmac32 password message
 
 /-- The remaining iterates `U_j`, XORed into the accumulator, RFC 8018 §5.2, step 3. -/
 def iterate (password : ByteArray) : Nat → Vector UInt8 32 → Vector UInt8 32 → Vector UInt8 32

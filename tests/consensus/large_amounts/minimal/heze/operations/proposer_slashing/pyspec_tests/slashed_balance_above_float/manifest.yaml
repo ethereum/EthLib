@@ -1,0 +1,6 @@
+preset: minimal
+fork: heze
+runner: operations
+handler: proposer_slashing
+suite: pyspec_tests
+case: slashed_balance_above_float
