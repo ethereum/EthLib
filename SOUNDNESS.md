@@ -1785,22 +1785,23 @@ With release archives enabled, it runs the 38 interchange tests of `eth-clients/
 
 ### Optimistic sync
 
-`Consensus/ForkChoice/OptimisticSync.lean` holds the optimistic sync of Bellatrix: the blocks that a node imports before the execution layer judges their payload.
+`Consensus/ForkChoice/OptimisticSync.lean` holds the optimistic sync from Bellatrix: the blocks that a node imports before the execution layer judges their payload.
 An optimistic store keeps their roots beside the blocks of the node, and the rules read only that store.
-The theorems are in `Consensus/Proofs/ForkChoice/OptimisticSync.lean`, and each assumes only that its function succeeds.
+The theorems are in `Consensus/Proofs/ForkChoice/OptimisticSync.lean`, and most assume only that their function succeeds.
 
 `isOptimisticCandidateBlock_eq_ok_iff` states when a block may be imported optimistically: its known parent carries a payload, or its slot is far enough before the clock.
-`latestVerifiedAncestor_spec` shows that the latest verified ancestor of a block is reached through optimistic blocks only.
+`latestVerifiedAncestor_spec` shows that, before Gloas, the latest verified ancestor of a block is reached through optimistic blocks only.
 The same theorem shows that this ancestor is not optimistic, or has the zero parent root.
-`onValidPayload_spec` shows that a valid payload removes exactly the block and its known ancestors from the optimistic set.
-`onInvalidatedPayload_spec` shows that the first invalid block removes exactly the optimistic roots whose chain holds it.
+`onValidPayload_spec` shows that a valid payload removes exactly the roots of its payload chain from the optimistic set.
+`onInvalidatedPayload_spec` shows that the first invalid block removes exactly the optimistic roots whose payload chain holds it.
+`payloadChain_of_lt_glamsterdam` shows that before Gloas the payload chain of a block is its whole chain, so these are its known ancestors and descendants.
 `isOptimisticRestrictedDomain_iff` lists the seven domain types under which an optimistic validator may not sign.
 
 The rule of the latest valid hash in `Consensus/ForkChoice/Optimistic.lean` names the first invalid block.
 The theorems here take that block as given.
 No theorem relates the optimistic set to the blocks that the store of the fork choice removes.
 A node is optimistic when its head is optimistic, or when invalid payloads left its block tree with no viable branch.
-`isOptimisticNode_of_isHeadOptimistic` shows that the first case alone makes an optimistic node.
+`isOptimisticNode_of_isHeadOptimistic` shows that, before Gloas, the first case alone makes an optimistic node.
 `isOptimisticNode_of_not_isHeadOptimistic` shows that, before Gloas, the second case needs a block that the fork choice dropped at or above the justified block.
 So a tree that empties with nothing invalidated does not count.
 This assumes that the optimistic store holds only blocks that the fork choice accepted.
@@ -1809,8 +1810,27 @@ EthLib counts a dropped justified block as no viable branch, a choice of its own
 `hasNoViableBranch_eq_ok_true_iff` shows that, with the justified block known and the filter successful, no viable branch means that no leaf above it passes the viability filter.
 `filterNodeTree_eq_nil_iff` gives the same fact for the filtered tree of any node.
 The re-run of the merge block checks is not defined, nor the answer to an execution layer that fails to respond.
-From Gloas these rules are not specified.
+
+From Gloas a block carries a bid, and its payload arrives later in an envelope.
+The optimistic sync guide has no Gloas text, and its tests stop before Gloas.
+EthLib therefore reads the Bellatrix guide at Gloas, a choice of its own.
+A root of the optimistic set then names a block whose payload was imported optimistically, as the Gloas gossip rules key a payload status by block root.
+A block carries a payload when its bid names a nonzero block hash; `isExecutionBlock_of_glamsterdam` states it.
+`payloadChain_of_glamsterdam` shows that the payload chain is the chain of the block, filtered by the block hashes that the bids name.
+`payloadChain_links` shows that each root of a payload chain builds on the payload of the next one, as the fork choice sees a full parent.
+`parentRoot_mem_payloadChain_iff` shows that the parent of a block is on its payload chain exactly when the fork choice sees the parent as full.
+`payloadChain_suffix` and `mem_payloadChain_trans` show that the payload chain of a block holds the payload chain of each of its roots.
+`payloadChain_of_find?_some` shows that the payload chain of a block goes on at the first ancestor whose bid names the parent block hash of its bid, with the chain and the payload chain of that ancestor found.
+`payloadChain_of_find?_none` shows that it is the block alone when no ancestor is named.
+So it reaches every payload that the block builds on among the known blocks of its chain, through any number of blocks, full or empty.
+A payload that builds on an invalid payload in that way leaves the set.
+A block built on its parent without the payload of the parent does not hold that payload on its payload chain.
+So its own optimistic payload stays when only the payload of the parent is invalid.
+From Gloas the rule of the latest valid hash, the latest verified ancestor and the optimistic node are not yet specified, and the last two fail.
+The store holds the blocks of one fork, so a payload chain does not cross from Gloas into Fulu.
+The Heze record of whether a payload satisfies the inclusion lists is not modelled here.
 The Python suite checks each rule on Bellatrix blocks built in the test, with roots from the SSZ export.
+At Gloas it checks the execution block, the candidate rule and the two payload answers, and that the latest verified ancestor and the optimistic node are refused.
 
 ### Light client
 

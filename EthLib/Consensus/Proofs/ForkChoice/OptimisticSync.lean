@@ -16,17 +16,27 @@ The latest verified ancestor of a block is reached through optimistic blocks onl
 
 It is not optimistic, or its parent root is zero.
 
-A valid payload removes exactly the block and its known ancestors from the optimistic set.
+Before Gloas the payload chain of a block is its chain.
 
-The first invalid block removes exactly the optimistic roots whose chain holds it.
+From Gloas it keeps the ancestors whose payload the chain builds on, linked by their bids.
+
+It goes on at the first ancestor whose bid names the hash that the chain expects.
+
+From any of its roots on, it is the payload chain of that root, so it holds every payload below.
+
+A valid payload removes exactly the block and its ancestors on its payload chain from the set.
+
+The first invalid block removes exactly the optimistic roots whose payload chain holds it.
 
 A tree filtered from a node is empty exactly when no viable leaf is reached from that node.
 
 So the second case of an optimistic node holds exactly when the filtered tree has no viable leaf.
 
-A node whose head is optimistic is an optimistic node.
+Before Gloas, a node whose head is optimistic is an optimistic node.
 
-Otherwise, before Gloas, it needs a dropped block at or above the justified block.
+Otherwise it needs a dropped block at or above the justified block.
+
+From Gloas the latest verified ancestor and the optimistic node are not yet specified, and fail.
 
 An optimistic validator may not sign exactly under seven domain types.
 -/
@@ -42,9 +52,25 @@ variable {preset : Preset} {fork : Fork}
 /-- Before Bellatrix, no block carries a payload. -/
 theorem isExecutionBlock_of_lt_bellatrix (before : fork < .bellatrix)
     (block : BeaconBlock preset fork) : isExecutionBlock block = false := by
-  have outside : ¬(.bellatrix ≤ fork ∧ fork < .glamsterdam) :=
-    fun range => absurd range.1 (Nat.not_le_of_lt before)
-  simp only [isExecutionBlock, outside, ↓reduceDIte]
+  have notGloas : ¬(Fork.glamsterdam ≤ fork) := fun gloas =>
+    Nat.lt_irrefl _ (Nat.lt_of_lt_of_le before (Nat.le_trans (by decide) gloas))
+  have notBellatrix : ¬(Fork.bellatrix ≤ fork) := Nat.not_le_of_lt before
+  simp [isExecutionBlock, notGloas, notBellatrix]
+
+/-- From Bellatrix to Fulu, a block carries a payload when its payload is not the empty one. -/
+theorem isExecutionBlock_of_range (range : .bellatrix ≤ fork ∧ fork < .glamsterdam)
+    (block : BeaconBlock preset fork) :
+    isExecutionBlock block = (block.body.executionPayload range != .empty preset fork) := by
+  have notGloas : ¬(Fork.glamsterdam ≤ fork) := Nat.not_le_of_lt range.2
+  simp [isExecutionBlock, notGloas, range.1]
+
+/-- From Gloas, a block carries a payload when its bid names a nonzero block hash. -/
+theorem isExecutionBlock_of_glamsterdam (gloas : .glamsterdam ≤ fork)
+    (block : BeaconBlock preset fork) :
+    isExecutionBlock block =
+      ((block.body.signedExecutionPayloadBid gloas).message.blockHash !=
+        Vector.replicate 32 0) := by
+  simp [isExecutionBlock, gloas]
 
 /-- A block may be imported optimistically exactly when its known parent allows it.
 
@@ -100,32 +126,37 @@ inductive OptimisticWalk : Root → Root → Prop where
       (notGenesis : block.parentRoot ≠ Vector.replicate 32 0)
       (rest : OptimisticWalk block.parentRoot last) : OptimisticWalk root last
 
-/-- The latest verified ancestor is reached through optimistic blocks.
+/-- Before Gloas, the latest verified ancestor is reached through optimistic blocks.
 
-It is known, and it is not optimistic or its parent root is zero. -/
+It is known, and it is not optimistic or its parent root is zero.
+
+From Gloas the function always fails, so the hypothesis never holds there. -/
 theorem latestVerifiedAncestor_spec {root ancestor : Root}
     (found : store.latestVerifiedAncestor root = .ok ancestor) :
     store.OptimisticWalk root ancestor ∧ ∃ block, store.blocks[ancestor]? = some block ∧
       (store.isOptimistic ancestor = false ∨ block.parentRoot = Vector.replicate 32 0) := by
   induction root using latestVerifiedAncestor.induct (store := store) with
-  | case1 root unknown =>
-    rw [latestVerifiedAncestor, unknown] at found
+  | case1 root gloas =>
+    rw [latestVerifiedAncestor, ite_eq_left_of_eq_true _ _ (eq_true gloas)] at found
     simp [throw, throwThe, MonadExceptOf.throw] at found
-  | case2 root block known stops =>
-    rw [latestVerifiedAncestor, known] at found
+  | case2 root notGloas unknown =>
+    rw [latestVerifiedAncestor, ite_eq_right_of_eq_false _ _ (eq_false notGloas), unknown] at found
+    simp [throw, throwThe, MonadExceptOf.throw] at found
+  | case3 root notGloas block known stops =>
+    rw [latestVerifiedAncestor, ite_eq_right_of_eq_false _ _ (eq_false notGloas), known] at found
     simp only [stops, ↓reduceIte, pure, Except.pure, Except.ok.injEq] at found
     subst found
     refine ⟨.here _, block, known, ?_⟩
     simp only [Bool.or_eq_true, Bool.not_eq_eq_eq_not, Bool.not_true, beq_iff_eq] at stops
     exact stops
-  | case3 root block known goes unknown =>
-    rw [latestVerifiedAncestor, known] at found
+  | case4 root notGloas block known goes unknown =>
+    rw [latestVerifiedAncestor, ite_eq_right_of_eq_false _ _ (eq_false notGloas), known] at found
     simp only [goes, Bool.false_eq_true, ↓reduceIte] at found
     split at found
     · simp [throw, throwThe, MonadExceptOf.throw] at found
     · simp_all
-  | case4 root block known goes parent parentFound lower ih =>
-    rw [latestVerifiedAncestor, known] at found
+  | case5 root notGloas block known goes parent parentFound lower ih =>
+    rw [latestVerifiedAncestor, ite_eq_right_of_eq_false _ _ (eq_false notGloas), known] at found
     simp only [goes, Bool.false_eq_true, ↓reduceIte] at found
     split at found
     · simp_all
@@ -137,8 +168,8 @@ theorem latestVerifiedAncestor_spec {root ancestor : Root}
       simp only [Bool.or_eq_true, Bool.not_eq_eq_eq_not, Bool.not_true, beq_iff_eq,
         not_or, Bool.not_eq_false] at goes
       exact ⟨.parent known goes.1 goes.2 walk, rest⟩
-  | case5 root block known goes parent parentFound notLower =>
-    rw [latestVerifiedAncestor, known] at found
+  | case6 root notGloas block known goes parent parentFound notLower =>
+    rw [latestVerifiedAncestor, ite_eq_right_of_eq_false _ _ (eq_false notGloas), known] at found
     simp only [goes, Bool.false_eq_true, ↓reduceIte] at found
     split at found
     · simp_all
@@ -148,12 +179,573 @@ theorem latestVerifiedAncestor_spec {root ancestor : Root}
       simp only [notLower, ↓reduceDIte] at found
       simp [throw, throwThe, MonadExceptOf.throw] at found
 
-/-- A valid payload removes exactly the block and its known ancestors from the optimistic set.
+/-- From Gloas the latest verified ancestor is not yet specified, and fails. -/
+theorem latestVerifiedAncestor_of_glamsterdam (gloas : .glamsterdam ≤ fork) (root : Root) :
+    store.latestVerifiedAncestor root = .error (.forkNotYetSpecified fork) := by
+  rw [latestVerifiedAncestor, ite_eq_left_of_eq_true _ _ (eq_true gloas)]
+  rfl
+
+/-- The chain of a block that is not known fails. -/
+private theorem chain_of_unknown {root : Root} (unknown : store.blocks[root]? = none) :
+    store.chain root = .error (.unknownBlock root) := by
+  rw [chain, unknown]
+  rfl
+
+/-- The chain of a known block whose parent is not known is the block alone. -/
+private theorem chain_of_parent_unknown {root : Root} {block : BeaconBlock preset fork}
+    (known : store.blocks[root]? = some block)
+    (unknown : store.blocks[block.parentRoot]? = none) :
+    store.chain root = .ok [root] := by
+  rw [chain, known]
+  dsimp only
+  split
+  · rfl
+  · simp_all
+
+/-- The chain of a known block whose known parent is at a lower slot. -/
+private theorem chain_of_lower {root : Root} {block parent : BeaconBlock preset fork}
+    (known : store.blocks[root]? = some block)
+    (parentFound : store.blocks[block.parentRoot]? = some parent)
+    (lower : parent.slot < block.slot) :
+    store.chain root = (store.chain block.parentRoot >>= fun rest => pure (root :: rest)) := by
+  rw [chain, known]
+  dsimp only
+  split
+  · simp_all
+  · rename_i other otherFound
+    rw [parentFound, Option.some.injEq] at otherFound
+    subst otherFound
+    rw [dite_eq_left lower]
+
+/-- The chain of a known block whose known parent is not at a lower slot fails. -/
+private theorem chain_of_not_lower {root : Root} {block parent : BeaconBlock preset fork}
+    (known : store.blocks[root]? = some block)
+    (parentFound : store.blocks[block.parentRoot]? = some parent)
+    (notLower : ¬parent.slot < block.slot) :
+    store.chain root = .error (.parentSlotNotLower root) := by
+  rw [chain, known]
+  dsimp only
+  split
+  · simp_all
+  · rename_i other otherFound
+    rw [parentFound, Option.some.injEq] at otherFound
+    subst otherFound
+    rw [dite_eq_right notLower]
+    rfl
+
+/-- Each root of the chain of a known block is a known block at a slot at most its slot. -/
+private theorem chain_slot_le {root : Root} {all : List Root} {block : BeaconBlock preset fork}
+    (chained : store.chain root = .ok all) (known : store.blocks[root]? = some block) :
+    ∀ other ∈ all, ∃ otherBlock, store.blocks[other]? = some otherBlock ∧
+      otherBlock.slot.toNat ≤ block.slot.toNat := by
+  induction root using chain.induct (store := store) generalizing all block with
+  | case1 root unknown =>
+    rw [chain_of_unknown store unknown] at chained
+    cases chained
+  | case2 root this thisFound unknown =>
+    rw [known, Option.some.injEq] at thisFound
+    subst thisFound
+    rw [chain_of_parent_unknown store known unknown, Except.ok.injEq] at chained
+    subst chained
+    simp only [List.mem_singleton, forall_eq]
+    exact ⟨block, known, Nat.le_refl _⟩
+  | case3 root this thisFound parent parentFound lower ih =>
+    rw [known, Option.some.injEq] at thisFound
+    subst thisFound
+    rw [chain_of_lower store known parentFound lower, bind_ok_iff] at chained
+    obtain ⟨rest, restOk, chained⟩ := chained
+    simp only [pure, Except.pure, Except.ok.injEq] at chained
+    subst chained
+    intro other mem
+    rcases List.mem_cons.mp mem with same | mem
+    · subst same
+      exact ⟨block, known, Nat.le_refl _⟩
+    · obtain ⟨otherBlock, otherFound, le⟩ := ih restOk parentFound other mem
+      exact ⟨otherBlock, otherFound,
+        Nat.le_trans le (Nat.le_of_lt (UInt64.lt_iff_toNat_lt.mp lower))⟩
+  | case4 root this thisFound parent parentFound notLower =>
+    rw [known, Option.some.injEq] at thisFound
+    subst thisFound
+    rw [chain_of_not_lower store known parentFound notLower] at chained
+    cases chained
+
+/-- The chain of a block starts at the block, which is known. -/
+private theorem chain_cons {root : Root} {all : List Root} (chained : store.chain root = .ok all) :
+    ∃ block tail, store.blocks[root]? = some block ∧ all = root :: tail := by
+  cases known : store.blocks[root]? with
+  | none =>
+    rw [chain_of_unknown store known] at chained
+    cases chained
+  | some block =>
+    cases parentFound : store.blocks[block.parentRoot]? with
+    | none =>
+      rw [chain_of_parent_unknown store known parentFound, Except.ok.injEq] at chained
+      exact ⟨block, [], rfl, chained.symm⟩
+    | some parent =>
+      by_cases lower : parent.slot < block.slot
+      · rw [chain_of_lower store known parentFound lower, bind_ok_iff] at chained
+        obtain ⟨rest, _, chained⟩ := chained
+        simp only [pure, Except.pure, Except.ok.injEq] at chained
+        exact ⟨block, rest, rfl, chained.symm⟩
+      · rw [chain_of_not_lower store known parentFound lower] at chained
+        cases chained
+
+/-- The chain of a block has no root twice. -/
+private theorem chain_nodup {root : Root} {all : List Root} (chained : store.chain root = .ok all) :
+    all.Nodup := by
+  induction root using chain.induct (store := store) generalizing all with
+  | case1 root unknown =>
+    rw [chain_of_unknown store unknown] at chained
+    cases chained
+  | case2 root block known unknown =>
+    rw [chain_of_parent_unknown store known unknown, Except.ok.injEq] at chained
+    subst chained
+    exact List.nodup_singleton _
+  | case3 root block known parent parentFound lower ih =>
+    rw [chain_of_lower store known parentFound lower, bind_ok_iff] at chained
+    obtain ⟨rest, restOk, chained⟩ := chained
+    simp only [pure, Except.pure, Except.ok.injEq] at chained
+    subst chained
+    refine List.nodup_cons.mpr ⟨fun mem => ?_, ih restOk⟩
+    obtain ⟨other, otherFound, le⟩ := chain_slot_le store restOk parentFound root mem
+    rw [known, Option.some.injEq] at otherFound
+    subst otherFound
+    exact absurd (UInt64.lt_iff_toNat_lt.mp lower) (Nat.not_lt_of_le le)
+  | case4 root block known parent parentFound notLower =>
+    rw [chain_of_not_lower store known parentFound notLower] at chained
+    cases chained
+
+/-- The chain of a block, from one of its roots on, is the chain of that root. -/
+private theorem chain_suffix {root middle : Root} {all : List Root}
+    (chained : store.chain root = .ok all) (member : middle ∈ all) :
+    ∃ before rest, store.chain middle = .ok rest ∧ all = before ++ rest := by
+  induction root using chain.induct (store := store) generalizing all with
+  | case1 root unknown =>
+    rw [chain_of_unknown store unknown] at chained
+    cases chained
+  | case2 root block known unknown =>
+    have same := chained
+    rw [chain_of_parent_unknown store known unknown, Except.ok.injEq] at same
+    subst same
+    rw [List.mem_singleton] at member
+    subst member
+    exact ⟨[], _, chained, rfl⟩
+  | case3 root block known parent parentFound lower ih =>
+    have same := chained
+    rw [chain_of_lower store known parentFound lower, bind_ok_iff] at same
+    obtain ⟨rest, restOk, same⟩ := same
+    simp only [pure, Except.pure, Except.ok.injEq] at same
+    subst same
+    rcases List.mem_cons.mp member with here | below
+    · subst here
+      exact ⟨[], _, chained, rfl⟩
+    · obtain ⟨before, after, afterOk, split⟩ := ih restOk below
+      exact ⟨root :: before, after, afterOk, by rw [split, List.cons_append]⟩
+  | case4 root block known parent parentFound notLower =>
+    rw [chain_of_not_lower store known parentFound notLower] at chained
+    cases chained
+
+/-- The filter of a chain keeps some of its roots, in their order. -/
+private theorem payloadsOnChain_sublist (gloas : .glamsterdam ≤ fork) (expected : Option Hash32)
+    (roots : List Root) : (store.payloadsOnChain gloas expected roots).Sublist roots := by
+  induction roots generalizing expected with
+  | nil => exact List.Sublist.slnil
+  | cons root rest ih =>
+    unfold payloadsOnChain
+    split
+    · exact (ih expected).cons root
+    · dsimp only
+      split
+      · exact (ih _).cons_cons root
+      · exact (ih expected).cons root
+
+/-- From no expected hash, the filter keeps the first root when it is a known block. -/
+private theorem payloadsOnChain_none_cons (gloas : .glamsterdam ≤ fork) {root : Root}
+    {block : BeaconBlock preset fork} (known : store.blocks[root]? = some block)
+    (rest : List Root) :
+    store.payloadsOnChain gloas none (root :: rest) =
+      root :: store.payloadsOnChain gloas
+        (some (block.body.signedExecutionPayloadBid gloas).message.parentBlockHash) rest := by
+  simp [payloadsOnChain, known]
+
+/-- Each root that the filter keeps first, from an expected hash, has a bid naming that hash. -/
+private theorem payloadsOnChain_some_head (gloas : .glamsterdam ≤ fork) {hash : Hash32}
+    {roots kept : List Root} {first : Root}
+    (filtered : store.payloadsOnChain gloas (some hash) roots = first :: kept) :
+    ∃ block, store.blocks[first]? = some block ∧
+      (block.body.signedExecutionPayloadBid gloas).message.blockHash = hash := by
+  induction roots with
+  | nil => simp [payloadsOnChain] at filtered
+  | cons root rest ih =>
+    unfold payloadsOnChain at filtered
+    split at filtered
+    · exact ih filtered
+    · rename_i block known
+      dsimp only at filtered
+      split at filtered
+      · rename_i named
+        simp only [List.cons.injEq] at filtered
+        obtain ⟨rfl, -⟩ := filtered
+        simp only [Option.all_some, beq_iff_eq] at named
+        exact ⟨block, known, named.symm⟩
+      · exact ih filtered
+
+/-- When the filter keeps a root that a list holds once, it goes on as from that root alone. -/
+private theorem payloadsOnChain_split (gloas : .glamsterdam ≤ fork) {root : Root}
+    {block : BeaconBlock preset fork} (known : store.blocks[root]? = some block)
+    {before after : List Root} (distinct : (before ++ root :: after).Nodup)
+    (expected : Option Hash32)
+    (member : root ∈ store.payloadsOnChain gloas expected (before ++ root :: after)) :
+    ∃ kept, store.payloadsOnChain gloas expected (before ++ root :: after) =
+      kept ++ root :: store.payloadsOnChain gloas
+        (some (block.body.signedExecutionPayloadBid gloas).message.parentBlockHash) after := by
+  induction before generalizing expected with
+  | nil =>
+    refine ⟨[], ?_⟩
+    simp only [List.nil_append] at distinct member ⊢
+    simp only [payloadsOnChain, known] at member ⊢
+    split at member
+    · rename_i named
+      simp only [named, ↓reduceIte]
+    · exact absurd ((payloadsOnChain_sublist store gloas _ _).subset member)
+        (List.nodup_cons.mp distinct).1
+  | cons first before ih =>
+    simp only [List.cons_append] at distinct member ⊢
+    have rest := (List.nodup_cons.mp distinct).2
+    cases firstFound : store.blocks[first]? with
+    | none =>
+      simp only [payloadsOnChain, firstFound] at member ⊢
+      exact ih rest expected member
+    | some firstBlock =>
+      simp only [payloadsOnChain, firstFound] at member ⊢
+      split at member
+      · rename_i named
+        simp only [named, ↓reduceIte]
+        rcases List.mem_cons.mp member with same | member
+        · subst same
+          exact absurd (by simp) (List.nodup_cons.mp distinct).1
+        · obtain ⟨kept, split⟩ := ih rest _ member
+          exact ⟨first :: kept, by rw [split, List.cons_append]⟩
+      · rename_i named
+        simp only [named, ↓reduceIte, Bool.false_eq_true]
+        exact ih rest expected member
+
+/-- Before Gloas, the payload chain of a block is its chain. -/
+theorem payloadChain_of_lt_glamsterdam (before : fork < .glamsterdam) (root : Root) :
+    store.payloadChain root = store.chain root := by
+  have notGloas : ¬(Fork.glamsterdam ≤ fork) := Nat.not_le_of_lt before
+  simp only [payloadChain, notGloas, ↓reduceDIte]
+  cases store.chain root <;> rfl
+
+/-- From Gloas, the payload chain of a block is its chain, filtered from no expected hash. -/
+theorem payloadChain_of_glamsterdam (gloas : .glamsterdam ≤ fork) (root : Root) :
+    store.payloadChain root = (store.payloadsOnChain gloas none ·) <$> store.chain root := by
+  simp only [payloadChain, gloas, ↓reduceDIte]
+  cases store.chain root <;> rfl
+
+/-- From Gloas, a payload chain is the filter of the chain of its block from no expected hash. -/
+private theorem payloadChain_ok_of_glamsterdam (gloas : .glamsterdam ≤ fork) {root : Root}
+    {roots : List Root} (walked : store.payloadChain root = .ok roots) :
+    ∃ all, store.chain root = .ok all ∧ roots = store.payloadsOnChain gloas none all := by
+  rw [payloadChain_of_glamsterdam store gloas] at walked
+  cases chained : store.chain root with
+  | error => simp [chained, Functor.map, Except.map] at walked
+  | ok all =>
+    simp only [chained, Functor.map, Except.map, Except.ok.injEq] at walked
+    exact ⟨all, rfl, walked.symm⟩
+
+/-- A payload chain keeps some roots of the chain of its block, in their order. -/
+theorem payloadChain_sublist {root : Root} {roots : List Root}
+    (walked : store.payloadChain root = .ok roots) :
+    ∃ all, store.chain root = .ok all ∧ roots.Sublist all := by
+  by_cases gloas : Fork.glamsterdam ≤ fork
+  · obtain ⟨all, chained, rfl⟩ := payloadChain_ok_of_glamsterdam store gloas walked
+    exact ⟨all, chained, payloadsOnChain_sublist store gloas none all⟩
+  · rw [payloadChain_of_lt_glamsterdam store (Nat.lt_of_not_le gloas)] at walked
+    exact ⟨roots, walked, List.Sublist.refl _⟩
+
+/-- The payload chain of a block starts at the block. -/
+theorem payloadChain_head? {root : Root} {roots : List Root}
+    (walked : store.payloadChain root = .ok roots) : roots.head? = some root := by
+  by_cases gloas : Fork.glamsterdam ≤ fork
+  · obtain ⟨all, chained, rfl⟩ := payloadChain_ok_of_glamsterdam store gloas walked
+    obtain ⟨block, tail, known, rfl⟩ := chain_cons store chained
+    rw [payloadsOnChain_none_cons store gloas known]
+    rfl
+  · rw [payloadChain_of_lt_glamsterdam store (Nat.lt_of_not_le gloas)] at walked
+    obtain ⟨block, tail, known, rfl⟩ := chain_cons store walked
+    rfl
+
+/-- Each root that the filter keeps builds on the payload of the next one it keeps. -/
+private theorem payloadsOnChain_links (gloas : .glamsterdam ≤ fork) (expected : Option Hash32)
+    (roots : List Root) (i : Nat)
+    (next : i + 1 < (store.payloadsOnChain gloas expected roots).length) :
+    store.PayloadLink (store.payloadsOnChain gloas expected roots)[i]
+      (store.payloadsOnChain gloas expected roots)[i + 1] := by
+  suffices key : ∀ kept, store.payloadsOnChain gloas expected roots = kept →
+      ∀ i (next : i + 1 < kept.length), store.PayloadLink kept[i] kept[i + 1] from
+    key _ rfl i next
+  intro kept filtered
+  clear next
+  induction roots generalizing expected kept with
+  | nil =>
+    simp only [payloadsOnChain] at filtered
+    subst filtered
+    intro step next
+    simp at next
+  | cons root rest ih =>
+    cases known : store.blocks[root]? with
+    | none =>
+      simp only [payloadsOnChain, known] at filtered
+      exact ih expected kept filtered
+    | some block =>
+      simp only [payloadsOnChain, known] at filtered
+      split at filtered
+      · rename_i named
+        subst filtered
+        intro step next
+        cases step with
+        | zero =>
+          simp only [List.getElem_cons_zero, List.getElem_cons_succ]
+          generalize later : store.payloadsOnChain gloas _ rest = after at next ⊢
+          match after, later with
+          | first :: _, later =>
+            obtain ⟨parent, parentFound, hash⟩ := payloadsOnChain_some_head store gloas later
+            refine ⟨block, parent, known, parentFound, ?_⟩
+            simp [Store.parentPayloadStatus, gloas, hash]
+        | succ step =>
+          simp only [List.getElem_cons_succ]
+          exact ih _ _ rfl step (by simpa using next)
+      · exact ih expected kept filtered
+
+/-- From Gloas, each root of a payload chain builds on the payload of the next one. -/
+theorem payloadChain_links (gloas : .glamsterdam ≤ fork) {root : Root} {roots : List Root}
+    (walked : store.payloadChain root = .ok roots) (i : Nat) (next : i + 1 < roots.length) :
+    store.PayloadLink roots[i] roots[i + 1] := by
+  obtain ⟨all, _, rfl⟩ := payloadChain_ok_of_glamsterdam store gloas walked
+  exact payloadsOnChain_links store gloas none all i next
+
+/-- From Gloas, the parent of a block is on its payload chain exactly when it builds on its payload.
+
+The fork choice then sees the parent as full. -/
+theorem parentRoot_mem_payloadChain_iff (gloas : .glamsterdam ≤ fork) {root : Root}
+    {roots : List Root} {block parent : BeaconBlock preset fork}
+    (found : store.blocks[root]? = some block)
+    (parentFound : store.blocks[block.parentRoot]? = some parent)
+    (walked : store.payloadChain root = .ok roots) :
+    block.parentRoot ∈ roots ↔ Store.parentPayloadStatus block parent = .full := by
+  obtain ⟨all, chained, rfl⟩ := payloadChain_ok_of_glamsterdam store gloas walked
+  by_cases lower : parent.slot < block.slot
+  · rw [chain_of_lower store found parentFound lower, bind_ok_iff] at chained
+    obtain ⟨rest, restOk, chained⟩ := chained
+    simp only [pure, Except.pure, Except.ok.injEq] at chained
+    subst chained
+    obtain ⟨parent', tail, parentFound', rfl⟩ := chain_cons store restOk
+    have distinct := chain_nodup store restOk
+    rw [payloadsOnChain_none_cons store gloas found]
+    simp only [payloadsOnChain, parentFound]
+    simp only [Store.parentPayloadStatus, gloas, dite_true]
+    by_cases named : (block.body.signedExecutionPayloadBid gloas).message.parentBlockHash =
+        (parent.body.signedExecutionPayloadBid gloas).message.blockHash
+    · simp [named]
+    · simp only [Option.all_some, named, beq_iff_eq, ↓reduceIte,
+        reduceCtorEq, iff_false, List.mem_cons, not_or]
+      refine ⟨fun same => ?_, fun member => ?_⟩
+      · rw [same, found, Option.some.injEq] at parentFound
+        subst parentFound
+        exact Nat.lt_irrefl _ (UInt64.lt_iff_toNat_lt.mp lower)
+      · exact (List.nodup_cons.mp distinct).1
+          ((payloadsOnChain_sublist store gloas _ tail).subset member)
+  · rw [chain_of_not_lower store found parentFound lower] at chained
+    cases chained
+
+/-- Dropping the roots that fail a test leaves nothing when no root passes it. -/
+private theorem dropWhile_not_of_find?_eq_none {test : Root → Bool} {roots : List Root}
+    (missing : roots.find? test = none) : (roots.dropWhile fun root => !test root) = [] := by
+  induction roots with
+  | nil => rfl
+  | cons root rest ih =>
+    simp only [List.find?_cons] at missing
+    split at missing
+    · cases missing
+    · rename_i failed
+      simp [failed, ih missing]
+
+/-- Dropping the roots that fail a test leaves the first root that passes it and the rest. -/
+private theorem dropWhile_not_of_find?_eq_some {test : Root → Bool} {roots : List Root}
+    {first : Root} (search : roots.find? test = some first) :
+    ∃ before after, roots = before ++ first :: after ∧
+      (roots.dropWhile fun root => !test root) = first :: after := by
+  induction roots with
+  | nil => cases search
+  | cons root rest ih =>
+    simp only [List.find?_cons] at search
+    split at search
+    · rename_i passed
+      cases search
+      exact ⟨[], rest, rfl, by simp [passed]⟩
+    · rename_i failed
+      obtain ⟨before, after, split, dropped⟩ := ih search
+      exact ⟨root :: before, after, by rw [split, List.cons_append],
+        by simp [failed, dropped]⟩
+
+/-- In a list without repeated roots, what follows a root is fixed by the list. -/
+private theorem suffix_eq_of_nodup {middle : Root} {before after other rest : List Root}
+    (distinct : (before ++ middle :: after).Nodup)
+    (same : before ++ middle :: after = other ++ middle :: rest) : after = rest := by
+  induction before generalizing other with
+  | nil =>
+    cases other with
+    | nil => simpa using same
+    | cons first other =>
+      simp only [List.nil_append, List.cons_append, List.cons.injEq] at same
+      obtain ⟨rfl, rfl⟩ := same
+      exact absurd (by simp) (List.nodup_cons.mp distinct).1
+  | cons first before ih =>
+    cases other with
+    | nil =>
+      simp only [List.nil_append, List.cons_append, List.cons.injEq] at same
+      obtain ⟨rfl, -⟩ := same
+      exact absurd (by simp) (List.nodup_cons.mp distinct).1
+    | cons second other =>
+      simp only [List.cons_append, List.cons.injEq] at same
+      exact ih (List.nodup_cons.mp distinct).2 same.2
+
+/-- From an expected hash, the filter skips the roots before the first whose bid names it. -/
+private theorem payloadsOnChain_some (gloas : .glamsterdam ≤ fork) (hash : Hash32)
+    (roots : List Root) :
+    store.payloadsOnChain gloas (some hash) roots = store.payloadsOnChain gloas none
+      (roots.dropWhile fun ancestor => !(store.blocks[ancestor]?).any fun known =>
+        (known.body.signedExecutionPayloadBid gloas).message.blockHash == hash) := by
+  induction roots with
+  | nil => rfl
+  | cons root rest ih =>
+    cases known : store.blocks[root]? with
+    | none => simpa [payloadsOnChain, known] using ih
+    | some block =>
+      by_cases named : (block.body.signedExecutionPayloadBid gloas).message.blockHash = hash
+      · simp [payloadsOnChain, known, named]
+      · simpa [payloadsOnChain, known, named, Ne.symm named] using ih
+
+/-- From Gloas, the payload chain of a block continues at the first root of its chain that it names.
+
+That root is the first ancestor whose bid names the parent block hash of the bid of the block. -/
+private theorem payloadChain_eq_cons (gloas : .glamsterdam ≤ fork) {root : Root}
+    {block : BeaconBlock preset fork} {all : List Root}
+    (found : store.blocks[root]? = some block) (chained : store.chain root = .ok (root :: all)) :
+    store.payloadChain root = .ok (root ::
+      match all.find? (fun ancestor => (store.blocks[ancestor]?).any fun known =>
+          (known.body.signedExecutionPayloadBid gloas).message.blockHash ==
+            (block.body.signedExecutionPayloadBid gloas).message.parentBlockHash) with
+      | none => []
+      | some next => (store.payloadChain next).toOption.getD []) := by
+  rw [payloadChain_of_glamsterdam store gloas, chained]
+  show Except.ok (store.payloadsOnChain gloas none (root :: all)) = _
+  rw [payloadsOnChain_none_cons store gloas found, payloadsOnChain_some store gloas]
+  congr 2
+  split
+  · rename_i missing
+    rw [dropWhile_not_of_find?_eq_none missing]
+    rfl
+  · rename_i next search
+    obtain ⟨before, after, split, dropped⟩ := dropWhile_not_of_find?_eq_some search
+    rw [dropped]
+    have member : next ∈ root :: all := by simp [split]
+    obtain ⟨other, rest, restOk, whole⟩ := chain_suffix store chained member
+    obtain ⟨nextBlock, tail, -, rfl⟩ := chain_cons store restOk
+    have distinct := chain_nodup store chained
+    rw [split, ← List.cons_append] at distinct whole
+    rw [suffix_eq_of_nodup distinct whole, payloadChain_of_glamsterdam store gloas, restOk]
+    rfl
+
+/-- From Gloas, the payload chain of a block goes on at the first ancestor that its bid names.
+
+That ancestor is the first root of the chain below the block whose bid names the parent block hash.
+
+Its chain and its payload chain are found, and the payload chain of the block is the block on it. -/
+theorem payloadChain_of_find?_some (gloas : .glamsterdam ≤ fork) {root next : Root}
+    {block : BeaconBlock preset fork} {all : List Root}
+    (found : store.blocks[root]? = some block) (chained : store.chain root = .ok (root :: all))
+    (named : all.find? (store.namesBlockHash gloas
+      (block.body.signedExecutionPayloadBid gloas).message.parentBlockHash) = some next) :
+    ∃ nextBlock rest, store.blocks[next]? = some nextBlock ∧
+      store.chain next = .ok (next :: rest) ∧
+      ∃ tail, store.payloadChain next = .ok tail ∧
+        store.payloadChain root = .ok (root :: tail) := by
+  have member : next ∈ root :: all := List.mem_cons_of_mem _ (List.mem_of_find?_eq_some named)
+  obtain ⟨-, rest, restOk, -⟩ := chain_suffix store chained member
+  obtain ⟨nextBlock, tail, nextFound, rfl⟩ := chain_cons store restOk
+  have walked :
+      store.payloadChain next = .ok (store.payloadsOnChain gloas none (next :: tail)) := by
+    rw [payloadChain_of_glamsterdam store gloas, restOk]
+    rfl
+  refine ⟨nextBlock, tail, nextFound, restOk, _, walked, ?_⟩
+  have cons := payloadChain_eq_cons store gloas found chained
+  rw [show all.find? (fun ancestor => (store.blocks[ancestor]?).any fun known =>
+      (known.body.signedExecutionPayloadBid gloas).message.blockHash ==
+        (block.body.signedExecutionPayloadBid gloas).message.parentBlockHash) = some next
+    from named] at cons
+  rw [cons]
+  simp only [walked]
+  rfl
+
+/-- From Gloas, the payload chain of a block is the block alone when no ancestor is named.
+
+No root of the chain below the block has a bid that names the parent block hash of the block. -/
+theorem payloadChain_of_find?_none (gloas : .glamsterdam ≤ fork) {root : Root}
+    {block : BeaconBlock preset fork} {all : List Root}
+    (found : store.blocks[root]? = some block) (chained : store.chain root = .ok (root :: all))
+    (unnamed : all.find? (store.namesBlockHash gloas
+      (block.body.signedExecutionPayloadBid gloas).message.parentBlockHash) = none) :
+    store.payloadChain root = .ok [root] := by
+  have cons := payloadChain_eq_cons store gloas found chained
+  rw [show all.find? (fun ancestor => (store.blocks[ancestor]?).any fun known =>
+      (known.body.signedExecutionPayloadBid gloas).message.blockHash ==
+        (block.body.signedExecutionPayloadBid gloas).message.parentBlockHash) = none
+    from unnamed] at cons
+  exact cons
+
+/-- The payload chain of a block, from one of its roots on, is the payload chain of that root.
+
+So a payload that builds on a payload of the chain also builds on every payload below it. -/
+theorem payloadChain_suffix {root middle : Root} {roots : List Root}
+    (walked : store.payloadChain root = .ok roots) (member : middle ∈ roots) :
+    ∃ before rest, store.payloadChain middle = .ok rest ∧ roots = before ++ rest := by
+  by_cases gloas : Fork.glamsterdam ≤ fork
+  · obtain ⟨all, chained, rfl⟩ := payloadChain_ok_of_glamsterdam store gloas walked
+    have inAll := (payloadsOnChain_sublist store gloas none all).subset member
+    obtain ⟨before, rest, restOk, split⟩ := chain_suffix store chained inAll
+    obtain ⟨middleBlock, tail, middleFound, rfl⟩ := chain_cons store restOk
+    have distinct := chain_nodup store chained
+    subst split
+    obtain ⟨kept, filtered⟩ :=
+      payloadsOnChain_split store gloas middleFound distinct none member
+    refine ⟨kept, _, ?_, filtered⟩
+    rw [payloadChain_of_glamsterdam store gloas, restOk,
+      ← payloadsOnChain_none_cons store gloas middleFound]
+    rfl
+  · rw [payloadChain_of_lt_glamsterdam store (Nat.lt_of_not_le gloas)] at walked ⊢
+    exact chain_suffix store walked member
+
+/-- A root on the payload chain of a root on the payload chain of a block is on the latter. -/
+theorem mem_payloadChain_trans {root middle last : Root} {roots rest : List Root}
+    (walked : store.payloadChain root = .ok roots) (member : middle ∈ roots)
+    (inner : store.payloadChain middle = .ok rest) (onInner : last ∈ rest) : last ∈ roots := by
+  obtain ⟨before, after, afterOk, split⟩ := payloadChain_suffix store walked member
+  rw [inner, Except.ok.injEq] at afterOk
+  subst afterOk split
+  exact List.mem_append_right before onInner
+
+/-- A valid payload removes exactly the roots of its payload chain from the optimistic set.
+
+Those are the block and its known ancestors whose payloads it builds on.
+
+Before Gloas they are all its known ancestors.
 
 The head and the blocks stay as they were. -/
 theorem onValidPayload_spec {root : Root} {after : OptimisticStore preset fork}
     (updated : store.onValidPayload root = .ok after) :
-    ∃ ancestors, store.chain root = .ok ancestors ∧
+    ∃ ancestors, store.payloadChain root = .ok ancestors ∧
       (∀ optimistic, optimistic ∈ after.optimisticRoots ↔
         optimistic ∈ store.optimisticRoots ∧ optimistic ∉ ancestors) ∧
       after.headBlockRoot = store.headBlockRoot ∧ after.blocks = store.blocks := by
@@ -162,16 +754,18 @@ theorem onValidPayload_spec {root : Root} {after : OptimisticStore preset fork}
   refine ⟨ancestors, chained, fun optimistic => ?_, rfl, rfl⟩
   simp
 
-/-- The first invalid block removes exactly the optimistic roots whose chain holds it.
+/-- The first invalid block removes exactly the optimistic roots whose payload chain holds it.
 
-Those are the first invalid block and its known descendants.
+Those are the first invalid block and its known descendants that build on its payload.
+
+Before Gloas these are all its known descendants.
 
 Every other root stays, and so do the head and the blocks. -/
 theorem onInvalidatedPayload_spec {first : Root} {after : OptimisticStore preset fork}
     (updated : store.onInvalidatedPayload first = .ok after) :
     (∀ optimistic, optimistic ∈ after.optimisticRoots ↔
       optimistic ∈ store.optimisticRoots ∧
-        ∃ chain, store.chain optimistic = .ok chain ∧ first ∉ chain) ∧
+        ∃ chain, store.payloadChain optimistic = .ok chain ∧ first ∉ chain) ∧
       after.headBlockRoot = store.headBlockRoot ∧ after.blocks = store.blocks := by
   simp only [onInvalidatedPayload, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at updated
   obtain ⟨kept, keptOk, rfl⟩ := updated
@@ -179,7 +773,7 @@ theorem onInvalidatedPayload_spec {first : Root} {after : OptimisticStore preset
   rw [mem_filterMapM_ok keptOk]
   constructor
   · rintro ⟨root, member, checked⟩
-    cases chained : store.chain root with
+    cases chained : store.payloadChain root with
     | error => simp [chained, bind, Except.bind] at checked
     | ok chain =>
       by_cases holds : first ∈ chain
@@ -305,12 +899,21 @@ theorem hasNoViableBranch_eq_ok_true_iff
 
 end Store
 
-/-- A node whose head is optimistic is an optimistic node, whatever its block tree. -/
+/-- Before Gloas, a node whose head is optimistic is an optimistic node, whatever its tree. -/
 theorem isOptimisticNode_of_isHeadOptimistic {config : Config}
     {optimistic : OptimisticStore preset fork} (store : Store preset fork)
-    (head : optimistic.isHeadOptimistic = true) :
+    (before : fork < .glamsterdam) (head : optimistic.isHeadOptimistic = true) :
     isOptimisticNode config optimistic store = .ok true := by
-  simp [isOptimisticNode, head]
+  have notGloas : ¬(Fork.glamsterdam ≤ fork) := Nat.not_le_of_lt before
+  simp [isOptimisticNode, head, notGloas]
+  rfl
+
+/-- From Gloas whether a node is optimistic is not yet specified, and fails. -/
+theorem isOptimisticNode_of_glamsterdam {config : Config}
+    (optimistic : OptimisticStore preset fork) (store : Store preset fork)
+    (gloas : .glamsterdam ≤ fork) :
+    isOptimisticNode config optimistic store = .error (.forkNotYetSpecified fork) := by
+  simp [isOptimisticNode, gloas]
   rfl
 
 /-- Before Gloas, a node whose head is not optimistic is optimistic exactly in the second case.
