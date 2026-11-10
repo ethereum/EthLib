@@ -47,15 +47,18 @@ Not yet released.
 - The theorem that an attestation keeps the registry and the RANDAO mixes now holds at every fork ([#1888](https://github.com/ethereum/EthLib/issues/1888)).
   No C export or Python function changes.
   In Lean, `processAttestation_registry` drops its argument `before : fork < .altair`, so a caller removes it.
-- Builder deposits and exits, ejections, slashing penalties and active-validator reads now check each conversion to a 64-bit index ([#1883](https://github.com/ethereum/EthLib/issues/1883)).
-  Registry and effective-balance writes use plain integer positions, so an in-range position does not fail merely because it is at least 2^64.
-  No C export or Python function signature changes.
+- From Gloas, builder deposits, exits and onboarding, ejections, slashing penalties, attestation committee counts and active-validator reads now fail where a position of 2^64 or more would become a 64-bit index ([#1883](https://github.com/ethereum/EthLib/issues/1883)).
+  Such a position used to wrap modulo 2^64, so the step read or wrote another validator or builder.
+  The registry updates, the slashing penalties, the effective-balance updates and the genesis activations read and write each validator at its plain position, as the specification indexes the registry with a Python integer.
+  No C export or Python function changes.
   In Lean, `addBuilderToRegistry` now returns an `Except TransitionError`; bind its result, and pass a successful return to `builderBalanceSum_addBuilderToRegistry`.
   `EpochFrameLaws` replaces its `setValidator` field by a `setValidatorAt` field for writes at plain integer positions, and the theorem `EpochFrameLaws.setValidator` gives the index form.
   The new `getValidator_eq_getValidatorAt`, `getBalance_eq_getBalanceAt` and `setValidator_eq_setValidatorAt` relate the index forms to the position forms; `frame_setValidatorAt` is gone.
   `KeysKept`, `Frame.keysKept` and `UpgradeFrame.keysKept` are gone, as no theorem read them ([#1908](https://github.com/ethereum/EthLib/issues/1908)); `advanceSlot_keys` becomes `advanceSlot_kept`, without the key conjunct.
   The setter laws of `EpochFrameLaws` and the frame lemmas of validator writes no longer take a key equality, and the `_of_whole` forms no longer take the old validator.
-  The activity, chain and effective-balance totality theorems lose their registry-size arguments.
+  `activeKept_processEpoch`, `activeKept_processBlock`, `activeKept_advanceSlot`, `ChainStep.activeKept`, `activeKept_of_chainSteps`, `processBlock_attestationSplit`, `voteFrame_processBlock`, `committeesKept_processBlock`, `committeesKept_advanceSlot`, `RunKept.committeesKept`, `slackJustifiedCheckpoints_chainRoot_of_chainSteps`, `slackFinalized_chainRoot_of_chainSteps` and `processEffectiveBalanceUpdates_effectiveBalance` drop their registry-size argument.
+  `SlackStepBounds` drops its field `small`, and the field `RunKept.active` no longer takes a registry bound.
+  `getTotalActiveBalance` reads the checked active indices.
   `getActiveValidatorIndicesChecked` converts each active position with `ofNatChecked`, as the specification builds each index.
   `getActiveValidatorIndicesChecked_eq_ok_iff` replaces `getActiveValidatorIndices_eq_mapM_ofNatChecked`, and `getActiveValidatorIndicesChecked_error_of_le` is gone; `getTotalActiveBalance_ne_indexOutOfRange` drops its registry bound.
   New lemmas: `sorted_of_getActiveValidatorIndicesChecked_ok`, `mem_iff_of_getActiveValidatorIndicesChecked_ok`, `getActiveValidatorIndicesChecked_error`, `getActiveValidatorIndicesChecked_eq_error`, and in `Base`, `ofNatChecked_toNat`, `mapM_ofNatChecked_eq_ok_iff` and `mapM_ofNatChecked_error`.

@@ -2326,8 +2326,8 @@ The term is twice the stake of that set outside the active set of the current ep
 `TargetFlagsVoted.attester` from Altair and `PendingVoted.attester` before it give that fact.
 With them, `linkWithChurn_of_test` would give the bound for the previous epoch when both pass, whose bit the finalization rules read; no theorem states that yet.
 For the current epoch the term is zero.
-For the previous epoch, `exists_exitEpoch_eq_of_mem_sdiff_active` shows that it counts only validators that exit at the current epoch, when the registry stays within the preset's limit.
-That theorem compares the pure active-index lists, whose casts need the bound to identify each index with its registry position.
+For the previous epoch, `exists_exitEpoch_eq_of_mem_sdiff_active` shows that it counts only validators that exit at the current epoch, when the registry stays within the limit of the preset.
+The theorem reads the unchecked active indices, and the bound makes each index equal to its registry position.
 The exit churn bounds that stake, but no theorem states that bound yet.
 So one step gives the stake condition of a supermajority link of the model, up to that term.
 The beacon chain leaves slashed attesters out, and the model counts them, so the converse does not hold.
@@ -2458,14 +2458,15 @@ So a transition never adds a validator at a position of `2^64` or more, and only
 
 `getActiveValidatorIndicesChecked_eq_ok_iff` in `Consensus/Proofs/Accessors.lean` states the divergence exactly.
 The checked read converts each active position as the specification does, and it gives EthLib's list exactly when every active position is below `2^64`.
-The number of committees per slot, the churn limit of validators before Electra and the Phase 0 weak subjectivity period also convert the number of active validators to a 64-bit integer without a check.
-The specification rejects a count of `2^64` active validators, which a registry of `2^64` positions allows.
-Such a registry can arise through the transition, at least in principle.
+The specification also converts the number of active validators to a 64-bit integer, and rejects a count of `2^64`, which a registry of `2^64` positions allows.
+Such a registry can arise through the transition from Gloas, at least in principle.
 
-Transition paths use `getActiveValidatorIndicesChecked` for unbounded active-position reads.
-It rejects an active position of `2^64` or more.
-Committee construction and attestation checks also reject an active count of `2^64` or more.
-Direct callers of the pure helper, including the standalone genesis validity check, keep the difference from the specification.
+The transition reads the active validators through `getActiveValidatorIndicesChecked`, which fails at an active position of `2^64` or more, as the specification does.
+The shuffle of the beacon committees and the committee count of an attestation also fail at `2^64` active validators, so the transition agrees with the specification on the count of committees.
+The churn limit of validators before Electra and the Phase 0 weak subjectivity period still convert the count of the pure list without a check.
+Both run only before Electra, where the type of the registry keeps it within the limit of the preset (`BeaconState.registryWithinLimit_of_lt`).
+There the count is below `2^64` (`length_getActiveValidatorIndices_lt`), so the conversion keeps its value (`toNat_length_getActiveValidatorIndices`) and agrees with the specification.
+The genesis validity check, fork choice, gossip and the honest-validator duties call the pure list directly, and keep the difference.
 
 Some official vectors expect more than a source says.
 The transaction tests of ethereum/tests reject 43 results whose gas limit is `2^64`, or whose gas limit times gas price exceeds `2^256 - 1`.
