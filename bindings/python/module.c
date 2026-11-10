@@ -916,6 +916,8 @@ static PyMethodDef methods[] = {
    DOC_consensus_on_invalidated_payload},
   {"consensus_is_optimistic_node", py_consensus_is_optimistic_node, METH_VARARGS,
    DOC_consensus_is_optimistic_node},
+  {"consensus_inclusion_list_satisfaction", py_consensus_inclusion_list_satisfaction,
+   METH_VARARGS, DOC_consensus_inclusion_list_satisfaction},
   {"consensus_is_optimistic_restricted_domain", py_consensus_is_optimistic_restricted_domain,
    METH_VARARGS, DOC_consensus_is_optimistic_restricted_domain},
   {"consensus_get_eth1_vote", py_consensus_get_eth1_vote, METH_VARARGS,

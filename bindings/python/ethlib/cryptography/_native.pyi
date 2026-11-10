@@ -759,6 +759,10 @@ def consensus_is_optimistic_node(name: str, fork: str, anchor_state: bytes, anch
     """From Bellatrix: whether a node is optimistic, after a run of fork choice steps."""
     ...
 
+def consensus_inclusion_list_satisfaction(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, config: dict | None, validation_status: int, satisfied: bool, validated_root: bytes | None, roots: list[bytes]) -> list[bool | None]:
+    """From Heze: the answers on the inclusion lists after a run of fork choice steps."""
+    ...
+
 def consensus_is_optimistic_restricted_domain(domain_type: bytes) -> bool:
     """Whether an optimistic validator may not sign under a domain type of 4 bytes."""
     ...

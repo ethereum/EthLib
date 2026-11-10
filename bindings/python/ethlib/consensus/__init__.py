@@ -989,6 +989,41 @@ def is_optimistic_node(
     )
 
 
+def inclusion_list_satisfaction(
+    name: str,
+    fork: str,
+    anchor_state: bytes,
+    anchor_block: bytes,
+    steps: Sequence[ForkChoiceStep],
+    validation_status: int,
+    satisfied: bool,
+    roots: Sequence[bytes],
+    *,
+    validated_root: bytes | None = None,
+    verify: bool = True,
+    # `Any`, because `dict` is invariant in its values.
+    config: dict[str, Any] | None = None,
+) -> list[bool | None]:
+    """From Heze, the recorded inclusion list answers for the roots after a fork choice run."""
+    # Every payload has one validation status, 0 valid, 1 invalidated or 2 not validated.
+    # The execution layer gives every payload the same answer, `satisfied`.
+    # Only a payload kept not validated is optimistic, so only it can turn valid.
+    # `validated_root`, if given, names such a payload, which then turns valid with `satisfied`.
+    return _native.consensus_inclusion_list_satisfaction(
+        name,
+        fork,
+        anchor_state,
+        anchor_block,
+        list(steps),
+        verify,
+        config,
+        validation_status,
+        satisfied,
+        validated_root,
+        list(roots),
+    )
+
+
 def is_optimistic_restricted_domain(domain_type: bytes) -> bool:
     """Whether an optimistic validator may not sign under a domain type of 4 bytes."""
     return _native.consensus_is_optimistic_restricted_domain(domain_type)
@@ -1225,6 +1260,7 @@ __all__ = [
     "is_execution_block",
     "is_optimistic_candidate_block",
     "is_optimistic_node",
+    "inclusion_list_satisfaction",
     "latest_verified_ancestor",
     "on_valid_payload",
     "on_invalidated_payload",

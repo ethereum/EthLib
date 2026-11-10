@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Consensus.ForkChoice.Handlers
 public import EthLib.Consensus.ForkChoice.Head
 public import EthLib.Consensus.ForkChoice.Optimistic
 
@@ -88,11 +89,12 @@ It needs the removal of an invalid payload from the store of the fork choice.
 
 The store holds the blocks of one fork, so a payload chain never crosses into Fulu.
 
-The [Heze guide] also records whether a payload satisfies the inclusion lists; it is not modelled.
+From Heze the node also records whether a payload satisfies the inclusion lists of the slot before.
+
+A payload not yet validated counts as satisfying them, until the execution layer judges it.
 
 [optimistic sync guide]: https://github.com/ethereum/consensus-specs/blob/aa16bb4c156184e9548a997d53efaf2a228a6304/specs/bellatrix/optimistic-sync.md
 [fork choice of Gloas]: https://github.com/ethereum/consensus-specs/blob/aa16bb4c156184e9548a997d53efaf2a228a6304/specs/gloas/fork-choice.md#new-get_parent_payload_status
-[Heze guide]: https://github.com/ethereum/consensus-specs/blob/aa16bb4c156184e9548a997d53efaf2a228a6304/specs/heze/optimistic-sync.md
 -/
 
 @[expose] public section
@@ -381,7 +383,59 @@ def hasNoViableBranch : Except ForkChoiceError Bool :=
     return (← store.getFilteredNodeTree config).isEmpty
   else pure true
 
+/-- From Heze: the store once the payload of a block moves from not validated to valid.
+
+The execution layer then answers whether that payload satisfies its inclusion lists.
+
+The answer is recorded for that block only, whose payload the store must keep.
+
+The answers for the other blocks, its ancestors among them, stay as they were.
+
+The store does not keep the status of a payload, so the caller must check that it was optimistic.
+
+It fails when the store keeps no payload for the block. -/
+def recordValidatedInclusionListSatisfaction (heze : .hegota ≤ fork) (root : Root)
+    (satisfied : Bool) : Except ForkChoiceError (Store preset fork) := do
+  unless store.isPayloadVerified (Nat.le_trans (by decide) heze) root do
+    throw (.payloadNotVerified root)
+  let satisfaction := (store.payloadInclusionListSatisfaction heze).insert root satisfied
+  return { store with payloadInclusionListSatisfaction := fun _ => satisfaction }
+
 end Store
+
+/-- From Bellatrix: the sources of a block whose payload the execution layer gave a status.
+
+A payload not yet validated passes the checks of the execution layer.
+
+From Heze it also counts as satisfying its inclusion lists.
+
+An invalidated payload fails those checks, and counts as not satisfying its lists.
+
+A valid payload keeps the sources as they are.
+
+Any other status counts as invalidated, a choice of EthLib. -/
+def BlockSources.withPayloadStatus (sources : BlockSources preset fork)
+    (status : PayloadValidationStatus) : BlockSources preset fork :=
+  if status = PAYLOAD_STATUS_VALID then sources
+  else
+    let accepted := decide (status = PAYLOAD_STATUS_NOT_VALIDATED)
+    { sources with engine := .constant accepted, inclusionListSatisfied := fun _ _ => accepted }
+
+/-- From Heze: both stores once the payload of a block moves from not validated to valid.
+
+The payload must be optimistic.
+
+It then leaves the optimistic set, with the payloads that it builds on.
+
+The store of the fork choice records the answer of the execution layer for that block only.
+
+It fails when the payload is not optimistic, and as each of the two updates does. -/
+def OptimisticStore.onValidatedPayload (optimistic : OptimisticStore preset fork)
+    (store : Store preset fork) (heze : .hegota ≤ fork) (root : Root) (satisfied : Bool) :
+    Except ForkChoiceError (OptimisticStore preset fork × Store preset fork) := do
+  unless optimistic.isOptimistic root do throw (.payloadNotOptimistic root)
+  let recorded ← store.recordValidatedInclusionListSatisfaction heze root satisfied
+  return (← optimistic.onValidPayload root, recorded)
 
 /-- Whether a block that the fork choice dropped is the justified block or descends from it.
 

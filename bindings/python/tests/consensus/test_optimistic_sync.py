@@ -425,21 +425,21 @@ BLOCK_1 = bytes.fromhex("29874e204fad82a30293db7910390d39dc70d4e7c5a7302cfbc10a1
 BLOCK_2 = bytes.fromhex("68066a5504528f3329d4ee97b17219501b21c1cdec09843ee5b5357eff6b8054")
 
 
-def _gloas_file(name: str) -> bytes:
-    """The SSZ bytes of a file of the Gloas case, without the Snappy framing."""
-    return snappy.decompress((GLOAS_CASE / f"{name}.ssz_snappy").read_bytes())
+def _pinned_file(name: str, case: Path = GLOAS_CASE) -> bytes:
+    """The SSZ bytes of a file of a pinned case, without the Snappy framing."""
+    return snappy.decompress((case / f"{name}.ssz_snappy").read_bytes())
 
 
-def _gloas_steps() -> list[consensus.ForkChoiceStep]:
-    """The ticks, blocks and payloads of the Gloas case, as fork choice steps."""
+def _pinned_steps(case: Path = GLOAS_CASE) -> list[consensus.ForkChoiceStep]:
+    """The ticks, blocks and payloads of a pinned case, as fork choice steps."""
     steps: list[consensus.ForkChoiceStep] = []
-    for step in YAML(typ="safe").load((GLOAS_CASE / "steps.yaml").read_text()):
+    for step in YAML(typ="safe").load((case / "steps.yaml").read_text()):
         if "tick" in step:
             steps.append(("tick", step["tick"]))
         elif "block" in step:
-            steps.append(("block", _gloas_file(step["block"])))
+            steps.append(("block", _pinned_file(step["block"], case)))
         elif "execution_payload" in step:
-            steps.append(("execution_payload", _gloas_file(step["execution_payload"])))
+            steps.append(("execution_payload", _pinned_file(step["execution_payload"], case)))
         elif "checks" not in step:
             raise ValueError(f"no runner for the step {step}")
     return steps
@@ -450,9 +450,9 @@ def _gloas_optimistic_node(roots: list[bytes], status: int, head: bytes = BLOCK_
     return consensus.is_optimistic_node(
         "minimal",
         GLOAS_FORK,
-        _gloas_file("anchor_state"),
-        _gloas_file("anchor_block"),
-        _gloas_steps(),
+        _pinned_file("anchor_state"),
+        _pinned_file("anchor_block"),
+        _pinned_steps(),
         roots,
         head,
         verify=False,
@@ -490,7 +490,7 @@ def test_gloas_head_not_optimistic(roots: list[bytes], status: int):
 
 
 # The anchor builds on a payload that the store does not hold.
-GLOAS_ANCHOR_ROOT = gloas_root(_gloas_file("anchor_block"))
+GLOAS_ANCHOR_ROOT = gloas_root(_pinned_file("anchor_block"))
 
 
 @pytest.mark.parametrize("status", [EMPTY, PENDING], ids=["empty", "pending"])
@@ -543,3 +543,88 @@ def test_roots_of_another_length():
 def test_roots_must_be_bytes():
     with raises(TypeError, "cannot pass a value of type bytearray to Lean"):
         consensus.on_valid_payload("mainnet", FORK, BLOCKS, [bytearray(RA)], RA)  # ty: ignore[invalid-argument-type]
+
+
+# The same case at Heze, pinned in tests/sources.toml: only block 1 has its payload imported.
+HEZE_CASE = (
+    Path(__file__).resolve().parents[4]
+    / "tests/consensus/fork_choice/minimal/heze/fork_choice/on_block/pyspec_tests"
+    / "on_block_parent_full_accepts_verified_payload"
+)
+HEZE_FORK = "hegota"
+HEZE_ANCHOR = bytes.fromhex("d7f0e221095c825ae64f6498843aeaffc47921a3cdb00562f6239ae5662c1c36")
+HEZE_BLOCK_1 = bytes.fromhex("67fe41cbe723d01b8e1dd2e0e7a20b8f2e4e0f3210c831854e46c333c61c2e3a")
+HEZE_BLOCK_2 = bytes.fromhex("c26cf871349a93b1968126b51a88d909bc8287a46d078d22b81300ce984951e3")
+VALID, INVALIDATED, NOT_VALIDATED = 0, 1, 2
+
+
+def _satisfaction(
+    status: int, satisfied: bool, validated_root: bytes | None = None, fork: str = HEZE_FORK
+) -> list[bool | None]:
+    """The answers for the anchor, the two blocks and an unknown root after the Heze case."""
+    return consensus.inclusion_list_satisfaction(
+        "minimal",
+        fork,
+        _pinned_file("anchor_state", HEZE_CASE),
+        _pinned_file("anchor_block", HEZE_CASE),
+        _pinned_steps(HEZE_CASE),
+        status,
+        satisfied,
+        [HEZE_ANCHOR, HEZE_BLOCK_1, HEZE_BLOCK_2, ZERO],
+        validated_root=validated_root,
+        verify=False,
+    )
+
+
+@pytest.mark.parametrize(
+    ("status", "satisfied", "expected"),
+    [
+        # A payload not yet validated satisfies its lists, whatever the execution layer says.
+        (NOT_VALIDATED, False, True),
+        (NOT_VALIDATED, True, True),
+        # A valid payload has the answer of the execution layer.
+        (VALID, True, True),
+        (VALID, False, False),
+    ],
+    ids=["not validated", "not validated, satisfied", "valid", "valid, unsatisfied"],
+)
+def test_inclusion_list_satisfaction_by_status(status: int, satisfied: bool, expected: bool):
+    # Only the block whose payload the store keeps has an answer.
+    assert _satisfaction(status, satisfied) == [None, expected, None, None]
+
+
+def test_inclusion_list_satisfaction_of_invalidated_payload():
+    # The execution layer rejects the payload, so the store keeps no envelope and no answer.
+    assert _satisfaction(INVALIDATED, True) == [None, None, None, None]
+
+
+def test_inclusion_list_satisfaction_of_unknown_status():
+    with raises(ERROR, "unknown payload validation status 3") as info:
+        _satisfaction(3, True)
+    assert info.value.code == 0
+
+
+@pytest.mark.parametrize("satisfied", [False, True], ids=["unsatisfied", "satisfied"])
+def test_inclusion_list_satisfaction_once_valid(satisfied: bool):
+    # The payload was kept before it was validated, then turns valid.
+    # Its block takes the answer of the execution layer; the other answers stay.
+    # No pinned Heze case keeps two payloads, so a theorem covers a neighbour with an answer.
+    assert _satisfaction(NOT_VALIDATED, satisfied, HEZE_BLOCK_1) == [None, satisfied, None, None]
+
+
+@pytest.mark.parametrize(
+    ("status", "root"),
+    [(NOT_VALIDATED, HEZE_BLOCK_2), (VALID, HEZE_BLOCK_1)],
+    ids=["no payload", "already valid"],
+)
+def test_inclusion_list_satisfaction_once_valid_of_payload_not_optimistic(status: int, root: bytes):
+    # Only a payload kept before it was validated can move from not validated to valid.
+    with raises(ERROR, "optimistic sync failed with code 52") as info:
+        _satisfaction(status, True, root)
+    assert info.value.code == 52
+
+
+def test_no_inclusion_list_satisfaction_before_heze():
+    with raises(ERROR, "no inclusion lists at glamsterdam") as info:
+        _satisfaction(NOT_VALIDATED, True, fork=GLOAS_FORK)
+    assert info.value.code == 0
