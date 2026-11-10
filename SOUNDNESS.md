@@ -2390,6 +2390,13 @@ BLS key generation fails after 16 attempts, a bound that EthLib chose.
 The ERC-2333 master and child derivations reuse key generation, so they share the bound.
 An attempt fails only when its 48-byte output is a multiple of `r`.
 
+The consensus state transition divides by constants of the preset, such as the slots of an epoch and the increment of an effective balance.
+Python's integer division raises an error on a zero divisor, so the specification fails there.
+A division of 64-bit integers in Lean returns zero instead, so with such a preset a step can succeed in EthLib where the specification fails.
+`Preset.DivisorsPositive` (`Proofs/Transition/Totality/Bound.lean`) names the presets whose divisors are all positive, and the mainnet and minimal presets are proved to be such presets.
+A theorem that says a step succeeds takes that predicate as a hypothesis only where its proof needs a positive divisor.
+For a preset with a zero divisor, the other such theorems describe EthLib's transition, not the specification's.
+
 Some official vectors expect more than a source says.
 The transaction tests of ethereum/tests reject 43 results whose gas limit is `2^64`, or whose gas limit times gas price exceeds `2^256 - 1`.
 No rule of the Yellow Paper rejects such a transaction alone, and EIP-7825 caps the gas limit only from Fusaka on.
