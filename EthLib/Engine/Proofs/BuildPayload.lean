@@ -16,6 +16,8 @@ A header filled from a body passes every check against what that body gave.
 The built block carries the timestamp, RANDAO mix, withdrawals, beacon root, slot and choices.
 
 From Pectra, its header commits to the requests that the build gives.
+
+A build on a chain from the attributes of a forkchoice update is such a build, at their fork.
 -/
 
 public section
@@ -187,5 +189,22 @@ theorem newPayloadOnChain_of_buildPayload {version : Nat} {params : Lean.Json}
   rw [hBlock] at hHash
   exact newPayloadOnChain_of_stateTransition_ok hCheck hP hHash
     (hBlock ▸ stateTransition_of_buildPayload h)
+
+/-- A build on a chain from decoded attributes is a build of a payload, at the fork it gives.
+
+So every theorem on that build holds for the payload that it returns. -/
+theorem buildPayload_of_buildPayloadOnChain {version : Nat}
+    {decoded : Σ f, PayloadAttributes f} {encoded : List ByteArray} {built : BuiltPayload fork}
+    (h : buildPayloadOnChain chain version decoded choices encoded = .ok ⟨fork, built⟩) :
+    ∃ (attributes : PayloadAttributes fork) (transactions : List Transaction),
+      buildPayload chain attributes choices transactions = .ok built := by
+  unfold buildPayloadOnChain at h
+  split at h
+  · obtain ⟨⟨f, a⟩, -, h⟩ := bind_ok_iff.mp h
+    obtain ⟨txs, -, h⟩ := bind_ok_iff.mp h
+    obtain ⟨b, hB, h⟩ := bind_ok_iff.mp h
+    cases h
+    exact ⟨a, txs, mapError_ok_iff.mp hB⟩
+  · simp [throw, throwThe, MonadExceptOf.throw] at h
 
 end EthLib.Engine

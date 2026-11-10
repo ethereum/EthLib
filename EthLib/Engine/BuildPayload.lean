@@ -1,8 +1,7 @@
 module
 
-public import EthLib.Base.BigEndian
 public import EthLib.Base.GasLimit
-public import EthLib.Cryptography.Hash.Keccak
+public import EthLib.Engine.Block
 public import EthLib.Engine.ForkchoiceUpdated
 public import EthLib.Execution.Blocks.Transition
 
@@ -44,16 +43,6 @@ Last, the build checks its block as the state transition does, so it gives no bl
 The build gives the block, the state after it, its requests and its value to the fee recipient.
 
 The value is the sum of the priority fees, one rule that [`engine_getPayloadV2`][v2] allows.
-
-A forkchoice update that starts a build answers with an ID of 8 bytes for it.
-
-The source asks that each new build has its own ID, and leaves the rest to the execution layer.
-
-This model hashes the head and the attributes, so the same inputs give the same ID.
-
-Under one configuration the head and the timestamp fix the fork, so other inputs give other bytes.
-
-Their IDs differ only if the 8-byte cut of the hash has no collision, an assumption of this model.
 
 The source states the build in [Payload building][build], at commit `3284ee8` of execution-apis.
 
@@ -204,37 +193,42 @@ def buildPayload (chain : BlockChain) (attributes : PayloadAttributes fork)
   return { block, state := result.post, requests := result.output.requests
            blockValue := priorityFees baseFee transactions result.output.receipts }
 
-/-- The bytes that the ID of a build hashes: the head, then the attributes in order.
+/-- Why a build on a chain fails: its attributes, a transaction that does not decode, or its block.
+-/
+inductive BuildError where
+  /-- The attributes fail the checks of the forkchoice update, with that error. -/
+  | attributes (e : EngineError)
+  /-- A transaction does not decode at the fork of the attributes. -/
+  | transaction (e : PayloadError)
+  /-- The build fails, with the error of its block. -/
+  | block (e : BlockError)
+  deriving Repr
 
-The attributes are those of their fork: the timestamp, the RANDAO mix and the fee recipient first.
+/-- The code of a build error: that of the error it holds. -/
+def BuildError.code : BuildError → UInt32
+  | .attributes e => e.code
+  | .transaction e => e.code
+  | .block e => e.code
 
-The withdrawals follow from Shapella, the parent beacon block root from Dencun.
+/-- Build a payload on a chain from attributes as a forkchoice update of a version decodes them.
 
-The slot and the target gas limit follow from Glamsterdam.
+The last recent block is the head that the update applies.
 
-Each number takes 8 big-endian bytes, and each withdrawal its four fields in turn. -/
-def payloadIdInput (head : Hash32) (attributes : PayloadAttributes fork) : ByteArray :=
-  let word (n : UInt64) : List UInt8 := Base.natToBytes 8 n.toNat
-  let withdrawals : List UInt8 := if h : .shapella ≤ fork then
-      (attributes.withdrawals h).flatMap fun w =>
-        word w.index ++ word w.validatorIndex ++ w.address.toList ++ word w.amount
-    else []
-  let beacon : List UInt8 :=
-    if h : .dencun ≤ fork then (attributes.parentBeaconBlockRoot h).toList else []
-  let glamsterdam : List UInt8 := if h : .glamsterdam ≤ fork then
-      word (attributes.slotNumber h) ++ word (attributes.targetGasLimit h)
-    else []
-  ⟨(head.toList ++ word attributes.timestamp ++ attributes.prevRandao.toList ++
-    attributes.suggestedFeeRecipient.toList ++ withdrawals ++ beacon ++ glamsterdam).toArray⟩
+So the attributes must pass the checks of that version against it, which fix their fork.
 
-/-- The ID of the build that attributes start on a head: the first 8 bytes of a Keccak-256 hash.
+The transactions are in the form of an execution payload, and decode at that fork.
 
-The hash is that of the head and then the attributes, each number in 8 big-endian bytes. -/
-def payloadId (head : Hash32) (attributes : PayloadAttributes fork) : Vector UInt8 8 :=
-  let digest := Cryptography.Hash.Keccak.keccak256 (payloadIdInput head attributes)
-  Vector.ofFn fun i => digest[i.val]'(by
-    have := i.isLt
-    simp only [Cryptography.Hash.Keccak.DIGEST_LEN]
-    omega)
+The parent's number and time are read in 64 bits, as the payload tree of the update holds them. -/
+def buildPayloadOnChain (chain : BlockChain) (version : Nat) (attributes : Σ f, PayloadAttributes f)
+    (choices : BuildChoices) (transactions : List ByteArray) :
+    Except BuildError (Σ fork, BuiltPayload fork) := do
+  let some parent := chain.recent.getLast? | throw (.block .noParent)
+  let head : KnownPayload := ⟨parent.header.parentHash, true,
+    UInt64.ofNat parent.header.number, UInt64.ofNat parent.header.timestamp.toNat⟩
+  let ⟨fork, attributes⟩ ←
+    (checkAttributes chain.config version head attributes).mapError .attributes
+  let transactions ← (decodeTransactions fork 0 transactions).mapError .transaction
+  let built ← (buildPayload chain attributes choices transactions).mapError .block
+  return ⟨fork, built⟩
 
 end EthLib.Engine

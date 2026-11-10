@@ -85,6 +85,12 @@ def _attributes(header: list, withdrawals: list | None) -> dict[str, object]:
     return attributes
 
 
+def _payload_transaction(item: bytes | list) -> bytes:
+    """A transaction of a block body in the form of an execution payload."""
+    # A legacy transaction is its RLP list, and a typed one is already its own bytes.
+    return rlp.encode(item) if isinstance(item, list) else item
+
+
 def _balances(accounts: bytes) -> dict[bytes, int]:
     """The balance of each account of a state in the form of the state root export."""
     return {entry[0]: int.from_bytes(entry[2], "big") for entry in rlp.decode(accounts)}
@@ -107,7 +113,7 @@ def test_builds_the_block_of_the_fixture(network: str) -> None:
         fee_recipient=header[COINBASE],
         extra_data=header[EXTRA_DATA],
         target_gas_limit=int.from_bytes(header[GAS_LIMIT], "big"),
-        transactions=[rlp.encode(tx) for tx in transactions],
+        transactions=[_payload_transaction(tx) for tx in transactions],
     )
     built_header = rlp.decode(built)[0]
     assert keccak256(rlp.encode(built_header)).hex() == vector["hash"]
@@ -211,11 +217,40 @@ def test_extra_data_above_32_bytes() -> None:
     assert error.value.code == 208
 
 
-def test_transaction_that_does_not_decode() -> None:
-    """A transaction that does not decode at the fork fails with its block error."""
-    with raises(EngineError, "transaction 0 does not decode: emptyTransaction") as error:
-        _build("Paris", PARIS, transactions=[rlp.encode(b"")])
-    assert error.value.code == 254
+@pytest.mark.parametrize(
+    ("transaction", "message"),
+    [
+        pytest.param(
+            b"",
+            "401: transaction 0 does not decode: "
+            "EthLib.Execution.Transactions.TransactionError.emptyTransaction",
+            id="empty",
+        ),
+        pytest.param(
+            b"\xc1",
+            "401: transaction 0 does not decode: "
+            "EthLib.Execution.Transactions.TransactionError.decoding "
+            "(EthLib.Serialization.Rlp.RlpError.inputTooShort 1 0)",
+            id="not-rlp",
+        ),
+    ],
+)
+def test_transaction_that_does_not_decode(transaction: bytes, message: str) -> None:
+    """A transaction that does not decode at the fork fails with the code of its payload error."""
+    with raises(EngineError, message) as error:
+        _build("Paris", PARIS, transactions=[transaction])
+    assert error.value.code == 401
+
+
+def test_parent_past_64_bits() -> None:
+    """A parent whose number does not fit 64 bits is no head of the update, and has code 0."""
+    _, _, recent = _chain("Paris")
+    fork, header, ommers = recent[0]
+    fields = rlp.decode(header)
+    fields[8] = (2**64).to_bytes(9, "big")
+    with raises(EngineError, "recent: the parent's number or time does not fit 64 bits") as error:
+        _build("Paris", PARIS, recent=[(fork, rlp.encode(fields), ommers)])
+    assert error.value.code == 0
 
 
 def test_unknown_method() -> None:
@@ -226,10 +261,10 @@ def test_unknown_method() -> None:
 
 
 def test_no_recent_block() -> None:
-    """A chain without a recent block has no parent to build on, and has code 0."""
-    with raises(EngineError, "recent: no block") as error:
+    """A chain without a recent block has no parent to build on, a block error."""
+    with raises(EngineError, "block invalid: noParent") as error:
         _build("Paris", PARIS, recent=[])
-    assert error.value.code == 0
+    assert error.value.code == 226
 
 
 def test_attributes_not_above_the_parent() -> None:

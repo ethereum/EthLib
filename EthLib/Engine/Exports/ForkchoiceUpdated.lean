@@ -1,6 +1,5 @@
 module
 
-public import EthLib.Engine.BuildPayload
 public import EthLib.Engine.Exports.NewPayload
 public import EthLib.Engine.ForkchoiceUpdated
 

@@ -1370,7 +1370,8 @@ def bindings : List Binding := [
     "(config: dict, state: bytes, recent: list[tuple[str, bytes, list[bytes]]], " ++
       "method: str, attributes: dict, fee_recipient: bytes, extra_data: bytes, " ++
       "target_gas_limit: int, transactions: list[bytes]) -> tuple[bytes, bytes, list[bytes], int]",
-    [`EthLib.Engine.EngineError, `EthLib.Execution.Blocks.BlockError], some "EngineError"⟩,
+    [`EthLib.Engine.EngineError, `EthLib.Engine.PayloadError,
+      `EthLib.Execution.Blocks.BlockError], some "EngineError"⟩,
   ⟨"engine_forkchoice_updated", `EthLib.Engine.Exports.forkchoiceUpdatedExport,
     "(config: dict, tree: list, finalized: str | None, request: dict) -> dict",
     [`EthLib.Engine.EngineError], some "EngineError"⟩,

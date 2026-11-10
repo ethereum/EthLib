@@ -1,6 +1,8 @@
 module
 
+public import EthLib.Base.BigEndian
 public import EthLib.Base.ChainConfig
+public import EthLib.Cryptography.Hash.Keccak
 public import EthLib.Engine.Json
 public import EthLib.Execution.Blocks.Withdrawal
 
@@ -113,7 +115,7 @@ The source does not order the fork check and step 8.1, and this model runs the f
 
 All these checks run only when the update applies a valid head, as step 8 of version 1 says.
 
-Attributes that pass start a payload build.
+Attributes that pass start a payload build, and the response names it by its ID.
 
 The model returns the attributes, as those of their fork.
 
@@ -473,5 +475,50 @@ def forkchoiceUpdatedCall (config : ChainConfig) (version : Nat) (tree : Payload
     let some known := tree.lookup h | return (status, head, none)
     return (status, head, some (← checkAttributes config version known decoded))
   | _, _ => return (status, head, none)
+
+/-- The bytes that the ID of a build hashes: the head, then the attributes in order.
+
+The attributes are those of their fork: the timestamp, the RANDAO mix and the fee recipient first.
+
+The withdrawals follow from Shapella, the parent beacon block root from Dencun.
+
+The slot and the target gas limit follow from Glamsterdam.
+
+Each number takes 8 big-endian bytes, and each withdrawal its four fields in turn. -/
+def payloadIdInput (head : Hash32) (attributes : PayloadAttributes fork) : ByteArray :=
+  let word (n : UInt64) : List UInt8 := Base.natToBytes 8 n.toNat
+  let withdrawals : List UInt8 := if h : .shapella ≤ fork then
+      (attributes.withdrawals h).flatMap fun w =>
+        word w.index ++ word w.validatorIndex ++ w.address.toList ++ word w.amount
+    else []
+  let beacon : List UInt8 :=
+    if h : .dencun ≤ fork then (attributes.parentBeaconBlockRoot h).toList else []
+  let glamsterdam : List UInt8 := if h : .glamsterdam ≤ fork then
+      word (attributes.slotNumber h) ++ word (attributes.targetGasLimit h)
+    else []
+  ⟨(head.toList ++ word attributes.timestamp ++ attributes.prevRandao.toList ++
+    attributes.suggestedFeeRecipient.toList ++ withdrawals ++ beacon ++ glamsterdam).toArray⟩
+
+/-- The ID of the build that attributes start on a head: the first 8 bytes of a Keccak-256 hash.
+
+The source asks that each new build has its own ID, and leaves the rest to the execution layer.
+
+The same head and attributes give the same ID.
+
+Under one configuration and one tree, the head and the timestamp fix the fork.
+
+So other attributes or another head give other bytes to hash.
+
+Two such inputs share an ID only if their hashes share the first 8 bytes.
+
+This model assumes that this does not happen.
+
+The hash is that of the head and then the attributes, each number in 8 big-endian bytes. -/
+def payloadId (head : Hash32) (attributes : PayloadAttributes fork) : Bytes8 :=
+  let digest := Cryptography.Hash.Keccak.keccak256 (payloadIdInput head attributes)
+  Vector.ofFn fun i => digest[i.val]'(by
+    have := i.isLt
+    simp only [Cryptography.Hash.Keccak.DIGEST_LEN]
+    omega)
 
 end EthLib.Engine

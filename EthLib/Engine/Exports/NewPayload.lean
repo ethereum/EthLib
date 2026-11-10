@@ -104,16 +104,12 @@ def newPayloadOnChainOf
     (args : PyValue × ByteArray × List (String × ByteArray × List ByteArray) × PyValue) :
     Result (PyValue × Option ByteArray × Option ByteArray) := do
   let (config, state, recent, request) := args
-  let config ← configOfJson config.toJson
-  -- The chain is an input that the export reads itself, so its errors have code 0.
-  let pre ← (Execution.State.Exports.ofInput state).mapError fun e => (0, e.message)
-  let recent ← (recent.mapM (Execution.Blocks.Exports.recentOf config)).mapError
-    fun (_, m) => (0, m)
+  let chain ← Execution.Blocks.Exports.chainOf config state recent
   let request := request.toJson
   let some method := (request.getObjValAs? String "method").toOption
     | throw (0, "request: no method")
   let some version := newPayloadVersion method | throw (0, s!"no method {method}")
-  match newPayloadOnChain ⟨config, pre, recent⟩ version (request.getObjValD "params") with
+  match newPayloadOnChain chain version (request.getObjValD "params") with
   | .error e => throw (e.code, s!"engine error: {reprStr e}")
   | .ok (status, reason, next) =>
     let status := PyValue.ofJson (statusJson status reason)
@@ -122,9 +118,7 @@ def newPayloadOnChainOf
     | some (block, post) =>
       let encoded : Except _ (ByteArray × ByteArray) := do
         let header ← Serialization.Rlp.encode (Serialization.Rlp.Codec.toItem block.header)
-        let accounts ← Serialization.Rlp.encode (.list (post.accounts.toList.map
-          fun (address, account) =>
-            Execution.Transactions.Exports.stateEntryItem post address account))
+        let accounts ← Serialization.Rlp.encode (Execution.Blocks.Exports.accountsItem post)
         return (header, accounts)
       let (header, accounts) ← encoded.mapError fun e => (0, s!"result: {reprStr e}")
       return (status, some header, some accounts)

@@ -9825,6 +9825,14 @@
       {"constructor": "invalidForkchoiceState", "code": 38002},
       {"constructor": "tooLargeRequest", "code": 38004},
       {"constructor": "invalidPayloadAttributes", "code": 38003}]},
+    {"type": "EthLib.Engine.PayloadError",
+     "codes":
+     [{"constructor": "invalidTransaction", "code": 401},
+      {"constructor": "noEncoding", "code": 402},
+      {"constructor": "wrongBlockHash", "code": 403},
+      {"constructor": "wrongVersionedHashes", "code": 404},
+      {"constructor": "invalidBlock", "code": 405},
+      {"constructor": "invalidBlockAccessList", "code": 406}]},
     {"type": "EthLib.Execution.Blocks.BlockError",
      "codes":
      [{"constructor": "genesisNumber", "code": 201},
