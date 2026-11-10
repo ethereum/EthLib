@@ -1473,6 +1473,10 @@ def engine_new_payload_on_chain(config: dict, state: bytes, recent: list[tuple[s
     """The payload status of an `engine_newPayload` request, on a chain that holds the parent."""
     ...
 
+def engine_build_payload(config: dict, state: bytes, recent: list[tuple[str, bytes, list[bytes]]], method: str, attributes: dict, fee_recipient: bytes, extra_data: bytes, target_gas_limit: int, transactions: list[bytes]) -> tuple[bytes, bytes, list[bytes], int]:
+    """Build a payload on a chain, from attributes, the builder's choices and transactions."""
+    ...
+
 def engine_forkchoice_updated(config: dict, tree: list, finalized: str | None, request: dict) -> dict:
     """The response to an `engine_forkchoiceUpdated` request, against a tree of payloads."""
     ...

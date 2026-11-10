@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.GasLimit
+public import EthLib.Engine.Block
 public import EthLib.Engine.ForkchoiceUpdated
 public import EthLib.Execution.Blocks.Transition
 
@@ -191,5 +192,45 @@ def buildPayload (chain : BlockChain) (attributes : PayloadAttributes fork)
   let baseFee := if h : .london ≤ fork then header.baseFeePerGas h else 0
   return { block, state := result.post, requests := result.output.requests
            blockValue := priorityFees baseFee transactions result.output.receipts }
+
+/-- Why a build on a chain fails: its attributes, a transaction that does not decode, or its block.
+-/
+inductive BuildError where
+  /-- The attributes fail the checks of the forkchoice update, with that error. -/
+  | attributes (e : EngineError)
+  /-- A transaction does not decode at the fork of the attributes. -/
+  | transaction (e : PayloadError)
+  /-- The build fails, with the error of its block. -/
+  | block (e : BlockError)
+  deriving Repr
+
+/-- The code of a build error: that of the error it holds. -/
+def BuildError.code : BuildError → UInt32
+  | .attributes e => e.code
+  | .transaction e => e.code
+  | .block e => e.code
+
+/-- Build a payload on a chain from attributes as a forkchoice update of a version decodes them.
+
+The last recent block is the head that the update applies.
+
+So the attributes must pass the checks of that version against it, which fix their fork.
+
+The transactions are in the form of an execution payload, and decode at that fork.
+
+The parent's number and time are read in 64 bits, as the payload tree of the update holds them.
+
+The result is meaningful only for a parent whose number and time fit 64 bits. -/
+def buildPayloadOnChain (chain : BlockChain) (version : Nat) (attributes : Σ f, PayloadAttributes f)
+    (choices : BuildChoices) (transactions : List ByteArray) :
+    Except BuildError (Σ fork, BuiltPayload fork) := do
+  let some parent := chain.recent.getLast? | throw (.block .noParent)
+  let head : KnownPayload := ⟨parent.header.parentHash, true,
+    UInt64.ofNat parent.header.number, UInt64.ofNat parent.header.timestamp.toNat⟩
+  let ⟨fork, attributes⟩ ←
+    (checkAttributes chain.config version head attributes).mapError .attributes
+  let transactions ← (decodeTransactions fork 0 transactions).mapError .transaction
+  let built ← (buildPayload chain attributes choices transactions).mapError .block
+  return ⟨fork, built⟩
 
 end EthLib.Engine
