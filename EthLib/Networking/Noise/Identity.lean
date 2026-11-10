@@ -23,6 +23,8 @@ Repeated identity fields use the last value, and extension messages merge.
 
 namespace EthLib.Networking.Noise
 
+open EthLib.Cryptography.Secp256k1 (Fn)
+
 /-- The two identity fields and optional opaque extension message of the libp2p payload. -/
 structure Payload where
   publicKey : ByteArray := .empty
@@ -131,7 +133,8 @@ def identitySecretError : Libp2p.IdentityError → NoiseError
 The rule is noise-libp2p "Static Key Authentication" and "The libp2p Handshake Payload".
 
 The secret key must stay private, and this function makes no constant-time claim. -/
-def makePayload (identitySecret staticKey : Key) (extensions : Option ByteArray) :
+def makePayload (identitySecret : Fn) (staticKey : Key)
+    (extensions : Option ByteArray) :
     Except NoiseError ByteArray := do
   let publicKey ← (Libp2p.publicKey identitySecret).mapError identitySecretError
   let signature ← (Libp2p.sign identitySecret (signedStatic staticKey)).mapError identitySecretError
@@ -197,9 +200,17 @@ def complete (s : Libp2pState) : Except NoiseError (Key × RemoteInfo) := do
     else throw .savedRemote
   else throw .wrongPhase
 
-/-- Write a libp2p message; first-message extensions are forbidden by the payload rules. -/
-def writeLibp2p (s : Libp2pState) (identitySecret : Key) (extensions : Option ByteArray) :
+/-- Write a libp2p message; first-message extensions are forbidden by the payload rules.
+
+The identity secret must be nonzero, and it is checked first, on every message.
+
+That check is a precondition of this specification; noise-libp2p puts no identity in message 1.
+
+The secret key must stay private, and this function makes no constant-time claim. -/
+def writeLibp2p (s : Libp2pState) (identitySecret : Fn)
+    (extensions : Option ByteArray) :
     Except NoiseError (Libp2pState × ByteArray) := do
+  if identitySecret = 0 then throw .identitySecret
   let payload ← if s.handshake.step = 0 then
       if extensions.isSome then throw .firstMessageExtensions else pure .empty
     else makePayload identitySecret (Cryptography.X25519.publicKey s.handshake.staticKey) extensions

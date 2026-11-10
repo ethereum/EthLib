@@ -1991,7 +1991,7 @@
       {"constructor": "savedRemote", "code": 13}]}],
    "error_class": "NoiseError",
    "docstring":
-   "Write the next libp2p message with a signed identity payload."},
+   "Write the next libp2p message with a signed identity payload.\n\nThe identity secret is 32 big-endian bytes whose value is in [1, n), with n the group order.\n\nIt is checked before every other check, on every message."},
   {"summary":
    "Read the next libp2p message, and authenticate the static key of message 2 or 3.",
    "signature":

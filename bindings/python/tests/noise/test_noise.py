@@ -267,6 +267,17 @@ def test_invalid_identity_secret(secret: int) -> None:
     assert error.value.code == 11
 
 
+@pytest.mark.parametrize("secret", [0, reference.N, 2**256 - 1])
+def test_identity_secret_checked_first(secret: int) -> None:
+    initiator, responder = libp2p_pair()
+    invalid = secret.to_bytes(32, "big")
+    # Message 1 carries no signature, but the secret is checked before the phase and extensions.
+    for state, extensions in ((initiator, None), (initiator, b""), (responder, None)):
+        with raises(NoiseError, ERROR + "identitySecret") as error:
+            noise_libp2p_write(state, invalid, extensions)
+        assert error.value.code == 11
+
+
 @pytest.mark.parametrize("component", ["missing", "tag", "truncated", "static", "phase"])
 def test_completion_rechecks_saved_message(exchange: tuple, component: str) -> None:
     handshake, saved = exchange[0]

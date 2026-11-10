@@ -41,6 +41,7 @@ namespace EthLib.Networking.Libp2p.Exports
 
 open EthLib.Exports (Result PyValue pyExport)
 open EthLib.Networking.Encoding
+open EthLib.Cryptography.Secp256k1 (Fn)
 
 derive_py Mplex.Flag
 derive_py_laws Mplex.Flag
@@ -108,6 +109,15 @@ def yamuxDecodeExport (args : PyValue) : Result PyValue :=
 def identityResult {α : Type} (r : Except IdentityError α) : Result α :=
   r.mapError fun e => (e.code, s!"libp2p identity rejected: {reprStr e}")
 
+/-- Read 32 big-endian bytes as a secp256k1 scalar, whose value must be below the group order.
+
+A value at least the group order gives the private-key error; the functions that take it reject 0.
+
+The secret key must stay private, and this function makes no constant-time claim. -/
+def secretOfBytes (bytes : Vector UInt8 32) : Except IdentityError Fn :=
+  let n := EthLib.Base.bytesToNat bytes.toList
+  if h : n < Fn.modulus then .ok ⟨n, h⟩ else .error .privateKey
+
 /-- The public-key protobuf of a 32-byte big-endian secp256k1 secret in [1, n).
 
 Here n is the order of the group.
@@ -115,7 +125,8 @@ Here n is the order of the group.
 The secret key must stay private, and this function makes no constant-time claim. -/
 @[export eth_libp2p_public_key]
 def publicKeyExport (args : PyValue) : Result PyValue :=
-  pyExport (fun (secret : Vector UInt8 32) => identityResult (publicKey secret)) args
+  pyExport (fun (secret : Vector UInt8 32) => identityResult do
+    publicKey (← secretOfBytes secret)) args
 
 /-- The peer ID of a canonical secp256k1 key protobuf. -/
 @[export eth_libp2p_peer_id]

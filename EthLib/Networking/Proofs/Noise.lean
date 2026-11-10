@@ -25,14 +25,14 @@ open EthLib.Base
 open EthLib.Cryptography.Hash
 
 /-- The two outputs are the first 64 bytes of HKDF, with the chaining key as salt and empty info. -/
-theorem hkdf_eq_hkdf2 (chainingKey : Key) (input : ByteArray) :
-    Hkdf.hkdf (packBytes chainingKey) input .empty 64 =
+theorem hkdf_eq_hkdf2 (chainingKey : ChainingKey) (input : ByteArray) :
+    Hkdf.hkdf (packBytes chainingKey.bytes) input .empty 64 =
       .ok (packBytes (hkdf2 chainingKey input).1 ++ packBytes (hkdf2 chainingKey input).2) := by
-  have hprk : Hkdf.HASH_LEN ≤ (Hkdf.extract (packBytes chainingKey) input).size := by
+  have hprk : Hkdf.HASH_LEN ≤ (Hkdf.extract (packBytes chainingKey.bytes) input).size := by
     simp [Hkdf.extract, Hkdf.HASH_LEN]
   rw [Hkdf.hkdf, Hkdf.expand_eq hprk (by decide)]
   simp only [show (64 + Hkdf.HASH_LEN - 1) / Hkdf.HASH_LEN = 2 from rfl]
-  rw [show 64 = (Hkdf.blocks (Hkdf.extract (packBytes chainingKey) input) .empty 2).size by
+  rw [show 64 = (Hkdf.blocks (Hkdf.extract (packBytes chainingKey.bytes) input) .empty 2).size by
     rw [Hkdf.blocks_size]; rfl, ByteArray.extract_zero_size]
   -- The two blocks of RFC 5869 are the two outputs, with the empty info dropped.
   congr 1
