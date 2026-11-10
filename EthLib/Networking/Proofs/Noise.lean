@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Networking.Noise.Identity
+public import EthLib.Networking.Proofs.Libp2p.PeerId
 
 /-!
 # Proofs: libp2p Noise authentication
@@ -9,7 +10,7 @@ Completion verifies the identity signature on a static key read from the receive
 
 The reported public key, signature and extensions are the fields of the decrypted payload.
 
-The reported peer ID is derived from that public key.
+The reported peer ID is that of the point the public key decodes to.
 
 Reading message 2 or 3 accepts only a payload signed over the static key the message carries.
 -/
@@ -30,8 +31,10 @@ theorem authenticatePayload_decode {staticKey : Key} {bytes : ByteArray}
     simp only [hd] at h
     dsimp only [Bind.bind, Pure.pure, Except.bind, Except.pure] at h
     split at h
-    · cases h
-      rfl
+    · split at h
+      · cases h
+        rfl
+      · simp [throw, throwThe, MonadExceptOf.throw] at h
     · simp [throw, throwThe, MonadExceptOf.throw] at h
 
 /-- Completion reports the fields of a payload whose signature verifies on the received key.
@@ -49,7 +52,7 @@ theorem complete_authenticates (s : Libp2pState) (staticKey : Key)
       received.remoteStatic = some staticKey ∧
       s.handshake.remoteStatic = some staticKey ∧
       Libp2p.verify publicKey (signedStatic staticKey) signature = true ∧
-      peerId = Libp2p.peerId publicKey := by
+      ∃ key, Libp2p.decodePublicKey publicKey = .ok key ∧ peerId = Libp2p.peerId key := by
   unfold complete at h
   split at h
   · rename_i hstep
@@ -82,11 +85,21 @@ theorem complete_authenticates (s : Libp2pState) (staticKey : Key)
                   change Except.ok (remote, remoteInfo authenticated) = _ at h
                   cases h
                   exact ⟨hstep, before, message, received, payload, rfl, hr,
-                    authenticatePayload_decode ha, hs, hstatic, authenticated.verified, rfl⟩
+                    authenticatePayload_decode ha, hs, hstatic, authenticated.verified,
+                    authenticated.key, authenticated.decoded, rfl⟩
               · simp [hstatic, throw, throwThe, MonadExceptOf.throw] at h
           · simp [hreceived, throw, throwThe, MonadExceptOf.throw] at h
       · simp [hphase, throw, throwThe, MonadExceptOf.throw] at h
   · simp_all
+
+/-- Completion reports as peer ID the two bytes `00 25`, then the reported public key. -/
+theorem complete_peerId (s : Libp2pState) (staticKey : Key)
+    (publicKey peerId signature : ByteArray) (extensions : Option ByteArray)
+    (h : complete s = .ok (staticKey, (publicKey, peerId, signature, extensions))) :
+    peerId = ⟨#[0x00, 0x25]⟩ ++ publicKey := by
+  obtain ⟨-, -, -, -, -, -, -, -, -, -, -, key, hkey, rfl⟩ := complete_authenticates s staticKey
+    publicKey peerId signature extensions h
+  exact Proofs.Libp2p.PeerId.peerId_of_decodePublicKey hkey
 
 /-- Reading message 2 or 3 accepts only a payload signed over the static key the message carries.
 
