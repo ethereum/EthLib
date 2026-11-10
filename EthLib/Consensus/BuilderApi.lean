@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Consensus.Accessors
 public import EthLib.Consensus.Containers.BuilderApi
 public import EthLib.Consensus.Signing
 public import EthLib.Consensus.Transition.Basic
@@ -24,6 +25,8 @@ That domain reads the genesis fork version and a zero root of the genesis valida
 So a registration keeps its signature across forks.
 
 A blinded block is signed under the proposer domain of its fork, like a full block.
+
+The proposer signs the same root for both, so one signature serves the two blocks.
 
 From Gloas the protocol carries the bids of builders, and the Builder API has other messages.
 
@@ -95,5 +98,25 @@ It fails as the check of a signature under that domain does. -/
 def verifyBuilderBidSignature (config : Config) (checks : SignatureChecks)
     (signed : SignedBuilderBid preset fork) : Except Err Bool :=
   verifyBuilderApiSignature config checks signed.message signed.message.pubkey signed.signature
+
+/-- From Bellatrix to Fulu: whether a signed blinded block carries the signature of its proposer.
+
+The proposer is the one of the slot of the state, as the [builder specification] reads it.
+
+The domain is that of a block, in the current epoch of the state.
+
+It fails when the proposer, its validator, the domain or the signing root fails.
+
+[builder specification]: https://github.com/ethereum/builder-specs/blob/fce64468a81a87892d7cb9b4858272bb3d010e50/specs/bellatrix/builder.md#blinded-block-processing
+-/
+def verifyBlindedBlockSignature (config : Config) (checks : SignatureChecks)
+    (state : BeaconState preset fork) (signed : SignedBlindedBeaconBlock preset fork) :
+    Except TransitionError Bool := do
+  let index ← liftAccessor (getBeaconProposerIndex state)
+  let proposer ← liftAccessor (getValidator state index)
+  let domain ← liftAccessor (getDomain config state DOMAIN_BEACON_PROPOSER)
+  let signingRoot ← liftSsz (computeSigningRoot signed.message domain)
+  return checks.verify (packBytes proposer.pubkey) (packBytes signingRoot)
+    (packBytes signed.signature)
 
 end EthLib.Consensus
