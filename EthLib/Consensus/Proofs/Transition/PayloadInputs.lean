@@ -215,9 +215,9 @@ theorem payloadInputs_switchToCompoundingValidator {electra : .pectra ≤ fork}
     exact PayloadInputs.refl _
 
 theorem payloadInputs_queueConsolidation {electra : .pectra ≤ fork}
-    {sourcePosition : Nat} {source : Validator} {targetIndex : ValidatorIndex}
+    {sourceIndex : ValidatorIndex} {source : Validator} {targetIndex : ValidatorIndex}
     (computed :
-      queueConsolidation config state electra sourcePosition source targetIndex = .ok after) :
+      queueConsolidation config state electra sourceIndex source targetIndex = .ok after) :
     PayloadInputs state after := by
   simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
     pure, Except.pure] at computed

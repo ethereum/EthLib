@@ -18,7 +18,7 @@ From Electra, the exit and consolidation queues of [EIP-7251] give no epoch befo
 
 A new validator has no activation epoch yet, so it is active in no epoch.
 
-That needs fewer than 2^64 validators, so that no 64-bit index lands on another validator.
+The theorems of a step still assume fewer than 2^64 validators, though no step needs it now.
 
 So each step of a chain keeps which validators are active in each epoch up to its current epoch.
 
@@ -62,11 +62,6 @@ private theorem StepBelow.foldlM {α ε : Type} {step : BeaconState preset fork 
     (computed : items.foldlM step state = .ok after) : StepBelow state after :=
   foldlM_ok_invariant (StepBelow state) (fun _ _ _ before ok => before.trans (keeps _ _ _ ok))
     (StepBelow.refl state) computed
-
-/-- A step that keeps the slot and activity below 2^64 validators before it. -/
-private theorem StepBelow.of_small (grows : state.validators.data.size ≤ after.validators.data.size)
-    (step : state.validators.data.size < 2 ^ 64 → ActiveStep state after) : StepBelow state after :=
-  ⟨grows, fun small => step (Nat.lt_of_le_of_lt grows small)⟩
 
 private theorem StepBelow.of_step (grows : state.validators.data.size ≤ after.validators.data.size)
     (step : ActiveStep state after) : StepBelow state after :=
@@ -114,8 +109,8 @@ private theorem stepBelow_addValidatorToRegistry {pubkey : Cryptography.Bls.BLSP
     {withdrawalCredentials : Bytes32} {amount : Gwei}
     (computed : addValidatorToRegistry state pubkey withdrawalCredentials amount = .ok after) :
     StepBelow state after :=
-  StepBelow.of_small (frame_addValidatorToRegistry computed).registryGrows
-    fun small => activeStep_addValidatorToRegistry small computed
+  StepBelow.of_step (frame_addValidatorToRegistry computed).registryGrows
+    (activeStep_addValidatorToRegistry computed)
 
 /-! ## Deposits -/
 
@@ -133,7 +128,9 @@ private theorem stepBelow_applyPendingDeposit {deposit : PendingDeposit}
     · exact stepBelow_addValidatorToRegistry computed
     · simp only [pure, Except.pure, Except.ok.injEq] at computed
       exact computed ▸ StepBelow.refl _
-  · exact stepBelow_increaseBalance (liftAccessor_ok.mp computed)
+  · simp only [liftAccessor_ok, bind_ok_iff] at computed
+    obtain ⟨_, _, computed⟩ := computed
+    exact stepBelow_increaseBalance computed
 
 private theorem stepBelow_applyDepositElectra {electra : .pectra ≤ fork}
     {pubkey : Cryptography.Bls.BLSPubkey} {withdrawalCredentials : Bytes32} {amount : Gwei}
@@ -250,13 +247,13 @@ private theorem consolidationEpoch_lt {electra : .pectra ≤ fork} {balance : Gw
 
 /-- The source of a consolidation had not started to exit, and exits after the current epoch.
 
-It must be the validator at its position, in a registry below 2^64 validators. -/
-private theorem stepBelow_queueConsolidation {electra : .pectra ≤ fork} {sourcePosition : Nat}
-    {source : Validator} {targetIndex : ValidatorIndex}
-    (found : state.validators.data[sourcePosition]? = some source)
+It must be the validator at its index. -/
+private theorem stepBelow_queueConsolidation {electra : .pectra ≤ fork}
+    {sourceIndex : ValidatorIndex} {source : Validator} {targetIndex : ValidatorIndex}
+    (found : state.validators.data[sourceIndex.toNat]? = some source)
     (far : source.exitEpoch = FAR_FUTURE_EPOCH)
     (computed :
-      queueConsolidation config state electra sourcePosition source targetIndex = .ok after) :
+      queueConsolidation config state electra sourceIndex source targetIndex = .ok after) :
     StepBelow state after := by
   simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
     addChecked_ok_iff, pure, Except.pure] at computed
@@ -268,14 +265,10 @@ private theorem stepBelow_queueConsolidation {electra : .pectra ≤ fork} {sourc
   obtain ⟨-, validators, -⟩ := computeConsolidationEpochAndUpdateChurn_earliest churned
   have slot := (frame_computeConsolidationEpochAndUpdateChurn churned).slot
   have first : StepBelow state churnedState := StepBelow.of_validators (by rw [validators]) slot
-  refine first.trans ((StepBelow.of_small (Nat.le_of_eq (sameSizes_setValidator set).1.symm)
-    fun small => ?_).trans StepBelow.of_validators)
-  -- Below 2^64 validators, the position names the source.
-  have found' : getValidator churnedState sourcePosition.toUInt64 = .ok source := by
-    have inside := (Array.getElem?_eq_some_iff.mp found).1
-    rw [getValidator, validators, Nat.toUInt64_eq,
-      UInt64.toNat_ofNat_of_lt' (Nat.lt_trans inside (validators ▸ small)), found]
-  refine (activeStep_setValidator found' (fun _ le => ?_) set)
+  have found' : getValidator churnedState sourceIndex = .ok source := by
+    rw [getValidator, validators, found]
+  refine first.trans ((stepBelow_setValidator found' (fun _ le => ?_) set).trans
+    StepBelow.of_validators)
   have epochEq : getCurrentEpoch churnedState = getCurrentEpoch state := by
     simp only [getCurrentEpoch, slot]
   exact isActiveValidator_eq_of_exit rfl far
@@ -294,7 +287,7 @@ private theorem stepBelow_processConsolidationRequest {electra : .pectra ≤ for
     | exact stepBelow_switchToCompoundingValidator (liftAccessor_ok.mp computed)
   -- The source had not started to exit.
   rename_i bothFar _ _ _ _ _ _ _ _
-  exact stepBelow_queueConsolidation (Array.getElem?_eq_getElem _)
+  exact stepBelow_queueConsolidation (getElem?_toNat_of_ofNatChecked (by assumption))
     (beq_iff_eq.mp ((Bool.and_eq_true _ _).mp bothFar).1) computed
 
 private theorem stepBelow_processExecutionRequests {body : BeaconBlockBody preset fork}
