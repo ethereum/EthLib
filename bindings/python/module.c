@@ -779,6 +779,8 @@ static PyMethodDef methods[] = {
   {"consensus_get_custody_groups", py_consensus_get_custody_groups, METH_VARARGS, DOC_consensus_get_custody_groups},
   {"consensus_compute_columns_for_custody_group", py_consensus_compute_columns_for_custody_group,
    METH_VARARGS, DOC_consensus_compute_columns_for_custody_group},
+  {"consensus_get_custody_column_bits", py_consensus_get_custody_column_bits, METH_VARARGS,
+   DOC_consensus_get_custody_column_bits},
   {"consensus_ssz_static", py_consensus_ssz_static, METH_VARARGS, DOC_consensus_ssz_static},
   {"consensus_is_valid_builder_signature", py_consensus_is_valid_builder_signature,
    METH_VARARGS, DOC_consensus_is_valid_builder_signature},
@@ -1134,6 +1136,8 @@ static PyMethodDef methods[] = {
    DOC_engine_prepare_execution_payload},
   {"engine_prepare_execution_payload_gloas", py_engine_prepare_execution_payload_gloas,
    METH_VARARGS, DOC_engine_prepare_execution_payload_gloas},
+  {"engine_finalized_execution_block_hash", py_engine_finalized_execution_block_hash,
+   METH_VARARGS, DOC_engine_finalized_execution_block_hash},
   {"pyvalue_echo", py_pyvalue_echo, METH_VARARGS, DOC_pyvalue_echo},
   {NULL, NULL, 0, NULL},
 };

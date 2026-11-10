@@ -379,6 +379,7 @@ PyObject* py_consensus_preset                             (PyObject* self, PyObj
 PyObject* py_consensus_config                             (PyObject* self, PyObject* args);
 PyObject* py_consensus_parameters                         (PyObject* self, PyObject* args);
 PyObject* py_consensus_get_custody_groups                 (PyObject* self, PyObject* args);
+PyObject* py_consensus_get_custody_column_bits            (PyObject* self, PyObject* args);
 PyObject* py_consensus_compute_columns_for_custody_group  (PyObject* self, PyObject* args);
 PyObject* py_consensus_ssz_static                         (PyObject* self, PyObject* args);
 PyObject* py_consensus_is_valid_builder_signature (PyObject* self, PyObject* args);
@@ -616,6 +617,7 @@ PyObject* py_engine_get_blobs                            (PyObject* self, PyObje
 PyObject* py_engine_get_payload_bodies                   (PyObject* self, PyObject* args);
 PyObject* py_engine_prepare_execution_payload            (PyObject* self, PyObject* args);
 PyObject* py_engine_prepare_execution_payload_gloas      (PyObject* self, PyObject* args);
+PyObject* py_engine_finalized_execution_block_hash       (PyObject* self, PyObject* args);
 
 /* ---- Typed values (`pyvalue.c`) --------------------------------------- */
 

@@ -23,9 +23,13 @@ Their fields carry the names of the Engine API, with hex data and hex quantities
 
 The withdrawals appear from Capella, and the parent beacon block root from Deneb.
 
-From Gloas the slot number and the target gas limit appear, and the custody columns are `null`.
+From Gloas the slot number and the target gas limit appear.
+
+The custody columns are 16 bytes of an SSZ bitvector that the caller gives, else `null`.
 
 The export from Gloas builds its store from an anchor state, an anchor block and steps.
+
+It reads the finalized block hash from that store.
 
 Those steps take the form of the fork choice export.
 
@@ -40,6 +44,8 @@ The Engine API has no field for them, so they sit beside the payload attributes.
 An input that does not decode, an unknown name or a fork that the export does not cover has code 0.
 
 So do a step that does not read and a payload status above 2.
+
+A third export gives the finalized block hash of a store, from Bellatrix.
 -/
 
 public section
@@ -129,13 +135,17 @@ def payloadStatusOfCode : UInt64 → Result Consensus.PayloadStatus
 
 The store comes from an anchor state, an anchor block and steps of the fork choice export.
 
+The finalized block hash is that of the store.
+
+The custody columns are given as the SSZ bytes of their bitvector, or not at all.
+
 The signature checks run unless the flag is false. -/
 def preparePayloadOnStore
     (args : String × String × ByteArray × ByteArray × List ForkChoiceStep × ByteArray × UInt64 ×
-      ByteArray × ByteArray × ByteArray × ByteArray × UInt64 × Bool × Option PyValue) :
+      ByteArray × ByteArray × ByteArray × UInt64 × Option ByteArray × Bool × Option PyValue) :
     Result PyValue := do
-  let (name, fork, anchorState, anchorBlock, steps, headRoot, headStatus, state, safe, finalized,
-    feeRecipient, targetGasLimit, verify, replacements) := args
+  let (name, fork, anchorState, anchorBlock, steps, headRoot, headStatus, state, safe,
+    feeRecipient, targetGasLimit, custodyColumns, verify, replacements) := args
   let (preset, fork) ← transitionPresetAndFork name.toUTF8 fork.toUTF8
   let config ← configWithValue name replacements
   let ⟨gloas⟩ ← holds (.glamsterdam ≤ fork) s!"no payload preparation on a store at {fork.name}"
@@ -147,25 +157,61 @@ def preparePayloadOnStore
     { root := ← decodeInput Root headRoot, payloadStatus := ← payloadStatusOfCode headStatus }
   let state ← decodeInput (BeaconState preset fork) state
   let safe ← decodeInput Root safe
-  let finalized ← decodeInput Root finalized
   let feeRecipient ← decodeInput ExecutionAddress feeRecipient
+  let custody ← match custodyColumns with
+    | some bytes => do
+      let _ ← decodeInput (Serialization.Ssz.Bitvector preset.NUMBER_OF_COLUMNS.toNat) bytes
+      pure (dataJson bytes.toList)
+    | none => pure Json.null
+  let finalized ← runProposer
+    ((getFinalizedExecutionBlockHash store (Nat.le_trans (by decide) gloas)).mapError .forkChoice)
   let (update, attributes, transactions) ← runProposer (prepareExecutionPayloadGloas config checks
     store head state gloas safe finalized feeRecipient targetGasLimit)
   let lists := match sinceValue transactions with
     | some list =>
       [("inclusionListTransactions", Json.arr (list.map (dataJson ·.data.toList)).toArray)]
     | none => []
-  return .ofJson (updateJson update attributes (("custodyColumns", Json.null) :: lists))
+  return .ofJson (updateJson update attributes (("custodyColumns", custody) :: lists))
 
 /-- From Gloas: the forkchoice update of a proposer, as the value of its JSON.
 
 The arguments are the preset, the fork, the anchor state and the anchor block, and the steps.
 
-Then come the head root and status, the state, the safe and finalized hashes and the fee recipient.
+Then come the head root and status, the state, the safe hash and the fee recipient.
 
-Then come the target gas limit, whether the signature checks run, and configuration replacements. -/
+Then come the target gas limit and the custody columns in SSZ, or `None`.
+
+Last come whether the signature checks run, and configuration replacements.
+
+The finalized hash is that of the store. -/
 @[export eth_engine_prepare_execution_payload_gloas]
 def prepareExecutionPayloadGloasExport (args : PyValue) : Result PyValue :=
   pyExport preparePayloadOnStore args
+
+/-- From Bellatrix: the finalized block hash of a store, after the steps of a fork choice case.
+
+The signature checks run unless the flag is false. -/
+def finalizedExecutionBlockHashOf (args : String × String × ByteArray × ByteArray ×
+    List ForkChoiceStep × Bool × Option PyValue) : Result ByteArray := do
+  let (name, fork, anchorState, anchorBlock, steps, verify, replacements) := args
+  let preset ← presetOf name
+  let fork ← forkOf fork.toUTF8
+  let config ← configWithValue name replacements
+  let ⟨bellatrix⟩ ← holds (.bellatrix ≤ fork) s!"no execution block hash at {fork.name}"
+  let checks := if verify then SignatureChecks.bls else SignatureChecks.acceptAll
+  let anchorState ← decodeInput (BeaconState preset fork) anchorState
+  let anchorBlock ← decodeInput (BeaconBlock preset fork) anchorBlock
+  let (store, _) ← replayForkChoice config checks anchorState anchorBlock steps
+  let hash ← runForkChoice (getFinalizedExecutionBlockHash store bellatrix)
+  return ⟨hash.toArray⟩
+
+/-- From Bellatrix: the 32 bytes of the finalized block hash of a store.
+
+The arguments are the preset, the fork, the anchor state and the anchor block, and the steps.
+
+Then come whether the signature checks run, and replacements of values of the configuration. -/
+@[export eth_engine_finalized_execution_block_hash]
+def finalizedExecutionBlockHashExport (args : PyValue) : Result PyValue :=
+  pyExport finalizedExecutionBlockHashOf args
 
 end EthLib.Engine.Exports

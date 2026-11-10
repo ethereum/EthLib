@@ -54,7 +54,13 @@ From Gloas the attributes add the slot of the state and a target gas limit that 
 
 From Heze the proposer also reads the transactions of the inclusion lists of the slot before.
 
-The safe and the finalized block of the update come from the fork choice, through the caller.
+The safe block of the update comes from the fast confirmation, through the caller.
+
+The finalized block is the payload of the finalized checkpoint, read from the fork choice store.
+
+From Gloas it is the parent payload that the bid of that block builds on.
+
+From Gloas the update may also name the columns that the node custodies, one bit per column.
 
 The call to the execution layer, and the payload that it builds, are not specified here.
 
@@ -123,6 +129,27 @@ def getTerminalPowBlock (config : Config) (powChain : List PowBlock) :
   if config.TERMINAL_BLOCK_HASH ≠ EMPTY_BLOCK_HASH then
     .ok (findPowBlock powChain config.TERMINAL_BLOCK_HASH)
   else getPowBlockAtTerminalTotalDifficulty config powChain
+
+/-! ## The finalized block of an update -/
+
+/-- From Bellatrix: the hash of the execution block that the execution layer takes as finalized.
+
+Before Gloas it is the block hash of the payload of the finalized block of the store.
+
+Before the merge that payload is empty, so its block hash is the zero hash.
+
+From Gloas a block carries a bid instead of a payload.
+
+The finalized hash is then the parent hash of that bid, the payload that the bid builds on.
+
+It fails when the store does not hold the finalized block. -/
+def getFinalizedExecutionBlockHash (store : Store preset fork) (bellatrix : .bellatrix ≤ fork) :
+    Except ForkChoiceError Hash32 := do
+  let finalizedBlock ← store.block store.finalizedCheckpoint.root
+  if gloas : .glamsterdam ≤ fork then
+    return (finalizedBlock.body.signedExecutionPayloadBid gloas).message.parentBlockHash
+  else
+    return (finalizedBlock.body.executionPayload ⟨bellatrix, Nat.lt_of_not_le gloas⟩).blockHash
 
 /-! ## The forkchoice update of a proposer -/
 
@@ -260,7 +287,7 @@ From Heze the result also holds the transactions of the inclusion lists of the s
 
 The payload attributes of the Engine API here have no field for them.
 
-The update names no custody columns, which these types do not carry.
+The custody columns of the update are not part of these types.
 
 It fails when the parent fails, a 64-bit operation overflows, or the mix, root or lists fail. -/
 def prepareExecutionPayloadGloas (config : Config) (checks : SignatureChecks)

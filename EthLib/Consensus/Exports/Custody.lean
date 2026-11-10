@@ -1,14 +1,16 @@
 module
 
-public import EthLib.Consensus.DataAvailability.Custody
+public import EthLib.Consensus.DataAvailability.CustodyColumns
 public import EthLib.Consensus.Exports.Parameters
 
 /-!
 # `Exports.Custody`
 
-C-ABI exports of the custody groups of a node and the columns of a group.
+C-ABI exports of the custody groups of a node, the columns of a group and the custody bits.
 
 Each one takes typed Python values, and comes back as a list of integers or as an error.
+
+The custody bits come back as the bytes of an SSZ bitvector instead.
 
 An argument out of range or of the wrong type, or an unknown name, has code 0.
 
@@ -62,5 +64,20 @@ The arguments are the name of the preset and the configuration, and the custody 
 @[export eth_consensus_compute_columns_for_custody_group]
 def computeColumnsForCustodyGroupExport (args : PyValue) : Result PyValue :=
   pyExport computeColumnsForCustodyGroupOf args
+
+/-- The columns that a node custodies, as the bytes of an SSZ bitvector. -/
+def getCustodyColumnBitsOf (args : String × NodeID × UInt64) : Result ByteArray := do
+  let (name, id, count) := args
+  let preset ← presetOf name
+  let bits ← (getCustodyColumnBits (← configOf name) preset id count custodyFuel).mapError
+    fun e => (e.code, custodyErrorText e)
+  return ⟨Serialization.Ssz.packBits bits.bits.toArray ((preset.NUMBER_OF_COLUMNS.toNat + 7) / 8)⟩
+
+/-- The columns that a node custodies, one bit per column, as the bytes of an SSZ bitvector.
+
+The arguments are the name of the configuration, the node ID and the custody group count. -/
+@[export eth_consensus_get_custody_column_bits]
+def getCustodyColumnBitsExport (args : PyValue) : Result PyValue :=
+  pyExport getCustodyColumnBitsOf args
 
 end EthLib.Consensus.Exports
