@@ -133,26 +133,37 @@ def get_payload_bodies(
     return _native.engine_get_payload_bodies(entries, latest, max_request, request)
 
 
-# An ID, fork, payload JSON value, block value, network blob transactions, requests and override.
+# One completed build: the 8-byte payload ID, its fork, then the four results of build_payload.
+# They are the block in RLP form, the accounts after it, the requests and the value in wei.
+# Then come the network forms of the block's blob transactions, in block order.
+# Then comes the shouldOverrideBuilder flag, and last the block access list.
+# The access list is None before Amsterdam, and from it the list whose hash the header holds.
+# A store holds each payload ID once.
 PayloadEntry: TypeAlias = tuple[
-    bytes, str, dict, int, Sequence[bytes], Sequence[bytes] | None, bool
+    bytes, str, bytes, bytes, Sequence[bytes], int, Sequence[bytes], bool, bytes | None
 ]
 
 
-def get_payload(config: dict, store: Sequence[PayloadEntry], method: str, params: list) -> dict:
-    """The latest completed payload of a build, with its checked blobs bundle."""
+def get_payload(
+    config: dict, store: Sequence[PayloadEntry], method: str, params: list
+) -> dict[str, Any]:
+    """The answer to an `engine_getPayload` call, from a snapshot of completed builds."""
     request = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
     entries = [
         (
             identifier,
             fork,
-            payload,
+            block,
+            accounts,
+            list(requests),
             value,
             list(network),
-            None if requests is None else list(requests),
             override,
+            access_list,
         )
-        for identifier, fork, payload, value, network, requests, override in store
+        for identifier, fork, block, accounts, requests, value, network, override, access_list in (
+            store
+        )
     ]
     return _native.engine_get_payload(config, entries, request)
 
@@ -245,9 +256,9 @@ __all__ = [
     "forkchoice_updated",
     "get_blobs",
     "PoolEntry",
-    "get_payload_bodies",
     "get_payload",
     "PayloadEntry",
+    "get_payload_bodies",
     "BodyEntry",
     "WithdrawalEntry",
     "prepare_execution_payload",

@@ -512,7 +512,7 @@ So within an update, other attributes or another head give other bytes to hash.
 So within an update, distinct builds get distinct IDs unless their hashes share the first 8 bytes.
 
 The hash is that of the head and then the attributes, each number in 8 big-endian bytes. -/
-def payloadId (head : Hash32) (attributes : PayloadAttributes fork) : Bytes8 :=
+def payloadId (head : Hash32) (attributes : PayloadAttributes fork) : PayloadId :=
   let digest := Cryptography.Hash.Keccak.keccak256 (payloadIdInput head attributes)
   Vector.ofFn fun i => digest[i.val]'(by
     have := i.isLt
