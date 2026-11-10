@@ -739,7 +739,7 @@ def consensus_is_optimistic_candidate_block(name: str, fork: str, blocks: list[b
     """From Bellatrix: whether a block may be imported optimistically, given the known blocks."""
     ...
 
-def consensus_latest_verified_ancestor(name: str, fork: str, blocks: list[bytes], optimistic_roots: list[bytes], root: bytes) -> bytes:
+def consensus_latest_verified_ancestor(name: str, fork: str, blocks: list[bytes], optimistic_roots: list[bytes], root: bytes, payload_status: int) -> bytes:
     """From Bellatrix: the root of the latest block of a chain that is not optimistic."""
     ...
 
@@ -751,7 +751,7 @@ def consensus_on_invalidated_payload(name: str, fork: str, blocks: list[bytes], 
     """From Bellatrix: the optimistic roots after a block is found the first invalid one, as a list."""
     ...
 
-def consensus_is_optimistic_node(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, config: dict | None, optimistic_roots: list[bytes], head: bytes) -> bool:
+def consensus_is_optimistic_node(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, config: dict | None, optimistic_roots: list[bytes], head: bytes, head_payload_status: int) -> bool:
     """From Bellatrix: whether a node is optimistic, after a run of fork choice steps."""
     ...
 
@@ -923,8 +923,8 @@ def consensus_reqresp_message(name: str, fork: str, type: str, data: bytes) -> t
     """The root of the message that the bytes encode, and the bytes of that message, as a pair."""
     ...
 
-def consensus_compute_min_epochs_for_block_requests(name: str) -> int:
-    """The fewest epochs back from the current one over which a node must serve blocks."""
+def consensus_compute_min_epochs_for_block_requests(name: str, fork: str) -> int:
+    """The fewest epochs back from the current one over which a node must serve blocks, at a fork."""
     ...
 
 def consensus_gossip_topics(name: str, fork: str) -> list[str]:
@@ -1433,6 +1433,10 @@ def engine_forkchoice_updated(tree: list, finalized: str | None, request: dict) 
 
 def engine_get_blobs(pool: list[tuple[bytes, bytes | None, bytes | None, list[tuple[bytes, bytes] | None] | None]], serving: bool, max_request: int, fork: str, request: dict) -> list | None:
     """The answer to an `engine_getBlobs` request, from a blob pool."""
+    ...
+
+def engine_get_payload_bodies(store: list[tuple[bytes, int | None, str, list[bytes], list[tuple[int, int, bytes, int]] | None, bytes | None]], latest: int, max_request: int, request: dict) -> list[dict | None]:
+    """The answer to a payload bodies request, from a store of bodies."""
     ...
 
 def engine_prepare_execution_payload(name: str, fork: str, state: bytes, config: dict | None, safe_block_hash: bytes, finalized_block_hash: bytes, suggested_fee_recipient: bytes, pow_chain: list[bytes]) -> dict | None:

@@ -335,8 +335,18 @@ def test_error_message_limit() -> None:
         consensus.reqresp_message("mainnet", "phase0", "ErrorMessage", bytes(257))
 
 
-@pytest.mark.parametrize("name", ["mainnet", "minimal"])
-def test_min_epochs_for_block_requests(name: str) -> None:
-    config = consensus.config(name)
-    expected = config["MIN_VALIDATOR_WITHDRAWABILITY_DELAY"] + config["CHURN_LIMIT_QUOTIENT"] // 2
-    assert consensus.compute_min_epochs_for_block_requests(name) == expected
+# Before Gloas: 256 + CHURN_LIMIT_QUOTIENT // 2, with 65536 on mainnet and 32 on minimal.
+# From Gloas, EIP-8061: 256 + (3 * E * C // (2 * C + 3 * E)) // 2.
+# Mainnet has E = 32768 and C = 65536, minimal has E = 16 and C = 32.
+@pytest.mark.parametrize(
+    ("name", "before", "after"), [("mainnet", 33024, 14299), ("minimal", 272, 262)]
+)
+@pytest.mark.parametrize("fork", ["london", "phase0", "fusaka", "bpo5", "glamsterdam", "hegota"])
+def test_min_epochs_for_block_requests(name: str, before: int, after: int, fork: str) -> None:
+    expected = after if fork in ("glamsterdam", "hegota") else before
+    assert consensus.compute_min_epochs_for_block_requests(fork, name) == expected
+
+
+def test_min_epochs_for_block_requests_unknown_fork() -> None:
+    with raises(ConsensusError, "no fork named nofork"):
+        consensus.compute_min_epochs_for_block_requests("nofork")

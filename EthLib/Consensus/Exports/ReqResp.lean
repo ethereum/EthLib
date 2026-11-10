@@ -107,10 +107,19 @@ The arguments are the name of the preset and the configuration, the fork, the me
 @[export eth_consensus_reqresp_message]
 def reqRespMessageExport (args : PyValue) : Result PyValue := pyExport reqRespMessageOfBytes args
 
-/-- The fewest epochs back from the current one over which a node must serve blocks. -/
+/-- The fewest epochs back from the current one over which a node must serve blocks, at a fork. -/
+def minEpochsForBlockRequestsOf (args : String × String) : Result Nat := do
+  let (name, fork) := args
+  let config ← configOf name
+  let fork ← forkUpTo .hegota fork.toUTF8
+  return (config.computeMinEpochsForBlockRequests fork).toNat
+
+/-- The fewest epochs back from the current one over which a node must serve blocks, at a fork.
+
+The arguments are the name of the configuration and the name of the fork. -/
 @[export eth_consensus_compute_min_epochs_for_block_requests]
-def computeMinEpochsForBlockRequestsExport (name : ByteArray) : Result UInt64 := do
-  return (← configOf (← nameOf name)).computeMinEpochsForBlockRequests
+def computeMinEpochsForBlockRequestsExport (args : PyValue) : Result PyValue :=
+  pyExport minEpochsForBlockRequestsOf args
 
 /-- A protocol ID that the fork defines, or the code of the error that says it does not. -/
 def protocolAtFork (fork : Fork) (text : String) : Result ProtocolId := do

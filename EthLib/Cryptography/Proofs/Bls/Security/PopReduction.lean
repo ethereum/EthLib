@@ -313,4 +313,78 @@ theorem prEvent_run_projectState_le (g₂ : G₂) (adversary : Adversary G₁ G�
   (dominatedUntilBad g₂ pk a hz j).prEvent_simulateQ_run_map_and_not_bad_le
     (fun _ _ _ _ _ => trivial) (implAt_preservesInv_bad g₂ a j z) _ st trivial P
 
+omit [DecidableEq M] [SampleableType F] in
+/-- The projection divides the scalar of every key other than `pk` by `z`. -/
+theorem keyScalar_projectState (pk x : G₁) (j : ℕ) (z : F) (st : State F G₁ M) :
+    keyScalar x (projectState pk j z st) =
+      if x = pk then keyScalar x st else keyScalar x st * z⁻¹ := by
+  simp only [keyScalar, projectState, lookup_scaleKeys]
+  cases lookup x st.keyTable with
+  | none => simp
+  | some p => by_cases hx : x = pk <;> simp [hx]
+
+omit [DecidableEq M] in
+/-- One key hash call answers the scalar of its key times `g2`, and only appends to the key table.
+
+It keeps the message part of the state, and adds one key hash call. -/
+theorem mem_support_keyHash {g₂ : G₂} {x : G₁} {st : State F G₁ M} {w : G₂ × State F G₁ M}
+    (hw : w ∈ support (keyHash g₂ x st)) :
+    w.1 = keyScalar x w.2 • g₂ ∧ (∃ i s, lookup x w.2.keyTable = some (i, s)) ∧
+      (∃ r, w.2.keyTable = st.keyTable ++ r) ∧ w.2.msg = st.msg ∧
+        w.2.keyCalls = st.keyCalls + 1 := by
+  unfold keyHash at hw
+  split at hw
+  · next i s h =>
+    simp only [support_pure, Set.mem_singleton_iff] at hw
+    subst hw
+    exact ⟨by simp [keyScalar, h], ⟨i, s, h⟩, ⟨[], by simp⟩, rfl, rfl⟩
+  · next h =>
+    simp only [support_map, Set.mem_image] at hw
+    obtain ⟨s, -, rfl⟩ := hw
+    have hl := lookup_append_of_none h s
+    exact ⟨by simp [keyScalar, hl], ⟨_, s, hl⟩, ⟨_, rfl⟩, rfl, rfl⟩
+
+/-- With the message scalar at `j` fixed to `z`, the message table entry at `j` has scalar `z`. -/
+theorem implAt_preservesInv_scalarAt (g₂ : G₂) (a : F) (j : ℕ) (z : F) :
+    QueryImpl.PreservesInv (implAt (M := M) (G₁ := G₁) g₂ a j z)
+      fun st => ∀ e, st.msg.table[j]? = some e → e.2 = z := by
+  intro t st hst x hx
+  rcases t with n | (m | m) | y
+  · change x ∈ support ((·, st) <$> _) at hx
+    simp only [support_map, Set.mem_image] at hx
+    obtain ⟨_, -, rfl⟩ := hx
+    exact hst
+  · change x ∈ support ((fun w => _) <$> hashAt g₂ j z m st.msg) at hx
+    simp only [support_map, Set.mem_image] at hx
+    obtain ⟨w, hw, rfl⟩ := hx
+    exact scalarAt_of_mem_support_hashAt hw hst
+  · change x ∈ support ((fun w => _) <$> ((fun w => _) <$> hashAt g₂ j z m st.msg)) at hx
+    simp only [support_map, Set.mem_image] at hx
+    obtain ⟨_, ⟨w, hw, rfl⟩, rfl⟩ := hx
+    exact scalarAt_of_mem_support_hashAt hw hst
+  · change x ∈ support (keyHash g₂ y st) at hx
+    rw [(mem_support_keyHash hx).2.2.2.1]
+    exact hst
+
+/-- A step of the oracles never lowers the number of key hash calls. -/
+theorem implAt_preservesInv_keyCalls (g₂ : G₂) (a : F) (j : ℕ) (z : F) (c : ℕ) :
+    QueryImpl.PreservesInv (implAt (M := M) (G₁ := G₁) g₂ a j z) fun st => c ≤ st.keyCalls := by
+  intro t st hst x hx
+  rcases t with n | (m | m) | y
+  · change x ∈ support ((·, st) <$> _) at hx
+    simp only [support_map, Set.mem_image] at hx
+    obtain ⟨_, -, rfl⟩ := hx
+    exact hst
+  · change x ∈ support ((fun w => _) <$> hashAt g₂ j z m st.msg) at hx
+    simp only [support_map, Set.mem_image] at hx
+    obtain ⟨w, -, rfl⟩ := hx
+    exact hst
+  · change x ∈ support ((fun w => _) <$> ((fun w => _) <$> hashAt g₂ j z m st.msg)) at hx
+    simp only [support_map, Set.mem_image] at hx
+    obtain ⟨_, ⟨w, -, rfl⟩, rfl⟩ := hx
+    exact hst
+  · change x ∈ support (keyHash g₂ y st) at hx
+    rw [(mem_support_keyHash hx).2.2.2.2]
+    omega
+
 end EthLib.Cryptography.Bls.Security.Pop

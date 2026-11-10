@@ -2,6 +2,7 @@ module
 
 public import EthLib.Base.Proofs.MapM
 public import EthLib.Engine.GetBlobs
+public import EthLib.Engine.Proofs.Json
 
 /-!
 # Proofs: `engine_getBlobs`, versions 1 to 4
@@ -53,29 +54,11 @@ theorem selectedCells_sorted (bits : CellBitarray) :
 
 /-! ## The request limit -/
 
-/-- A request passes the size check exactly when it names at most as many hashes as the pool takes.
--/
-theorem checkRequestSize_eq_ok_iff (pool : BlobPool) (hashes : List Bytes32) :
-    checkRequestSize pool hashes = .ok () ↔ hashes.length ≤ pool.maxRequest := by
-  unfold checkRequestSize
-  by_cases h : pool.maxRequest < hashes.length
-  · simp [h, throw, throwThe, MonadExceptOf.throw]
-  · simp [h, pure, Except.pure]; omega
-
-/-- A request is too large exactly when it names more hashes than the pool takes. -/
-theorem checkRequestSize_eq_error_iff (pool : BlobPool) (hashes : List Bytes32)
-    (e : EngineError) :
-    checkRequestSize pool hashes = .error e ↔
-      pool.maxRequest < hashes.length ∧ e = .tooLargeRequest := by
-  unfold checkRequestSize
-  by_cases h : pool.maxRequest < hashes.length
-  · simp [h, throw, throwThe, MonadExceptOf.throw, eq_comm]
-  · simp [h, pure, Except.pure]
-
 /-- A request of at most 128 hashes is never too large. -/
 theorem checkRequestSize_eq_ok_of_length_le (pool : BlobPool) (hashes : List Bytes32)
-    (h : hashes.length ≤ MIN_REQUEST_LIMIT) : checkRequestSize pool hashes = .ok () :=
-  (checkRequestSize_eq_ok_iff pool hashes).2 (Nat.le_trans h pool.le_maxRequest)
+    (h : hashes.length ≤ MIN_REQUEST_LIMIT) :
+    checkRequestSize pool.maxRequest hashes.length = .ok () :=
+  (checkRequestSize_eq_ok_iff _ _).2 (Nat.le_trans h pool.le_maxRequest)
 
 /-! ## The entries of a pooled blob -/
 
@@ -156,10 +139,10 @@ theorem getBlobsV1_of_fusaka (pool : BlobPool) {fork : Fork} (hashes : List Byte
 /-- Before Fusaka, version 1 answers each hash in turn, or fails on a too large request. -/
 theorem getBlobsV1_of_lt_fusaka (pool : BlobPool) {fork : Fork} (hashes : List Bytes32)
     (h : fork < .fusaka) :
-    getBlobsV1 pool fork hashes = (checkRequestSize pool hashes).map fun _ =>
+    getBlobsV1 pool fork hashes = (checkRequestSize pool.maxRequest hashes.length).map fun _ =>
       hashes.map fun h => if pool.serving then (pool.lookup h).bind PooledBlob.toV1 else none := by
   have : ¬ .fusaka ≤ fork := Nat.not_le.2 h
-  cases hc : checkRequestSize pool hashes <;>
+  cases hc : checkRequestSize pool.maxRequest hashes.length <;>
     simp [getBlobsV1, this, hc, bind, Except.bind, pure, Except.pure, Except.map]
 
 /-- An answer of version 1 has one entry per requested hash. -/
@@ -169,7 +152,7 @@ theorem getBlobsV1_length {pool : BlobPool} {fork : Fork} {hashes : List Bytes32
   by_cases hf : .fusaka ≤ fork
   · rw [getBlobsV1_of_fusaka pool hashes hf] at h; cases h
   · rw [getBlobsV1_of_lt_fusaka pool hashes (Nat.not_le.1 hf)] at h
-    cases hc : checkRequestSize pool hashes <;> simp_all [Except.map]
+    cases hc : checkRequestSize pool.maxRequest hashes.length <;> simp_all [Except.map]
     subst h; simp
 
 /-- Each entry of version 1 is the blob and blob proof that the pool holds for its hash. -/
@@ -180,7 +163,7 @@ theorem getBlobsV1_getElem? {pool : BlobPool} {fork : Fork} {hashes : List Bytes
   by_cases hf : .fusaka ≤ fork
   · rw [getBlobsV1_of_fusaka pool hashes hf] at h; cases h
   · rw [getBlobsV1_of_lt_fusaka pool hashes (Nat.not_le.1 hf)] at h
-    cases hc : checkRequestSize pool hashes <;> simp_all [Except.map]
+    cases hc : checkRequestSize pool.maxRequest hashes.length <;> simp_all [Except.map]
     subst h; simp
 
 /-- An entry of version 1 that is not `null` holds the pool's blob and blob proof for its hash. -/
@@ -207,10 +190,10 @@ theorem getBlobsV1_lookup_of_getElem? {pool : BlobPool} {fork : Fork} {hashes : 
 /-- After the size check, version 2 maps each hash to its blob and cell proofs, if the pool serves.
 -/
 theorem getBlobsV2_eq (pool : BlobPool) (hashes : List Bytes32) :
-    getBlobsV2 pool hashes = (checkRequestSize pool hashes).map fun _ =>
+    getBlobsV2 pool hashes = (checkRequestSize pool.maxRequest hashes.length).map fun _ =>
       if pool.serving then hashes.mapM fun h => (pool.lookup h).bind PooledBlob.toV2
       else none := by
-  cases hc : checkRequestSize pool hashes <;>
+  cases hc : checkRequestSize pool.maxRequest hashes.length <;>
     cases hs : pool.serving <;>
       simp [getBlobsV2, hc, hs, bind, Except.bind, pure, Except.pure, Except.map]
 
@@ -219,7 +202,7 @@ theorem getBlobsV2_eq_some {pool : BlobPool} {hashes : List Bytes32}
     {l : List BlobAndProofV2} (h : getBlobsV2 pool hashes = .ok (some l)) :
     pool.serving = true ∧ hashes.mapM (fun h => (pool.lookup h).bind PooledBlob.toV2) = some l := by
   rw [getBlobsV2_eq] at h
-  cases hc : checkRequestSize pool hashes <;> simp only [hc, Except.map] at h
+  cases hc : checkRequestSize pool.maxRequest hashes.length <;> simp only [hc, Except.map] at h
   · cases h
   · injection h with h
     split at h
@@ -246,7 +229,7 @@ theorem getBlobsV2_isSome_iff {pool : BlobPool} {hashes : List Bytes32}
     r.isSome ↔ pool.serving = true ∧
       ∀ hash ∈ hashes, ∃ p, pool.lookup hash = some p ∧ p.toV2.isSome := by
   rw [getBlobsV2_eq] at h
-  cases hc : checkRequestSize pool hashes <;> simp only [hc, Except.map] at h
+  cases hc : checkRequestSize pool.maxRequest hashes.length <;> simp only [hc, Except.map] at h
   · cases h
   · injection h with h
     subst h
@@ -260,10 +243,10 @@ theorem getBlobsV2_isSome_iff {pool : BlobPool} {hashes : List Bytes32}
 
 /-- Version 3 answers each hash in turn when the pool serves, after the size check. -/
 theorem getBlobsV3_eq (pool : BlobPool) (hashes : List Bytes32) :
-    getBlobsV3 pool hashes = (checkRequestSize pool hashes).map fun _ =>
+    getBlobsV3 pool hashes = (checkRequestSize pool.maxRequest hashes.length).map fun _ =>
       if pool.serving then some (hashes.map fun h => (pool.lookup h).bind PooledBlob.toV2)
       else none := by
-  cases hc : checkRequestSize pool hashes <;>
+  cases hc : checkRequestSize pool.maxRequest hashes.length <;>
     cases hs : pool.serving <;>
       simp [getBlobsV3, hc, hs, bind, Except.bind, pure, Except.pure, Except.map]
 
@@ -272,7 +255,7 @@ theorem getBlobsV3_isSome_iff {pool : BlobPool} {hashes : List Bytes32}
     {r : Option (List (Option BlobAndProofV2))} (h : getBlobsV3 pool hashes = .ok r) :
     r.isSome ↔ pool.serving = true := by
   rw [getBlobsV3_eq] at h
-  cases hc : checkRequestSize pool hashes <;> simp only [hc, Except.map] at h
+  cases hc : checkRequestSize pool.maxRequest hashes.length <;> simp only [hc, Except.map] at h
   · cases h
   · injection h with h
     subst h
@@ -283,7 +266,7 @@ theorem getBlobsV3_eq_some {pool : BlobPool} {hashes : List Bytes32}
     {l : List (Option BlobAndProofV2)} (h : getBlobsV3 pool hashes = .ok (some l)) :
     l = hashes.map fun h => (pool.lookup h).bind PooledBlob.toV2 := by
   rw [getBlobsV3_eq] at h
-  cases hc : checkRequestSize pool hashes <;> simp only [hc, Except.map] at h
+  cases hc : checkRequestSize pool.maxRequest hashes.length <;> simp only [hc, Except.map] at h
   · cases h
   · injection h with h
     split at h
@@ -300,11 +283,11 @@ theorem getBlobsV3_length {pool : BlobPool} {hashes : List Bytes32}
 
 /-- Version 4 answers each hash in turn when the pool serves, after the size check. -/
 theorem getBlobsV4_eq (pool : BlobPool) (hashes : List Bytes32) (bits : CellBitarray) :
-    getBlobsV4 pool hashes bits = (checkRequestSize pool hashes).map fun _ =>
+    getBlobsV4 pool hashes bits = (checkRequestSize pool.maxRequest hashes.length).map fun _ =>
       if pool.serving then
         some (hashes.map fun h => (pool.lookup h).bind (·.toV4 (selectedCells bits)))
       else none := by
-  cases hc : checkRequestSize pool hashes <;>
+  cases hc : checkRequestSize pool.maxRequest hashes.length <;>
     cases hs : pool.serving <;>
       simp [getBlobsV4, hc, hs, bind, Except.bind, pure, Except.pure, Except.map]
 
@@ -313,7 +296,7 @@ theorem getBlobsV4_isSome_iff {pool : BlobPool} {hashes : List Bytes32} {bits : 
     {r : Option (List (Option BlobCellsAndProofsV1))}
     (h : getBlobsV4 pool hashes bits = .ok r) : r.isSome ↔ pool.serving = true := by
   rw [getBlobsV4_eq] at h
-  cases hc : checkRequestSize pool hashes <;> simp only [hc, Except.map] at h
+  cases hc : checkRequestSize pool.maxRequest hashes.length <;> simp only [hc, Except.map] at h
   · cases h
   · injection h with h
     subst h
@@ -327,7 +310,7 @@ theorem getBlobsV4_eq_some {pool : BlobPool} {hashes : List Bytes32} {bits : Cel
     (h : getBlobsV4 pool hashes bits = .ok (some l)) :
     l = hashes.map fun h => (pool.lookup h).bind (·.toV4 (selectedCells bits)) := by
   rw [getBlobsV4_eq] at h
-  cases hc : checkRequestSize pool hashes <;> simp only [hc, Except.map] at h
+  cases hc : checkRequestSize pool.maxRequest hashes.length <;> simp only [hc, Except.map] at h
   · cases h
   · injection h with h
     split at h

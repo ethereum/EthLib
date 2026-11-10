@@ -69,6 +69,10 @@ structure ForkChoiceNode where
   payloadStatus : PayloadStatus := .pending
   deriving DecidableEq, Repr, Inhabited
 
+/-- A hash of a node, from its root and the number of its payload status. -/
+instance : Hashable ForkChoiceNode where
+  hash node := mixHash (hash node.root.toArray) (hash node.payloadStatus.code)
+
 /-- The latest vote of a validator: when it votes and the root of the block it votes for.
 
 Before Gloas the vote has its target epoch.

@@ -23,6 +23,11 @@ eth_engine_get_blobs(
   lean_object* args
 );
 
+extern lean_object*
+eth_engine_get_payload_bodies(
+  lean_object* args
+);
+
 extern lean_object* eth_engine_jwt_build(lean_object* args);
 extern lean_object* eth_engine_jwt_check(lean_object* args);
 
@@ -50,6 +55,14 @@ py_engine_get_blobs(
   PyObject* args
 ) {
   return call_pyvalue_export(eth_engine_get_blobs, args, 5, ENGINE_ERROR);
+}
+
+PyObject*
+py_engine_get_payload_bodies(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_engine_get_payload_bodies, args, 4, ENGINE_ERROR);
 }
 
 PyObject*

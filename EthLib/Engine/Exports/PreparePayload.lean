@@ -51,17 +51,7 @@ open EthLib.Exports (Result PyValue pyExport)
 open EthLib.Base
 open EthLib.Consensus
 open EthLib.Consensus.Exports
-open EthLib.Engine.Json (dataJson)
-
-/-- A number as an Engine API quantity: `0x`, then its hex digits without leading zeros. -/
-def quantityJson (n : Nat) : Json :=
-  .str ("0x" ++ String.ofList (Nat.toDigits 16 n))
-
-/-- A withdrawal as the Engine API writes it. -/
-def withdrawalJson (w : Execution.Blocks.Withdrawal) : Json :=
-  Json.mkObj [("index", quantityJson w.index.toNat),
-    ("validatorIndex", quantityJson w.validatorIndex.toNat),
-    ("address", dataJson w.address.toList), ("amount", quantityJson w.amount.toNat)]
+open EthLib.Engine.Json (dataJson quantityJson withdrawalJson)
 
 /-- The forkchoice update of a proposer as JSON, with the fields of its fork and some others. -/
 def updateJson {fork : Fork} (update : ForkchoiceState) (attributes : PayloadAttributes fork)

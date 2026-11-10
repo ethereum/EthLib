@@ -693,7 +693,7 @@
   "The root of the message that the bytes encode, and the bytes of that message, as a pair."
 
 #define DOC_consensus_compute_min_epochs_for_block_requests \
-  "The fewest epochs back from the current one over which a node must serve blocks."
+  "The fewest epochs back from the current one over which a node must serve blocks, at a fork."
 
 #define DOC_consensus_gossip_topics \
   "The gossip topics of a fork, in the order of the fork that adds each one."
@@ -1075,6 +1075,9 @@
 
 #define DOC_engine_get_blobs \
   "The answer to an `engine_getBlobs` request, from a blob pool."
+
+#define DOC_engine_get_payload_bodies \
+  "The answer to a payload bodies request, from a store of bodies."
 
 #define DOC_engine_prepare_execution_payload \
   "From Bellatrix to Fulu: the forkchoice update of a proposer, as the value of its JSON."

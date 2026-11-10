@@ -109,7 +109,7 @@ eth_consensus_reqresp_message(
 
 extern lean_object*
 eth_consensus_compute_min_epochs_for_block_requests(
-  lean_object* name
+  lean_object* args
 );
 
 extern lean_object*
@@ -667,12 +667,8 @@ py_consensus_compute_min_epochs_for_block_requests(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject* name_obj;
-  if (!PyArg_ParseTuple(args, "O", &name_obj)) return NULL;
-  lean_object* name = str_arg(name_obj, "name");
-  if (!name) return NULL;
-  return except_into_pyint(
-    eth_consensus_compute_min_epochs_for_block_requests(name), CONSENSUS_ERROR);
+  return call_pyvalue_export(
+    eth_consensus_compute_min_epochs_for_block_requests, args, 2, CONSENSUS_ERROR);
 }
 
 PyObject*
@@ -1474,7 +1470,7 @@ py_consensus_is_optimistic_node(
   PyObject* self,
   PyObject* args
 ) {
-  return call_pyvalue_export(eth_consensus_is_optimistic_node, args, 9, FORK_CHOICE_ERROR);
+  return call_pyvalue_export(eth_consensus_is_optimistic_node, args, 10, FORK_CHOICE_ERROR);
 }
 
 PyObject*
@@ -1482,7 +1478,7 @@ py_consensus_latest_verified_ancestor(
   PyObject* self,
   PyObject* args
 ) {
-  return call_pyvalue_export(eth_consensus_latest_verified_ancestor, args, 5, FORK_CHOICE_ERROR);
+  return call_pyvalue_export(eth_consensus_latest_verified_ancestor, args, 6, FORK_CHOICE_ERROR);
 }
 
 PyObject*

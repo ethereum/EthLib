@@ -592,7 +592,7 @@ The million-iteration X25519 vector requires `ETHLIB_SLOW_VECTORS=1`.
 
 ### Noise XX and libp2p identities
 
-`complete_authenticates` (`Networking/Proofs/Noise.lean`) ties successful completion to an incoming message that the XX reader accepts.
+`complete_authenticates` (`Networking/Proofs/Noise/Identity.lean`) ties successful completion to an incoming message that the XX reader accepts.
 The reported public key, signature and extensions are the fields of the payload decrypted from that message.
 The signature verifies against the static key read from that message, and the reported peer ID derives from the signing public key.
 `readLibp2p_authenticates` states the same check for the read of message 2 or 3.
@@ -1402,6 +1402,31 @@ So `bls12MapFpToG1_isOk_iff` and `bls12MapFp2ToG2_isOk_iff` (`Map.lean`) prove t
 
 No theorem relates the module to the execution-specs code it follows.
 
+### A transaction whose message fails
+
+`Execution/Proofs/Transactions/Failed.lean` states what a transaction leaves when its message fails, before Hegotá.
+Its first theorems bound the writes to the sender, the beneficiary and the authorities that the authorization signatures name.
+
+`buyGas_sender` in `Settlement.lean` proves that buying gas raises the nonce of the sender by one and takes the fees from its balance.
+`buyGas_keeps` proves that it changes no code hash of the sender, no word of storage and no code.
+`settleGas_accounts` proves that the settlement refunds the sender and pays the priority fee to the beneficiary.
+It changes no nonce, code hash or code.
+Storage stays at the sender when its nonce is not 0, and at the beneficiary unless it is deleted.
+
+`authority_applyAuthorization` proves that one accepted authorization in scope sets the code hash of its authority to that of the delegation code, and raises its nonce by one.
+The authorities after the whole list are given against the state that the authorizations leave; the fold over the list is not unrolled.
+`processMessageCall_of_halt` in `Process.lean` puts the state back to the state before the authorizations when the message halts before its first frame, as EIP-8037 asks.
+`processMessageCall_reads_of_error` proves that a failed frame reads as the state of its first frame, so a failed call keeps its accepted authorizations, as EIP-7702 asks.
+
+`runTransaction_values_of_error` combines these results for one gas meter.
+It names the output of the message call.
+It gives the nonce, the code hash and the balance of every address against the state before settlement.
+It gives the storage of every address but a deleted beneficiary, and of the sender while its nonce is not 0.
+That state reads as the state after the gas purchase when the transaction creates a contract or its first frame never starts.
+When the first frame of a call starts and fails, it reads as the state that the authorizations leave.
+`processTransaction_values_of_error` gives the same conclusion for every fork before Hegotá, with the gas meter of that fork.
+`block_of_output` proves that the block after the transaction reads as the state that the transaction leaves.
+
 ### Transaction gas
 
 Four theorems in `Execution/Proofs/Transactions/Process.lean` give the gas used and the block gas of a transaction that runs, before Hegotá.
@@ -1813,7 +1838,7 @@ The rule of the latest valid hash in `Consensus/ForkChoice/Optimistic.lean` name
 The theorems here take that block as given.
 No theorem relates the optimistic set to the blocks that the store of the fork choice removes.
 A node is optimistic when its head is optimistic, or when invalid payloads left its block tree with no viable branch.
-`isOptimisticNode_of_isHeadOptimistic` shows that, before Gloas, the first case alone makes an optimistic node.
+`isOptimisticNode_of_isHeadOptimistic` shows that, at every fork, the first case alone makes an optimistic node.
 `isOptimisticNode_of_not_isHeadOptimistic` shows that, before Gloas, the second case needs a block that the fork choice dropped at or above the justified block.
 So a tree that empties with nothing invalidated does not count.
 This assumes that the optimistic store holds only blocks that the fork choice accepted.
@@ -1838,11 +1863,30 @@ So it reaches every payload that the block builds on among the known blocks of i
 A payload that builds on an invalid payload in that way leaves the set.
 A block built on its parent without the payload of the parent does not hold that payload on its payload chain.
 So its own optimistic payload stays when only the payload of the parent is invalid.
-From Gloas the rule of the latest valid hash, the latest verified ancestor and the optimistic node are not yet specified, and the last two fail.
+From Gloas the head of the fork choice is a block with or without its payload, so the optimistic store keeps the status of the head.
+A full head reads the payload of its block, an empty head the payload its block builds on, and a pending head both; `isHeadOptimistic_of_full`, `isHeadOptimistic_of_empty_of_named` and `isHeadOptimistic_of_pending_of_optimistic` and `isHeadOptimistic_of_pending_of_not_optimistic` state it.
+The search of the head never stops at a pending node, so reading both for a pending head is a choice of EthLib, the cautious one.
+`isHeadOptimistic_of_empty_of_unnamed` shows that an empty head whose bid names no known payload fails with `payloadNotVerified`.
+That is the case of an empty first block of Gloas, whose bid builds on a payload of Fulu, which a store of one fork never holds.
+The rule fails there rather than call that payload verified, so the head rule and the latest verified ancestor agree.
+From Gloas the latest verified ancestor takes a node, and reads only the payloads that the node holds.
+A full node holds every payload of its payload chain, and an empty or pending node holds all but its own.
+`latestVerifiedAncestor_ne_root` shows that a node without its own payload is never its own verified ancestor.
+So a pending node reads as full or empty for the head, and as empty for the ancestor: each reading is the cautious one.
+The status of a node is an assumption: a full node must name a payload that the store holds, and the rules do not check it.
+The optimistic store follows the fields of the guide, which do not record the payloads held; the search of the head returns a full node only for a held payload.
+`latestVerifiedAncestor_of_glamsterdam` shows that the answer is the first of those payloads that is not optimistic, with every one before it optimistic.
+`latestVerifiedAncestor_eq_error_of_optimistic` shows that it fails with `payloadNotVerified` when all of them are optimistic, or when there is none.
+Before Gloas the walk returns an optimistic genesis block; from Gloas it never returns an optimistic payload, a choice of EthLib.
+From Gloas the rule of the latest valid hash is not defined, and the second case of an optimistic node is not yet specified.
+That case needs the removal of an invalid payload from the store of the fork choice, which is not defined from Gloas.
+`isOptimisticNode_of_glamsterdam` shows that the rule then fails when the head is not optimistic.
+`isOptimisticNode_of_isHeadOptimistic_error` shows that it fails as the optimism of the head does.
 The store holds the blocks of one fork, so a payload chain does not cross from Gloas into Fulu.
 The Heze record of whether a payload satisfies the inclusion lists is not modelled here.
 The Python suite checks each rule on Bellatrix blocks built in the test, with roots from the SSZ export.
-At Gloas it checks the execution block, the candidate rule and the two payload answers, and that the latest verified ancestor and the optimistic node are refused.
+At Gloas it checks the execution block, the candidate rule, the two payload answers and the latest verified ancestor.
+It checks the optimistic head of each status on a pinned Gloas fork choice case, and that the second case is refused.
 
 ### Light client
 
@@ -1948,7 +1992,7 @@ The new votes come from justified sources, and no honest validator becomes slash
 A vote names the validator that signed it, so both theorems assume that no one forges a vote.
 No theorem derives the votes of the model from the beacon chain yet, so neither theorem is about what a client runs.
 
-Three pieces of that link exist.
+Four pieces of that link exist.
 `FfgVotes.lean` relates the slashing conditions of the beacon chain to those of the model.
 `justificationTest_iff_stake` (`Consensus/Proofs/Transition/FfgStake.lean`) reads the test of justification as a comparison of stakes.
 There the stake of a validator is its effective balance, and the indices count as a set.
@@ -1960,8 +2004,15 @@ With the BLS checks, the aggregate signature verifies under keys that include th
 Reading this as a signature by that attester assumes that BLS aggregate signatures cannot be forged.
 The source of that attestation is the justified checkpoint of the epoch of the flags.
 Its target is the checkpoint of that epoch, with the block root that the state records for its first slot.
+`voteFrame_processBlock` (`Consensus/Proofs/Transition/TargetVotes.lean`) carries that fact across a whole block.
+A block sets a target flag only from a vote, a pair of a validator and attestation data, for the link of the epoch of the flag at the position of the flag.
+Each such vote holds the data of an attestation of the block, and passes the attestation checks in the state after the block.
+With the BLS checks, that means the validator signed it, if BLS aggregates with proofs of possession cannot be forged.
+The block keeps the slot, the block roots, the justified checkpoints, the fork versions, the genesis validators root and the key of each validator.
+So `TargetFlagsSigned.of_voteFrame` keeps each target flag backed by a vote that passes the checks in the current state.
+From Gloas the theorem assumes the registry within its limit, since its type does not bound its size.
 At least five gaps remain before a refinement.
-No theorem yet carries that fact across a whole block, the slots, the epoch step and the upgrades.
+No theorem yet carries that fact across the slots, the epoch step and the upgrades, or establishes it at the first Altair state.
 None covers the forks before Altair.
 So none yet shows that the attesters of an epoch signed the link that the model counts.
 The attesters of the previous epoch are filtered by activity in that epoch, but the total counts the active validators of the current one.
@@ -2201,12 +2252,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 360 operations and 49 size constants.
-The Python extension calls 360 of the operations and 49 of the constants.
+Lean exports 364 operations and 49 size constants.
+The Python extension calls 364 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-9591 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (1678), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (303), `engine.c` (77), `enr.c` (177), `eth.c` (225), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (54), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (102), `module.c` (1364), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (102), `vrf.c` (141), `wrappers.h` (641), `x25519.c` (21), `xmss.c` (134).
+9645 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (1707), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (303), `engine.c` (90), `enr.c` (177), `eth.c` (225), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (54), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (102), `module.c` (1372), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (114), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (102), `vrf.c` (141), `wrappers.h` (645), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.
