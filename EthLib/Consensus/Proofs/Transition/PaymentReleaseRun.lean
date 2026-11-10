@@ -1,7 +1,9 @@
 module
 
+public import EthLib.Consensus.Proofs.Transition.ActiveKept
+public import EthLib.Consensus.Proofs.Transition.PaymentReleaseBlock
+public import EthLib.Consensus.Proofs.Transition.PaymentReleaseChain
 public import EthLib.Consensus.Proofs.Transition.PaymentReleaseInvariants
-public import EthLib.Consensus.Proofs.Transition.PaymentReleaseWithdrawals
 
 /-!
 # Proofs: runs of steps that pay the bid of a block
@@ -23,6 +25,20 @@ The steps assume a few facts on the payments.
 The upgrade to Gloas starts with them, and the upgrade to Heze and each slot keep them.
 
 A block keeps them under conditions on the preset and on the size of the registries.
+
+A run of slots and blocks inside one fork, from Gloas on, is such a run of steps.
+
+That run releases each payment at most once.
+
+Its withdrawals are those of the computed states, and its payments are fixed up to their order.
+
+The epoch step pays each payment of the previous epoch that reaches its quorum.
+
+So along a chain through that step, such a payment is paid exactly once.
+
+A payment is paid here when its withdrawal joins the queue of the withdrawals of the builders.
+
+A chain across the upgrade to Heze is not covered, since a run of steps stays in one fork.
 
 [EIP-7732] adds the builders, their bids and their payments.
 
@@ -189,5 +205,247 @@ theorem PaymentRun.nodup {gloas : .glamsterdam ≤ fork} {released : List Slot}
     refine List.nodup_append.mpr ⟨ih, step.nodup, fun slot old slot' new same => ?_⟩
     subst same
     exact run.closed slot old (step.opened slot new)
+
+/-! ## Chains -/
+
+/-- Two releases between the same two states queue the same withdrawals.
+
+So the withdrawals that a release queues are fixed by its two states. -/
+theorem PaymentRelease.map_eq {gloas : .glamsterdam ≤ fork} {released other : List Slot}
+    (one : PaymentRelease state after gloas released)
+    (two : PaymentRelease state after gloas other) :
+    released.map (openWithdrawal state gloas) = other.map (openWithdrawal state gloas) :=
+  List.append_cancel_left (one.queue.symm.trans two.queue)
+
+/-- From Gloas, slots and blocks inside one fork, one after another, from a first state.
+
+A run carries the slots of the payments it releases, and the withdrawals it queues for them.
+
+A slot releases the payments of a release from the state before it to the state after it.
+
+Each of them reaches the quorum that the epoch transition computes after that slot.
+
+A block releases those of a release up to the state that the payload of its parent computes.
+
+It releases at most the payment of its parent.
+
+The rest of the block releases nothing, and may pay out a prefix of the queue.
+
+Each released payment is closed after its step.
+
+So the withdrawals that each step queues are fixed by the states that the step computes.
+
+Its payments are fixed too, up to their order.
+
+A slot lists only payments that reach the quorum.
+
+A block lists only the payment of its parent. -/
+inductive PaymentChain (config : Config) (checks : SignatureChecks)
+    (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork) :
+    BeaconState preset fork → List Slot → List BuilderPendingWithdrawal → Prop
+  /-- A state is a run of no step to itself. -/
+  | refl : PaymentChain config checks state gloas state [] []
+  /-- A run followed by one slot. -/
+  | slot {second third : BeaconState preset fork} {released more : List Slot}
+    {queued : List BuilderPendingWithdrawal} :
+    PaymentChain config checks state gloas second released queued →
+    advanceSlot config checks second = .ok third → PaymentRelease second third gloas more →
+    (∀ slot ∈ more, ReachesQuorum config checks second gloas slot) →
+    (∀ slot ∈ more, ¬ PaymentOpen third gloas slot) →
+    PaymentChain config checks state gloas third (released ++ more)
+      (queued ++ more.map (openWithdrawal second gloas))
+  /-- A run followed by one block. -/
+  | block {second parented third : BeaconState preset fork} {released more : List Slot}
+    {queued : List BuilderPendingWithdrawal} (engine : ExecutionEngine preset fork)
+    (block : BeaconBlock preset fork) :
+    PaymentChain config checks state gloas second released queued →
+    Consensus.processBlock config checks engine second block = .ok third →
+    Consensus.processParentExecutionPayload config checks second gloas block.body = .ok parented →
+    PaymentRelease second parented gloas more →
+    more.Sublist [second.latestBlockHeader.slot] → PaymentStep parented third gloas [] →
+    (∀ slot ∈ more, ¬ PaymentOpen third gloas slot) →
+    PaymentChain config checks state gloas third (released ++ more)
+      (queued ++ more.map (openWithdrawal second gloas))
+
+/-- A run of slots and blocks is a run of payment steps, with the same lists. -/
+theorem PaymentChain.paymentRun {gloas : .glamsterdam ≤ fork} {released : List Slot}
+    {queued : List BuilderPendingWithdrawal}
+    (chain : PaymentChain config checks state gloas after released queued) :
+    PaymentRun state gloas after released queued := by
+  induction chain with
+  | refl => exact .refl
+  | slot _ _ release _ closes ih => exact .step ih (.of_release release closes)
+  | block _ _ _ _ _ release _ step closes ih =>
+    exact .step ih (.of_release_trans release step closes)
+
+/-- One step of a chain inside one fork never shrinks the builder registry. -/
+theorem ChainStep.buildersGrow {gloas : .glamsterdam ≤ fork}
+    {state after : BeaconState preset fork}
+    (step : ChainStep config checks ⟨fork, state⟩ ⟨fork, after⟩) :
+    (state.builders gloas).data.size ≤ (after.builders gloas).data.size := by
+  rcases step.slot_or_block with computed | ⟨_, _, computed⟩
+  · rw [advanceSlot_builders gloas computed]
+    exact Nat.le_refl _
+  · exact processBlock_buildersGrow gloas computed
+
+/-- A run of steps of a chain inside one fork never shrinks the builder registry. -/
+theorem buildersGrow_of_chainSteps {gloas : .glamsterdam ≤ fork}
+    {first : BeaconState preset fork} {forked : ForkedBeaconState preset}
+    (steps : Relation.ReflTransGen (ChainStep config checks) ⟨fork, first⟩ forked) :
+    ∀ {last : BeaconState preset fork}, forked = ⟨fork, last⟩ →
+      (first.builders gloas).data.size ≤ (last.builders gloas).data.size := by
+  induction steps with
+  | refl =>
+    intro last same
+    cases same
+    exact Nat.le_refl _
+  | tail reach step more =>
+    intro last same
+    subst same
+    obtain ⟨middle, rfl⟩ := fork_eq_of_chainSteps reach step
+    exact Nat.le_trans (more rfl) step.buildersGrow
+
+/-- From Gloas, chain steps inside one fork extend a run of slots and blocks that pay.
+
+The facts on the payments must hold at the end of the run, and they then hold at the last state.
+
+Each registry must hold at most 2^40 entries at the last state. -/
+private theorem PaymentChain.extend (positive : preset.PaymentQuorumPositive)
+    (twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat) {gloas : .glamsterdam ≤ fork}
+    {first start : BeaconState preset fork} {released : List Slot}
+    {queued : List BuilderPendingWithdrawal}
+    (chain : PaymentChain config checks first gloas start released queued)
+    (holds : PaymentFacts start gloas) {forked : ForkedBeaconState preset}
+    (steps : Relation.ReflTransGen (ChainStep config checks) ⟨fork, start⟩ forked) :
+    ∀ {last : BeaconState preset fork}, forked = ⟨fork, last⟩ →
+      last.validators.data.size ≤ 2 ^ 40 → (last.builders gloas).data.size ≤ 2 ^ 40 →
+      ∃ more extra, PaymentChain config checks first gloas last (released ++ more)
+        (queued ++ extra) ∧ PaymentFacts last gloas := by
+  induction steps with
+  | refl =>
+    intro last same _ _
+    cases same
+    exact ⟨[], [], by simpa only [List.append_nil] using chain, holds⟩
+  | tail reach step more =>
+    intro last same validatorsFit buildersFit
+    subst same
+    obtain ⟨middle, rfl⟩ := fork_eq_of_chainSteps reach step
+    obtain ⟨added, extra, run, facts⟩ :=
+      more rfl (Nat.le_trans step.registryGrows validatorsFit)
+        (Nat.le_trans step.buildersGrow buildersFit)
+    rcases step.slot_or_block with computed | ⟨engine, block, computed⟩
+    · obtain ⟨released, release, closes, off, on⟩ := advanceSlot_release positive
+        facts.covered.parentFresh facts.funded facts.genesis computed
+      -- Off a boundary the slot releases nothing; at a boundary each release reaches the quorum.
+      have reaches : ∀ slot ∈ released, ReachesQuorum config checks middle gloas slot := by
+        intro slot member
+        by_cases atBoundary : last.slot % preset.SLOTS_PER_EPOCH = 0
+        · exact (on atBoundary slot).mp member
+        · rw [off atBoundary] at member
+          cases member
+      exact ⟨_, _, by
+        simpa only [List.append_assoc] using run.slot computed release reaches closes,
+        facts.advanceSlot positive computed⟩
+    · obtain ⟨_, _, parentOk, release, paid, closes, sub⟩ := processBlock_paymentRelease positive
+        twoSlots facts.covered facts.bidAt validatorsFit buildersFit computed
+      exact ⟨_, _, by
+        simpa only [List.append_assoc] using run.block engine block computed parentOk release
+          sub paid closes,
+        facts.processBlock positive twoSlots validatorsFit buildersFit computed⟩
+
+/-- A run of slots and blocks releases each payment at most once. -/
+theorem PaymentChain.nodup {gloas : .glamsterdam ≤ fork} {released : List Slot}
+    {queued : List BuilderPendingWithdrawal}
+    (chain : PaymentChain config checks state gloas after released queued) : released.Nodup :=
+  chain.paymentRun.nodup
+
+/-- From Gloas, a run of chain steps inside one fork keeps the facts on the payments.
+
+The preset needs a positive payment quorum and at least two slots in an epoch.
+
+The facts must hold at the first state.
+
+Each registry must hold at most 2^40 entries at the last state.
+
+A run across the upgrade to Heze is not covered. -/
+theorem PaymentFacts.chainSteps (positive : preset.PaymentQuorumPositive)
+    (twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat) {gloas : .glamsterdam ≤ fork}
+    {first last : BeaconState preset fork}
+    (steps : Relation.ReflTransGen (ChainStep config checks) ⟨fork, first⟩ ⟨fork, last⟩)
+    (holds : PaymentFacts first gloas)
+    (validatorsFit : last.validators.data.size ≤ 2 ^ 40)
+    (buildersFit : (last.builders gloas).data.size ≤ 2 ^ 40) : PaymentFacts last gloas := by
+  obtain ⟨_, _, -, facts⟩ :=
+    PaymentChain.extend positive twoSlots .refl holds steps rfl validatorsFit buildersFit
+  exact facts
+
+/-- From Gloas, a run of chain steps inside one fork is a run of slots and blocks that pay.
+
+The preset needs a positive payment quorum and at least two slots in an epoch.
+
+The facts on the payments must hold at the first state.
+
+Each registry must hold at most 2^40 entries at the last state.
+
+A run across the upgrade to Heze is not covered, since a run of payment steps stays in one fork. -/
+theorem paymentChain_of_chainSteps (positive : preset.PaymentQuorumPositive)
+    (twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat) {gloas : .glamsterdam ≤ fork}
+    {first last : BeaconState preset fork}
+    (steps : Relation.ReflTransGen (ChainStep config checks) ⟨fork, first⟩ ⟨fork, last⟩)
+    (holds : PaymentFacts first gloas)
+    (validatorsFit : last.validators.data.size ≤ 2 ^ 40)
+    (buildersFit : (last.builders gloas).data.size ≤ 2 ^ 40) :
+    ∃ released queued, PaymentChain config checks first gloas last released queued := by
+  obtain ⟨_, _, chain, -⟩ :=
+    PaymentChain.extend positive twoSlots .refl holds steps rfl validatorsFit buildersFit
+  exact ⟨_, _, chain⟩
+
+/-- From Gloas, along a chain through one slot that ends an epoch, that slot pays the quorum once.
+
+It queues the withdrawals of exactly the payments of the previous epoch that reach its quorum.
+
+That quorum is read on the state that the epoch transition reaches before its payments step.
+
+A run of slots and blocks from the first state to the last one releases each such payment.
+
+That run releases no payment twice.
+
+The preset needs a positive payment quorum and at least two slots in an epoch.
+
+The facts on the payments must hold at the first state.
+
+Each registry must hold at most 2^40 entries at the last state.
+
+The chain runs inside one fork, so a chain across the upgrade to Heze is not covered. -/
+theorem chainSteps_paysQuorum (positive : preset.PaymentQuorumPositive)
+    (twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat) {gloas : .glamsterdam ≤ fork}
+    {first middle next last : BeaconState preset fork}
+    (before : Relation.ReflTransGen (ChainStep config checks) ⟨fork, first⟩ ⟨fork, middle⟩)
+    (computed : advanceSlot config checks middle = .ok next)
+    (behind : Relation.ReflTransGen (ChainStep config checks) ⟨fork, next⟩ ⟨fork, last⟩)
+    (boundary : next.slot % preset.SLOTS_PER_EPOCH = 0) (holds : PaymentFacts first gloas)
+    (validatorsFit : last.validators.data.size ≤ 2 ^ 40)
+    (buildersFit : (last.builders gloas).data.size ≤ 2 ^ 40) :
+    ∃ more : List Slot, (next.builderPendingWithdrawals gloas).data.toList =
+        (middle.builderPendingWithdrawals gloas).data.toList ++
+          more.map (openWithdrawal middle gloas) ∧
+      (∀ slot, slot ∈ more ↔ ReachesQuorum config checks middle gloas slot) ∧
+      ∃ released queued, PaymentChain config checks first gloas last released queued ∧
+        released.Nodup ∧ ∀ slot ∈ more, slot ∈ released := by
+  -- The registries at the state after the slot are at most those at the last state.
+  have validators : next.validators.data.size ≤ last.validators.data.size :=
+    registryGrows_of_chainSteps behind
+  have builders := buildersGrow_of_chainSteps (gloas := gloas) behind rfl
+  obtain ⟨_, _, chain, facts⟩ := PaymentChain.extend positive twoSlots .refl holds before rfl
+    (Nat.le_trans (advanceSlot_keys computed).2.2.1 (Nat.le_trans validators validatorsFit))
+    (by rw [← advanceSlot_builders gloas computed]; exact Nat.le_trans builders buildersFit)
+  obtain ⟨more, release, closes, -, pays⟩ := advanceSlot_release positive
+    facts.covered.parentFresh facts.funded facts.genesis computed
+  have exactly := pays boundary
+  obtain ⟨_, _, whole, -⟩ := PaymentChain.extend positive twoSlots
+    (chain.slot computed release (fun slot member => (exactly slot).mp member) closes)
+    (facts.advanceSlot positive computed) behind rfl validatorsFit buildersFit
+  exact ⟨more, release.queue, exactly, _, _, whole, whole.nodup,
+    fun slot member => List.mem_append_left _ (List.mem_append_right _ member)⟩
 
 end EthLib.Consensus

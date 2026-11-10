@@ -34,6 +34,22 @@ open Base
 variable {preset : Preset} {fork : Base.Fork} {config : Config} {checks : SignatureChecks}
   {state after : BeaconState preset fork}
 
+/-- The payment of the bid at a slot reaches the quorum that the epoch transition computes.
+
+That transition runs after one slot, and only a slot that ends an epoch runs it.
+
+The quorum is read on the state that the epoch transition reaches before its payments step.
+
+The payment must be one of the previous epoch, in the first half of the window. -/
+def ReachesQuorum (config : Config) (checks : SignatureChecks) (state : BeaconState preset fork)
+    (gloas : .glamsterdam ≤ fork) (slot : Slot) : Prop :=
+  ∃ cached pending quorum position, processSlot state = .ok cached ∧
+    epochBeforePayments config checks cached = .ok pending ∧
+    getBuilderPaymentQuorumThreshold pending = .ok quorum ∧
+    slotPaymentPosition state slot = some position ∧
+    position.toNat < preset.SLOTS_PER_EPOCH.toNat ∧
+    quorum ≤ (paymentAt state gloas position.toNat).weight
+
 /-- With a positive quorum, one slot queues the withdrawals of open payments, each closed after it.
 
 The positive quorum is an assumption on the preset, which both presets meet.
@@ -46,6 +62,8 @@ That state is the one the epoch transition reaches before that step, after the s
 
 The slot then pays each payment of the previous epoch whose weight is at least the quorum there.
 
+It pays no other payment.
+
 The hypothesis on the parent payment is part of the builder debt invariant.
 
 The hypotheses on the weights and the genesis epoch hold along a chain from the upgrade to Gloas.
@@ -57,12 +75,8 @@ theorem advanceSlot_release (positive : preset.PaymentQuorumPositive)
     ∃ released : List Slot, PaymentRelease state after gloas released ∧
       (∀ slot ∈ released, ¬ PaymentOpen after gloas slot) ∧
       (after.slot % preset.SLOTS_PER_EPOCH ≠ 0 → released = []) ∧
-      (after.slot % preset.SLOTS_PER_EPOCH = 0 → ∃ cached pending quorum,
-        processSlot state = .ok cached ∧ epochBeforePayments config checks cached = .ok pending ∧
-        getBuilderPaymentQuorumThreshold pending = .ok quorum ∧
-        ∀ slot position, slotPaymentPosition state slot = some position →
-          position.toNat < preset.SLOTS_PER_EPOCH.toNat →
-          quorum ≤ (paymentAt state gloas position.toNat).weight → slot ∈ released) := by
+      (after.slot % preset.SLOTS_PER_EPOCH = 0 →
+        ∀ slot, slot ∈ released ↔ ReachesQuorum config checks state gloas slot) := by
   obtain ⟨next, cached, sum, cachedOk, cachedFrame, ⟨inside, rfl⟩ |
     ⟨boundary, pending, settled, pendingOk, before, settledOk, frame⟩⟩ :=
     advanceSlot_builderSplit (gloas := gloas) computed
@@ -76,20 +90,29 @@ theorem advanceSlot_release (positive : preset.PaymentQuorumPositive)
       (congrFun cachedFrame.withdrawals gloas), nofun, fun _ => rfl,
       fun boundary => absurd boundary inside⟩
   · have pendingFrame := cachedFrame.trans before
-    obtain ⟨quorum, released, quorumOk, release, closes, reaches⟩ :=
+    obtain ⟨quorum, released, quorumOk, release, closes, reaches, reached⟩ :=
       processBuilderPendingPayments_release positive (fresh.of_frame pendingFrame)
         (paid.of_frame pendingFrame) (genesis.of_frame pendingFrame)
         settledOk (by rw [pendingFrame.slot]; exact sum) boundary
     refine ⟨released, release.of_frames pendingFrame frame, ?_,
-      fun outside => absurd (frame.slot ▸ boundary) outside,
-      fun _ => ⟨cached, pending, quorum, cachedOk, pendingOk, quorumOk, ?_⟩⟩
+      fun outside => absurd (frame.slot ▸ boundary) outside, fun _ slot => ⟨?_, ?_⟩⟩
     · intro slot member opened
       exact closes slot member ((paymentOpen_congr (slotPaymentPosition_congr frame.slot)
         frame.headerSlot (congrFun frame.bid gloas)
         (fun position => congrArg _ (frame.paymentAt gloas position)) slot).mp opened)
-    · intro slot position located below reached
+    · intro member
+      obtain ⟨position, located, below, enough⟩ := reached slot member
+      rw [slotPaymentPosition_congr pendingFrame.slot] at located
+      rw [pendingFrame.paymentAt gloas] at enough
+      exact ⟨cached, pending, quorum, position, cachedOk, pendingOk, quorumOk, located, below,
+        enough⟩
+    · rintro ⟨cached', pending', quorum', position, cachedOk', pendingOk', quorumOk', located,
+        below, enough⟩
+      cases cachedOk'.symm.trans cachedOk
+      cases pendingOk'.symm.trans pendingOk
+      cases quorumOk'.symm.trans quorumOk
       rw [← slotPaymentPosition_congr pendingFrame.slot] at located
-      rw [← pendingFrame.paymentAt gloas] at reached
-      exact reaches slot position located below reached
+      rw [← pendingFrame.paymentAt gloas] at enough
+      exact reaches slot position located below enough
 
 end EthLib.Consensus
