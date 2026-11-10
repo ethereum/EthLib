@@ -88,6 +88,13 @@ lean_exe «check-decls» where
   -- The checker loads private proof bodies to inspect their dependencies.
   allowNonModules := true
 
+/-- Runs pinned test vectors through the compiled specification, with no export in between.
+
+Not a default target: `lake exe known-answers` builds and runs it. -/
+lean_exe «known-answers» where
+  srcDir := "scripts"
+  root := `KnownAnswers
+
 /-- Writes the binding contract from the Lean docstrings and error codes.
 
 Run it after `lake build Exports` with `lake exe gen-bindings`.
