@@ -38,42 +38,6 @@ open Base
 
 variable {preset : Preset} {fork : Base.Fork} {state after : BeaconState preset fork}
 
-/-- What a builder owes in some payments that pass a filter is at most what it owes in all of them.
--/
-theorem owedBy_filter_le {index : BuilderIndex} {keep : BuilderPendingPayment → Bool}
-    (payments : List BuilderPendingPayment) :
-    owedBy index ((payments.filter keep).map (·.withdrawal)) ≤
-      owedBy index (payments.map (·.withdrawal)) := by
-  induction payments with
-  | nil => simp [owedBy]
-  | cons first rest step =>
-    cases kept : keep first <;> simp [owedBy, kept] at step ⊢ <;> omega
-
-/-- What a builder owes in some payments that pass a filter, plus one payment that fails it, is at
-most what it owes in all of them. -/
-theorem owedBy_filter_add_le {index : BuilderIndex} {keep : BuilderPendingPayment → Bool} :
-    ∀ {payments : List BuilderPendingPayment} {k : Nat} (inside : k < payments.length),
-      keep payments[k] = false →
-      owedBy index ((payments.filter keep).map (·.withdrawal)) +
-          owedBy index [payments[k].withdrawal] ≤
-        owedBy index (payments.map (·.withdrawal))
-  | [], _, inside, _ => absurd inside (Nat.not_lt_zero _)
-  | first :: rest, 0, _, dropped => by
-    have := owedBy_filter_le (index := index) (keep := keep) rest
-    simp only [List.getElem_cons_zero] at dropped
-    simp [dropped, owedBy] at this ⊢
-    omega
-  | first :: rest, k + 1, inside, dropped => by
-    have step := owedBy_filter_add_le (index := index) (keep := keep) (payments := rest) (k := k)
-      (by simpa using inside) (by simpa using dropped)
-    simp only [List.getElem_cons_succ] at step ⊢
-    cases kept : keep first <;> simp [owedBy, kept] at step ⊢ <;> omega
-
-private theorem owedBy_append {index : BuilderIndex}
-    (first second : List BuilderPendingWithdrawal) :
-    owedBy index (first ++ second) = owedBy index first + owedBy index second := by
-  simp [owedBy]
-
 private theorem owedBy_shiftPayments {index : BuilderIndex}
     (payments : BuilderPendingPayments preset) :
     owedBy index ((shiftPayments payments).elements.toList.map (·.withdrawal)) =
@@ -100,20 +64,6 @@ private theorem owedBy_shiftPayments {index : BuilderIndex}
       exact getElem_shiftPayments_late payments (by omega) inside
   rw [split, List.map_append, owedBy_append]
   simp [owedBy, BuilderPendingPayment.empty]
-
-private theorem slotsPerEpoch_bounds (positive : preset.PaymentQuorumPositive) :
-    1 ≤ preset.SLOTS_PER_EPOCH.toNat ∧ 2 * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64 := by
-  have share : 10 ≤ preset.EFFECTIVE_BALANCE_INCREMENT.toNat / preset.SLOTS_PER_EPOCH.toNat * 6 :=
-    positive
-  have := preset.EFFECTIVE_BALANCE_INCREMENT.toNat_lt
-  rcases Nat.eq_zero_or_pos preset.SLOTS_PER_EPOCH.toNat with zero | pos
-  · simp [zero] at share
-  · have := Nat.div_mul_le_self preset.EFFECTIVE_BALANCE_INCREMENT.toNat
-      preset.SLOTS_PER_EPOCH.toNat
-    have two : 2 ≤ preset.EFFECTIVE_BALANCE_INCREMENT.toNat / preset.SLOTS_PER_EPOCH.toNat := by
-      omega
-    have := Nat.mul_le_mul_right preset.SLOTS_PER_EPOCH.toNat two
-    omega
 
 private theorem saturatingSub_succ {epoch : UInt64} (noWrap : epoch + 1 ≠ 0) :
     Uint64.saturatingSub (epoch + 1) 1 = epoch := by
@@ -144,7 +94,7 @@ private theorem processBuilderPendingPayments_of_noWrap (positive : preset.Payme
     (boundary : computeEpochAtSlot preset next = getCurrentEpoch state + 1)
     (noWrap : getCurrentEpoch state + 1 ≠ 0) :
     BuilderDebtCovered { after with slot := next } gloas := by
-  obtain ⟨one, small⟩ := slotsPerEpoch_bounds positive
+  obtain ⟨one, small⟩ := positive.slotsPerEpoch_bounds
   obtain ⟨quorum, found, queue, shifted⟩ := processBuilderPendingPayments_spec computed
   have least := getBuilderPaymentQuorumThreshold_pos positive found
   obtain ⟨builders, header, bid⟩ : after.builders = state.builders ∧
@@ -379,8 +329,7 @@ private theorem processBuilderPendingPayments_of_noWrap (positive : preset.Payme
       have := releasedLe index
       omega
 
-/-- With a positive quorum, the epoch step and the move to the next slot keep the builder debt
-invariant.
+/-- With a positive quorum, the epoch step and the move to the next slot keep the debt invariant.
 
 The next slot follows the slot of the state, and it is the first slot of an epoch. -/
 theorem BuilderDebtCovered.processBuilderPendingPayments (positive : preset.PaymentQuorumPositive)
@@ -388,7 +337,7 @@ theorem BuilderDebtCovered.processBuilderPendingPayments (positive : preset.Paym
     (computed : processBuilderPendingPayments state gloas = .ok after) {next : Slot}
     (advance : next.toNat = state.slot.toNat + 1) (first : next % preset.SLOTS_PER_EPOCH = 0) :
     BuilderDebtCovered { after with slot := next } gloas := by
-  have pos := (slotsPerEpoch_bounds positive).1
+  have pos := positive.slotsPerEpoch_bounds.1
   have divides : preset.SLOTS_PER_EPOCH.toNat ∣ state.slot.toNat + 1 := by
     rw [← advance]
     exact Nat.dvd_of_mod_eq_zero (by simpa [UInt64.toNat_mod] using congrArg UInt64.toNat first)

@@ -221,6 +221,22 @@ theorem getBuilderPaymentQuorumThreshold_pos {state : BeaconState preset fork}
   simp only [UInt64.toNat_zero]
   omega
 
+/-- Under this property an epoch has at least one slot, and twice its slots fit in 64 bits. -/
+theorem Preset.PaymentQuorumPositive.slotsPerEpoch_bounds
+    (positive : preset.PaymentQuorumPositive) :
+    1 ≤ preset.SLOTS_PER_EPOCH.toNat ∧ 2 * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64 := by
+  have share : 10 ≤ preset.EFFECTIVE_BALANCE_INCREMENT.toNat / preset.SLOTS_PER_EPOCH.toNat * 6 :=
+    positive
+  have := preset.EFFECTIVE_BALANCE_INCREMENT.toNat_lt
+  rcases Nat.eq_zero_or_pos preset.SLOTS_PER_EPOCH.toNat with zero | pos
+  · simp [zero] at share
+  · have := Nat.div_mul_le_self preset.EFFECTIVE_BALANCE_INCREMENT.toNat
+      preset.SLOTS_PER_EPOCH.toNat
+    have two : 2 ≤ preset.EFFECTIVE_BALANCE_INCREMENT.toNat / preset.SLOTS_PER_EPOCH.toNat := by
+      omega
+    have := Nat.mul_le_mul_right preset.SLOTS_PER_EPOCH.toNat two
+    omega
+
 /-- With at least six slots in an epoch, the quorum of a payment never overflows.
 
 It is then six tenths of the active balance of one slot, each division rounded down. -/
@@ -330,6 +346,44 @@ theorem owedBy_set {index : BuilderIndex} :
     simp only [owedBy, List.set_cons_succ, List.map_cons, List.sum_cons, List.getElem_cons_succ,
       List.map_nil, List.sum_nil] at step ⊢
     omega
+
+/-- What a builder owes in two lists is the sum of what it owes in each. -/
+theorem owedBy_append {index : BuilderIndex}
+    (first second : List BuilderPendingWithdrawal) :
+    owedBy index (first ++ second) = owedBy index first + owedBy index second := by
+  simp [owedBy]
+
+/-- What a builder owes in the payments that pass a filter is at most what it owes in all of them.
+-/
+theorem owedBy_filter_le {index : BuilderIndex} {keep : BuilderPendingPayment → Bool}
+    (payments : List BuilderPendingPayment) :
+    owedBy index ((payments.filter keep).map (·.withdrawal)) ≤
+      owedBy index (payments.map (·.withdrawal)) := by
+  induction payments with
+  | nil => simp [owedBy]
+  | cons first rest step =>
+    cases kept : keep first <;> simp [owedBy, kept] at step ⊢ <;> omega
+
+/-- What a builder owes in the payments that pass a filter, plus one that fails it, is bounded.
+
+The bound is what it owes in all of them. -/
+theorem owedBy_filter_add_le {index : BuilderIndex} {keep : BuilderPendingPayment → Bool} :
+    ∀ {payments : List BuilderPendingPayment} {k : Nat} (inside : k < payments.length),
+      keep payments[k] = false →
+      owedBy index ((payments.filter keep).map (·.withdrawal)) +
+          owedBy index [payments[k].withdrawal] ≤
+        owedBy index (payments.map (·.withdrawal))
+  | [], _, inside, _ => absurd inside (Nat.not_lt_zero _)
+  | first :: rest, 0, _, dropped => by
+    have := owedBy_filter_le (index := index) (keep := keep) rest
+    simp only [List.getElem_cons_zero] at dropped
+    simp [dropped, owedBy] at this ⊢
+    omega
+  | first :: rest, k + 1, inside, dropped => by
+    have step := owedBy_filter_add_le (index := index) (keep := keep) (payments := rest) (k := k)
+      (by simpa using inside) (by simpa using dropped)
+    simp only [List.getElem_cons_succ] at step ⊢
+    cases kept : keep first <;> simp [owedBy, kept] at step ⊢ <;> omega
 
 /-- Settling a payment keeps what each builder owes.
 
