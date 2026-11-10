@@ -239,6 +239,76 @@ theorem openWithdrawal_eq_latestBidWithdrawal {gloas : .glamsterdam ≤ fork}
       · exact settles
     · rw [ite_eq_right_of_eq_false _ _ (eq_false amount)]
 
+/-- A step that may only empty pending payments releases no payment.
+
+The parent payment must have no weight, and pay the latest bid or have no amount.
+
+That hypothesis is part of the builder debt invariant.
+
+An emptied parent payment may open the late path, which then pays the same withdrawal. -/
+theorem PaymentRelease.of_cancel {gloas : .glamsterdam ≤ fork}
+    (fresh : ParentPaymentFresh state gloas) (cancel : PaymentCancel state after gloas) :
+    PaymentRelease state after gloas [] := by
+  have positions := slotPaymentPosition_congr cancel.slot
+  have bidW := latestBidWithdrawal_congr cancel.bid
+  refine ⟨List.nodup_nil, by simp [cancel.withdrawals], nofun, nofun, ?_, ?_,
+    cancel.slot.symm ▸ UInt64.le_refl _⟩
+  · intro slot opened
+    rcases opened with ⟨p, located, amount⟩ | ⟨isHeader, bidSlot, late, value⟩
+    · refine Or.inl (Or.inl ⟨p, (positions slot).symm.trans located, ?_⟩)
+      rcases cancel.read p.toNat with same | zero
+      · rwa [← same]
+      · rw [zero] at amount
+        exact absurd amount (by decide)
+    · have hdr : slot = state.latestBlockHeader.slot := isHeader.trans cancel.headerSlot
+      have bidSlot' : (state.latestExecutionPayloadBid gloas).slot = slot := by
+        rw [← cancel.bid]
+        exact bidSlot
+      have value' : 0 < (state.latestExecutionPayloadBid gloas).value := by
+        rw [← cancel.bid]
+        exact value
+      by_cases lateBefore : latePaymentOpen state gloas = true
+      · exact Or.inl (Or.inr ⟨hdr, bidSlot', lateBefore, value'⟩)
+      · unfold latePaymentOpen at lateBefore
+        cases located : parentPaymentPosition state with
+        | none => simp [located] at lateBefore
+        | some p =>
+          simp only [located, beq_iff_eq] at lateBefore
+          refine Or.inl (Or.inl ⟨p, by rw [hdr]; exact located, ?_⟩)
+          exact UInt64.pos_iff_ne_zero.mpr lateBefore
+  · intro slot openedAfter openedBefore
+    unfold openWithdrawal
+    rw [positions slot, bidW]
+    cases located : slotPaymentPosition state slot with
+    | none => rfl
+    | some p =>
+      dsimp only
+      by_cases amount : 0 < (paymentAt after gloas p.toNat).withdrawal.amount
+      · rcases cancel.read p.toNat with same | zero
+        · have before : 0 < (paymentAt state gloas p.toNat).withdrawal.amount := by
+            rwa [← same]
+          rw [ite_eq_left_of_eq_true _ _ (eq_true amount),
+            ite_eq_left_of_eq_true _ _ (eq_true before), same]
+        · rw [zero] at amount
+          exact absurd amount (by decide)
+      · rw [ite_eq_right_of_eq_false _ _ (eq_false amount)]
+        by_cases before : 0 < (paymentAt state gloas p.toNat).withdrawal.amount
+        · rw [ite_eq_left_of_eq_true _ _ (eq_true before)]
+          have atHeader : slot = state.latestBlockHeader.slot := by
+            rcases openedAfter with ⟨q, located', positive⟩ | ⟨isHeader, _⟩
+            · rw [positions slot, located] at located'
+              cases Option.some.inj located'
+              exact absurd positive amount
+            · exact isHeader.trans cancel.headerSlot
+          have atParent := openWithdrawal_eq_latestBidWithdrawal fresh (slot := slot)
+            (by rw [atHeader]; rfl)
+          unfold openWithdrawal at atParent
+          rw [located] at atParent
+          dsimp only at atParent
+          rw [ite_eq_left_of_eq_true _ _ (eq_true before)] at atParent
+          exact atParent.symm
+        · rw [ite_eq_right_of_eq_false _ _ (eq_false before)]
+
 /-- The late path is open when the window does not hold the parent payment with a positive amount.
 -/
 theorem latePaymentOpen_of_not_paymentInWindow {gloas : .glamsterdam ≤ fork}
