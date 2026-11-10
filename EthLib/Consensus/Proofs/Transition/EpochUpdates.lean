@@ -8,9 +8,9 @@ public import EthLib.Consensus.Transition.EpochUpdates
 
 An updated effective balance is the old one, or the balance rounded down to an increment and capped.
 
-The effective balances are aligned when each is a whole number of increments, at most its largest.
+The effective balances are aligned when each is a whole number of increments.
 
-When each largest value is itself a whole number of increments, the update keeps them aligned.
+When the largest values of the preset are aligned too, the update keeps them aligned.
 
 The registry updates, the slashings and the update of the effective balances keep the sizes.
 
@@ -53,54 +53,51 @@ theorem updatedEffectiveBalance_cases {largest balance effectiveBalance result :
 /-- An updated effective balance is aligned when the old one and the largest are. -/
 theorem updatedEffectiveBalance_aligned {largest balance effectiveBalance result : Gwei}
     (maxAligned : largest % preset.EFFECTIVE_BALANCE_INCREMENT = 0)
-    (old : effectiveBalance % preset.EFFECTIVE_BALANCE_INCREMENT = 0 ∧ effectiveBalance ≤ largest)
+    (old : effectiveBalance % preset.EFFECTIVE_BALANCE_INCREMENT = 0)
     (computed : updatedEffectiveBalance preset largest balance effectiveBalance = .ok result) :
-    result % preset.EFFECTIVE_BALANCE_INCREMENT = 0 ∧ result ≤ largest := by
+    result % preset.EFFECTIVE_BALANCE_INCREMENT = 0 := by
   rcases updatedEffectiveBalance_cases computed with rfl | rfl
   · exact old
-  · rw [UInt64.min_def]
-    split
-    · exact ⟨sub_mod_mod_self _ _, by assumption⟩
-    · exact ⟨maxAligned, UInt64.le_refl _⟩
+  · exact min_sub_mod_mod_self _ maxAligned
 
 /-- Replacing a validator by an aligned one keeps the effective balances aligned. -/
 theorem effectiveBalancesAligned_setValidator {index : ValidatorIndex} {validator : Validator}
     (holds : EffectiveBalancesAligned state)
-    (good : validator.effectiveBalance % preset.EFFECTIVE_BALANCE_INCREMENT = 0 ∧
-      validator.effectiveBalance ≤ withdrawalMaxEffectiveBalance preset fork validator)
+    (good : validator.effectiveBalance % preset.EFFECTIVE_BALANCE_INCREMENT = 0)
     (set : state.setValidator index validator = .ok after) :
     EffectiveBalancesAligned after := by
   obtain ⟨inside, rfl⟩ := setValidator_ok set
   intro other member
-  simp only [BeaconState.putValidator, RootedForkList.data_set, Array.toList_set] at member
-  rcases List.mem_or_eq_of_mem_set member with old | rfl
+  simp only [BeaconState.putValidator, RootedForkList.data_set] at member
+  rcases Array.mem_or_eq_of_mem_set (w := inside) member with old | rfl
   · exact holds other old
   · exact good
 
-/-- The update of one effective balance keeps them aligned, when each largest is aligned. -/
+/-- The update of one effective balance keeps them aligned.
+
+The largest effective balances of the preset must be whole numbers of increments. -/
 theorem updateEffectiveBalance_aligned {index : Nat}
-    (maxAligned : ∀ validator,
-      withdrawalMaxEffectiveBalance preset fork validator % preset.EFFECTIVE_BALANCE_INCREMENT = 0)
+    (maxAligned : MaxEffectiveBalancesAligned preset)
     (holds : EffectiveBalancesAligned state)
     (computed : updateEffectiveBalance state index = .ok after) :
     EffectiveBalancesAligned after := by
   simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at computed
   obtain ⟨validator, found, _, _, effectiveBalance, updated, set⟩ := computed
   refine effectiveBalancesAligned_setValidator holds ?_ set
-  apply updatedEffectiveBalance_aligned (maxAligned validator) _ updated
+  apply updatedEffectiveBalance_aligned (withdrawalMaxEffectiveBalance_aligned maxAligned validator)
+    _ updated
   unfold getValidator at found
   split at found
   · rename_i read
     cases found
-    exact holds _ (Array.mem_toList_iff.mpr (Array.mem_of_getElem? read))
+    exact holds _ (Array.mem_of_getElem? read)
   · cases found
 
 /-- The update of the effective balances keeps them aligned.
 
-The largest effective balance of each validator must be a whole number of increments. -/
+The largest effective balances of the preset must be whole numbers of increments. -/
 theorem processEffectiveBalanceUpdates_aligned
-    (maxAligned : ∀ validator,
-      withdrawalMaxEffectiveBalance preset fork validator % preset.EFFECTIVE_BALANCE_INCREMENT = 0)
+    (maxAligned : MaxEffectiveBalancesAligned preset)
     (holds : EffectiveBalancesAligned state)
     (computed : processEffectiveBalanceUpdates state = .ok after) :
     EffectiveBalancesAligned after := by

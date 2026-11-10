@@ -39,6 +39,7 @@ theorem emptyGenesisState_invariant (before : fork < .altair) (genesisTime : UIn
   exitsOrdered := fun _ member => by simp [emptyGenesisState] at member
   ordered := ⟨UInt64.le_refl _, UInt64.le_refl _⟩
   settled := UInt64.zero_le
+  aligned _ _ member := by simp [emptyGenesisState] at member
 
 theorem frame_genesisDeposit {before : fork < .hegota} {leaves : Array DepositData}
     {entry : Deposit × Nat}
@@ -55,16 +56,18 @@ theorem frame_activateAtGenesis {index : Nat}
     (computed : activateAtGenesis state index = .ok after) : Frame state after := by
   simp only [activateAtGenesis, bind_ok_iff, liftAccessor_ok] at computed
   obtain ⟨validator, found, _, _, set⟩ := computed
-  refine (frame_setValidator set found (by split <;> rfl) fun ordered => ?_).toFrame
-  have le := ordered validator (mem_of_getValidator found)
-  split <;> exact le
+  refine (frame_setValidator_of_whole set found (by split <;> rfl) (fun ordered => ?_)
+    fun maxAligned _ => ?_).toFrame
+  · have le := ordered validator (mem_of_getValidator found)
+    split <;> exact le
+  · split <;> exact min_sub_mod_mod_self _ maxAligned.1
 
 /-- A new genesis validators root keeps the invariant.
 
 The invariant reads no such root. -/
 private theorem Invariant.withGenesisValidatorsRoot {root : Root} (holds : Invariant state) :
     Invariant { state with genesisValidatorsRoot := root } :=
-  ⟨holds.balancesMatch, holds.exitsOrdered, holds.ordered, holds.settled⟩
+  ⟨holds.balancesMatch, holds.exitsOrdered, holds.ordered, holds.settled, holds.aligned⟩
 
 /-- A candidate genesis state exists only before Altair.
 

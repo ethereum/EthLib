@@ -63,6 +63,10 @@ When each validator has one balance before it, each has one after it.
 
 When each validator may withdraw no earlier than it exits before it, the same holds after it.
 
+Let the largest effective balances of the preset be whole numbers of increments.
+
+When each effective balance is a whole number of increments before it, the same holds after it.
+
 From Altair, a target flag after it was a target flag at its position before. -/
 structure UpgradeFrame (config : Config) {fork post : Fork} (pre : BeaconState preset fork)
     (after : BeaconState preset post) : Prop where
@@ -79,6 +83,8 @@ structure UpgradeFrame (config : Config) {fork post : Fork} (pre : BeaconState p
   keysKept : after.validators.data.size < 2 ^ 64 → KeysKept pre after
   balancesMatch : BalancesMatch pre → BalancesMatch after
   exitsOrdered : ExitsOrdered pre → ExitsOrdered after
+  aligned : MaxEffectiveBalancesAligned preset → EffectiveBalancesAligned pre →
+    EffectiveBalancesAligned after
   flags : ∀ (altair : .altair ≤ fork) (current : Bool) (position : Nat),
     TargetFlagAt (recentParticipation after (Nat.le_trans altair forward) current) position →
       TargetFlagAt (recentParticipation pre altair current) position
@@ -120,6 +126,10 @@ theorem UpgradeFrame.of_carried {fork post : Fork} {pre : BeaconState preset for
     unfold ExitsOrdered at holds ⊢
     rw [validators]
     exact holds
+  aligned _ holds := by
+    unfold EffectiveBalancesAligned at holds ⊢
+    rw [validators]
+    exact holds
   flags altair current position flagged := by
     obtain ⟨flags, found, set⟩ := flagged
     exact ⟨flags, by rw [← participation altair current]; exact found, set⟩
@@ -142,6 +152,7 @@ theorem UpgradeFrame.trans_blockFrame {fork post : Fork} {pre : BeaconState pres
     (one.keysKept (Nat.lt_of_le_of_lt two.registryGrows small)).trans (two.keysKept small)
   balancesMatch := two.balancesMatch ∘ one.balancesMatch
   exitsOrdered := two.exitsOrdered ∘ one.exitsOrdered
+  aligned maxAligned := two.aligned maxAligned ∘ one.aligned maxAligned
   flags altair current position flagged :=
     one.flags altair current position (flagged.of_flagsKeptOrZero two.flags)
 
@@ -161,6 +172,7 @@ theorem UpgradeFrame.invariant {fork post : Fork} {pre : BeaconState preset fork
     unfold JustifiedSettled getPreviousEpoch getCurrentEpoch at this ⊢
     rw [frame.currentJustified, frame.slot]
     exact this
+  aligned maxAligned := frame.aligned maxAligned (holds.aligned maxAligned)
 
 /-! ## The upgrades -/
 
@@ -348,8 +360,8 @@ theorem frame_queuePreActivation {fork : Fork} {state after : BeaconState preset
   have sizes := sameSizes_setBalance set₁
   obtain ⟨_, rfl⟩ := setBalance_ok set₁
   have zeroed := BlockFrame.of_validators sizes
-  have reset := frame_setValidator set₂ found rfl fun ordered =>
-    ordered validator (mem_of_getValidator found)
+  have reset := frame_setValidator_of_whole set₂ found rfl
+    (fun ordered => ordered validator (mem_of_getValidator found)) fun _ _ => UInt64.zero_mod
   exact (zeroed.trans reset.toBlockFrame).trans (BlockFrame.of_validators ⟨rfl, rfl⟩)
 
 /-- Queueing the excess balance of a validator with compounding credentials keeps the frame.

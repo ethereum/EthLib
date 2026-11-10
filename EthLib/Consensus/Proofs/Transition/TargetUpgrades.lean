@@ -72,6 +72,14 @@ theorem JustifiedEarly.of_upgradeFrame {fork post : Fork} {pre : BeaconState pre
   rw [frame.slot, frame.previousJustified, frame.currentJustified]
   exact early
 
+/-- An upgrade keeps the previous justified epoch below the previous epoch. -/
+theorem JustifiedSeparated.of_upgradeFrame {fork post : Fork} {pre : BeaconState preset fork}
+    {after : BeaconState preset post} (frame : UpgradeFrame config pre after)
+    (separated : JustifiedSeparated pre) : JustifiedSeparated after := by
+  unfold JustifiedSeparated getPreviousEpoch getCurrentEpoch at separated ⊢
+  rw [frame.slot, frame.previousJustified]
+  exact separated
+
 /-- An upgrade from Altair on keeps each target flag backed by a signed vote for its link.
 
 It needs the registry below 2^64 validators after the upgrade. -/
@@ -249,6 +257,20 @@ theorem JustifiedEarly.of_processUpgrades {forked after : ForkedBeaconState pres
   | case2 forked _ =>
     cases computed
     exact early
+
+/-- The upgrades due at a slot keep the previous justified epoch below the previous epoch. -/
+theorem JustifiedSeparated.of_processUpgrades {forked after : ForkedBeaconState preset}
+    (separated : JustifiedSeparated forked.state)
+    (computed : processUpgrades config checks forked = .ok after) :
+    JustifiedSeparated after.state := by
+  fun_induction processUpgrades config checks forked generalizing after with
+  | case1 forked _ more =>
+    obtain ⟨step, stepOk, rest⟩ := bind_ok_iff.mp computed
+    exact more step
+      (separated.of_upgradeFrame (upgradeFrame_upgradeNext (checks := checks) stepOk)) rest
+  | case2 forked _ =>
+    cases computed
+    exact separated
 
 /-- The upgrades due at a slot, from Altair on, keep each target flag backed by a signed vote.
 

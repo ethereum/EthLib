@@ -245,6 +245,34 @@ theorem PendingSigned.of_processBlock (before : fork < .altair)
 
 /-! ## Slots -/
 
+/-- The caching of a slot keeps each pending attestation a signed vote for its link. -/
+theorem PendingSigned.of_processSlot (holds : PendingSigned config checks state)
+    (computed : processSlot state = .ok after) : PendingSigned config checks after := by
+  have frame := frame_processSlot computed
+  obtain ⟨_, _, _, _, afterEq⟩ := processSlot_ok computed
+  have validators : after.validators = state.validators := by rw [afterEq]
+  have keys : KeysKept state after := KeysKept.of_validators (by rw [validators])
+  have currentEq : getCurrentEpoch after = getCurrentEpoch state := by
+    simp only [getCurrentEpoch, frame.slot]
+  have previousEq : getPreviousEpoch after = getPreviousEpoch state := by
+    unfold getPreviousEpoch
+    rw [currentEq]
+  intro before current pending member
+  have lists : recentPending after before current = recentPending state before current := by
+    cases current <;> simp only [recentPending, afterEq]
+  rw [lists] at member
+  obtain ⟨epoch, slot, source, signed⟩ := holds before current pending member
+  have committees : CommitteesKept pending.data.target.epoch state after :=
+    CommitteesKept.of_eq (by rw [validators]) (by rw [afterEq]) _
+  refine ⟨by rw [currentEq, previousEq]; exact epoch, slot, ?_, ?_⟩
+  · rw [frame.currentJustified, frame.previousJustified]
+    exact source
+  intro attesters computed attester attesting
+  unfold getPendingAttestingIndices at computed
+  rw [committees _ _ slot] at computed
+  exact (signed attesters computed attester attesting).of_keys (Nat.le_refl _)
+    frame.genesisValidatorsRoot keys
+
 /-- Before Altair, one slot keeps each pending vote signed for its link.
 
 At the end of an epoch the votes of the current epoch become those of the previous one.
