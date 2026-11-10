@@ -97,6 +97,10 @@ class WeakSubjectivityError(EthLibError, ValueError):
     """The weak subjectivity period or the staleness check of a checkpoint has no answer."""
 
 
+class DepositTreeError(EthLibError, ValueError):
+    """A deposit tree or its snapshot rejected an operation."""
+
+
 class ValidatorDutyError(EthLibError, ValueError):
     """A duty of an honest validator has no result for its state or its input."""
 
@@ -288,6 +292,7 @@ __all__ = [
     "ConsensusError",
     "TransitionError",
     "WeakSubjectivityError",
+    "DepositTreeError",
     "ValidatorDutyError",
     "ProposerError",
     "SlashingProtectionError",

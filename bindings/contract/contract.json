@@ -3851,6 +3851,171 @@
    "error_class": "TransitionError",
    "docstring":
    "Whether a candidate genesis state launches the chain.\n\nThe preset, the configuration and the fork are named by `str`."},
+  {"summary": "The tree with no deposit.",
+   "signature":
+   "() -> tuple[list[Literal['node'] | tuple[Literal['zero'], int] | tuple[Literal['leaf'], bytes] | tuple[Literal['finalized'], int, bytes]], int, tuple[bytes, int] | None]",
+   "operation": "EthLib.Consensus.Exports.depositTreeNewExport",
+   "method": "consensus_deposit_tree_new",
+   "errors": [],
+   "error_class": "DepositTreeError",
+   "docstring": "The tree with no deposit."},
+  {"summary": "The tree with one more deposit, by the root of its data.",
+   "signature":
+   "(tree: tuple[list[Literal['node'] | tuple[Literal['zero'], int] | tuple[Literal['leaf'], bytes] | tuple[Literal['finalized'], int, bytes]], int, tuple[bytes, int] | None], leaf: bytes) -> tuple[list[Literal['node'] | tuple[Literal['zero'], int] | tuple[Literal['leaf'], bytes] | tuple[Literal['finalized'], int, bytes]], int, tuple[bytes, int] | None]",
+   "operation": "EthLib.Consensus.Exports.depositTreePushLeafExport",
+   "method": "consensus_deposit_tree_push_leaf",
+   "errors":
+   [{"type": "EthLib.Consensus.DepositTreeError",
+     "codes":
+     [{"constructor": "treeFull", "code": 1},
+      {"constructor": "finalizeBeyondCount", "code": 2},
+      {"constructor": "finalizeBelowFinalized", "code": 10},
+      {"constructor": "notFinalized", "code": 3},
+      {"constructor": "proofOfFinalized", "code": 4},
+      {"constructor": "proofBeyondCount", "code": 5},
+      {"constructor": "countBeyondCapacity", "code": 6},
+      {"constructor": "missingFinalized", "code": 7},
+      {"constructor": "extraFinalized", "code": 8},
+      {"constructor": "rootMismatch", "code": 9}]}],
+   "error_class": "DepositTreeError",
+   "docstring": "The tree with one more deposit, by the root of its data."},
+  {"summary":
+   "The tree after pushing deposits in order, by the roots of their data.",
+   "signature":
+   "(tree: tuple[list[Literal['node'] | tuple[Literal['zero'], int] | tuple[Literal['leaf'], bytes] | tuple[Literal['finalized'], int, bytes]], int, tuple[bytes, int] | None], leaves: list[bytes]) -> tuple[list[Literal['node'] | tuple[Literal['zero'], int] | tuple[Literal['leaf'], bytes] | tuple[Literal['finalized'], int, bytes]], int, tuple[bytes, int] | None]",
+   "operation": "EthLib.Consensus.Exports.depositTreePushLeavesExport",
+   "method": "consensus_deposit_tree_push_leaves",
+   "errors":
+   [{"type": "EthLib.Consensus.DepositTreeError",
+     "codes":
+     [{"constructor": "treeFull", "code": 1},
+      {"constructor": "finalizeBeyondCount", "code": 2},
+      {"constructor": "finalizeBelowFinalized", "code": 10},
+      {"constructor": "notFinalized", "code": 3},
+      {"constructor": "proofOfFinalized", "code": 4},
+      {"constructor": "proofBeyondCount", "code": 5},
+      {"constructor": "countBeyondCapacity", "code": 6},
+      {"constructor": "missingFinalized", "code": 7},
+      {"constructor": "extraFinalized", "code": 8},
+      {"constructor": "rootMismatch", "code": 9}]}],
+   "error_class": "DepositTreeError",
+   "docstring":
+   "The tree after pushing deposits in order, by the roots of their data."},
+  {"summary": "The deposit root of a tree.",
+   "signature":
+   "(tree: tuple[list[Literal['node'] | tuple[Literal['zero'], int] | tuple[Literal['leaf'], bytes] | tuple[Literal['finalized'], int, bytes]], int, tuple[bytes, int] | None]) -> bytes",
+   "operation": "EthLib.Consensus.Exports.depositTreeGetRootExport",
+   "method": "consensus_deposit_tree_get_root",
+   "errors": [],
+   "error_class": "DepositTreeError",
+   "docstring": "The deposit root of a tree."},
+  {"summary":
+   "The tree finalized at deposit data, given as its root, count and block hash, and a height.",
+   "signature":
+   "(tree: tuple[list[Literal['node'] | tuple[Literal['zero'], int] | tuple[Literal['leaf'], bytes] | tuple[Literal['finalized'], int, bytes]], int, tuple[bytes, int] | None], eth1_data: tuple[bytes, int, bytes], execution_block_height: int) -> tuple[list[Literal['node'] | tuple[Literal['zero'], int] | tuple[Literal['leaf'], bytes] | tuple[Literal['finalized'], int, bytes]], int, tuple[bytes, int] | None]",
+   "operation": "EthLib.Consensus.Exports.depositTreeFinalizeExport",
+   "method": "consensus_deposit_tree_finalize",
+   "errors":
+   [{"type": "EthLib.Consensus.DepositTreeError",
+     "codes":
+     [{"constructor": "treeFull", "code": 1},
+      {"constructor": "finalizeBeyondCount", "code": 2},
+      {"constructor": "finalizeBelowFinalized", "code": 10},
+      {"constructor": "notFinalized", "code": 3},
+      {"constructor": "proofOfFinalized", "code": 4},
+      {"constructor": "proofBeyondCount", "code": 5},
+      {"constructor": "countBeyondCapacity", "code": 6},
+      {"constructor": "missingFinalized", "code": 7},
+      {"constructor": "extraFinalized", "code": 8},
+      {"constructor": "rootMismatch", "code": 9}]}],
+   "error_class": "DepositTreeError",
+   "docstring":
+   "The tree finalized at deposit data, given as its root, count and block hash, and a height."},
+  {"summary":
+   "The leaf at an index of a tree, and its proof against the deposit root.",
+   "signature":
+   "(tree: tuple[list[Literal['node'] | tuple[Literal['zero'], int] | tuple[Literal['leaf'], bytes] | tuple[Literal['finalized'], int, bytes]], int, tuple[bytes, int] | None], index: int) -> tuple[bytes, list[bytes]]",
+   "operation": "EthLib.Consensus.Exports.depositTreeGetProofExport",
+   "method": "consensus_deposit_tree_get_proof",
+   "errors":
+   [{"type": "EthLib.Consensus.DepositTreeError",
+     "codes":
+     [{"constructor": "treeFull", "code": 1},
+      {"constructor": "finalizeBeyondCount", "code": 2},
+      {"constructor": "finalizeBelowFinalized", "code": 10},
+      {"constructor": "notFinalized", "code": 3},
+      {"constructor": "proofOfFinalized", "code": 4},
+      {"constructor": "proofBeyondCount", "code": 5},
+      {"constructor": "countBeyondCapacity", "code": 6},
+      {"constructor": "missingFinalized", "code": 7},
+      {"constructor": "extraFinalized", "code": 8},
+      {"constructor": "rootMismatch", "code": 9}]}],
+   "error_class": "DepositTreeError",
+   "docstring":
+   "The leaf at an index of a tree, and its proof against the deposit root."},
+  {"summary": "The snapshot of a finalized tree.",
+   "signature":
+   "(tree: tuple[list[Literal['node'] | tuple[Literal['zero'], int] | tuple[Literal['leaf'], bytes] | tuple[Literal['finalized'], int, bytes]], int, tuple[bytes, int] | None]) -> tuple[list[bytes], bytes, int, bytes, int]",
+   "operation": "EthLib.Consensus.Exports.depositTreeGetSnapshotExport",
+   "method": "consensus_deposit_tree_get_snapshot",
+   "errors":
+   [{"type": "EthLib.Consensus.DepositTreeError",
+     "codes":
+     [{"constructor": "treeFull", "code": 1},
+      {"constructor": "finalizeBeyondCount", "code": 2},
+      {"constructor": "finalizeBelowFinalized", "code": 10},
+      {"constructor": "notFinalized", "code": 3},
+      {"constructor": "proofOfFinalized", "code": 4},
+      {"constructor": "proofBeyondCount", "code": 5},
+      {"constructor": "countBeyondCapacity", "code": 6},
+      {"constructor": "missingFinalized", "code": 7},
+      {"constructor": "extraFinalized", "code": 8},
+      {"constructor": "rootMismatch", "code": 9}]}],
+   "error_class": "DepositTreeError",
+   "docstring": "The snapshot of a finalized tree."},
+  {"summary": "The tree rebuilt from a snapshot.",
+   "signature":
+   "(snapshot: tuple[list[bytes], bytes, int, bytes, int]) -> tuple[list[Literal['node'] | tuple[Literal['zero'], int] | tuple[Literal['leaf'], bytes] | tuple[Literal['finalized'], int, bytes]], int, tuple[bytes, int] | None]",
+   "operation": "EthLib.Consensus.Exports.depositTreeFromSnapshotExport",
+   "method": "consensus_deposit_tree_from_snapshot",
+   "errors":
+   [{"type": "EthLib.Consensus.DepositTreeError",
+     "codes":
+     [{"constructor": "treeFull", "code": 1},
+      {"constructor": "finalizeBeyondCount", "code": 2},
+      {"constructor": "finalizeBelowFinalized", "code": 10},
+      {"constructor": "notFinalized", "code": 3},
+      {"constructor": "proofOfFinalized", "code": 4},
+      {"constructor": "proofBeyondCount", "code": 5},
+      {"constructor": "countBeyondCapacity", "code": 6},
+      {"constructor": "missingFinalized", "code": 7},
+      {"constructor": "extraFinalized", "code": 8},
+      {"constructor": "rootMismatch", "code": 9}]}],
+   "error_class": "DepositTreeError",
+   "docstring": "The tree rebuilt from a snapshot."},
+  {"summary":
+   "The deposit root that the finalized roots and the count of a snapshot compute.",
+   "signature":
+   "(snapshot: tuple[list[bytes], bytes, int, bytes, int]) -> bytes",
+   "operation":
+   "EthLib.Consensus.Exports.depositTreeSnapshotCalculateRootExport",
+   "method": "consensus_deposit_tree_snapshot_calculate_root",
+   "errors":
+   [{"type": "EthLib.Consensus.DepositTreeError",
+     "codes":
+     [{"constructor": "treeFull", "code": 1},
+      {"constructor": "finalizeBeyondCount", "code": 2},
+      {"constructor": "finalizeBelowFinalized", "code": 10},
+      {"constructor": "notFinalized", "code": 3},
+      {"constructor": "proofOfFinalized", "code": 4},
+      {"constructor": "proofBeyondCount", "code": 5},
+      {"constructor": "countBeyondCapacity", "code": 6},
+      {"constructor": "missingFinalized", "code": 7},
+      {"constructor": "extraFinalized", "code": 8},
+      {"constructor": "rootMismatch", "code": 9}]}],
+   "error_class": "DepositTreeError",
+   "docstring":
+   "The deposit root that the finalized roots and the count of a snapshot compute."},
   {"summary": "The weak subjectivity period of a state, in epochs.",
    "signature":
    "(name: str, fork: str, state: bytes, config: dict[str, Any] | None) -> int",

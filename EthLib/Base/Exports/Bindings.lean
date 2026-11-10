@@ -27,6 +27,14 @@ structure Binding where
   /-- The class of `ethlib.errors` that the method raises, if it can fail. -/
   errorClass : Option String
 
+/-- The Python type of a deposit tree: its subtrees in preorder, its count, its finalized block. -/
+def depositTreeType : String :=
+  "tuple[list[Literal['node'] | tuple[Literal['zero'], int] | tuple[Literal['leaf'], bytes] | " ++
+    "tuple[Literal['finalized'], int, bytes]], int, tuple[bytes, int] | None]"
+
+/-- The Python type of a deposit tree snapshot: its five fields, in order. -/
+def depositTreeSnapshotType : String := "tuple[list[bytes], bytes, int, bytes, int]"
+
 /-- The Python type of a Noise cipher state: its key, if set, and its next nonce. -/
 def noiseCipherType : String := "tuple[bytes | None, int]"
 
@@ -522,6 +530,33 @@ def bindings : List Binding := [
   ⟨"consensus_is_valid_genesis_state", `EthLib.Consensus.Exports.isValidGenesisStateExport,
     "(name: str, fork: str, state: bytes, config: dict[str, Any] | None) -> bool",
     [], some "TransitionError"⟩,
+  ⟨"consensus_deposit_tree_new", `EthLib.Consensus.Exports.depositTreeNewExport,
+    "() -> " ++ depositTreeType, [], some "DepositTreeError"⟩,
+  ⟨"consensus_deposit_tree_push_leaf", `EthLib.Consensus.Exports.depositTreePushLeafExport,
+    "(tree: " ++ depositTreeType ++ ", leaf: bytes) -> " ++ depositTreeType,
+    [`EthLib.Consensus.DepositTreeError], some "DepositTreeError"⟩,
+  ⟨"consensus_deposit_tree_push_leaves", `EthLib.Consensus.Exports.depositTreePushLeavesExport,
+    "(tree: " ++ depositTreeType ++ ", leaves: list[bytes]) -> " ++ depositTreeType,
+    [`EthLib.Consensus.DepositTreeError], some "DepositTreeError"⟩,
+  ⟨"consensus_deposit_tree_get_root", `EthLib.Consensus.Exports.depositTreeGetRootExport,
+    "(tree: " ++ depositTreeType ++ ") -> bytes", [], some "DepositTreeError"⟩,
+  ⟨"consensus_deposit_tree_finalize", `EthLib.Consensus.Exports.depositTreeFinalizeExport,
+    "(tree: " ++ depositTreeType ++ ", eth1_data: tuple[bytes, int, bytes], " ++
+      "execution_block_height: int) -> " ++ depositTreeType,
+    [`EthLib.Consensus.DepositTreeError], some "DepositTreeError"⟩,
+  ⟨"consensus_deposit_tree_get_proof", `EthLib.Consensus.Exports.depositTreeGetProofExport,
+    "(tree: " ++ depositTreeType ++ ", index: int) -> tuple[bytes, list[bytes]]",
+    [`EthLib.Consensus.DepositTreeError], some "DepositTreeError"⟩,
+  ⟨"consensus_deposit_tree_get_snapshot", `EthLib.Consensus.Exports.depositTreeGetSnapshotExport,
+    "(tree: " ++ depositTreeType ++ ") -> " ++ depositTreeSnapshotType,
+    [`EthLib.Consensus.DepositTreeError], some "DepositTreeError"⟩,
+  ⟨"consensus_deposit_tree_from_snapshot", `EthLib.Consensus.Exports.depositTreeFromSnapshotExport,
+    "(snapshot: " ++ depositTreeSnapshotType ++ ") -> " ++ depositTreeType,
+    [`EthLib.Consensus.DepositTreeError], some "DepositTreeError"⟩,
+  ⟨"consensus_deposit_tree_snapshot_calculate_root",
+    `EthLib.Consensus.Exports.depositTreeSnapshotCalculateRootExport,
+    "(snapshot: " ++ depositTreeSnapshotType ++ ") -> bytes",
+    [`EthLib.Consensus.DepositTreeError], some "DepositTreeError"⟩,
   ⟨"consensus_compute_weak_subjectivity_period",
     `EthLib.Consensus.Exports.computeWeakSubjectivityPeriodExport,
     "(name: str, fork: str, state: bytes, config: dict[str, Any] | None) -> int",
