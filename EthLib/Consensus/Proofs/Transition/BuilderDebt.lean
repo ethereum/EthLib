@@ -2,6 +2,7 @@ module
 
 public import EthLib.Base.Proofs.MapM
 public import EthLib.Consensus.Transition.ParentPayload
+public import EthLib.Consensus.Transition.Payload
 
 /-!
 # Proofs: the debt of each builder stays within its balance
@@ -84,11 +85,10 @@ def lateBidValue (state : BeaconState preset fork) (gloas : .glamsterdam ≤ for
   let bid := state.latestExecutionPayloadBid gloas
   if bid.builderIndex = index ∧ latePaymentOpen state gloas = true then bid.value.toNat else 0
 
-/-- The withdrawal that pays the latest bid. -/
+/-- The withdrawal that pays the latest bid, as the bid step records it for any proposer. -/
 def latestBidWithdrawal (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork) :
     BuilderPendingWithdrawal :=
-  let bid := state.latestExecutionPayloadBid gloas
-  ⟨bid.feeRecipient, bid.value, bid.builderIndex⟩
+  (bidPayment (state.latestExecutionPayloadBid gloas) 0).withdrawal
 
 /-- The payment of the parent, while it is in the window, has no weight.
 
@@ -114,20 +114,25 @@ structure BuilderDebtCovered (state : BeaconState preset fork) (gloas : .glamste
       pendingBuilderTotal state gloas index + lateBidValue state gloas index = 0
   parentFresh : ParentPaymentFresh state gloas
 
-/-- A step that keeps the builders, their payments, their withdrawals and the latest bid. -/
+/-- A step that keeps the builders, their payments, their withdrawals and the latest bid.
+
+It also keeps the slot and the slot of the latest block, which place the parent payment. -/
 structure BuilderFrame (state after : BeaconState preset fork) : Prop where
+  slot : after.slot = state.slot
+  headerSlot : after.latestBlockHeader.slot = state.latestBlockHeader.slot
   builders : after.builders = state.builders
   payments : after.builderPendingPayments = state.builderPendingPayments
   withdrawals : after.builderPendingWithdrawals = state.builderPendingWithdrawals
   bid : after.latestExecutionPayloadBid = state.latestExecutionPayloadBid
 
 theorem BuilderFrame.refl (state : BeaconState preset fork) : BuilderFrame state state :=
-  ⟨rfl, rfl, rfl, rfl⟩
+  ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 theorem BuilderFrame.trans {first second third : BeaconState preset fork}
     (one : BuilderFrame first second) (two : BuilderFrame second third) :
     BuilderFrame first third :=
-  ⟨two.builders.trans one.builders, two.payments.trans one.payments,
+  ⟨two.slot.trans one.slot, two.headerSlot.trans one.headerSlot,
+    two.builders.trans one.builders, two.payments.trans one.payments,
     two.withdrawals.trans one.withdrawals, two.bid.trans one.bid⟩
 
 theorem BuilderFrame.foldlM {α ε : Type} {step : BeaconState preset fork → α → Except ε _}
@@ -143,13 +148,19 @@ theorem parentPaymentPosition_congr (slot : after.slot = state.slot)
   unfold parentPaymentPosition getPreviousEpoch getCurrentEpoch
   rw [slot, header]
 
+/-- A read of the pending payments inside the window is the read of their elements. -/
+theorem paymentAt_of_lt {gloas : .glamsterdam ≤ fork} {position : Nat}
+    (inside : position < 2 * preset.SLOTS_PER_EPOCH.toNat) :
+    paymentAt state gloas position = (state.builderPendingPayments gloas)[position] := by
+  simp [paymentAt, inside]
+  rfl
+
 /-- A step that keeps the builder fields, the slot and the slot of the latest block keeps the
 invariant. -/
 theorem BuilderDebtCovered.of_frame {gloas : .glamsterdam ≤ fork}
-    (frame : BuilderFrame state after) (slot : after.slot = state.slot)
-    (header : after.latestBlockHeader.slot = state.latestBlockHeader.slot)
-    (holds : BuilderDebtCovered state gloas) : BuilderDebtCovered after gloas := by
-  have position := parentPaymentPosition_congr slot header
+    (frame : BuilderFrame state after) (holds : BuilderDebtCovered state gloas) :
+    BuilderDebtCovered after gloas := by
+  have position := parentPaymentPosition_congr frame.slot frame.headerSlot
   have total : ∀ index,
       pendingBuilderTotal after gloas index = pendingBuilderTotal state gloas index :=
     fun _ => by simp only [pendingBuilderTotal, frame.payments, frame.withdrawals]
