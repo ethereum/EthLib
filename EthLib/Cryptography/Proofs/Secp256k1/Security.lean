@@ -3,7 +3,7 @@ module
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.Game
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.JointGame
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.KeyOnly
-public import EthLib.Cryptography.Proofs.Secp256k1.Security.KeyOnlyOverlay
+public import EthLib.Cryptography.Proofs.Secp256k1.Security.KeyOnlyOutside
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.LazyGame
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.Origin
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.QueryBound

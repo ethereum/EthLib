@@ -471,7 +471,7 @@ The cost is at most `q (q + 1) / 2` over the size of the bijection's domain, for
 That is the step from Game G0 to Game G1 of §4.2 of the source, in the proof of its Theorem 2, whose bound `Q² / 2^L` is at least as large.
 The source draws the key from the nonzero scalars; the key-only game here draws it from all scalars, and the key `0` never verifies.
 So its advantage is the source's times `(n - 1) / n`, where `n` is the number of scalars.
-`keyOnlyIndepAdvantage_eq_overlay` (`Proofs/Secp256k1/Security/KeyOnlyOverlay.lean`) asks each new forward answer of one outside oracle with no input, and keeps the advantage with independent answers.
+`keyOnlyIndepAdvantage_eq_outside` (`Proofs/Secp256k1/Security/KeyOnlyOutside.lean`) proves that the advantage with independent answers stays the same when each new forward answer is one query to an outside oracle with no input.
 A replay fork can later rewind the run at that oracle's query; unlike Figure 2 of the source, it draws the coins after the fork again.
 No theorem forks the run yet.
 `ecdsa_verify_eq_verify_ecdsaScheme` (`Proofs/Secp256k1/Security/Refinement.lean`) proves that `verify` is the game's verification, with the bijection the identity, for `r` and `s` below `n`.
