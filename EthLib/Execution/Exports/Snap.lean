@@ -77,9 +77,7 @@ def accessListsAnswerExport (request response : ByteArray) (expected : Array Byt
 /-- The full RLP form of an account in slim form. -/
 @[export eth_snap_full_account]
 def fullAccountExport (slim : ByteArray) : Result ByteArray := do
-  let .ok item := Serialization.Rlp.decode slim | throw (0, "account is not one RLP item")
-  let .ok (account, root) := ofSlimAccount item | throw (0, "account is not in slim form")
-  let .ok bytes := State.encodeAccount account root | throw (0, "account does not encode")
+  let some bytes := fullAccount slim | throw (0, "account is not in slim form")
   return bytes
 
 end EthLib.Execution.Network.Snap.Exports

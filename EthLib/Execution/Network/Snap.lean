@@ -113,6 +113,17 @@ def ofSlimAccount (item : Item) : Except RlpError (State.Account × Hash32) := d
     return (⟨← n.field 0, ← b.field 1, code⟩, root)
   | items => throw (.wrongFieldCount 4 items.length)
 
+/-- The value of an account in the state trie, from its body in slim form.
+
+There is none when the body is not the slim form itself, such as another encoding of the account.
+-/
+def fullAccount (body : ByteArray) : Option ByteArray := do
+  let .ok item := decode body | none
+  let .ok (account, storageRoot) := ofSlimAccount item | none
+  let .ok slim := encode (slimAccount account storageRoot) | none
+  if slim != body then none
+  (State.encodeAccount account storageRoot).toOption
+
 /-! ## Messages -/
 
 /-- An entry of a range: the hash of its key, the path in the trie, and its data. -/

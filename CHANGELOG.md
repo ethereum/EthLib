@@ -23,6 +23,13 @@ Not yet released.
   `Config.computeMinEpochsForBlockRequests` takes the fork as a new argument.
   The C export `eth_consensus_compute_min_epochs_for_block_requests` reads the configuration and the fork as a pair, as `eth_consensus_gossip_topics` does.
   In Python, `consensus.compute_min_epochs_for_block_requests` takes the fork first, then the configuration, `mainnet` by default.
+- `NoiseError` now gives its own code to each failure of the local identity secret, of signing and of the saved remote message, in the libp2p Noise handshake ([#1657](https://github.com/ethereum/EthLib/issues/1657)).
+  Before, a failure of the secret or of signing had code 9, the code of an invalid remote identity.
+  An identity secret that is 0, or at least the secp256k1 group order, now gives code 11, `identitySecret`.
+  A failure of ECDSA signing with that secret gives code 12, `signing`.
+  Completion of a state whose saved remote message is missing, or does not match the state, gives code 13, `savedRemote`.
+  Before, such a state gave the error of the failed step: code 1, 3, 4, 6, 7, 8 or 9.
+  Code 9 now means only a remote identity that fails to authenticate.
 - A chain configuration now holds the address of its deposit contract, and the deposit requests of a block come from that address ([#1486](https://github.com/ethereum/EthLib/issues/1486)).
   Before, every chain read deposits from the mainnet address, so a chain with another deposit contract, such as Sepolia, got no deposit request.
   The configuration that the exports read as JSON, or as a Python `dict`, must give `depositContractAddress`: `0x` and forty hex digits, or 20 bytes in Python.

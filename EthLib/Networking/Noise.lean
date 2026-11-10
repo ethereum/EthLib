@@ -6,6 +6,7 @@ public import EthLib.Base.LittleEndian
 public import EthLib.Cryptography.X25519
 public import EthLib.Cryptography.ChaCha20Poly1305
 public import EthLib.Cryptography.Hash.Hmac
+public import EthLib.Cryptography.Secp256k1.Errors
 
 /-!
 # Noise XX
@@ -35,20 +36,41 @@ open EthLib.Cryptography
 
 abbrev Key := X25519.Key
 
-/-- A malformed message, exhausted nonce, invalid phase, or primitive failure. -/
+/-- A malformed message, exhausted nonce, invalid phase or state, primitive or identity failure. -/
 inductive NoiseError where
+  /-- The operation does not belong to the current phase of the handshake. -/
   | wrongPhase
+  /-- A remote public key that the message pattern needs has not been received. -/
   | missingKey
+  /-- A message or frame is shorter than its fixed fields, or a decrypted key is not 32 bytes. -/
   | truncated
+  /-- A message or its payload would be longer than 65535 bytes, the limit of Noise §3. -/
   | messageTooLong
+  /-- A frame length does not match the bytes that follow it. -/
   | frameLength
+  /-- The nonce reached `2^64 - 1`, after which Noise §5.1 signals an error. -/
   | nonceExhausted
+  /-- ChaCha20-Poly1305 rejected its input or the authentication tag. -/
   | cipher (error : ChaCha20Poly1305.ChaCha20Poly1305Error)
+  /-- The libp2p payload is not well-formed protobuf. -/
   | protobuf
+  /-- The remote identity key, or its signature on the received static key, does not verify. -/
   | identity
+  /-- The first message carries libp2p extensions, which only later payloads may carry. -/
   | firstMessageExtensions
+  /-- The local identity secret is 0, or at least the secp256k1 group order. -/
+  | identitySecret
+  /-- ECDSA signing with the local identity secret failed. -/
+  | signing (error : Secp256k1.Secp256k1Error)
+  /-- The saved remote message is missing, or does not match the state that completion reads. -/
+  | savedRemote
 deriving DecidableEq, Repr
 
+/-- The stable code of an error, one per constructor, for the C exports.
+
+The code ignores the arguments of the constructor, which the message carries.
+
+A new constructor takes a new code, so that each code keeps its meaning. -/
 def NoiseError.code : NoiseError → UInt32
   | .wrongPhase => 1
   | .missingKey => 2
@@ -60,6 +82,9 @@ def NoiseError.code : NoiseError → UInt32
   | .protobuf => 8
   | .identity => 9
   | .firstMessageExtensions => 10
+  | .identitySecret => 11
+  | .signing _ => 12
+  | .savedRemote => 13
 
 /-- The exact concrete protocol name, Noise §8 and noise-libp2p "Noise Protocol Name". -/
 def protocolName : ByteArray := "Noise_XX_25519_ChaChaPoly_SHA256".toUTF8

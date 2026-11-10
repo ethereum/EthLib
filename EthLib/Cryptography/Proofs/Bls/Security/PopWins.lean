@@ -27,7 +27,7 @@ A winning run never signed its message, so it is before the bad event of the cou
 
 So such a winning run at `j` is at most as likely as a success of the reduction with the guess `j`.
 
-A later bound still has to pay for the zero scalars and bound the honest count.
+The bound of the game pays for the zero scalars, and bounds the honest count by the key hash calls.
 -/
 
 @[expose] public section
