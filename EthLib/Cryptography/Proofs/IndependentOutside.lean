@@ -574,6 +574,16 @@ theorem prEvent_simulateQ_outsideSample (X : OracleComp (OutsideSpec A) Prop) :
   have h := (simulateQ_outsideSample_evalDistEq X).prEvent_eq (fun e => e)
   simpa only [id_map'] using h
 
+omit [FinEnum A] in
+/-- The outputs of a run of the outside oracles do not change once the oracles are sampled. -/
+theorem support_simulateQ_outsideSample {α : Type}
+    (oa : OracleComp (OutsideSpec A) α) :
+    support (simulateQ outsideSample oa) = support oa := by
+  let : MeasurableSpace α := ⊤
+  ext y
+  rw [mem_support_iff_evalDist_singleton_pos, mem_support_iff_evalDist_singleton_pos,
+    (simulateQ_outsideSample_evalDistEq oa).evalDist_eq]
+
 omit [FinEnum A] [UniformAnswerMeasure (Unit →ₒ A)] in
 /-- Completing a query to the outside oracle draws a uniform answer, then completes with it. -/
 theorem simulateQ_outsideSample_complete {α : Type} {main : OracleComp (OutsideSpec A) α} {n : ℕ}
