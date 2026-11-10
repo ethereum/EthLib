@@ -644,6 +644,80 @@ theorem meter_foldlM_applyAuthorization_of_lt_glamsterdam (hfork : fork < .glams
     (fun _ _ _ hheld hstep => (meter_applyAuthorization_of_lt_glamsterdam hfork hstep).trans hheld)
     rfl
 
+/-! ## The meter of the authorizations
+
+A relation of meters that each charge keeps holds across the authorizations, at every fork.
+-/
+
+section Meter
+
+variable {Q : Meter → Meter → Prop} (refl : ∀ meter, Q meter meter)
+  (trans : ∀ {a b c}, Q a b → Q b c → Q a c)
+  (charge : ∀ {meter after : Meter} {amount : Nat}, GasMeter.charge meter amount = .ok after →
+    Q meter after)
+  (chargeState : ∀ {meter after : Meter} {amount : Nat},
+    GasMeter.chargeState meter amount = .ok after → Q meter after)
+
+include refl trans charge chargeState
+
+/-- The charge of an authorization keeps a relation of meters that each charge keeps. -/
+private theorem meter_chargeAuthorization {done : Delegations Meter} {authority : Address}
+    {auth : Authorization} {m : Meter} (h : chargeAuthorization done authority auth = .ok m) :
+    Q done.meter m := by
+  unfold chargeAuthorization at h
+  dsimp only [bind, Except.bind, pure, Except.pure] at h
+  repeat' split at h
+  all_goals first | (cases h; done) | skip
+  all_goals
+    try simp only [Except.ok.injEq] at h
+    try subst h
+    first
+    | exact refl _
+    | exact chargeState h
+    | exact chargeState (by assumption)
+    | exact charge (by assumption)
+    | exact trans (charge (by assumption)) (chargeState h)
+    | exact trans (chargeState (by assumption)) (chargeState h)
+    | exact trans (chargeState (by assumption)) (charge (by assumption))
+    | exact trans (chargeState (by assumption)) (trans (charge (by assumption)) (chargeState h))
+
+/-- The payment of an authorization keeps a relation of meters that each charge keeps. -/
+private theorem meter_payAuthorization {done paid : Delegations Meter} {authority : Address}
+    {auth : Authorization} (h : payAuthorization fork done authority auth = .ok paid) :
+    Q done.meter paid.meter := by
+  unfold payAuthorization at h
+  split at h
+  · dsimp only [bind, Except.bind, pure, Except.pure] at h
+    split at h
+    · cases h
+    · rename_i m hm
+      cases h
+      exact meter_chargeAuthorization refl trans charge chargeState hm
+  · cases h
+    exact refl _
+
+/-- An authorization keeps a relation of meters that each charge keeps. -/
+theorem meter_applyAuthorization {chainId : Nat} {done done' : Delegations Meter}
+    {auth : Authorization} (h : applyAuthorization fork chainId done auth = .ok done') :
+    Q done.meter done'.meter := by
+  rcases applyAuthorization_cases h with rfl | ⟨authority, -, -, ⟨-, rfl⟩ |
+    ⟨-, paid, state, refund, hpay, -, rfl⟩⟩
+  · exact refl _
+  · exact refl _
+  · exact (meter_payAuthorization refl trans charge chargeState hpay :)
+
+/-- The authorizations keep a relation of meters that each charge keeps. -/
+theorem meter_applyAuthorizations {chainId : Nat} {state : TransactionState}
+    {accessed paid : Std.ExtTreeSet Address} {meter : Meter} {auths : List Authorization}
+    {done : Delegations Meter}
+    (h : applyAuthorizations fork chainId state accessed meter paid auths = .ok done) :
+    Q meter done.meter :=
+  foldlM_ok_invariant (fun d : Delegations Meter => Q meter d.meter)
+    (fun _ _ _ hd hstep => trans hd (meter_applyAuthorization refl trans charge chargeState hstep))
+    (refl meter) h
+
+end Meter
+
 /-! ## The authorizations succeed
 
 No statement here assumes anything of the recovery of an authority.
