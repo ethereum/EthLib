@@ -27,8 +27,8 @@ from raising import raises
 # - NUMBER_OF_COLUMNS is 128.
 # - INCLUSION_LIST_COMMITTEE_SIZE and MAX_REQUEST_INCLUSION_LIST are both 16.
 #
-# The minimal preset and configuration change none of the values that a response check reads:
-# the limits above and the number of columns and seats are the same as on mainnet.
+# The minimal preset and configuration change none of the values that a response check reads.
+# The limits above and the number of columns and seats are the same as on mainnet.
 # So no case runs under the name minimal, as its result could not differ from mainnet.
 
 PREFIX = "/eth2/beacon_chain/req/"
