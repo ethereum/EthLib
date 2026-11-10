@@ -476,6 +476,15 @@ So its advantage is the source's times `(n - 1) / n`, where `n` is the number of
 `le_prEvent_isSome_contextFork_keyOnlyOutsideRun` bounds the chance of the fork from below on each fixed key, in the form of Lemma 1 of the source; Lemma 1 draws the key at random, and no theorem averages over the key yet.
 Unlike Figure 2 of the source, the fork draws the coins after the fork point again.
 No theorem yet proves that the check's answer from the bijection is the logged answer at the fork index, nor extracts the key from the two forgeries.
+`redrawInverse_fst_evalDistEq` (`Proofs/Secp256k1/Security/Redraw.lean`) proves the step of lines 25 to 28 of Figure 7 of the source: a uniform answer that encodes a nonzero multiple of the base point, redrawn as the encoding of `a g` for a uniform nonzero `a`, is still uniform.
+It assumes that the base point is nonzero, that `2` is nonzero in the scalars, that the encoding is semi-injective, and that opposite points share their encoding; the encoding is then exactly 2-to-1 on those points.
+So it covers ECDSA, not the injective case of Definition 2 (b) of the source.
+The redraw takes the test of the image as an argument, with a hypothesis that it agrees with a search of the encodings of the nonzero multiples of the base point; part (a) of Definition 2 asks that this test be efficient, which EthLib does not model.
+`prEvent_inverse_le_dlog` (`Proofs/Secp256k1/Security/InverseCase.lean`) bounds, in the key-only run with independent answers and new forward answers asked outside, the chance that the check passes on a point that was not a new forward query.
+The event does not require the flag of repeated answers to be clear, so with the fork index of the forward case it covers every run that wins.
+The bound is the advantage of a discrete-logarithm solver, which runs the forger once with the same test of the image; this is the step from Game G2 to Game G3 of the source.
+The solver's game is the discrete-logarithm game of the oracle framework, which draws the key from all scalars, while Definition 1 of the source draws it from the nonzero scalars.
+The two advantages differ by at most `1 / n`, where `n` is the number of scalars; no theorem states it.
 `ecdsa_verify_eq_verify_ecdsaScheme` (`Proofs/Secp256k1/Security/Refinement.lean`) proves that `verify` is the game's verification, with the bijection the identity, for `r` and `s` below `n`.
 `exists_signNonce_of_sign` proves that every signature from `sign` is the game's signature for some nonzero nonce; that is correctness of signing, and says nothing about how RFC 6979 draws the nonces.
 The game draws the bijection uniformly, so a bound on it would apply to EthLib, where the bijection is the identity, only under the heuristic of the source that the identity behaves as a bijective random oracle.

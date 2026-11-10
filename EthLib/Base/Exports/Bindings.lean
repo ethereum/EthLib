@@ -1388,8 +1388,8 @@ def bindings : List Binding := [
       "fork: str, request: dict) -> list | None",
     [`EthLib.Engine.EngineError], some "EngineError"⟩,
   ⟨"engine_get_payload", `EthLib.Engine.Exports.getPayloadExport,
-    "(config: dict, store: list[tuple[bytes, str, dict, int, list[bytes], " ++
-      "list[bytes] | None, bool]], request: dict) -> dict",
+    "(config: dict, store: list[tuple[bytes, str, bytes, bytes, list[bytes], int, " ++
+      "list[bytes], bool, bytes | None]], request: dict) -> dict[str, Any]",
     [`EthLib.Engine.EngineError], some "EngineError"⟩,
   ⟨"engine_get_payload_bodies", `EthLib.Engine.Exports.payloadBodiesExport,
     "(store: list[tuple[bytes, int | None, str, list[bytes], " ++

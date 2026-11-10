@@ -1493,8 +1493,8 @@ def engine_get_blobs(pool: list[tuple[bytes, bytes | None, bytes | None, list[tu
     """The answer to an `engine_getBlobs` request, from a blob pool."""
     ...
 
-def engine_get_payload(config: dict, store: list[tuple[bytes, str, dict, int, list[bytes], list[bytes] | None, bool]], request: dict) -> dict:
-    """The answer to a get-payload request, from the configuration and a store snapshot."""
+def engine_get_payload(config: dict, store: list[tuple[bytes, str, bytes, bytes, list[bytes], int, list[bytes], bool, bytes | None]], request: dict) -> dict[str, Any]:
+    """The answer to an `engine_getPayload` request, from the configuration and a store snapshot."""
     ...
 
 def engine_get_payload_bodies(store: list[tuple[bytes, int | None, str, list[bytes], list[tuple[int, int, bytes, int]] | None, bytes | None]], latest: int, max_request: int, request: dict) -> list[dict | None]:

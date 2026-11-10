@@ -10024,9 +10024,9 @@
    "docstring":
    "The answer to an `engine_getBlobs` request, from a blob pool.\n\nThe arguments are the pool's entries, whether it serves, its limit, the fork and the request.\n\nEach entry is the versioned hash, the blob, the blob proof and the 128 cells with their proofs.\n\nAny of the last three may be `None`, and so may each cell."},
   {"summary":
-   "The answer to a get-payload request, from the configuration and a store snapshot.",
+   "The answer to an `engine_getPayload` request, from the configuration and a store snapshot.",
    "signature":
-   "(config: dict, store: list[tuple[bytes, str, dict, int, list[bytes], list[bytes] | None, bool]], request: dict) -> dict",
+   "(config: dict, store: list[tuple[bytes, str, bytes, bytes, list[bytes], int, list[bytes], bool, bytes | None]], request: dict) -> dict[str, Any]",
    "operation": "EthLib.Engine.Exports.getPayloadExport",
    "method": "engine_get_payload",
    "errors":
@@ -10040,7 +10040,7 @@
       {"constructor": "unknownPayload", "code": 38001}]}],
    "error_class": "EngineError",
    "docstring":
-   "The answer to a get-payload request, from the configuration and a store snapshot."},
+   "The answer to an `engine_getPayload` request, from the configuration and a store snapshot.\n\nThe arguments are the chain configuration, the entries of the store and the request.\n\nEach entry is the payload ID, the fork name and the four results of the payload build export.\n\nThen come its network blob transactions, the override flag and the block access list or `None`."},
   {"summary": "The answer to a payload bodies request, from a store of bodies.",
    "signature":
    "(store: list[tuple[bytes, int | None, str, list[bytes], list[tuple[int, int, bytes, int]] | None, bytes | None]], latest: int, max_request: int, request: dict) -> list[dict | None]",
