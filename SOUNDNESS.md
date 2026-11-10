@@ -592,7 +592,7 @@ The million-iteration X25519 vector requires `ETHLIB_SLOW_VECTORS=1`.
 
 ### Noise XX and libp2p identities
 
-`complete_authenticates` (`Networking/Proofs/Noise.lean`) ties successful completion to an incoming message that the XX reader accepts.
+`complete_authenticates` (`Networking/Proofs/Noise/Identity.lean`) ties successful completion to an incoming message that the XX reader accepts.
 The reported public key, signature and extensions are the fields of the payload decrypted from that message.
 The signature verifies against the static key read from that message, and the reported peer ID derives from the signing public key.
 `readLibp2p_authenticates` states the same check for the read of message 2 or 3.
