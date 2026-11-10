@@ -631,6 +631,43 @@ theorem payloadInputs_processExecutionPayloadBid {signed : SignedExecutionPayloa
     subst recordedOk
     exact PayloadInputs.refl _
 
+/-- From Gloas, a block that succeeds runs each of its steps, each on the state of the last one.
+
+The parent payload runs first, then the header, the withdrawals, the bid and the RANDAO reveal.
+
+Before Heze the vote on the deposit contract follows, and from Heze no step runs in its place.
+
+The operations and the sync aggregate come last.
+
+The operations read the slot of the parent from the latest block header before the block. -/
+theorem processBlock_gloas_ok (gloas : .glamsterdam ≤ fork) {block : BeaconBlock preset fork}
+    (computed : processBlock config checks engine state block = .ok after) :
+    ∃ parented headed withdrawn bidded revealed voted operated, ∃ payload,
+      processParentExecutionPayload config checks state gloas block.body = .ok parented ∧
+      processBlockHeader parented block = .ok headed ∧
+      processWithdrawals headed (Nat.le_trans (by decide) gloas) payload = .ok withdrawn ∧
+      processExecutionPayloadBid config checks withdrawn gloas
+        (block.body.signedExecutionPayloadBid gloas) = .ok bidded ∧
+      processRandao config checks bidded block.body = .ok revealed ∧
+      (∀ before : fork < .hegota, processEth1Data before revealed block.body = .ok voted) ∧
+      (.hegota ≤ fork → voted = revealed) ∧
+      processOperations config checks voted block.body state.latestBlockHeader.slot =
+        .ok operated ∧
+      processSyncAggregate config checks operated (Nat.le_trans (by decide) gloas)
+        (block.body.syncAggregate (Nat.le_trans (by decide) gloas)) = .ok after := by
+  have altair : .altair ≤ fork := Nat.le_trans (by decide) gloas
+  have bellatrix : .bellatrix ≤ fork := Nat.le_trans (by decide) gloas
+  simp only [processBlock, altair, ↓reduceDIte, processBlockAltair, gloas, bellatrix,
+    processBlockExecution, bind_ok_iff] at computed
+  obtain ⟨parented, parentOk, headed, headedOk, bidded, ⟨withdrawn, withdrawnOk, biddedOk⟩,
+    revealed, revealedOk, voted, votedOk, operated, operatedOk, synced⟩ := computed
+  refine ⟨parented, headed, withdrawn, bidded, revealed, voted, operated, _, parentOk, headedOk,
+    withdrawnOk, biddedOk, revealedOk, fun before => ?_, fun heze => ?_, operatedOk, synced⟩
+  · simpa only [before, ↓reduceDIte] using votedOk
+  · have dropped : ¬fork < .hegota := Nat.not_lt_of_le heze
+    simp only [dropped, ↓reduceDIte, pure, Except.pure, Except.ok.injEq] at votedOk
+    exact votedOk.symm
+
 /-- From Gloas, a block runs its parent, header, withdrawal and bid steps in that order.
 
 The steps after the bid keep the slot, the latest block header, the latest block hash and bid. -/
@@ -645,17 +682,14 @@ theorem processBlock_steps (gloas : .glamsterdam ≤ fork) {block : BeaconBlock 
       after.slot = bidded.slot ∧ after.latestBlockHeader = bidded.latestBlockHeader ∧
       after.latestBlockHash = bidded.latestBlockHash ∧
       after.latestExecutionPayloadBid = bidded.latestExecutionPayloadBid := by
-  have altair : .altair ≤ fork := Nat.le_trans (by decide) gloas
-  have bellatrix : .bellatrix ≤ fork := Nat.le_trans (by decide) gloas
-  simp only [processBlock, altair, ↓reduceDIte, processBlockAltair, gloas, bellatrix,
-    processBlockExecution, bind_ok_iff] at computed
-  obtain ⟨parented, parentOk, headed, headedOk, bidded, ⟨withdrawn, withdrawnOk, biddedOk⟩,
-    revealed, revealedOk, voted, votedOk, operated, operatedOk, synced⟩ := computed
+  obtain ⟨parented, headed, withdrawn, bidded, revealed, voted, _, _, parentOk, headedOk,
+    withdrawnOk, biddedOk, revealedOk, votedOk, kept, operatedOk, synced⟩ :=
+    processBlock_gloas_ok gloas computed
   have randao := payloadInputs_processRandao revealedOk
   have voting : PayloadInputs revealed voted := by
-    split at votedOk
-    · exact payloadInputs_processEth1Data votedOk
-    · cases votedOk
+    by_cases before : fork < .hegota
+    · exact payloadInputs_processEth1Data (votedOk before)
+    · rw [kept (Nat.le_of_not_lt before)]
       exact PayloadInputs.refl _
   have rest := voting.trans <| (payloadInputs_processOperations gloas operatedOk).trans <|
     payloadInputs_processSyncAggregate synced
@@ -671,12 +705,8 @@ theorem processBlock_operations (gloas : .glamsterdam ≤ fork) {block : BeaconB
     (computed : processBlock config checks engine state block = .ok after) :
     ∃ voted operated, processOperations config checks voted block.body
       state.latestBlockHeader.slot = .ok operated := by
-  have altair : .altair ≤ fork := Nat.le_trans (by decide) gloas
-  have bellatrix : .bellatrix ≤ fork := Nat.le_trans (by decide) gloas
-  simp only [processBlock, altair, ↓reduceDIte, processBlockAltair, gloas, bellatrix,
-    processBlockExecution, bind_ok_iff] at computed
-  -- Four steps and the vote on the deposit contract come first, and Heze drops the vote.
-  obtain ⟨-, -, -, -, -, -, -, -, voted, -, operated, operatedOk, -⟩ := computed
+  obtain ⟨-, -, -, -, -, voted, operated, -, -, -, -, -, -, -, -, operatedOk, -⟩ :=
+    processBlock_gloas_ok gloas computed
   exact ⟨voted, operated, operatedOk⟩
 
 /-- From Gloas, a block leaves its own bid as the latest bid. -/

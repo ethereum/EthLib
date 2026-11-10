@@ -270,3 +270,177 @@ def test_unknown_message():
             "mainnet", "bellatrix", "SignedBlindedBeaconBlock", b""
         )
     assert info.value.code == 0
+
+
+def _auth_message(data: bytes = b"builder.example.com", slot: int = 1) -> bytes:
+    """The SSZ bytes of request authentication, with its variable data after the fixed part."""
+    return struct.pack("<IQ", 12, slot) + data
+
+
+def _auth_root(message: bytes) -> bytes:
+    """The root of request authentication: its padded data and length, then its slot."""
+    data = message[12:]
+    chunks = [data[i : i + 32].ljust(32, b"\0") for i in range(0, len(data), 32)]
+    chunks += [ZERO] * (128 - len(chunks))
+    data_root = _sha(_merkleize(chunks) + len(data).to_bytes(32, "little"))
+    return _sha(data_root + message[4:12] + bytes(24))
+
+
+def _auth_domain(kind: bytes = bytes([11, 0, 0, 1])) -> bytes:
+    """A domain at the mainnet genesis fork version, with a zero validators root."""
+    return kind + _builder_domain()[4:]
+
+
+def _signed_auth(message: bytes | None = None, domain: bytes | None = None) -> bytes:
+    """Request authentication signed by the test key under the requested domain."""
+    if message is None:
+        message = _auth_message()
+    if domain is None:
+        domain = _auth_domain()
+    return struct.pack("<I", 4 + 96) + _sign(_auth_root(message), domain) + message
+
+
+@pytest.mark.parametrize("fork", ["glamsterdam", "hegota"])
+def test_gloas_examples(fork: str):
+    # The Gloas examples of the builder specification, against roots computed here.
+    signed = _example("gloas", "signed_builder_request_auth")
+    message, signature = _split(signed)
+    expected = _example_json("gloas", "signed_builder_request_auth")
+    assert message[12:] == bytes.fromhex(expected["message"]["data"][2:])
+    assert struct.unpack_from("<Q", message, 4)[0] == int(expected["message"]["slot"])
+    assert signature == bytes.fromhex(expected["signature"][2:])
+    auth_root = _auth_root(message)
+    assert _message_root("BuilderRequestAuth", fork, message) == auth_root
+    signed_root = _sha(auth_root + _signature_root(signature))
+    assert _message_root("SignedBuilderRequestAuth", fork, signed) == signed_root
+    preferences = _example("gloas", "builder_preferences")
+    expected_cap = _example_json("gloas", "builder_preferences")["max_execution_payment"]
+    assert int.from_bytes(preferences, "little") == int(expected_cap)
+    preferences_root = preferences + bytes(24)
+    assert _message_root("BuilderPreferences", fork, preferences) == preferences_root
+    request = _example("gloas", "builder_preferences_request")
+    assert request[:8] == preferences
+    assert struct.unpack_from("<I", request, 8)[0] == 12
+    assert request[12:] == signed
+    assert _message_root("BuilderPreferencesRequest", fork, request) == _sha(
+        preferences_root + signed_root
+    )
+
+
+@pytest.mark.parametrize("fork", ["glamsterdam", "hegota"])
+def test_builder_request_auth_signature(fork: str):
+    assert consensus.verify_builder_request_auth_signature("mainnet", fork, PUBKEY, _signed_auth())
+
+
+@pytest.mark.parametrize(
+    "kind",
+    [bytes(4), bytes([0, 0, 0, 1]), bytes([11, 0, 0, 0])],
+    ids=["beacon proposer", "registrations and bids", "beacon builder"],
+)
+def test_builder_request_auth_wrong_domain(kind: bytes):
+    signed = _signed_auth(domain=_auth_domain(kind))
+    assert not consensus.verify_builder_request_auth_signature(
+        "mainnet", "glamsterdam", PUBKEY, signed
+    )
+
+
+@pytest.mark.parametrize("message", [_auth_message(slot=2), _auth_message(b"other.example.com")])
+def test_builder_request_auth_changed_message(message: bytes):
+    signed = _signed_auth()[:100] + message
+    assert not consensus.verify_builder_request_auth_signature(
+        "mainnet", "glamsterdam", PUBKEY, signed
+    )
+
+
+def test_builder_request_auth_wrong_key():
+    other = G2ProofOfPossession.SkToPk(SECRET_KEY + 1)
+    assert not consensus.verify_builder_request_auth_signature(
+        "mainnet", "glamsterdam", other, _signed_auth()
+    )
+
+
+def test_builder_request_auth_other_genesis_version():
+    config = {"GENESIS_FORK_VERSION": "0x10000910"}
+    domain = bytes([11, 0, 0, 1]) + _builder_domain(bytes.fromhex("10000910"))[4:]
+    signed = _signed_auth(domain=domain)
+    assert consensus.verify_builder_request_auth_signature(
+        "mainnet", "glamsterdam", PUBKEY, signed, config
+    )
+    assert not consensus.verify_builder_request_auth_signature(
+        "mainnet", "glamsterdam", PUBKEY, signed
+    )
+
+
+def test_builder_request_auth_placeholder_signature():
+    assert not consensus.verify_builder_request_auth_signature(
+        "mainnet", "glamsterdam", PUBKEY, _example("gloas", "signed_builder_request_auth")
+    )
+
+
+def test_builder_request_auth_data_limit():
+    message = _auth_message(bytes(4096))
+    assert _message_root("BuilderRequestAuth", "glamsterdam", message) == _auth_root(message)
+    with raises(ERROR, "input rejected: EthLib.Serialization.Ssz.Err.overLimit 4096 4097"):
+        consensus.ssz_static(
+            "mainnet", "glamsterdam", "BuilderRequestAuth", _auth_message(bytes(4097))
+        )
+
+
+@pytest.mark.parametrize(
+    "kind",
+    [
+        "BuilderRequestAuth",
+        "SignedBuilderRequestAuth",
+        "BuilderPreferences",
+        "BuilderPreferencesRequest",
+    ],
+)
+def test_no_gloas_builder_container_before_gloas(kind: str):
+    with raises(ERROR, f"no container {kind} at fusaka") as info:
+        consensus.ssz_static("mainnet", "fusaka", kind, b"")
+    assert info.value.code == 0
+
+
+def test_no_request_authentication_before_gloas():
+    with raises(ERROR, "no builder request authentication at fusaka") as info:
+        consensus.verify_builder_request_auth_signature("mainnet", "fusaka", PUBKEY, b"")
+    assert info.value.code == 0
+
+
+def test_builder_request_auth_short_key():
+    with raises(ERROR, "expected 48 bytes, got 47") as info:
+        consensus.verify_builder_request_auth_signature(
+            "mainnet", "glamsterdam", PUBKEY[:47], _signed_auth()
+        )
+    assert info.value.code == 0
+
+
+def test_builder_request_auth_over_limit():
+    with raises(ERROR, "input rejected: EthLib.Serialization.Ssz.Err.overLimit 4096 4097"):
+        consensus.verify_builder_request_auth_signature(
+            "mainnet", "glamsterdam", PUBKEY, _signed_auth(_auth_message(bytes(4097)))
+        )
+
+
+@pytest.mark.parametrize(
+    ("value", "payment", "cap", "expected"),
+    [
+        (1_000_000_000, 5_000_000_000, 0, 1_000_000_000),
+        (1_000_000_000, 5_000_000_000, 2**64 - 1, 6_000_000_000),
+        (1, 5, 3, 4),
+        (2**64 - 1, 2**64 - 1, 2**64 - 1, 2**65 - 2),
+    ],
+)
+def test_builder_bid_value(value: int, payment: int, cap: int, expected: int):
+    assert consensus.builder_bid_value(value, payment, cap) == expected
+
+
+@pytest.mark.parametrize("value", [2**64, 2**64 + 1])
+@pytest.mark.parametrize("position", range(3))
+def test_builder_bid_value_out_of_range(value: int, position: int):
+    # Lean reads each amount as a 64-bit number, and rejects a larger one instead of reducing it.
+    amounts = [1, 5, 3]
+    amounts[position] = value
+    with raises(consensus.ConsensusError, f"expected an int below {2**64}, got {value}") as info:
+        consensus.builder_bid_value(*amounts)
+    assert info.value.code == 0

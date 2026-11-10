@@ -67,6 +67,23 @@ def is_valid_builder_signature(
     return _native.consensus_is_valid_builder_signature(name, fork, config, type_name, data)
 
 
+def verify_builder_request_auth_signature(
+    name: str,
+    fork: str,
+    pubkey: bytes,
+    data: bytes,
+    # `Any`, because `dict` is invariant in its values.
+    config: dict[str, Any] | None = None,
+) -> bool:
+    """Whether the proposer key signed a Gloas request authentication; data and slot unchecked."""
+    return _native.consensus_verify_builder_request_auth_signature(name, fork, config, pubkey, data)
+
+
+def builder_bid_value(value: int, execution_payment: int, max_execution_payment: int) -> int:
+    """The bid's value in Gwei, with its execution payment capped, not reduced to 64 bits."""
+    return _native.consensus_builder_bid_value(value, execution_payment, max_execution_payment)
+
+
 def upgrade_operation(name: str, type_name: str, data: bytes) -> tuple[bytes, bytes]:
     """The Gloas root and bytes of a Fulu attestation, indexed attestation or attester slashing."""
     return _native.consensus_upgrade_operation(name, type_name, data)
@@ -1221,6 +1238,8 @@ __all__ = [
     "compute_columns_for_custody_group",
     "ssz_static",
     "is_valid_builder_signature",
+    "verify_builder_request_auth_signature",
+    "builder_bid_value",
     "upgrade_operation",
     "pq_keys_ssz",
     "pq_keys_possession_signing_root",

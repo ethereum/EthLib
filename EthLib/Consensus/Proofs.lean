@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.Proofs.Accessors
+public import EthLib.Consensus.Proofs.Accessors.Draw
 public import EthLib.Consensus.Proofs.BuilderApi
 public import EthLib.Consensus.Proofs.Builders
 public import EthLib.Consensus.Proofs.Churn
@@ -31,6 +32,7 @@ public import EthLib.Consensus.Proofs.ForkChoice.AttestationScores
 public import EthLib.Consensus.Proofs.ForkChoice.Checkpoints
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmationIndicators
+public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmationSets
 public import EthLib.Consensus.Proofs.ForkChoice.Ghost
 public import EthLib.Consensus.Proofs.ForkChoice.Handlers
 public import EthLib.Consensus.Proofs.ForkChoice.Head
@@ -43,6 +45,7 @@ public import EthLib.Consensus.Proofs.ForkChoice.PayloadReveal
 public import EthLib.Consensus.Proofs.ForkChoice.PayloadVotes
 public import EthLib.Consensus.Proofs.ForkChoice.ProposerHead
 public import EthLib.Consensus.Proofs.ForkChoice.Reachable
+public import EthLib.Consensus.Proofs.ForkChoice.Supporters
 public import EthLib.Consensus.Proofs.ForkChoice.Store
 public import EthLib.Consensus.Proofs.ForkChoice.UnrealizedCheckpoints
 public import EthLib.Consensus.Proofs.ForkSchedule
@@ -98,6 +101,7 @@ public import EthLib.Consensus.Proofs.Transition.Block
 public import EthLib.Consensus.Proofs.Transition.BlockRewards
 public import EthLib.Consensus.Proofs.Transition.BuilderDebt
 public import EthLib.Consensus.Proofs.Transition.BuilderDebtBid
+public import EthLib.Consensus.Proofs.Transition.BuilderDebtBlock
 public import EthLib.Consensus.Proofs.Transition.BuilderDebtEpoch
 public import EthLib.Consensus.Proofs.Transition.BuilderDebtOperations
 public import EthLib.Consensus.Proofs.Transition.BuilderDebtSlots

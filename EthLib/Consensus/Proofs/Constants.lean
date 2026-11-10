@@ -50,6 +50,12 @@ theorem domainTypes_not_application :
     ∀ domain ∈ protocolDomainTypes, ∀ i : Fin 4, domain[i] &&& DOMAIN_APPLICATION_MASK[i] = 0 := by
   decide
 
+/-- A domain type that sets a bit of the application mask is no domain type of a fork. -/
+theorem not_mem_protocolDomainTypes_of_masked {domainType : DomainType} (i : Fin 4)
+    (masked : domainType[i] &&& DOMAIN_APPLICATION_MASK[i] ≠ 0) :
+    domainType ∉ protocolDomainTypes := fun mem =>
+  masked (domainTypes_not_application _ mem i)
+
 /-- The five request types, from Electra to Gloas, strictly increase. -/
 theorem requestTypes_increasing :
     [DEPOSIT_REQUEST_TYPE, WITHDRAWAL_REQUEST_TYPE, CONSOLIDATION_REQUEST_TYPE,
