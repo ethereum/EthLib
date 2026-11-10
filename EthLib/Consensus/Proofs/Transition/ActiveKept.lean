@@ -1008,6 +1008,47 @@ private theorem beforeVotes_processEth1Data {before : fork < .hegota}
   BeforeVotes.of_mixes (frame_processEth1Data computed) (stepBelow_processEth1Data computed)
     (payloadInputs_processEth1Data computed).randaoMixes
 
+/-- Where a list of attestations starts, each has the attesters of an earlier state.
+
+The start must have the slot of the earlier state, and keep its activity up to its current epoch.
+
+Of the RANDAO mixes, the start may differ from it at most at the one of its current epoch.
+
+There must be more than `MIN_SEED_LOOKAHEAD + 2` epochs of mixes. -/
+theorem getAttestingIndices_of_foldlM {first last : BeaconState preset fork}
+    (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    (slotEq : first.slot = state.slot) (active : ActiveKept (getCurrentEpoch state) state first)
+    (mixes : MixesKeptBut (getCurrentEpoch state) state first)
+    {parentSlot : Slot} {attestations : List (Attestation preset fork)}
+    (attested :
+      attestations.foldlM (processAttestation config checks · parentSlot ·) first = .ok last) :
+    ∀ attestation ∈ attestations,
+      getAttestingIndices first attestation = getAttestingIndices state attestation := by
+  intro attestation member
+  -- The fold runs the attestation at a state with the slot of the earlier state.
+  obtain ⟨index, bound, found⟩ := List.getElem_of_mem member
+  obtain ⟨mid, _, prefixOk, ok, -⟩ := (foldlM_ok_steps (fun _ _ => True) (fun _ => trivial)
+    (fun _ _ => trivial) (fun _ _ _ _ => trivial) attested).2 index bound
+  rw [found] at ok
+  have slot : mid.slot = state.slot :=
+    foldlM_ok_invariant (fun next : BeaconState preset fork => next.slot = state.slot)
+      (fun _ _ _ holds ok => (frame_processAttestation ok).slot.trans holds) slotEq prefixOk
+  have current : getCurrentEpoch mid = getCurrentEpoch state := by
+    simp only [getCurrentEpoch, slot]
+  have previous : getPreviousEpoch mid = getPreviousEpoch state := by
+    simp only [getPreviousEpoch, current]
+  have previousNat := getPreviousEpoch_toNat state
+  have recent := processAttestation_slotEpoch ok
+  rw [previous, current] at recent
+  have low : computeEpochAtSlot preset attestation.data.slot ≤ getCurrentEpoch state := by
+    rcases recent with same | same <;> rw [same]
+    · exact getPreviousEpoch_le state
+    · exact UInt64.le_refl _
+  have high : (getCurrentEpoch state).toNat ≤
+      (computeEpochAtSlot preset attestation.data.slot).toNat + 1 := by
+    rcases recent with same | same <;> rw [same] <;> omega
+  exact getAttestingIndices_eq_of_activeKept apart (active.mono low) mixes low high
+
 /-- A block runs its attestations in order, between two block frames.
 
 Where they start, the attesters of each of them are those of the state before the block.
@@ -1047,31 +1088,9 @@ theorem processBlock_attestationSplit
     rw [← kept]
     exact Nat.lt_of_le_of_lt tail.registryGrows small
   have active := (head.step.2 below).2
-  refine ⟨first, last, head.frame, fun attestation member => ?_, attested, tail⟩
-  -- The fold runs the attestation at a state with the slot of the state before the block.
-  obtain ⟨index, bound, found⟩ := List.getElem_of_mem (Array.mem_toList_iff.mpr member)
-  obtain ⟨mid, _, prefixOk, ok, -⟩ := (foldlM_ok_steps (fun _ _ => True) (fun _ => trivial)
-    (fun _ _ => trivial) (fun _ _ _ _ => trivial) attested).2 index bound
-  rw [found] at ok
-  have slot : mid.slot = state.slot :=
-    foldlM_ok_invariant (fun next : BeaconState preset fork => next.slot = state.slot)
-      (fun _ _ _ holds ok => (frame_processAttestation ok).slot.trans holds) head.frame.slot
-      prefixOk
-  have current : getCurrentEpoch mid = getCurrentEpoch state := by
-    simp only [getCurrentEpoch, slot]
-  have previous : getPreviousEpoch mid = getPreviousEpoch state := by
-    simp only [getPreviousEpoch, current]
-  have previousNat := getPreviousEpoch_toNat state
-  have recent := processAttestation_slotEpoch ok
-  rw [previous, current] at recent
-  have low : computeEpochAtSlot preset attestation.data.slot ≤ getCurrentEpoch state := by
-    rcases recent with same | same <;> rw [same]
-    · exact getPreviousEpoch_le state
-    · exact UInt64.le_refl _
-  have high : (getCurrentEpoch state).toNat ≤
-      (computeEpochAtSlot preset attestation.data.slot).toNat + 1 := by
-    rcases recent with same | same <;> rw [same] <;> omega
-  exact getAttestingIndices_eq_of_activeKept apart (active.mono low) head.mixes low high
+  exact ⟨first, last, head.frame, fun attestation member =>
+    getAttestingIndices_of_foldlM apart head.frame.slot active head.mixes attested attestation
+      (Array.mem_toList_iff.mpr member), attested, tail⟩
 
 /-- One slot keeps activity in each epoch up to its current epoch, at every fork.
 

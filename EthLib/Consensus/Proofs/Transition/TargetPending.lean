@@ -212,42 +212,6 @@ theorem PendingVoted.of_processAttestation {votes : Set (ValidatorIndex × Attes
     rw [same] at member
     exact kept _ other member
 
-/-- Where a list of attestations starts, each has the attesters of a state before a pending frame.
-
-There must be more than `MIN_SEED_LOOKAHEAD + 2` epochs of mixes. -/
-private theorem getAttestingIndices_of_pendingFrame {first last : BeaconState preset fork}
-    (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
-    {parentSlot : Slot} {attestations : List (Attestation preset fork)}
-    (head : PendingFrame state first)
-    (attested :
-      attestations.foldlM (processAttestation config checks · parentSlot ·) first = .ok last) :
-    ∀ attestation ∈ attestations,
-      getAttestingIndices first attestation = getAttestingIndices state attestation := by
-  intro attestation member
-  -- The fold runs the attestation at a state with the slot of the state before the frame.
-  obtain ⟨index, bound, found⟩ := List.getElem_of_mem member
-  obtain ⟨mid, _, prefixOk, ok, -⟩ := (foldlM_ok_steps (fun _ _ => True) (fun _ => trivial)
-    (fun _ _ => trivial) (fun _ _ _ _ => trivial) attested).2 index bound
-  rw [found] at ok
-  have slot : mid.slot = state.slot :=
-    foldlM_ok_invariant (fun next : BeaconState preset fork => next.slot = state.slot)
-      (fun _ _ _ holds ok => (frame_processAttestation ok).slot.trans holds) head.slot prefixOk
-  have current : getCurrentEpoch mid = getCurrentEpoch state := by
-    simp only [getCurrentEpoch, slot]
-  have previous : getPreviousEpoch mid = getPreviousEpoch state := by
-    simp only [getPreviousEpoch, current]
-  have previousNat := getPreviousEpoch_toNat state
-  have recent := processAttestation_slotEpoch ok
-  rw [previous, current] at recent
-  have low : computeEpochAtSlot preset attestation.data.slot ≤ getCurrentEpoch state := by
-    rcases recent with same | same <;> rw [same]
-    · exact getPreviousEpoch_le state
-    · exact UInt64.le_refl _
-  have high : (getCurrentEpoch state).toNat ≤
-      (computeEpochAtSlot preset attestation.data.slot).toNat + 1 := by
-    rcases recent with same | same <;> rw [same] <;> omega
-  exact getAttestingIndices_eq_of_activeKept apart (head.active.mono low) head.mixes low high
-
 /-- Before Altair, a block keeps the pending votes, and adds those that its attestations cast.
 
 It casts them in the committees of the state before the block.
@@ -261,7 +225,7 @@ theorem PendingVoted.of_processBlock {votes : Set (ValidatorIndex × Attestation
     (computed : processBlock config checks engine state block = .ok after) :
     PendingVoted (votes ∪ blockVotes state block) after := by
   obtain ⟨first, last, head, attested, tail⟩ := processBlock_pendingSplit before computed
-  have same := getAttestingIndices_of_pendingFrame apart head attested
+  have same := getAttestingIndices_of_foldlM apart head.slot head.active head.mixes attested
   have middle := foldlM_processAttestation_votes PendingVoted (fun holds sub => holds.mono sub)
     (fun holds ok => holds.of_processAttestation before ok) (holds.of_pendingFrame apart head)
     attested
