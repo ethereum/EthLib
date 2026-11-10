@@ -72,7 +72,7 @@ structure SlackBits (V U : Models.Ffg.Checkpoint β → Finset ValidatorIndex)
     (W : Models.Ffg.Checkpoint β → Set (ValidatorIndex → ℕ)) (genesis : β)
     (votes : Set (Vote ValidatorIndex β)) (block : Root → β) (epoch : ℕ)
     (state : BeaconState preset fork) : Prop where
-  /-- Up to epoch 2, justification has not run, and the two newest bits are clear. -/
+  /-- Up to epoch 2, justification has changed nothing, and the two newest bits are clear. -/
   early : epoch ≤ 2 →
     state.justificationBits.bits[0] = false ∧ state.justificationBits.bits[1] = false
   /-- A set bit 0 gives a slack link from the previous to the current justified checkpoint.
@@ -285,6 +285,8 @@ So the hypotheses of justification are asked of the state before the slot.
 The bound on the active stake and the sets are asked only when the slot ends an epoch.
 
 The buffer of roots must cover three epochs, as both presets do, so that the caching keeps them.
+
+The current justified epoch must be at most the previous epoch.
 
 The previous justified epoch must be below the previous epoch once justification runs.
 
@@ -504,7 +506,7 @@ theorem advanceSlot_slackBits
         omega
       rw [← two] at oneBack twoBack
       exact getBlockRoot_exists (by rw [cachedFrame.slot]; omega) (by omega)
-        (by rw [cachedFrame.slot]; omega) (by omega)
+        (by rw [cachedFrame.slot]; omega)
     · -- The bits carry their facts at the cached state.
       rw [currentEq]
       refine ⟨fun small => ?_, fun set => ?_, fun set older root epoch read => ?_⟩

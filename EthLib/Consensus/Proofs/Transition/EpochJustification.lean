@@ -165,7 +165,7 @@ theorem finalizes_eq_true {justified : Bool} {source gap currentEpoch : Epoch}
     obtain ⟨sum, sumOk, rfl⟩ := computed
     exact ⟨rfl, ((addChecked_ok_iff.mp sumOk).2).symm⟩
 
-/-- What weighing the votes does to the two newest bits and to the finalized checkpoint.
+/-- What weighing the votes does to the three newest bits and to the finalized checkpoint.
 
 A set bit 0 means that the test of the current epoch passed.
 
@@ -179,9 +179,9 @@ Bit 2 is the old bit 1.
 
 The new finalized checkpoint is the old one, or an old justified one by one of the four rules.
 
-The old current justified checkpoint needs bit 0, and bit 1 too when it is two epochs back.
+The old current justified checkpoint needs at least bit 0, and also bit 1 when two back.
 
-The old previous justified checkpoint needs bit 1, and bit 2 too when it is three epochs back. -/
+The old previous justified checkpoint needs at least bit 1, and also bit 2 when three back. -/
 theorem weighJustificationAndFinalization_bits {total previousBalance currentBalance : Gwei}
     (computed : weighJustificationAndFinalization state total previousBalance currentBalance =
       .ok after) :
