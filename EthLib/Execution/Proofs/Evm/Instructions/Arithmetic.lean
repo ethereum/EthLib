@@ -23,6 +23,13 @@ open EthLib.Base
 theorem toNat_add (x y : U256) : (add x y).toNat = (x.toNat + y.toNat) % 2 ^ 256 :=
   BitVec.toNat_add x y
 
+/-- Adding `x` to a word of value `n` gives `n + x`, when the sum is below `2^256`. -/
+theorem toNat_add_ofNat_of_lt {a : U256} {n x : Nat} (ha : a.toNat = n) (h : n + x < 2 ^ 256) :
+    (add (BitVec.ofNat 256 x) a).toNat = n + x := by
+  simp only [add, BitVec.toNat_add, BitVec.toNat_ofNat, ha]
+  rw [Nat.mod_eq_of_lt (by omega : x < 2 ^ 256), Nat.mod_eq_of_lt (by omega)]
+  omega
+
 /-- SUB is the difference of the operands, reduced modulo 2^256. -/
 theorem toNat_sub (x y : U256) : (sub x y).toNat = (2 ^ 256 - y.toNat + x.toNat) % 2 ^ 256 :=
   BitVec.toNat_sub x y

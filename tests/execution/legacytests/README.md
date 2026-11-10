@@ -34,13 +34,6 @@ The Yellow Paper (Shanghai version, sections 4.4.3 and 4.4.4) makes the gas limi
 `tests/parity/disagreements.toml` lists each of these cases, for the header check and for the state transition.
 So a test fails if EthLib starts to reject them.
 
-The weekly job also expects 71 state tests to fail in the state transition.
-Each creates a contract at an address that holds storage, but has no code and a nonce of zero.
-These tests apply EIP-7610, so the creation fails.
-EthLib does not apply EIP-7610, as the documentation of `EthLib/Execution/Evm/Call/Create.lean` says.
-The creation clears the storage and runs, so the gas that the block uses differs.
-`tests/parity/disagreements.toml` lists each case under the name of its test file.
-
 The state transition leaves out the network `Constantinople`.
 That network runs EIP-1283, which EIP-1716 removed before the fork reached mainnet.
 EthLib treats Constantinople as Petersburg, so it would compute other gas costs for these tests.

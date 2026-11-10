@@ -252,7 +252,7 @@ The calls of the body keep a property of block states that the state before the 
 
 That excludes storage at an account that is empty or missing, since deleting it wipes its storage.
 
-Until EIP-7610 applies, it also excludes storage at an account with no nonce and no code.
+Storage at an account with a balance alone needs no exclusion: a creation there fails, by EIP-7610.
 
 The block has fewer than 2^32 - 1 transactions.
 
