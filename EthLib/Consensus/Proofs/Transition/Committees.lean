@@ -23,12 +23,6 @@ open Base Uint64
 variable {preset : Preset} {fork : Base.Fork} {config : Config} {checks : SignatureChecks}
   {engine : ExecutionEngine preset fork} {state after : BeaconState preset fork}
 
-/-- Whether the validator at a position of the registry is active in an epoch.
-
-A position outside the registry is not active. -/
-def isActiveAt (state : BeaconState preset fork) (epoch : Epoch) (position : Nat) : Bool :=
-  (state.validators.data[position]?.map (isActiveValidator · epoch)).getD false
-
 /-- Two states agree on which positions of the registry are active, in each epoch up to a bound.
 
 A position outside the registry counts as not active. -/

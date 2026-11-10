@@ -1723,9 +1723,17 @@ The vendored fast confirmation cases in `tests/consensus/fork_choice` still pass
 `lt_two_mul_honest_support_of_isOneConfirmed` then gives Lemmas 4 and 3 of the paper for a block that the store confirms.
 Twice its honest support, plus the discount for empty slots, exceeds the committee weight since its parent plus the boost.
 It assumes that the Byzantine validators hold at most the configured share of the stake of the committees, as Assumption 2 of the paper does.
+It also assumes that no validator the store knows to equivocate is honest.
 It also assumes that the effective balances of those validators are whole numbers of 100 Gwei, since the store rounds the weight down to 100 Gwei for its share of the adversary.
-Effective balances are whole increments of 10^9 Gwei, but no theorem yet derives that from the state transition.
-The supporters and the equivocators are sets whose stakes are the store's numbers; no theorem yet builds them from the store.
+`lt_two_mul_honest_supportersOf_of_isOneConfirmed` (`Consensus/Proofs/ForkChoice/FastConfirmationSets.lean`) builds the supporters, the equivocators and the committee members from the store, and their stakes are the store's numbers.
+It replaces that assumption with an invariant of the state: each effective balance of the source of balances is a whole number of increments, and at most its cap.
+It also assumes that the increment of the preset is a whole number of 100 Gwei, as 10^9 Gwei is.
+No theorem yet derives that from the state transition.
+The update of effective balances keeps it, but the other steps and the upgrades have no proof.
+It also assumes that each supporter of the block is a member of the committees of the range.
+Before Gloas the store keeps the target epoch and the root of each latest vote, not its slot, so no theorem yet proves that.
+From Gloas it keeps the slot, but the committees of the vote must still match those of the head.
+The store checks a vote against the committees in the state of its target, while the rule reads them in the state of the head.
 Like the paper, the theorem takes a static set of validators, Assumption 1.
 The honest support of the target of the current epoch takes the total active balance less the weight of the committees so far as the weight still to vote.
 No theorem proves that, which rests on the shuffling of the head and its pulled-up state agreeing on the active validators of the epoch.
