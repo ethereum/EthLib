@@ -69,6 +69,55 @@ private theorem Invariant.withGenesisValidatorsRoot {root : Root} (holds : Invar
     Invariant { state with genesisValidatorsRoot := root } :=
   ⟨holds.balancesMatch, holds.exitsOrdered, holds.ordered, holds.settled, holds.aligned⟩
 
+/-- The genesis state built from deposits, one stage at a time.
+
+Its fork is before Altair.
+
+It starts from an empty genesis state with the block hash and the deposit count.
+
+It adds each deposit, then activates the validators.
+
+The result then takes some genesis validators root. -/
+theorem initializeBeaconStateFromEth1_ok {eth1BlockHash : Hash32} {eth1Timestamp : UInt64}
+    {deposits : Array Deposit} {after : BeaconState preset fork}
+    (computed : initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits =
+      .ok after) :
+    ∃ (before : fork < .altair) (genesisTime : UInt64) (bodyRoot : Root)
+      (deposited activated : BeaconState preset fork) (root : Root),
+      deposits.toList.zipIdx.foldlM
+          (genesisDeposit config checks (Nat.lt_trans before (by decide)) (deposits.map (·.data)))
+          (emptyGenesisState config before genesisTime eth1BlockHash deposits.size.toUInt64
+            bodyRoot) = .ok deposited ∧
+        (List.range deposited.validators.data.size).foldlM activateAtGenesis deposited =
+          .ok activated ∧
+        after = { activated with genesisValidatorsRoot := root } := by
+  unfold initializeBeaconStateFromEth1 at computed
+  split at computed
+  · cases computed
+  rename_i altair
+  simp only [bind_ok_iff, ensure_ok_iff, liftSsz_ok, pure, Except.pure,
+    Except.ok.injEq] at computed
+  obtain ⟨genesisTime, _, _, _, bodyRoot, _, deposited, depositedOk, activated, activatedOk, root,
+    _, rfl⟩ := computed
+  exact ⟨Nat.lt_of_not_le altair, genesisTime, bodyRoot, deposited, activated, root, depositedOk,
+    activatedOk, rfl⟩
+
+/-- The genesis state built from deposits is at the genesis slot.
+
+Its two justified checkpoints are the genesis epoch with the zero root. -/
+theorem initializeBeaconStateFromEth1_checkpoints {eth1BlockHash : Hash32}
+    {eth1Timestamp : UInt64} {deposits : Array Deposit} {after : BeaconState preset fork}
+    (computed : initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits =
+      .ok after) :
+    after.slot = GENESIS_SLOT ∧
+      after.previousJustifiedCheckpoint = ⟨GENESIS_EPOCH, Vector.replicate 32 0⟩ ∧
+      after.currentJustifiedCheckpoint = ⟨GENESIS_EPOCH, Vector.replicate 32 0⟩ := by
+  obtain ⟨_, _, _, _, _, _, depositedOk, activatedOk, rfl⟩ :=
+    initializeBeaconStateFromEth1_ok computed
+  have frame := (Frame.foldlM (fun _ _ _ ok => frame_genesisDeposit ok) depositedOk).trans
+    (Frame.foldlM (fun _ _ _ ok => frame_activateAtGenesis ok) activatedOk)
+  exact ⟨frame.slot, frame.previousJustified, frame.currentJustified⟩
+
 /-- A candidate genesis state exists only before Altair.
 
 It satisfies the invariant that each valid block keeps.
@@ -79,15 +128,8 @@ theorem initializeBeaconStateFromEth1_invariant {eth1BlockHash : Hash32} {eth1Ti
     (computed : initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits =
       .ok after) :
     fork < .altair ∧ Invariant after := by
-  unfold initializeBeaconStateFromEth1 at computed
-  split at computed
-  · cases computed
-  rename_i altair
-  simp only [bind_ok_iff, ensure_ok_iff, liftSsz_ok, pure, Except.pure,
-    Except.ok.injEq] at computed
-  obtain ⟨_, _, _, _, _, _, deposited, depositedOk, activated, activatedOk, root, _, rfl⟩ :=
-    computed
-  have before : fork < .altair := Nat.lt_of_not_le altair
+  obtain ⟨before, _, _, _, _, _, depositedOk, activatedOk, rfl⟩ :=
+    initializeBeaconStateFromEth1_ok computed
   refine ⟨before, ?_⟩
   have frame := (Frame.foldlM (fun _ _ _ ok => frame_genesisDeposit ok) depositedOk).trans
     (Frame.foldlM (fun _ _ _ ok => frame_activateAtGenesis ok) activatedOk)

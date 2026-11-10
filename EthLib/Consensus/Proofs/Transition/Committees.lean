@@ -532,7 +532,10 @@ private theorem keeps_addValidatorToRegistry (before : fork < .altair)
     · rfl
   · cases computed
 
-private theorem pendingFrame_processDeposit (before : fork < .altair) {deposit : Deposit}
+/-- Before Altair, a deposit is a block frame that keeps the activity and the pending attestations.
+
+It keeps every RANDAO mix but the one of the current epoch. -/
+theorem pendingFrame_processDeposit (before : fork < .altair) {deposit : Deposit}
     {hegota : fork < .hegota}
     (computed : processDeposit config checks hegota state deposit = .ok after) :
     PendingFrame state after := by

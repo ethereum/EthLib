@@ -210,6 +210,21 @@ theorem upgradeNext_invariant {pre : ForkedBeaconState preset}
   have frame := upgradeFrame_upgradeNext computed
   exact ⟨frame.invariant holds, frame.finalized⟩
 
+/-- The upgrades due at a slot keep a property of states that each upgrade keeps. -/
+theorem processUpgrades_induction {property : ForkedBeaconState preset → Prop}
+    (step : ∀ {pre : ForkedBeaconState preset}
+      {post : {post : ForkedBeaconState preset // pre.fork < post.fork}},
+      property pre → upgradeNext config checks pre = .ok post → property post.val)
+    {forked after : ForkedBeaconState preset} (holds : property forked)
+    (computed : processUpgrades config checks forked = .ok after) : property after := by
+  fun_induction processUpgrades config checks forked generalizing after with
+  | case1 forked _ more =>
+    obtain ⟨next, nextOk, rest⟩ := bind_ok_iff.mp computed
+    exact more next (step holds nextOk) rest
+  | case2 forked _ =>
+    cases computed
+    exact holds
+
 /-- The upgrades due at a slot keep the invariant and the finalized checkpoint. -/
 theorem processUpgrades_invariant {forked after : ForkedBeaconState preset}
     (holds : Invariant forked.state)

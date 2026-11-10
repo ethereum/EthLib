@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Proofs.IndependentAnswers
+public import VCVio.CryptoFoundations.ReplayFork
 public import VCVio.OracleComp.Coercions.SubSpec.Measure
 public import VCVio.OracleComp.QueryTracking.LoggingOracle.Core
 
@@ -36,6 +37,12 @@ The `k`-th answer of the outside oracle is the answer of the `k`-th pair of the 
 Just before it, the transcript holds a coin query at the code of the point of that pair.
 
 So two runs whose transcripts agree before the `k`-th outside answer share the `k`-th point.
+
+Answering the coins and the outside oracle with uniform draws keeps the law of a run.
+
+A run can also stop just before a query to the outside oracle, and complete it with a given answer.
+
+A replay fork there, with an event, is no likelier than two independent completions meeting it.
 
 The source is [Fersch, Kiltz, Poettering, CCS 2016](https://doi.org/10.1145/2976749.2978413).
 
@@ -535,5 +542,226 @@ theorem simulateQ_outsideImpl_run_evalDistEq {α : Type} (oa : PermComp A α) (s
         (g := fun z => (simulateQ indepPermImpl (k z.1)).run z.2)
         fun _ => evalDistEq_liftComp_uniform _
       simpa only [bind_map_left] using h
+
+/-! ## The oracles answered by uniform draws, and the stopped run -/
+
+omit [FinEnum A] [UniformAnswerMeasure (Unit →ₒ A)] in
+/-- The oracles of the run with the outside oracle: coins passed through, and uniform answers. -/
+abbrev outsideSample : QueryImpl (OutsideSpec A) ProbComp :=
+  QueryImpl.ofLift unifSpec ProbComp + uniformSampleImpl (spec := (Unit →ₒ A))
+
+omit [FinEnum A] in
+/-- The coins and the uniform answers have the law of the outside oracles. -/
+theorem simulateQ_outsideSample_evalDistEq {α : Type}
+    (oa : OracleComp (OutsideSpec A) α) :
+    EvalDistEq (m' := OracleComp (OutsideSpec A)) (simulateQ outsideSample oa) oa := by
+  let : MeasurableSpace α := ⊤
+  refine EvalDistEq.of_evalDist_eq
+    (evalDist_simulateQ_eq_of_forall (spec := OutsideSpec A) outsideSample (fun t => ?_) oa)
+  rw [OracleSpec.AnswerMeasure.toMeasure_eq_uniformOn]
+  rcases t with n | u
+  · simp only [QueryImpl.add_apply_inl, QueryImpl.ofLift_eq_id', QueryImpl.id'_apply]
+    exact evalDist_liftM_query_uniform (spec := unifSpec) n
+  · let : MeasurableSpace A := ⊤
+    let : MeasurableSpace ((OutsideSpec A).Range (.inr u)) := ‹MeasurableSpace A›
+    simp only [QueryImpl.add_apply_inr, uniformSampleImpl_apply]
+    exact SampleableType.evalDist_uniformSample
+
+omit [FinEnum A] in
+/-- An event of a run of the outside oracles has the same chance once the oracles are sampled. -/
+theorem prEvent_simulateQ_outsideSample (X : OracleComp (OutsideSpec A) Prop) :
+    prEvent (simulateQ outsideSample X) = prEvent X := by
+  have h := (simulateQ_outsideSample_evalDistEq X).prEvent_eq (fun e => e)
+  simpa only [id_map'] using h
+
+omit [FinEnum A] [UniformAnswerMeasure (Unit →ₒ A)] in
+/-- Completing a query to the outside oracle draws a uniform answer, then completes with it. -/
+theorem simulateQ_outsideSample_complete {α : Type} {main : OracleComp (OutsideSpec A) α} {n : ℕ}
+    (occ : PFunctor.FreeM.Cursor.Occurrence (P := (OutsideSpec A).toPFunctor) (.inr ()) main n) :
+    simulateQ outsideSample (occ.complete : OracleComp (OutsideSpec A) _) =
+      $ᵗ A >>= fun a =>
+        simulateQ outsideSample (occ.completeWith a : OracleComp (OutsideSpec A) _) := by
+  rw [PFunctor.FreeM.Cursor.Occurrence.complete_eq_liftBind]
+  change simulateQ outsideSample ((liftM ((OutsideSpec A).query (.inr ())) :
+    OracleComp (OutsideSpec A) _) >>= occ.completeWith) = _
+  rw [simulateQ_bind, simulateQ_spec_query]
+  rfl
+
+omit [FinEnum A] [UniformAnswerMeasure (Unit →ₒ A)] in
+/-- A completion with a given answer keeps that answer. -/
+theorem answer_of_mem_support_simulateQ_completeWith {α : Type}
+    {main : OracleComp (OutsideSpec A) α} {n : ℕ}
+    (occ : PFunctor.FreeM.Cursor.Occurrence (P := (OutsideSpec A).toPFunctor) (.inr ()) main n)
+    {a : A} {c : occ.Completion}
+    (hc : c ∈ support
+      (simulateQ outsideSample (occ.completeWith a : OracleComp (OutsideSpec A) _))) :
+    c.answer = a := by
+  change c ∈ support (simulateQ outsideSample
+    ((PFunctor.FreeM.Cursor.Occurrence.Completion.mk a) <$>
+      (PFunctor.FreeM.withPath (occ.resume a) : OracleComp (OutsideSpec A) _))) at hc
+  rw [simulateQ_map, support_map] at hc
+  obtain ⟨_, -, rfl⟩ := hc
+  rfl
+
+/-- Binds with pointwise equal events, the second one already a proposition. -/
+private theorem prEvent_bind_congr_prop {m : Type → Type} [Monad m] [LawfulMonad m]
+    [EvalDistSemantics m] [LawfulEvalDistSemantics m] {β γ : Type} (mx : m β)
+    (f : β → m γ) (g : β → m Prop) (p : γ → Prop)
+    (h : ∀ x, Pr{let y ← f x}[p y] = prEvent (g x)) :
+    Pr{let y ← mx >>= f}[p y] = prEvent (mx >>= g) :=
+  (prEvent_bind_congr mx f g p (fun e => e) fun x => by simpa using h x).trans (by simp)
+
+omit [SampleableType A] in
+/-- **A fork at index `s` is no likelier than two completions of the run stopped at `s`.**
+
+Take the event that the fork succeeds, its first output has fork index `s`, and `D` holds.
+
+Stop the run before its query to the outside oracle that follows `s` earlier ones.
+
+Complete that query twice, independently.
+
+The event is at most as likely as both completions having fork index `s` with `D`. -/
+theorem prEvent_contextFork_le_splitAt {α : Type}
+    (main : OracleComp (OutsideSpec A) α) (qb : ℕ ⊕ Unit → ℕ)
+    (cf : α → Option (Fin (qb (.inr ()) + 1))) (s : Fin (qb (.inr ()) + 1))
+    (D : α → α → Prop)
+    (cont : PFunctor.FreeM.Cursor.Split (P := (OutsideSpec A).toPFunctor) (.inr ()) main s →
+      OracleComp (OutsideSpec A) Prop)
+    (hk₁ : ∀ path, cont (.missing path) = pure False)
+    (hk₂ : ∀ occ, cont (.found occ) = do
+      let c₁ ← occ.complete
+      let c₂ ← occ.complete
+      pure (cf (PFunctor.FreeM.output main c₁.path) = some s ∧
+        cf (PFunctor.FreeM.output main c₂.path) = some s ∧
+        D (PFunctor.FreeM.output main c₁.path) (PFunctor.FreeM.output main c₂.path))) :
+    Pr{let r ← contextFork main qb (.inr ()) cf}[
+      ∃ x₁ x₂, r = some (x₁, x₂) ∧ cf x₁ = some s ∧ D x₁ x₂] ≤
+    prEvent (PFunctor.FreeM.Cursor.splitAt (P := (OutsideSpec A).toPFunctor) (.inr ()) main s >>=
+      cont) := by
+  classical
+  let Fv : Option (PFunctor.FreeM.Cursor.ForkView (P := (OutsideSpec A).toPFunctor) (.inr ())
+      main s) → Prop := fun v? => ∃ v, v? = some v ∧
+    cf (PFunctor.FreeM.output main v.firstPath) = some s ∧
+    cf (PFunctor.FreeM.output main v.secondPath) = some s ∧
+    D (PFunctor.FreeM.output main v.firstPath) (PFunctor.FreeM.output main v.secondPath)
+  have hR : Pr{let v ← (PFunctor.FreeM.Cursor.forkAt (P := (OutsideSpec A).toPFunctor) (.inr ())
+      main s : OracleComp (OutsideSpec A) _)}[Fv v] =
+    prEvent (PFunctor.FreeM.Cursor.splitAt (P := (OutsideSpec A).toPFunctor) (.inr ()) main s >>=
+      cont) := by
+    unfold PFunctor.FreeM.Cursor.forkAt
+    refine prEvent_bind_congr_prop (m := OracleComp (OutsideSpec A)) _ _ _ _ fun sp => ?_
+    cases sp with
+    | missing path =>
+      rw [PFunctor.FreeM.Cursor.Split.completeFork_missing, hk₁]
+      simp [Fv]
+    | found occ =>
+      rw [PFunctor.FreeM.Cursor.Split.completeFork_found, hk₂]
+      refine prEvent_bind_congr_prop (m := OracleComp (OutsideSpec A)) _ _ _ _ fun c₁ => ?_
+      rw [bind_pure_comp]
+      refine (prEvent_map (m := OracleComp (OutsideSpec A)) occ.complete _ _).trans
+        (prEvent_congr _ _ _ fun c₂ => ?_)
+      simp [Fv, PFunctor.FreeM.Cursor.ForkView.firstPath, PFunctor.FreeM.Cursor.ForkView.secondPath]
+  rw [← hR, PFunctor.FreeM.Cursor.forkAt_eq_locateAndForkAt]
+  rw [show contextFork main qb (.inr ()) cf =
+    Option.map PFunctor.FreeM.Cursor.SelectedForkView.outputs <$>
+      contextForkWitness main qb (.inr ()) cf from rfl, prEvent_map]
+  unfold contextForkWitness
+  rw [PFunctor.FreeM.Cursor.filterMapLocateAndForkSelected_eq_filterMapLocateAndForkBy,
+    PFunctor.FreeM.Cursor.filterMapLocateAndForkBy_eq_bind_complete]
+  unfold PFunctor.FreeM.Cursor.locateAndForkAt
+  refine prEvent_bind_mono_of_forall_le (OracleComp.ofFreeM _) _ _ _ _ fun path => ?_
+  rcases hcf : cf (PFunctor.FreeM.output main path) with _ | k
+  · dsimp only
+    rw [prEvent_pure]
+    simp
+  by_cases hks : k = s
+  · subst hks
+    dsimp only
+    rcases hloc : PFunctor.FreeM.Cursor.locateAt? (P := (OutsideSpec A).toPFunctor) (.inr ())
+        main path k with _ | located
+    · dsimp only
+      rw [prEvent_pure]
+      simp
+    · dsimp only
+      rw [PFunctor.FreeM.Cursor.Located.fork_eq_map_complete]
+      refine ((prEvent_map (m := OracleComp (OutsideSpec A)) located.occurrence.complete _
+        _).trans_le (prEvent_mono _ _ _ fun second h => ?_)).trans_eq
+        ((prEvent_map (m := OracleComp (OutsideSpec A)) _ _ _).trans
+          (prEvent_map (m := OracleComp (OutsideSpec A)) _ _ _)).symm
+      obtain ⟨x₁, x₂, hm, -, hD⟩ := h
+      simp only [acceptContextForkWitness, classifyForkView] at hm
+      by_cases ha : located.completion.answer = second.answer
+      · simp [ha] at hm
+      by_cases hc : cf (PFunctor.FreeM.output main located.completion.path) = some k ∧
+          cf (PFunctor.FreeM.output main second.path) = some k
+      · simp only [PFunctor.FreeM.Cursor.ForkView.firstAnswer,
+          PFunctor.FreeM.Cursor.ForkView.secondAnswer, PFunctor.FreeM.Cursor.ForkView.firstPath,
+          PFunctor.FreeM.Cursor.ForkView.secondPath, ha, hc, ite_false, ite_true, and_self,
+          Option.isSome_some, Option.map_some, Option.some.injEq] at hm
+        simp only [PFunctor.FreeM.Cursor.SelectedForkView.outputs_mk, Prod.mk.injEq] at hm
+        obtain ⟨rfl, rfl⟩ := hm
+        exact ⟨_, rfl, hc.1, hc.2, hD⟩
+      · simp [PFunctor.FreeM.Cursor.ForkView.firstAnswer,
+          PFunctor.FreeM.Cursor.ForkView.secondAnswer, PFunctor.FreeM.Cursor.ForkView.firstPath,
+          PFunctor.FreeM.Cursor.ForkView.secondPath, ha, hc] at hm
+  · dsimp only
+    refine le_of_eq_of_le ?_ zero_le
+    rcases hloc : PFunctor.FreeM.Cursor.locateAt? (P := (OutsideSpec A).toPFunctor) (.inr ())
+        main path k with _ | located
+    · dsimp only
+      rw [prEvent_pure]
+      simp
+    · dsimp only
+      refine (prEvent_map (m := OracleComp (OutsideSpec A)) located.occurrence.complete _ _).trans
+        (prEvent_eq_zero_of_forall_not _ _ fun second h => ?_)
+      obtain ⟨x₁, x₂, hm, hs, -⟩ := h
+      simp only [acceptContextForkWitness, classifyForkView] at hm
+      by_cases ha : located.completion.answer = second.answer
+      · simp [ha] at hm
+      by_cases hc : cf (PFunctor.FreeM.output main located.completion.path) = some k ∧
+          cf (PFunctor.FreeM.output main second.path) = some k
+      · simp only [PFunctor.FreeM.Cursor.ForkView.firstAnswer,
+          PFunctor.FreeM.Cursor.ForkView.secondAnswer, PFunctor.FreeM.Cursor.ForkView.firstPath,
+          PFunctor.FreeM.Cursor.ForkView.secondPath, ha, hc, ite_false, ite_true, and_self,
+          Option.isSome_some, Option.map_some, Option.some.injEq,
+          PFunctor.FreeM.Cursor.SelectedForkView.outputs_mk, Prod.mk.injEq] at hm
+        obtain ⟨rfl, rfl⟩ := hm
+        exact hks (Option.some.inj (hc.1.symm.trans hs))
+      · simp [PFunctor.FreeM.Cursor.ForkView.firstAnswer,
+          PFunctor.FreeM.Cursor.ForkView.secondAnswer, PFunctor.FreeM.Cursor.ForkView.firstPath,
+          PFunctor.FreeM.Cursor.ForkView.secondPath, ha, hc] at hm
+
+omit [FinEnum A] in
+/-- An event of two completions of the run stopped at `n` keeps its chance with sampled oracles. -/
+theorem prEvent_splitAt_eq_sample {α : Type}
+    (main : OracleComp (OutsideSpec A) α) (n : ℕ) (P : α → α → Prop)
+    (k : PFunctor.FreeM.Cursor.Split (P := (OutsideSpec A).toPFunctor) (.inr ()) main n →
+      OracleComp (OutsideSpec A) Prop)
+    (hk₁ : ∀ path, k (.missing path) = pure False)
+    (hk₂ : ∀ occ, k (.found occ) = do
+      let c₁ ← occ.complete
+      let c₂ ← occ.complete
+      pure (P (PFunctor.FreeM.output main c₁.path) (PFunctor.FreeM.output main c₂.path)))
+    (k' : PFunctor.FreeM.Cursor.Split (P := (OutsideSpec A).toPFunctor) (.inr ()) main n →
+      ProbComp Prop)
+    (hk'₁ : ∀ path, k' (.missing path) = pure False)
+    (hk'₂ : ∀ occ, k' (.found occ) = do
+      let a₁ ← $ᵗ A
+      let c₁ ← simulateQ outsideSample (occ.completeWith a₁)
+      let a₂ ← $ᵗ A
+      let c₂ ← simulateQ outsideSample (occ.completeWith a₂)
+      pure (P (PFunctor.FreeM.output main c₁.path) (PFunctor.FreeM.output main c₂.path))) :
+    prEvent (PFunctor.FreeM.Cursor.splitAt (P := (OutsideSpec A).toPFunctor) (.inr ()) main n >>=
+      k) =
+    prEvent (simulateQ outsideSample
+      (PFunctor.FreeM.Cursor.splitAt (P := (OutsideSpec A).toPFunctor) (.inr ()) main n) >>=
+      k') := by
+  rw [← prEvent_simulateQ_outsideSample, simulateQ_bind]
+  refine congrArg prEvent (bind_congr fun sp => ?_)
+  cases sp with
+  | missing path => rw [hk₁, hk'₁]; rfl
+  | found occ =>
+    rw [hk₂, hk'₂]
+    simp [simulateQ_outsideSample_complete]
 
 end EthLib.Cryptography.LazyPermutation
