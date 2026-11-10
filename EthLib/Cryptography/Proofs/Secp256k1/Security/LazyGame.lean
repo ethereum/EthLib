@@ -154,7 +154,7 @@ def lazyExperiment (scheme : Scheme F G A M) (fuel : ℕ) (adversary : Adversary
 omit [Field F] [DecidableEq F] [AddCommGroup G] [Module F G] [DecidableEq G] [SampleableType F]
   [DecidableEq M] [FinEnum A] in
 /-- With `π`, the conversion asked of the oracle is the conversion by `π`. -/
-private theorem simulateQ_permImpl_conversionQ (scheme : Scheme F G A M) (π : Equiv.Perm A)
+theorem simulateQ_permImpl_conversionQ (scheme : Scheme F G A M) (π : Equiv.Perm A)
     (R : G) : simulateQ (permImpl π) (conversionQ scheme R) = pure (conversion scheme π R) := by
   simp [conversionQ, conversion, permImpl, permOracle]
 
@@ -171,7 +171,7 @@ private theorem simulateQ_permImpl_signNonceQ (scheme : Scheme F G A M) (π : Eq
 
 omit [SampleableType F] [DecidableEq M] [FinEnum A] in
 /-- With `π`, verification asked of the oracle is verification by `π`. -/
-private theorem simulateQ_permImpl_verifyQ (scheme : Scheme F G A M) (π : Equiv.Perm A)
+theorem simulateQ_permImpl_verifyQ (scheme : Scheme F G A M) (π : Equiv.Perm A)
     (X : G) (m : M) (t s : F) :
     simulateQ (permImpl π) (verifyQ scheme X m t s) = pure (verify scheme π X m t s) := by
   unfold verifyQ
