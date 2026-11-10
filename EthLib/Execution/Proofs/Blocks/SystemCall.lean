@@ -159,6 +159,20 @@ theorem checkedSystemCall_eq_systemCallFailed_iff {address : Address} {error : E
         cases call.error <;>
           simp [throw, throwThe, MonadExceptOf.throw, pure, Except.pure, eq_comm, hNe]
 
+/-! ## A call that joins the body -/
+
+/-- A call that joins the body is recorded by its builder.
+
+Its writes join the block state, and the builder after the record is the new builder. -/
+theorem BodyState.join_eq_ok {body body' : BodyState} {tx : State.TransactionState}
+    (h : body.join tx = .ok body') :
+    ∃ builder, body.builder.recordTransaction tx = .ok builder ∧
+      body' = ⟨tx.incorporateTxIntoBlock.parent, builder⟩ := by
+  unfold BodyState.join at h
+  obtain ⟨b, hb, h⟩ := bind_ok_iff.mp h
+  cases h
+  exact ⟨b, hb, rfl⟩
+
 /-! ## The calls at the start of a block -/
 
 /-- The system calls at the start of a block pass through one body between the two calls.

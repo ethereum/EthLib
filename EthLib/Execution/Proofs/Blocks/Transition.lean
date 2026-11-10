@@ -341,6 +341,16 @@ theorem applyTransactions_steps {env : BlockEnvironment fork} {body : BodyState}
 
 /-! ## The body -/
 
+/-- A step that runs on a block state succeeds on it, and its writes give the block state after. -/
+theorem onBlock_eq_ok {block block' : BlockState}
+    {step : State.TransactionState → Except State.StateError State.TransactionState}
+    (h : onBlock block step = .ok block') :
+    ∃ tx, step (.ofBlock block) = .ok tx ∧ block' = tx.incorporateTxIntoBlock.parent := by
+  unfold onBlock at h
+  obtain ⟨tx, htx, h⟩ := bind_ok_iff.mp h
+  cases h
+  exact ⟨tx, mapError_ok_iff.mp htx, rfl⟩
+
 /-- A body that runs takes each step, in order, and gives the gas counts of its transactions.
 
 The DAO transfer runs first, then the system calls that start the block, then the transactions.
@@ -399,6 +409,16 @@ theorem applyBody_eq_ok {config : ChainConfig} {env : BlockEnvironment fork}
     exact ⟨state, body, txs, _, requested, hState, mapError_ok_iff.mp hBody, hTxs,
       fun hYes => absurd hYes hShapella, fun _ => rfl, hRequests, hRewarded, rfl, hHash, rfl,
       rfl⟩
+
+/-- From Glamsterdam, a body gives the hash of the list that its builder built. -/
+theorem applyBody_accessListHash {config : ChainConfig} {env : BlockEnvironment fork}
+    {block : Block fork Transaction} {start : BlockState} {output : BlockOutput fork}
+    (h : applyBody config env block start = .ok output) (hFork : .glamsterdam ≤ fork) :
+    ∃ value, output.accessListHash = some value ∧
+      BlockAccessList.hash output.body.builder.build = .ok value := by
+  obtain ⟨-, -, -, -, requested, -, -, -, -, -, -, -, hBuilder, hHash, -⟩ := applyBody_eq_ok h
+  rw [hBuilder]
+  exact (accessListHashOf_eq_ok hHash hFork).2
 
 /-! ## The transition -/
 

@@ -56,9 +56,7 @@ variable {fork : Fork}
 theorem BodyState.join_covers {body body' : BodyState} {tx : State.TransactionState}
     (h : body.join tx = .ok body') :
     body.builder.Extends body'.builder ∧ body'.builder.Covers tx := by
-  unfold join at h
-  obtain ⟨b, hb, h⟩ := bind_ok_iff.mp h
-  cases h
+  obtain ⟨b, hb, rfl⟩ := BodyState.join_eq_ok h
   exact AccessListBuilder.recordTransaction_covers hb
 
 /-- A transaction that enters the body extends the builder, which then covers its run. -/
@@ -269,16 +267,6 @@ theorem applyBody_covers_transaction {config : ChainConfig} {env : BlockEnvironm
   exact ⟨before, included, out, hBefore, hIncluded, hOut, hCovers.mono hExt⟩
 
 /-! ## The list of the block -/
-
-/-- From Glamsterdam, a body gives the hash of the list that its builder built. -/
-theorem applyBody_accessListHash {config : ChainConfig} {env : BlockEnvironment fork}
-    {block : Block fork Transaction} {start : BlockState} {output : BlockOutput fork}
-    (h : applyBody config env block start = .ok output) (hFork : .glamsterdam ≤ fork) :
-    ∃ value, output.accessListHash = some value ∧
-      BlockAccessList.hash output.body.builder.build = .ok value := by
-  obtain ⟨-, -, -, -, requested, -, -, -, -, -, -, -, hBuilder, hHash, -⟩ := applyBody_eq_ok h
-  rw [hBuilder]
-  exact (accessListHashOf_eq_ok hHash hFork).2
 
 /-- From Glamsterdam, a block that passes the transition commits to the list that its builder built.
 

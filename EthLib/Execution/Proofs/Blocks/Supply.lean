@@ -107,17 +107,13 @@ theorem supply_onBlock {block block' : BlockState}
     (h : onBlock block step = .ok block') :
     ∃ tx, step (.ofBlock block) = .ok tx ∧
       (TransactionState.ofBlock block').supply = tx.supply := by
-  unfold onBlock at h
-  obtain ⟨tx, htx, h⟩ := bind_ok_iff.mp h
-  cases h
-  exact ⟨tx, mapError_ok_iff.mp htx, TransactionState.supply_incorporateTxIntoBlock tx⟩
+  obtain ⟨tx, htx, rfl⟩ := onBlock_eq_ok h
+  exact ⟨tx, htx, TransactionState.supply_incorporateTxIntoBlock tx⟩
 
 /-- A call that joins the body leaves the supply of its end state. -/
 theorem BodyState.supply_join {body body' : BodyState} {tx : TransactionState}
     (h : body.join tx = .ok body') : (TransactionState.ofBlock body'.block).supply = tx.supply := by
-  unfold BodyState.join at h
-  obtain ⟨builder, -, h⟩ := bind_ok_iff.mp h
-  cases h
+  obtain ⟨builder, -, rfl⟩ := BodyState.join_eq_ok h
   exact TransactionState.supply_incorporateTxIntoBlock tx
 
 /-- The DAO transfer moves ether, and so keeps the supply. -/
