@@ -26,6 +26,8 @@ From Glamsterdam, its one counter also pays the state gas of EIP-8037 and ignore
 
 From London, the refund to clear a slot is that of EIP-3529.
 
+From Glamsterdam, its price and its refund are those of EIP-8038.
+
 Each rule here is a triple for one opcode, from one running frame of a code to the next.
 
 Most rules here also hold over the steps from frames that are monotone in gas.
@@ -1550,7 +1552,7 @@ That state keeps every other slot of every address.
 
 It also keeps the words before the transaction, the accounts, the codes and the block.
 
-The rest is as for SSTORE: a frame that may change the state, more than 2300 gas, and the price. -/
+The rest is as for SSTORE: a frame that may change the state, more than 2300 gas, and the charge. -/
 theorem sstore_of_account (hfork : .berlin ≤ fork)
     {key new : U256} {rest : List U256} {cold : Bool}
     (hlt : pc < code.size) (hbyte : code[pc] = 0x55) (hstatic : message.isStatic = false)

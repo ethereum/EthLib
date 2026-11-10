@@ -267,7 +267,7 @@ private theorem processSystemMessage_of_run (Meter : Type) [GasMeter Meter]
 
 It runs with the gas meter of each fork.
 
-The code passes the opcode check.
+From Glamsterdam, the code passes the opcode check.
 
 The address is not a precompile, and the code is not a delegation indicator.
 
@@ -289,7 +289,7 @@ In the conclusion, `Q` gets that start state. -/
 theorem systemCall_of_spec {env : BlockEnvironment fork} {block : State.BlockState}
     {target : Address} {data : ByteArray}
     {Q : TransactionState → TransactionState → ByteArray → Prop}
-    (hparis : .paris ≤ fork) (supported : SupportedCode code = true)
+    (hparis : .paris ≤ fork) (supported : .glamsterdam ≤ fork → SupportedCode code = true)
     (hcode : codeAt block target = .ok code) (hsize : code.size ≠ 0)
     (hpre : Precompiles.addedAt target.toU256.toNat = none)
     (hdelegate : delegatedAddress code = none)
@@ -330,7 +330,7 @@ theorem systemCall_of_spec {env : BlockEnvironment fork} {block : State.BlockSta
     have hbound : low.pc ∈ opcodePositions low.code :=
       mem_opcodePositions_iff.mpr (.here (by change 0 < message.code.size; rw [hcodeM]; omega))
     obtain ⟨after, _, highReached⟩ := reached.followsMeter
-      (by change SupportedCode message.code = true; rw [hcodeM]; exact supported)
+      (by change SupportedCode message.code = true; rw [hcodeM]; exact supported (Nat.le_of_not_gt hglam))
       rfl (.inr hbound) herr (Nat.le_of_eq hheld)
     exact ⟨_, runFrame_of_reaches highReached halted held, herr, hq⟩
 
@@ -340,7 +340,7 @@ It runs with the gas meter of each fork.
 
 The contract has code at an address that is not a precompile, and its code is not a delegation.
 
-The code passes the opcode check.
+From Glamsterdam, the code passes the opcode check.
 
 The storage of the contract in the block meets `P`.
 
@@ -358,7 +358,7 @@ Its state holds `store` of the storage in the block at the contract, and keeps t
 theorem systemCall_of_writesStorage {env : BlockEnvironment fork} {block : State.BlockState}
     {target : Address} {data : ByteArray} {P : (U256 → U256) → Prop}
     (output : (U256 → U256) → ByteArray) (store : (U256 → U256) → U256 → U256)
-    (hparis : .paris ≤ fork) (supported : SupportedCode code = true)
+    (hparis : .paris ≤ fork) (supported : .glamsterdam ≤ fork → SupportedCode code = true)
     (hcode : codeAt block target = .ok code) (hsize : code.size ≠ 0)
     (hpre : Precompiles.addedAt target.toU256.toNat = none)
     (hdelegate : delegatedAddress code = none)

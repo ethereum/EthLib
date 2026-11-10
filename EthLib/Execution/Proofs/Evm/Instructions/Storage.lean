@@ -26,6 +26,10 @@ SSTORE never completes in a static frame, and from Istanbul fails with 2300 gas 
 
 From Glamsterdam, SSTORE in a static frame fails before it reads the stack.
 
+From Berlin, a write with its state gas costs at most 22,100 gas before Glamsterdam.
+
+From Glamsterdam, it costs at most 5 times that.
+
 SLOAD accesses the slot of the current account and pays the cold or warm price of the fork.
 
 Then it puts the word of the slot in place of the key.

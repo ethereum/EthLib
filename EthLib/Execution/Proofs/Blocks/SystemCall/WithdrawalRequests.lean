@@ -1338,7 +1338,7 @@ theorem systemCall_dequeue {env : BlockEnvironment fork} {block : State.BlockSta
           (storageOf (.ofBlock block) WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS))
         (.ofBlock block) out.state :=
   systemCall_of_writesStorage (P := Bounded) _ _ (Nat.le_trans (by decide) hfork)
-    supportedCode_CODE hcode
+    (fun _ => supportedCode_CODE) hcode
     (by simp [CODE, NatCode.size_ofNat]) addedAt_WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS
     delegatedAddress_CODE hbounded
     fun message _ _ hcaller htarget hstatic _ _ hgas hacc hread => by

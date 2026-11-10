@@ -418,7 +418,7 @@ theorem systemCall_set {env : BlockEnvironment fork} {block : State.BlockState} 
         (setRoot env.timestamp data (storageOf (.ofBlock block) BEACON_ROOTS_ADDRESS))
         (.ofBlock block) out.state :=
   systemCall_of_writesStorage (P := fun _ => True) (fun _ => .empty) _
-    (Nat.le_trans (by decide) hfork) supportedCode_CODE hcode (by simp [CODE, NatCode.size_ofNat])
+    (Nat.le_trans (by decide) hfork) (fun _ => supportedCode_CODE) hcode (by simp [CODE, NatCode.size_ofNat])
     addedAt_BEACON_ROOTS_ADDRESS delegatedAddress_CODE trivial
     fun message _ _ hcaller htarget hstatic henv hdata hgas hacc _ => by
       subst henv hdata
