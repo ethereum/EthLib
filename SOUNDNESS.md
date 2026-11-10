@@ -2476,6 +2476,28 @@ The bound on the reward of a flag does not use the square root of the total acti
 The validators that set a flag in the previous epoch include those whose exit epoch is the current epoch.
 So their effective balance can exceed the total active balance of the current epoch, and only the budget bounds it.
 The budget of `2^57` Gwei is about 84% of the largest that this bound allows.
+
+The builder payments of Gloas carry four hypotheses and one restriction.
+`chainSteps_paysQuorum` proves that along a chain through the last slot of an epoch, each payment of the previous epoch that reaches its quorum is paid exactly once.
+Paid means that the withdrawal of the payment joins the queue of the withdrawals of the builders.
+The last slot of the epoch queues the withdrawals of exactly those payments.
+A run of slots and blocks over the whole chain (`PaymentChain`) releases each of them, and releases no payment twice.
+The withdrawals of such a run are fixed by the states that each step computes.
+Its payments are fixed too, up to their order: a slot lists only payments that reach the quorum, and a block only the payment of its parent.
+`paymentChain_of_chainSteps` proves that every chain inside one fork is such a run, and `PaymentChain.nodup` gives "at most once" for any such run.
+The facts on the payments must hold at the first state, as `paymentFacts_upgradeToGloas` proves for the upgrade to Gloas.
+These theorems also take a positive payment quorum (`PaymentQuorumPositive`), at least two slots in an epoch, and at most 2^40 entries in each registry at the last state.
+`paymentQuorumPositive_presets` and `twoSlotsPerEpoch_presets` prove the first two for the mainnet and minimal presets.
+For the validators, 2^40 is `VALIDATOR_REGISTRY_LIMIT`.
+The registry of the builders has no limit in the specification, so for it the bound is an assumption, which matches `BUILDER_INDEX_FLAG`.
+No theorem proves either bound along a chain.
+The chain must stay inside one fork, from Gloas on, so a chain across the upgrade to Heze is not covered.
+A run of payment steps relates two states of one fork, and carrying open payments through that upgrade needs a run across forks.
+The four facts that the runs assume do hold through that upgrade, by `PaymentFacts.upgradeToHeze`.
+The "at least once" half is stated for a chain split at the epoch step, which fixes the step that pays.
+The quorum is read on the state that the epoch transition reaches before its step of the payments.
+A bid whose payment a slashing cancels may still be paid by the late path of the bid, and then the run releases it once.
+
 Whatever those hypotheses leave unproved is part of what a reader trusts.
 
 ### A3. Side channels

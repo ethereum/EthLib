@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.Fork
 public import EthLib.Consensus.Proofs.Transition.ForkBoundary
 public import Mathlib.Logic.Relation
 
@@ -17,6 +18,10 @@ A block that the state transition accepts is a run of slot steps, then one block
 So an invariant that each step keeps, under hypotheses on that step, holds along every such block.
 
 The hypotheses need hold only for the steps between its first and its last state.
+
+A run of steps never moves the fork back, so a run between two states of one fork stays in it.
+
+Inside one fork, a step is one slot or one block.
 -/
 
 @[expose] public section
@@ -100,5 +105,55 @@ theorem chainSteps_and {property : ForkedBeaconState preset → ForkedBeaconStat
   | head step rest more =>
     exact .head ⟨step, meets _ _ .refl step rest⟩
       (more fun forked after reach => meets forked after (.head step reach))
+
+/-- One step of a chain never moves the fork back. -/
+theorem ChainStep.fork_le {forked after : ForkedBeaconState preset}
+    (step : ChainStep config checks forked after) : forked.fork ≤ after.fork := by
+  cases step with
+  | slot computed =>
+    obtain ⟨_, _, upgraded⟩ := bind_ok_iff.mp computed
+    exact (processUpgrades_fork_le upgraded :)
+  | block => exact Nat.le_refl _
+
+/-- A run of steps of a chain never moves the fork back. -/
+theorem fork_le_of_chainSteps {first last : ForkedBeaconState preset}
+    (steps : Relation.ReflTransGen (ChainStep config checks) first last) :
+    first.fork ≤ last.fork := by
+  induction steps with
+  | refl => exact Nat.le_refl _
+  | tail _ step more => exact Nat.le_trans more step.fork_le
+
+/-- The last step of a run inside one fork starts in that fork. -/
+theorem fork_eq_of_chainSteps {fork : Fork} {first last : BeaconState preset fork}
+    {forked : ForkedBeaconState preset}
+    (steps : Relation.ReflTransGen (ChainStep config checks) ⟨fork, first⟩ forked)
+    (step : ChainStep config checks forked ⟨fork, last⟩) :
+    ∃ middle : BeaconState preset fork, forked = ⟨fork, middle⟩ := by
+  obtain ⟨middleFork, middle⟩ := forked
+  obtain rfl : middleFork = fork :=
+    Fork.ctorIdx_injective (Nat.le_antisymm step.fork_le (fork_le_of_chainSteps steps))
+  exact ⟨middle, rfl⟩
+
+/-- One step of a chain inside one fork is a slot or a block of that fork. -/
+theorem ChainStep.slot_or_block {fork : Fork} {state after : BeaconState preset fork}
+    (step : ChainStep config checks ⟨fork, state⟩ ⟨fork, after⟩) :
+    advanceSlot config checks state = .ok after ∨
+      ∃ (engine : ExecutionEngine preset fork) (block : BeaconBlock preset fork),
+        Consensus.processBlock config checks engine state block = .ok after := by
+  generalize first : (⟨fork, state⟩ : ForkedBeaconState preset) = forked at step
+  generalize second : (⟨fork, after⟩ : ForkedBeaconState preset) = upgraded at step
+  cases step with
+  | slot computed =>
+    subst first
+    obtain ⟨advanced, advancedOk, upgraded⟩ := bind_ok_iff.mp computed
+    subst second
+    have same := processUpgrades_eq_of_fork_le upgraded (Nat.le_refl _)
+    cases same
+    exact .inl advancedOk
+  | block engine signed _ computed =>
+    obtain ⟨-, blockOk, -⟩ := applySignedBlock_ok computed
+    cases first
+    cases second
+    exact .inr ⟨engine, signed.message, blockOk⟩
 
 end EthLib.Consensus

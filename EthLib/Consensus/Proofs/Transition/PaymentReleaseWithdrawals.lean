@@ -73,6 +73,27 @@ theorem PaymentStep.of_release {gloas : .glamsterdam ≤ fork} {released : List 
     release.forward⟩
   simp [release.queue]
 
+/-- A release, then a step that releases nothing, form one step.
+
+The released payments must be closed after the second step.
+
+That step may drop a prefix of the queue. -/
+theorem PaymentStep.of_release_trans {gloas : .glamsterdam ≤ fork}
+    {middle : BeaconState preset fork} {released : List Slot}
+    (release : PaymentRelease state middle gloas released)
+    (step : PaymentStep middle after gloas [])
+    (closes : ∀ slot ∈ released, ¬ PaymentOpen after gloas slot) :
+    PaymentStep state after gloas released := by
+  obtain ⟨count, queue⟩ := step.queue
+  refine ⟨release.nodup, ⟨count, ?_⟩, release.opened, release.past, closes, ?_,
+    UInt64.le_trans release.forward step.forward⟩
+  · rw [queue, release.queue]
+    simp
+  · intro slot open_after
+    rcases step.noReopen slot open_after with open_middle | later
+    · exact release.noReopen slot open_middle
+    · exact Or.inr (UInt64.le_trans release.forward later)
+
 /-- A payment closed before a step and older than its slot stays closed after the step. -/
 theorem PaymentStep.keepsClosed {gloas : .glamsterdam ≤ fork} {released : List Slot}
     {slot : Slot} (step : PaymentStep state after gloas released)
