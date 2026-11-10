@@ -9,6 +9,15 @@ Not yet released.
 
 ### Changes that break callers
 
+- From Gloas, the pending deposits of an epoch now fail at every deposit they read to a key whose first validator sits at a registry position of 2^64 or more ([#1883](https://github.com/ethereum/EthLib/issues/1883)).
+  The specification builds a `ValidatorIndex` from that position before it tests the validator, so it fails there.
+  EthLib failed only when it credited such a deposit, and missed the deposit to a validator that exits and is not withdrawn, and the deposit beyond the churn.
+  Before Gloas the registry stays within its limit, which is below 2^64, so nothing changes there.
+  No C export or Python function changes.
+  In Lean, `depositTargetStatus` now returns an `Except AccessorError (Bool × Bool)`.
+  The fields `stops`, `used`, `appliedFilter` and `movedFilter` of `PassPendingDepositsFacts`, and `processPendingDeposits_postponed`, test that result.
+  The new field `statusOk`, and a new conclusion of `processPendingDeposits_postponed`, say that the status of each deposit read succeeds.
+  The new `addValidatorToRegistry_size_lt` says that a new validator joins a registry of fewer than 2^64 validators.
 - The FFG theorems on the beacon chain now take their votes from the attestations that blocks apply, instead of from any data that some signature verifies on ([#1888](https://github.com/ethereum/EthLib/issues/1888)).
   Under the BLS checks a verifying signature exists for every data that a registered key can sign, so the old votes did not say who voted.
   No C export or Python function changes.

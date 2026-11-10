@@ -31,6 +31,28 @@ open OracleComp OracleSpec ENNReal LazyPermutation
 
 variable {F G A M : Type}
 
+/-- A computation that asks only coins and `Π`, as one of the chosen-message game. -/
+def keyOnlyLift : QueryImpl (unifSpec + PermSpec A) (OracleComp (Spec F A M))
+  | .inl n => query (spec := Spec F A M) (.inl n)
+  | .inr (.inl a) => query (spec := Spec F A M) (.inr (.inl a))
+  | .inr (.inr b) => query (spec := Spec F A M) (.inr (.inr (.inl b)))
+
+/-- A query of coins asks the same coins. -/
+@[simp] theorem keyOnlyLift_inl (n : ℕ) :
+    keyOnlyLift (F := F) (A := A) (M := M) (.inl n) = query (spec := Spec F A M) (.inl n) :=
+  rfl
+
+/-- A forward query of `Π` asks `Π` forward. -/
+@[simp] theorem keyOnlyLift_inr_inl (a : A) :
+    keyOnlyLift (F := F) (M := M) (.inr (.inl a)) = query (spec := Spec F A M) (.inr (.inl a)) :=
+  rfl
+
+/-- An inverse query of `Π` asks `Π` backward. -/
+@[simp] theorem keyOnlyLift_inr_inr (b : A) :
+    keyOnlyLift (F := F) (M := M) (.inr (.inr b)) =
+      query (spec := Spec F A M) (.inr (.inr (.inl b))) :=
+  rfl
+
 variable [Field F] [DecidableEq F] [AddCommGroup G] [Module F G] [DecidableEq G]
 
 /-- The conversion `f = ψ ∘ Π ∘ φ`, with `Π` asked of the oracle. -/

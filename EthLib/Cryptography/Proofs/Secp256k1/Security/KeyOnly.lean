@@ -14,7 +14,9 @@ This is the chosen-message game with no signing query, as a lemma below proves.
 
 The game draws `Π` up front.
 
-As a program of the permutation oracle, its final check asks for `Π` at most once more than the forger.
+Read the game as a program of the permutation oracle.
+
+Then its final check asks for `Π` at most once more than the forger.
 
 With `Π` sampled one answer at a time, it has the same law.
 
@@ -63,12 +65,6 @@ It has coins and `Π` in both directions, and no signing oracle. -/
 structure KeyOnlyAdversary (F G A M : Type) where
   /-- The forger's run, with access to the oracles. -/
   main : G → PermComp A (M × F × F)
-
-/-- The oracles of a key-only forger, as the same oracles of the chosen-message game. -/
-def keyOnlyLift : QueryImpl (unifSpec + PermSpec A) (OracleComp (Spec F A M))
-  | .inl n => query (spec := Spec F A M) (.inl n)
-  | .inr (.inl a) => query (spec := Spec F A M) (.inr (.inl a))
-  | .inr (.inr b) => query (spec := Spec F A M) (.inr (.inr (.inl b)))
 
 /-- A key-only forger in the chosen-message game: it never asks for a signature. -/
 def KeyOnlyAdversary.toAdversary (adversary : KeyOnlyAdversary F G A M) : Adversary F G A M where
@@ -131,9 +127,10 @@ theorem simulateQ_impl_keyOnlyLift_run [DecidableEq M] (scheme : Scheme F G A M)
     · simp only [simulateQ_bind, simulateQ_spec_query, StateT.run_bind]
       change ((·, cache) <$> (query (spec := unifSpec) n : ProbComp (Fin (n + 1)))) >>= _ = _
       simp [ih]
-    · simp [keyOnlyLift, impl, StateT.run, permOracle]
-      exact ih _ cache
-    · simp [keyOnlyLift, impl, StateT.run, permOracle]
+    all_goals
+      simp only [StateT.run, simulateQ_bind, simulateQ_query, OracleQuery.input_query,
+        OracleQuery.cont_query, keyOnlyLift_inr_inl, keyOnlyLift_inr_inr,
+        HasQuery.instOfMonadLift_query, id_map, impl, map_pure, pure_bind, add_apply_inr]
       exact ih _ cache
 
 variable [FinEnum A]

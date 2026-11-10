@@ -354,6 +354,18 @@ theorem getCurrentEpoch_toNat (state : BeaconState preset fork) :
     (getCurrentEpoch state).toNat = state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat := by
   simp [getCurrentEpoch, computeEpochAtSlot, UInt64.toNat_div]
 
+/-- With at least two slots in an epoch, the current epoch is never the far future one. -/
+theorem getCurrentEpoch_ne_farFuture (twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat)
+    (state : BeaconState preset fork) : getCurrentEpoch state ≠ FAR_FUTURE_EPOCH := by
+  intro far
+  have epoch := congrArg UInt64.toNat far
+  rw [getCurrentEpoch_toNat] at epoch
+  have farNat : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
+  have half := Nat.div_le_div_left (a := state.slot.toNat) twoSlots (by decide)
+  have := state.slot.toNat_lt_size
+  simp only [UInt64.size] at this
+  omega
+
 /-- The current epoch is at most the slot, at every length of an epoch. -/
 theorem getCurrentEpoch_toNat_le_slot (state : BeaconState preset fork) :
     (getCurrentEpoch state).toNat ≤ state.slot.toNat := by
