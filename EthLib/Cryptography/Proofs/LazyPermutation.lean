@@ -212,6 +212,15 @@ variable [FinEnum A]
 def uniformOutside (used : List A) (d : A) : ProbComp A :=
   uniformFrom ((FinEnum.toList A).filter fun b => b ∉ used) d
 
+/-- A uniform value of all of `A` does not depend on the default. -/
+theorem uniformOutside_nil_eq (d d' : A) :
+    (uniformOutside [] d : ProbComp A) = uniformOutside [] d' := by
+  have hnil : ((FinEnum.toList A).filter fun b => b ∉ []) = FinEnum.toList A := by simp
+  rw [uniformOutside, uniformOutside, hnil]
+  cases h : FinEnum.toList A with
+  | nil => exact absurd (h ▸ FinEnum.mem_toList d) (List.not_mem_nil)
+  | cons b bs => rfl
+
 /-- At least `|A|` minus the length of a list of values of `A` lie outside the list. -/
 theorem card_sub_length_le_length_filter (used : List A) :
     FinEnum.card A - used.length ≤ ((FinEnum.toList A).filter fun b => b ∉ used).length := by

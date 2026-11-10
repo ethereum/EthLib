@@ -154,22 +154,6 @@ private theorem prEvent_overlayLazyOracle_budget_le {σ : Type} (sc : σ)
 
 /-! ## The nonces of a signing query -/
 
-/-- A nonzero nonce programs the query of its point with a uniform answer of `A`. -/
-private theorem simulateQ_programPermImpl_signNonceQ_run (scheme : Scheme F G A M) (x : F)
-    (m : M) {k : F} (hk : k ≠ 0) (s : ProgrammedCache A × PermCache A) :
-    ∃ f : A → Option (F × F), (simulateQ programPermImpl (signNonceQ scheme x m k)).run s =
-      (fun b => (f b, (((scheme.encode (k • scheme.g), b), true) :: s.1, s.2))) <$>
-        uniformOutside [] (scheme.encode (k • scheme.g)) := by
-  simp only [signNonceQ, hk, ite_false, conversionQ, simulateQ_map, StateT.run_map]
-  have hq : (simulateQ programPermImpl (query (spec := unifSpec + PermSpec A)
-      (.inr (.inl (scheme.encode (k • scheme.g)))))).run s =
-      (fun b => (b, (((scheme.encode (k • scheme.g), b), true) :: s.1, s.2))) <$>
-        (uniformOutside [] (scheme.encode (k • scheme.g)) : ProbComp A) := by
-    simp [simulateQ_query]
-    rfl
-  rw [hq, Functor.map_map, Functor.map_map]
-  exact ⟨_, rfl⟩
-
 /-- A run beside the programming oracle keeps the lazy cache and the relayed pairs.
 
 It adds at most one pair per query of `Π`. -/
@@ -261,7 +245,7 @@ private theorem prEvent_nonce_conflict_le (scheme : Scheme F G A M) (hg : scheme
   · by_cases hk0 : k = 0
     · subst hk0
       simp [signNonceQ, hc]
-    · obtain ⟨f, hf⟩ := simulateQ_programPermImpl_signNonceQ_run scheme x m hk0 (c, l)
+    · have hf := simulateQ_programPermImpl_signNonceQ_run scheme x m hk0 (c, l)
       rw [hf, prEvent_map]
       have hα := fun h => hk ⟨hk0, h⟩
       refine (prEvent_mono _ _ (fun b => b ∈ (TaggedCache.untag c).map Prod.snd)
