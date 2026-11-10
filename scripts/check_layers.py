@@ -106,6 +106,60 @@ def scheme_problems(graph: dict[str, list[str]]) -> list[tuple[str, str, str]]:
     return problems
 
 
+def external_reached(graph: dict[str, list[str]]) -> dict[str, str]:
+    """
+    The first module outside EthLib and the toolchain that each property reaches, if any.
+
+    The search passes only through properties.
+    A specification or an export on the way reports its own imports.
+    So an import that breaks the rule is reported once, where it is written.
+    """
+    found: dict[str, str | None] = {}
+
+    def visit(name: str) -> str | None:
+        if name in found:
+            return found[name]
+        # Mark the module first, so that an import cycle ends the search.
+        found[name] = None
+        for imported in graph[name]:
+            package = imported.split(".")[0]
+            if package != "EthLib":
+                reached = None if package in TOOLCHAIN else imported
+            elif imported in graph and kind(imported) == "property":
+                reached = visit(imported)
+            else:
+                reached = None
+            if reached is not None:
+                found[name] = reached
+                break
+        return found[name]
+
+    for name in sorted(graph):
+        if kind(name) == "property":
+            visit(name)
+    return {name: reached for name, reached in found.items() if reached is not None}
+
+
+def reach_problems(graph: dict[str, list[str]]) -> list[tuple[str, str, str]]:
+    """
+    Each import of a property through which a C export reaches another library.
+
+    An export may import a property, but then reaches whatever the property imports.
+    An export that imports an outside module is a problem of its own.
+    So is a specification that imports anything but specifications.
+    So only these imports are reported: the export, the property, the module reached.
+    """
+    reached = external_reached(graph)
+    problems = []
+    for name in sorted(graph):
+        if kind(name) != "export":
+            continue
+        for imported in graph[name]:
+            if imported in reached and kind(imported) == "property":
+                problems.append((name, imported, reached[imported]))
+    return problems
+
+
 def library_roots(lakefile: str) -> list[str]:
     """The root modules of each `lean_lib` of the lakefile; without `roots`, the library itself."""
     roots = []
@@ -182,6 +236,12 @@ def check(root: Path) -> list[str]:
         problems.append(
             f"{modules[name].relative_to(root)}: imports {imported}{via}, "
             f"but {scheme(name)} and {scheme(target)} never import each other"
+        )
+
+    for name, imported, target in reach_problems(graph):
+        problems.append(
+            f"{modules[name].relative_to(root)}: imports {imported}, which reaches {target}, "
+            "but a C export reaches nothing beyond EthLib and the toolchain"
         )
 
     roots = [
