@@ -7,6 +7,7 @@ public import EthLib.Cryptography.Proofs.Secp256k1.Security.Game
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.InverseCase
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.JointGame
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.KeyOnly
+public import EthLib.Cryptography.Proofs.Secp256k1.Security.KeyOnlyBound
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.KeyOnlyOutside
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.LazyGame
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.Origin
@@ -87,5 +88,15 @@ A reduction wins a game of division resistance at least that often, divided by `
 
 Two forgeries of a fork that divide to different scalars give the discrete logarithm of the key.
 
-No theorem bounds the advantage of a forger yet.
+So a key-only forger with at most `q` queries to `Π` or its inverse on every key has a bound.
+
+The bound is a sum of `C(q + 1, 2) / |A|`, `(q + 1) / |A|` and the advantage of a solver.
+
+To that sum it adds the square root of `q + 1` times a sum: a second solver's advantage and a term.
+
+That term is `q + 1` times the advantage of a reduction to division resistance.
+
+This is their Theorem 2.
+
+No theorem bounds a forger with a signing oracle yet; that is their Theorem 1.
 -/

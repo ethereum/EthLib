@@ -458,7 +458,7 @@ The parity of `y` must be the recovery id.
 Under them, `(r, s')` verifies under the same key and hash exactly when `s'` is `s` or `n - s`.
 `verify_and_isLowS_iff` adds that `s` is low, and then that signature is the only valid low-s one with that `r`.
 
-No theorem bounds the probability of forging a signature, which rests on the discrete logarithm problem and on properties of the hash, in an idealised model.
+No theorem bounds the probability of forging a signature with a signing oracle, which rests on the discrete logarithm problem and on properties of the hash, in an idealised model; the key-only game has a bound, below.
 `Proofs/Secp256k1/Security/Game.lean` states the unforgeability game of GenDSA, the abstraction of ECDSA in [Fersch, Kiltz and Poettering](https://doi.org/10.1145/2976749.2978413), Definition 6, in their bijective random oracle model.
 There, `verify_neg` shows that `(r, -s)` verifies whenever `(r, s)` does, when opposite points share their encoding, as `x` coordinates do.
 So the game counts only messages that were never signed.
@@ -494,6 +494,9 @@ The event does not require the flag of repeated answers to be clear, so with the
 The bound is the advantage of a discrete-logarithm solver, which runs the forger once with the same test of the image; this is the step from Game G2 to Game G3 of the source.
 The solver's game is the discrete-logarithm game of the oracle framework, which draws the key from all scalars, while Definition 1 of the source draws it from the nonzero scalars.
 The two advantages differ by at most `1 / n`, where `n` is the number of scalars; no theorem states it.
+`keyOnlyAdvantage_le` (`Proofs/Secp256k1/Security/KeyOnlyBound.lean`) assembles these parts into the bound of Theorem 2 of the source, for a key-only forger with at most `q` queries to the bijection or its inverse on every key.
+The bound charges three adversaries built from the forger: the two discrete-logarithm solvers and the reduction to division resistance.
+It is a bound on the key-only game only; Theorem 1 of the source, from chosen messages to key only, has no theorem yet.
 `ecdsa_verify_eq_verify_ecdsaScheme` (`Proofs/Secp256k1/Security/Refinement.lean`) proves that `verify` is the game's verification, with the bijection the identity, for `r` and `s` below `n`.
 `exists_signNonce_of_sign` proves that every signature from `sign` is the game's signature for some nonzero nonce; that is correctness of signing, and says nothing about how RFC 6979 draws the nonces.
 The game draws the bijection uniformly, so a bound on it would apply to EthLib, where the bijection is the identity, only under the heuristic of the source that the identity behaves as a bijective random oracle.
