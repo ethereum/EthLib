@@ -291,11 +291,14 @@ def test_state_holds_authenticated_remote(exchange: tuple) -> None:
         assert identity[0] == b"\x08\x02\x12\x21" + bytes([2 + y % 2]) + x.to_bytes(32, "big")
 
 
-@pytest.mark.parametrize("component", ["missing", "public_key"])
+@pytest.mark.parametrize("component", ["missing", "static", "public_key"])
 def test_completion_needs_stored_remote(exchange: tuple, component: str) -> None:
     handshake, remote = exchange[0]
     if component == "missing":
         remote = None
+    elif component == "static":
+        h = handshake
+        handshake = (h[0], h[1], h[2], bytes(32), h[4], h[5], h[6], h[7], h[8], h[9])
     else:
         static_key, public_key, signature, extensions = remote
         # The prefix 05 is not that of a compressed point, so the key protobuf does not decode.

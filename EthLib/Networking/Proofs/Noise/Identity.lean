@@ -11,9 +11,11 @@ Reading message 2 or 3 accepts only a payload signed over the static key the mes
 
 The state then keeps that remote, so completion only returns it with the transport ciphers.
 
-In a state that the libp2p functions produce, the stored remote is the one the handshake read.
+Completion checks that the remote has the remote static key of the handshake.
 
-Its signature verifies on the remote static key of the handshake that gives the transport ciphers.
+In a state that the libp2p functions produce, the stored remote has that key.
+
+Its signature verifies on that key, the key of the handshake that gives the transport ciphers.
 
 Such a state at step 3 always holds a remote, so completion succeeds.
 -/
@@ -53,10 +55,13 @@ theorem authenticatePayload_ok {staticKey : Key} {bytes : ByteArray} {remote : R
       · simp [throw, throwThe, MonadExceptOf.throw] at h
     · simp [throw, throwThe, MonadExceptOf.throw] at h
 
-/-- Completion returns the stored remote and the transport ciphers of the same state. -/
+/-- Completion returns the stored remote and the transport ciphers of the same state.
+
+The remote has the remote static key of that state's handshake. -/
 theorem complete_ok {s : Libp2pState} {remote : Remote} {send receive : CipherState}
     (h : complete s = .ok (remote, send, receive)) :
-    s.remote = some remote ∧ transport s.handshake = .ok (send, receive) := by
+    s.remote = some remote ∧ s.handshake.remoteStatic = some remote.staticKey ∧
+      transport s.handshake = .ok (send, receive) := by
   unfold complete at h
   cases ht : transport s.handshake with
   | error e => simp [ht, bind, Except.bind] at h
@@ -65,9 +70,11 @@ theorem complete_ok {s : Libp2pState} {remote : Remote} {send receive : CipherSt
     cases hr : s.remote with
     | none => simp [ht, hr, bind, Except.bind, throw, throwThe, MonadExceptOf.throw] at h
     | some r =>
-      simp [ht, hr, bind, Except.bind, pure, Except.pure] at h
-      obtain ⟨rfl, rfl, rfl⟩ := h
-      exact ⟨rfl, rfl⟩
+      by_cases hk : s.handshake.remoteStatic = some r.staticKey
+      · simp [ht, hr, hk, bind, Except.bind, pure, Except.pure] at h
+        obtain ⟨rfl, rfl, rfl⟩ := h
+        exact ⟨rfl, hk, rfl⟩
+      · simp [ht, hr, hk, bind, Except.bind, throw, throwThe, MonadExceptOf.throw] at h
 
 /-- Reading message 2 or 3 accepts only a payload signed over the static key the message carries.
 
@@ -218,8 +225,8 @@ theorem Produced.complete_isOk {s : Libp2pState} (hs : Produced s) (hstep : s.ha
     (complete s).isOk := by
   have hsome := hs.remote_isSome (by cases s.handshake.initiator <;> simp [hstep])
   obtain ⟨remote, hr⟩ := Option.isSome_iff_exists.mp hsome
-  simp [complete, transport, hstep, hr, bind, Except.bind, pure, Except.pure, Except.isOk,
-    Except.toBool]
+  simp [complete, transport, hstep, hr, (hs.remote_ok hr).1, bind, Except.bind, pure, Except.pure,
+    Except.isOk, Except.toBool]
 
 /-- Completion of a produced state returns the transport ciphers of its handshake.
 
@@ -233,7 +240,7 @@ theorem Produced.complete_authenticates {s : Libp2pState} {remote : Remote}
       s.handshake.remoteStatic = some remote.staticKey ∧
       Libp2p.verify remote.publicKey (signedStatic remote.staticKey) remote.signature = true ∧
       Libp2p.decodePublicKey remote.publicKey = .ok remote.key := by
-  obtain ⟨hrem, ht⟩ := complete_ok h
+  obtain ⟨hrem, -, ht⟩ := complete_ok h
   obtain ⟨h1, h2, h3⟩ := hs.remote_ok hrem
   exact ⟨ht, h1, h2, h3⟩
 

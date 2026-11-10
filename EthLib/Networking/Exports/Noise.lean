@@ -19,6 +19,8 @@ The libp2p state holds the remote that the read of message 2 or 3 authenticated.
 
 Completion returns that remote and does not verify its signature again.
 
+The state carries the remote's extensions; use them only from the completion result.
+
 Framing follows [noise-libp2p][libp2p], "Wire Format".
 
 [libp2p]: https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/noise/README.md

@@ -9,7 +9,11 @@ public import EthLib.Networking.Encoding.Varint
 
 The secp256k1 profile and payload of [noise-libp2p, "The Noise Handshake"][libp2p].
 
-Extensions stay opaque and are returned only when the handshake has completed.
+Extensions stay opaque.
+
+The state keeps them from the read of message 2 or 3, and completion returns them.
+
+Under noise-libp2p "libp2p Data in Handshake Messages", they reach other parts only after that.
 
 Protobuf fields follow the [wire format][protobuf].
 
@@ -181,11 +185,15 @@ def initializeLibp2p (initiator : Bool) (staticKey ephemeralKey : Key) : Libp2pS
 
 /-- The authenticated remote and the send and receive ciphers, after all three messages.
 
-Completion reads no message: the read of message 2 or 3 stored the remote. -/
+Completion reads no message: the read of message 2 or 3 stored the remote.
+
+It checks that the remote has the remote static key of the handshake. -/
 def complete (s : Libp2pState) : Except NoiseError (Remote × CipherState × CipherState) := do
   let (send, receive) ← transport s.handshake
   match s.remote with
-  | some remote => return (remote, send, receive)
+  | some remote =>
+    if s.handshake.remoteStatic = some remote.staticKey then return (remote, send, receive)
+    else throw .savedRemote
   | none => throw .savedRemote
 
 /-- Write a libp2p message; first-message extensions are forbidden by the payload rules.

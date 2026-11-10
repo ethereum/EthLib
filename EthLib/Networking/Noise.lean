@@ -75,7 +75,7 @@ inductive NoiseError where
   | identitySecret
   /-- ECDSA signing with the local identity secret failed. -/
   | signing (error : Secp256k1.Secp256k1Error)
-  /-- The state holds no authenticated remote at completion.
+  /-- At completion, the state holds no remote, or one without the handshake's remote static key.
 
   In the exports, it is also a stored remote whose key protobuf does not decode. -/
   | savedRemote

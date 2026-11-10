@@ -44,7 +44,9 @@ Not yet released.
   `AuthenticatedRemote`, `RemoteInfo` and `remoteInfo` are removed, and `authenticatePayload` returns a `Remote`.
   `writeLibp2p` no longer runs completion after message 3.
   The Python state of `noise_libp2p_*` holds the remote as `(static_key, public_key, signature, extensions)`, or `None`, in place of the saved message and its state.
-  Code 13, `savedRemote`, now means a state without a remote at completion, or a stored public key that does not decode.
+  Completion checks that the stored remote has the remote static key of the handshake, and no longer verifies its signature.
+  Code 13, `savedRemote`, now means a state without that remote at completion.
+  The C exports and Python functions that take a libp2p state, to write, read or complete, also give code 13 when the stored public key does not decode.
 - A chain configuration now holds the address of its deposit contract, and the deposit requests of a block come from that address ([#1486](https://github.com/ethereum/EthLib/issues/1486)).
   Before, every chain read deposits from the mainnet address, so a chain with another deposit contract, such as Sepolia, got no deposit request.
   The configuration that the exports read as JSON, or as a Python `dict`, must give `depositContractAddress`: `0x` and forty hex digits, or 20 bytes in Python.
