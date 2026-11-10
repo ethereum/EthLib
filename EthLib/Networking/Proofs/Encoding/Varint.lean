@@ -12,6 +12,7 @@ Properties of the unsigned protobuf varint codec, proved for every 64-bit value 
 - An encoding is always minimal.
 - The decoder accepts only these encodings, so exactly one byte string decodes to each value.
 - An input is too long exactly when it has over ten bytes and the first ten are continued.
+- Splitting an encoding from any bytes after it returns the encoding and those bytes.
 -/
 
 @[expose] public section
@@ -379,6 +380,58 @@ theorem decode_eq_tooLong_iff {bs : List UInt8} :
       split
       · simp
       · split <;> simp
+
+/-! ## Splitting a varint from the bytes after it -/
+
+/-- The split finds the last byte of an encoding, whatever follows it. -/
+theorem findIdx_encodeAux {n fuel m : Nat} (rest : List UInt8) (hf : 0 < fuel)
+    (hn : n < groupSize ^ fuel) (hm : (encodeAux n fuel).length ≤ m) :
+    ((encodeAux n fuel ++ rest).take m).findIdx (·.toNat < continuation) + 1 =
+      (encodeAux n fuel).length := by
+  induction fuel generalizing n m with
+  | zero => omega
+  | succ fuel ih =>
+    obtain ⟨m, rfl⟩ : ∃ k, m = k + 1 := ⟨m - 1, by
+      have := encodeAux_ne_nil (n := n) hf
+      cases h : encodeAux n (fuel + 1) <;> simp_all; omega⟩
+    by_cases hlt : n < groupSize
+    · -- One byte, below 128.
+      simp [encodeAux, hlt, toNat_terminator_byte hlt, List.findIdx_cons]
+      rw [groupSize_eq, continuation_eq] at *
+      omega
+    · -- A continued byte, then the encoding of the rest.
+      have hf' : 0 < fuel := by
+        rcases fuel with _ | _
+        · simp at hn; omega
+        · omega
+      have hn' : n / groupSize < groupSize ^ fuel := by
+        rw [Nat.pow_succ] at hn
+        exact Nat.div_lt_of_lt_mul (by rwa [Nat.mul_comm])
+      simp only [encodeAux, hlt, ite_false, List.cons_append, List.take_succ_cons,
+        List.length_cons] at hm ⊢
+      rw [List.findIdx_cons]
+      have hc : ¬ (UInt8.ofNat (n % groupSize + continuation)).toNat < continuation := by
+        rw [toNat_continued_byte]; omega
+      have := ih hf' hn' (m := m) (by omega)
+      simp only [hc, decide_false, Bool.false_eq_true, ite_false]
+      omega
+
+/-- The split of an encoding followed by any bytes returns the encoding and those bytes. -/
+theorem split_encode (v : UInt64) (rest : List UInt8) :
+    split (encode v ++ rest) = (encode v, rest) := by
+  have hlt : v.toNat < groupSize ^ maxLength := by
+    have := v.toNat_lt_size
+    simp only [UInt64.size, groupSize, payloadBits, maxLength] at *
+    omega
+  have h := findIdx_encodeAux rest (by decide) hlt (encode_length_le v)
+  simp only [split]
+  rw [show encodeAux v.toNat maxLength = encode v from rfl] at h
+  rw [h]
+  simp
+
+/-- The split cuts the input in two, so its two parts join back to the input. -/
+theorem split_append (bs : List UInt8) : (split bs).1 ++ (split bs).2 = bs :=
+  List.take_append_drop _ _
 
 /-! ## Error codes -/
 
