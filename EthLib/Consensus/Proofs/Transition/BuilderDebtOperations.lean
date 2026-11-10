@@ -325,6 +325,19 @@ theorem recordPaymentWeight_of_amount_eq_zero {gloas : .glamsterdam ≤ fork}
     rw [Serialization.Ssz.RootedVector.getElem?_eq] at found
     simpa only [paymentAt, found, Option.getD_some] using zero)
 
+/-- Weighing a payment keeps each payment of no bid empty. -/
+theorem paymentAt_recordPaymentWeight_empty {gloas : .glamsterdam ≤ fork}
+    {data : AttestationData} {current : Bool} {before updated : EpochParticipation preset fork}
+    {attesters : List ValidatorIndex} {position : Nat}
+    (computed : recordPaymentWeight state gloas data current before updated attesters = .ok after)
+    (empty : paymentAt state gloas position = .empty) :
+    paymentAt after gloas position = .empty := by
+  by_cases weighed : position = attestationPaymentPosition preset current data.slot
+  · rw [recordPaymentWeight_of_amount_eq_zero computed (by rw [← weighed, empty]; rfl)]
+    exact empty
+  · rw [paymentAt_recordPaymentWeight_other computed weighed]
+    exact empty
+
 /-- Weighing a payment reads whether the vote is for the block of its own slot. -/
 private theorem recordPaymentWeight_sameSlot {gloas : .glamsterdam ≤ fork}
     {data : AttestationData} {current : Bool} {before updated : EpochParticipation preset fork}
@@ -408,12 +421,8 @@ private theorem BuilderDebtCovered.recordPaymentWeight (positive : preset.Paymen
     cases found
     rw [paymentAt_recordPaymentWeight_other computed apart]
     simpa only [latestBidWithdrawal, bid] using holds.parentFresh _ parentAt
-  · have kept := holds.laterEmpty k fun parent found => later parent (position ▸ found)
-    by_cases weighed : k = attestationPaymentPosition preset current data.slot
-    · rw [recordPaymentWeight_of_amount_eq_zero computed (by rw [← weighed, kept]; rfl)]
-      exact kept
-    · rw [paymentAt_recordPaymentWeight_other computed weighed]
-      exact kept
+  · exact paymentAt_recordPaymentWeight_empty computed
+      (holds.laterEmpty k fun parent found => later parent (position ▸ found))
 
 /-- Setting the participation flags of an epoch keeps the builder fields. -/
 private theorem builderFrame_setEpochParticipation {current : Bool}
