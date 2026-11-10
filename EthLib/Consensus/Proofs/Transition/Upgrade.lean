@@ -2,7 +2,7 @@ module
 
 public import EthLib.Consensus.Proofs.Transition.BuilderRequests
 public import EthLib.Consensus.Proofs.Transition.Invariants
-public import EthLib.Consensus.Proofs.Transition.TargetVotes
+public import EthLib.Consensus.Proofs.Transition.TargetFlags
 public import EthLib.Consensus.Transition.Upgrade
 
 /-!
@@ -50,6 +50,22 @@ open Base Uint64 Cryptography.Bls Serialization.Ssz
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 
 /-! ## Upgrade frames -/
+
+/-- A step that keeps each byte of flags or zeroes it adds no target flag. -/
+theorem TargetFlagAt.of_flagsKeptOrZero {fork : Fork} {state after : BeaconState preset fork}
+    {altair : .altair ≤ fork} {current : Bool} {position : Nat}
+    (kept : FlagsKeptOrZero state after)
+    (flagged : TargetFlagAt (recentParticipation after altair current) position) :
+    TargetFlagAt (recentParticipation state altair current) position := by
+  obtain ⟨flags, found, set⟩ := flagged
+  have kept := kept altair position flags
+  cases current
+  · rcases kept.1 found with old | rfl
+    · exact ⟨flags, old, set⟩
+    · exact absurd set (by decide)
+  · rcases kept.2 found with old | rfl
+    · exact ⟨flags, old, set⟩
+    · exact absurd set (by decide)
 
 /-- An upgrade to a fork no earlier than the fork before.
 

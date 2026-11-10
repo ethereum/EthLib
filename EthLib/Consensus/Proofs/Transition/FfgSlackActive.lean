@@ -30,17 +30,17 @@ Its weights are the effective balances of each state whose step makes it current
 
 That step may lie on any run between the first and the last state.
 
-The votes are those of the data that some state between the first and the last accepts as signed.
+The votes are those that the block steps between the first and the last state cast.
 
-That acceptance asks only that some signature of the keys verifies on the data.
+A block casts a vote for each validator that the bits of one of its attestations show.
 
-So under the BLS checks it holds for every data that a key of the registry can sign.
+The committees are those of the state before the block.
 
-So each validator of the set of a target counts as a voter for each link.
+The block accepts each of its attestations only when the signature checks accept it.
 
-The theorem then bounds the epochs, blocks, sets and weights of the justified checkpoints.
+Reading such a vote as signed by its validator assumes the BLS checks and unforgeable aggregates.
 
-It does not bound who voted.
+So the voters of a link are validators whose attestations a block of some run applied.
 
 The step asks only the stake, the order of the blocks, the size of the registry and the preset.
 
@@ -85,16 +85,16 @@ def justifyingBalances (config : Config) (checks : SignatureChecks) (block : Roo
     after.state.currentJustifiedCheckpoint.toFfg block = c ∧
     weights = fun index => balanceAt forked.state index.toNat}
 
-/-- The votes of the model that some state between the first and the last state accepts as signed.
+/-- The votes that the block steps between the first and the last state cast.
 
-The state lies on any run of steps from the first state to the last one.
+The step lies on any run of steps from the first state to the last one.
 
-It accepts data as signed when some signature of the keys verifies on it. -/
-def runVotes (config : Config) (checks : SignatureChecks) (block : Root → β)
-    (first last : ForkedBeaconState preset) : Set (Vote ValidatorIndex β) :=
-  {vote | ∃ forked, Relation.ReflTransGen (ChainStep config checks) first forked ∧
-    Relation.ReflTransGen (ChainStep config checks) forked last ∧
-    vote ∈ ffgVotes block {signed | SignedVote config checks forked.state signed}}
+So the set may hold votes of several runs, which only widens the voters that the theorem allows. -/
+def runVotes (config : Config) (checks : SignatureChecks)
+    (first last : ForkedBeaconState preset) : Set (ValidatorIndex × AttestationData) :=
+  {vote | ∃ forked after, Relation.ReflTransGen (ChainStep config checks) first forked ∧
+    Relation.ReflTransGen (ChainStep config checks) after last ∧
+    vote ∈ blockStepVotes config checks forked after}
 
 /-- Along a run of steps of a chain from genesis, both justified checkpoints are slack-justified.
 
@@ -104,13 +104,11 @@ Its second set is the active set of the next epoch in the last state.
 
 Its weights are the effective balances of each state whose step makes it current justified.
 
-The votes are those of the data that some state between genesis and the last accepts as signed.
+The votes are those that the block steps between genesis and the last state cast.
+
+Each vote comes from an attestation that a block of some run between them applied.
 
 Each step on any run between them must meet the bounds on the stake, the blocks and the registry.
-
-A state accepts data as signed when some signature of the keys verifies on it.
-
-So the votes do not bound who voted.
 
 The order of the blocks is an assumption on the map from roots to blocks.
 
@@ -137,7 +135,7 @@ theorem slackJustifiedCheckpoints_activeSetAt_of_chainSteps
     SlackJustifiedCheckpoints (fun c => activeSetAt last.state c.epoch)
       (fun c => activeSetAt last.state (c.epoch + 1))
       (justifyingBalances config checks block ⟨fork, state⟩ last) (block (Vector.replicate 32 0))
-      (runVotes config checks block ⟨fork, state⟩ last) block last.state := by
+      (ffgVotes block (runVotes config checks ⟨fork, state⟩ last)) block last.state := by
   refine slackJustifiedCheckpoints_of_chainSteps positive window apart computed steps
     fun forked after reach step rest => ?_
   have bounds := meets forked after reach step rest
@@ -150,9 +148,8 @@ theorem slackJustifiedCheckpoints_activeSetAt_of_chainSteps
   have kept : ActiveKept (getCurrentEpoch forked.state) forked.state last.state :=
     (step.activeKept bounds.small).trans
       ((activeKept_of_chainSteps small rest).mono step.currentEpoch_le)
-  refine ⟨bounds, fun _ _ => ?_, fun changed root rootOk => ?_⟩
-  · rintro _ ⟨signer, signed, rfl⟩
-    exact ⟨forked, reach, .head step rest, signer, signed, rfl⟩
+  refine ⟨bounds, fun vote member => ⟨forked, after, reach, rest, member⟩,
+    fun changed root rootOk => ?_⟩
   obtain ⟨recent, rootAfter⟩ := step.getBlockRoot_currentJustified_of_ne window changed
   rw [rootOk, Except.ok.injEq] at rootAfter
   have previous := getPreviousEpoch_toNat forked.state
