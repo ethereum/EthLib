@@ -15,6 +15,10 @@ A factor of every term comes out of the sum.
 
 The quotients of the terms sum to at most the quotient of the sum.
 
+Two lists of distinct elements that each hold every element with a nonzero term give the same sum.
+
+A change of one term of a sum over distinct elements changes the sum by the same amount.
+
 Dropping the front where a test holds keeps each member that fails the test.
 
 Numbering the front of a list gives the front of the numbered list.
@@ -105,6 +109,48 @@ theorem sum_map_div_le {α : Type} (f : α → Nat) (divisor : Nat) :
       have second := Nat.div_mul_le_self (xs.map f).sum divisor
       have kept := Nat.mul_le_mul_right divisor rest
       rw [Nat.add_mul]
+      omega
+
+/-- Dropping the terms that are 0 keeps a sum. -/
+theorem sum_map_filter_ne_zero {α : Type} (f : α → Nat) :
+    ∀ xs : List α, ((xs.filter fun x => f x ≠ 0).map f).sum = (xs.map f).sum
+  | [] => rfl
+  | x :: xs => by
+    have ih := sum_map_filter_ne_zero f xs
+    by_cases hx : f x = 0 <;> simp_all
+
+/-- Two lists without repeats that each hold every element with a nonzero term give the same sum. -/
+theorem sum_map_eq_of_nodup {α : Type} {f : α → Nat} {xs ys : List α} (dx : xs.Nodup)
+    (dy : ys.Nodup) (hx : ∀ a, f a ≠ 0 → a ∈ xs) (hy : ∀ a, f a ≠ 0 → a ∈ ys) :
+    (xs.map f).sum = (ys.map f).sum := by
+  rw [← sum_map_filter_ne_zero f xs, ← sum_map_filter_ne_zero f ys]
+  refine List.Perm.sum_nat (List.Perm.map f ?_)
+  refine (List.perm_ext_iff_of_nodup (dx.filter _) (dy.filter _)).mpr fun a => ?_
+  simp only [List.mem_filter, decide_eq_true_eq]
+  exact ⟨fun h => ⟨hy a h.2, h.2⟩, fun h => ⟨hx a h.2, h.2⟩⟩
+
+/-- A change of one term of a sum over distinct elements changes the sum by the same amount.
+
+The two functions agree at every element other than `a`, which the list holds. -/
+theorem sum_map_add_eq_of_eq_off {α : Type} {f g : α → Nat} {a : α}
+    (h : ∀ x, x ≠ a → g x = f x) :
+    ∀ {xs : List α}, xs.Nodup → a ∈ xs → (xs.map g).sum + f a = (xs.map f).sum + g a
+  | [], _, ha => absurd ha List.not_mem_nil
+  | x :: xs, d, ha => by
+    obtain ⟨hx, d⟩ := List.nodup_cons.mp d
+    simp only [List.map_cons, List.sum_cons]
+    by_cases hxa : x = a
+    · subst hxa
+      have hrest : xs.map g = xs.map f :=
+        List.map_congr_left fun y hy => h y fun e => hx (e ▸ hy)
+      rw [hrest]
+      omega
+    · have ha' : a ∈ xs := by
+        rcases List.mem_cons.mp ha with e | e
+        · exact absurd e.symm hxa
+        · exact e
+      have := sum_map_add_eq_of_eq_off h d ha'
+      rw [h x hxa]
       omega
 
 /-- Dropping the front where a test holds keeps each member that fails the test. -/
