@@ -15,7 +15,7 @@ Completion checks that the remote has the remote static key of the handshake.
 
 In a state that the libp2p functions produce, the stored remote has that key.
 
-Its signature verifies on that key, the key of the handshake that gives the transport ciphers.
+Its signature verifies on that key, held by the handshake state that gives the transport ciphers.
 
 Such a state at step 3 always holds a remote, so completion succeeds.
 -/
@@ -232,7 +232,7 @@ theorem Produced.complete_isOk {s : Libp2pState} (hs : Produced s) (hstep : s.ha
 
 The returned remote has the remote static key of that handshake.
 
-Its signature verifies on that static key. -/
+Its signature verifies on that static key, and its public key decodes to its point. -/
 theorem Produced.complete_authenticates {s : Libp2pState} {remote : Remote}
     {send receive : CipherState} (hs : Produced s)
     (h : complete s = .ok (remote, send, receive)) :

@@ -13,7 +13,9 @@ Extensions stay opaque.
 
 The state keeps them from the read of message 2 or 3, and completion returns them.
 
-Under noise-libp2p "libp2p Data in Handshake Messages", they reach other parts only after that.
+Other libp2p components should see them only after completion.
+
+That is the rule of noise-libp2p "libp2p Data in Handshake Messages".
 
 Protobuf fields follow the [wire format][protobuf].
 
@@ -160,9 +162,9 @@ structure Remote where
 /-- The protobuf of the identity key, peer-IDs "Keys". -/
 def Remote.publicKey (remote : Remote) : ByteArray := Libp2p.encodePublicKey remote.key
 
-/-- Verify a decoded payload against the static key actually read from the encrypted token.
+/-- Decode a payload, and verify it against the static key read from the encrypted token.
 
-The rule is noise-libp2p "Static Key Authentication". -/
+The rule is noise-libp2p "The libp2p Handshake Payload". -/
 def authenticatePayload (staticKey : Key) (bytes : ByteArray) : Except NoiseError Remote := do
   let p ← decodePayload bytes
   if Libp2p.verify p.publicKey (signedStatic staticKey) p.signature then

@@ -16,9 +16,9 @@ So the two outputs are the first 64 bytes of that HKDF.
 
 Distinct kinds of handshake error have distinct codes.
 
-Each message keeps the role, advances the step by one, and is sent by the role XX assigns.
+Each message keeps the role, advances the step by one, and comes at the step XX gives that role.
 
-The pattern is Noise §7.5.
+The pattern is [Noise revision 34, §7.5](https://noiseprotocol.org/noise_rev34.pdf).
 -/
 
 @[expose] public section
