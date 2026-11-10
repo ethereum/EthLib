@@ -139,6 +139,40 @@ class Rules(unittest.TestCase):
             "Cryptography sits below Serialization",
         )
 
+    def test_hash_imports_a_signature(self):
+        tree = with_modules(
+            {"EthLib.Cryptography.Hash.A": ["EthLib.Cryptography.Bls.A"]},
+            {"EthLib.Cryptography.Bls.A": []},
+        )
+        self.assert_fails(
+            tree,
+            "EthLib/Cryptography/Hash/A.lean: imports EthLib.Cryptography.Bls.A, "
+            "but hashes and Merkle trees import no other part of Cryptography",
+        )
+
+    def test_merkle_tree_imports_a_module_beside_the_tiers(self):
+        tree = with_modules(
+            {"EthLib.Cryptography.Merkle": ["EthLib.Cryptography.Montgomery"]},
+            {"EthLib.Cryptography.Montgomery": []},
+        )
+        self.assert_fails(tree, "hashes and Merkle trees import no other part of Cryptography")
+
+    def test_first_tier_imports_itself_and_base(self):
+        tree = with_modules(
+            {"EthLib.Cryptography.Hash.A": ["EthLib.Cryptography.Hash.B", "EthLib.Base.A"]},
+            {"EthLib.Cryptography.Hash.B": ["EthLib.Cryptography.Merkle.Tree"]},
+            {"EthLib.Cryptography.Merkle.Tree": []},
+            {"EthLib.Cryptography.Bls.A": ["EthLib.Cryptography.Hash.A"]},
+        )
+        self.assertEqual(Tree(tree).problems(), [])
+
+    def test_property_of_a_hash_imports_a_signature(self):
+        tree = with_imports("EthLib.Proofs", "EthLib.Cryptography.Proofs.Hash.A")
+        tree |= {
+            "EthLib.Cryptography.Proofs.Hash.A": ["EthLib.Cryptography.A"],
+        }
+        self.assertEqual(Tree(tree).problems(), [])
+
     def test_higher_layer_from_a_property(self):
         tree = with_imports("EthLib.Execution.Proofs.A", "EthLib.Consensus.A")
         self.assert_fails(tree, "Execution and Consensus never import each other")

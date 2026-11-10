@@ -162,6 +162,7 @@ A pull request that breaks one says why in its description.
 - Execution and Consensus never import each other; only Engine imports both.
 - No module with an `Xmss` component reaches one with a `Sphincs` component through its imports, nor the reverse.
   What both hash-based signatures use lives in a neutral module, such as `HashSig` or `Wots`.
+- A specification under `Cryptography/Hash/` or `Cryptography/Merkle/` imports no other part of Cryptography.
 - A cryptographic module never imports Serialization.
 - A specification never imports a property, a C export or a model.
 - A specification imports nothing outside the Lean toolchain, which ships `Init`, `Std` and `Lean`.
