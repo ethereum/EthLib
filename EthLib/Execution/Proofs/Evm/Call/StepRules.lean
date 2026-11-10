@@ -492,4 +492,174 @@ theorem processMessage [LawfulGasMeter Meter] (rules : StepRules fork R)
 
 end StepRules
 
+/-! ## The resume of a message -/
+
+/-- The message of a result, if it sends one, resumes its caller as a call or as a creation. -/
+private def ResumesCaller : StepResult fork Meter → Prop
+  | .next _ => True
+  | .child caller _ resume =>
+    (∃ newAccount outputStart outputSize,
+      resume = resumeCall fork caller newAccount outputStart outputSize) ∨
+    ∃ newAccount address, resume = resumeCreate fork caller newAccount address
+
+/-- A successful send of a message resumes its caller as a call or a creation.
+
+That holds whenever it sends a message. -/
+private theorem resumesCaller_genericCall {evm : Evm fork Meter} {message : Message fork}
+    {newAccount : Nat} {outputStart outputSize : U256} {result : StepResult fork Meter}
+    (h : genericCall evm message newAccount outputStart outputSize = .ok result) :
+    ResumesCaller result := by
+  unfold Evm.genericCall at h
+  dsimp only at h
+  split at h
+  · obtain ⟨after, -, rfl⟩ := Base.map_ok_iff.mp h
+    trivial
+  · cases h
+    exact .inl ⟨_, _, _, rfl⟩
+
+/-- The successful end of a call instruction resumes its caller as a call or a creation.
+
+That holds whenever it sends a message. -/
+private theorem resumesCaller_finishCall {kind : CallKind} {call : CallOperands}
+    {callee : Callee} {subCall newAccount expandBy : Nat} {evm : Evm fork Meter}
+    {result : StepResult fork Meter}
+    (h : finishCall kind call callee subCall newAccount expandBy evm = .ok result) :
+    ResumesCaller result := by
+  unfold Evm.finishCall at h
+  split at h
+  · cases h
+  dsimp only at h
+  split at h
+  · obtain ⟨after, -, rfl⟩ := Base.map_ok_iff.mp h
+    trivial
+  · exact resumesCaller_genericCall h
+
+/-- A successful step of a call instruction resumes its caller as a call or a creation.
+
+That holds whenever it sends a message. -/
+private theorem resumesCaller_callStep {kind : CallKind} {evm : Evm fork Meter}
+    {result : StepResult fork Meter} (h : callStep kind evm = .ok result) :
+    ResumesCaller result := by
+  unfold Evm.callStep at h
+  obtain ⟨⟨call, e1⟩, -, h⟩ := Base.bind_ok_iff.mp h
+  dsimp only at h
+  split at h
+  · simp only [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
+    cases h
+  rcases hacc : accessAddress e1 call.address with ⟨cold, e2⟩
+  simp only [hacc] at h
+  obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
+  rcases keepReads_eq_ok h with h | ⟨e, rfl⟩
+  · obtain ⟨⟨callee, e4⟩, -, h⟩ := Base.bind_ok_iff.mp h
+    dsimp only at h
+    rcases keepReads_eq_ok h with h | ⟨e, rfl⟩
+    · obtain ⟨⟨subCall, e5⟩, -, h⟩ := Base.bind_ok_iff.mp h
+      exact resumesCaller_finishCall h
+    · trivial
+  · trivial
+
+/-- A successful launch of a creation resumes its caller as a call or a creation.
+
+That holds whenever it sends a message. -/
+private theorem resumesCaller_launchCreate {evm : Evm fork Meter} {value : U256}
+    {initCode : ByteArray} {salt : Option U256} {result : StepResult fork Meter}
+    (h : launchCreate evm value initCode salt = .ok result) : ResumesCaller result := by
+  unfold Evm.launchCreate at h
+  dsimp only at h
+  split at h
+  · obtain ⟨after, -, rfl⟩ := Base.map_ok_iff.mp h
+    trivial
+  obtain ⟨address, -, h⟩ := Base.bind_ok_iff.mp h
+  rcases keepReads_eq_ok h with hr | ⟨e, rfl⟩
+  · obtain ⟨e1, -, hr⟩ := Base.bind_ok_iff.mp hr
+    obtain ⟨e2, -, hr⟩ := Base.bind_ok_iff.mp hr
+    obtain ⟨state, -, hr⟩ := Base.bind_ok_iff.mp hr
+    split at hr
+    · cases hr
+      exact .inr ⟨_, _, rfl⟩
+    · obtain ⟨e3, -, hr⟩ := Base.bind_ok_iff.mp hr
+      cases hr
+      trivial
+  · trivial
+
+/-- A successful step of CREATE or CREATE2 resumes its caller as a call or a creation.
+
+That holds whenever it sends a message. -/
+private theorem resumesCaller_createStep {create2 : Bool} {evm : Evm fork Meter}
+    {result : StepResult fork Meter} (h : createStep create2 evm = .ok result) :
+    ResumesCaller result := by
+  unfold Evm.createStep at h
+  by_cases hs : fork ≥ .glamsterdam ∧ evm.message.isStatic = true
+  · simp [hs, bind, Except.bind, throw, throwThe, MonadExceptOf.throw] at h
+  rw [ite_eq_right_of_eq_false _ _ (eq_false hs)] at h
+  obtain ⟨⟨_, e1⟩, -, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨_, e2⟩, -, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨_, e3⟩, -, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨salt, e4⟩, -, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨e5, -, h⟩ := Base.bind_ok_iff.mp h
+  unfold genericCreate at h
+  split at h
+  · cases h
+  split at h
+  · cases h
+  exact resumesCaller_launchCreate h
+
+/-- A successful instruction that may send a message resumes its caller as a call or a creation. -/
+private theorem resumesCaller_messageInstruction {op : Op}
+    {run : Evm fork Meter → Except EvmError (StepResult fork Meter)} {evm : Evm fork Meter}
+    {result : StepResult fork Meter} (hrun : messageInstruction fork op = some run)
+    (h : run evm = .ok result) : ResumesCaller result := by
+  unfold Evm.messageInstruction at hrun
+  cases hc : callInstruction (Meter := Meter) fork op with
+  | some call =>
+    simp only [hc, HOrElse.hOrElse, OrElse.orElse, Option.orElse, Option.some.injEq] at hrun
+    subst hrun
+    cases op <;> simp only [callInstruction, Option.some.injEq, reduceCtorEq] at hc
+    all_goals first
+      | (subst hc; exact resumesCaller_callStep h)
+      | (split at hc
+         · simp only [Option.some.injEq] at hc
+           subst hc
+           exact resumesCaller_callStep h
+         · cases hc)
+  | none =>
+    simp only [hc, HOrElse.hOrElse, OrElse.orElse, Option.orElse] at hrun
+    cases op <;> simp only [createInstruction, Option.some.injEq, reduceCtorEq] at hrun
+    all_goals first
+      | (subst hrun; exact resumesCaller_createStep h)
+      | (split at hrun
+         · simp only [Option.some.injEq] at hrun
+           subst hrun
+           exact resumesCaller_createStep h
+         · cases hrun)
+
+/-- Each message that a successful step sends resumes its caller as a call or as a creation. -/
+theorem step_eq_child_resume {evm caller : Evm fork Meter} {message : Message fork}
+    {resume : Evm fork Meter → Except EvmError (Evm fork Meter)}
+    (h : step fork evm = .ok (.child caller message resume)) :
+    (∃ newAccount outputStart outputSize,
+      resume = resumeCall fork caller newAccount outputStart outputSize) ∨
+    ∃ newAccount address, resume = resumeCreate fork caller newAccount address := by
+  suffices ∀ result, step fork evm = .ok result → ResumesCaller result from this _ h
+  intro result h
+  unfold Evm.step at h
+  split at h
+  · dsimp only at h
+    split at h
+    · cases h
+    · split at h
+      · cases hr : ‹Evm fork Meter → Except EvmError (Evm fork Meter)› evm with
+        | error => simp [hr, Functor.map, Except.map] at h
+        | ok after =>
+          simp only [hr, Functor.map, Except.map, Except.ok.injEq] at h
+          subst h
+          trivial
+      · split at h
+        · rename_i hcall
+          exact resumesCaller_messageInstruction hcall h
+        · cases h
+  · simp only [stopStep, Functor.map, Except.map, Except.ok.injEq] at h
+    subst h
+    trivial
+
 end EthLib.Execution.Evm
