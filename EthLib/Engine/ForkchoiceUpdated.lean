@@ -509,7 +509,7 @@ In an update, the configuration, the tree, the head and the timestamp fix the fo
 
 So within an update, other attributes or another head give other bytes to hash.
 
-Distinct builds get distinct IDs unless their hashes share the first 8 bytes.
+So within an update, distinct builds get distinct IDs unless their hashes share the first 8 bytes.
 
 The hash is that of the head and then the attributes, each number in 8 big-endian bytes. -/
 def payloadId (head : Hash32) (attributes : PayloadAttributes fork) : Bytes8 :=
