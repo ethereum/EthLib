@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Execution.Proofs.Evm.Call.StaticMessage
+public import EthLib.Execution.Proofs.Evm.Call.StepRules
 
 /-!
 # Proofs: every message keeps the block of the state
@@ -56,125 +56,31 @@ theorem parent_prepareCreation {tx tx' : TransactionState} {address : Address}
   · cases h
     rfl
 
-/-! ## The instructions that give the next frame -/
-
-/-- A successful SSTORE keeps the block of the state. -/
-theorem parent_sstoreStep {evm after : Evm fork Meter} (h : sstoreStep evm = .ok after) :
+omit [GasMeter Meter] in
+/-- The end of a successful SELFDESTRUCT keeps the block of the state. -/
+theorem parent_finishSelfdestruct {beneficiary : Address} {refund : Nat}
+    {evm after : Evm fork Meter} (h : finishSelfdestruct fork beneficiary refund evm = .ok after) :
     after.state.parent = evm.state.parent := by
-  unfold sstoreStep at h
+  unfold finishSelfdestruct at h
   split at h
-  · simp [bind, Except.bind, throw, throwThe, MonadExceptOf.throw] at h
-  obtain ⟨⟨k, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨⟨n, e2⟩, h2, h⟩ := Base.bind_ok_iff.mp h
-  have c2 : e2.state.parent = evm.state.parent := by
-    rw [(popWord_sameContext h2).state, (popWord_sameContext h1).state]
-  simp only [] at h
-  split at h
-  · simp [throw, throwThe, MonadExceptOf.throw] at h
-  · rcases hpair : accessStorageKey e2 e2.message.currentTarget (U256.toBeBytes k) with
-      ⟨cold, e3⟩
-    have ha : e3.state.parent = e2.state.parent := by
-      have := (staticStep_accessStorageKey e2 e2.message.currentTarget (U256.toBeBytes k)).parent
-      rwa [hpair] at this
-    simp only [hpair] at h
-    rcases keepReads_eq_ok h with h | ⟨e, rfl⟩
-    · obtain ⟨e4, h4, h⟩ := Base.bind_ok_iff.mp h
-      obtain ⟨e5, h5, h⟩ := Base.bind_ok_iff.mp h
-      have m5 : e5.state.parent = evm.state.parent := by
-        rw [(chargeStateGas_sameContext h5).state, (chargeGas_sameContext h4).state]
-        exact ha.trans c2
-      split at h
-      · simp [throw, throwThe, MonadExceptOf.throw] at h
-      · obtain ⟨st, hst, h⟩ := Base.bind_ok_iff.mp h
-        cases h
-        exact (TransactionState.parent_setStorage (Base.mapError_ok_iff.mp hst)).trans m5
-    · exact ha.trans c2
-
-/-- A successful TSTORE keeps the block of the state. -/
-theorem parent_tstoreStep {evm after : Evm fork Meter} (h : tstoreStep evm = .ok after) :
-    after.state.parent = evm.state.parent := by
-  obtain ⟨⟨_, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨⟨_, e2⟩, h2, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨e3, h3, h⟩ := Base.bind_ok_iff.mp h
-  split at h
-  · simp [throw, throwThe, MonadExceptOf.throw] at h
   · cases h
-    show e3.state.parent = _
-    rw [(chargeGas_sameContext h3).state, (popWord_sameContext h2).state,
-      (popWord_sameContext h1).state]
-
-/-- A successful SELFDESTRUCT keeps the block of the state, static frame or not. -/
-theorem parent_selfdestructStep {evm after : Evm fork Meter}
-    (h : selfdestructStep fork evm = .ok after) : after.state.parent = evm.state.parent := by
-  unfold selfdestructStep at h
-  by_cases hs : fork ≥ .glamsterdam ∧ evm.message.isStatic = true
-  · simp only [hs, and_self, ↓reduceIte] at h
+  · obtain ⟨st, hst, h⟩ := Base.bind_ok_iff.mp h
     cases h
-  simp only [hs, ↓reduceIte] at h
-  obtain ⟨⟨w, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
-  dsimp only at h
-  rcases hacc : accessAddress e1 (toAddressMasked w) with ⟨cold, e2⟩
-  simp only [hacc] at h
-  have ha : e2.state.parent = e1.state.parent := by
-    have := (staticStep_accessAddress e1 (toAddressMasked w)).parent
-    rwa [hacc] at this
-  obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
-  have c : (recordAccountRead e2 (toAddressMasked w)).state.parent = evm.state.parent := by
-    show e2.state.parent = _
-    rw [ha, (popWord_sameContext h1).state]
-  rcases keepReads_eq_ok h with h | ⟨e, rfl⟩
-  · obtain ⟨e3, h3, h⟩ := Base.bind_ok_iff.mp h
-    obtain ⟨e4, h4, h⟩ := Base.bind_ok_iff.mp h
-    have m4 : e4.state.parent = evm.state.parent := by
-      rw [(chargeStateGas_sameContext h4).state, (chargeGas_sameContext h3).state]
-      exact c
-    unfold finishSelfdestruct at h
-    split at h
-    · cases h
-    · obtain ⟨st, hst, h⟩ := Base.bind_ok_iff.mp h
-      cases h
-      exact (parent_selfdestructTransfer (Base.mapError_ok_iff.mp hst)).trans m4
-  · exact c
+    exact parent_selfdestructTransfer (Base.mapError_ok_iff.mp hst)
 
-/-- Each instruction that gives the next frame keeps the block of the state when it succeeds.
+/-! ## A step -/
 
-That holds in a static frame and in any other frame. -/
-theorem parent_instruction {op : Op}
-    {run : Evm fork Meter → Except EvmError (Evm fork Meter)} {evm after : Evm fork Meter}
-    (hrun : instruction fork op = some run) (h : run evm = .ok after) :
-    after.state.parent = evm.state.parent := by
-  unfold instruction at hrun
-  rcases orElse_eq_some hrun with hf | hrun
-  · exact congrArg _ (stackOnlyStep_sameContext hf h).state
-  rcases orElse_eq_some hrun with hf | hrun
-  · exact congrArg _ (controlFlowStep_sameContext hf h).state
-  rcases orElse_eq_some hrun with hf | hrun
-  · exact congrArg _ (memoryDataStep_sameContext hf h).state
-  rcases orElse_eq_some hrun with hf | hrun
-  · exact (staticStep_returnOpStep hf h).parent
-  rcases orElse_eq_some hrun with hf | hrun
-  · exact congrArg _ (environmentStep_sameContext hf h).state
-  rcases orElse_eq_some hrun with hf | hrun
-  · exact (staticStep_accountStep hf h).parent
-  rcases orElse_eq_some hrun with hf | hrun
-  · cases op <;> simp only [storageStep, Option.some.injEq, reduceCtorEq] at hf
-    case sload => subst hf; exact (staticStep_sloadStep h).parent
-    case sstore => subst hf; exact parent_sstoreStep h
-  rcases orElse_eq_some hrun with hf | hrun
-  · cases op <;> simp only [transientStorageStep, reduceCtorEq] at hf <;> split at hf <;>
-      simp only [Option.some.injEq, reduceCtorEq] at hf <;> subst hf
-    · exact congrArg _ (tloadStep_sameContext h).state
-    · exact parent_tstoreStep h
-  rcases orElse_eq_some hrun with hf | hf
-  · cases op <;> simp only [logOpStep, Option.some.injEq, reduceCtorEq] at hf
-    subst hf
-    obtain ⟨_, -, -, -, hs, -⟩ := logStep_eq_ok h
-    rw [hs]
-  · cases op <;> simp only [selfdestructOpStep, Option.some.injEq, reduceCtorEq] at hf
-    subst hf
-    exact parent_selfdestructStep h
-
-/-! ## The calls and the creations -/
+/-- Each write of a step keeps the block of the state, static frame or not. -/
+theorem stepRules_parent :
+    StepRules fork (fun a b : Evm fork Meter => b.state.parent = a.state.parent) where
+  trans hab hbc := hbc.trans hab
+  static h := h.parent
+  sstore _ _ _ _ _ _ h := TransactionState.parent_setStorage h
+  tstore _ _ _ _ := rfl
+  log _ hs _ := by rw [hs]
+  selfdestruct _ _ h := parent_finishSelfdestruct h
+  incrementNonce _ _ _ h := TransactionState.parent_incrementNonce h
+  incorporate h := by rw [state_incorporateChild]; exact h
 
 /-- A result of a step from `evm` that keeps the block of the state.
 
@@ -187,210 +93,10 @@ abbrev ParentResult (evm : Evm fork Meter) : StepResult fork Meter → Prop :=
   StepResult.Keeps (fun a b => b.state.parent = a.state.parent)
     (fun caller _ child => child.state.parent = caller.state.parent) evm
 
-omit [GasMeter Meter] in
-/-- A result that keeps the block of a frame keeps the block of each frame with the same block. -/
-theorem ParentResult.lift {evm evm' : Evm fork Meter} {result : StepResult fork Meter}
-    (h : evm'.state.parent = evm.state.parent) (r : ParentResult evm' result) :
-    ParentResult evm result :=
-  StepResult.Keeps.lift (fun hab hbc => hbc.trans hab) h r
-
-/-- The caller that resumes after a call has the state of the frame that ends the call. -/
-theorem state_resumeCall {caller child after : Evm fork Meter} {newAccount : Nat}
-    {outputStart outputSize : U256}
-    (h : resumeCall fork caller newAccount outputStart outputSize child = .ok after) :
-    after.state = child.state := by
-  obtain ⟨e, h1, h⟩ := Base.bind_ok_iff.mp h
-  cases h
-  show e.state = child.state
-  rw [(pushWord_sameContext h1).state]
-  split <;> simp [state_incorporateChild, refillStateGas]
-
-/-- The creator that resumes after a creation has the state of the frame that ends it. -/
-theorem state_resumeCreate {caller child after : Evm fork Meter} {newAccount : Nat}
-    {address : Address} (h : resumeCreate fork caller newAccount address child = .ok after) :
-    after.state = child.state := by
-  obtain ⟨e, h1, h⟩ := Base.bind_ok_iff.mp h
-  cases h
-  show e.state = child.state
-  rw [(pushWord_sameContext h1).state]
-  split <;> simp [state_incorporateChild, refillStateGas]
-
-/-- A successful send of a message keeps the block of the state. -/
-theorem parentResult_genericCall {evm : Evm fork Meter} {message : Message fork}
-    {newAccount : Nat} {outputStart outputSize : U256} {result : StepResult fork Meter}
-    (h : genericCall evm message newAccount outputStart outputSize = .ok result) :
-    ParentResult evm result := by
-  unfold genericCall at h
-  dsimp only at h
-  split at h
-  · obtain ⟨after, hs, rfl⟩ := Base.map_ok_iff.mp h
-    exact (staticStep_skipCall hs).parent
-  · cases h
-    exact ⟨rfl, fun child after hres p =>
-      (congrArg TransactionState.parent (state_resumeCall hres)).trans p⟩
-
-/-- The successful end of a call instruction keeps the block of the state. -/
-theorem parentResult_finishCall {kind : CallKind} {call : CallOperands} {callee : Callee}
-    {subCall newAccount expandBy : Nat} {evm : Evm fork Meter} {result : StepResult fork Meter}
-    (h : finishCall kind call callee subCall newAccount expandBy evm = .ok result) :
-    ParentResult evm result := by
-  unfold finishCall at h
-  split at h
-  · cases h
-  dsimp only at h
-  split at h
-  · obtain ⟨after, hs, rfl⟩ := Base.map_ok_iff.mp h
-    exact (staticStep_skipCall hs).parent
-  · refine ParentResult.lift ?_ (parentResult_genericCall h)
-    rfl
-
-/-- A successful step of a call instruction keeps the block of the state. -/
-theorem parentResult_callStep {kind : CallKind} {evm : Evm fork Meter}
-    {result : StepResult fork Meter} (h : callStep kind evm = .ok result) :
-    ParentResult evm result := by
-  unfold callStep at h
-  obtain ⟨⟨call, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
-  have c1 := (staticStep_popCallOperands h1).1
-  dsimp only at h
-  split at h
-  · simp only [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
-    cases h
-  rcases hacc : accessAddress e1 call.address with ⟨cold, e2⟩
-  simp only [hacc] at h
-  have ha : StaticStep e1 e2 := by
-    have := staticStep_accessAddress e1 call.address
-    rwa [hacc] at this
-  have s3 : StaticStep evm (recordAccountRead e2 call.address) :=
-    (c1.trans ha).trans (staticStep_recordAccountRead e2 call.address)
-  obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
-  rcases keepReads_eq_ok h with h | ⟨e, rfl⟩
-  · obtain ⟨⟨callee, e4⟩, h4, h⟩ := Base.bind_ok_iff.mp h
-    have s4 : StaticStep evm e4 := s3.trans (staticStep_accessDelegation h4)
-    dsimp only at h
-    rcases keepReads_eq_ok h with h | ⟨e, rfl⟩
-    · obtain ⟨⟨subCall, e5⟩, h5, h⟩ := Base.bind_ok_iff.mp h
-      exact ParentResult.lift (s4.trans (staticStep_payCall h5)).parent
-        (parentResult_finishCall h)
-    · exact (s4.trans (staticStep_exceptionalHalt _ _)).parent
-  · exact (s3.trans (staticStep_exceptionalHalt _ _)).parent
-
-/-- A successful launch of a creation keeps the block of the state. -/
-theorem parentResult_launchCreate {evm : Evm fork Meter} {value : U256} {initCode : ByteArray}
-    {salt : Option U256} {result : StepResult fork Meter}
-    (h : launchCreate evm value initCode salt = .ok result) : ParentResult evm result := by
-  unfold launchCreate at h
-  dsimp only at h
-  split at h
-  · obtain ⟨after, hs, rfl⟩ := Base.map_ok_iff.mp h
-    exact (staticStep_skipCall hs).parent
-  obtain ⟨address, -, h⟩ := Base.bind_ok_iff.mp h
-  have c0 : (recordAccountRead (accessAddress (recordAccountRead
-      { evm with returnData := .empty } evm.message.currentTarget) address).2
-      address).state.parent = evm.state.parent :=
-    ((staticStep_accessAddress _ _).trans (staticStep_recordAccountRead _ _)).parent
-  rcases keepReads_eq_ok h with hr | ⟨e, rfl⟩
-  · obtain ⟨e1, h1, hr⟩ := Base.bind_ok_iff.mp hr
-    obtain ⟨e2, h2, hr⟩ := Base.bind_ok_iff.mp hr
-    obtain ⟨state, hst, hr⟩ := Base.bind_ok_iff.mp hr
-    have m2 : e2.state.parent = evm.state.parent := by
-      rw [(chargeGas_sameContext h2).state, (chargeStateGas_sameContext h1).state]
-      exact c0
-    have ms : state.parent = evm.state.parent :=
-      (TransactionState.parent_incrementNonce (Base.mapError_ok_iff.mp hst)).trans m2
-    split at hr
-    · cases hr
-      exact ⟨ms, fun child after hres p =>
-        (congrArg TransactionState.parent (state_resumeCreate hres)).trans (p.trans ms)⟩
-    · obtain ⟨e3, h3, hr⟩ := Base.bind_ok_iff.mp hr
-      cases hr
-      show e3.state.parent = _
-      rw [(pushWord_sameContext h3).state]
-      exact ms
-  · exact c0
-
-/-- A successful step of CREATE or CREATE2 keeps the block of the state. -/
-theorem parentResult_createStep {create2 : Bool} {evm : Evm fork Meter}
-    {result : StepResult fork Meter} (h : createStep create2 evm = .ok result) :
-    ParentResult evm result := by
-  unfold createStep at h
-  by_cases hs : fork ≥ .glamsterdam ∧ evm.message.isStatic = true
-  · simp [hs, bind, Except.bind, throw, throwThe, MonadExceptOf.throw] at h
-  rw [ite_eq_right_of_eq_false _ _ (eq_false hs)] at h
-  obtain ⟨⟨_, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨⟨_, e2⟩, h2, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨⟨_, e3⟩, h3, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨⟨salt, e4⟩, h4, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨e5, h5, h⟩ := Base.bind_ok_iff.mp h
-  have m4 : e4.state = e3.state := by
-    unfold popSalt at h4
-    split at h4
-    · obtain ⟨⟨_, e⟩, he, h4⟩ := Base.bind_ok_iff.mp h4
-      cases h4
-      exact (popWord_sameContext he).state
-    · cases h4
-      rfl
-  have m5 : e5.state.parent = evm.state.parent := by
-    rw [(chargeGasAndMemory_sameContext h5).state, m4, (popWord_sameContext h3).state,
-      (popWord_sameContext h2).state, (popWord_sameContext h1).state]
-  unfold genericCreate at h
-  split at h
-  · cases h
-  split at h
-  · cases h
-  exact ParentResult.lift m5 (parentResult_launchCreate h)
-
-/-- A successful instruction that may send a message keeps the block of the state. -/
-theorem parentResult_messageInstruction {op : Op}
-    {run : Evm fork Meter → Except EvmError (StepResult fork Meter)} {evm : Evm fork Meter}
-    {result : StepResult fork Meter} (hrun : messageInstruction fork op = some run)
-    (h : run evm = .ok result) : ParentResult evm result := by
-  unfold messageInstruction at hrun
-  cases hc : callInstruction (Meter := Meter) fork op with
-  | some call =>
-    simp only [hc, HOrElse.hOrElse, OrElse.orElse, Option.orElse, Option.some.injEq] at hrun
-    subst hrun
-    cases op <;> simp only [callInstruction, Option.some.injEq, reduceCtorEq] at hc
-    all_goals first
-      | (subst hc; exact parentResult_callStep h)
-      | (split at hc
-         · simp only [Option.some.injEq] at hc
-           subst hc
-           exact parentResult_callStep h
-         · cases hc)
-  | none =>
-    simp only [hc, HOrElse.hOrElse, OrElse.orElse, Option.orElse] at hrun
-    cases op <;> simp only [createInstruction, Option.some.injEq, reduceCtorEq] at hrun
-    all_goals first
-      | (subst hrun; exact parentResult_createStep h)
-      | (split at hrun
-         · simp only [Option.some.injEq] at hrun
-           subst hrun
-           exact parentResult_createStep h
-         · cases hrun)
-
 /-- Every successful step of every frame keeps the block of the state, static frame or not. -/
 theorem parentResult_step {evm : Evm fork Meter} {result : StepResult fork Meter}
-    (h : step fork evm = .ok result) : ParentResult evm result := by
-  unfold step at h
-  split at h
-  · dsimp only at h
-    split at h
-    · cases h
-    · split at h
-      · rename_i hop
-        cases hr : ‹Evm fork Meter → Except EvmError (Evm fork Meter)› evm with
-        | error => simp [hr, Functor.map, Except.map] at h
-        | ok after =>
-          simp only [hr, Functor.map, Except.map, Except.ok.injEq] at h
-          subst h
-          exact parent_instruction hop hr
-      · split at h
-        · rename_i hcall
-          exact parentResult_messageInstruction hcall h
-        · cases h
-  · simp only [stopStep, Functor.map, Except.map, Except.ok.injEq] at h
-    subst h
-    exact congrArg _ (controlFlowStep_sameContext (op := .stop) rfl rfl).state
+    (h : step fork evm = .ok result) : ParentResult evm result :=
+  stepRules_parent.step h
 
 /-! ## A run of a frame -/
 
@@ -398,8 +104,7 @@ theorem parentResult_step {evm : Evm fork Meter} {result : StepResult fork Meter
 
 It ends each message that it runs successfully with the block of the frame that sends it. -/
 def KeepsParent {bound : Nat} (runChild : MessageRunner fork Meter bound) : Prop :=
-  ∀ caller message lt ended, runChild caller message lt = .ok ended →
-    ended.val.state.parent = caller.state.parent
+  RunnerEnsures (fun caller _ child => child.state.parent = caller.state.parent) runChild
 
 /-- A successful run of a frame keeps the block of the state.
 
@@ -409,10 +114,7 @@ theorem parent_runFrame [LawfulGasMeter Meter] {bound : Nat}
     {evm after : Evm fork Meter} {within : GasMeter.gasHeld evm.gas ≤ bound}
     (h : runFrame (step fork) (step_decreases fork) bound runChild evm within = .ok after) :
     after.state.parent = evm.state.parent :=
-  rel_runFrame (R := fun a b => b.state.parent = a.state.parent)
-    (C := fun caller _ child => child.state.parent = caller.state.parent)
-    (Inv := fun _ => True) (fun _ => rfl) (fun hab hbc => hbc.trans hab) (fun _ _ => trivial)
-    (fun _ _ _ => rfl) (fun _ h => parentResult_step h) (fun _ _ _ _ _ => runs _ _ _ _) trivial h
+  stepRules_parent.runFrame runs h
 
 /-! ## Messages -/
 
@@ -479,18 +181,16 @@ theorem processMessage_parent [LawfulGasMeter Meter] (n : Nat) :
       (held : GasMeter.gasHeld meter ≤ message.gas), message.gas = n →
       ∀ ended, processCreateMessage fork message state substate meter held = .ok ended →
         ended.val.state.parent = state.parent) :=
-  processMessage_rel (R := fun a b => b.state.parent = a.state.parent) (Inv := fun _ => True)
+  stepRules_parent.processMessage
     (M := fun _ state _ _ ended => ended.state.parent = state.parent)
-    (fun _ => rfl) (fun hab hbc => hbc.trans hab) (fun _ _ => trivial) (fun _ _ _ => rfl)
-    (fun _ h => parentResult_step h) (fun _ _ => rfl)
-    (fun h _ => (staticStep_runPrecompile h).parent)
-    (fun {message state _ _ _ _ _} hstate hrun => by
+    (fun {message state _ _ _ _ _} hentry hrun => by
       rw [parent_rollbackOnError]
-      refine (hrun trivial).trans ?_
-      rcases hstate with ⟨rfl, -, -⟩ | ⟨-, hm, -⟩
+      refine hrun.trans ?_
+      rcases hentry with ⟨-, rfl, -⟩ | ⟨-, hm, -⟩
       · exact parent_startState message state
       · exact (TransactionState.parent_moveEther hm).trans (parent_startState message state))
-    (fun hp hm hd => (parent_depositCode hd).trans (hm.trans (parent_prepareCreation hp))) n
+    (fun hp hm hd => (parent_depositCode hd).trans (hm.trans (parent_prepareCreation hp)))
+    (fun h => h) n
 
 /-- A successful call keeps the block of the state it is sent from, at every fork. -/
 theorem parent_processMessage [LawfulGasMeter Meter] {message : Message fork}

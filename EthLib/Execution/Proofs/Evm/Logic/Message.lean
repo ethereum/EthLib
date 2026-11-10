@@ -202,8 +202,7 @@ Each frame that it gives meets the assumption, and it fails only with an error t
 structure Meets (callee : Evm fork Meter → Message fork → Evm fork Meter → Prop)
     (runChild : MessageRunner fork Meter bound) : Prop where
   /-- The frame that ends a message, from a caller, meets the assumption. -/
-  ok : ∀ caller message lt child, runChild caller message lt = .ok child →
-    callee caller message child.1
+  ok : RunnerEnsures callee runChild
   /-- The runner fails only with an error that aborts the run. -/
   aborts : ∀ caller message lt e, runChild caller message lt = .error e → e.aborts = true
 

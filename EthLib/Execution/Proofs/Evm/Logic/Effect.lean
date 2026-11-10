@@ -84,36 +84,6 @@ theorem Meets.and {Meter : Type} [GasMeter Meter] {bound : Nat}
   ⟨fun caller message lt child ran => ⟨ha.ok caller message lt child ran,
     hb.ok caller message lt child ran⟩, ha.aborts⟩
 
-/-- The state and the substate that the frame of a message starts from, after those of its caller.
-
-Before Paris, the target of the message is touched first.
-
-A message that moves a value then moves it from its sender to its target.
-
-From Glamsterdam, it also logs a move to another account, by EIP-7708.
-
-Any other message starts from there with the substate of its caller. -/
-def Entered (fork : Fork) (message : Message fork) (state : TransactionState)
-    (substate : Substate) (entry : TransactionState) (entrySubstate : Substate) : Prop :=
-  (¬(message.shouldTransferValue = true ∧ message.value ≠ 0) ∧
-      entry = startState fork message state ∧ entrySubstate = substate) ∨
-    ((message.shouldTransferValue = true ∧ message.value ≠ 0) ∧
-      (startState fork message state).moveEther fork message.caller message.currentTarget
-        message.value = .ok entry ∧
-      entrySubstate = { substate with
-        logs := pushTransferLog fork substate.logs message.caller message.currentTarget
-          message.value })
-
-/-- A message that moves no value starts from the start state and the substate of its caller. -/
-theorem Entered.of_not_transfers {message : Message fork} {state entry : TransactionState}
-    {substate entrySubstate : Substate}
-    (h : Entered fork message state substate entry entrySubstate)
-    (hno : ¬(message.shouldTransferValue = true ∧ message.value ≠ 0)) :
-    entry = startState fork message state ∧ entrySubstate = substate := by
-  rcases h with ⟨-, h⟩ | ⟨ht, -⟩
-  · exact h
-  · exact absurd ht hno
-
 /-- A message with code `code` runs as a specification of that code says.
 
 The message has a target and runs no precompile, and `G` holds of it and of its caller.
