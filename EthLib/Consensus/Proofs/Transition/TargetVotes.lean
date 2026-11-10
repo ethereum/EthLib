@@ -286,21 +286,6 @@ theorem VoteFrame.trans {first second third : BeaconState preset fork}
         two.toFrame small
     · exact two.signed small known vote second
 
-/-- A step that keeps each byte of flags or zeroes it adds no target flag. -/
-theorem TargetFlagAt.of_flagsKeptOrZero {altair : .altair ≤ fork} {current : Bool}
-    {position : Nat} (kept : FlagsKeptOrZero state after)
-    (flagged : TargetFlagAt (recentParticipation after altair current) position) :
-    TargetFlagAt (recentParticipation state altair current) position := by
-  obtain ⟨flags, found, set⟩ := flagged
-  have kept := kept altair position flags
-  cases current
-  · rcases kept.1 found with old | rfl
-    · exact ⟨flags, old, set⟩
-    · exact absurd set (by decide)
-  · rcases kept.2 found with old | rfl
-    · exact ⟨flags, old, set⟩
-    · exact absurd set (by decide)
-
 /-- A block frame is a step that sets no target flag, since a zero byte holds no flag. -/
 theorem VoteFrame.of_blockFrame (frame : BlockFrame state after) :
     VoteFrame config checks (fun _ => False) state after where

@@ -2,6 +2,7 @@ module
 
 public import EthLib.Consensus.Proofs.Transition.BuilderRequests
 public import EthLib.Consensus.Proofs.Transition.Invariants
+public import EthLib.Consensus.Transition.ForkBoundary
 public import EthLib.Consensus.Transition.Upgrade
 
 /-!
@@ -110,13 +111,9 @@ theorem foldlM_translateAttestation {fork : Fork} {altair : .altair ≤ fork}
   obtain ⟨participation', rfl, same'⟩ := translateAttestation_spec step
   exact ⟨participation', rfl, same'.trans same⟩
 
-/-- The upgrade to Altair keeps the registry and the balances.
-
-Each list of flags and of inactivity scores has one entry for each validator.
-
-Both sync committees are the same committee, and the fork version moves to Altair. -/
-theorem upgradeToAltair_spec {pre : BeaconState preset .phase0}
+private theorem upgradeToAltair_frame_spec {pre : BeaconState preset .phase0}
     {after : BeaconState preset .altair} (computed : upgradeToAltair config pre = .ok after) :
+    UpgradeFrame config pre after ∧
     after.validators.data = pre.validators.data ∧ after.balances.data = pre.balances.data ∧
       (after.previousEpochParticipation (by decide)).data.size = pre.validators.data.size ∧
       (after.currentEpochParticipation (by decide)).data.size = pre.validators.data.size ∧
@@ -130,13 +127,31 @@ theorem upgradeToAltair_spec {pre : BeaconState preset .phase0}
   obtain ⟨participation, rfl, same⟩ := foldlM_translateAttestation folded
   obtain ⟨previous, current, scores⟩ := carryFields_of_lt_altair (config := config)
     (post := .altair) pre (by decide) (by decide) (by decide) (by decide)
-  refine ⟨rfl, rfl, ?_, ?_, ?_, rfl, rfl⟩
+  refine ⟨?_, rfl, rfl, ?_, ?_, ?_, rfl, rfl⟩
+  · exact UpgradeFrame.of_carried (by decide) rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl
+      fun altair => absurd altair (by decide)
   · show participation.data.size = _
     rw [same, previous, Array.size_replicate]
   · show (_ : EpochParticipation preset .altair).data.size = _
     rw [current, Array.size_replicate]
   · show (_ : InactivityScores preset .altair).data.size = _
     rw [scores, Array.size_replicate]
+
+/-- The upgrade to Altair keeps the registry and the balances.
+
+Each list of flags and of inactivity scores has one entry for each validator.
+
+Both sync committees are the same committee, and the fork version moves to Altair. -/
+theorem upgradeToAltair_spec {pre : BeaconState preset .phase0}
+    {after : BeaconState preset .altair} (computed : upgradeToAltair config pre = .ok after) :
+    after.validators.data = pre.validators.data ∧ after.balances.data = pre.balances.data ∧
+      (after.previousEpochParticipation (by decide)).data.size = pre.validators.data.size ∧
+      (after.currentEpochParticipation (by decide)).data.size = pre.validators.data.size ∧
+      (after.inactivityScores (by decide)).data.size = pre.validators.data.size ∧
+      after.currentSyncCommittee (by decide) = after.nextSyncCommittee (by decide) ∧
+      after.forkVersions =
+        ⟨pre.forkVersions.currentVersion, config.ALTAIR_FORK_VERSION, getCurrentEpoch pre⟩ :=
+  (upgradeToAltair_frame_spec computed).2
 
 /-- What each step of the Electra upgrade keeps.
 
@@ -186,6 +201,66 @@ theorem electraKept_queueCompoundingExcess {fork : Fork} {state after : BeaconSt
   · cases computed
     exact ⟨SameSizes.refl _, rfl, rfl⟩
 
+/-- Queueing a validator that is not yet active changes no exit epoch.
+
+It keeps the block roots, and keeps each byte of flags or zeroes it. -/
+theorem frame_queuePreActivation {fork : Fork} {state after : BeaconState preset fork}
+    {electra : .pectra ≤ fork} {index : ValidatorIndex}
+    (computed : queuePreActivation state electra index = .ok after) :
+    BlockFrame state after := by
+  simp only [queuePreActivation, bind_ok_iff, liftAccessor_ok, pure, Except.pure,
+    Except.ok.injEq] at computed
+  obtain ⟨validator, found, _, -, _, -, _, set₁, _, set₂, rfl⟩ := computed
+  have sizes := sameSizes_setBalance set₁
+  obtain ⟨_, rfl⟩ := setBalance_ok set₁
+  have zeroed := BlockFrame.of_validators sizes
+  have reset := frame_setValidator set₂ found rfl fun ordered =>
+    ordered validator (mem_of_getValidator found)
+  exact (zeroed.trans reset.toBlockFrame).trans (BlockFrame.of_validators ⟨rfl, rfl⟩)
+
+/-- Queueing the excess balance of a validator with compounding credentials keeps the frame.
+
+It keeps the block roots, and keeps each byte of flags or zeroes it. -/
+theorem frame_queueCompoundingExcess {fork : Fork} {state after : BeaconState preset fork}
+    {electra : .pectra ≤ fork} {index : Nat}
+    (computed : queueCompoundingExcess state electra index = .ok after) :
+    BlockFrame state after := by
+  unfold queueCompoundingExcess at computed
+  split at computed
+  · split at computed
+    · exact frame_queueExcessActiveBalance (liftAccessor_ok.mp computed)
+    · cases computed
+      exact BlockFrame.refl _
+  · cases computed
+    exact BlockFrame.refl _
+
+private theorem upgradeToElectra_frame_spec {pre : BeaconState preset .dencun}
+    {after : BeaconState preset .pectra} (computed : upgradeToElectra config pre = .ok after) :
+    UpgradeFrame config pre after ∧
+    after.validators.data.size = pre.validators.data.size ∧
+      after.balances.data.size = pre.balances.data.size ∧
+      after.depositRequestsStartIndex (by decide) = UNSET_DEPOSIT_REQUESTS_START_INDEX ∧
+      after.forkVersions =
+        ⟨pre.forkVersions.currentVersion, config.ELECTRA_FORK_VERSION, getCurrentEpoch pre⟩ := by
+  simp only [upgradeToElectra, bind_ok_iff] at computed
+  obtain ⟨_, -, _, -, _, -, _, -, middle, queued, compounded⟩ := computed
+  have frame : UpgradeFrame config pre after := by
+    refine ((UpgradeFrame.trans_blockFrame ?_
+      (BlockFrame.foldlM (fun _ _ _ ok => frame_queuePreActivation ok) queued)).trans_blockFrame
+      (BlockFrame.foldlM (fun _ _ _ ok => frame_queueCompoundingExcess ok) compounded))
+    have altair : Fork.altair ≤ Fork.dencun := by decide
+    exact UpgradeFrame.of_carried (by decide) rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl
+      fun _ current => by cases current <;>
+        simp [recentParticipation, carryFields, carryList, altair]
+  have first := foldlM_ok_invariant (ElectraKept _)
+    (fun _ _ _ before step => before.trans (electraKept_queuePreActivation step))
+    ⟨SameSizes.refl _, rfl, rfl⟩ queued
+  have kept := foldlM_ok_invariant (ElectraKept _)
+    (fun _ _ _ before step => before.trans (electraKept_queueCompoundingExcess step))
+    first compounded
+  obtain ⟨⟨validators, balances⟩, versions, start⟩ := kept
+  exact ⟨frame, validators, balances, congrFun start _, versions⟩
+
 /-- The upgrade to Electra keeps the number of validators and of balances.
 
 The index of the first deposit request starts unset, and the fork version moves to Electra. -/
@@ -195,17 +270,21 @@ theorem upgradeToElectra_spec {pre : BeaconState preset .dencun}
       after.balances.data.size = pre.balances.data.size ∧
       after.depositRequestsStartIndex (by decide) = UNSET_DEPOSIT_REQUESTS_START_INDEX ∧
       after.forkVersions =
-        ⟨pre.forkVersions.currentVersion, config.ELECTRA_FORK_VERSION, getCurrentEpoch pre⟩ := by
-  simp only [upgradeToElectra, bind_ok_iff] at computed
-  obtain ⟨_, -, _, -, _, -, _, -, middle, queued, compounded⟩ := computed
-  have first := foldlM_ok_invariant (ElectraKept _)
-    (fun _ _ _ before step => before.trans (electraKept_queuePreActivation step))
-    ⟨SameSizes.refl _, rfl, rfl⟩ queued
-  have kept := foldlM_ok_invariant (ElectraKept _)
-    (fun _ _ _ before step => before.trans (electraKept_queueCompoundingExcess step))
-    first compounded
-  obtain ⟨⟨validators, balances⟩, versions, start⟩ := kept
-  exact ⟨validators, balances, congrFun start _, versions⟩
+        ⟨pre.forkVersions.currentVersion, config.ELECTRA_FORK_VERSION, getCurrentEpoch pre⟩ :=
+  (upgradeToElectra_frame_spec computed).2
+
+private theorem upgradeToFulu_frame_spec {pre : BeaconState preset .pectra}
+    {after : BeaconState preset .fusaka} (computed : upgradeToFulu config pre = .ok after) :
+    UpgradeFrame config pre after ∧
+    after.validators.data = pre.validators.data ∧ after.balances.data = pre.balances.data ∧
+      after.forkVersions =
+        ⟨pre.forkVersions.currentVersion, config.FULU_FORK_VERSION, getCurrentEpoch pre⟩ := by
+  simp only [upgradeToFulu, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+  obtain ⟨_, -, rfl⟩ := computed
+  have altair : Fork.altair ≤ Fork.pectra := by decide
+  refine ⟨?_, rfl, rfl, rfl⟩
+  exact UpgradeFrame.of_carried (by decide) rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl
+    fun _ current => by cases current <;> simp [recentParticipation, carryFields, carryList, altair]
 
 /-- The upgrade to Fulu keeps the registry and the balances.
 
@@ -214,10 +293,8 @@ theorem upgradeToFulu_spec {pre : BeaconState preset .pectra}
     {after : BeaconState preset .fusaka} (computed : upgradeToFulu config pre = .ok after) :
     after.validators.data = pre.validators.data ∧ after.balances.data = pre.balances.data ∧
       after.forkVersions =
-        ⟨pre.forkVersions.currentVersion, config.FULU_FORK_VERSION, getCurrentEpoch pre⟩ := by
-  simp only [upgradeToFulu, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-  obtain ⟨_, -, rfl⟩ := computed
-  exact ⟨rfl, rfl, rfl⟩
+        ⟨pre.forkVersions.currentVersion, config.FULU_FORK_VERSION, getCurrentEpoch pre⟩ :=
+  (upgradeToFulu_frame_spec computed).2
 
 /-- The upgrade carries the registry, the balances and the queues as the same sequences. -/
 theorem upgradeFields_lists (pre : BeaconState preset .fusaka) (requestsRoot : Root) :
@@ -363,6 +440,25 @@ theorem onboardBuildersFromPendingDeposits_spec {state after : BeaconState prese
   simp only [builderBalanceSum, pendingAmount] at bound ⊢
   simpa using bound
 
+private theorem upgradeToGloas_frame_spec {pre : BeaconState preset .fusaka}
+    {after : BeaconState preset .glamsterdam}
+    (computed : upgradeToGloas config checks pre = .ok after) :
+    UpgradeFrame config pre after ∧
+    after.validators.data = pre.validators.data ∧ after.balances.data = pre.balances.data ∧
+      after.latestBlockHash (by decide) =
+        (pre.latestExecutionPayloadHeader (by decide)).blockHash ∧
+      (after.latestExecutionPayloadBid (by decide)).blockHash =
+        (pre.latestExecutionPayloadHeader (by decide)).blockHash ∧
+      after.forkVersions =
+        ⟨pre.forkVersions.currentVersion, config.GLOAS_FORK_VERSION, getCurrentEpoch pre⟩ := by
+  unfold upgradeToGloas at computed
+  obtain ⟨root, -, rest⟩ := bind_ok_iff.mp computed
+  obtain ⟨window, -, onboarded⟩ := bind_ok_iff.mp rest
+  obtain ⟨⟨builders, pending, rfl⟩, -⟩ := onboardBuildersFromPendingDeposits_spec onboarded
+  refine ⟨?_, rfl, rfl, rfl, rfl, rfl⟩
+  exact UpgradeFrame.of_carried (by decide) rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl
+    fun _ current => by cases current <;> rfl
+
 /-- The upgrade of a Fulu state keeps its registry and balances, and the hash of its payload.
 
 The latest block hash and the latest bid's block hash are both the hash of the latest payload.
@@ -376,12 +472,8 @@ theorem upgradeToGloas_spec {pre : BeaconState preset .fusaka}
       (after.latestExecutionPayloadBid (by decide)).blockHash =
         (pre.latestExecutionPayloadHeader (by decide)).blockHash ∧
       after.forkVersions =
-        ⟨pre.forkVersions.currentVersion, config.GLOAS_FORK_VERSION, getCurrentEpoch pre⟩ := by
-  unfold upgradeToGloas at computed
-  obtain ⟨root, -, rest⟩ := bind_ok_iff.mp computed
-  obtain ⟨window, -, onboarded⟩ := bind_ok_iff.mp rest
-  obtain ⟨⟨builders, pending, rfl⟩, -⟩ := onboardBuildersFromPendingDeposits_spec onboarded
-  exact ⟨rfl, rfl, rfl, rfl, rfl⟩
+        ⟨pre.forkVersions.currentVersion, config.GLOAS_FORK_VERSION, getCurrentEpoch pre⟩ :=
+  (upgradeToGloas_frame_spec computed).2
 
 /-- The upgraded bid keeps every field of the Gloas bid, and sets no inclusion list bit. -/
 theorem upgradeBidToHeze_spec (bid : ExecutionPayloadBid preset .glamsterdam) :
@@ -509,39 +601,83 @@ theorem upgradeToHeze_error_iff {pre : BeaconState preset .glamsterdam}
   · simp [equal, bind, Except.bind, pure, Except.pure]
   · simp [equal, bind, Except.bind, eq_comm]
 
+/-! ## The upgrades from Altair on -/
+
+/-- An upgrade that carries the fields, from Altair on and before Gloas, is an upgrade frame. -/
+theorem upgradeFrame_carryFields {fork post : Fork} (pre : BeaconState preset fork)
+    (upgrade : fork < post) (before : post < .glamsterdam) (altair : .altair ≤ fork) :
+    UpgradeFrame config pre (carryFields config post pre upgrade before) :=
+  UpgradeFrame.of_carried (Nat.le_of_lt upgrade) rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl
+    fun _ current => by cases current <;> simp [recentParticipation, carryFields, altair, carryList]
+
+/-- The upgrade to Altair is an upgrade frame, with no flags before it to keep. -/
+theorem upgradeFrame_upgradeToAltair {pre : BeaconState preset .phase0}
+    {after : BeaconState preset .altair} (computed : upgradeToAltair config pre = .ok after) :
+    UpgradeFrame config pre after :=
+  (upgradeToAltair_frame_spec computed).1
+
+/-- The upgrade to Electra is an upgrade frame. -/
+theorem upgradeFrame_upgradeToElectra {pre : BeaconState preset .dencun}
+    {after : BeaconState preset .pectra} (computed : upgradeToElectra config pre = .ok after) :
+    UpgradeFrame config pre after :=
+  (upgradeToElectra_frame_spec computed).1
+
+/-- The upgrade to Fulu is an upgrade frame. -/
+theorem upgradeFrame_upgradeToFulu {pre : BeaconState preset .pectra}
+    {after : BeaconState preset .fusaka} (computed : upgradeToFulu config pre = .ok after) :
+    UpgradeFrame config pre after :=
+  (upgradeToFulu_frame_spec computed).1
+
+/-- The upgrade to Gloas is an upgrade frame. -/
+theorem upgradeFrame_upgradeToGloas {pre : BeaconState preset .fusaka}
+    {after : BeaconState preset .glamsterdam}
+    (computed : upgradeToGloas config checks pre = .ok after) : UpgradeFrame config pre after :=
+  (upgradeToGloas_frame_spec computed).1
+
+/-- The upgrade to Heze is an upgrade frame. -/
+theorem upgradeFrame_upgradeToHeze {pre : BeaconState preset .glamsterdam}
+    {after : BeaconState preset .hegota} (computed : upgradeToHeze config pre = .ok after) :
+    UpgradeFrame config pre after := by
+  obtain ⟨-, rfl⟩ := upgradeToHeze_ok_iff.mp computed
+  exact UpgradeFrame.of_carried (by decide) rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl
+    fun _ current => by cases current <;> rfl
+
+/-- Each upgrade is an upgrade frame. -/
+theorem upgradeFrame_upgradeNext {pre : ForkedBeaconState preset}
+    {post : {post : ForkedBeaconState preset // pre.fork < post.fork}}
+    (computed : upgradeNext config checks pre = .ok post) :
+    UpgradeFrame config pre.state post.val.state := by
+  obtain ⟨fork, state⟩ := pre
+  cases fork
+  case phase0 =>
+    simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+    obtain ⟨_, upgraded, rfl⟩ := computed
+    exact upgradeFrame_upgradeToAltair upgraded
+  case altair | bellatrix | shapella =>
+    simp only [upgradeNext, pure, Except.pure, Except.ok.injEq] at computed
+    subst computed
+    refine upgradeFrame_carryFields state ?_ ?_ (by decide) <;> (dsimp only; decide)
+  case dencun =>
+    simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+    obtain ⟨_, upgraded, rfl⟩ := computed
+    exact upgradeFrame_upgradeToElectra upgraded
+  case pectra =>
+    simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+    obtain ⟨_, upgraded, rfl⟩ := computed
+    exact upgradeFrame_upgradeToFulu upgraded
+  case fusaka =>
+    simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+    obtain ⟨_, upgraded, rfl⟩ := computed
+    exact upgradeFrame_upgradeToGloas upgraded
+  case glamsterdam =>
+    simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+    obtain ⟨_, upgraded, rfl⟩ := computed
+    exact upgradeFrame_upgradeToHeze upgraded
+  all_goals
+    simp only [upgradeNext] at computed
+    cases computed
+
 /-! ## The invariant across an upgrade -/
-
-/-- A state of another fork keeps the invariant when it keeps what the invariant reads.
-
-That is the registry, the number of balances, the slot and the three checkpoints. -/
-theorem Invariant.of_carried {fork post : Fork} {pre : BeaconState preset fork}
-    {after : BeaconState preset post} (holds : Invariant pre)
-    (validators : after.validators.data = pre.validators.data)
-    (balances : after.balances.data.size = pre.balances.data.size) (slot : after.slot = pre.slot)
-    (finalized : after.finalizedCheckpoint = pre.finalizedCheckpoint)
-    (previousJustified : after.previousJustifiedCheckpoint = pre.previousJustifiedCheckpoint)
-    (currentJustified : after.currentJustifiedCheckpoint = pre.currentJustifiedCheckpoint) :
-    Invariant after where
-  balancesMatch := by
-    have := holds.balancesMatch
-    unfold BalancesMatch at this ⊢
-    rw [balances, validators]
-    exact this
-  exitsOrdered := by
-    have := holds.exitsOrdered
-    unfold ExitsOrdered at this ⊢
-    rw [validators]
-    exact this
-  ordered := by
-    have := holds.ordered
-    unfold CheckpointsOrdered at this ⊢
-    rw [finalized, previousJustified, currentJustified]
-    exact this
-  settled := by
-    have := holds.settled
-    unfold JustifiedSettled getPreviousEpoch getCurrentEpoch at this ⊢
-    rw [currentJustified, slot]
-    exact this
 
 /-- A carry-over upgrade before Gloas keeps the invariant and the finalized checkpoint. -/
 theorem carryFields_invariant {fork post : Fork} {pre : BeaconState preset fork}
@@ -555,44 +691,8 @@ theorem upgradeToAltair_invariant {pre : BeaconState preset .phase0}
     {after : BeaconState preset .altair} (holds : Invariant pre)
     (computed : upgradeToAltair config pre = .ok after) :
     Invariant after ∧ after.finalizedCheckpoint = pre.finalizedCheckpoint := by
-  simp only [upgradeToAltair, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-  obtain ⟨_, folded, _, -, rfl⟩ := computed
-  rw [← Array.foldlM_toList] at folded
-  obtain ⟨participation, rfl, -⟩ := foldlM_translateAttestation folded
-  exact ⟨holds.of_carried rfl rfl rfl rfl rfl rfl, rfl⟩
-
-/-- Queueing a validator that is not yet active changes no exit epoch.
-
-It keeps the block roots, and keeps each byte of flags or zeroes it. -/
-theorem frame_queuePreActivation {fork : Fork} {state after : BeaconState preset fork}
-    {electra : .pectra ≤ fork} {index : ValidatorIndex}
-    (computed : queuePreActivation state electra index = .ok after) :
-    BlockFrame state after := by
-  simp only [queuePreActivation, bind_ok_iff, liftAccessor_ok, pure, Except.pure,
-    Except.ok.injEq] at computed
-  obtain ⟨validator, found, _, -, _, -, _, set₁, _, set₂, rfl⟩ := computed
-  have sizes := sameSizes_setBalance set₁
-  obtain ⟨_, rfl⟩ := setBalance_ok set₁
-  have zeroed := BlockFrame.of_validators sizes
-  have reset := frame_setValidator set₂ found rfl fun ordered =>
-    ordered validator (mem_of_getValidator found)
-  exact (zeroed.trans reset.toBlockFrame).trans (BlockFrame.of_validators ⟨rfl, rfl⟩)
-
-/-- Queueing the excess balance of a validator with compounding credentials keeps the frame.
-
-It keeps the block roots, and keeps each byte of flags or zeroes it. -/
-theorem frame_queueCompoundingExcess {fork : Fork} {state after : BeaconState preset fork}
-    {electra : .pectra ≤ fork} {index : Nat}
-    (computed : queueCompoundingExcess state electra index = .ok after) :
-    BlockFrame state after := by
-  unfold queueCompoundingExcess at computed
-  split at computed
-  · split at computed
-    · exact frame_queueExcessActiveBalance (liftAccessor_ok.mp computed)
-    · cases computed
-      exact BlockFrame.refl _
-  · cases computed
-    exact BlockFrame.refl _
+  have frame := upgradeFrame_upgradeToAltair computed
+  exact ⟨frame.invariant holds, frame.finalized⟩
 
 /-- The upgrade to Electra keeps the invariant and the finalized checkpoint.
 
@@ -601,20 +701,16 @@ theorem upgradeToElectra_invariant {pre : BeaconState preset .dencun}
     {after : BeaconState preset .pectra} (holds : Invariant pre)
     (computed : upgradeToElectra config pre = .ok after) :
     Invariant after ∧ after.finalizedCheckpoint = pre.finalizedCheckpoint := by
-  simp only [upgradeToElectra, bind_ok_iff] at computed
-  obtain ⟨_, -, _, -, _, -, _, -, _, queued, compounded⟩ := computed
-  have frame := (Frame.foldlM (fun _ _ _ ok => (frame_queuePreActivation ok).toFrame) queued).trans
-    (Frame.foldlM (fun _ _ _ ok => (frame_queueCompoundingExcess ok).toFrame) compounded)
-  exact ⟨frame.invariant (holds.of_carried rfl rfl rfl rfl rfl rfl), frame.finalized⟩
+  have frame := upgradeFrame_upgradeToElectra computed
+  exact ⟨frame.invariant holds, frame.finalized⟩
 
 /-- The upgrade to Fulu keeps the invariant and the finalized checkpoint. -/
 theorem upgradeToFulu_invariant {pre : BeaconState preset .pectra}
     {after : BeaconState preset .fusaka} (holds : Invariant pre)
     (computed : upgradeToFulu config pre = .ok after) :
     Invariant after ∧ after.finalizedCheckpoint = pre.finalizedCheckpoint := by
-  simp only [upgradeToFulu, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-  obtain ⟨_, -, rfl⟩ := computed
-  exact ⟨holds.of_carried rfl rfl rfl rfl rfl rfl, rfl⟩
+  have frame := upgradeFrame_upgradeToFulu computed
+  exact ⟨frame.invariant holds, frame.finalized⟩
 
 /-- The upgrade to Gloas keeps the invariant and the finalized checkpoint.
 
@@ -623,18 +719,15 @@ theorem upgradeToGloas_invariant {pre : BeaconState preset .fusaka}
     {after : BeaconState preset .glamsterdam} (holds : Invariant pre)
     (computed : upgradeToGloas config checks pre = .ok after) :
     Invariant after ∧ after.finalizedCheckpoint = pre.finalizedCheckpoint := by
-  unfold upgradeToGloas at computed
-  obtain ⟨_, -, rest⟩ := bind_ok_iff.mp computed
-  obtain ⟨_, -, onboarded⟩ := bind_ok_iff.mp rest
-  obtain ⟨⟨_, _, rfl⟩, -⟩ := onboardBuildersFromPendingDeposits_spec onboarded
-  exact ⟨holds.of_carried rfl rfl rfl rfl rfl rfl, rfl⟩
+  have frame := upgradeFrame_upgradeToGloas computed
+  exact ⟨frame.invariant holds, frame.finalized⟩
 
 /-- The upgrade to Heze keeps the invariant and the finalized checkpoint. -/
 theorem upgradeToHeze_invariant {pre : BeaconState preset .glamsterdam}
     {after : BeaconState preset .hegota} (holds : Invariant pre)
     (computed : upgradeToHeze config pre = .ok after) :
     Invariant after ∧ after.finalizedCheckpoint = pre.finalizedCheckpoint := by
-  obtain ⟨-, rfl⟩ := upgradeToHeze_ok_iff.mp computed
-  exact ⟨holds.of_carried rfl rfl rfl rfl rfl rfl, rfl⟩
+  have frame := upgradeFrame_upgradeToHeze computed
+  exact ⟨frame.invariant holds, frame.finalized⟩
 
 end EthLib.Consensus
