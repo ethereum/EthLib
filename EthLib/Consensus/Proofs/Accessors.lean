@@ -78,6 +78,14 @@ A position outside the registry is not active. -/
 def isActiveAt (state : BeaconState preset fork) (epoch : Epoch) (position : Nat) : Bool :=
   (state.validators.data[position]?.map (isActiveValidator · epoch)).getD false
 
+/-- A position is active in an epoch exactly when it holds a validator active in that epoch. -/
+theorem isActiveAt_eq_true_iff {state : BeaconState preset fork} {epoch : Epoch}
+    {position : Nat} :
+    isActiveAt state epoch position = true ↔ ∃ validator,
+      state.validators.data[position]? = some validator ∧
+        isActiveValidator validator epoch = true := by
+  cases found : state.validators.data[position]? <;> simp [isActiveAt, found]
+
 /-- Every effective balance of the registry is a whole number of increments. -/
 def EffectiveBalancesAligned (state : BeaconState preset fork) : Prop :=
   ∀ validator ∈ state.validators.data,
@@ -123,24 +131,31 @@ theorem toNat_toUInt64_of_lt {state : BeaconState preset fork}
   have limit := preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt
   rw [Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.mod_eq_of_lt (by omega)]
 
+/-- An index whose position holds a validator active in an epoch is active in that epoch. -/
+theorem mem_getActiveValidatorIndices_of_isActiveAt {state : BeaconState preset fork}
+    {epoch : Epoch} {index : ValidatorIndex} (active : isActiveAt state epoch index.toNat = true) :
+    index ∈ getActiveValidatorIndices state epoch := by
+  obtain ⟨validator, found, isActive⟩ := isActiveAt_eq_true_iff.mp active
+  simp only [getActiveValidatorIndices, List.mem_filterMap, Option.ite_none_right_eq_some,
+    Option.some.injEq, List.mem_zipIdx_iff_getElem?, Prod.exists]
+  exact ⟨validator, index.toNat, by simpa using found, isActive, by simp⟩
+
 /-- An index is active exactly when it names a validator that is active in the epoch. -/
 theorem mem_getActiveValidatorIndices {state : BeaconState preset fork}
     (within : state.RegistryWithinLimit) {epoch : Epoch} {index : ValidatorIndex} :
     index ∈ getActiveValidatorIndices state epoch ↔
       ∃ validator, state.validators.data[index.toNat]? = some validator ∧
         isActiveValidator validator epoch = true := by
+  refine ⟨fun member => ?_, fun found =>
+    mem_getActiveValidatorIndices_of_isActiveAt (isActiveAt_eq_true_iff.mpr found)⟩
   simp only [getActiveValidatorIndices, List.mem_filterMap, Option.ite_none_right_eq_some,
-    Option.some.injEq, List.mem_zipIdx_iff_getElem?, Prod.exists]
-  constructor
-  · rintro ⟨validator, i, found, active, rfl⟩
-    have lt : i < state.validators.data.size := by
-      have := (List.getElem?_eq_some_iff.mp found).1
-      simpa using this
-    rw [toNat_toUInt64_of_lt within lt]
-    exact ⟨validator, by simpa using found, active⟩
-  · rintro ⟨validator, found, active⟩
-    refine ⟨validator, index.toNat, by simpa using found, active, ?_⟩
-    simp
+    Option.some.injEq, List.mem_zipIdx_iff_getElem?, Prod.exists] at member
+  obtain ⟨validator, i, found, active, rfl⟩ := member
+  have lt : i < state.validators.data.size := by
+    have := (List.getElem?_eq_some_iff.mp found).1
+    simpa using this
+  rw [toNat_toUInt64_of_lt within lt]
+  exact ⟨validator, by simpa using found, active⟩
 
 /-- The positions of the validators that pass a test increase strictly, as 64-bit indices.
 
