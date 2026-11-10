@@ -636,7 +636,7 @@ theorem staticTouchStep_runFrame
     (h : runFrame step decreases bound runChild evm within = .ok after) :
     ∃ touched, StaticTouchStep touched evm after := by
   refine rel_runFrame (R := fun a b => ∃ touched, StaticTouchStep touched a b)
-    (C := fun caller message c => StaticFrame caller → StaticMessage caller.state message →
+    (C := fun caller message c => StaticMessage caller.state message →
       ∃ touched, TouchesOnly touched caller.state c.state ∧
         c.state.parent = caller.state.parent ∧
         ∀ address ∈ touched, c.error = none ∧ fork < .paris ∧
@@ -645,15 +645,15 @@ theorem staticTouchStep_runFrame
     (Inv := StaticFrame) (fun _ => ⟨[], StaticTouchStep.refl _⟩)
     (fun ⟨_, hab⟩ ⟨_, hbc⟩ => ⟨_, hab.trans hbc⟩)
     (fun hf ⟨_, hab⟩ => StaticFrame.of_touchStep hab hf)
-    (fun _ _ => ⟨[], .of_staticStep (staticStep_exceptionalHalt _ _)⟩) ?_
-    (fun _ _ _ _ hrun hf hmsg => runs hf hmsg hrun) hf h
+    (fun _ _ _ => ⟨[], .of_staticStep (staticStep_exceptionalHalt _ _)⟩) ?_
+    (fun _ _ _ _ hf hrun hmsg => runs hf hmsg hrun) hf h
   intro evm' result hf' hstep
   cases result with
   | next after' => exact ⟨[], .of_staticStep (next hf' hstep)⟩
   | child caller message resume =>
     obtain ⟨c0, hmsg, hres⟩ := child hf' hstep
     refine ⟨⟨[], .of_staticStep c0⟩, fun c after' hresumed hc => ?_⟩
-    obtain ⟨tc, kept, parent, hrec⟩ := hc (StaticFrame.of_staticStep c0 hf') hmsg
+    obtain ⟨tc, kept, parent, hrec⟩ := hc hmsg
     exact ⟨_, hres tc c after' hresumed kept parent hrec⟩
 
 end TouchLoop

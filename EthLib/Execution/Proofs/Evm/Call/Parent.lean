@@ -184,7 +184,7 @@ A child is sent from a frame with the block of `evm`.
 
 The frame that resumes has it too, when the frame that ends the child has the caller's block. -/
 abbrev ParentResult (evm : Evm fork Meter) : StepResult fork Meter → Prop :=
-  RunResult (fun a b => b.state.parent = a.state.parent)
+  StepResult.Keeps (fun a b => b.state.parent = a.state.parent)
     (fun caller _ child => child.state.parent = caller.state.parent) evm
 
 omit [GasMeter Meter] in
@@ -192,7 +192,7 @@ omit [GasMeter Meter] in
 theorem ParentResult.lift {evm evm' : Evm fork Meter} {result : StepResult fork Meter}
     (h : evm'.state.parent = evm.state.parent) (r : ParentResult evm' result) :
     ParentResult evm result :=
-  RunResult.lift (fun hab hbc => hbc.trans hab) h r
+  StepResult.Keeps.lift (fun hab hbc => hbc.trans hab) h r
 
 /-- The caller that resumes after a call has the state of the frame that ends the call. -/
 theorem state_resumeCall {caller child after : Evm fork Meter} {newAccount : Nat}
@@ -412,7 +412,7 @@ theorem parent_runFrame [LawfulGasMeter Meter] {bound : Nat}
   rel_runFrame (R := fun a b => b.state.parent = a.state.parent)
     (C := fun caller _ child => child.state.parent = caller.state.parent)
     (Inv := fun _ => True) (fun _ => rfl) (fun hab hbc => hbc.trans hab) (fun _ _ => trivial)
-    (fun _ _ => rfl) (fun _ h => parentResult_step h) runs trivial h
+    (fun _ _ _ => rfl) (fun _ h => parentResult_step h) (fun _ _ _ _ _ => runs _ _ _ _) trivial h
 
 /-! ## Messages -/
 
@@ -481,12 +481,13 @@ theorem processMessage_parent [LawfulGasMeter Meter] (n : Nat) :
         ended.val.state.parent = state.parent) :=
   processMessage_rel (R := fun a b => b.state.parent = a.state.parent) (Inv := fun _ => True)
     (M := fun _ state _ _ ended => ended.state.parent = state.parent)
-    (fun _ => rfl) (fun hab hbc => hbc.trans hab) (fun _ _ => trivial) (fun _ _ => rfl)
-    (fun _ h => parentResult_step h) (fun _ => rfl) (fun h => (staticStep_runPrecompile h).parent)
-    (fun {message state _ _ _ _ _} hstate _ hrun => by
+    (fun _ => rfl) (fun hab hbc => hbc.trans hab) (fun _ _ => trivial) (fun _ _ _ => rfl)
+    (fun _ h => parentResult_step h) (fun _ _ => rfl)
+    (fun h _ => (staticStep_runPrecompile h).parent)
+    (fun {message state _ _ _ _ _} hstate hrun => by
       rw [parent_rollbackOnError]
       refine (hrun trivial).trans ?_
-      rcases hstate with rfl | ⟨-, hm⟩
+      rcases hstate with ⟨rfl, -, -⟩ | ⟨-, hm, -⟩
       · exact parent_startState message state
       · exact (TransactionState.parent_moveEther hm).trans (parent_startState message state))
     (fun hp hm hd => (parent_depositCode hd).trans (hm.trans (parent_prepareCreation hp))) n

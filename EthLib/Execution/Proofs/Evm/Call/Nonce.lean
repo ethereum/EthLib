@@ -315,7 +315,7 @@ A child is sent from a frame with nonces at least those of `evm`.
 
 So has the frame that resumes, when the frame that ends the child has those of the caller. -/
 abbrev NonceResult (evm : Evm fork Meter) : StepResult fork Meter → Prop :=
-  RunResult (fun a b => NonceLe a.state b.state)
+  StepResult.Keeps (fun a b => NonceLe a.state b.state)
     (fun caller _ child => NonceLe caller.state child.state) evm
 
 omit [GasMeter Meter] in
@@ -323,7 +323,7 @@ omit [GasMeter Meter] in
 theorem NonceResult.lift {evm evm' : Evm fork Meter} {result : StepResult fork Meter}
     (h : NonceLe evm.state evm'.state) (r : NonceResult evm' result) :
     NonceResult evm result :=
-  RunResult.lift (R := fun a b => NonceLe a.state b.state) (fun hab hbc => hab.trans hbc) h r
+  StepResult.Keeps.lift (R := fun a b => NonceLe a.state b.state) (fun hab hbc => hab.trans hbc) h r
 
 /-- A successful send of a message lowers no nonce. -/
 theorem nonceResult_genericCall {evm : Evm fork Meter} {message : Message fork}
@@ -527,8 +527,8 @@ theorem nonceLe_runFrame [LawfulGasMeter Meter] {bound : Nat}
   rel_runFrame (R := fun a b => NonceLe a.state b.state)
     (C := fun caller _ child => NonceLe caller.state child.state) (Inv := fun _ => True)
     (fun _ => NonceLe.refl _) NonceLe.trans (fun _ _ => trivial)
-    (fun _ _ => NonceLe.of_getAccountOptional fun _ => rfl) (fun _ h => nonceResult_step h)
-    runs trivial h
+    (fun _ _ _ => NonceLe.of_getAccountOptional fun _ => rfl) (fun _ h => nonceResult_step h)
+    (fun _ _ _ _ _ => runs _ _ _ _) trivial h
 
 /-! ## Messages -/
 
@@ -587,13 +587,13 @@ theorem processMessage_nonceLe [LawfulGasMeter Meter] (n : Nat) :
     (M := fun _ state _ _ ended => NonceLe state ended.state ∧ ended.state.parent = state.parent)
     (fun _ => ⟨NonceLe.refl _, rfl⟩)
     (fun hab hbc => ⟨hab.1.trans hbc.1, hbc.2.trans hab.2⟩) (fun _ _ => trivial)
-    (fun _ _ => ⟨NonceLe.of_getAccountOptional fun _ => rfl, rfl⟩)
+    (fun _ _ _ => ⟨NonceLe.of_getAccountOptional fun _ => rfl, rfl⟩)
     (fun _ h => (nonceResult_step h).and (parentResult_step h))
-    (fun _ => ⟨NonceLe.refl _, rfl⟩)
-    (fun h => ⟨(staticStep_runPrecompile h).nonceLe, (staticStep_runPrecompile h).parent⟩)
-    (fun {message state state1 _ _ _ ended} hstate _ hrun => by
+    (fun _ _ => ⟨NonceLe.refl _, rfl⟩)
+    (fun h _ => ⟨(staticStep_runPrecompile h).nonceLe, (staticStep_runPrecompile h).parent⟩)
+    (fun {message state state1 _ _ _ ended} hstate hrun => by
       have h1 : NonceLe state state1 ∧ state1.parent = state.parent := by
-        rcases hstate with rfl | ⟨-, hm⟩
+        rcases hstate with ⟨rfl, -, -⟩ | ⟨-, hm, -⟩
         · exact ⟨nonceLe_startState message state, parent_startState message state⟩
         · exact ⟨(nonceLe_startState message state).trans (nonceLe_moveEther hm),
             (TransactionState.parent_moveEther hm).trans (parent_startState message state)⟩
