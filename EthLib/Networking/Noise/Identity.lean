@@ -131,7 +131,8 @@ def identitySecretError : Libp2p.IdentityError → NoiseError
 The rule is noise-libp2p "Static Key Authentication" and "The libp2p Handshake Payload".
 
 The secret key must stay private, and this function makes no constant-time claim. -/
-def makePayload (identitySecret staticKey : Key) (extensions : Option ByteArray) :
+def makePayload (identitySecret : Cryptography.Secp256k1.Fn) (staticKey : Key)
+    (extensions : Option ByteArray) :
     Except NoiseError ByteArray := do
   let publicKey ← (Libp2p.publicKey identitySecret).mapError identitySecretError
   let signature ← (Libp2p.sign identitySecret (signedStatic staticKey)).mapError identitySecretError
@@ -198,7 +199,8 @@ def complete (s : Libp2pState) : Except NoiseError (Key × RemoteInfo) := do
   else throw .wrongPhase
 
 /-- Write a libp2p message; first-message extensions are forbidden by the payload rules. -/
-def writeLibp2p (s : Libp2pState) (identitySecret : Key) (extensions : Option ByteArray) :
+def writeLibp2p (s : Libp2pState) (identitySecret : Cryptography.Secp256k1.Fn)
+    (extensions : Option ByteArray) :
     Except NoiseError (Libp2pState × ByteArray) := do
   let payload ← if s.handshake.step = 0 then
       if extensions.isSome then throw .firstMessageExtensions else pure .empty

@@ -115,7 +115,8 @@ Here n is the order of the group.
 The secret key must stay private, and this function makes no constant-time claim. -/
 @[export eth_libp2p_public_key]
 def publicKeyExport (args : PyValue) : Result PyValue :=
-  pyExport (fun (secret : Vector UInt8 32) => identityResult (publicKey secret)) args
+  pyExport (fun (secret : Vector UInt8 32) => identityResult do
+    publicKey (← secretOfBytes secret)) args
 
 /-- The peer ID of a canonical secp256k1 key protobuf. -/
 @[export eth_libp2p_peer_id]

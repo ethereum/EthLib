@@ -30,6 +30,12 @@ Not yet released.
   Completion of a state whose saved remote message is missing, or does not match the state, gives code 13, `savedRemote`.
   Before, such a state gave the error of the failed step: code 1, 3, 4, 6, 7, 8 or 9.
   Code 9 now means only a remote identity that fails to authenticate.
+- The libp2p Noise handshake now gives the identity secret, the X25519 keys and the chaining key distinct types ([#1657](https://github.com/ethereum/EthLib/issues/1657)).
+  The secp256k1 identity secret of `writeLibp2p` and `makePayload` is a scalar `Secp256k1.Fn`, in place of 32 bytes.
+  `Libp2p.publicKey` and `Libp2p.sign` take that scalar too, and `Libp2p.secretOfBytes` reads it from 32 big-endian bytes below the group order.
+  The chaining key and the handshake hash of `SymmetricState` have the types `ChainingKey` and `HandshakeHash`, and `hkdf2` takes a `ChainingKey`.
+  The cipher key of `CipherState` has the ChaCha20-Poly1305 key type.
+  The C exports and the Python functions are unchanged: they still take the secret and return the chaining key and the hash as 32 bytes.
 - A chain configuration now holds the address of its deposit contract, and the deposit requests of a block come from that address ([#1486](https://github.com/ethereum/EthLib/issues/1486)).
   Before, every chain read deposits from the mainnet address, so a chain with another deposit contract, such as Sepolia, got no deposit request.
   The configuration that the exports read as JSON, or as a Python `dict`, must give `depositContractAddress`: `0x` and forty hex digits, or 20 bytes in Python.

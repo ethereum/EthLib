@@ -33,7 +33,7 @@ inductive IdentityError where
   | publicKey
   /-- The bytes do not start with the identity code 0 and the length 37. -/
   | peerId
-  /-- The secret is 0, or at least the group order. -/
+  /-- The secret is 0, or its bytes are at least the group order. -/
   | privateKey
   /-- The bytes are not a strict DER signature with r in [1, n) and s in [1, n/2]. -/
   | signature
@@ -78,14 +78,19 @@ def decodePeerId (id : ByteArray) : Except IdentityError Point :=
   | 0x00 :: 0x25 :: key => decodePublicKey ⟨key.toArray⟩
   | _ => .error .peerId
 
-/-- Derive and serialize the public key of a secret in [1, n), with n the secp256k1 group order.
+/-- Read 32 big-endian bytes as a secp256k1 secret scalar, which must be below the group order.
 
 The secret key must stay private, and this function makes no constant-time claim. -/
-def publicKey (secret : Vector UInt8 32) : Except IdentityError ByteArray :=
-  let n := EthLib.Base.bytesToNat secret.toList
-  if h : 0 < n ∧ n < Fn.modulus then
-    .ok (encodePublicKey (Point.mul ⟨n, h.2⟩ .generator))
-  else .error .privateKey
+def secretOfBytes (bytes : Vector UInt8 32) : Except IdentityError Fn :=
+  let n := EthLib.Base.bytesToNat bytes.toList
+  if h : n < Fn.modulus then .ok ⟨n, h⟩ else .error .privateKey
+
+/-- Derive and serialize the public key of a nonzero secp256k1 secret scalar.
+
+The secret key must stay private, and this function makes no constant-time claim. -/
+def publicKey (secret : Fn) : Except IdentityError ByteArray :=
+  if secret = 0 then .error .privateKey
+  else .ok (encodePublicKey (Point.mul secret .generator))
 
 /-- A positive DER INTEGER with the required leading zero when its high bit is set, BIP 62. -/
 def derInteger (n : Nat) : List UInt8 :=
@@ -121,13 +126,11 @@ def decodeSignature (signature : ByteArray) : Except IdentityError (Nat × Nat) 
 /-- Sign SHA-256 of the message, then write its low-s signature in DER, peer-IDs "Secp256k1".
 
 The secret key must stay private, and this function makes no constant-time claim. -/
-def sign (secret : Vector UInt8 32) (message : ByteArray) : Except IdentityError ByteArray := do
-  let n := EthLib.Base.bytesToNat secret.toList
-  if h : 0 < n ∧ n < Fn.modulus then
-    let (r, s, _) ← (Ecdsa.sign ⟨n, h.2⟩
-      (EthLib.Cryptography.Hash.Sha256.hash32 message)).mapError IdentityError.signing
-    return encodeSignature r.val s.val
-  else throw .privateKey
+def sign (secret : Fn) (message : ByteArray) : Except IdentityError ByteArray := do
+  if secret = 0 then throw .privateKey
+  let (r, s, _) ← (Ecdsa.sign secret
+    (EthLib.Cryptography.Hash.Sha256.hash32 message)).mapError IdentityError.signing
+  return encodeSignature r.val s.val
 
 /-- Check the canonical key and DER signature on SHA-256 of the message, peer-IDs "Secp256k1". -/
 def verify (publicKey message signature : ByteArray) : Bool :=

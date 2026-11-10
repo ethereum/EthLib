@@ -42,13 +42,14 @@ def cipherOfValue (s : CipherValue) : CipherState := ⟨s.1, s.2⟩
 
 def stateToValue (s : HandshakeState) : StateValue :=
   (s.initiator, s.staticKey, s.ephemeralKey, s.remoteStatic, s.remoteEphemeral, s.step,
-    s.symmetric.chainingKey, s.symmetric.hash, s.symmetric.cipher.key, s.symmetric.cipher.nonce)
+    s.symmetric.chainingKey.bytes, s.symmetric.hash.bytes, s.symmetric.cipher.key,
+    s.symmetric.cipher.nonce)
 
 def stateOfValue (v : StateValue) : HandshakeState :=
   let (initiator, staticKey, ephemeralKey, remoteStatic, remoteEphemeral,
     step, ck, h, key, nonce) := v
   ⟨initiator, staticKey, ephemeralKey, remoteStatic, remoteEphemeral, step,
-    ⟨ck, h, ⟨key, nonce⟩⟩⟩
+    ⟨⟨ck⟩, ⟨h⟩, ⟨key, nonce⟩⟩⟩
 
 def libp2pToValue (s : Libp2pState) : Libp2pValue :=
   (stateToValue s.handshake, s.remoteMessage.map fun (before, message) =>
@@ -89,7 +90,7 @@ def transportExport (args : PyValue) : Result PyValue :=
   pyExport (fun value => result (do
     let state := stateOfValue value
     let (send, receive) ← transport state
-    return (cipherToValue send, cipherToValue receive, state.symmetric.hash))) args
+    return (cipherToValue send, cipherToValue receive, state.symmetric.hash.bytes))) args
 
 /-- Encrypt with a cipher state and associated data, returning its next state, Noise §5.1. -/
 @[export eth_noise_cipher_encrypt]
@@ -127,7 +128,8 @@ def initializeLibp2pExport (args : PyValue) : Result PyValue :=
 @[export eth_noise_libp2p_write]
 def writeLibp2pExport (args : PyValue) : Result PyValue :=
   pyExport (fun (value, identitySecret, extensions) => result (do
-    let (state, message) ← writeLibp2p (libp2pOfValue value) identitySecret extensions
+    let secret ← (Libp2p.secretOfBytes identitySecret).mapError identitySecretError
+    let (state, message) ← writeLibp2p (libp2pOfValue value) secret extensions
     return (libp2pToValue state, message))) args
 
 /-- Read the next libp2p message, and authenticate the static key of message 2 or 3. -/
@@ -146,6 +148,6 @@ def completeExport (args : PyValue) : Result PyValue :=
     let (staticKey, identity) ← complete state
     let (send, receive) ← transport state.handshake
     return (staticKey, identity, cipherToValue send, cipherToValue receive,
-      state.handshake.symmetric.hash))) args
+      state.handshake.symmetric.hash.bytes))) args
 
 end EthLib.Networking.Noise.Exports
