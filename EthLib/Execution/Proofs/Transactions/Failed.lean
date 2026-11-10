@@ -20,7 +20,7 @@ The later ones say their values.
 - From Pectra, each accepted authorization, taken alone, sets the code and nonce of its authority.
 - The sender gets back the price of the gas it did not use.
 - The beneficiary gets the priority fee of the gas that the transaction used.
-- From Spurious Dragon, an empty beneficiary paid a fee of 0 is deleted.
+- Storage stays at the beneficiary unless the payment deletes it.
 
 The values read a missing account as empty, so they do not say which of these accounts exist.
 
@@ -735,6 +735,8 @@ abbrev transactionFirstFrame (Meter : Type) [GasMeter Meter] (tx : Transaction)
 When the transaction creates a contract, or its first frame never starts, no authorization stays.
 
 The state before settlement then reads as the state after the gas purchase.
+
+The refund is then 0.
 
 When the first frame of a call starts and fails, that state reads as the authorizations left it.
 

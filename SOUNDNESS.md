@@ -1413,7 +1413,7 @@ Its first theorems bound the writes to the sender, the beneficiary and the autho
 It changes no nonce, code hash or code.
 Storage stays at the sender when its nonce is not 0, and at the beneficiary unless it is deleted.
 
-`authority_applyAuthorization` proves that one accepted authorization in scope sets the delegation code and raises the nonce of its authority by one.
+`authority_applyAuthorization` proves that one accepted authorization in scope sets the code hash of its authority to that of the delegation code, and raises its nonce by one.
 The authorities after the whole list are given against the state that the authorizations leave; the fold over the list is not unrolled.
 `processMessageCall_of_halt` in `Process.lean` puts the state back to the state before the authorizations when the message halts before its first frame, as EIP-8037 asks.
 `processMessageCall_reads_of_error` proves that a failed frame reads as the state of its first frame, so a failed call keeps its accepted authorizations, as EIP-7702 asks.
