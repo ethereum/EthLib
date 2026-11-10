@@ -20,6 +20,8 @@ What the validity of a response says about its blocks or sidecars.
 - A valid response to a request for sidecars by root has at most as many sidecars as requested.
 - Each of its sidecars is one that the request names.
 - A valid response to a request for payload envelopes by range has increasing slots.
+- A valid response for payload envelopes by root has at most as many envelopes as requested roots.
+- The block root of each of its envelopes is a requested root.
 - Each of its payloads names the one before it as its parent.
 - A valid response to a request for inclusion lists has the requested slot and dependent root.
 - The validator of each list holds a requested seat of the committee.
@@ -277,9 +279,10 @@ theorem isValidDataColumnSidecarsByRootResponse_iff {preset : Preset} {config : 
   simp [isValidDataColumnSidecarsByRootResponse, columnCount_eq, List.all_eq_true,
     Array.any_eq_true', -Array.any_eq_true]
 
-/-- An envelope may follow another exactly when its slot is higher and its parent is that payload.
--/
-theorem ResponseEnvelope.next_iff (a b : ResponseEnvelope) :
+/-- An envelope may follow another exactly when its slot is higher and it builds on that payload.
+
+Building on it means that its payload names that payload as its parent. -/
+theorem nextEnvelope_iff (a b : ResponseEnvelope) :
     ResponseEnvelope.next a b = true ↔ a.slot < b.slot ∧ b.parentHash = a.blockHash := by
   simp [ResponseEnvelope.next]
 
@@ -296,7 +299,7 @@ theorem isValidExecutionPayloadEnvelopesByRangeResponse_iff (config : Config) (f
           envelopes[i + 1].parentHash = envelopes[i].blockHash) := by
   simp only [isValidExecutionPayloadEnvelopesByRangeResponse, Bool.and_eq_true,
     decide_eq_true_eq, List.all_eq_true, slotInRange_iff, allAdjacent_iff,
-    ResponseEnvelope.next_iff, and_assoc]
+    nextEnvelope_iff, and_assoc]
 
 /-- In a valid response for payload envelopes by range, slots increase along the whole list. -/
 theorem pairwise_of_isValidExecutionPayloadEnvelopesByRangeResponse {config : Config}
@@ -306,7 +309,7 @@ theorem pairwise_of_isValidExecutionPayloadEnvelopesByRangeResponse {config : Co
     envelopes.Pairwise (fun a b => a.slot < b.slot) := by
   simp only [isValidExecutionPayloadEnvelopesByRangeResponse, Bool.and_eq_true] at valid
   exact pairwise_of_allAdjacent (s := fun (a b : ResponseEnvelope) => a.slot < b.slot)
-    (fun a b next => ((ResponseEnvelope.next_iff a b).mp next).1)
+    (fun a b next => ((nextEnvelope_iff a b).mp next).1)
     (fun _ _ _ => UInt64.lt_trans) valid.2
 
 /-- The rules that a valid response for payload envelopes by root meets, and no others. -/
@@ -318,7 +321,7 @@ theorem isValidExecutionPayloadEnvelopesByRootResponse_iff {config : Config}
   simp [isValidExecutionPayloadEnvelopesByRootResponse, List.all_eq_true]
 
 /-- A request asks for a validator exactly when the validator holds a seat whose bit is set. -/
-theorem InclusionListsByIndicesRequest.asksFor_iff {preset : Preset}
+theorem asksFor_iff {preset : Preset}
     (request : InclusionListsByIndicesRequest preset) (committee : InclusionListCommittee preset)
     (validator : ValidatorIndex) :
     request.asksFor committee validator = true ↔
@@ -331,14 +334,14 @@ theorem isValidInclusionListsByIndicesResponse_iff {preset : Preset} (config : C
     (request : InclusionListsByIndicesRequest preset) (committee : InclusionListCommittee preset)
     (lists : List InclusionList) :
     isValidInclusionListsByIndicesResponse config request committee lists = true ↔
-      lists.length ≤ request.indices.bits.toList.count true ∧
+      lists.length ≤ request.indices.bits.count true ∧
       lists.length ≤ config.MAX_REQUEST_INCLUSION_LIST.toNat ∧
       ∀ list ∈ lists, list.slot = request.slot ∧ list.dependentRoot = request.dependentRoot ∧
         ∃ seat, ∃ h : seat < preset.INCLUSION_LIST_COMMITTEE_SIZE.toNat,
           request.indices.bits[seat] = true ∧ committee[seat] = list.validatorIndex := by
   simp only [isValidInclusionListsByIndicesResponse, InclusionListsByIndicesRequest.listCount,
     Bool.and_eq_true, decide_eq_true_eq, List.all_eq_true, beq_iff_eq,
-    InclusionListsByIndicesRequest.asksFor_iff, and_assoc]
-  simp
+    asksFor_iff, and_assoc]
+  exact Iff.intro (fun ⟨a, b⟩ => ⟨of_decide_eq_true a, b⟩) (fun ⟨a, b⟩ => ⟨decide_eq_true a, b⟩)
 
 end EthLib.Consensus.Proofs.ReqResp.Validity
