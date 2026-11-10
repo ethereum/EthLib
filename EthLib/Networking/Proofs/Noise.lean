@@ -50,7 +50,7 @@ theorem NoiseError.code_injective (e₁ e₂ : NoiseError) (h : e₁.code = e₂
 
 /-- Writing keeps the role and the remote static key, and advances the step by one.
 
-XX writes only message 1 or 3 as initiator, and message 2 as responder, Noise §7.5. -/
+XX writes only message 1 or 3 as initiator, and message 2 as responder, Noise revision 34, §7.5. -/
 theorem writeMessage_ok {s next : HandshakeState} {payload message : ByteArray}
     (h : writeMessage s payload = .ok (next, message)) :
     next.initiator = s.initiator ∧ next.step = s.step + 1 ∧
@@ -74,7 +74,7 @@ theorem writeMessage_ok {s next : HandshakeState} {payload message : ByteArray}
 
 /-- Reading keeps the role and advances the step by one.
 
-XX reads only message 1 or 3 as responder, and message 2 as initiator, Noise §7.5. -/
+XX reads only message 1 or 3 as responder, and message 2 as initiator, Noise revision 34, §7.5. -/
 theorem readMessage_ok {s next : HandshakeState} {message payload : ByteArray}
     (h : readMessage s message = .ok (next, payload)) :
     next.initiator = s.initiator ∧ next.step = s.step + 1 ∧

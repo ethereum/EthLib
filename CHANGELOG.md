@@ -47,6 +47,7 @@ Not yet released.
   The Python state of `noise_libp2p_*` holds the remote as `(static_key, public_key, signature, extensions)`, or `None`, in place of the saved message and its state.
   Completion checks that the stored remote has the remote static key of the handshake, and no longer verifies its signature.
   Code 13, `savedRemote`, now means that at completion the state holds no remote, or one whose static key is not the remote static key of the handshake.
+  `readLibp2p_authenticates` now concludes that the new state stores the authenticated `Remote`.
   The theorems `complete_authenticates` and `complete_peerId` are replaced by `complete_ok` and the `Produced` theorems, and `authenticatePayload_decode` by `authenticatePayload_ok`.
   The C exports and Python functions that take a libp2p state, to write, read or complete, also give code 13 when the stored public key does not decode.
 - A chain configuration now holds the address of its deposit contract, and the deposit requests of a block come from that address ([#1486](https://github.com/ethereum/EthLib/issues/1486)).

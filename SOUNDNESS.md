@@ -610,7 +610,8 @@ A caller that edits the state can therefore complete with a remote whose signatu
 These are acceptance theorems, not a proof of protocol security, confidentiality or constant-time execution.
 They relate the identity to the transport keys only through the shared handshake state.
 No theorem says that the chaining key mixed a Diffie-Hellman output with the remote static key, and none covers the handshake hash.
-Only the libp2p read and completion check an identity; the raw transport split of an XX state checks none.
+Only the libp2p read verifies an identity, and completion checks that the stored remote has the remote static key of the handshake.
+The raw transport split of an XX state checks neither.
 The Python tests compare the raw XX handshake with a published test vector.
 No published vector covers the libp2p payload, so its tests check the keys and signatures with independent code.
 
