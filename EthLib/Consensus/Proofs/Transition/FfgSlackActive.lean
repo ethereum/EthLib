@@ -89,7 +89,7 @@ def justifyingBalances (config : Config) (checks : SignatureChecks) (block : Roo
 
 The step lies on any run of steps from the first state to the last one.
 
-So the set may hold votes of several runs, which only weakens a bound that it gives. -/
+So the set may hold votes of several runs, which only widens the voters that the theorem allows. -/
 def runVotes (config : Config) (checks : SignatureChecks)
     (first last : ForkedBeaconState preset) : Set (ValidatorIndex × AttestationData) :=
   {vote | ∃ forked after, Relation.ReflTransGen (ChainStep config checks) first forked ∧

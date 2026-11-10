@@ -318,9 +318,10 @@ theorem TargetFlagsVoted.of_processUpgrades_of_lt_altair
     intro altair
     exact absurd altair (Nat.not_le_of_lt before)
 
-/-! ## Genesis, slots and blocks -/
+/-! ## Genesis -/
 
-/-- The two justified checkpoints of the genesis state built from deposits are equal. -/
+/-- The genesis state built from deposits has equal justified checkpoints in the first two epochs.
+-/
 theorem JustifiedEarly.of_initializeBeaconStateFromEth1 {fork : Fork}
     {after : BeaconState preset fork} {eth1BlockHash : Hash32} {eth1Timestamp : UInt64}
     {deposits : Array Deposit}

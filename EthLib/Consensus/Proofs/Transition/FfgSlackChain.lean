@@ -21,7 +21,9 @@ The target flags and pending attestations of each state come from votes of that 
 
 Each block step must cast only votes of that set, with the committees of the state before it.
 
-The set of all votes meets that, so only a set of the votes of the run says who voted.
+The set of all votes meets these hypotheses.
+
+So the theorem bounds who voted only for a set as small as the votes of the run.
 
 The sets and weights of the model must match the state for each new current justified checkpoint.
 
