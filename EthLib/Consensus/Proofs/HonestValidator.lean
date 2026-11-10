@@ -27,6 +27,10 @@ It is the only one under two bounds.
 
 The registry stays within its limit, and its active validators times the committees fit in 64 bits.
 
+The search for an assignment shares the shuffle of the epoch among its committees.
+
+It gives what each committee alone gives, errors included.
+
 The proposer check and the sync committee seat check have their outcomes characterized.
 
 The sync committee subnets of a validator come once each, in increasing order.
@@ -267,6 +271,70 @@ theorem mem_committeePositions {state : BeaconState preset fork} {epoch : Epoch}
   rw [Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.mod_eq_of_lt (Nat.lt_trans indexLt perSmall)]
   exact indexLt
 
+/-- With a shuffle that has a value, the search cuts each committee from that shuffle.
+
+The shuffle is that of an epoch that holds the slot of each position.
+
+Each committee is cut with the count of committees per slot of that epoch. -/
+theorem findCommittee_of_attesterShuffle {state : BeaconState preset fork} {epoch : Epoch}
+    {active : Array ValidatorIndex} {shuffled : Array UInt64}
+    (shuffleOk : attesterShuffle state epoch = .ok (active, shuffled))
+    (validatorIndex : ValidatorIndex) {positions : List (Slot × CommitteeIndex)}
+    (inEpoch : ∀ position ∈ positions, computeEpochAtSlot preset position.1 = epoch) :
+    findCommittee state validatorIndex positions =
+      findCommitteeOf preset validatorIndex (getCommitteeCountPerSlot state epoch) active
+        shuffled positions := by
+  induction positions with
+  | nil => rfl
+  | cons position rest ih =>
+    obtain ⟨slot, index⟩ := position
+    -- The first slot is in the epoch, so its committee alone is cut from the given shuffle.
+    have slotEpoch : computeEpochAtSlot preset slot = epoch := inEpoch _ List.mem_cons_self
+    rw [findCommittee, findCommitteeOf, getBeaconCommittee_eq, slotEpoch, shuffleOk,
+      ih fun position mem => inEpoch position (List.mem_cons_of_mem _ mem)]
+    rfl
+
+/-- A committee assignment searches the positions of the epoch, with each committee computed alone.
+
+The committees of the epoch share its shuffle and its count of committees per slot.
+
+Sharing them changes no committee and no error. -/
+theorem getCommitteeAssignment_eq (state : BeaconState preset fork) (epoch : Epoch)
+    (validatorIndex : ValidatorIndex) :
+    getCommitteeAssignment state epoch validatorIndex = (do
+      let nextEpoch ← (addChecked (getCurrentEpoch state) 1).mapError .arith
+      if epoch ≤ nextEpoch then
+        findCommittee state validatorIndex (← committeePositions state epoch)
+      else throw (.epochTooFar epoch nextEpoch)) := by
+  unfold getCommitteeAssignment
+  cases addChecked (getCurrentEpoch state) 1 with
+  | error _ => rfl
+  | ok nextEpoch =>
+    dsimp only [Except.mapError, bind, Except.bind]
+    by_cases within : epoch ≤ nextEpoch
+    · simp only [within, ↓reduceIte]
+      cases positioned : committeePositions state epoch with
+      | error _ => rfl
+      | ok positions =>
+        dsimp only
+        cases positions with
+        | nil => rfl
+        | cons first rest =>
+          have inEpoch : ∀ position ∈ first :: rest,
+              computeEpochAtSlot preset position.1 = epoch :=
+            fun _ mem => (mem_committeePositions positioned mem).1
+          cases shuffleOk : attesterShuffle state epoch with
+          -- The first committee reads the shuffle of the epoch, so it fails with the same error.
+          | error _ =>
+            obtain ⟨slot, index⟩ := first
+            rw [findCommittee, getBeaconCommittee_eq, inEpoch (slot, index) List.mem_cons_self,
+              shuffleOk]
+            rfl
+          | ok pair =>
+            obtain ⟨active, shuffled⟩ := pair
+            rw [findCommittee_of_attesterShuffle shuffleOk validatorIndex inEpoch]
+    · simp only [within, ↓reduceIte]
+
 /-- A committee assignment is a committee of the epoch that holds the validator.
 
 Its slot is in the epoch, and its index is below the committees of a slot. -/
@@ -276,7 +344,7 @@ theorem getCommitteeAssignment_sound {state : BeaconState preset fork} {epoch : 
     (h : getCommitteeAssignment state epoch validatorIndex = .ok (some (committee, index, slot))) :
     computeEpochAtSlot preset slot = epoch ∧ index < getCommitteeCountPerSlot state epoch ∧
       getBeaconCommittee state slot index = .ok committee ∧ validatorIndex ∈ committee := by
-  unfold getCommitteeAssignment at h
+  rw [getCommitteeAssignment_eq] at h
   obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
   split at h
   · obtain ⟨positions, positioned, found⟩ := bind_ok_iff.mp h
@@ -376,7 +444,7 @@ theorem getCommitteeAssignment_ne_none {state : BeaconState preset fork} {epoch 
     (active : validatorIndex ∈ getActiveValidatorIndices state epoch) :
     getCommitteeAssignment state epoch validatorIndex ≠ .ok none := by
   intro h
-  unfold getCommitteeAssignment at h
+  rw [getCommitteeAssignment_eq] at h
   obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
   split at h
   · obtain ⟨positions, positioned, found⟩ := bind_ok_iff.mp h
