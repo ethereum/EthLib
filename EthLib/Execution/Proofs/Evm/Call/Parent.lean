@@ -183,22 +183,16 @@ The next frame has the block of `evm`.
 A child is sent from a frame with the block of `evm`.
 
 The frame that resumes has it too, when the frame that ends the child has the caller's block. -/
-def ParentResult (evm : Evm fork Meter) : StepResult fork Meter → Prop
-  | .next after => after.state.parent = evm.state.parent
-  | .child caller _ resume => caller.state.parent = evm.state.parent ∧
-      ∀ child after, resume child = .ok after → child.state.parent = caller.state.parent →
-        after.state.parent = evm.state.parent
+abbrev ParentResult (evm : Evm fork Meter) : StepResult fork Meter → Prop :=
+  RunResult (fun a b => b.state.parent = a.state.parent)
+    (fun caller _ child => child.state.parent = caller.state.parent) evm
 
 omit [GasMeter Meter] in
 /-- A result that keeps the block of a frame keeps the block of each frame with the same block. -/
 theorem ParentResult.lift {evm evm' : Evm fork Meter} {result : StepResult fork Meter}
     (h : evm'.state.parent = evm.state.parent) (r : ParentResult evm' result) :
-    ParentResult evm result := by
-  cases result with
-  | next after => exact (r : _ = _).trans h
-  | child caller message resume =>
-    obtain ⟨c, m⟩ := r
-    exact ⟨c.trans h, fun child after hres p => (m child after hres p).trans h⟩
+    ParentResult evm result :=
+  RunResult.lift (fun hab hbc => hbc.trans hab) h r
 
 /-- The caller that resumes after a call has the state of the frame that ends the call. -/
 theorem state_resumeCall {caller child after : Evm fork Meter} {newAccount : Nat}
@@ -414,21 +408,11 @@ theorem parent_runFrame [LawfulGasMeter Meter] {bound : Nat}
     {runChild : MessageRunner fork Meter bound} (runs : KeepsParent runChild)
     {evm after : Evm fork Meter} {within : GasMeter.gasHeld evm.gas ≤ bound}
     (h : runFrame (step fork) (step_decreases fork) bound runChild evm within = .ok after) :
-    after.state.parent = evm.state.parent := by
-  fun_induction runFrame (step fork) (step_decreases fork) bound runChild evm within
-  case case1 => cases h
-  case case2 => cases h; rfl
-  case case3 =>
-    rename_i result _ ih
-    exact (ih h).trans (parentResult_step result)
-  case case4 => cases h
-  case case5 => cases h
-  case case6 => cases h; rfl
-  case case7 =>
-    rename_i hchild _ _ _ hran _ resumed _ ih
-    obtain ⟨-, hres⟩ := parentResult_step hchild
-    exact (ih h).trans (hres _ _ resumed (runs _ _ _ _ hran))
-  case case8 => cases h; rfl
+    after.state.parent = evm.state.parent :=
+  rel_runFrame (R := fun a b => b.state.parent = a.state.parent)
+    (C := fun caller _ child => child.state.parent = caller.state.parent)
+    (Inv := fun _ => True) (fun _ => rfl) (fun hab hbc => hbc.trans hab) (fun _ _ => trivial)
+    (fun _ _ => rfl) (fun _ h => parentResult_step h) runs trivial h
 
 /-! ## Messages -/
 
@@ -494,67 +478,18 @@ theorem processMessage_parent [LawfulGasMeter Meter] (n : Nat) :
     (∀ (message : Message fork) (state : TransactionState) (substate : Substate) (meter : Meter)
       (held : GasMeter.gasHeld meter ≤ message.gas), message.gas = n →
       ∀ ended, processCreateMessage fork message state substate meter held = .ok ended →
-        ended.val.state.parent = state.parent) := by
-  induction n using Nat.strongRecOn with
-  | _ n ih =>
-    have call : ∀ (message : Message fork) (state : TransactionState) (substate : Substate)
-        (meter : Meter) (held : GasMeter.gasHeld meter ≤ message.gas), message.gas = n →
-        ∀ ended, processMessage fork message state substate meter held = .ok ended →
-          ended.val.state.parent = state.parent := by
-      intro message state substate meter held hn ended h
-      rw [processMessage] at h
-      obtain ⟨ended0, hdo, rolled⟩ := Base.map_ok_iff.mp h
-      have hst := parent_startState message state
-      have core : ended0.val.state.parent = state.parent := by
-        dsimp only at hdo
-        split at hdo
-        all_goals obtain ⟨state1, hm, hdo⟩ := Base.bind_ok_iff.mp hdo
-        all_goals
-          have hp1 : state1.parent = state.parent := by
-            first
-            | exact (TransactionState.parent_moveEther (Base.mapError_ok_iff.mp hm)).trans hst
-            | (cases hm; exact hst)
-          rcases hpa : precompileAddress fork message with _ | addr
-          · simp only [hpa] at hdo
-            split at hdo
-            · cases hdo
-            · rename_i after hrun
-              cases hdo
-              refine (parent_runFrame ?_ hrun).trans hp1
-              rintro caller' message' lt ⟨c, used⟩ hrun'
-              dsimp only at hrun'
-              split at hrun'
-              · exact (ih message'.gas (by omega)).1 message' caller'.state _ _ _ rfl ⟨c, used⟩
-                  hrun'
-              · exact (ih message'.gas (by omega)).2 message' caller'.state _ _ _ rfl ⟨c, used⟩
-                  hrun'
-          · simp only [hpa] at hdo
-            split at hdo
-            · cases hdo
-              exact hp1
-            · split at hdo
-              · rename_i after hrp
-                cases hdo
-                exact (staticStep_runPrecompile hrp).parent.trans hp1
-              · cases hdo
-                exact hp1
-      have hval := congrArg Subtype.val rolled
-      simp only at hval
-      rw [← hval, parent_rollbackOnError]
-      exact core
-    refine ⟨call, ?_⟩
-    intro message state substate meter held hn ended h
-    rw [processCreateMessage] at h
-    obtain ⟨prepared, hp, h⟩ := Base.bind_ok_iff.mp h
-    obtain ⟨⟨evm, used⟩, hrun, h⟩ := Base.bind_ok_iff.mp h
-    dsimp only at h
-    split at h
-    · cases h
-    · cases h
-      have hp' : evm.state.parent = prepared.parent :=
-        call message prepared substate meter held hn _ hrun
-      exact (parent_depositCode ‹depositCode _ _ _ = .ok _›).trans
-        (hp'.trans (parent_prepareCreation hp))
+        ended.val.state.parent = state.parent) :=
+  processMessage_rel (R := fun a b => b.state.parent = a.state.parent) (Inv := fun _ => True)
+    (M := fun _ state _ _ ended => ended.state.parent = state.parent)
+    (fun _ => rfl) (fun hab hbc => hbc.trans hab) (fun _ _ => trivial) (fun _ _ => rfl)
+    (fun _ h => parentResult_step h) (fun _ => rfl) (fun h => (staticStep_runPrecompile h).parent)
+    (fun {message state _ _ _ _ _} hstate _ hrun => by
+      rw [parent_rollbackOnError]
+      refine (hrun trivial).trans ?_
+      rcases hstate with rfl | ⟨-, hm⟩
+      · exact parent_startState message state
+      · exact (TransactionState.parent_moveEther hm).trans (parent_startState message state))
+    (fun hp hm hd => (parent_depositCode hd).trans (hm.trans (parent_prepareCreation hp))) n
 
 /-- A successful call keeps the block of the state it is sent from, at every fork. -/
 theorem parent_processMessage [LawfulGasMeter Meter] {message : Message fork}

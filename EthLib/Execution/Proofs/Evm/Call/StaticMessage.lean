@@ -2,6 +2,7 @@ module
 
 public import EthLib.Base.Proofs.MapM
 public import EthLib.Execution.Proofs.Evm.Call.MessageCall
+public import EthLib.Execution.Proofs.Evm.Call.Run
 public import EthLib.Execution.Proofs.Evm.Call.StaticStep
 
 /-!
@@ -634,27 +635,26 @@ theorem staticTouchStep_runFrame
     (hf : StaticFrame evm)
     (h : runFrame step decreases bound runChild evm within = .ok after) :
     ∃ touched, StaticTouchStep touched evm after := by
-  fun_induction runFrame step decreases bound runChild evm within
-  case case1 => cases h
-  case case2 => cases h; exact ⟨[], .of_staticStep (staticStep_exceptionalHalt _ _)⟩
-  case case3 =>
-    rename_i result _ ih
-    have n := next hf result
-    obtain ⟨t, ht⟩ := ih (StaticFrame.of_staticStep n hf) h
-    exact ⟨_, n.trans_touchStep ht⟩
-  case case4 => cases h
-  case case5 => cases h
-  case case6 => cases h; exact ⟨[], .of_staticStep (staticStep_exceptionalHalt _ _)⟩
-  case case7 =>
-    obtain ⟨c0, hmsg, hres⟩ := child hf ‹step _ = .ok (.child _ _ _)›
-    obtain ⟨tc, kept, parent, hrec⟩ :=
-      runs (StaticFrame.of_staticStep c0 hf) hmsg ‹runChild _ _ _ = .ok _›
-    have n := hres tc _ _ (by assumption) kept parent hrec
-    obtain ⟨tr, htr⟩ :=
-      ‹StaticFrame _ → runFrame _ _ _ _ _ _ = .ok after → ∃ t, StaticTouchStep t _ after›
-        (StaticFrame.of_touchStep n hf) h
-    exact ⟨_, n.trans htr⟩
-  case case8 => cases h; exact ⟨[], StaticTouchStep.refl _⟩
+  refine rel_runFrame (R := fun a b => ∃ touched, StaticTouchStep touched a b)
+    (C := fun caller message c => StaticFrame caller → StaticMessage caller.state message →
+      ∃ touched, TouchesOnly touched caller.state c.state ∧
+        c.state.parent = caller.state.parent ∧
+        ∀ address ∈ touched, c.error = none ∧ fork < .paris ∧
+          ((.spuriousDragon ≤ fork → address ∈ c.substate.touchedAccounts) ∨
+            address = c.message.currentTarget))
+    (Inv := StaticFrame) (fun _ => ⟨[], StaticTouchStep.refl _⟩)
+    (fun ⟨_, hab⟩ ⟨_, hbc⟩ => ⟨_, hab.trans hbc⟩)
+    (fun hf ⟨_, hab⟩ => StaticFrame.of_touchStep hab hf)
+    (fun _ _ => ⟨[], .of_staticStep (staticStep_exceptionalHalt _ _)⟩) ?_
+    (fun _ _ _ _ hrun hf hmsg => runs hf hmsg hrun) hf h
+  intro evm' result hf' hstep
+  cases result with
+  | next after' => exact ⟨[], .of_staticStep (next hf' hstep)⟩
+  | child caller message resume =>
+    obtain ⟨c0, hmsg, hres⟩ := child hf' hstep
+    refine ⟨⟨[], .of_staticStep c0⟩, fun c after' hresumed hc => ?_⟩
+    obtain ⟨tc, kept, parent, hrec⟩ := hc (StaticFrame.of_staticStep c0 hf') hmsg
+    exact ⟨_, hres tc c after' hresumed kept parent hrec⟩
 
 end TouchLoop
 

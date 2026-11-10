@@ -314,22 +314,16 @@ The next frame has nonces at least those of `evm`.
 A child is sent from a frame with nonces at least those of `evm`.
 
 So has the frame that resumes, when the frame that ends the child has those of the caller. -/
-def NonceResult (evm : Evm fork Meter) : StepResult fork Meter → Prop
-  | .next after => NonceLe evm.state after.state
-  | .child caller _ resume => NonceLe evm.state caller.state ∧
-      ∀ child after, resume child = .ok after → NonceLe caller.state child.state →
-        NonceLe evm.state after.state
+abbrev NonceResult (evm : Evm fork Meter) : StepResult fork Meter → Prop :=
+  RunResult (fun a b => NonceLe a.state b.state)
+    (fun caller _ child => NonceLe caller.state child.state) evm
 
 omit [GasMeter Meter] in
 /-- A result that keeps the nonces of a frame keeps those of each frame with lower nonces. -/
 theorem NonceResult.lift {evm evm' : Evm fork Meter} {result : StepResult fork Meter}
     (h : NonceLe evm.state evm'.state) (r : NonceResult evm' result) :
-    NonceResult evm result := by
-  cases result with
-  | next after => exact h.trans r
-  | child caller message resume =>
-    obtain ⟨c, m⟩ := r
-    exact ⟨h.trans c, fun child after hres p => h.trans (m child after hres p)⟩
+    NonceResult evm result :=
+  RunResult.lift (R := fun a b => NonceLe a.state b.state) (fun hab hbc => hab.trans hbc) h r
 
 /-- A successful send of a message lowers no nonce. -/
 theorem nonceResult_genericCall {evm : Evm fork Meter} {message : Message fork}
@@ -343,6 +337,7 @@ theorem nonceResult_genericCall {evm : Evm fork Meter} {message : Message fork}
     exact (staticStep_skipCall hs).nonceLe
   · cases h
     refine ⟨NonceLe.refl _, fun child after hres p => ?_⟩
+    show NonceLe _ after.state
     rw [state_resumeCall hres]
     exact p
 
@@ -419,6 +414,7 @@ theorem nonceResult_launchCreate {evm : Evm fork Meter} {value : U256} {initCode
     split at hr
     · cases hr
       refine ⟨ms, fun child after hres p => ?_⟩
+      show NonceLe _ after.state
       rw [state_resumeCreate hres]
       exact ms.trans p
     · obtain ⟨e3, h3, hr⟩ := Base.bind_ok_iff.mp hr
@@ -527,21 +523,12 @@ theorem nonceLe_runFrame [LawfulGasMeter Meter] {bound : Nat}
     {runChild : MessageRunner fork Meter bound} (runs : KeepsNonce runChild)
     {evm after : Evm fork Meter} {within : GasMeter.gasHeld evm.gas ≤ bound}
     (h : runFrame (step fork) (step_decreases fork) bound runChild evm within = .ok after) :
-    NonceLe evm.state after.state := by
-  fun_induction runFrame (step fork) (step_decreases fork) bound runChild evm within
-  case case1 => cases h
-  case case2 => cases h; exact NonceLe.refl _
-  case case3 =>
-    rename_i result _ ih
-    exact (nonceResult_step result).trans (ih h)
-  case case4 => cases h
-  case case5 => cases h
-  case case6 => cases h; exact NonceLe.refl _
-  case case7 =>
-    rename_i hchild _ _ _ hran _ resumed _ ih
-    obtain ⟨-, hres⟩ := nonceResult_step hchild
-    exact (hres _ _ resumed (runs _ _ _ _ hran)).trans (ih h)
-  case case8 => cases h; exact NonceLe.refl _
+    NonceLe evm.state after.state :=
+  rel_runFrame (R := fun a b => NonceLe a.state b.state)
+    (C := fun caller _ child => NonceLe caller.state child.state) (Inv := fun _ => True)
+    (fun _ => NonceLe.refl _) NonceLe.trans (fun _ _ => trivial)
+    (fun _ _ => NonceLe.of_getAccountOptional fun _ => rfl) (fun _ h => nonceResult_step h)
+    runs trivial h
 
 /-! ## Messages -/
 
@@ -594,73 +581,37 @@ theorem processMessage_nonceLe [LawfulGasMeter Meter] (n : Nat) :
       (held : GasMeter.gasHeld meter ≤ message.gas), message.gas = n →
       ∀ ended, processCreateMessage fork message state substate meter held = .ok ended →
         NonceLe state ended.val.state) := by
-  induction n using Nat.strongRecOn with
-  | _ n ih =>
-    have call : ∀ (message : Message fork) (state : TransactionState) (substate : Substate)
-        (meter : Meter) (held : GasMeter.gasHeld meter ≤ message.gas), message.gas = n →
-        ∀ ended, processMessage fork message state substate meter held = .ok ended →
-          NonceLe state ended.val.state := by
-      intro message state substate meter held hn ended h
-      by_cases herr : ended.val.error.isSome = true
-      · exact NonceLe.of_sameOutside (processMessage_sameOutside_of_error h herr)
-      rw [processMessage] at h
-      obtain ⟨ended0, hdo, rolled⟩ := Base.map_ok_iff.mp h
-      have hst := nonceLe_startState message state
-      have core : NonceLe state ended0.val.state := by
-        dsimp only at hdo
-        split at hdo
-        all_goals obtain ⟨state1, hm, hdo⟩ := Base.bind_ok_iff.mp hdo
-        all_goals
-          have hp1 : NonceLe state state1 := by
-            first
-            | exact hst.trans (nonceLe_moveEther (Base.mapError_ok_iff.mp hm))
-            | (cases hm; exact hst)
-          rcases hpa : precompileAddress fork message with _ | addr
-          · simp only [hpa] at hdo
-            split at hdo
-            · cases hdo
-            · rename_i after hrun
-              cases hdo
-              refine hp1.trans (nonceLe_runFrame ?_ hrun)
-              rintro caller' message' lt ⟨c, used⟩ hrun'
-              dsimp only at hrun'
-              split at hrun'
-              · exact (ih message'.gas (by omega)).1 message' caller'.state _ _ _ rfl ⟨c, used⟩
-                  hrun'
-              · exact (ih message'.gas (by omega)).2 message' caller'.state _ _ _ rfl ⟨c, used⟩
-                  hrun'
-          · simp only [hpa] at hdo
-            split at hdo
-            · cases hdo
-              exact hp1
-            · split at hdo
-              · rename_i after hrp
-                cases hdo
-                exact hp1.trans (staticStep_runPrecompile hrp).nonceLe
-              · cases hdo
-                exact hp1
-      have hval := congrArg Subtype.val rolled
-      simp only at hval
-      rw [← hval] at herr ⊢
-      unfold rollbackOnError at herr ⊢
+  have both := processMessage_rel (fork := fork) (Meter := Meter)
+    (R := fun a b => NonceLe a.state b.state ∧ b.state.parent = a.state.parent)
+    (Inv := fun _ => True)
+    (M := fun _ state _ _ ended => NonceLe state ended.state ∧ ended.state.parent = state.parent)
+    (fun _ => ⟨NonceLe.refl _, rfl⟩)
+    (fun hab hbc => ⟨hab.1.trans hbc.1, hbc.2.trans hab.2⟩) (fun _ _ => trivial)
+    (fun _ _ => ⟨NonceLe.of_getAccountOptional fun _ => rfl, rfl⟩)
+    (fun _ h => (nonceResult_step h).and (parentResult_step h))
+    (fun _ => ⟨NonceLe.refl _, rfl⟩)
+    (fun h => ⟨(staticStep_runPrecompile h).nonceLe, (staticStep_runPrecompile h).parent⟩)
+    (fun {message state state1 _ _ _ ended} hstate _ hrun => by
+      have h1 : NonceLe state state1 ∧ state1.parent = state.parent := by
+        rcases hstate with rfl | ⟨-, hm⟩
+        · exact ⟨nonceLe_startState message state, parent_startState message state⟩
+        · exact ⟨(nonceLe_startState message state).trans (nonceLe_moveEther hm),
+            (TransactionState.parent_moveEther hm).trans (parent_startState message state)⟩
+      obtain ⟨hle, hpar⟩ := hrun trivial
+      have hp : ended.state.parent = state.parent := hpar.trans h1.2
+      refine ⟨?_, (parent_rollbackOnError state ended).trans hp⟩
+      unfold rollbackOnError
       split
-      · rename_i he
-        simp [he] at herr
-      · exact core
-    refine ⟨call, ?_⟩
-    intro message state substate meter held hn ended h
-    rw [processCreateMessage] at h
-    obtain ⟨prepared, hp, h⟩ := Base.bind_ok_iff.mp h
-    obtain ⟨⟨evm, used⟩, hrun, h⟩ := Base.bind_ok_iff.mp h
-    dsimp only at h
-    split at h
-    · cases h
-    · cases h
-      have hle : NonceLe prepared evm.state := call message prepared substate meter held hn _ hrun
-      have hpar : evm.state.parent = state.parent :=
-        (parent_processMessage hrun).trans (parent_prepareCreation hp)
-      exact nonceLe_depositCode ((nonceLe_prepareCreation hp).trans hle) hpar
-        ‹depositCode _ _ _ = .ok _›
+      · exact nonceLe_restoreTxState hp
+      · exact h1.1.trans hle)
+    (fun hp hm hd =>
+      ⟨nonceLe_depositCode ((nonceLe_prepareCreation hp).trans hm.1)
+          (hm.2.trans (parent_prepareCreation hp)) hd,
+        (parent_depositCode hd).trans (hm.2.trans (parent_prepareCreation hp))⟩) n
+  exact ⟨fun message state substate meter held hn ended h =>
+      (both.1 message state substate meter held hn ended h).1,
+    fun message state substate meter held hn ended h =>
+      (both.2 message state substate meter held hn ended h).1⟩
 
 /-- A call that returns a frame keeps or raises the nonce of every address, at every fork.
 
