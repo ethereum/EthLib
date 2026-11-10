@@ -37,7 +37,7 @@ Not yet released.
   The C exports and the Python functions keep their signatures: they take the secret and return the chaining key and the hash as 32 bytes.
   `writeLibp2p` now rejects a zero identity secret before every other check, on every message, message 1 included.
   The C export `eth_noise_libp2p_write`, and `noise_libp2p_write` in Python, give code 11 for a secret of 0 or at least the group order.
-  Before, message 1 ignored the secret, and a write out of turn gave code 1, `wrongPhase`, or code 10, `firstMessageExtensions`.
+  Before, a write at step 0 ignored the secret: message 1 succeeded, and a responder writing out of turn got code 1, `wrongPhase`, or code 10, `firstMessageExtensions`.
 - A chain configuration now holds the address of its deposit contract, and the deposit requests of a block come from that address ([#1486](https://github.com/ethereum/EthLib/issues/1486)).
   Before, every chain read deposits from the mainnet address, so a chain with another deposit contract, such as Sepolia, got no deposit request.
   The configuration that the exports read as JSON, or as a Python `dict`, must give `depositContractAddress`: `0x` and forty hex digits, or 20 bytes in Python.

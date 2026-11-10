@@ -204,6 +204,8 @@ def complete (s : Libp2pState) : Except NoiseError (Key × RemoteInfo) := do
 
 The identity secret must be nonzero, and it is checked first, on every message.
 
+That check is a precondition of this specification; noise-libp2p puts no identity in message 1.
+
 The secret key must stay private, and this function makes no constant-time claim. -/
 def writeLibp2p (s : Libp2pState) (identitySecret : Fn)
     (extensions : Option ByteArray) :

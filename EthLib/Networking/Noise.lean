@@ -69,7 +69,9 @@ inductive NoiseError where
   | identity
   /-- The first message carries libp2p extensions, which only later payloads may carry. -/
   | firstMessageExtensions
-  /-- The local identity secret is 0, or its big-endian value is at least the group order. -/
+  /-- The local identity secret is 0.
+
+  In the exports, it is also 32 bytes whose value is at least the secp256k1 group order. -/
   | identitySecret
   /-- ECDSA signing with the local identity secret failed. -/
   | signing (error : Secp256k1.Secp256k1Error)

@@ -33,7 +33,7 @@ inductive IdentityError where
   | publicKey
   /-- The bytes do not start with the identity code 0 and the length 37. -/
   | peerId
-  /-- The secret is 0, or its 32 big-endian bytes encode a number at least the group order. -/
+  /-- The secret is 0, or, in the exports, its bytes give a value at least the group order. -/
   | privateKey
   /-- The bytes are not a strict DER signature with r in [1, n) and s in [1, n/2]. -/
   | signature

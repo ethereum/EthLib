@@ -111,7 +111,7 @@ def identityResult {α : Type} (r : Except IdentityError α) : Result α :=
 
 /-- Read 32 big-endian bytes as a secp256k1 scalar, whose value must be below the group order.
 
-A larger value gives the private-key error; the functions that take the scalar reject 0.
+A value at least the group order gives the private-key error; the functions that take it reject 0.
 
 The secret key must stay private, and this function makes no constant-time claim. -/
 def secretOfBytes (bytes : Vector UInt8 32) : Except IdentityError Fn :=
