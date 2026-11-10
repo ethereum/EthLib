@@ -41,6 +41,10 @@ directories = [
   "tests/cryptography/bls",
 ]
 
+[repositories."ethereum/builder-specs"]
+commit = "fce64468a81a87892d7cb9b4858272bb3d010e50"
+directories = ["tests/consensus/builder_api"]
+
 [repositories."ethereum/c-kzg-4844"]
 commit = "a751e2d92abcd63b01d1400789789f5ea289a8b0"
 directories = ["tests/cryptography/kzg"]

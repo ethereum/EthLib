@@ -224,3 +224,10 @@ Their SHA-256 digests are:
 - `general.tar.gz`: `c4f395f71f606c28093500e32067990e430cc73a2277be6f3bf5090adcce3f67`, 3,228 bytes.
 - `mainnet.tar.gz`: `67762986572372a08d3b182535aa760433c86e174e14e0bbd756f350dd19398c`, 967,886,924 bytes.
 - `minimal.tar.gz`: `26d09aea70c62ed235a120a95082d544ab1c2e6fe36bd35ea1bd5da62f3b7b68`, 468,730,308 bytes.
+
+The directory `builder_api/` holds the examples of the Builder API, from `ethereum/builder-specs` at commit `fce64468a81a87892d7cb9b4858272bb3d010e50`.
+They are the files `examples/<fork>/signed_*.ssz` and their JSON forms, copied byte for byte under their fork, from Bellatrix to Fulu.
+Bellatrix also has a signed validator registration, and every fork has a signed bid and a signed blinded block.
+`bindings/python/tests/consensus/test_builder_api.py` decodes each one, encodes it again, and checks its root against the roots of its message and its signature.
+It also compares a few fields with the JSON form.
+The signatures of the examples are placeholders, so the tests of the signature checks sign their own messages.

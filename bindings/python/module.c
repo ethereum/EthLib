@@ -780,6 +780,8 @@ static PyMethodDef methods[] = {
   {"consensus_compute_columns_for_custody_group", py_consensus_compute_columns_for_custody_group,
    METH_VARARGS, DOC_consensus_compute_columns_for_custody_group},
   {"consensus_ssz_static", py_consensus_ssz_static, METH_VARARGS, DOC_consensus_ssz_static},
+  {"consensus_is_valid_builder_signature", py_consensus_is_valid_builder_signature,
+   METH_VARARGS, DOC_consensus_is_valid_builder_signature},
   {"consensus_merkle_proof", py_consensus_merkle_proof, METH_VARARGS, DOC_consensus_merkle_proof},
   {"consensus_upgrade_operation", py_consensus_upgrade_operation, METH_VARARGS,
    DOC_consensus_upgrade_operation},

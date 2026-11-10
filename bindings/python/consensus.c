@@ -56,6 +56,11 @@ eth_consensus_compute_columns_for_custody_group(
 );
 
 extern lean_object*
+eth_consensus_is_valid_builder_signature(
+  lean_object* args
+);
+
+extern lean_object*
 eth_consensus_ssz_static(
   lean_object* args
 );
@@ -507,6 +512,14 @@ py_consensus_ssz_static(
   PyObject* args
 ) {
   return call_pyvalue_export(eth_consensus_ssz_static, args, 4, SSZ_ERROR);
+}
+
+PyObject*
+py_consensus_is_valid_builder_signature(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_is_valid_builder_signature, args, 5, SSZ_ERROR);
 }
 
 PyObject*
