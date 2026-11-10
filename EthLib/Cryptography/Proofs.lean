@@ -19,6 +19,7 @@ public import EthLib.Cryptography.Proofs.LoggedUntilBad
 public import EthLib.Cryptography.Proofs.BadOnGrowth
 public import EthLib.Cryptography.Proofs.LogKeys
 public import EthLib.Cryptography.Proofs.LazyPermutation
+public import EthLib.Cryptography.Proofs.IndependentAnswers
 public import EthLib.Cryptography.Proofs.TaggedLazyPermutation
 public import EthLib.Cryptography.Proofs.DerivationTable
 public import EthLib.Cryptography.Proofs.Xmss

@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.Game
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.JointGame
+public import EthLib.Cryptography.Proofs.Secp256k1.Security.KeyOnly
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.LazyGame
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.Origin
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.QueryBound
@@ -41,6 +42,16 @@ Take an adversary with at most `q_Π` queries to `Π` or its inverse.
 Let it also make at most `q_S` signing queries.
 
 The game as a program then asks `Π` or its inverse at most `q_Π + fuel · q_S + 1` times.
+
+The key-only game gives the forger no signing oracle.
+
+It is the chosen-message game of a forger that never asks for a signature.
+
+Swap `Π` there for independent uniform answers.
+
+Stop counting a win once a new answer repeats a cached value in the direction of its query.
+
+The advantage falls by at most `q_Π (q_Π + 1) / 2` over `|A|`.
 
 No theorem bounds the advantage of a forger yet.
 -/

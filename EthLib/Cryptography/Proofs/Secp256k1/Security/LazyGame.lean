@@ -171,7 +171,7 @@ private theorem simulateQ_permImpl_signNonceQ (scheme : Scheme F G A M) (π : Eq
 
 omit [SampleableType F] [DecidableEq M] [FinEnum A] in
 /-- With `π`, verification asked of the oracle is verification by `π`. -/
-private theorem simulateQ_permImpl_verifyQ (scheme : Scheme F G A M) (π : Equiv.Perm A)
+theorem simulateQ_permImpl_verifyQ (scheme : Scheme F G A M) (π : Equiv.Perm A)
     (X : G) (m : M) (t s : F) :
     simulateQ (permImpl π) (verifyQ scheme X m t s) = pure (verify scheme π X m t s) := by
   unfold verifyQ
