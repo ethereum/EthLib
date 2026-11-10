@@ -1,6 +1,8 @@
 module
 
 public import EthLib.Execution.Proofs.Blocks.AccessListBuilder
+public import EthLib.Execution.Proofs.Blocks.AccessListComplete
+public import EthLib.Execution.Proofs.Blocks.AccessListCoverage
 public import EthLib.Execution.Proofs.Blocks.Block
 public import EthLib.Execution.Proofs.Blocks.BlockAccessList
 public import EthLib.Execution.Proofs.Blocks.BodyGas
