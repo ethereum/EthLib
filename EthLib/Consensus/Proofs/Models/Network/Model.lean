@@ -29,7 +29,7 @@ The rule follows from the network rule of §2 and its assumption that honest val
 
 It is weaker, since §2 also delivers each message that a Byzantine validator sends.
 
-So a result proved here holds under §2.
+So a result proved here holds under §2, when time grows without bound and the delay is positive.
 
 A message that no honest validator holds may never be delivered, as a Byzantine sender may keep it.
 

@@ -49,7 +49,7 @@ inductive Message (preset : Preset) (fork : Fork)
 
 /-- The moves of the store of an honest validator, at a time and with a view.
 
-A tick sets the store to the time, which must fit in 64 bits.
+A tick sets the store to the time, which must fit in 64 bits and not lie before its clock.
 
 Every other move processes a message of the view, as one from the network.
 
@@ -61,7 +61,7 @@ inductive Handles (config : Config) (checks : SignatureChecks) (sources : BlockS
     Store preset fork → Prop
   /-- The store after a tick at the time. -/
   | tick {after : Store preset fork} :
-    time < 2 ^ 64 → store.onTick config time.toUInt64 = .ok after →
+    store.timeMs.toNat ≤ time → time < 2 ^ 64 → store.onTick config time.toUInt64 = .ok after →
       Handles config checks sources time view store after
   /-- The store after a block of the view, with its votes. -/
   | block {after : Store preset fork} {signed : SignedBeaconBlock preset fork} :
@@ -119,7 +119,7 @@ theorem Handles.reachable {checks : SignatureChecks} {sources : BlockSources pre
     (reachable : Store.Reachable config anchorState anchorBlock store) :
     Store.Reachable config anchorState anchorBlock after := by
   cases handles with
-  | tick _ ticked => exact reachable.tick ticked
+  | tick _ _ ticked => exact reachable.tick ticked
   | block _ added => exact reachable.onBlockWithVotes added
   | attestation _ attested => exact reachable.attestation attested
   | attesterSlashing _ slashed => exact reachable.attesterSlashing slashed
@@ -186,7 +186,7 @@ theorem Handles.tick_anchor {checks : SignatureChecks} {sources : BlockSources p
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok store)
     (view : Set (Message preset fork)) :
     Handles config checks sources store.timeMs.toNat view store store := by
-  refine .tick (UInt64.toNat_lt _) ?_
+  refine .tick le_rfl (UInt64.toNat_lt _) ?_
   have round : store.timeMs.toNat.toUInt64 = store.timeMs :=
     UInt64.toNat_inj.mp (by simp)
   rw [round]
@@ -213,17 +213,20 @@ theorem exists_forkChoice_execution {ν κ : Type*} [DecidableEq ν] (checks : S
     (positive : 0 < Δ) :
     ∃ e : Execution (forkChoice config checks sources (fun _ => (∅ : Set (ν × κ)))
         fun _ _ _ _ m => m = .block signed) J,
-      e.events 0 = .send v (.block signed) ∧ (∀ u, .block signed ∈ (e.world 2).view u) ∧
+      e.startTime = store.timeMs.toNat ∧ e.start = (fun _ => store) ∧
+      e.events 0 = .send v (.block signed) ∧ (e.world 2).time = store.timeMs.toNat ∧
+      (e.world 2).state = (fun _ => store) ∧ (∀ u, .block signed ∈ (e.world 2).view u) ∧
       Allowed (forkChoice config checks sources (fun _ => (∅ : Set (ν × κ)))
         fun _ _ _ _ m => m = .block signed) J (e.world 2) (.move v store) ∧
       (∀ GST, e.PartiallySynchronous GST Δ) ∧
       ∀ n, ∀ u ∈ J, Store.Reachable config anchorState anchorBlock ((e.world n).state u) := by
-  obtain ⟨e, -, start, sends, time, states, delivered, sync⟩ :=
+  obtain ⟨e, startTime, start, sends, time, states, delivered, sync⟩ :=
     exists_partiallySynchronous
       (P := forkChoice config checks sources (fun _ => (∅ : Set (ν × κ)))
         fun _ _ _ _ m => m = .block signed) (time := store.timeMs.toNat)
       (state := fun _ => store) honest rfl (fun _ none => none.elim) positive
-  refine ⟨e, sends, delivered, ⟨honest, ?_⟩, sync, e.reachable fun u _ => ?_⟩
+  refine ⟨e, startTime, start, sends, time, states, delivered, ⟨honest, ?_⟩, sync,
+    e.reachable fun u _ => ?_⟩
   · show Handles config checks sources (e.world 2).time ((e.world 2).view v)
       ((e.world 2).state v) store
     rw [time, states]
