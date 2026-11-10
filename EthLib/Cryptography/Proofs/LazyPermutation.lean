@@ -142,6 +142,9 @@ abbrev PermSpec (A : Type) := (A →ₒ A) + (A →ₒ A)
 /-- The pairs `(a, π a)` that the lazy oracle answered so far, the most recent first. -/
 abbrev PermCache (A : Type) := List (A × A)
 
+/-- The computations that draw coins and ask the permutation oracle. -/
+abbrev PermComp (A : Type) := OracleComp (unifSpec + PermSpec A)
+
 /-- The permutation `π` as an oracle: `π` and its inverse. -/
 def permOracle (π : Equiv.Perm A) : QueryImpl (PermSpec A) ProbComp
   | .inl a => (pure (π a) : ProbComp A)
@@ -150,6 +153,12 @@ def permOracle (π : Equiv.Perm A) : QueryImpl (PermSpec A) ProbComp
 /-- The oracles with the permutation `π`: coins, passed through, then `π` and its inverse. -/
 abbrev permImpl (π : Equiv.Perm A) : QueryImpl (unifSpec + PermSpec A) ProbComp :=
   unifSpec.passthrough + permOracle π
+
+/-- Running a computation of coins alone with `π` leaves it unchanged. -/
+theorem simulateQ_permImpl_liftM {α : Type} (π : Equiv.Perm A) (oa : ProbComp α) :
+    simulateQ (permImpl π) (liftM oa : PermComp A α) = oa := by
+  rw [QueryImpl.simulateQ_liftM_eq_of_query (permImpl π) (QueryImpl.id' unifSpec)
+    (fun t => by simp [permImpl]) oa, simulateQ_id']
 
 variable [FinEnum A]
 
