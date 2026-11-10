@@ -95,13 +95,9 @@ No update by Osaka names version 3, yet the update by Amsterdam ends it at Glams
 
 So this model lets version 3 take Fusaka and the BPO forks too, as `engine_newPayloadV4` does.
 
-The source gives version 1 no rule of forks, and step 2 of version 2 sends Shanghai to version 2.
+The source gives version 1 no rule of forks, and step 2 of version 2 sends Shapella to version 2.
 
 So this model takes Paris only for version 1, as version 1 of `engine_newPayload` does.
-
-The fork check comes before the timestamp check, so it also wins over step 8.1 when both fail.
-
-All these checks run only when the update applies a valid head, as step 8 of version 1 says.
 
 Version 2 takes version 1 of the structure only before Shapella, and version 2 only from it.
 
@@ -112,6 +108,10 @@ By step 8.1 of version 1, the timestamp of the attributes must be above that of 
 Otherwise the error is `-38003` too.
 
 The checks run in this order: the structure, the fork, the structure at the fork, the timestamp.
+
+The source does not order the fork check and step 8.1, and this model runs the fork check first.
+
+All these checks run only when the update applies a valid head, as step 8 of version 1 says.
 
 Attributes that pass start a payload build.
 
@@ -125,6 +125,7 @@ The method specifications state these rules, at commit `3284ee8` of execution-ap
 - [`engine_forkchoiceUpdatedV2`][v2] and [`engine_forkchoiceUpdatedV3`][v3]
 - [`engine_forkchoiceUpdatedV4`][v4], and the custody columns of [EIP-8070][eip8070]
 - the updates of earlier versions by [Cancun][v2-cancun] and [Prague][v3-prague]
+- the update of earlier versions by [Osaka][osaka], which leaves version 3 unchanged
 - the update of version 3 by [Amsterdam][v3-amsterdam]
 - the [OpenRPC description][rpc] of the four versions, for the parameters that each requires
 
@@ -138,6 +139,7 @@ From Glamsterdam, [version 4][a4] adds the slot number of EIP-7843 and a target 
 [v4]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/amsterdam.md#engine_forkchoiceupdatedv4
 [v2-cancun]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/cancun.md#update-the-methods-of-previous-forks
 [v3-prague]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/prague.md#update-the-methods-of-previous-forks
+[osaka]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/osaka.md#update-the-methods-of-previous-forks
 [v3-amsterdam]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/amsterdam.md#update-the-methods-of-previous-forks
 [eip8070]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-8070.md#engine-api-extensions
 [rpc]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/openrpc/methods/forkchoice.yaml
@@ -368,7 +370,7 @@ def forkchoiceUpdatedParams (version : Nat) (params : Json) :
 
 Version 1 takes Paris, and version 2 Paris and Shapella.
 
-Version 3 takes the forks from Dencun up to Glamsterdam, which it does not take.
+Version 3 takes the forks from Dencun on, before Glamsterdam.
 
 Version 4 takes Glamsterdam.
 
@@ -411,15 +413,15 @@ def PayloadAttributes.ofStructure {fork : Fork} (a : PayloadAttributes (attribut
   timestamp := a.timestamp
   prevRandao := a.prevRandao
   suggestedFeeRecipient := a.suggestedFeeRecipient
-  withdrawals h := a.withdrawals ((shapella_le_attributesForkAt_iff fork).mpr h)
-  parentBeaconBlockRoot h := a.parentBeaconBlockRoot ((dencun_le_attributesForkAt_iff fork).mpr h)
-  slotNumber h := a.slotNumber ((glamsterdam_le_attributesForkAt_iff fork).mpr h)
-  targetGasLimit h := a.targetGasLimit ((glamsterdam_le_attributesForkAt_iff fork).mpr h)
+  withdrawals := a.withdrawals.congr (shapella_le_attributesForkAt_iff fork)
+  parentBeaconBlockRoot := a.parentBeaconBlockRoot.congr (dencun_le_attributesForkAt_iff fork)
+  slotNumber := a.slotNumber.congr (glamsterdam_le_attributesForkAt_iff fork)
+  targetGasLimit := a.targetGasLimit.congr (glamsterdam_le_attributesForkAt_iff fork)
 
 /-- Payload attributes at a fork, when their structure is that of the fork.
 
 Otherwise there are none. -/
-def PayloadAttributes.toFork (a : Σ f, PayloadAttributes f) (fork : Fork) :
+def PayloadAttributes.atFork (a : Σ f, PayloadAttributes f) (fork : Fork) :
     Option (PayloadAttributes fork) :=
   if h : attributesForkAt fork = a.1 then some (PayloadAttributes.ofStructure (h ▸ a.2)) else none
 
@@ -443,7 +445,7 @@ def checkAttributes (config : ChainConfig) (version : Nat) (head : KnownPayload)
   let some fork := config.activeFork (head.number.toNat + 1) timestamp.toNat
     | throw .unsupportedFork
   unless attributesTakeFork version fork do throw .unsupportedFork
-  let some atFork := PayloadAttributes.toFork attributes fork | throw .invalidPayloadAttributes
+  let some atFork := PayloadAttributes.atFork attributes fork | throw .invalidPayloadAttributes
   unless head.timestamp < timestamp do throw .invalidPayloadAttributes
   return ⟨fork, atFork⟩
 
@@ -467,7 +469,7 @@ def forkchoiceUpdatedCall (config : ChainConfig) (version : Nat) (tree : Payload
   match attributes, head with
   | some j, some h =>
     let decoded ← payloadAttributesOfVersion version j
-    -- The update applies only a head that the tree holds.
+    -- The update applies only a head that the tree holds, so this branch never runs.
     let some known := tree.lookup h | return (status, head, none)
     return (status, head, some (← checkAttributes config version known decoded))
   | _, _ => return (status, head, none)

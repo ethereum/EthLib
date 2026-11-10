@@ -5,7 +5,7 @@ public import EthLib.Base.Except
 public import EthLib.Engine.Proofs.Json
 
 /-!
-# Proofs: the parameters and the head of `engine_forkchoiceUpdated`
+# Proofs: the parameters, the head and the payload attributes of `engine_forkchoiceUpdated`
 
 The update is syncing exactly when the execution layer does not hold the head.
 
@@ -55,13 +55,13 @@ When it applies none, the attributes are not read.
 
 Attributes that fit give the answer of their checks against the head, which the tree holds.
 
-They pass exactly when their fork is one of the version and their structure is that of the fork.
+They pass exactly when the version takes their fork and their structure is that of the fork.
 
 Their timestamp must also be above the head's.
 
 The attributes at that fork keep every field.
 
-A fork that the version does not take gives `-38005`.
+A fork that the version does not take, or no fork at all, gives `-38005`.
 
 A structure that is not that of the fork, or a timestamp not above the head's, gives `-38003`.
 -/
@@ -507,7 +507,7 @@ theorem forkchoiceUpdatedCall_of_no_head {version : Nat}
     hs, hf, bind, Except.bind, pure, Except.pure]
 
 /-- An applied head is a head that the tree holds. -/
-theorem lookup_of_forkchoiceUpdated {status : PayloadStatus} {head : Hash32}
+theorem exists_lookup_of_forkchoiceUpdated {status : PayloadStatus} {head : Hash32}
     (hf : forkchoiceUpdated tree finalized state = .ok (status, some head)) :
     ∃ known, tree.lookup head = some known := by
   unfold forkchoiceUpdated at hf
@@ -544,16 +544,23 @@ theorem forkchoiceUpdatedCall_of_attributes {version : Nat}
       hs, hf, hk, ha, hc, bind, Except.bind, pure, Except.pure, Except.map]
 
 /-- Attributes move to a fork exactly when their structure is that of the fork. -/
-theorem PayloadAttributes.toFork_isSome_iff {a : Σ f, PayloadAttributes f} {fork : Fork} :
-    (PayloadAttributes.toFork a fork).isSome ↔ attributesForkAt fork = a.1 := by
-  unfold PayloadAttributes.toFork
+theorem PayloadAttributes.atFork_isSome_iff {a : Σ f, PayloadAttributes f} {fork : Fork} :
+    (PayloadAttributes.atFork a fork).isSome ↔ attributesForkAt fork = a.1 := by
+  unfold PayloadAttributes.atFork
   split <;> simp_all
+
+/-- A field read at another fork that has it exactly when the first does keeps its value. -/
+theorem sinceValue_congr {f a b : Fork} {α : Type} (h : f ≤ a ↔ f ≤ b) (x : Since f a α) :
+    sinceValue (x.congr h) = sinceValue x := by
+  by_cases hb : f ≤ b
+  · simp [sinceValue, Since.congr, hb, h.mpr hb]
+  · simp [sinceValue, hb, mt h.mp hb]
 
 /-- Attributes at a fork keep the timestamp, the RANDAO mix and the fee recipient.
 
 They also keep each field that comes with a fork. -/
-theorem PayloadAttributes.toFork_fields {a : Σ f, PayloadAttributes f} {fork : Fork}
-    {b : PayloadAttributes fork} (h : PayloadAttributes.toFork a fork = some b) :
+theorem PayloadAttributes.atFork_fields {a : Σ f, PayloadAttributes f} {fork : Fork}
+    {b : PayloadAttributes fork} (h : PayloadAttributes.atFork a fork = some b) :
     b.timestamp = a.2.timestamp ∧ b.prevRandao = a.2.prevRandao ∧
       b.suggestedFeeRecipient = a.2.suggestedFeeRecipient ∧
       sinceValue b.withdrawals = sinceValue a.2.withdrawals ∧
@@ -561,27 +568,14 @@ theorem PayloadAttributes.toFork_fields {a : Σ f, PayloadAttributes f} {fork : 
       sinceValue b.slotNumber = sinceValue a.2.slotNumber ∧
       sinceValue b.targetGasLimit = sinceValue a.2.targetGasLimit := by
   obtain ⟨f, a⟩ := a
-  unfold PayloadAttributes.toFork at h
+  unfold PayloadAttributes.atFork at h
   split at h
   · next hf =>
     simp only [Option.some.injEq] at h
     subst h
     dsimp only at hf
     subst hf
-    simp only [PayloadAttributes.ofStructure, sinceValue, true_and]
-    refine ⟨?_, ?_, ?_, ?_⟩
-    · by_cases h : .shapella ≤ fork
-      · simp [h, (shapella_le_attributesForkAt_iff fork).mpr h]
-      · simp [h, mt (shapella_le_attributesForkAt_iff fork).mp h]
-    · by_cases h : .dencun ≤ fork
-      · simp [h, (dencun_le_attributesForkAt_iff fork).mpr h]
-      · simp [h, mt (dencun_le_attributesForkAt_iff fork).mp h]
-    · by_cases h : .glamsterdam ≤ fork
-      · simp [h, (glamsterdam_le_attributesForkAt_iff fork).mpr h]
-      · simp [h, mt (glamsterdam_le_attributesForkAt_iff fork).mp h]
-    · by_cases h : .glamsterdam ≤ fork
-      · simp [h, (glamsterdam_le_attributesForkAt_iff fork).mpr h]
-      · simp [h, mt (glamsterdam_le_attributesForkAt_iff fork).mp h]
+    simp only [PayloadAttributes.ofStructure, sinceValue_congr, true_and]
   · cases h
 
 /-- Attributes pass their checks exactly when each check holds.
@@ -595,7 +589,7 @@ theorem checkAttributes_eq_ok_iff {version : Nat} {head : KnownPayload}
     {a : Σ f, PayloadAttributes f} {fork : Fork} {b : PayloadAttributes fork} :
     checkAttributes config version head a = .ok ⟨fork, b⟩ ↔
       config.activeFork (head.number.toNat + 1) a.2.timestamp.toNat = some fork ∧
-        attributesTakeFork version fork = true ∧ PayloadAttributes.toFork a fork = some b ∧
+        attributesTakeFork version fork = true ∧ PayloadAttributes.atFork a fork = some b ∧
         head.timestamp < a.2.timestamp := by
   constructor
   · intro h
@@ -607,7 +601,7 @@ theorem checkAttributes_eq_ok_iff {version : Nat} {head : KnownPayload}
         simp [checkAttributes, hF, hT, bind, Except.bind, throw, throwThe,
           MonadExceptOf.throw] at h
       | true =>
-        cases hA : PayloadAttributes.toFork a fork' with
+        cases hA : PayloadAttributes.atFork a fork' with
         | none =>
           simp [checkAttributes, hF, hT, hA, throw, throwThe, MonadExceptOf.throw] at h
         | some b' =>
@@ -623,7 +617,7 @@ theorem checkAttributes_eq_ok_iff {version : Nat} {head : KnownPayload}
     simp [checkAttributes, hFork, hTake, hAt, hTime, pure, Except.pure]
 
 /-- Attributes of no fork, or of a fork that the version does not take, give `-38005`. -/
-theorem checkAttributes_unsupportedFork {version : Nat} {head : KnownPayload}
+theorem checkAttributes_eq_error_of_unsupportedFork {version : Nat} {head : KnownPayload}
     {a : Σ f, PayloadAttributes f}
     (h : ∀ fork, config.activeFork (head.number.toNat + 1) a.2.timestamp.toNat = some fork →
       attributesTakeFork version fork = false) :
@@ -649,23 +643,22 @@ theorem attributesForkAt_of_attributesTakeFork {version : Nat} (hv : version ≠
 /-- Attributes of a fork of the version, whose structure is not that of the fork, give `-38003`.
 
 Only version 2 takes two structures, so only it can fail this way. -/
-theorem checkAttributes_wrong_structure {version : Nat} {head : KnownPayload}
+theorem checkAttributes_eq_error_of_wrong_structure {version : Nat} {head : KnownPayload}
     {a : Σ f, PayloadAttributes f} {fork : Fork}
     (hFork : config.activeFork (head.number.toNat + 1) a.2.timestamp.toNat = some fork)
     (hTake : attributesTakeFork version fork = true) (hAt : attributesForkAt fork ≠ a.1) :
     checkAttributes config version head a = .error .invalidPayloadAttributes := by
-  have hNone : PayloadAttributes.toFork a fork = none := by
-    simpa using mt PayloadAttributes.toFork_isSome_iff.mp hAt
+  have hNone : PayloadAttributes.atFork a fork = none := by
+    simpa using mt PayloadAttributes.atFork_isSome_iff.mp hAt
   simp [checkAttributes, hFork, hTake, hNone, throw, throwThe,
     MonadExceptOf.throw]
 
-/-- Attributes that pass every other check, with a timestamp not above the head's, give `-38003`.
--/
-theorem checkAttributes_not_after_head {version : Nat} {head : KnownPayload}
+/-- Attributes that pass the other checks, with a timestamp not above the head's, give `-38003`. -/
+theorem checkAttributes_eq_error_of_not_after_head {version : Nat} {head : KnownPayload}
     {a : Σ f, PayloadAttributes f} {fork : Fork} {b : PayloadAttributes fork}
     (hFork : config.activeFork (head.number.toNat + 1) a.2.timestamp.toNat = some fork)
     (hTake : attributesTakeFork version fork = true)
-    (hAt : PayloadAttributes.toFork a fork = some b) (hTime : a.2.timestamp ≤ head.timestamp) :
+    (hAt : PayloadAttributes.atFork a fork = some b) (hTime : a.2.timestamp ≤ head.timestamp) :
     checkAttributes config version head a = .error .invalidPayloadAttributes := by
   have hNot : ¬ head.timestamp < a.2.timestamp := UInt64.not_lt.mpr hTime
   simp [checkAttributes, hFork, hTake, hAt, hNot, bind, Except.bind, throw, throwThe,

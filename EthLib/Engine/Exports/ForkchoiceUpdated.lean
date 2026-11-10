@@ -12,7 +12,9 @@ The configuration, the payload tree, the finalized block and the request cross a
 
 Each is the value of its JSON.
 
-The configuration is an object with the chain ID and the activations, as for `engine_newPayload`.
+The configuration is an object as for `engine_newPayload`.
+
+It holds the chain ID, the deposit contract address and the activations.
 
 The tree is a list of objects, each with a block hash, a parent hash and a validity flag.
 
@@ -28,7 +30,7 @@ The result is the value of the JSON of the response: the payload status, and no 
 
 A JSON-RPC error has the code of its Engine API error: 32602, 38002, 38003 or 38005.
 
-Payload attributes on an applied valid head that fit the version ask for a build.
+Payload attributes on an applied valid head that pass every check ask for a build.
 
 That build is not specified, so they have code 0.
 
@@ -44,7 +46,7 @@ open EthLib.Exports (Result PyValue pyExport)
 open EthLib.Base
 open EthLib.Base.ChainConfig.Exports (configOfJson)
 
-/-- One payload of the tree: its block hash, its parent hash, its validity, number and time. -/
+/-- One payload of the tree: its block hash, parent hash, validity, number and timestamp. -/
 def knownOfJson (j : Json) : Result (Hash32 × KnownPayload) := do
   let some valid := (j.getObjValAs? Bool "valid").toOption | throw (0, "tree: no validity")
   let hash (name : String) : Result Hash32 :=
@@ -89,8 +91,7 @@ def forkchoiceUpdatedOf (args : PyValue × PyValue × PyValue × PyValue) : Resu
 
 /-- The response to an `engine_forkchoiceUpdated` request, against a tree of payloads.
 
-The arguments are the chain configuration, the tree, the known finalized block and the request.
--/
+The arguments are the configuration, the tree, the known finalized block and the request. -/
 @[export eth_engine_forkchoice_updated]
 def forkchoiceUpdatedExport (args : PyValue) : Result PyValue :=
   pyExport forkchoiceUpdatedOf args

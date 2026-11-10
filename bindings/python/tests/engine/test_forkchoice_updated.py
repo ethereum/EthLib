@@ -31,7 +31,7 @@ def _known(block: str, parent: str, number: str, timestamp: str, valid: bool = T
     }
 
 
-# Paris at block 0, then each fork by time 100 seconds after the one before it.
+# Every fork by block activates at block 0, then each fork by time 100 seconds after the last.
 # So Shapella starts at 100, Dencun at 200, BPO2 at 600 and Glamsterdam at 700.
 CONFIG = {
     "chainId": 1,
@@ -175,7 +175,7 @@ OFF_HEAD_ATTRIBUTES = pytest.mark.parametrize(
         # A field whose value is null counts as absent.
         pytest.param(2, ATTRIBUTES_V1 | {"withdrawals": None}, id="v2-null-withdrawals"),
         pytest.param(3, ATTRIBUTES_V3, id="v3"),
-        # Version 3 takes the forks from Dencun up to Glamsterdam: here BPO2, at 600 seconds.
+        # Version 3 takes the forks from Dencun on, before Glamsterdam: here BPO2, at 600 seconds.
         pytest.param(3, ATTRIBUTES_V3 | {"timestamp": "0x258"}, id="v3-at-bpo2"),
         # The last second before Shapella is still Paris.
         pytest.param(1, ATTRIBUTES_V1 | {"timestamp": "0x63"}, id="v1-before-shapella"),

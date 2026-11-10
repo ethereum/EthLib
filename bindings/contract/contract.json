@@ -9827,7 +9827,7 @@
       {"constructor": "invalidPayloadAttributes", "code": 38003}]}],
    "error_class": "EngineError",
    "docstring":
-   "The response to an `engine_forkchoiceUpdated` request, against a tree of payloads.\n\nThe arguments are the chain configuration, the tree, the known finalized block and the request."},
+   "The response to an `engine_forkchoiceUpdated` request, against a tree of payloads.\n\nThe arguments are the configuration, the tree, the known finalized block and the request."},
   {"summary": "The answer to an `engine_getBlobs` request, from a blob pool.",
    "signature":
    "(pool: list[tuple[bytes, bytes | None, bytes | None, list[tuple[bytes, bytes] | None] | None]], serving: bool, max_request: int, fork: str, request: dict) -> list | None",
