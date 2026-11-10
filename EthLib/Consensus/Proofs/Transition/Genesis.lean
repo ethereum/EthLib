@@ -102,6 +102,30 @@ theorem initializeBeaconStateFromEth1_ok {eth1BlockHash : Hash32} {eth1Timestamp
   exact ⟨Nat.lt_of_not_le altair, genesisTime, bodyRoot, deposited, activated, root, depositedOk,
     activatedOk, rfl⟩
 
+/-- The genesis state built from deposits keeps the frame of the empty state that it starts from.
+
+Its fork is before Altair.
+
+The empty state has the block hash and the deposit count.
+
+The deposits and the activations keep the frame.
+
+The result then takes some genesis validators root. -/
+theorem initializeBeaconStateFromEth1_frame {eth1BlockHash : Hash32} {eth1Timestamp : UInt64}
+    {deposits : Array Deposit} {after : BeaconState preset fork}
+    (computed : initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits =
+      .ok after) :
+    ∃ (before : fork < .altair) (genesisTime : UInt64) (bodyRoot : Root)
+      (activated : BeaconState preset fork) (root : Root),
+      Frame (emptyGenesisState config before genesisTime eth1BlockHash deposits.size.toUInt64
+          bodyRoot) activated ∧
+        after = { activated with genesisValidatorsRoot := root } := by
+  obtain ⟨before, genesisTime, bodyRoot, _, activated, root, depositedOk, activatedOk, rfl⟩ :=
+    initializeBeaconStateFromEth1_ok computed
+  exact ⟨before, genesisTime, bodyRoot, activated, root,
+    (Frame.foldlM (fun _ _ _ ok => frame_genesisDeposit ok) depositedOk).trans
+      (Frame.foldlM (fun _ _ _ ok => frame_activateAtGenesis ok) activatedOk), rfl⟩
+
 /-- The genesis state built from deposits is at the genesis slot.
 
 Its two justified checkpoints are the genesis epoch with the zero root. -/
@@ -112,11 +136,20 @@ theorem initializeBeaconStateFromEth1_checkpoints {eth1BlockHash : Hash32}
     after.slot = GENESIS_SLOT ∧
       after.previousJustifiedCheckpoint = ⟨GENESIS_EPOCH, Vector.replicate 32 0⟩ ∧
       after.currentJustifiedCheckpoint = ⟨GENESIS_EPOCH, Vector.replicate 32 0⟩ := by
-  obtain ⟨_, _, _, _, _, _, depositedOk, activatedOk, rfl⟩ :=
-    initializeBeaconStateFromEth1_ok computed
-  have frame := (Frame.foldlM (fun _ _ _ ok => frame_genesisDeposit ok) depositedOk).trans
-    (Frame.foldlM (fun _ _ _ ok => frame_activateAtGenesis ok) activatedOk)
+  obtain ⟨_, _, _, _, _, frame, rfl⟩ := initializeBeaconStateFromEth1_frame computed
   exact ⟨frame.slot, frame.previousJustified, frame.currentJustified⟩
+
+/-- The genesis state built from deposits has every bit of justification clear.
+
+Its finalized checkpoint is the genesis epoch with the zero root. -/
+theorem initializeBeaconStateFromEth1_finality {eth1BlockHash : Hash32}
+    {eth1Timestamp : UInt64} {deposits : Array Deposit} {after : BeaconState preset fork}
+    (computed : initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits =
+      .ok after) :
+    after.justificationBits.bits = Vector.replicate _ false ∧
+      after.finalizedCheckpoint = ⟨GENESIS_EPOCH, Vector.replicate 32 0⟩ := by
+  obtain ⟨_, _, _, _, _, frame, rfl⟩ := initializeBeaconStateFromEth1_frame computed
+  exact ⟨congrArg (·.bits) frame.justificationBits, frame.finalized⟩
 
 /-- A candidate genesis state exists only before Altair.
 
@@ -128,12 +161,9 @@ theorem initializeBeaconStateFromEth1_invariant {eth1BlockHash : Hash32} {eth1Ti
     (computed : initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits =
       .ok after) :
     fork < .altair ∧ Invariant after := by
-  obtain ⟨before, _, _, _, _, _, depositedOk, activatedOk, rfl⟩ :=
-    initializeBeaconStateFromEth1_ok computed
-  refine ⟨before, ?_⟩
-  have frame := (Frame.foldlM (fun _ _ _ ok => frame_genesisDeposit ok) depositedOk).trans
-    (Frame.foldlM (fun _ _ _ ok => frame_activateAtGenesis ok) activatedOk)
-  exact (frame.invariant (emptyGenesisState_invariant before _ _ _ _)).withGenesisValidatorsRoot
+  obtain ⟨before, _, _, _, _, frame, rfl⟩ := initializeBeaconStateFromEth1_frame computed
+  exact ⟨before,
+    (frame.invariant (emptyGenesisState_invariant before _ _ _ _)).withGenesisValidatorsRoot⟩
 
 /-- A candidate state launches the chain exactly when it is late enough.
 

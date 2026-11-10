@@ -167,6 +167,17 @@ theorem RootsAbove.le_of_getBlockRoot {fork : Fork} {state : BeaconState preset 
       else state.previousJustifiedCheckpoint).root ≤ block root :=
   holds.le_of_epoch_le current (holds.epoch current) read
 
+/-- The genesis state built from deposits records no root, as no slot comes before its own. -/
+theorem getBlockRootAtSlot_initializeBeaconStateFromEth1 {fork : Fork}
+    {state : BeaconState preset fork} {eth1BlockHash : Hash32} {eth1Timestamp : UInt64}
+    {deposits : Array Deposit}
+    (computed : initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits =
+      .ok state) (slot : Slot) (root : Root) : getBlockRootAtSlot state slot ≠ .ok root :=
+  fun read => by
+    have before := UInt64.lt_iff_toNat_lt.mp (getBlockRootAtSlot_read read).1
+    rw [(initializeBeaconStateFromEth1_checkpoints computed).1] at before
+    simp [GENESIS_SLOT] at before
+
 /-- The genesis state built from deposits has each justified checkpoint below its later roots. -/
 theorem RootsAbove.of_initializeBeaconStateFromEth1 {fork : Fork}
     {state : BeaconState preset fork} {eth1BlockHash : Hash32} {eth1Timestamp : UInt64}
@@ -174,13 +185,11 @@ theorem RootsAbove.of_initializeBeaconStateFromEth1 {fork : Fork}
     (computed : initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits =
       .ok state) :
     RootsAbove block state := by
-  obtain ⟨slot, previous, current⟩ := initializeBeaconStateFromEth1_checkpoints computed
-  refine ⟨fun current => ?_, fun current => ?_, fun _ _ _ _ read => ?_⟩
+  obtain ⟨-, previous, current⟩ := initializeBeaconStateFromEth1_checkpoints computed
+  refine ⟨fun current => ?_, fun current => ?_, fun _ slot root _ read =>
+    absurd read (getBlockRootAtSlot_initializeBeaconStateFromEth1 computed slot root)⟩
   · cases current <;> simp [recentJustified, previous, current, GENESIS_EPOCH]
   · cases current <;> simp [recentJustified, previous, current, GENESIS_EPOCH]
-  · have before := UInt64.lt_iff_toNat_lt.mp (getBlockRootAtSlot_read read).1
-    rw [slot] at before
-    simp [GENESIS_SLOT] at before
 
 /-- Two states with the same slot and buffer of roots have the same links. -/
 private theorem rootLinks_congr {fork post : Fork} {state : BeaconState preset fork}
@@ -329,7 +338,8 @@ private theorem RootsAbove.of_advanceSlot (positive : 0 < preset.SLOTS_PER_EPOCH
     by_cases same : after.currentJustifiedCheckpoint = state.currentJustifiedCheckpoint
     · rw [same]
       exact carried true _ currentLe
-    · obtain ⟨near, rootOk⟩ := advanceSlot_getBlockRoot_currentJustified_of_ne window computed same
+    · obtain ⟨near, rootOk, -⟩ :=
+        advanceSlot_getBlockRoot_currentJustified_of_ne window computed same
       have nearLe : after.currentJustifiedCheckpoint.epoch.toNat ≤
           (getCurrentEpoch state).toNat := by
         rcases near with epoch | epoch <;> rw [epoch]

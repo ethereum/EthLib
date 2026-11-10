@@ -2228,7 +2228,7 @@ A constant validator set then gives the model of Casper FFG and Gasper §4.
 A slack link weakens a supermajority link by a second set for its target: the bound adds twice the stake of the target set outside that second set.
 The beacon chain needs that slack, since it weighs the attesters of the previous epoch against the active balance of the current one.
 A slack link also lets each checkpoint have a set of weights, each a stake for every validator, and holds when its bound holds under one of them.
-A refinement from the beacon state puts in that set the effective balances of each state whose step justifies the checkpoint.
+A refinement from the beacon state puts in that set the effective balances of each state at the last slot of the epoch of the checkpoint or of the next one, when that state records the root of the checkpoint for its epoch.
 So a balance may change from one checkpoint to the next, and two branches that justify one checkpoint from two states both fit, where one stake function could not.
 Nothing excludes other weights from a set, and the zero weights make every ordered link a slack link, so the bounds say something only when every choice of weights in each set stays close to the reference weights.
 `accountable_safety_dynamic_slack`, `accountable_safety_reference_slack` and `accountable_safety_of_change_slack` (`AccountableSafety.lean`) take slack links, with a validator set and a set of weights for each checkpoint.
@@ -2331,9 +2331,9 @@ The ancestry of the blocks of the link is not shown yet.
 If the two justified checkpoints of the state before the step are slack-justified, so are those of the state after it.
 A new current justified checkpoint must match the state of that step.
 Its set is the active set of its epoch, its set of weights holds the effective balances, and each member of both of its sets is active in the current epoch.
-On one chain only the step that changes the current justified checkpoint reads them, so the effective balances may change before a later step.
+In that single step, only the step that changes the current justified checkpoint reads them, so the effective balances may change before a later step.
 Two branches can justify the same checkpoint in different states; its set of weights holds the balances of both, but its validator set must be the active set of its epoch in both states, and no theorem shows that yet.
-The step asks a match only for the new current justified checkpoint; finalization also reads a previous target that the same step justifies, which a refinement of finality will need to match too.
+That single step asks a match only for the new current justified checkpoint; the hypotheses of a chain step ask it for both recent epochs at each end of an epoch, since finalization also reads a previous target that the same step justifies.
 The step also needs the previous justified epoch below the previous epoch once justification runs, and the source block of each recent link in the chain of its target block.
 `slackJustifiedCheckpoints_of_chain` (`Consensus/Proofs/Transition/FfgSlackChain.lean`) carries these steps along a chain from the genesis state built from deposits, for a set of votes that holds the votes of each block step.
 `slackJustifiedCheckpoints_activeSetAt_of_chainSteps` (`FfgSlackActive.lean`) takes the votes that the block steps of the run cast, the active sets and the effective balances.
@@ -2346,7 +2346,12 @@ Without a collision of header roots, such pairs order the roots by ancestry.
 That order does not depend on the last state, so two branches from one genesis share it.
 It holds the links of every reachable state, so it also holds every collision of header roots among reachable headers, and such collisions exist by counting.
 A collision of header roots makes two conflicting blocks comparable, so this order does not serve a safety theorem for two chains; that needs the order of the states of the given runs, with a named search for a collision.
-No theorem gives a finalized checkpoint of the model along a chain yet.
+`processJustificationAndFinalization_slackBits` and `advanceSlot_slackBits` (`Consensus/Proofs/Transition/FfgFinality.lean`) keep the finalized checkpoint slack-finalized through one step, by the four rules of finalization read as 1- or 2-finalization (Gasper Definition 4.9).
+They carry two facts in the bits of justification: a set bit 0 gives a slack link from the previous to the current justified checkpoint, and a set bit 1 makes the checkpoint two epochs back slack-justified.
+They need a buffer of roots of three epochs, which both presets have.
+`slackFinalized_of_chainSteps`, `slackFinalized_activeSetAt_of_chainSteps` and `slackFinalized_chainRoot_of_chainSteps` (`FfgFinalityChain.lean`) carry this along a chain from the genesis state built from deposits, with the sets, weights and votes of the theorems on justified checkpoints.
+The weights of a checkpoint then hold the effective balances of each state before a slot that ends its epoch or the next one, on a run between genesis and the last state, when that state records the root of the checkpoint for that epoch.
+That genesis state exists only before Altair, so a chain whose genesis is later is out of scope.
 
 ### Engine API
 
