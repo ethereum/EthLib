@@ -19,6 +19,10 @@ What the validity of a response says about its blocks or sidecars.
 - For columns, each index is a requested column.
 - A valid response to a request for sidecars by root has at most as many sidecars as requested.
 - Each of its sidecars is one that the request names.
+- A valid response to a request for payload envelopes by range has increasing slots.
+- Each of its payloads names the one before it as its parent.
+- A valid response to a request for inclusion lists has the requested slot and dependent root.
+- The validator of each list holds a requested seat of the committee.
 -/
 
 @[expose] public section
@@ -272,5 +276,69 @@ theorem isValidDataColumnSidecarsByRootResponse_iff {preset : Preset} {config : 
           identifier.blockRoot = sidecar.blockRoot ∧ sidecar.index ∈ identifier.columns.data := by
   simp [isValidDataColumnSidecarsByRootResponse, columnCount_eq, List.all_eq_true,
     Array.any_eq_true', -Array.any_eq_true]
+
+/-- An envelope may follow another exactly when its slot is higher and its parent is that payload.
+-/
+theorem ResponseEnvelope.next_iff (a b : ResponseEnvelope) :
+    ResponseEnvelope.next a b = true ↔ a.slot < b.slot ∧ b.parentHash = a.blockHash := by
+  simp [ResponseEnvelope.next]
+
+/-- The rules that a valid response for payload envelopes by range meets, and no others. -/
+theorem isValidExecutionPayloadEnvelopesByRangeResponse_iff (config : Config) (fork : Base.Fork)
+    (request : ExecutionPayloadEnvelopesByRangeRequest) (envelopes : List ResponseEnvelope) :
+    isValidExecutionPayloadEnvelopesByRangeResponse config fork request envelopes = true ↔
+      envelopes.length ≤ request.count.toNat ∧
+      envelopes.length ≤ (config.maxRequestBlocks fork).toNat ∧
+      (∀ envelope ∈ envelopes, request.startSlot.toNat ≤ envelope.slot.toNat ∧
+        envelope.slot.toNat < request.startSlot.toNat + request.count.toNat) ∧
+      (∀ i (h : i + 1 < envelopes.length),
+        envelopes[i].slot < envelopes[i + 1].slot ∧
+          envelopes[i + 1].parentHash = envelopes[i].blockHash) := by
+  simp only [isValidExecutionPayloadEnvelopesByRangeResponse, Bool.and_eq_true,
+    decide_eq_true_eq, List.all_eq_true, slotInRange_iff, allAdjacent_iff,
+    ResponseEnvelope.next_iff, and_assoc]
+
+/-- In a valid response for payload envelopes by range, slots increase along the whole list. -/
+theorem pairwise_of_isValidExecutionPayloadEnvelopesByRangeResponse {config : Config}
+    {fork : Base.Fork} {request : ExecutionPayloadEnvelopesByRangeRequest}
+    {envelopes : List ResponseEnvelope}
+    (valid : isValidExecutionPayloadEnvelopesByRangeResponse config fork request envelopes = true) :
+    envelopes.Pairwise (fun a b => a.slot < b.slot) := by
+  simp only [isValidExecutionPayloadEnvelopesByRangeResponse, Bool.and_eq_true] at valid
+  exact pairwise_of_allAdjacent (s := fun (a b : ResponseEnvelope) => a.slot < b.slot)
+    (fun a b next => ((ResponseEnvelope.next_iff a b).mp next).1)
+    (fun _ _ _ => UInt64.lt_trans) valid.2
+
+/-- The rules that a valid response for payload envelopes by root meets, and no others. -/
+theorem isValidExecutionPayloadEnvelopesByRootResponse_iff {config : Config}
+    (request : ExecutionPayloadEnvelopesByRootRequest config) (envelopes : List ResponseEnvelope) :
+    isValidExecutionPayloadEnvelopesByRootResponse request envelopes = true ↔
+      envelopes.length ≤ request.data.size ∧
+        ∀ envelope ∈ envelopes, envelope.beaconBlockRoot ∈ request.data := by
+  simp [isValidExecutionPayloadEnvelopesByRootResponse, List.all_eq_true]
+
+/-- A request asks for a validator exactly when the validator holds a seat whose bit is set. -/
+theorem InclusionListsByIndicesRequest.asksFor_iff {preset : Preset}
+    (request : InclusionListsByIndicesRequest preset) (committee : InclusionListCommittee preset)
+    (validator : ValidatorIndex) :
+    request.asksFor committee validator = true ↔
+      ∃ seat, ∃ h : seat < preset.INCLUSION_LIST_COMMITTEE_SIZE.toNat,
+        request.indices.bits[seat] = true ∧ committee[seat] = validator := by
+  simp [InclusionListsByIndicesRequest.asksFor, Vector.any_eq_true]
+
+/-- The rules that a valid response for inclusion lists by indices meets, and no others. -/
+theorem isValidInclusionListsByIndicesResponse_iff {preset : Preset} (config : Config)
+    (request : InclusionListsByIndicesRequest preset) (committee : InclusionListCommittee preset)
+    (lists : List InclusionList) :
+    isValidInclusionListsByIndicesResponse config request committee lists = true ↔
+      lists.length ≤ request.indices.bits.toList.count true ∧
+      lists.length ≤ config.MAX_REQUEST_INCLUSION_LIST.toNat ∧
+      ∀ list ∈ lists, list.slot = request.slot ∧ list.dependentRoot = request.dependentRoot ∧
+        ∃ seat, ∃ h : seat < preset.INCLUSION_LIST_COMMITTEE_SIZE.toNat,
+          request.indices.bits[seat] = true ∧ committee[seat] = list.validatorIndex := by
+  simp only [isValidInclusionListsByIndicesResponse, InclusionListsByIndicesRequest.listCount,
+    Bool.and_eq_true, decide_eq_true_eq, List.all_eq_true, beq_iff_eq,
+    InclusionListsByIndicesRequest.asksFor_iff, and_assoc]
+  simp
 
 end EthLib.Consensus.Proofs.ReqResp.Validity

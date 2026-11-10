@@ -10,6 +10,8 @@ When the response of a request and response protocol is valid for its request.
 
 Each check reads only the request and the items of the response.
 
+The check of inclusion lists also reads the committee of their slot.
+
 So the rules that need the chain of the responder stay out, such as sending the first block it has.
 
 ## Blocks by range
@@ -61,10 +63,44 @@ The request names sidecars by the root of their block and their index.
 
 The protocol does not forbid a sidecar twice in one response, so these checks allow it.
 
+## Payload envelopes
+
+From Gloas, a request names the payload envelopes of a range of slots, or of some block roots.
+
+The rules of a range follow those of blocks by range.
+
+- The response has at most the count of envelopes, and at most the request limit of the fork.
+- Each envelope lies in the requested slots, with slots that increase.
+- The payload of each envelope names the payload before it as its parent.
+
+That last rule holds because the envelopes come from one chain.
+
+A block whose payload is missing gives no envelope, and the next payload builds on the one before.
+
+By root, the response has at most as many envelopes as requested roots.
+
+The block root of each envelope is one of the requested roots.
+
+## Inclusion lists by indices
+
+From Heze, a request names the inclusion lists of a slot, by seats of its committee.
+
+The committee is the inclusion list committee of the slot, on the chain of the dependent root.
+
+So this check also reads that committee.
+
+- The response has at most as many lists as requested seats, and at most the request limit.
+- Each list has the requested slot and dependent root.
+- The validator of each list holds a requested seat of the committee.
+
 [EIP-4844] adds the blob protocols, and [EIP-7594] the column protocols.
+
+[EIP-7732] adds the payload envelopes, and [EIP-7805] the inclusion lists.
 
 [EIP-4844]: https://eips.ethereum.org/EIPS/eip-4844#networking
 [EIP-7594]: https://eips.ethereum.org/EIPS/eip-7594#networking
+[EIP-7732]: https://eips.ethereum.org/EIPS/eip-7732#specification
+[EIP-7805]: https://eips.ethereum.org/EIPS/eip-7805#specification
 -/
 
 @[expose] public section
@@ -237,5 +273,73 @@ def isValidDataColumnSidecarsByRootResponse {preset : Preset} {config : Config}
   sidecars.length ≤ request.columnCount &&
     sidecars.all (fun sidecar => request.data.any (fun identifier =>
       identifier.blockRoot == sidecar.blockRoot && identifier.columns.data.contains sidecar.index))
+
+/-- What a response check reads from a payload envelope, from Gloas.
+
+It reads the slot and the hash of the payload, the hash of its parent and the root of its block. -/
+structure ResponseEnvelope where
+  /-- The slot of the payload. -/
+  slot : Slot
+  /-- The root of the beacon block whose bid the payload fulfils. -/
+  beaconBlockRoot : Root
+  /-- The hash of the parent execution block. -/
+  parentHash : Hash32
+  /-- The hash of the execution block. -/
+  blockHash : Hash32
+  deriving DecidableEq, Repr
+
+/-- What a response check reads from a signed payload envelope, from Gloas. -/
+def ResponseEnvelope.ofSigned {preset : Preset} {fork : Fork} (gloas : .glamsterdam ≤ fork)
+    (envelope : SignedExecutionPayloadEnvelope preset fork) : ResponseEnvelope :=
+  let payload := envelope.message.payload
+  ⟨payload.slotNumber gloas, envelope.message.beaconBlockRoot, payload.parentHash,
+    payload.blockHash⟩
+
+/-- Whether a payload envelope may follow another in a response by range.
+
+It has a higher slot, and its payload names the payload before it as its parent. -/
+def ResponseEnvelope.next (a b : ResponseEnvelope) : Bool :=
+  a.slot < b.slot && b.parentHash == a.blockHash
+
+/-- Whether the envelopes of a response are valid for a request for payload envelopes by range.
+
+The fork is the one in effect when the request is served; it sets the request limit. -/
+def isValidExecutionPayloadEnvelopesByRangeResponse (config : Config) (fork : Fork)
+    (request : ExecutionPayloadEnvelopesByRangeRequest) (envelopes : List ResponseEnvelope) :
+    Bool :=
+  envelopes.length ≤ request.count.toNat &&
+    envelopes.length ≤ (config.maxRequestBlocks fork).toNat &&
+    envelopes.all (fun envelope => slotInRange request.startSlot request.count envelope.slot) &&
+    allAdjacent ResponseEnvelope.next envelopes
+
+/-- Whether the envelopes of a response are valid for a request for payload envelopes by root. -/
+def isValidExecutionPayloadEnvelopesByRootResponse {config : Config}
+    (request : ExecutionPayloadEnvelopesByRootRequest config)
+    (envelopes : List ResponseEnvelope) : Bool :=
+  envelopes.length ≤ request.data.size &&
+    envelopes.all (fun envelope => request.data.contains envelope.beaconBlockRoot)
+
+/-- The number of inclusion lists that a request asks for: the seats whose bit is set. -/
+def InclusionListsByIndicesRequest.listCount {preset : Preset}
+    (request : InclusionListsByIndicesRequest preset) : Nat :=
+  request.indices.bits.toList.count true
+
+/-- Whether a validator holds a seat of a committee that a request asks for. -/
+def InclusionListsByIndicesRequest.asksFor {preset : Preset}
+    (request : InclusionListsByIndicesRequest preset) (committee : InclusionListCommittee preset)
+    (validator : ValidatorIndex) : Bool :=
+  (request.indices.bits.zip committee).any fun (asked, member) => asked && member == validator
+
+/-- Whether the lists of a response are valid for a request for inclusion lists by indices.
+
+The committee is the inclusion list committee of the slot, on the chain of the dependent root. -/
+def isValidInclusionListsByIndicesResponse {preset : Preset} (config : Config)
+    (request : InclusionListsByIndicesRequest preset) (committee : InclusionListCommittee preset)
+    (lists : List InclusionList) : Bool :=
+  lists.length ≤ request.listCount &&
+    lists.length ≤ config.MAX_REQUEST_INCLUSION_LIST.toNat &&
+    lists.all fun list =>
+      list.slot == request.slot && list.dependentRoot == request.dependentRoot &&
+        request.asksFor committee list.validatorIndex
 
 end EthLib.Consensus
