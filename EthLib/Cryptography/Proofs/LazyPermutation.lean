@@ -80,7 +80,9 @@ theorem mem_of_mem_support_uniformFrom {X : Type} {l : List X} (hne : l ≠ []) 
   by_contra h
   exact (mem_support_iff_prEvent_ne_zero _ x).1 hx (prEvent_uniformFrom_eq_of_notMem hne d h)
 
-/-- A draw from a nonempty list gives an event the share of the list in it as chance. -/
+/-- A draw from a nonempty list meets an event with chance its entries that meet it over its length.
+
+The entries are counted with repeats. -/
 theorem prEvent_uniformFrom_eq_countP {X : Type} {l : List X} (hl : l ≠ []) (d : X)
     (p : X → Prop) [DecidablePred p] :
     Pr{let y ← uniformFrom l d}[p y] = (l.countP (fun y => decide (p y)) : ℝ≥0∞) / l.length := by
@@ -183,7 +185,7 @@ theorem isQueryBoundP_liftM_permComp {α : Type} (oa : ProbComp α) :
     rw [isQueryBoundP_query_iff]
     simp
 
-/-- Coins pass through an oracle of the permutation, and leave its state unchanged. -/
+/-- With coins passed through beside a permutation oracle, a coin query keeps the state. -/
 theorem passthrough_add_inl_run {σ : Type} (perm : QueryImpl (PermSpec A) (StateT σ ProbComp))
     (n : ℕ) (s : σ) :
     ((unifSpec.passthrough + perm) (.inl n)).run s =

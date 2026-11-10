@@ -14,7 +14,7 @@ This is the chosen-message game with no signing query, as a lemma below proves.
 
 The game draws `Π` up front.
 
-As a program of the permutation oracle, its final check asks for `Π` once more than the forger.
+As a program of the permutation oracle, its final check asks for `Π` at most once more than the forger.
 
 With `Π` sampled one answer at a time, it has the same law.
 
@@ -34,13 +34,19 @@ The key-only game is the variant of their Figure 1 named in their Definition 4.
 
 Their key generation avoids the scalar `0`, and the key here may be `0`, which never verifies.
 
+So the advantage here is theirs times `(n - 1) / n`, where `n` is the number of scalars.
+
+No theorem states it.
+
 The swap is the step from Game G0 to Game G1 of their §4.2, in the proof of their Theorem 2.
 
 Their Game G1 is in their Figure 7, and stops with `0` where the flag rises here.
 
-Their `Q` bounds every query of the game, as `q + 1` does here.
+Their `Q` bounds the forger's queries, and their forger asks the check's query first.
 
-So their bound `Q² / 2^L` is at least the one here.
+Here the check may ask once more, hence `q + 1`.
+
+Their bound `Q² / 2^L` is still at least the one here.
 -/
 
 @[expose] public section

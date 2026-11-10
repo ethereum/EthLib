@@ -154,7 +154,7 @@ def lazyExperiment (scheme : Scheme F G A M) (fuel : ℕ) (adversary : Adversary
 omit [Field F] [DecidableEq F] [AddCommGroup G] [Module F G] [DecidableEq G] [SampleableType F]
   [DecidableEq M] [FinEnum A] in
 /-- With `π`, the conversion asked of the oracle is the conversion by `π`. -/
-theorem simulateQ_permImpl_conversionQ (scheme : Scheme F G A M) (π : Equiv.Perm A)
+private theorem simulateQ_permImpl_conversionQ (scheme : Scheme F G A M) (π : Equiv.Perm A)
     (R : G) : simulateQ (permImpl π) (conversionQ scheme R) = pure (conversion scheme π R) := by
   simp [conversionQ, conversion, permImpl, permOracle]
 

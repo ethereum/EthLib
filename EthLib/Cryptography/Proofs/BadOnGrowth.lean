@@ -64,7 +64,6 @@ theorem BadOnGrowthBy.le_size_of_mem_support {impl : QueryImpl spec (StateT σ P
   simulateQ_run_preservesInv impl (fun st ↦ size s ≤ size st)
     (fun t s₀ hs₀ z hz ↦ hs₀.trans (h.mono t s₀ z hz)) oa s le_rfl
 
-
 /-- **The union bound over new entries, with a chance for each size.**
 
 Take a run from a good state of size `k`, which always ends with at most `n` entries.
