@@ -16,7 +16,11 @@ It is also at most the largest effective balance, which is the cap before Electr
 
 So the genesis state is within any budget that covers the sum of the amounts of the deposits.
 
-Genesis comes before Altair, so there are no inactivity scores and no pending deposits.
+This candidate genesis comes before Altair.
+
+So there are no inactivity scores and no pending deposits.
+
+There are no balances left to consume either, as those start at Electra.
 
 The slashed balances all start at zero.
 -/
@@ -78,31 +82,17 @@ private theorem applyPendingDeposit_slashings {state after : BeaconState preset 
     obtain ⟨_, rfl⟩ := setBalance_ok set
     rfl
 
-/-- A deposit credited at once to a copy of a state keeps the slashed balances of that state.
-
-It raises the sum of the balances of that state by at most its amount. -/
-private theorem applyPendingDeposit_le {middle state after : BeaconState preset fork}
-    {deposit : PendingDeposit} (balances : middle.balances = state.balances)
-    (validators : middle.validators = state.validators)
-    (slashings : middle.slashings = state.slashings) (holds : BalancesMatch state)
-    (computed : applyPendingDeposit config checks middle deposit = .ok after) :
-    after.slashings = state.slashings ∧
-      balanceSum after ≤ balanceSum state + deposit.amount.toNat := by
-  have matched : BalancesMatch middle := by
-    unfold BalancesMatch at holds ⊢
-    rw [balances, validators]
-    exact holds
-  have same : balanceSum middle = balanceSum state := by unfold balanceSum; rw [balances]
-  refine ⟨(applyPendingDeposit_slashings computed).trans slashings, ?_⟩
-  rcases balanceSum_applyPendingDeposit computed matched with raised | ⟨rfl, -⟩
-  · omega
-  · omega
+/-- A fork before Altair is not at least Electra. -/
+private theorem not_pectra_of_lt_altair {fork : Base.Fork} (before : fork < .altair) :
+    ¬Fork.pectra ≤ fork := fun le =>
+  Nat.lt_irrefl _ (Nat.lt_of_lt_of_le (Nat.lt_trans before (by decide)) le)
 
 /-- A deposit at genesis keeps one balance for each validator and the slashed balances.
 
 It raises the sum of the balances by at most its amount. -/
-private theorem genesisDeposit_le {state after : BeaconState preset fork} (before : fork < .altair)
-    {leaves : Array DepositData} {entry : Deposit × Nat} (holds : BalancesMatch state)
+private theorem balanceSum_genesisDeposit_le {state after : BeaconState preset fork}
+    (before : fork < .altair) {leaves : Array DepositData} {entry : Deposit × Nat}
+    (holds : BalancesMatch state)
     (computed : genesisDeposit config checks (Nat.lt_trans before (by decide)) leaves state entry =
       .ok after) :
     BalancesMatch after ∧ after.slashings = state.slashings ∧
@@ -111,10 +101,17 @@ private theorem genesisDeposit_le {state after : BeaconState preset fork} (befor
   simp only [genesisDeposit, bind_ok_iff] at computed
   obtain ⟨_, _, deposited⟩ := computed
   obtain ⟨_, _, _, _, applied⟩ := processDeposit_ok deposited
-  have notElectra : ¬Fork.pectra ≤ fork := fun le =>
-    Nat.lt_irrefl _ (Nat.lt_of_lt_of_le (Nat.lt_trans before (by decide)) le)
-  simp only [applyDeposit, notElectra, ↓reduceDIte] at applied
-  exact applyPendingDeposit_le (by rfl) (by rfl) (by rfl) holds applied
+  simp only [applyDeposit, not_pectra_of_lt_altair before, ↓reduceDIte] at applied
+  have copy : ∀ (middle : BeaconState preset fork) (deposit : PendingDeposit),
+      middle.balances = state.balances → middle.slashings = state.slashings →
+      applyPendingDeposit config checks middle deposit = .ok after →
+      after.slashings = state.slashings ∧
+        balanceSum after ≤ balanceSum state + deposit.amount.toNat := by
+    intro middle deposit balances slashings applied
+    have same : balanceSum middle = balanceSum state := by unfold balanceSum; rw [balances]
+    have := balanceSum_applyPendingDeposit_le applied
+    exact ⟨(applyPendingDeposit_slashings applied).trans slashings, by omega⟩
+  exact copy _ _ (by rfl) (by rfl) applied
 
 /-- Activation at genesis replaces one validator, keeping the other fields.
 
@@ -222,7 +219,7 @@ private theorem foldlM_activateAtGenesis {state after : BeaconState preset fork}
 
 /-- A candidate genesis state is within every budget that covers the amounts of its deposits.
 
-The bound on the inactivity scores can be any number, as genesis comes before Altair. -/
+The bound on the inactivity scores can be any number, as this genesis comes before Altair. -/
 theorem initializeBeaconStateFromEth1_withinBudget {eth1BlockHash : Hash32}
     {eth1Timestamp : UInt64} {deposits : Array Deposit} {after : BeaconState preset fork}
     {budget : Nat} (scoreBound : Nat)
@@ -235,8 +232,7 @@ theorem initializeBeaconStateFromEth1_withinBudget {eth1BlockHash : Hash32}
     rfl⟩ := initializeBeaconStateFromEth1_ok computed
   clear computed
   have notGloas : fork < .glamsterdam := Nat.lt_trans before (by decide)
-  have notElectra : ¬Fork.pectra ≤ fork := fun le =>
-    Nat.lt_irrefl _ (Nat.lt_of_lt_of_le (Nat.lt_trans before (by decide)) le)
+  have notElectra := not_pectra_of_lt_altair before
   -- The deposits keep one balance for each validator and the slashed balances.
   obtain ⟨depositedMatch, depositedSlashings, depositedSum⟩ := foldlM_ok_weighted
     (fun current bound => BalancesMatch current ∧
@@ -244,7 +240,7 @@ theorem initializeBeaconStateFromEth1_withinBudget {eth1BlockHash : Hash32}
         eth1BlockHash deposits.size.toUInt64 bodyRoot).slashings ∧ balanceSum current ≤ bound)
     (fun entry : Deposit × Nat => entry.1.data.amount.toNat)
     (fun current entry next bound ⟨holds, slashings, summed⟩ step => by
-      obtain ⟨holds', slashings', summed'⟩ := genesisDeposit_le before holds step
+      obtain ⟨holds', slashings', summed'⟩ := balanceSum_genesisDeposit_le before holds step
       exact ⟨holds', slashings'.trans slashings, by omega⟩)
     (c := 0)
     ⟨(emptyGenesisState_invariant before genesisTime eth1BlockHash _ bodyRoot).balancesMatch, rfl,
@@ -268,7 +264,8 @@ theorem initializeBeaconStateFromEth1_withinBudget {eth1BlockHash : Hash32}
     rw [this]
     exact min_sub_mod_le _ _ _
   refine ⟨activated.validators.bound notGloas, matched, ?_, ?_, ?_,
-    fun altair => absurd (Nat.lt_of_lt_of_le before altair) (Nat.lt_irrefl _)⟩
+    fun altair => absurd (Nat.lt_of_lt_of_le before altair) (Nat.lt_irrefl _),
+    fun electra => absurd electra notElectra⟩
   · intro validator member
     obtain ⟨i, inside, rfl⟩ := Array.mem_iff_getElem.mp member
     change i < activated.validators.data.size at inside

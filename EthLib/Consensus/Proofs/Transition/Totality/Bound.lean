@@ -5,6 +5,8 @@ public import EthLib.Base.Proofs.Uint64
 public import EthLib.Consensus.Config
 public import EthLib.Consensus.Proofs.Accessors
 public import EthLib.Consensus.Proofs.Transition.Operations
+public import Mathlib.Algebra.Order.BigOperators.Group.List
+public import Mathlib.Algebra.Order.Group.Nat
 
 /-!
 # Proofs: the bounds under which a run of slots succeeds
@@ -33,15 +35,21 @@ They are the sum of the effective balances and the sum of the recent slashed bal
 
 It shows that a checked sum of a list and the total active balance succeed under such bounds.
 
-It then names the bounds on a state under which a run of slots succeeds.
+It then names the bounds on the amounts of a state that a run of slots needs.
 
 They hold a budget of Gwei, and a bound on the inactivity scores.
+
+They are not enough alone.
+
+A run also needs the budget below a ceiling, and its epochs within a horizon.
+
+It also needs the lists of the state to have matching sizes, and its indices to be in range.
 
 The budget covers the larger of each balance and its effective balance, and the pending deposits.
 
 It also covers the recent slashed balances, on their own.
 
-A run of slots adds no deposit and no slashing, which only blocks bring.
+A run of slots adds no pending deposit and no slashed balance, which only blocks bring.
 
 The budget is an assumption about the ether at stake, not a fact that a state keeps forever.
 -/
@@ -197,7 +205,7 @@ def pendingDepositSum (state : BeaconState preset fork) : Nat :=
   if electra : .pectra ≤ fork then pendingAmount (state.pendingDeposits electra).data.toList
   else 0
 
-/-- The bounds on a state under which a run of slots succeeds.
+/-- The bounds on the amounts of a state that a run of slots needs.
 
 The registry stays within its limit, and has one balance for each validator.
 
@@ -207,7 +215,9 @@ The larger of each balance and its effective balance, plus the pending deposits,
 
 The slashed balances of the recent epochs fit in the same budget, on their own.
 
-From Altair each inactivity score is at most a bound. -/
+From Altair each inactivity score is at most a bound.
+
+From Electra the balances left to consume for deposits and for exits fit in the budget too. -/
 structure WithinBudget (budget scoreBound : Nat) (state : BeaconState preset fork) : Prop where
   within : state.RegistryWithinLimit
   matched : BalancesMatch state
@@ -217,6 +227,9 @@ structure WithinBudget (budget scoreBound : Nat) (state : BeaconState preset for
   slashed : slashedBalanceSum state ≤ budget
   scored : ∀ altair : .altair ≤ fork, ∀ score ∈ (state.inactivityScores altair).data,
     score.toNat ≤ scoreBound
+  carried : ∀ electra : .pectra ≤ fork,
+    (state.depositBalanceToConsume electra).toNat ≤ budget ∧
+      (state.exitBalanceToConsume electra).toNat ≤ budget
 
 namespace WithinBudget
 
@@ -235,11 +248,6 @@ private theorem sum_map_le_sum_zipWith {α β : Type} (f : α → Nat) (g : α �
     have := bounded a b
     omega
 
-/-- A member of a list of natural numbers is at most its sum. -/
-private theorem le_sum_of_mem {x : Nat} : ∀ {xs : List Nat}, x ∈ xs → x ≤ xs.sum
-  | _ :: _, .head _ => by simp
-  | _ :: _, .tail _ member => by have := le_sum_of_mem member; simp; omega
-
 /-- The term of the stake sum at an index of the registry is at most the stake sum. -/
 private theorem le_stakeSum {state : BeaconState preset fork} (matched : BalancesMatch state)
     (i : Nat) (inside : i < state.validators.data.size) :
@@ -247,7 +255,7 @@ private theorem le_stakeSum {state : BeaconState preset fork} (matched : Balance
       (state.balances.data[i]'(by unfold BalancesMatch at matched; omega)).toNat ≤
       stakeSum state := by
   unfold stakeSum
-  apply le_sum_of_mem
+  apply List.le_sum_of_mem
   rw [List.mem_iff_getElem]
   refine ⟨i, by unfold BalancesMatch at matched; simp; omega, ?_⟩
   simp
