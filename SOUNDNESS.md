@@ -472,8 +472,10 @@ That is the step from Game G0 to Game G1 of §4.2 of the source, in the proof of
 The source draws the key from the nonzero scalars; the key-only game here draws it from all scalars, and the key `0` never verifies.
 So its advantage is the source's times `(n - 1) / n`, where `n` is the number of scalars.
 `keyOnlyIndepAdvantage_eq_outside` (`Proofs/Secp256k1/Security/KeyOnlyOutside.lean`) proves that the advantage with independent answers stays the same when each new forward answer is one query to an outside oracle with no input.
-A replay fork can later rewind the run at that oracle's query; unlike Figure 2 of the source, it draws the coins after the fork again.
-No theorem forks the run yet.
+`forward_point_eq_answer_ne_of_mem_support_contextFork` proves that the two runs returned by a replay fork at the new forward query of the forgery's point share that point and got different answers there.
+`le_prEvent_isSome_contextFork_keyOnlyOutsideRun` bounds the chance of the fork from below on each fixed key, in the form of Lemma 1 of the source; Lemma 1 draws the key at random, and no theorem averages over the key yet.
+Unlike Figure 2 of the source, the fork draws the coins after the fork point again.
+No theorem yet proves that the check's answer from the bijection is the logged answer at the fork index, nor extracts the key from the two forgeries.
 `ecdsa_verify_eq_verify_ecdsaScheme` (`Proofs/Secp256k1/Security/Refinement.lean`) proves that `verify` is the game's verification, with the bijection the identity, for `r` and `s` below `n`.
 `exists_signNonce_of_sign` proves that every signature from `sign` is the game's signature for some nonzero nonce; that is correctness of signing, and says nothing about how RFC 6979 draws the nonces.
 The game draws the bijection uniformly, so a bound on it would apply to EthLib, where the bijection is the identity, only under the heuristic of the source that the identity behaves as a bijective random oracle.
