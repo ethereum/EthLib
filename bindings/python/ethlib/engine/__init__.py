@@ -71,6 +71,37 @@ def get_blobs(
     return _native.engine_get_blobs(entries, serving, max_request, fork, request)
 
 
+# One withdrawal of a body: the index, the validator index, the 20-byte address and the amount.
+WithdrawalEntry: TypeAlias = tuple[int, int, bytes, int]
+
+# One block of a store of bodies: the block hash, its number if canonical, and its fork.
+# Then come its transactions, its withdrawals (None before Shapella) and its block access list.
+# The access list is None before Glamsterdam, and from Glamsterdam when the node pruned it.
+# A store holds each hash once, one canonical block per number, and one at the latest number.
+BodyEntry: TypeAlias = tuple[
+    bytes, int | None, str, Sequence[bytes], Sequence[WithdrawalEntry] | None, bytes | None
+]
+
+
+def get_payload_bodies(
+    store: Sequence[BodyEntry], latest: int, method: str, params: list, *, max_request: int = 32
+) -> list[dict[str, Any] | None]:
+    """The answer to an `engine_getPayloadBodiesByHash` or `ByRange` call, from a store."""
+    request = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
+    entries = [
+        (
+            block_hash,
+            number,
+            fork,
+            list(transactions),
+            None if withdrawals is None else list(withdrawals),
+            access_list,
+        )
+        for block_hash, number, fork, transactions, withdrawals, access_list in store
+    ]
+    return _native.engine_get_payload_bodies(entries, latest, max_request, request)
+
+
 def prepare_execution_payload(
     name: str,
     fork: str,
@@ -140,6 +171,9 @@ __all__ = [
     "forkchoice_updated",
     "get_blobs",
     "PoolEntry",
+    "get_payload_bodies",
+    "BodyEntry",
+    "WithdrawalEntry",
     "prepare_execution_payload",
     "prepare_execution_payload_gloas",
     "EngineError",

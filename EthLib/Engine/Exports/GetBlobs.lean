@@ -40,6 +40,7 @@ open EthLib.Exports (Result PyValue pyExport)
 open EthLib.Base
 open EthLib.Cryptography.Kzg
 open EthLib.Cryptography.Kzg.Constants
+open EthLib.Engine.Json (optionJson listJson)
 
 /-- One entry of the pool: the hash, the blob, the blob proof and the cells with their proofs. -/
 abbrev PoolEntry :=
@@ -63,11 +64,6 @@ def getBlobsVersion (method : String) : Option Nat :=
 /-- Fixed bytes as Engine API data. -/
 def hexJson {n : Nat} (bytes : Vector UInt8 n) : Json := Json.dataJson bytes.toList
 
-/-- The JSON of a value, or `null`. -/
-def optionJson {α : Type} (f : α → Json) : Option α → Json
-  | some a => f a
-  | none => .null
-
 /-- The JSON of a blob and its proof. -/
 def blobAndProofV1Json (x : BlobAndProofV1) : Json :=
   Json.mkObj [("blob", hexJson x.blob), ("proof", hexJson x.proof)]
@@ -81,9 +77,6 @@ def blobCellsJson (x : BlobCellsAndProofsV1) : Json :=
   Json.mkObj [
     ("blob_cells", .arr (x.cells.toArray.map (optionJson (hexJson ·.1)))),
     ("proofs", .arr (x.cells.toArray.map (optionJson (hexJson ·.2))))]
-
-/-- The JSON of a list. -/
-def listJson {α : Type} (f : α → Json) (items : List α) : Json := .arr (items.toArray.map f)
 
 /-- The answer to an `engine_getBlobs` request, from a blob pool.
 

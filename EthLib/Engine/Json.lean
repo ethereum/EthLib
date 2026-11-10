@@ -230,6 +230,24 @@ def payloadV4 (j : Json) : Decode (AnyPayload × ByteArray × UInt64) := do
 def dataJson (bytes : List UInt8) : Json :=
   .str (hexString bytes)
 
+/-- The JSON of a value, or `null`. -/
+def optionJson {α : Type} (f : α → Json) : Option α → Json
+  | some a => f a
+  | none => .null
+
+/-- The JSON of a list. -/
+def listJson {α : Type} (f : α → Json) (items : List α) : Json := .arr (items.toArray.map f)
+
+/-- A number as an Engine API quantity: `0x`, then its hex digits without leading zeros. -/
+def quantityJson (n : Nat) : Json :=
+  .str ("0x" ++ String.ofList (Nat.toDigits 16 n))
+
+/-- A withdrawal as the Engine API writes it. -/
+def withdrawalJson (w : Withdrawal) : Json :=
+  Json.mkObj [("index", quantityJson w.index.toNat),
+    ("validatorIndex", quantityJson w.validatorIndex.toNat),
+    ("address", dataJson w.address.toList), ("amount", quantityJson w.amount.toNat)]
+
 /-- A field from fork `f`, which must be present exactly when the fork has it. -/
 def since {α : Type} {f fork : Fork} (what : String) : Option α → Decode (Since f fork α)
   | some x => if f ≤ fork then pure fun _ => x else invalid s!"{what}: present before its fork"
@@ -258,5 +276,9 @@ open EthLib.Base
 /-- The value of a field from fork `f`, if the fork has the field. -/
 def sinceValue {fork : Fork} {α : Type} {f : Fork} (x : Since f fork α) : Option α :=
   if h : f ≤ fork then some (x h) else none
+
+/-- A request for more items than the node takes at once is too large. -/
+def checkRequestSize (maxRequest count : Nat) : Except EngineError Unit :=
+  if maxRequest < count then throw .tooLargeRequest else pure ()
 
 end EthLib.Engine
