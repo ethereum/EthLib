@@ -87,9 +87,17 @@ It is zero when the two weights agree on the set. -/
 def weightChange (w₀ w : ν → ℕ) (S : Finset ν) : ℕ :=
   stake (fun v => w v - w₀ v) S + 2 * stake (fun v => w₀ v - w v) S
 
+theorem weightChange_eq_zero {w₀ : ν → ℕ} {S : Finset ν} (agree : ∀ v ∈ S, w₀ v = w v) :
+    weightChange w₀ w S = 0 := by
+  have gain : stake (fun v => w v - w₀ v) S = 0 :=
+    Finset.sum_eq_zero fun v member => by rw [agree v member, Nat.sub_self]
+  have loss : stake (fun v => w₀ v - w v) S = 0 :=
+    Finset.sum_eq_zero fun v member => by rw [agree v member, Nat.sub_self]
+  simp [weightChange, gain, loss]
+
 @[simp]
-theorem weightChange_self (S : Finset ν) : weightChange w w S = 0 := by
-  simp [weightChange, stake]
+theorem weightChange_self (S : Finset ν) : weightChange w w S = 0 :=
+  weightChange_eq_zero fun _ _ => rfl
 
 /-- A quorum under weights `w` is a quorum under weights `w₀`, up to the change of the weights.
 
@@ -97,8 +105,10 @@ The quorum `A` of `L` holds two thirds of the stake of `L` under `w`, up to a sl
 
 Under `w₀` the slack grows by the change from `w₀` to `w` on `L`.
 
-A gain counts once and a loss twice, as for a validator that joins or leaves the set. -/
-theorem two_mul_stake_le_of_weights {w₀ : ν → ℕ} {L A : Finset ν} {a : ℕ} (hA : A ⊆ L)
+A gain counts once and a loss twice, as for a validator that joins or leaves the set.
+
+The bound overcounts: it also charges the loss of a member of the quorum. -/
+theorem two_mul_stake_le_add_weightChange {w₀ : ν → ℕ} {L A : Finset ν} {a : ℕ} (hA : A ⊆ L)
     (h : 2 * stake w L ≤ 3 * stake w A + a) :
     2 * stake w₀ L ≤ 3 * stake w₀ A + weightChange w₀ w L + a := by
   -- Pointwise, `w + (w₀ - w) = w₀ + (w - w₀)` and `w ≤ w₀ + (w - w₀)`.

@@ -17,6 +17,14 @@ A target is read at the step of its epoch and again at the next step, with new b
 
 So the sets and weights of a checkpoint need to match only the step that first justifies it.
 
+Along one chain that step is unique.
+
+Two branches can justify one checkpoint from two different states.
+
+One set and one weights for that checkpoint then need the two states to agree on them.
+
+No theorem shows that yet.
+
 Gasper §4.4, Definitions 4.5 and 4.6, justify a checkpoint by a supermajority link.
 
 The slack is the stake of the set `E(V t, U t)` of Gasper §8.6, Definition 8.1.
@@ -41,7 +49,8 @@ variable {preset : Preset} {fork : Base.Fork} {config : Config} {checks : Signat
 Each root maps to a block of the model. -/
 def SlackJustifiedCheckpoints (V U : Models.Ffg.Checkpoint β → Finset ValidatorIndex)
     (w : Models.Ffg.Checkpoint β → ValidatorIndex → ℕ) (genesis : β)
-    (votes : Set (Vote ValidatorIndex β)) (block : Root → β) (state : BeaconState preset fork) : Prop :=
+    (votes : Set (Vote ValidatorIndex β)) (block : Root → β)
+    (state : BeaconState preset fork) : Prop :=
   SlackJustified V U w genesis votes (state.previousJustifiedCheckpoint.toFfg block) ∧
     SlackJustified V U w genesis votes (state.currentJustifiedCheckpoint.toFfg block)
 
@@ -106,9 +115,11 @@ The current justified epoch must be at most the previous epoch.
 
 Once justification runs, the previous justified epoch must be below the previous epoch.
 
-If the step changes the current justified checkpoint, the new one is the checkpoint of its epoch.
+The step may make the checkpoint of the previous or the current epoch the current justified one.
 
-The sets and weights of the model must then match the state for that epoch.
+If that changes the current justified checkpoint, the sets and weights of the model must match.
+
+They must match the state for the epoch of the new checkpoint.
 
 Otherwise they need not match.
 

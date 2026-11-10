@@ -236,9 +236,9 @@ theorem SlackLink.two_mul_stake_le_of_slashable {s₁ t₁ s₂ t₂ : Checkpoin
   classical
   refine (two_mul_stake_le_stake_inter_add_slack V₀ (Finset.filter_subset _ _)
     (Finset.filter_subset _ _)
-    ((two_mul_stake_le_of_weights (Finset.filter_subset _ _) h₁.2.2).trans_eq
+    ((two_mul_stake_le_add_weightChange (Finset.filter_subset _ _) h₁.2.2).trans_eq
       (Nat.add_assoc _ _ _))
-    ((two_mul_stake_le_of_weights (Finset.filter_subset _ _) h₂.2.2).trans_eq
+    ((two_mul_stake_le_add_weightChange (Finset.filter_subset _ _) h₂.2.2).trans_eq
       (Nat.add_assoc _ _ _))).trans
     (Nat.add_le_add_right (Nat.add_le_add_right (Nat.add_le_add_right
       (Nat.mul_le_mul_left 3 (stake_mono ?_)) _) _) _)
@@ -379,6 +379,8 @@ So a validator that counts in the slack weighs as much as one that left.
 
 It stays slashable, but it weakens the quorum of its link.
 
+The bound has content only when the reference weights stay close to the weights of both links.
+
 The two checkpoints do not depend on the reference set or the reference weights. -/
 theorem accountable_safety_reference_slack [DecidableEq ν] {c₁ c₂ : Checkpoint β}
     (h₁ : SlackFinalized V U w genesis votes c₁) (h₂ : SlackFinalized V U w genesis votes c₂)
@@ -465,7 +467,9 @@ Assume that sum is at most `b`.
 
 Then two such slack-justified checkpoints `l` and `r` have slashable validators of both sets.
 
-Their stake `x` under `w₀` satisfies `w₀(V₀) ≤ 3 * x + 2 * b`. -/
+Their stake `x` under `w₀` satisfies `w₀(V₀) ≤ 3 * x + 2 * b`.
+
+The bound has content only when `w₀` stays close to the weights of each such checkpoint. -/
 theorem accountable_safety_of_change_slack [DecidableEq ν] {c₁ c₂ : Checkpoint β}
     (h₁ : SlackFinalized V U w genesis votes c₁) (h₂ : SlackFinalized V U w genesis votes c₂)
     (hc : Conflicting c₁.block c₂.block) (V₀ : Finset ν) (w₀ : ν → ℕ) (b : ℕ)

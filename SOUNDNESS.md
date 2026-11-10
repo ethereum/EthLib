@@ -2124,7 +2124,7 @@ The model in `Consensus/Proofs/Models/Ffg/` follows Casper FFG §2 and Gasper §
 Each checkpoint has its own validator set, as each block has in Gasper §8.6, and a link counts the stake of the set of its target.
 Each checkpoint also has its own weights, the stake of each validator for the links that end there.
 Gasper §8.6 keeps one stake for each validator instead; constant weights give its model.
-A refinement from the beacon state takes the weights of a checkpoint from the effective balances of the state that justifies it, so a balance may change from one checkpoint to the next.
+On one chain, a refinement from the beacon state takes the weights of a checkpoint from the effective balances of the state that justifies it, so a balance may change from one checkpoint to the next.
 A constant validator set with constant weights gives the model of Casper FFG and Gasper §4.
 
 A slack link weakens a supermajority link by a second set for its target: the bound adds twice the stake of the target set outside that second set.
@@ -2231,7 +2231,8 @@ The beacon chain leaves slashed attesters out, and the model counts them, so the
 If the two justified checkpoints of the state before the step are slack-justified, so are those of the state after it.
 A new current justified checkpoint must match the state of that step.
 Its set is the active set of its epoch, its weights are the effective balances on that set, and each member of both of its sets is active in the current epoch.
-Only the step that changes the current justified checkpoint reads them, so the effective balances may change before a later step.
+On one chain only the step that changes the current justified checkpoint reads them, so the effective balances may change before a later step.
+Two branches can justify the same checkpoint in different states, and then one set and one weights for that checkpoint need those states to agree on its active set and effective balances; no theorem shows that yet.
 The step also needs the previous justified epoch below the previous epoch once justification runs, and the source block of each recent link in the chain of its target block.
 No theorem yet turns these steps into a justified or finalized checkpoint of the model along a chain.
 
