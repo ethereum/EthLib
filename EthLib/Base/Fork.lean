@@ -235,6 +235,10 @@ Before `f` no such proof exists, so the field has one value and holds nothing.
 From `f` on, the field holds one value of `α`. -/
 def Since (f fork : Fork) (α : Type) : Type := f ≤ fork → α
 
+/-- A field from fork `f`, read at another fork that has it exactly when the first does. -/
+def Since.congr {f a b : Fork} {α : Type} (h : f ≤ a ↔ f ≤ b) (x : Since f a α) : Since f b α :=
+  fun hb => x (h.mpr hb)
+
 /-- A field that a fork `f` removes, in a type at fork `fork`.
 
 It maps a proof of `fork < f` to a value.

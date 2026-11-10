@@ -1473,7 +1473,7 @@ def engine_new_payload_on_chain(config: dict, state: bytes, recent: list[tuple[s
     """The payload status of an `engine_newPayload` request, on a chain that holds the parent."""
     ...
 
-def engine_forkchoice_updated(tree: list, finalized: str | None, request: dict) -> dict:
+def engine_forkchoice_updated(config: dict, tree: list, finalized: str | None, request: dict) -> dict:
     """The response to an `engine_forkchoiceUpdated` request, against a tree of payloads."""
     ...
 

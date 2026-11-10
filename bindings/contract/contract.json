@@ -9813,7 +9813,8 @@
    "The payload status of an `engine_newPayload` request, on a chain that holds the parent.\n\nThe arguments are the chain configuration, the state, the recent blocks and the request.\n\nA valid payload also gives the RLP forms of its header and of the accounts after it.\n\nOtherwise both are `None`."},
   {"summary":
    "The response to an `engine_forkchoiceUpdated` request, against a tree of payloads.",
-   "signature": "(tree: list, finalized: str | None, request: dict) -> dict",
+   "signature":
+   "(config: dict, tree: list, finalized: str | None, request: dict) -> dict",
    "operation": "EthLib.Engine.Exports.forkchoiceUpdatedExport",
    "method": "engine_forkchoice_updated",
    "errors":
@@ -9826,7 +9827,7 @@
       {"constructor": "invalidPayloadAttributes", "code": 38003}]}],
    "error_class": "EngineError",
    "docstring":
-   "The response to an `engine_forkchoiceUpdated` request, against a tree of payloads.\n\nThe arguments are the tree, the finalized block that the execution layer knows, and the request."},
+   "The response to an `engine_forkchoiceUpdated` request, against a tree of payloads.\n\nThe arguments are the configuration, the tree, the known finalized block and the request."},
   {"summary": "The answer to an `engine_getBlobs` request, from a blob pool.",
    "signature":
    "(pool: list[tuple[bytes, bytes | None, bytes | None, list[tuple[bytes, bytes] | None] | None]], serving: bool, max_request: int, fork: str, request: dict) -> list | None",

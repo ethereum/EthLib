@@ -9,6 +9,15 @@ Not yet released.
 
 ### Changes that break callers
 
+- The forkchoice update now checks the timestamp of payload attributes, on an applied valid head ([#1479](https://github.com/ethereum/EthLib/issues/1479)).
+  A known payload holds the number and the timestamp of its block, so `KnownPayload` has two new fields, `number` and `timestamp`.
+  `forkchoiceUpdatedCall` takes the chain configuration first, and returns the attributes at the fork of their timestamp.
+  Attributes of a fork that the version does not take now give code 38005, `unsupportedFork`.
+  Version 1 takes Paris, version 2 Paris and Shapella, version 3 Dencun to BPO5, and version 4 Glamsterdam.
+  Version 2 with the structure of version 1 from Shapella, or of version 2 before it, gives code 38003.
+  So do attributes whose timestamp is not above that of the head.
+  The C export `eth_engine_forkchoice_updated` takes the configuration first, and each payload of the tree needs `number` and `timestamp`.
+  In Python, `engine.forkchoice_updated` takes the configuration first.
 - The forkchoice update now models `engine_forkchoiceUpdatedV4`, and it checks the structure of the payload attributes on an applied valid head ([#1478](https://github.com/ethereum/EthLib/issues/1478)).
   Attributes that fit no structure of the version now give code 38003, `invalidPayloadAttributes`, where any object gave code 0 before.
   Attributes that fit still give code 0, since no payload build is specified.

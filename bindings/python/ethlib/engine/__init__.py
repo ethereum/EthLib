@@ -37,11 +37,14 @@ def new_payload_on_chain(
     return _native.engine_new_payload_on_chain(config, state, items, request)
 
 
-def forkchoice_updated(tree: list, method: str, params: list, finalized: str | None = None) -> dict:
+def forkchoice_updated(
+    config: dict, tree: list, method: str, params: list, finalized: str | None = None
+) -> dict:
     """The response to an `engine_forkchoiceUpdated` call, against a tree of known payloads."""
+    # Each payload of the tree has a block hash, a parent hash, a validity, a number and a time.
     # The execution layer may know a finalized block, the latest one an earlier update named.
     request = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
-    return _native.engine_forkchoice_updated(tree, finalized, request)
+    return _native.engine_forkchoice_updated(config, tree, finalized, request)
 
 
 # One entry of a blob pool: the versioned hash, the blob, the blob proof, and the 128 cells.

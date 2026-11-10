@@ -8,7 +8,7 @@ import pytest
 from ethlib import engine
 from parity.runners import run_engine_chain
 
-from .cases import check
+from .cases import check, config
 
 ARCHIVE = "execution-specs/tests@v21.0.2/fixtures"
 
@@ -50,15 +50,32 @@ def test_every_chain(archive) -> None:
     """On every chain, each valid payload becomes the head, and the last one is the last block."""
     chains = 0
     for fixture in _fixtures(archive):
-        genesis = fixture["genesisBlockHeader"]["hash"]
-        tree = [{"blockHash": genesis, "parentHash": ZERO, "valid": True}]
+        header = fixture["genesisBlockHeader"]
+        genesis = header["hash"]
+        chain_config = config(fixture["network"])
+        # The genesis header writes 0 as `0x00`, which is no Engine API quantity.
+        tree = [
+            {
+                "blockHash": genesis,
+                "parentHash": ZERO,
+                "valid": True,
+                "number": hex(int(header["number"], 16)),
+                "timestamp": hex(int(header["timestamp"], 16)),
+            }
+        ]
         head = genesis
         for payload in fixture["engineNewPayloads"]:
             if payload.get("validationError") or "errorCode" in payload:
                 continue
             block = payload["params"][0]
             tree.append(
-                {"blockHash": block["blockHash"], "parentHash": block["parentHash"], "valid": True}
+                {
+                    "blockHash": block["blockHash"],
+                    "parentHash": block["parentHash"],
+                    "valid": True,
+                    "number": block["blockNumber"],
+                    "timestamp": block["timestamp"],
+                }
             )
             state = {
                 "headBlockHash": block["blockHash"],
@@ -66,7 +83,7 @@ def test_every_chain(archive) -> None:
                 "finalizedBlockHash": genesis,
             }
             method = f"engine_forkchoiceUpdatedV{payload['forkchoiceUpdatedVersion']}"
-            response = engine.forkchoice_updated(tree, method, [state, None])
+            response = engine.forkchoice_updated(chain_config, tree, method, [state, None])
             assert response["payloadStatus"]["status"] == "VALID"
             head = block["blockHash"]
         assert head == fixture["lastblockhash"]

@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.ChainConfig
 public import EthLib.Engine.Json
 public import EthLib.Execution.Blocks.Withdrawal
 
@@ -78,21 +79,43 @@ Versions 1, 3 and 4 of the method each take the version of the structure with th
 
 Version 2 takes versions 1 and 2 of the structure.
 
-Its source takes version 1 only before Shapella, and version 2 only from Shapella.
+The fork of the attributes is the active fork at the number after the head and at their timestamp.
 
-The payload tree has no timestamps, so this model takes both at any time.
+Each version takes some forks only, and gives `-38005` for attributes of another fork.
 
-For the same reason it does not check that the timestamp falls in the fork of the method.
+Version 1 takes Paris, and version 2 Paris and Shapella.
 
-Versions 3 and 4 give that check the error `-38005`.
+Version 3 takes the forks from Dencun on, before Glamsterdam, and version 4 takes Glamsterdam.
 
-Nor does it check that the timestamp is above that of the head.
+The update by Cancun ends version 2 at Dencun.
+
+The update by Prague extends version 3 to Pectra, and names only Cancun and Prague.
+
+No update by Osaka names version 3, yet the update by Amsterdam ends it at Glamsterdam.
+
+So this model lets version 3 take Fusaka and the BPO forks too, as `engine_newPayloadV4` does.
+
+The source gives version 1 no rule of forks, and step 2 of version 2 sends Shapella to version 2.
+
+So this model takes Paris only for version 1, as version 1 of `engine_newPayload` does.
+
+Version 2 takes version 1 of the structure only before Shapella, and version 2 only from it.
+
+Otherwise the error is `-38003`.
+
+By step 8.1 of version 1, the timestamp of the attributes must be above that of the head.
+
+Otherwise the error is `-38003` too.
+
+The checks run in this order: the structure, the fork, the structure at the fork, the timestamp.
+
+The source does not order the fork check and step 8.1, and this model runs the fork check first.
+
+All these checks run only when the update applies a valid head, as step 8 of version 1 says.
 
 Attributes that pass start a payload build.
 
-That build is not specified here, so the C export refuses such a request.
-
-The model returns the decoded attributes.
+The model returns the attributes, as those of their fork.
 
 When the update applies no valid head, no build begins, so the attributes change nothing.
 
@@ -101,6 +124,9 @@ The method specifications state these rules, at commit `3284ee8` of execution-ap
 - [`engine_forkchoiceUpdatedV1`][v1], steps 2, 4, 5, 7, 8 and 9
 - [`engine_forkchoiceUpdatedV2`][v2] and [`engine_forkchoiceUpdatedV3`][v3]
 - [`engine_forkchoiceUpdatedV4`][v4], and the custody columns of [EIP-8070][eip8070]
+- the updates of earlier versions by [Cancun][v2-cancun] and [Prague][v3-prague]
+- the update of earlier versions by [Osaka][osaka], which leaves version 3 unchanged
+- the update of version 3 by [Amsterdam][v3-amsterdam]
 - the [OpenRPC description][rpc] of the four versions, for the parameters that each requires
 
 Each version has its payload attributes: [version 1][a1], [version 2][a2] and [version 3][a3].
@@ -111,6 +137,10 @@ From Glamsterdam, [version 4][a4] adds the slot number of EIP-7843 and a target 
 [v2]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/shanghai.md#engine_forkchoiceupdatedv2
 [v3]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/cancun.md#engine_forkchoiceupdatedv3
 [v4]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/amsterdam.md#engine_forkchoiceupdatedv4
+[v2-cancun]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/cancun.md#update-the-methods-of-previous-forks
+[v3-prague]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/prague.md#update-the-methods-of-previous-forks
+[osaka]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/osaka.md#update-the-methods-of-previous-forks
+[v3-amsterdam]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/amsterdam.md#update-the-methods-of-previous-forks
 [eip8070]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-8070.md#engine-api-extensions
 [rpc]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/openrpc/methods/forkchoice.yaml
 [a1]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#payloadattributesv1
@@ -145,12 +175,16 @@ structure PayloadAttributes (fork : Fork) : Type where
   /-- The target of the gas limit of the payload, from Glamsterdam. -/
   targetGasLimit : Since .glamsterdam fork UInt64
 
-/-- A payload that the execution layer holds: its parent and whether it is valid. -/
+/-- A payload that the execution layer holds: its parent, its validity, its number and its time. -/
 structure KnownPayload where
   /-- The block hash of the parent. -/
   parentHash : Hash32
   /-- Whether the payload and its ancestors are valid. -/
   valid : Bool
+  /-- The number of the block. -/
+  number : UInt64
+  /-- The time of the block, in seconds since the Unix epoch. -/
+  timestamp : UInt64
   deriving DecidableEq, Repr
 
 /-- The payloads that the execution layer holds, by block hash. -/
@@ -281,7 +315,9 @@ def payloadAttributesOfJson (version : Nat) (j : Json) :
 
 /-- The versions of the structure of the payload attributes that a version of the method takes.
 
-Version 2 takes version 1 before Shapella and version 2 from it, so it takes both here. -/
+Version 2 takes versions 1 and 2, and the fork of the timestamp then picks one of them.
+
+Any other version takes its own number. -/
 def attributesVersions : Nat → List Nat
   | 2 => [1, 2]
   | version => [version]
@@ -330,21 +366,112 @@ def forkchoiceUpdatedParams (version : Nat) (params : Json) :
   let _ ← custodyColumnsOfJson custody
   return (state, attributes)
 
+/-- Whether a version of the method takes payload attributes whose timestamp is in a fork.
+
+Version 1 takes Paris, and version 2 Paris and Shapella.
+
+Version 3 takes the forks from Dencun on, before Glamsterdam.
+
+Version 4 takes Glamsterdam.
+
+Version 0 reads as 1, and a version above 4 reads as 4. -/
+def attributesTakeFork : Nat → Fork → Bool
+  | 0, fork | 1, fork => fork == .paris
+  | 2, fork => fork == .paris || fork == .shapella
+  | 3, fork => decide (.dencun ≤ fork) && decide (fork < .glamsterdam)
+  | _, fork => fork == .glamsterdam
+
+/-- The fork of the structure of the payload attributes whose timestamp is in a fork.
+
+Before Shapella it is Paris, then Shapella before Dencun, then Dencun before Glamsterdam.
+
+From Glamsterdam it is Glamsterdam. -/
+def attributesForkAt (fork : Fork) : Fork :=
+  if fork < .shapella then .paris
+  else if fork < .dencun then .shapella
+  else if fork < .glamsterdam then .dencun
+  else .glamsterdam
+
+/-- The fork of the structure has the withdrawals exactly when the fork has them. -/
+theorem shapella_le_attributesForkAt_iff (fork : Fork) :
+    .shapella ≤ attributesForkAt fork ↔ .shapella ≤ fork := by
+  cases fork <;> decide
+
+/-- The fork of the structure has the parent beacon block root exactly when the fork has it. -/
+theorem dencun_le_attributesForkAt_iff (fork : Fork) :
+    .dencun ≤ attributesForkAt fork ↔ .dencun ≤ fork := by
+  cases fork <;> decide
+
+/-- The fork of the structure has the slot number exactly when the fork has it. -/
+theorem glamsterdam_le_attributesForkAt_iff (fork : Fork) :
+    .glamsterdam ≤ attributesForkAt fork ↔ .glamsterdam ≤ fork := by
+  cases fork <;> decide
+
+/-- Payload attributes of the structure of a fork, as attributes of that fork, field by field. -/
+def PayloadAttributes.ofStructure {fork : Fork} (a : PayloadAttributes (attributesForkAt fork)) :
+    PayloadAttributes fork where
+  timestamp := a.timestamp
+  prevRandao := a.prevRandao
+  suggestedFeeRecipient := a.suggestedFeeRecipient
+  withdrawals := a.withdrawals.congr (shapella_le_attributesForkAt_iff fork)
+  parentBeaconBlockRoot := a.parentBeaconBlockRoot.congr (dencun_le_attributesForkAt_iff fork)
+  slotNumber := a.slotNumber.congr (glamsterdam_le_attributesForkAt_iff fork)
+  targetGasLimit := a.targetGasLimit.congr (glamsterdam_le_attributesForkAt_iff fork)
+
+/-- Payload attributes at a fork, when their structure is that of the fork.
+
+Otherwise there are none. -/
+def PayloadAttributes.atFork (a : Σ f, PayloadAttributes f) (fork : Fork) :
+    Option (PayloadAttributes fork) :=
+  if h : attributesForkAt fork = a.1 then some (PayloadAttributes.ofStructure (h ▸ a.2)) else none
+
+/-- The checks of decoded payload attributes against the head that they build on.
+
+The fork of the attributes is the active fork at the number after the head and at their timestamp.
+
+A version of the method that does not take that fork gives `-38005`, as do attributes of no fork.
+
+Attributes whose structure is not that of the fork give `-38003`.
+
+Only version 2 can fail that way, since each other version takes a single structure.
+
+Attributes whose timestamp is not above that of the head give `-38003` too.
+
+The result is the attributes at their fork. -/
+def checkAttributes (config : ChainConfig) (version : Nat) (head : KnownPayload)
+    (attributes : Σ f, PayloadAttributes f) :
+    Except EngineError (Σ fork, PayloadAttributes fork) := do
+  let timestamp := attributes.2.timestamp
+  let some fork := config.activeFork (head.number.toNat + 1) timestamp.toNat
+    | throw .unsupportedFork
+  unless attributesTakeFork version fork do throw .unsupportedFork
+  let some atFork := PayloadAttributes.atFork attributes fork | throw .invalidPayloadAttributes
+  unless head.timestamp < timestamp do throw .invalidPayloadAttributes
+  return ⟨fork, atFork⟩
+
 /-- A version of the method: its status, the new head, and the payload attributes of a build.
 
 Attributes count only when a valid head is applied.
 
-They must then fit a structure of the version.
+They must then fit a structure of the version, and then pass the checks against the head.
 
-The versions of the method are 1 to 4; the C export passes no other. -/
-def forkchoiceUpdatedCall (version : Nat) (tree : PayloadTree) (finalized : Option Hash32)
-    (params : Json) :
+The attributes of a build are those of the fork of their timestamp.
+
+The versions of the method are 1 to 4; the C export passes no other.
+
+Version 0 reads as 1, and a version above 4 reads as 4. -/
+def forkchoiceUpdatedCall (config : ChainConfig) (version : Nat) (tree : PayloadTree)
+    (finalized : Option Hash32) (params : Json) :
     Except EngineError
       (PayloadStatus × Option Hash32 × Option (Σ fork, PayloadAttributes fork)) := do
   let (state, attributes) ← forkchoiceUpdatedParams version params
   let (status, head) ← forkchoiceUpdated tree finalized state
   match attributes, head with
-  | some j, some _ => return (status, head, some (← payloadAttributesOfVersion version j))
+  | some j, some h =>
+    let decoded ← payloadAttributesOfVersion version j
+    -- The update applies only a head that the tree holds, so this branch never runs.
+    let some known := tree.lookup h | return (status, head, none)
+    return (status, head, some (← checkAttributes config version known decoded))
   | _, _ => return (status, head, none)
 
 end EthLib.Engine
