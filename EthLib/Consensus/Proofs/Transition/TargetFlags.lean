@@ -56,7 +56,7 @@ def TargetFlagAt (participation : EpochParticipation preset fork) (position : Na
     hasFlag flags TIMELY_TARGET_FLAG_INDEX = true
 
 /-- Setting a flag other than the target flag never sets the target flag. -/
-theorem hasFlag_addFlag_target (flags : ParticipationFlags) (flag : Fin 3)
+private theorem hasFlag_addFlag_target (flags : ParticipationFlags) (flag : Fin 3)
     (set : hasFlag (addFlag flags flag.val.toUInt64) TIMELY_TARGET_FLAG_INDEX = true) :
     hasFlag flags TIMELY_TARGET_FLAG_INDEX = true ∨
       flag.val.toUInt64 = TIMELY_TARGET_FLAG_INDEX := by
@@ -159,6 +159,53 @@ private theorem addAttesterFlags_target {total : Gwei} {earned : List UInt64}
     · exact .inl ⟨value, found, set⟩
   · cases computed
 
+/-- Adding flags of the three kinds sets the target flag only if it was set or is among them. -/
+theorem hasFlag_foldl_addFlag_target :
+    ∀ (flags : List UInt64) (old : ParticipationFlags),
+      flags.Sublist [TIMELY_SOURCE_FLAG_INDEX, TIMELY_TARGET_FLAG_INDEX, TIMELY_HEAD_FLAG_INDEX] →
+      hasFlag (flags.foldl addFlag old) TIMELY_TARGET_FLAG_INDEX = true →
+      hasFlag old TIMELY_TARGET_FLAG_INDEX = true ∨ TIMELY_TARGET_FLAG_INDEX ∈ flags
+  | [], _, _, set => .inl set
+  | flag :: rest, old, kinds, set => by
+    have known : flag ∈ [TIMELY_SOURCE_FLAG_INDEX, TIMELY_TARGET_FLAG_INDEX,
+        TIMELY_HEAD_FLAG_INDEX] := kinds.subset List.mem_cons_self
+    rcases hasFlag_foldl_addFlag_target rest (addFlag old flag)
+        ((List.sublist_cons_self flag rest).trans kinds) set with middle | later
+    · simp only [TIMELY_SOURCE_FLAG_INDEX, TIMELY_TARGET_FLAG_INDEX, TIMELY_HEAD_FLAG_INDEX,
+        List.mem_cons, List.not_mem_nil, or_false] at known
+      rcases known with rfl | rfl | rfl
+      · exact (hasFlag_addFlag_target old ⟨0, by decide⟩ middle).imp id (absurd · (by decide))
+      · exact .inr List.mem_cons_self
+      · exact (hasFlag_addFlag_target old ⟨2, by decide⟩ middle).imp id (absurd · (by decide))
+    · exact .inr (List.mem_cons_of_mem flag later)
+
+/-- A fold whose steps each set a target flag only at the position of their index, if earned.
+
+After it, a target flag was there before, or is at the position of an index of the list.
+
+The fold may carry more than the flags, which a projection reads. -/
+theorem foldlM_targetFlag {σ : Type} {earned : Prop} {flagsOf : σ → EpochParticipation preset fork}
+    {step : σ → ValidatorIndex → Except TransitionError σ}
+    (each : ∀ carried index updated, step carried index = .ok updated →
+      ∀ position, TargetFlagAt (flagsOf updated) position →
+        TargetFlagAt (flagsOf carried) position ∨ earned ∧ index.toNat = position) :
+    ∀ (indices : List ValidatorIndex) (start finish : σ),
+      indices.foldlM step start = .ok finish → ∀ position, TargetFlagAt (flagsOf finish) position →
+        TargetFlagAt (flagsOf start) position ∨ earned ∧ ∃ index ∈ indices, index.toNat = position
+  | [], start, finish, computed, position, flagged => by
+    simp only [List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at computed
+    subst computed
+    exact .inl flagged
+  | first :: rest, start, finish, computed, position, flagged => by
+    rw [List.foldlM_cons, bind_ok_iff] at computed
+    obtain ⟨middle, middleOk, computed⟩ := computed
+    rcases foldlM_targetFlag each rest middle finish computed position flagged with
+      old | ⟨chosen, index, member, place⟩
+    · rcases each start first middle middleOk position old with older | ⟨chosen, place⟩
+      · exact .inl older
+      · exact .inr ⟨chosen, first, List.mem_cons_self, place⟩
+    · exact .inr ⟨chosen, index, List.mem_cons_of_mem first member, place⟩
+
 /-- From Altair, setting the flags of attesters keeps the size of the list of flags.
 
 A position gains the timely target flag only if the earned flags hold it.
@@ -174,22 +221,14 @@ theorem foldlM_addAttesterFlags_target {total : Gwei} {earned : List UInt64}
         TargetFlagAt participation position ∨
           TIMELY_TARGET_FLAG_INDEX ∈ earned ∧
             ∃ attester ∈ attesters, attester.toNat = position := by
-  induction attesters generalizing participation numerator with
-  | nil =>
-    simp only [List.foldlM_nil, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at computed
-    obtain ⟨rfl, _⟩ := computed
-    exact ⟨rfl, fun _ flagged => .inl flagged⟩
-  | cons first rest more =>
-    rw [List.foldlM_cons, bind_ok_iff] at computed
-    obtain ⟨⟨middle, _⟩, step, computed⟩ := computed
-    obtain ⟨stepSize, stepFlag⟩ := addAttesterFlags_target step
-    obtain ⟨restSize, restFlag⟩ := more computed
-    refine ⟨restSize.trans stepSize, fun position flagged => ?_⟩
-    rcases restFlag position flagged with old | ⟨chosen, attester, member, place⟩
-    · rcases stepFlag position old with older | ⟨chosen, place⟩
-      · exact .inl older
-      · exact .inr ⟨chosen, first, List.mem_cons_self, place⟩
-    · exact .inr ⟨chosen, attester, List.mem_cons_of_mem first member, place⟩
+  refine ⟨foldlM_ok_invariant
+      (fun (carried : EpochParticipation preset fork × Gwei) =>
+        carried.1.data.size = participation.data.size)
+      (fun ⟨_, _⟩ _ ⟨_, _⟩ holds ok => (addAttesterFlags_target ok).1.trans holds) rfl computed,
+    fun position flagged => ?_⟩
+  exact foldlM_targetFlag (flagsOf := Prod.fst)
+    (fun ⟨_, _⟩ _ ⟨_, _⟩ ok => (addAttesterFlags_target ok).2) attesters _ _ computed position
+    flagged
 
 /-- From Altair, a target flag that an attestation sets comes from a vote that passed the checks.
 

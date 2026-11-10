@@ -29,7 +29,7 @@ A vote stays signed under the version of the fork it was signed in.
 
 The upgrade from Phase 0 builds the flags of the previous epoch from the pending attestations.
 
-Each of their attesters signed a vote for the link of that epoch, so each such flag has one.
+When each of their attesters signed a vote for the link of that epoch, each such flag has one.
 
 Gasper §4.4, Definitions 4.5 and 4.6, justify a checkpoint by a supermajority link.
 
@@ -258,52 +258,6 @@ theorem upgradeFrame_upgradeNext {pre : ForkedBeaconState preset}
 
 /-! ## The upgrade from Phase 0 -/
 
-/-- Adding flags of the three kinds sets the target flag only if it was set or is among them. -/
-private theorem hasFlag_foldl_addFlag_target :
-    ∀ (flags : List UInt64) (old : ParticipationFlags),
-      flags.Sublist [TIMELY_SOURCE_FLAG_INDEX, TIMELY_TARGET_FLAG_INDEX, TIMELY_HEAD_FLAG_INDEX] →
-      hasFlag (flags.foldl addFlag old) TIMELY_TARGET_FLAG_INDEX = true →
-      hasFlag old TIMELY_TARGET_FLAG_INDEX = true ∨ TIMELY_TARGET_FLAG_INDEX ∈ flags
-  | [], _, _, set => .inl set
-  | flag :: rest, old, kinds, set => by
-    have known : flag ∈ [TIMELY_SOURCE_FLAG_INDEX, TIMELY_TARGET_FLAG_INDEX,
-        TIMELY_HEAD_FLAG_INDEX] := kinds.subset List.mem_cons_self
-    rcases hasFlag_foldl_addFlag_target rest (addFlag old flag)
-        ((List.sublist_cons_self flag rest).trans kinds) set with middle | later
-    · simp only [TIMELY_SOURCE_FLAG_INDEX, TIMELY_TARGET_FLAG_INDEX, TIMELY_HEAD_FLAG_INDEX,
-        List.mem_cons, List.not_mem_nil, or_false] at known
-      rcases known with rfl | rfl | rfl
-      · exact (hasFlag_addFlag_target old ⟨0, by decide⟩ middle).imp id (absurd · (by decide))
-      · exact .inr List.mem_cons_self
-      · exact (hasFlag_addFlag_target old ⟨2, by decide⟩ middle).imp id (absurd · (by decide))
-    · exact .inr (List.mem_cons_of_mem flag later)
-
-/-- A fold whose steps each set a target flag only at the position of their index, if earned.
-
-After it, a target flag was there before, or is at the position of an index of the list. -/
-private theorem foldlM_target {fork : Fork} {earned : Prop}
-    {step : EpochParticipation preset fork → ValidatorIndex →
-      Except TransitionError (EpochParticipation preset fork)}
-    (each : ∀ participation index updated, step participation index = .ok updated →
-      ∀ position, TargetFlagAt updated position →
-        TargetFlagAt participation position ∨ earned ∧ index.toNat = position) :
-    ∀ (indices : List ValidatorIndex) (start finish : EpochParticipation preset fork),
-      indices.foldlM step start = .ok finish → ∀ position, TargetFlagAt finish position →
-        TargetFlagAt start position ∨ earned ∧ ∃ index ∈ indices, index.toNat = position
-  | [], start, finish, computed, position, flagged => by
-    simp only [List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at computed
-    subst computed
-    exact .inl flagged
-  | first :: rest, start, finish, computed, position, flagged => by
-    rw [List.foldlM_cons, bind_ok_iff] at computed
-    obtain ⟨middle, middleOk, computed⟩ := computed
-    rcases foldlM_target each rest middle finish computed position flagged with
-      old | ⟨chosen, index, member, place⟩
-    · rcases each start first middle middleOk position old with older | ⟨chosen, place⟩
-      · exact .inl older
-      · exact .inr ⟨chosen, first, List.mem_cons_self, place⟩
-    · exact .inr ⟨chosen, index, List.mem_cons_of_mem first member, place⟩
-
 /-- One translated pending attestation sets a target flag only for one of its attesters.
 
 Its target root is then the root of the block at the first slot of its target epoch. -/
@@ -320,12 +274,13 @@ private theorem translateAttestation_target {fork : Fork} {state after : BeaconS
   obtain ⟨flags, flagsOk, attesters, attestersOk, participation, folded, rfl⟩ := computed
   have kinds := (getAttestationParticipationFlagIndices_spec flagsOk).2
   -- Each attester in turn gets the earned flags at its own position.
-  rcases foldlM_target (earned := TIMELY_TARGET_FLAG_INDEX ∈ flags)
+  rcases foldlM_targetFlag (earned := TIMELY_TARGET_FLAG_INDEX ∈ flags) (flagsOf := id)
       (fun list index updated ok place ⟨value, found, set⟩ => by
         split at ok
         · rename_i inside
           simp only [Except.ok.injEq] at ok
           subst ok
+          dsimp only [id] at found ⊢
           rw [Array.getElem?_set] at found
           split at found
           · rename_i same
@@ -345,17 +300,22 @@ private theorem translateAttestation_target {fork : Fork} {state after : BeaconS
 
 The flags of the previous epoch come from the pending attestations of Phase 0.
 
-Each of them must be a signed vote for the link of its epoch.
+Each pending attestation of Phase 0 must be a signed vote for the link of its epoch.
 
-The flags of the current epoch start empty.
-
-The registry must stay below 2^64 validators after the upgrade. -/
+The flags of the current epoch start empty. -/
 theorem TargetFlagsSigned.of_upgradeToAltair {pre : BeaconState preset .phase0}
     {after : BeaconState preset .altair} (holds : PendingSigned config checks pre)
-    (small : after.validators.data.size < 2 ^ 64)
     (computed : upgradeToAltair config pre = .ok after) :
     TargetFlagsSigned config checks after := by
   have frame := upgradeFrame_upgradeToAltair computed
+  -- The upgrade keeps the registry, so each key, with no bound on its size.
+  have keys : KeysKept pre after := by
+    have same := (upgradeToAltair_spec computed).1
+    intro index validator found
+    refine ⟨validator, ?_, rfl⟩
+    unfold getValidator at found ⊢
+    rw [same]
+    exact found
   simp only [upgradeToAltair, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
   obtain ⟨_, folded, _, -, rfl⟩ := computed
   rw [← Array.foldlM_toList] at folded
@@ -424,7 +384,7 @@ theorem TargetFlagsSigned.of_upgradeToAltair {pre : BeaconState preset .phase0}
   cases current
   · obtain ⟨vote, link, signed⟩ := previousFlags position flagged
     exact ⟨vote, link.of_upgradeFrame frame,
-      signed.of_keys frame.forward frame.genesisValidatorsRoot (frame.keysKept small)⟩
+      signed.of_keys frame.forward frame.genesisValidatorsRoot keys⟩
   · exact absurd flagged (currentNone position)
 
 /-! ## The upgrades due at a slot -/
@@ -495,9 +455,9 @@ That vote is for the link of the epoch of the flag.
 
 Each pending attestation of Phase 0 must be a signed vote for the link of its epoch.
 
-The upgrades must reach Altair, and the registry must stay below 2^64 validators after them. -/
-theorem TargetFlagsSigned.of_processUpgrades_phase0 {forked after : ForkedBeaconState preset}
-    (phase0 : forked.fork = .phase0) (altair : .altair ≤ after.fork)
+The registry must stay below 2^64 validators after the upgrades. -/
+theorem TargetFlagsSigned.of_processUpgrades_of_phase0 {forked after : ForkedBeaconState preset}
+    (phase0 : forked.fork = .phase0)
     (small : after.state.validators.data.size < 2 ^ 64)
     (holds : PendingSigned config checks forked.state)
     (computed : processUpgrades config checks forked = .ok after) :
@@ -511,9 +471,9 @@ theorem TargetFlagsSigned.of_processUpgrades_phase0 {forked after : ForkedBeacon
     simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at stepOk
     obtain ⟨_, upgraded, rfl⟩ := stepOk
     exact TargetFlagsSigned.of_processUpgrades (show Fork.altair ≤ Fork.altair by decide) small
-      (TargetFlagsSigned.of_upgradeToAltair holds
-        (Nat.lt_of_le_of_lt (processUpgrades_registryGrows rest) small) upgraded) rest
+      (TargetFlagsSigned.of_upgradeToAltair holds upgraded) rest
   · cases computed
+    intro altair
     exact absurd altair (by decide : ¬Fork.altair ≤ Fork.phase0)
 
 /-! ## Genesis, slots and blocks -/
