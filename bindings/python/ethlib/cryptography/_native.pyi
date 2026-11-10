@@ -1233,6 +1233,10 @@ def era1_decode(data: bytes) -> tuple[int, list[tuple[bytes, bytes, bytes, int]]
     """The contents of an era1 file, as plain values."""
     ...
 
+def era_decode(name: str, config: dict[str, Any] | None, data: bytes) -> tuple[str | None, list[tuple[int, list[tuple[int, str, bytes, bytes]], str, bytes, list[tuple[int, bytes]]]]]:
+    """The name of the file and its groups, as plain values."""
+    ...
+
 def snappy_decompress(block: bytes) -> bytes:
     """The bytes a Snappy block decompresses to, or why it is not a valid block."""
     ...

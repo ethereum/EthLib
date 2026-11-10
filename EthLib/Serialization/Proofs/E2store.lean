@@ -352,6 +352,31 @@ theorem record_at {bytes : ByteArray} {records : List Record} (h : decode bytes 
   rw [he]
   exact this
 
+/-- There is one position for each record. -/
+@[simp] theorem length_recordStarts (pos : Nat) (records : List Record) :
+    (recordStarts pos records).length = records.length := by
+  induction records generalizing pos with
+  | nil => rfl
+  | cons r rs ih => simp [recordStarts, ih]
+
+/-- In bytes that decode, a record paired with its position sits there.
+
+Its header reads at the position, and its data follows the header. -/
+theorem record_at_mem {bytes : ByteArray} {records : List Record}
+    (h : decode bytes = .ok records) {pos : Nat} {r : Record}
+    (hm : (pos, r) ∈ (recordStarts 0 records).zip records) :
+    readHeader bytes pos = .ok ⟨r.type, r.data.size⟩ ∧
+      bytes.extract (pos + 8) (pos + 8 + r.data.size) = r.data := by
+  obtain ⟨k, hk, he⟩ := List.getElem_of_mem hm
+  rw [List.getElem_zip, Prod.mk.injEq] at he
+  obtain ⟨hp, hr⟩ := he
+  have hk' : k < records.length := by simpa using hk
+  have := record_at h hk'
+  rw [List.getD_eq_getElem?_getD, List.getElem?_eq_getElem (by simpa using hk'),
+    Option.getD_some, hp] at this
+  rw [← hr]
+  exact this
+
 /-! ### Index records -/
 
 /-- The data of an index that reads has 16 bytes plus 8 bytes per offset. -/
