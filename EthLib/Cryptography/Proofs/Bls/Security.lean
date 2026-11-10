@@ -4,6 +4,7 @@ public import EthLib.Cryptography.Proofs.Bls.Security.PopEager
 public import EthLib.Cryptography.Proofs.Bls.Security.PopExtract
 public import EthLib.Cryptography.Proofs.Bls.Security.PopReduction
 public import EthLib.Cryptography.Proofs.Bls.Security.PopZeroKey
+public import EthLib.Cryptography.Proofs.Bls.Security.PopWins
 public import EthLib.Cryptography.Proofs.Bls.Security.Refinement
 
 /-!
@@ -42,6 +43,8 @@ This holds until the message at position `j` is signed.
 Fix the secret and the scalar of the honest key hash, in a game within `qK` key hash calls.
 
 Then some other key gets the scalar 0 with probability at most `(qK - 1) / |F|`.
+
+A winning forgery at the guessed position, with nonzero scalars, gives the reduction its answer.
 
 No bound on the aggregate game is proved yet.
 -/
