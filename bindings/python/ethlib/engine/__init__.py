@@ -37,6 +37,34 @@ def new_payload_on_chain(
     return _native.engine_new_payload_on_chain(config, state, items, request)
 
 
+def build_payload(
+    config: dict,
+    state: bytes,
+    recent: Sequence[RecentBlock],
+    method: str,
+    attributes: dict,
+    *,
+    fee_recipient: bytes,
+    extra_data: bytes,
+    target_gas_limit: int,
+    transactions: Sequence[bytes],
+) -> tuple[bytes, bytes, list[bytes], int]:
+    """The block that payload attributes build on a chain, its accounts, requests and value."""
+    # The attributes pass the checks of the forkchoice update `method` against the last block.
+    items = [(name, header, list(ommers)) for name, header, ommers in recent]
+    return _native.engine_build_payload(
+        config,
+        state,
+        items,
+        method,
+        attributes,
+        fee_recipient,
+        extra_data,
+        target_gas_limit,
+        list(transactions),
+    )
+
+
 def forkchoice_updated(
     config: dict, tree: list, method: str, params: list, finalized: str | None = None
 ) -> dict:
@@ -103,6 +131,41 @@ def get_payload_bodies(
         for block_hash, number, fork, transactions, withdrawals, access_list in store
     ]
     return _native.engine_get_payload_bodies(entries, latest, max_request, request)
+
+
+# One completed build: the 8-byte payload ID, its fork, then the four results of build_payload.
+# They are the block in RLP form, the accounts after it, the requests and the value in wei.
+# Then come the network forms of the block's blob transactions, in block order.
+# Then comes the shouldOverrideBuilder flag, and last the block access list.
+# The access list is None before Amsterdam, and from it the list whose hash the header holds.
+# A store holds each payload ID once.
+PayloadEntry: TypeAlias = tuple[
+    bytes, str, bytes, bytes, Sequence[bytes], int, Sequence[bytes], bool, bytes | None
+]
+
+
+def get_payload(
+    config: dict, store: Sequence[PayloadEntry], method: str, params: list
+) -> dict[str, Any]:
+    """The answer to an `engine_getPayload` call, from a snapshot of completed builds."""
+    request = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
+    entries = [
+        (
+            identifier,
+            fork,
+            block,
+            accounts,
+            list(requests),
+            value,
+            list(network),
+            override,
+            access_list,
+        )
+        for identifier, fork, block, accounts, requests, value, network, override, access_list in (
+            store
+        )
+    ]
+    return _native.engine_get_payload(config, entries, request)
 
 
 def prepare_execution_payload(
@@ -193,6 +256,8 @@ __all__ = [
     "forkchoice_updated",
     "get_blobs",
     "PoolEntry",
+    "get_payload",
+    "PayloadEntry",
     "get_payload_bodies",
     "BodyEntry",
     "WithdrawalEntry",

@@ -37,6 +37,16 @@ So they hold for every kind of link that raises the epoch and follows the chain.
 
 With slack links, each stake bound also loses twice the slack of two links.
 
+Each checkpoint then has a set of weights, and its links hold under some weights of that set.
+
+The bounds measure every stake but the slack under reference weights.
+
+They lose the change from the reference weights to the weights of each of the two links.
+
+In the reference form, a gain of weight counts like an activation, and a loss like an exit.
+
+With one stake function in each set and as reference weights, that change is zero.
+
 With no slack, a slack link is a supermajority link, which gives the bounds without slack.
 -/
 
@@ -197,39 +207,57 @@ theorem FinalizedBy.slashableLinksBy
       (min_le_right _ _) (le_max_left _ _)
 
 open scoped Classical in
-/-- The slashable stake of two slack links, as in the proof of Gasper Theorem 8.3.
+omit [Preorder β] in
+/-- The slashable stake of two links up to slack, as in the proof of Gasper Theorem 8.3.
 
 Each validator that votes for both links is slashable.
 
 The links have the validator sets `L` and `R` of their targets.
 
+Under `w₁`, twice the stake of `L` is at most three times that of its voters plus twice its slack.
+
+The same holds for `R` under weights `w₂`.
+
 `V₀` is any reference set, and the stake of `L \ V₀` and `V₀ \ R` counts the change since it.
+
+Every other stake is measured under any reference weights `w₀`.
 
 The slashable validators of both sets then hold stake `x` with the bound below.
 
-The bound: `2 * w(L) ≤ 3 * x + w(R) + 3 * (w(L \ V₀) + w(V₀ \ R)) + 2 * (σL + σR)`.
+The bound: `2 * w₀(L) ≤ 3 * x + w₀(R) + 3 * (w₀(L \ V₀) + w₀(V₀ \ R)) + δL + δR`.
 
-There `σL` and `σR` are the slacks of the two links. -/
-theorem SlackLink.two_mul_stake_le_of_slashable {s₁ t₁ s₂ t₂ : Checkpoint β}
-    (h₁ : SlackLink V U w votes s₁ t₁) (h₂ : SlackLink V U w votes s₂ t₂)
+There `δL` is the change from `w₀` to `w₁` on `L`, plus twice the slack of `L` under `w₁`.
+
+`δR` is the same for `R` and `w₂`. -/
+theorem two_mul_stake_le_of_slashable {s₁ t₁ s₂ t₂ : Checkpoint β} {w₁ w₂ : ν → ℕ}
+    (h₁ : 2 * stake w₁ (V t₁) ≤
+      3 * stake w₁ (signers (V t₁) votes s₁ t₁) + 2 * stake w₁ (V t₁ \ U t₁))
+    (h₂ : 2 * stake w₂ (V t₂) ≤
+      3 * stake w₂ (signers (V t₂) votes s₂ t₂) + 2 * stake w₂ (V t₂ \ U t₂))
     (h : ∀ v : ν, ⟨v, s₁, t₁⟩ ∈ votes → ⟨v, s₂, t₂⟩ ∈ votes → Slashable votes v)
-    (V₀ : Finset ν) :
-    2 * stake w (V t₁) ≤ 3 * stake w {v ∈ V t₁ ∩ V t₂ | Slashable votes v} + stake w (V t₂) +
-      3 * (stake w (V t₁ \ V₀) + stake w (V₀ \ V t₂)) +
-      2 * (stake w (V t₁ \ U t₁) + stake w (V t₂ \ U t₂)) := by
+    (V₀ : Finset ν) (w₀ : ν → ℕ) :
+    2 * stake w₀ (V t₁) ≤ 3 * stake w₀ {v ∈ V t₁ ∩ V t₂ | Slashable votes v} +
+      stake w₀ (V t₂) + 3 * (stake w₀ (V t₁ \ V₀) + stake w₀ (V₀ \ V t₂)) +
+      ((weightChange w₀ w₁ (V t₁) + 2 * stake w₁ (V t₁ \ U t₁)) +
+        (weightChange w₀ w₂ (V t₂) + 2 * stake w₂ (V t₂ \ U t₂))) := by
   classical
   refine (two_mul_stake_le_stake_inter_add_slack V₀ (Finset.filter_subset _ _)
-    (Finset.filter_subset _ _) h₁.2.2 h₂.2.2).trans (Nat.add_le_add_right (Nat.add_le_add_right
-      (Nat.add_le_add_right (Nat.mul_le_mul_left 3 (stake_mono ?_)) _) _) _)
+    (Finset.filter_subset _ _)
+    ((two_mul_stake_le_add_weightChange (Finset.filter_subset _ _) h₁).trans_eq
+      (Nat.add_assoc _ _ _))
+    ((two_mul_stake_le_add_weightChange (Finset.filter_subset _ _) h₂).trans_eq
+      (Nat.add_assoc _ _ _))).trans
+    (Nat.add_le_add_right (Nat.add_le_add_right (Nat.add_le_add_right
+      (Nat.mul_le_mul_left 3 (stake_mono ?_)) _) _) _)
   intro v hv
   simp only [Finset.mem_inter, Finset.mem_filter] at hv
   simp only [Finset.mem_filter, Finset.mem_inter]
   exact ⟨⟨hv.1.1, hv.2.1⟩, h v hv.1.2 hv.2.2⟩
 
 open scoped Classical in
-/-- Accountable safety with slack links and a validator set for each checkpoint.
+/-- Accountable safety with slack links, and a validator set and a set of weights per checkpoint.
 
-This extends Gasper Theorem 8.3, which has no slack.
+This extends Gasper Theorem 8.3, which has no slack and one stake for each validator.
 
 Take two slack-finalized checkpoints whose blocks conflict.
 
@@ -237,43 +265,57 @@ Then two slack-justified checkpoints `l` and `r` have the property below.
 
 Their epochs lie between the epochs of the two finalized checkpoints.
 
-Take the validator sets `L` and `R` of `l` and `r`, and any reference set `V₀`.
+They come with weights `wl` from the set of `l` and `wr` from the set of `r`.
 
-The sets `L \ V₀` and `R \ V₀`, of stake `aL` and `aR`, activated since `V₀`.
+The change and slack terms below are measured under those weights.
 
-The sets `V₀ \ L` and `V₀ \ R`, of stake `eL` and `eR`, exited since `V₀`.
+Take the validator sets `L` and `R` of `l` and `r`, a reference set `V₀` and reference weights `w₀`.
 
-The slack `σL` is the stake of `L` outside the second set of `l`, and `σR` the same for `r`.
+Under `w₀`, the sets `L \ V₀` and `R \ V₀`, of stake `aL` and `aR`, activated since `V₀`.
 
-The slashable validators of both sets hold stake `x` with two bounds, one for each side.
+Under `w₀`, the sets `V₀ \ L` and `V₀ \ R`, of stake `eL` and `eR`, exited since `V₀`.
 
-The first bound: `2 * w(L) ≤ 3 * x + w(R) + 3 * (aL + eR) + 2 * (σL + σR)`.
+The term `δL` is the change from `w₀` to `wl` on `L`.
+
+It adds twice the slack of `l`: the stake of `L` outside the second set of `l`, under `wl`.
+
+The term `δR` is the same for `r` and `wr`.
+
+The slashable validators of both sets hold stake `x` under `w₀`, with two bounds.
+
+The first bound: `2 * w₀(L) ≤ 3 * x + w₀(R) + 3 * (aL + eR) + δL + δR`.
 
 The second bound is the first with the two sides swapped.
 
-The two checkpoints do not depend on the reference set. -/
-theorem accountable_safety_dynamic_slack {c₁ c₂ : Checkpoint β}
-    (h₁ : SlackFinalized V U w genesis votes c₁) (h₂ : SlackFinalized V U w genesis votes c₂)
+The bounds have content only when `w₀` stays close to `wl` on `L` and to `wr` on `R`.
+
+The two checkpoints and their weights do not depend on the reference set or weights. -/
+theorem accountable_safety_dynamic_slack {W : Checkpoint β → Set (ν → ℕ)} {c₁ c₂ : Checkpoint β}
+    (h₁ : SlackFinalized V U W genesis votes c₁) (h₂ : SlackFinalized V U W genesis votes c₂)
     (hc : Conflicting c₁.block c₂.block) :
     ∃ l r : Checkpoint β, min c₁.epoch c₂.epoch ≤ l.epoch ∧ l.epoch ≤ max c₁.epoch c₂.epoch ∧
       min c₁.epoch c₂.epoch ≤ r.epoch ∧ r.epoch ≤ max c₁.epoch c₂.epoch ∧
-      SlackJustified V U w genesis votes l ∧ SlackJustified V U w genesis votes r ∧
-      ∀ V₀ : Finset ν,
-        2 * stake w (V l) ≤ 3 * stake w {v ∈ V l ∩ V r | Slashable votes v} +
-          stake w (V r) + 3 * (stake w (V l \ V₀) + stake w (V₀ \ V r)) +
-          2 * (stake w (V l \ U l) + stake w (V r \ U r)) ∧
-        2 * stake w (V r) ≤ 3 * stake w {v ∈ V l ∩ V r | Slashable votes v} +
-          stake w (V l) + 3 * (stake w (V r \ V₀) + stake w (V₀ \ V l)) +
-          2 * (stake w (V r \ U r) + stake w (V l \ U l)) := by
+      SlackJustified V U W genesis votes l ∧ SlackJustified V U W genesis votes r ∧
+      ∃ wl ∈ W l, ∃ wr ∈ W r, ∀ (V₀ : Finset ν) (w₀ : ν → ℕ),
+        2 * stake w₀ (V l) ≤ 3 * stake w₀ {v ∈ V l ∩ V r | Slashable votes v} +
+          stake w₀ (V r) + 3 * (stake w₀ (V l \ V₀) + stake w₀ (V₀ \ V r)) +
+          ((weightChange w₀ wl (V l) + 2 * stake wl (V l \ U l)) +
+            (weightChange w₀ wr (V r) + 2 * stake wr (V r \ U r))) ∧
+        2 * stake w₀ (V r) ≤ 3 * stake w₀ {v ∈ V l ∩ V r | Slashable votes v} +
+          stake w₀ (V l) + 3 * (stake w₀ (V r \ V₀) + stake w₀ (V₀ \ V l)) +
+          ((weightChange w₀ wr (V r) + 2 * stake wr (V r \ U r)) +
+            (weightChange w₀ wl (V l) + 2 * stake wl (V l \ U l))) := by
   obtain ⟨s₁, t₁, s₂, t₂, lo₁, hi₁, lo₂, hi₂, hs₁, hs₂, hl₁, hl₂, h⟩ :=
     h₁.slashableLinksBy (ν := ν) SlackLink.ordered h₂ hc
   -- A validator that votes for both links signs the two votes that break a condition.
   have hboth : ∀ v : ν, ⟨v, s₁, t₁⟩ ∈ votes → ⟨v, s₂, t₂⟩ ∈ votes → Slashable votes v :=
     fun v hv₁ hv₂ => ⟨_, hv₁, _, hv₂, rfl, rfl, h v⟩
-  refine ⟨t₁, t₂, lo₁, hi₁, lo₂, hi₂, .link hs₁ hl₁, .link hs₂ hl₂, fun V₀ =>
-    ⟨hl₁.two_mul_stake_le_of_slashable hl₂ hboth V₀, ?_⟩⟩
+  obtain ⟨-, -, w₁, hw₁, b₁⟩ := id hl₁
+  obtain ⟨-, -, w₂, hw₂, b₂⟩ := id hl₂
+  refine ⟨t₁, t₂, lo₁, hi₁, lo₂, hi₂, .link hs₁ hl₁, .link hs₂ hl₂, w₁, hw₁, w₂, hw₂,
+    fun V₀ w₀ => ⟨two_mul_stake_le_of_slashable b₁ b₂ hboth V₀ w₀, ?_⟩⟩
   rw [Finset.inter_comm]
-  exact hl₂.two_mul_stake_le_of_slashable hl₁ (fun v hv₂ hv₁ => hboth v hv₁ hv₂) V₀
+  exact two_mul_stake_le_of_slashable b₂ b₁ (fun v hv₂ hv₁ => hboth v hv₁ hv₂) V₀ w₀
 
 open scoped Classical in
 /-- Accountable safety with a validator set for each checkpoint: Gasper Theorem 8.3.
@@ -317,13 +359,15 @@ theorem accountable_safety_dynamic {c₁ c₂ : Checkpoint β}
           stake w (V r) + 3 * (stake w (V l \ V₀) + stake w (V₀ \ V r)) ∧
         2 * stake w (V r) ≤ 3 * stake w {v ∈ V l ∩ V r | Slashable votes v} +
           stake w (V l) + 3 * (stake w (V r \ V₀) + stake w (V₀ \ V l)) := by
-  obtain ⟨l, r, lo₁, hi₁, lo₂, hi₂, hl, hr, h⟩ := accountable_safety_dynamic_slack (U := V)
-    (h₁.slackFinalized V) (h₂.slackFinalized V) hc
+  obtain ⟨l, r, lo₁, hi₁, lo₂, hi₂, hl, hr, wl, hwl, wr, hwr, h⟩ :=
+    accountable_safety_dynamic_slack (U := V) (h₁.slackFinalized V) (h₂.slackFinalized V) hc
+  rw [Set.mem_singleton_iff] at hwl hwr
+  subst wl wr
   rw [slackJustified_self] at hl hr
-  exact ⟨l, r, lo₁, hi₁, lo₂, hi₂, hl, hr, fun V₀ => by simpa using h V₀⟩
+  exact ⟨l, r, lo₁, hi₁, lo₂, hi₂, hl, hr, fun V₀ => by simpa using h V₀ w⟩
 
 open scoped Classical in
-/-- Accountable safety with slack links against a fixed reference set `V₀`.
+/-- Accountable safety with slack links against a reference set `V₀` and reference weights `w₀`.
 
 Take two slack-finalized checkpoints whose blocks conflict.
 
@@ -331,43 +375,56 @@ Then two slack-justified checkpoints `l` and `r` have the property below.
 
 Their epochs lie between the epochs of the two finalized checkpoints.
 
+They come with weights `wl` from the set of `l` and `wr` from the set of `r`.
+
+The change and slack terms below are measured under those weights.
+
 Take the validator sets `L` and `R` of `l` and `r`.
 
-Measure the change of `L` since `V₀` as the stake that joined plus twice the stake that left.
+Under `w₀`, measure the change of `L` since `V₀` as the stake that joined plus twice what left.
 
-Add twice the slack of `l`, the stake of `L` outside the second set of `l`.
+Add the change from `w₀` to `wl` on `L`, where a gain counts once and a loss twice.
 
-Do the same for `R`.
+Add twice the slack of `l`, the stake of `L` outside the second set of `l`, under `wl`.
 
-The slashable validators of both sets hold stake `x` at least a third of `w(V₀)`, less the rest.
+Do the same for `R` and `wr`.
 
-The rest is a third of the two changes with their slacks.
+The slashable validators of both sets hold stake `x` under `w₀`.
+
+It is at least a third of `w₀(V₀)`, less a third of the two sums.
 
 So a validator that counts in the slack weighs as much as one that left.
 
 It stays slashable, but it weakens the quorum of its link.
 
-The two checkpoints do not depend on the reference set. -/
-theorem accountable_safety_reference_slack [DecidableEq ν] {c₁ c₂ : Checkpoint β}
-    (h₁ : SlackFinalized V U w genesis votes c₁) (h₂ : SlackFinalized V U w genesis votes c₂)
+The bound has content only when the reference weights stay close to the weights of both links.
+
+The two checkpoints and their weights do not depend on the reference set or weights. -/
+theorem accountable_safety_reference_slack [DecidableEq ν] {W : Checkpoint β → Set (ν → ℕ)}
+    {c₁ c₂ : Checkpoint β}
+    (h₁ : SlackFinalized V U W genesis votes c₁) (h₂ : SlackFinalized V U W genesis votes c₂)
     (hc : Conflicting c₁.block c₂.block) :
     ∃ l r : Checkpoint β, min c₁.epoch c₂.epoch ≤ l.epoch ∧ l.epoch ≤ max c₁.epoch c₂.epoch ∧
       min c₁.epoch c₂.epoch ≤ r.epoch ∧ r.epoch ≤ max c₁.epoch c₂.epoch ∧
-      SlackJustified V U w genesis votes l ∧ SlackJustified V U w genesis votes r ∧
-      ∀ V₀ : Finset ν,
-      stake w V₀ ≤ 3 * stake w {v ∈ V l ∩ V r | Slashable votes v} +
-        (stake w (V l \ V₀) + 2 * stake w (V₀ \ V l) + 2 * stake w (V l \ U l)) +
-        (stake w (V r \ V₀) + 2 * stake w (V₀ \ V r) + 2 * stake w (V r \ U r)) := by
-  obtain ⟨l, r, lo₁, hi₁, lo₂, hi₂, hl, hr, h⟩ := accountable_safety_dynamic_slack h₁ h₂ hc
-  refine ⟨l, r, lo₁, hi₁, lo₂, hi₂, hl, hr, fun V₀ => ?_⟩
+      SlackJustified V U W genesis votes l ∧ SlackJustified V U W genesis votes r ∧
+      ∃ wl ∈ W l, ∃ wr ∈ W r, ∀ (V₀ : Finset ν) (w₀ : ν → ℕ),
+      stake w₀ V₀ ≤ 3 * stake w₀ {v ∈ V l ∩ V r | Slashable votes v} +
+        (stake w₀ (V l \ V₀) + 2 * stake w₀ (V₀ \ V l) + weightChange w₀ wl (V l) +
+          2 * stake wl (V l \ U l)) +
+        (stake w₀ (V r \ V₀) + 2 * stake w₀ (V₀ \ V r) + weightChange w₀ wr (V r) +
+          2 * stake wr (V r \ U r)) := by
+  obtain ⟨l, r, lo₁, hi₁, lo₂, hi₂, hl, hr, wl, hwl, wr, hwr, h⟩ :=
+    accountable_safety_dynamic_slack h₁ h₂ hc
+  refine ⟨l, r, lo₁, hi₁, lo₂, hi₂, hl, hr, wl, hwl, wr, hwr, fun V₀ w₀ => ?_⟩
   -- The theorem above decides equality classically; this statement uses the given test.
-  have hbound : 2 * stake w (V l) ≤ 3 * stake w {v ∈ V l ∩ V r | Slashable votes v} +
-      stake w (V r) + 3 * (stake w (V l \ V₀) + stake w (V₀ \ V r)) +
-      2 * (stake w (V l \ U l) + stake w (V r \ U r)) := by
-    convert (h V₀).1
+  have hbound : 2 * stake w₀ (V l) ≤ 3 * stake w₀ {v ∈ V l ∩ V r | Slashable votes v} +
+      stake w₀ (V r) + 3 * (stake w₀ (V l \ V₀) + stake w₀ (V₀ \ V r)) +
+      ((weightChange w₀ wl (V l) + 2 * stake wl (V l \ U l)) +
+        (weightChange w₀ wr (V r) + 2 * stake wr (V r \ U r))) := by
+    convert (h V₀ w₀).1
   -- Each set and what left `V₀` weigh as much as `V₀` and what joined.
-  have hL := stake_add_stake_sdiff (w := w) (V l) V₀
-  have hR := stake_add_stake_sdiff (w := w) (V r) V₀
+  have hL := stake_add_stake_sdiff (w := w₀) (V l) V₀
+  have hR := stake_add_stake_sdiff (w := w₀) (V r) V₀
   omega
 
 open scoped Classical in
@@ -403,40 +460,53 @@ theorem accountable_safety_reference [DecidableEq ν] {c₁ c₂ : Checkpoint β
       stake w V₀ ≤ 3 * stake w {v ∈ V l ∩ V r | Slashable votes v} +
         (stake w (V l \ V₀) + 2 * stake w (V₀ \ V l)) +
         (stake w (V r \ V₀) + 2 * stake w (V₀ \ V r)) := by
-  obtain ⟨l, r, lo₁, hi₁, lo₂, hi₂, hl, hr, h⟩ := accountable_safety_reference_slack (U := V)
-    (h₁.slackFinalized V) (h₂.slackFinalized V) hc
+  obtain ⟨l, r, lo₁, hi₁, lo₂, hi₂, hl, hr, wl, hwl, wr, hwr, h⟩ :=
+    accountable_safety_reference_slack (U := V) (h₁.slackFinalized V) (h₂.slackFinalized V) hc
+  rw [Set.mem_singleton_iff] at hwl hwr
+  subst wl wr
   rw [slackJustified_self] at hl hr
-  exact ⟨l, r, lo₁, hi₁, lo₂, hi₂, hl, hr, fun V₀ => by simpa using h V₀⟩
+  exact ⟨l, r, lo₁, hi₁, lo₂, hi₂, hl, hr, fun V₀ => by simpa using h V₀ w⟩
 
 open scoped Classical in
-/-- Accountable safety with slack links when the validator sets change little since `V₀`.
+/-- Accountable safety with slack links when the sets and weights change little since a reference.
+
+The reference is a set `V₀` with weights `w₀`.
 
 Take two slack-finalized checkpoints whose blocks conflict.
 
-Take each slack-justified checkpoint whose epoch lies between theirs.
+Take each slack-justified checkpoint whose epoch lies between theirs, and each of its weights.
 
-Assume the stake that joined its set since `V₀`, plus twice the stake that left, is at most `b`.
+Under `w₀`, take the stake that joined its set since `V₀`, plus twice the stake that left.
 
-The sum also counts twice its slack, the stake of its set outside its second set.
+Add the change from `w₀` to those weights on its set, where a gain counts once and a loss twice.
+
+Add twice its slack, the stake of its set outside its second set, under those weights.
+
+Assume that sum is at most `b`.
 
 Then two such slack-justified checkpoints `l` and `r` have slashable validators of both sets.
 
-Their stake `x` satisfies `w(V₀) ≤ 3 * x + 2 * b`. -/
-theorem accountable_safety_of_change_slack [DecidableEq ν] {c₁ c₂ : Checkpoint β}
-    (h₁ : SlackFinalized V U w genesis votes c₁) (h₂ : SlackFinalized V U w genesis votes c₂)
-    (hc : Conflicting c₁.block c₂.block) (V₀ : Finset ν) (b : ℕ)
+Their stake `x` under `w₀` satisfies `w₀(V₀) ≤ 3 * x + 2 * b`.
+
+The bound has content only when `w₀` stays close to the weights of each such checkpoint. -/
+theorem accountable_safety_of_change_slack [DecidableEq ν] {W : Checkpoint β → Set (ν → ℕ)}
+    {c₁ c₂ : Checkpoint β}
+    (h₁ : SlackFinalized V U W genesis votes c₁) (h₂ : SlackFinalized V U W genesis votes c₂)
+    (hc : Conflicting c₁.block c₂.block) (V₀ : Finset ν) (w₀ : ν → ℕ) (b : ℕ)
     (change : ∀ c : Checkpoint β, min c₁.epoch c₂.epoch ≤ c.epoch →
-      c.epoch ≤ max c₁.epoch c₂.epoch → SlackJustified V U w genesis votes c →
-      stake w (V c \ V₀) + 2 * stake w (V₀ \ V c) + 2 * stake w (V c \ U c) ≤ b) :
+      c.epoch ≤ max c₁.epoch c₂.epoch → SlackJustified V U W genesis votes c → ∀ w ∈ W c,
+      stake w₀ (V c \ V₀) + 2 * stake w₀ (V₀ \ V c) + weightChange w₀ w (V c) +
+        2 * stake w (V c \ U c) ≤ b) :
     ∃ l r : Checkpoint β, min c₁.epoch c₂.epoch ≤ l.epoch ∧ l.epoch ≤ max c₁.epoch c₂.epoch ∧
       min c₁.epoch c₂.epoch ≤ r.epoch ∧ r.epoch ≤ max c₁.epoch c₂.epoch ∧
-      SlackJustified V U w genesis votes l ∧ SlackJustified V U w genesis votes r ∧
-      stake w V₀ ≤ 3 * stake w {v ∈ V l ∩ V r | Slashable votes v} + 2 * b := by
-  obtain ⟨l, r, lo₁, hi₁, lo₂, hi₂, hl, hr, h⟩ := accountable_safety_reference_slack h₁ h₂ hc
-  have h := h V₀
+      SlackJustified V U W genesis votes l ∧ SlackJustified V U W genesis votes r ∧
+      stake w₀ V₀ ≤ 3 * stake w₀ {v ∈ V l ∩ V r | Slashable votes v} + 2 * b := by
+  obtain ⟨l, r, lo₁, hi₁, lo₂, hi₂, hl, hr, wl, hwl, wr, hwr, h⟩ :=
+    accountable_safety_reference_slack h₁ h₂ hc
+  have h := h V₀ w₀
   refine ⟨l, r, lo₁, hi₁, lo₂, hi₂, hl, hr, ?_⟩
-  have := change l lo₁ hi₁ hl
-  have := change r lo₂ hi₂ hr
+  have := change l lo₁ hi₁ hl wl hwl
+  have := change r lo₂ hi₂ hr wr hwr
   omega
 
 open scoped Classical in
@@ -462,8 +532,10 @@ theorem accountable_safety_of_change [DecidableEq ν] {c₁ c₂ : Checkpoint β
       Justified V w genesis votes l ∧ Justified V w genesis votes r ∧
       stake w V₀ ≤ 3 * stake w {v ∈ V l ∩ V r | Slashable votes v} + 2 * b := by
   obtain ⟨l, r, lo₁, hi₁, lo₂, hi₂, hl, hr, h⟩ := accountable_safety_of_change_slack (U := V)
-    (h₁.slackFinalized V) (h₂.slackFinalized V) hc V₀ b
-    fun c lo hi hj => by
+    (h₁.slackFinalized V) (h₂.slackFinalized V) hc V₀ w b
+    fun c lo hi hj w' hw' => by
+      rw [Set.mem_singleton_iff] at hw'
+      subst w'
       rw [slackJustified_self] at hj
       simpa using change c lo hi hj
   rw [slackJustified_self] at hl hr

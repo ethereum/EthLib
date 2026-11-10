@@ -3,7 +3,7 @@ module
 public import EthLib.Consensus.Proofs.Transition.Genesis
 public import EthLib.Consensus.Proofs.Transition.TargetPending
 public import EthLib.Consensus.Proofs.Transition.TargetSlots
-public import EthLib.Consensus.Proofs.Transition.Upgrade
+public import EthLib.Consensus.Proofs.Transition.ForkBoundary
 public import EthLib.Consensus.Transition.ForkBoundary
 
 /-!
@@ -138,16 +138,8 @@ theorem TargetFlagsSigned.of_upgradeToAltair {pre : BeaconState preset .phase0}
     TargetFlagsSigned config checks after := by
   have frame := upgradeFrame_upgradeToAltair computed
   -- The upgrade keeps the registry, so each key, with no bound on its size.
-  have keys : KeysKept pre after := by
-    have same := (upgradeToAltair_spec computed).1
-    intro index validator found
-    refine ⟨validator, ?_, rfl⟩
-    unfold getValidator at found ⊢
-    rw [same]
-    exact found
-  simp only [upgradeToAltair, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-  obtain ⟨_, folded, _, -, rfl⟩ := computed
-  rw [← Array.foldlM_toList] at folded
+  have keys : KeysKept pre after := KeysKept.of_validators (upgradeToAltair_spec computed).1
+  obtain ⟨_, folded, _, rfl⟩ := upgradeToAltair_ok computed
   obtain ⟨previousZero, currentZero, -⟩ := carryFields_of_lt_altair (config := config)
     (post := .altair) pre (by decide) (by decide) (by decide) (by decide)
   -- A flag of the previous epoch in a state of the fold comes from a signed vote in Phase 0.

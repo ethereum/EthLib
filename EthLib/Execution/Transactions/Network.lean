@@ -142,9 +142,14 @@ def proofCount (fork : Fork) (count : Nat) : Nat :=
   if fork ≥ .fusaka then CELLS_PER_EXT_BLOB * count else count
 
 /-- Whether the counts of versioned hashes, commitments and proofs match the count of blobs. -/
+def blobCountsMatch (fork : Fork) (hashes : List Bytes32) (blobs : List Blob)
+    (commitments : List KZGCommitment) (proofs : List KZGProof) : Bool :=
+  hashes.length == blobs.length && commitments.length == blobs.length &&
+    proofs.length == proofCount fork blobs.length
+
+/-- Whether the counts of the network form match the count of its blobs. -/
 def countsMatch (fork : Fork) (w : NetworkBlobTransaction) : Bool :=
-  w.tx.blobVersionedHashes.length == w.blobs.length && w.commitments.length == w.blobs.length &&
-    w.proofs.length == proofCount fork w.blobs.length
+  blobCountsMatch fork w.tx.blobVersionedHashes w.blobs w.commitments w.proofs
 
 /--
 Whether the proofs show that the commitments match the blobs.
@@ -155,16 +160,35 @@ From Fusaka, proof `i * CELLS_PER_EXT_BLOB + j` is for cell `j` of the extended 
 
 The batch check of cells then runs on every cell of every extended blob.
 -/
-def proofsVerify (setup : TrustedSetup) (fork : Fork) (w : NetworkBlobTransaction) :
+def verifyBlobBundle (setup : TrustedSetup) (fork : Fork) (blobs : List Blob)
+    (commitments : List KZGCommitment) (proofs : List KZGProof) :
     Except KzgError Bool :=
   if fork ≥ .fusaka then do
-    let cells ← w.blobs.mapM computeCells
+    let cells ← blobs.mapM computeCells
     let indices := (List.range CELLS_PER_EXT_BLOB).toArray
     verifyCellKzgProofBatch setup
-      (w.commitments.toArray.flatMap fun c => Array.replicate CELLS_PER_EXT_BLOB c)
-      (Array.flatten (Array.replicate w.blobs.length indices))
-      cells.toArray.flatten w.proofs.toArray
-  else verifyBlobKzgProofBatch setup w.blobs.toArray w.commitments.toArray w.proofs.toArray
+      (commitments.toArray.flatMap fun c => Array.replicate CELLS_PER_EXT_BLOB c)
+      (Array.flatten (Array.replicate blobs.length indices))
+      cells.toArray.flatten proofs.toArray
+  else verifyBlobKzgProofBatch setup blobs.toArray commitments.toArray proofs.toArray
+
+/-- Whether the network form's proofs show that its commitments match its blobs. -/
+def proofsVerify (setup : TrustedSetup) (fork : Fork) (w : NetworkBlobTransaction) :
+    Except KzgError Bool :=
+  verifyBlobBundle setup fork w.blobs w.commitments w.proofs
+
+/--
+Check blobs, commitments and proofs at `fork` against the versioned hashes they answer.
+
+The counts match, each commitment hashes to its versioned hash, and the proofs verify.
+-/
+def validateBlobs (setup : TrustedSetup) (fork : Fork) (hashes : List Bytes32) (blobs : List Blob)
+    (commitments : List KZGCommitment) (proofs : List KZGProof) : Except NetworkError Unit := do
+  unless blobCountsMatch fork hashes blobs commitments proofs do
+    throw (.countMismatch hashes.length blobs.length commitments.length proofs.length)
+  unless hashesMatch hashes commitments do throw .versionedHashMismatch
+  unless ← (verifyBlobBundle setup fork blobs commitments proofs).mapError .kzg do
+    throw .proofRejected
 
 /--
 Check the blobs of the network form of a blob transaction at `fork`, as its "Networking" asks.
@@ -174,11 +198,7 @@ The counts match, each commitment hashes to its versioned hash, and the proofs v
 The checks of the transaction itself are separate.
 -/
 def validateNetwork (setup : TrustedSetup) (fork : Fork) (w : NetworkBlobTransaction) :
-    Except NetworkError Unit := do
-  unless countsMatch fork w do
-    throw (.countMismatch w.tx.blobVersionedHashes.length w.blobs.length w.commitments.length
-      w.proofs.length)
-  unless hashesMatch w.tx.blobVersionedHashes w.commitments do throw .versionedHashMismatch
-  unless ← (proofsVerify setup fork w).mapError .kzg do throw .proofRejected
+    Except NetworkError Unit :=
+  validateBlobs setup fork w.tx.blobVersionedHashes w.blobs w.commitments w.proofs
 
 end EthLib.Execution.Transactions

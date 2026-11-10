@@ -88,6 +88,9 @@ structure ExecutionPayload (fork : Fork) : Type where
   /-- The blob gas above the target before the block, from Dencun. -/
   excessBlobGas : Since .dencun fork UInt64
 
+/-- The eight-byte identifier of a payload build process. -/
+abbrev PayloadId := Bytes8
+
 /-- The three blocks that the consensus layer names to the execution layer. -/
 structure ForkchoiceState where
   /-- The head of the canonical chain. -/
@@ -146,6 +149,8 @@ inductive EngineError where
   | tooLargeRequest
   /-- The payload attributes do not have a structure that the version of the method takes. -/
   | invalidPayloadAttributes
+  /-- No build process has the requested payload ID. -/
+  | unknownPayload
   deriving DecidableEq, Repr
 
 /-- The code of an error: its JSON-RPC code is the negative of this number. -/
@@ -155,6 +160,7 @@ def EngineError.code : EngineError → UInt32
   | .invalidForkchoiceState => 38002
   | .tooLargeRequest => 38004
   | .invalidPayloadAttributes => 38003
+  | .unknownPayload => 38001
 
 /-- Why a payload is not valid, before its transactions run or when they run. -/
 inductive PayloadError where

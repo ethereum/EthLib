@@ -618,9 +618,11 @@ PyObject* py_engine_new_payload                          (PyObject* self, PyObje
 PyObject* py_engine_jwt_build                            (PyObject* self, PyObject* args);
 PyObject* py_engine_jwt_check                            (PyObject* self, PyObject* args);
 PyObject* py_engine_new_payload_on_chain                 (PyObject* self, PyObject* args);
+PyObject* py_engine_build_payload                        (PyObject* self, PyObject* args);
 PyObject* py_engine_forkchoice_updated                   (PyObject* self, PyObject* args);
 PyObject* py_engine_get_blobs                            (PyObject* self, PyObject* args);
 PyObject* py_engine_get_payload_bodies                   (PyObject* self, PyObject* args);
+PyObject* py_engine_get_payload                          (PyObject* self, PyObject* args);
 PyObject* py_engine_prepare_execution_payload            (PyObject* self, PyObject* args);
 PyObject* py_engine_prepare_execution_payload_gloas      (PyObject* self, PyObject* args);
 PyObject* py_engine_finalized_execution_block_hash       (PyObject* self, PyObject* args);
