@@ -2110,9 +2110,9 @@ The block is finalized at an epoch above every justified epoch so far.
 The new votes come from justified sources, and no honest validator becomes slashable.
 
 A vote names the validator that signed it, so both theorems assume that no one forges a vote.
-No theorem derives the votes of the model from the beacon chain yet, so neither theorem is about what a client runs.
+The votes of the model come from the beacon chain only one epoch step at a time, below, so neither theorem is yet about what a client runs.
 
-Four pieces of that link exist.
+These pieces of that link exist.
 `FfgVotes.lean` relates the slashing conditions of the beacon chain to those of the model.
 `justificationTest_iff_stake` (`Consensus/Proofs/Transition/FfgStake.lean`) reads the test of justification as a comparison of stakes.
 There the stake of a validator is its effective balance, and the indices count as a set.
@@ -2145,13 +2145,24 @@ It also assumes `ForkVersionsKnown` after the block.
 The genesis state built from deposits satisfies that and the equal justified checkpoints, and the slots, the blocks and every upgrade keep both (`Consensus/Proofs/Transition/TargetUpgrades.lean`).
 `TargetFlagsSigned.of_processUpgrades` carries the target-flag fact across the upgrades from Altair on.
 It assumes the registry below 2^64 validators after the upgrades.
-At least five gaps remain before a refinement.
-No theorem yet establishes the target-flag fact at the first Altair state, which the upgrade from Phase 0 builds from the pending attestations.
-None covers the forks before Altair.
-So none yet shows that the attesters of an epoch signed the link that the model counts.
-The attesters of the previous epoch are filtered by activity in that epoch, but the total counts the active validators of the current one.
-So a validator that exits at the current epoch counts as an attester but not in the total, and the model would leave it out.
-The beacon chain leaves slashed attesters out, and the model counts them, so the two tests agree only in one direction.
+Before Altair, `PendingSigned` (`Consensus/Proofs/Transition/TargetPending.lean`) says the same of each pending attestation of the two epochs, across attestations, blocks and slots.
+It relies on the beacon committees of those epochs staying fixed while the epoch is recent (`Committees.lean`), which needs more than `MIN_SEED_LOOKAHEAD + 2` epochs of RANDAO mixes.
+`TargetFlagsSigned.of_upgradeToAltair` (`TargetUpgrades.lean`) builds the target flags of the first Altair state from such pending attestations.
+
+`processJustificationAndFinalization_currentJustified` (`Consensus/Proofs/Transition/FfgJustification.lean`) refines one epoch step.
+It takes the target-flag fact from Altair, the pending-attestation fact before Altair, and an active stake of more than one and a half increments.
+The validator set of a target is the active set of its epoch, as each checkpoint has its own set in Gasper §8.6.
+Each validator weighs its effective balance in the state before the step.
+The votes of the model must hold those of the data that the state signs.
+If the step justifies the previous or the current epoch, the link goes from the justified checkpoint of that epoch to the new checkpoint.
+Then twice the stake of the set of the target is at most three times the stake of the voters of the link, plus a term of churn.
+The term is twice the stake of that set outside the active set of the current epoch, because the step divides by the active balance of the current epoch.
+For the current epoch the term is zero.
+For the previous epoch, `exitEpoch_of_mem_sdiff_active` shows that it counts only validators that exit at the current epoch.
+The exit churn bounds that stake, but no theorem states that bound yet.
+So one step gives a supermajority link of the model only up to that term.
+The beacon chain leaves slashed attesters out, and the model counts them, so the converse does not hold.
+No theorem yet turns these steps into a justified or finalized checkpoint of the model along a chain.
 The effective balances also change between epochs, while the model keeps one stake for every vote.
 
 ### Engine API
