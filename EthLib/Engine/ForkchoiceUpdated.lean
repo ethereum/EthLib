@@ -89,11 +89,19 @@ Version 3 takes the forks from Dencun on, before Glamsterdam, and version 4 take
 
 The update by Cancun ends version 2 at Dencun.
 
-The update by Prague extends version 3 to Pectra, and the update by Amsterdam ends it at Glamsterdam.
+The update by Prague extends version 3 to Pectra, and names only Cancun and Prague.
 
-So version 3 also takes Fusaka and the BPO forks, as version 4 of `engine_newPayload` does.
+No update by Osaka names version 3, yet the update by Amsterdam ends it at Glamsterdam.
 
-The source gives version 1 no rule of forks, and this model takes Paris only for it.
+So this model lets version 3 take Fusaka and the BPO forks too, as `engine_newPayloadV4` does.
+
+The source gives version 1 no rule of forks, and step 2 of version 2 sends Shanghai to version 2.
+
+So this model takes Paris only for version 1, as version 1 of `engine_newPayload` does.
+
+The fork check comes before the timestamp check, so it also wins over step 8.1 when both fail.
+
+All these checks run only when the update applies a valid head, as step 8 of version 1 says.
 
 Version 2 takes version 1 of the structure only before Shapella, and version 2 only from it.
 

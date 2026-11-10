@@ -633,6 +633,18 @@ theorem checkAttributes_unsupportedFork {version : Nat} {head : KnownPayload}
   | some fork =>
     simp [checkAttributes, hF, h fork hF, bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
 
+/-- A version other than 2 takes only forks whose structure is the one structure that it takes.
+
+So only version 2 can give `-38003` for the structure at the fork. -/
+theorem attributesForkAt_of_attributesTakeFork {version : Nat} (hv : version ≠ 2) {fork : Fork}
+    (h : attributesTakeFork version fork = true) :
+    attributesForkAt fork = attributesFork version := by
+  match version with
+  | 0 | 1 | 3 => revert h; cases fork <;> decide
+  | 2 => exact absurd rfl hv
+  | n + 4 =>
+    revert h
+    cases fork <;> simp [attributesTakeFork, attributesForkAt, attributesFork] <;> decide
 
 /-- Attributes of a fork of the version, whose structure is not that of the fork, give `-38003`.
 

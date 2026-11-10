@@ -177,6 +177,8 @@ OFF_HEAD_ATTRIBUTES = pytest.mark.parametrize(
         pytest.param(3, ATTRIBUTES_V3, id="v3"),
         # Version 3 takes the forks from Dencun up to Glamsterdam: here BPO2, at 600 seconds.
         pytest.param(3, ATTRIBUTES_V3 | {"timestamp": "0x258"}, id="v3-at-bpo2"),
+        # The last second before Shapella is still Paris.
+        pytest.param(1, ATTRIBUTES_V1 | {"timestamp": "0x63"}, id="v1-before-shapella"),
         pytest.param(4, ATTRIBUTES_V4, id="v4"),
     ],
 )
@@ -475,6 +477,10 @@ def test_attributes_unsupported_fork(version: int, attributes: dict[str, object]
     [
         # Version 2 takes the structure of version 1 before Shapella only.
         pytest.param(2, ATTRIBUTES_V1 | {"timestamp": "0x64"}, id="v2-structure-1-at-shapella"),
+        # Null withdrawals count as absent, so these are of the structure of version 1.
+        pytest.param(
+            2, ATTRIBUTES_V2 | {"withdrawals": None}, id="v2-null-withdrawals-at-shapella"
+        ),
         # It takes the structure of version 2 from Shapella only.
         pytest.param(2, ATTRIBUTES_V2 | {"timestamp": "0x32"}, id="v2-structure-2-at-paris"),
         # The timestamp must be above the 30 seconds of the head.
