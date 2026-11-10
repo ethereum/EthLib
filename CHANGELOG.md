@@ -18,8 +18,8 @@ Not yet released.
   The latest verified ancestor and the optimistic node now run at Gloas.
   The theorem `latestVerifiedAncestor_of_glamsterdam` now states the Gloas answer, no longer a failure.
   The optimistic node then fails when the head is not optimistic, since its second case is not yet specified.
-- `compute_min_epochs_for_block_requests` now takes the fork, and from Gloas it applies the EIP-8061 formula of `gloas/p2p-interface.md`.
-  Before, every fork got the Phase 0 value: 33024 epochs on mainnet, where Gloas serves 14299.
+- `compute_min_epochs_for_block_requests` now takes the fork, and from Gloas it applies the formula of [EIP-8061](https://eips.ethereum.org/EIPS/eip-8061#weak-subjectivity-period).
+  Before, every fork got the Phase 0 value: 33024 epochs on mainnet, where Gloas asks for 14299.
   `Config.computeMinEpochsForBlockRequests` takes the fork as a new argument.
   The C export `eth_consensus_compute_min_epochs_for_block_requests` reads the configuration and the fork as a pair, as `eth_consensus_gossip_topics` does.
   In Python, `consensus.compute_min_epochs_for_block_requests` takes the fork first, then the configuration, `mainnet` by default.

@@ -335,25 +335,18 @@ def test_error_message_limit() -> None:
         consensus.reqresp_message("mainnet", "phase0", "ErrorMessage", bytes(257))
 
 
-def _min_epochs_for_block_requests(config: dict, fork: str) -> int:
-    """compute_min_epochs_for_block_requests, from phase0 and from gloas/p2p-interface.md."""
-    if fork in ("glamsterdam", "hegota"):
-        exit_quotient = config["CHURN_LIMIT_QUOTIENT_GLOAS"]
-        consolidation = config["CONSOLIDATION_CHURN_LIMIT_QUOTIENT"]
-        numerator = 3 * exit_quotient * consolidation
-        denominator = 2 * consolidation + 3 * exit_quotient
-        return config["MIN_VALIDATOR_WITHDRAWABILITY_DELAY"] + (numerator // denominator) // 2
-    return config["MIN_VALIDATOR_WITHDRAWABILITY_DELAY"] + config["CHURN_LIMIT_QUOTIENT"] // 2
-
-
-@pytest.mark.parametrize("name", ["mainnet", "minimal"])
-@pytest.mark.parametrize("fork", ["phase0", "fusaka", "glamsterdam", "hegota"])
-def test_min_epochs_for_block_requests(name: str, fork: str) -> None:
-    expected = _min_epochs_for_block_requests(consensus.config(name), fork)
+# Before Gloas: 256 + CHURN_LIMIT_QUOTIENT // 2, with 65536 on mainnet and 32 on minimal.
+# From Gloas, EIP-8061: 256 + (3 * E * C // (2 * C + 3 * E)) // 2.
+# Mainnet has E = 32768 and C = 65536, minimal has E = 16 and C = 32.
+@pytest.mark.parametrize(
+    ("name", "before", "after"), [("mainnet", 33024, 14299), ("minimal", 272, 262)]
+)
+@pytest.mark.parametrize("fork", ["london", "phase0", "fusaka", "bpo5", "glamsterdam", "hegota"])
+def test_min_epochs_for_block_requests(name: str, before: int, after: int, fork: str) -> None:
+    expected = after if fork in ("glamsterdam", "hegota") else before
     assert consensus.compute_min_epochs_for_block_requests(fork, name) == expected
 
 
-def test_min_epochs_for_block_requests_mainnet() -> None:
-    # Phase 0: 256 + 65536 // 2. Gloas: 256 + (3 * 32768 * 65536 // (2 * 65536 + 3 * 32768)) // 2.
-    assert consensus.compute_min_epochs_for_block_requests("fusaka") == 33024
-    assert consensus.compute_min_epochs_for_block_requests("glamsterdam") == 14299
+def test_min_epochs_for_block_requests_unknown_fork() -> None:
+    with raises(ConsensusError, "no fork named nofork"):
+        consensus.compute_min_epochs_for_block_requests("nofork")
