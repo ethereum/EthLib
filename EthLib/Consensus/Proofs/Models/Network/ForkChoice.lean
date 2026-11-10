@@ -1,0 +1,190 @@
+module
+
+public import EthLib.Consensus.Proofs.Containers.Block
+public import EthLib.Consensus.Proofs.Containers.State
+public import EthLib.Consensus.Proofs.ForkChoice.Reachable
+public import EthLib.Consensus.Proofs.Models.Network.Model
+
+/-!
+# Honest validators that run the fork choice over the network
+
+Each honest validator keeps a store of the fork choice.
+
+At each move it ticks its store to the current time, or processes a message of its view.
+
+The messages are those of the fork choice handlers.
+
+A block is processed with the votes and slashings that it carries.
+
+A message that the handler rejects leaves the store as it was.
+
+The store of each honest validator stays reachable from the anchor along every execution.
+
+The answers of the execution engine are not part of the model, so any answer is allowed.
+-/
+
+@[expose] public section
+
+namespace EthLib.Consensus.Models.Network
+
+open Base Serialization.Ssz
+
+variable {preset : Preset} {fork : Fork}
+
+/-- A message of the fork choice. -/
+inductive Message (preset : Preset) (fork : Fork)
+  /-- A signed block. -/
+  | block (signed : SignedBeaconBlock preset fork)
+  /-- An attestation. -/
+  | attestation (attestation : Attestation preset fork)
+  /-- An attester slashing. -/
+  | attesterSlashing (slashing : AttesterSlashing preset fork)
+  /-- From Gloas, a vote of a member of the payload committee. -/
+  | payloadAttestation (gloas : .glamsterdam ≤ fork) (message : PayloadAttestationMessage)
+  /-- From Gloas, a signed envelope. -/
+  | envelope (gloas : .glamsterdam ≤ fork) (signed : SignedExecutionPayloadEnvelope preset fork)
+  /-- From Heze, a signed inclusion list. -/
+  | inclusionList (heze : .hegota ≤ fork) (signed : SignedInclusionList)
+
+/-- The moves of the store of an honest validator, at a time and with a view.
+
+A tick sets the store to the time, which must fit in 64 bits.
+
+Every other move processes a message of the view, as one from the network.
+
+The votes inside a block are processed with it. -/
+inductive Handles (config : Config) (checks : SignatureChecks) (time : ℕ)
+    (view : Set (Message preset fork)) (store : Store preset fork) : Store preset fork → Prop
+  /-- The store after a tick at the time. -/
+  | tick {after : Store preset fork} :
+    time < 2 ^ 64 → store.onTick config time.toUInt64 = .ok after →
+      Handles config checks time view store after
+  /-- The store after a block of the view, with its votes. -/
+  | block {after : Store preset fork} {sources : BlockSources preset fork}
+      {signed : SignedBeaconBlock preset fork} :
+    .block signed ∈ view → store.onBlockWithVotes config checks sources signed = .ok after →
+      Handles config checks time view store after
+  /-- The store after an attestation of the view. -/
+  | attestation {after : Store preset fork} {attestation : Attestation preset fork} :
+    .attestation attestation ∈ view →
+      store.onAttestation config checks attestation false = .ok after →
+      Handles config checks time view store after
+  /-- The store after an attester slashing of the view. -/
+  | attesterSlashing {after : Store preset fork} {slashing : AttesterSlashing preset fork} :
+    .attesterSlashing slashing ∈ view →
+      store.onAttesterSlashing config checks slashing = .ok after →
+      Handles config checks time view store after
+  /-- From Gloas, the store after a vote of the payload committee from the view. -/
+  | payloadAttestation {after : Store preset fork} {gloas : .glamsterdam ≤ fork}
+      {message : PayloadAttestationMessage} :
+    .payloadAttestation gloas message ∈ view →
+      store.onPayloadAttestationMessage config checks gloas message false = .ok after →
+      Handles config checks time view store after
+  /-- From Gloas, the store after a signed envelope of the view. -/
+  | envelope {after : Store preset fork} {sources : BlockSources preset fork}
+      {gloas : .glamsterdam ≤ fork} {signed : SignedExecutionPayloadEnvelope preset fork} :
+    .envelope gloas signed ∈ view →
+      store.onExecutionPayloadEnvelope config checks sources gloas signed = .ok after →
+      Handles config checks time view store after
+  /-- From Heze, the store after an inclusion list of the view. -/
+  | inclusionList {after : Store preset fork} {heze : .hegota ≤ fork}
+      {signed : SignedInclusionList} :
+    .inclusionList heze signed ∈ view →
+      store.onInclusionList config checks heze signed = .ok after →
+      Handles config checks time view store after
+
+/-- The protocol where honest validators run the fork choice.
+
+The signed statements of a message and the messages that honest validators send are parameters.
+
+The moves of an honest validator are those of its store. -/
+def forkChoice {ν κ : Type*} (config : Config) (checks : SignatureChecks)
+    (signed : Message preset fork → Set (ν × κ))
+    (sends : ν → ℕ → Set (Message preset fork) → Store preset fork → Message preset fork → Prop) :
+    Protocol ν (Message preset fork) (Store preset fork) κ where
+  signed := signed
+  Sends := sends
+  Moves := fun _ time view store after => Handles config checks time view store after
+
+variable {config : Config} {anchorState : BeaconState preset fork}
+  {anchorBlock : BeaconBlock preset fork}
+
+/-- A move of the store leads from a reachable store to a reachable store. -/
+theorem Handles.reachable {checks : SignatureChecks} {time : ℕ} {view : Set (Message preset fork)}
+    {store after : Store preset fork} (handles : Handles config checks time view store after)
+    (reachable : Store.Reachable config anchorState anchorBlock store) :
+    Store.Reachable config anchorState anchorBlock after := by
+  cases handles with
+  | tick _ ticked => exact reachable.tick ticked
+  | block _ added => exact reachable.onBlockWithVotes added
+  | attestation _ attested => exact reachable.attestation attested
+  | attesterSlashing _ slashed => exact reachable.attesterSlashing slashed
+  | payloadAttestation _ voted => exact reachable.payloadAttestation voted
+  | envelope _ accepted => exact reachable.envelope accepted
+  | inclusionList _ accepted => exact reachable.inclusionList accepted
+
+/-- Along an execution, the store of each honest validator stays reachable from the anchor.
+
+The stores of the honest validators must be reachable at the start. -/
+theorem Execution.reachable {ν κ : Type*} [DecidableEq ν] {checks : SignatureChecks}
+    {signed : Message preset fork → Set (ν × κ)}
+    {sends : ν → ℕ → Set (Message preset fork) → Store preset fork → Message preset fork → Prop}
+    {J : Set ν} (e : Execution (forkChoice config checks signed sends) J)
+    (start : ∀ v ∈ J, Store.Reachable config anchorState anchorBlock (e.init.state v)) (n : ℕ) :
+    ∀ v ∈ J, Store.Reachable config anchorState anchorBlock ((e.world n).state v) := by
+  induction n with
+  | zero => exact start
+  | succ n ih =>
+    intro v honest
+    rcases e.state_succ n v with same | ⟨-, moved⟩
+    · exact same ▸ ih v honest
+    · exact Handles.reachable moved (ih v honest)
+
+/-- A mainnet store can start from a state at slot zero and a block with the root of that state.
+-/
+theorem exists_getForkchoiceStore (config : Config) {state : BeaconState .mainnet fork}
+    (zero : state.slot = 0) (block : BeaconBlock .mainnet fork) :
+    ∃ stateRoot store, SszType.hashTreeRoot state = .ok stateRoot ∧
+      getForkchoiceStore config state { block with stateRoot } = .ok store := by
+  have : NeZero Preset.mainnet.MAX_COMMITTEES_PER_SLOT.toNat := ⟨by decide⟩
+  obtain ⟨stateRoot, rooted⟩ := SszType.hashTreeRoot_total state
+  obtain ⟨blockRoot, blockRooted⟩ :=
+    SszType.hashTreeRoot_total ({ block with stateRoot } : BeaconBlock .mainnet fork)
+  have time : computeTimeAtSlotMs config (secondsToMilliseconds state.genesisTime) state.slot =
+      .ok (secondsToMilliseconds state.genesisTime) := by
+    have fits := UInt64.toNat_lt (secondsToMilliseconds state.genesisTime)
+    simp [computeTimeAtSlotMs, zero, Uint64.mulChecked, Uint64.addChecked, bind, Except.bind,
+      fits]
+  refine ⟨stateRoot, ?_⟩
+  simp only [true_and, getForkchoiceStore, rooted, blockRooted, time, Except.mapError, bind,
+    Except.bind, ne_eq, not_true_eq_false, ite_false]
+  exact ⟨_, rfl⟩
+
+/-- Honest validators that run the fork choice have an execution where a block reaches all.
+
+An honest validator sends the block from an empty view, as the protocol allows.
+
+Every validator then has the block in its view, and the stores stay reachable.
+
+The execution is partially synchronous for every GST and every positive delay.
+
+Its time also grows without bound. -/
+theorem exists_forkChoice_execution {ν κ : Type*} [DecidableEq ν] (checks : SignatureChecks)
+    {store : Store preset fork}
+    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok store)
+    {J : Set ν} {v : ν} (honest : v ∈ J) (signed : SignedBeaconBlock preset fork) {Δ : ℕ}
+    (positive : 0 < Δ) :
+    ∃ e : Execution (forkChoice config checks (fun _ => (∅ : Set (ν × κ)))
+        fun _ _ _ _ m => m = .block signed) J,
+      e.events 0 = .send v (.block signed) ∧ (∀ u, .block signed ∈ (e.world 2).view u) ∧
+      (∀ GST, e.PartiallySynchronous GST Δ) ∧ (∀ T, ∃ n, T ≤ (e.world n).time) ∧
+      ∀ n, ∀ u ∈ J, Store.Reachable config anchorState anchorBlock ((e.world n).state u) := by
+  obtain ⟨e, init, sends, delivered, sync, unbounded⟩ :=
+    exists_partiallySynchronous (P := forkChoice config checks (fun _ => (∅ : Set (ν × κ)))
+        fun _ _ _ _ m => m = .block signed) (time := 0) (state := fun _ => store)
+      honest rfl (fun _ none => none.elim) positive
+  refine ⟨e, sends, delivered, sync, unbounded, e.reachable fun u _ => ?_⟩
+  rw [init]
+  exact .anchor anchored
+
+end EthLib.Consensus.Models.Network
