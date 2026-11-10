@@ -2596,7 +2596,7 @@
       {"constructor": "outOfFuel", "code": 3}]}],
    "error_class": "ConsensusError",
    "docstring":
-   "The columns that a node custodies, one bit per column, as the bytes of an SSZ bitvector.\n\nThe arguments are the name of the configuration, the node ID and the custody group count."},
+   "The columns that a node custodies, one bit per column, as the bytes of an SSZ bitvector.\n\nThe arguments are the name of the preset and the configuration, the node ID and the group count."},
   {"summary":
    "The root of the value that the bytes encode, and the bytes of that value, as a pair.",
    "signature":
