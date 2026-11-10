@@ -179,8 +179,7 @@ theorem paymentAt_of_lt {gloas : .glamsterdam ≤ fork} {position : Nat}
   simp [paymentAt, inside]
   rfl
 
-/-- A step that keeps the builder fields and the position of the parent payment keeps the
-invariant.
+/-- A step that keeps the builder fields and the parent payment position keeps the invariant.
 
 The invariant reads nothing else of the state. -/
 theorem BuilderDebtCovered.of_position {gloas : .glamsterdam ≤ fork}
