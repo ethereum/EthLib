@@ -115,12 +115,7 @@ def runCacheQ (scheme : Scheme F G A M) (adversary : Adversary F G A M) (X : G)
   if signed cache m then return ((m, t, s), false, cache) else
     (((m, t, s), ·, cache)) <$> verifyQ scheme X m t s
 
-/-- Run the adversary on the key `X` with a signing oracle, and keep the result of the check. -/
-def runQ (scheme : Scheme F G A M) (adversary : Adversary F G A M) (X : G)
-    (signer : SignerQ F A M) : PermComp A Bool :=
-  (fun z => z.2.1) <$> runCacheQ scheme adversary X signer
-
-/-- The game as a program of the permutation oracle, keeping the forgery and the signing cache.
+/-- The game as a program of the permutation oracle, with the forgery, result and signing cache.
 
 It draws the key, runs, and checks the forgery. -/
 def experimentViewQ (scheme : Scheme F G A M) (fuel : ℕ) (adversary : Adversary F G A M) :

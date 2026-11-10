@@ -51,9 +51,11 @@ abbrev JointState (F M σ : Type) := Cache F M × σ
 
 /-- A signer of new messages, which may read and write the state of the permutation oracle.
 
-A signer that breaks the partial bijection of the lazy permutation's cache leaves the model.
+Its answer `none` means that signing failed, and the message stays fresh.
 
-Then a permutation may fail to agree with the cache, and the draw at the end gives the identity. -/
+Over the lazy permutation, a signer may write a pair that no permutation agrees with.
+
+The draw at the end then gives the identity, and the joint law of the game no longer holds. -/
 abbrev FreshSigner (F M σ : Type) := M → StateT σ ProbComp (Option (F × F))
 
 variable [DecidableEq M]
@@ -107,7 +109,7 @@ def jointRun (scheme : Scheme F G A M) (adversary : Adversary F G A M) (X : G)
 variable [SampleableType F]
 
 omit [DecidableEq G] in
-/-- Run the oracles of the real signing oracle under the key `x` against the permutation oracle.
+/-- Run the game's oracles, with the real signing oracle under the key `x`, against `Π`'s oracle.
 
 Those are the joint oracles with the real signer of new messages. -/
 theorem flattenStateT_mapStateTBase_implQ_signQ (perm : QueryImpl (PermSpec A) (StateT σ ProbComp))
