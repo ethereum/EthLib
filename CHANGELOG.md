@@ -9,6 +9,13 @@ Not yet released.
 
 ### Changes that break callers
 
+- Each fork upgrade now gives one upgrade frame, and the invariant across the upgrade follows from it ([#1841](https://github.com/ethereum/EthLib/pull/1841)).
+  `UpgradeFrame` now also keeps the finalized checkpoint, and it carries the balance count and the exit order of the validators.
+  So a caller that builds one supplies the three new fields, and `UpgradeFrame.of_carried` takes the finalized checkpoint and the number of balances as new premises.
+  `UpgradeFrame` and its lemmas are in `EthLib.Consensus.Proofs.Transition.Upgrade`, and `upgradeFrame_upgradeNext` is in `EthLib.Consensus.Proofs.Transition.ForkBoundary`.
+  `upgradeFrame_carryFields` no longer takes a proof that the fork is at least Altair.
+  `Invariant.of_carried` is gone; `UpgradeFrame.invariant` replaces it.
+  No statement of an invariant theorem changes, and no C export or Python function changes.
 - The fast confirmation rule now weighs the committees of a range of slots exactly, in place of an average per slot ([#1828](https://github.com/ethereum/EthLib/issues/1828)).
   Each active member of the committees counts once, by its effective balance in the source of balances, and a range with a whole epoch still weighs the total active balance.
   The average did not bound a given committee, so the rule could confirm a block that an attack then reorgs.
