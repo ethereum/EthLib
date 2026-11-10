@@ -1,6 +1,9 @@
 module
 
+public import EthLib.Base.Proofs.FoldlM
+public import EthLib.Consensus.Proofs.Transition.EpochRewards
 public import EthLib.Consensus.Proofs.Transition.Totality.Inactivity
+public import Mathlib.Data.Nat.Sqrt
 
 /-!
 # Proofs: the rewards and penalties succeed from Altair
@@ -48,8 +51,8 @@ def Preset.largestEffectiveBalance (preset : Preset) : Nat :=
     (max preset.MIN_ACTIVATION_BALANCE.toNat preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat)
 
 /-- The cap on the effective balance of a validator is at most the largest cap. -/
-theorem withdrawalMaxEffectiveBalance_le_largest (preset : Preset) (fork : Base.Fork)
-    (validator : Validator) :
+theorem withdrawalMaxEffectiveBalance_le_largestEffectiveBalance (preset : Preset)
+    (fork : Base.Fork) (validator : Validator) :
     (withdrawalMaxEffectiveBalance preset fork validator).toNat ≤
       preset.largestEffectiveBalance := by
   unfold withdrawalMaxEffectiveBalance getMaxEffectiveBalance Preset.largestEffectiveBalance
@@ -71,7 +74,7 @@ def Preset.baseRewardCeiling (preset : Preset) : Nat :=
 
 /-- The whole increments of a budget, or of one increment if the budget is smaller.
 
-A total balance of the step is at least one increment, so it has at most these increments. -/
+A total balance of the step is at most one increment or the budget, so it has at most these. -/
 def Preset.budgetIncrements (preset : Preset) (budget : Nat) : Nat :=
   max preset.EFFECTIVE_BALANCE_INCREMENT.toNat budget / preset.EFFECTIVE_BALANCE_INCREMENT.toNat
 
@@ -81,7 +84,9 @@ The budget bounds the balances and the sum of the effective balances.
 
 The score bound bounds the inactivity scores.
 
-The increment times the base reward factor must fit, and so must the active increments times 64.
+The increment times the base reward factor must fit.
+
+So must the increments of the budget times the weight denominator, 64.
 
 The base reward bound times the weight of a flag times the increments of the budget must fit.
 
@@ -105,27 +110,19 @@ structure RewardsFit (preset : Preset) (config : Config) (budget scoreBound : Na
   penaltyQuotient : ∀ fork : Base.Fork, config.INACTIVITY_SCORE_BIAS.toNat *
     (parameters preset fork).INACTIVITY_PENALTY_QUOTIENT.toNat < 2 ^ 64
 
-/-- A number whose square is at most n, with the next square above n, is the square root of n. -/
-private theorem sqrt_eq_of_bounds {n root : Nat} (below : root * root ≤ n)
-    (above : n < (root + 1) * (root + 1)) : n.sqrt = root := by
-  have low := Nat.sqrt_le n
-  have high := Nat.lt_succ_sqrt n
-  rcases Nat.lt_trichotomy n.sqrt root with lt | eq | gt
-  · have := Nat.mul_le_mul (Nat.succ_le_of_lt lt) (Nat.succ_le_of_lt lt)
-    omega
-  · exact eq
-  · have := Nat.mul_le_mul (Nat.succ_le_of_lt gt) (Nat.succ_le_of_lt gt)
-    simp only [Nat.succ_eq_add_one] at this
-    omega
+/-- Under the bounds, the budget is below 2^64. -/
+theorem RewardsFit.budget_lt {preset : Preset} {config : Config} {budget scoreBound : Nat}
+    (fit : RewardsFit preset config budget scoreBound) : budget < 2 ^ 64 :=
+  Nat.lt_of_le_of_lt (Nat.le_add_right _ _) fit.flagRewards
 
 /-- The rewards of mainnet fit under a budget of 2^57 Gwei and scores up to 2^23.
 
 That budget is about 1.44 * 10^8 ETH.
 
 The score bound is the score bias times 2^21 epochs. -/
-theorem RewardsFit.mainnet : RewardsFit Preset.mainnet Config.mainnet (2 ^ 57) (2 ^ 23) := by
+theorem rewardsFit_mainnet : RewardsFit Preset.mainnet Config.mainnet (2 ^ 57) (2 ^ 23) := by
   have root : (Preset.mainnet.EFFECTIVE_BALANCE_INCREMENT.toNat).sqrt = 31622 :=
-    sqrt_eq_of_bounds (by decide) (by decide)
+    (Nat.eq_sqrt.mpr ⟨by decide, by decide⟩).symm
   constructor
   · decide
   · decide
@@ -141,9 +138,9 @@ theorem RewardsFit.mainnet : RewardsFit Preset.mainnet Config.mainnet (2 ^ 57) (
     split_ifs <;> decide
 
 /-- The rewards of minimal fit under a budget of 2^57 Gwei and scores up to 2^23. -/
-theorem RewardsFit.minimal : RewardsFit Preset.minimal Config.minimal (2 ^ 57) (2 ^ 23) := by
+theorem rewardsFit_minimal : RewardsFit Preset.minimal Config.minimal (2 ^ 57) (2 ^ 23) := by
   have root : (Preset.minimal.EFFECTIVE_BALANCE_INCREMENT.toNat).sqrt = 31622 :=
-    sqrt_eq_of_bounds (by decide) (by decide)
+    (Nat.eq_sqrt.mpr ⟨by decide, by decide⟩).symm
   constructor
   · decide
   · decide
@@ -160,21 +157,6 @@ theorem RewardsFit.minimal : RewardsFit Preset.minimal Config.minimal (2 ^ 57) (
 
 variable {preset : Preset} {fork : Base.Fork} {state : BeaconState preset fork}
 
-/-- The square root keeps the order. -/
-private theorem sqrt_le_sqrt_of_le {a b : Nat} (le : a ≤ b) : a.sqrt ≤ b.sqrt := by
-  have low := Nat.sqrt_le a
-  have high := Nat.lt_succ_sqrt b
-  refine Nat.le_of_not_lt fun lt => ?_
-  have := Nat.mul_le_mul (Nat.succ_le_of_lt lt) (Nat.succ_le_of_lt lt)
-  omega
-
-/-- The square root of a positive number is positive. -/
-private theorem sqrt_pos_of_pos {a : Nat} (pos : 0 < a) : 0 < a.sqrt := by
-  have := Nat.lt_succ_sqrt a
-  refine Nat.pos_of_ne_zero fun zero => ?_
-  simp only [zero, Nat.succ_eq_add_one, Nat.zero_add, Nat.mul_one] at this
-  omega
-
 /-- The reward of one increment succeeds when the total is at least one positive increment.
 
 It is then at most its value at a total of one increment. -/
@@ -188,8 +170,8 @@ private theorem getBaseRewardPerIncrement_le (positive : preset.EFFECTIVE_BALANC
     Nat.pos_of_ne_zero fun zero => positive (UInt64.toNat_inj.mp (by simpa using zero))
   have lowNat := UInt64.le_iff_toNat_le.mp low
   have root := toNat_integerSquareroot total
-  have rootLow := sqrt_le_sqrt_of_le lowNat
-  have rootPos := sqrt_pos_of_pos incPos
+  have rootLow := Nat.sqrt_le_sqrt lowNat
+  have rootPos := Nat.sqrt_pos.mpr incPos
   have nonzero : integerSquareroot total ≠ 0 := fun zero => by
     rw [zero, UInt64.toNat_zero] at root
     omega
@@ -223,24 +205,6 @@ private theorem getBaseReward_le (altair : .altair ≤ fork) {total per : Gwei}
       mulChecked_of_lt (Nat.lt_of_le_of_lt bound fits), bind, Except.bind, Except.mapError]
   · rw [UInt64.toNat_mul, Nat.mod_eq_of_lt (Nat.lt_of_le_of_lt bound fits)]
     exact bound
-
-/-- A fold over inputs with distinct keys succeeds when each step from a ready state succeeds.
-
-Each step must keep ready the inputs with another key. -/
-private theorem foldlM_exists_ok_of_distinct {α σ ε : Type} {step : σ → α → Except ε σ}
-    (key : α → Nat) (Ready : σ → α → Prop)
-    (advance : ∀ last x, Ready last x → ∃ next, step last x = .ok next ∧
-      ∀ y, key y ≠ key x → Ready last y → Ready next y) :
-    ∀ (xs : List α) (start : σ), (xs.map key).Nodup → (∀ x ∈ xs, Ready start x) →
-      ∃ out, xs.foldlM step start = .ok out
-  | [], start, _, _ => ⟨start, rfl⟩
-  | x :: rest, start, distinct, ready => by
-    rw [List.map_cons, List.nodup_cons] at distinct
-    obtain ⟨next, stepped, keeps⟩ := advance start x (ready x List.mem_cons_self)
-    obtain ⟨out, folded⟩ := foldlM_exists_ok_of_distinct key Ready advance rest next distinct.2
-      fun y member => keeps y (fun same => distinct.1 (same ▸ List.mem_map_of_mem member))
-        (ready y (List.mem_cons_of_mem _ member))
-    exact ⟨out, by rw [List.foldlM_cons, stepped]; exact folded⟩
 
 /-- Adding an amount to a zero entry of the deltas succeeds. -/
 private theorem addDelta_exists_ok_of_zero {deltas : Array Gwei} {index : ValidatorIndex}
@@ -450,7 +414,7 @@ private theorem getFlagIndexDeltas_exists_ok {config : Config} {budget scoreBoun
     ∃ deltas, getFlagIndexDeltas state altair flagIndex = .ok deltas := by
   have incPos : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat :=
     Nat.pos_of_ne_zero fun zero => positive (UInt64.toNat_inj.mp (by simpa using zero))
-  have budgetLt : budget < 2 ^ 64 := Nat.lt_of_le_of_lt (Nat.le_add_right _ _) fit.flagRewards
+  have budgetLt : budget < 2 ^ 64 := fit.budget_lt
   obtain ⟨participating, participatingOk, inRange⟩ := getUnslashedParticipatingIndices_exists_ok
     within altair flagIndex.val.toUInt64 (Or.inl rfl) sized
   obtain ⟨participatingBalance, balanceOk, balanceLe⟩ :=
@@ -543,7 +507,7 @@ private theorem getFlagIndexDeltas_reward_le {config : Config} {budget scoreBoun
       PARTICIPATION_FLAG_WEIGHTS[flagIndex].toNat * preset.budgetIncrements budget := by
   have incPos : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat :=
     Nat.pos_of_ne_zero fun zero => positive (UInt64.toNat_inj.mp (by simpa using zero))
-  have budgetLt : budget < 2 ^ 64 := Nat.lt_of_le_of_lt (Nat.le_add_right _ _) fit.flagRewards
+  have budgetLt : budget < 2 ^ 64 := fit.budget_lt
   obtain ⟨participating, participatingBalance, total', participatingOk, balanceOk, totalOk',
     entries⟩ := getFlagIndexDeltas_getD within computed
   obtain rfl : total = total' := Except.ok.inj (totalOk.symm.trans totalOk')
@@ -640,7 +604,7 @@ private theorem map_flag_weights :
 
 The registry must stay within its limit, with one balance for each validator.
 
-Each effective balance must be at most the cap of its validator.
+Each effective balance must be at most the largest cap, as the cap of its validator is.
 
 The sum of the effective balances and each balance must be at most the budget.
 
@@ -650,17 +614,17 @@ The finalized epoch must be at most the previous epoch, so that the test for a l
 
 The lists of scores and of flags must have one entry for each validator.
 
-The increment, the inactivity penalty quotients and the score bias must be positive.
+The divisors of the preset and of the configuration must be positive.
 
-These hypotheses hold on the state that the update of the inactivity scores returns.
+The hypotheses are read on the state that the update of the inactivity scores returns.
 
-That update and justification change neither the registry nor the balances. -/
+A run must show that they hold there. -/
 theorem processRewardsAndPenalties_total {config : Config} {budget scoreBound : Nat}
     (altair : .altair ≤ fork) (positive : preset.DivisorsPositive)
-    (biased : config.INACTIVITY_SCORE_BIAS ≠ 0) (fit : RewardsFit preset config budget scoreBound)
+    (configPositive : config.DivisorsPositive) (fit : RewardsFit preset config budget scoreBound)
     (within : state.RegistryWithinLimit) (matched : BalancesMatch state)
     (capped : ∀ validator ∈ state.validators.data,
-      validator.effectiveBalance ≤ withdrawalMaxEffectiveBalance preset fork validator)
+      validator.effectiveBalance.toNat ≤ preset.largestEffectiveBalance)
     (summed : effectiveBalanceSum state ≤ budget)
     (funded : ∀ balance ∈ state.balances.data, balance.toNat ≤ budget)
     (scored : ∀ score ∈ (state.inactivityScores altair).data, score.toNat ≤ scoreBound)
@@ -669,7 +633,7 @@ theorem processRewardsAndPenalties_total {config : Config} {budget scoreBound : 
     ∃ after, processRewardsAndPenalties config state = .ok after := by
   by_cases genesis : getCurrentEpoch state = GENESIS_EPOCH
   · exact ⟨state, processRewardsAndPenalties_genesis config genesis⟩
-  have budgetLt : budget < 2 ^ 64 := Nat.lt_of_le_of_lt (Nat.le_add_right _ _) fit.flagRewards
+  have budgetLt : budget < 2 ^ 64 := fit.budget_lt
   obtain ⟨total, totalOk, low, highCases⟩ :=
     getTotalActiveBalance_exists_ok within (Nat.lt_of_le_of_lt summed budgetLt)
   have high : total.toNat ≤ max preset.EFFECTIVE_BALANCE_INCREMENT.toNat budget := by
@@ -687,10 +651,7 @@ theorem processRewardsAndPenalties_total {config : Config} {budget scoreBound : 
     have weight : 0 < PARTICIPATION_FLAG_WEIGHTS[0].toNat := by decide
     exact Nat.lt_of_le_of_lt (Nat.le_trans (Nat.le_mul_of_pos_right _ weight)
       (Nat.le_mul_of_pos_right _ one)) numerator
-  have largest : ∀ validator ∈ state.validators.data,
-      validator.effectiveBalance.toNat ≤ preset.largestEffectiveBalance := fun validator member =>
-    Nat.le_trans (UInt64.le_iff_toNat_le.mp (capped validator member))
-      (withdrawalMaxEffectiveBalance_le_largest preset fork validator)
+  have largest := capped
   have baseOk : ∀ index : ValidatorIndex, index.toNat < state.validators.data.size →
       ∃ base, getBaseReward state total index = .ok base ∧
         base.toNat ≤ preset.baseRewardCeiling := fun index lt =>
@@ -701,8 +662,8 @@ theorem processRewardsAndPenalties_total {config : Config} {budget scoreBound : 
       getFlagIndexDeltas_exists_ok altair positive.increment fit within summed finalized sized
         totalOk low high baseOk flagIndex
   obtain ⟨⟨inactivityRewards, inactivityPenalties⟩, inactivityOk⟩ :=
-    getInactivityPenaltyDeltas_exists_ok altair positive biased fit within largest scored
-      scoresMatch sized
+    getInactivityPenaltyDeltas_exists_ok altair positive configPositive.scoreBias fit within largest
+      scored scoresMatch sized
   have small : state.validators.data.size < 2 ^ 64 :=
     Nat.lt_of_le_of_lt within preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt
   obtain ⟨after, applied⟩ := foldlM_applyAllDeltas_exists_ok
