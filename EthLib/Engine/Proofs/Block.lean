@@ -35,6 +35,11 @@ variable {fork : Fork}
 
 /-! ## Pieces -/
 
+/-- A timestamp of 64 bits keeps its value in the 256-bit field of a header. -/
+theorem toNat_ofNat_timestamp (t : UInt64) : (BitVec.ofNat 256 t.toNat).toNat = t.toNat := by
+  rw [BitVec.toNat_ofNat]
+  exact Nat.mod_eq_of_lt (Nat.lt_trans t.toNat_lt (by decide))
+
 /-- A field computed only at the forks that have it is exactly the step's value at each of them.
 
 Before its fork the field has one value, so the computation then always succeeds. -/
@@ -161,10 +166,8 @@ theorem ofBlock_toBlock (hParis : .paris ≤ fork)
     · cases hCheck
   subst hComputed
   obtain ⟨hEnc, -⟩ := encode_of_decodeTransactions hTxs
-  have hTime : (BitVec.ofNat 256 p.timestamp.toNat).toNat = p.timestamp.toNat := by
-    rw [BitVec.toNat_ofNat]
-    exact Nat.mod_eq_of_lt (Nat.lt_trans p.timestamp.toNat_lt (by decide))
-  simp only [ofBlock, hEnc, hHash, Except.toOption, Option.bind_eq_bind, Option.bind_some, hTime]
+  simp only [ofBlock, hEnc, hHash, Except.toOption, Option.bind_eq_bind, Option.bind_some,
+    toNat_ofNat_timestamp]
   rw [ite_eq_left ⟨p.blockNumber.toNat_lt, p.gasLimit.toNat_lt, p.gasUsed.toNat_lt,
     p.timestamp.toNat_lt, p.baseFeePerGas.isLt⟩]
   cases p

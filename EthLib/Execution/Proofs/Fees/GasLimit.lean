@@ -2,6 +2,7 @@ module
 
 public import EthLib.Execution.Fees.GasLimit
 public import EthLib.Base.Proofs.Fork
+public import EthLib.Base.Proofs.GasLimit
 
 /-!
 # Proofs: the gas limit rule
@@ -15,6 +16,10 @@ So `k` blocks multiply it by at most `(1025 / 1024)^k`.
 At the first London block, the rule reads twice the parent's gas limit.
 
 So that block may double the gas limit, which no other block may do.
+
+After a parent of at least 5000, a gas limit toward a target of at least 5000 follows the rule.
+
+A target that the rule allows is the gas limit itself.
 -/
 
 @[expose] public section
@@ -110,5 +115,31 @@ theorem checkGasLimitAcross_double_of_london_le (h : .london ≤ parentFork)
   · rfl
   · have := ((checkGasLimit_iff _ _).mp hc).1
     omega
+
+/-! ## The gas limit toward a target -/
+
+/-- The gas limit toward a target of at least 5000 follows the rule, after a parent of 5000 or more.
+-/
+theorem checkGasLimit_gasLimitToward {parentGasLimit target : Nat}
+    (hParent : LIMIT_MINIMUM ≤ parentGasLimit) (hTarget : LIMIT_MINIMUM ≤ target) :
+    checkGasLimit (Base.gasLimitToward parentGasLimit target) parentGasLimit = true := by
+  rw [checkGasLimit_iff]
+  unfold LIMIT_MINIMUM at hParent hTarget
+  have := Base.gasLimitToward_bounds parentGasLimit target
+  -- A parent of at least 5000 has a 1024th of at least 4, so one step stays strictly inside.
+  have : 4 ≤ parentGasLimit / 1024 := (Nat.le_div_iff_mul_le (by decide)).mpr (by omega)
+  refine ⟨by omega, by omega, ?_⟩
+  unfold Base.gasLimitToward
+  dsimp only
+  split
+  · omega
+  · split <;> omega
+
+/-- A target that the rule allows after the parent is the gas limit toward it. -/
+theorem gasLimitToward_of_checkGasLimit {parentGasLimit target : Nat}
+    (h : checkGasLimit target parentGasLimit = true) :
+    Base.gasLimitToward parentGasLimit target = target := by
+  have := (checkGasLimit_iff _ _).mp h
+  exact Base.gasLimitToward_of_le_of_le (by omega) (by omega)
 
 end EthLib.Execution.Fees.GasLimit

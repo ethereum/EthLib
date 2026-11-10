@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.GasLimit
 public import EthLib.Consensus.Gossip.Bid
 public import EthLib.Base.Proofs.Uint64
 public import EthLib.Networking.Proofs.Gossip.Validation
@@ -44,35 +45,12 @@ theorem isGasLimitTargetCompatible_bounds {parent gasLimit target : UInt64}
     parent.toNat - (parent.toNat / 1024 - 1) ≤ gasLimit.toNat ∧
       gasLimit.toNat ≤ parent.toNat + (parent.toNat / 1024 - 1) := by
   unfold isGasLimitTargetCompatible at compatible
-  have difference : (saturatingSub (parent / 1024) 1).toNat = parent.toNat / 1024 - 1 := by
-    rw [toNat_saturatingSub, UInt64.toNat_div]
-    rfl
-  have below : saturatingSub (parent / 1024) 1 ≤ parent := by
-    rw [UInt64.le_iff_toNat_le, difference]
-    omega
   cases sum : addChecked parent (saturatingSub (parent / 1024) 1) with
   | error e => simp [sum, bind, Except.bind] at compatible
   | ok high =>
-    have highNat := (addChecked_ok_iff.mp sum).2
-    rw [difference] at highNat
-    have lowNat : (parent - saturatingSub (parent / 1024) 1).toNat =
-        parent.toNat - (parent.toNat / 1024 - 1) := by
-      rw [UInt64.toNat_sub_of_le _ _ below, difference]
-    simp only [sum, bind, Except.bind, pure, Except.pure] at compatible
-    split at compatible
-    · simp only [Except.ok.injEq, beq_iff_eq] at compatible
-      rw [compatible, lowNat]
-      omega
-    · split at compatible
-      · simp only [Except.ok.injEq, beq_iff_eq] at compatible
-        rw [compatible, highNat]
-        omega
-      · rename_i notLow notHigh
-        simp only [Except.ok.injEq, beq_iff_eq] at compatible
-        subst compatible
-        rw [UInt64.lt_iff_toNat_lt, lowNat] at notLow
-        rw [UInt64.lt_iff_toNat_lt, highNat] at notHigh
-        omega
+    simp only [sum, bind, Except.bind, pure, Except.pure, Except.ok.injEq, beq_iff_eq] at compatible
+    rw [compatible]
+    exact gasLimitToward_bounds parent.toNat target.toNat
 
 /-- A compatible gas limit differs from a parent's limit of at least 1024 by less than its 1024th.
 -/

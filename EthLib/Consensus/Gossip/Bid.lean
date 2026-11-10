@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.GasLimit
 public import EthLib.Consensus.Gossip.Payload
 public import EthLib.Consensus.Gossip.ProposerPreferences
 
@@ -51,15 +52,11 @@ A block may change the gas limit by less than a 1024th of the parent's limit.
 
 So the limit is the target when the target is that close, and else the nearest bound.
 
-A bound past the 64-bit range is an error. -/
+An upper bound past the 64-bit range is an error. -/
 def isGasLimitTargetCompatible (parentGasLimit gasLimit targetGasLimit : UInt64) :
     Except ArithError Bool := do
-  let difference := saturatingSub (parentGasLimit / 1024) 1
-  let low := parentGasLimit - difference
-  let high ← addChecked parentGasLimit difference
-  if targetGasLimit < low then return gasLimit == low
-  if high < targetGasLimit then return gasLimit == high
-  return gasLimit == targetGasLimit
+  let _ ← addChecked parentGasLimit (saturatingSub (parentGasLimit / 1024) 1)
+  return gasLimit.toNat == gasLimitToward parentGasLimit.toNat targetGasLimit.toNat
 
 /-- Whether a bid builds on the branch of the head of the fork choice.
 

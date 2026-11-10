@@ -402,6 +402,30 @@ theorem applyBody_eq_ok {config : ChainConfig} {env : BlockEnvironment fork}
 
 /-! ## The transition -/
 
+/-- The body of a block runs on its chain exactly when each of its steps succeeds.
+
+The recent hashes give the environment, and the body runs on the state of the chain.
+
+The roots come from the output and the state after it. -/
+theorem runBody_eq_ok {chain : BlockChain} {block : Block fork Transaction}
+    {result : BodyResult fork} :
+    runBody chain block = .ok result ↔ ∃ hashes,
+      recentHashes chain.recent = .ok hashes ∧
+      applyBody chain.config (blockEnvironment chain.config hashes block.header) block
+        ⟨chain.state, ∅, ∅, ∅, ∅⟩ = .ok result.output ∧
+      outputRoots block.transactions block.withdrawals result.output
+        result.output.block.applyChanges = .ok result.roots := by
+  constructor
+  · intro h
+    unfold runBody at h
+    obtain ⟨hashes, hHashes, h⟩ := bind_ok_iff.mp h
+    obtain ⟨output, hOutput, h⟩ := bind_ok_iff.mp h
+    obtain ⟨roots, hRoots, h⟩ := bind_ok_iff.mp h
+    cases h
+    exact ⟨hashes, hHashes, hOutput, hRoots⟩
+  · rintro ⟨hashes, hHashes, hOutput, hRoots⟩
+    simp only [runBody, hHashes, hOutput, hRoots, bind, Except.bind, pure, Except.pure]
+
 /-- From Hegotá, the transition fails, since the rules of that fork are not here yet. -/
 theorem stateTransition_of_hegota_le {chain : BlockChain} {block : Block fork Transaction}
     {checkSeal : Bool} (h : .hegota ≤ fork) :
@@ -438,14 +462,31 @@ theorem stateTransition_eq_ok {chain : BlockChain} {block : Block fork Transacti
   split at h
   · rename_i hActive
     obtain ⟨_, hCheck, h⟩ := bind_ok_iff.mp h
-    obtain ⟨hashes, hHashes, h⟩ := bind_ok_iff.mp h
-    obtain ⟨output, hOutput, h⟩ := bind_ok_iff.mp h
-    obtain ⟨roots, hRoots, h⟩ := bind_ok_iff.mp h
+    obtain ⟨result, hResult, h⟩ := bind_ok_iff.mp h
     obtain ⟨_, hChecks, h⟩ := bind_ok_iff.mp h
     cases h
-    exact ⟨hNotHegota, hActive, hCheck, hashes, output, roots, hHashes, hOutput, hRoots, hChecks,
-      rfl⟩
+    obtain ⟨hashes, hHashes, hOutput, hRoots⟩ := runBody_eq_ok.mp hResult
+    exact ⟨hNotHegota, hActive, hCheck, hashes, result.output, result.roots, hHashes, hOutput,
+      hRoots, hChecks, rfl⟩
   · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
+
+/-- A block passes the transition when each of its steps succeeds.
+
+Its fork is before Hegotá and is the active fork of its chain, and it passes its own checks.
+
+Its body runs on its chain, and the roots of the output pass the checks against the header.
+
+The state after the block is the state that the body gives. -/
+theorem stateTransition_of_runBody {chain : BlockChain} {block : Block fork Transaction}
+    {checkSeal : Bool} {result : BodyResult fork} (hFork : ¬.hegota ≤ fork)
+    (hActive :
+      chain.config.activeFork block.header.number block.header.timestamp.toNat = some fork)
+    (hCheck : checkBlock chain.config checkSeal chain.recent block = .ok ())
+    (hBody : runBody chain block = .ok result)
+    (hChecks : firstFailure (outputChecks block.header result.output result.roots) = .ok ()) :
+    stateTransition chain block checkSeal = .ok result.post := by
+  simp only [stateTransition, hFork, hActive, ↓reduceIte, hCheck, hBody, hChecks, bind,
+    Except.bind, pure, Except.pure]
 
 /-- A block that passes its checks has a parent, the last recent block.
 
