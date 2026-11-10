@@ -62,6 +62,18 @@ theorem lookup_append_of_none {m : M} : ∀ {l : List (M × F)}, lookup m l = no
     rw [lookup_append_of_none (by simpa using h) t]
     simp
 
+/-- An entry that a lookup finds is still found after more entries are appended. -/
+theorem lookup_append_of_some {x : M} {v : ℕ × F} :
+    ∀ {l : List (M × F)} (r : List (M × F)), lookup x l = some v → lookup x (l ++ r) = some v
+  | [], _, h => by simp [lookup] at h
+  | (y, t) :: rest, r, h => by
+    simp only [List.cons_append, lookup] at h ⊢
+    split_ifs at h ⊢ with hy
+    · exact h
+    · obtain ⟨w, hw, rfl⟩ := Option.map_eq_some_iff.mp h
+      rw [lookup_append_of_some r hw]
+      rfl
+
 variable [CommRing F]
 
 /-- The table with the scalar at position `j` lowered by `c`. -/
