@@ -85,7 +85,7 @@ def checkOmmerHeader (config : ChainConfig) (checkSeal : Bool) (recent : List Re
 
 The chain configuration gives the block of the DAO Fork.
 
-The recent chain is the last seven blocks, ending with the parent of the block, in order.
+The recent chain ends with the parent of the block, oldest first, and the checks read all of it.
 
 The checks run in a fixed order, and the first that fails gives the error. -/
 def validateOmmers {fork : Fork} (config : ChainConfig) (checkSeal : Bool)

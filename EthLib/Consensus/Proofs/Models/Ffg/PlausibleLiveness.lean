@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Consensus.Proofs.Models.Ffg.AccountableSafety
+public import EthLib.Consensus.Proofs.Models.Ffg.Model
 public import Mathlib.Data.Set.Finite.Lemmas
 
 /-!
@@ -113,7 +113,7 @@ theorem plausible_liveness {H : Finset ν} (hfin : votes.Finite) (hV : ∀ c, 0 
       exact Set.mem_insert_of_mem _ ⟨_, hv, rfl⟩
   -- `a` is a justified checkpoint of greatest epoch.
   obtain ⟨a, ha, hmax⟩ :=
-    Set.exists_max_image _ (fun c : Checkpoint β => c.epoch) hJfin ⟨_, Justified.root⟩
+    Set.exists_max_image _ (fun c : Checkpoint β => c.epoch) hJfin ⟨_, JustifiedBy.root⟩
   refine ⟨a, ha, fun b hab => ?_⟩
   set e := m + 1
   let t : Checkpoint β := ⟨b, e⟩

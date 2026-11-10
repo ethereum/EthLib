@@ -30,16 +30,24 @@ That result is Theorem 1 of Casper FFG §2.1 and Theorem 5.2 of Gasper.
 Accountable safety holds for `k`-finalization with every `k ≥ 1`.
 
 The proof follows Gasper Lemma 4.11, Lemma 5.1 and Lemma 8.2.
+
+Those lemmas use only the order of each link.
+
+So they hold for every kind of link that raises the epoch and follows the chain.
+
+With slack links, each stake bound also loses twice the slack of two links.
+
+With no slack, a slack link is a supermajority link, which gives the bounds without slack.
 -/
 
 @[expose] public section
 
 namespace EthLib.Consensus.Models.Ffg
 
-variable {ν β : Type*} [Preorder β] {V : Checkpoint β → Finset ν} {w : ν → ℕ} {genesis : β}
-  {votes : Set (Vote ν β)}
+variable {ν β : Type*} [Preorder β] {V U : Checkpoint β → Finset ν} {w : ν → ℕ} {genesis : β}
+  {votes : Set (Vote ν β)} {link : Checkpoint β → Checkpoint β → Prop}
 
-/-- Two supermajority links that break a slashing condition.
+/-- Two links that break a slashing condition.
 
 Each link starts from a justified checkpoint, so its target is justified too.
 
@@ -50,62 +58,68 @@ For each validator, its votes for the two links make a double vote or a surround
 So each validator that votes for both links is slashable.
 
 Gasper Lemma 8.2 finds such links when two finalized checkpoints conflict. -/
-def SlashableLinks (V : Checkpoint β → Finset ν) (w : ν → ℕ) (genesis : β)
-    (votes : Set (Vote ν β)) (lo hi : ℕ) : Prop :=
+def SlashableLinksBy (link : Checkpoint β → Checkpoint β → Prop) (genesis : β) (lo hi : ℕ) :
+    Prop :=
   ∃ s₁ t₁ s₂ t₂ : Checkpoint β, lo ≤ t₁.epoch ∧ t₁.epoch ≤ hi ∧ lo ≤ t₂.epoch ∧ t₂.epoch ≤ hi ∧
-    Justified V w genesis votes s₁ ∧ Justified V w genesis votes s₂ ∧
-    SupermajorityLink V w votes s₁ t₁ ∧ SupermajorityLink V w votes s₂ t₂ ∧
+    JustifiedBy link genesis s₁ ∧ JustifiedBy link genesis s₂ ∧ link s₁ t₁ ∧ link s₂ t₂ ∧
     ∀ v : ν, DoubleVote ⟨v, s₁, t₁⟩ ⟨v, s₂, t₂⟩ ∨ SurroundVote ⟨v, s₁, t₁⟩ ⟨v, s₂, t₂⟩
 
-theorem SlashableLinks.mono {lo hi lo' hi' : ℕ} (h : SlashableLinks V w genesis votes lo hi)
-    (hlo : lo' ≤ lo) (hhi : hi ≤ hi') : SlashableLinks V w genesis votes lo' hi' := by
+omit [Preorder β] in
+theorem SlashableLinksBy.mono {lo hi lo' hi' : ℕ}
+    (h : SlashableLinksBy (ν := ν) link genesis lo hi) (hlo : lo' ≤ lo) (hhi : hi ≤ hi') :
+    SlashableLinksBy (ν := ν) link genesis lo' hi' := by
   obtain ⟨s₁, t₁, s₂, t₂, h₁, h₁', h₂, h₂', h⟩ := h
   exact ⟨s₁, t₁, s₂, t₂, hlo.trans h₁, h₁'.trans hhi, hlo.trans h₂, h₂'.trans hhi, h⟩
 
-/-- Double votes: two different supermajority links have one target epoch.
+omit [Preorder β] in
+/-- Double votes: two different links have one target epoch.
 
 Both start from justified checkpoints. -/
-theorem SupermajorityLink.slashableLinks_of_double {s₁ t₁ s₂ t₂ : Checkpoint β}
-    (hs₁ : Justified V w genesis votes s₁) (hs₂ : Justified V w genesis votes s₂)
-    (h₁ : SupermajorityLink V w votes s₁ t₁) (h₂ : SupermajorityLink V w votes s₂ t₂)
-    (hne : s₁ ≠ s₂ ∨ t₁ ≠ t₂) (he : t₁.epoch = t₂.epoch) :
-    SlashableLinks V w genesis votes t₁.epoch t₁.epoch :=
+theorem slashableLinksBy_of_double {s₁ t₁ s₂ t₂ : Checkpoint β}
+    (hs₁ : JustifiedBy link genesis s₁) (hs₂ : JustifiedBy link genesis s₂)
+    (h₁ : link s₁ t₁) (h₂ : link s₂ t₂) (hne : s₁ ≠ s₂ ∨ t₁ ≠ t₂) (he : t₁.epoch = t₂.epoch) :
+    SlashableLinksBy (ν := ν) link genesis t₁.epoch t₁.epoch :=
   ⟨s₁, t₁, s₂, t₂, le_rfl, le_rfl, he.le, he.ge, hs₁, hs₂, h₁, h₂, fun _ =>
     .inl ⟨fun h => by cases h; simp at hne, he⟩⟩
 
-/-- Surround votes: one supermajority link surrounds another in epochs.
+omit [Preorder β] in
+/-- Surround votes: one link surrounds another in epochs.
 
-Both start from justified checkpoints. -/
-theorem SupermajorityLink.slashableLinks_of_surround {s₁ t₁ s₂ t₂ : Checkpoint β}
-    (hs₁ : Justified V w genesis votes s₁) (hs₂ : Justified V w genesis votes s₂)
-    (h₁ : SupermajorityLink V w votes s₁ t₁) (h₂ : SupermajorityLink V w votes s₂ t₂)
-    (hs : s₁.epoch < s₂.epoch) (ht : t₂.epoch < t₁.epoch) :
-    SlashableLinks V w genesis votes t₂.epoch t₁.epoch :=
-  ⟨s₁, t₁, s₂, t₂, ht.le, le_rfl, le_rfl, ht.le, hs₁, hs₂, h₁, h₂, fun _ => .inr ⟨hs, h₂.1, ht⟩⟩
+Both start from justified checkpoints, and the second source comes before its target. -/
+theorem slashableLinksBy_of_surround {s₁ t₁ s₂ t₂ : Checkpoint β}
+    (hs₁ : JustifiedBy link genesis s₁) (hs₂ : JustifiedBy link genesis s₂)
+    (h₁ : link s₁ t₁) (h₂ : link s₂ t₂) (hs : s₁.epoch < s₂.epoch)
+    (hst : s₂.epoch < t₂.epoch) (ht : t₂.epoch < t₁.epoch) :
+    SlashableLinksBy (ν := ν) link genesis t₂.epoch t₁.epoch :=
+  ⟨s₁, t₁, s₂, t₂, ht.le, le_rfl, le_rfl, ht.le, hs₁, hs₂, h₁, h₂, fun _ => .inr ⟨hs, hst, ht⟩⟩
 
+omit [Preorder β] in
 /-- Gasper Lemma 4.11: two justified checkpoints of one epoch are equal.
 
-Otherwise two links with that target epoch break a slashing condition. -/
-theorem Justified.eq_or_slashableLinks {c₁ c₂ : Checkpoint β}
-    (h₁ : Justified V w genesis votes c₁) (h₂ : Justified V w genesis votes c₂)
+Otherwise two links with that target epoch break a slashing condition.
+
+Each link must raise the epoch. -/
+theorem JustifiedBy.eq_or_slashableLinksBy
+    (raises : ∀ {s t}, link s t → s.epoch < t.epoch) {c₁ c₂ : Checkpoint β}
+    (h₁ : JustifiedBy link genesis c₁) (h₂ : JustifiedBy link genesis c₂)
     (he : c₁.epoch = c₂.epoch) :
-    c₁ = c₂ ∨ SlashableLinks V w genesis votes c₁.epoch c₁.epoch := by
+    c₁ = c₂ ∨ SlashableLinksBy (ν := ν) link genesis c₁.epoch c₁.epoch := by
   cases h₁ with
   | root =>
     cases h₂ with
     | root => exact .inl rfl
-    | link _ hl => exact absurd he (by have := hl.1; dsimp at this ⊢; omega)
+    | link _ hl => exact absurd he (by have := raises hl; dsimp at this ⊢; omega)
   | link hs₁ hl₁ =>
     cases h₂ with
-    | root => exact absurd he (by have := hl₁.1; dsimp at this ⊢; omega)
+    | root => exact absurd he (by have := raises hl₁; dsimp at this ⊢; omega)
     | link hs₂ hl₂ =>
       by_cases hc : c₁ = c₂
       · exact .inl hc
-      · exact .inr (hl₁.slashableLinks_of_double hs₁ hs₂ hl₂ (.inr hc) he)
+      · exact .inr (slashableLinksBy_of_double hs₁ hs₂ hl₁ hl₂ (.inr hc) he)
 
 /-- A finalized checkpoint is justified. -/
-theorem Finalized.justified {c : Checkpoint β} (h : Finalized V w genesis votes c) :
-    Justified V w genesis votes c := by
+theorem FinalizedBy.justifiedBy {c : Checkpoint β} (h : FinalizedBy link genesis c) :
+    JustifiedBy link genesis c := by
   rcases h with rfl | ⟨k, hk, b, hb, -, hj, -⟩
   · exact .root
   · simpa [hb] using hj 0 hk
@@ -124,59 +138,66 @@ Then the finalized block is in the chain of the justified block.
 
 Otherwise two links break a slashing condition.
 
-Their target epochs lie from the finalized epoch to the justified epoch. -/
-theorem Finalized.le_or_slashableLinks {f j : Checkpoint β}
-    (hf : Finalized V w genesis votes f) (hj : Justified V w genesis votes j)
+Their target epochs lie from the finalized epoch to the justified epoch.
+
+Each link must raise the epoch, and its source block must be in the chain of its target block. -/
+theorem FinalizedBy.le_or_slashableLinksBy
+    (ordered : ∀ {s t}, link s t → s.epoch < t.epoch ∧ s.block ≤ t.block) {f j : Checkpoint β}
+    (hf : FinalizedBy link genesis f) (hj : JustifiedBy link genesis j)
     (hlt : f.epoch < j.epoch) :
-    f.block ≤ j.block ∨ SlashableLinks V w genesis votes f.epoch j.epoch := by
+    f.block ≤ j.block ∨ SlashableLinksBy (ν := ν) link genesis f.epoch j.epoch := by
   induction hj with
   | root => exact absurd hlt (Nat.not_lt_zero _)
   | @link s t hs hl ih =>
     rcases lt_trichotomy s.epoch f.epoch with hsf | hsf | hsf
     · -- The link starts before `f`, so `f` is `k`-finalized with `k ≥ 1`.
-      have hfj := hf.justified
+      have hfj := hf.justifiedBy
       rcases hf with rfl | ⟨k, hk, b, hb, hchain, hjust, hlink⟩
       · exact absurd hsf (Nat.not_lt_zero _)
       rcases lt_trichotomy t.epoch (f.epoch + k) with htk | htk | htk
       · -- The target shares its epoch with a justified checkpoint of the finalization.
         have hi : t.epoch - f.epoch < k := by omega
-        rcases (Justified.link hs hl).eq_or_slashableLinks (hjust _ hi)
+        rcases (JustifiedBy.link hs hl).eq_or_slashableLinksBy (fun h => (ordered h).1) (hjust _ hi)
           (by dsimp; omega) with heq | h
         · rw [heq, ← hb]
           exact .inl (le_of_chain hchain _ hi.le)
         · exact .inr (h.mono hlt.le le_rfl)
       · -- The two links share a target epoch, and their sources differ in epoch.
-        exact .inr ((hl.slashableLinks_of_double hs hfj hlink
+        exact .inr ((slashableLinksBy_of_double hs hfj hl hlink
           (.inl fun h => by rw [h] at hsf; exact lt_irrefl _ hsf) htk).mono hlt.le le_rfl)
       · -- The link surrounds the link that finalizes `f`.
-        exact .inr ((hl.slashableLinks_of_surround hs hfj hlink hsf htk).mono
-          (by dsimp; omega) le_rfl)
+        exact .inr ((slashableLinksBy_of_surround hs hfj hl hlink hsf (ordered hlink).1
+          htk).mono (by dsimp; omega) le_rfl)
     · -- The source shares its epoch with `f`, so it is `f` itself.
-      rcases hs.eq_or_slashableLinks hf.justified hsf with rfl | h
-      · exact .inl hl.2.1
-      · exact .inr (h.mono hsf.ge hl.1.le)
-    · exact (ih hsf).imp (fun h => h.trans hl.2.1) fun h => h.mono le_rfl hl.1.le
+      rcases hs.eq_or_slashableLinksBy (fun h => (ordered h).1) hf.justifiedBy hsf with rfl | h
+      · exact .inl (ordered hl).2
+      · exact .inr (h.mono hsf.ge (ordered hl).1.le)
+    · exact (ih hsf).imp (fun h => h.trans (ordered hl).2) fun h => h.mono le_rfl (ordered hl).1.le
 
-/-- Gasper Lemma 8.2: two conflicting finalized checkpoints give two supermajority links.
+/-- Gasper Lemma 8.2: two conflicting finalized checkpoints give two links.
 
 For each validator, a vote for one link and a vote for the other break a slashing condition.
 
-Their target epochs lie between the epochs of the two checkpoints. -/
-theorem Finalized.slashableLinks {c₁ c₂ : Checkpoint β}
-    (h₁ : Finalized V w genesis votes c₁) (h₂ : Finalized V w genesis votes c₂)
+Their target epochs lie between the epochs of the two checkpoints.
+
+Each link must raise the epoch, and its source block must be in the chain of its target block. -/
+theorem FinalizedBy.slashableLinksBy
+    (ordered : ∀ {s t}, link s t → s.epoch < t.epoch ∧ s.block ≤ t.block) {c₁ c₂ : Checkpoint β}
+    (h₁ : FinalizedBy link genesis c₁) (h₂ : FinalizedBy link genesis c₂)
     (hc : Conflicting c₁.block c₂.block) :
-    SlashableLinks V w genesis votes (min c₁.epoch c₂.epoch) (max c₁.epoch c₂.epoch) := by
+    SlashableLinksBy (ν := ν) link genesis (min c₁.epoch c₂.epoch) (max c₁.epoch c₂.epoch) := by
   rcases lt_trichotomy c₁.epoch c₂.epoch with h | h | h
-  · exact ((h₁.le_or_slashableLinks h₂.justified h).resolve_left hc.1).mono (min_le_left _ _)
-      (le_max_right _ _)
-  · rcases h₁.justified.eq_or_slashableLinks h₂.justified h with rfl | h
+  · exact ((h₁.le_or_slashableLinksBy ordered h₂.justifiedBy h).resolve_left hc.1).mono
+      (min_le_left _ _) (le_max_right _ _)
+  · rcases h₁.justifiedBy.eq_or_slashableLinksBy (fun h => (ordered h).1) h₂.justifiedBy h with
+        rfl | h
     · exact absurd le_rfl hc.1
     · exact h.mono (min_le_left _ _) (le_max_left _ _)
-  · exact ((h₂.le_or_slashableLinks h₁.justified h).resolve_left hc.2).mono (min_le_right _ _)
-      (le_max_left _ _)
+  · exact ((h₂.le_or_slashableLinksBy ordered h₁.justifiedBy h).resolve_left hc.2).mono
+      (min_le_right _ _) (le_max_left _ _)
 
 open scoped Classical in
-/-- The slashable stake of two supermajority links, as in the proof of Gasper Theorem 8.3.
+/-- The slashable stake of two slack links, as in the proof of Gasper Theorem 8.3.
 
 Each validator that votes for both links is slashable.
 
@@ -184,23 +205,75 @@ The links have the validator sets `L` and `R` of their targets.
 
 `V₀` is any reference set, and the stake of `L \ V₀` and `V₀ \ R` counts the change since it.
 
-The slashable validators of both sets then hold stake `x` with this bound.
+The slashable validators of both sets then hold stake `x` with the bound below.
 
-The bound: `2 * w(L) ≤ 3 * x + w(R) + 3 * (w(L \ V₀) + w(V₀ \ R))`. -/
-theorem SupermajorityLink.two_mul_stake_le_of_slashable {s₁ t₁ s₂ t₂ : Checkpoint β}
-    (h₁ : SupermajorityLink V w votes s₁ t₁) (h₂ : SupermajorityLink V w votes s₂ t₂)
+The bound: `2 * w(L) ≤ 3 * x + w(R) + 3 * (w(L \ V₀) + w(V₀ \ R)) + 2 * (σL + σR)`.
+
+There `σL` and `σR` are the slacks of the two links. -/
+theorem SlackLink.two_mul_stake_le_of_slashable {s₁ t₁ s₂ t₂ : Checkpoint β}
+    (h₁ : SlackLink V U w votes s₁ t₁) (h₂ : SlackLink V U w votes s₂ t₂)
     (h : ∀ v : ν, ⟨v, s₁, t₁⟩ ∈ votes → ⟨v, s₂, t₂⟩ ∈ votes → Slashable votes v)
     (V₀ : Finset ν) :
     2 * stake w (V t₁) ≤ 3 * stake w {v ∈ V t₁ ∩ V t₂ | Slashable votes v} + stake w (V t₂) +
-      3 * (stake w (V t₁ \ V₀) + stake w (V₀ \ V t₂)) := by
+      3 * (stake w (V t₁ \ V₀) + stake w (V₀ \ V t₂)) +
+      2 * (stake w (V t₁ \ U t₁) + stake w (V t₂ \ U t₂)) := by
   classical
-  refine (two_mul_stake_le_stake_inter_add V₀ (Finset.filter_subset _ _)
+  refine (two_mul_stake_le_stake_inter_add_slack V₀ (Finset.filter_subset _ _)
     (Finset.filter_subset _ _) h₁.2.2 h₂.2.2).trans (Nat.add_le_add_right (Nat.add_le_add_right
-      (Nat.mul_le_mul_left 3 (stake_mono ?_)) _) _)
+      (Nat.add_le_add_right (Nat.mul_le_mul_left 3 (stake_mono ?_)) _) _) _)
   intro v hv
   simp only [Finset.mem_inter, Finset.mem_filter] at hv
   simp only [Finset.mem_filter, Finset.mem_inter]
   exact ⟨⟨hv.1.1, hv.2.1⟩, h v hv.1.2 hv.2.2⟩
+
+open scoped Classical in
+/-- Accountable safety with slack links and a validator set for each checkpoint.
+
+This extends Gasper Theorem 8.3, which has no slack.
+
+Take two slack-finalized checkpoints whose blocks conflict.
+
+Then two slack-justified checkpoints `l` and `r` have the property below.
+
+Their epochs lie between the epochs of the two finalized checkpoints.
+
+Take the validator sets `L` and `R` of `l` and `r`, and any reference set `V₀`.
+
+The sets `L \ V₀` and `R \ V₀`, of stake `aL` and `aR`, activated since `V₀`.
+
+The sets `V₀ \ L` and `V₀ \ R`, of stake `eL` and `eR`, exited since `V₀`.
+
+The slack `σL` is the stake of `L` outside the second set of `l`, and `σR` the same for `r`.
+
+The slashable validators of both sets hold stake `x` with two bounds, one for each side.
+
+The first bound: `2 * w(L) ≤ 3 * x + w(R) + 3 * (aL + eR) + 2 * (σL + σR)`.
+
+The second bound is the first with the two sides swapped.
+
+The two checkpoints do not depend on the reference set. -/
+theorem accountable_safety_dynamic_slack {c₁ c₂ : Checkpoint β}
+    (h₁ : SlackFinalized V U w genesis votes c₁) (h₂ : SlackFinalized V U w genesis votes c₂)
+    (hc : Conflicting c₁.block c₂.block) :
+    ∃ l r : Checkpoint β, min c₁.epoch c₂.epoch ≤ l.epoch ∧ l.epoch ≤ max c₁.epoch c₂.epoch ∧
+      min c₁.epoch c₂.epoch ≤ r.epoch ∧ r.epoch ≤ max c₁.epoch c₂.epoch ∧
+      SlackJustified V U w genesis votes l ∧ SlackJustified V U w genesis votes r ∧
+      ∀ V₀ : Finset ν,
+        2 * stake w (V l) ≤ 3 * stake w {v ∈ V l ∩ V r | Slashable votes v} +
+          stake w (V r) + 3 * (stake w (V l \ V₀) + stake w (V₀ \ V r)) +
+          2 * (stake w (V l \ U l) + stake w (V r \ U r)) ∧
+        2 * stake w (V r) ≤ 3 * stake w {v ∈ V l ∩ V r | Slashable votes v} +
+          stake w (V l) + 3 * (stake w (V r \ V₀) + stake w (V₀ \ V l)) +
+          2 * (stake w (V r \ U r) + stake w (V l \ U l)) := by
+  obtain ⟨s₁, t₁, s₂, t₂, lo₁, hi₁, lo₂, hi₂, hs₁, hs₂, hl₁, hl₂, h⟩ :=
+    h₁.slashableLinksBy (ν := ν) SlackLink.ordered h₂ hc
+  -- A validator that votes for both links signs the two votes that break a condition.
+  have hboth : ∀ v : ν, ⟨v, s₁, t₁⟩ ∈ votes → ⟨v, s₂, t₂⟩ ∈ votes → Slashable votes v :=
+    fun v hv₁ hv₂ => ⟨_, hv₁, _, hv₂, rfl, rfl, h v⟩
+  refine ⟨t₁, t₂, lo₁, hi₁, lo₂, hi₂, .link hs₁ hl₁, .link hs₂ hl₂, fun V₀ =>
+    ⟨hl₁.two_mul_stake_le_of_slashable hl₂ hboth V₀, ?_⟩⟩
+  rw [Finset.inter_comm]
+  exact hl₂.two_mul_stake_le_of_slashable hl₁ (fun v hv₂ hv₁ => hboth v hv₁ hv₂) V₀
 
 open scoped Classical in
 /-- Accountable safety with a validator set for each checkpoint: Gasper Theorem 8.3.
@@ -213,9 +286,9 @@ Their epochs lie between the epochs of the two finalized checkpoints.
 
 Take the validator sets `L` and `R` of `l` and `r`, and any reference set `V₀`.
 
-The stake `aL` of `L \ V₀` and `aR` of `R \ V₀` activated since `V₀`.
+The sets `L \ V₀` and `R \ V₀`, of stake `aL` and `aR`, activated since `V₀`.
 
-The stake `eL` of `V₀ \ L` and `eR` of `V₀ \ R` exited since `V₀`.
+The sets `V₀ \ L` and `V₀ \ R`, of stake `eL` and `eR`, exited since `V₀`.
 
 The slashable validators of both sets hold stake `x` with two bounds, one for each side.
 
@@ -244,14 +317,58 @@ theorem accountable_safety_dynamic {c₁ c₂ : Checkpoint β}
           stake w (V r) + 3 * (stake w (V l \ V₀) + stake w (V₀ \ V r)) ∧
         2 * stake w (V r) ≤ 3 * stake w {v ∈ V l ∩ V r | Slashable votes v} +
           stake w (V l) + 3 * (stake w (V r \ V₀) + stake w (V₀ \ V l)) := by
-  obtain ⟨s₁, t₁, s₂, t₂, lo₁, hi₁, lo₂, hi₂, hs₁, hs₂, hl₁, hl₂, h⟩ := h₁.slashableLinks h₂ hc
-  -- A validator that votes for both links signs the two votes that break a condition.
-  have hboth : ∀ v : ν, ⟨v, s₁, t₁⟩ ∈ votes → ⟨v, s₂, t₂⟩ ∈ votes → Slashable votes v :=
-    fun v hv₁ hv₂ => ⟨_, hv₁, _, hv₂, rfl, rfl, h v⟩
-  refine ⟨t₁, t₂, lo₁, hi₁, lo₂, hi₂, .link hs₁ hl₁, .link hs₂ hl₂, fun V₀ =>
-    ⟨hl₁.two_mul_stake_le_of_slashable hl₂ hboth V₀, ?_⟩⟩
-  rw [Finset.inter_comm]
-  exact hl₂.two_mul_stake_le_of_slashable hl₁ (fun v hv₂ hv₁ => hboth v hv₁ hv₂) V₀
+  obtain ⟨l, r, lo₁, hi₁, lo₂, hi₂, hl, hr, h⟩ := accountable_safety_dynamic_slack (U := V)
+    (h₁.slackFinalized V) (h₂.slackFinalized V) hc
+  rw [slackJustified_self] at hl hr
+  exact ⟨l, r, lo₁, hi₁, lo₂, hi₂, hl, hr, fun V₀ => by simpa using h V₀⟩
+
+open scoped Classical in
+/-- Accountable safety with slack links against a fixed reference set `V₀`.
+
+Take two slack-finalized checkpoints whose blocks conflict.
+
+Then two slack-justified checkpoints `l` and `r` have the property below.
+
+Their epochs lie between the epochs of the two finalized checkpoints.
+
+Take the validator sets `L` and `R` of `l` and `r`.
+
+Measure the change of `L` since `V₀` as the stake that joined plus twice the stake that left.
+
+Add twice the slack of `l`, the stake of `L` outside the second set of `l`.
+
+Do the same for `R`.
+
+The slashable validators of both sets hold stake `x` at least a third of `w(V₀)`, less the rest.
+
+The rest is a third of the two changes with their slacks.
+
+So a validator that counts in the slack weighs as much as one that left.
+
+It stays slashable, but it weakens the quorum of its link.
+
+The two checkpoints do not depend on the reference set. -/
+theorem accountable_safety_reference_slack [DecidableEq ν] {c₁ c₂ : Checkpoint β}
+    (h₁ : SlackFinalized V U w genesis votes c₁) (h₂ : SlackFinalized V U w genesis votes c₂)
+    (hc : Conflicting c₁.block c₂.block) :
+    ∃ l r : Checkpoint β, min c₁.epoch c₂.epoch ≤ l.epoch ∧ l.epoch ≤ max c₁.epoch c₂.epoch ∧
+      min c₁.epoch c₂.epoch ≤ r.epoch ∧ r.epoch ≤ max c₁.epoch c₂.epoch ∧
+      SlackJustified V U w genesis votes l ∧ SlackJustified V U w genesis votes r ∧
+      ∀ V₀ : Finset ν,
+      stake w V₀ ≤ 3 * stake w {v ∈ V l ∩ V r | Slashable votes v} +
+        (stake w (V l \ V₀) + 2 * stake w (V₀ \ V l) + 2 * stake w (V l \ U l)) +
+        (stake w (V r \ V₀) + 2 * stake w (V₀ \ V r) + 2 * stake w (V r \ U r)) := by
+  obtain ⟨l, r, lo₁, hi₁, lo₂, hi₂, hl, hr, h⟩ := accountable_safety_dynamic_slack h₁ h₂ hc
+  refine ⟨l, r, lo₁, hi₁, lo₂, hi₂, hl, hr, fun V₀ => ?_⟩
+  -- The theorem above decides equality classically; this statement uses the given test.
+  have hbound : 2 * stake w (V l) ≤ 3 * stake w {v ∈ V l ∩ V r | Slashable votes v} +
+      stake w (V r) + 3 * (stake w (V l \ V₀) + stake w (V₀ \ V r)) +
+      2 * (stake w (V l \ U l) + stake w (V r \ U r)) := by
+    convert (h V₀).1
+  -- Each set and what left `V₀` weigh as much as `V₀` and what joined.
+  have hL := stake_add_stake_sdiff (w := w) (V l) V₀
+  have hR := stake_add_stake_sdiff (w := w) (V r) V₀
+  omega
 
 open scoped Classical in
 /-- Accountable safety against a fixed reference set `V₀`, such as the set of a trusted checkpoint.
@@ -286,15 +403,40 @@ theorem accountable_safety_reference [DecidableEq ν] {c₁ c₂ : Checkpoint β
       stake w V₀ ≤ 3 * stake w {v ∈ V l ∩ V r | Slashable votes v} +
         (stake w (V l \ V₀) + 2 * stake w (V₀ \ V l)) +
         (stake w (V r \ V₀) + 2 * stake w (V₀ \ V r)) := by
-  obtain ⟨l, r, lo₁, hi₁, lo₂, hi₂, hl, hr, h⟩ := accountable_safety_dynamic h₁ h₂ hc
-  refine ⟨l, r, lo₁, hi₁, lo₂, hi₂, hl, hr, fun V₀ => ?_⟩
-  -- The theorem above decides equality classically; this statement uses the given test.
-  have hbound : 2 * stake w (V l) ≤ 3 * stake w {v ∈ V l ∩ V r | Slashable votes v} +
-      stake w (V r) + 3 * (stake w (V l \ V₀) + stake w (V₀ \ V r)) := by
-    convert (h V₀).1
-  -- Each set and what left `V₀` weigh as much as `V₀` and what joined.
-  have hL := stake_add_stake_sdiff (w := w) (V l) V₀
-  have hR := stake_add_stake_sdiff (w := w) (V r) V₀
+  obtain ⟨l, r, lo₁, hi₁, lo₂, hi₂, hl, hr, h⟩ := accountable_safety_reference_slack (U := V)
+    (h₁.slackFinalized V) (h₂.slackFinalized V) hc
+  rw [slackJustified_self] at hl hr
+  exact ⟨l, r, lo₁, hi₁, lo₂, hi₂, hl, hr, fun V₀ => by simpa using h V₀⟩
+
+open scoped Classical in
+/-- Accountable safety with slack links when the validator sets change little since `V₀`.
+
+Take two slack-finalized checkpoints whose blocks conflict.
+
+Take each slack-justified checkpoint whose epoch lies between theirs.
+
+Assume the stake that joined its set since `V₀`, plus twice the stake that left, is at most `b`.
+
+The sum also counts twice its slack, the stake of its set outside its second set.
+
+Then two such slack-justified checkpoints `l` and `r` have slashable validators of both sets.
+
+Their stake `x` satisfies `w(V₀) ≤ 3 * x + 2 * b`. -/
+theorem accountable_safety_of_change_slack [DecidableEq ν] {c₁ c₂ : Checkpoint β}
+    (h₁ : SlackFinalized V U w genesis votes c₁) (h₂ : SlackFinalized V U w genesis votes c₂)
+    (hc : Conflicting c₁.block c₂.block) (V₀ : Finset ν) (b : ℕ)
+    (change : ∀ c : Checkpoint β, min c₁.epoch c₂.epoch ≤ c.epoch →
+      c.epoch ≤ max c₁.epoch c₂.epoch → SlackJustified V U w genesis votes c →
+      stake w (V c \ V₀) + 2 * stake w (V₀ \ V c) + 2 * stake w (V c \ U c) ≤ b) :
+    ∃ l r : Checkpoint β, min c₁.epoch c₂.epoch ≤ l.epoch ∧ l.epoch ≤ max c₁.epoch c₂.epoch ∧
+      min c₁.epoch c₂.epoch ≤ r.epoch ∧ r.epoch ≤ max c₁.epoch c₂.epoch ∧
+      SlackJustified V U w genesis votes l ∧ SlackJustified V U w genesis votes r ∧
+      stake w V₀ ≤ 3 * stake w {v ∈ V l ∩ V r | Slashable votes v} + 2 * b := by
+  obtain ⟨l, r, lo₁, hi₁, lo₂, hi₂, hl, hr, h⟩ := accountable_safety_reference_slack h₁ h₂ hc
+  have h := h V₀
+  refine ⟨l, r, lo₁, hi₁, lo₂, hi₂, hl, hr, ?_⟩
+  have := change l lo₁ hi₁ hl
+  have := change r lo₂ hi₂ hr
   omega
 
 open scoped Classical in
@@ -319,12 +461,13 @@ theorem accountable_safety_of_change [DecidableEq ν] {c₁ c₂ : Checkpoint β
       min c₁.epoch c₂.epoch ≤ r.epoch ∧ r.epoch ≤ max c₁.epoch c₂.epoch ∧
       Justified V w genesis votes l ∧ Justified V w genesis votes r ∧
       stake w V₀ ≤ 3 * stake w {v ∈ V l ∩ V r | Slashable votes v} + 2 * b := by
-  obtain ⟨l, r, lo₁, hi₁, lo₂, hi₂, hl, hr, h⟩ := accountable_safety_reference h₁ h₂ hc
-  have h := h V₀
-  refine ⟨l, r, lo₁, hi₁, lo₂, hi₂, hl, hr, ?_⟩
-  have := change l lo₁ hi₁ hl
-  have := change r lo₂ hi₂ hr
-  omega
+  obtain ⟨l, r, lo₁, hi₁, lo₂, hi₂, hl, hr, h⟩ := accountable_safety_of_change_slack (U := V)
+    (h₁.slackFinalized V) (h₂.slackFinalized V) hc V₀ b
+    fun c lo hi hj => by
+      rw [slackJustified_self] at hj
+      simpa using change c lo hi hj
+  rw [slackJustified_self] at hl hr
+  exact ⟨l, r, lo₁, hi₁, lo₂, hi₂, hl, hr, h⟩
 
 open scoped Classical in
 /-- Accountable safety when the validator sets change slowly after a reference set `V₀`.

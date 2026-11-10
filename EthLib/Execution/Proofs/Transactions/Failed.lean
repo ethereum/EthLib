@@ -17,7 +17,8 @@ The later ones say their values.
 
 - The sender buys the gas: its nonce grows by one and it pays the fee.
 - The fee is the gas limit times the price, plus the blob fee.
-- From Pectra, each accepted authorization, taken alone, sets the code and nonce of its authority.
+- From Pectra, each authorization that an authority accepts adds one to its nonce.
+- The last one sets the code of the authority: a delegation indicator, or no code.
 - The sender gets back the price of the gas it did not use.
 - The beneficiary gets the priority fee of the gas that the transaction used.
 - Storage stays at the beneficiary unless the payment deletes it.
@@ -33,6 +34,10 @@ So the state after the transaction reads as the state before it at every other a
 That holds for the account, every word of storage and every word of transient storage.
 
 It holds up to Glamsterdam, whether the message fails in its first frame or before it starts.
+
+Up to BPO5, a call halts before its first frame only when a code is missing.
+
+That error aborts the whole run, so up to BPO5 a failed call keeps its authorizations.
 
 From Hegotá a transaction is not yet specified, so none runs.
 
@@ -543,45 +548,6 @@ section Meter
 
 variable {Meter : Type} [GasMeter Meter]
 
-/-- An accepted authorization in scope adds one to the nonce of its authority.
-
-It sets the code that the authorization names, and keeps the balance of the authority.
-
-That code is the delegation indicator, or no code for the zero address.
-
-The payment changes no account, so the authority is read as it was before the authorization. -/
-theorem authority_applyAuthorization {chainId : Nat} {done done' : Delegations Meter}
-    {auth : Authorization} {authority : Address}
-    (h : applyAuthorization fork chainId done auth = .ok done')
-    (hscope : authorizationInScope chainId auth = true)
-    (hrecover : recoverAuthority auth = some authority)
-    (haccept : authorityAccepts done.state authority auth = .ok true) :
-    (done'.state.getAccount authority).nonce = (done.state.getAccount authority).nonce + 1 ∧
-      (done'.state.getAccount authority).codeHash =
-        Cryptography.Hash.Keccak.keccak256 (delegationCode auth) ∧
-      (done'.state.getAccount authority).balance = (done.state.getAccount authority).balance := by
-  cases hpay : payAuthorization fork { done with
-      state := done.state.recordAccountRead authority
-      accessed := done.accessed.insert authority } authority auth with
-  | error e =>
-    rw [applyAuthorization_of_payAuthorization_error hscope hrecover haccept hpay] at h
-    cases h
-  | ok paid =>
-    obtain ⟨state, hdelegate⟩ := delegate_isOk (fork := fork) (authority := authority)
-      (auth := auth) paid.state
-    rw [applyAuthorization_of_accepts_of_pay hscope hrecover haccept hpay, hdelegate] at h
-    simp only [Except.map, Except.mapError, Except.ok.injEq] at h
-    subst h
-    obtain ⟨hstate, -, -⟩ := state_payAuthorization hpay
-    obtain ⟨-, haccount, -⟩ := delegate_eq_ok hdelegate
-    have hpaid : paid.state.getAccount authority = done.state.getAccount authority := by
-      rw [hstate]
-      rfl
-    rw [hpaid] at haccount
-    dsimp only
-    rw [haccount]
-    exact ⟨rfl, rfl, rfl⟩
-
 /-- A failed message either halts before its first frame or rolls back to the state of that frame.
 
 On a halt, every account, storage word, transient word and code reads as before the message.
@@ -822,8 +788,7 @@ abbrev SettledAccounts (tx : Transaction) (env : BlockEnvironment fork)
       (if env.coinbase = address then
         (settlement fork (baseFeeOf env) included.sender tx gasLeft refund).priorityFee
       else 0) ∧
-    (∀ key, (address ≠ included.sender ∨ (base.getAccount included.sender).nonce ≠ 0) →
-      (address ≠ env.coinbase ∨ out.state.getAccountOptional env.coinbase ≠ none) →
+    (∀ key, (address ≠ env.coinbase ∨ out.state.getAccountOptional env.coinbase ≠ none) →
       out.state.getStorage address key = base.getStorage address key)
 
 /-- The authorizations of a call that fails, read as the state before settlement. -/
@@ -848,6 +813,21 @@ abbrev transactionFirstFrame (Meter : Type) [GasMeter Meter] (tx : Transaction)
     { message with reservoir := (allocateGas fork tx included.intrinsicGas).reservoir } bought
     (startSubstate fork env.coinbase included.sender target tx) tx.authorizations
     (paidWrites included.sender target tx)
+
+/-- The first frame of the message of a transaction never starts: its preparation halts.
+
+The preparation runs after the gas purchase, on the message that the transaction sends. -/
+abbrev FirstFrameHalts (Meter : Type) [GasMeter Meter] (tx : Transaction)
+    (env : BlockEnvironment fork) (block : State.BlockState) (included : Included) : Prop :=
+  let pre := State.TransactionState.ofBlock block
+  ∃ target bought message e read,
+    messageTarget included.sender (pre.getAccount included.sender).nonce tx = .ok target ∧
+    buyGas env pre included.sender tx = .ok bought ∧
+    transactionMessage env
+      { origin := included.sender, gasPrice := included.gasPrice,
+        blobVersionedHashes := fun _ => tx.blobHashes } bought included.sender target
+      (allocateGas fork tx included.intrinsicGas).execution tx = .ok message ∧
+    transactionFirstFrame Meter tx env included bought target message = .error (e, read)
 
 /-- What a failed run leaves: it buys the gas, then settles it against the state of the message.
 
@@ -934,8 +914,20 @@ theorem runTransaction_values_of_error {Meter : Type} [GasMeter Meter] [LawfulGa
     output.refund, htarget, hbought', hmessage, houtput, rfl, rfl, rfl, hlogs,
     (settleGas_accounts hsettle' included.sender).1, fun address => ?_,
     (settleGas_accounts hsettle' included.sender).2.2.2.2.2, ?_⟩
-  · obtain ⟨-, hnonce, hcode, hbal, hstore, -⟩ := settleGas_accounts hsettle' address
-    exact ⟨hnonce, hcode, hbal, hstore⟩
+  · -- The gas purchase raised the nonce of the sender, and nothing since lowered it.
+    have hsender : (output.state.getAccount included.sender).nonce ≠ 0 := by
+      have hbump := (buyGas_sender rfl hbought').2.2
+      have hle : (bought.getAccount included.sender).nonce ≤
+          (output.state.getAccount included.sender).nonce := by
+        rcases hcases with ⟨e, read, -, hstate⟩ | ⟨first, hfirst, hsame, -⟩
+        · rw [hstate, (sameOutside_withReadsOf bought read).getAccount_eq
+            List.not_mem_nil]
+          exact Nat.le_refl _
+        · rw [hsame.getAccount_eq List.not_mem_nil]
+          exact nonceLe_prepareFirstFrame hfirst _
+      omega
+    obtain ⟨-, hnonce, hcode, hbal, hstore, -⟩ := settleGas_accounts hsettle' address
+    exact ⟨hnonce, hcode, hbal, fun key hcoinbase => hstore key (.inr hsender) hcoinbase⟩
   · rcases hcases with ⟨e, read, hprep, hstate⟩ | ⟨first, hfirst, hsame, hcode⟩
     · refine .inl ⟨.inr ⟨e, read, hprep⟩, ?_, fun codeHash => by rw [hstate]; rfl, ?_⟩
       · rw [hstate]
@@ -999,6 +991,296 @@ theorem processTransaction_values_of_error {block : State.BlockState}
   · have hlt_glam : fork < .glamsterdam := Nat.lt_of_not_le hglam
     rw [processTransaction_of_lt_glamsterdam hlt_glam] at h
     exact .inl ⟨hlt_glam, runTransaction_values_of_error h failed⟩
+
+/-- A creation holds no authorization. -/
+theorem authorizations_eq_nil_of_to_eq_none (h : tx.to = none) : tx.authorizations = [] := by
+  cases tx <;> simp_all [Transaction.to, Transaction.authorizations]
+
+/-- The purchase of gas keeps the code hash of every account, and the balance of all but the sender.
+
+It adds one to the nonce of the sender. -/
+private theorem buyGas_authority {state bought : State.TransactionState} {sender : Address}
+    (hbought : buyGas env state sender tx = .ok bought) (authority : Address) :
+    (bought.getAccount authority).codeHash = (state.getAccount authority).codeHash ∧
+      (bought.getAccount authority).nonce =
+        (state.getAccount authority).nonce + (if authority = sender then 1 else 0) ∧
+      (authority ≠ sender →
+        (bought.getAccount authority).balance = (state.getAccount authority).balance) := by
+  by_cases hs : authority = sender
+  · subst hs
+    refine ⟨(buyGas_keeps hbought).1, ?_, fun hne => absurd rfl hne⟩
+    rw [(buyGas_sender rfl hbought).2.2]
+    simp
+  · rw [(sameOutside_buyGas hbought).getAccount_eq (by simpa using hs)]
+    simp [hs]
+
+/-- In a failed run, the settlement changes no nonce or code hash of an authority.
+
+It changes the balance only of the sender and the beneficiary. -/
+private theorem failedRun_settled {authority : Address} {gasLeft refund : Nat}
+    {base : State.TransactionState}
+    (hsettled : SettledAccounts tx env included out base gasLeft refund) :
+    (out.state.getAccount authority).nonce = (base.getAccount authority).nonce ∧
+      (out.state.getAccount authority).codeHash = (base.getAccount authority).codeHash ∧
+      (authority ≠ included.sender → authority ≠ env.coinbase →
+        (out.state.getAccount authority).balance.toNat =
+          (base.getAccount authority).balance.toNat) := by
+  obtain ⟨hnonce, hhash, hbal, -⟩ := hsettled authority
+  exact ⟨hnonce, hhash, fun hs hc => by simp [hbal, Ne.symm hs, Ne.symm hc]⟩
+
+/-- A failed run whose first frame halts leaves every authority as the gas purchase left it.
+
+That holds for its nonce, its code hash, and its balance unless it is the sender or the beneficiary.
+-/
+private theorem failedRun_authority_of_halts {Meter : Type} [GasMeter Meter]
+    [LawfulGasMeter Meter] {block : State.BlockState}
+    (hrun : FailedRun Meter tx env block included out)
+    (hhalt : FirstFrameHalts Meter tx env block included) (authority : Address) :
+    let pre := State.TransactionState.ofBlock block
+    (out.state.getAccount authority).nonce =
+        (pre.getAccount authority).nonce + (if authority = included.sender then 1 else 0) ∧
+      (out.state.getAccount authority).codeHash = (pre.getAccount authority).codeHash ∧
+      (authority ≠ included.sender → authority ≠ env.coinbase →
+        (out.state.getAccount authority).balance.toNat =
+          (pre.getAccount authority).balance.toNat) := by
+  intro pre
+  obtain ⟨target, bought, message, output, base, gasLeft, refund, htarget, hbought, hmessage, -,
+    rfl, -, -, -, -, hsettled, -, hcases⟩ := hrun
+  obtain ⟨target', bought', message', e, read, htarget', hbought', hmessage', hprep⟩ := hhalt
+  rw [htarget, Except.ok.injEq] at htarget'
+  subst htarget'
+  rw [hbought, Except.ok.injEq] at hbought'
+  subst hbought'
+  rw [hmessage, Except.ok.injEq] at hmessage'
+  subst hmessage'
+  have hsame : SameOutside [] bought output.state := by
+    rcases hcases with ⟨-, hsame, -, -⟩ | ⟨first, -, -, hfirst, -⟩
+    · exact hsame
+    · rw [hprep] at hfirst
+      cases hfirst
+  have hbase := hsame.getAccount_eq (address := authority) List.not_mem_nil
+  obtain ⟨hnonce, hhash, hbal⟩ :=
+    failedRun_settled hsettled (authority := authority)
+  obtain ⟨hb_hash, hb_nonce, hb_bal⟩ := buyGas_authority hbought authority
+  refine ⟨by rw [hnonce, hbase, hb_nonce], by rw [hhash, hbase, hb_hash], fun hs hc => ?_⟩
+  rw [hbal hs hc, hbase, hb_bal hs]
+
+/-- A failed run whose first frame starts, or that runs up to BPO5, keeps the authorizations.
+
+The authority must have code that is empty or a delegation indicator. -/
+private theorem failedRun_authority_of_starts {Meter : Type} [GasMeter Meter]
+    [LawfulGasMeter Meter] {block : State.BlockState}
+    (hrun : FailedRun Meter tx env block included out)
+    (hstarts : fork < .glamsterdam ∨ ¬FirstFrameHalts Meter tx env block included)
+    {authority : Address} {code : ByteArray}
+    (hcode : (State.TransactionState.ofBlock block).getCode
+      ((State.TransactionState.ofBlock block).getAccount authority).codeHash = .ok code)
+    (hdelegable : (code.size = 0 || isValidDelegation code) = true) :
+    let pre := State.TransactionState.ofBlock block
+    let start := (pre.getAccount authority).nonce + if authority = included.sender then 1 else 0
+    let accepted := acceptedBy env.chainId.toNat authority start tx.authorizations
+    (out.state.getAccount authority).nonce = start + accepted.length ∧
+      (out.state.getAccount authority).codeHash =
+        delegatedCodeHash accepted (pre.getAccount authority).codeHash ∧
+      (authority ≠ included.sender → authority ≠ env.coinbase →
+        (out.state.getAccount authority).balance.toNat =
+          (pre.getAccount authority).balance.toNat) := by
+  intro pre start accepted
+  obtain ⟨target, bought, message, output, base, gasLeft, refund, htarget0, hbought, hmessage,
+    houtput, rfl, -, -, -, -, hsettled, -, hcases⟩ := hrun
+  obtain ⟨hnonce, hhash, hbal⟩ :=
+    failedRun_settled hsettled (authority := authority)
+  obtain ⟨hb_hash, hb_nonce, hb_bal⟩ := buyGas_authority hbought authority
+  have hb_code : bought.getCode (bought.getAccount authority).codeHash = .ok code := by
+    rw [hb_hash, (buyGas_keeps hbought).2.2]
+    exact hcode
+  rcases hcases with ⟨hhalt, hsame, -, -⟩ | ⟨first, done, hto, -, hdone, hsame_done, -, -⟩
+  · -- No authorization stays, and none is accepted.
+    have hnil : accepted = [] := by
+      cases hto : tx.to with
+      | none => simp only [accepted, authorizations_eq_nil_of_to_eq_none hto, acceptedBy]
+      | some to =>
+        rcases hhalt with hnone | ⟨e, read, hprep⟩
+        · rw [hto] at hnone
+          cases hnone
+        rcases hstarts with hlt | hnot
+        · -- Up to BPO5, the first frame of a call fails only with an error that aborts the run.
+          have htarget : ({ message with reservoir :=
+              (allocateGas fork tx included.intrinsicGas).reservoir }).target = some to := by
+            rw [← hto]
+            exact (target_transactionMessage hmessage).1
+          have habort := aborts_of_prepareFirstFrame_of_lt_glamsterdam hlt htarget hprep
+          simp only [processMessageCall, transactionFirstFrame] at houtput hprep
+          rw [hprep] at houtput
+          simp [habort] at houtput
+        · exact absurd ⟨target, bought, message, e, read, htarget0, hbought, hmessage, hprep⟩ hnot
+    have hbase := hsame.getAccount_eq (address := authority) List.not_mem_nil
+    rw [hnil]
+    refine ⟨by rw [hnonce, hbase, hb_nonce]; rfl, by rw [hhash, hbase, hb_hash]; rfl,
+      fun hs hc => ?_⟩
+    rw [hbal hs hc, hbase, hb_bal hs]
+  · have hdelegated := foldlM_applyAuthorization_authority hdone hb_code hdelegable
+    have hbase := hsame_done.getAccount_eq (address := authority) List.not_mem_nil
+    rw [hdelegated] at hbase
+    refine ⟨?_, ?_, fun hs hc => ?_⟩
+    · rw [hnonce, hbase]
+      simp only [hb_nonce, accepted, start, pre]
+    · rw [hhash, hbase]
+      simp only [hb_nonce, hb_hash, accepted, start, pre]
+    · rw [hbal hs hc, hbase, hb_bal hs]
+
+/-- A failed run keeps the account and storage of an authority with real code.
+
+Real code is neither empty nor a delegation indicator, so the authority refuses every authorization.
+
+No authorization may set a code whose hash is the code hash of the authority, an assumption.
+
+Storage stays unless the payment to the beneficiary deletes it. -/
+private theorem failedRun_authority_keeps {Meter : Type} [GasMeter Meter]
+    [LawfulGasMeter Meter] {block : State.BlockState}
+    (hrun : FailedRun Meter tx env block included out) {authority : Address} {code : ByteArray}
+    (hcode : (State.TransactionState.ofBlock block).getCode
+      ((State.TransactionState.ofBlock block).getAccount authority).codeHash = .ok code)
+    (hsize : code.size ≠ 0) (hindicator : isValidDelegation code = false)
+    (hhash : ∀ auth ∈ tx.authorizations, Cryptography.Hash.Keccak.keccak256 (delegationCode auth) ≠
+      ((State.TransactionState.ofBlock block).getAccount authority).codeHash) :
+    let pre := State.TransactionState.ofBlock block
+    (out.state.getAccount authority).nonce =
+        (pre.getAccount authority).nonce + (if authority = included.sender then 1 else 0) ∧
+      (out.state.getAccount authority).codeHash = (pre.getAccount authority).codeHash ∧
+      (authority ≠ included.sender → authority ≠ env.coinbase →
+        (out.state.getAccount authority).balance.toNat =
+          (pre.getAccount authority).balance.toNat) ∧
+      (∀ key, (authority ≠ env.coinbase ∨ out.state.getAccountOptional env.coinbase ≠ none) →
+        out.state.getStorage authority key = pre.getStorage authority key) := by
+  intro pre
+  obtain ⟨target, bought, message, output, base, gasLeft, refund, -, hbought, -, -,
+    rfl, -, -, -, -, hsettled, -, hcases⟩ := hrun
+  obtain ⟨hnonce, hhash', hbal⟩ :=
+    failedRun_settled hsettled (authority := authority)
+  have hstore := (hsettled authority).2.2.2
+  obtain ⟨hb_hash, hb_nonce, hb_bal⟩ := buyGas_authority hbought authority
+  have hb_store : ∀ key, bought.getStorage authority key = pre.getStorage authority key :=
+    fun key => (buyGas_keeps hbought).2.1 authority key
+  -- The state before settlement reads as after the gas purchase at the authority.
+  have hkeep : output.state.getAccount authority = bought.getAccount authority ∧
+      ∀ key, output.state.getStorage authority key = bought.getStorage authority key := by
+    rcases hcases with ⟨-, hsame, -, -⟩ | ⟨first, done, -, -, hdone, hsame_done, -, -⟩
+    · exact ⟨hsame.getAccount_eq List.not_mem_nil, (hsame authority List.not_mem_nil).2.1⟩
+    · have hb_code : bought.getCode (bought.getAccount authority).codeHash = .ok code := by
+        rw [hb_hash, (buyGas_keeps hbought).2.2]
+        exact hcode
+      obtain ⟨haccount, hstorage, -, -⟩ := foldlM_applyAuthorization_keeps hsize hindicator hdone
+        hb_code (fun auth hmem => hb_hash ▸ hhash auth hmem)
+      have hdone_acc : done.state.getAccount authority = bought.getAccount authority := by
+        unfold getAccount
+        rw [haccount]
+      exact ⟨(hsame_done.getAccount_eq List.not_mem_nil).trans hdone_acc,
+        fun key => ((hsame_done authority List.not_mem_nil).2.1 key).trans (hstorage key)⟩
+  refine ⟨by rw [hnonce, hkeep.1, hb_nonce], by rw [hhash', hkeep.1, hb_hash],
+    fun hs hc => by rw [hbal hs hc, hkeep.1, hb_bal hs], fun key hcoinbase => ?_⟩
+  rw [hstore key hcoinbase, hkeep.2 key, hb_store key]
+
+/-- Before Hegotá, a transaction whose message fails leaves each authority what it accepts.
+
+The code of the authority before the transaction must be empty or a delegation indicator.
+
+From Glamsterdam, the first frame of the call must start.
+
+Its nonce starts at its nonce before the transaction, plus one for the sender, who buys the gas.
+
+It gains one per accepted authorization, and its code hash is that of the code the last one sets.
+
+So a failed call keeps its authorizations, as [EIP-7702][e7702] asks.
+
+Up to BPO5, the first frame of a call never halts without aborting the run.
+
+So up to BPO5 no condition on the first frame is needed.
+
+Its balance stays unless it is the sender or the beneficiary.
+
+[e7702]: https://eips.ethereum.org/EIPS/eip-7702#behavior -/
+theorem processTransaction_authority_of_error {block : State.BlockState}
+    (h : processTransaction env block included tx = .ok out) (failed : out.error.isSome = true)
+    (hstarts : .glamsterdam ≤ fork → ¬FirstFrameHalts StateGasMeter tx env block included)
+    {authority : Address} {code : ByteArray}
+    (hcode : (State.TransactionState.ofBlock block).getCode
+      ((State.TransactionState.ofBlock block).getAccount authority).codeHash = .ok code)
+    (hdelegable : (code.size = 0 || isValidDelegation code) = true) :
+    let pre := State.TransactionState.ofBlock block
+    let start := (pre.getAccount authority).nonce + if authority = included.sender then 1 else 0
+    let accepted := acceptedBy env.chainId.toNat authority start tx.authorizations
+    (out.state.getAccount authority).nonce = start + accepted.length ∧
+      (out.state.getAccount authority).codeHash =
+        delegatedCodeHash accepted (pre.getAccount authority).codeHash ∧
+      (authority ≠ included.sender → authority ≠ env.coinbase →
+        (out.state.getAccount authority).balance.toNat =
+          (pre.getAccount authority).balance.toNat) := by
+  rcases processTransaction_values_of_error h failed with ⟨hlt, hrun⟩ | ⟨hglam, -, hrun⟩
+  · exact failedRun_authority_of_starts hrun (.inl hlt) hcode hdelegable
+  · exact failedRun_authority_of_starts hrun (.inr (hstarts hglam)) hcode hdelegable
+
+/-- From Glamsterdam, a transaction whose first frame halts undoes every authorization.
+
+That is what [EIP-8037][e8037] asks of a failure before the top frame.
+
+Each authority keeps its code hash, and its nonce from before the transaction.
+
+The sender has one more nonce, from the gas purchase.
+
+The balance stays unless the account is the sender or the beneficiary.
+
+That holds whatever the code of the authority.
+
+[e8037]: https://eips.ethereum.org/EIPS/eip-8037#gas-accounting-for-halts-and-reverts -/
+theorem processTransaction_authority_of_firstFrameHalts {block : State.BlockState}
+    (h : processTransaction env block included tx = .ok out) (failed : out.error.isSome = true)
+    (hglam : .glamsterdam ≤ fork)
+    (hhalt : FirstFrameHalts StateGasMeter tx env block included) (authority : Address) :
+    let pre := State.TransactionState.ofBlock block
+    (out.state.getAccount authority).nonce =
+        (pre.getAccount authority).nonce + (if authority = included.sender then 1 else 0) ∧
+      (out.state.getAccount authority).codeHash = (pre.getAccount authority).codeHash ∧
+      (authority ≠ included.sender → authority ≠ env.coinbase →
+        (out.state.getAccount authority).balance.toNat =
+          (pre.getAccount authority).balance.toNat) := by
+  rcases processTransaction_values_of_error h failed with ⟨hlt, -⟩ | ⟨-, -, hrun⟩
+  · exact absurd hglam (Nat.not_le_of_lt hlt)
+  · exact failedRun_authority_of_halts hrun hhalt authority
+
+/-- Before Hegotá, a transaction whose message fails keeps an authority with real code.
+
+Real code is neither empty nor a delegation indicator, so the authority refuses every authorization.
+
+No authorization may set a code whose hash is the code hash of the authority.
+
+That is an assumption; when each code sits under its own hash, only a collision breaks it.
+
+The authority keeps its code hash, and its nonce, plus one for the sender.
+
+Its balance stays unless it is the sender or the beneficiary.
+
+Its storage stays unless the payment to the beneficiary deletes it. -/
+theorem processTransaction_authority_keeps_of_error {block : State.BlockState}
+    (h : processTransaction env block included tx = .ok out) (failed : out.error.isSome = true)
+    {authority : Address} {code : ByteArray}
+    (hcode : (State.TransactionState.ofBlock block).getCode
+      ((State.TransactionState.ofBlock block).getAccount authority).codeHash = .ok code)
+    (hsize : code.size ≠ 0) (hindicator : isValidDelegation code = false)
+    (hhash : ∀ auth ∈ tx.authorizations, Cryptography.Hash.Keccak.keccak256 (delegationCode auth) ≠
+      ((State.TransactionState.ofBlock block).getAccount authority).codeHash) :
+    let pre := State.TransactionState.ofBlock block
+    (out.state.getAccount authority).nonce =
+        (pre.getAccount authority).nonce + (if authority = included.sender then 1 else 0) ∧
+      (out.state.getAccount authority).codeHash = (pre.getAccount authority).codeHash ∧
+      (authority ≠ included.sender → authority ≠ env.coinbase →
+        (out.state.getAccount authority).balance.toNat =
+          (pre.getAccount authority).balance.toNat) ∧
+      (∀ key, (authority ≠ env.coinbase ∨ out.state.getAccountOptional env.coinbase ≠ none) →
+        out.state.getStorage authority key = pre.getStorage authority key) := by
+  rcases processTransaction_values_of_error h failed with ⟨-, hrun⟩ | ⟨-, -, hrun⟩
+  · exact failedRun_authority_keeps hrun hcode hsize hindicator hhash
+  · exact failedRun_authority_keeps hrun hcode hsize hindicator hhash
 
 end Values
 

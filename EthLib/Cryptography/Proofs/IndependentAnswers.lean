@@ -98,6 +98,18 @@ theorem uniformOutside_nil_evalDistEq [SampleableType A] (d : A) :
 The most recent pair comes first, so a position in the cache counts back from the last query. -/
 abbrev IndepState (A : Type) := PermCache A × Bool
 
+/-- The state after a new forward pair `(a, b)`: the pair joins the cache.
+
+The flag rises if `b` is already a cached image. -/
+abbrev IndepState.addForward (s : IndepState A) (a b : A) : IndepState A :=
+  ((a, b) :: s.1, s.2 || decide (b ∈ s.1.map Prod.snd))
+
+/-- The state after a new inverse pair `(a, b)`: the pair joins the cache.
+
+The flag rises if `a` is already a cached preimage. -/
+abbrev IndepState.addInverse (s : IndepState A) (a b : A) : IndepState A :=
+  ((a, b) :: s.1, s.2 || decide (a ∈ s.1.map Prod.fst))
+
 /-- The permutation oracle answered by independent uniform values.
 
 A query answered before gets its answer again, in either direction.
@@ -113,13 +125,11 @@ def indepPermOracle : QueryImpl (PermSpec A) (StateT (IndepState A) ProbComp)
   | .inl a => fun s =>
     match s.1.lookup a with
     | some b => pure (b, s)
-    | none => (fun b => (b, ((a, b) :: s.1, s.2 || decide (b ∈ s.1.map Prod.snd)))) <$>
-      (uniformOutside [] a : ProbComp A)
+    | none => (fun b => (b, IndepState.addForward s a b)) <$> (uniformOutside [] a : ProbComp A)
   | .inr b => fun s =>
     match (s.1.map Prod.swap).lookup b with
     | some a => pure (a, s)
-    | none => (fun a => (a, ((a, b) :: s.1, s.2 || decide (a ∈ s.1.map Prod.fst)))) <$>
-      (uniformOutside [] b : ProbComp A)
+    | none => (fun a => (a, IndepState.addInverse s a b)) <$> (uniformOutside [] b : ProbComp A)
 
 /-- The oracles with independent answers: coins, passed through, then the oracle above. -/
 abbrev indepPermImpl : QueryImpl (unifSpec + PermSpec A) (StateT (IndepState A) ProbComp) :=

@@ -188,16 +188,6 @@ theorem recordAccountWrite_extends {b b' : AccessListBuilder} {tx : TransactionS
     exact keep (fun _ _ => rfl) (fun _ _ => rfl) (keep (fun _ _ => rfl) (fun _ _ => rfl)
       (keep (fun _ _ => rfl) (fun _ _ => rfl) hid))
 
-/-- Dropping the value of a slot at a position keeps the values of every other slot. -/
-theorem dropSlotChange_getD_of_ne (changes : Std.ExtTreeMap Bytes32 (Std.ExtTreeMap UInt32 U256))
-    {key other : Bytes32} (index : UInt32) (hne : key ≠ other) :
-    (dropSlotChange changes key index).getD other ∅ = changes.getD other ∅ := by
-  unfold dropSlotChange
-  split
-  · rfl
-  · dsimp only
-    split <;> simp [Std.ExtTreeMap.getD_erase, Std.ExtTreeMap.getD_insert, hne]
-
 /-- A storage write extends the builder, and names its key in the record of its account.
 
 The key has a change when the new value differs from the slot at the start of the position.

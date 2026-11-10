@@ -192,6 +192,14 @@ theorem passthrough_add_inl_run {σ : Type} (perm : QueryImpl (PermSpec A) (Stat
       (·, s) <$> (query (spec := unifSpec) n : ProbComp (Fin (n + 1))) := by
   simp [StateT.run_monadLift]
 
+/-- With coins passed through beside a permutation oracle, a run of coins alone keeps the state. -/
+theorem simulateQ_passthrough_add_liftM_run {σ α : Type}
+    (perm : QueryImpl (PermSpec A) (StateT σ ProbComp)) (oa : ProbComp α) (s : σ) :
+    (simulateQ (unifSpec.passthrough + perm) (liftM oa : PermComp A α)).run s = (·, s) <$> oa := by
+  rw [QueryImpl.simulateQ_liftM_eq_of_query (unifSpec.passthrough + perm)
+    ((QueryImpl.id' unifSpec).liftTarget (StateT σ ProbComp)) (fun t => by simp) oa]
+  simp [StateT.run_monadLift]
+
 variable [FinEnum A]
 
 /-- A uniform element of `A` outside the list, or `d` when there is none. -/
@@ -222,11 +230,8 @@ abbrev lazyPermImpl : QueryImpl (unifSpec + PermSpec A) (StateT (PermCache A) Pr
 /-- A run of coins alone against the lazy permutation leaves the cache unchanged. -/
 theorem simulateQ_lazyPermImpl_liftM_run {α : Type} (oa : ProbComp α)
     (c : PermCache A) :
-    (simulateQ lazyPermImpl (liftM oa : PermComp A α)).run c = (·, c) <$> oa := by
-  rw [QueryImpl.simulateQ_liftM_eq_of_query lazyPermImpl
-    ((QueryImpl.id' unifSpec).liftTarget (StateT (PermCache A) ProbComp))
-    (fun t => by simp [lazyPermImpl]) oa]
-  simp [StateT.run_monadLift]
+    (simulateQ lazyPermImpl (liftM oa : PermComp A α)).run c = (·, c) <$> oa :=
+  simulateQ_passthrough_add_liftM_run lazyPermOracle oa c
 
 /-- Whether the permutation agrees with every pair of the cache. -/
 def Agrees (c : PermCache A) (π : Equiv.Perm A) : Prop :=

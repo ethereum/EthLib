@@ -75,7 +75,26 @@ def KeyOnlyAdversary.toAdversary (adversary : KeyOnlyAdversary F G A M) : Advers
   main X := simulateQ keyOnlyLift (adversary.main X)
 
 variable [Field F] [DecidableEq F] [AddCommGroup G] [Module F G] [DecidableEq G]
-  [SampleableType F]
+
+/-- A key-only forger on the key `X`, then the check of its forgery, which may ask for `Π`. -/
+def keyOnlyRunQ (scheme : Scheme F G A M) (adversary : KeyOnlyAdversary F G A M) (X : G) :
+    PermComp A ((M × F × F) × Bool) := do
+  let z ← adversary.main X
+  let b ← verifyQ scheme X z.1 z.2.1 z.2.2
+  pure (z, b)
+
+/-- The run asks for `Π` or its inverse at most once more than the forger. -/
+theorem isQueryBoundP_keyOnlyRunQ (scheme : Scheme F G A M)
+    (adversary : KeyOnlyAdversary F G A M) (X : G) {q : ℕ}
+    (hq : IsQueryBoundP (adversary.main X) (·.isRight = true) q) :
+    IsQueryBoundP (keyOnlyRunQ scheme adversary X) (·.isRight = true) (q + 1) := by
+  have h := isQueryBoundP_bind hq fun z _ =>
+    isQueryBoundP_bind (isQueryBoundP_verifyQ scheme X z.1 z.2.1 z.2.2) fun b _ =>
+      isQueryBoundP_pure (fun t : (unifSpec + PermSpec A).Domain => t.isRight = true)
+        ((z, b) : (M × F × F) × Bool) 0
+  simpa [keyOnlyRunQ] using h
+
+variable [SampleableType F]
 
 /-- The key-only game as a program of the permutation oracle.
 
@@ -85,8 +104,7 @@ The check asks for `Π` itself, once or never. -/
 def keyOnlyExperimentQ (scheme : Scheme F G A M) (adversary : KeyOnlyAdversary F G A M) :
     PermComp A Bool := do
   let x ← ($ᵗ F : ProbComp F)
-  let (m, t, s) ← adversary.main (x • scheme.g)
-  verifyQ scheme (x • scheme.g) m t s
+  Prod.snd <$> keyOnlyRunQ scheme adversary (x • scheme.g)
 
 /-- The key-only game asks for `Π` or its inverse at most `q + 1` times.
 
@@ -96,8 +114,8 @@ theorem isQueryBoundP_keyOnlyExperimentQ (scheme : Scheme F G A M)
     (hq : ∀ X, IsQueryBoundP (adversary.main X) (·.isRight = true) q) :
     IsQueryBoundP (keyOnlyExperimentQ scheme adversary) (·.isRight = true) (q + 1) := by
   have h := isQueryBoundP_bind (isQueryBoundP_liftM_permComp ($ᵗ F)) fun x _ =>
-    isQueryBoundP_bind (hq (x • scheme.g)) fun z _ =>
-      isQueryBoundP_verifyQ scheme (x • scheme.g) z.1 z.2.1 z.2.2
+    (isQueryBoundP_map_iff _ Prod.snd _).2
+      (isQueryBoundP_keyOnlyRunQ scheme adversary (x • scheme.g) (hq (x • scheme.g)))
   simpa [keyOnlyExperimentQ] using h
 
 omit [DecidableEq G] in
@@ -157,9 +175,11 @@ theorem keyOnlyExperiment_eq_permImpl (scheme : Scheme F G A M)
       (do
         let π ← $ᵗ (Equiv.Perm A)
         simulateQ (permImpl π) (keyOnlyExperimentQ scheme adversary)) := by
-  simp only [keyOnlyExperiment, keyOnlyExperimentQ, simulateQ_bind, simulateQ_permImpl_liftM]
+  simp only [keyOnlyExperiment, keyOnlyExperimentQ, keyOnlyRunQ, simulateQ_bind,
+    simulateQ_permImpl_liftM, map_bind, simulateQ_pure, map_pure]
   refine bind_congr fun π => bind_congr fun x => bind_congr fun z => ?_
   rw [simulateQ_permImpl_verifyQ]
+  simp
 
 /-- The advantage of every key-only forger is its chance to win the lazy key-only game. -/
 theorem keyOnlyAdvantage_eq_lazy (scheme : Scheme F G A M)

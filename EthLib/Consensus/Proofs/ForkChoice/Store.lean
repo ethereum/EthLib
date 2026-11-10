@@ -29,6 +29,11 @@ open Base Serialization.Ssz
 
 variable {preset : Preset} {fork : Fork}
 
+/-- The order of checkpoints is transitive, as an order by epoch and then by root. -/
+instance : Std.TransCmp Checkpoint.compare :=
+  inferInstanceAs
+    (Std.TransCmp (compareLex (compareOn Checkpoint.epoch) (compareOn Checkpoint.root)))
+
 /-- Two errors with one code come from one constructor. -/
 theorem ForkChoiceError.code_injective (e₁ e₂ : ForkChoiceError) (h : e₁.code = e₂.code) :
     e₁.ctorIdx = e₂.ctorIdx := by
@@ -309,6 +314,61 @@ theorem getForkchoiceStore_maps {config : Config} {anchorState : BeaconState pre
           simp only [time, pure, Except.pure, Except.ok.injEq] at made
           subst made
           exact ⟨anchorRoot, rfl, rfl, rfl⟩
+
+/-- A new store holds the anchor state for the checkpoint of the anchor, and no other state. -/
+theorem getForkchoiceStore_checkpointStates {config : Config}
+    {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
+    {store : Store preset fork}
+    (made : getForkchoiceStore config anchorState anchorBlock = .ok store) :
+    ∃ anchorRoot, SszType.hashTreeRoot anchorBlock = .ok anchorRoot ∧
+      store.checkpointStates =
+        (∅ : Std.TreeMap Checkpoint (BeaconState preset fork) Checkpoint.compare).insert
+          ⟨getCurrentEpoch anchorState, anchorRoot⟩ anchorState := by
+  unfold getForkchoiceStore at made
+  cases stateRoot : SszType.hashTreeRoot anchorState with
+  | error e => simp [stateRoot, bind, Except.bind, Except.mapError] at made
+  | ok stateRoot' =>
+    simp only [stateRoot, Except.mapError, bind, Except.bind] at made
+    split at made
+    · simp [throw, throwThe, MonadExceptOf.throw] at made
+    · cases blockRoot : SszType.hashTreeRoot anchorBlock with
+      | error e => simp [blockRoot] at made
+      | ok anchorRoot =>
+        simp only [blockRoot] at made
+        cases time : computeTimeAtSlotMs config (secondsToMilliseconds anchorState.genesisTime)
+            anchorState.slot with
+        | error e => simp [time] at made
+        | ok timeMs =>
+          simp only [time, pure, Except.pure, Except.ok.injEq] at made
+          subst made
+          exact ⟨anchorRoot, rfl, rfl⟩
+
+/-- The genesis time of a new store is that of the anchor state, in milliseconds.
+
+Its clock is at the start of the slot of the anchor state. -/
+theorem getForkchoiceStore_timeMs {config : Config} {anchorState : BeaconState preset fork}
+    {anchorBlock : BeaconBlock preset fork} {store : Store preset fork}
+    (made : getForkchoiceStore config anchorState anchorBlock = .ok store) :
+    store.genesisTimeMs = secondsToMilliseconds anchorState.genesisTime ∧
+      computeTimeAtSlotMs config store.genesisTimeMs anchorState.slot = .ok store.timeMs := by
+  unfold getForkchoiceStore at made
+  cases stateRoot : SszType.hashTreeRoot anchorState with
+  | error e => simp [stateRoot, bind, Except.bind, Except.mapError] at made
+  | ok stateRoot' =>
+    simp only [stateRoot, Except.mapError, bind, Except.bind] at made
+    split at made
+    · simp [throw, throwThe, MonadExceptOf.throw] at made
+    · cases blockRoot : SszType.hashTreeRoot anchorBlock with
+      | error e => simp [blockRoot] at made
+      | ok anchorRoot =>
+        simp only [blockRoot] at made
+        cases time : computeTimeAtSlotMs config (secondsToMilliseconds anchorState.genesisTime)
+            anchorState.slot with
+        | error e => simp [time] at made
+        | ok timeMs =>
+          simp only [time, pure, Except.pure, Except.ok.injEq] at made
+          subst made
+          exact ⟨rfl, time⟩
 
 /-- A new store holds no vote, and holds the timeliness of its anchor from Gloas only.
 

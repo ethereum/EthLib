@@ -3,6 +3,7 @@ module
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.Game
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.JointGame
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.KeyOnly
+public import EthLib.Cryptography.Proofs.Secp256k1.Security.KeyOnlyOutside
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.LazyGame
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.Origin
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.QueryBound
@@ -52,6 +53,10 @@ Swap `Π` there for independent uniform answers.
 Stop counting a win once a new answer repeats a cached value in the direction of its query.
 
 The advantage falls by at most `q_Π (q_Π + 1) / 2` over `|A|`.
+
+With independent answers, each new forward answer can be one query to an outside oracle.
+
+The chance to win stays, and a later proof can rewind the run at such a query.
 
 No theorem bounds the advantage of a forger yet.
 -/

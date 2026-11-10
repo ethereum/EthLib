@@ -162,6 +162,22 @@ theorem exists_getForkchoiceStore (config : Config) {state : BeaconState .mainne
     Except.bind, ne_eq, not_true_eq_false, ite_false]
   exact ⟨_, rfl⟩
 
+/-- A store ticks to a time in its current slot by setting its clock to that time alone. -/
+theorem onTick_sameSlot {store : Store preset fork} {slot : Slot} {timeMs : UInt64}
+    (current : store.getCurrentSlot config = .ok slot)
+    (slotted : computeSlotAtTimeMs config store.genesisTimeMs timeMs = .ok slot) :
+    store.onTick config timeMs = .ok { store with timeMs } := by
+  have caught : Store.catchUp config store slot = .ok store := by
+    rw [Store.catchUp]
+    simp [current, bind, Except.bind, pure, Except.pure]
+  have later : ({ store with timeMs } : Store preset fork).getCurrentSlot config = .ok slot := by
+    simp [Store.getCurrentSlot, slotted, Except.mapError]
+  have ticked : store.onTickPerSlot config timeMs = .ok { store with timeMs } := by
+    simp [Store.onTickPerSlot, current, later, computeSlotsSinceEpochStart,
+      computeStartSlotAtEpoch_computeEpochAtSlot, bind, Except.bind, pure, Except.pure,
+      Except.mapError]
+  simp [Store.onTick, slotted, caught, ticked, Except.mapError, bind, Except.bind]
+
 /-- A store whose clock has a slot ticks to its own time and stays as it is. -/
 theorem onTick_timeMs {store : Store preset fork} {slot : Slot}
     (current : store.getCurrentSlot config = .ok slot) :
@@ -171,14 +187,7 @@ theorem onTick_timeMs {store : Store preset fork} {slot : Slot}
     cases computed : computeSlotAtTimeMs config store.genesisTimeMs store.timeMs with
     | error e => simp [computed, Except.mapError] at current
     | ok s => simpa [computed, Except.mapError] using current
-  have caught : Store.catchUp config store slot = .ok store := by
-    rw [Store.catchUp]
-    simp [current, bind, Except.bind, pure, Except.pure]
-  have ticked : store.onTickPerSlot config store.timeMs = .ok store := by
-    simp [Store.onTickPerSlot, current, computeSlotsSinceEpochStart,
-      computeStartSlotAtEpoch_computeEpochAtSlot, bind, Except.bind, pure, Except.pure,
-      Except.mapError]
-  simp [Store.onTick, slotted, caught, ticked, Except.mapError, bind, Except.bind]
+  exact onTick_sameSlot current slotted
 
 /-- A store built from an anchor can tick to its own time, when slots last a positive time.
 
