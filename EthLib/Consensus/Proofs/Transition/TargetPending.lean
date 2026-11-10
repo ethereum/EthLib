@@ -1,29 +1,15 @@
 module
 
+public import EthLib.Base.Proofs.FilterM
 public import EthLib.Consensus.Proofs.Transition.Committees
 public import EthLib.Consensus.Proofs.Transition.TargetSlots
-import all Init.Data.List.Control
 
 /-!
 # Proofs: before Altair, the attesters that justification counts signed the right link
 
-Before Altair the state keeps the pending attestations of the current and the previous epoch.
+Before Altair, justification counts the stake of the attesters of pending attestations.
 
-Justification counts the stake of the unslashed members of their committees whose bit is set.
-
-Of those, it counts only the attestations whose target is the first block of their epoch.
-
-It reads each committee again in the state at the epoch step.
-
-The committees of an epoch do not change while the epoch is recent, so it reads the same ones.
-
-Each member of a committee whose bit is set then signed the data of the attestation.
-
-Its target epoch is the epoch of its list, and its source the justified checkpoint of that epoch.
-
-The epoch step moves the list of the current epoch to the previous epoch, with the checkpoints.
-
-So justification before Altair counts only signed votes for the link of each epoch.
+Each of them signed a vote for the link of the epoch of its attestation, and each step keeps that.
 
 Reading a valid aggregate as the validator's signature assumes that no one forges a BLS aggregate.
 
@@ -48,7 +34,7 @@ def recentPending (state : BeaconState preset fork) (before : fork < .altair) (c
   if current then (state.currentEpochAttestations before).data
   else (state.previousEpochAttestations before).data
 
-/-- Before Altair, each pending attestation of the two epochs is a signed vote for their link.
+/-- Before Altair, each pending attestation of the two epochs is a signed vote for its link.
 
 Its target epoch is the epoch of its list, and the epoch of its slot.
 
@@ -154,7 +140,6 @@ theorem PendingSigned.of_processAttestation {parentSlot : Slot}
     PendingSigned config checks after := by
   have frame := frame_processAttestation computed
   have registry := processAttestation_registry before computed
-  have notAltair : ¬Fork.altair ≤ fork := Nat.not_le_of_lt before
   have notElectra : ¬Fork.pectra ≤ fork :=
     Nat.not_le_of_lt (Nat.lt_trans before (by decide : Fork.altair < Fork.pectra))
   have committees : ∀ epoch, CommitteesKept epoch state after := CommitteesKept.of_eq
@@ -182,39 +167,45 @@ theorem PendingSigned.of_processAttestation {parentSlot : Slot}
     exact ⟨by rw [currentEq, previousEq]; exact epoch, slot,
       by rw [frame.currentJustified, frame.previousJustified]; exact source,
       signedAttesters_of (committees _) slot frame.genesisValidatorsRoot keys signed⟩
-  unfold processAttestation at computed
-  simp only [notAltair, ↓reduceDIte, bind_ok_iff, ensure_ok_iff, pure, Except.pure,
-    Except.ok.injEq] at computed
-  obtain ⟨_, recent, _, slotEpoch, _, _, _, _, _, _, _, _, _, _, committee, committeeOk, _, _,
-    proposer, _, _, source, updated, recorded, indexed, indexedOk, valid, validOk, _, accepted,
-    rfl⟩ := computed
-  subst accepted
-  rw [liftAccessor_ok] at committeeOk indexedOk
+  obtain ⟨recent, slotEpoch, -, -, -, ⟨committee, committeeOk, -⟩, source⟩ :=
+    processAttestation_checks before computed
+  obtain ⟨pending, bits, dataEq, -, -, recorded, indexed, indexedOk, validOk⟩ :=
+    processAttestation_records before computed
   obtain ⟨added, same⟩ := recordPendingAttestation_lists recorded
-  intro before' current pending member
+  intro before' current other member
   generalize chosen : (attestation.data.target.epoch == getCurrentEpoch state) = target
-    at added same source
+    at added same
   by_cases here : current = target
   · subst here
     rw [added] at member
     rcases Array.mem_push.mp member with old | rfl
-    · exact kept _ pending old
+    · exact kept _ other old
     -- The new pending vote: its epoch, its source, and the signers of its indexed attestation.
-    refine ⟨?_, slotEpoch.symm,
-      by rw [frame.currentJustified, frame.previousJustified]; exact source,
-      fun attesters attestersOk attester inside => ?_⟩
-    · cases current
-      · have other : attestation.data.target.epoch ≠ getCurrentEpoch state := ne_of_beq_false chosen
-        simpa [previousEq] using recent.resolve_right other
-      · simpa [currentEq] using beq_iff_eq.mp chosen
-    · have committeeAfter : getBeaconCommittee updated attestation.data.slot
+    have attestersAfter : ∀ attesters, getPendingAttestingIndices after other = .ok attesters →
+        getBeaconCommittee after attestation.data.slot attestation.data.index = .ok committee ∧
+          committeeAttesters attestation.aggregationBits.bits 0 committee = .ok attesters := by
+      intro attesters attestersOk
+      have committeeAfter : getBeaconCommittee after attestation.data.slot
           attestation.data.index = .ok committee := by
         rw [committees _ _ _ rfl]
         exact committeeOk
       unfold getPendingAttestingIndices at attestersOk
+      rw [dataEq, bits] at attestersOk
       simp only [committeeAfter, bind, Except.bind] at attestersOk
-      have signers : getAttestingIndices updated attestation =
-          .ok (sortedSet attesters) := by
+      exact ⟨committeeAfter, attestersOk⟩
+    rw [dataEq]
+    refine ⟨?_, slotEpoch.symm, ?_, fun attesters attestersOk attester inside => ?_⟩
+    · cases current
+      · have differ : attestation.data.target.epoch ≠ getCurrentEpoch state :=
+          ne_of_beq_false chosen
+        simpa [previousEq] using recent.resolve_right differ
+      · simpa [currentEq] using beq_iff_eq.mp chosen
+    · rw [frame.currentJustified, frame.previousJustified, source]
+      cases current
+      · simp [ne_of_beq_false chosen]
+      · simp [beq_iff_eq.mp chosen]
+    · obtain ⟨committeeAfter, attestersOk⟩ := attestersAfter attesters attestersOk
+      have signers : getAttestingIndices after attestation = .ok (sortedSet attesters) := by
         simp only [getAttestingIndices, notElectra, ↓reduceDIte, committeeAfter, bind,
           Except.bind, attestersOk, pure, Except.pure]
       obtain ⟨indexed', indexedOk', indices, data, -⟩ :=
@@ -226,7 +217,7 @@ theorem PendingSigned.of_processAttestation {parentSlot : Slot}
   · have flipped : current = !target := by cases current <;> cases target <;> simp_all
     subst flipped
     rw [same] at member
-    exact kept _ pending member
+    exact kept _ other member
 
 /-- Before Altair, a block keeps each pending vote signed for its link.
 
@@ -394,37 +385,6 @@ theorem PendingSigned.of_stateTransition (before : fork < .altair)
 
 /-! ## The attesters that justification counts -/
 
-/-- A filter that a computation runs keeps only elements of its list, or of what it started with.
--/
-private theorem mem_of_filterAuxM_ok {ε α : Type} {test : α → Except ε Bool} :
-    ∀ {list kept out : List α}, List.filterAuxM test list kept = .ok out →
-      ∀ value ∈ out, value ∈ list ∨ value ∈ kept
-  | [], kept, out, computed => by
-    simp only [List.filterAuxM, pure, Except.pure, Except.ok.injEq] at computed
-    subst computed
-    exact fun _ member => .inr member
-  | first :: rest, kept, out, computed => by
-    simp only [List.filterAuxM, bind_ok_iff] at computed
-    obtain ⟨chosen, _, computed⟩ := computed
-    intro value member
-    rcases mem_of_filterAuxM_ok computed value member with inside | earlier
-    · exact .inl (List.mem_cons_of_mem first inside)
-    · cases chosen
-      · exact .inr earlier
-      · rcases List.mem_cons.mp earlier with rfl | earlier
-        · exact .inl List.mem_cons_self
-        · exact .inr earlier
-
-/-- A filter that a computation runs keeps only elements of its list. -/
-private theorem mem_of_filterM_ok {ε α : Type} {test : α → Except ε Bool} {list out : List α}
-    (computed : list.filterM test = .ok out) {value : α} (member : value ∈ out) :
-    value ∈ list := by
-  simp only [List.filterM, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-  obtain ⟨reversed, filtered, rfl⟩ := computed
-  rcases mem_of_filterAuxM_ok filtered value (List.mem_reverse.mp member) with inside | none
-  · exact inside
-  · cases none
-
 /-- Before Altair, each attester that justification counts for an epoch signed a vote for its link.
 
 The epoch is the current one when asked, and the previous one otherwise.
@@ -433,9 +393,7 @@ The attestations are those of the epoch whose target is the first block of the e
 
 Each unslashed member of their committees whose bit is set signed such data.
 
-The vote is for the link of that epoch, at the position of the attester.
-
-The attester is active in that epoch.
+The vote is for the link of that epoch, and the attester is active in that epoch.
 
 The two justified checkpoints must be equal in the first two epochs. -/
 theorem PendingSigned.attester (before : fork < .altair) (holds : PendingSigned config checks state)
