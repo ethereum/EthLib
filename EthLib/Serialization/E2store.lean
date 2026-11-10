@@ -69,6 +69,8 @@ inductive E2storeError where
   | noVersion
   /-- A Version record has data. -/
   | versionData
+  /-- The data of an index record is not 16 bytes plus 8 bytes for each entry it counts. -/
+  | indexSize
   deriving Repr, DecidableEq
 
 /-- The stable code of an error, one per constructor.
@@ -81,6 +83,7 @@ def E2storeError.code : E2storeError → UInt32
   | .dataTooLong => 4
   | .noVersion => 5
   | .versionData => 6
+  | .indexSize => 7
 
 /-- The header of a record of the type `type` whose data has `length` bytes.
 
@@ -151,5 +154,55 @@ def decodeFile (bytes : ByteArray) : Except E2storeError (List Record) := do
   unless records.all (fun record => record.type != VERSION || record.data.size == 0) do
     throw .versionData
   return records
+
+/-- The position of each record in the bytes that encode the records, from the position `pos`. -/
+def recordStarts (pos : Nat) : List Record → List Nat
+  | [] => []
+  | record :: rest => pos :: recordStarts (pos + 8 + record.data.size) rest
+
+/-! ### Index records -/
+
+/-- An index record: the number of its first entry, then the offset of each entry.
+
+An offset counts bytes from the start of the index record, so it may be negative. -/
+structure Index where
+  /-- The number of the first entry, such as a block number or a slot. -/
+  start : Nat
+  /-- The offset of each entry from the start of the index record, in order. -/
+  offsets : List Int
+  deriving Repr, DecidableEq
+
+/-- The 8 little-endian bytes at the position `pos` of `data`, as an unsigned integer. -/
+def readUint64 (data : ByteArray) (pos : Nat) : Nat :=
+  bytesToUint (Vector.ofFn fun i : Fin 8 => byteAt data (pos + i))
+
+/-- The 8 little-endian bytes at the position `pos` of `data`, as a signed integer.
+
+The integer is in two's complement, so a top bit of 1 makes it negative. -/
+def readInt64 (data : ByteArray) (pos : Nat) : Int :=
+  let n := readUint64 data pos
+  if n < 2 ^ 63 then n else n - 2 ^ 64
+
+/-- The index that the data of an index record holds.
+
+The data is the first number, one offset per entry, then the count of entries.
+
+Each is 8 bytes, little-endian, and each offset is signed.
+
+The [SlotIndex][slotindex] document gives this layout.
+
+So the data has 16 bytes plus 8 bytes for each entry it counts.
+
+[slotindex]: https://github.com/eth-clients/e2store-format-specs/blob/31cf6b577123bf1703eb3713f0b242f65fea806a/types/0x6932.md
+-/
+def readIndex (data : ByteArray) : Except E2storeError Index :=
+  if data.size < 16 then
+    .error .indexSize
+  else
+    let count := readUint64 data (data.size - 8)
+    if data.size ≠ 16 + 8 * count then
+      .error .indexSize
+    else
+      .ok ⟨readUint64 data 0, (List.range count).map fun i => readInt64 data (8 + 8 * i)⟩
 
 end EthLib.Serialization.E2store

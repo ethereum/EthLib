@@ -57,6 +57,7 @@ Each part names the EIPs that define it where they exist, and a later fork adds 
 - State: accounts, storage and code, committed by the Merkle Patricia Trie, and the trees proposed to replace it, such as the binary tree of EIP-7864.
 - Blocks: the header, receipts and their logs bloom, withdrawals of EIP-4895, the block-level access lists of EIP-7928, and the state transition of a block from Frontier to the latest fork.
 - The eth wire protocol of devp2p, which carries blocks, transactions and receipts between peers.
+- History files: the era1 files of the blocks before the Merge, with their accumulator and block index.
 
 ### Consensus layer
 

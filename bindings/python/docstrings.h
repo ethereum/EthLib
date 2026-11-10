@@ -920,6 +920,9 @@
 #define DOC_snap_verify_storage_ranges \
   "Check the ranges of a StorageRanges answer, against the storage roots of the request."
 
+#define DOC_era1_decode \
+  "The contents of an era1 file, as plain values."
+
 #define DOC_snappy_decompress \
   "The bytes a Snappy block decompresses to, or why it is not a valid block."
 

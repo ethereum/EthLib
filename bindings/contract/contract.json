@@ -8563,6 +8563,31 @@
    "error_class": "SnapError",
    "docstring":
    "Check the ranges of a StorageRanges answer, against the storage roots of the request.\n\nAn empty start is the zero hash.\n\n`None` means the empty reply of a peer without the state.\n\nOtherwise it says whether the last account holds a slot after its range."},
+  {"summary": "The contents of an era1 file, as plain values.",
+   "signature":
+   "(data: bytes) -> tuple[int, list[tuple[bytes, bytes, bytes, int]], list[tuple[int, bytes]], bytes]",
+   "operation": "EthLib.Execution.History.Exports.decodeEra1Of",
+   "method": "era1_decode",
+   "errors":
+   [{"type": "EthLib.Execution.History.Era1Error",
+     "codes":
+     [{"constructor": "e2store", "code": 1},
+      {"constructor": "noTrailer", "code": 2},
+      {"constructor": "misplacedRecord", "code": 3},
+      {"constructor": "tooManyBlocks", "code": 4},
+      {"constructor": "wrongSize", "code": 5},
+      {"constructor": "blockCount", "code": 6},
+      {"constructor": "blockOffset", "code": 7},
+      {"constructor": "frame", "code": 8},
+      {"constructor": "rlp", "code": 9},
+      {"constructor": "blockNumber", "code": 10},
+      {"constructor": "parentHash", "code": 11},
+      {"constructor": "totalDifficulty", "code": 12},
+      {"constructor": "ssz", "code": 13},
+      {"constructor": "accumulator", "code": 14}]}],
+   "error_class": "Era1Error",
+   "docstring":
+   "The contents of an era1 file, as plain values.\n\nThey are the first block number, the blocks, the other records and the accumulator.\n\nEach block is its header, body and receipts as RLP, and its total difficulty.\n\nEach other record is its type and its data."},
   {"summary":
    "The bytes a Snappy block decompresses to, or why it is not a valid block.",
    "signature": "(block: bytes) -> bytes",

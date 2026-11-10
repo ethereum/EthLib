@@ -174,6 +174,7 @@ extern PyObject* DISCV4_ERROR;
 extern PyObject* FORK_ID_ERROR;
 extern PyObject* ETH_WIRE_ERROR;
 extern PyObject* SNAP_ERROR;
+extern PyObject* ERA1_ERROR;
 extern PyObject* TRANSACTION_ERROR;
 extern PyObject* VRF_ERROR;
 extern PyObject* TRIE_ERROR;
@@ -572,6 +573,7 @@ PyObject* py_snap_access_lists_answer                     (PyObject* self, PyObj
 PyObject* py_snap_full_account                            (PyObject* self, PyObject* args);
 PyObject* py_snap_verify_account_range                    (PyObject* self, PyObject* args);
 PyObject* py_snap_verify_storage_ranges                   (PyObject* self, PyObject* args);
+PyObject* py_era1_decode                                  (PyObject* self, PyObject* args);
 PyObject* py_receipt_reencode                             (PyObject* self, PyObject* args);
 PyObject* py_receipt_logs_bloom                           (PyObject* self, PyObject* args);
 PyObject* py_block_make_receipts                          (PyObject* self, PyObject* args);

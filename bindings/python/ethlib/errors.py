@@ -241,6 +241,10 @@ class SnapError(EthLibError, ValueError):
     """A snap message or range answer was rejected, with its error code, or 0 for a bad argument."""
 
 
+class Era1Error(EthLibError, ValueError):
+    """An era1 file was rejected, with the code of its fault, or 0 for a bad argument."""
+
+
 class TransactionError(EthLibError, ValueError):
     """A transaction or its network form was rejected, or a fork name is unknown."""
 
@@ -346,6 +350,7 @@ __all__ = [
     "ForkIdError",
     "EthWireError",
     "SnapError",
+    "Era1Error",
     "TransactionError",
     "VrfError",
     "TrieError",

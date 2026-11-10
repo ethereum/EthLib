@@ -1229,6 +1229,10 @@ def snap_verify_storage_ranges(roots: list[bytes], start: bytes, slots: list[lis
     """Check the ranges of a StorageRanges answer, against the storage roots of the request."""
     ...
 
+def era1_decode(data: bytes) -> tuple[int, list[tuple[bytes, bytes, bytes, int]], list[tuple[int, bytes]], bytes]:
+    """The contents of an era1 file, as plain values."""
+    ...
+
 def snappy_decompress(block: bytes) -> bytes:
     """The bytes a Snappy block decompresses to, or why it is not a valid block."""
     ...

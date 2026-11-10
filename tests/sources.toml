@@ -70,6 +70,10 @@ directories = ["bindings/python/tests/precompile/blake2"]
 [repositories."google/snappy"]
 commit = "7406111ac4ae539ea0db8b7ea2dc76730cd957f4"
 
+# The e2store, era1 and era formats, which the history file tests follow.
+[repositories."eth-clients/e2store-format-specs"]
+commit = "31cf6b577123bf1703eb3713f0b242f65fea806a"
+
 [repositories."ethereum/devp2p"]
 commit = "88f1c80800d622cc3a542a2125bbe33cc18c9f9c"
 
@@ -219,6 +223,13 @@ repository = "eth-clients/slashing-protection-interchange-tests"
 url = "https://github.com/eth-clients/slashing-protection-interchange-tests/archive/bb7900688eecd287d8723154faac6addb5e63336.tar.gz"
 size = 7867
 sha256 = "f59908e927db1e5ceefec3a4d224cc6434b1a0e24eb5a57c8f31fc1b157cbfaf"
+
+# Era 0 of the mainnet pre-Merge history, an era1 file used as it is, without unpacking.
+[archives."era1/mainnet-00000-5ec1ffb8"]
+source = "The era1 files of the Portal network history, at era1.ethportal.net"
+url = "https://era1.ethportal.net/mainnet-00000-5ec1ffb8.era1"
+size = 3891337
+sha256 = "9c3f42e0247d5503533f437ada2d44e7e9661170421c1b7844687c8dcfc0eb9b"
 
 # The pinned vector directories whose cases come from no repository, with their source.
 [other]

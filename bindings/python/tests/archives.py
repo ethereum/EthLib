@@ -28,6 +28,11 @@ def unpack(name: str, *paths: str) -> Path:
     return fetch_archives.unpack(fetch_archives.load(REPO)[name], CACHE, list(paths))
 
 
+def download(name: str) -> Path:
+    """The file of the archive `name`, for a pinned file that is used as it is, not unpacked."""
+    return fetch_archives.download(fetch_archives.load(REPO)[name], CACHE)
+
+
 def parametrize(argnames: str | Sequence[str], cases: Callable[[], list]):
     """Parametrize a test with the cases of an archive, built when pytest collects the test."""
     # A module that imports this test module for its tables then reads no archive.

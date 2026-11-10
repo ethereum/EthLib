@@ -1159,6 +1159,10 @@ def bindings : List Binding := [
       "proof: list[bytes]) -> bool | None",
     [`EthLib.Execution.Network.SnapRangeError, `EthLib.Execution.Trie.RangeError],
     some "SnapError"⟩,
+  ⟨"era1_decode", `EthLib.Execution.History.Exports.decodeEra1Of,
+    "(data: bytes) -> tuple[int, list[tuple[bytes, bytes, bytes, int]], " ++
+      "list[tuple[int, bytes]], bytes]",
+    [`EthLib.Execution.History.Era1Error], some "Era1Error"⟩,
   ⟨"snappy_decompress", `EthLib.Networking.Snappy.decompress,
     "(block: bytes) -> bytes",
     [`EthLib.Networking.Snappy.SnappyError], some "SnappyError"⟩,
