@@ -99,6 +99,7 @@ public import EthLib.Consensus.Proofs.Transition.Block
 public import EthLib.Consensus.Proofs.Transition.BlockRewards
 public import EthLib.Consensus.Proofs.Transition.BuilderDebt
 public import EthLib.Consensus.Proofs.Transition.BuilderDebtBid
+public import EthLib.Consensus.Proofs.Transition.BuilderDebtBlock
 public import EthLib.Consensus.Proofs.Transition.BuilderDebtEpoch
 public import EthLib.Consensus.Proofs.Transition.BuilderDebtOperations
 public import EthLib.Consensus.Proofs.Transition.BuilderDebtSlots
