@@ -164,24 +164,12 @@ theorem outsideInv_empty : OutsideInv ((([] : PermCache A), false), ([] : List (
   refine ⟨fun p hp => by simp at hp, fun _ => ?_⟩
   simp [PermCache.IsPartialBijection]
 
-/-- A lookup that finds nothing means the query is not a cached query. -/
-private theorem not_mem_map_fst_of_lookup_eq_none {c : PermCache A} {a : A}
-    (h : c.lookup a = none) : a ∉ c.map Prod.fst := fun ha => by
-  obtain ⟨p, hp, hpa⟩ := List.mem_map.1 ha
-  exact ne_of_lookup_eq_none h p hp hpa
-
-/-- A reversed lookup that finds nothing means the answer is not a cached answer. -/
-private theorem not_mem_map_snd_of_lookup_swap_eq_none {c : PermCache A} {b : A}
-    (h : (c.map Prod.swap).lookup b = none) : b ∉ c.map Prod.snd := by
-  have := not_mem_map_fst_of_lookup_eq_none h
-  simpa [Function.comp_def] using this
-
 /-- A new forward pair keeps the invariant. -/
 private theorem outsideInv_forward {s : OutsideState A} (hs : OutsideInv s) {a b : A}
     (ha : s.1.1.lookup a = none) :
     OutsideInv ((IndepState.addForward s.1 a b, s.2 ++ [(a, b)]) : OutsideState A) := by
   obtain ⟨h1, h2⟩ := hs
-  have hna := not_mem_map_fst_of_lookup_eq_none ha
+  have hna := notMem_map_fst_of_lookup_eq_none ha
   refine ⟨fun p hp => ?_, fun hf => ?_⟩
   · simp only [List.mem_append, List.mem_singleton] at hp
     rcases hp with hp | rfl
@@ -197,7 +185,7 @@ private theorem outsideInv_inverse {s : OutsideState A} (hs : OutsideInv s) {a b
     (hb : (s.1.1.map Prod.swap).lookup b = none) :
     OutsideInv ((IndepState.addInverse s.1 a b, s.2) : OutsideState A) := by
   obtain ⟨h1, h2⟩ := hs
-  have hnb := not_mem_map_snd_of_lookup_swap_eq_none hb
+  have hnb := notMem_map_snd_of_lookup_swap_eq_none hb
   refine ⟨fun p hp => List.mem_cons_of_mem _ (h1 p hp), fun hf => ?_⟩
   simp only [Bool.or_eq_false_iff, decide_eq_false_iff_not] at hf
   obtain ⟨hf1, hf2⟩ := hf

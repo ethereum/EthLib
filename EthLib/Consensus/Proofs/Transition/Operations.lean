@@ -602,6 +602,23 @@ theorem addValidatorToRegistry_validators_eq_push {pubkey : BLSPubkey}
       rfl
     · cases computed
 
+/-- A new validator joins a registry of fewer than `2^64` validators.
+
+So its position fits a validator index. -/
+theorem addValidatorToRegistry_size_lt {pubkey : BLSPubkey}
+    {withdrawalCredentials : Bytes32} {amount : Gwei}
+    (computed : addValidatorToRegistry state pubkey withdrawalCredentials amount = .ok after) :
+    state.validators.data.size < 2 ^ 64 := by
+  unfold addValidatorToRegistry at computed
+  split at computed
+  · simp only [addValidatorToRegistryAltair, liftAccessor_ok, bind_ok_iff] at computed
+    obtain ⟨_, indexOk, _⟩ := computed
+    exact (getIndexForNewValidator_ok_iff.mp indexOk).1
+  · split at computed
+    · rename_i fits
+      exact Nat.lt_trans fits.1 preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt
+    · cases computed
+
 /-- A new validator joins the end of the registry, and its balance joins the end of the balances.
 
 That needs one balance for each validator. -/
@@ -858,7 +875,7 @@ theorem balanceSum_applyPendingDeposit {deposit : PendingDeposit}
     exact .inl (balanceSum_increaseBalance computed)
 
 /-- A deposit raises the sum of the balances by at most its amount. -/
-private theorem balanceSum_applyPendingDeposit_le {deposit : PendingDeposit}
+theorem balanceSum_applyPendingDeposit_le {deposit : PendingDeposit}
     (computed : applyPendingDeposit config checks state deposit = .ok after) :
     balanceSum after ≤ balanceSum state + deposit.amount.toNat := by
   unfold applyPendingDeposit at computed

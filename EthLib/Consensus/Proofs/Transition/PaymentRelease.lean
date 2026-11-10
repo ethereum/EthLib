@@ -81,6 +81,24 @@ def PaymentOpen (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork
     (slot = state.latestBlockHeader.slot ∧ (state.latestExecutionPayloadBid gloas).slot = slot ∧
       latePaymentOpen state gloas = true ∧ 0 < (state.latestExecutionPayloadBid gloas).value)
 
+/-- A latest bid with a value is at the slot of the latest block.
+
+Only a bid with a value opens a payment, so the slot of a bid without one does not matter. -/
+def ValuedBidAtLatestBlock (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork) :
+    Prop :=
+  0 < (state.latestExecutionPayloadBid gloas).value →
+    (state.latestExecutionPayloadBid gloas).slot = state.latestBlockHeader.slot
+
+/-- A step that keeps the latest bid and the slot of the latest block keeps a valued bid there. -/
+theorem ValuedBidAtLatestBlock.of_fields {gloas : .glamsterdam ≤ fork}
+    (holds : ValuedBidAtLatestBlock state gloas)
+    (header : after.latestBlockHeader.slot = state.latestBlockHeader.slot)
+    (bid : after.latestExecutionPayloadBid = state.latestExecutionPayloadBid) :
+    ValuedBidAtLatestBlock after gloas := by
+  unfold ValuedBidAtLatestBlock at *
+  rw [header, bid]
+  exact holds
+
 /-- The withdrawal that pays the bid of the block at a slot.
 
 It is the payment in the window, if the window holds it with a positive amount.
@@ -334,7 +352,7 @@ theorem paymentOpen_latestBlock {gloas : .glamsterdam ≤ fork}
 
 The parent must be older than the slot of the state, as it is when the parent payload runs.
 
-The latest bid must be at the slot of the parent, as it is then too.
+A latest bid with a value must be at the slot of the parent, as it is then too.
 
 Those two hypotheses are assumptions, which a later step proves.
 
@@ -350,7 +368,7 @@ The parent slot may stay open through the late path, until the header moves. -/
 theorem settleParentPayment_release {gloas : .glamsterdam ≤ fork}
     (older : state.latestBlockHeader.slot < state.slot)
     (fresh : ParentPaymentFresh state gloas)
-    (bidMatches : (state.latestExecutionPayloadBid gloas).slot = state.latestBlockHeader.slot)
+    (bidMatches : ValuedBidAtLatestBlock state gloas)
     (computed : settleParentPayment state gloas = .ok after) :
     ∃ released : List Slot, PaymentRelease state after gloas released ∧
       released.Sublist [state.latestBlockHeader.slot] ∧
@@ -442,7 +460,7 @@ theorem settleParentPayment_release {gloas : .glamsterdam ≤ fork}
       · intro slot member
         rw [List.mem_singleton] at member
         subst member
-        exact Or.inr ⟨rfl, bidMatches, by simp [latePaymentOpen, parent], valued⟩
+        exact Or.inr ⟨rfl, bidMatches valued, by simp [latePaymentOpen, parent], valued⟩
       · rintro ⟨position, found, -⟩
         rw [positions, atParent] at found
         cases found

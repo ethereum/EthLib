@@ -217,4 +217,26 @@ theorem processBuilderExitRequest_error_of_le {request : BuilderExitRequest}
   simp [processBuilderExitRequest, found, liftAccessor, liftArith, ofNatChecked,
     Nat.not_lt.mpr large, Except.mapError, bind, Except.bind]
 
+/-- A builder deposit changes only the registry of builders. -/
+theorem processBuilderDepositRequest_eq {request : BuilderDepositRequest}
+    (computed : processBuilderDepositRequest config checks state gloas request = .ok after) :
+    ∃ builders, after = { state with builders := builders } := by
+  unfold processBuilderDepositRequest addBuilderToRegistry at computed
+  simp only [bind, Except.bind, pure, Except.pure] at computed
+  repeat' split at computed
+  all_goals first
+    | (cases computed; done)
+    | (cases computed; exact ⟨_, rfl⟩)
+
+/-- A builder exit request changes only the registry of builders. -/
+theorem processBuilderExitRequest_eq {request : BuilderExitRequest}
+    (computed : processBuilderExitRequest config state gloas request = .ok after) :
+    ∃ builders, after = { state with builders := builders } := by
+  rcases processBuilderExitRequest_cases computed with rfl | ⟨_, _, _, _, _, exited⟩
+  · exact ⟨_, rfl⟩
+  · simp only [initiateBuilderExit, bind_ok_iff] at exited
+    obtain ⟨_, _, _, _, set⟩ := exited
+    obtain ⟨_, rfl⟩ := setBuilder_ok set
+    exact ⟨_, rfl⟩
+
 end EthLib.Consensus

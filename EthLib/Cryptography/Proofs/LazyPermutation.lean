@@ -5,6 +5,7 @@ public import VCVio.OracleComp.Constructions.UniformSelectMeasure
 public import VCVio.OracleComp.SimSemantics.Append.Core
 public import VCVio.OracleComp.SimSemantics.QueryImpl.Basic
 public import VCVio.OracleComp.SimSemantics.StateT.Basic
+public import VCVio.OracleComp.SimSemantics.StateT.PreservesInv
 public import VCVio.OracleComp.QueryTracking.QueryBound.Simulation
 
 /-!
@@ -192,6 +193,11 @@ theorem passthrough_add_inl_run {σ : Type} (perm : QueryImpl (PermSpec A) (Stat
       (·, s) <$> (query (spec := unifSpec) n : ProbComp (Fin (n + 1))) := by
   simp [StateT.run_monadLift]
 
+/-- Coins passed through keep each invariant of the state. -/
+theorem preservesInv_passthrough {σ : Type} (P : σ → Prop) :
+    QueryImpl.PreservesInv (unifSpec.passthrough : QueryImpl unifSpec (StateT σ ProbComp)) P :=
+  fun n => StateT.preservesInv_monadLift (query (spec := unifSpec) n) P
+
 /-- With coins passed through beside a permutation oracle, a run of coins alone keeps the state. -/
 theorem simulateQ_passthrough_add_liftM_run {σ α : Type}
     (perm : QueryImpl (PermSpec A) (StateT σ ProbComp)) (oa : ProbComp α) (s : σ) :
@@ -256,23 +262,34 @@ The converse of the next theorem fails: a repeated pair keeps an agreeing permut
 def PermCache.IsPartialBijection (c : PermCache A) : Prop :=
   (c.map Prod.fst).Nodup ∧ (c.map Prod.snd).Nodup
 
+omit [FinEnum A] in
+/-- A cache with one more pair is a partial bijection exactly when three facts hold.
+
+The query of the pair is no query of the cache, and its answer is no answer of the cache.
+
+The rest of the cache is a partial bijection. -/
+theorem PermCache.isPartialBijection_cons_iff (p : A × A) (c : PermCache A) :
+    PermCache.IsPartialBijection (p :: c) ↔
+      p.1 ∉ c.map Prod.fst ∧ p.2 ∉ c.map Prod.snd ∧ c.IsPartialBijection := by
+  simp only [PermCache.IsPartialBijection, List.map_cons, List.nodup_cons]
+  tauto
+
 /-- A partial bijection has a permutation that agrees with it. -/
 theorem PermCache.IsPartialBijection.extensions_nonempty {c : PermCache A}
     (hc : c.IsPartialBijection) : (extensions c).Nonempty := by
   induction c with
   | nil => exact ⟨Equiv.refl A, by simp [extensions, Agrees]⟩
   | cons p c ih =>
-    obtain ⟨hf, hs⟩ := hc
-    simp only [List.map_cons, List.nodup_cons] at hf hs
-    obtain ⟨π, hπ⟩ := ih ⟨hf.2, hs.2⟩
+    obtain ⟨hf, hs, hc⟩ := (PermCache.isPartialBijection_cons_iff _ _).1 hc
+    obtain ⟨π, hπ⟩ := ih hc
     refine ⟨Equiv.swap (π p.1) p.2 * π, ?_⟩
     simp only [extensions, Finset.mem_filter, Finset.mem_univ, true_and, Agrees] at hπ ⊢
     intro q hq
     rcases List.mem_cons.1 hq with rfl | hq
     · simp
     · rw [Equiv.Perm.mul_apply, hπ q hq]
-      refine Equiv.swap_apply_of_ne_of_ne (fun h => ?_) (fun h => hs.1 (List.mem_map.2 ⟨q, hq, h⟩))
-      exact hf.1 (List.mem_map.2 ⟨q, hq, π.injective ((hπ q hq).trans h)⟩)
+      refine Equiv.swap_apply_of_ne_of_ne (fun h => ?_) (fun h => hs (List.mem_map.2 ⟨q, hq, h⟩))
+      exact hf (List.mem_map.2 ⟨q, hq, π.injective ((hπ q hq).trans h)⟩)
 
 /-! ## Permutations that agree with a cache -/
 
@@ -303,6 +320,18 @@ theorem ne_of_lookup_eq_none {c : PermCache A} {a : A} (h : c.lookup a = none) :
     ∀ p ∈ c, p.1 ≠ a := fun p hp hpa => by
   have := List.lookup_eq_none_iff.1 h p hp
   simp [hpa] at this
+
+/-- A lookup that finds nothing means the query is not a cached query. -/
+theorem notMem_map_fst_of_lookup_eq_none {c : PermCache A} {a : A}
+    (h : c.lookup a = none) : a ∉ c.map Prod.fst := fun ha => by
+  obtain ⟨p, hp, hpa⟩ := List.mem_map.1 ha
+  exact ne_of_lookup_eq_none h p hp hpa
+
+/-- A reversed lookup that finds nothing means the answer is not a cached answer. -/
+theorem notMem_map_snd_of_lookup_swap_eq_none {c : PermCache A} {b : A}
+    (h : (c.map Prod.swap).lookup b = none) : b ∉ c.map Prod.snd := by
+  have := notMem_map_fst_of_lookup_eq_none h
+  simpa [Function.comp_def] using this
 
 /-- An agreeing permutation sends a query missing from the cache outside the answers. -/
 private theorem apply_mem_outside {c : PermCache A} {a : A} (h : c.lookup a = none)
@@ -462,6 +491,22 @@ private theorem permImpl_inr (π : Equiv.Perm A) (t : (PermSpec A).Domain) :
 theorem lazyPermImpl_inr (t : (PermSpec A).Domain) :
     (lazyPermImpl (.inr t) : StateT (PermCache A) ProbComp _) = lazyPermOracle t := rfl
 
+/-- A forward query to the lazy permutation reads the cache, or draws outside the images. -/
+theorem lazyPermOracle_inl_run (a : A) (c : PermCache A) :
+    (lazyPermOracle (.inl a)).run c =
+      match c.lookup a with
+      | some b => pure (b, c)
+      | none => (fun b => (b, (a, b) :: c)) <$>
+        (uniformOutside (c.map Prod.snd) a : ProbComp A) := rfl
+
+/-- An inverse query to the lazy permutation reads the cache, or draws outside the queries. -/
+theorem lazyPermOracle_inr_run (b : A) (c : PermCache A) :
+    (lazyPermOracle (.inr b)).run c =
+      match (c.map Prod.swap).lookup b with
+      | some a => pure (a, c)
+      | none => (fun a => (a, (a, b) :: c)) <$>
+        (uniformOutside (c.map Prod.fst) b : ProbComp A) := rfl
+
 /-- One lazy query only adds pairs to the cache, and keeps it a partial bijection. -/
 private theorem lazyPermImpl_step {t : (unifSpec + PermSpec A).Domain} {c c₁ : PermCache A}
     {u : (unifSpec + PermSpec A).Range t} (h : (u, c₁) ∈ support ((lazyPermImpl t).run c)) :
@@ -485,13 +530,11 @@ private theorem lazyPermImpl_step {t : (unifSpec + PermSpec A).Domain} {c c₁ :
       simp only [support_map, Set.mem_image, Prod.mk.injEq] at h
       obtain ⟨b, hb, -, rfl⟩ := h
       refine ⟨List.suffix_cons _ _, fun hc => ?_⟩
-      have ha : a ∉ c.map Prod.fst := fun ha => by
-        obtain ⟨p, hp, hpa⟩ := List.mem_map.1 ha
-        exact ne_of_lookup_eq_none hl p hp hpa
+      have ha := notMem_map_fst_of_lookup_eq_none hl
       have hb' := mem_of_mem_support_uniformFrom
         (filter_notMem_ne_nil hc.1 hc.2 (by simp) ha) _ hb
       simp only [List.mem_filter, decide_eq_true_eq] at hb'
-      exact ⟨List.nodup_cons.2 ⟨ha, hc.1⟩, List.nodup_cons.2 ⟨hb'.2, hc.2⟩⟩
+      exact (PermCache.isPartialBijection_cons_iff _ _).2 ⟨ha, hb'.2, hc⟩
   · simp only [lazyPermImpl, QueryImpl.passthrough_add, QueryImpl.add_apply_inr, lazyPermOracle,
       StateT.run] at h
     cases hl : (c.map Prod.swap).lookup b with
@@ -505,13 +548,11 @@ private theorem lazyPermImpl_step {t : (unifSpec + PermSpec A).Domain} {c c₁ :
       simp only [support_map, Set.mem_image, Prod.mk.injEq] at h
       obtain ⟨a, ha, -, rfl⟩ := h
       refine ⟨List.suffix_cons _ _, fun hc => ?_⟩
-      have hb : b ∉ c.map Prod.snd := fun hb => by
-        obtain ⟨p, hp, hpb⟩ := List.mem_map.1 hb
-        exact ne_of_lookup_eq_none hl p.swap (List.mem_map_of_mem hp) hpb
+      have hb := notMem_map_snd_of_lookup_swap_eq_none hl
       have ha' := mem_of_mem_support_uniformFrom
         (filter_notMem_ne_nil hc.2 hc.1 (by simp) hb) _ ha
       simp only [List.mem_filter, decide_eq_true_eq] at ha'
-      exact ⟨List.nodup_cons.2 ⟨ha'.2, hc.1⟩, List.nodup_cons.2 ⟨hb, hc.2⟩⟩
+      exact (PermCache.isPartialBijection_cons_iff _ _).2 ⟨ha'.2, hb, hc⟩
 
 /-- A lazy run only adds pairs to the cache, and keeps it a partial bijection. -/
 private theorem lazyPermImpl_run_support {α : Type} (oa : OracleComp (unifSpec + PermSpec A) α)

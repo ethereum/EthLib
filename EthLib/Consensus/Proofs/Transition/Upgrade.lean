@@ -2,7 +2,7 @@ module
 
 public import EthLib.Consensus.Proofs.Transition.BuilderRequests
 public import EthLib.Consensus.Proofs.Transition.Invariants
-public import EthLib.Consensus.Proofs.Transition.TargetVotes
+public import EthLib.Consensus.Proofs.Transition.TargetFlags
 public import EthLib.Consensus.Transition.Upgrade
 
 /-!
@@ -50,6 +50,22 @@ open Base Uint64 Cryptography.Bls Serialization.Ssz
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 
 /-! ## Upgrade frames -/
+
+/-- A step that keeps each byte of flags or zeroes it adds no target flag. -/
+theorem TargetFlagAt.of_flagsKeptOrZero {fork : Fork} {state after : BeaconState preset fork}
+    {altair : .altair ≤ fork} {current : Bool} {position : Nat}
+    (kept : FlagsKeptOrZero state after)
+    (flagged : TargetFlagAt (recentParticipation after altair current) position) :
+    TargetFlagAt (recentParticipation state altair current) position := by
+  obtain ⟨flags, found, set⟩ := flagged
+  have kept := kept altair position flags
+  cases current
+  · rcases kept.1 found with old | rfl
+    · exact ⟨flags, old, set⟩
+    · exact absurd set (by decide)
+  · rcases kept.2 found with old | rfl
+    · exact ⟨flags, old, set⟩
+    · exact absurd set (by decide)
 
 /-- An upgrade to a fork no earlier than the fork before.
 
@@ -623,6 +639,21 @@ theorem upgradeToGloas_spec {pre : BeaconState preset .fusaka}
       after.forkVersions =
         ⟨pre.forkVersions.currentVersion, config.GLOAS_FORK_VERSION, getCurrentEpoch pre⟩ :=
   (upgradeToGloas_frame_spec computed).2
+
+/-- The upgrade to Gloas starts with no pending payment and no pending withdrawal of a builder.
+
+The latest bid of the upgraded state has no value. -/
+theorem upgradeToGloas_builderFields {pre : BeaconState preset .fusaka}
+    {after : BeaconState preset .glamsterdam}
+    (computed : upgradeToGloas config checks pre = .ok after) :
+    (after.builderPendingPayments (by decide)).elements = Vector.replicate _ .empty ∧
+      (after.builderPendingWithdrawals (by decide)).data = #[] ∧
+      (after.latestExecutionPayloadBid (by decide)).value = 0 := by
+  unfold upgradeToGloas at computed
+  obtain ⟨root, -, rest⟩ := bind_ok_iff.mp computed
+  obtain ⟨window, -, onboarded⟩ := bind_ok_iff.mp rest
+  obtain ⟨⟨builders, pending, rfl⟩, -⟩ := onboardBuildersFromPendingDeposits_spec onboarded
+  exact ⟨rfl, rfl, rfl⟩
 
 /-- The upgraded bid keeps every field of the Gloas bid, and sets no inclusion list bit. -/
 theorem upgradeBidToHeze_spec (bid : ExecutionPayloadBid preset .glamsterdam) :

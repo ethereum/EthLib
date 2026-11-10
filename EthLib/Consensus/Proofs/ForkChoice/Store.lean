@@ -232,6 +232,66 @@ theorem getAncestor_trans {node ancestor : ForkChoiceNode} {higher lower : Slot}
         subst same
         simp [notLower, throw, throwThe, MonadExceptOf.throw] at walk
 
+/-- A walk keeps its result in a store that keeps every block of this one. -/
+theorem getAncestor_of_blocks {after : Store preset fork} {node ancestor : ForkChoiceNode}
+    {slot : Slot}
+    (blocks : ∀ {root : Root} {block : BeaconBlock preset fork},
+      store.blocks[root]? = some block → after.blocks[root]? = some block)
+    (walk : store.getAncestor node slot = .ok ancestor) :
+    after.getAncestor node slot = .ok ancestor := by
+  induction node using getAncestor.induct (store := store) (slot := slot) with
+  | case1 node found =>
+    rw [getAncestor] at walk
+    split at walk <;> simp_all [throw, throwThe, MonadExceptOf.throw]
+  | case2 node block found le =>
+    rw [getAncestor_of_le found le] at walk
+    cases walk
+    exact getAncestor_of_le (blocks found) le
+  | case3 node block found above parentFound =>
+    rw [getAncestor] at walk
+    split at walk
+    · simp_all
+    · rename_i b same
+      rw [found, Option.some.injEq] at same
+      subst same
+      simp only [above, ↓reduceIte] at walk
+      split at walk <;> simp_all [throw, throwThe, MonadExceptOf.throw]
+  | case4 node block found above parent parentFound lower ih =>
+    rw [getAncestor_step found above parentFound lower] at walk
+    rw [getAncestor_step (blocks found) above (blocks parentFound) lower]
+    exact ih walk
+  | case5 node block found above parent parentFound notLower =>
+    rw [getAncestor] at walk
+    split at walk
+    · simp_all
+    · rename_i b same
+      rw [found, Option.some.injEq] at same
+      subst same
+      simp only [above, ↓reduceIte] at walk
+      split at walk
+      · simp_all
+      · rename_i p same
+        rw [parentFound, Option.some.injEq] at same
+        subst same
+        simp [notLower, throw, throwThe, MonadExceptOf.throw] at walk
+
+/-- A checkpoint block stays the same in a store that keeps every block of this one. -/
+theorem getCheckpointBlock_of_blocks {after : Store preset fork} {root checkpoint : Root}
+    {epoch : Epoch}
+    (blocks : ∀ {root : Root} {block : BeaconBlock preset fork},
+      store.blocks[root]? = some block → after.blocks[root]? = some block)
+    (found : store.getCheckpointBlock root epoch = .ok checkpoint) :
+    after.getCheckpointBlock root epoch = .ok checkpoint := by
+  simp only [getCheckpointBlock, bind, Except.bind] at found ⊢
+  split at found
+  · simp at found
+  · rename_i start _
+    split at found
+    · simp at found
+    · rename_i ancestor walk
+      rw [getAncestor_of_blocks blocks walk]
+      exact found
+
 /-- Every known node descends from itself. -/
 theorem isAncestor_self {node : ForkChoiceNode} {block : BeaconBlock preset fork}
     (found : store.blocks[node.root]? = some block) :

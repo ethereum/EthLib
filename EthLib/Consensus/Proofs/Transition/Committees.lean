@@ -893,13 +893,9 @@ private theorem keeps_processRewardsAndPenalties
     (computed : processRewardsAndPenalties config state = .ok after) : Keeps state after := by
   have deltas : ∀ {state after : BeaconState preset fork} {all : Array Gwei × Array Gwei},
       applyAllDeltas state all = .ok after → Keeps state after := fun computed =>
-    Keeps.foldlM (fun _ index _ ok => by
-      have bounded : index < 2 ^ 64 := by
-        by_cases inside : index < 2 ^ 64
-        · exact inside
-        · simp [applyDeltas, inside] at ok
-      simp only [applyDeltas, bounded, ↓reduceIte, bind_ok_iff, liftAccessor_ok] at ok
-      obtain ⟨_, raised, lowered⟩ := ok
+    Keeps.foldlM (fun _ _ _ ok => by
+      simp only [applyDeltas, bind_ok_iff, liftAccessor_ok] at ok
+      obtain ⟨_, _, _, raised, lowered⟩ := ok
       exact (keeps_increaseBalance raised).trans (keeps_decreaseBalance lowered)) computed
   unfold processRewardsAndPenalties at computed
   split at computed

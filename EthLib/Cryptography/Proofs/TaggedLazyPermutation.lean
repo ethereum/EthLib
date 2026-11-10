@@ -1,7 +1,6 @@
 module
 
 public import EthLib.Cryptography.Proofs.LazyPermutation
-public import VCVio.OracleComp.SimSemantics.StateT.PreservesInv
 public import VCVio.OracleComp.SimSemantics.StateT.StateProjection
 
 /-!
@@ -52,6 +51,11 @@ abbrev TaggedCache (A τ : Type) := List ((A × A) × τ)
 /-- The cache without its tags. -/
 def TaggedCache.untag (c : TaggedCache A τ) : PermCache A :=
   c.map Prod.fst
+
+/-- A pair that joins the cache joins the cache without its tags. -/
+@[simp] theorem TaggedCache.untag_cons (e : (A × A) × τ) (c : TaggedCache A τ) :
+    TaggedCache.untag (e :: c) = e.1 :: TaggedCache.untag c :=
+  rfl
 
 variable [FinEnum A]
 

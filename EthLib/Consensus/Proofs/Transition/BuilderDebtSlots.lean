@@ -87,133 +87,6 @@ theorem builderFrame_initiateValidatorExit {index : ValidatorIndex}
     obtain ⟨_, _, rfl, _⟩ := queue
     exact BuilderFrame.refl _
 
-/-! ## The steps of an epoch before the builder payments -/
-
-private theorem builderFrame_processJustificationAndFinalization
-    (computed : processJustificationAndFinalization state = .ok after) :
-    BuilderFrame state after := by
-  obtain rfl | ⟨_, _, _, weighed⟩ := processJustificationAndFinalization_ok computed
-  · exact BuilderFrame.refl _
-  · obtain ⟨_, _, _, rest⟩ := weighJustificationAndFinalization_checkpoints weighed
-    exact ⟨by rw [← rest], by rw [← rest], by rw [← rest], by rw [← rest], by rw [← rest],
-      by rw [← rest]⟩
-
-private theorem builderFrame_processInactivityUpdates {altair : .altair ≤ fork}
-    (computed : processInactivityUpdates config state altair = .ok after) :
-    BuilderFrame state after := by
-  unfold processInactivityUpdates at computed
-  split at computed
-  · simp only [pure, Except.pure, Except.ok.injEq] at computed
-    exact computed ▸ BuilderFrame.refl _
-  · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-    obtain ⟨_, _, _, _, rfl⟩ := computed
-    exact ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
-
-private theorem builderFrame_applyAllDeltas {deltas : Array Gwei × Array Gwei}
-    (computed : applyAllDeltas state deltas = .ok after) : BuilderFrame state after := by
-  refine BuilderFrame.foldlM (fun _ _ _ ok => ?_) computed
-  obtain ⟨_, _, _, rfl⟩ := applyDeltas_eq_ok_iff.mp ok
-  exact ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
-
-private theorem builderFrame_processRewardsAndPenalties
-    (computed : processRewardsAndPenalties config state = .ok after) :
-    BuilderFrame state after := by
-  unfold processRewardsAndPenalties at computed
-  split at computed
-  · simp only [pure, Except.pure, Except.ok.injEq] at computed
-    exact computed ▸ BuilderFrame.refl _
-  split at computed
-  · simp only [bind_ok_iff] at computed
-    obtain ⟨_, _, _, _, applied⟩ := computed
-    exact BuilderFrame.foldlM (fun _ _ _ ok => builderFrame_applyAllDeltas ok) applied
-  · simp only [bind_ok_iff] at computed
-    obtain ⟨_, _, applied⟩ := computed
-    exact builderFrame_applyAllDeltas applied
-
-private theorem builderFrame_processRegistryUpdates
-    (computed : processRegistryUpdates config state = .ok after) : BuilderFrame state after := by
-  unfold processRegistryUpdates at computed
-  split at computed
-  · simp only [bind_ok_iff, liftAccessor_ok] at computed
-    obtain ⟨_, _, computed⟩ := computed
-    refine BuilderFrame.foldlM (fun _ _ _ ok => ?_) computed
-    simp only [updateRegistryEntryElectra, bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, ok⟩ := ok
-    split at ok
-    · simp only [bind_ok_iff, liftAccessor_ok] at ok
-      obtain ⟨_, _, set⟩ := ok
-      exact builderFrame_setValidatorAt set
-    split at ok
-    · obtain ⟨_, _, ok⟩ := bind_ok_iff.mp ok
-      exact builderFrame_initiateValidatorExit (liftAccessor_ok.mp ok)
-    split at ok
-    · exact builderFrame_setValidatorAt (liftAccessor_ok.mp ok)
-    · simp only [pure, Except.pure, Except.ok.injEq] at ok
-      exact ok ▸ BuilderFrame.refl _
-  simp only [bind_ok_iff] at computed
-  obtain ⟨_, updatedOk, activated⟩ := computed
-  refine (BuilderFrame.foldlM (fun _ _ _ ok => ?_) updatedOk).trans
-    (BuilderFrame.foldlM (fun _ _ _ ok => ?_) activated)
-  · simp only [updateRegistryEntry, bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, _, _, _, markedOk, ok⟩ := ok
-    have set := builderFrame_setValidatorAt markedOk
-    split at ok
-    · obtain ⟨_, _, ok⟩ := bind_ok_iff.mp ok
-      exact set.trans (builderFrame_initiateValidatorExit (liftAccessor_ok.mp ok))
-    · simp only [pure, Except.pure, Except.ok.injEq] at ok
-      exact ok ▸ set
-  · simp only [activateValidator, bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, _, _, set⟩ := ok
-    exact builderFrame_setValidator set
-
-private theorem builderFrame_processSlashings (computed : processSlashings state = .ok after) :
-    BuilderFrame state after := by
-  unfold processSlashings at computed
-  simp only [bind_ok_iff] at computed
-  obtain ⟨_, _, _, _, _, _, computed⟩ := computed
-  split at computed
-  · simp only [bind_ok_iff] at computed
-    obtain ⟨_, _, applied⟩ := computed
-    refine BuilderFrame.foldlM (fun _ _ _ ok => ?_) applied
-    simp only [applySlashingPenaltyElectra, bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, ok⟩ := ok
-    split at ok
-    · simp only [bind_ok_iff] at ok
-      obtain ⟨_, _, ok⟩ := ok
-      split at ok
-      · simp only [bind_ok_iff, liftAccessor_ok] at ok
-        obtain ⟨_, _, _, _, lowered⟩ := ok
-        exact builderFrame_decreaseBalance lowered
-      · simp only [pure, Except.pure, Except.ok.injEq] at ok
-        exact ok ▸ BuilderFrame.refl _
-    · simp only [pure, Except.pure, Except.ok.injEq] at ok
-      exact ok ▸ BuilderFrame.refl _
-  · refine BuilderFrame.foldlM (fun _ _ _ ok => ?_) computed
-    simp only [applySlashingPenalty, bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, ok⟩ := ok
-    split at ok
-    · simp only [bind_ok_iff] at ok
-      obtain ⟨_, _, ok⟩ := ok
-      split at ok
-      · simp only [bind_ok_iff, liftAccessor_ok] at ok
-        obtain ⟨_, _, _, _, _, _, lowered⟩ := ok
-        exact builderFrame_decreaseBalance lowered
-      · simp only [pure, Except.pure, Except.ok.injEq] at ok
-        exact ok ▸ BuilderFrame.refl _
-    · simp only [pure, Except.pure, Except.ok.injEq] at ok
-      exact ok ▸ BuilderFrame.refl _
-
-private theorem builderFrame_processEth1DataReset {before : fork < .hegota}
-    (computed : processEth1DataReset before state = .ok after) : BuilderFrame state after := by
-  simp only [processEth1DataReset, bind_ok_iff, liftAccessor_ok] at computed
-  obtain ⟨_, _, computed⟩ := computed
-  split at computed
-  · simp only [pure, Except.pure, Except.ok.injEq] at computed
-    subst computed
-    exact ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
-  · simp only [pure, Except.pure, Except.ok.injEq] at computed
-    exact computed ▸ BuilderFrame.refl _
-
 /-- Adding a validator keeps the builder fields and the two slots. -/
 theorem builderFrame_addValidatorToRegistry {pubkey withdrawalCredentials amount}
     (computed : addValidatorToRegistry state pubkey withdrawalCredentials amount = .ok after) :
@@ -229,212 +102,35 @@ theorem builderFrame_addValidatorToRegistry {pubkey withdrawalCredentials amount
     exact ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
   · cases computed
 
+/-- Keeping the builder fields and the two slots satisfies the laws of the epoch steps. -/
+private theorem builderEpochFrameLaws : EpochFrameLaws (@BuilderFrame preset fork)
+    where
+  refl := BuilderFrame.refl
+  trans := BuilderFrame.trans
+  setValidator := fun set _ _ _ _ => builderFrame_setValidator set
+  setValidatorAt := fun set _ _ _ _ => builderFrame_setValidatorAt set
+  increaseBalance := builderFrame_increaseBalance
+  decreaseBalance := builderFrame_decreaseBalance
+  initiateValidatorExit := builderFrame_initiateValidatorExit
+  addValidatorToRegistry := builderFrame_addValidatorToRegistry
+  eth1DataVotes _ _ := ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
+  inactivityScores _ _ := ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
+  slashings _ _ := ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
+  randaoMixes _ _ := ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
+  historicalRoots _ _ := ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
+  historicalSummaries _ _ := ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
+  participationRecords _ := ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
+  pendingDeposits _ _ _ := ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
+  pendingConsolidations _ _ := ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
+  syncCommittees _ _ _ := ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
+  proposerLookahead _ _ := ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
+  ptcWindow _ _ := ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
+
 /-- Applying a pending deposit keeps the builder fields and the two slots. -/
 theorem builderFrame_applyPendingDeposit {deposit : PendingDeposit}
     (computed : applyPendingDeposit config checks state deposit = .ok after) :
-    BuilderFrame state after := by
-  unfold applyPendingDeposit at computed
-  split at computed
-  · split at computed
-    · cases computed
-      exact BuilderFrame.refl _
-    simp only [bind_ok_iff] at computed
-    obtain ⟨_, _, computed⟩ := computed
-    split at computed
-    · exact builderFrame_addValidatorToRegistry computed
-    · simp only [pure, Except.pure, Except.ok.injEq] at computed
-      exact computed ▸ BuilderFrame.refl _
-  · simp only [liftAccessor_ok, bind_ok_iff] at computed
-    obtain ⟨_, _, computed⟩ := computed
-    exact builderFrame_increaseBalance computed
-
-private theorem builderFrame_passPendingDeposits {stop : PendingDeposit → Bool}
-    {nextEpoch : Epoch} {available : Gwei} :
-    ∀ {deposits : List PendingDeposit} {state : BeaconState preset fork} {processed : Gwei}
-      {count : Nat} {postponed : Array PendingDeposit} {pass},
-      passPendingDeposits config checks stop nextEpoch available state processed count postponed
-        deposits = .ok pass →
-      BuilderFrame state pass.1.state
-  | [], _, _, _, _, _, computed => by
-    simp only [passPendingDeposits, pure, Except.pure, Except.ok.injEq] at computed
-    subst computed
-    exact BuilderFrame.refl _
-  | deposit :: rest, state, processed, count, postponed, pass, computed => by
-    unfold passPendingDeposits at computed
-    simp only [bind, Except.bind, pure, Except.pure] at computed
-    split at computed
-    · cases computed
-      exact BuilderFrame.refl _
-    split at computed
-    · split at computed
-      · cases computed
-      rename_i credited
-      split at computed
-      · cases computed
-      cases computed
-      exact (builderFrame_applyPendingDeposit credited).trans
-        (builderFrame_passPendingDeposits (deposits := rest) ‹_›)
-    split at computed
-    · split at computed
-      · cases computed
-      cases computed
-      exact builderFrame_passPendingDeposits (deposits := rest) ‹_›
-    split at computed
-    · cases computed
-    split at computed
-    · cases computed
-      exact BuilderFrame.refl _
-    split at computed
-    · cases computed
-    rename_i credited
-    split at computed
-    · cases computed
-    cases computed
-    exact (builderFrame_applyPendingDeposit credited).trans
-      (builderFrame_passPendingDeposits (deposits := rest) ‹_›)
-
-private theorem builderFrame_passPendingConsolidations {nextEpoch : Epoch} :
-    ∀ {consolidations : List PendingConsolidation} {state : BeaconState preset fork}
-      {result : BeaconState preset fork × Nat},
-      passPendingConsolidations nextEpoch state consolidations = .ok result →
-      BuilderFrame state result.1
-  | [], _, _, computed => by
-    simp only [passPendingConsolidations, pure, Except.pure, Except.ok.injEq] at computed
-    subst computed
-    exact BuilderFrame.refl _
-  | consolidation :: rest, state, result, computed => by
-    simp only [passPendingConsolidations, bind_ok_iff, liftAccessor_ok] at computed
-    obtain ⟨source, _, computed⟩ := computed
-    split at computed
-    · simp only [bind_ok_iff] at computed
-      obtain ⟨⟨passed, read⟩, passedOk, computed⟩ := computed
-      cases computed
-      exact builderFrame_passPendingConsolidations (result := (passed, read)) passedOk
-    split at computed
-    · cases computed
-      exact BuilderFrame.refl _
-    simp only [bind_ok_iff, liftAccessor_ok] at computed
-    obtain ⟨_, _, lowered, loweredOk, raised, raisedOk, ⟨passed, read⟩, passedOk, computed⟩ :=
-      computed
-    cases computed
-    exact ((builderFrame_decreaseBalance loweredOk).trans
-      (builderFrame_increaseBalance raisedOk)).trans
-      (builderFrame_passPendingConsolidations (result := (passed, read)) passedOk)
-
-private theorem builderFrame_processPendingBalances
-    (computed : processPendingBalances config checks state = .ok after) :
-    BuilderFrame state after := by
-  unfold processPendingBalances at computed
-  split at computed
-  · simp only [bind_ok_iff] at computed
-    obtain ⟨_, deposited, consolidated⟩ := computed
-    refine BuilderFrame.trans (second := ‹_›) ?_ ?_
-    · unfold processPendingDeposits at deposited
-      simp only [bind, Except.bind, pure, Except.pure] at deposited
-      repeat' (split at deposited <;> try cases deposited)
-      all_goals
-        exact (builderFrame_passPendingDeposits ‹_›).trans ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
-    · unfold processPendingConsolidations at consolidated
-      simp only [bind, Except.bind, pure, Except.pure] at consolidated
-      repeat' (split at consolidated <;> try cases consolidated)
-      all_goals
-        exact (builderFrame_passPendingConsolidations ‹_›).trans ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
-  · simp only [pure, Except.pure, Except.ok.injEq] at computed
-    exact computed ▸ BuilderFrame.refl _
-
-/-! ## The steps of an epoch after the builder payments -/
-
-private theorem builderFrame_processEffectiveBalanceUpdates
-    (computed : processEffectiveBalanceUpdates state = .ok after) : BuilderFrame state after := by
-  unfold processEffectiveBalanceUpdates at computed
-  refine BuilderFrame.foldlM (fun _ _ _ ok => ?_) computed
-  simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at ok
-  obtain ⟨_, _, _, _, _, _, set⟩ := ok
-  exact builderFrame_setValidatorAt set
-
-private theorem builderFrame_processHistoricalSummariesUpdate {capella : .shapella ≤ fork}
-    (computed : processHistoricalSummariesUpdate state capella = .ok after) :
-    BuilderFrame state after := by
-  unfold processHistoricalSummariesUpdate at computed
-  simp only [bind, Except.bind, pure, Except.pure] at computed
-  repeat' (split at computed <;> try cases computed)
-  all_goals first
-    | exact BuilderFrame.refl _
-    | exact ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
-
-private theorem builderFrame_processSyncCommitteeUpdates {altair : .altair ≤ fork}
-    (computed : processSyncCommitteeUpdates state altair = .ok after) :
-    BuilderFrame state after := by
-  unfold processSyncCommitteeUpdates at computed
-  simp only [bind, Except.bind, pure, Except.pure] at computed
-  repeat' (split at computed <;> try cases computed)
-  all_goals first
-    | exact BuilderFrame.refl _
-    | exact ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
-
-private theorem builderFrame_processSlashingsReset
-    (computed : processSlashingsReset state = .ok after) : BuilderFrame state after := by
-  obtain ⟨_, _, _, _, rfl⟩ := processSlashingsReset_eq computed
-  exact ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
-
-private theorem builderFrame_processRandaoMixesReset
-    (computed : processRandaoMixesReset state = .ok after) : BuilderFrame state after := by
-  obtain ⟨_, _, _, _, _, _, rfl⟩ := processRandaoMixesReset_eq computed
-  exact ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
-
-private theorem builderFrame_processProposerLookahead {fulu : .fusaka ≤ fork}
-    (computed : processProposerLookahead state fulu = .ok after) : BuilderFrame state after := by
-  simp only [processProposerLookahead, bind_ok_iff, pure, Except.pure,
-    Except.ok.injEq] at computed
-  obtain ⟨_, _, _, _, rfl⟩ := computed
-  exact ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
-
-private theorem builderFrame_processPtcWindow {gloas : .glamsterdam ≤ fork}
-    (computed : processPtcWindow state gloas = .ok after) : BuilderFrame state after := by
-  simp only [processPtcWindow, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-  obtain ⟨_, _, _, _, rfl⟩ := computed
-  exact ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
-
-/-- The state that the epoch transition reaches before the step of the payments.
-
-It runs the steps of the epoch transition that come before that step, in their order.
-
-Before Altair it skips the inactivity scores, as the epoch transition does. -/
-def epochBeforePayments (config : Config) (checks : SignatureChecks)
-    (state : BeaconState preset fork) : Except TransitionError (BeaconState preset fork) := do
-  let state ← processJustificationAndFinalization state
-  let state ← (if altair : .altair ≤ fork then processInactivityUpdates config state altair
-    else pure state)
-  let state ← processRewardsAndPenalties config state
-  let state ← processRegistryUpdates config state
-  let state ← processSlashings state
-  let state ← (if before : fork < .hegota then processEth1DataReset before state else pure state)
-  processPendingBalances config checks state
-
-/-- From Altair, the epoch transition first runs the steps that come before the payments.
-
-It then runs the rest of its steps in their order.
-
-So those first steps are a factor of the epoch transition, and not a second form of it. -/
-theorem processEpochAltair_eq_epochBeforePayments_bind (config : Config) (checks : SignatureChecks)
-    (state : BeaconState preset fork) (altair : .altair ≤ fork) :
-    processEpochAltair config checks state altair = (do
-      let state ← epochBeforePayments config checks state
-      let state ← (if gloas : .glamsterdam ≤ fork then
-          liftAccessor (processBuilderPendingPayments state gloas)
-        else pure state)
-      let state ← processEffectiveBalanceUpdates state
-      let state ← processSlashingsReset state
-      let state ← processRandaoMixesReset state
-      let state ← if capella : .shapella ≤ fork then processHistoricalSummariesUpdate state capella
-        else processHistoricalRootsUpdate state
-      let state := processParticipationFlagUpdates state altair
-      let state ← processSyncCommitteeUpdates state altair
-      let state ← (if fulu : .fusaka ≤ fork then liftAccessor (processProposerLookahead state fulu)
-        else pure state)
-      if gloas : .glamsterdam ≤ fork then liftAccessor (processPtcWindow state gloas)
-      else pure state) := by
-  simp only [processEpochAltair, epochBeforePayments, altair, ↓reduceDIte, bind_assoc]
+    BuilderFrame state after :=
+  builderEpochFrameLaws.applyPendingDeposit computed
 
 /-- From Gloas, the epoch transition keeps the builder fields, except the step of the payments.
 
@@ -445,37 +141,22 @@ theorem processEpoch_builderSplit {gloas : .glamsterdam ≤ fork}
       BuilderFrame state pending ∧
       processBuilderPendingPayments pending gloas = .ok paid ∧ BuilderFrame paid after := by
   have altair : .altair ≤ fork := Nat.le_trans (by decide) gloas
-  have capella : .shapella ≤ fork := Nat.le_trans (by decide) gloas
-  have fulu : .fusaka ≤ fork := Nat.le_trans (by decide) gloas
   unfold processEpoch at computed
-  rw [dite_eq_left altair, processEpochAltair_eq_epochBeforePayments_bind] at computed
-  simp only [bind_ok_iff, capella, fulu, gloas, ↓reduceDIte, liftAccessor_ok] at computed
-  obtain ⟨pending, pendingOk, paid, paidOk, balanced, balancedOk, cleared, clearedOk, mixed,
-    mixedOk, rooted, rootedOk, synced, syncedOk, looked, lookedOk, windowed⟩ := computed
-  refine ⟨pending, paid, pendingOk, ?_, paidOk, ?_⟩
-  · simp only [epochBeforePayments, bind_ok_iff, altair, ↓reduceDIte] at pendingOk
-    obtain ⟨justified, justifiedOk, scored, scoredOk, rewarded, rewardedOk, registered,
-      registeredOk, slashed, slashedOk, reset, resetOk, pendingOk⟩ := pendingOk
-    have resetFrame : BuilderFrame slashed reset := by
-      split at resetOk
-      · exact builderFrame_processEth1DataReset resetOk
-      · simp only [pure, Except.pure, Except.ok.injEq] at resetOk
-        exact resetOk ▸ BuilderFrame.refl _
-    exact (builderFrame_processJustificationAndFinalization justifiedOk).trans <|
-      (builderFrame_processInactivityUpdates scoredOk).trans <|
-      (builderFrame_processRewardsAndPenalties rewardedOk).trans <|
-      (builderFrame_processRegistryUpdates registeredOk).trans <|
-      (builderFrame_processSlashings slashedOk).trans <|
-      resetFrame.trans (builderFrame_processPendingBalances pendingOk)
+  simp only [altair, ↓reduceDIte] at computed
+  obtain ⟨pending, paid, rooted, pendingOk, paidOk, middle, tail⟩ :=
+    builderEpochFrameLaws.processEpochAltair_paymentSplit computed
+  obtain ⟨justified, justifiedOk, head⟩ := builderEpochFrameLaws.epochBeforePayments_split pendingOk
+  have justifiedFrame : BuilderFrame state justified := by
+    obtain rfl | ⟨_, _, _, weighed⟩ := processJustificationAndFinalization_ok justifiedOk
+    · exact BuilderFrame.refl _
+    · obtain ⟨_, _, _, rest⟩ := weighJustificationAndFinalization_checkpoints weighed
+      exact ⟨by rw [← rest], by rw [← rest], by rw [← rest], by rw [← rest], by rw [← rest],
+        by rw [← rest]⟩
   have rotated : BuilderFrame rooted (processParticipationFlagUpdates rooted altair) :=
     ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
-  exact (builderFrame_processEffectiveBalanceUpdates balancedOk).trans <|
-    (builderFrame_processSlashingsReset clearedOk).trans <|
-    (builderFrame_processRandaoMixesReset mixedOk).trans <|
-    (builderFrame_processHistoricalSummariesUpdate rootedOk).trans <|
-    rotated.trans <|
-    (builderFrame_processSyncCommitteeUpdates syncedOk).trans <|
-    (builderFrame_processProposerLookahead lookedOk).trans (builderFrame_processPtcWindow windowed)
+  exact ⟨pending, paid, pendingOk, justifiedFrame.trans head,
+    by simpa only [gloas, ↓reduceDIte, liftAccessor_ok] using paidOk,
+    middle.trans (rotated.trans tail)⟩
 
 /-! ## Slots -/
 
