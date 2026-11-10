@@ -4,6 +4,7 @@ public import EthLib.Consensus.BuilderApi
 public import EthLib.Consensus.Proofs.Constants
 public import EthLib.Consensus.Proofs.Containers.BuilderApi
 public import EthLib.Consensus.Proofs.Signing
+public import EthLib.Consensus.Transition.Block
 
 /-!
 # Proofs: the Builder API
@@ -17,6 +18,8 @@ So no domain of a fork equals the domain of the Builder API, at any fork version
 From Bellatrix to Fulu, blinding a body or a block always succeeds and keeps its root.
 
 So a signature over a blinded block is a signature over the full block.
+
+When the block names the proposer of the state, the two checks of a signature agree.
 -/
 
 @[expose] public section
@@ -125,5 +128,21 @@ theorem BeaconBlock.computeSigningRoot_blind {block : BeaconBlock preset fork}
     (made : block.blind range = .ok blinded) (domain : Domain) :
     computeSigningRoot blinded domain = computeSigningRoot block domain := by
   simp [computeSigningRoot, BeaconBlock.hashTreeRoot_blind made]
+
+/-- From Bellatrix to Fulu, a signature verifies on a blinded block exactly as on its full block.
+
+The full block must name the proposer of the state, which the blinded check reads from the state.
+
+Both checks then read the same key, the same domain and the same signing root. -/
+theorem verifyBlindedBlockSignature_blind {config : Config} {checks : SignatureChecks}
+    {state : BeaconState preset fork} {block : BeaconBlock preset fork}
+    {range : HasBuilderApi fork} {blinded : BlindedBeaconBlock preset fork}
+    (made : block.blind range = .ok blinded)
+    (proposer : getBeaconProposerIndex state = .ok block.proposerIndex)
+    (signature : Cryptography.Bls.BLSSignature) :
+    verifyBlindedBlockSignature config checks state ⟨blinded, signature⟩ =
+      verifyBlockSignature config checks state ⟨block, signature⟩ := by
+  simp [verifyBlindedBlockSignature, verifyBlockSignature, proposer, liftAccessor,
+    BeaconBlock.computeSigningRoot_blind made, bind, Except.bind, Except.mapError]
 
 end EthLib.Consensus
