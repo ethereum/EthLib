@@ -187,12 +187,11 @@ theorem slackJustifiedCheckpoints_activeSetAt_of_chainSteps
       kept.getActiveValidatorIndices_eq (UInt64.le_refl _)]
     exact Finset.inter_subset_right
 
-set_option linter.unusedVariables false in
 /-- The roots, ordered by the links that the states of the runs between two states record.
 
 A run of steps from the first state reaches the state of each link, which reaches the last one. -/
-def RunRoot (config : Config) (checks : SignatureChecks) (first last : ForkedBeaconState preset) :
-    Type :=
+def RunRoot (_config : Config) (_checks : SignatureChecks)
+    (_first _last : ForkedBeaconState preset) : Type :=
   Root
 
 /-- Two roots are in order when a chain of links of the runs leads from the first to the second. -/
