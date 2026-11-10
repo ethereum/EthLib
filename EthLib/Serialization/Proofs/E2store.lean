@@ -19,6 +19,8 @@ So the encoding is a bijection onto the bytes that decode.
 Its domain is the record lists whose data each have fewer than `2^32` bytes.
 
 A file decodes exactly when its records start with a Version record, and no Version record has data.
+
+In bytes that decode, each record sits where the sizes of the records before it put it.
 -/
 
 @[expose] public section
@@ -179,26 +181,31 @@ theorem encode_eq_ok_iff {records : List Record} {bytes : ByteArray} :
 
 /-! ### Decoding -/
 
+/-- A record after a prefix has its header at the end of the prefix, and its data after it. -/
+private theorem record_after (pre post : ByteArray) (r : Record) (h : r.data.size < 2 ^ 32) :
+    readHeader (pre ++ (encodeHeader r.type r.data.size ++ r.data ++ post)) pre.size =
+        .ok ⟨r.type, r.data.size⟩ ∧
+      (pre ++ (encodeHeader r.type r.data.size ++ r.data ++ post)).extract
+        (pre.size + 8) (pre.size + 8 + r.data.size) = r.data := by
+  refine ⟨?_, ?_⟩
+  · rw [ByteArray.append_assoc, ← ByteArray.append_assoc]
+    exact readHeader_append_encodeHeader _ _ _ _ h
+  · have hd := @ByteArray.extract_append_size_add' (encodeHeader r.type r.data.size)
+      (r.data ++ post) 0 r.data.size 8 (size_encodeHeader _ _).symm
+    rw [Nat.add_zero, ByteArray.extract_append_eq_left rfl, ← ByteArray.append_assoc] at hd
+    rw [Nat.add_assoc, ByteArray.extract_append_size_add, hd]
+
 /-- Decoding at the header of a record reads the record, then goes on after its data. -/
 private theorem decodeFrom_record (pre post : ByteArray) (r : Record) (acc : Array Record)
     (h : r.data.size < 2 ^ 32) :
     decodeFrom (pre ++ (encodeHeader r.type r.data.size ++ r.data ++ post)) pre.size acc =
       decodeFrom (pre ++ (encodeHeader r.type r.data.size ++ r.data ++ post))
         (pre.size + 8 + r.data.size) (acc.push r) := by
-  have hr : readHeader (pre ++ (encodeHeader r.type r.data.size ++ r.data ++ post)) pre.size =
-      .ok ⟨r.type, r.data.size⟩ := by
-    rw [ByteArray.append_assoc, ← ByteArray.append_assoc]
-    exact readHeader_append_encodeHeader _ _ _ _ h
+  obtain ⟨hr, he⟩ := record_after pre post r h
   have hs : (pre ++ (encodeHeader r.type r.data.size ++ r.data ++ post)).size =
       pre.size + 8 + r.data.size + post.size := by
     rw [ByteArray.size_append, ByteArray.size_append, ByteArray.size_append, size_encodeHeader]
     omega
-  have hd := @ByteArray.extract_append_size_add' (encodeHeader r.type r.data.size)
-    (r.data ++ post) 0 r.data.size 8 (size_encodeHeader _ _).symm
-  rw [Nat.add_zero, ByteArray.extract_append_eq_left rfl, ← ByteArray.append_assoc] at hd
-  have he : (pre ++ (encodeHeader r.type r.data.size ++ r.data ++ post)).extract
-      (pre.size + 8) (pre.size + 8 + r.data.size) = r.data := by
-    rw [Nat.add_assoc, ByteArray.extract_append_size_add, hd]
   rw [decodeFrom.eq_1 _ pre.size, ite_eq_left (by omega), hr]
   dsimp only
   rw [ite_eq_right (by omega), he]
@@ -221,6 +228,34 @@ private theorem decodeFrom_foldr (records : List Record) (pre : ByteArray) (acc 
       ByteArray.append_assoc, Array.toList_push, List.append_assoc, List.singleton_append] at this
     rw [List.foldr_cons, decodeFrom_record _ _ _ _ hr, ByteArray.append_assoc]
     exact this
+
+/-- In the bytes of records after a prefix, each record sits at its position. -/
+private theorem record_at_foldr (records : List Record) (pre : ByteArray)
+    (h : ∀ record ∈ records, record.data.size < 2 ^ 32) (k : Nat) (hk : k < records.length) :
+    readHeader (pre ++ records.foldr (fun record out =>
+        encodeHeader record.type record.data.size ++ record.data ++ out) .empty)
+        ((recordStarts pre.size records).getD k 0) =
+        .ok ⟨records[k].type, records[k].data.size⟩ ∧
+      (pre ++ records.foldr (fun record out =>
+        encodeHeader record.type record.data.size ++ record.data ++ out) .empty).extract
+        ((recordStarts pre.size records).getD k 0 + 8)
+        ((recordStarts pre.size records).getD k 0 + 8 + records[k].data.size) =
+        records[k].data := by
+  induction records generalizing pre k with
+  | nil => exact absurd hk (Nat.not_lt_zero _)
+  | cons r rs ih =>
+    cases k with
+    | zero =>
+      rw [List.foldr_cons]
+      exact record_after pre _ r (h r List.mem_cons_self)
+    | succ k =>
+      have := ih (pre ++ encodeHeader r.type r.data.size ++ r.data)
+        (fun r' hr' => h r' (List.mem_cons_of_mem _ hr')) k (by simpa using hk)
+      rw [ByteArray.size_append, ByteArray.size_append, size_encodeHeader, ByteArray.append_assoc,
+        ByteArray.append_assoc] at this
+      rw [List.foldr_cons, recordStarts, List.getD_cons_succ, List.getElem_cons_succ,
+        ByteArray.append_assoc]
+      exact this
 
 /-- Bytes that decode from a position hold the bytes of the records read from there. -/
 private theorem decodeFrom_eq_ok (bytes : ByteArray) (offset : Nat) (acc : Array Record)
@@ -301,5 +336,36 @@ theorem decodeFile_eq_ok_iff {bytes : ByteArray} {records : List Record} :
       · rintro ⟨h2, h3, h4⟩
         cases h2
         simp_all
+
+/-- In bytes that decode, each record sits at its position.
+
+Its header reads there, and its data follows the header. -/
+theorem record_at {bytes : ByteArray} {records : List Record} (h : decode bytes = .ok records)
+    {k : Nat} (hk : k < records.length) :
+    readHeader bytes ((recordStarts 0 records).getD k 0) =
+        .ok ⟨records[k].type, records[k].data.size⟩ ∧
+      bytes.extract ((recordStarts 0 records).getD k 0 + 8)
+        ((recordStarts 0 records).getD k 0 + 8 + records[k].data.size) = records[k].data := by
+  obtain ⟨hs, he⟩ := encode_eq_ok_iff.mp (encode_decode h)
+  have := record_at_foldr records .empty hs k hk
+  rw [ByteArray.empty_append, ByteArray.size_empty] at this
+  rw [he]
+  exact this
+
+/-! ### Index records -/
+
+/-- The data of an index that reads has 16 bytes plus 8 bytes per offset. -/
+theorem readIndex_size {data : ByteArray} {index : Index}
+    (h : readIndex data = .ok index) : data.size = 16 + 8 * index.offsets.length := by
+  unfold readIndex at h
+  split at h
+  · cases h
+  dsimp only at h
+  split at h
+  · nomatch h
+  rename_i hs
+  obtain rfl := Except.ok.inj h
+  simp only [List.length_map, List.length_range]
+  exact Decidable.of_not_not hs
 
 end EthLib.Serialization.E2store

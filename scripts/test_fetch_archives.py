@@ -92,6 +92,17 @@ class Fetch(unittest.TestCase):
         (self.root / "served.tar.gz").unlink()
         self.assertTrue(fetch.download(archive, self.cache).is_file())
 
+    def test_single_file_keeps_its_suffix(self):
+        data = b"e2\x00\x00\x00\x00\x00\x00"
+        path = fetch.download(self.archive(data, name="served.era1"), self.cache)
+        self.assertEqual(path.name, hashlib.sha256(data).hexdigest() + ".era1")
+        self.assertEqual(path.read_bytes(), data)
+
+    def test_single_file_has_nothing_to_unpack(self):
+        archive = self.archive(b"e2", name="served.era1")
+        with self.raises_exactly("vectors: a single file, which has no members to unpack"):
+            fetch.unpack(archive, self.cache, ["fixtures"])
+
     def test_unpack_only_the_paths_asked(self):
         archive = self.archive(tar_gz(MEMBERS))
         target = fetch.unpack(archive, self.cache, ["fixtures/a"])

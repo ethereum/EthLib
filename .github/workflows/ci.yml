@@ -319,6 +319,13 @@ jobs:
           uv run --no-sync pytest -m archive bindings/python/tests/parity/test_consensus.py
           -k "not test_case"
 
+      # The pinned history files check the layout that the format documents leave open.
+      - name: pinned history files
+        if: matrix.python == '3.12'
+        env:
+          ETHLIB_ARCHIVES: ${{ runner.temp }}/archives
+        run: uv run --no-sync pytest -m archive bindings/python/tests/history
+
       # The generators rewrite every case, so a changed vector shows up as a diff.
       - name: unchanged vectors
         run: git diff --exit-code -- tests/cryptography

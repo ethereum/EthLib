@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Execution.Exports.Blocks
+public import EthLib.Execution.Exports.Era1
 public import EthLib.Execution.Exports.Evm
 public import EthLib.Execution.Exports.Proofs.Evm
 public import EthLib.Execution.Exports.Fees

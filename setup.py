@@ -173,6 +173,7 @@ def _make_extension() -> Extension:
             "bindings/python/forkid.c",
             "bindings/python/eth.c",
             "bindings/python/snap.c",
+            "bindings/python/era1.c",
             "bindings/python/snappy.c",
             "bindings/python/libp2p.c",
             "bindings/python/gossip.c",
