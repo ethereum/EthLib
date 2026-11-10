@@ -1902,7 +1902,20 @@ The block is finalized at an epoch above every justified epoch so far.
 The new votes come from justified sources, and no honest validator becomes slashable.
 
 A vote names the validator that signed it, so both theorems assume that no one forges a vote.
-No theorem links the model to the beacon chain, so neither theorem is yet about what a client runs.
+No theorem derives the votes of the model from the beacon chain yet, so neither theorem is about what a client runs.
+
+Two pieces of that link exist.
+`FfgVotes.lean` relates the slashing conditions of the beacon chain to those of the model.
+`justificationTest_iff_stake` (`Consensus/Proofs/Transition/FfgStake.lean`) reads the test of justification as a comparison of stakes.
+There the stake of a validator is its effective balance, and the indices count as a set.
+It needs an active stake of more than one and a half increments.
+Up to that bound, the beacon chain can justify with no vote at all, since a total balance is never below one increment.
+At least four gaps remain before a refinement.
+No theorem yet shows that the attesters of an epoch signed the link that the model counts.
+The attesters of the previous epoch are filtered by activity in that epoch, but the total counts the active validators of the current one.
+So a validator that exits at the current epoch counts as an attester but not in the total, and the model would leave it out.
+The beacon chain leaves slashed attesters out, and the model counts them, so the two tests agree only in one direction.
+The effective balances also change between epochs, while the model keeps one stake for every vote.
 
 ### Engine API
 

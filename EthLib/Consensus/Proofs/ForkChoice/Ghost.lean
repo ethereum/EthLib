@@ -3,6 +3,7 @@ module
 public import EthLib.Base.Proofs.BigEndian
 public import EthLib.Consensus.Proofs.ForkChoice.Head
 public import EthLib.Consensus.Proofs.Models.ForkChoice.LmdGhost
+public import EthLib.Consensus.Proofs.Transition.FfgStake
 
 /-!
 # Proofs: the head of the fork choice is LMD-GHOST
@@ -305,10 +306,6 @@ def counts (state : BeaconState preset fork) (index : ℕ) : Bool :=
 /-- The validators that count in a state, by their positions in the registry. -/
 def voters (state : BeaconState preset fork) : Finset ℕ :=
   (Finset.range state.validators.data.size).filter (counts state ·)
-
-/-- The stake of the validator at a position of the registry: its effective balance. -/
-def balanceAt (state : BeaconState preset fork) (index : ℕ) : ℕ :=
-  (state.validators.data[index]?.map (·.effectiveBalance.toNat)).getD 0
 
 variable (store) in
 /-- The latest vote of a validator, by its index, as a root of the tree.
