@@ -87,6 +87,14 @@ def paymentAt (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork) 
     BuilderPendingPayment :=
   ((state.builderPendingPayments gloas).elements[position]?).getD .empty
 
+/-- Pending payments that are all the payment of no bid hold it at each position. -/
+theorem paymentAt_of_replicate {gloas : .glamsterdam ≤ fork}
+    (payments : (state.builderPendingPayments gloas).elements = Vector.replicate _ .empty)
+    (position : Nat) : paymentAt state gloas position = .empty := by
+  simp only [paymentAt, payments]
+  rw [Vector.getElem?_replicate]
+  split <;> rfl
+
 /-- Whether the invariant reserves the value of the latest bid.
 
 It does when the payment of the parent has left the window, or when that payment has no amount. -/
@@ -279,13 +287,56 @@ theorem ParentPaymentFresh.of_frame {gloas : .glamsterdam ≤ fork}
   simp only [frame.paymentAt gloas, latestBidWithdrawal, frame.bid]
   exact fresh position (parentPaymentPosition_congr frame.slot frame.headerSlot ▸ found)
 
+/-- A step that keeps the slot and changes each pending payment in only a few ways.
+
+At each position it keeps the payment or empties it.
+
+It may also write a payment of no weight in the second half of the window. -/
+structure PaymentWrites (state after : BeaconState preset fork) (gloas : .glamsterdam ≤ fork) :
+    Prop where
+  slot : after.slot = state.slot
+  each : ∀ position, paymentAt after gloas position = paymentAt state gloas position ∨
+    paymentAt after gloas position = .empty ∨
+    (preset.SLOTS_PER_EPOCH.toNat ≤ position ∧ (paymentAt after gloas position).weight = 0)
+
+/-- A state rewrites its payments into themselves. -/
+theorem PaymentWrites.refl (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork) :
+    PaymentWrites state state gloas :=
+  ⟨rfl, fun _ => .inl rfl⟩
+
+/-- Two steps that rewrite payments rewrite them together. -/
+theorem PaymentWrites.trans {gloas : .glamsterdam ≤ fork}
+    {first second third : BeaconState preset fork}
+    (one : PaymentWrites first second gloas) (two : PaymentWrites second third gloas) :
+    PaymentWrites first third gloas :=
+  ⟨two.slot.trans one.slot, fun position => by
+    rcases two.each position with same | written
+    · exact same ▸ one.each position
+    · exact .inr written⟩
+
+/-- A step that keeps the builder fields rewrites no payment. -/
+theorem PaymentWrites.of_frame {gloas : .glamsterdam ≤ fork} (frame : BuilderFrame state after) :
+    PaymentWrites state after gloas :=
+  ⟨frame.slot, fun position => .inl (frame.paymentAt gloas position)⟩
+
+/-- A step that rewrites payments keeps an amount for each payment with weight. -/
+theorem WeightedPaymentsFunded.of_writes {gloas : .glamsterdam ≤ fork}
+    (writes : PaymentWrites state after gloas) (holds : WeightedPaymentsFunded state gloas) :
+    WeightedPaymentsFunded after gloas := by
+  intro position weighted
+  rcases writes.each position with same | empty | ⟨-, zero⟩
+  · rw [same] at weighted ⊢
+    exact holds position weighted
+  · rw [empty] at weighted
+    exact absurd weighted (UInt64.lt_irrefl 0)
+  · rw [zero] at weighted
+    exact absurd weighted (UInt64.lt_irrefl 0)
+
 /-- A step that keeps the builder fields keeps an amount for each payment with weight. -/
 theorem WeightedPaymentsFunded.of_frame {gloas : .glamsterdam ≤ fork}
     (frame : BuilderFrame state after) (paid : WeightedPaymentsFunded state gloas) :
-    WeightedPaymentsFunded after gloas := by
-  intro position weighted
-  rw [frame.paymentAt gloas] at weighted ⊢
-  exact paid position weighted
+    WeightedPaymentsFunded after gloas :=
+  paid.of_writes (.of_frame frame)
 
 /-- A step that keeps the builder fields keeps the first half of the genesis window empty. -/
 theorem GenesisFirstHalfEmpty.of_frame {gloas : .glamsterdam ≤ fork}

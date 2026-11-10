@@ -104,9 +104,10 @@ theorem processWithdrawals_paymentStep {gloas : .glamsterdam ≤ fork}
     (computed : processWithdrawals state capella payload = .ok after) :
     PaymentStep state after gloas [] := by
   have inputs := payloadInputs_processWithdrawals computed
+  have payments := processWithdrawals_payments gloas computed
   by_cases full : isParentBlockFull state gloas = true
   · obtain ⟨expected, -, applied, -⟩ := processWithdrawals_recorded gloas full computed
-    obtain ⟨payments, queue⟩ := applyExpectedWithdrawals_builderQueues gloas applied
+    have queue := (applyExpectedWithdrawals_builderQueues gloas applied).2
     have positions := slotPaymentPosition_congr inputs.slot
     have header : after.latestBlockHeader.slot = state.latestBlockHeader.slot := by
       rw [inputs.latestBlockHeader]

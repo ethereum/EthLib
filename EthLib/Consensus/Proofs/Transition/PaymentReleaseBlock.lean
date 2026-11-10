@@ -43,10 +43,6 @@ private structure PaymentFields (state after : BeaconState preset fork) : Prop w
   withdrawals : after.builderPendingWithdrawals = state.builderPendingWithdrawals
   bid : after.latestExecutionPayloadBid = state.latestExecutionPayloadBid
 
-/-- Each state keeps its own fields of the payments. -/
-private theorem PaymentFields.refl (state : BeaconState preset fork) : PaymentFields state state :=
-  ⟨rfl, rfl, rfl, rfl⟩
-
 /-- Steps that keep the fields of the payments keep them together. -/
 private theorem PaymentFields.trans {first second third : BeaconState preset fork}
     (one : PaymentFields first second) (two : PaymentFields second third) :
@@ -58,22 +54,6 @@ private theorem PaymentFields.trans {first second third : BeaconState preset for
 private theorem PaymentFields.of_frame {first second : BeaconState preset fork}
     (frame : BuilderFrame first second) : PaymentFields first second :=
   ⟨frame.slot, frame.payments, frame.withdrawals, frame.bid⟩
-
-/-- A builder deposit keeps the fields of the payments. -/
-private theorem PaymentFields.of_builderDeposit {gloas : .glamsterdam ≤ fork}
-    {request : BuilderDepositRequest}
-    (computed : processBuilderDepositRequest config checks state gloas request = .ok after) :
-    PaymentFields state after := by
-  obtain ⟨_, rfl⟩ := processBuilderDepositRequest_eq computed
-  exact ⟨rfl, rfl, rfl, rfl⟩
-
-/-- A builder exit keeps the fields of the payments. -/
-private theorem PaymentFields.of_builderExit {gloas : .glamsterdam ≤ fork}
-    {request : BuilderExitRequest}
-    (computed : processBuilderExitRequest config state gloas request = .ok after) :
-    PaymentFields state after := by
-  obtain ⟨_, rfl⟩ := processBuilderExitRequest_eq computed
-  exact ⟨rfl, rfl, rfl, rfl⟩
 
 /-- A release, a step that keeps the fields of the payments and a header form one payment step.
 
@@ -130,29 +110,16 @@ theorem processParentExecutionPayload_processBlockHeader_paymentStep
     (headedOk : processBlockHeader parented block = .ok after) :
     ∃ released : List Slot, PaymentStep state after gloas released ∧
       released.Sublist [state.latestBlockHeader.slot] := by
-  have inputs := payloadInputs_processParentExecutionPayload parentOk
-  obtain ⟨sameSlot, newer, -⟩ := processBlockHeader_checks headedOk
-  have older : state.latestBlockHeader.slot < state.slot := by
-    rw [← inputs.slot, ← inputs.latestBlockHeader]
-    exact sameSlot ▸ newer
+  have older := latestBlockHeader_slot_lt_of_processBlockHeader parentOk headedOk
   rcases processParentExecutionPayload_ok parentOk with ⟨-, -, rfl⟩ |
-    ⟨-, settled, deposited, withdrawn, consolidated, builderDeposited, exited, bits, settledOk,
-      depositsOk, withdrawalsOk, consolidationsOk, buildersOk, exitsOk, -, parentedEq⟩
+    ⟨-, settled, _, _, _, _, _, _, settledOk, depositsOk, withdrawalsOk, consolidationsOk,
+      buildersOk, exitsOk, -, parentedEq⟩
   · exact ⟨[], .of_release (processBlockHeader_release headedOk) nofun, List.nil_sublist _⟩
   obtain ⟨released, release, sub, -, closed⟩ := settleParentPayment_release older fresh bidAt
     settledOk
-  have frame :=
-    (BuilderFrame.foldlM (fun _ _ _ ok => builderFrame_processDepositRequest ok)
-      depositsOk).trans <|
-    (BuilderFrame.foldlM (fun _ _ _ ok => builderFrame_processWithdrawalRequest ok)
-      withdrawalsOk).trans <|
-    BuilderFrame.foldlM (fun _ _ _ ok => builderFrame_processConsolidationRequest ok)
-      consolidationsOk
-  have buildersKept := foldlM_ok_invariant (PaymentFields consolidated)
-    (fun _ _ _ before ok => before.trans (.of_builderDeposit ok)) (PaymentFields.refl _) buildersOk
-  have exitsKept := foldlM_ok_invariant (PaymentFields builderDeposited)
-    (fun _ _ _ before ok => before.trans (.of_builderExit ok)) (PaymentFields.refl _) exitsOk
-  have kept := (PaymentFields.of_frame frame).trans (buildersKept.trans exitsKept)
+  have frame := builderFrame_validatorRequests depositsOk withdrawalsOk consolidationsOk
+  obtain ⟨slot, payments, withdrawals, bid⟩ := builderRequests_paymentFields buildersOk exitsOk
+  have kept := (PaymentFields.of_frame frame).trans ⟨slot, payments, withdrawals, bid⟩
   refine ⟨released, paymentStep_of_fields release (fun paid member => ?_)
     (kept.trans (by rw [parentedEq]; exact ⟨rfl, rfl, rfl, rfl⟩)) headedOk, sub⟩
   rw [List.mem_singleton.mp (sub.subset member)]
@@ -196,10 +163,7 @@ theorem processBlock_paymentStep (positive : preset.PaymentQuorumPositive)
   have headedBid : headed.latestExecutionPayloadBid = state.latestExecutionPayloadBid := by
     obtain ⟨_, _, rfl⟩ := processBlockHeader_eq headedOk
     exact parentInputs.latestExecutionPayloadBid
-  have older : state.latestBlockHeader.slot < state.slot := by
-    obtain ⟨sameSlot, newer, -⟩ := processBlockHeader_checks headedOk
-    rw [← parentInputs.slot, ← parentInputs.latestBlockHeader, ← sameSlot]
-    exact newer
+  have older := latestBlockHeader_slot_lt_of_processBlockHeader parentOk headedOk
   have withdrawnSlot : withdrawn.slot = state.slot := withdrawnInputs.slot.trans headedSlot
   have withdrawnBid : withdrawn.latestExecutionPayloadBid = state.latestExecutionPayloadBid :=
     withdrawnInputs.latestExecutionPayloadBid.trans headedBid

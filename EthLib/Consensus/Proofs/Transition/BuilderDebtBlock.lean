@@ -68,10 +68,7 @@ private theorem BuilderDebtCovered.of_empty {gloas : .glamsterdam ≤ fork}
     simp [pendingBuilderTotal, owedBy, payments, withdrawals, BuilderPendingPayment.empty]
   have late : ∀ index, lateBidValue state gloas index = 0 := fun _ => by
     simp [lateBidValue, value]
-  have empty : ∀ k, paymentAt state gloas k = .empty := fun k => by
-    simp only [paymentAt, payments]
-    rw [Vector.getElem?_replicate]
-    split <;> rfl
+  have empty : ∀ k, paymentAt state gloas k = .empty := paymentAt_of_replicate payments
   refine ⟨fun index => ?_, fun index _ _ _ => ?_, fun position _ => ?_, fun k _ => empty k⟩
   · rw [total, late]
     exact Nat.zero_le _
@@ -167,13 +164,7 @@ private theorem builders_size_processParentExecutionPayload {gloas : .glamsterda
   · exact Nat.le_refl _
   have paid := settleParentPayment_builders settledOk
   -- The requests of validators keep the builder fields.
-  have frame :=
-    (BuilderFrame.foldlM (fun _ _ _ ok => builderFrame_processDepositRequest ok)
-      depositsOk).trans <|
-    (BuilderFrame.foldlM (fun _ _ _ ok => builderFrame_processWithdrawalRequest ok)
-      withdrawalsOk).trans <|
-    BuilderFrame.foldlM (fun _ _ _ ok => builderFrame_processConsolidationRequest ok)
-      consolidationsOk
+  have frame := builderFrame_validatorRequests depositsOk withdrawalsOk consolidationsOk
   have deposited := foldlM_ok_invariant
     (fun s => (state.builders gloas).data.size ≤ (s.builders gloas).data.size)
     (fun _ _ _ before ok => Nat.le_trans before (builders_size_processBuilderDepositRequest ok))
@@ -265,6 +256,20 @@ theorem processBlock_buildersGrow (gloas : .glamsterdam ≤ fork) {block : Beaco
   rw [← size, kept]
   exact builders_size_processParentExecutionPayload parentOk
 
+/-- Before a block, the latest block is older than the slot of the state.
+
+The header of the block requires it, and the payload of the parent keeps both slots. -/
+theorem latestBlockHeader_slot_lt_of_processBlockHeader {gloas : .glamsterdam ≤ fork}
+    {block : BeaconBlock preset fork} {parented headed : BeaconState preset fork}
+    (parentOk : Consensus.processParentExecutionPayload config checks state gloas block.body =
+      .ok parented)
+    (headedOk : processBlockHeader parented block = .ok headed) :
+    state.latestBlockHeader.slot < state.slot := by
+  have inputs := payloadInputs_processParentExecutionPayload parentOk
+  obtain ⟨same, newer, -⟩ := processBlockHeader_checks headedOk
+  rw [← inputs.slot, ← inputs.latestBlockHeader, ← same]
+  exact newer
+
 /-- From Gloas, after the parent payload and the header, the builder debt is settled.
 
 The latest block is then at the slot of the state, which is not the first slot. -/
@@ -276,19 +281,13 @@ theorem BuilderDebtCovered.headed {gloas : .glamsterdam ≤ fork}
     (headedOk : processBlockHeader parented block = .ok headed) :
     BuilderDebtSettled headed gloas ∧ headed.latestBlockHeader.slot = headed.slot ∧
       headed.slot ≠ 0 := by
-  have inputs := payloadInputs_processParentExecutionPayload parentOk
-  have slot : parented.slot = state.slot := inputs.slot
-  have header : parented.latestBlockHeader = state.latestBlockHeader := inputs.latestBlockHeader
-  obtain ⟨same, newer, -⟩ := processBlockHeader_checks headedOk
-  have older : state.latestBlockHeader.slot < state.slot := by
-    rw [← slot, ← header, ← same]
-    exact newer
+  have older := latestBlockHeader_slot_lt_of_processBlockHeader parentOk headedOk
   obtain ⟨settled, placed⟩ :=
     (holds.processParentExecutionPayload older parentOk).processBlockHeader headedOk
   refine ⟨settled, placed, ?_⟩
   obtain ⟨_, _, rfl⟩ := processBlockHeader_eq headedOk
   show parented.slot ≠ 0
-  rw [slot]
+  rw [(payloadInputs_processParentExecutionPayload parentOk).slot]
   intro zero
   rw [zero] at older
   exact absurd older (by simp)

@@ -163,6 +163,21 @@ private theorem BuilderDebtCovered.settleParentPayment {gloas : .glamsterdam ≤
     · cases computed
       exact holds.toSettled newer rfl rfl (fun _ => Nat.le_add_right _ _) fun _ _ empty => empty
 
+/-- The payment of the parent keeps each pending payment, or empties it. -/
+theorem paymentAt_settleParentPayment {gloas : .glamsterdam ≤ fork}
+    (computed : settleParentPayment state gloas = .ok after) (position : Nat) :
+    paymentAt after gloas position = paymentAt state gloas position ∨
+      paymentAt after gloas position = .empty := by
+  unfold Consensus.settleParentPayment at computed
+  split at computed
+  · obtain ⟨_, payments, -⟩ := settleBuilderPayment_spec (liftAccessor_ok.mp computed)
+    rw [paymentAt_set payments]
+    split
+    · exact .inr rfl
+    · exact .inl rfl
+  · dsimp only at computed
+    split at computed <;> cases computed <;> exact .inl rfl
+
 /-! ## The requests of the parent payload -/
 
 /-- A deposit request keeps the builder fields and the two slots. -/
@@ -255,6 +270,53 @@ theorem builderFrame_processConsolidationRequest {electra : .pectra ≤ fork}
     | (cases computed; exact BuilderFrame.refl _)
     | exact builderFrame_switchToCompoundingValidator (liftAccessor_ok.mp computed)
     | exact builderFrame_queueConsolidation computed
+
+/-- The deposit, withdrawal and consolidation requests of validators run in turn.
+
+They keep the builder fields and the two slots. -/
+theorem builderFrame_validatorRequests {electra : .pectra ≤ fork}
+    {deposits : List DepositRequest} {withdrawals : List WithdrawalRequest}
+    {consolidations : List ConsolidationRequest} {deposited withdrawn : BeaconState preset fork}
+    (depositsOk : deposits.foldlM (processDepositRequest · electra ·) state = .ok deposited)
+    (withdrawalsOk : withdrawals.foldlM (processWithdrawalRequest config · electra ·) deposited =
+      .ok withdrawn)
+    (consolidationsOk :
+      consolidations.foldlM (processConsolidationRequest config · electra ·) withdrawn =
+        .ok after) :
+    BuilderFrame state after :=
+  (BuilderFrame.foldlM (fun _ _ _ ok => builderFrame_processDepositRequest ok)
+      depositsOk).trans <|
+    (BuilderFrame.foldlM (fun _ _ _ ok => builderFrame_processWithdrawalRequest ok)
+      withdrawalsOk).trans <|
+    BuilderFrame.foldlM (fun _ _ _ ok => builderFrame_processConsolidationRequest ok)
+      consolidationsOk
+
+/-- The builder deposit and exit requests run in turn.
+
+They keep the slot, the payments, the withdrawals of builders and the latest bid. -/
+theorem builderRequests_paymentFields {gloas : .glamsterdam ≤ fork}
+    {deposits : List BuilderDepositRequest} {exits : List BuilderExitRequest}
+    {deposited : BeaconState preset fork}
+    (depositsOk : deposits.foldlM (processBuilderDepositRequest config checks · gloas ·) state =
+      .ok deposited)
+    (exitsOk : exits.foldlM (processBuilderExitRequest config · gloas ·) deposited = .ok after) :
+    after.slot = state.slot ∧ after.builderPendingPayments = state.builderPendingPayments ∧
+      after.builderPendingWithdrawals = state.builderPendingWithdrawals ∧
+      after.latestExecutionPayloadBid = state.latestExecutionPayloadBid := by
+  have kept := foldlM_ok_invariant (fun s => s.slot = state.slot ∧
+      s.builderPendingPayments = state.builderPendingPayments ∧
+      s.builderPendingWithdrawals = state.builderPendingWithdrawals ∧
+      s.latestExecutionPayloadBid = state.latestExecutionPayloadBid)
+    (fun _ _ _ before ok => by
+      obtain ⟨_, rfl⟩ := processBuilderDepositRequest_eq ok
+      exact before) ⟨rfl, rfl, rfl, rfl⟩ depositsOk
+  exact foldlM_ok_invariant (fun s => s.slot = state.slot ∧
+      s.builderPendingPayments = state.builderPendingPayments ∧
+      s.builderPendingWithdrawals = state.builderPendingWithdrawals ∧
+      s.latestExecutionPayloadBid = state.latestExecutionPayloadBid)
+    (fun _ _ _ before ok => by
+      obtain ⟨_, rfl⟩ := processBuilderExitRequest_eq ok
+      exact before) kept exitsOk
 
 /-- A step that only changes the builders keeps the form, if each builder keeps its bounds.
 
@@ -429,13 +491,7 @@ theorem BuilderDebtCovered.processParentExecutionPayload {gloas : .glamsterdam �
   · -- An empty parent leaves the state as it is.
     exact holds.toSettled newer rfl rfl (fun _ => Nat.le_add_right _ _) fun _ _ empty => empty
   -- The requests of validators keep the builder fields.
-  have frame :=
-    (BuilderFrame.foldlM (fun _ _ _ ok => builderFrame_processDepositRequest ok)
-      depositsOk).trans <|
-    (BuilderFrame.foldlM (fun _ _ _ ok => builderFrame_processWithdrawalRequest ok)
-      withdrawalsOk).trans <|
-    BuilderFrame.foldlM (fun _ _ _ ok => builderFrame_processConsolidationRequest ok)
-      consolidationsOk
+  have frame := builderFrame_validatorRequests depositsOk withdrawalsOk consolidationsOk
   have paid := holds.settleParentPayment newer settledOk
   have validators := BuilderDebtSettled.of_eq (state := settled) frame.slot frame.builders
     frame.payments frame.withdrawals paid
@@ -634,5 +690,27 @@ theorem processExecutionPayloadBid_builders (gloas : .glamsterdam ≤ fork)
       at recordedOk
     subst recordedOk
     rfl
+
+/-- The bid keeps each payment, or leaves one of no weight in the second half of the window. -/
+theorem paymentAt_processExecutionPayloadBid {gloas : .glamsterdam ≤ fork}
+    {signed : SignedExecutionPayloadBid preset fork}
+    (computed : processExecutionPayloadBid config checks state gloas signed = .ok after)
+    (position : Nat) :
+    paymentAt after gloas position = paymentAt state gloas position ∨
+      preset.SLOTS_PER_EPOCH.toNat ≤ position ∧ (paymentAt after gloas position).weight = 0 := by
+  obtain ⟨-, recorded, recordOk, rfl⟩ := processExecutionPayloadBid_ok computed
+  change paymentAt recorded gloas position = _ ∨
+    _ ∧ (paymentAt recorded gloas position).weight = 0
+  by_cases paid : 0 < signed.message.value
+  · obtain ⟨_, _, -, placed, rfl⟩ := recordBidPayment_of_pos paid recordOk
+    rw [paymentAt_set (state := state) rfl]
+    split
+    · exact .inr ⟨by omega, rfl⟩
+    · exact .inl rfl
+  · rw [recordBidPayment_of_value_eq_zero
+      (Classical.byContradiction fun nonzero => paid (UInt64.pos_iff_ne_zero.mpr nonzero)),
+      Except.ok.injEq] at recordOk
+    subst recordOk
+    exact .inl rfl
 
 end EthLib.Consensus
