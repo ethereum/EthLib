@@ -176,6 +176,7 @@ theorem getBeaconProposerIndices_spec (gloas : .glamsterdam ≤ fork) {epoch : E
     ∀ proposer ∈ proposers.toList, proposer ∈ getActiveValidatorIndices state epoch ∧
       ∀ validator, state.validators.data[proposer.toNat]? = some validator →
         validator.slashed = false := by
+  obtain ⟨_, _, computed⟩ := bind_ok_iff.mp computed
   obtain ⟨seed, -, drawn⟩ := bind_ok_iff.mp computed
   intro proposer member
   exact proposerCandidates_spec gloas (mem_of_computeProposerIndices drawn proposer member)

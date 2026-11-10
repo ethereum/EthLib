@@ -73,8 +73,9 @@ def isEligibleValidator (previousEpoch : Epoch) (validator : Validator) :
 def getEligibleValidatorIndices (state : BeaconState preset fork) :
     Except TransitionError (List ValidatorIndex) :=
   state.validators.data.toList.zipIdx.filterMapM fun (validator, index) => do
-    return if ← isEligibleValidator (getPreviousEpoch state) validator then some index.toUInt64
-      else none
+    if ← isEligibleValidator (getPreviousEpoch state) validator then
+      return some (← liftAccessor (liftArith (ofNatChecked index)))
+    else return none
 
 /-- The deltas with an amount added at an index.
 
@@ -331,9 +332,11 @@ def getAttestationDeltas (config : Config) (state : BeaconState preset fork)
 
 /-- The state with the reward and then the penalty of one validator applied. -/
 def applyDeltas (rewards penalties : Array Gwei) (state : BeaconState preset fork) (index : Nat) :
-    Except TransitionError (BeaconState preset fork) := do
-  let state ← liftAccessor (increaseBalance state index.toUInt64 (rewards.getD index 0))
-  liftAccessor (decreaseBalance state index.toUInt64 (penalties.getD index 0))
+    Except TransitionError (BeaconState preset fork) :=
+  if index < 2 ^ 64 then do
+    let state ← liftAccessor (increaseBalance state index.toUInt64 (rewards.getD index 0))
+    liftAccessor (decreaseBalance state index.toUInt64 (penalties.getD index 0))
+  else .error (.accessor (.arith .overflow))
 
 /-- The state with the rewards and then the penalties of some deltas applied, index by index. -/
 def applyAllDeltas (state : BeaconState preset fork) (deltas : Array Gwei × Array Gwei) :

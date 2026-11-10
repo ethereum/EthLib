@@ -61,7 +61,13 @@ theorem mem_getUnslashedParticipatingIndices {state : BeaconState preset fork}
   dsimp only at computed
   split at computed
   · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-    obtain ⟨read, readOk, rfl⟩ := computed
+    obtain ⟨activeIndices, checked, read, readOk, rfl⟩ := computed
+    have same : activeIndices = getActiveValidatorIndices state epoch := by
+      unfold getActiveValidatorIndicesChecked at checked
+      split at checked
+      · exact (Except.ok.inj checked).symm
+      · cases checked
+    subst activeIndices
     intro index member
     simp only [List.mem_map, List.mem_filter] at member
     obtain ⟨⟨same, kept⟩, ⟨found, keptTrue⟩, rfl⟩ := member

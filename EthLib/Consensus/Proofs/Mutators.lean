@@ -115,6 +115,45 @@ theorem sameSizes_setValidator {state after : BeaconState preset fork} {index : 
   obtain ⟨inside, rfl⟩ := setValidator_ok set
   exact sameSizes_putValidator state inside validator
 
+/-- A successful write at a plain position uses that position, without reduction modulo `2^64`. -/
+theorem setValidatorAt_ok {state after : BeaconState preset fork} {position : Nat}
+    {validator : Validator} (set : state.setValidatorAt position validator = .ok after) :
+    ∃ inside : position < state.validators.data.size,
+      after = state.putValidator position inside validator := by
+  unfold BeaconState.setValidatorAt at set
+  split at set
+  · cases set
+    exact ⟨_, rfl⟩
+  · simp [bind_ok_iff, throw, throwThe, MonadExceptOf.throw] at set
+
+/-- A write at a plain position keeps the registry and balance lengths. -/
+theorem sameSizes_setValidatorAt {state after : BeaconState preset fork} {position : Nat}
+    {validator : Validator} (set : state.setValidatorAt position validator = .ok after) :
+    SameSizes state after := by
+  obtain ⟨inside, rfl⟩ := setValidatorAt_ok set
+  exact sameSizes_putValidator state inside validator
+
+/-- A read at a plain position succeeds exactly when that position holds the validator. -/
+theorem getValidatorAt_eq_ok_iff {state : BeaconState preset fork} {position : Nat}
+    {validator : Validator} :
+    getValidatorAt state position = .ok validator ↔
+      state.validators.data[position]? = some validator := by
+  unfold getValidatorAt
+  split <;> simp_all [bind_ok_iff, throw, throwThe, MonadExceptOf.throw]
+
+/-- A validator read at a plain position belongs to the registry. -/
+theorem mem_of_getValidatorAt {state : BeaconState preset fork} {position : Nat}
+    {validator : Validator} (computed : getValidatorAt state position = .ok validator) :
+    validator ∈ state.validators.data :=
+  Array.mem_of_getElem? (getValidatorAt_eq_ok_iff.mp computed)
+
+/-- A read at a plain position succeeds exactly when that position holds the balance. -/
+theorem getBalanceAt_eq_ok_iff {state : BeaconState preset fork} {position : Nat}
+    {balance : Gwei} :
+    getBalanceAt state position = .ok balance ↔ state.balances.data[position]? = some balance := by
+  unfold getBalanceAt
+  split <;> simp_all [bind_ok_iff, throw, throwThe, MonadExceptOf.throw]
+
 /-- Raising a balance sets a balance. -/
 theorem increaseBalance_ok {state after : BeaconState preset fork} {index : ValidatorIndex}
     {delta : Gwei} (computed : increaseBalance state index delta = .ok after) :

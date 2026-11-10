@@ -130,21 +130,21 @@ private theorem builders_size_processBuilderDepositRequest {gloas : .glamsterdam
   · simp only [bind_ok_iff] at computed
     obtain ⟨_, _, computed⟩ := computed
     split at computed
-    · simp only [pure, Except.pure, Except.ok.injEq] at computed
-      subst computed
-      unfold addBuilderToRegistry
-      dsimp only
-      split
-      · simp [BeaconState.putBuilder]
-      · simp
+    · simp only [addBuilderToRegistry, bind_ok_iff] at computed
+      obtain ⟨_, _, computed⟩ := computed
+      split at computed
+      all_goals
+        cases computed
+        simp [BeaconState.putBuilder]
     · simp only [pure, Except.pure, Except.ok.injEq] at computed
       exact computed ▸ Nat.le_refl _
   · dsimp only at computed
+    obtain ⟨_, _, computed⟩ := bind_ok_iff.mp computed
     split at computed
     all_goals
-      simp only [bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
-        Uint64.addChecked_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-      obtain ⟨_, _, _, _, rfl⟩ := computed
+      obtain ⟨_, _, computed⟩ := bind_ok_iff.mp computed
+      obtain ⟨_, _, computed⟩ := bind_ok_iff.mp computed
+      cases computed
       simp [BeaconState.putBuilder]
 
 /-- A builder exit request never shrinks the registry of builders. -/

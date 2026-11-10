@@ -80,18 +80,16 @@ theorem JustifiedSeparated.of_upgradeFrame {fork post : Fork} {pre : BeaconState
   rw [frame.slot, frame.previousJustified]
   exact separated
 
-/-- An upgrade from Altair on keeps each target flag backed by a signed vote for its link.
-
-It needs the registry below 2^64 validators after the upgrade. -/
+/-- An upgrade from Altair on keeps each target flag backed by a signed vote for its link. -/
 theorem TargetFlagsSigned.of_upgradeFrame {fork post : Fork} {pre : BeaconState preset fork}
     {after : BeaconState preset post} (frame : UpgradeFrame config pre after)
-    (altair : .altair ≤ fork) (small : after.validators.data.size < 2 ^ 64)
+    (altair : .altair ≤ fork)
     (holds : TargetFlagsSigned config checks pre) : TargetFlagsSigned config checks after := by
   intro _ current position flagged
   obtain ⟨vote, link, signed⟩ := holds altair current position (frame.flags altair current
     position flagged)
   exact ⟨vote, link.of_upgradeFrame frame,
-    signed.of_keys frame.forward frame.genesisValidatorsRoot (frame.keysKept small)⟩
+    signed.of_keys frame.forward frame.genesisValidatorsRoot frame.keysKept⟩
 
 /-! ## The upgrade from Phase 0 -/
 
@@ -295,20 +293,17 @@ theorem PendingSigned.of_processUpgrades {forked after : ForkedBeaconState prese
 
 /-- The upgrades due at a slot, from Altair on, keep each target flag backed by a signed vote.
 
-That vote is for the link of the epoch of the flag.
-
-The registry must stay below 2^64 validators after the upgrades. -/
+That vote is for the link of the epoch of the flag. -/
 theorem TargetFlagsSigned.of_processUpgrades {forked after : ForkedBeaconState preset}
-    (altair : .altair ≤ forked.fork) (small : after.state.validators.data.size < 2 ^ 64)
+    (altair : .altair ≤ forked.fork)
     (holds : TargetFlagsSigned config checks forked.state)
     (computed : processUpgrades config checks forked = .ok after) :
     TargetFlagsSigned config checks after.state := by
   fun_induction processUpgrades config checks forked generalizing after with
   | case1 forked _ more =>
     obtain ⟨step, stepOk, rest⟩ := bind_ok_iff.mp computed
-    exact more step (Nat.le_trans altair (Nat.le_of_lt step.property)) small
-      (holds.of_upgradeFrame (upgradeFrame_upgradeNext stepOk) altair
-        (Nat.lt_of_le_of_lt (processUpgrades_registryGrows rest) small)) rest
+    exact more step (Nat.le_trans altair (Nat.le_of_lt step.property))
+      (holds.of_upgradeFrame (upgradeFrame_upgradeNext stepOk) altair) rest
   | case2 forked _ =>
     cases computed
     exact holds
@@ -317,12 +312,9 @@ theorem TargetFlagsSigned.of_processUpgrades {forked after : ForkedBeaconState p
 
 That vote is for the link of the epoch of the flag.
 
-Each pending attestation of Phase 0 must be a signed vote for the link of its epoch.
-
-The registry must stay below 2^64 validators after the upgrades. -/
+Each pending attestation of Phase 0 must be a signed vote for the link of its epoch. -/
 theorem TargetFlagsSigned.of_processUpgrades_of_phase0 {forked after : ForkedBeaconState preset}
     (phase0 : forked.fork = .phase0)
-    (small : after.state.validators.data.size < 2 ^ 64)
     (holds : PendingSigned config checks forked.state)
     (computed : processUpgrades config checks forked = .ok after) :
     TargetFlagsSigned config checks after.state := by
@@ -334,7 +326,7 @@ theorem TargetFlagsSigned.of_processUpgrades_of_phase0 {forked after : ForkedBea
   · obtain ⟨step, stepOk, rest⟩ := bind_ok_iff.mp computed
     simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at stepOk
     obtain ⟨_, upgraded, rfl⟩ := stepOk
-    exact TargetFlagsSigned.of_processUpgrades (show Fork.altair ≤ Fork.altair by decide) small
+    exact TargetFlagsSigned.of_processUpgrades (show Fork.altair ≤ Fork.altair by decide)
       (TargetFlagsSigned.of_upgradeToAltair holds upgraded) rest
   · cases computed
     intro altair
@@ -344,16 +336,14 @@ theorem TargetFlagsSigned.of_processUpgrades_of_phase0 {forked after : ForkedBea
 
 That vote is for the link of the epoch of the flag.
 
-Each pending attestation must be a signed vote for the link of its epoch.
-
-The registry must stay below 2^64 validators after the upgrades. -/
+Each pending attestation must be a signed vote for the link of its epoch. -/
 theorem TargetFlagsSigned.of_processUpgrades_of_lt_altair {forked after : ForkedBeaconState preset}
-    (before : forked.fork < .altair) (small : after.state.validators.data.size < 2 ^ 64)
+    (before : forked.fork < .altair)
     (holds : PendingSigned config checks forked.state)
     (computed : processUpgrades config checks forked = .ok after) :
     TargetFlagsSigned config checks after.state := by
   by_cases phase0 : forked.fork = .phase0
-  · exact TargetFlagsSigned.of_processUpgrades_of_phase0 phase0 small holds computed
+  · exact TargetFlagsSigned.of_processUpgrades_of_phase0 phase0 holds computed
   unfold processUpgrades at computed
   split at computed
   · obtain ⟨step, stepOk, -⟩ := bind_ok_iff.mp computed
@@ -445,7 +435,7 @@ theorem initializeBeaconStateFromEth1_pending {fork : Fork} {after : BeaconState
       activatedOk
     simp only [activateAtGenesis, bind_ok_iff, liftAccessor_ok] at ok
     obtain ⟨_, _, _, _, set⟩ := ok
-    obtain ⟨_, rfl⟩ := setValidator_ok set
+    obtain ⟨_, rfl⟩ := setValidatorAt_ok set
     exact empty
   cases current
   · exact afterActivation.1

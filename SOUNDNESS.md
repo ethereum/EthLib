@@ -2265,18 +2265,17 @@ The attestation check implies this when the two fork versions of the state are s
 The version stays free among those forks, since two upgrades in one epoch change the version that the state gives to the previous epoch.
 With the BLS checks, a signed vote means that the validator signed the data, if BLS aggregates with proofs of possession cannot be forged.
 The block keeps the slot, the block roots, the justified checkpoints, the fork versions, the genesis validators root and the key of each validator.
+Positions that become 64-bit validator indices are checked.
+Registry and effective-balance writes keep their plain integer positions.
 So `TargetFlagsSigned.of_voteFrame` keeps each target flag backed by a signed vote for its link.
-From Gloas the theorem assumes the registry within its limit, since its type does not bound its size.
 `TargetFlagsSigned.of_stateTransition` (`Consensus/Proofs/Transition/TargetSlots.lean`) carries the same fact across the slots, the epoch step included, and then the block.
 The slot step writes one block root, so the roots at the first slots of the current and previous epochs stay.
 That needs at least one slot per epoch, and a buffer of roots that covers two epochs, as both presets do.
 The epoch step moves the flags of the current epoch to the previous one, and justification moves the current justified checkpoint to the previous one.
 Justification does not run in the first two epochs, so the theorem assumes the two justified checkpoints equal there, and the slots keep that.
-The theorem also assumes the registry below 2^64 validators after the block, which its type already bounds before Gloas.
 It also assumes `ForkVersionsKnown` after the block.
 The genesis state built from deposits satisfies that and the equal justified checkpoints, and the slots, the blocks and every upgrade keep both (`Consensus/Proofs/Transition/TargetUpgrades.lean`).
 `TargetFlagsSigned.of_processUpgrades` carries the target-flag fact across the upgrades from Altair on.
-It assumes the registry below 2^64 validators after the upgrades.
 Before Altair, `PendingSigned` (`Consensus/Proofs/Transition/TargetPending.lean`) says the same of each pending attestation of the two epochs, across attestations, blocks and slots.
 It relies on the beacon committees of those epochs staying fixed while the epoch is recent (`Committees.lean`), which needs more than `MIN_SEED_LOOKAHEAD + 2` epochs of RANDAO mixes.
 `TargetFlagsSigned.of_upgradeToAltair` (`TargetUpgrades.lean`) builds the target flags of the first Altair state from such pending attestations.
@@ -2294,7 +2293,8 @@ The term is twice the stake of that set outside the active set of the current ep
 `TargetFlagsSigned.attester` from Altair and `PendingSigned.attester` before it give that fact.
 With them, `linkWithChurn_of_test` would give the bound for the previous epoch when both pass, whose bit the finalization rules read; no theorem states that yet.
 For the current epoch the term is zero.
-For the previous epoch, `exists_exitEpoch_eq_of_mem_sdiff_active` shows that it counts only validators that exit at the current epoch, while the registry stays below 2^64 validators.
+For the previous epoch, `exists_exitEpoch_eq_of_mem_sdiff_active` shows that it counts only validators that exit at the current epoch, when the registry stays within the preset's limit.
+That theorem compares the pure active-index lists, whose casts need the bound to identify each index with its registry position.
 The exit churn bounds that stake, but no theorem states that bound yet.
 So one step gives the stake condition of a supermajority link of the model, up to that term.
 The beacon chain leaves slashed attesters out, and the model counts them, so the converse does not hold.

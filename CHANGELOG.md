@@ -12,6 +12,13 @@ Not yet released.
 - The theorem that an attestation keeps the registry and the RANDAO mixes now holds at every fork ([#1888](https://github.com/ethereum/EthLib/issues/1888)).
   No C export or Python function changes.
   In Lean, `processAttestation_registry` drops its argument `before : fork < .altair`, so a caller removes it.
+- Builder deposits and exits, epoch rewards and penalties, and active-validator reads now check each conversion to a 64-bit index ([#1883](https://github.com/ethereum/EthLib/issues/1883)).
+  Registry and effective-balance writes use plain integer positions, so an in-range position does not fail merely because it is at least 2^64.
+  No C export or Python function signature changes.
+  In Lean, `addBuilderToRegistry` now returns an `Except TransitionError`; bind its result, and pass a successful return to `builderBalanceSum_addBuilderToRegistry`.
+  `Frame.keysKept` and `UpgradeFrame.keysKept` are unconditional, and the activity, signed-vote, chain and effective-balance totality theorems lose their registry-size arguments.
+  `exists_mem_getBeaconCommittee` takes a successful checked active-index read, and `attestationCommitteesSize_of_attesterShuffle` takes a successful checked committee-count read.
+  `attestationCommitteesSize_cons` includes that count check on its right side, and `applyDeltas_eq_ok_iff` includes index representability on its right side.
 - From Gloas, a deposit, a withdrawal or consolidation request, or a sync aggregate now fails where a registry position of 2^64 or more would become a validator index ([#1883](https://github.com/ethereum/EthLib/issues/1883)).
   Such a position used to wrap modulo 2^64, so a deposit at 2^64 validators overwrote validator 0.
   The step now fails with the accessor error `arith overflow`, as the specification fails to build a `ValidatorIndex` there.

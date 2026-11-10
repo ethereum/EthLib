@@ -42,7 +42,7 @@ The theorem then bounds the epochs, blocks, sets and weights of the justified ch
 
 It does not bound who voted.
 
-The step asks only the stake, the order of the blocks, the size of the registry and the preset.
+The step asks only the stake, the order of the blocks and the preset.
 
 The slack is the stake of the set `E(V t, U t)` of Gasper §8.6, Definition 8.1.
 
@@ -106,7 +106,7 @@ Its weights are the effective balances of each state whose step makes it current
 
 The votes are those of the data that some state between genesis and the last accepts as signed.
 
-Each step on any run between them must meet the bounds on the stake, the blocks and the registry.
+Each step on any run between them must meet the bounds on the stake and the blocks.
 
 A state accepts data as signed when some signature of the keys verifies on it.
 
@@ -141,15 +141,8 @@ theorem slackJustifiedCheckpoints_activeSetAt_of_chainSteps
   refine slackJustifiedCheckpoints_of_chainSteps positive window apart computed steps
     fun forked after reach step rest => ?_
   have bounds := meets forked after reach step rest
-  -- The registry of the last state stays below 2^64 validators.
-  have small : last.state.validators.data.size < 2 ^ 64 := by
-    cases rest with
-    | refl => exact bounds.small
-    | tail middle lastStep =>
-      exact (meets _ _ ((reach.tail step).trans middle) lastStep .refl).small
   have kept : ActiveKept (getCurrentEpoch forked.state) forked.state last.state :=
-    (step.activeKept bounds.small).trans
-      ((activeKept_of_chainSteps small rest).mono step.currentEpoch_le)
+    step.activeKept.trans ((activeKept_of_chainSteps rest).mono step.currentEpoch_le)
   refine ⟨bounds, fun _ _ => ?_, fun changed root rootOk => ?_⟩
   · rintro _ ⟨signer, signed, rfl⟩
     exact ⟨forked, reach, .head step rest, signer, signed, rfl⟩

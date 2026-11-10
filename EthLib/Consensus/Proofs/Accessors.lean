@@ -27,7 +27,7 @@ A total balance reads its indices as a set: their order and their repeats do not
 
 A total balance is at least one effective balance increment.
 
-The total active balance never fails on an index, only on a sum of 2^64 or more.
+The total active balance rejects an active position or a balance sum of `2^64` or more.
 
 The previous epoch is the current one minus one, or the genesis epoch at genesis.
 
@@ -141,6 +141,70 @@ theorem mem_getActiveValidatorIndices {state : BeaconState preset fork}
   · rintro ⟨validator, found, active⟩
     refine ⟨validator, index.toNat, by simpa using found, active, ?_⟩
     simp
+
+/-- A successful checked read agrees with the pure list of active indices. -/
+theorem getActiveValidatorIndicesChecked_ok {state : BeaconState preset fork} {epoch : Epoch}
+    {indices : List ValidatorIndex}
+    (computed : getActiveValidatorIndicesChecked state epoch = .ok indices) :
+    indices = getActiveValidatorIndices state epoch := by
+  unfold getActiveValidatorIndicesChecked at computed
+  split at computed
+  · exact (Except.ok.inj computed).symm
+  · cases computed
+
+/-- The checked read succeeds when every position of the registry fits in 64 bits. -/
+theorem getActiveValidatorIndicesChecked_of_size_le {state : BeaconState preset fork}
+    (small : state.validators.data.size ≤ 2 ^ 64) (epoch : Epoch) :
+    getActiveValidatorIndicesChecked state epoch = .ok (getActiveValidatorIndices state epoch) := by
+  unfold getActiveValidatorIndicesChecked
+  have valid : state.validators.data.toList.zipIdx.all (fun (validator, index) =>
+      !isActiveValidator validator epoch || index < 2 ^ 64) = true := by
+    rw [List.all_eq_true]
+    intro entry mem
+    have inside : entry.2 < state.validators.data.size := by
+      simpa using (List.mem_zipIdx' mem).1
+    have fits : entry.2 < 2 ^ 64 := Nat.lt_of_lt_of_le inside small
+    simp [fits]
+  simp only [valid, ↓reduceIte]
+
+/-- A registry within its preset limit has the same checked and pure active indices. -/
+theorem getActiveValidatorIndicesChecked_of_within {state : BeaconState preset fork}
+    (within : state.RegistryWithinLimit) (epoch : Epoch) :
+    getActiveValidatorIndicesChecked state epoch = .ok (getActiveValidatorIndices state epoch) :=
+  getActiveValidatorIndicesChecked_of_size_le
+    (Nat.le_trans within (Nat.le_of_lt preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt)) epoch
+
+/-- A successful checked read converts an active position without wrapping. -/
+theorem lt_of_getActiveValidatorIndicesChecked_ok {state : BeaconState preset fork}
+    {epoch : Epoch} {indices : List ValidatorIndex} {position : Nat} {validator : Validator}
+    (computed : getActiveValidatorIndicesChecked state epoch = .ok indices)
+    (found : state.validators.data[position]? = some validator)
+    (active : isActiveValidator validator epoch = true) : position < 2 ^ 64 := by
+  unfold getActiveValidatorIndicesChecked at computed
+  split at computed
+  · rename_i valid
+    have mem : (validator, position) ∈ state.validators.data.toList.zipIdx := by
+      rw [List.mk_mem_zipIdx_iff_getElem?]
+      simpa using found
+    have check := (List.all_eq_true.mp valid) _ mem
+    simpa [active] using check
+  · cases computed
+
+/-- An active position of `2^64` or more makes the checked read fail. -/
+theorem getActiveValidatorIndicesChecked_error_of_le {state : BeaconState preset fork}
+    {epoch : Epoch} {position : Nat} {validator : Validator}
+    (found : state.validators.data[position]? = some validator)
+    (active : isActiveValidator validator epoch = true) (large : 2 ^ 64 ≤ position) :
+    getActiveValidatorIndicesChecked state epoch = .error (.arith .overflow) := by
+  cases computed : getActiveValidatorIndicesChecked state epoch with
+  | ok indices =>
+    have small := lt_of_getActiveValidatorIndicesChecked_ok computed found active
+    omega
+  | error error =>
+    unfold getActiveValidatorIndicesChecked at computed
+    split at computed
+    · cases computed
+    · exact computed.symm
 
 /-- The positions of the validators that pass a test increase strictly, as 64-bit indices.
 
@@ -309,6 +373,15 @@ theorem getTotalBalance_congr {state : BeaconState preset fork}
   exact ⟨fun ⟨inside, rest⟩ => ⟨fun i m => inside i ((same i).mpr m), rest⟩,
     fun ⟨inside, rest⟩ => ⟨fun i m => inside i ((same i).mp m), rest⟩⟩
 
+/-- A successful active-balance read is the total balance of the checked active indices. -/
+theorem getTotalActiveBalance_ok {state : BeaconState preset fork} {total : Gwei}
+    (computed : getTotalActiveBalance state = .ok total) :
+    getTotalBalance state (getActiveValidatorIndices state (getCurrentEpoch state)) =
+      .ok total := by
+  obtain ⟨indices, checked, computed⟩ := bind_ok_iff.mp computed
+  rw [getActiveValidatorIndicesChecked_ok checked] at computed
+  exact computed
+
 /-- The total active balance never fails on an index: every active index names a validator. -/
 theorem getTotalActiveBalance_ne_indexOutOfRange {state : BeaconState preset fork}
     (within : state.RegistryWithinLimit) (index : ValidatorIndex) :
@@ -325,7 +398,10 @@ theorem getTotalActiveBalance_ne_indexOutOfRange {state : BeaconState preset for
     have := inside i member
     simp
     omega
-  unfold getTotalActiveBalance getTotalBalance
+  unfold getTotalActiveBalance
+  rw [getActiveValidatorIndicesChecked_of_within within]
+  simp only [bind, Except.bind]
+  unfold getTotalBalance
   simp only [none]
   by_cases big : 2 ^ 64 ≤ sumMarked state.validators.data (markIndices state.validators.data.size
       (getActiveValidatorIndices state (getCurrentEpoch state)))
@@ -443,6 +519,53 @@ theorem count_ne_zero_of_computeCommittee {indices : Array ValidatorIndex} {seed
     simp [computeCommittee, shuffledCommittee, shuffle, zero, bind, Except.bind, throw, throwThe,
       MonadExcept.throw, MonadExceptOf.throw] at computed
 
+/-- A successful shuffle uses the checked active indices, and then shuffles their positions. -/
+theorem attesterShuffle_ok {state : BeaconState preset fork} {epoch : Epoch}
+    {active : Array ValidatorIndex} {shuffled : Array UInt64}
+    (computed : attesterShuffle state epoch = .ok (active, shuffled)) :
+    ∃ seed, getSeed state epoch DOMAIN_BEACON_ATTESTER = .ok seed ∧
+      computeShuffledPermutation preset
+        (UInt64.ofNat (getActiveValidatorIndices state epoch).toArray.size) seed = .ok shuffled ∧
+      active = (getActiveValidatorIndices state epoch).toArray := by
+  simp only [attesterShuffle, bind_ok_iff] at computed
+  obtain ⟨seed, seedOk, indices, indicesOk, rest⟩ := computed
+  have same := getActiveValidatorIndicesChecked_ok indicesOk
+  subst indices
+  split at rest
+  · simp only [bind_ok_iff, mapError_ok_iff, pure, Except.pure, Except.ok.injEq,
+      Prod.mk.injEq] at rest
+    obtain ⟨_, shuffleOk, activeEq, rfl⟩ := rest
+    exact ⟨seed, seedOk, shuffleOk, activeEq.symm⟩
+  · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at rest
+
+/-- A successful shuffle has checked every active registry position. -/
+theorem getActiveValidatorIndicesChecked_of_attesterShuffle
+    {state : BeaconState preset fork} {epoch : Epoch}
+    {active : Array ValidatorIndex} {shuffled : Array UInt64}
+    (computed : attesterShuffle state epoch = .ok (active, shuffled)) :
+    getActiveValidatorIndicesChecked state epoch = .ok (getActiveValidatorIndices state epoch) := by
+  simp only [attesterShuffle, bind_ok_iff] at computed
+  obtain ⟨_, _, indices, checked, _⟩ := computed
+  rw [getActiveValidatorIndicesChecked_ok checked] at checked
+  exact checked
+
+/-- A registry within its preset limit has the same checked and pure committee count. -/
+theorem getCommitteeCountPerSlotChecked_of_within {state : BeaconState preset fork}
+    (within : state.RegistryWithinLimit) (epoch : Epoch) :
+    getCommitteeCountPerSlotChecked state epoch = .ok (getCommitteeCountPerSlot state epoch) := by
+  simp [getCommitteeCountPerSlotChecked, getActiveValidatorIndicesChecked_of_within within,
+    liftArith, ofNatChecked_of_lt (length_getActiveValidatorIndices_lt within epoch),
+    Except.mapError, bind, Except.bind, pure, Except.pure]
+
+/-- A successful checked count agrees with the pure committee count. -/
+theorem getCommitteeCountPerSlotChecked_ok {state : BeaconState preset fork} {epoch : Epoch}
+    {count : UInt64} (computed : getCommitteeCountPerSlotChecked state epoch = .ok count) :
+    count = getCommitteeCountPerSlot state epoch := by
+  simp only [getCommitteeCountPerSlotChecked, bind_ok_iff, pure, Except.pure,
+    Except.ok.injEq] at computed
+  obtain ⟨_, _, _, _, same⟩ := computed
+  exact same.symm
+
 /-- A beacon committee that has a value is one committee cut from the active indices.
 
 Its position counts the committees of the earlier slots of the epoch, then its index.
@@ -460,11 +583,13 @@ theorem getBeaconCommittee_ok {state : BeaconState preset fork} {slot : Slot}
       computeCommittee preset
         (getActiveValidatorIndices state (computeEpochAtSlot preset slot)).toArray seed position
         count = .ok committee := by
-  simp only [getBeaconCommittee, attesterShuffle, bind_assoc, pure_bind, beaconCommitteeOf,
-    bind_ok_iff, liftArith, mapError_ok_iff, Base.Uint64.mulChecked_ok_iff,
-    Base.Uint64.addChecked_ok_iff] at computed
-  obtain ⟨seed, seedOk, shuffled, shuffleOk, position, ⟨product, ⟨_, productEq⟩, _, positionEq⟩,
-    count, ⟨_, countEq⟩, committeeOk⟩ := computed
+  simp only [getBeaconCommittee, bind_ok_iff] at computed
+  obtain ⟨⟨active, shuffled⟩, shuffledOk, rest⟩ := computed
+  obtain ⟨seed, seedOk, shuffleOk, rfl⟩ := attesterShuffle_ok shuffledOk
+  simp only [beaconCommitteeOf, bind_ok_iff, liftArith, mapError_ok_iff,
+    Base.Uint64.mulChecked_ok_iff, Base.Uint64.addChecked_ok_iff] at rest
+  obtain ⟨position, ⟨product, ⟨_, productEq⟩, _, positionEq⟩,
+    count, ⟨_, countEq⟩, committeeOk⟩ := rest
   refine ⟨seed, position, count, seedOk, by rw [positionEq, productEq], countEq, ?_⟩
   rw [computeCommittee, shuffleOk]
   exact committeeOk
@@ -583,6 +708,8 @@ There must be at most `2^40` active validators.
 
 Their number times the number of committees of the epoch must fit in 64 bits. -/
 theorem exists_mem_getBeaconCommittee {state : BeaconState preset fork} {epoch : Epoch}
+    (indicesFit : getActiveValidatorIndicesChecked state epoch =
+      .ok (getActiveValidatorIndices state epoch))
     {seed : Bytes32} (seedOk : getSeed state epoch DOMAIN_BEACON_ATTESTER = .ok seed)
     (positive : preset.SLOTS_PER_EPOCH ≠ 0)
     (slotsFit : (epoch.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat ≤ 2 ^ 64)
@@ -673,9 +800,11 @@ theorem exists_mem_getBeaconCommittee {state : BeaconState preset fork} {epoch :
     (count := UInt64.ofNat (getActiveValidatorIndices state epoch).toArray.size)
     (by rw [activeSize]; simpa using small)
   rw [computeCommittee_of_le (by simpa using small)] at computed
-  simp only [getBeaconCommittee, attesterShuffle, beaconCommitteeOf, epochEq, seedOk, shuffleOk,
-    activeSize, liftArith, productOk, sumOk, countOk, bind, Except.bind, Except.mapError, pure,
-    Except.pure, positionEq]
+  have lengthFits : (getActiveValidatorIndices state epoch).toArray.size < 2 ^ 64 :=
+    Nat.lt_of_le_of_lt (by simpa using small) (by decide)
+  simp only [getBeaconCommittee, attesterShuffle, beaconCommitteeOf, epochEq, seedOk, indicesFit,
+    lengthFits, ↓reduceIte, shuffleOk, activeSize, liftArith, productOk, sumOk, countOk, bind,
+    Except.bind, Except.mapError, pure, Except.pure, positionEq]
   rw [computed]
 
 /-- A beacon committee is cut from the shuffle of the epoch of its slot.
@@ -697,32 +826,21 @@ theorem slotCommitteeMembers_eq (state : BeaconState preset fork) (slot : Slot) 
       (List.range (getCommitteeCountPerSlot state (computeEpochAtSlot preset slot)).toNat).foldlM
         (fun members index => return members ++ (← getBeaconCommittee state slot index.toUInt64))
         #[] := by
-  unfold slotCommitteeMembers attesterShuffle slotCommitteeMembersOf
+  unfold slotCommitteeMembers slotCommitteeMembersOf
   have perPos : 0 < (getCommitteeCountPerSlot state (computeEpochAtSlot preset slot)).toNat :=
     UInt64.le_iff_toNat_le.mp (one_le_getCommitteeCountPerSlot _ _)
-  -- The first committee reads the same seed and shuffle, so a failure of either is on both sides.
   obtain ⟨n, count⟩ : ∃ n,
       (getCommitteeCountPerSlot state (computeEpochAtSlot preset slot)).toNat = n + 1 :=
     ⟨_, (Nat.succ_pred_eq_of_pos perPos).symm⟩
-  cases seedOk : getSeed state (computeEpochAtSlot preset slot) DOMAIN_BEACON_ATTESTER with
+  cases shuffledOk : attesterShuffle state (computeEpochAtSlot preset slot) with
   | error e =>
     rw [count, List.range_succ_eq_map, List.foldlM_cons]
-    simp [getBeaconCommittee, attesterShuffle, seedOk, bind, Except.bind]
-  | ok seed =>
-    cases shuffleOk : computeShuffledPermutation preset
-        (UInt64.ofNat (getActiveValidatorIndices state (computeEpochAtSlot preset slot)).length)
-        seed with
-    | error e =>
-      rw [count, List.range_succ_eq_map, List.foldlM_cons]
-      simp [getBeaconCommittee, attesterShuffle, seedOk, shuffleOk, bind, Except.bind,
-        Except.mapError]
-    | ok shuffled =>
-      simp only [seedOk, List.size_toArray, shuffleOk, Except.mapError, bind, Except.bind, pure,
-        Except.pure]
-      congr 1
-      funext members index
-      simp [getBeaconCommittee, attesterShuffle, seedOk, shuffleOk, bind, Except.bind,
-        Except.mapError, pure, Except.pure]
+    simp [getBeaconCommittee, shuffledOk, bind, Except.bind]
+  | ok pair =>
+    simp only [shuffledOk, bind, Except.bind]
+    congr 1
+    funext members index
+    simp [getBeaconCommittee, shuffledOk, bind, Except.bind, pure, Except.pure]
 
 /-- A validator is among the members of a slot exactly when a beacon committee of it holds it. -/
 theorem mem_slotCommitteeMembers {state : BeaconState preset fork} {slot : Slot}
@@ -1305,6 +1423,11 @@ theorem mem_getActiveValidatorIndices_of_getBeaconProposerIndex
   simp only [getBeaconProposerIndex, beforeFulu, ↓reduceDIte, bind, Except.bind] at computed
   split at computed
   · cases computed
+  split at computed
+  · cases computed
+  have same := getActiveValidatorIndicesChecked_ok (show
+    getActiveValidatorIndicesChecked state (getCurrentEpoch state) = .ok _ from by assumption)
+  subst same
   simpa using mem_of_computeProposerIndex computed
 
 /-- A domain always has a value. -/

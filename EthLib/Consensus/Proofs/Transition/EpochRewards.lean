@@ -398,9 +398,17 @@ theorem getEligibleValidatorIndices_eq {eligible : List ValidatorIndex}
   dsimp only at step ⊢
   rw [bind_ok_iff] at step
   obtain ⟨eligibility, tested, step⟩ := step
-  simp only [pure, Except.pure, Except.ok.injEq] at step
-  subst step
   rw [tested]
+  cases eligibility with
+  | false => simpa [pure, Except.pure] using step
+  | true =>
+    simp only [↓reduceIte, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
+      pure, Except.pure, Except.ok.injEq] at step
+    obtain ⟨index, converted, rfl⟩ := step
+    have same : index = position.toUInt64 :=
+      Except.ok.inj (converted.symm.trans
+        (ofNatChecked_of_lt (ofNatChecked_ok_iff.mp converted).1))
+    exact congrArg some same.symm
 
 /-- The eligible indices increase strictly, for a registry within its limit. -/
 theorem getEligibleValidatorIndices_sorted {eligible : List ValidatorIndex}
@@ -559,7 +567,11 @@ theorem processRewardsAndPenalties_genesis (config : Config)
 /-- Applying the deltas of one validator keeps the sizes. -/
 theorem sameSizes_applyDeltas {rewards penalties : Array Gwei} {index : Nat}
     (computed : applyDeltas rewards penalties state index = .ok after) : SameSizes state after := by
-  simp only [applyDeltas, bind_ok_iff, liftAccessor_ok] at computed
+  have bounded : index < 2 ^ 64 := by
+    by_cases inside : index < 2 ^ 64
+    · exact inside
+    · simp [applyDeltas, inside] at computed
+  simp only [applyDeltas, bounded, ↓reduceIte, bind_ok_iff, liftAccessor_ok] at computed
   obtain ⟨raised, raisedOk, lowered⟩ := computed
   exact (sameSizes_increaseBalance raisedOk).trans (sameSizes_decreaseBalance lowered)
 
@@ -661,26 +673,28 @@ theorem earliestInclusions_size_and_mem {size : Nat}
 
 /-- The deltas of one validator apply exactly when its position names a balance.
 
-The position is taken as a 64-bit index, and the reward added to the balance stays below `2^64`.
+The position fits in 64 bits, and the reward added to the balance stays below `2^64`.
 
 The new balance is the old one plus the reward, minus the penalty, or zero if the penalty is larger.
 
 A reward or penalty past the end of its array counts as zero. -/
 theorem applyDeltas_eq_ok_iff {rewards penalties : Array Gwei} {index : Nat} :
     applyDeltas rewards penalties state index = .ok after ↔
-      ∃ inside : index.toUInt64.toNat < state.balances.data.size,
+      index < 2 ^ 64 ∧ ∃ inside : index.toUInt64.toNat < state.balances.data.size,
         state.balances.data[index.toUInt64.toNat].toNat + (rewards.getD index 0).toNat < 2 ^ 64 ∧
           after = state.putBalance index.toUInt64.toNat inside
             (saturatingSub (state.balances.data[index.toUInt64.toNat] + rewards.getD index 0)
               (penalties.getD index 0)) := by
-  simp only [applyDeltas, bind_ok_iff, liftAccessor_ok, increaseBalance_eq_ok_iff,
-    decreaseBalance_eq_ok_iff]
-  constructor
-  · rintro ⟨_, ⟨inside, fits, rfl⟩, again, rfl⟩
-    exact ⟨inside, fits, by simp [BeaconState.putBalance]⟩
-  · rintro ⟨inside, fits, rfl⟩
-    exact ⟨_, ⟨inside, fits, rfl⟩, by simpa [BeaconState.putBalance] using inside,
-      by simp [BeaconState.putBalance]⟩
+  by_cases bounded : index < 2 ^ 64
+  · simp only [applyDeltas, bounded, ↓reduceIte, true_and, bind_ok_iff, liftAccessor_ok,
+      increaseBalance_eq_ok_iff, decreaseBalance_eq_ok_iff]
+    constructor
+    · rintro ⟨_, ⟨inside, fits, rfl⟩, again, rfl⟩
+      exact ⟨inside, fits, by simp [BeaconState.putBalance]⟩
+    · rintro ⟨inside, fits, rfl⟩
+      exact ⟨_, ⟨inside, fits, rfl⟩, by simpa [BeaconState.putBalance] using inside,
+        by simp [BeaconState.putBalance]⟩
+  · simp [applyDeltas, bounded]
 
 /-- A fold over the first positions whose step acts on the balance at its own position.
 
@@ -743,7 +757,7 @@ private theorem foldlM_applyDeltas_balances {rewards penalties : Array Gwei} {co
   have same : j.toUInt64.toNat = j := by
     rw [Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.mod_eq_of_lt (by omega)]
   -- The position is below `2^64`, so it is its own validator index.
-  obtain ⟨inside, fits, rfl⟩ := applyDeltas_eq_ok_iff.mp step
+  obtain ⟨_, inside, fits, rfl⟩ := applyDeltas_eq_ok_iff.mp step
   have inside' : j < middle.balances.data.size := same ▸ inside
   refine ⟨trivial, ⟨middle.balances.data[j], Array.getElem?_eq_getElem inside',
     by simpa [same] using fits, ?_⟩, fun k ne => ?_⟩
@@ -976,7 +990,7 @@ theorem getFlagIndexDeltas_rewards_le {altair : .altair ≤ fork}
 private theorem balanceSum_applyDeltas_le {rewards penalties : Array Gwei} {index : Nat}
     (computed : applyDeltas rewards penalties state index = .ok after) :
     balanceSum after ≤ balanceSum state + (rewards.getD index 0).toNat := by
-  obtain ⟨inside, fits, rfl⟩ := applyDeltas_eq_ok_iff.mp computed
+  obtain ⟨_, inside, fits, rfl⟩ := applyDeltas_eq_ok_iff.mp computed
   unfold balanceSum BeaconState.putBalance
   simp only [Array.toList_set, List.map_set]
   have replaced := sum_set_add (l := state.balances.data.toList.map (·.toNat))
@@ -1123,7 +1137,8 @@ theorem processRewardsAndPenalties_balanceSum_le_of_participating_le {config : C
   have denominator : WEIGHT_DENOMINATOR.toNat = 64 := by decide
   rw [denominator] at bound
   have positive : 0 < total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat :=
-    Nat.div_pos (UInt64.le_iff_toNat_le.mp (le_getTotalBalance active)) increment
+    Nat.div_pos (UInt64.le_iff_toNat_le.mp
+      (le_getTotalBalance (getTotalActiveBalance_ok active))) increment
   -- Each flag counts at most every active increment.
   have flags : ((List.finRange PARTICIPATION_FLAG_WEIGHTS.length).map fun flagIndex =>
       PARTICIPATION_FLAG_WEIGHTS[flagIndex].toNat * perIncrement.toNat *

@@ -411,7 +411,7 @@ theorem stake_le_computeCommitteeWeightBetweenSlots_of_reads {head : Root}
     obtain ⟨total, totalOk, final⟩ := weightOk
     simp only [pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at final
     obtain ⟨rfl, -⟩ := final
-    refine stake_le_of_getTotalBalance totalOk fun v member => ?_
+    refine stake_le_of_getTotalBalance (getTotalActiveBalance_ok totalOk) fun v member => ?_
     obtain ⟨-, validator, atIndex, isActive⟩ := inside v member
     simp only [getActiveValidatorIndices, List.mem_filterMap, Option.ite_none_right_eq_some,
       Option.some.injEq, List.mem_zipIdx_iff_getElem?, Prod.exists]

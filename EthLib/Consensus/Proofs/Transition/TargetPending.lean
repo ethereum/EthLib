@@ -106,12 +106,10 @@ private theorem recordPendingAttestation_lists {before : fork < .altair} {curren
 
 /-- Before Altair, a step of a block other than an attestation keeps the pending votes signed.
 
-There must be more than `MIN_SEED_LOOKAHEAD + 2` epochs of mixes.
-
-The registry must stay below 2^64 validators after the step. -/
+There must be more than `MIN_SEED_LOOKAHEAD + 2` epochs of mixes. -/
 theorem PendingSigned.of_pendingFrame
     (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
-    (small : after.validators.data.size < 2 ^ 64) (frame : PendingFrame state after)
+    (frame : PendingFrame state after)
     (holds : PendingSigned config checks state) : PendingSigned config checks after := by
   intro before current pending member
   have lists : recentPending after before current = recentPending state before current := by
@@ -128,7 +126,7 @@ theorem PendingSigned.of_pendingFrame
   rw [← epoch] at committees
   refine ⟨by rw [currentEq, previousEq]; exact epoch, slot,
     by rw [frame.currentJustified, frame.previousJustified]; exact source, ?_⟩
-  exact signedAttesters_of committees slot frame.genesisValidatorsRoot (frame.keysKept small) signed
+  exact signedAttesters_of committees slot frame.genesisValidatorsRoot frame.keysKept signed
 
 /-- Before Altair, an attestation keeps the pending votes signed, and adds a signed one.
 
@@ -220,19 +218,15 @@ theorem PendingSigned.of_processAttestation {parentSlot : Slot}
 
 There must be more than `MIN_SEED_LOOKAHEAD + 2` epochs of mixes.
 
-The registry must stay below 2^64 validators after the block.
-
 The fork versions after the block must be those of forks of the chain. -/
 theorem PendingSigned.of_processBlock (before : fork < .altair)
     (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
-    {block : BeaconBlock preset fork} (small : after.validators.data.size < 2 ^ 64)
+    {block : BeaconBlock preset fork}
     (known : ForkVersionsKnown config after) (holds : PendingSigned config checks state)
     (computed : processBlock config checks engine state block = .ok after) :
     PendingSigned config checks after := by
   obtain ⟨first, last, head, attested, tail⟩ := processBlock_pendingSplit before computed
   have attestedFrame := Frame.foldlM (fun _ _ _ ok => frame_processAttestation ok) attested
-  have small' : first.validators.data.size < 2 ^ 64 :=
-    Nat.lt_of_le_of_lt (Nat.le_trans attestedFrame.registryGrows tail.registryGrows) small
   have known' : ForkVersionsKnown config first :=
     (ForkVersionsKnown.congr (tail.forkVersions.trans attestedFrame.forkVersions)).mp known
   have middle := foldlM_ok_invariant
@@ -240,8 +234,8 @@ theorem PendingSigned.of_processBlock (before : fork < .altair)
     (fun _ _ _ holds ok => ⟨holds.1.of_processAttestation before
         ((ForkVersionsKnown.congr holds.2.forkVersions).mpr known') ok,
       holds.2.trans (frame_processAttestation ok)⟩)
-    ⟨holds.of_pendingFrame apart small' head, Frame.refl first⟩ attested
-  exact middle.1.of_pendingFrame apart small tail
+    ⟨holds.of_pendingFrame apart head, Frame.refl first⟩ attested
+  exact middle.1.of_pendingFrame apart tail
 
 /-! ## Slots -/
 
@@ -279,12 +273,10 @@ At the end of an epoch the votes of the current epoch become those of the previo
 
 There must be more than `MIN_SEED_LOOKAHEAD + 2` epochs of mixes.
 
-The two justified checkpoints must be equal in the first two epochs.
-
-The registry must stay below 2^64 validators after the slot. -/
+The two justified checkpoints must be equal in the first two epochs. -/
 theorem PendingSigned.of_advanceSlot (before : fork < .altair)
     (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
-    (early : JustifiedEarly state) (small : after.validators.data.size < 2 ^ 64)
+    (early : JustifiedEarly state)
     (holds : PendingSigned config checks state)
     (computed : advanceSlot config checks state = .ok after) :
     PendingSigned config checks after := by
@@ -330,7 +322,7 @@ theorem PendingSigned.of_advanceSlot (before : fork < .altair)
             { epoched with slot := next } := by
           rw [epoch]
           exact committees (by rw [previousEq]; exact UInt64.le_refl _) (UInt64.le_refl _)
-        exact signedAttesters_of kept slot genesisRoot (keys small) signed
+        exact signedAttesters_of kept slot genesisRoot keys signed
     · simp [recentPending, emptied] at member
   · rename_i inside
     simp only [pure, Except.pure, Except.ok.injEq] at epochedOk
@@ -355,7 +347,7 @@ theorem PendingSigned.of_advanceSlot (before : fork < .altair)
       · exact UInt64.le_refl _
       · exact getPreviousEpoch_le state
     refine ⟨by rw [currentEq, previousEq]; exact epoch, slot, ?_,
-      signedAttesters_of kept slot genesisRoot (keys small) signed⟩
+      signedAttesters_of kept slot genesisRoot keys signed⟩
     show pending.data.source = if current then cached.currentJustifiedCheckpoint
       else cached.previousJustifiedCheckpoint
     rw [cachedFrame.currentJustified, cachedFrame.previousJustified]
@@ -365,23 +357,20 @@ theorem PendingSigned.of_advanceSlot (before : fork < .altair)
 
 There must be more than `MIN_SEED_LOOKAHEAD + 2` epochs of mixes.
 
-The two justified checkpoints must be equal in the first two epochs before the slots.
-
-The registry must stay below 2^64 validators after the slots. -/
+The two justified checkpoints must be equal in the first two epochs before the slots. -/
 theorem PendingSigned.of_advanceSlots (before : fork < .altair)
     (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat) :
     ∀ {count : Nat} {state after : BeaconState preset fork}, JustifiedEarly state →
-      after.validators.data.size < 2 ^ 64 → PendingSigned config checks state →
+      PendingSigned config checks state →
       advanceSlots config checks count state = .ok after → PendingSigned config checks after
-  | 0, state, after, _, _, holds, computed => by
+  | 0, state, after, _, holds, computed => by
     simp only [advanceSlots, pure, Except.pure, Except.ok.injEq] at computed
     exact computed ▸ holds
-  | count + 1, state, after, early, small, holds, computed => by
+  | count + 1, state, after, early, holds, computed => by
     simp only [advanceSlots, bind_ok_iff] at computed
     obtain ⟨next, nextOk, rest⟩ := computed
-    exact PendingSigned.of_advanceSlots before apart (early.of_advanceSlot nextOk) small
-      (holds.of_advanceSlot before apart early
-        (Nat.lt_of_le_of_lt (advanceSlots_registryGrows rest) small) nextOk) rest
+    exact PendingSigned.of_advanceSlots before apart (early.of_advanceSlot nextOk)
+      (holds.of_advanceSlot before apart early nextOk) rest
 
 /-- Before Altair, a block that the transition accepts keeps each pending vote signed.
 
@@ -391,22 +380,19 @@ There must be more than `MIN_SEED_LOOKAHEAD + 2` epochs of mixes.
 
 The two justified checkpoints must be equal in the first two epochs before the block.
 
-The registry must stay below 2^64 validators after the block.
-
 The fork versions after the block must be those of forks of the chain. -/
 theorem PendingSigned.of_stateTransition (before : fork < .altair)
     (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
     {signed : SignedBeaconBlock preset fork} {validateResult : Bool}
-    (early : JustifiedEarly state) (small : after.validators.data.size < 2 ^ 64)
+    (early : JustifiedEarly state)
     (known : ForkVersionsKnown config after) (holds : PendingSigned config checks state)
     (computed : stateTransition config checks engine state signed validateResult = .ok after) :
     PendingSigned config checks after := by
   obtain ⟨advanced, slotsOk, -, -, blockOk, -⟩ := stateTransition_ok computed
   simp only [processSlots, bind_ok_iff, ensure_ok_iff] at slotsOk
   obtain ⟨_, -, slotsOk⟩ := slotsOk
-  have slots := PendingSigned.of_advanceSlots before apart early
-    (Nat.lt_of_le_of_lt (frame_processBlock blockOk).registryGrows small) holds slotsOk
-  exact slots.of_processBlock before apart small known blockOk
+  have slots := PendingSigned.of_advanceSlots before apart early holds slotsOk
+  exact slots.of_processBlock before apart known blockOk
 
 /-! ## The attesters that justification counts -/
 

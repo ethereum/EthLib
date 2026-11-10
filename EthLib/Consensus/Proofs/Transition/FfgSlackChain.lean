@@ -84,15 +84,13 @@ structure SlackChainInvariant (config : Config) (checks : SignatureChecks)
 
 /-- The bounds that one step of a chain needs, apart from the sets, weights and votes of the model.
 
-Two of them are asked only of a step that moves the slot, when that slot ends an epoch.
+Both bounds apply only to a step that moves the slot, when that slot ends an epoch.
 
 Then the active stake of the current epoch must be more than one and a half increments.
 
 The block of each justified checkpoint must be in the chain of the block of its recent epoch.
 
-After the step, the registry must stay below 2^64 validators.
-
-A block keeps the slot and the justified checkpoints, so it is asked only the size of the registry.
+A block keeps the slot and the justified checkpoints, so neither bound applies to it.
 
 The order of the blocks of the model is an assumption on the map from roots to blocks.
 
@@ -114,8 +112,6 @@ structure SlackStepBounds (block : Root → β) (forked after : ForkedBeaconStat
       .ok root →
     block (if current then forked.state.currentJustifiedCheckpoint
       else forked.state.previousJustifiedCheckpoint).root ≤ block root
-  /-- The registry stays below 2^64 validators. -/
-  small : after.state.validators.data.size < 2 ^ 64
 
 /-- The hypotheses that one step of a chain needs, on the states before and after it.
 
@@ -195,8 +191,6 @@ theorem SlackChainInvariant.of_chainStep (positive : 0 < preset.SLOTS_PER_EPOCH.
   cases step with
   | slot computed =>
     obtain ⟨advanced, advancedOk, upgraded⟩ := bind_ok_iff.mp computed
-    have small : advanced.validators.data.size < 2 ^ 64 :=
-      Nat.lt_of_le_of_lt (processUpgrades_registryGrows upgraded) hypotheses.small
     have early := holds.early.of_advanceSlot advancedOk
     -- The slot moves on by one, and the upgrades keep it.
     have moved : after.state.slot ≠ forked.state.slot := by
@@ -210,11 +204,11 @@ theorem SlackChainInvariant.of_chainStep (positive : 0 < preset.SLOTS_PER_EPOCH.
     obtain ⟨previousKept, currentKept⟩ := processUpgrades_justified upgraded
     have pending : PendingSigned config checks advanced := by
       by_cases before : forked.fork < .altair
-      · exact holds.pendingSigned.of_advanceSlot before apart holds.early small advancedOk
+      · exact holds.pendingSigned.of_advanceSlot before apart holds.early advancedOk
       · exact fun before' => absurd before' before
     have known : ForkVersionsKnown config forked.state → ForkVersionsKnown config advanced :=
       fun known => (ForkVersionsKnown.congr (advanceSlot_keys advancedOk).1).mpr known
-    have flags := holds.flagsSigned.of_advanceSlot positive window holds.early small advancedOk
+    have flags := holds.flagsSigned.of_advanceSlot positive window holds.early advancedOk
     have slack := advanceSlot_slackJustifiedCheckpoints window holds.flagsSigned
       holds.pendingSigned (hypotheses.large moved) block (hypotheses.contains moved)
       holds.invariant.settled
@@ -228,9 +222,9 @@ theorem SlackChainInvariant.of_chainStep (positive : 0 < preset.SLOTS_PER_EPOCH.
       ForkVersionsKnown.of_processUpgrades (known holds.known) upgraded, ?_⟩
     · by_cases altair : .altair ≤ forked.fork
       · exact TargetFlagsSigned.of_processUpgrades (forked := ⟨forked.fork, advanced⟩) altair
-          hypotheses.small flags upgraded
+          flags upgraded
       · exact TargetFlagsSigned.of_processUpgrades_of_lt_altair (forked := ⟨forked.fork, advanced⟩)
-          (Nat.lt_of_not_le altair) hypotheses.small pending upgraded
+          (Nat.lt_of_not_le altair) pending upgraded
     · unfold SlackJustifiedCheckpoints
       rw [previousKept, currentKept]
       exact slack
@@ -241,8 +235,8 @@ theorem SlackChainInvariant.of_chainStep (positive : 0 < preset.SLOTS_PER_EPOCH.
     have known := ForkVersionsKnown.of_frame frame holds.known
     refine ⟨frame.invariant holds.invariant, holds.early.of_frame frame,
       holds.separated.of_frame frame,
-      holds.flagsSigned.of_voteFrame hypotheses.small known voteFrame,
-      fun before => PendingSigned.of_processBlock before apart hypotheses.small known
+      holds.flagsSigned.of_voteFrame known voteFrame,
+      fun before => PendingSigned.of_processBlock before apart known
         holds.pendingSigned blockOk before, known, ?_⟩
     unfold SlackJustifiedCheckpoints
     rw [frame.previousJustified, frame.currentJustified]

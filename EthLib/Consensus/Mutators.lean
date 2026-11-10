@@ -82,6 +82,32 @@ def getValidator (state : BeaconState preset fork) (index : ValidatorIndex) :
   | some validator => .ok validator
   | none => .error (.indexOutOfRange index)
 
+/-- The balance at a plain integer position. -/
+def getBalanceAt (state : BeaconState preset fork) (position : Nat) : Except AccessorError Gwei :=
+  match state.balances.data[position]? with
+  | some balance => .ok balance
+  | none => do
+    let index ← liftArith (ofNatChecked position)
+    throw (.indexOutOfRange index)
+
+/-- The validator at a plain integer position. -/
+def getValidatorAt (state : BeaconState preset fork) (position : Nat) :
+    Except AccessorError Validator :=
+  match state.validators.data[position]? with
+  | some validator => .ok validator
+  | none => do
+    let index ← liftArith (ofNatChecked position)
+    throw (.indexOutOfRange index)
+
+/-- Replace the validator at a plain integer position, with an error outside the registry. -/
+def BeaconState.setValidatorAt (state : BeaconState preset fork) (position : Nat)
+    (validator : Validator) : Except AccessorError (BeaconState preset fork) :=
+  if inside : position < state.validators.data.size then
+    .ok (state.putValidator position inside validator)
+  else do
+    let index ← liftArith (ofNatChecked position)
+    throw (.indexOutOfRange index)
+
 /-- The state with a balance raised by an amount. -/
 def increaseBalance (state : BeaconState preset fork) (index : ValidatorIndex) (delta : Gwei) :
     Except AccessorError (BeaconState preset fork) := do

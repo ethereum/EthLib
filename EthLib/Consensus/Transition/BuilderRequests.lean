@@ -76,19 +76,22 @@ def getIndexForNewBuilder (state : BeaconState preset fork) (gloas : .glamsterda
 
 /-- The state with a new builder at the index for a new builder.
 
-It deposits in the epoch of a slot, and does not exit. -/
+It deposits in the epoch of a slot, and does not exit.
+
+A chosen position of `2^64` or more is an overflow. -/
 def addBuilderToRegistry (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork)
     (pubkey : BLSPubkey) (version : UInt8) (executionAddress : ExecutionAddress) (amount : Gwei)
-    (slot : Slot) : BeaconState preset fork :=
+    (slot : Slot) : Except TransitionError (BeaconState preset fork) := do
   let builder : Builder :=
     ⟨pubkey, version, executionAddress, amount, computeEpochAtSlot preset slot,
       FAR_FUTURE_EPOCH⟩
   let builders := (state.builders gloas).data
   let index := getIndexForNewBuilder state gloas
-  if inside : index < builders.size then state.putBuilder gloas index inside builder
+  let _ ← liftAccessor (liftArith (ofNatChecked index))
+  if inside : index < builders.size then return state.putBuilder gloas index inside builder
   else
     let builders : Builders := ⟨builders.push builder⟩
-    { state with builders := fun _ => builders }
+    return { state with builders := fun _ => builders }
 
 /-- The position of the first builder with a key in the registry, if any. -/
 def findBuilderByPubkey (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork)
@@ -115,10 +118,11 @@ def processBuilderDepositRequest (config : Config) (checks : SignatureChecks)
   match findBuilderByPubkey state gloas request.pubkey with
   | none =>
     if ← isValidBuilderDepositSignature config checks request then
-      return addBuilderToRegistry state gloas request.pubkey PAYLOAD_BUILDER_VERSION
+      addBuilderToRegistry state gloas request.pubkey PAYLOAD_BUILDER_VERSION
         (credentialAddress request.withdrawalCredentials) request.amount state.slot
     else return state
   | some index =>
+    let _ ← liftAccessor (liftArith (ofNatChecked index.val))
     let builder := (state.builders gloas).data[index]
     let withdrawableEpoch ←
       if builder.withdrawableEpoch ≠ FAR_FUTURE_EPOCH ∧ builder.balance = 0 then
@@ -139,7 +143,7 @@ def processBuilderExitRequest (config : Config) (state : BeaconState preset fork
     (gloas : .glamsterdam ≤ fork) (request : BuilderExitRequest) :
     Except TransitionError (BeaconState preset fork) := do
   let some index := findBuilderByPubkey state gloas request.pubkey | return state
-  let builderIndex := index.val.toUInt64
+  let builderIndex ← liftAccessor (liftArith (ofNatChecked index.val))
   let builder := (state.builders gloas).data[index]
   unless ← liftAccessor (isActiveBuilder state gloas builderIndex) do return state
   unless builder.executionAddress = request.sourceAddress do return state

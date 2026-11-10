@@ -93,11 +93,23 @@ variable {preset : Preset} {fork : Base.Fork}
 def getCurrentEpoch (state : BeaconState preset fork) : Epoch :=
   computeEpochAtSlot preset state.slot
 
-/-- The indices of the validators active in an epoch, in increasing order. -/
+/-- The indices of the validators active in an epoch, in increasing order.
+
+The positions must fit in 64 bits; transition steps use `getActiveValidatorIndicesChecked`. -/
 def getActiveValidatorIndices (state : BeaconState preset fork) (epoch : Epoch) :
     List ValidatorIndex :=
   state.validators.data.toList.zipIdx.filterMap fun (validator, index) =>
     if isActiveValidator validator epoch then some index.toUInt64 else none
+
+/-- The active indices, rejecting each active position that does not fit in 64 bits.
+
+An inactive position is not converted, so it needs no bound. -/
+def getActiveValidatorIndicesChecked (state : BeaconState preset fork) (epoch : Epoch) :
+    Except AccessorError (List ValidatorIndex) :=
+  if state.validators.data.toList.zipIdx.all (fun (validator, index) =>
+      !isActiveValidator validator epoch || index < 2 ^ 64) then
+    .ok (getActiveValidatorIndices state epoch)
+  else .error (.arith .overflow)
 
 /-- The marks of the validators at some indices: one flag per validator of the registry.
 
@@ -127,7 +139,9 @@ def getTotalBalance (state : BeaconState preset fork) (indices : List ValidatorI
 
 /-- The total effective balance of the validators active in the epoch of a state. -/
 def getTotalActiveBalance (state : BeaconState preset fork) : Except AccessorError Gwei :=
-  getTotalBalance state (getActiveValidatorIndices state (getCurrentEpoch state))
+  do
+    let active ← getActiveValidatorIndicesChecked state (getCurrentEpoch state)
+    getTotalBalance state active
 
 /-- An error of a 64-bit operation, as an error of an accessor. -/
 def liftArith {α : Type} (result : Except ArithError α) : Except AccessorError α :=
@@ -281,6 +295,13 @@ def getCommitteeCountPerSlot (state : BeaconState preset fork) (epoch : Epoch) :
     ((getActiveValidatorIndices state epoch).length.toUInt64 / preset.SLOTS_PER_EPOCH /
       preset.TARGET_COMMITTEE_SIZE))
 
+/-- The committee count, after checking every active index and the number of active validators. -/
+def getCommitteeCountPerSlotChecked (state : BeaconState preset fork) (epoch : Epoch) :
+    Except AccessorError UInt64 := do
+  let active ← getActiveValidatorIndicesChecked state epoch
+  let _ ← liftArith (ofNatChecked active.length)
+  return getCommitteeCountPerSlot state epoch
+
 /-- The committee of a slot with a given index, cut from active validators in a shuffled order.
 
 The count of committees in each slot is an argument, so that a caller computes it once.
@@ -302,7 +323,8 @@ It fails as the shuffle does, for more than `2^40` active validators. -/
 def attesterShuffle (state : BeaconState preset fork) (epoch : Epoch) :
     Except AccessorError (Array ValidatorIndex × Array UInt64) := do
   let seed ← getSeed state epoch DOMAIN_BEACON_ATTESTER
-  let active := (getActiveValidatorIndices state epoch).toArray
+  let active := (← getActiveValidatorIndicesChecked state epoch).toArray
+  unless active.size < 2 ^ 64 do throw (.arith .overflow)
   return (active,
     ← (computeShuffledPermutation preset (UInt64.ofNat active.size) seed).mapError .shuffle)
 
@@ -449,7 +471,7 @@ def getBeaconProposerIndex (state : BeaconState preset fork) :
     let epochSeed ← getSeed state epoch DOMAIN_BEACON_PROPOSER
     let seed := Cryptography.Hash.Sha256.hash32
       ⟨epochSeed.toArray ++ (uintToBytes 8 state.slot.toNat).toArray⟩
-    computeProposerIndex state (getActiveValidatorIndices state epoch).toArray seed
+    computeProposerIndex state (← getActiveValidatorIndicesChecked state epoch).toArray seed
 
 /-- The signature domain of a kind of message in an epoch, by default the epoch of the state.
 

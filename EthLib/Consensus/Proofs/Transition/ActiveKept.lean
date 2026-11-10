@@ -19,8 +19,6 @@ From Electra, the exit and consolidation queues of [EIP-7251] give no epoch befo
 
 A new validator has no activation epoch yet, so it is active in no epoch.
 
-The theorems of a step still assume fewer than 2^64 validators, though no step needs it now.
-
 So each step of a chain keeps which validators are active in each epoch up to its current epoch.
 
 That holds at every fork, for slots, epochs, blocks and upgrades.
@@ -41,22 +39,21 @@ open Base Uint64
 variable {preset : Preset} {fork : Base.Fork} {config : Config} {checks : SignatureChecks}
   {engine : ExecutionEngine preset fork} {state after : BeaconState preset fork}
 
-/-! ## Steps below 2^64 validators -/
+/-! ## Steps that keep activity -/
 
 /-- A step that never shrinks the registry.
 
-While the registry after it stays below 2^64 validators, it keeps the slot and activity. -/
+It keeps the slot and activity. -/
 private def StepBelow (state after : BeaconState preset fork) : Prop :=
   state.validators.data.size ≤ after.validators.data.size ∧
-    (after.validators.data.size < 2 ^ 64 → ActiveStep state after)
+    ActiveStep state after
 
 private theorem StepBelow.refl (state : BeaconState preset fork) : StepBelow state state :=
-  ⟨Nat.le_refl _, fun _ => ActiveStep.refl state⟩
+  ⟨Nat.le_refl _, ActiveStep.refl state⟩
 
 private theorem StepBelow.trans {first second third : BeaconState preset fork}
     (one : StepBelow first second) (two : StepBelow second third) : StepBelow first third :=
-  ⟨Nat.le_trans one.1 two.1, fun small =>
-    (one.2 (Nat.lt_of_le_of_lt two.1 small)).trans (two.2 small)⟩
+  ⟨Nat.le_trans one.1 two.1, one.2.trans two.2⟩
 
 private theorem StepBelow.foldlM {α ε : Type} {step : BeaconState preset fork → α → Except ε _}
     (keeps : ∀ s x s', step s x = .ok s' → StepBelow s s') {items : List α}
@@ -66,12 +63,12 @@ private theorem StepBelow.foldlM {α ε : Type} {step : BeaconState preset fork 
 
 private theorem StepBelow.of_step (grows : state.validators.data.size ≤ after.validators.data.size)
     (step : ActiveStep state after) : StepBelow state after :=
-  ⟨grows, fun _ => step⟩
+  ⟨grows, step⟩
 
 private theorem StepBelow.of_validators
     (validators : after.validators.data = state.validators.data := by rfl)
     (slot : after.slot = state.slot := by rfl) : StepBelow state after :=
-  ⟨Nat.le_of_eq (congrArg Array.size validators).symm, fun _ =>
+  ⟨Nat.le_of_eq (congrArg Array.size validators).symm,
     ActiveStep.of_validators validators slot⟩
 
 /-! ## Mutators -/
@@ -83,6 +80,14 @@ private theorem stepBelow_setValidator {index : ValidatorIndex} {validator old :
     (set : state.setValidator index validator = .ok after) : StepBelow state after :=
   StepBelow.of_step (Nat.le_of_eq (sameSizes_setValidator set).1.symm)
     (activeStep_setValidator found same set)
+
+private theorem stepBelow_setValidatorAt {index : Nat} {validator old : Validator}
+    (found : getValidatorAt state index = .ok old)
+    (same : ∀ epoch ≤ getCurrentEpoch state,
+      isActiveValidator validator epoch = isActiveValidator old epoch)
+    (set : state.setValidatorAt index validator = .ok after) : StepBelow state after :=
+  StepBelow.of_step (Nat.le_of_eq (sameSizes_setValidatorAt set).1.symm)
+    (activeStep_setValidatorAt found same set)
 
 private theorem stepBelow_increaseBalance {index : ValidatorIndex} {delta : Gwei}
     (computed : increaseBalance state index delta = .ok after) : StepBelow state after :=
@@ -664,14 +669,16 @@ private theorem stepBelow_updateRegistryEntryElectra {activationEpoch : Epoch} {
   split at computed
   · simp only [bind_ok_iff, liftAccessor_ok] at computed
     obtain ⟨_, _, set⟩ := computed
-    exact stepBelow_setValidator found (fun _ _ => by simp only [isActiveValidator]) set
+    exact stepBelow_setValidatorAt found (fun _ _ => by simp only [isActiveValidator]) set
   split at computed
-  · exact stepBelow_initiateValidatorExit (liftAccessor_ok.mp computed)
+  · simp only [bind_ok_iff, liftAccessor_ok] at computed
+    obtain ⟨_, _, exited⟩ := computed
+    exact stepBelow_initiateValidatorExit exited
   split at computed
   · rename_i eligible
     simp only [isEligibleForActivation, Bool.and_eq_true, beq_iff_eq] at eligible
     -- Neither the far-future epoch nor the new one is at or before the current epoch.
-    exact stepBelow_setValidator found (fun _ le => isActiveValidator_eq_of_activation
+    exact stepBelow_setValidatorAt found (fun _ le => isActiveValidator_eq_of_activation
       (.inl eligible.2) (UInt64.lt_iff_toNat_lt.mpr later) le) (liftAccessor_ok.mp computed)
   · simp only [pure, Except.pure, Except.ok.injEq] at computed
     exact computed ▸ StepBelow.refl _
@@ -847,16 +854,13 @@ private theorem stepBelow_processEpochAltair {altair : .altair ≤ fork}
         (activeStep_processHistoricalRootsUpdate rootedOk)).trans
       (stepBelow_epochTail syncedOk lookedOk windowed)
 
-/-- The epoch step keeps activity in each epoch up to its current epoch, at every fork.
-
-The registry after it must hold fewer than 2^64 validators. -/
+/-- The epoch step keeps activity in each epoch up to its current epoch, at every fork. -/
 theorem activeKept_processEpoch
-    (small : after.validators.data.size < 2 ^ 64)
     (computed : processEpoch config checks state = .ok after) :
     ActiveKept (getCurrentEpoch state) state after := by
   by_cases altair : Fork.altair ≤ fork
   · simp only [processEpoch, altair, ↓reduceDIte] at computed
-    exact ((stepBelow_processEpochAltair computed).2 small).2
+    exact (stepBelow_processEpochAltair computed).2.2
   · exact activeKept_processEpoch_of_lt_altair (Nat.lt_of_not_le altair) computed
 
 /-- The epoch step never shrinks the registry. -/
@@ -871,11 +875,10 @@ private theorem processEpoch_registryGrows
 
 /-- One slot never shrinks the registry.
 
-While the registry after it stays below 2^64 validators, it keeps activity. -/
+It keeps activity. -/
 private theorem advanceSlot_kept (computed : advanceSlot config checks state = .ok after) :
     state.validators.data.size ≤ after.validators.data.size ∧
-      (after.validators.data.size < 2 ^ 64 →
-        ActiveKept (getCurrentEpoch state) state after) := by
+      ActiveKept (getCurrentEpoch state) state after := by
   obtain ⟨next, cached, epoched, -, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok computed
   obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
   -- The slot step writes neither the registry nor the slot.
@@ -885,17 +888,15 @@ private theorem advanceSlot_kept (computed : advanceSlot config checks state = .
   have first : ActiveKept (getCurrentEpoch state) state cached :=
     ActiveKept.of_validators (by rw [validators]) _
   suffices kept : cached.validators.data.size ≤ epoched.validators.data.size ∧
-      (epoched.validators.data.size < 2 ^ 64 →
-        ActiveKept (getCurrentEpoch cached) cached epoched) by
-    refine ⟨validators ▸ kept.1, fun small => first.trans ?_⟩
-    exact (epoch ▸ kept.2 small).trans (ActiveKept.of_validators rfl _)
+      ActiveKept (getCurrentEpoch cached) cached epoched by
+    refine ⟨validators ▸ kept.1, first.trans ?_⟩
+    exact (epoch ▸ kept.2).trans (ActiveKept.of_validators rfl _)
   unfold epochIfLast at epochedOk
   split at epochedOk
-  · exact ⟨processEpoch_registryGrows epochedOk, fun small =>
-      activeKept_processEpoch small epochedOk⟩
+  · exact ⟨processEpoch_registryGrows epochedOk, activeKept_processEpoch epochedOk⟩
   · simp only [pure, Except.pure, Except.ok.injEq] at epochedOk
     subst epochedOk
-    exact ⟨Nat.le_refl _, fun _ => ActiveKept.refl _ _⟩
+    exact ⟨Nat.le_refl _, ActiveKept.refl _ _⟩
 
 /-- Queueing a validator that is not yet active keeps its activation and exit epochs. -/
 private theorem stepBelow_queuePreActivation {electra : .pectra ≤ fork} {index : ValidatorIndex}
@@ -929,16 +930,13 @@ private theorem activeKept_upgradeToElectra {pre : BeaconState preset .dencun}
   have step := (StepBelow.foldlM (fun _ _ _ ok => stepBelow_queuePreActivation ok) queued).trans
     (StepBelow.foldlM (fun _ _ _ ok => stepBelow_queueCompoundingExcess ok) compounded)
   exact (ActiveKept.of_validators rfl _).trans
-    (step.2 (BeaconState.validators_size_lt_of_lt_glamsterdam (by decide) _)).2
+    step.2.2
 
-/-- A block keeps activity in each epoch up to its current epoch, at every fork.
-
-The registry after it must hold fewer than 2^64 validators. -/
+/-- A block keeps activity in each epoch up to its current epoch, at every fork. -/
 theorem activeKept_processBlock {block : BeaconBlock preset fork}
-    (small : after.validators.data.size < 2 ^ 64)
     (computed : processBlock config checks engine state block = .ok after) :
     ActiveKept (getCurrentEpoch state) state after :=
-  ((stepBelow_processBlock computed).2 small).2
+  (stepBelow_processBlock computed).2.2
 
 /-! ## The attestations of a block -/
 
@@ -946,7 +944,7 @@ theorem activeKept_processBlock {block : BeaconBlock preset fork}
 
 It is a block frame, and it never shrinks the registry.
 
-While the registry after it stays below 2^64 validators, it keeps the slot and activity.
+It keeps the slot and activity.
 
 Of the RANDAO mixes, it writes at most the one of the current epoch. -/
 private structure BeforeVotes (state after : BeaconState preset fork) : Prop where
@@ -1012,12 +1010,10 @@ private theorem beforeVotes_processEth1Data {before : fork < .hegota}
 
 Where they start, the attesters of each of them are those of the state before the block.
 
-There must be more than `MIN_SEED_LOOKAHEAD + 2` epochs of mixes.
-
-The registry after the block must hold fewer than 2^64 validators. -/
+There must be more than `MIN_SEED_LOOKAHEAD + 2` epochs of mixes. -/
 theorem processBlock_attestationSplit
     (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
-    {block : BeaconBlock preset fork} (small : after.validators.data.size < 2 ^ 64)
+    {block : BeaconBlock preset fork}
     (computed : processBlock config checks engine state block = .ok after) :
     ∃ first last, BlockFrame state first ∧
       (∀ attestation ∈ block.body.attestations.data,
@@ -1039,14 +1035,7 @@ theorem processBlock_attestationSplit
       beforeVotes_processProposerSlashing beforeVotes_processAttesterSlashing operated
   have head := blockHead.trans operationsHead
   have tail := operationsTail.trans blockTail
-  -- The attestations keep the registry, so the registry where they start is below 2^64.
-  have kept : last.validators = first.validators :=
-    foldlM_ok_invariant (fun next : BeaconState preset fork => next.validators = first.validators)
-      (fun _ _ _ holds ok => (processAttestation_registry ok).1.trans holds) rfl attested
-  have below : first.validators.data.size < 2 ^ 64 := by
-    rw [← kept]
-    exact Nat.lt_of_le_of_lt tail.registryGrows small
-  have active := (head.step.2 below).2
+  have active := head.step.2.2
   refine ⟨first, last, head.frame, fun attestation member => ?_, attested, tail⟩
   -- The fold runs the attestation at a state with the slot of the state before the block.
   obtain ⟨index, bound, found⟩ := List.getElem_of_mem (Array.mem_toList_iff.mpr member)
@@ -1073,13 +1062,11 @@ theorem processBlock_attestationSplit
     rcases recent with same | same <;> rw [same] <;> omega
   exact getAttestingIndices_eq_of_activeKept apart (active.mono low) head.mixes low high
 
-/-- One slot keeps activity in each epoch up to its current epoch, at every fork.
-
-The registry after it must hold fewer than 2^64 validators. -/
-theorem activeKept_advanceSlot (small : after.validators.data.size < 2 ^ 64)
+/-- One slot keeps activity in each epoch up to its current epoch, at every fork. -/
+theorem activeKept_advanceSlot
     (computed : advanceSlot config checks state = .ok after) :
     ActiveKept (getCurrentEpoch state) state after :=
-  (advanceSlot_kept computed).2 small
+  (advanceSlot_kept computed).2
 
 /-- An upgrade keeps activity in each epoch up to its current epoch. -/
 theorem activeKept_upgradeNext {pre : ForkedBeaconState preset}
@@ -1119,12 +1106,11 @@ theorem activeKept_upgradeNext {pre : ForkedBeaconState preset}
 
 /-- One step of a chain never shrinks the registry, nor moves the current epoch back.
 
-While the registry after it stays below 2^64 validators, it keeps activity. -/
+It keeps activity. -/
 private theorem chainStep_kept {forked after : ForkedBeaconState preset}
     (step : ChainStep config checks forked after) :
     forked.state.validators.data.size ≤ after.state.validators.data.size ∧
-      (after.state.validators.data.size < 2 ^ 64 →
-        ActiveKept (getCurrentEpoch forked.state) forked.state after.state) ∧
+      ActiveKept (getCurrentEpoch forked.state) forked.state after.state ∧
       getCurrentEpoch forked.state ≤ getCurrentEpoch after.state := by
   cases step with
   | slot computed =>
@@ -1151,47 +1137,39 @@ private theorem chainStep_kept {forked after : ForkedBeaconState preset}
       exact Nat.div_le_div_right (Nat.le_succ _)
     have epoch : getCurrentEpoch after.state = getCurrentEpoch advanced := by
       simp only [getCurrentEpoch, slot]
-    refine ⟨Nat.le_trans advancedGrows grows, fun small => ?_, epoch ▸ later⟩
-    exact (advancedActive (Nat.lt_of_le_of_lt grows small)).trans (active.mono later)
+    exact ⟨Nat.le_trans advancedGrows grows, advancedActive.trans (active.mono later),
+      epoch ▸ later⟩
   | @block _ blockState blockAfter engine signed validateResult computed =>
     obtain ⟨-, blockOk, -⟩ := applySignedBlock_ok computed
     have kept := stepBelow_processBlock blockOk
     have epoch : getCurrentEpoch blockAfter = getCurrentEpoch blockState := by
       simp only [getCurrentEpoch, (frame_processBlock blockOk).slot]
-    exact ⟨kept.1, fun small => (kept.2 small).2, UInt64.le_of_eq epoch.symm⟩
+    exact ⟨kept.1, kept.2.2, UInt64.le_of_eq epoch.symm⟩
 
 /-- A run of steps of a chain never shrinks the registry.
 
-While the registry at its end stays below 2^64 validators, it keeps activity. -/
+It keeps activity. -/
 private theorem chainSteps_kept {first last : ForkedBeaconState preset}
     (steps : Relation.ReflTransGen (ChainStep config checks) first last) :
     first.state.validators.data.size ≤ last.state.validators.data.size ∧
-      (last.state.validators.data.size < 2 ^ 64 →
-        ActiveKept (getCurrentEpoch first.state) first.state last.state) := by
+      ActiveKept (getCurrentEpoch first.state) first.state last.state := by
   induction steps using Relation.ReflTransGen.head_induction_on with
-  | refl => exact ⟨Nat.le_refl _, fun _ => ActiveKept.refl _ _⟩
+  | refl => exact ⟨Nat.le_refl _, ActiveKept.refl _ _⟩
   | head step _ more =>
     obtain ⟨grows, active, later⟩ := chainStep_kept step
-    exact ⟨Nat.le_trans grows more.1, fun small =>
-      (active (Nat.lt_of_le_of_lt more.1 small)).trans ((more.2 small).mono later)⟩
+    exact ⟨Nat.le_trans grows more.1, active.trans (more.2.mono later)⟩
 
-/-- One step of a chain keeps activity in each epoch up to its current epoch.
-
-The registry after it must hold fewer than 2^64 validators. -/
+/-- One step of a chain keeps activity in each epoch up to its current epoch. -/
 theorem ChainStep.activeKept {forked after : ForkedBeaconState preset}
-    (small : after.state.validators.data.size < 2 ^ 64)
     (step : ChainStep config checks forked after) :
     ActiveKept (getCurrentEpoch forked.state) forked.state after.state :=
-  (chainStep_kept step).2.1 small
+  (chainStep_kept step).2.1
 
-/-- A run of steps of a chain keeps activity in each epoch up to the current epoch of its start.
-
-The registry at its end must hold fewer than 2^64 validators. -/
+/-- A run of steps of a chain keeps activity in each epoch up to the current epoch of its start. -/
 theorem activeKept_of_chainSteps {first last : ForkedBeaconState preset}
-    (small : last.state.validators.data.size < 2 ^ 64)
     (steps : Relation.ReflTransGen (ChainStep config checks) first last) :
     ActiveKept (getCurrentEpoch first.state) first.state last.state :=
-  (chainSteps_kept steps).2 small
+  (chainSteps_kept steps).2
 
 /-- One step of a chain does not move the current epoch back. -/
 theorem ChainStep.currentEpoch_le {forked after : ForkedBeaconState preset}

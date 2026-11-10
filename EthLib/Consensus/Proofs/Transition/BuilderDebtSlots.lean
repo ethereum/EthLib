@@ -46,6 +46,12 @@ theorem builderFrame_setValidator {index : ValidatorIndex} {validator : Validato
   obtain ⟨_, rfl⟩ := setValidator_ok set
   exact ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
 
+/-- Setting a validator at a plain position keeps the builder fields and the two slots. -/
+theorem builderFrame_setValidatorAt {position : Nat} {validator : Validator}
+    (set : state.setValidatorAt position validator = .ok after) : BuilderFrame state after := by
+  obtain ⟨_, rfl⟩ := setValidatorAt_ok set
+  exact ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
+
 /-- Setting a balance keeps the builder fields and the two slots. -/
 theorem builderFrame_setBalance {index : ValidatorIndex} {balance : Gwei}
     (set : state.setBalance index balance = .ok after) : BuilderFrame state after := by
@@ -104,12 +110,10 @@ private theorem builderFrame_processInactivityUpdates {altair : .altair ≤ fork
     exact ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 private theorem builderFrame_applyAllDeltas {deltas : Array Gwei × Array Gwei}
-    (computed : applyAllDeltas state deltas = .ok after) : BuilderFrame state after :=
-  BuilderFrame.foldlM (fun _ _ _ ok => by
-    simp only [applyDeltas, bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, raised, lowered⟩ := ok
-    exact (builderFrame_increaseBalance raised).trans (builderFrame_decreaseBalance lowered))
-    computed
+    (computed : applyAllDeltas state deltas = .ok after) : BuilderFrame state after := by
+  refine BuilderFrame.foldlM (fun _ _ _ ok => ?_) computed
+  obtain ⟨_, _, _, rfl⟩ := applyDeltas_eq_ok_iff.mp ok
+  exact ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 private theorem builderFrame_processRewardsAndPenalties
     (computed : processRewardsAndPenalties config state = .ok after) :
@@ -138,11 +142,12 @@ private theorem builderFrame_processRegistryUpdates
     split at ok
     · simp only [bind_ok_iff, liftAccessor_ok] at ok
       obtain ⟨_, _, set⟩ := ok
-      exact builderFrame_setValidator set
+      exact builderFrame_setValidatorAt set
     split at ok
-    · exact builderFrame_initiateValidatorExit (liftAccessor_ok.mp ok)
+    · obtain ⟨_, _, ok⟩ := bind_ok_iff.mp ok
+      exact builderFrame_initiateValidatorExit (liftAccessor_ok.mp ok)
     split at ok
-    · exact builderFrame_setValidator (liftAccessor_ok.mp ok)
+    · exact builderFrame_setValidatorAt (liftAccessor_ok.mp ok)
     · simp only [pure, Except.pure, Except.ok.injEq] at ok
       exact ok ▸ BuilderFrame.refl _
   simp only [bind_ok_iff] at computed
@@ -151,9 +156,10 @@ private theorem builderFrame_processRegistryUpdates
     (BuilderFrame.foldlM (fun _ _ _ ok => ?_) activated)
   · simp only [updateRegistryEntry, bind_ok_iff, liftAccessor_ok] at ok
     obtain ⟨_, _, _, _, _, markedOk, ok⟩ := ok
-    have set := builderFrame_setValidator markedOk
+    have set := builderFrame_setValidatorAt markedOk
     split at ok
-    · exact set.trans (builderFrame_initiateValidatorExit (liftAccessor_ok.mp ok))
+    · obtain ⟨_, _, ok⟩ := bind_ok_iff.mp ok
+      exact set.trans (builderFrame_initiateValidatorExit (liftAccessor_ok.mp ok))
     · simp only [pure, Except.pure, Except.ok.injEq] at ok
       exact ok ▸ set
   · simp only [activateValidator, bind_ok_iff, liftAccessor_ok] at ok
@@ -176,7 +182,7 @@ private theorem builderFrame_processSlashings (computed : processSlashings state
       obtain ⟨_, _, ok⟩ := ok
       split at ok
       · simp only [bind_ok_iff, liftAccessor_ok] at ok
-        obtain ⟨_, _, lowered⟩ := ok
+        obtain ⟨_, _, _, _, lowered⟩ := ok
         exact builderFrame_decreaseBalance lowered
       · simp only [pure, Except.pure, Except.ok.injEq] at ok
         exact ok ▸ BuilderFrame.refl _
@@ -190,7 +196,7 @@ private theorem builderFrame_processSlashings (computed : processSlashings state
       obtain ⟨_, _, ok⟩ := ok
       split at ok
       · simp only [bind_ok_iff, liftAccessor_ok] at ok
-        obtain ⟨_, _, _, _, lowered⟩ := ok
+        obtain ⟨_, _, _, _, _, _, lowered⟩ := ok
         exact builderFrame_decreaseBalance lowered
       · simp only [pure, Except.pure, Except.ok.injEq] at ok
         exact ok ▸ BuilderFrame.refl _
@@ -344,7 +350,7 @@ private theorem builderFrame_processEffectiveBalanceUpdates
   refine BuilderFrame.foldlM (fun _ _ _ ok => ?_) computed
   simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at ok
   obtain ⟨_, _, _, _, _, _, set⟩ := ok
-  exact builderFrame_setValidator set
+  exact builderFrame_setValidatorAt set
 
 private theorem builderFrame_processHistoricalSummariesUpdate {capella : .shapella ≤ fork}
     (computed : processHistoricalSummariesUpdate state capella = .ok after) :

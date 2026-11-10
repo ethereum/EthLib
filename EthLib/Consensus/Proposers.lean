@@ -71,6 +71,7 @@ def proposerCandidates (state : BeaconState preset fork) (epoch : Epoch) : Array
 /-- The proposers of the slots of an epoch. -/
 def getBeaconProposerIndices (state : BeaconState preset fork) (epoch : Epoch) :
     Except AccessorError (Vector ValidatorIndex preset.SLOTS_PER_EPOCH.toNat) := do
+  let _ ← getActiveValidatorIndicesChecked state epoch
   let seed ← getSeed state epoch DOMAIN_BEACON_PROPOSER
   computeProposerIndices state epoch seed (proposerCandidates state epoch)
 
