@@ -18,7 +18,9 @@ Not yet released.
   The slot and upgrade lemmas of the flags and the pending attestations no longer take a bound on the registry.
   The link and slack theorems of `FfgJustification.lean` and `FfgSlack.lean` take the vote set and a hypothesis that the votes of the model hold it, with no slot condition.
   `SlackChainInvariant` drops its configuration, its signature checks and its field `known`, takes the vote set, and uses its votes in the model; `SlackStepHypotheses` replaces `contains` by `applied`, on the new `blockStepVotes`.
-  `runVotes` now holds the votes that the block steps of a run cast, and `TargetFlagAt.of_flagsKeptOrZero` moves to `Upgrade.lean`.
+  `runVotes` drops its argument `block` and now holds the beacon votes that the block steps of a run cast, so a caller wraps it in `ffgVotes block`.
+  `ForkVersionsKnown` is gone with its lemmas, and `initializeBeaconStateFromEth1_target` becomes `JustifiedEarly.of_initializeBeaconStateFromEth1`, which gives only the equal justified checkpoints.
+  `TargetFlagAt.of_flagsKeptOrZero` moves to `Upgrade.lean`.
 - The theorem that an attestation keeps the registry and the RANDAO mixes now holds at every fork ([#1888](https://github.com/ethereum/EthLib/issues/1888)).
   No C export or Python function changes.
   In Lean, `processAttestation_registry` drops its argument `before : fork < .altair`, so a caller removes it.

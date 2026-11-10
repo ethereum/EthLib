@@ -17,12 +17,6 @@ It carries the slot, the justified checkpoints, the block roots and the flags of
 
 So a vote for the link of a flag stays a vote for that link.
 
-The upgrade moves the current fork version into the previous one.
-
-The current version becomes that of the new fork.
-
-So the two versions stay versions of forks of the chain, up to the fork of the state.
-
 The upgrade from Phase 0 builds the flags of the previous epoch from the pending attestations.
 
 When each of their attesters cast a vote of the set for the link of that epoch, each flag has one.
@@ -52,14 +46,6 @@ theorem LinkVote.of_upgradeFrame {fork post : Fork} {pre : BeaconState preset fo
     (link : LinkVote pre current position vote) : LinkVote after current position vote := by
   simpa only [LinkVote, getCurrentEpoch, getPreviousEpoch, getBlockRoot, getBlockRootAtSlot,
     frame.slot, frame.blockRoots, frame.previousJustified, frame.currentJustified] using link
-
-/-- An upgrade keeps the fork versions those of forks of the chain, up to the fork of the state. -/
-theorem ForkVersionsKnown.of_upgradeFrame {fork post : Fork} {pre : BeaconState preset fork}
-    {after : BeaconState preset post} (frame : UpgradeFrame config pre after)
-    (known : ForkVersionsKnown config pre) : ForkVersionsKnown config after := by
-  obtain ⟨signer, le, same⟩ := known.2
-  exact ⟨⟨signer, Nat.le_trans le frame.forward, frame.previousVersion.trans same⟩,
-    ⟨post, Nat.le_refl _, frame.currentVersion⟩⟩
 
 /-- An upgrade keeps the two justified checkpoints equal in the first two epochs. -/
 theorem JustifiedEarly.of_upgradeFrame {fork post : Fork} {pre : BeaconState preset fork}
@@ -216,14 +202,6 @@ theorem processUpgrades_registryGrows {forked after : ForkedBeaconState preset}
     (fun le stepOk => Nat.le_trans le (upgradeFrame_upgradeNext stepOk).registryGrows)
     (Nat.le_refl _) computed
 
-/-- The upgrades due at a slot keep the fork versions those of forks of the chain. -/
-theorem ForkVersionsKnown.of_processUpgrades {forked after : ForkedBeaconState preset}
-    (known : ForkVersionsKnown config forked.state)
-    (computed : processUpgrades config checks forked = .ok after) :
-    ForkVersionsKnown config after.state :=
-  processUpgrades_induction (property := fun state => ForkVersionsKnown config state.state)
-    (fun known stepOk => known.of_upgradeFrame (upgradeFrame_upgradeNext stepOk)) known computed
-
 /-- The upgrades due at a slot keep the two justified checkpoints equal in the first two epochs.
 -/
 theorem JustifiedEarly.of_processUpgrades {forked after : ForkedBeaconState preset}
@@ -342,63 +320,21 @@ theorem TargetFlagsVoted.of_processUpgrades_of_lt_altair
 
 /-! ## Genesis, slots and blocks -/
 
-/-- A frame keeps the fork versions those of forks of the chain. -/
-theorem ForkVersionsKnown.of_frame {fork : Fork} {state after : BeaconState preset fork}
-    (frame : Frame state after) (known : ForkVersionsKnown config state) :
-    ForkVersionsKnown config after :=
-  (ForkVersionsKnown.congr frame.forkVersions).mpr known
-
-/-- Slots keep the fork versions those of forks of the chain. -/
-theorem ForkVersionsKnown.of_advanceSlots {fork : Fork} :
-    ∀ {count : Nat} {state after : BeaconState preset fork}, ForkVersionsKnown config state →
-      advanceSlots config checks count state = .ok after → ForkVersionsKnown config after
-  | 0, state, after, known, computed => by
-    simp only [advanceSlots, pure, Except.pure, Except.ok.injEq] at computed
-    exact computed ▸ known
-  | count + 1, state, after, known, computed => by
-    simp only [advanceSlots, bind_ok_iff] at computed
-    obtain ⟨next, nextOk, rest⟩ := computed
-    exact ForkVersionsKnown.of_advanceSlots
-      ((ForkVersionsKnown.congr (advanceSlot_keys nextOk).1).mpr known) rest
-
-/-- A block that the transition accepts keeps the fork versions those of forks of the chain. -/
-theorem ForkVersionsKnown.of_stateTransition {fork : Fork} {state after : BeaconState preset fork}
-    {engine : ExecutionEngine preset fork} {signed : SignedBeaconBlock preset fork}
-    {validateResult : Bool} (known : ForkVersionsKnown config state)
-    (computed : stateTransition config checks engine state signed validateResult = .ok after) :
-    ForkVersionsKnown config after := by
-  obtain ⟨advanced, slotsOk, -, -, blockOk, -⟩ := stateTransition_ok computed
-  simp only [processSlots, bind_ok_iff, ensure_ok_iff] at slotsOk
-  obtain ⟨_, -, slotsOk⟩ := slotsOk
-  exact (known.of_advanceSlots slotsOk).of_frame (frame_processBlock blockOk)
-
-/-- The fork versions of the genesis state built from deposits are those of forks of the chain.
-
-Its two justified checkpoints are also equal. -/
-theorem initializeBeaconStateFromEth1_target {fork : Fork} {after : BeaconState preset fork}
-    {eth1BlockHash : Hash32} {eth1Timestamp : UInt64} {deposits : Array Deposit}
+/-- The two justified checkpoints of the genesis state built from deposits are equal. -/
+theorem JustifiedEarly.of_initializeBeaconStateFromEth1 {fork : Fork}
+    {after : BeaconState preset fork} {eth1BlockHash : Hash32} {eth1Timestamp : UInt64}
+    {deposits : Array Deposit}
     (computed : initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits =
       .ok after) :
-    ForkVersionsKnown config after ∧ JustifiedEarly after := by
-  obtain ⟨before, _, _, _, activated, _, depositedOk, activatedOk, rfl⟩ :=
+    JustifiedEarly after := by
+  obtain ⟨_, _, _, _, activated, _, depositedOk, activatedOk, rfl⟩ :=
     initializeBeaconStateFromEth1_ok computed
-  have altair : ¬Fork.altair ≤ fork := Nat.not_le_of_lt before
   have frame := (Frame.foldlM (fun _ _ _ ok => frame_genesisDeposit ok) depositedOk).trans
     (Frame.foldlM (fun _ _ _ ok => frame_activateAtGenesis ok) activatedOk)
-  have later : ∀ next : Fork, Fork.altair ≤ next → ¬next ≤ fork :=
-    fun _ le le' => altair (Nat.le_trans le le')
-  have genesis : config.GENESIS_FORK_VERSION = config.forkVersion fork := by
-    unfold Config.forkVersion
-    simp [later .hegota (by decide), later .glamsterdam (by decide), later .fusaka (by decide),
-      later .pectra (by decide), later .dencun (by decide), later .shapella (by decide),
-      later .bellatrix (by decide), altair]
-  refine ⟨?_, fun _ => ?_⟩
-  · show ForkVersionsKnown config activated
-    rw [ForkVersionsKnown.congr frame.forkVersions]
-    exact ⟨⟨fork, Nat.le_refl _, genesis⟩, ⟨fork, Nat.le_refl _, genesis⟩⟩
-  · show activated.previousJustifiedCheckpoint = activated.currentJustifiedCheckpoint
-    rw [frame.previousJustified, frame.currentJustified]
-    rfl
+  intro _
+  show activated.previousJustifiedCheckpoint = activated.currentJustifiedCheckpoint
+  rw [frame.previousJustified, frame.currentJustified]
+  rfl
 
 /-- Before Altair, the genesis state built from deposits has no pending attestations. -/
 theorem initializeBeaconStateFromEth1_pending {fork : Fork} {after : BeaconState preset fork}

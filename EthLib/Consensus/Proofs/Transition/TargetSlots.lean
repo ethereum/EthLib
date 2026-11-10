@@ -337,7 +337,6 @@ theorem TargetFlagsVoted.of_advanceSlot {votes : Set (ValidatorIndex × Attestat
       exact ⟨vote, voted, index, epoch.trans currentEq.symm,
         source.trans cachedFrame.currentJustified.symm, roots rootOk (.inl epoch)⟩
 
-
 /-! ## Slots and blocks -/
 
 /-- Slots never shrink the registry. -/

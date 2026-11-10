@@ -35,9 +35,9 @@ Two steps chain into one step, whose votes are the union of their votes.
 
 Each attestation, each other step of a block, and a whole block are such steps.
 
-A block accepts an attestation only when its aggregate signature verifies under the keys.
+A block accepts an attestation only when the signature checks accept its aggregate signature.
 
-Reading such a vote as one that the validator signed assumes that no one forges a BLS aggregate.
+Reading such a vote as signed by its validator assumes the BLS checks and unforgeable aggregates.
 
 Gasper §4.4, Definition 4.5, justifies a checkpoint by the stake of the votes for one link.
 
@@ -52,13 +52,6 @@ open Base Uint64 Serialization.Ssz Cryptography.Bls
 
 variable {preset : Preset} {fork : Base.Fork} {config : Config} {checks : SignatureChecks}
   {engine : ExecutionEngine preset fork} {state after : BeaconState preset fork}
-
-/-- The two fork versions of the state are versions of forks of the chain, up to its own fork.
-
-Genesis and each upgrade set them so, and the slots and blocks keep them. -/
-def ForkVersionsKnown (config : Config) (state : BeaconState preset fork) : Prop :=
-  (∃ signer ≤ fork, state.forkVersions.previousVersion = config.forkVersion signer) ∧
-    ∃ signer ≤ fork, state.forkVersions.currentVersion = config.forkVersion signer
 
 /-- The votes that an attestation casts in a state.
 
@@ -136,12 +129,6 @@ theorem LinkVote.of_voteFrame {votes : Set (ValidatorIndex × AttestationData)}
     LinkVote after current position vote :=
   (LinkVote.congr frame.slot frame.blockRoots frame.previousJustified frame.currentJustified).mpr
     link
-
-/-- Two states with the same fork versions both have known versions, or neither has. -/
-theorem ForkVersionsKnown.congr (same : after.forkVersions = state.forkVersions) :
-    ForkVersionsKnown config after ↔ ForkVersionsKnown config state := by
-  unfold ForkVersionsKnown
-  rw [same]
 
 theorem VoteFrame.refl (state : BeaconState preset fork) : VoteFrame ∅ state state :=
   ⟨Frame.refl state, rfl, fun _ _ _ flagged => .inl flagged⟩

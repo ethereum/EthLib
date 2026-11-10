@@ -2275,7 +2275,7 @@ The genesis state built from deposits has equal justified checkpoints, and the s
 Before Altair, `PendingVoted` (`Consensus/Proofs/Transition/TargetPending.lean`) says the same of each pending attestation of the two epochs, across attestations, blocks and slots.
 It relies on the beacon committees of those epochs staying fixed while the epoch is recent (`Committees.lean`), which needs more than `MIN_SEED_LOOKAHEAD + 2` epochs of RANDAO mixes.
 `TargetFlagsVoted.of_upgradeToAltair` (`TargetUpgrades.lean`) builds the target flags of the first Altair state from such pending attestations.
-A vote of a block is evidence that its validator signed the data only under the assumption that BLS aggregates with proofs of possession cannot be forged, since the block accepts the attestation only when its aggregate signature verifies.
+A vote of a block is evidence that its validator signed the data only with the BLS checks, and under the assumption that BLS aggregates with proofs of possession cannot be forged, since the block accepts the attestation only when the signature checks accept its aggregate signature.
 
 `processJustificationAndFinalization_linkWithChurn` (`Consensus/Proofs/Transition/FfgJustification.lean`) refines one epoch step.
 It takes the target-flag fact from Altair, the pending-attestation fact before Altair, and an active stake of more than one and a half increments.

@@ -13,9 +13,9 @@ Each of them cast a vote of a set for the link of the epoch of its attestation.
 
 A block adds the votes that its attestations cast, and each other step keeps the fact.
 
-A block accepts an attestation only when its aggregate signature verifies under the keys.
+A block accepts an attestation only when the signature checks accept its aggregate signature.
 
-Reading such a vote as one that the validator signed assumes that no one forges a BLS aggregate.
+Reading such a vote as signed by its validator assumes the BLS checks and unforgeable aggregates.
 
 Gasper §4.4, Definition 4.5, justifies a checkpoint by the stake of the votes for one link.
 
@@ -225,7 +225,7 @@ theorem PendingVoted.of_processBlock {votes : Set (ValidatorIndex × Attestation
     (computed : processBlock config checks engine state block = .ok after) :
     PendingVoted (votes ∪ blockVotes state block) after := by
   obtain ⟨first, last, head, attested, tail⟩ := processBlock_pendingSplit before computed
-  have same := getAttestingIndices_of_foldlM apart head.slot head.active head.mixes attested
+  have same := getAttestingIndices_eq_of_foldlM apart head.slot head.active head.mixes attested
   have middle := foldlM_processAttestation_votes PendingVoted (fun holds sub => holds.mono sub)
     (fun holds ok => holds.of_processAttestation before ok) (holds.of_pendingFrame apart head)
     attested

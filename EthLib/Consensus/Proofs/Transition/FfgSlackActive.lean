@@ -36,11 +36,11 @@ A block casts a vote for each validator that the bits of one of its attestations
 
 The committees are those of the state before the block.
 
-The block accepts each of its attestations only when the aggregate signature verifies.
+The block accepts each of its attestations only when the signature checks accept it.
 
-Reading such a vote as the validator's signature assumes that no one forges a BLS aggregate.
+Reading such a vote as signed by its validator assumes the BLS checks and unforgeable aggregates.
 
-So the voters of a link are validators whose attestations a block of the run applied.
+So the voters of a link are validators whose attestations a block of some run applied.
 
 The step asks only the stake, the order of the blocks, the size of the registry and the preset.
 
@@ -87,7 +87,9 @@ def justifyingBalances (config : Config) (checks : SignatureChecks) (block : Roo
 
 /-- The votes that the block steps between the first and the last state cast.
 
-The step lies on any run of steps from the first state to the last one. -/
+The step lies on any run of steps from the first state to the last one.
+
+So the set may hold votes of several runs, which only weakens a bound that it gives. -/
 def runVotes (config : Config) (checks : SignatureChecks)
     (first last : ForkedBeaconState preset) : Set (ValidatorIndex × AttestationData) :=
   {vote | ∃ forked after, Relation.ReflTransGen (ChainStep config checks) first forked ∧
@@ -104,9 +106,9 @@ Its weights are the effective balances of each state whose step makes it current
 
 The votes are those that the block steps between genesis and the last state cast.
 
-Each step on any run between them must meet the bounds on the stake, the blocks and the registry.
+Each vote comes from an attestation that a block of some run between them applied.
 
-Each of them comes from an attestation that a block of the run applied, with a verified signature.
+Each step on any run between them must meet the bounds on the stake, the blocks and the registry.
 
 The order of the blocks is an assumption on the map from roots to blocks.
 

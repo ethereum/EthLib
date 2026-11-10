@@ -1015,7 +1015,7 @@ The start must have the slot of the earlier state, and keep its activity up to i
 Of the RANDAO mixes, the start may differ from it at most at the one of its current epoch.
 
 There must be more than `MIN_SEED_LOOKAHEAD + 2` epochs of mixes. -/
-theorem getAttestingIndices_of_foldlM {first last : BeaconState preset fork}
+theorem getAttestingIndices_eq_of_foldlM {first last : BeaconState preset fork}
     (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
     (slotEq : first.slot = state.slot) (active : ActiveKept (getCurrentEpoch state) state first)
     (mixes : MixesKeptBut (getCurrentEpoch state) state first)
@@ -1089,7 +1089,7 @@ theorem processBlock_attestationSplit
     exact Nat.lt_of_le_of_lt tail.registryGrows small
   have active := (head.step.2 below).2
   exact ⟨first, last, head.frame, fun attestation member =>
-    getAttestingIndices_of_foldlM apart head.frame.slot active head.mixes attested attestation
+    getAttestingIndices_eq_of_foldlM apart head.frame.slot active head.mixes attested attestation
       (Array.mem_toList_iff.mpr member), attested, tail⟩
 
 /-- One slot keeps activity in each epoch up to its current epoch, at every fork.

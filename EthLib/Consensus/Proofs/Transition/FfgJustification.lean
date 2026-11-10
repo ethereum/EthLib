@@ -25,9 +25,9 @@ From Altair the target flags give that, and before Altair the pending attestatio
 
 The meaningful set holds the votes that the attestations of applied blocks cast.
 
-A block accepts an attestation only when its aggregate signature verifies under the keys.
+A block accepts an attestation only when the signature checks accept its aggregate signature.
 
-Reading such a vote as the validator's signature assumes that no one forges a BLS aggregate.
+Reading such a vote as signed by its validator assumes the BLS checks and unforgeable aggregates.
 
 The step drops slashed attesters, so the attesters are a subset of the voters of the model.
 

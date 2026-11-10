@@ -328,7 +328,6 @@ theorem advanceSlot_slackJustifiedCheckpoints
         rw [UInt64.toNat_add, UInt64.toNat_one, ← sum, Nat.mod_eq_of_lt next.toNat_lt]
       rw [← nextEq]
       exact boundary
-    have keysBack : KeysKept cached state := KeysKept.of_validators (by rw [validators])
     have active : ∀ epoch, getActiveValidatorIndices cached epoch =
         getActiveValidatorIndices state epoch := by
       intro epoch

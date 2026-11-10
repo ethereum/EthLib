@@ -21,6 +21,8 @@ The target flags and pending attestations of each state come from votes of that 
 
 Each block step must cast only votes of that set, with the committees of the state before it.
 
+The set of all votes meets that, so only a set of the votes of the run says who voted.
+
 The sets and weights of the model must match the state for each new current justified checkpoint.
 
 The theorem takes the sets and weights as parameters, matched where a step justifies.
@@ -59,7 +61,7 @@ They are those of the attestations of a block whose application takes the first 
 
 The committees are those of the first state.
 
-A block accepts an attestation only when its aggregate signature verifies under the keys. -/
+A block accepts an attestation only when the signature checks accept its aggregate signature. -/
 def blockStepVotes (config : Config) (checks : SignatureChecks)
     (forked after : ForkedBeaconState preset) : Set (ValidatorIndex × AttestationData) :=
   {vote | ∃ (engine : ExecutionEngine preset forked.fork)
@@ -244,8 +246,7 @@ theorem SlackChainInvariant.of_chainStep (positive : 0 < preset.SLOTS_PER_EPOCH.
     · unfold SlackJustifiedCheckpoints
       rw [previousKept, currentKept]
       exact slack
-  | block engine signed validateResult applied =>
-    rename_i _ pre _
+  | @block _ pre _ engine signed validateResult applied =>
     obtain ⟨-, blockOk, -⟩ := applySignedBlock_ok applied
     have frame := frame_processBlock blockOk
     have voteFrame := voteFrame_processBlock apart hypotheses.small blockOk
@@ -286,7 +287,7 @@ theorem initializeBeaconStateFromEth1_slackChainInvariant {fork : Fork}
       ⟨fork, state⟩ := by
   obtain ⟨before, holds⟩ := initializeBeaconStateFromEth1_invariant computed
   obtain ⟨slot, previous, current⟩ := initializeBeaconStateFromEth1_checkpoints computed
-  refine ⟨holds, (initializeBeaconStateFromEth1_target computed).2, fun later => ?_,
+  refine ⟨holds, JustifiedEarly.of_initializeBeaconStateFromEth1 computed, fun later => ?_,
     fun altair => absurd altair (Nat.not_le_of_lt before), fun _ current pending member => ?_, ?_⟩
   · simp [getCurrentEpoch, slot, computeEpochAtSlot, GENESIS_SLOT, GENESIS_EPOCH] at later
   · rw [initializeBeaconStateFromEth1_pending computed] at member
