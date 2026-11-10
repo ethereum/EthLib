@@ -12,19 +12,22 @@ Take a run that wins with its forged message at position `j`.
 
 The message hash is then `z • g2`, and each key hash is its table scalar times `g2`.
 
-Through the projection, every key other than the honest one has the scalar `t * z⁻¹`.
+Through the projection, a key other than the honest one with table scalar `s` gets `s * z⁻¹`.
 
-Its hash `t • g2` is then that scalar times `z • g2`, as the extraction step needs.
+Its hash `s • g2` is then that scalar times `z • g2`, as the extraction step needs.
 
-So the reduction's answer is `(a * z) • g2`, when the following hold.
+So the reduction's answer is `(a * z) • g2`, under these assumptions.
 
+- The scheme is sound: it accepts exactly the co-Diffie-Hellman tuples.
 - Every element of `G1` is a multiple of `g1`.
-- `z ≠ 0`, and no key other than the honest one hashes with the scalar 0.
+- `z ≠ 0`, and no key other than the honest one has the scalar 0.
 - The number of copies of the honest key is not zero in the scalars.
 
 A winning run never signed its message, so it is before the bad event of the coupling.
 
-So a winning run at `j` is at most as likely as a success of the reduction with the guess `j`.
+So such a winning run at `j` is at most as likely as a success of the reduction with the guess `j`.
+
+The final bound pays for the zero scalars, and gets the honest count from the hash call bound.
 -/
 
 @[expose] public section
@@ -46,124 +49,6 @@ def At (j : ℕ) (p : Output G₁ G₂ M × State F G₁ M) : Prop :=
 /-- The number of copies of the key `pk` among the adversary's keys. -/
 def honestCount (pk : G₁) (p : Output G₁ G₂ M × State F G₁ M) : ℕ :=
   (p.1.1.1.map Prod.fst).count pk
-
-omit [DecidableEq M] [SampleableType F] [AddCommGroup G₁] [Module F G₁] in
-/-- The projection divides the scalar of every key other than `pk` by `z`. -/
-theorem keyScalar_projectState (pk x : G₁) (j : ℕ) (z : F) (st : State F G₁ M) :
-    keyScalar x (projectState pk j z st) =
-      if x = pk then keyScalar x st else keyScalar x st * z⁻¹ := by
-  simp only [keyScalar, projectState, lookup_scaleKeys]
-  cases lookup x st.keyTable with
-  | none => simp
-  | some p => by_cases hx : x = pk <;> simp [hx]
-
-omit [Field F] [SampleableType F] [AddCommGroup G₁] [Module F G₁] in
-/-- An entry that a lookup finds is still found after more entries are appended. -/
-theorem lookup_append_of_some {x : G₁} {v : ℕ × F} :
-    ∀ {l : List (G₁ × F)} (r : List (G₁ × F)), lookup x l = some v → lookup x (l ++ r) = some v
-  | [], _, h => by simp [lookup] at h
-  | (y, t) :: rest, r, h => by
-    simp only [List.cons_append, lookup] at h ⊢
-    split_ifs at h ⊢ with hy
-    · exact h
-    · obtain ⟨w, hw, rfl⟩ := Option.map_eq_some_iff.mp h
-      rw [lookup_append_of_some r hw]
-      rfl
-
-omit [DecidableEq M] [AddCommGroup G₁] [Module F G₁] in
-/-- One key hash call answers the scalar of its key times `g2`, and only appends to the key table.
-
-It keeps the message part of the state, and adds one key hash call. -/
-theorem mem_support_keyHash {g₂ : G₂} {x : G₁} {st : State F G₁ M} {w : G₂ × State F G₁ M}
-    (hw : w ∈ support (keyHash g₂ x st)) :
-    w.1 = keyScalar x w.2 • g₂ ∧ (∃ i s, lookup x w.2.keyTable = some (i, s)) ∧
-      (∃ r, w.2.keyTable = st.keyTable ++ r) ∧ w.2.msg = st.msg ∧
-        w.2.keyCalls = st.keyCalls + 1 := by
-  unfold keyHash at hw
-  split at hw
-  · next i s h =>
-    simp only [support_pure, Set.mem_singleton_iff] at hw
-    subst hw
-    exact ⟨by simp [keyScalar, h], ⟨i, s, h⟩, ⟨[], by simp⟩, rfl, rfl⟩
-  · next h =>
-    simp only [support_map, Set.mem_image] at hw
-    obtain ⟨s, -, rfl⟩ := hw
-    have hl := lookup_append_of_none h s
-    exact ⟨by simp [keyScalar, hl], ⟨_, s, hl⟩, ⟨_, rfl⟩, rfl, rfl⟩
-
-/-- A message hash call with the scalar `z` fixed at `j` keeps the scalar `z` at position `j`. -/
-theorem scalarAt_of_mem_support_hashAt {g₂ : G₂} {j : ℕ} {z : F} {m : M}
-    {st : Security.State F M} {w : G₂ × Security.State F M}
-    (hw : w ∈ support (hashAt g₂ j z m st)) (hst : ∀ e, st.table[j]? = some e → e.2 = z) :
-    ∀ e, w.2.table[j]? = some e → e.2 = z := by
-  intro e he
-  by_cases hnew : lookup m st.table = none ∧ st.table.length = j
-  · rw [hashAt_of_new hnew.1 hnew.2] at hw
-    simp only [support_pure, Set.mem_singleton_iff] at hw
-    subst hw
-    simp [← hnew.2] at he
-    rw [← he]
-  · rw [hashAt_eq_hash fun hl hj => hnew ⟨hl, hj⟩] at hw
-    unfold hash at hw
-    split at hw
-    · simp only [support_pure, Set.mem_singleton_iff] at hw
-      subst hw
-      exact hst e he
-    · next hl =>
-      simp only [support_map, Set.mem_image] at hw
-      obtain ⟨t, -, rfl⟩ := hw
-      have hj : st.table.length ≠ j := fun hj => hnew ⟨hl, hj⟩
-      rcases lt_or_gt_of_ne hj with h | h
-      · simp [List.getElem?_append_right h.le] at he
-        rw [List.getElem?_eq_none (by simp; omega)] at he
-        simp at he
-      · rw [List.getElem?_append_left h] at he
-        exact hst e he
-
-omit [AddCommGroup G₁] [Module F G₁] in
-/-- With the message scalar at `j` fixed to `z`, the message table entry at `j` has scalar `z`. -/
-theorem implAt_preservesInv_scalarAt (g₂ : G₂) (a : F) (j : ℕ) (z : F) :
-    QueryImpl.PreservesInv (implAt (M := M) (G₁ := G₁) g₂ a j z)
-      fun st => ∀ e, st.msg.table[j]? = some e → e.2 = z := by
-  intro t st hst x hx
-  rcases t with n | (m | m) | y
-  · change x ∈ support ((·, st) <$> _) at hx
-    simp only [support_map, Set.mem_image] at hx
-    obtain ⟨_, -, rfl⟩ := hx
-    exact hst
-  · change x ∈ support ((fun w => _) <$> hashAt g₂ j z m st.msg) at hx
-    simp only [support_map, Set.mem_image] at hx
-    obtain ⟨w, hw, rfl⟩ := hx
-    exact scalarAt_of_mem_support_hashAt hw hst
-  · change x ∈ support ((fun w => _) <$> ((fun w => _) <$> hashAt g₂ j z m st.msg)) at hx
-    simp only [support_map, Set.mem_image] at hx
-    obtain ⟨_, ⟨w, hw, rfl⟩, rfl⟩ := hx
-    exact scalarAt_of_mem_support_hashAt hw hst
-  · change x ∈ support (keyHash g₂ y st) at hx
-    rw [(mem_support_keyHash hx).2.2.2.1]
-    exact hst
-
-omit [AddCommGroup G₁] [Module F G₁] in
-/-- A step of the oracles never lowers the number of key hash calls. -/
-theorem implAt_preservesInv_keyCalls (g₂ : G₂) (a : F) (j : ℕ) (z : F) (c : ℕ) :
-    QueryImpl.PreservesInv (implAt (M := M) (G₁ := G₁) g₂ a j z) fun st => c ≤ st.keyCalls := by
-  intro t st hst x hx
-  rcases t with n | (m | m) | y
-  · change x ∈ support ((·, st) <$> _) at hx
-    simp only [support_map, Set.mem_image] at hx
-    obtain ⟨_, -, rfl⟩ := hx
-    exact hst
-  · change x ∈ support ((fun w => _) <$> hashAt g₂ j z m st.msg) at hx
-    simp only [support_map, Set.mem_image] at hx
-    obtain ⟨w, -, rfl⟩ := hx
-    exact hst
-  · change x ∈ support ((fun w => _) <$> ((fun w => _) <$> hashAt g₂ j z m st.msg)) at hx
-    simp only [support_map, Set.mem_image] at hx
-    obtain ⟨_, ⟨w, -, rfl⟩, rfl⟩ := hx
-    exact hst
-  · change x ∈ support (keyHash g₂ y st) at hx
-    rw [(mem_support_keyHash hx).2.2.2.2]
-    omega
 
 omit [AddCommGroup G₁] [Module F G₁] in
 /-- The key hash calls of verification answer the table scalar of each key times `g2`.
@@ -203,7 +88,7 @@ theorem mem_support_mapM_keyHash {g₂ : G₂} {a : F} {j : ℕ} {z : F} :
       · exact hvl k' hk'
 
 omit [AddCommGroup G₁] [Module F G₁] in
-/-- A run is the adversary's run, then the message hash call, then one key hash call per key.
+/-- A reachable output comes from the adversary's run, the message hash, then one key hash per key.
 
 The adversary's run never lowers the number of key hash calls. -/
 theorem mem_support_run_implAt {g₂ : G₂} {a : F} {j : ℕ} {z : F}
@@ -266,7 +151,7 @@ theorem keyCalls_of_mem_support {g₂ : G₂} {a : F} {j : ℕ} {z : F}
 
 /-- A winning run whose forged message sits at position `j` gives the reduction `(a * z) • g2`.
 
-Every element of `G1` is a multiple of `g1`, and `z ≠ 0`.
+Assume the scheme is sound and every element of `G1` is a multiple of `g1`, and let `z ≠ 0`.
 
 No key other than the honest one hashes with the scalar 0.
 
@@ -319,13 +204,15 @@ theorem extract_of_wins {scheme : Scheme G₁ G₂} (hsound : scheme.Sound F)
     cases he
     exact hs
 
-/-- **A winning run at `j` is a success of the reduction with the guess `j`.**
+/-- **A winning run at `j` is at most as likely as a success of the reduction with the guess `j`.**
 
-The game draws the message scalar `z ≠ 0` at `j`, and the honest key scalar `t`.
+The game fixes the message scalar `z ≠ 0` at `j`, and the honest key scalar `t`.
 
 The reduction gets `X2 = a • g2` and the challenge `Y = z • g2`, and uses `t` for the honest key.
 
-The event also asks that no other key hashes to 0, and that the honest count is not zero. -/
+The event also asks that no other key has the scalar 0, and that the honest count is not zero.
+
+The scheme is assumed sound, and every element of `G1` a multiple of `g1`. -/
 theorem prEvent_wins_le_extract {scheme : Scheme G₁ G₂} (hsound : scheme.Sound F)
     (hgen : ∀ x : G₁, ∃ sk : F, x = sk • scheme.g₁) (adversary : Adversary G₁ G₂ M)
     (a t : F) {z : F} (hz : z ≠ 0) (j : ℕ) :

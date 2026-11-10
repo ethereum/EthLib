@@ -3,8 +3,8 @@ module
 public import EthLib.Cryptography.Proofs.Bls.Security.PopEager
 public import EthLib.Cryptography.Proofs.Bls.Security.PopExtract
 public import EthLib.Cryptography.Proofs.Bls.Security.PopReduction
-public import EthLib.Cryptography.Proofs.Bls.Security.PopZeroKey
 public import EthLib.Cryptography.Proofs.Bls.Security.PopWins
+public import EthLib.Cryptography.Proofs.Bls.Security.PopZeroKey
 public import EthLib.Cryptography.Proofs.Bls.Security.Refinement
 
 /-!
@@ -44,7 +44,9 @@ Fix the secret and the scalar of the honest key hash, in a game within `qK` key 
 
 Then some other key gets the scalar 0 with probability at most `(qK - 1) / |F|`.
 
-A winning forgery at the guessed position, with nonzero scalars, gives the reduction its answer.
+A winning forgery at the guessed position gives the reduction its answer.
+
+That holds under the hypotheses of the extraction step, with no other key of scalar 0.
 
 No bound on the aggregate game is proved yet.
 -/

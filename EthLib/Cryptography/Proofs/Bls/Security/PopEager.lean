@@ -154,6 +154,35 @@ theorem mem_support_hashAt {g₂ : G₂} {j : ℕ} {z : F} {m : M} {st : State F
     · exact ⟨[], by simp [h]⟩
     · exact ⟨[e], h⟩
 
+/-- A message hash call with the scalar `z` fixed at `j` keeps the scalar `z` at position `j`. -/
+theorem scalarAt_of_mem_support_hashAt {g₂ : G₂} {j : ℕ} {z : F} {m : M}
+    {st : Security.State F M} {w : G₂ × Security.State F M}
+    (hw : w ∈ support (hashAt g₂ j z m st)) (hst : ∀ e, st.table[j]? = some e → e.2 = z) :
+    ∀ e, w.2.table[j]? = some e → e.2 = z := by
+  intro e he
+  by_cases hnew : lookup m st.table = none ∧ st.table.length = j
+  · rw [hashAt_of_new hnew.1 hnew.2] at hw
+    simp only [support_pure, Set.mem_singleton_iff] at hw
+    subst hw
+    simp [← hnew.2] at he
+    rw [← he]
+  · rw [hashAt_eq_hash fun hl hj => hnew ⟨hl, hj⟩] at hw
+    unfold hash at hw
+    split at hw
+    · simp only [support_pure, Set.mem_singleton_iff] at hw
+      subst hw
+      exact hst e he
+    · next hl =>
+      simp only [support_map, Set.mem_image] at hw
+      obtain ⟨t, -, rfl⟩ := hw
+      have hj : st.table.length ≠ j := fun hj => hnew ⟨hl, hj⟩
+      rcases lt_or_gt_of_ne hj with h | h
+      · simp [List.getElem?_append_right h.le] at he
+        rw [List.getElem?_eq_none (by simp; omega)] at he
+        simp at he
+      · rw [List.getElem?_append_left h] at he
+        exact hst e he
+
 namespace Pop
 
 variable [DecidableEq G₁] [AddCommGroup G₁] [Module F G₁]
