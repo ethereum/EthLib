@@ -219,7 +219,9 @@ private theorem foldlM_activateAtGenesis {state after : BeaconState preset fork}
 
 /-- A candidate genesis state is within every budget that covers the amounts of its deposits.
 
-The bound on the inactivity scores can be any number, as this genesis comes before Altair. -/
+The bound on the inactivity scores can be any number, as this genesis comes before Altair.
+
+The candidate genesis fails from Altair, so the theorem says something only at Phase 0. -/
 theorem initializeBeaconStateFromEth1_withinBudget {eth1BlockHash : Hash32}
     {eth1Timestamp : UInt64} {deposits : Array Deposit} {after : BeaconState preset fork}
     {budget : Nat} (scoreBound : Nat)

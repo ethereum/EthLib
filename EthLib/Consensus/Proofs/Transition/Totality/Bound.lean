@@ -43,7 +43,9 @@ They are not enough alone.
 
 A run also needs the budget below a ceiling, and its epochs within a horizon.
 
-It also needs the lists of the state to have matching sizes, and its indices to be in range.
+It also needs the inactivity scores and the participation lists to match the registry.
+
+Its indices must be in range.
 
 The budget covers the larger of each balance and its effective balance, and the pending deposits.
 
@@ -195,7 +197,7 @@ theorem getTotalActiveBalance_exists_ok {state : BeaconState preset fork}
 
 /-- The sum over the registry of the larger of each balance and its effective balance.
 
-The registry and the balances are read in step, so a balance past the registry does not count. -/
+The registry and the balances are read in step, so an entry past the shorter list does not count. -/
 def stakeSum (state : BeaconState preset fork) : Nat :=
   (state.validators.data.toList.zipWith (fun validator balance =>
     max validator.effectiveBalance.toNat balance.toNat) state.balances.data.toList).sum
@@ -217,7 +219,11 @@ The slashed balances of the recent epochs fit in the same budget, on their own.
 
 From Altair each inactivity score is at most a bound.
 
-From Electra the balances left to consume for deposits and for exits fit in the budget too. -/
+From Electra the balances left to consume for deposits and for exits fit in the budget too.
+
+The balances of the builders and the churn of the consolidations are left out.
+
+A run of slots does no checked sum on them. -/
 structure WithinBudget (budget scoreBound : Nat) (state : BeaconState preset fork) : Prop where
   within : state.RegistryWithinLimit
   matched : BalancesMatch state
