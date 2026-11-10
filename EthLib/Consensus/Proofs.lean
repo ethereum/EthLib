@@ -90,6 +90,7 @@ public import EthLib.Consensus.Proofs.Signing
 public import EthLib.Consensus.Proofs.Time
 public import EthLib.Consensus.Proofs.Transition.Block
 public import EthLib.Consensus.Proofs.Transition.BlockRewards
+public import EthLib.Consensus.Proofs.Transition.BuilderDebt
 public import EthLib.Consensus.Proofs.Transition.BuilderPayments
 public import EthLib.Consensus.Proofs.Transition.BuilderRequests
 public import EthLib.Consensus.Proofs.Transition.ConsolidationWindow
