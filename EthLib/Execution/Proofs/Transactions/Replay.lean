@@ -114,6 +114,8 @@ The account must not be created at the start, and nothing must be marked at the 
 
 Before Cancun, the account must have no code, and the message no authorization.
 
+Before Cancun, the account still has no code at the end.
+
 That holds whether or not the message ends with an error. -/
 theorem processMessageCall_keeps {Meter : Type} [GasMeter Meter] [LawfulGasMeter Meter]
     {chainId : Nat} {message : Message fork} {state : State.TransactionState}
@@ -128,14 +130,16 @@ theorem processMessageCall_keeps {Meter : Type} [GasMeter Meter] [LawfulGasMeter
     (code : fork < .dencun →
       auths = [] ∧ (state.getAccount address).codeHash = EMPTY_CODE_HASH) :
     (state.getAccount address).nonce ≤ (output.state.getAccount address).nonce ∧
-      address ∉ output.accountsToDelete := by
+      address ∉ output.accountsToDelete ∧
+      (fork < .dencun → (output.state.getAccount address).codeHash = EMPTY_CODE_HASH) := by
   have marks := fun hd : .dencun ≤ fork => accountsToDelete_processMessageCall hd h empty
   unfold processMessageCall at h
   split at h
   · split at h
     · cases h
     · cases h
-      exact ⟨Nat.le_refl _, by simp [CallOutput.ofHalt]⟩
+      refine ⟨Nat.le_refl _, by simp [CallOutput.ofHalt], fun hd => ?_⟩
+      exact (code hd).2
   rename_i first hfirst
   obtain ⟨hcreate, hcode⟩ := prepareFirstFrame_nonce_code hfirst
   have hn := nonceLe_prepareFirstFrame hfirst
@@ -163,7 +167,7 @@ theorem processMessageCall_keeps {Meter : Type} [GasMeter Meter] [LawfulGasMeter
       rw [heq] at this
       omega
     have fr := createsFresh_processCreateMessage hrun
-    refine ⟨?_, fun mem => ?_⟩
+    refine ⟨?_, fun mem => ?_, fun hd => ?_⟩
     · rw [state_ofFrame]
       exact Nat.le_trans (hn address) (fr.nonce address)
     · by_cases hd : .dencun ≤ fork
@@ -174,11 +178,13 @@ theorem processMessageCall_keeps {Meter : Type} [GasMeter Meter] [LawfulGasMeter
         · exact ne h0.symm
       · exact unmarked_processCreateMessage hrun ne (plain (Nat.lt_of_not_le hd)) unmarked0
           (accountsToDelete_ofFrame_subset _ _ _ address mem)
+    · rw [state_ofFrame]
+      exact (PlainAccount.of_createsFresh fr (plain hd) ne.symm).2.2
   · rename_i t hsome
     obtain ⟨⟨evm, used⟩, hrun, h⟩ := bind_ok_iff.mp h
     cases h
     have fr := createsFresh_processMessage hrun
-    refine ⟨?_, fun mem => ?_⟩
+    refine ⟨?_, fun mem => ?_, fun hd => ?_⟩
     · rw [state_ofFrame]
       exact Nat.le_trans (hn address) (fr.nonce address)
     · by_cases hd : .dencun ≤ fork
@@ -197,6 +203,8 @@ theorem processMessageCall_keeps {Meter : Type} [GasMeter Meter] [LawfulGasMeter
         simp [State.TransactionState.getCode] at hc
         rw [← hc]
         rfl
+    · rw [state_ofFrame]
+      exact (PlainAccount.of_createsFresh fr (plain hd) id).2.2
 
 end Meter
 
@@ -230,7 +238,7 @@ private theorem buyGas_nonce_codeHash {env : BlockEnvironment fork}
 
 After that purchase, it keeps or raises every nonce above 0.
 
-Before Cancun, the account must have no code after the purchase. -/
+Before Cancun, the account must have no code after the purchase, and it has none at the end. -/
 private theorem runTransaction_nonce_le {Meter : Type} [GasMeter Meter] [LawfulGasMeter Meter]
     {env : BlockEnvironment fork} {block : State.BlockState} {included : Included}
     {out : TransactionOutput} (hauth : fork < .pectra → tx.authorizations = [])
@@ -238,7 +246,8 @@ private theorem runTransaction_nonce_le {Meter : Type} [GasMeter Meter] [LawfulG
     ∃ bought, buyGas env (.ofBlock block) included.sender tx = .ok bought ∧
       ∀ address, 1 ≤ (bought.getAccount address).nonce →
         (fork < .dencun → (bought.getAccount address).codeHash = EMPTY_CODE_HASH) →
-        (bought.getAccount address).nonce ≤ (out.state.getAccount address).nonce := by
+        (bought.getAccount address).nonce ≤ (out.state.getAccount address).nonce ∧
+          (fork < .dencun → (out.state.getAccount address).codeHash = EMPTY_CODE_HASH) := by
   unfold runTransaction at h
   obtain ⟨target, htarget, h⟩ := bind_ok_iff.mp h
   obtain ⟨bought, hbought, h⟩ := bind_ok_iff.mp h
@@ -269,21 +278,23 @@ private theorem runTransaction_nonce_le {Meter : Type} [GasMeter Meter] [LawfulG
     nonce (by simp [created]) (by simp)
     (fun hd => ⟨hauth (Nat.lt_of_lt_of_le hd (by decide)), code hd⟩)
   have settledNonce := (settleGas_accounts hsettle address).2.1
-  rw [getAccount_deleteAccounts hdeleted (by omega) keeps.2]
-  omega
+  have settledCode := (settleGas_accounts hsettle address).2.2.1
+  rw [getAccount_deleteAccounts hdeleted (by omega) keeps.2.1]
+  exact ⟨by omega, fun hd => settledCode.trans (keeps.2.2 hd)⟩
 
 /-- A transaction that runs buys the gas first.
 
 After that purchase, it keeps or raises every nonce above 0.
 
-Before Cancun, the account must have no code after the purchase. -/
+Before Cancun, the account must have no code after the purchase, and it has none at the end. -/
 private theorem processTransaction_nonce_le_bought {env : BlockEnvironment fork}
     {block : State.BlockState} {included : Included} {out : TransactionOutput}
     (hfork : tx.fork ≤ fork) (h : processTransaction env block included tx = .ok out) :
     ∃ bought, buyGas env (.ofBlock block) included.sender tx = .ok bought ∧
       ∀ address, 1 ≤ (bought.getAccount address).nonce →
         (fork < .dencun → (bought.getAccount address).codeHash = EMPTY_CODE_HASH) →
-        (bought.getAccount address).nonce ≤ (out.state.getAccount address).nonce := by
+        (bought.getAccount address).nonce ≤ (out.state.getAccount address).nonce ∧
+          (fork < .dencun → (out.state.getAccount address).codeHash = EMPTY_CODE_HASH) := by
   have hauth := authorizations_eq_nil hfork
   by_cases hhegota : .hegota ≤ fork
   · rw [processTransaction_of_hegota_le hhegota] at h
@@ -311,11 +322,11 @@ theorem processTransaction_nonce_lt {env : BlockEnvironment fork} {block : State
   obtain ⟨bought, hbought, le⟩ :=
     processTransaction_nonce_le_bought (checkInclusion_fork_le hcheck) h
   have bumped := (buyGas_sender rfl hbought).2.2
-  have := le included.sender (by omega) (fun hd => by
+  have := (le included.sender (by omega) (fun hd => by
     rw [(buyGas_keeps hbought).1]
     rcases hcodeOf with hempty | ⟨hge, -⟩
     · exact hempty
-    · exact absurd hge (Nat.not_le.mpr (Nat.lt_of_lt_of_le hd (by decide))))
+    · exact absurd hge (Nat.not_le.mpr (Nat.lt_of_lt_of_le hd (by decide))))).1
   omega
 
 /-- A transaction that runs lowers no nonce of any account.
@@ -338,7 +349,33 @@ theorem processTransaction_nonce_le {env : BlockEnvironment fork} {block : State
   · omega
   obtain ⟨bought, hbought, le⟩ := processTransaction_nonce_le_bought hfork h
   obtain ⟨hn, hc⟩ := buyGas_nonce_codeHash hbought address
-  have := le address (by omega) (fun hd => hc ▸ code hd)
+  have := (le address (by omega) (fun hd => hc ▸ code hd)).1
   omega
+
+/-- Before Cancun, a transaction that runs gives no code to an account with a nonce.
+
+The account has no code in the state of the block.
+
+It has a nonce there, or it is the sender, whose nonce the gas purchase raises.
+
+Its type must exist at the fork of the block, which a passing inclusion check gives.
+
+That holds whether or not its message ends with an error. -/
+theorem processTransaction_codeHash_of_lt_dencun {env : BlockEnvironment fork}
+    {block : State.BlockState} {included : Included} {out : TransactionOutput}
+    {address : Address} (hd : fork < .dencun) (hfork : tx.fork ≤ fork)
+    (h : processTransaction env block included tx = .ok out)
+    (nonce : 1 ≤ ((State.TransactionState.ofBlock block).getAccount address).nonce ∨
+      address = included.sender)
+    (code : ((State.TransactionState.ofBlock block).getAccount address).codeHash =
+      EMPTY_CODE_HASH) :
+    (out.state.getAccount address).codeHash = EMPTY_CODE_HASH := by
+  obtain ⟨bought, hbought, le⟩ := processTransaction_nonce_le_bought hfork h
+  obtain ⟨hn, hc⟩ := buyGas_nonce_codeHash hbought address
+  refine (le address ?_ (fun _ => hc ▸ code)).2 hd
+  rcases nonce with nonce | rfl
+  · omega
+  · have := (buyGas_sender rfl hbought).2.2
+    omega
 
 end EthLib.Execution.Transactions

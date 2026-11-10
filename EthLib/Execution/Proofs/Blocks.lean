@@ -14,6 +14,7 @@ public import EthLib.Execution.Proofs.Blocks.ProofOfWork
 public import EthLib.Execution.Proofs.Blocks.Header
 public import EthLib.Execution.Proofs.Blocks.Ommers
 public import EthLib.Execution.Proofs.Blocks.Receipt
+public import EthLib.Execution.Proofs.Blocks.Replay
 public import EthLib.Execution.Proofs.Blocks.Rewards
 public import EthLib.Execution.Proofs.Blocks.Requests
 public import EthLib.Execution.Proofs.Blocks.Roots

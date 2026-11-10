@@ -73,12 +73,7 @@ theorem getAccount_processWithdrawals {fork : Fork} {block block' : BlockState}
   · rename_i tx htx
     cases h
     -- The block after the withdrawals reads its accounts as the last step does.
-    have hread : (TransactionState.ofBlock tx.incorporateTxIntoBlock.parent).getAccount address =
-        tx.getAccount address := by
-      unfold TransactionState.getAccount
-      rw [← TransactionState.getAccountOptional_incorporateTxIntoBlock tx address]
-      rfl
-    rw [hread, withdrawnTo_eq_sum]
+    rw [TransactionState.getAccount_ofBlock_incorporateTxIntoBlock, withdrawnTo_eq_sum]
     exact TransactionState.getAccount_foldlM_createEther _ _ withdrawals htx address
 
 /-- The withdrawals of a block succeed exactly when each balance stays below `2^256`.

@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.MapM
 public import EthLib.Execution.Blocks.DaoFork
 public import EthLib.Execution.Proofs.State.Tracker
 
@@ -119,6 +120,19 @@ theorem applyDaoFork_spec {fork : Fork} {tx tx' : TransactionState}
       ∀ other, other ∉ DAO_ACCOUNTS → other ≠ DAO_RECOVERY →
         tx'.getAccount other = tx.getAccount other :=
   foldlM_moveEther DAO_RECOVERY DAO_ACCOUNTS tx tx' daoAccounts_nodup daoRecovery_not_mem h
+
+/-- The DAO Fork keeps every nonce and every code hash. -/
+theorem applyDaoFork_nonce_codeHash {fork : Fork} {tx tx' : TransactionState}
+    (h : applyDaoFork fork tx = .ok tx') (address : Address) :
+    (tx'.getAccount address).nonce = (tx.getAccount address).nonce ∧
+      (tx'.getAccount address).codeHash = (tx.getAccount address).codeHash :=
+  foldlM_ok_invariant (fun mid : TransactionState =>
+      (mid.getAccount address).nonce = (tx.getAccount address).nonce ∧
+        (mid.getAccount address).codeHash = (tx.getAccount address).codeHash)
+    (fun _ _ _ keeps hstep => by
+      obtain ⟨hn, hc⟩ := moveEther_nonce_codeHash hstep address
+      exact ⟨hn.trans keeps.1, hc.trans keeps.2⟩)
+    ⟨rfl, rfl⟩ h
 
 /-- Moving each listed balance to an outside recipient succeeds when a sum stays below 2^256.
 

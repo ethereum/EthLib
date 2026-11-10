@@ -3,6 +3,7 @@ module
 public import EthLib.Base.Except
 public import EthLib.Base.Proofs.MapM
 public import EthLib.Execution.Blocks.SystemCall
+public import EthLib.Execution.Blocks.Transition
 
 /-!
 # Proofs: the system calls of a block
@@ -20,6 +21,8 @@ From Glamsterdam, the builder deposits and exits follow, by EIP-8282.
 Each list holds its type byte and at least one byte of data.
 
 Before Pectra a block reads no request.
+
+The calls at the start of a block, and the requests of a block, are stated call by call.
 
 A system call has 30,000,000 gas at every fork.
 
@@ -156,7 +159,74 @@ theorem checkedSystemCall_eq_systemCallFailed_iff {address : Address} {error : E
         cases call.error <;>
           simp [throw, throwThe, MonadExceptOf.throw, pure, Except.pure, eq_comm, hNe]
 
+/-! ## The calls at the start of a block -/
+
+/-- The system calls at the start of a block pass through one body between the two calls.
+
+From Dencun, the beacon roots contract runs on the body, and its call joins it to give that body.
+
+Before Dencun, that body is the body at the start.
+
+From Pectra, the history storage contract runs on that body, and its call joins it to give the end.
+
+Before Pectra, the body at the end is that body. -/
+theorem startSystemCalls_eq_ok {parentHash : Hash32} {body body' : BodyState}
+    (h : startSystemCalls env parentHash body = .ok body') :
+    ∃ mid : BodyState,
+      (∀ hDencun : .dencun ≤ fork, ∃ out,
+        systemCall env body.block BEACON_ROOTS_ADDRESS
+          ⟨(env.parentBeaconBlockRoot hDencun).toArray⟩ = .ok out ∧
+        body.join out.state = .ok mid) ∧
+      (¬.dencun ≤ fork → mid = body) ∧
+      (.pectra ≤ fork → ∃ out,
+        systemCall env mid.block HISTORY_STORAGE_ADDRESS ⟨parentHash.toArray⟩ = .ok out ∧
+        mid.join out.state = .ok body') ∧
+      (¬.pectra ≤ fork → body' = mid) := by
+  -- The second call, from the body after the first.
+  have second : ∀ mid : BodyState,
+      (if Fork.pectra ≤ fork then do
+          let out ← systemCall env mid.block HISTORY_STORAGE_ADDRESS ⟨parentHash.toArray⟩
+          (mid.join out.state).mapError EvmError.state
+        else pure mid) = .ok body' →
+      (.pectra ≤ fork → ∃ out,
+        systemCall env mid.block HISTORY_STORAGE_ADDRESS ⟨parentHash.toArray⟩ = .ok out ∧
+        mid.join out.state = .ok body') ∧
+      (¬.pectra ≤ fork → body' = mid) := by
+    intro mid h
+    split at h
+    · rename_i hPectra
+      obtain ⟨out, hOut, hJoin⟩ := bind_ok_iff.mp h
+      exact ⟨fun _ => ⟨out, hOut, mapError_ok_iff.mp hJoin⟩, fun h => absurd hPectra h⟩
+    · rename_i hPectra
+      exact ⟨fun h => absurd h hPectra, fun _ => (Except.ok.inj h).symm⟩
+  unfold startSystemCalls at h
+  dsimp only at h
+  split at h
+  · rename_i hDencun
+    obtain ⟨out, hOut, h⟩ := bind_ok_iff.mp h
+    obtain ⟨mid, hMid, h⟩ := bind_ok_iff.mp h
+    exact ⟨mid, fun _ => ⟨out, hOut, mapError_ok_iff.mp hMid⟩, fun h => absurd hDencun h,
+      second mid h⟩
+  · rename_i hDencun
+    obtain ⟨mid, hMid, h⟩ := bind_ok_iff.mp h
+    cases hMid
+    exact ⟨body, fun h => absurd h hDencun, fun _ => rfl, second _ h⟩
+
 /-! ## The requests -/
+
+/-- The call to one request contract must succeed on the body so far, and then joins it.
+
+Its requests follow those read so far. -/
+theorem readRequest_eq_ok {state state' : BodyState × List ByteArray}
+    {contract : UInt8 × Address} (h : readRequest env state contract = .ok state') :
+    ∃ out, checkedSystemCall env state.1.block contract.2 .empty = .ok out ∧
+      state.1.join out.state = .ok state'.1 ∧
+      state'.2 = state.2 ++ requestList contract.1 out.output := by
+  unfold readRequest at h
+  obtain ⟨out, hOut, h⟩ := bind_ok_iff.mp h
+  obtain ⟨body, hBody, h⟩ := bind_ok_iff.mp h
+  cases h
+  exact ⟨out, hOut, mapError_ok_iff.mp hBody, rfl⟩
 
 /-- A list made by `requestList` holds its type byte first, then at least one byte. -/
 theorem mem_requestList {type : UInt8} {r : ByteArray} (h : r ∈ requestList type data) :
@@ -187,12 +257,9 @@ theorem foldlM_requests {contracts : List (UInt8 × Address)} {start : BodyState
   | cons contract rest ih =>
     simp only [List.foldlM_cons] at h
     obtain ⟨next, hNext, hRest⟩ := bind_ok_iff.mp h
-    unfold readRequest at hNext
-    obtain ⟨out, hOut, hNext⟩ := bind_ok_iff.mp hNext
-    obtain ⟨body, hBody, hEq⟩ := bind_ok_iff.mp hNext
-    cases hEq
+    obtain ⟨out, -, -, hNext⟩ := readRequest_eq_ok hNext
     obtain ⟨added, hAdded, hSize, hSub⟩ := ih hRest
-    refine ⟨requestList contract.1 out.output ++ added, by simp [hAdded], ?_, ?_⟩
+    refine ⟨requestList contract.1 out.output ++ added, by simp [hAdded, hNext], ?_, ?_⟩
     · intro r hr
       rcases List.mem_append.mp hr with hr | hr
       · exact (mem_requestList hr).1
@@ -214,6 +281,11 @@ theorem readRequests_of_lt_pectra {body : BodyState} (h : fork < .pectra) :
   · exact absurd ‹_› (Nat.not_le_of_lt h)
   · rfl
 
+/-- From Pectra, a block calls each of its request contracts in turn, from no request. -/
+theorem readRequests_of_pectra {body : BodyState} (h : .pectra ≤ fork) :
+    readRequests env body = (requestContracts fork).foldlM (readRequest env) (body, []) := by
+  simp only [readRequests, h, ↓reduceIte]
+
 /-- The requests of a block have data, and come in the order of their types.
 
 Withdrawals, of type 1, come before consolidations, of type 2.
@@ -226,13 +298,14 @@ theorem readRequests_requests {body : BodyState} {result : BodyState × List Byt
     (h : readRequests env body = .ok result) :
     (∀ r ∈ result.2, 1 < r.size) ∧
       (result.2.map (·.data[0]?)).Sublist (((requestContracts fork).map Prod.fst).map some) := by
-  unfold readRequests at h
-  split at h
-  · obtain ⟨added, hAdded, hSize, hSub⟩ := foldlM_requests h
+  by_cases hPectra : .pectra ≤ fork
+  · rw [readRequests_of_pectra hPectra] at h
+    obtain ⟨added, hAdded, hSize, hSub⟩ := foldlM_requests h
     simp only [List.nil_append] at hAdded
     rw [hAdded]
     exact ⟨hSize, hSub⟩
-  · cases h
+  · rw [readRequests_of_lt_pectra (Nat.lt_of_not_le hPectra)] at h
+    cases h
     simp
 
 /-- Up to BPO5, a block reads the withdrawal and consolidation requests only. -/
@@ -248,5 +321,30 @@ theorem requestContracts_types_of_glamsterdam (h : .glamsterdam ≤ fork) :
     (requestContracts fork).map Prod.fst = [1, 2, 3, 4] := by
   simp only [requestContracts, h, ↓reduceIte]
   rfl
+
+/-- The requests of a block, after its transactions and withdrawals.
+
+Before Pectra, the body stays as it was and there is no request.
+
+From Pectra, the deposits come from the logs, and each request contract is called in turn.
+
+The deposits come first, then the requests of the contracts. -/
+theorem blockRequests_eq_ok {depositContract : Address} {body : BodyState} {logs : List Log}
+    {result : BodyState × List ByteArray}
+    (h : blockRequests depositContract env body logs = .ok result) :
+    (¬.pectra ≤ fork → result = (body, [])) ∧
+      (.pectra ≤ fork → ∃ deposits read,
+        depositRequests depositContract logs = .ok deposits ∧
+        (requestContracts fork).foldlM (readRequest env) (body, []) = .ok read ∧
+        result = (read.1, requestList DEPOSIT_REQUEST_TYPE deposits ++ read.2)) := by
+  unfold blockRequests at h
+  refine ⟨fun hPectra => ?_, fun hPectra => ?_⟩
+  · simp only [hPectra, ↓reduceIte] at h
+    exact (Except.ok.inj h).symm
+  · simp only [hPectra, ↓reduceIte] at h
+    obtain ⟨deposits, hDeposits, h⟩ := bind_ok_iff.mp h
+    obtain ⟨read, hRead, h⟩ := bind_ok_iff.mp h
+    rw [readRequests_of_pectra hPectra] at hRead
+    exact ⟨deposits, read, mapError_ok_iff.mp hDeposits, hRead, (Except.ok.inj h).symm⟩
 
 end EthLib.Execution.Blocks
