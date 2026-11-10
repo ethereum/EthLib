@@ -12,6 +12,7 @@ public import EthLib.Networking.Proofs.Discv5.Session
 public import EthLib.Networking.Proofs.Devp2p.ForkId
 public import EthLib.Networking.Proofs.Devp2p.P2p
 public import EthLib.Networking.Proofs.Discv4.Packet
+public import EthLib.Networking.Proofs.Encoding.Protobuf
 public import EthLib.Networking.Proofs.Encoding.Uvarint
 public import EthLib.Networking.Proofs.Encoding.Varint
 public import EthLib.Networking.Proofs.Enr.Consensus
