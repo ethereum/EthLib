@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Proofs.MapM
+public import EthLib.Execution.Proofs.Transactions.Authorization
 public import EthLib.Execution.Proofs.Transactions.Settlement
 public import EthLib.Execution.Transactions.Process
 
@@ -137,6 +138,14 @@ theorem processTransaction_of_hegota_le {env : BlockEnvironment fork}
     processTransaction env block included tx = .error (.forkNotYetSpecified fork) := by
   simp only [processTransaction, h, ↓reduceIte]
 
+/-- A transaction that runs is from a fork before Hegotá. -/
+theorem processTransaction_lt_hegota {env : BlockEnvironment fork} {block : State.BlockState}
+    {included : Included} {out : TransactionOutput}
+    (h : processTransaction env block included tx = .ok out) : fork < .hegota := by
+  refine Nat.lt_of_not_le fun hle => ?_
+  rw [processTransaction_of_hegota_le hle] at h
+  cases h
+
 /-- At Glamsterdam, a transaction runs with the meter of EIP-8037. -/
 theorem processTransaction_of_glamsterdam {env : BlockEnvironment fork}
     {block : State.BlockState} {included : Included} (h : .glamsterdam ≤ fork)
@@ -246,7 +255,80 @@ theorem processTransaction_of_lt_glamsterdam {env : BlockEnvironment fork}
   have hlate : ¬Fork.hegota ≤ fork := fun hh => hpre (Nat.le_trans (by decide) hh)
   simp only [processTransaction, hlate, hpre, ↓reduceIte, GE.ge]
 
+/-! ## The meter of the first frame -/
+
+section Meter
+
+variable {Q : Meter → Meter → Prop} (refl : ∀ meter, Q meter meter)
+  (trans : ∀ {a b c}, Q a b → Q b c → Q a c)
+  (charge : ∀ {meter after : Meter} {amount : Nat}, GasMeter.charge meter amount = .ok after →
+    Q meter after)
+  (chargeState : ∀ {meter after : Meter} {amount : Nat},
+    GasMeter.chargeState meter amount = .ok after → Q meter after)
+
+include refl trans charge chargeState
+
+omit [LawfulGasMeter Meter] in
+/-- The first frame of a message starts with a meter related to the fresh meter of the message.
+
+The relation must hold of each charge and of a commit. -/
+theorem meter_prepareFirstFrame (commit : ∀ meter : Meter, Q meter (GasMeter.commit meter))
+    {chainId : Nat} {message : Message fork} {state : State.TransactionState}
+    {substate : Substate} {auths : List Authorization} {paid : Std.ExtTreeSet Address}
+    {first : FirstFrame fork Meter}
+    (h : prepareFirstFrame chainId message state substate auths paid = .ok first) :
+    Q (GasMeter.start message.gas message.reservoir) first.meter := by
+  unfold prepareFirstFrame at h
+  dsimp only [bind, Except.bind, pure, Except.pure] at h
+  repeat' split at h
+  all_goals first | (cases h; done) | skip
+  all_goals
+    simp only [Except.ok.injEq] at h
+    subst h
+    try have hA := meter_applyAuthorizations refl trans charge chargeState
+          ‹applyAuthorizations _ _ _ _ _ _ _ = .ok _›
+    try (have hB := trans hA (commit _))
+    first
+    | exact refl _
+    | exact chargeState (mapError_ok_iff.mp (by assumption))
+    | exact hB
+    | exact trans hB (chargeState (mapError_ok_iff.mp (by assumption)))
+    | exact trans hB (charge (mapError_ok_iff.mp (by assumption)))
+    | exact trans (trans hB (chargeState (mapError_ok_iff.mp (by assumption))))
+        (charge (mapError_ok_iff.mp (by assumption)))
+
+omit [LawfulGasMeter Meter] refl trans charge chargeState in
+/-- The message of the first frame holds exactly the gas that its meter holds. -/
+theorem gas_prepareFirstFrame {chainId : Nat} {message : Message fork}
+    {state : State.TransactionState} {substate : Substate} {auths : List Authorization}
+    {paid : Std.ExtTreeSet Address} {first : FirstFrame fork Meter}
+    (h : prepareFirstFrame chainId message state substate auths paid = .ok first) :
+    first.message.gas = GasMeter.gasHeld first.meter := by
+  unfold prepareFirstFrame at h
+  dsimp only [bind, Except.bind, pure, Except.pure] at h
+  repeat' split at h
+  all_goals first | (cases h; done) | skip
+  all_goals
+    simp only [Except.ok.injEq] at h
+    subst h
+    rfl
+
+end Meter
+
 /-! ## The gas used -/
+
+/-- The message of a transaction holds the gas it is given. -/
+theorem gas_transactionMessage {env : BlockEnvironment fork} {txEnv : TransactionEnvironment fork}
+    {state : State.TransactionState} {sender target : Address} {gas : Nat} {tx : Transaction}
+    {message : Message fork}
+    (h : transactionMessage env txEnv state sender target gas tx = .ok message) :
+    message.gas = gas := by
+  unfold transactionMessage at h
+  split at h
+  · obtain ⟨_, -, h⟩ := map_ok_iff.mp h
+    rw [← h]
+  · cases h
+    rfl
 
 /-- With one counter of gas, a message given no reservoir hands back none. -/
 private theorem processMessageCall_reservoir {chainId : Nat} {message : Message fork}
