@@ -42,7 +42,8 @@ The reduction will read `r x` from its table of key hashes, so a function of the
 No bound is proved here; the planned one would pay three terms around this step.
 
 - A factor `q` for guessing which message hash is `Z`.
-- About `qK` over the number of scalars, for a key hash scalar that is zero.
+- `(qK - 1) / |F|`, for a key hash scalar other than the honest one that is zero.
+  This term is proved in its own module, for a fixed secret and honest scalar.
 - One over the number of scalars in the simulation, for `c = 0`, which zeroes every programmed hash.
 -/
 
