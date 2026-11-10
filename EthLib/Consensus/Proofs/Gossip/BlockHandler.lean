@@ -2,6 +2,7 @@ module
 
 public import EthLib.Consensus.Gossip.Block
 public import EthLib.Consensus.Proofs.ForkChoice.Handlers
+public import EthLib.Consensus.Proofs.ForkChoice.Reachable
 public import EthLib.Consensus.Proofs.Gossip.Block
 public import EthLib.Consensus.Proofs.Gossip.Payload
 public import EthLib.Consensus.Proofs.Transition.BlockRoots
@@ -35,6 +36,12 @@ It checks the proposer that the parent state expects at the slot of the block.
 
 From Gloas it checks that the bid of the block names the parent of the block.
 
+It checks that the block comes after its parent block.
+
+From Capella to Fulu it checks the time of the payload against the genesis time of the head state.
+
+From Gloas a block on an empty parent must bid on the execution head of the parent state.
+
 The block handler checks the size of each list of operations against the same limit.
 
 On a full parent it checks the four counts of the requests, and an empty parent takes no request.
@@ -54,6 +61,24 @@ From Gloas its bid step checks the parent root of the bid against the root at th
 The slots leave the root of the latest block header there, and the steps before the bid keep it.
 
 The header step checks that this root is the parent root of the block.
+
+The last three checks read the parent block, the head state, or the bid of the parent block.
+
+The handler reads the state that the store keeps for the parent.
+
+In a store reached from an anchor at or before the slot of its state, take a kept state.
+
+It comes at or after the slot of its block.
+
+All kept states have one genesis time.
+
+From Gloas each kept state has the bid of its block, or a latest block hash equal to its bid hash.
+
+That needs the anchor state to meet the same condition with the anchor block.
+
+At Bellatrix the topic tests whether payloads run on the head state.
+
+So the timestamp theorem starts at Capella.
 
 A new block that the handler accepts passes the block step of the transition.
 
@@ -244,5 +269,112 @@ theorem bidParentRoot_of_onBlock (gloas : .glamsterdam ≤ fork) {after : Store 
   rw [sameRoots, sameSlot, slot, written] at read
   rw [sameHeader, hashed] at parentRoot
   exact (Except.ok.inj read).symm.trans (Except.ok.inj parentRoot)
+
+/-- A new block that the handler accepts comes after its parent block.
+
+The state that the store keeps for the parent comes at or after the slot of the parent block. -/
+theorem parentSlot_of_onBlock {after : Store preset fork} {orphanParent : Root}
+    (linked : store.Linked orphanParent)
+    (root : SszType.hashTreeRoot signed.message = .ok blockRoot)
+    (new : ¬ store.blocks.contains blockRoot)
+    (added : store.onBlock config checks sources signed = .ok after)
+    {parent : BeaconBlock preset fork}
+    (parentKnown : store.blocks[signed.message.parentRoot]? = some parent) :
+    parent.slot < signed.message.slot := by
+  obtain ⟨pre, _, _, stored, slots, -, -⟩ := processBlock_of_onBlock root new added
+  obtain ⟨block, blockFound, slotLe⟩ := linked.stateAfter _ _ stored
+  -- The store keeps one block for the parent root, and the slots move past the slot of its state.
+  obtain rfl : block = parent := Option.some.inj (blockFound.symm.trans parentKnown)
+  exact UInt64.lt_of_le_of_lt slotLe (processSlots_slot slots).1
+
+/-- From Capella to Fulu, a new block that the handler accepts carries the time of its slot.
+
+Its payload has the time of the slot of the block.
+
+That time is counted from the genesis time of any kept state.
+
+The topic reads that genesis time from the head state, which the store keeps. -/
+theorem payloadTimestamp_of_onBlock (capella : .shapella ≤ fork) (before : fork < .glamsterdam)
+    {after : Store preset fork} (oneTime : store.OneGenesisTime)
+    (root : SszType.hashTreeRoot signed.message = .ok blockRoot)
+    (new : ¬ store.blocks.contains blockRoot)
+    (added : store.onBlock config checks sources signed = .ok after)
+    {keptRoot : Root} {kept : BeaconState preset fork}
+    (keptFound : store.blockStates[keptRoot]? = some kept) :
+    computeTimeAtSlot config kept.genesisTime signed.message.slot =
+      .ok (signed.message.body.executionPayload
+        ⟨Nat.le_trans (by decide) capella, before⟩).timestamp := by
+  obtain ⟨_, _, _, stored, slots, slot, computed⟩ := processBlock_of_onBlock root new added
+  obtain ⟨_, _, _, headedOk, withdrawnOk, paidOk⟩ :=
+    processBlock_steps_of_lt_gloas capella before computed
+  have time := (processExecutionPayload_randao_time paidOk).2
+  have header := payloadInputs_processBlockHeader headedOk
+  have withdrawal := payloadInputs_processWithdrawals withdrawnOk
+  -- The header and withdrawal steps keep the slot and the genesis time of the advanced state.
+  rw [withdrawal.slot, header.slot, slot, withdrawal.genesisTime, header.genesisTime,
+    processSlots_genesisTime slots, oneTime stored keptFound] at time
+  exact time
+
+/-- From Gloas, take a new block on an empty parent that the handler accepts.
+
+It bids on the execution head of the parent.
+
+The topic finds the parent empty from the bid of the parent block.
+
+The handler finds it empty from the latest bid of the parent state, which is the same bid.
+
+The parent payload step then leaves the latest block hash as it is.
+
+That hash is the one of the parent state, advanced to the slot of the block. -/
+theorem bidParentHash_of_onBlock (gloas : .glamsterdam ≤ fork) {after : Store preset fork}
+    (bids : store.StatesKeepBids)
+    (root : SszType.hashTreeRoot signed.message = .ok blockRoot)
+    (new : ¬ store.blocks.contains blockRoot)
+    (added : store.onBlock config checks sources signed = .ok after)
+    {parent : BeaconBlock preset fork} {parentState advanced : BeaconState preset fork}
+    (parentKnown : store.blocks[signed.message.parentRoot]? = some parent)
+    (stateKnown : store.blockStates[signed.message.parentRoot]? = some parentState)
+    (advancedOk : processSlots config checks parentState signed.message.slot = .ok advanced)
+    (empty : Store.parentPayloadStatus signed.message parent ≠ .full) :
+    (signed.message.body.signedExecutionPayloadBid gloas).message.parentBlockHash =
+      advanced.latestBlockHash gloas := by
+  obtain ⟨pre, advanced', _, stored, slots, -, computed⟩ := processBlock_of_onBlock root new added
+  -- The handler reads the same parent state, and the slots advance it to the same state.
+  have samePre : parentState = pre := Option.some.inj (stateKnown.symm.trans stored)
+  subst samePre
+  have sameAdvanced : advanced = advanced' := Except.ok.inj (advancedOk.symm.trans slots)
+  subst sameAdvanced
+  -- The parent state has the bid of the parent block, or a latest block hash equal to its hash.
+  obtain ⟨block, blockFound, sameBid⟩ := bids stored
+  have sameBlock : parent = block := Option.some.inj (parentKnown.symm.trans blockFound)
+  subst sameBlock
+  have kept := processSlots_latestBid slots
+  simp only [Store.parentPayloadStatus, gloas, ↓reduceDIte] at empty
+  by_cases emptyHere :
+      (signed.message.body.signedExecutionPayloadBid gloas).message.parentBlockHash ≠
+        (advanced.latestExecutionPayloadBid gloas).blockHash
+  swap
+  -- A handler that finds the parent full needs a latest block hash equal to the hash of its bid.
+  · have full := Classical.not_not.mp emptyHere
+    rcases sameBid gloas with sameBlockBid | hashEq
+    · rw [kept.2, sameBlockBid] at full
+      simp [full] at empty
+    · rw [full, kept.1, kept.2]
+      exact hashEq.symm
+  -- Otherwise the handler finds the parent empty too, and its parent step keeps the state.
+  obtain ⟨parented, _, withdrawn, _, _, parentOk, headedOk, withdrawnOk, biddedOk, -⟩ :=
+    processBlock_steps gloas computed
+  have sameParented : parented = advanced := by
+    cases requests : (signed.message.body.parentExecutionRequests gloas).isEmpty gloas
+    · rw [processParentExecutionPayload_of_empty_requests emptyHere requests] at parentOk
+      cases parentOk
+    · rw [processParentExecutionPayload_of_empty emptyHere requests] at parentOk
+      exact (Except.ok.inj parentOk).symm
+  subst sameParented
+  -- The bid step checks the parent hash against the latest block hash, which the steps keep.
+  obtain ⟨-, -, -, -, parentHash, -⟩ :=
+    checkExecutionPayloadBid_ok_iff.mp (processExecutionPayloadBid_ok biddedOk).1
+  rw [parentHash, (payloadInputs_processWithdrawals withdrawnOk).latestBlockHash,
+    (payloadInputs_processBlockHeader headedOk).latestBlockHash]
 
 end EthLib.Consensus
