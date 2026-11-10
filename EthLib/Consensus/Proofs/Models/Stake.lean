@@ -26,6 +26,10 @@ def stake (w : ν → ℕ) (S : Finset ν) : ℕ :=
 
 variable {w : ν → ℕ}
 
+@[simp]
+theorem stake_empty : stake w ∅ = 0 :=
+  Finset.sum_empty
+
 theorem stake_mono {S T : Finset ν} (h : S ⊆ T) : stake w S ≤ stake w T :=
   Finset.sum_le_sum_of_subset h
 
@@ -68,18 +72,22 @@ theorem stake_sdiff_add_two_mul_le [DecidableEq ν] (S : ℕ → Finset ν) {d :
     have : (n + 1) * d = n * d + d := Nat.succ_mul n d
     omega
 
-/-- Two quorums of two validator sets share stake, up to the change between the two sets.
+/-- Two quorums up to slacks of two validator sets share stake, up to the change between the sets.
 
-The quorum `A` holds two thirds of the stake of `L`, and `B` two thirds of the stake of `R`.
+The quorum `A` holds two thirds of what is left of the stake of `L` once `a` is removed.
+
+The quorum `B` holds the same share of the stake of `R` once `b` is removed.
 
 The stake of `L \ V₀` and `V₀ \ R` measures that change against any reference set `V₀`.
 
-This is the bound in the proof of Gasper Theorem 8.3, times three. -/
-theorem two_mul_stake_le_stake_inter_add [DecidableEq ν] {L R A B : Finset ν} (V₀ : Finset ν)
-    (hA : A ⊆ L) (hB : B ⊆ R) (hA' : 2 * stake w L ≤ 3 * stake w A)
-    (hB' : 2 * stake w R ≤ 3 * stake w B) :
-    2 * stake w L ≤
-      3 * stake w (A ∩ B) + stake w R + 3 * (stake w (L \ V₀) + stake w (V₀ \ R)) := by
+The bound loses twice each slack.
+
+With no slack, this is the bound in the proof of Gasper Theorem 8.3, times three. -/
+theorem two_mul_stake_le_stake_inter_add_slack [DecidableEq ν] {L R A B : Finset ν}
+    (V₀ : Finset ν) {a b : ℕ} (hA : A ⊆ L) (hB : B ⊆ R)
+    (hA' : 2 * stake w L ≤ 3 * stake w A + 2 * a) (hB' : 2 * stake w R ≤ 3 * stake w B + 2 * b) :
+    2 * stake w L ≤ 3 * stake w (A ∩ B) + stake w R +
+      3 * (stake w (L \ V₀) + stake w (V₀ \ R)) + 2 * (a + b) := by
   have hsum : stake w (A ∪ B) + stake w (A ∩ B) = stake w A + stake w B :=
     Finset.sum_union_inter
   -- A validator of `L` outside `R` either joined after `V₀` or left `V₀` before `R`.
@@ -93,6 +101,21 @@ theorem two_mul_stake_le_stake_inter_add [DecidableEq ν] {L R A B : Finset ν} 
   have hle := (stake_mono (w := w) hsub).trans
     ((stake_union_le _ _).trans (Nat.add_le_add_right (stake_union_le _ _) _))
   omega
+
+/-- Two quorums of two validator sets share stake, up to the change between the two sets.
+
+The quorum `A` holds two thirds of the stake of `L`, and `B` two thirds of the stake of `R`.
+
+The stake of `L \ V₀` and `V₀ \ R` measures that change against any reference set `V₀`.
+
+This is the bound in the proof of Gasper Theorem 8.3, times three. -/
+theorem two_mul_stake_le_stake_inter_add [DecidableEq ν] {L R A B : Finset ν} (V₀ : Finset ν)
+    (hA : A ⊆ L) (hB : B ⊆ R) (hA' : 2 * stake w L ≤ 3 * stake w A)
+    (hB' : 2 * stake w R ≤ 3 * stake w B) :
+    2 * stake w L ≤
+      3 * stake w (A ∩ B) + stake w R + 3 * (stake w (L \ V₀) + stake w (V₀ \ R)) := by
+  simpa using two_mul_stake_le_stake_inter_add_slack (a := 0) (b := 0) V₀ hA hB
+    (by simpa using hA') (by simpa using hB')
 
 /-- Two sets of validators of `V`, each with two thirds of its stake, share one third of it. -/
 theorem stake_inter [DecidableEq ν] {V A B : Finset ν} (hA : A ⊆ V) (hB : B ⊆ V)
