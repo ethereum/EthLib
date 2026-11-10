@@ -15,7 +15,7 @@ That mix is final at the start when the epoch is at most `MIN_SEED_LOOKAHEAD` af
 
 A run keeps it while it stays within the ring of mixes.
 
-A run also keeps activity up to its start plus `MAX_SEED_LOOKAHEAD`, below 2^64 validators.
+A run also keeps activity up to its start plus `MAX_SEED_LOOKAHEAD`.
 
 So it keeps the committees of each epoch up to its start plus `MIN_SEED_LOOKAHEAD`.
 

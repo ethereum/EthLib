@@ -171,7 +171,7 @@ private theorem mem_activePositions {state : BeaconState preset fork} {epoch : E
 
 The specification builds each active index with that check, so it fails otherwise.
 
-The active indices then take some active position modulo `2^64`. -/
+Otherwise the pure list wraps some active position modulo `2^64`. -/
 theorem getActiveValidatorIndicesChecked_eq_ok_iff {state : BeaconState preset fork}
     {epoch : Epoch} :
     getActiveValidatorIndicesChecked state epoch = .ok (getActiveValidatorIndices state epoch) ↔

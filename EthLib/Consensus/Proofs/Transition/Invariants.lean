@@ -265,7 +265,7 @@ theorem BlockFrame.foldlM {α ε : Type} {step : BeaconState preset fork → α 
 
 So it is also a block frame.
 
-The mutators of a balance, of the exit queue and of a validator that keeps its key form one.
+The mutators of a balance, of the exit queue and of a validator form one.
 
 So do the steps that add a validator to the registry.
 

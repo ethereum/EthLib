@@ -97,7 +97,7 @@ def getCurrentEpoch (state : BeaconState preset fork) : Epoch :=
 
 An active position of `2^64` or more wraps modulo `2^64`, where the specification fails.
 
-The transition reads the active indices through a checked form instead. -/
+The transition guards each read with a checked form, or reads it only where the registry fits. -/
 def getActiveValidatorIndices (state : BeaconState preset fork) (epoch : Epoch) :
     List ValidatorIndex :=
   state.validators.data.toList.zipIdx.filterMap fun (validator, index) =>
