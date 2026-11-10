@@ -70,6 +70,14 @@ theorem keyValidatePoint_eq_ok_iff {bytes : ByteArray} {P : G1} :
         rintro ⟨rfl, -, -, hr⟩
         exact hsub ((inSubgroup_iff_modulus_smul_eq_zero hp).mpr hr)
 
+/-- Key validation that accepts the bytes returns a point. -/
+theorem exists_keyValidatePoint_of_isOk {bytes : ByteArray} (h : (keyValidate bytes).isOk = true) :
+    ∃ P, keyValidatePoint bytes = .ok P := by
+  unfold keyValidate at h
+  cases hp : keyValidatePoint bytes with
+  | error e => simp [hp, Except.isOk, Except.toBool] at h
+  | ok P => exact ⟨P, rfl⟩
+
 /-- A compressed representative of a nonzero multiple of `g1` passes key validation. -/
 theorem keyValidatePoint_compress_of_represents {P : G1} {a : Fr} (hP : Represents P a)
     (ha : a ≠ 0) : ∃ Q, keyValidatePoint (compress P) = .ok Q ∧ Represents Q a := by

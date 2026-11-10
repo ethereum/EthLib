@@ -1,9 +1,11 @@
 module
 
 public import EthLib.Cryptography.Proofs.Bls.Security.PopBound
+public import EthLib.Cryptography.Proofs.Bls.Security.PopByteGame
 public import EthLib.Cryptography.Proofs.Bls.Security.PopEager
 public import EthLib.Cryptography.Proofs.Bls.Security.PopExtract
 public import EthLib.Cryptography.Proofs.Bls.Security.PopReduction
+public import EthLib.Cryptography.Proofs.Bls.Security.PopRefinement
 public import EthLib.Cryptography.Proofs.Bls.Security.PopWins
 public import EthLib.Cryptography.Proofs.Bls.Security.PopZeroKey
 public import EthLib.Cryptography.Proofs.Bls.Security.Refinement

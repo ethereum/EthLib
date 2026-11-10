@@ -162,20 +162,29 @@ def popProve (sk : SecretKey) : Except BlsError BLSSignature :=
 It is the core verification of the public key as message, under the public key tag. -/
 def popVerify (pk proof : ByteArray) : Bool := coreVerify pk pk proof POP_DST
 
+/-- The sum of the public keys, after the size check, key validation and decompression of each.
+
+These are the first steps of fast aggregate verification, §3.3.4, with key validation added.
+
+It returns nothing on an empty list and on any key that fails a check. -/
+def aggregatePubkeyPoint (pubkeys : Array ByteArray) : Option G1 := Id.run do
+  if pubkeys.isEmpty then return none
+  let mut agg : G1 := G1.zero
+  for pk in pubkeys do
+    if pk.size ≠ 48 || !(G1.keyValidate pk).isOk then return none
+    match G1.uncompress pk with
+    | .error _ => return none
+    | .ok p => agg := G1.add agg p
+  return some agg
+
 /-- Sum the public keys, then verify the signature under the sum (§3.3.4).
 
 It returns `false` on an empty list and on any key that fails key validation. -/
 def fastAggregateVerify
-    (pubkeys : Array ByteArray) (msg : ByteArray) (sigBytes : ByteArray) : Bool := Id.run do
-  if pubkeys.isEmpty then return false
-  let mut agg : G1 := G1.zero
-  for pk in pubkeys do
-    if pk.size ≠ 48 || !(G1.keyValidate pk).isOk then return false
-    match G1.uncompress pk with
-    | .error _ => return false
-    | .ok p => agg := G1.add agg p
-  let aggBytes := G1.compress agg
-  return verify aggBytes msg sigBytes
+    (pubkeys : Array ByteArray) (msg : ByteArray) (sigBytes : ByteArray) : Bool :=
+  match aggregatePubkeyPoint pubkeys with
+  | none => false
+  | some agg => verify (G1.compress agg) msg sigBytes
 
 /-! ## Ethereum wrappers -/
 
