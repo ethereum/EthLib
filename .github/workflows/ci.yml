@@ -124,6 +124,7 @@ jobs:
 
       # The steps below run even after a failed step above, so every result is reported.
       - name: proofs
+        id: proofs
         if: ${{ !cancelled() }}
         run: bash scripts/build_timing_report.sh run proofs_build "$BUILD_TIMING_RESULTS" -- lake build --wfail
 
@@ -154,6 +155,17 @@ jobs:
       - name: module system regression
         if: ${{ !cancelled() }}
         run: bash scripts/test_module_system.sh
+
+      # A separate package that requires EthLib, as a downstream project does, must still build.
+      # EthLib is built above, so this elaborates one small file, in a few seconds.
+      # The package has no manifest, so Lake resolves it from the root's; Mathlib's update hook
+      # would then fetch its cache, which the packages built above make unneeded.
+      - name: downstream package
+        if: ${{ !cancelled() && steps.proofs.outcome == 'success' }}
+        working-directory: tests/downstream
+        env:
+          MATHLIB_NO_CACHE_ON_UPDATE: "1"
+        run: lake build --wfail
 
       - name: timing report fixtures
         if: ${{ !cancelled() }}

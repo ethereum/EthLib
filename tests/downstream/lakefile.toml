@@ -1,0 +1,14 @@
+# A package that depends on EthLib as a downstream project does, from the working tree.
+name = "EthLibDownstream"
+# EthLib's dependencies are those of the repository root, already built there.
+packagesDir = "../../.lake/packages"
+defaultTargets = ["Consumer"]
+
+[[require]]
+name = "EthLib"
+path = "../.."
+
+[[lean_lib]]
+name = "Consumer"
+# A name that does not resolve is an error, not a new variable.
+leanOptions = { autoImplicit = false }

@@ -3,6 +3,10 @@
 build/
 lake-packages/
 lakefile.olean
+# The downstream package resolves its dependencies from the root manifest on each build,
+# and Lake writes the toolchain of EthLib beside it.
+tests/downstream/lake-manifest.json
+tests/downstream/lean-toolchain
 
 # Python
 __pycache__/
