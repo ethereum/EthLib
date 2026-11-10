@@ -22,6 +22,7 @@ public import EthLib.Cryptography.Proofs.LazyPermutation
 public import EthLib.Cryptography.Proofs.IndependentAnswers
 public import EthLib.Cryptography.Proofs.IndependentOutside
 public import EthLib.Cryptography.Proofs.TaggedLazyPermutation
+public import EthLib.Cryptography.Proofs.ProgrammedPermutation
 public import EthLib.Cryptography.Proofs.DerivationTable
 public import EthLib.Cryptography.Proofs.Xmss
 public import EthLib.Cryptography.Proofs.Sphincs

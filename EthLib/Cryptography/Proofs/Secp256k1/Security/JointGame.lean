@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.LazyGame
 public import VCVio.OracleComp.SimSemantics.StateT.StateProjection
+public import VCVio.OracleComp.SimSemantics.StateT.UntilBad
 
 /-!
 # Proofs: the ECDSA game over the joint state of its oracles
@@ -143,6 +144,109 @@ theorem map_run_liftFresh_of_proj {σ₁ σ₂ : Type}
   · simp [StateT.run_monadLift, Functor.map_map]
   · exact hperm q s
 
+/-! ## Domination until a bad event -/
+
+/-- The joint oracles keep an invariant of the state of the permutation oracle.
+
+It suffices that each query of `Π`, and each call of the signer, keeps it. -/
+theorem preservesInv_jointImpl {perm : QueryImpl (PermSpec A) (StateT σ ProbComp)}
+    {fresh : FreshSigner F M σ} {P : σ → Prop} (hperm : QueryImpl.PreservesInv perm P)
+    (hfresh : ∀ m, StateT.PreservesInv (fresh m) P) :
+    QueryImpl.PreservesInv (jointImpl perm fresh) fun s => P s.2 := by
+  rintro q ⟨cache, c⟩ hs z hz
+  rcases q with n | α | β | m
+  · change z ∈ support ((·, (cache, c)) <$>
+      (query (spec := unifSpec) n : ProbComp (Fin (n + 1)))) at hz
+    simp only [support_map, Set.mem_image] at hz
+    obtain ⟨_, _, rfl⟩ := hz
+    exact hs
+  · change z ∈ support ((fun z => (z.1, (cache, z.2))) <$> (perm (.inl α)).run c) at hz
+    simp only [support_map, Set.mem_image] at hz
+    obtain ⟨w, hw, rfl⟩ := hz
+    exact hperm _ c hs w hw
+  · change z ∈ support ((fun z => (z.1, (cache, z.2))) <$> (perm (.inr β)).run c) at hz
+    simp only [support_map, Set.mem_image] at hz
+    obtain ⟨w, hw, rfl⟩ := hz
+    exact hperm _ c hs w hw
+  · change z ∈ support (match cache.lookup m with
+        | some a => pure (a, (cache, c))
+        | none => (fun z : Option (F × F) × σ => (z.1, (cache ++ [(m, z.1)], z.2))) <$>
+          (fresh m).run c) at hz
+    rcases h : cache.lookup m with _ | a <;> rw [h] at hz
+    · simp only [support_map, Set.mem_image] at hz
+      obtain ⟨w, hw, rfl⟩ := hz
+      exact hfresh m c hs w hw
+    · simp only [support_pure, Set.mem_singleton_iff] at hz
+      subst hz
+      exact hs
+
+/-- The joint oracles with a first oracle of `Π` and signer are dominated by a second pair.
+
+The domination holds until a bad event of the first state, read through `f` on the second state.
+
+It suffices that each query of `Π`, and each call of the signer, is dominated in the same way. -/
+theorem dominatedUntilBad_jointImpl {σ₁ σ₂ : Type}
+    {perm₁ : QueryImpl (PermSpec A) (StateT σ₁ ProbComp)}
+    {perm₂ : QueryImpl (PermSpec A) (StateT σ₂ ProbComp)} {fresh₁ : FreshSigner F M σ₁}
+    {fresh₂ : FreshSigner F M σ₂} {f : σ₁ → σ₂} {inv bad : σ₁ → Prop}
+    (hperm : QueryImpl.DominatedUntilBad perm₁ perm₂ f inv bad)
+    (hfresh : ∀ m s, inv s → ¬bad s → ∀ Q : Option (F × F) × σ₂ → Prop,
+      Pr{let z ← (fresh₁ m).run s}[Q (z.1, f z.2) ∧ ¬bad z.2] ≤
+        Pr{let z ← (fresh₂ m).run (f s)}[Q z]) :
+    QueryImpl.DominatedUntilBad (jointImpl perm₁ fresh₁) (jointImpl perm₂ fresh₂)
+      (Prod.map id f) (fun s => inv s.2) fun s => bad s.2 := by
+  rintro q ⟨cache, c⟩ hinv hbad Q
+  rcases q with n | α | β | m
+  · change Pr{let z ← (·, (cache, c)) <$>
+        (query (spec := unifSpec) n : ProbComp (Fin (n + 1)))}[
+          Q (z.1, Prod.map id f z.2) ∧ ¬bad z.2.2] ≤
+      Pr{let z ← (·, (cache, f c)) <$> (query (spec := unifSpec) n : ProbComp (Fin (n + 1)))}[Q z]
+    rw [prEvent_map, prEvent_map]
+    exact prEvent_mono _ _ _ fun _ h => h.1
+  · change Pr{let z ← (fun z => (z.1, (cache, z.2))) <$> (perm₁ (.inl α)).run c}[
+          Q (z.1, Prod.map id f z.2) ∧ ¬bad z.2.2] ≤
+      Pr{let z ← (fun z => (z.1, (cache, z.2))) <$> (perm₂ (.inl α)).run (f c)}[Q z]
+    rw [prEvent_map, prEvent_map]
+    exact hperm (.inl α) c hinv hbad fun w : A × σ₂ => Q (w.1, (cache, w.2))
+  · change Pr{let z ← (fun z => (z.1, (cache, z.2))) <$> (perm₁ (.inr β)).run c}[
+          Q (z.1, Prod.map id f z.2) ∧ ¬bad z.2.2] ≤
+      Pr{let z ← (fun z => (z.1, (cache, z.2))) <$> (perm₂ (.inr β)).run (f c)}[Q z]
+    rw [prEvent_map, prEvent_map]
+    exact hperm (.inr β) c hinv hbad fun w : A × σ₂ => Q (w.1, (cache, w.2))
+  · change Pr{let z ← (match cache.lookup m with
+          | some a => pure (a, (cache, c))
+          | none => (fun z : Option (F × F) × σ₁ => (z.1, (cache ++ [(m, z.1)], z.2))) <$>
+            (fresh₁ m).run c)}[Q (z.1, Prod.map id f z.2) ∧ ¬bad z.2.2] ≤
+      Pr{let z ← (match cache.lookup m with
+          | some a => pure (a, (cache, f c))
+          | none => (fun z : Option (F × F) × σ₂ => (z.1, (cache ++ [(m, z.1)], z.2))) <$>
+            (fresh₂ m).run (f c))}[Q z]
+    rcases cache.lookup m with _ | a
+    · rw [prEvent_map, prEvent_map]
+      exact hfresh m c hinv hbad fun w => Q (w.1, (cache ++ [(m, w.1)], w.2))
+    · exact prEvent_pure_le_pure _ _ _ _ fun h => h.1
+
+/-- Over the joint state, a computation that asks only coins and `Π` runs on the second state.
+
+The signing cache stays as it is. -/
+theorem simulateQ_jointImpl_keyOnlyLift_run (perm : QueryImpl (PermSpec A) (StateT σ ProbComp))
+    (fresh : FreshSigner F M σ) {α : Type} (oa : PermComp A α) (cache : Cache F M) (s : σ) :
+    (simulateQ (jointImpl perm fresh) (simulateQ keyOnlyLift oa)).run (cache, s) =
+      (fun z => (z.1, (cache, z.2))) <$> (simulateQ (unifSpec.passthrough + perm) oa).run s := by
+  induction oa using OracleComp.inductionOn generalizing s with
+  | pure a => simp
+  | query_bind t k ih =>
+    rcases t with n | a | b
+    · simp only [simulateQ_bind, simulateQ_spec_query, StateT.run_bind]
+      change ((·, (cache, s)) <$> (query (spec := unifSpec) n : ProbComp (Fin (n + 1)))) >>= _ = _
+      simp [ih]
+    all_goals
+      simp only [simulateQ_bind, simulateQ_spec_query, StateT.run_bind]
+      simp only [add_apply_inr, StateT.run, keyOnlyLift_inr_inl, keyOnlyLift_inr_inr,
+        HasQuery.instOfMonadLift_query, simulateQ_query, OracleQuery.input_query,
+        OracleQuery.cont_query, jointImpl, id_map, bind_map_left, map_bind]
+      exact bind_congr fun z : A × σ => ih z.1 z.2
+
 variable [Field F] [DecidableEq F] [AddCommGroup G] [Module F G] [DecidableEq G]
 
 /-- Run the adversary on the key `X` over the joint state, and check its forgery.
@@ -189,6 +293,31 @@ theorem map_jointRun_of_proj {σ₁ σ₂ : Type} (scheme : Scheme F G A M)
         · simp [StateT.run_monadLift, Functor.map_map]
         · exact hperm q s)]
     simp [Functor.map_map]
+
+/-- The adversary's run on the key `X`, then the check of its forgery, with the game's oracles.
+
+The check asks `Π` through the same oracles as the adversary. -/
+def runWithCheck (scheme : Scheme F G A M) (adversary : Adversary F G A M) (X : G) :
+    OracleComp (Spec F A M) ((M × F × F) × Bool) := do
+  let z ← adversary.main X
+  let b ← simulateQ keyOnlyLift (verifyQ scheme X z.1 z.2.1 z.2.2)
+  pure (z, b)
+
+/-- The joint run wins exactly when the run with an unconditional check wins on a new message.
+
+The event on a win may also read the forgery and the final signing cache. -/
+theorem prEvent_jointRun_eq_runWithCheck (scheme : Scheme F G A M)
+    (adversary : Adversary F G A M) (X : G) (perm : QueryImpl (PermSpec A) (StateT σ ProbComp))
+    (init : σ) (fresh : FreshSigner F M σ) (R : M × F × F → Cache F M → Prop) :
+    Pr{let r ← jointRun scheme adversary X perm init fresh}[
+      r.1.2.1 = true ∧ R r.1.1 r.1.2.2] =
+    Pr{let r ← (simulateQ (jointImpl perm fresh) (runWithCheck scheme adversary X)).run
+        ([], init)}[signed r.2.1 r.1.1.1 = false ∧ r.1.2 = true ∧ R r.1.1 r.2.1] := by
+  simp only [jointRun, runWithCheck, simulateQ_bind, simulateQ_pure, StateT.run_bind]
+  refine prEvent_bind_congr _ _ _ _ _ fun z => ?_
+  obtain ⟨⟨m, t, s⟩, cache, ps⟩ := z
+  rw [simulateQ_jointImpl_keyOnlyLift_run, bind_map_left]
+  by_cases h : signed cache m <;> simp [h]
 
 variable [SampleableType F]
 
