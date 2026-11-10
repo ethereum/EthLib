@@ -16,11 +16,11 @@ A key derivation beyond the caller's limits gives the limit error.
 
 Verification accepts exactly a key of at least 32 bytes whose checksum matches the ciphertext.
 
-A derived key always has at least 32 bytes, so verification never refuses one as too short.
+A successful derivation gives at least 32 bytes, so verification never refuses its key as too short.
 
 Decryption returns as many bytes as the ciphertext holds.
 
-Encrypting the secret again, under a recomputed checksum, gives back the ciphertext.
+AES-128-CTR undoes itself: decrypting the secret under its own checksum gives back the ciphertext.
 -/
 
 @[expose] public section
