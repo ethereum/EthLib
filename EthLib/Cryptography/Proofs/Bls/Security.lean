@@ -16,9 +16,11 @@ The byte game reduces a forger on compressed encodings to a group-element forger
 
 Freshness excludes every message submitted to signing, regardless of signature bytes.
 
-A second game states unforgeability of aggregates with proofs of possession; no bound is proved yet.
+A second game states unforgeability of aggregates with proofs of possession.
 
-The algebraic step of its reduction is proved.
+The algebraic step of its reduction is proved, on programmed hashes.
 
-A forged aggregate gives the honest secret times the message hash.
+A valid aggregate with valid proofs on key hashes `r x • Z` gives `a • Z`, for the key `a • g1`.
+
+No bound on that game is proved yet.
 -/

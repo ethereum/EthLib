@@ -1,21 +1,27 @@
 module
 
-public import EthLib.Cryptography.Proofs.Bls.Security.PopGame
+public import EthLib.Cryptography.Proofs.Bls.Security.Game
 
 /-!
 # Proofs: what a forged aggregate tells the reduction
 
 This is the algebraic step of the reduction for aggregates with proofs of possession.
 
-It follows Ristenpart and Yilek, §5, where a proof of possession is a signature on the key.
+The game is in the module of the aggregate game; this step only needs the scheme.
+
+It follows Ristenpart and Yilek, where a proof of possession signs the key under a separate hash.
 
 <https://eprint.iacr.org/2007/264>
 
+Their groups are symmetric; here keys lie in `G1` and signatures in `G2`.
+
+The co-CDH problem here also gives `a • g2`, which signs on the honest key hash.
+
 The reduction programs the hash of the forged message to an element `Z`.
 
-It programs the key hash of every key `x` other than the honest key `pk` to `r • Z`, with `r` known.
+It programs the key hash of every key `x` other than the honest key to `r x • Z`, with `r x` known.
 
-A valid proof `π` on `x = sk • g1` is then `sk • (r • Z)`, so `r⁻¹ • π` is `sk • Z`.
+A valid proof `π` on `x = sk • g1` is then `sk • (r x • Z)`, so `(r x)⁻¹ • π` is `sk • Z`.
 
 A valid aggregate `σ` is the sum of the secrets of all keys, times `Z`.
 
@@ -26,8 +32,20 @@ Dividing by `n` gives `a • Z`; when `Z` is the challenge `c • g2`, this is `
 The step needs three facts that the game does not give.
 
 - Every key is a multiple of `g1`, so that it has a secret.
-- No scalar `r` is zero; a zero hash makes every proof on it the zero element.
+- No scalar `r x` is zero; a zero hash makes every proof on it the zero element.
 - The count `n` is not zero in the scalars; it is at most the number of keys.
+
+The count is nonzero when the number of keys is below the characteristic of the scalars.
+
+The game checks each proof against the key hash at its position in a list.
+
+The reduction will read `r x` from its table of key hashes, so a function of the key suffices here.
+
+The bound will pay for this step in three terms.
+
+- A factor `q` for guessing which message hash is `Z`.
+- About `qK` over the number of scalars, for a key hash scalar that is zero.
+- One over the number of scalars, for the challenge `c = 0`, which makes every programmed hash zero.
 -/
 
 @[expose] public section
@@ -37,9 +55,9 @@ namespace EthLib.Cryptography.Bls.Security.Pop
 variable {F G₁ G₂ : Type} [Field F] [DecidableEq G₁] [AddCommGroup G₁] [Module F G₁]
   [AddCommGroup G₂] [Module F G₂]
 
-/-- The share of the keys other than `pk`: `r⁻¹ • π` for each key and its proof `π`.
+/-- The share of the keys other than `pk`: the sum of `(r x)⁻¹ • π` over each such key `x`.
 
-The scalar `r` of a key is the one the reduction used for its key hash. -/
+Here `π` is the proof of `x`, and `r x` is the scalar the reduction used for its key hash. -/
 def otherShare (pk : G₁) (r : G₁ → F) (keys : List (G₁ × G₂)) : G₂ :=
   ((keys.filter fun k => k.1 ≠ pk).map fun k => (r k.1)⁻¹ • k.2).sum
 
@@ -51,19 +69,21 @@ def extractAggregate (pk : G₁) (r : G₁ → F) (keys : List (G₁ × G₂)) (
 
 omit [DecidableEq G₁] [AddCommGroup G₂] [Module F G₂] in
 /-- A key sum is the sum of the secrets of its keys, times `g1`. -/
-theorem sum_keys_eq (g₁ : G₁) (s : G₁ → F) (hs : ∀ x, x = s x • g₁) (keys : List (G₁ × G₂)) :
+theorem sum_map_fst_eq_sum_smul (g₁ : G₁) (s : G₁ → F) {keys : List (G₁ × G₂)}
+    (hs : ∀ k ∈ keys, k.1 = s k.1 • g₁) :
     (keys.map Prod.fst).sum = (keys.map fun k => s k.1).sum • g₁ := by
   induction keys with
   | nil => simp
-  | cons k rest ih => rw [List.map_cons, List.sum_cons, ih, List.map_cons, List.sum_cons,
-      add_smul, ← hs]
+  | cons k rest ih =>
+    rw [List.map_cons, List.sum_cons, ih fun k' hk' => hs k' (List.mem_cons_of_mem _ hk'),
+      List.map_cons, List.sum_cons, add_smul, ← hs k List.mem_cons_self]
 
 /-- The sum of the secrets of the keys, times `Z`, splits into the honest copies and the others.
 
-The honest key `pk` has the secret `a`, and every other key a valid proof on `r • Z`. -/
+The honest key `a • g1` has the secret `a`, and every other key `x` a valid proof on `r x • Z`. -/
 theorem sum_smul_eq_count_add_otherShare {scheme : Scheme G₁ G₂} (hsound : scheme.Sound F)
-    {a : F} {Z : G₂} {r : G₁ → F} {s : G₁ → F} (hs : ∀ x, x = s x • scheme.g₁)
-    (ha : s (a • scheme.g₁) = a) {keys : List (G₁ × G₂)}
+    {a : F} {Z : G₂} {r : G₁ → F} {s : G₁ → F} {keys : List (G₁ × G₂)}
+    (hs : ∀ k ∈ keys, k.1 = s k.1 • scheme.g₁) (ha : s (a • scheme.g₁) = a)
     (hproofs : ∀ k ∈ keys, k.1 ≠ a • scheme.g₁ →
       r k.1 ≠ 0 ∧ scheme.isDh k.1 (r k.1 • Z) k.2 = true) :
     (keys.map fun k => s k.1).sum • Z =
@@ -72,7 +92,8 @@ theorem sum_smul_eq_count_add_otherShare {scheme : Scheme G₁ G₂} (hsound : s
   induction keys with
   | nil => simp [otherShare]
   | cons k rest ih =>
-    have ih := ih fun k' hk' => hproofs k' (List.mem_cons_of_mem _ hk')
+    have ih := ih (fun k' hk' => hs k' (List.mem_cons_of_mem _ hk'))
+      fun k' hk' => hproofs k' (List.mem_cons_of_mem _ hk')
     simp only [otherShare] at ih ⊢
     by_cases hk : k.1 = a • scheme.g₁
     · simp only [List.map_cons, List.sum_cons, add_smul, ih, List.count_cons, hk, ha,
@@ -81,8 +102,8 @@ theorem sum_smul_eq_count_add_otherShare {scheme : Scheme G₁ G₂} (hsound : s
       simp [add_smul]
       abel
     · obtain ⟨hr, hdh⟩ := hproofs k List.mem_cons_self hk
-      -- A valid proof on `r • Z` is `s • (r • Z)`, so `r⁻¹` times it is `s • Z`.
-      have hπ : k.2 = s k.1 • (r k.1 • Z) := (hsound _ _ _).mp (by rwa [← hs k.1])
+      -- A valid proof on `r x • Z` is `s x • (r x • Z)`, so `(r x)⁻¹` times it is `s x • Z`.
+      have hπ : k.2 = s k.1 • (r k.1 • Z) := (hsound _ _ _).mp (by rwa [← hs k List.mem_cons_self])
       have hshare : (r k.1)⁻¹ • k.2 = s k.1 • Z := by
         rw [hπ, smul_smul, smul_smul]
         congr 1
@@ -93,38 +114,66 @@ theorem sum_smul_eq_count_add_otherShare {scheme : Scheme G₁ G₂} (hsound : s
         hshare]
       abel
 
-/-- **The extraction step.** A valid aggregate with valid proofs gives the reduction `a • Z`.
+/-- The extraction step: a valid aggregate with valid proofs gives the reduction `a • Z`.
 
-The honest key is `a • g1`, and every key is a multiple of `g1`.
+The honest key is `a • g1`, and every key in the list is a multiple of `g1`.
 
-The hash of the message is `Z`; the key hash of every other key `x` is `r x • Z`, with `r x ≠ 0`.
+Every other key `x` carries a proof that verifies on `r x • Z`, with `r x ≠ 0`.
+
+The aggregate verifies on `Z` under the sum of the keys.
 
 The number of copies of the honest key among the keys is not zero in the scalars. -/
-theorem extractAggregate_eq {scheme : Scheme G₁ G₂} (hsound : scheme.Sound F)
-    (hkeys : ∀ x : G₁, ∃ sk : F, x = sk • scheme.g₁) {a : F} {Z σ : G₂} {r : G₁ → F}
-    {keys : List (G₁ × G₂)}
+theorem extractAggregate_eq {scheme : Scheme G₁ G₂} (hsound : scheme.Sound F) {a : F}
+    {Z σ : G₂} {r : G₁ → F} {keys : List (G₁ × G₂)}
+    (hkeys : ∀ k ∈ keys, ∃ sk : F, k.1 = sk • scheme.g₁)
     (hproofs : ∀ k ∈ keys, k.1 ≠ a • scheme.g₁ →
       r k.1 ≠ 0 ∧ scheme.isDh k.1 (r k.1 • Z) k.2 = true)
     (hcount : ((keys.map Prod.fst).count (a • scheme.g₁) : F) ≠ 0)
     (hagg : scheme.isDh (keys.map Prod.fst).sum Z σ = true) :
     extractAggregate (a • scheme.g₁) r keys σ = a • Z := by
-  choose sk hsk using hkeys
-  -- The secret of the honest key is `a`; any other key gets the secret that `hkeys` chose.
-  let s : G₁ → F := fun x => if x = a • scheme.g₁ then a else sk x
-  have hs : ∀ x, x = s x • scheme.g₁ := by
-    intro x
-    by_cases hx : x = a • scheme.g₁
+  classical
+  -- The secret of the honest key is `a`; any other key in the list gets a secret it has.
+  let s : G₁ → F := fun x =>
+    if x = a • scheme.g₁ then a else if h : ∃ sk : F, x = sk • scheme.g₁ then h.choose else 0
+  have hs : ∀ k ∈ keys, k.1 = s k.1 • scheme.g₁ := by
+    intro k hk
+    by_cases hx : k.1 = a • scheme.g₁
     · simp only [s, hx, ite_true]
-    · simp only [s, hx, ite_false]
-      exact hsk x
+    · simp only [s, hx, ite_false, hkeys k hk, dite_true]
+      exact (hkeys k hk).choose_spec
   have ha : s (a • scheme.g₁) = a := by simp [s]
   have hσ : σ = (keys.map fun k => s k.1).sum • Z := by
-    rw [sum_keys_eq scheme.g₁ s hs] at hagg
+    rw [sum_map_fst_eq_sum_smul scheme.g₁ s hs] at hagg
     exact (hsound _ _ _).mp hagg
   rw [extractAggregate, hσ, sum_smul_eq_count_add_otherShare hsound hs ha hproofs,
     add_sub_cancel_right, smul_smul, inv_mul_cancel₀ hcount, one_smul]
 
 /-! ## The hypotheses can hold together -/
+
+omit [DecidableEq G₁] in
+/-- Honest keys meet the hypotheses of the extraction step on keys, proofs and aggregate.
+
+Each secret `sk` gives the key `sk • g1` and the proof `sk • (r (sk • g1) • Z)`.
+
+The sum of `sk • Z` over the secrets then verifies on `Z` under the sum of the keys. -/
+theorem hypotheses_of_secrets {scheme : Scheme G₁ G₂} (hsound : scheme.Sound F) (pk : G₁)
+    (r : G₁ → F) (Z : G₂) {sks : List F} (hr : ∀ sk ∈ sks, r (sk • scheme.g₁) ≠ 0) :
+    let keys := sks.map fun sk => (sk • scheme.g₁, sk • (r (sk • scheme.g₁) • Z))
+    (∀ k ∈ keys, ∃ sk : F, k.1 = sk • scheme.g₁) ∧
+      (∀ k ∈ keys, k.1 ≠ pk → r k.1 ≠ 0 ∧ scheme.isDh k.1 (r k.1 • Z) k.2 = true) ∧
+      scheme.isDh (keys.map Prod.fst).sum Z (sks.map (· • Z)).sum = true := by
+  refine ⟨?_, ?_, ?_⟩
+  · intro k hk
+    obtain ⟨sk, -, rfl⟩ := List.mem_map.mp hk
+    exact ⟨sk, rfl⟩
+  · intro k hk _
+    obtain ⟨sk, hsk, rfl⟩ := List.mem_map.mp hk
+    exact ⟨hr sk hsk, (hsound _ _ _).mpr rfl⟩
+  · have hkeys : ((sks.map fun sk => (sk • scheme.g₁, sk • (r (sk • scheme.g₁) • Z))).map
+        Prod.fst).sum = sks.sum • scheme.g₁ := by
+      simp [List.map_map, Function.comp_def, List.sum_smul]
+    rw [hkeys, show (sks.map (· • Z)).sum = sks.sum • Z from List.sum_smul.symm]
+    exact (hsound _ _ _).mpr rfl
 
 /-- The scheme over the scalars themselves, with `g1 = g2 = 1`.
 
@@ -137,12 +186,9 @@ def scalarScheme (F : Type) [Field F] [DecidableEq F] : Scheme F F where
 omit [DecidableEq G₁] in
 /-- The scheme over the scalars decides co-Diffie-Hellman tuples.
 
-Every key is a multiple of `1` there.
-
-So the hypotheses of the extraction step are not contradictory. -/
-theorem scalarScheme_sound [DecidableEq F] :
-    (scalarScheme F).Sound F ∧ ∀ x : F, ∃ sk : F, x = sk • (scalarScheme F).g₁ := by
-  refine ⟨fun a h σ => ?_, fun x => ⟨x, by simp [scalarScheme]⟩⟩
+So a sound scheme exists, and with the lemma above every hypothesis of the step can hold. -/
+theorem scalarScheme_sound [DecidableEq F] : (scalarScheme F).Sound F := by
+  intro a h σ
   simp [scalarScheme]
 
 end EthLib.Cryptography.Bls.Security.Pop
