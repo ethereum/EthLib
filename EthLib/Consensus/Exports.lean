@@ -4,6 +4,7 @@ public import EthLib.Consensus.Exports.BuilderApi
 public import EthLib.Consensus.Exports.Column
 public import EthLib.Consensus.Exports.Custody
 public import EthLib.Consensus.Exports.DepositTree
+public import EthLib.Consensus.Exports.Era
 public import EthLib.Consensus.Exports.ForkChoice
 public import EthLib.Consensus.Exports.ForkChoiceValues
 public import EthLib.Consensus.Exports.Genesis

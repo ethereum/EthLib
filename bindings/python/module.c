@@ -107,6 +107,7 @@ PyObject* FORK_ID_ERROR;
 PyObject* ETH_WIRE_ERROR;
 PyObject* SNAP_ERROR;
 PyObject* ERA1_ERROR;
+PyObject* ERA_ERROR;
 PyObject* TRANSACTION_ERROR;
 PyObject* VRF_ERROR;
 PyObject* TRIE_ERROR;
@@ -1070,6 +1071,7 @@ static PyMethodDef methods[] = {
   {"snap_verify_account_range", py_snap_verify_account_range, METH_VARARGS, DOC_snap_verify_account_range},
   {"snap_verify_storage_ranges", py_snap_verify_storage_ranges, METH_VARARGS, DOC_snap_verify_storage_ranges},
   {"era1_decode", py_era1_decode, METH_VARARGS, DOC_era1_decode},
+  {"era_decode", py_era_decode, METH_VARARGS, DOC_era_decode},
   {"snappy_decompress", py_snappy_decompress, METH_VARARGS, DOC_snappy_decompress},
   {"snappy_compress", py_snappy_compress, METH_VARARGS, DOC_snappy_compress},
   {"snappy_decode_frames", py_snappy_decode_frames, METH_VARARGS, DOC_snappy_decode_frames},
@@ -1207,6 +1209,7 @@ PyInit__native(void) {
     ETH_WIRE_ERROR = PyObject_GetAttrString(errors, "EthWireError");
     SNAP_ERROR = PyObject_GetAttrString(errors, "SnapError");
     ERA1_ERROR = PyObject_GetAttrString(errors, "Era1Error");
+    ERA_ERROR = PyObject_GetAttrString(errors, "EraError");
     TRANSACTION_ERROR = PyObject_GetAttrString(errors, "TransactionError");
     VRF_ERROR = PyObject_GetAttrString(errors, "VrfError");
     TRIE_ERROR = PyObject_GetAttrString(errors, "TrieError");

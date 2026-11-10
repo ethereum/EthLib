@@ -923,6 +923,9 @@
 #define DOC_era1_decode \
   "The contents of an era1 file, as plain values."
 
+#define DOC_era_decode \
+  "The name of the file and its groups, as plain values."
+
 #define DOC_snappy_decompress \
   "The bytes a Snappy block decompresses to, or why it is not a valid block."
 

@@ -53,6 +53,7 @@ public import EthLib.Consensus.Gossip.Seen
 public import EthLib.Consensus.Gossip.Sidecar
 public import EthLib.Consensus.Gossip.SyncCommittee
 public import EthLib.Consensus.Gossip.Topics
+public import EthLib.Consensus.History.Era
 public import EthLib.Consensus.InclusionList
 public import EthLib.Consensus.HonestBuilder
 public import EthLib.Consensus.HonestAggregation

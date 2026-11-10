@@ -1163,6 +1163,11 @@ def bindings : List Binding := [
     "(data: bytes) -> tuple[int, list[tuple[bytes, bytes, bytes, int]], " ++
       "list[tuple[int, bytes]], bytes]",
     [`EthLib.Execution.History.Era1Error], some "Era1Error"⟩,
+  ⟨"era_decode", `EthLib.Consensus.History.Exports.decodeEraOf,
+    "(name: str, config: dict[str, Any] | None, data: bytes) -> " ++
+      "tuple[str | None, list[tuple[int, list[tuple[int, str, bytes, bytes]], str, bytes, " ++
+      "list[tuple[int, bytes]]]]]",
+    [`EthLib.Consensus.History.EraError], some "EraError"⟩,
   ⟨"snappy_decompress", `EthLib.Networking.Snappy.decompress,
     "(block: bytes) -> bytes",
     [`EthLib.Networking.Snappy.SnappyError], some "SnappyError"⟩,

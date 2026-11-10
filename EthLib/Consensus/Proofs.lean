@@ -58,6 +58,7 @@ public import EthLib.Consensus.Proofs.Gossip.Sidecar
 public import EthLib.Consensus.Proofs.Gossip.SidecarInclusion
 public import EthLib.Consensus.Proofs.Gossip.SyncCommittee
 public import EthLib.Consensus.Proofs.Gossip.Topics
+public import EthLib.Consensus.Proofs.History.Era
 public import EthLib.Consensus.Proofs.InclusionList
 public import EthLib.Consensus.Proofs.HonestBuilder
 public import EthLib.Consensus.Proofs.HonestAggregation

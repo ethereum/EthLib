@@ -8588,6 +8588,36 @@
    "error_class": "Era1Error",
    "docstring":
    "The contents of an era1 file, as plain values.\n\nThey are the first block number, the blocks, the other records and the accumulator.\n\nEach block is its header, body and receipts as RLP, and its total difficulty.\n\nEach other record is its type and its data."},
+  {"summary": "The name of the file and its groups, as plain values.",
+   "signature":
+   "(name: str, config: dict[str, Any] | None, data: bytes) -> tuple[str | None, list[tuple[int, list[tuple[int, str, bytes, bytes]], str, bytes, list[tuple[int, bytes]]]]]",
+   "operation": "EthLib.Consensus.History.Exports.decodeEraOf",
+   "method": "era_decode",
+   "errors":
+   [{"type": "EthLib.Consensus.History.EraError",
+     "codes":
+     [{"constructor": "e2store", "code": 1},
+      {"constructor": "noState", "code": 2},
+      {"constructor": "noStateIndex", "code": 3},
+      {"constructor": "misplacedRecord", "code": 4},
+      {"constructor": "stateIndex", "code": 5},
+      {"constructor": "frame", "code": 6},
+      {"constructor": "ssz", "code": 7},
+      {"constructor": "stateSlot", "code": 8},
+      {"constructor": "forkVersion", "code": 9},
+      {"constructor": "genesisBlocks", "code": 10},
+      {"constructor": "noBlockIndex", "code": 11},
+      {"constructor": "blockIndexRange", "code": 12},
+      {"constructor": "blockOffset", "code": 13},
+      {"constructor": "unindexedBlock", "code": 14},
+      {"constructor": "blockSlot", "code": 15},
+      {"constructor": "blockRoot", "code": 16},
+      {"constructor": "emptySlot", "code": 17},
+      {"constructor": "accessor", "code": 18},
+      {"constructor": "eraRoot", "code": 19}]}],
+   "error_class": "EraError",
+   "docstring":
+   "The name of the file and its groups, as plain values.\n\nA file whose name cannot be computed has none, as when the state of its highest era has no root.\n\nA value that does not encode again has code 0."},
   {"summary":
    "The bytes a Snappy block decompresses to, or why it is not a valid block.",
    "signature": "(block: bytes) -> bytes",
@@ -9731,7 +9761,8 @@
      [{"constructor": "invalidParams", "code": 32602},
       {"constructor": "unsupportedFork", "code": 38005},
       {"constructor": "invalidForkchoiceState", "code": 38002},
-      {"constructor": "tooLargeRequest", "code": 38004}]}],
+      {"constructor": "tooLargeRequest", "code": 38004},
+      {"constructor": "invalidPayloadAttributes", "code": 38003}]}],
    "error_class": "EngineError",
    "docstring":
    "The payload status of an `engine_newPayload` request, without the parent's state.\n\nThe arguments are the chain configuration and the request."},
@@ -9775,7 +9806,8 @@
      [{"constructor": "invalidParams", "code": 32602},
       {"constructor": "unsupportedFork", "code": 38005},
       {"constructor": "invalidForkchoiceState", "code": 38002},
-      {"constructor": "tooLargeRequest", "code": 38004}]}],
+      {"constructor": "tooLargeRequest", "code": 38004},
+      {"constructor": "invalidPayloadAttributes", "code": 38003}]}],
    "error_class": "EngineError",
    "docstring":
    "The payload status of an `engine_newPayload` request, on a chain that holds the parent.\n\nThe arguments are the chain configuration, the state, the recent blocks and the request.\n\nA valid payload also gives the RLP forms of its header and of the accounts after it.\n\nOtherwise both are `None`."},
@@ -9790,7 +9822,8 @@
      [{"constructor": "invalidParams", "code": 32602},
       {"constructor": "unsupportedFork", "code": 38005},
       {"constructor": "invalidForkchoiceState", "code": 38002},
-      {"constructor": "tooLargeRequest", "code": 38004}]}],
+      {"constructor": "tooLargeRequest", "code": 38004},
+      {"constructor": "invalidPayloadAttributes", "code": 38003}]}],
    "error_class": "EngineError",
    "docstring":
    "The response to an `engine_forkchoiceUpdated` request, against a tree of payloads.\n\nThe arguments are the tree, the finalized block that the execution layer knows, and the request."},
@@ -9805,7 +9838,8 @@
      [{"constructor": "invalidParams", "code": 32602},
       {"constructor": "unsupportedFork", "code": 38005},
       {"constructor": "invalidForkchoiceState", "code": 38002},
-      {"constructor": "tooLargeRequest", "code": 38004}]}],
+      {"constructor": "tooLargeRequest", "code": 38004},
+      {"constructor": "invalidPayloadAttributes", "code": 38003}]}],
    "error_class": "EngineError",
    "docstring":
    "The answer to an `engine_getBlobs` request, from a blob pool.\n\nThe arguments are the pool's entries, whether it serves, its limit, the fork and the request.\n\nEach entry is the versioned hash, the blob, the blob proof and the 128 cells with their proofs.\n\nAny of the last three may be `None`, and so may each cell."},
@@ -9820,7 +9854,8 @@
      [{"constructor": "invalidParams", "code": 32602},
       {"constructor": "unsupportedFork", "code": 38005},
       {"constructor": "invalidForkchoiceState", "code": 38002},
-      {"constructor": "tooLargeRequest", "code": 38004}]}],
+      {"constructor": "tooLargeRequest", "code": 38004},
+      {"constructor": "invalidPayloadAttributes", "code": 38003}]}],
    "error_class": "EngineError",
    "docstring":
    "The answer to a payload bodies request, from a store of bodies.\n\nThe arguments are the store's entries, the latest known block, the limit and the request.\n\nEach entry is the block hash, its canonical number or `None`, and its fork name.\n\nThen come its transactions, its withdrawals or `None`, and its block access list or `None`."},
