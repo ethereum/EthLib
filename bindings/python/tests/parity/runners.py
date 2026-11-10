@@ -561,11 +561,22 @@ def _blockchain_test_engine(root: Path, case: Case) -> None:
     run_engine_chain(fixture, fixture["pre"], fixture["genesisBlockHeader"])
 
 
+def _pre_alloc(case: Case) -> str:
+    """The directory of the states and geneses that the fixtures of an engine_x format share."""
+    return "/".join([*case.path.split("/")[:2], "pre_alloc"])
+
+
+def reads(case: Case) -> list[str]:
+    """The archive paths that the runner of an execution-spec-tests case reads."""
+    if case.group == "blockchain_test_engine_x":
+        return [case.path, _pre_alloc(case)]
+    return [case.path]
+
+
 def _blockchain_test_engine_x(root: Path, case: Case) -> None:
     # The fixtures of one group share their state and genesis in a file named by its hash.
     fixture = _fixtures(root / case.path)[case.id]
-    directory = root.joinpath(*case.path.split("/")[:2])
-    path = directory / "pre_alloc" / f"{fixture['preHash']}.json"
+    path = root / _pre_alloc(case) / f"{fixture['preHash']}.json"
     shared = _fixtures(path)
     run_engine_chain(
         fixture, shared["pre"], shared["genesis"], lambda fork: _shared_start(path, fork)

@@ -13,7 +13,7 @@ import pytest
 import archives
 
 from .catalogue import Case
-from .runners import RUNNERS, plan, runner
+from .runners import RUNNERS, plan, reads, runner
 
 # The test of each wheel runs the suites on Python 3.10 too.
 if sys.version_info >= (3, 11):
@@ -68,6 +68,14 @@ def in_shard(cases: list[Case]) -> list[Case]:
 def unpack(name: str, cases: list[Case], depth: int) -> Path:
     """The archive `name`, with the first `depth` directories of each runnable case unpacked."""
     paths = sorted({"/".join(case.path.split("/")[:depth]) for case in runnable(cases)})
+    if not paths:
+        return archives.CACHE
+    return archives.unpack(name, *paths)
+
+
+def unpack_read(name: str, cases: list[Case]) -> Path:
+    """The archive `name`, with every path that its runnable cases read unpacked."""
+    paths = sorted({path for case in runnable(cases) for path in reads(case)})
     if not paths:
         return archives.CACHE
     return archives.unpack(name, *paths)
