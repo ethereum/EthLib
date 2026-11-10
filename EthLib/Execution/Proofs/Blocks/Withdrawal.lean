@@ -25,7 +25,7 @@ def withdrawnTo (withdrawals : List Withdrawal) (address : Address) : Nat :=
   ((withdrawals.filter (·.address = address)).map (·.amount.toNat)).sum * GWEI_TO_WEI
 
 /-- The amount of a withdrawal in wei is below `2^256`, since its amount in Gwei is below `2^64`. -/
-private theorem toNat_wei (amount : UInt64) :
+theorem toNat_wei (amount : UInt64) :
     (BitVec.ofNat 256 (amount.toNat * GWEI_TO_WEI)).toNat = amount.toNat * GWEI_TO_WEI := by
   have hlt : amount.toNat * GWEI_TO_WEI < 2 ^ 64 * GWEI_TO_WEI :=
     Nat.mul_lt_mul_of_pos_right amount.toNat_lt (by decide)

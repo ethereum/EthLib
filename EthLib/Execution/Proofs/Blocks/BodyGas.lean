@@ -82,6 +82,22 @@ theorem applyTransactions_state_of_lt {env : BlockEnvironment fork} {body : Body
   dsimp only
   omega
 
+/-- Up to BPO5, the gas of a body that runs is the gas used that its receipts add up.
+
+That gas used is counted after the refunds. -/
+theorem applyTransactions_execution_of_lt {env : BlockEnvironment fork} {body : BodyState}
+    {transactions : List Transaction} {output : BodyOutput fork} (hlt : fork < .glamsterdam)
+    (h : applyTransactions env body transactions = .ok output) :
+    output.gas.execution = output.cumulativeGasUsed := by
+  refine foldlM_ok_invariant (fun before : BodyOutput fork =>
+    before.gas.execution = before.cumulativeGasUsed) ?_ rfl h
+  rintro before ⟨tx, index⟩ after hExecution hStep
+  obtain ⟨included, out, -, hOut, hGas, hCumulative, -⟩ := applyTransaction_eq_ok hStep
+  have hTx := processTransaction_blockGas_execution_of_lt hlt hOut
+  rw [hGas, hCumulative, BlockGas.add]
+  dsimp only
+  omega
+
 /-- From Glamsterdam, the execution gas of a body that runs is at most its block gas limit. -/
 theorem applyTransactions_execution_le_of_glamsterdam {env : BlockEnvironment fork}
     {body : BodyState} {transactions : List Transaction} {output : BodyOutput fork}

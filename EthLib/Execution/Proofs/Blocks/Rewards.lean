@@ -140,7 +140,7 @@ theorem payRewards_spec {fork : Fork} (h : fork < .paris) {tx tx' : TransactionS
       rw [hother other hno.2, hrest other hno.1]
 
 /-- The reward of an ommer, as a word, has the same value. -/
-private theorem toNat_ommerReward (fork : Fork) (age : Nat) :
+theorem toNat_ommerReward (fork : Fork) (age : Nat) :
     (BitVec.ofNat 256 (ommerReward fork age)).toNat = ommerReward fork age := by
   rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (ommerReward_lt fork age)]
 

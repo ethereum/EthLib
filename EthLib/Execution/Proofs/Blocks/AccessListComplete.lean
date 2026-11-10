@@ -69,7 +69,7 @@ theorem applyTransaction_covers {env : BlockEnvironment fork} {index : Nat}
       checkInclusion env.chainId env before.gas (.ofBlock before.block) tx = .ok included ∧
       processTransaction env before.block included tx = .ok out ∧
       before.body.builder.Extends after.body.builder ∧ after.body.builder.Covers out.state := by
-  obtain ⟨included, out, hIncluded, hOut, -, hJoin⟩ := applyTransaction_eq_ok h
+  obtain ⟨included, out, hIncluded, hOut, -, -, hJoin⟩ := applyTransaction_eq_ok h
   obtain ⟨hExt, hCovers⟩ := BodyState.join_covers hJoin
   exact ⟨included, out, hIncluded, hOut, hExt, hCovers⟩
 

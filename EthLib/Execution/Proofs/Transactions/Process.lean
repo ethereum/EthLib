@@ -378,7 +378,7 @@ The block counts the gas of the transaction.
 The gas is then settled on the state that the message leaves.
 
 Then the accounts to delete and the empty touched accounts are deleted. -/
-private theorem runTransaction_eq_ok {env : BlockEnvironment fork} {block : State.BlockState}
+theorem runTransaction_eq_ok {env : BlockEnvironment fork} {block : State.BlockState}
     {included : Included} {out : TransactionOutput}
     (h : runTransaction Meter env block included tx = .ok out) :
     let gas := allocateGas fork tx included.intrinsicGas
@@ -663,6 +663,15 @@ theorem processTransaction_blockGas_execution_le_of_lt {env : BlockEnvironment f
   obtain ⟨_, _, _, output, _, -, -, -, -, hBlock, -, -⟩ := processTransaction_eq_ok_of_lt hlt h
   rw [hBlock, transactionBlockGas_of_lt hlt]
   exact gasUsed_le_gas hMin _ _
+
+/-- Up to BPO5, a transaction that runs adds its gas used, after the refund, to its block. -/
+theorem processTransaction_blockGas_execution_of_lt {env : BlockEnvironment fork}
+    {block : State.BlockState} {included : Included} {out : TransactionOutput}
+    (hlt : fork < .glamsterdam) (h : processTransaction env block included tx = .ok out) :
+    out.blockGas.execution = out.gasUsed := by
+  obtain ⟨_, _, _, output, _, -, -, -, -, hBlock, hSettle, -⟩ :=
+    processTransaction_eq_ok_of_lt hlt h
+  rw [hBlock, transactionBlockGas_of_lt hlt, settleGas_gasUsed hSettle]
 
 /-- Up to BPO5, a transaction that runs adds no state gas to its block. -/
 theorem processTransaction_blockGas_state_of_lt {env : BlockEnvironment fork}

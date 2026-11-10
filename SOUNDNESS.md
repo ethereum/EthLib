@@ -1488,6 +1488,17 @@ The state does not record that amount, so the theorems give only the bound there
 The same holds from Cancun until Glamsterdam for a transaction that creates an account.
 An exact form there needs a term that tracks the burned balance through the whole run.
 
+`Execution/Proofs/Blocks/Supply.lean` extends the bound to a whole block.
+The block creates the wei of its withdrawals from Shapella, by EIP-4895, and of its rewards before Paris.
+The DAO transfer only moves wei, and a system call keeps or lowers the supply, as a message does.
+`stateTransition_supply_le` proves that the supply after the block plus the burned fees is at most the supply before plus the created wei, at every fork.
+`stateTransition_supply_of_glamsterdam` proves the equality from Glamsterdam.
+`stateTransition_supply_le_of_lt_glamsterdam` writes the burned fees from the header before Glamsterdam: the gas used and the blob gas used, each at its base fee.
+From Glamsterdam the gas used of the header counts the gas before the refunds, by EIP-7778, so it no longer gives the burned fees.
+There the theorems take the fees from the body that the transition runs.
+Before Glamsterdam the block theorems give only the bound, for the reasons above, even from Cancun.
+A block form of the Cancun equality would need every transaction and every system call to end with no created account; [#1793](https://github.com/ethereum/EthLib/issues/1793) tracks the exact accounting before Glamsterdam.
+
 ### The authorizations of EIP-7702
 
 `Execution/Proofs/Transactions/Authorization.lean` covers every case of one authorization, at every fork.
