@@ -66,10 +66,10 @@ theorem complete_authenticates (s : Libp2pState) (staticKey : Key)
           before.step = (if s.handshake.initiator then 1 else 2)
       · rw [ite_eq_left hphase] at h
         cases hr : readMessage before message with
-        | error error => simp [hr] at h
+        | error error => simp [hr, Except.mapError] at h
         | ok result =>
           obtain ⟨received, payload⟩ := result
-          simp only [hr] at h
+          simp only [hr, Except.mapError] at h
           by_cases hreceived : received.step = (if s.handshake.initiator then 2 else 3)
           · rw [ite_eq_left hreceived] at h
             cases hs : received.remoteStatic with

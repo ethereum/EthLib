@@ -257,19 +257,36 @@ def test_incomplete_and_wrong_order(exchange: tuple) -> None:
         noise_libp2p_read(initiator, exchange[3])
 
 
-@pytest.mark.parametrize("component", ["static", "phase"])
+@pytest.mark.parametrize("secret", [0, reference.N, 2**256 - 1])
+def test_invalid_identity_secret(secret: int) -> None:
+    initiator, responder = libp2p_pair()
+    _, m1 = noise_libp2p_write(initiator, IDENTITY_I, None)
+    responder = noise_libp2p_read(responder, m1)
+    with raises(NoiseError, ERROR + "identitySecret") as error:
+        noise_libp2p_write(responder, secret.to_bytes(32, "big"), None)
+    assert error.value.code == 11
+
+
+@pytest.mark.parametrize("component", ["missing", "tag", "truncated", "static", "phase"])
 def test_completion_rechecks_saved_message(exchange: tuple, component: str) -> None:
     handshake, saved = exchange[0]
-    if component == "static":
+    if component == "missing":
+        saved = None
+    elif component == "tag":
+        before, ciphertext = saved
+        saved = (before, ciphertext[:-1] + bytes([ciphertext[-1] ^ 1]))
+    elif component == "truncated":
+        before, ciphertext = saved
+        saved = (before, ciphertext[:50])
+    elif component == "static":
         h = handshake
         handshake = (h[0], h[1], h[2], bytes(32), h[4], h[5], h[6], h[7], h[8], h[9])
-        error = "identity"
     else:
         b, ciphertext = saved
         saved = ((b[0], b[1], b[2], b[3], b[4], 0, b[6], b[7], b[8], b[9]), ciphertext)
-        error = "wrongPhase"
-    with raises(NoiseError, ERROR + error):
+    with raises(NoiseError, ERROR + "savedRemote") as error:
         noise_libp2p_complete((handshake, saved))
+    assert error.value.code == 13
 
 
 @pytest.mark.parametrize("length", [0, 1, 31, 32, 63, 79, 80, 95])
