@@ -471,6 +471,8 @@ The cost is at most `q (q + 1) / 2` over the size of the bijection's domain, for
 That is the step from Game G0 to Game G1 of §4.2 of the source, in the proof of its Theorem 2, whose bound `Q² / 2^L` is at least as large.
 The source draws the key from the nonzero scalars; the key-only game here draws it from all scalars, and the key `0` never verifies.
 So its advantage is the source's times `(n - 1) / n`, where `n` is the number of scalars.
+`keyOnlyIndepAdvantage_eq_overlay` (`Proofs/Secp256k1/Security/KeyOnlyOverlay.lean`) asks each new forward answer of one outside oracle with no input, and keeps the advantage with independent answers.
+The forking lemma can then rewind the run at that oracle's query, as the source's algorithm `A` of Figure 8 is rewound.
 `ecdsa_verify_eq_verify_ecdsaScheme` (`Proofs/Secp256k1/Security/Refinement.lean`) proves that `verify` is the game's verification, with the bijection the identity, for `r` and `s` below `n`.
 `exists_signNonce_of_sign` proves that every signature from `sign` is the game's signature for some nonzero nonce; that is correctness of signing, and says nothing about how RFC 6979 draws the nonces.
 The game draws the bijection uniformly, so a bound on it would apply to EthLib, where the bijection is the identity, only under the heuristic of the source that the identity behaves as a bijective random oracle.
