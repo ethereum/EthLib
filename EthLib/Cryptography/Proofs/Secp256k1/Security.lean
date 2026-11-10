@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.Game
+public import EthLib.Cryptography.Proofs.Secp256k1.Security.JointGame
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.LazyGame
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.Refinement
 
@@ -18,6 +19,14 @@ A bound on the game applies to EthLib only if the identity behaves as a random b
 Every signature from EthLib's signing is the game's signature for some nonzero nonce.
 
 With the bijection sampled lazily, every adversary wins with the same chance as in the game.
+
+The game also runs over the joint state of its oracles.
+
+The permutation oracle and the signer of new messages are parameters there.
+
+Run the lazy game that way, then draw `Π` from the final cache of `Π`.
+
+The forgery, the result, the signing cache and `Π` then have the joint law of the game.
 
 No theorem bounds the advantage of a forger yet.
 -/
