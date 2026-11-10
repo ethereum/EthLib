@@ -39,7 +39,9 @@ Then an event of the game, read on the state the reduction sees, is at most as l
 
 This holds until the message at position `j` is signed.
 
-A key hash other than the honest one is zero with probability at most `(qK - 1) / |F|`.
+In a game within `qK` key hash calls, a key other than the honest one has the scalar 0 rarely.
+
+That probability is at most `(qK - 1) / |F|`.
 
 No bound on the aggregate game is proved yet.
 -/

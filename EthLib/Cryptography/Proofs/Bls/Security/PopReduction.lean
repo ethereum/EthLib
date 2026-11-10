@@ -82,9 +82,6 @@ def embedImpl (g₂ X₂ Y : G₂) (pk : G₁) (j : ℕ) :
     (onMsg (embedSignAt g₂ X₂ Y j m) : StateT (State F G₁ M) ProbComp G₂)
   | .inr (.inr x) => (embedKeyHash g₂ Y pk x : StateT (State F G₁ M) ProbComp G₂)
 
-/-- The state after the hash of the honest key `pk` with scalar `s`, the first key hash call. -/
-def State.withKey (pk : G₁) (s : F) : State F G₁ M := ⟨Security.State.init, [(pk, s)], 1⟩
-
 /-- The scalar of the key hash of `x` in the key table, or 0 when `x` was never hashed. -/
 def keyScalar (x : G₁) (st : State F G₁ M) : F :=
   match lookup x st.keyTable with

@@ -5,15 +5,17 @@ public import VCVio.OracleComp.SimSemantics.StateT.PreservesInv
 /-!
 # Proofs: a bad event that only a new table entry can cause
 
-A stateful oracle keeps a table, and a step adds at most one entry to it.
+A stateful oracle keeps a table, and no step shrinks it.
 
 From a good state, a step either keeps the size and stays good, or adds one entry.
 
 A step that adds an entry turns bad with probability at most `ε`.
 
-Then a run that ends with at most `n` entries ends bad with probability at most `(n - k) * ε`.
+Take a run from a good state of size `k`, which always ends with at most `n` entries.
 
-Here `k` is the size at the start, from a good state.
+Its final state is bad with probability at most `(n - k) * ε`.
+
+Badness need not persist: the bound is on the final state.
 
 This is the union bound over the entries that the run adds.
 -/
@@ -55,7 +57,7 @@ theorem BadOnGrowth.le_size_of_mem_support {impl : QueryImpl spec (StateT σ Pro
 
 Take a run from a good state of size `k`, which always ends with at most `n` entries.
 
-It ends bad with probability at most `(n - k) * ε`. -/
+Its final state is bad with probability at most `(n - k) * ε`. -/
 theorem BadOnGrowth.prEvent_bad_le {impl : QueryImpl spec (StateT σ ProbComp)} {size : σ → ℕ}
     {bad : σ → Prop} {ε : ℝ≥0∞} (h : BadOnGrowth impl size bad ε) {α : Type}
     (oa : OracleComp spec α) (s : σ) (hs : ¬bad s) {n : ℕ}

@@ -79,6 +79,9 @@ structure State (F G₁ M : Type) where
 /-- The empty state, at the start of the game. -/
 def State.init : State F G₁ M := ⟨Security.State.init, [], 0⟩
 
+/-- The state after the hash of the honest key `pk` with scalar `s`, the first key hash call. -/
+def State.withKey (pk : G₁) (s : F) : State F G₁ M := ⟨Security.State.init, [(pk, s)], 1⟩
+
 variable [DecidableEq M] [DecidableEq G₁] [CommRing F] [SampleableType F]
   [AddCommGroup G₁] [Module F G₁] [AddCommGroup G₂] [Module F G₂]
 
@@ -92,6 +95,24 @@ def keyHash (g₂ : G₂) (x : G₁) : StateT (State F G₁ M) ProbComp G₂ := 
     (fun t => (t • g₂,
       { st with keyTable := st.keyTable ++ [(x, t)], keyCalls := st.keyCalls + 1 })) <$>
       ($ᵗ F)
+
+omit [DecidableEq M] [AddCommGroup G₁] [Module F G₁] in
+/-- A key already in the table hashes to its scalar times `g2`, and only counts the call. -/
+theorem keyHash_of_lookup_some {g₂ : G₂} {x : G₁} {st : State F G₁ M} {k : ℕ} {t : F}
+    (h : lookup x st.keyTable = some (k, t)) :
+    keyHash g₂ x st = pure (t • g₂, { st with keyCalls := st.keyCalls + 1 }) := by
+  unfold keyHash
+  rw [h]
+
+omit [DecidableEq M] [AddCommGroup G₁] [Module F G₁] in
+/-- A new key draws a fresh scalar, which the key table keeps with the key. -/
+theorem keyHash_of_lookup_none {g₂ : G₂} {x : G₁} {st : State F G₁ M}
+    (h : lookup x st.keyTable = none) :
+    keyHash g₂ x st = (fun t => (t • g₂,
+      { st with keyTable := st.keyTable ++ [(x, t)], keyCalls := st.keyCalls + 1 })) <$>
+      ($ᵗ F) := by
+  unfold keyHash
+  rw [h]
 
 /-- Run one oracle of the game for one key on the message part of the state. -/
 def onMsg {α : Type} (step : StateT (Security.State F M) ProbComp α) :
