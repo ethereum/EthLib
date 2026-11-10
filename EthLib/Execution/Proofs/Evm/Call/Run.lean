@@ -22,8 +22,9 @@ This needs a runner of messages that gives the fact.
 
 The fact then holds of every call and creation, by strong induction on the gas of the message.
 
-Each property supplies its steps, its halts, the start of a call, its rollback and its deposit of
-code.
+Each property supplies its steps, its halts and the start of a call.
+
+It also supplies the rollback of a call and the deposit of code.
 
 The steps may assume a frame invariant that the relation keeps.
 
@@ -99,7 +100,9 @@ variable {R : Evm fork Meter → Evm fork Meter → Prop}
 
 The relation must be reflexive and transitive, and hold of each exceptional halt.
 
-Each step from a frame with the invariant must keep the relation, which keeps the invariant.
+Each halt and each step starts from a frame with the invariant.
+
+Each step must keep the relation, which keeps the invariant.
 
 The runner must end each message from a caller with the invariant in a frame that `C` relates.
 
@@ -146,13 +149,13 @@ def ChildRel
 
 The relation `R` of frames must be reflexive and transitive, and keep the invariant `Inv`.
 
-It must hold of each exceptional halt, each stop and each precompile, from a frame with the
-invariant.
+It must hold of each exceptional halt, each stop and each precompile.
+
+Each of these starts from a frame with the invariant.
 
 Each step from a frame with the invariant must keep `R`, given `M` for the messages it sends.
 
-A call must satisfy `M` after its rollback, when its frame ends related to the frame it starts
-from.
+A call must satisfy `M` after its rollback, when its frame ends related to its start frame.
 
 That frame starts from the state and substate before or after the transfer of value.
 
