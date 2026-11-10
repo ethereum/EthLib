@@ -25,7 +25,7 @@ When the block names the proposer of the state, the two checks of a signature ag
 
 From Gloas, a bid's execution payment adds at most the proposer's cap to its value.
 
-A payment at or above the cap adds the cap, and a payment below it adds itself.
+A payment at or above the cap adds the cap, and a payment at or below it adds itself.
 -/
 
 @[expose] public section
@@ -34,12 +34,12 @@ namespace EthLib.Consensus
 
 open Base Serialization.Ssz
 
-/-- The domain type of the Builder API sets the bit of the application mask. -/
+/-- The domain type of registrations and bids sets the bit of the application mask. -/
 theorem DOMAIN_APPLICATION_BUILDER_masked :
     DOMAIN_APPLICATION_BUILDER[3] &&& DOMAIN_APPLICATION_MASK[3] ≠ 0 := by
   decide
 
-/-- No domain type of a fork is the domain type of the Builder API. -/
+/-- No domain type of a fork is the domain type of registrations and bids. -/
 theorem DOMAIN_APPLICATION_BUILDER_not_mem :
     DOMAIN_APPLICATION_BUILDER ∉ protocolDomainTypes :=
   not_mem_protocolDomainTypes_of_masked 3 DOMAIN_APPLICATION_BUILDER_masked
@@ -80,7 +80,7 @@ theorem builderDomain_ne_of_masked {config : Config} {builderType domainType : D
   intro same
   exact not_mem_protocolDomainTypes_of_masked i masked (same ▸ protocol)
 
-/-- No domain of a fork is the domain of the Builder API, whatever its fork version and chain. -/
+/-- No domain of a fork is that of registrations and bids, whatever its fork version and chain. -/
 theorem builderDomain_ne {config : Config} {domainType : DomainType} {version : Version}
     {root : Root} {builder domain : Domain} (protocol : domainType ∈ protocolDomainTypes)
     (built : builderDomain config = .ok builder)

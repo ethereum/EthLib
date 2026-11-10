@@ -129,14 +129,14 @@ def ExecutionPayloadBid.proposerValue (bid : ExecutionPayloadBid preset fork)
     (preferences : BuilderPreferences) : Nat :=
   builderBidValue bid.value bid.executionPayment preferences
 
-/-- Whether the key of a registration signed it, under the domain of the Builder API.
+/-- Whether the key of a registration signed it, under the domain of registrations and bids.
 
 It fails as the check of a signature under that domain does. -/
 def verifyRegistrationSignature (config : Config) (checks : SignatureChecks)
     (signed : SignedValidatorRegistrationV1) : Except Err Bool :=
   verifyBuilderApiSignature config checks signed.message signed.message.pubkey signed.signature
 
-/-- Whether the key of the builder in a bid signed it, under the domain of the Builder API.
+/-- Whether the key of the builder in a bid signed it, under the domain of registrations and bids.
 
 It fails as the check of a signature under that domain does. -/
 def verifyBuilderBidSignature (config : Config) (checks : SignatureChecks)
