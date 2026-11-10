@@ -76,6 +76,14 @@ theorem natToBytes_add (a b n : Nat) :
     rw [← Nat.add_assoc, natToBytes_succ, ih, natToBytes_succ, List.append_assoc,
       Nat.div_div_eq_div_mul, Nat.pow_succ, Nat.mul_comm 256]
 
+/-- A number written on `len` bytes keeps only its remainder modulo `256 ^ len`. -/
+theorem natToBytes_mod (len n : Nat) : natToBytes len (n % 256 ^ len) = natToBytes len n := by
+  induction len generalizing n with
+  | zero => rfl
+  | succ len ih =>
+    rw [natToBytes_succ, natToBytes_succ, Nat.pow_succ', Nat.mod_mul_right_div_self, ih,
+      Nat.mod_mul_right_mod]
+
 /-- Zero on `len` bytes is `len` zero bytes. -/
 theorem natToBytes_zero_right (len : Nat) : natToBytes len 0 = List.replicate len 0 := by
   induction len with
