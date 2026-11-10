@@ -48,7 +48,7 @@ The slot then pays each payment of the previous epoch whose weight is at least t
 
 The hypothesis on the parent payment is part of the builder debt invariant.
 
-The hypotheses on the weights and the genesis epoch are assumptions, which no lemma proves yet.
+The hypotheses on the weights and the genesis epoch hold along a chain from the upgrade to Gloas.
 -/
 theorem advanceSlot_release (positive : preset.PaymentQuorumPositive)
     {gloas : .glamsterdam ≤ fork} (fresh : ParentPaymentFresh state gloas)
@@ -63,22 +63,25 @@ theorem advanceSlot_release (positive : preset.PaymentQuorumPositive)
         ∀ slot position, slotPaymentPosition state slot = some position →
           position.toNat < preset.SLOTS_PER_EPOCH.toNat →
           quorum ≤ (paymentAt state gloas position.toNat).weight → slot ∈ released) := by
-  obtain ⟨next, cached, epoched, sum, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok computed
-  have cachedFrame := builderFrame_processSlot cachedOk
-  have forward : state.slot ≤ next := UInt64.le_iff_toNat_le.mpr (by omega)
-  unfold epochIfLast at epochedOk
-  split at epochedOk
-  · rename_i boundary
-    obtain ⟨pending, settled, pendingOk, before, settledOk, tail⟩ :=
-      processEpoch_builderSplit (gloas := gloas) epochedOk
-    have pendingFrame := cachedFrame.trans before
+  obtain ⟨next, cached, sum, cachedOk, cachedFrame, ⟨inside, rfl⟩ |
+    ⟨boundary, pending, settled, pendingOk, before, settledOk, frame⟩⟩ :=
+    advanceSlot_builderSplit (gloas := gloas) computed
+  · have sameEpoch : next.toNat / preset.SLOTS_PER_EPOCH.toNat =
+        state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat :=
+      nextSlot_epoch_of_inside sum inside
+    have forward : state.slot ≤ next := UInt64.le_iff_toNat_le.mpr (by omega)
+    refine ⟨[], PaymentRelease.of_fields forward (slotPaymentPosition_congr_epoch sameEpoch)
+      cachedFrame.headerSlot (congrFun cachedFrame.bid gloas)
+      (fun position => congrArg _ (cachedFrame.paymentAt gloas position))
+      (congrFun cachedFrame.withdrawals gloas), nofun, fun _ => rfl,
+      fun boundary => absurd boundary inside⟩
+  · have pendingFrame := cachedFrame.trans before
     obtain ⟨quorum, released, quorumOk, release, closes, reaches⟩ :=
       processBuilderPendingPayments_release positive (fresh.of_frame pendingFrame)
         (paid.of_frame pendingFrame) (genesis.of_frame pendingFrame)
         settledOk (by rw [pendingFrame.slot]; exact sum) boundary
-    have frame := tail.withSlot next
     refine ⟨released, release.of_frames pendingFrame frame, ?_,
-      fun outside => absurd boundary outside,
+      fun outside => absurd (frame.slot ▸ boundary) outside,
       fun _ => ⟨cached, pending, quorum, cachedOk, pendingOk, quorumOk, ?_⟩⟩
     · intro slot member opened
       exact closes slot member ((paymentOpen_congr (slotPaymentPosition_congr frame.slot)
@@ -88,16 +91,5 @@ theorem advanceSlot_release (positive : preset.PaymentQuorumPositive)
       rw [← slotPaymentPosition_congr pendingFrame.slot] at located
       rw [← pendingFrame.paymentAt gloas] at reached
       exact reaches slot position located below reached
-  · rename_i inside
-    simp only [pure, Except.pure, Except.ok.injEq] at epochedOk
-    subst epochedOk
-    have sameEpoch : next.toNat / preset.SLOTS_PER_EPOCH.toNat =
-        state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat :=
-      nextSlot_epoch_of_inside sum inside
-    refine ⟨[], PaymentRelease.of_fields forward (slotPaymentPosition_congr_epoch sameEpoch)
-      cachedFrame.headerSlot (congrFun cachedFrame.bid gloas)
-      (fun position => congrArg _ (cachedFrame.paymentAt gloas position))
-      (congrFun cachedFrame.withdrawals gloas), nofun, fun _ => rfl,
-      fun boundary => absurd boundary inside⟩
 
 end EthLib.Consensus

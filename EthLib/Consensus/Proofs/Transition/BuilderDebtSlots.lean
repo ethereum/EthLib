@@ -178,22 +178,48 @@ theorem builderFrame_processSlot (computed : processSlot state = .ok after) :
   obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok computed
   exact ⟨rfl, header, rfl, rfl, rfl, rfl⟩
 
+/-- From Gloas, one slot caches its roots, then may run the epoch step of the payments.
+
+The caching keeps the builder fields, the slot and the slot of the latest block header.
+
+Inside an epoch, the state after is the cached state at the next slot.
+
+At the last slot of an epoch, the epoch step of the payments runs between two frames.
+
+It starts from the state that the epoch transition reaches before its payments step. -/
+theorem advanceSlot_builderSplit {gloas : .glamsterdam ≤ fork}
+    (computed : advanceSlot config checks state = .ok after) :
+    ∃ next cached, next.toNat = state.slot.toNat + 1 ∧ processSlot state = .ok cached ∧
+      BuilderFrame state cached ∧
+      ((next % preset.SLOTS_PER_EPOCH ≠ 0 ∧ after = { cached with slot := next }) ∨
+        (next % preset.SLOTS_PER_EPOCH = 0 ∧ ∃ pending paid,
+          epochBeforePayments config checks cached = .ok pending ∧ BuilderFrame cached pending ∧
+          processBuilderPendingPayments pending gloas = .ok paid ∧
+          BuilderFrame { paid with slot := next } after)) := by
+  obtain ⟨next, cached, epoched, sum, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok computed
+  refine ⟨next, cached, sum, cachedOk, builderFrame_processSlot cachedOk, ?_⟩
+  unfold epochIfLast at epochedOk
+  split at epochedOk
+  · rename_i boundary
+    obtain ⟨pending, paid, pendingOk, before, paidOk, tail⟩ :=
+      processEpoch_builderSplit (gloas := gloas) epochedOk
+    exact .inr ⟨boundary, pending, paid, pendingOk, before, paidOk, tail.withSlot next⟩
+  · rename_i inside
+    simp only [pure, Except.pure, Except.ok.injEq] at epochedOk
+    subst epochedOk
+    exact .inl ⟨inside, rfl⟩
+
 /-- One slot keeps the builders. -/
 theorem advanceSlot_builders (gloas : .glamsterdam ≤ fork)
     (computed : advanceSlot config checks state = .ok after) :
     after.builders gloas = state.builders gloas := by
-  obtain ⟨next, cached, epoched, -, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok computed
-  have cachedFrame := builderFrame_processSlot cachedOk
-  unfold epochIfLast at epochedOk
-  split at epochedOk
-  · obtain ⟨pending, paid, -, before, paidOk, tail⟩ :=
-      processEpoch_builderSplit (gloas := gloas) epochedOk
-    have paidBuilders : paid.builders = pending.builders := by
+  obtain ⟨next, cached, -, -, cachedFrame, ⟨-, rfl⟩ |
+    ⟨-, pending, paid, -, before, paidOk, tail⟩⟩ :=
+      advanceSlot_builderSplit (gloas := gloas) computed
+  · simp only [cachedFrame.builders]
+  · have paidBuilders : paid.builders = pending.builders := by
       rw [processBuilderPendingPayments_eq paidOk]
     simp only [tail.builders, paidBuilders, before.builders, cachedFrame.builders]
-  · simp only [pure, Except.pure, Except.ok.injEq] at epochedOk
-    subst epochedOk
-    simp only [cachedFrame.builders]
 
 /-- A run of slots keeps the builders. -/
 theorem processSlots_builders (gloas : .glamsterdam ≤ fork) {slot : Slot}
@@ -225,21 +251,13 @@ private theorem BuilderDebtCovered.withSlot {gloas : .glamsterdam ≤ fork} {nex
 theorem BuilderDebtCovered.advanceSlot (positive : preset.PaymentQuorumPositive)
     {gloas : .glamsterdam ≤ fork} (holds : BuilderDebtCovered state gloas)
     (computed : advanceSlot config checks state = .ok after) : BuilderDebtCovered after gloas := by
-  obtain ⟨next, cached, epoched, sum, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok computed
-  have cachedFrame := builderFrame_processSlot cachedOk
-  have cachedHolds := holds.of_frame cachedFrame
-  unfold epochIfLast at epochedOk
-  split at epochedOk
-  · rename_i boundary
-    obtain ⟨pending, paid, -, before, paidOk, tail⟩ := processEpoch_builderSplit epochedOk
-    have paidHolds := (cachedHolds.of_frame before).processBuilderPendingPayments positive paidOk
-      (by rw [before.slot, cachedFrame.slot]; exact sum) boundary
-    exact paidHolds.of_frame (tail.withSlot next)
-  · rename_i inside
-    simp only [pure, Except.pure, Except.ok.injEq] at epochedOk
-    subst epochedOk
-    exact cachedHolds.withSlot
+  obtain ⟨next, cached, sum, -, cachedFrame, ⟨inside, rfl⟩ |
+    ⟨boundary, pending, paid, -, before, paidOk, tail⟩⟩ := advanceSlot_builderSplit computed
+  · exact (holds.of_frame cachedFrame).withSlot
       (by rw [cachedFrame.slot]; exact nextSlot_epoch_of_inside sum inside)
+  · have paidHolds := ((holds.of_frame cachedFrame).of_frame before).processBuilderPendingPayments
+      positive paidOk (by rw [before.slot, cachedFrame.slot]; exact sum) boundary
+    exact paidHolds.of_frame tail
 
 /-- With a positive quorum, a run of slots keeps the builder debt invariant. -/
 theorem BuilderDebtCovered.processSlots (positive : preset.PaymentQuorumPositive)

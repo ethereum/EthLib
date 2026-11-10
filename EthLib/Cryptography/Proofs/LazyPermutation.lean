@@ -212,6 +212,44 @@ variable [FinEnum A]
 def uniformOutside (used : List A) (d : A) : ProbComp A :=
   uniformFrom ((FinEnum.toList A).filter fun b => b ∉ used) d
 
+/-- A uniform value of all of `A` does not depend on the default. -/
+theorem uniformOutside_nil_eq (d d' : A) :
+    (uniformOutside [] d : ProbComp A) = uniformOutside [] d' := by
+  have hnil : ((FinEnum.toList A).filter fun b => b ∉ []) = FinEnum.toList A := by simp
+  rw [uniformOutside, uniformOutside, hnil]
+  cases h : FinEnum.toList A with
+  | nil => exact absurd (h ▸ FinEnum.mem_toList d) (List.not_mem_nil)
+  | cons b bs => rfl
+
+/-- At least `|A|` minus the length of a list of values of `A` lie outside the list. -/
+theorem card_sub_length_le_length_filter (used : List A) :
+    FinEnum.card A - used.length ≤ ((FinEnum.toList A).filter fun b => b ∉ used).length := by
+  have hlen : (FinEnum.toList A).length = FinEnum.card A := by simp [FinEnum.toList]
+  have hsplit := List.length_eq_length_filter_add (l := FinEnum.toList A)
+    fun b => decide (b ∉ used)
+  have hin : ((FinEnum.toList A).filter fun b => !decide (b ∉ used)).length ≤ used.length :=
+    (List.subperm_of_subset ((FinEnum.nodup_toList).filter _)
+      fun y hy => by simpa using (List.mem_filter.1 hy).2).length_le
+  omega
+
+/-- A list of values of `A` with no repeats, which misses one value, is shorter than `|A|`. -/
+theorem length_lt_card_of_nodup {l : List A} (hl : l.Nodup) {a : A} (ha : a ∉ l) :
+    l.length < FinEnum.card A := by
+  have := (List.nodup_cons.2 ⟨ha, hl⟩).length_le_card
+  rw [FinEnum.card_eq_fintypeCard]
+  simpa using this
+
+/-- A uniform value outside a list shorter than `|A|` is outside the list. -/
+theorem notMem_of_mem_support_uniformOutside {used : List A} {d y : A}
+    (h : used.length < FinEnum.card A) (hy : y ∈ support (uniformOutside used d)) :
+    y ∉ used := by
+  have hcard := card_sub_length_le_length_filter used
+  have hne : ((FinEnum.toList A).filter fun b => b ∉ used) ≠ [] := by
+    intro h'
+    rw [h', List.length_nil] at hcard
+    omega
+  simpa using (List.mem_filter.1 (mem_of_mem_support_uniformFrom hne d hy)).2
+
 /-- The permutation sampled one answer at a time, as an oracle.
 
 A query answered before gets its answer again.
@@ -463,25 +501,6 @@ private theorem extensions_cons_nonempty_inverse {c : PermCache A} (hc : (extens
 
 /-! ## The lazy oracle stays a partial bijection -/
 
-/-- Two lists without repeats of one length, the first missing a value.
-
-Some value of the type is then missing from the second list. -/
-private theorem filter_notMem_ne_nil {l₁ l₂ : List A} (h₁ : l₁.Nodup) (h₂ : l₂.Nodup)
-    (hlen : l₁.length = l₂.length) {a : A} (ha : a ∉ l₁) :
-    (FinEnum.toList A).filter (fun b => b ∉ l₂) ≠ [] := by
-  intro h
-  have hall : ∀ b, b ∈ l₂ := fun b => by
-    by_contra hb
-    have : b ∈ (FinEnum.toList A).filter (fun b => b ∉ l₂) :=
-      List.mem_filter.2 ⟨FinEnum.mem_toList b, by simpa using hb⟩
-    rw [h] at this
-    simp at this
-  have h₂u : l₂.toFinset = Finset.univ := Finset.eq_univ_of_forall fun b => by simp [hall b]
-  have h₁u : l₁.toFinset = Finset.univ := Finset.eq_univ_of_card _ (by
-    rw [List.toFinset_card_of_nodup h₁, hlen, ← List.toFinset_card_of_nodup h₂, h₂u,
-      Finset.card_univ])
-  exact ha (List.mem_toFinset.1 (h₁u ▸ Finset.mem_univ a))
-
 omit [FinEnum A] in
 /-- A permutation query goes to the permutation oracle. -/
 private theorem permImpl_inr (π : Equiv.Perm A) (t : (PermSpec A).Domain) :
@@ -531,10 +550,9 @@ private theorem lazyPermImpl_step {t : (unifSpec + PermSpec A).Domain} {c c₁ :
       obtain ⟨b, hb, -, rfl⟩ := h
       refine ⟨List.suffix_cons _ _, fun hc => ?_⟩
       have ha := notMem_map_fst_of_lookup_eq_none hl
-      have hb' := mem_of_mem_support_uniformFrom
-        (filter_notMem_ne_nil hc.1 hc.2 (by simp) ha) _ hb
-      simp only [List.mem_filter, decide_eq_true_eq] at hb'
-      exact (PermCache.isPartialBijection_cons_iff _ _).2 ⟨ha, hb'.2, hc⟩
+      have hb' := notMem_of_mem_support_uniformOutside (A := A)
+        (by simpa using length_lt_card_of_nodup hc.1 ha) hb
+      exact (PermCache.isPartialBijection_cons_iff _ _).2 ⟨ha, hb', hc⟩
   · simp only [lazyPermImpl, QueryImpl.passthrough_add, QueryImpl.add_apply_inr, lazyPermOracle,
       StateT.run] at h
     cases hl : (c.map Prod.swap).lookup b with
@@ -549,10 +567,9 @@ private theorem lazyPermImpl_step {t : (unifSpec + PermSpec A).Domain} {c c₁ :
       obtain ⟨a, ha, -, rfl⟩ := h
       refine ⟨List.suffix_cons _ _, fun hc => ?_⟩
       have hb := notMem_map_snd_of_lookup_swap_eq_none hl
-      have ha' := mem_of_mem_support_uniformFrom
-        (filter_notMem_ne_nil hc.2 hc.1 (by simp) hb) _ ha
-      simp only [List.mem_filter, decide_eq_true_eq] at ha'
-      exact (PermCache.isPartialBijection_cons_iff _ _).2 ⟨ha'.2, hb, hc⟩
+      have ha' := notMem_of_mem_support_uniformOutside (A := A)
+        (by simpa using length_lt_card_of_nodup hc.2 hb) ha
+      exact (PermCache.isPartialBijection_cons_iff _ _).2 ⟨ha', hb, hc⟩
 
 /-- A lazy run only adds pairs to the cache, and keeps it a partial bijection. -/
 private theorem lazyPermImpl_run_support {α : Type} (oa : OracleComp (unifSpec + PermSpec A) α)

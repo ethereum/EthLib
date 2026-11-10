@@ -63,9 +63,9 @@ The check of the forgery may relay one more query, which their Definition 4 rule
 
 So a bound on the chance of a conflict counts that query too.
 
-No theorem bounds that chance yet.
+The module on conflicts bounds that chance.
 
-Such a bound needs a nonzero base point and a semi-injective `φ`.
+That bound assumes a nonzero base point and a semi-injective `φ`.
 
 With the base point `0`, every nonce programs the same query, and the second one conflicts.
 
@@ -89,6 +89,27 @@ variable {F G A M : Type} [FinEnum A]
 variable [Field F] [DecidableEq F] [AddCommGroup G] [Module F G] [DecidableEq G] [DecidableEq M]
 
 /-! ## The game with `Π` programmed -/
+
+omit [DecidableEq G] [DecidableEq M] in
+/-- A nonzero nonce, with `Π` programmed, programs the query of its point with a uniform answer.
+
+The answer `b` gives `t = ψ(b)`, and the signature or the failure of the nonce under the key. -/
+theorem simulateQ_programPermImpl_signNonceQ_run (scheme : Scheme F G A M) (x : F) (m : M)
+    {k : F} (hk : k ≠ 0) (s : ProgrammedCache A × PermCache A) :
+    (simulateQ programPermImpl (signNonceQ scheme x m k)).run s =
+      (fun b => ((let t := scheme.reduce b
+          let u := scheme.hash m + x * t
+          if k = 0 ∨ t = 0 ∨ u = 0 then none else some (t, scheme.normalize (u / k))),
+        (((scheme.encode (k • scheme.g), b), true) :: s.1, s.2))) <$>
+        uniformOutside [] (scheme.encode (k • scheme.g)) := by
+  simp only [signNonceQ, hk, ite_false, conversionQ, simulateQ_map, StateT.run_map]
+  have hq : (simulateQ programPermImpl (query (spec := unifSpec + PermSpec A)
+      (.inr (.inl (scheme.encode (k • scheme.g)))))).run s =
+      (fun b => (b, (((scheme.encode (k • scheme.g), b), true) :: s.1, s.2))) <$>
+        (uniformOutside [] (scheme.encode (k • scheme.g)) : ProbComp A) := by
+    simp [simulateQ_query]
+    rfl
+  rw [hq, Functor.map_map, Functor.map_map]
 
 variable [SampleableType F]
 

@@ -5,11 +5,13 @@ public import EthLib.Consensus.Proofs.Transition.Committees
 public import EthLib.Consensus.Proofs.Transition.PayloadInputs
 
 /-!
-# Proofs: the active validators of past epochs stay fixed along a chain
+# Proofs: activity up to the current epoch plus `MAX_SEED_LOOKAHEAD` stays fixed along a chain
 
 A validator is active in an epoch from its activation epoch, up to its exit epoch.
 
-The state transition sets an activation or an exit epoch only after the current epoch.
+The state transition sets an activation or an exit epoch only after a bound.
+
+That bound is the current epoch plus `MAX_SEED_LOOKAHEAD`.
 
 An activation lands at the first epoch an activation may take, `MAX_SEED_LOOKAHEAD + 1` epochs on.
 
@@ -19,13 +21,15 @@ From Electra, the exit and consolidation queues of [EIP-7251] give no epoch befo
 
 A new validator has no activation epoch yet, so it is active in no epoch.
 
-So each step of a chain keeps which validators are active in each epoch up to its current epoch.
+So each step of a chain keeps which validators are active in each epoch up to that bound.
 
 That holds at every fork, for slots, epochs, blocks and upgrades.
 
 The current epoch never decreases along a chain.
 
-So along a run of steps, the active sets of the epochs up to its first current epoch stay fixed.
+So that bound never decreases either.
+
+So along a run of steps, the active sets stay fixed in each epoch up to the bound of its start.
 
 [EIP-7251]: https://eips.ethereum.org/EIPS/eip-7251#specification
 -/
@@ -75,7 +79,7 @@ private theorem StepBelow.of_validators
 
 private theorem stepBelow_setValidator {index : ValidatorIndex} {validator old : Validator}
     (found : getValidator state index = .ok old)
-    (same : ∀ epoch ≤ getCurrentEpoch state,
+    (same : ∀ epoch ≤ activityFixedEpoch state,
       isActiveValidator validator epoch = isActiveValidator old epoch)
     (set : state.setValidator index validator = .ok after) : StepBelow state after :=
   StepBelow.of_step (Nat.le_of_eq (sameSizes_setValidator set).1.symm)
@@ -83,7 +87,7 @@ private theorem stepBelow_setValidator {index : ValidatorIndex} {validator old :
 
 private theorem stepBelow_setValidatorAt {index : Nat} {validator old : Validator}
     (found : getValidatorAt state index = .ok old)
-    (same : ∀ epoch ≤ getCurrentEpoch state,
+    (same : ∀ epoch ≤ activityFixedEpoch state,
       isActiveValidator validator epoch = isActiveValidator old epoch)
     (set : state.setValidatorAt index validator = .ok after) : StepBelow state after :=
   StepBelow.of_step (Nat.le_of_eq (sameSizes_setValidatorAt set).1.symm)
@@ -235,12 +239,12 @@ private theorem stepBelow_switchToCompoundingValidator {electra : .pectra ≤ fo
   exact (stepBelow_setValidator found (fun _ _ => by rfl) set).trans
     (stepBelow_queueExcessActiveBalance queued)
 
-/-- A consolidation from Electra takes effect after the current epoch. -/
+/-- A consolidation from Electra takes effect after the current epoch plus `MAX_SEED_LOOKAHEAD`. -/
 private theorem consolidationEpoch_lt {electra : .pectra ≤ fork} {balance : Gwei}
     {churned : BeaconState preset fork} {epoch : Epoch}
     (computed :
       computeConsolidationEpochAndUpdateChurn config state electra balance = .ok (churned, epoch)) :
-    (getCurrentEpoch state).toNat < epoch.toNat := by
+    (getCurrentEpoch state).toNat + preset.MAX_SEED_LOOKAHEAD.toNat < epoch.toNat := by
   cases first : computeActivationExitEpoch preset (getCurrentEpoch state) with
   | error =>
     simp [computeConsolidationEpochAndUpdateChurn, first, liftArith, Except.mapError, bind,
@@ -251,7 +255,7 @@ private theorem consolidationEpoch_lt {electra : .pectra ≤ fork} {balance : Gw
     have firstEq := (computeActivationExitEpoch_ok_iff.mp first).2
     omega
 
-/-- The source of a consolidation had not started to exit, and exits after the current epoch.
+/-- The source of a consolidation had not started to exit, and exits after the fixed epoch.
 
 It must be the validator at its index. -/
 private theorem stepBelow_queueConsolidation {electra : .pectra ≤ fork}
@@ -278,7 +282,7 @@ private theorem stepBelow_queueConsolidation {electra : .pectra ≤ fork}
   have epochEq : getCurrentEpoch churnedState = getCurrentEpoch state := by
     simp only [getCurrentEpoch, slot]
   exact isActiveValidator_eq_of_exit rfl far
-    (by rw [epochEq]; exact UInt64.lt_iff_toNat_lt.mpr later) le
+    (activityFixedEpoch_lt_of_toNat_lt (by rw [epochEq]; exact later)) le
 
 private theorem stepBelow_processConsolidationRequest {electra : .pectra ≤ fork}
     {request : ConsolidationRequest}
@@ -657,11 +661,12 @@ private theorem stepBelow_processInactivityUpdates {altair : .altair ≤ fork}
     obtain ⟨_, _, _, _, rfl⟩ := computed
     exact StepBelow.of_validators
 
-/-- From Electra, the registry updates of one validator keep activity up to the current epoch.
+/-- From Electra, the registry updates of one validator keep activity up to the fixed epoch.
 
-An activation goes to an epoch after the current epoch, and only from the far future. -/
+An activation goes to an epoch after the fixed epoch, and only from the far future. -/
 private theorem stepBelow_updateRegistryEntryElectra {activationEpoch : Epoch} {index : Nat}
-    (later : (getCurrentEpoch state).toNat < activationEpoch.toNat)
+    (later :
+      (getCurrentEpoch state).toNat + preset.MAX_SEED_LOOKAHEAD.toNat < activationEpoch.toNat)
     (computed : updateRegistryEntryElectra config activationEpoch state index = .ok after) :
     StepBelow state after := by
   simp only [updateRegistryEntryElectra, bind_ok_iff, liftAccessor_ok] at computed
@@ -677,9 +682,9 @@ private theorem stepBelow_updateRegistryEntryElectra {activationEpoch : Epoch} {
   split at computed
   · rename_i eligible
     simp only [isEligibleForActivation, Bool.and_eq_true, beq_iff_eq] at eligible
-    -- Neither the far-future epoch nor the new one is at or before the current epoch.
+    -- Neither the far-future epoch nor the new one is at or before the fixed epoch.
     exact stepBelow_setValidatorAt found (fun _ le => isActiveValidator_eq_of_activation
-      (.inl eligible.2) (UInt64.lt_iff_toNat_lt.mpr later) le) (liftAccessor_ok.mp computed)
+      (.inl eligible.2) (activityFixedEpoch_lt_of_toNat_lt later) le) (liftAccessor_ok.mp computed)
   · simp only [pure, Except.pure, Except.ok.injEq] at computed
     exact computed ▸ StepBelow.refl _
 
@@ -692,7 +697,7 @@ private theorem stepBelow_processRegistryUpdates
       mapError_ok_iff] at computed
     obtain ⟨activationEpoch, activationOk, computed⟩ := computed
     have activationEq := (computeActivationExitEpoch_ok_iff.mp activationOk).2
-    -- Each step keeps the slot, so the activation epoch stays after the current epoch.
+    -- Each step keeps the slot, so the activation epoch stays after the fixed epoch.
     refine (foldlM_ok_invariant (fun middle => StepBelow state middle ∧ middle.slot = state.slot)
       (fun middle _ next before ok => ⟨before.1.trans
         (stepBelow_updateRegistryEntryElectra ?_ ok),
@@ -856,10 +861,10 @@ private theorem stepBelow_processEpochAltair {altair : .altair ≤ fork}
         (activeStep_processHistoricalRootsUpdate rootedOk)).trans
       (stepBelow_epochTail syncedOk lookedOk windowed)
 
-/-- The epoch step keeps activity in each epoch up to its current epoch, at every fork. -/
+/-- At every fork, the epoch step keeps activity up to the fixed epoch. -/
 theorem activeKept_processEpoch
     (computed : processEpoch config checks state = .ok after) :
-    ActiveKept (getCurrentEpoch state) state after := by
+    ActiveKept (activityFixedEpoch state) state after := by
   by_cases altair : Fork.altair ≤ fork
   · simp only [processEpoch, altair, ↓reduceDIte] at computed
     exact (stepBelow_processEpochAltair computed).2.2
@@ -880,17 +885,17 @@ private theorem processEpoch_registryGrows
 It keeps activity. -/
 private theorem advanceSlot_kept (computed : advanceSlot config checks state = .ok after) :
     state.validators.data.size ≤ after.validators.data.size ∧
-      ActiveKept (getCurrentEpoch state) state after := by
+      ActiveKept (activityFixedEpoch state) state after := by
   obtain ⟨next, cached, epoched, -, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok computed
   obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
   -- The slot step writes neither the registry nor the slot.
   have validators : cached.validators = state.validators := by rw [cachedEq]
-  have epoch : getCurrentEpoch cached = getCurrentEpoch state := by
-    simp only [getCurrentEpoch, cachedEq]
-  have first : ActiveKept (getCurrentEpoch state) state cached :=
+  have epoch : activityFixedEpoch cached = activityFixedEpoch state :=
+    activityFixedEpoch_eq_of_slot (by rw [cachedEq])
+  have first : ActiveKept (activityFixedEpoch state) state cached :=
     ActiveKept.of_validators (by rw [validators]) _
   suffices kept : cached.validators.data.size ≤ epoched.validators.data.size ∧
-      ActiveKept (getCurrentEpoch cached) cached epoched by
+      ActiveKept (activityFixedEpoch cached) cached epoched by
     refine ⟨validators ▸ kept.1, first.trans ?_⟩
     exact (epoch ▸ kept.2).trans (ActiveKept.of_validators rfl _)
   unfold epochIfLast at epochedOk
@@ -923,10 +928,10 @@ private theorem stepBelow_queueCompoundingExcess {electra : .pectra ≤ fork} {i
   · cases computed
     exact StepBelow.refl _
 
-/-- The upgrade to Electra keeps activity up to the current epoch. -/
+/-- The upgrade to Electra keeps activity up to the current epoch plus `MAX_SEED_LOOKAHEAD`. -/
 private theorem activeKept_upgradeToElectra {pre : BeaconState preset .dencun}
     {post : BeaconState preset .pectra} (computed : upgradeToElectra config pre = .ok post) :
-    ActiveKept (getCurrentEpoch pre) pre post := by
+    ActiveKept (activityFixedEpoch pre) pre post := by
   simp only [upgradeToElectra, bind_ok_iff] at computed
   obtain ⟨_, -, _, -, _, -, _, -, middle, queued, compounded⟩ := computed
   have step := (StepBelow.foldlM (fun _ _ _ ok => stepBelow_queuePreActivation ok) queued).trans
@@ -934,10 +939,10 @@ private theorem activeKept_upgradeToElectra {pre : BeaconState preset .dencun}
   exact (ActiveKept.of_validators rfl _).trans
     step.2.2
 
-/-- A block keeps activity in each epoch up to its current epoch, at every fork. -/
+/-- A block keeps activity up to the current epoch plus `MAX_SEED_LOOKAHEAD`, at every fork. -/
 theorem activeKept_processBlock {block : BeaconBlock preset fork}
     (computed : processBlock config checks engine state block = .ok after) :
-    ActiveKept (getCurrentEpoch state) state after :=
+    ActiveKept (activityFixedEpoch state) state after :=
   (stepBelow_processBlock computed).2.2
 
 /-! ## The attestations of a block -/
@@ -1078,22 +1083,22 @@ theorem processBlock_attestationSplit
       beforeVotes_processProposerSlashing beforeVotes_processAttesterSlashing operated
   have head := blockHead.trans operationsHead
   have tail := operationsTail.trans blockTail
-  have active := head.step.2.2
+  have active := head.step.2.2.mono (getCurrentEpoch_le_activityFixedEpoch _)
   exact ⟨first, last, head.frame, fun attestation member =>
     getAttestingIndices_eq_of_foldlM apart head.frame.slot active head.mixes attested attestation
       (Array.mem_toList_iff.mpr member), attested, tail⟩
 
-/-- One slot keeps activity in each epoch up to its current epoch, at every fork. -/
+/-- One slot keeps activity up to the current epoch plus `MAX_SEED_LOOKAHEAD`, at every fork. -/
 theorem activeKept_advanceSlot
     (computed : advanceSlot config checks state = .ok after) :
-    ActiveKept (getCurrentEpoch state) state after :=
+    ActiveKept (activityFixedEpoch state) state after :=
   (advanceSlot_kept computed).2
 
-/-- An upgrade keeps activity in each epoch up to its current epoch. -/
+/-- An upgrade keeps activity in each epoch up to the current epoch plus `MAX_SEED_LOOKAHEAD`. -/
 theorem activeKept_upgradeNext {pre : ForkedBeaconState preset}
     {post : {post : ForkedBeaconState preset // pre.fork < post.fork}}
     (computed : upgradeNext config checks pre = .ok post) :
-    ActiveKept (getCurrentEpoch pre.state) pre.state post.val.state := by
+    ActiveKept (activityFixedEpoch pre.state) pre.state post.val.state := by
   obtain ⟨fork, state⟩ := pre
   cases fork
   case phase0 =>
@@ -1131,7 +1136,7 @@ It keeps activity. -/
 private theorem chainStep_kept {forked after : ForkedBeaconState preset}
     (step : ChainStep config checks forked after) :
     forked.state.validators.data.size ≤ after.state.validators.data.size ∧
-      ActiveKept (getCurrentEpoch forked.state) forked.state after.state ∧
+      ActiveKept (activityFixedEpoch forked.state) forked.state after.state ∧
       getCurrentEpoch forked.state ≤ getCurrentEpoch after.state := by
   cases step with
   | slot computed =>
@@ -1140,12 +1145,12 @@ private theorem chainStep_kept {forked after : ForkedBeaconState preset}
     obtain ⟨grows, active, slot⟩ := processUpgrades_induction
       (property := fun upgraded =>
         advanced.validators.data.size ≤ upgraded.state.validators.data.size ∧
-          ActiveKept (getCurrentEpoch advanced) advanced upgraded.state ∧
+          ActiveKept (activityFixedEpoch advanced) advanced upgraded.state ∧
           upgraded.state.slot = advanced.slot)
       (fun {pre} _ ⟨grows, active, slot⟩ stepOk => by
         have frame := upgradeFrame_upgradeNext stepOk
-        have epoch : getCurrentEpoch pre.state = getCurrentEpoch advanced := by
-          simp only [getCurrentEpoch, slot]
+        have epoch : activityFixedEpoch pre.state = activityFixedEpoch advanced :=
+          activityFixedEpoch_eq_of_slot slot
         exact ⟨Nat.le_trans grows frame.registryGrows,
           active.trans (epoch ▸ activeKept_upgradeNext stepOk), frame.slot.trans slot⟩)
       ⟨Nat.le_refl _, ActiveKept.refl _ _, rfl⟩ upgraded
@@ -1158,8 +1163,8 @@ private theorem chainStep_kept {forked after : ForkedBeaconState preset}
       exact Nat.div_le_div_right (Nat.le_succ _)
     have epoch : getCurrentEpoch after.state = getCurrentEpoch advanced := by
       simp only [getCurrentEpoch, slot]
-    exact ⟨Nat.le_trans advancedGrows grows, advancedActive.trans (active.mono later),
-      epoch ▸ later⟩
+    exact ⟨Nat.le_trans advancedGrows grows,
+      advancedActive.trans (active.mono (activityFixedEpoch_mono later)), epoch ▸ later⟩
   | @block _ blockState blockAfter engine signed validateResult computed =>
     obtain ⟨-, blockOk, -⟩ := applySignedBlock_ok computed
     have kept := stepBelow_processBlock blockOk
@@ -1173,23 +1178,26 @@ It keeps activity. -/
 private theorem chainSteps_kept {first last : ForkedBeaconState preset}
     (steps : Relation.ReflTransGen (ChainStep config checks) first last) :
     first.state.validators.data.size ≤ last.state.validators.data.size ∧
-      ActiveKept (getCurrentEpoch first.state) first.state last.state := by
+      ActiveKept (activityFixedEpoch first.state) first.state last.state := by
   induction steps using Relation.ReflTransGen.head_induction_on with
   | refl => exact ⟨Nat.le_refl _, ActiveKept.refl _ _⟩
   | head step _ more =>
     obtain ⟨grows, active, later⟩ := chainStep_kept step
-    exact ⟨Nat.le_trans grows more.1, active.trans (more.2.mono later)⟩
+    exact ⟨Nat.le_trans grows more.1,
+      active.trans (more.2.mono (activityFixedEpoch_mono later))⟩
 
-/-- One step of a chain keeps activity in each epoch up to its current epoch. -/
+/-- One step of a chain keeps activity up to the current epoch plus `MAX_SEED_LOOKAHEAD`. -/
 theorem ChainStep.activeKept {forked after : ForkedBeaconState preset}
     (step : ChainStep config checks forked after) :
-    ActiveKept (getCurrentEpoch forked.state) forked.state after.state :=
+    ActiveKept (activityFixedEpoch forked.state) forked.state after.state :=
   (chainStep_kept step).2.1
 
-/-- A run of steps of a chain keeps activity in each epoch up to the current epoch of its start. -/
+/-- A run of steps of a chain keeps activity up to the fixed epoch of its start.
+
+That is the current epoch of its start plus `MAX_SEED_LOOKAHEAD`. -/
 theorem activeKept_of_chainSteps {first last : ForkedBeaconState preset}
     (steps : Relation.ReflTransGen (ChainStep config checks) first last) :
-    ActiveKept (getCurrentEpoch first.state) first.state last.state :=
+    ActiveKept (activityFixedEpoch first.state) first.state last.state :=
   (chainSteps_kept steps).2
 
 /-- One step of a chain does not move the current epoch back. -/
