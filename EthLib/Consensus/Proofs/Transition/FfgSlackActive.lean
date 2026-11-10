@@ -187,6 +187,7 @@ theorem slackJustifiedCheckpoints_activeSetAt_of_chainSteps
       kept.getActiveValidatorIndices_eq (UInt64.le_refl _)]
     exact Finset.inter_subset_right
 
+set_option linter.unusedVariables false in
 /-- The roots, ordered by the links that the states of the runs between two states record.
 
 A run of steps from the first state reaches the state of each link, which reaches the last one. -/
@@ -253,7 +254,11 @@ theorem slackJustifiedCheckpoints_runRoot_of_chainSteps
       (RunRoot.of config checks ⟨fork, state⟩ last (Vector.replicate 32 0))
       (ffgVotes (RunRoot.of config checks ⟨fork, state⟩ last)
         (runVotes config checks ⟨fork, state⟩ last))
-      (RunRoot.of config checks ⟨fork, state⟩ last) last.state := by
-  sorry
+      (RunRoot.of config checks ⟨fork, state⟩ last) last.state :=
+  slackJustifiedCheckpoints_activeSetAt_of_chainSteps positive window apart computed steps
+    fun forked after reach step rest =>
+      ⟨large forked after reach step rest,
+        fun _ member => Relation.ReflTransGen.single ⟨after, reach.tail step, rest, member⟩,
+        small forked after reach step rest⟩
 
 end EthLib.Consensus
