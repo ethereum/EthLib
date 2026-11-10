@@ -166,7 +166,7 @@ theorem supply_selfdestructTransfer {tx tx' : TransactionState}
       omega
 
 /-- An account with no balance burns nothing. -/
-theorem selfdestructBurn_eq_zero {state : TransactionState} {originator beneficiary : Address}
+theorem selfdestructBurn_eq_zero_of_balanceOf_eq_zero {state : TransactionState} {originator beneficiary : Address}
     (balance : state.balanceOf originator = 0) :
     selfdestructBurn fork state originator beneficiary = 0 := by
   unfold selfdestructBurn
@@ -208,7 +208,7 @@ theorem balanceOf_selfdestructTransfer_eq_zero {state after : TransactionState}
     exact setZero h
 
 /-- A burn of SELFDESTRUCT above 0 is from an account to itself, at a fork before Glamsterdam. -/
-theorem selfdestructBurn_ne_zero {tx : TransactionState} {originator beneficiary : Address}
+theorem of_selfdestructBurn_ne_zero {tx : TransactionState} {originator beneficiary : Address}
     (h : selfdestructBurn fork tx originator beneficiary ≠ 0) :
     originator = beneficiary ∧ fork < .glamsterdam := by
   unfold selfdestructBurn at h

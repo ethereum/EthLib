@@ -76,7 +76,7 @@ theorem MessageCallBurns.supply [LawfulGasMeter Meter] {chainId : Nat} {message 
   | call preparation _ run => exact run.supply.trans (supply_prepareFirstFrame preparation)
 
 /-- From Glamsterdam, a certified message call burns nothing. -/
-theorem MessageCallBurns.total_eq_zero [LawfulGasMeter Meter] {chainId : Nat}
+theorem MessageCallBurns.total_eq_zero_of_glamsterdam [LawfulGasMeter Meter] {chainId : Nat}
     {message : Message fork} {state : TransactionState} {substate : Substate}
     {auths : List Authorization} {paid : Std.ExtTreeSet Address} {ended : TransactionState}
     {log : BurnLog} (hfork : .glamsterdam ≤ fork)
@@ -84,8 +84,8 @@ theorem MessageCallBurns.total_eq_zero [LawfulGasMeter Meter] {chainId : Nat}
     log.total = 0 := by
   cases h with
   | halt => rfl
-  | create _ _ run => exact run.total_eq_zero hfork
-  | call _ _ run => exact run.total_eq_zero hfork
+  | create _ _ run => exact run.total_eq_zero_of_glamsterdam hfork
+  | call _ _ run => exact run.total_eq_zero_of_glamsterdam hfork
 
 /-- Two certificates of a message call that end in the same state have the same total. -/
 theorem MessageCallBurns.total_eq [LawfulGasMeter Meter] {chainId : Nat}
@@ -245,7 +245,7 @@ theorem TransactionBurns.unique {env : BlockEnvironment fork} {block : State.Blo
     exact TransactionBurnsWith.unique h h'
 
 /-- From Glamsterdam, a certificate of a transaction has no burns and no deleted balances. -/
-theorem TransactionBurns.eq_zero {env : BlockEnvironment fork} {block : State.BlockState}
+theorem TransactionBurns.eq_zero_of_glamsterdam {env : BlockEnvironment fork} {block : State.BlockState}
     {included : Included} {tx : Transaction} {out : TransactionOutput} {log : BurnLog}
     {deleted : Nat} (hfork : .glamsterdam ≤ fork)
     (h : TransactionBurns env block included tx out log deleted) :
@@ -253,7 +253,7 @@ theorem TransactionBurns.eq_zero {env : BlockEnvironment fork} {block : State.Bl
   unfold TransactionBurns at h
   simp only [ge_iff_le, hfork, ↓reduceIte] at h
   obtain ⟨_, _, _, _, settled, _, trace, hdel⟩ := h
-  refine ⟨trace.total_eq_zero hfork, ?_⟩
+  refine ⟨trace.total_eq_zero_of_glamsterdam hfork, ?_⟩
   rw [hdel]
   simp only [deletedBalances, ge_iff_le, hfork, ↓reduceIte]
 

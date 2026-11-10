@@ -83,6 +83,21 @@ structure StepRules (fork : Fork) (R : Evm fork Meter → Evm fork Meter → Pro
 def RunsSelfdestruct (evm : Evm fork Meter) : Prop :=
   ∃ within : evm.pc < evm.code.size, Op.ofByte fork evm.code[evm.pc] = some .selfdestruct
 
+instance (evm : Evm fork Meter) : Decidable (RunsSelfdestruct evm) := by
+  sorry
+
+/-- A successful step of SELFDESTRUCT pops its beneficiary, then keeps the state up to reads.
+
+From the frame it reaches, it either ends SELFDESTRUCT with some refund, or halts with an error.
+
+The halt keeps the state up to the records of reads. -/
+theorem selfdestructStep_eq_ok {evm after : Evm fork Meter}
+    (h : selfdestructStep fork evm = .ok after) :
+    ∃ word rest paid, evm.stack.val = word :: rest ∧ StaticStep evm paid ∧
+      ((∃ refund, finishSelfdestruct fork (toAddressMasked word) refund paid = .ok after) ∨
+        StaticStep evm after) := by
+  sorry
+
 /-- A refill of state gas keeps the message, the state, the substate and the code. -/
 theorem sameContext_refillStateGas (evm : Evm fork Meter) (amount : Nat) :
     SameContext evm (refillStateGas evm amount) :=

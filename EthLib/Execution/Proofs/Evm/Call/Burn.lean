@@ -62,7 +62,7 @@ def BurnLog.Counted (originator beneficiary : Address) (amount : Nat) : BurnLog 
   | .rollback _ => False
 
 /-- A log that counts no burn has a total of 0. -/
-theorem BurnLog.total_eq_zero {log : BurnLog}
+theorem BurnLog.total_eq_zero_of_not_counted {log : BurnLog}
     (none : ∀ originator beneficiary amount, ¬log.Counted originator beneficiary amount) :
     log.total = 0 := by
   induction log with
@@ -173,7 +173,7 @@ theorem supply_selfdestructStep {evm after : Evm fork Meter}
       else .empty) = evm.state.supply
     split
     · rename_i cleared
-      have zero := selfdestructBurn_eq_zero (fork := fork) (beneficiary := toAddressMasked word)
+      have zero := selfdestructBurn_eq_zero_of_balanceOf_eq_zero (fork := fork) (beneficiary := toAddressMasked word)
         (balance.symm.trans cleared)
       simp only [selfdestructLog, zero, ↓reduceIte, BurnLog.total, Nat.add_zero]
       exact unchanged
@@ -184,10 +184,7 @@ theorem supply_selfdestructStep {evm after : Evm fork Meter}
 /-- The log of a step from `evm` to `after`: that of SELFDESTRUCT when the step runs it, else none.
 -/
 def stepBurnLog (evm after : Evm fork Meter) : BurnLog :=
-  if within : evm.pc < evm.code.size then
-    if Op.ofByte fork evm.code[evm.pc] = some .selfdestruct then selfdestructStepLog evm after
-    else .empty
-  else .empty
+  if RunsSelfdestruct evm then selfdestructStepLog evm after else .empty
 
 omit [GasMeter Meter] in
 /-- The log of a step that runs SELFDESTRUCT is the log of SELFDESTRUCT. -/

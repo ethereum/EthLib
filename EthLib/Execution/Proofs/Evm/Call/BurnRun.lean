@@ -160,14 +160,6 @@ theorem RunBurns.supply {start : BurnStart fork Meter} {ended : Evm fork Meter} 
     · rw [TransactionState.supply_setCode coded]
       exact ih.trans startSupply
 
-/-- Two certificates of a run from the same start to the same end have the same total. -/
-theorem RunBurns.total_eq {start : BurnStart fork Meter} {ended : Evm fork Meter}
-    {log log' : BurnLog} (h : RunBurns fork Meter start ended log)
-    (h' : RunBurns fork Meter start ended log') : log.total = log'.total := by
-  have := h.supply
-  have := h'.supply
-  omega
-
 /-- Each burn that a certified log counts is the burn of a step of SELFDESTRUCT.
 
 That step runs SELFDESTRUCT in the account the burn is from, and the burn is above 0. -/
@@ -196,12 +188,12 @@ theorem RunBurns.counted {start : BurnStart fork Meter} {ended : Evm fork Meter}
   | createKeep _ _ _ _ ih => exact ih counted
 
 /-- From Glamsterdam, a certified log counts no burn, so its total is 0. -/
-theorem RunBurns.total_eq_zero {start : BurnStart fork Meter} {ended : Evm fork Meter}
+theorem RunBurns.total_eq_zero_of_glamsterdam {start : BurnStart fork Meter} {ended : Evm fork Meter}
     {log : BurnLog} (hfork : .glamsterdam ≤ fork) (h : RunBurns fork Meter start ended log) :
     log.total = 0 := by
-  refine BurnLog.total_eq_zero fun originator beneficiary amount counted => ?_
+  refine BurnLog.total_eq_zero_of_not_counted fun originator beneficiary amount counted => ?_
   obtain ⟨_, _, _, _, _, hamount, nonzero⟩ := h.counted counted
-  have early := (selfdestructBurn_ne_zero fun zero => nonzero (hamount.trans zero)).2
+  have early := (of_selfdestructBurn_ne_zero fun zero => nonzero (hamount.trans zero)).2
   exact Nat.lt_irrefl _ (Nat.lt_of_lt_of_le early hfork)
 
 private theorem childRelByKind_burns {caller : Evm fork Meter} {message : Message fork}

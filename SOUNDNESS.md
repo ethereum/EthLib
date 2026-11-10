@@ -1553,7 +1553,7 @@ The deleted balances are a function of the run.
 The total of the burns is fixed by the equation itself, so its uniqueness says no more than the equation does.
 What the certificate adds is the split of that total: `RunBurns.counted` proves that each burn it counts is the burn of a step that runs SELFDESTRUCT, above 0, in the account the burn is from.
 A certificate may skip steps that keep the state up to the records of reads, so it does not pin the run step by step.
-From Glamsterdam, `TransactionBurns.eq_zero` proves that both amounts are 0.
+From Glamsterdam, `TransactionBurns.eq_zero_of_glamsterdam` proves that both amounts are 0.
 The theorem makes the same two assumptions as `processTransaction_supply_le`.
 
 `Execution/Proofs/Blocks/Supply.lean` extends the bound to a whole block.
