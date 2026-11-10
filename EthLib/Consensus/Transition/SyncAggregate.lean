@@ -100,7 +100,7 @@ def applySyncReward (reward proposerReward : Gwei)
 
 /-- From Altair: the index of the first validator with a key, or an error when none has it.
 
-A position of `2^64` or more has no index, an overflow. -/
+A key at a position of `2^64` or more has no index, an overflow. -/
 def validatorIndexOfPubkey (state : BeaconState preset fork) (pubkey : BLSPubkey) :
     Except TransitionError ValidatorIndex :=
   match state.validators.data.findIdx? (·.pubkey == pubkey) with

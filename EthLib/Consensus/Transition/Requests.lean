@@ -92,7 +92,9 @@ The request must name a known key, from the address of its execution credentials
 
 The validator must be active, not exit, and have been active for long enough.
 
-A full exit starts only when no partial withdrawal of the validator waits. -/
+A full exit starts only when no partial withdrawal of the validator waits.
+
+A known key at a position of `2^64` or more is an overflow. -/
 def processWithdrawalRequest (config : Config) (state : BeaconState preset fork)
     (electra : .pectra ≤ fork) (request : WithdrawalRequest) :
     Except TransitionError (BeaconState preset fork) := do
@@ -164,7 +166,9 @@ Both must be active and not exit.
 
 The source must have been active for long enough, with no partial withdrawal waiting.
 
-The source then exits to consolidate into the target. -/
+The source then exits to consolidate into the target.
+
+A known key at a position of `2^64` or more is an overflow. -/
 def processConsolidationRequest (config : Config) (state : BeaconState preset fork)
     (electra : .pectra ≤ fork) (request : ConsolidationRequest) :
     Except TransitionError (BeaconState preset fork) := do

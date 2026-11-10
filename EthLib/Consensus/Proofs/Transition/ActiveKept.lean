@@ -18,7 +18,7 @@ From Electra, the exit and consolidation queues of [EIP-7251] give no epoch befo
 
 A new validator has no activation epoch yet, so it is active in no epoch.
 
-That needs fewer than 2^64 validators, so that no 64-bit index lands on another validator.
+The theorems of a step still assume fewer than 2^64 validators, though no step needs it now.
 
 So each step of a chain keeps which validators are active in each epoch up to its current epoch.
 

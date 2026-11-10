@@ -104,8 +104,6 @@ While the registry stays below 2^64 validators, each validator keeps its key.
 
 With 2^64 validators or more, a 64-bit index can name another validator.
 
-A new validator can then overwrite it.
-
 When they hold before it, it also keeps one balance for each validator.
 
 It then also keeps each exit no later than its withdrawal.

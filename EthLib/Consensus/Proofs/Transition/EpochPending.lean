@@ -20,8 +20,6 @@ So the queue splits into the deposits added to the balances, those dropped, and 
 
 A pass postpones exactly the deposits it reads whose validator exits and is not withdrawn.
 
-That needs the registry and the limit per epoch to fit together in 64 bits.
-
 The validators it tests are those at the start of the pass.
 
 The balances plus the amounts in the queue never rise.
@@ -144,7 +142,7 @@ theorem passPendingDeposits_processed_le {stop : PendingDeposit → Bool} {nextE
 
 They ask whether it exits and whether it is withdrawn.
 
-A new validator does neither, as at a key that no validator has. -/
+A new validator neither exits nor is withdrawn, as for a key that no validator has. -/
 theorem depositTargetStatus_applyPendingDeposit {deposit : PendingDeposit}
     (computed : applyPendingDeposit config checks state deposit = .ok after) :
     depositTargetStatus after = depositTargetStatus state := by

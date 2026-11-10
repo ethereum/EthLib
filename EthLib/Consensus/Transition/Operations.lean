@@ -430,7 +430,7 @@ A deposit to a new key with an invalid signature changes nothing.
 
 A key that a validator has adds the amount to the balance of the first such validator.
 
-A position of `2^64` or more has no validator index, an overflow.
+A known key at a position of `2^64` or more has no validator index, an overflow.
 
 Before Electra a deposit is credited at once; from Electra it waits in the pending deposits.
 
