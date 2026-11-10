@@ -70,7 +70,10 @@ theorem MessageCallBurns.supply [LawfulGasMeter Meter] {chainId : Nat} {message 
     {paid : Std.ExtTreeSet Address} {ended : TransactionState} {log : BurnLog}
     (h : MessageCallBurns (Meter := Meter) chainId message state substate auths paid ended log) :
     ended.supply + log.total = state.supply := by
-  sorry
+  cases h with
+  | halt => rfl
+  | create preparation _ run => exact run.supply.trans (supply_prepareFirstFrame preparation)
+  | call preparation _ run => exact run.supply.trans (supply_prepareFirstFrame preparation)
 
 /-- From Glamsterdam, a certified message call burns nothing. -/
 theorem MessageCallBurns.total_eq_zero [LawfulGasMeter Meter] {chainId : Nat}
@@ -79,7 +82,10 @@ theorem MessageCallBurns.total_eq_zero [LawfulGasMeter Meter] {chainId : Nat}
     {log : BurnLog} (hfork : .glamsterdam ≤ fork)
     (h : MessageCallBurns (Meter := Meter) chainId message state substate auths paid ended log) :
     log.total = 0 := by
-  sorry
+  cases h with
+  | halt => rfl
+  | create _ _ run => exact run.total_eq_zero hfork
+  | call _ _ run => exact run.total_eq_zero hfork
 
 /-- Two certificates of a message call that end in the same state have the same total. -/
 theorem MessageCallBurns.total_eq [LawfulGasMeter Meter] {chainId : Nat}
@@ -101,7 +107,29 @@ theorem processMessageCall_messageCallBurns [LawfulGasMeter Meter] {chainId : Na
       .ok output) :
     ∃ log, MessageCallBurns (Meter := Meter) chainId message state substate auths paid
       output.state log := by
-  sorry
+  unfold processMessageCall at h
+  split at h
+  · rename_i error read preparation
+    split at h
+    · cases h
+    · cases h
+      exact ⟨.empty, .halt preparation⟩
+  · rename_i first preparation
+    split at h
+    · rename_i target
+      obtain ⟨⟨evm, used⟩, hrun, h⟩ := bind_ok_iff.mp h
+      cases h
+      obtain ⟨log, trace⟩ := (processMessage_runBurns first.message.gas).2 first.message first.state
+        first.substate first.meter first.held rfl ⟨evm, used⟩ hrun
+      rw [state_ofFrame]
+      exact ⟨log, .create preparation target trace⟩
+    · rename_i target selected
+      obtain ⟨⟨evm, used⟩, hrun, h⟩ := bind_ok_iff.mp h
+      cases h
+      obtain ⟨log, trace⟩ := (processMessage_runBurns first.message.gas).1 first.message first.state
+        first.substate first.meter first.held rfl ⟨evm, used⟩ hrun
+      rw [state_ofFrame]
+      exact ⟨log, .call preparation selected trace⟩
 
 /-! ## The transaction -/
 
@@ -149,19 +177,10 @@ theorem TransactionBurnsWith.supply_eq [LawfulGasMeter Meter] {env : BlockEnviro
     out.state.supply + burnedFees env tx out.gasUsed + log.total + deleted =
       (TransactionState.ofBlock block).supply := by
   obtain ⟨target, bought, message, output, settled, ⟨ht, hb, hm, ho, -, hs, hd⟩, trace, hdel⟩ := h
-  obtain ⟨hbuy, -⟩ := supply_buyGas hb
+  have hfees := supply_buyGas_settleGas hMin hPrice hb hs
   have hmsg := trace.supply
-  have hset := supply_settleGas hs
   have hdelete := supply_deleteAccounts_eq hd
-  have hused := settleGas_gasUsed hs
-  have conserve := settlement_conserves hMin hPrice (output.gasLeft + output.reservoir)
-    output.refund
-  dsimp only at hset conserve
-  simp only [settlement, priorityFeeOf] at hset conserve
-  simp only [burnedFees]
-  rw [hused, hdel]
-  generalize gasUsed fork included.sender tx (output.gasLeft + output.reservoir) output.refund =
-    g at hset conserve ⊢
+  rw [hdel]
   omega
 
 /-- Two certificates of a run of a transaction give the same burns and deleted balances. -/
@@ -231,7 +250,12 @@ theorem TransactionBurns.eq_zero {env : BlockEnvironment fork} {block : State.Bl
     {deleted : Nat} (hfork : .glamsterdam ≤ fork)
     (h : TransactionBurns env block included tx out log deleted) :
     log.total = 0 ∧ deleted = 0 := by
-  sorry
+  unfold TransactionBurns at h
+  simp only [ge_iff_le, hfork, ↓reduceIte] at h
+  obtain ⟨_, _, _, _, settled, _, trace, hdel⟩ := h
+  refine ⟨trace.total_eq_zero hfork, ?_⟩
+  rw [hdel]
+  simp only [deletedBalances, ge_iff_le, hfork, ↓reduceIte]
 
 /-- A transaction that runs lowers the supply by exactly its losses, at every fork.
 

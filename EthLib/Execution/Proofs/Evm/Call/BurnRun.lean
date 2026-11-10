@@ -174,16 +174,35 @@ That step runs SELFDESTRUCT in the account the burn is from, and the burn is abo
 theorem RunBurns.counted {start : BurnStart fork Meter} {ended : Evm fork Meter} {log : BurnLog}
     {originator beneficiary : Address} {amount : Nat} (h : RunBurns fork Meter start ended log)
     (counted : log.Counted originator beneficiary amount) :
-    ∃ evm after, step fork evm = .ok (.next after) ∧ RunsSelfdestruct evm ∧
+    ∃ evm after : Evm fork Meter, step fork evm = .ok (.next after) ∧ RunsSelfdestruct evm ∧
       originator = evm.message.currentTarget ∧
       amount = selfdestructBurn fork evm.state originator beneficiary ∧ amount ≠ 0 := by
-  sorry
+  induction h with
+  | static => exact counted.elim
+  | append _ _ ih1 ih2 =>
+    rcases counted with c | c
+    · exact ih1 c
+    · exact ih2 c
+  | next h =>
+    obtain ⟨runs, o, a, nonzero⟩ := counted_stepBurnLog (Meter := Meter) counted
+    exact ⟨_, _, h, runs, o, a, nonzero⟩
+  | send => exact counted.elim
+  | resume _ _ _ ih => exact ih counted
+  | call _ _ _ ih =>
+    split at counted
+    · exact counted.elim
+    · exact ih counted
+  | createRollback => exact counted.elim
+  | createKeep _ _ _ _ ih => exact ih counted
 
 /-- From Glamsterdam, a certified log counts no burn, so its total is 0. -/
 theorem RunBurns.total_eq_zero {start : BurnStart fork Meter} {ended : Evm fork Meter}
     {log : BurnLog} (hfork : .glamsterdam ≤ fork) (h : RunBurns fork Meter start ended log) :
     log.total = 0 := by
-  sorry
+  refine BurnLog.total_eq_zero fun originator beneficiary amount counted => ?_
+  obtain ⟨_, _, _, _, _, hamount, nonzero⟩ := h.counted counted
+  have early := (selfdestructBurn_ne_zero fun zero => nonzero (hamount.trans zero)).2
+  exact Nat.lt_irrefl _ (Nat.lt_of_lt_of_le early hfork)
 
 private theorem childRelByKind_burns {caller : Evm fork Meter} {message : Message fork}
     {child : Evm fork Meter}

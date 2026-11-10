@@ -65,7 +65,13 @@ def BurnLog.Counted (originator beneficiary : Address) (amount : Nat) : BurnLog 
 theorem BurnLog.total_eq_zero {log : BurnLog}
     (none : ∀ originator beneficiary amount, ¬log.Counted originator beneficiary amount) :
     log.total = 0 := by
-  sorry
+  induction log with
+  | empty => rfl
+  | selfdestruct o b a => exact absurd ⟨rfl, rfl, rfl⟩ (none o b a)
+  | append first second ih1 ih2 =>
+    simp only [BurnLog.total]
+    rw [ih1 fun o b a c => none o b a (.inl c), ih2 fun o b a c => none o b a (.inr c)]
+  | rollback => rfl
 
 /-- The log of a move of the balance of SELFDESTRUCT, in the state `state`.
 
@@ -221,6 +227,7 @@ theorem supply_of_step_eq_child {evm caller : Evm fork Meter} {message : Message
   · cases next
   · exact keeps.1
 
+omit [GasMeter Meter] in
 /-- Each burn that the log of a step counts is the burn of SELFDESTRUCT from the frame before.
 
 The step runs SELFDESTRUCT, in the account of that frame, and the burn is above 0. -/
@@ -228,6 +235,24 @@ theorem counted_stepBurnLog {evm after : Evm fork Meter} {originator beneficiary
     {amount : Nat} (counted : (stepBurnLog evm after).Counted originator beneficiary amount) :
     RunsSelfdestruct evm ∧ originator = evm.message.currentTarget ∧
       amount = selfdestructBurn fork evm.state originator beneficiary ∧ amount ≠ 0 := by
-  sorry
+  unfold stepBurnLog at counted
+  split at counted
+  · rename_i within
+    split at counted
+    · rename_i decoded
+      unfold selfdestructStepLog at counted
+      split at counted
+      · exact counted.elim
+      · split at counted
+        · unfold selfdestructLog at counted
+          dsimp only at counted
+          split at counted
+          · exact counted.elim
+          · rename_i nonzero
+            obtain ⟨rfl, rfl, rfl⟩ := counted
+            exact ⟨⟨within, decoded⟩, rfl, rfl, nonzero⟩
+        · exact counted.elim
+    · exact counted.elim
+  · exact counted.elim
 
 end EthLib.Execution.Evm

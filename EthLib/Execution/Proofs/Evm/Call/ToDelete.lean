@@ -236,10 +236,8 @@ theorem deletesCreated_processMessage_induction [LawfulGasMeter Meter] (hfork : 
     (fun {message state state1 substate substate1 _ ended} hentry hd => by
       have h12 : state1.createdAccounts = state.createdAccounts ∧
           substate1.accountsToDelete = substate.accountsToDelete := by
-        rcases hentry with ⟨-, rfl, rfl⟩ | ⟨-, hm, rfl⟩
-        · exact ⟨createdAccounts_startState message state, rfl⟩
-        · exact ⟨(TransactionState.createdAccounts_moveEther hm).trans
-            (createdAccounts_startState message state), rfl⟩
+        refine ⟨createdAccounts_entered hentry, ?_⟩
+        rcases hentry with ⟨-, -, rfl⟩ | ⟨-, -, rfl⟩ <;> rfl
       obtain ⟨hc, hs⟩ := createdAccounts_rollbackOnError state ended
       refine ⟨fun x hx => ?_, fun x hx => ?_⟩
       · rw [hc]

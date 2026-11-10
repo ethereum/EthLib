@@ -391,7 +391,16 @@ theorem supply_buyGas_settleGas {env : BlockEnvironment fork}
     (hb : buyGas env state sender tx = .ok bought)
     (hs : settleGas env ended sender tx gasLeft refund = .ok (settled, used)) :
     settled.supply + burnedFees env tx used + bought.supply = ended.supply + state.supply := by
-  sorry
+  obtain ⟨hbuy, -⟩ := supply_buyGas hb
+  have hset := supply_settleGas hs
+  have hused := settleGas_gasUsed hs
+  have conserve := settlement_conserves hMin hPrice gasLeft refund
+  dsimp only at hset conserve
+  simp only [settlement, priorityFeeOf] at hset conserve
+  simp only [burnedFees]
+  rw [hused]
+  generalize gasUsed fork sender tx gasLeft refund = g at hset conserve ⊢
+  omega
 
 /-- A transaction that runs with any gas meter lowers the supply by at least its burned fees.
 
@@ -411,20 +420,10 @@ theorem runTransaction_supply {Meter : Type} [GasMeter Meter] [LawfulGasMeter Me
           (State.TransactionState.ofBlock block).supply) := by
   obtain ⟨target, bought, message, output, settled, -, hbought, -, houtput, -, hs, hd⟩ :=
     runTransaction_eq_ok h
-  obtain ⟨hbuy, -⟩ := supply_buyGas hbought
   have hmsg := supplyLe_processMessageCall houtput
-  have hset := supply_settleGas hs
   have cset := createdAccounts_settleGas hs
   obtain ⟨hdel, cdel, hdelEq⟩ := supply_deleteAccounts hd
-  have hused := settleGas_gasUsed hs
-  have conserve := settlement_conserves hMin hPrice (output.gasLeft + output.reservoir)
-    output.refund
-  dsimp only at hset conserve
-  simp only [settlement, priorityFeeOf] at hset conserve
-  simp only [burnedFees]
-  rw [hused]
-  generalize gasUsed fork included.sender tx (output.gasLeft + output.reservoir) output.refund =
-    g at hset conserve ⊢
+  have hfees := supply_buyGas_settleGas hMin hPrice hbought hs
   refine ⟨by have := hmsg.1; omega, fun burns => ?_⟩
   -- The message burns nothing, and neither do the deletions.
   have burnsOut : BurnsNone fork output.state := by

@@ -211,7 +211,14 @@ theorem balanceOf_selfdestructTransfer_eq_zero {state after : TransactionState}
 theorem selfdestructBurn_ne_zero {tx : TransactionState} {originator beneficiary : Address}
     (h : selfdestructBurn fork tx originator beneficiary ≠ 0) :
     originator = beneficiary ∧ fork < .glamsterdam := by
-  sorry
+  unfold selfdestructBurn at h
+  split at h
+  · rename_i condition
+    refine ⟨condition.1, ?_⟩
+    rcases condition.2 with early | created
+    · exact Nat.lt_trans early (by decide)
+    · exact created.1
+  · exact absurd rfl h
 
 /-- A successful move of the balance of SELFDESTRUCT keeps or lowers the supply.
 

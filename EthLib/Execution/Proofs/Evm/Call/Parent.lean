@@ -185,10 +185,7 @@ theorem processMessage_parent [LawfulGasMeter Meter] (n : Nat) :
     (M := fun _ state _ _ ended => ended.state.parent = state.parent)
     (fun {message state _ _ _ _ _} hentry hrun => by
       rw [parent_rollbackOnError]
-      refine hrun.trans ?_
-      rcases hentry with ⟨-, rfl, -⟩ | ⟨-, hm, -⟩
-      · exact parent_startState message state
-      · exact (TransactionState.parent_moveEther hm).trans (parent_startState message state))
+      exact hrun.trans (parent_entered hentry))
     (fun hp hm hd => (parent_depositCode hd).trans (hm.trans (parent_prepareCreation hp)))
     (fun h => h) n
 
