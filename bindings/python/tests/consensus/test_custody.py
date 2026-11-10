@@ -125,7 +125,7 @@ def test_non_integer(value):
 
 @pytest.mark.parametrize(("preset", "case"), _cases("get_custody_groups"))
 def test_get_custody_column_bits(preset, case):
-    # Column `i` is bit `i mod 8` of byte `i / 8`, as in an SSZ bitvector.
+    # Column `i` is bit `i % 8` of byte `i // 8`, as in an SSZ bitvector.
     meta = _meta(case)
     node_id, count = int(meta["node_id"]), meta["custody_group_count"]
     bits = consensus.get_custody_column_bits(node_id, count, preset)

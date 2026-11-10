@@ -175,7 +175,7 @@ def finalized_execution_block_hash(
     # `Any`, because `dict` is invariant in its values.
     config: dict[str, Any] | None = None,
 ) -> bytes:
-    """From Bellatrix: the finalized block hash of a forkchoice update, on a store."""
+    """From Bellatrix: the finalized block hash of an update on a store, or ForkChoiceError."""
     # The steps take the form of those of `consensus.fork_choice`, which build the store.
     return _native.engine_finalized_execution_block_hash(
         name, fork, anchor_state, anchor_block, steps, verify, config

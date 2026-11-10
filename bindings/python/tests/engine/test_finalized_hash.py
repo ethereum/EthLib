@@ -6,13 +6,22 @@ import pytest
 from ruamel.yaml import YAML
 
 from ethlib import consensus, engine
+from ethlib.consensus import ForkChoiceStep
 from ethlib.networking import snappy
 from raising import raises
 
 FILES = Path(__file__).resolve().parents[4] / "tests" / "consensus" / "fork_choice" / "minimal"
 
-# The case finalizes epoch 3, on a block that the case holds, at each of these forks.
-CASE = "fork_choice/withholding/pyspec_tests/withholding_attack"
+# Each case finalizes a later block than its anchor, whose hash differs from that of the anchor.
+# Before Gloas every block of this case names its own payload.
+WITHHOLDING = "fork_choice/withholding/pyspec_tests/withholding_attack"
+# The withholding case delivers no payload at Gloas, so every bid there names one parent hash.
+# This case delivers payloads before it finalizes, so its finalized bid names another one.
+DEPOSIT = (
+    "fork_choice/deposit_with_reorg/pyspec_tests/"
+    "new_validator_deposit_with_multiple_epoch_transitions"
+)
+CASES = {"bellatrix": WITHHOLDING, "capella": WITHHOLDING, "deneb": WITHHOLDING, "gloas": DEPOSIT}
 
 # The name of each fork in EthLib, by its name in the cases.
 NAMES = {
@@ -27,18 +36,18 @@ _YAML = YAML(typ="safe")
 
 def _read(fork: str, name: str) -> bytes:
     """The bytes of an SSZ file of the case, without the Snappy framing."""
-    return snappy.decompress((FILES / fork / CASE / f"{name}.ssz_snappy").read_bytes())
+    return snappy.decompress((FILES / fork / CASES[fork] / f"{name}.ssz_snappy").read_bytes())
 
 
 def _offset(data: bytes, at: int) -> int:
     return int.from_bytes(data[at : at + 4], "little")
 
 
-def _steps(fork: str) -> tuple[list, bytes]:
+def _steps(fork: str) -> tuple[list[ForkChoiceStep], bytes]:
     """The ticks, blocks and attestations of the case, and its last finalized root."""
-    steps = []
+    steps: list[ForkChoiceStep] = []
     finalized = b""
-    for step in _YAML.load((FILES / fork / CASE / "steps.yaml").read_text()):
+    for step in _YAML.load((FILES / fork / CASES[fork] / "steps.yaml").read_text()):
         if "tick" in step:
             steps.append(("tick", step["tick"]))
         elif "checks" in step:
@@ -52,11 +61,12 @@ def _steps(fork: str) -> tuple[list, bytes]:
     return steps, finalized
 
 
-def _hash_in_block(fork: str, signed: bytes) -> bytes:
-    """The hash that the update names, read out of a signed block by the offsets of its SSZ."""
-    # A signed block opens with the offset of the block.
+def _hash_in_block(fork: str, signed: bytes, block: int | None = None) -> bytes:
+    """The hash that the update names, read out of a block by the offsets of its SSZ."""
+    # A signed block opens with the offset of the block; a block alone starts at 0.
+    block = _offset(signed, 0) if block is None else block
     # The body follows the slot, the proposer index, two roots and its own offset.
-    body = _offset(signed, 0) + _offset(signed, _offset(signed, 0) + 8 + 8 + 32 + 32)
+    body = block + _offset(signed, block + 8 + 8 + 32 + 32)
     # Before the variable part of the body come its fixed fields and offsets.
     # They are the RANDAO reveal, the Eth1 data, the graffiti, 5 offsets and the sync aggregate.
     # The minimal sync committee has 32 members, so its bits take 4 bytes.
@@ -74,20 +84,21 @@ def _hash_in_block(fork: str, signed: bytes) -> bytes:
     return signed[block_hash : block_hash + 32]
 
 
-def finalized_hash(fork: str, steps: list) -> bytes:
+def finalized_hash(fork: str, steps: list[ForkChoiceStep]) -> bytes:
     """The finalized block hash of the store after the steps of the case."""
     return engine.finalized_execution_block_hash(
         "minimal", NAMES[fork], _read(fork, "anchor_state"), _read(fork, "anchor_block"), steps
     )
 
 
-@pytest.mark.parametrize("fork", sorted(NAMES))
+@pytest.mark.parametrize("fork", sorted(CASES))
 def test_finalized_block(fork: str) -> None:
     # Before Gloas the hash is that of the payload of the finalized block.
     # From Gloas it is the parent block hash in the bid of the finalized block.
     steps, root = _steps(fork)
     want = _hash_in_block(fork, _read(fork, f"block_0x{root.hex()}"))
-    assert want != bytes(32)
+    # The anchor names another hash, so the store must read the finalized block itself.
+    assert want != _hash_in_block(fork, _read(fork, "anchor_block"), 0)
     assert finalized_hash(fork, steps) == want
 
 
