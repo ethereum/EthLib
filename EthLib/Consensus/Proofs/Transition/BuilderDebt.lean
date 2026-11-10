@@ -11,8 +11,9 @@ From Gloas a builder owes its queued withdrawals and the payments of its bids.
 
 A bid passes only if the balance of its builder covers the bid, that debt and a minimum.
 
-The invariant here says that the balance always covers the debt, so no withdrawal of a builder
-falls short.
+The invariant here says that the balance always covers the debt.
+
+So no withdrawal of a builder falls short.
 
 The payment of the parent block can leave the pending payments with no block between.
 
@@ -22,14 +23,16 @@ The child then queues the value of the parent bid again, by the late path of the
 
 So the invariant also reserves that value, from when the payment leaves until the child comes.
 
-It reserves it too when the slashing of the proposer cancelled the payment, since the late path
-reads the bid and not the payment.
+It reserves it too when the slashing of the proposer cancelled the payment.
 
-The invariant has three parts.
+The late path reads the bid, and not the payment.
+
+The invariant has four parts.
 
 * For each builder, the debt plus the reserved value is at most the balance.
 * The payment of the parent has no weight, and it is the payment of the latest bid or has no amount.
 * A builder that has started to exit owes nothing and has no reserved value.
+* Each position of the window after that of the parent holds the payment of no bid.
 
 The second part makes the first one last across an epoch.
 
@@ -38,6 +41,14 @@ With a positive quorum, the epoch step drops a payment with no weight instead of
 The value of that payment then moves from the debt to the reserve.
 
 The third part covers the sweep of builders, which pays a withdrawable builder its whole balance.
+
+The fourth part keeps the second one true after a block whose bid has no value.
+
+Such a bid records no payment, so the position of the block keeps what it held.
+
+The invariant holds between blocks and slots, and not after each step inside them.
+
+Inside a block, the settled parent payment and the reserve both count the same value until the bid.
 
 Most steps keep the builders, their payments, their withdrawals and the latest bid.
 
@@ -68,18 +79,19 @@ def paymentAt (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork) 
     BuilderPendingPayment :=
   ((state.builderPendingPayments gloas).elements[position]?).getD .empty
 
-/-- Whether the late path may still queue the value of the latest bid.
+/-- Whether the invariant reserves the value of the latest bid.
 
-It may when the payment of the parent has left the window, or when that payment has no amount. -/
+It does when the payment of the parent has left the window, or when that payment has no amount. -/
 def latePaymentOpen (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork) : Bool :=
   match parentPaymentPosition state with
   | none => true
   | some position => (paymentAt state gloas position.toNat).withdrawal.amount == 0
 
-/-- The value that the late path may still queue for a builder.
+/-- The value that the invariant reserves for a builder, for the late path.
 
-It is the value of the latest bid when the builder made it and the late path is open, and else
-zero. -/
+It is the value of the latest bid when the builder made it and the reserve is open.
+
+It is zero otherwise. -/
 def lateBidValue (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork)
     (index : BuilderIndex) : Nat :=
   let bid := state.latestExecutionPayloadBid gloas
@@ -99,11 +111,20 @@ def ParentPaymentFresh (state : BeaconState preset fork) (gloas : .glamsterdam �
       ((paymentAt state gloas position.toNat).withdrawal.amount = 0 ∨
         (paymentAt state gloas position.toNat).withdrawal = latestBidWithdrawal state gloas)
 
+/-- Each position after that of the parent holds the payment of no bid.
+
+Every position is after it when the parent payment has left the window. -/
+def LaterPaymentsEmpty (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork) : Prop :=
+  ∀ position, (∀ parent, parentPaymentPosition state = some parent → parent.toNat < position) →
+    paymentAt state gloas position = .empty
+
 /-- From Gloas: the balance of each builder covers what it owes and what the late path may add.
 
 A builder that has started to exit owes nothing, and the late path adds nothing for it.
 
-The payment of the parent has no weight, and pays the latest bid or has no amount. -/
+The payment of the parent has no weight, and pays the latest bid or has no amount.
+
+Each position after it holds the payment of no bid. -/
 structure BuilderDebtCovered (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork) :
     Prop where
   covered : ∀ index,
@@ -113,6 +134,7 @@ structure BuilderDebtCovered (state : BeaconState preset fork) (gloas : .glamste
     builder.withdrawableEpoch ≠ FAR_FUTURE_EPOCH →
       pendingBuilderTotal state gloas index + lateBidValue state gloas index = 0
   parentFresh : ParentPaymentFresh state gloas
+  laterEmpty : LaterPaymentsEmpty state gloas
 
 /-- A step that keeps the builders, their payments, their withdrawals and the latest bid.
 
@@ -155,8 +177,9 @@ theorem paymentAt_of_lt {gloas : .glamsterdam ≤ fork} {position : Nat}
   simp [paymentAt, inside]
   rfl
 
-/-- A step that keeps the builder fields, the slot and the slot of the latest block keeps the
-invariant. -/
+/-- A step that keeps the builder fields and the two slots of its frame keeps the invariant.
+
+The invariant reads nothing else of the state. -/
 theorem BuilderDebtCovered.of_frame {gloas : .glamsterdam ≤ fork}
     (frame : BuilderFrame state after) (holds : BuilderDebtCovered state gloas) :
     BuilderDebtCovered after gloas := by
@@ -170,12 +193,15 @@ theorem BuilderDebtCovered.of_frame {gloas : .glamsterdam ≤ fork}
     fun _ => by simp only [lateBidValue, opened, frame.bid]
   have balance : ∀ index, builderBalance after gloas index = builderBalance state gloas index :=
     fun _ => by simp only [builderBalance, frame.builders]
-  refine ⟨fun index => ?_, fun index builder found exited => ?_, fun p found => ?_⟩
+  refine ⟨fun index => ?_, fun index builder found exited => ?_, fun p found => ?_,
+    fun k later => ?_⟩
   · rw [total, late, balance]
     exact holds.covered index
   · rw [total, late]
     exact holds.exitedClear index builder (by rwa [frame.builders] at found) exited
   · simp only [paymentAt, latestBidWithdrawal, frame.payments, frame.bid]
     exact holds.parentFresh p (position ▸ found)
+  · simp only [paymentAt, frame.payments]
+    exact holds.laterEmpty k fun parent found => later parent (position ▸ found)
 
 end EthLib.Consensus
