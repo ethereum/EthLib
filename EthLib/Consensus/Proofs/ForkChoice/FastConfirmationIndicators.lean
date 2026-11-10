@@ -175,18 +175,77 @@ theorem computeSafetyThreshold_bound {head root : Root} {balanceSource : BeaconS
   simp only [pure, Except.pure, Except.ok.injEq] at done
   subst done
   have two : UInt64.toNat 2 = 2 := rfl
-  simp only [two] at *
-  split
-  · rename_i lower
-    rw [UInt64.toNat_div, UInt64.toNat_sub_of_le _ _ (UInt64.le_of_lt lower)]
+  rw [two] at dbOk
+  split_ifs with lower
+  · rw [UInt64.toNat_div, UInt64.toNat_sub_of_le _ _ (UInt64.le_of_lt lower), two]
     rw [UInt64.lt_iff_toNat_lt] at lower
-    have halve : UInt64.toNat 2 = 2 := rfl
-    rw [halve]
     omega
-  · rename_i notLower
-    rw [UInt64.lt_iff_toNat_lt] at notLower
+  · rw [UInt64.lt_iff_toNat_lt] at lower
     simp only [UInt64.toNat_zero]
     omega
+
+/-- The terms of a safety threshold that the store computes, each from its own step.
+
+They are the current slot, the block and its parent, the total active balance and the boost.
+
+They are also the first and last slots of the range since the parent, and its estimated weight.
+
+They are also the discount and the adversary of the block. -/
+theorem computeSafetyThreshold_eq_ok {head root : Root} {balanceSource : BeaconState preset fork}
+    {threshold : Gwei}
+    (result : store.computeSafetyThreshold config head root balanceSource = .ok threshold) :
+    ∃ currentSlot block parentBlock total proposerScore firstSlot lastSlot maximumSupport
+      discount adversary,
+      store.getCurrentSlot config = .ok currentSlot ∧ store.block root = .ok block ∧
+      store.block block.parentRoot = .ok parentBlock ∧
+      getTotalActiveBalance balanceSource = .ok total ∧
+      computeProposerScore config balanceSource = .ok proposerScore ∧
+      addChecked parentBlock.slot 1 = .ok firstSlot ∧ subChecked currentSlot 1 = .ok lastSlot ∧
+      estimateCommitteeWeightBetweenSlots preset total firstSlot lastSlot = .ok maximumSupport ∧
+      store.computeEmptySlotSupportDiscount config head balanceSource root = .ok discount ∧
+      store.getAdversarialWeight config head balanceSource root = .ok adversary := by
+  have steps := result
+  simp only [computeSafetyThreshold, bind_ok_iff, mapError_ok_iff] at steps
+  obtain ⟨c, cOk, b, bOk, pb, pbOk, t, tOk, ps, psOk, f, fOk, l, lOk, m, mOk, d, dOk, a, aOk,
+    -⟩ := steps
+  exact ⟨c, b, pb, t, ps, f, l, m, d, a, cOk, bOk, pbOk, tOk, psOk, fOk, lOk, mOk, dOk, aOk⟩
+
+/-- The range of slots of the adversary of a block, and the adversary over it.
+
+The range ends at the last slot before the current one.
+
+It starts at the slot of the block, or at the start of the epoch of the block. -/
+theorem getAdversarialWeight_eq_ok {head root : Root} {balanceSource : BeaconState preset fork}
+    {adversary : Gwei}
+    (result : store.getAdversarialWeight config head balanceSource root = .ok adversary) :
+    ∃ currentSlot block startSlot lastSlot,
+      store.getCurrentSlot config = .ok currentSlot ∧ store.block root = .ok block ∧
+      subChecked currentSlot 1 = .ok lastSlot ∧
+      (startSlot = block.slot ∨
+        computeStartSlotAtEpoch preset (computeEpochAtSlot preset block.slot) = .ok startSlot) ∧
+      store.computeAdversarialWeight config head balanceSource startSlot lastSlot =
+        .ok adversary := by
+  have steps := result
+  simp only [getAdversarialWeight, bind_ok_iff] at steps
+  obtain ⟨c, cOk, b, bOk, e, eOk, pe, -, range⟩ := steps
+  have epoch : computeEpochAtSlot preset b.slot = e := by
+    simpa [getBlockEpoch, bOk, bind, Except.bind, pure, Except.pure] using eOk
+  split_ifs at range
+  · simp only [bind_ok_iff, mapError_ok_iff] at range
+    obtain ⟨start, startOk, l, lOk, done⟩ := range
+    exact ⟨c, b, start, l, cOk, bOk, lOk, .inr (epoch ▸ startOk), done⟩
+  · simp only [bind_ok_iff, mapError_ok_iff, pure, Except.pure, Except.ok.injEq] at range
+    obtain ⟨start, startOk, l, lOk, done⟩ := range
+    exact ⟨c, b, start, l, cOk, bOk, lOk, .inl startOk.symm, done⟩
+
+/-- A block is confirmed when its support and its threshold are computed, the first above. -/
+theorem isOneConfirmed_eq_ok_true_iff {head root : Root}
+    {balanceSource : BeaconState preset fork} {tally : VoteTally} :
+    store.isOneConfirmed config head balanceSource tally root = .ok true ↔
+      ∃ support threshold, store.scoreFromTally tally ⟨root, .pending⟩ = .ok support ∧
+        store.computeSafetyThreshold config head root balanceSource = .ok threshold ∧
+        threshold < support := by
+  simp [isOneConfirmed, bind_ok_iff, pure, Except.pure]
 
 /-- A confirmed block has support above its safety threshold. -/
 theorem threshold_lt_of_isOneConfirmed {head root : Root} {balanceSource : BeaconState preset fork}
@@ -213,7 +272,7 @@ Both lie in the committees `W` of a range of slots, and they are apart.
 
 The store's adversary over that range must be its adversary for the block.
 
-The range of the block itself is one such range, as the two theorems above give.
+The range that the store uses for the block is one such range.
 
 Assume that the Byzantine validators hold at most β of the stake of `W`, as in Assumption 2.
 
