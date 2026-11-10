@@ -2177,7 +2177,8 @@ The exception is step 2 of the method, which `forkchoiceUpdated_of_belowFinalize
 A valid head below the finalized block that the execution layer knows is `VALID` there, and the head does not change.
 `forkchoiceUpdated_of_invalid` gives the answer for an invalid head, and `latestValid_eq_some_iff` with `getElem?_succ_chainOf` shows that its latest valid hash is the valid ancestor nearest the head.
 From version 4, custody columns that decode never change the answer (`forkchoiceUpdatedCall_custody`), and without payload attributes every version gives the same answer (`forkchoiceUpdatedCall_of_null`).
-The model has no timestamps, so it checks neither the fork of the payload attributes nor that their timestamp is above the head's, and version 2 takes both structures of the attributes at any time.
+The model has no timestamps, so it checks neither the fork of the payload attributes nor that their timestamp is above the head's.
+For the same reason, version 2 takes both structures of the attributes at any time.
 
 `executionEngine_accepts_iff` (`Proofs/ExecutionEngine.lean`) states when the execution engine accepts a payload request of the beacon chain.
 The request lists must be well formed, and the payload must have a block at the active fork of the chain, which must be before Glamsterdam.

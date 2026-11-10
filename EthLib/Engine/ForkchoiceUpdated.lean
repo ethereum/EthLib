@@ -48,13 +48,25 @@ The source runs the update of the custody set apart from the forkchoice update.
 
 So custody columns that decode never change the answer.
 
-Payload attributes count only when the update selects a new valid head.
+Payload attributes count only when the update applies a valid head.
 
 They must then have the fields of a version of their structure that the method takes.
 
+A field whose value is `null` counts as absent.
+
 Otherwise the error is `-38003`, invalid payload attributes.
 
-Versions 1, 3 and 4 of the method take the same version of the structure.
+A field of the right name with a value of the wrong form also gives `-38003`.
+
+Versions 2, 3 and 4 name `-38003` for a structure that the method does not take.
+
+Version 1 names no code for that case.
+
+This model gives it `-38003` too, the answer that step 9 of version 1 gives for invalid attributes.
+
+The forkchoice state stays applied after that error, as step 8 of version 1 asks.
+
+Versions 1, 3 and 4 of the method each take the version of the structure with their own number.
 
 Version 2 takes versions 1 and 2 of the structure.
 
@@ -204,7 +216,9 @@ def attributesFieldsV3 : List String := attributesFieldsV2 ++ ["parentBeaconBloc
 /-- The fields of version 4: those of version 3, the slot number and the target gas limit. -/
 def attributesFieldsV4 : List String := attributesFieldsV3 ++ ["slotNumber", "targetGasLimit"]
 
-/-- The fields of a version of the payload attributes, from 1 to 4; a later one reads as 4. -/
+/-- The fields of a version of the payload attributes, from 1 to 4.
+
+Version 0 reads as 1, and a version above 4 reads as 4. -/
 def attributesFields : Nat → List String
   | 0 | 1 => attributesFieldsV1
   | 2 => attributesFieldsV2
@@ -229,6 +243,8 @@ structure AnyPayloadAttributes where
   targetGasLimit : Option UInt64
 
 /-- Payload attributes with exactly the fields of a version of their structure.
+
+A field whose value is `null` counts as absent.
 
 Each field holds a value of its type. -/
 def payloadAttributesOfJson (layout : Nat) (j : Json) : Decode AnyPayloadAttributes := do
@@ -276,7 +292,7 @@ They are the forkchoice state, then the payload attributes, an object or `null`.
 
 From version 4 the custody columns may follow, as 16 bytes or `null`.
 
-The source checks the fields of the attributes only on a new valid head.
+The source checks the fields of the attributes only when a valid head is applied.
 
 The result is the state, and the attributes when they are an object. -/
 def forkchoiceUpdatedParams (version : Nat) (params : Json) :
@@ -297,7 +313,9 @@ def forkchoiceUpdatedParams (version : Nat) (params : Json) :
 
 /-- A version of the method: its status, the new head, and the payload attributes of a build.
 
-Attributes count only on a new valid head, where they must fit a layout of the version. -/
+Attributes count only when a valid head is applied, and they must then fit a layout of the version.
+
+The versions are 1 to 4. -/
 def forkchoiceUpdatedCall (version : Nat) (tree : PayloadTree) (finalized : Option Hash32)
     (params : Json) :
     Except EngineError (PayloadStatus × Option Hash32 × Option AnyPayloadAttributes) := do

@@ -9,7 +9,7 @@ Not yet released.
 
 ### Changes that break callers
 
-- The forkchoice update now models `engine_forkchoiceUpdatedV4`, and it checks the structure of the payload attributes on a new valid head ([#1478](https://github.com/ethereum/EthLib/issues/1478)).
+- The forkchoice update now models `engine_forkchoiceUpdatedV4`, and it checks the structure of the payload attributes on an applied valid head ([#1478](https://github.com/ethereum/EthLib/issues/1478)).
   Attributes that fit no structure of the version now give code 38003, `invalidPayloadAttributes`, where any object gave code 0 before.
   Attributes that fit still give code 0, since no payload build is specified.
   A wrong number of parameters now has the reason `params: got N, expected 2`, or `2 or 3` for version 4, in place of `params: not 2 values`.

@@ -24,7 +24,9 @@ The result is the value of the JSON of the response: the payload status, and no 
 
 A JSON-RPC error has the code of its Engine API error: 32602, 38002 or 38003.
 
-Payload attributes on a new head that fit the version have code 0, since no build is specified.
+Payload attributes on an applied valid head that fit the version have code 0.
+
+They ask for a build, which is not specified.
 
 So do an unknown method and an argument that Lean cannot read.
 -/
@@ -68,7 +70,7 @@ def forkchoiceUpdatedOf (args : PyValue × PyValue × PyValue) : Result PyValue 
   let some version := forkchoiceUpdatedVersion method | throw (0, s!"no method {method}")
   let answer := forkchoiceUpdatedCall version tree finalized (request.getObjValD "params")
   let (status, _, attributes) ← answer.mapError fun e => (e.code, s!"engine error: {reprStr e}")
-  -- Step 8: valid attributes on a new valid head start a build, and no build is specified.
+  -- Step 8: valid attributes on an applied valid head start a build, which is not specified.
   if attributes.isSome then
     throw (0, "payload attributes: building a payload is not specified")
   let response := Json.mkObj [

@@ -48,6 +48,10 @@ The state must decode, and the attributes must be `null` or an object.
 Custody columns that decode never change the answer.
 
 Without payload attributes, every version gives the same answer.
+
+When the update applies a valid head, attributes of no layout of the version give `-38003`.
+
+When it applies none, the attributes are not read.
 -/
 
 public section
@@ -397,15 +401,14 @@ theorem forkchoiceUpdatedParams_custody {version : Nat} (four : 4 ≤ version)
     simp [forkchoiceUpdatedParams, Json.paramsArray, four, decoded, hNull, hs, bind, Except.bind,
       pure, Except.pure]
 
-/-- From version 4, custody columns that decode never change the answer of the method.
+/-- In version 4, custody columns that decode never change the answer of the method.
 
 The answer is the same as without them. -/
-theorem forkchoiceUpdatedCall_custody {version : Nat} (four : 4 ≤ version)
-    {stateJson attributes custody : Lean.Json} {columns : Option (Vector UInt8 16)}
-    (decoded : custodyColumnsOfJson custody = .ok columns) :
-    forkchoiceUpdatedCall version tree finalized (.arr #[stateJson, attributes, custody]) =
-      forkchoiceUpdatedCall version tree finalized (.arr #[stateJson, attributes]) := by
-  simp only [forkchoiceUpdatedCall, forkchoiceUpdatedParams_custody four decoded]
+theorem forkchoiceUpdatedCall_custody {stateJson attributes custody : Lean.Json}
+    {columns : Option (Vector UInt8 16)} (decoded : custodyColumnsOfJson custody = .ok columns) :
+    forkchoiceUpdatedCall 4 tree finalized (.arr #[stateJson, attributes, custody]) =
+      forkchoiceUpdatedCall 4 tree finalized (.arr #[stateJson, attributes]) := by
+  simp only [forkchoiceUpdatedCall, forkchoiceUpdatedParams_custody (Nat.le_refl 4) decoded]
 
 /-- Without payload attributes, every version of the method gives the same answer.
 
@@ -416,5 +419,32 @@ theorem forkchoiceUpdatedCall_of_null {version version' : Nat} {stateJson : Lean
   cases hs : forkchoiceStateOfJson stateJson <;>
     simp [forkchoiceUpdatedCall, forkchoiceUpdatedParams, Json.paramsArray, custodyColumnsOfJson,
       hs, bind, Except.bind, pure, Except.pure]
+
+/-- When the update applies a valid head, attributes of no layout of the version give `-38003`.
+
+The answer is the error of invalid payload attributes, not the status of the head. -/
+theorem forkchoiceUpdatedCall_invalidPayloadAttributes {version : Nat}
+    {stateJson : Lean.Json} {kvs : Std.TreeMap.Raw String Lean.Json compare}
+    {s : ForkchoiceState} {status : PayloadStatus} {head : Hash32}
+    (hs : forkchoiceStateOfJson stateJson = .ok s)
+    (hf : forkchoiceUpdated tree finalized s = .ok (status, some head))
+    (hm : methodPayloadAttributes version (.obj kvs) = .error .invalidPayloadAttributes) :
+    forkchoiceUpdatedCall version tree finalized (.arr #[stateJson, .obj kvs]) =
+      .error .invalidPayloadAttributes := by
+  simp [forkchoiceUpdatedCall, forkchoiceUpdatedParams, Json.paramsArray, custodyColumnsOfJson,
+    hs, hf, hm, bind, Except.bind, pure, Except.pure]
+
+/-- When the update applies no head, the payload attributes are not read.
+
+The answer is that of the update, whatever object the attributes are. -/
+theorem forkchoiceUpdatedCall_of_no_head {version : Nat}
+    {stateJson : Lean.Json} {kvs : Std.TreeMap.Raw String Lean.Json compare}
+    {s : ForkchoiceState} {status : PayloadStatus}
+    (hs : forkchoiceStateOfJson stateJson = .ok s)
+    (hf : forkchoiceUpdated tree finalized s = .ok (status, none)) :
+    forkchoiceUpdatedCall version tree finalized (.arr #[stateJson, .obj kvs]) =
+      .ok (status, none, none) := by
+  simp [forkchoiceUpdatedCall, forkchoiceUpdatedParams, Json.paramsArray, custodyColumnsOfJson,
+    hs, hf, bind, Except.bind, pure, Except.pure]
 
 end EthLib.Engine
