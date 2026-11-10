@@ -27,5 +27,5 @@ That needs every key to be a multiple of `g1`, no `r x` to be zero, and a nonzer
 
 The game is unchanged in distribution when one message hash scalar is drawn right after the key.
 
-No bound on that game is proved yet.
+No bound on the aggregate game is proved yet.
 -/

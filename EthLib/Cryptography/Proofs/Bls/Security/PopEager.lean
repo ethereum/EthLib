@@ -13,7 +13,7 @@ So it must know that hash before the run, while the game samples it at the first
 
 This file shows that the two orders give the same distribution.
 
-The message hash may fix in advance, to `z`, the scalar of the new message at table position `j`.
+A variant of the message hash fixes to `z` the scalar of its new message at position `j`.
 
 Positions count from 0, as in the reduction for one key.
 
@@ -148,7 +148,7 @@ def implAt (g₂ : G₂) (a : F) (j : ℕ) (z : F) :
   | .inr (.inr x) => (keyHash g₂ x : StateT (State F G₁ M) ProbComp G₂)
 
 omit [AddCommGroup G₁] [Module F G₁] in
-/-- The oracles with the message scalar at `j` fixed draw that scalar early, against the game's.
+/-- The oracles with the message scalar at `j` fixed draw it early, compared with the game's.
 
 The sample is used once the message table has more than `j` entries. -/
 theorem eagerAt_implAt (g₂ : G₂) (a : F) (j : ℕ) :
@@ -230,7 +230,7 @@ theorem eagerAt_implAt (g₂ : G₂) (a : F) (j : ℕ) :
     · exact Or.inl fun _ => rfl
 
 omit [AddCommGroup G₁] [Module F G₁] in
-/-- Every run of the game's oracles has the distribution of the run that draws that scalar first. -/
+/-- A run of the game's oracles is distributed as the run that draws the scalar at `j` first. -/
 theorem run_impl_eq_uniform_implAt {α : Type} (g₂ : G₂) (a : F) (j : ℕ)
     (oa : OracleComp (Spec M G₁ G₂) α) (st : State F G₁ M) :
     (simulateQ (impl g₂ a) oa).run st =ᵈ
@@ -250,7 +250,7 @@ def experimentAt (scheme : Scheme G₁ G₂) (adversary : Adversary G₁ G₂ M)
 
 /-- **The aggregate game with one message scalar drawn first.**
 
-For every position `j`, the game has the distribution of the game that draws that scalar first. -/
+For every position `j`, the game is distributed as the game that draws that scalar after the key. -/
 theorem experiment_eq_experimentAt (scheme : Scheme G₁ G₂) (adversary : Adversary G₁ G₂ M)
     (j : ℕ) : experiment (F := F) scheme adversary =ᵈ experimentAt scheme adversary j := by
   unfold experiment experimentAt
