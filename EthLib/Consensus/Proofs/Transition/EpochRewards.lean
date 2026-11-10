@@ -669,9 +669,11 @@ theorem earliestInclusions_size_and_mem {size : Nat}
 
 /-- The deltas of one validator apply exactly when three conditions hold.
 
-Its position is below `2^64`, and it names a balance.
+Its position is below `2^64`.
 
-The reward added to that balance stays below `2^64`.
+It names a balance.
+
+That balance plus the reward stays below `2^64`.
 
 The new balance is the old one plus the reward, minus the penalty, or zero if the penalty is larger.
 

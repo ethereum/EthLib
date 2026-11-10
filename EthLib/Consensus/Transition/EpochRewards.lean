@@ -341,7 +341,7 @@ def applyDeltas (rewards penalties : Array Gwei) (state : BeaconState preset for
   let state ← increaseBalance state index (rewards.getD position 0)
   decreaseBalance state index (penalties.getD position 0)
 
-/-- The state with the rewards and then the penalties of some deltas applied, index by index. -/
+/-- The state with the rewards, then the penalties, of some deltas applied in order of position. -/
 def applyAllDeltas (state : BeaconState preset fork) (deltas : Array Gwei × Array Gwei) :
     Except TransitionError (BeaconState preset fork) :=
   (List.range state.validators.data.size).foldlM (applyDeltas deltas.1 deltas.2) state
