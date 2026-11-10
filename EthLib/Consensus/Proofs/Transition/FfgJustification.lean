@@ -37,6 +37,8 @@ Gasper §4.4, Definitions 4.5 and 4.6, justify a checkpoint by a supermajority l
 
 Gasper §8.6, Lemma 8.2, gives each justified checkpoint its own validator set.
 
+The term of churn is the stake of the exited set of Gasper §8.6, Definition 8.1.
+
 The paper is [arXiv 2003.03052v3](https://arxiv.org/abs/2003.03052v3).
 -/
 
@@ -51,7 +53,9 @@ variable {preset : Preset} {fork : Base.Fork} {config : Config} {checks : Signat
 
 /-- The stake bound of a supermajority link of Casper FFG, up to a term of churn.
 
-The validator set is the active set of the given epoch, which should be the epoch of the target.
+The validator set is the active set of the given epoch.
+
+The caller must give the epoch of the target, which this does not check.
 
 Each validator weighs its effective balance in the state.
 
@@ -162,6 +166,37 @@ private theorem stake_le_of_justificationTest {attesting : List ValidatorIndex}
     (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset target
   omega
 
+/-- From Altair, each attester that justification counts for an epoch signed a vote for its link.
+
+The epoch is the current one when asked, and the previous one otherwise.
+
+The attesters are the unslashed validators with the timely target flag for that epoch.
+
+Each of them is active in that epoch.
+
+Justification must run, so the current epoch must be past the first two. -/
+theorem TargetFlagsSigned.attester (altair : .altair ≤ fork)
+    (holds : TargetFlagsSigned config checks state)
+    (late : ¬getCurrentEpoch state ≤ GENESIS_EPOCH + 1) (current : Bool)
+    {indices : List ValidatorIndex}
+    (counted : getUnslashedParticipatingIndices state altair TIMELY_TARGET_FLAG_INDEX
+      (if current then getCurrentEpoch state else getPreviousEpoch state) = .ok indices)
+    {index : ValidatorIndex} (member : index ∈ indices) :
+    index ∈ getActiveValidatorIndices state
+        (if current then getCurrentEpoch state else getPreviousEpoch state) ∧
+      ∃ vote, LinkVote state current index.toNat vote ∧ SignedVote config checks state vote := by
+  -- After the first two epochs, the previous epoch is not the current one.
+  have distinct : getPreviousEpoch state ≠ getCurrentEpoch state := by
+    intro same
+    have := congrArg UInt64.toNat same
+    rw [getPreviousEpoch_toNat] at this
+    exact late (UInt64.le_iff_toNat_le.mpr (by simp [GENESIS_EPOCH]; omega))
+  obtain ⟨active, -, flags, read, set⟩ := mem_getUnslashedParticipatingIndices counted index member
+  refine ⟨active, holds altair current index.toNat ⟨flags, ?_, set⟩⟩
+  cases current
+  · simpa [recentParticipation, distinct] using read
+  · simpa [recentParticipation] using read
+
 /-- A passing test of justification for an epoch gives the stake bound of its link, with churn.
 
 The epoch is the current one when asked, and the previous one otherwise.
@@ -268,7 +303,7 @@ The votes of the model must hold those of the data that the state signs, with bl
 
 Then the step keeps the current justified checkpoint.
 
-Or it replaces it by the checkpoint of the newest epoch whose test passes, the previous or current.
+Or it replaces it by the checkpoint of the previous or the current epoch, whose test passes.
 
 In the second case, take the active set of that epoch as the validator set of the target.
 
@@ -315,31 +350,9 @@ theorem processJustificationAndFinalization_linkWithChurn
     refine linkWithChurn_of_weigh large block contains totalOk previousBalanceOk
       currentBalanceOk (fun recent index member => ?_) weighed
     -- From Altair the counted attesters hold the target flag of the epoch.
-    have distinct : getPreviousEpoch state ≠ getCurrentEpoch state := by
-      intro same
-      have := congrArg UInt64.toNat same
-      rw [getPreviousEpoch_toNat] at this
-      exact late (UInt64.le_iff_toNat_le.mpr (by simp [GENESIS_EPOCH]; omega))
-    have flagged : ∀ {epoch : Epoch} {indices : List ValidatorIndex},
-        getUnslashedParticipatingIndices state altair TIMELY_TARGET_FLAG_INDEX epoch =
-          .ok indices →
-        epoch = (if recent then getCurrentEpoch state else getPreviousEpoch state) →
-        index ∈ indices →
-        index ∈ getActiveValidatorIndices state
-            (if recent then getCurrentEpoch state else getPreviousEpoch state) ∧
-          ∃ vote, LinkVote state recent index.toNat vote ∧
-            SignedVote config checks state vote := by
-      intro epoch indices indicesOk same inside
-      obtain ⟨active, -, flags, read, set⟩ := mem_getUnslashedParticipatingIndices indicesOk index
-        inside
-      subst same
-      refine ⟨active, flagsSigned altair recent index.toNat ⟨flags, ?_, set⟩⟩
-      cases recent
-      · simpa [recentParticipation, distinct] using read
-      · simpa [recentParticipation] using read
     cases recent
-    · exact flagged previousOk rfl member
-    · exact flagged currentOk rfl member
+    · exact TargetFlagsSigned.attester altair flagsSigned late false previousOk member
+    · exact TargetFlagsSigned.attester altair flagsSigned late true currentOk member
   · rename_i notAltair
     split at computed
     · simp only [pure, Except.pure, Except.ok.injEq] at computed

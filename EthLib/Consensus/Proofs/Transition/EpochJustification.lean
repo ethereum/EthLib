@@ -71,7 +71,8 @@ Otherwise it is that of the previous or the current epoch, whose test passes.
 
 A test passes when twice the total balance is at most three times the target balance.
 
-The root of the checkpoint is the block root that the state records for the epoch. -/
+The root of the checkpoint is the block root that the state records for the first slot of the epoch.
+-/
 theorem weighJustificationAndFinalization_currentJustified
     {total previousBalance currentBalance : Gwei}
     (computed : weighJustificationAndFinalization state total previousBalance currentBalance =
