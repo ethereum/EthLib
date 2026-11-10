@@ -1,24 +1,31 @@
 module
 
-public import EthLib.Execution.Proofs.Evm.Call.Nonce
+public import EthLib.Execution.Proofs.Evm.Call.StaticMessage
 
 /-!
 # Proofs: from Cancun, a message marks for deletion only the accounts created in its transaction
 
-From Cancun, [EIP-6780][e6780] lets SELFDESTRUCT mark its account for deletion only when the same
-transaction created it.
+From Cancun, [EIP-6780][e6780] lets SELFDESTRUCT mark its account for deletion.
 
-The created accounts of a transaction only grow: a creation adds its address, and a rollback
-keeps them.
+It does so only when the same transaction created that account.
+
+The created accounts of a transaction only grow.
+
+A creation adds its address, and a rollback keeps them.
+
+So an account counts as created here even when the frame that created it failed.
 
 A child that succeeds passes its accounts to delete to its caller.
 
 A child that fails passes none, and its caller keeps its own.
 
-So every successful call and creation ends with each account to delete either marked before it
-started or created in the transaction.
+Take a call or creation that returns a frame, with or without an error.
 
-The deletion at the end of the transaction then removes only created accounts.
+Each account that frame marks for deletion was marked before the message started.
+
+Otherwise the transaction has created it by the end of the message.
+
+The deletions at the end of a transaction are not part of a message, so they are not covered here.
 
 [e6780]: https://eips.ethereum.org/EIPS/eip-6780#specification
 -/
@@ -40,7 +47,9 @@ def CreatedLe (tx tx' : TransactionState) : Prop :=
 
 /-- From `evm` to `after`, the created accounts only grow.
 
-Each account that `after` marks for deletion was marked by `evm`, or is created in `after`. -/
+Each account that `after` marks for deletion was marked by `evm`.
+
+Otherwise it is among the created accounts of `after`. -/
 def DeletesCreated (evm after : Evm fork Meter) : Prop :=
   CreatedLe evm.state after.state ∧
     ∀ address ∈ after.substate.accountsToDelete,
@@ -72,33 +81,15 @@ theorem DeletesCreated.of_sameContext {a b : Evm fork Meter} (h : SameContext a 
     DeletesCreated a b :=
   of_eq (by rw [h.state]) (by rw [h.substate])
 
+omit [GasMeter Meter] in
+/-- A static step keeps the relation. -/
+theorem DeletesCreated.of_staticStep {a b : Evm fork Meter} (h : StaticStep a b) :
+    DeletesCreated a b :=
+  of_eq h.created h.toDelete
+
 /-! ## The writes of the state -/
 
-/-- A write of storage keeps the created accounts. -/
-theorem createdAccounts_setStorage {tx tx' : TransactionState} {address : Address}
-    {key : Base.Bytes32} {value : Base.U256} (h : tx.setStorage address key value = .ok tx') :
-    tx'.createdAccounts = tx.createdAccounts := by
-  unfold TransactionState.setStorage at h
-  split at h
-  · cases h
-  · cases h
-    rfl
-
-/-- A new code keeps the created accounts. -/
-theorem createdAccounts_setCode {tx tx' : TransactionState} {address : Address}
-    {code : ByteArray} (h : tx.setCode fork address code = .ok tx') :
-    tx'.createdAccounts = tx.createdAccounts := by
-  unfold TransactionState.setCode at h
-  rw [TransactionState.createdAccounts_modifyState h]
-  split <;> rfl
-
-/-- A touch of an account keeps the created accounts. -/
-theorem createdAccounts_touchAccount (tx : TransactionState) (address : Address) :
-    (tx.touchAccount address).createdAccounts = tx.createdAccounts := by
-  unfold TransactionState.touchAccount
-  split <;> rfl
-
-/-- A successful move of the balance of a destroyed account keeps the created accounts. -/
+/-- A successful move of the balance of SELFDESTRUCT keeps the created accounts. -/
 theorem createdAccounts_selfdestructTransfer {tx tx' : TransactionState}
     {originator beneficiary : Address}
     (h : selfdestructTransfer fork tx originator beneficiary = .ok tx') :
@@ -117,60 +108,7 @@ theorem createdAccounts_selfdestructTransfer {tx tx' : TransactionState}
 
 /-! ## The frames that keep the relation -/
 
-omit [GasMeter Meter] in
-/-- A record of the read of an account keeps the relation. -/
-theorem deletesCreated_recordAccountRead (evm : Evm fork Meter) (address : Address) :
-    DeletesCreated evm (recordAccountRead evm address) :=
-  .of_eq rfl rfl
-
-omit [GasMeter Meter] in
-/-- A record of the read of a storage key keeps the relation. -/
-theorem deletesCreated_recordStorageRead (evm : Evm fork Meter) (address : Address)
-    (key : Base.Bytes32) : DeletesCreated evm (recordStorageRead evm address key) :=
-  .of_eq rfl rfl
-
-omit [GasMeter Meter] in
-/-- An access to an address keeps the relation. -/
-theorem deletesCreated_accessAddress (evm : Evm fork Meter) (address : Address) :
-    DeletesCreated evm (accessAddress evm address).2 := by
-  obtain ⟨_, h⟩ := accessAddress_snd evm address
-  rw [h]
-  exact .of_eq rfl rfl
-
-omit [GasMeter Meter] in
-/-- An access to a storage key keeps the relation. -/
-theorem deletesCreated_accessStorageKey (evm : Evm fork Meter) (address : Address)
-    (key : Base.Bytes32) : DeletesCreated evm (accessStorageKey evm address key).2 := by
-  obtain ⟨_, h⟩ := accessStorageKey_snd evm address key
-  rw [h]
-  exact .of_eq rfl rfl
-
-/-- An exceptional halt keeps the relation. -/
-theorem deletesCreated_exceptionalHalt (evm : Evm fork Meter) (e : EvmError) :
-    DeletesCreated evm (exceptionalHalt evm e) :=
-  .of_eq rfl rfl
-
-/-- A call that runs no message keeps the relation. -/
-theorem deletesCreated_skipCall {evm after : Evm fork Meter} {gas reservoir : Nat}
-    (h : skipCall evm gas reservoir = .ok after) : DeletesCreated evm after := by
-  obtain ⟨stack, -, rfl⟩ := skipCall_eq_ok h
-  exact .of_eq rfl rfl
-
-/-- A precompile keeps the relation. -/
-theorem deletesCreated_runPrecompile {address : Nat} {evm after : Evm fork Meter}
-    (h : runPrecompile fork address evm = some after) : DeletesCreated evm after := by
-  unfold runPrecompile at h
-  split at h
-  · cases h
-  · cases h
-    exact .of_eq rfl rfl
-  · split at h
-    · cases h
-      exact .of_eq rfl rfl
-    · cases h
-      exact .of_eq rfl rfl
-
-/-- A caller that takes in a child related to it is related to the caller.
+/-- Taking in a child that is related to the caller keeps the relation from the caller.
 
 A child that succeeds passes its accounts to delete, and one that fails passes none. -/
 theorem deletesCreated_incorporateChild {caller child : Evm fork Meter}
@@ -228,17 +166,16 @@ theorem deletesCreated_sstoreStep {evm after : Evm fork Meter} (h : sstoreStep e
   obtain ⟨⟨n, e2⟩, h2, h⟩ := Base.bind_ok_iff.mp h
   have c2 : DeletesCreated evm e2 :=
     DeletesCreated.of_sameContext ((popWord_sameContext h1).trans (popWord_sameContext h2))
-  simp only [] at h
+  dsimp only at h
   split at h
   · simp [throw, throwThe, MonadExceptOf.throw] at h
   · rcases hpair : accessStorageKey e2 e2.message.currentTarget (Base.U256.toBeBytes k) with
       ⟨cold, e3⟩
     have ha : DeletesCreated evm
         (recordStorageRead e3 e2.message.currentTarget (Base.U256.toBeBytes k)) := by
-      have := deletesCreated_accessStorageKey e2 e2.message.currentTarget
-        (Base.U256.toBeBytes k)
+      have := staticStep_accessStorageKey e2 e2.message.currentTarget (Base.U256.toBeBytes k)
       rw [hpair] at this
-      exact (c2.trans this).trans (deletesCreated_recordStorageRead _ _ _)
+      exact c2.trans (.of_staticStep (this.trans (staticStep_recordStorageRead _ _ _)))
     simp only [hpair] at h
     rcases keepReads_eq_ok h with h | ⟨e, rfl⟩
     · obtain ⟨e4, h4, h⟩ := Base.bind_ok_iff.mp h
@@ -250,8 +187,9 @@ theorem deletesCreated_sstoreStep {evm after : Evm fork Meter} (h : sstoreStep e
       · simp [throw, throwThe, MonadExceptOf.throw] at h
       · obtain ⟨st, hst, h⟩ := Base.bind_ok_iff.mp h
         cases h
-        exact m5.trans (.of_eq (createdAccounts_setStorage (Base.mapError_ok_iff.mp hst)) rfl)
-    · exact ha.trans (deletesCreated_exceptionalHalt _ _)
+        exact m5.trans
+          (.of_eq (TransactionState.createdAccounts_setStorage (Base.mapError_ok_iff.mp hst)) rfl)
+    · exact ha.trans (.of_staticStep (staticStep_exceptionalHalt _ _))
 
 /-- A successful TSTORE keeps the relation. -/
 theorem deletesCreated_tstoreStep {evm after : Evm fork Meter} (h : tstoreStep evm = .ok after) :
@@ -279,13 +217,12 @@ theorem deletesCreated_selfdestructStep (hfork : .dencun ≤ fork) {evm after : 
   dsimp only at h
   rcases hacc : accessAddress e1 (Base.toAddressMasked w) with ⟨cold, e2⟩
   simp only [hacc] at h
-  have ha : DeletesCreated e1 e2 := by
-    have := deletesCreated_accessAddress e1 (Base.toAddressMasked w)
-    rwa [hacc] at this
+  have ha := staticStep_accessAddress e1 (Base.toAddressMasked w)
+  rw [hacc] at ha
   obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
   have c : DeletesCreated evm (recordAccountRead e2 (Base.toAddressMasked w)) :=
-    ((DeletesCreated.of_sameContext (popWord_sameContext h1)).trans ha).trans
-      (deletesCreated_recordAccountRead _ _)
+    .of_staticStep (((StaticStep.of_sameContext (popWord_sameContext h1)).trans ha).trans
+      (staticStep_recordAccountRead _ _))
   rcases keepReads_eq_ok h with h | ⟨e, rfl⟩
   · obtain ⟨e3, h3, h⟩ := Base.bind_ok_iff.mp h
     obtain ⟨e4, h4, h⟩ := Base.bind_ok_iff.mp h
@@ -306,107 +243,7 @@ theorem deletesCreated_selfdestructStep (hfork : .dencun ≤ fork) {evm after : 
           exact .inr (hd.resolve_left (Nat.not_lt.mpr hfork))
         · exact .inl hx
       · exact .inl hx
-  · exact c.trans (deletesCreated_exceptionalHalt _ _)
-
-omit [GasMeter Meter] in
-/-- An access to an address, after a pop, keeps the relation. -/
-theorem deletesCreated_popAccess {evm e1 e2 : Evm fork Meter} {w : Base.U256} {cold : Bool}
-    (h1 : popWord evm = .ok (w, e1))
-    (hacc : accessAddress e1 (Base.toAddressMasked w) = (cold, e2)) :
-    DeletesCreated evm e2 := by
-  have := deletesCreated_accessAddress e1 (Base.toAddressMasked w)
-  rw [hacc] at this
-  exact (DeletesCreated.of_sameContext (popWord_sameContext h1)).trans this
-
-/-- Each instruction that reads another account keeps the relation. -/
-theorem deletesCreated_accountStep {op : Op}
-    {step : Evm fork Meter → Except EvmError (Evm fork Meter)}
-    (hstep : accountStep fork op = some step) {evm after : Evm fork Meter}
-    (h : step evm = .ok after) : DeletesCreated evm after := by
-  cases op <;> simp only [accountStep, Option.some.injEq, reduceCtorEq] at hstep
-  case balance =>
-    subst hstep
-    obtain ⟨⟨w, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
-    rcases hacc : accessAddress e1 (Base.toAddressMasked w) with ⟨cold, e2⟩
-    simp only [hacc] at h
-    obtain ⟨e3, h3, h⟩ := Base.bind_ok_iff.mp h
-    obtain ⟨e4, h4, h⟩ := Base.bind_ok_iff.mp h
-    cases h
-    exact ((((deletesCreated_popAccess h1 hacc).trans
-      (.of_sameContext (chargeGas_sameContext h3))).trans
-      (deletesCreated_recordAccountRead _ _)).trans
-      (.of_sameContext (pushWord_sameContext h4))).trans (.of_eq rfl rfl)
-  case extcodesize =>
-    subst hstep
-    obtain ⟨⟨w, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
-    rcases hacc : accessAddress e1 (Base.toAddressMasked w) with ⟨cold, e2⟩
-    simp only [hacc] at h
-    obtain ⟨e3, h3, h⟩ := Base.bind_ok_iff.mp h
-    obtain ⟨code, h4, h⟩ := Base.bind_ok_iff.mp h
-    obtain ⟨e5, h5, h⟩ := Base.bind_ok_iff.mp h
-    cases h
-    exact ((((deletesCreated_popAccess h1 hacc).trans
-      (.of_sameContext (chargeGas_sameContext h3))).trans
-      (deletesCreated_recordAccountRead _ _)).trans
-      (.of_sameContext (pushWord_sameContext h5))).trans (.of_eq rfl rfl)
-  case extcodecopy =>
-    subst hstep
-    obtain ⟨⟨w, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
-    obtain ⟨⟨st, e2⟩, h2, h⟩ := Base.bind_ok_iff.mp h
-    obtain ⟨⟨off, e3⟩, h3, h⟩ := Base.bind_ok_iff.mp h
-    obtain ⟨⟨sz, e4⟩, h4, h⟩ := Base.bind_ok_iff.mp h
-    rcases hacc : accessAddress e4 (Base.toAddressMasked w) with ⟨cold, e5⟩
-    simp only [hacc] at h
-    obtain ⟨e6, h6, h⟩ := Base.bind_ok_iff.mp h
-    obtain ⟨code, h7, h⟩ := Base.bind_ok_iff.mp h
-    cases h
-    have ha : DeletesCreated e4 e5 := by
-      have := deletesCreated_accessAddress e4 (Base.toAddressMasked w)
-      rwa [hacc] at this
-    exact (((((DeletesCreated.of_sameContext ((((popWord_sameContext h1).trans
-      (popWord_sameContext h2)).trans (popWord_sameContext h3)).trans
-      (popWord_sameContext h4))).trans ha).trans
-      (.of_sameContext (chargeGasAndMemory_sameContext h6))).trans
-      (deletesCreated_recordAccountRead _ _))).trans (.of_eq rfl rfl)
-  case selfbalance =>
-    split at hstep
-    · cases hstep
-      exact (deletesCreated_recordAccountRead _ _).trans
-        (.of_sameContext (readFrame_sameContext h))
-    · cases hstep
-  case extcodehash =>
-    split at hstep
-    · cases hstep
-      obtain ⟨⟨w, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
-      rcases hacc : accessAddress e1 (Base.toAddressMasked w) with ⟨cold, e2⟩
-      simp only [hacc] at h
-      obtain ⟨e3, h3, h⟩ := Base.bind_ok_iff.mp h
-      obtain ⟨e4, h4, h⟩ := Base.bind_ok_iff.mp h
-      cases h
-      exact ((((deletesCreated_popAccess h1 hacc).trans
-        (.of_sameContext (chargeGas_sameContext h3))).trans
-        (deletesCreated_recordAccountRead _ _)).trans
-        (.of_sameContext (pushWord_sameContext h4))).trans (.of_eq rfl rfl)
-    · cases hstep
-
-/-- SLOAD keeps the relation. -/
-theorem deletesCreated_sloadStep {evm after : Evm fork Meter} (h : sloadStep evm = .ok after) :
-    DeletesCreated evm after := by
-  obtain ⟨⟨w, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
-  dsimp only at h
-  rcases hacc : accessStorageKey e1 e1.message.currentTarget (Base.U256.toBeBytes w) with
-    ⟨cold, e2⟩
-  simp only [hacc] at h
-  obtain ⟨e3, h3, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨e4, h4, h⟩ := Base.bind_ok_iff.mp h
-  cases h
-  have ha : DeletesCreated e1 e2 := by
-    have := deletesCreated_accessStorageKey e1 e1.message.currentTarget (Base.U256.toBeBytes w)
-    rwa [hacc] at this
-  exact ((((DeletesCreated.of_sameContext (popWord_sameContext h1)).trans ha).trans
-    (.of_sameContext (chargeGas_sameContext h3))).trans
-    (deletesCreated_recordStorageRead _ _ _)).trans
-    (.of_sameContext (pushWord_sameContext h4)) |>.trans (.of_eq rfl rfl)
+  · exact c.trans (.of_staticStep (staticStep_exceptionalHalt _ _))
 
 /-- From Cancun, each successful instruction that gives the next frame keeps the relation. -/
 theorem deletesCreated_instruction (hfork : .dencun ≤ fork) {op : Op}
@@ -430,10 +267,10 @@ theorem deletesCreated_instruction (hfork : .dencun ≤ fork) {op : Op}
   rcases orElse_eq_some hrun with hf | hrun
   · exact .of_sameContext (environmentStep_sameContext hf h)
   rcases orElse_eq_some hrun with hf | hrun
-  · exact deletesCreated_accountStep hf h
+  · exact .of_staticStep (staticStep_accountStep hf h)
   rcases orElse_eq_some hrun with hf | hrun
   · cases op <;> simp only [storageStep, Option.some.injEq, reduceCtorEq] at hf
-    case sload => subst hf; exact deletesCreated_sloadStep h
+    case sload => subst hf; exact .of_staticStep (staticStep_sloadStep h)
     case sstore => subst hf; exact deletesCreated_sstoreStep h
   rcases orElse_eq_some hrun with hf | hrun
   · cases op <;> simp only [transientStorageStep, hfork, ↓reduceIte, Option.some.injEq,
@@ -448,37 +285,6 @@ theorem deletesCreated_instruction (hfork : .dencun ≤ fork) {op : Op}
   · cases op <;> simp only [selfdestructOpStep, Option.some.injEq, reduceCtorEq] at hf
     subst hf
     exact deletesCreated_selfdestructStep hfork h
-
-/-- The access to a delegate keeps the relation. -/
-theorem deletesCreated_accessDelegation {evm after : Evm fork Meter} {address : Address}
-    {known : Nat} {callee : Callee} (h : accessDelegation evm address known = .ok (callee, after)) :
-    DeletesCreated evm after := by
-  obtain ⟨code, -, h⟩ := Base.bind_ok_iff.mp h
-  dsimp only at h
-  split at h
-  · obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
-    obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
-    cases h
-    exact (deletesCreated_accessAddress _ _).trans (deletesCreated_recordAccountRead _ _)
-  · cases h
-    exact .refl _
-
-/-- The payment of a call keeps the relation. -/
-theorem deletesCreated_payCall {kind : CallKind} {call : CallOperands}
-    {memoryCost extraGas newAccount subCall : Nat} {evm after : Evm fork Meter}
-    (h : payCall kind call memoryCost extraGas newAccount evm = .ok (subCall, after)) :
-    DeletesCreated evm after := by
-  unfold payCall at h
-  split at h
-  · obtain ⟨e1, h1, h⟩ := Base.bind_ok_iff.mp h
-    obtain ⟨e2, h2, h⟩ := Base.bind_ok_iff.mp h
-    obtain ⟨e3, h3, h⟩ := Base.bind_ok_iff.mp h
-    cases h
-    exact .of_sameContext (((chargeGas_sameContext h1).trans
-      (chargeStateGas_sameContext h2)).trans (chargeGas_sameContext h3))
-  · obtain ⟨e1, h1, h⟩ := Base.bind_ok_iff.mp h
-    cases h
-    exact .of_sameContext (chargeGas_sameContext h1)
 
 omit [GasMeter Meter] in
 /-- A result that keeps the relation from a frame keeps it from each frame before it. -/
@@ -497,10 +303,9 @@ theorem deletesCreated_genericCall {evm : Evm fork Meter} {message : Message for
   dsimp only at h
   split at h
   · obtain ⟨after, hs, rfl⟩ := Base.map_ok_iff.mp h
-    exact DeletesCreated.trans (by exact .of_eq rfl rfl) (deletesCreated_skipCall hs)
+    exact (DeletesCreated.of_staticStep (staticStep_skipCall hs) :)
   · cases h
-    exact ⟨.of_eq rfl rfl, fun child after hres p =>
-      DeletesCreated.trans (by exact .of_eq rfl rfl) (deletesCreated_resumeCall hres p)⟩
+    exact ⟨.of_eq rfl rfl, fun _ _ hres p => (deletesCreated_resumeCall hres p :)⟩
 
 /-- The successful end of a call instruction keeps the relation. -/
 theorem deletesCreated_finishCall {kind : CallKind} {call : CallOperands} {callee : Callee}
@@ -513,8 +318,8 @@ theorem deletesCreated_finishCall {kind : CallKind} {call : CallOperands} {calle
   dsimp only at h
   split at h
   · obtain ⟨after, hs, rfl⟩ := Base.map_ok_iff.mp h
-    exact DeletesCreated.trans (by exact .of_eq rfl rfl) (deletesCreated_skipCall hs)
-  · exact deletesCreated_keeps_lift (by exact .of_eq rfl rfl) (deletesCreated_genericCall h)
+    exact (DeletesCreated.of_staticStep (staticStep_skipCall hs) :)
+  · exact (deletesCreated_genericCall h :)
 
 /-- A successful step of a call instruction keeps the relation. -/
 theorem deletesCreated_callStep {kind : CallKind} {evm : Evm fork Meter}
@@ -531,22 +336,21 @@ theorem deletesCreated_callStep {kind : CallKind} {evm : Evm fork Meter}
     cases h
   rcases hacc : accessAddress e1 call.address with ⟨cold, e2⟩
   simp only [hacc] at h
-  have ha : DeletesCreated e1 e2 := by
-    have := deletesCreated_accessAddress e1 call.address
-    rwa [hacc] at this
+  have ha := staticStep_accessAddress e1 call.address
+  rw [hacc] at ha
   have s3 : DeletesCreated evm (recordAccountRead e2 call.address) :=
-    (c1.trans ha).trans (deletesCreated_recordAccountRead e2 call.address)
+    c1.trans (.of_staticStep (ha.trans (staticStep_recordAccountRead e2 call.address)))
   obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
   rcases keepReads_eq_ok h with h | ⟨e, rfl⟩
   · obtain ⟨⟨callee, e4⟩, h4, h⟩ := Base.bind_ok_iff.mp h
-    have s4 : DeletesCreated evm e4 := s3.trans (deletesCreated_accessDelegation h4)
+    have s4 : DeletesCreated evm e4 := s3.trans (.of_staticStep (staticStep_accessDelegation h4))
     dsimp only at h
     rcases keepReads_eq_ok h with h | ⟨e, rfl⟩
     · obtain ⟨⟨subCall, e5⟩, h5, h⟩ := Base.bind_ok_iff.mp h
-      exact deletesCreated_keeps_lift (s4.trans (deletesCreated_payCall h5))
+      exact deletesCreated_keeps_lift (s4.trans (.of_staticStep (staticStep_payCall h5)))
         (deletesCreated_finishCall h)
-    · exact s4.trans (deletesCreated_exceptionalHalt _ _)
-  · exact s3.trans (deletesCreated_exceptionalHalt _ _)
+    · exact s4.trans (.of_staticStep (staticStep_exceptionalHalt _ _))
+  · exact s3.trans (.of_staticStep (staticStep_exceptionalHalt _ _))
 
 /-- A successful launch of a creation keeps the relation. -/
 theorem deletesCreated_launchCreate {evm : Evm fork Meter} {value : Base.U256}
@@ -557,13 +361,13 @@ theorem deletesCreated_launchCreate {evm : Evm fork Meter} {value : Base.U256}
   dsimp only at h
   split at h
   · obtain ⟨after, hs, rfl⟩ := Base.map_ok_iff.mp h
-    exact DeletesCreated.trans (by exact .of_eq rfl rfl) (deletesCreated_skipCall hs)
+    exact (DeletesCreated.of_staticStep (staticStep_skipCall hs) :)
   obtain ⟨address, -, h⟩ := Base.bind_ok_iff.mp h
   have c0 : DeletesCreated evm (recordAccountRead (accessAddress (recordAccountRead
       { evm with returnData := .empty } evm.message.currentTarget) address).2 address) :=
-    ((DeletesCreated.of_eq rfl rfl).trans (deletesCreated_accessAddress (recordAccountRead
-      { evm with returnData := .empty } evm.message.currentTarget) address)).trans
-      (deletesCreated_recordAccountRead _ address)
+    (DeletesCreated.of_staticStep ((staticStep_accessAddress (recordAccountRead
+      { evm with returnData := .empty } evm.message.currentTarget) address).trans
+      (staticStep_recordAccountRead _ address)) :)
   rcases keepReads_eq_ok h with hr | ⟨e, rfl⟩
   · obtain ⟨e1, h1, hr⟩ := Base.bind_ok_iff.mp hr
     obtain ⟨e2, h2, hr⟩ := Base.bind_ok_iff.mp hr
@@ -575,12 +379,11 @@ theorem deletesCreated_launchCreate {evm : Evm fork Meter} {value : Base.U256}
     split at hr
     · cases hr
       exact ⟨ms.trans (.of_eq rfl rfl), fun child after hres p =>
-        ms.trans (DeletesCreated.trans (by exact .of_eq rfl rfl)
-          (deletesCreated_resumeCreate hres p))⟩
+        ms.trans (deletesCreated_resumeCreate hres p :)⟩
     · obtain ⟨e3, h3, hr⟩ := Base.bind_ok_iff.mp hr
       cases hr
       exact (ms.trans (.of_sameContext (pushWord_sameContext h3))).trans (.of_eq rfl rfl)
-  · exact c0.trans (deletesCreated_exceptionalHalt _ _)
+  · exact c0.trans (.of_staticStep (staticStep_exceptionalHalt _ _))
 
 /-- A successful step of CREATE or CREATE2 keeps the relation. -/
 theorem deletesCreated_createStep {create2 : Bool} {evm : Evm fork Meter}
@@ -672,7 +475,7 @@ theorem deletesCreated_step (hfork : .dencun ≤ fork) {evm : Evm fork Meter}
 
 /-! ## Messages -/
 
-/-- A successful preparation of a creation keeps every created account, and adds the new one. -/
+/-- A successful preparation of a creation keeps every created account. -/
 theorem createdLe_prepareCreation {tx tx' : TransactionState} {address : Address}
     (h : prepareCreation fork tx address = .ok tx') : CreatedLe tx tx' := by
   unfold prepareCreation at h
@@ -690,18 +493,18 @@ theorem createdAccounts_startState (message : Message fork) (state : Transaction
     (startState fork message state).createdAccounts = state.createdAccounts := by
   unfold startState
   split
-  · exact createdAccounts_touchAccount _ _
+  · exact TransactionState.createdAccounts_touchAccount _ _
   · rfl
 
 /-- A rollback keeps the created accounts and the substate of the frame. -/
-theorem rollbackOnError_createdAccounts (snapshot : TransactionState) (evm : Evm fork Meter) :
+theorem createdAccounts_rollbackOnError (snapshot : TransactionState) (evm : Evm fork Meter) :
     (rollbackOnError snapshot evm).state.createdAccounts = evm.state.createdAccounts ∧
       (rollbackOnError snapshot evm).substate = evm.substate := by
   unfold rollbackOnError
   split <;> exact ⟨rfl, rfl⟩
 
 /-- A successful deposit of code keeps the created accounts and the substate of the frame. -/
-theorem depositCode_createdAccounts {snapshot : TransactionState} {evm after : Evm fork Meter}
+theorem createdAccounts_depositCode {snapshot : TransactionState} {evm after : Evm fork Meter}
     (h : depositCode fork snapshot evm = .ok after) :
     after.state.createdAccounts = evm.state.createdAccounts ∧ after.substate = evm.substate := by
   unfold depositCode at h
@@ -723,14 +526,17 @@ theorem depositCode_createdAccounts {snapshot : TransactionState} {evm after : E
     exact ⟨rfl, rfl⟩
   obtain ⟨st, hst, h⟩ := Base.bind_ok_iff.mp h
   cases h
-  exact ⟨createdAccounts_setCode (Base.mapError_ok_iff.mp hst), rfl⟩
+  exact ⟨TransactionState.createdAccounts_setCode (Base.mapError_ok_iff.mp hst), rfl⟩
 
-/-- From Cancun, every successful call and creation keeps the created accounts of its start.
+/-- From Cancun, every call and creation that returns a frame keeps the created accounts.
 
-Each account it marks for deletion was marked before it started, or is created at its end.
+Each account it marks for deletion was marked before it started.
+
+Otherwise the transaction has created it by the end of the message.
 
 The proof is by strong induction on the gas of the message, for calls and creations together. -/
-theorem processMessage_deletesCreated [LawfulGasMeter Meter] (hfork : .dencun ≤ fork) (n : Nat) :
+theorem deletesCreated_processMessage_induction [LawfulGasMeter Meter] (hfork : .dencun ≤ fork)
+    (n : Nat) :
     (∀ (message : Message fork) (state : TransactionState) (substate : Substate) (meter : Meter)
       (held : GasMeter.gasHeld meter ≤ message.gas), message.gas = n →
       ∀ ended, processMessage fork message state substate meter held = .ok ended →
@@ -751,7 +557,7 @@ theorem processMessage_deletesCreated [LawfulGasMeter Meter] (hfork : .dencun �
         address ∈ substate.accountsToDelete ∨ address ∈ ended.state.createdAccounts)
     DeletesCreated.refl (fun hab hbc => hab.trans hbc) (fun _ _ => trivial)
     (fun _ _ _ => .of_eq rfl rfl) (fun _ h => deletesCreated_step hfork h)
-    (fun _ _ => .of_eq rfl rfl) (fun h _ => deletesCreated_runPrecompile h)
+    (fun _ _ => .of_eq rfl rfl) (fun h _ => .of_staticStep (staticStep_runPrecompile h))
     (fun {message state state1 substate substate1 _ ended} hstate hrun => by
       have hd := hrun trivial
       have h12 : state1.createdAccounts = state.createdAccounts ∧
@@ -760,7 +566,7 @@ theorem processMessage_deletesCreated [LawfulGasMeter Meter] (hfork : .dencun �
         · exact ⟨createdAccounts_startState message state, rfl⟩
         · exact ⟨(TransactionState.createdAccounts_moveEther hm).trans
             (createdAccounts_startState message state), rfl⟩
-      obtain ⟨hc, hs⟩ := rollbackOnError_createdAccounts state ended
+      obtain ⟨hc, hs⟩ := createdAccounts_rollbackOnError state ended
       refine ⟨fun x hx => ?_, fun x hx => ?_⟩
       · rw [hc]
         exact hd.1 x (h12.1 ▸ hx)
@@ -768,7 +574,7 @@ theorem processMessage_deletesCreated [LawfulGasMeter Meter] (hfork : .dencun �
         rw [hc]
         exact (hd.2 x hx).imp_left fun hx => h12.2 ▸ hx)
     (fun hp hm hd => by
-      obtain ⟨hc, hs⟩ := depositCode_createdAccounts hd
+      obtain ⟨hc, hs⟩ := createdAccounts_depositCode hd
       refine ⟨fun x hx => ?_, fun x hx => ?_⟩
       · rw [hc]
         exact hm.1 x (createdLe_prepareCreation hp x hx)
@@ -776,9 +582,11 @@ theorem processMessage_deletesCreated [LawfulGasMeter Meter] (hfork : .dencun �
         rw [hc]
         exact hm.2 x hx) n
 
-/-- From Cancun, every successful call ends with the created accounts of its start, or more.
+/-- From Cancun, every call that returns a frame keeps the created accounts of its start.
 
-Each account it marks for deletion was marked before it started, or is created at its end.
+Each account it marks for deletion was marked before it started.
+
+Otherwise the transaction has created it by the end of the call.
 
 That holds whether or not the call ends with an error. -/
 theorem deletesCreated_processMessage [LawfulGasMeter Meter] (hfork : .dencun ≤ fork)
@@ -788,11 +596,14 @@ theorem deletesCreated_processMessage [LawfulGasMeter Meter] (hfork : .dencun �
     CreatedLe state ended.val.state ∧
       ∀ address ∈ ended.val.substate.accountsToDelete,
         address ∈ substate.accountsToDelete ∨ address ∈ ended.val.state.createdAccounts :=
-  (processMessage_deletesCreated hfork message.gas).1 message state substate meter held rfl ended h
+  (deletesCreated_processMessage_induction hfork message.gas).1 message state substate meter held
+    rfl ended h
 
-/-- From Cancun, every successful creation ends with the created accounts of its start, or more.
+/-- From Cancun, every creation that returns a frame keeps the created accounts of its start.
 
-Each account it marks for deletion was marked before it started, or is created at its end.
+Each account it marks for deletion was marked before it started.
+
+Otherwise the transaction has created it by the end of the creation.
 
 That holds whether or not the creation ends with an error. -/
 theorem deletesCreated_processCreateMessage [LawfulGasMeter Meter] (hfork : .dencun ≤ fork)
@@ -802,6 +613,7 @@ theorem deletesCreated_processCreateMessage [LawfulGasMeter Meter] (hfork : .den
     CreatedLe state ended.val.state ∧
       ∀ address ∈ ended.val.substate.accountsToDelete,
         address ∈ substate.accountsToDelete ∨ address ∈ ended.val.state.createdAccounts :=
-  (processMessage_deletesCreated hfork message.gas).2 message state substate meter held rfl ended h
+  (deletesCreated_processMessage_induction hfork message.gas).2 message state substate meter held
+    rfl ended h
 
 end EthLib.Execution.Evm

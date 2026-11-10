@@ -106,70 +106,79 @@ theorem stateKept_recordStorageRead (evm : Evm fork Meter) (address : Address) (
 
 It keeps its message, its code and the block of its state.
 
-It also keeps the touched accounts of its substate. -/
+It also keeps the touched accounts and the accounts to delete of its substate.
+
+It keeps the created accounts of its state. -/
 structure StaticStep (before after : Evm fork Meter) : Prop where
   state : StateKept before after
   message : after.message = before.message
   code : after.code = before.code
   parent : after.state.parent = before.state.parent
   touched : after.substate.touchedAccounts = before.substate.touchedAccounts
+  toDelete : after.substate.accountsToDelete = before.substate.accountsToDelete
+  created : after.state.createdAccounts = before.state.createdAccounts
 
 omit [GasMeter Meter] in
 /-- A frame keeps its state and message. -/
 theorem StaticStep.refl (evm : Evm fork Meter) : StaticStep evm evm :=
-  ⟨StateKept.refl _, rfl, rfl, rfl, rfl⟩
+  ⟨StateKept.refl _, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 omit [GasMeter Meter] in
 /-- Two steps that each keep the state and the message keep them together. -/
 theorem StaticStep.trans {a b c : Evm fork Meter} (hab : StaticStep a b) (hbc : StaticStep b c) :
     StaticStep a c :=
   ⟨hab.state.trans hbc.state, hbc.message.trans hab.message, hbc.code.trans hab.code,
-    hbc.parent.trans hab.parent, hbc.touched.trans hab.touched⟩
+    hbc.parent.trans hab.parent, hbc.touched.trans hab.touched,
+    hbc.toDelete.trans hab.toDelete, hbc.created.trans hab.created⟩
 
 omit [GasMeter Meter] in
 /-- A step that keeps the message, the state and the substate is a static step. -/
 theorem StaticStep.of_sameContext {a b : Evm fork Meter} (h : SameContext a b) : StaticStep a b :=
-  ⟨StateKept.of_sameContext h, h.message, h.code, by rw [h.state], by rw [h.substate]⟩
+  ⟨StateKept.of_sameContext h, h.message, h.code, by rw [h.state], by rw [h.substate],
+    by rw [h.substate], by rw [h.state]⟩
 
 omit [GasMeter Meter] in
 /-- A change of the memory is a static step. -/
 theorem StaticStep.withMemory (evm : Evm fork Meter) (memory : ByteArray) :
-    StaticStep evm { evm with memory } := ⟨StateKept.refl _, rfl, rfl, rfl, rfl⟩
+    StaticStep evm { evm with memory } := ⟨StateKept.refl _, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 omit [GasMeter Meter] in
 /-- A move of the program counter is a static step. -/
 theorem StaticStep.advance {a b : Evm fork Meter} (h : StaticStep a b) (n : Nat := 1) :
-    StaticStep a (Evm.advance b n) := ⟨h.state, h.message, h.code, h.parent, h.touched⟩
+    StaticStep a (Evm.advance b n) :=
+  ⟨h.state, h.message, h.code, h.parent, h.touched, h.toDelete, h.created⟩
 
 omit [GasMeter Meter] in
 /-- A record of the read of an account is a static step. -/
 theorem staticStep_recordAccountRead (evm : Evm fork Meter) (address : Address) :
     StaticStep evm (recordAccountRead evm address) :=
-  ⟨stateKept_recordAccountRead evm address, rfl, rfl, rfl, rfl⟩
+  ⟨stateKept_recordAccountRead evm address, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 omit [GasMeter Meter] in
 /-- A record of the read of a storage key is a static step. -/
 theorem staticStep_recordStorageRead (evm : Evm fork Meter) (address : Address) (key : Bytes32) :
     StaticStep evm (recordStorageRead evm address key) :=
-  ⟨stateKept_recordStorageRead evm address key, rfl, rfl, rfl, rfl⟩
+  ⟨stateKept_recordStorageRead evm address key, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 omit [GasMeter Meter] in
 /-- An access to an address is a static step. -/
 theorem staticStep_accessAddress (evm : Evm fork Meter) (address : Address) :
     StaticStep evm (accessAddress evm address).2 := by
   obtain ⟨_, h⟩ := accessAddress_snd evm address
-  exact ⟨stateKept_accessAddress evm address, by rw [h], by rw [h], by rw [h], by rw [h]⟩
+  exact ⟨stateKept_accessAddress evm address, by rw [h], by rw [h], by rw [h], by rw [h],
+    by rw [h], by rw [h]⟩
 
 omit [GasMeter Meter] in
 /-- An access to a storage key is a static step. -/
 theorem staticStep_accessStorageKey (evm : Evm fork Meter) (address : Address) (key : Bytes32) :
     StaticStep evm (accessStorageKey evm address key).2 := by
   obtain ⟨_, h⟩ := accessStorageKey_snd evm address key
-  exact ⟨stateKept_accessStorageKey evm address key, by rw [h], by rw [h], by rw [h], by rw [h]⟩
+  exact ⟨stateKept_accessStorageKey evm address key, by rw [h], by rw [h], by rw [h], by rw [h],
+    by rw [h], by rw [h]⟩
 
 /-- An exceptional halt is a static step. -/
 theorem staticStep_exceptionalHalt (evm : Evm fork Meter) (e : EvmError) :
-    StaticStep evm (exceptionalHalt evm e) := ⟨StateKept.refl _, rfl, rfl, rfl, rfl⟩
+    StaticStep evm (exceptionalHalt evm e) := ⟨StateKept.refl _, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 /-- BALANCE is a static step. -/
 theorem staticStep_balanceStep {evm after : Evm fork Meter} (h : balanceStep evm = .ok after) :

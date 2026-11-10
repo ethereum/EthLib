@@ -125,7 +125,7 @@ theorem accessDelegation_codeHash_ne {evm after : Evm fork Meter} {address : Add
 theorem staticStep_skipCall {evm after : Evm fork Meter} {gas reservoir : Nat}
     (h : skipCall evm gas reservoir = .ok after) : StaticStep evm after := by
   obtain ⟨stack, -, rfl⟩ := skipCall_eq_ok h
-  exact ⟨StateKept.refl _, rfl, rfl, rfl, rfl⟩
+  exact ⟨StateKept.refl _, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 /-- The caller that takes in a child has the state of the child. -/
 theorem state_incorporateChild (caller child : Evm fork Meter) :

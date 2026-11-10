@@ -606,6 +606,30 @@ theorem createdAccounts_moveEther {fork : Fork} {tx tx' : TransactionState}
   · simp only [hmid, bind, Except.bind] at h
     rw [createdAccounts_modifyState h, createdAccounts_modifyState hmid]
 
+/-- A write of storage keeps the record of the accounts that the transaction created. -/
+theorem createdAccounts_setStorage {tx tx' : TransactionState} {address : Address}
+    {key : Bytes32} {value : U256} (h : tx.setStorage address key value = .ok tx') :
+    tx'.createdAccounts = tx.createdAccounts := by
+  unfold setStorage at h
+  split at h
+  · cases h
+  · cases h
+    rfl
+
+/-- A new code keeps the record of the accounts that the transaction created. -/
+theorem createdAccounts_setCode {fork : Fork} {tx tx' : TransactionState} {address : Address}
+    {code : ByteArray} (h : tx.setCode fork address code = .ok tx') :
+    tx'.createdAccounts = tx.createdAccounts := by
+  unfold setCode at h
+  rw [createdAccounts_modifyState h]
+  split <;> rfl
+
+/-- A touch of an account keeps the record of the accounts that the transaction created. -/
+theorem createdAccounts_touchAccount (tx : TransactionState) (address : Address) :
+    (tx.touchAccount address).createdAccounts = tx.createdAccounts := by
+  unfold touchAccount
+  split <;> rfl
+
 /-- Moving ether from an address to itself leaves every account reading as it did. -/
 theorem moveEther_self {fork : Fork} {tx tx' : TransactionState} {address : Address}
     {amount : U256} (h : tx.moveEther fork address address amount = .ok tx') :
