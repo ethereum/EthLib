@@ -7495,7 +7495,7 @@
       {"constructor": "wrongDaoExtraData", "code": 243}]}],
    "error_class": "BlockError",
    "docstring":
-   "Check the ommers of a block in RLP form, against recent blocks, each at the fork of its number.\n\nThe forks of the chain are an RLP list of `[name, first block]`, the first one from block 0.\n\nThe recent blocks are an RLP list of blocks, the last seven of the chain, ending with the parent.\n\nA check seal of 0 leaves out the proof of work of the ommers, as for test chains."},
+   "Check the ommers of a block in RLP form, against recent blocks, each at the fork of its number.\n\nThe forks of the chain are an RLP list of `[name, first block]`, the first one from block 0.\n\nThe recent blocks are an RLP list of blocks, oldest first, ending with the parent.\n\nThe last seven blocks are enough.\n\nA check seal of 0 leaves out the proof of work of the ommers, as for test chains."},
   {"summary":
    "The transactions root of the transactions of a block, decoded at the fork.",
    "signature": "(fork: str, block: bytes) -> bytes",
