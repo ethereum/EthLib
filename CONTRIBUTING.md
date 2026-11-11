@@ -93,7 +93,18 @@ The specification and the exports import nothing beyond the Lean toolchain.
   #106 tracks the ones in KZG.
 - Prefer structural recursion, `map` and folds to `Id.run do` with mutable variables.
   A proof then follows the shape of the definition.
+  For a loop that can stop early, use `foldlM` in `Option` or `Except`.
   This is advice, not a rule: a loop whose speed matters can keep `do`.
+- Prefer not to restate the elaborated body of a loop in a theorem, since any edit of the loop then breaks the statement.
+  Write the loop as a recursion or a fold.
+  Or keep the loop as the source writes it, and prove once that it equals such a helper.
+  The other theorems are then about the helper.
+- Write a chain of steps that can fail as an `Except` `do` block, so that it reads like the source.
+  Prove it through `bind_ok_iff` and the other lemmas of `EthLib/Base/Except.lean`, not by rewriting it as a `match`.
+- A definition that a kernel-checked fact evaluates needs a recursion that the kernel can reduce.
+  `decide` and `rfl` need structural recursion or fuel, because Lean makes a well-founded definition irreducible.
+  `decide +kernel` also reduces a well-founded recursion whose measure is a single `Nat`, which Lean builds on `WellFounded.Nat.fix`.
+  It does not reduce one with a lexicographic measure, such as a pair, which Lean builds on `WellFounded.fix`.
 
 ### Proofs
 
