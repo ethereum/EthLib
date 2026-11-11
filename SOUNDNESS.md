@@ -2567,6 +2567,10 @@ So the bound on its reward is the bound on base rewards at the whole budget, as 
 On mainnet and minimal these bounds hold for a budget of `2^57` Gwei and `2^21` epochs.
 The bound on the current epoch multiplies it by the largest cap at any fork, 2048 ETH, so it is conservative before Altair, where the cap is 32 ETH.
 
+Before Electra, registry updates need a ceiling for the first activation epoch and every exit epoch other than `FAR_FUTURE_EPOCH`.
+The ceiling plus the registry size and the withdrawability delay must be below `2^64`.
+Each ejection raises the ceiling by at most one, and activation leaves the exit epochs unchanged.
+
 The builder payments of Gloas carry four hypotheses and one restriction.
 `chainSteps_paysQuorum` proves that along a chain through the last slot of an epoch, each payment of the previous epoch that reaches its quorum is paid exactly once.
 Paid means that the withdrawal of the payment joins the queue of the withdrawals of the builders.
