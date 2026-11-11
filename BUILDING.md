@@ -165,9 +165,11 @@ python3 -m http.server -d .lake/build/doc
 The pages are in `docbuild/.lake/build/doc`.
 Open them through a local server, because a browser blocks some of their scripts when it opens them as files.
 
-`docbuild` uses the packages of the repository root, through `packagesDir`.
-Its manifest is not committed: Lake writes it when it is missing, with the pins of the root manifest and the doc-gen4 tag of `docbuild/lakefile.toml`.
-That tag follows the toolchain, so a toolchain upgrade raises it too.
+`docbuild` keeps its packages in the repository root's `.lake/packages`, through `packagesDir`.
+So doc-gen4 and its own dependencies are fetched there, beside those of EthLib.
+The manifest of `docbuild` is not committed: Lake writes it when it is missing.
+EthLib's dependencies then keep the pins of the root manifest, and doc-gen4's dependencies take the pins of doc-gen4's manifest.
+The doc-gen4 tag in `docbuild/lakefile.toml` follows the toolchain, so a toolchain upgrade raises it too.
 
 Only the library `EthLib` has pages so far, not `Proofs` or `Exports`.
 Most of the output documents `Init`, `Lean`, `Lake` and `Std`, which doc-gen4 always includes.
