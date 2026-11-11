@@ -2212,6 +2212,18 @@ Otherwise a search over the two branch climbs, or one over the hash inputs of th
 From Deneb, `isValidLightClientHeader_blobGas` applies this to the blob gas used and the excess blob gas, at a slot from Deneb.
 The schedule must start Capella no later than Deneb.
 `isValidLightClientHeader_blobGas_zero` shows that a valid header of an earlier slot has zero for both.
+A store of a later fork upgrades the header of an earlier block.
+So the fork of a header can be later than the fork of its block.
+`isValidLightClientHeader_execution_eq_upgrade_capella` takes a valid header from Deneb to Fulu at a slot from Capella and before Deneb, and a Capella body.
+The execution header is then the upgrade of the payload header of the body.
+So it has the fields of that payload header, and zero for both blob gas fields.
+`isValidLightClientHeader_execution_eq_upgrade` takes a valid header from Deneb to Fulu at a slot from Capella and from Deneb, and a body of any fork from Deneb to Fulu.
+The execution header is again the upgrade of the payload header of the body, which keeps every field.
+`isValidLightClientHeader_blobGas_upgrade` applies this to the two blob gas fields, at a slot from Deneb.
+Its schedule must also start Capella no later than Deneb.
+`LightClientHeader.upgrade_execution_eq` takes the header and the body of `isValidLightClientHeader_execution_eq`, and the upgrade of the header to a fork before Gloas.
+The upgraded header has the upgrade of the payload header of the body, by `LightClientHeader.upgrade_execution`.
+In each of these theorems, the alternative is a SHA-256 collision that one of the same two searches names.
 From Gloas, `isValidLightClientHeader_parentBlockHash` binds the block hash of a header at a slot from Gloas to the parent block hash of the bid of a Gloas body.
 `isValidLightClientHeader_executionBlockHash` binds it, for an earlier slot from Capella, to the block hash of the payload of a body from Capella to Fulu that is from Deneb exactly when the slot is.
 The headers that the client checks are valid: `initializeLightClientStore_header_valid`, `validateLightClientUpdate_attestedHeader_valid`, and `validateLightClientUpdate_finalizedHeader_valid` after the genesis slot.
