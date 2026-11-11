@@ -5,11 +5,13 @@ public import EthLib.Execution.Proofs.State.Frame
 /-!
 # Proofs: code availability under changes of state
 
-`HasCodes` requires code lookup to succeed for every current account.
+Code is available when lookup succeeds at the code hash of every current account.
 
-`HasPreCodes` uses each account in the parent block view, before the transaction.
+Pre-transaction availability asks the same of each account in the parent block view.
 
-A change that keeps or clears an account's code hash keeps both properties.
+Any account change keeps pre-transaction availability.
+
+It keeps current availability when it keeps or clears the account's code hash.
 
 Writing code keeps them too, since it stores code under the hash that the account receives.
 
@@ -105,7 +107,7 @@ theorem hasPreCodes_setCode {fork : Fork} {state state' : TransactionState} {add
   rw [account]
   exact exists_getCode_setCode h (available other)
 
-/-- Rolling back to a snapshot of the same parent restores its current code availability. -/
+/-- Rolling back to a snapshot of the same parent restores the snapshot's code availability. -/
 theorem hasCodes_restoreTxState {state snapshot : TransactionState}
     (parent : state.parent = snapshot.parent) (available : HasCodes snapshot) :
     HasCodes (state.restoreTxState snapshot) := by
@@ -134,7 +136,7 @@ theorem hasCodes_incorporateTxIntoBlock {state : TransactionState} (available : 
   rw [account, getCode_incorporateTxIntoBlock]
   exact available address
 
-/-- After incorporation, pre-transaction availability follows from the old current accounts. -/
+/-- If every account has its code, every pre-transaction account has it after incorporation. -/
 theorem hasPreCodes_incorporateTxIntoBlock {state : TransactionState}
     (available : HasCodes state) : HasPreCodes state.incorporateTxIntoBlock := by
   intro address
