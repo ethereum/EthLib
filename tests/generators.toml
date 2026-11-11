@@ -1,0 +1,728 @@
+# Who computed the expected values of the test vectors, and which libraries compute them at run time.
+#
+# The pins of `tests/sources.toml` say where a vector comes from.
+# This file says which program computed its expected values: outputs, post-states, verdicts and digests.
+# A vector computed by the code that EthLib's definition was written from tests less than one computed apart from it.
+# So each conformance claim can name its generator.
+#
+# The table `generators` defines each generator once, under a short name.
+# Its `computes` field names the program, and the library that does the arithmetic when it is not the program itself.
+# Its `version` field gives the versions that a file, a fixture or a lock file records, or says that none is recorded.
+# Its `source` field is where a reader checks the claim, at a pinned commit where there is one.
+#
+# Two names are reserved and need no definition:
+# - "ethlib": EthLib computed the values, so the case is a regression test of EthLib, not a check of it.
+# - "not established": no file, commit or document read so far names the program.
+#   Such a group gives what was read in `checked`, and it never counts as independent.
+#
+# The table `directories` gives, for each directory that `tests/sources.toml` lists, its groups of cases.
+# The table `archives` does the same for each release archive of `tests/sources.toml`.
+# A group lists its files in `cases`, as globs relative to the directory, or to the top of the archive.
+# Several groups can share one file, when each gives the part it covers in `subset`.
+# Files named LICENSE, and Python files, hold no case and belong to no group.
+#
+# The table `runtime` lists the modules the Python tests import that are no part of EthLib, of the standard library or of the tests.
+# A module that computes expected values while the tests run is an oracle.
+# Any other module is a tool.
+#
+#     uv run --no-project --python 3.12 python scripts/check_fixture_pins.py
+#
+# The check fails when a directory or an archive has no entry, when a pinned file belongs to no group, and when a group names an undefined generator.
+# It also fails when a test imports a module that `runtime` does not list, and when an oracle's version differs from `uv.lock`.
+
+# The Python specification of the consensus layer and the test vectors of its releases.
+
+[generators."pyspec v1.7.0-beta.4"]
+computes = "the consensus-specs Python specification, run by its reference-test plugin, with SSZ in eth-ssz-specs, BLS in py_arkworks_bls12381, KZG in ckzg and Snappy in python-snappy"
+version = "consensus-specs v1.7.0-beta.4 (aa16bb4c), eth-ssz-specs 0.1.0, py_arkworks_bls12381 0.5.0, ckzg 2.1.8, python-snappy 0.7.3 on cramjam 2.11.0"
+source = "https://github.com/ethereum/consensus-specs/blob/aa16bb4c156184e9548a997d53efaf2a228a6304/pyproject.toml, and .github/workflows/release.yml:77"
+
+[generators."pyspec v1.7.0-beta.4, EthLib scenarios"]
+computes = "the consensus-specs Python specification, unchanged, run by its reference-test plugin on test functions that EthLib wrote"
+version = "consensus-specs v1.7.0-beta.4 (aa16bb4c), with the libraries of its uv.lock"
+source = "tests/consensus/large_amounts/README.md"
+
+[generators."pyspec v1.7.0-alpha.12"]
+computes = "the consensus-specs Python specification, run by its reference-test plugin, with BLS in py_arkworks_bls12381 and SSZ in eth-remerkleable"
+version = "consensus-specs v1.7.0-alpha.12 (84454a9d), py_arkworks_bls12381 0.5.0, eth-remerkleable 0.1.31, python-snappy 0.7.3 on cramjam 2.11.0"
+source = "https://github.com/ethereum/consensus-specs/blob/84454a9d57f4f49f74c78e9f375347baf30474f2/pyproject.toml"
+
+[generators."ckzg 2.1.7 in pyspec v1.7.0-alpha.12"]
+computes = "ckzg, the Python binding of c-kzg-4844, which the reference tests put in place of the specification's KZG functions by default"
+version = "ckzg 2.1.7, consensus-specs v1.7.0-alpha.12 (84454a9d)"
+source = "https://github.com/ethereum/consensus-specs/blob/84454a9d57f4f49f74c78e9f375347baf30474f2/Makefile#L205, and tests/core/pyspec/eth_consensus_specs/utils/ckzg_utils.py"
+
+[generators."pyspec v1.7.0-alpha.13"]
+computes = "the ssz_generic template tests of the consensus-specs Python specification, with SSZ in eth-remerkleable"
+version = "consensus-specs v1.7.0-alpha.13 (e762dd6e), eth-remerkleable 0.1.31, python-snappy 0.7.3 on cramjam 2.11.0"
+source = "https://github.com/ethereum/consensus-specs/blob/e762dd6e2c45ee05648b5787e7d261279aec226a/tests/core/pyspec/eth_consensus_specs/utils/ssz/ssz_impl.py"
+
+[generators."consensus-specs KZG reference tests"]
+computes = "the KZG reference tests of the consensus-specs Python specification, copied into c-kzg-4844, with the group arithmetic in py_arkworks_bls12381"
+version = "runs of December 2024 to September 2025 with py_arkworks_bls12381 0.3.8, the release of each file not recorded"
+source = "https://github.com/ethereum/c-kzg-4844/blob/a751e2d92abcd63b01d1400789789f5ea289a8b0/scripts/do_tests_match_ref_tests.py"
+
+[generators."consensus-specs config files"]
+computes = "nothing: the configuration and preset files of consensus-specs, written by its authors"
+version = "consensus-specs v1.7.0-beta.4 (aa16bb4c)"
+source = "https://github.com/ethereum/consensus-specs/tree/aa16bb4c156184e9548a997d53efaf2a228a6304/configs"
+
+[generators."pyspec 63aa303c KZG"]
+computes = "the KZG test generator of the consensus-specs Python specification, with the group arithmetic in py_arkworks_bls12381"
+version = "consensus-specs 63aa303c (1.4.0-beta.2), py_arkworks_bls12381 0.3.4, py_ecc 6.0.0, milagro_bls_binding 1.9.0"
+source = "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/cancun/eip4844_blobs/point_evaluation_vectors/README.md"
+
+[generators."ssz-specs v0.1.0"]
+computes = "the filler suite of ssz-specs, with its own eth-ssz-specs package"
+version = "ssz-specs v0.1.0 (7bce07ff), eth-ssz-specs 0.1.0"
+source = "https://github.com/ethereum/ssz-specs/blob/7bce07ff7d51b1a3c66ff4e2bd3233ac248ede70/packages/testing/src/ssz_testing/fixtures.py"
+
+[generators."cramjam 2.11.0, run once"]
+computes = "cramjam.snappy.decompress_raw, run once by the author of the test, the same library that compressed the files upstream"
+version = "cramjam 2.11.0"
+source = "bindings/python/tests/snappy/test_consensus_spec_tests.py:3-4"
+
+[generators."EthLib script on eth-ssz-specs 0.1.0"]
+computes = "a script of EthLib that computes the values with eth-ssz-specs and never calls EthLib"
+version = "eth-ssz-specs 0.1.0"
+source = "the README.md and generate.py of the directory"
+
+# BLS and the other cryptographic suites.
+
+[generators."bls12-381-tests v0.1.2"]
+computes = "main.py of bls12-381-tests: values from py_ecc, verdicts written by the author and checked with py_ecc and milagro-bls-binding (batch_verify with milagro-bls-binding only)"
+version = "bls12-381-tests v0.1.2 (89ff3a86), py_ecc 5.2.0, milagro-bls-binding 1.7.0"
+source = "https://github.com/ethereum/bls12-381-tests/blob/89ff3a86f1a9b89a555495f7535c853cda589320/main.py"
+
+[generators."hash-to-curve draft vectors"]
+computes = "the test vectors of the hash-to-curve draft, copied into main.py of bls12-381-tests, and checked with py_ecc"
+version = "the draft's version not recorded, py_ecc 5.2.0"
+source = "https://github.com/ethereum/bls12-381-tests/blob/89ff3a86f1a9b89a555495f7535c853cda589320/main.py#L622-L648"
+
+[generators."bls12-381-tests hand-written"]
+computes = "nothing: verdicts written by the author of bls12-381-tests for inputs from Teku's tests, some checked with py_ecc"
+version = "bls12-381-tests v0.1.2 (89ff3a86)"
+source = "https://github.com/ethereum/bls12-381-tests/blob/89ff3a86f1a9b89a555495f7535c853cda589320/main.py#L651-L870"
+
+[generators."bls12-381-tests eip-2537 branch"]
+computes = "main.py of the eip-2537 branch of bls12-381-tests, with py_ecc and py_arkworks_bls12381"
+version = "the commit run not recorded, the branch head 72f47fb6 pins py_ecc 7.0.0 and py_arkworks_bls12381 0.3.4"
+source = "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/prague/eip2537_bls_12_381_precompiles/vectors/test-vectors.md"
+
+[generators."Wycheproof"]
+computes = "the generator of Project Wycheproof, which C2SP/wycheproof does not publish, named google-wycheproof in each test group"
+version = "the version in each test group: 0.9 for HMAC and HKDF, 0.9rc5 for AES-GCM and ECDSA"
+source = "the `source` field of each test group, in C2SP/wycheproof at d17cc89f"
+
+[generators."Wycheproof, David Benjamin's scripts"]
+computes = "David Benjamin's Python scripts for ECDSA edge cases, with their own modular arithmetic, added to Wycheproof"
+version = "source version 0.1"
+source = "https://github.com/C2SP/wycheproof/pull/237 and https://github.com/C2SP/wycheproof/pull/238"
+
+[generators."Wycheproof, blsvecgen"]
+computes = "blsvecgen, an unpublished program of the author of the BLS vectors, whose BLS library is not named"
+version = "source version 0.1, the program's version not recorded"
+source = "https://github.com/C2SP/wycheproof/pull/224"
+
+[generators."Wycheproof P-256, converted by execution-specs"]
+computes = "the ECDSA P-256 vectors of Wycheproof, turned into precompile calls by the authors of execution-specs"
+version = "the Wycheproof commit not recorded"
+source = "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/osaka/eip7951_p256verify_precompiles/test_p256verify.py#L38-L40"
+
+[generators."BLAKE2 genkat-json"]
+computes = "genkat-json.c of the BLAKE2 reference package, linked with its own BLAKE2 code"
+version = "not recorded, the file written in BLAKE2 2994ec5 (2016)"
+source = "https://github.com/BLAKE2/BLAKE2/blob/ed1974ea83433eba7b2d95c5dcd9ac33cb847913/ref/makefile#L33-L37"
+
+[generators."tiny-secp256k1 ecdsa.cpp"]
+computes = "scripts/ecdsa.cpp of tiny-secp256k1, which signs with libsecp256k1 and lists the rejected inputs in its code"
+version = "libsecp256k1 6ad5cdb4, from tiny-secp256k1 7ffc09d (2018)"
+source = "https://github.com/bitcoinjs/tiny-secp256k1/blob/7ffc09d568a64c9c7a26df97e7b2d127f184d5cf/scripts/shared.hpp#L216-L222"
+
+[generators."noise-c vector-gen"]
+computes = "tests/vector-gen of noise-c, a separate handshake on the primitives of noise-c"
+version = "not recorded, the file from 2016"
+source = "https://github.com/rweather/noise-c/blob/cfe25410979a87391bb9ac8d4d4bef64e9f268c6/tests/vector-gen/README"
+
+[generators."RFC 9380 proof of concept"]
+computes = "the Sage and Python proof of concept of the RFC 9380 authors, in cfrg/draft-irtf-cfrg-hash-to-curve"
+version = "the commit run for the RFC not recorded"
+source = "RFC 9380, Appendices J and K, which say the vectors were generated with code from that repository"
+
+[generators."Keccak team KAT"]
+computes = "the known-answer files of the Keccak team, whose program is not in the archive"
+version = "KeccakKAT-3.zip (January 2011)"
+source = "bindings/python/tests/keccak/kat/README.md"
+
+[generators."NIST CAVS"]
+computes = "the Cryptographic Algorithm Validation System of NIST"
+version = "the version in each file header: SHA-256 short and long messages 11.0, SHA-256 Monte Carlo 11.1, AES ECB 11.1, AES-GCM 14.0"
+source = "the header of each .rsp file"
+
+[generators."FIPS 180-2 examples"]
+computes = "the examples of FIPS 180-2, Appendix B, whose tool is not stated"
+version = "FIPS 180-2"
+source = "bindings/python/tests/sha256/fixtures.py"
+
+[generators."Unicode Character Database"]
+computes = "the data files of the Unicode Consortium, whose tool is not stated"
+version = "Unicode 16.0.0"
+source = "tests/cryptography/keystore/unicode/NormalizationTest.txt:1-3"
+
+[generators."leanVM leanSPHINCS"]
+computes = "the Rust leanSPHINCS of leanVM, with Keccak-256 from RustCrypto sha3, whose test pins known_answer.hex"
+version = "leanVM 5e3ade21, sha3 0.11.0"
+source = "https://github.com/leanEthereum/leanVM/blob/5e3ade21d339a45e1b3b0dba97ad9300ab50e49b/crates/signatures/src/lean_sphincs/known_answer.hex"
+
+[generators."Lighthouse test generator, PR 4958"]
+computes = "test_generator.rs of Lighthouse, whose verdicts are written in the program and run against Lighthouse's slashing protection"
+version = "Lighthouse ec8edfb8 (PR 4958)"
+source = "https://github.com/eth-clients/slashing-protection-interchange-tests/pull/18"
+
+[generators."Lighthouse test generator, earlier"]
+computes = "earlier runs of the slashing-protection test generator of Lighthouse"
+version = "not recorded, the files from Lighthouse releases of 2020 and 2021"
+source = "slashing-protection-interchange-tests 8e30b9dd and ad54abce"
+
+# The execution layer.
+
+[generators."EELS 2.19.0"]
+computes = "EELS, the Python execution specification, run as the transition tool by the execution-specs filler"
+version = "ethereum-execution 2.19.0 and ethereum-execution-testing 1.0.0 at execution-specs e27f097e, in each fixture's _info"
+source = "_info.filling-transition-tool of each fixture, and https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/packages/testing/src/execution_testing/fixtures/base.py#L184"
+
+[generators."EELS 2.19.0, heze devnet"]
+computes = "EELS, the Python execution specification, run as the transition tool by the execution-specs filler"
+version = "ethereum-execution 2.19.0 at execution-specs 0548fdc5, read from a sample of the fixtures"
+source = "_info of each fixture"
+
+[generators."EELS 2.19.0, bogota devnet"]
+computes = "EELS, the Python execution specification, run as the transition tool by the execution-specs filler"
+version = "ethereum-execution 2.19.0 at execution-specs ca8c6094, read from a sample of the fixtures"
+source = "_info of each fixture"
+
+[generators."execution-specs filler, no transition tool"]
+computes = "the execution-specs filler alone, which drops the transition tool for a transaction test and computes the hash, the sender and the intrinsic gas itself"
+version = "ethereum-execution-testing 1.0.0 at execution-specs e27f097e"
+source = "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/packages/testing/src/execution_testing/specs/transaction.py#L57-L103"
+
+[generators."go-ethereum default genesis"]
+computes = "core.DefaultGenesisBlock of go-ethereum, written out by scripts/gen_genesis_config.go of execution-specs"
+version = "the go-ethereum version not recorded, the file added in execution-specs cac02060 (2021)"
+source = "https://github.com/ethereum/execution-specs/blob/cac0206027098fb07b01e228715d70da654d2ead/scripts/gen_genesis_config.go"
+
+[generators."go-ethereum evm under retesteth"]
+computes = "the evm transition tool of go-ethereum, called by retesteth"
+version = "the build in each fixture's _info, such as evm 1.11.4-unstable-564db9a9 with retesteth 0.3.0"
+source = "_info.filling-rpc-server and _info.filling-tool-version of each fixture"
+
+[generators."evmone-t8n under retesteth"]
+computes = "the transition tool of evmone, called by retesteth"
+version = "the build in each fixture's _info, evmone-t8n 0.14.0 or 0.15.0"
+source = "_info.filling-rpc-server and _info.filling-tool-version of each fixture"
+
+[generators."aleth testeth"]
+computes = "testeth of aleth (cpp-ethereum), with its own EVM"
+version = "the build in each fixture's _info.filledwith, testeth 1.7.0 or 1.8.0"
+source = "_info.filledwith of each fixture"
+
+[generators."rpctestgen on go-ethereum"]
+computes = "rpctestgen of execution-apis, recording the replies of a go-ethereum node"
+version = "last regenerated at execution-apis ba884e7d with go-ethereum 8a8efd332457, and CI requires no change at the pin"
+source = "https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/tools/README.md"
+
+[generators."EIP-779 text"]
+computes = "nothing: the list of accounts in the text of EIP-779, copied by its author"
+version = "EIP-779 at EIPs 46976b2a"
+source = "bindings/python/tests/state/dao/eip-779.md.txt"
+
+# The consensus layer.
+
+[[directories."tests/consensus/data_columns"]]
+cases = ["**"]
+generator = "pyspec v1.7.0-beta.4"
+
+[[directories."tests/consensus/epoch_processing"]]
+cases = ["**"]
+generator = "pyspec v1.7.0-beta.4"
+
+[[directories."tests/consensus/fork"]]
+cases = ["**"]
+generator = "pyspec v1.7.0-beta.4"
+
+[[directories."tests/consensus/fork_choice"]]
+cases = ["**"]
+generator = "pyspec v1.7.0-beta.4"
+
+[[directories."tests/consensus/genesis"]]
+cases = ["**"]
+generator = "pyspec v1.7.0-beta.4"
+
+[[directories."tests/consensus/gossip"]]
+cases = ["**"]
+generator = "pyspec v1.7.0-beta.4"
+
+[[directories."tests/consensus/large_amounts"]]
+cases = ["minimal/**"]
+generator = "pyspec v1.7.0-beta.4, EthLib scenarios"
+
+[[directories."tests/consensus/light_client"]]
+cases = ["**"]
+generator = "pyspec v1.7.0-beta.4"
+
+[[directories."tests/consensus/merkle_proof"]]
+cases = ["**"]
+generator = "pyspec v1.7.0-beta.4"
+
+[[directories."tests/consensus/networking"]]
+cases = ["**"]
+generator = "pyspec v1.7.0-beta.4"
+
+[[directories."tests/consensus/operations"]]
+cases = ["**"]
+generator = "pyspec v1.7.0-beta.4"
+
+[[directories."tests/consensus/parameters"]]
+cases = ["**"]
+generator = "consensus-specs config files"
+
+[[directories."tests/consensus/rewards"]]
+cases = ["**"]
+generator = "pyspec v1.7.0-beta.4"
+
+[[directories."tests/consensus/shuffling"]]
+cases = ["**"]
+generator = "pyspec v1.7.0-beta.4"
+
+[[directories."tests/consensus/snappy"]]
+cases = ["**"]
+subset = "the compressed bytes, and the SSZ data inside them"
+generator = "pyspec v1.7.0-beta.4"
+
+[[directories."tests/consensus/snappy"]]
+cases = ["**"]
+subset = "the size and SHA-256 of each file's data, in bindings/python/tests/snappy/consensus_spec_tests.json"
+generator = "cramjam 2.11.0, run once"
+
+[[directories."tests/consensus/ssz_static"]]
+cases = ["**"]
+generator = "pyspec v1.7.0-beta.4"
+
+[[directories."tests/consensus/transition"]]
+cases = ["**"]
+generator = "pyspec v1.7.0-beta.4"
+
+[[directories."tests/consensus/builder_api"]]
+cases = ["**"]
+generator = "not established"
+checked = "builder-specs at fce64468 holds no generator code, and the commits that added the examples (#128, #138, #165) name no tool"
+
+[[directories."tests/consensus/pq_keys"]]
+cases = ["ssz/**", "possession/*/data.yaml"]
+generator = "EthLib script on eth-ssz-specs 0.1.0"
+
+[[directories."tests/consensus/pq_keys"]]
+cases = ["possession/*/proof.yaml"]
+generator = "ethlib"
+
+[[directories."tests/cryptography/bls"]]
+cases = ["sign/**", "verify/**", "aggregate/**", "fast_aggregate_verify/**", "aggregate_verify/**"]
+generator = "bls12-381-tests v0.1.2"
+
+[[directories."tests/cryptography/bls"]]
+cases = ["hash_to_G2/**"]
+generator = "hash-to-curve draft vectors"
+
+[[directories."tests/cryptography/bls"]]
+cases = ["deserialization_G1/**", "deserialization_G2/**"]
+generator = "bls12-381-tests hand-written"
+
+[[directories."tests/cryptography/bls"]]
+cases = ["eth_aggregate_pubkeys/**", "eth_fast_aggregate_verify/**"]
+generator = "pyspec v1.7.0-beta.4"
+
+[[directories."tests/cryptography/kzg"]]
+cases = ["**"]
+generator = "consensus-specs KZG reference tests"
+
+[[directories."tests/serialization/ssz"]]
+cases = ["**"]
+generator = "ssz-specs v0.1.0"
+
+[[directories."tests/serialization/ssz_generic"]]
+cases = ["**"]
+generator = "pyspec v1.7.0-alpha.13"
+
+[[directories."tests/serialization/ssz_limits"]]
+cases = ["cases.json"]
+generator = "EthLib script on eth-ssz-specs 0.1.0"
+
+# The cryptographic suites.
+
+[[directories."bindings/python/tests/aes/cavp"]]
+cases = ["**"]
+generator = "NIST CAVS"
+
+[[directories."bindings/python/tests/aes/wycheproof"]]
+cases = ["**"]
+generator = "Wycheproof"
+
+[[directories."bindings/python/tests/hmac_kdf/wycheproof"]]
+cases = ["**"]
+generator = "Wycheproof"
+
+[[directories."bindings/python/tests/bls/wycheproof"]]
+cases = ["**"]
+generator = "Wycheproof, blsvecgen"
+
+[[directories."bindings/python/tests/keccak/kat"]]
+cases = ["**"]
+generator = "Keccak team KAT"
+
+[[directories."bindings/python/tests/sha256/cavp"]]
+cases = ["**"]
+generator = "NIST CAVS"
+
+[[directories."bindings/python/tests/precompile/blake2"]]
+cases = ["**"]
+generator = "BLAKE2 genkat-json"
+
+[[directories."bindings/python/tests/noise/published_vector"]]
+cases = ["**"]
+generator = "noise-c vector-gen"
+
+[[directories."bindings/python/tests/secp256k1/tiny_secp256k1"]]
+cases = ["ecdsa.json"]
+subset = "the valid signatures, the 4 invalid sign entries and 24 of the invalid verify entries"
+generator = "tiny-secp256k1 ecdsa.cpp"
+
+[[directories."bindings/python/tests/secp256k1/tiny_secp256k1"]]
+cases = ["ecdsa.json"]
+subset = "the 4 valid entries 'Strange hash (MAX)' and '(MAX % N)', the invalid verify entry with strict set, the 8 invalid recover entries, and the field recoveryId"
+generator = "not established"
+checked = "tiny-secp256k1 17d82c7, 349c778, 99acbe1 and 8332eba add or change them by hand, and name no program"
+
+[[directories."tests/cryptography/secp256k1"]]
+cases = ["verify/**", "verify_low_s/**"]
+subset = "Wycheproof tcId 1 to 242 of the P1363 file, and tcId 1 to 463 of the Bitcoin file"
+generator = "Wycheproof"
+
+[[directories."tests/cryptography/secp256k1"]]
+cases = ["verify/**"]
+subset = "Wycheproof tcId 243 to 252 of the P1363 file"
+generator = "Wycheproof, David Benjamin's scripts"
+
+[[directories."tests/cryptography/secp256k1"]]
+cases = ["verify_low_s/**"]
+subset = "Wycheproof tcId 464 of the Bitcoin file"
+generator = "not established"
+checked = "C2SP/wycheproof PR 277 takes the case from bitcoin-core/secp256k1 PR 1948 and names no program"
+
+[[directories."tests/cryptography/secp256k1"]]
+cases = ["recover/**"]
+generator = "ethlib"
+
+[[directories."tests/cryptography/secp256r1"]]
+cases = ["**"]
+subset = "Wycheproof tcId 1 to 252"
+generator = "Wycheproof"
+
+[[directories."tests/cryptography/secp256r1"]]
+cases = ["**"]
+subset = "Wycheproof tcId 253 to 262"
+generator = "Wycheproof, David Benjamin's scripts"
+
+[[directories."tests/cryptography/hash_to_curve"]]
+cases = ["**"]
+generator = "RFC 9380 proof of concept"
+
+[[directories."tests/cryptography/keccak"]]
+cases = ["hash/hash_case_short_len_*/**", "hash/hash_case_long_len_*/**", "hash_512/**", "permutation/**"]
+generator = "Keccak team KAT"
+
+[[directories."tests/cryptography/keccak"]]
+cases = ["hash/hash_case_abc/**"]
+generator = "not established"
+checked = "the digest appears in EthLib issue 64 without a source, and no file of the Keccak team holds the message"
+
+[[directories."tests/cryptography/sha256"]]
+cases = ["hash/hash_case_short_len_*/**", "hash/hash_case_long_len_*/**"]
+generator = "NIST CAVS"
+
+[[directories."tests/cryptography/sha256"]]
+cases = ["hash/hash_case_fips_*/**"]
+generator = "FIPS 180-2 examples"
+
+[[directories."tests/cryptography/keystore"]]
+cases = ["scrypt.json", "pbkdf2.json"]
+generator = "not established"
+checked = "ERC-2335 gives the vectors without a tool, and EIPs PRs 2335, 2621 and 2749 name none"
+
+[[directories."tests/cryptography/keystore"]]
+cases = ["unicode/**"]
+generator = "Unicode Character Database"
+
+[[directories."tests/cryptography/sphincs"]]
+cases = ["key_gen/key_gen_known_answer/**", "sign/sign_known_answer/**"]
+generator = "leanVM leanSPHINCS"
+
+[[directories."tests/cryptography/sphincs"]]
+cases = ["key_gen/key_gen_*_seed/**", "sign/sign_*_message/**", "sign/sign_*_seed/**", "verify/**"]
+generator = "ethlib"
+
+[[directories."tests/cryptography/xmss"]]
+cases = ["key_gen/key_gen_known_answer/**", "sign/sign_known_answer/**"]
+generator = "not established"
+checked = "EthLib/Cryptography/Xmss/README.md names no implementation, and neither do #50 and #134. The public key and the Keccak-256 of the signature equal those pinned by lean_xmss of leanVM at 4af2cddd, a match, not a record"
+
+[[directories."tests/cryptography/xmss"]]
+cases = ["key_gen/key_gen_*_seed/**", "sign/sign_*_leaf/**", "sign/sign_second_tree/**", "sign/sign_short_*/**", "verify/**", "signature_index/**"]
+generator = "ethlib"
+
+[[directories."tests/cryptography/vrf"]]
+cases = ["verify/verify_valid_*/**", "secret/**", "evaluate/**", "mix/**"]
+generator = "not established"
+checked = "the README and format.md files say only 'an independent implementation', and #1652 recomputed the outputs with an unnamed Keccak-256"
+
+[[directories."tests/cryptography/vrf"]]
+cases = ["verify/verify_wrong_*/**", "verify/verify_other_index_*/**", "verify/verify_index_out_of_range/**", "verify/verify_short_*/**"]
+generator = "ethlib"
+
+# The execution layer.
+
+[[directories."tests/engine"]]
+cases = ["**"]
+generator = "EELS 2.19.0"
+
+[[directories."tests/execution/blocks"]]
+cases = ["**"]
+generator = "EELS 2.19.0"
+
+[[directories."tests/execution/fees"]]
+cases = ["**"]
+generator = "EELS 2.19.0"
+
+[[directories."tests/execution/modexp"]]
+cases = ["**"]
+generator = "EELS 2.19.0"
+
+[[directories."tests/execution/transactions"]]
+cases = ["**"]
+generator = "execution-specs filler, no transition tool"
+
+[[directories."tests/execution/genesis"]]
+cases = ["**"]
+generator = "go-ethereum default genesis"
+
+[[directories."tests/execution/precompiles"]]
+cases = ["prague/**", "msm_up_to_8_pairs.json"]
+generator = "bls12-381-tests eip-2537 branch"
+
+[[directories."tests/execution/precompiles"]]
+cases = ["osaka/eip7951_p256verify_precompiles/**"]
+subset = "every case whose Name starts with wycheproof/"
+generator = "Wycheproof P-256, converted by execution-specs"
+
+[[directories."tests/execution/precompiles"]]
+cases = ["osaka/eip7951_p256verify_precompiles/**"]
+subset = "cases 25 and 26 of secp256r1_public_key.json and case 18 of secp256r1_special_points.json, whose Name has no wycheproof/ prefix"
+generator = "not established"
+checked = "the Name of each case, and execution-specs at e27f097e, which holds no record of them"
+
+[[directories."tests/execution/precompiles"]]
+cases = ["osaka/eip7883_modexp_gas_increase/**"]
+generator = "not established"
+checked = "execution-spec-tests PRs 1579, 1929 and 1993 add the files in go-ethereum's format and name no program"
+
+[[directories."tests/execution/precompiles"]]
+cases = ["cancun/**"]
+generator = "pyspec 63aa303c KZG"
+
+[[directories."tests/execution/legacytests"]]
+cases = ["Constantinople/**"]
+generator = "aleth testeth"
+
+[[directories."tests/execution/legacytests"]]
+cases = ["Cancun/BlockchainTests/InvalidBlocks/**", "Cancun/BlockchainTests/TransitionTests/bcBerlinToLondon/**"]
+generator = "evmone-t8n under retesteth"
+
+[[directories."tests/execution/legacytests"]]
+cases = ["Cancun/BlockchainTests/TransitionTests/bcHomesteadToDao/**"]
+generator = "go-ethereum evm under retesteth"
+
+[[directories."tests/execution/ethereum_tests"]]
+cases = ["TransactionTests/**"]
+generator = "go-ethereum evm under retesteth"
+
+[[directories."tests/execution/ethereum_tests"]]
+cases = ["BasicTests/genesishashestest.json"]
+generator = "not established"
+checked = "the file has no _info, and ethereum/tests 149cc9bb (2015) names no tool"
+
+[[directories."bindings/python/tests/pow/difficulty"]]
+cases = ["**"]
+generator = "go-ethereum evm under retesteth"
+
+[[directories."bindings/python/tests/ethash/vectors"]]
+cases = ["**"]
+generator = "not established"
+checked = "the file has no _info, and ethereum/tests 715ed17e (2015) and b09975f0 (2017) name no tool"
+
+[[directories."bindings/python/tests/rlp/vectors"]]
+cases = ["**"]
+generator = "not established"
+checked = "the files have no _info, and ethereum/tests 1b2f8ccd (2015) names no tool"
+
+[[directories."bindings/python/tests/secp256k1/keyaddr"]]
+cases = ["**"]
+generator = "not established"
+checked = "the file has no _info, and ethereum/tests 3930ca3a (2014) names no tool"
+
+[[directories."bindings/python/tests/state/genesis"]]
+cases = ["**"]
+generator = "not established"
+checked = "the file has no _info, and ethereum/tests bd21d174 (2015) names no tool"
+
+[[directories."bindings/python/tests/trie/trietests"]]
+cases = ["**"]
+generator = "not established"
+checked = "the files have no _info, and ethereum/tests 3930ca3a (2014) names no tool"
+
+[[directories."bindings/python/tests/trie/getproof"]]
+cases = ["**"]
+generator = "rpctestgen on go-ethereum"
+
+[[directories."bindings/python/tests/consensus/deposit_tree"]]
+cases = ["**"]
+generator = "not established"
+checked = "EIP-4881 ships a reference implementation and a test that runs the cases on it, but not the script that wrote them"
+
+[[directories."bindings/python/tests/state/dao"]]
+cases = ["**"]
+generator = "EIP-779 text"
+
+[[directories."bindings/python/tests/ethash/spec"]]
+cases = ["**"]
+generator = "not established"
+checked = "the page gives the formulas of the size tables, but not the script that computed them"
+
+# The release archives.
+
+[[archives."consensus-specs/v1.7.0-alpha.12/general"]]
+cases = ["tests/general/altair/bls/**", "tests/general/phase0/ssz_generic/**"]
+generator = "pyspec v1.7.0-alpha.12"
+
+[[archives."consensus-specs/v1.7.0-alpha.12/general"]]
+cases = ["tests/general/deneb/kzg/**", "tests/general/fulu/kzg/**"]
+subset = "every handler but compute_challenge and compute_verify_cell_kzg_proof_batch_challenge"
+generator = "ckzg 2.1.7 in pyspec v1.7.0-alpha.12"
+
+[[archives."consensus-specs/v1.7.0-alpha.12/general"]]
+cases = ["tests/general/deneb/kzg/compute_challenge/**", "tests/general/fulu/kzg/compute_verify_cell_kzg_proof_batch_challenge/**"]
+generator = "pyspec v1.7.0-alpha.12"
+
+[[archives."consensus-specs/v1.7.0-beta.4/minimal"]]
+cases = ["**"]
+generator = "pyspec v1.7.0-beta.4"
+
+[[archives."consensus-specs/v1.7.0-beta.4/mainnet"]]
+cases = ["**"]
+generator = "pyspec v1.7.0-beta.4"
+
+[[archives."bls12-381-tests/v0.1.2/bls_tests_yaml"]]
+cases = ["sign/**", "verify/**", "aggregate/**", "fast_aggregate_verify/**", "aggregate_verify/**", "batch_verify/**"]
+generator = "bls12-381-tests v0.1.2"
+
+[[archives."bls12-381-tests/v0.1.2/bls_tests_yaml"]]
+cases = ["hash_to_G2/**"]
+generator = "hash-to-curve draft vectors"
+
+[[archives."bls12-381-tests/v0.1.2/bls_tests_yaml"]]
+cases = ["deserialization_G1/**", "deserialization_G2/**"]
+generator = "bls12-381-tests hand-written"
+
+[[archives."execution-specs/tests@v21.0.2/fixtures"]]
+cases = ["fixtures/blockchain_tests/**", "fixtures/blockchain_tests_engine/**", "fixtures/blockchain_tests_engine_x/**", "fixtures/state_tests/**"]
+generator = "EELS 2.19.0"
+
+[[archives."execution-specs/tests@v21.0.2/fixtures"]]
+cases = ["fixtures/transaction_tests/**"]
+generator = "execution-specs filler, no transition tool"
+
+[[archives."execution-specs/tests-heze-devnet@v3.0.0/fixtures"]]
+cases = ["**"]
+generator = "EELS 2.19.0, heze devnet"
+
+[[archives."execution-specs/tests-bogota-devnet@v2.0.0/fixtures"]]
+cases = ["**"]
+generator = "EELS 2.19.0, bogota devnet"
+
+[[archives."nist-cavp/gcmtestvectors"]]
+cases = ["**"]
+generator = "NIST CAVS"
+
+[[archives."legacytests@1f581b8c/source"]]
+cases = ["*/*/BlockchainTests/**"]
+subset = "the fixtures whose _info names go-ethereum evm, evm 1.11 to 1.15 under retesteth 0.3.0 to 0.3.2"
+generator = "go-ethereum evm under retesteth"
+
+[[archives."legacytests@1f581b8c/source"]]
+cases = ["*/*/BlockchainTests/**"]
+subset = "the fixtures whose _info names evmone-t8n"
+generator = "evmone-t8n under retesteth"
+
+[[archives."legacytests@1f581b8c/source"]]
+cases = ["*/*/BlockchainTests/**"]
+subset = "the fixtures whose _info.filledwith names testeth"
+generator = "aleth testeth"
+
+[[archives."legacytests@1f581b8c/source"]]
+cases = ["**"]
+subset = "every file outside the BlockchainTests directories, which EthLib does not read"
+generator = "not established"
+checked = "four files sampled, the rest not read"
+
+[[archives."slashing-protection-interchange-tests@bb790068/source"]]
+cases = ["*/tests/generated/**"]
+subset = "the 28 files that v5.3.0 rewrote"
+generator = "Lighthouse test generator, PR 4958"
+
+[[archives."slashing-protection-interchange-tests@bb790068/source"]]
+cases = ["*/tests/generated/**"]
+subset = "the 10 files that v5.3.0 did not touch"
+generator = "Lighthouse test generator, earlier"
+
+[[archives."era1/mainnet-00000-5ec1ffb8"]]
+cases = ["**"]
+generator = "not established"
+checked = "the file holds mainnet blocks 0 to 8191 with receipts and total difficulty, and records no exporting tool"
+
+# The modules that the Python tests run.
+
+[runtime]
+tools = ["eth_typing", "hypothesis", "pytest", "ruamel", "tomli"]
+
+[runtime.oracles.py_ecc]
+package = "py-ecc"
+version = "8.0.0"
+computes = "BLS12-381 signatures and points, alt_bn128 points and pairings, secp256k1 points"
+
+[runtime.oracles.hashlib]
+package = "python"
+computes = "SHA-256 and BLAKE2b digests, PBKDF2 and scrypt"
+
+[runtime.oracles.hmac]
+package = "python"
+computes = "HMAC-SHA256"
+
+[runtime.oracles.zlib]
+package = "python"
+computes = "CRC-32"
+
+[runtime.oracles.snappy_reference]
+path = "bindings/python/tests/snappy_reference.py"
+computes = "Snappy decompression, written from the format description apart from EthLib"
+
+[runtime.oracles.trie_reference]
+path = "bindings/python/tests/trie_reference.py"
+computes = "Merkle Patricia trie roots and proofs, written from the Yellow Paper apart from EthLib, on EthLib's Keccak-256 and RLP"

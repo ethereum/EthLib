@@ -377,6 +377,13 @@ The check fails when a test cites another commit, and when a directory with a `S
 The file also pins each release archive that is too large to vendor, by its URL, its size and its sha256.
 The check fails when no test names an archive.
 
+`tests/generators.toml` records which program computed the expected values of each pinned directory and archive.
+Where no record names the program, it says so, with what was read.
+It also lists the modules that the Python tests import, and the version of each one that computes expected values while the tests run.
+The check fails when a directory or an archive has no entry, and when a pinned file belongs to no group of cases.
+It also fails when a test imports a module that the file does not list.
+So a new vector directory, or a new library in the tests, comes with its generator.
+
 Then check the layout of the Lean lines that your branch changes:
 
 ```bash

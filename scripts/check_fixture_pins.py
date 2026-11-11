@@ -1,9 +1,11 @@
 """Check that the test vectors and fixtures cite only the pins of `tests/sources.toml`."""
 
+import ast
 import re
 import sys
 import tomllib
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -19,6 +21,16 @@ HEX_AT = re.compile(rf"\bat\s+{_HEX}\b")
 FULL_COMMIT = re.compile(r"[0-9a-f]{40}")
 SHA256 = re.compile(r"[0-9a-f]{64}")
 SOURCE_LINE = "# Source: "
+
+GENERATORS = "tests/generators.toml"
+# EthLib itself, and a generator that no record names, need no definition.
+RESERVED = ("ethlib", "not established")
+GROUP_FIELDS = {"cases", "subset", "generator", "checked"}
+# A licence or a Python file pins no case.
+NOT_A_CASE = re.compile(r"(?:^|/)LICENSE$|\.py$")
+# The tests that import the runtime oracles, and the lock file that pins their versions.
+TESTS = "bindings/python/tests"
+LOCK = "uv.lock"
 
 
 def scanned_files(root: Path) -> list[Path]:
@@ -39,6 +51,166 @@ def readme(directory: Path, root: Path) -> Path | None:
         if (candidate / "README.md").is_file():
             return candidate / "README.md"
     return None
+
+
+def pinned_files(directory: Path) -> list[str]:
+    """The files that the SHA256SUMS of a directory pins, relative to the directory."""
+    lines = (directory / "SHA256SUMS").read_text(encoding="utf-8").splitlines()
+    return [
+        line.split(maxsplit=1)[1] for line in lines if line.strip() and not line.startswith("#")
+    ]
+
+
+def glob_pattern(glob: str) -> re.Pattern[str]:
+    """A glob as a pattern: `**` matches across directories, `*` and `?` within one name."""
+    parts = re.split(r"(\*\*|\*|\?)", glob)
+    wildcards = {"**": ".*", "*": "[^/]*", "?": "[^/]"}
+    return re.compile("".join(wildcards.get(part, re.escape(part)) for part in parts))
+
+
+def check_groups(
+    where: str, groups: Any, defined: dict[str, Any], files: list[str] | None
+) -> tuple[list[str], set[str]]:
+    """The problems of the groups of one directory or archive, and the generators they name."""
+    # `files` lists the pinned files of a directory, and is None for an archive, which is not read.
+    problems: list[str] = []
+    named: set[str] = set()
+    if not isinstance(groups, list) or not groups:
+        return [f"{GENERATORS}: {where} needs at least one group"], named
+    patterns: list[tuple[list[re.Pattern[str]], bool]] = []
+    for index, group in enumerate(groups, 1):
+        label = f"{GENERATORS}: {where}, group {index}"
+        for field in sorted(set(group) - GROUP_FIELDS):
+            problems.append(f"{label}: unknown field {field}")
+        cases = group.get("cases")
+        if not isinstance(cases, list) or not cases or not all(isinstance(c, str) for c in cases):
+            problems.append(f"{label}: needs a list of globs in cases")
+            cases = []
+        generator = group.get("generator", "")
+        named.add(generator)
+        if generator not in defined and generator not in RESERVED:
+            problems.append(f"{label}: the generator '{generator}' is not defined")
+        if (generator == "not established") != bool(group.get("checked")):
+            problems.append(
+                f"{label}: needs checked when, and only when, the generator is not established"
+            )
+        globs = [glob_pattern(case) for case in cases]
+        patterns.append((globs, bool(group.get("subset"))))
+        if files is not None:
+            for case, pattern in zip(cases, globs, strict=True):
+                if not any(pattern.fullmatch(f) for f in files):
+                    problems.append(f"{label}: {case} matches no pinned file")
+    for name in files or []:
+        if NOT_A_CASE.search(name):
+            continue
+        owners = [subset for globs, subset in patterns if any(g.fullmatch(name) for g in globs)]
+        if not owners:
+            problems.append(f"{GENERATORS}: {where}/{name} belongs to no group")
+        elif len(owners) > 1 and not all(owners):
+            problems.append(
+                f"{GENERATORS}: {where}/{name} is in several groups, so each needs a subset"
+            )
+    return problems, named
+
+
+def check_generators(root: Path, directories: set[str], archives: set[str]) -> list[str]:
+    """Every problem of the generator records, against the directories and archives of the pins."""
+    path = root / GENERATORS
+    if not path.is_file():
+        return [f"{GENERATORS} is missing"]
+    config = tomllib.loads(path.read_text(encoding="utf-8"))
+    defined: dict[str, Any] = config.get("generators", {})
+    problems = []
+    for name, entry in defined.items():
+        if name in RESERVED:
+            problems.append(f"{GENERATORS}: the generator '{name}' is reserved")
+        for field in ("computes", "version", "source"):
+            if not entry.get(field):
+                problems.append(f"{GENERATORS}: the generator '{name}' needs {field}")
+    named: set[str] = set()
+    for table, keys in (("directories", directories), ("archives", archives)):
+        recorded = config.get(table, {})
+        for key in sorted(keys - set(recorded)):
+            problems.append(f"{GENERATORS}: {key} has no entry in the table {table}")
+        for key in sorted(set(recorded) - keys):
+            problems.append(f"{GENERATORS}: {key} is in the table {table}, but not in {SOURCES}")
+        for key in sorted(keys & set(recorded)):
+            directory = root / key
+            files = (
+                pinned_files(directory)
+                if table == "directories" and (directory / "SHA256SUMS").is_file()
+                else None
+            )
+            found, used = check_groups(key, recorded[key], defined, files)
+            problems += found
+            named |= used
+    for name in sorted(set(defined) - named):
+        problems.append(f"{GENERATORS}: the generator '{name}' is defined but no group names it")
+    return problems + check_runtime(root, config.get("runtime", {}))
+
+
+def imported_modules(root: Path) -> set[str]:
+    """The top-level names of the absolute imports of the Python tests."""
+    names = set()
+    for path in sorted((root / TESTS).rglob("*.py")):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.Import):
+                names.update(alias.name.split(".")[0] for alias in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+                names.add(node.module.split(".")[0])
+    return names
+
+
+def locked_versions(root: Path) -> dict[str, str]:
+    """The version of each package in the lock file, by its normalized name."""
+    path = root / LOCK
+    if not path.is_file():
+        return {}
+    lock = tomllib.loads(path.read_text(encoding="utf-8"))
+    return {normalized(p["name"]): p.get("version", "") for p in lock.get("package", [])}
+
+
+def normalized(package: str) -> str:
+    """A package name in the normal form of PEP 503."""
+    return re.sub(r"[-_.]+", "-", package).lower()
+
+
+def check_runtime(root: Path, runtime: dict[str, Any]) -> list[str]:
+    """Every problem of the table `runtime` against the imports of the tests and the lock file."""
+    problems = []
+    tools = set(runtime.get("tools", []))
+    oracles: dict[str, Any] = runtime.get("oracles", {})
+    imported = imported_modules(root)
+    tests = root / TESTS
+    # A module of the tests themselves, which `pythonpath` puts on the import path.
+    local = {p.stem for p in tests.rglob("*.py")} | {p.name for p in tests.rglob("*") if p.is_dir()}
+    external = imported - set(sys.stdlib_module_names) - local - {"ethlib"}
+    for module in sorted(external - tools - set(oracles)):
+        problems.append(
+            f"{GENERATORS}: the tests import {module}, which the table runtime does not list"
+        )
+    for module in sorted((tools | set(oracles)) - imported):
+        problems.append(f"{GENERATORS}: the table runtime lists {module}, which no test imports")
+    versions = locked_versions(root)
+    for module, entry in sorted(oracles.items()):
+        if not entry.get("computes"):
+            problems.append(f"{GENERATORS}: the oracle {module} needs computes")
+        if "path" in entry:
+            if not (root / entry["path"]).is_file():
+                problems.append(
+                    f"{GENERATORS}: the oracle {module} names a missing file {entry['path']}"
+                )
+        elif entry.get("package") == "python":
+            if module not in sys.stdlib_module_names:
+                problems.append(f"{GENERATORS}: the oracle {module} is not in the standard library")
+        else:
+            locked = versions.get(normalized(entry.get("package", "")))
+            if locked is None or locked != entry.get("version"):
+                problems.append(
+                    f"{GENERATORS}: the oracle {module} has version {entry.get('version')}, "
+                    f"but {LOCK} has {locked}"
+                )
+    return problems
 
 
 def check(root: Path) -> list[str]:
@@ -117,6 +289,8 @@ def check(root: Path) -> list[str]:
             problems.append(f"{SOURCES}: the archive {name} needs a positive size in bytes")
         if not SHA256.fullmatch(str(entry.get("sha256", ""))):
             problems.append(f"{SOURCES}: the archive {name} needs a 64-digit sha256")
+
+    problems += check_generators(root, set(expected), set(archives))
 
     cited, named = set(), set()
     for path in scanned_files(root):
