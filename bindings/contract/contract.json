@@ -4663,7 +4663,7 @@
    "docstring":
    "An interchange file as the format writes it again, from its JSON text."},
   {"summary":
-   "The record of a signer that keeps every message, after it imports a file, as JSON text.",
+   "The record after importing a file with the minimal strategy of EIP-3076, as JSON text.",
    "signature": "(held: bytes, file: bytes) -> bytes",
    "operation": "EthLib.Consensus.Exports.importSlashingInterchangeExport",
    "method": "consensus_import_slashing_interchange",
@@ -4679,7 +4679,7 @@
       {"constructor": "targetEpochTooLow", "code": 7}]}],
    "error_class": "SlashingProtectionError",
    "docstring":
-   "The record of a signer that keeps every message, after it imports a file, as JSON text."},
+   "The record after importing a file with the minimal strategy of EIP-3076, as JSON text."},
   {"summary":
    "Whether a key may sign a block of a slot with a signing root, given a record.",
    "signature":
