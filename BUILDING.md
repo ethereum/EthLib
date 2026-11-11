@@ -149,3 +149,26 @@ To measure files on your machine, build their imports first, then run:
 ```bash
 uv run --no-project --python 3.12 python scripts/check_memory.py <file>...
 ```
+
+## API documentation
+
+[doc-gen4](https://github.com/leanprover/doc-gen4) renders the doc comments of the specification as HTML, one page per module.
+It runs in `docbuild/`, a separate Lake package that requires EthLib, so EthLib itself does not depend on doc-gen4.
+
+```bash
+lake build EthLib
+cd docbuild
+lake build EthLib:docs
+python3 -m http.server -d .lake/build/doc
+```
+
+The pages are in `docbuild/.lake/build/doc`.
+Open them through a local server, because a browser blocks some of their scripts when it opens them as files.
+
+`docbuild` uses the packages of the repository root, through `packagesDir`.
+Its manifest is not committed: Lake writes it when it is missing, with the pins of the root manifest and the doc-gen4 tag of `docbuild/lakefile.toml`.
+That tag follows the toolchain, so a toolchain upgrade raises it too.
+
+Only the library `EthLib` has pages so far, not `Proofs` or `Exports`.
+Most of the output documents `Init`, `Lean`, `Lake` and `Std`, which doc-gen4 always includes.
+
