@@ -101,6 +101,21 @@ class SoundnessFacts(unittest.TestCase):
             "\nNo specification file imports it.\n",
         )
 
+    def test_a_proof_that_reaches_vcvio_through_another_proof_is_named(self):
+        proofs = self.root / "EthLib" / "Foo" / "Proofs"
+        (proofs / "Games").mkdir(parents=True)
+        (proofs / "Games" / "Game.lean").write_text("module\n\npublic import VCVio\n")
+        (proofs / "Uses.lean").write_text("module\n\npublic import EthLib.Foo.Proofs.Games.Game\n")
+        (proofs / "Games.lean").write_text("module\n\npublic import EthLib.Foo.Proofs.Games.Game\n")
+        (self.root / "EthLib" / "Foo" / "Proofs.lean").write_text(
+            "module\n\npublic import EthLib.Foo.Proofs.Uses\n"
+        )
+        self.assertEqual(
+            facts.vcvio_users(self.root),
+            "- `EthLib/Foo/Proofs/Games/`\n- `EthLib/Foo/Proofs/Uses.lean`\n"
+            "\nNo specification file imports it.\n",
+        )
+
     def test_a_specification_that_imports_vcvio_is_named(self):
         (self.root / "EthLib" / "Foo.lean").write_text("module\n\npublic import VCVio\n")
         self.assertIn("- `EthLib/Foo.lean`", facts.vcvio_users(self.root))

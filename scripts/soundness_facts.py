@@ -254,25 +254,49 @@ def pins(root: Path) -> str:
     )
 
 
-VCVIO_IMPORT = re.compile(r"^\s*(?:public\s+|meta\s+|private\s+)*import\s+(?:all\s+)?VCVio\b", re.M)
+# One import command of a Lean header, with the module it names.
+LEAN_IMPORT = re.compile(r"^\s*(?:(?:public|meta|private)\s+)*import\s+(?:all\s+)?(\S+)", re.M)
 
 
 def vcvio_users(root: Path) -> str:
     """
-    The Lean files and proof directories that import VCVio directly.
+    The Lean files and proof directories whose imports reach VCVio.
+
+    A file reaches VCVio when it imports a VCVio module, or a file under `EthLib/` that reaches it.
 
     A file under a directory inside `Proofs` is named by that directory.
     A file directly inside `Proofs` is named by its own path.
+    A file `X.lean` beside a directory `X/` is the root of that directory, so `X/` names it too.
+    A file named `Proofs.lean` is a root that gathers the proofs of a domain, so it is left out.
     """
+    files = {
+        ".".join(path.relative_to(root).with_suffix("").parts): path
+        for path in sorted((root / "EthLib").rglob("*.lean"))
+    }
+    imports = {
+        module: LEAN_IMPORT.findall(strip_lean(path.read_text(encoding="utf-8")))
+        for module, path in files.items()
+    }
+    reached = {m for m, names in imports.items() if any(n.split(".")[0] == "VCVio" for n in names)}
+    # Lean imports form no cycle, so this grows the set until no file is added.
+    grown = True
+    while grown:
+        grown = False
+        for module, names in imports.items():
+            if module not in reached and any(n in reached for n in names):
+                reached.add(module)
+                grown = True
+
     users, spec = set(), []
-    for path in sorted((root / "EthLib").rglob("*.lean")):
-        if not VCVIO_IMPORT.search(strip_lean(path.read_text(encoding="utf-8"))):
-            continue
+    for module in sorted(reached):
+        path = files[module]
         rel = path.relative_to(root)
         parts = rel.with_suffix("").parts
+        if parts[-1] == "Proofs":
+            continue
         if "Proofs" not in parts:
             spec.append(rel.as_posix())
-        elif len(parts) > parts.index("Proofs") + 2:
+        elif len(parts) > parts.index("Proofs") + 2 or path.with_suffix("").is_dir():
             users.add("/".join(parts[: parts.index("Proofs") + 2]) + "/")
         else:
             users.add(rel.as_posix())

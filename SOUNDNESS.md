@@ -2810,9 +2810,15 @@ The Lean toolchain is `leanprover/lean4:v4.35.0`.
 <!-- end generated -->
 
 VCVio defines the oracle computations and probabilities in which the security games are stated.
-The proofs that import it directly are the ones that rest on its definitions:
+The proofs below import it, directly or through another file, so their statements can use its definitions.
+A directory stands for its files and for the file of the same name beside it, such as `Wots.lean` beside `Wots/`.
+The files named `Proofs.lean` are roots that gather the proofs of a domain, so they are not listed.
 
 <!-- generated: vcvio-users -->
+- `EthLib/Consensus/Proofs/DataAvailability/`
+- `EthLib/Consensus/Proofs/Gossip/`
+- `EthLib/Consensus/Proofs/LightClient/`
+- `EthLib/Consensus/Proofs/PqKeys/`
 - `EthLib/Cryptography/Proofs/Aes/`
 - `EthLib/Cryptography/Proofs/BadOnBudget.lean`
 - `EthLib/Cryptography/Proofs/BadOnGrowth.lean`
@@ -2828,12 +2834,12 @@ The proofs that import it directly are the ones that rest on its definitions:
 - `EthLib/Cryptography/Proofs/LogKeys.lean`
 - `EthLib/Cryptography/Proofs/LoggedUntilBad.lean`
 - `EthLib/Cryptography/Proofs/Merkle/`
+- `EthLib/Cryptography/Proofs/ProgrammedPermutation.lean`
 - `EthLib/Cryptography/Proofs/QueryAvoidance.lean`
 - `EthLib/Cryptography/Proofs/Secp256k1/`
 - `EthLib/Cryptography/Proofs/Sphincs/`
 - `EthLib/Cryptography/Proofs/TaggedLazyPermutation.lean`
 - `EthLib/Cryptography/Proofs/Vrf/`
-- `EthLib/Cryptography/Proofs/Wots.lean`
 - `EthLib/Cryptography/Proofs/Wots/`
 - `EthLib/Cryptography/Proofs/Xmss/`
 - `EthLib/Execution/Proofs/Trie/`
