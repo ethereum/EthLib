@@ -1790,6 +1790,8 @@ An earlier form of the rule estimated that weight as an average per slot, which 
 The pinned fast confirmation vectors of consensus-specs `v1.7.0-beta.4` were generated with that estimate.
 In 24 of them, five cases at several forks, the rule now confirms another block, and `tests/parity/disagreements.toml` lists them as expected failures.
 The vendored fast confirmation cases in `tests/consensus/fork_choice` still pass.
+From Gloas the discount for empty slots also counts the votes for the pending node of the parent, which the rule of consensus-specs `v1.7.0-beta.4` leaves out.
+No pinned vector reaches that case, so review alone checks it until the vectors move to a release with it.
 
 `stake_le_computeCommitteeWeightBetweenSlots` (`Consensus/Proofs/ForkChoice/FastConfirmationIndicators.lean`) shows that the weight covers the stake of the active members of the committees.
 `stake_le_computeCommitteeWeightBetweenSlots_of_covered` shows that the weight of a range with a whole epoch covers the stake of every validator active in the source of balances.

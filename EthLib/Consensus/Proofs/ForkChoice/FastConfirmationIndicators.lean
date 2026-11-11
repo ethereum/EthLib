@@ -31,7 +31,7 @@ Its `Φ` is the committee weight since the parent, plus the boost.
 
 A discount is then taken off.
 
-It comes from the votes for the parent in the empty slots before the block.
+It comes from the votes for the parent from the committees of the empty slots before the block.
 
 A discount above the committee weight since the parent is an error of the store.
 
@@ -452,7 +452,7 @@ theorem stake_le_computeCommitteeWeightBetweenSlots {head : Root}
   rw [participantsOk, Except.ok.injEq] at readOk
   exact readOk ▸ (inside v member).1
 
-/-- The store's votes for some nodes from the committees of a range weigh at most those committees.
+/-- The store's votes for any of a list of nodes from the committees of a range weigh at most them.
 
 The weight may be that of a range from the same slot that ends later. -/
 theorem getNodeSupportBetweenSlots_le {head : Root} {balanceSource : BeaconState preset fork}

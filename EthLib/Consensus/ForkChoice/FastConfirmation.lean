@@ -265,15 +265,17 @@ def getAdversarialWeight (head : Root) (balanceSource : BeaconState preset fork)
 
 /-- The votes for the parent of a block from the committees of the empty slots between them.
 
-The votes for the pending node of the parent count.
+The adversarial weight of those slots is taken off, since the adversary may move its votes.
+
+A vote from the parent's own slot supports the pending node of the parent, so those votes count.
+
+Before Gloas the pending node is the only node of the parent.
 
 From Gloas the votes for the node of the parent that the block builds on count with them.
 
 That node is the full or the empty one, and it is the ancestor of the block at the parent's slot.
 
-The other of those two nodes is not an ancestor of the block, so the votes for it stay out.
-
-The adversarial weight of those slots is taken off, since the adversary may move its votes. -/
+The other of those two nodes is not an ancestor of the block, so the votes for it stay out. -/
 def computeEmptySlotSupportDiscount (head : Root) (balanceSource : BeaconState preset fork)
     (root : Root) : Except ForkChoiceError Gwei := do
   let block ← store.block root
