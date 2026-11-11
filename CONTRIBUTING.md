@@ -112,7 +112,7 @@ The specification and the exports import nothing beyond the Lean toolchain.
 ### Known answers
 
 A known answer pins one input to one output, byte for byte.
-Known answers never enter the default build, the libraries that `lake build` builds.
+Known answers never enter the default build: the libraries `EthLib`, `Proofs` and `Exports`, which `lake build` builds.
 They may run in three places outside it:
 
 - The Python test suite, in `bindings/python/tests/`, runs them through the bindings, which are the surface that clients call.
@@ -130,12 +130,13 @@ It also checks only one input.
 So the library of kernel vectors holds such a proof only under a budget.
 Each proof takes its input from the specification's own vectors, or covers every value of a finite type.
 Each file of the library elaborates in under 20 s of CPU, with a peak memory under 2 GiB.
+The budget is for the whole file, run alone with `lake env lean` after its imports are built, as `scripts/check_memory.py` runs it.
 
-State each theorem of the libraries `EthLib` and `Proofs` for all inputs.
+State each theorem of the default build for all inputs.
 Test concrete inputs from Python, through the bindings, or through a fixture runner.
 If a function that clients call has no C export yet, add the export and its binding.
 
-The libraries `EthLib` and `Proofs` keep one kind of concrete fact: a small decidable fact that a definition needs to be correct.
+The default build keeps one kind of concrete fact: a small decidable fact that a definition needs to be correct.
 Examples are a constant checked against the algorithm that generates it, or a Pratt certificate.
 The order of the fork timeline is another example.
 Each such proof must take a few seconds at most.
