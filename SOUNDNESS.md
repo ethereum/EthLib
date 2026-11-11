@@ -1796,10 +1796,15 @@ The Python suite checks the periods against the three tables of the rule, except
 
 ### Inactivity leak
 
-`Consensus/Proofs/Transition/InactivityLeakEpoch.lean` shows that a successful epoch transition keeps the leak test when the finalized epoch stays fixed.
-For ordered, settled checkpoints, that transition either advances the finalized epoch or leaves a leaking state in the leak.
-The sequences of balances, scores and effective balances in `InactivityLeakBound.lean` and `InactivityLeakStake.lean` are still assumptions.
-No theorem derives them from the transition, including the condition that absent validators receive no credits.
+`Consensus/Proofs/Transition/InactivityLeakBound.lean` bounds the number of epochs after which a leak brings the effective balance of an absent validator to a threshold.
+`InactivityLeakStake.lean` deduces that the voters then hold two thirds of the active stake.
+Both take the balance, the score and the effective balance of each epoch as given sequences, not derived from the state transition.
+
+`InactivityLeakEpoch.lean` proves one link of that derivation: the leak lasts from one slot or epoch transition to the next, unless finality advances.
+In an epoch transition from a leaking state, the state that justification returns still leaks, unless the finalized epoch rises (`processEpoch_finalized_lt_or_isInInactivityLeak`).
+The steps after justification read the leak test on that state, or on a later one with the same slot and finalized checkpoint.
+One slot from a leaking state ends in a leaking state, unless the finalized epoch rises (`advanceSlot_finalized_lt_or_isInInactivityLeak`).
+No theorem yet derives the sequences themselves, such as the condition that the balance of an absent validator never rises.
 
 ### Fast confirmation rule
 

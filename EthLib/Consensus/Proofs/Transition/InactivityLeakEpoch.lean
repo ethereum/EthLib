@@ -1,24 +1,29 @@
 module
 
-public import EthLib.Consensus.Proofs.Transition.InactivityLeak
 public import EthLib.Consensus.Proofs.Transition.Invariants
 
 /-!
-# Proofs: an epoch stays in the leak unless finality advances
+# Proofs: the chain stays in the leak unless finality advances
 
-The leak test reads only the slot and the epoch of the finalized checkpoint.
+The leak test reads only the slot and the finalized epoch.
 
-Justification and finalization keep the slot, as does the full epoch transition.
+A later slot, with a finalized epoch no later, therefore keeps a leak.
 
-So either step keeps the test when the finalized epoch stays fixed.
+Justification and finalization keep the slot.
 
-With ordered, settled checkpoints, the finalized epoch never decreases.
+The steps of an epoch read the leak test on the state that justification returns.
 
-A leaking state therefore still leaks after an epoch transition unless finality advances.
+Some read it later in the epoch, with the same slot and the same finalized checkpoint.
 
-This is the finality condition of the leak described by [Pavloff et al.][pat], Section 4.
+That state still leaks unless the finalized epoch rises.
 
-It does not derive the balance, score or effective-balance traces of the leak bounds.
+So does the state after one slot, which ends at a later slot.
+
+In [Pavloff et al.][pat], Section 4, the leak starts after four epochs without finalization.
+
+Their Section 5.1 ends it at the next finalization; that direction is not proved here.
+
+The balance, score and effective-balance traces of the leak bounds are not derived here.
 
 [pat]: https://arxiv.org/abs/2404.16363v2
 -/
@@ -31,53 +36,59 @@ open Base
 
 variable {preset : Preset} {fork : Base.Fork} {state after : BeaconState preset fork}
 
-private theorem leak_eq_of_slot_finalized (slot : after.slot = state.slot)
-    (finalized : after.finalizedCheckpoint.epoch = state.finalizedCheckpoint.epoch) :
-    isInInactivityLeak after = isInInactivityLeak state := by
-  simp only [isInInactivityLeak, getFinalityDelay, getPreviousEpoch, getCurrentEpoch, slot,
-    finalized]
+/-- A leak holds at every later slot whose finalized epoch is no later. -/
+theorem isInInactivityLeak_of_slot_le (leak : isInInactivityLeak state = .ok true)
+    (later : state.slot.toNat ≤ after.slot.toNat)
+    (finalized : after.finalizedCheckpoint.epoch ≤ state.finalizedCheckpoint.epoch) :
+    isInInactivityLeak after = .ok true := by
+  obtain ⟨delay, delayOk, big⟩ := isInInactivityLeak_ok_iff.mp leak
+  obtain ⟨settled, value⟩ := getFinalityDelay_ok_iff.mp delayOk
+  have before := getPreviousEpoch_toNat state
+  have now := getPreviousEpoch_toNat after
+  rw [getCurrentEpoch_toNat] at before now
+  have grows : state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat ≤
+      after.slot.toNat / preset.SLOTS_PER_EPOCH.toNat := Nat.div_le_div_right later
+  have lt := UInt64.lt_iff_toNat_lt.mp (big.mp rfl)
+  have lower := UInt64.le_iff_toNat_le.mp finalized
+  have le : after.finalizedCheckpoint.epoch ≤ getPreviousEpoch after := by
+    rw [UInt64.le_iff_toNat_le]
+    omega
+  have sub := UInt64.toNat_sub_of_le _ _ le
+  refine isInInactivityLeak_ok_iff.mpr ⟨getPreviousEpoch after - after.finalizedCheckpoint.epoch,
+    getFinalityDelay_ok_iff.mpr ⟨UInt64.le_iff_toNat_le.mp le, sub⟩, ?_⟩
+  simp only [true_iff]
+  rw [UInt64.lt_iff_toNat_lt, sub]
+  omega
 
-private theorem justification_slot
-    (computed : processJustificationAndFinalization state = .ok after) :
-    after.slot = state.slot := by
-  obtain rfl | ⟨_, _, _, weighed⟩ := processJustificationAndFinalization_ok computed
-  · rfl
-  · -- Restoring the checkpoint fields does not change the slot.
-    have kept := congrArg (fun s : BeaconState preset fork => s.slot)
-      (weighJustificationAndFinalization_checkpoints weighed).2.2.2
-    exact kept
+/-- An epoch transition from a leaking state advances finality, or its steps read a leak.
 
-/-- Justification and finalization keep the leak test when the finalized epoch stays fixed. -/
-theorem processJustificationAndFinalization_isInInactivityLeak_eq
-    (computed : processJustificationAndFinalization state = .ok after)
-    (finalized : after.finalizedCheckpoint.epoch = state.finalizedCheckpoint.epoch) :
-    isInInactivityLeak after = isInInactivityLeak state :=
-  leak_eq_of_slot_finalized (justification_slot computed) finalized
+The steps after justification and finalization read the leak test on the state it returns.
 
-/-- A successful epoch transition keeps the leak test when the finalized epoch stays fixed. -/
-theorem processEpoch_isInInactivityLeak_eq {config : Config} {checks : SignatureChecks}
-    (computed : processEpoch config checks state = .ok after)
-    (finalized : after.finalizedCheckpoint.epoch = state.finalizedCheckpoint.epoch) :
-    isInInactivityLeak after = isInInactivityLeak state := by
-  obtain ⟨justified, justifiedOk, frame⟩ := processEpoch_frame computed
-  exact leak_eq_of_slot_finalized (frame.slot.trans (justification_slot justifiedOk)) finalized
-
-/-- An epoch transition from a leaking state advances finality or leaves the state in the leak.
-
-The checkpoints must be ordered, and the current justified epoch at most the previous epoch. -/
+Some read it on a later state, with the same slot and the same finalized checkpoint. -/
 theorem processEpoch_finalized_lt_or_isInInactivityLeak {config : Config}
-    {checks : SignatureChecks} (ordered : CheckpointsOrdered state)
-    (settled : state.currentJustifiedCheckpoint.epoch ≤ getPreviousEpoch state)
-    (leak : isInInactivityLeak state = .ok true)
+    {checks : SignatureChecks} (leak : isInInactivityLeak state = .ok true)
     (computed : processEpoch config checks state = .ok after) :
+    ∃ justified, processJustificationAndFinalization state = .ok justified ∧
+      (state.finalizedCheckpoint.epoch < after.finalizedCheckpoint.epoch ∨
+        isInInactivityLeak justified = .ok true) := by
+  obtain ⟨justified, justifiedOk, frame⟩ := processEpoch_frame computed
+  refine ⟨justified, justifiedOk, ?_⟩
+  rw [frame.finalized]
+  by_cases advanced : state.finalizedCheckpoint.epoch < justified.finalizedCheckpoint.epoch
+  · exact .inl advanced
+  exact .inr (isInInactivityLeak_of_slot_le leak
+    (by rw [processJustificationAndFinalization_slot justifiedOk]; exact Nat.le_refl _)
+    (UInt64.not_lt.mp advanced))
+
+/-- One slot from a leaking state advances finality, or ends in a state that still leaks. -/
+theorem advanceSlot_finalized_lt_or_isInInactivityLeak {config : Config}
+    {checks : SignatureChecks} (leak : isInInactivityLeak state = .ok true)
+    (computed : advanceSlot config checks state = .ok after) :
     state.finalizedCheckpoint.epoch < after.finalizedCheckpoint.epoch ∨
       isInInactivityLeak after = .ok true := by
   by_cases advanced : state.finalizedCheckpoint.epoch < after.finalizedCheckpoint.epoch
   · exact .inl advanced
-  obtain ⟨justified, justifiedOk, frame⟩ := processEpoch_frame computed
-  have monotone := (processJustificationAndFinalization_ordered ordered settled justifiedOk).2
-  rw [← frame.finalized] at monotone
-  have same := UInt64.le_antisymm (UInt64.not_lt.mp advanced) monotone
-  exact .inr ((processEpoch_isInInactivityLeak_eq computed same).trans leak)
+  exact .inr (isInInactivityLeak_of_slot_le leak
+    (by have := advanceSlot_slot computed; omega) (UInt64.not_lt.mp advanced))
 
 end EthLib.Consensus
