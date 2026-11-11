@@ -190,7 +190,7 @@ theorem getAccount_of_staticStep {a b : Evm fork Meter} (h : StaticStep a b)
 theorem createStep_ne_ok_of_isStatic {create2 : Bool} {evm : Evm fork Meter}
     {result : StepResult fork Meter} (static : evm.message.isStatic = true) :
     createStep create2 evm ≠ .ok result := fun h => by
-  obtain ⟨-, -, -, -, -, -, -, -, notStatic, -, -⟩ := createStep_eq_ok h
+  obtain ⟨-, -, -, -, -, -, -, -, -, notStatic, -, -⟩ := createStep_eq_ok h
   rw [static] at notStatic
   cases notStatic
 

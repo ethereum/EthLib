@@ -421,8 +421,8 @@ At an address that is not deployable, they run no message, and keep both reads a
 
 At a deployable address, they send a message, and the caller keeps both reads and the new nonce. -/
 theorem state_createStep {create2 : Bool} {evm : Evm fork Meter} {value start size : U256}
-    {rest : List U256} {result : StepResult fork Meter}
-    (hs : evm.stack.val = value :: start :: size :: rest)
+    {salt : U256} {rest : List U256} {result : StepResult fork Meter}
+    (hs : evm.stack.val = value :: start :: size :: ((if create2 then [salt] else []) ++ rest))
     (h : createStep create2 evm = .ok result) :
     let current := evm.message.currentTarget
     let sender := evm.state.getAccount current
@@ -430,7 +430,7 @@ theorem state_createStep {create2 : Bool} {evm : Evm fork Meter} {value start si
     let initCode := memoryReadBytes
       (memoryExtend evm.memory (extendMemory evm.memory.size [(start, size)]).expandBy)
       start.toNat size.toNat
-    let salt := if create2 then rest.head? else none
+    let salt := if create2 then some salt else none
     ((sender.balance < value ∨ sender.nonce = MAX_NONCE ∨
         evm.message.depth + 1 > STACK_DEPTH_LIMIT) ∧
       ∃ after, result = .next after ∧ after.state = senderRead) ∨
@@ -446,9 +446,17 @@ theorem state_createStep {create2 : Bool} {evm : Evm fork Meter} {value start si
         | .child caller _ _ =>
           evm.state.accountDeployable address = true ∧
             both.incrementNonce fork current = .ok caller.state) := by
-  obtain ⟨v, st, sz, r, paid, hstack, sc, hmem, -, -, hlaunch⟩ := createStep_eq_ok h
-  obtain ⟨rfl, rfl, rfl, rfl⟩ : v = value ∧ st = start ∧ sz = size ∧ r = rest := by
-    simpa using hstack.symm.trans hs
+  obtain ⟨v, st, sz, w, r, paid, hstack, sc, hmem, -, -, hlaunch⟩ := createStep_eq_ok h
+  have same := hstack.symm.trans hs
+  simp only [List.cons.injEq] at same
+  obtain ⟨rfl, rfl, rfl, same⟩ := same
+  -- CREATE has no salt word, and CREATE2 pops the one of the stack.
+  have hsalt : (if create2 then some w else none) = if create2 then some salt else none := by
+    cases create2
+    · rfl
+    · simp only [↓reduceIte, List.singleton_append, List.cons.injEq] at same
+      rw [same.1]
+  rw [hsalt] at hlaunch
   have hstate := state_launchCreate hlaunch
   simpa only [sc.state, sc.message, hmem] using hstate
 
@@ -458,15 +466,15 @@ When the checks on the sender and the depth pass, they also add the new address.
 
 That holds whether the step then halts, finds a collision at the new address, or sends a message. -/
 theorem reads_createStep {create2 : Bool} {evm : Evm fork Meter} {value start size : U256}
-    {rest : List U256} {result : StepResult fork Meter}
-    (hs : evm.stack.val = value :: start :: size :: rest)
+    {salt : U256} {rest : List U256} {result : StepResult fork Meter}
+    (hs : evm.stack.val = value :: start :: size :: ((if create2 then [salt] else []) ++ rest))
     (h : createStep create2 evm = .ok result) :
     let current := evm.message.currentTarget
     let sender := evm.state.getAccount current
     let initCode := memoryReadBytes
       (memoryExtend evm.memory (extendMemory evm.memory.size [(start, size)]).expandBy)
       start.toNat size.toNat
-    let salt := if create2 then rest.head? else none
+    let salt := if create2 then some salt else none
     ((sender.balance < value ∨ sender.nonce = MAX_NONCE ∨
         evm.message.depth + 1 > STACK_DEPTH_LIMIT) ∧
       ∃ after, result = .next after ∧
@@ -479,9 +487,17 @@ theorem reads_createStep {create2 : Bool} {evm : Evm fork Meter} {value start si
         | .next after | .child after _ _ =>
           after.state.accountReads = (evm.state.accountReads.insert current).insert address ∧
             after.state.storageReads = evm.state.storageReads) := by
-  obtain ⟨v, st, sz, r, paid, hstack, sc, hmem, -, -, hlaunch⟩ := createStep_eq_ok h
-  obtain ⟨rfl, rfl, rfl, rfl⟩ : v = value ∧ st = start ∧ sz = size ∧ r = rest := by
-    simpa using hstack.symm.trans hs
+  obtain ⟨v, st, sz, w, r, paid, hstack, sc, hmem, -, -, hlaunch⟩ := createStep_eq_ok h
+  have same := hstack.symm.trans hs
+  simp only [List.cons.injEq] at same
+  obtain ⟨rfl, rfl, rfl, same⟩ := same
+  -- CREATE has no salt word, and CREATE2 pops the one of the stack.
+  have hsalt : (if create2 then some w else none) = if create2 then some salt else none := by
+    cases create2
+    · rfl
+    · simp only [↓reduceIte, List.singleton_append, List.cons.injEq] at same
+      rw [same.1]
+  rw [hsalt] at hlaunch
   have hreads := reads_launchCreate hlaunch
   simpa only [sc.state, sc.message, hmem] using hreads
 
