@@ -71,7 +71,9 @@ It is a separate library, so that the specification never imports an `@[export]`
 
 An export then re-elaborates only when a module it imports changes.
 
-No export module runs compiled code of the specification while it is elaborated, such as an `#eval` or an `initialize`.
+No export module runs compiled code of the specification while it is elaborated.
+
+An `#eval` or an `initialize` in an export would do so.
 
 So that library cannot change an export's output.
 
