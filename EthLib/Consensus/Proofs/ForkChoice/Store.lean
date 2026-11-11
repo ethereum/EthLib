@@ -16,6 +16,10 @@ A node at or below the slot is its own ancestor, so every known node descends fr
 
 A node that descends from a known node sits at the slot of that node or later.
 
+A node descends from its ancestor at any slot.
+
+Each node of a block descends from the pending node of its parent, when the parent is earlier.
+
 The walk to a lower slot can stop at a higher slot on the way, and go on from there.
 
 From Gloas the walk gives each parent an empty or full status.
@@ -343,6 +347,37 @@ theorem isAncestor_pending (gloas : .glamsterdam ≤ fork) (node : ForkChoiceNod
   split
   · rfl
   · split <;> simp
+
+/-- A node descends from its ancestor at any slot. -/
+theorem isAncestor_of_getAncestor {node ancestor : ForkChoiceNode} {slot : Slot}
+    (walk : store.getAncestor node slot = .ok ancestor) :
+    store.isAncestor node ancestor = .ok true := by
+  obtain ⟨block, found, le⟩ := getAncestor_le walk
+  -- The walk to the slot of the ancestor passes through the ancestor and stops there.
+  have stops : store.getAncestor node block.slot = .ok ancestor := by
+    rw [getAncestor_trans le walk, getAncestor_of_le found (UInt64.le_refl _)]
+  by_cases gloas : .glamsterdam ≤ fork <;>
+    simp [isAncestor, block_ok_iff.mpr found, stops, gloas, bind, Except.bind, pure, Except.pure]
+
+/-- Each node of a block descends from the pending node of the parent of that block.
+
+That needs the parent at an earlier slot than the block. -/
+theorem isAncestor_pending_parent_of_slot_lt {node : ForkChoiceNode}
+    {block parent : BeaconBlock preset fork}
+    (found : store.blocks[node.root]? = some block)
+    (parentFound : store.blocks[block.parentRoot]? = some parent)
+    (lower : parent.slot < block.slot) :
+    store.isAncestor node ⟨block.parentRoot, .pending⟩ = .ok true := by
+  -- The walk to the slot of the parent takes one step, to the node that the block builds on.
+  have walk : store.getAncestor node parent.slot =
+      .ok ⟨block.parentRoot, parentPayloadStatus block parent⟩ := by
+    rw [getAncestor_step found (UInt64.not_le.mpr lower) parentFound lower]
+    exact getAncestor_of_le parentFound (UInt64.le_refl _)
+  by_cases gloas : .glamsterdam ≤ fork
+  · simp [isAncestor, block_ok_iff.mpr parentFound, walk, gloas, bind, Except.bind, pure,
+      Except.pure]
+  · simp [isAncestor, block_ok_iff.mpr parentFound, walk, gloas, bind, Except.bind, pure,
+      Except.pure, parentPayloadStatus_of_lt (Nat.lt_of_not_le gloas)]
 
 end Store
 
