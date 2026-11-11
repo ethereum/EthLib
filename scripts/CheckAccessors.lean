@@ -38,6 +38,19 @@ A line number would change with every edit above the site, so the list uses name
 The exact list in `scripts/check_accessors_baseline.txt` may only shrink.
 
 A new site fails the check, and so does an entry that does not match.
+
+The check does not see some ways to fall back to a default.
+
+Each one is covered elsewhere or left for later:
+
+- The body of a `partial def` is only in its compiled copy, `foo._unsafe_rec`, which is skipped.
+  `lake exe check-decls` rejects `partial` in the specification.
+- A wrapper whose name has no `!`, such as `panicWith`, is counted once, in its own body.
+  Its callers are not counted.
+  No specification module calls `panicWith`.
+- The explicit defaults, such as `getD`, `headD` and `setIfInBounds`, have no `!` in their names.
+  Nor does the deprecated `String.get`, which returns a default character at a bad position.
+  They are not in the scope of this check.
 -/
 
 open Lean
@@ -142,9 +155,29 @@ structure Site where
   accessor : Name
   count : Nat
 
+/-- For each accessor, the larger of its counts in `a` and in `b`. -/
+def larger (a b : NameMap Nat) : NameMap Nat :=
+  b.toList.foldl (init := a) fun acc (n, k) => acc.insert n (max k (acc.getD n 0))
+
 /-- Every site in a declaration of the specification.
 
 A definition is searched in its type and its value.
+
+Lean can copy a site of the type into the value, as an explicit argument it fills from the type:
+
+```text
+    source:      def isOne (b : ByteArray) : Decidable (b.get! 0 = 1) := decEq _ _
+    elaborated:  type   Decidable (b.get! 0 = 1)
+                 value  decEq (b.get! 0) 1
+```
+
+So a definition counts each accessor once over its type and value.
+
+It takes the larger of the two counts, not their sum.
+
+Two different sites, one in the type and one in the value, then count as one.
+
+A copy that Lean makes inside the value, from an expected type there, still counts again.
 
 A theorem is searched in its statement only: its proof computes nothing.
 
@@ -155,14 +188,16 @@ def sites (env : Environment) : Array (Name × Site) := Id.run do
     let some m := moduleOf? env n | continue
     unless isSpecModule m do continue
     if isGenerated n then continue
-    let parts : List (String × Expr) := match c with
-      | .defnInfo v => [("type", v.type), ("value", v.value)]
-      | .thmInfo v => [("statement", v.type)]
-      | .opaqueInfo v => [("type", v.type), ("value", v.value)]
-      | _ => []
-    for (part, e) in parts do
-      for (a, k) in (occurrences env e {}).toList do
-        out := out.push (m, ⟨n, part, a, k⟩)
+    let found : Option (String × NameMap Nat) := match c with
+      | .defnInfo v =>
+        some ("definition", larger (occurrences env v.type {}) (occurrences env v.value {}))
+      | .opaqueInfo v =>
+        some ("definition", larger (occurrences env v.type {}) (occurrences env v.value {}))
+      | .thmInfo v => some ("statement", occurrences env v.type {})
+      | _ => none
+    let some (part, counts) := found | continue
+    for (a, k) in counts.toList do
+      out := out.push (m, ⟨n, part, a, k⟩)
   return out
 
 /-- The source lines of `n`.
