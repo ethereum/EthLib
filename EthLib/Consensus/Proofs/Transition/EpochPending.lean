@@ -586,6 +586,26 @@ theorem processPendingDeposits_applied {electra : .pectra ≤ fork}
       by simpa using facts.bounded, facts.appliedSublist, facts.movedSublist, facts.perm,
       facts.applies, rfl⟩
 
+/-- The pending deposits of an epoch keep each old validator at its index. -/
+theorem processPendingDeposits_validator_eq {electra : .pectra ≤ fork} {i : Nat}
+    {validator : Validator} (found : state.validators.data[i]? = some validator)
+    (computed : processPendingDeposits config checks state electra = .ok after) :
+    after.validators.data[i]? = some validator := by
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, later, rfl⟩ :=
+    processPendingDeposits_applied computed
+  have kept := foldlM_applyPendingDeposit_validator_eq found later
+  exact kept
+
+/-- The pending deposits of an epoch preserve distinct public keys in the registry. -/
+theorem processPendingDeposits_pubkeys_nodup {electra : .pectra ≤ fork}
+    (distinct : (state.validators.data.toList.map (·.pubkey)).Nodup)
+    (computed : processPendingDeposits config checks state electra = .ok after) :
+    (after.validators.data.toList.map (·.pubkey)).Nodup := by
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, later, rfl⟩ :=
+    processPendingDeposits_applied computed
+  have kept := foldlM_applyPendingDeposit_pubkeys_nodup distinct later
+  exact kept
+
 /-- The pending deposits of an epoch read a prefix of the queue, at most the limit per epoch.
 
 They postpone those whose validator, in the state before, exits and is not withdrawn.
