@@ -16,9 +16,9 @@ Call preparation then reads the current account's balance before deciding whethe
 
 [EIP-7928][bal] keeps both reads when the call then fails its balance or depth check.
 
-[EIP-7928][halt] also keeps every accessed address when the frame then halts.
+[EIP-7928][halt] also keeps every account read when the frame then halts.
 
-Call preparation changes no storage read.
+Call preparation only adds account reads.
 
 Paying for the call changes no transaction state.
 
@@ -78,14 +78,18 @@ theorem aborts_of_accountCode {evm : Evm fork Meter} {address : Address} {e : Ev
     intro h
     cases h
 
-/-- Resolving a delegation halts its frame only on the delegate's gas check, from Glamsterdam.
+/-- Resolving a delegation halts its frame only from Glamsterdam, when the frame lacks the gas.
+
+That gas is the price known before and the price of the access to the delegate.
 
 Every other failure aborts the whole execution. -/
 theorem accessDelegation_halt {evm : Evm fork Meter} {address : Address} {known : Nat}
     {e : EvmError} (h : accessDelegation evm address known = .error e) (keep : e.aborts = false) :
     fork ≥ .glamsterdam ∧ e = .outOfGas ∧
       ∃ delegate, (if fork ≥ .pectra then
-        (accountCode evm address).toOption.bind delegatedAddress else none) = some delegate := by
+        (accountCode evm address).toOption.bind delegatedAddress else none) = some delegate ∧
+        GasMeter.gasLeft (accessAddress evm delegate).2.gas <
+          known + accountAccessCost fork (accessAddress evm delegate).1 := by
   unfold accessDelegation at h
   rcases Base.bind_eq_error h with h | ⟨code, hcode, h⟩
   · rw [aborts_of_accountCode h] at keep
@@ -103,7 +107,7 @@ theorem accessDelegation_halt {evm : Evm fork Meter} {address : Address} {known 
       split at h
       · rename_i glamsterdam
         cases h
-        exact ⟨glamsterdam.1, rfl, delegate, rfl⟩
+        exact ⟨glamsterdam.1, rfl, delegate, rfl, glamsterdam.2⟩
       · cases h
     · rcases Base.bind_eq_error h with h | ⟨_, -, h⟩
       · rw [aborts_of_accountCode h] at keep
@@ -180,23 +184,11 @@ private theorem keepReads_eq_ok_halt {α : Type} {evm : Evm fork Meter}
   · cases h
     exact .inl rfl
 
-private theorem aborts_of_keepReads {α : Type} {evm : Evm fork Meter}
-    {halted : Evm fork Meter → α} {rest : Except EvmError α} {e : EvmError}
-    (h : keepReads evm halted rest = .error e) : e.aborts = true := by
-  unfold keepReads at h
-  split at h
-  · split at h
-    · rename_i aborts
-      cases h
-      exact aborts
-    · cases h
-  · cases h
-
 /-- A call records its target, a resolved delegate, and then the current account.
 
 A halt before delegation finishes keeps the target read.
 
-It happens only from Glamsterdam, when the delegate's gas check fails.
+It happens only from Glamsterdam, with a resolved delegate, and the error is out of gas.
 
 A halt after delegation keeps any delegate read too.
 
@@ -215,7 +207,7 @@ theorem state_callStep {kind : CallKind} {evm popped : Evm fork Meter} {call : C
     | .next after =>
       (fork ≥ .glamsterdam ∧ (∃ delegate, resolved = some delegate) ∧
         after.state = target ∧ after.error = some .outOfGas) ∨
-      (after.state = delegated ∧ ∃ e, after.error = some e) ∨
+      (after.state = delegated ∧ ∃ e, e.aborts = false ∧ after.error = some e) ∨
       after.state = delegated.recordAccountRead evm.message.currentTarget
     | .child caller _ _ =>
       caller.state = delegated.recordAccountRead evm.message.currentTarget := by
@@ -248,7 +240,7 @@ theorem state_callStep {kind : CallKind} {evm popped : Evm fork Meter} {call : C
     have resolvedMessage : resolved.message = evm.message :=
       (accessDelegation_message hd).trans readMessage
     dsimp only at h
-    rcases keepReads_eq_ok h with h | ⟨e, rfl⟩
+    rcases keepReads_eq_ok_halt h with h | ⟨e, -, keep, rfl⟩
     · obtain ⟨⟨subCall, paid⟩, hp, h⟩ := Base.bind_ok_iff.mp h
       have state := state_finishCall h
       have paidState := (state_payCall hp).trans resolvedState
@@ -257,15 +249,15 @@ theorem state_callStep {kind : CallKind} {evm popped : Evm fork Meter} {call : C
       | next after => exact .inr (.inr (by simpa only [paidState, paidMessage] using state))
       | child caller message resume =>
         simpa only [paidState, paidMessage] using state
-    · exact .inr (.inl ⟨resolvedState, e, rfl⟩)
+    · exact .inr (.inl ⟨resolvedState, e, keep, rfl⟩)
   · rcases Base.bind_eq_error (α := Callee × Evm fork Meter) (β := StepResult fork Meter) he with
       he | ⟨⟨_, _⟩, -, he⟩
-    · obtain ⟨glamsterdam, outOfGas, delegate, hd⟩ := accessDelegation_halt he keep
+    · obtain ⟨glamsterdam, outOfGas, delegate, hd, -⟩ := accessDelegation_halt he keep
       rw [readCode] at hd
       subst outOfGas
       exact .inl ⟨glamsterdam, ⟨delegate, hd⟩, readState, rfl⟩
     · dsimp only at he
-      rw [aborts_of_keepReads he] at keep
+      rw [(keepReads_eq_error.mp he).2] at keep
       cases keep
 
 end EthLib.Execution.Evm
