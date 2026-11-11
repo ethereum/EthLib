@@ -15,7 +15,9 @@ The reserved balance plus the churn left equals the churn left at the start plus
 
 So reservations placed up to an epoch fit the churn left at the start, plus a churn per later epoch.
 
-The theorems ask that the first permitted epoch is at most the earliest open epoch at the start.
+The equalities ask that the first permitted epoch is at most the earliest open epoch at the start.
+
+The bounds also hold for an idle queue, whose earliest open epoch is before the first permitted one.
 
 In a block, other writes to the registry and the pending queues come between these updates.
 
@@ -89,21 +91,18 @@ theorem computeExitEpochAndUpdateChurn_foldlM_spend {config : Config}
           churn.toNat :=
   churnQueue_foldlM_spend open_ (exitReservations_queue firstOk churnOk computed)
 
-/-- Exits placed up to an epoch fit the churn left at the start, plus a churn per later epoch.
-
-The earliest open epoch at the start must be no earlier than the first permitted epoch. -/
+/-- Exits placed up to an epoch fit the churn left at the start, plus a churn per later epoch. -/
 theorem computeExitEpochAndUpdateChurn_foldlM_le {config : Config}
     {electra : .pectra ≤ fork} {state after : BeaconState preset fork} {amounts : List Gwei}
     {first churn horizon : UInt64}
     (firstOk : computeActivationExitEpoch preset (getCurrentEpoch state) = .ok first)
-    (open_ : first ≤ state.earliestExitEpoch electra)
     (churnOk : exitChurnLimit config state = .ok churn)
     (computed : amounts.foldlM (fun s amount =>
       Prod.fst <$> computeExitEpochAndUpdateChurn config s electra amount) state = .ok after)
     (placed : after.earliestExitEpoch electra ≤ horizon) :
     (amounts.map UInt64.toNat).sum ≤ (state.exitBalanceToConsume electra).toNat +
       (horizon.toNat - (state.earliestExitEpoch electra).toNat) * churn.toNat := by
-  have budget := computeExitEpochAndUpdateChurn_foldlM_spend firstOk open_ churnOk computed
+  have budget := churnQueue_foldlM_le (exitReservations_queue firstOk churnOk computed)
   have epochs := Nat.sub_le_sub_right (UInt64.le_iff_toNat_le.mp placed)
     (state.earliestExitEpoch electra).toNat
   have allowance := Nat.mul_le_mul_right churn.toNat epochs
@@ -151,14 +150,11 @@ theorem computeConsolidationEpochAndUpdateChurn_foldlM_spend {config : Config}
           (state.earliestConsolidationEpoch electra).toNat) * churn.toNat :=
   churnQueue_foldlM_spend open_ (consolidationReservations_queue firstOk churnOk computed)
 
-/-- Consolidations up to an epoch fit the churn left at the start, plus a churn per later epoch.
-
-The earliest open epoch at the start must be no earlier than the first permitted epoch. -/
+/-- Consolidations up to an epoch fit the churn left at the start, plus a churn per later epoch. -/
 theorem computeConsolidationEpochAndUpdateChurn_foldlM_le {config : Config}
     {electra : .pectra ≤ fork} {state after : BeaconState preset fork} {amounts : List Gwei}
     {first churn horizon : UInt64}
     (firstOk : computeActivationExitEpoch preset (getCurrentEpoch state) = .ok first)
-    (open_ : first ≤ state.earliestConsolidationEpoch electra)
     (churnOk : getConsolidationChurnLimit config state = .ok churn)
     (computed : amounts.foldlM (fun s amount =>
       Prod.fst <$> computeConsolidationEpochAndUpdateChurn config s electra amount)
@@ -166,7 +162,7 @@ theorem computeConsolidationEpochAndUpdateChurn_foldlM_le {config : Config}
     (placed : after.earliestConsolidationEpoch electra ≤ horizon) :
     (amounts.map UInt64.toNat).sum ≤ (state.consolidationBalanceToConsume electra).toNat +
       (horizon.toNat - (state.earliestConsolidationEpoch electra).toNat) * churn.toNat := by
-  have budget := computeConsolidationEpochAndUpdateChurn_foldlM_spend firstOk open_ churnOk computed
+  have budget := churnQueue_foldlM_le (consolidationReservations_queue firstOk churnOk computed)
   have epochs := Nat.sub_le_sub_right (UInt64.le_iff_toNat_le.mp placed)
     (state.earliestConsolidationEpoch electra).toNat
   have allowance := Nat.mul_le_mul_right churn.toNat epochs
