@@ -122,7 +122,9 @@ The invariant `P` relates the items read so far to the state of the loop.
 
 A step that goes on keeps `P`, with its item added to the items read.
 
-A step that stops gives `Q`, and so does `P` once the loop has read every item. -/
+A step that stops from a state with `P` gives `Q`.
+
+So does `P` once the loop has read every item. -/
 theorem forIn_ok_invariant {σ : Type} {xs : List α} {body : α → σ → Except ε (ForInStep σ)}
     {init out : σ} (P : List α → σ → Prop) (Q : σ → Prop) (start : P [] init)
     (goesOn : ∀ read x rest s s', xs = read ++ x :: rest → P read s →
@@ -151,19 +153,18 @@ theorem forIn_ok_invariant {σ : Type} {xs : List α} {body : α → σ → Exce
       exact ih (read ++ [x]) s' (by rw [split, List.append_assoc, List.singleton_append])
         (goesOn read x rest s s' split holds stepped) looped
 
-/-- A loop whose state is the last item it accepted ends at its start or at an accepted item.
+/-- A successful loop that keeps the last item it accepted ends at its start or at such an item.
 
-A step that goes on takes its item as the state, and the item then has the property `kept`.
+Each successful step either stops and leaves the state as it was, or goes on with its item.
 
-A step that stops leaves the state as it was.
+An item that the loop goes on with has the property `kept`.
 
-So the loop accepts the items of the list in order until it stops.
+So the loop ends at its start, or at an item of the list.
 
-It ends at the last of them, and each of them has the property. -/
+That item and every item before it have the property. -/
 theorem forIn_ok_last_kept {xs : List α} {body : α → α → Except ε (ForInStep α)}
     {init out : α} {kept : α → Prop}
-    (goesOn : ∀ x s s', body x s = .ok (.yield s') → s' = x ∧ kept x)
-    (stops : ∀ x s s', body x s = .ok (.done s') → s' = s)
+    (step : ∀ x s r, body x s = .ok r → r = .done s ∨ r = .yield x ∧ kept x)
     (looped : forIn xs init body = .ok out) :
     out = init ∨ ∃ before after, xs = before ++ out :: after ∧ ∀ x ∈ before ++ [out], kept x := by
   -- The state is the last item read, or the start when no item is read.
@@ -173,13 +174,20 @@ theorem forIn_ok_last_kept {xs : List α} {body : α → α → Except ε (ForIn
       (fun out => ∃ read after, xs = read ++ after ∧ out = read.getLast?.getD init ∧
         ∀ x ∈ read, kept x) ⟨rfl, by simp⟩ ?_ ?_ ?_ looped
     · intro read x rest s s' _ ⟨_, allKept⟩ stepped
-      obtain ⟨rfl, keptHere⟩ := goesOn x s s' stepped
+      obtain ⟨rfl, keptHere⟩ : s' = x ∧ kept x := by
+        rcases step x s _ stepped with stopped | ⟨went, keptHere⟩
+        · cases stopped
+        · exact ⟨ForInStep.yield.inj went, keptHere⟩
       refine ⟨by simp, fun y member => ?_⟩
       rcases List.mem_append.mp member with earlier | here
       · exact allKept y earlier
       · exact List.mem_singleton.mp here ▸ keptHere
     · intro read x rest s s' split ⟨last, allKept⟩ stepped
-      exact ⟨read, x :: rest, split, (stops x s s' stepped).trans last, allKept⟩
+      have same : s' = s := by
+        rcases step x s _ stepped with stopped | ⟨went, -⟩
+        · exact ForInStep.done.inj stopped
+        · cases went
+      exact ⟨read, x :: rest, split, same.trans last, allKept⟩
     · intro s ⟨last, allKept⟩
       exact ⟨xs, [], by simp, last, allKept⟩
   obtain ⟨read, after, split, last, allKept⟩ := accepted
