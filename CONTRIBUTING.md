@@ -45,6 +45,13 @@ You can read them to understand a rule and to check your work.
 If no primary source states a rule, state the rule itself in the doc comment.
 Test vectors keep their pinned origin, as [`ARCHITECTURE.md`](ARCHITECTURE.md#sources) explains.
 
+A doc comment may still name execution-specs or consensus-specs in a provenance note.
+The note names the commit that EthLib took a rule from.
+Write one only when no primary source states the rule in its own text.
+Some EIPs state a rule only through a link to consensus-specs at a pinned commit, as EIP-4844 does for its KZG functions.
+Such a rule cites the EIP, and it may also carry a provenance note.
+A provenance note says where EthLib took a rule from, not which text makes the rule normative, so it is not a citation of authority.
+
 Do not cite another implementation as the authority for a behaviour.
 A byte-for-byte match with a client is a useful test, not a justification.
 

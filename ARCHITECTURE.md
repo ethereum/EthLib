@@ -342,6 +342,10 @@ Where no primary source states a rule, the doc comment states the rule itself, i
 A reader then needs no other specification.
 A contributor may read execution-specs and consensus-specs to understand a rule and to check the work, but the code does not cite them.
 
+A doc comment may still name execution-specs or consensus-specs in a provenance note, which names the commit that EthLib took a rule from.
+[`CONTRIBUTING.md`](CONTRIBUTING.md#sources-of-truth) says when to write one.
+A provenance note is not a citation of authority.
+
 Test vectors are the exception, because a test must say what it checks against.
 Each fixture keeps its pinned origin and digests in `tests/`.
 Two tests that pin two commits of one repository can disagree without anyone noticing.
