@@ -89,6 +89,7 @@ The specification and the exports import nothing beyond the Lean toolchain.
   Each one hides a failure: it returns a default value, or it changes nothing.
   Index with `Fin` or a `Vector`, walk arrays of equal length together with `zip`, or return a typed error.
   Older modules still use these accessors, and pull requests remove them module by module.
+  `lake exe check-accessors` keeps their exact list.
   #106 tracks the ones in KZG.
 - Prefer structural recursion, `map` and folds to `Id.run do` with mutable variables.
   A proof then follows the shape of the definition.
@@ -317,6 +318,17 @@ A pull request that removes a finding removes its line, or the check fails on th
 A new finding is fixed, never added to the list.
 
 When you change the check, also run `scripts/test_check_decls.sh`.
+
+Then check the defaulting accessors of the specification:
+
+```bash
+lake exe check-accessors
+```
+
+It lists each call of `xs[i]!`, `get!`, `set!` or `panic` in the elaborated declarations of the specification, with its count.
+`scripts/check_accessors_baseline.txt` lists the sites that exist today, and the goal is to remove each one.
+A pull request that removes a site lowers or removes its entry, or the check fails on the stale entry.
+A new site is fixed, never added to the list.
 
 Then check that `SOUNDNESS.md` still holds:
 

@@ -106,3 +106,14 @@ lean_lib «CheckDeclsTest» where
   roots := #[`CheckDeclsTest, `CheckDeclsForeign]
   -- The classic root checks findings behind ordinary module boundaries.
   allowNonModules := true
+
+/-- Lists the defaulting accessors of the specification, such as `xs[i]!`, `set!` and `get!`.
+
+It compares them with an exact list that may only shrink.
+
+Run it after `lake build` with `lake exe check-accessors`. -/
+lean_exe «check-accessors» where
+  srcDir := "scripts"
+  root := `CheckAccessors
+  supportInterpreter := true
+  allowNonModules := true
