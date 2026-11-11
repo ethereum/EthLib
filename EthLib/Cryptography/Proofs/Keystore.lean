@@ -22,11 +22,11 @@ Decryption returns as many bytes as the ciphertext holds.
 
 AES-128-CTR undoes itself: decrypting the secret under its own checksum gives back the ciphertext.
 
-The prepared password bytes encode the NFKD form of the password without its control codes.
+The prepared password bytes encode the NFKD form of the password, in order, less its control codes.
 
 A password already in NFKD form and free of control codes prepares to its own UTF-8 bytes.
 
-A key derivation other than PBKDF2 and scrypt is refused before any parameter of it is read.
+A well-formed key derivation other than PBKDF2 and scrypt is refused before any parameter is read.
 
 A store of a version other than 4 is refused before any other field is read.
 -/
@@ -168,15 +168,26 @@ theorem decryptWithKey_decryptWithKey {store : Store} {key secret : ByteArray}
 
 /-! ## The password that the reader prepares -/
 
-/-- The prepared bytes encode in UTF-8 the characters of the NFKD form that are no control codes.
+/-- The prepared bytes are the UTF-8 encoding of a subsequence of the NFKD form of the password.
 
-So no control code of ERC-2335, "Password requirements", reaches the key derivation. -/
+That subsequence holds no control code of ERC-2335, "Password requirements".
+
+It keeps every other character as often as the NFKD form holds it. -/
 theorem exists_passwordBytes_eq_toUTF8 (password : String) :
     ∃ prepared : String, passwordBytes password = prepared.toUTF8 ∧
-      ∀ c, c ∈ prepared.toList ↔
-        c ∈ (Base.Unicode.nfkd password).toList ∧ isControl c = false := by
-  refine ⟨_, rfl, fun c => ?_⟩
-  simp [String.toList_ofList]
+      prepared.toList.Sublist (Base.Unicode.nfkd password).toList ∧
+      (∀ c ∈ prepared.toList, isControl c = false) ∧
+      ∀ c, isControl c = false →
+        prepared.toList.count c = (Base.Unicode.nfkd password).toList.count c := by
+  refine ⟨_, rfl, ?_, ?_, ?_⟩
+  · rw [String.toList_ofList]
+    exact List.filter_sublist
+  · intro c hc
+    rw [String.toList_ofList] at hc
+    simpa using (List.mem_filter.mp hc).2
+  · intro c hc
+    rw [String.toList_ofList]
+    exact List.count_filter (by simp [hc])
 
 /-- A password already in NFKD form and free of control codes prepares to its own UTF-8 bytes. -/
 theorem passwordBytes_eq_toUTF8 {password : String}
