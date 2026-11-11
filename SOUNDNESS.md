@@ -691,6 +691,8 @@ They must discard handshake state after an error.
 `Jwt.check_build_of_size` (`Engine/Proofs/Jwt.lean`) proves that a token built with a 32-byte secret passes with that secret at clocks within 60 seconds of its issued-at time.
 The builder validates the JSON it generates, and `Jwt.build_eq_ok` proves that this validation never fails.
 `Jwt.authenticate_eq_error_of_tag_ne` proves that a token whose tag differs from the HS256 tag of its parts is refused before any JSON is read.
+`Jwt.compact_signature_of_check` proves that an accepted token is the compact form of its parts with their HS256 tag under the secret.
+So the clock check accepts no other tag part for those parts.
 Keeping a party without the secret away from the reader also assumes HMAC unforgeability, and a captured token can be replayed within its 60 seconds.
 `Jwt.check_eq_false_of_algorithm_ne` proves rejection when the decoded algorithm differs from HS256.
 The total JSON reader has no separate theorem of agreement with RFC 8259.

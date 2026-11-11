@@ -377,7 +377,7 @@ theorem signature_eq_of_authenticate {secret : ByteArray} {token : String} {time
 
 /-- An authenticated token is the compact form that signing its own parts with the secret gives.
 
-So for given parts, exactly one tag part authenticates under that secret.
+So for given parts, no other tag part authenticates under that secret.
 
 That only a holder of the secret can compute that tag is HMAC unforgeability, not proved here. -/
 theorem compact_signature_of_authenticate {secret : ByteArray} {token : String}
