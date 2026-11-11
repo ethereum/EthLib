@@ -9,7 +9,6 @@ public import EthLib.Serialization.Proofs.Ssz.Codec.Table
 
 Properties of the gossip message ID.
 
-- Every ID is 20 bytes.
 - Data that decompresses is hashed as its payload under the domain `01 00 00 00`.
 - Other data is hashed as it is under the domain `00 00 00 00`.
 - Two byte strings that decompress to one payload get one ID on one topic.
@@ -25,20 +24,8 @@ namespace EthLib.Networking.Proofs.Gossip.MessageId
 
 open EthLib.Networking.Gossip
 open EthLib.Networking.Snappy (decompress SnappyError)
-open EthLib.Cryptography.Hash (sha256)
+open EthLib.Cryptography.Hash.Sha256 (hash32)
 open EthLib.Serialization.Ssz (uintBytes_size uintBytes_injective)
-
-/-! ## Length -/
-
-/-- The first 20 bytes of a SHA-256 digest are 20 bytes, since the digest has 32. -/
-private theorem sha256_extract_size (input : ByteArray) : ((sha256 input).extract 0 20).size = 20 := by
-  simp [sha256, ByteArray.size_extract]
-
-/-- Every message ID is 20 bytes. -/
-theorem messageId_size (fork : Base.Fork) (topic data : ByteArray) :
-    (messageId fork topic data).size = 20 := by
-  unfold messageId
-  split <;> exact sha256_extract_size _
 
 /-! ## The two cases -/
 
@@ -46,14 +33,14 @@ theorem messageId_size (fork : Base.Fork) (topic data : ByteArray) :
 theorem messageId_of_ok (fork : Base.Fork) (topic : ByteArray) {data payload : ByteArray}
     (h : decompress data = .ok payload) :
     messageId fork topic data =
-      (sha256 (hashInput fork MESSAGE_DOMAIN_VALID_SNAPPY topic payload)).extract 0 20 := by
+      (hash32 (hashInput fork MESSAGE_DOMAIN_VALID_SNAPPY topic payload)).take 20 := by
   simp only [messageId, h]
 
 /-- Data that does not decompress is hashed as it is, under the invalid domain. -/
 theorem messageId_of_error (fork : Base.Fork) (topic : ByteArray) {data : ByteArray}
     {e : SnappyError} (h : decompress data = .error e) :
     messageId fork topic data =
-      (sha256 (hashInput fork MESSAGE_DOMAIN_INVALID_SNAPPY topic data)).extract 0 20 := by
+      (hash32 (hashInput fork MESSAGE_DOMAIN_INVALID_SNAPPY topic data)).take 20 := by
   simp only [messageId, h]
 
 /--

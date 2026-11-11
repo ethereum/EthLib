@@ -9,6 +9,12 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the gossip message ID has its length in its type.
+  `Gossip.messageId` returns `Vector UInt8 20` in place of a `ByteArray`.
+  A caller that needs a `ByteArray` takes `Base.packBytes (messageId fork topic data)`.
+  `messageId_size` goes, since the type states it.
+  `messageId_of_ok` and `messageId_of_error` state the ID as `(Sha256.hash32 input).take 20`.
+  The C export `eth_gossip_message_id` and the Python `gossip.message_id` are unchanged.
 - The cumulative churn bounds also hold for idle queues ([#1451](https://github.com/ethereum/EthLib/issues/1451)).
   In Lean, `churnQueue_foldlM_le` drops its `first` argument, and `computeExitEpochAndUpdateChurn_foldlM_le` and `computeConsolidationEpochAndUpdateChurn_foldlM_le` drop their `open_` argument.
   Callers remove that argument.
