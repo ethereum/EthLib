@@ -13,6 +13,8 @@ Lean core proves no such facts for `Except`, and every layer needs them.
 - Two lists that map to one list are equal, when the function is injective on their items.
 - A run of checks passes exactly when each check passes.
 - A loop that never stops early passes exactly when each step passes.
+- A loop that may stop early ends in a state with a property that its steps establish.
+- A loop that keeps the last item it accepted ends at its start or at an accepted item.
 - The function succeeds on every input.
 - Each output is the image of an input.
 - The map succeeds, and returns no error, when the function succeeds on every input.
@@ -113,6 +115,80 @@ theorem forIn_unit_ok_iff {xs : List α} {body : α → PUnit → Except ε (For
       cases s with
       | done u => exact absurd h (hnd x)
       | yield u => simpa [bind, Except.bind] using ih
+
+/-- A successful loop that may stop early ends in a state with a chosen property `Q`.
+
+The invariant `P` relates the items read so far to the state of the loop.
+
+A step that goes on keeps `P`, with its item added to the items read.
+
+A step that stops gives `Q`, and so does `P` once the loop has read every item. -/
+theorem forIn_ok_invariant {σ : Type} {xs : List α} {body : α → σ → Except ε (ForInStep σ)}
+    {init out : σ} (P : List α → σ → Prop) (Q : σ → Prop) (start : P [] init)
+    (goesOn : ∀ read x rest s s', xs = read ++ x :: rest → P read s →
+      body x s = .ok (.yield s') → P (read ++ [x]) s')
+    (stops : ∀ read x rest s s', xs = read ++ x :: rest → P read s →
+      body x s = .ok (.done s') → Q s')
+    (ends : ∀ s, P xs s → Q s) (looped : forIn xs init body = .ok out) : Q out := by
+  suffices fromHere : ∀ rest read s, xs = read ++ rest → P read s →
+      forIn rest s body = .ok out → Q out from fromHere xs [] init rfl start looped
+  intro rest
+  induction rest with
+  | nil =>
+    intro read s split holds looped
+    simp only [List.forIn_nil, pure, Except.pure, Except.ok.injEq] at looped
+    rw [List.append_nil] at split
+    exact looped ▸ ends s (split ▸ holds)
+  | cons x rest ih =>
+    intro read s split holds looped
+    rw [List.forIn_cons, bind_ok_iff] at looped
+    obtain ⟨step, stepped, looped⟩ := looped
+    cases step with
+    | done s' =>
+      simp only [pure, Except.pure, Except.ok.injEq] at looped
+      exact looped ▸ stops read x rest s s' split holds stepped
+    | yield s' =>
+      exact ih (read ++ [x]) s' (by rw [split, List.append_assoc, List.singleton_append])
+        (goesOn read x rest s s' split holds stepped) looped
+
+/-- A loop whose state is the last item it accepted ends at its start or at an accepted item.
+
+A step that goes on takes its item as the state, and the item then has the property `kept`.
+
+A step that stops leaves the state as it was.
+
+So the loop accepts the items of the list in order until it stops.
+
+It ends at the last of them, and each of them has the property. -/
+theorem forIn_ok_last_kept {xs : List α} {body : α → α → Except ε (ForInStep α)}
+    {init out : α} {kept : α → Prop}
+    (goesOn : ∀ x s s', body x s = .ok (.yield s') → s' = x ∧ kept x)
+    (stops : ∀ x s s', body x s = .ok (.done s') → s' = s)
+    (looped : forIn xs init body = .ok out) :
+    out = init ∨ ∃ before after, xs = before ++ out :: after ∧ ∀ x ∈ before ++ [out], kept x := by
+  -- The state is the last item read, or the start when no item is read.
+  have accepted : ∃ read after, xs = read ++ after ∧ out = read.getLast?.getD init ∧
+      ∀ x ∈ read, kept x := by
+    refine forIn_ok_invariant (fun read s => s = read.getLast?.getD init ∧ ∀ x ∈ read, kept x)
+      (fun out => ∃ read after, xs = read ++ after ∧ out = read.getLast?.getD init ∧
+        ∀ x ∈ read, kept x) ⟨rfl, by simp⟩ ?_ ?_ ?_ looped
+    · intro read x rest s s' _ ⟨_, allKept⟩ stepped
+      obtain ⟨rfl, keptHere⟩ := goesOn x s s' stepped
+      refine ⟨by simp, fun y member => ?_⟩
+      rcases List.mem_append.mp member with earlier | here
+      · exact allKept y earlier
+      · exact List.mem_singleton.mp here ▸ keptHere
+    · intro read x rest s s' split ⟨last, allKept⟩ stepped
+      exact ⟨read, x :: rest, split, (stops x s s' stepped).trans last, allKept⟩
+    · intro s ⟨last, allKept⟩
+      exact ⟨xs, [], by simp, last, allKept⟩
+  obtain ⟨read, after, split, last, allKept⟩ := accepted
+  rcases List.eq_nil_or_concat read with rfl | ⟨before, final, rfl⟩
+  · exact Or.inl last
+  · simp only [List.concat_eq_append, List.getLast?_append, List.getLast?_singleton,
+      Option.some_or, Option.getD_some] at last
+    subst last
+    exact Or.inr ⟨before, after, by simpa using split, by simpa using allKept⟩
 
 /-- Each input of a successful map has its output among the outputs. -/
 theorem exists_mem_of_mapM_ok {xs : List α} {ys : List β}
