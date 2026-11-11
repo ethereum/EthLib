@@ -125,7 +125,8 @@ def selfdestructStepLog (evm after : Evm fork Meter) : BurnLog :=
 theorem supply_selfdestructStep {evm after : Evm fork Meter}
     (h : selfdestructStep fork evm = .ok after) :
     after.state.supply + (selfdestructStepLog evm after).total = evm.state.supply := by
-  obtain ⟨word, rest, paid, stack, hpaid, ⟨refund, finished⟩ | halted⟩ := selfdestructStep_eq_ok h
+  obtain ⟨word, rest, paid, stack, hpaid, -, -, ⟨refund, finished⟩ | halted⟩ :=
+    selfdestructStep_eq_ok h
   · unfold finishSelfdestruct at finished
     split at finished
     · cases finished

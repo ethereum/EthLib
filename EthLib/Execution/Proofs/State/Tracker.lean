@@ -1257,6 +1257,16 @@ theorem reads_setStorage {tx tx' : TransactionState} {address : Address} {key : 
   · cases h
     exact ⟨rfl, rfl⟩
 
+/-- A written account exists, so it is empty exactly when it is the empty account. -/
+private theorem accountExistsAndIsEmpty_setAccount_self (tx : TransactionState)
+    (address : Address) (account : Account) :
+    (tx.setAccount address (some account)).accountExistsAndIsEmpty address =
+      decide (account = EMPTY_ACCOUNT) := by
+  simp only [accountExistsAndIsEmpty, getAccountOptional_setAccount_self]
+  cases account
+  simp only [EMPTY_ACCOUNT, Account.mk.injEq, Bool.decide_and]
+  ac_rfl
+
 /-- A change by `f` that succeeds adds the address to the account reads.
 
 From Paris, a result of `f` that is the empty account deletes the account.
@@ -1278,14 +1288,7 @@ theorem reads_modifyState {fork : Fork} {tx tx' : TransactionState} {address : A
   | ok account =>
     refine ⟨account, rfl, ?_⟩
     simp only [hf, bind, Except.bind, pure, Except.pure] at h
-    -- The written account exists, so it is empty exactly when it is the empty account.
-    have hempty : ((tx.recordAccountRead address).setAccount address
-        (some account)).accountExistsAndIsEmpty address = decide (account = EMPTY_ACCOUNT) := by
-      simp only [accountExistsAndIsEmpty, getAccountOptional_setAccount_self]
-      cases account
-      simp only [EMPTY_ACCOUNT, Account.mk.injEq, Bool.decide_and]
-      ac_rfl
-    rw [hempty] at h
+    rw [accountExistsAndIsEmpty_setAccount_self] at h
     split at h <;> cases h
     · rename_i hcond
       simp only [Bool.and_eq_true, decide_eq_true_eq] at hcond
@@ -1313,6 +1316,34 @@ theorem getElem?_storageReads_modifyState_of_ne {fork : Fork} {tx tx' : Transact
   · simp [destroyStorage, Std.ExtTreeMap.getElem?_insert, Ne.symm hne]
   · rfl
 
+/-- A second wipe of the storage of an address records no new read. -/
+theorem storageReads_destroyStorage_destroyStorage (tx : TransactionState) (address : Address) :
+    ((tx.destroyStorage address).destroyStorage address).storageReads =
+      (tx.destroyStorage address).storageReads := by
+  apply Std.ExtTreeMap.ext_getElem?
+  intro other
+  by_cases hother : other = address
+  · subst hother
+    simp [destroyStorage, Std.ExtTreeMap.keys_eq_nil_iff.mpr rfl, Std.ExtTreeSet.insertMany_nil]
+  · simp [destroyStorage, Std.ExtTreeMap.getElem?_insert, Ne.symm hother]
+
+/-- A wipe of the storage of an address reads there what its storage writes and reads give. -/
+theorem getElem?_storageReads_destroyStorage_congr {tx tx' : TransactionState}
+    {address : Address} (hw : tx'.storageWrites.getD address ∅ = tx.storageWrites.getD address ∅)
+    (hr : tx'.storageReads[address]? = tx.storageReads[address]?) :
+    (tx'.destroyStorage address).storageReads[address]? =
+      (tx.destroyStorage address).storageReads[address]? := by
+  simp [destroyStorage, hw, Std.ExtTreeMap.getD_eq_getD_getElem?, hr]
+
+/-- A wipe adds no read to the reads of an earlier wipe when no key was written since. -/
+theorem getElem?_storageReads_destroyStorage_of_wiped {tx mid : TransactionState}
+    {address : Address} (hw : mid.storageWrites.getD address ∅ = ∅)
+    (hr : mid.storageReads[address]? = (tx.destroyStorage address).storageReads[address]?) :
+    (mid.destroyStorage address).storageReads[address]? =
+      (tx.destroyStorage address).storageReads[address]? := by
+  rw [getElem?_storageReads_destroyStorage_congr (tx := tx.destroyStorage address)
+    (hw.trans (by simp [destroyStorage])) hr, storageReads_destroyStorage_destroyStorage]
+
 /-- A change of an account that succeeds gives the storage reads at that address.
 
 From Paris, an empty result deletes the account and turns its written keys into reads.
@@ -1332,7 +1363,7 @@ theorem getElem?_storageReads_modifyState_self {fork : Fork} {tx tx' : Transacti
   rw [hreads]
   split <;> rfl
 
-/-- A change of an account that succeeds keeps its storage writes at every other address. -/
+/-- A change of an account that succeeds keeps the storage writes at every other address. -/
 theorem getD_storageWrites_modifyState_of_ne {fork : Fork} {tx tx' : TransactionState}
     {address other : Address} {f : Account → Except StateError Account} (hne : other ≠ address)
     (h : tx.modifyState fork address f = .ok tx') :
@@ -1343,9 +1374,9 @@ theorem getD_storageWrites_modifyState_of_ne {fork : Fork} {tx tx' : Transaction
       recordAccountRead]
   · rfl
 
-/-- A change of an account that succeeds clears its storage writes when it deletes the account.
+/-- From Paris, a change of an account that deletes it clears its storage writes.
 
-Otherwise its storage writes at the address stay as they were. -/
+Otherwise the storage writes at that address stay as they were. -/
 theorem getD_storageWrites_modifyState_self {fork : Fork} {tx tx' : TransactionState}
     {address : Address} {f : Account → Except StateError Account}
     (h : tx.modifyState fork address f = .ok tx') :
@@ -1357,13 +1388,7 @@ theorem getD_storageWrites_modifyState_self {fork : Fork} {tx tx' : TransactionS
   obtain ⟨account', hf', rfl⟩ := modifyState_eq_ok_iff.mp h
   rw [hf, Except.ok.injEq] at hf'
   subst hf'
-  have hempty : ((tx.recordAccountRead address).setAccount address
-      (some account)).accountExistsAndIsEmpty address = decide (account = EMPTY_ACCOUNT) := by
-    simp only [accountExistsAndIsEmpty, getAccountOptional_setAccount_self]
-    cases account
-    simp only [EMPTY_ACCOUNT, Account.mk.injEq, Bool.decide_and]
-    ac_rfl
-  rw [hempty]
+  rw [accountExistsAndIsEmpty_setAccount_self]
   split
   · rename_i hc
     simp only [Bool.and_eq_true, decide_eq_true_eq] at hc
@@ -1374,7 +1399,9 @@ theorem getD_storageWrites_modifyState_self {fork : Fork} {tx tx' : TransactionS
     rw [ite_eq_right_of_eq_false _ _ (eq_false hc)]
     rfl
 
-/-- At one address, two changes in sequence give the storage reads of a wipe when either wipes.
+/-- Two changes of accounts in sequence give the storage reads at every address.
+
+From Paris, an address that either change leaves empty has its earlier written keys read.
 
 Otherwise they keep the storage reads at that address. -/
 theorem getElem?_storageReads_modifyState_modifyState {fork : Fork}
@@ -1400,9 +1427,9 @@ theorem getElem?_storageReads_modifyState_modifyState {fork : Fork}
           have hr : mid.storageReads[z]? = (tx.destroyStorage z).storageReads[z]? := by
             rw [getElem?_storageReads_modifyState_self h1]
             simp [hp, he1]
-          have hd : (mid.destroyStorage z).storageReads[z]? = mid.storageReads[z]? := by
-            simp [destroyStorage, hw, Std.ExtTreeMap.keys_eq_nil_iff.mpr rfl,
-              Std.ExtTreeSet.insertMany_nil, Std.ExtTreeMap.getD_eq_getD_getElem?, hr]
+          have hd : (mid.destroyStorage z).storageReads[z]? =
+              (tx.destroyStorage z).storageReads[z]? :=
+            getElem?_storageReads_destroyStorage_of_wiped hw hr
           by_cases he2 : tx'.getAccount z = EMPTY_ACCOUNT <;> simp [hp, he1, he2, hd, hr]
         · have hw : mid.storageWrites.getD z ∅ = tx.storageWrites.getD z ∅ := by
             rw [getD_storageWrites_modifyState_self h1]
@@ -1411,8 +1438,8 @@ theorem getElem?_storageReads_modifyState_modifyState {fork : Fork}
             rw [getElem?_storageReads_modifyState_self h1]
             simp [hp, he1]
           have hd : (mid.destroyStorage z).storageReads[z]? =
-              (tx.destroyStorage z).storageReads[z]? := by
-            simp [destroyStorage, hw, Std.ExtTreeMap.getD_eq_getD_getElem?, hr]
+              (tx.destroyStorage z).storageReads[z]? :=
+            getElem?_storageReads_destroyStorage_congr hw hr
           by_cases he2 : tx'.getAccount z = EMPTY_ACCOUNT <;> simp [hp, he1, he2, hd, hr]
       · rw [getElem?_storageReads_modifyState_self h1]
         simp [hp]
@@ -1421,8 +1448,8 @@ theorem getElem?_storageReads_modifyState_modifyState {fork : Fork}
       have hr : mid.storageReads[z]? = tx.storageReads[z]? :=
         getElem?_storageReads_modifyState_of_ne hz1 h1
       have hd : (mid.destroyStorage z).storageReads[z]? =
-          (tx.destroyStorage z).storageReads[z]? := by
-        simp [destroyStorage, hw, Std.ExtTreeMap.getD_eq_getD_getElem?, hr]
+          (tx.destroyStorage z).storageReads[z]? :=
+        getElem?_storageReads_destroyStorage_congr hw hr
       by_cases hp : fork ≥ .paris <;> by_cases he2 : tx'.getAccount z = EMPTY_ACCOUNT <;>
         simp [hp, hz1, he2, hd, hr]
   · rw [getElem?_storageReads_modifyState_of_ne hz2 h2]
@@ -1460,7 +1487,9 @@ theorem reads_moveEther {fork : Fork} {tx tx' : TransactionState} {sender recipi
 
 /-- A move of ether gives the storage reads at every address.
 
-From Paris, an address that the debit or the credit leaves empty has its written keys read. -/
+From Paris, an address that the debit or the credit leaves empty has its written keys read.
+
+Every other address keeps its storage reads, and before Paris every address keeps them. -/
 theorem getElem?_storageReads_moveEther {fork : Fork} {tx tx' : TransactionState}
     {sender recipient : Address} {amount : U256}
     (h : tx.moveEther fork sender recipient amount = .ok tx') (address : Address) :
@@ -1479,7 +1508,9 @@ theorem getElem?_storageReads_moveEther {fork : Fork} {tx tx' : TransactionState
   · simp only [hmid, bind, Except.bind] at h
     rw [getElem?_storageReads_modifyState_modifyState hmid h address, hsender]
 
-/-- Moving ether clears the storage writes of an address that it deletes, and keeps the rest. -/
+/-- From Paris, a move of ether clears the storage writes of an address that it deletes.
+
+It keeps the storage writes at every other address. -/
 theorem getD_storageWrites_moveEther {fork : Fork} {tx tx' : TransactionState}
     {sender recipient : Address} {amount : U256}
     (h : tx.moveEther fork sender recipient amount = .ok tx') (address : Address) :
@@ -1612,17 +1643,6 @@ theorem reads_setCode {fork : Fork} {tx tx' : TransactionState} {address : Addre
   have := reads_modifyState_eq_insert h
   -- The code goes into the store of codes, which holds no read.
   split at this <;> exact this
-
-/-- A second wipe of the storage of an address records no new read. -/
-theorem storageReads_destroyStorage_destroyStorage (tx : TransactionState) (address : Address) :
-    ((tx.destroyStorage address).destroyStorage address).storageReads =
-      (tx.destroyStorage address).storageReads := by
-  apply Std.ExtTreeMap.ext_getElem?
-  intro other
-  by_cases hother : other = address
-  · subst hother
-    simp [destroyStorage, Std.ExtTreeMap.keys_eq_nil_iff.mpr rfl, Std.ExtTreeSet.insertMany_nil]
-  · simp [destroyStorage, Std.ExtTreeMap.getElem?_insert, Ne.symm hother]
 
 /-- Clearing an account adds the address to the account reads.
 

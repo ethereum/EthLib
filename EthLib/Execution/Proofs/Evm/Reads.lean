@@ -8,6 +8,7 @@ public import EthLib.Execution.Proofs.Evm.Instructions.LogData
 public import EthLib.Execution.Proofs.Evm.Instructions.MemoryData
 public import EthLib.Execution.Proofs.Evm.Instructions.Return
 public import EthLib.Execution.Proofs.Evm.Instructions.SelfDestruct
+public import EthLib.Execution.Proofs.Evm.Instructions.Static
 public import EthLib.Execution.Proofs.Evm.Instructions.StackOnly
 public import EthLib.Execution.Proofs.Evm.Instructions.Storage
 public import EthLib.Execution.Proofs.Evm.Instructions.TransientStorage
@@ -37,13 +38,13 @@ SELFDESTRUCT reads its beneficiary even when it then halts.
 
 When it completes, it also reads the current account.
 
-From Paris, an account that SELFDESTRUCT leaves empty is deleted.
+From Paris, an account that SELFDESTRUCT empties, even for a moment, is deleted.
 
 The keys that the transaction wrote at that account then become storage reads.
 
-BALANCE, EXTCODESIZE, EXTCODECOPY, EXTCODEHASH, SELFBALANCE and SLOAD add only that read.
+BALANCE, EXTCODESIZE, EXTCODECOPY, EXTCODEHASH, SELFBALANCE and SLOAD add only their own read.
 
-SSTORE and SELFDESTRUCT give the account reads and the storage reads at every address.
+For SSTORE and SELFDESTRUCT, the account reads and the storage reads are stated exactly.
 
 Every other instruction of the dispatch keeps the account reads and the storage reads.
 
@@ -292,208 +293,19 @@ theorem mem_storageReads_sstoreStep {evm after : Evm fork Meter} {key new : U256
   rw [(reads_sstoreStep hs h).1, Std.ExtTreeMap.getD_insert_self]
   exact Std.ExtTreeSet.mem_insert_self
 
-/-- The transfer of SELFDESTRUCT adds the originator and the beneficiary to the account reads. -/
-theorem accountReads_selfdestructTransfer {tx tx' : State.TransactionState}
-    {originator beneficiary : Address}
-    (h : selfdestructTransfer fork tx originator beneficiary = .ok tx') :
-    tx'.accountReads = (tx.accountReads.insert originator).insert beneficiary := by
-  unfold selfdestructTransfer at h
-  dsimp only at h
-  split at h
-  · obtain ⟨mid, hmove, h⟩ := Base.bind_ok_iff.mp h
-    obtain ⟨hmid, -⟩ := State.TransactionState.reads_moveEther hmove
-    split at h
-    · obtain ⟨hset, -⟩ := State.TransactionState.reads_setAccountBalance h
-      rw [hset, hmid]
-      ext a
-      simp [Std.ExtTreeSet.mem_insert, or_left_comm]
-    · cases h
-      exact hmid
-  · obtain ⟨mid, hcreate, h⟩ := Base.bind_ok_iff.mp h
-    obtain ⟨hmid, -⟩ := State.TransactionState.reads_createEther hcreate
-    obtain ⟨hset, -⟩ := State.TransactionState.reads_setAccountBalance h
-    rw [hset, hmid]
-    ext a
-    simp [Std.ExtTreeSet.mem_insert, or_left_comm]
-
-/-- The transfer of SELFDESTRUCT gives the storage reads at every address.
-
-From Paris, an originator whose nonce and code are empty has its written keys read.
-
-From Paris, a beneficiary that the transfer leaves empty has its written keys read.
-
-Every other address keeps its storage reads, and before Paris every address keeps them. -/
-theorem getElem?_storageReads_selfdestructTransfer {tx tx' : State.TransactionState}
-    {originator beneficiary : Address}
-    (h : selfdestructTransfer fork tx originator beneficiary = .ok tx') (address : Address) :
-    tx'.storageReads[address]? =
-      if fork ≥ .paris ∧
-          ((address = originator ∧
-              { tx.getAccount originator with balance := 0 } = State.EMPTY_ACCOUNT) ∨
-            (address = beneficiary ∧ tx'.getAccount beneficiary = State.EMPTY_ACCOUNT)) then
-        (tx.destroyStorage address).storageReads[address]?
-      else tx.storageReads[address]? := by
-  unfold selfdestructTransfer at h
-  dsimp only at h
-  split at h
-  · obtain ⟨mid, hmove, h⟩ := Base.bind_ok_iff.mp h
-    have hsub : (tx.getAccount originator).balance - (tx.getAccount originator).balance = 0 :=
-      BitVec.sub_self _
-    split at h
-    · obtain ⟨_, hf, hread, hother⟩ := State.TransactionState.modifyState_eq_ok h
-      cases hf
-      by_cases ha : address = originator
-      · subst ha
-        rw [State.TransactionState.getElem?_storageReads_modifyState_self h, hread]
-        have hm := State.TransactionState.getElem?_storageReads_moveEther hmove address
-        have hw := State.TransactionState.getD_storageWrites_moveEther hmove address
-        rw [hsub] at hm hw
-        have hmid_orig : mid.getAccount address =
-            { tx.getAccount address with balance :=
-                if address = beneficiary then (tx.getAccount address).balance else 0 } := by
-          by_cases hab : address = beneficiary
-          · subst hab
-            rw [(State.TransactionState.moveEther_self hmove).1]
-            cases tx.getAccount address
-            simp
-          · rw [(State.TransactionState.moveEther_eq_ok hab hmove).2.2.1, hsub]
-            simp [hab]
-        have hsame_empty : { mid.getAccount address with balance := 0 } = State.EMPTY_ACCOUNT ↔
-            { tx.getAccount address with balance := 0 } = State.EMPTY_ACCOUNT := by
-          rw [hmid_orig]
-        by_cases hp : fork ≥ .paris
-        · by_cases he : { tx.getAccount address with balance := 0 } = State.EMPTY_ACCOUNT
-          · have he_mid : { mid.getAccount address with balance := 0 } = State.EMPTY_ACCOUNT :=
-              hsame_empty.mpr he
-            have hw0 : mid.storageWrites.getD address ∅ = ∅ := by
-              rw [hw, ite_eq_left_of_eq_true _ _ (eq_true ⟨hp, .inl ⟨rfl, he⟩⟩)]
-            have hr0 : mid.storageReads[address]? =
-                (tx.destroyStorage address).storageReads[address]? := by
-              rw [hm, ite_eq_left_of_eq_true _ _ (eq_true ⟨hp, .inl ⟨rfl, he⟩⟩)]
-            have hd : (mid.destroyStorage address).storageReads[address]? =
-                (tx.destroyStorage address).storageReads[address]? := by
-              simp [State.TransactionState.destroyStorage, hw0,
-                Std.ExtTreeMap.keys_eq_nil_iff.mpr rfl, Std.ExtTreeSet.insertMany_nil,
-                Std.ExtTreeMap.getD_eq_getD_getElem?, hr0]
-            rw [ite_eq_left_of_eq_true _ _ (eq_true ⟨hp, he_mid⟩),
-              ite_eq_left_of_eq_true _ _ (eq_true ⟨hp, .inl ⟨rfl, he⟩⟩), hd]
-          · have he_mid : { mid.getAccount address with balance := 0 } ≠ State.EMPTY_ACCOUNT :=
-              mt hsame_empty.mp he
-            have he_tx' : tx'.getAccount address ≠ State.EMPTY_ACCOUNT := by
-              rw [hread]
-              exact he_mid
-            have he_mid_acc : mid.getAccount address ≠ State.EMPTY_ACCOUNT := by
-              intro hc
-              apply he_mid
-              rw [hc]
-              rfl
-            have hr0 : mid.storageReads[address]? = tx.storageReads[address]? := by
-              rw [hm, ite_eq_right_of_eq_false _ _ (eq_false fun hc => ?_)]
-              rcases hc.2 with ⟨-, h1⟩ | ⟨rfl, h2⟩
-              · exact he h1
-              · exact he_mid_acc h2
-            rw [ite_eq_right_of_eq_false _ _ (eq_false fun hc => he_mid hc.2), hr0,
-              ite_eq_right_of_eq_false _ _ (eq_false fun hc => ?_)]
-            rcases hc.2 with ⟨-, h1⟩ | ⟨rfl, h2⟩
-            · exact he h1
-            · exact he_tx' h2
-        · rw [hm]
-          simp [hp]
-      · rw [State.TransactionState.getElem?_storageReads_modifyState_of_ne ha h,
-          State.TransactionState.getElem?_storageReads_moveEther hmove address, hsub]
-        by_cases hab : address = beneficiary
-        · subst hab
-          rw [hother address ha]
-        · simp [ha, hab]
-    · cases h
-      rw [State.TransactionState.getElem?_storageReads_moveEther hmove address, hsub]
-  · obtain ⟨mid, hcreate, h⟩ := Base.bind_ok_iff.mp h
-    rw [State.TransactionState.getElem?_storageReads_modifyState_modifyState hcreate h address]
-    obtain ⟨_, hf, hread, hother⟩ := State.TransactionState.modifyState_eq_ok h
-    cases hf
-    by_cases hp : fork ≥ .paris
-    · by_cases ha : address = originator
-      · subst ha
-        by_cases hab : address = beneficiary
-        · subst hab
-          obtain ⟨-, hn, hc⟩ := State.TransactionState.getAccount_createEther hcreate address
-          have heq_zero : { mid.getAccount address with balance := 0 } =
-              { tx.getAccount address with balance := 0 } := by
-            cases hmid_acc : mid.getAccount address
-            cases htx_acc : tx.getAccount address
-            rw [hmid_acc, htx_acc] at hn hc
-            dsimp only at hn hc
-            subst hn hc
-            rfl
-          have htx'_zero : tx'.getAccount address =
-              { tx.getAccount address with balance := 0 } :=
-            hread.trans heq_zero
-          have hiff : (mid.getAccount address = State.EMPTY_ACCOUNT ∨
-              tx'.getAccount address = State.EMPTY_ACCOUNT) ↔
-              ({ tx.getAccount address with balance := 0 } = State.EMPTY_ACCOUNT ∨
-                tx'.getAccount address = State.EMPTY_ACCOUNT) := by
-            rw [htx'_zero, or_self]
-            refine ⟨fun h => h.elim (fun hm => ?_) id, Or.inr⟩
-            rw [← heq_zero, hm]
-            rfl
-          by_cases he : { tx.getAccount address with balance := 0 } = State.EMPTY_ACCOUNT
-          · have h1 : mid.getAccount address = State.EMPTY_ACCOUNT ∨
-                tx'.getAccount address = State.EMPTY_ACCOUNT :=
-              hiff.mpr (.inl he)
-            rw [ite_eq_left_of_eq_true _ _ (eq_true ⟨hp, by simpa using h1⟩),
-              ite_eq_left_of_eq_true _ _ (eq_true ⟨hp, .inl ⟨rfl, he⟩⟩)]
-          · have hne_tx' : tx'.getAccount address ≠ State.EMPTY_ACCOUNT := by
-              rw [htx'_zero]
-              exact he
-            have h1 : ¬(mid.getAccount address = State.EMPTY_ACCOUNT ∨
-                tx'.getAccount address = State.EMPTY_ACCOUNT) := by
-              rw [hiff]
-              exact not_or.mpr ⟨he, hne_tx'⟩
-            rw [ite_eq_right_of_eq_false _ _ (eq_false fun hc => h1 (by simpa using hc.2)),
-              ite_eq_right_of_eq_false _ _ (eq_false fun hc =>
-                (not_or.mpr ⟨he, hne_tx'⟩) (by simpa using hc.2))]
-        · obtain ⟨_, _, _, hrest⟩ := State.TransactionState.modifyState_eq_ok hcreate
-          have hne_ba : address ≠ beneficiary := hab
-          rw [hread, hrest address hne_ba]
-          simp [hp, hab]
-      · by_cases hab : address = beneficiary
-        · subst hab
-          rw [hother address ha]
-          simp [hp, ha]
-        · simp [hp, ha, hab]
-    · simp [hp]
-
-/-- The transfer of SELFDESTRUCT keeps the account reads and storage reads in lockstep. -/
-theorem reads_selfdestructTransfer {tx tx' : State.TransactionState}
-    {originator beneficiary : Address}
-    (h : selfdestructTransfer fork tx originator beneficiary = .ok tx') :
-    tx'.accountReads = (tx.accountReads.insert originator).insert beneficiary ∧
-      (∀ address, tx'.storageReads[address]? =
-        if fork ≥ .paris ∧
-            ((address = originator ∧
-                { tx.getAccount originator with balance := 0 } = State.EMPTY_ACCOUNT) ∨
-              (address = beneficiary ∧ tx'.getAccount beneficiary = State.EMPTY_ACCOUNT)) then
-          (tx.destroyStorage address).storageReads[address]?
-        else tx.storageReads[address]?) ∧
-      (fork < .paris → tx'.storageReads = tx.storageReads) := by
-  refine ⟨accountReads_selfdestructTransfer h,
-    getElem?_storageReads_selfdestructTransfer h, fun hfork => ?_⟩
-  have hnp : ¬fork ≥ .paris := Nat.not_le_of_lt hfork
-  exact Std.ExtTreeMap.ext_getElem? fun address => by
-    rw [getElem?_storageReads_selfdestructTransfer h address]
-    simp [hnp]
-
 omit [GasMeter Meter] in
 /-- Completing SELFDESTRUCT adds the current account and the beneficiary to the account reads.
 
-From Paris, an empty current account or beneficiary has its written keys read.
+From Paris, it reads the written keys of a current account whose nonce and code are empty.
+
+So it does for a beneficiary that it leaves empty.
 
 Every other address keeps its storage reads, and before Paris every address keeps them. -/
 theorem reads_finishSelfdestruct {beneficiary : Address} {refund : Nat}
     {evm after : Evm fork Meter} (h : finishSelfdestruct fork beneficiary refund evm = .ok after) :
     after.state.accountReads =
         (evm.state.accountReads.insert evm.message.currentTarget).insert beneficiary ∧
-      (∀ address, after.state.storageReads[address]? =
+      ∀ address, after.state.storageReads[address]? =
         if fork ≥ .paris ∧
             ((address = evm.message.currentTarget ∧
                 { evm.state.getAccount evm.message.currentTarget with balance := 0 } =
@@ -501,8 +313,7 @@ theorem reads_finishSelfdestruct {beneficiary : Address} {refund : Nat}
               (address = beneficiary ∧
                 after.state.getAccount beneficiary = State.EMPTY_ACCOUNT)) then
           (evm.state.destroyStorage address).storageReads[address]?
-        else evm.state.storageReads[address]?) ∧
-      (fork < .paris → after.state.storageReads = evm.state.storageReads) := by
+        else evm.state.storageReads[address]? := by
   unfold finishSelfdestruct at h
   split at h
   · cases h
@@ -527,7 +338,9 @@ theorem accountReads_finishSelfdestruct {beneficiary : Address} {refund : Nat}
 
 When it halts after reading the beneficiary, it keeps every storage read.
 
-When it completes, it adds the current account and applies the transfer storage reads. -/
+When it completes, it also adds the current account.
+
+From Paris, it then reads the written keys of an account that its transfer deletes. -/
 theorem reads_selfdestructStep {evm after : Evm fork Meter} {word : U256}
     {rest : List U256} (hs : evm.stack.val = word :: rest)
     (h : selfdestructStep fork evm = .ok after) :
@@ -546,78 +359,20 @@ theorem reads_selfdestructStep {evm after : Evm fork Meter} {word : U256}
                   after.state.getAccount (Base.toAddressMasked word) = State.EMPTY_ACCOUNT)) then
             (evm.state.destroyStorage address).storageReads[address]?
           else evm.state.storageReads[address]?) ∧
-        (fork < .paris → after.state.storageReads = evm.state.storageReads) ∧
         after.error = evm.error) := by
-  unfold selfdestructStep at h
-  split at h
-  · simp [bind, Except.bind, throw, throwThe, MonadExceptOf.throw] at h
-  obtain ⟨⟨w, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨rfl, -⟩ := popWord_of_stack hs h1
-  have err1 : e1.error = evm.error := by
-    obtain ⟨⟨_, _⟩, -, h1'⟩ := Base.bind_ok_iff.mp h1
-    cases h1'
-    rfl
-  have c1 := popWord_sameContext h1
-  dsimp only at h
-  rcases hacc : accessAddress e1 (Base.toAddressMasked word) with ⟨cold, e2⟩
-  have c2 : e2.message = evm.message ∧ e2.state = evm.state ∧ e2.error = evm.error := by
-    obtain ⟨_, ha⟩ := accessAddress_snd e1 (Base.toAddressMasked word)
-    rw [hacc] at ha
-    dsimp only at ha
+  obtain ⟨w, _, paid, hw, hpaid, hstate, herr, hrest⟩ := selfdestructStep_eq_ok h
+  obtain rfl : w = word := (List.cons.inj (hw.symm.trans hs)).1
+  rcases hrest with ⟨refund, finished⟩ | ⟨e, rfl⟩
+  · right
+    obtain ⟨ha, hst⟩ := reads_finishSelfdestruct finished
+    rw [hpaid.message, hstate] at ha hst
+    refine ⟨?_, hst, (error_finishSelfdestruct finished).trans herr⟩
     rw [ha]
-    exact ⟨c1.message, c1.state, err1⟩
-  simp only [hacc] at h
-  obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
-  rcases keepReads_eq_ok h with h | ⟨e, rfl⟩
-  · obtain ⟨e3, h3, h⟩ := Base.bind_ok_iff.mp h
-    obtain ⟨e4, h4, h⟩ := Base.bind_ok_iff.mp h
-    have err3 : e3.error = e2.error := by
-      obtain ⟨_, -, h3'⟩ := Base.bind_ok_iff.mp h3
-      cases h3'
-      rfl
-    have err4 : e4.error = e3.error := by
-      obtain ⟨_, -, h4'⟩ := Base.bind_ok_iff.mp h4
-      cases h4'
-      rfl
-    have c4 := (chargeGas_sameContext h3).trans (chargeStateGas_sameContext h4)
-    obtain ⟨ha, hst, hpre⟩ := reads_finishSelfdestruct h
-    have herr : after.error = evm.error := by
-      unfold finishSelfdestruct at h
-      split at h
-      · cases h
-      · obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
-        cases h
-        exact err4.trans (err3.trans c2.2.2)
-    right
-    have he4_msg : e4.message = evm.message := by
-      rw [c4.message]
-      exact c2.1
-    have he4_state : e4.state.getAccount = evm.state.getAccount := by
-      funext addr
-      rw [c4.state]
-      simp [recordAccountRead, c2.2.1]
-    have he4_sr : e4.state.storageReads = evm.state.storageReads := by
-      rw [c4.state]
-      simp [recordAccountRead, State.TransactionState.recordAccountRead, c2.2.1]
-    have he4_ds : ∀ address, (e4.state.destroyStorage address).storageReads =
-        (evm.state.destroyStorage address).storageReads := by
-      intro address
-      rw [c4.state]
-      simp [recordAccountRead, State.TransactionState.recordAccountRead,
-        State.TransactionState.destroyStorage, c2.2.1]
-    refine ⟨?_, fun address => ?_, fun hfork => (hpre hfork).trans he4_sr, herr⟩
-    · rw [ha, he4_msg, c4.state]
-      show ((e2.state.accountReads.insert _).insert evm.message.currentTarget).insert _ = _
-      rw [c2.2.1]
-      ext a
-      simp [Std.ExtTreeSet.mem_insert, or_left_comm]
-    · rw [hst address, he4_msg, he4_state, he4_sr, he4_ds address]
+    ext a
+    simp [State.TransactionState.recordAccountRead, Std.ExtTreeSet.mem_insert, or_left_comm]
   · left
-    refine ⟨?_, ?_, e, rfl⟩
-    · simp [id, state_exceptionalHalt, recordAccountRead, State.TransactionState.recordAccountRead,
-        c2.2.1]
-    · simp [id, state_exceptionalHalt, recordAccountRead, State.TransactionState.recordAccountRead,
-        c2.2.1]
+    rw [state_exceptionalHalt, hstate]
+    exact ⟨rfl, rfl, e, rfl⟩
 
 /-- SELFDESTRUCT adds its beneficiary to the account reads, even when it then halts.
 
@@ -633,7 +388,6 @@ theorem accountReads_selfdestructStep {evm after : Evm fork Meter} {word : U256}
   rcases reads_selfdestructStep hs h with ⟨ha, -, he⟩ | ⟨ha, -⟩
   · exact .inl ⟨ha, he⟩
   · exact .inr ha
-
 
 /-- Every other instruction of the dispatch keeps the account and storage reads.
 
