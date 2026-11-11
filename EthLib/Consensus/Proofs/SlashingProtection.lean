@@ -33,7 +33,7 @@ So no valid proposer slashing pairs an older block with a signed block.
 
 No vote that it signs is slashable with an older vote.
 
-Both need the file to keep one or more such messages of the key.
+Each of these needs the file to keep one or more such messages of the key.
 
 An interchange file reads back as itself from the document that writes it.
 -/
@@ -568,7 +568,9 @@ theorem lt_slot_of_signBlocks {signingRootOf : BeaconBlockHeader → Root} {pubk
 
 The file holds one or more blocks of the key.
 
-The two headers of a valid proposer slashing have one slot, in either order. -/
+The signed header may be the first or the second header of the slashing.
+
+The two headers of a valid proposer slashing have one slot. -/
 theorem processProposerSlashing_ne_ok_of_signBlocks {signingRootOf : BeaconBlockHeader → Root}
     {pubkey : BLSPubkey} {start finish : Interchange} {headers : List BeaconBlockHeader}
     (signed : signBlocks signingRootOf pubkey start headers = .ok finish)
