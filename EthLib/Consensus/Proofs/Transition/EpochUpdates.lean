@@ -24,6 +24,10 @@ That balance stops at zero.
 
 From Electra this holds for a registry within its limit.
 
+For a registry within its limit, the penalty is also expressed in natural numbers.
+
+Successful checked products justify removing the modular reductions in that expression.
+
 When the slashings succeed, the balances past the registry stay.
 
 The slashings reset clears the slashed balance of the next epoch.
@@ -733,7 +737,9 @@ private theorem slashingPenaltyDue_iff {state : BeaconState preset fork} {valida
 
 /-- A successful due penalty before Electra checks both products before lowering the balance.
 
-The first product counts effective-balance increments, and the second restores the unit. -/
+The first multiplies the effective-balance increment count by the adjusted slashed balance.
+
+After division by the active balance, the second multiplies by the increment. -/
 theorem applySlashingPenalty_no_overflow {total adjusted : Gwei} {j : Nat}
     {validator : Validator} (found : getValidatorAt state j = .ok validator)
     (due : SlashingPenaltyDue preset (getCurrentEpoch state) validator)
@@ -1014,7 +1020,11 @@ theorem processSlashings_balances_of_electra (electra : .pectra ≤ fork)
 
 The scaled sum of slashings does not overflow, even when no validator has a due penalty.
 
-Only due penalties need their intermediate products to fit.
+The proof uses the per-step no-overflow lemmas only for due penalties.
+
+Before Electra the increment count is multiplied by the adjusted slashed balance.
+
+That product is divided by the active balance, then multiplied by the increment.
 
 From Electra the adjusted slashed balance is first divided by the active balance in increments.
 
