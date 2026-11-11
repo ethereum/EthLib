@@ -1,26 +1,24 @@
 module
 
-public import EthLib.Networking.ReqResp.Encoding
 public import EthLib.Networking.Proofs.Snappy.Frame
 public import EthLib.Networking.Proofs.Snappy.FrameEncode
 
 /-!
-# `Networking.Proofs.ReqResp.Read`
+# `Networking.Proofs.Snappy.Read`
 
-Properties of the reader that stops a framed stream at the declared length of a payload.
+Properties of the reader that stops a framed stream once it holds a given number of bytes.
 
 The chunks it reads form a stream on their own, and that stream decodes to its output.
 
-When those chunks hold at least the declared length, bytes after them are left unread.
+When those chunks hold the bytes it needs, bytes after them are left unread.
 
 The encoders write a stream that the reader reads whole, with no bytes left after it.
 -/
 
 @[expose] public section
 
-namespace EthLib.Networking.Proofs.ReqResp.Read
+namespace EthLib.Networking.Proofs.Snappy.Read
 
-open EthLib.Networking.ReqResp
 open EthLib.Networking.Snappy
 open EthLib.Networking.Proofs.Snappy.Frame
 open EthLib.Base (bytesToUint uintToBytes)
@@ -229,9 +227,11 @@ theorem encodeChunks_nil (chunk : List UInt8 → List UInt8) (n : Nat) :
     encodeChunks chunk [] n = [] := by
   cases n <;> rfl
 
-/-- The reader reads the chunks of the encoder whole, given enough fuel on both sides.
+/-- The reader reads the chunks of the encoder whole, when both fuels are large enough.
 
-Each chunk of at most 65536 bytes must be a header and a body that decodes to that piece. -/
+The encoder needs at least the data length, and the reader at least the length it writes.
+
+The chunk of each piece of at most 65536 bytes must be a header and a body that decodes to it. -/
 theorem readChunks_encodeChunks {chunk : List UInt8 → List UInt8}
     (hchunk : ∀ piece : List UInt8, piece.length ≤ maxChunkLength →
       ∃ (type : UInt8) (body : List UInt8), body.length < 2 ^ 24 ∧
@@ -296,7 +296,7 @@ theorem readFrames_streamIdentifier_encodeChunks {chunk : List UInt8 → List UI
       streamIdentifierType :: (uintToBytes 3 (streamIdentifier.drop 4).length).toList ++
         streamIdentifier.drop 4 ++ encodeChunks chunk data n := rfl
   have hc : decodeChunk streamIdentifierType (streamIdentifier.drop 4) = .ok [] := rfl
-  -- The stream starts with the identifier, so the reader reads all of it, with its length as fuel.
+  -- The stream starts with the identifier, so the reader reads chunks, with its length as fuel.
   have hstart : readFrames data.length (streamIdentifier ++ encodeChunks chunk data n) =
       readChunks data.length (streamIdentifier ++ encodeChunks chunk data n)
         ((encodeChunks chunk data n).length + 9 + 1) := by
@@ -334,4 +334,4 @@ theorem readFrames_encodeFrames (d : ByteArray) :
   exact readFrames_streamIdentifier_encodeChunks
     (fun _ h => Proofs.Snappy.FrameEncode.dataChunk_spec h) _ (Nat.le_of_eq hs.symm)
 
-end EthLib.Networking.Proofs.ReqResp.Read
+end EthLib.Networking.Proofs.Snappy.Read

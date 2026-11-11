@@ -163,7 +163,7 @@ def test_stream_longer_than_declared():
 
 
 def test_compressed_bytes_at_the_bound():
-    # Declared length 4 allows 32 + 4 + 0 = 36 bytes.
+    # Declared length 4 allows 32 + 4 + 4 // 6 = 36 bytes.
     # The identifier (10), a padding chunk of 4 + 10 and the data chunk (12) make 36.
     message = _varint(4) + STREAM_IDENTIFIER + _chunk(0xFE, bytes(10)) + _uncompressed(PAYLOAD)
     assert reqresp.decode_payload(0, 4, message) == PAYLOAD
@@ -177,9 +177,9 @@ def test_compressed_bytes_above_the_bound():
 
 
 # A reader must reject any bytes that remain after it has read the declared n SSZ bytes.
-# The rule is in the ssz_snappy encoding strategy of phase0/p2p-interface.md of consensus-specs.
-# The reader stops at the chunk that completes n bytes, so a chunk after it is rejected.
+# The reader stops at the chunk that completes n bytes, so any byte after it is rejected.
 # That holds for chunks that add no bytes too: padding, skippable chunks and stream identifiers.
+# An empty data chunk adds no bytes either.
 
 
 @pytest.mark.parametrize(
@@ -190,11 +190,25 @@ def test_compressed_bytes_above_the_bound():
         pytest.param(STREAM_IDENTIFIER, id="stream_identifier"),
         pytest.param(_uncompressed(b""), id="empty_data_chunk"),
         pytest.param(b"\x00", id="one_byte"),
+        pytest.param(_uncompressed(b"\x01"), id="data_chunk"),
     ],
 )
 def test_bytes_after_the_payload(after: bytes):
     message = _varint(4) + STREAM_IDENTIFIER + _uncompressed(PAYLOAD) + after
     with raises(ValueError, f"{len(after)} bytes follow the last chunk of the payload"):
+        reqresp.decode_payload(0, 100, message)
+
+
+def test_bytes_after_a_compressed_payload():
+    message = _varint(4) + STREAM_IDENTIFIER + _compressed_literal(PAYLOAD) + _chunk(0xFE, b"")
+    with raises(ValueError, "4 bytes follow the last chunk of the payload"):
+        reqresp.decode_payload(0, 100, message)
+
+
+def test_last_chunk_past_the_length_with_bytes_after():
+    # The length is checked before the bytes after the chunk, so the overshoot is reported.
+    message = _varint(3) + STREAM_IDENTIFIER + _uncompressed(PAYLOAD) + _chunk(0xFE, b"")
+    with raises(ValueError, "payload has 4 bytes, not the declared 3"):
         reqresp.decode_payload(0, 100, message)
 
 
@@ -213,8 +227,7 @@ def test_chunks_before_the_last_data_chunk():
 
 
 def test_response_chunk_with_bytes_after():
-    # In a stream of response chunks, the next chunk starts with its response code.
-    # A reader that ran on past the payload would read that code as a Snappy chunk type.
+    # A padding chunk after the payload of a response chunk is rejected too.
     chunk = bytes([0]) + _varint(4) + STREAM_IDENTIFIER + _uncompressed(PAYLOAD)
     with raises(ValueError, "4 bytes follow the last chunk of the payload"):
         reqresp.decode_response_chunk(0, 0, 100, chunk + _chunk(0xFE, b""))

@@ -12,13 +12,14 @@ Not yet released.
 - A req/resp payload now fails when bytes follow the chunk that completes its declared length.
   A reader must reject any bytes that remain after it has read the declared number of SSZ bytes.
   The decoder read the whole Snappy stream.
-  So it accepted chunks after that one that add no bytes: padding, reserved skippable chunks, a second stream identifier or an empty data chunk.
+  So it accepted chunks after the one that completes the length, if they add no bytes: padding, reserved skippable chunks, a second stream identifier or an empty data chunk.
   With a declared length of 0, the reader now reads the stream identifier alone, so any chunk after it fails too.
   `reqresp.decode_payload` and `reqresp.decode_response_chunk` raise `ReqRespError` with the message "N bytes follow the last chunk of the payload", and the C exports return the new error code 10.
-  In Lean, `decodePayload` reads the stream with the new `readFrames`, which stops at the chunk that completes the declared length and returns the bytes after it.
+  In Lean, `decodePayload` reads the stream with the new `Snappy.readFrames`, which stops at the chunk that completes the declared length and returns the bytes after it.
+  `Snappy.readChunks` is its chunk loop, and the new module `Networking.Proofs.Snappy.Read` proves their properties.
   `ReqRespError` gains the constructor `trailingBytes`.
-  The last conjunct of `decodePayload_ok` and `decodePayload_eq_ok_iff` is now `readFrames … = .ok (d.data.toList, [])` in place of `Snappy.decodeFrames … = .ok d`.
-  `decodeFramesList_of_readFrames` recovers the old conjunct, and the new `decodePayload_append_ne_ok` proves that bytes appended to a payload that decodes make it fail.
+  The last conjunct of `decodePayload_ok` and `decodePayload_eq_ok_iff` is now `Snappy.readFrames … = .ok (d.data.toList, [])` in place of `Snappy.decodeFrames … = .ok d`.
+  `decodeFramesList_of_readFrames` gives the list form of the old conjunct, and the new `decodePayload_append_ne_ok` proves that bytes appended to a payload that decodes make it fail.
 - From Gloas, the discount for empty slots of the fast confirmation rule also counts the votes for the pending node of the parent ([#1368](https://github.com/ethereum/EthLib/issues/1368), [#1458](https://github.com/ethereum/EthLib/issues/1458)).
   A parent has three nodes from Gloas: a pending one, and a full and an empty one for the two answers on its payload.
   The discount counted only the votes for the full or the empty node that the block builds on.

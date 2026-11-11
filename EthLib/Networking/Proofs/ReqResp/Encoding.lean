@@ -4,7 +4,7 @@ public import EthLib.Networking.ReqResp.Encoding
 public import EthLib.Networking.Proofs.Encoding.Varint
 public import EthLib.Networking.Proofs.Snappy.Frame
 public import EthLib.Networking.Proofs.Snappy.FrameEncode
-public import EthLib.Networking.Proofs.ReqResp.Read
+public import EthLib.Networking.Proofs.Snappy.Read
 
 /-!
 # `Networking.Proofs.ReqResp.Encoding`
@@ -17,7 +17,7 @@ The decoder accepts exactly the encoding of that length, then compressed bytes.
 
 Those bytes are within the bound for that length.
 
-The reader stops them at the payload, with no byte left after it.
+The reader reads them to the last chunk of the payload, with no byte left after it.
 
 So bytes appended to a payload that decodes make the longer message invalid.
 
@@ -38,7 +38,7 @@ open EthLib.Networking.ReqResp
 open EthLib.Networking.Encoding.Varint
 open EthLib.Networking.Proofs.Encoding.Varint
 open EthLib.Networking.Proofs
-open EthLib.Networking.Proofs.ReqResp.Read
+open EthLib.Networking.Proofs.Snappy.Read
 
 /-! ## The bound on the compressed size -/
 
@@ -66,14 +66,14 @@ It is also at least the smallest encoding of the type.
 
 The compressed bytes after the prefix are within the bound for that length.
 
-The reader reads them up to the payload and leaves no byte after it. -/
+The reader reads all of them, its output is the payload, and no byte is left after it. -/
 theorem decodePayload_ok {typeMin typeBound : UInt64} {bs d : ByteArray}
     (h : decodePayload typeMin typeBound bs = .ok d) :
     ∃ declared b, decode (split bs.data.toList).1 = .ok declared ∧
       d.size = declared.toNat ∧ declared ≤ typeBound ∧ declared ≤ MAX_PAYLOAD_SIZE ∧
       typeMin ≤ declared ∧ maxCompressedLen declared = .ok b ∧
       (split bs.data.toList).2.length ≤ b.toNat ∧
-      readFrames declared.toNat (split bs.data.toList).2 = .ok (d.data.toList, []) := by
+      Snappy.readFrames declared.toNat (split bs.data.toList).2 = .ok (d.data.toList, []) := by
   simp only [decodePayload] at h
   generalize split bs.data.toList = sp at h ⊢
   obtain ⟨header, rest⟩ := sp
@@ -95,7 +95,7 @@ theorem decodePayload_ok {typeMin typeBound : UInt64} {bs d : ByteArray}
           split at h
           · simp_all
           · rename_i hc
-            cases hf : readFrames declared.toNat rest with
+            cases hf : Snappy.readFrames declared.toNat rest with
             | error e => simp [hf] at h
             | ok r =>
               obtain ⟨data, trailing⟩ := r
@@ -128,14 +128,14 @@ The length is at most the smaller of the largest encoding and the cap, and at le
 
 The compressed bytes are within the bound for that length.
 
-The reader reads them up to the payload and leaves no byte after it.
+The reader reads all of them, its output is the payload, and no byte is left after it.
 -/
 theorem decodePayload_eq_ok_iff {typeMin typeBound : UInt64} {bs d : ByteArray} :
     decodePayload typeMin typeBound bs = .ok d ↔
       d.size ≤ (min typeBound MAX_PAYLOAD_SIZE).toNat ∧ typeMin.toNat ≤ d.size ∧
       ∃ rest, bs.data.toList = encode (UInt64.ofNat d.size) ++ rest ∧
         rest.length ≤ 32 + d.size + d.size / 6 ∧
-        readFrames d.size rest = .ok (d.data.toList, []) := by
+        Snappy.readFrames d.size rest = .ok (d.data.toList, []) := by
   have hmax := toNat_MAX_PAYLOAD_SIZE
   constructor
   · intro h
@@ -186,9 +186,7 @@ theorem decodePayload_eq_ok_iff {typeMin typeBound : UInt64} {bs d : ByteArray} 
 
 /-! ## Bytes after a payload -/
 
-/-- A payload that decodes stops at its last chunk, so any byte after it makes it invalid.
-
-A reader must reject any bytes that remain after it has read the declared length.
+/-- A payload that decodes stops at its last chunk, so any byte after it makes the message invalid.
 
 This holds even for chunks that add no bytes, such as padding or a second stream identifier. -/
 theorem decodePayload_append_ne_ok {typeMin typeBound : UInt64} {bs extra d : ByteArray}
