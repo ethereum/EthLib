@@ -474,7 +474,8 @@ theorem and {S : Evm fork Meter → Evm fork Meter → Prop} (r : StepRules fork
 /-- A successful SELFDESTRUCT keeps the relation. -/
 theorem selfdestructStep (rules : StepRules fork R) {evm after : Evm fork Meter}
     (h : selfdestructStep fork evm = .ok after) : R evm after := by
-  obtain ⟨word, -, paid, -, hpaid, ⟨refund, finished⟩ | halted⟩ := selfdestructStep_eq_ok h
+  obtain ⟨word, -, paid, -, hpaid, -, -, ⟨refund, finished⟩ | halted⟩ :=
+    selfdestructStep_eq_ok h
   · exact rules.trans (rules.static hpaid) (rules.selfdestruct _ refund finished)
   · obtain ⟨error, rfl⟩ := halted
     exact rules.static (hpaid.trans (staticStep_exceptionalHalt _ _))

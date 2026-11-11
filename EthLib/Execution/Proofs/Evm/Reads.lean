@@ -8,6 +8,7 @@ public import EthLib.Execution.Proofs.Evm.Instructions.LogData
 public import EthLib.Execution.Proofs.Evm.Instructions.MemoryData
 public import EthLib.Execution.Proofs.Evm.Instructions.Return
 public import EthLib.Execution.Proofs.Evm.Instructions.SelfDestruct
+public import EthLib.Execution.Proofs.Evm.Instructions.Static
 public import EthLib.Execution.Proofs.Evm.Instructions.StackOnly
 public import EthLib.Execution.Proofs.Evm.Instructions.Storage
 public import EthLib.Execution.Proofs.Evm.Instructions.TransientStorage
@@ -31,13 +32,19 @@ SLOAD and SSTORE each read their slot in the storage of the current account.
 
 SSTORE records that read even when it then halts, as EIP-7928 asks.
 
+When it completes, its write also reads the current account.
+
 SELFDESTRUCT reads its beneficiary even when it then halts.
 
 When it completes, it also reads the current account.
 
-BALANCE, EXTCODESIZE, EXTCODECOPY, EXTCODEHASH, SELFBALANCE and SLOAD add exactly that read.
+From Paris, an account that SELFDESTRUCT empties, even for a moment, is deleted.
 
-They keep every other read.
+The keys that the transaction wrote at that account then become storage reads.
+
+BALANCE, EXTCODESIZE, EXTCODECOPY, EXTCODEHASH, SELFBALANCE and SLOAD add only their own read.
+
+For SSTORE and SELFDESTRUCT, the account reads and the storage reads are stated exactly.
 
 Every other instruction of the dispatch keeps the account reads and the storage reads.
 
@@ -72,58 +79,6 @@ theorem checkGas_eq_ok_iff (h : fork ≥ .glamsterdam) {evm : Evm fork Meter} {a
 /-- An exceptional halt keeps the state of the frame, with its reads. -/
 theorem state_exceptionalHalt (evm : Evm fork Meter) (e : EvmError) :
     (exceptionalHalt evm e).state = evm.state := rfl
-
-/-- A storage write keeps the storage reads. -/
-theorem storageReads_setStorage {tx tx' : State.TransactionState} {address : Address}
-    {key : Bytes32} {value : U256} (h : tx.setStorage address key value = .ok tx') :
-    tx'.storageReads = tx.storageReads := by
-  unfold State.TransactionState.setStorage at h
-  split at h
-  · cases h
-  · cases h
-    rfl
-
-/-- SSTORE reads its slot, whether it then completes or halts.
-
-The slot is the top word of the stack, in the storage of the current account. -/
-theorem mem_storageReads_sstoreStep {evm after : Evm fork Meter} {key new : U256}
-    {rest : List U256} (hs : evm.stack.val = key :: new :: rest)
-    (h : sstoreStep evm = .ok after) :
-    U256.toBeBytes key ∈ after.state.storageReads.getD evm.message.currentTarget ∅ := by
-  have hstack : evm.stack = ⟨key :: new :: rest, hs ▸ evm.stack.property⟩ := Subtype.ext hs
-  unfold sstoreStep at h
-  split at h
-  · cases h
-  simp only [popWord, hstack, Stack.pop, bind, Except.bind, pure, Except.pure] at h
-  split at h
-  · cases h
-  generalize accessStorageKey _ evm.message.currentTarget (U256.toBeBytes key) = accessed at h
-  obtain ⟨cold, e3⟩ := accessed
-  have hread : U256.toBeBytes key ∈
-      (recordStorageRead e3 evm.message.currentTarget (U256.toBeBytes key)).state.storageReads.getD
-        evm.message.currentTarget ∅ :=
-    (State.TransactionState.mem_storageReads_recordStorageRead _ _ _ _ _).mpr (.inl ⟨rfl, rfl⟩)
-  rcases keepReads_eq_ok h with h | ⟨e, rfl⟩
-  · obtain ⟨e4, h4, h⟩ := Base.bind_ok_iff.mp h
-    obtain ⟨e5, h5, h⟩ := Base.bind_ok_iff.mp h
-    split at h
-    · cases h
-    obtain ⟨state, hset, h⟩ := Base.bind_ok_iff.mp h
-    cases h
-    have s4 := (chargeGas_sameContext h4).state
-    have s5 : e5.state = e4.state := by
-      obtain ⟨_, -, h5⟩ := Base.bind_ok_iff.mp h5
-      cases h5
-      rfl
-    have hset' : e5.state.setStorage evm.message.currentTarget (U256.toBeBytes key) new =
-        .ok state := by
-      revert hset
-      cases e5.state.setStorage evm.message.currentTarget (U256.toBeBytes key) new <;>
-        simp [Except.mapError]
-    show U256.toBeBytes key ∈ state.storageReads.getD _ ∅
-    rw [storageReads_setStorage hset', s5, s4]
-    exact hread
-  · exact hread
 
 /-- BALANCE reads the account at its address. -/
 theorem mem_accountReads_balanceStep {evm after : Evm fork Meter} {word : U256}
@@ -249,36 +204,116 @@ theorem reads_sloadStep {evm after : Evm fork Meter} {word : U256} {rest : List 
     rw [state_accessStorageKey]
     exact ⟨rfl, rfl⟩
 
-/-- The transfer of SELFDESTRUCT adds the originator and the beneficiary to the account reads. -/
-theorem accountReads_selfdestructTransfer {tx tx' : State.TransactionState}
-    {originator beneficiary : Address}
-    (h : selfdestructTransfer fork tx originator beneficiary = .ok tx') :
-    tx'.accountReads = (tx.accountReads.insert originator).insert beneficiary := by
-  unfold selfdestructTransfer at h
+/-- SSTORE adds its slot to the storage reads of the current account, even when it then halts.
+
+When it halts after reading, it keeps the account reads.
+
+When it completes, it adds the current account to the account reads. -/
+theorem reads_sstoreStep {evm after : Evm fork Meter} {key new : U256} {rest : List U256}
+    (hs : evm.stack.val = key :: new :: rest) (h : sstoreStep evm = .ok after) :
+    after.state.storageReads = evm.state.storageReads.insert evm.message.currentTarget
+        ((evm.state.storageReads.getD evm.message.currentTarget ∅).insert
+          (U256.toBeBytes key)) ∧
+      ((after.state.accountReads = evm.state.accountReads ∧ ∃ e, after.error = some e) ∨
+        (after.state.accountReads = evm.state.accountReads.insert evm.message.currentTarget ∧
+          after.error = evm.error)) := by
+  unfold sstoreStep at h
+  split at h
+  · cases h
+  obtain ⟨⟨w1, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨rfl, r1, -⟩ := popWord_of_stack hs h1
+  obtain ⟨⟨w2, e2⟩, h2, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨rfl, -⟩ := popWord_of_stack r1 h2
+  have err1 : e1.error = evm.error := by
+    obtain ⟨⟨_, _⟩, -, h1'⟩ := Base.bind_ok_iff.mp h1
+    cases h1'
+    rfl
+  have err2 : e2.error = e1.error := by
+    obtain ⟨⟨_, _⟩, -, h2'⟩ := Base.bind_ok_iff.mp h2
+    cases h2'
+    rfl
+  have c2 := (popWord_sameContext h1).trans (popWord_sameContext h2)
   dsimp only at h
   split at h
-  · obtain ⟨mid, hmove, h⟩ := Base.bind_ok_iff.mp h
-    obtain ⟨hmid, -⟩ := State.TransactionState.reads_moveEther hmove
+  · cases h
+  rcases hacc : accessStorageKey e2 e2.message.currentTarget (U256.toBeBytes key) with ⟨cold, e3⟩
+  have s3 : e3.state = evm.state ∧ e3.error = evm.error := by
+    have s := state_accessStorageKey e2 e2.message.currentTarget (U256.toBeBytes key)
+    have herr : (accessStorageKey e2 e2.message.currentTarget (U256.toBeBytes key)).2.error =
+        e2.error := by
+      unfold accessStorageKey
+      split <;> rfl
+    rw [hacc] at s herr
+    exact ⟨s.trans c2.state, herr.trans (err2.trans err1)⟩
+  simp only [hacc] at h
+  rcases keepReads_eq_ok h with h | ⟨e, rfl⟩
+  · obtain ⟨e4, h4, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨e5, h5, h⟩ := Base.bind_ok_iff.mp h
     split at h
-    · obtain ⟨hset, -⟩ := State.TransactionState.reads_setAccountBalance h
-      rw [hset, hmid]
-      ext a
-      simp [Std.ExtTreeSet.mem_insert, or_left_comm]
     · cases h
-      exact hmid
-  · obtain ⟨mid, hcreate, h⟩ := Base.bind_ok_iff.mp h
-    obtain ⟨hmid, -⟩ := State.TransactionState.reads_createEther hcreate
-    obtain ⟨hset, -⟩ := State.TransactionState.reads_setAccountBalance h
-    rw [hset, hmid]
-    ext a
-    simp [Std.ExtTreeSet.mem_insert, or_left_comm]
+    obtain ⟨state, hset, h⟩ := Base.bind_ok_iff.mp h
+    cases h
+    have err4 : e4.error = e3.error := by
+      obtain ⟨_, -, h4'⟩ := Base.bind_ok_iff.mp h4
+      cases h4'
+      rfl
+    have err5 : e5.error = e4.error := by
+      obtain ⟨_, -, h5'⟩ := Base.bind_ok_iff.mp h5
+      cases h5'
+      rfl
+    have c5 := (chargeGas_sameContext h4).trans (chargeStateGas_sameContext h5)
+    have hset' : e5.state.setStorage e2.message.currentTarget (U256.toBeBytes key) new =
+        .ok state := by
+      revert hset
+      cases e5.state.setStorage e2.message.currentTarget (U256.toBeBytes key) new <;>
+        simp [Except.mapError]
+    obtain ⟨ha, hst⟩ := State.TransactionState.reads_setStorage hset'
+    refine ⟨?_, .inr ⟨?_, err5.trans (err4.trans s3.2)⟩⟩
+    · show state.storageReads = _
+      rw [hst, c5.state]
+      show (recordStorageRead e3 _ _).state.storageReads = _
+      simp [recordStorageRead, State.TransactionState.recordStorageRead, s3.1, c2.message]
+    · show state.accountReads = _
+      rw [ha, c5.state]
+      show (recordStorageRead e3 _ _).state.accountReads.insert _ = _
+      simp [recordStorageRead, State.TransactionState.recordStorageRead, s3.1, c2.message]
+  · refine ⟨?_, .inl ⟨?_, e, rfl⟩⟩
+    · show (recordStorageRead e3 _ _).state.storageReads = _
+      simp [recordStorageRead, State.TransactionState.recordStorageRead, s3.1, c2.message]
+    · show (recordStorageRead e3 _ _).state.accountReads = _
+      simp [recordStorageRead, State.TransactionState.recordStorageRead, s3.1]
+
+/-- SSTORE reads its slot, whether it then completes or halts.
+
+The slot is the top word of the stack, in the storage of the current account. -/
+theorem mem_storageReads_sstoreStep {evm after : Evm fork Meter} {key new : U256}
+    {rest : List U256} (hs : evm.stack.val = key :: new :: rest)
+    (h : sstoreStep evm = .ok after) :
+    U256.toBeBytes key ∈ after.state.storageReads.getD evm.message.currentTarget ∅ := by
+  rw [(reads_sstoreStep hs h).1, Std.ExtTreeMap.getD_insert_self]
+  exact Std.ExtTreeSet.mem_insert_self
 
 omit [GasMeter Meter] in
-/-- Completing SELFDESTRUCT adds the current account and the beneficiary to the account reads. -/
-theorem accountReads_finishSelfdestruct {beneficiary : Address} {refund : Nat}
+/-- Completing SELFDESTRUCT adds the current account and the beneficiary to the account reads.
+
+From Paris, it reads the written keys of a current account whose nonce and code are empty.
+
+So it does for a beneficiary that it leaves empty.
+
+Every other address keeps its storage reads, and before Paris every address keeps them. -/
+theorem reads_finishSelfdestruct {beneficiary : Address} {refund : Nat}
     {evm after : Evm fork Meter} (h : finishSelfdestruct fork beneficiary refund evm = .ok after) :
     after.state.accountReads =
-      (evm.state.accountReads.insert evm.message.currentTarget).insert beneficiary := by
+        (evm.state.accountReads.insert evm.message.currentTarget).insert beneficiary ∧
+      ∀ address, after.state.storageReads[address]? =
+        if fork ≥ .paris ∧
+            ((address = evm.message.currentTarget ∧
+                { evm.state.getAccount evm.message.currentTarget with balance := 0 } =
+                  State.EMPTY_ACCOUNT) ∨
+              (address = beneficiary ∧
+                after.state.getAccount beneficiary = State.EMPTY_ACCOUNT)) then
+          (evm.state.destroyStorage address).storageReads[address]?
+        else evm.state.storageReads[address]? := by
   unfold finishSelfdestruct at h
   split at h
   · cases h
@@ -289,7 +324,55 @@ theorem accountReads_finishSelfdestruct {beneficiary : Address} {refund : Nat}
       revert htr
       cases selfdestructTransfer fork evm.state evm.message.currentTarget beneficiary <;>
         simp [Except.mapError]
-    exact accountReads_selfdestructTransfer htr'
+    exact reads_selfdestructTransfer htr'
+
+omit [GasMeter Meter] in
+/-- Completing SELFDESTRUCT adds the current account and the beneficiary to the account reads. -/
+theorem accountReads_finishSelfdestruct {beneficiary : Address} {refund : Nat}
+    {evm after : Evm fork Meter} (h : finishSelfdestruct fork beneficiary refund evm = .ok after) :
+    after.state.accountReads =
+      (evm.state.accountReads.insert evm.message.currentTarget).insert beneficiary :=
+  (reads_finishSelfdestruct h).1
+
+/-- SELFDESTRUCT adds its beneficiary to the account reads, even when it then halts.
+
+When it halts after reading the beneficiary, it keeps every storage read.
+
+When it completes, it also adds the current account.
+
+From Paris, it then reads the written keys of an account that its transfer deletes. -/
+theorem reads_selfdestructStep {evm after : Evm fork Meter} {word : U256}
+    {rest : List U256} (hs : evm.stack.val = word :: rest)
+    (h : selfdestructStep fork evm = .ok after) :
+    (after.state.accountReads = evm.state.accountReads.insert (Base.toAddressMasked word) ∧
+        after.state.storageReads = evm.state.storageReads ∧
+        ∃ e, after.error = some e) ∨
+      (after.state.accountReads =
+          (evm.state.accountReads.insert evm.message.currentTarget).insert
+            (Base.toAddressMasked word) ∧
+        (∀ address, after.state.storageReads[address]? =
+          if fork ≥ .paris ∧
+              ((address = evm.message.currentTarget ∧
+                  { evm.state.getAccount evm.message.currentTarget with balance := 0 } =
+                    State.EMPTY_ACCOUNT) ∨
+                (address = Base.toAddressMasked word ∧
+                  after.state.getAccount (Base.toAddressMasked word) = State.EMPTY_ACCOUNT)) then
+            (evm.state.destroyStorage address).storageReads[address]?
+          else evm.state.storageReads[address]?) ∧
+        after.error = evm.error) := by
+  obtain ⟨w, _, paid, hw, hpaid, hstate, herr, hrest⟩ := selfdestructStep_eq_ok h
+  obtain rfl : w = word := (List.cons.inj (hw.symm.trans hs)).1
+  rcases hrest with ⟨refund, finished⟩ | ⟨e, rfl⟩
+  · right
+    obtain ⟨ha, hst⟩ := reads_finishSelfdestruct finished
+    rw [hpaid.message, hstate] at ha hst
+    refine ⟨?_, hst, (error_finishSelfdestruct finished).trans herr⟩
+    rw [ha]
+    ext a
+    simp [State.TransactionState.recordAccountRead, Std.ExtTreeSet.mem_insert, or_left_comm]
+  · left
+    rw [state_exceptionalHalt, hstate]
+    exact ⟨rfl, rfl, e, rfl⟩
 
 /-- SELFDESTRUCT adds its beneficiary to the account reads, even when it then halts.
 
@@ -302,35 +385,9 @@ theorem accountReads_selfdestructStep {evm after : Evm fork Meter} {word : U256}
       after.state.accountReads =
         (evm.state.accountReads.insert evm.message.currentTarget).insert
           (Base.toAddressMasked word) := by
-  unfold selfdestructStep at h
-  split at h
-  · simp [bind, Except.bind, throw, throwThe, MonadExceptOf.throw] at h
-  obtain ⟨⟨w, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨rfl, -⟩ := popWord_of_stack hs h1
-  have c1 := popWord_sameContext h1
-  dsimp only at h
-  rcases hacc : accessAddress e1 (Base.toAddressMasked word) with ⟨cold, e2⟩
-  have c2 : e2.message = evm.message ∧ e2.state = evm.state := by
-    obtain ⟨_, ha⟩ := accessAddress_snd e1 (Base.toAddressMasked word)
-    rw [hacc] at ha
-    dsimp only at ha
-    rw [ha]
-    exact ⟨c1.message, c1.state⟩
-  simp only [hacc] at h
-  obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
-  rcases keepReads_eq_ok h with h | ⟨e, rfl⟩
-  · obtain ⟨e3, h3, h⟩ := Base.bind_ok_iff.mp h
-    obtain ⟨e4, h4, h⟩ := Base.bind_ok_iff.mp h
-    have c4 := (chargeGas_sameContext h3).trans (chargeStateGas_sameContext h4)
-    right
-    rw [accountReads_finishSelfdestruct h, c4.message, c4.state]
-    show ((e2.state.accountReads.insert _).insert e2.message.currentTarget).insert _ = _
-    rw [c2.1, c2.2]
-    ext a
-    simp [Std.ExtTreeSet.mem_insert, or_left_comm]
-  · left
-    exact ⟨by rw [← c2.2]; rfl, e, rfl⟩
-
+  rcases reads_selfdestructStep hs h with ⟨ha, -, he⟩ | ⟨ha, -⟩
+  · exact .inl ⟨ha, he⟩
+  · exact .inr ha
 
 /-- Every other instruction of the dispatch keeps the account and storage reads.
 
