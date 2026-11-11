@@ -35,13 +35,30 @@ A file that only imports other files needs no section.
 The helper definitions of an exposed implementation must be public as well, since the exposed body refers to them.
 C exports use a plain `public section`, because clients execute them through the bindings.
 
+A module that hides its representation is the other exception.
+It holds a container that many specifications and proofs share, such as a registry.
+A module hides such a container only when a measured change of its representation breaks code outside the file of its laws.
+An intermediate description whose clients are its own theory, such as the SSZ layout, keeps its bodies exposed.
+
+Such a module uses a plain `public section`, with a private constructor and private fields.
+A public abstraction function maps the container to the model that the source uses.
+Each primitive operation has one law, a public theorem that states the operation through that function.
+Only the operations built from the primitives carry `@[expose]`.
+A client then reasons through the laws, so a change of representation breaks only the proofs of the laws.
+The file of the laws imports the module with a targeted `import all`, as the next paragraph describes.
+
 Proofs sometimes need more than the public interface offers.
 A proof-only import can use a plain `import` when it contributes nothing to the public API.
 When you reason about a dependency, prefer its public equations.
 If a proof needs the body of a definition, a targeted `import all` can provide it, either from the same package or from a dependency that permits private imports.
 Comment the exact definition whose body the proof needs.
+EthLib does not permit private imports, so a package that depends on EthLib cites the laws of a hidden module instead.
 Give a public definition an explicit result type when a delayed proof cannot infer it.
 Keep compatibility options such as `backward.proofsInPublic` disabled.
+
+The module system hides a body only from files that have a `module` header.
+In such a file, `rfl`, `unfold`, `decide` and `decide +kernel` stop at the hidden body, and the proof cites a law instead.
+A downstream file without a `module` header sees hidden bodies, so the module system does not hold it to the laws.
 
 The library, the proofs and the C exports remain three separate Lake libraries.
 The declaration checker loads modules at Lean's `.private` level, so that it can inspect proof bodies and private helpers.
