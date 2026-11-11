@@ -27,7 +27,7 @@ A keyed cipher state advances its nonce by one for each message it encrypts or d
 
 Without a key, both directions return their input and leave the cipher state as it was.
 
-Noise §5.1 reserves the greatest nonce, so both directions refuse it, and the nonce never wraps.
+Noise §5.1 reserves the greatest nonce, so both directions refuse it.
 
 From one state, decrypting what encrypting wrote returns the plaintext and the same next state.
 
@@ -133,7 +133,7 @@ private theorem readBytes_append_tag (c : ByteArray) (t : ChaCha20Poly1305.Tag)
 theorem nonce_initializeKey (key : Option ChaCha20Poly1305.Key) :
     (initializeKey key).nonce = 0 := rfl
 
-/-- Encrypting under no key returns the plaintext and leaves the cipher state as it was. -/
+/-- Under no key, a plaintext within 65535 bytes comes back unchanged, with the same state. -/
 theorem encryptWithAd_eq_ok_of_key_eq_none {s : CipherState} {aad plaintext : ByteArray}
     (hk : s.key = none) (hs : ¬plaintext.size > 65535) :
     encryptWithAd s aad plaintext = .ok (s, plaintext) := by
@@ -184,7 +184,7 @@ theorem decryptWithAd_eq_error_of_size {s : CipherState} {aad ciphertext : ByteA
     decryptWithAd s aad ciphertext = .error .messageTooLong := by
   simp [decryptWithAd, hs, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
 
-/-- Decrypting under no key returns the ciphertext and leaves the cipher state as it was. -/
+/-- Under no key, a ciphertext within 65535 bytes comes back unchanged, with the same state. -/
 theorem decryptWithAd_eq_ok_of_key_eq_none {s : CipherState} {aad ciphertext : ByteArray}
     (hk : s.key = none) (hs : ¬ciphertext.size > 65535) :
     decryptWithAd s aad ciphertext = .ok (s, ciphertext) := by
