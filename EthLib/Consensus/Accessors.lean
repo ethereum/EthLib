@@ -368,12 +368,17 @@ def slotCommitteeMembers (state : BeaconState preset fork) (slot : Slot) :
 def drawsPerHash (fork : Base.Fork) : Nat :=
   if .pectra ≤ fork then 16 else 32
 
+/-- The input hashed for one block of draws: the seed, then the block number as eight bytes.
+
+The bytes are little-endian. -/
+def drawInput (seed : Bytes32) (block : Nat) : ByteArray :=
+  ⟨seed.toArray ++ (uintToBytes 8 block).toArray⟩
+
 /-- The hash that draw number `i` reads its random bytes from.
 
 The draws come in blocks of the number of draws per hash, and each block has its own hash. -/
 def drawHash (fork : Base.Fork) (seed : Bytes32) (i : Nat) : Bytes32 :=
-  Cryptography.Hash.Sha256.hash32
-    ⟨seed.toArray ++ (uintToBytes 8 (i / drawsPerHash fork)).toArray⟩
+  Cryptography.Hash.Sha256.hash32 (drawInput seed (i / drawsPerHash fork))
 
 /-- A draw that does not start a block reads the hash of the draw before it. -/
 theorem drawHash_succ {fork : Base.Fork} {seed : Bytes32} {i : Nat}
