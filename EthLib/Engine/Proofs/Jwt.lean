@@ -14,6 +14,10 @@ That token authenticates with its secret and issued-at time.
 The clock check then accepts at every clock within 60 seconds, including both endpoints.
 
 A token whose tag does not match its parts is refused before any JSON is read.
+
+A token the clock check accepts carries the tag that its own header and claims sign.
+
+So it is the token that signing those same parts with that secret builds.
 -/
 
 @[expose] public section
@@ -308,5 +312,129 @@ theorem check_eq_false_of_algorithm_ne {secret : ByteArray} {token : String} {cl
     rw [issuedAt_eq_error_of_algorithm_ne ha hn] at hi
     cases hi
   · rfl
+
+/-! ## What an accepted token proves -/
+
+/-- Rejoining the three parts that a compact token splits into gives that token back. -/
+theorem compact_parts {token : String} {p : Parts} (hp : parts token = some p) :
+    compact p.header p.claims p.signature = token := by
+  unfold parts at hp
+  split at hp
+  · rename_i header claims signature hsplit
+    cases hp
+    have hj := List.intercalate_splitOn (xs := token.toList) (x := '.')
+    rw [hsplit] at hj
+    apply String.ext
+    simp only [compact, String.toList_append, String.toList_ofList,
+      show ".".toList = ['.'] by rfl]
+    simpa [List.intercalate] using hj
+  · cases hp
+
+/-- A secret of any length other than 32 bytes authenticates no token. -/
+theorem size_eq_of_authenticate {secret : ByteArray} {token : String} {time : Json.Number}
+    (h : authenticate secret token = .ok time) : secret.size = 32 := by
+  by_contra hs
+  simp only [authenticate] at h
+  split at h <;> cases h
+
+/-- An authenticated token splits at exactly two period separators. -/
+theorem exists_parts_of_authenticate {secret : ByteArray} {token : String} {time : Json.Number}
+    (h : authenticate secret token = .ok time) : ∃ p, parts token = some p := by
+  rcases hp : parts token with _ | p
+  · simp only [authenticate, hp] at h
+    split at h <;> cases h
+  · exact ⟨p, rfl⟩
+
+/-- The tag of an authenticated token decodes to the HS256 tag of its own header and claims. -/
+theorem tag_of_authenticate {secret : ByteArray} {token : String} {time : Json.Number}
+    {p : Parts} (hp : parts token = some p) (h : authenticate secret token = .ok time) :
+    Base64.decode p.signature =
+      .ok (Cryptography.Hash.Hmac.hmac secret (signingInput p.header p.claims)) := by
+  have hs := size_eq_of_authenticate h
+  unfold authenticate at h
+  simp only [hs, ne_eq, not_true_eq_false, ↓reduceIte, hp] at h
+  split at h
+  · rename_i mac hd
+    split at h
+    · cases h
+    · rename_i hne
+      rw [hd, not_ne_iff.mp hne]
+  · cases h
+
+/-- The tag part of an authenticated token is the base64url tag of its own header and claims.
+
+The decoder accepts one text per byte string, so the tag part is written exactly as it is signed. -/
+theorem signature_eq_of_authenticate {secret : ByteArray} {token : String} {time : Json.Number}
+    {p : Parts} (hp : parts token = some p) (h : authenticate secret token = .ok time) :
+    p.signature = signature secret p.header p.claims := by
+  rw [signature]
+  exact (Base64.encode_decode _ _ (tag_of_authenticate hp h)).symm
+
+/-- An authenticated token is the compact form that signing its own parts with the secret gives.
+
+So a token authenticates only where its tag was computed under the secret it is checked with. -/
+theorem compact_signature_of_authenticate {secret : ByteArray} {token : String}
+    {time : Json.Number} {p : Parts} (hp : parts token = some p)
+    (h : authenticate secret token = .ok time) :
+    token = compact p.header p.claims (signature secret p.header p.claims) := by
+  rw [← signature_eq_of_authenticate hp h, compact_parts hp]
+
+/-- The header of an authenticated token names HS256. -/
+theorem algorithm_eq_of_authenticate {secret : ByteArray} {token : String} {time : Json.Number}
+    {p : Parts} (hp : parts token = some p) (h : authenticate secret token = .ok time) :
+    algorithm p.header = .ok "HS256" := by
+  have hi := issuedAt_of_authenticate hp h
+  unfold issuedAt at hi
+  simp only [bind, Except.bind] at hi
+  split at hi
+  · cases hi
+  · rename_i name ha
+    split at hi
+    · cases hi
+    · rename_i hn
+      rw [ha, not_ne_iff.mp hn]
+
+/-- The header of an authenticated token lists no critical extension. -/
+theorem crit_eq_none_of_authenticate {secret : ByteArray} {token : String} {time : Json.Number}
+    {p : Parts} {fields : List (String × Json.Value)} (hp : parts token = some p)
+    (h : authenticate secret token = .ok time) (hf : objectFields p.header = some fields) :
+    fields.lookup "crit" = none := by
+  have ha := algorithm_eq_of_authenticate hp h
+  unfold algorithm at ha
+  simp only [hf] at ha
+  split at ha
+  · cases ha
+  · rename_i hc
+    cases hl : fields.lookup "crit" with
+    | none => rfl
+    | some value => rw [hl] at hc; simp at hc
+
+/-- A 32-byte secret authenticates the compact form it signs, for parts that hold no separator.
+
+The token then reports the issued-at time that those same parts read. -/
+theorem authenticate_compact {secret : ByteArray} (hs : secret.size = 32)
+    {header claims : String} (hh : '.' ∉ header.toList) (hc : '.' ∉ claims.toList) :
+    authenticate secret (compact header claims (signature secret header claims)) =
+      issuedAt header claims := by
+  rw [authenticate, ite_eq_right (by simp [hs]), signature,
+    parts_compact header claims _ hh hc (dot_not_mem_encode _)]
+  simp [Base64.decode_encode]
+
+/-- A token that the clock check accepts authenticates, with a time the clock passes. -/
+theorem exists_authenticate_of_check {secret : ByteArray} {token : String} {clock : Nat}
+    (h : check secret token clock = true) :
+    ∃ time, authenticate secret token = .ok time ∧ Json.within time clock = true := by
+  unfold check at h
+  split at h
+  · rename_i time ht
+    exact ⟨time, ht, h⟩
+  · cases h
+
+/-- The clock check accepts only the compact form that signing the token's own parts gives. -/
+theorem compact_signature_of_check {secret : ByteArray} {token : String} {clock : Nat}
+    {p : Parts} (hp : parts token = some p) (h : check secret token clock = true) :
+    token = compact p.header p.claims (signature secret p.header p.claims) := by
+  obtain ⟨time, ha, -⟩ := exists_authenticate_of_check h
+  exact compact_signature_of_authenticate hp ha
 
 end EthLib.Engine.Jwt
