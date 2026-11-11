@@ -91,7 +91,9 @@ theorem PointEvaluationError.code_injective (e₁ e₂ : PointEvaluationError) (
 open EthLib.Cryptography.Kzg in
 /-- The 96 bytes of `KZG_SETUP_G2_MONOMIAL_1` are entry 1 of `g2_monomial` in the embedded setup.
 
-`CONTRIBUTING.md` allows this concrete fact: a constant checked against the data it is copied from.
+`CONTRIBUTING.md` keeps in Lean "a small decidable fact that a definition needs to be correct".
+
+The constant needs this fact to be correct, since its docstring says that it is this entry.
 
 It decodes one hex string of 192 characters. -/
 private theorem hexToBytes_g2MonomialHex_one :
@@ -102,11 +104,13 @@ private theorem hexToBytes_g2MonomialHex_one :
 open EthLib.Cryptography.Kzg in
 /-- The setup point of the call decompresses to entry 1 of the `G2` points of the embedded setup.
 
+It assumes that the embedded setup decodes, as `TrustedSetup.ofHex_valid` does.
+
 So the `[tau]_2` of the precompile is the one that the KZG theorems about a decoded setup use. -/
 theorem uncompress_KZG_SETUP_G2_MONOMIAL_1 {s : TrustedSetup} (h : TrustedSetup.ofHex = .ok s) :
     Cryptography.Bls.G2.uncompress KZG_SETUP_G2_MONOMIAL_1 = .ok (s.g2Monomial[1]'(by decide)) := by
   unfold TrustedSetup.ofHex at h
-  -- The three lists stay abstract, so no step evaluates the decoding of the 8000 hex strings.
+  -- The three lists stay abstract, so no step evaluates the decoding of the 8257 hex strings.
   generalize TrustedSetup.hexListToBytes TrustedSetupData.g1LagrangeHex = a at h
   generalize TrustedSetup.hexListToBytes TrustedSetupData.g1MonomialHex = b at h
   generalize hc : TrustedSetup.hexListToBytes TrustedSetupData.g2MonomialHex = c at h
