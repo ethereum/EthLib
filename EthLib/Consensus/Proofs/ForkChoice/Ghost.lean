@@ -1085,11 +1085,11 @@ theorem getHead_finalized {head : ForkChoiceNode} (found : store.getHead config 
         .ok store.finalizedCheckpoint.root :=
   isViableLeaf_finalized ((getHead_viable found).resolve_right fun ⟨noLeaf, _⟩ => someViable noLeaf)
 
-/-- When some leaf is viable, the head respects both checkpoint conditions.
+/-- The head descends from the pending node of the justified block.
 
-It descends from the pending node of the justified block.
+With a viable leaf, its finalized-epoch checkpoint block is the finalized block, except at genesis.
 
-Its finalized-epoch checkpoint block is the finalized root, unless that epoch is genesis. -/
+The viable-leaf hypothesis is needed only for the finalized-checkpoint conclusion. -/
 theorem getHead_checkpoints {head : ForkChoiceNode} (found : store.getHead config = .ok head)
     (someViable : store.getFilteredNodeTree config ≠ .ok []) :
     store.isAncestor head ⟨store.justifiedCheckpoint.root, .pending⟩ = .ok true ∧
