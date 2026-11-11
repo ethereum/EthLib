@@ -1227,28 +1227,17 @@ theorem foldlM_applyPendingDeposit_validator_eq {deposits : List PendingDeposit}
     {validator : Validator} (found : state.validators.data[i]? = some validator)
     (computed : deposits.foldlM (applyPendingDeposit config checks) state = .ok after) :
     after.validators.data[i]? = some validator := by
-  induction deposits generalizing state with
-  | nil =>
-    cases computed
-    exact found
-  | cons deposit rest ih =>
-    simp only [List.foldlM_cons, bind_ok_iff] at computed
-    obtain ⟨next, applied, computed⟩ := computed
-    exact ih (applyPendingDeposit_validator_eq found applied) computed
+  exact foldlM_ok_invariant (fun s => s.validators.data[i]? = some validator)
+    (fun _ _ _ found applied => applyPendingDeposit_validator_eq found applied) found computed
 
 /-- Crediting a list of pending deposits preserves distinct public keys. -/
 theorem foldlM_applyPendingDeposit_pubkeys_nodup {deposits : List PendingDeposit}
     (distinct : (state.validators.data.toList.map (·.pubkey)).Nodup)
     (computed : deposits.foldlM (applyPendingDeposit config checks) state = .ok after) :
     (after.validators.data.toList.map (·.pubkey)).Nodup := by
-  induction deposits generalizing state with
-  | nil =>
-    cases computed
-    exact distinct
-  | cons deposit rest ih =>
-    simp only [List.foldlM_cons, bind_ok_iff] at computed
-    obtain ⟨next, applied, computed⟩ := computed
-    exact ih (applyPendingDeposit_pubkeys_nodup distinct applied) computed
+  exact foldlM_ok_invariant (fun s => (s.validators.data.toList.map (·.pubkey)).Nodup)
+    (fun _ _ _ distinct applied => applyPendingDeposit_pubkeys_nodup distinct applied)
+    distinct computed
 
 /-- A deposit keeps one balance for each validator. -/
 theorem balancesMatch_applyDeposit {pubkey : BLSPubkey} {withdrawalCredentials : Bytes32}
