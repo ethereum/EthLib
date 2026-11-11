@@ -96,7 +96,8 @@ The specification and the exports import nothing beyond the Lean toolchain.
   Prove that the new definition equals the old one wherever the old index was in range.
   If an input that the source rejects reached a default, the change is a `fix`.
   It cites the rule of the source that it restores.
-  Record EthLib as the origin of each test vector that such a fix adds, since no upstream suite holds it.
+  No upstream suite holds the test vectors that such a fix adds.
+  So describe what each one pins, and record its origin next to it, as [Known answers](#known-answers) asks.
 - Prefer structural recursion, `map` and folds to `Id.run do` with mutable variables.
   A proof then follows the shape of the definition.
   A theorem about a `do` loop restates its elaborated body, so any edit of the loop breaks the statement.
@@ -125,12 +126,16 @@ What an entry point does with a wrong input is part of the protocol, so its sour
   A caller that the source requires to tell outcomes apart, for example to import or to queue a block, receives the richer type.
 - Where the source fixes the order of its checks, and the order changes the outcome, follow that order.
   Pin it with a theorem, or with a test whose input fails two checks.
-  Elsewhere, a theorem or the binding contract in `bindings/contract/contract.json` promises that the operation rejects the input, not which error it returns.
+  Elsewhere, the source fixes only that the operation rejects the input.
   The consensus specification, for example, says only which state transitions are invalid.
+  This guide does not say whether EthLib also promises which error such an input gets.
+  Many proofs and Python tests pin the exact error today, and `bindings/contract/contract.json` lists the error codes of its methods.
 - Where the source requires the state to be unchanged on failure, state that in a theorem.
   When the operation returns its input state on failure, state it as equality of the returned state.
   Inside a step, such as an EVM call that halts, state it over the values a caller can read: balances, nonces, code and storage.
   Do not state it over the fields of the representation, since a new representation would break the statement.
+  This rule is for new theorems.
+  Some existing ones, such as `processMessage_sameWrites_of_error`, state it over the fields of `SameWrites`.
 
 ### Proofs
 
