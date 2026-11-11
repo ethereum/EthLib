@@ -1794,6 +1794,18 @@ Over 6280 epochs, the churn of validators alone lowers the bound of Gasper Theor
 With small balances, `230 T ≥ 320 t`, no theorem relates the period to the margin.
 The Python suite checks the periods against the three tables of the rule, except for the rows whose states take minutes to build.
 
+### Inactivity leak
+
+`Consensus/Proofs/Transition/InactivityLeakBound.lean` bounds the number of epochs after which a leak brings the effective balance of an absent validator to a threshold.
+`InactivityLeakStake.lean` deduces that the voters then hold two thirds of the active stake.
+Both take the balance, the score and the effective balance of each epoch as given sequences, not derived from the state transition.
+
+`InactivityLeakEpoch.lean` proves one link of that derivation: the leak lasts from one slot or epoch transition to the next, unless finality advances.
+In an epoch transition from a leaking state, the state that justification returns still leaks, unless the finalized epoch rises (`processEpoch_finalized_lt_or_isInInactivityLeak`).
+The steps after justification read the leak test on that state, or on a later one with the same slot and finalized checkpoint.
+One slot from a leaking state ends in a leaking state, unless the finalized epoch rises (`advanceSlot_finalized_lt_or_isInInactivityLeak`).
+No theorem yet derives the sequences themselves, such as the condition that the balance of an absent validator never rises.
+
 ### Fast confirmation rule
 
 `Consensus/ForkChoice/FastConfirmation.lean` holds the fast confirmation rule of [arXiv 2405.00549v4](https://arxiv.org/abs/2405.00549v4).
@@ -2123,17 +2135,26 @@ A vote with the target of a kept vote is not older, so the theorem on votes says
 The signer of these theorems records every message it signs, so a signer that prunes as it goes is not covered.
 `mem_blocksOf` and `mem_attestationsOf` show that the messages of a key are those of its own entries.
 The proofs read only conditions 2, 4 and 5, through `lt_slot_of_checkBlockSlot`, `le_sourceEpoch_of_checkSourceEpoch` and `lt_targetEpoch_of_checkTargetEpoch`.
-No theorem says what conditions 2, 4 and 5 guarantee across two imported files.
-The record merges both files, so its checks use the least slot and epochs over both, not those of the second file.
-So a message in a gap between the two passes, though the EIP [says](https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-3076.md#advice-for-complete-databases) that signing it violates conditions 2, 4 and 5.
-A message that the key signed in such a gap, and that neither file keeps, is not older than all the kept ones, so these theorems do not cover it.
+
+Import follows the [minimal strategy](https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-3076.md#advice-for-minimal-databases) of the EIP, for the held record and for the file.
+For each key it keeps one block limit, the greatest slot, and one vote limit, the greatest source epoch and the greatest target epoch, without signing roots.
+The two epochs of the vote limit can come from different votes.
+So after an import a block must be after the slot limit, and a vote needs a source at least the source limit and a target after the target limit.
+Since no limit carries a signing root, no imported message can be signed again.
+`lt_slot_of_importFile`, `le_sourceEpoch_of_importFile` and `lt_targetEpoch_of_importFile` show that a message accepted after one import is after every message of both inputs, in that sense.
+`checkBlockSigning_of_foldl_importFile` concludes that a block accepted after any finite sequence of imports meets conditions 1 and 2 of every input file.
+`checkAttestationSigning_of_foldl_importFile` does so for a vote and conditions 3, 4 and 5.
+Both include the initial held file, allow repeated imports and duplicate-key entries, and assume only that the final check passes.
+These two theorems cover a record built by imports alone.
+The theorems on one import take any held record, but no theorem chains imports with messages recorded between them.
 
 `readUInt64_uint64Json` and `readBytes_bytesJson` show that each integer and each byte string of a file reads back as written.
 `ofJson_toJson` shows that a whole file reads back as itself from the document that `toJson` writes, whatever its records.
 No theorem says what `ofJson` does on a document that another client wrote.
 
 The Python suite checks each condition and each malformed field against cases worked out from the EIP.
-With release archives enabled, it runs the 38 interchange tests of `eth-clients/slashing-protection-interchange-tests` as a signer that keeps every message.
+With release archives enabled, it runs the 38 interchange tests of `eth-clients/slashing-protection-interchange-tests` against their flags for the minimal strategy.
+Its signer imports each file with the minimal strategy and records each message it signs with its signing root.
 
 ### Optimistic sync
 
@@ -2611,6 +2632,12 @@ Each ejection raises the ceiling by at most one, and activation leaves the exit 
 From Electra, pending consolidations succeed when their source and target indices are in the registry, balances match the registry, and the sum of balances is below `2^64`.
 The current epoch plus one must fit in 64 bits.
 The source is debited before the target is credited, so the budget also covers equal source and target indices.
+
+From Gloas, builder payment settlement succeeds when an epoch has at least six slots.
+The registry must also be within its limit, and the sum of effective balances below `2^64`.
+Mainnet and minimal have 32 and 8 slots an epoch.
+With fewer than six, the specification itself can overflow when it multiplies the balance of one slot by six.
+The step changes only the pending payments and the withdrawals of the builders, so it keeps the bounds on the amounts of a run of slots (`WithinBudget`).
 
 The builder payments of Gloas carry four hypotheses and one restriction.
 `chainSteps_paysQuorum` proves that along a chain through the last slot of an epoch, each payment of the previous epoch that reaches its quorum is paid exactly once.
