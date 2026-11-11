@@ -21,6 +21,12 @@ A successful derivation gives at least 32 bytes, so verification never refuses i
 Decryption returns as many bytes as the ciphertext holds.
 
 AES-128-CTR undoes itself: decrypting the secret under its own checksum gives back the ciphertext.
+
+Preparation removes the control codes of a password, and leaves a prepared one alone.
+
+A key derivation other than PBKDF2 and scrypt is refused before any parameter of it is read.
+
+A store of a version other than 4 is refused before its modules are read.
 -/
 
 @[expose] public section
@@ -157,5 +163,73 @@ theorem decryptWithKey_decryptWithKey {store : Store} {key secret : ByteArray}
   obtain rfl := Except.ok.inj h
   simp [decryptWithKey, hsize, hcheck, Aes.ctr_ctr]
   rfl
+
+/-! ## The password that the reader prepares -/
+
+/-- The codes that preparation removes are C0, C1 and Delete.
+
+ERC-2335 asks for exactly those under "Password requirements". -/
+theorem isControl_eq_true_iff {c : Char} :
+    isControl c = true ↔ c.toNat ≤ 0x1F ∨ (0x7F ≤ c.toNat ∧ c.toNat ≤ 0x9F) := by
+  simp [isControl]
+
+/-- A space is no control code, so preparation keeps it. -/
+theorem isControl_space : isControl ' ' = false := by
+  decide
+
+/-- Delete is a control code, so preparation removes it. -/
+theorem isControl_delete : isControl (Char.ofNat 0x7F) = true := by
+  decide
+
+/-- The code just above the C1 block is no control code, so preparation keeps it. -/
+theorem isControl_above_c1 : isControl (Char.ofNat 0xA0) = false := by
+  decide
+
+/-- No character that preparation keeps is a control code. -/
+theorem not_isControl_of_mem_prepared {password : String} {c : Char}
+    (h : c ∈ (Base.Unicode.nfkd password).toList.filter (!isControl ·)) :
+    isControl c = false := by
+  simpa using (List.mem_filter.mp h).2
+
+/-- A password already decomposed and free of control codes prepares to its own bytes. -/
+theorem passwordBytes_eq_toUTF8 {password : String}
+    (hn : Base.Unicode.nfkd password = password)
+    (hc : ∀ c ∈ password.toList, isControl c = false) :
+    passwordBytes password = password.toUTF8 := by
+  unfold passwordBytes
+  rw [hn, List.filter_eq_self.mpr (by simpa using hc), String.ofList_toList]
+
+/-! ## What the reader of a key derivation refuses -/
+
+/-- A key derivation whose module fields fail is refused with the error of those fields. -/
+theorem readKdf_eq_error_of_moduleFields {value : Lean.Json} {error : KeystoreError}
+    (h : moduleFields "kdf" value = .error error) : readKdf value = .error error := by
+  simp [readKdf, h, bind, Except.bind]
+
+/-- A key derivation other than PBKDF2 and scrypt is refused as an unsupported function.
+
+Its parameters are not read, so an unsupported function is reported before any of them. -/
+theorem readKdf_eq_error_of_unsupported {value : Lean.Json} {name : String}
+    {params message : Lean.Json}
+    (h : moduleFields "kdf" value = .ok (name, params, message))
+    (hp : name ≠ "pbkdf2") (hs : name ≠ "scrypt") :
+    readKdf value = .error (.unsupportedFunction "kdf" name) := by
+  simp [readKdf, h, hp, hs, bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
+
+/-! ## What the reader of a store refuses -/
+
+/-- A store without a readable version is refused with the error of that field. -/
+theorem readStore_eq_error_of_field {value : Lean.Json} {error : KeystoreError}
+    (h : field "keystore" value "version" = .error error) : readStore value = .error error := by
+  simp [readStore, h, bind, Except.bind]
+
+/-- A store of a version other than 4 is refused, before its modules are read.
+
+ERC-2335 fixes the version at 4 under "JSON schema". -/
+theorem readStore_eq_error_of_version_ne {value json : Lean.Json} {version : Nat}
+    (hf : field "keystore" value "version" = .ok json)
+    (hn : number "version" json = .ok version) (hv : version ≠ 4) :
+    readStore value = .error (.unsupportedVersion version) := by
+  simp [readStore, hf, hn, hv, bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
 
 end EthLib.Cryptography.Keystore
