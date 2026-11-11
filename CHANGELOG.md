@@ -14,7 +14,9 @@ Not yet released.
   A caller that needs a `ByteArray` takes `Base.packBytes (messageId fork topic data)`.
   `messageId_size` goes, since the type states it.
   `messageId_of_ok` and `messageId_of_error` state the ID as `(Sha256.hash32 input).take 20`.
+  `packBytes_messageId_of_ok` and `packBytes_messageId_of_error` keep their former statements, through `Base.packBytes`.
   The C export `eth_gossip_message_id` and the Python `gossip.message_id` are unchanged.
+
 - Slashing-protection imports use EIP-3076's minimal strategy ([#1963](https://github.com/ethereum/EthLib/issues/1963)).
   Import compacts both the held record and the file: each key keeps its greatest block slot and its greatest source and target epochs, taken independently, without signing roots.
   So a repeat of any message held before the import is refused, and so is a block at or before the slot limit, or a vote with a source before the source limit or a target at or before the target limit.
