@@ -9,7 +9,9 @@ Two block states agree on a set of addresses when they hold the same account at 
 
 They agree likewise on sets of slots and code hashes, and on every key at some addresses.
 
-Two transaction states agree when their blocks agree and they carry the same writes and reads.
+Two transaction states agree when their blocks agree and they carry the same tracker.
+
+That means the same writes, wipes, created accounts, transient storage and reads.
 
 Lookups inside those sets, or at what the tracker wrote, give the same value in both.
 
@@ -676,6 +678,8 @@ They also agree on the whole storage of each accessed deployment candidate.
 They also agree on the code under the code hash of each accessed address.
 
 A block access list names neither, so they are assumptions beyond it.
+
+The first block state decides which addresses are candidates and which code hashes count.
 
 [eip7610]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-7610.md#specification -/
 abbrev _root_.EthLib.Execution.State.BlockState.AgreesOnTracker (endState : TransactionState)
