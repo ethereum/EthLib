@@ -225,7 +225,7 @@ A reader then knows where to look, and each fact has one place where it must sta
 | Document | What it holds |
 | --- | --- |
 | Doc comment of a declaration | what the declaration computes, when it fails, and the source it follows |
-| Doc comment of a module | what the module specifies, and its sources |
+| Doc comment of a module | what the module specifies, its sources, and any contract card that `ARCHITECTURE.md` asks of a module that declares a boundary |
 | README of a module | how to read the module: its source, its operations, its test vectors and what its theorems cover |
 | README of a test directory | where its vectors come from, at which pinned commit, and under which licence |
 | `tests/sources.toml` | the one pinned commit of each repository that fixtures come from |
@@ -235,7 +235,7 @@ A reader then knows where to look, and each fact has one place where it must sta
 | [BUILDING.md](BUILDING.md) | how the module system, the CI cache and the memory limits shape the build |
 | [SOUNDNESS.md](SOUNDNESS.md) | what the proofs establish, and what each use of EthLib trusts on top of them |
 | [WRITING.md](WRITING.md) | advice on prose, with no requirement of its own |
-| [AGENTS.md](AGENTS.md) | the instructions for an AI agent that these rules do not already give |
+| [AGENTS.md](AGENTS.md) | what an AI agent adds to these rules: the role it takes, how it writes prose, and the shape of its pull request descriptions |
 | [CHANGELOG.md](CHANGELOG.md) | the changes of each release that a caller may need to act on |
 
 A fact has one home.
@@ -244,8 +244,9 @@ When a change makes a fact false, the same pull request corrects it in its home.
 
 ### Owners
 
-Each layer directory and each top-level document has an owner, and [`.github/CODEOWNERS`](.github/CODEOWNERS) names them.
-GitHub then asks the owner to review every pull request that changes those paths.
+[`.github/CODEOWNERS`](.github/CODEOWNERS) lists the paths that need an owner: each layer directory and each top-level document.
+A path with no owner after it has no owner yet.
+Once the file names an owner for a path, GitHub asks that owner to review each pull request that changes the path.
 The owner keeps the documents of their paths true, and checks that a pull request corrects each sentence that it makes false.
 
 ### Doc comments in Lean

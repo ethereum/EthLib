@@ -1,6 +1,6 @@
-# The owner of each layer directory and of each top-level document.
+# The paths that need an owner: each layer directory and each top-level document.
 # CONTRIBUTING.md, under "Owners", says what an owner does.
-# A path with no owner after it has no owner.
+# A path with no owner after it has no owner yet.
 
 # The layers of ARCHITECTURE.md, from the lowest to the highest.
 /EthLib/Base/
