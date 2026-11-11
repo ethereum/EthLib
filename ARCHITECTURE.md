@@ -99,7 +99,8 @@ A **property** says what a specification guarantees.
 Round trips of encodings, bounds on a fee and the rejection of malformed input are all properties.
 They are stated about the specification itself, so they hold for exactly the code that runs.
 A known answer fixes one input and its output, so it is a test and not a property.
-Known answers live in the Python test suite, which runs the specification through the bindings.
+Known answers stay out of the default build.
+They run in the Python test suite, which runs the specification through the bindings, and in Lean only outside the default build, as `CONTRIBUTING.md` describes.
 
 A **model** says why the protocol is secure.
 It is abstract where the specification is concrete: a hash becomes a random oracle, a network becomes an adversary that schedules messages.
