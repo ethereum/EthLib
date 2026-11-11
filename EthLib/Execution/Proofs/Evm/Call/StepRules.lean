@@ -344,32 +344,8 @@ theorem launchCreate (rules : OrdinaryStepRules fork R) {evm : Evm fork Meter} {
 theorem createStep (rules : OrdinaryStepRules fork R) {create2 : Bool} {evm : Evm fork Meter}
     {result : StepResult fork Meter} (h : createStep create2 evm = .ok result) :
     result.Keeps R (fun caller _ child => R caller child) evm := by
-  unfold Evm.createStep at h
-  by_cases hs : fork ≥ .glamsterdam ∧ evm.message.isStatic = true
-  · simp [hs, bind, Except.bind, throw, throwThe, MonadExceptOf.throw] at h
-  rw [ite_eq_right_of_eq_false _ _ (eq_false hs)] at h
-  obtain ⟨⟨_, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨⟨_, e2⟩, h2, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨⟨_, e3⟩, h3, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨⟨salt, e4⟩, h4, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨e5, h5, h⟩ := Base.bind_ok_iff.mp h
-  have m4 : SameContext e3 e4 := by
-    unfold popSalt at h4
-    split at h4
-    · obtain ⟨⟨_, e⟩, he, h4⟩ := Base.bind_ok_iff.mp h4
-      cases h4
-      exact popWord_sameContext he
-    · cases h4
-      exact SameContext.refl _
-  have m5 : R evm e5 := rules.sameContext (((((popWord_sameContext h1).trans
-    (popWord_sameContext h2)).trans (popWord_sameContext h3)).trans m4).trans
-    (chargeGasAndMemory_sameContext h5))
-  unfold genericCreate at h
-  split at h
-  · cases h
-  split at h
-  · cases h
-  exact rules.lift m5 (rules.launchCreate h)
+  obtain ⟨_, _, _, _, _, _, -, sc, -, -, -, launched⟩ := createStep_eq_ok h
+  exact rules.lift (rules.sameContext sc) (rules.launchCreate launched)
 
 /-- A successful instruction that may send a message keeps the relation. -/
 theorem messageInstruction (rules : OrdinaryStepRules fork R) {op : Op}
@@ -700,32 +676,8 @@ private theorem sends_launchCreate {evm : Evm fork Meter} {value : U256}
 private theorem sends_createStep {create2 : Bool} {evm : Evm fork Meter}
     {result : StepResult fork Meter} (h : createStep create2 evm = .ok result) :
     Sends evm result := by
-  unfold Evm.createStep at h
-  by_cases hs : fork ≥ .glamsterdam ∧ evm.message.isStatic = true
-  · simp [hs, bind, Except.bind, throw, throwThe, MonadExceptOf.throw] at h
-  rw [ite_eq_right_of_eq_false _ _ (eq_false hs)] at h
-  obtain ⟨⟨_, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨⟨_, e2⟩, h2, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨⟨_, e3⟩, h3, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨⟨salt, e4⟩, h4, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨e5, h5, h⟩ := Base.bind_ok_iff.mp h
-  have m4 : SameContext e3 e4 := by
-    unfold popSalt at h4
-    split at h4
-    · obtain ⟨⟨_, e⟩, he, h4⟩ := Base.bind_ok_iff.mp h4
-      cases h4
-      exact popWord_sameContext he
-    · cases h4
-      exact SameContext.refl _
-  have m5 : StaticStep evm e5 := .of_sameContext (((((popWord_sameContext h1).trans
-    (popWord_sameContext h2)).trans (popWord_sameContext h3)).trans m4).trans
-    (chargeGasAndMemory_sameContext h5))
-  unfold genericCreate at h
-  split at h
-  · cases h
-  split at h
-  · cases h
-  exact Sends.lift m5 (sends_launchCreate h)
+  obtain ⟨_, _, _, _, _, _, -, sc, -, -, -, launched⟩ := createStep_eq_ok h
+  exact Sends.lift (.of_sameContext sc) (sends_launchCreate launched)
 
 /-- A successful instruction that may send a message says what it sends. -/
 private theorem sends_messageInstruction {op : Op}
