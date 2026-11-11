@@ -1,7 +1,6 @@
 module
 
 public import EthLib.Execution.Proofs.Evm.Call.Create
-public import EthLib.Execution.Proofs.Evm.Call.Instructions
 public import EthLib.Execution.Proofs.State.Tracker
 
 /-!
@@ -23,13 +22,15 @@ Call preparation only adds account reads.
 
 Paying for the call changes no transaction state.
 
-A creation reads its sender before its balance, nonce and depth checks.
+A creation reads its sender before the checks on its balance, its nonce and the depth.
 
 When one of those checks fails, it runs no message and keeps only the read of the sender.
 
 Otherwise it reads the new address, and then either halts or raises the sender's nonce.
 
 Both paths keep the reads of the sender and of the new address.
+
+A creation also only adds account reads.
 
 The results describe the next frame or the caller before its child runs.
 
@@ -273,13 +274,17 @@ theorem state_callStep {kind : CallKind} {evm popped : Evm fork Meter} {call : C
 
 /-! ## The creations -/
 
-/-- A creation that has paid reads its sender first, before its balance, nonce and depth checks.
+/-- A creation that has paid reads its sender first, before the checks on the sender and the depth.
 
 When one of those checks fails, it runs no message and keeps only the read of the sender.
 
-Otherwise it derives the new address, reads it, and then either halts, or raises the sender's nonce.
+Otherwise it derives the new address, reads it, then halts or raises the sender's nonce.
 
-A collision at the new address runs no message, and keeps the new nonce and both reads. -/
+A halt keeps both reads, with an error that does not abort the execution.
+
+At an address that is not deployable, it runs no message, and keeps both reads and the new nonce.
+
+At a deployable address, it sends a message, and the caller keeps both reads and the new nonce. -/
 theorem state_launchCreate {evm : Evm fork Meter} {value : U256} {initCode : ByteArray}
     {salt : Option U256} {result : StepResult fork Meter}
     (h : launchCreate evm value initCode salt = .ok result) :
@@ -367,7 +372,7 @@ private theorem reads_incrementNonce_recordAccountRead {tx state : State.Transac
 
 /-- A creation that has paid adds its sender to the account reads, and keeps the storage reads.
 
-When its balance, nonce and depth checks pass, it also adds the new address to the account reads.
+When the checks on the sender and the depth pass, it also adds the new address.
 
 That holds whether the step then halts, finds a collision at the new address, or sends a message. -/
 theorem reads_launchCreate {evm : Evm fork Meter} {value : U256} {initCode : ByteArray}
@@ -402,37 +407,19 @@ theorem reads_launchCreate {evm : Evm fork Meter} {value : U256} {initCode : Byt
       dsimp only
       exact reads_incrementNonce_recordAccountRead hres.2
 
-/-- A creation after payment has the same state transition as the creation step that has paid. -/
-theorem state_genericCreate {evm : Evm fork Meter} {value : U256} {initCode : ByteArray}
-    {salt : Option U256} {result : StepResult fork Meter}
-    (h : genericCreate evm value initCode salt = .ok result) :
-    let current := evm.message.currentTarget
-    let sender := evm.state.getAccount current
-    let senderRead := evm.state.recordAccountRead current
-    ((sender.balance < value ∨ sender.nonce = MAX_NONCE ∨
-        evm.message.depth + 1 > STACK_DEPTH_LIMIT) ∧
-      ∃ after, result = .next after ∧ after.state = senderRead) ∨
-    (value ≤ sender.balance ∧ sender.nonce ≠ MAX_NONCE ∧
-      evm.message.depth + 1 ≤ STACK_DEPTH_LIMIT ∧
-      ∃ address, creationAddress current sender.nonce salt initCode = .ok address ∧
-        let both := senderRead.recordAccountRead address
-        match (generalizing := false) result with
-        | .next after =>
-          (after.state = both ∧ ∃ e, e.aborts = false ∧ after.error = some e) ∨
-          (evm.state.accountDeployable address = false ∧
-            both.incrementNonce fork current = .ok after.state)
-        | .child caller _ _ =>
-          evm.state.accountDeployable address = true ∧
-            both.incrementNonce fork current = .ok caller.state) :=
-  state_launchCreate (genericCreate_eq_ok h).2.2
-
-/-- CREATE and CREATE2 read the sender first, before their balance, nonce and depth checks.
+/-- CREATE and CREATE2 read the sender first, before the checks on the sender and the depth.
 
 When one of those checks fails, they run no message and keep only the read of the sender.
 
-Otherwise they derive the new address from the init code in grown memory, and read that address.
+Otherwise they derive the new address and read it.
 
-They then either halt with both reads, or raise the sender's nonce and keep both reads. -/
+CREATE2 hashes the init code that it reads from the grown memory.
+
+A halt keeps both reads, with an error that does not abort the execution.
+
+At an address that is not deployable, they run no message, and keep both reads and the new nonce.
+
+At a deployable address, they send a message, and the caller keeps both reads and the new nonce. -/
 theorem state_createStep {create2 : Bool} {evm : Evm fork Meter} {value start size : U256}
     {rest : List U256} {result : StepResult fork Meter}
     (hs : evm.stack.val = value :: start :: size :: rest)
@@ -467,7 +454,7 @@ theorem state_createStep {create2 : Bool} {evm : Evm fork Meter} {value start si
 
 /-- CREATE and CREATE2 add the sender to the account reads, and keep the storage reads.
 
-When their balance, nonce and depth checks pass, they also add the new address.
+When the checks on the sender and the depth pass, they also add the new address.
 
 That holds whether the step then halts, finds a collision at the new address, or sends a message. -/
 theorem reads_createStep {create2 : Bool} {evm : Evm fork Meter} {value start size : U256}

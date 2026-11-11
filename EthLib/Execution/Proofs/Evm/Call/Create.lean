@@ -22,6 +22,8 @@ No creation deploys code longer than 65536 bytes from Glamsterdam.
 A creation keeps the size of memory a multiple of 32, and so does the creator once it ends.
 
 So does every instruction that may send a message.
+
+A successful CREATE or CREATE2 pops its operands, grows memory, then launches the creation.
 -/
 
 @[expose] public section
@@ -110,9 +112,11 @@ theorem popSalt_eq_ok {create2 : Bool} {evm after : Evm fork Meter} {salt : Opti
     rw [hst]
     exact ⟨rfl, popWord_sameContext hp, hmem⟩
 
-/-- A creation after payment succeeds only in a non-static frame whose init code fits the limit.
+/-- A creation after payment succeeds only in a frame that is not static.
 
-It then runs the creation step that has paid. -/
+From Shanghai, its init code must also fit the limit.
+
+It then gives the result of the launch that follows those two checks. -/
 theorem genericCreate_eq_ok {evm : Evm fork Meter} {value : U256} {initCode : ByteArray}
     {salt : Option U256} {result : StepResult fork Meter}
     (h : genericCreate evm value initCode salt = .ok result) :
@@ -129,7 +133,11 @@ theorem genericCreate_eq_ok {evm : Evm fork Meter} {value : U256} {initCode : By
   revert hstatic
   cases evm.message.isStatic <;> simp
 
-/-- A successful step of CREATE or CREATE2 pops its operands, pays, grows memory and launches. -/
+/-- A successful step of CREATE or CREATE2 pops its operands, grows memory and launches.
+
+Its frame is not static, and from Shanghai its init code fits the limit.
+
+The salt of CREATE2 is the fourth word of the stack, and the frame keeps its context. -/
 theorem createStep_eq_ok {create2 : Bool} {evm : Evm fork Meter} {result : StepResult fork Meter}
     (h : createStep create2 evm = .ok result) :
     ∃ value start size rest paid,
