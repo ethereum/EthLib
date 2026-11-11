@@ -179,6 +179,7 @@ So the types that cross a module boundary are fixed here, and `EthLib/Base/` def
 - Bytes of a fixed length `n` are a `Vector UInt8 n`.
   The length is then part of the type, as `CONTRIBUTING.md` asks, and a 48-byte commitment cannot be passed where a 96-byte signature is expected.
   Such a value crosses a module boundary in its typed form, not as a `ByteArray`.
+  The exceptions today are `kzgCommitmentToVersionedHash`, `Bls.Signatures.verify` and `messageId`, which later pull requests convert.
   At an external interface, one parser turns the bytes into the typed value or a typed error.
   A C export, EVM call data and a wire format are such interfaces.
 - A fixed-size type keeps the name its source gives it, defined once by the layer that owns the concept.
@@ -196,6 +197,7 @@ So the types that cross a module boundary are fixed here, and `EthLib/Base/` def
   A name that the source only aliases, such as `Hash32 = Bytes32` in execution-specs, stays an `abbrev`.
   Two sources can disagree on whether a name is a type of its own, as they do for `Hash32`.
   Its definition then records both readings and the choice.
+  `EthLib/Base/Hash32.lean` does not record them yet.
 - An integer keeps the range its source gives it.
   An unbounded integer is a `Nat`, and a 64-bit one is a `UInt64`.
   Where the source makes overflow invalid, an operation that would overflow is an error, never a silent wrap.
