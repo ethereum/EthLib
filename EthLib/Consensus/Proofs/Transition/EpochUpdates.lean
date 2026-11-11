@@ -134,6 +134,27 @@ private theorem toNat_min_rounded {balance largest : Gwei} :
   · rename_i h
     rw [Nat.min_eq_right (Nat.le_of_lt (UInt64.lt_iff_toNat_lt.mp (UInt64.not_le.mp h)))]
 
+/-- An updated effective balance stays below the cap when the old one is below it. -/
+theorem updatedEffectiveBalance_le {largest balance effectiveBalance result : Gwei}
+    (old : effectiveBalance ≤ largest)
+    (computed : updatedEffectiveBalance preset largest balance effectiveBalance = .ok result) :
+    result ≤ largest := by
+  rcases updatedEffectiveBalance_cases computed with rfl | rfl
+  · exact old
+  · rw [UInt64.le_iff_toNat_le, toNat_min_rounded (preset := preset)]
+    exact Nat.min_le_right _ _
+
+/-- An updated effective balance is at most the greater of the old value and the balance.
+
+Keeping the old value need not put it below the balance. -/
+theorem updatedEffectiveBalance_le_max {largest balance effectiveBalance result : Gwei}
+    (computed : updatedEffectiveBalance preset largest balance effectiveBalance = .ok result) :
+    result.toNat ≤ max effectiveBalance.toNat balance.toNat := by
+  rcases updatedEffectiveBalance_cases computed with rfl | rfl
+  · exact Nat.le_max_left _ _
+  · rw [toNat_min_rounded (preset := preset)]
+    exact (Nat.min_le_left _ _).trans ((Nat.sub_le _ _).trans (Nat.le_max_right _ _))
+
 /-- The increment of a preset is positive and at most its upward band, as the hysteresis needs. -/
 abbrev Preset.IncrementWithinUpwardBand (preset : Preset) : Prop :=
   0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat ∧
