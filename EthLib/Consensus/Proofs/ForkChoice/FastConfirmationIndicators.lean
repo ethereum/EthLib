@@ -452,13 +452,13 @@ theorem stake_le_computeCommitteeWeightBetweenSlots {head : Root}
   rw [participantsOk, Except.ok.injEq] at readOk
   exact readOk ▸ (inside v member).1
 
-/-- The store's votes for a node from the committees of a range weigh at most those committees.
+/-- The store's votes for some nodes from the committees of a range weigh at most those committees.
 
 The weight may be that of a range from the same slot that ends later. -/
 theorem getNodeSupportBetweenSlots_le {head : Root} {balanceSource : BeaconState preset fork}
-    {node : ForkChoiceNode} {startSlot shortEnd endSlot : Slot} {support weight : Gwei}
+    {nodes : List ForkChoiceNode} {startSlot shortEnd endSlot : Slot} {support weight : Gwei}
     (supportOk :
-      store.getNodeSupportBetweenSlots head balanceSource node startSlot shortEnd = .ok support)
+      store.getNodeSupportBetweenSlots head balanceSource nodes startSlot shortEnd = .ok support)
     (weightOk : store.computeCommitteeWeightBetweenSlots head balanceSource startSlot endSlot =
       .ok weight)
     (le : shortEnd ≤ endSlot) : support.toNat ≤ weight.toNat := by
@@ -528,7 +528,7 @@ theorem computeEmptySlotSupportDiscount_le {head root : Root}
     subst discountOk
     exact UInt64.zero_le
   simp only [bind_ok_iff, mapError_ok_iff] at discountOk
-  obtain ⟨parentNode, -, lastEmpty, lastEmptyOk, parentSupport, supportOk, adversary, -, final⟩ :=
+  obtain ⟨parentNodes, -, lastEmpty, lastEmptyOk, parentSupport, supportOk, adversary, -, final⟩ :=
     discountOk
   simp only [pure, Except.pure, Except.ok.injEq] at final
   subst final

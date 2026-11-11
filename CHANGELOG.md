@@ -9,6 +9,16 @@ Not yet released.
 
 ### Changes that break callers
 
+- From Gloas, the discount for empty slots of the fast confirmation rule now also counts the votes for the pending node of the parent ([#1368](https://github.com/ethereum/EthLib/issues/1368)).
+  A parent has three nodes from Gloas: a pending one, and a full and an empty one for the two answers on its payload.
+  The discount counted only the votes for the full or the empty node that the block builds on.
+  It now counts the votes for that node and for the pending node, and the votes for the other of the two still stay out.
+  A vote from the slot of its block supports the pending node.
+  A member of the committees of the empty slots can hold such a vote for the parent, and the discount missed it.
+  Before Gloas the parent has only its pending node, and the discount keeps its value.
+  No signature of a C export or Python function changes, but a `fast_confirmation` step of `fork_choice` can confirm another block from Gloas.
+  In Lean, `Store.getNodeSupportBetweenSlots` takes a list of nodes in place of a node, and counts a vote for any of them.
+  `getNodeSupportBetweenSlots_le` takes that list too.
 - The block supply bound and the Glamsterdam equality now follow from the exact block supply equation ([#1902](https://github.com/ethereum/EthLib/issues/1902)).
   No C export or Python function changes.
   In Lean, `supply_systemCall`, `supply_systemCall_join`, `supply_startSystemCalls`, `supply_blockRequests` and `applyTransactions_supply` are gone from `EthLib.Execution.Proofs.Blocks.Supply`.

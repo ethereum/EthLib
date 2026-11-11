@@ -191,13 +191,15 @@ def getPulledUpHeadState (head : Root) : Except ForkChoiceError (BeaconState pre
     (processSlots config .bls headState start).mapError .transition
   else return headState
 
-/-- The votes for a node from the members of the committees of a range of slots.
+/-- The votes for any of a list of nodes from the members of the committees of a range of slots.
+
+The list is read as a set, since only membership in it is tested.
 
 A voter counts when it is active and not slashed in the source of balances, and not an equivocator.
 
 A vote from outside the range by a member of it may count too, which keeps the rule safe. -/
 def getNodeSupportBetweenSlots (head : Root) (balanceSource : BeaconState preset fork)
-    (node : ForkChoiceNode) (startSlot endSlot : Slot) : Except ForkChoiceError Gwei := do
+    (nodes : List ForkChoiceNode) (startSlot endSlot : Slot) : Except ForkChoiceError Gwei := do
   let participants ← store.getCommitteesBetweenSlots head startSlot endSlot
   let epoch := getCurrentEpoch balanceSource
   let counted ← participants.toList.filterM fun index => do
@@ -207,7 +209,7 @@ def getNodeSupportBetweenSlots (head : Root) (balanceSource : BeaconState preset
     match store.latestMessages[index]? with
     | none => return 0
     | some message =>
-      if (← store.getSupportedNode message) = node ∧ index ∉ store.equivocatingIndices then
+      if (← store.getSupportedNode message) ∈ nodes ∧ index ∉ store.equivocatingIndices then
         return (← validatorAt balanceSource index).effectiveBalance
       else return 0
 
@@ -263,6 +265,14 @@ def getAdversarialWeight (head : Root) (balanceSource : BeaconState preset fork)
 
 /-- The votes for the parent of a block from the committees of the empty slots between them.
 
+The votes for the pending node of the parent count.
+
+From Gloas the votes for the node of the parent that the block builds on count with them.
+
+That node is the full or the empty one, and it is the ancestor of the block at the parent's slot.
+
+The other of those two nodes is not an ancestor of the block, so the votes for it stay out.
+
 The adversarial weight of those slots is taken off, since the adversary may move its votes. -/
 def computeEmptySlotSupportDiscount (head : Root) (balanceSource : BeaconState preset fork)
     (root : Root) : Except ForkChoiceError Gwei := do
@@ -270,10 +280,15 @@ def computeEmptySlotSupportDiscount (head : Root) (balanceSource : BeaconState p
   let parentBlock ← store.block block.parentRoot
   let firstEmpty ← (addChecked parentBlock.slot 1).mapError .arith
   if firstEmpty = block.slot then return 0
-  let parentNode ← store.getAncestor ⟨root, .pending⟩ parentBlock.slot
+  let parentPendingNode : ForkChoiceNode := ⟨block.parentRoot, .pending⟩
+  let parentNodes ←
+    (if .glamsterdam ≤ fork then do
+      let parentNode ← store.getAncestor ⟨root, .pending⟩ parentBlock.slot
+      pure [parentPendingNode, parentNode]
+    else pure [parentPendingNode])
   let lastEmpty ← (subChecked block.slot 1).mapError .arith
   let parentSupport ←
-    store.getNodeSupportBetweenSlots head balanceSource parentNode firstEmpty lastEmpty
+    store.getNodeSupportBetweenSlots head balanceSource parentNodes firstEmpty lastEmpty
   let adversarialWeight ←
     store.computeAdversarialWeight config head balanceSource firstEmpty lastEmpty
   return saturatingSub parentSupport adversarialWeight
