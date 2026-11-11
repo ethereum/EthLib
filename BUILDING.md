@@ -46,13 +46,16 @@ Each primitive operation has one law, a public theorem that states the operation
 Only the operations built from the primitives carry `@[expose]`.
 A client then reasons through the laws, so a change of representation breaks only the proofs of the laws.
 The file of the laws imports the module with a targeted `import all`, as the next paragraph describes.
+Even so, prove each law with tactics that unfold the primitive, such as `unfold` and then `rfl`, not with the term `rfl`.
+Lean checks a public theorem whose proof is the term `rfl` against exposed bodies only, so it rejects such a law.
 
 Proofs sometimes need more than the public interface offers.
 A proof-only import can use a plain `import` when it contributes nothing to the public API.
 When you reason about a dependency, prefer its public equations.
 If a proof needs the body of a definition, a targeted `import all` can provide it, either from the same package or from a dependency that permits private imports.
 Comment the exact definition whose body the proof needs.
-EthLib does not permit private imports, so a package that depends on EthLib cites the laws of a hidden module instead.
+EthLib does not set Lake's option `allowImportAll`, so a package that depends on EthLib cites the laws of a hidden module instead.
+Lake v4.35.0 does not enforce that option, so the build allows such an import, and this is a rule of the repository.
 Give a public definition an explicit result type when a delayed proof cannot infer it.
 Keep compatibility options such as `backward.proofsInPublic` disabled.
 
