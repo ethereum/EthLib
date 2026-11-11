@@ -9,6 +9,11 @@ Not yet released.
 
 ### Changes that break callers
 
+- Slashing-protection imports use EIP-3076's minimal strategy ([#1963](https://github.com/ethereum/EthLib/issues/1963)).
+  Each key keeps its greatest block slot and independent greatest source and target epochs, without signing roots.
+  Imported histories and their roots are discarded, so old messages and repeats at the imported boundary can be refused.
+  The JSON format and the C and Python signatures are unchanged.
+
 - The cumulative churn bounds also hold for idle queues ([#1451](https://github.com/ethereum/EthLib/issues/1451)).
   In Lean, `churnQueue_foldlM_le` drops its `first` argument, and `computeExitEpochAndUpdateChurn_foldlM_le` and `computeConsolidationEpochAndUpdateChurn_foldlM_le` drop their `open_` argument.
   Callers remove that argument.
