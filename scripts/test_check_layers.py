@@ -187,8 +187,8 @@ class Rules(unittest.TestCase):
         )
         self.assert_fails(
             tree,
-            "EthLib/Execution/Exports/A.lean: meta-imports EthLib.Execution.A, "
-            "but a module of the Exports library runs no EthLib code while it is elaborated",
+            "EthLib/Execution/Exports/A.lean:4: meta-imports EthLib.Execution.A, "
+            "but no export runs specification code while it is elaborated",
         )
 
     def test_export_proof_meta_imports_the_specification(self):
@@ -198,6 +198,47 @@ class Rules(unittest.TestCase):
         tree["EthLib.Execution.Exports.Proofs.A"] = "module\n\nmeta import EthLib.Execution.A\n"
         self.assert_fails(tree, "meta-imports EthLib.Execution.A")
 
+    def test_imported_property_meta_imports_the_specification(self):
+        # The property can define an `elab` that runs specification code inside the export.
+        tree: dict[str, list[str] | str] = dict(
+            with_imports("EthLib.Execution.Exports.A", "EthLib.Execution.Proofs.A")
+        )
+        tree["EthLib.Execution.Proofs.A"] = (
+            "module\n\npublic import EthLib.Execution.A\npublic meta import EthLib.Execution.A\n"
+        )
+        self.assert_fails(
+            tree,
+            "EthLib/Execution/Proofs/A.lean:4: meta-imports EthLib.Execution.A, "
+            "but EthLib.Execution.Exports.A reaches it, "
+            "and no export runs specification code while it is elaborated",
+        )
+
+    def test_specification_meta_imports_the_specification(self):
+        # An export imports `EthLib.Execution.A` plainly, as `PyValue` imports `Hex`.
+        tree: dict[str, list[str] | str] = dict(GOOD)
+        tree["EthLib.Execution.A"] = (
+            "module\n\npublic import EthLib.Networking.A\npublic import EthLib.Base.A\n"
+            "public meta import EthLib.Base.A\n"
+        )
+        self.assert_fails(
+            tree,
+            "EthLib/Execution/A.lean:5: meta-imports EthLib.Base.A, "
+            "but a specification never uses `meta import`",
+        )
+
+    def test_specification_meta_imports_the_toolchain(self):
+        tree: dict[str, list[str] | str] = dict(GOOD)
+        tree["EthLib.Base.A"] = "module\n\npublic meta import Lean.Elab.Command\n"
+        self.assert_fails(tree, "a specification never uses `meta import`")
+
+    def test_export_meta_imports_a_property_that_reaches_the_specification(self):
+        tree: dict[str, list[str] | str] = dict(with_imports("EthLib.Exports"))
+        tree["EthLib.Execution.Exports.A"] = (
+            "module\n\npublic import EthLib.Execution.A\n"
+            "public meta import EthLib.Execution.Proofs.A\n"
+        )
+        self.assert_fails(tree, "meta-imports EthLib.Execution.Proofs.A")
+
     def test_export_meta_imports_the_toolchain(self):
         tree: dict[str, list[str] | str] = dict(with_imports("EthLib.Exports"))
         tree["EthLib.Execution.Exports.A"] = (
@@ -205,7 +246,20 @@ class Rules(unittest.TestCase):
         )
         self.assertEqual(Tree(tree).problems(), [])
 
+    def test_export_meta_imports_an_export_of_the_toolchain(self):
+        # As `derive_py` would be, if its module imported only the toolchain.
+        tree: dict[str, list[str] | str] = dict(
+            with_imports("EthLib.Exports", "EthLib.Execution.Exports.Derive")
+        )
+        tree["EthLib.Execution.Exports.Derive"] = ["Lean.Elab.Command"]
+        tree["EthLib.Execution.Exports.A"] = (
+            "module\n\npublic import EthLib.Execution.A\n"
+            "public meta import EthLib.Execution.Exports.Derive\n"
+        )
+        self.assertEqual(Tree(tree).problems(), [])
+
     def test_property_meta_imports_the_specification(self):
+        # No export reaches the property, so its elaboration never runs inside an export.
         tree: dict[str, list[str] | str] = dict(with_imports("EthLib.Proofs"))
         tree["EthLib.Execution.Proofs.A"] = (
             "module\n\npublic import EthLib.Execution.A\nmeta import EthLib.Execution.A\n"
@@ -278,7 +332,7 @@ class Header(unittest.TestCase):
         )
         self.assertEqual(
             layers.header_imports(text),
-            [("EthLib.A", False), ("EthLib.B", True), ("EthLib.C", True)],
+            [("EthLib.A", False, 3), ("EthLib.B", True, 4), ("EthLib.C", True, 5)],
         )
 
     def test_header_ends_at_the_first_command(self):

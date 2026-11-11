@@ -5,6 +5,7 @@ import re
 import sys
 from collections import deque
 from pathlib import Path
+from typing import NamedTuple
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -42,15 +43,26 @@ ROOTS = re.compile(r"roots\s*:=\s*#\[(.*?)\]", re.S)
 LAYER_ROW = re.compile(r"^\|\s*([A-Za-z]+)\s*\|.*\|\s*`EthLib/([A-Za-z]+)/`\s*\|\s*$", re.M)
 
 
-def header_imports(text: str) -> list[tuple[str, bool]]:
-    """The modules that a Lean file imports, read from its header, each with whether it is meta."""
+class Import(NamedTuple):
+    """One import line of a module header."""
+
+    module: str
+    meta: bool
+    line: int
+
+
+def header_imports(text: str) -> list[Import]:
+    """The imports of a Lean file, read from its header."""
     code = strip_lean(text)
     found, index = [], 0
     while True:
         if word := HEADER_WORD.match(code, index):
             index = word.end()
         elif match := IMPORT.match(code, index):
-            found.append((match.group(2).replace("«", "").replace("»", ""), bool(match.group(1))))
+            module = match.group(2).replace("«", "").replace("»", "")
+            # `strip_lean` keeps every newline, so the line number is the one in the file.
+            line = code.count("\n", 0, match.start(2)) + 1
+            found.append(Import(module, bool(match.group(1)), line))
             index = match.end()
         else:
             return found
@@ -58,19 +70,63 @@ def header_imports(text: str) -> list[tuple[str, bool]]:
 
 def imports(text: str) -> list[str]:
     """The modules that a Lean file imports, read from its header."""
-    return [module for module, _ in header_imports(text)]
+    return [found.module for found in header_imports(text)]
 
 
-def meta_problems(module: str, meta_imported: list[str]) -> list[str]:
+def meta_problems(
+    headers: dict[str, list[Import]], graph: dict[str, list[str]]
+) -> list[tuple[str, Import, str]]:
     """
-    Each EthLib module that a module of the `Exports` library imports with `meta import`.
+    Each `meta import` that could let an export run specification code while it is elaborated.
 
-    Under the module system, code that runs while a module is elaborated needs `meta import`.
-    So a module of `Exports` that meta-imports no EthLib module runs no EthLib code then.
+    Each problem is the module that writes the import, the import, and the rule it breaks.
+
+    Under the module system, a module runs imported code at elaboration only through `meta import`.
+    But an `elab` defined in another module runs while the module that uses it is elaborated.
+    `derive_py` is such an `elab`: it runs while an export is elaborated.
+    Its module meta-imports only the toolchain.
+    So the check walks every module that an export reaches through its imports, of any kind.
+    A `meta import` also makes the code of every module that the imported one reaches runnable.
+    So no module on that walk meta-imports a module that reaches the specification.
+
+    A specification never uses `meta import`, whether an export reaches it today or not.
+    An `elab` or a `meta def` written in a specification with no `meta import` is not seen here.
     """
-    if "Exports" not in module.split("."):
-        return []
-    return [imported for imported in meta_imported if imported.split(".")[0] == "EthLib"]
+    reaches: dict[str, bool] = {}
+
+    def reaches_specification(module: str) -> bool:
+        if module not in reaches:
+            # Lean rejects a cycle of imports; the mark only keeps a broken tree from looping.
+            reaches[module] = False
+            reaches[module] = module in graph and (
+                kind(module) == "specification"
+                or any(reaches_specification(imported) for imported in graph[module])
+            )
+        return reaches[module]
+
+    # Walk breadth first, and remember an export that reaches each module.
+    exports = [name for name in sorted(graph) if "Exports" in name.split(".")]
+    reached = {name: name for name in exports}
+    queue = deque(exports)
+    while queue:
+        current = queue.popleft()
+        for imported in graph[current]:
+            if imported in graph and imported not in reached:
+                reached[imported] = reached[current]
+                queue.append(imported)
+
+    problems = []
+    for name in sorted(headers):
+        for found in headers[name]:
+            if not found.meta:
+                continue
+            if kind(name) == "specification":
+                problems.append((name, found, "a specification never uses `meta import`"))
+            elif name in reached and reaches_specification(found.module):
+                via = "" if reached[name] == name else f"{reached[name]} reaches it, and "
+                rule = f"{via}no export runs specification code while it is elaborated"
+                problems.append((name, found, rule))
+    return problems
 
 
 def module_name(path: Path, root: Path) -> str:
@@ -173,7 +229,7 @@ def check(root: Path) -> list[str]:
     headers = {
         name: header_imports(path.read_text(encoding="utf-8")) for name, path in modules.items()
     }
-    graph = {name: [imported for imported, _ in found] for name, found in headers.items()}
+    graph = {name: [found.module for found in lines] for name, lines in headers.items()}
 
     for name, path in modules.items():
         if name not in AGGREGATORS and layer(name) is None:
@@ -197,12 +253,11 @@ def check(root: Path) -> list[str]:
             "breaks no rule any more; remove the entry"
         )
 
-    for name, found in headers.items():
-        for imported in meta_problems(name, [m for m, meta in found if meta]):
-            problems.append(
-                f"{modules[name].relative_to(root)}: meta-imports {imported}, "
-                "but a module of the Exports library runs no EthLib code while it is elaborated"
-            )
+    for name, found, rule in meta_problems(headers, graph):
+        problems.append(
+            f"{modules[name].relative_to(root)}:{found.line}: meta-imports {found.module}, "
+            f"but {rule}"
+        )
 
     for name, imported, target in scheme_problems(graph):
         via = "" if imported == target else f", which reaches {target}"
