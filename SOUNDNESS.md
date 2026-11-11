@@ -1828,6 +1828,21 @@ The honest support of the target of the current epoch takes the total active bal
 No theorem proves that, which rests on the shuffling of the head and its pulled-up state agreeing on the active validators of the epoch.
 Each member of the committees must also be in the source of balances, or the rule fails; no theorem bounds the epochs between that source and the range.
 
+`Consensus/Proofs/ForkChoice/FastConfirmationConfirmedRoot.lean` states where the confirmed block of a slot comes from.
+`Store.onFastConfirmation_confirmedRoot` shows that the rule starts from the block stored before, the finalized block or the observed justified block.
+It keeps the block stored before only when that block is in the chain of the head, and at the first slot of an epoch only when `isConfirmedChainSafe` accepts it.
+It takes the observed justified block only at the first slot of an epoch, when that checkpoint is the unrealized justification of the head.
+The rule stores that block, or a later root of the walk of `getAncestorRoots` from that block to the head.
+That root and each root before it in the walk then pass `isOneConfirmed`, with the votes of the state of the observed justified checkpoint.
+The rule makes two walks, and `Store.getAncestorRoots_of_append` in `Consensus/Proofs/ForkChoice/AncestorRoots.lean` joins them into one.
+No theorem yet shows that the roots of a walk are in the chain of the head.
+These theorems prove no safety: no theorem yet shows that a start is safe, or that a one-confirmed walk keeps a block in the chain of every honest head.
+They do not record every check of the rule.
+For the start they leave out the checks that compare the epochs and the slots of the blocks.
+For the walks they leave out the check that the head of the slot before holds each block of the first walk.
+They leave out the checks that a voting source or an unrealized justification is recent.
+They also leave out `willNoConflictingCheckpointBeJustified` and `willCurrentTargetBeJustified`, which are about the justification of the target of the current epoch.
+
 ### Honest validator duties
 
 `Consensus/HonestValidator.lean` holds what an honest validator computes for its duties.
