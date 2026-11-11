@@ -1,24 +1,27 @@
 module
 
-public import EthLib.Base.Proofs.MapM
-public import EthLib.Execution.Blocks.SystemCall
 public import EthLib.Execution.Proofs.Blocks.AccessListFollow
-public import EthLib.Execution.Proofs.Blocks.SystemCall
 public import EthLib.Execution.Proofs.Blocks.SystemCall.Contract
 public import EthLib.Execution.Proofs.Evm.Call.Rebuild
 
 /-!
 # Proofs: the access-list builder follows the system calls
 
-From Spurious Dragon, a system call runs one message with zero value and no authorization.
+A system call runs one message with zero value and no authorization.
 
 Its target has code whenever the frame runs nonempty bytecode or follows a delegation indicator.
 
-By EIP-7610, any creation inside the call fails at an address that already holds storage.
+By [EIP-7610][eip7610], any creation inside the call fails at an address that already holds storage.
+
+From Spurious Dragon, a created account starts at nonce 1, so it may hold storage.
 
 So unwritten storage words keep their block values, and each read code hashes to its key.
 
 Thus the access-list builder follows the call, and the block state afterward can still be rebuilt.
+
+This needs the block state before the call to be rebuildable: no empty account holds storage.
+
+[eip7610]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-7610.md#specification
 -/
 
 @[expose] public section
@@ -30,23 +33,15 @@ open EthLib.Execution.Evm
 open EthLib.Execution.State
 open EthLib.Execution.Transactions
 
-/-- With no write on a block state that can be rebuilt, the transaction state has `RebuildState`. -/
-theorem Rebuildable.rebuildState {block : BlockState} (valid : Rebuildable block) :
-    RebuildState block (.ofBlock block) :=
-  RebuildState.ofBlock valid.code valid.storage
-
-/-- Every `RebuildState` satisfies `RebuildInvariant`. -/
-theorem _root_.EthLib.Execution.Evm.RebuildState.rebuildInvariant {block : BlockState}
-    {tx : TransactionState} (valid : RebuildState block tx) : RebuildInvariant tx :=
-  ⟨valid.code, valid.emptyStorage⟩
-
-/-- Every `RebuildState` is `Followable` on its block. -/
+/-- The access-list builder follows every state with the rebuild property on its block. -/
 theorem _root_.EthLib.Execution.Evm.RebuildState.followable {block : BlockState}
     {tx : TransactionState} (valid : RebuildState block tx) : Followable block tx :=
   ⟨valid.parent, fun _ _ hslot => valid.getStorage_of_slot_eq_none hslot,
     fun _ _ code _ hread => valid.code _ code hread⟩
 
-/-- Preparing the first frame of a system message keeps `RebuildState` and prepares a valid call. -/
+/-- Preparing the first frame of a system message keeps the rebuild property and moves no value.
+
+If the frame runs code, its target has a nonce or code. -/
 private theorem prepareFirstFrame_systemMessage {fork : Fork} {Meter : Type} [GasMeter Meter]
     {env : BlockEnvironment fork} {block : BlockState} {target : Address} {data : ByteArray}
     {first : FirstFrame fork Meter} (valid : RebuildState block (.ofBlock block))
@@ -103,7 +98,7 @@ private theorem prepareFirstFrame_systemMessage {fork : Fork} {Meter : Type} [Ga
       · cases h
         exact ⟨vs2, rfl, fun _ => hs2_nc⟩
 
-/-- Running a system message from Spurious Dragon keeps `RebuildState`. -/
+/-- From Spurious Dragon, running a system message keeps the rebuild property. -/
 private theorem processMessageCall_systemMessage {fork : Fork} {Meter : Type} [GasMeter Meter]
     [LawfulGasMeter Meter] (hfork : .spuriousDragon ≤ fork) {env : BlockEnvironment fork}
     {block : BlockState} {target : Address} {data : ByteArray} {out : CallOutput}
@@ -111,7 +106,7 @@ private theorem processMessageCall_systemMessage {fork : Fork} {Meter : Type} [G
     (h : processMessageCall (Meter := Meter) env.chainId.toNat (systemMessage env target data)
       (.ofBlock block) Substate.empty = .ok out) :
     RebuildState block out.state := by
-  have v0 := valid.rebuildState
+  have v0 := RebuildState.ofBlock valid
   unfold processMessageCall at h
   rcases hprep : prepareFirstFrame (Meter := Meter) env.chainId.toNat
       (systemMessage env target data) (.ofBlock block) Substate.empty [] ∅ with ⟨e, read⟩ | first
@@ -138,7 +133,7 @@ private theorem processMessageCall_systemMessage {fork : Fork} {Meter : Type} [G
     rw [hframe_state]
     exact vended
 
-/-- From Spurious Dragon, a system call on a rebuildable block state keeps `RebuildState`. -/
+/-- From Spurious Dragon, a system call keeps the rebuild property of its block state. -/
 theorem systemCall_rebuildState {fork : Fork} (hfork : .spuriousDragon ≤ fork)
     {env : BlockEnvironment fork} {block : BlockState} {target : Address} {data : ByteArray}
     {out : SystemCallOutput} (valid : Rebuildable block)
@@ -164,68 +159,13 @@ theorem systemCall_rebuildable {fork : Fork} (hfork : .spuriousDragon ≤ fork)
     {out : SystemCallOutput} (valid : Rebuildable block)
     (h : systemCall env block target data = .ok out) :
     Rebuildable out.block :=
-  (systemCall_rebuildState hfork valid h).rebuildInvariant.ofBlock_incorporateTxIntoBlock
+  (systemCall_rebuildState hfork valid h).toRebuildInvariant.ofBlock_incorporateTxIntoBlock
 
-/-- Joining a followed state that can be rebuilt keeps `Rebuildable` and `Tracks`, at its index. -/
-private theorem join_tracks_rebuildable {body body' : BodyState} {tx : TransactionState}
-    {base : BlockState} (h : body.builder.Tracks base body.block)
-    (hfollow : Followable body.block tx) (hreb : Rebuildable tx.incorporateTxIntoBlock.parent)
-    (hjoin : body.join tx = .ok body') :
-    Rebuildable body'.block ∧ body'.builder.Tracks base body'.block ∧
-      body'.builder.index = body.builder.index := by
-  obtain ⟨builder, hrecord, rfl⟩ := BodyState.join_eq_ok hjoin
-  exact ⟨hreb, h.recordTransaction hfollow hrecord,
-    (AccessListBuilder.recordTransaction_index hrecord).1⟩
+/-- From Paris, the empty block state can be rebuilt, and a system call on it succeeds.
 
-/-- The system calls at the start of a block keep `Rebuildable` and `Tracks`, at the same index. -/
-theorem startSystemCalls_rebuildable {fork : Fork} {env : BlockEnvironment fork}
-    {parentHash : Hash32} {body body' : BodyState} {base : BlockState}
-    (valid : Rebuildable body.block) (tracks : body.builder.Tracks base body.block)
-    (h : startSystemCalls env parentHash body = .ok body') :
-    Rebuildable body'.block ∧ body'.builder.Tracks base body'.block ∧
-      body'.builder.index = body.builder.index := by
-  obtain ⟨mid, hFirst, hNoFirst, hSecond, hNoSecond⟩ := startSystemCalls_eq_ok h
-  have hmid : Rebuildable mid.block ∧ mid.builder.Tracks base mid.block ∧
-      mid.builder.index = body.builder.index := by
-    by_cases hDencun : .dencun ≤ fork
-    · obtain ⟨out, hOut, hJoin⟩ := hFirst hDencun
-      have hsd : .spuriousDragon ≤ fork := Nat.le_trans (by decide) hDencun
-      exact join_tracks_rebuildable tracks (systemCall_followable hsd valid hOut)
-        (systemCall_rebuildable hsd valid hOut) hJoin
-    · obtain rfl := hNoFirst hDencun
-      exact ⟨valid, tracks, rfl⟩
-  by_cases hPectra : .pectra ≤ fork
-  · obtain ⟨out, hOut, hJoin⟩ := hSecond hPectra
-    have hsd : .spuriousDragon ≤ fork := Nat.le_trans (by decide) hPectra
-    obtain ⟨h1, h2, h3⟩ := join_tracks_rebuildable hmid.2.1 (systemCall_followable hsd hmid.1 hOut)
-      (systemCall_rebuildable hsd hmid.1 hOut) hJoin
-    exact ⟨h1, h2, h3.trans hmid.2.2⟩
-  · rw [hNoSecond hPectra]
-    exact hmid
+The call goes to the beacon roots address, which holds no code there.
 
-/-- Reading the request contracts keeps `Rebuildable` and `Tracks`. -/
-theorem readRequests_rebuildable {fork : Fork} {env : BlockEnvironment fork}
-    {base : BlockState} {body body' : BodyState} {requests : List ByteArray}
-    (valid : Rebuildable body.block) (tracks : body.builder.Tracks base body.block)
-    (h : readRequests env body = .ok (body', requests)) :
-    Rebuildable body'.block ∧ body'.builder.Tracks base body'.block := by
-  by_cases hPectra : .pectra ≤ fork
-  · have hsd : .spuriousDragon ≤ fork := Nat.le_trans (by decide) hPectra
-    rw [readRequests_of_pectra hPectra] at h
-    refine foldlM_ok_invariant
-      (fun s : BodyState × List ByteArray =>
-        Rebuildable s.1.block ∧ s.1.builder.Tracks base s.1.block)
-      (fun s _ s' hs hs' => ?_) ⟨valid, tracks⟩ h
-    obtain ⟨out, hOut, hJoin, -⟩ := readRequest_eq_ok hs'
-    have hCall := (checkedSystemCall_ok hOut).2.1
-    obtain ⟨h1, h2, -⟩ := join_tracks_rebuildable hs.2 (systemCall_followable hsd hs.1 hCall)
-      (systemCall_rebuildable hsd hs.1 hCall) hJoin
-    exact ⟨h1, h2⟩
-  · rw [readRequests_of_lt_pectra (Nat.lt_of_not_le hPectra)] at h
-    cases h
-    exact ⟨valid, tracks⟩
-
-/-- The empty block state can be rebuilt, and a system call on it to the beacon roots succeeds. -/
+The builder follows the call, and the state after it can still be rebuilt. -/
 theorem exists_rebuildable_systemCall {fork : Fork} (hfork : .paris ≤ fork)
     (env : BlockEnvironment fork) (data : ByteArray) :
     ∃ (block : BlockState) (out : SystemCallOutput),
