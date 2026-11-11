@@ -113,11 +113,6 @@ variable {m n : Type → Type} [Monad m] [Monad n] [LawfulMonad m] [LawfulMonad 
 
 include map_pure map_bind
 
-/-- The map keeps `map` too. -/
-theorem map_monad_map {β γ : Type} (g : β → γ) (x : m β) : φ (g <$> x) = g <$> φ x := by
-  rw [map_eq_bind_pure_comp, map_eq_bind_pure_comp, map_bind]
-  simp only [Function.comp_def, map_pure]
-
 omit [LawfulMonad m] [LawfulMonad n] in
 /-- A tweakable hash call commutes with the map. -/
 theorem th_map_monad (pkSeed : PkSeed) (adrs : Adrs) (payload : ByteArray) :
@@ -190,7 +185,7 @@ theorem otsLeaf_map_monad (pkSeed : PkSeed) (key : OtsKey) (msg : Digest) (count
     (y : Vector Digest V) :
     φ (otsLeaf H pkSeed key msg counter y)
       = otsLeaf (fun x => φ (H x)) pkSeed key msg counter y := by
-  rw [otsLeaf, otsLeaf, map_bind, encode, encode, map_monad_map φ map_pure map_bind,
+  rw [otsLeaf, otsLeaf, map_bind, encode, encode, HashSig.map_monad_map φ map_pure map_bind,
     th_map_monad φ map_pure map_bind]
   refine congrArg _ (funext fun x => ?_)
   cases x with

@@ -12,6 +12,8 @@ Take a map of monads that keeps `pure` and `bind`.
 
 It sends each algorithm over a hash `H` and a seed function to the algorithm over their images.
 
+Most signing algorithms also need both monads to be lawful.
+
 Simulating the oracle queries of a computation is such a map.
 
 So a game written over one oracle is, once simulated, the same game over another.
@@ -112,7 +114,9 @@ theorem layerRoot_map_monad (pp : PublicParam) (layer : Layer) (e : Nat) (msg : 
 
 /-! ## Signing
 
-The codeword test maps a digest, so signing uses lawful monads. -/
+The codeword test maps a digest.
+
+From the codeword search on, the lemmas assume both monads lawful, so the map also keeps `map`. -/
 
 section Sign
 
@@ -125,18 +129,13 @@ theorem randomizerBase_map_monad (pp : PublicParam) (layer : Layer) (e : UInt32)
 
 variable [LawfulMonad m] [LawfulMonad m']
 
-private theorem map_monad_map {β γ : Type} (f : β → γ) (x : m β) :
-    φ (f <$> x) = f <$> φ x := by
-  rw [map_eq_bind_pure_comp, map_eq_bind_pure_comp, map_bind]
-  simp only [Function.comp_def, map_pure]
-
 /-- The codeword search, over the image of `H`. -/
 theorem findCodeword_map_monad (pp : PublicParam) (layer : Layer) (e : UInt32)
     (msg : ByteArray) (base : Randomizer) (c fuel : Nat) :
     φ (Internal.findCodeword H pp layer e msg base c fuel) =
       Internal.findCodeword (fun x => φ (H x)) pp layer e msg base c fuel := by
   simp only [Internal.findCodeword, Wots.findFirst_map_monad φ map_pure map_bind,
-    map_monad_map φ map_pure map_bind, messageDigest, th_map_monad φ map_pure map_bind]
+    HashSig.map_monad_map φ map_pure map_bind, messageDigest, th_map_monad φ map_pure map_bind]
 
 /-- A one-time signature, over the images of `H` and of the seed function. -/
 theorem otsSign_map_monad (pp : PublicParam) (layer : Layer) (e : UInt32) (msg : ByteArray) :
