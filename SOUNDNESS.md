@@ -1874,6 +1874,14 @@ Here `e` is the balance, `M` is the largest effective balance of the preset, and
 They assume `0 < M`, `e <= M` and `M * (2^b - 1) < 2^64`.
 These theorems do not model SHA-256 or a sequence of draws.
 
+`Consensus/Proofs/Accessors/DrawRandomOracle.lean` exposes the hash call of `proposerDraw` as `queryProposerDraw`.
+Answering it with SHA-256 gives `proposerDraw`.
+With the cached random oracle, the acceptance probability is the same when that input is absent from the starting cache.
+The seed is fixed, and other inputs may already be cached.
+For two distinct inputs absent from that cache, `prEvent_queryProposerDraw_pair_of_fresh` gives the product of their acceptance probabilities.
+No theorem yet gives that product for draws that read different bytes of one cached digest, or for the whole search.
+Seed derivation is not part of this model.
+
 ### Honest validator duties
 
 `Consensus/HonestValidator.lean` holds what an honest validator computes for its duties.
