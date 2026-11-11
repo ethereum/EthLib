@@ -12,9 +12,9 @@ It is at most the balance plus the downward band of hysteresis.
 
 It does not rise while the balance stays within the upward band of it.
 
-Unless it is the old one, it is at most the balance and at most the cap.
+Unless it is the old one, it is at most the balance and at most the largest.
 
-So when the old effective balance is at most the cap, the updated one is too.
+So when the old effective balance is at most the largest, the updated one is too.
 
 It is also at most the greater of the old effective balance and the balance.
 
