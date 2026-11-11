@@ -34,6 +34,7 @@ public import EthLib.Execution.Proofs.Blocks.TypedRoots
 public import EthLib.Execution.Proofs.Blocks.Validate
 public import EthLib.Execution.Proofs.Blocks.Withdrawal
 public import EthLib.Execution.Proofs.Blocks.WithdrawalCodec
+public import EthLib.Execution.Proofs.Blocks.WithdrawalFollow
 
 /-!
 # `EthLib.Execution.Proofs.Blocks`
