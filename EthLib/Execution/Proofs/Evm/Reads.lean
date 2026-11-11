@@ -136,20 +136,6 @@ theorem mem_accountReads_balanceStep {evm after : Evm fork Meter} {word : U256}
   · cases h
     exact (State.TransactionState.mem_accountReads_recordAccountRead _ _ _).mpr (.inl rfl)
 
-omit [GasMeter Meter] in
-/-- An access to an address changes only the substate, so the state stays exactly as it was. -/
-theorem state_accessAddress (evm : Evm fork Meter) (address : Address) :
-    (accessAddress evm address).2.state = evm.state := by
-  unfold accessAddress
-  split <;> rfl
-
-omit [GasMeter Meter] in
-/-- An access to a storage key changes only the substate, so the state stays exactly as it was. -/
-theorem state_accessStorageKey (evm : Evm fork Meter) (address : Address) (key : Bytes32) :
-    (accessStorageKey evm address key).2.state = evm.state := by
-  unfold accessStorageKey
-  split <;> rfl
-
 /-- BALANCE adds the account at its address to the account reads.
 
 It keeps every other read. -/
