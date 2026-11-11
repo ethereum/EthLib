@@ -148,7 +148,7 @@ theorem updatedEffectiveBalance_le_of_le {largest balance effectiveBalance resul
   · rw [UInt64.le_iff_toNat_le, toNat_min_rounded (preset := preset)]
     exact Nat.min_le_right _ _
 
-/-- An updated effective balance is at most the greater of the old effective balance and the balance.
+/-- An updated effective balance is at most the greater of the old one and the balance.
 
 A kept old effective balance can exceed the balance, so the bound needs both values. -/
 theorem updatedEffectiveBalance_le_max {largest balance effectiveBalance result : Gwei}
