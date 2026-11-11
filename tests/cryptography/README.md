@@ -20,7 +20,11 @@ A `SHA256SUMS` starts with one `# Source:` line for each source of its cases, an
 The `kzg/` cases and the `eth_*` cases of `bls/` come from the general test archive of consensus-specs `v1.7.0-alpha.12`.
 They match the cases in its `general.tar.gz` byte for byte, and that archive has sha256 `329f3cf58927df2614ecafbce78eb3c5258a13e8731d2f410bb31d8e4a5b9eaf`.
 That release came out before consensus-specs#5398, which removed the KZG specification and its generators from consensus-specs and pointed to this repository.
-Its cases were written by the Python specification, not by EthLib, and the digests preserve that independent provenance for the cases committed here.
+At that release, the reference tests replace ten public KZG functions of the specification with `ckzg` 2.1.7, the Python binding of `ethereum/c-kzg-4844`.
+Its `Makefile` passes `--kzg-type=ckzg` by default (line 205 at that release), and `utils/ckzg_utils.py` makes the replacement.
+So `ckzg` computed 325 of the 344 cases.
+The Python specification computed the other 19, those of `compute_challenge` and `compute_verify_cell_kzg_proof_batch_challenge`.
+EthLib computed none of these cases, and the digests preserve that independent provenance for the cases committed here.
 
 Later releases of consensus-specs hold no KZG cases, so the `kzg/` cases are pinned to `ethereum/c-kzg-4844` at commit `a751e2d92abcd63b01d1400789789f5ea289a8b0`.
 Its `tests/` directory holds the same 344 cases, byte for byte.
