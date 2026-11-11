@@ -108,8 +108,9 @@ A model connects to the specification by a refinement theorem, which says that t
 Without that theorem, the security proof is about a different object than the one clients run.
 
 A refinement theorem is a property.
-A property module that depends on a model, to state such theorems or to build on them, is a **refinement module**.
-A refinement that holds by definition is still stated, as a theorem proved by `rfl`, so that a reader can find it.
+A **refinement module** is a property module that states a refinement theorem, or uses one in a proof.
+A refinement that holds by definition is still stated as a theorem, so that a reader can find it.
+Its proof unfolds the definitions, often with `rfl`.
 `rootWith_hash` in `EthLib/Cryptography/Proofs/Vrf/Unpredictability.lean` is one.
 
 A module is a model because of what it says, not because of what it imports.
@@ -118,6 +119,8 @@ A module that imports VCVio is a property when its theorems are about the specif
 Each kind depends only on the kinds before it, and refinement modules are the one exception.
 A specification never imports a property or a model.
 A property never imports a model, directly or through another module, unless it is a refinement module.
+So a property module that imports a model, but neither states nor uses a refinement theorem, breaks the rule.
+No file lists the refinement modules yet, and no check enforces the rule.
 
 ## Layers
 
@@ -435,6 +438,7 @@ A theorem stays in the specification file in two cases, because a specification 
   A project that imports only the specification can then still use it.
 
 Every other theorem goes under `Proofs/`.
+Specification files already hold theorems that fit neither case, and a later change sorts them.
 A model goes under `Proofs/` too, as the models of Casper FFG and LMD-GHOST do in `EthLib/Consensus/Proofs/Models/`.
 Modules of one kind share a directory, under the part of the layer that uses them.
 The precompiles are one kind, and only the EVM calls them, so ECRECOVER sits in `EthLib/Execution/Evm/Precompiles/Ecrecover.lean`, and its theorems in `EthLib/Execution/Proofs/Evm/Precompiles/Ecrecover.lean`.
