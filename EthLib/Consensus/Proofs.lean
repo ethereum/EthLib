@@ -141,6 +141,7 @@ public import EthLib.Consensus.Proofs.Transition.FfgVotes
 public import EthLib.Consensus.Proofs.Transition.ForkBoundary
 public import EthLib.Consensus.Proofs.Transition.Genesis
 public import EthLib.Consensus.Proofs.Transition.InactivityLeak
+public import EthLib.Consensus.Proofs.Transition.InactivityLeakEpoch
 public import EthLib.Consensus.Proofs.Transition.InactivityLeakBound
 public import EthLib.Consensus.Proofs.Transition.InactivityLeakStake
 public import EthLib.Consensus.Proofs.Transition.Invariants

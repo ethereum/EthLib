@@ -1794,6 +1794,13 @@ Over 6280 epochs, the churn of validators alone lowers the bound of Gasper Theor
 With small balances, `230 T ≥ 320 t`, no theorem relates the period to the margin.
 The Python suite checks the periods against the three tables of the rule, except for the rows whose states take minutes to build.
 
+### Inactivity leak
+
+`Consensus/Proofs/Transition/InactivityLeakEpoch.lean` shows that a successful epoch transition keeps the leak test when the finalized epoch stays fixed.
+For ordered, settled checkpoints, that transition either advances the finalized epoch or leaves a leaking state in the leak.
+The sequences of balances, scores and effective balances in `InactivityLeakBound.lean` and `InactivityLeakStake.lean` are still assumptions.
+No theorem derives them from the transition, including the condition that absent validators receive no credits.
+
 ### Fast confirmation rule
 
 `Consensus/ForkChoice/FastConfirmation.lean` holds the fast confirmation rule of [arXiv 2405.00549v4](https://arxiv.org/abs/2405.00549v4).
