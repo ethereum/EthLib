@@ -87,8 +87,10 @@ The C exports read untyped bytes into these types, and reject a wrong length the
 | `verify_kzg_proof` | 122 |
 
 They match the consensus-specs `v1.7.0-alpha.12` general vectors and the `ethereum/c-kzg-4844` cases byte for byte.
-At that release, `ckzg` 2.1.7 computed the expected values of the ten public operations, and the Python specification those of the two challenges.
-None of them comes from EthLib.
+In the run of that release, `ckzg` 2.1.7 computed 325 of the cases, and the Python specification the other 19.
+The `ethereum/c-kzg-4844` cases hold the same bytes, from consensus-specs runs of `v1.5.0-alpha.9` to `v1.6.0-beta.0`.
+Those runs used the specification's own KZG functions, with `py_arkworks_bls12381` 0.3.8.
+None of the cases comes from EthLib.
 `tests/cryptography/kzg/SHA256SUMS` pins each one, and CI checks the pins.
 
 [`tests/cryptography/README.md`](../../../tests/cryptography/README.md) explains the pins and the check against the upstream archive.
