@@ -32,7 +32,7 @@ From Electra this holds for a registry within its limit.
 
 The same holds in natural numbers, with no reduction modulo `2^64`.
 
-Each checked product of a successful step fits, and so does the scaled sum of slashings.
+On success the scaled sum of slashings fits, and so does each checked product of a due penalty.
 
 When the slashings succeed, the balances past the registry stay.
 
