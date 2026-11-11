@@ -4,6 +4,7 @@ public import EthLib.Base.Except
 public import EthLib.Base.Proofs.MapM
 public import EthLib.Execution.Proofs.Evm.Call.Delegation
 public import EthLib.Execution.Proofs.Evm.Gas.StateGas
+public import EthLib.Execution.Proofs.State.CodeAvailability
 public import EthLib.Execution.Proofs.State.Frame
 public import EthLib.Execution.Proofs.State.Tracker
 public import EthLib.Execution.Transactions.Authorization
@@ -746,14 +747,6 @@ No statement here assumes anything of the recovery of an authority.
 The state must hold the code of every account.
 
 From Glamsterdam, it must also hold the code of every account before the transaction. -/
-
-/-- Whether the state holds the code of every account. -/
-def HasCodes (state : TransactionState) : Prop :=
-  ∀ address, ∃ code, state.getCode (state.getAccount address).codeHash = .ok code
-
-/-- Whether the state holds the code of every account before the transaction. -/
-def HasPreCodes (state : TransactionState) : Prop :=
-  ∀ address, ∃ code, state.getCode (state.getPreStateAccount address).codeHash = .ok code
 
 /-- Taking an authorization keeps every code that the state holds. -/
 theorem exists_getCode_delegate {state state' : TransactionState} {refund : Nat}
