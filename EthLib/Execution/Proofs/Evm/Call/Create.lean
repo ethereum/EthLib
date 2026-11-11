@@ -23,7 +23,7 @@ A creation keeps the size of memory a multiple of 32, and so does the creator on
 
 So does every instruction that may send a message.
 
-A successful CREATE or CREATE2 pops its operands, grows memory, then launches the creation.
+A successful CREATE or CREATE2 reads its operands from the stack, grows memory, then launches.
 -/
 
 @[expose] public section
@@ -133,7 +133,7 @@ theorem genericCreate_eq_ok {evm : Evm fork Meter} {value : U256} {initCode : By
   revert hstatic
   cases evm.message.isStatic <;> simp
 
-/-- A successful step of CREATE or CREATE2 pops its operands, grows memory and launches.
+/-- A successful step of CREATE or CREATE2 reads its operands, grows memory and launches.
 
 Its frame is not static, and from Shanghai its init code fits the limit.
 
@@ -174,6 +174,33 @@ theorem createStep_eq_ok {create2 : Bool} {evm : Evm fork Meter} {result : StepR
   refine ⟨value, start, size, word, e4.stack.val, paid, ?_, sc, hmem, sc.message ▸ hstatic,
     hlim, hsalt ▸ hlaunch⟩
   rw [s1, s2, s3, s4]
+
+/-- A successful step of CREATE or CREATE2 launches from a frame with the same context.
+
+The launch takes the init code from the grown memory, and the salt word for CREATE2. -/
+theorem launchCreate_of_createStep {create2 : Bool} {evm : Evm fork Meter}
+    {value start size salt : U256} {rest : List U256} {result : StepResult fork Meter}
+    (hs : evm.stack.val = value :: start :: size :: ((if create2 then [salt] else []) ++ rest))
+    (h : createStep create2 evm = .ok result) :
+    ∃ paid, SameContext evm paid ∧
+      launchCreate paid value
+        (memoryReadBytes
+          (memoryExtend evm.memory (extendMemory evm.memory.size [(start, size)]).expandBy)
+          start.toNat size.toNat)
+        (if create2 then some salt else none) = .ok result := by
+  obtain ⟨v, st, sz, w, r, paid, hstack, sc, hmem, -, -, hlaunch⟩ := createStep_eq_ok h
+  have same := hstack.symm.trans hs
+  simp only [List.cons.injEq] at same
+  obtain ⟨rfl, rfl, rfl, same⟩ := same
+  -- CREATE has no salt word, and CREATE2 pops the one of the stack.
+  have hsalt : (if create2 then some w else none) = if create2 then some salt else none := by
+    cases create2
+    · rfl
+    · simp only [↓reduceIte, List.singleton_append, List.cons.injEq] at same
+      rw [same.1]
+  rw [hsalt] at hlaunch
+  rw [hmem] at hlaunch
+  exact ⟨paid, sc, hlaunch⟩
 
 /-! ## The refill -/
 

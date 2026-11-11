@@ -430,13 +430,13 @@ theorem state_createStep {create2 : Bool} {evm : Evm fork Meter} {value start si
     let initCode := memoryReadBytes
       (memoryExtend evm.memory (extendMemory evm.memory.size [(start, size)]).expandBy)
       start.toNat size.toNat
-    let salt := if create2 then some salt else none
+    let saltOption := if create2 then some salt else none
     ((sender.balance < value ∨ sender.nonce = MAX_NONCE ∨
         evm.message.depth + 1 > STACK_DEPTH_LIMIT) ∧
       ∃ after, result = .next after ∧ after.state = senderRead) ∨
     (value ≤ sender.balance ∧ sender.nonce ≠ MAX_NONCE ∧
       evm.message.depth + 1 ≤ STACK_DEPTH_LIMIT ∧
-      ∃ address, creationAddress current sender.nonce salt initCode = .ok address ∧
+      ∃ address, creationAddress current sender.nonce saltOption initCode = .ok address ∧
         let both := senderRead.recordAccountRead address
         match (generalizing := false) result with
         | .next after =>
@@ -446,19 +446,9 @@ theorem state_createStep {create2 : Bool} {evm : Evm fork Meter} {value start si
         | .child caller _ _ =>
           evm.state.accountDeployable address = true ∧
             both.incrementNonce fork current = .ok caller.state) := by
-  obtain ⟨v, st, sz, w, r, paid, hstack, sc, hmem, -, -, hlaunch⟩ := createStep_eq_ok h
-  have same := hstack.symm.trans hs
-  simp only [List.cons.injEq] at same
-  obtain ⟨rfl, rfl, rfl, same⟩ := same
-  -- CREATE has no salt word, and CREATE2 pops the one of the stack.
-  have hsalt : (if create2 then some w else none) = if create2 then some salt else none := by
-    cases create2
-    · rfl
-    · simp only [↓reduceIte, List.singleton_append, List.cons.injEq] at same
-      rw [same.1]
-  rw [hsalt] at hlaunch
+  obtain ⟨paid, sc, hlaunch⟩ := launchCreate_of_createStep hs h
   have hstate := state_launchCreate hlaunch
-  simpa only [sc.state, sc.message, hmem] using hstate
+  simpa only [sc.state, sc.message] using hstate
 
 /-- CREATE and CREATE2 add the sender to the account reads, and keep the storage reads.
 
@@ -474,7 +464,7 @@ theorem reads_createStep {create2 : Bool} {evm : Evm fork Meter} {value start si
     let initCode := memoryReadBytes
       (memoryExtend evm.memory (extendMemory evm.memory.size [(start, size)]).expandBy)
       start.toNat size.toNat
-    let salt := if create2 then some salt else none
+    let saltOption := if create2 then some salt else none
     ((sender.balance < value ∨ sender.nonce = MAX_NONCE ∨
         evm.message.depth + 1 > STACK_DEPTH_LIMIT) ∧
       ∃ after, result = .next after ∧
@@ -482,23 +472,13 @@ theorem reads_createStep {create2 : Bool} {evm : Evm fork Meter} {value start si
         after.state.storageReads = evm.state.storageReads) ∨
     (value ≤ sender.balance ∧ sender.nonce ≠ MAX_NONCE ∧
       evm.message.depth + 1 ≤ STACK_DEPTH_LIMIT ∧
-      ∃ address, creationAddress current sender.nonce salt initCode = .ok address ∧
+      ∃ address, creationAddress current sender.nonce saltOption initCode = .ok address ∧
         match (generalizing := false) result with
         | .next after | .child after _ _ =>
           after.state.accountReads = (evm.state.accountReads.insert current).insert address ∧
             after.state.storageReads = evm.state.storageReads) := by
-  obtain ⟨v, st, sz, w, r, paid, hstack, sc, hmem, -, -, hlaunch⟩ := createStep_eq_ok h
-  have same := hstack.symm.trans hs
-  simp only [List.cons.injEq] at same
-  obtain ⟨rfl, rfl, rfl, same⟩ := same
-  -- CREATE has no salt word, and CREATE2 pops the one of the stack.
-  have hsalt : (if create2 then some w else none) = if create2 then some salt else none := by
-    cases create2
-    · rfl
-    · simp only [↓reduceIte, List.singleton_append, List.cons.injEq] at same
-      rw [same.1]
-  rw [hsalt] at hlaunch
+  obtain ⟨paid, sc, hlaunch⟩ := launchCreate_of_createStep hs h
   have hreads := reads_launchCreate hlaunch
-  simpa only [sc.state, sc.message, hmem] using hreads
+  simpa only [sc.state, sc.message] using hreads
 
 end EthLib.Execution.Evm
