@@ -12,6 +12,10 @@ It is at most the balance plus the downward band of hysteresis.
 
 It does not rise while the balance stays within the upward band of it.
 
+It stays at most the largest when the old effective balance is at most the largest.
+
+It is also at most the greater of the old effective balance and the balance.
+
 The effective balances are aligned when each is a whole number of increments.
 
 When the largest values of the preset are aligned too, the update keeps them aligned.
@@ -134,8 +138,8 @@ private theorem toNat_min_rounded {balance largest : Gwei} :
   · rename_i h
     rw [Nat.min_eq_right (Nat.le_of_lt (UInt64.lt_iff_toNat_lt.mp (UInt64.not_le.mp h)))]
 
-/-- An updated effective balance stays below the cap when the old one is below it. -/
-theorem updatedEffectiveBalance_le {largest balance effectiveBalance result : Gwei}
+/-- An updated effective balance is at most the largest when the old one is. -/
+theorem updatedEffectiveBalance_le_of_le {largest balance effectiveBalance result : Gwei}
     (old : effectiveBalance ≤ largest)
     (computed : updatedEffectiveBalance preset largest balance effectiveBalance = .ok result) :
     result ≤ largest := by
@@ -144,16 +148,17 @@ theorem updatedEffectiveBalance_le {largest balance effectiveBalance result : Gw
   · rw [UInt64.le_iff_toNat_le, toNat_min_rounded (preset := preset)]
     exact Nat.min_le_right _ _
 
-/-- An updated effective balance is at most the greater of the old value and the balance.
+/-- An updated effective balance is at most the greater of the old effective balance and the balance.
 
-Keeping the old value need not put it below the balance. -/
+A kept old effective balance can exceed the balance, so the bound needs both values. -/
 theorem updatedEffectiveBalance_le_max {largest balance effectiveBalance result : Gwei}
     (computed : updatedEffectiveBalance preset largest balance effectiveBalance = .ok result) :
     result.toNat ≤ max effectiveBalance.toNat balance.toNat := by
   rcases updatedEffectiveBalance_cases computed with rfl | rfl
   · exact Nat.le_max_left _ _
   · rw [toNat_min_rounded (preset := preset)]
-    exact (Nat.min_le_left _ _).trans ((Nat.sub_le _ _).trans (Nat.le_max_right _ _))
+    exact Nat.le_trans (Nat.min_le_left _ _)
+      (Nat.le_trans (Nat.sub_le _ _) (Nat.le_max_right _ _))
 
 /-- The increment of a preset is positive and at most its upward band, as the hysteresis needs. -/
 abbrev Preset.IncrementWithinUpwardBand (preset : Preset) : Prop :=
