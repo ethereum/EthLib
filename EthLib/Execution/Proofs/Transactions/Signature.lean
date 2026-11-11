@@ -23,7 +23,7 @@ So changing the signature of a transaction leaves its signing hash as it was.
 
 A legacy transaction that reports a chain signs a hash that covers that chain.
 
-So one that passes the chain check of a network signs no chain, or the chain of that network.
+So one that passes the chain check of a network signs a hash with no chain or the network's chain.
 -/
 
 @[expose] public section
@@ -250,9 +250,7 @@ theorem signingInput_legacy_chain {fork : Fork} {tx : LegacyTransaction} {hash :
 
 /-- A legacy transaction that passes the chain check of a network signs one of two hashes.
 
-It is the hash of its six fields, or the hash that covers the chain of that network.
-
-So a signature for one chain passes the check of no other chain, unless it signs no chain. -/
+It is the hash of its six fields, or the hash that covers the chain of that network. -/
 theorem signingInput_legacy_of_checkChainId {fork : Fork} {chainId : UInt64}
     {tx : LegacyTransaction} {hash : Hash32} {id : Fin 2}
     (hok : checkChainId fork chainId (.legacy tx) = .ok ())
