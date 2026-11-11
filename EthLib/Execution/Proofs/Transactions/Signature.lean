@@ -333,7 +333,9 @@ theorem parityRecovery_eq_ok_iff {yParity : U256} {id : Fin 2} :
 
 /-! ## The hash and the sender of a typed transaction -/
 
-/-- The input that each typed branch of the signing input computes from its hash and parity. -/
+/-- A typed branch of the signing input gives a hash and an id exactly when the hash encodes to it.
+
+Its parity must also be that id. -/
 private theorem typedInput_eq_ok_iff {e : Except Serialization.Rlp.RlpError Hash32}
     {yParity : U256} {hash : Hash32} {id : Fin 2} :
     (do return (← e.mapError TransactionError.encoding, ← parityRecovery yParity) :
@@ -343,7 +345,7 @@ private theorem typedInput_eq_ok_iff {e : Except Serialization.Rlp.RlpError Hash
   cases e <;> cases parityRecovery yParity <;>
     simp [bind, Except.bind, Except.mapError, pure, Except.pure]
 
-/-- A transaction of type 1 signs the hash of its fields before the signature.
+/-- At every fork, a transaction of type 1 signs the hash of its type and its unsigned fields.
 
 Its parity is the recovery id. -/
 theorem signingInput_accessList_eq_ok_iff {fork : Fork} {tx : AccessListTransaction}
@@ -352,7 +354,7 @@ theorem signingInput_accessList_eq_ok_iff {fork : Fork} {tx : AccessListTransact
       signingHash2930 tx = .ok hash ∧ tx.yParity.toNat = id.val :=
   typedInput_eq_ok_iff
 
-/-- A transaction of type 2 signs the hash of its fields before the signature.
+/-- At every fork, a transaction of type 2 signs the hash of its type and its unsigned fields.
 
 Its parity is the recovery id. -/
 theorem signingInput_feeMarket_eq_ok_iff {fork : Fork} {tx : FeeMarketTransaction}
@@ -361,7 +363,7 @@ theorem signingInput_feeMarket_eq_ok_iff {fork : Fork} {tx : FeeMarketTransactio
       signingHash1559 tx = .ok hash ∧ tx.yParity.toNat = id.val :=
   typedInput_eq_ok_iff
 
-/-- A transaction of type 3 signs the hash of its fields before the signature.
+/-- At every fork, a transaction of type 3 signs the hash of its type and its unsigned fields.
 
 Its parity is the recovery id. -/
 theorem signingInput_blob_eq_ok_iff {fork : Fork} {tx : BlobTransaction}
@@ -370,7 +372,7 @@ theorem signingInput_blob_eq_ok_iff {fork : Fork} {tx : BlobTransaction}
       signingHash4844 tx = .ok hash ∧ tx.yParity.toNat = id.val :=
   typedInput_eq_ok_iff
 
-/-- A transaction of type 4 signs the hash of its fields before the signature.
+/-- At every fork, a transaction of type 4 signs the hash of its type and its unsigned fields.
 
 Its parity is the recovery id. -/
 theorem signingInput_setCode_eq_ok_iff {fork : Fork} {tx : SetCodeTransaction}
@@ -379,7 +381,7 @@ theorem signingInput_setCode_eq_ok_iff {fork : Fork} {tx : SetCodeTransaction}
       signingHash7702 tx = .ok hash ∧ tx.yParity.toNat = id.val :=
   typedInput_eq_ok_iff
 
-/-- A transaction whose parity above 1 would be its recovery id names no sender. -/
+/-- A transaction names no sender when its signing input can only give a recovery id above 1. -/
 private theorem recoverSender_ne_of_parity {fork : Fork} {tx : Transaction} {yParity : U256}
     (hInput : ∀ hash id, signingInput fork tx = .ok (hash, id) → yParity.toNat = id.val)
     (h : 1 < yParity.toNat) (sender : Address) : recoverSender fork tx ≠ .ok sender := by
