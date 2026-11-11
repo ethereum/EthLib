@@ -29,6 +29,7 @@ public import EthLib.Execution.Proofs.Blocks.SystemCall.ConsolidationRequests
 public import EthLib.Execution.Proofs.Blocks.SystemCall.HistoryStorage
 public import EthLib.Execution.Proofs.Blocks.SystemCall.RequestQueue
 public import EthLib.Execution.Proofs.Blocks.SystemCall.WithdrawalRequests
+public import EthLib.Execution.Proofs.Blocks.SystemCallFollow
 public import EthLib.Execution.Proofs.Blocks.Transition
 public import EthLib.Execution.Proofs.Blocks.TypedRoots
 public import EthLib.Execution.Proofs.Blocks.Validate
