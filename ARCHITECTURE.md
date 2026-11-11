@@ -44,7 +44,8 @@ Each part names the EIPs that define it where they exist, and a later fork adds 
 ### Networking
 
 - Discovery: Ethereum Node Records of EIP-778, and the discovery protocols that exchange them.
-- Execution-layer peers: the encrypted RLPx transport, the "p2p" capability that opens a session, and the states that a session passes through.
+- Execution-layer peers: the encrypted RLPx transport, the "p2p" capability that opens a session, the states that a session passes through, and the snap capability.
+  A node uses snap to download the state of a recent block.
 - Consensus-layer peers: gossip topics and their message IDs, request and response protocols, and the Snappy compression and length prefixes they use.
 - Consensus-layer connections: the libp2p transports, the Noise handshake, the negotiation of protocols and the multiplexing of streams.
 - Gossip: the gossipsub router that relays messages between consensus-layer peers.
@@ -68,6 +69,7 @@ Each part names the EIPs that define it where they exist, and a later fork adds 
 - Validators: deposits, exits, withdrawals, consolidations, shuffling into committees, and the selection of proposers and sync committees.
 - Fork choice: LMD-GHOST with Casper FFG, proposer boost, optimistic sync, and fast confirmation.
 - The interface to the execution layer: what the consensus layer asks of an execution engine, and what it learns back.
+  Between two clients, the Engine API of [Interfaces](#interfaces) carries these calls.
 - Honest validator duties: proposing, attesting, aggregating and serving on a sync committee.
 - Light clients: the sync protocol that follows the chain from sync committee signatures.
 - Weak subjectivity: how long a checkpoint stays safe to start from.
@@ -79,14 +81,15 @@ Each part names the EIPs that define it where they exist, and a later fork adds 
 ### Interfaces
 
 Independent teams write the parts of a node and the tools around it.
-So the interfaces between those parts have published specifications, and EthLib specifies each of them:
+So the interfaces between those parts have published specifications, and EthLib is to specify each of them:
 
 - Engine API: the calls between the consensus client and the execution client of a node, from `ethereum/execution-apis`.
 - Execution JSON-RPC API: the methods of an execution client, from `ethereum/execution-apis`, such as the account proof that `eth_getProof` returns (EIP-1186).
 - Beacon API: the methods of a consensus client, from `ethereum/beacon-APIs`.
 - Builder API: the messages between a proposer and the builders that bid for its payload, from `ethereum/builder-specs`.
 - Relay API: what a relay serves to the builders that submit blocks and to anyone who reads its data, from `flashbots/relay-specs`.
-- Keymanager API and remote-signing API: the calls between a validator client and the tools that hold its keys, from `ethereum/keymanager-APIs` and `ethereum/remote-signing-api`.
+- Keymanager API: the calls that management tools make to a validator client, which holds the keys and the anti-slashing database, from `ethereum/keymanager-APIs`.
+- Remote-signing API: the calls that a validator client makes to a remote signer, which holds the keys and signs for it, from `ethereum/remote-signing-api`.
 
 The relay API and the two validator-client APIs come after the others in the order of work.
 The relay API stays in scope because no rule excludes it.
