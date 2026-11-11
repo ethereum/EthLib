@@ -19,7 +19,7 @@ From Pectra, its header commits to the requests that the build gives.
 
 A build on a chain from the attributes of a forkchoice update is such a build, at their fork.
 
-Each refusal of a build names its own condition, in the order that the build checks it.
+Each refusal of a build happens when its check fails and every earlier check passes.
 -/
 
 public section
@@ -83,6 +83,12 @@ theorem runBody_fillHeader {header : Header fork} {output : BlockOutput fork}
       runBody chain ⟨header, transactions, [], withdrawals⟩ :=
   rfl
 
+/-- From Hegotá a build is aborted, since the rules of that fork are not specified here yet. -/
+theorem buildPayload_eq_error_of_hegota_le (h : .hegota ≤ fork) :
+    buildPayload chain attributes choices transactions =
+      .error (.aborted (.forkNotYetSpecified fork)) := by
+  simp [buildPayload, h, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
+
 /-- A build that succeeds went through each of its steps.
 
 The parent is the last recent block, and the fork is the active fork after it at the timestamp.
@@ -101,8 +107,7 @@ private theorem buildPayload_spec
       built.block = ⟨fillHeader (buildHeader chain.config parent parentHash attributes choices)
         result.output result.roots, transactions, [], attributes.withdrawals⟩ ∧
       built.state = result.post ∧ built.requests = result.output.requests := by
-  have hH : ¬ .hegota ≤ fork := by
-    intro hc; simp [buildPayload, hc, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
+  have hH : ¬ .hegota ≤ fork := fun hc => by simp [buildPayload_eq_error_of_hegota_le hc] at h
   simp only [buildPayload, hH, reduceIte] at h
   split at h
   next parent hP =>
@@ -222,12 +227,6 @@ theorem buildPayload_of_buildPayloadOnChain {version : Nat}
 
 /-! ## Each refusal of a build -/
 
-/-- A build at Hegotá or later is aborted, since the rules of that fork are not here yet. -/
-theorem buildPayload_eq_error_of_hegota_le (h : .hegota ≤ fork) :
-    buildPayload chain attributes choices transactions =
-      .error (.aborted (.forkNotYetSpecified fork)) := by
-  simp [buildPayload, h, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
-
 /-- A build on a chain with no recent block fails for a missing parent. -/
 theorem buildPayload_eq_error_of_getLast?_eq_none (hh : ¬ .hegota ≤ fork)
     (hp : chain.recent.getLast? = none) :
@@ -278,7 +277,9 @@ theorem buildPayload_eq_error_of_checkBlock_eq_error {parent : RecentBlock} {par
     buildPayload chain attributes choices transactions = .error error := by
   simp [buildPayload, hh, hp, ha, hx, hr, hc, bind, Except.bind, Except.mapError]
 
-/-- A build whose filled header disagrees with its body fails at the first disagreement. -/
+/-- A build whose filled header disagrees with what its body gave fails with the first such error.
+
+After a body that runs, only blob gas of 2^64 or more makes the filled header disagree. -/
 theorem buildPayload_eq_error_of_outputChecks_eq_error {parent : RecentBlock} {parentHash : Hash32}
     {result : BodyResult fork} {error : BlockError} (hh : ¬ .hegota ≤ fork)
     (hp : chain.recent.getLast? = some parent)
@@ -296,14 +297,14 @@ theorem buildPayload_eq_error_of_outputChecks_eq_error {parent : RecentBlock} {p
     buildPayload chain attributes choices transactions = .error error := by
   simp [buildPayload, hh, hp, ha, hx, hr, hc, hf, bind, Except.bind, Except.mapError]
 
-/-- A request on a chain with no recent block has no head to apply, so it fails for that parent. -/
+/-- A build on a chain with no recent block fails for a missing parent, with no head to apply. -/
 theorem buildPayloadOnChain_eq_error_of_getLast?_eq_none {version : Nat}
     {decoded : Σ f, PayloadAttributes f} {encoded : List ByteArray}
     (hp : chain.recent.getLast? = none) :
     buildPayloadOnChain chain version decoded choices encoded = .error (.block .noParent) := by
   simp [buildPayloadOnChain, hp, throw, throwThe, MonadExceptOf.throw]
 
-/-- Attributes that fail the checks of the update fail the request, with that error. -/
+/-- Attributes that fail the checks of the update fail a build on a chain, with that error. -/
 theorem buildPayloadOnChain_eq_error_of_checkAttributes_eq_error {version : Nat}
     {decoded : Σ f, PayloadAttributes f} {encoded : List ByteArray} {parent : RecentBlock}
     {error : EngineError} (hp : chain.recent.getLast? = some parent)
@@ -313,7 +314,7 @@ theorem buildPayloadOnChain_eq_error_of_checkAttributes_eq_error {version : Nat}
     buildPayloadOnChain chain version decoded choices encoded = .error (.attributes error) := by
   simp [buildPayloadOnChain, hp, ha, bind, Except.bind, Except.mapError]
 
-/-- A transaction that does not decode at the fork of the attributes fails the request. -/
+/-- A transaction that does not decode at the fork of the attributes fails with that error. -/
 theorem buildPayloadOnChain_eq_error_of_decodeTransactions_eq_error {version : Nat}
     {decoded : Σ f, PayloadAttributes f} {encoded : List ByteArray} {parent : RecentBlock}
     {error : PayloadError} (hp : chain.recent.getLast? = some parent)
@@ -324,7 +325,7 @@ theorem buildPayloadOnChain_eq_error_of_decodeTransactions_eq_error {version : N
     buildPayloadOnChain chain version decoded choices encoded = .error (.transaction error) := by
   simp [buildPayloadOnChain, hp, ha, ht, bind, Except.bind, Except.mapError]
 
-/-- A request whose build fails returns the error of that build. -/
+/-- A build on a chain whose own build fails gives the error of that build. -/
 theorem buildPayloadOnChain_eq_error_of_buildPayload_eq_error {version : Nat}
     {decoded : Σ f, PayloadAttributes f} {encoded : List ByteArray} {parent : RecentBlock}
     {error : BlockError} (hp : chain.recent.getLast? = some parent)
