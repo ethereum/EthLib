@@ -1,10 +1,11 @@
 module
 
+public import EthLib.Execution.Proofs.Evm.Call.Create
 public import EthLib.Execution.Proofs.Evm.Call.Instructions
 public import EthLib.Execution.Proofs.State.Tracker
 
 /-!
-# Proofs: the reads of call preparation
+# Proofs: the reads of call and creation preparation
 
 A call records its target, once its gas check passes, before resolving a delegation.
 
@@ -22,6 +23,14 @@ Call preparation only adds account reads.
 
 Paying for the call changes no transaction state.
 
+A creation reads its sender before its balance, nonce and depth checks.
+
+When one of those checks fails, it runs no message and keeps only the read of the sender.
+
+Otherwise it reads the new address, and then either halts or raises the sender's nonce.
+
+Both paths keep the reads of the sender and of the new address.
+
 The results describe the next frame or the caller before its child runs.
 
 [bal]: https://eips.ethereum.org/EIPS/eip-7928#eip-7702-delegation
@@ -32,9 +41,11 @@ The results describe the next frame or the caller before its child runs.
 
 namespace EthLib.Execution.Evm
 
-open EthLib.Base (Address Fork)
+open EthLib.Base (Address Fork U256)
 
 variable {fork : Fork} {Meter : Type} [GasMeter Meter]
+
+/-! ## The calls -/
 
 /-- Resolving a delegation adds exactly its delegate's account read.
 
@@ -259,5 +270,232 @@ theorem state_callStep {kind : CallKind} {evm popped : Evm fork Meter} {call : C
     · dsimp only at he
       rw [(keepReads_eq_error.mp he).2] at keep
       cases keep
+
+/-! ## The creations -/
+
+/-- A creation that has paid reads its sender first, before its balance, nonce and depth checks.
+
+When one of those checks fails, it runs no message and keeps only the read of the sender.
+
+Otherwise it derives the new address, reads it, and then either halts, or raises the sender's nonce.
+
+A collision at the new address runs no message, and keeps the new nonce and both reads. -/
+theorem state_launchCreate {evm : Evm fork Meter} {value : U256} {initCode : ByteArray}
+    {salt : Option U256} {result : StepResult fork Meter}
+    (h : launchCreate evm value initCode salt = .ok result) :
+    let current := evm.message.currentTarget
+    let sender := evm.state.getAccount current
+    let senderRead := evm.state.recordAccountRead current
+    ((sender.balance < value ∨ sender.nonce = MAX_NONCE ∨
+        evm.message.depth + 1 > STACK_DEPTH_LIMIT) ∧
+      ∃ after, result = .next after ∧ after.state = senderRead) ∨
+    (value ≤ sender.balance ∧ sender.nonce ≠ MAX_NONCE ∧
+      evm.message.depth + 1 ≤ STACK_DEPTH_LIMIT ∧
+      ∃ address, creationAddress current sender.nonce salt initCode = .ok address ∧
+        let both := senderRead.recordAccountRead address
+        match (generalizing := false) result with
+        | .next after =>
+          (after.state = both ∧ ∃ e, e.aborts = false ∧ after.error = some e) ∨
+          (evm.state.accountDeployable address = false ∧
+            both.incrementNonce fork current = .ok after.state)
+        | .child caller _ _ =>
+          evm.state.accountDeployable address = true ∧
+            both.incrementNonce fork current = .ok caller.state) := by
+  dsimp only
+  by_cases fails : (evm.state.getAccount evm.message.currentTarget).balance < value ∨
+      (evm.state.getAccount evm.message.currentTarget).nonce = MAX_NONCE ∨
+      evm.message.depth + 1 > STACK_DEPTH_LIMIT
+  · obtain ⟨after, rfl, hstate, -⟩ := launchCreate_of_preflight fails h
+    exact .inl ⟨fails, after, rfl, hstate⟩
+  · have hbal : value ≤ (evm.state.getAccount evm.message.currentTarget).balance :=
+      BitVec.not_lt.mp fun hlt => fails (.inl hlt)
+    have hnonce : (evm.state.getAccount evm.message.currentTarget).nonce ≠ MAX_NONCE :=
+      fun hn => fails (.inr (.inl hn))
+    have hdepth : evm.message.depth + 1 ≤ STACK_DEPTH_LIMIT :=
+      Nat.not_lt.mp fun hd => fails (.inr (.inr hd))
+    unfold launchCreate at h
+    dsimp only at h
+    rw [ite_eq_right_of_eq_false _ _ (eq_false (by exact fails))] at h
+    obtain ⟨address, haddr, h⟩ := Base.bind_ok_iff.mp h
+    let read := recordAccountRead (accessAddress
+      (recordAccountRead { evm with returnData := .empty } evm.message.currentTarget) address).2
+      address
+    have readState : read.state =
+        (evm.state.recordAccountRead evm.message.currentTarget).recordAccountRead address := by
+      change (accessAddress _ _).2.state.recordAccountRead address = _
+      rw [state_accessAddress]
+      rfl
+    rcases keepReads_eq_ok_halt h with hr | ⟨e, -, keep, rfl⟩
+    · obtain ⟨e1, h1, hr⟩ := Base.bind_ok_iff.mp hr
+      obtain ⟨e2, h2, hr⟩ := Base.bind_ok_iff.mp hr
+      obtain ⟨state, hinc, hr⟩ := Base.bind_ok_iff.mp hr
+      have s2 : e2.state =
+          (evm.state.recordAccountRead evm.message.currentTarget).recordAccountRead address :=
+        (chargeGas_sameContext h2).state.trans
+          ((chargeStateGas_sameContext h1).state.trans readState)
+      have hinc' :
+          ((evm.state.recordAccountRead evm.message.currentTarget).recordAccountRead
+            address).incrementNonce fork evm.message.currentTarget = .ok state :=
+        s2 ▸ Base.mapError_ok_iff.mp hinc
+      have hdep : e2.state.accountDeployable address = evm.state.accountDeployable address := by
+        rw [s2]
+        rfl
+      split at hr
+      · rename_i dep
+        cases hr
+        exact .inr ⟨hbal, hnonce, hdepth, address, haddr, hdep ▸ dep, hinc'⟩
+      · rename_i ndep
+        obtain ⟨e3, h3, hr⟩ := Base.bind_ok_iff.mp hr
+        cases hr
+        have hdepFalse : evm.state.accountDeployable address = false :=
+          Bool.eq_false_iff.mpr (hdep ▸ ndep)
+        have s3 : (advance e3).state = state := (pushWord_sameContext h3).state
+        exact .inr ⟨hbal, hnonce, hdepth, address, haddr, .inr ⟨hdepFalse, s3 ▸ hinc'⟩⟩
+    · exact .inr ⟨hbal, hnonce, hdepth, address, haddr, .inl ⟨readState, e, keep, rfl⟩⟩
+
+private theorem reads_incrementNonce_recordAccountRead {tx state : State.TransactionState}
+    {current address : Address}
+    (h : ((tx.recordAccountRead current).recordAccountRead address).incrementNonce
+      fork current = .ok state) :
+    state.accountReads = (tx.accountReads.insert current).insert address ∧
+      state.storageReads = tx.storageReads := by
+  obtain ⟨ha, hs⟩ := State.TransactionState.reads_incrementNonce h
+  refine ⟨?_, hs⟩
+  rw [ha]
+  ext a
+  simp [State.TransactionState.recordAccountRead, Std.ExtTreeSet.mem_insert, or_left_comm]
+
+/-- A creation that has paid adds its sender to the account reads, and keeps the storage reads.
+
+When its balance, nonce and depth checks pass, it also adds the new address to the account reads.
+
+That holds whether the step then halts, finds a collision at the new address, or sends a message. -/
+theorem reads_launchCreate {evm : Evm fork Meter} {value : U256} {initCode : ByteArray}
+    {salt : Option U256} {result : StepResult fork Meter}
+    (h : launchCreate evm value initCode salt = .ok result) :
+    let current := evm.message.currentTarget
+    let sender := evm.state.getAccount current
+    ((sender.balance < value ∨ sender.nonce = MAX_NONCE ∨
+        evm.message.depth + 1 > STACK_DEPTH_LIMIT) ∧
+      ∃ after, result = .next after ∧
+        after.state.accountReads = evm.state.accountReads.insert current ∧
+        after.state.storageReads = evm.state.storageReads) ∨
+    (value ≤ sender.balance ∧ sender.nonce ≠ MAX_NONCE ∧
+      evm.message.depth + 1 ≤ STACK_DEPTH_LIMIT ∧
+      ∃ address, creationAddress current sender.nonce salt initCode = .ok address ∧
+        match (generalizing := false) result with
+        | .next after | .child after _ _ =>
+          after.state.accountReads = (evm.state.accountReads.insert current).insert address ∧
+            after.state.storageReads = evm.state.storageReads) := by
+  rcases state_launchCreate h with ⟨fails, after, rfl, hstate⟩ |
+      ⟨hbal, hnonce, hdepth, address, haddr, hres⟩
+  · exact .inl ⟨fails, after, rfl, by rw [hstate]; rfl, by rw [hstate]; rfl⟩
+  · refine .inr ⟨hbal, hnonce, hdepth, address, haddr, ?_⟩
+    cases result with
+    | next after =>
+      dsimp only
+      rcases hres with ⟨hstate, -⟩ | ⟨-, hinc⟩
+      · rw [hstate]
+        exact ⟨rfl, rfl⟩
+      · exact reads_incrementNonce_recordAccountRead hinc
+    | child caller message resume =>
+      dsimp only
+      exact reads_incrementNonce_recordAccountRead hres.2
+
+/-- A creation after payment has the same state transition as the creation step that has paid. -/
+theorem state_genericCreate {evm : Evm fork Meter} {value : U256} {initCode : ByteArray}
+    {salt : Option U256} {result : StepResult fork Meter}
+    (h : genericCreate evm value initCode salt = .ok result) :
+    let current := evm.message.currentTarget
+    let sender := evm.state.getAccount current
+    let senderRead := evm.state.recordAccountRead current
+    ((sender.balance < value ∨ sender.nonce = MAX_NONCE ∨
+        evm.message.depth + 1 > STACK_DEPTH_LIMIT) ∧
+      ∃ after, result = .next after ∧ after.state = senderRead) ∨
+    (value ≤ sender.balance ∧ sender.nonce ≠ MAX_NONCE ∧
+      evm.message.depth + 1 ≤ STACK_DEPTH_LIMIT ∧
+      ∃ address, creationAddress current sender.nonce salt initCode = .ok address ∧
+        let both := senderRead.recordAccountRead address
+        match (generalizing := false) result with
+        | .next after =>
+          (after.state = both ∧ ∃ e, e.aborts = false ∧ after.error = some e) ∨
+          (evm.state.accountDeployable address = false ∧
+            both.incrementNonce fork current = .ok after.state)
+        | .child caller _ _ =>
+          evm.state.accountDeployable address = true ∧
+            both.incrementNonce fork current = .ok caller.state) :=
+  state_launchCreate (genericCreate_eq_ok h).2.2
+
+/-- CREATE and CREATE2 read the sender first, before their balance, nonce and depth checks.
+
+When one of those checks fails, they run no message and keep only the read of the sender.
+
+Otherwise they derive the new address from the init code in grown memory, and read that address.
+
+They then either halt with both reads, or raise the sender's nonce and keep both reads. -/
+theorem state_createStep {create2 : Bool} {evm : Evm fork Meter} {value start size : U256}
+    {rest : List U256} {result : StepResult fork Meter}
+    (hs : evm.stack.val = value :: start :: size :: rest)
+    (h : createStep create2 evm = .ok result) :
+    let current := evm.message.currentTarget
+    let sender := evm.state.getAccount current
+    let senderRead := evm.state.recordAccountRead current
+    let initCode := memoryReadBytes
+      (memoryExtend evm.memory (extendMemory evm.memory.size [(start, size)]).expandBy)
+      start.toNat size.toNat
+    let salt := if create2 then rest.head? else none
+    ((sender.balance < value ∨ sender.nonce = MAX_NONCE ∨
+        evm.message.depth + 1 > STACK_DEPTH_LIMIT) ∧
+      ∃ after, result = .next after ∧ after.state = senderRead) ∨
+    (value ≤ sender.balance ∧ sender.nonce ≠ MAX_NONCE ∧
+      evm.message.depth + 1 ≤ STACK_DEPTH_LIMIT ∧
+      ∃ address, creationAddress current sender.nonce salt initCode = .ok address ∧
+        let both := senderRead.recordAccountRead address
+        match (generalizing := false) result with
+        | .next after =>
+          (after.state = both ∧ ∃ e, e.aborts = false ∧ after.error = some e) ∨
+          (evm.state.accountDeployable address = false ∧
+            both.incrementNonce fork current = .ok after.state)
+        | .child caller _ _ =>
+          evm.state.accountDeployable address = true ∧
+            both.incrementNonce fork current = .ok caller.state) := by
+  obtain ⟨v, st, sz, r, paid, hstack, sc, hmem, -, -, hlaunch⟩ := createStep_eq_ok h
+  obtain ⟨rfl, rfl, rfl, rfl⟩ : v = value ∧ st = start ∧ sz = size ∧ r = rest := by
+    simpa using hstack.symm.trans hs
+  have hstate := state_launchCreate hlaunch
+  simpa only [sc.state, sc.message, hmem] using hstate
+
+/-- CREATE and CREATE2 add the sender to the account reads, and keep the storage reads.
+
+When their balance, nonce and depth checks pass, they also add the new address.
+
+That holds whether the step then halts, finds a collision at the new address, or sends a message. -/
+theorem reads_createStep {create2 : Bool} {evm : Evm fork Meter} {value start size : U256}
+    {rest : List U256} {result : StepResult fork Meter}
+    (hs : evm.stack.val = value :: start :: size :: rest)
+    (h : createStep create2 evm = .ok result) :
+    let current := evm.message.currentTarget
+    let sender := evm.state.getAccount current
+    let initCode := memoryReadBytes
+      (memoryExtend evm.memory (extendMemory evm.memory.size [(start, size)]).expandBy)
+      start.toNat size.toNat
+    let salt := if create2 then rest.head? else none
+    ((sender.balance < value ∨ sender.nonce = MAX_NONCE ∨
+        evm.message.depth + 1 > STACK_DEPTH_LIMIT) ∧
+      ∃ after, result = .next after ∧
+        after.state.accountReads = evm.state.accountReads.insert current ∧
+        after.state.storageReads = evm.state.storageReads) ∨
+    (value ≤ sender.balance ∧ sender.nonce ≠ MAX_NONCE ∧
+      evm.message.depth + 1 ≤ STACK_DEPTH_LIMIT ∧
+      ∃ address, creationAddress current sender.nonce salt initCode = .ok address ∧
+        match (generalizing := false) result with
+        | .next after | .child after _ _ =>
+          after.state.accountReads = (evm.state.accountReads.insert current).insert address ∧
+            after.state.storageReads = evm.state.storageReads) := by
+  obtain ⟨v, st, sz, r, paid, hstack, sc, hmem, -, -, hlaunch⟩ := createStep_eq_ok h
+  obtain ⟨rfl, rfl, rfl, rfl⟩ : v = value ∧ st = start ∧ sz = size ∧ r = rest := by
+    simpa using hstack.symm.trans hs
+  have hreads := reads_launchCreate hlaunch
+  simpa only [sc.state, sc.message, hmem] using hreads
 
 end EthLib.Execution.Evm
