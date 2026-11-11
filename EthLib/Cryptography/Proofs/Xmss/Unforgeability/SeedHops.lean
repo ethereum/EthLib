@@ -108,7 +108,7 @@ theorem simulateQ_run_failSignerOf_apply {σ : Type}
       (fun x f => simulateQ_bind so x f)]
     refine bind_congr fun pp => ?_
     rw [signDerived_map_monad (simulateQ so) (fun b => simulateQ_pure so b)
-      (fun x f => simulateQ_bind so x f) _ _ (fun f x => simulateQ_map so x f)]
+      (fun x f => simulateQ_bind so x f)]
     simp only [simulateQ_hashOf]
 
 /-- Simulating the run of the game's oracles gives their run over the simulated sources. -/
@@ -187,8 +187,8 @@ theorem reasonOracles_eq_failSignerOf (seed : Seed) :
       liftM_seedPrf]
     refine bind_congr fun pp => ?_
     rw [signDerived_map_monad (fun {β} (c : OracleComp HashSpec β) =>
-      (liftM c : OracleComp OracleWorld β)) (fun b => liftM_pure b) (fun x f => liftM_bind x f)
-      _ _ (fun f x => liftM_map f x), liftM_seedPrf, funext liftM_H]
+      (liftM c : OracleComp OracleWorld β)) (fun b => liftM_pure b) (fun x f => liftM_bind x f),
+      liftM_seedPrf, funext liftM_H]
     simp
 
 /-- The game of a signing failure, before the random oracle, as the game over the seed `S_0`. -/
