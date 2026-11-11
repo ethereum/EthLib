@@ -17,6 +17,14 @@ from .runners import RUNNERS, plan, reads, runner
 # The environment variable that names the shard of a run, as `k/n` with 1 <= k <= n.
 # Without it a run takes every case, as the one shard of one.
 SHARD = "ETHLIB_PARITY_SHARD"
+# The classes of a disagreement, which tests/parity/disagreements.toml defines.
+CLASSES = {
+    "ethlib-defect",
+    "fixture-defect",
+    "mocked-environment",
+    "sources-disagree",
+    "harness-defect",
+}
 
 
 def runnable(cases: list[Case]) -> list[Case]:
@@ -107,8 +115,11 @@ def check_groups(cases: list[Case]) -> None:
 
 
 def check_disagreements(cases: list[Case], suite_disagreements: dict) -> None:
-    """Every disagreement names a runnable case, with a reason and a source."""
+    """Every disagreement names a runnable case, with its reason, source, class and command."""
     keys = {key for case in runnable(cases) for key in ((case.id, case.group), (case.id, None))}
     for key, entry in suite_disagreements.items():
         assert key in keys, key
         assert entry.get("reason") and entry.get("source"), key
+        assert entry.get("class") in CLASSES, key
+        # It also says where it stands upstream.
+        assert entry.get("reproduce") and entry.get("upstream"), key
