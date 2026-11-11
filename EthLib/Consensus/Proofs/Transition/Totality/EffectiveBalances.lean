@@ -180,24 +180,50 @@ theorem processEffectiveBalanceUpdates_balances
       current.balances = state.balances)
     (fun _ _ _ kept step => (updateEffectiveBalance_ok step).1.trans kept) rfl computed
 
-/-- After the update, each validator keeps every field except its effective balance.
+/-- A successful pass applies the scalar effective-balance update at each validator's index.
 
-The new effective balance is the old one, or at most the balance.
-
-In the second case it is also at most the largest effective balance of the validator.
-
-The largest value is that of the fork, which from Electra depends on the credentials. -/
-theorem processEffectiveBalanceUpdates_effectiveBalance
+It uses the original validator and balance, and keeps every other field of that validator. -/
+theorem processEffectiveBalanceUpdates_effectiveBalance_eq
     (computed : processEffectiveBalanceUpdates state = .ok after) {index : Nat}
     {validator : Validator} (found : state.validators.data[index]? = some validator)
     {balance : Gwei} (owned : state.balances.data[index]? = some balance) :
     ∃ effectiveBalance : Gwei,
       after.validators.data[index]? = some { validator with effectiveBalance } ∧
-        (effectiveBalance = validator.effectiveBalance ∨
-          effectiveBalance ≤ balance ∧
-            effectiveBalance ≤ withdrawalMaxEffectiveBalance preset fork validator) := by
+        updatedEffectiveBalance preset (withdrawalMaxEffectiveBalance preset fork validator)
+          balance validator.effectiveBalance = .ok effectiveBalance := by
   unfold processEffectiveBalanceUpdates at computed
   have inside := (Array.getElem?_eq_some_iff.mp found).1
+  -- The pass reaches this index after steps at different indices only.
+  obtain ⟨middle, next, prefixOk, atIndex, -⟩ :=
+    (foldlM_ok_steps (fun _ _ => True) (fun _ => trivial) (fun _ _ => trivial)
+      (fun _ _ _ _ => trivial) computed).2 index (by simpa using inside)
+  simp only [List.getElem_range] at atIndex
+  have balances : middle.balances = state.balances :=
+    foldlM_ok_invariant (fun current : BeaconState preset fork =>
+      current.balances = state.balances)
+      (fun _ _ _ kept step => (updateEffectiveBalance_ok step).1.trans kept) rfl prefixOk
+  have notEarlier : ∀ j ∈ (List.range state.validators.data.size).take index, j ≠ index := by
+    intro j member
+    simp only [List.take_range, List.mem_range] at member
+    omega
+  have distinct : (((List.range state.validators.data.size).take index).map id).Nodup := by
+    simpa only [List.map_id, List.take_range] using
+      (List.nodup_range (n := min index state.validators.data.size))
+  obtain ⟨-, untouched, -⟩ := foldlM_ok_pointwise (fun _ : BeaconState preset fork => True)
+    (fun current => current.validators.data[index]?) id index (fun _ old => old) distinct
+    (fun _ _ _ _ _ _ => trivial)
+    (fun j _ current later _ step different => by
+      obtain ⟨-, _, _, _, _, _, _, view⟩ := updateEffectiveBalance_ok step
+      change j ≠ index at different
+      simp only [view, different, ite_false])
+    (fun j member _ _ _ _ same => absurd same (notEarlier j member)) trivial prefixOk
+  obtain ⟨-, original, amount, effectiveBalance, originalAt, amountAt, scalar, -⟩ :=
+    updateEffectiveBalance_ok atIndex
+  rw [untouched notEarlier, found, Option.some.injEq] at originalAt
+  subst original
+  rw [balances, owned, Option.some.injEq] at amountAt
+  subst amount
+  -- Distinct indices keep this result from being overwritten by a later step.
   let H : Nat → Option Validator → Option Validator := fun _ current => current.map fun old =>
     match updatedEffectiveBalance preset (withdrawalMaxEffectiveBalance preset fork old) balance
         old.effectiveBalance with
@@ -222,10 +248,26 @@ theorem processEffectiveBalanceUpdates_effectiveBalance
       simp only [view, ite_true, located, H, Option.map_some, updated])
     ⟨SameSizes.refl state, rfl⟩ computed
   rw [changed index (List.mem_range.mpr inside) rfl, found]
-  simp only [H, Option.map_some]
-  split
-  · rename_i effectiveBalance updated
-    exact ⟨effectiveBalance, rfl, updatedEffectiveBalance_eq_or_le updated⟩
-  · exact ⟨validator.effectiveBalance, rfl, Or.inl rfl⟩
+  exact ⟨effectiveBalance, by simp only [H, Option.map_some, scalar], scalar⟩
+
+/-- After the update, each validator keeps every field except its effective balance.
+
+The new effective balance is the old one, or at most the balance.
+
+In the second case it is also at most the largest effective balance of the validator.
+
+The largest value is that of the fork, which from Electra depends on the credentials. -/
+theorem processEffectiveBalanceUpdates_effectiveBalance
+    (computed : processEffectiveBalanceUpdates state = .ok after) {index : Nat}
+    {validator : Validator} (found : state.validators.data[index]? = some validator)
+    {balance : Gwei} (owned : state.balances.data[index]? = some balance) :
+    ∃ effectiveBalance : Gwei,
+      after.validators.data[index]? = some { validator with effectiveBalance } ∧
+        (effectiveBalance = validator.effectiveBalance ∨
+          effectiveBalance ≤ balance ∧
+            effectiveBalance ≤ withdrawalMaxEffectiveBalance preset fork validator) := by
+  obtain ⟨effectiveBalance, updated, computed⟩ :=
+    processEffectiveBalanceUpdates_effectiveBalance_eq computed found owned
+  exact ⟨effectiveBalance, updated, updatedEffectiveBalance_eq_or_le computed⟩
 
 end EthLib.Consensus
