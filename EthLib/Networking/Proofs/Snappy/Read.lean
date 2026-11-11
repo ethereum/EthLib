@@ -149,7 +149,9 @@ theorem decodeFramesList_of_readFrames {n : Nat} {bs out : List UInt8}
 
 /-! ## Bytes after the chunks -/
 
-/-- Chunks that hold the bytes the reader needs stop it, so bytes after them are left unread. -/
+/-- Nonempty chunks that the reader reads whole, with the bytes it needs, stop it.
+
+So bytes after them are left unread. -/
 theorem readChunks_append {need fuel : Nat} {a b out : List UInt8} (ha : a ≠ [])
     (h : readChunks need a fuel = .ok (out, [])) (hn : need ≤ out.length) :
     readChunks need (a ++ b) fuel = .ok (out, b) := by
@@ -231,7 +233,9 @@ theorem encodeChunks_nil (chunk : List UInt8 → List UInt8) (n : Nat) :
 
 The encoder needs at least the data length, and the reader at least the length it writes.
 
-The chunk of each piece of at most 65536 bytes must be a header and a body that decodes to it. -/
+The chunk of each piece of at most 65536 bytes must be a header and a body that decodes to it.
+
+That body must be shorter than 2^24 bytes. -/
 theorem readChunks_encodeChunks {chunk : List UInt8 → List UInt8}
     (hchunk : ∀ piece : List UInt8, piece.length ≤ maxChunkLength →
       ∃ (type : UInt8) (body : List UInt8), body.length < 2 ^ 24 ∧
@@ -283,6 +287,10 @@ theorem readChunks_encodeChunks {chunk : List UInt8 → List UInt8}
             simp [Except.map, piece]
 
 /-- The reader reads a stream of the encoder whole: the identifier, then the chunks of the data.
+
+Each chunk must be a header and a body that decodes to its piece, as for the chunks alone.
+
+The fuel of the encoder must be at least the data length.
 -/
 theorem readFrames_streamIdentifier_encodeChunks {chunk : List UInt8 → List UInt8}
     (hchunk : ∀ piece : List UInt8, piece.length ≤ maxChunkLength →

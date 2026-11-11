@@ -190,6 +190,8 @@ def decodeFrames (bs : ByteArray) : Except FrameError ByteArray :=
 
 It returns the decoded bytes of the chunks read and the bytes after the last of them.
 
+It reads at least one chunk unless the stream is empty, even when `need` is 0.
+
 A chunk is read whole, so the output can be longer than `need`.
 
 The stream can end first, and then the output is shorter.
