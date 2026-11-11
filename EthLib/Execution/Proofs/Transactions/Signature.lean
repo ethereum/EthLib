@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Proofs.Secp256k1.Recovery
 public import EthLib.Execution.Transactions.Signature
+public import EthLib.Execution.Transactions.Validity
 
 /-!
 # Proofs: the sender of a transaction
@@ -19,6 +20,10 @@ An honest signer is the sender of the transaction that it signs.
 The signature of a transaction is not part of what it signs.
 
 So changing the signature of a transaction leaves its signing hash as it was.
+
+A legacy transaction that reports a chain signs a hash that covers that chain.
+
+So one that passes the chain check of a network signs a hash with no chain or the network's chain.
 -/
 
 @[expose] public section
@@ -196,6 +201,76 @@ theorem recoverSender_sign {fork : Fork} {tx : Transaction} {hash : Vector UInt8
   simp only [recoverSender, hRange, hInput, bind, Except.bind]
   rw [hr, hsTx, hRecover, hQ]
   rfl
+
+/-! ## The chain of a legacy transaction -/
+
+/-- A legacy transaction that reports no chain signs the hash of its six fields.
+
+The chain that it reports and the hash that it signs both come from its `v`. -/
+theorem signingInput_legacy_no_chain {fork : Fork} {tx : LegacyTransaction} {hash : Hash32}
+    {id : Fin 2} (h : signingInput fork (.legacy tx) = .ok (hash, id))
+    (hc : Transaction.chainId fork (.legacy tx) = .ok none) :
+    signingHashPre155 tx = .ok hash := by
+  simp only [signingInput, bind, Except.bind] at h
+  cases hv : legacyRecovery fork tx.v with
+  | error e => simp only [hv] at h; cases h
+  | ok r =>
+    obtain ⟨chain, i⟩ := r
+    obtain rfl : chain = none := by
+      simp only [Transaction.chainId, hv, Functor.map, Except.map, Except.ok.injEq] at hc
+      exact hc
+    simp only [hv] at h
+    cases hh : signingHashPre155 tx with
+    | error e => simp only [hh, Except.mapError] at h; cases h
+    | ok h' =>
+      simp only [hh, Except.mapError, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at h
+      simp [h.1]
+
+/-- A legacy transaction that reports the chain `c` signs the hash that covers `c`.
+
+[EIP-155](https://eips.ethereum.org/EIPS/eip-155#specification) puts the chain into that hash. -/
+theorem signingInput_legacy_chain {fork : Fork} {tx : LegacyTransaction} {hash : Hash32}
+    {id : Fin 2} {c : U256} (h : signingInput fork (.legacy tx) = .ok (hash, id))
+    (hc : Transaction.chainId fork (.legacy tx) = .ok (some c)) :
+    signingHash155 tx c = .ok hash := by
+  simp only [signingInput, bind, Except.bind] at h
+  cases hv : legacyRecovery fork tx.v with
+  | error e => simp only [hv] at h; cases h
+  | ok r =>
+    obtain ⟨chain, i⟩ := r
+    obtain rfl : chain = some c := by
+      simp only [Transaction.chainId, hv, Functor.map, Except.map, Except.ok.injEq] at hc
+      exact hc
+    simp only [hv] at h
+    cases hh : signingHash155 tx c with
+    | error e => simp only [hh, Except.mapError] at h; cases h
+    | ok h' =>
+      simp only [hh, Except.mapError, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at h
+      simp [h.1]
+
+/-- A legacy transaction that passes the chain check of a network signs one of two hashes.
+
+It is the hash of its six fields, or the hash that covers the chain of that network. -/
+theorem signingInput_legacy_of_checkChainId {fork : Fork} {chainId : UInt64}
+    {tx : LegacyTransaction} {hash : Hash32} {id : Fin 2}
+    (hok : checkChainId fork chainId (.legacy tx) = .ok ())
+    (h : signingInput fork (.legacy tx) = .ok (hash, id)) :
+    signingHashPre155 tx = .ok hash ∨
+      signingHash155 tx (.ofNat 256 chainId.toNat) = .ok hash := by
+  unfold checkChainId at hok
+  cases hc : Transaction.chainId fork (.legacy tx) with
+  | error e => simp [hc, bind, Except.bind] at hok
+  | ok signed =>
+    cases signed with
+    | none => exact .inl (signingInput_legacy_no_chain h hc)
+    | some c =>
+      have heq : c.toNat = chainId.toNat := by
+        by_contra hne
+        simp [hc, bind, Except.bind, hne] at hok
+      have hc' : c = .ofNat 256 chainId.toNat := by
+        apply BitVec.eq_of_toNat_eq
+        rw [heq, BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by have := chainId.toNat_lt; omega)]
+      exact .inr (hc' ▸ signingInput_legacy_chain h hc)
 
 /-! ## The signing hashes -/
 
