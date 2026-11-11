@@ -90,7 +90,6 @@ The specification and the exports import nothing beyond the Lean toolchain.
   Index with `Fin` or a `Vector`, walk arrays of equal length together with `zip`, or return a typed error.
   Older modules still use these accessors, and pull requests remove them module by module.
   `lake exe check-accessors` keeps their exact list.
-  #106 tracks the ones in KZG.
 - Prefer structural recursion, `map` and folds to `Id.run do` with mutable variables.
   A proof then follows the shape of the definition.
   This is advice, not a rule: a loop whose speed matters can keep `do`.
