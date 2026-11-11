@@ -3,6 +3,7 @@
 import hashlib
 import json
 import os
+import re
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
@@ -11,7 +12,7 @@ import pytest
 
 import archives
 
-from .catalogue import Case
+from .catalogue import DEVNETS, Case
 from .runners import RUNNERS, plan, reads, runner
 
 # The environment variable that names the shard of a run, as `k/n` with 1 <= k <= n.
@@ -25,6 +26,17 @@ CLASSES = {
     "sources-disagree",
     "harness-defect",
 }
+# The parity test of each suite, by the suite name of its report.
+TESTS = {
+    "execution-spec-tests": "test_execution.py",
+    **dict.fromkeys(DEVNETS, "test_devnets.py"),
+    "consensus-spec-tests": "test_consensus.py",
+    "legacytests": "test_legacy.py",
+}
+# The directory of the parity tests, from the repository root, where a command runs.
+PARITY = Path(__file__).resolve().parent.relative_to(archives.REPO).as_posix()
+# The state upstream of a disagreement starts with the day it was last checked.
+AS_OF = re.compile(r"As of \d{4}-\d{2}-\d{2}, ")
 
 
 def runnable(cases: list[Case]) -> list[Case]:
@@ -114,12 +126,41 @@ def check_groups(cases: list[Case]) -> None:
     assert missing == []
 
 
+def case_id(suite: str, ident: str, group: str | None) -> str:
+    """The pytest identifier of a case in the parity test of its suite."""
+    # A legacy test is one case per group, so the group tells them apart.
+    if suite == "legacytests":
+        return f"{group}:{ident}"
+    # The devnets share one test, so the suite tells their cases apart.
+    if suite in DEVNETS:
+        return f"{suite}:{ident}"
+    return ident
+
+
+def reproduce(entry: dict) -> str:
+    """The command that runs the case of a disagreement alone, from the repository root."""
+    suite = entry["suite"]
+    ident = case_id(suite, entry["case"], entry.get("group"))
+    return f'pytest -m archive "{PARITY}/{TESTS[suite]}::test_case[{ident}]"'
+
+
+def check_entry(entry: dict) -> None:
+    """A disagreement gives its reason, source, class, command and state upstream.
+
+    It reads the entry alone, so it runs without the archives.
+    """
+    key = (entry.get("suite"), entry.get("case"), entry.get("group"))
+    assert entry.get("suite") in TESTS and entry.get("case"), key
+    assert entry.get("reason") and entry.get("source"), key
+    assert entry.get("class") in CLASSES, key
+    # The command of a legacy case needs its group.
+    assert entry["suite"] != "legacytests" or entry.get("group"), key
+    assert entry.get("reproduce") == reproduce(entry), key
+    assert AS_OF.match(entry.get("upstream", "")), key
+
+
 def check_disagreements(cases: list[Case], suite_disagreements: dict) -> None:
-    """Every disagreement names a runnable case, with its reason, source, class and command."""
+    """Every disagreement names a runnable case."""
     keys = {key for case in runnable(cases) for key in ((case.id, case.group), (case.id, None))}
-    for key, entry in suite_disagreements.items():
+    for key in suite_disagreements:
         assert key in keys, key
-        assert entry.get("reason") and entry.get("source"), key
-        assert entry.get("class") in CLASSES, key
-        # It also says where it stands upstream.
-        assert entry.get("reproduce") and entry.get("upstream"), key

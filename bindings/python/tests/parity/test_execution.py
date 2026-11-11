@@ -20,7 +20,9 @@ DISAGREEMENTS = archives.disagreements(SUITE)
 pytestmark = pytest.mark.archive(catalogue.EXECUTION)
 
 
-@pytest.mark.parametrize("case", SHARD, ids=lambda case: case.id)
+@pytest.mark.parametrize(
+    "case", SHARD, ids=lambda case: harness.case_id(case.suite, case.id, case.group)
+)
 def test_case(case, request, record_property) -> None:
     harness.run(cast(Path, ROOT), case, DISAGREEMENTS, request, record_property)
 

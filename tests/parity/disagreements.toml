@@ -13,13 +13,16 @@
 #   mocked-environment   The case relies on a mock that the source does not define.
 #   sources-disagree     Two sources disagree, and the fixture follows the other one.
 #   harness-defect       The parity harness runs the case wrongly.
-# The command runs with ETHLIB_ARCHIVES set, through `uv run --no-sync`, from the repository root.
+# The command is the pytest node of the case, which test_disagreements.py checks.
+# It runs with ETHLIB_ARCHIVES set, through `uv run --no-sync`, from the repository root.
 # The upstream field names the report or fix upstream, or says that there is none.
+# It starts with the day it was last checked, as "As of YYYY-MM-DD, ", since its state changes.
 # The case is the identifier that the parity report uses.
 # For execution-spec-tests, it is the test identifier of a fixture.
 # For consensus-spec-tests, it is the directory of a case in the archive.
 # For legacytests, it is the path of a file in the archive, two colons, and the name of a test.
 # An entry can name the group of runners that disagrees, and then holds for that group only.
+# A legacytests case runs once per group, so a legacytests entry names its group.
 #
 #     [[disagreement]]
 #     suite = "execution-spec-tests"
@@ -28,7 +31,7 @@
 #     source = "EIP-... section ..."
 #     class = "fixture-defect"
 #     reproduce = 'pytest -m archive "bindings/python/tests/parity/test_execution.py::test_case[...]"'
-#     upstream = "ethereum/execution-spec-tests#..."
+#     upstream = "As of 2026-11-11, ethereum/execution-spec-tests#... is open"
 
 # A block whose gas limit is 2^63, one above the gas limit of its parent.
 # Clients cap the gas limit at 2^63 - 1, and the tests reject the block.
@@ -44,7 +47,7 @@ reason = "EthLib accepts a gas limit of 2^63, as execution-specs does, since no 
 source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number. execution-specs e27f097: forks/frontier/blocks.py line 121 and forks/london/blocks.py line 130 type it as Uint, check_gas_limit at frontier/fork.py line 705 bounds it only by the parent and the minimum, and tests/json_loader/helpers/exceptional_test_patterns.py line 85 lists GasLimitHigherThan2p63m1 as expected_fail. EIP-1985 is Stagnant"
 class = "fixture-defect"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_header:Constantinople/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_Frontier]"'
-upstream = "ethereum/tests#1218 (open) reports that t8n does not reject the block, and its reply says retesteth adds the check. No report says that no activated rule bounds the gas limit"
+upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that t8n does not reject the block, and its reply says retesteth adds the check. No report says that no activated rule bounds the gas limit"
 
 [[disagreement]]
 suite = "legacytests"
@@ -54,7 +57,7 @@ reason = "EthLib accepts a gas limit of 2^63, as execution-specs does, since no 
 source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number. execution-specs e27f097: forks/frontier/blocks.py line 121 and forks/london/blocks.py line 130 type it as Uint, check_gas_limit at frontier/fork.py line 705 bounds it only by the parent and the minimum, and tests/json_loader/helpers/exceptional_test_patterns.py line 85 lists GasLimitHigherThan2p63m1 as expected_fail. EIP-1985 is Stagnant"
 class = "fixture-defect"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_header:Constantinople/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_Homestead]"'
-upstream = "ethereum/tests#1218 (open) reports that t8n does not reject the block, and its reply says retesteth adds the check. No report says that no activated rule bounds the gas limit"
+upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that t8n does not reject the block, and its reply says retesteth adds the check. No report says that no activated rule bounds the gas limit"
 
 [[disagreement]]
 suite = "legacytests"
@@ -64,7 +67,7 @@ reason = "EthLib accepts a gas limit of 2^63, as execution-specs does, since no 
 source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number. execution-specs e27f097: forks/frontier/blocks.py line 121 and forks/london/blocks.py line 130 type it as Uint, check_gas_limit at frontier/fork.py line 705 bounds it only by the parent and the minimum, and tests/json_loader/helpers/exceptional_test_patterns.py line 85 lists GasLimitHigherThan2p63m1 as expected_fail. EIP-1985 is Stagnant"
 class = "fixture-defect"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_header:Constantinople/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_EIP150]"'
-upstream = "ethereum/tests#1218 (open) reports that t8n does not reject the block, and its reply says retesteth adds the check. No report says that no activated rule bounds the gas limit"
+upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that t8n does not reject the block, and its reply says retesteth adds the check. No report says that no activated rule bounds the gas limit"
 
 [[disagreement]]
 suite = "legacytests"
@@ -74,7 +77,7 @@ reason = "EthLib accepts a gas limit of 2^63, as execution-specs does, since no 
 source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number. execution-specs e27f097: forks/frontier/blocks.py line 121 and forks/london/blocks.py line 130 type it as Uint, check_gas_limit at frontier/fork.py line 705 bounds it only by the parent and the minimum, and tests/json_loader/helpers/exceptional_test_patterns.py line 85 lists GasLimitHigherThan2p63m1 as expected_fail. EIP-1985 is Stagnant"
 class = "fixture-defect"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_header:Constantinople/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_EIP158]"'
-upstream = "ethereum/tests#1218 (open) reports that t8n does not reject the block, and its reply says retesteth adds the check. No report says that no activated rule bounds the gas limit"
+upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that t8n does not reject the block, and its reply says retesteth adds the check. No report says that no activated rule bounds the gas limit"
 
 [[disagreement]]
 suite = "legacytests"
@@ -84,7 +87,7 @@ reason = "EthLib accepts a gas limit of 2^63, as execution-specs does, since no 
 source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number. execution-specs e27f097: forks/frontier/blocks.py line 121 and forks/london/blocks.py line 130 type it as Uint, check_gas_limit at frontier/fork.py line 705 bounds it only by the parent and the minimum, and tests/json_loader/helpers/exceptional_test_patterns.py line 85 lists GasLimitHigherThan2p63m1 as expected_fail. EIP-1985 is Stagnant"
 class = "fixture-defect"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_header:Constantinople/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_Byzantium]"'
-upstream = "ethereum/tests#1218 (open) reports that t8n does not reject the block, and its reply says retesteth adds the check. No report says that no activated rule bounds the gas limit"
+upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that t8n does not reject the block, and its reply says retesteth adds the check. No report says that no activated rule bounds the gas limit"
 
 [[disagreement]]
 suite = "legacytests"
@@ -94,7 +97,7 @@ reason = "EthLib accepts a gas limit of 2^63, as execution-specs does, since no 
 source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number. execution-specs e27f097: forks/frontier/blocks.py line 121 and forks/london/blocks.py line 130 type it as Uint, check_gas_limit at frontier/fork.py line 705 bounds it only by the parent and the minimum, and tests/json_loader/helpers/exceptional_test_patterns.py line 85 lists GasLimitHigherThan2p63m1 as expected_fail. EIP-1985 is Stagnant"
 class = "fixture-defect"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_header:Constantinople/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_Constantinople]"'
-upstream = "ethereum/tests#1218 (open) reports that t8n does not reject the block, and its reply says retesteth adds the check. No report says that no activated rule bounds the gas limit"
+upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that t8n does not reject the block, and its reply says retesteth adds the check. No report says that no activated rule bounds the gas limit"
 
 [[disagreement]]
 suite = "legacytests"
@@ -104,7 +107,7 @@ reason = "EthLib accepts a gas limit of 2^63, as execution-specs does, since no 
 source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number. execution-specs e27f097: forks/frontier/blocks.py line 121 and forks/london/blocks.py line 130 type it as Uint, check_gas_limit at frontier/fork.py line 705 bounds it only by the parent and the minimum, and tests/json_loader/helpers/exceptional_test_patterns.py line 85 lists GasLimitHigherThan2p63m1 as expected_fail. EIP-1985 is Stagnant"
 class = "fixture-defect"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_header:Constantinople/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_ConstantinopleFix]"'
-upstream = "ethereum/tests#1218 (open) reports that t8n does not reject the block, and its reply says retesteth adds the check. No report says that no activated rule bounds the gas limit"
+upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that t8n does not reject the block, and its reply says retesteth adds the check. No report says that no activated rule bounds the gas limit"
 
 [[disagreement]]
 suite = "legacytests"
@@ -114,7 +117,7 @@ reason = "EthLib accepts a gas limit of 2^63, as execution-specs does, since no 
 source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number. execution-specs e27f097: forks/frontier/blocks.py line 121 and forks/london/blocks.py line 130 type it as Uint, check_gas_limit at frontier/fork.py line 705 bounds it only by the parent and the minimum, and tests/json_loader/helpers/exceptional_test_patterns.py line 85 lists GasLimitHigherThan2p63m1 as expected_fail. EIP-1985 is Stagnant"
 class = "fixture-defect"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_header:Cancun/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::LegacyTests/Cancun/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_Istanbul]"'
-upstream = "ethereum/tests#1218 (open) reports that t8n does not reject the block, and its reply says retesteth adds the check. No report says that no activated rule bounds the gas limit"
+upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that t8n does not reject the block, and its reply says retesteth adds the check. No report says that no activated rule bounds the gas limit"
 
 [[disagreement]]
 suite = "legacytests"
@@ -124,7 +127,7 @@ reason = "EthLib accepts a gas limit of 2^63, as execution-specs does, since no 
 source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number. execution-specs e27f097: forks/frontier/blocks.py line 121 and forks/london/blocks.py line 130 type it as Uint, check_gas_limit at frontier/fork.py line 705 bounds it only by the parent and the minimum, and tests/json_loader/helpers/exceptional_test_patterns.py line 85 lists GasLimitHigherThan2p63m1 as expected_fail. EIP-1985 is Stagnant"
 class = "fixture-defect"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_header:Cancun/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::LegacyTests/Cancun/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_Berlin]"'
-upstream = "ethereum/tests#1218 (open) reports that t8n does not reject the block, and its reply says retesteth adds the check. No report says that no activated rule bounds the gas limit"
+upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that t8n does not reject the block, and its reply says retesteth adds the check. No report says that no activated rule bounds the gas limit"
 
 [[disagreement]]
 suite = "legacytests"
@@ -134,7 +137,7 @@ reason = "EthLib accepts a gas limit of 2^63, as execution-specs does, since no 
 source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number. execution-specs e27f097: forks/frontier/blocks.py line 121 and forks/london/blocks.py line 130 type it as Uint, check_gas_limit at frontier/fork.py line 705 bounds it only by the parent and the minimum, and tests/json_loader/helpers/exceptional_test_patterns.py line 85 lists GasLimitHigherThan2p63m1 as expected_fail. EIP-1985 is Stagnant"
 class = "fixture-defect"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_header:Cancun/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::LegacyTests/Cancun/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_London]"'
-upstream = "ethereum/tests#1218 (open) reports that t8n does not reject the block, and its reply says retesteth adds the check. No report says that no activated rule bounds the gas limit"
+upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that t8n does not reject the block, and its reply says retesteth adds the check. No report says that no activated rule bounds the gas limit"
 
 [[disagreement]]
 suite = "legacytests"
@@ -144,7 +147,7 @@ reason = "EthLib accepts a gas limit of 2^63, as execution-specs does, since no 
 source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number. execution-specs e27f097: forks/frontier/blocks.py line 121 and forks/london/blocks.py line 130 type it as Uint, check_gas_limit at frontier/fork.py line 705 bounds it only by the parent and the minimum, and tests/json_loader/helpers/exceptional_test_patterns.py line 85 lists GasLimitHigherThan2p63m1 as expected_fail. EIP-1985 is Stagnant"
 class = "fixture-defect"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Constantinople/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_Frontier]"'
-upstream = "ethereum/tests#1218 (open) reports that t8n does not reject the block, and its reply says retesteth adds the check. No report says that no activated rule bounds the gas limit"
+upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that t8n does not reject the block, and its reply says retesteth adds the check. No report says that no activated rule bounds the gas limit"
 
 [[disagreement]]
 suite = "legacytests"
@@ -154,7 +157,7 @@ reason = "EthLib accepts a gas limit of 2^63, as execution-specs does, since no 
 source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number. execution-specs e27f097: forks/frontier/blocks.py line 121 and forks/london/blocks.py line 130 type it as Uint, check_gas_limit at frontier/fork.py line 705 bounds it only by the parent and the minimum, and tests/json_loader/helpers/exceptional_test_patterns.py line 85 lists GasLimitHigherThan2p63m1 as expected_fail. EIP-1985 is Stagnant"
 class = "fixture-defect"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Constantinople/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_Homestead]"'
-upstream = "ethereum/tests#1218 (open) reports that t8n does not reject the block, and its reply says retesteth adds the check. No report says that no activated rule bounds the gas limit"
+upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that t8n does not reject the block, and its reply says retesteth adds the check. No report says that no activated rule bounds the gas limit"
 
 [[disagreement]]
 suite = "legacytests"
@@ -164,7 +167,7 @@ reason = "EthLib accepts a gas limit of 2^63, as execution-specs does, since no 
 source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number. execution-specs e27f097: forks/frontier/blocks.py line 121 and forks/london/blocks.py line 130 type it as Uint, check_gas_limit at frontier/fork.py line 705 bounds it only by the parent and the minimum, and tests/json_loader/helpers/exceptional_test_patterns.py line 85 lists GasLimitHigherThan2p63m1 as expected_fail. EIP-1985 is Stagnant"
 class = "fixture-defect"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Constantinople/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_EIP150]"'
-upstream = "ethereum/tests#1218 (open) reports that t8n does not reject the block, and its reply says retesteth adds the check. No report says that no activated rule bounds the gas limit"
+upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that t8n does not reject the block, and its reply says retesteth adds the check. No report says that no activated rule bounds the gas limit"
 
 [[disagreement]]
 suite = "legacytests"
@@ -174,7 +177,7 @@ reason = "EthLib accepts a gas limit of 2^63, as execution-specs does, since no 
 source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number. execution-specs e27f097: forks/frontier/blocks.py line 121 and forks/london/blocks.py line 130 type it as Uint, check_gas_limit at frontier/fork.py line 705 bounds it only by the parent and the minimum, and tests/json_loader/helpers/exceptional_test_patterns.py line 85 lists GasLimitHigherThan2p63m1 as expected_fail. EIP-1985 is Stagnant"
 class = "fixture-defect"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Constantinople/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_EIP158]"'
-upstream = "ethereum/tests#1218 (open) reports that t8n does not reject the block, and its reply says retesteth adds the check. No report says that no activated rule bounds the gas limit"
+upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that t8n does not reject the block, and its reply says retesteth adds the check. No report says that no activated rule bounds the gas limit"
 
 [[disagreement]]
 suite = "legacytests"
@@ -184,7 +187,7 @@ reason = "EthLib accepts a gas limit of 2^63, as execution-specs does, since no 
 source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number. execution-specs e27f097: forks/frontier/blocks.py line 121 and forks/london/blocks.py line 130 type it as Uint, check_gas_limit at frontier/fork.py line 705 bounds it only by the parent and the minimum, and tests/json_loader/helpers/exceptional_test_patterns.py line 85 lists GasLimitHigherThan2p63m1 as expected_fail. EIP-1985 is Stagnant"
 class = "fixture-defect"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Constantinople/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_Byzantium]"'
-upstream = "ethereum/tests#1218 (open) reports that t8n does not reject the block, and its reply says retesteth adds the check. No report says that no activated rule bounds the gas limit"
+upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that t8n does not reject the block, and its reply says retesteth adds the check. No report says that no activated rule bounds the gas limit"
 
 [[disagreement]]
 suite = "legacytests"
@@ -194,7 +197,7 @@ reason = "EthLib accepts a gas limit of 2^63, as execution-specs does, since no 
 source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number. execution-specs e27f097: forks/frontier/blocks.py line 121 and forks/london/blocks.py line 130 type it as Uint, check_gas_limit at frontier/fork.py line 705 bounds it only by the parent and the minimum, and tests/json_loader/helpers/exceptional_test_patterns.py line 85 lists GasLimitHigherThan2p63m1 as expected_fail. EIP-1985 is Stagnant"
 class = "fixture-defect"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Constantinople/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_ConstantinopleFix]"'
-upstream = "ethereum/tests#1218 (open) reports that t8n does not reject the block, and its reply says retesteth adds the check. No report says that no activated rule bounds the gas limit"
+upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that t8n does not reject the block, and its reply says retesteth adds the check. No report says that no activated rule bounds the gas limit"
 
 [[disagreement]]
 suite = "legacytests"
@@ -204,7 +207,7 @@ reason = "EthLib accepts a gas limit of 2^63, as execution-specs does, since no 
 source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number. execution-specs e27f097: forks/frontier/blocks.py line 121 and forks/london/blocks.py line 130 type it as Uint, check_gas_limit at frontier/fork.py line 705 bounds it only by the parent and the minimum, and tests/json_loader/helpers/exceptional_test_patterns.py line 85 lists GasLimitHigherThan2p63m1 as expected_fail. EIP-1985 is Stagnant"
 class = "fixture-defect"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::LegacyTests/Cancun/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_Istanbul]"'
-upstream = "ethereum/tests#1218 (open) reports that t8n does not reject the block, and its reply says retesteth adds the check. No report says that no activated rule bounds the gas limit"
+upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that t8n does not reject the block, and its reply says retesteth adds the check. No report says that no activated rule bounds the gas limit"
 
 [[disagreement]]
 suite = "legacytests"
@@ -214,7 +217,7 @@ reason = "EthLib accepts a gas limit of 2^63, as execution-specs does, since no 
 source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number. execution-specs e27f097: forks/frontier/blocks.py line 121 and forks/london/blocks.py line 130 type it as Uint, check_gas_limit at frontier/fork.py line 705 bounds it only by the parent and the minimum, and tests/json_loader/helpers/exceptional_test_patterns.py line 85 lists GasLimitHigherThan2p63m1 as expected_fail. EIP-1985 is Stagnant"
 class = "fixture-defect"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::LegacyTests/Cancun/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_Berlin]"'
-upstream = "ethereum/tests#1218 (open) reports that t8n does not reject the block, and its reply says retesteth adds the check. No report says that no activated rule bounds the gas limit"
+upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that t8n does not reject the block, and its reply says retesteth adds the check. No report says that no activated rule bounds the gas limit"
 
 [[disagreement]]
 suite = "legacytests"
@@ -224,7 +227,7 @@ reason = "EthLib accepts a gas limit of 2^63, as execution-specs does, since no 
 source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number. execution-specs e27f097: forks/frontier/blocks.py line 121 and forks/london/blocks.py line 130 type it as Uint, check_gas_limit at frontier/fork.py line 705 bounds it only by the parent and the minimum, and tests/json_loader/helpers/exceptional_test_patterns.py line 85 lists GasLimitHigherThan2p63m1 as expected_fail. EIP-1985 is Stagnant"
 class = "fixture-defect"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::LegacyTests/Cancun/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_London]"'
-upstream = "ethereum/tests#1218 (open) reports that t8n does not reject the block, and its reply says retesteth adds the check. No report says that no activated rule bounds the gas limit"
+upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that t8n does not reject the block, and its reply says retesteth adds the check. No report says that no activated rule bounds the gas limit"
 
 # The fast confirmation cases of v1.7.0-beta.4 whose answer depends on the weight of the committees.
 # That release weighs the committees of a range of slots by an average per slot.
@@ -239,7 +242,7 @@ reason = "The case was generated with an average estimate of the committee weigh
 source = "arXiv 2405.00549v4, equation (6) and Definition 4: the safety threshold uses the exact weight of the committees, which Lemma 2 of Appendix A.1 needs. consensus-specs cc68498a51ceb7b1fb80b1c595ef5597ca4b3c2c, specs/phase0/fast-confirmation.md, compute_committee_weight_between_slots, replaces the estimate, and changes this case in test_empty_slots.py. The pinned v1.7.0-beta.4 archive predates that commit"
 class = "sources-disagree"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/altair/fast_confirmation/empty_slots/pyspec_tests/fcr_handles_multiple_consecutive_empty_slots]"'
-upstream = "Fixed in consensus-specs #5670 (cc68498a, 2026-10-28). No release contains it: v1.7.0-beta.4 is the latest"
+upstream = "As of 2026-11-11, consensus-specs #5670 (cc68498a, merged 2026-10-28) fixes it, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
 
 [[disagreement]]
 suite = "consensus-spec-tests"
@@ -248,7 +251,7 @@ reason = "The case was generated with an average estimate of the committee weigh
 source = "arXiv 2405.00549v4, equation (6) and Definition 4: the safety threshold uses the exact weight of the committees, which Lemma 2 of Appendix A.1 needs. consensus-specs cc68498a51ceb7b1fb80b1c595ef5597ca4b3c2c, specs/phase0/fast-confirmation.md, compute_committee_weight_between_slots, replaces the estimate, and changes this case in test_empty_slots.py. The pinned v1.7.0-beta.4 archive predates that commit"
 class = "sources-disagree"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/bellatrix/fast_confirmation/empty_slots/pyspec_tests/fcr_handles_multiple_consecutive_empty_slots]"'
-upstream = "Fixed in consensus-specs #5670 (cc68498a, 2026-10-28). No release contains it: v1.7.0-beta.4 is the latest"
+upstream = "As of 2026-11-11, consensus-specs #5670 (cc68498a, merged 2026-10-28) fixes it, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
 
 [[disagreement]]
 suite = "consensus-spec-tests"
@@ -257,7 +260,7 @@ reason = "The case was generated with an average estimate of the committee weigh
 source = "arXiv 2405.00549v4, equation (6) and Definition 4: the safety threshold uses the exact weight of the committees, which Lemma 2 of Appendix A.1 needs. consensus-specs cc68498a51ceb7b1fb80b1c595ef5597ca4b3c2c, specs/phase0/fast-confirmation.md, compute_committee_weight_between_slots, replaces the estimate, and changes this case in test_empty_slots.py. The pinned v1.7.0-beta.4 archive predates that commit"
 class = "sources-disagree"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/capella/fast_confirmation/empty_slots/pyspec_tests/fcr_handles_multiple_consecutive_empty_slots]"'
-upstream = "Fixed in consensus-specs #5670 (cc68498a, 2026-10-28). No release contains it: v1.7.0-beta.4 is the latest"
+upstream = "As of 2026-11-11, consensus-specs #5670 (cc68498a, merged 2026-10-28) fixes it, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
 
 [[disagreement]]
 suite = "consensus-spec-tests"
@@ -266,7 +269,7 @@ reason = "The case was generated with an average estimate of the committee weigh
 source = "arXiv 2405.00549v4, equation (6) and Definition 4: the safety threshold uses the exact weight of the committees, which Lemma 2 of Appendix A.1 needs. consensus-specs cc68498a51ceb7b1fb80b1c595ef5597ca4b3c2c, specs/phase0/fast-confirmation.md, compute_committee_weight_between_slots, replaces the estimate, and changes this case in test_empty_slots.py. The pinned v1.7.0-beta.4 archive predates that commit"
 class = "sources-disagree"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/deneb/fast_confirmation/empty_slots/pyspec_tests/fcr_handles_multiple_consecutive_empty_slots]"'
-upstream = "Fixed in consensus-specs #5670 (cc68498a, 2026-10-28). No release contains it: v1.7.0-beta.4 is the latest"
+upstream = "As of 2026-11-11, consensus-specs #5670 (cc68498a, merged 2026-10-28) fixes it, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
 
 [[disagreement]]
 suite = "consensus-spec-tests"
@@ -275,7 +278,7 @@ reason = "The case was generated with an average estimate of the committee weigh
 source = "arXiv 2405.00549v4, equation (6) and Definition 4: the safety threshold uses the exact weight of the committees, which Lemma 2 of Appendix A.1 needs. consensus-specs cc68498a51ceb7b1fb80b1c595ef5597ca4b3c2c, specs/phase0/fast-confirmation.md, compute_committee_weight_between_slots, replaces the estimate, and changes this case in test_empty_slots.py. The pinned v1.7.0-beta.4 archive predates that commit"
 class = "sources-disagree"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/electra/fast_confirmation/empty_slots/pyspec_tests/fcr_handles_multiple_consecutive_empty_slots]"'
-upstream = "Fixed in consensus-specs #5670 (cc68498a, 2026-10-28). No release contains it: v1.7.0-beta.4 is the latest"
+upstream = "As of 2026-11-11, consensus-specs #5670 (cc68498a, merged 2026-10-28) fixes it, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
 
 [[disagreement]]
 suite = "consensus-spec-tests"
@@ -284,7 +287,7 @@ reason = "The case was generated with an average estimate of the committee weigh
 source = "arXiv 2405.00549v4, equation (6) and Definition 4: the safety threshold uses the exact weight of the committees, which Lemma 2 of Appendix A.1 needs. consensus-specs cc68498a51ceb7b1fb80b1c595ef5597ca4b3c2c, specs/phase0/fast-confirmation.md, compute_committee_weight_between_slots, replaces the estimate, and changes this case in test_is_one_confirmed.py. The pinned v1.7.0-beta.4 archive predates that commit"
 class = "sources-disagree"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/electra/fast_confirmation/is_one_confirmed/pyspec_tests/is_one_confirmed_fails_recently_activated_validator_voting_in_empty_slot]"'
-upstream = "Fixed in consensus-specs #5670 (cc68498a, 2026-10-28). No release contains it: v1.7.0-beta.4 is the latest"
+upstream = "As of 2026-11-11, consensus-specs #5670 (cc68498a, merged 2026-10-28) fixes it, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
 
 [[disagreement]]
 suite = "consensus-spec-tests"
@@ -293,7 +296,7 @@ reason = "The case was generated with an average estimate of the committee weigh
 source = "arXiv 2405.00549v4, equation (6) and Definition 4: the safety threshold uses the exact weight of the committees, which Lemma 2 of Appendix A.1 needs. consensus-specs cc68498a51ceb7b1fb80b1c595ef5597ca4b3c2c, specs/phase0/fast-confirmation.md, compute_committee_weight_between_slots, replaces the estimate, and changes this case in test_is_one_confirmed.py. The pinned v1.7.0-beta.4 archive predates that commit"
 class = "sources-disagree"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/electra/fast_confirmation/is_one_confirmed/pyspec_tests/is_one_confirmed_passes_large_validator_voting_in_empty_slot]"'
-upstream = "Fixed in consensus-specs #5670 (cc68498a, 2026-10-28). No release contains it: v1.7.0-beta.4 is the latest"
+upstream = "As of 2026-11-11, consensus-specs #5670 (cc68498a, merged 2026-10-28) fixes it, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
 
 [[disagreement]]
 suite = "consensus-spec-tests"
@@ -302,7 +305,7 @@ reason = "The case was generated with an average estimate of the committee weigh
 source = "arXiv 2405.00549v4, equation (6) and Definition 4: the safety threshold uses the exact weight of the committees, which Lemma 2 of Appendix A.1 needs. consensus-specs cc68498a51ceb7b1fb80b1c595ef5597ca4b3c2c, specs/phase0/fast-confirmation.md, compute_committee_weight_between_slots, replaces the estimate, and changes this case in test_is_one_confirmed.py. The pinned v1.7.0-beta.4 archive predates that commit"
 class = "sources-disagree"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/electra/fast_confirmation/is_one_confirmed/pyspec_tests/is_one_confirmed_passes_with_empty_slot_and_attester_in_two_consecutive_slots_1]"'
-upstream = "Fixed in consensus-specs #5670 (cc68498a, 2026-10-28). No release contains it: v1.7.0-beta.4 is the latest"
+upstream = "As of 2026-11-11, consensus-specs #5670 (cc68498a, merged 2026-10-28) fixes it, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
 
 [[disagreement]]
 suite = "consensus-spec-tests"
@@ -311,7 +314,7 @@ reason = "The case was generated with an average estimate of the committee weigh
 source = "arXiv 2405.00549v4, equation (6) and Definition 4: the safety threshold uses the exact weight of the committees, which Lemma 2 of Appendix A.1 needs. consensus-specs cc68498a51ceb7b1fb80b1c595ef5597ca4b3c2c, specs/phase0/fast-confirmation.md, compute_committee_weight_between_slots, replaces the estimate, and changes this case in test_is_one_confirmed.py. The pinned v1.7.0-beta.4 archive predates that commit"
 class = "sources-disagree"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/electra/fast_confirmation/is_one_confirmed/pyspec_tests/is_one_confirmed_passes_with_empty_slot_and_attester_in_two_consecutive_slots_2]"'
-upstream = "Fixed in consensus-specs #5670 (cc68498a, 2026-10-28). No release contains it: v1.7.0-beta.4 is the latest"
+upstream = "As of 2026-11-11, consensus-specs #5670 (cc68498a, merged 2026-10-28) fixes it, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
 
 [[disagreement]]
 suite = "consensus-spec-tests"
@@ -320,7 +323,7 @@ reason = "The case was generated with an average estimate of the committee weigh
 source = "arXiv 2405.00549v4, equation (6) and Definition 4: the safety threshold uses the exact weight of the committees, which Lemma 2 of Appendix A.1 needs. consensus-specs cc68498a51ceb7b1fb80b1c595ef5597ca4b3c2c, specs/phase0/fast-confirmation.md, compute_committee_weight_between_slots, replaces the estimate, and changes this case in test_empty_slots.py. The pinned v1.7.0-beta.4 archive predates that commit"
 class = "sources-disagree"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/fulu/fast_confirmation/empty_slots/pyspec_tests/fcr_handles_multiple_consecutive_empty_slots]"'
-upstream = "Fixed in consensus-specs #5670 (cc68498a, 2026-10-28). No release contains it: v1.7.0-beta.4 is the latest"
+upstream = "As of 2026-11-11, consensus-specs #5670 (cc68498a, merged 2026-10-28) fixes it, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
 
 [[disagreement]]
 suite = "consensus-spec-tests"
@@ -329,7 +332,7 @@ reason = "The case was generated with an average estimate of the committee weigh
 source = "arXiv 2405.00549v4, equation (6) and Definition 4: the safety threshold uses the exact weight of the committees, which Lemma 2 of Appendix A.1 needs. consensus-specs cc68498a51ceb7b1fb80b1c595ef5597ca4b3c2c, specs/phase0/fast-confirmation.md, compute_committee_weight_between_slots, replaces the estimate, and changes this case in test_is_one_confirmed.py. The pinned v1.7.0-beta.4 archive predates that commit"
 class = "sources-disagree"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/fulu/fast_confirmation/is_one_confirmed/pyspec_tests/is_one_confirmed_fails_recently_activated_validator_voting_in_empty_slot]"'
-upstream = "Fixed in consensus-specs #5670 (cc68498a, 2026-10-28). No release contains it: v1.7.0-beta.4 is the latest"
+upstream = "As of 2026-11-11, consensus-specs #5670 (cc68498a, merged 2026-10-28) fixes it, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
 
 [[disagreement]]
 suite = "consensus-spec-tests"
@@ -338,7 +341,7 @@ reason = "The case was generated with an average estimate of the committee weigh
 source = "arXiv 2405.00549v4, equation (6) and Definition 4: the safety threshold uses the exact weight of the committees, which Lemma 2 of Appendix A.1 needs. consensus-specs cc68498a51ceb7b1fb80b1c595ef5597ca4b3c2c, specs/phase0/fast-confirmation.md, compute_committee_weight_between_slots, replaces the estimate, and changes this case in test_is_one_confirmed.py. The pinned v1.7.0-beta.4 archive predates that commit"
 class = "sources-disagree"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/fulu/fast_confirmation/is_one_confirmed/pyspec_tests/is_one_confirmed_passes_large_validator_voting_in_empty_slot]"'
-upstream = "Fixed in consensus-specs #5670 (cc68498a, 2026-10-28). No release contains it: v1.7.0-beta.4 is the latest"
+upstream = "As of 2026-11-11, consensus-specs #5670 (cc68498a, merged 2026-10-28) fixes it, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
 
 [[disagreement]]
 suite = "consensus-spec-tests"
@@ -347,7 +350,7 @@ reason = "The case was generated with an average estimate of the committee weigh
 source = "arXiv 2405.00549v4, equation (6) and Definition 4: the safety threshold uses the exact weight of the committees, which Lemma 2 of Appendix A.1 needs. consensus-specs cc68498a51ceb7b1fb80b1c595ef5597ca4b3c2c, specs/phase0/fast-confirmation.md, compute_committee_weight_between_slots, replaces the estimate, and changes this case in test_is_one_confirmed.py. The pinned v1.7.0-beta.4 archive predates that commit"
 class = "sources-disagree"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/fulu/fast_confirmation/is_one_confirmed/pyspec_tests/is_one_confirmed_passes_with_empty_slot_and_attester_in_two_consecutive_slots_1]"'
-upstream = "Fixed in consensus-specs #5670 (cc68498a, 2026-10-28). No release contains it: v1.7.0-beta.4 is the latest"
+upstream = "As of 2026-11-11, consensus-specs #5670 (cc68498a, merged 2026-10-28) fixes it, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
 
 [[disagreement]]
 suite = "consensus-spec-tests"
@@ -356,7 +359,7 @@ reason = "The case was generated with an average estimate of the committee weigh
 source = "arXiv 2405.00549v4, equation (6) and Definition 4: the safety threshold uses the exact weight of the committees, which Lemma 2 of Appendix A.1 needs. consensus-specs cc68498a51ceb7b1fb80b1c595ef5597ca4b3c2c, specs/phase0/fast-confirmation.md, compute_committee_weight_between_slots, replaces the estimate, and changes this case in test_is_one_confirmed.py. The pinned v1.7.0-beta.4 archive predates that commit"
 class = "sources-disagree"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/fulu/fast_confirmation/is_one_confirmed/pyspec_tests/is_one_confirmed_passes_with_empty_slot_and_attester_in_two_consecutive_slots_2]"'
-upstream = "Fixed in consensus-specs #5670 (cc68498a, 2026-10-28). No release contains it: v1.7.0-beta.4 is the latest"
+upstream = "As of 2026-11-11, consensus-specs #5670 (cc68498a, merged 2026-10-28) fixes it, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
 
 [[disagreement]]
 suite = "consensus-spec-tests"
@@ -365,7 +368,7 @@ reason = "The case was generated with an average estimate of the committee weigh
 source = "arXiv 2405.00549v4, equation (6) and Definition 4: the safety threshold uses the exact weight of the committees, which Lemma 2 of Appendix A.1 needs. consensus-specs cc68498a51ceb7b1fb80b1c595ef5597ca4b3c2c, specs/phase0/fast-confirmation.md, compute_committee_weight_between_slots, replaces the estimate, and changes this case in test_empty_slots.py. The pinned v1.7.0-beta.4 archive predates that commit"
 class = "sources-disagree"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/gloas/fast_confirmation/empty_slots/pyspec_tests/fcr_handles_multiple_consecutive_empty_slots]"'
-upstream = "Fixed in consensus-specs #5670 (cc68498a, 2026-10-28). No release contains it: v1.7.0-beta.4 is the latest"
+upstream = "As of 2026-11-11, consensus-specs #5670 (cc68498a, merged 2026-10-28) fixes it, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
 
 [[disagreement]]
 suite = "consensus-spec-tests"
@@ -374,7 +377,7 @@ reason = "The case was generated with an average estimate of the committee weigh
 source = "arXiv 2405.00549v4, equation (6) and Definition 4: the safety threshold uses the exact weight of the committees, which Lemma 2 of Appendix A.1 needs. consensus-specs cc68498a51ceb7b1fb80b1c595ef5597ca4b3c2c, specs/phase0/fast-confirmation.md, compute_committee_weight_between_slots, replaces the estimate, and changes this case in test_is_one_confirmed.py. The pinned v1.7.0-beta.4 archive predates that commit"
 class = "sources-disagree"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/gloas/fast_confirmation/is_one_confirmed/pyspec_tests/is_one_confirmed_fails_recently_activated_validator_voting_in_empty_slot]"'
-upstream = "Fixed in consensus-specs #5670 (cc68498a, 2026-10-28). No release contains it: v1.7.0-beta.4 is the latest"
+upstream = "As of 2026-11-11, consensus-specs #5670 (cc68498a, merged 2026-10-28) fixes it, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
 
 [[disagreement]]
 suite = "consensus-spec-tests"
@@ -383,7 +386,7 @@ reason = "The case was generated with an average estimate of the committee weigh
 source = "arXiv 2405.00549v4, equation (6) and Definition 4: the safety threshold uses the exact weight of the committees, which Lemma 2 of Appendix A.1 needs. consensus-specs cc68498a51ceb7b1fb80b1c595ef5597ca4b3c2c, specs/phase0/fast-confirmation.md, compute_committee_weight_between_slots, replaces the estimate, and changes this case in test_is_one_confirmed.py. The pinned v1.7.0-beta.4 archive predates that commit"
 class = "sources-disagree"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/gloas/fast_confirmation/is_one_confirmed/pyspec_tests/is_one_confirmed_passes_large_validator_voting_in_empty_slot]"'
-upstream = "Fixed in consensus-specs #5670 (cc68498a, 2026-10-28). No release contains it: v1.7.0-beta.4 is the latest"
+upstream = "As of 2026-11-11, consensus-specs #5670 (cc68498a, merged 2026-10-28) fixes it, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
 
 [[disagreement]]
 suite = "consensus-spec-tests"
@@ -392,7 +395,7 @@ reason = "The case was generated with an average estimate of the committee weigh
 source = "arXiv 2405.00549v4, equation (6) and Definition 4: the safety threshold uses the exact weight of the committees, which Lemma 2 of Appendix A.1 needs. consensus-specs cc68498a51ceb7b1fb80b1c595ef5597ca4b3c2c, specs/phase0/fast-confirmation.md, compute_committee_weight_between_slots, replaces the estimate, and changes this case in test_is_one_confirmed.py. The pinned v1.7.0-beta.4 archive predates that commit"
 class = "sources-disagree"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/gloas/fast_confirmation/is_one_confirmed/pyspec_tests/is_one_confirmed_passes_with_empty_slot_and_attester_in_two_consecutive_slots_1]"'
-upstream = "Fixed in consensus-specs #5670 (cc68498a, 2026-10-28). No release contains it: v1.7.0-beta.4 is the latest"
+upstream = "As of 2026-11-11, consensus-specs #5670 (cc68498a, merged 2026-10-28) fixes it, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
 
 [[disagreement]]
 suite = "consensus-spec-tests"
@@ -401,7 +404,7 @@ reason = "The case was generated with an average estimate of the committee weigh
 source = "arXiv 2405.00549v4, equation (6) and Definition 4: the safety threshold uses the exact weight of the committees, which Lemma 2 of Appendix A.1 needs. consensus-specs cc68498a51ceb7b1fb80b1c595ef5597ca4b3c2c, specs/phase0/fast-confirmation.md, compute_committee_weight_between_slots, replaces the estimate, and changes this case in test_is_one_confirmed.py. The pinned v1.7.0-beta.4 archive predates that commit"
 class = "sources-disagree"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/gloas/fast_confirmation/is_one_confirmed/pyspec_tests/is_one_confirmed_passes_with_empty_slot_and_attester_in_two_consecutive_slots_2]"'
-upstream = "Fixed in consensus-specs #5670 (cc68498a, 2026-10-28). No release contains it: v1.7.0-beta.4 is the latest"
+upstream = "As of 2026-11-11, consensus-specs #5670 (cc68498a, merged 2026-10-28) fixes it, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
 
 [[disagreement]]
 suite = "consensus-spec-tests"
@@ -410,7 +413,7 @@ reason = "The case was generated with an average estimate of the committee weigh
 source = "arXiv 2405.00549v4, equation (6) and Definition 4: the safety threshold uses the exact weight of the committees, which Lemma 2 of Appendix A.1 needs. consensus-specs cc68498a51ceb7b1fb80b1c595ef5597ca4b3c2c, specs/phase0/fast-confirmation.md, compute_committee_weight_between_slots, replaces the estimate, and changes this case in test_empty_slots.py. The pinned v1.7.0-beta.4 archive predates that commit"
 class = "sources-disagree"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/heze/fast_confirmation/empty_slots/pyspec_tests/fcr_handles_multiple_consecutive_empty_slots]"'
-upstream = "Fixed in consensus-specs #5670 (cc68498a, 2026-10-28). No release contains it: v1.7.0-beta.4 is the latest"
+upstream = "As of 2026-11-11, consensus-specs #5670 (cc68498a, merged 2026-10-28) fixes it, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
 
 [[disagreement]]
 suite = "consensus-spec-tests"
@@ -419,7 +422,7 @@ reason = "The case was generated with an average estimate of the committee weigh
 source = "arXiv 2405.00549v4, equation (6) and Definition 4: the safety threshold uses the exact weight of the committees, which Lemma 2 of Appendix A.1 needs. consensus-specs cc68498a51ceb7b1fb80b1c595ef5597ca4b3c2c, specs/phase0/fast-confirmation.md, compute_committee_weight_between_slots, replaces the estimate, and changes this case in test_is_one_confirmed.py. The pinned v1.7.0-beta.4 archive predates that commit"
 class = "sources-disagree"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/heze/fast_confirmation/is_one_confirmed/pyspec_tests/is_one_confirmed_fails_recently_activated_validator_voting_in_empty_slot]"'
-upstream = "Fixed in consensus-specs #5670 (cc68498a, 2026-10-28). No release contains it: v1.7.0-beta.4 is the latest"
+upstream = "As of 2026-11-11, consensus-specs #5670 (cc68498a, merged 2026-10-28) fixes it, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
 
 [[disagreement]]
 suite = "consensus-spec-tests"
@@ -428,7 +431,7 @@ reason = "The case was generated with an average estimate of the committee weigh
 source = "arXiv 2405.00549v4, equation (6) and Definition 4: the safety threshold uses the exact weight of the committees, which Lemma 2 of Appendix A.1 needs. consensus-specs cc68498a51ceb7b1fb80b1c595ef5597ca4b3c2c, specs/phase0/fast-confirmation.md, compute_committee_weight_between_slots, replaces the estimate, and changes this case in test_is_one_confirmed.py. The pinned v1.7.0-beta.4 archive predates that commit"
 class = "sources-disagree"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/heze/fast_confirmation/is_one_confirmed/pyspec_tests/is_one_confirmed_passes_large_validator_voting_in_empty_slot]"'
-upstream = "Fixed in consensus-specs #5670 (cc68498a, 2026-10-28). No release contains it: v1.7.0-beta.4 is the latest"
+upstream = "As of 2026-11-11, consensus-specs #5670 (cc68498a, merged 2026-10-28) fixes it, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
 
 [[disagreement]]
 suite = "consensus-spec-tests"
@@ -437,7 +440,7 @@ reason = "The case was generated with an average estimate of the committee weigh
 source = "arXiv 2405.00549v4, equation (6) and Definition 4: the safety threshold uses the exact weight of the committees, which Lemma 2 of Appendix A.1 needs. consensus-specs cc68498a51ceb7b1fb80b1c595ef5597ca4b3c2c, specs/phase0/fast-confirmation.md, compute_committee_weight_between_slots, replaces the estimate, and changes this case in test_is_one_confirmed.py. The pinned v1.7.0-beta.4 archive predates that commit"
 class = "sources-disagree"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/heze/fast_confirmation/is_one_confirmed/pyspec_tests/is_one_confirmed_passes_with_empty_slot_and_attester_in_two_consecutive_slots_1]"'
-upstream = "Fixed in consensus-specs #5670 (cc68498a, 2026-10-28). No release contains it: v1.7.0-beta.4 is the latest"
+upstream = "As of 2026-11-11, consensus-specs #5670 (cc68498a, merged 2026-10-28) fixes it, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
 
 [[disagreement]]
 suite = "consensus-spec-tests"
@@ -446,4 +449,4 @@ reason = "The case was generated with an average estimate of the committee weigh
 source = "arXiv 2405.00549v4, equation (6) and Definition 4: the safety threshold uses the exact weight of the committees, which Lemma 2 of Appendix A.1 needs. consensus-specs cc68498a51ceb7b1fb80b1c595ef5597ca4b3c2c, specs/phase0/fast-confirmation.md, compute_committee_weight_between_slots, replaces the estimate, and changes this case in test_is_one_confirmed.py. The pinned v1.7.0-beta.4 archive predates that commit"
 class = "sources-disagree"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/heze/fast_confirmation/is_one_confirmed/pyspec_tests/is_one_confirmed_passes_with_empty_slot_and_attester_in_two_consecutive_slots_2]"'
-upstream = "Fixed in consensus-specs #5670 (cc68498a, 2026-10-28). No release contains it: v1.7.0-beta.4 is the latest"
+upstream = "As of 2026-11-11, consensus-specs #5670 (cc68498a, merged 2026-10-28) fixes it, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
