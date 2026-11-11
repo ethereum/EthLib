@@ -172,7 +172,9 @@ theorem decryptWithKey_decryptWithKey {store : Store} {key secret : ByteArray}
 
 That subsequence holds no control code of ERC-2335, "Password requirements".
 
-It keeps every other character as often as the NFKD form holds it. -/
+It keeps every other character as often as the NFKD form holds it.
+
+These three facts determine the prepared string. -/
 theorem exists_passwordBytes_eq_toUTF8 (password : String) :
     ∃ prepared : String, passwordBytes password = prepared.toUTF8 ∧
       prepared.toList.Sublist (Base.Unicode.nfkd password).toList ∧
@@ -199,7 +201,7 @@ theorem passwordBytes_eq_toUTF8 {password : String}
 
 /-! ## What the reader refuses -/
 
-/-- A key derivation other than PBKDF2 and scrypt is refused as an unsupported function.
+/-- A well-formed key derivation other than PBKDF2 and scrypt is refused as unsupported.
 
 No field of its parameters is read, so an unsupported function is reported before any of them. -/
 theorem readKdf_eq_error_of_unsupported {value : Lean.Json} {name : String}
