@@ -12,7 +12,11 @@ The last change of each field in a built list, or its value before the body, is 
 
 This holds for every call that meets three conditions, which the builder cannot check itself.
 
-A state helps a call meet them when its code matches its hash and empty accounts hold no storage.
+A block state can be rebuilt when its code matches its hash and empty accounts hold no storage.
+
+A missing account counts as empty.
+
+Adding ether keeps this, and so does moving the writes of a transaction into its block.
 
 The list keeps code, not code hashes, so the code hash is the Keccak-256 hash of the last code.
 
@@ -819,12 +823,12 @@ structure RebuildInvariant (tx : TransactionState) : Prop where
   storage : ∀ address, tx.getAccount address = EMPTY_ACCOUNT →
     ∀ key, tx.getStorage address key = 0
 
-/-- A block state holds the property when its state, before any call, holds it. -/
+/-- A block state can be rebuilt when, with no write on top, the property above holds. -/
 def Rebuildable (block : BlockState) : Prop :=
   RebuildInvariant (TransactionState.ofBlock block)
 
 /-- Adding ether cannot make a nonempty account empty. -/
-theorem TransactionState.getAccount_eq_empty_of_createEther {fork : Fork}
+theorem getAccount_eq_empty_of_createEther {fork : Fork}
     {tx tx' : TransactionState} {target : Address} {amount : U256}
     (h : tx.createEther fork target amount = .ok tx') (address : Address)
     (empty : tx'.getAccount address = EMPTY_ACCOUNT) : tx.getAccount address = EMPTY_ACCOUNT := by
@@ -853,7 +857,7 @@ theorem RebuildInvariant.getStorage_createEther {fork : Fork} {tx tx' : Transact
     have empty : tx'.getAccount address = EMPTY_ACCOUNT := by
       simp only [TransactionState.getAccount, deleted.1, deleted.2, Option.getD_none]
     exact (valid.storage address
-      (TransactionState.getAccount_eq_empty_of_createEther h address empty) key).symm
+      (getAccount_eq_empty_of_createEther h address empty) key).symm
   · rfl
 
 /-- Adding ether keeps the property. -/
@@ -867,7 +871,7 @@ theorem RebuildInvariant.createEther {fork : Fork} {tx tx' : TransactionState}
   · intro address empty key
     rw [valid.getStorage_createEther h]
     exact valid.storage address
-      (TransactionState.getAccount_eq_empty_of_createEther h address empty) key
+      (getAccount_eq_empty_of_createEther h address empty) key
 
 /-- Incorporating a transaction into its block keeps the property. -/
 theorem RebuildInvariant.ofBlock_incorporateTxIntoBlock {tx : TransactionState}
