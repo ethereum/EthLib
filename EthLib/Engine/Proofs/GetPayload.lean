@@ -8,7 +8,7 @@ public import EthLib.Execution.Proofs.Transactions.Network
 
 An unknown payload ID returns the Engine API's unknown-payload error.
 
-Each other refusal names its own condition, in the order that the method checks them.
+Each other refusal happens when its check fails and every earlier check passes.
 
 A returned payload is the payload form of the stored block, at a fork that its version accepts.
 
@@ -119,12 +119,12 @@ theorem getPayload_cell_proof_count {config : ChainConfig} {setup : TrustedSetup
   have hc := (getPayload_bundle h (by omega)).2.2.1
   simpa [proofCount, hfork] using hc
 
-/-! ## Each refusal of the method -/
+/-! ## The other refusals of the method -/
 
 variable {config : ChainConfig} {setup : TrustedSetup} {store : PayloadStore} {version : Nat}
   {id : PayloadId} {stored : StoredPayload}
 
-/-- A stored build whose block is not at the fork that the configuration gives is refused. -/
+/-- A stored build whose fork is not the one the configuration gives at its block is refused. -/
 theorem getPayload_eq_error_of_activeFork_ne (hs : store id = some stored)
     (hf : config.activeFork stored.built.block.header.number
       stored.built.block.header.timestamp.toNat ≠ some stored.fork) :
@@ -169,7 +169,7 @@ theorem getPayload_eq_error_of_payloadOfBlock_eq_none (hs : store id = some stor
     getPayload config setup store version id = .error .noPayload := by
   simp [getPayload, hs, hf, hv, hr, hb, hp, throw, throwThe, MonadExceptOf.throw]
 
-/-- A build whose payload does not give its block back is refused with the error that says why. -/
+/-- A build whose payload gives no block with the stored block hash is refused, with that error. -/
 theorem getPayload_eq_error_of_blockOfPayload_eq_error
     {payload : ExecutionPayload stored.fork} {error : PayloadError}
     (hs : store id = some stored)
