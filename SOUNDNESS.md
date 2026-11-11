@@ -1830,6 +1830,24 @@ The honest support of the target of the current epoch takes the total active bal
 No theorem proves that, which rests on the shuffling of the head and its pulled-up state agreeing on the active validators of the epoch.
 Each member of the committees must also be in the source of balances, or the rule fails; no theorem bounds the epochs between that source and the range.
 
+`Consensus/Proofs/ForkChoice/FastConfirmationConfirmedRoot.lean` states where the confirmed block of a slot comes from.
+`Store.onFastConfirmation_confirmedRoot` shows that the rule starts from the block stored before, the finalized block or the observed justified block.
+It keeps the block stored before only when that block is in the chain of the head, and at the first slot of an epoch only when `isConfirmedChainSafe` accepts it.
+It takes the observed justified block only at the first slot of an epoch, when that checkpoint is the unrealized justification of the head.
+The rule stores that block, or a later root of the walk of `getAncestorRoots` from that block to the head.
+That root and each root before it in the walk then pass `isOneConfirmed`, with the votes of the state of the observed justified checkpoint.
+The rule makes two walks, and `Store.getAncestorRoots_of_append` in `Consensus/Proofs/ForkChoice/AncestorRoots.lean` joins them into one.
+No theorem yet shows that the roots of a walk are in the chain of the head.
+`foldlM_onFastConfirmation_confirmedRoot` turns those four cases into an induction along a list of stores, one fast confirmation for each.
+A property of the confirmed block holds at the end when the three starts have it and a one-confirmed walk keeps it.
+These theorems prove no safety: no theorem yet shows that a start is safe, or that a one-confirmed walk keeps a block in the chain of every honest head.
+They do not record every check of the rule.
+For the start they leave out the checks that compare the epochs and the slots of the blocks.
+For the walks they leave out the check that the head of the slot before holds each block of the first walk.
+They leave out the checks that a voting source or an unrealized justification is recent.
+They also leave out `willNoConflictingCheckpointBeJustified` and `willCurrentTargetBeJustified`, which are about the justification of the target of the current epoch.
+No theorem yet relates the list of stores to the stores of an honest validator in an execution.
+
 ### Honest validator duties
 
 `Consensus/HonestValidator.lean` holds what an honest validator computes for its duties.
@@ -2211,9 +2229,25 @@ Like the state theorems, these take the lawful type of the body.
 So `isValidLightClientHeader_execution_eq` takes the binding to the fields, for a body of the fork of the header, at a slot from Capella, and from Deneb for a header from Deneb.
 The execution header of the light client header is then the header of the payload of the body, field by field.
 Otherwise a search over the two branch climbs, or one over the hash inputs of the two header roots, names a SHA-256 collision.
+`isValidLightClientHeader_execution_binding` states this step once, for two payload headers of one fork whose roots are the execution root and the root of the payload header of the body.
 From Deneb, `isValidLightClientHeader_blobGas` applies this to the blob gas used and the excess blob gas, at a slot from Deneb.
 The schedule must start Capella no later than Deneb.
 `isValidLightClientHeader_blobGas_zero` shows that a valid header of an earlier slot has zero for both.
+
+A store of a later fork upgrades a header of an earlier fork before it checks it.
+So the fork of a header can be later than the fork of its block.
+`isValidLightClientHeader_execution_eq_upgrade_capella` takes a valid header from Deneb to Fulu at a slot from Capella and before Deneb, and a Capella body.
+The execution header is then the upgrade of the payload header of the body.
+So it has the fields of that payload header, and zero for both blob gas fields.
+`isValidLightClientHeader_execution_eq_upgrade` takes a valid header from Deneb to Fulu at a slot from Capella and from Deneb, and a body of any fork from Deneb to Fulu.
+The execution header is again the upgrade of the payload header of the body, which keeps every field.
+`isValidLightClientHeader_blobGas_upgrade` applies this to the two blob gas fields, at a slot from Deneb.
+Its schedule must also start Capella no later than Deneb.
+`LightClientHeader.isValidLightClientHeader_upgrade_execution` takes the header and the body of `isValidLightClientHeader_execution_eq`, and the upgrade of the header to a fork before Gloas.
+The upgraded header has the upgrade of the payload header of the body, by `LightClientHeader.upgrade_execution`.
+In each of these theorems, the alternative is a SHA-256 collision that a search names.
+The search is over the two branch climbs, or over the hash inputs of two execution header roots.
+
 From Gloas, `isValidLightClientHeader_parentBlockHash` binds the block hash of a header at a slot from Gloas to the parent block hash of the bid of a Gloas body.
 `isValidLightClientHeader_executionBlockHash` binds it, for an earlier slot from Capella, to the block hash of the payload of a body from Capella to Fulu that is from Deneb exactly when the slot is.
 The headers that the client checks are valid: `initializeLightClientStore_header_valid`, `validateLightClientUpdate_attestedHeader_valid`, and `validateLightClientUpdate_finalizedHeader_valid` after the genesis slot.
