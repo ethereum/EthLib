@@ -24,6 +24,12 @@ So changing the signature of a transaction leaves its signing hash as it was.
 A legacy transaction that reports a chain signs a hash that covers that chain.
 
 So one that passes the chain check of a network signs a hash with no chain or the network's chain.
+
+A typed transaction carries its recovery id as a parity, which must be 0 or 1.
+
+An accepted parity is the recovery id itself, so it has one accepted form.
+
+A parity other than 0 and 1 names no sender, whatever the rest of the signature.
 -/
 
 @[expose] public section
@@ -297,5 +303,176 @@ theorem signingHash4844_signature (tx : BlobTransaction) (yParity r s : U256) :
 /-- The signing hash of a transaction of type 4 ignores the parity, `r` and `s`. -/
 theorem signingHash7702_signature (tx : SetCodeTransaction) (yParity r s : U256) :
     signingHash7702 { tx with yParity := yParity, r := r, s := s } = signingHash7702 tx := rfl
+
+/-! ## The parity of a typed transaction -/
+
+/-- A parity of 0 is the recovery id 0. -/
+theorem parityRecovery_zero {yParity : U256} (h : yParity.toNat = 0) :
+    parityRecovery yParity = .ok 0 := by
+  simp [parityRecovery, h]
+
+/-- A parity of 1 is the recovery id 1. -/
+theorem parityRecovery_one {yParity : U256} (h : yParity.toNat = 1) :
+    parityRecovery yParity = .ok 1 := by
+  simp [parityRecovery, h]
+
+/-- A parity other than 0 and 1 is no recovery id. -/
+theorem parityRecovery_eq_error {yParity : U256} (h0 : yParity.toNat ≠ 0)
+    (h1 : yParity.toNat ≠ 1) : parityRecovery yParity = .error .invalidSignature := by
+  simp [parityRecovery, h0, h1]
+
+/-- An accepted parity is the recovery id itself.
+
+So a recovery id of a typed transaction has one accepted form, while a legacy `v` has two. -/
+theorem toNat_of_parityRecovery {yParity : U256} {id : Fin 2}
+    (h : parityRecovery yParity = .ok id) : yParity.toNat = id.val := by
+  unfold parityRecovery at h
+  split at h
+  · rename_i h0
+    obtain rfl := Except.ok.inj h
+    simpa using h0
+  · split at h
+    · rename_i h1
+      obtain rfl := Except.ok.inj h
+      simpa using h1
+    · cases h
+
+/-! ## The hash and the sender of a typed transaction -/
+
+/-- A transaction of type 1 signs the hash of its fields, and its parity is its recovery id. -/
+theorem signingInput_accessList {fork : Fork} {tx : AccessListTransaction} {hash : Hash32}
+    {id : Fin 2} (h : signingInput fork (.accessList tx) = .ok (hash, id)) :
+    signingHash2930 tx = .ok hash ∧ tx.yParity.toNat = id.val := by
+  simp only [signingInput, bind, Except.bind] at h
+  cases hh : signingHash2930 tx with
+  | error e => simp [hh, Except.mapError] at h
+  | ok hashed =>
+    cases hp : parityRecovery tx.yParity with
+    | error e => simp [hh, hp, Except.mapError] at h
+    | ok i =>
+      simp only [hh, hp, Except.mapError, pure, Except.pure, Except.ok.injEq,
+        Prod.mk.injEq] at h
+      obtain ⟨rfl, rfl⟩ := h
+      exact ⟨rfl, toNat_of_parityRecovery hp⟩
+
+/-- A transaction of type 1 whose parity is neither 0 nor 1 has no signing input. -/
+theorem signingInput_accessList_eq_error {fork : Fork} {tx : AccessListTransaction} {hash : Hash32}
+    (hh : signingHash2930 tx = .ok hash) (h0 : tx.yParity.toNat ≠ 0) (h1 : tx.yParity.toNat ≠ 1) :
+    signingInput fork (.accessList tx) = .error .invalidSignature := by
+  simp [signingInput, hh, parityRecovery_eq_error h0 h1, bind, Except.bind, Except.mapError]
+
+/-- A transaction of type 1 whose parity is neither 0 nor 1 names no sender.
+
+This holds whatever its `r` and `s`, so no third parity names the sender that 0 or 1 names. -/
+theorem recoverSender_accessList_parity {fork : Fork} {tx : AccessListTransaction} {hash : Hash32}
+    (hh : signingHash2930 tx = .ok hash) (h0 : tx.yParity.toNat ≠ 0) (h1 : tx.yParity.toNat ≠ 1) :
+    recoverSender fork (.accessList tx) = .error .invalidSignature := by
+  unfold recoverSender
+  split
+  · rw [signingInput_accessList_eq_error hh h0 h1]
+    rfl
+  · rfl
+
+/-- A transaction of type 2 signs the hash of its fields, and its parity is its recovery id. -/
+theorem signingInput_feeMarket {fork : Fork} {tx : FeeMarketTransaction} {hash : Hash32}
+    {id : Fin 2} (h : signingInput fork (.feeMarket tx) = .ok (hash, id)) :
+    signingHash1559 tx = .ok hash ∧ tx.yParity.toNat = id.val := by
+  simp only [signingInput, bind, Except.bind] at h
+  cases hh : signingHash1559 tx with
+  | error e => simp [hh, Except.mapError] at h
+  | ok hashed =>
+    cases hp : parityRecovery tx.yParity with
+    | error e => simp [hh, hp, Except.mapError] at h
+    | ok i =>
+      simp only [hh, hp, Except.mapError, pure, Except.pure, Except.ok.injEq,
+        Prod.mk.injEq] at h
+      obtain ⟨rfl, rfl⟩ := h
+      exact ⟨rfl, toNat_of_parityRecovery hp⟩
+
+/-- A transaction of type 2 whose parity is neither 0 nor 1 has no signing input. -/
+theorem signingInput_feeMarket_eq_error {fork : Fork} {tx : FeeMarketTransaction} {hash : Hash32}
+    (hh : signingHash1559 tx = .ok hash) (h0 : tx.yParity.toNat ≠ 0) (h1 : tx.yParity.toNat ≠ 1) :
+    signingInput fork (.feeMarket tx) = .error .invalidSignature := by
+  simp [signingInput, hh, parityRecovery_eq_error h0 h1, bind, Except.bind, Except.mapError]
+
+/-- A transaction of type 2 whose parity is neither 0 nor 1 names no sender.
+
+This holds whatever its `r` and `s`, so no third parity names the sender that 0 or 1 names. -/
+theorem recoverSender_feeMarket_parity {fork : Fork} {tx : FeeMarketTransaction} {hash : Hash32}
+    (hh : signingHash1559 tx = .ok hash) (h0 : tx.yParity.toNat ≠ 0) (h1 : tx.yParity.toNat ≠ 1) :
+    recoverSender fork (.feeMarket tx) = .error .invalidSignature := by
+  unfold recoverSender
+  split
+  · rw [signingInput_feeMarket_eq_error hh h0 h1]
+    rfl
+  · rfl
+
+/-- A transaction of type 3 signs the hash of its fields, and its parity is its recovery id. -/
+theorem signingInput_blob {fork : Fork} {tx : BlobTransaction} {hash : Hash32}
+    {id : Fin 2} (h : signingInput fork (.blob tx) = .ok (hash, id)) :
+    signingHash4844 tx = .ok hash ∧ tx.yParity.toNat = id.val := by
+  simp only [signingInput, bind, Except.bind] at h
+  cases hh : signingHash4844 tx with
+  | error e => simp [hh, Except.mapError] at h
+  | ok hashed =>
+    cases hp : parityRecovery tx.yParity with
+    | error e => simp [hh, hp, Except.mapError] at h
+    | ok i =>
+      simp only [hh, hp, Except.mapError, pure, Except.pure, Except.ok.injEq,
+        Prod.mk.injEq] at h
+      obtain ⟨rfl, rfl⟩ := h
+      exact ⟨rfl, toNat_of_parityRecovery hp⟩
+
+/-- A transaction of type 3 whose parity is neither 0 nor 1 has no signing input. -/
+theorem signingInput_blob_eq_error {fork : Fork} {tx : BlobTransaction} {hash : Hash32}
+    (hh : signingHash4844 tx = .ok hash) (h0 : tx.yParity.toNat ≠ 0) (h1 : tx.yParity.toNat ≠ 1) :
+    signingInput fork (.blob tx) = .error .invalidSignature := by
+  simp [signingInput, hh, parityRecovery_eq_error h0 h1, bind, Except.bind, Except.mapError]
+
+/-- A transaction of type 3 whose parity is neither 0 nor 1 names no sender.
+
+This holds whatever its `r` and `s`, so no third parity names the sender that 0 or 1 names. -/
+theorem recoverSender_blob_parity {fork : Fork} {tx : BlobTransaction} {hash : Hash32}
+    (hh : signingHash4844 tx = .ok hash) (h0 : tx.yParity.toNat ≠ 0) (h1 : tx.yParity.toNat ≠ 1) :
+    recoverSender fork (.blob tx) = .error .invalidSignature := by
+  unfold recoverSender
+  split
+  · rw [signingInput_blob_eq_error hh h0 h1]
+    rfl
+  · rfl
+
+/-- A transaction of type 4 signs the hash of its fields, and its parity is its recovery id. -/
+theorem signingInput_setCode {fork : Fork} {tx : SetCodeTransaction} {hash : Hash32}
+    {id : Fin 2} (h : signingInput fork (.setCode tx) = .ok (hash, id)) :
+    signingHash7702 tx = .ok hash ∧ tx.yParity.toNat = id.val := by
+  simp only [signingInput, bind, Except.bind] at h
+  cases hh : signingHash7702 tx with
+  | error e => simp [hh, Except.mapError] at h
+  | ok hashed =>
+    cases hp : parityRecovery tx.yParity with
+    | error e => simp [hh, hp, Except.mapError] at h
+    | ok i =>
+      simp only [hh, hp, Except.mapError, pure, Except.pure, Except.ok.injEq,
+        Prod.mk.injEq] at h
+      obtain ⟨rfl, rfl⟩ := h
+      exact ⟨rfl, toNat_of_parityRecovery hp⟩
+
+/-- A transaction of type 4 whose parity is neither 0 nor 1 has no signing input. -/
+theorem signingInput_setCode_eq_error {fork : Fork} {tx : SetCodeTransaction} {hash : Hash32}
+    (hh : signingHash7702 tx = .ok hash) (h0 : tx.yParity.toNat ≠ 0) (h1 : tx.yParity.toNat ≠ 1) :
+    signingInput fork (.setCode tx) = .error .invalidSignature := by
+  simp [signingInput, hh, parityRecovery_eq_error h0 h1, bind, Except.bind, Except.mapError]
+
+/-- A transaction of type 4 whose parity is neither 0 nor 1 names no sender.
+
+This holds whatever its `r` and `s`, so no third parity names the sender that 0 or 1 names. -/
+theorem recoverSender_setCode_parity {fork : Fork} {tx : SetCodeTransaction} {hash : Hash32}
+    (hh : signingHash7702 tx = .ok hash) (h0 : tx.yParity.toNat ≠ 0) (h1 : tx.yParity.toNat ≠ 1) :
+    recoverSender fork (.setCode tx) = .error .invalidSignature := by
+  unfold recoverSender
+  split
+  · rw [signingInput_setCode_eq_error hh h0 h1]
+    rfl
+  · rfl
 
 end EthLib.Execution.Transactions
