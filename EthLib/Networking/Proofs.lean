@@ -32,6 +32,7 @@ public import EthLib.Networking.Proofs.Libp2p.PeerId
 public import EthLib.Networking.Proofs.Libp2p.Yamux
 public import EthLib.Networking.Proofs.ReqResp.Bounds
 public import EthLib.Networking.Proofs.ReqResp.Encoding
+public import EthLib.Networking.Proofs.ReqResp.Read
 public import EthLib.Networking.Proofs.Rlpx.Ecies
 public import EthLib.Networking.Proofs.Rlpx.Frame
 public import EthLib.Networking.Proofs.Rlpx.Handshake

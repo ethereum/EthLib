@@ -35,6 +35,7 @@ def message : ReqRespError → String
   | .lengthMismatch declared size => s!"payload has {size} bytes, not the declared {declared}"
   | .missingCode => "response chunk has no response code"
   | .contextTruncated => "response chunk ends inside its context bytes"
+  | .trailingBytes count => s!"{count} bytes follow the last chunk of the payload"
 
 /-- Run a fallible computation, with its error as a code and a message. -/
 def runReqResp {α : Type} (act : Except ReqRespError α) : Result α :=

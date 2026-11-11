@@ -20,6 +20,10 @@ A response chunk starts with a response code, then context bytes, then such a pa
 
 These definitions take the whole message at once.
 
+The reader of a payload stops at the chunk that completes the declared length.
+
+Any byte after that chunk makes the payload invalid.
+
 A peer reads a stream and may stop at the first byte past a bound.
 
 How many bytes it reads before it decides is not part of these definitions.
@@ -29,7 +33,7 @@ How many bytes it reads before it decides is not part of these definitions.
 
 namespace EthLib.Networking.ReqResp
 
-open EthLib.Base (ArithError)
+open EthLib.Base (ArithError bytesToUint)
 open EthLib.Base.Uint64 (addChecked divChecked)
 open EthLib.Networking.Encoding
 
@@ -115,6 +119,8 @@ inductive ReqRespError where
   | missingCode
   /-- A response chunk ends inside its context bytes. -/
   | contextTruncated
+  /-- Bytes follow the chunk that completes the declared length. -/
+  | trailingBytes (count : Nat)
   deriving Repr, DecidableEq
 
 /-- The stable code of an error, one per constructor, for the C exports.
@@ -132,6 +138,49 @@ def ReqRespError.code : ReqRespError → UInt32
   | .missingCode => 7
   | .contextTruncated => 8
   | .lengthBelowMinimum .. => 9
+  | .trailingBytes _ => 10
+
+/-- Read the chunks of a framed stream until they hold `need` bytes.
+
+It returns the bytes of the chunks read and the bytes after the last of them.
+
+A chunk is read whole, so the output can be longer than `need`.
+
+The stream can end first, and then the output is shorter.
+
+The fuel bounds the number of chunks. -/
+def readChunks (need : Nat) : List UInt8 → Nat →
+    Except Snappy.FrameError (List UInt8 × List UInt8)
+  | [], _ => .ok ([], [])
+  | type :: l0 :: l1 :: l2 :: rest, fuel + 1 =>
+      let len := bytesToUint #v[l0, l1, l2]
+      if rest.length < len then
+        .error .chunkPastEnd
+      else
+        match Snappy.decodeChunk type (rest.take len) with
+        | .error e => .error e
+        | .ok out =>
+          if need ≤ out.length then .ok (out, rest.drop len)
+          else (readChunks (need - out.length) (rest.drop len) fuel).map
+            fun read => (out ++ read.1, read.2)
+  -- A header cut short, or out of fuel: the second is unreachable with enough fuel.
+  | _, _ => .error .headerTruncated
+
+/-- Read a framed stream until it holds `n` bytes, and return them with the bytes after.
+
+The stream starts with the stream identifier, which the reader reads even when `n` is 0.
+
+A reader must reject any bytes that remain after it has read the `n` SSZ bytes.
+
+So `decodePayload` rejects a payload when bytes follow the chunk that completes `n` bytes.
+-/
+def readFrames (n : Nat) (bs : List UInt8) :
+    Except Snappy.FrameError (List UInt8 × List UInt8) :=
+  match bs with
+  | type :: _ =>
+      if type == Snappy.streamIdentifierType then readChunks n bs bs.length
+      else .error .missingStreamIdentifier
+  | [] => .error .missingStreamIdentifier
 
 /-- The SSZ bytes of a payload, given the smallest and the largest encoding of its SSZ type.
 
@@ -145,7 +194,11 @@ The specification only recommends this; requiring it gives each length exactly o
 
 At most `32 + n + n / 6` bytes may follow a declared length `n`.
 
-The stream must decode to exactly `n` bytes, so a stream that ends early or runs on is rejected.
+The stream is read until it holds `n` bytes, and it must then hold exactly `n` bytes.
+
+So a stream that ends early, or whose last chunk runs past `n`, is rejected.
+
+A chunk after the one that completes `n` bytes is rejected too, even one that adds no bytes.
 
 The caller deserializes the bytes, since it knows their SSZ type. -/
 def decodePayload (typeMin typeBound : UInt64) (bs : ByteArray) :
@@ -158,9 +211,10 @@ def decodePayload (typeMin typeBound : UInt64) (bs : ByteArray) :
   let compressedBound ← (maxCompressedLen declared).mapError .arith
   if compressedBound.toNat < rest.length then
     throw (.compressedTooLong rest.length compressedBound.toNat)
-  let data ← (Snappy.decodeFrames ⟨rest.toArray⟩).mapError .frame
-  if data.size ≠ declared.toNat then throw (.lengthMismatch declared data.size)
-  return data
+  let (data, trailing) ← (readFrames declared.toNat rest).mapError .frame
+  if data.length ≠ declared.toNat then throw (.lengthMismatch declared data.length)
+  if trailing ≠ [] then throw (.trailingBytes trailing.length)
+  return ⟨data.toArray⟩
 
 /-- A payload that decodes to `data`: its length as a varint, then uncompressed Snappy frames.
 
