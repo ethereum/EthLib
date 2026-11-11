@@ -337,7 +337,7 @@ private theorem getAttestationComponentDeltas_exists_le {budget ceiling : Nat}
       preset.budgetIncrements budget :=
     toNat_div_le_budgetIncrements (le_trans balanceLe (max_le_max (le_refl _) summed))
   obtain ⟨eligible, eligibleOk⟩ := getEligibleValidatorIndices_exists_ok within
-  have distinct := (getEligibleValidatorIndices_ok within eligibleOk).1
+  have distinct := (getEligibleValidatorIndices_ok eligibleOk).1
   have eligibleLt := getEligibleValidatorIndices_lt within eligibleOk
   have leakOk := isInInactivityLeak_eq_ok finalized
   obtain ⟨⟨rewards, penalties⟩, computed⟩ :
@@ -709,7 +709,7 @@ private theorem getInactivityPenaltyDeltas_exists_le {config : Config} {ceiling 
     simp only [notAltair, ↓reduceDIte, leakOk, bind, Except.bind]
     split
     · obtain ⟨eligible, eligibleOk⟩ := getEligibleValidatorIndices_exists_ok within
-      have distinct := (getEligibleValidatorIndices_ok within eligibleOk).1
+      have distinct := (getEligibleValidatorIndices_ok eligibleOk).1
       have eligibleLt := getEligibleValidatorIndices_lt within eligibleOk
       simp only [targetOk, liftAccessor, attestersOk, totalOk, delayOk, eligibleOk,
         Except.mapError]

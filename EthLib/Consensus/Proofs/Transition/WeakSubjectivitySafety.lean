@@ -140,7 +140,7 @@ theorem accountable_safety_of_weakSubjectivityPeriod {config : Config}
   obtain ⟨total, totalOk, periodOk⟩ :=
     balanceChurnPeriod_of_computeWeakSubjectivityPeriod_eq_ok electra periodOk churnOk
   -- With at least one increment of stake, the total active balance is that stake.
-  obtain ⟨-, -, totalEq⟩ := getTotalBalance_ok_iff_stake.mp totalOk
+  obtain ⟨-, -, totalEq⟩ := getTotalBalance_ok_iff_stake.mp (getTotalActiveBalance_ok totalOk)
   rw [Nat.max_eq_right large] at totalEq
   rw [← totalEq] at bound ⊢
   exact safetyMargin_of_balanceChurnPeriod_eq_ok periodOk bound
@@ -240,7 +240,7 @@ theorem accountable_safety_of_weakSubjectivityPeriod_of_lt_electra {config : Con
     rw [(addChecked_ok_iff.mp periodOk).2]
     omega
   -- With at least one increment of stake, the total active balance is that stake.
-  obtain ⟨-, -, totalEq⟩ := getTotalBalance_ok_iff_stake.mp totalOk
+  obtain ⟨-, -, totalEq⟩ := getTotalBalance_ok_iff_stake.mp (getTotalActiveBalance_ok totalOk)
   rw [Nat.max_eq_right large] at totalEq
   -- A set of validators weighs at most the largest effective balance for each of them.
   have perValidator : ∀ S : Finset ValidatorIndex,

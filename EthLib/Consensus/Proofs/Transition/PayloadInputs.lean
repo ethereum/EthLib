@@ -94,10 +94,14 @@ theorem PayloadInputs.foldlM {α ε : Type}
 
 /-! ## Mutators -/
 
-theorem payloadInputs_setValidator {index : ValidatorIndex} {validator : Validator}
-    (set : state.setValidator index validator = .ok after) : PayloadInputs state after := by
-  obtain ⟨_, rfl⟩ := setValidator_ok set
+theorem payloadInputs_setValidatorAt {position : Nat} {validator : Validator}
+    (set : state.setValidatorAt position validator = .ok after) : PayloadInputs state after := by
+  obtain ⟨_, rfl⟩ := setValidatorAt_ok set
   exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+
+theorem payloadInputs_setValidator {index : ValidatorIndex} {validator : Validator}
+    (set : state.setValidator index validator = .ok after) : PayloadInputs state after :=
+  payloadInputs_setValidatorAt (by rwa [← setValidator_eq_setValidatorAt])
 
 theorem payloadInputs_setBalance {index : ValidatorIndex} {balance : Gwei}
     (set : state.setBalance index balance = .ok after) : PayloadInputs state after := by
@@ -489,7 +493,7 @@ theorem payloadInputs_processAttestation {attestation : Attestation preset fork}
     exact (flags _ _).trans ((payloadInputs_increaseBalance raisedOk).trans last)
   simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok, pure, Except.pure,
     Except.ok.injEq] at computed
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
     _, _, _, _, _, _, _, _, recorded, _, _, _, _, _, _, rfl⟩ := computed
   have kept := recordPendingAttestation_ok recorded
   split at kept <;>

@@ -430,6 +430,32 @@ theorem mem_committeePositions_of_epoch {state : BeaconState preset fork} {epoch
   exact ⟨slot, mem_epochSlots_of_epoch positive sloted slotEpoch, index.toNat,
     UInt64.lt_iff_toNat_lt.mp indexLt, rfl, by simp⟩
 
+/-- An epoch with slots has at least one committee position. -/
+theorem committeePositions_ne_nil {state : BeaconState preset fork} {epoch : Epoch}
+    {positions : List (Slot × CommitteeIndex)} (positive : preset.SLOTS_PER_EPOCH ≠ 0)
+    (computed : committeePositions state epoch = .ok positions) : positions ≠ [] := by
+  unfold committeePositions at computed
+  obtain ⟨slots, sloted, computed⟩ := bind_ok_iff.mp computed
+  rw [mapError_ok_iff] at sloted
+  obtain ⟨_, rfl⟩ := epochSlots_eq_ok_iff.mp sloted
+  simp only [pure, Except.pure, Except.ok.injEq] at computed
+  subst positions
+  have slotsPos : 0 < preset.SLOTS_PER_EPOCH.toNat :=
+    Nat.pos_of_ne_zero fun zero => positive (UInt64.toNat_inj.mp (by simpa using zero))
+  have committeesPos : 0 < (getCommitteeCountPerSlot state epoch).toNat :=
+    UInt64.le_iff_toNat_le.mp (one_le_getCommitteeCountPerSlot state epoch)
+  intro empty
+  have nil := List.flatMap_eq_nil_iff.mp empty
+  have slotMem : epoch * preset.SLOTS_PER_EPOCH ∈
+      (List.range preset.SLOTS_PER_EPOCH.toNat).map
+        (fun offset => epoch * preset.SLOTS_PER_EPOCH + offset.toUInt64) := by
+    apply List.mem_map.mpr
+    exact ⟨0, List.mem_range.mpr slotsPos, by simp⟩
+  have impossible := nil _ slotMem
+  have size := congrArg List.length impossible
+  simp only [List.length_map, List.length_range, List.length_nil] at size
+  omega
+
 /-- An active validator never gets the answer that it has no committee in its epoch.
 
 The search may still fail, for an epoch too far ahead or a committee without a value.
@@ -458,8 +484,17 @@ theorem getCommitteeAssignment_ne_none {state : BeaconState preset fork} {epoch 
   obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
   split at h
   · obtain ⟨positions, positioned, found⟩ := bind_ok_iff.mp h
+    have nonempty := committeePositions_ne_nil positive positioned
+    obtain ⟨first, firstMem⟩ := List.exists_mem_of_ne_nil positions nonempty
+    have firstStep := forall_of_findSomeM?_eq_ok_none found first firstMem
+    obtain ⟨firstCommittee, firstOk, _⟩ := bind_ok_iff.mp firstStep
+    rw [mapError_ok_iff] at firstOk
+    obtain ⟨activeIndices, shuffled, shuffleOk⟩ := attesterShuffle_ok_of_getBeaconCommittee firstOk
+    have firstEpoch := (mem_committeePositions positioned firstMem).1
+    rw [firstEpoch] at shuffleOk
+    have indicesFit := getActiveValidatorIndicesChecked_of_attesterShuffle shuffleOk
     obtain ⟨slot, index, committee, slotEpoch, indexLt, computed, mem⟩ :=
-      exists_mem_getBeaconCommittee seedOk positive slotsFit small fits active
+      exists_mem_getBeaconCommittee indicesFit seedOk positive slotsFit small fits active
     have step := forall_of_findSomeM?_eq_ok_none found (slot, index)
       (mem_committeePositions_of_epoch positive positioned slotEpoch indexLt)
     simp [computed, mem, Except.mapError, bind, Except.bind, pure, Except.pure] at step

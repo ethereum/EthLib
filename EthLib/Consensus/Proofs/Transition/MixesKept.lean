@@ -116,11 +116,13 @@ private theorem kept_processRegistryUpdates
     split at ok
     · simp only [bind_ok_iff, liftAccessor_ok] at ok
       obtain ⟨_, _, set⟩ := ok
-      exact Kept.of_payloadInputs (payloadInputs_setValidator set)
+      exact Kept.of_payloadInputs (payloadInputs_setValidatorAt set)
     split at ok
-    · exact Kept.of_payloadInputs (payloadInputs_initiateValidatorExit (liftAccessor_ok.mp ok))
+    · simp only [bind_ok_iff, liftAccessor_ok] at ok
+      obtain ⟨_, _, exited⟩ := ok
+      exact Kept.of_payloadInputs (payloadInputs_initiateValidatorExit exited)
     split at ok
-    · exact Kept.of_payloadInputs (payloadInputs_setValidator (liftAccessor_ok.mp ok))
+    · exact Kept.of_payloadInputs (payloadInputs_setValidatorAt (liftAccessor_ok.mp ok))
     · simp only [pure, Except.pure, Except.ok.injEq] at ok
       exact ok ▸ Kept.refl _
   simp only [bind_ok_iff] at computed
@@ -129,10 +131,11 @@ private theorem kept_processRegistryUpdates
     (Kept.foldlM (fun _ _ _ ok => ?_) activated)
   · simp only [updateRegistryEntry, bind_ok_iff, liftAccessor_ok] at ok
     obtain ⟨_, _, _, _, _, markedOk, ok⟩ := ok
-    have set := Kept.of_payloadInputs (payloadInputs_setValidator markedOk)
+    have set := Kept.of_payloadInputs (payloadInputs_setValidatorAt markedOk)
     split at ok
-    · exact set.trans (Kept.of_payloadInputs
-        (payloadInputs_initiateValidatorExit (liftAccessor_ok.mp ok)))
+    · simp only [bind_ok_iff, liftAccessor_ok] at ok
+      obtain ⟨_, _, exited⟩ := ok
+      exact set.trans (Kept.of_payloadInputs (payloadInputs_initiateValidatorExit exited))
     · simp only [pure, Except.pure, Except.ok.injEq] at ok
       exact ok ▸ set
   · simp only [activateValidator, bind_ok_iff, liftAccessor_ok] at ok
@@ -508,14 +511,10 @@ theorem mixesKeptBut_processBlock {block : BeaconBlock preset fork}
 
 /-- A block keeps the committees of the previous and of the current epoch, at every fork.
 
-There must be more than `MIN_SEED_LOOKAHEAD + 2` epochs of mixes.
-
-The registry after the block must hold fewer than 2^64 validators.
-
-Before Gloas the registry always does. -/
+There must be more than `MIN_SEED_LOOKAHEAD + 2` epochs of mixes. -/
 theorem committeesKept_processBlock
     (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
-    {block : BeaconBlock preset fork} (small : after.validators.data.size < 2 ^ 64)
+    {block : BeaconBlock preset fork}
     (computed : processBlock config checks engine state block = .ok after) {epoch : Epoch}
     (low : getPreviousEpoch state ≤ epoch) (high : epoch ≤ getCurrentEpoch state) :
     CommitteesKept epoch state after := by
@@ -523,7 +522,7 @@ theorem committeesKept_processBlock
   have lowNat := UInt64.le_iff_toNat_le.mp low
   -- The block writes at most the mix of the current epoch, which the seed never reads.
   exact CommitteesKept.of_activeKept apart
-    ((activeKept_processBlock small computed).mono
+    ((activeKept_processBlock computed).mono
       (UInt64.le_trans high (getCurrentEpoch_le_activityFixedEpoch state)))
     (mixesKeptBut_processBlock computed) high (by omega)
 
@@ -533,14 +532,9 @@ Such an epoch is at most the current epoch before the slot.
 
 It is at least the previous epoch after it.
 
-There must be more than `MIN_SEED_LOOKAHEAD + 2` epochs of mixes.
-
-The registry after the slot must hold fewer than 2^64 validators.
-
-Before Gloas the registry always does. -/
+There must be more than `MIN_SEED_LOOKAHEAD + 2` epochs of mixes. -/
 theorem committeesKept_advanceSlot
     (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
-    (small : after.validators.data.size < 2 ^ 64)
     (computed : advanceSlot config checks state = .ok after) {epoch : Epoch}
     (low : getPreviousEpoch after ≤ epoch) (high : epoch ≤ getCurrentEpoch state) :
     CommitteesKept epoch state after := by
@@ -554,7 +548,7 @@ theorem committeesKept_advanceSlot
   have highNat := UInt64.le_iff_toNat_le.mp high
   -- The slot writes at most the mix of the epoch it reaches, which the seed never reads.
   exact CommitteesKept.of_activeKept apart
-    ((activeKept_advanceSlot small computed).mono
+    ((activeKept_advanceSlot computed).mono
       (UInt64.le_trans high (getCurrentEpoch_le_activityFixedEpoch state)))
     (mixesKeptBut_advanceSlot computed) (UInt64.le_iff_toNat_le.mpr (by omega)) (by omega)
 

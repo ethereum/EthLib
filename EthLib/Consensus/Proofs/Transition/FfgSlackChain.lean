@@ -115,15 +115,13 @@ The map from roots to blocks must keep in order the roots of consecutive slots a
 
 It must also keep the zero root before the root of slot zero.
 
-After the step, the registry must stay below 2^64 validators.
-
 The order of the blocks of the model is an assumption on the map from roots to blocks.
 
 The meaningful choice orders the roots by the links that the states of the chains record. -/
 structure SlackStepBounds (block : Root → β) (forked after : ForkedBeaconState preset) : Prop where
   /-- At the end of an epoch, the active stake is more than one and a half increments.
 
-  It is asked only when the slot moves, as is the next one. -/
+  It is asked only when the slot moves. -/
   large : after.state.slot ≠ forked.state.slot →
     (forked.state.slot + 1) % preset.SLOTS_PER_EPOCH = 0 →
     3 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat <
@@ -131,8 +129,6 @@ structure SlackStepBounds (block : Root → β) (forked after : ForkedBeaconStat
         (getActiveValidatorIndices forked.state (getCurrentEpoch forked.state)).toFinset
   /-- The map from roots to blocks keeps the roots of consecutive slots in order. -/
   links : ∀ link ∈ rootLinks after.state, block link.1 ≤ block link.2
-  /-- The registry stays below 2^64 validators. -/
-  small : after.state.validators.data.size < 2 ^ 64
 
 /-- The hypotheses that one step of a chain needs, on the states before and after it.
 
@@ -196,8 +192,6 @@ theorem SlackChainInvariant.of_chainStep (positive : 0 < preset.SLOTS_PER_EPOCH.
   cases step with
   | slot computed =>
     obtain ⟨advanced, advancedOk, upgraded⟩ := bind_ok_iff.mp computed
-    have small : advanced.validators.data.size < 2 ^ 64 :=
-      Nat.lt_of_le_of_lt (processUpgrades_registryGrows upgraded) hypotheses.small
     have early := holds.early.of_advanceSlot advancedOk
     have moved := advanceSlotAcross_slot_ne computed
     obtain ⟨previousKept, currentKept⟩ := processUpgrades_justified upgraded
@@ -233,7 +227,7 @@ theorem SlackChainInvariant.of_chainStep (positive : 0 < preset.SLOTS_PER_EPOCH.
   | @block _ pre _ engine signed validateResult applied =>
     obtain ⟨-, blockOk, -⟩ := applySignedBlock_ok applied
     have frame := frame_processBlock blockOk
-    have voteFrame := voteFrame_processBlock apart hypotheses.small blockOk
+    have voteFrame := voteFrame_processBlock apart blockOk
     have sub : blockVotes pre signed.message ⊆ attested := fun vote member =>
       hypotheses.applied ⟨engine, signed, validateResult, _, rfl, applied, member⟩
     refine ⟨frame.invariant holds.invariant, holds.early.of_frame frame,

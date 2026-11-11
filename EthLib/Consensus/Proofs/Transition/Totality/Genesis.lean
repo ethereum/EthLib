@@ -118,15 +118,15 @@ private theorem balanceSum_genesisDeposit_le {state after : BeaconState preset f
 Its effective balance is the balance rounded down to an increment, capped at the largest one. -/
 private theorem activateAtGenesis_eq {state after : BeaconState preset fork} {index : Nat}
     (computed : activateAtGenesis state index = .ok after) :
-    ∃ inside validator balance, after = state.putValidator index.toUInt64.toNat inside validator ∧
-      state.balances.data[index.toUInt64.toNat]? = some balance ∧
+    ∃ inside validator balance, after = state.putValidator index inside validator ∧
+      state.balances.data[index]? = some balance ∧
       validator.effectiveBalance =
         min (balance - balance % preset.EFFECTIVE_BALANCE_INCREMENT)
           preset.MAX_EFFECTIVE_BALANCE := by
   simp only [activateAtGenesis, bind_ok_iff, liftAccessor_ok] at computed
   obtain ⟨validator, _, balance, read, set⟩ := computed
-  obtain ⟨inside, rfl⟩ := setValidator_ok set
-  exact ⟨inside, _, balance, rfl, getBalance_eq_ok_iff.mp read, by split <;> rfl⟩
+  obtain ⟨inside, rfl⟩ := setValidatorAt_ok set
+  exact ⟨inside, _, balance, rfl, getBalanceAt_eq_ok_iff.mp read, by split <;> rfl⟩
 
 /-- A sum read in step over two lists is at most a sum over the second list.
 
@@ -164,7 +164,7 @@ private theorem min_sub_mod_le (value step cap : UInt64) :
 
 Each effective balance is then its balance rounded down to an increment, capped at the largest. -/
 private theorem foldlM_activateAtGenesis {state after : BeaconState preset fork}
-    (before : fork < .glamsterdam)
+    (_before : fork < .glamsterdam)
     (computed : (List.range state.validators.data.size).foldlM activateAtGenesis state =
       .ok after) :
     after.balances = state.balances ∧ after.slashings = state.slashings ∧
@@ -182,9 +182,7 @@ private theorem foldlM_activateAtGenesis {state after : BeaconState preset fork}
               preset.MAX_EFFECTIVE_BALANCE := by
     intro current next j inside activated
     obtain ⟨_, validator, balance, rfl, read, effective⟩ := activateAtGenesis_eq activated
-    have same := toNat_toUInt64_of_lt (current.validators.bound before) inside
-    rw [same] at read
-    exact ⟨rfl, rfl, validator, by simp [BeaconState.putValidator, same], balance, read, effective⟩
+    exact ⟨rfl, rfl, validator, by simp [BeaconState.putValidator], balance, read, effective⟩
   let P := fun current : BeaconState preset fork => current.balances = state.balances ∧
     current.slashings = state.slashings ∧ current.validators.data.size = state.validators.data.size
   have keeps : ∀ j ∈ List.range state.validators.data.size, ∀ current next, P current →

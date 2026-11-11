@@ -179,7 +179,7 @@ That state must record its root for its epoch.
 
 The votes are those that the block steps between genesis and the last state cast.
 
-Each step on any run between them must meet the bounds on the stake, the blocks and the registry.
+Each step on any run between them must meet the bounds on the stake and the blocks.
 
 An epoch must have at least one slot, and the buffer of roots must cover three epochs.
 
@@ -217,7 +217,7 @@ The blocks of the model are the roots, ordered by the links of the states that g
 
 The sets are the active sets, the weights the effective balances, and the votes those of the run.
 
-Each step on any run between them must meet the bound on the stake and on the registry.
+Each step on any run between them must meet the bound on the stake.
 
 An epoch must have at least one slot, and the buffer of roots must cover three epochs.
 
@@ -244,12 +244,7 @@ theorem slackFinalized_chainRoot_of_chainSteps
       (forked.state.slot + 1) % preset.SLOTS_PER_EPOCH = 0 →
       3 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat <
         2 * stake (fun index => balanceAt forked.state index.toNat)
-          (getActiveValidatorIndices forked.state (getCurrentEpoch forked.state)).toFinset)
-    (small : ∀ forked after,
-      Relation.ReflTransGen (ChainStep config checks) ⟨fork, state⟩ forked →
-      ChainStep config checks forked after →
-      Relation.ReflTransGen (ChainStep config checks) after last →
-      after.state.validators.data.size < 2 ^ 64) :
+          (getActiveValidatorIndices forked.state (getCurrentEpoch forked.state)).toFinset) :
     SlackFinalized (fun c => activeSetAt last.state c.epoch)
       (fun c => activeSetAt last.state (c.epoch + 1))
       (justifyingBalances config checks (toChainRoot config checks ⟨fork, state⟩)
@@ -259,6 +254,6 @@ theorem slackFinalized_chainRoot_of_chainSteps
         (runVotes config checks ⟨fork, state⟩ last))
       (last.state.finalizedCheckpoint.toFfg (toChainRoot config checks ⟨fork, state⟩)) :=
   slackFinalized_activeSetAt_of_chainSteps positive window apart computed steps
-    (SlackStepBounds.of_toChainRoot large small)
+    (SlackStepBounds.of_toChainRoot large)
 
 end EthLib.Consensus

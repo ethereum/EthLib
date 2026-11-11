@@ -171,7 +171,8 @@ private theorem stake_le_of_justificationTest {attesting : List ValidatorIndex}
       3 * stake (fun index => balanceAt state index.toNat) voters +
         2 * stake (fun index => balanceAt state index.toNat)
           (target \ (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset) := by
-  have test := (justificationTest_iff_stake totalOk balanceOk thresholdOk weightOk large).mp passed
+  have test := (justificationTest_iff_stake (getTotalActiveBalance_ok totalOk) balanceOk
+    thresholdOk weightOk large).mp passed
   have attesters := stake_mono (w := fun index => balanceAt state index.toNat) subset
   have split := stake_add_stake_sdiff (w := fun index => balanceAt state index.toNat)
     (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset target

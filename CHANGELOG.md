@@ -9,6 +9,12 @@ Not yet released.
 
 ### Changes that break callers
 
+- The block supply bound and the Glamsterdam equality now follow from the exact block supply equation ([#1902](https://github.com/ethereum/EthLib/issues/1902)).
+  No C export or Python function changes.
+  In Lean, `supply_systemCall`, `supply_systemCall_join`, `supply_startSystemCalls`, `supply_blockRequests` and `applyTransactions_supply` are gone from `EthLib.Execution.Proofs.Blocks.Supply`.
+  The new `SystemCallBurns.total_eq_zero_of_glamsterdam`, `StartSystemCallsBurns.total_eq_zero_of_glamsterdam`, `TransactionsBurns.total_eq_zero_of_glamsterdam`, `RequestsBurns.total_eq_zero_of_glamsterdam`, `BlockRequestsBurns.total_eq_zero_of_glamsterdam` and `BodyBurns.total_eq_zero_of_glamsterdam` in `EthLib.Execution.Proofs.Blocks.Burn` prove that the certified losses are 0 from Glamsterdam.
+  `withdrawnWei`, `rewardWei`, `createdWei`, `burnedWei` and the supply lemmas of the DAO transfer, the withdrawals and the rewards move to `EthLib.Execution.Proofs.Blocks.Burn`, with the same names.
+  `EthLib.Execution.Proofs.Blocks.Burn` no longer imports `EthLib.Execution.Proofs.Blocks.Supply`, so import the latter for `headerBurnedWei`, the `applyBody_supply` theorems and the `stateTransition_supply` bounds.
 - From Gloas, the rewards and penalties and the inactivity updates of an epoch now fail where a registry position of 2^64 or more would become a validator index ([#1883](https://github.com/ethereum/EthLib/issues/1883)).
   The specification builds a `ValidatorIndex` for each position when it applies the deltas, and for each eligible validator when it lists the eligible indices.
   EthLib took such a position modulo 2^64, so it credited the balance, or updated the inactivity score, of another validator.
@@ -37,7 +43,7 @@ Not yet released.
   No C export or Python function changes.
   In Lean, `SignedVote`, `TargetFlagsSigned` and `PendingSigned` are gone, with their lemmas, `voteFrame_processOperations` and the two `of_stateTransition` lemmas of the flags and the pending attestations.
   The new `attestationVotes` and `blockVotes` name the votes that an attestation and a block cast, and `TargetFlagsVoted` and the new `PendingVoted` take a set of such votes.
-  `VoteFrame` drops its configuration, its signature checks and its field `signed`, and `voteFrame_processAttestation` and `voteFrame_processBlock` give the votes of the step by name; the latter takes the preset bound `apart` and a registry below 2^64.
+  `VoteFrame` drops its configuration, its signature checks and its field `signed`, and `voteFrame_processAttestation` and `voteFrame_processBlock` give the votes of the step by name; the latter takes the preset bound `apart`.
   The slot and upgrade lemmas of the flags and the pending attestations no longer take a bound on the registry.
   The link and slack theorems of `FfgJustification.lean` and `FfgSlack.lean` take the vote set and a hypothesis that the votes of the model hold it, with no slot condition.
   `SlackChainInvariant` drops its configuration, its signature checks and its field `known`, takes the vote set, and uses its votes in the model; `SlackStepHypotheses` replaces `contains` by `applied`, on the new `blockStepVotes`.
@@ -47,6 +53,30 @@ Not yet released.
 - The theorem that an attestation keeps the registry and the RANDAO mixes now holds at every fork ([#1888](https://github.com/ethereum/EthLib/issues/1888)).
   No C export or Python function changes.
   In Lean, `processAttestation_registry` drops its argument `before : fork < .altair`, so a caller removes it.
+- From Gloas, builder deposits, exits and onboarding, ejections, slashing penalties, attestation committee counts and active-validator reads now fail where a position of 2^64 or more would become a 64-bit index ([#1883](https://github.com/ethereum/EthLib/issues/1883)).
+  Such a position used to wrap modulo 2^64, so the step read or wrote another validator or builder.
+  The registry updates, the slashing penalties, the effective-balance updates and the genesis activations read and write each validator at its plain position, as the specification indexes the registry with a Python integer.
+  No C export or Python function changes.
+  In Lean, `addBuilderToRegistry` now returns an `Except TransitionError`; bind its result, and pass a successful return to `builderBalanceSum_addBuilderToRegistry`.
+  The new `getValidatorAt`, `getBalanceAt` and `BeaconState.setValidatorAt` read and write at a plain position, and `getValidator_eq_getValidatorAt`, `getBalance_eq_getBalanceAt` and `setValidator_eq_setValidatorAt` relate them to the index forms.
+  `EpochFrameLaws` replaces its `setValidator` field by a `setValidatorAt` field, and the theorem `EpochFrameLaws.setValidator` gives the index form; `EpochFrameLaws.setValidatorAt_of_sameBalance`, `frame_setValidatorAt_of_whole`, `activeStep_setValidatorAt` and `sameSizes_setValidatorAt` are new.
+  `KeysKept`, `Frame.keysKept` and `UpgradeFrame.keysKept` are gone, as no theorem read them ([#1908](https://github.com/ethereum/EthLib/issues/1908)); `advanceSlot_keys` becomes `advanceSlot_kept`, without the key conjunct.
+  The setter laws of `EpochFrameLaws` and the frame lemmas of validator writes no longer take a key equality, and the `_of_whole` forms no longer take the old validator.
+  `activeKept_processEpoch`, `activeKept_processBlock`, `activeKept_advanceSlot`, `ChainStep.activeKept`, `activeKept_of_chainSteps`, `processBlock_attestationSplit`, `voteFrame_processBlock`, `committeesKept_processBlock`, `committeesKept_advanceSlot`, `RunKept.committeesKept`, `slackJustifiedCheckpoints_chainRoot_of_chainSteps`, `slackFinalized_chainRoot_of_chainSteps` and `processEffectiveBalanceUpdates_effectiveBalance` drop their registry-size argument.
+  `SlackStepBounds` drops its field `small`, and the field `RunKept.active` no longer takes a registry bound.
+  `getTotalActiveBalance` reads the checked active indices.
+  The new `getActiveValidatorIndicesChecked` converts each active position with `ofNatChecked`, as the specification builds each index, and the new `getCommitteeCountPerSlotChecked` also converts their count.
+  `getActiveValidatorIndicesChecked_eq_ok_iff` replaces `getActiveValidatorIndices_eq_mapM_ofNatChecked`, and `getTotalActiveBalance_ne_indexOutOfRange` drops its registry bound.
+  New lemmas on the checked read: `getActiveValidatorIndicesChecked_ok`, `_of_size_le`, `_of_within`, `_of_attesterShuffle`, `_error` and `_eq_error`, `lt_of_getActiveValidatorIndicesChecked_ok`, `sorted_of_getActiveValidatorIndicesChecked_ok`, `mem_iff_of_getActiveValidatorIndicesChecked_ok` and `ActiveKept.getActiveValidatorIndicesChecked_eq`.
+  New lemmas on the checked count: `getCommitteeCountPerSlotChecked_of_within` and `getCommitteeCountPerSlotChecked_ok`; in `Base`, `ofNatChecked_toNat`, `mapM_ofNatChecked_eq_ok_iff` and `mapM_ofNatChecked_error`.
+  `getValidatorAt_eq_ok_iff`, `getBalanceAt_eq_ok_iff` and `committeePositions_ne_nil` are new.
+  The new `committeeCountOf` gives the committee count for a number of active validators, so the checked count converts the length of the checked list without a second pass over the registry.
+  `CommitteesKept.of_seed` also takes the equality of the checked active indices of the two states.
+  `proposerCandidates` takes the checked active indices instead of the epoch, and `proposerCandidates_spec` places each candidate among them.
+  `getEligibleValidatorIndices_sorted`, `getEligibleValidatorIndices_ok` and `processInactivityUpdates_scores` drop their registry bound: the new `getEligibleValidatorIndices_fits` bounds each eligible position of a successful computation, and the new `validatorPositions_sorted_of_fits` sorts positions under such a bound.
+  The new `depositTargetStatus_ne_indexOutOfRange` states that the status of a deposit target never fails on an index, through the new `getElem?_toNat_eq_of_ofNatChecked`.
+  `exists_mem_getBeaconCommittee` takes a successful checked active-index read, and `attestationCommitteesSize_of_attesterShuffle` takes a successful checked committee-count read.
+  `attestationCommitteesSize_cons` includes that count check on its right side.
 - From Gloas, a deposit, a withdrawal or consolidation request, or a sync aggregate now fails where a registry position of 2^64 or more would become a validator index ([#1883](https://github.com/ethereum/EthLib/issues/1883)).
   Such a position used to wrap modulo 2^64, so a deposit at 2^64 validators overwrote validator 0.
   The step now fails with the accessor error `arith overflow`, as the specification fails to build a `ValidatorIndex` there.

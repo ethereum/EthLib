@@ -27,7 +27,7 @@ A total balance reads its indices as a set: their order and their repeats do not
 
 A total balance is at least one effective balance increment.
 
-The total active balance never fails on an index, only on a sum of 2^64 or more.
+The total active balance rejects an active position or a balance sum of `2^64` or more.
 
 The previous epoch is the current one minus one, or the genesis epoch at genesis.
 
@@ -140,28 +140,148 @@ theorem mem_getActiveValidatorIndices_of_isActiveAt {state : BeaconState preset 
     Option.some.injEq, List.mem_zipIdx_iff_getElem?, Prod.exists]
   exact ⟨validator, index.toNat, by simpa using found, isActive, by simp⟩
 
+/-- The active positions of a registry, converted without a check, are the active indices. -/
+private theorem map_activePositions (state : BeaconState preset fork) (epoch : Epoch) :
+    (state.validators.data.toList.zipIdx.filterMap fun (validator, position) =>
+        if isActiveValidator validator epoch then some position else none).map Nat.toUInt64 =
+      getActiveValidatorIndices state epoch := by
+  rw [getActiveValidatorIndices, List.map_filterMap]
+  congr
+  funext ⟨validator, position⟩
+  dsimp only
+  split <;> rfl
+
+/-- A position is an active position exactly when the validator there is active. -/
+private theorem mem_activePositions {state : BeaconState preset fork} {epoch : Epoch}
+    {position : Nat} :
+    position ∈ (state.validators.data.toList.zipIdx.filterMap fun (validator, position) =>
+        if isActiveValidator validator epoch then some position else none) ↔
+      ∃ inside : position < state.validators.data.size,
+        isActiveValidator state.validators.data[position] epoch = true := by
+  simp only [List.mem_filterMap, Option.ite_none_right_eq_some, Option.some.injEq,
+    List.mem_zipIdx_iff_getElem?, Prod.exists]
+  constructor
+  · rintro ⟨validator, _, found, active, rfl⟩
+    obtain ⟨inside, read⟩ := Array.getElem?_eq_some_iff.mp (by simpa using found)
+    exact ⟨inside, read ▸ active⟩
+  · rintro ⟨inside, active⟩
+    exact ⟨_, position, by simp [inside], active, rfl⟩
+
+/-- The checked read gives the active indices exactly when each active position is below `2^64`.
+
+The specification builds each active index with that check, so it fails otherwise.
+
+Otherwise the pure list wraps some active position modulo `2^64`. -/
+theorem getActiveValidatorIndicesChecked_eq_ok_iff {state : BeaconState preset fork}
+    {epoch : Epoch} :
+    getActiveValidatorIndicesChecked state epoch = .ok (getActiveValidatorIndices state epoch) ↔
+    ∀ position (inside : position < state.validators.data.size),
+      isActiveValidator state.validators.data[position] epoch = true → position < 2 ^ 64 := by
+  rw [getActiveValidatorIndicesChecked, liftArith, mapError_ok_iff, mapM_ofNatChecked_eq_ok_iff,
+    map_activePositions]
+  simp only [and_true]
+  constructor
+  · intro below position inside active
+    exact below position (mem_activePositions.mpr ⟨inside, active⟩)
+  · intro below position member
+    obtain ⟨inside, active⟩ := mem_activePositions.mp member
+    exact below position inside active
+
+/-- A successful checked read agrees with the pure list of active indices. -/
+theorem getActiveValidatorIndicesChecked_ok {state : BeaconState preset fork} {epoch : Epoch}
+    {indices : List ValidatorIndex}
+    (computed : getActiveValidatorIndicesChecked state epoch = .ok indices) :
+    indices = getActiveValidatorIndices state epoch := by
+  rw [getActiveValidatorIndicesChecked, liftArith, mapError_ok_iff,
+    mapM_ofNatChecked_eq_ok_iff, map_activePositions] at computed
+  exact computed.2
+
+/-- The checked read fails only by an overflow. -/
+theorem getActiveValidatorIndicesChecked_error {state : BeaconState preset fork} {epoch : Epoch}
+    {error : AccessorError}
+    (computed : getActiveValidatorIndicesChecked state epoch = .error error) :
+    error = .arith .overflow := by
+  rw [getActiveValidatorIndicesChecked, liftArith] at computed
+  cases converted : (state.validators.data.toList.zipIdx.filterMap fun (validator, position) =>
+      if isActiveValidator validator epoch then some position else none).mapM ofNatChecked with
+  | ok => simp [converted, Except.mapError] at computed
+  | error arith =>
+    simp only [converted, Except.mapError, Except.error.injEq] at computed
+    rw [← computed, mapM_ofNatChecked_error converted]
+
+/-- An active position of `2^64` or more makes the checked read fail by an overflow. -/
+theorem getActiveValidatorIndicesChecked_eq_error {state : BeaconState preset fork}
+    {epoch : Epoch}
+    (large : ¬ ∀ position (inside : position < state.validators.data.size),
+      isActiveValidator state.validators.data[position] epoch = true → position < 2 ^ 64) :
+    getActiveValidatorIndicesChecked state epoch = .error (.arith .overflow) := by
+  cases computed : getActiveValidatorIndicesChecked state epoch with
+  | ok indices =>
+    rw [getActiveValidatorIndicesChecked_ok computed] at computed
+    exact absurd (getActiveValidatorIndicesChecked_eq_ok_iff.mp computed) large
+  | error error => rw [getActiveValidatorIndicesChecked_error computed]
+
+/-- A successful checked read leaves every active position below `2^64`. -/
+theorem lt_of_getActiveValidatorIndicesChecked_ok {state : BeaconState preset fork}
+    {epoch : Epoch} {indices : List ValidatorIndex} {position : Nat} {validator : Validator}
+    (computed : getActiveValidatorIndicesChecked state epoch = .ok indices)
+    (found : state.validators.data[position]? = some validator)
+    (active : isActiveValidator validator epoch = true) : position < 2 ^ 64 := by
+  obtain ⟨inside, rfl⟩ := Array.getElem?_eq_some_iff.mp found
+  rw [getActiveValidatorIndicesChecked_ok computed] at computed
+  exact getActiveValidatorIndicesChecked_eq_ok_iff.mp computed position inside active
+
+/-- The checked read succeeds when every position of the registry fits in 64 bits. -/
+theorem getActiveValidatorIndicesChecked_of_size_le {state : BeaconState preset fork}
+    (small : state.validators.data.size ≤ 2 ^ 64) (epoch : Epoch) :
+    getActiveValidatorIndicesChecked state epoch = .ok (getActiveValidatorIndices state epoch) :=
+  getActiveValidatorIndicesChecked_eq_ok_iff.mpr fun _ inside _ => Nat.lt_of_lt_of_le inside small
+
+/-- A registry within its preset limit has the same checked and pure active indices. -/
+theorem getActiveValidatorIndicesChecked_of_within {state : BeaconState preset fork}
+    (within : state.RegistryWithinLimit) (epoch : Epoch) :
+    getActiveValidatorIndicesChecked state epoch = .ok (getActiveValidatorIndices state epoch) :=
+  getActiveValidatorIndicesChecked_of_size_le
+    (Nat.le_trans within (Nat.le_of_lt preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt)) epoch
+
+/-- A successful checked read lists exactly the indices that name an active validator. -/
+theorem mem_iff_of_getActiveValidatorIndicesChecked_ok {state : BeaconState preset fork}
+    {epoch : Epoch} {indices : List ValidatorIndex}
+    (computed : getActiveValidatorIndicesChecked state epoch = .ok indices)
+    {index : ValidatorIndex} :
+    index ∈ indices ↔
+      ∃ validator, state.validators.data[index.toNat]? = some validator ∧
+        isActiveValidator validator epoch = true := by
+  rw [getActiveValidatorIndicesChecked_ok computed]
+  refine ⟨fun member => ?_, fun found =>
+    mem_getActiveValidatorIndices_of_isActiveAt (isActiveAt_eq_true_iff.mpr found)⟩
+  rw [getActiveValidatorIndicesChecked, liftArith, mapError_ok_iff,
+    mapM_ofNatChecked_eq_ok_iff] at computed
+  obtain ⟨small, same⟩ := computed
+  rw [← map_activePositions, List.mem_map] at member
+  obtain ⟨position, listed, rfl⟩ := member
+  obtain ⟨inside, active⟩ := mem_activePositions.mp listed
+  have fits : position.toUInt64.toNat = position := by
+    rw [Nat.toUInt64_eq, UInt64.toNat_ofNat_of_lt' (small position listed)]
+  rw [fits]
+  exact ⟨_, by simp [inside], active⟩
+
 /-- An index is active exactly when it names a validator that is active in the epoch. -/
 theorem mem_getActiveValidatorIndices {state : BeaconState preset fork}
     (within : state.RegistryWithinLimit) {epoch : Epoch} {index : ValidatorIndex} :
     index ∈ getActiveValidatorIndices state epoch ↔
       ∃ validator, state.validators.data[index.toNat]? = some validator ∧
-        isActiveValidator validator epoch = true := by
-  refine ⟨fun member => ?_, fun found =>
-    mem_getActiveValidatorIndices_of_isActiveAt (isActiveAt_eq_true_iff.mpr found)⟩
-  simp only [getActiveValidatorIndices, List.mem_filterMap, Option.ite_none_right_eq_some,
-    Option.some.injEq, List.mem_zipIdx_iff_getElem?, Prod.exists] at member
-  obtain ⟨validator, i, found, active, rfl⟩ := member
-  have lt : i < state.validators.data.size := by
-    have := (List.getElem?_eq_some_iff.mp found).1
-    simpa using this
-  rw [toNat_toUInt64_of_lt within lt]
-  exact ⟨validator, by simpa using found, active⟩
+        isActiveValidator validator epoch = true :=
+  mem_iff_of_getActiveValidatorIndicesChecked_ok
+    (getActiveValidatorIndicesChecked_of_within within epoch)
 
 /-- The positions of the validators that pass a test increase strictly, as 64-bit indices.
 
-That needs a registry within its limit. -/
-theorem validatorPositions_sorted {state : BeaconState preset fork}
-    (within : state.RegistryWithinLimit) (test : Validator → Bool) :
+That needs each position that passes to be below `2^64`. -/
+theorem validatorPositions_sorted_of_fits {state : BeaconState preset fork}
+    (test : Validator → Bool)
+    (fits : ∀ entry ∈ state.validators.data.toList.zipIdx, test entry.1 = true →
+      entry.2 < 2 ^ 64) :
     (state.validators.data.toList.zipIdx.filterMap fun (validator, index) =>
       if test validator then some index.toUInt64 else none).Pairwise (· < ·) := by
   have base : state.validators.data.toList.zipIdx.Pairwise (fun a b => a.2 < b.2) := by
@@ -171,68 +291,43 @@ theorem validatorPositions_sorted {state : BeaconState preset fork}
   refine List.Pairwise.filterMap _ ?_ (List.Pairwise.and_mem.mp base)
   rintro ⟨v, i⟩ ⟨w, j⟩ ⟨mi, mj, lt⟩ a ha b hb
   simp only [Option.ite_none_right_eq_some, Option.some.injEq] at ha hb
-  obtain ⟨-, rfl⟩ := ha
-  obtain ⟨-, rfl⟩ := hb
-  have hi : i < state.validators.data.size := by simpa using (List.mem_zipIdx' mi).1
-  have hj : j < state.validators.data.size := by simpa using (List.mem_zipIdx' mj).1
-  rw [UInt64.lt_iff_toNat_lt, toNat_toUInt64_of_lt within hi, toNat_toUInt64_of_lt within hj]
+  obtain ⟨vi, rfl⟩ := ha
+  obtain ⟨wj, rfl⟩ := hb
+  rw [UInt64.lt_iff_toNat_lt, Nat.toUInt64_eq, Nat.toUInt64_eq,
+    UInt64.toNat_ofNat_of_lt' (fits _ mi vi), UInt64.toNat_ofNat_of_lt' (fits _ mj wj)]
   exact lt
 
-/-- Converting the positions that pass a test with a check agrees with converting them without one.
+/-- The positions of the validators that pass a test increase strictly, as 64-bit indices.
 
-They agree exactly when each position that passes is below `2^64`. -/
-private theorem mapM_ofNatChecked_filterMap {α : Type} (test : α → Bool) :
-    ∀ entries : List (α × Nat),
-      (entries.filterMap fun (value, position) =>
-          if test value then some position else none).mapM ofNatChecked =
-        .ok (entries.filterMap fun (value, position) =>
-          if test value then some position.toUInt64 else none) ↔
-      ∀ entry ∈ entries, test entry.1 = true → entry.2 < 2 ^ 64
-  | [] => by simp [pure, Except.pure]
-  | (value, position) :: rest => by
-    have later := mapM_ofNatChecked_filterMap test rest
-    cases passes : test value
-    · simp only [List.filterMap_cons, passes, Bool.false_eq_true, ↓reduceIte, later,
-        List.forall_mem_cons, false_implies, true_and]
-    · simp only [List.filterMap_cons, passes, ↓reduceIte, List.mapM_cons, List.forall_mem_cons,
-        forall_const]
-      by_cases small : position < 2 ^ 64
-      · simp only [ofNatChecked_of_lt small, small, true_and, ← later]
-        cases rest.filterMap (fun (value, position) =>
-            if test value then some position else none) |>.mapM ofNatChecked <;>
-          simp [bind, Except.bind, pure, Except.pure]
-      · simp [ofNatChecked, small, bind, Except.bind]
+That needs a registry within its limit. -/
+theorem validatorPositions_sorted {state : BeaconState preset fork}
+    (within : state.RegistryWithinLimit) (test : Validator → Bool) :
+    (state.validators.data.toList.zipIdx.filterMap fun (validator, index) =>
+      if test validator then some index.toUInt64 else none).Pairwise (· < ·) :=
+  validatorPositions_sorted_of_fits test fun entry member _ => by
+    have inside : entry.2 < state.validators.data.size := by
+      simpa using (List.mem_zipIdx' member).1
+    have limit := preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt
+    have bound : state.validators.data.size ≤ _ := within
+    omega
 
-/-- The specification converts each active position to an index, and fails at `2^64` or more.
-
-That conversion gives the active indices exactly when each active position is below `2^64`.
-
-Otherwise the specification gives no such result.
-
-The active indices then take some active position modulo `2^64`. -/
-theorem getActiveValidatorIndices_eq_mapM_ofNatChecked {state : BeaconState preset fork}
-    {epoch : Epoch} :
-    (state.validators.data.toList.zipIdx.filterMap fun (validator, position) =>
-        if isActiveValidator validator epoch then some position else none).mapM ofNatChecked =
-      .ok (getActiveValidatorIndices state epoch) ↔
-    ∀ position (inside : position < state.validators.data.size),
-      isActiveValidator state.validators.data[position] epoch = true → position < 2 ^ 64 := by
-  rw [getActiveValidatorIndices]
-  refine (mapM_ofNatChecked_filterMap (isActiveValidator · epoch) _).trans ?_
-  constructor
-  · intro below position inside active
-    exact below (state.validators.data[position], position)
-      (List.mem_zipIdx_iff_getElem?.mpr (by simp [inside])) active
-  · rintro below ⟨validator, position⟩ member active
-    obtain ⟨inside, read⟩ := Array.getElem?_eq_some_iff.mp
-      (by simpa using List.mem_zipIdx_iff_getElem?.mp member)
-    exact below position inside (read ▸ active)
+/-- After a successful checked read, the active indices increase strictly. -/
+theorem sorted_of_getActiveValidatorIndicesChecked_ok {state : BeaconState preset fork}
+    {epoch : Epoch} {indices : List ValidatorIndex}
+    (computed : getActiveValidatorIndicesChecked state epoch = .ok indices) :
+    indices.Pairwise (· < ·) := by
+  obtain rfl := getActiveValidatorIndicesChecked_ok computed
+  refine validatorPositions_sorted_of_fits (isActiveValidator · epoch) fun entry member active => ?_
+  obtain ⟨inside, read⟩ := Array.getElem?_eq_some_iff.mp
+    (by simpa using List.mem_zipIdx_iff_getElem?.mp member)
+  exact getActiveValidatorIndicesChecked_eq_ok_iff.mp computed entry.2 inside (read ▸ active)
 
 /-- The active indices increase strictly. -/
 theorem getActiveValidatorIndices_sorted {state : BeaconState preset fork}
     (within : state.RegistryWithinLimit) (epoch : Epoch) :
     (getActiveValidatorIndices state epoch).Pairwise (· < ·) :=
-  validatorPositions_sorted within (isActiveValidator · epoch)
+  sorted_of_getActiveValidatorIndicesChecked_ok
+    (getActiveValidatorIndicesChecked_of_within within epoch)
 
 /-- Marking indices one after the other sets exactly the entries that some index names. -/
 theorem getElem?_foldl_mark (indices : List ValidatorIndex) (init : Array Bool) (j : Nat) :
@@ -374,28 +469,39 @@ theorem getTotalBalance_congr {state : BeaconState preset fork}
   exact ⟨fun ⟨inside, rest⟩ => ⟨fun i m => inside i ((same i).mpr m), rest⟩,
     fun ⟨inside, rest⟩ => ⟨fun i m => inside i ((same i).mp m), rest⟩⟩
 
+/-- A successful active-balance read is the total balance of the checked active indices. -/
+theorem getTotalActiveBalance_ok {state : BeaconState preset fork} {total : Gwei}
+    (computed : getTotalActiveBalance state = .ok total) :
+    getTotalBalance state (getActiveValidatorIndices state (getCurrentEpoch state)) =
+      .ok total := by
+  obtain ⟨indices, checked, computed⟩ := bind_ok_iff.mp computed
+  rw [getActiveValidatorIndicesChecked_ok checked] at computed
+  exact computed
+
 /-- The total active balance never fails on an index: every active index names a validator. -/
 theorem getTotalActiveBalance_ne_indexOutOfRange {state : BeaconState preset fork}
-    (within : state.RegistryWithinLimit) (index : ValidatorIndex) :
+    (index : ValidatorIndex) :
     getTotalActiveBalance state ≠ .error (.indexOutOfRange index) := by
-  have inside : ∀ i ∈ getActiveValidatorIndices state (getCurrentEpoch state),
-      i.toNat < state.validators.data.size := by
-    intro i member
-    obtain ⟨_, found, -⟩ := (mem_getActiveValidatorIndices within).mp member
-    exact (Array.getElem?_eq_some_iff.mp found).1
-  have none : (getActiveValidatorIndices state (getCurrentEpoch state)).find?
-      (state.validators.data.size ≤ ·.toNat) = none := by
-    rw [List.find?_eq_none]
-    intro i member
-    have := inside i member
-    simp
-    omega
-  unfold getTotalActiveBalance getTotalBalance
-  simp only [none]
-  by_cases big : 2 ^ 64 ≤ sumMarked state.validators.data (markIndices state.validators.data.size
-      (getActiveValidatorIndices state (getCurrentEpoch state)))
-  · simp [big, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
-  · simp [big, pure, Except.pure]
+  unfold getTotalActiveBalance
+  cases checked : getActiveValidatorIndicesChecked state (getCurrentEpoch state) with
+  | error error =>
+    rw [getActiveValidatorIndicesChecked_error checked]
+    simp [bind, Except.bind]
+  | ok indices =>
+    have none : indices.find? (state.validators.data.size ≤ ·.toNat) = none := by
+      rw [List.find?_eq_none]
+      intro i member
+      obtain ⟨_, found, -⟩ := (mem_iff_of_getActiveValidatorIndicesChecked_ok checked).mp member
+      have := (Array.getElem?_eq_some_iff.mp found).1
+      simp
+      omega
+    simp only [bind, Except.bind]
+    unfold getTotalBalance
+    simp only [none]
+    by_cases big : 2 ^ 64 ≤ sumMarked state.validators.data
+        (markIndices state.validators.data.size indices)
+    · simp [big, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
+    · simp [big, pure, Except.pure]
 
 
 /--
@@ -498,7 +604,7 @@ theorem toNat_length_getActiveValidatorIndices {state : BeaconState preset fork}
 /-- Each slot has at least one committee. -/
 theorem one_le_getCommitteeCountPerSlot (state : BeaconState preset fork) (epoch : Epoch) :
     1 ≤ getCommitteeCountPerSlot state epoch := by
-  simp only [getCommitteeCountPerSlot, max, min]
+  simp only [getCommitteeCountPerSlot, committeeCountOf, max, min]
   repeat' split
   all_goals simp_all [UInt64.le_iff_toNat_le]
   all_goals omega
@@ -506,7 +612,7 @@ theorem one_le_getCommitteeCountPerSlot (state : BeaconState preset fork) (epoch
 /-- A slot has at most the most committees of the preset, or one if that is zero. -/
 theorem getCommitteeCountPerSlot_le (state : BeaconState preset fork) (epoch : Epoch) :
     getCommitteeCountPerSlot state epoch ≤ max 1 preset.MAX_COMMITTEES_PER_SLOT := by
-  simp only [getCommitteeCountPerSlot, max, min]
+  simp only [getCommitteeCountPerSlot, committeeCountOf, max, min]
   repeat' split
   all_goals simp_all [UInt64.le_iff_toNat_le]
   all_goals omega
@@ -519,6 +625,58 @@ theorem count_ne_zero_of_computeCommittee {indices : Array ValidatorIndex} {seed
   cases shuffle : computeShuffledPermutation preset (UInt64.ofNat indices.size) seed <;>
     simp [computeCommittee, shuffledCommittee, shuffle, zero, bind, Except.bind, throw, throwThe,
       MonadExcept.throw, MonadExceptOf.throw] at computed
+
+/-- A successful shuffle uses the checked active indices, and then shuffles their positions. -/
+theorem attesterShuffle_ok {state : BeaconState preset fork} {epoch : Epoch}
+    {active : Array ValidatorIndex} {shuffled : Array UInt64}
+    (computed : attesterShuffle state epoch = .ok (active, shuffled)) :
+    ∃ seed, getSeed state epoch DOMAIN_BEACON_ATTESTER = .ok seed ∧
+      computeShuffledPermutation preset
+        (UInt64.ofNat (getActiveValidatorIndices state epoch).toArray.size) seed = .ok shuffled ∧
+      active = (getActiveValidatorIndices state epoch).toArray := by
+  simp only [attesterShuffle, bind_ok_iff] at computed
+  obtain ⟨seed, seedOk, indices, indicesOk, rest⟩ := computed
+  have same := getActiveValidatorIndicesChecked_ok indicesOk
+  subst indices
+  simp only [liftArith, mapError_ok_iff, pure, Except.pure, Except.ok.injEq,
+    Prod.mk.injEq] at rest
+  obtain ⟨count, countOk, _, shuffleOk, activeEq, rfl⟩ := rest
+  obtain ⟨-, value⟩ := ofNatChecked_ok_iff.mp countOk
+  have same : count = UInt64.ofNat (getActiveValidatorIndices state epoch).toArray.size := by
+    rw [← value, UInt64.ofNat_toNat]
+  subst same
+  exact ⟨seed, seedOk, shuffleOk, activeEq.symm⟩
+
+/-- A successful shuffle has checked every active registry position. -/
+theorem getActiveValidatorIndicesChecked_of_attesterShuffle
+    {state : BeaconState preset fork} {epoch : Epoch}
+    {active : Array ValidatorIndex} {shuffled : Array UInt64}
+    (computed : attesterShuffle state epoch = .ok (active, shuffled)) :
+    getActiveValidatorIndicesChecked state epoch = .ok (getActiveValidatorIndices state epoch) := by
+  simp only [attesterShuffle, bind_ok_iff] at computed
+  obtain ⟨_, _, indices, checked, _⟩ := computed
+  rw [getActiveValidatorIndicesChecked_ok checked] at checked
+  exact checked
+
+/-- A registry within its preset limit has the same checked and pure committee count. -/
+theorem getCommitteeCountPerSlotChecked_of_within {state : BeaconState preset fork}
+    (within : state.RegistryWithinLimit) (epoch : Epoch) :
+    getCommitteeCountPerSlotChecked state epoch = .ok (getCommitteeCountPerSlot state epoch) := by
+  simp [getCommitteeCountPerSlotChecked, getCommitteeCountPerSlot,
+    getActiveValidatorIndicesChecked_of_within within, liftArith,
+    ofNatChecked_of_lt (length_getActiveValidatorIndices_lt within epoch), Except.mapError, bind,
+    Except.bind, pure, Except.pure]
+
+/-- A successful checked count agrees with the pure committee count. -/
+theorem getCommitteeCountPerSlotChecked_ok {state : BeaconState preset fork} {epoch : Epoch}
+    {count : UInt64} (computed : getCommitteeCountPerSlotChecked state epoch = .ok count) :
+    count = getCommitteeCountPerSlot state epoch := by
+  simp only [getCommitteeCountPerSlotChecked, bind_ok_iff, liftArith, mapError_ok_iff, pure,
+    Except.pure, Except.ok.injEq] at computed
+  obtain ⟨active, checked, converted, convertedOk, rfl⟩ := computed
+  obtain rfl := getActiveValidatorIndicesChecked_ok checked
+  obtain ⟨-, value⟩ := ofNatChecked_ok_iff.mp convertedOk
+  rw [getCommitteeCountPerSlot, ← value, Nat.toUInt64_eq, UInt64.ofNat_toNat]
 
 /-- A beacon committee that has a value is one committee cut from the active indices.
 
@@ -537,11 +695,13 @@ theorem getBeaconCommittee_ok {state : BeaconState preset fork} {slot : Slot}
       computeCommittee preset
         (getActiveValidatorIndices state (computeEpochAtSlot preset slot)).toArray seed position
         count = .ok committee := by
-  simp only [getBeaconCommittee, attesterShuffle, bind_assoc, pure_bind, beaconCommitteeOf,
-    bind_ok_iff, liftArith, mapError_ok_iff, Base.Uint64.mulChecked_ok_iff,
-    Base.Uint64.addChecked_ok_iff] at computed
-  obtain ⟨seed, seedOk, shuffled, shuffleOk, position, ⟨product, ⟨_, productEq⟩, _, positionEq⟩,
-    count, ⟨_, countEq⟩, committeeOk⟩ := computed
+  simp only [getBeaconCommittee, bind_ok_iff] at computed
+  obtain ⟨⟨active, shuffled⟩, shuffledOk, rest⟩ := computed
+  obtain ⟨seed, seedOk, shuffleOk, rfl⟩ := attesterShuffle_ok shuffledOk
+  simp only [beaconCommitteeOf, bind_ok_iff, liftArith, mapError_ok_iff,
+    Base.Uint64.mulChecked_ok_iff, Base.Uint64.addChecked_ok_iff] at rest
+  obtain ⟨position, ⟨product, ⟨_, productEq⟩, _, positionEq⟩,
+    count, ⟨_, countEq⟩, committeeOk⟩ := rest
   refine ⟨seed, position, count, seedOk, by rw [positionEq, productEq], countEq, ?_⟩
   rw [computeCommittee, shuffleOk]
   exact committeeOk
@@ -652,6 +812,8 @@ theorem eq_of_mem_getBeaconCommittee {state : BeaconState preset fork}
 
 The committee has a slot of the epoch and an index below the committees of a slot.
 
+The checked read of the active indices of the epoch must succeed.
+
 The seed of the epoch must have a value, and an epoch must have at least one slot.
 
 The slots of the epoch must fit in 64 bits.
@@ -660,6 +822,8 @@ There must be at most `2^40` active validators.
 
 Their number times the number of committees of the epoch must fit in 64 bits. -/
 theorem exists_mem_getBeaconCommittee {state : BeaconState preset fork} {epoch : Epoch}
+    (indicesFit : getActiveValidatorIndicesChecked state epoch =
+      .ok (getActiveValidatorIndices state epoch))
     {seed : Bytes32} (seedOk : getSeed state epoch DOMAIN_BEACON_ATTESTER = .ok seed)
     (positive : preset.SLOTS_PER_EPOCH ≠ 0)
     (slotsFit : (epoch.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat ≤ 2 ^ 64)
@@ -750,9 +914,13 @@ theorem exists_mem_getBeaconCommittee {state : BeaconState preset fork} {epoch :
     (count := UInt64.ofNat (getActiveValidatorIndices state epoch).toArray.size)
     (by rw [activeSize]; simpa using small)
   rw [computeCommittee_of_le (by simpa using small)] at computed
-  simp only [getBeaconCommittee, attesterShuffle, beaconCommitteeOf, epochEq, seedOk, shuffleOk,
-    activeSize, liftArith, productOk, sumOk, countOk, bind, Except.bind, Except.mapError, pure,
-    Except.pure, positionEq]
+  have lengthOk : ofNatChecked (getActiveValidatorIndices state epoch).toArray.size =
+      .ok (UInt64.ofNat (getActiveValidatorIndices state epoch).toArray.size) := by
+    rw [ofNatChecked_of_lt (Nat.lt_of_le_of_lt (by simpa using small) (by decide)),
+      Nat.toUInt64_eq]
+  simp only [getBeaconCommittee, attesterShuffle, beaconCommitteeOf, epochEq, seedOk, indicesFit,
+    lengthOk, shuffleOk, activeSize, liftArith, productOk, sumOk, countOk, bind, Except.bind,
+    Except.mapError, pure, Except.pure, positionEq]
   rw [computed]
 
 /-- A beacon committee is cut from the shuffle of the epoch of its slot.
@@ -774,32 +942,21 @@ theorem slotCommitteeMembers_eq (state : BeaconState preset fork) (slot : Slot) 
       (List.range (getCommitteeCountPerSlot state (computeEpochAtSlot preset slot)).toNat).foldlM
         (fun members index => return members ++ (← getBeaconCommittee state slot index.toUInt64))
         #[] := by
-  unfold slotCommitteeMembers attesterShuffle slotCommitteeMembersOf
+  unfold slotCommitteeMembers slotCommitteeMembersOf
   have perPos : 0 < (getCommitteeCountPerSlot state (computeEpochAtSlot preset slot)).toNat :=
     UInt64.le_iff_toNat_le.mp (one_le_getCommitteeCountPerSlot _ _)
-  -- The first committee reads the same seed and shuffle, so a failure of either is on both sides.
   obtain ⟨n, count⟩ : ∃ n,
       (getCommitteeCountPerSlot state (computeEpochAtSlot preset slot)).toNat = n + 1 :=
     ⟨_, (Nat.succ_pred_eq_of_pos perPos).symm⟩
-  cases seedOk : getSeed state (computeEpochAtSlot preset slot) DOMAIN_BEACON_ATTESTER with
+  cases shuffledOk : attesterShuffle state (computeEpochAtSlot preset slot) with
   | error e =>
     rw [count, List.range_succ_eq_map, List.foldlM_cons]
-    simp [getBeaconCommittee, attesterShuffle, seedOk, bind, Except.bind]
-  | ok seed =>
-    cases shuffleOk : computeShuffledPermutation preset
-        (UInt64.ofNat (getActiveValidatorIndices state (computeEpochAtSlot preset slot)).length)
-        seed with
-    | error e =>
-      rw [count, List.range_succ_eq_map, List.foldlM_cons]
-      simp [getBeaconCommittee, attesterShuffle, seedOk, shuffleOk, bind, Except.bind,
-        Except.mapError]
-    | ok shuffled =>
-      simp only [seedOk, List.size_toArray, shuffleOk, Except.mapError, bind, Except.bind, pure,
-        Except.pure]
-      congr 1
-      funext members index
-      simp [getBeaconCommittee, attesterShuffle, seedOk, shuffleOk, bind, Except.bind,
-        Except.mapError, pure, Except.pure]
+    simp [getBeaconCommittee, shuffledOk, bind, Except.bind]
+  | ok pair =>
+    simp only [shuffledOk, bind, Except.bind]
+    congr 1
+    funext members index
+    simp [getBeaconCommittee, shuffledOk, bind, Except.bind, pure, Except.pure]
 
 /-- A validator is among the members of a slot exactly when a beacon committee of it holds it. -/
 theorem mem_slotCommitteeMembers {state : BeaconState preset fork} {slot : Slot}
@@ -1416,6 +1573,11 @@ theorem mem_getActiveValidatorIndices_of_getBeaconProposerIndex
   simp only [getBeaconProposerIndex, beforeFulu, ↓reduceDIte, bind, Except.bind] at computed
   split at computed
   · cases computed
+  split at computed
+  · cases computed
+  have same := getActiveValidatorIndicesChecked_ok (show
+    getActiveValidatorIndicesChecked state (getCurrentEpoch state) = .ok _ from by assumption)
+  subst same
   simpa using mem_of_computeProposerIndex computed
 
 /-- A domain always has a value. -/

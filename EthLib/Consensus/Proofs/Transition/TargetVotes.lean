@@ -229,7 +229,7 @@ theorem voteFrame_processAttestation {attestation : Attestation preset fork} {pa
   simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok, pure, Except.pure,
     Except.ok.injEq] at computed
   obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
-    _, _, _, _, _, _, _, _, recorded, _, _, _, _, _, _, rfl⟩ := computed
+    _, _, _, _, _, _, _, _, _, _, recorded, _, _, _, _, _, _, rfl⟩ := computed
   have kept := recordPendingAttestation_ok recorded
   split at kept <;>
   · obtain ⟨_, rest⟩ := kept
@@ -322,16 +322,14 @@ theorem blockVotes_eq_of_attesters {first : BeaconState preset fork}
 
 Those votes are read in the committees of the state before the block.
 
-There must be more than `MIN_SEED_LOOKAHEAD + 2` epochs of mixes.
-
-The registry after the block must hold fewer than 2^64 validators. -/
+There must be more than `MIN_SEED_LOOKAHEAD + 2` epochs of mixes. -/
 theorem voteFrame_processBlock
     (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
-    {block : BeaconBlock preset fork} (small : after.validators.data.size < 2 ^ 64)
+    {block : BeaconBlock preset fork}
     (computed : processBlock config checks engine state block = .ok after) :
     VoteFrame (blockVotes state block) state after := by
   obtain ⟨first, last, head, same, attested, tail⟩ :=
-    processBlock_attestationSplit apart small computed
+    processBlock_attestationSplit apart computed
   have middle := foldlM_processAttestation_votes (fun votes mid => VoteFrame votes state mid)
     (fun frame sub => frame.mono sub)
     (fun frame ok => frame.trans (voteFrame_processAttestation ok))

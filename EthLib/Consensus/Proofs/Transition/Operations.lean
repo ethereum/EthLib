@@ -162,11 +162,17 @@ theorem processAttestation_checks {attestation : Attestation preset fork}
   unfold processAttestation at computed
   split at computed
   · exact absurd ‹_› (Nat.not_le_of_lt before)
+  have countOk := getCommitteeCountPerSlotChecked_of_within
+    (state.validators.bound (Nat.lt_trans before (by decide))) attestation.data.target.epoch
+  dsimp only at computed
+  rw [countOk] at computed
   simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
-    addChecked_ok_iff] at computed
+    addChecked_ok_iff, Except.ok.injEq] at computed
   obtain ⟨_, recent, _, slotEpoch, earliest, ⟨_, earliestSum⟩, _, early, latest,
-    ⟨_, latestSum⟩, _, late, _, index, committee, found, _, bits, _, _, _, source, _⟩ :=
+    ⟨_, latestSum⟩, _, late, count, countEq, _, index, committee, found, _, bits,
+    _, _, _, source, _⟩ :=
     computed
+  subst count
   refine ⟨recent, slotEpoch, ?_, ?_, index, ⟨committee, found, bits⟩, ?_⟩
   · rw [← earliestSum]
     exact UInt64.le_iff_toNat_le.mp early
@@ -194,9 +200,13 @@ theorem processAttestation_records {attestation : Attestation preset fork}
   unfold processAttestation at computed
   split at computed
   · exact absurd ‹_› (Nat.not_le_of_lt before)
+  have countOk := getCommitteeCountPerSlotChecked_of_within
+    (state.validators.bound (Nat.lt_trans before (by decide))) attestation.data.target.epoch
+  dsimp only at computed
+  rw [countOk] at computed
   simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok, pure, Except.pure,
     Except.ok.injEq] at computed
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, proposer, proposerOk, _, _,
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, proposer, proposerOk, _, _,
     updated, recorded, indexed, indexedOk, valid, validOk, _, validTrue, rfl⟩ := computed
   subst validTrue
   exact ⟨_, rfl, rfl, rfl, proposerOk, recorded, indexed, indexedOk, validOk⟩
@@ -244,6 +254,8 @@ theorem attestationCommitteesSize_of_attesterShuffle {data : AttestationData}
     {active : Array ValidatorIndex} {shuffled : Array UInt64}
     (shuffleOk :
       attesterShuffle state (computeEpochAtSlot preset data.slot) = .ok (active, shuffled))
+    (countOk : getCommitteeCountPerSlotChecked state data.target.epoch =
+      .ok (getCommitteeCountPerSlot state data.target.epoch))
     (bits : Array Bool) (committees : List CommitteeIndex) (offset : Nat) :
     attestationCommitteesSize state data bits committees offset =
       attestationCommitteesSizeOf preset data.slot bits
@@ -253,7 +265,8 @@ theorem attestationCommitteesSize_of_attesterShuffle {data : AttestationData}
   cases committees with
   | nil => rfl
   | cons index rest =>
-    simp only [attestationCommitteesSize, attestationCommitteesSizeOf, shuffleOk, liftAccessor,
+    simp only [attestationCommitteesSize, attestationCommitteesSizeOf, countOk, shuffleOk,
+      liftAccessor,
       Except.mapError, bind, Except.bind]
     -- The left side checks the first index twice, and a check that passed passes again.
     cases ensure (index < getCommitteeCountPerSlot state data.target.epoch)
@@ -273,22 +286,28 @@ The two sides fail with the same error too. -/
 theorem attestationCommitteesSize_cons (data : AttestationData) (bits : Array Bool)
     (index : CommitteeIndex) (rest : List CommitteeIndex) (offset : Nat) :
     attestationCommitteesSize state data bits (index :: rest) offset = (do
-      let count := getCommitteeCountPerSlot state data.target.epoch
+      let count ← liftAccessor (getCommitteeCountPerSlotChecked state data.target.epoch)
       ensure (index < count) (.committeeIndexOutOfRange index count)
       let committee ← liftAccessor (getBeaconCommittee state data.slot index)
       let attesters ← liftAccessor (committeeAttesters bits offset committee)
       ensure (attesters ≠ []) (.noCommitteeAttester index)
       attestationCommitteesSize state data bits rest (offset + committee.size)) := by
-  rw [getBeaconCommittee_eq]
-  -- A committee reads the shuffle after its index is checked, so both sides fail in one order.
-  cases shuffleOk : attesterShuffle state (computeEpochAtSlot preset data.slot) with
-  | error e =>
-    simp only [attestationCommitteesSize, shuffleOk, liftAccessor, Except.mapError, bind,
-      Except.bind]
-  | ok pair =>
-    obtain ⟨active, shuffled⟩ := pair
-    simp only [attestationCommitteesSize_of_attesterShuffle shuffleOk,
-      attestationCommitteesSizeOf, liftAccessor, Except.mapError, bind, Except.bind]
+  cases countOk : getCommitteeCountPerSlotChecked state data.target.epoch with
+  | error error =>
+    simp [attestationCommitteesSize, countOk, liftAccessor, Except.mapError, bind, Except.bind]
+  | ok count =>
+    have same := getCommitteeCountPerSlotChecked_ok countOk
+    subst count
+    rw [getBeaconCommittee_eq]
+    -- A committee reads the shuffle after its index is checked, so both sides fail in one order.
+    cases shuffleOk : attesterShuffle state (computeEpochAtSlot preset data.slot) with
+    | error e =>
+      simp only [attestationCommitteesSize, countOk, shuffleOk, liftAccessor, Except.mapError, bind,
+        Except.bind]
+    | ok pair =>
+      obtain ⟨active, shuffled⟩ := pair
+      simp only [attestationCommitteesSize_of_attesterShuffle shuffleOk countOk,
+        attestationCommitteesSizeOf, liftAccessor, Except.mapError, bind, Except.bind]
 
 /-- Each committee that a checked attestation names has an index below the count.
 
@@ -314,6 +333,8 @@ theorem lt_getCommitteeCountPerSlot_of_checkAttestationCommittees
     | cons first rest ih =>
       intro offset size sized mem
       rw [attestationCommitteesSize_cons] at sized
+      obtain ⟨count, countOk, sized⟩ := bind_ok_iff.mp sized
+      rw [getCommitteeCountPerSlotChecked_ok (liftAccessor_ok.mp countOk)] at sized
       obtain ⟨below, sized⟩ := bind_unit_ok_iff.mp sized
       obtain ⟨committee, -, sized⟩ := bind_ok_iff.mp sized
       obtain ⟨attesters, -, sized⟩ := bind_ok_iff.mp sized
@@ -334,6 +355,8 @@ theorem lt_getCommitteeCountPerSlot_of_checkAttestationCommittees
   · simp only [electra, ↓reduceDIte] at named
     subst named
     simp only [checkAttestationCommittees, electra, ↓reduceDIte] at checked
+    obtain ⟨count, countOk, checked⟩ := bind_ok_iff.mp checked
+    rw [getCommitteeCountPerSlotChecked_ok (liftAccessor_ok.mp countOk)] at checked
     exact ensure_ok_iff.mp (bind_unit_ok_iff.mp checked).1
 
 /-- An attester of an attestation that passes the committee check sits in one of its committees.

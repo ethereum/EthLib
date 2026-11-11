@@ -131,7 +131,7 @@ def getUnslashedParticipatingIndices (state : BeaconState preset fork) (altair :
     let participation :=
       if epoch = current then (state.currentEpochParticipation altair).data
       else (state.previousEpochParticipation altair).data
-    let read ← (getActiveValidatorIndices state epoch).mapM fun index => do
+    let read ← (← getActiveValidatorIndicesChecked state epoch).mapM fun index => do
       let some flags := participation[index.toNat]? | throw (.indexOutOfRange index)
       return (index, hasFlag flags flagIndex && !(← getValidator state index).slashed)
     return (read.filter (·.2)).map (·.1)

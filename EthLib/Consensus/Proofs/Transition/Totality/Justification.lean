@@ -139,6 +139,8 @@ theorem getUnslashedParticipatingIndices_exists_ok (within : state.RegistryWithi
   unfold getUnslashedParticipatingIndices
   dsimp only
   rw [ite_eq_left_of_eq_true _ _ (eq_true recent)]
+  rw [getActiveValidatorIndicesChecked_of_within within]
+  simp only [bind, Except.bind]
   have sizedAt : (if epoch = getCurrentEpoch state then
       (state.currentEpochParticipation altair).data
       else (state.previousEpochParticipation altair).data).size =

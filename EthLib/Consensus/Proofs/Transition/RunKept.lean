@@ -15,7 +15,7 @@ That mix is final at the start when the epoch is at most `MIN_SEED_LOOKAHEAD` af
 
 A run keeps it while it stays within the ring of mixes.
 
-A run also keeps activity up to its start plus `MAX_SEED_LOOKAHEAD`, below 2^64 validators.
+A run also keeps activity up to its start plus `MAX_SEED_LOOKAHEAD`.
 
 So it keeps the committees of each epoch up to its start plus `MIN_SEED_LOOKAHEAD`.
 
@@ -39,9 +39,7 @@ The current epoch never moves back, and the registry never shrinks.
 
 Each RANDAO mix is kept at a position that no epoch between the two current epochs takes.
 
-While the registry of the second stays below 2^64 validators, activity is kept.
-
-That activity is up to the current epoch of the first plus `MAX_SEED_LOOKAHEAD`, capped. -/
+It keeps activity up to the current epoch of the first plus `MAX_SEED_LOOKAHEAD`, capped. -/
 structure RunKept (state after : BeaconState preset fork) : Prop where
   later : getCurrentEpoch state ≤ getCurrentEpoch after
   grows : state.validators.data.size ≤ after.validators.data.size
@@ -50,11 +48,10 @@ structure RunKept (state after : BeaconState preset fork) : Prop where
         written % preset.EPOCHS_PER_HISTORICAL_VECTOR ≠
           epoch % preset.EPOCHS_PER_HISTORICAL_VECTOR) →
     readCircular after.randaoMixes.elements epoch = readCircular state.randaoMixes.elements epoch
-  active : after.validators.data.size < 2 ^ 64 →
-    ActiveKept (activityFixedEpoch state) state after
+  active : ActiveKept (activityFixedEpoch state) state after
 
 theorem RunKept.refl (state : BeaconState preset fork) : RunKept state state :=
-  ⟨UInt64.le_refl _, Nat.le_refl _, fun _ _ => rfl, fun _ => ActiveKept.refl _ _⟩
+  ⟨UInt64.le_refl _, Nat.le_refl _, fun _ _ => rfl, ActiveKept.refl _ _⟩
 
 theorem RunKept.trans {first second third : BeaconState preset fork}
     (one : RunKept first second) (two : RunKept second third) : RunKept first third where
@@ -65,8 +62,7 @@ theorem RunKept.trans {first second third : BeaconState preset fork}
         apart written (UInt64.le_trans one.later low) high,
       one.mixes epoch fun written low high =>
         apart written low (UInt64.le_trans high two.later)]
-  active small := (one.active (Nat.lt_of_le_of_lt two.grows small)).trans
-    ((two.active small).mono (activityFixedEpoch_mono one.later))
+  active := one.active.trans (two.active.mono (activityFixedEpoch_mono one.later))
 
 /-- One slot is a run step. -/
 theorem runKept_advanceSlot (computed : advanceSlot config checks state = .ok after) :
@@ -78,7 +74,7 @@ theorem runKept_advanceSlot (computed : advanceSlot config checks state = .ok af
   exact ⟨later, advanceSlot_registryGrows computed,
     fun epoch apart => mixesKeptBut_advanceSlot computed epoch fun same =>
       apart _ later (UInt64.le_refl _) same.symm,
-    fun small => activeKept_advanceSlot small computed⟩
+    activeKept_advanceSlot computed⟩
 
 /-- A block is a run step. -/
 theorem runKept_processBlock {block : BeaconBlock preset fork}
@@ -90,7 +86,7 @@ theorem runKept_processBlock {block : BeaconBlock preset fork}
   exact ⟨same ▸ UInt64.le_refl _, frame.registryGrows,
     fun epoch apart => mixesKeptBut_processBlock computed epoch fun eq =>
       apart _ (UInt64.le_refl _) (same ▸ UInt64.le_refl _) eq.symm,
-    fun small => activeKept_processBlock small computed⟩
+    activeKept_processBlock computed⟩
 
 /-- Some count of slots is a run step. -/
 private theorem runKept_advanceSlots :
@@ -124,17 +120,16 @@ The epoch must also be at most the fixed epoch of activity of the start.
 
 The first bound implies it when `MIN_SEED_LOOKAHEAD` is at most `MAX_SEED_LOOKAHEAD`.
 
-The run must end before the mix that the seed of the epoch reads is written again.
-
-The registry at its end must hold fewer than 2^64 validators. -/
+The run must end before the mix that the seed of the epoch reads is written again. -/
 theorem RunKept.committeesKept (run : RunKept state after)
-    (small : after.validators.data.size < 2 ^ 64) {epoch : Epoch}
+    {epoch : Epoch}
     (final : epoch.toNat ≤ (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat)
     (fixed : epoch ≤ activityFixedEpoch state)
     (inRing : (getCurrentEpoch after).toNat + preset.MIN_SEED_LOOKAHEAD.toNat + 1 <
       epoch.toNat + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat) :
     CommitteesKept epoch state after := by
-  refine CommitteesKept.of_seed ((run.active small).getActiveValidatorIndices_eq fixed)
+  refine CommitteesKept.of_seed (run.active.getActiveValidatorIndices_eq fixed)
+    (run.active.getActiveValidatorIndicesChecked_eq fixed)
     (getSeed_eq_of_mix _ fun shifted reads => run.mixes shifted fun written low high same => ?_)
   have lowLe := UInt64.le_iff_toNat_le.mp low
   have highLe := UInt64.le_iff_toNat_le.mp high
