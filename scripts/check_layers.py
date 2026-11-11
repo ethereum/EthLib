@@ -36,24 +36,41 @@ SCHEMES = ("Xmss", "Sphincs")
 KIND_NAMES = {"specification": "a specification", "property": "a property", "export": "a C export"}
 
 HEADER_WORD = re.compile(r"\s*(module|prelude)\b")
-IMPORT = re.compile(r"\s*(?:public\s+)?(?:meta\s+)?import\s+(?:all\s+)?([^\s]+)")
+IMPORT = re.compile(r"\s*(?:public\s+)?(meta\s+)?import\s+(?:all\s+)?([^\s]+)")
 LIBRARY = re.compile(r"^lean_lib\s+«?([A-Za-z0-9_]+)»?\s+where(.*?)(?=^\S|\Z)", re.M | re.S)
 ROOTS = re.compile(r"roots\s*:=\s*#\[(.*?)\]", re.S)
 LAYER_ROW = re.compile(r"^\|\s*([A-Za-z]+)\s*\|.*\|\s*`EthLib/([A-Za-z]+)/`\s*\|\s*$", re.M)
 
 
-def imports(text: str) -> list[str]:
-    """The modules that a Lean file imports, read from its header."""
+def header_imports(text: str) -> list[tuple[str, bool]]:
+    """The modules that a Lean file imports, read from its header, each with whether it is meta."""
     code = strip_lean(text)
     found, index = [], 0
     while True:
         if word := HEADER_WORD.match(code, index):
             index = word.end()
         elif match := IMPORT.match(code, index):
-            found.append(match.group(1).replace("«", "").replace("»", ""))
+            found.append((match.group(2).replace("«", "").replace("»", ""), bool(match.group(1))))
             index = match.end()
         else:
             return found
+
+
+def imports(text: str) -> list[str]:
+    """The modules that a Lean file imports, read from its header."""
+    return [module for module, _ in header_imports(text)]
+
+
+def meta_problems(module: str, meta_imported: list[str]) -> list[str]:
+    """
+    Each EthLib module that a module of the `Exports` library imports with `meta import`.
+
+    Under the module system, code that runs while a module is elaborated needs `meta import`.
+    So a module of `Exports` that meta-imports no EthLib module runs no EthLib code then.
+    """
+    if "Exports" not in module.split("."):
+        return []
+    return [imported for imported in meta_imported if imported.split(".")[0] == "EthLib"]
 
 
 def module_name(path: Path, root: Path) -> str:
@@ -153,7 +170,10 @@ def check(root: Path) -> list[str]:
     problems = []
     files = sorted((root / "EthLib").rglob("*.lean")) + sorted(root.glob("EthLib.lean"))
     modules = {module_name(path, root): path for path in files}
-    graph = {name: imports(path.read_text(encoding="utf-8")) for name, path in modules.items()}
+    headers = {
+        name: header_imports(path.read_text(encoding="utf-8")) for name, path in modules.items()
+    }
+    graph = {name: [imported for imported, _ in found] for name, found in headers.items()}
 
     for name, path in modules.items():
         if name not in AGGREGATORS and layer(name) is None:
@@ -176,6 +196,13 @@ def check(root: Path) -> list[str]:
             f"scripts/check_layers_baseline.txt: {name} {imported} "
             "breaks no rule any more; remove the entry"
         )
+
+    for name, found in headers.items():
+        for imported in meta_problems(name, [m for m, meta in found if meta]):
+            problems.append(
+                f"{modules[name].relative_to(root)}: meta-imports {imported}, "
+                "but a module of the Exports library runs no EthLib code while it is elaborated"
+            )
 
     for name, imported, target in scheme_problems(graph):
         via = "" if imported == target else f", which reaches {target}"

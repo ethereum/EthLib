@@ -180,6 +180,38 @@ class Rules(unittest.TestCase):
             "a C export imports only EthLib",
         )
 
+    def test_export_meta_imports_the_specification(self):
+        tree: dict[str, list[str] | str] = dict(with_imports("EthLib.Exports"))
+        tree["EthLib.Execution.Exports.A"] = (
+            "module\n\npublic import EthLib.Execution.A\npublic meta import EthLib.Execution.A\n"
+        )
+        self.assert_fails(
+            tree,
+            "EthLib/Execution/Exports/A.lean: meta-imports EthLib.Execution.A, "
+            "but a module of the Exports library runs no EthLib code while it is elaborated",
+        )
+
+    def test_export_proof_meta_imports_the_specification(self):
+        tree: dict[str, list[str] | str] = dict(
+            with_imports("EthLib.Exports", "EthLib.Execution.Exports.Proofs.A")
+        )
+        tree["EthLib.Execution.Exports.Proofs.A"] = "module\n\nmeta import EthLib.Execution.A\n"
+        self.assert_fails(tree, "meta-imports EthLib.Execution.A")
+
+    def test_export_meta_imports_the_toolchain(self):
+        tree: dict[str, list[str] | str] = dict(with_imports("EthLib.Exports"))
+        tree["EthLib.Execution.Exports.A"] = (
+            "module\n\npublic import EthLib.Execution.A\npublic meta import Lean.Elab.Command\n"
+        )
+        self.assertEqual(Tree(tree).problems(), [])
+
+    def test_property_meta_imports_the_specification(self):
+        tree: dict[str, list[str] | str] = dict(with_imports("EthLib.Proofs"))
+        tree["EthLib.Execution.Proofs.A"] = (
+            "module\n\npublic import EthLib.Execution.A\nmeta import EthLib.Execution.A\n"
+        )
+        self.assertEqual(Tree(tree).problems(), [])
+
     def test_orphan(self):
         self.assert_fails(GOOD | {"EthLib.Base.B": []}, "EthLib/Base/B.lean: no library root")
 
@@ -237,6 +269,16 @@ class Header(unittest.TestCase):
         )
         self.assertEqual(
             layers.imports(text), ["EthLib.A", "EthLib.B", "EthLib.C", "EthLib.D", "EthLib.E"]
+        )
+
+    def test_meta_imports(self):
+        text = (
+            "module\n\npublic import EthLib.A\npublic meta import EthLib.B\n"
+            "meta import all EthLib.C\n"
+        )
+        self.assertEqual(
+            layers.header_imports(text),
+            [("EthLib.A", False), ("EthLib.B", True), ("EthLib.C", True)],
         )
 
     def test_header_ends_at_the_first_command(self):
