@@ -233,6 +233,8 @@ class Rules(unittest.TestCase):
 
     def test_export_meta_imports_a_property_that_reaches_the_specification(self):
         tree: dict[str, list[str] | str] = dict(with_imports("EthLib.Exports"))
+        # The property imports only the specification, so no other rule applies.
+        tree["EthLib.Execution.Proofs.A"] = ["EthLib.Execution.A"]
         tree["EthLib.Execution.Exports.A"] = (
             "module\n\npublic import EthLib.Execution.A\n"
             "public meta import EthLib.Execution.Proofs.A\n"
