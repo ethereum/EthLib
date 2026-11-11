@@ -112,11 +112,9 @@ theorem layerRoot_map_monad (pp : PublicParam) (layer : Layer) (e : Nat) (msg : 
 
 /-! ## Signing
 
-The codeword test maps a digest, so these lemmas also ask that the map keep `map`. -/
+The codeword test maps a digest, so signing uses lawful monads. -/
 
 section Sign
-
-variable (map_map : ∀ {β γ : Type} (f : β → γ) (x : m β), φ (f <$> x) = f <$> φ x)
 
 /-- The base of the randomizer trials, over the image of the seed function. -/
 theorem randomizerBase_map_monad (pp : PublicParam) (layer : Layer) (e : UInt32)
@@ -125,22 +123,27 @@ theorem randomizerBase_map_monad (pp : PublicParam) (layer : Layer) (e : UInt32)
       randomizerBase pp (fun pp a suffix => φ (prf pp a suffix)) layer e msg :=
   (map_bind _ _).trans (bind_congr fun _ => map_pure _)
 
-include map_map
+variable [LawfulMonad m] [LawfulMonad m']
+
+private theorem map_monad_map {β γ : Type} (f : β → γ) (x : m β) :
+    φ (f <$> x) = f <$> φ x := by
+  rw [map_eq_bind_pure_comp, map_eq_bind_pure_comp, map_bind]
+  simp only [Function.comp_def, map_pure]
 
 /-- The codeword search, over the image of `H`. -/
 theorem findCodeword_map_monad (pp : PublicParam) (layer : Layer) (e : UInt32)
     (msg : ByteArray) (base : Randomizer) (c fuel : Nat) :
     φ (Internal.findCodeword H pp layer e msg base c fuel) =
       Internal.findCodeword (fun x => φ (H x)) pp layer e msg base c fuel := by
-  simp only [Internal.findCodeword, Wots.findFirst_map_monad φ map_pure map_bind, map_map,
-    messageDigest, th_map_monad φ map_pure map_bind]
+  simp only [Internal.findCodeword, Wots.findFirst_map_monad φ map_pure map_bind,
+    map_monad_map φ map_pure map_bind, messageDigest, th_map_monad φ map_pure map_bind]
 
 /-- A one-time signature, over the images of `H` and of the seed function. -/
 theorem otsSign_map_monad (pp : PublicParam) (layer : Layer) (e : UInt32) (msg : ByteArray) :
     φ (otsSign H pp prf layer e msg) =
       otsSign (fun x => φ (H x)) pp (fun pp a suffix => φ (prf pp a suffix)) layer e msg := by
   simp only [otsSign, map_bind, randomizerBase_map_monad φ map_pure map_bind,
-    findCodeword_map_monad φ map_pure map_bind H map_map]
+    findCodeword_map_monad φ map_pure map_bind H]
   refine bind_congr fun base => bind_congr fun r => ?_
   cases r with
   | none => exact map_pure _
@@ -152,7 +155,7 @@ theorem otsSign_map_monad (pp : PublicParam) (layer : Layer) (e : UInt32) (msg :
 theorem signLayer_map_monad (pp : PublicParam) (layer : Layer) (e : Nat) (msg : ByteArray) :
     φ (signLayer H pp prf layer e msg) =
       signLayer (fun x => φ (H x)) pp (fun pp a suffix => φ (prf pp a suffix)) layer e msg := by
-  simp only [signLayer, map_bind, otsSign_map_monad φ map_pure map_bind H prf map_map]
+  simp only [signLayer, map_bind, otsSign_map_monad φ map_pure map_bind H prf]
   refine bind_congr fun r => ?_
   cases r with
   | none => exact map_pure _
@@ -175,18 +178,17 @@ theorem publicKeyOf_map_monad :
     node_map_monad φ map_pure map_bind]
 
 /-- A signature from the derivations, over the images of `H` and of the seed function. -/
-theorem signDerived_map_monad
-    (map_map : ∀ {β γ : Type} (f : β → γ) (x : m β), φ (f <$> x) = f <$> φ x)
+theorem signDerived_map_monad [LawfulMonad m] [LawfulMonad m']
     (pp : PublicParam) (idx : LeafIndex) (msg : Message) :
     φ (signDerived H prf pp idx msg) =
       signDerived (fun x => φ (H x)) (fun pp a suffix => φ (prf pp a suffix)) pp idx msg := by
-  simp only [signDerived, map_bind, signLayer_map_monad φ map_pure map_bind H prf map_map]
+  simp only [signDerived, map_bind, signLayer_map_monad φ map_pure map_bind H prf]
   refine bind_congr fun r => ?_
   cases r with
   | error err => exact map_pure _
   | ok bottom =>
     simp only [map_bind, map_pure, node_map_monad φ map_pure map_bind,
-      signLayer_map_monad φ map_pure map_bind H prf map_map]
+      signLayer_map_monad φ map_pure map_bind H prf]
     refine bind_congr fun _ => bind_congr fun _ => bind_congr fun r => ?_
     cases r with
     | error err => exact map_pure _
