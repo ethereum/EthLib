@@ -2054,7 +2054,18 @@ So a slashable pair of signed messages needs a collision of the signing root, an
 `isSlashableWith_eq_false_of_signAttestations` shows that each signed vote is not slashable with a vote of the starting file, as a record sees it.
 A record holds the epochs of a vote and maybe its signing root, not its data.
 So that comparison reads a double vote through the signing root, and counts a record without a root as a different vote.
+
+A file may also keep only the latest messages of a key, as the minimal strategy of the EIP does.
+`lt_slot_of_signBlocks` shows that if each block of the file is after a slot, so is each block signed from it.
+`processProposerSlashing_checks` puts both headers of a valid proposer slashing at one slot, so an older block makes none with a signed block.
+`isSlashableAttestationData_eq_false_of_signAttestations` shows that no signed vote is slashable with a vote older than each vote of the file.
+An older vote has a source at most, and a target before, those of each vote of the file.
+Both theorems need the file to hold one or more messages of their kind for the key.
+`mem_blocksOf` and `mem_attestationsOf` show that the messages of a key are those of its own entries.
+The proofs read only conditions 2, 4 and 5, through `lt_slot_of_checkBlockSlot`, `le_sourceEpoch_of_checkSourceEpoch` and `lt_targetEpoch_of_checkTargetEpoch`.
 No theorem says what conditions 2, 4 and 5 guarantee across two imported files, which the EIP leaves to the signer.
+A message signed in a gap between two imported files is not older than all the kept ones, so these theorems do not cover it.
+
 `readUInt64_uint64Json` and `readBytes_bytesJson` show that each integer and each byte string of a file reads back as written.
 `ofJson_toJson` shows that a whole file reads back as itself from the document that `toJson` writes, whatever its records.
 No theorem says what `ofJson` does on a document that another client wrote.
