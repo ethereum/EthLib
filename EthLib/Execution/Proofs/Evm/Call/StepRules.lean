@@ -344,7 +344,7 @@ theorem launchCreate (rules : OrdinaryStepRules fork R) {evm : Evm fork Meter} {
 theorem createStep (rules : OrdinaryStepRules fork R) {create2 : Bool} {evm : Evm fork Meter}
     {result : StepResult fork Meter} (h : createStep create2 evm = .ok result) :
     result.Keeps R (fun caller _ child => R caller child) evm := by
-  obtain ⟨-, -, -, -, -, -, sc, -, -, -, launched⟩ := createStep_eq_ok h
+  obtain ⟨_, _, _, _, _, -, sc, -, -, -, launched⟩ := createStep_eq_ok h
   exact rules.lift (rules.sameContext sc) (rules.launchCreate launched)
 
 /-- A successful instruction that may send a message keeps the relation. -/
@@ -676,7 +676,7 @@ private theorem sends_launchCreate {evm : Evm fork Meter} {value : U256}
 private theorem sends_createStep {create2 : Bool} {evm : Evm fork Meter}
     {result : StepResult fork Meter} (h : createStep create2 evm = .ok result) :
     Sends evm result := by
-  obtain ⟨-, -, -, -, -, -, sc, -, -, -, launched⟩ := createStep_eq_ok h
+  obtain ⟨_, _, _, _, _, -, sc, -, -, -, launched⟩ := createStep_eq_ok h
   exact Sends.lift (.of_sameContext sc) (sends_launchCreate launched)
 
 /-- A successful instruction that may send a message says what it sends. -/
