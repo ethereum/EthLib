@@ -66,7 +66,7 @@ source = "https://github.com/ethereum/consensus-specs/blob/e762dd6e2c45ee05648b5
 [generators."consensus-specs KZG reference tests"]
 computes = "the KZG reference tests of the consensus-specs Python specification, copied into c-kzg-4844, with the group arithmetic in py_arkworks_bls12381"
 version = "runs of December 2024 to September 2025 with py_arkworks_bls12381 0.3.8, the release of each file not recorded"
-source = "https://github.com/ethereum/c-kzg-4844/blob/a751e2d92abcd63b01d1400789789f5ea289a8b0/scripts/do_tests_match_ref_tests.py"
+source = "for the version, https://github.com/ethereum/consensus-specs/blob/e262b34b19e4513b4148a288efb502d9d5e50fcc/setup.py#L579 (v1.5.0-alpha.9) and https://github.com/ethereum/consensus-specs/blob/34ed95a58164d22b200df7ef4fb6dc1301599474/pyproject.toml#L24 (v1.6.0-beta.0), with the default BLS of tests/core/pyspec/eth2spec/utils/bls.py at each; for the copy, https://github.com/ethereum/c-kzg-4844/blob/a751e2d92abcd63b01d1400789789f5ea289a8b0/scripts/do_tests_match_ref_tests.py, which compares the tests with the latest release"
 
 [generators."consensus-specs config files"]
 computes = "nothing: the configuration and preset files of consensus-specs, written by its authors"
