@@ -4,6 +4,7 @@ public import EthLib.Base.Except
 public import EthLib.Base.Proofs.MapM
 public import EthLib.Execution.Proofs.Evm.Call.Delegation
 public import EthLib.Execution.Proofs.Evm.Gas.StateGas
+public import EthLib.Execution.Proofs.State.CodeAvailability
 public import EthLib.Execution.Proofs.State.Frame
 public import EthLib.Execution.Proofs.State.Tracker
 public import EthLib.Execution.Transactions.Authorization
@@ -747,55 +748,35 @@ The state must hold the code of every account.
 
 From Glamsterdam, it must also hold the code of every account before the transaction. -/
 
-/-- Whether the state holds the code of every account. -/
-def HasCodes (state : TransactionState) : Prop :=
-  ∀ address, ∃ code, state.getCode (state.getAccount address).codeHash = .ok code
-
-/-- Whether the state holds the code of every account before the transaction. -/
-def HasPreCodes (state : TransactionState) : Prop :=
-  ∀ address, ∃ code, state.getCode (state.getPreStateAccount address).codeHash = .ok code
-
 /-- Taking an authorization keeps every code that the state holds. -/
 theorem exists_getCode_delegate {state state' : TransactionState} {refund : Nat}
     (h : delegate fork state authority auth = .ok (state', refund)) {codeHash : Hash32}
     (hcode : ∃ code, state.getCode codeHash = .ok code) :
     ∃ code, state'.getCode codeHash = .ok code := by
-  obtain ⟨code, hcode⟩ := hcode
-  by_cases hset : codeHash = Cryptography.Hash.Keccak.keccak256 (delegationCode auth)
-  · by_cases hempty : codeHash = EMPTY_CODE_HASH
-    · exact ⟨.empty, by simp [getCode, hempty]⟩
-    · subst hset
-      exact ⟨_, getCode_delegate_self h hempty⟩
-  · exact ⟨code, (getCode_delegate_of_ne h hset).trans hcode⟩
+  obtain ⟨coded, hset, h⟩ := bind_ok_iff.mp h
+  obtain ⟨bumped, hnonce, h⟩ := bind_ok_iff.mp h
+  cases h
+  rw [getCode_modifyState hnonce]
+  exact exists_getCode_setCode hset hcode
 
 /-- Taking an authorization keeps the code of every account in the state. -/
 theorem hasCodes_delegate {state state' : TransactionState} {refund : Nat}
     (h : delegate fork state authority auth = .ok (state', refund)) (hcodes : HasCodes state) :
     HasCodes state' := by
-  intro address
-  by_cases hself : address = authority
-  · subst hself
-    have hhash : (state'.getAccount address).codeHash =
-        Cryptography.Hash.Keccak.keccak256 (delegationCode auth) := by
-      rw [(delegate_eq_ok h).2.1]
-    rw [hhash]
-    by_cases hempty : Cryptography.Hash.Keccak.keccak256 (delegationCode auth) = EMPTY_CODE_HASH
-    · exact ⟨.empty, by simp [getCode, hempty]⟩
-    · exact ⟨_, getCode_delegate_self h hempty⟩
-  · have hother : state'.getAccount address = state.getAccount address := by
-      simp only [getAccount, ((sameOutside_delegate h).1 address (by simpa using hself)).1]
-    rw [hother]
-    exact exists_getCode_delegate h (hcodes address)
+  obtain ⟨coded, hset, h⟩ := bind_ok_iff.mp h
+  obtain ⟨bumped, hnonce, h⟩ := bind_ok_iff.mp h
+  cases h
+  exact hasCodes_modifyState hnonce (hasCodes_setCode hset hcodes)
+    (fun _ hbump => .inl (by cases hbump; rfl))
 
 /-- Taking an authorization keeps the code of every account before the transaction in the state. -/
 theorem hasPreCodes_delegate {state state' : TransactionState} {refund : Nat}
     (h : delegate fork state authority auth = .ok (state', refund)) (hpre : HasPreCodes state) :
     HasPreCodes state' := by
-  intro address
-  have hother : state'.getPreStateAccount address = state.getPreStateAccount address := by
-    simp only [getPreStateAccount, getPreStateAccountOptional, (sameOutside_delegate h).2]
-  rw [hother]
-  exact exists_getCode_delegate h (hpre address)
+  obtain ⟨coded, hset, h⟩ := bind_ok_iff.mp h
+  obtain ⟨bumped, hnonce, h⟩ := bind_ok_iff.mp h
+  cases h
+  exact hasPreCodes_modifyState hnonce (hasPreCodes_setCode hset hpre)
 
 /-- An authorization keeps the code of every account before the transaction in the state. -/
 theorem hasPreCodes_applyAuthorization (h : applyAuthorization fork chainId done auth = .ok done')
