@@ -4,13 +4,15 @@ public import EthLib.Cryptography.ChaCha20Poly1305
 public import EthLib.Base.Proofs.Bytes
 
 /-!
-# Proofs: the ChaCha20-Poly1305 boundaries
+# Proofs: the ChaCha20-Poly1305 boundaries and round trip
 
 Counter exhaustion is rejected, output length is preserved, and a wrong tag reveals no plaintext.
 
-The cipher undoes itself, as RFC 8439 §2.4 says: decryption is done in the same way as encryption.
+The cipher undoes itself, as [RFC 8439 §2.4][rfc] says: decryption is done in the same way.
 
 So decryption of an honest ciphertext and tag returns the plaintext, and no other tag passes.
+
+[rfc]: https://www.rfc-editor.org/rfc/rfc8439#section-2.4
 -/
 
 public section
@@ -47,7 +49,6 @@ The output has the length of the input, so it passes the same counter check. -/
 theorem crypt_crypt (key : Key) (counter : UInt32) (nonce : Nonce) (input output : ByteArray)
     (h : crypt key counter nonce input = .ok output) :
     crypt key counter nonce output = .ok input := by
-  have hs := crypt_size key counter nonce input output h
   unfold crypt at h ⊢
   split at h
   · contradiction
@@ -77,7 +78,7 @@ theorem decrypt_encrypt (key : Key) (nonce : Nonce) (aad plaintext ciphertext : 
       simp only [bind, Except.bind, ite_true]
       exact crypt_crypt key 1 nonce plaintext c hc
 
-/-- Decryption of an honest ciphertext fails on every tag other than the honest one. -/
+/-- An honest ciphertext decrypts under no tag other than the honest one, RFC 8439 §2.8. -/
 theorem tag_eq_of_decrypt_eq_ok (key : Key) (nonce : Nonce)
     (aad plaintext ciphertext out : ByteArray) (tag tag' : Tag)
     (h : encrypt key nonce aad plaintext = .ok (ciphertext, tag))

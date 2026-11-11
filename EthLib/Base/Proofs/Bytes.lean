@@ -13,7 +13,7 @@ So two objects with the same bytes are the same object.
 
 The exclusive or of byte strings is commutative, and applying one string twice undoes it.
 
-That holds for untyped strings too, where a byte past the end of the second reads as zero.
+Applying an untyped string twice undoes it too: a byte past its end reads as zero.
 
 A byte of a join or a slice is a byte of a part, or zero past its end.
 
@@ -138,7 +138,7 @@ theorem byteAt_set {acc : ByteArray} {i : Nat} (h : i < acc.size) (v : UInt8) (j
       simp [ByteArray.set, ByteArray.getElem_eq_getElem_data, Array.getElem_set, Ne.symm hj]
     · rw [dite_eq_right (show ¬j < (acc.set i v h).size by omega), dite_eq_right hlt]
 
-/-- A byte of the exclusive or is the exclusive or of the two bytes, over the first string. -/
+/-- A byte of the exclusive or is the exclusive or of both bytes, or zero past the first string. -/
 theorem byteAt_xorByteArray (a b : ByteArray) (j : Nat) :
     byteAt (xorByteArray a b) j = if j < a.size then byteAt a j ^^^ byteAt b j else 0 := by
   -- From index `i` on, the loop XORs each byte of the buffer with the byte of `b`.
