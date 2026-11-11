@@ -1,6 +1,7 @@
 module
 
 public import Lean.Data.Json
+public import Std.Data.TreeMap
 public import EthLib.Base.Except
 public import EthLib.Consensus.Types
 public import EthLib.Cryptography.Bls.Signatures
@@ -51,9 +52,13 @@ The conditions of the EIP leave out several checks, and so does this module:
 - It does not reject a file whose own records are slashable with each other.
 - It does not ask for the records of a key to be sorted, or for a key to appear once.
 
-Import uses the EIP's minimal strategy, keeping the greatest slot and source and target epochs.
+Import follows the minimal strategy of the EIP, in its section Advice for Minimal Databases.
 
-The source and target limits can come from different votes.
+For each key, it keeps only the greatest block slot, the greatest source and the greatest target.
+
+The two epochs can come from different votes, which is at least as strict as any one vote.
+
+After an import, these limits are the least recorded slot and epochs.
 
 The limits have no signing roots, so imported messages cannot be signed again.
 
@@ -97,7 +102,7 @@ structure InterchangeEntry where
   pubkey : BLSPubkey
   /-- Its signed blocks, or its imported slot limit. -/
   signedBlocks : List SignedBlockRecord
-  /-- Its signed votes, or its independent imported epoch limits. -/
+  /-- Its signed votes, or one imported limit on source and target epochs. -/
   signedAttestations : List SignedAttestationRecord
   deriving DecidableEq, Repr
 
@@ -197,7 +202,7 @@ def readAttestation (path : String) (document : Json) :
     targetEpoch := ← readUInt64 s!"{path}.target_epoch" (← field path "target_epoch" document)
     signingRoot := ← readSigningRoot path document }
 
-/-- What one key signed, from its object. -/
+/-- The records of one key, from its object. -/
 def readEntry (path : String) (document : Json) :
     Except SlashingProtectionError InterchangeEntry := do
   return {
@@ -244,7 +249,7 @@ def attestationJson (attestation : SignedAttestationRecord) : Json :=
     ("target_epoch", uint64Json attestation.targetEpoch)] ++
       signingRootFields attestation.signingRoot)
 
-/-- What one key signed, as the file writes it. -/
+/-- The records of one key, as the file writes it. -/
 def entryJson (entry : InterchangeEntry) : Json :=
   Json.mkObj [("pubkey", bytesJson entry.pubkey),
     ("signed_blocks", .arr (entry.signedBlocks.map blockJson).toArray),
@@ -347,7 +352,7 @@ def checkBlockSlot (blocks : List SignedBlockRecord) (slot : Slot) (signingRoot 
       (.blockSlotTooLow slot minimum)
   | none => .ok ()
 
-/-- Whether a key may sign a block, under the first two conditions, given the blocks it signed.
+/-- Whether a key may sign a block, under the first two conditions, given its block records.
 
 It refuses a block that conflicts with a recorded one, then a block not after the least slot.
 
@@ -376,7 +381,7 @@ def checkTargetEpoch (attestations : List SignedAttestationRecord)
       (.targetEpochTooLow targetEpoch minimum)
   | none => .ok ()
 
-/-- Whether a key may sign a vote, under the last three conditions, given the votes it signed.
+/-- Whether a key may sign a vote, under the last three conditions, given its vote records.
 
 It refuses a vote slashable with a recorded one, then a vote before the least source epoch.
 
@@ -406,27 +411,49 @@ def checkAttestation (interchange : Interchange) (pubkey : BLSPubkey)
   checkAttestationSigning (interchange.attestationsOf pubkey) sourceEpoch targetEpoch
     signingRoot
 
-/-- The limits of one key, without signing roots.
+end Interchange
 
-The source and target maxima are independent and can come from different votes. -/
-def minimalEntry (interchange : Interchange) (pubkey : BLSPubkey) : InterchangeEntry :=
-  { pubkey
-    signedBlocks := ((interchange.blocksOf pubkey).map (·.slot)).max?.toList.map
-      (fun slot => ⟨slot, none⟩)
-    signedAttestations :=
-      match ((interchange.attestationsOf pubkey).map (·.sourceEpoch)).max?,
-          ((interchange.attestationsOf pubkey).map (·.targetEpoch)).max? with
-      | some source, some target => [⟨source, target, none⟩]
-      | _, _ => [] }
+/-- A slot limit raised to cover one more block. -/
+def raiseSlotLimit (limit : Option Slot) (block : SignedBlockRecord) : Option Slot :=
+  some (limit.elim block.slot fun slot => max slot block.slot)
 
-/-- The minimal strategy: one entry per key, holding its slot and epoch limits.
+/-- Epoch limits raised to cover one more vote, the source and the target each on its own. -/
+def raiseEpochLimits (limits : Option (Epoch × Epoch)) (attestation : SignedAttestationRecord) :
+    Option (Epoch × Epoch) :=
+  some (limits.elim (attestation.sourceEpoch, attestation.targetEpoch) fun (source, target) =>
+    (max source attestation.sourceEpoch, max target attestation.targetEpoch))
 
-An absent signing root makes the boundary conflict with every message at its slot or target.
+/-- The limits of a key raised to cover the blocks and votes of one more of its entries. -/
+def InterchangeEntry.raiseLimits (entry : InterchangeEntry)
+    (limits : Option Slot × Option (Epoch × Epoch)) : Option Slot × Option (Epoch × Epoch) :=
+  (entry.signedBlocks.foldl raiseSlotLimit limits.1,
+    entry.signedAttestations.foldl raiseEpochLimits limits.2)
 
-A new block's slot and a new vote's target must exceed the corresponding limit. -/
+namespace Interchange
+
+/-- The limits of each key in one pass: its greatest slot, and its greatest source and target.
+
+The source and target maxima are independent and can come from different votes.
+
+A key without blocks keeps no slot limit, and a key without votes keeps no epoch limits. -/
+def limits (interchange : Interchange) :
+    Std.TreeMap BLSPubkey (Option Slot × Option (Epoch × Epoch)) :=
+  interchange.data.foldl (init := ∅) fun limits entry =>
+    limits.insert entry.pubkey (entry.raiseLimits (limits.getD entry.pubkey (none, none)))
+
+/-- The minimal strategy: one entry per key in byte order, holding its limits without roots.
+
+A limit without a signing root conflicts with every new message at its slot or target.
+
+So a new block's slot and a new vote's target must exceed their limits.
+
+A new vote's source must be at least its limit. -/
 def toMinimal (interchange : Interchange) : Interchange :=
-  { interchange with data :=
-      (interchange.data.map (·.pubkey)).eraseDups.map interchange.minimalEntry }
+  { interchange with
+    data := interchange.limits.toList.map fun (pubkey, slot, epochs) =>
+      { pubkey
+        signedBlocks := slot.toList.map fun slot => ⟨slot, none⟩
+        signedAttestations := epochs.toList.map fun (source, target) => ⟨source, target, none⟩ } }
 
 /-- The record after importing a file with the minimal strategy of EIP-3076.
 

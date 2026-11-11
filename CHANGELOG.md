@@ -10,8 +10,9 @@ Not yet released.
 ### Changes that break callers
 
 - Slashing-protection imports use EIP-3076's minimal strategy ([#1963](https://github.com/ethereum/EthLib/issues/1963)).
-  Each key keeps its greatest block slot and independent greatest source and target epochs, without signing roots.
-  Imported histories and their roots are discarded, so old messages and repeats at the imported boundary can be refused.
+  Import compacts both the held record and the file: each key keeps its greatest block slot and its greatest source and target epochs, taken independently, without signing roots.
+  So a repeat of any message held before the import is refused, and so is a block at or before the slot limit, or a vote with a source before the source limit or a target at or before the target limit.
+  The keys of the record come out in byte order.
   The JSON format and the C and Python signatures are unchanged.
 
 - The cumulative churn bounds also hold for idle queues ([#1451](https://github.com/ethereum/EthLib/issues/1451)).

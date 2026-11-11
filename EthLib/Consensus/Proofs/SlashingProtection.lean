@@ -5,6 +5,7 @@ public import EthLib.Consensus.SlashingProtection
 public import EthLib.Consensus.Proofs.Transition.Block
 public import EthLib.Serialization.Proofs.Ssz.Codec.JsonHex
 public import EthLib.Serialization.Proofs.Ssz.Codec.JsonLaws
+public import Std.Data.TreeMap.Lemmas
 
 /-!
 # Proofs: slashing protection
@@ -34,6 +35,10 @@ So no valid proposer slashing pairs an older block with a signed block.
 No vote that it signs is slashable with an older vote.
 
 Each of these needs the file to keep one or more such messages of the key.
+
+An import keeps only the greatest slot and epochs of each key.
+
+After any sequence of imports, an accepted message meets every condition of each imported file.
 
 An interchange file reads back as itself from the document that writes it.
 -/
@@ -624,44 +629,186 @@ theorem isSlashableAttestationData_eq_false_of_signAttestations
 
 /-! ## Imports with the minimal strategy -/
 
-private theorem exists_maximum {α : Type} {xs : List α} (field : α → UInt64)
-    {x : α} (member : x ∈ xs) :
-    ∃ maximum, (xs.map field).max? = some maximum ∧ ∀ y ∈ xs, field y ≤ maximum := by
-  cases computed : (xs.map field).max? with
+/-- A slot limit covers a slot when it exists and is at least that slot. -/
+private abbrev CoversSlot (limit : Option Slot) (slot : Slot) : Prop :=
+  ∃ maximum, limit = some maximum ∧ slot ≤ maximum
+
+/-- Epoch limits cover a vote when they exist and are at least its source and its target. -/
+private abbrev CoversEpochs (limits : Option (Epoch × Epoch))
+    (attestation : SignedAttestationRecord) : Prop :=
+  ∃ source target, limits = some (source, target) ∧
+    attestation.sourceEpoch ≤ source ∧ attestation.targetEpoch ≤ target
+
+/-- A property that every step of a fold keeps holds at its end. -/
+private theorem foldl_keeps {α β : Type} {f : β → α → β} {P : β → Prop}
+    (keep : ∀ b a, P b → P (f b a)) : ∀ (xs : List α) (b : β), P b → P (xs.foldl f b)
+  | [], _, holds => holds
+  | x :: xs, b, holds => foldl_keeps keep xs (f b x) (keep b x holds)
+
+/-- A property that every step keeps, and that one step makes, holds at the end of a fold. -/
+private theorem foldl_makes {α β : Type} {f : β → α → β} {P : β → Prop}
+    (keep : ∀ b a, P b → P (f b a)) {x : α} (make : ∀ b, P (f b x)) :
+    ∀ (xs : List α) (b : β), x ∈ xs → P (xs.foldl f b)
+  | [], _, member => nomatch member
+  | y :: xs, b, member => by
+    rcases List.mem_cons.mp member with rfl | member
+    · exact foldl_keeps keep xs _ (make b)
+    · exact foldl_makes keep make xs (f b y) member
+
+/-- Raising a slot limit keeps every slot it covers, and covers the new block. -/
+private theorem coversSlot_raiseSlotLimit {limit : Option Slot} {block : SignedBlockRecord} :
+    (∀ slot, CoversSlot limit slot → CoversSlot (raiseSlotLimit limit block) slot) ∧
+      CoversSlot (raiseSlotLimit limit block) block.slot := by
+  cases limit with
   | none =>
-    have empty := List.max?_eq_none_iff.mp computed
-    have mapped : field x ∈ xs.map field := List.mem_map.mpr ⟨x, member, rfl⟩
-    simp [empty] at mapped
+    refine ⟨?_, block.slot, rfl, UInt64.le_refl _⟩
+    rintro _ ⟨_, found, _⟩
+    cases found
   | some maximum =>
-    refine ⟨maximum, rfl, fun y kept => ?_⟩
-    exact (List.max?_eq_some_iff.mp computed).2 _ (List.mem_map.mpr ⟨y, kept, rfl⟩)
+    refine ⟨fun slot ⟨_, same, below⟩ => ?_, _, rfl, Std.right_le_max⟩
+    cases same
+    exact ⟨_, rfl, UInt64.le_trans below Std.left_le_max⟩
 
-private theorem minimalEntry_mem {record : Interchange} {key : BLSPubkey}
-    (present : ∃ entry ∈ record.data, entry.pubkey = key) :
-    record.minimalEntry key ∈ record.toMinimal.data := by
-  obtain ⟨entry, member, same⟩ := present
-  exact List.mem_map.mpr ⟨key, List.mem_eraseDups.mpr
-    (List.mem_map.mpr ⟨entry, member, same⟩), rfl⟩
+/-- Raising epoch limits keeps every vote they cover, and covers the new vote. -/
+private theorem coversEpochs_raiseEpochLimits {limits : Option (Epoch × Epoch)}
+    {attestation : SignedAttestationRecord} :
+    (∀ old, CoversEpochs limits old → CoversEpochs (raiseEpochLimits limits attestation) old) ∧
+      CoversEpochs (raiseEpochLimits limits attestation) attestation := by
+  cases limits with
+  | none =>
+    refine ⟨?_, _, _, rfl, UInt64.le_refl _, UInt64.le_refl _⟩
+    rintro _ ⟨_, _, found, _⟩
+    cases found
+  | some limits =>
+    obtain ⟨source, target⟩ := limits
+    refine ⟨fun old ⟨_, _, same, sourceBelow, targetBelow⟩ => ?_,
+      _, _, rfl, Std.right_le_max, Std.right_le_max⟩
+    cases same
+    exact ⟨_, _, rfl, UInt64.le_trans sourceBelow Std.left_le_max,
+      UInt64.le_trans targetBelow Std.left_le_max⟩
 
-private theorem block_of_toMinimal {record : Interchange} {key : BLSPubkey}
-    {block : SignedBlockRecord} (member : block ∈ record.toMinimal.blocksOf key) :
-    block ∈ (record.minimalEntry key).signedBlocks := by
-  obtain ⟨entry, kept, same, member⟩ := mem_blocksOf.mp member
-  obtain ⟨k, _, rfl⟩ := List.mem_map.mp kept
-  change k = key at same
-  subst k
-  exact member
+/-- The slot limit of a key in a map of limits, none when the key has none. -/
+private def slotLimit (limits : Std.TreeMap BLSPubkey (Option Slot × Option (Epoch × Epoch)))
+    (key : BLSPubkey) : Option Slot :=
+  (limits.getD key (none, none)).1
 
-private theorem attestation_of_toMinimal {record : Interchange} {key : BLSPubkey}
-    {attestation : SignedAttestationRecord}
-    (member : attestation ∈ record.toMinimal.attestationsOf key) :
-    attestation ∈ (record.minimalEntry key).signedAttestations := by
-  obtain ⟨entry, kept, same, member⟩ := mem_attestationsOf.mp member
-  obtain ⟨k, _, rfl⟩ := List.mem_map.mp kept
-  change k = key at same
-  subst k
-  exact member
+/-- The epoch limits of a key in a map of limits, none when the key has none. -/
+private def epochLimits (limits : Std.TreeMap BLSPubkey (Option Slot × Option (Epoch × Epoch)))
+    (key : BLSPubkey) : Option (Epoch × Epoch) :=
+  (limits.getD key (none, none)).2
 
+/-- One more entry keeps each slot that the slot limit of a key covers. -/
+private theorem coversSlot_insert {key : BLSPubkey} {slot : Slot}
+    (limits : Std.TreeMap BLSPubkey (Option Slot × Option (Epoch × Epoch)))
+    (entry : InterchangeEntry) (covered : CoversSlot (slotLimit limits key) slot) :
+    CoversSlot (slotLimit (limits.insert entry.pubkey
+      (entry.raiseLimits (limits.getD entry.pubkey (none, none)))) key) slot := by
+  unfold slotLimit at covered ⊢
+  rw [Std.TreeMap.getD_insert]
+  split
+  · rename_i same
+    rw [Std.LawfulEqCmp.compare_eq_iff_eq.mp same]
+    exact foldl_keeps (f := raiseSlotLimit) (P := fun limit => CoversSlot limit slot)
+      (fun _ _ holds => coversSlot_raiseSlotLimit.1 _ holds) _ _ covered
+  · exact covered
+
+/-- One more entry keeps each vote that the epoch limits of a key cover. -/
+private theorem coversEpochs_insert {key : BLSPubkey} {old : SignedAttestationRecord}
+    (limits : Std.TreeMap BLSPubkey (Option Slot × Option (Epoch × Epoch)))
+    (entry : InterchangeEntry) (covered : CoversEpochs (epochLimits limits key) old) :
+    CoversEpochs (epochLimits (limits.insert entry.pubkey
+      (entry.raiseLimits (limits.getD entry.pubkey (none, none)))) key) old := by
+  unfold epochLimits at covered ⊢
+  rw [Std.TreeMap.getD_insert]
+  split
+  · rename_i same
+    rw [Std.LawfulEqCmp.compare_eq_iff_eq.mp same]
+    exact foldl_keeps (f := raiseEpochLimits) (P := fun limits => CoversEpochs limits old)
+      (fun _ _ holds => coversEpochs_raiseEpochLimits.1 _ holds) _ _ covered
+  · exact covered
+
+/-- The slot limit of a key covers each of its blocks. -/
+private theorem coversSlot_limits {record : Interchange} {key : BLSPubkey}
+    {old : SignedBlockRecord} (member : old ∈ record.blocksOf key) :
+    CoversSlot (slotLimit record.limits key) old.slot := by
+  obtain ⟨entry, kept, same, signed⟩ := mem_blocksOf.mp member
+  subst same
+  refine foldl_makes (P := fun limits => CoversSlot (slotLimit limits entry.pubkey) old.slot)
+    (fun limits entry holds => coversSlot_insert limits entry holds)
+    (fun limits => ?_) record.data ∅ kept
+  unfold slotLimit
+  rw [Std.TreeMap.getD_insert_self]
+  exact foldl_makes (f := raiseSlotLimit) (P := fun limit => CoversSlot limit old.slot)
+    (fun _ _ holds => coversSlot_raiseSlotLimit.1 _ holds)
+    (fun _ => coversSlot_raiseSlotLimit.2) entry.signedBlocks _ signed
+
+/-- The epoch limits of a key cover each of its votes. -/
+private theorem coversEpochs_limits {record : Interchange} {key : BLSPubkey}
+    {old : SignedAttestationRecord} (member : old ∈ record.attestationsOf key) :
+    CoversEpochs (epochLimits record.limits key) old := by
+  obtain ⟨entry, kept, same, signed⟩ := mem_attestationsOf.mp member
+  subst same
+  refine foldl_makes (P := fun limits => CoversEpochs (epochLimits limits entry.pubkey) old)
+    (fun limits entry holds => coversEpochs_insert limits entry holds)
+    (fun limits => ?_) record.data ∅ kept
+  unfold epochLimits
+  rw [Std.TreeMap.getD_insert_self]
+  exact foldl_makes (f := raiseEpochLimits) (P := fun limits => CoversEpochs limits old)
+    (fun _ _ holds => coversEpochs_raiseEpochLimits.1 _ holds)
+    (fun _ => coversEpochs_raiseEpochLimits.2) entry.signedAttestations _ signed
+
+/-- The blocks of a key after compaction are exactly its slot limit, without a root. -/
+private theorem blocksOf_toMinimal {record : Interchange} {key : BLSPubkey} {maximum : Slot}
+    (limit : slotLimit record.limits key = some maximum) :
+    ∀ block, block ∈ record.toMinimal.blocksOf key ↔ block = ⟨maximum, none⟩ := by
+  intro block
+  rw [mem_blocksOf]
+  unfold slotLimit at limit
+  rw [Std.TreeMap.getD_eq_getD_getElem?] at limit
+  cases found : record.limits[key]? with
+  | none => simp [found] at limit
+  | some value =>
+    rw [found, Option.getD_some] at limit
+    constructor
+    · rintro ⟨entry, kept, same, member⟩
+      obtain ⟨⟨k, v⟩, listed, rfl⟩ := List.mem_map.mp kept
+      change k = key at same
+      subst same
+      rw [Std.TreeMap.mem_toList_iff_getElem?_eq_some, found, Option.some.injEq] at listed
+      subst listed
+      simpa [limit] using member
+    · rintro rfl
+      refine ⟨_, List.mem_map.mpr ⟨(key, value),
+        Std.TreeMap.mem_toList_iff_getElem?_eq_some.mpr found, rfl⟩, rfl, ?_⟩
+      simp [limit]
+
+/-- The votes of a key after compaction are exactly its epoch limits, without a root. -/
+private theorem attestationsOf_toMinimal {record : Interchange} {key : BLSPubkey}
+    {source target : Epoch} (limits : epochLimits record.limits key = some (source, target)) :
+    ∀ attestation, attestation ∈ record.toMinimal.attestationsOf key ↔
+      attestation = ⟨source, target, none⟩ := by
+  intro attestation
+  rw [mem_attestationsOf]
+  unfold epochLimits at limits
+  rw [Std.TreeMap.getD_eq_getD_getElem?] at limits
+  cases found : record.limits[key]? with
+  | none => simp [found] at limits
+  | some value =>
+    rw [found, Option.getD_some] at limits
+    constructor
+    · rintro ⟨entry, kept, same, member⟩
+      obtain ⟨⟨k, v⟩, listed, rfl⟩ := List.mem_map.mp kept
+      change k = key at same
+      subst same
+      rw [Std.TreeMap.mem_toList_iff_getElem?_eq_some, found, Option.some.injEq] at listed
+      subst listed
+      simpa [limits] using member
+    · rintro rfl
+      refine ⟨_, List.mem_map.mpr ⟨(key, value),
+        Std.TreeMap.mem_toList_iff_getElem?_eq_some.mpr found, rfl⟩, rfl, ?_⟩
+      simp [limits]
+
+/-- The least value of a field over a list where it is constant is that value. -/
 private theorem minimum_of_constant {α : Type} {xs : List α} (field : α → UInt64)
     {value : UInt64} (present : ∃ x ∈ xs, field x = value)
     (same : ∀ x ∈ xs, field x = value) : (xs.map field).min? = some value := by
@@ -672,75 +819,62 @@ private theorem minimum_of_constant {α : Type} {xs : List α} (field : α → U
   rw [same x kept]
   exact UInt64.le_refl _
 
+/-- After compaction, a block that passes the second condition is after every block of the key. -/
 private theorem lt_slot_of_toMinimal {record : Interchange} {key : BLSPubkey}
     {slot : Slot} {root : Root} {old : SignedBlockRecord}
     (passed : checkBlockSlot (record.toMinimal.blocksOf key) slot root = .ok ())
     (member : old ∈ record.blocksOf key) : old.slot < slot := by
-  obtain ⟨maximum, computed, bounds⟩ := exists_maximum SignedBlockRecord.slot member
-  have shape : ∀ block ∈ record.toMinimal.blocksOf key,
-      block = (⟨maximum, none⟩ : SignedBlockRecord) := by
-    intro block member
-    simpa [Interchange.minimalEntry, computed] using block_of_toMinimal member
-  obtain ⟨entry, kept, same, _⟩ := mem_blocksOf.mp member
-  have present : (⟨maximum, none⟩ : SignedBlockRecord) ∈ record.toMinimal.blocksOf key :=
-    mem_blocksOf.mpr ⟨record.minimalEntry key, minimalEntry_mem ⟨entry, kept, same⟩,
-      rfl, by simp [Interchange.minimalEntry, computed]⟩
+  obtain ⟨maximum, limit, bound⟩ := coversSlot_limits member
+  have shape := blocksOf_toMinimal limit
   have minimum : minBlockSlot (record.toMinimal.blocksOf key) = some maximum :=
-    minimum_of_constant SignedBlockRecord.slot ⟨_, present, rfl⟩
-      (fun block member => congrArg SignedBlockRecord.slot (shape block member))
+    minimum_of_constant SignedBlockRecord.slot ⟨_, (shape _).mpr rfl, rfl⟩
+      (fun block member => by rw [(shape block).mp member])
   -- The limit has no signing root, so it cannot make an old block a permitted repeat.
   have repeated : isRepeatBlock (record.toMinimal.blocksOf key) slot root = false := by
     simp only [isRepeatBlock, List.any_eq_false]
     intro block member
-    rw [shape block member]
+    rw [(shape block).mp member]
     simp
   have after := checkBlockSlot_eq_ok_iff.mp passed maximum minimum
   simp only [repeated, Bool.false_eq_true, or_false] at after
-  have bound := UInt64.le_iff_toNat_le.mp (bounds old member)
+  have bound := UInt64.le_iff_toNat_le.mp bound
   have after := UInt64.lt_iff_toNat_lt.mp after
   exact UInt64.lt_iff_toNat_lt.mpr (by omega)
 
+/-- After compaction, a vote that passes the last two conditions is after every vote of the key.
+
+Its source is at least, and its target after, those of each vote. -/
 private theorem epochs_of_toMinimal {record : Interchange} {key : BLSPubkey}
     {source target : Epoch} {root : Root} {old : SignedAttestationRecord}
     (sourcePassed : checkSourceEpoch (record.toMinimal.attestationsOf key) source = .ok ())
     (targetPassed : checkTargetEpoch (record.toMinimal.attestationsOf key) source target root =
       .ok ()) (member : old ∈ record.attestationsOf key) :
     old.sourceEpoch ≤ source ∧ old.targetEpoch < target := by
-  -- The source and target maxima may have different witnesses in the input file.
-  obtain ⟨maxSource, sourceComputed, sourceBounds⟩ :=
-    exists_maximum SignedAttestationRecord.sourceEpoch member
-  obtain ⟨maxTarget, targetComputed, targetBounds⟩ :=
-    exists_maximum SignedAttestationRecord.targetEpoch member
-  have shape : ∀ vote ∈ record.toMinimal.attestationsOf key,
-      vote = (⟨maxSource, maxTarget, none⟩ : SignedAttestationRecord) := by
-    intro vote member
-    simpa [Interchange.minimalEntry, sourceComputed, targetComputed] using
-      attestation_of_toMinimal member
-  obtain ⟨entry, kept, same, _⟩ := mem_attestationsOf.mp member
-  have present : (⟨maxSource, maxTarget, none⟩ : SignedAttestationRecord) ∈
-      record.toMinimal.attestationsOf key :=
-    mem_attestationsOf.mpr ⟨record.minimalEntry key, minimalEntry_mem ⟨entry, kept, same⟩,
-      rfl, by simp [Interchange.minimalEntry, sourceComputed, targetComputed]⟩
+  -- The source and target limits may come from different votes of the key.
+  obtain ⟨maxSource, maxTarget, limits, sourceBound, targetBound⟩ := coversEpochs_limits member
+  have shape := attestationsOf_toMinimal limits
+  have present := (shape ⟨maxSource, maxTarget, none⟩).mpr rfl
   have leastSource : minSourceEpoch (record.toMinimal.attestationsOf key) = some maxSource :=
     minimum_of_constant SignedAttestationRecord.sourceEpoch ⟨_, present, rfl⟩
-      (fun vote member => congrArg SignedAttestationRecord.sourceEpoch (shape vote member))
+      (fun vote member => by rw [(shape vote).mp member])
   have leastTarget : minTargetEpoch (record.toMinimal.attestationsOf key) = some maxTarget :=
     minimum_of_constant SignedAttestationRecord.targetEpoch ⟨_, present, rfl⟩
-      (fun vote member => congrArg SignedAttestationRecord.targetEpoch (shape vote member))
+      (fun vote member => by rw [(shape vote).mp member])
   have repeated : isRepeatAttestation (record.toMinimal.attestationsOf key)
       source target root = false := by
     simp only [isRepeatAttestation, List.any_eq_false]
     intro vote member
-    rw [shape vote member]
+    rw [(shape vote).mp member]
     simp
   have sourceAfter := checkSourceEpoch_eq_ok_iff.mp sourcePassed maxSource leastSource
   have targetAfter := checkTargetEpoch_eq_ok_iff.mp targetPassed maxTarget leastTarget
   simp only [repeated, Bool.false_eq_true, or_false] at targetAfter
-  refine ⟨UInt64.le_trans (sourceBounds old member) sourceAfter, ?_⟩
-  have bound := UInt64.le_iff_toNat_le.mp (targetBounds old member)
+  refine ⟨UInt64.le_trans sourceBound sourceAfter, ?_⟩
+  have bound := UInt64.le_iff_toNat_le.mp targetBound
   have after := UInt64.lt_iff_toNat_lt.mp targetAfter
   exact UInt64.lt_iff_toNat_lt.mpr (by omega)
 
+/-- A block after every recorded block passes the second condition. -/
 private theorem blockSlot_of_all_lt {blocks : List SignedBlockRecord} {slot : Slot}
     {root : Root} (after : ∀ block ∈ blocks, block.slot < slot) :
     checkBlockSlot blocks slot root = .ok () := by
@@ -749,6 +883,7 @@ private theorem blockSlot_of_all_lt {blocks : List SignedBlockRecord} {slot : Sl
   obtain ⟨block, member, rfl⟩ := List.mem_map.mp (List.min?_mem computed)
   exact Or.inl (after block member)
 
+/-- A vote with a source at least every recorded source passes the fourth condition. -/
 private theorem sourceEpoch_of_all_le {votes : List SignedAttestationRecord} {source : Epoch}
     (after : ∀ vote ∈ votes, vote.sourceEpoch ≤ source) :
     checkSourceEpoch votes source = .ok () := by
@@ -757,6 +892,7 @@ private theorem sourceEpoch_of_all_le {votes : List SignedAttestationRecord} {so
   obtain ⟨vote, member, rfl⟩ := List.mem_map.mp (List.min?_mem computed)
   exact after vote member
 
+/-- A vote with a target after every recorded target passes the fifth condition. -/
 private theorem targetEpoch_of_all_lt {votes : List SignedAttestationRecord}
     {source target : Epoch} {root : Root} (after : ∀ vote ∈ votes, vote.targetEpoch < target) :
     checkTargetEpoch votes source target root = .ok () := by
@@ -765,104 +901,115 @@ private theorem targetEpoch_of_all_lt {votes : List SignedAttestationRecord}
   obtain ⟨vote, member, rfl⟩ := List.mem_map.mp (List.min?_mem computed)
   exact Or.inl (after vote member)
 
-private theorem blockSlot_of_importFile {held file : Interchange} {key : BLSPubkey}
-    {slot : Slot} {root : Root}
-    (passed : checkBlockSlot ((held.importFile file).blocksOf key) slot root = .ok ()) :
-    checkBlockSlot (held.blocksOf key) slot root = .ok () ∧
-      checkBlockSlot (file.blocksOf key) slot root = .ok () := by
-  have bound {old : SignedBlockRecord}
-      (member : old ∈ ({held with data := held.data ++ file.data} : Interchange).blocksOf key) :
-      old.slot < slot := lt_slot_of_toMinimal passed member
-  have merged : ({held with data := held.data ++ file.data} : Interchange).blocksOf key =
+/-- The record before one import, as the held file and the file one after the other. -/
+private theorem blocksOf_append {held file : Interchange} {key : BLSPubkey} :
+    ({held with data := held.data ++ file.data} : Interchange).blocksOf key =
       held.blocksOf key ++ file.blocksOf key := by
-    simp [Interchange.blocksOf, List.filter_append]
-  rw [merged] at bound
-  exact ⟨blockSlot_of_all_lt (fun block member => bound (List.mem_append_left _ member)),
-    blockSlot_of_all_lt (fun block member => bound (List.mem_append_right _ member))⟩
+  simp [Interchange.blocksOf, List.filter_append]
 
-private theorem epochs_of_importFile {held file : Interchange} {key : BLSPubkey}
-    {source target : Epoch} {root : Root}
-    (sourcePassed : checkSourceEpoch ((held.importFile file).attestationsOf key) source = .ok ())
-    (targetPassed : checkTargetEpoch ((held.importFile file).attestationsOf key)
-      source target root = .ok ()) :
-    (checkSourceEpoch (held.attestationsOf key) source = .ok () ∧
-      checkTargetEpoch (held.attestationsOf key) source target root = .ok ()) ∧
-    (checkSourceEpoch (file.attestationsOf key) source = .ok () ∧
-      checkTargetEpoch (file.attestationsOf key) source target root = .ok ()) := by
-  have bound {old : SignedAttestationRecord}
-      (member : old ∈ ({held with data := held.data ++ file.data} : Interchange).attestationsOf
-        key) : old.sourceEpoch ≤ source ∧ old.targetEpoch < target :=
-    epochs_of_toMinimal sourcePassed targetPassed member
-  have merged : ({held with data := held.data ++ file.data} : Interchange).attestationsOf key =
+/-- The votes before one import, as those of the held file and then those of the file. -/
+private theorem attestationsOf_append {held file : Interchange} {key : BLSPubkey} :
+    ({held with data := held.data ++ file.data} : Interchange).attestationsOf key =
       held.attestationsOf key ++ file.attestationsOf key := by
-    simp [Interchange.attestationsOf, List.filter_append]
-  rw [merged] at bound
-  exact ⟨⟨sourceEpoch_of_all_le (fun vote member =>
-      (bound (List.mem_append_left _ member)).1),
-    targetEpoch_of_all_lt (fun vote member => (bound (List.mem_append_left _ member)).2)⟩,
-    ⟨sourceEpoch_of_all_le (fun vote member => (bound (List.mem_append_right _ member)).1),
-    targetEpoch_of_all_lt (fun vote member => (bound (List.mem_append_right _ member)).2)⟩⟩
+  simp [Interchange.attestationsOf, List.filter_append]
 
-private theorem blockSlot_of_imports {files : List Interchange} {held : Interchange}
-    {key : BLSPubkey} {slot : Slot} {root : Root}
-    (passed : checkBlockSlot ((files.foldl Interchange.importFile held).blocksOf key)
-      slot root = .ok ()) :
-    ∀ file ∈ held :: files, checkBlockSlot (file.blocksOf key) slot root = .ok () := by
-  induction files generalizing held with
-  | nil => simpa using passed
-  | cons first rest ih =>
-    have all := ih passed
-    have current := blockSlot_of_importFile (all _ (List.mem_cons_self ..))
-    intro file member
-    rcases List.mem_cons.mp member with rfl | member
-    · exact current.1
-    rcases List.mem_cons.mp member with rfl | member
-    · exact current.2
-    · exact all file (List.mem_cons_of_mem _ member)
+/-- After one import, an accepted block is after every block of the held file and the file.
 
-private theorem epochs_of_imports {files : List Interchange} {held : Interchange}
-    {key : BLSPubkey} {source target : Epoch} {root : Root}
-    (sourcePassed : checkSourceEpoch ((files.foldl Interchange.importFile held).attestationsOf key)
-      source = .ok ())
-    (targetPassed : checkTargetEpoch ((files.foldl Interchange.importFile held).attestationsOf key)
-      source target root = .ok ()) :
-    ∀ file ∈ held :: files,
-      checkSourceEpoch (file.attestationsOf key) source = .ok () ∧
-        checkTargetEpoch (file.attestationsOf key) source target root = .ok () := by
-  induction files generalizing held with
-  | nil => simpa using And.intro sourcePassed targetPassed
-  | cons first rest ih =>
-    have all := ih sourcePassed targetPassed
-    have current := epochs_of_importFile (all _ (List.mem_cons_self ..)).1
-      (all _ (List.mem_cons_self ..)).2
-    intro file member
-    rcases List.mem_cons.mp member with rfl | member
-    · exact current.1
-    rcases List.mem_cons.mp member with rfl | member
-    · exact current.2
-    · exact all file (List.mem_cons_of_mem _ member)
+So the block meets conditions 1 and 2 of the held record and of the file. -/
+theorem lt_slot_of_importFile {held file : Interchange} {key : BLSPubkey} {slot : Slot}
+    {root : Root} (passed : (held.importFile file).checkBlock key slot root = .ok ()) :
+    ∀ old ∈ held.blocksOf key ++ file.blocksOf key, old.slot < slot := by
+  intro old member
+  rw [← blocksOf_append] at member
+  exact lt_slot_of_toMinimal (bind_unit_ok_iff.mp passed).2 member
 
-/-- After any sequence of imports, an accepted block meets condition 2 of each input file.
+/-- After one import, an accepted vote has a source at least each source of the two files. -/
+theorem le_sourceEpoch_of_importFile {held file : Interchange} {key : BLSPubkey}
+    {source target : Epoch} {root : Root}
+    (passed : (held.importFile file).checkAttestation key source target root = .ok ()) :
+    ∀ old ∈ held.attestationsOf key ++ file.attestationsOf key, old.sourceEpoch ≤ source := by
+  intro old member
+  rw [← attestationsOf_append] at member
+  have checks := (bind_unit_ok_iff.mp (bind_unit_ok_iff.mp passed).2)
+  exact (epochs_of_toMinimal checks.1 checks.2 member).1
+
+/-- After one import, an accepted vote has a target after each target of the two files. -/
+theorem lt_targetEpoch_of_importFile {held file : Interchange} {key : BLSPubkey}
+    {source target : Epoch} {root : Root}
+    (passed : (held.importFile file).checkAttestation key source target root = .ok ()) :
+    ∀ old ∈ held.attestationsOf key ++ file.attestationsOf key, old.targetEpoch < target := by
+  intro old member
+  rw [← attestationsOf_append] at member
+  have checks := (bind_unit_ok_iff.mp (bind_unit_ok_iff.mp passed).2)
+  exact (epochs_of_toMinimal checks.1 checks.2 member).2
+
+/-- A block after every recorded block passes the first two conditions. -/
+private theorem checkBlockSigning_of_all_lt {blocks : List SignedBlockRecord} {slot : Slot}
+    {root : Root} (after : ∀ block ∈ blocks, block.slot < slot) :
+    checkBlockSigning blocks slot root = .ok () := by
+  refine checkBlockSigning_eq_ok_iff.mpr ⟨fun block member => ?_, ?_⟩
+  · simp [SignedBlockRecord.conflictsWith, UInt64.ne_of_lt (after block member)]
+  · exact checkBlockSlot_eq_ok_iff.mp (blockSlot_of_all_lt after)
+
+/-- A vote with a source at least, and a target after, every recorded vote passes the last three.
+
+No recorded vote has its target, and none surrounds it or is surrounded by it. -/
+private theorem checkAttestationSigning_of_all {votes : List SignedAttestationRecord}
+    {source target : Epoch} {root : Root} (above : ∀ vote ∈ votes, vote.sourceEpoch ≤ source)
+    (after : ∀ vote ∈ votes, vote.targetEpoch < target) :
+    checkAttestationSigning votes source target root = .ok () := by
+  refine checkAttestationSigning_eq_ok_iff.mpr ⟨fun vote member => ?_,
+    checkSourceEpoch_eq_ok_iff.mp (sourceEpoch_of_all_le above),
+    checkTargetEpoch_eq_ok_iff.mp (targetEpoch_of_all_lt after)⟩
+  have notAbove : ¬source < vote.sourceEpoch := UInt64.not_lt.mpr (above vote member)
+  have notBelow : ¬target < vote.targetEpoch :=
+    UInt64.not_lt.mpr (UInt64.le_of_lt (after vote member))
+  simp [SignedAttestationRecord.isSlashableWith, UInt64.ne_of_lt (after vote member), notAbove,
+    notBelow]
+
+/-- After any sequence of imports, an accepted block meets conditions 1 and 2 of each input file.
 
 The initial held file is included, and imported files may repeat or contain duplicate keys. -/
-theorem checkBlockSlot_of_importFiles {files : List Interchange} {held : Interchange}
+theorem checkBlockSigning_of_foldl_importFile {files : List Interchange} {held : Interchange}
     {key : BLSPubkey} {slot : Slot} {root : Root}
     (passed : (files.foldl Interchange.importFile held).checkBlock key slot root = .ok ()) :
-    ∀ file ∈ held :: files, checkBlockSlot (file.blocksOf key) slot root = .ok () :=
-  blockSlot_of_imports (bind_unit_ok_iff.mp passed).2
+    ∀ file ∈ held :: files, checkBlockSigning (file.blocksOf key) slot root = .ok () := by
+  induction files generalizing held with
+  | nil => simpa [Interchange.checkBlock] using passed
+  | cons first rest ih =>
+    have all := ih passed
+    have current := lt_slot_of_importFile (all _ (List.mem_cons_self ..))
+    intro file member
+    rcases List.mem_cons.mp member with rfl | member
+    · exact checkBlockSigning_of_all_lt fun old kept => current old (List.mem_append_left _ kept)
+    rcases List.mem_cons.mp member with rfl | member
+    · exact checkBlockSigning_of_all_lt fun old kept => current old (List.mem_append_right _ kept)
+    · exact all file (List.mem_cons_of_mem _ member)
 
-/-- After any sequence of imports, an accepted vote meets conditions 4 and 5 of each input file.
+/-- After any sequence of imports, an accepted vote meets conditions 3, 4 and 5 of each input file.
 
 The initial held file is included, and imported files may repeat or contain duplicate keys. -/
-theorem checkSourceEpoch_and_checkTargetEpoch_of_importFiles
-    {files : List Interchange} {held : Interchange}
-    {key : BLSPubkey} {source target : Epoch} {root : Root}
+theorem checkAttestationSigning_of_foldl_importFile {files : List Interchange}
+    {held : Interchange} {key : BLSPubkey} {source target : Epoch} {root : Root}
     (passed : (files.foldl Interchange.importFile held).checkAttestation key source target root =
       .ok ()) :
     ∀ file ∈ held :: files,
-      checkSourceEpoch (file.attestationsOf key) source = .ok () ∧
-        checkTargetEpoch (file.attestationsOf key) source target root = .ok () :=
-  epochs_of_imports (bind_unit_ok_iff.mp (bind_unit_ok_iff.mp passed).2).1
-    (bind_unit_ok_iff.mp (bind_unit_ok_iff.mp passed).2).2
+      checkAttestationSigning (file.attestationsOf key) source target root = .ok () := by
+  induction files generalizing held with
+  | nil => simpa [Interchange.checkAttestation] using passed
+  | cons first rest ih =>
+    have all := ih passed
+    have above := le_sourceEpoch_of_importFile (all _ (List.mem_cons_self ..))
+    have after := lt_targetEpoch_of_importFile (all _ (List.mem_cons_self ..))
+    intro file member
+    rcases List.mem_cons.mp member with rfl | member
+    · exact checkAttestationSigning_of_all
+        (fun old kept => above old (List.mem_append_left _ kept))
+        (fun old kept => after old (List.mem_append_left _ kept))
+    rcases List.mem_cons.mp member with rfl | member
+    · exact checkAttestationSigning_of_all
+        (fun old kept => above old (List.mem_append_right _ kept))
+        (fun old kept => after old (List.mem_append_right _ kept))
+    · exact all file (List.mem_cons_of_mem _ member)
 
 end EthLib.Consensus

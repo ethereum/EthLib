@@ -146,7 +146,8 @@ def test_import_keeps_independent_limits():
         root="0x" + "00" * 32,
     )
     merged = json.loads(consensus.import_slashing_interchange(held, file))
-    # Source 9 and target 20 come from different votes; neither signing root identifies the limits.
+    # Source 9 comes from the held vote and target 20 from the file; no limit keeps a signing root.
+    # The record keeps its own chain root, not the file's.
     assert merged == json.loads(
         interchange([entry(blocks=[block(100)], attestations=[vote(9, 20)]), entry(OTHER_KEY)])
     )
@@ -156,24 +157,36 @@ def test_import_refuses_the_gap_and_boundary_repeat():
     held = interchange([entry(blocks=[block(10, ROOT_A)])])
     file = interchange([entry(blocks=[block(100, ROOT_B)])])
     record = consensus.import_slashing_interchange(held, file)
-    with raises(ERROR, "slashing protection failed with code 4") as error:
+    with raises(ERROR, "slashing protection failed with code 4") as info:
         consensus.check_block_signing(record, _bytes(KEY), 50, _bytes(ROOT_A))
-    assert error.value.code == 4
+    assert info.value.code == 4
     # The imported boundary has no root, so even its original block cannot be repeated.
-    with raises(ERROR, "slashing protection failed with code 3") as error:
+    with raises(ERROR, "slashing protection failed with code 3") as info:
         consensus.check_block_signing(record, _bytes(KEY), 100, _bytes(ROOT_B))
-    assert error.value.code == 3
+    assert info.value.code == 3
     consensus.check_block_signing(record, _bytes(KEY), 101, _bytes(ROOT_A))
 
 
-def test_import_checks_independent_vote_limits():
-    held = interchange([entry(attestations=[vote(9, 10, ROOT_A)])])
-    file = interchange([entry(attestations=[vote(7, 20, ROOT_B)])])
-    record = consensus.import_slashing_interchange(held, file)
-    for source, target, code in [(8, 19, 6), (9, 19, 7), (9, 20, 5)]:
-        with raises(ERROR, f"slashing protection failed with code {code}") as error:
-            consensus.check_attestation_signing(record, _bytes(KEY), source, target, _bytes(ROOT_B))
-        assert error.value.code == code
+VOTE_LIMITS = (
+    interchange([entry(attestations=[vote(9, 10, ROOT_A)])]),
+    interchange([entry(attestations=[vote(7, 20, ROOT_B)])]),
+)
+
+
+@pytest.mark.parametrize(
+    ("source", "target", "code"),
+    [(8, 19, 6), (9, 19, 7), (9, 20, 5)],
+    ids=["source", "target", "double"],
+)
+def test_import_refuses_below_vote_limits(source: int, target: int, code: int):
+    record = consensus.import_slashing_interchange(*VOTE_LIMITS)
+    with raises(ERROR, f"slashing protection failed with code {code}") as info:
+        consensus.check_attestation_signing(record, _bytes(KEY), source, target, _bytes(ROOT_B))
+    assert info.value.code == code
+
+
+def test_import_accepts_above_vote_limits():
+    record = consensus.import_slashing_interchange(*VOTE_LIMITS)
     consensus.check_attestation_signing(record, _bytes(KEY), 9, 21, _bytes(ROOT_A))
 
 
@@ -200,22 +213,30 @@ def test_import_coalesces_duplicate_keys_and_keeps_empty_lists():
 
 def test_import_limits_survive_reload_and_checked_recording():
     record = interchange([entry(blocks=[block(10)], attestations=[vote(1, 2)])])
-    for slot, source, target in [(100, 9, 20), (50, 7, 15), (200, 10, 30)]:
+    # The greatest file comes second, so a later import that dropped the held limits would show.
+    for slot, source, target in [(100, 9, 20), (200, 10, 30), (50, 7, 15)]:
         file = interchange(
             [entry(blocks=[block(slot, ROOT_A)], attestations=[vote(source, target)])]
         )
         record = consensus.import_slashing_interchange(record, file)
         record = consensus.read_slashing_interchange(record)
+    assert json.loads(record) == json.loads(
+        interchange([entry(blocks=[block(200)], attestations=[vote(10, 30)])])
+    )
     consensus.check_block_signing(record, _bytes(KEY), 201, _bytes(ROOT_A))
     record = consensus.record_block_signing(record, _bytes(KEY), 201, _bytes(ROOT_A))
     consensus.check_attestation_signing(record, _bytes(KEY), 10, 31, _bytes(ROOT_A))
     record = consensus.record_attestation_signing(record, _bytes(KEY), 10, 31, _bytes(ROOT_A))
-    with raises(ERROR, "slashing protection failed with code 4") as error:
-        consensus.check_block_signing(record, _bytes(KEY), 150, _bytes(ROOT_B))
-    assert error.value.code == 4
-    with raises(ERROR, "slashing protection failed with code 7") as error:
-        consensus.check_attestation_signing(record, _bytes(KEY), 10, 25, _bytes(ROOT_B))
-    assert error.value.code == 7
+    # A recorded message keeps its signing root, so it may be signed again.
+    consensus.check_block_signing(record, _bytes(KEY), 201, _bytes(ROOT_A))
+    consensus.check_attestation_signing(record, _bytes(KEY), 10, 31, _bytes(ROOT_A))
+    # The rootless limits are still held: each conflicts with a new message at its slot or target.
+    with raises(ERROR, "slashing protection failed with code 3") as info:
+        consensus.check_block_signing(record, _bytes(KEY), 200, _bytes(ROOT_B))
+    assert info.value.code == 3
+    with raises(ERROR, "slashing protection failed with code 5") as info:
+        consensus.check_attestation_signing(record, _bytes(KEY), 10, 30, _bytes(ROOT_B))
+    assert info.value.code == 5
 
 
 # ---- The conditions on blocks --------------------------------------------------------------------
@@ -369,9 +390,8 @@ GENERATED = f"{ARCHIVE_ROOT}/tests/generated"
 
 
 def _run(case: dict) -> None:
-    """Run a case with the minimal strategy and its exact expected flags."""
-    empty_file = interchange([], root=case["genesis_validators_root"])
-    held = empty_file
+    """Run a case as a signer that imports with the minimal strategy, against `should_succeed`."""
+    held = interchange([], root=case["genesis_validators_root"])
     for step in case["steps"]:
         file = step["interchange"]
         # The tests refuse a file of another chain, a check that the EIP does not make.
@@ -394,8 +414,6 @@ def _run(case: dict) -> None:
                 continue
             assert expected, (case["name"], signing)
             held = consensus.record_block_signing(held, key, slot, root)
-            # This test signer also compacts local history, through the native minimal import.
-            held = consensus.import_slashing_interchange(held, empty_file)
         for signing in step["attestations"]:
             expected = signing["should_succeed"]
             key, root = _bytes(signing["pubkey"]), _bytes(signing["signing_root"])
@@ -407,7 +425,6 @@ def _run(case: dict) -> None:
                 continue
             assert expected, (case["name"], signing)
             held = consensus.record_attestation_signing(held, key, source, target, root)
-            held = consensus.import_slashing_interchange(held, empty_file)
 
 
 @pytest.mark.archive(ARCHIVE, GENERATED)
