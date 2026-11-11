@@ -2054,7 +2054,22 @@ So a slashable pair of signed messages needs a collision of the signing root, an
 `isSlashableWith_eq_false_of_signAttestations` shows that each signed vote is not slashable with a vote of the starting file, as a record sees it.
 A record holds the epochs of a vote and maybe its signing root, not its data.
 So that comparison reads a double vote through the signing root, and counts a record without a root as a different vote.
-No theorem says what conditions 2, 4 and 5 guarantee across two imported files, which the EIP leaves to the signer.
+
+A file may also keep only the latest messages of a key, as the [minimal strategy](https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-3076.md#supporting-different-strategies) of the EIP does.
+`lt_slot_of_signBlocks` shows that if each block of the file is after a slot, so is each block signed from it.
+`processProposerSlashing_ne_ok_of_signBlocks` concludes that no valid proposer slashing pairs such an older block with a signed block, since both headers of one have the same slot.
+`isSlashableAttestationData_eq_false_of_signAttestations` shows that no signed vote is slashable with a vote older than each vote of the file.
+An older vote has a source at most, and a target before, those of each vote of the file.
+Each of these theorems needs the file to hold one or more messages of its kind for the key.
+A vote with the target of a kept vote is not older, so the theorem on votes says nothing about it.
+The signer of these theorems records every message it signs, so a signer that prunes as it goes is not covered.
+`mem_blocksOf` and `mem_attestationsOf` show that the messages of a key are those of its own entries.
+The proofs read only conditions 2, 4 and 5, through `lt_slot_of_checkBlockSlot`, `le_sourceEpoch_of_checkSourceEpoch` and `lt_targetEpoch_of_checkTargetEpoch`.
+No theorem says what conditions 2, 4 and 5 guarantee across two imported files.
+The record merges both files, so its checks use the least slot and epochs over both, not those of the second file.
+So a message in a gap between the two passes, though the EIP [says](https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-3076.md#advice-for-complete-databases) that signing it violates conditions 2, 4 and 5.
+A message that the key signed in such a gap, and that neither file keeps, is not older than all the kept ones, so these theorems do not cover it.
+
 `readUInt64_uint64Json` and `readBytes_bytesJson` show that each integer and each byte string of a file reads back as written.
 `ofJson_toJson` shows that a whole file reads back as itself from the document that `toJson` writes, whatever its records.
 No theorem says what `ofJson` does on a document that another client wrote.
