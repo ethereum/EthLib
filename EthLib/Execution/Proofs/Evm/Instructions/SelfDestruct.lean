@@ -29,7 +29,7 @@ SELFDESTRUCT keeps memory.
 
 Its transfer reads the originator and the beneficiary.
 
-From Paris, it also reads the written keys of an account that it deletes.
+From Paris, it also reads the written keys of an account that it leaves empty, even for a moment.
 
 From Glamsterdam, it writes the transfer log of the balance it moves, and none before.
 -/

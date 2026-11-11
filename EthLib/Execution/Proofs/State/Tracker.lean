@@ -1327,7 +1327,7 @@ theorem storageReads_destroyStorage_destroyStorage (tx : TransactionState) (addr
     simp [destroyStorage, Std.ExtTreeMap.keys_eq_nil_iff.mpr rfl, Std.ExtTreeSet.insertMany_nil]
   · simp [destroyStorage, Std.ExtTreeMap.getElem?_insert, Ne.symm hother]
 
-/-- A wipe of the storage of an address reads there what its storage writes and reads give. -/
+/-- Two states with the same storage writes and reads at an address keep them equal after a wipe. -/
 theorem getElem?_storageReads_destroyStorage_congr {tx tx' : TransactionState}
     {address : Address} (hw : tx'.storageWrites.getD address ∅ = tx.storageWrites.getD address ∅)
     (hr : tx'.storageReads[address]? = tx.storageReads[address]?) :
@@ -1335,7 +1335,7 @@ theorem getElem?_storageReads_destroyStorage_congr {tx tx' : TransactionState}
       (tx.destroyStorage address).storageReads[address]? := by
   simp [destroyStorage, hw, Std.ExtTreeMap.getD_eq_getD_getElem?, hr]
 
-/-- A wipe adds no read to the reads of an earlier wipe when no key was written since. -/
+/-- A wipe adds no read when the address has no written key and the reads of an earlier wipe. -/
 theorem getElem?_storageReads_destroyStorage_of_wiped {tx mid : TransactionState}
     {address : Address} (hw : mid.storageWrites.getD address ∅ = ∅)
     (hr : mid.storageReads[address]? = (tx.destroyStorage address).storageReads[address]?) :
