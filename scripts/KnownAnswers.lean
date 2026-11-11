@@ -10,7 +10,9 @@ The Python suite reaches the specification through the C exports and the Python 
 
 This program calls the same definitions that the theorems are about, compiled, on the same files.
 
-So a disagreement it finds lies in the specification or in the compiler, not in the glue.
+So a disagreement it finds lies in the specification, in the compiler or in how this program reads the files.
+
+The exports and the bindings play no part.
 
 Each family reads its vectors from `tests/`, at the pins of `tests/sources.toml`.
 
