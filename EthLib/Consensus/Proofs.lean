@@ -28,6 +28,7 @@ public import EthLib.Consensus.Proofs.DataAvailability.Blob
 public import EthLib.Consensus.Proofs.DataAvailability.Column
 public import EthLib.Consensus.Proofs.DataAvailability.Custody
 public import EthLib.Consensus.Proofs.DepositTree
+public import EthLib.Consensus.Proofs.ForkChoice.AncestorRoots
 public import EthLib.Consensus.Proofs.ForkChoice.AttestationScores
 public import EthLib.Consensus.Proofs.ForkChoice.BlockStates
 public import EthLib.Consensus.Proofs.ForkChoice.Checkpoints
