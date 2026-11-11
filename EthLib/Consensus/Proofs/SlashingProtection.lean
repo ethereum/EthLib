@@ -27,9 +27,13 @@ No signed vote is slashable with a vote of the starting file, as a record sees i
 
 A file may keep only the latest messages of a key, and drop the older ones.
 
-Each block that a signer signs from it is after every older block, so no pair is slashable.
+Each block that a signer signs from it is after every older block.
+
+So no valid proposer slashing pairs an older block with a signed block.
 
 No vote that it signs is slashable with an older vote.
+
+Both need the file to keep one or more such messages of the key.
 
 An interchange file reads back as itself from the document that writes it.
 -/
@@ -525,7 +529,7 @@ theorem lt_targetEpoch_of_checkTargetEpoch {attestations : List SignedAttestatio
 
 /-- A vote is not slashable with a newer vote, in either order.
 
-The newer vote has a source at least, and a target after, those of the first. -/
+The newer vote has a source at least, and a target after, those of the older one. -/
 theorem isSlashableAttestationData_eq_false_of_le_of_lt {old data : AttestationData}
     (source : old.source.epoch ≤ data.source.epoch)
     (target : old.target.epoch < data.target.epoch) :
@@ -538,11 +542,7 @@ theorem isSlashableAttestationData_eq_false_of_le_of_lt {old data : AttestationD
 
 /-- If each block of the starting file is after a slot, so is each block that a signer signs.
 
-The file holds one or more blocks of the key.
-
-A valid proposer slashing has two headers of one slot.
-
-So an older block makes none with a signed block. -/
+The file holds one or more blocks of the key. -/
 theorem lt_slot_of_signBlocks {signingRootOf : BeaconBlockHeader → Root} {pubkey : BLSPubkey}
     {start finish : Interchange} {headers : List BeaconBlockHeader}
     (signed : signBlocks signingRootOf pubkey start headers = .ok finish)
@@ -563,6 +563,28 @@ theorem lt_slot_of_signBlocks {signingRootOf : BeaconBlockHeader → Root} {pubk
       rcases kept with kept | rfl
       · exact older block kept
       · exact after
+
+/-- No valid proposer slashing pairs a signed header with a header before each block of the file.
+
+The file holds one or more blocks of the key.
+
+The two headers of a valid proposer slashing have one slot, in either order. -/
+theorem processProposerSlashing_ne_ok_of_signBlocks {signingRootOf : BeaconBlockHeader → Root}
+    {pubkey : BLSPubkey} {start finish : Interchange} {headers : List BeaconBlockHeader}
+    (signed : signBlocks signingRootOf pubkey start headers = .ok finish)
+    (nonempty : start.blocksOf pubkey ≠ []) {old : BeaconBlockHeader}
+    (older : ∀ block ∈ start.blocksOf pubkey, old.slot < block.slot) {header : BeaconBlockHeader}
+    (member : header ∈ headers) {config : Config} {checks : SignatureChecks}
+    {state after : BeaconState preset fork} {slashing : ProposerSlashing}
+    (pair : slashing.signedHeader1.message = old ∧ slashing.signedHeader2.message = header ∨
+      slashing.signedHeader1.message = header ∧ slashing.signedHeader2.message = old) :
+    processProposerSlashing config checks state slashing ≠ .ok after := by
+  intro valid
+  have sameSlot := (processProposerSlashing_checks valid).1
+  have before := UInt64.ne_of_lt (lt_slot_of_signBlocks signed nonempty older member)
+  rcases pair with ⟨first, second⟩ | ⟨first, second⟩
+  · exact before (by rw [← first, ← second, sameSlot])
+  · exact before (by rw [← first, ← second, sameSlot])
 
 /-- No vote that a signer signs is slashable with a vote older than each vote of its starting file.
 
