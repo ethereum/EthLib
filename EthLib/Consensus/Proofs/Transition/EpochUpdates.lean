@@ -12,6 +12,12 @@ It is at most the balance plus the downward band of hysteresis.
 
 It does not rise while the balance stays within the upward band of it.
 
+Unless it is the old one, it is at most the balance and at most the largest.
+
+So when the old effective balance is at most the largest, the updated one is too.
+
+It is also at most the greater of the old effective balance and the balance.
+
 The effective balances are aligned when each is a whole number of increments.
 
 When the largest values of the preset are aligned too, the update keeps them aligned.
@@ -137,6 +143,35 @@ private theorem toNat_min_rounded {balance largest : Gwei} :
     rw [Nat.min_eq_left (UInt64.le_iff_toNat_le.mp h)]
   · rename_i h
     rw [Nat.min_eq_right (Nat.le_of_lt (UInt64.lt_iff_toNat_lt.mp (UInt64.not_le.mp h)))]
+
+/-- An updated effective balance is the old one, or at most both the balance and the largest. -/
+theorem updatedEffectiveBalance_eq_or_le {largest balance effectiveBalance result : Gwei}
+    (computed : updatedEffectiveBalance preset largest balance effectiveBalance = .ok result) :
+    result = effectiveBalance ∨ result ≤ balance ∧ result ≤ largest := by
+  rcases updatedEffectiveBalance_cases computed with rfl | rfl
+  · exact .inl rfl
+  · right
+    rw [UInt64.le_iff_toNat_le, UInt64.le_iff_toNat_le, toNat_min_rounded (preset := preset)]
+    exact ⟨Nat.le_trans (Nat.min_le_left _ _) (Nat.sub_le _ _), Nat.min_le_right _ _⟩
+
+/-- An updated effective balance is at most the largest when the old one is. -/
+theorem updatedEffectiveBalance_le_largest {largest balance effectiveBalance result : Gwei}
+    (old : effectiveBalance ≤ largest)
+    (computed : updatedEffectiveBalance preset largest balance effectiveBalance = .ok result) :
+    result ≤ largest := by
+  rcases updatedEffectiveBalance_eq_or_le computed with rfl | ⟨_, capped⟩
+  · exact old
+  · exact capped
+
+/-- An updated effective balance is at most the greater of the old one and the balance.
+
+A kept old effective balance can exceed the balance, so the bound needs both values. -/
+theorem updatedEffectiveBalance_le_max {largest balance effectiveBalance result : Gwei}
+    (computed : updatedEffectiveBalance preset largest balance effectiveBalance = .ok result) :
+    result.toNat ≤ max effectiveBalance.toNat balance.toNat := by
+  rcases updatedEffectiveBalance_eq_or_le computed with rfl | ⟨below, _⟩
+  · exact Nat.le_max_left _ _
+  · exact Nat.le_trans (UInt64.le_iff_toNat_le.mp below) (Nat.le_max_right _ _)
 
 /-- The increment of a preset is positive and at most its upward band, as the hysteresis needs. -/
 abbrev Preset.IncrementWithinUpwardBand (preset : Preset) : Prop :=

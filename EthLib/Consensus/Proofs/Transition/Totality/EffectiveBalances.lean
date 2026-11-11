@@ -73,18 +73,8 @@ private theorem updatedEffectiveBalance_exists_ok {largest balance effectiveBala
 private theorem updatedEffectiveBalance_lt {largest balance effectiveBalance result : Gwei}
     (low : balance.toNat < 2 ^ 63) (old : effectiveBalance.toNat < 2 ^ 63)
     (computed : updatedEffectiveBalance preset largest balance effectiveBalance = .ok result) :
-    result.toNat < 2 ^ 63 := by
-  rcases updatedEffectiveBalance_cases computed with rfl | rfl
-  · exact old
-  · have rounded := UInt64.le_iff_toNat_le.mp (UInt64.sub_le
-      (a := balance) (b := balance % preset.EFFECTIVE_BALANCE_INCREMENT)
-      (UInt64.le_iff_toNat_le.mpr (by rw [UInt64.toNat_mod]; exact Nat.mod_le _ _)))
-    rw [UInt64.min_def]
-    split
-    · omega
-    · rename_i h
-      have := UInt64.lt_iff_toNat_lt.mp (UInt64.not_le.mp h)
-      omega
+    result.toNat < 2 ^ 63 :=
+  Nat.lt_of_le_of_lt (updatedEffectiveBalance_le_max computed) (Nat.max_lt.mpr ⟨old, low⟩)
 
 /-- The update of one effective balance keeps the balances, and the bound on effective balances.
 
@@ -235,19 +225,7 @@ theorem processEffectiveBalanceUpdates_effectiveBalance
   simp only [H, Option.map_some]
   split
   · rename_i effectiveBalance updated
-    refine ⟨effectiveBalance, rfl, ?_⟩
-    rcases updatedEffectiveBalance_cases updated with rfl | rfl
-    · exact Or.inl rfl
-    · have rounded := UInt64.le_iff_toNat_le.mp (UInt64.sub_le
-        (a := balance) (b := balance % preset.EFFECTIVE_BALANCE_INCREMENT)
-        (UInt64.le_iff_toNat_le.mpr (by rw [UInt64.toNat_mod]; exact Nat.mod_le _ _)))
-      rw [UInt64.min_def]
-      split
-      · rename_i below
-        exact Or.inr ⟨UInt64.le_iff_toNat_le.mpr rounded, below⟩
-      · rename_i above
-        have := UInt64.lt_iff_toNat_lt.mp (UInt64.not_le.mp above)
-        exact Or.inr ⟨UInt64.le_iff_toNat_le.mpr (by omega), UInt64.le_refl _⟩
+    exact ⟨effectiveBalance, rfl, updatedEffectiveBalance_eq_or_le updated⟩
   · exact ⟨validator.effectiveBalance, rfl, Or.inl rfl⟩
 
 end EthLib.Consensus
