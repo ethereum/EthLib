@@ -245,14 +245,17 @@ This keeps the repository free of changes that may never activate.
 Two kinds of change have no stage of their own.
 
 - A blob-parameter-only fork of EIP-7892 changes parameters and no rule.
-  It enters when a meta EIP schedules its activation, as EIP-7607 of Fusaka does for BPO1 and BPO2.
-  The configurations of the specifications give its parameters.
-- A standard outside the EIP process, such as the Engine API, the beacon API or a libp2p protocol, has no inclusion stages.
-  A version of it enters with the upgrade that requires it.
-  A standard that no upgrade requires, such as the era file format, enters once it is stable enough to cite at a pinned commit.
+  It enters when a meta EIP records its mainnet activation, as EIP-7607 of Fusaka does for BPO1 and BPO2.
+  The code cites the EIP that fixes its parameters: EIP-8134 for BPO1 and EIP-8135 for BPO2.
+- A standard outside the EIP process has no inclusion stages.
+  A version that an upgrade requires, such as a version of the Engine API or of a libp2p protocol, enters with that upgrade.
+  A standard that nodes of a deployed fork already use enters once it can be cited at a pinned commit.
+  The beacon API and the era file format are such standards.
+  Any other standard enters only as an exception that the maintainers choose, as the next paragraph says.
 
 A few components are the exception, because EthLib means to be their reference by the time they reach mainnet, several upgrades ahead.
-The maintainers choose these components, and each has an issue that records the decision:
+The maintainers choose these components, and record each decision in an issue.
+The two components on the list have no such issue yet, only the issues that started their work:
 
 - the hash-based signature XMSS, in [#29](https://github.com/ethereum/EthLib/issues/29),
 - the hash-based signature SPHINCS, in [#41](https://github.com/ethereum/EthLib/issues/41).
