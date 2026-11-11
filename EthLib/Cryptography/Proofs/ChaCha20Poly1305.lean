@@ -28,6 +28,22 @@ theorem crypt_size (key : Key) (counter : UInt32) (nonce : Nonce) (input output 
   · cases h
     exact EthLib.Base.xorByteArray_size _ _
 
+/-- Encryption returns a ciphertext of the plaintext's length. -/
+theorem encrypt_size (key : Key) (nonce : Nonce) (aad plaintext ciphertext : ByteArray)
+    (tag : Tag) (h : encrypt key nonce aad plaintext = .ok (ciphertext, tag)) :
+    ciphertext.size = plaintext.size := by
+  unfold encrypt at h
+  cases hl : checkLengths aad.size plaintext.size with
+  | error e => simp [hl, bind, Except.bind] at h
+  | ok u =>
+    cases hc : crypt key 1 nonce plaintext with
+    | error e => simp [hl, hc, bind, Except.bind] at h
+    | ok c =>
+      simp only [hl, hc, bind, Except.bind, pure, Except.pure, Except.ok.injEq,
+        Prod.mk.injEq] at h
+      rw [← h.1]
+      exact crypt_size _ _ _ _ _ hc
+
 /-- A stream that would wrap the counter is refused. -/
 theorem crypt_eq_error_of_counter_exhausted (key : Key) (counter : UInt32) (nonce : Nonce)
     (input : ByteArray) (h : counter.toNat + (input.size + 63) / 64 > 2 ^ 32) :
