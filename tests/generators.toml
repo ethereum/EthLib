@@ -9,6 +9,7 @@
 # Its `computes` field names the program, and the library that does the arithmetic when it is not the program itself.
 # Its `version` field gives the versions that a file, a fixture or a lock file records, or says that none is recorded.
 # Its `source` field is where a reader checks the claim, at a pinned commit where there is one.
+# Its optional `imports` field lists the modules from outside the repository that the scripts of its directories import.
 #
 # Two names are reserved and need no definition:
 # - "ethlib": EthLib computed the values, so the case is a regression test of EthLib, not a check of it.
@@ -23,12 +24,16 @@
 #
 # The table `runtime` lists the modules the Python tests import that are no part of EthLib, of the standard library or of the tests.
 # A module that computes expected values while the tests run is an oracle.
-# Any other module is a tool.
+# Any other module is a tool, and `runtime.tools` gives the reason it computes no expected value.
 #
 #     uv run --no-project --python 3.12 python scripts/check_fixture_pins.py
 #
 # The check fails when a directory or an archive has no entry, when a pinned file belongs to no group, and when a group names an undefined generator.
 # It also fails when a test imports a module that `runtime` does not list, and when an oracle's version differs from `uv.lock`.
+# It fails as well when a script in a directory imports a module that no generator of the directory lists in `imports`.
+#
+# The check downloads no archive.
+# When `ETHLIB_ARCHIVES` names the cache of the archives, it also checks each glob of an archive against the member list that the cache holds.
 
 # The Python specification of the consensus layer and the test vectors of its releases.
 
@@ -41,6 +46,7 @@ source = "https://github.com/ethereum/consensus-specs/blob/aa16bb4c156184e9548a9
 computes = "the consensus-specs Python specification, unchanged, run by its reference-test plugin on test functions that EthLib wrote"
 version = "consensus-specs v1.7.0-beta.4 (aa16bb4c), with the libraries of its uv.lock"
 source = "tests/consensus/large_amounts/README.md"
+imports = ["eth_consensus_specs"]
 
 [generators."pyspec v1.7.0-alpha.12"]
 computes = "the consensus-specs Python specification, run by its reference-test plugin, with BLS in py_arkworks_bls12381 and SSZ in eth-remerkleable"
@@ -86,6 +92,7 @@ source = "bindings/python/tests/snappy/test_consensus_spec_tests.py:3-4"
 computes = "a script of EthLib that computes the values with eth-ssz-specs and never calls EthLib"
 version = "eth-ssz-specs 0.1.0"
 source = "the README.md and generate.py of the directory"
+imports = ["ssz"]
 
 # BLS and the other cryptographic suites.
 
@@ -116,7 +123,7 @@ source = "the `source` field of each test group, in C2SP/wycheproof at d17cc89f"
 
 [generators."Wycheproof, David Benjamin's scripts"]
 computes = "David Benjamin's Python scripts for ECDSA edge cases, with their own modular arithmetic, added to Wycheproof"
-version = "source version 0.1"
+version = "source github/davidben/ecdsa-r-s-edge-cases and github/davidben/ecdsa-s-pow2, version 0.1"
 source = "https://github.com/C2SP/wycheproof/pull/237 and https://github.com/C2SP/wycheproof/pull/238"
 
 [generators."Wycheproof, blsvecgen"]
@@ -416,7 +423,7 @@ generator = "Wycheproof, David Benjamin's scripts"
 cases = ["verify_low_s/**"]
 subset = "Wycheproof tcId 464 of the Bitcoin file"
 generator = "not established"
-checked = "C2SP/wycheproof PR 277 takes the case from bitcoin-core/secp256k1 PR 1948 and names no program"
+checked = "the test group gives source github/ViniciusCestarii/ecdsa-bitcoin-r-plus-n, version 0.1, a repository that GitHub does not find. C2SP/wycheproof PR 277 takes the case from bitcoin-core/secp256k1 PR 1948 and names no program"
 
 [[directories."tests/cryptography/secp256k1"]]
 cases = ["recover/**"]
@@ -619,6 +626,7 @@ generator = "ckzg 2.1.7 in pyspec v1.7.0-alpha.12"
 
 [[archives."consensus-specs/v1.7.0-alpha.12/general"]]
 cases = ["tests/general/deneb/kzg/compute_challenge/**", "tests/general/fulu/kzg/compute_verify_cell_kzg_proof_batch_challenge/**"]
+subset = "the handlers compute_challenge and compute_verify_cell_kzg_proof_batch_challenge"
 generator = "pyspec v1.7.0-alpha.12"
 
 [[archives."consensus-specs/v1.7.0-beta.4/minimal"]]
@@ -699,8 +707,12 @@ checked = "the file holds mainnet blocks 0 to 8191 with receipts and total diffi
 
 # The modules that the Python tests run.
 
-[runtime]
-tools = ["eth_typing", "hypothesis", "pytest", "ruamel", "tomli"]
+[runtime.tools]
+eth_typing = "names the types of py_ecc's arguments, for the type checker"
+hypothesis = "draws random inputs, and the expected value is the input itself or comes from code in the test"
+pytest = "runs the tests"
+ruamel = "parses the YAML files of the vectors"
+tomli = "reads TOML on Python 3.10, which has no tomllib"
 
 [runtime.oracles.py_ecc]
 package = "py-ecc"
