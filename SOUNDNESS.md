@@ -2917,6 +2917,7 @@ A directory stands for its files and for the file of the same name beside it, su
 The files named `Proofs.lean` are roots that gather the proofs of a domain, so they are not listed.
 
 <!-- generated: vcvio-users -->
+- `EthLib/Consensus/Proofs/Accessors/`
 - `EthLib/Consensus/Proofs/DataAvailability/`
 - `EthLib/Consensus/Proofs/Gossip/`
 - `EthLib/Consensus/Proofs/LightClient/`
