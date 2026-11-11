@@ -107,8 +107,17 @@ The unforgeability of a signature scheme is proved about a model, and so are the
 A model connects to the specification by a refinement theorem, which says that the concrete definition is an instance of the abstract one.
 Without that theorem, the security proof is about a different object than the one clients run.
 
-Each kind depends only on the kinds before it.
-A specification never imports a property or a model, and a property never imports a model.
+A refinement theorem is a property.
+A property module that depends on a model, to state such theorems or to build on them, is a **refinement module**.
+A refinement that holds by definition is still stated, as a theorem proved by `rfl`, so that a reader can find it.
+`rootWith_hash` in `EthLib/Cryptography/Proofs/Vrf/Unpredictability.lean` is one.
+
+A module is a model because of what it says, not because of what it imports.
+A module that imports VCVio is a property when its theorems are about the specification.
+
+Each kind depends only on the kinds before it, and refinement modules are the one exception.
+A specification never imports a property or a model.
+A property never imports a model, directly or through another module, unless it is a refinement module.
 
 ## Layers
 
@@ -401,7 +410,7 @@ So the code that clients and the bindings run depends on no other library.
 Lake still downloads Mathlib and VCVio for a project that requires EthLib, because a requirement holds for the whole package.
 
 A model is a module under `Proofs/`, like a property.
-The rule that no property imports a model is a rule between modules, not between packages.
+The rule that only a refinement module imports a model is a rule between modules, not between packages.
 
 ## Where a new module goes
 
@@ -418,6 +427,14 @@ A new module finds its place by answering three questions in order.
    If two modules need the same thing, write it once, in the lower of their layers.
 
 Then the module follows the layout of `CONTRIBUTING.md`: the specification in `EthLib/<Domain>/<Module>/`, its theorems in `EthLib/<Domain>/Proofs/<Module>/`, and its C exports in `EthLib/<Domain>/Exports/`.
+A theorem stays in the specification file in two cases, because a specification never imports a property:
+
+- A definition or an instance of the specification uses it.
+  `gasHeld_runFrame_le` in `EthLib/Execution/Evm/Interpreter.lean` is one, since the recursion of messages needs its bound.
+- The users of a definition rely on it, such as a `@[simp]` lemma.
+  A project that imports only the specification can then still use it.
+
+Every other theorem goes under `Proofs/`.
 A model goes under `Proofs/` too, as the models of Casper FFG and LMD-GHOST do in `EthLib/Consensus/Proofs/Models/`.
 Modules of one kind share a directory, under the part of the layer that uses them.
 The precompiles are one kind, and only the EVM calls them, so ECRECOVER sits in `EthLib/Execution/Evm/Precompiles/Ecrecover.lean`, and its theorems in `EthLib/Execution/Proofs/Evm/Precompiles/Ecrecover.lean`.
