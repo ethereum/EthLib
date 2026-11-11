@@ -6,13 +6,15 @@ public import VCVio.OracleComp.QueryTracking.RandomOracle.Basic
 /-!
 # Proofs: balance-weighted draws with a cached random oracle
 
-The oracle answers the byte string that `drawHash` hashes, then `drawAccepts` reads that answer.
+The oracle answers in place of the SHA-256 call that gives a draw its random bytes.
 
 A draw whose input is absent from the cache has the acceptance probability of a uniform digest.
 
-The seed is fixed, and freshness is a condition on the actual input, including its block number.
+These probabilities hold for the oracle only; no theorem bounds the draw when SHA-256 answers.
 
-This does not model seed derivation or the whole proposer search.
+The seed is fixed, and freshness is a condition on the hashed input of the draw's block of draws.
+
+No theorem here covers seed derivation or the whole proposer search.
 -/
 
 @[expose] public section
@@ -46,7 +48,9 @@ private theorem run_queryProposerDraw_of_fresh (preset : Preset) (fork : Base.Fo
   rw [map_eq_bind_pure_comp]
   rfl
 
-/-- Before Electra, a fresh draw input gives the exact one-byte acceptance probability.
+/-- Before Electra, a fresh draw input accepts with probability `(⌊e * (2^8 - 1) / M⌋ + 1) / 2^8`.
+
+It needs `0 < M`, `e ≤ M` and `M * (2^8 - 1) < 2^64`, where `M` is the largest effective balance.
 
 Other inputs may already have answers in the shared cache. -/
 theorem prEvent_queryProposerDraw_of_before_pectra (preset : Preset) (fork : Base.Fork)
@@ -63,7 +67,9 @@ theorem prEvent_queryProposerDraw_of_before_pectra (preset : Preset) (fork : Bas
   rw [run_queryProposerDraw_of_fresh preset fork seed i e cache fresh, prEvent_map]
   exact prEvent_drawAccepts_uniform_of_before_pectra preset fork before i e positive balance fits
 
-/-- From Electra, a fresh draw input gives the exact two-byte acceptance probability.
+/-- From Electra, a fresh draw input accepts with probability `(⌊e * (2^16 - 1) / M⌋ + 1) / 2^16`.
+
+It needs `0 < M`, `e ≤ M` and `M * (2^16 - 1) < 2^64`, where `M` is the largest effective balance.
 
 Other inputs may already have answers in the shared cache. -/
 theorem prEvent_queryProposerDraw_of_pectra (preset : Preset) (fork : Base.Fork)
@@ -80,11 +86,11 @@ theorem prEvent_queryProposerDraw_of_pectra (preset : Preset) (fork : Base.Fork)
   rw [run_queryProposerDraw_of_fresh preset fork seed i e cache fresh, prEvent_map]
   exact prEvent_drawAccepts_uniform_of_pectra preset fork electra i e positive balance fits
 
-/-- Two distinct inputs absent from the shared cache give independent acceptance events.
+/-- Two distinct inputs absent from the shared cache both accept with the product probability.
 
 The factors are the acceptance probabilities of two uniform digests.
 
-Draws that share an input require a separate proof about disjoint bytes of one digest. -/
+This does not cover two draws that share an input, and so read one digest. -/
 theorem prEvent_queryProposerDraw_pair_of_fresh (preset : Preset) (fork : Base.Fork)
     (seed : Bytes32) (i j : Nat) (e f : Gwei) (cache : (ByteArray →ₒ Bytes32).QueryCache)
     (different : drawInput seed (i / drawsPerHash fork) ≠ drawInput seed (j / drawsPerHash fork))
