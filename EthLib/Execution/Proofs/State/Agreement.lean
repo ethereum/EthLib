@@ -3,31 +3,23 @@ module
 public import EthLib.Execution.Proofs.State.Tracker
 
 /-!
-# Proofs: two transaction states that agree on a set of accounts and slots
+# Proofs: transaction states that agree on accessed accounts, slots and code
 
-Two block states agree on `account`, `allStorage`, `slot` and `code`.
+Two block states agree on a set of addresses when they hold the same account at each.
 
-At each address in `account`, they hold the same optional account.
+They agree likewise on sets of slots and code hashes, and on every key at some addresses.
 
-At each address in `allStorage`, they hold the same storage word at every key.
+Two transaction states agree when their blocks agree and they carry the same writes and reads.
 
-At each slot in `slot`, they hold the same word of storage.
+Lookups inside those sets, or at what the tracker wrote, give the same value in both.
 
-At each code hash in `code`, they fetch the same code.
+Tracker writes, recorded reads, rollback and the end of a transaction keep that agreement.
 
-Two transaction states agree there when their parent blocks do and they carry the same tracker.
+The sets that matter are those a transaction read and wrote.
 
-That means the same writes, wipes, transient storage, created accounts and recorded reads.
+[EIP-7928, Scope and Inclusion][eip7928] asks a block access list to name them.
 
-Every lookup at an address, slot or code hash in those sets then gives the same value.
-
-Each primitive write of the tracker keeps that agreement when its read is in those sets.
-
-Recording the same read on both states updates both read sets identically and keeps agreement.
-
-Rolling back two agreeing states to two agreeing snapshots gives two agreeing states.
-
-[EIP-7928, Scope and Inclusion][eip7928] asks a block list to name every accessed account and slot.
+Agreement on whole storages and on code goes beyond that list, so it stays a hypothesis.
 
 [eip7928]: https://eips.ethereum.org/EIPS/eip-7928#scope-and-inclusion
 -/
@@ -40,33 +32,35 @@ open EthLib.Base
 
 /-! ## Agreement of two block states -/
 
-/-- Two block states agree on `account`, `allStorage`, `slot` and `code`.
+/-- Two block states agree on four sets: of addresses, of whole storages, of slots, of code hashes.
 
-At each address in `account`, they read the same optional account.
+At each address of the first set, they read the same optional account.
 
-At each address in `allStorage`, they read the same word at every key of storage.
+At each address of the second set, they read the same word at every key of storage.
 
-At each slot in `slot`, they read the same word of storage.
+At each slot of the third set, they read the same word of storage.
 
-At each hash in `code`, they fetch the same code.
+At each code hash of the fourth set, they fetch the same code.
 
-A contract creation checks that every storage key at a candidate address is zero, by EIP-7610. -/
+A contract creation checks every storage key at a candidate address, by [EIP-7610][eip7610].
+
+[eip7610]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-7610.md#specification -/
 structure BlockState.AgreesOn (account allStorage : Address → Prop)
     (slot : Address → Bytes32 → Prop) (code : Hash32 → Prop) (block other : BlockState) :
     Prop where
-  /-- Each address in `account` has the same optional account in both block states. -/
+  /-- Each address of the first set has the same optional account in both block states. -/
   account : ∀ address, account address →
     (TransactionState.ofBlock other).getAccountOptional address =
       (TransactionState.ofBlock block).getAccountOptional address
-  /-- Each address in `allStorage` has the same word at every storage key in both block states. -/
+  /-- Each address of the second set has the same word at every key in both block states. -/
   allStorage : ∀ address key, allStorage address →
     (TransactionState.ofBlock other).getStorage address key =
       (TransactionState.ofBlock block).getStorage address key
-  /-- Each slot in `slot` has the same storage word in both block states. -/
+  /-- Each slot of the third set has the same storage word in both block states. -/
   slot : ∀ address key, slot address key →
     (TransactionState.ofBlock other).getStorage address key =
       (TransactionState.ofBlock block).getStorage address key
-  /-- Each code hash in `code` fetches the same code in both block states. -/
+  /-- Each code hash of the fourth set fetches the same code in both block states. -/
   code : ∀ codeHash, code codeHash →
     (TransactionState.ofBlock other).getCode codeHash =
       (TransactionState.ofBlock block).getCode codeHash
@@ -98,7 +92,7 @@ theorem trans {account allStorage : Address → Prop} {slot : Address → Bytes3
     fun x k hx => (hbc.slot x k hx).trans (hab.slot x k hx),
     fun x hx => (hbc.code x hx).trans (hab.code x hx)⟩
 
-/-- Agreement on stronger predicates implies agreement on weaker ones. -/
+/-- Agreement on some sets implies agreement on any of their subsets. -/
 theorem mono {account account' allStorage allStorage' : Address → Prop}
     {slot slot' : Address → Bytes32 → Prop} {code code' : Hash32 → Prop}
     {block other : BlockState} (h : AgreesOn account allStorage slot code block other)
@@ -162,12 +156,12 @@ end SameTracker
 
 /-! ## Agreement of two transaction states -/
 
-/-- Two transaction states agree on `account`, `allStorage`, `slot` and `code`.
+/-- Two transaction states agree on four sets of addresses, slots and code hashes.
 
 Their parent block states agree there, and both states carry the same tracker. -/
 structure AgreesOn (account allStorage : Address → Prop) (slot : Address → Bytes32 → Prop)
     (code : Hash32 → Prop) (tx other : TransactionState) : Prop where
-  /-- Their parent block states agree on `account`, `allStorage`, `slot` and `code`. -/
+  /-- Their parent block states agree on the four sets. -/
   parent : BlockState.AgreesOn account allStorage slot code tx.parent other.parent
   /-- Both transaction states carry the same tracker. -/
   tracker : SameTracker tx other
@@ -191,7 +185,7 @@ theorem mapError (f : ε → δ) (h : AgreesOnExcept account allStorage slot cod
     AgreesOnExcept account allStorage slot code (res.mapError f) (res'.mapError f) := by
   cases res <;> cases res' <;> simp_all [AgreesOnExcept, Except.mapError]
 
-/-- Chaining a state transition across agreeing results preserves agreement. -/
+/-- Chaining two steps that keep agreement keeps agreement of the results. -/
 theorem bind {k k' : TransactionState → Except ε TransactionState}
     (h : AgreesOnExcept account allStorage slot code res res')
     (hk : ∀ {tx other}, AgreesOn account allStorage slot code tx other →
@@ -233,7 +227,7 @@ theorem trans {a b c : TransactionState}
     AgreesOn account allStorage slot code a c :=
   ⟨hab.parent.trans hbc.parent, hab.tracker.trans hbc.tracker⟩
 
-/-- Agreement on stronger predicates implies agreement on weaker ones. -/
+/-- Agreement on some sets implies agreement on any of their subsets. -/
 theorem mono {account' allStorage' : Address → Prop} {slot' : Address → Bytes32 → Prop}
     {code' : Hash32 → Prop} (h : AgreesOn account allStorage slot code tx other)
     (ha : ∀ x, account' x → account x) (he : ∀ x, allStorage' x → allStorage x)
@@ -323,7 +317,7 @@ theorem getStorage_eq (h : AgreesOn account allStorage slot code tx other)
       · exact h.parent.allStorage address key he
       · exact h.parent.slot address key hs
 
-/-- At a created or agreed slot, both states read the same storage word before the transaction. -/
+/-- At an agreed slot or a created account, both read the same word from before the transaction. -/
 theorem getStorageOriginal_eq (h : AgreesOn account allStorage slot code tx other)
     {address : Address} {key : Bytes32}
     (hs : address ∈ tx.createdAccounts ∨ allStorage address ∨ slot address key) :
@@ -346,7 +340,7 @@ theorem getTransientStorage_eq (h : AgreesOn account allStorage slot code tx oth
     other.getTransientStorage address key = tx.getTransientStorage address key := by
   simp [getTransientStorage, h.tracker.transientStorage]
 
-/-- At a written, empty or agreed hash, both states fetch the same code. -/
+/-- At a written or agreed hash, or the empty-code hash, both states fetch the same code. -/
 theorem getCode_eq (h : AgreesOn account allStorage slot code tx other) {codeHash : Hash32}
     (hc : codeHash = EMPTY_CODE_HASH ∨ codeHash ∈ tx.codeWrites ∨ code codeHash) :
     other.getCode codeHash = tx.getCode codeHash := by
@@ -363,7 +357,7 @@ theorem getCode_eq (h : AgreesOn account allStorage slot code tx other) {codeHas
         cases hmem
       · simpa [getCode, TransactionState.ofBlock, hempty] using h.parent.code codeHash hc
 
-/-- At an address in `allStorage` or wiped, both states agree on whether storage is empty. -/
+/-- At an address whose whole storage agrees, or that was wiped, storage emptiness agrees. -/
 theorem accountHasStorage_eq (h : AgreesOn account allStorage slot code tx other)
     {address : Address} (he : address ∈ tx.storageClears ∨ allStorage address) :
     other.accountHasStorage address = tx.accountHasStorage address := by
@@ -378,7 +372,9 @@ theorem accountHasStorage_eq (h : AgreesOn account allStorage slot code tx other
 /--
 At a written or agreed address, deployability agrees when a candidate's storage agrees.
 
-When the nonce is nonzero or the code is nonempty, EIP-684 rejects deployment without storage.
+When the nonce is nonzero or the code is nonempty, [EIP-684][eip684] refuses before reading storage.
+
+[eip684]: https://eips.ethereum.org/EIPS/eip-684#specification
 -/
 theorem accountDeployable_eq (h : AgreesOn account allStorage slot code tx other)
     {address : Address} (ha : address ∈ tx.accountWrites ∨ account address)
@@ -414,7 +410,7 @@ theorem recordStorageRead (h : AgreesOn account allStorage slot code tx other)
   obtain ⟨aw, sw, cw, ca, sc, ts, ar, sr⟩ := h.tracker
   exact ⟨aw, sw, cw, ca, sc, ts, ar, by simp [TransactionState.recordStorageRead, sr]⟩
 
-/-- Taking the reads of two agreeing states preserves agreement. -/
+/-- Taking the reads of two states with the same tracker preserves agreement. -/
 theorem withReadsOf {reads reads' : TransactionState}
     (h : AgreesOn account allStorage slot code tx other) (hr : SameTracker reads reads') :
     AgreesOn account allStorage slot code (tx.withReadsOf reads) (other.withReadsOf reads') := by
@@ -599,7 +595,7 @@ theorem setCode (h : AgreesOn account allStorage slot code tx other) (fork : For
       exact ⟨h.parent, aw, sw, by simp [cw], ca, sc, ts, ar, sr⟩
   · split <;> exact ha
 
-/-- Clearing an account while keeping its balance gives the same outcome and agrees. -/
+/-- Clearing an account at a written or agreed address keeps its balance, outcome and agreement. -/
 theorem clearAccountPreservingBalance (h : AgreesOn account allStorage slot code tx other)
     (fork : Fork) {address : Address} (ha : address ∈ tx.accountWrites ∨ account address) :
     AgreesOnExcept account allStorage slot code (tx.clearAccountPreservingBalance fork address)
@@ -617,29 +613,34 @@ theorem restoreTxState {snapshot snapshot' : TransactionState}
   exact ⟨hs.accountWrites, hs.storageWrites, hs.codeWrites, ca, hs.storageClears,
     hs.transientStorage, ar, sr⟩
 
-/-- Folding two agreeing transactions into their blocks preserves agreement for the next run. -/
+/-- Moving two agreeing transactions into their blocks gives agreeing states for the next one.
+
+The new blocks also agree on everything the transaction wrote or wiped. -/
 theorem incorporateTxIntoBlock (h : AgreesOn account allStorage slot code tx other) :
-    AgreesOn account allStorage slot code tx.incorporateTxIntoBlock
-      other.incorporateTxIntoBlock := by
-  have hparent : BlockState.AgreesOn account allStorage slot code
-      tx.incorporateTxIntoBlock.parent other.incorporateTxIntoBlock.parent := by
-    refine ⟨fun a ha => ?_, fun a k he => ?_, fun a k hs => ?_, fun c hc => ?_⟩
-    · change other.incorporateTxIntoBlock.getAccountOptional a =
-        tx.incorporateTxIntoBlock.getAccountOptional a
-      rw [getAccountOptional_incorporateTxIntoBlock, getAccountOptional_incorporateTxIntoBlock]
-      exact h.getAccountOptional_eq (.inr ha)
-    · change other.incorporateTxIntoBlock.getStorage a k =
-        tx.incorporateTxIntoBlock.getStorage a k
-      rw [getStorage_incorporateTxIntoBlock, getStorage_incorporateTxIntoBlock]
-      exact h.getStorage_eq (.inr (.inr (.inl he)))
-    · change other.incorporateTxIntoBlock.getStorage a k =
-        tx.incorporateTxIntoBlock.getStorage a k
-      rw [getStorage_incorporateTxIntoBlock, getStorage_incorporateTxIntoBlock]
-      exact h.getStorage_eq (.inr (.inr (.inr hs)))
-    · change other.incorporateTxIntoBlock.getCode c = tx.incorporateTxIntoBlock.getCode c
-      rw [getCode_incorporateTxIntoBlock, getCode_incorporateTxIntoBlock]
-      exact h.getCode_eq (.inr (.inr hc))
-  exact ⟨hparent, .ofBlock _ _⟩
+    AgreesOn (fun a => a ∈ tx.accountWrites ∨ account a)
+      (fun a => a ∈ tx.storageClears ∨ allStorage a)
+      (fun a k => (tx.storageWrites.slot a k).isSome ∨ a ∈ tx.storageClears ∨
+        allStorage a ∨ slot a k)
+      (fun c => c = EMPTY_CODE_HASH ∨ c ∈ tx.codeWrites ∨ code c)
+      tx.incorporateTxIntoBlock other.incorporateTxIntoBlock := by
+  refine ⟨⟨fun a ha => ?_, fun a k he => ?_, fun a k hs => ?_, fun c hc => ?_⟩, .ofBlock _ _⟩
+  · change other.incorporateTxIntoBlock.getAccountOptional a =
+      tx.incorporateTxIntoBlock.getAccountOptional a
+    rw [getAccountOptional_incorporateTxIntoBlock, getAccountOptional_incorporateTxIntoBlock]
+    exact h.getAccountOptional_eq ha
+  · change other.incorporateTxIntoBlock.getStorage a k =
+      tx.incorporateTxIntoBlock.getStorage a k
+    rw [getStorage_incorporateTxIntoBlock, getStorage_incorporateTxIntoBlock]
+    rcases he with hc | he
+    · exact h.getStorage_eq (.inr (.inl hc))
+    · exact h.getStorage_eq (.inr (.inr (.inl he)))
+  · change other.incorporateTxIntoBlock.getStorage a k =
+      tx.incorporateTxIntoBlock.getStorage a k
+    rw [getStorage_incorporateTxIntoBlock, getStorage_incorporateTxIntoBlock]
+    exact h.getStorage_eq hs
+  · change other.incorporateTxIntoBlock.getCode c = tx.incorporateTxIntoBlock.getCode c
+    rw [getCode_incorporateTxIntoBlock, getCode_incorporateTxIntoBlock]
+    exact h.getCode_eq hc
 
 end AgreesOn
 
@@ -649,7 +650,7 @@ end AgreesOn
 def accessedAccount (endState : TransactionState) (address : Address) : Prop :=
   address ∈ endState.accountReads ∨ address ∈ endState.accountWrites
 
-/-- The accessed addresses that could be deployment candidates in `block` under EIP-684. -/
+/-- The accessed addresses with nonce 0 and no code in the block, so deployment candidates. -/
 def candidateStorage (block : BlockState) (endState : TransactionState)
     (address : Address) : Prop :=
   accessedAccount endState address ∧
@@ -661,21 +662,32 @@ def accessedSlot (endState : TransactionState) (address : Address) (key : Bytes3
   key ∈ endState.storageReads.getD address ∅ ∨
     (endState.storageWrites.slot address key).isSome
 
-/-- The pre-state code hashes of the addresses that a transaction state read or wrote. -/
+/-- The code hashes, before the transaction, of the addresses that a transaction read or wrote. -/
 def accessedCode (block : BlockState) (endState : TransactionState) (codeHash : Hash32) : Prop :=
   ∃ address, accessedAccount endState address ∧
     ((TransactionState.ofBlock block).getAccount address).codeHash = codeHash
 
-/-- Two block states agree on every read and write recorded in `endState`. -/
-abbrev BlockState.AgreesOnTracker (endState : TransactionState) (block other : BlockState) : Prop :=
+/-- Two block states agree on the accounts and slots that a transaction read or wrote.
+
+They also agree on the whole storage of each accessed deployment candidate.
+
+[EIP-7610][eip7610] reads that storage, and the tracker does not record it.
+
+They also agree on the code under the code hash of each accessed address.
+
+A block access list names neither, so they are assumptions beyond it.
+
+[eip7610]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-7610.md#specification -/
+abbrev _root_.EthLib.Execution.State.BlockState.AgreesOnTracker (endState : TransactionState)
+    (block other : BlockState) : Prop :=
   BlockState.AgreesOn
-    (accessedAccount endState)
-    (candidateStorage block endState)
-    (accessedSlot endState)
-    (accessedCode block endState)
+    (TransactionState.accessedAccount endState)
+    (TransactionState.candidateStorage block endState)
+    (TransactionState.accessedSlot endState)
+    (TransactionState.accessedCode block endState)
     block other
 
-/-- Starting from two block states that agree on `endState` gives agreeing transaction states. -/
+/-- Two block states that agree on a transaction's accesses give agreeing fresh states. -/
 theorem AgreesOn.ofTracker {block other : BlockState} {endState : TransactionState}
     (h : BlockState.AgreesOnTracker endState block other) :
     AgreesOn
@@ -689,7 +701,7 @@ theorem AgreesOn.ofTracker {block other : BlockState} {endState : TransactionSta
 /-! ## Satisfiability witness -/
 
 /-- Two distinct block states can agree on every tracker predicate while differing outside them. -/
-theorem exists_agreesOnTracker_of_ne :
+theorem exists_agreesOnTracker_ne :
     ∃ (address candidate unread : Address) (key unreadKey : Bytes32) (codeHash : Hash32)
       (endState : TransactionState) (block other : BlockState),
       block ≠ other ∧
