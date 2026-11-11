@@ -661,7 +661,11 @@ The Python tests check seven test cases of the NIST CAVP file `gcmtestvectors.zi
 ### X25519 and ChaCha20-Poly1305
 
 X25519 has no theorem: only the Python tests check it.
-The ChaCha20-Poly1305 proofs cover output length, counter exhaustion and rejection of a wrong tag (`Proofs/ChaCha20Poly1305.lean`).
+The ChaCha20-Poly1305 proofs cover output length, counter exhaustion, rejection of a wrong tag and the round trip (`Proofs/ChaCha20Poly1305.lean`).
+`crypt_crypt` proves that the cipher, run twice under one key, counter and nonce, gives back its input.
+`decrypt_encrypt` proves that decryption of an honest ciphertext and tag returns the plaintext.
+`tag_eq_of_decrypt_eq_ok` proves that no other tag passes for that ciphertext.
+These are statements about the definitions alone, not about their security.
 No theorem relates ChaCha20-Poly1305 to an independent model of RFC 8439.
 The Python tests compare the bindings with the RFC 7748 and RFC 8439 vectors.
 The million-iteration X25519 vector requires `ETHLIB_SLOW_VECTORS=1`.
@@ -691,6 +695,8 @@ They must discard handshake state after an error.
 `Jwt.check_build_of_size` (`Engine/Proofs/Jwt.lean`) proves that a token built with a 32-byte secret passes with that secret at clocks within 60 seconds of its issued-at time.
 The builder validates the JSON it generates, and `Jwt.build_eq_ok` proves that this validation never fails.
 `Jwt.authenticate_eq_error_of_tag_ne` proves that a token whose tag differs from the HS256 tag of its parts is refused before any JSON is read.
+`Jwt.compact_signature_of_check` proves that an accepted token is the compact form of its parts with their HS256 tag under the secret.
+So the clock check accepts no other tag part for those parts.
 Keeping a party without the secret away from the reader also assumes HMAC unforgeability, and a captured token can be replayed within its 60 seconds.
 `Jwt.check_eq_false_of_algorithm_ne` proves rejection when the decoded algorithm differs from HS256.
 The total JSON reader has no separate theorem of agreement with RFC 8259.
@@ -1583,9 +1589,9 @@ The deleted balances are read after the gas is settled and before any account is
 From Glamsterdam, `TransactionBurns.eq_zero_of_glamsterdam` proves that both amounts are 0.
 `processTransaction_supply_eq` makes the same two assumptions as `processTransaction_supply_le`.
 
-`Execution/Proofs/Blocks/Supply.lean` extends the bound to a whole block.
+`Execution/Proofs/Blocks/Burn.lean` gives the exact change of the supply across a whole block, and `Execution/Proofs/Blocks/Supply.lean` derives the bound and the Glamsterdam equality from it.
 The block creates the wei of its withdrawals from Shapella, by EIP-4895, and of its rewards before Paris.
-The DAO transfer only moves wei, and a system call keeps or lowers the supply, as a message does.
+The DAO transfer only moves wei.
 `stateTransition_supply_le` proves that the supply after the block plus the burned fees is at most the supply before plus the created wei, at every fork that the transition runs; it fails from Hegotá.
 `stateTransition_supply_of_glamsterdam` proves the equality from Glamsterdam.
 `stateTransition_supply_le_of_lt_glamsterdam` writes the burned fees from the header before Glamsterdam: the gas used and the blob gas used, each at its base fee.
@@ -1596,8 +1602,9 @@ It adds the created wei and subtracts the burned fees, the surviving SELFDESTRUC
 `BodyBurns` certifies the system calls before the transactions, each transaction in order, and the calls that read requests.
 The system calls also carry burn logs, since the theorem assumes no particular code at their addresses.
 `BlockLosses.transactions` retains each transaction's burn log and deleted balances.
-`BodyBurns.total_eq` shows that two certificates of the same body give the same total of losses, when the block has at most two ommers before Paris, as its checks ensure.
+`BodyBurns.total_eq` shows that two certificates of the same body give the same total of losses, when the block has at most two ommers before Paris, as its checks enforce.
 So the run fixes that total.
+From Glamsterdam, `BodyBurns.total_eq_zero_of_glamsterdam` proves that the total of losses is 0.
 
 ### The authorizations of EIP-7702
 
@@ -1766,6 +1773,14 @@ The beacon chain weighs the votes of each epoch at the effective balances of tha
 Top-ups, the balance that a consolidation moves to its target, rewards and penalties all change those balances during the window.
 The theorems weigh every vote at the balances of the checkpoint, so they reach a chain only once those changes are bounded, and no theorem bounds them yet.
 
+`Consensus/Proofs/ChurnReservations.lean` bounds the balance that the churn updates of exits and consolidations reserve, from Electra, when they run in turn on one state.
+These updates keep the slot and the validators, so the churn stays fixed.
+Their sum fits the churn left at the start plus one full churn for each later epoch of the queue.
+The bounds also hold for an idle queue, whose earliest open epoch is before the first permitted epoch.
+The exact equalities require the first permitted epoch to be no later than the earliest open epoch at the start.
+In a block, other writes to the registry and to the pending queues come between these updates, and no theorem yet covers that interleaving.
+Nor does any theorem yet bound how the churn changes between slots, or derive the change of the active set.
+
 From Phase 0 to Deneb, `accountable_safety_of_weakSubjectivityPeriod_of_lt_electra` covers the period in part.
 The rule counts `N` active validators of average balance `t` ether, rounded down, a largest effective balance `T` ether, a churn of `delta` validators and `Delta` top-ups per epoch.
 The theorem assumes each justified set gains and loses at most `delta` validators for each of the `n` epochs of churn, with `delta` the churn at the checkpoint.
@@ -1789,6 +1804,8 @@ An earlier form of the rule estimated that weight as an average per slot, which 
 The pinned fast confirmation vectors of consensus-specs `v1.7.0-beta.4` were generated with that estimate.
 In 24 of them, five cases at several forks, the rule now confirms another block, and `tests/parity/disagreements.toml` lists them as expected failures.
 The vendored fast confirmation cases in `tests/consensus/fork_choice` still pass.
+From Gloas the discount for empty slots also counts the votes for the pending node of the parent, which the rule of consensus-specs `v1.7.0-beta.4` leaves out.
+No pinned vector reaches that case, so review alone checks it until the vectors move to a release with it.
 
 `stake_le_computeCommitteeWeightBetweenSlots` (`Consensus/Proofs/ForkChoice/FastConfirmationIndicators.lean`) shows that the weight covers the stake of the active members of the committees.
 `stake_le_computeCommitteeWeightBetweenSlots_of_covered` shows that the weight of a range with a whole epoch covers the stake of every validator active in the source of balances.
@@ -1826,6 +1843,47 @@ Like the paper, the theorem takes a static set of validators, Assumption 1.
 The honest support of the target of the current epoch takes the total active balance less the weight of the committees so far as the weight still to vote.
 No theorem proves that, which rests on the shuffling of the head and its pulled-up state agreeing on the active validators of the epoch.
 Each member of the committees must also be in the source of balances, or the rule fails; no theorem bounds the epochs between that source and the range.
+
+`Consensus/Proofs/ForkChoice/FastConfirmationConfirmedRoot.lean` states where the confirmed block of a slot comes from.
+`Store.onFastConfirmation_confirmedRoot` shows that the rule starts from the block stored before, the finalized block or the observed justified block.
+It keeps the block stored before only when that block is in the chain of the head, and at the first slot of an epoch only when `isConfirmedChainSafe` accepts it.
+It takes the observed justified block only at the first slot of an epoch.
+That block must then be in the epoch before the current one, and its checkpoint must be the unrealized justification of the head.
+The rule stores that block, or a later root of the walk of `getAncestorRoots` from that block to the head.
+That root and each root before it in the walk then pass `isOneConfirmed`, with the votes of the state of the observed justified checkpoint.
+The rule makes two walks, and `Store.getAncestorRoots_of_append` in `Consensus/Proofs/ForkChoice/AncestorRoots.lean` shows that the second walk is the part of the first walk after the root where the first walk stopped.
+No theorem yet shows that the roots of a walk are in the chain of the head.
+
+`foldlM_onFastConfirmation_confirmedRoot` turns those four cases into an induction along a list of stores, one fast confirmation for each.
+A property of the confirmed block holds at the end when the three starts have it and a one-confirmed walk keeps it.
+
+These theorems prove no safety: no theorem yet shows that a start is safe, or that a one-confirmed walk keeps a block in the chain of every honest head.
+They do not record every check of the rule.
+For the start they leave out the other checks that compare the epochs and the slots of the blocks.
+For the walks they leave out the checks on the epochs of the start and of the walked blocks.
+They also leave out the check that the head of the slot before holds each block of the first walk.
+They leave out the checks that a voting source or an unrealized justification is recent.
+They also leave out `willNoConflictingCheckpointBeJustified` and `willCurrentTargetBeJustified`, which are about the justification of the target of the current epoch.
+No theorem yet relates the list of stores to the stores of an honest validator in an execution.
+
+### Balance-weighted draws
+
+`Consensus/Proofs/Accessors/DrawProbability.lean` samples one digest uniformly from the 32-byte values.
+`evalDistEq_uniformSample_vector_map_getElem_injective`, in `Cryptography/Proofs/EvalDistEq.lean`, proves that distinct positions of a uniform vector give a uniform tuple of values.
+`prEvent_drawAccepts_uniform_of_before_pectra` and `prEvent_drawAccepts_uniform_of_pectra` give the exact acceptance probability of the checked draw.
+It is `(e * (2^b - 1) / M + 1) / 2^b`, with integer division inside the numerator.
+Here `e` is the balance, `M` is the largest effective balance of the preset, and `b` is 8 before Electra or 16 from Electra.
+They assume `0 < M`, `e <= M` and `M * (2^b - 1) < 2^64`.
+These theorems do not model SHA-256 or a sequence of draws.
+
+`Consensus/Proofs/Accessors/DrawRandomOracle.lean` exposes the hash call of `proposerDraw` as `queryProposerDraw`.
+Answering it with SHA-256 gives `proposerDraw`.
+With the cached random oracle, a draw whose hashed input is absent from the starting cache accepts with the probability above for a uniform digest.
+These probabilities hold in the random-oracle model only; no theorem bounds the draw when SHA-256 answers.
+The seed is fixed, and other inputs may already be cached.
+For two distinct inputs absent from that cache, `prEvent_queryProposerDraw_pair_of_fresh` gives the product of their acceptance probabilities for uniform digests.
+No theorem yet gives that product for draws that read different bytes of one digest, or for the whole search.
+Seed derivation, including a seed chosen after the oracle answers are seen, is not part of this model.
 
 ### Honest validator duties
 
@@ -1937,6 +1995,7 @@ It assumes a signature that passes the block signature check.
 `getExecutionRequests_eq_ok_iff` shows that the requests read from a list are exactly the requests that give that list.
 It rests on the canonical SSZ decoder and on the empty bytes being the only encoding of an empty list.
 `signedHeader_eq_ok_iff` shows that the signed header of a block carries the root of its body, and `getValidatorsCustodyRequirement_bounds` that the custody requirement stays between its two bounds.
+`totalEffectiveBalance_eq_ok_iff` shows that the balance behind that requirement is the sum of the effective balances of the validators, with a repeated index counted again.
 From Altair, `processSyncCommitteeContributions_spec` states the bits of the sync aggregate of a block.
 They are exactly the bits that its contributions set, each at the seat of its subcommittee.
 It also shows that the contributions name distinct subcommittees below the number of subnets.
@@ -2053,7 +2112,22 @@ So a slashable pair of signed messages needs a collision of the signing root, an
 `isSlashableWith_eq_false_of_signAttestations` shows that each signed vote is not slashable with a vote of the starting file, as a record sees it.
 A record holds the epochs of a vote and maybe its signing root, not its data.
 So that comparison reads a double vote through the signing root, and counts a record without a root as a different vote.
-No theorem says what conditions 2, 4 and 5 guarantee across two imported files, which the EIP leaves to the signer.
+
+A file may also keep only the latest messages of a key, as the [minimal strategy](https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-3076.md#supporting-different-strategies) of the EIP does.
+`lt_slot_of_signBlocks` shows that if each block of the file is after a slot, so is each block signed from it.
+`processProposerSlashing_ne_ok_of_signBlocks` concludes that no valid proposer slashing pairs such an older block with a signed block, since both headers of one have the same slot.
+`isSlashableAttestationData_eq_false_of_signAttestations` shows that no signed vote is slashable with a vote older than each vote of the file.
+An older vote has a source at most, and a target before, those of each vote of the file.
+Each of these theorems needs the file to hold one or more messages of its kind for the key.
+A vote with the target of a kept vote is not older, so the theorem on votes says nothing about it.
+The signer of these theorems records every message it signs, so a signer that prunes as it goes is not covered.
+`mem_blocksOf` and `mem_attestationsOf` show that the messages of a key are those of its own entries.
+The proofs read only conditions 2, 4 and 5, through `lt_slot_of_checkBlockSlot`, `le_sourceEpoch_of_checkSourceEpoch` and `lt_targetEpoch_of_checkTargetEpoch`.
+No theorem says what conditions 2, 4 and 5 guarantee across two imported files.
+The record merges both files, so its checks use the least slot and epochs over both, not those of the second file.
+So a message in a gap between the two passes, though the EIP [says](https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-3076.md#advice-for-complete-databases) that signing it violates conditions 2, 4 and 5.
+A message that the key signed in such a gap, and that neither file keeps, is not older than all the kept ones, so these theorems do not cover it.
+
 `readUInt64_uint64Json` and `readBytes_bytesJson` show that each integer and each byte string of a file reads back as written.
 `ofJson_toJson` shows that a whole file reads back as itself from the document that `toJson` writes, whatever its records.
 No theorem says what `ofJson` does on a document that another client wrote.
@@ -2192,9 +2266,25 @@ Like the state theorems, these take the lawful type of the body.
 So `isValidLightClientHeader_execution_eq` takes the binding to the fields, for a body of the fork of the header, at a slot from Capella, and from Deneb for a header from Deneb.
 The execution header of the light client header is then the header of the payload of the body, field by field.
 Otherwise a search over the two branch climbs, or one over the hash inputs of the two header roots, names a SHA-256 collision.
+`isValidLightClientHeader_execution_binding` states this step once, for two payload headers of one fork whose roots are the execution root and the root of the payload header of the body.
 From Deneb, `isValidLightClientHeader_blobGas` applies this to the blob gas used and the excess blob gas, at a slot from Deneb.
 The schedule must start Capella no later than Deneb.
 `isValidLightClientHeader_blobGas_zero` shows that a valid header of an earlier slot has zero for both.
+
+A store of a later fork upgrades a header of an earlier fork before it checks it.
+So the fork of a header can be later than the fork of its block.
+`isValidLightClientHeader_execution_eq_upgrade_capella` takes a valid header from Deneb to Fulu at a slot from Capella and before Deneb, and a Capella body.
+The execution header is then the upgrade of the payload header of the body.
+So it has the fields of that payload header, and zero for both blob gas fields.
+`isValidLightClientHeader_execution_eq_upgrade` takes a valid header from Deneb to Fulu at a slot from Capella and from Deneb, and a body of any fork from Deneb to Fulu.
+The execution header is again the upgrade of the payload header of the body, which keeps every field.
+`isValidLightClientHeader_blobGas_upgrade` applies this to the two blob gas fields, at a slot from Deneb.
+Its schedule must also start Capella no later than Deneb.
+`LightClientHeader.isValidLightClientHeader_upgrade_execution` takes the header and the body of `isValidLightClientHeader_execution_eq`, and the upgrade of the header to a fork before Gloas.
+The upgraded header has the upgrade of the payload header of the body, by `LightClientHeader.upgrade_execution`.
+In each of these theorems, the alternative is a SHA-256 collision that a search names.
+The search is over the two branch climbs, or over the hash inputs of two execution header roots.
+
 From Gloas, `isValidLightClientHeader_parentBlockHash` binds the block hash of a header at a slot from Gloas to the parent block hash of the bid of a Gloas body.
 `isValidLightClientHeader_executionBlockHash` binds it, for an earlier slot from Capella, to the block hash of the payload of a body from Capella to Fulu that is from Deneb exactly when the slot is.
 The headers that the client checks are valid: `initializeLightClientStore_header_valid`, `validateLightClientUpdate_attestedHeader_valid`, and `validateLightClientUpdate_finalizedHeader_valid` after the genesis slot.
@@ -2359,6 +2449,10 @@ They need a buffer of roots of three epochs, which both presets have.
 The weights of a checkpoint then hold the effective balances of each state before a slot that ends its epoch or the next one, on a run between genesis and the last state, when that state records the root of the checkpoint for that epoch.
 That genesis state exists only before Altair, so a chain whose genesis is later is out of scope.
 
+Adding votes and allowed weights keeps slack links, justification and finalization (`Consensus/Proofs/Models/Ffg/Monotonicity.lean`).
+`FfgFinalityMonotonicity.lean` puts the finalized checkpoint of a chain in such larger sets, with the same validator sets and second sets.
+This does not identify validator indices or establish root ancestry across two chains.
+
 ### Engine API
 
 The Engine API is the interface through which the consensus layer drives the execution layer.
@@ -2509,6 +2603,14 @@ A proposer can earn a share of the base reward of each signer that it included.
 So the bound on its reward is the bound on base rewards at the whole budget, as the effective balances of its signers sum to at most that.
 On mainnet and minimal these bounds hold for a budget of `2^57` Gwei and `2^21` epochs.
 The bound on the current epoch multiplies it by the largest cap at any fork, 2048 ETH, so it is conservative before Altair, where the cap is 32 ETH.
+
+Before Electra, registry updates need a ceiling for the first activation epoch and every exit epoch other than `FAR_FUTURE_EPOCH`.
+The ceiling plus the registry size and the withdrawability delay must be below `2^64`.
+Each ejection raises the ceiling by at most one, and activation leaves the exit epochs unchanged.
+
+From Electra, pending consolidations succeed when their source and target indices are in the registry, balances match the registry, and the sum of balances is below `2^64`.
+The current epoch plus one must fit in 64 bits.
+The source is debited before the target is credited, so the budget also covers equal source and target indices.
 
 The builder payments of Gloas carry four hypotheses and one restriction.
 `chainSteps_paysQuorum` proves that along a chain through the last slot of an epoch, each payment of the previous epoch that reaches its quorum is paid exactly once.

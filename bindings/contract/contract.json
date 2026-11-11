@@ -7360,7 +7360,8 @@
       {"constructor": "frame", "code": 5},
       {"constructor": "lengthMismatch", "code": 6},
       {"constructor": "missingCode", "code": 7},
-      {"constructor": "contextTruncated", "code": 8}]}],
+      {"constructor": "contextTruncated", "code": 8},
+      {"constructor": "trailingBytes", "code": 10}]}],
    "error_class": "ReqRespError",
    "docstring":
    "The most compressed bytes a reader accepts after a declared length `n`: `32 + n + n / 6`.\n\nIt is the worst-case size of a Snappy block of `n` bytes, from `snappy.cc` of `google/snappy`:\n<https://github.com/google/snappy/blob/32ded457c0b1fe78ceb8397632c416568d6714a0/snappy.cc#L218>\n\nThe sum is a 64-bit integer, so a value of 2^64 or more is an error."},
@@ -7380,10 +7381,11 @@
       {"constructor": "frame", "code": 5},
       {"constructor": "lengthMismatch", "code": 6},
       {"constructor": "missingCode", "code": 7},
-      {"constructor": "contextTruncated", "code": 8}]}],
+      {"constructor": "contextTruncated", "code": 8},
+      {"constructor": "trailingBytes", "code": 10}]}],
    "error_class": "ReqRespError",
    "docstring":
-   "The SSZ bytes of a payload, given the smallest and the largest encoding of its SSZ type.\n\nThe declared length must be at most the smaller of the largest encoding and the payload cap.\n\nIt must also be at least the smallest encoding, since a shorter payload cannot be of that type.\n\nThe length prefix must be the shortest varint of its value.\n\nThe specification only recommends this; requiring it gives each length exactly one prefix.\n\nAt most `32 + n + n / 6` bytes may follow a declared length `n`.\n\nThe stream must decode to exactly `n` bytes, so a stream that ends early or runs on is rejected.\n\nThe caller deserializes the bytes, since it knows their SSZ type."},
+   "The SSZ bytes of a payload, given the smallest and the largest encoding of its SSZ type.\n\nThe declared length must be at most the smaller of the largest encoding and the payload cap.\n\nIt must also be at least the smallest encoding, since a shorter payload cannot be of that type.\n\nThe length prefix must be the shortest varint of its value.\n\nThe specification only recommends this; requiring it gives each length exactly one prefix.\n\nAt most `32 + n + n / 6` bytes may follow a declared length `n`.\n\nThe stream is read until it holds `n` bytes, and it must then hold exactly `n` bytes.\n\nSo a stream that ends early, or whose last chunk runs past `n`, is rejected.\n\nAny byte after the chunk that completes `n` bytes is rejected, even a chunk that adds no bytes.\n\nThe caller deserializes the bytes, since it knows their SSZ type."},
   {"summary":
    "One response chunk, given the number of context bytes that the method sends.",
    "signature":
@@ -7401,7 +7403,8 @@
       {"constructor": "frame", "code": 5},
       {"constructor": "lengthMismatch", "code": 6},
       {"constructor": "missingCode", "code": 7},
-      {"constructor": "contextTruncated", "code": 8}]}],
+      {"constructor": "contextTruncated", "code": 8},
+      {"constructor": "trailingBytes", "code": 10}]}],
    "error_class": "ReqRespError",
    "docstring":
    "One response chunk, given the number of context bytes that the method sends.\n\nA success carries that many context bytes, and its payload has the bounds of the message type.\n\nAn error carries no context bytes, and its payload is an error message of at most 256 bytes."},

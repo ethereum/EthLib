@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Proofs.Hash.Hkdf
 public import EthLib.Networking.Noise
+public import EthLib.Cryptography.Proofs.ChaCha20Poly1305
 
 /-!
 # Proofs: Noise XX
@@ -19,6 +20,18 @@ Distinct kinds of handshake error have distinct codes.
 Each message keeps the role, advances the step by one, and comes at the step XX gives that role.
 
 The pattern is [Noise revision 34, §7.5](https://noiseprotocol.org/noise_rev34.pdf).
+
+The cipher state is [Noise revision 34, §5.1](https://noiseprotocol.org/noise_rev34.pdf).
+
+A keyed cipher state advances its nonce by one for each message it encrypts or decrypts.
+
+Without a key, both directions return their input and leave the cipher state as it was.
+
+Noise §5.1 reserves the greatest nonce, so both directions refuse it.
+
+From one state, decrypting what encrypting wrote returns the plaintext and the same next state.
+
+Both sides hash the same ciphertext, so their transcripts stay in step.
 -/
 
 @[expose] public section
@@ -26,6 +39,7 @@ The pattern is [Noise revision 34, §7.5](https://noiseprotocol.org/noise_rev34.
 namespace EthLib.Networking.Noise
 
 open EthLib.Base
+open EthLib.Cryptography
 open EthLib.Cryptography.Hash
 
 /-- The two outputs are the first 64 bytes of HKDF, with the chaining key as salt and empty info. -/
@@ -95,5 +109,184 @@ theorem readMessage_ok {s next : HandshakeState} {message payload : ByteArray}
   next _ _ hi hs => (repeat' split at hv) <;> cases hv <;> exact ⟨rfl, rfl, .inr (.inl ⟨hi, hs⟩)⟩
   next _ _ hi hs => (repeat' split at hv) <;> cases hv <;> exact ⟨rfl, rfl, .inr (.inr ⟨hi, hs⟩)⟩
   next => cases hv
+
+private theorem size_append_tag (c : ByteArray) (t : ChaCha20Poly1305.Tag) :
+    (c ++ packBytes t).size = c.size + 16 := by
+  rw [ByteArray.size_append, size_packBytes]
+
+private theorem extract_append_tag (c : ByteArray) (t : ChaCha20Poly1305.Tag) :
+    (c ++ packBytes t).extract 0 c.size = c :=
+  ByteArray.extract_append_eq_left rfl
+
+private theorem readBytes_append_tag (c : ByteArray) (t : ChaCha20Poly1305.Tag)
+    (h : c.size + 16 ≤ (c ++ packBytes t).size) :
+    readBytes (c ++ packBytes t) c.size 16 h = t := by
+  apply Vector.ext
+  intro i hi
+  simp only [readBytes, Vector.getElem_ofFn, ByteArray.data_append]
+  rw [Array.getElem_append_right (by simp)]
+  simp [packBytes]
+
+/-! ## The cipher state -/
+
+/-- A key is installed with its nonce at zero. -/
+theorem nonce_initializeKey (key : Option ChaCha20Poly1305.Key) :
+    (initializeKey key).nonce = 0 := rfl
+
+/-- Under no key, a plaintext within 65535 bytes comes back unchanged, with the same state. -/
+theorem encryptWithAd_eq_ok_of_key_eq_none {s : CipherState} {aad plaintext : ByteArray}
+    (hk : s.key = none) (hs : ¬plaintext.size > 65535) :
+    encryptWithAd s aad plaintext = .ok (s, plaintext) := by
+  simp [encryptWithAd, hk, hs, pure, Except.pure]
+
+/-- Under no key, a plaintext above 65535 bytes, the limit of Noise §3, is refused. -/
+theorem encryptWithAd_eq_error_of_key_eq_none_of_size {s : CipherState}
+    {aad plaintext : ByteArray} (hk : s.key = none) (hs : plaintext.size > 65535) :
+    encryptWithAd s aad plaintext = .error .messageTooLong := by
+  simp [encryptWithAd, hk, hs, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
+
+/-- Under a key, a plaintext whose message with its 16-byte tag exceeds 65535 bytes is refused. -/
+theorem encryptWithAd_eq_error_of_size {s : CipherState} {aad plaintext : ByteArray}
+    {key : ChaCha20Poly1305.Key} (hk : s.key = some key) (hs : plaintext.size + 16 > 65535) :
+    encryptWithAd s aad plaintext = .error .messageTooLong := by
+  simp [encryptWithAd, hk, hs, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
+
+/-- The greatest nonce never encrypts, as Noise revision 34, §5.1 reserves it for other use. -/
+theorem encryptWithAd_eq_error_of_nonce_max {s : CipherState} {aad plaintext : ByteArray}
+    {key : ChaCha20Poly1305.Key} (hk : s.key = some key)
+    (hs : ¬plaintext.size + 16 > 65535) (hn : s.nonce = 2 ^ 64 - 1) :
+    encryptWithAd s aad plaintext = .error .nonceExhausted := by
+  simp [encryptWithAd, hk, hs, hn, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
+
+/-- Under a key, an error of the AEAD cipher becomes the error of encrypting.
+
+For a message within 65535 bytes, the cipher refuses only associated data of 2^64 bytes or more. -/
+theorem encryptWithAd_eq_error_of_encrypt {s : CipherState} {aad plaintext : ByteArray}
+    {key : ChaCha20Poly1305.Key} {error : ChaCha20Poly1305.ChaCha20Poly1305Error}
+    (hk : s.key = some key) (hs : ¬plaintext.size + 16 > 65535) (hn : ¬s.nonce = 2 ^ 64 - 1)
+    (he : ChaCha20Poly1305.encrypt key (cipherNonce s.nonce) aad plaintext = .error error) :
+    encryptWithAd s aad plaintext = .error (.cipher error) := by
+  simp [encryptWithAd, hk, hs, hn, he, Except.mapError, Functor.map, Except.map]
+
+/-- Encrypting appends the tag to the ciphertext, keeps the key and advances the nonce by one. -/
+theorem encryptWithAd_eq_ok_of_encrypt {s : CipherState} {aad plaintext ciphertext : ByteArray}
+    {key : ChaCha20Poly1305.Key} {tag : ChaCha20Poly1305.Tag} (hk : s.key = some key)
+    (hs : ¬plaintext.size + 16 > 65535) (hn : ¬s.nonce = 2 ^ 64 - 1)
+    (he : ChaCha20Poly1305.encrypt key (cipherNonce s.nonce) aad plaintext =
+      .ok (ciphertext, tag)) :
+    encryptWithAd s aad plaintext =
+      .ok (⟨some key, s.nonce + 1⟩, ciphertext ++ packBytes tag) := by
+  simp [encryptWithAd, hk, hs, hn, he, Except.mapError, Functor.map, Except.map]
+
+/-- A ciphertext above 65535 bytes is refused, with or without a key. -/
+theorem decryptWithAd_eq_error_of_size {s : CipherState} {aad ciphertext : ByteArray}
+    (hs : ciphertext.size > 65535) :
+    decryptWithAd s aad ciphertext = .error .messageTooLong := by
+  simp [decryptWithAd, hs, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
+
+/-- Under no key, a ciphertext within 65535 bytes comes back unchanged, with the same state. -/
+theorem decryptWithAd_eq_ok_of_key_eq_none {s : CipherState} {aad ciphertext : ByteArray}
+    (hk : s.key = none) (hs : ¬ciphertext.size > 65535) :
+    decryptWithAd s aad ciphertext = .ok (s, ciphertext) := by
+  simp [decryptWithAd, hk, hs, pure, Except.pure]
+
+/-- The greatest nonce never decrypts, as Noise revision 34, §5.1 reserves it for other use. -/
+theorem decryptWithAd_eq_error_of_nonce_max {s : CipherState} {aad ciphertext : ByteArray}
+    {key : ChaCha20Poly1305.Key} (hk : s.key = some key) (hs : ¬ciphertext.size > 65535)
+    (hn : s.nonce = 2 ^ 64 - 1) :
+    decryptWithAd s aad ciphertext = .error .nonceExhausted := by
+  simp [decryptWithAd, hk, hs, hn, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
+
+/-- A message too short to hold a tag is refused as truncated. -/
+theorem decryptWithAd_eq_error_of_lt {s : CipherState} {aad ciphertext : ByteArray}
+    {key : ChaCha20Poly1305.Key} (hk : s.key = some key) (hs : ¬ciphertext.size > 65535)
+    (hn : ¬s.nonce = 2 ^ 64 - 1) (h16 : ciphertext.size < 16) :
+    decryptWithAd s aad ciphertext = .error .truncated := by
+  simp [decryptWithAd, hk, hs, hn, Nat.not_le.mpr h16, throw, throwThe, MonadExceptOf.throw]
+
+/-- An accepted ciphertext and tag decrypt to the plaintext, and the nonce advances by one. -/
+theorem decryptWithAd_eq_ok_of_decrypt {s : CipherState} {aad ciphertext plaintext : ByteArray}
+    {key : ChaCha20Poly1305.Key} {tag : ChaCha20Poly1305.Tag} (hk : s.key = some key)
+    (hs : ¬(ciphertext ++ packBytes tag).size > 65535) (hn : ¬s.nonce = 2 ^ 64 - 1)
+    (hd : ChaCha20Poly1305.decrypt key (cipherNonce s.nonce) aad ciphertext tag = .ok plaintext) :
+    decryptWithAd s aad (ciphertext ++ packBytes tag) =
+      .ok (⟨some key, s.nonce + 1⟩, plaintext) := by
+  have h16 : 16 ≤ (ciphertext ++ packBytes tag).size := by rw [size_append_tag]; omega
+  have hcut : (ciphertext ++ packBytes tag).size - 16 = ciphertext.size := by
+    rw [size_append_tag]; omega
+  simp only [decryptWithAd, hs, ↓reduceIte, hk, hn, h16, hcut, readBytes_append_tag,
+    extract_append_tag, hd, Except.mapError, bind, Except.bind,
+    pure, Except.pure, throw, throwThe, MonadExceptOf.throw]
+  simp
+
+/-- A ciphertext and tag that the cipher refuses are refused with its error, Noise §5.1.
+
+The refusal returns no cipher state, so the nonce of the caller does not advance. -/
+theorem decryptWithAd_eq_error_of_decrypt {s : CipherState} {aad ciphertext : ByteArray}
+    {key : ChaCha20Poly1305.Key} {tag : ChaCha20Poly1305.Tag}
+    {error : ChaCha20Poly1305.ChaCha20Poly1305Error} (hk : s.key = some key)
+    (hs : ¬(ciphertext ++ packBytes tag).size > 65535) (hn : ¬s.nonce = 2 ^ 64 - 1)
+    (hd : ChaCha20Poly1305.decrypt key (cipherNonce s.nonce) aad ciphertext tag = .error error) :
+    decryptWithAd s aad (ciphertext ++ packBytes tag) = .error (.cipher error) := by
+  have h16 : 16 ≤ (ciphertext ++ packBytes tag).size := by rw [size_append_tag]; omega
+  have hcut : (ciphertext ++ packBytes tag).size - 16 = ciphertext.size := by
+    rw [size_append_tag]; omega
+  simp only [decryptWithAd, hs, ↓reduceIte, hk, hn, h16, hcut, readBytes_append_tag,
+    extract_append_tag, hd, Except.mapError, bind, Except.bind,
+    throw, throwThe, MonadExceptOf.throw]
+  simp
+
+/-! ## Decrypting undoes encrypting -/
+
+/-- Decrypting undoes encrypting, and reaches the cipher state that encrypting reached. -/
+theorem decryptWithAd_encryptWithAd {s next : CipherState} {aad plaintext message : ByteArray}
+    (h : encryptWithAd s aad plaintext = .ok (next, message)) :
+    decryptWithAd s aad message = .ok (next, plaintext) := by
+  cases hk : s.key with
+  | none =>
+    have hs : ¬plaintext.size > 65535 := by
+      intro hc
+      rw [encryptWithAd_eq_error_of_key_eq_none_of_size hk hc] at h
+      cases h
+    rw [encryptWithAd_eq_ok_of_key_eq_none hk hs] at h
+    cases h
+    exact decryptWithAd_eq_ok_of_key_eq_none hk hs
+  | some key =>
+    have hs : ¬plaintext.size + 16 > 65535 := by
+      intro hc
+      rw [encryptWithAd_eq_error_of_size hk hc] at h
+      cases h
+    have hn : ¬s.nonce = 2 ^ 64 - 1 := by
+      intro hc
+      rw [encryptWithAd_eq_error_of_nonce_max hk hs hc] at h
+      cases h
+    cases he : ChaCha20Poly1305.encrypt key (cipherNonce s.nonce) aad plaintext with
+    | error e =>
+      rw [encryptWithAd_eq_error_of_encrypt hk hs hn he] at h
+      cases h
+    | ok r =>
+      obtain ⟨ciphertext, tag⟩ := r
+      rw [encryptWithAd_eq_ok_of_encrypt hk hs hn he] at h
+      cases h
+      exact decryptWithAd_eq_ok_of_decrypt hk
+        (by rw [size_append_tag, ChaCha20Poly1305.encrypt_size _ _ _ _ _ _ he]; omega) hn
+        (ChaCha20Poly1305.decrypt_encrypt key (cipherNonce s.nonce) aad plaintext ciphertext tag he)
+
+/-- Decrypting a handshake message undoes encrypting it, and reaches the same symmetric state.
+
+Both sides hash the same ciphertext into the transcript, so their transcripts stay in step. -/
+theorem decryptAndHash_encryptAndHash {s next : SymmetricState} {plaintext message : ByteArray}
+    (h : encryptAndHash s plaintext = .ok (next, message)) :
+    decryptAndHash s message = .ok (next, plaintext) := by
+  unfold encryptAndHash at h
+  unfold decryptAndHash
+  cases hc : encryptWithAd s.cipher (packBytes s.hash.bytes) plaintext with
+  | error e => simp [hc, bind, Except.bind] at h
+  | ok r =>
+    obtain ⟨cipher, ciphertext⟩ := r
+    simp only [hc, bind, Except.bind, pure, Except.pure] at h
+    cases h
+    rw [decryptWithAd_encryptWithAd hc]
+    rfl
 
 end EthLib.Networking.Noise

@@ -34,7 +34,7 @@ Its state is the snapshot restored, the state it was given, or that state with t
 
 namespace EthLib.Execution.Evm
 
-open EthLib.Base (Fork bind_eq_error)
+open EthLib.Base (Address Bytes32 Fork Hash32 bind_eq_error)
 open EthLib.Execution.State (TransactionState)
 
 variable {fork : Fork} {Meter : Type} [GasMeter Meter]
@@ -51,6 +51,62 @@ structure SameWrites (tx snapshot : TransactionState) : Prop where
 theorem sameWrites_restoreTxState (tx snapshot : TransactionState) :
     SameWrites (tx.restoreTxState snapshot) snapshot :=
   ⟨rfl, rfl, rfl, rfl, rfl⟩
+
+/-- Same writes are reflexive. -/
+theorem SameWrites.refl (tx : TransactionState) : SameWrites tx tx :=
+  ⟨rfl, rfl, rfl, rfl, rfl⟩
+
+/-- Same writes are symmetric. -/
+theorem SameWrites.symm {a b : TransactionState} (h : SameWrites a b) : SameWrites b a :=
+  ⟨h.accountWrites.symm, h.storageWrites.symm, h.codeWrites.symm, h.storageClears.symm,
+    h.transientStorage.symm⟩
+
+/-- Same writes are transitive. -/
+theorem SameWrites.trans {a b c : TransactionState} (hab : SameWrites a b)
+    (hbc : SameWrites b c) : SameWrites a c :=
+  ⟨hab.accountWrites.trans hbc.accountWrites, hab.storageWrites.trans hbc.storageWrites,
+    hab.codeWrites.trans hbc.codeWrites, hab.storageClears.trans hbc.storageClears,
+    hab.transientStorage.trans hbc.transientStorage⟩
+
+/-- Recording an account read keeps the writes. -/
+theorem SameWrites.recordAccountRead (tx : TransactionState) (address : Address) :
+    SameWrites (tx.recordAccountRead address) tx :=
+  ⟨rfl, rfl, rfl, rfl, rfl⟩
+
+/-- Recording a storage read keeps the writes. -/
+theorem SameWrites.recordStorageRead (tx : TransactionState) (address : Address) (key : Bytes32) :
+    SameWrites (tx.recordStorageRead address key) tx :=
+  ⟨rfl, rfl, rfl, rfl, rfl⟩
+
+/-- Copying reads from another transaction keeps the writes. -/
+theorem SameWrites.withReadsOf (tx other : TransactionState) :
+    SameWrites (tx.withReadsOf other) tx :=
+  ⟨rfl, rfl, rfl, rfl, rfl⟩
+
+/-- Two states with the same writes and the same block read the same optional accounts. -/
+theorem SameWrites.getAccountOptional {tx snapshot : TransactionState}
+    (h : SameWrites tx snapshot) (hp : tx.parent = snapshot.parent) (address : Address) :
+    tx.getAccountOptional address = snapshot.getAccountOptional address := by
+  simp only [TransactionState.getAccountOptional, h.accountWrites, hp]
+
+/-- Two states with the same writes and the same block read the same accounts. -/
+theorem SameWrites.getAccount {tx snapshot : TransactionState}
+    (h : SameWrites tx snapshot) (hp : tx.parent = snapshot.parent) (address : Address) :
+    tx.getAccount address = snapshot.getAccount address := by
+  simp only [TransactionState.getAccount, h.getAccountOptional hp address]
+
+/-- Two states with the same writes and the same block read the same code. -/
+theorem SameWrites.getCode {tx snapshot : TransactionState}
+    (h : SameWrites tx snapshot) (hp : tx.parent = snapshot.parent) (hash : Hash32) :
+    tx.getCode hash = snapshot.getCode hash := by
+  simp only [TransactionState.getCode, h.codeWrites, hp]
+
+/-- Two states with the same writes and the same block read the same storage. -/
+theorem SameWrites.getStorage {tx snapshot : TransactionState}
+    (h : SameWrites tx snapshot) (hp : tx.parent = snapshot.parent)
+    (address : Address) (key : Bytes32) :
+    tx.getStorage address key = snapshot.getStorage address key := by
+  simp only [TransactionState.getStorage, h.storageWrites, h.storageClears, hp]
 
 /-- A message that fails leaves the writes of the transaction as they were before it. -/
 theorem processMessage_sameWrites_of_error [LawfulGasMeter Meter] {message : Message fork}

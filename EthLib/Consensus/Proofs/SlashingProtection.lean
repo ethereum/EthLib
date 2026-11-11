@@ -25,6 +25,16 @@ Since slashable messages are different messages, each such pair is a collision o
 
 No signed vote is slashable with a vote of the starting file, as a record sees it.
 
+A file may keep only the latest messages of a key, and drop the older ones.
+
+Each block that a signer signs from it is after every older block.
+
+So no valid proposer slashing pairs an older block with a signed block.
+
+No vote that it signs is slashable with an older vote.
+
+Each of these needs the file to keep one or more such messages of the key.
+
 An interchange file reads back as itself from the document that writes it.
 -/
 
@@ -266,6 +276,21 @@ theorem blocksOf_recordBlock (interchange : Interchange) (pubkey : BLSPubkey) (s
       interchange.blocksOf pubkey ++ [⟨slot, some signingRoot⟩] := by
   simp [Interchange.blocksOf, Interchange.recordBlock, List.filter_append]
 
+/-- A vote is a vote of a key exactly when an entry of that key holds it. -/
+theorem mem_attestationsOf {interchange : Interchange} {pubkey : BLSPubkey}
+    {attestation : SignedAttestationRecord} :
+    attestation ∈ interchange.attestationsOf pubkey ↔
+      ∃ entry ∈ interchange.data, entry.pubkey = pubkey ∧
+        attestation ∈ entry.signedAttestations := by
+  simp [Interchange.attestationsOf, and_assoc]
+
+/-- A block is a block of a key exactly when an entry of that key holds it. -/
+theorem mem_blocksOf {interchange : Interchange} {pubkey : BLSPubkey}
+    {block : SignedBlockRecord} :
+    block ∈ interchange.blocksOf pubkey ↔
+      ∃ entry ∈ interchange.data, entry.pubkey = pubkey ∧ block ∈ entry.signedBlocks := by
+  simp [Interchange.blocksOf, and_assoc]
+
 /-! ## A signer's history -/
 
 /-- A signer of votes: each vote of a key is checked against the record, then recorded.
@@ -448,5 +473,153 @@ theorem signingRoot_eq_of_processProposerSlashing {signingRootOf : BeaconBlockHe
         signingRootOf slashing.signedHeader2.message := by
   obtain ⟨sameSlot, -, distinct, -⟩ := processProposerSlashing_checks valid
   exact ⟨distinct, signingRoot_eq_of_signBlocks signed member1 member2 sameSlot⟩
+
+/-! ## A file that drops older messages -/
+
+/-- The least value of a field over a list that is not empty is the field of one of its members. -/
+private theorem exists_min?_map_eq {α : Type} {xs : List α} (field : α → UInt64)
+    (nonempty : xs ≠ []) : ∃ x ∈ xs, (xs.map field).min? = some (field x) := by
+  cases least : (xs.map field).min? with
+  | none => simp_all
+  | some value =>
+    obtain ⟨x, member, rfl⟩ := List.mem_map.mp (List.min?_mem least)
+    exact ⟨x, member, rfl⟩
+
+/-- If each recorded block is after a slot, so is a block that passes the second condition.
+
+The record holds one or more blocks. -/
+theorem lt_slot_of_checkBlockSlot {blocks : List SignedBlockRecord} {old slot : Slot}
+    {signingRoot : Root} (nonempty : blocks ≠ []) (older : ∀ block ∈ blocks, old < block.slot)
+    (passed : checkBlockSlot blocks slot signingRoot = .ok ()) : old < slot := by
+  obtain ⟨least, kept, isLeast⟩ := exists_min?_map_eq SignedBlockRecord.slot nonempty
+  rcases checkBlockSlot_eq_ok_iff.mp passed _ isLeast with after | repeated
+  · exact UInt64.lt_trans (older least kept) after
+  · -- A repeat has the slot of a recorded block.
+    obtain ⟨block, kept, same⟩ := List.any_eq_true.mp repeated
+    simp only [Bool.and_eq_true, beq_iff_eq] at same
+    exact same.1 ▸ older block kept
+
+/-- If each recorded source is at least an epoch, so is a source that passes the fourth condition.
+
+The record holds one or more votes. -/
+theorem le_sourceEpoch_of_checkSourceEpoch {attestations : List SignedAttestationRecord}
+    {old sourceEpoch : Epoch} (nonempty : attestations ≠ [])
+    (older : ∀ attestation ∈ attestations, old ≤ attestation.sourceEpoch)
+    (passed : checkSourceEpoch attestations sourceEpoch = .ok ()) : old ≤ sourceEpoch := by
+  obtain ⟨least, kept, isLeast⟩ :=
+    exists_min?_map_eq SignedAttestationRecord.sourceEpoch nonempty
+  exact UInt64.le_trans (older least kept) (checkSourceEpoch_eq_ok_iff.mp passed _ isLeast)
+
+/-- If each recorded target is after an epoch, so is a target that passes the fifth condition.
+
+The record holds one or more votes. -/
+theorem lt_targetEpoch_of_checkTargetEpoch {attestations : List SignedAttestationRecord}
+    {old sourceEpoch targetEpoch : Epoch} {signingRoot : Root} (nonempty : attestations ≠ [])
+    (older : ∀ attestation ∈ attestations, old < attestation.targetEpoch)
+    (passed : checkTargetEpoch attestations sourceEpoch targetEpoch signingRoot = .ok ()) :
+    old < targetEpoch := by
+  obtain ⟨least, kept, isLeast⟩ :=
+    exists_min?_map_eq SignedAttestationRecord.targetEpoch nonempty
+  rcases checkTargetEpoch_eq_ok_iff.mp passed _ isLeast with after | repeated
+  · exact UInt64.lt_trans (older least kept) after
+  · -- A repeat has the target of a recorded vote.
+    obtain ⟨attestation, kept, same⟩ := List.any_eq_true.mp repeated
+    simp only [Bool.and_eq_true, beq_iff_eq] at same
+    exact same.1.2 ▸ older attestation kept
+
+/-- A vote is not slashable with a newer vote, in either order.
+
+The newer vote has a source at least, and a target after, those of the older one. -/
+theorem isSlashableAttestationData_eq_false_of_le_of_lt {old data : AttestationData}
+    (source : old.source.epoch ≤ data.source.epoch)
+    (target : old.target.epoch < data.target.epoch) :
+    isSlashableAttestationData old data = false ∧ isSlashableAttestationData data old = false := by
+  have notAbove : ¬data.source.epoch < old.source.epoch := UInt64.not_lt.mpr source
+  have notBelow : ¬data.target.epoch < old.target.epoch :=
+    UInt64.not_lt.mpr (UInt64.le_of_lt target)
+  simp [isSlashableAttestationData, UInt64.ne_of_lt target, (UInt64.ne_of_lt target).symm,
+    notAbove, notBelow]
+
+/-- If each block of the starting file is after a slot, so is each block that a signer signs.
+
+The file holds one or more blocks of the key. -/
+theorem lt_slot_of_signBlocks {signingRootOf : BeaconBlockHeader → Root} {pubkey : BLSPubkey}
+    {start finish : Interchange} {headers : List BeaconBlockHeader}
+    (signed : signBlocks signingRootOf pubkey start headers = .ok finish)
+    (nonempty : start.blocksOf pubkey ≠ []) {old : Slot}
+    (older : ∀ block ∈ start.blocksOf pubkey, old < block.slot) {header : BeaconBlockHeader}
+    (member : header ∈ headers) : old < header.slot := by
+  induction headers generalizing start with
+  | nil => simp at member
+  | cons first rest ih =>
+    obtain ⟨checked, later⟩ := bind_unit_ok_iff.mp signed
+    have after := lt_slot_of_checkBlockSlot nonempty older (bind_unit_ok_iff.mp checked).2
+    rcases List.mem_cons.mp member with rfl | inRest
+    · exact after
+    · -- The block just signed is after the old slot too, so the grown record keeps the bound.
+      refine ih later (by simp [blocksOf_recordBlock]) ?_ inRest
+      intro block kept
+      rw [blocksOf_recordBlock, List.mem_append, List.mem_singleton] at kept
+      rcases kept with kept | rfl
+      · exact older block kept
+      · exact after
+
+/-- No valid proposer slashing pairs a signed header with a header before each block of the file.
+
+The file holds one or more blocks of the key.
+
+The signed header may be the first or the second header of the slashing.
+
+The two headers of a valid proposer slashing have one slot. -/
+theorem processProposerSlashing_ne_ok_of_signBlocks {signingRootOf : BeaconBlockHeader → Root}
+    {pubkey : BLSPubkey} {start finish : Interchange} {headers : List BeaconBlockHeader}
+    (signed : signBlocks signingRootOf pubkey start headers = .ok finish)
+    (nonempty : start.blocksOf pubkey ≠ []) {old : BeaconBlockHeader}
+    (older : ∀ block ∈ start.blocksOf pubkey, old.slot < block.slot) {header : BeaconBlockHeader}
+    (member : header ∈ headers) {config : Config} {checks : SignatureChecks}
+    {state after : BeaconState preset fork} {slashing : ProposerSlashing}
+    (pair : slashing.signedHeader1.message = old ∧ slashing.signedHeader2.message = header ∨
+      slashing.signedHeader1.message = header ∧ slashing.signedHeader2.message = old) :
+    processProposerSlashing config checks state slashing ≠ .ok after := by
+  intro valid
+  have sameSlot := (processProposerSlashing_checks valid).1
+  have before := UInt64.ne_of_lt (lt_slot_of_signBlocks signed nonempty older member)
+  rcases pair with ⟨first, second⟩ | ⟨first, second⟩
+  · exact before (by rw [← first, ← second, sameSlot])
+  · exact before (by rw [← first, ← second, sameSlot])
+
+/-- No vote that a signer signs is slashable with a vote older than each vote of its starting file.
+
+The file holds one or more votes of the key.
+
+An older vote has a source at most, and a target before, those of each vote of the file. -/
+theorem isSlashableAttestationData_eq_false_of_signAttestations
+    {signingRootOf : AttestationData → Root} {pubkey : BLSPubkey} {start finish : Interchange}
+    {votes : List AttestationData}
+    (signed : signAttestations signingRootOf pubkey start votes = .ok finish)
+    (nonempty : start.attestationsOf pubkey ≠ []) {old : AttestationData}
+    (older : ∀ attestation ∈ start.attestationsOf pubkey,
+      old.source.epoch ≤ attestation.sourceEpoch ∧ old.target.epoch < attestation.targetEpoch)
+    {data : AttestationData} (member : data ∈ votes) :
+    isSlashableAttestationData old data = false ∧ isSlashableAttestationData data old = false := by
+  induction votes generalizing start with
+  | nil => simp at member
+  | cons first rest ih =>
+    obtain ⟨checked, later⟩ := bind_unit_ok_iff.mp signed
+    obtain ⟨-, epochsChecked⟩ := bind_unit_ok_iff.mp checked
+    obtain ⟨sourceChecked, targetChecked⟩ := bind_unit_ok_iff.mp epochsChecked
+    have above := le_sourceEpoch_of_checkSourceEpoch nonempty
+      (fun attestation kept => (older attestation kept).1) sourceChecked
+    have after := lt_targetEpoch_of_checkTargetEpoch nonempty
+      (fun attestation kept => (older attestation kept).2) targetChecked
+    rcases List.mem_cons.mp member with rfl | inRest
+    · exact isSlashableAttestationData_eq_false_of_le_of_lt above after
+    · -- The vote just signed is newer than the old one too, so the grown record keeps the bound.
+      refine ih later (by simp [attestationsOf_recordAttestation]) ?_ inRest
+      intro attestation kept
+      rw [attestationsOf_recordAttestation, List.mem_append, List.mem_singleton] at kept
+      rcases kept with kept | rfl
+      · exact older attestation kept
+      · exact ⟨above, after⟩
 
 end EthLib.Consensus
