@@ -58,6 +58,22 @@ theorem evalDistEq_uniformSample_map_comp_injective {A B R : Type} [Finite A] [F
   EvalDistEq.of_evalDist_eq (evalDist_map_table_comp_injective ($ᵗ (A → R)) ($ᵗ (B → R))
     SampleableType.evalDist_uniformSample SampleableType.evalDist_uniformSample he)
 
+/-- Reading a uniform vector at distinct positions gives a uniform table of the values read. -/
+theorem evalDistEq_uniformSample_vector_map_getElem_injective {R : Type} {m n : Nat} [Finite R]
+    [Nonempty R] [SampleableType (Vector R m)] [SampleableType (Fin m → R)]
+    [SampleableType (Fin n → R)] {e : Fin n → Fin m} (he : Function.Injective e) :
+    ((fun v : Vector R m => fun j => v[(e j).val]) <$> ($ᵗ (Vector R m))) =ᵈ
+      ($ᵗ (Fin n → R)) :=
+  calc
+    _ =ᵈ ((fun g : Fin m → R => g ∘ e) <$>
+        (arrayVectorEquivFin R m <$> ($ᵗ (Vector R m)))) := by
+      simp only [Functor.map_map]
+      exact EvalDistEq.rfl
+    _ =ᵈ ((fun g : Fin m → R => g ∘ e) <$> ($ᵗ (Fin m → R))) :=
+      (SampleableType.map_uniformSample_evalDistEq_of_bijective
+        (arrayVectorEquivFin R m).bijective).map _
+    _ =ᵈ ($ᵗ (Fin n → R)) := evalDistEq_uniformSample_map_comp_injective he
+
 /-- A bound on each continuation, over the support, bounds the binds.
 
 The event of one continuation is at most the sum of the events of two others.

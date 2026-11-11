@@ -9,15 +9,19 @@ import Mathlib.Tactic.FinCases
 /-!
 # Proofs: acceptance probability of one balance-weighted draw
 
-The digest supplied to `drawAccepts` is sampled uniformly from the 32-byte values.
+A draw reads a random value of `b` bits from a digest: one byte before Electra, two from Electra.
 
-Selecting distinct byte positions preserves the uniform distribution on those bytes.
+It accepts a balance `e` when `M * value ≤ e * (2^b - 1)`.
 
-The acceptance counts then give the exact probability of a successful checked draw.
+Here `M` is the largest effective balance of the preset.
 
-The balance must be at most the positive largest balance, whose product with the scale must fit.
+The digest is uniform among the 32-byte values.
 
-This model samples one digest; it makes no claim about SHA-256 or a sequence of proposer draws.
+The checked draw then accepts with probability `(⌊e * (2^b - 1) / M⌋ + 1) / 2^b`.
+
+This needs `0 < M`, `e ≤ M`, and `M * (2^b - 1) < 2^64`.
+
+The model samples one digest; it makes no claim about SHA-256 or a sequence of proposer draws.
 -/
 
 @[expose] public section
@@ -26,27 +30,10 @@ namespace EthLib.Consensus
 
 open Base OracleComp OracleSpec ENNReal
 
-/-- Distinct positions of a uniform digest give a uniform tuple of bytes. -/
-theorem evalDist_uniform_bytes32_select {n : Nat} (positions : Fin n → Fin 32)
-    (distinct : Function.Injective positions) :
-    ((fun random : Bytes32 => fun j => random[(positions j).val]) <$> ($ᵗ Bytes32)) =ᵈ
-      ($ᵗ (Fin n → UInt8)) := by
-  calc
-    _ =ᵈ ((fun bytes : Fin 32 → UInt8 => bytes ∘ positions) <$>
-        (arrayVectorEquivFin UInt8 32 <$> ($ᵗ Bytes32))) := by
-      simp only [Functor.map_map]
-      exact EvalDistEq.rfl
-    _ =ᵈ ((fun bytes : Fin 32 → UInt8 => bytes ∘ positions) <$>
-        ($ᵗ (Fin 32 → UInt8))) :=
-      (SampleableType.map_uniformSample_evalDistEq_of_bijective
-        (arrayVectorEquivFin UInt8 32).bijective).map _
-    _ =ᵈ ($ᵗ (Fin n → UInt8)) :=
-      evalDistEq_uniformSample_map_comp_injective distinct
-
 private theorem evalDist_uniform_bytes32_byte (j : Fin 32) :
     ((fun random : Bytes32 => random[j.val]) <$> ($ᵗ Bytes32)) =ᵈ ($ᵗ UInt8) := by
-  have selected := evalDist_uniform_bytes32_select (fun _ : Fin 1 => j)
-    (fun _ _ _ => Subsingleton.elim _ _)
+  have selected := evalDistEq_uniformSample_vector_map_getElem_injective
+    (R := UInt8) (m := 32) (e := fun _ : Fin 1 => j) (fun _ _ _ => Subsingleton.elim _ _)
   calc
     _ =ᵈ ((Equiv.funUnique (Fin 1) UInt8) <$>
         ((fun random : Bytes32 => fun _ : Fin 1 => random[j.val]) <$> ($ᵗ Bytes32))) := by
@@ -64,7 +51,8 @@ private theorem evalDist_uniform_bytes32_pair (j k : Fin 32) (different : j ≠ 
   have distinct : Function.Injective positions := by
     intro a b same
     fin_cases a <;> fin_cases b <;> simp_all [positions]
-  have selected := evalDist_uniform_bytes32_select positions distinct
+  have selected := evalDistEq_uniformSample_vector_map_getElem_injective
+    (R := UInt8) (m := 32) distinct
   calc
     _ =ᵈ (finTwoArrowEquiv UInt8 <$>
         ((fun random : Bytes32 => fun a => random[(positions a).val]) <$> ($ᵗ Bytes32))) := by
@@ -110,9 +98,11 @@ private theorem card_filter_byte_pairs (P : Nat × Nat → Prop) [DecidablePred 
       by simpa only [lowNat, highNat] using accepted,
       by simp [lowNat, highNat]⟩
 
-/-- Before Electra, a uniform digest gives the accepted fraction of the 256 byte values.
+/-- Before Electra, the draw accepts with probability `(⌊e * (2^8 - 1) / M⌋ + 1) / 2^8`.
 
-The largest balance is positive, the balance is at most it, and both products fit in 64 bits. -/
+The digest is uniform, `e` is the balance and `M` the largest effective balance of the preset.
+
+It needs `0 < M`, `e ≤ M`, and `M * (2^8 - 1) < 2^64`. -/
 theorem prEvent_drawAccepts_uniform_of_before_pectra (preset : Preset) (fork : Base.Fork)
     (before : ¬ .pectra ≤ fork) (i : Nat) (e : Gwei)
     (positive : 0 < preset.MAX_EFFECTIVE_BALANCE.toNat)
@@ -139,9 +129,11 @@ theorem prEvent_drawAccepts_uniform_of_before_pectra (preset : Preset) (fork : B
   simp only [← FinEnum.card_eq_fintypeCard (α := UInt8), FinEnum.card_UInt8,
     Nat.cast_pow, Nat.cast_ofNat]
 
-/-- From Electra, a uniform digest gives the accepted fraction of the 65536 byte pairs.
+/-- From Electra, the draw accepts with probability `(⌊e * (2^16 - 1) / M⌋ + 1) / 2^16`.
 
-The largest balance is positive, the balance is at most it, and both products fit in 64 bits. -/
+The digest is uniform, `e` is the balance and `M` the largest effective balance of the preset.
+
+It needs `0 < M`, `e ≤ M`, and `M * (2^16 - 1) < 2^64`. -/
 theorem prEvent_drawAccepts_uniform_of_pectra (preset : Preset) (fork : Base.Fork)
     (electra : .pectra ≤ fork) (i : Nat) (e : Gwei)
     (positive : 0 < preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat)

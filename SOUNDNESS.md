@@ -1855,10 +1855,11 @@ No theorem yet relates the list of stores to the stores of an honest validator i
 ### Balance-weighted draws
 
 `Consensus/Proofs/Accessors/DrawProbability.lean` samples one digest uniformly from the 32-byte values.
-`evalDist_uniform_bytes32_select` proves that distinct byte positions give a uniform tuple of bytes.
+`evalDistEq_uniformSample_vector_map_getElem_injective`, in `Cryptography/Proofs/EvalDistEq.lean`, proves that distinct positions of a uniform vector give a uniform tuple of values.
 `prEvent_drawAccepts_uniform_of_before_pectra` and `prEvent_drawAccepts_uniform_of_pectra` give the exact acceptance probability of the checked draw.
-It is `(e * (2^b - 1) / M + 1) / 2^b`, with integer division inside the numerator, balance `e`, largest balance `M`, and `b` equal to 8 before Electra or 16 from Electra.
-They assume `0 < M`, `e <= M` and `M * (2^b - 1) < 2^64`, so the products fit.
+It is `(e * (2^b - 1) / M + 1) / 2^b`, with integer division inside the numerator.
+Here `e` is the balance, `M` is the largest effective balance of the preset, and `b` is 8 before Electra or 16 from Electra.
+They assume `0 < M`, `e <= M` and `M * (2^b - 1) < 2^64`.
 These theorems do not model SHA-256 or a sequence of draws.
 
 ### Honest validator duties
