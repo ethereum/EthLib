@@ -5,15 +5,21 @@ public import EthLib.Consensus.Proofs.Churn
 /-!
 # Proofs: the balance spent by exit and consolidation reservations
 
-A list of reservations keeps the slot and the validator registry, so its churn stays fixed.
+The churn updates of exits or consolidations run in turn on one state, from Electra.
 
-The reserved balance and churn left equal the initial carry plus the churn of added epochs.
+They keep its slot and validators, so the first permitted epoch and the churn stay fixed.
 
 Each epoch that the queue moves past adds one full churn.
 
-Thus a list placed by a given epoch takes at most that window's budget, including initial carry.
+The reserved balance plus the churn left equals the churn left at the start plus those churns.
 
-This concerns queue reservations, not the change of the active set through epoch transitions.
+So reservations placed up to an epoch fit the churn left at the start, plus a churn per later epoch.
+
+The theorems ask that the first permitted epoch is at most the earliest open epoch at the start.
+
+In a block, other writes to the registry and the pending queues come between these updates.
+
+These theorems do not cover that interleaving, nor the change of the active set between epochs.
 -/
 
 @[expose] public section
@@ -83,7 +89,9 @@ theorem computeExitEpochAndUpdateChurn_foldlM_spend {config : Config}
           churn.toNat :=
   churnQueue_foldlM_spend open_ (exitReservations_queue firstOk churnOk computed)
 
-/-- Exit reservations placed by an epoch fit the initial carry plus the churn of later epochs. -/
+/-- Exits placed up to an epoch fit the churn left at the start, plus a churn per later epoch.
+
+The earliest open epoch at the start must be no earlier than the first permitted epoch. -/
 theorem computeExitEpochAndUpdateChurn_foldlM_le {config : Config}
     {electra : .pectra ≤ fork} {state after : BeaconState preset fork} {amounts : List Gwei}
     {first churn horizon : UInt64}
@@ -143,7 +151,9 @@ theorem computeConsolidationEpochAndUpdateChurn_foldlM_spend {config : Config}
           (state.earliestConsolidationEpoch electra).toNat) * churn.toNat :=
   churnQueue_foldlM_spend open_ (consolidationReservations_queue firstOk churnOk computed)
 
-/-- Consolidations placed by an epoch fit the initial carry plus the churn of later epochs. -/
+/-- Consolidations up to an epoch fit the churn left at the start, plus a churn per later epoch.
+
+The earliest open epoch at the start must be no earlier than the first permitted epoch. -/
 theorem computeConsolidationEpochAndUpdateChurn_foldlM_le {config : Config}
     {electra : .pectra ≤ fork} {state after : BeaconState preset fork} {amounts : List Gwei}
     {first churn horizon : UInt64}
