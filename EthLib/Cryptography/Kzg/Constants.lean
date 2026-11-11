@@ -39,6 +39,42 @@ def BYTES_PER_CELL : Nat := FIELD_ELEMENTS_PER_CELL * BYTES_PER_FIELD_ELEMENT
 /-- Number of cells in an extended blob. -/
 def CELLS_PER_EXT_BLOB : Nat := FIELD_ELEMENTS_PER_EXT_BLOB / FIELD_ELEMENTS_PER_CELL
 
+/-!
+## Domain separators
+
+Each domain separator starts the hash input of one Fiat-Shamir challenge.
+
+Provenance: consensus-specs defined all three, until its pull request [#5398][cs-5398] removed them.
+
+Each has the bytes below in its file, at both commits named with that file:
+
+```text
+specs/deneb/polynomial-commitments.md, at 86fb82b2 and 8a3df1d7
+  FIAT_SHAMIR_PROTOCOL_DOMAIN             "FSBLOBVERIFY_V1_"
+  RANDOM_CHALLENGE_KZG_BATCH_DOMAIN       "RCKZGBATCH___V1_"
+
+specs/fulu/polynomial-commitments-sampling.md, at 9d377fd5 and 8a3df1d7
+  RANDOM_CHALLENGE_KZG_CELL_BATCH_DOMAIN  "RCKZGCBATCH__V1_"
+```
+
+[EIP-4844][eip-4844] takes its KZG functions from [commit `86fb82b2`][cs-86fb82b2].
+
+[EIP-7594][eip-7594] points to the Fulu specifications of [commit `9d377fd5`][cs-9d377fd5].
+
+Neither EIP states these bytes in its own text.
+
+[Commit `8a3df1d7`][cs-8a3df1d7] is the parent of the commit that removed the two files.
+
+This note records where the bytes come from, not which text makes them normative.
+
+[cs-5398]: https://github.com/ethereum/consensus-specs/pull/5398
+[eip-4844]: https://eips.ethereum.org/EIPS/eip-4844#cryptographic-helpers
+[eip-7594]: https://eips.ethereum.org/EIPS/eip-7594#specification
+[cs-86fb82b2]: https://github.com/ethereum/consensus-specs/blob/86fb82b221474cc89387fa6436806507b3849d88/specs/deneb/polynomial-commitments.md
+[cs-9d377fd5]: https://github.com/ethereum/consensus-specs/blob/9d377fd53d029536e57cfda1a4d2c700c59f86bf/specs/fulu/polynomial-commitments-sampling.md
+[cs-8a3df1d7]: https://github.com/ethereum/consensus-specs/tree/8a3df1d79d70000801407e33d660171be9cd06d1/specs
+-/
+
 /-- Domain separator for the Fiat-Shamir challenge of a blob and its commitment. -/
 def FIAT_SHAMIR_PROTOCOL_DOMAIN : ByteArray := String.toUTF8 "FSBLOBVERIFY_V1_"
 
