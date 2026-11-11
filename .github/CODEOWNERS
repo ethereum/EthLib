@@ -1,0 +1,22 @@
+# The owner of each layer directory and of each top-level document.
+# CONTRIBUTING.md, under "Owners", says what an owner does.
+# A path with no owner after it has no owner.
+
+# The layers of ARCHITECTURE.md, from the lowest to the highest.
+/EthLib/Base/
+/EthLib/Cryptography/
+/EthLib/Serialization/
+/EthLib/Networking/
+/EthLib/Execution/
+/EthLib/Consensus/
+/EthLib/Engine/
+
+# Top-level documents.
+/README.md
+/ARCHITECTURE.md
+/CONTRIBUTING.md
+/BUILDING.md
+/SOUNDNESS.md
+/WRITING.md
+/AGENTS.md
+/CHANGELOG.md
