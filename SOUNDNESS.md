@@ -2426,6 +2426,10 @@ They need a buffer of roots of three epochs, which both presets have.
 The weights of a checkpoint then hold the effective balances of each state before a slot that ends its epoch or the next one, on a run between genesis and the last state, when that state records the root of the checkpoint for that epoch.
 That genesis state exists only before Altair, so a chain whose genesis is later is out of scope.
 
+Adding votes and allowed weights keeps slack links, justification and finalization (`Consensus/Proofs/Models/Ffg/Monotonicity.lean`).
+`FfgFinalityMonotonicity.lean` puts the finalized checkpoint of a chain in such larger sets, with the same validator sets and second sets.
+This does not identify validator indices or establish root ancestry across two chains.
+
 ### Engine API
 
 The Engine API is the interface through which the consensus layer drives the execution layer.
