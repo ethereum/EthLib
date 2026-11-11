@@ -254,12 +254,43 @@ def pins(root: Path) -> str:
     )
 
 
+VCVIO_IMPORT = re.compile(r"^\s*(?:public\s+|meta\s+|private\s+)*import\s+(?:all\s+)?VCVio\b", re.M)
+
+
+def vcvio_users(root: Path) -> str:
+    """
+    The Lean files and proof directories that import VCVio directly.
+
+    A file under a directory inside `Proofs` is named by that directory.
+    A file directly inside `Proofs` is named by its own path.
+    """
+    users, spec = set(), []
+    for path in sorted((root / "EthLib").rglob("*.lean")):
+        if not VCVIO_IMPORT.search(strip_lean(path.read_text(encoding="utf-8"))):
+            continue
+        rel = path.relative_to(root)
+        parts = rel.with_suffix("").parts
+        if "Proofs" not in parts:
+            spec.append(rel.as_posix())
+        elif len(parts) > parts.index("Proofs") + 2:
+            users.add("/".join(parts[: parts.index("Proofs") + 2]) + "/")
+        else:
+            users.add(rel.as_posix())
+    text = "".join(f"- `{user}`\n" for user in sorted(users)) or "No proof imports it.\n"
+    if spec:
+        return (
+            text + "\nSpecification files that import it:\n\n" + "".join(f"- `{f}`\n" for f in spec)
+        )
+    return text + "\nNo specification file imports it.\n"
+
+
 GENERATORS = {
     "native": native,
     "unfoldable": unfoldable,
     "exports": exports,
     "c-lines": c_lines,
     "pins": pins,
+    "vcvio-users": vcvio_users,
 }
 
 

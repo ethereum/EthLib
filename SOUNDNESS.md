@@ -2809,6 +2809,39 @@ Only the proofs import them.
 The Lean toolchain is `leanprover/lean4:v4.35.0`.
 <!-- end generated -->
 
+VCVio defines the oracle computations and probabilities in which the security games are stated.
+The proofs that import it directly are the ones that rest on its definitions:
+
+<!-- generated: vcvio-users -->
+- `EthLib/Cryptography/Proofs/Aes/`
+- `EthLib/Cryptography/Proofs/BadOnBudget.lean`
+- `EthLib/Cryptography/Proofs/BadOnGrowth.lean`
+- `EthLib/Cryptography/Proofs/Bls/`
+- `EthLib/Cryptography/Proofs/DerivationTable.lean`
+- `EthLib/Cryptography/Proofs/EvalDistEq.lean`
+- `EthLib/Cryptography/Proofs/ExceptTAnswers.lean`
+- `EthLib/Cryptography/Proofs/HashSig/`
+- `EthLib/Cryptography/Proofs/IndependentAnswers.lean`
+- `EthLib/Cryptography/Proofs/IndependentOutside.lean`
+- `EthLib/Cryptography/Proofs/Kzg/`
+- `EthLib/Cryptography/Proofs/LazyPermutation.lean`
+- `EthLib/Cryptography/Proofs/LogKeys.lean`
+- `EthLib/Cryptography/Proofs/LoggedUntilBad.lean`
+- `EthLib/Cryptography/Proofs/Merkle/`
+- `EthLib/Cryptography/Proofs/QueryAvoidance.lean`
+- `EthLib/Cryptography/Proofs/Secp256k1/`
+- `EthLib/Cryptography/Proofs/Sphincs/`
+- `EthLib/Cryptography/Proofs/TaggedLazyPermutation.lean`
+- `EthLib/Cryptography/Proofs/Vrf/`
+- `EthLib/Cryptography/Proofs/Wots.lean`
+- `EthLib/Cryptography/Proofs/Wots/`
+- `EthLib/Cryptography/Proofs/Xmss/`
+- `EthLib/Execution/Proofs/Trie/`
+- `EthLib/Serialization/Proofs/Ssz/`
+
+No specification file imports it.
+<!-- end generated -->
+
 ### D3. The KZG trusted setup
 
 The setup raises three separate assumptions, and each use of KZG relies on a different subset of them.
