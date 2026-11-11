@@ -1,7 +1,6 @@
 module
 
 public import EthLib.Execution.Proofs.Blocks.AccessListBuilder
-public import EthLib.Execution.Proofs.State.Rebuild
 public import EthLib.Execution.Proofs.State.Tracker
 
 /-!

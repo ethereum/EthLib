@@ -4,6 +4,7 @@ public import EthLib.Base.Proofs.MapM
 public import EthLib.Execution.Blocks.Withdrawal
 public import EthLib.Execution.Proofs.Blocks.AccessListFollow
 public import EthLib.Execution.Proofs.State.Frame
+public import EthLib.Execution.Proofs.State.Rebuild
 
 /-!
 # Proofs: the access-list builder follows the withdrawals

@@ -11,7 +11,7 @@ public import EthLib.Execution.Proofs.State.Rebuild
 
 From Spurious Dragon, every successful call and creation keeps a property of transaction states.
 
-A call needs code to run only at an address with a nonce or code.
+A call must run code only at an address with a nonce or code.
 
 A creation needs its address to be deployable.
 
@@ -73,11 +73,11 @@ theorem HasNonceOrCode.congr {tx tx' : TransactionState} {address : Address}
 def KeepsNonceOrCode (tx tx' : TransactionState) : Prop :=
   NonceLe tx tx' ∧ ∀ address, HasNonceOrCode tx address → HasNonceOrCode tx' address
 
-/-- Every state keeps its own nonces and codes. -/
+/-- Every state keeps its own nonces, and a nonce or code wherever it has one. -/
 theorem KeepsNonceOrCode.refl (tx : TransactionState) : KeepsNonceOrCode tx tx :=
   ⟨NonceLe.refl tx, fun _ h => h⟩
 
-/-- Two transitions that keep nonces and codes compose. -/
+/-- Two transitions that lower no nonce and keep each nonce or code compose. -/
 theorem KeepsNonceOrCode.trans {a b c : TransactionState}
     (hab : KeepsNonceOrCode a b) (hbc : KeepsNonceOrCode b c) : KeepsNonceOrCode a c :=
   ⟨hab.1.trans hbc.1, fun address h => hbc.2 address (hab.2 address h)⟩
@@ -117,7 +117,7 @@ theorem RebuildState.toRebuildInvariant {block : BlockState} {tx : TransactionSt
     (valid : RebuildState block tx) : RebuildInvariant tx :=
   ⟨valid.code, valid.emptyStorage⟩
 
-/-- Same writes on the same block keep nonces and codes. -/
+/-- Same writes on the same block lower no nonce and keep each nonce or code. -/
 theorem SameWrites.keepsNonceOrCode {tx snapshot : TransactionState}
     (h : SameWrites snapshot tx) (hp : snapshot.parent = tx.parent) :
     KeepsNonceOrCode tx snapshot := by
@@ -701,7 +701,7 @@ theorem RebuildState.rollbackOnError {block : BlockState} {snapshot : Transactio
 
 /-! ## Steps of an EVM frame -/
 
-/-- A step that keeps the rebuild property, nonces and codes, the message, and the code. -/
+/-- A step that keeps the rebuild property, each nonce or code, the message, and the code. -/
 private def RebuildStep (block : BlockState) (a b : Evm fork Meter) : Prop :=
   (RebuildState block a.state → RebuildState block b.state ∧ KeepsNonceOrCode a.state b.state) ∧
     b.message = a.message ∧ b.code = a.code
@@ -1407,7 +1407,7 @@ private def FrameInv (block : BlockState) (evm : Evm fork Meter) : Prop :=
   RebuildState block evm.state ∧
     (evm.code.size ≠ 0 → HasNonceOrCode evm.state evm.message.currentTarget)
 
-/-- What a call keeps: the rebuild property, nonces and codes, and its message. -/
+/-- What a call keeps: the rebuild property, each nonce or code, and its message. -/
 def CallRebuild (block : BlockState) (message : Message fork) (state : TransactionState)
     (_substate : Substate) (_meter : Meter) (ended : Evm fork Meter) : Prop :=
   RebuildState block state →
@@ -1416,7 +1416,7 @@ def CallRebuild (block : BlockState) (message : Message fork) (state : Transacti
       HasNonceOrCode state message.caller) →
     ended.message = message ∧ RebuildState block ended.state ∧ KeepsNonceOrCode state ended.state
 
-/-- What a creation keeps: the rebuild property, and nonces and codes. -/
+/-- What a creation keeps: the rebuild property, and each nonce or code. -/
 def CreateRebuild (block : BlockState) (message : Message fork) (state : TransactionState)
     (_substate : Substate) (_meter : Meter) (after : Evm fork Meter) : Prop :=
   RebuildState block state → state.accountDeployable message.currentTarget = true →
@@ -1513,7 +1513,9 @@ theorem processMessage_rebuildState_induction [LawfulGasMeter Meter]
       exact Nat.le_trans hnonce_prep (kevm.1 message.currentTarget)
     exact vstate.depositCode vevm (kprep.trans kevm) hnonce_evm hdep
 
-/-- From Spurious Dragon, a call keeps the rebuild property and loses no nonce or code.
+/-- From Spurious Dragon, a call keeps the rebuild property.
+
+It lowers no nonce, and keeps a nonce or code wherever there was one.
 
 Its code must run only at a target with a nonce or code.
 
@@ -1531,7 +1533,9 @@ theorem processMessage_rebuildState [LawfulGasMeter Meter] (hfork : .spuriousDra
   ((processMessage_rebuildState_induction hfork message.gas).1 message state substate meter held
     rfl ended h valid hcode hval).2
 
-/-- From Spurious Dragon, a creation keeps the rebuild property and loses no nonce or code.
+/-- From Spurious Dragon, a creation keeps the rebuild property.
+
+It lowers no nonce, and keeps a nonce or code wherever there was one.
 
 Its target must be deployable: nonce 0, no code and no storage.
 

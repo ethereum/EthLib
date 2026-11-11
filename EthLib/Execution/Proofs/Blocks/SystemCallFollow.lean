@@ -19,7 +19,9 @@ So unwritten storage words keep their block values, and each read code hashes to
 
 Thus the access-list builder follows the call, and the block state afterward can still be rebuilt.
 
-This needs the block state before the call to be rebuildable: no empty account holds storage.
+This needs the block state before the call to be rebuildable.
+
+Its code matches its hash, and no empty account holds storage.
 
 [eip7610]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-7610.md#specification
 -/
