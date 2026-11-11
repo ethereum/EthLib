@@ -33,6 +33,8 @@ Three of them give it to each block that the rule can start from.
 
 The fourth keeps it along a walk of blocks that the rule confirms.
 
+The same four steps keep a property along a run of fast confirmations, one store for each.
+
 The theorems do not record every check of the rule.
 
 For the start they keep four checks.
@@ -418,5 +420,95 @@ theorem onFastConfirmation_confirmedRoot {fcr after : FastConfirmationStore}
   · exact findLatestConfirmedDescendant_eq_or later
 
 end Store
+
+/-- A property of the confirmed block that four steps keep holds along a run of confirmations.
+
+The run is one fast confirmation for each store of a list, in order.
+
+The property depends on the count of the confirmations before.
+
+The first three steps give the property to each block that a confirmation can start from.
+
+They are the block stored before, the finalized block and the observed justified block.
+
+The fourth step keeps the property from that block to a later block that the rule confirms.
+
+Each step knows the store of its confirmation and the run that came before it.
+
+So a step can use what another proof states about the stores of the rule along the run. -/
+theorem foldlM_onFastConfirmation_confirmedRoot {config : Config}
+    {stores : List (Store preset fork)} {first last : FastConfirmationStore}
+    (safe : Nat → Root → Prop) (begins : safe 0 first.confirmedRoot)
+    (carried : ∀ calls store fcr after head slot,
+      (stores.take calls).foldlM (fun fcr store => store.onFastConfirmation config fcr) first =
+        .ok fcr →
+      stores[calls]? = some store → store.onFastConfirmation config fcr = .ok after →
+      store.getHead config = .ok head → store.getCurrentSlot config = .ok slot →
+      safe calls fcr.confirmedRoot →
+      store.isAncestor ⟨head.root, .pending⟩ ⟨fcr.confirmedRoot, .pending⟩ = .ok true →
+      (isStartSlotAtEpoch preset slot = .ok true →
+        store.isConfirmedChainSafe config after head.root fcr.confirmedRoot = .ok true) →
+      safe (calls + 1) fcr.confirmedRoot)
+    (finalized : ∀ calls store fcr after,
+      (stores.take calls).foldlM (fun fcr store => store.onFastConfirmation config fcr) first =
+        .ok fcr →
+      stores[calls]? = some store → store.onFastConfirmation config fcr = .ok after →
+      safe (calls + 1) store.finalizedCheckpoint.root)
+    (observed : ∀ calls store fcr after head slot,
+      (stores.take calls).foldlM (fun fcr store => store.onFastConfirmation config fcr) first =
+        .ok fcr →
+      stores[calls]? = some store → store.onFastConfirmation config fcr = .ok after →
+      store.getHead config = .ok head → store.getCurrentSlot config = .ok slot →
+      isStartSlotAtEpoch preset slot = .ok true →
+      store.unrealizedJustification head.root =
+        .ok after.currentEpochObservedJustifiedCheckpoint →
+      safe (calls + 1) after.currentEpochObservedJustifiedCheckpoint.root)
+    (selected : ∀ calls store fcr after head start balanceSource chain later,
+      (stores.take calls).foldlM (fun fcr store => store.onFastConfirmation config fcr) first =
+        .ok fcr →
+      stores[calls]? = some store → store.onFastConfirmation config fcr = .ok after →
+      store.getHead config = .ok head → safe (calls + 1) start →
+      store.checkpointState after.currentEpochObservedJustifiedCheckpoint = .ok balanceSource →
+      store.getAncestorRoots head.root start = .ok (chain ++ after.confirmedRoot :: later) →
+      (∀ member ∈ chain ++ [after.confirmedRoot], store.isOneConfirmed config head.root
+        balanceSource (store.tallyVotes balanceSource) member = .ok true) →
+      safe (calls + 1) after.confirmedRoot)
+    (ran : stores.foldlM (fun fcr store => store.onFastConfirmation config fcr) first =
+      .ok last) :
+    safe stores.length last.confirmedRoot := by
+  -- The property holds after each part of the run, by induction on the count of its calls.
+  suffices parts : ∀ calls, calls ≤ stores.length → ∀ fcr,
+      (stores.take calls).foldlM (fun fcr store => store.onFastConfirmation config fcr) first =
+        .ok fcr → safe calls fcr.confirmedRoot from
+    parts stores.length (Nat.le_refl _) last (by rwa [List.take_length])
+  intro calls
+  induction calls with
+  | zero =>
+    intro _ fcr reached
+    simp only [List.take_zero, List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at reached
+    exact reached ▸ begins
+  | succ calls ih =>
+  intro within after reached
+  have placed : stores[calls]? = some stores[calls] := List.getElem?_eq_getElem within
+  rw [List.take_add_one, List.foldlM_append, bind_ok_iff] at reached
+  obtain ⟨fcr, reached, confirmed⟩ := reached
+  have holds := ih (Nat.le_of_succ_le within) fcr reached
+  generalize stores[calls] = store at placed confirmed
+  rw [placed] at confirmed
+  simp only [Option.toList, List.foldlM_cons, List.foldlM_nil, bind_ok_iff, pure, Except.pure,
+    Except.ok.injEq, exists_eq_right] at confirmed
+  obtain ⟨head, slot, start, found, slotFound, startCase, rootCase⟩ :=
+    Store.onFastConfirmation_confirmedRoot confirmed
+  have startSafe : safe (calls + 1) start := by
+    rcases startCase with ⟨rfl, onChain, chainSafe⟩ | rfl | ⟨rfl, isStart, justified⟩
+    · exact carried calls store fcr after head slot reached placed confirmed found slotFound
+        holds onChain chainSafe
+    · exact finalized calls store fcr after reached placed confirmed
+    · exact observed calls store fcr after head slot reached placed confirmed found slotFound
+        isStart justified
+  rcases rootCase with same | ⟨balanceSource, chain, later, sourced, walked, allConfirmed⟩
+  · exact same ▸ startSafe
+  · exact selected calls store fcr after head start balanceSource chain later reached placed
+      confirmed found startSafe sourced walked allConfirmed
 
 end EthLib.Consensus
