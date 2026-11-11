@@ -1767,6 +1767,10 @@ The beacon chain weighs the votes of each epoch at the effective balances of tha
 Top-ups, the balance that a consolidation moves to its target, rewards and penalties all change those balances during the window.
 The theorems weigh every vote at the balances of the checkpoint, so they reach a chain only once those changes are bounded, and no theorem bounds them yet.
 
+`Consensus/Proofs/ChurnReservations.lean` gives a budget for lists of exit and consolidation reservations when the first permitted epoch is at most the initial queue epoch.
+These updates keep the slot and registry fixed, so their sum fits the initial carry plus one fixed churn per later queue epoch.
+This does not bound how churn changes between slots or derive the change of the active set.
+
 From Phase 0 to Deneb, `accountable_safety_of_weakSubjectivityPeriod_of_lt_electra` covers the period in part.
 The rule counts `N` active validators of average balance `t` ether, rounded down, a largest effective balance `T` ether, a churn of `delta` validators and `Delta` top-ups per epoch.
 The theorem assumes each justified set gains and loses at most `delta` validators for each of the `n` epochs of churn, with `delta` the churn at the checkpoint.
