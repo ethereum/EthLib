@@ -39,6 +39,16 @@ def BYTES_PER_CELL : Nat := FIELD_ELEMENTS_PER_CELL * BYTES_PER_FIELD_ELEMENT
 /-- Number of cells in an extended blob. -/
 def CELLS_PER_EXT_BLOB : Nat := FIELD_ELEMENTS_PER_EXT_BLOB / FIELD_ELEMENTS_PER_CELL
 
+/-- Serialized form of the point at infinity on the G1 group. -/
+def G1_POINT_AT_INFINITY : Vector UInt8 48 :=
+  (Vector.replicate 48 0).set 0 0xc0
+
+/-- Number of G2 points in the trusted setup. -/
+def KZG_SETUP_G2_LENGTH : Nat := 65
+
+/-- Length of a compressed G2 point in bytes. -/
+def BYTES_PER_G2_POINT : Nat := 96
+
 /-!
 ## Domain separators
 
@@ -65,7 +75,7 @@ Neither EIP states these bytes in its own text.
 
 [Commit `8a3df1d7`][cs-8a3df1d7] is the parent of the commit that removed the two files.
 
-This note records where the bytes come from, not which text makes them normative.
+This note records where the bytes are stated, not which text makes them normative.
 
 [cs-5398]: https://github.com/ethereum/consensus-specs/pull/5398
 [eip-4844]: https://eips.ethereum.org/EIPS/eip-4844#cryptographic-helpers
@@ -83,15 +93,5 @@ def RANDOM_CHALLENGE_KZG_BATCH_DOMAIN : ByteArray := String.toUTF8 "RCKZGBATCH__
 
 /-- Domain separator for the Fiat-Shamir challenge of the batch check of cell proofs. -/
 def RANDOM_CHALLENGE_KZG_CELL_BATCH_DOMAIN : ByteArray := String.toUTF8 "RCKZGCBATCH__V1_"
-
-/-- Serialized form of the point at infinity on the G1 group. -/
-def G1_POINT_AT_INFINITY : Vector UInt8 48 :=
-  (Vector.replicate 48 0).set 0 0xc0
-
-/-- Number of G2 points in the trusted setup. -/
-def KZG_SETUP_G2_LENGTH : Nat := 65
-
-/-- Length of a compressed G2 point in bytes. -/
-def BYTES_PER_G2_POINT : Nat := 96
 
 end EthLib.Cryptography.Kzg.Constants
