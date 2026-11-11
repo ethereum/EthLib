@@ -533,13 +533,6 @@ theorem computeWeakSubjectivityPeriodElectra_le_mainnet
   Nat.le_trans (computeWeakSubjectivityPeriodElectra_le (by decide) (by decide) (by decide) h)
     (by decide)
 
-/-- The smaller of two 64-bit integers has the smaller value. -/
-private theorem toNat_min_eq (a b : UInt64) : (min a b).toNat = min a.toNat b.toNat := by
-  rw [UInt64.min_def, Nat.min_def]
-  by_cases h : a ≤ b
-  · simp [h, UInt64.le_iff_toNat_le.mp h]
-  · simp [h, mt UInt64.le_iff_toNat_le.mpr h]
-
 /-- From Gloas: the three churns follow from the total active balance, and bound it above.
 
 Let `Qe` and `Qc` be the quotients, `m` the minimum, `M` the cap and `i` the increment.
@@ -581,7 +574,7 @@ private theorem gloasWeightedChurn_bounds {config : Config} {state : BeaconState
   generalize hM : config.MAX_PER_EPOCH_ACTIVATION_CHURN_LIMIT_GLOAS.toNat = M at *
   generalize hi : preset.EFFECTIVE_BALANCE_INCREMENT.toNat = i at *
   generalize ht : total.toNat = t at *
-  rw [toNat_min_eq, toNat_roundToIncrement, toNat_roundToIncrement, toNat_max, UInt64.toNat_div,
+  rw [toNat_min, toNat_roundToIncrement, toNat_roundToIncrement, toNat_max, UInt64.toNat_div,
     UInt64.toNat_div, hQe, hQc, hm, hM, hi, ht] at hch
   generalize hx : max m (t / Qe) = x at hch
   obtain ⟨hem, hexHi⟩ :=
