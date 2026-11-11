@@ -43,7 +43,7 @@ A change of the nonce never deletes the account, so it keeps every storage read.
 
 The deletion of the touched empty accounts reads no account and keeps every storage read.
 
-From Paris, a change that deletes an account also reads each key that the transaction wrote there.
+From Paris, a change that deletes an account clears its written keys and reads them.
 
 The next transaction starts with an empty record of reads.
 
@@ -1313,6 +1313,127 @@ theorem getElem?_storageReads_modifyState_of_ne {fork : Fork} {tx tx' : Transact
   · simp [destroyStorage, Std.ExtTreeMap.getElem?_insert, Ne.symm hne]
   · rfl
 
+/-- A change of an account that succeeds gives the storage reads at that address.
+
+From Paris, an empty result deletes the account and turns its written keys into reads.
+
+Otherwise the storage reads at the address stay as they were. -/
+theorem getElem?_storageReads_modifyState_self {fork : Fork} {tx tx' : TransactionState}
+    {address : Address} {f : Account → Except StateError Account}
+    (h : tx.modifyState fork address f = .ok tx') :
+    tx'.storageReads[address]? =
+      if fork ≥ .paris ∧ tx'.getAccount address = EMPTY_ACCOUNT then
+        (tx.destroyStorage address).storageReads[address]?
+      else tx.storageReads[address]? := by
+  obtain ⟨account, hf, rfl, -⟩ := modifyState_eq_ok h
+  obtain ⟨account', hf', -, hreads⟩ := reads_modifyState h
+  rw [hf, Except.ok.injEq] at hf'
+  subst hf'
+  rw [hreads]
+  split <;> rfl
+
+/-- A change of an account that succeeds keeps its storage writes at every other address. -/
+theorem getD_storageWrites_modifyState_of_ne {fork : Fork} {tx tx' : TransactionState}
+    {address other : Address} {f : Account → Except StateError Account} (hne : other ≠ address)
+    (h : tx.modifyState fork address f = .ok tx') :
+    tx'.storageWrites.getD other ∅ = tx.storageWrites.getD other ∅ := by
+  obtain ⟨_, -, rfl⟩ := modifyState_eq_ok_iff.mp h
+  split
+  · simp [destroyAccount, setAccount, destroyStorage, Std.ExtTreeMap.getD_erase, Ne.symm hne,
+      recordAccountRead]
+  · rfl
+
+/-- A change of an account that succeeds clears its storage writes when it deletes the account.
+
+Otherwise its storage writes at the address stay as they were. -/
+theorem getD_storageWrites_modifyState_self {fork : Fork} {tx tx' : TransactionState}
+    {address : Address} {f : Account → Except StateError Account}
+    (h : tx.modifyState fork address f = .ok tx') :
+    tx'.storageWrites.getD address ∅ =
+      if fork ≥ .paris ∧ tx'.getAccount address = EMPTY_ACCOUNT then ∅
+      else tx.storageWrites.getD address ∅ := by
+  obtain ⟨account, hf, hread, -⟩ := modifyState_eq_ok h
+  rw [hread]
+  obtain ⟨account', hf', rfl⟩ := modifyState_eq_ok_iff.mp h
+  rw [hf, Except.ok.injEq] at hf'
+  subst hf'
+  have hempty : ((tx.recordAccountRead address).setAccount address
+      (some account)).accountExistsAndIsEmpty address = decide (account = EMPTY_ACCOUNT) := by
+    simp only [accountExistsAndIsEmpty, getAccountOptional_setAccount_self]
+    cases account
+    simp only [EMPTY_ACCOUNT, Account.mk.injEq, Bool.decide_and]
+    ac_rfl
+  rw [hempty]
+  split
+  · rename_i hc
+    simp only [Bool.and_eq_true, decide_eq_true_eq] at hc
+    rw [ite_eq_left_of_eq_true _ _ (eq_true hc)]
+    simp [destroyAccount, setAccount, destroyStorage]
+  · rename_i hc
+    simp only [Bool.and_eq_true, decide_eq_true_eq] at hc
+    rw [ite_eq_right_of_eq_false _ _ (eq_false hc)]
+    rfl
+
+/-- At one address, two changes in sequence give the storage reads of a wipe when either wipes.
+
+Otherwise they keep the storage reads at that address. -/
+theorem getElem?_storageReads_modifyState_modifyState {fork : Fork}
+    {tx mid tx' : TransactionState} {address other : Address}
+    {f g : Account → Except StateError Account}
+    (h1 : tx.modifyState fork address f = .ok mid)
+    (h2 : mid.modifyState fork other g = .ok tx') (z : Address) :
+    tx'.storageReads[z]? =
+      if fork ≥ .paris ∧ ((z = address ∧ mid.getAccount address = EMPTY_ACCOUNT) ∨
+          (z = other ∧ tx'.getAccount other = EMPTY_ACCOUNT)) then
+        (tx.destroyStorage z).storageReads[z]?
+      else tx.storageReads[z]? := by
+  by_cases hz2 : z = other
+  · subst hz2
+    rw [getElem?_storageReads_modifyState_self h2]
+    by_cases hz1 : z = address
+    · subst hz1
+      by_cases hp : fork ≥ .paris
+      · by_cases he1 : mid.getAccount z = EMPTY_ACCOUNT
+        · have hw : mid.storageWrites.getD z ∅ = ∅ := by
+            rw [getD_storageWrites_modifyState_self h1]
+            simp [hp, he1]
+          have hr : mid.storageReads[z]? = (tx.destroyStorage z).storageReads[z]? := by
+            rw [getElem?_storageReads_modifyState_self h1]
+            simp [hp, he1]
+          have hd : (mid.destroyStorage z).storageReads[z]? = mid.storageReads[z]? := by
+            simp [destroyStorage, hw, Std.ExtTreeMap.keys_eq_nil_iff.mpr rfl,
+              Std.ExtTreeSet.insertMany_nil, Std.ExtTreeMap.getD_eq_getD_getElem?, hr]
+          by_cases he2 : tx'.getAccount z = EMPTY_ACCOUNT <;> simp [hp, he1, he2, hd, hr]
+        · have hw : mid.storageWrites.getD z ∅ = tx.storageWrites.getD z ∅ := by
+            rw [getD_storageWrites_modifyState_self h1]
+            simp [hp, he1]
+          have hr : mid.storageReads[z]? = tx.storageReads[z]? := by
+            rw [getElem?_storageReads_modifyState_self h1]
+            simp [hp, he1]
+          have hd : (mid.destroyStorage z).storageReads[z]? =
+              (tx.destroyStorage z).storageReads[z]? := by
+            simp [destroyStorage, hw, Std.ExtTreeMap.getD_eq_getD_getElem?, hr]
+          by_cases he2 : tx'.getAccount z = EMPTY_ACCOUNT <;> simp [hp, he1, he2, hd, hr]
+      · rw [getElem?_storageReads_modifyState_self h1]
+        simp [hp]
+    · have hw : mid.storageWrites.getD z ∅ = tx.storageWrites.getD z ∅ :=
+        getD_storageWrites_modifyState_of_ne hz1 h1
+      have hr : mid.storageReads[z]? = tx.storageReads[z]? :=
+        getElem?_storageReads_modifyState_of_ne hz1 h1
+      have hd : (mid.destroyStorage z).storageReads[z]? =
+          (tx.destroyStorage z).storageReads[z]? := by
+        simp [destroyStorage, hw, Std.ExtTreeMap.getD_eq_getD_getElem?, hr]
+      by_cases hp : fork ≥ .paris <;> by_cases he2 : tx'.getAccount z = EMPTY_ACCOUNT <;>
+        simp [hp, hz1, he2, hd, hr]
+  · rw [getElem?_storageReads_modifyState_of_ne hz2 h2]
+    by_cases hz1 : z = address
+    · subst hz1
+      rw [getElem?_storageReads_modifyState_self h1]
+      by_cases hp : fork ≥ .paris <;> by_cases he1 : mid.getAccount z = EMPTY_ACCOUNT <;>
+        simp [hp, hz2, he1]
+    · rw [getElem?_storageReads_modifyState_of_ne hz1 h1]
+      simp [hz1, hz2]
+
 /-- A move of ether that succeeds adds the sender and the recipient to the account reads.
 
 It keeps the storage reads of every other address.
@@ -1336,6 +1457,68 @@ theorem reads_moveEther {fork : Fork} {tx tx' : TransactionState} {sender recipi
         getElem?_storageReads_modifyState_of_ne hs hmid]
     · rw [storageReads_modifyState_of_lt_paris hfork h,
         storageReads_modifyState_of_lt_paris hfork hmid]
+
+/-- A move of ether gives the storage reads at every address.
+
+From Paris, an address that the debit or the credit leaves empty has its written keys read. -/
+theorem getElem?_storageReads_moveEther {fork : Fork} {tx tx' : TransactionState}
+    {sender recipient : Address} {amount : U256}
+    (h : tx.moveEther fork sender recipient amount = .ok tx') (address : Address) :
+    tx'.storageReads[address]? =
+      if fork ≥ .paris ∧
+          ((address = sender ∧
+              { tx.getAccount sender with balance := (tx.getAccount sender).balance - amount } =
+                EMPTY_ACCOUNT) ∨
+            (address = recipient ∧ tx'.getAccount recipient = EMPTY_ACCOUNT)) then
+        (tx.destroyStorage address).storageReads[address]?
+      else tx.storageReads[address]? := by
+  unfold moveEther at h
+  rcases modifyState_debit fork tx sender amount with
+    ⟨-, hmid⟩ | ⟨-, mid, hmid, hsender, -⟩
+  · simp [hmid, bind, Except.bind] at h
+  · simp only [hmid, bind, Except.bind] at h
+    rw [getElem?_storageReads_modifyState_modifyState hmid h address, hsender]
+
+/-- Moving ether clears the storage writes of an address that it deletes, and keeps the rest. -/
+theorem getD_storageWrites_moveEther {fork : Fork} {tx tx' : TransactionState}
+    {sender recipient : Address} {amount : U256}
+    (h : tx.moveEther fork sender recipient amount = .ok tx') (address : Address) :
+    tx'.storageWrites.getD address ∅ =
+      if fork ≥ .paris ∧
+          ((address = sender ∧
+              { tx.getAccount sender with balance := (tx.getAccount sender).balance - amount } =
+                EMPTY_ACCOUNT) ∨
+            (address = recipient ∧ tx'.getAccount recipient = EMPTY_ACCOUNT)) then ∅
+      else tx.storageWrites.getD address ∅ := by
+  unfold moveEther at h
+  rcases modifyState_debit fork tx sender amount with
+    ⟨-, hmid⟩ | ⟨-, mid, hmid, hsender, -⟩
+  · simp [hmid, bind, Except.bind] at h
+  · simp only [hmid, bind, Except.bind] at h
+    by_cases hra : address = recipient
+    · subst hra
+      rw [getD_storageWrites_modifyState_self h]
+      by_cases hsa : address = sender
+      · subst hsa
+        rw [getD_storageWrites_modifyState_self hmid, hsender]
+        by_cases hp : fork ≥ .paris <;>
+          by_cases he1 : { tx.getAccount address with
+              balance := (tx.getAccount address).balance - amount } = EMPTY_ACCOUNT <;>
+          by_cases he2 : tx'.getAccount address = EMPTY_ACCOUNT <;>
+          simp [hp, he1, he2]
+      · rw [getD_storageWrites_modifyState_of_ne hsa hmid]
+        by_cases hp : fork ≥ .paris <;> by_cases he2 : tx'.getAccount address = EMPTY_ACCOUNT <;>
+          simp [hp, hsa, he2]
+    · rw [getD_storageWrites_modifyState_of_ne hra h]
+      by_cases hsa : address = sender
+      · subst hsa
+        rw [getD_storageWrites_modifyState_self hmid, hsender]
+        by_cases hp : fork ≥ .paris <;>
+          by_cases he1 : { tx.getAccount address with
+              balance := (tx.getAccount address).balance - amount } = EMPTY_ACCOUNT <;>
+          simp [hp, hra, he1]
+      · rw [getD_storageWrites_modifyState_of_ne hsa hmid]
+        simp [hsa, hra]
 
 /-- A write of an account keeps the account reads and the storage reads. -/
 theorem reads_setAccount (tx : TransactionState) (address : Address) (account : Option Account) :
