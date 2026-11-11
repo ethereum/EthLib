@@ -2612,8 +2612,11 @@ From Electra, pending consolidations succeed when their source and target indice
 The current epoch plus one must fit in 64 bits.
 The source is debited before the target is credited, so the budget also covers equal source and target indices.
 
-Builder payment settlement succeeds from Gloas when an epoch has at least six slots, the registry is within its limit, and the sum of effective balances is below `2^64`.
-The step keeps `WithinBudget`.
+From Gloas, builder payment settlement succeeds when an epoch has at least six slots.
+The registry must also be within its limit, and the sum of effective balances below `2^64`.
+Mainnet and minimal have 32 and 8 slots an epoch.
+With fewer than six, the specification itself can overflow when it multiplies the balance of one slot by six.
+The step changes only the pending payments and the withdrawals of the builders, so it keeps the bounds on the amounts of a run of slots (`WithinBudget`).
 
 The builder payments of Gloas carry four hypotheses and one restriction.
 `chainSteps_paysQuorum` proves that along a chain through the last slot of an epoch, each payment of the previous epoch that reaches its quorum is paid exactly once.
