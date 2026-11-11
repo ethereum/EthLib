@@ -233,20 +233,36 @@ These stages, and not the status of the EIP document itself, decide where the sp
   Another project can also import a pinned revision of EthLib and build on it.
 - An EIP Considered or Scheduled for Inclusion in a named upgrade lives on a branch of ethereum/EthLib named after that upgrade.
   The work is then visible to everyone, and it follows the devnets of the upgrade.
-- An upgrade merges into `master` once it is Scheduled for mainnet, with only its Scheduled EIPs.
+- An upgrade merges into `master` once its meta EIP records a mainnet activation, with only its Scheduled EIPs.
+  EIP-7723 gives stages to EIPs, not to upgrades, so the activation table of the meta EIP is the signal.
   An EIP Declined for Inclusion leaves the branch.
+- EIP-7723 lets a Scheduled EIP move back to Considered or to Declined.
+  If that happens after the merge, the EIP leaves `master`, and a Considered EIP returns to the branch.
 
 So a contribution that adds an EIP ahead of its stage is not accepted, whoever or whatever writes it.
 This keeps the repository free of changes that may never activate.
 
+Two kinds of change have no stage of their own.
+
+- A blob-parameter-only fork of EIP-7892 changes parameters and no rule.
+  It enters when a meta EIP schedules its activation, as EIP-7607 of Fusaka does for BPO1 and BPO2.
+  The configurations of the specifications give its parameters.
+- A standard outside the EIP process, such as the Engine API, the beacon API or a libp2p protocol, has no inclusion stages.
+  A version of it enters with the upgrade that requires it.
+  A standard that no upgrade requires, such as the era file format, enters once it is stable enough to cite at a pinned commit.
+
 A few components are the exception, because EthLib means to be their reference by the time they reach mainnet, several upgrades ahead.
-The hash-based signatures XMSS and SPHINCS are such components.
-The maintainers choose these components, and each has an issue that records the decision.
+The maintainers choose these components, and each has an issue that records the decision:
+
+- the hash-based signature XMSS, in [#29](https://github.com/ethereum/EthLib/issues/29),
+- the hash-based signature SPHINCS, in [#41](https://github.com/ethereum/EthLib/issues/41).
+
 Each is specified on its own, outside `Fork`, so no rule of an upgrade uses it.
 It joins the timeline by the rule above, when an upgrade schedules it.
 
 The stages apply to changes, not to forks.
-A constructor of `Fork`, such as Hegotá, exists as soon as one of its changes has entered.
+On the branch of an upgrade, its constructor of `Fork`, such as Hegotá, exists from the first change that enters.
+On `master`, the constructor appears when the upgrade merges.
 The rules that wait for its other changes reject it as not yet specified.
 The parity catalogue lists the cases of each pinned devnet, and a case runs only once its change has entered.
 `scripts/check_spec_releases.py` reports when the specification repositories start the tests of a new upgrade, which tells a reviewer that a branch is due.
