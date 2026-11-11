@@ -13,6 +13,8 @@ So two objects with the same bytes are the same object.
 
 The exclusive or of byte strings is commutative, and applying one string twice undoes it.
 
+That holds for untyped strings too, where a byte past the end of the second reads as zero.
+
 A byte of a join or a slice is a byte of a part, or zero past its end.
 
 Two strings of one size are equal when they agree on every byte.
@@ -119,6 +121,62 @@ theorem eq_of_byteAt {a b : ByteArray} (size : a.size = b.size)
   unfold byteAt at h
   rw [dite_eq_left (show i < a.size from ha), dite_eq_left (show i < b.size from hb)] at h
   exact h
+
+/-- Writing one byte of a buffer changes that byte and no other. -/
+theorem byteAt_set {acc : ByteArray} {i : Nat} (h : i < acc.size) (v : UInt8) (j : Nat) :
+    byteAt (acc.set i v h) j = if j = i then v else byteAt acc j := by
+  have hs : (acc.set i v h).size = acc.size := by
+    simp only [ByteArray.set, ByteArray.size, Array.size_set]
+  unfold byteAt
+  by_cases hj : j = i
+  · subst hj
+    rw [ite_eq_left rfl, dite_eq_left (show j < (acc.set j v h).size by omega)]
+    simp [ByteArray.set, ByteArray.getElem_eq_getElem_data]
+  · rw [ite_eq_right hj]
+    by_cases hlt : j < acc.size
+    · rw [dite_eq_left (show j < (acc.set i v h).size by omega), dite_eq_left hlt]
+      simp [ByteArray.set, ByteArray.getElem_eq_getElem_data, Array.getElem_set, Ne.symm hj]
+    · rw [dite_eq_right (show ¬j < (acc.set i v h).size by omega), dite_eq_right hlt]
+
+/-- A byte of the exclusive or is the exclusive or of the two bytes, over the first string. -/
+theorem byteAt_xorByteArray (a b : ByteArray) (j : Nat) :
+    byteAt (xorByteArray a b) j = if j < a.size then byteAt a j ^^^ byteAt b j else 0 := by
+  -- From index `i` on, the loop XORs each byte of the buffer with the byte of `b`.
+  suffices ∀ i acc, byteAt (xorByteArray.go b i acc) j =
+      if i ≤ j ∧ j < acc.size then byteAt acc j ^^^ byteAt b j else byteAt acc j by
+    rw [xorByteArray, this 0 a]
+    by_cases hj : j < a.size
+    · simp [hj]
+    · simp [hj, byteAt_of_size_le (Nat.le_of_not_lt hj)]
+  intro i acc
+  induction i, acc using xorByteArray.go.induct b with
+  | case1 i acc h ih =>
+    rw [xorByteArray.go, dite_eq_left h, ih, byteAt_set h]
+    have hs : (acc.set i (acc[i] ^^^ byteAt b i) h).size = acc.size := by
+      simp only [ByteArray.set, ByteArray.size, Array.size_set]
+    rw [hs]
+    by_cases hji : j = i
+    · subst hji
+      have hacc : acc[j] = byteAt acc j := by unfold byteAt; rw [dite_eq_left h]
+      simp [hacc, h, show ¬(j + 1 ≤ j) by omega]
+    · by_cases hle : i + 1 ≤ j ∧ j < acc.size
+      · simp [hji, hle, show i ≤ j by omega]
+      · have : ¬(i ≤ j ∧ j < acc.size) := by omega
+        simp [hji, hle, this]
+  | case2 i acc h =>
+    rw [xorByteArray.go, dite_eq_right h]
+    have : ¬(i ≤ j ∧ j < acc.size) := by omega
+    simp [this]
+
+/-- Applying the same string twice gives back the first string. -/
+@[simp] theorem xorByteArray_xorByteArray_cancel_right (a b : ByteArray) :
+    xorByteArray (xorByteArray a b) b = a := by
+  apply eq_of_byteAt (by rw [xorByteArray_size, xorByteArray_size])
+  intro j
+  rw [byteAt_xorByteArray, byteAt_xorByteArray, xorByteArray_size]
+  by_cases hj : j < a.size
+  · simp [hj, UInt8.xor_assoc]
+  · simp [hj, byteAt_of_size_le (Nat.le_of_not_lt hj)]
 
 /-! ## A loop over the bytes -/
 

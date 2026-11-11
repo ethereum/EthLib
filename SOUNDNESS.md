@@ -662,6 +662,9 @@ The Python tests check seven test cases of the NIST CAVP file `gcmtestvectors.zi
 
 X25519 has no theorem: only the Python tests check it.
 The ChaCha20-Poly1305 proofs cover output length, counter exhaustion and rejection of a wrong tag (`Proofs/ChaCha20Poly1305.lean`).
+`crypt_crypt` proves that the cipher undoes itself, and `decrypt_encrypt` that decryption of an honest ciphertext and tag returns the plaintext.
+`tag_eq_of_decrypt_eq_ok` proves that no other tag passes for that ciphertext.
+These are statements about the definitions alone, not about their security.
 No theorem relates ChaCha20-Poly1305 to an independent model of RFC 8439.
 The Python tests compare the bindings with the RFC 7748 and RFC 8439 vectors.
 The million-iteration X25519 vector requires `ETHLIB_SLOW_VECTORS=1`.
