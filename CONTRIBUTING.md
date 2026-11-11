@@ -91,6 +91,12 @@ The specification and the exports import nothing beyond the Lean toolchain.
   Index with `Fin` or a `Vector`, walk arrays of equal length together with `zip`, or return a typed error.
   Older modules still use these accessors, and pull requests remove them module by module.
   #106 tracks the ones in KZG.
+- Remove such an accessor even when no input that the source accepts reaches its default.
+  A caller of a public function can still reach it, with arguments that break a precondition the type does not state.
+  Prove that the new definition equals the old one wherever the old index was in range.
+  If an input that the source rejects reached a default, the change is a `fix`.
+  It cites the rule of the source that it restores.
+  Record EthLib as the origin of each test vector that such a fix adds, since no upstream suite holds it.
 - Prefer structural recursion, `map` and folds to `Id.run do` with mutable variables.
   A proof then follows the shape of the definition.
   A theorem about a `do` loop restates its elaborated body, so any edit of the loop breaks the statement.
@@ -104,6 +110,27 @@ The specification and the exports import nothing beyond the Lean toolchain.
   `decide +kernel` also reduces a well-founded recursion whose measure is a single `Nat`, which Lean builds on `WellFounded.Nat.fix`.
   Do not count on it for a lexicographic measure, such as a pair, which Lean builds on `WellFounded.fix`.
   Lean documents only `WellFounded.Nat.fix` as reducing on closed terms.
+
+### Failure at an entry point
+
+An entry point is a public operation that a client or another layer calls.
+Examples are a state transition, a gossip validation and an Engine API method.
+What an entry point does with a wrong input is part of the protocol, so its source often says what it returns.
+
+- Where the source defines the outcomes of an operation, return them as a type.
+  For example, the Engine API answers a payload with one of five statuses, and gossip validation returns a `ValidationResult`: accept, ignore or reject.
+  Map the internal errors to that type in one place, with a total function.
+  `newPayloadOnChain` does this: an execution that aborts gives `.syncing`, and any other failed transition gives `.invalid`.
+- Return a `Bool` only where the source defines one.
+  A caller that the source requires to tell outcomes apart, for example to import or to queue a block, receives the richer type.
+- Where the source fixes the order of its checks, and the order changes the outcome, follow that order.
+  Pin it with a theorem, or with a test whose input fails two checks.
+  Elsewhere, a theorem or the binding contract in `bindings/contract/contract.json` promises that the operation rejects the input, not which error it returns.
+  The consensus specification, for example, says only which state transitions are invalid.
+- Where the source requires the state to be unchanged on failure, state that in a theorem.
+  When the operation returns its input state on failure, state it as equality of the returned state.
+  Inside a step, such as an EVM call that halts, state it over the values a caller can read: balances, nonces, code and storage.
+  Do not state it over the fields of the representation, since a new representation would break the statement.
 
 ### Proofs
 
