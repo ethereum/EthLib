@@ -2592,6 +2592,10 @@ Before Electra, registry updates need a ceiling for the first activation epoch a
 The ceiling plus the registry size and the withdrawability delay must be below `2^64`.
 Each ejection raises the ceiling by at most one, and activation leaves the exit epochs unchanged.
 
+From Electra, pending consolidations succeed when their source and target indices are in the registry, balances match the registry, and the sum of balances is below `2^64`.
+The current epoch plus one must fit in 64 bits.
+The source is debited before the target is credited, so the budget also covers equal source and target indices.
+
 The builder payments of Gloas carry four hypotheses and one restriction.
 `chainSteps_paysQuorum` proves that along a chain through the last slot of an epoch, each payment of the previous epoch that reaches its quorum is paid exactly once.
 Paid means that the withdrawal of the payment joins the queue of the withdrawals of the builders.
