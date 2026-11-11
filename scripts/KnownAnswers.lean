@@ -10,7 +10,7 @@ The Python suite reaches the specification through the C exports and the Python 
 
 This program calls the same definitions that the theorems are about, compiled, on the same files.
 
-So a disagreement it finds lies in the specification, in the compiler or in how this program reads the files.
+So a disagreement lies in the specification, in the compiler or in how this program reads files.
 
 The exports and the bindings play no part.
 
