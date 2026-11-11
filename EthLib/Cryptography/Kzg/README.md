@@ -43,7 +43,8 @@ The trusted setup is the output of the KZG ceremony.
 Seven places in its specifications now say that the KZG functions are defined in `ethereum/cryptography-specs`.
 GitHub redirects that name to this repository, and no link names a commit or a release.
 
-The maintainers have not chosen which text is normative for KZG.
+No one has settled which text is normative for KZG.
+EthLib's maintainers, the EIP editors and the consensus-specs maintainers may all have a say.
 Three readings exist:
 
 1. The frozen consensus-specs text that the Final EIPs pin.
