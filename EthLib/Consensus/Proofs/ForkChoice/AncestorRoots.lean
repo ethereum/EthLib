@@ -6,17 +6,19 @@ public import EthLib.Consensus.Proofs.ForkChoice.Store
 /-!
 # Proofs: the walk of roots from a block back to an older block
 
-`getAncestorRoots` lists the roots from a block back to a terminal block, oldest first.
+A walk lists the roots from a block back to a terminal block, oldest first.
 
 The list leaves out the terminal block.
 
-- A successful walk is empty, or it ends with the block that it starts from.
-- A walk that returns a root starts at a block above the terminal block.
+It is empty when the walk reaches a block whose slot is not above the slot of the terminal block.
+
+- A successful walk is empty, or it lists the block after its older roots.
+- A walk that returns a root starts at a block with a higher slot than the terminal block.
 - The roots of a walk after one of its roots are the walk from the block back to that root.
 
-The last fact joins two walks into one.
+The last fact splits a walk at one of its roots.
 
-A proof needs it when a definition walks to a root of an earlier walk and then onwards from it.
+A second walk from the same block, back to a root of the first walk, lists the roots after it.
 
 No theorem here states that the roots of a walk are ancestors of the block.
 -/
@@ -33,9 +35,9 @@ namespace Store
 
 variable {store : Store preset fork}
 
-/-- A successful walk back from a block is empty, or it ends with that block.
+/-- A successful walk back from a block is empty, or it lists the block after its older roots.
 
-The roots that the walk had when it reached the block follow, unchanged. -/
+The roots that the walk already held follow the block, unchanged. -/
 theorem getAncestorRoots_eq_nil_or {root terminal : Root} {acc roots : List Root}
     (walked : store.getAncestorRoots root terminal acc = .ok roots) :
     roots = [] ∨ ∃ older, roots = older ++ root :: acc := by
@@ -60,7 +62,7 @@ theorem getAncestorRoots_eq_nil_or {root terminal : Root} {acc roots : List Root
             · exact Or.inr ⟨older ++ [block.parentRoot], by simp⟩
           · cases walked
 
-/-- A walk that returns a root starts at a known block above the terminal block.
+/-- A walk that returns a root starts at a known block with a higher slot than the terminal block.
 
 The terminal block is known too. -/
 theorem slot_lt_of_getAncestorRoots {root terminal : Root} {acc roots : List Root}
@@ -78,11 +80,11 @@ theorem slot_lt_of_getAncestorRoots {root terminal : Root} {acc roots : List Roo
     · rename_i higher
       exact ⟨block, terminalBlock, found, terminalFound, by simpa using higher⟩
 
-/-- The walk back to a root of a longer walk returns the roots after it, from any block.
+/-- The walk back to a root of a longer walk returns the roots after it, whatever roots it holds.
 
 The roots `acc` and `otherAcc` are what each walk had when it reached the block.
 
-The roots `newer` come before `acc` in the longer walk, and there is one at least. -/
+The roots `newer` come before `acc` in the longer walk, and there is at least one. -/
 private theorem getAncestorRoots_of_append_aux {root terminal mid : Root}
     {acc otherAcc older newer : List Root}
     (walked : store.getAncestorRoots root terminal acc = .ok (older ++ mid :: (newer ++ acc)))
@@ -161,12 +163,12 @@ private theorem getAncestorRoots_of_append_aux {root terminal mid : Root}
 
 /-- The walk from a block back to a root of a longer walk returns the roots after that root.
 
-So the roots of a walk after one of its roots are the walk from the block back to that root. -/
+The longer walk starts at the same block and goes back to an older terminal block. -/
 theorem getAncestorRoots_of_append {head terminal mid : Root} {older newer : List Root}
     (walked : store.getAncestorRoots head terminal = .ok (older ++ mid :: newer)) :
     store.getAncestorRoots head mid = .ok newer := by
   rcases List.eq_nil_or_concat newer with rfl | ⟨init, final, rfl⟩
-  · -- The walk ends with `mid`, so `mid` is the block, and a block has no root above itself.
+  · -- The walk ends with `mid`, so `mid` is the block, and a walk from a block to itself is empty.
     obtain ⟨block, -, found, -, -⟩ := slot_lt_of_getAncestorRoots walked (by simp)
     rcases getAncestorRoots_eq_nil_or walked with empty | ⟨front, shape⟩
     · simp at empty

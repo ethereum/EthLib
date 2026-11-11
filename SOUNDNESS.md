@@ -1831,17 +1831,21 @@ Each member of the committees must also be in the source of balances, or the rul
 `Consensus/Proofs/ForkChoice/FastConfirmationConfirmedRoot.lean` states where the confirmed block of a slot comes from.
 `Store.onFastConfirmation_confirmedRoot` shows that the rule starts from the block stored before, the finalized block or the observed justified block.
 It keeps the block stored before only when that block is in the chain of the head, and at the first slot of an epoch only when `isConfirmedChainSafe` accepts it.
-It takes the observed justified block only at the first slot of an epoch, when that checkpoint is the unrealized justification of the head.
+It takes the observed justified block only at the first slot of an epoch.
+That block must then be in the epoch before the current one, and its checkpoint must be the unrealized justification of the head.
 The rule stores that block, or a later root of the walk of `getAncestorRoots` from that block to the head.
 That root and each root before it in the walk then pass `isOneConfirmed`, with the votes of the state of the observed justified checkpoint.
-The rule makes two walks, and `Store.getAncestorRoots_of_append` in `Consensus/Proofs/ForkChoice/AncestorRoots.lean` joins them into one.
+The rule makes two walks, and `Store.getAncestorRoots_of_append` in `Consensus/Proofs/ForkChoice/AncestorRoots.lean` shows that the second walk is the part of the first walk after the root where the first walk stopped.
 No theorem yet shows that the roots of a walk are in the chain of the head.
+
 `foldlM_onFastConfirmation_confirmedRoot` turns those four cases into an induction along a list of stores, one fast confirmation for each.
 A property of the confirmed block holds at the end when the three starts have it and a one-confirmed walk keeps it.
+
 These theorems prove no safety: no theorem yet shows that a start is safe, or that a one-confirmed walk keeps a block in the chain of every honest head.
 They do not record every check of the rule.
-For the start they leave out the checks that compare the epochs and the slots of the blocks.
-For the walks they leave out the check that the head of the slot before holds each block of the first walk.
+For the start they leave out the other checks that compare the epochs and the slots of the blocks.
+For the walks they leave out the checks on the epochs of the start and of the walked blocks.
+They also leave out the check that the head of the slot before holds each block of the first walk.
 They leave out the checks that a voting source or an unrealized justification is recent.
 They also leave out `willNoConflictingCheckpointBeJustified` and `willCurrentTargetBeJustified`, which are about the justification of the target of the current epoch.
 No theorem yet relates the list of stores to the stores of an honest validator in an execution.
