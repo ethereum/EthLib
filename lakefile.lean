@@ -71,11 +71,13 @@ It is a separate library, so that the specification never imports an `@[export]`
 
 An export then re-elaborates only when a module it imports changes.
 
-No export module evaluates a definition of the specification while it is elaborated.
+No export module runs compiled code of the specification while it is elaborated, such as an `#eval` or an `initialize`.
 
 So that library cannot change an export's output.
 
 `derive_py` runs while export modules are elaborated, but it only reads declarations.
+
+A `by decide` in an export reduces definitions read from the `.olean` files, not compiled code.
 
 Each domain's export tree is also a root, so that its modules belong to this library. -/
 @[default_target]
