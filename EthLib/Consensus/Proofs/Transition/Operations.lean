@@ -1114,6 +1114,142 @@ theorem applyDepositElectra_kept {electra : .pectra ≤ fork} {pubkey : BLSPubke
   · obtain ⟨_, rfl⟩ := addPendingDeposit_eq (liftAccessor_ok.mp computed)
     exact ⟨id, rfl, rfl⟩
 
+/-- A credited deposit leaves the registry alone or appends a validator with a new key. -/
+private theorem applyPendingDeposit_registry {deposit : PendingDeposit}
+    (computed : applyPendingDeposit config checks state deposit = .ok after) :
+    after.validators.data = state.validators.data ∨
+      (after.validators.data = state.validators.data.push
+        (getValidatorFromDeposit preset fork deposit.pubkey deposit.withdrawalCredentials
+          deposit.amount) ∧
+        ∀ validator ∈ state.validators.data, validator.pubkey ≠ deposit.pubkey) := by
+  unfold applyPendingDeposit at computed
+  split at computed
+  · rename_i new
+    split at computed
+    · cases computed
+      exact .inl rfl
+    simp only [bind_ok_iff] at computed
+    obtain ⟨_, _, computed⟩ := computed
+    split at computed
+    · refine .inr ⟨addValidatorToRegistry_validators_eq_push computed, ?_⟩
+      simpa only [Array.findIdx?_eq_none_iff, beq_eq_false_iff_ne] using new
+    · cases computed
+      exact .inl rfl
+  · simp only [liftAccessor_ok, bind_ok_iff] at computed
+    obtain ⟨_, _, computed⟩ := computed
+    exact .inl (congrArg (·.data) (increaseBalance_validators computed))
+
+/-- A deposit leaves the registry alone or appends a validator with a new key.
+
+From Electra the new validator has zero balance while the deposit waits in the queue. -/
+private theorem applyDeposit_registry {pubkey : BLSPubkey} {withdrawalCredentials : Bytes32}
+    {amount : Gwei} {signature : BLSSignature}
+    (computed :
+      applyDeposit config checks state pubkey withdrawalCredentials amount signature = .ok after) :
+    after.validators.data = state.validators.data ∨
+      ∃ credited, after.validators.data = state.validators.data.push
+        (getValidatorFromDeposit preset fork pubkey withdrawalCredentials credited) ∧
+        ∀ validator ∈ state.validators.data, validator.pubkey ≠ pubkey := by
+  unfold applyDeposit at computed
+  split at computed
+  · unfold applyDepositElectra at computed
+    split at computed
+    · rename_i new
+      simp only [bind_ok_iff] at computed
+      obtain ⟨_, _, computed⟩ := computed
+      split at computed
+      · simp only [bind_ok_iff, liftAccessor_ok] at computed
+        obtain ⟨_, added, pushed⟩ := computed
+        have appended := addValidatorToRegistry_validators_eq_push added
+        obtain ⟨_, rfl⟩ := addPendingDeposit_eq pushed
+        refine .inr ⟨0, appended, ?_⟩
+        simpa only [Array.findIdx?_eq_none_iff, beq_eq_false_iff_ne] using new
+      · cases computed
+        exact .inl rfl
+    · obtain ⟨_, rfl⟩ := addPendingDeposit_eq (liftAccessor_ok.mp computed)
+      exact .inl rfl
+  · rcases applyPendingDeposit_registry computed with same | ⟨added, fresh⟩
+    · exact .inl same
+    · exact .inr ⟨amount, added, fresh⟩
+
+/-- A credited deposit keeps every old validator, and hence its public key, at the same index. -/
+theorem applyPendingDeposit_validator_eq {deposit : PendingDeposit} {i : Nat}
+    {validator : Validator} (found : state.validators.data[i]? = some validator)
+    (computed : applyPendingDeposit config checks state deposit = .ok after) :
+    after.validators.data[i]? = some validator := by
+  rcases applyPendingDeposit_registry computed with same | ⟨added, _⟩
+  · rwa [same]
+  · rw [added, Array.getElem?_push]
+    have inside := Array.getElem?_eq_some_iff.mp found
+    simp [Nat.ne_of_lt inside.1, found]
+
+/-- A deposit keeps every old validator, and hence its public key, at the same index. -/
+theorem applyDeposit_validator_eq {pubkey : BLSPubkey} {withdrawalCredentials : Bytes32}
+    {amount : Gwei} {signature : BLSSignature} {i : Nat} {validator : Validator}
+    (found : state.validators.data[i]? = some validator)
+    (computed :
+      applyDeposit config checks state pubkey withdrawalCredentials amount signature = .ok after) :
+    after.validators.data[i]? = some validator := by
+  rcases applyDeposit_registry computed with same | ⟨_, added, _⟩
+  · rwa [same]
+  · rw [added, Array.getElem?_push]
+    have inside := Array.getElem?_eq_some_iff.mp found
+    simp [Nat.ne_of_lt inside.1, found]
+
+/-- Crediting a deposit preserves distinct public keys in the registry.
+
+The lookup, not the append helper, ensures that an appended key is new. -/
+theorem applyPendingDeposit_pubkeys_nodup {deposit : PendingDeposit}
+    (distinct : (state.validators.data.toList.map (·.pubkey)).Nodup)
+    (computed : applyPendingDeposit config checks state deposit = .ok after) :
+    (after.validators.data.toList.map (·.pubkey)).Nodup := by
+  rcases applyPendingDeposit_registry computed with same | ⟨added, fresh⟩
+  · rwa [same]
+  · rw [added]
+    simpa [Array.toList_push, List.map_append, List.nodup_append, distinct,
+      getValidatorFromDeposit, List.mem_map] using fresh
+
+/-- Applying a deposit preserves distinct public keys, including when it queues the amount. -/
+theorem applyDeposit_pubkeys_nodup {pubkey : BLSPubkey} {withdrawalCredentials : Bytes32}
+    {amount : Gwei} {signature : BLSSignature}
+    (distinct : (state.validators.data.toList.map (·.pubkey)).Nodup)
+    (computed :
+      applyDeposit config checks state pubkey withdrawalCredentials amount signature = .ok after) :
+    (after.validators.data.toList.map (·.pubkey)).Nodup := by
+  rcases applyDeposit_registry computed with same | ⟨_, added, fresh⟩
+  · rwa [same]
+  · rw [added]
+    simpa [Array.toList_push, List.map_append, List.nodup_append, distinct,
+      getValidatorFromDeposit, List.mem_map] using fresh
+
+/-- Crediting a list of pending deposits keeps each old validator at its index. -/
+theorem foldlM_applyPendingDeposit_validator_eq {deposits : List PendingDeposit} {i : Nat}
+    {validator : Validator} (found : state.validators.data[i]? = some validator)
+    (computed : deposits.foldlM (applyPendingDeposit config checks) state = .ok after) :
+    after.validators.data[i]? = some validator := by
+  induction deposits generalizing state with
+  | nil =>
+    cases computed
+    exact found
+  | cons deposit rest ih =>
+    simp only [List.foldlM_cons, bind_ok_iff] at computed
+    obtain ⟨next, applied, computed⟩ := computed
+    exact ih (applyPendingDeposit_validator_eq found applied) computed
+
+/-- Crediting a list of pending deposits preserves distinct public keys. -/
+theorem foldlM_applyPendingDeposit_pubkeys_nodup {deposits : List PendingDeposit}
+    (distinct : (state.validators.data.toList.map (·.pubkey)).Nodup)
+    (computed : deposits.foldlM (applyPendingDeposit config checks) state = .ok after) :
+    (after.validators.data.toList.map (·.pubkey)).Nodup := by
+  induction deposits generalizing state with
+  | nil =>
+    cases computed
+    exact distinct
+  | cons deposit rest ih =>
+    simp only [List.foldlM_cons, bind_ok_iff] at computed
+    obtain ⟨next, applied, computed⟩ := computed
+    exact ih (applyPendingDeposit_pubkeys_nodup distinct applied) computed
+
 /-- A deposit keeps one balance for each validator. -/
 theorem balancesMatch_applyDeposit {pubkey : BLSPubkey} {withdrawalCredentials : Bytes32}
     {amount : Gwei} {signature : BLSSignature}
@@ -1189,6 +1325,24 @@ theorem balancesMatch_processDeposit {before : fork < .hegota} {deposit : Deposi
     (holds : BalancesMatch state) : BalancesMatch after := by
   obtain ⟨_, _, _, _, applied⟩ := processDeposit_ok computed
   exact balancesMatch_applyDeposit applied holds
+
+/-- An accepted block deposit keeps each old validator at its index. -/
+theorem processDeposit_validator_eq {before : fork < .hegota} {deposit : Deposit} {i : Nat}
+    {validator : Validator} (found : state.validators.data[i]? = some validator)
+    (computed : processDeposit config checks before state deposit = .ok after) :
+    after.validators.data[i]? = some validator := by
+  obtain ⟨_, _, next, _, applied⟩ := processDeposit_ok computed
+  exact applyDeposit_validator_eq
+    (state := { state with eth1DepositIndex := fun _ => next }) found applied
+
+/-- An accepted block deposit preserves distinct public keys in the registry. -/
+theorem processDeposit_pubkeys_nodup {before : fork < .hegota} {deposit : Deposit}
+    (distinct : (state.validators.data.toList.map (·.pubkey)).Nodup)
+    (computed : processDeposit config checks before state deposit = .ok after) :
+    (after.validators.data.toList.map (·.pubkey)).Nodup := by
+  obtain ⟨_, _, next, _, applied⟩ := processDeposit_ok computed
+  exact applyDeposit_pubkeys_nodup
+    (state := { state with eth1DepositIndex := fun _ => next }) distinct applied
 
 /-! ## Voluntary exits -/
 
