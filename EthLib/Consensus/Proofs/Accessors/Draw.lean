@@ -20,7 +20,7 @@ This holds when the balance is at most the largest, and the largest times the sc
 
 It states counts, not probabilities.
 
-Two draw inputs are equal only for equal seeds and block numbers, while these fit in eight bytes.
+Two draw inputs with block numbers below `2^64` are equal only for equal seeds and blocks.
 
 The draw inputs have 40 bytes, so they differ from the shuffle inputs of 33 or 37 bytes.
 

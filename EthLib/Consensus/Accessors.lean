@@ -368,7 +368,9 @@ def slotCommitteeMembers (state : BeaconState preset fork) (slot : Slot) :
 def drawsPerHash (fork : Base.Fork) : Nat :=
   if .pectra ≤ fork then 16 else 32
 
-/-- The input hashed for one block of draws: the seed, then the block number as eight bytes. -/
+/-- The input hashed for one block of draws: the seed, then the block number as eight bytes.
+
+The bytes are little-endian. -/
 def drawInput (seed : Bytes32) (block : Nat) : ByteArray :=
   ⟨seed.toArray ++ (uintToBytes 8 block).toArray⟩
 
