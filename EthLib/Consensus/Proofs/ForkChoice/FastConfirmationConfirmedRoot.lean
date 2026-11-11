@@ -6,57 +6,15 @@ public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation
 /-!
 # Proofs: how the fast confirmation rule chooses the confirmed block
 
-The fast confirmation of a slot stores a confirmed block.
+The rule starts from the block stored before, the finalized block or the observed justified block.
 
-This file states where that block comes from, without the long definition of the rule.
+It then stores that block, or a one-confirmed root of the walk from it to the head.
 
-The rule first picks a block to start from, in one of three ways.
+So a property of the confirmed block holds along a run of fast confirmations in four steps.
 
-- It keeps the block stored before.
-  That block is then in the chain of the head.
-  At the first slot of an epoch its chain also passes `isConfirmedChainSafe`.
-- It falls back to the finalized block.
-- At the first slot of an epoch it takes the observed justified block.
-  That checkpoint is then the unrealized justification of the head.
+The theorems keep only some checks of the rule, and each theorem says which.
 
-The rule then stores that block, or a later block of the chain of the head.
-
-A later block is one of the roots that `getAncestorRoots` walks from the start to the head.
-
-That block and each root before it in the walk pass `isOneConfirmed`.
-
-The votes are those of the state of the observed justified checkpoint.
-
-So a property of the confirmed block holds after a fast confirmation in four steps.
-
-Three of them give it to each block that the rule can start from.
-
-The fourth keeps it along a walk of blocks that the rule confirms.
-
-The same four steps keep a property along a run of fast confirmations, one store for each.
-
-The theorems do not record every check of the rule.
-
-For the start they keep four checks.
-
-- The block stored before is in the chain of the head.
-- At the first slot of an epoch, that block passes `isConfirmedChainSafe`.
-- The observed justified block is taken only at the first slot of an epoch.
-- The observed justified checkpoint is then the unrealized justification of the head.
-
-They leave out the other checks on the start, which compare the epochs and the slots of the blocks.
-
-For the walks they keep `isOneConfirmed` only.
-
-They leave out the check that the head of the slot before holds each block of the first walk.
-
-They leave out the checks that a voting source or an unrealized justification is recent.
-
-They leave out `willNoConflictingCheckpointBeJustified` and `willCurrentTargetBeJustified`.
-
-Those two are about the justification of the target of the current epoch.
-
-No theorem here states that a confirmed block stays in the chain of the head.
+No theorem here shows that the roots of a walk are in the chain of the head.
 -/
 
 @[expose] public section
@@ -103,11 +61,19 @@ private theorem of_oneConfirmedStep {head root state : Root}
 
 Each root of the walk before it is one-confirmed too.
 
-The walk is `getAncestorRoots`, from the start to the head, with the oldest root first.
+The walk goes from the head back to the start, without the start, with the oldest root first.
 
 The votes are those of the state of the observed justified checkpoint.
 
-The theorem does not record the other checks of the two walks of the rule. -/
+The theorem does not record the other checks of the two walks of the rule.
+
+It leaves out the checks on the epochs of the start and of the walked blocks.
+
+It also leaves out the check on the head of the slot before.
+
+It also leaves out the checks that a voting source or an unrealized justification is recent.
+
+It also leaves out the two checks on the justification of the target of the current epoch. -/
 theorem findLatestConfirmedDescendant_eq_or {fcr : FastConfirmationStore}
     {head start root : Root}
     (found : store.findLatestConfirmedDescendant config fcr head start = .ok root) :
@@ -159,31 +125,17 @@ theorem findLatestConfirmedDescendant_eq_or {fcr : FastConfirmationStore}
       rw [bind_ok_iff] at found
       obtain ⟨mid, looped, found⟩ := found
       refine ⟨mid, ?_, found⟩
-      refine (forIn_ok_last_kept (kept := good) ?_ ?_ looped).imp id ?_
-      · intro x s s' stepped
+      refine (forIn_ok_last_kept (kept := good) ?_ looped).imp id ?_
+      · intro x s r stepped
         rw [bind_ok_iff] at stepped
         obtain ⟨_, -, stepped⟩ := stepped
         split at stepped
-        · simp [pure, Except.pure] at stepped
+        · exact Or.inl (by simpa [pure, Except.pure] using stepped.symm)
         · rw [bind_ok_iff] at stepped
           obtain ⟨_, -, stepped⟩ := stepped
           split at stepped
-          · simp [pure, Except.pure] at stepped
-          · rcases of_oneConfirmedStep stepped with stopped | ⟨went, confirmed⟩
-            · simp at stopped
-            · exact ⟨ForInStep.yield.inj went, confirmed⟩
-      · intro x s s' stepped
-        rw [bind_ok_iff] at stepped
-        obtain ⟨_, -, stepped⟩ := stepped
-        split at stepped
-        · simpa [pure, Except.pure] using stepped.symm
-        · rw [bind_ok_iff] at stepped
-          obtain ⟨_, -, stepped⟩ := stepped
-          split at stepped
-          · simpa [pure, Except.pure] using stepped.symm
-          · rcases of_oneConfirmedStep stepped with stopped | ⟨went, -⟩
-            · exact ForInStep.done.inj stopped
-            · simp at went
+          · exact Or.inl (by simpa [pure, Except.pure] using stepped.symm)
+          · exact of_oneConfirmedStep stepped
       · rintro ⟨chain, later, split, allGood⟩
         exact ⟨chain, later, split ▸ walked, allGood⟩
     · exact ⟨start, Or.inl rfl, found⟩
@@ -208,34 +160,16 @@ theorem findLatestConfirmedDescendant_eq_or {fcr : FastConfirmationStore}
     obtain ⟨last, looped, found⟩ := found
     -- The second walk starts where the first ended, and ends in the same two ways.
     have second := forIn_ok_last_kept (kept := good) (by
-      intro x s s' stepped
+      intro x s r stepped
       simp only [bind_ok_iff] at stepped
       obtain ⟨_, -, _, -, stepped⟩ := stepped
       split at stepped
       · rw [bind_ok_iff] at stepped
         obtain ⟨_, -, stepped⟩ := stepped
         split at stepped
-        · simp [pure, Except.pure] at stepped
-        · rcases of_oneConfirmedStep stepped with stopped | ⟨went, confirmed⟩
-          · simp at stopped
-          · exact ⟨ForInStep.yield.inj went, confirmed⟩
-      · rcases of_oneConfirmedStep stepped with stopped | ⟨went, confirmed⟩
-        · simp at stopped
-        · exact ⟨ForInStep.yield.inj went, confirmed⟩) (by
-      intro x s s' stepped
-      simp only [bind_ok_iff] at stepped
-      obtain ⟨_, -, _, -, stepped⟩ := stepped
-      split at stepped
-      · rw [bind_ok_iff] at stepped
-        obtain ⟨_, -, stepped⟩ := stepped
-        split at stepped
-        · simpa [pure, Except.pure] using stepped.symm
-        · rcases of_oneConfirmedStep stepped with stopped | ⟨went, -⟩
-          · exact ForInStep.done.inj stopped
-          · simp at went
-      · rcases of_oneConfirmedStep stepped with stopped | ⟨went, -⟩
-        · exact ForInStep.done.inj stopped
-        · simp at went) looped
+        · exact Or.inl (by simpa [pure, Except.pure] using stepped.symm)
+        · exact of_oneConfirmedStep stepped
+      · exact of_oneConfirmedStep stepped) looped
     extract_lets tentativeRoot accepted acceptBody at found
     rw [bind_ok_iff] at found
     obtain ⟨_, -, found⟩ := found
@@ -278,13 +212,15 @@ The rule starts from the stored block, the finalized block or the observed justi
 
 It keeps the stored block only when that block is in the chain of the head.
 
-At the first slot of an epoch, the stored block must also pass `isConfirmedChainSafe`.
+At the first slot of an epoch, the chain of the stored block must also still be safe.
 
 It takes the observed justified block only at the first slot of an epoch.
 
-The observed justified checkpoint is then the unrealized justification of the head.
+That block is then in the epoch before the current one.
 
-The theorem does not record the checks of the rule on the epochs and the slots of the blocks. -/
+Its checkpoint is then the unrealized justification of the head.
+
+The theorem does not record the other checks on the epochs and the slots of the blocks. -/
 theorem getLatestConfirmed_eq_or {fcr : FastConfirmationStore} {head root : Root}
     (latest : store.getLatestConfirmed config fcr head = .ok root) :
     ∃ slot start, store.getCurrentSlot config = .ok slot ∧
@@ -295,12 +231,16 @@ theorem getLatestConfirmed_eq_or {fcr : FastConfirmationStore} {head root : Root
         start = store.finalizedCheckpoint.root ∨
         start = fcr.currentEpochObservedJustifiedCheckpoint.root ∧
           isStartSlotAtEpoch preset slot = .ok true ∧
+          (∃ observedBlock epoch,
+            store.block fcr.currentEpochObservedJustifiedCheckpoint.root = .ok observedBlock ∧
+            store.getCurrentStoreEpoch config = .ok epoch ∧
+            Uint64.addChecked (computeEpochAtSlot preset observedBlock.slot) 1 = .ok epoch) ∧
           store.unrealizedJustification head =
             .ok fcr.currentEpochObservedJustifiedCheckpoint) ∧
       (root = start ∨ store.findLatestConfirmedDescendant config fcr head start = .ok root) := by
   unfold getLatestConfirmed at latest
   rw [bind_ok_iff] at latest
-  obtain ⟨currentEpoch, -, latest⟩ := latest
+  obtain ⟨currentEpoch, epochFound, latest⟩ := latest
   rw [bind_ok_iff] at latest
   obtain ⟨slot, slotFound, latest⟩ := latest
   refine ⟨slot, ?_⟩
@@ -350,15 +290,22 @@ theorem getLatestConfirmed_eq_or {fcr : FastConfirmationStore} {head root : Root
       start = store.finalizedCheckpoint.root ∨
       start = fcr.currentEpochObservedJustifiedCheckpoint.root ∧
         isStartSlotAtEpoch preset slot = .ok true ∧
+        (∃ observedBlock epoch,
+          store.block fcr.currentEpochObservedJustifiedCheckpoint.root = .ok observedBlock ∧
+          store.getCurrentStoreEpoch config = .ok epoch ∧
+          Uint64.addChecked (computeEpochAtSlot preset observedBlock.slot) 1 = .ok epoch) ∧
         store.unrealizedJustification head =
           .ok fcr.currentEpochObservedJustifiedCheckpoint) ∧ finish () start = .ok root := by
     clear_value finish
     simp only [afterReset, bind_ok_iff] at latest
-    obtain ⟨atStart, startChecked, _, -, _, -, justified, justification, _, -, latest⟩ := latest
+    obtain ⟨atStart, startChecked, observedBlock, observedFound, observedEpoch, epochAdded,
+      justified, justification, _, -, latest⟩ := latest
     split at latest
     · rename_i replaced
-      refine ⟨observedRoot, Or.inr (Or.inr ⟨rfl, ?_, ?_⟩), latest⟩
+      refine ⟨observedRoot, Or.inr (Or.inr ⟨rfl, ?_, ?_, ?_⟩), latest⟩
       · exact replaced.1 ▸ startChecked
+      · refine ⟨observedBlock, currentEpoch, observedFound, epochFound, ?_⟩
+        exact replaced.2.1 ▸ mapError_ok_iff.mp epochAdded
       · exact justification.trans (congrArg Except.ok replaced.2.2.1.symm)
     · exact ⟨base, baseCase.imp id Or.inl, latest⟩
   clear latest
@@ -376,9 +323,13 @@ The rule starts from the block stored before, the finalized block or the observe
 
 It keeps the block stored before only when that block is in the chain of the head of the store.
 
-At the first slot of an epoch, that block must also pass `isConfirmedChainSafe`.
+At the first slot of an epoch, the chain of that block must also still be safe.
 
 It takes the observed justified block only at the first slot of an epoch.
+
+That block is then in the epoch before the current one.
+
+Its checkpoint is then the unrealized justification of the head.
 
 A later block is a root of the walk from the start to the head.
 
@@ -398,6 +349,10 @@ theorem onFastConfirmation_confirmedRoot {fcr after : FastConfirmationStore}
         start = store.finalizedCheckpoint.root ∨
         start = after.currentEpochObservedJustifiedCheckpoint.root ∧
           isStartSlotAtEpoch preset slot = .ok true ∧
+          (∃ observedBlock epoch,
+            store.block after.currentEpochObservedJustifiedCheckpoint.root = .ok observedBlock ∧
+            store.getCurrentStoreEpoch config = .ok epoch ∧
+            Uint64.addChecked (computeEpochAtSlot preset observedBlock.slot) 1 = .ok epoch) ∧
           store.unrealizedJustification head.root =
             .ok after.currentEpochObservedJustifiedCheckpoint) ∧
       (after.confirmedRoot = start ∨ ∃ balanceSource chain later,
@@ -460,6 +415,10 @@ theorem foldlM_onFastConfirmation_confirmedRoot {config : Config}
       stores[calls]? = some store → store.onFastConfirmation config fcr = .ok after →
       store.getHead config = .ok head → store.getCurrentSlot config = .ok slot →
       isStartSlotAtEpoch preset slot = .ok true →
+      (∃ observedBlock epoch,
+        store.block after.currentEpochObservedJustifiedCheckpoint.root = .ok observedBlock ∧
+        store.getCurrentStoreEpoch config = .ok epoch ∧
+        Uint64.addChecked (computeEpochAtSlot preset observedBlock.slot) 1 = .ok epoch) →
       store.unrealizedJustification head.root =
         .ok after.currentEpochObservedJustifiedCheckpoint →
       safe (calls + 1) after.currentEpochObservedJustifiedCheckpoint.root)
@@ -500,12 +459,12 @@ theorem foldlM_onFastConfirmation_confirmedRoot {config : Config}
   obtain ⟨head, slot, start, found, slotFound, startCase, rootCase⟩ :=
     Store.onFastConfirmation_confirmedRoot confirmed
   have startSafe : safe (calls + 1) start := by
-    rcases startCase with ⟨rfl, onChain, chainSafe⟩ | rfl | ⟨rfl, isStart, justified⟩
+    rcases startCase with ⟨rfl, onChain, chainSafe⟩ | rfl | ⟨rfl, isStart, epochOk, justified⟩
     · exact carried calls store fcr after head slot reached placed confirmed found slotFound
         holds onChain chainSafe
     · exact finalized calls store fcr after reached placed confirmed
     · exact observed calls store fcr after head slot reached placed confirmed found slotFound
-        isStart justified
+        isStart epochOk justified
   rcases rootCase with same | ⟨balanceSource, chain, later, sourced, walked, allConfirmed⟩
   · exact same ▸ startSafe
   · exact selected calls store fcr after head start balanceSource chain later reached placed
