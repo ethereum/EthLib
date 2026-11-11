@@ -1770,7 +1770,8 @@ The theorems weigh every vote at the balances of the checkpoint, so they reach a
 `Consensus/Proofs/ChurnReservations.lean` bounds the balance that the churn updates of exits and consolidations reserve, from Electra, when they run in turn on one state.
 These updates keep the slot and the validators, so the churn stays fixed.
 Their sum fits the churn left at the start plus one full churn for each later epoch of the queue.
-The theorems ask that the first permitted epoch is no later than the earliest open epoch of the queue at the start.
+The bounds also hold for an idle queue, whose earliest open epoch is before the first permitted epoch.
+The exact equalities require the first permitted epoch to be no later than the earliest open epoch at the start.
 In a block, other writes to the registry and to the pending queues come between these updates, and no theorem yet covers that interleaving.
 Nor does any theorem yet bound how the churn changes between slots, or derive the change of the active set.
 

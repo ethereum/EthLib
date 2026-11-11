@@ -9,6 +9,10 @@ Not yet released.
 
 ### Changes that break callers
 
+- The cumulative churn bounds also hold for idle queues ([#1451](https://github.com/ethereum/EthLib/issues/1451)).
+  In Lean, `churnQueue_foldlM_le` drops its `first` argument, and `computeExitEpochAndUpdateChurn_foldlM_le` and `computeConsolidationEpochAndUpdateChurn_foldlM_le` drop their `open_` argument.
+  Callers remove that argument.
+  The exact `_spend` equalities keep it.
 - A req/resp payload now fails when bytes follow the chunk that completes its declared length.
   A reader must reject any bytes that remain after it has read the declared number of SSZ bytes.
   The decoder read the whole Snappy stream.
