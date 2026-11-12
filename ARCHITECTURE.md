@@ -211,6 +211,7 @@ So the types that cross a module boundary are fixed here, and `EthLib/Base/` def
   It has no production instance, and the theorems about it hold for every answer, or for every answer that meets its laws.
 - The laws of a resource are a separate `Prop`, written as a property in the proof library of the lowest layer that can state it.
   A theorem shows that the production instance meets them.
+  Where no theorem does yet, `SOUNDNESS.md` names the missing proof as an assumption.
 - A security property that holds only with high probability is not such a law.
   The theorems take it as a hypothesis, and `SOUNDNESS.md` names it as an assumption, as it does for `SignatureChecks.AggregateSound`.
 - A test stub of a resource is an instance written for tests.
