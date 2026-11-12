@@ -14,7 +14,7 @@ So a theorem about a run can name the blocks of that run and the attestations in
 
 A block step of a run checks its state root, and is applied on a state with no upgrade due.
 
-Each step erases to a `ChainStep`, so the invariants of chains hold along a run.
+Each step of a run is a step of a chain, so the invariants of chains hold along a run.
 -/
 
 @[expose] public section
@@ -81,6 +81,14 @@ theorem Run.chainSteps {x y : ForkedBeaconState preset} (run : Run config checks
   induction run with
   | nil => exact .refl
   | snoc _ step ih => exact ih.tail step.chainStep
+
+/-- Appending runs is associative. -/
+theorem Run.append_assoc {a b c d : ForkedBeaconState preset} (one : Run config checks a b)
+    (two : Run config checks b c) (three : Run config checks c d) :
+    one.append (two.append three) = (one.append two).append three := by
+  induction three with
+  | nil => rfl
+  | snoc three step ih => exact congrArg (fun run => run.snoc step) ih
 
 /-- A step of two appended runs is a step of one of them. -/
 theorem Run.contains_append {g x y u v : ForkedBeaconState preset}

@@ -156,11 +156,11 @@ The active stake at `x` is at most three times the accountable stake at `x`.
 
 The drift at the state of each call is added.
 
-Otherwise the headers and states of the runs show a collision of the node hash or a zero root.
+Otherwise SHA-256 collides in the root of a header of the runs, or a header or state has root zero.
 
 The runs start at one genesis built from deposits, and the preset meets the parameters.
 
-Each run has an active stake above one and a half increments at each end of an epoch. -/
+At each epoch call after epoch 1, each run has an active stake above one and a half increments. -/
 theorem accountable_safety_at_calls {g x a b : ForkedBeaconState preset}
     (shared : Run config checks g x) (left : Run config checks x a) (right : Run config checks x b)
     (parameters : Parameters preset) (genesis : Genesis (config := config) (checks := checks) g)
@@ -241,19 +241,39 @@ private theorem selected_call_drift_le {g x y : ForkedBeaconState preset}
   have result := (observed pre epoch).trans (next.trans (mono _ post))
   simpa only [← split] using result
 
+/-- The drift at the state of a call of either run is at most the larger drift of the tails.
+
+The call targets an epoch from `low` to `high`, and `x` is no later than the first slot of `low`. -/
+private theorem either_call_drift_le {g x a b : ForkedBeaconState preset}
+    (shared : Run config checks g x) (left : Run config checks x a) (right : Run config checks x b)
+    (parameters : Parameters preset) (low high : Nat)
+    (starts : x.state.slot.toNat ≤ low * preset.SLOTS_PER_EPOCH.toNat)
+    (c : EitherCall (shared.append left) (shared.append right))
+    (lower : low ≤ c.targetEpoch) (upper : c.targetEpoch ≤ high) :
+    stateDrift x c.state ≤ max (derivedDrift high left) (derivedDrift high right) := by
+  cases c with
+  | inl c => exact (selected_call_drift_le shared left parameters low high starts c lower
+      upper).trans (Nat.le_max_left _ _)
+  | inr c => exact (selected_call_drift_le shared right parameters low high starts c lower
+      upper).trans (Nat.le_max_right _ _)
+
 /-- The finalized fields of the two runs conflict, and `x` comes before the earlier one.
+
+The left finalized epoch is at most the right one.
 
 `x` is no later than the first slot of the earlier finalized epoch.
 
 Then the active stake at `x` is at most three times the accountable stake at `x`.
 
-Twice the larger drift of the two tails, up to the later finalized epoch, is added.
+Twice the larger drift of the two tails is added.
 
-Otherwise the headers and states of the runs show a collision of the node hash or a zero root.
+The drift of a tail is the largest over its states up to one epoch past the later finalized epoch.
+
+Otherwise SHA-256 collides in the root of a header of the runs, or a header or state has root zero.
 
 The runs start at one genesis built from deposits, and the preset meets the parameters.
 
-Each run has an active stake above one and a half increments at each end of an epoch. -/
+At each epoch call after epoch 1, each run has an active stake above one and a half increments. -/
 theorem accountable_safety {g x a b : ForkedBeaconState preset}
     (shared : Run config checks g x) (left : Run config checks x a) (right : Run config checks x b)
     (parameters : Parameters preset) (genesis : Genesis (config := config) (checks := checks) g)
@@ -279,34 +299,30 @@ theorem accountable_safety {g x a b : ForkedBeaconState preset}
     have start : x.state.slot.toNat ≤
         a.state.finalizedCheckpoint.epoch.toNat * preset.SLOTS_PER_EPOCH.toNat :=
       starts.trans (Nat.mul_le_mul_right _ (Nat.min_le_left _ _))
-    have budget (c : EitherCall (shared.append left) (shared.append right))
-        (lower : a.state.finalizedCheckpoint.epoch.toNat ≤ c.targetEpoch)
-        (upper : c.targetEpoch ≤ b.state.finalizedCheckpoint.epoch.toNat) :
-        stateDrift x c.state ≤ max (derivedDrift high left) (derivedDrift high right) := by
-      have upperHigh : c.targetEpoch ≤ high := upper.trans (Nat.le_max_right _ _)
-      cases c with
-      | inl c => exact (selected_call_drift_le shared left parameters _ high start c lower
-          upperHigh).trans (Nat.le_max_left _ _)
-      | inr c => exact (selected_call_drift_le shared right parameters _ high start c lower
-          upperHigh).trans (Nat.le_max_right _ _)
-    have first := budget one lowerOne upperOne
-    have second := budget two lowerTwo upperTwo
+    have first := either_call_drift_le shared left right parameters _ high start one lowerOne
+      (upperOne.trans (Nat.le_max_right _ _))
+    have second := either_call_drift_le shared left right parameters _ high start two lowerTwo
+      (upperTwo.trans (Nat.le_max_right _ _))
     exact .inl (by dsimp only [high] at first second; omega)
   · exact .inr hashes
 
 /-- A finalized field of the left run conflicts with a justified field of the right run.
 
-The justified field is at the finalized epoch or later, and `x` is no later than its first slot.
+The justified field is at the finalized epoch or later.
+
+`x` is no later than the first slot of the finalized epoch.
 
 Then the active stake at `x` is at most three times the accountable stake at `x`.
 
-Twice the larger drift of the two tails, up to the justified epoch, is added.
+Twice the larger drift of the two tails is added.
 
-Otherwise the headers and states of the runs show a collision of the node hash or a zero root.
+The drift of a tail is the largest over its states up to one epoch past the justified epoch.
+
+Otherwise SHA-256 collides in the root of a header of the runs, or a header or state has root zero.
 
 The runs start at one genesis built from deposits, and the preset meets the parameters.
 
-Each run has an active stake above one and a half increments at each end of an epoch. -/
+At each epoch call after epoch 1, each run has an active stake above one and a half increments. -/
 theorem accountable_safety_justified {g x a b : ForkedBeaconState preset}
     (shared : Run config checks g x) (left : Run config checks x a) (right : Run config checks x b)
     (parameters : Parameters preset) (genesis : Genesis (config := config) (checks := checks) g)
@@ -325,18 +341,10 @@ theorem accountable_safety_justified {g x a b : ForkedBeaconState preset}
   rcases accountable_safety_at_calls shared left right parameters genesis
     enoughA enoughB j (field.imp_right Or.inl) ordered conflict with witnesses | hashes
   · obtain ⟨one, two, lowerOne, upperOne, lowerTwo, upperTwo, bound⟩ := witnesses
-    have budget (c : EitherCall (shared.append left) (shared.append right))
-        (lower : a.state.finalizedCheckpoint.epoch.toNat ≤ c.targetEpoch)
-        (upper : c.targetEpoch ≤ j.epoch.toNat) :
-        stateDrift x c.state ≤
-          max (derivedDrift j.epoch.toNat left) (derivedDrift j.epoch.toNat right) := by
-      cases c with
-      | inl c => exact (selected_call_drift_le shared left parameters _ _ starts c lower
-          upper).trans (Nat.le_max_left _ _)
-      | inr c => exact (selected_call_drift_le shared right parameters _ _ starts c lower
-          upper).trans (Nat.le_max_right _ _)
-    have first := budget one lowerOne upperOne
-    have second := budget two lowerTwo upperTwo
+    have first := either_call_drift_le shared left right parameters _ _ starts one lowerOne
+      upperOne
+    have second := either_call_drift_le shared left right parameters _ _ starts two lowerTwo
+      upperTwo
     exact .inl (by omega)
   · exact .inr hashes
 
@@ -346,13 +354,15 @@ theorem accountable_safety_justified {g x a b : ForkedBeaconState preset}
 
 The active stake at `x` is then at most three times the accountable stake at `x`.
 
-Twice the larger drift of the two tails, up to that epoch, is added.
+Twice the larger drift of the two tails is added.
 
-Otherwise the headers and states of the runs show a collision of the node hash or a zero root.
+The drift of a tail is the largest over its states up to one epoch past that epoch.
+
+Otherwise SHA-256 collides in the root of a header of the runs, or a header or state has root zero.
 
 The runs start at one genesis built from deposits, and the preset meets the parameters.
 
-Each run has an active stake above one and a half increments at each end of an epoch. -/
+At each epoch call after epoch 1, each run has an active stake above one and a half increments. -/
 theorem accountable_justified_unique {g x a b : ForkedBeaconState preset}
     (shared : Run config checks g x) (left : Run config checks x a)
     (right : Run config checks x b) (parameters : Parameters preset)
@@ -408,11 +418,12 @@ theorem accountable_justified_unique {g x a b : ForkedBeaconState preset}
         (by rw [targetA, targetB]; exact same)
       have bound := accountable_pair_bound shared left right parameters genesis
         enoughA enoughB (.inl one) (.inr two) overlap
-      have first := selected_call_drift_le shared left parameters j.epoch.toNat j.epoch.toNat
-        starts one (by rw [targetA]) (by rw [targetA])
-      have second := selected_call_drift_le shared right parameters j.epoch.toNat j.epoch.toNat
-        starts two (by rw [targetB, epoch]) (by rw [targetB, epoch])
-      simp only [EitherCall.state] at bound
+      have first := either_call_drift_le shared left right parameters j.epoch.toNat
+        j.epoch.toNat starts (.inl one) (by simp [EitherCall.targetEpoch, targetA])
+        (by simp [EitherCall.targetEpoch, targetA])
+      have second := either_call_drift_le shared left right parameters j.epoch.toNat
+        j.epoch.toNat starts (.inr two) (by simp [EitherCall.targetEpoch, targetB, epoch])
+        (by simp [EitherCall.targetEpoch, targetB, epoch])
       exact .inr (.inl (by omega))
 
 /-- Data that one of the two runs checked in an aggregate that names `key`. -/

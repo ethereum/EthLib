@@ -15,7 +15,7 @@ Collision evidence uses the selected block headers, not beacon-state commitments
 
 States are included only for the zero-root alternative.
 
-A zero state root leaves processSlot's empty-root sentinel unset.
+Caching a slot fills a zero state root of the latest header, unless the state hashes to zero.
 
 A later slot can then refill it.
 -/
@@ -66,7 +66,7 @@ def _root_.EthLib.Consensus.Run.hashObjects {first last : ForkedBeaconState pres
   | .nil => [.state first, .header first.state.latestBlockHeader]
   | .snoc pre step => pre.hashObjects ++ step.hashObjects
 
-/-- Two different inputs of the node hash with one digest, or an object whose root is zero.
+/-- Two different inputs of the SHA-256 node hash with one digest, or an object whose root is zero.
 
 Both are read among the given objects. -/
 def HashEvidence (objects : List (HashObject preset)) : Prop :=
@@ -169,7 +169,9 @@ private theorem step_slots {before after : ForkedBeaconState preset}
     subst header
     exact (processBlock_parentRoot (applySignedBlock_ok ok).2.1).1
 
-private theorem run_slots {a b : ForkedBeaconState preset} (run : Run config checks a b) :
+/-- The slot never decreases along a run. -/
+theorem _root_.EthLib.Consensus.Run.slot_le {a b : ForkedBeaconState preset}
+    (run : Run config checks a b) :
     a.state.slot.toNat ≤ b.state.slot.toNat := by
   induction run with
   | nil => exact Nat.le_refl _
@@ -187,7 +189,7 @@ private theorem path_append_stable {g a b : ForkedBeaconState preset}
       apply List.filter_eq_nil_iff.mpr
       intro h member
       have same := (step_slots step).2 h member
-      have bound := run_slots tail
+      have bound := tail.slot_le
       simp only [same, decide_eq_true_eq]
       omega
     simpa only [Run.append, Run.checkpointPath, Run.headers, List.filter_append, empty,
@@ -450,7 +452,7 @@ private theorem hashEvidence_mono {one two : List (HashObject preset)}
 
 Each step comes after the first slot of the epoch, while its root is still in the buffer.
 
-Otherwise the headers and states of the runs show a collision of the node hash or a zero root.
+Otherwise SHA-256 collides in the root of a header of the runs, or a header or state has root zero.
 
 The runs start at one genesis built from deposits. -/
 theorem checkpoint_binding_cached {g a b before₁ after₁ before₂ after₂ : ForkedBeaconState preset}
@@ -479,13 +481,7 @@ theorem checkpoint_binding_cached {g a b before₁ after₁ before₂ after₂ :
   obtain ⟨pre₂, post₂, rfl⟩ := right.contains_split (.slot ok₂) member₂
   have paths₁ := path_append_stable pre₁ ((Run.nil.snoc (.slot ok₁)).append post₁) epoch early₁
   have paths₂ := path_append_stable pre₂ ((Run.nil.snoc (.slot ok₂)).append post₂) epoch early₂
-  have assoc {x y z w : ForkedBeaconState preset} (p : Run config checks x y)
-      (q : Run config checks y z) (r : Run config checks z w) :
-      p.append (q.append r) = (p.append q).append r := by
-    induction r with
-    | nil => rfl
-    | snoc r step ih => exact congrArg (fun run => run.snoc step) ih
-  rw [assoc] at paths₁ paths₂
+  rw [Run.append_assoc] at paths₁ paths₂
   rcases checkpoint_binding pre₁ pre₂ genesis epoch root
       read₁ read₂ with same | evidence
   · exact .inl (paths₁.trans (same.trans paths₂.symm))

@@ -70,24 +70,8 @@ theorem call_after_reference {g x a : ForkedBeaconState preset}
   rcases (shared.contains_append tail (.slot call.advanced)).mp call.member with member | member
   · exfalso
     -- A call in the shared prefix finishes strictly before the reference slot bound permits.
-    have forward {u v : ForkedBeaconState preset} (run : Run config checks u v) :
-        u.state.slot.toNat ≤ v.state.slot.toNat := by
-      induction run with
-      | nil => exact Nat.le_refl _
-      | snoc pre step ih =>
-        cases step with
-        | slot ok =>
-          obtain ⟨advanced, advancedOk, upgraded⟩ := bind_ok_iff.mp ok
-          have next := advanceSlot_slot advancedOk
-          have kept := processUpgrades_slot upgraded
-          simp only [kept] at *
-          omega
-        | block engine signed due ok =>
-          have kept := (frame_processBlock (applySignedBlock_ok ok).2.1).slot
-          simp only [kept] at *
-          exact ih
     obtain ⟨pre, post, _⟩ := shared.contains_split (.slot call.advanced) member
-    have afterEnd := forward post
+    have afterEnd := post.slot_le
     obtain ⟨advanced, advancedOk, upgraded⟩ := bind_ok_iff.mp call.advanced
     have next := advanceSlot_slot advancedOk
     have kept := processUpgrades_slot upgraded
