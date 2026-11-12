@@ -268,13 +268,6 @@ def applyBody {fork : Fork} (config : ChainConfig) (env : BlockEnvironment fork)
 
 /-! ## The checks -/
 
-/-- The item of a transaction in the body of a block.
-
-A legacy transaction is its RLP list, and a typed transaction the byte string of its bytes. -/
-def bodyItem : Transaction → Except Serialization.Rlp.RlpError Serialization.Rlp.Item
-  | .legacy tx => .ok (Serialization.Rlp.Codec.toItem tx)
-  | tx => .bytes <$> encodeTransaction tx
-
 /-- The block with each transaction as its item in the body, for the RLP size of the block. -/
 def bodyItems {fork : Fork} (block : Block fork Transaction) :
     Except BlockError (Block fork Serialization.Rlp.Item) := do

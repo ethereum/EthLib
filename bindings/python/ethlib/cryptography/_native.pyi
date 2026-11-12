@@ -1205,6 +1205,10 @@ def eth_receipts_match(version: int, fork: str, receipts_root: bytes, receipts: 
     """Whether the receipts of a block, as a version sends them, match the receipts root of its header."""
     ...
 
+def eth_check_body(fork: str, header: bytes, body: bytes) -> bool:
+    """Whether the body `body` of a BlockBodies answer belongs to the header `header` at a fork."""
+    ...
+
 def eth_access_lists_answer(version: int, request: bytes, response: bytes, expected: list[bytes]) -> bool:
     """Whether `response` answers a GetBlockAccessLists `request`, given each block's access list hash."""
     ...

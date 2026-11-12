@@ -185,7 +185,7 @@ theorem getExecutionPayloadEnvelope_checks {config : Config} {checks : Signature
   obtain ⟨-, requestsRoot, parentHash, blockHash, randao, gasLimit, -, -, bidSlot, -⟩ :=
     getExecutionPayloadBid_eq_ok_iff.mp built
   have kept := latestExecutionPayloadBid_processBlock gloas processed
-  obtain ⟨bodyRoot, bodyRooted, header⟩ := latestBlockHeader_processBlock gloas processed
+  obtain ⟨bodyRoot, bodyRooted, header⟩ := latestBlockHeader_processBlock processed
   obtain ⟨_, _, withdrawn, _, _, _, _, _, bidOk, slotKept, -, -, -⟩ :=
     processBlock_steps gloas processed
   obtain ⟨-, -, checkedSlot, -⟩ :=
