@@ -3,6 +3,7 @@ module
 public import EthLib.Cryptography.Proofs.Secp256k1.Recovery
 public import EthLib.Execution.Transactions.Signature
 public import EthLib.Execution.Transactions.Validity
+public import EthLib.Serialization.Proofs.Rlp.Scalar
 
 /-!
 # Proofs: the sender of a transaction
@@ -32,6 +33,16 @@ An accepted parity is the recovery id itself, so each recovery id has one accept
 A typed transaction signs the hash of its fields before the signature, with its parity as the id.
 
 A parity above 1 names no sender, whatever the other fields, `r` and `s`.
+
+A signing hash is the Keccak-256 hash of the bytes that decode to its items.
+
+A typed hash puts its type byte before those bytes.
+
+A legacy transaction that signs a chain signs its six fields, then the chain, 0 and 0.
+
+A typed hash equal to a legacy hash is a collision of Keccak-256.
+
+So are equal hashes that sign two chains, and a hash with no chain equal to one with a chain.
 -/
 
 @[expose] public section
@@ -40,6 +51,8 @@ namespace EthLib.Execution.Transactions
 
 open EthLib.Base
 open EthLib.Cryptography.Secp256k1
+open EthLib.Serialization.Rlp
+open EthLib.Cryptography.Hash.Keccak (keccak256)
 
 /-! ## The ranges of `r` and `s` -/
 
@@ -422,5 +435,105 @@ theorem recoverSender_setCode_yParity_gt {fork : Fork} {tx : SetCodeTransaction}
     (h : 1 < tx.yParity.toNat) (sender : Address) :
     recoverSender fork (.setCode tx) ≠ .ok sender :=
   recoverSender_ne_of_parity (fun _ _ hi => (signingInput_setCode_eq_ok_iff.mp hi).2) h sender
+
+/-! ## The bytes that each signing hash covers -/
+
+/-- The hash of a list of items is the Keccak-256 hash of the bytes that decode to that list. -/
+theorem hashItems_eq_ok_iff {items : List Item} {hash : Hash32} :
+    hashItems items = .ok hash ↔
+      ∃ bytes, decode bytes = .ok (.list items) ∧ hash = keccak256 bytes := by
+  simp only [hashItems, decode_eq_ok_iff]
+  cases encode (.list items) <;> simp [bind, Except.bind, pure, Except.pure]
+  exact ⟨fun h => (Except.ok.inj h).symm, fun h => h ▸ rfl⟩
+
+/-- A typed hash is the Keccak-256 hash of the type byte, then the bytes that decode to the list.
+
+[EIP-2718](https://eips.ethereum.org/EIPS/eip-2718#specification) puts the type first. -/
+theorem hashTypedItems_eq_ok_iff {type : UInt8} {items : List Item} {hash : Hash32} :
+    hashTypedItems type items = .ok hash ↔
+      ∃ payload, decode payload = .ok (.list items) ∧
+        hash = keccak256 (ByteArray.mk #[type] ++ payload) := by
+  simp only [hashTypedItems, typedBytes, decode_eq_ok_iff]
+  cases encode (.list items) <;> simp [bind, Except.bind, pure, Except.pure]
+  exact ⟨fun h => (Except.ok.inj h).symm, fun h => h ▸ rfl⟩
+
+/-- A legacy transaction that signs no chain signs the hash of its six fields, in order.
+
+They are the nonce, the gas price, the gas, the recipient, the value and the data. -/
+theorem signingHashPre155_eq_ok_iff {tx : LegacyTransaction} {hash : Hash32} :
+    signingHashPre155 tx = .ok hash ↔
+      ∃ bytes, decode bytes = .ok (.list [.scalar tx.nonce.toNat, .scalar tx.gasPrice.toNat,
+        .scalar tx.gas.toNat, Codec.toItem tx.to, .scalar tx.value.toNat, .bytes tx.data]) ∧
+        hash = keccak256 bytes :=
+  hashItems_eq_ok_iff
+
+/-- A legacy transaction that signs the chain `c` signs its six fields, then `c`, 0 and 0.
+
+[EIP-155](https://eips.ethereum.org/EIPS/eip-155#specification) defines these nine items. -/
+theorem signingHash155_eq_ok_iff {tx : LegacyTransaction} {c : U256} {hash : Hash32} :
+    signingHash155 tx c = .ok hash ↔
+      ∃ bytes, decode bytes = .ok (.list [.scalar tx.nonce.toNat, .scalar tx.gasPrice.toNat,
+        .scalar tx.gas.toNat, Codec.toItem tx.to, .scalar tx.value.toNat, .bytes tx.data,
+        .scalar c.toNat, .scalar 0, .scalar 0]) ∧ hash = keccak256 bytes :=
+  hashItems_eq_ok_iff
+
+/-- Two lists with one hash are a collision of Keccak-256 when the lists differ. -/
+private theorem hashItems_collision {items items' : List Item} {hash : Hash32}
+    (h : hashItems items = .ok hash) (h' : hashItems items' = .ok hash) (hne : items ≠ items') :
+    ∃ bytes bytes', decode bytes = .ok (.list items) ∧ decode bytes' = .ok (.list items') ∧
+      bytes ≠ bytes' ∧ keccak256 bytes = keccak256 bytes' := by
+  obtain ⟨bytes, hb, rfl⟩ := hashItems_eq_ok_iff.mp h
+  obtain ⟨bytes', hb', hh⟩ := hashItems_eq_ok_iff.mp h'
+  refine ⟨bytes, bytes', hb, hb', ?_, hh⟩
+  rintro rfl
+  rw [hb] at hb'
+  exact hne (by injection hb' with hb'; injection hb')
+
+/-- A typed hash equal to the hash of a list is a collision of Keccak-256.
+
+The type byte is below `0xc0`, and an encoded list starts with `0xc0` or more, so the inputs differ.
+
+So a typed signature is no legacy signature, unless Keccak-256 collides. -/
+theorem hashTypedItems_eq_hashItems_collision {type : UInt8} (ht : type < 0xc0)
+    {items items' : List Item} {hash : Hash32} (h : hashTypedItems type items = .ok hash)
+    (h' : hashItems items' = .ok hash) :
+    ∃ payload bytes, decode payload = .ok (.list items) ∧ decode bytes = .ok (.list items') ∧
+      ByteArray.mk #[type] ++ payload ≠ bytes ∧
+      keccak256 (ByteArray.mk #[type] ++ payload) = keccak256 bytes := by
+  obtain ⟨payload, hp, rfl⟩ := hashTypedItems_eq_ok_iff.mp h
+  obtain ⟨bytes, hb, hh⟩ := hashItems_eq_ok_iff.mp h'
+  refine ⟨payload, bytes, hp, hb, ?_, hh⟩
+  rintro rfl
+  obtain ⟨first, rest, hl, hf⟩ := encode_list_head items' _ ((decode_eq_ok_iff _ _).mp hb)
+  simp only [ByteArray.toList_data_append, List.cons_append, List.nil_append] at hl
+  have : type = first := (List.cons.inj hl).1
+  subst this
+  exact absurd hf (UInt8.not_le.mpr ht)
+
+/-- Two hashes that sign different chains and are equal are a collision of Keccak-256.
+
+So a signature for one chain is no signature for another, unless Keccak-256 collides. -/
+theorem signingHash155_eq_collision {tx tx' : LegacyTransaction} {c c' : U256} (hc : c ≠ c')
+    {hash : Hash32} (h : signingHash155 tx c = .ok hash) (h' : signingHash155 tx' c' = .ok hash) :
+    ∃ bytes bytes', decode bytes = .ok (.list (tx.signedItems ++
+        [.scalar c.toNat, .scalar 0, .scalar 0])) ∧
+      decode bytes' = .ok (.list (tx'.signedItems ++ [.scalar c'.toNat, .scalar 0, .scalar 0])) ∧
+      bytes ≠ bytes' ∧ keccak256 bytes = keccak256 bytes' := by
+  refine hashItems_collision h h' fun he => hc (BitVec.eq_of_toNat_eq ?_)
+  have := congrArg (fun l => l[6]?) he
+  simp [LegacyTransaction.signedItems] at this
+  exact scalar_injective _ _ this
+
+/-- A hash that signs no chain and equals a hash that signs a chain is a collision of Keccak-256.
+
+So a signature with no chain is no signature for a chain, unless Keccak-256 collides. -/
+theorem signingHashPre155_eq_signingHash155_collision {tx tx' : LegacyTransaction} {c : U256}
+    {hash : Hash32} (h : signingHashPre155 tx = .ok hash) (h' : signingHash155 tx' c = .ok hash) :
+    ∃ bytes bytes', decode bytes = .ok (.list tx.signedItems) ∧
+      decode bytes' = .ok (.list (tx'.signedItems ++ [.scalar c.toNat, .scalar 0, .scalar 0])) ∧
+      bytes ≠ bytes' ∧ keccak256 bytes = keccak256 bytes' :=
+  hashItems_collision h h' fun he => by
+    have := congrArg List.length he
+    simp [LegacyTransaction.signedItems] at this
 
 end EthLib.Execution.Transactions
