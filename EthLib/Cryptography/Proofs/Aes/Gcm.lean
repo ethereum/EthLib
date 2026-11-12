@@ -183,7 +183,7 @@ theorem gctr_inc_block (ciph : Block → Block) (J0 : Block) (text : ByteArray) 
     (((gctr ciph (inc 32 J0) text).data.toList).drop (16 * k)).take 16
       = List.zipWith (· ^^^ ·) ((text.data.toList.drop (16 * k)).take 16)
           (ciph (Nat.repeat (inc 32) (k + 1) J0)).toList := by
-  rw [gctr, ctr_block ciph 32 (inc 32 J0) text k, repeat_apply_eq_repeat_succ]
+  rw [gctr, ctr_block ciph 32 (inc 32 J0) text k, Base.repeat_apply_eq_repeat_succ]
 
 /-- Under the length checks, no counter of the text is `J_0`, the counter of the tag. -/
 theorem counter_ne_preCounter {t : Nat} {iv text aad : ByteArray}
