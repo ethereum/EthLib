@@ -1862,6 +1862,18 @@ It does not check the ommer headers against the chain, which needs the recent bl
 It does not ask that the sum of the gas limits of the transactions is at most the gas limit of the block, as `caps/eth.md` says.
 Block validity asks only that each transaction fits in the gas that the block still has, so the stricter rule would reject valid blocks.
 
+### The block access lists and the cells of the eth protocol
+
+`accessListsResponse` (`Execution/Network/Message.lean`) checks a BlockAccessLists answer of eth/71 against the access list hashes of the requested blocks.
+It follows "BlockAccessLists (0x13)" in [`caps/eth.md`](https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/eth.md#blockaccesslists-0x13).
+`accessListsResponse_eq_true_iff` (`Execution/Proofs/Network/Message.lean`) states when an answer passes: it repeats the request ID and has one entry for each requested block.
+Each entry is the empty string, or its encoding hashes to the access list hash of its block.
+`accessListsAnswer_eq_true_iff` (`Execution/Proofs/Network/Snap.lean`) states the check of the entries alone, which snap/2 shares and which lets an answer stop early.
+`checkCellsResponse_eq_ok_iff` states that a Cells answer of eth/72 passes exactly when it repeats the request ID and its cells pass `checkCells`.
+`checkCells_eq_ok_iff` (`Execution/Proofs/Network/Cells.lean`) states the rules of those cells.
+The caller gives the access list hash of each requested block.
+The check does not compare these with the block hashes of the request.
+
 ### Weak subjectivity
 
 A node that starts from a recent checkpoint trusts it only for a limited time, the weak subjectivity period.
