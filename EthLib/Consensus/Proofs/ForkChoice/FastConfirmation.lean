@@ -113,38 +113,48 @@ theorem validatorAt_ok_iff {state : BeaconState preset fork} {index : ValidatorI
   unfold validatorAt
   split <;> simp_all [throw, throwThe, MonadExceptOf.throw, pure, Except.pure]
 
+/-- The members of a set with a list folded in: those of the set and of the list. -/
+private theorem mem_list_foldl_insert {v : ValidatorIndex} :
+    ∀ {members : List ValidatorIndex} {start : Std.TreeSet ValidatorIndex},
+      v ∈ members.foldl (·.insert ·) start ↔ v ∈ start ∨ v ∈ members
+  | [], start => by simp
+  | first :: rest, start => by
+    simp only [List.foldl_cons, mem_list_foldl_insert, Std.TreeSet.mem_insert, List.mem_cons,
+      Std.LawfulEqCmp.compare_eq_iff_eq]
+    constructor
+    · rintro ((rfl | inside) | later)
+      · exact .inr (.inl rfl)
+      · exact .inl inside
+      · exact .inr (.inr later)
+    · rintro (inside | rfl | later)
+      · exact .inl (.inr inside)
+      · exact .inl (.inl rfl)
+      · exact .inr later
+
 /-- The members of a set with a committee folded in: those of the set and of the committee. -/
 private theorem mem_foldl_insert {committee participants : Std.TreeSet ValidatorIndex}
     {v : ValidatorIndex} :
     v ∈ committee.foldl (·.insert ·) participants ↔ v ∈ participants ∨ v ∈ committee := by
-  have onList : ∀ (members : List ValidatorIndex) (start : Std.TreeSet ValidatorIndex),
-      v ∈ members.foldl (·.insert ·) start ↔ v ∈ start ∨ v ∈ members := by
-    intro members
-    induction members with
-    | nil => simp
-    | cons first rest ih =>
-      intro start
-      simp only [List.foldl_cons, ih, Std.TreeSet.mem_insert, List.mem_cons,
-        Std.LawfulEqCmp.compare_eq_iff_eq]
-      constructor
-      · rintro ((rfl | inside) | later)
-        · exact .inr (.inl rfl)
-        · exact .inl inside
-        · exact .inr (.inr later)
-      · rintro (inside | rfl | later)
-        · exact .inl (.inr inside)
-        · exact .inl (.inl rfl)
-        · exact .inr later
-  rw [Std.TreeSet.foldl_eq_foldl_toList, onList, Std.TreeSet.mem_toList]
+  rw [Std.TreeSet.foldl_eq_foldl_toList, mem_list_foldl_insert, Std.TreeSet.mem_toList]
 
-/-- The members of a fold of committees: those it starts with, and those of a committee it reads.
--/
-theorem mem_foldlM_committees_iff {α : Type}
-    {read : α → Except ForkChoiceError (Std.TreeSet ValidatorIndex)} {v : ValidatorIndex} :
+/-- The members of a set with an array folded in: those of the set and of the array. -/
+private theorem mem_array_foldl_insert {committee : Array ValidatorIndex}
+    {participants : Std.TreeSet ValidatorIndex} {v : ValidatorIndex} :
+    v ∈ committee.foldl (·.insert ·) participants ↔ v ∈ participants ∨ v ∈ committee := by
+  rw [← Array.foldl_toList, mem_list_foldl_insert, Array.mem_toList_iff]
+
+/-- The members of a fold that adds what it reads: those it starts with, and those it reads.
+
+Adding a read value must give the members of the set and of the value. -/
+private theorem mem_foldlM_add_iff {α β : Type} [Membership ValidatorIndex β]
+    {read : α → Except ForkChoiceError β}
+    {add : Std.TreeSet ValidatorIndex → β → Std.TreeSet ValidatorIndex} {v : ValidatorIndex}
+    (adds : ∀ participants committee,
+      v ∈ add participants committee ↔ v ∈ participants ∨ v ∈ committee) :
     ∀ {items : List α} {start out : Std.TreeSet ValidatorIndex},
       items.foldlM (fun (participants : Std.TreeSet ValidatorIndex) item => do
           let committee ← read item
-          return committee.foldl (·.insert ·) participants) start =
+          return add participants committee) start =
         (.ok out : Except ForkChoiceError _) →
       (v ∈ out ↔
         v ∈ start ∨ ∃ item ∈ items, ∃ committee, read item = .ok committee ∧ v ∈ committee)
@@ -157,7 +167,7 @@ theorem mem_foldlM_committees_iff {α : Type}
     obtain ⟨next, ⟨committee, readOk, nextOk⟩, folded⟩ := folded
     simp only [Except.ok.injEq] at nextOk
     subst nextOk
-    rw [mem_foldlM_committees_iff folded, mem_foldl_insert]
+    rw [mem_foldlM_add_iff adds folded, adds]
     constructor
     · rintro ((inside | inCommittee) | ⟨item, member, other, otherOk, inOther⟩)
       · exact .inl inside
@@ -170,6 +180,20 @@ theorem mem_foldlM_committees_iff {α : Type}
           subst otherOk
           exact .inl (.inr inOther)
         · exact .inr ⟨item, later, other, otherOk, inOther⟩
+
+/-- The members of a fold of committees: those it starts with, and those of a committee it reads.
+-/
+theorem mem_foldlM_committees_iff {α : Type}
+    {read : α → Except ForkChoiceError (Std.TreeSet ValidatorIndex)} {v : ValidatorIndex} :
+    ∀ {items : List α} {start out : Std.TreeSet ValidatorIndex},
+      items.foldlM (fun (participants : Std.TreeSet ValidatorIndex) item => do
+          let committee ← read item
+          return committee.foldl (·.insert ·) participants) start =
+        (.ok out : Except ForkChoiceError _) →
+      (v ∈ out ↔
+        v ∈ start ∨ ∃ item ∈ items, ∃ committee, read item = .ok committee ∧ v ∈ committee) :=
+  mem_foldlM_add_iff fun _ _ => mem_foldl_insert
+
 namespace Store
 
 variable {config : Config} {store : Store preset fork}
@@ -275,6 +299,60 @@ theorem mem_getCommitteesBetweenSlots_of_le {head : Root} {startSlot shortEnd en
   refine (mem_foldlM_committees_iff longOk).mpr (.inr ⟨offset, ?_, rest⟩)
   rw [List.mem_range] at inRange ⊢
   omega
+
+/-- A member of a committee of a slot, in the state of the head, is one that the rule reads for it.
+
+The index of the committee must be below the count of committees per slot of the epoch of the slot.
+-/
+theorem mem_getSlotCommittee {head : Root} {slot : Slot} {headState : BeaconState preset fork}
+    {index : CommitteeIndex} {committee : Array ValidatorIndex}
+    {members : Std.TreeSet ValidatorIndex} {validator : ValidatorIndex}
+    (computed : store.getSlotCommittee head slot = .ok members)
+    (stateOk : store.blockState head = .ok headState)
+    (below : index < getCommitteeCountPerSlot headState (computeEpochAtSlot preset slot))
+    (committeeOk : getBeaconCommittee headState slot index = .ok committee)
+    (member : validator ∈ committee) :
+    validator ∈ members := by
+  simp only [getSlotCommittee, stateOk, bind, Except.bind] at computed
+  have back : index.toNat.toUInt64 = index := UInt64.ofNat_toNat
+  refine (mem_foldlM_add_iff (fun _ _ => mem_array_foldl_insert) computed).mpr
+    (.inr ⟨index.toNat, ?_, committee, ?_, member⟩)
+  · exact List.mem_range.mpr (UInt64.lt_iff_toNat_lt.mp below)
+  · rw [back, committeeOk]
+    rfl
+
+/-- A member of a committee of a slot of a range, in the state of the head, is one the rule reads.
+
+The index of the committee must be below the count of committees per slot of the epoch of the slot.
+-/
+theorem mem_getCommitteesBetweenSlots {head : Root} {startSlot endSlot slot : Slot}
+    {participants : Std.TreeSet ValidatorIndex} {headState : BeaconState preset fork}
+    {index : CommitteeIndex} {committee : Array ValidatorIndex} {validator : ValidatorIndex}
+    (computed : store.getCommitteesBetweenSlots head startSlot endSlot = .ok participants)
+    (low : startSlot ≤ slot) (high : slot ≤ endSlot)
+    (stateOk : store.blockState head = .ok headState)
+    (below : index < getCommitteeCountPerSlot headState (computeEpochAtSlot preset slot))
+    (committeeOk : getBeaconCommittee headState slot index = .ok committee)
+    (member : validator ∈ committee) :
+    validator ∈ participants := by
+  simp only [getCommitteesBetweenSlots, bind_ok_iff, mapError_ok_iff] at computed
+  obtain ⟨afterEnd, afterEndOk, folded⟩ := computed
+  rw [Uint64.addChecked_ok_iff, UInt64.toNat_one] at afterEndOk
+  rw [UInt64.le_iff_toNat_le] at low high
+  -- The slot is the start moved on by its offset, which lies in the range.
+  have inRange : slot.toNat - startSlot.toNat ∈ List.range (afterEnd.toNat - startSlot.toNat) :=
+    List.mem_range.mpr (by omega)
+  have back : startSlot + (slot.toNat - startSlot.toNat).toUInt64 = slot := by
+    rw [← UInt64.toNat_sub_of_le _ _ (UInt64.le_iff_toNat_le.mpr low), Nat.toUInt64_eq,
+      UInt64.ofNat_toNat, UInt64.add_comm, UInt64.sub_add_cancel]
+  obtain ⟨members, membersOk⟩ := foldlM_forall_of_ok
+    (fun _ _ _ stepOk => (bind_ok_iff.mp stepOk).imp fun _ read => read.1) _ _ _ folded _
+    inRange
+  rw [back] at membersOk
+  have inMembers := mem_getSlotCommittee membersOk stateOk below committeeOk member
+  refine (mem_foldlM_committees_iff folded).mpr (.inr ⟨_, inRange, members, ?_, inMembers⟩)
+  rw [back, membersOk]
+
 /-- The adversary of a range reads the committee weight, its share, then the equivocators.
 
 That holds for every input, errors included, so reading the members once changes nothing. -/

@@ -3,6 +3,7 @@ module
 public import EthLib.Cryptography.Proofs.Secp256k1.Security.KeyOnly
 public import EthLib.Cryptography.Proofs.IndependentOutside
 public import VCVio.CryptoFoundations.ReplayFork
+import VCVio.EvalDist.Inequalities
 
 /-!
 # Proofs: the key-only game with new forward answers asked of one oracle
@@ -19,11 +20,25 @@ The run logs at most one more pair than the forger asks for `Π` or its inverse.
 
 When the outside oracle answered the conversion of a forgery, a replay fork can rewind there.
 
+Stop a path of the run just before a query to the outside oracle with `s` earlier ones.
+
+Every completion of that query logs at least `s + 1` pairs.
+
+Its pair at position `s` has the same point for every completion.
+
+The answer of that pair is the answer that completed the query.
+
 The fork index is the position of the forgery's point in the log of new forward pairs.
 
 The new forward queries of both runs at that index then share the point and differ in answer.
 
 The forking lemma bounds the chance of such a fork from below.
+
+On the key `x g`, the forgery's point is the encoding of `((H(m) + t x) / s) g`.
+
+Say two forgeries `(m, t, s)` and `(m', t', s')` have these scalars equal up to a sign `η`.
+
+Then they give the key, when `H(m) / t ≠ H(m') / t'`.
 
 A forger with at most `q` queries to `Π` or its inverse logs at most `q + 1` pairs.
 
@@ -59,7 +74,7 @@ The fork here reruns the run from the selected query on, with fresh answers and 
 
 Its bound has the form of their Lemma 1 for one fixed key, with `q + 1` for `Q` and `|A|` for `|B|`.
 
-Their Lemma 1 draws the key at random; no theorem averages over the key yet.
+With the key drawn uniformly, the bound also holds, as in their Lemma 1.
 -/
 
 @[expose] public section
@@ -113,6 +128,51 @@ theorem length_forward_le_of_mem_support_keyOnlyOutsideRun (scheme : Scheme F G 
 It is the encoding of `U / s`, where `U = H(m) g + t X`. -/
 def forgeryPoint (scheme : Scheme F G A M) (X : G) (z : M × F × F) : A :=
   scheme.encode (z.2.2⁻¹ • (scheme.hash z.1 • scheme.g + z.2.1 • X))
+
+omit [DecidableEq F] [DecidableEq G] [FinEnum A] in
+/-- The forgery's point on the key `x g` is the encoding of `((H(m) + t x) / s) g`. -/
+theorem forgeryPoint_smul (scheme : Scheme F G A M) (x t s : F) (m : M) :
+    forgeryPoint scheme (x • scheme.g) (m, t, s) =
+      scheme.encode ((s⁻¹ * (scheme.hash m + t * x)) • scheme.g) := by
+  simp only [forgeryPoint, smul_smul, ← add_smul, mul_add]
+
+/-- The key from two forgeries `(m, t, s)` and `(m', t', s')` on one point, for a sign `η`.
+
+It is `(s r - H(m)) / t`, where `r = (H(m) / t - H(m') / t') / (s / t - η s' / t')`. -/
+def forwardKey (scheme : Scheme F G A M) (z z' : M × F × F) (η : F) : F :=
+  let r := (scheme.hash z.1 / z.2.1 - scheme.hash z'.1 / z'.2.1) /
+    (z.2.2 / z.2.1 - η * z'.2.2 / z'.2.1)
+  (z.2.2 * r - scheme.hash z.1) / z.2.1
+
+omit [DecidableEq F] [DecidableEq G] [AddCommGroup G] [Module F G] [FinEnum A] in
+/-- Take two forgeries on the key `x g` whose scalars `(H(m) + t x) / s` agree up to a sign `η`.
+
+Then the key for `η` is `x`, when `t`, `s`, `t'` and `s'` are nonzero.
+
+It also needs `H(m) / t` and `H(m') / t'` to differ. -/
+theorem forwardKey_eq_of {scheme : Scheme F G A M} {x η : F} {z z' : M × F × F}
+    (ht : z.2.1 ≠ 0) (hs : z.2.2 ≠ 0) (ht' : z'.2.1 ≠ 0) (hs' : z'.2.2 ≠ 0)
+    (hη : z'.2.2⁻¹ * (scheme.hash z'.1 + z'.2.1 * x) =
+      η * (z.2.2⁻¹ * (scheme.hash z.1 + z.2.1 * x)))
+    (hdiv : scheme.hash z.1 / z.2.1 ≠ scheme.hash z'.1 / z'.2.1) :
+    forwardKey scheme z z' η = x := by
+  obtain ⟨m, t, s⟩ := z
+  obtain ⟨m', t', s'⟩ := z'
+  simp only at ht hs ht' hs' hη hdiv
+  set r := s⁻¹ * (scheme.hash m + t * x) with hr
+  have h1 : scheme.hash m = s * r - t * x := by rw [hr]; field_simp; ring
+  have h2 : scheme.hash m' = s' * (η * r) - t' * x := by rw [← hη]; field_simp; ring
+  have hden : s / t - η * s' / t' ≠ 0 := by
+    intro h0
+    apply hdiv
+    have : (s * r - t * x) / t - (s' * (η * r) - t' * x) / t' = r * (s / t - η * s' / t') := by
+      field_simp; ring
+    rw [h1, h2]
+    exact sub_eq_zero.mp (by rw [this, h0, mul_zero])
+  have hrr : (scheme.hash m / t - scheme.hash m' / t') / (s / t - η * s' / t') = r := by
+    rw [div_eq_iff hden, h1, h2]; field_simp; ring
+  simp only [forwardKey]
+  rw [hrr, h1]; field_simp; ring
 
 /-- The bound on each oracle index that the fork reads: `q` for the outside oracle.
 
@@ -182,42 +242,47 @@ theorem cfReachable_forkIndex (scheme : Scheme F G A M) (adversary : KeyOnlyAdve
   rw [htr.getQueryValue?_inr, List.getElem?_eq_getElem hlt]
   rfl
 
-/-- **Both runs of the fork ask `Π` at the same point, and get different answers.**
+/-- **Completions of one query to the outside oracle log one point there, with their answers.**
 
-Take two runs that the fork returns, on the key `X`.
+Take a query to the outside oracle with `s` earlier ones, on a path of the run on the key `X`.
 
-They have the same fork index `j`.
+Complete it twice, each time with an answer and a path for the rest of the run.
 
-Their `j`-th new forward pairs have the same point and different answers. -/
-theorem forward_point_eq_answer_ne_of_mem_support_contextFork (scheme : Scheme F G A M)
-    (adversary : KeyOnlyAdversary F G A M) (X : G) (q : ℕ) {tr₁ tr₂ : KeyOnlyTrace F A M}
-    (h : some (tr₁, tr₂) ∈ support
-      (contextFork (keyOnlyOutsideRun scheme adversary X) (forkBound q) (.inr ())
-        (forkIndex scheme X q))) :
-    ∃ j, forkIndex scheme X q tr₁ = some j ∧ forkIndex scheme X q tr₂ = some j ∧
-      ∃ (h₁ : (j : ℕ) < tr₁.forward.length) (h₂ : (j : ℕ) < tr₂.forward.length),
-        tr₁.forward[j].1 = tr₂.forward[j].1 ∧ tr₁.forward[j].2 ≠ tr₂.forward[j].2 := by
-  set main := keyOnlyOutsideRun scheme adversary X
-  obtain ⟨path, s, located, second, hpath, hcf₁, -, hne, hcf₂, rfl, rfl⟩ :=
-    contextFork_success main (forkBound q) (.inr ()) (forkIndex scheme X q) h
+Both runs then log at least `s + 1` pairs.
+
+Their pairs at position `s`, counted from `0`, have the same point.
+
+The answer of each is the answer that completed the query. -/
+theorem forward_getElem_of_completion_keyOnlyOutsideRun (scheme : Scheme F G A M)
+    (adversary : KeyOnlyAdversary F G A M) (X : G) {s : ℕ}
+    (occ : PFunctor.FreeM.Cursor.Occurrence (P := (OutsideSpec A).toPFunctor) (.inr ())
+      (keyOnlyOutsideRun scheme adversary X) s)
+    (c₁ c₂ : occ.Completion) :
+    ∃ (h₁ : s < (PFunctor.FreeM.output _ c₁.path).forward.length)
+      (h₂ : s < (PFunctor.FreeM.output _ c₂.path).forward.length),
+      (PFunctor.FreeM.output _ c₁.path).forward[s].1 =
+          (PFunctor.FreeM.output _ c₂.path).forward[s].1 ∧
+        (PFunctor.FreeM.output _ c₁.path).forward[s].2 = c₁.answer ∧
+        (PFunctor.FreeM.output _ c₂.path).forward[s].2 = c₂.answer := by
   have hT₁ := outsideTranscript_of_mem_support_keyOnlyOutsideRun scheme adversary X
-    (replayPathResult_mem_support_replayFirstRun main path hpath)
+    (replayPathResult_mem_support_replayFirstRun (keyOnlyOutsideRun scheme adversary X) c₁.path
+      (mem_support_replayFirstPath (keyOnlyOutsideRun scheme adversary X) c₁.path))
   have hT₂ := outsideTranscript_of_mem_support_keyOnlyOutsideRun scheme adversary X
-    (replayPathResult_mem_support_replayFirstRun main second.path
-      (mem_support_replayFirstPath main second.path))
-  let before : QueryLog (OutsideSpec A) := located.occurrence.before
-  let log₁ : QueryLog (OutsideSpec A) := PFunctor.FreeM.Path.trace main path
-  let log₂ : QueryLog (OutsideSpec A) := PFunctor.FreeM.Path.trace main second.path
+    (replayPathResult_mem_support_replayFirstRun (keyOnlyOutsideRun scheme adversary X) c₂.path
+      (mem_support_replayFirstPath (keyOnlyOutsideRun scheme adversary X) c₂.path))
+  let before : QueryLog (OutsideSpec A) := occ.before
+  let log₁ : QueryLog (OutsideSpec A) :=
+    PFunctor.FreeM.Path.trace (keyOnlyOutsideRun scheme adversary X) c₁.path
+  let log₂ : QueryLog (OutsideSpec A) :=
+    PFunctor.FreeM.Path.trace (keyOnlyOutsideRun scheme adversary X) c₂.path
   let rest₁ : QueryLog (OutsideSpec A) := PFunctor.FreeM.Path.trace
-    (located.occurrence.resume located.completion.answer) located.completion.suffix
+    (occ.resume c₁.answer) c₁.suffix
   let rest₂ : QueryLog (OutsideSpec A) := PFunctor.FreeM.Path.trace
-    (located.occurrence.resume second.answer) second.suffix
-  have hlog₁ : log₁ = before ++ ⟨.inr (), located.completion.answer⟩ :: rest₁ :=
-    (congrArg (PFunctor.FreeM.Path.trace main) located.path_eq).symm.trans
-      (PFunctor.FreeM.Cursor.Occurrence.trace_plug
-        located.occurrence located.completion.answer located.completion.suffix)
-  have hlog₂ : log₂ = before ++ ⟨.inr (), second.answer⟩ :: rest₂ :=
-    PFunctor.FreeM.Cursor.Occurrence.trace_plug located.occurrence second.answer second.suffix
+    (occ.resume c₂.answer) c₂.suffix
+  have hlog₁ : log₁ = before ++ ⟨.inr (), c₁.answer⟩ :: rest₁ :=
+    PFunctor.FreeM.Cursor.Occurrence.trace_plug occ c₁.answer c₁.suffix
+  have hlog₂ : log₂ = before ++ ⟨.inr (), c₂.answer⟩ :: rest₂ :=
+    PFunctor.FreeM.Cursor.Occurrence.trace_plug occ c₂.answer c₂.suffix
   have hc : before.countQ (· = .inr ()) = s := by
     rw [QueryLog.countQ_eq_occurrences]
     simp [before]
@@ -237,8 +302,32 @@ theorem forward_point_eq_answer_ne_of_mem_support_contextFork (scheme : Scheme F
   clear hl₁ hl₂ u₁ u₂
   generalize before.countQ (· = .inr ()) = n at hc hk₁ hk₂ hcode hv₁ hv₂
   subst hc
-  refine ⟨s, hcf₁, hcf₂, hk₁, hk₂, FinEnum.equiv.injective (Fin.ext hcode), ?_⟩
-  simpa only [Fin.getElem_fin, ← hv₁, ← hv₂] using hne
+  exact ⟨hk₁, hk₂, FinEnum.equiv.injective (Fin.ext hcode), hv₁.symm, hv₂.symm⟩
+
+/-- **Both runs of the fork ask `Π` at the same point, and get different answers.**
+
+Take two runs that the fork returns, on the key `X`.
+
+They have the same fork index `j`.
+
+Their `j`-th new forward pairs have the same point and different answers. -/
+theorem forward_point_eq_answer_ne_of_mem_support_contextFork (scheme : Scheme F G A M)
+    (adversary : KeyOnlyAdversary F G A M) (X : G) (q : ℕ) {tr₁ tr₂ : KeyOnlyTrace F A M}
+    (h : some (tr₁, tr₂) ∈ support
+      (contextFork (keyOnlyOutsideRun scheme adversary X) (forkBound q) (.inr ())
+        (forkIndex scheme X q))) :
+    ∃ j, forkIndex scheme X q tr₁ = some j ∧ forkIndex scheme X q tr₂ = some j ∧
+      ∃ (h₁ : (j : ℕ) < tr₁.forward.length) (h₂ : (j : ℕ) < tr₂.forward.length),
+        tr₁.forward[j].1 = tr₂.forward[j].1 ∧ tr₁.forward[j].2 ≠ tr₂.forward[j].2 := by
+  set main := keyOnlyOutsideRun scheme adversary X
+  obtain ⟨path, s, located, second, hpath, hcf₁, -, hne, hcf₂, rfl, rfl⟩ :=
+    contextFork_success main (forkBound q) (.inr ()) (forkIndex scheme X q) h
+  obtain ⟨hk₁, hk₂, hpt, ha₁, ha₂⟩ :=
+    forward_getElem_of_completion_keyOnlyOutsideRun scheme adversary X
+    located.occurrence located.completion second
+  simp only [located.path_eq] at hk₁ hpt ha₁
+  refine ⟨s, hcf₁, hcf₂, hk₁, hk₂, hpt, ?_⟩
+  exact fun hq => hne (ha₁.symm.trans (hq.trans ha₂))
 
 /-- **The forking lemma for the run on one key.**
 
@@ -261,6 +350,32 @@ theorem le_prEvent_isSome_contextFork_keyOnlyOutsideRun
     rw [FinEnum.card_eq_fintypeCard]
     rfl
   simpa only [forkBound, Nat.cast_add, Nat.cast_one, hcard] using h
+
+/-- **The forking lemma for the run on a uniform key.**
+
+Draw the key uniformly, and let `acc` be the chance that the run has a fork index.
+
+Then the fork on the same key succeeds with chance at least `acc (acc / (q + 1) - 1 / |A|)`.
+
+The mean of the bounds of the forking lemma on each key is at least this bound.
+
+The reason is that the mean of a square is at least the square of the mean. -/
+theorem le_prEvent_isSome_contextFork_keyOnlyOutsideRun_uniform [SampleableType F]
+    [UniformAnswerMeasure (Unit →ₒ A)] (scheme : Scheme F G A M)
+    (adversary : KeyOnlyAdversary F G A M) (q : ℕ) :
+    (let acc := Pr{let x ← liftComp ($ᵗ F : ProbComp F) (OutsideSpec A)
+                   let tr ← keyOnlyOutsideRun scheme adversary (x • scheme.g)}[
+        (forkIndex scheme (x • scheme.g) q tr).isSome]
+     acc * (acc / (q + 1 : ℝ≥0∞) - (FinEnum.card A : ℝ≥0∞)⁻¹)) ≤
+      Pr{let x ← liftComp ($ᵗ F : ProbComp F) (OutsideSpec A)
+         let r ← contextFork (keyOnlyOutsideRun scheme adversary (x • scheme.g)) (forkBound q)
+           (.inr ()) (forkIndex scheme (x • scheme.g) q)}[r.isSome] := by
+  let : MeasurableSpace F := ⊤
+  dsimp only
+  rw [prEvent_bind_of_discrete, prEvent_bind_of_discrete]
+  exact OracleComp.EvalDist.marginalized_jensen_forking_bound_of_discrete _ _ _ _ _
+    (fun _ => prEvent_le_one _)
+    (fun x => le_prEvent_isSome_contextFork_keyOnlyOutsideRun scheme adversary _ q)
 
 /-! ## Runs of the fork -/
 

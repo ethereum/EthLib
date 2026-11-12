@@ -422,7 +422,9 @@ theorem sstore_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam) {
   have hacc : (evm.state.getAccountOptional message.currentTarget).isSome = true := by
     rw [hagree.isSome (List.not_mem_nil)]; exact hbase
   obtain ⟨state', hnew, hothers, horig, haccount, hcode, hparent, hrule⟩ := sstore_of_account
-    hfork hglam hlt hbyte hstatic hcold hstipend (by rw [ho, hc]; exact hgas) hacc
+    hfork hlt hbyte hstatic hcold hstipend
+    (by rw [sstoreTotalCost_of_lt hglam, ho, hc]; exact hgas) hacc
+  rw [sstoreTotalCost_of_lt hglam] at hrule
   obtain ⟨after, hreach, hat'⟩ := hrule evm hat
   rw [ho, hc] at hat'
   have hm := hat'.2.2.2.2.2.1

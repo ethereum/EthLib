@@ -8,6 +8,7 @@ public import EthLib.Base.Proofs.Bytes
 public import EthLib.Base.Proofs.ChainConfig
 public import EthLib.Base.Proofs.ExceptT
 public import EthLib.Base.Proofs.FilterM
+public import EthLib.Base.Proofs.FoldlM
 public import EthLib.Base.Proofs.Forall2
 public import EthLib.Base.Proofs.Fork
 public import EthLib.Base.Proofs.GasLimit

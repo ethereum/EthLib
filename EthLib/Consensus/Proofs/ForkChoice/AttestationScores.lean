@@ -340,6 +340,36 @@ theorem voteCountsFor_of_check {node : ForkChoiceNode} {index : ValidatorIndex}
     store.voteCountsFor node index = descends := by
   simp only [voteCountsFor, latest, honest, Bool.false_eq_true, ↓reduceIte, checked]
 
+/-- A vote that counts for a node is the latest vote of a validator that does not equivocate.
+
+The node of that vote is found, and it descends from the node. -/
+theorem exists_of_voteCountsFor {node : ForkChoiceNode} {index : ValidatorIndex}
+    (counts : store.voteCountsFor node index = true) :
+    ∃ message supported, store.latestMessages[index]? = some message ∧
+      store.equivocatingIndices.contains index = false ∧
+      store.getSupportedNode message = .ok supported ∧
+      store.isAncestor supported node = .ok true := by
+  unfold voteCountsFor at counts
+  cases latest : store.latestMessages[index]? with
+  | none => simp [latest] at counts
+  | some message =>
+    rw [latest] at counts
+    dsimp only at counts
+    by_cases member : store.equivocatingIndices.contains index = true
+    · simp only [member, ↓reduceIte] at counts
+      exact absurd counts (by simp)
+    · have honest : store.equivocatingIndices.contains index = false := by simpa using member
+      rw [honest] at counts
+      cases supported : store.getSupportedNode message with
+      | error e => simp [supported, bind, Except.bind] at counts
+      | ok supported' =>
+        cases check : store.isAncestor supported' node with
+        | error e => simp [supported, check, bind, Except.bind] at counts
+        | ok descends =>
+          simp only [supported, check, bind, Except.bind, Bool.false_eq_true, ↓reduceIte] at counts
+          subst counts
+          exact ⟨message, supported', rfl, honest, supported, check⟩
+
 /-- A computed score of a node found the node of each vote that it reads.
 
 Those are the votes of the validators active and not slashed in the given state.

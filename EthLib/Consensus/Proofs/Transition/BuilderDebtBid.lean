@@ -82,7 +82,8 @@ private theorem parentPaymentPosition_lt (newer : state.latestBlockHeader.slot <
       position) (parent : UInt64) (found : parentPaymentPosition state = some parent) :
     parent.toNat < position := by
   have lt := UInt64.lt_iff_toNat_lt.mp newer
-  unfold parentPaymentPosition getPreviousEpoch getCurrentEpoch computeEpochAtSlot at found
+  unfold parentPaymentPosition slotPaymentPosition getPreviousEpoch getCurrentEpoch
+    computeEpochAtSlot at found
   dsimp only at found
   split at found
   · rename_i same
@@ -107,22 +108,6 @@ private theorem parentPaymentPosition_lt (newer : state.latestBlockHeader.slot <
       · have := Nat.mod_lt state.latestBlockHeader.slot.toNat pos
         omega
     · cases found
-
-/-- A write at one position of the pending payments keeps the payment at each other position. -/
-private theorem paymentAt_of_set {gloas : .glamsterdam ≤ fork} {k position : Nat}
-    {entry : BuilderPendingPayment} {inside : k < 2 * preset.SLOTS_PER_EPOCH.toNat}
-    (payments : after.builderPendingPayments gloas =
-      (state.builderPendingPayments gloas).set k entry inside) (differ : k ≠ position) :
-    paymentAt after gloas position = paymentAt state gloas position := by
-  simp [paymentAt, payments, differ]
-
-/-- A write at one position of the pending payments puts the entry there. -/
-private theorem paymentAt_of_set_self {gloas : .glamsterdam ≤ fork} {k : Nat}
-    {entry : BuilderPendingPayment} {inside : k < 2 * preset.SLOTS_PER_EPOCH.toNat}
-    (payments : after.builderPendingPayments gloas =
-      (state.builderPendingPayments gloas).set k entry inside) :
-    paymentAt after gloas k = entry := by
-  simp [paymentAt, payments, inside]
 
 /-- The invariant gives the form inside a block to a step that adds at most the reserve.
 
@@ -163,7 +148,7 @@ private theorem BuilderDebtCovered.settleParentPayment {gloas : .glamsterdam ≤
     · rw [pendingBuilderTotal_settleBuilderPayment settled]
       exact Nat.le_add_right _ _
     · have := before parent found
-      rw [paymentAt_of_set payments (by omega)]
+      rw [paymentAt_set payments, ite_eq_right (by omega)]
       exact empty
   · rename_i found
     dsimp only at computed
@@ -177,6 +162,21 @@ private theorem BuilderDebtCovered.settleParentPayment {gloas : .glamsterdam ≤
       split <;> simp_all [owedBy] <;> omega
     · cases computed
       exact holds.toSettled newer rfl rfl (fun _ => Nat.le_add_right _ _) fun _ _ empty => empty
+
+/-- The payment of the parent keeps each pending payment, or empties it. -/
+theorem paymentAt_settleParentPayment {gloas : .glamsterdam ≤ fork}
+    (computed : settleParentPayment state gloas = .ok after) (position : Nat) :
+    paymentAt after gloas position = paymentAt state gloas position ∨
+      paymentAt after gloas position = .empty := by
+  unfold Consensus.settleParentPayment at computed
+  split at computed
+  · obtain ⟨_, payments, -⟩ := settleBuilderPayment_spec (liftAccessor_ok.mp computed)
+    rw [paymentAt_set payments]
+    split
+    · exact .inr rfl
+    · exact .inl rfl
+  · dsimp only at computed
+    split at computed <;> cases computed <;> exact .inl rfl
 
 /-! ## The requests of the parent payload -/
 
@@ -241,9 +241,9 @@ private theorem builderFrame_switchToCompoundingValidator {electra : .pectra ≤
     exact BuilderFrame.refl _
 
 private theorem builderFrame_queueConsolidation {electra : .pectra ≤ fork}
-    {sourcePosition : Nat} {source : Validator} {targetIndex : ValidatorIndex}
+    {sourceIndex : ValidatorIndex} {source : Validator} {targetIndex : ValidatorIndex}
     (computed :
-      queueConsolidation config state electra sourcePosition source targetIndex = .ok after) :
+      queueConsolidation config state electra sourceIndex source targetIndex = .ok after) :
     BuilderFrame state after := by
   simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
     pure, Except.pure] at computed
@@ -270,6 +270,53 @@ theorem builderFrame_processConsolidationRequest {electra : .pectra ≤ fork}
     | (cases computed; exact BuilderFrame.refl _)
     | exact builderFrame_switchToCompoundingValidator (liftAccessor_ok.mp computed)
     | exact builderFrame_queueConsolidation computed
+
+/-- The deposit, withdrawal and consolidation requests of validators run in turn.
+
+They keep the builder fields and the two slots. -/
+theorem builderFrame_validatorRequests {electra : .pectra ≤ fork}
+    {deposits : List DepositRequest} {withdrawals : List WithdrawalRequest}
+    {consolidations : List ConsolidationRequest} {deposited withdrawn : BeaconState preset fork}
+    (depositsOk : deposits.foldlM (processDepositRequest · electra ·) state = .ok deposited)
+    (withdrawalsOk : withdrawals.foldlM (processWithdrawalRequest config · electra ·) deposited =
+      .ok withdrawn)
+    (consolidationsOk :
+      consolidations.foldlM (processConsolidationRequest config · electra ·) withdrawn =
+        .ok after) :
+    BuilderFrame state after :=
+  (BuilderFrame.foldlM (fun _ _ _ ok => builderFrame_processDepositRequest ok)
+      depositsOk).trans <|
+    (BuilderFrame.foldlM (fun _ _ _ ok => builderFrame_processWithdrawalRequest ok)
+      withdrawalsOk).trans <|
+    BuilderFrame.foldlM (fun _ _ _ ok => builderFrame_processConsolidationRequest ok)
+      consolidationsOk
+
+/-- The builder deposit and exit requests run in turn.
+
+They keep the slot, the payments, the withdrawals of builders and the latest bid. -/
+theorem builderRequests_paymentFields {gloas : .glamsterdam ≤ fork}
+    {deposits : List BuilderDepositRequest} {exits : List BuilderExitRequest}
+    {deposited : BeaconState preset fork}
+    (depositsOk : deposits.foldlM (processBuilderDepositRequest config checks · gloas ·) state =
+      .ok deposited)
+    (exitsOk : exits.foldlM (processBuilderExitRequest config · gloas ·) deposited = .ok after) :
+    after.slot = state.slot ∧ after.builderPendingPayments = state.builderPendingPayments ∧
+      after.builderPendingWithdrawals = state.builderPendingWithdrawals ∧
+      after.latestExecutionPayloadBid = state.latestExecutionPayloadBid := by
+  have kept := foldlM_ok_invariant (fun s => s.slot = state.slot ∧
+      s.builderPendingPayments = state.builderPendingPayments ∧
+      s.builderPendingWithdrawals = state.builderPendingWithdrawals ∧
+      s.latestExecutionPayloadBid = state.latestExecutionPayloadBid)
+    (fun _ _ _ before ok => by
+      obtain ⟨_, rfl⟩ := processBuilderDepositRequest_eq ok
+      exact before) ⟨rfl, rfl, rfl, rfl⟩ depositsOk
+  exact foldlM_ok_invariant (fun s => s.slot = state.slot ∧
+      s.builderPendingPayments = state.builderPendingPayments ∧
+      s.builderPendingWithdrawals = state.builderPendingWithdrawals ∧
+      s.latestExecutionPayloadBid = state.latestExecutionPayloadBid)
+    (fun _ _ _ before ok => by
+      obtain ⟨_, rfl⟩ := processBuilderExitRequest_eq ok
+      exact before) kept exitsOk
 
 /-- A step that only changes the builders keeps the form, if each builder keeps its bounds.
 
@@ -407,19 +454,20 @@ private theorem BuilderDebtSettled.processBuilderDepositRequest {gloas : .glamst
   · simp only [bind_ok_iff] at computed
     obtain ⟨_, _, computed⟩ := computed
     split at computed
-    · simp only [pure, Except.pure, Except.ok.injEq] at computed
-      subst computed
-      unfold addBuilderToRegistry
-      dsimp only
-      split
+    · simp only [addBuilderToRegistry, bind_ok_iff] at computed
+      obtain ⟨_, _, computed⟩ := computed
+      split at computed
       · rename_i inside
+        cases computed
         have reusable := isReusableBuilder_of_getIndexForNewBuilder_lt inside
         simp only [isReusableBuilder, Bool.and_eq_true, beq_iff_eq] at reusable
         exact holds.putBuilder (by simp [reusable.2]) fun far => absurd rfl far
-      · exact holds.pushBuilder
+      · cases computed
+        exact holds.pushBuilder
     · simp only [pure, Except.pure, Except.ok.injEq] at computed
       exact computed ▸ holds
-  · dsimp only at computed
+  · obtain ⟨_, _, computed⟩ := bind_ok_iff.mp computed
+    dsimp only at computed
     split at computed
     all_goals
       simp only [bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
@@ -444,13 +492,7 @@ theorem BuilderDebtCovered.processParentExecutionPayload {gloas : .glamsterdam �
   · -- An empty parent leaves the state as it is.
     exact holds.toSettled newer rfl rfl (fun _ => Nat.le_add_right _ _) fun _ _ empty => empty
   -- The requests of validators keep the builder fields.
-  have frame :=
-    (BuilderFrame.foldlM (fun _ _ _ ok => builderFrame_processDepositRequest ok)
-      depositsOk).trans <|
-    (BuilderFrame.foldlM (fun _ _ _ ok => builderFrame_processWithdrawalRequest ok)
-      withdrawalsOk).trans <|
-    BuilderFrame.foldlM (fun _ _ _ ok => builderFrame_processConsolidationRequest ok)
-      consolidationsOk
+  have frame := builderFrame_validatorRequests depositsOk withdrawalsOk consolidationsOk
   have paid := holds.settleParentPayment newer settledOk
   have validators := BuilderDebtSettled.of_eq (state := settled) frame.slot frame.builders
     frame.payments frame.withdrawals paid
@@ -497,8 +539,8 @@ private theorem BuilderDebtSettled.recordBid {gloas : .glamsterdam ≤ fork}
     (found : parentPaymentPosition after = some parent) (parentAt : parent.toNat = place.val) :
     BuilderDebtCovered after gloas := by
   have empty := holds.laterEmpty place (Nat.le_of_eq placed.symm)
-  have recorded : paymentAt after gloas place = bidPayment bid proposer :=
-    paymentAt_of_set_self payments
+  have recorded : paymentAt after gloas place = bidPayment bid proposer := by
+    rw [paymentAt_set payments, ite_eq_left rfl]
   -- The payment of the bid owes its value, at a position that owed nothing.
   have total : ∀ index, pendingBuilderTotal after gloas index =
       pendingBuilderTotal state gloas index +
@@ -556,7 +598,7 @@ private theorem BuilderDebtSettled.recordBid {gloas : .glamsterdam ≤ fork}
     rw [parentAt, recorded]
     exact ⟨rfl, .inr (by rw [latestBidWithdrawal, latest]; rfl)⟩
   · have := past parent found
-    rw [paymentAt_of_set payments (by omega)]
+    rw [paymentAt_set payments, ite_eq_right (by omega)]
     exact holds.laterEmpty k (by omega)
 
 /-- From Gloas, the bid of a block restores the builder debt invariant.
@@ -584,7 +626,7 @@ theorem BuilderDebtSettled.processExecutionPayloadBid (positive : preset.Payment
     exact Nat.mod_eq_of_lt (by omega)
   have parentAt : parentPaymentPosition state =
       some (preset.SLOTS_PER_EPOCH + state.slot % preset.SLOTS_PER_EPOCH) := by
-    simp [parentPaymentPosition, getCurrentEpoch, header]
+    simp [parentPaymentPosition, slotPaymentPosition, getCurrentEpoch, header]
   -- Each position from that of the parent payment is empty before the bid.
   have later : ∀ k, (preset.SLOTS_PER_EPOCH + state.slot % preset.SLOTS_PER_EPOCH).toNat ≤ k →
       paymentAt state gloas k = .empty :=
@@ -649,5 +691,27 @@ theorem processExecutionPayloadBid_builders (gloas : .glamsterdam ≤ fork)
       at recordedOk
     subst recordedOk
     rfl
+
+/-- The bid keeps each payment, or leaves one of no weight in the second half of the window. -/
+theorem paymentAt_processExecutionPayloadBid {gloas : .glamsterdam ≤ fork}
+    {signed : SignedExecutionPayloadBid preset fork}
+    (computed : processExecutionPayloadBid config checks state gloas signed = .ok after)
+    (position : Nat) :
+    paymentAt after gloas position = paymentAt state gloas position ∨
+      preset.SLOTS_PER_EPOCH.toNat ≤ position ∧ (paymentAt after gloas position).weight = 0 := by
+  obtain ⟨-, recorded, recordOk, rfl⟩ := processExecutionPayloadBid_ok computed
+  change paymentAt recorded gloas position = _ ∨
+    _ ∧ (paymentAt recorded gloas position).weight = 0
+  by_cases paid : 0 < signed.message.value
+  · obtain ⟨_, _, -, placed, rfl⟩ := recordBidPayment_of_pos paid recordOk
+    rw [paymentAt_set (state := state) rfl]
+    split
+    · exact .inr ⟨by omega, rfl⟩
+    · exact .inl rfl
+  · rw [recordBidPayment_of_value_eq_zero
+      (Classical.byContradiction fun nonzero => paid (UInt64.pos_iff_ne_zero.mpr nonzero)),
+      Except.ok.injEq] at recordOk
+    subst recordOk
+    exact .inl rfl
 
 end EthLib.Consensus

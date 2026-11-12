@@ -30,26 +30,28 @@ variable {preset : Preset} {fork : Base.Fork} {state : BeaconState preset fork}
 
 /-! ## The eligible validators -/
 
-/-- For a registry within its limit, the eligible indices name each validator at most once.
+/-- The eligible indices name each validator at most once.
 
 A position is listed exactly when its validator is eligible.
 
 The eligibility of every validator of the registry is decided without an error. -/
 theorem getEligibleValidatorIndices_ok {eligible : List ValidatorIndex}
-    (within : state.RegistryWithinLimit)
     (computed : getEligibleValidatorIndices state = .ok eligible) :
     (eligible.map UInt64.toNat).Nodup ∧
       ∀ j (inside : j < state.validators.data.size), ∃ decided,
         isEligibleValidator (getPreviousEpoch state) state.validators.data[j] = .ok decided ∧
           ((∃ index ∈ eligible, index.toNat = j) ↔ decided = true) := by
   -- The indices increase strictly, so no position repeats.
-  refine ⟨List.pairwise_map.mpr ((getEligibleValidatorIndices_sorted within computed).imp
+  refine ⟨List.pairwise_map.mpr ((getEligibleValidatorIndices_sorted computed).imp
     fun lt => Nat.ne_of_lt (UInt64.lt_iff_toNat_lt.mp lt)), ?_⟩
   have succeeds := filterMapM_ok_of_mem computed
   have member {x : Validator × Nat} : x ∈ state.validators.data.toList.zipIdx ↔
       ∃ inside : x.2 < state.validators.data.size, state.validators.data[x.2] = x.1 := by
     rw [List.mem_zipIdx_iff_getElem?, Array.getElem?_toList, Array.getElem?_eq_some_iff]
   -- Each step succeeds, so it keeps the position exactly when it decides that it is eligible.
+  have fits := getEligibleValidatorIndices_fits computed
+  have toNat_eq {n : Nat} (small : n < 2 ^ 64) : n.toUInt64.toNat = n := by
+    rw [Nat.toUInt64_eq, UInt64.toNat_ofNat_of_lt' small]
   obtain rfl := getEligibleValidatorIndices_eq computed
   intro j inside
   obtain ⟨_, found⟩ := succeeds (state.validators.data[j], j) (member.mpr ⟨inside, rfl⟩)
@@ -64,12 +66,14 @@ theorem getEligibleValidatorIndices_ok {eligible : List ValidatorIndex}
     · rename_i passes chose
       obtain ⟨passed, picked⟩ := Option.ite_none_right_eq_some.mp image
       obtain rfl := Option.some.inj picked
-      obtain rfl : k = j := (toNat_toUInt64_of_lt within lt).symm.trans named
+      obtain rfl : k = j :=
+        (toNat_eq (fits _ kInside (by simp [chose, passed]))).symm.trans named
       rw [ok, Except.ok.injEq] at chose
       exact chose ▸ passed
     · simp at image
   · refine ⟨j.toUInt64, List.mem_filterMap.mpr ⟨(state.validators.data[j], j),
-      member.mpr ⟨inside, rfl⟩, by simp [ok, yes]⟩, toNat_toUInt64_of_lt within inside⟩
+      member.mpr ⟨inside, rfl⟩, by simp [ok, yes]⟩,
+      toNat_eq (fits (state.validators.data[j], j) (member.mpr ⟨inside, rfl⟩) (by simp [ok, yes]))⟩
 
 /-! ## One entry of a fold over distinct indices -/
 
@@ -255,7 +259,7 @@ theorem getFlagIndexDeltas_getD {altair : .altair ≤ fork}
   simp only [getFlagIndexDeltas, bind_ok_iff, liftAccessor_ok] at computed
   obtain ⟨participating, participatingOk, participatingBalance, balanceOk, total, totalOk,
     eligible, eligibleOk, folded⟩ := computed
-  obtain ⟨distinct, decided⟩ := getEligibleValidatorIndices_ok within eligibleOk
+  obtain ⟨distinct, decided⟩ := getEligibleValidatorIndices_ok eligibleOk
   refine ⟨participating, participatingBalance, total, participatingOk, balanceOk, totalOk,
     fun j inside => ?_⟩
   obtain ⟨isEligible, eligibleJ, named⟩ := decided j inside
@@ -388,7 +392,7 @@ theorem getInactivityPenaltyDeltas_getD_of_altair {config : Config} (altair : .a
   simp only [altair, ↓reduceDIte, bind_ok_iff, liftAccessor_ok, pure, Except.pure,
     Except.ok.injEq, Prod.mk.injEq] at computed
   obtain ⟨matching, matchingOk, eligible, eligibleOk, penalties, folded, -, rfl⟩ := computed
-  obtain ⟨distinct, decided⟩ := getEligibleValidatorIndices_ok within eligibleOk
+  obtain ⟨distinct, decided⟩ := getEligibleValidatorIndices_ok eligibleOk
   refine ⟨matching, matchingOk, fun j inside => ?_⟩
   obtain ⟨isEligible, eligibleJ, named⟩ := decided j inside
   have small := toNat_toUInt64_of_lt within inside
@@ -488,7 +492,7 @@ theorem getAttestationComponentDeltas_getD {attestations : Array (PendingAttesta
   simp only [getAttestationComponentDeltas, bind_ok_iff, liftAccessor_ok] at computed
   obtain ⟨total, totalOk, attesters, attestersOk, attestingBalance, balanceOk, eligible,
     eligibleOk, folded⟩ := computed
-  obtain ⟨distinct, decided⟩ := getEligibleValidatorIndices_ok within eligibleOk
+  obtain ⟨distinct, decided⟩ := getEligibleValidatorIndices_ok eligibleOk
   refine ⟨total, attesters, attestingBalance, totalOk, attestersOk, balanceOk,
     fun j inside => ?_⟩
   obtain ⟨isEligible, eligibleJ, named⟩ := decided j inside
@@ -646,7 +650,7 @@ theorem getInactivityPenaltyDeltas_getD_of_lt_altair {config : Config} (before :
     Prod.mk.injEq] at computed
   obtain ⟨attestations, attestationsOk, attesters, attestersOk, total, totalOk, delay, delayOk,
     eligible, eligibleOk, penalties, folded, -, rfl⟩ := computed
-  obtain ⟨distinct, decided⟩ := getEligibleValidatorIndices_ok within eligibleOk
+  obtain ⟨distinct, decided⟩ := getEligibleValidatorIndices_ok eligibleOk
   refine ⟨attestations, attesters, total, delay, attestationsOk, attestersOk, totalOk, delayOk,
     fun j inside => ?_⟩
   obtain ⟨isEligible, eligibleJ, named⟩ := decided j inside

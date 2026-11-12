@@ -9,6 +9,7 @@ public import EthLib.Execution.Proofs.Blocks.Block
 public import EthLib.Execution.Proofs.Blocks.BlockAccessList
 public import EthLib.Execution.Proofs.Blocks.BodyGas
 public import EthLib.Execution.Proofs.Blocks.Bloom
+public import EthLib.Execution.Proofs.Blocks.Burn
 public import EthLib.Execution.Proofs.Blocks.DaoFork
 public import EthLib.Execution.Proofs.Blocks.Difficulty
 public import EthLib.Execution.Proofs.Blocks.Genesis
@@ -28,11 +29,13 @@ public import EthLib.Execution.Proofs.Blocks.SystemCall.ConsolidationRequests
 public import EthLib.Execution.Proofs.Blocks.SystemCall.HistoryStorage
 public import EthLib.Execution.Proofs.Blocks.SystemCall.RequestQueue
 public import EthLib.Execution.Proofs.Blocks.SystemCall.WithdrawalRequests
+public import EthLib.Execution.Proofs.Blocks.SystemCallFollow
 public import EthLib.Execution.Proofs.Blocks.Transition
 public import EthLib.Execution.Proofs.Blocks.TypedRoots
 public import EthLib.Execution.Proofs.Blocks.Validate
 public import EthLib.Execution.Proofs.Blocks.Withdrawal
 public import EthLib.Execution.Proofs.Blocks.WithdrawalCodec
+public import EthLib.Execution.Proofs.Blocks.WithdrawalFollow
 
 /-!
 # `EthLib.Execution.Proofs.Blocks`

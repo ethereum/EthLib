@@ -24,7 +24,7 @@ A request with one key for both source and target switches that validator to com
 
 A request that fails a condition changes nothing.
 
-A 64-bit overflow is an error.
+A 64-bit overflow is an error, and so is a known key at a position of `2^64` or more.
 
 [EIP-7002]: https://eips.ethereum.org/EIPS/eip-7002#consensus-layer
 [EIP-7251]: https://eips.ethereum.org/EIPS/eip-7251#consensus-layer-1
@@ -92,7 +92,9 @@ The request must name a known key, from the address of its execution credentials
 
 The validator must be active, not exit, and have been active for long enough.
 
-A full exit starts only when no partial withdrawal of the validator waits. -/
+A full exit starts only when no partial withdrawal of the validator waits.
+
+A known key at a position of `2^64` or more is an overflow. -/
 def processWithdrawalRequest (config : Config) (state : BeaconState preset fork)
     (electra : .pectra ≤ fork) (request : WithdrawalRequest) :
     Except TransitionError (BeaconState preset fork) := do
@@ -101,12 +103,12 @@ def processWithdrawalRequest (config : Config) (state : BeaconState preset fork)
       preset.PENDING_PARTIAL_WITHDRAWALS_LIMIT.toNat && !fullExit then
     return state
   let some position := findValidatorByPubkey state request.validatorPubkey | return state
+  let index ← liftAccessor (liftArith (ofNatChecked position.val))
   let validator := state.validators.data[position]
   unless hasExecutionWithdrawalCredential validator &&
       credentialAddress validator.withdrawalCredentials == request.sourceAddress do
     return state
   unless ← canRequest config state validator do return state
-  let index := position.val.toUInt64
   let owed ← liftAccessor (getPendingBalanceToWithdraw state electra index)
   if fullExit then
     if owed = 0 then liftAccessor (initiateValidatorExit config state index) else return state
@@ -134,16 +136,16 @@ It may withdraw a fixed delay after that.
 
 The consolidation then waits in the queue. -/
 def queueConsolidation (config : Config) (state : BeaconState preset fork)
-    (electra : .pectra ≤ fork) (sourcePosition : Nat) (source : Validator)
+    (electra : .pectra ≤ fork) (sourceIndex : ValidatorIndex) (source : Validator)
     (targetIndex : ValidatorIndex) : Except TransitionError (BeaconState preset fork) := do
   let (state, exitEpoch) ← liftAccessor
     (computeConsolidationEpochAndUpdateChurn config state electra source.effectiveBalance)
   let withdrawableEpoch ←
     liftAccessor (liftArith (addChecked exitEpoch config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY))
   let state ← liftAccessor
-    (state.setValidator sourcePosition.toUInt64 { source with exitEpoch, withdrawableEpoch })
+    (state.setValidator sourceIndex { source with exitEpoch, withdrawableEpoch })
   let pending ← liftAccessor (appendWithinLimit (state.pendingConsolidations electra)
-    ⟨sourcePosition.toUInt64, targetIndex⟩)
+    ⟨sourceIndex, targetIndex⟩)
   return { state with pendingConsolidations := fun _ => pending }
 
 /-- From Electra: the state after a consolidation request.
@@ -164,14 +166,17 @@ Both must be active and not exit.
 
 The source must have been active for long enough, with no partial withdrawal waiting.
 
-The source then exits to consolidate into the target. -/
+The source then exits to consolidate into the target.
+
+A known key at a position of `2^64` or more is an overflow. -/
 def processConsolidationRequest (config : Config) (state : BeaconState preset fork)
     (electra : .pectra ≤ fork) (request : ConsolidationRequest) :
     Except TransitionError (BeaconState preset fork) := do
   if request.sourcePubkey == request.targetPubkey then
     let some position := findValidatorByPubkey state request.sourcePubkey | return state
+    let index ← liftAccessor (liftArith (ofNatChecked position.val))
     if isValidSwitchToCompoundingRequest state request state.validators.data[position] then
-      liftAccessor (switchToCompoundingValidator state electra position.val.toUInt64)
+      liftAccessor (switchToCompoundingValidator state electra index)
     else return state
   else
     if (state.pendingConsolidations electra).data.size ==
@@ -181,6 +186,8 @@ def processConsolidationRequest (config : Config) (state : BeaconState preset fo
     then return state
     let some sourcePosition := findValidatorByPubkey state request.sourcePubkey | return state
     let some targetPosition := findValidatorByPubkey state request.targetPubkey | return state
+    let sourceIndex ← liftAccessor (liftArith (ofNatChecked sourcePosition.val))
+    let targetIndex ← liftAccessor (liftArith (ofNatChecked targetPosition.val))
     let source := state.validators.data[sourcePosition]
     let target := state.validators.data[targetPosition]
     unless hasExecutionWithdrawalCredential source &&
@@ -194,10 +201,9 @@ def processConsolidationRequest (config : Config) (state : BeaconState preset fo
     let eligible ←
       liftAccessor (liftArith (addChecked source.activationEpoch config.SHARD_COMMITTEE_PERIOD))
     if epoch < eligible then return state
-    let sourceIndex := sourcePosition.val.toUInt64
     if 0 < (← liftAccessor (getPendingBalanceToWithdraw state electra sourceIndex)) then
       return state
-    queueConsolidation config state electra sourcePosition source targetPosition.val.toUInt64
+    queueConsolidation config state electra sourceIndex source targetIndex
 
 /-- From Electra: one pass over the pending consolidations from the front, and the number it read.
 

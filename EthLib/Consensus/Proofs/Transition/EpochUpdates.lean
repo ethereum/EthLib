@@ -8,9 +8,19 @@ public import EthLib.Consensus.Transition.EpochUpdates
 
 An updated effective balance is the old one, or the balance rounded down to an increment and capped.
 
-The effective balances are aligned when each is a whole number of increments, at most its largest.
+It is at most the balance plus the downward band of hysteresis.
 
-When each largest value is itself a whole number of increments, the update keeps them aligned.
+It does not rise while the balance stays within the upward band of it.
+
+Unless it is the old one, it is at most the balance and at most the largest.
+
+So when the old effective balance is at most the largest, the updated one is too.
+
+It is also at most the greater of the old effective balance and the balance.
+
+The effective balances are aligned when each is a whole number of increments.
+
+When the largest values of the preset are aligned too, the update keeps them aligned.
 
 The registry updates, the slashings and the update of the effective balances keep the sizes.
 
@@ -19,6 +29,10 @@ When the slashings succeed, each balance of the registry loses its penalty if it
 That balance stops at zero.
 
 From Electra this holds for a registry within its limit.
+
+The same holds in natural numbers, with no reduction modulo `2^64`.
+
+On success the scaled sum of slashings fits, and so does each checked product of a due penalty.
 
 When the slashings succeed, the balances past the registry stay.
 
@@ -50,57 +64,239 @@ theorem updatedEffectiveBalance_cases {largest balance effectiveBalance result :
   · exact .inl rfl
   · exact .inr rfl
 
+/-- The downward band of hysteresis, in Gwei: a quarter of an increment on mainnet. -/
+abbrev Preset.downwardBand (preset : Preset) : Nat :=
+  (preset.EFFECTIVE_BALANCE_INCREMENT / preset.HYSTERESIS_QUOTIENT).toNat *
+    preset.HYSTERESIS_DOWNWARD_MULTIPLIER.toNat
+
+/-- The upward band of hysteresis, in Gwei: five quarters of an increment on mainnet. -/
+abbrev Preset.upwardBand (preset : Preset) : Nat :=
+  (preset.EFFECTIVE_BALANCE_INCREMENT / preset.HYSTERESIS_QUOTIENT).toNat *
+    preset.HYSTERESIS_UPWARD_MULTIPLIER.toNat
+
+/-- A successful update either keeps the old value inside the band, or leaves the band.
+
+Inside the band, the balance is at most the old value plus the upward band.
+
+Also inside the band, the old value is at most the balance plus the downward band.
+
+Outside the band, the result is the balance rounded down to an increment, at most the largest. -/
+theorem updatedEffectiveBalance_split {largest balance effectiveBalance result : Gwei}
+    (computed : updatedEffectiveBalance preset largest balance effectiveBalance = .ok result) :
+    (result = effectiveBalance ∧
+      balance.toNat ≤ effectiveBalance.toNat + preset.upwardBand ∧
+      effectiveBalance.toNat ≤ balance.toNat + preset.downwardBand) ∨
+    (result = min (balance - balance % preset.EFFECTIVE_BALANCE_INCREMENT) largest ∧
+      (balance.toNat + preset.downwardBand < effectiveBalance.toNat ∨
+        effectiveBalance.toNat + preset.upwardBand < balance.toNat)) := by
+  simp only [updatedEffectiveBalance, leavesBand, liftAccessor, liftArith, Except.mapError, bind,
+    Except.bind, pure, Except.pure] at computed
+  rcases hd : mulChecked (preset.EFFECTIVE_BALANCE_INCREMENT / preset.HYSTERESIS_QUOTIENT)
+    preset.HYSTERESIS_DOWNWARD_MULTIPLIER with _ | down
+  · simp [hd] at computed
+  rcases hu : mulChecked (preset.EFFECTIVE_BALANCE_INCREMENT / preset.HYSTERESIS_QUOTIENT)
+    preset.HYSTERESIS_UPWARD_MULTIPLIER with _ | up
+  · simp [hd, hu] at computed
+  have downNat := (mulChecked_ok_iff.mp hd).2
+  have upNat := (mulChecked_ok_iff.mp hu).2
+  simp [hd, hu] at computed
+  have dBand : down.toNat = preset.downwardBand := downNat
+  have uBand : up.toNat = preset.upwardBand := upNat
+  rcases hs : addChecked balance down with _ | sum
+  · simp [hs] at computed
+  have sumNat := (addChecked_ok_iff.mp hs).2
+  simp only [hs] at computed
+  by_cases lt : sum < effectiveBalance
+  · simp [lt] at computed
+    have := UInt64.lt_iff_toNat_lt.mp lt
+    exact .inr ⟨computed.symm, .inl (by omega)⟩
+  · simp [lt] at computed
+    rcases hs2 : addChecked effectiveBalance up with _ | sum2
+    · simp [hs2] at computed
+    have sum2Nat := (addChecked_ok_iff.mp hs2).2
+    simp only [hs2] at computed
+    have := Nat.not_lt.mp (fun h => lt (UInt64.lt_iff_toNat_lt.mpr h))
+    by_cases lt2 : sum2 < balance
+    · simp [lt2] at computed
+      have := UInt64.lt_iff_toNat_lt.mp lt2
+      exact .inr ⟨computed.symm, .inr (by omega)⟩
+    · simp [lt2] at computed
+      have := Nat.not_lt.mp (fun h => lt2 (UInt64.lt_iff_toNat_lt.mpr h))
+      exact .inl ⟨computed.symm, by omega, by omega⟩
+
+/-- The balance rounded down to an increment is that balance less the remainder. -/
+private theorem toNat_rounded {balance : Gwei} :
+    (balance - balance % preset.EFFECTIVE_BALANCE_INCREMENT).toNat =
+      balance.toNat - balance.toNat % preset.EFFECTIVE_BALANCE_INCREMENT.toNat := by
+  have le : balance % preset.EFFECTIVE_BALANCE_INCREMENT ≤ balance :=
+    UInt64.le_iff_toNat_le.mpr (by rw [UInt64.toNat_mod]; exact Nat.mod_le _ _)
+  rw [UInt64.toNat_sub_of_le _ _ le, UInt64.toNat_mod]
+
+/-- The rounded balance capped at the largest is either the rounded balance or the largest. -/
+private theorem toNat_min_rounded {balance largest : Gwei} :
+    (min (balance - balance % preset.EFFECTIVE_BALANCE_INCREMENT) largest).toNat =
+      min (balance.toNat - balance.toNat % preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
+        largest.toNat := by
+  rw [UInt64.min_def, ← toNat_rounded (preset := preset)]
+  split
+  · rename_i h
+    rw [Nat.min_eq_left (UInt64.le_iff_toNat_le.mp h)]
+  · rename_i h
+    rw [Nat.min_eq_right (Nat.le_of_lt (UInt64.lt_iff_toNat_lt.mp (UInt64.not_le.mp h)))]
+
+/-- An updated effective balance is the old one, or at most both the balance and the largest. -/
+theorem updatedEffectiveBalance_eq_or_le {largest balance effectiveBalance result : Gwei}
+    (computed : updatedEffectiveBalance preset largest balance effectiveBalance = .ok result) :
+    result = effectiveBalance ∨ result ≤ balance ∧ result ≤ largest := by
+  rcases updatedEffectiveBalance_cases computed with rfl | rfl
+  · exact .inl rfl
+  · right
+    rw [UInt64.le_iff_toNat_le, UInt64.le_iff_toNat_le, toNat_min_rounded (preset := preset)]
+    exact ⟨Nat.le_trans (Nat.min_le_left _ _) (Nat.sub_le _ _), Nat.min_le_right _ _⟩
+
+/-- An updated effective balance is at most the largest when the old one is. -/
+theorem updatedEffectiveBalance_le_largest {largest balance effectiveBalance result : Gwei}
+    (old : effectiveBalance ≤ largest)
+    (computed : updatedEffectiveBalance preset largest balance effectiveBalance = .ok result) :
+    result ≤ largest := by
+  rcases updatedEffectiveBalance_eq_or_le computed with rfl | ⟨_, capped⟩
+  · exact old
+  · exact capped
+
+/-- An updated effective balance is at most the greater of the old one and the balance.
+
+A kept old effective balance can exceed the balance, so the bound needs both values. -/
+theorem updatedEffectiveBalance_le_max {largest balance effectiveBalance result : Gwei}
+    (computed : updatedEffectiveBalance preset largest balance effectiveBalance = .ok result) :
+    result.toNat ≤ max effectiveBalance.toNat balance.toNat := by
+  rcases updatedEffectiveBalance_eq_or_le computed with rfl | ⟨below, _⟩
+  · exact Nat.le_max_left _ _
+  · exact Nat.le_trans (UInt64.le_iff_toNat_le.mp below) (Nat.le_max_right _ _)
+
+/-- The increment of a preset is positive and at most its upward band, as the hysteresis needs. -/
+abbrev Preset.IncrementWithinUpwardBand (preset : Preset) : Prop :=
+  0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat ∧
+    preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ preset.upwardBand
+
+/-- An updated effective balance is at most the balance plus the downward band. -/
+theorem updatedEffectiveBalance_le_add {largest balance effectiveBalance result : Gwei}
+    (computed : updatedEffectiveBalance preset largest balance effectiveBalance = .ok result) :
+    result.toNat ≤ balance.toNat + preset.downwardBand := by
+  rcases updatedEffectiveBalance_split computed with ⟨rfl, _, below⟩ | ⟨rfl, _⟩
+  · exact below
+  · rw [toNat_min_rounded (preset := preset)]
+    have := Nat.mod_le balance.toNat preset.EFFECTIVE_BALANCE_INCREMENT.toNat
+    have := Nat.min_le_left
+      (balance.toNat - balance.toNat % preset.EFFECTIVE_BALANCE_INCREMENT.toNat) largest.toNat
+    omega
+
+/-- An updated effective balance is at most the old one in two cases.
+
+The balance may be at most the old one plus the upward band.
+
+Or the old one may already be at least the largest. -/
+theorem updatedEffectiveBalance_le_of_band {largest balance effectiveBalance result : Gwei}
+    (band : balance.toNat ≤ effectiveBalance.toNat + preset.upwardBand ∨
+      largest ≤ effectiveBalance)
+    (computed : updatedEffectiveBalance preset largest balance effectiveBalance = .ok result) :
+    result ≤ effectiveBalance := by
+  rcases updatedEffectiveBalance_split computed with ⟨rfl, _⟩ | ⟨rfl, out⟩
+  · exact UInt64.le_refl _
+  · rw [UInt64.le_iff_toNat_le, toNat_min_rounded (preset := preset)]
+    have := Nat.mod_le balance.toNat preset.EFFECTIVE_BALANCE_INCREMENT.toNat
+    have := Nat.min_le_left
+      (balance.toNat - balance.toNat % preset.EFFECTIVE_BALANCE_INCREMENT.toNat) largest.toNat
+    have := Nat.min_le_right
+      (balance.toNat - balance.toNat % preset.EFFECTIVE_BALANCE_INCREMENT.toNat) largest.toNat
+    rcases band with band | big
+    · omega
+    · have := UInt64.le_iff_toNat_le.mp big
+      omega
+
+/-- After an update, the balance is at most the new effective balance plus the upward band.
+
+Otherwise the new effective balance is at least the largest.
+
+The increment must be positive and at most the upward band. -/
+theorem updatedEffectiveBalance_band {largest balance effectiveBalance result : Gwei}
+    (bands : preset.IncrementWithinUpwardBand)
+    (computed : updatedEffectiveBalance preset largest balance effectiveBalance = .ok result) :
+    balance.toNat ≤ result.toNat + preset.upwardBand ∨ largest ≤ result := by
+  obtain ⟨positive, narrow⟩ := bands
+  rcases updatedEffectiveBalance_split computed with ⟨rfl, inside, _⟩ | ⟨rfl, _⟩
+  · exact .inl inside
+  · rw [UInt64.le_iff_toNat_le, toNat_min_rounded (preset := preset)]
+    have := Nat.mod_lt balance.toNat positive
+    have := Nat.min_le_left
+      (balance.toNat - balance.toNat % preset.EFFECTIVE_BALANCE_INCREMENT.toNat) largest.toNat
+    rcases Nat.le_total largest.toNat
+      (balance.toNat - balance.toNat % preset.EFFECTIVE_BALANCE_INCREMENT.toNat) with le | le
+    · right
+      have := Nat.min_eq_right le
+      omega
+    · left
+      have := Nat.min_eq_left le
+      omega
+
+/-- The increment of the mainnet preset is positive and at most its upward band. -/
+theorem Preset.incrementWithinUpwardBand_mainnet : Preset.mainnet.IncrementWithinUpwardBand := by
+  decide
+
+/-- The increment of the minimal preset is positive and at most its upward band. -/
+theorem Preset.incrementWithinUpwardBand_minimal : Preset.minimal.IncrementWithinUpwardBand := by
+  decide
+
 /-- An updated effective balance is aligned when the old one and the largest are. -/
 theorem updatedEffectiveBalance_aligned {largest balance effectiveBalance result : Gwei}
     (maxAligned : largest % preset.EFFECTIVE_BALANCE_INCREMENT = 0)
-    (old : effectiveBalance % preset.EFFECTIVE_BALANCE_INCREMENT = 0 ∧ effectiveBalance ≤ largest)
+    (old : effectiveBalance % preset.EFFECTIVE_BALANCE_INCREMENT = 0)
     (computed : updatedEffectiveBalance preset largest balance effectiveBalance = .ok result) :
-    result % preset.EFFECTIVE_BALANCE_INCREMENT = 0 ∧ result ≤ largest := by
+    result % preset.EFFECTIVE_BALANCE_INCREMENT = 0 := by
   rcases updatedEffectiveBalance_cases computed with rfl | rfl
   · exact old
-  · rw [UInt64.min_def]
-    split
-    · exact ⟨sub_mod_mod_self _ _, by assumption⟩
-    · exact ⟨maxAligned, UInt64.le_refl _⟩
+  · exact min_sub_mod_mod_self _ maxAligned
+
+/-- An aligned validator written at a plain position keeps the effective balances aligned. -/
+theorem effectiveBalancesAligned_setValidatorAt {index : Nat} {validator : Validator}
+    (holds : EffectiveBalancesAligned state)
+    (good : validator.effectiveBalance % preset.EFFECTIVE_BALANCE_INCREMENT = 0)
+    (set : state.setValidatorAt index validator = .ok after) :
+    EffectiveBalancesAligned after := by
+  obtain ⟨inside, rfl⟩ := setValidatorAt_ok set
+  intro other member
+  simp only [BeaconState.putValidator, RootedForkList.data_set] at member
+  rcases Array.mem_or_eq_of_mem_set (w := inside) member with old | rfl
+  · exact holds other old
+  · exact good
 
 /-- Replacing a validator by an aligned one keeps the effective balances aligned. -/
 theorem effectiveBalancesAligned_setValidator {index : ValidatorIndex} {validator : Validator}
     (holds : EffectiveBalancesAligned state)
-    (good : validator.effectiveBalance % preset.EFFECTIVE_BALANCE_INCREMENT = 0 ∧
-      validator.effectiveBalance ≤ withdrawalMaxEffectiveBalance preset fork validator)
+    (good : validator.effectiveBalance % preset.EFFECTIVE_BALANCE_INCREMENT = 0)
     (set : state.setValidator index validator = .ok after) :
-    EffectiveBalancesAligned after := by
-  obtain ⟨inside, rfl⟩ := setValidator_ok set
-  intro other member
-  simp only [BeaconState.putValidator, RootedForkList.data_set, Array.toList_set] at member
-  rcases List.mem_or_eq_of_mem_set member with old | rfl
-  · exact holds other old
-  · exact good
+    EffectiveBalancesAligned after :=
+  effectiveBalancesAligned_setValidatorAt holds good (by rwa [← setValidator_eq_setValidatorAt])
 
-/-- The update of one effective balance keeps them aligned, when each largest is aligned. -/
+/-- The update of one effective balance keeps them aligned.
+
+The largest effective balances of the preset must be whole numbers of increments. -/
 theorem updateEffectiveBalance_aligned {index : Nat}
-    (maxAligned : ∀ validator,
-      withdrawalMaxEffectiveBalance preset fork validator % preset.EFFECTIVE_BALANCE_INCREMENT = 0)
+    (maxAligned : MaxEffectiveBalancesAligned preset)
     (holds : EffectiveBalancesAligned state)
     (computed : updateEffectiveBalance state index = .ok after) :
     EffectiveBalancesAligned after := by
   simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at computed
   obtain ⟨validator, found, _, _, effectiveBalance, updated, set⟩ := computed
-  refine effectiveBalancesAligned_setValidator holds ?_ set
-  apply updatedEffectiveBalance_aligned (maxAligned validator) _ updated
-  unfold getValidator at found
-  split at found
-  · rename_i read
-    cases found
-    exact holds _ (Array.mem_toList_iff.mpr (Array.mem_of_getElem? read))
-  · cases found
+  refine effectiveBalancesAligned_setValidatorAt holds ?_ set
+  apply updatedEffectiveBalance_aligned (withdrawalMaxEffectiveBalance_aligned maxAligned validator)
+    _ updated
+  exact holds _ (mem_of_getValidatorAt found)
 
 /-- The update of the effective balances keeps them aligned.
 
-The largest effective balance of each validator must be a whole number of increments. -/
+The largest effective balances of the preset must be whole numbers of increments. -/
 theorem processEffectiveBalanceUpdates_aligned
-    (maxAligned : ∀ validator,
-      withdrawalMaxEffectiveBalance preset fork validator % preset.EFFECTIVE_BALANCE_INCREMENT = 0)
+    (maxAligned : MaxEffectiveBalancesAligned preset)
     (holds : EffectiveBalancesAligned state)
     (computed : processEffectiveBalanceUpdates state = .ok after) :
     EffectiveBalancesAligned after := by
@@ -114,7 +310,7 @@ theorem sameSizes_updateEffectiveBalance {index : Nat}
     (computed : updateEffectiveBalance state index = .ok after) : SameSizes state after := by
   simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at computed
   obtain ⟨_, _, _, _, _, _, set⟩ := computed
-  exact sameSizes_setValidator set
+  exact sameSizes_setValidatorAt set
 
 theorem sameSizes_processEffectiveBalanceUpdates
     (computed : processEffectiveBalanceUpdates state = .ok after) : SameSizes state after := by
@@ -130,10 +326,11 @@ theorem sameSizes_updateRegistryEntry {config : Config} {index : Nat}
   simp only [updateRegistryEntry, bind_ok_iff, liftAccessor_ok] at computed
   obtain ⟨_, _, _, _, _, set, computed⟩ := computed
   split at computed
-  · rw [liftAccessor_ok] at computed
-    exact (sameSizes_setValidator set).trans (sameSizes_initiateValidatorExit computed)
+  · simp only [bind_ok_iff, liftAccessor_ok] at computed
+    obtain ⟨_, _, exited⟩ := computed
+    exact (sameSizes_setValidatorAt set).trans (sameSizes_initiateValidatorExit exited)
   · simp only [pure, Except.pure, Except.ok.injEq] at computed
-    exact computed ▸ sameSizes_setValidator set
+    exact computed ▸ sameSizes_setValidatorAt set
 
 theorem sameSizes_activateValidator {index : ValidatorIndex}
     (computed : activateValidator state index = .ok after) : SameSizes state after := by
@@ -161,6 +358,18 @@ theorem activationEpochAt_setValidator {index : ValidatorIndex} {validator : Val
   · subst other
     simp [activationEpochAt, getValidator_setValidator_self set, Except.map]
   · simp [activationEpochAt, getValidator_setValidator_of_ne set equal, equal]
+
+/-- A write at a plain position leaves every other activation epoch unchanged. -/
+theorem activationEpochAt_setValidatorAt {index : Nat} {validator : Validator}
+    (set : state.setValidatorAt index validator = .ok after) (other : ValidatorIndex) :
+    activationEpochAt after other =
+      if other.toNat = index then .ok validator.activationEpoch
+      else activationEpochAt state other := by
+  obtain ⟨inside, rfl⟩ := setValidatorAt_ok set
+  by_cases equal : other.toNat = index
+  · simp [activationEpochAt, getValidator, BeaconState.putValidator, equal, inside, Except.map]
+  · simp [activationEpochAt, getValidator, BeaconState.putValidator, equal, Ne.symm equal,
+      Except.map]
 
 /-- In a registry within its limit, a queued index has the far-future activation epoch. -/
 theorem activationEpochAt_of_mem_activationQueue (within : state.RegistryWithinLimit)
@@ -230,19 +439,23 @@ theorem updateRegistryEntry_activationEpochs {config : Config} {index : Nat}
       rfl
   have first : ∀ other, activationEpochAt middle other = activationEpochAt state other := by
     intro other
-    rw [activationEpochAt_setValidator set]
+    rw [activationEpochAt_setValidatorAt set]
     split
     · rename_i equal
-      subst other
-      simp [activationEpochAt, found, kept, Except.map]
+      simp [activationEpochAt, getValidator, equal, getValidatorAt_eq_ok_iff.mp found,
+        kept, Except.map]
     · rfl
+  have markedSlot : middle.slot = state.slot := by
+    obtain ⟨_, rfl⟩ := setValidatorAt_ok set
+    rfl
   split at rest
-  · rw [liftAccessor_ok] at rest
-    obtain ⟨slot, epochs⟩ := initiateValidatorExit_activationEpochs rest
-    exact ⟨slot.trans (setValidator_slot set), fun other => (epochs other).trans (first other)⟩
+  · simp only [bind_ok_iff, liftAccessor_ok] at rest
+    obtain ⟨_, _, exited⟩ := rest
+    obtain ⟨slot, epochs⟩ := initiateValidatorExit_activationEpochs exited
+    exact ⟨slot.trans markedSlot, fun other => (epochs other).trans (first other)⟩
   · simp only [pure, Except.pure, Except.ok.injEq] at rest
     subst after
-    exact ⟨setValidator_slot set, first⟩
+    exact ⟨markedSlot, first⟩
 
 /-- Activating one validator writes the computed epoch, and keeps the slot and the other epochs. -/
 theorem activateValidator_activationEpochs {index : ValidatorIndex}
@@ -420,13 +633,14 @@ theorem sameSizes_updateRegistryEntryElectra {config : Config} {activationEpoch 
   split at computed
   · simp only [bind_ok_iff, liftAccessor_ok] at computed
     obtain ⟨_, _, set⟩ := computed
-    exact sameSizes_setValidator set
+    exact sameSizes_setValidatorAt set
+  split at computed
+  · simp only [bind_ok_iff, liftAccessor_ok] at computed
+    obtain ⟨_, _, exited⟩ := computed
+    exact sameSizes_initiateValidatorExit exited
   split at computed
   · rw [liftAccessor_ok] at computed
-    exact sameSizes_initiateValidatorExit computed
-  split at computed
-  · rw [liftAccessor_ok] at computed
-    exact sameSizes_setValidator computed
+    exact sameSizes_setValidatorAt computed
   · simp only [pure, Except.pure, Except.ok.injEq] at computed
     exact computed ▸ SameSizes.refl _
 
@@ -458,7 +672,7 @@ theorem sameSizes_applySlashingPenalty {total adjusted : Gwei} {index : Nat}
     obtain ⟨_, _, computed⟩ := computed
     split at computed
     · simp only [bind_ok_iff, liftAccessor_ok] at computed
-      obtain ⟨_, _, _, _, lowered⟩ := computed
+      obtain ⟨_, _, _, _, _, _, lowered⟩ := computed
       exact sameSizes_decreaseBalance lowered
     · simp only [pure, Except.pure, Except.ok.injEq] at computed
       exact computed ▸ SameSizes.refl _
@@ -475,7 +689,7 @@ theorem sameSizes_applySlashingPenaltyElectra {perIncrement : Gwei} {index : Nat
     obtain ⟨_, _, computed⟩ := computed
     split at computed
     · simp only [bind_ok_iff, liftAccessor_ok] at computed
-      obtain ⟨_, _, lowered⟩ := computed
+      obtain ⟨_, _, _, _, lowered⟩ := computed
       exact sameSizes_decreaseBalance lowered
     · simp only [pure, Except.pure, Except.ok.injEq] at computed
       exact computed ▸ SameSizes.refl _
@@ -520,7 +734,7 @@ The balance at its position loses the penalty if it is due, stopping at zero.
 The other balances stay. -/
 private theorem slashingStep_balances {last next : BeaconState preset fork} {j : Nat}
     (small : j < 2 ^ 64) {validator : Validator} {penalty : Gwei}
-    (found : getValidator last j.toUInt64 = .ok validator)
+    (found : getValidatorAt last j = .ok validator)
     (cases : (SlashingPenaltyDue preset (getCurrentEpoch last) validator ∧
         decreaseBalance last j.toUInt64 penalty = .ok next) ∨
       (¬ SlashingPenaltyDue preset (getCurrentEpoch last) validator ∧ next = last)) :
@@ -533,13 +747,7 @@ private theorem slashingStep_balances {last next : BeaconState preset fork} {j :
       ∀ k, k ≠ j → next.balances.data[k]? = last.balances.data[k]? := by
   have same : j.toUInt64.toNat = j := by
     rw [Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.mod_eq_of_lt small]
-  have registered : last.validators.data[j]? = some validator := by
-    unfold getValidator at found
-    rw [same] at found
-    split at found
-    · cases found
-      assumption
-    · cases found
+  have registered : last.validators.data[j]? = some validator := getValidatorAt_eq_ok_iff.mp found
   rcases cases with ⟨due, lowered⟩ | ⟨notDue, kept⟩
   · obtain ⟨inside, rfl⟩ := decreaseBalance_eq_ok_iff.mp lowered
     have inside' : j < last.balances.data.size := same ▸ inside
@@ -561,6 +769,143 @@ private theorem slashingPenaltyDue_iff {state : BeaconState preset fork} {valida
   have sum := Except.ok.inj ((addChecked_of_lt (addChecked_ok_iff.mp computed).1).symm.trans
     computed)
   simp [SlashingPenaltyDue, slashed, sum]
+
+/-- A successful penalty step used before Electra finds the validator at its position.
+
+When the penalty is due, both checked products are below `2^64`.
+
+The first is the effective balance in increments, times the given adjusted slashed balance.
+
+The second divides it by the given active balance, then multiplies by the increment.
+
+The step then lowers the balance at a position below `2^64` by that penalty.
+
+When the penalty is not due, the step keeps the state. -/
+private theorem applySlashingPenalty_cases {total adjusted : Gwei}
+    {last next : BeaconState preset fork} {j : Nat}
+    (computed : applySlashingPenalty last total adjusted j = .ok next) :
+    ∃ validator, getValidatorAt last j = .ok validator ∧
+      ((SlashingPenaltyDue preset (getCurrentEpoch last) validator ∧
+          validator.effectiveBalance.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
+            adjusted.toNat < 2 ^ 64 ∧
+          validator.effectiveBalance.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
+            adjusted.toNat / total.toNat * preset.EFFECTIVE_BALANCE_INCREMENT.toNat < 2 ^ 64 ∧
+          (j < 2 ^ 64 → decreaseBalance last j.toUInt64
+            (validator.effectiveBalance / preset.EFFECTIVE_BALANCE_INCREMENT * adjusted / total *
+              preset.EFFECTIVE_BALANCE_INCREMENT) = .ok next)) ∨
+        (¬ SlashingPenaltyDue preset (getCurrentEpoch last) validator ∧ next = last)) := by
+  simp only [applySlashingPenalty, bind_ok_iff, liftAccessor_ok] at computed
+  obtain ⟨validator, found, computed⟩ := computed
+  refine ⟨validator, found, ?_⟩
+  split at computed
+  · rename_i slashed
+    simp only [bind_ok_iff] at computed
+    obtain ⟨due, dueOk, computed⟩ := computed
+    have dueIff := slashingPenaltyDue_iff slashed dueOk
+    split at computed
+    · rename_i isDue
+      simp only [bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff] at computed
+      obtain ⟨numerator, product, penalty, scaled, validatorIndex, converted, lowered⟩ := computed
+      obtain ⟨fits, value⟩ := mulChecked_ok_iff.mp product
+      have scaledFits := (mulChecked_ok_iff.mp scaled).1
+      rw [UInt64.toNat_div] at fits value
+      rw [UInt64.toNat_div, value] at scaledFits
+      have product := Except.ok.inj
+        ((mulChecked_of_lt (mulChecked_ok_iff.mp product).1).symm.trans product)
+      have scaled := Except.ok.inj
+        ((mulChecked_of_lt (mulChecked_ok_iff.mp scaled).1).symm.trans scaled)
+      subst product scaled
+      refine .inl ⟨dueIff.mpr isDue, fits, scaledFits, fun small => ?_⟩
+      rwa [Except.ok.inj (converted.symm.trans (ofNatChecked_of_lt small))] at lowered
+    · rename_i notDue
+      simp only [pure, Except.pure, Except.ok.injEq] at computed
+      exact .inr ⟨fun due => notDue (dueIff.mp due), computed.symm⟩
+  · rename_i notSlashed
+    simp only [pure, Except.pure, Except.ok.injEq] at computed
+    exact .inr ⟨fun due => notSlashed due.1, computed.symm⟩
+
+/-- A successful penalty step used from Electra finds the validator at its position.
+
+When the penalty is due, its checked product is below `2^64`.
+
+That product is the given penalty per increment, times the effective balance in increments.
+
+The step then lowers the balance at a position below `2^64` by that product.
+
+When the penalty is not due, the step keeps the state. -/
+private theorem applySlashingPenaltyElectra_cases {perIncrement : Gwei}
+    {last next : BeaconState preset fork} {j : Nat}
+    (computed : applySlashingPenaltyElectra last perIncrement j = .ok next) :
+    ∃ validator, getValidatorAt last j = .ok validator ∧
+      ((SlashingPenaltyDue preset (getCurrentEpoch last) validator ∧
+          perIncrement.toNat *
+            (validator.effectiveBalance.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) <
+              2 ^ 64 ∧
+          (j < 2 ^ 64 → decreaseBalance last j.toUInt64
+            (perIncrement * (validator.effectiveBalance / preset.EFFECTIVE_BALANCE_INCREMENT)) =
+              .ok next)) ∨
+        (¬ SlashingPenaltyDue preset (getCurrentEpoch last) validator ∧ next = last)) := by
+  simp only [applySlashingPenaltyElectra, bind_ok_iff, liftAccessor_ok] at computed
+  obtain ⟨validator, found, computed⟩ := computed
+  refine ⟨validator, found, ?_⟩
+  split at computed
+  · rename_i slashed
+    simp only [bind_ok_iff] at computed
+    obtain ⟨due, dueOk, computed⟩ := computed
+    have dueIff := slashingPenaltyDue_iff slashed dueOk
+    split at computed
+    · rename_i isDue
+      simp only [bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff] at computed
+      obtain ⟨penalty, product, validatorIndex, converted, lowered⟩ := computed
+      have fits := (mulChecked_ok_iff.mp product).1
+      rw [UInt64.toNat_div] at fits
+      have product := Except.ok.inj
+        ((mulChecked_of_lt (mulChecked_ok_iff.mp product).1).symm.trans product)
+      subst product
+      refine .inl ⟨dueIff.mpr isDue, fits, fun small => ?_⟩
+      rwa [Except.ok.inj (converted.symm.trans (ofNatChecked_of_lt small))] at lowered
+    · rename_i notDue
+      simp only [pure, Except.pure, Except.ok.injEq] at computed
+      exact .inr ⟨fun due => notDue (dueIff.mp due), computed.symm⟩
+  · rename_i notSlashed
+    simp only [pure, Except.pure, Except.ok.injEq] at computed
+    exact .inr ⟨fun due => notSlashed due.1, computed.symm⟩
+
+/-- For the penalty step used before Electra, a successful due penalty has both products fit.
+
+The first is the effective balance in increments, times the given adjusted slashed balance.
+
+The second divides it by the given active balance, then multiplies by the increment.
+
+Each is below `2^64`. -/
+theorem applySlashingPenalty_no_overflow {total adjusted : Gwei} {j : Nat}
+    {validator : Validator} (found : getValidatorAt state j = .ok validator)
+    (due : SlashingPenaltyDue preset (getCurrentEpoch state) validator)
+    (computed : applySlashingPenalty state total adjusted j = .ok after) :
+    validator.effectiveBalance.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
+        adjusted.toNat < 2 ^ 64 ∧
+      (validator.effectiveBalance.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
+        adjusted.toNat / total.toNat) * preset.EFFECTIVE_BALANCE_INCREMENT.toNat < 2 ^ 64 := by
+  obtain ⟨other, foundOther, cases⟩ := applySlashingPenalty_cases computed
+  obtain rfl : other = validator := Except.ok.inj (foundOther.symm.trans found)
+  rcases cases with ⟨_, fits, scaledFits, _⟩ | ⟨notDue, _⟩
+  · exact ⟨fits, scaledFits⟩
+  · exact absurd due notDue
+
+/-- For the penalty step used from Electra, a successful due penalty has its product fit.
+
+The given penalty per increment, times the effective balance in increments, is below `2^64`. -/
+theorem applySlashingPenaltyElectra_no_overflow {perIncrement : Gwei} {j : Nat}
+    {validator : Validator} (found : getValidatorAt state j = .ok validator)
+    (due : SlashingPenaltyDue preset (getCurrentEpoch state) validator)
+    (computed : applySlashingPenaltyElectra state perIncrement j = .ok after) :
+    perIncrement.toNat *
+      (validator.effectiveBalance.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) < 2 ^ 64 := by
+  obtain ⟨other, foundOther, cases⟩ := applySlashingPenaltyElectra_cases computed
+  obtain rfl : other = validator := Except.ok.inj (foundOther.symm.trans found)
+  rcases cases with ⟨_, fits, _⟩ | ⟨notDue, _⟩
+  · exact fits
+  · exact absurd due notDue
 
 /-- The penalty step used before Electra lowers the balance of one validator when it is due.
 
@@ -588,30 +933,9 @@ theorem applySlashingPenalty_balances {total adjusted : Gwei} {last next : Beaco
               adjusted / total * preset.EFFECTIVE_BALANCE_INCREMENT)
           else balance) ∧
       ∀ k, k ≠ j → next.balances.data[k]? = last.balances.data[k]? := by
-  simp only [applySlashingPenalty, bind_ok_iff, liftAccessor_ok] at computed
-  obtain ⟨validator, found, computed⟩ := computed
-  obtain ⟨kept, slot, ⟨registered, entry⟩, others⟩ := slashingStep_balances small found <| by
-    split at computed
-    · rename_i slashed
-      simp only [bind_ok_iff] at computed
-      obtain ⟨due, dueOk, computed⟩ := computed
-      have dueIff := slashingPenaltyDue_iff slashed dueOk
-      split at computed
-      · rename_i isDue
-        simp only [bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff] at computed
-        obtain ⟨numerator, product, penalty, scaled, lowered⟩ := computed
-        have product := Except.ok.inj
-          ((mulChecked_of_lt (mulChecked_ok_iff.mp product).1).symm.trans product)
-        have scaled := Except.ok.inj
-          ((mulChecked_of_lt (mulChecked_ok_iff.mp scaled).1).symm.trans scaled)
-        subst product scaled
-        exact .inl ⟨dueIff.mpr isDue, lowered⟩
-      · rename_i notDue
-        simp only [pure, Except.pure, Except.ok.injEq] at computed
-        exact .inr ⟨fun due => notDue (dueIff.mp due), computed.symm⟩
-    · rename_i notSlashed
-      simp only [pure, Except.pure, Except.ok.injEq] at computed
-      exact .inr ⟨fun due => notSlashed due.1, computed.symm⟩
+  obtain ⟨validator, found, cases⟩ := applySlashingPenalty_cases computed
+  obtain ⟨kept, slot, ⟨registered, entry⟩, others⟩ := slashingStep_balances small found
+    (cases.imp (fun ⟨due, _, _, lowered⟩ => ⟨due, lowered small⟩) id)
   exact ⟨kept, slot, ⟨validator, registered, entry⟩, others⟩
 
 /-- The penalty step used from Electra lowers the balance of one validator when it is due.
@@ -638,66 +962,132 @@ theorem applySlashingPenaltyElectra_balances {perIncrement : Gwei}
               (perIncrement * (validator.effectiveBalance / preset.EFFECTIVE_BALANCE_INCREMENT))
           else balance) ∧
       ∀ k, k ≠ j → next.balances.data[k]? = last.balances.data[k]? := by
-  simp only [applySlashingPenaltyElectra, bind_ok_iff, liftAccessor_ok] at computed
-  obtain ⟨validator, found, computed⟩ := computed
-  obtain ⟨kept, slot, ⟨registered, entry⟩, others⟩ := slashingStep_balances small found <| by
-    split at computed
-    · rename_i slashed
-      simp only [bind_ok_iff] at computed
-      obtain ⟨due, dueOk, computed⟩ := computed
-      have dueIff := slashingPenaltyDue_iff slashed dueOk
-      split at computed
-      · rename_i isDue
-        simp only [bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff] at computed
-        obtain ⟨penalty, product, lowered⟩ := computed
-        have product := Except.ok.inj
-          ((mulChecked_of_lt (mulChecked_ok_iff.mp product).1).symm.trans product)
-        subst product
-        exact .inl ⟨dueIff.mpr isDue, lowered⟩
-      · rename_i notDue
-        simp only [pure, Except.pure, Except.ok.injEq] at computed
-        exact .inr ⟨fun due => notDue (dueIff.mp due), computed.symm⟩
-    · rename_i notSlashed
-      simp only [pure, Except.pure, Except.ok.injEq] at computed
-      exact .inr ⟨fun due => notSlashed due.1, computed.symm⟩
+  obtain ⟨validator, found, cases⟩ := applySlashingPenaltyElectra_cases computed
+  obtain ⟨kept, slot, ⟨registered, entry⟩, others⟩ := slashingStep_balances small found
+    (cases.imp (fun ⟨due, _, lowered⟩ => ⟨due, lowered small⟩) id)
   exact ⟨kept, slot, ⟨validator, registered, entry⟩, others⟩
 
-/-- A fold of slashing steps over the registry lowers each balance by its penalty when it is due.
+/-- The penalty step used before Electra lowers one balance by its penalty in natural numbers.
 
-Each step lowers the balance at its position below `2^64` by the penalty of its validator, if due.
+This holds when the step succeeds at a position below `2^64`.
 
-It keeps the registry, the slot and the other balances.
+The registry and the slot stay.
+
+The validator at that position exists.
+
+Its balance loses the penalty if it is due, stopping at zero.
+
+The penalty is its effective balance in increments, times the given adjusted slashed balance.
+
+That product is divided by the given active balance, then multiplied by the increment.
+
+The other balances stay. -/
+theorem applySlashingPenalty_balances_toNat {total adjusted : Gwei}
+    {last next : BeaconState preset fork} {j : Nat} (small : j < 2 ^ 64)
+    (computed : applySlashingPenalty last total adjusted j = .ok next) :
+    next.validators = last.validators ∧ next.slot = last.slot ∧
+      (∃ validator, last.validators.data[j]? = some validator ∧
+        next.balances.data[j]?.map UInt64.toNat = last.balances.data[j]?.map fun balance =>
+          balance.toNat - if SlashingPenaltyDue preset (getCurrentEpoch last) validator then
+            validator.effectiveBalance.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
+              adjusted.toNat / total.toNat * preset.EFFECTIVE_BALANCE_INCREMENT.toNat
+          else 0) ∧
+      ∀ k, k ≠ j → next.balances.data[k]? = last.balances.data[k]? := by
+  obtain ⟨kept, slot, ⟨validator, registered, entry⟩, others⟩ :=
+    applySlashingPenalty_balances small computed
+  refine ⟨kept, slot, ⟨validator, registered, ?_⟩, others⟩
+  rw [entry, Option.map_map]
+  congr 1
+  funext balance
+  by_cases due : SlashingPenaltyDue preset (getCurrentEpoch last) validator
+  · obtain ⟨numeratorFits, penaltyFits⟩ :=
+      applySlashingPenalty_no_overflow (getValidatorAt_eq_ok_iff.mpr registered) due computed
+    -- Both checked products fit, so neither is reduced modulo `2^64`.
+    simp only [Function.comp_apply, due, ↓reduceIte, toNat_saturatingSub, UInt64.toNat_mul,
+      UInt64.toNat_div, Nat.mod_eq_of_lt numeratorFits, Nat.mod_eq_of_lt penaltyFits]
+  · simp only [Function.comp_apply, due, ↓reduceIte, Nat.sub_zero]
+
+/-- The penalty step used from Electra lowers one balance by its penalty in natural numbers.
+
+This holds when the step succeeds at a position below `2^64`.
+
+The registry and the slot stay.
+
+The validator at that position exists.
+
+Its balance loses the penalty if it is due, stopping at zero.
+
+The penalty is the given penalty per increment, times its effective balance in increments.
+
+The other balances stay. -/
+theorem applySlashingPenaltyElectra_balances_toNat {perIncrement : Gwei}
+    {last next : BeaconState preset fork} {j : Nat} (small : j < 2 ^ 64)
+    (computed : applySlashingPenaltyElectra last perIncrement j = .ok next) :
+    next.validators = last.validators ∧ next.slot = last.slot ∧
+      (∃ validator, last.validators.data[j]? = some validator ∧
+        next.balances.data[j]?.map UInt64.toNat = last.balances.data[j]?.map fun balance =>
+          balance.toNat - if SlashingPenaltyDue preset (getCurrentEpoch last) validator then
+            perIncrement.toNat *
+              (validator.effectiveBalance.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
+          else 0) ∧
+      ∀ k, k ≠ j → next.balances.data[k]? = last.balances.data[k]? := by
+  obtain ⟨kept, slot, ⟨validator, registered, entry⟩, others⟩ :=
+    applySlashingPenaltyElectra_balances small computed
+  refine ⟨kept, slot, ⟨validator, registered, ?_⟩, others⟩
+  rw [entry, Option.map_map]
+  congr 1
+  funext balance
+  by_cases due : SlashingPenaltyDue preset (getCurrentEpoch last) validator
+  · have fits :=
+      applySlashingPenaltyElectra_no_overflow (getValidatorAt_eq_ok_iff.mpr registered) due computed
+    -- The checked product fits, so it is not reduced modulo `2^64`.
+    simp only [Function.comp_apply, due, ↓reduceIte, toNat_saturatingSub, UInt64.toNat_mul,
+      UInt64.toNat_div, Nat.mod_eq_of_lt fits]
+  · simp only [Function.comp_apply, due, ↓reduceIte, Nat.sub_zero]
+
+/-- The balance loses the penalty of its validator when it is due, stopping at zero. -/
+private abbrev LosesPenalty (preset : Preset) (penalty : Validator → Gwei) (epoch : Epoch)
+    (validator : Validator) (old new : Option Gwei) : Prop :=
+  new = old.map fun balance =>
+    if SlashingPenaltyDue preset epoch validator then saturatingSub balance (penalty validator)
+    else balance
+
+/-- The balance loses the penalty of its validator in natural numbers when it is due. -/
+private abbrev LosesPenaltyToNat (preset : Preset) (penalty : Validator → Nat) (epoch : Epoch)
+    (validator : Validator) (old new : Option Gwei) : Prop :=
+  new.map UInt64.toNat = old.map fun balance =>
+    balance.toNat - if SlashingPenaltyDue preset epoch validator then penalty validator else 0
+
+/-- A fold of slashing steps over the registry relates each balance to its old value.
+
+Each step relates the balance at its position below `2^64` to its old value.
+
+The relation depends on the epoch of the step and on the validator at that position.
+
+Each step keeps the registry, the slot and the other balances.
 
 The validators are those of the first state.
 
-The penalty is due at the epoch of the first state. -/
+The relation holds at the epoch of the first state. -/
 private theorem foldlM_slashingSteps_balances {ε : Type}
     {step : BeaconState preset fork → Nat → Except ε (BeaconState preset fork)}
-    (penalty : Validator → Gwei) (within : state.RegistryWithinLimit)
+    (Entry : Epoch → Validator → Option Gwei → Option Gwei → Prop)
+    (within : state.RegistryWithinLimit)
     (stepped : ∀ {last next : BeaconState preset fork} {j : Nat}, j < 2 ^ 64 →
       step last j = .ok next → next.validators = last.validators ∧ next.slot = last.slot ∧
         (∃ validator, last.validators.data[j]? = some validator ∧
-          next.balances.data[j]? = last.balances.data[j]?.map fun balance =>
-            if SlashingPenaltyDue preset (getCurrentEpoch last) validator then
-              saturatingSub balance (penalty validator)
-            else balance) ∧
+          Entry (getCurrentEpoch last) validator last.balances.data[j]? next.balances.data[j]?) ∧
         ∀ k, k ≠ j → next.balances.data[k]? = last.balances.data[k]?)
     (computed : (List.range state.validators.data.size).foldlM step state = .ok after) (i : Nat) :
     (i < state.validators.data.size → ∃ validator, state.validators.data[i]? = some validator ∧
-      after.balances.data[i]? = state.balances.data[i]?.map fun balance =>
-        if SlashingPenaltyDue preset (getCurrentEpoch state) validator then
-          saturatingSub balance (penalty validator)
-        else balance) ∧
+      Entry (getCurrentEpoch state) validator state.balances.data[i]? after.balances.data[i]?) ∧
     (state.validators.data.size ≤ i → after.balances.data[i]? = state.balances.data[i]?) := by
   have bound : state.validators.data.size ≤ _ := within
   have limit := preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt
   refine (foldlM_range_balances
     (fun last => last.validators = state.validators ∧ last.slot = state.slot)
     (fun j old new => ∃ validator, state.validators.data[j]? = some validator ∧
-      new = old.map fun balance =>
-        if SlashingPenaltyDue preset (getCurrentEpoch state) validator then
-          saturatingSub balance (penalty validator)
-        else balance)
+      Entry (getCurrentEpoch state) validator old new)
     (fun {last next j} lt ⟨sameRegistry, sameSlot⟩ step => ?_) ⟨rfl, rfl⟩ computed).2 i
   obtain ⟨kept, slot, ⟨validator, registered, entry⟩, others⟩ := stepped (by omega) step
   have sameEpoch : getCurrentEpoch last = getCurrentEpoch state := by
@@ -744,7 +1134,7 @@ theorem processSlashings_balances_of_lt_electra (before : fork < .pectra)
   -- Before Gloas the type of the registry keeps it within its limit.
   have within : state.RegistryWithinLimit :=
     state.validators.bound (Nat.lt_trans before (by decide))
-  exact ⟨total, sum, totalOk, sumOk, foldlM_slashingSteps_balances _ within
+  exact ⟨total, sum, totalOk, sumOk, foldlM_slashingSteps_balances (LosesPenalty preset _) within
     applySlashingPenalty_balances applied⟩
 
 /-- From Electra, the slashings lower the balance of each validator by its penalty when it is due.
@@ -788,8 +1178,98 @@ theorem processSlashings_balances_of_electra (electra : .pectra ≤ fork)
     rw [← UInt64.toNat_inj, UInt64.toNat_div]
     exact (divChecked_ok_iff.mp divided).2
   subst product counted divided
-  exact ⟨total, sum, totalOk, sumOk, foldlM_slashingSteps_balances _ within
+  exact ⟨total, sum, totalOk, sumOk, foldlM_slashingSteps_balances (LosesPenalty preset _) within
     applySlashingPenaltyElectra_balances applied⟩
+
+/-- Before Electra, the slashings lower each balance by its penalty in natural numbers.
+
+This holds when the step succeeds.
+
+The sum of the recent slashed balances, scaled by the multiplier of the fork, is below `2^64`.
+
+This holds even when no penalty is due.
+
+The adjusted balance is that scaled sum, capped by the active balance.
+
+The penalty is the effective balance in increments, times the adjusted balance.
+
+That product is divided by the active balance, then multiplied by the increment.
+
+A penalty that is not due is zero.
+
+The balance stops at zero when the penalty is larger.
+
+The balances past the registry stay. -/
+theorem processSlashings_balances_toNat_of_lt_electra (before : fork < .pectra)
+    (computed : processSlashings state = .ok after) :
+    ∃ total sum, getTotalActiveBalance state = .ok total ∧ slashingsSum state = .ok sum ∧
+      sum.toNat * (parameters preset fork).PROPORTIONAL_SLASHING_MULTIPLIER.toNat < 2 ^ 64 ∧
+      ∀ i, (i < state.validators.data.size → ∃ validator,
+        state.validators.data[i]? = some validator ∧
+        after.balances.data[i]?.map UInt64.toNat = state.balances.data[i]?.map fun balance =>
+          balance.toNat - if SlashingPenaltyDue preset (getCurrentEpoch state) validator then
+            validator.effectiveBalance.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
+              min (sum.toNat * (parameters preset fork).PROPORTIONAL_SLASHING_MULTIPLIER.toNat)
+                total.toNat / total.toNat * preset.EFFECTIVE_BALANCE_INCREMENT.toNat
+          else 0) ∧
+      (state.validators.data.size ≤ i → after.balances.data[i]? = state.balances.data[i]?) := by
+  have notElectra : ¬ .pectra ≤ fork := Nat.not_le_of_lt before
+  simp only [processSlashings, notElectra, ↓reduceIte, bind_ok_iff, liftAccessor_ok, liftArith,
+    mapError_ok_iff] at computed
+  obtain ⟨total, totalOk, sum, sumOk, slashed, product, applied⟩ := computed
+  obtain ⟨fits, value⟩ := mulChecked_ok_iff.mp product
+  -- Before Gloas the type of the registry keeps it within its limit.
+  have within : state.RegistryWithinLimit :=
+    state.validators.bound (Nat.lt_trans before (by decide))
+  have balances := foldlM_slashingSteps_balances (LosesPenaltyToNat preset _) within
+    applySlashingPenalty_balances_toNat applied
+  -- The cap applies to the checked product, which fits, so it is not reduced modulo `2^64`.
+  simp only [toNat_min, value] at balances
+  exact ⟨total, sum, totalOk, sumOk, fits, balances⟩
+
+/-- From Electra, the slashings lower each balance by its penalty in natural numbers.
+
+This holds when the step succeeds on a registry within its limit.
+
+The sum of the recent slashed balances, scaled by the multiplier of the fork, is below `2^64`.
+
+This holds even when no penalty is due.
+
+The adjusted balance is that scaled sum, capped by the active balance.
+
+The penalty per increment divides the adjusted balance by the active balance in increments.
+
+The penalty is the penalty per increment, times the effective balance in increments.
+
+A penalty that is not due is zero.
+
+The balance stops at zero when the penalty is larger.
+
+The balances past the registry stay. -/
+theorem processSlashings_balances_toNat_of_electra (electra : .pectra ≤ fork)
+    (within : state.RegistryWithinLimit) (computed : processSlashings state = .ok after) :
+    ∃ total sum, getTotalActiveBalance state = .ok total ∧ slashingsSum state = .ok sum ∧
+      sum.toNat * (parameters preset fork).PROPORTIONAL_SLASHING_MULTIPLIER.toNat < 2 ^ 64 ∧
+      ∀ i, (i < state.validators.data.size → ∃ validator,
+        state.validators.data[i]? = some validator ∧
+        after.balances.data[i]?.map UInt64.toNat = state.balances.data[i]?.map fun balance =>
+          balance.toNat - if SlashingPenaltyDue preset (getCurrentEpoch state) validator then
+            min (sum.toNat * (parameters preset fork).PROPORTIONAL_SLASHING_MULTIPLIER.toNat)
+                total.toNat / (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) *
+              (validator.effectiveBalance.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
+          else 0) ∧
+      (state.validators.data.size ≤ i → after.balances.data[i]? = state.balances.data[i]?) := by
+  simp only [processSlashings, electra, ↓reduceIte, bind_ok_iff, liftAccessor_ok, liftArith,
+    mapError_ok_iff] at computed
+  obtain ⟨total, totalOk, sum, sumOk, slashed, product, perIncrement, ⟨increments, counted,
+    divided⟩, applied⟩ := computed
+  obtain ⟨fits, value⟩ := mulChecked_ok_iff.mp product
+  have balances := foldlM_slashingSteps_balances (LosesPenaltyToNat preset _) within
+    applySlashingPenaltyElectra_balances_toNat applied
+  -- The cap applies to the checked product, which fits, so it is not reduced modulo `2^64`.
+  simp only [(divChecked_ok_iff.mp divided).2, (divChecked_ok_iff.mp counted).2, toNat_min,
+    value] at balances
+  exact ⟨total, sum, totalOk, sumOk, fits, balances⟩
 
 /-! ## Resets and rotations -/
 

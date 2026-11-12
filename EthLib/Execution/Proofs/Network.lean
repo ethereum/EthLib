@@ -8,6 +8,7 @@ public import EthLib.Execution.Proofs.Network.Receipts
 public import EthLib.Execution.Proofs.Network.Snap
 public import EthLib.Execution.Proofs.Network.SnapRange
 public import EthLib.Execution.Proofs.Network.SnapRangeBinding
+public import EthLib.Execution.Proofs.Network.SnapRangeComplete
 public import EthLib.Execution.Proofs.Network.Status
 public import EthLib.Execution.Proofs.Network.Transactions
 

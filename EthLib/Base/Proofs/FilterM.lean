@@ -134,4 +134,23 @@ theorem sublist_of_filterM_ok {test : α → Except ε Bool} {list out : List α
   obtain ⟨chosen, sub, rfl⟩ := sublist_of_filterAuxM_ok filtered
   simpa using sub
 
+/-- A filter that a computation runs, started with any kept list, succeeds when each test does. -/
+private theorem filterAuxM_exists_ok {test : α → Except ε Bool} :
+    ∀ {list : List α}, (∀ value ∈ list, ∃ passes, test value = .ok passes) →
+      ∀ kept : List α, ∃ out, List.filterAuxM test list kept = .ok out
+  | [], _, kept => ⟨kept, rfl⟩
+  | first :: rest, tested, kept => by
+    obtain ⟨passes, passesOk⟩ := tested first List.mem_cons_self
+    simp only [List.filterAuxM]
+    rw [passesOk]
+    exact filterAuxM_exists_ok
+      (fun value member => tested value (List.mem_cons_of_mem _ member)) _
+
+/-- A filter that a computation runs succeeds when the test succeeds on each element. -/
+theorem filterM_exists_ok {test : α → Except ε Bool} {list : List α}
+    (tested : ∀ value ∈ list, ∃ passes, test value = .ok passes) :
+    ∃ out, list.filterM test = .ok out := by
+  obtain ⟨out, computed⟩ := filterAuxM_exists_ok tested []
+  exact ⟨out.reverse, by simp only [List.filterM, computed]; rfl⟩
+
 end EthLib.Base

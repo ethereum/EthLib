@@ -372,12 +372,21 @@ def updateLatestMessages (attestingIndices : List ValidatorIndex)
 
 /-- The store after an attestation, from the wire or from a block.
 
-The attestation must be valid in the state of its target, with its signature. -/
+The attestation must be valid in the state of its target, with its signature.
+
+Its committees must be those of its slot, with one bit for each member, as blocks require.
+
+From Electra each of them must also have an attester.
+
+They are read in the state of its target, whose committees also give its signers.
+
+Otherwise an index past the count of committees of its slot could name one of a later slot. -/
 def onAttestation (checks : SignatureChecks) (attestation : Attestation preset fork)
     (isFromBlock : Bool) : Except ForkChoiceError (Store preset fork) := do
   store.validateOnAttestation config attestation isFromBlock
   let store ← store.storeTargetCheckpointState config checks attestation.data.target
   let targetState ← store.checkpointState attestation.data.target
+  (checkAttestationCommittees targetState attestation).mapError .transition
   let indexed ← (getIndexedAttestation targetState attestation).mapError .accessor
   unless ← (isValidIndexedAttestation config checks targetState indexed).mapError .transition do
     throw .invalidIndexedAttestation
