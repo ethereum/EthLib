@@ -9,7 +9,9 @@ Two executions of the state transition start at one genesis and share a prefix u
 
 Each then runs a tail of its own, and the two end in conflicting finalized checkpoints.
 
-Then the accountable keys hold a third of the active stake at `x`, less a drift term.
+Then the accountable keys hold at least a third of the active stake at `x`.
+
+Two thirds of the larger drift of the two tails are subtracted from that third.
 
 Otherwise the hashes of the two runs show a collision or a zero root.
 
@@ -21,9 +23,13 @@ The votes are the attestations that the blocks of the runs applied, read by publ
 
 The weights are the effective balances at the states of the runs.
 
-The drift charges the stake that leaves or loses balance after `x`.
+The drift charges twice the stake that leaves or loses balance after `x`.
 
-It also charges the stake that joins or gains balance.
+It charges once the stake that joins or gains balance.
+
+It also charges twice the stake active only at the previous epoch.
+
+With no change of the validators and of their balances, it is zero.
 
 It is the largest drift that the tails observe, not a bound in closed form.
 

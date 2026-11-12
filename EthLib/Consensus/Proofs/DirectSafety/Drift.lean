@@ -40,7 +40,9 @@ noncomputable def boundaryStake (y : ForkedBeaconState preset) : Nat :=
 
 /-- The combined transfer assigns coefficients two, one and two to loss, gain and boundary stake.
 
-For current-active voters with fixed balances this gives the churn constants of [EIP-8061].
+Divided by three, loss and gain weigh four thirds and two thirds.
+
+These are the weights of exits and of activations in [EIP-8061], Security Considerations.
 
 [EIP-8061]: https://eips.ethereum.org/EIPS/eip-8061#weak-subjectivity-period
 -/

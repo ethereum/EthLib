@@ -2654,18 +2654,25 @@ They take two runs of the state transition from one genesis built from deposits,
 A run keeps the inputs of each step: the slots, and the blocks with their state roots checked (`Run`, `Consensus/Proofs/Transition/Trace.lean`).
 A key is accountable when the two runs accepted two of its votes that `isSlashableAttestationData` flags.
 It is also accountable when a block of either run applied a slashing that names it.
+That slashing may be a proposer slashing, and it may be in the shared prefix, before `x`.
+So a key slashed before `x` and still active at `x` counts as accountable, although justification no longer counts its votes, and the bound is weaker by that stake.
 The votes are those of the attestations that the blocks applied, read by public key in the registry before each block.
 The weights are effective balances.
+Two checkpoints conflict when the runs applied different block headers up to the first slot of the earlier of their two epochs (`Conflict`, `DirectSafety/Execution.lean`).
+So the runs disagree on the checkpoint of that epoch, even when one of the two finalized blocks is an ancestor of the other.
 `accountable_safety` takes conflicting finalized checkpoints of the two last states, with `x` no later than the first slot of the earlier finalized epoch.
 Then the active stake at `x` is at most three times the accountable stake at `x`, plus twice the larger drift of the two tails.
+With no change of the validators and of their effective balances, the drift is zero, and the accountable keys hold at least one third of the active stake at `x`.
 Otherwise the runs show evidence about the hash (`HashEvidence`), so no theorem assumes that the hash is injective.
 The evidence is two different inputs of the SHA-256 node hash with one digest, read in the roots of the headers of the runs.
 Or it is a header or a state of the runs whose root is zero.
 The drift of a tail is the largest over its states up to one epoch past the later finalized epoch.
+At a state, it charges twice the stake at `x` that the state no longer supports, outside the keys slashed by then.
+It charges once the recent stake of the state that `x` did not hold, and twice the stake active at the previous epoch of the state but not at its current epoch.
 It is observed, not bounded in closed form.
 The theorems need at least one slot per epoch, a buffer of roots of four epochs and more than `MIN_SEED_LOOKAHEAD + 2` epochs of RANDAO mixes.
 Each run also needs an active stake above one and a half increments at each epoch call after epoch 1 (`EnoughStake`).
-They take no bound on the fork, so they hold at every fork that the transition of this revision defines.
+They take no bound on the fork, so a run may cross every upgrade that the transition of this revision defines, from a genesis before Altair.
 `verifiedConflict_of_accountable` gives, for each accountable key, two checks of its conflicting messages.
 Each is a call of `isValidIndexedAttestation` or `checkHeaderSignature` that a block of a run executed, and that accepted.
 It assumes nothing about the signature checks, so it does not say who signed.

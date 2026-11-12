@@ -33,7 +33,9 @@ def Slashable {g a b : ForkedBeaconState preset} (left : Run config checks g a)
 
 /-- A key is accountable when the runs accepted two of its votes that a slashing would punish.
 
-It is also accountable when a block of either run applied a slashing that names it. -/
+It is also accountable when a block of either run applied a slashing that names it.
+
+That slashing may be a proposer slashing, and it may be in a shared prefix of the runs. -/
 def Accountable {g a b : ForkedBeaconState preset} (left : Run config checks g a)
     (right : Run config checks g b) (key : BLSPubkey) : Prop :=
   Slashable left right key ∨ left.SlashingEvidence key ∨ right.SlashingEvidence key
