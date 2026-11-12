@@ -2,12 +2,11 @@ module
 
 public import EthLib.Cryptography.Bls.Compress
 public import EthLib.Cryptography.Proofs.Bls.G1Group
-public import EthLib.Cryptography.Proofs.IdLoops
 public import EthLib.Cryptography.Proofs.Kzg.Polynomials
--- The infinity check reduces the finite range loop in `tailAllZero`.
-import all Init.Data.Range.Basic
 -- Its closed equality check needs the body of Batteries' derived `Except` instance.
 import all Batteries.Data.Except
+-- The kernel reduces the check of the zero tail, which needs the body of the bounded `all`.
+import all Init.Data.Nat.Fold
 
 /-!
 # Proofs: the square root in `Fp` and the compressed encoding of `G1`
@@ -371,11 +370,11 @@ private theorem compress_noninf {p : G1} (hinf : ¬ p.isInfinity = true)
 private theorem uncompress_infinityBytes :
     uncompress infinityBytes = .ok zero := by
   have hsz : infinityBytes.size = 48 := by decide
-  have hhead : infinityBytes.get! 0 = 0xc0 := by decide
-  have htail : tailAllZero infinityBytes 1 = true := by decide +kernel
   rw [uncompress, ite_eq_right (show ¬ infinityBytes.size ≠ 48 from fun h => h hsz)]
   -- `dsimp only` is slow here when `Fp` is in Montgomery form.
-  simp (config := { decide := true }) only [hhead, htail]
+  --
+  -- `decide` reads the head byte and the zero tail of the literal encoding.
+  simp (config := { decide := true }) only
 
 /-- Sign selection in `uncompress` (a `Prop`-equality condition) recovers `y` from `±y`.
 
@@ -852,70 +851,20 @@ private theorem toAffine_of_z_one (x y : Fp) :
 
 /-! ### The infinity encoding -/
 
-/-- A fold that clears a flag on any nonzero byte ends true only if every byte it visits is zero. -/
-private theorem foldl_allZero (b : ByteArray) (s n : Nat) (init : Bool)
-    (h : (List.range' s n).foldl
-      (fun ok i => if b.get! i ≠ 0 then false else ok) init = true) :
-    init = true ∧ ∀ i, s ≤ i → i < s + n → b.get! i = 0 := by
-  induction n generalizing s init with
-  -- No positions visited: the flag is its initial value.
-  | zero => exact ⟨h, fun i h1 h2 => by omega⟩
-  | succ n ih =>
-    -- Peel off position s, then apply the induction hypothesis to positions s + 1 onwards.
-    rw [List.range'_succ, List.foldl_cons] at h
-    obtain ⟨hinit, hrest⟩ := ih (s + 1) _ h
-    -- A nonzero byte at s would clear the flag, and nothing sets it again.
-    have hs : b.get! s = 0 := by
-      by_contra hne
-      rw [ite_eq_left hne] at hinit
-      cases hinit
-    -- Position s is zero, and the flag passed through it unchanged.
-    refine ⟨by rwa [ite_eq_right (not_not.mpr hs)] at hinit, fun i h1 h2 => ?_⟩
-    rcases Nat.eq_or_lt_of_le h1 with rfl | hlt
-    · exact hs
-    · exact hrest i hlt (by omega)
-
-/-- The scan over the tail agrees with the same scan read by `get!`. -/
-private theorem tailAllZero_eq (b : ByteArray) (s : Nat) :
-    tailAllZero b s = (Id.run do
-      let mut ok := true
-      for i in [s : b.size] do
-        if b.get! i ≠ 0 then ok := false
-      return ok) := by
-  dsimp only [tailAllZero, Id.run]
-  rw [forIn'_eq_forIn (g := fun i (acc : Bool) =>
-    (if b.get! i ≠ 0 then pure (ForInStep.yield false) else pure (ForInStep.yield acc) :
-      Id (ForInStep Bool)))]
-  intro i hi acc
-  have : b.get! i = b[i]'hi.upper := by
-    simp only [ByteArray.get!]
-    exact getElem!_pos b.data i hi.upper
-  rw [this]
-
-open EthLib.Cryptography.IdLoops in
 /-- The tail scan in decompression succeeds only if bytes `1` to the end are all zero. -/
 theorem _root_.EthLib.Cryptography.Bls.tailAllZero_ok (b : ByteArray)
     (h : tailAllZero b 1 = true) :
     ∀ i, 1 ≤ i → i < b.size → b.get! i = 0 := by
-  rw [tailAllZero_eq] at h
-  -- Turn the imperative loop over the range into a fold over the list of indices.
-  dsimp only [Id.run, id_pure, id_bind] at h
-  rw [Std.Legacy.Range.forIn_eq_forIn_range'] at h
-  -- Each loop step only continues, so the body is a plain fold step.
-  have hbody : (fun (i : Nat) (ok : Bool) =>
-      (if b.get! i ≠ 0 then ForInStep.yield false
-        else ForInStep.yield ok : Id (ForInStep Bool)))
-      = fun i ok => ForInStep.yield (if b.get! i ≠ 0 then false else ok) := by
-    funext i ok; split <;> rfl
-  change (forIn (m := Id) (List.range' 1 ([1 : b.size].size) 1) true
-      (fun i ok => if b.get! i ≠ 0 then ForInStep.yield false else ForInStep.yield ok)) = true at h
-  rw [hbody, forIn_list_yield] at h
-  -- The range from 1 to the size visits size - 1 positions.
-  have hsz : [1 : b.size].size = b.size - 1 := by
-    simp [Std.Legacy.Range.size]
-  rw [hsz] at h
   intro i hi1 hi2
-  exact (foldl_allZero b 1 (b.size - 1) true h).2 i hi1 (by omega)
+  rw [tailAllZero, Nat.all_eq_finRange_all, List.all_eq_true] at h
+  -- Byte `i` is the tail byte at offset `i - 1`.
+  have hzero := h ⟨i - 1, by omega⟩ (List.mem_finRange _)
+  have hi : 1 + (i - 1) = i := by omega
+  simp only [hi, beq_iff_eq] at hzero
+  -- The checked read returns the same byte, since `i` is in bounds.
+  simp only [ByteArray.size] at hi2
+  simp only [ByteArray.get!, getElem!_pos b.data i hi2]
+  exact hzero
 
 /-- Every byte of the infinity encoding after the first is zero. -/
 private theorem infinityBytes_get!_pos (i : Fin 48) (hi : 1 ≤ i.val) :
