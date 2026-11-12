@@ -660,7 +660,16 @@ The Python tests check seven test cases of the NIST CAVP file `gcmtestvectors.zi
 
 ### X25519 and ChaCha20-Poly1305
 
-X25519 has no theorem: only the Python tests check it.
+The X25519 proofs cover the clamp of RFC 7748 §5 and the decoding of a coordinate (`Proofs/X25519.lean`).
+`decodeScalar_eq` proves that the clamp sets bit 254, clears bits 0 to 2 and bit 255, and keeps bits 3 to 253 of the key.
+`decodeScalar_mod_eight`, `le_decodeScalar` and `decodeScalar_lt` follow: a clamped scalar is a multiple of eight, at least `2 ^ 254` and below `2 ^ 255`.
+`val_decodeUCoordinate` proves that decoding clears bit 255 and reduces modulo the field prime, so a noncanonical coordinate is accepted.
+`decodeUCoordinate_encodeUCoordinate` proves that decoding the bytes of a reduced coordinate returns it.
+`ladder_mod_two_pow` proves that the bits of the scalar above bit 254 do not change the ladder.
+So no run of the ladder can observe the cleared bit 255; only the clamp theorems record it.
+`swap_ladder_decodeScalar` proves that a clamped scalar leaves no swap pending at the end of the ladder.
+No theorem relates the ladder to the curve, so it is not proved to compute a scalar multiple.
+
 The ChaCha20-Poly1305 proofs cover output length, counter exhaustion, rejection of a wrong tag and the round trip (`Proofs/ChaCha20Poly1305.lean`).
 `crypt_crypt` proves that the cipher, run twice under one key, counter and nonce, gives back its input.
 `decrypt_encrypt` proves that decryption of an honest ciphertext and tag returns the plaintext.
