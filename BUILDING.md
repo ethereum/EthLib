@@ -169,8 +169,9 @@ Open them through a local server, because a browser blocks some of their scripts
 So doc-gen4 and its own dependencies are fetched there, beside those of EthLib.
 The manifest of `docbuild` is not committed: Lake writes it when it is missing.
 EthLib's dependencies then keep the pins of the root manifest, and doc-gen4's dependencies take the pins of doc-gen4's manifest.
-The doc-gen4 tag in `docbuild/lakefile.toml` follows the toolchain, so a toolchain upgrade raises it too.
+`Cli` is a dependency of both, and the two manifests pin it to the same commit.
+The doc-gen4 tag in `docbuild/lakefile.toml` names the toolchain version.
+No check raises it, so a pull request that upgrades the toolchain raises it to the same tag.
 
-Only the library `EthLib` has pages so far, not `Proofs` or `Exports`.
+Only the library `EthLib` has pages, not `Proofs` or `Exports`.
 Most of the output documents `Init`, `Lean`, `Lake` and `Std`, which doc-gen4 always includes.
-
