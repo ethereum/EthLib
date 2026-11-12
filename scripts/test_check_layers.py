@@ -133,14 +133,21 @@ def with_proofs(*added: dict[str, list[str] | str]) -> dict[str, list[str] | str
 
 MODEL = "EthLib.Execution.Proofs.Models.M"
 # A model, a property that imports it, and a property that imports that property.
-MODELLED = with_proofs(
-    {MODEL: ["EthLib.Execution.A"]},
-    {"EthLib.Execution.Proofs.R": [MODEL]},
-    {"EthLib.Execution.Proofs.S": ["EthLib.Execution.Proofs.R"]},
-)
+MODEL_TREE: dict[str, list[str] | str] = {
+    MODEL: ["EthLib.Execution.A"],
+    "EthLib.Execution.Proofs.R": [MODEL],
+    "EthLib.Execution.Proofs.S": ["EthLib.Execution.Proofs.R"],
+}
+MODELLED = with_proofs(MODEL_TREE)
+# A property module whose body holds only an import of the model.
+GATHERER: dict[str, list[str] | str] = {
+    "EthLib.Execution.Proofs.All": f"module\n\npublic import {MODEL}\n"
+}
 
 
 def kinds(models: list[str], refinement: list[str]) -> str:
+    """A kinds file that declares the given models and refinement modules."""
+
     def quoted(names: list[str]) -> str:
         return "[" + ", ".join(f'"{name}"' for name in names) + "]"
 
@@ -443,7 +450,7 @@ DIRECT = (
 )
 
 
-class Kinds(unittest.TestCase):
+class KindsRule(unittest.TestCase):
     def problems(
         self,
         tree: Mapping[str, list[str] | str],
@@ -467,11 +474,7 @@ class Kinds(unittest.TestCase):
         self.assertEqual(self.problems(MODELLED, [REFINEMENT, "EthLib.Execution.Proofs.S"]), [])
 
     def test_module_of_imports_only(self):
-        gatherer: dict[str, list[str] | str] = {
-            "EthLib.Execution.Proofs.All": f"module\n\npublic import {MODEL}\n"
-        }
-        tree = with_proofs(*({k: v} for k, v in MODELLED.items() if "Proofs." in k), gatherer)
-        self.assertEqual(self.problems(tree, [REFINEMENT]), [])
+        self.assertEqual(self.problems(with_proofs(MODEL_TREE, GATHERER), [REFINEMENT]), [])
 
     def test_aggregator_imports_a_model(self):
         # The aggregator has a body, so only its place among the aggregators exempts it.
@@ -479,10 +482,7 @@ class Kinds(unittest.TestCase):
         self.assertEqual(self.problems(MODELLED, [REFINEMENT]), [])
 
     def test_model_imports_a_model(self):
-        tree = with_proofs(
-            *({k: v} for k, v in MODELLED.items() if "Proofs." in k),
-            {"EthLib.Execution.Proofs.Models.N": [MODEL]},
-        )
+        tree = with_proofs(MODEL_TREE, {"EthLib.Execution.Proofs.Models.N": [MODEL]})
         self.assertEqual(self.problems(tree, [REFINEMENT]), [])
 
     def test_specification_imports_a_model(self):
@@ -514,16 +514,20 @@ class Kinds(unittest.TestCase):
 
     def test_listed_transitive_import_is_stale(self):
         baseline = "# Why.\nEthLib.Execution.Proofs.S EthLib.Execution.Proofs.R\n"
-        problems = self.problems(MODELLED, [REFINEMENT], baseline=baseline)
-        self.assertEqual(len(problems), 1, problems)
-        self.assertIn("breaks no rule any more", problems[0])
+        self.assertEqual(
+            self.problems(MODELLED, [REFINEMENT], baseline=baseline),
+            [
+                "scripts/check_layers_baseline.txt: EthLib.Execution.Proofs.S "
+                "EthLib.Execution.Proofs.R breaks no rule any more; remove the entry"
+            ],
+        )
 
     def test_refinement_module_reaches_no_model(self):
         self.assertEqual(
             self.problems(MODELLED, [REFINEMENT, "EthLib.Execution.Proofs.A"]),
             [
-                "coverage/kinds.toml: EthLib.Execution.Proofs.A reaches no model, "
-                "so it is no refinement module"
+                "coverage/kinds.toml: the refinement module EthLib.Execution.Proofs.A "
+                "reaches no model"
             ],
         )
 
@@ -536,19 +540,19 @@ class Kinds(unittest.TestCase):
             ],
         )
 
-    def test_refinement_module_is_not_a_property(self):
-        gatherer: dict[str, list[str] | str] = {
-            "EthLib.Execution.Proofs.All": f"module\n\npublic import {MODEL}\n"
+    def test_refinement_module_of_the_wrong_kind(self):
+        tree = with_proofs(MODEL_TREE, GATHERER)
+        cases = {
+            "EthLib.Execution.A": "is not a property module",
+            MODEL: "is a model",
+            "EthLib.Execution.Proofs.All": "only gathers imports",
+            "EthLib.Proofs": "is an aggregator",
         }
-        tree = with_proofs(*({k: v} for k, v in MODELLED.items() if "Proofs." in k), gatherer)
-        for name in ("EthLib.Execution.A", MODEL, "EthLib.Execution.Proofs.All", "EthLib.Proofs"):
+        for name, reason in cases.items():
             with self.subTest(name=name):
                 self.assertEqual(
                     self.problems(tree, [REFINEMENT, name]),
-                    [
-                        f"coverage/kinds.toml: {name} is not a property module, "
-                        "so it is no refinement module"
-                    ],
+                    [f"coverage/kinds.toml: the refinement module {name} {reason}"],
                 )
 
     def test_model_matches_no_module(self):
@@ -576,6 +580,16 @@ class Kinds(unittest.TestCase):
     def test_missing_file(self):
         self.assertEqual(Tree(GOOD, kinds=None).problems(), ["coverage/kinds.toml: missing"])
 
+    def test_unreadable_file_keeps_the_baseline_of_the_rule(self):
+        # Without the declarations, the check cannot tell whether the entry is still needed.
+        baseline = f"# Why.\nEthLib.Execution.Proofs.R {MODEL}\n"
+        cases = {None: r"missing", "models = [": r"not valid TOML: .+"}
+        for declared, message in cases.items():
+            with self.subTest(declared=declared):
+                problems = Tree(MODELLED, kinds=declared, baseline=baseline).problems()
+                self.assertEqual(len(problems), 1, problems)
+                self.assertRegex(problems[0], f"^coverage/kinds\\.toml: {message}$")
+
     def test_invalid_file_is_reported(self):
         problems = Tree(GOOD, kinds='models = []\nrefinement = "EthLib.Proofs"\n').problems()
         self.assertEqual(
@@ -588,7 +602,7 @@ class ReadKinds(unittest.TestCase):
     def test_valid(self):
         self.assertEqual(
             layers.read_kinds('models = ["A"]\nrefinement = ["B", "C"]\n'),
-            layers.Kinds(models=["A"], refinement=["B", "C"]),
+            layers.Kinds(models=("A",), refinement=("B", "C")),
         )
 
     def test_invalid(self):
@@ -638,8 +652,9 @@ class Header(unittest.TestCase):
         self.assertEqual(layers.imports("module\nimport A\ndef x := 1\nimport B\n"), ["A"])
 
     def test_code_after_the_header(self):
-        found, rest = layers.read_header("module\nimport A\n-- note\ndef x := 1\n")
-        self.assertEqual(([found.module for found in found], rest.strip()), (["A"], "def x := 1"))
+        imported, rest = layers.read_header("module\nimport A\n-- note\ndef x := 1\n")
+        self.assertEqual([item.module for item in imported], ["A"])
+        self.assertEqual(rest.strip(), "def x := 1")
         self.assertEqual(layers.read_header("module\nimport A\n/- only -/\n")[1].strip(), "")
 
     def test_library_roots(self):
