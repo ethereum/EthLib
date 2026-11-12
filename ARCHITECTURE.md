@@ -212,7 +212,6 @@ So the types that cross a module boundary are fixed here, and `EthLib/Base/` def
 - The laws of a resource are a separate `Prop`, written as a property in the proof library of the lowest layer that can state it.
   A theorem shows that the production instance meets them.
   Where no theorem does, `SOUNDNESS.md` names the law as an assumption, as it does for `SignatureChecks.AggregateSound`.
-  Some resources have no laws yet: `ExecutionEngine`, and the fields `powBlock`, `blobsAndProofs`, `columns` and `inclusionListSatisfied` of `BlockSources`.
 - A test stub of a resource is an instance written for tests.
   It has a name, and a docstring that says which answers it fixes.
   Where a theorem can show it, a theorem shows that the stub breaks the laws.
