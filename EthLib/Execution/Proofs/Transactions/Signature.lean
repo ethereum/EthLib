@@ -24,6 +24,14 @@ So changing the signature of a transaction leaves its signing hash as it was.
 A legacy transaction that reports a chain signs a hash that covers that chain.
 
 So one that passes the chain check of a network signs a hash with no chain or the network's chain.
+
+A typed transaction carries its recovery id as a parity, which must be 0 or 1.
+
+An accepted parity is the recovery id itself, so each recovery id has one accepted parity.
+
+A typed transaction signs the hash of its fields before the signature, with its parity as the id.
+
+A parity above 1 names no sender, whatever the other fields, `r` and `s`.
 -/
 
 @[expose] public section
@@ -297,5 +305,122 @@ theorem signingHash4844_signature (tx : BlobTransaction) (yParity r s : U256) :
 /-- The signing hash of a transaction of type 4 ignores the parity, `r` and `s`. -/
 theorem signingHash7702_signature (tx : SetCodeTransaction) (yParity r s : U256) :
     signingHash7702 { tx with yParity := yParity, r := r, s := s } = signingHash7702 tx := rfl
+
+/-! ## The parity of a typed transaction -/
+
+/-- A parity is accepted exactly when it is the recovery id itself.
+
+So each recovery id of a typed transaction has one accepted parity. -/
+theorem parityRecovery_eq_ok_iff {yParity : U256} {id : Fin 2} :
+    parityRecovery yParity = .ok id ↔ yParity.toNat = id.val := by
+  unfold parityRecovery
+  constructor
+  · intro h
+    split at h
+    · rename_i h0
+      obtain rfl := Except.ok.inj h
+      simpa using h0
+    · split at h
+      · rename_i h1
+        obtain rfl := Except.ok.inj h
+        simpa using h1
+      · cases h
+  · intro h
+    obtain ⟨_ | _ | n, hn⟩ := id
+    · simp [show yParity.toNat = 0 from h]
+    · simp [show yParity.toNat = 1 from h]
+    · omega
+
+/-! ## The hash and the sender of a typed transaction -/
+
+/-- A typed branch of the signing input gives a hash and an id exactly when the hash encodes to it.
+
+Its parity must also be that id. -/
+private theorem typedInput_eq_ok_iff {e : Except Serialization.Rlp.RlpError Hash32}
+    {yParity : U256} {hash : Hash32} {id : Fin 2} :
+    (do return (← e.mapError TransactionError.encoding, ← parityRecovery yParity) :
+      Except TransactionError (Hash32 × Fin 2)) = .ok (hash, id) ↔
+      e = .ok hash ∧ yParity.toNat = id.val := by
+  rw [← parityRecovery_eq_ok_iff]
+  cases e <;> cases parityRecovery yParity <;>
+    simp [bind, Except.bind, Except.mapError, pure, Except.pure]
+
+/-- At every fork, a transaction of type 1 signs the hash of its type and its unsigned fields.
+
+Its parity is the recovery id. -/
+theorem signingInput_accessList_eq_ok_iff {fork : Fork} {tx : AccessListTransaction}
+    {hash : Hash32} {id : Fin 2} :
+    signingInput fork (.accessList tx) = .ok (hash, id) ↔
+      signingHash2930 tx = .ok hash ∧ tx.yParity.toNat = id.val :=
+  typedInput_eq_ok_iff
+
+/-- At every fork, a transaction of type 2 signs the hash of its type and its unsigned fields.
+
+Its parity is the recovery id. -/
+theorem signingInput_feeMarket_eq_ok_iff {fork : Fork} {tx : FeeMarketTransaction}
+    {hash : Hash32} {id : Fin 2} :
+    signingInput fork (.feeMarket tx) = .ok (hash, id) ↔
+      signingHash1559 tx = .ok hash ∧ tx.yParity.toNat = id.val :=
+  typedInput_eq_ok_iff
+
+/-- At every fork, a transaction of type 3 signs the hash of its type and its unsigned fields.
+
+Its parity is the recovery id. -/
+theorem signingInput_blob_eq_ok_iff {fork : Fork} {tx : BlobTransaction}
+    {hash : Hash32} {id : Fin 2} :
+    signingInput fork (.blob tx) = .ok (hash, id) ↔
+      signingHash4844 tx = .ok hash ∧ tx.yParity.toNat = id.val :=
+  typedInput_eq_ok_iff
+
+/-- At every fork, a transaction of type 4 signs the hash of its type and its unsigned fields.
+
+Its parity is the recovery id. -/
+theorem signingInput_setCode_eq_ok_iff {fork : Fork} {tx : SetCodeTransaction}
+    {hash : Hash32} {id : Fin 2} :
+    signingInput fork (.setCode tx) = .ok (hash, id) ↔
+      signingHash7702 tx = .ok hash ∧ tx.yParity.toNat = id.val :=
+  typedInput_eq_ok_iff
+
+/-- A transaction names no sender when its signing input can only give a recovery id above 1. -/
+private theorem recoverSender_ne_of_parity {fork : Fork} {tx : Transaction} {yParity : U256}
+    (hInput : ∀ hash id, signingInput fork tx = .ok (hash, id) → yParity.toNat = id.val)
+    (h : 1 < yParity.toNat) (sender : Address) : recoverSender fork tx ≠ .ok sender := by
+  intro hs
+  obtain ⟨hash, id, -, -, hi, -, -⟩ := recoverSender_eq_ok hs
+  have := hInput hash id hi
+  have := id.isLt
+  omega
+
+/-- A transaction of type 1 whose parity is above 1 names no sender.
+
+This holds whatever its other fields, `r` and `s`. -/
+theorem recoverSender_accessList_yParity_gt {fork : Fork} {tx : AccessListTransaction}
+    (h : 1 < tx.yParity.toNat) (sender : Address) :
+    recoverSender fork (.accessList tx) ≠ .ok sender :=
+  recoverSender_ne_of_parity (fun _ _ hi => (signingInput_accessList_eq_ok_iff.mp hi).2) h sender
+
+/-- A transaction of type 2 whose parity is above 1 names no sender.
+
+This holds whatever its other fields, `r` and `s`. -/
+theorem recoverSender_feeMarket_yParity_gt {fork : Fork} {tx : FeeMarketTransaction}
+    (h : 1 < tx.yParity.toNat) (sender : Address) :
+    recoverSender fork (.feeMarket tx) ≠ .ok sender :=
+  recoverSender_ne_of_parity (fun _ _ hi => (signingInput_feeMarket_eq_ok_iff.mp hi).2) h sender
+
+/-- A transaction of type 3 whose parity is above 1 names no sender.
+
+This holds whatever its other fields, `r` and `s`. -/
+theorem recoverSender_blob_yParity_gt {fork : Fork} {tx : BlobTransaction}
+    (h : 1 < tx.yParity.toNat) (sender : Address) :
+    recoverSender fork (.blob tx) ≠ .ok sender :=
+  recoverSender_ne_of_parity (fun _ _ hi => (signingInput_blob_eq_ok_iff.mp hi).2) h sender
+
+/-- A transaction of type 4 whose parity is above 1 names no sender.
+
+This holds whatever its other fields, `r` and `s`. -/
+theorem recoverSender_setCode_yParity_gt {fork : Fork} {tx : SetCodeTransaction}
+    (h : 1 < tx.yParity.toNat) (sender : Address) :
+    recoverSender fork (.setCode tx) ≠ .ok sender :=
+  recoverSender_ne_of_parity (fun _ _ hi => (signingInput_setCode_eq_ok_iff.mp hi).2) h sender
 
 end EthLib.Execution.Transactions
