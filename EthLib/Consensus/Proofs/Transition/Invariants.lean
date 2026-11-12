@@ -1289,9 +1289,13 @@ theorem processOperations_split {body : BeaconBlockBody preset fork} {parentSlot
 
 The equations are the steps that the block runs before its operations, at every fork.
 
-From Gloas the payload of the parent comes first, then the header.
+From Gloas the payload of the parent comes first.
 
-From Bellatrix the execution part comes next, then the RANDAO reveal.
+At every fork the header follows.
+
+From Bellatrix the execution part comes next.
+
+At every fork the RANDAO reveal follows.
 
 The vote on the deposit contract comes last, before Heze. -/
 def OperationsInput (config : Config) (checks : SignatureChecks) {fork : Fork}

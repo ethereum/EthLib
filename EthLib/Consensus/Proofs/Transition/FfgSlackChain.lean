@@ -45,9 +45,9 @@ Each vote that a block step casts comes from an attestation of the block.
 
 The block checked the indexed form of that attestation, and the check accepted.
 
-The result also gives the state that the check read and its place in the block.
+That state and the place of the check in the block are also given.
 
-It holds for any signature checks.
+It holds for any signature checks, with more than `MIN_SEED_LOOKAHEAD + 2` epochs of mixes.
 
 Gasper §4.4, Definitions 4.5 and 4.6, justify a checkpoint by a supermajority link.
 
@@ -135,7 +135,7 @@ inductive AttestationSite (config : Config) (checks : SignatureChecks) {fork : F
       AttestationSite config checks input body parentSlot
         (if .altair ≤ fork then mid else next) indexed
 
-/-- A vote of a block comes from an attestation whose indexed form the block checked.
+/-- A vote of a block that applies comes from an attestation whose indexed form the block checked.
 
 The voter is among its attesters, and its data is the data of the vote.
 
@@ -199,7 +199,13 @@ theorem blockVotes_verified
 
 /-- A vote that a block step casts comes from an attestation whose indexed form the block checked.
 
-The step applies a signed block, and the check ran inside that block. -/
+The step applies a signed block, and the check ran inside that block and accepted.
+
+The voter is among its attesters, and its data is the data of the vote.
+
+It holds for any signature checks.
+
+There must be more than `MIN_SEED_LOOKAHEAD + 2` epochs of mixes. -/
 theorem blockStepVotes_verified
     (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
     {forked after : ForkedBeaconState preset} {vote : ValidatorIndex × AttestationData}
