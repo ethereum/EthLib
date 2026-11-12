@@ -3,7 +3,9 @@
 import importlib.util
 import re
 import sys
-from collections import deque
+import tomllib
+from collections import Counter, deque
+from collections.abc import Iterable, Mapping, Sequence, Set as AbstractSet
 from pathlib import Path
 from typing import NamedTuple
 
@@ -37,6 +39,8 @@ FIRST_TIER = ("Hash", "Merkle")
 # The two hash-based signatures, whose modules never reach each other through their imports.
 SCHEMES = ("Xmss", "Sphincs")
 KIND_NAMES = {"specification": "a specification", "property": "a property", "export": "a C export"}
+# The models and the refinement modules of ARCHITECTURE.md "Three kinds of content".
+KINDS = "coverage/kinds.toml"
 
 HEADER_WORD = re.compile(r"\s*(module|prelude)\b")
 IMPORT = re.compile(r"\s*(?:public\s+)?(meta\s+)?import\s+(?:all\s+)?([^\s]+)")
@@ -53,8 +57,8 @@ class Import(NamedTuple):
     line: int
 
 
-def header_imports(text: str) -> list[Import]:
-    """The imports of a Lean file, read from its header."""
+def read_header(text: str) -> tuple[list[Import], str]:
+    """The imports of a Lean file, read from its header, and the code after the header."""
     code = strip_lean(text)
     found, index = [], 0
     while True:
@@ -67,7 +71,12 @@ def header_imports(text: str) -> list[Import]:
             found.append(Import(module, bool(match.group(1)), line))
             index = match.end()
         else:
-            return found
+            return found, code[index:]
+
+
+def header_imports(text: str) -> list[Import]:
+    """The imports of a Lean file, read from its header."""
+    return read_header(text)[0]
 
 
 def imports(text: str) -> list[str]:
@@ -276,6 +285,119 @@ def import_problems(module: str, imported: str) -> list[str]:
     return problems
 
 
+class Kinds(NamedTuple):
+    """The model prefixes and the refinement modules that the kinds file declares."""
+
+    models: tuple[str, ...]
+    refinement: tuple[str, ...]
+
+
+class KindsError(ValueError):
+    """The kinds file is not valid TOML, or is not two lists of distinct module names."""
+
+
+def read_kinds(text: str) -> Kinds:
+    """The declarations of a kinds file, or a `KindsError` that says what is wrong."""
+    try:
+        declared: dict[str, object] = tomllib.loads(text)
+    except tomllib.TOMLDecodeError as error:
+        raise KindsError(f"not valid TOML: {error}") from error
+    if unknown := sorted(set(declared) - set(Kinds._fields)):
+        raise KindsError(f"unknown keys {unknown}; the file holds only {list(Kinds._fields)}")
+
+    def names(key: str) -> tuple[str, ...]:
+        if key not in declared:
+            raise KindsError(f"the key {key} is missing")
+        value = declared[key]
+        if not isinstance(value, list):
+            raise KindsError(f"{key} must be a list of module names, each a string")
+        strings = tuple(name for name in value if isinstance(name, str))
+        if len(strings) != len(value):
+            raise KindsError(f"{key} must be a list of module names, each a string")
+        if duplicates := sorted(name for name, count in Counter(strings).items() if count > 1):
+            raise KindsError(f"{key} lists {duplicates} more than once")
+        return strings
+
+    return Kinds(models=names("models"), refinement=names("refinement"))
+
+
+def is_model(module: str, models: Iterable[str]) -> bool:
+    """Whether a module is a model: a declared prefix, or a module under one."""
+    return any(module == prefix or module.startswith(prefix + ".") for prefix in models)
+
+
+def reaches_model(graph: Mapping[str, Sequence[str]], models: Sequence[str]) -> dict[str, bool]:
+    """Whether each module is a model or reaches one through its imports."""
+    reached: dict[str, bool] = {}
+
+    def visit(name: str) -> bool:
+        if name not in reached:
+            # Lean rejects a cycle of imports; the mark only keeps a broken tree from looping.
+            reached[name] = False
+            reached[name] = is_model(name, models) or any(
+                visit(imported) for imported in graph[name] if imported in graph
+            )
+        return reached[name]
+
+    for name in sorted(graph):
+        visit(name)
+    return reached
+
+
+def stale_kinds(
+    graph: Mapping[str, Sequence[str]], gatherers: AbstractSet[str], kinds: Kinds
+) -> list[str]:
+    """
+    Each declaration of the kinds file that names no module, or a module of the wrong kind.
+
+    A refinement module is checked only to reach a model: only a reviewer can see its theorems.
+    """
+    stale = []
+    for prefix in kinds.models:
+        if not any(is_model(name, [prefix]) for name in graph):
+            stale.append(f"{KINDS}: no module is under the model {prefix}")
+        elif kind(prefix) != "property":
+            stale.append(f"{KINDS}: the model {prefix} is not under a Proofs directory")
+    reached = reaches_model(graph, kinds.models)
+    for name in kinds.refinement:
+        if name not in graph:
+            reason = "does not exist"
+        elif kind(name) != "property":
+            reason = "is not a property module"
+        elif is_model(name, kinds.models):
+            reason = "is a model"
+        elif name in AGGREGATORS:
+            reason = "is an aggregator"
+        elif name in gatherers:
+            reason = "only gathers imports"
+        elif not reached[name]:
+            reason = "reaches no model"
+        else:
+            continue
+        stale.append(f"{KINDS}: the refinement module {name} {reason}")
+    return stale
+
+
+def model_imports(
+    graph: Mapping[str, Sequence[str]], gatherers: AbstractSet[str], kinds: Kinds
+) -> list[tuple[str, str]]:
+    """
+    Each direct import of a model by a property module that the kinds file does not allow.
+
+    Each import is the module that writes it and the model it names.
+    A module whose body holds nothing but imports gathers other modules and states nothing.
+    So it is exempt, as are the aggregators and the models themselves.
+    """
+    exempt = gatherers | AGGREGATORS | set(kinds.refinement)
+    return [
+        (name, imported)
+        for name in sorted(graph)
+        if kind(name) == "property" and not is_model(name, kinds.models) and name not in exempt
+        for imported in graph[name]
+        if is_model(imported, kinds.models)
+    ]
+
+
 def read_baseline(path: Path) -> set[tuple[str, str]]:
     """The (module, import) pairs that the baseline file allows."""
     entries = set()
@@ -292,10 +414,10 @@ def check(root: Path) -> list[str]:
     problems = []
     files = sorted((root / "EthLib").rglob("*.lean")) + sorted(root.glob("EthLib.lean"))
     modules = {module_name(path, root): path for path in files}
-    headers = {
-        name: header_imports(path.read_text(encoding="utf-8")) for name, path in modules.items()
-    }
+    parsed = {name: read_header(path.read_text(encoding="utf-8")) for name, path in modules.items()}
+    headers = {name: lines for name, (lines, _) in parsed.items()}
     graph = {name: [found.module for found in lines] for name, lines in headers.items()}
+    gatherers = {name for name, (_, rest) in parsed.items() if not rest.strip()}
 
     for name, path in modules.items():
         if name not in AGGREGATORS and layer(name) is None:
@@ -313,7 +435,30 @@ def check(root: Path) -> list[str]:
                     problems.append(
                         f"{modules[name].relative_to(root)}: imports {imported}, but {problem}"
                     )
+
+    kinds_path = root / KINDS
+    kinds = None
+    if not kinds_path.exists():
+        problems.append(f"{KINDS}: missing")
+    else:
+        try:
+            kinds = read_kinds(kinds_path.read_text(encoding="utf-8"))
+        except KindsError as error:
+            problems.append(f"{KINDS}: {error}")
+    if kinds is not None:
+        problems += stale_kinds(graph, gatherers, kinds)
+        for name, model in model_imports(graph, gatherers, kinds):
+            if (name, model) in baseline:
+                used.add((name, model))
+            else:
+                problems.append(
+                    f"{modules[name].relative_to(root)}: imports the model {model}, "
+                    f"but {KINDS} does not declare it a refinement module"
+                )
     for name, imported in sorted(baseline - used):
+        # Without the kinds file, an entry between two properties may still be needed.
+        if kinds is None and kind(name) == kind(imported) == "property":
+            continue
         problems.append(
             f"scripts/check_layers_baseline.txt: {name} {imported} "
             "breaks no rule any more; remove the entry"

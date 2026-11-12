@@ -425,6 +425,7 @@ uv run --no-project --python 3.12 python scripts/check_layers.py
 It fails on an import that breaks a rule of [`ARCHITECTURE.md`](ARCHITECTURE.md#rules), and on a module that no library root imports.
 An import that must break a rule goes in `scripts/check_layers_baseline.txt`, with the reason in a comment and in the pull request.
 An entry that no longer breaks a rule fails the check, so remove it with the import.
+A new model directory or a new refinement module goes in `coverage/kinds.toml`, which the same check reads, and an entry leaves with its module.
 
 When you add or change a C export that reads a fork name, check that it rejects the forks whose rules EthLib lacks:
 

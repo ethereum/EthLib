@@ -149,7 +149,15 @@ A specification never imports a property or a model.
 A property never imports a model directly, unless it is a refinement module.
 So a property module that imports a model directly, but neither states nor uses a refinement theorem, breaks the rule.
 A property may import a refinement module, and so reach a model through it, without being a refinement module itself.
-No file lists the refinement modules yet, and no check enforces the rule.
+`coverage/kinds.toml` lists the models by module prefix, and the refinement modules by name.
+`scripts/check_layers.py` fails on a property module that imports a listed model directly, unless `coverage/kinds.toml` lists that property module as a refinement module.
+The check sees only the models that the file lists.
+It cannot see whether a listed module states or uses a refinement theorem, so the reviewer of the module confirms it.
+The check exempts three kinds of module, none of which needs to be a refinement module:
+
+- a module whose body holds only imports, such as `EthLib/Consensus/Proofs.lean`, since it states nothing;
+- the aggregators `EthLib.lean`, `EthLib/Proofs.lean` and `EthLib/Exports.lean`, which import every layer;
+- a model, which may import another model.
 
 ## Layers
 
@@ -220,6 +228,8 @@ A pull request that breaks one says why in its description.
 - A specification under `Cryptography/Hash/` or `Cryptography/Merkle/`, or in their roots `Hash.lean` and `Merkle.lean`, imports no other part of Cryptography.
 - A cryptographic module never imports Serialization.
 - A specification never imports a property, a C export or a model.
+- A property imports a model directly only if `coverage/kinds.toml` lists that property as a refinement module.
+  A module that only gathers imports, an aggregator and a model are exempt.
 - A specification imports nothing outside the Lean toolchain, which ships `Init`, `Std` and `Lean`.
   Mathlib and the probability libraries enter only in properties and models.
 - No export runs specification code while it is elaborated.
