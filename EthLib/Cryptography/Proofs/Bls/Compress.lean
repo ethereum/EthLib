@@ -5,6 +5,8 @@ public import EthLib.Cryptography.Proofs.Bls.G1Group
 public import EthLib.Cryptography.Proofs.Kzg.Polynomials
 -- Its closed equality check needs the body of Batteries' derived `Except` instance.
 import all Batteries.Data.Except
+-- The kernel reduces the check of the zero tail, which needs the body of the bounded `all`.
+import all Init.Data.Nat.Fold
 
 /-!
 # Proofs: the square root in `Fp` and the compressed encoding of `G1`
@@ -854,18 +856,15 @@ theorem _root_.EthLib.Cryptography.Bls.tailAllZero_ok (b : ByteArray)
     (h : tailAllZero b 1 = true) :
     ∀ i, 1 ≤ i → i < b.size → b.get! i = 0 := by
   intro i hi1 hi2
+  rw [tailAllZero, Nat.all_eq_finRange_all, List.all_eq_true] at h
+  -- Byte `i` is the tail byte at offset `i - 1`.
+  have hzero := h ⟨i - 1, by omega⟩ (List.mem_finRange _)
+  have hi : 1 + (i - 1) = i := by omega
+  simp only [hi, beq_iff_eq] at hzero
+  -- The checked read returns the same byte, since `i` is in bounds.
   simp only [ByteArray.size] at hi2
-  -- Byte `i` is in the tail that `List.all` checks, at position `i - 1`.
-  have hmem : b.data[i] ∈ b.data.toList.drop 1 := by
-    rw [List.mem_iff_getElem]
-    refine ⟨i - 1, by simp only [List.length_drop, Array.length_toList]; omega, ?_⟩
-    simp only [List.getElem_drop, Array.getElem_toList]
-    congr 1
-    omega
-  have hzero := List.all_eq_true.mp h _ hmem
-  -- `get!` reads the same byte, since `i` is in bounds.
   simp only [ByteArray.get!, getElem!_pos b.data i hi2]
-  simpa using hzero
+  exact hzero
 
 /-- Every byte of the infinity encoding after the first is zero. -/
 private theorem infinityBytes_get!_pos (i : Fin 48) (hi : 1 ≤ i.val) :

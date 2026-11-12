@@ -2,8 +2,8 @@ module
 
 public import EthLib.Cryptography.Kzg.Core
 public import EthLib.Cryptography.Proofs.Bls.KeyValidate
--- The kernel decodes one fixed encoding, which runs a range loop.
-import all Init.Data.Range.Basic
+-- The kernel reduces the check of the zero tail, which needs the body of the bounded `all`.
+import all Init.Data.Nat.Fold
 -- It then compares two `Except` values, so it needs the body of that instance.
 import all Batteries.Data.Except
 

@@ -83,14 +83,14 @@ def Fp2.sqrt (a : Fp2 F) : Except BlsError (Fp2 F) :=
 
 end Sqrt
 
-/-- True iff `bytes[start..]` are all zero.
-
-Example: `tailAllZero ⟨#[0xc0, 0, 0]⟩ 1 = true`, and `tailAllZero ⟨#[0xc0, 0, 1]⟩ 1 = false`. -/
+/-- True iff `bytes[start..]` are all zero. -/
 -- The exposed decoders need this body for downstream reduction.
 --
--- `List.all` recurses on the list, so the kernel reduces it on a literal encoding.
+-- The check recurses on the number of tail bytes, so the kernel reduces it on a literal encoding.
+--
+-- Compiled, it is a loop over the bytes in place that stops at the first nonzero byte.
 def tailAllZero (bytes : ByteArray) (start : Nat) : Bool :=
-  (bytes.data.toList.drop start).all (· == 0)
+  (bytes.size - start).all fun i h => bytes[start + i]'(by omega) == 0
 
 /-! ## G1 -/
 
