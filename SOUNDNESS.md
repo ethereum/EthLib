@@ -1426,7 +1426,7 @@ It assumes a runner that never fails on those messages.
 
 BLOCKHASH reads its hash from a list that the block transition builds from the recent blocks of the chain.
 The Yellow Paper (Appendix H.2, [`Paper.tex`][yp-blockhash]) defines the result by a walk up the parent hashes instead.
-So the two agree only when the recent blocks are linked and reach back far enough.
+So the two agree when the recent blocks are linked and reach back far enough.
 `BlockChain.addBlock` (`Execution/Blocks/Transition.lean`) defines the chain after a block, and keeps its last 255 recent blocks.
 `HistoryOk` (`Execution/Proofs/Blocks/History.lean`) says that the recent blocks are linked and not empty.
 Each one is numbered one above the one before it and names the hash of that one as its parent hash.

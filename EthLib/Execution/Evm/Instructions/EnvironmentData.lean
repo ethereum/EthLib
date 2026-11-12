@@ -59,7 +59,7 @@ A list too short to hold that hash gives 0 too.
 
 No list is too short inside the window on a chain whose recent blocks are linked.
 
-They must also reach back 255 blocks, or to block 0. -/
+They must also number at least 255, or the number of the last block when that is fewer. -/
 def blockHash (hashes : List Hash32) (current n : Nat) : U256 :=
   if n < current ∧ current ≤ n + 256 then
     match hashes.reverse[current - n - 1]? with

@@ -46,7 +46,7 @@ def LinkedList : List RecentBlock → Prop
 
 /-- A chain has its history in order when its recent blocks are linked and not empty.
 
-It has at least as many recent blocks as the number of its last block, or 255 past that number. -/
+It has at least as many recent blocks as the number of its last block, capped at 255. -/
 def HistoryOk (chain : BlockChain) : Prop :=
   LinkedList chain.recent ∧ ∃ last, chain.recent.getLast? = some last ∧
     min last.header.number 255 ≤ chain.recent.length
