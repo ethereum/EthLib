@@ -619,43 +619,6 @@ theorem stateTransition_of_runBody {chain : BlockChain} {block : Block fork Tran
   simp only [stateTransition, hFork, hActive, ↓reduceIte, hCheck, hBody, hChecks, bind,
     Except.bind, pure, Except.pure]
 
-/-- A block that passes its checks has a parent, the last recent block.
-
-The fork of the parent is at most the fork of the block. -/
-theorem checkBlock_parent {config : ChainConfig} {checkSeal : Bool} {recent : List RecentBlock}
-    {block : Block fork Transaction} (h : checkBlock config checkSeal recent block = .ok ()) :
-    ∃ parent, recent.getLast? = some parent ∧ parent.fork ≤ fork := by
-  unfold checkBlock at h
-  obtain ⟨_, _, h⟩ := bind_ok_iff.mp h
-  obtain ⟨_, _, h⟩ := bind_ok_iff.mp h
-  split at h
-  · rename_i parent hp
-    refine ⟨parent, hp, ?_⟩
-    by_cases hle : parent.fork ≤ fork
-    · exact hle
-    · simp [hle, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
-  · simp [throw, throwThe, MonadExceptOf.throw] at h
-
-/-- The chain after a block has the state after it. -/
-theorem BlockChain.addBlock_state {chain : BlockChain} {block : Block fork Transaction}
-    {post : State} : (chain.addBlock block post).state = post :=
-  rfl
-
-/-- The recent blocks of the chain after a block are its last 255, with the block last. -/
-theorem BlockChain.addBlock_recent {chain : BlockChain} {block : Block fork Transaction}
-    {post : State} :
-    (chain.addBlock block post).recent =
-      (chain.recent ++ [(⟨fork, block.header, block.ommers⟩ : RecentBlock)]).drop
-        ((chain.recent ++ [(⟨fork, block.header, block.ommers⟩ : RecentBlock)]).length - 255) := by
-  simp only [BlockChain.addBlock]
-
-/-- The last recent block of the chain after a block is that block. -/
-theorem BlockChain.addBlock_getLast? {chain : BlockChain} {block : Block fork Transaction}
-    {post : State} :
-    (chain.addBlock block post).recent.getLast? = some ⟨fork, block.header, block.ommers⟩ := by
-  simp [BlockChain.addBlock, List.getLast?_drop]
-  omega
-
 /-- A block that passes its checks has a header that passes the checks against its parent.
 
 The parent is the last recent block. -/
@@ -689,6 +652,35 @@ theorem checkBlock_checkHeader {config : ChainConfig} {checkSeal : Bool}
         | error e => simp [hc, bind, Except.bind] at h
     · simp [hF, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
   · simp [throw, throwThe, MonadExceptOf.throw] at h
+
+/-- A block that passes its checks has a parent, the last recent block.
+
+The fork of the parent is at most the fork of the block. -/
+theorem checkBlock_parent {config : ChainConfig} {checkSeal : Bool} {recent : List RecentBlock}
+    {block : Block fork Transaction} (h : checkBlock config checkSeal recent block = .ok ()) :
+    ∃ parent, recent.getLast? = some parent ∧ parent.fork ≤ fork :=
+  let ⟨parent, hp, hF, _⟩ := checkBlock_checkHeader h
+  ⟨parent, hp, hF⟩
+
+/-- The chain after a block has the state after it. -/
+theorem BlockChain.addBlock_state {chain : BlockChain} {block : Block fork Transaction}
+    {post : State} : (chain.addBlock block post).state = post :=
+  rfl
+
+/-- The recent blocks after a block are the last 255 of those before it, with the block last. -/
+theorem BlockChain.addBlock_recent {chain : BlockChain} {block : Block fork Transaction}
+    {post : State} :
+    (chain.addBlock block post).recent =
+      (chain.recent ++ [(⟨fork, block.header, block.ommers⟩ : RecentBlock)]).drop
+        ((chain.recent ++ [(⟨fork, block.header, block.ommers⟩ : RecentBlock)]).length - 255) := by
+  simp only [BlockChain.addBlock]
+
+/-- The last recent block of the chain after a block is that block. -/
+theorem BlockChain.addBlock_getLast? {chain : BlockChain} {block : Block fork Transaction}
+    {post : State} :
+    (chain.addBlock block post).recent.getLast? = some ⟨fork, block.header, block.ommers⟩ := by
+  simp [BlockChain.addBlock, List.getLast?_drop]
+  omega
 
 /-- A block that passes its checks is numbered one above its parent, the last recent block.
 

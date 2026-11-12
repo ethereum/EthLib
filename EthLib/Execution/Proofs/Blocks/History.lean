@@ -8,7 +8,9 @@ public import EthLib.Execution.Proofs.Evm.Instructions.EnvironmentData
 
 The hashes that BLOCKHASH reads come from the recent blocks of the chain.
 
-They are right only when the recent blocks form a chain.
+The Yellow Paper ([`Paper.tex`][yp], Appendix H.2) defines BLOCKHASH by a walk up the parent hashes.
+
+The two agree when the recent blocks are linked and reach back far enough.
 
 Each one is numbered one above the one before, and names the hash of that one as its parent hash.
 
@@ -17,6 +19,8 @@ A chain with enough recent blocks keeps this property through each block that pa
 On such a chain, BLOCKHASH finds the hash of each of the 256 blocks before the current one.
 
 It never falls back to 0 inside that window.
+
+[yp]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
 -/
 
 @[expose] public section
@@ -26,11 +30,11 @@ namespace EthLib.Execution.Blocks
 open EthLib.Base
 open EthLib.Execution.Transactions
 open EthLib.Execution.State (State)
-open EthLib.Execution.Evm (blockHash blockHash_of_not_mem blockHash_of_length_lt)
+open EthLib.Execution.Evm (blockHash blockHash_of_length_lt)
 
 /-- Two recent blocks are linked when the second is numbered one above the first.
 
-It also names the hash of the first as its parent hash. -/
+The second also names the hash of the first as its parent hash. -/
 def Linked (a b : RecentBlock) : Prop :=
   b.header.number = a.header.number + 1 ∧ ∃ h, a.header.hash = .ok h ∧ b.header.parentHash = h
 
@@ -40,10 +44,10 @@ def LinkedList : List RecentBlock → Prop
   | [_] => True
   | a :: b :: rest => Linked a b ∧ LinkedList (b :: rest)
 
-/-- A chain has its history in order when its recent blocks are linked.
+/-- A chain has its history in order when its recent blocks are linked and not empty.
 
-Its last block is numbered at least as high as it has recent blocks, up to 255. -/
-def HistoryOK (chain : BlockChain) : Prop :=
+It has at least as many recent blocks as the number of its last block, or 255 past that number. -/
+def HistoryOk (chain : BlockChain) : Prop :=
   LinkedList chain.recent ∧ ∃ last, chain.recent.getLast? = some last ∧
     min last.header.number 255 ≤ chain.recent.length
 
@@ -88,7 +92,7 @@ theorem LinkedList.linked_getElem {l : List RecentBlock} (hl : LinkedList l) {i 
       | zero => exact hl.1
       | succ i => exact ih hl.2 (by simpa using hi)
 
-/-- The number of each block of a linked list is its distance from the end below the last number. -/
+/-- Each block of a linked list is numbered the last number minus its distance from the end. -/
 theorem LinkedList.number_getElem {l : List RecentBlock} (hl : LinkedList l) {i : Nat}
     (hi : i < l.length) (hne : l ≠ []) :
     l[i].header.number + (l.length - 1 - i) = (l.getLast hne).header.number := by
@@ -119,10 +123,10 @@ theorem LinkedList.number_getElem {l : List RecentBlock} (hl : LinkedList l) {i 
 variable {fork : Fork}
 
 /-- A block that passes its transition keeps the history of its chain in order. -/
-theorem stateTransition_historyOK {chain : BlockChain} {block : Block fork Transaction}
-    {checkSeal : Bool} {post : State} (hok : HistoryOK chain)
+theorem stateTransition_historyOk {chain : BlockChain} {block : Block fork Transaction}
+    {checkSeal : Bool} {post : State} (hok : HistoryOk chain)
     (h : stateTransition chain block checkSeal = .ok post) :
-    HistoryOK (chain.addBlock block post) := by
+    HistoryOk (chain.addBlock block post) := by
   obtain ⟨hlinked, last, hlast, hlen⟩ := hok
   obtain ⟨-, -, hcheck, -⟩ := stateTransition_eq_ok h
   obtain ⟨parent, hparent, hnumber, hhash⟩ := checkBlock_link hcheck
@@ -143,17 +147,17 @@ theorem stateTransition_historyOK {chain : BlockChain} {block : Block fork Trans
     omega
 
 /-- A chain whose only recent block is a genesis block has its history in order. -/
-theorem genesis_historyOK {chain : BlockChain} {genesis : RecentBlock}
+theorem genesis_historyOk {chain : BlockChain} {genesis : RecentBlock}
     (hrecent : chain.recent = [genesis]) (hnumber : genesis.header.number = 0) :
-    HistoryOK chain := by
+    HistoryOk chain := by
   refine ⟨by simp [hrecent, LinkedList], genesis, by simp [hrecent], ?_⟩
   simp [hrecent, hnumber]
 
-/-- On a chain with its history in order, the hashes of a block are as many as the window asks.
+/-- On a chain with its history in order, the next block has enough hashes for its window.
 
-They are the hashes of the 256 blocks before it, or of all of them when it has fewer. -/
+They number at least 256, or the count of blocks before it when that is fewer. -/
 theorem recentHashes_length {chain : BlockChain} {hashes : List Hash32} {last : RecentBlock}
-    (hok : HistoryOK chain) (hlast : chain.recent.getLast? = some last)
+    (hok : HistoryOk chain) (hlast : chain.recent.getLast? = some last)
     (h : recentHashes chain.recent = .ok hashes) :
     min (last.header.number + 1) 256 ≤ hashes.length := by
   obtain ⟨-, last', hlast', hlen⟩ := hok
@@ -166,8 +170,8 @@ theorem recentHashes_length {chain : BlockChain} {hashes : List Hash32} {last : 
 /-! ## The window of BLOCKHASH -/
 
 /-- The number of a recent block of a chain with its history in order is set by its position. -/
-theorem HistoryOK.number_getElem {chain : BlockChain} {last : RecentBlock}
-    (hok : HistoryOK chain) (hlast : chain.recent.getLast? = some last) {i : Nat}
+theorem HistoryOk.number_getElem {chain : BlockChain} {last : RecentBlock}
+    (hok : HistoryOk chain) (hlast : chain.recent.getLast? = some last) {i : Nat}
     (hi : i < chain.recent.length) :
     chain.recent[i].header.number + (chain.recent.length - 1 - i) = last.header.number := by
   have hne : chain.recent ≠ [] := by rintro h; simp [h] at hlast
@@ -178,8 +182,8 @@ theorem HistoryOK.number_getElem {chain : BlockChain} {last : RecentBlock}
   rw [hl]
 
 /-- Two recent blocks with one number are one block, on a chain with its history in order. -/
-theorem HistoryOK.eq_of_number {chain : BlockChain} {last : RecentBlock}
-    (hok : HistoryOK chain) (hlast : chain.recent.getLast? = some last) {a b : RecentBlock}
+theorem HistoryOk.eq_of_number {chain : BlockChain} {last : RecentBlock}
+    (hok : HistoryOk chain) (hlast : chain.recent.getLast? = some last) {a b : RecentBlock}
     (ha : a ∈ chain.recent) (hb : b ∈ chain.recent) (h : a.header.number = b.header.number) :
     a = b := by
   obtain ⟨i, hi, rfl⟩ := List.getElem_of_mem ha
@@ -194,7 +198,7 @@ theorem HistoryOK.eq_of_number {chain : BlockChain} {last : RecentBlock}
 
 On a chain with its history in order, the current block is numbered one above the last recent block.
 
-The hash of the block numbered `n` is the hash of the last block when `n` is its number.
+The entry for `n` is the hash of the last recent block when `n` is its number.
 
 Otherwise it is the parent hash of the recent block numbered `n + 1`.
 
@@ -202,7 +206,7 @@ When a recent block is numbered `n`, the hash is its hash.
 
 The list of hashes is long enough, so the fallback to 0 for a short list is not used. -/
 theorem blockHash_ancestor {chain : BlockChain} {hashes : List Hash32} {last : RecentBlock}
-    (hok : HistoryOK chain) (hlast : chain.recent.getLast? = some last)
+    (hok : HistoryOk chain) (hlast : chain.recent.getLast? = some last)
     (hhashes : recentHashes chain.recent = .ok hashes) {n : Nat}
     (hlt : n < last.header.number + 1) (hwin : last.header.number + 1 ≤ n + 256) :
     ∃ h, hashes.reverse[last.header.number + 1 - n - 1]? = some h ∧
@@ -279,31 +283,42 @@ theorem blockHash_ancestor {chain : BlockChain} {hashes : List Hash32} {last : R
 
 /-! ## Along a run of blocks -/
 
-/-- A chain gives BLOCKHASH, in a block numbered `current`, the hash of each of the last 256 blocks.
+/-- A chain gives BLOCKHASH, in a block numbered `current`, the hash of each of the 256 before it.
 
-For each such block number `n`, the list of hashes has an entry for it.
+For each such block number `n`, the list of hashes has an entry, and BLOCKHASH reads it.
 
-So the fallback to 0 is not used, and BLOCKHASH reads that entry. -/
+The entry is the hash of the last recent block when `n` is its number.
+
+Otherwise it is the parent hash of the recent block numbered `n + 1`.
+
+When a recent block is numbered `n`, the entry is its hash. -/
 def Window (chain : BlockChain) (current : Nat) : Prop :=
   ∀ hashes, recentHashes chain.recent = .ok hashes → ∀ n, n < current → current ≤ n + 256 →
     ∃ h, hashes.reverse[current - n - 1]? = some h ∧
-      blockHash hashes current n = U256.fromBeBytes h
+      blockHash hashes current n = U256.fromBeBytes h ∧
+      ((∃ last, chain.recent.getLast? = some last ∧ n = last.header.number ∧
+          last.header.hash = .ok h) ∨
+        ∃ b ∈ chain.recent, b.header.number = n + 1 ∧ b.header.parentHash = h) ∧
+      ∀ b ∈ chain.recent, b.header.number = n → b.header.hash = .ok h
 
 /-- A block that passes its transition on a chain with its history in order has its window. -/
 theorem stateTransition_window {chain : BlockChain} {block : Block fork Transaction}
-    {checkSeal : Bool} {post : State} (hok : HistoryOK chain)
+    {checkSeal : Bool} {post : State} (hok : HistoryOk chain)
     (h : stateTransition chain block checkSeal = .ok post) :
     Window chain block.header.number := by
   obtain ⟨-, -, hcheck, -⟩ := stateTransition_eq_ok h
   obtain ⟨parent, hparent, hnumber, -⟩ := checkBlock_link hcheck
   intro hashes hhashes n hlt hwin
   rw [hnumber] at hlt hwin ⊢
-  obtain ⟨h, hget, hhash, -⟩ := blockHash_ancestor hok hparent hhashes hlt hwin
-  exact ⟨h, hget, hhash⟩
+  obtain ⟨h, hget, hhash, hwhich, hall⟩ := blockHash_ancestor hok hparent hhashes hlt hwin
+  refine ⟨h, hget, hhash, ?_, hall⟩
+  rcases hwhich with ⟨hn, hh⟩ | hb
+  · exact .inl ⟨parent, hparent, hn, hh⟩
+  · exact .inr hb
 
 /-- Every block of a run has its window, on the chain that it runs on.
 
-The chain before the first block is `chain`.
+The chain before the first block is the given chain.
 
 The chain before each later block is the chain after the block before it. -/
 def Windows : BlockChain → List ((fork : Fork) × Block fork Transaction) → Prop
@@ -316,52 +331,39 @@ def Windows : BlockChain → List ((fork : Fork) × Block fork Transaction) → 
 
 A run from a genesis block is such a run, by the theorem on genesis chains.
 
-So BLOCKHASH finds the hash of each of the last 256 blocks, in every block of the run. -/
+So in every block of the run, BLOCKHASH reads the hash of each of the 256 blocks before it. -/
 theorem ChainRun.windows {chain : BlockChain}
     {blocks : List ((fork : Fork) × Block fork Transaction)} (run : ChainRun chain blocks)
-    (hok : HistoryOK chain) : Windows chain blocks := by
+    (hok : HistoryOk chain) : Windows chain blocks := by
   induction run with
   | nil => trivial
-  | cons checkSeal transition hnext tail ih =>
-    subst hnext
+  | cons checkSeal transition tail ih =>
     exact ⟨checkSeal, _, transition, stateTransition_window hok transition,
-      ih (stateTransition_historyOK hok transition)⟩
+      ih (stateTransition_historyOk hok transition)⟩
 
-/-! ## Examples -/
+/-! ## Too few recent blocks -/
 
-/-- A genesis block and two more give a chain with its history in order.
+/-- A chain with fewer recent blocks than its history asks for gives 0 inside the window.
 
-In the block after them, BLOCKHASH of block 1 reads the hash of block 1, and of block 3 gives 0. -/
-theorem history_example_three_blocks {chain : BlockChain} {b₀ b₁ b₂ : RecentBlock}
-    {h₀ h₁ h₂ : Hash32} (hrecent : chain.recent = [b₀, b₁, b₂])
-    (n₀ : b₀.header.number = 0) (n₁ : b₁.header.number = 1) (n₂ : b₂.header.number = 2)
-    (x₀ : b₀.header.hash = .ok h₀) (x₁ : b₁.header.hash = .ok h₁) (x₂ : b₂.header.hash = .ok h₂)
-    (p₁ : b₁.header.parentHash = h₀) (p₂ : b₂.header.parentHash = h₁) :
-    HistoryOK chain ∧
-      recentHashes chain.recent = .ok [b₀.header.parentHash, h₀, h₁, h₂] ∧
-      blockHash [b₀.header.parentHash, h₀, h₁, h₂] 3 1 = U256.fromBeBytes h₁ ∧
-      blockHash [b₀.header.parentHash, h₀, h₁, h₂] 3 3 = 0 := by
-  refine ⟨⟨?_, b₂, by simp [hrecent], by simp [hrecent, n₂]⟩, ?_, ?_, ?_⟩
-  · rw [hrecent]
-    exact ⟨⟨by rw [n₀, n₁], h₀, x₀, p₁⟩, ⟨by rw [n₁, n₂], h₁, x₁, p₂⟩, trivial⟩
-  · refine recentHashes_eq_ok_iff.mpr (.inr ⟨b₂, h₂, by simp [hrecent], x₂, ?_⟩)
-    simp [hrecent, p₁, p₂]
-  · simp [blockHash]
-  · exact blockHash_of_not_mem (by omega)
+The last block is numbered `m`, and the chain keeps `k` recent blocks, with `k` below `m` and 255.
 
-/-- A chain started from block 100 with only that block recent has no history in order.
+In the next block, BLOCKHASH of block `m - k - 1` is inside the window.
 
-In block 101, BLOCKHASH of block 50 is inside the window, but the list holds no entry for it. -/
-theorem history_example_late_start {chain : BlockChain} {b : RecentBlock} {h₉₉ h₁₀₀ : Hash32}
-    (hrecent : chain.recent = [b]) (hnumber : b.header.number = 100)
-    (hhash : b.header.hash = .ok h₁₀₀) (hparent : b.header.parentHash = h₉₉) :
-    ¬ HistoryOK chain ∧ recentHashes chain.recent = .ok [h₉₉, h₁₀₀] ∧
-      blockHash [h₉₉, h₁₀₀] 101 50 = 0 := by
-  refine ⟨?_, ?_, blockHash_of_length_lt (by simp)⟩
-  · rintro ⟨-, last, hlast, hlen⟩
-    obtain rfl : b = last := by simpa [hrecent] using hlast
-    simp [hrecent, hnumber] at hlen
-  · refine recentHashes_eq_ok_iff.mpr (.inr ⟨b, h₁₀₀, by simp [hrecent], hhash, ?_⟩)
-    simp [hrecent, hparent]
+The list of hashes holds no entry for it, so BLOCKHASH gives 0.
+
+So the length condition of a history in order is needed. -/
+theorem blockHash_of_short {chain : BlockChain} {hashes : List Hash32} {last : RecentBlock}
+    (hlast : chain.recent.getLast? = some last)
+    (hhashes : recentHashes chain.recent = .ok hashes)
+    (hshort : chain.recent.length < min last.header.number 255) :
+    last.header.number - chain.recent.length - 1 < last.header.number + 1 ∧
+      last.header.number + 1 ≤ last.header.number - chain.recent.length - 1 + 256 ∧
+      blockHash hashes (last.header.number + 1)
+        (last.header.number - chain.recent.length - 1) = 0 := by
+  refine ⟨by omega, by omega, blockHash_of_length_lt ?_⟩
+  rcases recentHashes_eq_ok_iff.mp hhashes with ⟨hnil, -⟩ | ⟨l, hash, -, -, hh⟩
+  · simp [hnil] at hlast
+  · rw [hh, List.length_append, List.length_map, List.length_drop, List.length_singleton]
+    omega
 
 end EthLib.Execution.Blocks

@@ -1425,19 +1425,23 @@ It assumes a runner that never fails on those messages.
 `Logic.not_runsOk_of_lt` proves that no run with less gas than `cost` succeeds, from a specification to a halt that pays `cost`, as above.
 
 BLOCKHASH reads its hash from a list that the block transition builds from the recent blocks of the chain.
-The Yellow Paper (Appendix H.2, [`Paper.tex`][yp-blockhash]) defines the result by a walk up the parent hashes instead, so the two agree only when the recent blocks chain together.
+The Yellow Paper (Appendix H.2, [`Paper.tex`][yp-blockhash]) defines the result by a walk up the parent hashes instead.
+So the two agree only when the recent blocks are linked and reach back far enough.
 `BlockChain.addBlock` (`Execution/Blocks/Transition.lean`) defines the chain after a block, and keeps its last 255 recent blocks.
-`HistoryOK` (`Execution/Proofs/Blocks/History.lean`) says that the recent blocks are linked.
-Each one is numbered one above the one before it and names the hash of that one as its parent hash, and the number of the last block is at least the count of recent blocks, up to 255.
-`stateTransition_historyOK` proves that a block that passes the transition keeps `HistoryOK`, and `genesis_historyOK` gives the start.
-On such a chain, `blockHash_ancestor` proves that each of the last 256 blocks has an entry in the list.
-The entry is the hash of the last block when `n` is its number, and the parent hash of the recent block numbered `n + 1` otherwise.
-`ChainRun.windows` carries the result along a run of blocks.
+`HistoryOk` (`Execution/Proofs/Blocks/History.lean`) says that the recent blocks are linked and not empty.
+Each one is numbered one above the one before it and names the hash of that one as its parent hash.
+The chain also holds at least as many recent blocks as the number of its last block, or 255 when that number is higher.
+`stateTransition_historyOk` proves that a block that passes the transition keeps `HistoryOk`, and `genesis_historyOk` gives the start.
+On such a chain, `blockHash_ancestor` proves that each of the last 256 blocks has an entry in the list, and that BLOCKHASH reads it.
+For a block number `n` in the window, the entry is the hash of the last block when `n` is its number.
+Otherwise it is the parent hash of the recent block numbered `n + 1`.
+When a recent block is numbered `n`, the entry is its hash.
+`ChainRun.windows` carries the whole result along a run of blocks.
 
-The theorems assume `HistoryOK` of the first chain.
-A chain started from a later block with too few recent blocks does not meet it.
-From block 100 with only that block recent, BLOCKHASH in block 101 for block 50 finds no entry and returns 0, where the Yellow Paper gives the hash of block 50.
-`history_example_late_start` proves this case, and `history_example_three_blocks` the case of a genesis block and two more.
+The theorems assume `HistoryOk` of the first chain.
+A chain with too few recent blocks does not meet it.
+`blockHash_of_short` proves that on such a chain, BLOCKHASH gives 0 for a block inside the window that the list does not reach.
+For example, from block 100 with only that block recent, BLOCKHASH in block 101 gives 0 for block 98, where the Yellow Paper gives the hash of block 98.
 No theorem relates the recent blocks of a chain to a real network.
 
 [yp-blockhash]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex

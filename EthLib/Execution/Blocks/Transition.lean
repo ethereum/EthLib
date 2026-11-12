@@ -108,7 +108,7 @@ It keeps the configuration and takes the state after the block.
 
 It appends the block to the recent blocks, and keeps the last 255 of them.
 
-The hashes of the blocks before a block read no more.
+The hashes of the blocks before the next block read only those 255, so no older block is needed.
 -/
 def BlockChain.addBlock (chain : BlockChain) {fork : Fork} (block : Block fork Transaction)
     (post : State) : BlockChain :=
