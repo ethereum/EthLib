@@ -4,6 +4,7 @@ public import EthLib.Execution.Network.Message
 public import EthLib.Execution.Proofs.Network.Blocks
 public import EthLib.Execution.Proofs.Network.Cells
 public import EthLib.Execution.Proofs.Network.Receipts
+public import EthLib.Execution.Proofs.Network.Snap
 public import EthLib.Execution.Proofs.Network.Status
 public import EthLib.Execution.Proofs.Network.Transactions
 
@@ -19,6 +20,14 @@ Every version rejects an announcement whose lists differ in length.
 A response answers a request only when it repeats the request ID.
 
 A BlockHeaders or a PooledTransactions that passes the check of its request answers it.
+
+A Cells response passes its check exactly when it repeats the request ID and its cells pass.
+
+A BlockAccessLists response passes exactly when it repeats the ID and its entries pass.
+
+It must hold one entry for each expected hash.
+
+Each entry must be the empty string, or its RLP encoding must hash to the expected hash there.
 -/
 
 @[expose] public section
@@ -227,6 +236,75 @@ theorem answers_of_checkPooledResponse {request response : Message}
     · simp [answers, hij]
     · simp [hij, throw, throwThe, MonadExceptOf.throw] at h
   · simp [throw, throwThe, MonadExceptOf.throw] at h
+
+/-- A response passes the check of cells exactly when two conditions hold.
+
+The request is GetCells, and the response is Cells with its request ID.
+
+The cells of the response pass the check against the hashes and the bitmap of the request.
+
+That check also reads the number of blobs of each transaction, which the caller gives. -/
+theorem checkCellsResponse_eq_ok_iff {blobs : List Nat} {request response : Message} :
+    checkCellsResponse blobs request response = .ok () ↔
+      ∃ i requested requestMask hashes groups mask,
+        request = getCells i requested requestMask ∧ response = cells i hashes groups mask ∧
+          checkCells requested requestMask blobs hashes groups mask = .ok () := by
+  unfold checkCellsResponse
+  split
+  · rename_i i requested requestMask j hashes groups mask
+    by_cases hij : i = j
+    · subst hij
+      simp only [↓reduceIte, getCells.injEq, cells.injEq]
+      constructor
+      · intro h
+        exact ⟨i, requested, requestMask, hashes, groups, mask, ⟨rfl, rfl, rfl⟩,
+          ⟨rfl, rfl, rfl, rfl⟩, h⟩
+      · rintro ⟨_, _, _, _, _, _, ⟨rfl, rfl, rfl⟩, ⟨-, rfl, rfl, rfl⟩, h⟩
+        exact h
+    · simp only [hij, ↓reduceIte, throw, throwThe, MonadExceptOf.throw, getCells.injEq,
+        cells.injEq]
+      constructor
+      · intro h
+        nomatch h
+      · rintro ⟨_, _, _, _, _, _, ⟨rfl, -, -⟩, ⟨h, -⟩, -⟩
+        exact absurd h.symm hij
+  · rename_i hne
+    simp only [throw, throwThe, MonadExceptOf.throw]
+    constructor
+    · intro h
+      nomatch h
+    · rintro ⟨i, requested, requestMask, hashes, groups, mask, rfl, rfl, -⟩
+      exact absurd rfl (hne i requested requestMask i hashes groups mask rfl)
+
+/-- A response passes the check of access lists exactly when three conditions hold.
+
+The request is GetBlockAccessLists, and the response is BlockAccessLists with its request ID.
+
+The response has one entry for each expected hash.
+
+Each entry is the empty string, or its RLP encoding hashes to the expected hash at its position. -/
+theorem accessListsResponse_eq_true_iff {expected : List Hash32} {request response : Message} :
+    accessListsResponse expected request response = true ↔
+      ∃ i hashes lists, request = getBlockAccessLists i hashes ∧
+        response = blockAccessLists i lists ∧ lists.length = expected.length ∧
+          ∀ (k : Nat) (hk : k < lists.length) (he : k < expected.length),
+            lists[k] = .bytes .empty ∨
+              ∃ bytes, Serialization.Rlp.encode lists[k] = .ok bytes ∧
+                Cryptography.Hash.Keccak.keccak256 bytes = expected[k] := by
+  unfold accessListsResponse
+  split
+  · rename_i i hashes j lists
+    simp only [Bool.and_eq_true, beq_iff_eq, accessListsAnswer_eq_true_iff,
+      getBlockAccessLists.injEq, blockAccessLists.injEq]
+    constructor
+    · rintro ⟨⟨rfl, hlen⟩, -, H⟩
+      exact ⟨i, hashes, lists, ⟨rfl, rfl⟩, ⟨rfl, rfl⟩, hlen, H⟩
+    · rintro ⟨_, _, _, ⟨rfl, rfl⟩, ⟨rfl, rfl⟩, hlen, H⟩
+      exact ⟨⟨rfl, hlen⟩, by omega, H⟩
+  · rename_i hne
+    simp only [Bool.false_eq_true, false_iff, not_exists, not_and]
+    rintro i hashes lists rfl rfl
+    exact absurd rfl (hne i hashes i lists rfl)
 
 end Message
 

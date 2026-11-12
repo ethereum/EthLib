@@ -1863,6 +1863,22 @@ It does not check the ommer headers against the chain, which needs the recent bl
 It does not ask that the sum of the gas limits of the transactions is at most the gas limit of the block, as `caps/eth.md` says.
 Block validity asks only that each transaction fits in the gas that the block still has, so the stricter rule would reject valid blocks.
 
+### The block access lists and the cells of the eth protocol
+
+`accessListsResponse` (`Execution/Network/Message.lean`) checks a BlockAccessLists answer of eth/71 against the access list hashes of the requested blocks.
+It follows "BlockAccessLists (0x13)" in [`caps/eth.md`](https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/eth.md#blockaccesslists-0x13).
+`accessListsResponse_eq_true_iff` (`Execution/Proofs/Network/Message.lean`) states when an answer passes: it repeats the request ID and has one entry for each hash that the caller gives.
+Each entry is the RLP empty string, or its RLP encoding has that hash under Keccak-256.
+`accessListsAnswer_eq_true_iff` (`Execution/Proofs/Network/Snap.lean`) states the check of the entries alone, which snap/2 shares.
+There the peer may cut the list short, so that check asks only for no more entries than hashes.
+The caller gives the access list hash of each requested block, in the order of the request.
+The check trusts these hashes: it reads neither the block hashes of the request nor their number.
+
+`checkCellsResponse_eq_ok_iff` (`Execution/Proofs/Network/Message.lean`) states that a Cells answer of eth/72 passes exactly when it repeats the request ID and its cells pass `checkCells` (`Execution/Network/Cells.lean`).
+That check follows "Cells (0x15)" in [`caps/eth.md`](https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/eth.md#cells-0x15).
+`checkCells_eq_ok_iff` (`Execution/Proofs/Network/Cells.lean`) states the rules of those cells.
+The caller gives the number of blobs of each transaction, and the check trusts it.
+
 ### Weak subjectivity
 
 A node that starts from a recent checkpoint trusts it only for a limited time, the weak subjectivity period.
