@@ -57,6 +57,8 @@ Twice that support, plus the discount, exceeds the committee weight and the boos
 
 The range of slots of the adversary starts at the block, or at its epoch when its parent is older.
 
+The file also states the two FFG tests of the rule on the target of the current epoch.
+
 [fcr]: https://arxiv.org/abs/2405.00549v4
 -/
 
@@ -852,17 +854,20 @@ theorem lt_two_mul_honest_support_of_isOneConfirmed {J : Set ValidatorIndex}
 
 The theorems above state the LMD-GHOST indicator of the rule, Definition 4 of the paper.
 
-A block of the current epoch also needs the target of that epoch to become justified.
+The rule also has two FFG indicators, which weigh the honest support against the active balance.
 
-The rule has two FFG indicators for that, which weigh the honest support against the balance.
+One checks that no checkpoint in conflict with the current target can be justified.
 
-One asks for more than a third of the active balance, the other for two thirds of it.
+It asks for more than a third of the balance, unless the target is the unrealized justification.
 
-So reaching two thirds implies the weaker test, for a nonzero active balance.
+The other checks that the current target will be justified, and asks for two thirds of the balance.
+
+So reaching two thirds implies the weaker test, for a nonzero balance increment.
 -/
 
 /-- The checkpoint of an epoch in a chain carries that epoch and its checkpoint block. -/
-theorem getCheckpointForBlock_eq_ok_iff {root : Root} {epoch : Epoch} {checkpoint : Checkpoint} :
+private theorem getCheckpointForBlock_eq_ok_iff {root : Root} {epoch : Epoch}
+    {checkpoint : Checkpoint} :
     store.getCheckpointForBlock root epoch = .ok checkpoint ↔
       ∃ block, store.getCheckpointBlock root epoch = .ok block ∧
         checkpoint = ⟨epoch, block⟩ := by
@@ -883,8 +888,8 @@ theorem getCurrentTarget_eq_ok_iff {head : Root} {checkpoint : Checkpoint} :
   · rintro ⟨epoch, block, epochOk, blockOk, rfl⟩
     exact ⟨epoch, epochOk, block, blockOk, rfl⟩
 
-/-- The target of the current epoch is a checkpoint of the current epoch of the store. -/
-theorem epoch_of_getCurrentTarget {head : Root} {epoch : Epoch} {checkpoint : Checkpoint}
+/-- The current target carries the current epoch of the store. -/
+theorem epoch_eq_of_getCurrentTarget {head : Root} {epoch : Epoch} {checkpoint : Checkpoint}
     (epochOk : store.getCurrentStoreEpoch config = .ok epoch)
     (targetOk : store.getCurrentTarget config head = .ok checkpoint) :
     checkpoint.epoch = epoch := by
@@ -892,9 +897,11 @@ theorem epoch_of_getCurrentTarget {head : Root} {epoch : Epoch} {checkpoint : Ch
   rw [epochOk] at epochOk'
   exact (Except.ok.inj epochOk').symm
 
-/-- The target will be justified when three times the honest support reaches twice the balance.
+/-- The two-thirds test accepts exactly when three times the support reaches twice the balance.
 
-The balance is the total active balance of the state of the head, pulled up to the epoch.
+Both products must fit in 64 bits.
+
+The balance is the total active balance of the state of the head, pulled up to the current epoch.
 -/
 theorem willCurrentTargetBeJustified_eq_ok_true_iff {head : Root} :
     store.willCurrentTargetBeJustified config head = .ok true ↔
@@ -906,7 +913,7 @@ theorem willCurrentTargetBeJustified_eq_ok_true_iff {head : Root} :
         twice ≤ thrice := by
   simp [willCurrentTargetBeJustified, bind_ok_iff, mapError_ok_iff, pure, Except.pure]
 
-/-- A target that will be justified has three times the support above twice the balance. -/
+/-- When the two-thirds test accepts, three times the support reaches twice the balance. -/
 theorem two_mul_le_three_mul_of_willCurrentTargetBeJustified {head : Root}
     {state : BeaconState preset fork} {total support : Gwei}
     (stateOk : store.getPulledUpHeadState config head = .ok state)
@@ -929,49 +936,61 @@ theorem two_mul_le_three_mul_of_willCurrentTargetBeJustified {head : Root}
   rw [twiceVal, thriceVal, two, three] at above
   exact above
 
-/-- The rule accepts at once when the current target is the unrealized justified checkpoint. -/
-theorem willNoConflictingCheckpointBeJustified_of_unrealized {head : Root}
-    (targetOk : store.getCurrentTarget config head = .ok store.unrealizedJustifiedCheckpoint) :
-    store.willNoConflictingCheckpointBeJustified config head = .ok true := by
-  simp [willNoConflictingCheckpointBeJustified, targetOk, bind, Except.bind, pure, Except.pure]
+/-- The one-third test accepts exactly in two cases.
 
-/-- For another target, no conflicting checkpoint is justified when the support passes a third. -/
+The current target is the unrealized justified checkpoint.
+
+Or three times the support exceeds the balance, and that product fits in 64 bits.
+-/
 theorem willNoConflictingCheckpointBeJustified_eq_ok_true_iff {head : Root} {target : Checkpoint}
-    (targetOk : store.getCurrentTarget config head = .ok target)
-    (apart : target ≠ store.unrealizedJustifiedCheckpoint) :
+    (targetOk : store.getCurrentTarget config head = .ok target) :
     store.willNoConflictingCheckpointBeJustified config head = .ok true ↔
-      ∃ state total support thrice,
-        store.getPulledUpHeadState config head = .ok state ∧
-        getTotalActiveBalance state = .ok total ∧
-        store.computeHonestFfgSupportForCurrentTarget config head = .ok support ∧
-        mulChecked 3 support = .ok thrice ∧ total < thrice := by
-  simp [willNoConflictingCheckpointBeJustified, targetOk, apart, bind_ok_iff, mapError_ok_iff,
-    pure, Except.pure]
+      target = store.unrealizedJustifiedCheckpoint ∨
+        ∃ state total support thrice,
+          store.getPulledUpHeadState config head = .ok state ∧
+          getTotalActiveBalance state = .ok total ∧
+          store.computeHonestFfgSupportForCurrentTarget config head = .ok support ∧
+          mulChecked 3 support = .ok thrice ∧ total < thrice := by
+  by_cases unrealized : target = store.unrealizedJustifiedCheckpoint
+  · simp [willNoConflictingCheckpointBeJustified, targetOk, unrealized, bind, Except.bind, pure,
+      Except.pure]
+  · simp [willNoConflictingCheckpointBeJustified, targetOk, unrealized, bind_ok_iff,
+      mapError_ok_iff, pure, Except.pure]
 
-/-- A target that will be justified leaves no room for a conflicting checkpoint.
+/-- The support of the current target is computed only once that target is. -/
+private theorem exists_getCurrentTarget_of_support {head : Root} {support : Gwei}
+    (supportOk : store.computeHonestFfgSupportForCurrentTarget config head = .ok support) :
+    ∃ target, store.getCurrentTarget config head = .ok target := by
+  simp only [computeHonestFfgSupportForCurrentTarget, getCurrentTargetScore, bind_ok_iff]
+    at supportOk
+  obtain ⟨-, -, -, -, -, -, -, ⟨target, targetOk, -⟩, -⟩ := supportOk
+  exact ⟨target, targetOk⟩
 
-Two thirds of a nonzero balance is above a third of it, so the weaker test passes too.
+/-- When the two-thirds test accepts, the one-third test accepts too.
+
+The total active balance is at least one balance increment, so it is nonzero.
+
+Two thirds of a nonzero balance is above a third of it.
 -/
 theorem willNoConflictingCheckpointBeJustified_of_willCurrentTargetBeJustified {head : Root}
-    {target : Checkpoint} {state : BeaconState preset fork} {total support thrice : Gwei}
-    (targetOk : store.getCurrentTarget config head = .ok target)
-    (stateOk : store.getPulledUpHeadState config head = .ok state)
-    (totalOk : getTotalActiveBalance state = .ok total)
-    (supportOk : store.computeHonestFfgSupportForCurrentTarget config head = .ok support)
-    (thriceOk : mulChecked 3 support = .ok thrice) (positive : 0 < total.toNat)
+    (positive : preset.EFFECTIVE_BALANCE_INCREMENT ≠ 0)
     (justified : store.willCurrentTargetBeJustified config head = .ok true) :
     store.willNoConflictingCheckpointBeJustified config head = .ok true := by
-  by_cases apart : target = store.unrealizedJustifiedCheckpoint
-  · exact willNoConflictingCheckpointBeJustified_of_unrealized (apart ▸ targetOk)
-  · refine (willNoConflictingCheckpointBeJustified_eq_ok_true_iff targetOk apart).mpr
-      ⟨state, total, support, thrice, stateOk, totalOk, supportOk, thriceOk, ?_⟩
-    have above := two_mul_le_three_mul_of_willCurrentTargetBeJustified stateOk totalOk supportOk
-      justified
-    obtain ⟨-, thriceVal⟩ := mulChecked_ok_iff.mp thriceOk
-    have three : (3 : Gwei).toNat = 3 := rfl
-    refine UInt64.lt_iff_toNat_lt.mpr ?_
-    rw [thriceVal, three]
-    omega
+  obtain ⟨state, total, support, -, thrice, stateOk, totalOk, supportOk, -, thriceOk, -⟩ :=
+    willCurrentTargetBeJustified_eq_ok_true_iff.mp justified
+  obtain ⟨target, targetOk⟩ := exists_getCurrentTarget_of_support supportOk
+  refine (willNoConflictingCheckpointBeJustified_eq_ok_true_iff targetOk).mpr
+    (.inr ⟨state, total, support, thrice, stateOk, totalOk, supportOk, thriceOk, ?_⟩)
+  have above := two_mul_le_three_mul_of_willCurrentTargetBeJustified stateOk totalOk supportOk
+    justified
+  have least := UInt64.le_iff_toNat_le.mp (le_getTotalBalance (getTotalActiveBalance_ok totalOk))
+  have nonzero : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat :=
+    Nat.pos_of_ne_zero fun h => positive (UInt64.toNat_inj.mp (by simpa using h))
+  obtain ⟨-, thriceVal⟩ := mulChecked_ok_iff.mp thriceOk
+  have three : (3 : Gwei).toNat = 3 := rfl
+  refine UInt64.lt_iff_toNat_lt.mpr ?_
+  rw [thriceVal, three]
+  omega
 
 end Store
 
