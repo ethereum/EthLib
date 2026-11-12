@@ -8,6 +8,7 @@ public import EthLib.Engine.Proofs.GetBlobs
 public import EthLib.Engine.Proofs.GetPayload
 public import EthLib.Engine.Proofs.Json
 public import EthLib.Engine.Proofs.Jwt
+public import EthLib.Engine.Proofs.Jwt.Json
 public import EthLib.Engine.Proofs.NewPayload
 public import EthLib.Engine.Proofs.PayloadBodies
 public import EthLib.Engine.Proofs.PreparePayload

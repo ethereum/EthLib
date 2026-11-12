@@ -8,6 +8,8 @@ public import EthLib.Execution.Proofs.Transactions.Network
 
 An unknown payload ID returns the Engine API's unknown-payload error.
 
+Each other refusal happens when its check fails and every earlier check passes.
+
 A returned payload is the payload form of the stored block, at a fork that its version accepts.
 
 From version 3, the bundle's commitments hash to the block's blob hashes, in order.
@@ -24,6 +26,7 @@ namespace EthLib.Engine
 open EthLib.Base
 open EthLib.Cryptography.Kzg
 open EthLib.Cryptography.Kzg.Constants
+open EthLib.Execution.Blocks (Block)
 open EthLib.Execution.Transactions
 
 /-- A missing build process returns unknown payload, before any fork or bundle check. -/
@@ -115,5 +118,90 @@ theorem getPayload_cell_proof_count {config : ChainConfig} {setup : TrustedSetup
     | n + 7, _, hf => simp [acceptsGetPayloadFork] at hf
   have hc := (getPayload_bundle h (by omega)).2.2.1
   simpa [proofCount, hfork] using hc
+
+/-! ## The other refusals of the method -/
+
+variable {config : ChainConfig} {setup : TrustedSetup} {store : PayloadStore} {version : Nat}
+  {id : PayloadId} {stored : StoredPayload}
+
+/-- A stored build whose fork is not the one the configuration gives at its block is refused. -/
+theorem getPayload_eq_error_of_activeFork_ne (hs : store id = some stored)
+    (hf : config.activeFork stored.built.block.header.number
+      stored.built.block.header.timestamp.toNat ≠ some stored.fork) :
+    getPayload config setup store version id = .error .wrongFork := by
+  simp [getPayload, hs, hf, bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
+
+/-- A build at a fork that the requested version does not return is refused. -/
+theorem getPayload_eq_error_of_acceptsGetPayloadFork_eq_false (hs : store id = some stored)
+    (hf : config.activeFork stored.built.block.header.number
+      stored.built.block.header.timestamp.toNat = some stored.fork)
+    (hv : acceptsGetPayloadFork version stored.fork = false) :
+    getPayload config setup store version id = .error (.engine .unsupportedFork) := by
+  simp [getPayload, hs, hf, hv, bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
+
+/-- A build whose stored requests do not have the shape of its fork is refused. -/
+theorem getPayload_eq_error_of_requestsOfFork_eq_false (hs : store id = some stored)
+    (hf : config.activeFork stored.built.block.header.number
+      stored.built.block.header.timestamp.toNat = some stored.fork)
+    (hv : acceptsGetPayloadFork version stored.fork = true)
+    (hr : requestsOfFork stored.fork stored.built.requests = false) :
+    getPayload config setup store version id = .error .requests := by
+  simp [getPayload, hs, hf, hv, hr, bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
+
+/-- A build whose stored block value does not fit in 256 bits is refused. -/
+theorem getPayload_eq_error_of_blockValue_ge (hs : store id = some stored)
+    (hf : config.activeFork stored.built.block.header.number
+      stored.built.block.header.timestamp.toNat = some stored.fork)
+    (hv : acceptsGetPayloadFork version stored.fork = true)
+    (hr : requestsOfFork stored.fork stored.built.requests = true)
+    (hb : ¬stored.built.blockValue < 2 ^ 256) :
+    getPayload config setup store version id = .error .blockValue := by
+  simp [getPayload, hs, hf, hv, hr, hb, bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
+
+/-- A build whose block has no payload form is refused. -/
+theorem getPayload_eq_error_of_payloadOfBlock_eq_none (hs : store id = some stored)
+    (hf : config.activeFork stored.built.block.header.number
+      stored.built.block.header.timestamp.toNat = some stored.fork)
+    (hv : acceptsGetPayloadFork version stored.fork = true)
+    (hr : requestsOfFork stored.fork stored.built.requests = true)
+    (hb : stored.built.blockValue < 2 ^ 256)
+    (hp : payloadOfBlock stored.built.block = none) :
+    getPayload config setup store version id = .error .noPayload := by
+  simp [getPayload, hs, hf, hv, hr, hb, hp, throw, throwThe, MonadExceptOf.throw]
+
+/-- A build whose payload gives no block with the stored block hash is refused, with that error. -/
+theorem getPayload_eq_error_of_blockOfPayload_eq_error
+    {payload : ExecutionPayload stored.fork} {error : PayloadError}
+    (hs : store id = some stored)
+    (hf : config.activeFork stored.built.block.header.number
+      stored.built.block.header.timestamp.toNat = some stored.fork)
+    (hv : acceptsGetPayloadFork version stored.fork = true)
+    (hr : requestsOfFork stored.fork stored.built.requests = true)
+    (hb : stored.built.blockValue < 2 ^ 256)
+    (hp : payloadOfBlock stored.built.block = some payload)
+    (hh : stored.blockOfPayload payload = .error error) :
+    getPayload config setup store version id = .error (.header error) := by
+  simp [getPayload, hs, hf, hv, hr, hb, hp, hh, bind, Except.bind, throw, throwThe,
+    MonadExceptOf.throw]
+
+/-- From version 3, a build whose bundle fails a count, a hash or the KZG check is refused. -/
+theorem getPayload_eq_error_of_validateBlobs_eq_error
+    {payload : ExecutionPayload stored.fork} {block : Block stored.fork Transaction}
+    {error : NetworkError}
+    (hs : store id = some stored)
+    (hf : config.activeFork stored.built.block.header.number
+      stored.built.block.header.timestamp.toNat = some stored.fork)
+    (hv : acceptsGetPayloadFork version stored.fork = true)
+    (hr : requestsOfFork stored.fork stored.built.requests = true)
+    (hb : stored.built.blockValue < 2 ^ 256)
+    (hp : payloadOfBlock stored.built.block = some payload)
+    (hh : stored.blockOfPayload payload = .ok block)
+    (hversion : 3 ≤ version)
+    (hv3 : validateBlobs setup stored.fork
+      (ExecutionPayload.blobVersionedHashes stored.built.block.transactions)
+      stored.bundle.blobs stored.bundle.commitments stored.bundle.proofs = .error error) :
+    getPayload config setup store version id = .error (.bundle error) := by
+  simp [getPayload, hs, hf, hv, hr, hb, hp, hh, hversion, hv3, bind, Except.bind,
+    Except.mapError]
 
 end EthLib.Engine

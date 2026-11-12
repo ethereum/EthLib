@@ -549,7 +549,7 @@
   "An interchange file as the format writes it again, from its JSON text."
 
 #define DOC_consensus_import_slashing_interchange \
-  "The record of a signer that keeps every message, after it imports a file, as JSON text."
+  "The record after importing a file with the minimal strategy of EIP-3076, as JSON text."
 
 #define DOC_consensus_check_block_signing \
   "Whether a key may sign a block of a slot with a signing root, given a record."

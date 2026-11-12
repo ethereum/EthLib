@@ -660,8 +660,26 @@ The Python tests check seven test cases of the NIST CAVP file `gcmtestvectors.zi
 
 ### X25519 and ChaCha20-Poly1305
 
-X25519 has no theorem: only the Python tests check it.
-The ChaCha20-Poly1305 proofs cover output length, counter exhaustion and rejection of a wrong tag (`Proofs/ChaCha20Poly1305.lean`).
+The X25519 proofs cover the clamp of RFC 7748 §5 and the decoding of a coordinate (`Proofs/X25519.lean`).
+`decodeScalar_eq` proves that the clamp sets bit 254, clears bits 0 to 2 and bit 255, and keeps bits 3 to 253 of the key.
+`decodeScalar_mod_eight`, `le_decodeScalar` and `decodeScalar_lt` follow: a clamped scalar is a multiple of eight, at least `2 ^ 254` and below `2 ^ 255`.
+`val_decodeUCoordinate` proves that decoding clears bit 255 and reduces modulo the field prime, so a noncanonical coordinate is accepted.
+`decodeUCoordinate_encodeUCoordinate` proves that decoding the bytes of a reduced coordinate returns it.
+`ladder_mod_two_pow` proves that the bits of the scalar above bit 254 do not change the ladder.
+So no run of the ladder can observe the cleared bit 255; only the clamp theorems record it.
+`swap_ladder_decodeScalar` proves that a clamped scalar leaves no swap pending at the end of the ladder.
+No theorem relates the ladder to the curve, so it is not proved to compute a scalar multiple.
+
+The ChaCha20-Poly1305 proofs cover output length, counter exhaustion, rejection of a wrong tag and the round trip (`Proofs/ChaCha20Poly1305.lean`).
+`crypt_crypt` proves that the cipher, run twice under one key, counter and nonce, gives back its input.
+`decrypt_encrypt` proves that decryption of an honest ciphertext and tag returns the plaintext.
+`tag_eq_of_decrypt_eq_ok` proves that no other tag passes for that ciphertext.
+These are statements about the definitions alone, not about their security.
+The clamp of the Poly1305 key has its own theorem.
+`testBit_clampR` gives every bit of `r` without the mask, by its place in the little-endian 32-bit words of `r`: the top four bits of bytes 3, 7, 11 and 15 and the bottom two bits of bytes 4, 8 and 12 are clear, and every other bit of the low 16 bytes of the key is kept.
+So a clamp with another mask would fail it.
+`clampR_lt` bounds `r` by `2 ^ 124`.
+`poly1305Accumulator_lt` proves that the accumulator stays below the prime `2 ^ 130 - 5`, whatever `r` and the message, since each step reduces modulo the prime.
 No theorem relates ChaCha20-Poly1305 to an independent model of RFC 8439.
 The Python tests compare the bindings with the RFC 7748 and RFC 8439 vectors.
 The million-iteration X25519 vector requires `ETHLIB_SLOW_VECTORS=1`.
@@ -676,7 +694,12 @@ A caller that edits the state can therefore complete with a remote whose signatu
 `Produced.complete_isOk` says that completion of such a state after message 3 succeeds.
 These are acceptance theorems, not a proof of protocol security, confidentiality or constant-time execution.
 They relate the identity to the transport keys only through the shared handshake state.
-No theorem says that the chaining key mixed a Diffie-Hellman output with the remote static key, and none covers the handshake hash.
+The transcript of Noise §5.2 has its own theorems (`Networking/Proofs/Noise.lean`).
+`chainingKey_foldl_mixHash` and `cipher_foldl_mixHash` prove that a run of transcript mixes leaves the chaining key and the cipher unchanged.
+`eq_or_collision_of_hash_mixHash_eq` proves that two mixes that end at one handshake hash started at one handshake hash and mixed the same bytes, or else names the two different SHA-256 inputs that hash alike.
+No theorem assumes or bounds the collision resistance of SHA-256, and none binds the whole transcript of a handshake.
+`unframe_frame` proves that reading back a written frame of the noise-libp2p "Wire Format" returns its message.
+No theorem says that the chaining key mixed a Diffie-Hellman output with the remote static key.
 Only the libp2p read verifies an identity, and completion checks that the stored remote has the remote static key of the handshake.
 The raw transport split of an XX state checks neither.
 The Python tests compare the raw XX handshake with a published test vector.
@@ -689,11 +712,25 @@ They must discard handshake state after an error.
 ### Engine API authentication
 
 `Jwt.check_build_of_size` (`Engine/Proofs/Jwt.lean`) proves that a token built with a 32-byte secret passes with that secret at clocks within 60 seconds of its issued-at time.
+`Jwt.within_eq_true_iff_of_nonneg` and `Jwt.within_eq_true_iff_of_neg` give the clock comparison of the issued-at time in full, one for each sign of the exponent of the date.
+For a negative exponent the statement scales the bounds instead of dividing the date, so it is the exact comparison.
+They prove correct the two shortcuts that avoid expanding a huge exponent, where a test can run the shortcut but cannot compute the value it replaces.
 The builder validates the JSON it generates, and `Jwt.build_eq_ok` proves that this validation never fails.
 `Jwt.authenticate_eq_error_of_tag_ne` proves that a token whose tag differs from the HS256 tag of its parts is refused before any JSON is read.
+`Jwt.compact_signature_of_check` proves that an accepted token is the compact form of its parts with their HS256 tag under the secret.
+So the clock check accepts no other tag part for those parts.
 Keeping a party without the secret away from the reader also assumes HMAC unforgeability, and a captured token can be replayed within its 60 seconds.
 `Jwt.check_eq_false_of_algorithm_ne` proves rejection when the decoded algorithm differs from HS256.
-The total JSON reader has no separate theorem of agreement with RFC 8259.
+The Unicode escape of [RFC 8259 §7](https://www.rfc-editor.org/rfc/rfc8259#section-7) has its own theorems (`Engine/Proofs/Jwt/Json.lean`).
+`Jwt.Json.hex4_cons_eq_some_iff` proves that four hex digits, in either letter case, name the number they write in base 16.
+`Jwt.Json.hex4_eq_none_of_length_lt` proves that fewer than four characters are no escape.
+`hexValue?_hexDigitChar` and `hexValue?_toUpper_hexDigitChar` prove that those hex digits are read in lowercase and in uppercase.
+`Jwt.Json.unicodeEscape_eq_none_of_hex4` proves that an escape without four hex digits is refused.
+`Jwt.Json.unicodeEscape_eq_of_not_surrogate` proves that a value outside the surrogate range is returned as the code point it names.
+`Jwt.Json.unicodeEscape_eq_of_pair` proves that a high surrogate followed by an escaped low surrogate is returned as the code point of the pair.
+`Jwt.Json.unicodeEscape_eq_none_of_surrogate` proves that every other surrogate is refused: the grammar admits a lone surrogate ([§8.2](https://www.rfc-editor.org/rfc/rfc8259#section-8.2)), but this reader refuses one.
+`Jwt.Json.string_eq_none_of_control` proves that a character below `0x20` is refused when it comes next in a string unescaped.
+The total JSON reader has no theorem of full agreement with RFC 8259.
 These theorems do not establish HMAC unforgeability or constant-time execution.
 
 ### ERC-2335 keystores
@@ -1583,9 +1620,9 @@ The deleted balances are read after the gas is settled and before any account is
 From Glamsterdam, `TransactionBurns.eq_zero_of_glamsterdam` proves that both amounts are 0.
 `processTransaction_supply_eq` makes the same two assumptions as `processTransaction_supply_le`.
 
-`Execution/Proofs/Blocks/Supply.lean` extends the bound to a whole block.
+`Execution/Proofs/Blocks/Burn.lean` gives the exact change of the supply across a whole block, and `Execution/Proofs/Blocks/Supply.lean` derives the bound and the Glamsterdam equality from it.
 The block creates the wei of its withdrawals from Shapella, by EIP-4895, and of its rewards before Paris.
-The DAO transfer only moves wei, and a system call keeps or lowers the supply, as a message does.
+The DAO transfer only moves wei.
 `stateTransition_supply_le` proves that the supply after the block plus the burned fees is at most the supply before plus the created wei, at every fork that the transition runs; it fails from Hegotá.
 `stateTransition_supply_of_glamsterdam` proves the equality from Glamsterdam.
 `stateTransition_supply_le_of_lt_glamsterdam` writes the burned fees from the header before Glamsterdam: the gas used and the blob gas used, each at its base fee.
@@ -1596,8 +1633,9 @@ It adds the created wei and subtracts the burned fees, the surviving SELFDESTRUC
 `BodyBurns` certifies the system calls before the transactions, each transaction in order, and the calls that read requests.
 The system calls also carry burn logs, since the theorem assumes no particular code at their addresses.
 `BlockLosses.transactions` retains each transaction's burn log and deleted balances.
-`BodyBurns.total_eq` shows that two certificates of the same body give the same total of losses, when the block has at most two ommers before Paris, as its checks ensure.
+`BodyBurns.total_eq` shows that two certificates of the same body give the same total of losses, when the block has at most two ommers before Paris, as its checks enforce.
 So the run fixes that total.
+From Glamsterdam, `BodyBurns.total_eq_zero_of_glamsterdam` proves that the total of losses is 0.
 
 ### The authorizations of EIP-7702
 
@@ -1766,6 +1804,14 @@ The beacon chain weighs the votes of each epoch at the effective balances of tha
 Top-ups, the balance that a consolidation moves to its target, rewards and penalties all change those balances during the window.
 The theorems weigh every vote at the balances of the checkpoint, so they reach a chain only once those changes are bounded, and no theorem bounds them yet.
 
+`Consensus/Proofs/ChurnReservations.lean` bounds the balance that the churn updates of exits and consolidations reserve, from Electra, when they run in turn on one state.
+These updates keep the slot and the validators, so the churn stays fixed.
+Their sum fits the churn left at the start plus one full churn for each later epoch of the queue.
+The bounds also hold for an idle queue, whose earliest open epoch is before the first permitted epoch.
+The exact equalities require the first permitted epoch to be no later than the earliest open epoch at the start.
+In a block, other writes to the registry and to the pending queues come between these updates, and no theorem yet covers that interleaving.
+Nor does any theorem yet bound how the churn changes between slots, or derive the change of the active set.
+
 From Phase 0 to Deneb, `accountable_safety_of_weakSubjectivityPeriod_of_lt_electra` covers the period in part.
 The rule counts `N` active validators of average balance `t` ether, rounded down, a largest effective balance `T` ether, a churn of `delta` validators and `Delta` top-ups per epoch.
 The theorem assumes each justified set gains and loses at most `delta` validators for each of the `n` epochs of churn, with `delta` the churn at the checkpoint.
@@ -1779,6 +1825,18 @@ Over 6280 epochs, the churn of validators alone lowers the bound of Gasper Theor
 With small balances, `230 T ≥ 320 t`, no theorem relates the period to the margin.
 The Python suite checks the periods against the three tables of the rule, except for the rows whose states take minutes to build.
 
+### Inactivity leak
+
+`Consensus/Proofs/Transition/InactivityLeakBound.lean` bounds the number of epochs after which a leak brings the effective balance of an absent validator to a threshold.
+`InactivityLeakStake.lean` deduces that the voters then hold two thirds of the active stake.
+Both take the balance, the score and the effective balance of each epoch as given sequences, not derived from the state transition.
+
+`InactivityLeakEpoch.lean` proves one link of that derivation: the leak lasts from one slot or epoch transition to the next, unless finality advances.
+In an epoch transition from a leaking state, the state that justification returns still leaks, unless the finalized epoch rises (`processEpoch_finalized_lt_or_isInInactivityLeak`).
+The steps after justification read the leak test on that state, or on a later one with the same slot and finalized checkpoint.
+One slot from a leaking state ends in a leaking state, unless the finalized epoch rises (`advanceSlot_finalized_lt_or_isInInactivityLeak`).
+No theorem yet derives the sequences themselves, such as the condition that the balance of an absent validator never rises.
+
 ### Fast confirmation rule
 
 `Consensus/ForkChoice/FastConfirmation.lean` holds the fast confirmation rule of [arXiv 2405.00549v4](https://arxiv.org/abs/2405.00549v4).
@@ -1789,6 +1847,8 @@ An earlier form of the rule estimated that weight as an average per slot, which 
 The pinned fast confirmation vectors of consensus-specs `v1.7.0-beta.4` were generated with that estimate.
 In 24 of them, five cases at several forks, the rule now confirms another block, and `tests/parity/disagreements.toml` lists them as expected failures.
 The vendored fast confirmation cases in `tests/consensus/fork_choice` still pass.
+From Gloas the discount for empty slots also counts the votes for the pending node of the parent, which the rule of consensus-specs `v1.7.0-beta.4` leaves out.
+No pinned vector reaches that case, so review alone checks it until the vectors move to a release with it.
 
 `stake_le_computeCommitteeWeightBetweenSlots` (`Consensus/Proofs/ForkChoice/FastConfirmationIndicators.lean`) shows that the weight covers the stake of the active members of the committees.
 `stake_le_computeCommitteeWeightBetweenSlots_of_covered` shows that the weight of a range with a whole epoch covers the stake of every validator active in the source of balances.
@@ -1826,6 +1886,47 @@ Like the paper, the theorem takes a static set of validators, Assumption 1.
 The honest support of the target of the current epoch takes the total active balance less the weight of the committees so far as the weight still to vote.
 No theorem proves that, which rests on the shuffling of the head and its pulled-up state agreeing on the active validators of the epoch.
 Each member of the committees must also be in the source of balances, or the rule fails; no theorem bounds the epochs between that source and the range.
+
+`Consensus/Proofs/ForkChoice/FastConfirmationConfirmedRoot.lean` states where the confirmed block of a slot comes from.
+`Store.onFastConfirmation_confirmedRoot` shows that the rule starts from the block stored before, the finalized block or the observed justified block.
+It keeps the block stored before only when that block is in the chain of the head, and at the first slot of an epoch only when `isConfirmedChainSafe` accepts it.
+It takes the observed justified block only at the first slot of an epoch.
+That block must then be in the epoch before the current one, and its checkpoint must be the unrealized justification of the head.
+The rule stores that block, or a later root of the walk of `getAncestorRoots` from that block to the head.
+That root and each root before it in the walk then pass `isOneConfirmed`, with the votes of the state of the observed justified checkpoint.
+The rule makes two walks, and `Store.getAncestorRoots_of_append` in `Consensus/Proofs/ForkChoice/AncestorRoots.lean` shows that the second walk is the part of the first walk after the root where the first walk stopped.
+No theorem yet shows that the roots of a walk are in the chain of the head.
+
+`foldlM_onFastConfirmation_confirmedRoot` turns those four cases into an induction along a list of stores, one fast confirmation for each.
+A property of the confirmed block holds at the end when the three starts have it and a one-confirmed walk keeps it.
+
+These theorems prove no safety: no theorem yet shows that a start is safe, or that a one-confirmed walk keeps a block in the chain of every honest head.
+They do not record every check of the rule.
+For the start they leave out the other checks that compare the epochs and the slots of the blocks.
+For the walks they leave out the checks on the epochs of the start and of the walked blocks.
+They also leave out the check that the head of the slot before holds each block of the first walk.
+They leave out the checks that a voting source or an unrealized justification is recent.
+They also leave out `willNoConflictingCheckpointBeJustified` and `willCurrentTargetBeJustified`, which are about the justification of the target of the current epoch.
+No theorem yet relates the list of stores to the stores of an honest validator in an execution.
+
+### Balance-weighted draws
+
+`Consensus/Proofs/Accessors/DrawProbability.lean` samples one digest uniformly from the 32-byte values.
+`evalDistEq_uniformSample_vector_map_getElem_injective`, in `Cryptography/Proofs/EvalDistEq.lean`, proves that distinct positions of a uniform vector give a uniform tuple of values.
+`prEvent_drawAccepts_uniform_of_before_pectra` and `prEvent_drawAccepts_uniform_of_pectra` give the exact acceptance probability of the checked draw.
+It is `(e * (2^b - 1) / M + 1) / 2^b`, with integer division inside the numerator.
+Here `e` is the balance, `M` is the largest effective balance of the preset, and `b` is 8 before Electra or 16 from Electra.
+They assume `0 < M`, `e <= M` and `M * (2^b - 1) < 2^64`.
+These theorems do not model SHA-256 or a sequence of draws.
+
+`Consensus/Proofs/Accessors/DrawRandomOracle.lean` exposes the hash call of `proposerDraw` as `queryProposerDraw`.
+Answering it with SHA-256 gives `proposerDraw`.
+With the cached random oracle, a draw whose hashed input is absent from the starting cache accepts with the probability above for a uniform digest.
+These probabilities hold in the random-oracle model only; no theorem bounds the draw when SHA-256 answers.
+The seed is fixed, and other inputs may already be cached.
+For two distinct inputs absent from that cache, `prEvent_queryProposerDraw_pair_of_fresh` gives the product of their acceptance probabilities for uniform digests.
+No theorem yet gives that product for draws that read different bytes of one digest, or for the whole search.
+Seed derivation, including a seed chosen after the oracle answers are seen, is not part of this model.
 
 ### Honest validator duties
 
@@ -1937,6 +2038,7 @@ It assumes a signature that passes the block signature check.
 `getExecutionRequests_eq_ok_iff` shows that the requests read from a list are exactly the requests that give that list.
 It rests on the canonical SSZ decoder and on the empty bytes being the only encoding of an empty list.
 `signedHeader_eq_ok_iff` shows that the signed header of a block carries the root of its body, and `getValidatorsCustodyRequirement_bounds` that the custody requirement stays between its two bounds.
+`totalEffectiveBalance_eq_ok_iff` shows that the balance behind that requirement is the sum of the effective balances of the validators, with a repeated index counted again.
 From Altair, `processSyncCommitteeContributions_spec` states the bits of the sync aggregate of a block.
 They are exactly the bits that its contributions set, each at the seat of its subcommittee.
 It also shows that the contributions name distinct subcommittees below the number of subnets.
@@ -2053,13 +2155,37 @@ So a slashable pair of signed messages needs a collision of the signing root, an
 `isSlashableWith_eq_false_of_signAttestations` shows that each signed vote is not slashable with a vote of the starting file, as a record sees it.
 A record holds the epochs of a vote and maybe its signing root, not its data.
 So that comparison reads a double vote through the signing root, and counts a record without a root as a different vote.
-No theorem says what conditions 2, 4 and 5 guarantee across two imported files, which the EIP leaves to the signer.
+
+A file may also keep only the latest messages of a key, as the [minimal strategy](https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-3076.md#supporting-different-strategies) of the EIP does.
+`lt_slot_of_signBlocks` shows that if each block of the file is after a slot, so is each block signed from it.
+`processProposerSlashing_ne_ok_of_signBlocks` concludes that no valid proposer slashing pairs such an older block with a signed block, since both headers of one have the same slot.
+`isSlashableAttestationData_eq_false_of_signAttestations` shows that no signed vote is slashable with a vote older than each vote of the file.
+An older vote has a source at most, and a target before, those of each vote of the file.
+Each of these theorems needs the file to hold one or more messages of its kind for the key.
+A vote with the target of a kept vote is not older, so the theorem on votes says nothing about it.
+The signer of these theorems records every message it signs, so a signer that prunes as it goes is not covered.
+`mem_blocksOf` and `mem_attestationsOf` show that the messages of a key are those of its own entries.
+The proofs read only conditions 2, 4 and 5, through `lt_slot_of_checkBlockSlot`, `le_sourceEpoch_of_checkSourceEpoch` and `lt_targetEpoch_of_checkTargetEpoch`.
+
+Import follows the [minimal strategy](https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-3076.md#advice-for-minimal-databases) of the EIP, for the held record and for the file.
+For each key it keeps one block limit, the greatest slot, and one vote limit, the greatest source epoch and the greatest target epoch, without signing roots.
+The two epochs of the vote limit can come from different votes.
+So after an import a block must be after the slot limit, and a vote needs a source at least the source limit and a target after the target limit.
+Since no limit carries a signing root, no imported message can be signed again.
+`lt_slot_of_importFile`, `le_sourceEpoch_of_importFile` and `lt_targetEpoch_of_importFile` show that a message accepted after one import is after every message of both inputs, in that sense.
+`checkBlockSigning_of_foldl_importFile` concludes that a block accepted after any finite sequence of imports meets conditions 1 and 2 of every input file.
+`checkAttestationSigning_of_foldl_importFile` does so for a vote and conditions 3, 4 and 5.
+Both include the initial held file, allow repeated imports and duplicate-key entries, and assume only that the final check passes.
+These two theorems cover a record built by imports alone.
+The theorems on one import take any held record, but no theorem chains imports with messages recorded between them.
+
 `readUInt64_uint64Json` and `readBytes_bytesJson` show that each integer and each byte string of a file reads back as written.
 `ofJson_toJson` shows that a whole file reads back as itself from the document that `toJson` writes, whatever its records.
 No theorem says what `ofJson` does on a document that another client wrote.
 
 The Python suite checks each condition and each malformed field against cases worked out from the EIP.
-With release archives enabled, it runs the 38 interchange tests of `eth-clients/slashing-protection-interchange-tests` as a signer that keeps every message.
+With release archives enabled, it runs the 38 interchange tests of `eth-clients/slashing-protection-interchange-tests` against their flags for the minimal strategy.
+Its signer imports each file with the minimal strategy and records each message it signs with its signing root.
 
 ### Optimistic sync
 
@@ -2192,9 +2318,25 @@ Like the state theorems, these take the lawful type of the body.
 So `isValidLightClientHeader_execution_eq` takes the binding to the fields, for a body of the fork of the header, at a slot from Capella, and from Deneb for a header from Deneb.
 The execution header of the light client header is then the header of the payload of the body, field by field.
 Otherwise a search over the two branch climbs, or one over the hash inputs of the two header roots, names a SHA-256 collision.
+`isValidLightClientHeader_execution_binding` states this step once, for two payload headers of one fork whose roots are the execution root and the root of the payload header of the body.
 From Deneb, `isValidLightClientHeader_blobGas` applies this to the blob gas used and the excess blob gas, at a slot from Deneb.
 The schedule must start Capella no later than Deneb.
 `isValidLightClientHeader_blobGas_zero` shows that a valid header of an earlier slot has zero for both.
+
+A store of a later fork upgrades a header of an earlier fork before it checks it.
+So the fork of a header can be later than the fork of its block.
+`isValidLightClientHeader_execution_eq_upgrade_capella` takes a valid header from Deneb to Fulu at a slot from Capella and before Deneb, and a Capella body.
+The execution header is then the upgrade of the payload header of the body.
+So it has the fields of that payload header, and zero for both blob gas fields.
+`isValidLightClientHeader_execution_eq_upgrade` takes a valid header from Deneb to Fulu at a slot from Capella and from Deneb, and a body of any fork from Deneb to Fulu.
+The execution header is again the upgrade of the payload header of the body, which keeps every field.
+`isValidLightClientHeader_blobGas_upgrade` applies this to the two blob gas fields, at a slot from Deneb.
+Its schedule must also start Capella no later than Deneb.
+`LightClientHeader.isValidLightClientHeader_upgrade_execution` takes the header and the body of `isValidLightClientHeader_execution_eq`, and the upgrade of the header to a fork before Gloas.
+The upgraded header has the upgrade of the payload header of the body, by `LightClientHeader.upgrade_execution`.
+In each of these theorems, the alternative is a SHA-256 collision that a search names.
+The search is over the two branch climbs, or over the hash inputs of two execution header roots.
+
 From Gloas, `isValidLightClientHeader_parentBlockHash` binds the block hash of a header at a slot from Gloas to the parent block hash of the bid of a Gloas body.
 `isValidLightClientHeader_executionBlockHash` binds it, for an earlier slot from Capella, to the block hash of the payload of a body from Capella to Fulu that is from Deneb exactly when the slot is.
 The headers that the client checks are valid: `initializeLightClientStore_header_valid`, `validateLightClientUpdate_attestedHeader_valid`, and `validateLightClientUpdate_finalizedHeader_valid` after the genesis slot.
@@ -2359,6 +2501,10 @@ They need a buffer of roots of three epochs, which both presets have.
 The weights of a checkpoint then hold the effective balances of each state before a slot that ends its epoch or the next one, on a run between genesis and the last state, when that state records the root of the checkpoint for that epoch.
 That genesis state exists only before Altair, so a chain whose genesis is later is out of scope.
 
+Adding votes and allowed weights keeps slack links, justification and finalization (`Consensus/Proofs/Models/Ffg/Monotonicity.lean`).
+`FfgFinalityMonotonicity.lean` puts the finalized checkpoint of a chain in such larger sets, with the same validator sets and second sets.
+This does not identify validator indices or establish root ancestry across two chains.
+
 ### Engine API
 
 The Engine API is the interface through which the consensus layer drives the execution layer.
@@ -2509,6 +2655,20 @@ A proposer can earn a share of the base reward of each signer that it included.
 So the bound on its reward is the bound on base rewards at the whole budget, as the effective balances of its signers sum to at most that.
 On mainnet and minimal these bounds hold for a budget of `2^57` Gwei and `2^21` epochs.
 The bound on the current epoch multiplies it by the largest cap at any fork, 2048 ETH, so it is conservative before Altair, where the cap is 32 ETH.
+
+Before Electra, registry updates need a ceiling for the first activation epoch and every exit epoch other than `FAR_FUTURE_EPOCH`.
+The ceiling plus the registry size and the withdrawability delay must be below `2^64`.
+Each ejection raises the ceiling by at most one, and activation leaves the exit epochs unchanged.
+
+From Electra, pending consolidations succeed when their source and target indices are in the registry, balances match the registry, and the sum of balances is below `2^64`.
+The current epoch plus one must fit in 64 bits.
+The source is debited before the target is credited, so the budget also covers equal source and target indices.
+
+From Gloas, builder payment settlement succeeds when an epoch has at least six slots.
+The registry must also be within its limit, and the sum of effective balances below `2^64`.
+Mainnet and minimal have 32 and 8 slots an epoch.
+With fewer than six, the specification itself can overflow when it multiplies the balance of one slot by six.
+The step changes only the pending payments and the withdrawals of the builders, so it keeps the bounds on the amounts of a run of slots (`WithinBudget`).
 
 The builder payments of Gloas carry four hypotheses and one restriction.
 `chainSteps_paysQuorum` proves that along a chain through the last slot of an epoch, each payment of the previous epoch that reaches its quorum is paid exactly once.
