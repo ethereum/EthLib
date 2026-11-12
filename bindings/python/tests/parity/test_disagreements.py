@@ -1,4 +1,4 @@
-"""The fields of every listed disagreement, which read the file alone and need no archive."""
+"""Check the fields of every listed disagreement, from the file alone, without an archive."""
 
 import pytest
 
@@ -31,6 +31,8 @@ WRONG = {
     },
     "command without the mark": {"reproduce": ENTRY["reproduce"].replace("-m archive ", "")},
     "legacy case without its group": {"group": None},
+    "no reason": {"reason": None},
+    "no source": {"source": None},
     "unknown class": {"class": "unknown"},
     "no state upstream": {"upstream": None},
     "state upstream without its date": {"upstream": "There is no report upstream"},

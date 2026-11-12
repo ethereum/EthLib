@@ -47,7 +47,7 @@ reason = "EthLib accepts a gas limit of 2^63, as execution-specs does, since no 
 source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number. execution-specs e27f097: forks/frontier/blocks.py line 121 and forks/london/blocks.py line 130 type it as Uint, check_gas_limit at frontier/fork.py line 705 bounds it only by the parent and the minimum, and tests/json_loader/helpers/exceptional_test_patterns.py line 85 lists GasLimitHigherThan2p63m1 as expected_fail. EIP-1985 is Stagnant"
 class = "fixture-defect"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_header:Constantinople/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_Frontier]"'
-upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that t8n does not reject the block, and its reply says retesteth adds the check. No report says that no activated rule bounds the gas limit"
+upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that the transition tool accepts the block, and its reply says that the program that fills the tests adds the check. No report says that no activated rule bounds the gas limit"
 
 [[disagreement]]
 suite = "legacytests"
@@ -57,7 +57,7 @@ reason = "EthLib accepts a gas limit of 2^63, as execution-specs does, since no 
 source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number. execution-specs e27f097: forks/frontier/blocks.py line 121 and forks/london/blocks.py line 130 type it as Uint, check_gas_limit at frontier/fork.py line 705 bounds it only by the parent and the minimum, and tests/json_loader/helpers/exceptional_test_patterns.py line 85 lists GasLimitHigherThan2p63m1 as expected_fail. EIP-1985 is Stagnant"
 class = "fixture-defect"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_header:Constantinople/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_Homestead]"'
-upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that t8n does not reject the block, and its reply says retesteth adds the check. No report says that no activated rule bounds the gas limit"
+upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that the transition tool accepts the block, and its reply says that the program that fills the tests adds the check. No report says that no activated rule bounds the gas limit"
 
 [[disagreement]]
 suite = "legacytests"
@@ -67,7 +67,7 @@ reason = "EthLib accepts a gas limit of 2^63, as execution-specs does, since no 
 source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number. execution-specs e27f097: forks/frontier/blocks.py line 121 and forks/london/blocks.py line 130 type it as Uint, check_gas_limit at frontier/fork.py line 705 bounds it only by the parent and the minimum, and tests/json_loader/helpers/exceptional_test_patterns.py line 85 lists GasLimitHigherThan2p63m1 as expected_fail. EIP-1985 is Stagnant"
 class = "fixture-defect"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_header:Constantinople/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_EIP150]"'
-upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that t8n does not reject the block, and its reply says retesteth adds the check. No report says that no activated rule bounds the gas limit"
+upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that the transition tool accepts the block, and its reply says that the program that fills the tests adds the check. No report says that no activated rule bounds the gas limit"
 
 [[disagreement]]
 suite = "legacytests"
@@ -77,7 +77,7 @@ reason = "EthLib accepts a gas limit of 2^63, as execution-specs does, since no 
 source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number. execution-specs e27f097: forks/frontier/blocks.py line 121 and forks/london/blocks.py line 130 type it as Uint, check_gas_limit at frontier/fork.py line 705 bounds it only by the parent and the minimum, and tests/json_loader/helpers/exceptional_test_patterns.py line 85 lists GasLimitHigherThan2p63m1 as expected_fail. EIP-1985 is Stagnant"
 class = "fixture-defect"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_header:Constantinople/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_EIP158]"'
-upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that t8n does not reject the block, and its reply says retesteth adds the check. No report says that no activated rule bounds the gas limit"
+upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that the transition tool accepts the block, and its reply says that the program that fills the tests adds the check. No report says that no activated rule bounds the gas limit"
 
 [[disagreement]]
 suite = "legacytests"
@@ -87,7 +87,7 @@ reason = "EthLib accepts a gas limit of 2^63, as execution-specs does, since no 
 source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number. execution-specs e27f097: forks/frontier/blocks.py line 121 and forks/london/blocks.py line 130 type it as Uint, check_gas_limit at frontier/fork.py line 705 bounds it only by the parent and the minimum, and tests/json_loader/helpers/exceptional_test_patterns.py line 85 lists GasLimitHigherThan2p63m1 as expected_fail. EIP-1985 is Stagnant"
 class = "fixture-defect"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_header:Constantinople/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_Byzantium]"'
-upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that t8n does not reject the block, and its reply says retesteth adds the check. No report says that no activated rule bounds the gas limit"
+upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that the transition tool accepts the block, and its reply says that the program that fills the tests adds the check. No report says that no activated rule bounds the gas limit"
 
 [[disagreement]]
 suite = "legacytests"
@@ -97,7 +97,7 @@ reason = "EthLib accepts a gas limit of 2^63, as execution-specs does, since no 
 source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number. execution-specs e27f097: forks/frontier/blocks.py line 121 and forks/london/blocks.py line 130 type it as Uint, check_gas_limit at frontier/fork.py line 705 bounds it only by the parent and the minimum, and tests/json_loader/helpers/exceptional_test_patterns.py line 85 lists GasLimitHigherThan2p63m1 as expected_fail. EIP-1985 is Stagnant"
 class = "fixture-defect"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_header:Constantinople/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_Constantinople]"'
-upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that t8n does not reject the block, and its reply says retesteth adds the check. No report says that no activated rule bounds the gas limit"
+upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that the transition tool accepts the block, and its reply says that the program that fills the tests adds the check. No report says that no activated rule bounds the gas limit"
 
 [[disagreement]]
 suite = "legacytests"
@@ -107,7 +107,7 @@ reason = "EthLib accepts a gas limit of 2^63, as execution-specs does, since no 
 source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number. execution-specs e27f097: forks/frontier/blocks.py line 121 and forks/london/blocks.py line 130 type it as Uint, check_gas_limit at frontier/fork.py line 705 bounds it only by the parent and the minimum, and tests/json_loader/helpers/exceptional_test_patterns.py line 85 lists GasLimitHigherThan2p63m1 as expected_fail. EIP-1985 is Stagnant"
 class = "fixture-defect"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_header:Constantinople/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_ConstantinopleFix]"'
-upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that t8n does not reject the block, and its reply says retesteth adds the check. No report says that no activated rule bounds the gas limit"
+upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that the transition tool accepts the block, and its reply says that the program that fills the tests adds the check. No report says that no activated rule bounds the gas limit"
 
 [[disagreement]]
 suite = "legacytests"
@@ -117,7 +117,7 @@ reason = "EthLib accepts a gas limit of 2^63, as execution-specs does, since no 
 source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number. execution-specs e27f097: forks/frontier/blocks.py line 121 and forks/london/blocks.py line 130 type it as Uint, check_gas_limit at frontier/fork.py line 705 bounds it only by the parent and the minimum, and tests/json_loader/helpers/exceptional_test_patterns.py line 85 lists GasLimitHigherThan2p63m1 as expected_fail. EIP-1985 is Stagnant"
 class = "fixture-defect"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_header:Cancun/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::LegacyTests/Cancun/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_Istanbul]"'
-upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that t8n does not reject the block, and its reply says retesteth adds the check. No report says that no activated rule bounds the gas limit"
+upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that the transition tool accepts the block, and its reply says that the program that fills the tests adds the check. No report says that no activated rule bounds the gas limit"
 
 [[disagreement]]
 suite = "legacytests"
@@ -127,7 +127,7 @@ reason = "EthLib accepts a gas limit of 2^63, as execution-specs does, since no 
 source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number. execution-specs e27f097: forks/frontier/blocks.py line 121 and forks/london/blocks.py line 130 type it as Uint, check_gas_limit at frontier/fork.py line 705 bounds it only by the parent and the minimum, and tests/json_loader/helpers/exceptional_test_patterns.py line 85 lists GasLimitHigherThan2p63m1 as expected_fail. EIP-1985 is Stagnant"
 class = "fixture-defect"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_header:Cancun/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::LegacyTests/Cancun/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_Berlin]"'
-upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that t8n does not reject the block, and its reply says retesteth adds the check. No report says that no activated rule bounds the gas limit"
+upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that the transition tool accepts the block, and its reply says that the program that fills the tests adds the check. No report says that no activated rule bounds the gas limit"
 
 [[disagreement]]
 suite = "legacytests"
@@ -137,7 +137,7 @@ reason = "EthLib accepts a gas limit of 2^63, as execution-specs does, since no 
 source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number. execution-specs e27f097: forks/frontier/blocks.py line 121 and forks/london/blocks.py line 130 type it as Uint, check_gas_limit at frontier/fork.py line 705 bounds it only by the parent and the minimum, and tests/json_loader/helpers/exceptional_test_patterns.py line 85 lists GasLimitHigherThan2p63m1 as expected_fail. EIP-1985 is Stagnant"
 class = "fixture-defect"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_header:Cancun/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::LegacyTests/Cancun/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_London]"'
-upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that t8n does not reject the block, and its reply says retesteth adds the check. No report says that no activated rule bounds the gas limit"
+upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that the transition tool accepts the block, and its reply says that the program that fills the tests adds the check. No report says that no activated rule bounds the gas limit"
 
 [[disagreement]]
 suite = "legacytests"
@@ -147,7 +147,7 @@ reason = "EthLib accepts a gas limit of 2^63, as execution-specs does, since no 
 source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number. execution-specs e27f097: forks/frontier/blocks.py line 121 and forks/london/blocks.py line 130 type it as Uint, check_gas_limit at frontier/fork.py line 705 bounds it only by the parent and the minimum, and tests/json_loader/helpers/exceptional_test_patterns.py line 85 lists GasLimitHigherThan2p63m1 as expected_fail. EIP-1985 is Stagnant"
 class = "fixture-defect"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Constantinople/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_Frontier]"'
-upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that t8n does not reject the block, and its reply says retesteth adds the check. No report says that no activated rule bounds the gas limit"
+upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that the transition tool accepts the block, and its reply says that the program that fills the tests adds the check. No report says that no activated rule bounds the gas limit"
 
 [[disagreement]]
 suite = "legacytests"
@@ -157,7 +157,7 @@ reason = "EthLib accepts a gas limit of 2^63, as execution-specs does, since no 
 source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number. execution-specs e27f097: forks/frontier/blocks.py line 121 and forks/london/blocks.py line 130 type it as Uint, check_gas_limit at frontier/fork.py line 705 bounds it only by the parent and the minimum, and tests/json_loader/helpers/exceptional_test_patterns.py line 85 lists GasLimitHigherThan2p63m1 as expected_fail. EIP-1985 is Stagnant"
 class = "fixture-defect"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Constantinople/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_Homestead]"'
-upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that t8n does not reject the block, and its reply says retesteth adds the check. No report says that no activated rule bounds the gas limit"
+upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that the transition tool accepts the block, and its reply says that the program that fills the tests adds the check. No report says that no activated rule bounds the gas limit"
 
 [[disagreement]]
 suite = "legacytests"
@@ -167,7 +167,7 @@ reason = "EthLib accepts a gas limit of 2^63, as execution-specs does, since no 
 source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number. execution-specs e27f097: forks/frontier/blocks.py line 121 and forks/london/blocks.py line 130 type it as Uint, check_gas_limit at frontier/fork.py line 705 bounds it only by the parent and the minimum, and tests/json_loader/helpers/exceptional_test_patterns.py line 85 lists GasLimitHigherThan2p63m1 as expected_fail. EIP-1985 is Stagnant"
 class = "fixture-defect"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Constantinople/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_EIP150]"'
-upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that t8n does not reject the block, and its reply says retesteth adds the check. No report says that no activated rule bounds the gas limit"
+upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that the transition tool accepts the block, and its reply says that the program that fills the tests adds the check. No report says that no activated rule bounds the gas limit"
 
 [[disagreement]]
 suite = "legacytests"
@@ -177,7 +177,7 @@ reason = "EthLib accepts a gas limit of 2^63, as execution-specs does, since no 
 source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number. execution-specs e27f097: forks/frontier/blocks.py line 121 and forks/london/blocks.py line 130 type it as Uint, check_gas_limit at frontier/fork.py line 705 bounds it only by the parent and the minimum, and tests/json_loader/helpers/exceptional_test_patterns.py line 85 lists GasLimitHigherThan2p63m1 as expected_fail. EIP-1985 is Stagnant"
 class = "fixture-defect"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Constantinople/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_EIP158]"'
-upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that t8n does not reject the block, and its reply says retesteth adds the check. No report says that no activated rule bounds the gas limit"
+upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that the transition tool accepts the block, and its reply says that the program that fills the tests adds the check. No report says that no activated rule bounds the gas limit"
 
 [[disagreement]]
 suite = "legacytests"
@@ -187,7 +187,7 @@ reason = "EthLib accepts a gas limit of 2^63, as execution-specs does, since no 
 source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number. execution-specs e27f097: forks/frontier/blocks.py line 121 and forks/london/blocks.py line 130 type it as Uint, check_gas_limit at frontier/fork.py line 705 bounds it only by the parent and the minimum, and tests/json_loader/helpers/exceptional_test_patterns.py line 85 lists GasLimitHigherThan2p63m1 as expected_fail. EIP-1985 is Stagnant"
 class = "fixture-defect"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Constantinople/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_Byzantium]"'
-upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that t8n does not reject the block, and its reply says retesteth adds the check. No report says that no activated rule bounds the gas limit"
+upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that the transition tool accepts the block, and its reply says that the program that fills the tests adds the check. No report says that no activated rule bounds the gas limit"
 
 [[disagreement]]
 suite = "legacytests"
@@ -197,7 +197,7 @@ reason = "EthLib accepts a gas limit of 2^63, as execution-specs does, since no 
 source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number. execution-specs e27f097: forks/frontier/blocks.py line 121 and forks/london/blocks.py line 130 type it as Uint, check_gas_limit at frontier/fork.py line 705 bounds it only by the parent and the minimum, and tests/json_loader/helpers/exceptional_test_patterns.py line 85 lists GasLimitHigherThan2p63m1 as expected_fail. EIP-1985 is Stagnant"
 class = "fixture-defect"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Constantinople/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_ConstantinopleFix]"'
-upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that t8n does not reject the block, and its reply says retesteth adds the check. No report says that no activated rule bounds the gas limit"
+upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that the transition tool accepts the block, and its reply says that the program that fills the tests adds the check. No report says that no activated rule bounds the gas limit"
 
 [[disagreement]]
 suite = "legacytests"
@@ -207,7 +207,7 @@ reason = "EthLib accepts a gas limit of 2^63, as execution-specs does, since no 
 source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number. execution-specs e27f097: forks/frontier/blocks.py line 121 and forks/london/blocks.py line 130 type it as Uint, check_gas_limit at frontier/fork.py line 705 bounds it only by the parent and the minimum, and tests/json_loader/helpers/exceptional_test_patterns.py line 85 lists GasLimitHigherThan2p63m1 as expected_fail. EIP-1985 is Stagnant"
 class = "fixture-defect"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::LegacyTests/Cancun/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_Istanbul]"'
-upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that t8n does not reject the block, and its reply says retesteth adds the check. No report says that no activated rule bounds the gas limit"
+upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that the transition tool accepts the block, and its reply says that the program that fills the tests adds the check. No report says that no activated rule bounds the gas limit"
 
 [[disagreement]]
 suite = "legacytests"
@@ -217,7 +217,7 @@ reason = "EthLib accepts a gas limit of 2^63, as execution-specs does, since no 
 source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number. execution-specs e27f097: forks/frontier/blocks.py line 121 and forks/london/blocks.py line 130 type it as Uint, check_gas_limit at frontier/fork.py line 705 bounds it only by the parent and the minimum, and tests/json_loader/helpers/exceptional_test_patterns.py line 85 lists GasLimitHigherThan2p63m1 as expected_fail. EIP-1985 is Stagnant"
 class = "fixture-defect"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::LegacyTests/Cancun/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_Berlin]"'
-upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that t8n does not reject the block, and its reply says retesteth adds the check. No report says that no activated rule bounds the gas limit"
+upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that the transition tool accepts the block, and its reply says that the program that fills the tests adds the check. No report says that no activated rule bounds the gas limit"
 
 [[disagreement]]
 suite = "legacytests"
@@ -227,7 +227,7 @@ reason = "EthLib accepts a gas limit of 2^63, as execution-specs does, since no 
 source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number. execution-specs e27f097: forks/frontier/blocks.py line 121 and forks/london/blocks.py line 130 type it as Uint, check_gas_limit at frontier/fork.py line 705 bounds it only by the parent and the minimum, and tests/json_loader/helpers/exceptional_test_patterns.py line 85 lists GasLimitHigherThan2p63m1 as expected_fail. EIP-1985 is Stagnant"
 class = "fixture-defect"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::LegacyTests/Cancun/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_London]"'
-upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that t8n does not reject the block, and its reply says retesteth adds the check. No report says that no activated rule bounds the gas limit"
+upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that the transition tool accepts the block, and its reply says that the program that fills the tests adds the check. No report says that no activated rule bounds the gas limit"
 
 # The fast confirmation cases of v1.7.0-beta.4 whose answer depends on the weight of the committees.
 # That release weighs the committees of a range of slots by an average per slot.
