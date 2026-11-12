@@ -179,18 +179,27 @@ def verifyKzgProofImpl (setup : TrustedSetup)
     (commitmentG1 : G1) (z y : Fr) (proofG1 : G1) : Bool :=
   verifyKzgProofWith (setup.g2Monomial[1]'(by decide)) commitmentG1 z y proofG1
 
-/-- Verify a KZG proof, taking inputs as raw bytes. -/
+/-- Verify a KZG proof, taking inputs as raw bytes.
+
+It is `verify_kzg_proof` of `polynomial-commitments.md`, in consensus-specs `86fb82b2`.
+
+It checks its arguments in the order that Python evaluates them.
+
+That is the commitment, `z`, `y`, then the proof.
+
+The first invalid argument gives the error. -/
 def verifyKzgProof (setup : TrustedSetup)
     (commitmentBytes : Bytes48) (zBytes yBytes : Bytes32) (proofBytes : Bytes48)
     : Except KzgError Bool := do
-  let commitmentG1 ← match validateKzgG1Point commitmentBytes with
-                     | .ok c    => pure c
-                     | .error _ => throw (.invalidCommitment none)
-  let proofG1 ← match validateKzgG1Point proofBytes with
-                | .ok p    => pure p
-                | .error _ => throw (.invalidProof none)
+  let commitment ← bytesToKzgCommitment commitmentBytes
   let z ← bytesToBlsField zBytes
   let y ← bytesToBlsField yBytes
+  let proof ← bytesToKzgProof proofBytes
+  -- `verify_kzg_proof_impl` decodes both points with `bytes48_to_G1`.
+  --
+  -- Bytes that passed validation always decode (`uncompressG1_of_validateKzgG1Point`).
+  let commitmentG1 ← uncompressG1 commitment
+  let proofG1 ← uncompressG1 proof
   return verifyKzgProofImpl setup commitmentG1 z y proofG1
 
 /-- The Fiat-Shamir challenge of a batch of openings.
@@ -269,22 +278,29 @@ def computeBlobKzgProof (setup : TrustedSetup) (blob : Blob) (commitmentBytes : 
   let (proof, _) ← computeKzgProofImpl setup polynomial evaluationChallenge
   return proof
 
-/-- Verify that `blob` corresponds to `commitment` via `proof`. -/
+/-- Verify that `blob` corresponds to `commitment` via `proof`.
+
+It is `verify_blob_kzg_proof` of `polynomial-commitments.md`, in consensus-specs `86fb82b2`.
+
+It checks the commitment, then decodes the blob, then checks the proof.
+
+The first failure gives the error. -/
 def verifyBlobKzgProof (setup : TrustedSetup)
     (blob : Blob) (commitmentBytes : Bytes48) (proofBytes : Bytes48)
     : Except KzgError Bool := do
-  let commitmentG1 ← match validateKzgG1Point commitmentBytes with
-                     | .ok c    => pure c
-                     | .error _ => throw (.invalidCommitment none)
+  let commitment ← bytesToKzgCommitment commitmentBytes
   let polynomial ← blobToPolynomial blob
-  let evaluationChallenge := computeChallenge blob commitmentBytes
+  let evaluationChallenge := computeChallenge blob commitment
   let y ← evaluatePolynomialInEvaluationForm polynomial evaluationChallenge
-  let proofG1 ← match validateKzgG1Point proofBytes with
-                | .ok p    => pure p
-                | .error _ => throw (.invalidProof none)
+  let proof ← bytesToKzgProof proofBytes
+  -- `verify_kzg_proof_impl` decodes both points with `bytes48_to_G1`, as in `verifyKzgProof`.
+  let commitmentG1 ← uncompressG1 commitment
+  let proofG1 ← uncompressG1 proof
   return verifyKzgProofImpl setup commitmentG1 evaluationChallenge y proofG1
 
 /-- Verify a batch of triples of a blob, a commitment and a proof.
+
+It is `verify_blob_kzg_proof_batch` of `polynomial-commitments.md`, in consensus-specs `86fb82b2`.
 
 Each triple checks its commitment, then decodes its blob, then checks its proof.
 
@@ -307,18 +323,21 @@ def verifyBlobKzgProofBatch (setup : TrustedSetup)
                 (#[] : Array Fr), (#[] : Array KZGProof), (#[] : Array G1)))
       fun (commitments, commitmentsG1, challenges, ys, proofs, proofsG1)
           ((blob, cb, pb), i) => do
-        let commitmentG1 ← match validateKzgG1Point cb with
-                           | .ok c    => pure c
-                           | .error _ => throw (.invalidCommitment (some i))
+        let commitment ← match bytesToKzgCommitment cb with
+                         | .ok c    => pure c
+                         | .error _ => throw (.invalidCommitment (some i))
         let polynomial ← blobToPolynomial blob
-        let challenge := computeChallenge blob cb
+        let challenge := computeChallenge blob commitment
         let y ← evaluatePolynomialInEvaluationForm polynomial challenge
-        let proofG1 ← match validateKzgG1Point pb with
-                      | .ok p    => pure p
-                      | .error _ => throw (.invalidProof (some i))
+        let proof ← match bytesToKzgProof pb with
+                    | .ok p    => pure p
+                    | .error _ => throw (.invalidProof (some i))
+        -- `verify_kzg_proof_batch` decodes the points with `bytes48_to_G1`.
+        let commitmentG1 ← uncompressG1 commitment
+        let proofG1 ← uncompressG1 proof
 
-        pure (commitments.push cb, commitmentsG1.push commitmentG1,
-              challenges.push challenge, ys.push y, proofs.push pb, proofsG1.push proofG1)
+        pure (commitments.push commitment, commitmentsG1.push commitmentG1,
+              challenges.push challenge, ys.push y, proofs.push proof, proofsG1.push proofG1)
 
   verifyKzgProofBatch setup commitments commitmentsG1 challenges ys proofs proofsG1
 

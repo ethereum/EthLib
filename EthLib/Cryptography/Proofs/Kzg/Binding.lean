@@ -148,32 +148,35 @@ theorem verifyKzgProof_eq_ok_true {s : TrustedSetup} {commitmentBytes proofBytes
       validateKzgG1Point proofBytes = .ok P ∧ bytesToBlsField zBytes = .ok z ∧
       bytesToBlsField yBytes = .ok y ∧ verifyKzgProofImpl s C z y P = true := by
   unfold verifyKzgProof at h
+  -- The checks run in the order of the specification: the commitment, `z`, `y`, then the proof.
   cases hC : validateKzgG1Point commitmentBytes with
   | error e =>
-    rw [hC] at h
-    simp only [bind, Except.bind, throw, throwThe, MonadExceptOf.throw] at h
+    rw [bytesToKzgCommitment_of_validateKzgG1Point_error hC] at h
     exact nomatch h
   | ok C =>
-    cases hP : validateKzgG1Point proofBytes with
+    rw [bytesToKzgCommitment_of_validateKzgG1Point hC] at h
+    cases hz : bytesToBlsField zBytes with
     | error e =>
-      rw [hC, hP] at h
-      simp only [bind, Except.bind, pure, Except.pure, throw, throwThe, MonadExceptOf.throw] at h
+      rw [hz] at h
       exact nomatch h
-    | ok P =>
-      cases hz : bytesToBlsField zBytes with
+    | ok z =>
+      rw [hz] at h
+      cases hy : bytesToBlsField yBytes with
       | error e =>
-        rw [hC, hP, hz] at h
-        simp only [bind, Except.bind, pure, Except.pure] at h
+        rw [hy] at h
         exact nomatch h
-      | ok z =>
-        cases hy : bytesToBlsField yBytes with
+      | ok y =>
+        rw [hy] at h
+        cases hP : validateKzgG1Point proofBytes with
         | error e =>
-          rw [hC, hP, hz, hy] at h
-          simp only [bind, Except.bind, pure, Except.pure] at h
+          rw [bytesToKzgProof_of_validateKzgG1Point_error hP] at h
           exact nomatch h
-        | ok y =>
-          rw [hC, hP, hz, hy] at h
-          simp only [bind, Except.bind, pure, Except.pure, Except.ok.injEq] at h
+        | ok P =>
+          -- Valid bytes decode to the points that validation returned.
+          rw [bytesToKzgProof_of_validateKzgG1Point hP] at h
+          simp only [bind, Except.bind] at h
+          rw [uncompressG1_of_validateKzgG1Point hC, uncompressG1_of_validateKzgG1Point hP] at h
+          simp only [pure, Except.pure, Except.ok.injEq] at h
           exact ⟨C, P, z, y, rfl, rfl, rfl, rfl, h⟩
 
 /-- **Evaluation binding from bytes.**
