@@ -23,9 +23,11 @@ A BlockHeaders or a PooledTransactions that passes the check of its request answ
 
 A Cells response passes its check exactly when it repeats the request ID and its cells pass.
 
-A BlockAccessLists response passes exactly when it repeats the ID and has one entry per block.
+A BlockAccessLists response passes exactly when it repeats the ID and its entries pass.
 
-Each entry is then absent, or hashes to the access list hash of its block.
+It must hold one entry for each expected hash.
+
+Each entry must be the empty string, or its RLP encoding must hash to the expected hash there.
 -/
 
 @[expose] public section
@@ -239,7 +241,9 @@ theorem answers_of_checkPooledResponse {request response : Message}
 
 The request is GetCells, and the response is Cells with its request ID.
 
-The cells of the response pass the check of the hashes and the bitmap of the request. -/
+The cells of the response pass the check against the hashes and the bitmap of the request.
+
+That check also reads the number of blobs of each transaction, which the caller gives. -/
 theorem checkCellsResponse_eq_ok_iff {blobs : List Nat} {request response : Message} :
     checkCellsResponse blobs request response = .ok () ↔
       ∃ i requested requestMask hashes groups mask,
@@ -278,7 +282,7 @@ The request is GetBlockAccessLists, and the response is BlockAccessLists with it
 
 The response has one entry for each expected hash.
 
-Each entry is the empty string, or its encoding hashes to the expected hash at its position. -/
+Each entry is the empty string, or its RLP encoding hashes to the expected hash at its position. -/
 theorem accessListsResponse_eq_true_iff {expected : List Hash32} {request response : Message} :
     accessListsResponse expected request response = true ↔
       ∃ i hashes lists, request = getBlockAccessLists i hashes ∧

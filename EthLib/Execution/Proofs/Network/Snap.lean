@@ -183,9 +183,9 @@ theorem sublist_of_codesAnswer {requested : List Hash32} {codes : List ByteArray
 
 /-- An answer of access lists passes the check exactly when two conditions hold.
 
-It holds at most one entry for each requested block.
+It holds no more entries than there are expected hashes.
 
-Each entry is the empty string, or its encoding hashes to the access list hash at its position. -/
+Each entry is the empty string, or its RLP encoding hashes to the expected hash at its position. -/
 theorem accessListsAnswer_eq_true_iff {expected : List Hash32} {lists : List Item} :
     accessListsAnswer expected lists = true ↔
       lists.length ≤ expected.length ∧
@@ -203,10 +203,14 @@ theorem accessListsAnswer_eq_true_iff {expected : List Hash32} {lists : List Ite
     · right
       cases hb : Serialization.Rlp.encode lists[i] with
       | error e => simp [hb] at h
-      | ok bytes => simp only [hb] at h; exact ⟨bytes, rfl, eq_of_beq h⟩
+      | ok bytes =>
+        simp only [hb] at h
+        exact ⟨bytes, rfl, eq_of_beq h⟩
   · rcases H i (by omega) (by omega) with h | ⟨bytes, hb, hh⟩
     · exact .inl h
-    · right; simp only [hb, hh]; exact beq_self_eq_true _
+    · right
+      simp only [hb, hh]
+      exact beq_self_eq_true _
 
 /-- Each access list of a checked answer is absent, or hashes to the access list hash of its block.
 
