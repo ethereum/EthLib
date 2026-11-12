@@ -109,8 +109,6 @@ private theorem processAttestation_checked {fork : Fork} {state after : BeaconSt
 
 /-- Where the operations of a block check an indexed attestation, and on which state.
 
-An attester slashing checks both of its attestations on the state before it.
-
 From Altair an attestation is checked on the state before it.
 
 Before Altair it is checked on the state after its pending attestation is recorded.
@@ -119,16 +117,6 @@ That state is the one that the attestation returns. -/
 inductive AttestationSite (config : Config) (checks : SignatureChecks) {fork : Fork}
     (input : BeaconState preset fork) (body : BeaconBlockBody preset fork) (parentSlot : Slot) :
     BeaconState preset fork → IndexedAttestation preset fork → Prop where
-  | slashing {proposersDone checked next : BeaconState preset fork}
-      {pre post : List (AttesterSlashing preset fork)} {slashing : AttesterSlashing preset fork}
-      {indexed : IndexedAttestation preset fork}
-      (split : body.attesterSlashings.data.toList = pre ++ slashing :: post)
-      (proposers : body.proposerSlashings.data.toList.foldlM
-        (processProposerSlashing config checks) input = .ok proposersDone)
-      (earlier : pre.foldlM (processAttesterSlashing config checks) proposersDone = .ok checked)
-      (processed : processAttesterSlashing config checks checked slashing = .ok next)
-      (which : indexed = slashing.attestation1 ∨ indexed = slashing.attestation2) :
-      AttestationSite config checks input body parentSlot checked indexed
   | attestation {proposersDone slashingsDone mid next : BeaconState preset fork}
       {pre post : List (Attestation preset fork)} {attestation : Attestation preset fork}
       {indexed : IndexedAttestation preset fork}
