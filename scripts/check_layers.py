@@ -127,7 +127,7 @@ def external_reached(graph: dict[str, list[str]]) -> dict[str, str]:
     def visit(name: str) -> str | None:
         if name in found:
             return found[name]
-        # Mark the module first, so that an import cycle ends the search.
+        # Lean rejects a cycle of imports; the mark only keeps a broken tree from looping.
         found[name] = None
         for imported in graph[name]:
             package = imported.split(".")[0]
@@ -152,10 +152,8 @@ def reach_problems(graph: dict[str, list[str]]) -> list[tuple[str, str, str]]:
     """
     Each import of a property through which a C export reaches another library.
 
-    An export may import a property, but then reaches whatever the property imports.
-    An export that imports an outside module is a problem of its own.
-    So is a specification that imports anything but specifications.
-    So only these imports are reported: the export, the property, the module reached.
+    Each problem is the export, the property it imports, and the module outside that it reaches.
+    An export that imports an outside module itself breaks another rule, so it is not reported here.
     """
     reached = external_reached(graph)
     problems = []

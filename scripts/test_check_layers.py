@@ -244,6 +244,16 @@ class Rules(unittest.TestCase):
             tree, "EthLib/Execution/Exports/A.lean: imports EthLib.Execution.Proofs.A"
         )
 
+    def test_export_reaches_outside_once_through_a_chain_of_exports(self):
+        # Only the property that the second export imports is reported, where the import is written.
+        tree = with_imports("EthLib.Exports", "EthLib.Execution.Exports.B")
+        tree["EthLib.Execution.Proofs.B"] = ["EthLib.Execution.Exports.A"]
+        tree["EthLib.Execution.Exports.B"] = ["EthLib.Execution.A", "EthLib.Execution.Proofs.B"]
+        tree["EthLib.Execution.Exports.A"] = ["EthLib.Execution.A", "EthLib.Execution.Proofs.A"]
+        self.assert_fails(
+            tree, "EthLib/Execution/Exports/A.lean: imports EthLib.Execution.Proofs.A"
+        )
+
     def test_export_imports_a_property_inside_ethlib(self):
         tree = with_imports("EthLib.Exports", "EthLib.Execution.Exports.Proofs.A")
         tree["EthLib.Execution.Exports.Proofs.A"] = ["EthLib.Execution.Exports.A"]
