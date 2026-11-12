@@ -41,11 +41,13 @@ It also asks the zero root before the root of slot zero.
 
 Each justified block is then in the chain of the block of its recent epoch.
 
-Each vote that a block step casts comes from an attestation of the block.
+Each vote that a block step casts is in an indexed attestation with the data of the vote.
 
-The block checked the indexed form of that attestation, and the check accepted.
+The block checked it on a state inside the block, and the check accepted.
 
 That state and the place of the check in the block are also given.
+
+The place is an attestation or an attester slashing of the block.
 
 It holds for any signature checks, with more than `MIN_SEED_LOOKAHEAD + 2` epochs of mixes.
 
@@ -107,9 +109,11 @@ private theorem processAttestation_checked {fork : Fork} {state after : BeaconSt
     simp only [altair, ↓reduceIte]
     exact ⟨indexed, indexedOk, validOk⟩
 
-/-- Where the attestations of a block check an indexed attestation, and on which state.
+/-- Where the operations of a block check an indexed attestation, and on which state.
 
 The operations start at the given state, and the attestations read the given parent slot.
+
+An attester slashing checks both of its attestations on the state before it.
 
 From Altair an attestation is checked on the state before it.
 
@@ -119,6 +123,16 @@ That state is the one that the attestation returns. -/
 inductive AttestationSite (config : Config) (checks : SignatureChecks) {fork : Fork}
     (input : BeaconState preset fork) (body : BeaconBlockBody preset fork) (parentSlot : Slot) :
     BeaconState preset fork → IndexedAttestation preset fork → Prop where
+  | slashing {proposersDone checked next : BeaconState preset fork}
+      {pre post : List (AttesterSlashing preset fork)} {slashing : AttesterSlashing preset fork}
+      {indexed : IndexedAttestation preset fork}
+      (split : body.attesterSlashings.data.toList = pre ++ slashing :: post)
+      (proposers : body.proposerSlashings.data.toList.foldlM
+        (processProposerSlashing config checks) input = .ok proposersDone)
+      (earlier : pre.foldlM (processAttesterSlashing config checks) proposersDone = .ok checked)
+      (processed : processAttesterSlashing config checks checked slashing = .ok next)
+      (which : indexed = slashing.attestation1 ∨ indexed = slashing.attestation2) :
+      AttestationSite config checks input body parentSlot checked indexed
   | attestation {proposersDone slashingsDone mid next : BeaconState preset fork}
       {pre post : List (Attestation preset fork)} {attestation : Attestation preset fork}
       {indexed : IndexedAttestation preset fork}
@@ -135,13 +149,38 @@ inductive AttestationSite (config : Config) (checks : SignatureChecks) {fork : F
       AttestationSite config checks input body parentSlot
         (if .altair ≤ fork then mid else next) indexed
 
-/-- A vote of a block that applies comes from an attestation whose indexed form the block checked.
+/-- The state where a block checks an indexed attestation follows from the input of its operations.
+
+The steps between them are slashings and attestations, so they form a frame. -/
+theorem AttestationSite.frame {fork : Fork} {input checked : BeaconState preset fork}
+    {body : BeaconBlockBody preset fork} {parentSlot : Slot}
+    {indexed : IndexedAttestation preset fork}
+    (site : AttestationSite config checks input body parentSlot checked indexed) :
+    Frame input checked := by
+  cases site with
+  | slashing _ proposers earlier =>
+    exact (BlockFrame.foldlM (fun _ _ _ ok => frame_processProposerSlashing ok)
+      proposers).toFrame.trans
+        (BlockFrame.foldlM (fun _ _ _ ok => frame_processAttesterSlashing ok) earlier).toFrame
+  | attestation _ proposers slashings earlier processed =>
+    have mid : Frame input _ :=
+      (BlockFrame.foldlM (fun _ _ _ ok => frame_processProposerSlashing ok)
+        proposers).toFrame.trans <|
+      (BlockFrame.foldlM (fun _ _ _ ok => frame_processAttesterSlashing ok)
+        slashings).toFrame.trans
+          (Frame.foldlM (fun _ _ _ ok => frame_processAttestation ok) earlier)
+    -- Before Altair the check runs after the attestation, on the state that it returns.
+    split
+    · exact mid
+    · exact mid.trans (frame_processAttestation processed)
+
+/-- A vote of a block that applies is in an indexed attestation that the block checked.
 
 The voter is among its attesters, and its data is the data of the vote.
 
 The check ran on a state inside the block, and it accepted.
 
-The result also says where in the block the check ran.
+The result also says where in the block the check ran: at an attestation or an attester slashing.
 
 It holds for any signature checks.
 
@@ -197,7 +236,7 @@ theorem blockVotes_verified
     simpa using iMem
   · rw [indexedData, ← dataEq]
 
-/-- A vote that a block step casts comes from an attestation whose indexed form the block checked.
+/-- A vote that a block step casts is in an indexed attestation that the block checked.
 
 The step applies a signed block, and the check ran inside that block and accepted.
 
@@ -331,6 +370,73 @@ theorem advanceSlotAcross_slot_ne {forked after : ForkedBeaconState preset}
   rw [← processUpgrades_slot upgraded, same] at next
   omega
 
+/-- A slot step keeps the target flags and the pending attestations backed by a set of votes.
+
+An epoch must have at least one slot, and the buffer of roots must cover two epochs.
+
+The seed lookahead must leave room in the buffer of RANDAO mixes.
+
+In the first two epochs the two justified checkpoints of the state must be equal. -/
+theorem votedParticipation_advanceSlotAcross (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
+    (window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
+    (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    {forked after : ForkedBeaconState preset} (early : JustifiedEarly forked.state)
+    (flagsVoted : TargetFlagsVoted attested forked.state)
+    (pendingVoted : PendingVoted attested forked.state)
+    (computed : advanceSlotAcross config checks forked = .ok after) :
+    TargetFlagsVoted attested after.state ∧ PendingVoted attested after.state := by
+  obtain ⟨advanced, advancedOk, upgraded⟩ := bind_ok_iff.mp computed
+  have pending : PendingVoted attested advanced := by
+    by_cases before : forked.fork < .altair
+    · exact pendingVoted.of_advanceSlot before apart early advancedOk
+    · exact fun before' => absurd before' before
+  have flags := flagsVoted.of_advanceSlot positive window early advancedOk
+  refine ⟨?_, pending.of_processUpgrades upgraded⟩
+  -- Before Altair the upgrade builds the target flags from the pending attestations.
+  by_cases altair : .altair ≤ forked.fork
+  · exact TargetFlagsVoted.of_processUpgrades (forked := ⟨forked.fork, advanced⟩) altair
+      flags upgraded
+  · exact TargetFlagsVoted.of_processUpgrades_of_lt_altair (forked := ⟨forked.fork, advanced⟩)
+      (Nat.lt_of_not_le altair) pending upgraded
+
+/-- A block keeps the target flags and the pending attestations backed by a set of votes.
+
+The set must hold the votes of the block.
+
+The seed lookahead must leave room in the buffer of RANDAO mixes. -/
+theorem votedParticipation_processBlock
+    (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    {fork : Fork} {engine : ExecutionEngine preset fork} {state after : BeaconState preset fork}
+    {block : BeaconBlock preset fork}
+    (flagsVoted : TargetFlagsVoted attested state) (pendingVoted : PendingVoted attested state)
+    (sub : blockVotes state block ⊆ attested)
+    (computed : processBlock config checks engine state block = .ok after) :
+    TargetFlagsVoted attested after ∧ PendingVoted attested after :=
+  ⟨(flagsVoted.of_voteFrame (voteFrame_processBlock apart computed)).mono
+      (Set.union_subset subset_rfl sub),
+    fun before => (PendingVoted.of_processBlock before apart pendingVoted computed).mono
+      (Set.union_subset subset_rfl sub) before⟩
+
+/-- One step of a chain keeps the state invariant and the justified checkpoints apart.
+
+In the first two epochs the two justified checkpoints are equal.
+
+Later the previous justified checkpoint is before the previous epoch. -/
+theorem invariant_justified_of_chainStep {forked after : ForkedBeaconState preset}
+    (holds : Invariant forked.state) (early : JustifiedEarly forked.state)
+    (separated : JustifiedSeparated forked.state) (step : ChainStep config checks forked after) :
+    Invariant after.state ∧ JustifiedEarly after.state ∧ JustifiedSeparated after.state := by
+  cases step with
+  | slot computed =>
+    obtain ⟨advanced, advancedOk, upgraded⟩ := bind_ok_iff.mp computed
+    exact ⟨(advanceSlotAcross_invariant holds computed).1,
+      (early.of_advanceSlot advancedOk).of_processUpgrades upgraded,
+      (separated.of_advanceSlot early holds.settled advancedOk).of_processUpgrades upgraded⟩
+  | block engine signed _ applied =>
+    obtain ⟨-, blockOk, -⟩ := applySignedBlock_ok applied
+    have frame := frame_processBlock blockOk
+    exact ⟨frame.invariant holds, early.of_frame frame, separated.of_frame frame⟩
+
 /-- One step of a chain keeps the properties of its states.
 
 An epoch must have at least one slot, and the buffer of roots must cover two epochs.
@@ -344,17 +450,15 @@ theorem SlackChainInvariant.of_chainStep (positive : 0 < preset.SLOTS_PER_EPOCH.
     (hypotheses : SlackStepHypotheses config checks V U W attested block forked after)
     (step : ChainStep config checks forked after) :
     SlackChainInvariant V U W genesis attested block after := by
+  obtain ⟨invariant, early, separated⟩ :=
+    invariant_justified_of_chainStep holds.invariant holds.early holds.separated step
   cases step with
   | slot computed =>
     obtain ⟨advanced, advancedOk, upgraded⟩ := bind_ok_iff.mp computed
-    have early := holds.early.of_advanceSlot advancedOk
     have moved := advanceSlotAcross_slot_ne computed
     obtain ⟨previousKept, currentKept⟩ := processUpgrades_justified upgraded
-    have pending : PendingVoted attested advanced := by
-      by_cases before : forked.fork < .altair
-      · exact holds.pendingVoted.of_advanceSlot before apart holds.early advancedOk
-      · exact fun before' => absurd before' before
-    have flags := holds.flagsVoted.of_advanceSlot positive window holds.early advancedOk
+    obtain ⟨flags, pending⟩ := votedParticipation_advanceSlotAcross positive window apart
+      holds.early holds.flagsVoted holds.pendingVoted computed
     have slack := advanceSlot_slackJustifiedCheckpoints window holds.flagsVoted
       holds.pendingVoted (hypotheses.large moved) block subset_rfl
       holds.invariant.settled
@@ -366,30 +470,19 @@ theorem SlackChainInvariant.of_chainStep (positive : 0 < preset.SLOTS_PER_EPOCH.
         · rw [recent]
           exact hypotheses.sets moved boundary true)
       (fun _ => holds.roots.le_of_getBlockRoot) holds.slack advancedOk
-    refine ⟨(advanceSlotAcross_invariant holds.invariant computed).1,
-      early.of_processUpgrades upgraded,
-      (holds.separated.of_advanceSlot holds.early holds.invariant.settled
-        advancedOk).of_processUpgrades upgraded, ?_, pending.of_processUpgrades upgraded,
+    refine ⟨invariant, early, separated, flags, pending,
       RootsAbove.of_chainStep positive window holds.roots hypotheses.links (.slot computed), ?_⟩
-    · by_cases altair : .altair ≤ forked.fork
-      · exact TargetFlagsVoted.of_processUpgrades (forked := ⟨forked.fork, advanced⟩) altair
-          flags upgraded
-      · exact TargetFlagsVoted.of_processUpgrades_of_lt_altair (forked := ⟨forked.fork, advanced⟩)
-          (Nat.lt_of_not_le altair) pending upgraded
     · unfold SlackJustifiedCheckpoints
       rw [previousKept, currentKept]
       exact slack
   | @block _ pre _ engine signed validateResult applied =>
     obtain ⟨-, blockOk, -⟩ := applySignedBlock_ok applied
     have frame := frame_processBlock blockOk
-    have voteFrame := voteFrame_processBlock apart blockOk
     have sub : blockVotes pre signed.message ⊆ attested := fun vote member =>
       hypotheses.applied ⟨engine, signed, validateResult, _, rfl, applied, member⟩
-    refine ⟨frame.invariant holds.invariant, holds.early.of_frame frame,
-      holds.separated.of_frame frame,
-      (holds.flagsVoted.of_voteFrame voteFrame).mono (Set.union_subset subset_rfl sub),
-      fun before => (PendingVoted.of_processBlock before apart holds.pendingVoted blockOk).mono
-        (Set.union_subset subset_rfl sub) before,
+    obtain ⟨flags, pending⟩ :=
+      votedParticipation_processBlock apart holds.flagsVoted holds.pendingVoted sub blockOk
+    refine ⟨invariant, early, separated, flags, pending,
       RootsAbove.of_chainStep positive window holds.roots hypotheses.links
         (.block engine signed validateResult applied), ?_⟩
     unfold SlackJustifiedCheckpoints

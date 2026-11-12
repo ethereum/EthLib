@@ -303,6 +303,90 @@ theorem processJustificationAndFinalization_early (before : fork < .altair)
   have notAltair : ¬Fork.altair ≤ fork := fun le => Nat.lt_irrefl _ (Nat.lt_of_lt_of_le before le)
   simp [processJustificationAndFinalization, notAltair, early, pure, Except.pure]
 
+/-- The indices that the justification test of an epoch counts for its target.
+
+From Altair they are the unslashed validators with the timely target flag.
+
+Before Altair they are the unslashed attesters of the matching target attestations. -/
+def targetIndices (state : BeaconState preset fork) (epoch : Epoch) :
+    Except TransitionError (List ValidatorIndex) := do
+  if altair : .altair ≤ fork then
+    liftAccessor (getUnslashedParticipatingIndices state altair TIMELY_TARGET_FLAG_INDEX epoch)
+  else
+    let pending ← getMatchingTargetAttestations state (Nat.lt_of_not_le altair) epoch
+    liftAccessor (getUnslashedAttestingIndices state pending)
+
+/-- The target indices come from the target flags from Altair.
+
+Before Altair they come from the unslashed attesters of the matching target attestations. -/
+theorem targetIndices_ok {epoch : Epoch} {indices : List ValidatorIndex}
+    (computed : targetIndices state epoch = .ok indices) :
+    (∃ altair : .altair ≤ fork,
+      getUnslashedParticipatingIndices state altair TIMELY_TARGET_FLAG_INDEX epoch = .ok indices) ∨
+      ∃ (before : fork < .altair) (pending : _),
+        getMatchingTargetAttestations state before epoch = .ok pending ∧
+        getUnslashedAttestingIndices state pending = .ok indices := by
+  unfold targetIndices at computed
+  split at computed
+  · exact .inl ⟨‹_›, liftAccessor_ok.mp computed⟩
+  · simp only [bind_ok_iff, liftAccessor_ok] at computed
+    obtain ⟨pending, matching, indicesOk⟩ := computed
+    exact .inr ⟨_, pending, matching, indicesOk⟩
+
+/-- What a successful justification and finalization read, and what it did.
+
+In the first two epochs it changed nothing.
+
+Later it read the target indices of the previous and the current epoch and their balances.
+
+It also read the total active balance, then weighed the three balances. -/
+theorem processJustificationAndFinalization_reads
+    (computed : processJustificationAndFinalization state = .ok after) :
+    (getCurrentEpoch state ≤ GENESIS_EPOCH + 1 ∧ after = state) ∨
+      GENESIS_EPOCH + 1 < getCurrentEpoch state ∧
+      ∃ (previous current : List ValidatorIndex) (total previousBalance currentBalance : Gwei),
+        targetIndices state (getPreviousEpoch state) = .ok previous ∧
+        targetIndices state (getCurrentEpoch state) = .ok current ∧
+        getTotalActiveBalance state = .ok total ∧
+        getTotalBalance state previous = .ok previousBalance ∧
+        getTotalBalance state current = .ok currentBalance ∧
+        weighJustificationAndFinalization state total previousBalance currentBalance =
+          .ok after := by
+  unfold processJustificationAndFinalization at computed
+  split at computed
+  · rename_i altair
+    unfold processJustificationAndFinalizationAltair at computed
+    split at computed
+    · rename_i early
+      simp only [pure, Except.pure, Except.ok.injEq] at computed
+      exact .inl ⟨early, computed.symm⟩
+    · rename_i late
+      simp only [bind_ok_iff, liftAccessor_ok] at computed
+      obtain ⟨previous, previousOk, current, currentOk, total, totalOk, previousBalance,
+        previousBalanceOk, currentBalance, currentBalanceOk, weighed⟩ := computed
+      refine .inr ⟨UInt64.not_le.mp late, previous, current, total, previousBalance,
+        currentBalance, ?_, ?_, totalOk, previousBalanceOk, currentBalanceOk, weighed⟩
+      · simpa [targetIndices, altair, liftAccessor_ok] using previousOk
+      · simpa [targetIndices, altair, liftAccessor_ok] using currentOk
+  · rename_i notAltair
+    split at computed
+    · rename_i early
+      simp only [pure, Except.pure, Except.ok.injEq] at computed
+      exact .inl ⟨early, computed.symm⟩
+    · rename_i late
+      -- Before Altair the attesting balance reads the unslashed attesters, then their balance.
+      simp only [bind_ok_iff, liftAccessor_ok, getAttestingBalance] at computed
+      obtain ⟨previous, previousOk, current, currentOk, total, totalOk, previousBalance,
+        ⟨previousIndices, previousIndicesOk, previousBalanceOk⟩, currentBalance,
+        ⟨currentIndices, currentIndicesOk, currentBalanceOk⟩, weighed⟩ := computed
+      refine .inr ⟨UInt64.not_le.mp late, previousIndices, currentIndices, total,
+        previousBalance, currentBalance, ?_, ?_, totalOk, previousBalanceOk, currentBalanceOk,
+        weighed⟩
+      · simp only [targetIndices, notAltair, ↓reduceDIte, bind_ok_iff, liftAccessor_ok]
+        exact ⟨_, previousOk, previousIndicesOk⟩
+      · simp only [targetIndices, notAltair, ↓reduceDIte, bind_ok_iff, liftAccessor_ok]
+        exact ⟨_, currentOk, currentIndicesOk⟩
+
 /-- What a successful justification and finalization did.
 
 It changed nothing in the first two epochs, and else weighed some target balances. -/
@@ -310,21 +394,10 @@ theorem processJustificationAndFinalization_ok
     (computed : processJustificationAndFinalization state = .ok after) :
     after = state ∨ ∃ total previous current,
       weighJustificationAndFinalization state total previous current = .ok after := by
-  unfold processJustificationAndFinalization at computed
-  split at computed
-  · unfold processJustificationAndFinalizationAltair at computed
-    split at computed
-    · simp only [pure, Except.pure, Except.ok.injEq] at computed
-      exact .inl computed.symm
-    · simp only [bind_ok_iff, liftAccessor_ok] at computed
-      obtain ⟨_, _, _, _, total, _, previous, _, current, _, weighed⟩ := computed
-      exact .inr ⟨total, previous, current, weighed⟩
-  split at computed
-  · simp only [pure, Except.pure, Except.ok.injEq] at computed
-    exact .inl computed.symm
-  · simp only [bind_ok_iff] at computed
-    obtain ⟨_, _, _, _, total, _, previous, _, current, _, weighed⟩ := computed
-    exact .inr ⟨total, previous, current, weighed⟩
+  rcases processJustificationAndFinalization_reads computed with ⟨-, same⟩ |
+    ⟨-, -, -, total, previous, current, -, -, -, -, -, weighed⟩
+  · exact .inl same
+  · exact .inr ⟨total, previous, current, weighed⟩
 
 /-- Justification and finalization keep the slot. -/
 theorem processJustificationAndFinalization_slot

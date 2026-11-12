@@ -132,6 +132,21 @@ theorem recordBidPayment_of_pos {bid : ExecutionPayloadBid preset fork}
   cases placed
   exact ⟨proposer, _, found, rfl, (Except.ok.inj kept).symm⟩
 
+/-- A valid bid changes only the pending payments of builders, and becomes the latest bid. -/
+theorem processExecutionPayloadBid_eq {signed : SignedExecutionPayloadBid preset fork}
+    (computed : processExecutionPayloadBid config checks state gloas signed = .ok after) :
+    ∃ payments, after = { state with
+      builderPendingPayments := payments
+      latestExecutionPayloadBid := fun _ => signed.message } := by
+  obtain ⟨_, recorded, recordedOk, rfl⟩ := processExecutionPayloadBid_ok computed
+  by_cases paid : 0 < signed.message.value
+  · obtain ⟨_, _, _, _, rfl⟩ := recordBidPayment_of_pos paid recordedOk
+    exact ⟨_, rfl⟩
+  · simp only [recordBidPayment, paid, ↓reduceIte, pure, Except.pure, Except.ok.injEq]
+      at recordedOk
+    subst recordedOk
+    exact ⟨_, rfl⟩
+
 /-- The payment of a bid pays its value, from its builder, to the address it names. -/
 theorem bidPayment_withdrawal (bid : ExecutionPayloadBid preset fork) (proposer : ValidatorIndex) :
     (bidPayment bid proposer).withdrawal = ⟨bid.feeRecipient, bid.value, bid.builderIndex⟩ ∧

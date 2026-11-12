@@ -536,6 +536,23 @@ Not yet released.
   It applies `OperationsInput.step_of` to it with the same step arguments.
   The block then continues with `processOperations`, as before.
   No C export or Python function changes.
+- A validator write in the epoch laws must keep the slashed flag ([#1421](https://github.com/ethereum/EthLib/issues/1421)).
+  No C export or Python function changes.
+  In Lean, the `setValidatorAt` field of `EpochFrameLaws` takes a proof of `validator.slashed = old.slashed`, after the proof of the key.
+  `EpochFrameLaws.setValidator`, `EpochFrameLaws.setValidator_of_sameBalance` and `EpochFrameLaws.setValidatorAt_of_sameBalance` take the same proof, after the proof of the key.
+  A caller passes `rfl` when the write leaves the flag alone, and an instance of the laws takes one more argument.
+- The place where a block checks an indexed attestation now also covers the two attestations of an attester slashing ([#1421](https://github.com/ethereum/EthLib/issues/1421)).
+  No C export or Python function changes.
+  In Lean, `AttestationSite` gains the constructor `slashing`, and a proof that eliminates an `AttestationSite` handles that case too.
+  `blockVotes_verified` and `blockStepVotes_verified` keep their statements, so the site that they give may now be either case.
+  `AttestationSite.frame` gives the frame from the input of the operations to the state of the check, in both cases.
+- The decompositions of a block and of its operations now name the steps after the attestations ([#1421](https://github.com/ethereum/EthLib/issues/1421)).
+  No C export or Python function changes.
+  In Lean, `processBlock_operationsInput` ends with a new conjunct for the step after the operations.
+  From Altair the sync aggregate takes the state after the operations to the state after the block, and before Altair the two are equal.
+  A caller that destructures its result adds one pattern at the end.
+  The new `processOperations_folds_of` gives the three folds of the operations and a step of any relation across the operations after them.
+  `processOperations_folds` is its case for `BlockFrame`, with the same statement.
 
 ## 0.3.0
 

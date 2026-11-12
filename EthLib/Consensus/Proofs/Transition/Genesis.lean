@@ -41,26 +41,44 @@ theorem emptyGenesisState_invariant (before : fork < .altair) (genesisTime : UIn
   settled := UInt64.zero_le
   aligned _ _ member := by simp [emptyGenesisState] at member
 
-theorem frame_genesisDeposit {before : fork < .hegota} {leaves : Array DepositData}
-    {entry : Deposit × Nat}
-    (computed : genesisDeposit config checks before leaves state entry = .ok after) :
-    Frame state after := by
-  simp only [genesisDeposit, bind_ok_iff] at computed
+theorem EpochFrameLaws.genesisDeposit
+    {R : BeaconState preset fork → BeaconState preset fork → Prop} (laws : EpochFrameLaws R)
+    (keep : ∀ {state after : BeaconState preset fork}, BlockFrame state after →
+      after.validators = state.validators → R state after)
+    {before : fork < .hegota} {leaves : Array DepositData} {entry : Deposit × Nat}
+    (computed : Consensus.genesisDeposit config checks before leaves state entry = .ok after) :
+    R state after := by
+  simp only [Consensus.genesisDeposit, bind_ok_iff] at computed
   obtain ⟨depositRoot, _, deposited⟩ := computed
-  exact (Frame.of_validators (state := state)
+  exact laws.trans (keep
     (after := { state with eth1Data := fun _ => { state.eth1Data before with depositRoot } })
-    ⟨rfl, rfl⟩ rfl rfl rfl rfl rfl rfl).trans (frame_processDeposit deposited).toFrame
+    (BlockFrame.of_validators ⟨rfl, rfl⟩) rfl) (laws.processDeposit keep deposited)
 
-/-- Setting the effective balance and the activation at genesis changes no exit. -/
-theorem frame_activateAtGenesis {index : Nat}
-    (computed : activateAtGenesis state index = .ok after) : Frame state after := by
-  simp only [activateAtGenesis, bind_ok_iff, liftAccessor_ok] at computed
+/-- Setting the effective balance and the activation at genesis keeps the key and the flag.
+
+It changes no exit, and the effective balance is a whole number of increments. -/
+theorem EpochFrameLaws.activateAtGenesis
+    {R : BeaconState preset fork → BeaconState preset fork → Prop} (laws : EpochFrameLaws R)
+    {index : Nat} (computed : Consensus.activateAtGenesis state index = .ok after) :
+    R state after := by
+  simp only [Consensus.activateAtGenesis, bind_ok_iff, liftAccessor_ok] at computed
   obtain ⟨validator, found, _, _, set⟩ := computed
-  refine (frame_setValidatorAt_of_whole set found (by split <;> rfl) (fun ordered => ?_)
-    fun maxAligned _ => ?_).toFrame
+  refine laws.setValidatorAt set found (by split <;> rfl) (by split <;> rfl) (fun ordered => ?_)
+    fun maxAligned _ => ?_
   · have le := ordered validator (mem_of_getValidatorAt found)
     split <;> exact le
   · split <;> exact min_sub_mod_mod_self _ maxAligned.1
+
+theorem frame_genesisDeposit {before : fork < .hegota} {leaves : Array DepositData}
+    {entry : Deposit × Nat}
+    (computed : genesisDeposit config checks before leaves state entry = .ok after) :
+    Frame state after :=
+  (blockEpochFrameLaws.genesisDeposit (fun frame _ => frame) computed).toFrame
+
+/-- Setting the effective balance and the activation at genesis changes no exit. -/
+theorem frame_activateAtGenesis {index : Nat}
+    (computed : activateAtGenesis state index = .ok after) : Frame state after :=
+  (mutatorEpochFrameLaws.activateAtGenesis computed).toFrame
 
 /-- A new genesis validators root keeps the invariant.
 

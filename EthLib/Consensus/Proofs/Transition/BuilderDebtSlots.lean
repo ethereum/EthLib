@@ -106,7 +106,7 @@ private theorem builderEpochFrameLaws : EpochFrameLaws (@BuilderFrame preset for
     where
   refl := BuilderFrame.refl
   trans := BuilderFrame.trans
-  setValidatorAt := fun set _ _ _ _ => builderFrame_setValidatorAt set
+  setValidatorAt := fun set _ _ _ _ _ => builderFrame_setValidatorAt set
   increaseBalance := builderFrame_increaseBalance
   decreaseBalance := builderFrame_decreaseBalance
   initiateValidatorExit := builderFrame_initiateValidatorExit
