@@ -9,6 +9,12 @@ Not yet released.
 
 ### Changes that break callers
 
+- `verify_kzg_proof` checks its inputs in the order of EIP-4844: the commitment, `z`, `y`, then the proof.
+  When more than one input is invalid, the first in that order gives the error.
+  Before, it checked the proof second, so an input with an invalid `z` and an invalid proof raised the error of the proof.
+  It now raises the error of `z`.
+  The verdicts are unchanged, and so are the errors of an input with at most one invalid argument.
+
 - Along a chain from genesis, the public keys of the validators stay a prefix and stay distinct ([#1421](https://github.com/ethereum/EthLib/issues/1421)).
   No C export or Python function changes.
   In Lean, `Frame` and `UpgradeFrame` gain the fields `pubkeysPrefix` and `pubkeysDistinct`.
