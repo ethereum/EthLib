@@ -181,17 +181,30 @@ When a scheme needs a wire encoding, such as the SSZ encoding of a signature, th
 
 Execution and Consensus sit side by side and never import each other.
 The consensus layer needs one fact from the execution layer: whether an execution payload is valid.
-So the execution engine that answers it is a parameter of the consensus state transition, not an import.
-The consensus state transition can then be proved about with any engine, and instantiated with the Execution layer's.
+So the execution engine that answers it is a parameter, never an import, of each consensus function that asks.
+From Bellatrix to Fulu, `processExecutionPayload` asks, and from Gloas, `verifyExecutionPayloadEnvelope` does.
+Each such function can then be proved about with any engine, and instantiated with the Engine layer's.
 
 Some definitions need the types of both layers.
 The execution payload of a beacon block stands for an execution block, and the conversion between them reads both.
 Such a definition lives in the Engine layer, the only layer that imports both Execution and Consensus.
 
+The engine shows the general rule for an operation that a module needs from a layer it cannot import.
+The module declares the operations it needs, in its own types, and takes them as a resource, as [Shared types](#shared-types) describes.
+By that rule, their production instance lives in Engine, the only layer that imports both sides.
+So `ExecutionEngine` in `EthLib/Consensus/Transition/Execution.lean` declares the checks of a payload, and `executionEngine` in `EthLib/Engine/ExecutionEngine.lean` builds them from the Execution layer.
+A module imports an operation of a lower layer directly.
+When a test must replace such an operation, the function takes it as a resource too, and the test passes a test stub.
+`SignatureChecks` is one example: the stub `SignatureChecks.acceptAll` replaces the BLS checks for the consensus test vectors that carry placeholder signatures.
+
 The Networking layer holds formats that need no chain state.
 A gossip validation rule that reads the beacon state, such as the checks on a `beacon_block` message, belongs to Consensus, which imports Networking.
 In the same way, the eth wire protocol of devp2p carries blocks, transactions and receipts.
 So its messages live in `EthLib/Execution/Network/`, which has those types and imports Networking.
+
+A protocol layer owns the tables that give bytes their meaning.
+For example, Consensus gives the SSZ type of each gossip topic and of each request, in `EthLib/Consensus/Gossip/Bounds.lean` and `EthLib/Consensus/ReqResp/Bounds.lean`.
+Networking owns the framing, and applies the length bounds that its caller passes, as `decodePayload` does.
 
 ## Rules
 
@@ -283,6 +296,37 @@ So the types that cross a module boundary are fixed here, and `EthLib/Base/` def
   The protocol computes gas, and the EVM takes the meter as a class so that one definition runs with the meter of each fork.
   The two meters, `Nat` and `StateGasMeter`, and the class of their laws, `LawfulGasMeter`, stay in the specification library.
   The definition of a message call, `processMessage`, needs those laws to show that execution ends.
+
+## Boundaries
+
+A boundary is a resource that is a record of operations, declared by one module and provided by another, such as `ExecutionEngine`.
+[Shared types](#shared-types) says where its production instance, its laws and its test stubs live.
+The shared types make the two sides fit, but they do not make them compose.
+Each side must also know what the other guarantees, what it assumes, and what happens when an operation fails.
+So a boundary also has a contract card: a short list of facts in the doc comment of the module that declares the operations.
+
+New boundaries follow this rule.
+Existing ones, such as `ExecutionEngine`, `SignatureChecks` and `BlockSources`, do not yet carry cards.
+
+The conversions between Lean values and Python values, `ToPy` and `FromPy`, are not boundaries.
+No specification takes them as an argument, so their laws `LawfulPy` and `LawfulPyItems` stay with them in the library `Exports`.
+
+The card has these fields, in this order:
+
+```text
+Boundary     which layer uses the operations, which provides them, and where the production instance lives
+Owns         each type and state that crosses the boundary, with the layer that owns it
+Operations   the Lean names of the operations, and of the test stubs
+Laws         the Prop of laws, and the theorem or the assumption in SOUNDNESS.md that covers the production instance
+Failure      the error type, what each outcome means, and what the user must do on each
+Guarantees   what success implies, and what it does not
+Assumes      what each side assumes of the other
+Readings     the reading taken where two sources disagree, or where a source is silent
+```
+
+A field with nothing to record says "none", so a reader can tell an empty field from a forgotten one.
+The card holds the coarse facts that the types do not show.
+It names the operations and the laws, and does not restate their definitions.
 
 ## Forks
 
