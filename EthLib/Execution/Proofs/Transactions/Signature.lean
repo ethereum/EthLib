@@ -461,9 +461,9 @@ private theorem hashItems_collision {items items' : List Item} {hash : Hash32}
   rw [hb] at hb'
   exact hne (by injection hb' with hb'; injection hb')
 
-/-- A typed hash equal to the hash of a list names a collision of Keccak-256.
+/-- A typed hash with a type below `0xc0` equal to the hash of a list names a Keccak-256 collision.
 
-When the type byte is below `0xc0`, the inputs differ, since an encoded list starts at `0xc0`.
+The inputs differ, since an encoded list starts at `0xc0`.
 
 So a typed hash and a legacy hash differ, unless Keccak-256 collides. -/
 theorem hashTypedItems_eq_hashItems_collision {type : UInt8} (ht : type < 0xc0)
