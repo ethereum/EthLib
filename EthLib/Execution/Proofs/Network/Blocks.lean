@@ -20,7 +20,7 @@ It is not longer than asked, and its first header, if any, is the start block.
 
 Each header follows the one before it.
 
-When the request skips no block, the parent hash of each later block is the hash of the earlier one.
+So when the request skips no block, each later block names the earlier one by its hash.
 -/
 
 @[expose] public section
@@ -268,9 +268,9 @@ theorem checkHeaders_eq_ok_iff {r : HeaderRequest} {headers : List Item} :
 
 /-- In an answer that passes the check of a request that skips no block, neighbours are linked.
 
-The parent hash of each later block is the hash of the earlier one.
-
 Take two neighbouring headers.
+
+The parent hash of the later block is the hash of the earlier one.
 
 The later block is the second, or the first when the request is reversed. -/
 theorem headerParent_of_checkHeaders {r : HeaderRequest} {headers : List Item}
