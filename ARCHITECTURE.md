@@ -116,11 +116,10 @@ Its proof unfolds the definitions, often with `rfl`.
 A module is a model because of what it says, not because of what it imports.
 A module that imports VCVio is a property when its theorems are about the specification.
 
-Each kind depends only on the kinds before it, and refinement modules are the one exception.
+Each kind imports directly only the kinds before it, and refinement modules are the one exception.
 A specification never imports a property or a model.
 A property never imports a model directly, unless it is a refinement module.
-So a property module that imports a model, but neither states nor uses a refinement theorem, breaks the rule.
-The rule applies to direct imports only.
+So a property module that imports a model directly, but neither states nor uses a refinement theorem, breaks the rule.
 A property may import a refinement module, and so reach a model through it, without being a refinement module itself.
 No file lists the refinement modules yet, and no check enforces the rule.
 
@@ -415,7 +414,7 @@ So the code that clients and the bindings run depends on no other library.
 Lake still downloads Mathlib and VCVio for a project that requires EthLib, because a requirement holds for the whole package.
 
 A model is a module under `Proofs/`, like a property.
-The rule that only a refinement module imports a model is a rule between modules, not between packages.
+The rule that, among the properties, only a refinement module imports a model directly is a rule between modules, not between packages.
 
 ## Where a new module goes
 

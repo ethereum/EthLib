@@ -68,7 +68,7 @@ A new domain with exports adds its export root to the `Exports` library.
 
 These three libraries form one package, `EthLib`.
 A property or a model may import Mathlib, Batteries or VCVio, and it goes in `EthLib/<Domain>/Proofs/<Module>/` like any other property.
-Among the properties, only a refinement module imports a model, as [`ARCHITECTURE.md`](ARCHITECTURE.md#three-kinds-of-content) explains.
+Among the properties, only a refinement module imports a model directly, as [`ARCHITECTURE.md`](ARCHITECTURE.md#three-kinds-of-content) explains.
 The specification and the exports import nothing beyond the Lean toolchain.
 [`ARCHITECTURE.md`](ARCHITECTURE.md#packages) describes the package.
 
