@@ -20,6 +20,10 @@ The block handler uses this to show which parent a block it accepts names.
 
 The block, and from Gloas its bid, names that root as its parent.
 
+A root that is readable after one slot was readable before it, or is the root of the new header.
+
+The new header is the one before it, with its state root filled by the root of the state before.
+
 From Gloas the slots and the epoch transition also keep the latest block hash and the latest bid.
 
 The slots and the transition keep the genesis time.
@@ -63,6 +67,15 @@ theorem advanceSlot_cachedRoots
     subst epochedOk
     exact ⟨rfl, rfl, rfl, rfl, rfl, sum⟩
 
+/-- A slot below another, by less than the length of the buffer of roots, has another position. -/
+private theorem slot_mod_ne {low high : Slot} (lt : low.toNat < high.toNat)
+    (close : high.toNat - low.toNat < preset.SLOTS_PER_HISTORICAL_ROOT.toNat) :
+    high % preset.SLOTS_PER_HISTORICAL_ROOT ≠ low % preset.SLOTS_PER_HISTORICAL_ROOT := by
+  intro same
+  have same' := congrArg UInt64.toNat same
+  rw [UInt64.toNat_mod, UInt64.toNat_mod] at same'
+  exact Nat.mod_ne_of_sub_lt lt close same'
+
 /-- One slot keeps the root recorded at a slot while that slot stays in the buffer of roots. -/
 theorem getBlockRootAtSlot_advanceSlot {slot : Slot} {root : Root}
     (computed : advanceSlot config checks state = .ok after)
@@ -74,11 +87,7 @@ theorem getBlockRootAtSlot_advanceSlot {slot : Slot} {root : Root}
   obtain ⟨before, readOk⟩ := getBlockRootAtSlot_read read
   have before' := UInt64.lt_iff_toNat_lt.mp before
   have other : state.slot % preset.SLOTS_PER_HISTORICAL_ROOT ≠
-      slot % preset.SLOTS_PER_HISTORICAL_ROOT := by
-    intro same
-    have same' := congrArg UInt64.toNat same
-    rw [UInt64.toNat_mod, UInt64.toNat_mod] at same'
-    exact Nat.mod_ne_of_sub_lt before' (by omega) same'
+      slot % preset.SLOTS_PER_HISTORICAL_ROOT := slot_mod_ne before' (by omega)
   unfold getBlockRootAtSlot at read
   simp only [before, ↓reduceIte, bind_ok_iff, liftArith, mapError_ok_iff,
     addChecked_ok_iff] at read
@@ -91,6 +100,53 @@ theorem getBlockRootAtSlot_advanceSlot {slot : Slot} {root : Root}
   simp only [within, ↓reduceIte, roots]
   rw [readCircular_writeCircular_of_ne written other]
   exact readOk
+
+/-- After one slot, the latest block header is the one before, with its state root filled if zero.
+
+The root that fills it is the root of the state before the slot. -/
+theorem advanceSlot_latestBlockHeader (computed : advanceSlot config checks state = .ok after) :
+    ∃ root, SszType.hashTreeRoot state = .ok root ∧
+      after.latestBlockHeader =
+        if state.latestBlockHeader.stateRoot = Vector.replicate 32 0 then
+          { state.latestBlockHeader with stateRoot := root } else state.latestBlockHeader := by
+  obtain ⟨cached, cachedOk, -, -, header, -⟩ := advanceSlot_cachedRoots computed
+  rw [header]
+  unfold processSlot at cachedOk
+  simp only [bind_ok_iff, liftSsz_ok, liftAccessor_ok] at cachedOk
+  obtain ⟨root, hashed, _, _, _, _, _, _, cachedOk⟩ := cachedOk
+  refine ⟨root, hashed, ?_⟩
+  split at cachedOk
+  · obtain ⟨_, _, _, _, rfl⟩ := unsetNextPayloadAvailability_ok (liftAccessor_ok.mp cachedOk)
+    rfl
+  · cases cachedOk
+    rfl
+
+/-- A root that one slot makes readable was readable before, or is the root of the new header.
+
+The root of the new header is at the slot of the state before the slot step. -/
+theorem getBlockRootAtSlot_advanceSlot_cases {slot : Slot} {root : Root}
+    (computed : advanceSlot config checks state = .ok after)
+    (read : getBlockRootAtSlot after slot = .ok root) :
+    (slot < state.slot ∧ getBlockRootAtSlot state slot = .ok root) ∨
+      (slot = state.slot ∧ SszType.hashTreeRoot after.latestBlockHeader = .ok root) := by
+  obtain ⟨cached, cachedOk, -, roots, header, -, -, afterSlot⟩ := advanceSlot_cachedRoots computed
+  obtain ⟨lt, fits, recent, read⟩ := getBlockRootAtSlot_ok_iff.mp read
+  obtain ⟨_, hashed, written⟩ := processSlot_blockRoots cachedOk
+  rw [roots] at read
+  by_cases same : slot = state.slot
+  · subst same
+    -- The slot step writes the root of the new header at the slot of the state.
+    rw [readCircular_writeCircular written] at read
+    cases read
+    exact .inr ⟨rfl, by rw [header]; exact hashed⟩
+  · -- Any other slot in the buffer keeps its root, as the write is at another position.
+    have different : slot.toNat ≠ state.slot.toNat := fun eq => same (UInt64.toNat_inj.mp eq)
+    have earlier : slot.toNat < state.slot.toNat := by omega
+    have other : state.slot % preset.SLOTS_PER_HISTORICAL_ROOT ≠
+        slot % preset.SLOTS_PER_HISTORICAL_ROOT := slot_mod_ne earlier (by omega)
+    rw [readCircular_writeCircular_of_ne written other] at read
+    exact .inl ⟨UInt64.lt_iff_toNat_lt.mpr earlier,
+      getBlockRootAtSlot_ok_iff.mpr ⟨earlier, fits, by omega, read⟩⟩
 
 /-- One slot keeps the root of the block at the first slot of an epoch.
 
@@ -144,11 +200,8 @@ theorem getBlockRootAtSlot_processSlot {cached : BeaconState preset fork} {slot 
     · rfl
     · by_cases within : state.slot ≤ bound
       · simp only [liftArith, Except.mapError, within, ↓reduceIte, bind, Except.bind]
-        refine readCircular_writeCircular_of_ne written fun same => ?_
-        have same' := congrArg UInt64.toNat same
-        rw [UInt64.toNat_mod, UInt64.toNat_mod] at same'
         have lt' := UInt64.lt_iff_toNat_lt.mp lt
-        exact Nat.mod_ne_of_sub_lt lt' (by omega) same'
+        exact readCircular_writeCircular_of_ne written (slot_mod_ne lt' (by omega))
       · simp only [liftArith, Except.mapError, within, ↓reduceIte, bind, Except.bind]
         rfl
   · simp only [lt, ↓reduceIte]
@@ -171,7 +224,7 @@ theorem getBlockRoot_processSlot {cached : BeaconState preset fork} {epoch : Epo
     exact recent
 
 /-- After one slot, the root at the slot before the new one is that of the header. -/
-private theorem advanceSlot_latestBlockRoot
+theorem advanceSlot_latestBlockRoot
     (computed : advanceSlot config checks state = .ok after) :
     ∃ root, SszType.hashTreeRoot after.latestBlockHeader = .ok root ∧
       readCircular after.blockRoots.elements (after.slot - 1) = .ok root := by
