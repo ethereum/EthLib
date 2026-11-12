@@ -285,6 +285,68 @@ theorem getBlockRootAtSlot_stateTransition_of_lt {signed : SignedBeaconBlock pre
   · exact older
   · exact absurd before (UInt64.not_lt.mpr later)
 
+/-- A header that some slots leave with a zero state root is the header before them. -/
+private theorem advanceSlots_latestBlockHeader_of_eq :
+    ∀ (count : Nat) {state after : BeaconState preset fork},
+      advanceSlots config checks count state = .ok after →
+      after.latestBlockHeader.stateRoot = Vector.replicate 32 0 →
+      after.latestBlockHeader = state.latestBlockHeader
+  | 0, state, after, computed, _ => by
+    simp only [advanceSlots, pure, Except.pure, Except.ok.injEq] at computed
+    rw [← computed]
+  | count + 1, state, after, computed, unfilled => by
+    simp only [advanceSlots, bind_ok_iff] at computed
+    obtain ⟨next, nextOk, rest⟩ := computed
+    have same := advanceSlots_latestBlockHeader_of_eq count rest unfilled
+    obtain ⟨_, -, header⟩ := advanceSlot_latestBlockHeader nextOk
+    rw [same, (unfilled_of_filled header (by rw [← same]; exact unfilled)).2]
+
+/-- A root that a state within a transition records follows the same cases as after the block.
+
+The state is some slots after the state before the transition.
+
+Some more slots lead from it to the state on which the block runs.
+
+A root of an older slot is that of the state before.
+
+A root from the first slot of the transition on is the parent root of the block.
+
+Or the state before hashes to the zero root, and it is the root of the header before.
+
+Epoch processing within the transition reads such a state. -/
+theorem getBlockRootAtSlot_advanceSlots_cases {count more : Nat}
+    {middle last : BeaconState preset fork} {block : BeaconBlock preset fork}
+    (first : advanceSlots config checks count state = .ok middle)
+    (rest : advanceSlots config checks more middle = .ok last)
+    (processed : processBlock config checks engine last block = .ok after)
+    {slot : Slot} {root : Root} (read : getBlockRootAtSlot middle slot = .ok root) :
+    (slot < state.slot ∧ getBlockRootAtSlot state slot = .ok root) ∨
+      (state.slot ≤ slot ∧ (root = block.parentRoot ∨
+        (hashTreeRoot state = .ok (Vector.replicate 32 0) ∧
+          hashTreeRoot state.latestBlockHeader = .ok root))) := by
+  rcases getBlockRootAtSlot_advanceSlots count first read with older | ⟨later, rooted | zero⟩
+  · exact .inl older
+  · refine .inr ⟨later, ?_⟩
+    by_cases filled : middle.latestBlockHeader.stateRoot = Vector.replicate 32 0
+    · -- An unfilled header after the first slot means that the state before hashes to zero.
+      cases count with
+      | zero =>
+        simp only [advanceSlots, pure, Except.pure, Except.ok.injEq] at first
+        subst first
+        exact absurd later (UInt64.not_le.mpr (getBlockRootAtSlot_read read).1)
+      | succ count =>
+        simp only [advanceSlots, bind_ok_iff] at first
+        obtain ⟨next, nextOk, run⟩ := first
+        have same := advanceSlots_latestBlockHeader_of_eq count run filled
+        obtain ⟨stateRoot, hashed, header⟩ := advanceSlot_latestBlockHeader nextOk
+        obtain ⟨zero, unchanged⟩ := unfilled_of_filled header (by rw [← same]; exact filled)
+        rw [same, unchanged] at rooted
+        exact .inr ⟨zero ▸ hashed, rooted⟩
+    · -- A filled header stays until the block, which names its root as the parent.
+      rw [← advanceSlots_latestBlockHeader_of_ne more rest filled] at rooted
+      exact .inl (Except.ok.inj (rooted.symm.trans (processBlock_parentRoot processed).2.2))
+  · exact .inr ⟨later, .inr zero⟩
+
 end Transition
 
 /-! ## A run of a chain -/
