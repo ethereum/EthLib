@@ -354,7 +354,11 @@ In the first case the state records the root of its latest header at the slot be
 
 The next slot then records the same root, unless it fills the header.
 
-It fills the header only if the state hashes to zero, which is a zero preimage.
+It fills the header when its state root is zero.
+
+Such a header stays unfilled through a slot only if the state before that slot hashed to zero.
+
+So such a header comes only from a state of the run that hashes to zero, a zero preimage.
 
 In the second case the state has just taken a block.
 
@@ -406,7 +410,7 @@ variable [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat] [NeZero preset.SYNC_COMMITTE
 The state also records the root of its latest header at the slot before it, or follows a block. -/
 private theorem rootLinks_cases_aux {first last : ForkedBeaconState preset}
     (recorded : first.state.slot = 0 ∨ ∃ root,
-      getBlockRootAtSlot first.state (first.state.slot - 1) = .ok root ∧
+      readCircular first.state.blockRoots.elements (first.state.slot - 1) = .ok root ∧
         hashTreeRoot first.state.latestBlockHeader = .ok root ∧
         first.state.latestBlockHeader.stateRoot ≠ Vector.replicate 32 0) :
     ∀ {forked : ForkedBeaconState preset},
@@ -422,8 +426,7 @@ private theorem rootLinks_cases_aux {first last : ForkedBeaconState preset}
     refine ⟨Nat.le_refl _, fun _ => rfl, fun link member => .inr (.inr (.inl member)), ?_⟩
     rcases recorded with slot | ⟨root, read, rooted, filled⟩
     · exact .inl (.inl slot)
-    · exact .inl (.inr ⟨root, (getBlockRootAtSlot_read read).2, rooted,
-        fun empty => absurd empty filled⟩)
+    · exact .inl (.inr ⟨root, read, rooted, fun empty => absurd empty filled⟩)
   | @tail before after reach step ih =>
     intro toLast
     have toBefore := Relation.ReflTransGen.head step toLast
@@ -554,7 +557,7 @@ Otherwise the first slot can add a pair that no case covers. -/
 theorem rootLinks_cases_of_chainSteps {first last : ForkedBeaconState preset}
     (steps : Relation.ReflTransGen (ChainStep config checks) first last)
     (recorded : first.state.slot = 0 ∨ ∃ root,
-      getBlockRootAtSlot first.state (first.state.slot - 1) = .ok root ∧
+      readCircular first.state.blockRoots.elements (first.state.slot - 1) = .ok root ∧
         hashTreeRoot first.state.latestBlockHeader = .ok root ∧
         first.state.latestBlockHeader.stateRoot ≠ Vector.replicate 32 0)
     {root₁ root₂ : Root} (member : (root₁, root₂) ∈ rootLinks last.state) :
@@ -599,7 +602,7 @@ theorem zeroPreimage_or_rootLinks_le_of_chainSteps {β : Type*} [Preorder β] {b
     {first last : ForkedBeaconState preset}
     (steps : Relation.ReflTransGen (ChainStep config checks) first last)
     (recorded : first.state.slot = 0 ∨ ∃ root,
-      getBlockRootAtSlot first.state (first.state.slot - 1) = .ok root ∧
+      readCircular first.state.blockRoots.elements (first.state.slot - 1) = .ok root ∧
         hashTreeRoot first.state.latestBlockHeader = .ok root ∧
         first.state.latestBlockHeader.stateRoot ≠ Vector.replicate 32 0)
     (start : ∀ link ∈ rootLinks first.state, block link.1 ≤ block link.2)
