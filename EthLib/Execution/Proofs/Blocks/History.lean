@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Execution.Proofs.Blocks.Replay
+public import EthLib.Execution.Proofs.Evm.Instructions.EnvironmentData
 
 /-!
 # Proofs: the history behind BLOCKHASH
@@ -25,7 +26,7 @@ namespace EthLib.Execution.Blocks
 open EthLib.Base
 open EthLib.Execution.Transactions
 open EthLib.Execution.State (State)
-open EthLib.Execution.Evm (blockHash)
+open EthLib.Execution.Evm (blockHash blockHash_of_not_mem blockHash_of_length_lt)
 
 /-- Two recent blocks are linked when the second is numbered one above the first.
 
@@ -325,5 +326,42 @@ theorem ChainRun.windows {chain : BlockChain}
     subst hnext
     exact ⟨checkSeal, _, transition, stateTransition_window hok transition,
       ih (stateTransition_historyOK hok transition)⟩
+
+/-! ## Examples -/
+
+/-- A genesis block and two more give a chain with its history in order.
+
+In the block after them, BLOCKHASH of block 1 reads the hash of block 1, and of block 3 gives 0. -/
+theorem history_example_three_blocks {chain : BlockChain} {b₀ b₁ b₂ : RecentBlock}
+    {h₀ h₁ h₂ : Hash32} (hrecent : chain.recent = [b₀, b₁, b₂])
+    (n₀ : b₀.header.number = 0) (n₁ : b₁.header.number = 1) (n₂ : b₂.header.number = 2)
+    (x₀ : b₀.header.hash = .ok h₀) (x₁ : b₁.header.hash = .ok h₁) (x₂ : b₂.header.hash = .ok h₂)
+    (p₁ : b₁.header.parentHash = h₀) (p₂ : b₂.header.parentHash = h₁) :
+    HistoryOK chain ∧
+      recentHashes chain.recent = .ok [b₀.header.parentHash, h₀, h₁, h₂] ∧
+      blockHash [b₀.header.parentHash, h₀, h₁, h₂] 3 1 = U256.fromBeBytes h₁ ∧
+      blockHash [b₀.header.parentHash, h₀, h₁, h₂] 3 3 = 0 := by
+  refine ⟨⟨?_, b₂, by simp [hrecent], by simp [hrecent, n₂]⟩, ?_, ?_, ?_⟩
+  · rw [hrecent]
+    exact ⟨⟨by rw [n₀, n₁], h₀, x₀, p₁⟩, ⟨by rw [n₁, n₂], h₁, x₁, p₂⟩, trivial⟩
+  · refine recentHashes_eq_ok_iff.mpr (.inr ⟨b₂, h₂, by simp [hrecent], x₂, ?_⟩)
+    simp [hrecent, p₁, p₂]
+  · simp [blockHash]
+  · exact blockHash_of_not_mem (by omega)
+
+/-- A chain started from block 100 with only that block recent has no history in order.
+
+In block 101, BLOCKHASH of block 50 is inside the window, but the list holds no entry for it. -/
+theorem history_example_late_start {chain : BlockChain} {b : RecentBlock} {h₉₉ h₁₀₀ : Hash32}
+    (hrecent : chain.recent = [b]) (hnumber : b.header.number = 100)
+    (hhash : b.header.hash = .ok h₁₀₀) (hparent : b.header.parentHash = h₉₉) :
+    ¬ HistoryOK chain ∧ recentHashes chain.recent = .ok [h₉₉, h₁₀₀] ∧
+      blockHash [h₉₉, h₁₀₀] 101 50 = 0 := by
+  refine ⟨?_, ?_, blockHash_of_length_lt (by simp)⟩
+  · rintro ⟨-, last, hlast, hlen⟩
+    obtain rfl : b = last := by simpa [hrecent] using hlast
+    simp [hrecent, hnumber] at hlen
+  · refine recentHashes_eq_ok_iff.mpr (.inr ⟨b, h₁₀₀, by simp [hrecent], hhash, ?_⟩)
+    simp [hrecent, hparent]
 
 end EthLib.Execution.Blocks
