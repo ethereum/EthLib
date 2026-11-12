@@ -20,7 +20,7 @@ Message errors have codes from 1, and Status errors from 101.
 
 Header errors have codes from 201, and transaction errors from 301.
 
-Body errors have codes from 601.
+Cell errors have codes from 401, partial receipts errors from 501, and body errors from 601.
 
 A bad argument has code 0.
 -/

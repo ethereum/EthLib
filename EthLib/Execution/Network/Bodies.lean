@@ -54,7 +54,7 @@ inductive BodyError where
   | wrongOmmersHash
   /-- An ommer has a block number above that of the block that holds it. -/
   | ommerAfterBlock (index number : Nat)
-  /-- A transaction is a byte string whose first byte is not a type. -/
+  /-- A transaction is a byte string that is empty or whose first byte is not a type. -/
   | untypedTransaction
   deriving DecidableEq, Repr
 
@@ -131,11 +131,14 @@ The body is the RLP list of the transactions and the ommers, then the withdrawal
 The check fails with the first of the following that does not hold.
 
 1. The body is a list of 2 items before Shapella and of 3 items from Shapella.
-2. The trie root of the transactions is the transactions root of the header.
-3. From Shapella, the trie root of the withdrawals is the withdrawals root of the header.
-4. The ommers list holds at most two items.
-5. The Keccak-256 hash of the ommers list is the ommers hash of the header.
-6. Each ommer is a header with a block number at most that of the block.
+2. Each transaction sent as a byte string starts with a type below `0x80`.
+3. The trie root of the transactions is the transactions root of the header.
+4. From Shapella, the trie root of the withdrawals is the withdrawals root of the header.
+5. The ommers list holds at most two items.
+6. The Keccak-256 hash of the ommers list is the ommers hash of the header.
+7. Each ommer is a list whose ninth field, the block number, is at most that of the block.
+
+The check does not decode the ommers further, since their validity is left to the chain.
 
 "Block Encoding and Validity" lists these among the rules of data validity.
 
