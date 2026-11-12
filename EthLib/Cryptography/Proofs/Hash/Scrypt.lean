@@ -187,7 +187,7 @@ No theorem states the read loop of RFC 7914 §5, step 3, or the values of Salsa2
 
 /-- Integerify reads the last 64 bytes of its value as a little-endian number, RFC 7914 §5.
 
-ROMix takes its remainder mod `N` as the index it reads. -/
+In ROMix, its remainder mod `N` is the index, RFC 7914 §5, step 3. -/
 theorem integerify_eq (r : Nat) (x : MixBlock r) :
     integerify r x
       = Base.bytesToUint (x.val.extract (128 * r - 64) (128 * r)).data.toVector := by
@@ -253,7 +253,7 @@ theorem romixFill_replicate_fst_get (r : Nat) (positive : 0 < r) (n : Nat) (inpu
       = Nat.repeat (blockMixCore r positive) j input := by
   rw [romixFill_fst_get r positive n 0 (by omega) _ _ j (by omega) (by omega), Nat.sub_zero]
 
-/-- Mixing appends to the output it is given, and the blocks it mixes do not depend on it. -/
+/-- When mixing succeeds, bytes put before its output are put before its result too. -/
 theorem mixBlocks_append (input : ByteArray) (n r count offset : Nat)
     (out extra mixed : ByteArray) (h : mixBlocks input n r count offset out = .ok mixed) :
     mixBlocks input n r count offset (extra ++ out) = .ok (extra ++ mixed) := by
@@ -271,7 +271,9 @@ theorem mixBlocks_append (input : ByteArray) (n r count offset : Nat)
       rw [ByteArray.append_assoc]
       exact ih (offset + 128 * r) (out ++ block) mixed h
 
-/-- Mixing from any output gives that output, then the blocks mixed from an empty one. -/
+/-- When mixing from an empty output succeeds, mixing from any output puts that output first.
+
+The blocks that follow it are the same. -/
 theorem mixBlocks_eq_append (input : ByteArray) (n r count offset : Nat) (out mixed : ByteArray)
     (h : mixBlocks input n r count offset ByteArray.empty = .ok mixed) :
     mixBlocks input n r count offset out = .ok (out ++ mixed) := by
