@@ -2,7 +2,9 @@ module
 
 public import EthLib.Base.Proofs.MapM
 public import EthLib.Consensus.History.Era
+public import EthLib.Consensus.Proofs.Containers.Misc
 public import EthLib.Serialization.Proofs.E2store
+public import EthLib.Serialization.Proofs.Ssz.Typed.Root
 
 /-!
 # Proofs: the indices of an era file
@@ -24,6 +26,14 @@ Each entry that is not 0 finds a block, and each later entry of 0 repeats the ro
 So a reader can go straight to any block or state through the indices.
 
 Two errors of an era file with one code come from one constructor.
+
+The name of a file is stated in full, for every list of groups.
+
+It takes the lowest era, on at least five digits, and the root of the last group of the highest era.
+
+That root is the root of the validators at genesis for era 0, then a historical root.
+
+From Capella, past the historical roots, it is the root of a historical summary.
 -/
 
 @[expose] public section
@@ -534,5 +544,247 @@ theorem decodeEra_emptySlot {preset : Preset} {config : Config} {bytes : ByteArr
       getBlockRootAtSlot group.state (UInt64.ofNat (index.start + i)) = .ok root := by
   obtain ⟨_, _, _, _, hread⟩ := decodeEra_blocksRead h hg hi
   exact checkEmptySlots_root hread.empty hlt hz h0
+
+/-! ## The name of a file -/
+
+/-- The root that names an era, from the state at the end of that era.
+
+Era 0 is named by the root of the validators at genesis.
+
+Era `n + 1` is named by the historical root at index `n`, when the state holds one there.
+
+Past the historical roots, a state from Capella names it by the root of a summary.
+
+That summary sits at index `n` less the number of historical roots. -/
+theorem eraRoot_eq_ok_iff {preset : Preset} {fork : Fork} {state : BeaconState preset fork}
+    {era : Nat} {root : Root} :
+    eraRoot state era = .ok root ↔
+      (era = 0 ∧ root = state.genesisValidatorsRoot) ∨
+      (∃ n, era = n + 1 ∧ state.historicalRoots.data[n]? = some root) ∨
+      (∃ n, era = n + 1 ∧ state.historicalRoots.data.size ≤ n ∧
+        ∃ (capella : .shapella ≤ fork) (summary : HistoricalSummary),
+          (state.historicalSummaries capella).data[n - state.historicalRoots.data.size]? =
+            some summary ∧
+          Ssz.SszType.hashTreeRoot summary = .ok root) := by
+  cases era with
+  | zero => simp [eraRoot, pure, Except.pure, eq_comm]
+  | succ n =>
+    simp only [eraRoot, Nat.add_one_ne_zero, ite_false, Nat.add_sub_cancel]
+    by_cases hr : n < state.historicalRoots.data.size
+    · simp only [hr, dite_true, pure, Except.pure]
+      simp [hr]
+      omega
+    · simp only [hr, dite_false]
+      by_cases capella : .shapella ≤ fork
+      · simp only [capella, dite_true]
+        by_cases hs :
+            n - state.historicalRoots.data.size < (state.historicalSummaries capella).data.size
+        · obtain ⟨r, hroot⟩ := Ssz.SszType.hashTreeRoot_total
+            (state.historicalSummaries capella).data[n - state.historicalRoots.data.size]
+          simp [hs, hroot, hr, Except.mapError]
+          omega
+        · simp [hs, hr, throw, throwThe, MonadExceptOf.throw]
+      · simp [capella, hr, throw, throwThe, MonadExceptOf.throw]
+
+/-- The root of an era fails exactly when the state holds no root for it, with the era.
+
+So era 0 never fails, and neither does an era within the historical roots.
+
+A later era fails before Capella, and from Capella when it is past the summaries too. -/
+theorem eraRoot_eq_error_iff {preset : Preset} {fork : Fork} {state : BeaconState preset fork}
+    {era : Nat} {e : EraError} :
+    eraRoot state era = .error e ↔
+      e = .eraRoot era ∧ 0 < era ∧ state.historicalRoots.data.size < era ∧
+        ∀ capella : .shapella ≤ fork,
+          state.historicalRoots.data.size + (state.historicalSummaries capella).data.size <
+            era := by
+  cases era with
+  | zero => simp [eraRoot, pure, Except.pure]
+  | succ n =>
+    simp only [eraRoot, Nat.add_one_ne_zero, ite_false, Nat.add_sub_cancel]
+    by_cases hr : n < state.historicalRoots.data.size
+    · simp only [hr, dite_true, pure, Except.pure]
+      simp
+      omega
+    · simp only [hr, dite_false]
+      by_cases capella : .shapella ≤ fork
+      · simp only [capella, dite_true]
+        by_cases hs :
+            n - state.historicalRoots.data.size < (state.historicalSummaries capella).data.size
+        · obtain ⟨r, hroot⟩ := Ssz.SszType.hashTreeRoot_total
+            (state.historicalSummaries capella).data[n - state.historicalRoots.data.size]
+          simp [hs, hroot, Except.mapError]
+          omega
+        · simp only [hs, dite_false, throw, throwThe, MonadExceptOf.throw, Except.error.injEq]
+          exact ⟨fun h => ⟨h.symm, by omega, by omega, fun _ => by omega⟩, fun h => h.1.symm⟩
+      · simp only [capella, dite_false, throw, throwThe, MonadExceptOf.throw, Except.error.injEq]
+        exact ⟨fun h => ⟨h.symm, by omega, by omega, fun c => c.elim⟩, fun h => h.1.symm⟩
+
+/-- The decimal digits of a number, after zeros up to `k` places, are its digits by place. -/
+private theorem leftpad_toDigits (n k : Nat) (hk : (Nat.toDigits 10 n).length ≤ k) :
+    (Nat.toDigits 10 n).leftpad k '0' =
+      List.ofFn fun i : Fin k => Nat.digitChar (n / 10 ^ (k - 1 - i) % 10) := by
+  induction n using Nat.strongRecOn generalizing k with
+  | _ n ih =>
+    obtain ⟨m, rfl⟩ : ∃ m, k = m + 1 := ⟨k - 1, by
+      have := Nat.length_toDigits_pos (b := 10) (n := n); omega⟩
+    rw [List.ofFn_succ_last]
+    by_cases hn : n < 10
+    · rw [Nat.toDigits_of_lt_base hn]
+      have hlast : n / 10 ^ (m + 1 - 1 - m) % 10 = n := by simp [Nat.mod_eq_of_lt hn]
+      simp only [List.leftpad, List.length_singleton, Fin.val_last, hlast]
+      congr 1
+      apply List.ext_getElem (by simp)
+      intro j h1 h2
+      simp only [List.length_replicate] at h1
+      have hdiv : n / 10 ^ (m - j) = 0 := by
+        apply Nat.div_eq_of_lt
+        calc n < 10 := hn
+          _ = 10 ^ 1 := by simp
+          _ ≤ 10 ^ (m - j) := Nat.pow_le_pow_right (by decide) (by omega)
+      simp [hdiv]
+    · rw [Nat.toDigits_of_base_le (by decide) (by omega)] at hk ⊢
+      simp only [List.length_append, List.length_singleton] at hk
+      have hpad : (Nat.toDigits 10 (n / 10) ++ [Nat.digitChar (n % 10)]).leftpad (m + 1) '0' =
+          (Nat.toDigits 10 (n / 10)).leftpad m '0' ++ [Nat.digitChar (n % 10)] := by
+        simp only [List.leftpad, List.length_append, List.length_singleton, List.append_assoc]
+        congr 2
+        omega
+      rw [hpad, ih (n / 10) (by omega) m (by omega)]
+      congr 1
+      · apply List.ext_getElem (by simp)
+        intro j h1 h2
+        simp only [List.length_ofFn] at h1
+        have hj : n / 10 ^ (m - j) = n / 10 / 10 ^ (m - 1 - j) := by
+          rw [Nat.div_div_eq_div_mul, ← Nat.pow_succ']
+          congr 2
+          omega
+        simp [hj]
+      · simp
+
+/-- The digits of an era are its decimal digits by place, with zeros in front up to five places.
+
+The last digit is the units.
+
+An era of more than five digits keeps all its digits. -/
+theorem eraDigits_toList (era : Nat) :
+    (eraDigits era).toList =
+      List.ofFn fun i : Fin (max 5 (Nat.toDigits 10 era).length) =>
+        Nat.digitChar (era / 10 ^ (max 5 (Nat.toDigits 10 era).length - 1 - i) % 10) := by
+  rw [eraDigits, String.toList_ofList, ← leftpad_toDigits era _ (Nat.le_max_right _ _)]
+  simp only [List.leftpad]
+  congr 2
+  omega
+
+/-- Below `10 ^ 5`, the digits of an era are its five decimal digits by place. -/
+theorem eraDigits_toList_of_lt {era : Nat} (h : era < 10 ^ 5) :
+    (eraDigits era).toList =
+      List.ofFn fun i : Fin 5 => Nat.digitChar (era / 10 ^ (4 - i.val) % 10) := by
+  have hlen : max 5 (Nat.toDigits 10 era).length = 5 :=
+    Nat.max_eq_left ((Nat.length_toDigits_le_iff (by decide) (by decide)).mpr h)
+  rw [eraDigits_toList, hlen]
+
+/-- Folding by the lower era gives the lowest era of the groups. -/
+private theorem foldl_min_era {preset : Preset} (era : Nat) (groups : List (EraGroup preset))
+    {lowest : Nat} (hmem : lowest = era ∨ ∃ g ∈ groups, g.era = lowest)
+    (hle : lowest ≤ era ∧ ∀ g ∈ groups, lowest ≤ g.era) :
+    groups.foldl (fun era group => min era group.era) era = lowest := by
+  induction groups generalizing era with
+  | nil =>
+    simp only [List.foldl_nil]
+    rcases hmem with h | ⟨_, h, _⟩
+    · exact h.symm
+    · simp at h
+  | cons g gs ih =>
+    simp only [List.foldl_cons]
+    have hg := hle.2 g (by simp)
+    apply ih
+    · rcases hmem with h | ⟨x, hx, h⟩
+      · exact .inl (by omega)
+      · simp only [List.mem_cons] at hx
+        rcases hx with rfl | hx
+        · exact .inl (by omega)
+        · exact .inr ⟨x, hx, h⟩
+    · exact ⟨Nat.le_min.mpr ⟨hle.1, hg⟩, fun x hx => hle.2 x (by simp [hx])⟩
+
+/-- Folding by the higher era, the later on a tie, gives the last group of the highest era. -/
+private theorem foldl_highest {preset : Preset} (highest : EraGroup preset) :
+    ∀ (top : EraGroup preset) (groups before after : List (EraGroup preset)),
+      top :: groups = before ++ highest :: after → (∀ g ∈ before, g.era ≤ highest.era) →
+      (∀ g ∈ after, g.era < highest.era) →
+      groups.foldl (fun top group => if top.era ≤ group.era then group else top) top = highest := by
+  intro top groups
+  induction groups generalizing top with
+  | nil =>
+    intro before after h _ _
+    cases before with
+    | nil => simp at h; exact h.1
+    | cons b bs => simp at h
+  | cons g gs ih =>
+    intro before after h hbefore hafter
+    simp only [List.foldl_cons]
+    cases before with
+    | nil =>
+      simp only [List.nil_append, List.cons.injEq] at h
+      obtain ⟨rfl, rfl⟩ := h
+      have hlt := hafter g (by simp)
+      rw [ite_eq_right_iff.mpr (fun h => absurd h (by omega))]
+      exact ih top [] gs (by simp) (by simp) (fun x hx => hafter x (by simp [hx]))
+    | cons b bs =>
+      simp only [List.cons_append, List.cons.injEq] at h
+      obtain ⟨rfl, h⟩ := h
+      have htop := hbefore top (by simp)
+      cases bs with
+      | nil =>
+        simp only [List.nil_append, List.cons.injEq] at h
+        obtain ⟨rfl, rfl⟩ := h
+        rw [ite_eq_left_iff.mpr (fun h => absurd htop h)]
+        exact ih g [] gs (by simp) (by simp) hafter
+      | cons c cs =>
+        simp only [List.cons_append, List.cons.injEq] at h
+        obtain ⟨rfl, h⟩ := h
+        have hg := hbefore g (by simp)
+        apply ih _ (_ :: cs) after (by rw [h]; rfl) _ hafter
+        intro x hx
+        simp only [List.mem_cons] at hx
+        rcases hx with rfl | hx
+        · split <;> assumption
+        · exact hbefore x (by simp [hx])
+
+/-- The name of a file of groups.
+
+It is the name of the configuration, the digits of the lowest era, and a short root.
+
+Dashes separate them, and `.era` ends the name.
+
+The short root is the first 4 bytes of the root of the highest era, as lowercase hex.
+
+That root comes from the last group of the highest era.
+
+No group before that group has a higher era, and every group after it has a lower era.
+
+The name fails exactly when that root fails, with the same error. -/
+theorem eraFileName_eq {preset : Preset} {config : Config} {first : EraGroup preset}
+    {rest before after : List (EraGroup preset)} {highest : EraGroup preset} {lowest : Nat}
+    (hsplit : first :: rest = before ++ highest :: after)
+    (hbefore : ∀ g ∈ before, g.era ≤ highest.era) (hafter : ∀ g ∈ after, g.era < highest.era)
+    (hlowest : ∃ g ∈ first :: rest, g.era = lowest)
+    (hle : ∀ g ∈ first :: rest, lowest ≤ g.era) :
+    eraFileName config first rest = (eraRoot highest.state highest.era).map fun root =>
+      config.CONFIG_NAME ++ "-" ++ eraDigits lowest ++ "-" ++
+        String.ofList ((root.toList.take 4).flatMap byteHexDigits) ++ ".era" := by
+  have hlow : rest.foldl (fun era group => min era group.era) first.era = lowest := by
+    apply foldl_min_era
+    · obtain ⟨g, hg, rfl⟩ := hlowest
+      simp only [List.mem_cons] at hg
+      rcases hg with rfl | hg
+      · exact .inl rfl
+      · exact .inr ⟨g, hg, rfl⟩
+    · exact ⟨hle first (by simp), fun g hg => hle g (by simp [hg])⟩
+  have hhigh := foldl_highest highest first rest before after hsplit hbefore hafter
+  rw [eraFileName]
+  simp only [hlow]
+  rw [hhigh]
+  cases eraRoot highest.state highest.era <;> rfl
 
 end EthLib.Consensus.History
