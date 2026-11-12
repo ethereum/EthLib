@@ -9,13 +9,10 @@ A defaulting accessor returns a value instead of failing.
 
 It does so on an index out of range, or on an empty collection.
 
-```text
-    xs[i]!       getElem!     out of range -> the Inhabited default
-    xs.get! i    Array.get!   out of range -> the Inhabited default
-    xs.set! i v  Array.set!   out of range -> xs, unchanged
-    xs.back!     Array.back!  empty        -> the Inhabited default
-    panic! msg   panic        always       -> the Inhabited default
-```
+- `xs[i]!` and `xs.get! i` return the `Inhabited` default when the index is out of range.
+- `xs.set! i v` returns `xs` unchanged when the index is out of range.
+- `xs.back!` returns the `Inhabited` default on an empty collection.
+- `panic! msg` always returns the `Inhabited` default.
 
 The kernel and the compiled code give the same value.
 
@@ -27,11 +24,9 @@ The check reads what the kernel accepted, not the source.
 
 A comment or a string that spells `]!` is no finding, and a macro that hides one still is.
 
-A site is named by its declaration and the accessor it calls, with a count.
+A site is named by the accessor it calls and its declaration, with a count.
 
-```text
-    getElem! EthLib.Engine.NewPayload.newPayloadParams 4
-```
+For example, `GetElem?.getElem! EthLib.Serialization.Ssz.Desc.resolveStep 1` is one entry.
 
 A line number would change with every edit above the site, so the list uses names.
 
@@ -41,13 +36,12 @@ A new site fails the check, and so does an entry that does not match.
 
 The check does not see some ways to fall back to a default.
 
-Each one is covered elsewhere or left for later:
+Each one is covered elsewhere or outside the scope of this check:
 
 - The body of a `partial def` is only in its compiled copy, `foo._unsafe_rec`, which is skipped.
   `lake exe check-decls` rejects `partial` in the specification.
-- A wrapper whose name has no `!`, such as `panicWith`, is counted once, in its own body.
+- A wrapper whose name has no `!` is counted once, in its own body.
   Its callers are not counted.
-  No specification module calls `panicWith`.
 - The explicit defaults, such as `getD`, `headD` and `setIfInBounds`, have no `!` in their names.
   Nor does the deprecated `String.get`, which returns a default character at a bad position.
   They are not in the scope of this check.
@@ -63,7 +57,9 @@ def panicFamily : NameSet :=
 
 /-- Whether calling `n` can return a default in place of failing.
 
-Lean names every such accessor with `!`: `getElem!`, `Array.set!`, `List.head!`, `Option.get!`.
+Lean names every such accessor with `!`, such as `getElem!`, `Array.set!` and `Option.get!`.
+
+The panic functions are the exception, and they are listed by name.
 
 A theorem about one, such as `getElem!_pos`, computes nothing, so it is no accessor. -/
 def isDefaulting (env : Environment) (n : Name) : Bool :=
@@ -90,11 +86,11 @@ The elaborator copies a term into implicit and instance arguments.
 
 Counting those would count one site several times.
 
-```text
-    source:      if xs[i]! ≠ 0 then a else b
-    elaborated:  ite (xs[i]! ≠ 0) (instDecidableNot (instDecidableEqUInt8 xs[i]! 0)) a b
-                      ^ explicit         instance argument: the same site again ^
-```
+For example, `if xs[i]! ≠ 0 then a else b` elaborates to an `ite` with `xs[i]!` in two places.
+
+One is the explicit condition, and the other is the instance that decides it.
+
+Only the explicit occurrence is counted.
 
 An accessor that appears only inside an implicit argument is missed. -/
 partial def occurrences (env : Environment) (e : Expr) (acc : NameMap Nat) : NameMap Nat :=
@@ -129,15 +125,15 @@ def isSpecModule (m : Name) : Bool :=
 
 /-- Whether `n` is a declaration Lean generates from another one, which repeats its source.
 
-```text
-    foo._unsafe_rec   the compiled copy of a recursive definition
-    foo._sunfold      the one-step unfolding of a structural recursion
-    foo.eq_def        an equation lemma, and so are foo.eq_1, foo.eq_2, ...
-    foo._proof_3      a proof obligation, stated over the source's terms
-    foo.match_2       a matcher
-```
+- `foo._unsafe_rec` is the compiled copy of a recursive definition.
+- `foo._sunfold` is the one-step unfolding of a structural recursion.
+- `foo.eq_def`, `foo.eq_unfold` and `foo.eq_1`, `foo.eq_2`, ... are equation lemmas.
+- `foo._proof_3` is a proof obligation, stated over the source's terms.
+- `foo.match_2` is a matcher, and `foo.match_2.splitter` its splitter.
 
-The kernel's copy of a recursion, `foo._f` or `foo._mutual`, is kept: it holds each site once. -/
+The kernel's copy of a recursion, `foo._f`, `foo._unary` or `foo._mutual`, is kept.
+
+It holds each site once. -/
 def isGenerated (n : Name) : Bool :=
   match n with
   | .str _ s =>
@@ -163,13 +159,11 @@ def larger (a b : NameMap Nat) : NameMap Nat :=
 
 A definition is searched in its type and its value.
 
-Lean can copy a site of the type into the value, as an explicit argument it fills from the type:
+Lean can copy a site of the type into the value, as an explicit argument it fills from the type.
 
-```text
-    source:      def isOne (b : ByteArray) : Decidable (b.get! 0 = 1) := decEq _ _
-    elaborated:  type   Decidable (b.get! 0 = 1)
-                 value  decEq (b.get! 0) 1
-```
+For example, take a definition of type `Decidable (b.get! 0 = 1)` whose source value is `decEq _ _`.
+
+Lean elaborates its value to `decEq (b.get! 0) 1`, which holds the site of the type again.
 
 So a definition counts each accessor once over its type and value.
 
@@ -227,7 +221,7 @@ They are the `.lean` files under `EthLib/`, outside the proof and export trees.
 
 The directory is read, not the imports of `EthLib.lean`.
 
-So a module that nothing imports is still checked. -/
+So a module that the library does not import is not skipped: the build leaves it out, and its import fails. -/
 partial def specModules (dir : System.FilePath) (pre : Name) : IO (Array Name) := do
   let mut out := #[]
   for entry in ← dir.readDir do
@@ -266,6 +260,12 @@ unsafe def run (args : List String) : IO UInt32 := do
   -- `.private` loads the bodies of private and non-exposed definitions too.
   let env ← importModules (mods.map fun m => { module := m }) {} (trustLevel := 1024)
     (loadExts := true) (level := .private)
+  -- A scan that sees no definition would pass once the baseline is empty, so it fails.
+  let scanned := env.constants.toList.countP fun (n, c) =>
+    c matches .defnInfo _ && (moduleOf? env n).any isSpecModule
+  if scanned == 0 then
+    IO.eprintln "check-accessors: no definition of the specification was loaded"
+    return 3
   let found := sites env
   if args.contains "--list" then
     for (m, s) in found do

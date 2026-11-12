@@ -120,4 +120,5 @@ lean_exe «check-accessors» where
   srcDir := "scripts"
   root := `CheckAccessors
   supportInterpreter := true
+  -- The checker loads private definition bodies to find the accessors they call.
   allowNonModules := true

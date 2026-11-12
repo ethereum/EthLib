@@ -397,7 +397,7 @@ Then check the defaulting accessors of the specification:
 lake exe check-accessors
 ```
 
-It lists each call of `xs[i]!`, `get!`, `set!` or `panic` in the elaborated declarations of the specification, with its count.
+It lists each use of a `!` accessor, such as `xs[i]!`, `get!` or `set!`, or of `panic`, in the elaborated declarations of the specification, with its count.
 `scripts/check_accessors_baseline.txt` lists the sites that exist today, and the goal is to remove each one.
 A pull request that removes a site lowers or removes its entry, or the check fails on the stale entry.
 A new site is fixed, never added to the list.
