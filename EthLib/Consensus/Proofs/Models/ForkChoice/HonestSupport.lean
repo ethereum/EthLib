@@ -26,6 +26,10 @@ The Byzantine validators hold at most the fraction `β = num / den` of the stake
 
 That bound is Assumption 2 of the paper, taken as a hypothesis.
 
+One more bound serves the discount for empty slots of the specification.
+
+The support of a block, less an adversary that covers `β W - I`, is at most its honest support.
+
 Every bound is stated with its fractions multiplied out, in natural numbers.
 
 Views, checkpoints and Assumption 1 are left out: the statements bound stakes only.
@@ -107,6 +111,52 @@ theorem honest_ratio_of_new_votes [DecidableEq ν] {H K N H' : Finset ν} {a c :
     _ ≤ c * (stake w H' * stake w K) := Nat.mul_le_mul_left c counted
     _ = c * stake w H' * stake w K := by ring
 
+/-- The Byzantine supporters and the equivocators weigh at most the Byzantine validators of `W`.
+
+The supporters `S` and the equivocators `I` are disjoint parts of `W`.
+
+No equivocator is honest.
+
+This is the disjoint accounting used in arXiv 2405.00549v4, Appendix A.1, Lemma 4. -/
+theorem byzantine_support_add_le {W S I : Finset ν} (supportIn : S ⊆ W) (equivocatorsIn : I ⊆ W)
+    (apart : Disjoint S I) (dishonest : ∀ v ∈ I, v ∉ J) :
+    stake w {v ∈ S | v ∉ J} + stake w I ≤ stake w {v ∈ W | v ∉ J} := by
+  classical
+  have disjoint : Disjoint ({v ∈ S | v ∉ J} : Finset ν) I :=
+    Finset.disjoint_of_subset_left (Finset.filter_subset _ _) apart
+  unfold stake
+  rw [← Finset.sum_union disjoint]
+  refine stake_mono (Finset.union_subset ?_ ?_)
+  · exact Finset.filter_subset_filter _ supportIn
+  · intro v member
+    exact Finset.mem_filter.mpr ⟨equivocatorsIn member, dishonest v member⟩
+
+/-- The support of a block, less an adversary, is at most its honest support.
+
+The supporters `S` and the equivocators `I` are disjoint parts of `W`.
+
+No equivocator is honest.
+
+The adversary and the equivocators must cover the Byzantine share `β W`.
+
+Each set stands for its stake, and the difference is zero when the adversary is larger.
+
+This is the honest lower bound of arXiv 2405.00549v4, Definition 5, under Assumption 2. -/
+theorem sub_le_honest_support {W S I : Finset ν} {adversary num den : ℕ}
+    (bound : ByzantineStakeAtMost w W J num den) (supportIn : S ⊆ W) (equivocatorsIn : I ⊆ W)
+    (apart : Disjoint S I) (dishonest : ∀ v ∈ I, v ∉ J)
+    (covered : num * stake w W ≤ den * (adversary + stake w I)) :
+    stake w S - adversary ≤ stake w {v ∈ S | v ∈ J} := by
+  obtain ⟨positiveDen, byzantineBound⟩ := bound
+  -- The support splits into honest and Byzantine validators.
+  have split : stake w {v ∈ S | v ∈ J} + stake w {v ∈ S | v ∉ J} = stake w S :=
+    Finset.sum_filter_add_sum_filter_not S (· ∈ J) w
+  have byzantine := byzantine_support_add_le (w := w) supportIn equivocatorsIn apart dishonest
+  -- The Byzantine validators of `W` weigh at most the adversary and the equivocators.
+  have room : stake w {v ∈ W | v ∉ J} ≤ adversary + stake w I :=
+    Nat.le_of_mul_le_mul_left (byzantineBound.trans covered) positiveDen
+  omega
+
 /-- Lemma 4: the observed support of a block bounds its honest ratio from below.
 
 The supporters `S` and the equivocators `I` are disjoint parts of `W`.
@@ -134,15 +184,8 @@ theorem honest_ratio_of_support {W S I : Finset ν} {Φ num den : ℕ}
   have splitS : stake w {v ∈ S | v ∈ J} + stake w {v ∈ S | v ∉ J} = stake w S :=
     Finset.sum_filter_add_sum_filter_not S (· ∈ J) w
   -- The Byzantine supporters and the equivocators are disjoint Byzantine validators.
-  have byzantine : stake w {v ∈ S | v ∉ J} + stake w I ≤ A := by
-    have disjoint : Disjoint ({v ∈ S | v ∉ J} : Finset ν) I :=
-      Finset.disjoint_of_subset_left (Finset.filter_subset _ _) apart
-    unfold stake
-    rw [← Finset.sum_union disjoint]
-    refine stake_mono (Finset.union_subset ?_ ?_)
-    · exact Finset.filter_subset_filter _ supportIn
-    · intro v member
-      exact Finset.mem_filter.mpr ⟨equivocatorsIn member, dishonest v member⟩
+  have byzantine : stake w {v ∈ S | v ∉ J} + stake w I ≤ A :=
+    byzantine_support_add_le supportIn equivocatorsIn apart dishonest
   -- The supporters and the equivocators fit in the committees.
   have fits : X ≤ stake w W := by
     unfold X stake

@@ -123,13 +123,26 @@ theorem stake_equivocatorsOf {balanceSource : BeaconState preset fork}
       simp [validatorAt, found, isActive, bind, Except.bind, pure, Except.pure]
   have distinct : active.Nodup :=
     ((sublist_of_filterM_ok activeOk).trans List.filter_sublist).nodup
-      (Std.TreeSet.distinct_toList.imp fun different same =>
-        different (Std.LawfulEqCmp.compare_eq_iff_eq.mpr same))
+      (Std.TreeSet.distinct_toList.imp Std.ReflCmp.ne_of_cmp_ne_eq)
   rw [← members, stake, List.sum_toFinset _ distinct]
-  refine (toNat_eq_of_sumGwei summed fun v _ value valueOk => ?_).symm
-  simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at valueOk
-  obtain ⟨validator, found, rfl⟩ := valueOk
-  simp [balanceAt, validatorAt_ok_iff.mp found]
+  exact (toNat_eq_of_sumGwei summed fun _ _ _ valueOk =>
+    toNat_eq_balanceAt_of_effectiveBalance valueOk).symm
+
+/-- The store's equivocation score of a range of slots is the stake of known equivocators.
+
+They are the known equivocators of the committees that the store reads for the range.
+
+These supply the equivocator term of arXiv 2405.00549v4, Definition 5. -/
+theorem exists_stake_equivocatorsOf_of_getEquivocationScore {head : Root}
+    {balanceSource : BeaconState preset fork} {startSlot endSlot : Slot} {score : Gwei}
+    (computed : store.getEquivocationScore head balanceSource startSlot endSlot = .ok score) :
+    ∃ participants,
+      store.getCommitteesBetweenSlots head startSlot endSlot = .ok participants ∧
+        stake (fun v => balanceAt balanceSource v.toNat)
+          (store.equivocatorsOf balanceSource participants) = score.toNat := by
+  simp only [getEquivocationScore, bind_ok_iff] at computed
+  obtain ⟨participants, participantsOk, scoreOk⟩ := computed
+  exact ⟨participants, participantsOk, stake_equivocatorsOf scoreOk⟩
 
 /-- The known equivocators of some committees are among their active members. -/
 theorem equivocatorsOf_subset_activeMembers {balanceSource : BeaconState preset fork}
@@ -150,6 +163,17 @@ theorem disjoint_supportersOf_equivocatorsOf {state balanceSource : BeaconState 
   exact absurd known (by simp)
 
 variable {config : Config}
+
+/-- With aligned effective balances, each stake is a whole number of 100 Gwei.
+
+An increment must be a whole number of 100 Gwei.
+
+This controls the rounded Byzantine share for arXiv 2405.00549v4, Definition 5. -/
+private theorem balanceAt_mod_of_aligned {balanceSource : BeaconState preset fork}
+    (aligned : EffectiveBalancesAligned balanceSource)
+    (increment : preset.EFFECTIVE_BALANCE_INCREMENT.toNat % 100 = 0) (index : ℕ) :
+    balanceAt balanceSource index % 100 = 0 :=
+  Nat.mod_eq_zero_of_dvd (dvd_balanceAt_of_aligned aligned (Nat.dvd_of_mod_eq_zero increment) _)
 
 /-- Lemmas 4 and 3 for a confirmed block, with any set `W` whose stake the store's weight covers.
 
@@ -222,18 +246,15 @@ theorem lt_two_mul_honest_supportersOf_of_weighed {J : Set ValidatorIndex}
   obtain ⟨support, threshold, supportOk, thresholdOk, -⟩ :=
     isOneConfirmed_eq_ok_true_iff.mp confirmed
   obtain ⟨weight, equivocation, weightOk, equivocationOk⟩ := computeAdversarialWeight_eq_ok rangeOk
-  have equivocationOfOk : ∃ participants,
-      store.getCommitteesBetweenSlots head startSlot lastSlot = .ok participants ∧
-        store.getEquivocationScoreOf balanceSource participants = .ok equivocation := by
-    simpa only [getEquivocationScore, bind_ok_iff] using equivocationOk
-  obtain ⟨participants, participantsOk, equivocationOfOk⟩ := equivocationOfOk
+  obtain ⟨participants, participantsOk, equivocators⟩ :=
+    exists_stake_equivocatorsOf_of_getEquivocationScore equivocationOk
   -- Each effective balance is a whole number of increments, so of 100 Gwei.
   have whole : ∀ v ∈ W, balanceAt balanceSource v.toNat % 100 = 0 := fun v _ =>
-    Nat.mod_eq_zero_of_dvd (dvd_balanceAt_of_aligned aligned (Nat.dvd_of_mod_eq_zero increment) _)
+    balanceAt_mod_of_aligned aligned increment _
   exact lt_two_mul_honest_support_of_isOneConfirmed slotOk blockOk parentOk boostOk firstOk lastOk
     maximumOk discountOk adversaryOk rangeOk weightOk equivocationOk thresholdOk
     supportOk confirmed (stake_supportersOf within supportOk)
-    (stake_equivocatorsOf equivocationOfOk) supportersIn
+    equivocators supportersIn
     (equivocatorsOf_subset_activeMembers.trans (membersIn participants participantsOk))
     (weighed weight weightOk) whole disjoint_supportersOf_equivocatorsOf
     (fun v member => dishonest v (Finset.mem_filter.mp member).2) byzantine
