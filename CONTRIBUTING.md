@@ -90,14 +90,15 @@ The specification and the exports import nothing beyond the Lean toolchain.
   Each one hides a failure: it returns a default value, or it changes nothing.
   Index with `Fin` or a `Vector`, walk arrays of equal length together with `zip`, or return a typed error.
   Older modules still use these accessors, and pull requests remove them module by module.
-  #106 tracks the ones in KZG.
 - Remove such an accessor even when no input that the source accepts reaches its default.
   A caller of a public function can still reach it, with arguments that break a precondition the type does not state.
-  Prove that the new definition equals the old one wherever the old index was in range.
+  Change the definition in place, and keep no copy of the old one beside it.
+  Wherever the old index was in range, the result must not change, so the existing theorems and tests keep their statements and pass.
   If an input that the source rejects reached a default, the change is a `fix`.
   It cites the rule of the source that it restores.
   No upstream suite holds the test vectors that such a fix adds.
-  So describe what each one pins, and record its origin next to it, as [Known answers](#known-answers) asks.
+  So take the expected value of each one from that rule, never from EthLib.
+  Describe what each vector pins, and record its origin next to it, as [Known answers](#known-answers) asks.
 - Prefer structural recursion, `map` and folds to `Id.run do` with mutable variables.
   A proof then follows the shape of the definition.
   A theorem about a `do` loop restates its elaborated body, so any edit of the loop breaks the statement.
