@@ -40,7 +40,7 @@ noncomputable def boundaryStake (y : ForkedBeaconState preset) : Nat :=
 
 /-- The combined transfer assigns coefficients two, one and two to loss, gain and boundary stake.
 
-Divided by three, loss and gain weigh four thirds and two thirds.
+In the bound, twice the drift divided by three weighs loss and gain at four thirds and two thirds.
 
 These are the weights of exits and of activations in [EIP-8061], Security Considerations.
 

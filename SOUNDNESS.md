@@ -2659,10 +2659,11 @@ So a key slashed before `x` and still active at `x` counts as accountable, altho
 The votes are those of the attestations that the blocks applied, read by public key in the registry before each block.
 The weights are effective balances.
 Two checkpoints conflict when the runs applied different block headers up to the first slot of the earlier of their two epochs (`Conflict`, `DirectSafety/Execution.lean`).
-So the runs disagree on the checkpoint of that epoch, even when one of the two finalized blocks is an ancestor of the other.
+So, unless the roots of their headers collide, the runs disagree on the checkpoint of that epoch, even when one of the two finalized blocks is an ancestor of the other.
 `accountable_safety` takes conflicting finalized checkpoints of the two last states, with `x` no later than the first slot of the earlier finalized epoch.
 Then the active stake at `x` is at most three times the accountable stake at `x`, plus twice the larger drift of the two tails.
-With no change of the validators and of their effective balances, the drift is zero, and the accountable keys hold at least one third of the active stake at `x`.
+The drift is zero when the active validators and their effective balances stay the same from the epoch before `x` to one epoch past the later finalized epoch.
+Then the accountable keys hold at least one third of the active stake at `x`.
 Otherwise the runs show evidence about the hash (`HashEvidence`), so no theorem assumes that the hash is injective.
 The evidence is two different inputs of the SHA-256 node hash with one digest, read in the roots of the headers of the runs.
 Or it is a header or a state of the runs whose root is zero.

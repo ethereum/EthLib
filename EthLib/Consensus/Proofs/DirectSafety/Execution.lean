@@ -75,7 +75,7 @@ The headers are compared up to the first slot of the earlier of the two epochs.
 
 Only the epochs of the checkpoints are read, not their roots.
 
-So the runs disagree on the checkpoint of the earlier epoch.
+So, unless the roots of their headers collide, the runs disagree on the checkpoint of that epoch.
 
 That holds even when one finalized block is an ancestor of the other. -/
 def Conflict {g a b : ForkedBeaconState preset} (left : Run config checks g a)

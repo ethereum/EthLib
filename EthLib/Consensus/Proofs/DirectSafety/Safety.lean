@@ -29,7 +29,9 @@ It charges once the stake that joins or gains balance.
 
 It also charges twice the stake active only at the previous epoch.
 
-With no change of the validators and of their balances, it is zero.
+It is zero when the active validators and their effective balances stay the same.
+
+They must stay so from the epoch before `x` to one epoch past the later finalized epoch.
 
 It is the largest drift that the tails observe, not a bound in closed form.
 
