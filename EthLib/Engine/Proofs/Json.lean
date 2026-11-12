@@ -602,7 +602,8 @@ The text is `0x` and the digits of the number, without leading zeros, and `0x0` 
 
 The converse also holds: no other text decodes to the number. -/
 theorem quantity_toDigits (what : String) {bits v : Nat} (hv : v < 2 ^ bits) :
-    quantity what bits (.str ("0x" ++ String.ofList (Nat.toDigits 16 v))) = .ok v := by
+    quantity what bits (quantityJson v) = .ok v := by
+  unfold quantityJson
   obtain ⟨hall, hval, hhead⟩ := toDigits_hex v
   have hascii : ∀ c ∈ Nat.toDigits 16 v, c.val ≤ 0x7F := by
     intro c hc
@@ -644,7 +645,7 @@ theorem quantity_toDigits (what : String) {bits v : Nat} (hv : v < 2 ^ bits) :
 
 /-- The decoder of 64-bit numbers reads back any 64-bit number, written in lowercase hex. -/
 theorem uint64_toDigits (what : String) (x : UInt64) :
-    uint64 what (.str ("0x" ++ String.ofList (Nat.toDigits 16 x.toNat))) = .ok x :=
+    uint64 what (quantityJson x.toNat) = .ok x :=
   uint64_eq_ok_iff.mpr (quantity_toDigits what x.toNat_lt)
 
 /-! ## Only the canonical text decodes -/
@@ -773,8 +774,8 @@ The number must also be below the bound of the decoder.
 
 So uppercase digits, leading zeros, `0x` alone and any other text are rejected. -/
 theorem quantity_eq_ok_iff {what : String} {bits : Nat} {j : Lean.Json} {v : Nat} :
-    quantity what bits j = .ok v ↔
-      v < 2 ^ bits ∧ j = .str ("0x" ++ String.ofList (Nat.toDigits 16 v)) := by
+    quantity what bits j = .ok v ↔ v < 2 ^ bits ∧ j = quantityJson v := by
+  unfold quantityJson
   constructor
   · intro h
     refine ⟨lt_of_quantity h, ?_⟩
@@ -1183,7 +1184,7 @@ theorem address_eq_ok_iff_map_toLower {what : String} {j : Lean.Json} {a : Addre
 
 /-! ## The encoders
 
-A number is written as the only text that decodes to it, at any bound above the number.
+The decoder of numbers takes only the text that the encoder writes, at any bound above the number.
 
 So two numbers never share a text, however large they are.
 
@@ -1191,15 +1192,6 @@ A list decodes from its encoding exactly as its items decode from theirs, in ord
 
 A withdrawal, and a list of withdrawals, decode back from what the encoders write for them.
 -/
-
-/-- A number decodes from a value exactly when the value is the encoding of that number.
-
-The number must also be below the bound of the decoder.
-
-So the encoding has no leading zero and no uppercase digit, and zero is `0x0`. -/
-theorem quantity_eq_ok_iff_quantityJson {what : String} {bits : Nat} {j : Lean.Json} {v : Nat} :
-    quantity what bits j = .ok v ↔ v < 2 ^ bits ∧ j = quantityJson v :=
-  quantity_eq_ok_iff
 
 /-- Two numbers have the same encoding only when they are equal. -/
 theorem quantityJson_inj {m n : Nat} : quantityJson m = quantityJson n ↔ m = n := by
@@ -1209,19 +1201,9 @@ theorem quantityJson_inj {m n : Nat} : quantityJson m = quantityJson n ↔ m = n
     (by decide) (Nat.le_add_right m n))
   have hn : n < 2 ^ (m + n) := Nat.lt_of_lt_of_le (Nat.lt_two_pow_self) (Nat.pow_le_pow_right
     (by decide) (Nat.le_add_left n m))
-  have h1 := quantity_eq_ok_iff_quantityJson (what := "") (j := quantityJson m) |>.mpr ⟨hm, rfl⟩
-  rw [(quantity_eq_ok_iff_quantityJson (what := "")).mpr ⟨hn, h⟩] at h1
+  have h1 := quantity_eq_ok_iff (what := "") (j := quantityJson m) |>.mpr ⟨hm, rfl⟩
+  rw [(quantity_eq_ok_iff (what := "")).mpr ⟨hn, h⟩] at h1
   exact (Except.ok.inj h1).symm
-
-/-- The decoder of 64-bit numbers reads back the encoding of any 64-bit number. -/
-private theorem uint64_quantityJson (what : String) (x : UInt64) :
-    uint64 what (quantityJson x.toNat) = .ok x :=
-  uint64_toDigits what x
-
-/-- The decoder of addresses reads back the encoding of any address. -/
-private theorem address_dataJson (what : String) (a : Address) :
-    address what (dataJson a.toList) = .ok a :=
-  fixed_hexString what 20 a true
 
 /-- A list decodes from its encoding exactly as its items decode from theirs, in order. -/
 theorem array_listJson {α β : Type} (what : String) (f : Lean.Json → Decode α) (g : β → Lean.Json)
@@ -1233,7 +1215,7 @@ theorem array_listJson {α β : Type} (what : String) (f : Lean.Json → Decode 
   | cons x xs ih => simp only [List.map_cons, List.mapM_cons, ih]
 
 open Std in
-/-- An object built from pairs with distinct names holds exactly those pairs, by distinct names. -/
+/-- An object built from pairs with distinct names holds exactly those pairs, no two of one name. -/
 private theorem toList_mkObj {pairs : List (String × Lean.Json)}
     (distinct : pairs.Pairwise fun a b => a.1 ≠ b.1) :
     ∃ kvs, Lean.Json.mkObj pairs = .obj kvs ∧ kvs.toList.length = pairs.length ∧
@@ -1315,8 +1297,7 @@ theorem withdrawal_withdrawalJson (w : Execution.Blocks.Withdrawal) :
     withdrawal (withdrawalJson w) = .ok w := by
   obtain ⟨fs, hfs, hx, h1, h2, h3, h4⟩ := fields_withdrawalJson w
   exact withdrawal_eq_ok_iff.mpr ⟨fs, hfs, hx, _, _, _, _, h1, h2, h3, h4,
-    uint64_quantityJson _ _, uint64_quantityJson _ _, address_dataJson _ _,
-    uint64_quantityJson _ _⟩
+    uint64_toDigits _ _, uint64_toDigits _ _, fixed_hexString _ 20 _ true, uint64_toDigits _ _⟩
 
 /-- The decoder of lists of withdrawals reads back the encoding of any list of withdrawals. -/
 theorem array_withdrawal_listJson (what : String) (ws : List Execution.Blocks.Withdrawal) :
