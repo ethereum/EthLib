@@ -1,0 +1,17 @@
+# The package that renders the API documentation of EthLib with doc-gen4.
+# It is separate, so EthLib itself does not depend on doc-gen4.
+name = "docbuild"
+reservoir = false
+version = "0.1.0"
+# EthLib's dependencies are those of the repository root, already fetched there.
+packagesDir = "../.lake/packages"
+
+# The tag of doc-gen4 that matches the toolchain in `lean-toolchain`.
+[[require]]
+scope = "leanprover"
+name = "doc-gen4"
+rev = "v4.35.0"
+
+[[require]]
+name = "EthLib"
+path = "../"
