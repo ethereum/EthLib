@@ -30,9 +30,9 @@ The RANDAO step changes only the mixes, and the bid step only the latest bid.
 
 So from Gloas a block leaves its own bid as the latest bid.
 
-At every fork a block leaves its own header as the latest header, and names the header before it.
-
 The latest block hash after the block is then the parent hash of that bid.
+
+At every fork a block leaves its own header as the latest header, and names the header before it.
 
 From Gloas a block that succeeds also runs an operations step that succeeds.
 

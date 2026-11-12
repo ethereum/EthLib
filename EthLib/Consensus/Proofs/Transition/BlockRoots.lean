@@ -16,13 +16,13 @@ The epoch transition changes neither the buffer of block roots nor the latest bl
 
 So after the slots up to a later slot, the root at the slot before it is the root of the header.
 
-A root that is readable after one slot was readable before it, or is the root of the new header.
-
-The new header is the one before it, with its state root filled by the root of the state before.
-
 The block handler uses this to show which parent a block it accepts names.
 
 The block, and from Gloas its bid, names that root as its parent.
+
+A root that is readable after one slot was readable before it, or is the root of the new header.
+
+The new header is the one before it, with its state root filled by the root of the state before.
 
 From Gloas the slots and the epoch transition also keep the latest block hash and the latest bid.
 

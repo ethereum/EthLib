@@ -13,7 +13,7 @@ At two consecutive slots it records the same root, or a block and its child.
 
 The parent root of a block is the root recorded at the slot before it, by the check of its header.
 
-`rootLinks_cases_of_chainSteps` in `RootLinks.lean` states that for a run of a chain.
+The proofs of root links show that for a run of a chain.
 
 Without a collision of header roots, these pairs order the roots by ancestry.
 
