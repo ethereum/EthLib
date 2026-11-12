@@ -680,6 +680,16 @@ The clamp of the Poly1305 key has its own theorem.
 So a clamp with another mask would fail it.
 `clampR_lt` bounds `r` by `2 ^ 124`.
 `poly1305Accumulator_lt` proves that the accumulator stays below the prime `2 ^ 130 - 5`, whatever `r` and the message, since each step reduces modulo the prime.
+The cipher and the keystream have their own theorems.
+`crypt_eq_ok_iff` gives every byte of the output of the cipher.
+Byte `j` is byte `j` of the input XOR byte `j % 64` of the block whose counter is the initial counter plus `j / 64`.
+So a keystream shorter than the input, which leaves its last bytes in plaintext, or a counter that repeats would fail it.
+`encrypt_eq_ok_iff` gives the AEAD ciphertext in the same terms, with the counter starting at 1.
+It gives the tag too: the Poly1305 tag of the MAC input under the key of block 0.
+`byteAt_keyStream` and `size_keyStream` give the keystream itself.
+`pad16_eq_iff` proves that the padding of the MAC input is the fewest zero bytes that complete a multiple of 16, so aligned input gets none.
+`getElem_serializeState` gives each byte of the serialized state, the least significant byte of each word first.
+`stateOfBytes_serializeState` and `serializeState_stateOfBytes` prove that reading 64 bytes as a state undoes the serialization.
 No theorem relates ChaCha20-Poly1305 to an independent model of RFC 8439.
 The Python tests compare the bindings with the RFC 7748 and RFC 8439 vectors.
 The million-iteration X25519 vector requires `ETHLIB_SLOW_VECTORS=1`.
