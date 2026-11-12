@@ -15,9 +15,11 @@ Below version 5 the payload decodes exactly as a structure of a version that the
 
 From version 5 it decodes exactly as a payload of version 4, with its access list and its slot.
 
-A request list passes the checks exactly when each request has more than one byte.
+From version 4, a request list passes its check exactly when two conditions hold.
 
-The first byte of each request is its type, and the types strictly increase along the list.
+Each request has more than one byte, so its first byte is its type.
+
+The types strictly increase along the list.
 
 Without a JSON-RPC error, the parameters are an array of the values of the version, none null.
 
@@ -137,11 +139,11 @@ theorem payloadParam_eq_ok_iff_of_le {version : Nat} {j : Lean.Json}
   · rintro ⟨bal, slot, ha, rfl⟩
     simp [ha, bind, Except.bind, pure, Except.pure]
 
-/-- A list passes the check exactly when each request has more than one byte.
+/-- A list passes the check exactly when two conditions hold.
 
-The first bytes of the requests must also be strictly increasing along the list.
+Each request has more than one byte, so its first byte is its type.
 
-So a list passes with types in any increasing order, gaps between them allowed. -/
+The types strictly increase along the list, with gaps between them allowed. -/
 theorem validRequests_iff : ∀ {requests : List ByteArray},
     validRequests requests = true ↔
       (∀ r ∈ requests, 1 < r.size) ∧ (requests.map fun r => r[0]!).Pairwise (· < ·)
