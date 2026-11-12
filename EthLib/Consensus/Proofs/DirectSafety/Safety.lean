@@ -89,7 +89,7 @@ private theorem accountable_pair_bound {g x a b : ForkedBeaconState preset}
               (effectiveWeight c.cached) k)) ≤ referenceLoss x ⟨c.before.fork, c.cached⟩ := by
         refine ⟨quorum_voters_recent run parameters genesis c,
           quorum_count run genesis enough c, ?_⟩
-        obtain ⟨pre, post, split, frame, validators, balances⟩ := c.toEpochCall.selected_prefix
+        obtain ⟨pre, tail, split, frame, validators, balances⟩ := c.toEpochCall.selected_prefix
         unfold referenceLoss
         apply Finset.sum_le_sum_of_subset_of_nonneg
         · intro k hk
@@ -102,8 +102,7 @@ private theorem accountable_pair_bound {g x a b : ForkedBeaconState preset}
             obtain ⟨u, v, step, inside, ev⟩ := evidence
             refine ⟨u, v, step, ?_, ev⟩
             rw [split]
-            exact ((pre.snoc (.slot c.advanced)).contains_append post step).mpr
-              (.inl (.earlier inside _))
+            exact (pre.contains_append tail step).mpr (.inl inside)
           exact absent (Finset.mem_filter.mpr ⟨active, key ▸ included _ all⟩)
         · intros; exact Nat.zero_le _
       cases call with

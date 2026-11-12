@@ -41,18 +41,20 @@ structure EpochCall {g a : ForkedBeaconState preset} (run : Run config checks g 
   weighedOk : processJustificationAndFinalization cached = .ok weighed
   later : GENESIS_EPOCH + 1 < getCurrentEpoch cached
 
-/-- An epoch call splits the run at its slot step.
+/-- An epoch call splits the run before its slot step.
 
 Caching the slot is a frame, and keeps the registry and the balances. -/
 theorem EpochCall.selected_prefix {g a : ForkedBeaconState preset}
     {run : Run config checks g a} (call : EpochCall run) :
-    ∃ (pre : Run config checks g call.before) (post : Run config checks call.after a),
-      run = (pre.snoc (.slot call.advanced)).append post ∧
+    ∃ (pre : Run config checks g call.before) (tail : Run config checks call.before a),
+      run = pre.append tail ∧
       Frame call.before.state call.cached ∧
       call.cached.validators = call.before.state.validators ∧
       call.cached.balances = call.before.state.balances := by
   obtain ⟨pre, post, same⟩ := run.contains_split (.slot call.advanced) call.member
-  refine ⟨pre, post, same, frame_processSlot call.cachedOk, ?_⟩
+  refine ⟨pre, (Run.nil.snoc (.slot call.advanced)).append post,
+    same.trans (Run.append_assoc pre (Run.nil.snoc (.slot call.advanced)) post).symm,
+    frame_processSlot call.cachedOk, ?_⟩
   obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok call.cachedOk
   rw [cachedEq]
   exact ⟨rfl, rfl⟩
@@ -246,12 +248,9 @@ theorem cached_participation {g a : ForkedBeaconState preset} (run : Run config 
     (parameters : Parameters preset) (genesis : Genesis (config := config) (checks := checks) g)
     (call : EpochCall run) :
     ParticipationBacked run call.cached := by
-  obtain ⟨pre, post, same, _⟩ := call.selected_prefix
-  let tail := (Run.nil.snoc (.slot call.advanced)).append post
+  obtain ⟨pre, tail, same, _⟩ := call.selected_prefix
   have backed := inherited_participation pre tail parameters genesis
-  have eqRun : pre.append tail = run :=
-    (Run.append_assoc pre _ post).trans same.symm
-  rw [eqRun] at backed
+  rw [← same] at backed
   exact ⟨backed.1.of_processSlot call.cachedOk,
     backed.2.of_processSlot (by have := parameters.slots; omega)
       (by have := parameters.roots; omega) call.cachedOk⟩
@@ -309,14 +308,13 @@ theorem quorum_attestations {g a : ForkedBeaconState preset} (run : Run config c
     (call : QuorumCall run) :
     ∀ key ∈ call.voters, ∃ data, run.Accepted key data ∧
       data.source = call.source ∧ data.target = call.target := by
-  obtain ⟨pre, post, same, _, validators, _⟩ := call.toEpochCall.selected_prefix
+  obtain ⟨pre, tail, same, _, validators, _⟩ := call.toEpochCall.selected_prefix
   refine counted_accepted run (cached_participation run parameters genesis call.toEpochCall)
     call.later call.current call.target call.targetEpoch call.targetRoot call.counted ?_
   intro index data validator found voted
   -- The validator keeps its key from the cached state to the end of the run.
   have atBefore : call.before.state.validators.data[index.toNat]? = some validator := by
     simpa [validators] using found
-  let tail := (Run.nil.snoc (.slot call.advanced)).append post
   obtain ⟨last, atLast, keyLast⟩ := validators_getElem?_of_validatorKeys_prefix
     (validatorKeys_prefix_and_distinct_of_chainSteps tail.chainSteps).1 atBefore
   rw [← keyLast]
@@ -568,12 +566,9 @@ private theorem justification_bit_call {g a : ForkedBeaconState preset}
       witness.target.epoch.toNat + i.val = (getCurrentEpoch call.cached).toNat := by
   rcases call_bits call i set with direct | ⟨j, shift, oldSet⟩
   · exact direct
-  · obtain ⟨pre, post, same, frame, _⟩ := call.selected_prefix
+  · obtain ⟨pre, tail, same, frame, _⟩ := call.selected_prefix
     obtain ⟨quorum, target⟩ := run_bits pre genesis j
       (by simpa [frame.justificationBits] using oldSet)
-    let tail := (Run.nil.snoc (.slot call.advanced)).append post
-    have eqRun : pre.append tail = run :=
-      (Run.append_assoc pre _ post).trans same.symm
     have result : ∃ witness : QuorumCall (pre.append tail),
         witness.target.epoch.toNat + i.val = (getCurrentEpoch call.cached).toNat := by
       refine ⟨quorum.extend tail, ?_⟩
@@ -582,8 +577,7 @@ private theorem justification_bit_call {g a : ForkedBeaconState preset}
         simp [getCurrentEpoch_toNat, frame.slot]
       change quorum.target.epoch.toNat + i.val = _
       omega
-    exact Eq.mp (congrArg (fun r => ∃ witness : QuorumCall r,
-      witness.target.epoch.toNat + i.val = (getCurrentEpoch call.cached).toNat) eqRun) result
+    exact Eq.mp (by rw [← same]) result
 
 private theorem call_current {g a : ForkedBeaconState preset} {run : Run config checks g a}
     (call : EpochCall run) :
@@ -727,7 +721,7 @@ private theorem quorum_source_history {g a : ForkedBeaconState preset} (run : Ru
     (genesis : Genesis (config := config) (checks := checks) g) (call : QuorumCall run) :
     call.source = ⟨GENESIS_EPOCH, Vector.replicate 32 0⟩ ∨
       Nonempty (JustificationHistory run call.source) := by
-  obtain ⟨pre, post, same, frame, _⟩ := call.toEpochCall.selected_prefix
+  obtain ⟨pre, tail, same, frame, _⟩ := call.toEpochCall.selected_prefix
   have field : call.source = call.before.state.previousJustifiedCheckpoint ∨
       call.source = call.before.state.currentJustifiedCheckpoint := by
     unfold QuorumCall.source
@@ -737,13 +731,9 @@ private theorem quorum_source_history {g a : ForkedBeaconState preset} (run : Ru
   rcases justified_fields pre genesis call.source field with initial | history
   · exact .inl initial
   · obtain ⟨history⟩ := history
-    let tail := (Run.nil.snoc (.slot call.advanced)).append post
-    have eqRun : pre.append tail = run :=
-      (Run.append_assoc pre _ post).trans same.symm
     have result : Nonempty (JustificationHistory (pre.append tail) call.source) :=
       ⟨history.extend tail⟩
-    exact .inr (Eq.mp (congrArg (fun r => Nonempty (JustificationHistory r call.source))
-      eqRun) result)
+    exact .inr (Eq.mp (by rw [← same]) result)
 
 private theorem weighed_rule {g a : ForkedBeaconState preset} {run : Run config checks g a}
     (call : EpochCall run) :
@@ -880,21 +870,16 @@ theorem finalization_rule_quorums {g a : ForkedBeaconState preset} (run : Run co
       have late := UInt64.lt_iff_toNat_lt.mp call.later
       simp only [GENESIS_EPOCH, UInt64.reduceAdd, UInt64.reduceToNat] at late
       exact ⟨quorum, source, by rw [epoch]; omega⟩
-    · obtain ⟨pre, post, same, frame, _⟩ := call.selected_prefix
+    · obtain ⟨pre, tail, same, frame, _⟩ := call.selected_prefix
       obtain ⟨quorum, source, _, date⟩ := run_zero pre genesis
         (by simpa [frame.justificationBits] using old)
-      let tail := (Run.nil.snoc (.slot call.advanced)).append post
-      have eqRun : pre.append tail = run :=
-        (Run.append_assoc pre _ post).trans same.symm
       have result : ∃ outgoing : QuorumCall (pre.append tail),
           outgoing.source = call.cached.previousJustifiedCheckpoint ∧
           outgoing.target.epoch.toNat + 1 = (getCurrentEpoch call.cached).toNat := by
         refine ⟨quorum.extend tail, source.trans frame.previousJustified.symm, ?_⟩
         change quorum.target.epoch.toNat + 1 = _
         simpa [getCurrentEpoch_toNat, frame.slot] using date
-      exact Eq.mp (congrArg (fun r => ∃ outgoing : QuorumCall r,
-        outgoing.source = call.cached.previousJustifiedCheckpoint ∧
-        outgoing.target.epoch.toNat + 1 = (getCurrentEpoch call.cached).toNat) eqRun) result
+      exact Eq.mp (by rw [← same]) result
   rcases rule with ⟨source, three | two⟩ | ⟨source, two | one⟩
   · obtain ⟨outgoing, start, date⟩ := previous three.1
     exact finish outgoing (start.trans source.symm) (.inr (by omega))
