@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Execution.Network.Blocks
+public import EthLib.Execution.Proofs.Blocks.Header
 public import EthLib.Serialization.Proofs.Rlp.Codec
 public import EthLib.Serialization.Proofs.Rlp.Item
 
@@ -238,5 +239,12 @@ theorem checkHeaders_eq_ok_iff {r : HeaderRequest} {headers : List Item} :
 /-- The empty answer passes the check of every request. -/
 theorem checkHeaders_nil (r : HeaderRequest) : checkHeaders r [] = .ok () := by
   simp [checkHeaders, followAll, pure, Except.pure]
+
+/-- The number of the header of an encoded header is its number. -/
+theorem headerNumber_toItem {fork : Fork} (h : Blocks.Header fork) :
+    headerNumber (Codec.toItem h) = .ok h.number := by
+  rw [Blocks.Header.toItem_eq]
+  simp [headerNumber, HEADER_NUMBER_INDEX, Item.toItems, bind, Except.bind]
+  exact LawfulCodec.ofItem_toItem _
 
 end EthLib.Execution.Network

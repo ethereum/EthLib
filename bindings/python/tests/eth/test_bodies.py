@@ -3,7 +3,7 @@
 import pytest
 
 import archives
-from blocks.test_blocks import BEFORE_SHANGHAI, CASES, FORK_OF_NETWORK, _case_id
+from blocks.test_blocks import BEFORE_SHANGHAI, CASES, EMPTY_TRIE_ROOT, FORK_OF_NETWORK, _case_id
 from ethlib.cryptography import keccak
 from ethlib.execution.history import decode_era1
 from ethlib.execution.network import EthWireError, check_body
@@ -11,16 +11,14 @@ from ethlib.serialization import rlp
 from raising import raises
 
 # The rules come from "Block Encoding and Validity" in caps/eth.md of ethereum/devp2p at the pin.
-# The accepted bodies are the blocks of tests/execution/blocks/blockchain_tests.json,
-# and the blocks of era 0 of mainnet, pinned in tests/sources.toml.
+# The accepted bodies are the blocks of tests/execution/blocks/blockchain_tests.json.
+# The blocks of era 0 of mainnet are accepted too, and tests/sources.toml pins their archive.
 # The refused ones are RLP built here.
 
 ARCHIVE = "era1/mainnet-00000-5ec1ffb8"
 
-# The empty trie has this root, the Keccak-256 hash of 0x80.
-EMPTY_TRIE_ROOT = bytes.fromhex("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")
 # The Keccak-256 hash of the encoding of no ommers, 0xc0.
-EMPTY_OMMERS_HASH = keccak.keccak256(rlp.encode([]))
+EMPTY_OMMERS_HASH = bytes.fromhex("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347")
 
 
 def _p(n: int) -> bytes:
@@ -33,7 +31,7 @@ def _header(
     transactions_root: bytes = EMPTY_TRIE_ROOT,
     withdrawals_root: bytes | None = None,
 ) -> bytes:
-    """A header of the fifteen fields of Frontier, with the fields of Shapella if it has a root."""
+    """A header of the fifteen fields of Frontier, with the base fee and withdrawals root if given."""
     fields = [
         bytes(32),
         ommers_hash,
@@ -70,7 +68,7 @@ def test_fixture_body_accepted(case) -> None:
 
 
 def test_fixture_bodies_cover_both_shapes() -> None:
-    # Bodies of both lengths pass: two items before Shapella, three from Shapella.
+    # The fixtures hold bodies of both lengths: two items before Shapella, three from Shapella.
     lengths = {
         (case["network"] in BEFORE_SHANGHAI, len(rlp.decode(_split(bytes.fromhex(case["rlp"]))[1])))
         for case in CASES
@@ -137,9 +135,26 @@ LATE_HEADER = _header(ommers_hash=keccak.keccak256(rlp.encode([LATE_OMMER])))
             "frontier",
             _header(),
             rlp.encode([[b""], []]),
-            602,
-            "a root of the body cannot be computed: EthLib.Execution.Trie.TrieError.emptyValue",
-            id="trie-empty-value",
+            610,
+            "a transaction is a byte string that does not start with a type",
+            id="untyped-transaction-empty",
+        ),
+        pytest.param(
+            "frontier",
+            _header(),
+            # A legacy transaction, the empty list 0xc0, sent as a byte string.
+            rlp.encode([[rlp.encode(TRANSACTION)], []]),
+            610,
+            "a transaction is a byte string that does not start with a type",
+            id="untyped-transaction-legacy-as-bytes",
+        ),
+        pytest.param(
+            "frontier",
+            _header(),
+            rlp.encode([[b"\x80\x01"], []]),
+            610,
+            "a transaction is a byte string that does not start with a type",
+            id="untyped-transaction-first-byte-0x80",
         ),
         pytest.param(
             "frontier",
@@ -212,6 +227,13 @@ def test_ommer_at_the_block_passes() -> None:
     check_body("frontier", header, rlp.encode([[], [ommer]]))
 
 
+def test_two_ommers_pass() -> None:
+    # Two ommers is the most that the rule allows.
+    ommers = [rlp.decode(_header(number=99)), rlp.decode(_header(number=100))]
+    header = _header(ommers_hash=keccak.keccak256(rlp.encode(ommers)))
+    check_body("frontier", header, rlp.encode([[], ommers]))
+
+
 def test_header_that_does_not_decode_is_refused() -> None:
     # A Frontier header has fifteen fields, and Shapella asks for seventeen.
     message = (
@@ -227,3 +249,8 @@ def test_body_that_is_not_rlp_is_refused() -> None:
     with raises(EthWireError, "body is not RLP") as info:
         check_body("frontier", _header(), b"\xc1")
     assert info.value.code == 0
+
+
+def test_fork_that_is_not_a_string_is_refused() -> None:
+    with raises(TypeError, "fork must be str"):
+        check_body(b"frontier", _header(), rlp.encode([[], []]))  # ty: ignore[invalid-argument-type]

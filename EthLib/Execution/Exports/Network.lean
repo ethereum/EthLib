@@ -192,6 +192,7 @@ def bodyMessage : BodyError → String
   | .tooManyOmmers c => s!"body holds {c} ommers, more than {Blocks.MAX_OMMERS}"
   | .wrongOmmersHash => "ommers do not have the ommers hash of the header"
   | .ommerAfterBlock i n => s!"ommer {i} has number {n}, after the block"
+  | .untypedTransaction => "a transaction is a byte string that does not start with a type"
 
 /-- Whether the body `body` of a BlockBodies answer belongs to the header `header` at a fork.
 

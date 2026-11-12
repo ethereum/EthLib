@@ -42,7 +42,7 @@ def check_headers(version: int, request: bytes, response: bytes) -> None:
 
 
 def check_body(fork: str, header: bytes, body: bytes) -> None:
-    """Accept the RLP `body` of a BlockBodies answer for the RLP `header` at `fork`, or raise."""
+    """Accept the RLP `body` of a BlockBodies answer for the RLP `header` at `fork`, or raise EthWireError."""
     _native.eth_check_body(fork, header, body)
 
 

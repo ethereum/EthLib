@@ -3,22 +3,27 @@ module
 public import EthLib.Execution.Network.Bodies
 public import EthLib.Execution.Proofs.Blocks.Roots
 public import EthLib.Base.Proofs.MapM
-public import EthLib.Execution.Proofs.Blocks.Header
+public import EthLib.Execution.Proofs.Network.Blocks
 public import EthLib.Execution.Proofs.Blocks.Ommers
 public import EthLib.Execution.Proofs.Blocks.Transition
 public import EthLib.Execution.Proofs.Blocks.TypedRoots
 public import EthLib.Execution.Proofs.Blocks.Validate
+public import EthLib.Execution.Proofs.Transactions.Envelope
 public import EthLib.Serialization.Proofs.Rlp.Codec
 public import EthLib.Serialization.Proofs.Rlp.RoundTrip
 
 /-!
 # Proofs: the check of a block body
 
-Two errors with one code come from one constructor.
+The body of every block that passes the state transition passes the check against its header.
 
-A body whose ommers list holds three items is rejected, once its shape and its transactions pass.
+Two bodies that pass for one header are equal in each part, or a Keccak-256 collision is named.
+
+A body with three ommers is rejected once the checks before the ommers pass.
 
 A body without withdrawals from Shapella, or with them before, is rejected for that reason.
+
+Two errors with one code come from one constructor.
 -/
 
 @[expose] public section
@@ -67,8 +72,7 @@ theorem checkBody_missingWithdrawals (hfork : .shapella ≤ fork) {header : Head
   simp only [checkBody, hfork, ↓reduceDIte]
   rfl
 
-/-- Before Shapella, a body that passes the shape and transactions checks, with three ommers, is
-rejected for them. -/
+/-- Before Shapella, a body with three ommers is rejected once the earlier checks pass. -/
 theorem checkBody_tooManyOmmers (hfork : ¬ .shapella ≤ fork) {header : Header fork}
     {transactions : Item} {ommers : List Item} (hlen : ommers.length = 3)
     (htx : checkTransactions header transactions = .ok ()) :
@@ -78,8 +82,7 @@ theorem checkBody_tooManyOmmers (hfork : ¬ .shapella ≤ fork) {header : Header
   simp only [checkBody, Item.toItems, Except.mapError, bind, Except.bind, hfork, ↓reduceDIte,
     htx, this]
 
-/-- From Shapella, a body that passes the shape, transactions and withdrawals checks, with three
-ommers, is rejected for them. -/
+/-- From Shapella, a body with three ommers is rejected once the earlier checks pass. -/
 theorem checkBody_tooManyOmmers_shapella (hfork : .shapella ≤ fork) {header : Header fork}
     {transactions withdrawals : Item} {ommers : List Item} (hlen : ommers.length = 3)
     (htx : checkTransactions header transactions = .ok ())
@@ -100,7 +103,7 @@ theorem checkTransactions_eq_ok_iff {header : Header fork} {transactions : Item}
         indexedRoot values = .ok header.transactionsRoot := by
   unfold checkTransactions
   cases hv : transactionValues transactions with
-  | error e => simp [Except.mapError, bind, Except.bind]
+  | error e => simp [bind, Except.bind]
   | ok values =>
     cases hr : indexedRoot values with
     | error e => simp [Except.mapError, bind, Except.bind, hr]
@@ -182,14 +185,60 @@ theorem checkBody_eq_ok {header : Header fork} {body : Item}
 
 /-! ## Binding -/
 
-/-- Two transaction items have the same bytes, or their bytes give a Keccak-256 collision. -/
+/-- A typed transaction item stands for itself, with a type as its first byte. -/
+theorem transactionBytes_bytes {b v : ByteArray} (h : transactionBytes (.bytes b) = .ok v) :
+    b = v ∧ ∃ h0 : 0 < b.size, b[0] < 0x80 := by
+  unfold transactionBytes at h
+  by_cases h0 : 0 < b.size
+  · by_cases ht : b[0] < 0x80
+    · simp only [h0, ht, ↓reduceDIte, ↓reduceIte, Except.ok.injEq] at h
+      exact ⟨h, h0, ht⟩
+    · simp [h0, ht] at h
+  · simp [h0] at h
+
+/-- Two transaction items that stand for the same bytes are equal.
+
+A list starts with a byte of at least `0xc0`, and a typed transaction with a byte below `0x80`. -/
+theorem transactionBytes_injective {a b : Item} {v : ByteArray}
+    (ha : transactionBytes a = .ok v) (hb : transactionBytes b = .ok v) : a = b := by
+  -- A list item and a byte string item never stand for the same bytes.
+  have mixed : ∀ {x : ByteArray} {l : List Item}, transactionBytes (.bytes x) = .ok v →
+      transactionBytes (.list l) = .ok v → False := by
+    intro x l hx hl
+    obtain ⟨hxv, h0, hlow⟩ := transactionBytes_bytes hx
+    have he : encode (.list l) = .ok x := hxv ▸ mapError_ok_iff.mp hl
+    obtain ⟨first, rest, hlist, hhigh⟩ := encode_list_head l x he
+    obtain ⟨h0', hfirst⟩ := getElem_zero_of_toList hlist
+    have hlow' : first < 0x80 := hfirst ▸ hlow
+    exact absurd (UInt8.lt_of_le_of_lt hhigh hlow') (by decide)
+  cases a with
+  | bytes x =>
+    cases b with
+    | bytes y => rw [(transactionBytes_bytes ha).1, (transactionBytes_bytes hb).1]
+    | list l => exact (mixed ha hb).elim
+  | list l =>
+    cases b with
+    | bytes y => exact (mixed hb ha).elim
+    | list m => exact encode_injective _ _ v (mapError_ok_iff.mp ha) (mapError_ok_iff.mp hb)
+
+/-- Two transactions items that stand for the same bytes are equal. -/
+theorem transactionValues_injective {t₁ t₂ : Item} {values : List ByteArray}
+    (h₁ : transactionValues t₁ = .ok values) (h₂ : transactionValues t₂ = .ok values) :
+    t₁ = t₂ := by
+  obtain ⟨items₁, hi₁, hm₁⟩ := bind_ok_iff.mp h₁
+  obtain ⟨items₂, hi₂, hm₂⟩ := bind_ok_iff.mp h₂
+  rw [Item.toItems_eq_ok.mp (mapError_ok_iff.mp hi₁),
+    Item.toItems_eq_ok.mp (mapError_ok_iff.mp hi₂),
+    mapM_ok_injective (fun _ _ _ _ _ hx hy => transactionBytes_injective hx hy) hm₁ hm₂]
+
+/-- Two transactions items are equal, or their bytes give a Keccak-256 collision. -/
 def TransactionsBound (t₁ t₂ : Item) : Prop :=
-  transactionValues t₁ = transactionValues t₂ ∨
+  t₁ = t₂ ∨
     ∃ values₁ values₂ pair, transactionValues t₁ = .ok values₁ ∧
       transactionValues t₂ = .ok values₂ ∧ findIndexedCollision values₁ values₂ = some pair ∧
       Trie.IsCollision Cryptography.Hash.Keccak.keccak256 pair
 
-/-- Two withdrawals items are equal, or the bytes of their withdrawals give a Keccak-256 collision. -/
+/-- Two withdrawals items are equal, or their withdrawals give a Keccak-256 collision. -/
 def WithdrawalsBound (w₁ w₂ : Item) : Prop :=
   w₁ = w₂ ∨
     ∃ ws₁ ws₂ : List Withdrawal, ∃ values₁ values₂ pair, Codec.ofItem w₁ = .ok ws₁ ∧
@@ -202,7 +251,7 @@ def OmmersBound (o₁ o₂ : Item) : Prop :=
   o₁ = o₂ ∨ ∃ e₁ e₂, encode o₁ = .ok e₁ ∧ encode o₂ = .ok e₂ ∧
     Trie.IsCollision Cryptography.Hash.Keccak.keccak256 (e₁, e₂)
 
-/-- Two transaction lists that pass for one header have the same bytes.
+/-- Two transactions items that pass for one header are equal.
 
 Otherwise the search over their bytes finds a Keccak-256 collision. -/
 theorem checkTransactions_binding {header : Header fork} {t₁ t₂ : Item}
@@ -212,7 +261,7 @@ theorem checkTransactions_binding {header : Header fork} {t₁ t₂ : Item}
   obtain ⟨v₁, hv₁, hr₁⟩ := checkTransactions_eq_ok_iff.mp h₁
   obtain ⟨v₂, hv₂, hr₂⟩ := checkTransactions_eq_ok_iff.mp h₂
   rcases indexedRoot_binding hr₁ hr₂ with rfl | ⟨pair, hfound, hvalid⟩
-  · exact .inl (hv₁.trans hv₂.symm)
+  · exact .inl (transactionValues_injective hv₁ hv₂)
   · exact .inr ⟨v₁, v₂, pair, hv₁, hv₂, hfound, hvalid⟩
 
 /-- Two withdrawals items that pass for one header are equal.
@@ -224,7 +273,8 @@ theorem checkWithdrawals_binding {header : Header fork} {h : .shapella ≤ fork}
   unfold WithdrawalsBound
   obtain ⟨ws₁, hd₁, hr₁⟩ := checkWithdrawals_eq_ok_iff.mp h₁
   obtain ⟨ws₂, hd₂, hr₂⟩ := checkWithdrawals_eq_ok_iff.mp h₂
-  rcases withdrawalsRoot_binding hr₁ hr₂ with rfl | ⟨values₁, values₂, pair, hv₁, hv₂, hfound, hvalid⟩
+  rcases withdrawalsRoot_binding hr₁ hr₂ with
+    rfl | ⟨values₁, values₂, pair, hv₁, hv₂, hfound, hvalid⟩
   · exact .inl ((LawfulCodec.toItem_of_ofItem hd₁).symm.trans (LawfulCodec.toItem_of_ofItem hd₂))
   · exact .inr ⟨ws₁, ws₂, values₁, values₂, pair, hd₁, hd₂, hv₁, hv₂, hfound, hvalid⟩
 
@@ -246,7 +296,7 @@ theorem checkOmmers_binding {header : Header fork} {o₁ o₂ : Item}
 
 Two bodies that pass for one header have the same parts, up to a Keccak-256 collision.
 
-- Their transactions have the same bytes, or the bytes give a collision.
+- Their transactions are equal, or the bytes of the transactions give a collision.
 - From Shapella, their withdrawals are equal, or the bytes of the withdrawals give a collision.
 - Their ommers lists are equal, or their encodings are a collision. -/
 theorem checkBody_binding {header : Header fork} {x₁ x₂ : Item}
@@ -265,155 +315,45 @@ theorem checkBody_binding {header : Header fork} {x₁ x₂ : Item}
 
 /-! ## Completeness -/
 
-/-- A block that passes its checks has transactions that all encode as items of a body. -/
-theorem checkBlock_transactions {config : ChainConfig} {checkSeal : Bool}
-    {recent : List RecentBlock} {block : Block fork Transaction}
-    (h : checkBlock config checkSeal recent block = .ok ()) :
-    ∃ items, block.transactions.mapM bodyItem = .ok items := by
-  unfold checkBlock at h
-  obtain ⟨_, hitems, -⟩ := bind_ok_iff.mp h
-  unfold bodyItems at hitems
-  cases hm : block.transactions.mapM bodyItem with
-  | error e => simp [hm, Except.mapError, bind, Except.bind] at hitems
-  | ok items => exact ⟨items, rfl⟩
-
-/-- From Paris, a block that passes its checks has no ommers, and its header commits to none. -/
-theorem checkBlock_paris {config : ChainConfig} {checkSeal : Bool}
-    {recent : List RecentBlock} {block : Block fork Transaction} (hp : ¬ fork < .paris)
-    (h : checkBlock config checkSeal recent block = .ok ()) :
-    block.ommers = [] ∧ block.header.ommersHash = EMPTY_OMMER_HASH := by
-  unfold checkBlock at h
-  obtain ⟨_, _, h⟩ := bind_ok_iff.mp h
-  obtain ⟨_, _, h⟩ := bind_ok_iff.mp h
-  split at h
-  · rename_i parent hparent
-    by_cases hF : parent.fork ≤ fork
-    · simp only [hF, ↓reduceDIte] at h
-      have hhead : checkHeader hF parent.header block.header
-          (Fees.BlobBaseFee.chainBlobSchedule config fork block.header.number
-            block.header.timestamp.toNat) = .ok () := by
-        cases hs : checkSeal
-        · simp only [hs, Bool.false_eq_true, ↓reduceIte] at h
-          cases hc : checkHeader hF parent.header block.header
-              (Fees.BlobBaseFee.chainBlobSchedule config fork block.header.number
-                block.header.timestamp.toNat) with
-          | ok u => rfl
-          | error e => simp [hc, bind, Except.bind] at h
-        · simp only [hs, ↓reduceIte] at h
-          cases hc : validateHeader hF parent.header block.header
-              (Fees.BlobBaseFee.chainBlobSchedule config fork block.header.number
-                block.header.timestamp.toNat) with
-          | ok u => exact checkHeader_of_validateHeader hc
-          | error e => simp [hc, bind, Except.bind] at h
-      obtain ⟨-, -, -, -, -, -, -, -, -, -, hpar, -⟩ := checkHeader_eq_ok_iff.mp hhead
-      refine ⟨?_, (hpar hp).2.2⟩
-      refine Classical.byContradiction fun hne => ?_
-      have hne' : ¬ block.ommers.isEmpty = true := fun he => hne (List.isEmpty_iff.mp he)
-      cases hs : checkSeal
-      · simp only [hs, Bool.false_eq_true, ↓reduceIte] at h
-        simp [hhead, bind, Except.bind, hp, hne', throw, throwThe, MonadExceptOf.throw] at h
-        split at h <;> cases h
-      · simp only [hs, ↓reduceIte] at h
-        cases hc : validateHeader hF parent.header block.header
-            (Fees.BlobBaseFee.chainBlobSchedule config fork block.header.number
-              block.header.timestamp.toNat) with
-        | ok u =>
-          simp [hc, bind, Except.bind, hp, hne', throw, throwThe, MonadExceptOf.throw] at h
-          split at h <;> cases h
-        | error e => simp [hc, bind, Except.bind] at h
-    · simp [hF, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
-  · simp [throw, throwThe, MonadExceptOf.throw] at h
-
-/-- The bytes that a transaction item stands for are the bytes of the transaction. -/
-theorem transactionBytes_bodyItem {tx : Transaction} {item : Item}
-    (h : bodyItem tx = .ok item) : transactionBytes item = encodeTransaction tx := by
+/-- The bytes that the item of a transaction stands for are the bytes of the transaction. -/
+theorem transactionBytes_bodyItem {tx : Transaction} {item : Item} {b : ByteArray}
+    (h : bodyItem tx = .ok item) (he : encodeTransaction tx = .ok b) :
+    transactionBytes item = .ok b := by
   by_cases hl : ∃ t, tx = .legacy t
   · obtain ⟨t, rfl⟩ := hl
     simp only [bodyItem, Except.ok.injEq] at h
     subst h
-    rfl
+    exact (mapError_ok_iff (g := BodyError.decoding)).mpr he
   · have hb : bodyItem tx = .bytes <$> encodeTransaction tx := by
       cases tx <;> first | rfl | exact absurd ⟨_, rfl⟩ hl
-    rw [hb] at h
-    cases he : encodeTransaction tx with
-    | error e => simp only [he, Functor.map, Except.map] at h; cases h
-    | ok b =>
-      simp only [he, Functor.map, Except.map, Except.ok.injEq] at h
-      subst h
-      simp [transactionBytes]
+    rw [hb, he] at h
+    simp only [Functor.map, Except.map, Except.ok.injEq] at h
+    subst h
+    -- The first byte is the type, at most 4.
+    obtain ⟨h0, -, htype⟩ := encodeTransaction_head he
+    have hne : tx.type ≠ 0 := fun h0' => hl (by cases tx <;> simp_all [Transaction.type])
+    have hlow : b[0] < 0x80 := by
+      rw [htype hne]
+      exact UInt8.lt_of_le_of_lt (Transaction.type_le tx) (by decide)
+    simp [transactionBytes, h0, hlow]
 
-/-- The items of the transactions of a body have the bytes of the transactions. -/
+/-- The items of the transactions of a body stand for the bytes of the transactions. -/
 theorem mapM_transactionBytes {txs : List Transaction} {items : List Item}
-    (h : txs.mapM bodyItem = .ok items) :
-    items.mapM transactionBytes = txs.mapM encodeTransaction := by
-  induction txs generalizing items with
+    {values : List ByteArray} (h : txs.mapM bodyItem = .ok items)
+    (hv : txs.mapM encodeTransaction = .ok values) : items.mapM transactionBytes = .ok values := by
+  induction txs generalizing items values with
   | nil =>
-    simp only [List.mapM_nil, pure, Except.pure, Except.ok.injEq] at h
-    subst h; rfl
+    simp only [List.mapM_nil, pure, Except.pure, Except.ok.injEq] at h hv
+    subst h hv; rfl
   | cons tx txs ih =>
     obtain ⟨item, rest, hi, hr, rfl⟩ := mapM_cons_ok.mp h
-    rw [List.mapM_cons, List.mapM_cons, transactionBytes_bodyItem hi, ih hr]
+    obtain ⟨b, bs, hb, hbs, rfl⟩ := mapM_cons_ok.mp hv
+    rw [List.mapM_cons, transactionBytes_bodyItem hi hb, ih hr hbs]
+    rfl
 
-/-- The number of the header of an encoded header is its number. -/
-theorem headerNumber_toItem (h : Header fork) : headerNumber (Codec.toItem h) = .ok h.number := by
-  rw [Header.toItem_eq]
-  simp [headerNumber, HEADER_NUMBER_INDEX, Item.toItems, bind, Except.bind]
-  exact LawfulCodec.ofItem_toItem _
+/-- Ommers pass when their encoding has the ommers hash of the header.
 
-/-- The roots of an output hold the transactions root of the transactions. -/
-theorem outputRoots_transactions {transactions : List Transaction}
-    {withdrawals : Since .shapella fork (List Withdrawal)} {output : BlockOutput fork}
-    {post : State} {roots : OutputRoots}
-    (h : outputRoots transactions withdrawals output post = .ok roots) :
-    transactionsRoot transactions = .ok roots.transactions := by
-  unfold outputRoots at h
-  obtain ⟨_, htx, h⟩ := bind_ok_iff.mp h
-  obtain ⟨_, _, h⟩ := bind_ok_iff.mp h
-  obtain ⟨_, _, h⟩ := bind_ok_iff.mp h
-  obtain ⟨_, _, h⟩ := bind_ok_iff.mp h
-  cases h
-  exact mapError_ok_iff.mp htx
-
-/-- From Shapella, the roots of an output hold the withdrawals root of the withdrawals. -/
-theorem outputRoots_withdrawals {transactions : List Transaction}
-    {withdrawals : Since .shapella fork (List Withdrawal)} {output : BlockOutput fork}
-    {post : State} {roots : OutputRoots} (hs : .shapella ≤ fork)
-    (h : outputRoots transactions withdrawals output post = .ok roots) :
-    ∃ r, withdrawalsRoot (withdrawals hs) = .ok r ∧ roots.withdrawals = some r := by
-  unfold outputRoots at h
-  obtain ⟨_, _, h⟩ := bind_ok_iff.mp h
-  obtain ⟨_, _, h⟩ := bind_ok_iff.mp h
-  obtain ⟨_, _, h⟩ := bind_ok_iff.mp h
-  obtain ⟨w, hw, h⟩ := bind_ok_iff.mp h
-  cases h
-  simp only [withdrawalsRootOf, hs, ↓reduceDIte] at hw
-  cases hr : withdrawalsRoot (withdrawals hs) with
-  | error e => simp only [hr, Functor.map, Except.map, Except.mapError] at hw; cases hw
-  | ok r =>
-    simp only [hr, Functor.map, Except.map, Except.mapError, Except.ok.injEq] at hw
-    exact ⟨r, rfl, hw.symm⟩
-
-/-- A block that passes the checks against its output has the transactions root of its body. -/
-theorem outputChecks_transactions {header : Header fork} {output : BlockOutput fork}
-    {roots : OutputRoots} (h : firstFailure (outputChecks header output roots) = .ok ()) :
-    roots.transactions = header.transactionsRoot := by
-  have all := (firstFailure_eq_ok_iff _).mp h
-  have := all (decide (roots.transactions = header.transactionsRoot), .wrongTransactionsRoot)
-    (by simp [outputChecks])
-  simpa using this
-
-/-- From Shapella, a block that passes the checks against its output has the withdrawals root of
-its body. -/
-theorem outputChecks_withdrawals {header : Header fork} {output : BlockOutput fork}
-    {roots : OutputRoots} (hs : .shapella ≤ fork)
-    (h : firstFailure (outputChecks header output roots) = .ok ()) :
-    roots.withdrawals = some (header.withdrawalsRoot hs) := by
-  have all := (firstFailure_eq_ok_iff _).mp h
-  have := all (decide (roots.withdrawals = some (header.withdrawalsRoot hs)),
-    .wrongWithdrawalsRoot) (by simp [outputChecks, hs])
-  simpa using this
-
-/-- Ommers whose encoding has the ommers hash of the header, in number and in count, pass. -/
+There must be at most two of them, and none may have a number above that of the block. -/
 theorem checkOmmers_of_valid {header : Header fork}
     {ommers : List ((f : Fork) × Header f)} {encoded : ByteArray}
     (hencoded : encode (ommersItem ommers) = .ok encoded)
@@ -426,14 +366,15 @@ theorem checkOmmers_of_valid {header : Header fork}
   have hit : (ommersItem ommers).toItems = .ok (ommers.map fun o => Codec.toItem o.2) := rfl
   unfold checkOmmers
   rw [hit]
-  simp only [Except.mapError, bind, Except.bind, ensure, List.length_map, hcount, ↓reduceIte, hencoded,
-    hb]
+  simp only [Except.mapError, bind, Except.bind, ensure, List.length_map, hcount, ↓reduceIte,
+    hencoded, hb]
   refine forM_ok_iff.mpr fun (i, item) hm => ?_
   obtain ⟨ommer, hmem, rfl⟩ := List.mem_map.mp (List.of_mem_zip hm).2
   simp only [headerNumber_toItem, hnumber ommer hmem, ↓reduceIte]
 
-/-- Completeness: the body of a block that passes the transition passes the check against its
-header. -/
+/-- Completeness: the body of a block that passes the transition passes the check.
+
+The check is against the header of that block. -/
 theorem checkBody_complete {chain : BlockChain} {block : Block fork Transaction}
     {checkSeal : Bool} {post : State} (h : stateTransition chain block checkSeal = .ok post) :
     ∃ body, bodyOf block = .ok body ∧ checkBody block.header body = .ok () := by
@@ -445,8 +386,8 @@ theorem checkBody_complete {chain : BlockChain} {block : Block fork Transaction}
     rw [outputChecks_transactions hchecks] at hroot
     obtain ⟨values, hvalues, hindexed⟩ := transactionsRoot_eq_ok_iff.mp hroot
     refine ⟨values, ?_, hindexed⟩
-    simp [transactionValues, Item.toItems, bind, Except.bind, mapM_transactionBytes hitems,
-      hvalues]
+    simp [transactionValues, Item.toItems, Except.mapError, bind, Except.bind,
+      mapM_transactionBytes hitems hvalues]
   have hom : checkOmmers block.header (ommersItem block.ommers) = .ok () := by
     by_cases hp : fork < .paris
     · obtain ⟨⟨e, he, hk⟩, hc, -, hn⟩ := validateOmmers_spec (checkBlock_validateOmmers hp hcheck)
