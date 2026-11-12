@@ -7,17 +7,19 @@ public import EthLib.Consensus.Proofs.Transition.RootLinks
 /-!
 # Statements for issue 1423
 
-This file is not an upstream-ready change: three of its five statements end in `sorry`.
+This file is not an upstream-ready change: one of its five statements ends in `sorry`.
 
 The two provenance theorems of the store's justified and finalized fields are proved.
 
 Their proofs are the untimed provenance proofs of the fork, without its network imports.
 
+The two ancestry theorems are proved too; the provenance of the cache entries is not.
+
 An anchor checkpoint is synthesized, and a pulled-up state is not a stored post-state.
 
 State checkpoints at or before the anchor epoch can name blocks outside the store.
 
-The ancestry candidates therefore separate that boundary explicitly.
+The ancestry theorems therefore separate that boundary explicitly.
 
 They retain a concrete zero-state-root witness instead of assuming hash injectivity.
 
@@ -1047,6 +1049,101 @@ theorem Store.Reachable.postState_finalized_ancestor {config : Config}
       store.blockStates[badRoot]? = some badState ∧
       SszType.hashTreeRoot badState = .ok (Vector.replicate 32 0) ∧
       store.isAncestor ⟨root, .pending⟩ ⟨badRoot, .pending⟩ = .ok true := by
-  sorry
+  by_cases early : view.finalizedCheckpoint.epoch ≤ getCurrentEpoch anchorState
+  · exact .inl early
+  right
+  have afterF : getCurrentEpoch anchorState < view.finalizedCheckpoint.epoch :=
+    UInt64.not_le.mp early
+  -- The view keeps its checkpoints ordered, whether it is the held state or its pull-up.
+  have holds : Invariant state := (Store.Reachable.ordered sound reachable).2 held
+  have ordered : CheckpointsOrdered view := by
+    rcases selected with rfl | pulled
+    · exact holds.ordered
+    · exact (processJustificationAndFinalization_invariant holds.ordered holds.settled pulled).1
+  obtain ⟨finalizedLe, previousLe⟩ := ordered
+  have epochLe : view.finalizedCheckpoint.epoch ≤ view.currentJustifiedCheckpoint.epoch :=
+    UInt64.le_trans finalizedLe previousLe
+  have afterJ : getCurrentEpoch anchorState < view.currentJustifiedCheckpoint.epoch := by
+    have := UInt64.lt_iff_toNat_lt.mp afterF
+    have := UInt64.le_iff_toNat_le.mp epochLe
+    exact UInt64.lt_iff_toNat_lt.mpr (by omega)
+  -- Both checkpoints lie on the chain of the same source block, or a zero-hashing state does.
+  rcases reachable.checkpoint_source_ancestor sound positive window anchorSlot unknownParent held
+      selected (checkpoint := view.finalizedCheckpoint) (.inr (.inr rfl)) afterF with
+    ⟨ancestorF, blockF⟩ | bad
+  · rcases reachable.checkpoint_source_ancestor sound positive window anchorSlot unknownParent
+        held selected (checkpoint := view.currentJustifiedCheckpoint) (.inr (.inl rfl)) afterJ with
+      ⟨ancestorJ, blockJ⟩ | bad
+    · left
+      -- A checkpoint block is the root of the walk from the pending source to the epoch's start.
+      have walkOf : ∀ {epoch : Epoch} {checkpoint : Root},
+          store.getCheckpointBlock root epoch = .ok checkpoint →
+          ∃ start node, computeStartSlotAtEpoch preset epoch = .ok start ∧
+            store.getAncestor ⟨root, .pending⟩ start = .ok node ∧ node.root = checkpoint := by
+        intro epoch checkpoint found
+        cases started : computeStartSlotAtEpoch preset epoch with
+        | error e =>
+          simp [Store.getCheckpointBlock, started, Except.mapError, bind, Except.bind] at found
+        | ok start =>
+          cases walk : store.getAncestor ⟨root, .pending⟩ start with
+          | error e =>
+            simp [Store.getCheckpointBlock, started, walk, Except.mapError, bind,
+              Except.bind] at found
+          | ok node =>
+            simp [Store.getCheckpointBlock, started, walk, Except.mapError, bind, Except.bind,
+              pure, Except.pure] at found
+            exact ⟨start, node, rfl, walk, found⟩
+      obtain ⟨startF, nodeF, startedF, walkF, rootF⟩ := walkOf blockF
+      obtain ⟨startJ, nodeJ, startedJ, walkJ, rootJ⟩ := walkOf blockJ
+      have startLe : startF ≤ startJ := by
+        rw [computeStartSlotAtEpoch_ok_iff] at startedF startedJ
+        rw [UInt64.le_iff_toNat_le, startedF.2, startedJ.2]
+        exact Nat.mul_le_mul_right _ (UInt64.le_iff_toNat_le.mp epochLe)
+      -- The walk to the finalized start can stop at the justified block on the way.
+      have throughJ : store.getAncestor ⟨root, .pending⟩ startF = store.getAncestor nodeJ startF :=
+        Store.getAncestor_trans startLe walkJ
+      have roots := Store.getAncestor_root (store := store) nodeJ .pending startF
+      rw [← throughJ, walkF, rootJ] at roots
+      obtain ⟨reached, walkReached, rootReached⟩ :
+          ∃ reached, store.getAncestor ⟨view.currentJustifiedCheckpoint.root, .pending⟩ startF =
+            .ok reached ∧ reached.root = view.finalizedCheckpoint.root := by
+        cases walk : store.getAncestor ⟨view.currentJustifiedCheckpoint.root, .pending⟩ startF with
+        | error e => simp [walk, Functor.map, Except.map] at roots
+        | ok reached =>
+          simp [walk, Functor.map, Except.map] at roots
+          exact ⟨reached, rfl, roots ▸ rootF⟩
+      have checkpointBlock : store.getCheckpointBlock view.currentJustifiedCheckpoint.root
+          view.finalizedCheckpoint.epoch = .ok view.finalizedCheckpoint.root := by
+        simp [Store.getCheckpointBlock, startedF, walkReached, rootReached, Except.mapError, bind,
+          Except.bind, pure, Except.pure]
+      refine ⟨?_, checkpointBlock⟩
+      by_cases gloas : .glamsterdam ≤ fork
+      · -- From Gloas a pending ancestor needs only the root that the walk reaches.
+        obtain ⟨finalizedBlock, foundReached, reachedLe⟩ := Store.getAncestor_le walkReached
+        have stops : store.getAncestor ⟨view.currentJustifiedCheckpoint.root, .pending⟩
+            finalizedBlock.slot = .ok reached := by
+          rw [Store.getAncestor_trans reachedLe walkReached,
+            Store.getAncestor_of_le foundReached (UInt64.le_refl _)]
+        rw [rootReached] at foundReached
+        simp [Store.isAncestor_pending gloas, Store.block_ok_iff.mpr foundReached, stops,
+          rootReached, bind, Except.bind, pure, Except.pure]
+      · -- Before Gloas the source walk reaches both checkpoint blocks as pending nodes.
+        have pending : ∀ {start : Slot} {node : ForkChoiceNode} {checkpoint : Root},
+            store.getAncestor ⟨root, .pending⟩ start = .ok node → node.root = checkpoint →
+            store.isAncestor ⟨root, .pending⟩ ⟨checkpoint, .pending⟩ = .ok true →
+            node = ⟨checkpoint, .pending⟩ := by
+          intro start node checkpoint walk same descends
+          subst same
+          obtain ⟨block, found, le⟩ := Store.getAncestor_le walk
+          have stops : store.getAncestor ⟨root, .pending⟩ block.slot = .ok node := by
+            rw [Store.getAncestor_trans le walk, Store.getAncestor_of_le found (UInt64.le_refl _)]
+          simpa [Store.isAncestor, Store.block_ok_iff.mpr found, stops, gloas, bind, Except.bind,
+            pure, Except.pure] using descends
+        have walk : store.getAncestor ⟨view.currentJustifiedCheckpoint.root, .pending⟩ startF =
+            .ok ⟨view.finalizedCheckpoint.root, .pending⟩ := by
+          rw [← pending walkJ rootJ ancestorJ, ← throughJ, walkF, pending walkF rootF ancestorF]
+        exact Store.isAncestor_of_getAncestor walk
+    · exact .inr bad
+  · exact .inr bad
 
 end EthLib.Consensus
