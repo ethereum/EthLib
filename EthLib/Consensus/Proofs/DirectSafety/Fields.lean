@@ -26,19 +26,6 @@ open Base Serialization.Ssz Cryptography.Bls
 
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 
-/-- The indices that the justification test of an epoch counts for its target.
-
-From Altair they are the unslashed validators with the timely target flag.
-
-Before Altair they are the unslashed attesters of the matching target attestations. -/
-def targetIndices {fork : Fork} (state : BeaconState preset fork) (epoch : Epoch) :
-    Except TransitionError (List ValidatorIndex) := do
-  if altair : .altair ≤ fork then
-    liftAccessor (getUnslashedParticipatingIndices state altair TIMELY_TARGET_FLAG_INDEX epoch)
-  else
-    let pending ← getMatchingTargetAttestations state (Nat.lt_of_not_le altair) epoch
-    liftAccessor (getUnslashedAttestingIndices state pending)
-
 /-- A slot step of the run that ends an epoch, with the justification step that it runs.
 
 `cached` is the state after caching the slot, and `weighed` the state after justification. -/
@@ -355,28 +342,11 @@ private structure EpochCall.Reads {g a : ForkedBeaconState preset} {run : Run co
 
 private theorem call_balances {g a : ForkedBeaconState preset} {run : Run config checks g a}
     (call : EpochCall run) : Nonempty call.Reads := by
-  have ok := call.weighedOk
-  have late := UInt64.not_le.mpr call.later
-  unfold processJustificationAndFinalization at ok
-  split at ok
-  · rename_i altair
-    simp only [processJustificationAndFinalizationAltair, ite_eq_right late,
-      bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨previous, previousOk, current, currentOk, total, totalOk,
-      pb, pbOk, cb, cbOk, weighed⟩ := ok
-    exact ⟨⟨previous, current, total, pb, cb,
-      by simpa [targetIndices, altair, liftAccessor_ok] using previousOk,
-      by simpa [targetIndices, altair, liftAccessor_ok] using currentOk,
-      totalOk, pbOk, cbOk, weighed⟩⟩
-  · rename_i notAltair
-    simp only [bind_ok_iff, liftAccessor_ok, getAttestingBalance] at ok
-    obtain ⟨previous, previousOk, current, currentOk, total, totalOk,
-      pb, ⟨pi, piOk, pbOk⟩, cb, ⟨ci, ciOk, cbOk⟩, weighed⟩ := ok
-    refine ⟨⟨pi, ci, total, pb, cb, ?_, ?_, totalOk, pbOk, cbOk, weighed⟩⟩
-    · simp [targetIndices, notAltair, bind_ok_iff, liftAccessor_ok]
-      exact ⟨_, previousOk, piOk⟩
-    · simp [targetIndices, notAltair, bind_ok_iff, liftAccessor_ok]
-      exact ⟨_, currentOk, ciOk⟩
+  rcases processJustificationAndFinalization_reads call.weighedOk with ⟨early, _⟩ |
+    ⟨_, previous, current, total, pb, cb, previousOk, currentOk, totalOk, pbOk, cbOk, weighed⟩
+  · exact False.elim (UInt64.not_le.mpr call.later early)
+  · exact ⟨⟨previous, current, total, pb, cb, previousOk, currentOk, totalOk, pbOk, cbOk,
+      weighed⟩⟩
 
 /-- The quorum call of an epoch call whose test passes for its previous or its current epoch. -/
 private def EpochCall.Reads.quorum {g a : ForkedBeaconState preset}

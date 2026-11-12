@@ -342,50 +342,32 @@ theorem processJustificationAndFinalization_weighed
                   else state.previousJustifiedCheckpoint).toFfg block)
                 (Checkpoint.toFfg block
                   ⟨if recent then getCurrentEpoch state else getPreviousEpoch state, root⟩) := by
-  unfold processJustificationAndFinalization at computed
-  split at computed
-  · rename_i altair
-    unfold processJustificationAndFinalizationAltair at computed
-    split at computed
-    · rename_i early
-      simp only [pure, Except.pure, Except.ok.injEq] at computed
-      exact .inl ⟨early, computed.symm⟩
-    rename_i late
-    simp only [bind_ok_iff, liftAccessor_ok] at computed
-    obtain ⟨previous, previousOk, current, currentOk, total, totalOk, previousBalance,
-      previousBalanceOk, currentBalance, currentBalanceOk, weighed⟩ := computed
-    refine .inr ⟨UInt64.not_le.mp late, total, previousBalance, currentBalance, totalOk,
-      weighed, linkWithChurn_of_weigh large block contains totalOk previousBalanceOk
-        currentBalanceOk fun recent index member => ?_⟩
-    -- From Altair the counted attesters hold the target flag of the epoch.
+  rcases processJustificationAndFinalization_reads computed with early | ⟨late, previous, current,
+    total, previousBalance, currentBalance, previousOk, currentOk, totalOk, previousBalanceOk,
+    currentBalanceOk, weighed⟩
+  · exact .inl early
+  refine .inr ⟨late, total, previousBalance, currentBalance, totalOk, weighed,
+    linkWithChurn_of_weigh large block contains totalOk previousBalanceOk currentBalanceOk
+      fun recent index member => ?_⟩
+  have counted : targetIndices state
+      (if recent then getCurrentEpoch state else getPreviousEpoch state) =
+        .ok (if recent then current else previous) := by
     cases recent
-    · exact TargetFlagsVoted.attester altair flagsVoted late false previousOk member
-    · exact TargetFlagsVoted.attester altair flagsVoted late true currentOk member
+    · exact previousOk
+    · exact currentOk
+  unfold targetIndices at counted
+  split at counted
+  · rename_i altair
+    -- From Altair the counted attesters hold the target flag of the epoch.
+    exact TargetFlagsVoted.attester altair flagsVoted (UInt64.not_le.mpr late) recent
+      (liftAccessor_ok.mp counted) member
   · rename_i notAltair
-    split at computed
-    · rename_i early
-      simp only [pure, Except.pure, Except.ok.injEq] at computed
-      exact .inl ⟨early, computed.symm⟩
-    rename_i late
-    simp only [bind_ok_iff, liftAccessor_ok, getAttestingBalance] at computed
-    obtain ⟨previous, previousOk, current, currentOk, total, totalOk, previousBalance,
-      ⟨previousIndices, previousIndicesOk, previousBalanceOk⟩, currentBalance,
-      ⟨currentIndices, currentIndicesOk, currentBalanceOk⟩, weighed⟩ := computed
-    refine .inr ⟨UInt64.not_le.mp late, total, previousBalance, currentBalance, totalOk,
-      weighed, linkWithChurn_of_weigh large block contains totalOk previousBalanceOk
-        currentBalanceOk fun recent index member => ?_⟩
     -- Before Altair the counted attesters cast a pending attestation of the epoch.
-    have early : JustifiedEarly state := fun first => absurd first late
-    have attester : index ∈ getActiveValidatorIndices state
-          (if recent then getCurrentEpoch state else getPreviousEpoch state) ∧
-        ∃ data, LinkVote state recent index.toNat (index, data) ∧
-          (index, data) ∈ attested := by
-      cases recent
-      · exact PendingVoted.attester (Nat.lt_of_not_le notAltair) pendingVoted early false
-          previousOk previousIndicesOk member
-      · exact PendingVoted.attester (Nat.lt_of_not_le notAltair) pendingVoted early true
-          currentOk currentIndicesOk member
-    obtain ⟨active, data, link, signed⟩ := attester
+    simp only [bind_ok_iff, liftAccessor_ok] at counted
+    obtain ⟨pending, pendingOk, indicesOk⟩ := counted
+    have early : JustifiedEarly state := fun first => absurd first (UInt64.not_le.mpr late)
+    obtain ⟨active, data, link, signed⟩ := PendingVoted.attester (Nat.lt_of_not_le notAltair)
+      pendingVoted early recent pendingOk indicesOk member
     exact ⟨active, (index, data), link, signed⟩
 
 /-- Justification in the beacon chain gives the stake bound of a supermajority link of Casper FFG.
