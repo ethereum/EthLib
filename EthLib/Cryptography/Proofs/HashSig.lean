@@ -14,6 +14,8 @@ In the identity monad, a vector computed in order is the vector of its entries.
 
 A map of monads that keeps `pure` and `bind` commutes with computing a vector in order.
 
+Between lawful monads, such a map keeps `map` too.
+
 The models of the security proofs compute a function in order instead of a vector.
 
 Both make the same calls in the same order.
@@ -142,6 +144,16 @@ theorem ofFnInOrder_map_monad {m n : Type → Type} [Monad m] [Monad n]
   | 0, _ => map_pure _
   | k + 1, f => by
     simp only [ofFnInOrder, map_bind, map_pure, ofFnInOrder_map_monad φ map_pure map_bind k]
+
+/-! ## Maps of monads -/
+
+/-- A map of lawful monads that keeps `pure` and `bind` keeps `map` too. -/
+theorem map_monad_map {m n : Type → Type} [Monad m] [Monad n] [LawfulMonad m] [LawfulMonad n]
+    (φ : ∀ {β : Type}, m β → n β) (map_pure : ∀ {β : Type} (b : β), φ (pure b) = pure b)
+    (map_bind : ∀ {β γ : Type} (x : m β) (f : β → m γ), φ (x >>= f) = φ x >>= fun b => φ (f b))
+    {β γ : Type} (g : β → γ) (x : m β) : φ (g <$> x) = g <$> φ x := by
+  rw [← bind_pure_comp, ← bind_pure_comp, map_bind]
+  simp only [map_pure]
 
 /-! ## Computing a function in order -/
 

@@ -88,6 +88,7 @@ theorem builderBalanceSum_processBuilderDepositRequest_known {request : BuilderD
     builderBalanceSum after gloas = builderBalanceSum state gloas + request.amount.toNat := by
   simp only [processBuilderDepositRequest, credential, found, Bool.true_eq_false,
     ↓reduceIte] at computed
+  obtain ⟨_, _, computed⟩ := bind_ok_iff.mp computed
   -- Both branches end by adding the amount to the balance of the builder at the position.
   have added : ∃ balance : Gwei, balance.toNat =
       ((state.builders gloas).data[index]).balance.toNat + request.amount.toNat ∧
@@ -109,13 +110,15 @@ theorem builderBalanceSum_processBuilderDepositRequest_known {request : BuilderD
 
 A reused index held a builder with no balance, so nothing else changes the sum. -/
 theorem builderBalanceSum_addBuilderToRegistry {pubkey : BLSPubkey} {version : UInt8}
-    {executionAddress : ExecutionAddress} {amount : Gwei} {slot : Slot} :
-    builderBalanceSum (addBuilderToRegistry state gloas pubkey version executionAddress amount slot)
-        gloas = builderBalanceSum state gloas + amount.toNat := by
-  unfold addBuilderToRegistry
-  dsimp only
-  split
+    {executionAddress : ExecutionAddress} {amount : Gwei} {slot : Slot}
+    (computed : addBuilderToRegistry state gloas pubkey version executionAddress amount slot =
+      .ok after) :
+    builderBalanceSum after gloas = builderBalanceSum state gloas + amount.toNat := by
+  simp only [addBuilderToRegistry, bind_ok_iff] at computed
+  obtain ⟨_, _, computed⟩ := computed
+  split at computed
   · rename_i inside
+    cases computed
     have reusable := isReusableBuilder_of_getIndexForNewBuilder_lt inside
     have empty : ((state.builders gloas).data[getIndexForNewBuilder state gloas]).balance = 0 := by
       simp only [isReusableBuilder, Bool.and_eq_true, beq_iff_eq] at reusable
@@ -125,7 +128,8 @@ theorem builderBalanceSum_addBuilderToRegistry {pubkey : BLSPubkey} {version : U
         FAR_FUTURE_EPOCH⟩) inside
     rw [empty] at this
     simpa using this
-  · simp [builderBalanceSum]
+  · cases computed
+    simp [builderBalanceSum]
 
 /-- A deposit to a new key with a valid signature adds its amount to the sum of the balances. -/
 theorem builderBalanceSum_processBuilderDepositRequest_new {request : BuilderDepositRequest}
@@ -135,9 +139,8 @@ theorem builderBalanceSum_processBuilderDepositRequest_new {request : BuilderDep
     (computed : processBuilderDepositRequest config checks state gloas request = .ok after) :
     builderBalanceSum after gloas = builderBalanceSum state gloas + request.amount.toNat := by
   simp only [processBuilderDepositRequest, credential, unknown, valid, Bool.true_eq_false,
-    ↓reduceIte, bind, Except.bind, pure, Except.pure, Except.ok.injEq] at computed
-  rw [← computed]
-  exact builderBalanceSum_addBuilderToRegistry
+    ↓reduceIte, bind, Except.bind] at computed
+  exact builderBalanceSum_addBuilderToRegistry computed
 
 /-- A deposit to a new key with an invalid signature changes nothing. -/
 theorem processBuilderDepositRequest_of_invalid {request : BuilderDepositRequest}
@@ -164,6 +167,11 @@ theorem processBuilderExitRequest_cases {request : BuilderExitRequest}
     exact .inl (Except.ok.inj computed).symm
   | some index =>
     simp only [found] at computed
+    obtain ⟨builderIndex, checked, computed⟩ := bind_ok_iff.mp computed
+    rw [liftAccessor_ok, liftArith, mapError_ok_iff] at checked
+    have small := (ofNatChecked_ok_iff.mp checked).1
+    rw [ofNatChecked_of_lt small, Except.ok.injEq] at checked
+    subst builderIndex
     obtain ⟨active, isActive, rest⟩ := bind_ok_iff.mp computed
     rw [liftAccessor_ok] at isActive
     split at rest
@@ -178,5 +186,57 @@ theorem processBuilderExitRequest_cases {request : BuilderExitRequest}
         · exact .inl (Except.ok.inj rest).symm
       · exact .inl (Except.ok.inj rest).symm
     · exact .inl (Except.ok.inj rest).symm
+
+/-- Registering a builder rejects its chosen position when it is at least `2^64`. -/
+theorem addBuilderToRegistry_error_of_le {pubkey : BLSPubkey} {version : UInt8}
+    {executionAddress : ExecutionAddress} {amount : Gwei} {slot : Slot}
+    (large : 2 ^ 64 ≤ getIndexForNewBuilder state gloas) :
+    addBuilderToRegistry state gloas pubkey version executionAddress amount slot =
+      .error (.accessor (.arith .overflow)) := by
+  simp [addBuilderToRegistry, liftAccessor, liftArith, ofNatChecked, Nat.not_lt.mpr large,
+    Except.mapError, bind, Except.bind]
+
+/-- A builder deposit with the builder prefix rejects a matching position of `2^64` or more. -/
+theorem processBuilderDepositRequest_error_of_le {request : BuilderDepositRequest}
+    {position : Fin (state.builders gloas).data.size}
+    (credential : isBuilderWithdrawalCredential request.withdrawalCredentials = true)
+    (found : findBuilderByPubkey state gloas request.pubkey = some position)
+    (large : 2 ^ 64 ≤ position.val) :
+    processBuilderDepositRequest config checks state gloas request =
+      .error (.accessor (.arith .overflow)) := by
+  simp [processBuilderDepositRequest, credential, found, liftAccessor, liftArith, ofNatChecked,
+    Nat.not_lt.mpr large, Except.mapError, bind, Except.bind]
+
+/-- A builder exit rejects a matching position of `2^64` or more before testing its activity. -/
+theorem processBuilderExitRequest_error_of_le {request : BuilderExitRequest}
+    {position : Fin (state.builders gloas).data.size}
+    (found : findBuilderByPubkey state gloas request.pubkey = some position)
+    (large : 2 ^ 64 ≤ position.val) :
+    processBuilderExitRequest config state gloas request =
+      .error (.accessor (.arith .overflow)) := by
+  simp [processBuilderExitRequest, found, liftAccessor, liftArith, ofNatChecked,
+    Nat.not_lt.mpr large, Except.mapError, bind, Except.bind]
+
+/-- A builder deposit changes only the registry of builders. -/
+theorem processBuilderDepositRequest_eq {request : BuilderDepositRequest}
+    (computed : processBuilderDepositRequest config checks state gloas request = .ok after) :
+    ∃ builders, after = { state with builders := builders } := by
+  unfold processBuilderDepositRequest addBuilderToRegistry at computed
+  simp only [bind, Except.bind, pure, Except.pure] at computed
+  repeat' split at computed
+  all_goals first
+    | (cases computed; done)
+    | (cases computed; exact ⟨_, rfl⟩)
+
+/-- A builder exit request changes only the registry of builders. -/
+theorem processBuilderExitRequest_eq {request : BuilderExitRequest}
+    (computed : processBuilderExitRequest config state gloas request = .ok after) :
+    ∃ builders, after = { state with builders := builders } := by
+  rcases processBuilderExitRequest_cases computed with rfl | ⟨_, _, _, _, _, exited⟩
+  · exact ⟨_, rfl⟩
+  · simp only [initiateBuilderExit, bind_ok_iff] at exited
+    obtain ⟨_, _, _, _, set⟩ := exited
+    obtain ⟨_, rfl⟩ := setBuilder_ok set
+    exact ⟨_, rfl⟩
 
 end EthLib.Consensus

@@ -94,10 +94,14 @@ theorem PayloadInputs.foldlM {α ε : Type}
 
 /-! ## Mutators -/
 
-theorem payloadInputs_setValidator {index : ValidatorIndex} {validator : Validator}
-    (set : state.setValidator index validator = .ok after) : PayloadInputs state after := by
-  obtain ⟨_, rfl⟩ := setValidator_ok set
+theorem payloadInputs_setValidatorAt {position : Nat} {validator : Validator}
+    (set : state.setValidatorAt position validator = .ok after) : PayloadInputs state after := by
+  obtain ⟨_, rfl⟩ := setValidatorAt_ok set
   exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+
+theorem payloadInputs_setValidator {index : ValidatorIndex} {validator : Validator}
+    (set : state.setValidator index validator = .ok after) : PayloadInputs state after :=
+  payloadInputs_setValidatorAt (by rwa [← setValidator_eq_setValidatorAt])
 
 theorem payloadInputs_setBalance {index : ValidatorIndex} {balance : Gwei}
     (set : state.setBalance index balance = .ok after) : PayloadInputs state after := by
@@ -215,9 +219,9 @@ theorem payloadInputs_switchToCompoundingValidator {electra : .pectra ≤ fork}
     exact PayloadInputs.refl _
 
 theorem payloadInputs_queueConsolidation {electra : .pectra ≤ fork}
-    {sourcePosition : Nat} {source : Validator} {targetIndex : ValidatorIndex}
+    {sourceIndex : ValidatorIndex} {source : Validator} {targetIndex : ValidatorIndex}
     (computed :
-      queueConsolidation config state electra sourcePosition source targetIndex = .ok after) :
+      queueConsolidation config state electra sourceIndex source targetIndex = .ok after) :
     PayloadInputs state after := by
   simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
     pure, Except.pure] at computed
@@ -489,7 +493,7 @@ theorem payloadInputs_processAttestation {attestation : Attestation preset fork}
     exact (flags _ _).trans ((payloadInputs_increaseBalance raisedOk).trans last)
   simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok, pure, Except.pure,
     Except.ok.injEq] at computed
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
     _, _, _, _, _, _, _, _, recorded, _, _, _, _, _, _, rfl⟩ := computed
   have kept := recordPendingAttestation_ok recorded
   split at kept <;>
@@ -634,6 +638,36 @@ theorem payloadInputs_processExecutionPayloadBid {signed : SignedExecutionPayloa
       at recordedOk
     subst recordedOk
     exact PayloadInputs.refl _
+
+/-- A payload before Gloas keeps the RANDAO mixes. -/
+theorem randaoMixes_processExecutionPayload {body : BeaconBlockBody preset fork}
+    {bellatrix : .bellatrix ≤ fork ∧ fork < .glamsterdam}
+    (computed : processExecutionPayload config engine state body bellatrix = .ok after) :
+    after.randaoMixes = state.randaoMixes := by
+  obtain ⟨_, _, _, rfl⟩ := processExecutionPayload_ok computed
+  rfl
+
+/-- The execution part of a block keeps the mixes. -/
+theorem randaoMixes_processBlockExecution {body : BeaconBlockBody preset fork}
+    {bellatrix : .bellatrix ≤ fork}
+    (computed : processBlockExecution config checks engine state body bellatrix = .ok after) :
+    after.randaoMixes = state.randaoMixes := by
+  unfold processBlockExecution at computed
+  split at computed
+  · simp only [bind_ok_iff] at computed
+    obtain ⟨_, withdrawnOk, bid⟩ := computed
+    exact (payloadInputs_processExecutionPayloadBid bid).randaoMixes.trans
+      (payloadInputs_processWithdrawals withdrawnOk).randaoMixes
+  split at computed
+  · simp only [bind_ok_iff] at computed
+    obtain ⟨_, withdrawnOk, paid⟩ := computed
+    exact (randaoMixes_processExecutionPayload paid).trans
+      (payloadInputs_processWithdrawals withdrawnOk).randaoMixes
+  · dsimp only at computed
+    split at computed
+    · exact randaoMixes_processExecutionPayload computed
+    · cases computed
+      rfl
 
 /-- From Gloas, a block that succeeds runs each of its steps, each on the state of the last one.
 

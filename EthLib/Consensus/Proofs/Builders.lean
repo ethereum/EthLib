@@ -249,7 +249,7 @@ theorem getBuilderPaymentQuorumThreshold_pos {state : BeaconState preset fork}
   simp only [getBuilderPaymentQuorumThreshold, bind_ok_iff, liftArith, mapError_ok_iff,
     mulChecked_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
   obtain ⟨total, totalOk, product, ⟨-, productIs⟩, rfl⟩ := computed
-  have least := UInt64.le_iff_toNat_le.mp (le_getTotalBalance totalOk)
+  have least := UInt64.le_iff_toNat_le.mp (le_getTotalBalance (getTotalActiveBalance_ok totalOk))
   -- The share of one slot in the total is at least its share in one increment.
   have share : preset.EFFECTIVE_BALANCE_INCREMENT.toNat / preset.SLOTS_PER_EPOCH.toNat ≤
       (total / preset.SLOTS_PER_EPOCH).toNat := by

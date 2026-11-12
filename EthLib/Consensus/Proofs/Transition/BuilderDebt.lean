@@ -1,6 +1,8 @@
 module
 
 public import EthLib.Base.Proofs.MapM
+public import EthLib.Consensus.Proofs.Accessors
+public import EthLib.Consensus.Proofs.Transition.BuilderPayments
 public import EthLib.Consensus.Transition.ParentPayload
 public import EthLib.Consensus.Transition.Payload
 
@@ -54,6 +56,12 @@ Most steps keep the builders, their payments, their withdrawals and the latest b
 
 Such a step keeps the invariant if it also keeps the slot and the slot of the latest block.
 
+Other lemmas read the window after a write or a shift, and place a slot in it on natural numbers.
+
+Two more facts on the window are stated here for the payment of each bid, and proved later.
+
+A payment with weight has an amount, and the genesis epoch has an empty first half.
+
 [EIP-7732] adds the builders, their bids and their payments.
 
 [EIP-7732]: https://eips.ethereum.org/EIPS/eip-7732#beacon-chain-changes
@@ -78,6 +86,14 @@ def builderBalance (state : BeaconState preset fork) (gloas : .glamsterdam ≤ f
 def paymentAt (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork) (position : Nat) :
     BuilderPendingPayment :=
   ((state.builderPendingPayments gloas).elements[position]?).getD .empty
+
+/-- Pending payments that are all the payment of no bid hold it at each position. -/
+theorem paymentAt_of_replicate {gloas : .glamsterdam ≤ fork}
+    (payments : (state.builderPendingPayments gloas).elements = Vector.replicate _ .empty)
+    (position : Nat) : paymentAt state gloas position = .empty := by
+  simp only [paymentAt, payments]
+  rw [Vector.getElem?_replicate]
+  split <;> rfl
 
 /-- Whether the invariant reserves the value of the latest bid.
 
@@ -110,6 +126,20 @@ def ParentPaymentFresh (state : BeaconState preset fork) (gloas : .glamsterdam �
     (paymentAt state gloas position.toNat).weight = 0 ∧
       ((paymentAt state gloas position.toNat).withdrawal.amount = 0 ∨
         (paymentAt state gloas position.toNat).withdrawal = latestBidWithdrawal state gloas)
+
+/-- Each pending payment with a positive weight has a positive amount. -/
+def WeightedPaymentsFunded (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork) :
+    Prop :=
+  ∀ position, 0 < (paymentAt state gloas position).weight →
+    0 < (paymentAt state gloas position).withdrawal.amount
+
+/-- In the genesis epoch, the first half of the window holds the payment of no bid.
+
+That epoch is also the previous one, so the first half names no slot. -/
+def GenesisFirstHalfEmpty (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork) :
+    Prop :=
+  getCurrentEpoch state = GENESIS_EPOCH →
+    ∀ position < preset.SLOTS_PER_EPOCH.toNat, paymentAt state gloas position = .empty
 
 /-- Each position after that of the parent holds the payment of no bid.
 
@@ -165,12 +195,227 @@ theorem BuilderFrame.foldlM {α ε : Type} {step : BeaconState preset fork → �
   foldlM_ok_invariant (BuilderFrame state)
     (fun _ _ _ before ok => before.trans (frame _ _ _ ok)) (BuilderFrame.refl state) computed
 
+/-- A step that keeps the builder fields keeps each pending payment. -/
+theorem BuilderFrame.paymentAt (frame : BuilderFrame state after) (gloas : .glamsterdam ≤ fork)
+    (position : Nat) : paymentAt after gloas position = paymentAt state gloas position := by
+  simp only [EthLib.Consensus.paymentAt, frame.payments]
+
+/-- A move of both states to the same slot keeps a step that keeps the builder fields. -/
+theorem BuilderFrame.withSlot (frame : BuilderFrame state after) (next : Slot) :
+    BuilderFrame { state with slot := next } { after with slot := next } :=
+  ⟨rfl, frame.headerSlot, frame.builders, frame.payments, frame.withdrawals, frame.bid⟩
+
+/-- A step that keeps what the payments read, except that it may empty a payment.
+
+It keeps the slot, the slot of the latest block, the latest bid and the queue.
+
+At each position, the withdrawal of the payment stays, or has no amount after the step.
+
+It may change the weights of the payments and the builders. -/
+structure PaymentCancel (state after : BeaconState preset fork) (gloas : .glamsterdam ≤ fork) :
+    Prop where
+  slot : after.slot = state.slot
+  headerSlot : after.latestBlockHeader.slot = state.latestBlockHeader.slot
+  bid : after.latestExecutionPayloadBid gloas = state.latestExecutionPayloadBid gloas
+  withdrawals : after.builderPendingWithdrawals gloas = state.builderPendingWithdrawals gloas
+  read : ∀ position,
+    (paymentAt after gloas position).withdrawal = (paymentAt state gloas position).withdrawal ∨
+      (paymentAt after gloas position).withdrawal.amount = 0
+
+theorem PaymentCancel.refl (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork) :
+    PaymentCancel state state gloas :=
+  ⟨rfl, rfl, rfl, rfl, fun _ => Or.inl rfl⟩
+
+theorem PaymentCancel.trans {gloas : .glamsterdam ≤ fork}
+    {first second third : BeaconState preset fork}
+    (one : PaymentCancel first second gloas) (two : PaymentCancel second third gloas) :
+    PaymentCancel first third gloas :=
+  ⟨two.slot.trans one.slot, two.headerSlot.trans one.headerSlot, two.bid.trans one.bid,
+    two.withdrawals.trans one.withdrawals, fun position => by
+      rcases two.read position with same | empty
+      · rcases one.read position with same' | empty'
+        · exact Or.inl (same.trans same')
+        · exact Or.inr (same ▸ empty')
+      · exact Or.inr empty⟩
+
+/-- A step that keeps the builder fields may only empty pending payments. -/
+theorem PaymentCancel.of_frame {gloas : .glamsterdam ≤ fork} (frame : BuilderFrame state after) :
+    PaymentCancel state after gloas :=
+  ⟨frame.slot, frame.headerSlot, congrFun frame.bid gloas, congrFun frame.withdrawals gloas,
+    fun position => Or.inl (by rw [frame.paymentAt gloas])⟩
+
+/-- The position of the payment of each slot reads only the slot of the state. -/
+theorem slotPaymentPosition_congr (same : after.slot = state.slot) (slot : Slot) :
+    slotPaymentPosition after slot = slotPaymentPosition state slot := by
+  unfold slotPaymentPosition getPreviousEpoch getCurrentEpoch
+  rw [same]
+
+/-- The position of the payment of each slot reads only the epoch of the state. -/
+theorem slotPaymentPosition_congr_epoch
+    (same : after.slot.toNat / preset.SLOTS_PER_EPOCH.toNat =
+      state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat) (slot : Slot) :
+    slotPaymentPosition after slot = slotPaymentPosition state slot := by
+  have epoch : computeEpochAtSlot preset after.slot = computeEpochAtSlot preset state.slot := by
+    apply UInt64.toNat_inj.mp
+    simpa only [computeEpochAtSlot, UInt64.toNat_div] using same
+  unfold slotPaymentPosition getPreviousEpoch getCurrentEpoch
+  rw [epoch]
+
 /-- The position of the parent payment reads only the slot and the slot of the latest block. -/
 theorem parentPaymentPosition_congr (slot : after.slot = state.slot)
     (header : after.latestBlockHeader.slot = state.latestBlockHeader.slot) :
     parentPaymentPosition after = parentPaymentPosition state := by
-  unfold parentPaymentPosition getPreviousEpoch getCurrentEpoch
-  rw [slot, header]
+  unfold parentPaymentPosition
+  rw [header]
+  exact slotPaymentPosition_congr slot _
+
+/-- Whether the late path is open reads only the parent position and the withdrawals. -/
+theorem latePaymentOpen_congr {gloas : .glamsterdam ≤ fork}
+    (parent : parentPaymentPosition after = parentPaymentPosition state)
+    (read : ∀ position,
+      (paymentAt after gloas position).withdrawal = (paymentAt state gloas position).withdrawal) :
+    latePaymentOpen after gloas = latePaymentOpen state gloas := by
+  unfold latePaymentOpen
+  rw [parent]
+  split <;> simp only [read]
+
+/-- A step that keeps the builder fields keeps the parent payment fresh. -/
+theorem ParentPaymentFresh.of_frame {gloas : .glamsterdam ≤ fork}
+    (frame : BuilderFrame state after) (fresh : ParentPaymentFresh state gloas) :
+    ParentPaymentFresh after gloas := by
+  intro position found
+  simp only [frame.paymentAt gloas, latestBidWithdrawal, frame.bid]
+  exact fresh position (parentPaymentPosition_congr frame.slot frame.headerSlot ▸ found)
+
+/-- A step that keeps the slot and changes each pending payment in only a few ways.
+
+At each position it keeps the payment or empties it.
+
+It may also write a payment of no weight in the second half of the window. -/
+structure PaymentWrites (state after : BeaconState preset fork) (gloas : .glamsterdam ≤ fork) :
+    Prop where
+  slot : after.slot = state.slot
+  each : ∀ position, paymentAt after gloas position = paymentAt state gloas position ∨
+    paymentAt after gloas position = .empty ∨
+    (preset.SLOTS_PER_EPOCH.toNat ≤ position ∧ (paymentAt after gloas position).weight = 0)
+
+/-- A state rewrites its payments into themselves. -/
+theorem PaymentWrites.refl (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork) :
+    PaymentWrites state state gloas :=
+  ⟨rfl, fun _ => .inl rfl⟩
+
+/-- Two steps that rewrite payments rewrite them together. -/
+theorem PaymentWrites.trans {gloas : .glamsterdam ≤ fork}
+    {first second third : BeaconState preset fork}
+    (one : PaymentWrites first second gloas) (two : PaymentWrites second third gloas) :
+    PaymentWrites first third gloas :=
+  ⟨two.slot.trans one.slot, fun position => by
+    rcases two.each position with same | written
+    · exact same ▸ one.each position
+    · exact .inr written⟩
+
+/-- A step that keeps the builder fields rewrites no payment. -/
+theorem PaymentWrites.of_frame {gloas : .glamsterdam ≤ fork} (frame : BuilderFrame state after) :
+    PaymentWrites state after gloas :=
+  ⟨frame.slot, fun position => .inl (frame.paymentAt gloas position)⟩
+
+/-- A step that rewrites payments keeps an amount for each payment with weight. -/
+theorem WeightedPaymentsFunded.of_writes {gloas : .glamsterdam ≤ fork}
+    (writes : PaymentWrites state after gloas) (holds : WeightedPaymentsFunded state gloas) :
+    WeightedPaymentsFunded after gloas := by
+  intro position weighted
+  rcases writes.each position with same | empty | ⟨-, zero⟩
+  · rw [same] at weighted ⊢
+    exact holds position weighted
+  · rw [empty] at weighted
+    exact absurd weighted (UInt64.lt_irrefl 0)
+  · rw [zero] at weighted
+    exact absurd weighted (UInt64.lt_irrefl 0)
+
+/-- A step that keeps the builder fields keeps an amount for each payment with weight. -/
+theorem WeightedPaymentsFunded.of_frame {gloas : .glamsterdam ≤ fork}
+    (frame : BuilderFrame state after) (paid : WeightedPaymentsFunded state gloas) :
+    WeightedPaymentsFunded after gloas :=
+  paid.of_writes (.of_frame frame)
+
+/-- A step that rewrites payments keeps the first half of the genesis window empty. -/
+theorem GenesisFirstHalfEmpty.of_writes {gloas : .glamsterdam ≤ fork}
+    (writes : PaymentWrites state after gloas) (holds : GenesisFirstHalfEmpty state gloas) :
+    GenesisFirstHalfEmpty after gloas := by
+  intro genesisEpoch position early
+  rcases writes.each position with same | empty | ⟨late, -⟩
+  · rw [same]
+    exact holds (by rwa [getCurrentEpoch, writes.slot] at genesisEpoch) position early
+  · exact empty
+  · omega
+
+/-- A step that keeps the builder fields keeps the first half of the genesis window empty. -/
+theorem GenesisFirstHalfEmpty.of_frame {gloas : .glamsterdam ≤ fork}
+    (frame : BuilderFrame state after) (genesis : GenesisFirstHalfEmpty state gloas) :
+    GenesisFirstHalfEmpty after gloas :=
+  genesis.of_writes (.of_frame frame)
+
+/-- The position of the payment of a slot on natural numbers.
+
+The epoch must have one slot or more, and the window must fit in 64 bits.
+
+A slot of the epoch of the state is in the second half.
+
+A slot of the epoch before is in the first half.
+
+Any other slot has no position. -/
+theorem slotPaymentPosition_map_toNat
+    (bounds : 1 ≤ preset.SLOTS_PER_EPOCH.toNat ∧ 2 * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64)
+    (state : BeaconState preset fork) (slot : Slot) :
+    (slotPaymentPosition state slot).map UInt64.toNat =
+      if slot.toNat / preset.SLOTS_PER_EPOCH.toNat =
+          state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat then
+        some (preset.SLOTS_PER_EPOCH.toNat + slot.toNat % preset.SLOTS_PER_EPOCH.toNat)
+      else if slot.toNat / preset.SLOTS_PER_EPOCH.toNat =
+          state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat - 1 then
+        some (slot.toNat % preset.SLOTS_PER_EPOCH.toNat)
+      else none := by
+  obtain ⟨one, small⟩ := bounds
+  have current : computeEpochAtSlot preset slot = getCurrentEpoch state ↔
+      slot.toNat / preset.SLOTS_PER_EPOCH.toNat =
+        state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat := by
+    rw [← UInt64.toNat_inj, getCurrentEpoch_toNat, computeEpochAtSlot, UInt64.toNat_div]
+  have previous : computeEpochAtSlot preset slot = getPreviousEpoch state ↔
+      slot.toNat / preset.SLOTS_PER_EPOCH.toNat =
+        state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat - 1 := by
+    rw [← UInt64.toNat_inj, getPreviousEpoch_toNat, getCurrentEpoch_toNat, computeEpochAtSlot,
+      UInt64.toNat_div]
+  have offset : (slot % preset.SLOTS_PER_EPOCH).toNat =
+      slot.toNat % preset.SLOTS_PER_EPOCH.toNat := UInt64.toNat_mod _ _
+  have below := Nat.mod_lt slot.toNat one
+  unfold slotPaymentPosition
+  simp only [current, previous]
+  split
+  · simp only [Option.map_some, UInt64.toNat_add, offset, Option.some.injEq]
+    exact Nat.mod_eq_of_lt (by omega)
+  · split <;> simp [offset]
+
+/-- Two slots with the same position of their payment are the same slot.
+
+The epoch must have one slot or more, and the window must fit in 64 bits. -/
+theorem slotPaymentPosition_injective
+    (bounds : 1 ≤ preset.SLOTS_PER_EPOCH.toNat ∧ 2 * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64)
+    {first second : Slot} {position : UInt64}
+    (atFirst : slotPaymentPosition state first = some position)
+    (atSecond : slotPaymentPosition state second = some position) : first = second := by
+  have firstNat := slotPaymentPosition_map_toNat bounds state first
+  have secondNat := slotPaymentPosition_map_toNat bounds state second
+  rw [atFirst] at firstNat
+  rw [atSecond] at secondNat
+  have firstSplit := Nat.div_add_mod first.toNat preset.SLOTS_PER_EPOCH.toNat
+  have secondSplit := Nat.div_add_mod second.toNat preset.SLOTS_PER_EPOCH.toNat
+  have firstBelow := Nat.mod_lt first.toNat bounds.1
+  have secondBelow := Nat.mod_lt second.toNat bounds.1
+  apply UInt64.toNat_inj.mp
+  simp only [Option.map_some] at firstNat secondNat
+  split at firstNat <;> split at secondNat <;> (try split at firstNat) <;>
+    (try split at secondNat) <;>
+    simp only [Option.some.injEq, reduceCtorEq] at firstNat secondNat <;> grind
 
 /-- A read of the pending payments inside the window is the read of their elements. -/
 theorem paymentAt_of_lt {gloas : .glamsterdam ≤ fork} {position : Nat}
@@ -178,6 +423,72 @@ theorem paymentAt_of_lt {gloas : .glamsterdam ≤ fork} {position : Nat}
     paymentAt state gloas position = (state.builderPendingPayments gloas)[position] := by
   simp [paymentAt, inside]
   rfl
+
+/-- The released withdrawals are those of the positions of the first epoch that reach the quorum.
+
+They follow the order of the positions. -/
+theorem releasedPayments_eq_map (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork)
+    (quorum : Gwei) :
+    releasedPayments (state.builderPendingPayments gloas).elements.toList
+        preset.SLOTS_PER_EPOCH.toNat quorum =
+      ((List.range preset.SLOTS_PER_EPOCH.toNat).filter
+          fun position => decide (quorum ≤ (paymentAt state gloas position).weight)).map
+        fun position => (paymentAt state gloas position).withdrawal := by
+  have take : (state.builderPendingPayments gloas).elements.toList.take
+      preset.SLOTS_PER_EPOCH.toNat =
+      (List.range preset.SLOTS_PER_EPOCH.toNat).map (paymentAt state gloas) := by
+    apply List.ext_getElem (by simp; omega)
+    intro position inside _
+    simp only [List.length_take, Vector.length_toList] at inside
+    rw [List.getElem_take, Vector.getElem_toList, List.getElem_map, List.getElem_range,
+      paymentAt_of_lt (by omega)]
+    rfl
+  unfold releasedPayments
+  rw [take, List.filter_map, List.map_map]
+  rfl
+
+/-- A write at one position of the pending payments puts the entry there.
+
+Every other position keeps its payment. -/
+theorem paymentAt_set {gloas : .glamsterdam ≤ fork} {k : Nat} {entry : BuilderPendingPayment}
+    {inside : k < 2 * preset.SLOTS_PER_EPOCH.toNat}
+    (payments : after.builderPendingPayments gloas =
+      (state.builderPendingPayments gloas).set k entry inside) (position : Nat) :
+    paymentAt after gloas position =
+      if position = k then entry else paymentAt state gloas position := by
+  unfold paymentAt
+  rw [payments, Serialization.Ssz.RootedVector.elements_set, Vector.getElem?_set]
+  split <;> rename_i same
+  · subst same
+    simp
+  · simp [Ne.symm same]
+
+/-- The payments move by one epoch.
+
+A position of the first epoch then takes the payment one epoch later. -/
+theorem paymentAt_shiftPayments_early {gloas : .glamsterdam ≤ fork} {position : Nat}
+    (payments : after.builderPendingPayments gloas =
+      shiftPayments (state.builderPendingPayments gloas))
+    (early : position < preset.SLOTS_PER_EPOCH.toNat) :
+    paymentAt after gloas position =
+      paymentAt state gloas (position + preset.SLOTS_PER_EPOCH.toNat) := by
+  rw [paymentAt_of_lt (by omega), paymentAt_of_lt (by omega)]
+  simp only [payments]
+  exact getElem_shiftPayments_early _ early
+
+/-- The payments move by one epoch.
+
+Each position from one epoch on then holds the payment of no bid. -/
+theorem paymentAt_shiftPayments_late {gloas : .glamsterdam ≤ fork} {position : Nat}
+    (payments : after.builderPendingPayments gloas =
+      shiftPayments (state.builderPendingPayments gloas))
+    (late : preset.SLOTS_PER_EPOCH.toNat ≤ position) :
+    paymentAt after gloas position = .empty := by
+  by_cases inside : position < 2 * preset.SLOTS_PER_EPOCH.toNat
+  · rw [paymentAt_of_lt inside]
+    simp only [payments]
+    exact getElem_shiftPayments_late _ late inside
+  · simp [paymentAt, Nat.not_lt.mp inside]
 
 /-- A step that keeps the builder fields and the parent payment position keeps the invariant.
 

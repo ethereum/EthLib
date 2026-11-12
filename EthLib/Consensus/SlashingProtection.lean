@@ -1,6 +1,7 @@
 module
 
 public import Lean.Data.Json
+public import Std.Data.TreeMap
 public import EthLib.Base.Except
 public import EthLib.Consensus.Types
 public import EthLib.Cryptography.Bls.Signatures
@@ -49,10 +50,19 @@ The conditions of the EIP leave out several checks, and so does this module:
 
 - It does not compare the genesis validators root of a file with that of the chain.
 - It does not reject a file whose own records are slashable with each other.
-- It keeps no low watermark, so it cannot see a gap between two imported files.
 - It does not ask for the records of a key to be sorted, or for a key to appear once.
 
-The security considerations of the EIP advise a low watermark against such a gap.
+Import follows the minimal strategy of the EIP, in its section Advice for Minimal Databases.
+
+For each key, it keeps only the greatest block slot, the greatest source and the greatest target.
+
+The two epochs can come from different votes, which is at least as strict as any one vote.
+
+After an import, these limits are the least recorded slot and epochs.
+
+The limits have no signing roots, so imported messages cannot be signed again.
+
+These limits prevent signing in a gap between imported files.
 
 [EIP-3076]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-3076.md
 -/
@@ -68,7 +78,7 @@ open Lean Base Cryptography.Bls
 /-- The version of the interchange format that this module reads and writes. -/
 def INTERCHANGE_FORMAT_VERSION : String := "5"
 
-/-- A block that a key signed: its slot, and the signing root when the file has it. -/
+/-- A block slot and optional signing root, or an imported slot limit without a root. -/
 structure SignedBlockRecord where
   /-- The slot of the block. -/
   slot : Slot
@@ -76,7 +86,7 @@ structure SignedBlockRecord where
   signingRoot : Option Root
   deriving DecidableEq, Repr
 
-/-- A vote that a key signed: its source and target epochs, and the signing root when known. -/
+/-- A vote's epochs and optional signing root, or imported epoch limits without a root. -/
 structure SignedAttestationRecord where
   /-- The epoch of the source checkpoint of the vote. -/
   sourceEpoch : Epoch
@@ -86,21 +96,21 @@ structure SignedAttestationRecord where
   signingRoot : Option Root
   deriving DecidableEq, Repr
 
-/-- What one key signed. -/
+/-- The message records or imported limits of one key. -/
 structure InterchangeEntry where
   /-- The public key. -/
   pubkey : BLSPubkey
-  /-- The blocks it signed. -/
+  /-- Its signed blocks, or its imported slot limit. -/
   signedBlocks : List SignedBlockRecord
-  /-- The votes it signed. -/
+  /-- Its signed votes, or one imported limit on source and target epochs. -/
   signedAttestations : List SignedAttestationRecord
   deriving DecidableEq, Repr
 
-/-- An interchange file: its chain, by its genesis validators root, and what each key signed. -/
+/-- An interchange file: its chain, by its genesis validators root, and the records of its keys. -/
 structure Interchange where
   /-- The genesis validators root of the chain. -/
   genesisValidatorsRoot : Root
-  /-- What the keys signed, one entry at a time. -/
+  /-- The records of the keys, one entry at a time. -/
   data : List InterchangeEntry
   deriving DecidableEq, Repr
 
@@ -192,7 +202,7 @@ def readAttestation (path : String) (document : Json) :
     targetEpoch := ← readUInt64 s!"{path}.target_epoch" (← field path "target_epoch" document)
     signingRoot := ← readSigningRoot path document }
 
-/-- What one key signed, from its object. -/
+/-- The records of one key, from its object. -/
 def readEntry (path : String) (document : Json) :
     Except SlashingProtectionError InterchangeEntry := do
   return {
@@ -239,7 +249,7 @@ def attestationJson (attestation : SignedAttestationRecord) : Json :=
     ("target_epoch", uint64Json attestation.targetEpoch)] ++
       signingRootFields attestation.signingRoot)
 
-/-- What one key signed, as the file writes it. -/
+/-- The records of one key, as the file writes it. -/
 def entryJson (entry : InterchangeEntry) : Json :=
   Json.mkObj [("pubkey", bytesJson entry.pubkey),
     ("signed_blocks", .arr (entry.signedBlocks.map blockJson).toArray),
@@ -255,11 +265,11 @@ def toJson (interchange : Interchange) : Json :=
 
 /-! ## The records of a key -/
 
-/-- The blocks that a key signed, from every entry with that key, in order. -/
+/-- The block records of a key, from every entry with that key, in order. -/
 def blocksOf (interchange : Interchange) (pubkey : BLSPubkey) : List SignedBlockRecord :=
   (interchange.data.filter (·.pubkey = pubkey)).flatMap (·.signedBlocks)
 
-/-- The votes that a key signed, from every entry with that key, in order. -/
+/-- The vote records of a key, from every entry with that key, in order. -/
 def attestationsOf (interchange : Interchange) (pubkey : BLSPubkey) :
     List SignedAttestationRecord :=
   (interchange.data.filter (·.pubkey = pubkey)).flatMap (·.signedAttestations)
@@ -342,7 +352,7 @@ def checkBlockSlot (blocks : List SignedBlockRecord) (slot : Slot) (signingRoot 
       (.blockSlotTooLow slot minimum)
   | none => .ok ()
 
-/-- Whether a key may sign a block, under the first two conditions, given the blocks it signed.
+/-- Whether a key may sign a block, under the first two conditions, given its block records.
 
 It refuses a block that conflicts with a recorded one, then a block not after the least slot.
 
@@ -371,7 +381,7 @@ def checkTargetEpoch (attestations : List SignedAttestationRecord)
       (.targetEpochTooLow targetEpoch minimum)
   | none => .ok ()
 
-/-- Whether a key may sign a vote, under the last three conditions, given the votes it signed.
+/-- Whether a key may sign a vote, under the last three conditions, given its vote records.
 
 It refuses a vote slashable with a recorded one, then a vote before the least source epoch.
 
@@ -401,13 +411,64 @@ def checkAttestation (interchange : Interchange) (pubkey : BLSPubkey)
   checkAttestationSigning (interchange.attestationsOf pubkey) sourceEpoch targetEpoch
     signingRoot
 
-/-- The record after importing a file, for a signer that keeps every message.
+end Interchange
 
-The entries of the file come after those already held.
+/-- A slot limit raised to cover one more block. -/
+def raiseSlotLimit (limit : Option Slot) (block : SignedBlockRecord) : Option Slot :=
+  some (limit.elim block.slot fun slot => max slot block.slot)
 
-It does not compare the genesis validators roots of the two. -/
+/-- Epoch limits raised to cover one more vote, the source and the target each on its own. -/
+def raiseEpochLimits (limits : Option (Epoch × Epoch)) (attestation : SignedAttestationRecord) :
+    Option (Epoch × Epoch) :=
+  some (limits.elim (attestation.sourceEpoch, attestation.targetEpoch) fun (source, target) =>
+    (max source attestation.sourceEpoch, max target attestation.targetEpoch))
+
+/-- The limits of a key raised to cover the blocks and votes of one more of its entries. -/
+def InterchangeEntry.raiseLimits (entry : InterchangeEntry)
+    (limits : Option Slot × Option (Epoch × Epoch)) : Option Slot × Option (Epoch × Epoch) :=
+  (entry.signedBlocks.foldl raiseSlotLimit limits.1,
+    entry.signedAttestations.foldl raiseEpochLimits limits.2)
+
+namespace Interchange
+
+/-- The limits of each key in one pass: its greatest slot, and its greatest source and target.
+
+The source and target maxima are independent and can come from different votes.
+
+A key without blocks keeps no slot limit, and a key without votes keeps no epoch limits. -/
+def limits (interchange : Interchange) :
+    Std.TreeMap BLSPubkey (Option Slot × Option (Epoch × Epoch)) :=
+  interchange.data.foldl (init := ∅) fun limits entry =>
+    limits.insert entry.pubkey (entry.raiseLimits (limits.getD entry.pubkey (none, none)))
+
+/-- The minimal strategy: one entry per key in byte order, holding its limits without roots.
+
+A limit without a signing root conflicts with every new message at its slot or target.
+
+So a new block's slot and a new vote's target must exceed their limits.
+
+A new vote's source must be at least its limit. -/
+def toMinimal (interchange : Interchange) : Interchange :=
+  { interchange with
+    data := interchange.limits.toList.map fun (pubkey, slot, epochs) =>
+      { pubkey
+        signedBlocks := slot.toList.map fun slot => ⟨slot, none⟩
+        signedAttestations := epochs.toList.map fun (source, target) => ⟨source, target, none⟩ } }
+
+/-- The record after importing a file with the minimal strategy of EIP-3076.
+
+The greatest slot and the independent greatest source and target epochs of each key are kept.
+
+Signing roots are discarded, so repeats of imported messages are refused.
+
+It does not compare the genesis validators roots of the two.
+
+[EIP-3076, Advice for Minimal Databases][minimal] recommends these maxima.
+
+[minimal]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-3076.md#advice-for-minimal-databases
+-/
 def importFile (held file : Interchange) : Interchange :=
-  { held with data := held.data ++ file.data }
+  toMinimal { held with data := held.data ++ file.data }
 
 end Interchange
 

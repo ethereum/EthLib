@@ -136,6 +136,15 @@ theorem parent_startState (message : Message fork) (state : TransactionState) :
   · exact TransactionState.parent_touchAccount _ _
   · rfl
 
+/-- The state that a message enters has the block of the state it is sent from. -/
+theorem parent_entered {message : Message fork} {state entry : TransactionState}
+    {substate entrySubstate : Substate}
+    (h : Entered fork message state substate entry entrySubstate) :
+    entry.parent = state.parent := by
+  rcases h with ⟨-, rfl, -⟩ | ⟨-, moved, -⟩
+  · exact parent_startState _ _
+  · exact (TransactionState.parent_moveEther moved).trans (parent_startState _ _)
+
 /-- The rollback of a frame keeps the block of that frame. -/
 theorem parent_rollbackOnError (snapshot : TransactionState) (evm : Evm fork Meter) :
     (rollbackOnError snapshot evm).state.parent = evm.state.parent := by
@@ -176,10 +185,7 @@ theorem processMessage_parent [LawfulGasMeter Meter] (n : Nat) :
     (M := fun _ state _ _ ended => ended.state.parent = state.parent)
     (fun {message state _ _ _ _ _} hentry hrun => by
       rw [parent_rollbackOnError]
-      refine hrun.trans ?_
-      rcases hentry with ⟨-, rfl, -⟩ | ⟨-, hm, -⟩
-      · exact parent_startState message state
-      · exact (TransactionState.parent_moveEther hm).trans (parent_startState message state))
+      exact hrun.trans (parent_entered hentry))
     (fun hp hm hd => (parent_depositCode hd).trans (hm.trans (parent_prepareCreation hp)))
     (fun h => h) n
 

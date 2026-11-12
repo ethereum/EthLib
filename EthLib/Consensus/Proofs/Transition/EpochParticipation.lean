@@ -16,6 +16,8 @@ There it stores as the next committee a draw from the state with that new curren
 
 The inactivity scores change nothing in the first epoch, and keep one score per entry.
 
+Their update changes no other field.
+
 After the first epoch, each eligible validator gets its next score, and the other scores stay.
 
 An unslashed validator that set the target flag in the previous epoch loses one point.
@@ -154,6 +156,20 @@ theorem processInactivityUpdates_sizes {config : Config} {altair : .altair ≤ f
       s.data.size = (state.inactivityScores altair).data.size)
       (fun _ _ _ hp step => (updateInactivityScore_size step).trans hp) rfl folded
 
+/-- The inactivity scores update changes only the inactivity scores. -/
+theorem processInactivityUpdates_frame {config : Config} {altair : .altair ≤ fork}
+    (computed : processInactivityUpdates config state altair = .ok after) :
+    after = { state with inactivityScores := after.inactivityScores } := by
+  unfold processInactivityUpdates at computed
+  split at computed
+  · simp only [pure, Except.pure, Except.ok.injEq] at computed
+    subst computed
+    rfl
+  · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+    obtain ⟨_, _, scores, folded, same⟩ := computed
+    subst same
+    rfl
+
 /-! ## The value of each inactivity score -/
 
 /-- Take a score update that succeeds, with a leak test that has a result.
@@ -262,11 +278,9 @@ A hit loses one point, and a miss gains the score bias.
 
 Outside a leak the score then loses the recovery rate, stopping at zero.
 
-The other scores stay.
-
-That needs a registry within its limit. -/
+The other scores stay. -/
 theorem processInactivityUpdates_scores {config : Config} {altair : .altair ≤ fork}
-    (within : state.RegistryWithinLimit) (later : getCurrentEpoch state ≠ GENESIS_EPOCH)
+    (later : getCurrentEpoch state ≠ GENESIS_EPOCH)
     (computed : processInactivityUpdates config state altair = .ok after) :
     ∃ eligible, getEligibleValidatorIndices state = .ok eligible ∧
       (∀ i, (∀ index ∈ eligible, index.toNat ≠ i) →
@@ -284,7 +298,7 @@ theorem processInactivityUpdates_scores {config : Config} {altair : .altair ≤ 
   simp only [later, ↓reduceIte, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
   obtain ⟨eligible, listed, scores, folded, rfl⟩ := computed
   -- The eligible indices name each validator once, so the fold sets each eligible score once.
-  have distinct := (getEligibleValidatorIndices_ok within listed).1
+  have distinct := (getEligibleValidatorIndices_ok listed).1
   have entry (j : Nat) := foldlM_entry (entry := fun scores : InactivityScores preset fork =>
     scores.data[j]?) (j := j)
     (fun _ _ _ step other => (updateInactivityScore_getElem? step).2 j (Ne.symm other))

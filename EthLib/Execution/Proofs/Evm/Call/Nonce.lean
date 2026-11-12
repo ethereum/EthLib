@@ -274,10 +274,10 @@ theorem nonceLe_rollbackOnError {message : Message fork} {state entry : Transact
     NonceLe state (rollbackOnError state ended).state ∧
       (rollbackOnError state ended).state.parent = state.parent := by
   have h1 : NonceLe state entry ∧ entry.parent = state.parent := by
+    refine ⟨?_, parent_entered hentry⟩
     rcases hentry with ⟨-, rfl, -⟩ | ⟨-, hm, -⟩
-    · exact ⟨nonceLe_startState message state, parent_startState message state⟩
-    · exact ⟨(nonceLe_startState message state).trans (nonceLe_moveEther hm),
-        (TransactionState.parent_moveEther hm).trans (parent_startState message state)⟩
+    · exact nonceLe_startState message state
+    · exact (nonceLe_startState message state).trans (nonceLe_moveEther hm)
   obtain ⟨hle, hpar⟩ := hrun
   have hp : ended.state.parent = state.parent := hpar.trans h1.2
   refine ⟨?_, (parent_rollbackOnError state ended).trans hp⟩

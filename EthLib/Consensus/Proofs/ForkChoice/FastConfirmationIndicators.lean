@@ -31,7 +31,7 @@ Its `Φ` is the committee weight since the parent, plus the boost.
 
 A discount is then taken off.
 
-It comes from the votes for the parent in the empty slots before the block.
+It comes from the votes for the parent from the committees of the empty slots before the block.
 
 A discount above the committee weight since the parent is an error of the store.
 
@@ -366,6 +366,23 @@ theorem stake_le_of_getTotalBalance {balanceSource : BeaconState preset fork}
   rw [total]
   exact le_max_of_le_right (stake_mono fun v member => List.mem_toFinset.mpr (among v member))
 
+/-- A range with a whole epoch weighs at least the total stake of the active validators.
+
+A validator weighs its effective balance in the source of balances.
+
+It is active when it is active in the current epoch of that source. -/
+theorem stake_le_computeCommitteeWeightBetweenSlots_of_covered {head : Root}
+    {balanceSource : BeaconState preset fork} {startSlot endSlot : Slot} {weight : Gwei}
+    (covered : isFullValidatorSetCovered preset startSlot endSlot = .ok true)
+    (weightOk : store.computeCommitteeWeightBetweenSlots head balanceSource startSlot endSlot =
+      .ok weight) :
+    stake (fun v => balanceAt balanceSource v.toNat)
+        (getActiveValidatorIndices balanceSource (getCurrentEpoch balanceSource)).toFinset ≤
+      weight.toNat := by
+  rw [computeCommitteeWeightBetweenSlots_of_covered covered, mapError_ok_iff] at weightOk
+  exact stake_le_of_getTotalBalance (getTotalActiveBalance_ok weightOk)
+    fun v member => List.mem_toFinset.mp member
+
 /-- The store's weight of the committees of a range covers the stake of active members.
 
 A member weighs its effective balance in the source of balances.
@@ -389,12 +406,19 @@ theorem stake_le_computeCommitteeWeightBetweenSlots_of_reads {head : Root}
       have := (inside v member).1 ∅ (getCommitteesBetweenSlots_of_gt empty)
       simp at this
     simp [this, stake_empty]
+  -- A whole epoch weighs the total active balance, which counts every active validator.
+  by_cases whole : isFullValidatorSetCovered preset startSlot endSlot = .ok true
+  · refine (stake_mono fun v member => List.mem_toFinset.mpr ?_).trans
+      (stake_le_computeCommitteeWeightBetweenSlots_of_covered whole weightOk)
+    obtain ⟨-, validator, atIndex, isActive⟩ := inside v member
+    exact mem_getActiveValidatorIndices_of_isActiveAt
+      (isActiveAt_eq_true_iff.mpr ⟨validator, atIndex, isActive⟩)
   have notGt : ¬startSlot > endSlot := empty
   simp only [computeCommitteeWeightBetweenSlots, bind_ok_iff, pure, Except.pure,
     Except.ok.injEq] at weightOk
   obtain ⟨⟨_, members⟩, weightOk, rfl⟩ := weightOk
   simp only [computeCommitteeWeightAndMembers, notGt, ↓reduceIte, bind_ok_iff] at weightOk
-  obtain ⟨covered, -, weightOk⟩ := weightOk
+  obtain ⟨covered, coveredOk, weightOk⟩ := weightOk
   cases covered
   · -- The members of the committees count once each, when active.
     simp only [Bool.false_eq_true, ↓reduceIte, bind_ok_iff, mapError_ok_iff] at weightOk
@@ -406,16 +430,7 @@ theorem stake_le_computeCommitteeWeightBetweenSlots_of_reads {head : Root}
     refine mem_filterM_ok_of_test activeOk
       (Std.TreeSet.mem_toList.mpr (inParticipants found foundOk)) ?_
     simp [validatorAt, atIndex, isActive, bind, Except.bind, pure, Except.pure]
-  · -- A whole epoch weighs the total active balance, which counts every active validator.
-    simp only [↓reduceIte, bind_ok_iff, mapError_ok_iff] at weightOk
-    obtain ⟨total, totalOk, final⟩ := weightOk
-    simp only [pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at final
-    obtain ⟨rfl, -⟩ := final
-    refine stake_le_of_getTotalBalance totalOk fun v member => ?_
-    obtain ⟨-, validator, atIndex, isActive⟩ := inside v member
-    simp only [getActiveValidatorIndices, List.mem_filterMap, Option.ite_none_right_eq_some,
-      Option.some.injEq, List.mem_zipIdx_iff_getElem?, Prod.exists]
-    exact ⟨validator, v.toNat, by simpa using atIndex, isActive, by simp⟩
+  · exact absurd coveredOk whole
 
 /-- The store's weight of the committees of a range covers the stake of their active members.
 
@@ -437,13 +452,13 @@ theorem stake_le_computeCommitteeWeightBetweenSlots {head : Root}
   rw [participantsOk, Except.ok.injEq] at readOk
   exact readOk ▸ (inside v member).1
 
-/-- The store's votes for a node from the committees of a range weigh at most those committees.
+/-- The store's votes for any of a list of nodes from the committees of a range weigh at most them.
 
 The weight may be that of a range from the same slot that ends later. -/
 theorem getNodeSupportBetweenSlots_le {head : Root} {balanceSource : BeaconState preset fork}
-    {node : ForkChoiceNode} {startSlot shortEnd endSlot : Slot} {support weight : Gwei}
+    {nodes : List ForkChoiceNode} {startSlot shortEnd endSlot : Slot} {support weight : Gwei}
     (supportOk :
-      store.getNodeSupportBetweenSlots head balanceSource node startSlot shortEnd = .ok support)
+      store.getNodeSupportBetweenSlots head balanceSource nodes startSlot shortEnd = .ok support)
     (weightOk : store.computeCommitteeWeightBetweenSlots head balanceSource startSlot endSlot =
       .ok weight)
     (le : shortEnd ≤ endSlot) : support.toNat ≤ weight.toNat := by
@@ -513,7 +528,7 @@ theorem computeEmptySlotSupportDiscount_le {head root : Root}
     subst discountOk
     exact UInt64.zero_le
   simp only [bind_ok_iff, mapError_ok_iff] at discountOk
-  obtain ⟨parentNode, -, lastEmpty, lastEmptyOk, parentSupport, supportOk, adversary, -, final⟩ :=
+  obtain ⟨parentNodes, -, lastEmpty, lastEmptyOk, parentSupport, supportOk, adversary, -, final⟩ :=
     discountOk
   simp only [pure, Except.pure, Except.ok.injEq] at final
   subst final
@@ -573,9 +588,7 @@ The supporters are validators whose stake is the support of the block in the sto
 
 The equivocators are validators whose stake is that of the known equivocators in the store.
 
-Both lie in a set `W` of members of the committees of a range of slots.
-
-Each member of `W` is active in the source of balances.
+Both lie in a set `W` of validators, whose stake the store's weight of a range of slots covers.
 
 The supporters and the equivocators are apart.
 
@@ -585,7 +598,9 @@ The range that the store uses for the block is one such range.
 
 Assume that the Byzantine validators hold at most β of the stake of `W`.
 
-That is Assumption 2 when `W` holds every active member of the committees of the range.
+That is Assumption 2 when `W` is the set of active members of the committees of the range.
+
+A range with a whole epoch may take as `W` every validator active in the source of balances.
 
 Here β is the threshold of the configuration, in percent, and no equivocator is honest.
 
@@ -600,7 +615,6 @@ theorem lt_two_mul_honest_support_of_isOneConfirmed {J : Set ValidatorIndex}
     [DecidablePred (· ∈ J)] {W supporters equivocators : Finset ValidatorIndex} {head root : Root}
     {balanceSource : BeaconState preset fork} {tally : VoteTally}
     {currentSlot firstSlot lastSlot startSlot : Slot} {block parentBlock : BeaconBlock preset fork}
-    {participants : Std.TreeSet ValidatorIndex}
     {proposerScore maximumSupport discount adversary threshold support weight equivocation : Gwei}
     (slotOk : store.getCurrentSlot config = .ok currentSlot)
     (blockOk : store.block root = .ok block)
@@ -615,7 +629,6 @@ theorem lt_two_mul_honest_support_of_isOneConfirmed {J : Set ValidatorIndex}
     (adversaryOk : store.getAdversarialWeight config head balanceSource root = .ok adversary)
     (rangeOk : store.computeAdversarialWeight config head balanceSource startSlot lastSlot =
       .ok adversary)
-    (participantsOk : store.getCommitteesBetweenSlots head startSlot lastSlot = .ok participants)
     (weightOk : store.computeCommitteeWeightBetweenSlots head balanceSource startSlot lastSlot =
       .ok weight)
     (equivocationOk :
@@ -627,9 +640,7 @@ theorem lt_two_mul_honest_support_of_isOneConfirmed {J : Set ValidatorIndex}
     (equivocationStake :
       stake (fun v => balanceAt balanceSource v.toNat) equivocators = equivocation.toNat)
     (supportersIn : supporters ⊆ W) (equivocatorsIn : equivocators ⊆ W)
-    (inside : ∀ v ∈ W, v ∈ participants ∧ ∃ validator,
-      balanceSource.validators.data[v.toNat]? = some validator ∧
-        isActiveValidator validator (getCurrentEpoch balanceSource) = true)
+    (weighed : stake (fun v => balanceAt balanceSource v.toNat) W ≤ weight.toNat)
     (aligned : ∀ v ∈ W, balanceAt balanceSource v.toNat % 100 = 0)
     (apart : Disjoint supporters equivocators) (dishonest : ∀ v ∈ equivocators, v ∉ J)
     (byzantine : ByzantineStakeAtMost (fun v => balanceAt balanceSource v.toNat) W J
@@ -643,15 +654,14 @@ theorem lt_two_mul_honest_support_of_isOneConfirmed {J : Set ValidatorIndex}
   have above := threshold_lt_of_isOneConfirmed supportOk thresholdOk confirmed
   have share := computeAdversarialWeight_share weightOk equivocationOk rangeOk
   -- The weight covers the stake of `W`, and that stake is a whole number of 100 Gwei.
-  have covered := stake_le_computeCommitteeWeightBetweenSlots participantsOk weightOk inside
   have whole : 100 ∣ stake w W := Finset.dvd_sum fun v member => Nat.dvd_of_mod_eq_zero
     (aligned v member)
   have cover : stake w W ≤ weight.toNat / 100 * 100 := by
     obtain ⟨k, hk⟩ := whole
-    rw [hk] at covered ⊢
+    rw [hk] at weighed ⊢
     rw [Nat.mul_comm 100 k]
     exact Nat.mul_le_mul_right 100 ((Nat.le_div_iff_mul_le (by norm_num)).mpr
-      (by rw [Nat.mul_comm]; exact covered))
+      (by rw [Nat.mul_comm]; exact weighed))
   -- The cover of the stake gives the cover of its Byzantine share.
   replace cover : config.CONFIRMATION_BYZANTINE_THRESHOLD.toNat * stake w W ≤
       100 * (weight.toNat / 100 * config.CONFIRMATION_BYZANTINE_THRESHOLD.toNat) := by

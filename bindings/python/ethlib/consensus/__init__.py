@@ -944,7 +944,7 @@ def read_slashing_interchange(text: bytes) -> bytes:
 
 
 def import_slashing_interchange(held: bytes, file: bytes) -> bytes:
-    """The record of a signer that keeps every message, after it imports a file."""
+    """The record after importing a file with the minimal strategy of EIP-3076."""
     return _native.consensus_import_slashing_interchange(held, file)
 
 
