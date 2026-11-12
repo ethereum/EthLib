@@ -16,6 +16,12 @@ A node at or below the slot is its own ancestor, so every known node descends fr
 
 A node that descends from a known node sits at the slot of that node or later.
 
+The ancestor of a block at the slot of an earlier parent is the node that the block builds on.
+
+A node descends from its ancestor at any slot.
+
+Each node descends from its parent's pending node when the parent sits at an earlier slot.
+
 The walk to a lower slot can stop at a higher slot on the way, and go on from there.
 
 From Gloas the walk gives each parent an empty or full status.
@@ -139,6 +145,25 @@ theorem getAncestor_step {node : ForkChoiceNode} {slot : Slot}
       rw [parentFound, Option.some.injEq] at same
       subst same
       simp [parentLower]
+
+/-- The ancestor of a block at the slot of its parent is the node that the block builds on.
+
+That node is the parent with the payload status that the block gives it.
+
+The walk may start from any node of the block.
+
+The store must hold the parent, at an earlier slot than the block.
+
+This identifies the parent node counted by arXiv 2405.00549v4, Definition 5. -/
+theorem getAncestor_parent_of_slot_lt {node : ForkChoiceNode}
+    {block parent : BeaconBlock preset fork}
+    (found : store.blocks[node.root]? = some block)
+    (parentFound : store.blocks[block.parentRoot]? = some parent)
+    (lower : parent.slot < block.slot) :
+    store.getAncestor node parent.slot =
+      .ok ⟨block.parentRoot, parentPayloadStatus block parent⟩ := by
+  rw [getAncestor_step found (UInt64.not_le.mpr lower) parentFound lower]
+  exact getAncestor_of_le parentFound (UInt64.le_refl _)
 
 /-- The root that the walk reaches does not depend on the payload status of the start.
 
@@ -294,14 +319,23 @@ theorem getCheckpointBlock_of_blocks {after : Store preset fork} {root checkpoin
       rw [getAncestor_of_blocks blocks walk]
       exact found
 
+/-- A node descends from its ancestor at any slot.
+
+This is the ancestry used by the empty-slot discount of arXiv 2405.00549v4, Definition 5. -/
+theorem isAncestor_of_getAncestor {node ancestor : ForkChoiceNode} {slot : Slot}
+    (walk : store.getAncestor node slot = .ok ancestor) :
+    store.isAncestor node ancestor = .ok true := by
+  obtain ⟨block, found, le⟩ := getAncestor_le walk
+  have stops : store.getAncestor node block.slot = .ok ancestor := by
+    rw [getAncestor_trans le walk, getAncestor_of_le found (UInt64.le_refl _)]
+  by_cases gloas : .glamsterdam ≤ fork <;>
+    simp [isAncestor, block_ok_iff.mpr found, stops, gloas, bind, Except.bind, pure, Except.pure]
+
 /-- Every known node descends from itself. -/
 theorem isAncestor_self {node : ForkChoiceNode} {block : BeaconBlock preset fork}
     (found : store.blocks[node.root]? = some block) :
-    store.isAncestor node node = .ok true := by
-  have known : store.block node.root = .ok block := block_ok_iff.mpr found
-  by_cases gloas : .glamsterdam ≤ fork <;>
-    simp [isAncestor, known, getAncestor_of_le found (UInt64.le_refl _), gloas, bind,
-      Except.bind, pure, Except.pure]
+    store.isAncestor node node = .ok true :=
+  isAncestor_of_getAncestor (getAncestor_of_le found (UInt64.le_refl _))
 
 /-- A node that descends from a known node is a known block, at the slot of that node or later. -/
 theorem slot_le_of_isAncestor {node ancestor : ForkChoiceNode} {block : BeaconBlock preset fork}
@@ -343,6 +377,24 @@ theorem isAncestor_pending (gloas : .glamsterdam ≤ fork) (node : ForkChoiceNod
   split
   · rfl
   · split <;> simp
+
+/-- Each node of a block descends from the pending node of the parent of that block.
+
+The store must hold the parent, at an earlier slot than the block.
+
+This is the pending ancestry used by arXiv 2405.00549v4, Definition 5. -/
+theorem isAncestor_pending_parent_of_slot_lt {node : ForkChoiceNode}
+    {block parent : BeaconBlock preset fork}
+    (found : store.blocks[node.root]? = some block)
+    (parentFound : store.blocks[block.parentRoot]? = some parent)
+    (lower : parent.slot < block.slot) :
+    store.isAncestor node ⟨block.parentRoot, .pending⟩ = .ok true := by
+  have walk := getAncestor_parent_of_slot_lt found parentFound lower
+  have descends := isAncestor_of_getAncestor walk
+  by_cases gloas : .glamsterdam ≤ fork
+  · simp [isAncestor_pending gloas, block_ok_iff.mpr parentFound, walk, bind, Except.bind,
+      pure, Except.pure]
+  · simpa only [parentPayloadStatus_of_lt (Nat.lt_of_not_le gloas)] using descends
 
 end Store
 
