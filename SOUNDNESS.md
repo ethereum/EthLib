@@ -1779,6 +1779,14 @@ The storage value of a slot that is not set is 0, so the answer must give that w
 EIP-1186 does not say which fields the answer holds for an address without an account.
 So the check judges no field of an absent account, and reports the absence.
 
+### The block headers of the eth protocol
+
+`checkHeaders` (`Execution/Network/Blocks.lean`) checks an answer to a GetBlockHeaders request of the eth protocol.
+`checkHeaders_eq_ok_iff` (`Execution/Proofs/Network/Blocks.lean`) states the conditions that an answer passes: its length, its start block, and each header following the one before it.
+`followsIn_eq_ok_iff` states that one header follows another exactly when it has the next number of the request and, when the request skips no block, the later block names the earlier one by its hash.
+`headerParent_of_checkHeaders` draws the consequence for a whole answer to a request that skips no block.
+No theorem checks a header against the chain or its validity rules.
+
 ### The block bodies of the eth protocol
 
 A node fetches the bodies of blocks after their headers, with the BlockBodies message of the eth protocol.
