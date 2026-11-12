@@ -93,11 +93,12 @@ The specification and the exports import nothing beyond the Lean toolchain.
 - Remove such an accessor even when no input that the source accepts reaches its default.
   A caller of a public function can still reach it, with arguments that break a precondition the type does not state.
   Change the definition in place, and keep no copy of the old one beside it.
-  Wherever the old index was in range, the result must not change, so the existing theorems and tests keep their statements and pass.
-  If an input that the source rejects reached a default, the change is a `fix`.
+  Wherever the old index was in range, the result must not change.
+  Existing theorems and tests keep their meaning, and change their statements only where the type of the result changes.
+  If any input reached a default where the source gives another outcome, the change is a `fix`.
   It cites the rule of the source that it restores.
-  No upstream suite holds the test vectors that such a fix adds.
-  So take the expected value of each one from that rule, never from EthLib.
+  Take its test vectors from the source's own suite when one holds them.
+  Otherwise take the expected value of each one from that rule, never from EthLib.
   Describe what each vector pins, and record its origin next to it, as [Known answers](#known-answers) asks.
 - Prefer structural recursion, `map` and folds to `Id.run do` with mutable variables.
   A proof then follows the shape of the definition.
@@ -121,8 +122,8 @@ What an entry point does with a wrong input is part of the protocol, so its sour
 
 - Where the source defines the outcomes of an operation, return them as a type.
   For example, the Engine API answers a payload with one of five statuses, and gossip validation returns a `ValidationResult`: accept, ignore or reject.
-  Map the internal errors to that type in one place, with a total function.
-  `newPayloadOnChain` does this: an execution that aborts gives `.syncing`, and any other failed transition gives `.invalid`.
+  Map the internal errors to that type with total functions, close to the entry point.
+  For example, after the checks of a payload, `newPayloadOnChain` maps an execution that aborts to `.syncing`, and any other failed transition to `.invalid`.
 - Return a `Bool` only where the source defines one.
   A caller that the source requires to tell outcomes apart, for example to import or to queue a block, receives the richer type.
 - Where the source fixes the order of its checks, and the order changes the outcome, follow that order.
@@ -133,10 +134,9 @@ What an entry point does with a wrong input is part of the protocol, so its sour
   Many proofs and Python tests pin the exact error today, and `bindings/contract/contract.json` lists the error codes of its methods.
 - Where the source requires the state to be unchanged on failure, state that in a theorem.
   When the operation returns its input state on failure, state it as equality of the returned state.
-  Inside a step, such as an EVM call that halts, state it over the values a caller can read: balances, nonces, code and storage.
+  Inside a step, such as an EVM call that fails, state it over the values a caller can read: balances, nonces, code, storage and transient storage.
   Do not state it over the fields of the representation, since a new representation would break the statement.
-  This rule is for new theorems.
-  Some existing ones, such as `processMessage_sameWrites_of_error`, state it over the fields of `SameWrites`.
+  `processMessage_sameWrites_of_error` states it over the fields of `SameWrites`; a new theorem states it over readable values.
 
 ### Proofs
 
