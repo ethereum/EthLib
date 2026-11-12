@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Hash.Scrypt
 public import EthLib.Cryptography.Proofs.Hash.Pbkdf2
+public import EthLib.Base.Proofs.LittleEndian
 
 /-!
 # Proofs: scrypt
@@ -167,6 +168,115 @@ theorem scrypt_ok_iff {password salt : ByteArray} {n r p length : Nat} :
     simp only [bind, Except.bind, MonadExcept.throw, Except.mapError]
     simp [Nat.ne_of_gt hr, hc, Nat.ne_of_gt hp, Nat.not_lt.mpr hpm, Nat.ne_of_gt hl,
       Nat.not_lt.mpr hL, h1, h2, h3]
+
+/-! ## The values the steps compute
+
+The theorems above fix the sizes each step returns and the inputs each step accepts.
+
+A step that returned a constant block of the right size would satisfy all of them.
+
+The theorems below fix the values.
+
+They state the index that ROMix reads, the table that it fills and the order of the mixed blocks.
+-/
+
+/-- Repeating a step on one application of it is one more application of the repeated step. -/
+private theorem repeat_succ {α : Type} (f : α → α) (count : Nat) (a : α) :
+    Nat.repeat f count (f a) = f (Nat.repeat f count a) := by
+  induction count generalizing a with
+  | zero => rfl
+  | succ count ih => show f (Nat.repeat f count (f a)) = f (f (Nat.repeat f count a)); rw [ih]
+
+/-- `Integerify` reads the last 64 bytes of its value as a little-endian number, RFC 7914 §5. -/
+theorem integerify_eq (r : Nat) (x : MixBlock r) :
+    integerify r x
+      = Base.bytesToUint (x.val.extract (128 * r - 64) (128 * r)).data.toVector := by
+  unfold integerify
+  rw [Base.bytesToUint_eq_foldr]
+  simp only [Vector.toList, ← Array.foldr_toList]
+  -- The two folds differ only in the order of the sum at each byte.
+  induction (x.val.extract (128 * r - 64) (128 * r)).data.toList with
+  | nil => rfl
+  | cons byte rest ih => simp only [List.foldr_cons, ih]; omega
+
+/-- The fill leaves every entry below the index it starts from, RFC 7914 §5, step 2. -/
+theorem romixFill_fst_get_lt (r : Nat) (positive : 0 < r) {n : Nat} (count i : Nat)
+    (whole : i + count = n) (table : Vector (MixBlock r) n) (x : MixBlock r) (j : Nat)
+    (below : j < i) (within : j < n) :
+    (romixFill r positive count i whole table x).1[j] = table[j] := by
+  induction count generalizing i table x with
+  | zero => rfl
+  | succ count ih =>
+    rw [romixFill, ih (i + 1) (by omega) _ _ (by omega), Vector.getElem_set_ne (by omega) within
+      (by omega)]
+
+/-- The fill stores `BlockMix` applied `j - i` times at entry `j`, RFC 7914 §5, step 2.
+
+So each entry is the value that the next BlockMix step reads.
+-/
+theorem romixFill_fst_get (r : Nat) (positive : 0 < r) {n : Nat} (count i : Nat)
+    (whole : i + count = n) (table : Vector (MixBlock r) n) (x : MixBlock r) (j : Nat)
+    (from_ : i ≤ j) (before : j < i + count) :
+    (romixFill r positive count i whole table x).1[j]'(by omega)
+      = Nat.repeat (blockMixCore r positive) (j - i) x := by
+  induction count generalizing i table x with
+  | zero => omega
+  | succ count ih =>
+    rw [romixFill]
+    rcases Nat.eq_or_lt_of_le from_ with rfl | gt
+    · -- Entry `i` is written first, and the later steps leave it alone.
+      rw [romixFill_fst_get_lt r positive count (i + 1) (by omega) _ _ i (by omega) (by omega),
+        Vector.getElem_set_self, Nat.sub_self]
+      rfl
+    · obtain ⟨d, rfl⟩ : ∃ d, j = i + 1 + d := ⟨j - (i + 1), by omega⟩
+      have step : i + 1 + d - (i + 1) = d := by omega
+      have total : i + 1 + d - i = d + 1 := by omega
+      rw [ih (i + 1) (by omega) _ _ (by omega) (by omega), step, repeat_succ, total]
+      rfl
+
+/-- The fill carries `BlockMix` applied `count` times, RFC 7914 §5, step 2. -/
+theorem romixFill_snd (r : Nat) (positive : 0 < r) {n : Nat} (count i : Nat)
+    (whole : i + count = n) (table : Vector (MixBlock r) n) (x : MixBlock r) :
+    (romixFill r positive count i whole table x).2
+      = Nat.repeat (blockMixCore r positive) count x := by
+  induction count generalizing i table x with
+  | zero => rfl
+  | succ count ih => rw [romixFill, ih (i + 1) (by omega), repeat_succ]; rfl
+
+/-- The table that ROMix reads holds `BlockMix` applied `j` times at entry `j`, RFC 7914 §5.
+
+ROMix reads this table at indices that the password decides, so each entry decides an output.
+-/
+theorem romixFill_replicate_fst_get (r : Nat) (positive : 0 < r) (n : Nat) (input : MixBlock r)
+    (j : Nat) (within : j < n) :
+    (romixFill r positive n 0 (by omega) (Vector.replicate n input) input).1[j]
+      = Nat.repeat (blockMixCore r positive) j input := by
+  rw [romixFill_fst_get r positive n 0 (by omega) _ _ j (by omega) (by omega), Nat.sub_zero]
+
+/-- Mixing appends to what it is given, so a block never reads the blocks already mixed. -/
+theorem mixBlocks_append (input : ByteArray) (n r count offset : Nat)
+    (out extra mixed : ByteArray) (h : mixBlocks input n r count offset out = .ok mixed) :
+    mixBlocks input n r count offset (extra ++ out) = .ok (extra ++ mixed) := by
+  induction count generalizing offset out mixed with
+  | zero => simp only [mixBlocks] at h ⊢; rw [Except.ok.inj h]
+  | succ count ih =>
+    simp only [mixBlocks, bind, Except.bind] at h ⊢
+    cases hr : romix (input.extract offset (offset + 128 * r)) n r with
+    | error e => rw [hr] at h; exact absurd h (by simp)
+    | ok block =>
+      rw [hr] at h
+      replace h : mixBlocks input n r count (offset + 128 * r) (out ++ block) = .ok mixed := h
+      show mixBlocks input n r count (offset + 128 * r) (extra ++ out ++ block)
+        = .ok (extra ++ mixed)
+      rw [ByteArray.append_assoc]
+      exact ih (offset + 128 * r) (out ++ block) mixed h
+
+/-- The `p` blocks of a derivation are mixed independently, RFC 7914 §6, step 2. -/
+theorem mixBlocks_eq_append (input : ByteArray) (n r count offset : Nat) (out mixed : ByteArray)
+    (h : mixBlocks input n r count offset ByteArray.empty = .ok mixed) :
+    mixBlocks input n r count offset out = .ok (out ++ mixed) := by
+  have := mixBlocks_append input n r count offset ByteArray.empty out mixed h
+  rwa [ByteArray.append_empty] at this
 
 /-! ## Error codes -/
 
