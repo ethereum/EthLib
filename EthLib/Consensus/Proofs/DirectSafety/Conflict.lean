@@ -284,7 +284,8 @@ theorem conflicting_fields_quorums {g a b : ForkedBeaconState preset}
       · subst j
         rcases finalized_field right genesis with initial | ⟨call, _, rule⟩
         · exact .inl initial
-        · exact (finalization_rule_quorums right genesis call _ rule).choose_spec.2.2.1
+        · obtain ⟨_, _, _, history, _⟩ := finalization_rule_quorums right genesis call _ rule
+          exact history
     rcases alternatives with equal | history
     · have zero : j.epoch.toNat = 0 := by rw [equal]; rfl
       exact False.elim (by dsimp [f] at positive; omega)
