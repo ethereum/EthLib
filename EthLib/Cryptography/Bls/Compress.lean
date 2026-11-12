@@ -83,13 +83,13 @@ def Fp2.sqrt (a : Fp2 F) : Except BlsError (Fp2 F) :=
 
 end Sqrt
 
-/-- True iff `bytes[start..]` are all zero. -/
+/-- True iff `bytes[start..]` are all zero.
+
+Example: `tailAllZero ⟨#[0xc0, 0, 0]⟩ 1 = true`, and `tailAllZero ⟨#[0xc0, 0, 1]⟩ 1 = false`. -/
 -- The exposed decoders need this body for downstream reduction.
-def tailAllZero (bytes : ByteArray) (start : Nat) : Bool := Id.run do
-  let mut ok := true
-  for h : i in [start : bytes.size] do
-    if bytes[i]'h.upper ≠ 0 then ok := false
-  return ok
+-- `List.all` recurses on the list, so the kernel reduces it on a literal encoding.
+def tailAllZero (bytes : ByteArray) (start : Nat) : Bool :=
+  (bytes.data.toList.drop start).all (· == 0)
 
 /-! ## G1 -/
 
