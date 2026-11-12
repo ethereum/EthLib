@@ -902,6 +902,9 @@
 #define DOC_eth_receipts_match \
   "Whether the receipts of a block, as a version sends them, match the receipts root of its header."
 
+#define DOC_eth_check_body \
+  "Whether the body `body` of a BlockBodies answer belongs to the header `header` at a fork."
+
 #define DOC_eth_access_lists_answer \
   "Whether `response` answers a GetBlockAccessLists `request`, given each block's access list hash."
 

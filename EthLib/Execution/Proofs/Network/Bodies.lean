@@ -416,7 +416,7 @@ theorem outputChecks_withdrawals {header : Header fork} {output : BlockOutput fo
 /-- Ommers whose encoding has the ommers hash of the header, in number and in count, pass. -/
 theorem checkOmmers_of_valid {header : Header fork}
     {ommers : List ((f : Fork) × Header f)} {encoded : ByteArray}
-    (henc : encode (ommersItem ommers) = .ok encoded)
+    (hencoded : encode (ommersItem ommers) = .ok encoded)
     (hhash : Cryptography.Hash.Keccak.keccak256 encoded = header.ommersHash)
     (hcount : ommers.length ≤ MAX_OMMERS)
     (hnumber : ∀ ommer ∈ ommers, ommer.2.number ≤ header.number) :
@@ -426,7 +426,7 @@ theorem checkOmmers_of_valid {header : Header fork}
   have hit : (ommersItem ommers).toItems = .ok (ommers.map fun o => Codec.toItem o.2) := rfl
   unfold checkOmmers
   rw [hit]
-  simp only [Except.mapError, bind, Except.bind, ensure, List.length_map, hcount, ↓reduceIte, henc,
+  simp only [Except.mapError, bind, Except.bind, ensure, List.length_map, hcount, ↓reduceIte, hencoded,
     hb]
   refine forM_ok_iff.mpr fun (i, item) hm => ?_
   obtain ⟨ommer, hmem, rfl⟩ := List.mem_map.mp (List.of_mem_zip hm).2

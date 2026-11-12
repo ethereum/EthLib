@@ -570,6 +570,7 @@ PyObject* py_eth_check_headers                            (PyObject* self, PyObj
 PyObject* py_eth_check_pooled                             (PyObject* self, PyObject* args);
 PyObject* py_eth_wire_hash                                (PyObject* self, PyObject* args);
 PyObject* py_eth_receipts_match                           (PyObject* self, PyObject* args);
+PyObject* py_eth_check_body                              (PyObject* self, PyObject* args);
 PyObject* py_eth_access_lists_answer                      (PyObject* self, PyObject* args);
 PyObject* py_eth_check_partial_receipts                   (PyObject* self, PyObject* args);
 PyObject* py_snap_message_decode                          (PyObject* self, PyObject* args);

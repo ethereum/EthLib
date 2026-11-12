@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Exports
+public import EthLib.Execution.Network.Bodies
 public import EthLib.Execution.Network.Message
 public import EthLib.Networking.Exports.ForkId
 
@@ -18,6 +19,8 @@ A schedule crosses it as the fork identifier exports read it.
 Message errors have codes from 1, and Status errors from 101.
 
 Header errors have codes from 201, and transaction errors from 301.
+
+Body errors have codes from 601.
 
 A bad argument has code 0.
 -/
@@ -177,5 +180,31 @@ def checkPartialReceiptsExport (gasLimits : ByteArray) (blockGasLimit : UInt64)
     | .error _ => throw (0, "a receipt does not encode")
   (checkPartialReceipts limits blockGasLimit.toNat sizes).map (fun _ => true)
     |>.mapError fun e => (e.code, partialMessage e)
+
+/-- A message for a refused body, phrased for someone reading a Python traceback. -/
+def bodyMessage : BodyError → String
+  | .decoding e => s!"body is not the RLP list of its parts: {reprStr e}"
+  | .trie e => s!"a root of the body cannot be computed: {reprStr e}"
+  | .wrongTransactionsRoot => "transactions do not have the transactions root of the header"
+  | .missingWithdrawals => "body has no withdrawals, which the fork asks for"
+  | .unexpectedWithdrawals => "body has withdrawals, which the fork does not have"
+  | .wrongWithdrawalsRoot => "withdrawals do not have the withdrawals root of the header"
+  | .tooManyOmmers c => s!"body holds {c} ommers, more than {Blocks.MAX_OMMERS}"
+  | .wrongOmmersHash => "ommers do not have the ommers hash of the header"
+  | .ommerAfterBlock i n => s!"ommer {i} has number {n}, after the block"
+
+/-- Whether the body `body` of a BlockBodies answer belongs to the header `header` at a fork.
+
+The header and the body are RLP.
+
+It returns true on acceptance, and raises the code of the refusal otherwise. -/
+@[export eth_check_body]
+def checkBodyExport (fork header body : ByteArray) : Result Bool := do
+  let fork ← forkUpTo .glamsterdam fork
+  let h : Blocks.Header fork ← (Serialization.Rlp.Codec.decode header).mapError
+    fun e => (0, s!"header does not decode at this fork: {reprStr e}")
+  let .ok item := Serialization.Rlp.decode body
+    | throw (0, "body is not RLP")
+  (checkBody h item).map (fun _ => true) |>.mapError fun e => (e.code, bodyMessage e)
 
 end EthLib.Execution.Network.Exports
