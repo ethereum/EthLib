@@ -660,12 +660,26 @@ The Python tests check seven test cases of the NIST CAVP file `gcmtestvectors.zi
 
 ### X25519 and ChaCha20-Poly1305
 
-X25519 has no theorem: only the Python tests check it.
+The X25519 proofs cover the clamp of RFC 7748 §5 and the decoding of a coordinate (`Proofs/X25519.lean`).
+`decodeScalar_eq` proves that the clamp sets bit 254, clears bits 0 to 2 and bit 255, and keeps bits 3 to 253 of the key.
+`decodeScalar_mod_eight`, `le_decodeScalar` and `decodeScalar_lt` follow: a clamped scalar is a multiple of eight, at least `2 ^ 254` and below `2 ^ 255`.
+`val_decodeUCoordinate` proves that decoding clears bit 255 and reduces modulo the field prime, so a noncanonical coordinate is accepted.
+`decodeUCoordinate_encodeUCoordinate` proves that decoding the bytes of a reduced coordinate returns it.
+`ladder_mod_two_pow` proves that the bits of the scalar above bit 254 do not change the ladder.
+So no run of the ladder can observe the cleared bit 255; only the clamp theorems record it.
+`swap_ladder_decodeScalar` proves that a clamped scalar leaves no swap pending at the end of the ladder.
+No theorem relates the ladder to the curve, so it is not proved to compute a scalar multiple.
+
 The ChaCha20-Poly1305 proofs cover output length, counter exhaustion, rejection of a wrong tag and the round trip (`Proofs/ChaCha20Poly1305.lean`).
 `crypt_crypt` proves that the cipher, run twice under one key, counter and nonce, gives back its input.
 `decrypt_encrypt` proves that decryption of an honest ciphertext and tag returns the plaintext.
 `tag_eq_of_decrypt_eq_ok` proves that no other tag passes for that ciphertext.
 These are statements about the definitions alone, not about their security.
+The clamp of the Poly1305 key has its own theorem.
+`testBit_clampR` gives every bit of `r` without the mask, by its place in the little-endian 32-bit words of `r`: the top four bits of bytes 3, 7, 11 and 15 and the bottom two bits of bytes 4, 8 and 12 are clear, and every other bit of the low 16 bytes of the key is kept.
+So a clamp with another mask would fail it.
+`clampR_lt` bounds `r` by `2 ^ 124`.
+`poly1305Accumulator_lt` proves that the accumulator stays below the prime `2 ^ 130 - 5`, whatever `r` and the message, since each step reduces modulo the prime.
 No theorem relates ChaCha20-Poly1305 to an independent model of RFC 8439.
 The Python tests compare the bindings with the RFC 7748 and RFC 8439 vectors.
 The million-iteration X25519 vector requires `ETHLIB_SLOW_VECTORS=1`.
@@ -680,7 +694,12 @@ A caller that edits the state can therefore complete with a remote whose signatu
 `Produced.complete_isOk` says that completion of such a state after message 3 succeeds.
 These are acceptance theorems, not a proof of protocol security, confidentiality or constant-time execution.
 They relate the identity to the transport keys only through the shared handshake state.
-No theorem says that the chaining key mixed a Diffie-Hellman output with the remote static key, and none covers the handshake hash.
+The transcript of Noise §5.2 has its own theorems (`Networking/Proofs/Noise.lean`).
+`chainingKey_foldl_mixHash` and `cipher_foldl_mixHash` prove that a run of transcript mixes leaves the chaining key and the cipher unchanged.
+`eq_or_collision_of_hash_mixHash_eq` proves that two mixes that end at one handshake hash started at one handshake hash and mixed the same bytes, or else names the two different SHA-256 inputs that hash alike.
+No theorem assumes or bounds the collision resistance of SHA-256, and none binds the whole transcript of a handshake.
+`unframe_frame` proves that reading back a written frame of the noise-libp2p "Wire Format" returns its message.
+No theorem says that the chaining key mixed a Diffie-Hellman output with the remote static key.
 Only the libp2p read verifies an identity, and completion checks that the stored remote has the remote static key of the handshake.
 The raw transport split of an XX state checks neither.
 The Python tests compare the raw XX handshake with a published test vector.
@@ -693,13 +712,25 @@ They must discard handshake state after an error.
 ### Engine API authentication
 
 `Jwt.check_build_of_size` (`Engine/Proofs/Jwt.lean`) proves that a token built with a 32-byte secret passes with that secret at clocks within 60 seconds of its issued-at time.
+`Jwt.within_eq_true_iff_of_nonneg` and `Jwt.within_eq_true_iff_of_neg` give the clock comparison of the issued-at time in full, one for each sign of the exponent of the date.
+For a negative exponent the statement scales the bounds instead of dividing the date, so it is the exact comparison.
+They prove correct the two shortcuts that avoid expanding a huge exponent, where a test can run the shortcut but cannot compute the value it replaces.
 The builder validates the JSON it generates, and `Jwt.build_eq_ok` proves that this validation never fails.
 `Jwt.authenticate_eq_error_of_tag_ne` proves that a token whose tag differs from the HS256 tag of its parts is refused before any JSON is read.
 `Jwt.compact_signature_of_check` proves that an accepted token is the compact form of its parts with their HS256 tag under the secret.
 So the clock check accepts no other tag part for those parts.
 Keeping a party without the secret away from the reader also assumes HMAC unforgeability, and a captured token can be replayed within its 60 seconds.
 `Jwt.check_eq_false_of_algorithm_ne` proves rejection when the decoded algorithm differs from HS256.
-The total JSON reader has no separate theorem of agreement with RFC 8259.
+The Unicode escape of [RFC 8259 §7](https://www.rfc-editor.org/rfc/rfc8259#section-7) has its own theorems (`Engine/Proofs/Jwt/Json.lean`).
+`Jwt.Json.hex4_cons_eq_some_iff` proves that four hex digits, in either letter case, name the number they write in base 16.
+`Jwt.Json.hex4_eq_none_of_length_lt` proves that fewer than four characters are no escape.
+`hexValue?_hexDigitChar` and `hexValue?_toUpper_hexDigitChar` prove that those hex digits are read in lowercase and in uppercase.
+`Jwt.Json.unicodeEscape_eq_none_of_hex4` proves that an escape without four hex digits is refused.
+`Jwt.Json.unicodeEscape_eq_of_not_surrogate` proves that a value outside the surrogate range is returned as the code point it names.
+`Jwt.Json.unicodeEscape_eq_of_pair` proves that a high surrogate followed by an escaped low surrogate is returned as the code point of the pair.
+`Jwt.Json.unicodeEscape_eq_none_of_surrogate` proves that every other surrogate is refused: the grammar admits a lone surrogate ([§8.2](https://www.rfc-editor.org/rfc/rfc8259#section-8.2)), but this reader refuses one.
+`Jwt.Json.string_eq_none_of_control` proves that a character below `0x20` is refused when it comes next in a string unescaped.
+The total JSON reader has no theorem of full agreement with RFC 8259.
 These theorems do not establish HMAC unforgeability or constant-time execution.
 
 ### ERC-2335 keystores
@@ -2936,6 +2967,47 @@ The package requires Mathlib, at `v4.35.0`, commit `56a0058`.
 The package requires VCVio, at `bbf05ee`.
 Only the proofs import them.
 The Lean toolchain is `leanprover/lean4:v4.35.0`.
+<!-- end generated -->
+
+VCVio defines the oracle computations and probabilities in which the security games are stated.
+The proofs below import it, directly or through another file.
+A directory is listed when at least one file under it imports VCVio, or when the file of the same name beside it does, such as `Wots.lean` beside `Wots/`.
+So a listed directory can hold files that do not import VCVio.
+The files named `Proofs.lean` are roots that gather the proofs of a domain, so they are not listed.
+
+<!-- generated: vcvio-users -->
+- `EthLib/Consensus/Proofs/Accessors/`
+- `EthLib/Consensus/Proofs/DataAvailability/`
+- `EthLib/Consensus/Proofs/Gossip/`
+- `EthLib/Consensus/Proofs/LightClient/`
+- `EthLib/Consensus/Proofs/PqKeys/`
+- `EthLib/Cryptography/Proofs/Aes/`
+- `EthLib/Cryptography/Proofs/BadOnBudget.lean`
+- `EthLib/Cryptography/Proofs/BadOnGrowth.lean`
+- `EthLib/Cryptography/Proofs/Bls/`
+- `EthLib/Cryptography/Proofs/DerivationTable.lean`
+- `EthLib/Cryptography/Proofs/EvalDistEq.lean`
+- `EthLib/Cryptography/Proofs/ExceptTAnswers.lean`
+- `EthLib/Cryptography/Proofs/HashSig/`
+- `EthLib/Cryptography/Proofs/IndependentAnswers.lean`
+- `EthLib/Cryptography/Proofs/IndependentOutside.lean`
+- `EthLib/Cryptography/Proofs/Kzg/`
+- `EthLib/Cryptography/Proofs/LazyPermutation.lean`
+- `EthLib/Cryptography/Proofs/LogKeys.lean`
+- `EthLib/Cryptography/Proofs/LoggedUntilBad.lean`
+- `EthLib/Cryptography/Proofs/Merkle/`
+- `EthLib/Cryptography/Proofs/ProgrammedPermutation.lean`
+- `EthLib/Cryptography/Proofs/QueryAvoidance.lean`
+- `EthLib/Cryptography/Proofs/Secp256k1/`
+- `EthLib/Cryptography/Proofs/Sphincs/`
+- `EthLib/Cryptography/Proofs/TaggedLazyPermutation.lean`
+- `EthLib/Cryptography/Proofs/Vrf/`
+- `EthLib/Cryptography/Proofs/Wots/`
+- `EthLib/Cryptography/Proofs/Xmss/`
+- `EthLib/Execution/Proofs/Trie/`
+- `EthLib/Serialization/Proofs/Ssz/`
+
+No specification file imports it.
 <!-- end generated -->
 
 ### D3. The KZG trusted setup
