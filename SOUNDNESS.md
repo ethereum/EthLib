@@ -1424,6 +1424,32 @@ Both hold for every bound on the gas of messages and every runner of messages.
 It assumes a runner that never fails on those messages.
 `Logic.not_runsOk_of_lt` proves that no run with less gas than `cost` succeeds, from a specification to a halt that pays `cost`, as above.
 
+### BLOCKHASH and the history of a chain
+
+BLOCKHASH reads the hash of one of the 256 blocks before the current one from a list that the block transition builds from the recent blocks of the chain.
+`BlockChain.addBlock` (`Execution/Blocks/Transition.lean`) defines the chain after a block: it takes the state after the block and appends the block to the recent blocks, keeping the last 255.
+The Yellow Paper (Appendix H.2, [`Paper.tex`][yp-blockhash]) defines the result by a walk up the parent hashes, and `blockHash` indexes the list instead.
+So the two agree only when the recent blocks chain together, which no theorem said before `Execution/Proofs/Blocks/History.lean`.
+
+`HistoryOK` says that the recent blocks of a chain are linked.
+Each one is numbered one above the one before it, and names the hash of the one before it as its parent hash.
+It also says that the number of the last block is at least the count of recent blocks, up to 255.
+`stateTransition_historyOK` proves that a block that passes the transition keeps `HistoryOK`, from the number check and the parent hash check of its header.
+`genesis_historyOK` gives the start, a chain whose only recent block is a genesis block.
+
+On such a chain, `blockHash_ancestor` proves that each of the last 256 blocks has an entry in the list.
+BLOCKHASH returns the hash of the last block when `n` is its number, and the parent hash of the recent block numbered `n + 1` otherwise.
+When a recent block is numbered `n`, that value is its header hash.
+`ChainRun.windows` carries the result along a run of blocks: from a chain with `HistoryOK`, every block of the run has this window on the chain that it runs on.
+
+The theorems assume `HistoryOK` of the first chain.
+A chain started from a later block with too few recent blocks does not meet it.
+From block 100 with only that block recent, BLOCKHASH in block 101 for block 50 finds no entry and returns 0, where the Yellow Paper gives the hash of block 50.
+The fallback to 0 for a list that is too short stays in `blockHash`, but a chain with `HistoryOK` does not reach it inside the window.
+No theorem relates the recent blocks of a chain to a real network: they are an input, and `HistoryOK` is a condition on them.
+
+[yp-blockhash]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
+
 ### System contracts
 
 The four modules under `Execution/Proofs/Blocks/SystemCall/` for beacon roots, historical block hashes, withdrawal requests and consolidation requests prove the effects of their deployed bytecode.
