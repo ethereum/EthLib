@@ -680,6 +680,16 @@ The clamp of the Poly1305 key has its own theorem.
 So a clamp with another mask would fail it.
 `clampR_lt` bounds `r` by `2 ^ 124`.
 `poly1305Accumulator_lt` proves that the accumulator stays below the prime `2 ^ 130 - 5`, whatever `r` and the message, since each step reduces modulo the prime.
+The cipher and the keystream have their own theorems.
+`crypt_eq_ok_iff` gives every byte of the output of the cipher.
+Byte `j` is byte `j` of the input XOR byte `j % 64` of the block whose counter is the initial counter plus `j / 64`.
+So a keystream shorter than the input, which leaves its last bytes in plaintext, or a counter that repeats, would fail it.
+`encrypt_eq_ok_iff` gives the AEAD ciphertext in the same terms, with the counter starting at 1.
+It gives the tag too: the Poly1305 tag of the MAC input of RFC 8439 §2.8, written out, under the first 32 bytes of block 0.
+`byteAt_keyStream` and `size_keyStream` give the keystream itself.
+`pad16_eq_iff` proves that the padding of the MAC input is the fewest zero bytes that complete a multiple of 16, so aligned input gets none.
+`getElem_serializeState` gives each byte of the serialized state, the least significant byte of each word first.
+`stateOfBytes_serializeState` and `serializeState_stateOfBytes` prove that reading 64 bytes as a state undoes the serialization.
 No theorem relates ChaCha20-Poly1305 to an independent model of RFC 8439.
 The Python tests compare the bindings with the RFC 7748 and RFC 8439 vectors.
 The million-iteration X25519 vector requires `ETHLIB_SLOW_VECTORS=1`.
@@ -743,6 +753,25 @@ Before parsing, the export refuses deep nesting, long digit runs and large posit
 Decryption takes the caller's limits on memory and work, and refuses a key derivation whose modeled memory or work exceeds them.
 The model counts bytes of buffers and calls of 64-byte block functions; no theorem shows that it bounds the code.
 The Python binding sets default limits.
+
+### scrypt
+
+The scrypt proofs state the length each step returns, the inputs each step accepts, and the table of ROMix and the integer that picks its index (`Proofs/Hash/Scrypt.lean`).
+`validCost_iff` states the cost test as the bound of RFC 7914 §2: a power of two above 1 and below `2^(16 r)`.
+`salsa208_ok_iff`, `blockMix_ok_iff`, `romix_ok_iff` and `scrypt_ok_iff` state which inputs each step accepts.
+`scrypt_ok_iff` also carries the bounds that PBKDF2 needs on the password and the salt.
+`salsa208_size`, `blockMix_size`, `romix_size` and `scrypt_size` state the length each step returns.
+`integerify_eq` states Integerify of RFC 7914 §5, whose remainder mod `N` is the index, as the last 64 bytes of the value read little-endian through `Base.bytesToUint`.
+`romixFill_replicate_fst_get` states that entry `j` of the table that ROMix fills is BlockMix applied `j` times to the input.
+It holds for every `j` below `N`, and `romixFill_fst_get` holds for a fill that starts from any index.
+`romixFill_fst_get_lt` states that the fill leaves the entries below its starting index unchanged.
+`romixFill_snd` states that the value the fill returns is BlockMix applied `count` times to its start value, so `N` times in ROMix.
+ROMix reads its table at indices that depend on its input, so a test vector checks only the entries that it reaches.
+`mixBlocks_append` states that mixing a block appends to the output it is given.
+`mixBlocks_eq_append` states that when mixing from an empty output succeeds, mixing from any output puts that output before the same blocks.
+No theorem states the read loop of RFC 7914 §5, step 3, or that block `k` of the mixed output is ROMix of block `k` of the input.
+No theorem relates Salsa20/8, BlockMix or the derivation to an independent model of RFC 7914.
+The Python tests (`bindings/python/tests/hmac_kdf/test_password_kdf.py`) check the Salsa20/8, BlockMix, ROMix, PBKDF2-HMAC-SHA256 and scrypt vectors of RFC 7914 §§8 to 12.
 
 ### RIPEMD-160
 
@@ -1769,6 +1798,14 @@ The storage value of a slot that is not set is 0, so the answer must give that w
 EIP-1186 does not say which fields the answer holds for an address without an account.
 So the check judges no field of an absent account, and reports the absence.
 
+### The block headers of the eth protocol
+
+`checkHeaders` (`Execution/Network/Blocks.lean`) checks an answer to a GetBlockHeaders request of the eth protocol.
+`checkHeaders_eq_ok_iff` (`Execution/Proofs/Network/Blocks.lean`) states the conditions under which an answer passes: it holds at most as many headers as asked, its first header is the start block, and each header follows the one before it.
+`followsIn_eq_ok_iff` states that one header follows another exactly when it has the next number of the request and, when the request skips no block, the later block names the earlier one by its hash.
+`headerParent_of_checkHeaders` draws the consequence for a whole answer to a request that skips no block.
+No theorem checks a header against the chain or its validity rules.
+
 ### The block bodies of the eth protocol
 
 A node fetches the bodies of blocks after their headers, with the BlockBodies message of the eth protocol.
@@ -1985,6 +2022,10 @@ The theorems in `Consensus/Proofs/HonestValidator.lean` relate these duties to t
 `processRandao_ne_invalidRandaoReveal` shows that the RANDAO reveal of the proposer never fails the RANDAO check.
 Both assume a block of the current epoch, and a proposer whose public key is that of the secret key.
 The gossip checks of a selection proof and of an aggregate and proof read the target epoch, so their theorems assume it is the epoch of the slot.
+`isValidSignatureAtSlot_getSyncCommitteeSelectionProof` shows that a sync committee selection proof passes the check at the epoch of its slot.
+That check reads the selection data of the same slot and subcommittee, under the public key of the secret key.
+`getContributionAndProof_spec` shows that a contribution and proof keeps its aggregator and its contribution.
+Its selection proof passes that check for the slot and subcommittee of the contribution.
 
 `getCommitteeAssignment_sound` shows that an assignment is a committee of the epoch that holds the validator.
 `getCommitteeAssignment_unique` shows that no other committee of the epoch holds it.
@@ -2057,6 +2098,8 @@ A key counts once for each of its selected seats, and each seat takes the first 
 The gossip corollaries characterize acceptance of the aggregate's committee check and the contribution topic by their remaining conditions.
 These include the checks of time, membership and the aggregator's signatures.
 The corollaries assume that the head state of the receiver is the state of the construction.
+`validateContributionAndProof_eq_accept_of_getContributionAndProof` removes the two signature checks of the aggregator from the conditions of the contribution topic.
+It assumes instead that the aggregator made and signed the contribution and proof with the secret key of its registered public key.
 
 The contribution takes the sync committee as an argument.
 The caller passes the committee of the next slot, which gossip and the next block check.

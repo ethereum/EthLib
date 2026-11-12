@@ -494,6 +494,22 @@ theorem foldlM_ok_steps {g : β → α → Except ε β} (R : β → β → Prop
       rw [List.take_succ_cons, List.foldlM_cons, first]
       exact hMid
 
+/-- A fold that succeeds succeeds at the step of each member.
+
+The list splits at the member, and the step runs on the state that the earlier members leave.
+
+The list is split by append, not by an index. -/
+theorem foldlM_ok_of_mem {g : β → α → Except ε β} {xs : List α} {x : α} {start done : β}
+    (member : x ∈ xs) (computed : xs.foldlM g start = .ok done) :
+    ∃ pre post before after, xs = pre ++ x :: post ∧ pre.foldlM g start = .ok before ∧
+      g before x = .ok after := by
+  obtain ⟨pre, post, split⟩ := List.append_of_mem member
+  rw [split, List.foldlM_append] at computed
+  obtain ⟨before, earlier, rest⟩ := bind_ok_iff.mp computed
+  rw [List.foldlM_cons] at rest
+  obtain ⟨after, step, -⟩ := bind_ok_iff.mp rest
+  exact ⟨pre, post, before, after, split, earlier, step⟩
+
 /-- A successful fold over inputs with distinct keys changes a view only at the key `k`.
 
 Suppose each step keeps an invariant, and changes the view only when its input has the key `k`.
