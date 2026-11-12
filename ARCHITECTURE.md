@@ -189,12 +189,12 @@ Some definitions need the types of both layers.
 The execution payload of a beacon block stands for an execution block, and the conversion between them reads both.
 Such a definition lives in the Engine layer, the only layer that imports both Execution and Consensus.
 
-The engine shows the general rule for an operation that a module needs from a layer it cannot import.
+The execution engine shows the general rule for an operation that a module needs from a layer it cannot import.
 The module declares the operations it needs, in its own types, and takes them as a resource, as [Shared types](#shared-types) describes.
 By that rule, their production instance lives in the lowest layer that imports both sides, which is Engine for Execution and Consensus.
 So `ExecutionEngine` in `EthLib/Consensus/Transition/Execution.lean` declares the checks of a payload, and `executionEngine` in `EthLib/Engine/ExecutionEngine.lean` builds them from the Execution layer.
 A module imports an operation of a lower layer directly.
-When a test must replace such an operation, the function takes it as a resource too, and the test passes a test stub.
+When a test or a model must replace such an operation, the function takes it as a resource too, and a test passes a test stub.
 `SignatureChecks` is one example: the stub `SignatureChecks.acceptAll` replaces the BLS checks for the consensus test vectors that carry placeholder signatures.
 
 The Networking layer holds formats that need no chain state.
@@ -203,7 +203,7 @@ In the same way, the eth wire protocol of devp2p carries blocks, transactions an
 So its messages live in `EthLib/Execution/Network/`, which has those types and imports Networking.
 
 A protocol layer owns the tables that give bytes their meaning.
-For example, Consensus gives the SSZ type of each gossip topic, of each request and of each response chunk, in `EthLib/Consensus/Gossip/Bounds.lean`, `EthLib/Consensus/ReqResp/Bounds.lean` and `EthLib/Consensus/ReqResp/ResponseBounds.lean`.
+For example, Consensus gives the SSZ type and the length bounds of each gossip topic, of each request and of each response chunk, in `EthLib/Consensus/Gossip/Bounds.lean`, `EthLib/Consensus/ReqResp/Bounds.lean` and `EthLib/Consensus/ReqResp/ResponseBounds.lean`.
 Networking owns the framing and its own payload cap.
 It applies the smaller of that cap and the length bound that its caller passes, as `decodePayload` does in `EthLib/Networking/Gossip/Payload.lean` and in `EthLib/Networking/ReqResp/Encoding.lean`.
 
@@ -298,18 +298,18 @@ So the types that cross a module boundary are fixed here, and `EthLib/Base/` def
   The two meters, `Nat` and `StateGasMeter`, and the class of their laws, `LawfulGasMeter`, stay in the specification library.
   The definition of a message call, `processMessage`, needs those laws to show that execution ends.
 
-## Boundaries
+## Operation boundaries
 
-A boundary is a resource that is a record of operations, declared by the module that uses them and supplied by its callers, such as `ExecutionEngine`.
+An operation boundary is a resource that is a record of operations, declared by the module that uses them and supplied by its callers, such as `ExecutionEngine`.
 [Shared types](#shared-types) says where its production instance, its laws and its test stubs live.
 The shared types make the two sides fit, but they do not make them compose.
 Each side must also know what the other guarantees, what it assumes, and what happens when an operation fails.
-So a boundary also has a contract card: a short list of facts in the doc comment of the module that declares the operations.
+So an operation boundary also has a contract card: a short list of facts in the doc comment of the module that declares the operations.
 
-New boundaries follow this rule.
+New operation boundaries carry a card.
 Existing ones, such as `ExecutionEngine`, `SignatureChecks` and `BlockSources`, do not yet carry cards.
 
-The conversions between Lean values and Python values, `ToPy`, `FromPy`, `ToPyItems` and `FromPyItems`, are not boundaries.
+The conversions between Lean values and Python values, `ToPy`, `FromPy`, `ToPyItems` and `FromPyItems`, are not operation boundaries.
 No specification takes them as an argument, so their laws `LawfulPy` and `LawfulPyItems` stay with them in the Lake library `Exports`.
 
 The card is a list in the doc comment, with one item per field, in this order:
@@ -318,21 +318,21 @@ The card is a list in the doc comment, with one item per field, in this order:
 - Owns: each type and state that crosses the boundary, with the layer that owns it.
 - Operations: what each operation answers, and what each test stub answers.
 - Laws: what the laws require, and whether a theorem or an assumption in `SOUNDNESS.md` covers the production instance.
-- Failure: the error type, what each outcome means, and what the user must do on each.
+- Failure: the error type, what each outcome means, and what the calling specification does with it.
 - Guarantees: what success implies, and what it does not.
-- Assumes: what each side assumes of the other.
-- Readings: where the primary sources disagree or are silent, the reading taken, with the EIP, paper, RFC or standard that supports it.
+- Assumes: what each side assumes of the other beyond the laws.
+- Readings: where the primary sources disagree or are silent, the reading taken, with the primary source that supports it.
 
 A field with nothing to record says "none", so a reader can tell an empty field from a forgotten one.
 The card holds the coarse facts that the types do not show.
 It describes the operations and the laws, and does not restate their definitions.
 It is a plain list, not a `text` block, so that each field reads as prose under the rules for doc comments in [`CONTRIBUTING.md`](CONTRIBUTING.md#doc-comments-in-lean).
 A field with several facts has one sub-item per fact, each one sentence on its own line, within 100 columns.
-Its fields describe behaviour and name no function or theorem, so that a renamed definition leaves the card correct.
+Its fields describe behaviour and name no function, theorem, law or assumption, so that a renamed definition leaves the card correct.
 A type that crosses the boundary is named in backticks.
-Like the rest of the code, the Readings field cites only primary sources as the authority, as [Sources](#sources) says.
+A source is linked as `[text][ref]`, with the definition at the end of the comment.
+As [Sources](#sources) says, the Readings field cites only primary sources as the authority, and names execution-specs or consensus-specs only in a provenance note.
 Where none of them settles a reading, the field states the reading itself.
-It may name execution-specs or consensus-specs only in a provenance note, as [Sources](#sources) allows.
 
 ## Forks
 
