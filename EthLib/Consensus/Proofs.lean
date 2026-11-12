@@ -179,6 +179,7 @@ public import EthLib.Consensus.Proofs.Transition.Totality.RewardsBeforeAltair
 public import EthLib.Consensus.Proofs.Transition.Totality.Slashings
 public import EthLib.Consensus.Proofs.Transition.Totality.Slot
 public import EthLib.Consensus.Proofs.Transition.Upgrade
+public import EthLib.Consensus.Proofs.Transition.ValidatorKeys
 public import EthLib.Consensus.Proofs.Transition.WeakSubjectivitySafety
 public import EthLib.Consensus.Proofs.Transition.WithdrawalAmounts
 public import EthLib.Consensus.Proofs.Transition.Withdrawals
