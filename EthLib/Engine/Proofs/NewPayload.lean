@@ -15,9 +15,9 @@ Below version 5 the payload decodes exactly as a structure of a version that the
 
 From version 5 it decodes exactly as a payload of version 4, with its access list and its slot.
 
-Request lists that pass the checks have distinct types, in increasing order.
+A request list passes the checks exactly when each request has more than one byte.
 
-Each such request has more than one byte, so its type is its first byte.
+The first byte of each request is its type, and the types strictly increase along the list.
 
 Without a JSON-RPC error, the parameters are an array of the values of the version, none null.
 
@@ -137,56 +137,72 @@ theorem payloadParam_eq_ok_iff_of_le {version : Nat} {j : Lean.Json}
   · rintro ⟨bal, slot, ha, rfl⟩
     simp [ha, bind, Except.bind, pure, Except.pure]
 
+/-- A list passes the check exactly when each request has more than one byte.
+
+The first bytes of the requests must also be strictly increasing along the list.
+
+So a list passes with types in any increasing order, gaps between them allowed. -/
+theorem validRequests_iff : ∀ {requests : List ByteArray},
+    validRequests requests = true ↔
+      (∀ r ∈ requests, 1 < r.size) ∧ (requests.map fun r => r[0]!).Pairwise (· < ·)
+  | [] => by simp [validRequests]
+  | [r] => by simp [validRequests]
+  | r :: s :: rest => by
+    have ih := @validRequests_iff (s :: rest)
+    -- A request of more than one byte has a first byte, its type.
+    by_cases hr : 1 < r.size
+    · by_cases hs : 1 < s.size
+      · have hr0 : r[0]? = some r[0]! := by
+          rw [getElem!_def, getElem?_pos r 0 (by omega)]
+        have hs0 : s[0]? = some s[0]! := by
+          rw [getElem!_def, getElem?_pos s 0 (by omega)]
+        simp only [validRequests, hr0, hs0, hr, hs, decide_true, Bool.true_and,
+          Bool.and_eq_true, decide_eq_true_eq, ih]
+        simp only [List.forall_mem_cons, List.map_cons, List.pairwise_cons, List.mem_map,
+          forall_exists_index, and_imp, forall_apply_eq_imp_iff₂, hr, hs, true_and]
+        constructor
+        · rintro ⟨hab, hSize, hTail, hPair⟩
+          exact ⟨hSize, ⟨hab, fun t ht => UInt8.lt_trans hab (hTail t ht)⟩, hTail, hPair⟩
+        · rintro ⟨hSize, ⟨hab, -⟩, hTail, hPair⟩
+          exact ⟨hab, hSize, hTail, hPair⟩
+      · simp only [validRequests]
+        constructor
+        · intro h
+          split at h
+          · simp [hs] at h
+          · exact absurd h (by simp)
+        · rintro ⟨hSize, -⟩
+          exact absurd (hSize s (by simp)) hs
+    · simp only [validRequests]
+      constructor
+      · intro h
+        split at h
+        · simp [hr] at h
+        · exact absurd h (by simp)
+      · rintro ⟨hSize, -⟩
+        exact absurd (hSize r (by simp)) hr
+
 /-- Request lists that pass the check have strictly increasing types. -/
 theorem pairwise_of_validRequests {requests : List ByteArray}
     (h : validRequests requests = true) :
     requests.Pairwise fun r s => ∃ a b, r[0]? = some a ∧ s[0]? = some b ∧ a < b := by
-  induction requests with
-  | nil => exact .nil
-  | cons r rest ih =>
-    match rest, h with
-    | [], _ => exact List.pairwise_singleton _ r
-    | s :: rest', h =>
-      simp only [validRequests] at h
-      split at h
-      · rename_i a b hra hsb
-        simp only [Bool.and_eq_true, decide_eq_true_eq] at h
-        obtain ⟨⟨⟨-, -⟩, hab⟩, hRest⟩ := h
-        have hTail := ih hRest
-        refine List.Pairwise.cons (fun t ht => ?_) hTail
-        rcases List.mem_cons.mp ht with rfl | ht
-        · exact ⟨a, b, hra, hsb, hab⟩
-        · obtain ⟨b', c, hb', hc, hbc⟩ := List.rel_of_pairwise_cons hTail ht
-          rw [hsb] at hb'
-          cases hb'
-          exact ⟨a, c, hra, hc, UInt8.lt_trans hab hbc⟩
-      · exact absurd h (by simp)
+  obtain ⟨hSize, hTypes⟩ := validRequests_iff.mp h
+  rw [List.pairwise_map] at hTypes
+  refine List.Pairwise.imp_of_mem (fun {r s} hr hs hlt => ⟨r[0]!, s[0]!, ?_, ?_, hlt⟩) hTypes
+  · rw [getElem!_def, getElem?_pos r 0 (by have := hSize r hr; omega)]
+  · rw [getElem!_def, getElem?_pos s 0 (by have := hSize s hs; omega)]
 
 /-- Each request of a list that passes the check has more than one byte: its type and its data. -/
-theorem size_of_validRequests :
-    ∀ {requests : List ByteArray}, validRequests requests = true → ∀ r ∈ requests, 1 < r.size
-  | [], _ => by simp
-  | [r], h => by simpa [validRequests] using h
-  | r :: s :: rest, h => by
-    simp only [validRequests] at h
-    split at h
-    · simp only [Bool.and_eq_true, decide_eq_true_eq] at h
-      obtain ⟨⟨⟨hr, -⟩, -⟩, hrest⟩ := h
-      intro t ht
-      rcases List.mem_cons.mp ht with rfl | ht
-      · exact hr
-      · exact size_of_validRequests hrest t ht
-    · exact absurd h (by simp)
+theorem size_of_validRequests {requests : List ByteArray} (h : validRequests requests = true) :
+    ∀ r ∈ requests, 1 < r.size :=
+  (validRequests_iff.mp h).1
 
 /-- Request lists that pass the check have distinct types, their first bytes.
 
 Each request has a first byte, so no type here is a default value. -/
 theorem nodup_types_of_validRequests {requests : List ByteArray}
     (h : validRequests requests = true) : (requests.map fun r => r[0]!).Nodup :=
-  List.Pairwise.map _ (fun r s ⟨a, b, ha, hb, hlt⟩ => by
-    rw [getElem!_def, getElem!_def, ha, hb]
-    exact UInt8.ne_of_lt hlt)
-    (pairwise_of_validRequests h)
+  (validRequests_iff.mp h).2.imp UInt8.ne_of_lt
 
 /-! ## The parameters of the checks -/
 

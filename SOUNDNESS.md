@@ -2663,6 +2663,8 @@ A payload and its block determine each other.
 
 The checks of `engine_newPayload` answer by the version of the method and the fork of the payload.
 `exists_acceptsFork_iff` (`Proofs/NewPayload.lean`) shows that some version takes a fork exactly when the fork is from Paris to Glamsterdam.
+`validRequests_iff` states when the execution requests of version 4 and later pass.
+Each request must have more than one byte, and their first bytes must strictly increase along the list.
 `status_of_checkNewPayload` shows that a payload that fails the checks is `INVALID`, or `INVALID_BLOCK_HASH` only at version 1, with no latest valid hash.
 So `status_of_newPayloadWithoutState` shows that the method without the parent's state never answers `VALID`.
 One C export runs that method, and a second runs the method on a chain that holds the parent's state.
