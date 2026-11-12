@@ -845,7 +845,7 @@ It is not computational binding: no theorem bounds the cost of finding two such 
 For a well-formed setup, honest KZG proofs and blob proofs verify (`verifyKzgProof_computeKzgProof`, `verifyBlobKzgProof_computeBlobKzgProof`, `Proofs/Kzg/Verify.lean`).
 `verifyKzgProofImpl_iff` states when the check accepts: `c - y = w (τ - z)`, for decoded points representing `c` and `w`.
 On a well-formed setup (assumption D3), `verifyBlobKzgProof_binding` (`Proofs/Kzg/BlobBinding.lean`) splits an accepted blob opening into three cases.
-Let the commitment and the proof convert with `bytesToKzgCommitment` and `bytesToKzgProof`, as in the specification.
+Let the commitment and the proof convert with `bytesToKzgCommitment` and `bytesToKzgProof`, as in EIP-4844.
 Let their decoded points represent `f(τ)` and `g(τ)` for polynomials `f` and `g` of degree below 4096.
 Let `p` be the interpolant of the blob's decoded values, and let `z` be the evaluation challenge.
 Then `f = p`; or `f ≠ p`, `f - p` has degree below 4096, and `z` is a root of `f - p`.

@@ -107,9 +107,9 @@ Assume a well-formed setup of the secret `τ`.
 
 Let the blob decode.
 
-Let the commitment and the proof convert, as `bytes_to_kzg_commitment` and `bytes_to_kzg_proof` do.
+Let the commitment and the proof pass the conversions of EIP-4844, which validate their bytes.
 
-Let the converted values decode, as `bytes48_to_G1` does, to points `C` and `P`.
+Let the converted values decode, as in EIP-4844, to points `C` and `P`.
 
 Let `C` and `P` represent `f(τ)` and `g(τ)`, for two polynomials `f` and `g` of degree below 4096.
 

@@ -140,7 +140,7 @@ theorem bytesToKzgProof_of_validateKzgG1Point_error {b : Bytes48} {e : KzgError}
 
 /-- A commitment that converts and then decodes is the input bytes, and validation gives its point.
 
-This is the commitment of the specification: `bytes_to_kzg_commitment`, then `bytes48_to_G1`. -/
+EIP-4844 gets the point of a commitment the same way: it converts the bytes, then decodes them. -/
 theorem validateKzgG1Point_of_bytesToKzgCommitment {b : Bytes48} {c : KZGCommitment} {C : G1}
     (hc : bytesToKzgCommitment b = .ok c) (hC : uncompressG1 c = .ok C) :
     c = b ∧ validateKzgG1Point b = .ok C := by
@@ -157,7 +157,7 @@ theorem validateKzgG1Point_of_bytesToKzgCommitment {b : Bytes48} {c : KZGCommitm
 
 /-- A proof that converts and then decodes is the input bytes, and validation gives its point.
 
-This is the proof of the specification: `bytes_to_kzg_proof`, then `bytes48_to_G1`. -/
+EIP-4844 gets the point of a proof the same way: it converts the bytes, then decodes them. -/
 theorem validateKzgG1Point_of_bytesToKzgProof {b : Bytes48} {p : KZGProof} {P : G1}
     (hp : bytesToKzgProof b = .ok p) (hP : uncompressG1 p = .ok P) :
     p = b ∧ validateKzgG1Point b = .ok P := by
