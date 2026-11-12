@@ -179,18 +179,28 @@ def verifyKzgProofImpl (setup : TrustedSetup)
     (commitmentG1 : G1) (z y : Fr) (proofG1 : G1) : Bool :=
   verifyKzgProofWith (setup.g2Monomial[1]'(by decide)) commitmentG1 z y proofG1
 
-/-- Verify a KZG proof, taking inputs as raw bytes. -/
+/-- Verify a KZG proof, taking inputs as raw bytes.
+
+It checks its arguments in the order of [EIP-4844][eip-4844].
+
+That order is the commitment, `z`, `y`, then the proof.
+
+The first invalid argument gives the error.
+
+[eip-4844]: https://eips.ethereum.org/EIPS/eip-4844#cryptographic-helpers
+-/
 def verifyKzgProof (setup : TrustedSetup)
     (commitmentBytes : Bytes48) (zBytes yBytes : Bytes32) (proofBytes : Bytes48)
     : Except KzgError Bool := do
-  let commitmentG1 ← match validateKzgG1Point commitmentBytes with
-                     | .ok c    => pure c
-                     | .error _ => throw (.invalidCommitment none)
-  let proofG1 ← match validateKzgG1Point proofBytes with
-                | .ok p    => pure p
-                | .error _ => throw (.invalidProof none)
+  let commitment ← bytesToKzgCommitment commitmentBytes
   let z ← bytesToBlsField zBytes
   let y ← bytesToBlsField yBytes
+  let proof ← bytesToKzgProof proofBytes
+  -- The pairing check reads the points, so both are decoded here, as in EIP-4844.
+  --
+  -- Bytes that passed validation always decode, so neither decoding below fails.
+  let commitmentG1 ← uncompressG1 commitment
+  let proofG1 ← uncompressG1 proof
   return verifyKzgProofImpl setup commitmentG1 z y proofG1
 
 /-- The Fiat-Shamir challenge of a batch of openings.
@@ -269,28 +279,37 @@ def computeBlobKzgProof (setup : TrustedSetup) (blob : Blob) (commitmentBytes : 
   let (proof, _) ← computeKzgProofImpl setup polynomial evaluationChallenge
   return proof
 
-/-- Verify that `blob` corresponds to `commitment` via `proof`. -/
+/-- Verify that `blob` corresponds to `commitment` via `proof`.
+
+It checks the commitment, then decodes the blob, then checks the proof.
+
+That is the order of [EIP-4844][eip-4844], and the first failure gives the error.
+
+[eip-4844]: https://eips.ethereum.org/EIPS/eip-4844#cryptographic-helpers
+-/
 def verifyBlobKzgProof (setup : TrustedSetup)
     (blob : Blob) (commitmentBytes : Bytes48) (proofBytes : Bytes48)
     : Except KzgError Bool := do
-  let commitmentG1 ← match validateKzgG1Point commitmentBytes with
-                     | .ok c    => pure c
-                     | .error _ => throw (.invalidCommitment none)
+  let commitment ← bytesToKzgCommitment commitmentBytes
   let polynomial ← blobToPolynomial blob
-  let evaluationChallenge := computeChallenge blob commitmentBytes
+  let evaluationChallenge := computeChallenge blob commitment
   let y ← evaluatePolynomialInEvaluationForm polynomial evaluationChallenge
-  let proofG1 ← match validateKzgG1Point proofBytes with
-                | .ok p    => pure p
-                | .error _ => throw (.invalidProof none)
+  let proof ← bytesToKzgProof proofBytes
+  -- The pairing check reads the points, so both are decoded here, as in EIP-4844.
+  let commitmentG1 ← uncompressG1 commitment
+  let proofG1 ← uncompressG1 proof
   return verifyKzgProofImpl setup commitmentG1 evaluationChallenge y proofG1
 
 /-- Verify a batch of triples of a blob, a commitment and a proof.
 
 Each triple checks its commitment, then decodes its blob, then checks its proof.
 
-The first failure gives the error.
+That is the order of [EIP-4844][eip-4844], and the first failure gives the error.
 
-The empty batch verifies. -/
+The empty batch verifies.
+
+[eip-4844]: https://eips.ethereum.org/EIPS/eip-4844#cryptographic-helpers
+-/
 def verifyBlobKzgProofBatch (setup : TrustedSetup)
     (blobs : Array Blob)
     (commitmentsBytes : Array Bytes48)
@@ -307,18 +326,21 @@ def verifyBlobKzgProofBatch (setup : TrustedSetup)
                 (#[] : Array Fr), (#[] : Array KZGProof), (#[] : Array G1)))
       fun (commitments, commitmentsG1, challenges, ys, proofs, proofsG1)
           ((blob, cb, pb), i) => do
-        let commitmentG1 ← match validateKzgG1Point cb with
-                           | .ok c    => pure c
-                           | .error _ => throw (.invalidCommitment (some i))
+        let commitment ← match bytesToKzgCommitment cb with
+                         | .ok c    => pure c
+                         | .error _ => throw (.invalidCommitment (some i))
         let polynomial ← blobToPolynomial blob
-        let challenge := computeChallenge blob cb
+        let challenge := computeChallenge blob commitment
         let y ← evaluatePolynomialInEvaluationForm polynomial challenge
-        let proofG1 ← match validateKzgG1Point pb with
-                      | .ok p    => pure p
-                      | .error _ => throw (.invalidProof (some i))
+        let proof ← match bytesToKzgProof pb with
+                    | .ok p    => pure p
+                    | .error _ => throw (.invalidProof (some i))
+        -- The pairing check reads the points, so both are decoded here, as in EIP-4844.
+        let commitmentG1 ← uncompressG1 commitment
+        let proofG1 ← uncompressG1 proof
 
-        pure (commitments.push cb, commitmentsG1.push commitmentG1,
-              challenges.push challenge, ys.push y, proofs.push pb, proofsG1.push proofG1)
+        pure (commitments.push commitment, commitmentsG1.push commitmentG1,
+              challenges.push challenge, ys.push y, proofs.push proof, proofsG1.push proofG1)
 
   verifyKzgProofBatch setup commitments commitmentsG1 challenges ys proofs proofsG1
 

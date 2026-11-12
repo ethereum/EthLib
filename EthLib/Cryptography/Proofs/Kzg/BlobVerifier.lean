@@ -114,40 +114,47 @@ private theorem blobLoopStep_of_ok (acc : BlobBatchAcc) (blob : Blob) (cb pb : B
     (hpb : validateKzgG1Point pb = .ok p) (hbl : blobToPolynomial blob = .ok poly) :
     (let (commitments, commitmentsG1, challenges, ys, proofs, proofsG1) := acc
      do
-       let commitmentG1 ← match validateKzgG1Point cb with
+       let commitment ← match bytesToKzgCommitment cb with
          | .ok c => pure c
          | .error _ => throw (KzgError.invalidCommitment (some i))
        let polynomial ← blobToPolynomial blob
-       let challenge := computeChallenge blob cb
+       let challenge := computeChallenge blob commitment
        let y ← evaluatePolynomialInEvaluationForm polynomial challenge
-       let proofG1 ← match validateKzgG1Point pb with
+       let proof ← match bytesToKzgProof pb with
          | .ok p => pure p
          | .error _ => throw (KzgError.invalidProof (some i))
-       pure (commitments.push cb, commitmentsG1.push commitmentG1,
-         challenges.push challenge, ys.push y, proofs.push pb, proofsG1.push proofG1)) =
+       let commitmentG1 ← uncompressG1 commitment
+       let proofG1 ← uncompressG1 proof
+       pure (commitments.push commitment, commitmentsG1.push commitmentG1,
+         challenges.push challenge, ys.push y, proofs.push proof, proofsG1.push proofG1)) =
       .ok (blobPureStep acc (blob, cb, pb, c, p, poly)) := by
   rcases acc with ⟨a1, a2, a3, a4, a5, a6⟩
   have hsz := size_blobToPolynomial blob poly hbl
   dsimp only [blobPureStep, interpolant]
-  rw [hcb, hpb, hbl]
+  rw [bytesToKzgCommitment_of_validateKzgG1Point hcb, hbl,
+    bytesToKzgProof_of_validateKzgG1Point hpb]
   simp only [bind, Except.bind, pure, Except.pure,
     evaluatePolynomialInEvaluationForm_eq_interpolate poly _ hsz]
+  -- Valid bytes decode to the points that validation returned.
+  rw [uncompressG1_of_validateKzgG1Point hcb, uncompressG1_of_validateKzgG1Point hpb]
 
 /-- A successful step of the loop of the batch check of blobs means that its three inputs decode. -/
 private theorem blobLoopStep_valid (acc r : BlobBatchAcc) (blob : Blob) (cb pb : Bytes48) (i : Nat)
     (hr : (let (commitments, commitmentsG1, challenges, ys, proofs, proofsG1) := acc
            do
-             let commitmentG1 ← match validateKzgG1Point cb with
+             let commitment ← match bytesToKzgCommitment cb with
                | .ok c => pure c
                | .error _ => throw (KzgError.invalidCommitment (some i))
              let polynomial ← blobToPolynomial blob
-             let challenge := computeChallenge blob cb
+             let challenge := computeChallenge blob commitment
              let y ← evaluatePolynomialInEvaluationForm polynomial challenge
-             let proofG1 ← match validateKzgG1Point pb with
+             let proof ← match bytesToKzgProof pb with
                | .ok p => pure p
                | .error _ => throw (KzgError.invalidProof (some i))
-             pure (commitments.push cb, commitmentsG1.push commitmentG1,
-               challenges.push challenge, ys.push y, proofs.push pb, proofsG1.push proofG1)) =
+             let commitmentG1 ← uncompressG1 commitment
+             let proofG1 ← uncompressG1 proof
+             pure (commitments.push commitment, commitmentsG1.push commitmentG1,
+               challenges.push challenge, ys.push y, proofs.push proof, proofsG1.push proofG1)) =
       .ok r) :
     (∃ c, validateKzgG1Point cb = .ok c) ∧
       (∃ p, validateKzgG1Point pb = .ok p) ∧
@@ -156,17 +163,18 @@ private theorem blobLoopStep_valid (acc r : BlobBatchAcc) (blob : Blob) (cb pb :
   dsimp only at hr
   cases hcb : validateKzgG1Point cb with
   | error err =>
-    rw [hcb] at hr
+    rw [bytesToKzgCommitment_of_validateKzgG1Point_error hcb] at hr
     cases hr
   | ok c =>
+    rw [bytesToKzgCommitment_of_validateKzgG1Point hcb] at hr
     cases hbl : blobToPolynomial blob with
     | error err =>
-      rw [hcb, hbl] at hr
+      rw [hbl] at hr
       cases hr
     | ok poly =>
       cases hpb : validateKzgG1Point pb with
       | error err =>
-        rw [hcb, hbl, hpb] at hr
+        rw [hbl, bytesToKzgProof_of_validateKzgG1Point_error hpb] at hr
         simp only [bind, Except.bind, pure, Except.pure,
           evaluatePolynomialInEvaluationForm_eq_interpolate poly _
             (size_blobToPolynomial blob poly hbl)] at hr
@@ -210,17 +218,19 @@ private theorem blobLoop_eq_ok {blobs : Array Blob} {commitmentsBytes proofsByte
       (init := ((#[] : Array KZGCommitment), (#[] : Array G1), (#[] : Array Fr),
                 (#[] : Array Fr), (#[] : Array KZGProof), (#[] : Array G1)))
       (fun (commitments, commitmentsG1, challenges, ys, proofs, proofsG1) ((blob, cb, pb), i) => do
-        let commitmentG1 ← match validateKzgG1Point cb with
+        let commitment ← match bytesToKzgCommitment cb with
           | .ok c => pure c
           | .error _ => throw (KzgError.invalidCommitment (some i))
         let polynomial ← blobToPolynomial blob
-        let challenge := computeChallenge blob cb
+        let challenge := computeChallenge blob commitment
         let y ← evaluatePolynomialInEvaluationForm polynomial challenge
-        let proofG1 ← match validateKzgG1Point pb with
+        let proof ← match bytesToKzgProof pb with
           | .ok p => pure p
           | .error _ => throw (KzgError.invalidProof (some i))
-        pure (commitments.push cb, commitmentsG1.push commitmentG1,
-          challenges.push challenge, ys.push y, proofs.push pb, proofsG1.push proofG1)) =
+        let commitmentG1 ← uncompressG1 commitment
+        let proofG1 ← uncompressG1 proof
+        pure (commitments.push commitment, commitmentsG1.push commitmentG1,
+          challenges.push challenge, ys.push y, proofs.push proof, proofsG1.push proofG1)) =
       .ok (commitmentsBytes, csG1, y.challenges, y.evals, proofsBytes, psG1) := by
   intro y
   obtain ⟨hpssz, hpsk⟩ := array_mapM_ok hps
