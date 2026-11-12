@@ -1891,7 +1891,7 @@ Each member of the committees must also be in the source of balances, or the rul
 They are active and not slashed in the source of balances, are not known equivocators, and vote for the pending parent node or the parent payload node that the child builds on.
 `exists_stake_parentVotersOf_of_computeEmptySlotSupportDiscount` shows that the discount is their stake less the adversarial weight of the empty slots, with subtraction truncated at zero.
 If the parent sits at an earlier slot than the child, both counted nodes are ancestors of the pending child node, including from Gloas.
-This needs only the two block reads and that local slot order, not `Reachable` or `ParentsBelow`.
+The ancestry needs only the two block reads and that local slot order, not `Reachable` or `ParentsBelow`.
 `le_honest_parentVotersOf_of_computeEmptySlotSupportDiscount` shows that the discount takes off at most the honest stake of these voters.
 It assumes Assumption 2 on the active members of the empty-slot committees, no honest known equivocator, aligned effective balances, and an increment divisible by 100 Gwei.
 These are store-local facts: no theorem here shows that a recorded honest vote is its voter's latest actual vote, or that it remains the recorded vote at a later store.

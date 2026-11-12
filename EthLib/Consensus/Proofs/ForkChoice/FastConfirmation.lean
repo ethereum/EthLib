@@ -402,7 +402,7 @@ theorem computeAdversarialWeight_eq_spec {config : Config} {head : Root}
 
 /-- A range of slots that starts after it ends has no adversarial weight.
 
-This is the zero-discount case of arXiv 2405.00549v4, Definition 5. -/
+This serves the case of arXiv 2405.00549v4, Definition 5, with no empty slot. -/
 theorem computeAdversarialWeight_of_gt {config : Config} {head : Root}
     {balanceSource : BeaconState preset fork} {startSlot endSlot : Slot}
     (empty : endSlot < startSlot) :

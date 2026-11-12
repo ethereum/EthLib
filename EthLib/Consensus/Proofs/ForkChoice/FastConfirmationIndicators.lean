@@ -480,7 +480,7 @@ The latest message of a voter supports one of the nodes, not a descendant of one
 
 A validator weighs its effective balance in the source of balances.
 
-This is the observed parent-voter weight used by arXiv 2405.00549v4, Definition 5. -/
+With the nodes of the parent, this is the observed weight of arXiv 2405.00549v4, Definition 5. -/
 theorem exists_stake_of_getNodeSupportBetweenSlots {head : Root}
     {balanceSource : BeaconState preset fork} {nodes : List ForkChoiceNode}
     {startSlot endSlot : Slot} {support : Gwei}
@@ -587,9 +587,11 @@ Before Gloas it holds the pending node only.
 
 The discount is then the votes for those nodes, less the adversarial weight.
 
+It is zero when the adversary is larger.
+
 Both are over the slots from the one after the parent to the one before the block.
 
-The subtraction is the discount of arXiv 2405.00549v4, Definition 5. -/
+This is the store's form of the discount of arXiv 2405.00549v4, Definition 5. -/
 theorem computeEmptySlotSupportDiscount_steps {head root : Root}
     {balanceSource : BeaconState preset fork} {firstSlot : Slot}
     {block parentBlock : BeaconBlock preset fork} {discount : Gwei}

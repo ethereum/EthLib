@@ -434,7 +434,7 @@ That node is the pending node of the parent, or the node of the parent that the 
 
 Before Gloas the two are the same node.
 
-The set differs from the supporters of the parent in the sense of `supportersOf`.
+This set differs from the supporters of the parent that Lemmas 4 and 3 count.
 
 The supporters of a node also hold the validators that vote for its descendants.
 
@@ -509,11 +509,9 @@ No hypothesis orders the slots of the two blocks.
 
 If the parent sits at an earlier slot, both counted nodes are ancestors of the pending child.
 
-When no slot lies between them, the store reads no committee.
+When no slot lies between them, the store reads no committee, so no validator is a voter.
 
-Then no validator is a voter, by `getCommitteesBetweenSlots_of_gt`.
-
-The discount is the lower bound of arXiv 2405.00549v4, Definition 5. -/
+This is the store's form of the discount of arXiv 2405.00549v4, Definition 5. -/
 theorem exists_stake_parentVotersOf_of_computeEmptySlotSupportDiscount {head root : Root}
     {balanceSource : BeaconState preset fork} {firstSlot : Slot}
     {block parentBlock : BeaconBlock preset fork} {discount : Gwei}

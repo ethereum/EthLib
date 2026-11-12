@@ -20,7 +20,7 @@ The ancestor of a block at the slot of an earlier parent is the node that the bl
 
 A node descends from its ancestor at any slot.
 
-Each node descends from its parent's pending node when the parent sits at an earlier slot.
+Each node of a block descends from the pending node of its parent at an earlier slot.
 
 The walk to a lower slot can stop at a higher slot on the way, and go on from there.
 
@@ -152,7 +152,7 @@ That node is the parent with the payload status that the block gives it.
 
 The walk may start from any node of the block.
 
-The store must hold the parent, at an earlier slot than the block.
+The store must hold the block and its parent, the parent at an earlier slot.
 
 This identifies the parent node counted by arXiv 2405.00549v4, Definition 5. -/
 theorem getAncestor_parent_of_slot_lt {node : ForkChoiceNode}
@@ -380,7 +380,7 @@ theorem isAncestor_pending (gloas : .glamsterdam ≤ fork) (node : ForkChoiceNod
 
 /-- Each node of a block descends from the pending node of the parent of that block.
 
-The store must hold the parent, at an earlier slot than the block.
+The store must hold the block and its parent, the parent at an earlier slot.
 
 This is the pending ancestry used by arXiv 2405.00549v4, Definition 5. -/
 theorem isAncestor_pending_parent_of_slot_lt {node : ForkChoiceNode}
