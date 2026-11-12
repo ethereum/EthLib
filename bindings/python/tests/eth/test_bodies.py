@@ -18,7 +18,9 @@ from raising import raises
 ARCHIVE = "era1/mainnet-00000-5ec1ffb8"
 
 # The Keccak-256 hash of the encoding of no ommers, 0xc0.
-EMPTY_OMMERS_HASH = bytes.fromhex("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347")
+EMPTY_OMMERS_HASH = bytes.fromhex(
+    "1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+)
 
 
 def _p(n: int) -> bytes:
@@ -31,7 +33,7 @@ def _header(
     transactions_root: bytes = EMPTY_TRIE_ROOT,
     withdrawals_root: bytes | None = None,
 ) -> bytes:
-    """A header of the fifteen fields of Frontier, with the base fee and withdrawals root if given."""
+    """A header of the fifteen fields of Frontier, plus a base fee and withdrawals root if given."""
     fields = [
         bytes(32),
         ommers_hash,
