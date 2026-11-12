@@ -1285,13 +1285,13 @@ theorem processOperations_split {body : BeaconBlockBody preset fork} {parentSlot
   processOperations_split_of BlockFrame BlockFrame.refl BlockFrame.trans
     frame_processProposerSlashing frame_processAttesterSlashing computed
 
-/-- The state at which `processBlock` starts the operations of a block.
+/-- The state at which a block starts its operations, from the state before the block.
 
-The equations are the steps that `processBlock` runs before `processOperations`, at every fork.
+The equations are the steps that the block runs before its operations, at every fork.
 
-They are the payload of the parent from Gloas and the header.
+From Gloas the payload of the parent comes first, then the header.
 
-The execution part follows from Bellatrix, then the RANDAO reveal.
+From Bellatrix the execution part comes next, then the RANDAO reveal.
 
 The vote on the deposit contract comes last, before Heze. -/
 def OperationsInput (config : Config) (checks : SignatureChecks) {fork : Fork}

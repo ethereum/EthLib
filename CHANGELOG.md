@@ -519,7 +519,7 @@ Not yet released.
   In Lean, `validateTransaction_eq_ok_iff` ends with the new conjunct `tx.fork ≤ fork`, and `checkInclusion_fork_le` derives it from a passing inclusion check.
   `processTransaction_nonce_lt` no longer takes the hypothesis `tx.fork ≤ fork`.
 - `processBlock_split_of` is removed.
-  Its readers, `processBlock_split` and `processBlock_attestationSplit`, now read `processBlock_operationsInput` and `OperationsInput.step_of`.
+  Its reader `processBlock_split` now reads `processBlock_operationsInput` and `OperationsInput.step_of`, and `processBlock_attestationSplit` reads `processBlock_folds`.
   In Lean, a caller that needs a step across the parts of a block before its operations takes the `OperationsInput` that `processBlock_operationsInput` gives.
   It applies `OperationsInput.step_of` to it with the same step arguments.
   The block then continues with `processOperations`, as before.

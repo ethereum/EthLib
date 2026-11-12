@@ -43,11 +43,11 @@ Each justified block is then in the chain of the block of its recent epoch.
 
 Each vote that a block step casts comes from an attestation of the block.
 
-The block ran `isValidIndexedAttestation` on it, and the check accepted.
+The block checked the indexed form of that attestation, and the check accepted.
 
-`blockStepVotes_verified` states this, with the state and the place in the block of that check.
+The result also gives the state that the check read and its place in the block.
 
-It makes no assumption about the signature checks.
+It holds for any signature checks.
 
 Gasper §4.4, Definitions 4.5 and 4.6, justify a checkpoint by a supermajority link.
 
@@ -81,7 +81,7 @@ def blockStepVotes (config : Config) (checks : SignatureChecks)
       applySignedBlock config checks engine forked.state signed validateResult = .ok state ∧
       vote ∈ blockVotes forked.state signed.message}
 
-/-- The state on which `processAttestation` checks its indexed attestation, and the check.
+/-- The state on which an attestation checks its indexed form, and the check.
 
 Before Altair it is the state that the attestation returns, and from Altair its input. -/
 private theorem processAttestation_checked {fork : Fork} {state after : BeaconState preset fork}
@@ -107,7 +107,9 @@ private theorem processAttestation_checked {fork : Fork} {state after : BeaconSt
     simp only [altair, ↓reduceIte]
     exact ⟨indexed, indexedOk, validOk⟩
 
-/-- Where the operations of a block check an indexed attestation, and on which state.
+/-- Where the attestations of a block check an indexed attestation, and on which state.
+
+The operations start at the given state, and the attestations read the given parent slot.
 
 From Altair an attestation is checked on the state before it.
 
@@ -133,13 +135,15 @@ inductive AttestationSite (config : Config) (checks : SignatureChecks) {fork : F
       AttestationSite config checks input body parentSlot
         (if .altair ≤ fork then mid else next) indexed
 
-/-- A vote of a block comes from an attestation whose aggregate check the block ran.
+/-- A vote of a block comes from an attestation whose indexed form the block checked.
 
-The block executed `isValidIndexedAttestation` on the state `checked`, and that check accepted.
+The voter is among its attesters, and its data is the data of the vote.
 
-`AttestationSite` says where in the block that happened.
+The check ran on a state inside the block, and it accepted.
 
-The signature checks are not assumed to mean anything.
+The result also says where in the block the check ran.
+
+It holds for any signature checks.
 
 There must be more than `MIN_SEED_LOOKAHEAD + 2` epochs of mixes. -/
 theorem blockVotes_verified
@@ -193,11 +197,9 @@ theorem blockVotes_verified
     simpa using iMem
   · rw [indexedData, ← dataEq]
 
-/-- A vote that a block step casts comes from an attestation whose aggregate check the block ran.
+/-- A vote that a block step casts comes from an attestation whose indexed form the block checked.
 
-It is `blockVotes_verified` for the block of the step.
-
-This is the sentence of the docstring of `blockStepVotes`. -/
+The step applies a signed block, and the check ran inside that block. -/
 theorem blockStepVotes_verified
     (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
     {forked after : ForkedBeaconState preset} {vote : ValidatorIndex × AttestationData}
