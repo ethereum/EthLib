@@ -166,12 +166,20 @@ class Rules(unittest.TestCase):
         )
         self.assertEqual(Tree(tree).problems(), [])
 
-    def test_property_of_a_hash_imports_a_signature(self):
-        tree = with_imports("EthLib.Proofs", "EthLib.Cryptography.Proofs.Hash.A")
+    def test_property_of_a_hash_imports_other_cryptography(self):
+        tree = with_imports("EthLib.Proofs", "EthLib.Cryptography.Hash.Proofs.A")
         tree |= {
-            "EthLib.Cryptography.Proofs.Hash.A": ["EthLib.Cryptography.A"],
+            "EthLib.Cryptography.Hash.Proofs.A": ["EthLib.Cryptography.A"],
         }
         self.assertEqual(Tree(tree).problems(), [])
+
+    def test_hash_imports_a_property_once(self):
+        # The import breaks the rule for properties, so it is reported once, for that rule.
+        tree = with_modules({"EthLib.Cryptography.Hash.A": ["EthLib.Cryptography.Proofs.A"]})
+        tree |= with_imports("EthLib.Proofs", "EthLib.Cryptography.Proofs.A")
+        tree["EthLib"] = [*GOOD["EthLib"], "EthLib.Cryptography.Hash.A"]
+        tree["EthLib.Cryptography.Proofs.A"] = []
+        self.assert_fails(tree, "a specification never imports a property")
 
     def test_higher_layer_from_a_property(self):
         tree = with_imports("EthLib.Execution.Proofs.A", "EthLib.Consensus.A")
