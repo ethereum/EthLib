@@ -14,6 +14,8 @@ A setup is valid when each of its points is a point of its curve.
 
 Every setup that the decoder returns is valid.
 
+Each decoded byte string and each decoded `G2` point comes from the encoding at its position.
+
 Validity says nothing about the subgroup, which the decoder does not check.
 -/
 
@@ -145,6 +147,21 @@ theorem TrustedSetup.ofBytes_g1Monomial_mem
       · cases h
     · cases h
   · cases h
+
+/-- Each string of a decoded list gives the byte string at its position. -/
+theorem TrustedSetup.hexListToBytes_getElem {hex : Array String} {bytes : Array ByteArray}
+    (h : TrustedSetup.hexListToBytes hex = .ok bytes) :
+    bytes.size = hex.size ∧
+      ∀ (i : Nat) (hi : i < hex.size), TrustedSetup.hexToBytes? hex[i] = some bytes[i]! := by
+  obtain ⟨hsize, hget⟩ := array_mapM_ok h
+  refine ⟨hsize, fun i hi => ?_⟩
+  have hj : i < bytes.size := hsize ▸ hi
+  have he := hget i hi hj
+  rw [getElem!_pos bytes i hj]
+  split at he
+  · rename_i b hb
+    rw [hb, Except.ok.inj he]
+  · cases he
 
 /-- Each `G2` point of a decoded setup is the decompression of the encoding at its position. -/
 theorem TrustedSetup.ofBytes_g2Monomial

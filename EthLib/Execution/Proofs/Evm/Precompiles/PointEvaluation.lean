@@ -1,8 +1,6 @@
 module
 
 public import EthLib.Execution.Evm.Precompiles.PointEvaluation
-public import EthLib.Cryptography.Kzg.TrustedSetup
-import EthLib.Base.Proofs.MapM
 import EthLib.Cryptography.Proofs.Kzg.TrustedSetup
 
 /-!
@@ -10,7 +8,7 @@ import EthLib.Cryptography.Proofs.Kzg.TrustedSetup
 
 - A call succeeds exactly when the call data has 192 bytes, the gas covers 50000, the versioned hash names the commitment and the proof verifies.
 - Every successful call returns the same 64 bytes: 4096, then the BLS12-381 group order.
-- The setup point of the call, `[tau]_2`, is entry 1 of the `G2` points of the embedded setup.
+- When the embedded setup decodes, the setup point `[tau]_2` of the call is its `G2` point 1.
 -/
 
 @[expose] public section
@@ -89,11 +87,9 @@ theorem PointEvaluationError.code_injective (e₁ e₂ : PointEvaluationError) (
     first | rfl | (simp only [PointEvaluationError.code] at h; exact absurd h (by decide))
 
 open EthLib.Cryptography.Kzg in
-/-- The 96 bytes of `KZG_SETUP_G2_MONOMIAL_1` are entry 1 of `g2_monomial` in the embedded setup.
+/-- The 96 bytes of the precompile's `[tau]_2` are entry 1 of `g2_monomial` in the embedded setup.
 
-`CONTRIBUTING.md` keeps in Lean "a small decidable fact that a definition needs to be correct".
-
-The constant needs this fact to be correct, since its docstring says that it is this entry.
+The definition of `[tau]_2` says that it is this entry, and this fact checks that claim.
 
 It decodes one hex string of 192 characters. -/
 private theorem hexToBytes_g2MonomialHex_one :
@@ -104,7 +100,7 @@ private theorem hexToBytes_g2MonomialHex_one :
 open EthLib.Cryptography.Kzg in
 /-- The setup point of the call decompresses to entry 1 of the `G2` points of the embedded setup.
 
-It assumes that the embedded setup decodes, as `TrustedSetup.ofHex_valid` does.
+It assumes that the embedded setup decodes, as the other theorems about that setup do.
 
 So the `[tau]_2` of the precompile is the one that the KZG theorems about a decoded setup use. -/
 theorem uncompress_KZG_SETUP_G2_MONOMIAL_1 {s : TrustedSetup} (h : TrustedSetup.ofHex = .ok s) :
@@ -125,19 +121,12 @@ theorem uncompress_KZG_SETUP_G2_MONOMIAL_1 {s : TrustedSetup} (h : TrustedSetup.
   | ok c =>
   simp only [bind, Except.bind] at h
   obtain ⟨hc1, hu⟩ := TrustedSetup.ofBytes_g2Monomial h 1 (by decide)
-  unfold TrustedSetup.hexListToBytes at hc
-  obtain ⟨-, hf⟩ := EthLib.Base.array_mapM_ok hc
   -- Entry 1 of the decoded list is the decoding of hex string 1, which is the constant.
-  have h1 := hf 1 (by decide) hc1
+  obtain ⟨-, hget⟩ := TrustedSetup.hexListToBytes_getElem hc
   have hg := hexToBytes_g2MonomialHex_one
-  cases hx : TrustedSetup.hexToBytes? (TrustedSetupData.g2MonomialHex[1]'(by decide)) with
-  | none => rw [hx] at hg; cases hg
-  | some bytes =>
-    rw [hx] at hg
-    simp only [hx] at h1
-    have hb : bytes = c[1] := Except.ok.inj h1
-    have hd : bytes = KZG_SETUP_G2_MONOMIAL_1 := ByteArray.ext (Option.some.inj hg)
-    rw [← hd, hb]
-    exact hu
+  rw [hget 1 (by decide), Option.map_some, Option.some.injEq] at hg
+  have hd : c[1]! = KZG_SETUP_G2_MONOMIAL_1 := ByteArray.ext hg
+  rw [← hd, getElem!_pos c 1 hc1]
+  exact hu
 
 end EthLib.Execution.Evm.Precompiles.PointEvaluation
