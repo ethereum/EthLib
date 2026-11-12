@@ -1769,6 +1769,32 @@ The storage value of a slot that is not set is 0, so the answer must give that w
 EIP-1186 does not say which fields the answer holds for an address without an account.
 So the check judges no field of an absent account, and reports the absence.
 
+### The block bodies of the eth protocol
+
+A node fetches the bodies of blocks after their headers, with the BlockBodies message of the eth protocol.
+`checkBody` (`Execution/Network/Bodies.lean`) checks such a body against the header that the node asked it for.
+It follows "Block Encoding and Validity" in [`caps/eth.md`](https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/eth.md#block-encoding-and-validity).
+The body must be the list of the transactions and the ommers, with the withdrawals from Shapella.
+The transactions and the withdrawals must have the roots of the header.
+The ommers list must hold at most two items, and its Keccak-256 hash must be the ommers hash of the header.
+No ommer may have a number above the block's.
+A transaction sent as a byte string must start with a type below `0x80`, as EIP-2718 asks, so that it cannot stand for a legacy transaction.
+
+`checkBody_complete` (`Execution/Proofs/Network/Bodies.lean`) proves that the body of every block that passes `stateTransition` passes this check.
+So a correct node never rejects it.
+`checkBody_binding` proves that two bodies that pass for one header are equal in each part, or that a Keccak-256 collision is named.
+For the transactions and the withdrawals, the search of the trie binding returns the collision; for the ommers, the two encodings are the collision.
+It reuses `indexedRoot_binding` and `withdrawalsRoot_binding` for the roots, and `encode_injective` for the ommers.
+`checkBody_tooManyOmmers` and `checkBody_tooManyOmmers_shapella` show that a body with three ommers is rejected once the earlier checks pass.
+No theorem bounds the probability of finding two bodies that pass for one header and differ.
+
+The check leaves four rules of that section to other checks.
+It does not check the header itself, which the header checks of the eth protocol decide before the body is asked for.
+It does not run the transactions or look at the state, so it does not say that the transactions are valid for the block.
+It does not check the ommer headers against the chain, which needs the recent blocks that `validateOmmers` reads.
+It does not ask that the sum of the gas limits of the transactions is at most the gas limit of the block, as `caps/eth.md` says.
+Block validity asks only that each transaction fits in the gas that the block still has, so the stricter rule would reject valid blocks.
+
 ### Weak subjectivity
 
 A node that starts from a recent checkpoint trusts it only for a limited time, the weak subjectivity period.
@@ -2152,7 +2178,7 @@ It assumes that the vectors whose length the preset sets have a positive length,
 It rests on `BeaconBlock.hashTreeRoot_header`, which shows that a block has the root of its header.
 It also rests on `latestBlockHash_processBlock`, which shows that from Gloas the latest block hash after a block is the parent hash of the latest bid.
 `latestExecutionPayloadBid_processBlock` shows that from Gloas a block leaves its own bid as the latest bid.
-`latestBlockHeader_processBlock` shows that from Gloas a block leaves its header, with a zero state root, as the latest block header.
+`latestBlockHeader_processBlock` shows that at every fork a block leaves its header, with a zero state root, as the latest block header.
 These rest on `PayloadInputs`, the fields that the checks of a payload and of a bid read.
 From Gloas the parent, header, RANDAO and bid steps each change one of them, and the other steps keep them all.
 No theorem covers the signature, the time or the withdrawals of the envelope, or the answer of the execution layer.
@@ -2511,8 +2537,26 @@ The step also needs the previous justified epoch below the previous epoch once j
 `slackJustifiedCheckpoints_activeSetAt_of_chainSteps` (`FfgSlackActive.lean`) takes the votes that the block steps of the run cast, the active sets and the effective balances.
 Its step asks only the active stake, the order of the blocks and the preset.
 The order of the blocks asks that the map from roots to blocks keeps in order the roots that a state records at two consecutive slots, and the zero root before the root of slot zero (`rootLinks`, `Consensus/Proofs/Transition/FfgRoots.lean`).
-Two consecutive slots record the same root, or a block and its child, since the header check makes the parent root of a block the root recorded at the slot before it; no theorem states that yet.
-Without a collision of header roots, such pairs order the roots by ancestry.
+Two consecutive slots record the same root, or a block and its child, since the header check makes the parent root of a block the root recorded at the slot before it.
+
+`rootLinks_cases_of_chainSteps` (`Consensus/Proofs/Transition/RootLinks.lean`) states that for a run of a chain, upgrades included.
+A block step may skip the check of the state root, so the root of its block is that of the block with its state root replaced by the root of the state after the step.
+The step that checks the state root leaves the block as it is.
+The other cases are a pair that the first state records, the first pair, and a state of the run that hashes to the zero root.
+The first pair is the pair that the first slot of the run adds: the root at the slot before the first state, or the zero root at slot zero, then the root of the first header filled with the root of the first state.
+A state that hashes to the zero root leaves the header of the latest block unfilled at its slot.
+So the next slot records the root of the header as it was.
+The first state must be at slot zero, or have its latest header at its own slot, as after a block, or record the root of its latest header at the slot before it.
+Genesis and every state that a block or a slot produces meet this, so a run may start at the state of a stored block.
+The theorem assumes that the vectors whose length the preset sets have a positive length, as the root of a block needs.
+`zeroPreimage_or_rootLinks_le_of_chainSteps` gives the `links` hypothesis of `RootsAbove.of_chainStep` for the last state of a run.
+It takes a map from roots to a preorder that orders the parent root of each block step between the first and the last state before the root of its block, as `rootLinks_cases_of_chainSteps` computes it.
+The map must also order the pairs of the first state and the first pair, and the result fails only on a zero preimage.
+For one transition, `getBlockRootAtSlot_stateTransition_cases` shows that each root recorded from the slot of the state on is the parent root of the block.
+The other case is that the state before the transition hashes to the zero root, and the root is that of the latest header as it was.
+`getBlockRootAtSlot_stateTransition_of_lt` shows that the roots of older slots are those of the state before.
+
+Without a collision of header roots, the pairs of consecutive slots order the roots by ancestry.
 `RootsAbove.of_chainStep` then keeps each justified checkpoint below every root that the state records from its epoch on, which gives the source block of each recent link in the chain of its target block.
 `slackJustifiedCheckpoints_chainRoot_of_chainSteps` (`FfgSlackActive.lean`) takes the roots themselves as the blocks of the model, ordered by the links of every state that genesis reaches (`ChainRoot`), so the order holds by construction and the step asks only the active stake.
 That order does not depend on the last state, so two branches from one genesis share it.
@@ -2864,12 +2908,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 380 operations and 49 size constants.
-The Python extension calls 380 of the operations and 49 of the constants.
+Lean exports 381 operations and 49 size constants.
+The Python extension calls 381 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-9888 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (1791), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (303), `engine.c` (113), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (225), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (80), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (102), `module.c` (1401), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (140), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (663), `x25519.c` (21), `xmss.c` (134).
+9918 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (1791), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (303), `engine.c` (113), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (253), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (80), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (102), `module.c` (1402), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (140), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (664), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

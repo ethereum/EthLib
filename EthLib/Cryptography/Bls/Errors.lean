@@ -99,22 +99,3 @@ def BlsError.code : BlsError → UInt32
   | .keyGenHkdf                   => 16
 
 end EthLib.Cryptography.Bls
-
-namespace EthLib.Cryptography
-
-/-- `panic!` with an explicit fallback value.
-
-Logically it equals `fallback`, so theorems about the surrounding definition are unaffected.
-
-When reached at runtime, it prints an error message.
-
-It also aborts when the process runs with `LEAN_ABORT_ON_PANIC=1`.
-
-It transcribes spec-level runtime assertions into proof-covered pure code. -/
-@[inline] def panicWith {α : Type _} (fallback : α) (msg : String) : α :=
-  @panic α ⟨fallback⟩ msg
-
-@[simp] theorem panicWith_eq {α : Type _} (fallback : α) (msg : String) :
-    panicWith fallback msg = fallback := rfl
-
-end EthLib.Cryptography

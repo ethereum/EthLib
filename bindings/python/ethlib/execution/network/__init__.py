@@ -41,6 +41,11 @@ def check_headers(version: int, request: bytes, response: bytes) -> None:
     _native.eth_check_headers(version, request, response)
 
 
+def check_body(fork: str, header: bytes, body: bytes) -> None:
+    """Accept the BlockBodies `body` for the header `header` at `fork`, or raise EthWireError."""
+    _native.eth_check_body(fork, header, body)
+
+
 def check_pooled(version: int, request: bytes, response: bytes) -> None:
     """Accept the PooledTransactions data `response` as an answer to the GetPooledTransactions."""
     _native.eth_check_pooled(version, request, response)
@@ -89,6 +94,7 @@ __all__ = [
     "STATUS",
     "TRANSACTIONS",
     "EthWireError",
+    "check_body",
     "check_headers",
     "check_partial_receipts",
     "check_pooled",

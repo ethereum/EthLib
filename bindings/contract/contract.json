@@ -8549,6 +8549,27 @@
    "docstring":
    "Whether the receipts of a block, as a version sends them, match the receipts root of its header.\n\nThe root is computed over the consensus forms, as \"Receipt Encoding and Validity\" says.\n\nReceipts that do not read, or that have no root, do not match."},
   {"summary":
+   "Whether the body `body` of a BlockBodies answer belongs to the header `header` at a fork.",
+   "signature": "(fork: str, header: bytes, body: bytes) -> bool",
+   "operation": "EthLib.Execution.Network.Exports.checkBodyExport",
+   "method": "eth_check_body",
+   "errors":
+   [{"type": "EthLib.Execution.Network.BodyError",
+     "codes":
+     [{"constructor": "decoding", "code": 601},
+      {"constructor": "trie", "code": 602},
+      {"constructor": "wrongTransactionsRoot", "code": 603},
+      {"constructor": "missingWithdrawals", "code": 604},
+      {"constructor": "unexpectedWithdrawals", "code": 605},
+      {"constructor": "wrongWithdrawalsRoot", "code": 606},
+      {"constructor": "tooManyOmmers", "code": 607},
+      {"constructor": "wrongOmmersHash", "code": 608},
+      {"constructor": "ommerAfterBlock", "code": 609},
+      {"constructor": "untypedTransaction", "code": 610}]}],
+   "error_class": "EthWireError",
+   "docstring":
+   "Whether the body `body` of a BlockBodies answer belongs to the header `header` at a fork.\n\nThe header and the body are RLP.\n\nIt returns true on acceptance, and raises the code of the refusal otherwise."},
+  {"summary":
    "Whether `response` answers a GetBlockAccessLists `request`, given each block's access list hash.",
    "signature":
    "(version: int, request: bytes, response: bytes, expected: list[bytes]) -> bool",
