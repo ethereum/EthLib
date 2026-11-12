@@ -1970,6 +1970,15 @@ It assumes Assumption 2 on the active members of the empty-slot committees, no h
 These are store-local facts: no theorem here shows that a recorded honest vote is its voter's latest actual vote, or that it remains the recorded vote at a later store.
 
 `Consensus/Proofs/ForkChoice/FastConfirmationConfirmedRoot.lean` states where the confirmed block of a slot comes from.
+`getCurrentTarget_eq_ok_iff` (`Consensus/Proofs/ForkChoice/FastConfirmationIndicators.lean`) states the target of the current epoch as the checkpoint of the store's epoch in the chain of the head.
+`epoch_of_getCurrentTarget` draws the consequence that the epoch of that target is the current epoch of the store.
+`willCurrentTargetBeJustified_eq_ok_true_iff` states the two-thirds test of the rule, with the checked products that can overflow.
+`two_mul_le_three_mul_of_willCurrentTargetBeJustified` states the bound it gives on naturals: three times the honest support reaches twice the total active balance.
+`willNoConflictingCheckpointBeJustified_eq_ok_true_iff` states the one-third test for a target that is not the unrealized justified checkpoint.
+`willNoConflictingCheckpointBeJustified_of_unrealized` states the accept for a target that is.
+`willNoConflictingCheckpointBeJustified_of_willCurrentTargetBeJustified` relates the two tests: the one-third test passes wherever the two-thirds test does, for a nonzero total active balance.
+No theorem relates either test to the justification of the target in a later state, which is what the paper assumes of them.
+
 `Store.onFastConfirmation_confirmedRoot` shows that the rule starts from the block stored before, the finalized block or the observed justified block.
 It keeps the block stored before only when that block is in the chain of the head, and at the first slot of an epoch only when `isConfirmedChainSafe` accepts it.
 It takes the observed justified block only at the first slot of an epoch.
@@ -1988,7 +1997,7 @@ For the start they leave out the other checks that compare the epochs and the sl
 For the walks they leave out the checks on the epochs of the start and of the walked blocks.
 They also leave out the check that the head of the slot before holds each block of the first walk.
 They leave out the checks that a voting source or an unrealized justification is recent.
-They also leave out `willNoConflictingCheckpointBeJustified` and `willCurrentTargetBeJustified`, which are about the justification of the target of the current epoch.
+They also leave out the calls to `willNoConflictingCheckpointBeJustified` and `willCurrentTargetBeJustified`, whose own tests the theorems above state.
 No theorem yet relates the list of stores to the stores of an honest validator in an execution.
 
 ### Balance-weighted draws
