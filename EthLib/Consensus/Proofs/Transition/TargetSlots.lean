@@ -6,9 +6,9 @@ public import EthLib.Consensus.Proofs.Transition.TargetVotes
 /-!
 # Proofs: the target flags across the slot and epoch steps
 
-From Altair each target flag of the state comes from a vote for the link of its epoch.
+From Altair each target flag of the state comes from a vote of a set for the link of its epoch.
 
-That vote is signed, and each slot keeps this, the epoch step included.
+Each slot keeps this, the epoch step included.
 
 In the buffer of block roots, the slot step writes only the entry at the current slot.
 
@@ -66,46 +66,38 @@ theorem JustifiedEarly.previousJustified_of_justification (early : JustifiedEarl
     obtain ⟨_, _, _, _, _, _, _, _, _, _, weighed⟩ := computed
     exact (weighJustificationAndFinalization_checkpoints weighed).1
   all_goals first
-    | exact absurd ‹getCurrentEpoch state ≤ GENESIS_EPOCH + 1› first
     | simp only [bind_ok_iff] at computed
       obtain ⟨_, _, _, _, _, _, _, _, _, _, weighed⟩ := computed
       exact (weighJustificationAndFinalization_checkpoints weighed).1
 
 /-! ## One slot -/
 
-/-- One slot keeps the fork versions, the genesis validators root and the keys.
+/-- One slot keeps the fork versions and the genesis validators root.
 
-It never shrinks the registry.
-
-It keeps the keys while the registry stays below 2^64 validators after the slot. -/
-theorem advanceSlot_keys (computed : advanceSlot config checks state = .ok after) :
+It never shrinks the registry. -/
+theorem advanceSlot_kept (computed : advanceSlot config checks state = .ok after) :
     after.forkVersions = state.forkVersions ∧
       after.genesisValidatorsRoot = state.genesisValidatorsRoot ∧
-      state.validators.data.size ≤ after.validators.data.size ∧
-      (after.validators.data.size < 2 ^ 64 → KeysKept state after) := by
+      state.validators.data.size ≤ after.validators.data.size := by
   obtain ⟨next, cached, epoched, -, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok computed
   have cachedFrame := frame_processSlot cachedOk
   suffices kept : epoched.forkVersions = cached.forkVersions ∧
       epoched.genesisValidatorsRoot = cached.genesisValidatorsRoot ∧
-      cached.validators.data.size ≤ epoched.validators.data.size ∧
-      (epoched.validators.data.size < 2 ^ 64 → KeysKept cached epoched) by
-    obtain ⟨forkVersions, root, grows, keys⟩ := kept
-    refine ⟨forkVersions.trans cachedFrame.forkVersions,
+      cached.validators.data.size ≤ epoched.validators.data.size by
+    obtain ⟨forkVersions, root, grows⟩ := kept
+    exact ⟨forkVersions.trans cachedFrame.forkVersions,
       root.trans cachedFrame.genesisValidatorsRoot,
-      Nat.le_trans cachedFrame.registryGrows grows, fun small => ?_⟩
-    exact (cachedFrame.keysKept (Nat.lt_of_le_of_lt grows small)).trans
-      ((keys small).trans fun _ validator found => ⟨validator, found, rfl⟩)
+      Nat.le_trans cachedFrame.registryGrows grows⟩
   unfold epochIfLast at epochedOk
   split at epochedOk
   · obtain ⟨justified, justifiedOk, frame⟩ := processEpoch_frame epochedOk
     obtain ⟨-, -, -, -, -, validators, forkVersions, root, -, -⟩ :=
       processJustificationAndFinalization_keeps justifiedOk
-    refine ⟨frame.forkVersions.trans forkVersions, frame.genesisValidatorsRoot.trans root,
-      validators ▸ frame.registryGrows, fun small => ?_⟩
-    exact (KeysKept.of_validators (by simp only [validators])).trans (frame.keysKept small)
+    exact ⟨frame.forkVersions.trans forkVersions, frame.genesisValidatorsRoot.trans root,
+      validators ▸ frame.registryGrows⟩
   · simp only [pure, Except.pure, Except.ok.injEq] at epochedOk
     subst epochedOk
-    exact ⟨rfl, rfl, Nat.le_refl _, fun _ => KeysKept.refl _⟩
+    exact ⟨rfl, rfl, Nat.le_refl _⟩
 
 /-- A frame keeps the two justified checkpoints equal in the first two epochs. -/
 theorem JustifiedEarly.of_frame (frame : Frame state after) (early : JustifiedEarly state) :
@@ -146,48 +138,174 @@ theorem JustifiedEarly.of_advanceSlot (early : JustifiedEarly state)
       rw [one, cachedEpoch, ← nextSlot_epoch_of_inside sum inside]
       exact afterEarly'))
 
-/-- The first slot of the current or the previous epoch is less than two epochs back.
+/-- Once justification runs, the previous justified epoch is below the previous epoch.
 
-So it stays in a buffer of roots that covers two epochs, at the next slot. -/
-private theorem recent_of_epoch (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
-    (window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
-    {epoch : Epoch} (near : epoch = getCurrentEpoch state ∨ epoch = getPreviousEpoch state) :
+It runs from the third epoch on. -/
+def JustifiedSeparated (state : BeaconState preset fork) : Prop :=
+  GENESIS_EPOCH + 1 < getCurrentEpoch state →
+    state.previousJustifiedCheckpoint.epoch < getPreviousEpoch state
+
+/-- A frame keeps the previous justified epoch below the previous epoch. -/
+theorem JustifiedSeparated.of_frame (frame : Frame state after)
+    (separated : JustifiedSeparated state) : JustifiedSeparated after := by
+  unfold JustifiedSeparated getPreviousEpoch getCurrentEpoch at separated ⊢
+  rw [frame.slot, frame.previousJustified]
+  exact separated
+
+/-- One slot keeps the previous justified epoch below the previous epoch once justification runs.
+
+In the first two epochs the two justified checkpoints must be equal.
+
+The current justified epoch must be at most the previous epoch. -/
+theorem JustifiedSeparated.of_advanceSlot (early : JustifiedEarly state)
+    (settled : JustifiedSettled state) (separated : JustifiedSeparated state)
+    (computed : advanceSlot config checks state = .ok after) : JustifiedSeparated after := by
+  obtain ⟨next, cached, epoched, sum, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok computed
+  have cachedFrame := frame_processSlot cachedOk
+  have one : (GENESIS_EPOCH + 1 : Epoch).toNat = 1 := by decide
+  have cachedEpoch := getCurrentEpoch_toNat cached
+  rw [cachedFrame.slot] at cachedEpoch
+  have afterEpoch := getCurrentEpoch_toNat { epoched with slot := next }
+  have afterPrevious := getPreviousEpoch_toNat { epoched with slot := next }
+  dsimp only at afterEpoch afterPrevious ⊢
+  intro late
+  have late' := UInt64.lt_iff_toNat_lt.mp late
+  rw [getCurrentEpoch_toNat, one] at late'
+  dsimp only at late'
+  apply UInt64.lt_iff_toNat_lt.mpr
+  unfold epochIfLast at epochedOk
+  split at epochedOk
+  · rename_i boundary
+    have epochs := nextSlot_epoch_of_boundary sum boundary
+    obtain ⟨justified, justifiedOk, frame⟩ := processEpoch_frame epochedOk
+    have settled' := UInt64.le_iff_toNat_le.mp settled
+    rw [getPreviousEpoch_toNat, getCurrentEpoch_toNat] at settled'
+    rw [afterPrevious, afterEpoch, epochs, frame.previousJustified,
+      (early.of_frame cachedFrame).previousJustified_of_justification justifiedOk,
+      cachedFrame.currentJustified]
+    omega
+  · rename_i inside
+    simp only [pure, Except.pure, Except.ok.injEq] at epochedOk
+    subst epochedOk
+    have epochs := nextSlot_epoch_of_inside sum inside
+    have below := UInt64.lt_iff_toNat_lt.mp
+      (separated (UInt64.lt_iff_toNat_lt.mpr (by rw [one, getCurrentEpoch_toNat]; omega)))
+    rw [getPreviousEpoch_toNat, getCurrentEpoch_toNat] at below
+    rw [afterPrevious, afterEpoch, epochs, cachedFrame.previousJustified]
+    exact below
+
+/-- One slot keeps the previous justified checkpoint, or makes it the old current one.
+
+It does the second only when the slot ends an epoch, whose epoch is then the new previous epoch. -/
+theorem advanceSlot_previousJustified (computed : advanceSlot config checks state = .ok after) :
+    after.previousJustifiedCheckpoint = state.previousJustifiedCheckpoint ∨
+      (after.previousJustifiedCheckpoint = state.currentJustifiedCheckpoint ∧
+        (getPreviousEpoch after).toNat = (getCurrentEpoch state).toNat) := by
+  obtain ⟨next, cached, epoched, sum, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok computed
+  have cachedFrame := frame_processSlot cachedOk
+  unfold epochIfLast at epochedOk
+  split at epochedOk
+  · rename_i boundary
+    have epochs := nextSlot_epoch_of_boundary sum boundary
+    obtain ⟨justified, justifiedOk, frame⟩ := processEpoch_frame epochedOk
+    dsimp only
+    rw [frame.previousJustified]
+    rcases processJustificationAndFinalization_ok justifiedOk with same | ⟨_, _, _, weighed⟩
+    · left
+      rw [same, cachedFrame.previousJustified]
+    · right
+      refine ⟨(weighJustificationAndFinalization_checkpoints weighed).1.trans
+        cachedFrame.currentJustified, ?_⟩
+      rw [getPreviousEpoch_toNat, getCurrentEpoch_toNat, getCurrentEpoch_toNat]
+      dsimp only
+      rw [epochs]
+      exact Nat.add_sub_cancel _ _
+  · simp only [pure, Except.pure, Except.ok.injEq] at epochedOk
+    subst epochedOk
+    exact .inl cachedFrame.previousJustified
+
+/-- The first slot of a recent epoch stays in the buffer of roots at the next slot.
+
+The epoch must be at most some distance before the current epoch.
+
+The buffer must cover one epoch more than that distance. -/
+theorem slot_lt_epoch_add_historical_of_le (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
+    (distance : Nat)
+    (window : (distance + 1) * preset.SLOTS_PER_EPOCH.toNat ≤
+      preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
+    {epoch : Epoch} (near : (getCurrentEpoch state).toNat ≤ epoch.toNat + distance) :
     state.slot.toNat <
       epoch.toNat * preset.SLOTS_PER_EPOCH.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat := by
   have split := Nat.div_add_mod state.slot.toNat preset.SLOTS_PER_EPOCH.toNat
   have small := Nat.mod_lt state.slot.toNat positive
-  have current := getCurrentEpoch_toNat state
-  have previous := getPreviousEpoch_toNat state
-  rw [current] at previous
-  rw [Nat.mul_comm] at split
-  rcases near with rfl | rfl
-  · rw [current]
-    omega
-  · rw [previous, Nat.sub_one_mul]
-    omega
+  rw [← getCurrentEpoch_toNat] at split
+  have scaled := Nat.mul_le_mul_right preset.SLOTS_PER_EPOCH.toNat near
+  rw [Nat.add_mul, Nat.mul_comm] at scaled
+  rw [Nat.add_mul, Nat.one_mul] at window
+  omega
 
-/-- One slot keeps each target flag backed by a signed vote for the link of its epoch.
+/-- The first slot of the current or the previous epoch is less than two epochs back.
+
+So it stays in a buffer of roots that covers two epochs, at the next slot. -/
+theorem slot_lt_epoch_add_historical (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
+    (window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
+    {epoch : Epoch} (near : epoch = getCurrentEpoch state ∨ epoch = getPreviousEpoch state) :
+    state.slot.toNat <
+      epoch.toNat * preset.SLOTS_PER_EPOCH.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat := by
+  refine slot_lt_epoch_add_historical_of_le positive 1 (by omega) ?_
+  have previous := getPreviousEpoch_toNat state
+  rcases near with rfl | rfl <;> omega
+
+/-- The caching of a slot keeps each target flag backed by a vote of the set for its link.
+
+An epoch must have at least one slot, and the buffer of roots must cover two epochs. -/
+theorem TargetFlagsVoted.of_processSlot {votes : Set (ValidatorIndex × AttestationData)}
+    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
+    (window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
+    (holds : TargetFlagsVoted votes state)
+    (computed : processSlot state = .ok after) : TargetFlagsVoted votes after := by
+  have frame := frame_processSlot computed
+  have currentEq : getCurrentEpoch after = getCurrentEpoch state := by
+    simp only [getCurrentEpoch, frame.slot]
+  have previousEq : getPreviousEpoch after = getPreviousEpoch state := by
+    unfold getPreviousEpoch
+    rw [currentEq]
+  intro altair current position flagged
+  have participation := processSlot_participation computed
+  have same : recentParticipation after altair current =
+      recentParticipation state altair current := by
+    cases current <;> simp only [recentParticipation, participation.1, participation.2]
+  rw [same] at flagged
+  obtain ⟨vote, voted, index, epoch, source, rootOk⟩ := holds altair current position flagged
+  refine ⟨vote, voted, index, ?_, ?_, ?_⟩
+  · rw [currentEq, previousEq]
+    exact epoch
+  · rw [frame.currentJustified, frame.previousJustified]
+    exact source
+  · have near : vote.2.target.epoch = getCurrentEpoch state ∨
+        vote.2.target.epoch = getPreviousEpoch state := by
+      cases current
+      · exact .inr epoch
+      · exact .inl epoch
+    rw [getBlockRoot_processSlot computed (slot_lt_epoch_add_historical positive window near)]
+    exact rootOk
+
+/-- One slot keeps each target flag backed by a vote of the set for the link of its epoch.
 
 An epoch must have at least one slot, and the buffer of roots must cover two epochs.
 
-The two justified checkpoints must be equal in the first two epochs.
-
-The registry must stay below 2^64 validators after the slot. -/
-theorem TargetFlagsSigned.of_advanceSlot
+The two justified checkpoints must be equal in the first two epochs. -/
+theorem TargetFlagsVoted.of_advanceSlot {votes : Set (ValidatorIndex × AttestationData)}
     (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
     (window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
-    (early : JustifiedEarly state) (small : after.validators.data.size < 2 ^ 64)
-    (holds : TargetFlagsSigned config checks state)
+    (early : JustifiedEarly state) (holds : TargetFlagsVoted votes state)
     (computed : advanceSlot config checks state = .ok after) :
-    TargetFlagsSigned config checks after := by
-  obtain ⟨-, genesisRoot, -, keys⟩ := advanceSlot_keys computed
-  have signed : ∀ vote, SignedVote config checks state vote →
-      SignedVote config checks after vote :=
-    fun _ one => one.of_keys (Nat.le_refl _) genesisRoot (keys small)
+    TargetFlagsVoted votes after := by
   have roots : ∀ {epoch : Epoch} {root : Root}, getBlockRoot state epoch = .ok root →
       (epoch = getCurrentEpoch state ∨ epoch = getPreviousEpoch state) →
       getBlockRoot after epoch = .ok root :=
-    fun read near => getBlockRoot_advanceSlot computed read (recent_of_epoch positive window near)
+    fun read near =>
+      getBlockRoot_advanceSlot computed read (slot_lt_epoch_add_historical positive window near)
   obtain ⟨next, cached, epoched, sum, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok computed
   have cachedFrame := frame_processSlot cachedOk
   have cachedEarly' := early.of_frame cachedFrame
@@ -216,9 +334,9 @@ theorem TargetFlagsSigned.of_advanceSlot
     · rcases (tail.flags altair position flags).1 found with rotated | rfl
       · rcases (head.flags altair position flags).2 rotated with old | rfl
         · rw [justifiedCurrent, cachedCurrent] at old
-          obtain ⟨vote, ⟨index, epoch, source, rootOk⟩, voted⟩ :=
+          obtain ⟨vote, voted, index, epoch, source, rootOk⟩ :=
             holds altair true position ⟨flags, old, set⟩
-          refine ⟨vote, ⟨index, ?_, ?_, roots rootOk (.inl epoch)⟩, signed vote voted⟩
+          refine ⟨vote, voted, index, ?_, ?_, roots rootOk (.inl epoch)⟩
           · exact epoch.trans previousEq.symm
           · exact source.trans <|
               (cachedFrame.currentJustified.symm.trans previousJustified.symm).trans
@@ -244,17 +362,15 @@ theorem TargetFlagsSigned.of_advanceSlot
       rw [currentEq]
     cases current
     · rw [cachedPrevious] at found
-      obtain ⟨vote, ⟨index, epoch, source, rootOk⟩, voted⟩ :=
+      obtain ⟨vote, voted, index, epoch, source, rootOk⟩ :=
         holds altair false position ⟨flags, found, set⟩
-      refine ⟨vote, ⟨index, epoch.trans previousEq.symm, ?_, roots rootOk (.inr epoch)⟩,
-        signed vote voted⟩
-      exact source.trans cachedFrame.previousJustified.symm
+      exact ⟨vote, voted, index, epoch.trans previousEq.symm,
+        source.trans cachedFrame.previousJustified.symm, roots rootOk (.inr epoch)⟩
     · rw [cachedCurrent] at found
-      obtain ⟨vote, ⟨index, epoch, source, rootOk⟩, voted⟩ :=
+      obtain ⟨vote, voted, index, epoch, source, rootOk⟩ :=
         holds altair true position ⟨flags, found, set⟩
-      refine ⟨vote, ⟨index, epoch.trans currentEq.symm, ?_, roots rootOk (.inl epoch)⟩,
-        signed vote voted⟩
-      exact source.trans cachedFrame.currentJustified.symm
+      exact ⟨vote, voted, index, epoch.trans currentEq.symm,
+        source.trans cachedFrame.currentJustified.symm, roots rootOk (.inl epoch)⟩
 
 /-! ## Slots and blocks -/
 
@@ -270,7 +386,7 @@ theorem advanceSlots_registryGrows :
   | count + 1, state, after, computed => by
     simp only [advanceSlots, bind_ok_iff] at computed
     obtain ⟨next, nextOk, rest⟩ := computed
-    exact Nat.le_trans (advanceSlot_keys nextOk).2.2.1 (advanceSlots_registryGrows rest)
+    exact Nat.le_trans (advanceSlot_kept nextOk).2.2 (advanceSlots_registryGrows rest)
 
 /-- Slots keep the two justified checkpoints equal in the first two epochs. -/
 theorem JustifiedEarly.of_advanceSlots :
@@ -284,27 +400,47 @@ theorem JustifiedEarly.of_advanceSlots :
     obtain ⟨next, nextOk, rest⟩ := computed
     exact JustifiedEarly.of_advanceSlots (early.of_advanceSlot nextOk) rest
 
-/-- Slots keep each target flag backed by a signed vote for its link.
+/-- Slots keep the previous justified epoch below the previous epoch once justification runs.
+
+The state before them must keep the invariant of valid blocks.
+
+In its first two epochs, its two justified checkpoints must be equal. -/
+theorem JustifiedSeparated.of_advanceSlots :
+    ∀ {count : Nat} {state after : BeaconState preset fork}, Invariant state →
+      JustifiedEarly state → JustifiedSeparated state →
+      advanceSlots config checks count state = .ok after → JustifiedSeparated after := by
+  intro count
+  induction count with
+  | zero =>
+    intro state after _ _ separated computed
+    simp only [advanceSlots, pure, Except.pure, Except.ok.injEq] at computed
+    exact computed ▸ separated
+  | succ count ih =>
+    intro state after holds early separated computed
+    simp only [advanceSlots, bind_ok_iff] at computed
+    obtain ⟨next, nextOk, rest⟩ := computed
+    exact ih (advanceSlot_invariant holds nextOk).1 (early.of_advanceSlot nextOk)
+      (separated.of_advanceSlot early holds.settled nextOk) rest
+
+/-- Slots keep each target flag backed by a vote of the set for its link.
 
 An epoch must have at least one slot, and the buffer of roots must cover two epochs.
 
-The two justified checkpoints must be equal in the first two epochs before the slots.
-
-The registry must stay below 2^64 validators after the slots. -/
-theorem TargetFlagsSigned.of_advanceSlots (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
+The two justified checkpoints must be equal in the first two epochs before the slots. -/
+theorem TargetFlagsVoted.of_advanceSlots {votes : Set (ValidatorIndex × AttestationData)}
+    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
     (window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat) :
     ∀ {count : Nat} {state after : BeaconState preset fork}, JustifiedEarly state →
-      after.validators.data.size < 2 ^ 64 → TargetFlagsSigned config checks state →
-      advanceSlots config checks count state = .ok after → TargetFlagsSigned config checks after
-  | 0, state, after, _, _, holds, computed => by
+      TargetFlagsVoted votes state → advanceSlots config checks count state = .ok after →
+        TargetFlagsVoted votes after
+  | 0, state, after, _, holds, computed => by
     simp only [advanceSlots, pure, Except.pure, Except.ok.injEq] at computed
     exact computed ▸ holds
-  | count + 1, state, after, early, small, holds, computed => by
+  | count + 1, state, after, early, holds, computed => by
     simp only [advanceSlots, bind_ok_iff] at computed
     obtain ⟨next, nextOk, rest⟩ := computed
-    exact TargetFlagsSigned.of_advanceSlots positive window (early.of_advanceSlot nextOk) small
-      (holds.of_advanceSlot positive window early
-        (Nat.lt_of_le_of_lt (advanceSlots_registryGrows rest) small) nextOk) rest
+    exact TargetFlagsVoted.of_advanceSlots positive window (early.of_advanceSlot nextOk)
+      (holds.of_advanceSlot positive window early nextOk) rest
 
 /-- A block that the transition accepts keeps the two justified checkpoints equal in early epochs.
 
@@ -319,33 +455,23 @@ theorem JustifiedEarly.of_stateTransition {engine : ExecutionEngine preset fork}
   obtain ⟨_, -, slotsOk⟩ := slotsOk
   exact (early.of_advanceSlots slotsOk).of_frame (frame_processBlock blockOk)
 
-/-- A block that the transition accepts keeps each target flag backed by a signed vote.
+/-- A block that the transition accepts keeps the previous justified epoch below the previous one.
 
-That vote is for the link of the epoch of the flag.
+That holds once justification runs, and the slots before the block keep it too.
 
-The slots before the block keep that, and so does the block itself.
+The state before must keep the invariant of valid blocks.
 
-An epoch must have at least one slot, and the roots must cover two epochs, as in both presets.
-
-The two justified checkpoints must be equal in the first two epochs before the block.
-
-The registry must stay below 2^64 validators after the block.
-
-The fork versions after the block must be those of forks of the chain. -/
-theorem TargetFlagsSigned.of_stateTransition {engine : ExecutionEngine preset fork}
+In its first two epochs, its two justified checkpoints must be equal. -/
+theorem JustifiedSeparated.of_stateTransition {engine : ExecutionEngine preset fork}
     {signed : SignedBeaconBlock preset fork} {validateResult : Bool}
-    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
-    (window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
-    (early : JustifiedEarly state) (small : after.validators.data.size < 2 ^ 64)
-    (known : ForkVersionsKnown config after)
-    (holds : TargetFlagsSigned config checks state)
+    (holds : Invariant state) (early : JustifiedEarly state)
+    (separated : JustifiedSeparated state)
     (computed : stateTransition config checks engine state signed validateResult = .ok after) :
-    TargetFlagsSigned config checks after := by
+    JustifiedSeparated after := by
   obtain ⟨advanced, slotsOk, -, -, blockOk, -⟩ := stateTransition_ok computed
   simp only [processSlots, bind_ok_iff, ensure_ok_iff] at slotsOk
   obtain ⟨_, -, slotsOk⟩ := slotsOk
-  obtain ⟨votes, frame, -⟩ := voteFrame_processBlock blockOk
-  exact (TargetFlagsSigned.of_advanceSlots positive window early
-    (Nat.lt_of_le_of_lt frame.registryGrows small) holds slotsOk).of_voteFrame small known frame
+  exact (JustifiedSeparated.of_advanceSlots holds early separated slotsOk).of_frame
+    (frame_processBlock blockOk)
 
 end EthLib.Consensus

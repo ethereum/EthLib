@@ -93,7 +93,7 @@ theorem findCounter_map_monad [LawfulMonad m] [LawfulMonad n] (pkSeed : PkSeed) 
       = Internal.findCounter (fun x => φ (H x)) pkSeed key msg c fuel := by
   rw [Internal.findCounter, Internal.findCounter, findFirst_map_monad φ map_pure map_bind]
   refine congrArg (fun test => Wots.findFirst UInt32.ofNat test c fuel) (funext fun k => ?_)
-  rw [encode, encode, map_monad_map φ map_pure map_bind, th_map_monad φ map_pure map_bind]
+  rw [encode, encode, HashSig.map_monad_map φ map_pure map_bind, th_map_monad φ map_pure map_bind]
 
 /-- A one-time signature commutes with the map. -/
 theorem otsSign_map_monad [LawfulMonad m] [LawfulMonad n] (pkSeed : PkSeed) (key : OtsKey)

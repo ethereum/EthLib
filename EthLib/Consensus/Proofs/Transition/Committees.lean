@@ -9,9 +9,11 @@ A beacon committee of an epoch depends only on activity in that epoch and on one
 
 That mix is the one `MIN_SEED_LOOKAHEAD + 1` epochs before.
 
-Before Altair, a block keeps the committees of the previous and the current epoch.
+A step keeps activity up to the current epoch plus `MAX_SEED_LOOKAHEAD`, capped at 2^64 - 1.
 
-A slot keeps those of its current epoch, which the next slot sees as the previous one.
+Before Altair, the steps of a block and of an epoch keep activity and write at most one mix.
+
+Before Altair, the epoch step also moves the pending attestations of the current epoch.
 -/
 
 @[expose] public section
@@ -22,6 +24,11 @@ open Base Uint64
 
 variable {preset : Preset} {fork : Base.Fork} {config : Config} {checks : SignatureChecks}
   {engine : ExecutionEngine preset fork} {state after : BeaconState preset fork}
+
+/-- Before Gloas, the registry holds fewer than 2^64 validators. -/
+theorem BeaconState.validators_size_lt_of_lt_glamsterdam (before : fork < .glamsterdam)
+    (state : BeaconState preset fork) : state.validators.data.size < 2 ^ 64 :=
+  Nat.lt_of_le_of_lt (state.validators.bound before) (UInt64.toNat_lt _)
 
 /-- Two states agree on which positions of the registry are active, in each epoch up to a bound.
 
@@ -44,6 +51,65 @@ theorem ActiveKept.mono {post : Base.Fork} {bound lower : Epoch}
     {other : BeaconState preset post} (kept : ActiveKept bound state other)
     (le : lower ≤ bound) : ActiveKept lower state other :=
   fun epoch below position => kept epoch (UInt64.le_trans below le) position
+
+/-- The fixed epoch of a state: the steps below keep the active validators of each epoch up to it.
+
+It is the current epoch plus `MAX_SEED_LOOKAHEAD`, capped at the largest epoch.
+
+Every activation or exit that a step sets lands after it, and an activation lands just after it.
+
+The committees of an epoch are fixed only up to the current epoch plus `MIN_SEED_LOOKAHEAD`.
+
+That bound comes from the RANDAO mix that their seed reads. -/
+def activityFixedEpoch (state : BeaconState preset fork) : Epoch :=
+  UInt64.ofNat (min ((getCurrentEpoch state).toNat + preset.MAX_SEED_LOOKAHEAD.toNat) (2 ^ 64 - 1))
+
+/-- The fixed epoch of a state, as a natural number. -/
+theorem activityFixedEpoch_toNat {post : Base.Fork} (state : BeaconState preset post) :
+    (activityFixedEpoch state).toNat =
+      min ((getCurrentEpoch state).toNat + preset.MAX_SEED_LOOKAHEAD.toNat) (2 ^ 64 - 1) := by
+  rw [activityFixedEpoch, UInt64.toNat_ofNat', Nat.mod_eq_of_lt (by omega)]
+
+/-- The current epoch is at most the fixed epoch. -/
+theorem getCurrentEpoch_le_activityFixedEpoch (state : BeaconState preset fork) :
+    getCurrentEpoch state ≤ activityFixedEpoch state := by
+  rw [UInt64.le_iff_toNat_le, activityFixedEpoch_toNat]
+  have := (getCurrentEpoch state).toNat_lt
+  omega
+
+/-- A current epoch at least as late gives a fixed epoch at least as late. -/
+theorem activityFixedEpoch_mono {post : Base.Fork} {other : BeaconState preset post}
+    (le : getCurrentEpoch state ≤ getCurrentEpoch other) :
+    activityFixedEpoch state ≤ activityFixedEpoch other := by
+  rw [UInt64.le_iff_toNat_le, activityFixedEpoch_toNat, activityFixedEpoch_toNat]
+  have := UInt64.le_iff_toNat_le.mp le
+  omega
+
+/-- An epoch after the current epoch plus `MAX_SEED_LOOKAHEAD` is after the fixed epoch. -/
+theorem activityFixedEpoch_lt_of_toNat_lt {epoch : Epoch}
+    (later : (getCurrentEpoch state).toNat + preset.MAX_SEED_LOOKAHEAD.toNat < epoch.toNat) :
+    activityFixedEpoch state < epoch := by
+  rw [UInt64.lt_iff_toNat_lt, activityFixedEpoch_toNat]
+  omega
+
+/-- Two states with the same slot have the same fixed epoch. -/
+theorem activityFixedEpoch_eq_of_slot {post : Base.Fork} {other : BeaconState preset post}
+    (slot : other.slot = state.slot) : activityFixedEpoch other = activityFixedEpoch state := by
+  simp only [activityFixedEpoch, getCurrentEpoch, slot]
+
+/-- A step that keeps the slot, and activity in each epoch up to the fixed epoch of its state. -/
+def ActiveStep (state after : BeaconState preset fork) : Prop :=
+  after.slot = state.slot ∧ ActiveKept (activityFixedEpoch state) state after
+
+/-- Every state is a step to itself. -/
+theorem ActiveStep.refl (state : BeaconState preset fork) : ActiveStep state state :=
+  ⟨rfl, ActiveKept.refl _ _⟩
+
+/-- Two steps in a row keep the slot and activity up to the fixed epoch of the first state. -/
+theorem ActiveStep.trans {first second third : BeaconState preset fork}
+    (one : ActiveStep first second) (two : ActiveStep second third) : ActiveStep first third := by
+  have epoch := activityFixedEpoch_eq_of_slot one.1
+  exact ⟨two.1.trans one.1, one.2.trans (epoch ▸ two.2)⟩
 
 /-- Two functions that agree on the elements of a list keep the same of them. -/
 private theorem filterMap_congr_mem {α β : Type} {f g : α → Option β} :
@@ -119,6 +185,37 @@ theorem ActiveKept.getActiveValidatorIndices_eq {post : Base.Fork} {bound epoch 
     getActiveValidatorIndices_eq_range state epoch (Nat.le_max_right other.validators.data.size _)]
   exact filterMap_congr_mem fun index _ => by rw [kept epoch le index]
 
+/-- Every active position of a registry fits in 64 bits, read by position or by activity. -/
+private theorem activePositionsFit_iff {post : Base.Fork} (state : BeaconState preset post)
+    (epoch : Epoch) :
+    (∀ position (inside : position < state.validators.data.size),
+      isActiveValidator state.validators.data[position] epoch = true → position < 2 ^ 64) ↔
+      ∀ position, isActiveAt state epoch position = true → position < 2 ^ 64 := by
+  constructor
+  · intro fits position active
+    obtain ⟨_, found, active⟩ := isActiveAt_eq_true_iff.mp active
+    obtain ⟨inside, rfl⟩ := Array.getElem?_eq_some_iff.mp found
+    exact fits position inside active
+  · intro fits position inside active
+    exact fits position (isActiveAt_eq_true_iff.mpr ⟨_, by simp [inside], active⟩)
+
+/-- Two states with the same activity have the same checked active indices, including errors. -/
+theorem ActiveKept.getActiveValidatorIndicesChecked_eq {post : Base.Fork} {bound epoch : Epoch}
+    {other : BeaconState preset post} (kept : ActiveKept bound state other) (le : epoch ≤ bound) :
+    getActiveValidatorIndicesChecked other epoch =
+      getActiveValidatorIndicesChecked state epoch := by
+  have same : (∀ position, isActiveAt other epoch position = true → position < 2 ^ 64) ↔
+      ∀ position, isActiveAt state epoch position = true → position < 2 ^ 64 := by
+    simp only [kept epoch le]
+  by_cases small : ∀ position, isActiveAt state epoch position = true → position < 2 ^ 64
+  · rw [getActiveValidatorIndicesChecked_eq_ok_iff.mpr ((activePositionsFit_iff _ _).mpr small),
+      getActiveValidatorIndicesChecked_eq_ok_iff.mpr
+        ((activePositionsFit_iff _ _).mpr (same.mpr small)),
+      kept.getActiveValidatorIndices_eq le]
+  · rw [getActiveValidatorIndicesChecked_eq_error (mt (activePositionsFit_iff _ _).mp small),
+      getActiveValidatorIndicesChecked_eq_error
+        (mt (activePositionsFit_iff _ _).mp (mt same.mp small))]
+
 /-- The RANDAO mixes of two states agree, except perhaps at the position of one epoch. -/
 def MixesKeptBut {post : Base.Fork} (written : Epoch) (state : BeaconState preset fork)
     (after : BeaconState preset post) : Prop :=
@@ -142,36 +239,39 @@ theorem CommitteesKept.trans {middle last : Base.Fork} {epoch : Epoch}
     (two : CommitteesKept epoch second third) : CommitteesKept epoch first third :=
   fun slot index inside => (two slot index inside).trans (one slot index inside)
 
-/-- Two states with the same active indices and seed of an epoch have its committees. -/
-private theorem committeesKept_of_seed {post : Base.Fork} {other : BeaconState preset post}
+/-- Two states with the same active indices and attester seed of an epoch agree on its committees.
+-/
+theorem CommitteesKept.of_seed {post : Base.Fork} {other : BeaconState preset post}
     {epoch : Epoch}
     (active : getActiveValidatorIndices other epoch = getActiveValidatorIndices state epoch)
+    (checked : getActiveValidatorIndicesChecked other epoch =
+      getActiveValidatorIndicesChecked state epoch)
     (seed :
       getSeed other epoch DOMAIN_BEACON_ATTESTER = getSeed state epoch DOMAIN_BEACON_ATTESTER) :
     CommitteesKept epoch state other := by
   intro slot index inside
   unfold getBeaconCommittee attesterShuffle getCommitteeCountPerSlot
   subst inside
-  simp only [active, seed]
+  simp only [active, checked, seed]
 
 /-- Two states with the same registry and the same RANDAO mixes have the same committees. -/
 theorem CommitteesKept.of_eq {post : Base.Fork} {other : BeaconState preset post}
     (validators : other.validators.data = state.validators.data)
     (mixes : other.randaoMixes.elements = state.randaoMixes.elements) (epoch : Epoch) :
     CommitteesKept epoch state other :=
-  committeesKept_of_seed (by unfold getActiveValidatorIndices; rw [validators])
+  CommitteesKept.of_seed (by unfold getActiveValidatorIndices; rw [validators])
+    (by unfold getActiveValidatorIndicesChecked; rw [validators])
     (by unfold getSeed getRandaoMix; rw [mixes])
 
-/-- The seed of an epoch reads only the mix of one position, which a nearby write misses.
+/-- The seed of an epoch is the same in two states with the same mix at the position it reads.
 
-The write is at the position of that epoch or of the next one.
-
-There must be more than `MIN_SEED_LOOKAHEAD + 2` epochs of mixes. -/
-private theorem getSeed_eq_of_mixesKeptBut {post : Base.Fork} {other : BeaconState preset post}
-    {epoch written : Epoch}
-    (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
-    (mixes : MixesKeptBut written state other) (low : epoch ≤ written)
-    (high : written.toNat ≤ epoch.toNat + 1) (domainType : DomainType) :
+That position is the epoch plus the length of the ring, less `MIN_SEED_LOOKAHEAD + 1`. -/
+theorem getSeed_eq_of_mix {post : Base.Fork} {other : BeaconState preset post} {epoch : Epoch}
+    (domainType : DomainType)
+    (same : ∀ shifted : Epoch, shifted.toNat + preset.MIN_SEED_LOOKAHEAD.toNat + 1 =
+        epoch.toNat + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat →
+      readCircular other.randaoMixes.elements shifted =
+        readCircular state.randaoMixes.elements shifted) :
     getSeed other epoch domainType = getSeed state epoch domainType := by
   unfold getSeed getRandaoMix
   -- Both seeds read the same position, and the mix there is the same.
@@ -188,14 +288,28 @@ private theorem getSeed_eq_of_mixesKeptBut {post : Base.Fork} {other : BeaconSta
       show readCircular other.randaoMixes.elements shifted >>= finish =
         readCircular state.randaoMixes.elements shifted >>= finish
       rw [same shifted rfl]
-  refine reads _ _ fun shifted computed => mixes shifted fun same => ?_
+  refine reads _ _ fun shifted computed => same shifted ?_
   simp only [liftArith, mapError_ok_iff, bind_ok_iff] at computed
   obtain ⟨sum, sumOk, lower, lowerOk, shiftedOk⟩ := computed
   obtain ⟨-, sumEq⟩ := addChecked_ok_iff.mp sumOk
   obtain ⟨-, lowerEq⟩ := subChecked_ok_iff.mp lowerOk
   obtain ⟨above, shiftedEq⟩ := subChecked_ok_iff.mp shiftedOk
-  have lowLe := UInt64.le_iff_toNat_le.mp low
   simp only [UInt64.reduceToNat] at above shiftedEq
+  omega
+
+/-- The seed of an epoch reads only the mix of one position, which a nearby write misses.
+
+The write is at the position of that epoch or of the next one.
+
+There must be more than `MIN_SEED_LOOKAHEAD + 2` epochs of mixes. -/
+private theorem getSeed_eq_of_mixesKeptBut {post : Base.Fork} {other : BeaconState preset post}
+    {epoch written : Epoch}
+    (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    (mixes : MixesKeptBut written state other) (low : epoch ≤ written)
+    (high : written.toNat ≤ epoch.toNat + 1) (domainType : DomainType) :
+    getSeed other epoch domainType = getSeed state epoch domainType := by
+  refine getSeed_eq_of_mix domainType fun shifted shiftedEq => mixes shifted fun same => ?_
+  have lowLe := UInt64.le_iff_toNat_le.mp low
   -- The seed reads the mix `MIN_SEED_LOOKAHEAD + 1` epochs back, never that of the write.
   have same := congrArg UInt64.toNat same
   rw [UInt64.toNat_mod, UInt64.toNat_mod] at same
@@ -204,9 +318,9 @@ private theorem getSeed_eq_of_mixesKeptBut {post : Base.Fork} {other : BeaconSta
 
 /-- Two states agree on the committees of an epoch, when two facts hold.
 
-They agree on activity in that epoch.
+They agree on activity in each epoch up to that one.
 
-Their RANDAO mixes differ at most at the position of that epoch or of the next one.
+Their RANDAO mixes differ at most at one position, of that epoch or of the next one.
 
 There must be more than `MIN_SEED_LOOKAHEAD + 2` epochs of mixes. -/
 theorem CommitteesKept.of_activeKept {post : Base.Fork} {other : BeaconState preset post}
@@ -215,7 +329,55 @@ theorem CommitteesKept.of_activeKept {post : Base.Fork} {other : BeaconState pre
     (active : ActiveKept epoch state other) (mixes : MixesKeptBut written state other)
     (low : epoch ≤ written) (high : written.toNat ≤ epoch.toNat + 1) :
     CommitteesKept epoch state other :=
-  committeesKept_of_seed (active.getActiveValidatorIndices_eq (UInt64.le_refl _))
+  CommitteesKept.of_seed (active.getActiveValidatorIndices_eq (UInt64.le_refl _))
+    (active.getActiveValidatorIndicesChecked_eq (UInt64.le_refl _))
+    (getSeed_eq_of_mixesKeptBut apart mixes low high _)
+
+/-- Two states agree on the attesters of an attestation, given the same active indices and seed.
+
+Both are those of the epoch of its slot. -/
+private theorem getAttestingIndices_eq_of_seed {other : BeaconState preset fork}
+    {attestation : Attestation preset fork}
+    (active : getActiveValidatorIndices other (computeEpochAtSlot preset attestation.data.slot) =
+      getActiveValidatorIndices state (computeEpochAtSlot preset attestation.data.slot))
+    (checked : getActiveValidatorIndicesChecked other
+        (computeEpochAtSlot preset attestation.data.slot) =
+      getActiveValidatorIndicesChecked state (computeEpochAtSlot preset attestation.data.slot))
+    (seed : getSeed other (computeEpochAtSlot preset attestation.data.slot)
+        DOMAIN_BEACON_ATTESTER =
+      getSeed state (computeEpochAtSlot preset attestation.data.slot) DOMAIN_BEACON_ATTESTER) :
+    getAttestingIndices other attestation = getAttestingIndices state attestation := by
+  unfold getAttestingIndices attesterShuffle getCommitteeCountPerSlot
+  simp only [active, checked, seed]
+
+/-- Two states with the same registry and RANDAO mixes agree on the attesters of an attestation.
+-/
+theorem getAttestingIndices_eq_of_eq {other : BeaconState preset fork}
+    (validators : other.validators.data = state.validators.data)
+    (mixes : other.randaoMixes.elements = state.randaoMixes.elements)
+    (attestation : Attestation preset fork) :
+    getAttestingIndices other attestation = getAttestingIndices state attestation :=
+  getAttestingIndices_eq_of_seed (by unfold getActiveValidatorIndices; rw [validators])
+    (by unfold getActiveValidatorIndicesChecked; rw [validators])
+    (by unfold getSeed getRandaoMix; rw [mixes])
+
+/-- Two states agree on the attesters of an attestation, when two facts hold.
+
+They agree on activity in each epoch up to the epoch of its slot.
+
+Their RANDAO mixes differ at most at one position, of that epoch or of the next one.
+
+There must be more than `MIN_SEED_LOOKAHEAD + 2` epochs of mixes. -/
+theorem getAttestingIndices_eq_of_activeKept {other : BeaconState preset fork}
+    {attestation : Attestation preset fork} {written : Epoch}
+    (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    (active : ActiveKept (computeEpochAtSlot preset attestation.data.slot) state other)
+    (mixes : MixesKeptBut written state other)
+    (low : computeEpochAtSlot preset attestation.data.slot ≤ written)
+    (high : written.toNat ≤ (computeEpochAtSlot preset attestation.data.slot).toNat + 1) :
+    getAttestingIndices other attestation = getAttestingIndices state attestation :=
+  getAttestingIndices_eq_of_seed (active.getActiveValidatorIndices_eq (UInt64.le_refl _))
+    (active.getActiveValidatorIndicesChecked_eq (UInt64.le_refl _))
     (getSeed_eq_of_mixesKeptBut apart mixes low high _)
 
 /-! ## Exits and slashings -/
@@ -227,13 +389,18 @@ theorem ActiveKept.of_validators {post : Base.Fork} {other : BeaconState preset 
   intro epoch _ position
   simp only [isActiveAt, validators]
 
-/-- A write of one validator changes activity only at its position. -/
-private theorem isActiveAt_setValidator {index : ValidatorIndex} {validator : Validator}
-    (set : state.setValidator index validator = .ok after) (epoch : Epoch) (position : Nat) :
+/-- A step that keeps the registry and the slot keeps activity. -/
+theorem ActiveStep.of_validators (validators : after.validators.data = state.validators.data)
+    (slot : after.slot = state.slot) : ActiveStep state after :=
+  ⟨slot, ActiveKept.of_validators validators _⟩
+
+/-- A write at a plain position changes activity only at that position. -/
+private theorem isActiveAt_setValidatorAt {index : Nat} {validator : Validator}
+    (set : state.setValidatorAt index validator = .ok after) (epoch : Epoch) (position : Nat) :
     isActiveAt after epoch position =
-      if position = index.toNat then isActiveValidator validator epoch
+      if position = index then isActiveValidator validator epoch
       else isActiveAt state epoch position := by
-  obtain ⟨inside, rfl⟩ := setValidator_ok set
+  obtain ⟨inside, rfl⟩ := setValidatorAt_ok set
   unfold isActiveAt
   split
   · rename_i same
@@ -242,24 +409,79 @@ private theorem isActiveAt_setValidator {index : ValidatorIndex} {validator : Va
   · rename_i other
     simp [BeaconState.putValidator, Ne.symm other]
 
-/-- A write of a validator with the activity of the old one, up to a bound, keeps activity. -/
-private theorem activeKept_setValidator {bound : Epoch} {index : ValidatorIndex}
-    {validator old : Validator} (found : getValidator state index = .ok old)
+/-- A write at a plain position with the activity of the old validator keeps activity. -/
+private theorem activeKept_setValidatorAt {bound : Epoch} {index : Nat}
+    {validator old : Validator} (found : getValidatorAt state index = .ok old)
     (same : ∀ epoch ≤ bound, isActiveValidator validator epoch = isActiveValidator old epoch)
-    (set : state.setValidator index validator = .ok after) : ActiveKept bound state after := by
+    (set : state.setValidatorAt index validator = .ok after) : ActiveKept bound state after := by
   intro epoch le position
-  rw [isActiveAt_setValidator set]
+  rw [isActiveAt_setValidatorAt set]
   split
   · rename_i here
     subst here
     rw [same epoch le]
-    simp [isActiveAt, getValidator_eq_ok_iff.mp found]
+    simp [isActiveAt, getValidatorAt_eq_ok_iff.mp found]
   · rfl
 
-/-- The exit queue gives an exit epoch after the current epoch, before Electra or from it. -/
+/-- A write at a plain position that keeps validator activity keeps the slot and activity. -/
+theorem activeStep_setValidatorAt {index : Nat} {validator old : Validator}
+    (found : getValidatorAt state index = .ok old)
+    (same : ∀ epoch ≤ activityFixedEpoch state,
+      isActiveValidator validator epoch = isActiveValidator old epoch)
+    (set : state.setValidatorAt index validator = .ok after) : ActiveStep state after := by
+  have active := activeKept_setValidatorAt found same set
+  obtain ⟨_, rfl⟩ := setValidatorAt_ok set
+  exact ⟨rfl, active⟩
+
+/-- A write of a validator with the activity of the old one keeps the slot and activity. -/
+theorem activeStep_setValidator {index : ValidatorIndex} {validator old : Validator}
+    (found : getValidator state index = .ok old)
+    (same : ∀ epoch ≤ activityFixedEpoch state,
+      isActiveValidator validator epoch = isActiveValidator old epoch)
+    (set : state.setValidator index validator = .ok after) : ActiveStep state after :=
+  activeStep_setValidatorAt (by rwa [← getValidator_eq_getValidatorAt]) same
+    (by rwa [← setValidator_eq_setValidatorAt])
+
+/-- A new exit epoch after a bound, from the far future, keeps activity up to the bound.
+
+The activation epoch must stay the same. -/
+theorem isActiveValidator_eq_of_exit {validator old : Validator} {bound epoch : Epoch}
+    (activation : validator.activationEpoch = old.activationEpoch)
+    (far : old.exitEpoch = FAR_FUTURE_EPOCH) (later : bound < validator.exitEpoch)
+    (le : epoch ≤ bound) : isActiveValidator validator epoch = isActiveValidator old epoch := by
+  have le := UInt64.le_iff_toNat_le.mp le
+  have later := UInt64.lt_iff_toNat_lt.mp later
+  have bounded := validator.exitEpoch.toNat_lt
+  have farNat : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
+  simp only [isActiveValidator, activation, far]
+  congr 1
+  simp only [decide_eq_decide, UInt64.lt_iff_toNat_lt, farNat]
+  omega
+
+/-- A new activation epoch after a bound keeps activity up to the bound.
+
+The old activation epoch must be the far future or after the bound. -/
+theorem isActiveValidator_eq_of_activation {validator old : Validator} {bound epoch : Epoch}
+    (pending : old.activationEpoch = FAR_FUTURE_EPOCH ∨ bound < old.activationEpoch)
+    (later : bound < validator.activationEpoch) (le : epoch ≤ bound) :
+    isActiveValidator validator epoch = isActiveValidator old epoch := by
+  have le := UInt64.le_iff_toNat_le.mp le
+  have later := UInt64.lt_iff_toNat_lt.mp later
+  have bounded := validator.activationEpoch.toNat_lt
+  have farNat : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
+  have pending : old.activationEpoch.toNat = 2 ^ 64 - 1 ∨ bound.toNat < old.activationEpoch.toNat :=
+    pending.imp (fun far => by rw [far, farNat]) UInt64.lt_iff_toNat_lt.mp
+  simp only [isActiveValidator, UInt64.le_iff_toNat_le]
+  rw [Bool.eq_iff_iff]
+  simp only [Bool.and_eq_true, decide_eq_true_eq]
+  omega
+
+/-- The exit queue gives an exit epoch after the current epoch plus `MAX_SEED_LOOKAHEAD`.
+
+That holds before Electra and from it. -/
 theorem exitQueue_lt {exitBalance : Gwei} {queued : BeaconState preset fork} {exitEpoch : Epoch}
     (computed : exitQueue config state exitBalance = .ok (queued, exitEpoch)) :
-    (getCurrentEpoch state).toNat < exitEpoch.toNat := by
+    (getCurrentEpoch state).toNat + preset.MAX_SEED_LOOKAHEAD.toNat < exitEpoch.toNat := by
   unfold exitQueue at computed
   split at computed
   · rename_i electra
@@ -295,18 +517,17 @@ private def Untouched (state after : BeaconState preset fork) : Prop :=
     after.previousEpochAttestations = state.previousEpochAttestations ∧
     after.currentEpochAttestations = state.currentEpochAttestations
 
-/-- A step that keeps activity up to the current epoch, the mixes, the attestations and the slot.
--/
+/-- A step that keeps activity up to the fixed epoch, the mixes, the attestations and the slot. -/
 private def Keeps (state after : BeaconState preset fork) : Prop :=
-  Untouched state after ∧ ActiveKept (getCurrentEpoch state) state after ∧ after.slot = state.slot
+  Untouched state after ∧ ActiveKept (activityFixedEpoch state) state after ∧
+    after.slot = state.slot
 
 private theorem Keeps.refl (state : BeaconState preset fork) : Keeps state state :=
   ⟨⟨rfl, rfl, rfl⟩, ActiveKept.refl _ _, rfl⟩
 
 private theorem Keeps.trans {first second third : BeaconState preset fork}
     (one : Keeps first second) (two : Keeps second third) : Keeps first third := by
-  have epoch : getCurrentEpoch second = getCurrentEpoch first := by
-    simp only [getCurrentEpoch, one.2.2]
+  have epoch := activityFixedEpoch_eq_of_slot one.2.2
   exact ⟨⟨two.1.1.trans one.1.1, two.1.2.1.trans one.1.2.1, two.1.2.2.trans one.1.2.2⟩,
     one.2.1.trans (epoch ▸ two.2.1), two.2.2.trans one.2.2⟩
 
@@ -325,6 +546,9 @@ private theorem Keeps.of_eq (validators : after.validators = state.validators)
   ⟨⟨randaoMixes, previous, current⟩,
     ActiveKept.of_validators (congrArg (·.data) validators) _, slot⟩
 
+private theorem Keeps.activeStep (keeps : Keeps state after) : ActiveStep state after :=
+  ⟨keeps.2.2, keeps.2.1⟩
+
 private theorem keeps_setBalance {index : ValidatorIndex} {balance : Gwei}
     (set : state.setBalance index balance = .ok after) : Keeps state after := by
   obtain ⟨_, rfl⟩ := setBalance_ok set
@@ -338,18 +562,26 @@ private theorem keeps_decreaseBalance {index : ValidatorIndex} {delta : Gwei}
     (computed : decreaseBalance state index delta = .ok after) : Keeps state after :=
   keeps_setBalance (decreaseBalance_ok computed).choose_spec
 
+private theorem keeps_setValidatorAt {index : Nat} {validator old : Validator}
+    (found : getValidatorAt state index = .ok old)
+    (same : ∀ epoch ≤ activityFixedEpoch state,
+      isActiveValidator validator epoch = isActiveValidator old epoch)
+    (set : state.setValidatorAt index validator = .ok after) : Keeps state after := by
+  have step := activeStep_setValidatorAt found same set
+  obtain ⟨_, rfl⟩ := setValidatorAt_ok set
+  exact ⟨⟨rfl, rfl, rfl⟩, step.2, rfl⟩
+
 private theorem keeps_setValidator {index : ValidatorIndex} {validator old : Validator}
     (found : getValidator state index = .ok old)
-    (same : ∀ epoch ≤ getCurrentEpoch state,
+    (same : ∀ epoch ≤ activityFixedEpoch state,
       isActiveValidator validator epoch = isActiveValidator old epoch)
-    (set : state.setValidator index validator = .ok after) : Keeps state after := by
-  have active := activeKept_setValidator found same set
-  obtain ⟨_, rfl⟩ := setValidator_ok set
-  exact ⟨⟨rfl, rfl, rfl⟩, active, rfl⟩
+    (set : state.setValidator index validator = .ok after) : Keeps state after :=
+  keeps_setValidatorAt (by rwa [← getValidator_eq_getValidatorAt]) same
+    (by rwa [← setValidator_eq_setValidatorAt])
 
-/-- Starting an exit keeps activity up to the current epoch, at every fork.
+/-- Starting an exit keeps activity up to the fixed epoch, at every fork.
 
-The exit epoch it sets is after the current epoch. -/
+The exit epoch it sets is after that epoch. -/
 private theorem keeps_initiateValidatorExit {index : ValidatorIndex}
     (computed : initiateValidatorExit config state index = .ok after) : Keeps state after := by
   obtain ⟨validator, found, ⟨_, rfl⟩ | ⟨far, queued, exitEpoch, _, queue, _, set⟩⟩ :=
@@ -365,24 +597,10 @@ private theorem keeps_initiateValidatorExit {index : ValidatorIndex}
     exact found
   have epoch : getCurrentEpoch queued = getCurrentEpoch state := by
     simp only [getCurrentEpoch, kept.2.2]
-  refine kept.trans (keeps_setValidator found' (fun epoch' le => ?_) set)
   -- The validator had not started to exit, and its new exit epoch is after the bound.
-  rw [epoch] at le
-  have le := UInt64.le_iff_toNat_le.mp le
-  have bounded := exitEpoch.toNat_lt
-  have farNat : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
-  simp only [isActiveValidator, far]
-  congr 1
-  simp only [decide_eq_decide, UInt64.lt_iff_toNat_lt, farNat]
-  omega
-
-/-- Starting an exit keeps activity up to the current epoch, at every fork.
-
-The exit epoch it sets is after the current epoch. -/
-theorem activeKept_initiateValidatorExit {index : ValidatorIndex}
-    (computed : initiateValidatorExit config state index = .ok after) :
-    ActiveKept (getCurrentEpoch state) state after :=
-  (keeps_initiateValidatorExit computed).2.1
+  refine kept.trans (keeps_setValidator found' (fun _ le => ?_) set)
+  exact isActiveValidator_eq_of_exit rfl far
+    (activityFixedEpoch_lt_of_toNat_lt (by rw [epoch]; exact later)) le
 
 private theorem keeps_slashValidator {slashedIndex : ValidatorIndex}
     {whistleblowerIndex : Option ValidatorIndex}
@@ -401,13 +619,6 @@ private theorem keeps_slashValidator {slashedIndex : ValidatorIndex}
     (keeps_increaseBalance lastOk).trans ?_
   subst done
   split <;> exact Keeps.refl _
-
-/-- Slashing a validator keeps activity up to the current epoch, at every fork. -/
-theorem activeKept_slashValidator {slashedIndex : ValidatorIndex}
-    {whistleblowerIndex : Option ValidatorIndex}
-    (computed : slashValidator config state slashedIndex whistleblowerIndex = .ok after) :
-    ActiveKept (getCurrentEpoch state) state after :=
-  (keeps_slashValidator computed).2.1
 
 /-! ## Blocks and epochs before Altair -/
 
@@ -444,8 +655,8 @@ theorem PendingFrame.trans {first second third : BeaconState preset fork}
 -/
 private theorem PendingFrame.of_keeps (frame : BlockFrame state after)
     (keeps : Keeps state after) : PendingFrame state after :=
-  ⟨frame, keeps.2.1, fun _ _ => by rw [keeps.1.1], fun before => by rw [keeps.1.2.1],
-    fun before => by rw [keeps.1.2.2]⟩
+  ⟨frame, keeps.2.1.mono (getCurrentEpoch_le_activityFixedEpoch _), fun _ _ => by rw [keeps.1.1],
+    fun before => by rw [keeps.1.2.1], fun before => by rw [keeps.1.2.2]⟩
 
 /-! ## The steps of a block before Altair -/
 
@@ -463,17 +674,25 @@ private theorem pendingFrame_processEth1Data {before : fork < .hegota}
   exact PendingFrame.of_keeps frame (Keeps.of_eq (by rw [← rest]) (by rw [← rest])
     (by rw [← rest]) (by rw [← rest]) (by rw [← rest]))
 
-private theorem pendingFrame_processRandao {body : BeaconBlockBody preset fork}
-    (computed : processRandao config checks state body = .ok after) : PendingFrame state after := by
-  have frame := frame_processRandao computed
+/-- The RANDAO step writes only the mix of the current epoch. -/
+theorem mixesKeptBut_processRandao {body : BeaconBlockBody preset fork}
+    (computed : processRandao config checks state body = .ok after) :
+    MixesKeptBut (getCurrentEpoch state) state after := by
   obtain ⟨_, _, _, _, mix, randaoMixes, _, _, _, _, _, _, written, rfl⟩ :=
     processRandao_eq computed
-  refine ⟨frame, ActiveKept.of_validators rfl _, fun other apart => ?_, fun _ => rfl, fun _ => rfl⟩
+  intro other apart
   have plain := writeCircularRooted_elements state.randaoMixes (getCurrentEpoch state)
     (Vector.zipWith (· ^^^ ·) mix
       (Cryptography.Hash.Sha256.hash32 (Base.packBytes body.randaoReveal)))
   rw [written] at plain
   exact readCircular_writeCircular_of_ne plain.symm (Ne.symm apart)
+
+private theorem pendingFrame_processRandao {body : BeaconBlockBody preset fork}
+    (computed : processRandao config checks state body = .ok after) : PendingFrame state after := by
+  have frame := frame_processRandao computed
+  have mixes := mixesKeptBut_processRandao computed
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq computed
+  exact ⟨frame, ActiveKept.of_validators rfl _, mixes, fun _ => rfl, fun _ => rfl⟩
 
 private theorem pendingFrame_processProposerSlashing {slashing : ProposerSlashing}
     (computed : processProposerSlashing config checks state slashing = .ok after) :
@@ -508,31 +727,53 @@ private theorem pendingFrame_processAttesterSlashing {slashing : AttesterSlashin
     (fun _ _ _ before ok => before.trans (pendingFrame_slashIfSlashable ok))
     (show PendingFrame state (state, false).1 from PendingFrame.refl state) folded
 
+/-- A validator from a deposit is active in no epoch. -/
+theorem isActiveValidator_getValidatorFromDeposit {pubkey : Cryptography.Bls.BLSPubkey}
+    {withdrawalCredentials : Bytes32} {amount : Gwei} (epoch : Epoch) :
+    isActiveValidator (getValidatorFromDeposit preset fork pubkey withdrawalCredentials amount)
+      epoch = false := by
+  have farNat : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
+  have bounded := epoch.toNat_lt
+  simp only [getValidatorFromDeposit, isActiveValidator, UInt64.le_iff_toNat_le,
+    UInt64.lt_iff_toNat_lt, farNat, Bool.and_eq_false_iff, decide_eq_false_iff_not]
+  omega
+
+/-- A new validator keeps the slot and activity, at every fork.
+
+Its index is the size of the registry, so it replaces no validator. -/
+theorem activeStep_addValidatorToRegistry {pubkey : Cryptography.Bls.BLSPubkey}
+    {withdrawalCredentials : Bytes32} {amount : Gwei}
+    (computed : addValidatorToRegistry state pubkey withdrawalCredentials amount = .ok after) :
+    ActiveStep state after := by
+  have pushed := addValidatorToRegistry_validators_eq_push computed
+  refine ⟨(frame_addValidatorToRegistry computed).slot, fun epoch _ position => ?_⟩
+  unfold isActiveAt
+  rw [pushed, Array.getElem?_push]
+  split
+  · rename_i last
+    subst last
+    simp [isActiveValidator_getValidatorFromDeposit]
+  · rfl
+
 /-- Before Altair, a new validator is never active, so adding it keeps activity. -/
 private theorem keeps_addValidatorToRegistry (before : fork < .altair)
     {pubkey : Cryptography.Bls.BLSPubkey}
     {withdrawalCredentials : Bytes32} {amount : Gwei}
     (computed : addValidatorToRegistry state pubkey withdrawalCredentials amount = .ok after) :
     Keeps state after := by
+  have step := activeStep_addValidatorToRegistry computed
   have notAltair : ¬Fork.altair ≤ fork := Nat.not_le_of_lt before
   unfold addValidatorToRegistry at computed
   simp only [notAltair, ↓reduceDIte] at computed
   split at computed
   · cases computed
-    refine ⟨⟨rfl, rfl, rfl⟩, fun epoch _ position => ?_, rfl⟩
-    have farNat : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
-    have bounded := epoch.toNat_lt
-    unfold isActiveAt
-    simp only [Serialization.Ssz.RootedForkList.data_push, Array.getElem?_push]
-    split
-    · rename_i last
-      subst last
-      simp [getValidatorFromDeposit, isActiveValidator, UInt64.le_iff_toNat_le,
-        UInt64.lt_iff_toNat_lt, farNat]
-    · rfl
+    exact ⟨⟨rfl, rfl, rfl⟩, step.2, step.1⟩
   · cases computed
 
-private theorem pendingFrame_processDeposit (before : fork < .altair) {deposit : Deposit}
+/-- Before Altair, a deposit is a block frame that keeps the activity and the pending attestations.
+
+It keeps every RANDAO mix but the one of the current epoch. -/
+theorem pendingFrame_processDeposit (before : fork < .altair) {deposit : Deposit}
     {hegota : fork < .hegota}
     (computed : processDeposit config checks hegota state deposit = .ok after) :
     PendingFrame state after := by
@@ -560,7 +801,8 @@ private theorem pendingFrame_processDeposit (before : fork < .altair) {deposit :
       · simp only [pure, Except.pure, Except.ok.injEq] at applied
         subst applied
         exact Keeps.refl _
-    · rw [liftAccessor_ok] at applied
+    · simp only [liftAccessor_ok, bind_ok_iff] at applied
+      obtain ⟨_, _, applied⟩ := applied
       exact keeps_increaseBalance applied
   exact PendingFrame.of_keeps frame (kept.trans parts)
 
@@ -615,17 +857,53 @@ theorem processBlock_pendingSplit (before : fork < .altair) {block : BeaconBlock
     (pendingFrame_processRandao randaoOk).trans <| (pendingFrame_processEth1Data eth1Ok).trans
       attesters, attestedOk, exits⟩
 
-/-- Before Altair, an attestation keeps the registry and the RANDAO mixes. -/
-theorem processAttestation_registry (before : fork < .altair) {parentSlot : Slot}
-    {attestation : Attestation preset fork}
+/-- An attestation keeps the registry and the RANDAO mixes, at every fork. -/
+theorem processAttestation_registry {parentSlot : Slot} {attestation : Attestation preset fork}
     (computed : processAttestation config checks state parentSlot attestation = .ok after) :
     after.validators = state.validators ∧ after.randaoMixes = state.randaoMixes := by
-  obtain ⟨_, -, -, -, -, recorded, -⟩ := processAttestation_records before computed
-  have kept := recordPendingAttestation_ok recorded
-  split at kept <;>
-  · obtain ⟨_, rest⟩ := kept
-    rw [← rest]
-    exact ⟨rfl, rfl⟩
+  by_cases altair : Fork.altair ≤ fork
+  · unfold processAttestation at computed
+    simp only [altair, ↓reduceDIte] at computed
+    unfold processAttestationAltair at computed
+    simp only [bind_ok_iff, liftAccessor_ok] at computed
+    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
+      _, _, raised, raisedOk, final⟩ := computed
+    -- The flags and the proposer reward leave the registry alone, and so does a payment.
+    have last : after.validators = raised.validators ∧ after.randaoMixes = raised.randaoMixes := by
+      split at final
+      · rw [recordPaymentWeight_eq final]
+        exact ⟨rfl, rfl⟩
+      · cases final
+        exact ⟨rfl, rfl⟩
+    obtain ⟨_, set⟩ := increaseBalance_ok raisedOk
+    obtain ⟨_, rfl⟩ := setBalance_ok set
+    rw [last.1, last.2]
+    unfold setEpochParticipation
+    split <;> exact ⟨rfl, rfl⟩
+  · obtain ⟨_, -, -, -, -, recorded, -⟩ :=
+      processAttestation_records (Nat.lt_of_not_le altair) computed
+    have kept := recordPendingAttestation_ok recorded
+    split at kept <;>
+    · obtain ⟨_, rest⟩ := kept
+      rw [← rest]
+      exact ⟨rfl, rfl⟩
+
+/-- An attestation that the step accepts has its slot in the previous or the current epoch.
+
+That holds at every fork. -/
+theorem processAttestation_slotEpoch {parentSlot : Slot} {attestation : Attestation preset fork}
+    (computed : processAttestation config checks state parentSlot attestation = .ok after) :
+    computeEpochAtSlot preset attestation.data.slot = getPreviousEpoch state ∨
+      computeEpochAtSlot preset attestation.data.slot = getCurrentEpoch state := by
+  by_cases altair : Fork.altair ≤ fork
+  · unfold processAttestation at computed
+    simp only [altair, ↓reduceDIte] at computed
+    unfold processAttestationAltair at computed
+    simp only [bind_ok_iff, ensure_ok_iff] at computed
+    obtain ⟨_, recent, _, slotEpoch, -⟩ := computed
+    exact slotEpoch ▸ recent
+  · obtain ⟨recent, slotEpoch, -⟩ := processAttestation_checks (Nat.lt_of_not_le altair) computed
+    exact slotEpoch ▸ recent
 
 /-! ## The steps of an epoch before Altair -/
 
@@ -635,7 +913,7 @@ private theorem keeps_processRewardsAndPenalties
       applyAllDeltas state all = .ok after → Keeps state after := fun computed =>
     Keeps.foldlM (fun _ _ _ ok => by
       simp only [applyDeltas, bind_ok_iff, liftAccessor_ok] at ok
-      obtain ⟨_, raised, lowered⟩ := ok
+      obtain ⟨_, _, _, raised, lowered⟩ := ok
       exact (keeps_increaseBalance raised).trans (keeps_decreaseBalance lowered)) computed
   unfold processRewardsAndPenalties at computed
   split at computed
@@ -663,22 +941,23 @@ private theorem keeps_updateRegistryEntry {index : Nat}
       exact ⟨rfl, rfl⟩
     · simp only [pure, Except.pure, Except.ok.injEq] at queuedOk
       exact queuedOk ▸ ⟨rfl, rfl⟩
-  have set : Keeps state marked := keeps_setValidator found
+  have set : Keeps state marked := keeps_setValidatorAt found
     (fun _ _ => by simp only [isActiveValidator, same.1, same.2]) markedOk
   split at computed
-  · rw [liftAccessor_ok] at computed
-    exact set.trans (keeps_initiateValidatorExit computed)
+  · simp only [bind_ok_iff, liftAccessor_ok] at computed
+    obtain ⟨_, _, exited⟩ := computed
+    exact set.trans (keeps_initiateValidatorExit exited)
   · simp only [pure, Except.pure, Except.ok.injEq] at computed
     exact computed ▸ set
 
-/-- Activating validators that are not yet active keeps activity up to the current epoch.
+/-- Activating validators that are not yet active keeps activity up to the fixed epoch.
 
-Each must have the far-future activation epoch, or one after the current epoch. -/
+Each must have the far-future activation epoch, or one after the fixed epoch. -/
 private theorem keeps_foldlM_activateValidator :
     ∀ {indices : List ValidatorIndex} {state after : BeaconState preset fork},
       (∀ index ∈ indices, ∀ validator, getValidator state index = .ok validator →
         validator.activationEpoch = FAR_FUTURE_EPOCH ∨
-          getCurrentEpoch state < validator.activationEpoch) →
+          activityFixedEpoch state < validator.activationEpoch) →
       indices.foldlM activateValidator state = .ok after → Keeps state after
   | [], state, after, _, computed => by
     simp only [List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at computed
@@ -691,41 +970,26 @@ private theorem keeps_foldlM_activateValidator :
     obtain ⟨validator, found, activation, activationOk, set⟩ := step
     have activationEq := (computeActivationExitEpoch_ok_iff.mp activationOk).2
     have farNat : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
-    -- Neither the old nor the new activation epoch is at or before the current epoch.
-    have first : Keeps state middle := keeps_setValidator found (fun epoch le => by
-      have le := UInt64.le_iff_toNat_le.mp le
-      have bounded := epoch.toNat_lt
-      have exitBounded := validator.exitEpoch.toNat_lt
-      simp only [isActiveValidator]
-      rcases pending index List.mem_cons_self validator found with far | later
-      · simp only [far, UInt64.le_iff_toNat_le, UInt64.lt_iff_toNat_lt, farNat, activationEq]
-        apply Bool.eq_iff_iff.mpr
-        simp only [Bool.and_eq_true, decide_eq_true_eq]
-        omega
-      · have later := UInt64.lt_iff_toNat_lt.mp later
-        simp only [UInt64.le_iff_toNat_le, UInt64.lt_iff_toNat_lt, activationEq]
-        congr 1
-        simp only [decide_eq_decide]
-        omega) set
+    -- Neither the old nor the new activation epoch is at or before the fixed epoch.
+    have first : Keeps state middle := keeps_setValidator found (fun _ le =>
+      isActiveValidator_eq_of_activation (pending index List.mem_cons_self validator found)
+        (activityFixedEpoch_lt_of_toNat_lt (by simp only [activationEq]; omega)) le) set
     refine first.trans (keeps_foldlM_activateValidator (fun other member written ok => ?_)
       computed)
-    have epoch : getCurrentEpoch middle = getCurrentEpoch state := by
-      simp only [getCurrentEpoch, first.2.2]
-    rw [epoch]
+    rw [activityFixedEpoch_eq_of_slot first.2.2]
     by_cases same : other = index
     · subst same
       rw [getValidator_setValidator_self set] at ok
       cases ok
-      refine .inr (UInt64.lt_iff_toNat_lt.mpr ?_)
+      refine .inr (activityFixedEpoch_lt_of_toNat_lt ?_)
       simp only [activationEq]
       omega
     · rw [getValidator_setValidator_of_ne set same] at ok
       exact pending other (List.mem_cons_of_mem index member) written ok
 
-private theorem keeps_processRegistryUpdates (before : fork < .altair)
+private theorem keeps_processRegistryUpdates (before : fork < .pectra)
     (computed : processRegistryUpdates config state = .ok after) : Keeps state after := by
-  have notElectra : ¬Fork.pectra ≤ fork :=
-    Nat.not_le_of_lt (Nat.lt_trans before (by decide : Fork.altair < Fork.pectra))
+  have notElectra : ¬Fork.pectra ≤ fork := Nat.not_le_of_lt before
   unfold processRegistryUpdates at computed
   simp only [notElectra, ↓reduceIte, bind_ok_iff] at computed
   obtain ⟨updated, updatedOk, activated⟩ := computed
@@ -754,7 +1018,7 @@ private theorem keeps_processSlashings (computed : processSlashings state = .ok 
       obtain ⟨_, _, ok⟩ := ok
       split at ok
       · simp only [bind_ok_iff, liftAccessor_ok] at ok
-        obtain ⟨_, _, lowered⟩ := ok
+        obtain ⟨_, _, _, _, lowered⟩ := ok
         exact keeps_decreaseBalance lowered
       · simp only [pure, Except.pure, Except.ok.injEq] at ok
         exact ok ▸ Keeps.refl _
@@ -768,7 +1032,7 @@ private theorem keeps_processSlashings (computed : processSlashings state = .ok 
       obtain ⟨_, _, ok⟩ := ok
       split at ok
       · simp only [bind_ok_iff, liftAccessor_ok] at ok
-        obtain ⟨_, _, _, _, lowered⟩ := ok
+        obtain ⟨_, _, _, _, _, _, lowered⟩ := ok
         exact keeps_decreaseBalance lowered
       · simp only [pure, Except.pure, Except.ok.injEq] at ok
         exact ok ▸ Keeps.refl _
@@ -792,7 +1056,7 @@ private theorem keeps_processEffectiveBalanceUpdates
   refine Keeps.foldlM (fun _ _ _ ok => ?_) computed
   simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at ok
   obtain ⟨validator, found, _, _, effectiveBalance, _, set⟩ := ok
-  exact keeps_setValidator (validator := { validator with effectiveBalance }) found
+  exact keeps_setValidatorAt (validator := { validator with effectiveBalance }) found
     (fun _ _ => rfl) set
 
 private theorem keeps_processSlashingsReset (computed : processSlashingsReset state = .ok after) :
@@ -822,10 +1086,117 @@ private theorem keeps_processJustificationAndFinalization
     exact Keeps.of_eq (by rw [← rest]) (by rw [← rest]) (by rw [← rest]) (by rw [← rest])
       (by rw [← rest])
 
+/-! ## Steps that keep the RANDAO mixes and the slot, at every fork -/
+
+/-- Justification and finalization keep the RANDAO mixes and the slot. -/
+theorem randaoMixes_slot_processJustificationAndFinalization
+    (computed : processJustificationAndFinalization state = .ok after) :
+    after.randaoMixes = state.randaoMixes ∧ after.slot = state.slot :=
+  have keeps := keeps_processJustificationAndFinalization computed
+  ⟨keeps.1.1, keeps.2.2⟩
+
+/-- The rewards and penalties of an epoch keep the RANDAO mixes and the slot. -/
+theorem randaoMixes_slot_processRewardsAndPenalties
+    (computed : processRewardsAndPenalties config state = .ok after) :
+    after.randaoMixes = state.randaoMixes ∧ after.slot = state.slot :=
+  have keeps := keeps_processRewardsAndPenalties computed
+  ⟨keeps.1.1, keeps.2.2⟩
+
+/-- The slashing penalties of an epoch keep the RANDAO mixes and the slot. -/
+theorem randaoMixes_slot_processSlashings (computed : processSlashings state = .ok after) :
+    after.randaoMixes = state.randaoMixes ∧ after.slot = state.slot :=
+  have keeps := keeps_processSlashings computed
+  ⟨keeps.1.1, keeps.2.2⟩
+
+/-- The reset of the deposit votes keeps the RANDAO mixes and the slot. -/
+theorem randaoMixes_slot_processEth1DataReset {hegota : fork < .hegota}
+    (computed : processEth1DataReset hegota state = .ok after) :
+    after.randaoMixes = state.randaoMixes ∧ after.slot = state.slot :=
+  have keeps := keeps_processEth1DataReset computed
+  ⟨keeps.1.1, keeps.2.2⟩
+
+/-- The updates of the effective balances keep the RANDAO mixes and the slot. -/
+theorem randaoMixes_slot_processEffectiveBalanceUpdates
+    (computed : processEffectiveBalanceUpdates state = .ok after) :
+    after.randaoMixes = state.randaoMixes ∧ after.slot = state.slot :=
+  have keeps := keeps_processEffectiveBalanceUpdates computed
+  ⟨keeps.1.1, keeps.2.2⟩
+
+/-- The update of the historical roots keeps the RANDAO mixes and the slot. -/
+theorem randaoMixes_slot_processHistoricalRootsUpdate
+    (computed : processHistoricalRootsUpdate state = .ok after) :
+    after.randaoMixes = state.randaoMixes ∧ after.slot = state.slot :=
+  have keeps := keeps_processHistoricalRootsUpdate computed
+  ⟨keeps.1.1, keeps.2.2⟩
+
+/-! ## Steps that keep the slot and activity, at every fork -/
+
+/-- A balance increase keeps the slot and activity. -/
+theorem activeStep_increaseBalance {index : ValidatorIndex} {delta : Gwei}
+    (computed : increaseBalance state index delta = .ok after) : ActiveStep state after :=
+  (keeps_increaseBalance computed).activeStep
+
+/-- A balance decrease keeps the slot and activity. -/
+theorem activeStep_decreaseBalance {index : ValidatorIndex} {delta : Gwei}
+    (computed : decreaseBalance state index delta = .ok after) : ActiveStep state after :=
+  (keeps_decreaseBalance computed).activeStep
+
+/-- Starting an exit keeps the slot and activity up to the fixed epoch, at every fork. -/
+theorem activeStep_initiateValidatorExit {index : ValidatorIndex}
+    (computed : initiateValidatorExit config state index = .ok after) : ActiveStep state after :=
+  (keeps_initiateValidatorExit computed).activeStep
+
+/-- Slashing a validator keeps the slot and activity up to the fixed epoch, at every fork. -/
+theorem activeStep_slashValidator {slashedIndex : ValidatorIndex}
+    {whistleblowerIndex : Option ValidatorIndex}
+    (computed : slashValidator config state slashedIndex whistleblowerIndex = .ok after) :
+    ActiveStep state after :=
+  (keeps_slashValidator computed).activeStep
+
+/-- Justification and finalization keep the slot and activity. -/
+theorem activeStep_processJustificationAndFinalization
+    (computed : processJustificationAndFinalization state = .ok after) : ActiveStep state after :=
+  (keeps_processJustificationAndFinalization computed).activeStep
+
+/-- The rewards and penalties of an epoch keep the slot and activity. -/
+theorem activeStep_processRewardsAndPenalties
+    (computed : processRewardsAndPenalties config state = .ok after) : ActiveStep state after :=
+  (keeps_processRewardsAndPenalties computed).activeStep
+
+/-- Before Electra, the registry updates keep the slot and activity up to the fixed epoch. -/
+theorem activeStep_processRegistryUpdates (before : fork < .pectra)
+    (computed : processRegistryUpdates config state = .ok after) : ActiveStep state after :=
+  (keeps_processRegistryUpdates before computed).activeStep
+
+/-- The slashing penalties of an epoch keep the slot and activity. -/
+theorem activeStep_processSlashings (computed : processSlashings state = .ok after) :
+    ActiveStep state after :=
+  (keeps_processSlashings computed).activeStep
+
+/-- The reset of the eth1 data votes keeps the slot and activity. -/
+theorem activeStep_processEth1DataReset {hegota : fork < .hegota}
+    (computed : processEth1DataReset hegota state = .ok after) : ActiveStep state after :=
+  (keeps_processEth1DataReset computed).activeStep
+
+/-- The effective balance updates keep the slot and activity. -/
+theorem activeStep_processEffectiveBalanceUpdates
+    (computed : processEffectiveBalanceUpdates state = .ok after) : ActiveStep state after :=
+  (keeps_processEffectiveBalanceUpdates computed).activeStep
+
+/-- The reset of the slashings of the next epoch keeps the slot and activity. -/
+theorem activeStep_processSlashingsReset (computed : processSlashingsReset state = .ok after) :
+    ActiveStep state after :=
+  (keeps_processSlashingsReset computed).activeStep
+
+/-- The historical roots update keeps the slot and activity. -/
+theorem activeStep_processHistoricalRootsUpdate
+    (computed : processHistoricalRootsUpdate state = .ok after) : ActiveStep state after :=
+  (keeps_processHistoricalRootsUpdate computed).activeStep
+
 /-- Before Altair, what the epoch step keeps, writes and rotates. -/
 private theorem processEpoch_kept (before : fork < .altair)
     (computed : processEpoch config checks state = .ok after) :
-    ActiveKept (getCurrentEpoch state) state after ∧
+    ActiveKept (activityFixedEpoch state) state after ∧
       (∃ next : Epoch, next.toNat = (getCurrentEpoch state).toNat + 1 ∧
         MixesKeptBut next state after) ∧
       after.previousEpochAttestations before = state.currentEpochAttestations before ∧
@@ -838,7 +1209,7 @@ private theorem processEpoch_kept (before : fork < .altair)
   have head : Keeps state cleared :=
     (keeps_processJustificationAndFinalization justifiedOk).trans <|
     (keeps_processRewardsAndPenalties rewardedOk).trans <|
-    (keeps_processRegistryUpdates before registeredOk).trans <|
+    (keeps_processRegistryUpdates (Nat.lt_trans before (by decide)) registeredOk).trans <|
     (keeps_processSlashings slashedOk).trans <|
     (keeps_processEth1DataReset resetOk).trans <|
     (keeps_processEffectiveBalanceUpdates balancedOk).trans <|
@@ -847,10 +1218,9 @@ private theorem processEpoch_kept (before : fork < .altair)
     simp only [getCurrentEpoch, head.2.2]
   obtain ⟨next, mix, randaoMixes, nextEq, -, written, rfl⟩ := processRandaoMixesReset_eq mixedOk
   have tail := keeps_processHistoricalRootsUpdate rootedOk
-  have tailActive : ActiveKept (getCurrentEpoch state) { cleared with randaoMixes } rooted := by
+  have tailActive : ActiveKept (activityFixedEpoch state) { cleared with randaoMixes } rooted := by
     have active := tail.2.1
-    rwa [show getCurrentEpoch { cleared with randaoMixes } = getCurrentEpoch state from epoch]
-      at active
+    rwa [activityFixedEpoch_eq_of_slot (other := { cleared with randaoMixes }) head.2.2] at active
   obtain ⟨rotated', rotatedOk, previous, current, rest⟩ :=
     processParticipationRecordUpdates_eq (state := rooted) before
   obtain rfl := Except.ok.inj (rotated.symm.trans rotatedOk)
@@ -867,16 +1237,16 @@ private theorem processEpoch_kept (before : fork < .altair)
   · rw [previous, tail.1.2.2]
     exact congrFun head.1.2.2 before
 
-/-- Before Altair, the epoch step keeps activity up to the current epoch.
+/-- Before Altair, the epoch step keeps activity up to the current epoch plus `MAX_SEED_LOOKAHEAD`.
 
-Each activation and exit epoch that it writes is after the current epoch. -/
-theorem processEpoch_activeKept (before : fork < .altair)
+Each activation and exit epoch that it writes is after that epoch. -/
+theorem activeKept_processEpoch_of_lt_altair (before : fork < .altair)
     (computed : processEpoch config checks state = .ok after) :
-    ActiveKept (getCurrentEpoch state) state after :=
+    ActiveKept (activityFixedEpoch state) state after :=
   (processEpoch_kept before computed).1
 
 /-- Before Altair, the epoch step writes at most the RANDAO mix of the next epoch. -/
-theorem processEpoch_mixesKeptBut (before : fork < .altair)
+theorem mixesKeptBut_processEpoch_of_lt_altair (before : fork < .altair)
     (computed : processEpoch config checks state = .ok after) :
     ∃ next : Epoch, next.toNat = (getCurrentEpoch state).toNat + 1 ∧
       MixesKeptBut next state after :=
@@ -890,84 +1260,5 @@ theorem processEpoch_pendingRotation (before : fork < .altair)
     after.previousEpochAttestations before = state.currentEpochAttestations before ∧
       (after.currentEpochAttestations before).data = #[] :=
   (processEpoch_kept before computed).2.2
-
-/-- Before Altair, a block keeps the committees of the previous and of the current epoch.
-
-There must be more than `MIN_SEED_LOOKAHEAD + 2` epochs of mixes. -/
-theorem committeesKept_processBlock (before : fork < .altair)
-    (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
-    {block : BeaconBlock preset fork}
-    (computed : processBlock config checks engine state block = .ok after) (current : Bool) :
-    CommitteesKept (if current then getCurrentEpoch state else getPreviousEpoch state) state
-      after := by
-  obtain ⟨first, last, head, attested, tail⟩ := processBlock_pendingSplit before computed
-  have middle : last.validators = first.validators ∧ last.randaoMixes = first.randaoMixes :=
-    foldlM_ok_invariant
-      (fun next : BeaconState preset fork =>
-        next.validators = first.validators ∧ next.randaoMixes = first.randaoMixes)
-      (fun _ _ _ holds ok => ⟨(processAttestation_registry before ok).1.trans holds.1,
-        (processAttestation_registry before ok).2.trans holds.2⟩) ⟨rfl, rfl⟩ attested
-  have slots : last.slot = state.slot :=
-    (Frame.foldlM (fun _ _ _ ok => frame_processAttestation ok) attested).slot.trans head.slot
-  have epochLast : getCurrentEpoch last = getCurrentEpoch state := by
-    simp only [getCurrentEpoch, slots]
-  -- The epoch is the current one or the one before, so neither write reaches its seed.
-  have previous := getPreviousEpoch_toNat state
-  have low : (if current then getCurrentEpoch state else getPreviousEpoch state) ≤
-      getCurrentEpoch state := by
-    cases current
-    · exact getPreviousEpoch_le state
-    · exact UInt64.le_refl _
-  have high : (getCurrentEpoch state).toNat ≤
-      (if current then getCurrentEpoch state else getPreviousEpoch state).toNat + 1 := by
-    cases current <;> simp only [Bool.false_eq_true, ↓reduceIte] <;> omega
-  refine (CommitteesKept.of_activeKept apart (head.active.mono low) head.mixes low high).trans <|
-    (CommitteesKept.of_eq (congrArg (·.data) middle.1) (congrArg (·.elements) middle.2) _).trans ?_
-  exact CommitteesKept.of_activeKept apart (tail.active.mono (epochLast ▸ low))
-    (epochLast ▸ tail.mixes) low high
-
-/-- Before Altair, one slot keeps the committees of each epoch that both states see as recent.
-
-Such an epoch is at most the current epoch before the slot.
-
-It is at least the previous epoch after it.
-
-There must be more than `MIN_SEED_LOOKAHEAD + 2` epochs of mixes. -/
-theorem committeesKept_advanceSlot (before : fork < .altair)
-    (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
-    (computed : advanceSlot config checks state = .ok after) {epoch : Epoch}
-    (low : getPreviousEpoch after ≤ epoch) (high : epoch ≤ getCurrentEpoch state) :
-    CommitteesKept epoch state after := by
-  obtain ⟨next, cached, epoched, sum, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok computed
-  obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
-  have cachedSlot : cached.slot = state.slot := by rw [cachedEq]
-  have cachedEpoch : getCurrentEpoch cached = getCurrentEpoch state := by
-    simp only [getCurrentEpoch, cachedSlot]
-  -- The slot step writes neither the registry nor the mixes.
-  refine (CommitteesKept.of_eq (other := cached) (by rw [cachedEq]) (by rw [cachedEq])
-    epoch).trans ?_
-  unfold epochIfLast at epochedOk
-  split at epochedOk
-  · rename_i boundary
-    have epochs := nextSlot_epoch_of_boundary sum boundary
-    have afterEpoch := getCurrentEpoch_toNat { epoched with slot := next }
-    have stateEpoch := getCurrentEpoch_toNat state
-    have previousEq := getPreviousEpoch_toNat { epoched with slot := next }
-    dsimp only at afterEpoch
-    have lowNat := UInt64.le_iff_toNat_le.mp low
-    have highNat := UInt64.le_iff_toNat_le.mp high
-    obtain ⟨active, ⟨written, writtenEq, mixes⟩, -, -⟩ := processEpoch_kept before epochedOk
-    rw [cachedEpoch] at active writtenEq
-    rw [previousEq, afterEpoch] at lowNat
-    have nextNat : next.toNat / preset.SLOTS_PER_EPOCH.toNat =
-        state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat + 1 := by
-      exact epochs
-    refine (CommitteesKept.of_activeKept apart (active.mono high) mixes ?_ ?_).trans
-      (CommitteesKept.of_eq rfl rfl epoch)
-    · exact UInt64.le_iff_toNat_le.mpr (by omega)
-    · omega
-  · simp only [pure, Except.pure, Except.ok.injEq] at epochedOk
-    subst epochedOk
-    exact CommitteesKept.of_eq rfl rfl epoch
 
 end EthLib.Consensus

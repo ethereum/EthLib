@@ -2,8 +2,8 @@ module
 
 public import EthLib.Cryptography.Kzg.Core
 public import EthLib.Cryptography.Proofs.Bls.KeyValidate
--- The kernel decodes one fixed encoding, which runs a range loop.
-import all Init.Data.Range.Basic
+-- The kernel reduces the check of the zero tail, which needs the body of the bounded `all`.
+import all Init.Data.Nat.Fold
 -- It then compares two `Except` values, so it needs the body of that instance.
 import all Batteries.Data.Except
 
@@ -26,11 +26,11 @@ open EthLib.Cryptography.Kzg.Constants
 theorem uncompress_G1_POINT_AT_INFINITY :
     G1.uncompress ⟨G1_POINT_AT_INFINITY.toArray⟩ = .ok G1.zero := by
   have hsz : (⟨G1_POINT_AT_INFINITY.toArray⟩ : ByteArray).size = 48 := by decide
-  have hhead : (⟨G1_POINT_AT_INFINITY.toArray⟩ : ByteArray).get! 0 = 0xc0 := by decide
-  have htail : Bls.tailAllZero ⟨G1_POINT_AT_INFINITY.toArray⟩ 1 = true := by decide +kernel
   rw [G1.uncompress, ite_eq_right (by rw [hsz]; decide)]
   -- Select the branch by the flags, so the kernel does not reduce the decoding of a coordinate.
-  simp (config := { decide := true }) only [hhead, htail]
+  --
+  -- `decide` reads the head byte and the zero tail of the literal encoding.
+  simp (config := { decide := true }) only
 
 /-- KZG validation accepts exactly the decodable points of order dividing `r`. -/
 theorem validateKzgG1Point_eq_ok_iff {b : Bytes48} {P : G1} :

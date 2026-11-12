@@ -14,6 +14,8 @@ A setup is valid when each of its points is a point of its curve.
 
 Every setup that the decoder returns is valid.
 
+Each decoded byte string and each decoded `G2` point comes from the encoding at its position.
+
 Validity says nothing about the subgroup, which the decoder does not check.
 -/
 
@@ -24,7 +26,7 @@ namespace EthLib.Cryptography.Kzg
 open EthLib.Cryptography.Bls (G1 G2)
 open EthLib.Cryptography.Kzg.Constants
 open EthLib.Cryptography.Kzg.BitReversal
-open EthLib.Base (array_mapM_ok_mem)
+open EthLib.Base (array_mapM_ok array_mapM_ok_mem)
 
 /-- Each point of the setup is a point of its curve. -/
 structure TrustedSetup.Valid (s : TrustedSetup) : Prop where
@@ -142,6 +144,55 @@ theorem TrustedSetup.ofBytes_g1Monomial_mem
         cases hu : Bls.G1.uncompress b with
         | error e => rw [hu] at hb; cases hb
         | ok q => rw [hu] at hb; cases hb; rfl
+      · cases h
+    · cases h
+  · cases h
+
+/-- Each string of a decoded list gives the byte string at its position. -/
+theorem TrustedSetup.hexListToBytes_getElem {hex : Array String} {bytes : Array ByteArray}
+    (h : TrustedSetup.hexListToBytes hex = .ok bytes) :
+    bytes.size = hex.size ∧
+      ∀ (i : Nat) (hi : i < hex.size), TrustedSetup.hexToBytes? hex[i] = some bytes[i]! := by
+  obtain ⟨hsize, hget⟩ := array_mapM_ok h
+  refine ⟨hsize, fun i hi => ?_⟩
+  have hj : i < bytes.size := hsize ▸ hi
+  have he := hget i hi hj
+  rw [getElem!_pos bytes i hj]
+  split at he
+  · rename_i b hb
+    rw [hb, Except.ok.inj he]
+  · cases he
+
+/-- Each `G2` point of a decoded setup is the decompression of the encoding at its position. -/
+theorem TrustedSetup.ofBytes_g2Monomial
+    {g1LagrangeBytes g1MonomialBytes g2MonomialBytes : Array ByteArray} {s : TrustedSetup}
+    (h : TrustedSetup.ofBytes g1LagrangeBytes g1MonomialBytes g2MonomialBytes = .ok s)
+    (i : Nat) (hi : i < KZG_SETUP_G2_LENGTH) :
+    ∃ hb : i < g2MonomialBytes.size,
+      G2.uncompress g2MonomialBytes[i] = .ok (s.g2Monomial[i]'hi) := by
+  unfold TrustedSetup.ofBytes at h
+  simp only [bind, Except.bind] at h
+  split at h
+  · cases h
+  split at h
+  · cases h
+  split at h
+  · cases h
+  rename_i monomial2 h₃
+  split at h
+  · split at h
+    · split at h
+      · rename_i hsz
+        cases h
+        obtain ⟨hcsz, hc⟩ := array_mapM_ok h₃
+        have hm : i < monomial2.size := by rw [hsz]; exact hi
+        have hb : i < g2MonomialBytes.size := by rw [← hcsz]; exact hm
+        refine ⟨hb, ?_⟩
+        -- The decoder wraps each error, so a decoded point is the decompression itself.
+        have hd := hc i hb hm
+        cases hu : G2.uncompress g2MonomialBytes[i] with
+        | error e => simp [hu, Except.mapError] at hd
+        | ok q => simp [hu, Except.mapError] at hd; simp [hd]
       · cases h
     · cases h
   · cases h

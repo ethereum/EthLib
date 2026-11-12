@@ -734,7 +734,7 @@ def consensus_read_slashing_interchange(text: bytes) -> bytes:
     ...
 
 def consensus_import_slashing_interchange(held: bytes, file: bytes) -> bytes:
-    """The record of a signer that keeps every message, after it imports a file, as JSON text."""
+    """The record after importing a file with the minimal strategy of EIP-3076, as JSON text."""
     ...
 
 def consensus_check_block_signing(interchange: bytes, pubkey: bytes, slot: int, signing_root: bytes) -> bool:

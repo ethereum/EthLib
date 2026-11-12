@@ -162,11 +162,17 @@ theorem processAttestation_checks {attestation : Attestation preset fork}
   unfold processAttestation at computed
   split at computed
   · exact absurd ‹_› (Nat.not_le_of_lt before)
+  have countOk := getCommitteeCountPerSlotChecked_of_within
+    (state.validators.bound (Nat.lt_trans before (by decide))) attestation.data.target.epoch
+  dsimp only at computed
+  rw [countOk] at computed
   simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
-    addChecked_ok_iff] at computed
+    addChecked_ok_iff, Except.ok.injEq] at computed
   obtain ⟨_, recent, _, slotEpoch, earliest, ⟨_, earliestSum⟩, _, early, latest,
-    ⟨_, latestSum⟩, _, late, _, index, committee, found, _, bits, _, _, _, source, _⟩ :=
+    ⟨_, latestSum⟩, _, late, count, countEq, _, index, committee, found, _, bits,
+    _, _, _, source, _⟩ :=
     computed
+  subst count
   refine ⟨recent, slotEpoch, ?_, ?_, index, ⟨committee, found, bits⟩, ?_⟩
   · rw [← earliestSum]
     exact UInt64.le_iff_toNat_le.mp early
@@ -194,9 +200,13 @@ theorem processAttestation_records {attestation : Attestation preset fork}
   unfold processAttestation at computed
   split at computed
   · exact absurd ‹_› (Nat.not_le_of_lt before)
+  have countOk := getCommitteeCountPerSlotChecked_of_within
+    (state.validators.bound (Nat.lt_trans before (by decide))) attestation.data.target.epoch
+  dsimp only at computed
+  rw [countOk] at computed
   simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok, pure, Except.pure,
     Except.ok.injEq] at computed
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, proposer, proposerOk, _, _,
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, proposer, proposerOk, _, _,
     updated, recorded, indexed, indexedOk, valid, validOk, _, validTrue, rfl⟩ := computed
   subst validTrue
   exact ⟨_, rfl, rfl, rfl, proposerOk, recorded, indexed, indexedOk, validOk⟩
@@ -244,6 +254,8 @@ theorem attestationCommitteesSize_of_attesterShuffle {data : AttestationData}
     {active : Array ValidatorIndex} {shuffled : Array UInt64}
     (shuffleOk :
       attesterShuffle state (computeEpochAtSlot preset data.slot) = .ok (active, shuffled))
+    (countOk : getCommitteeCountPerSlotChecked state data.target.epoch =
+      .ok (getCommitteeCountPerSlot state data.target.epoch))
     (bits : Array Bool) (committees : List CommitteeIndex) (offset : Nat) :
     attestationCommitteesSize state data bits committees offset =
       attestationCommitteesSizeOf preset data.slot bits
@@ -253,7 +265,8 @@ theorem attestationCommitteesSize_of_attesterShuffle {data : AttestationData}
   cases committees with
   | nil => rfl
   | cons index rest =>
-    simp only [attestationCommitteesSize, attestationCommitteesSizeOf, shuffleOk, liftAccessor,
+    simp only [attestationCommitteesSize, attestationCommitteesSizeOf, countOk, shuffleOk,
+      liftAccessor,
       Except.mapError, bind, Except.bind]
     -- The left side checks the first index twice, and a check that passed passes again.
     cases ensure (index < getCommitteeCountPerSlot state data.target.epoch)
@@ -273,22 +286,100 @@ The two sides fail with the same error too. -/
 theorem attestationCommitteesSize_cons (data : AttestationData) (bits : Array Bool)
     (index : CommitteeIndex) (rest : List CommitteeIndex) (offset : Nat) :
     attestationCommitteesSize state data bits (index :: rest) offset = (do
-      let count := getCommitteeCountPerSlot state data.target.epoch
+      let count ← liftAccessor (getCommitteeCountPerSlotChecked state data.target.epoch)
       ensure (index < count) (.committeeIndexOutOfRange index count)
       let committee ← liftAccessor (getBeaconCommittee state data.slot index)
       let attesters ← liftAccessor (committeeAttesters bits offset committee)
       ensure (attesters ≠ []) (.noCommitteeAttester index)
       attestationCommitteesSize state data bits rest (offset + committee.size)) := by
-  rw [getBeaconCommittee_eq]
-  -- A committee reads the shuffle after its index is checked, so both sides fail in one order.
-  cases shuffleOk : attesterShuffle state (computeEpochAtSlot preset data.slot) with
-  | error e =>
-    simp only [attestationCommitteesSize, shuffleOk, liftAccessor, Except.mapError, bind,
-      Except.bind]
-  | ok pair =>
-    obtain ⟨active, shuffled⟩ := pair
-    simp only [attestationCommitteesSize_of_attesterShuffle shuffleOk,
-      attestationCommitteesSizeOf, liftAccessor, Except.mapError, bind, Except.bind]
+  cases countOk : getCommitteeCountPerSlotChecked state data.target.epoch with
+  | error error =>
+    simp [attestationCommitteesSize, countOk, liftAccessor, Except.mapError, bind, Except.bind]
+  | ok count =>
+    have same := getCommitteeCountPerSlotChecked_ok countOk
+    subst count
+    rw [getBeaconCommittee_eq]
+    -- A committee reads the shuffle after its index is checked, so both sides fail in one order.
+    cases shuffleOk : attesterShuffle state (computeEpochAtSlot preset data.slot) with
+    | error e =>
+      simp only [attestationCommitteesSize, countOk, shuffleOk, liftAccessor, Except.mapError, bind,
+        Except.bind]
+    | ok pair =>
+      obtain ⟨active, shuffled⟩ := pair
+      simp only [attestationCommitteesSize_of_attesterShuffle shuffleOk countOk,
+        attestationCommitteesSizeOf, liftAccessor, Except.mapError, bind, Except.bind]
+
+/-- Each committee that a checked attestation names has an index below the count.
+
+The count is that of the committees in each slot of the target epoch. -/
+theorem lt_getCommitteeCountPerSlot_of_checkAttestationCommittees
+    {attestation : Attestation preset fork} {index : CommitteeIndex}
+    (checked : checkAttestationCommittees state attestation = .ok ())
+    (named : if electra : .pectra ≤ fork then
+        index ∈ getCommitteeIndices (attestation.committeeBits electra)
+      else index = attestation.data.index) :
+    index < getCommitteeCountPerSlot state attestation.data.target.epoch := by
+  -- Each committee of the walk has its index checked against the count.
+  have walk : ∀ {committees : List CommitteeIndex} {offset size : Nat},
+      attestationCommitteesSize state attestation.data attestation.aggregationBits.bits
+        committees offset = .ok size →
+      index ∈ committees →
+        index < getCommitteeCountPerSlot state attestation.data.target.epoch := by
+    intro committees
+    induction committees with
+    | nil =>
+      intro _ _ _ mem
+      simp at mem
+    | cons first rest ih =>
+      intro offset size sized mem
+      rw [attestationCommitteesSize_cons] at sized
+      obtain ⟨count, countOk, sized⟩ := bind_ok_iff.mp sized
+      rw [getCommitteeCountPerSlotChecked_ok (liftAccessor_ok.mp countOk)] at sized
+      obtain ⟨below, sized⟩ := bind_unit_ok_iff.mp sized
+      obtain ⟨committee, -, sized⟩ := bind_ok_iff.mp sized
+      obtain ⟨attesters, -, sized⟩ := bind_ok_iff.mp sized
+      obtain ⟨-, sized⟩ := bind_unit_ok_iff.mp sized
+      rcases List.mem_cons.mp mem with rfl | later
+      · exact ensure_ok_iff.mp below
+      · exact ih sized later
+  by_cases electra : .pectra ≤ fork
+  · simp only [electra, ↓reduceDIte] at named
+    simp only [checkAttestationCommittees, electra, ↓reduceDIte] at checked
+    obtain ⟨size, sizeOk⟩ : ∃ size, attestationCommitteesSize state attestation.data
+        attestation.aggregationBits.bits
+        (getCommitteeIndices (attestation.committeeBits electra)) 0 = .ok size := by
+      split at checked <;>
+      · obtain ⟨size, sizeOk, -⟩ := bind_ok_iff.mp (bind_unit_ok_iff.mp checked).2
+        exact ⟨size, sizeOk⟩
+    exact walk sizeOk named
+  · simp only [electra, ↓reduceDIte] at named
+    subst named
+    simp only [checkAttestationCommittees, electra, ↓reduceDIte] at checked
+    obtain ⟨count, countOk, checked⟩ := bind_ok_iff.mp checked
+    rw [getCommitteeCountPerSlotChecked_ok (liftAccessor_ok.mp countOk)] at checked
+    exact ensure_ok_iff.mp (bind_unit_ok_iff.mp checked).1
+
+/-- An attester of an attestation that passes the committee check sits in one of its committees.
+
+That committee is one of the slot of the attestation.
+
+Its index is below the count of committees in each slot of the target epoch. -/
+theorem exists_mem_getBeaconCommittee_of_checkAttestationCommittees
+    {attestation : Attestation preset fork} {indexed : IndexedAttestation preset fork}
+    {validator : ValidatorIndex}
+    (checked : checkAttestationCommittees state attestation = .ok ())
+    (indexedOk : getIndexedAttestation state attestation = .ok indexed)
+    (attests : validator ∈ indexed.attestingIndices.data.toList) :
+    ∃ index committee,
+      index < getCommitteeCountPerSlot state attestation.data.target.epoch ∧
+      getBeaconCommittee state attestation.data.slot index = .ok committee ∧
+      validator ∈ committee := by
+  obtain ⟨attesters, attestersOk, data⟩ := getAttestingIndices_of_getIndexedAttestation indexedOk
+  rw [data] at attests
+  obtain ⟨index, committee, named, committeeOk, member⟩ :=
+    exists_mem_getBeaconCommittee_of_getAttestingIndices attestersOk (by simpa using attests)
+  exact ⟨index, committee, lt_getCommitteeCountPerSlot_of_checkAttestationCommittees checked named,
+    committeeOk, member⟩
 
 /-- From Gloas, weighing the payment of a block changes only the pending payments of builders. -/
 theorem recordPaymentWeight_eq {gloas : .glamsterdam ≤ fork} {data : AttestationData}
@@ -417,7 +508,8 @@ theorem applyPendingDeposit_known {deposit : PendingDeposit} {index : Nat}
     (computed : applyPendingDeposit config checks state deposit = .ok after) :
     balanceSum after = balanceSum state + deposit.amount.toNat ∧
       after.validators = state.validators := by
-  simp only [applyPendingDeposit, known, liftAccessor_ok] at computed
+  simp only [applyPendingDeposit, known, liftAccessor_ok, bind_ok_iff] at computed
+  obtain ⟨_, _, computed⟩ := computed
   exact ⟨balanceSum_increaseBalance computed, increaseBalance_validators computed⟩
 
 /-- Before Electra, a deposit to a key that a validator has adds the amount to its balance.
@@ -518,6 +610,12 @@ theorem setOrAppendRooted_getElem? {switch : Base.Fork} {α : Type} [SszType α]
   rw [computed] at plain
   exact setOrAppendList_getElem? plain.symm i
 
+/-- The index of a new validator is the size of the registry, which must be below `2^64`. -/
+theorem getIndexForNewValidator_ok_iff {index : ValidatorIndex} :
+    getIndexForNewValidator state = .ok index ↔
+      state.validators.data.size < 2 ^ 64 ∧ index.toNat = state.validators.data.size := by
+  rw [getIndexForNewValidator, liftArith, mapError_ok_iff, ofNatChecked_ok_iff]
+
 /-- From Altair, a new validator keeps the deposit data and the next deposit index. -/
 theorem addValidatorToRegistryAltair_eth1 {altair : .altair ≤ fork} {pubkey : BLSPubkey}
     {withdrawalCredentials : Bytes32} {amount : Gwei}
@@ -526,7 +624,7 @@ theorem addValidatorToRegistryAltair_eth1 {altair : .altair ≤ fork} {pubkey : 
     after.eth1DepositIndex = state.eth1DepositIndex ∧ after.eth1Data = state.eth1Data := by
   unfold addValidatorToRegistryAltair at computed
   simp only [liftAccessor_ok, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, rfl⟩ := computed
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := computed
   exact ⟨rfl, rfl⟩
 
 /-- From Altair, a new validator keeps one balance for each validator. -/
@@ -536,7 +634,7 @@ theorem balancesMatch_addValidatorToRegistryAltair {altair : .altair ≤ fork} {
       .ok after) (holds : BalancesMatch state) : BalancesMatch after := by
   unfold addValidatorToRegistryAltair at computed
   simp only [liftAccessor_ok, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-  obtain ⟨validators, validatorsOk, balances, balancesOk, _, _, _, _, _, _, rfl⟩ := computed
+  obtain ⟨_, _, validators, validatorsOk, balances, balancesOk, _, _, _, _, _, _, rfl⟩ := computed
   unfold BalancesMatch at holds ⊢
   rw [setOrAppendRooted_size validatorsOk, setOrAppendList_size balancesOk, holds]
 
@@ -554,23 +652,18 @@ theorem balancesMatch_addValidatorToRegistry {pubkey : BLSPubkey}
       simp only [Array.size_push, RootedForkList.data_push, holds]
     · cases computed
 
-/-- A new validator joins the end of the registry.
-
-That needs an index that fits 64 bits. -/
+/-- A new validator joins the end of the registry. -/
 theorem addValidatorToRegistry_validators_eq_push {pubkey : BLSPubkey}
     {withdrawalCredentials : Bytes32} {amount : Gwei}
-    (computed : addValidatorToRegistry state pubkey withdrawalCredentials amount = .ok after)
-    (small : state.validators.data.size < 2 ^ 64) :
+    (computed : addValidatorToRegistry state pubkey withdrawalCredentials amount = .ok after) :
     after.validators.data = state.validators.data.push
       (getValidatorFromDeposit preset fork pubkey withdrawalCredentials amount) := by
   unfold addValidatorToRegistry at computed
   split at computed
   · simp only [addValidatorToRegistryAltair, liftAccessor_ok, bind_ok_iff, pure, Except.pure,
       Except.ok.injEq] at computed
-    obtain ⟨_, validatorsOk, _, _, _, _, _, _, _, _, rfl⟩ := computed
-    -- The index of a new validator is the size of the registry, since that size fits 64 bits.
-    have atEnd : (getIndexForNewValidator state).toNat = state.validators.data.size := by
-      rw [getIndexForNewValidator, Nat.toUInt64_eq, UInt64.toNat_ofNat_of_lt' small]
+    obtain ⟨_, indexOk, _, validatorsOk, _, _, _, _, _, _, _, _, rfl⟩ := computed
+    have atEnd := (getIndexForNewValidator_ok_iff.mp indexOk).2
     simp only [setOrAppendRooted, atEnd, ↓reduceIte] at validatorsOk
     split at validatorsOk
     · cases validatorsOk
@@ -581,25 +674,42 @@ theorem addValidatorToRegistry_validators_eq_push {pubkey : BLSPubkey}
       rfl
     · cases computed
 
+/-- A new validator joins a registry of fewer than `2^64` validators.
+
+So its position fits a validator index. -/
+theorem addValidatorToRegistry_size_lt {pubkey : BLSPubkey}
+    {withdrawalCredentials : Bytes32} {amount : Gwei}
+    (computed : addValidatorToRegistry state pubkey withdrawalCredentials amount = .ok after) :
+    state.validators.data.size < 2 ^ 64 := by
+  unfold addValidatorToRegistry at computed
+  split at computed
+  · simp only [addValidatorToRegistryAltair, liftAccessor_ok, bind_ok_iff] at computed
+    obtain ⟨_, indexOk, _⟩ := computed
+    exact (getIndexForNewValidator_ok_iff.mp indexOk).1
+  · split at computed
+    · rename_i fits
+      exact Nat.lt_trans fits.1 preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt
+    · cases computed
+
 /-- A new validator joins the end of the registry, and its balance joins the end of the balances.
 
-That needs one balance for each validator, and an index that fits 64 bits. -/
+That needs one balance for each validator. -/
 theorem addValidatorToRegistry_push {pubkey : BLSPubkey}
     {withdrawalCredentials : Bytes32} {amount : Gwei}
     (computed : addValidatorToRegistry state pubkey withdrawalCredentials amount = .ok after)
-    (holds : BalancesMatch state) (small : state.validators.data.size < 2 ^ 64) :
+    (holds : BalancesMatch state) :
     after.validators.data = state.validators.data.push
         (getValidatorFromDeposit preset fork pubkey withdrawalCredentials amount) ∧
       after.balances.data = state.balances.data.push amount := by
-  refine ⟨addValidatorToRegistry_validators_eq_push computed small, ?_⟩
+  refine ⟨addValidatorToRegistry_validators_eq_push computed, ?_⟩
   unfold addValidatorToRegistry at computed
   split at computed
   · simp only [addValidatorToRegistryAltair, liftAccessor_ok, bind_ok_iff, pure, Except.pure,
       Except.ok.injEq] at computed
-    obtain ⟨_, _, _, balancesOk, _, _, _, _, _, _, rfl⟩ := computed
-    -- The index is the size of the registry, which fits 64 bits, and so the size of the balances.
-    have atBalances : (getIndexForNewValidator state).toNat = state.balances.data.size := by
-      rw [getIndexForNewValidator, Nat.toUInt64_eq, UInt64.toNat_ofNat_of_lt' small, holds]
+    obtain ⟨index, indexOk, _, _, _, balancesOk, _, _, _, _, _, _, rfl⟩ := computed
+    -- The index is the size of the registry, and so the size of the balances.
+    have atBalances : index.toNat = state.balances.data.size := by
+      rw [(getIndexForNewValidator_ok_iff.mp indexOk).2, holds]
     simp only [setOrAppendList, atBalances, ↓reduceIte, appendWithinLimit] at balancesOk
     split at balancesOk
     · cases balancesOk
@@ -619,7 +729,7 @@ private theorem balanceSum_addValidatorToRegistry_le {pubkey : BLSPubkey}
   split at computed
   · simp only [addValidatorToRegistryAltair, liftAccessor_ok, bind_ok_iff, pure, Except.pure,
       Except.ok.injEq] at computed
-    obtain ⟨_, _, balances, balancesOk, _, _, _, _, _, _, rfl⟩ := computed
+    obtain ⟨index, _, _, _, balances, balancesOk, _, _, _, _, _, _, rfl⟩ := computed
     unfold setOrAppendList at balancesOk
     split at balancesOk
     · simp only [appendWithinLimit] at balancesOk
@@ -634,7 +744,7 @@ private theorem balanceSum_addValidatorToRegistry_le {pubkey : BLSPubkey}
         unfold balanceSum
         simp only [Array.toList_set, List.map_set]
         have := sum_set_add (l := state.balances.data.toList.map (·.toNat))
-          (i := (getIndexForNewValidator state).toNat) (by simpa using inside) amount.toNat
+          (i := index.toNat) (by simpa using inside) amount.toNat
         omega
       · cases balancesOk
   · split at computed
@@ -707,7 +817,8 @@ theorem applyPendingDeposit_kept {deposit : PendingDeposit}
     · exact ⟨balancesMatch_addValidatorToRegistry computed, addValidatorToRegistry_eth1 computed⟩
     · cases computed
       exact ⟨id, rfl, rfl⟩
-  · rw [liftAccessor_ok] at computed
+  · simp only [liftAccessor_ok, bind_ok_iff] at computed
+    obtain ⟨_, _, computed⟩ := computed
     refine ⟨balancesMatch_of_sameSizes (sameSizes_increaseBalance computed), ?_⟩
     obtain ⟨_, set⟩ := increaseBalance_ok computed
     obtain ⟨_, rfl⟩ := setBalance_ok set
@@ -727,7 +838,7 @@ theorem addValidatorToRegistry_validator {pubkey : BLSPubkey} {withdrawalCredent
   split at computed
   · unfold addValidatorToRegistryAltair at computed
     simp only [liftAccessor_ok, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-    obtain ⟨validators, validatorsOk, _, _, _, _, _, _, _, _, rfl⟩ := computed
+    obtain ⟨_, _, validators, validatorsOk, _, _, _, _, _, _, _, _, rfl⟩ := computed
     rw [setOrAppendRooted_getElem? validatorsOk] at found
     split at found
     · exact .inr (Option.some.inj found).symm
@@ -770,7 +881,8 @@ theorem applyPendingDeposit_blsValidator {deposit : PendingDeposit} (heze : .heg
       exact notBls ⟨heze, bls⟩
     · cases computed
       exact found
-  · rw [liftAccessor_ok] at computed
+  · simp only [liftAccessor_ok, bind_ok_iff] at computed
+    obtain ⟨_, _, computed⟩ := computed
     obtain ⟨_, set⟩ := increaseBalance_ok computed
     obtain ⟨_, rfl⟩ := setBalance_ok set
     exact found
@@ -807,10 +919,10 @@ theorem applyPendingDeposit_of_droppable {deposit : PendingDeposit}
 
 /-- A deposit adds its amount to the sum of the balances, or it is droppable and changes nothing.
 
-That needs one balance for each validator, and an index that fits 64 bits. -/
+That needs one balance for each validator. -/
 theorem balanceSum_applyPendingDeposit {deposit : PendingDeposit}
     (computed : applyPendingDeposit config checks state deposit = .ok after)
-    (holds : BalancesMatch state) (small : state.validators.data.size < 2 ^ 64) :
+    (holds : BalancesMatch state) :
     balanceSum after = balanceSum state + deposit.amount.toNat ∨
       after = state ∧ DepositDroppable config checks state deposit := by
   unfold applyPendingDeposit at computed
@@ -823,18 +935,19 @@ theorem balanceSum_applyPendingDeposit {deposit : PendingDeposit}
     simp only [bind_ok_iff] at computed
     obtain ⟨valid, checked, computed⟩ := computed
     split at computed
-    · have pushed := (addValidatorToRegistry_push computed holds small).2
+    · have pushed := (addValidatorToRegistry_push computed holds).2
       exact .inl (by simp [balanceSum, pushed])
     · rename_i invalid
       simp only [pure, Except.pure, Except.ok.injEq] at computed
       simp only [Bool.not_eq_true] at invalid
       subst invalid
       exact .inr ⟨computed.symm, unknown, .inl checked⟩
-  · rw [liftAccessor_ok] at computed
+  · simp only [liftAccessor_ok, bind_ok_iff] at computed
+    obtain ⟨_, _, computed⟩ := computed
     exact .inl (balanceSum_increaseBalance computed)
 
 /-- A deposit raises the sum of the balances by at most its amount. -/
-private theorem balanceSum_applyPendingDeposit_le {deposit : PendingDeposit}
+theorem balanceSum_applyPendingDeposit_le {deposit : PendingDeposit}
     (computed : applyPendingDeposit config checks state deposit = .ok after) :
     balanceSum after ≤ balanceSum state + deposit.amount.toNat := by
   unfold applyPendingDeposit at computed
@@ -849,33 +962,31 @@ private theorem balanceSum_applyPendingDeposit_le {deposit : PendingDeposit}
     · simp only [pure, Except.pure, Except.ok.injEq] at computed
       subst computed
       exact Nat.le_add_right _ _
-  · rw [liftAccessor_ok] at computed
+  · simp only [liftAccessor_ok, bind_ok_iff] at computed
+    obtain ⟨_, _, computed⟩ := computed
     exact Nat.le_of_eq (balanceSum_increaseBalance computed)
 
 /-- A valid deposit to a new key adds its validator and its amount at the ends of their lists.
 
 From Heze that needs withdrawal credentials other than BLS.
 
-It also needs one balance for each validator, and an index that fits 64 bits. -/
+It also needs one balance for each validator. -/
 theorem applyPendingDeposit_new_valid {deposit : PendingDeposit}
     (new : state.validators.data.findIdx? (·.pubkey == deposit.pubkey) = none)
     (notBls : ¬(.hegota ≤ fork ∧ deposit.withdrawalCredentials[0] = BLS_WITHDRAWAL_PREFIX[0]))
     (valid : isValidDepositSignature config checks deposit.pubkey deposit.withdrawalCredentials
       deposit.amount deposit.signature = .ok true)
     (computed : applyPendingDeposit config checks state deposit = .ok after)
-    (holds : BalancesMatch state) (small : state.validators.data.size < 2 ^ 64) :
+    (holds : BalancesMatch state) :
     after.validators.data = state.validators.data.push (getValidatorFromDeposit preset fork
         deposit.pubkey deposit.withdrawalCredentials deposit.amount) ∧
       after.balances.data = state.balances.data.push deposit.amount := by
   simp only [applyPendingDeposit, new, notBls, ↓reduceIte, bind, Except.bind, valid] at computed
-  exact addValidatorToRegistry_push computed holds small
+  exact addValidatorToRegistry_push computed holds
 
-/-- A deposit adds at most one entry to the registry, and keeps each validator there.
-
-That needs an index that fits 64 bits. -/
+/-- A deposit adds at most one entry to the registry, and keeps each validator there. -/
 theorem applyPendingDeposit_validators_size_le_and_mem {deposit : PendingDeposit}
-    (computed : applyPendingDeposit config checks state deposit = .ok after)
-    (small : state.validators.data.size < 2 ^ 64) :
+    (computed : applyPendingDeposit config checks state deposit = .ok after) :
     after.validators.data.size ≤ state.validators.data.size + 1 ∧
       ∀ validator ∈ state.validators.data, validator ∈ after.validators.data := by
   unfold applyPendingDeposit at computed
@@ -886,34 +997,29 @@ theorem applyPendingDeposit_validators_size_le_and_mem {deposit : PendingDeposit
     simp only [bind_ok_iff] at computed
     obtain ⟨_, _, computed⟩ := computed
     split at computed
-    · rw [addValidatorToRegistry_validators_eq_push computed small]
+    · rw [addValidatorToRegistry_validators_eq_push computed]
       exact ⟨by simp, fun _ member => Array.mem_push.mpr (.inl member)⟩
     · simp only [pure, Except.pure, Except.ok.injEq] at computed
       subst computed
       exact ⟨Nat.le_succ _, fun _ member => member⟩
-  · rw [liftAccessor_ok] at computed
+  · simp only [liftAccessor_ok, bind_ok_iff] at computed
+    obtain ⟨_, _, computed⟩ := computed
     rw [increaseBalance_validators computed]
     exact ⟨Nat.le_succ _, fun _ member => member⟩
 
 /-- A deposit to a known key raises the balance at the index of that key by its amount.
 
-No other balance changes.
-
-That needs an index that fits 64 bits. -/
+No other balance changes. -/
 theorem applyPendingDeposit_known_balances {deposit : PendingDeposit} {index : Nat}
     (known : state.validators.data.findIdx? (·.pubkey == deposit.pubkey) = some index)
-    (computed : applyPendingDeposit config checks state deposit = .ok after)
-    (small : state.validators.data.size < 2 ^ 64) :
+    (computed : applyPendingDeposit config checks state deposit = .ok after) :
     (∃ balance raised : Gwei, state.balances.data[index]? = some balance ∧
       after.balances.data[index]? = some raised ∧
         raised.toNat = balance.toNat + deposit.amount.toNat) ∧
       ∀ i, i ≠ index → after.balances.data[i]? = state.balances.data[i]? := by
-  obtain ⟨below, _⟩ := Array.findIdx?_eq_some_iff_getElem.mp known
-  have same : index.toUInt64.toNat = index := by
-    rw [Nat.toUInt64_eq, UInt64.toNat_ofNat_of_lt' (Nat.lt_trans below small)]
   simp only [applyPendingDeposit, known, liftAccessor_ok, increaseBalance, bind_ok_iff, liftArith,
-    mapError_ok_iff, addChecked_ok_iff] at computed
-  obtain ⟨balance, found, raised, ⟨_, summed⟩, set⟩ := computed
+    mapError_ok_iff, ofNatChecked_ok_iff, addChecked_ok_iff] at computed
+  obtain ⟨validatorIndex, ⟨_, same⟩, balance, found, raised, ⟨_, summed⟩, set⟩ := computed
   obtain ⟨inside, rfl⟩ := setBalance_ok set
   unfold getBalance at found
   split at found
@@ -929,32 +1035,28 @@ theorem applyPendingDeposit_known_balances {deposit : PendingDeposit} {index : N
 
 The others are droppable at the start, and the sum of the balances rises by the amounts added.
 
-That needs one balance for each validator, and room in 64 bits for the registry and the deposits.
--/
+That needs one balance for each validator. -/
 theorem foldlM_applyPendingDeposit_partition :
     ∀ {deposits : List PendingDeposit} {state after : BeaconState preset fork},
       deposits.foldlM (applyPendingDeposit config checks) state = .ok after →
       BalancesMatch state →
-      state.validators.data.size + deposits.length < 2 ^ 64 →
       ∃ added dropped : List PendingDeposit,
         (added ++ dropped).Perm deposits ∧
           (∀ deposit ∈ dropped, DepositDroppable config checks state deposit) ∧
           balanceSum after = balanceSum state + pendingAmount added
-  | [], _, _, computed, _, _ => by
+  | [], _, _, computed, _ => by
     simp only [List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at computed
     subst computed
     exact ⟨[], [], List.Perm.refl _, by simp, by simp [pendingAmount]⟩
-  | deposit :: rest, state, after, computed, holds, room => by
-    simp only [List.length_cons] at room
+  | deposit :: rest, state, after, computed, holds => by
     simp only [List.foldlM_cons, bind, Except.bind] at computed
     split at computed
     · cases computed
     rename_i next applied
-    have grown := applyPendingDeposit_validators_size_le_and_mem applied (by omega)
+    have grown := applyPendingDeposit_validators_size_le_and_mem applied
     obtain ⟨added, dropped, perm, all, sum⟩ :=
       foldlM_applyPendingDeposit_partition computed ((applyPendingDeposit_kept applied).1 holds)
-        (by omega)
-    rcases balanceSum_applyPendingDeposit applied holds (by omega) with raised | ⟨same, lost⟩
+    rcases balanceSum_applyPendingDeposit applied holds with raised | ⟨same, lost⟩
     · have front : pendingAmount (deposit :: added) =
           deposit.amount.toNat + pendingAmount added := by
         simp [pendingAmount]

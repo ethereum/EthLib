@@ -48,20 +48,27 @@ def ExecutionRequests.isEmpty (requests : ExecutionRequests preset fork)
     requests.consolidations.data.isEmpty && (requests.builderDeposits gloas).data.isEmpty &&
     (requests.builderExits gloas).data.isEmpty
 
-/-- From Gloas: the position of the pending payment of the parent's builder, if it has one.
+/-- From Gloas: the position of the pending payment of the block at a slot, if it has one.
 
-A parent of the current epoch has its payment in the second half of the pending payments.
+A block of the current epoch has its payment in the second half of the pending payments.
 
-A parent of the previous epoch has it in the first half.
+A block of the previous epoch has it in the first half.
 
-An older parent's payment has left the pending payments. -/
-def parentPaymentPosition (state : BeaconState preset fork) : Option UInt64 :=
-  let parentSlot := state.latestBlockHeader.slot
-  let parentEpoch := computeEpochAtSlot preset parentSlot
-  let position := parentSlot % preset.SLOTS_PER_EPOCH
-  if parentEpoch = getCurrentEpoch state then some (preset.SLOTS_PER_EPOCH + position)
-  else if parentEpoch = getPreviousEpoch state then some position
+The position is read against the epoch of the state.
+
+An older block's payment has left the pending payments.
+
+A block of a later epoch has no position yet. -/
+def slotPaymentPosition (state : BeaconState preset fork) (slot : Slot) : Option UInt64 :=
+  let epoch := computeEpochAtSlot preset slot
+  let position := slot % preset.SLOTS_PER_EPOCH
+  if epoch = getCurrentEpoch state then some (preset.SLOTS_PER_EPOCH + position)
+  else if epoch = getPreviousEpoch state then some position
   else none
+
+/-- From Gloas: the position of the pending payment of the parent's builder, if it has one. -/
+def parentPaymentPosition (state : BeaconState preset fork) : Option UInt64 :=
+  slotPaymentPosition state state.latestBlockHeader.slot
 
 /-- From Gloas: the state after the payment of the builder of the parent payload.
 

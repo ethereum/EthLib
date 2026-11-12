@@ -421,7 +421,8 @@ theorem BuilderDebtSettled.processWithdrawals {gloas : .glamsterdam ≤ fork}
     exact holds
   obtain ⟨expected, expectedOk, appliedOk, -⟩ := processWithdrawals_recorded gloas full computed
   obtain ⟨size, epochs⟩ := applyExpectedWithdrawals_kept gloas appliedOk
-  obtain ⟨payments, queue⟩ := applyExpectedWithdrawals_builderQueues gloas appliedOk
+  have payments := processWithdrawals_payments gloas computed
+  have queue := (applyExpectedWithdrawals_builderQueues gloas appliedOk).2
   have slot := (payloadInputs_processWithdrawals computed).slot
   -- The step drops from what each builder owes the queued withdrawals that it pays.
   have total : ∀ index, pendingBuilderTotal after gloas index +

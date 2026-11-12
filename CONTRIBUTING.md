@@ -40,10 +40,20 @@ Cite the exact document and section in the code that implements it.
 For example: `RFC 9380 §5.3.1`, or `EIP-4844` with the name of its section.
 
 EthLib is a specification at the same level as `ethereum/execution-specs` and `ethereum/consensus-specs`.
-So do not cite them in the code.
+So do not cite them in the code as the authority for a rule.
 You can read them to understand a rule and to check your work.
 If no primary source states a rule, state the rule itself in the doc comment.
 Test vectors keep their pinned origin, as [`ARCHITECTURE.md`](ARCHITECTURE.md#sources) explains.
+
+A comment in the code may still name execution-specs or consensus-specs in a provenance note.
+The note names the text and the commit where a rule is stated.
+If it is known, the note also names the commit that EthLib took the rule from.
+Put the note in the doc comment of the definition.
+A note that covers several definitions can go once, in a section comment (`/-! -/`) above them.
+Write a note only when no primary source states the rule in its own text.
+Some EIPs state a rule only through a link to consensus-specs at a pinned commit, as EIP-4844 does for its KZG functions.
+Such a rule cites the EIP, and it may also carry a provenance note.
+A provenance note says where a rule is stated, not which text makes the rule normative, so it is not a citation of authority.
 
 Do not cite another implementation as the authority for a behaviour.
 A byte-for-byte match with a client is a useful test, not a justification.
@@ -68,6 +78,7 @@ A new domain with exports adds its export root to the `Exports` library.
 
 These three libraries form one package, `EthLib`.
 A property or a model may import Mathlib, Batteries or VCVio, and it goes in `EthLib/<Domain>/Proofs/<Module>/` like any other property.
+Among the properties, only a refinement module imports a model directly, as [`ARCHITECTURE.md`](ARCHITECTURE.md#three-kinds-of-content) explains.
 The specification and the exports import nothing beyond the Lean toolchain.
 [`ARCHITECTURE.md`](ARCHITECTURE.md#packages) describes the package.
 
@@ -89,10 +100,53 @@ The specification and the exports import nothing beyond the Lean toolchain.
   Each one hides a failure: it returns a default value, or it changes nothing.
   Index with `Fin` or a `Vector`, walk arrays of equal length together with `zip`, or return a typed error.
   Older modules still use these accessors, and pull requests remove them module by module.
-  #106 tracks the ones in KZG.
+- Remove such an accessor even when no input that the source accepts reaches its default.
+  A caller of a public function can still reach it, with arguments that break a precondition the type does not state.
+  Change the definition in place, and keep no copy of the old one beside it.
+  Wherever the old index was in range, the result must not change.
+  Existing theorems and tests keep their meaning, and change their statements only where the type of the result changes.
+  If any input reached a default where the source gives another outcome, the change is a `fix`.
+  It cites the rule of the source that it restores.
+  Take its test vectors from the source's own suite when one holds them.
+  Otherwise take the expected value of each one from that rule, never from EthLib.
+  Describe what each vector pins, and record its origin next to it, as [Known answers](#known-answers) asks.
 - Prefer structural recursion, `map` and folds to `Id.run do` with mutable variables.
   A proof then follows the shape of the definition.
+  A theorem about a `do` loop restates its elaborated body, so any edit of the loop breaks the statement.
+  For a loop that can stop early, prefer `foldlM` in `Option` or `Except`.
   This is advice, not a rule: a loop whose speed matters can keep `do`.
+- Prefer an `Except` `do` block for a chain of steps that can fail, so that it reads like the source.
+  In proofs, prefer `bind_ok_iff` and the other lemmas of `EthLib/Base/Except.lean` to unfolding the chain into nested `match` expressions.
+- A small decidable fact that [Known answers](#known-answers) allows, such as a constant checked against its algorithm, evaluates a definition in the kernel.
+  That definition needs a recursion that the kernel can reduce.
+  `decide` and `rfl` need structural recursion or fuel, because Lean makes a well-founded definition irreducible.
+  `decide +kernel` also reduces a well-founded recursion whose measure is a single `Nat`, which Lean builds on `WellFounded.Nat.fix`.
+  Do not count on it for a lexicographic measure, such as a pair, which Lean builds on `WellFounded.fix`.
+  Lean documents only `WellFounded.Nat.fix` as reducing on closed terms.
+
+### Failure at an entry point
+
+An entry point is a public operation that a client or another layer calls.
+Examples are a state transition, a gossip validation and an Engine API method.
+What an entry point does with a wrong input is part of the protocol, so its source often says what it returns.
+
+- Where the source defines the outcomes of an operation, return them as a type.
+  For example, the Engine API answers a payload with one of five statuses, and gossip validation returns a `ValidationResult`: accept, ignore or reject.
+  Map the internal errors to that type with total functions, close to the entry point.
+  For example, after the checks of a payload, `newPayloadOnChain` maps an execution that aborts to `.syncing`, and any other failed transition to `.invalid`.
+- Return a `Bool` only where the source defines one.
+  A caller that the source requires to tell outcomes apart, for example to import or to queue a block, receives the richer type.
+- Where the source fixes the order of its checks, and the order changes the outcome, follow that order.
+  Pin it with a theorem, or with a test whose input fails two checks.
+  Elsewhere, the source fixes only that the operation rejects the input.
+  The consensus specification, for example, says only which state transitions are invalid.
+  This guide does not say whether EthLib also promises which error such an input gets.
+  Many proofs and Python tests pin the exact error today, and `bindings/contract/contract.json` lists the error codes of its methods.
+- Where the source requires the state to be unchanged on failure, state that in a theorem.
+  When the operation returns its input state on failure, state it as equality of the returned state.
+  Inside a step, such as an EVM call that fails, state it over the values a caller can read: balances, nonces, code, storage and transient storage.
+  Do not state it over the fields of the representation, since a new representation would break the statement.
+  `processMessage_sameWrites_of_error` states it over the fields of `SameWrites`; a new theorem states it over readable values.
 
 ### Proofs
 
@@ -102,6 +156,10 @@ The specification and the exports import nothing beyond the Lean toolchain.
 - Do not use a tactic that trusts compiled code, such as `native_decide`, `bv_decide` or `decide +native`.
   Their computed results are justified by compiler-trusting axioms rather than kernel evaluation.
   `lake exe check-decls` fails on any use.
+- Do not use `vcgen` or `mvcgen` in library proofs while `vcgen` is marked experimental.
+  The reason is stability across toolchains, not soundness: the kernel checks a proof that `vcgen` builds like any other proof.
+  In Lean v4.35.0, `mvcgen` is deprecated in favour of `vcgen`, and `vcgen` warns that it is experimental unless the option `experimental.vcgen` is set.
+  Check this rule again at each update of the toolchain.
 - After a proof change, check its axioms with `lake exe check-decls`.
   The goal is `propext`, `Classical.choice` and `Quot.sound`, nothing else.
 - Name each theorem by the [naming conventions of Mathlib](https://leanprover-community.github.io/contribute/naming.html).
@@ -112,7 +170,14 @@ The specification and the exports import nothing beyond the Lean toolchain.
 ### Known answers
 
 A known answer pins one input to one output, byte for byte.
-Known answers belong in the Python test suite, in `bindings/python/tests/`, and never in Lean.
+Known answers never enter the default build: the libraries `EthLib`, `Proofs` and `Exports`, which `lake build` builds.
+They may run in three places outside it:
+
+- The Python test suite, in `bindings/python/tests/`, runs them through the bindings, which are the surface that clients call.
+- A fixture runner, a Lean executable that no default target builds, may run pinned fixtures through the definitions of the specification.
+  It reaches an internal step that has no C export, and it runs compiled code, as the Python suite does.
+- A Lean library of kernel vectors, which no default target imports, may prove known answers.
+  CI must build it in its own step on every pull request, so that a failure points at the pull request that caused it.
 
 In Lean, a known answer is a theorem or an `example` that evaluates a definition on concrete inputs.
 It compares the result with an expected value, by `rfl`, `decide`, `decide +kernel` or `simp`.
@@ -120,11 +185,16 @@ The build must then run the definition on those inputs.
 One such proof can need several gigabytes of memory and minutes of build time.
 It also checks only one input.
 
-So state each Lean theorem for all inputs.
-Test concrete inputs from Python, through the bindings.
-If a function has no C export yet, add the export and its binding.
+So the library of kernel vectors holds such a proof only under a budget.
+Each proof takes its input from the specification's own vectors, or covers every value of a finite type.
+Each file of the library elaborates in under 20 s of CPU, with a peak memory under 2 GiB.
+The budget is for the whole file, run alone with `lake env lean` after its imports are built, as `scripts/check_memory.py` runs it.
 
-Lean keeps one kind of concrete fact: a small decidable fact that a definition needs to be correct.
+State each theorem of the default build for all inputs.
+Test concrete inputs from Python, through the bindings, or through a fixture runner.
+If a function that clients call has no C export yet, add the export and its binding.
+
+The default build keeps one kind of concrete fact: a small decidable fact that a definition needs to be correct.
 Examples are a constant checked against the algorithm that generates it, or a Pratt certificate.
 The order of the fork timeline is another example.
 Each such proof must take a few seconds at most.
@@ -135,6 +205,8 @@ For example: "one honest signature at epoch 7", or "one empty slot processed".
 Next to the vectors, record their pinned origin, such as the commit they come from.
 
 Never regenerate an expected value from the code under test and call it a check.
+A snapshot of values that the code computes, compared in CI, is a change detector and not a check.
+A pull request that changes such a snapshot names the source of each changed line.
 
 ### No examples
 
@@ -353,6 +425,7 @@ uv run --no-project --python 3.12 python scripts/check_layers.py
 It fails on an import that breaks a rule of [`ARCHITECTURE.md`](ARCHITECTURE.md#rules), and on a module that no library root imports.
 An import that must break a rule goes in `scripts/check_layers_baseline.txt`, with the reason in a comment and in the pull request.
 An entry that no longer breaks a rule fails the check, so remove it with the import.
+A new model directory or a new refinement module goes in `coverage/kinds.toml`, which the same check reads, and an entry leaves with its module.
 
 When you add or change a C export that reads a fork name, check that it rejects the forks whose rules EthLib lacks:
 
@@ -376,6 +449,17 @@ uv run --no-project --python 3.12 python scripts/check_fixture_pins.py
 The check fails when a test cites another commit, and when a directory with a `SHA256SUMS` file does not name its sources.
 The file also pins each release archive that is too large to vendor, by its URL, its size and its sha256.
 The check fails when no test names an archive.
+
+`tests/generators.toml` records which program computed the expected values of each pinned directory and archive.
+Where no record names the program, it says so, with what was read.
+It also lists the modules that the Python tests import, and the version of each one that computes expected values while the tests run.
+The check fails when a directory or an archive has no entry, and when a pinned file belongs to no group of cases.
+It also fails when a test imports a module that the file does not list.
+A module that computes no expected value is a tool, and it needs a reason.
+So a new vector directory, or a new library in the tests, comes with its generator.
+
+The check downloads no archive.
+With `ETHLIB_ARCHIVES` set, it also checks the groups of each archive against the member list in that cache.
 
 Then check the layout of the Lean lines that your branch changes:
 

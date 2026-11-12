@@ -172,8 +172,8 @@ def genesisDeposit (config : Config) (checks : SignatureChecks) (before : fork <
 A validator with the largest effective balance is eligible and active from the genesis epoch. -/
 def activateAtGenesis (state : BeaconState preset fork) (index : Nat) :
     Except TransitionError (BeaconState preset fork) := do
-  let validator ← liftAccessor (getValidator state index.toUInt64)
-  let balance ← liftAccessor (getBalance state index.toUInt64)
+  let validator ← liftAccessor (getValidatorAt state index)
+  let balance ← liftAccessor (getBalanceAt state index)
   let effectiveBalance := min (balance - balance % preset.EFFECTIVE_BALANCE_INCREMENT)
     preset.MAX_EFFECTIVE_BALANCE
   let validator := { validator with effectiveBalance }
@@ -182,7 +182,7 @@ def activateAtGenesis (state : BeaconState preset fork) (index : Nat) :
       { validator with
         activationEligibilityEpoch := GENESIS_EPOCH, activationEpoch := GENESIS_EPOCH }
     else validator
-  liftAccessor (state.setValidator index.toUInt64 validator)
+  liftAccessor (state.setValidatorAt index validator)
 
 /-- The candidate genesis state of a block of the proof-of-work chain, before Altair.
 

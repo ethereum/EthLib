@@ -1,7 +1,6 @@
 module
 
 public import EthLib.Cryptography.Proofs.LazyPermutation
-public import VCVio.OracleComp.SimSemantics.StateT.PreservesInv
 public import VCVio.OracleComp.SimSemantics.StateT.StateProjection
 
 /-!
@@ -53,6 +52,11 @@ abbrev TaggedCache (A τ : Type) := List ((A × A) × τ)
 def TaggedCache.untag (c : TaggedCache A τ) : PermCache A :=
   c.map Prod.fst
 
+/-- A pair that joins the cache joins the cache without its tags. -/
+@[simp] theorem TaggedCache.untag_cons (e : (A × A) × τ) (c : TaggedCache A τ) :
+    TaggedCache.untag (e :: c) = e.1 :: TaggedCache.untag c :=
+  rfl
+
 variable [FinEnum A]
 
 /-- The answer to `a` and its tag, from the most recent pair whose first entry is `a`. -/
@@ -73,6 +77,19 @@ theorem TaggedCache.map_fst_lookupTagged (c : TaggedCache A τ) (a : A) :
       simp only [TaggedCache.lookupTagged, TaggedCache.untag, List.find?_cons, h, decide_false,
         List.map_cons, List.lookup, hne] at ih ⊢
       exact ih
+
+/-- A tagged lookup returns a pair of the cache. -/
+theorem TaggedCache.mem_of_lookupTagged_eq_some {c : TaggedCache A τ} {a b : A} {o : τ}
+    (h : c.lookupTagged a = some (b, o)) : ((a, b), o) ∈ c := by
+  simp only [TaggedCache.lookupTagged, Option.map_eq_some_iff] at h
+  obtain ⟨e, he, hbe⟩ := h
+  have ha := List.find?_some he
+  simp only [decide_eq_true_eq] at ha
+  obtain ⟨⟨a', b'⟩, o'⟩ := e
+  simp only [Prod.mk.injEq] at hbe ha
+  obtain ⟨rfl, rfl⟩ := hbe
+  subst ha
+  exact List.mem_of_find?_eq_some he
 
 /-- The lazy permutation as an oracle, with each new pair tagged.
 

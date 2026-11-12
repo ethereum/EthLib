@@ -25,11 +25,15 @@ Each operation of [the EIP][eip-2935-contract] is a function here.
 
 A theorem runs the code and shows that it computes that function.
 
-It holds from Shapella, which adds PUSH0, up to BPO5, for a frame that counts gas as one number.
+The set specification uses a conservative one-counter budget.
+
+It holds from Shapella, the fork that adds PUSH0.
+
+From Glamsterdam, that one-counter frame is a model for the proof, not the meter of EIP-8037.
 
 The block number must be at least 1 and less than `2^256`, as the code computes on words.
 
-From Pectra up to BPO5, a system call to the contract succeeds.
+From Pectra, a system call to the contract succeeds with the gas meter of its fork.
 
 It leaves the storage that the EIP describes.
 
@@ -68,6 +72,10 @@ def CODE_NUMBER : Nat :=
 /-- The code of the history storage contract, 83 bytes, by EIP-2935. -/
 def CODE : ByteArray := NatCode.ofNat CODE_NUMBER 83
 
+/-- The opcode scan skips PUSH data and finds only instructions supported by both meters. -/
+theorem supportedCode_CODE : SupportedCode CODE = true := by
+  decide +kernel
+
 /-- The slot of the block number `n`: `n` modulo 8191. -/
 def slot (n : Nat) : U256 := BitVec.ofNat 256 (n % HISTORY_SERVE_WINDOW)
 
@@ -105,9 +113,11 @@ variable {fork : Fork} {message : Message fork} {gas : Nat} {state : Transaction
 
 /-- A call from the system address sets a hash, as EIP-2935 describes.
 
-It holds from Shapella up to BPO5, on a frame that may change the state.
+It holds from Shapella, on a frame that may change the state.
 
-The account of the contract exists, and the frame has at least 30,000 gas.
+The account of the contract exists.
+
+The one-counter budget is 30,000 gas before Glamsterdam and 150,000 from Glamsterdam.
 
 The block number is at least 1 and less than `2^256`.
 
@@ -116,16 +126,17 @@ The frame stops with no error and no output.
 The state then holds the storage after the input is set in the block, at the contract.
 
 It keeps the storage of every other account, the accounts and the codes. -/
-theorem spec_set (hfork : .shapella ≤ fork) (hglam : fork < .glamsterdam)
+theorem spec_set (hfork : .shapella ≤ fork)
     (hcaller : message.caller = SYSTEM_ADDRESS) (hstatic : message.isStatic = false)
     (hacc : (state.getAccountOptional message.currentTarget).isSome = true)
     (hnumber : 1 ≤ message.blockEnv.number) (hbound : message.blockEnv.number < 2 ^ 256)
-    (hgas : 30000 ≤ gas) :
+    (hgas : 30000 * storageGasScale fork ≤ gas) :
     Spec fork (At CODE message 0 [] .empty gas state substate returnData) fun evm =>
       evm.error = none ∧ evm.output = .empty ∧
       WritesStorage message.currentTarget
         (setHash message.blockEnv.number message.data (storageOf state message.currentTarget))
         state evm.state := by
+  have hscale := one_le_storageGasScale fork
   evm_step [CODE, CODE_NUMBER]
   rw [hcaller, toU256_SYSTEM_ADDRESS]
   evm_step [CODE, CODE_NUMBER]
@@ -145,10 +156,10 @@ theorem spec_set (hfork : .shapella ≤ fork) (hglam : fork < .glamsterdam)
   obtain ⟨s1, hs1, ho1, -, ha1, hc1, -, h1⟩ := sstore_of_account (code := CODE) (pc := 81)
     (gas := gas - 43) (rest := []) (key := slot (message.blockEnv.number - 1))
     (new := loadWord message.data 0 32)
-    hberlin hglam (by evm_code [CODE, CODE_NUMBER]) (by evm_code [CODE, CODE_NUMBER]) hstatic rfl
+    hberlin (by evm_code [CODE, CODE_NUMBER]) (by evm_code [CODE, CODE_NUMBER]) hstatic rfl
     (by simp only [CALL_STIPEND]; omega)
-    (Nat.le_trans (sstoreCost_le hberlin hglam _ _ _ _)
-      (by simp only [COLD_STORAGE_ACCESS, STORAGE_SET]; omega)) hacc
+    (Nat.le_trans (sstoreTotalCost_le hberlin _ _ _ _)
+      (by omega)) hacc
   refine Triple.seq h1 ?_
   refine Spec.consequence (stop (by evm_code [CODE, CODE_NUMBER])
     (by evm_code [CODE, CODE_NUMBER])) (fun _ h => h) ?_
@@ -335,7 +346,7 @@ theorem addedAt_HISTORY_STORAGE_ADDRESS :
 theorem delegatedAddress_CODE : delegatedAddress CODE = none := by
   simp [delegatedAddress, isValidDelegation, CODE, NatCode.size_ofNat, DELEGATION_SIZE]
 
-/-- From Pectra up to BPO5, a system call to the contract sets a hash.
+/-- From Pectra, a system call to the contract sets a hash.
 
 It writes the first 32 bytes of its data, padded with zeros, at the slot of the parent number.
 
@@ -351,7 +362,7 @@ A block passes the hash of its parent as that data, by EIP-2935.
 
 The call keeps the storage of every other account, the accounts and the codes. -/
 theorem systemCall_set {env : BlockEnvironment fork} {block : State.BlockState} {data : ByteArray}
-    (hfork : .pectra ≤ fork) (hglam : fork < .glamsterdam)
+    (hfork : .pectra ≤ fork)
     (hcode : codeAt block HISTORY_STORAGE_ADDRESS = .ok CODE)
     (hnumber : 1 ≤ env.number) (hbound : env.number < 2 ^ 256) :
     ∃ out, systemCall env block HISTORY_STORAGE_ADDRESS data = .ok out ∧ out.error = none ∧
@@ -360,13 +371,18 @@ theorem systemCall_set {env : BlockEnvironment fork} {block : State.BlockState} 
         (setHash env.number data (storageOf (.ofBlock block) HISTORY_STORAGE_ADDRESS))
         (.ofBlock block) out.state :=
   systemCall_of_writesStorage (P := fun _ => True) (fun _ => .empty) _
-    (Nat.le_trans (by decide) hfork) hglam hcode (by simp [CODE, NatCode.size_ofNat])
+    (Nat.le_trans (by decide) hfork) (fun _ => supportedCode_CODE) hcode
+    (by simp [CODE, NatCode.size_ofNat])
     addedAt_HISTORY_STORAGE_ADDRESS delegatedAddress_CODE trivial
     fun message _ _ hcaller htarget hstatic henv hdata hgas hacc _ => by
       subst henv hdata
       rw [← htarget]
-      exact spec_set (Nat.le_trans (by decide) hfork) hglam hcaller hstatic (htarget ▸ hacc)
-        hnumber hbound (by rw [hgas]; decide)
+      exact spec_set (Nat.le_trans (by decide) hfork) hcaller hstatic (htarget ▸ hacc)
+        hnumber hbound (by
+          rw [hgas]
+          have := storageGasScale_le fork
+          simp only [SYSTEM_TRANSACTION_GAS]
+          omega)
 
 /-- Empty history storage code keeps the body after the beacon call and records the address.
 

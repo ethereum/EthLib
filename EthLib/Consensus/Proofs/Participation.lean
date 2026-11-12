@@ -4,6 +4,7 @@ public import EthLib.Base.Except
 public import EthLib.Base.Proofs.MapM
 public import EthLib.Base.Proofs.Uint64
 public import EthLib.Consensus.Participation
+public import EthLib.Consensus.Proofs.Accessors
 
 /-!
 # Proofs: participation flags
@@ -61,7 +62,8 @@ theorem mem_getUnslashedParticipatingIndices {state : BeaconState preset fork}
   dsimp only at computed
   split at computed
   · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-    obtain ⟨read, readOk, rfl⟩ := computed
+    obtain ⟨activeIndices, checked, read, readOk, rfl⟩ := computed
+    obtain rfl := getActiveValidatorIndicesChecked_ok checked
     intro index member
     simp only [List.mem_map, List.mem_filter] at member
     obtain ⟨⟨same, kept⟩, ⟨found, keptTrue⟩, rfl⟩ := member

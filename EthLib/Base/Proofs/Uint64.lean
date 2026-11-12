@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.MapM
 public import EthLib.Base.Uint64
 
 /-!
@@ -27,6 +28,13 @@ theorem toNat_max (a b : UInt64) : (max a b).toNat = max a.toNat b.toNat := by
   · simp [h, UInt64.le_iff_toNat_le.mp h]
   · simp [h, mt UInt64.le_iff_toNat_le.mpr h]
 
+/-- The smaller of two 64-bit integers has the smaller value. -/
+theorem toNat_min (a b : UInt64) : (min a b).toNat = min a.toNat b.toNat := by
+  rw [UInt64.min_def, Nat.min_def]
+  by_cases h : a ≤ b
+  · simp [h, UInt64.le_iff_toNat_le.mp h]
+  · simp [h, mt UInt64.le_iff_toNat_le.mpr h]
+
 /-- The sum succeeds exactly when it is below `2^64`, and then it is the sum on `Nat`. -/
 theorem addChecked_ok_iff {a b c : UInt64} :
     addChecked a b = .ok c ↔ a.toNat + b.toNat < 2 ^ 64 ∧ c.toNat = a.toNat + b.toNat := by
@@ -49,6 +57,68 @@ theorem toNat_add_of_lt {a b : UInt64} (h : a.toNat + b.toNat < 2 ^ 64) :
 theorem addChecked_of_lt {a b : UInt64} (h : a.toNat + b.toNat < 2 ^ 64) :
     addChecked a b = .ok (a + b) :=
   addChecked_ok_iff.mpr ⟨h, toNat_add_of_lt h⟩
+
+/-- A 64-bit integer that is nonzero on naturals is nonzero. -/
+theorem ne_zero_of_neZero_toNat {n : UInt64} [NeZero n.toNat] : n ≠ 0 :=
+  fun zero => NeZero.ne n.toNat (by rw [zero]; rfl)
+
+/-- The conversion succeeds exactly below `2^64`, and then it keeps the value. -/
+theorem ofNatChecked_ok_iff {n : Nat} {a : UInt64} :
+    ofNatChecked n = .ok a ↔ n < 2 ^ 64 ∧ a.toNat = n := by
+  unfold ofNatChecked
+  split
+  · rename_i h
+    simp only [Except.ok.injEq, h, true_and]
+    constructor
+    · rintro rfl
+      rfl
+    · intro value
+      exact UInt64.toNat_inj.mp value.symm
+  · rename_i h
+    simp only [reduceCtorEq, false_iff, not_and]
+    omega
+
+/-- Below `2^64` the conversion succeeds, and it returns the plain conversion. -/
+theorem ofNatChecked_of_lt {n : Nat} (h : n < 2 ^ 64) : ofNatChecked n = .ok n.toUInt64 :=
+  ofNatChecked_ok_iff.mpr ⟨h, by rw [Nat.toUInt64_eq, UInt64.toNat_ofNat_of_lt' h]⟩
+
+/-- The conversion of the value of a 64-bit integer returns that integer. -/
+theorem ofNatChecked_toNat (a : UInt64) : ofNatChecked a.toNat = .ok a :=
+  ofNatChecked_ok_iff.mpr ⟨a.toNat_lt, rfl⟩
+
+/-- A successful conversion of a position reads the same entry of an array at its value. -/
+theorem getElem?_toNat_eq_of_ofNatChecked {α : Type} {data : Array α} {n : Nat} {a : UInt64}
+    (converted : ofNatChecked n = .ok a) : data[a.toNat]? = data[n]? := by
+  rw [(ofNatChecked_ok_iff.mp converted).2]
+
+/-- The conversions of a list succeed exactly when every entry is below `2^64`.
+
+They then return the plain conversions. -/
+theorem mapM_ofNatChecked_eq_ok_iff {entries : List Nat} {values : List UInt64} :
+    entries.mapM ofNatChecked = .ok values ↔
+      (∀ n ∈ entries, n < 2 ^ 64) ∧ values = entries.map Nat.toUInt64 := by
+  induction entries generalizing values with
+  | nil => simp [pure, Except.pure, eq_comm]
+  | cons n rest ih =>
+    rw [mapM_cons_ok]
+    constructor
+    · rintro ⟨value, others, converted, mapped, rfl⟩
+      obtain ⟨small, rfl⟩ := ih.mp mapped
+      obtain ⟨fits, same⟩ := ofNatChecked_ok_iff.mp converted
+      refine ⟨List.forall_mem_cons.mpr ⟨fits, small⟩, ?_⟩
+      rw [List.map_cons, ← same, Nat.toUInt64_eq, UInt64.ofNat_toNat]
+    · rintro ⟨small, rfl⟩
+      obtain ⟨fits, rest⟩ := List.forall_mem_cons.mp small
+      exact ⟨_, _, ofNatChecked_of_lt fits, ih.mpr ⟨rest, rfl⟩, rfl⟩
+
+/-- The conversions of a list fail only by an overflow. -/
+theorem mapM_ofNatChecked_error {entries : List Nat} {error : ArithError}
+    (failed : entries.mapM ofNatChecked = .error error) : error = .overflow := by
+  obtain ⟨i, _, converted, -⟩ := mapM_error failed
+  unfold ofNatChecked at converted
+  split at converted
+  · cases converted
+  · exact (Except.error.inj converted).symm
 
 /-- The difference succeeds exactly when `b ≤ a`, and then it is the difference on `Nat`. -/
 theorem subChecked_ok_iff {a b c : UInt64} :

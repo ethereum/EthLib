@@ -16,12 +16,14 @@ public import EthLib.Cryptography.Proofs.Wots.Binding
 public import EthLib.Cryptography.Proofs.Wots.TargetSum
 public import EthLib.Cryptography.Proofs.QueryAvoidance
 public import EthLib.Cryptography.Proofs.LoggedUntilBad
+public import EthLib.Cryptography.Proofs.BadOnBudget
 public import EthLib.Cryptography.Proofs.BadOnGrowth
 public import EthLib.Cryptography.Proofs.LogKeys
 public import EthLib.Cryptography.Proofs.LazyPermutation
 public import EthLib.Cryptography.Proofs.IndependentAnswers
 public import EthLib.Cryptography.Proofs.IndependentOutside
 public import EthLib.Cryptography.Proofs.TaggedLazyPermutation
+public import EthLib.Cryptography.Proofs.ProgrammedPermutation
 public import EthLib.Cryptography.Proofs.DerivationTable
 public import EthLib.Cryptography.Proofs.Xmss
 public import EthLib.Cryptography.Proofs.Sphincs
@@ -33,6 +35,7 @@ public import EthLib.Cryptography.Proofs.Aes
 public import EthLib.Cryptography.Proofs.Ethash
 public import EthLib.Cryptography.Proofs.Montgomery
 public import EthLib.Cryptography.Proofs.BaseField
+public import EthLib.Cryptography.Proofs.X25519
 public import EthLib.Cryptography.Proofs.ChaCha20Poly1305
 public import EthLib.Cryptography.Proofs.Keystore
 public import EthLib.Cryptography.Proofs.MillerFunction

@@ -68,10 +68,7 @@ private theorem BuilderDebtCovered.of_empty {gloas : .glamsterdam ≤ fork}
     simp [pendingBuilderTotal, owedBy, payments, withdrawals, BuilderPendingPayment.empty]
   have late : ∀ index, lateBidValue state gloas index = 0 := fun _ => by
     simp [lateBidValue, value]
-  have empty : ∀ k, paymentAt state gloas k = .empty := fun k => by
-    simp only [paymentAt, payments]
-    rw [Vector.getElem?_replicate]
-    split <;> rfl
+  have empty : ∀ k, paymentAt state gloas k = .empty := paymentAt_of_replicate payments
   refine ⟨fun index => ?_, fun index _ _ _ => ?_, fun position _ => ?_, fun k _ => empty k⟩
   · rw [total, late]
     exact Nat.zero_le _
@@ -83,12 +80,9 @@ private theorem BuilderDebtCovered.of_empty {gloas : .glamsterdam ≤ fork}
 theorem builderDebtCovered_upgradeToGloas {pre : BeaconState preset .fusaka}
     {post : BeaconState preset .glamsterdam}
     (computed : upgradeToGloas config checks pre = .ok post) :
-    BuilderDebtCovered post (by decide) := by
-  unfold upgradeToGloas at computed
-  obtain ⟨root, -, rest⟩ := bind_ok_iff.mp computed
-  obtain ⟨window, -, onboarded⟩ := bind_ok_iff.mp rest
-  obtain ⟨⟨builders, pending, rfl⟩, -⟩ := onboardBuildersFromPendingDeposits_spec onboarded
-  exact .of_empty rfl rfl rfl
+    BuilderDebtCovered post (by decide) :=
+  have ⟨payments, withdrawals, value⟩ := upgradeToGloas_builderFields computed
+  .of_empty payments withdrawals value
 
 /-- The upgrade to Heze keeps each builder's debt covered. -/
 theorem BuilderDebtCovered.upgradeToHeze {pre : BeaconState preset .glamsterdam}
@@ -130,21 +124,21 @@ private theorem builders_size_processBuilderDepositRequest {gloas : .glamsterdam
   · simp only [bind_ok_iff] at computed
     obtain ⟨_, _, computed⟩ := computed
     split at computed
-    · simp only [pure, Except.pure, Except.ok.injEq] at computed
-      subst computed
-      unfold addBuilderToRegistry
-      dsimp only
-      split
-      · simp [BeaconState.putBuilder]
-      · simp
+    · simp only [addBuilderToRegistry, bind_ok_iff] at computed
+      obtain ⟨_, _, computed⟩ := computed
+      split at computed
+      all_goals
+        cases computed
+        simp [BeaconState.putBuilder]
     · simp only [pure, Except.pure, Except.ok.injEq] at computed
       exact computed ▸ Nat.le_refl _
   · dsimp only at computed
+    obtain ⟨_, _, computed⟩ := bind_ok_iff.mp computed
     split at computed
     all_goals
-      simp only [bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
-        Uint64.addChecked_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-      obtain ⟨_, _, _, _, rfl⟩ := computed
+      obtain ⟨_, _, computed⟩ := bind_ok_iff.mp computed
+      obtain ⟨_, _, computed⟩ := bind_ok_iff.mp computed
+      cases computed
       simp [BeaconState.putBuilder]
 
 /-- A builder exit request never shrinks the registry of builders. -/
@@ -170,13 +164,7 @@ private theorem builders_size_processParentExecutionPayload {gloas : .glamsterda
   · exact Nat.le_refl _
   have paid := settleParentPayment_builders settledOk
   -- The requests of validators keep the builder fields.
-  have frame :=
-    (BuilderFrame.foldlM (fun _ _ _ ok => builderFrame_processDepositRequest ok)
-      depositsOk).trans <|
-    (BuilderFrame.foldlM (fun _ _ _ ok => builderFrame_processWithdrawalRequest ok)
-      withdrawalsOk).trans <|
-    BuilderFrame.foldlM (fun _ _ _ ok => builderFrame_processConsolidationRequest ok)
-      consolidationsOk
+  have frame := builderFrame_validatorRequests depositsOk withdrawalsOk consolidationsOk
   have deposited := foldlM_ok_invariant
     (fun s => (state.builders gloas).data.size ≤ (s.builders gloas).data.size)
     (fun _ _ _ before ok => Nat.le_trans before (builders_size_processBuilderDepositRequest ok))
@@ -203,26 +191,16 @@ private theorem builderFrame_processSyncAggregate {altair : .altair ≤ fork}
     exact (builderFrame_increaseBalance raised).trans (builderFrame_increaseBalance paid)
   · exact builderFrame_decreaseBalance (liftAccessor_ok.mp ok)
 
-/-- With at least two slots in an epoch, the current epoch is never the far future one. -/
-private theorem getCurrentEpoch_ne_farFuture (twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat)
-    (state : BeaconState preset fork) : getCurrentEpoch state ≠ FAR_FUTURE_EPOCH := by
-  intro far
-  have epoch := congrArg UInt64.toNat far
-  rw [getCurrentEpoch_toNat] at epoch
-  have farNat : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
-  have half := Nat.div_le_div_left (a := state.slot.toNat) twoSlots (by decide)
-  have := state.slot.toNat_lt_size
-  simp only [UInt64.size] at this
-  omega
-
 /-- From Gloas, a block runs its parent, header, withdrawal and bid steps, then the rest.
 
 Except the operations, the rest keeps the builder fields.
 
-It also keeps the slot and the slot of the latest block.
+Except the operations, the rest also keeps the slot and the slot of the latest block.
 
-After the header, no step shrinks a registry, and the steps keep the number of builders. -/
-private theorem processBlock_gloas_steps (gloas : .glamsterdam ≤ fork)
+The validators after the header are at most those after the block.
+
+The number of builders after the header is that after the block. -/
+theorem processBlock_gloas_steps (gloas : .glamsterdam ≤ fork)
     {block : BeaconBlock preset fork}
     (computed : Consensus.processBlock config checks engine state block = .ok after) :
     ∃ parented headed withdrawn bidded voted operated, ∃ payload,
@@ -278,10 +256,24 @@ theorem processBlock_buildersGrow (gloas : .glamsterdam ≤ fork) {block : Beaco
   rw [← size, kept]
   exact builders_size_processParentExecutionPayload parentOk
 
-/-- From Gloas, the parent payload and the header of a block leave the invariant inside a block.
+/-- Before a block, the latest block is older than the slot of the state.
+
+The header of the block requires it, and the payload of the parent keeps both slots. -/
+theorem latestBlockHeader_slot_lt_of_processBlockHeader {gloas : .glamsterdam ≤ fork}
+    {block : BeaconBlock preset fork} {parented headed : BeaconState preset fork}
+    (parentOk : Consensus.processParentExecutionPayload config checks state gloas block.body =
+      .ok parented)
+    (headedOk : processBlockHeader parented block = .ok headed) :
+    state.latestBlockHeader.slot < state.slot := by
+  have inputs := payloadInputs_processParentExecutionPayload parentOk
+  obtain ⟨same, newer, -⟩ := processBlockHeader_checks headedOk
+  rw [← inputs.slot, ← inputs.latestBlockHeader, ← same]
+  exact newer
+
+/-- From Gloas, after the parent payload and the header, the builder debt is settled.
 
 The latest block is then at the slot of the state, which is not the first slot. -/
-private theorem BuilderDebtCovered.headed {gloas : .glamsterdam ≤ fork}
+theorem BuilderDebtCovered.headed {gloas : .glamsterdam ≤ fork}
     {block : BeaconBlock preset fork} {parented headed : BeaconState preset fork}
     (holds : BuilderDebtCovered state gloas)
     (parentOk : Consensus.processParentExecutionPayload config checks state gloas block.body =
@@ -289,19 +281,13 @@ private theorem BuilderDebtCovered.headed {gloas : .glamsterdam ≤ fork}
     (headedOk : processBlockHeader parented block = .ok headed) :
     BuilderDebtSettled headed gloas ∧ headed.latestBlockHeader.slot = headed.slot ∧
       headed.slot ≠ 0 := by
-  have inputs := payloadInputs_processParentExecutionPayload parentOk
-  have slot : parented.slot = state.slot := inputs.slot
-  have header : parented.latestBlockHeader = state.latestBlockHeader := inputs.latestBlockHeader
-  obtain ⟨same, newer, -⟩ := processBlockHeader_checks headedOk
-  have older : state.latestBlockHeader.slot < state.slot := by
-    rw [← slot, ← header, ← same]
-    exact newer
+  have older := latestBlockHeader_slot_lt_of_processBlockHeader parentOk headedOk
   obtain ⟨settled, placed⟩ :=
     (holds.processParentExecutionPayload older parentOk).processBlockHeader headedOk
   refine ⟨settled, placed, ?_⟩
   obtain ⟨_, _, rfl⟩ := processBlockHeader_eq headedOk
   show parented.slot ≠ 0
-  rw [slot]
+  rw [(payloadInputs_processParentExecutionPayload parentOk).slot]
   intro zero
   rw [zero] at older
   exact absurd older (by simp)

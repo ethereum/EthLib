@@ -89,6 +89,49 @@ class SoundnessFacts(unittest.TestCase):
     def check(self) -> list[str]:
         return facts.run(self.root, check=True)
 
+    def test_vcvio_users_are_named_by_directory_or_file(self):
+        proofs = self.root / "EthLib" / "Foo" / "Proofs"
+        (proofs / "Games").mkdir(parents=True)
+        (proofs / "Games" / "Game.lean").write_text("module\n\npublic import VCVio.OracleComp\n")
+        (proofs / "Lone.lean").write_text("module\n\nimport VCVio\n")
+        (proofs / "Quiet.lean").write_text("/- import VCVio -/\nmodule\n\nimport Mathlib.Tactic\n")
+        self.assertEqual(
+            facts.vcvio_users(self.root),
+            "- `EthLib/Foo/Proofs/Games/`\n- `EthLib/Foo/Proofs/Lone.lean`\n"
+            "\nNo specification file imports it.\n",
+        )
+
+    def test_a_proof_that_reaches_vcvio_through_another_proof_is_named(self):
+        proofs = self.root / "EthLib" / "Foo" / "Proofs"
+        (proofs / "Games").mkdir(parents=True)
+        (proofs / "Games" / "Game.lean").write_text("module\n\npublic import VCVio\n")
+        (proofs / "Uses.lean").write_text("module\n\npublic import EthLib.Foo.Proofs.Games.Game\n")
+        (proofs / "Games.lean").write_text("module\n\npublic import EthLib.Foo.Proofs.Games.Game\n")
+        (self.root / "EthLib" / "Foo" / "Proofs.lean").write_text(
+            "module\n\npublic import EthLib.Foo.Proofs.Uses\n"
+        )
+        self.assertEqual(
+            facts.vcvio_users(self.root),
+            "- `EthLib/Foo/Proofs/Games/`\n- `EthLib/Foo/Proofs/Uses.lean`\n"
+            "\nNo specification file imports it.\n",
+        )
+
+    def test_a_specification_that_imports_vcvio_is_named(self):
+        (self.root / "EthLib" / "Foo.lean").write_text("module\n\npublic import VCVio\n")
+        self.assertIn("- `EthLib/Foo.lean`", facts.vcvio_users(self.root))
+        self.assertNotIn("No specification file imports it.", facts.vcvio_users(self.root))
+
+    def test_a_new_vcvio_user_fails_the_check(self):
+        (self.root / "EthLib" / "Foo" / "Proofs").mkdir(parents=True)
+        (self.root / "EthLib" / "Foo" / "Proofs" / "New.lean").write_text(
+            "module\n\nimport VCVio\n"
+        )
+        self.assertIn(
+            "generated blocks are out of date: run "
+            "uv run --no-project --python 3.12 python scripts/soundness_facts.py",
+            self.check(),
+        )
+
     def test_no_native_theorem_is_said_plainly(self):
         (self.root / "scripts" / "check_decls_baseline.txt").write_text("partial Foo.spin\n")
         self.assertEqual(facts.native(self.root), "No theorem uses them.\n")

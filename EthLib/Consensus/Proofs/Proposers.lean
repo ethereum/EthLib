@@ -51,13 +51,13 @@ theorem mem_of_computeProposerIndices {epoch : Epoch} {seed : Bytes32}
   obtain ⟨slot, -, slotProposer⟩ := bind_ok_iff.mp entry
   simpa using mem_of_computeSlotProposer slotProposer
 
-/-- From Gloas, each candidate to propose is active and unslashed. -/
-theorem proposerCandidates_spec (gloas : .glamsterdam ≤ fork) {epoch : Epoch}
-    {index : ValidatorIndex} (member : index ∈ proposerCandidates state epoch) :
-    index ∈ getActiveValidatorIndices state epoch ∧
+/-- From Gloas, each candidate to propose is among the active validators and unslashed. -/
+theorem proposerCandidates_spec (gloas : .glamsterdam ≤ fork) {active : Array ValidatorIndex}
+    {index : ValidatorIndex} (member : index ∈ proposerCandidates state active) :
+    index ∈ active ∧
       ∀ validator, state.validators.data[index.toNat]? = some validator →
         validator.slashed = false := by
-  simp only [proposerCandidates, gloas, ↓reduceIte, Array.mem_filter, List.mem_toArray] at member
+  simp only [proposerCandidates, gloas, ↓reduceIte, Array.mem_filter] at member
   refine ⟨member.1, fun validator found => ?_⟩
   have := member.2
   rw [found] at this
@@ -176,9 +176,13 @@ theorem getBeaconProposerIndices_spec (gloas : .glamsterdam ≤ fork) {epoch : E
     ∀ proposer ∈ proposers.toList, proposer ∈ getActiveValidatorIndices state epoch ∧
       ∀ validator, state.validators.data[proposer.toNat]? = some validator →
         validator.slashed = false := by
+  obtain ⟨active, checked, computed⟩ := bind_ok_iff.mp computed
   obtain ⟨seed, -, drawn⟩ := bind_ok_iff.mp computed
   intro proposer member
-  exact proposerCandidates_spec gloas (mem_of_computeProposerIndices drawn proposer member)
+  obtain ⟨listed, unslashed⟩ :=
+    proposerCandidates_spec gloas (mem_of_computeProposerIndices drawn proposer member)
+  rw [← getActiveValidatorIndicesChecked_ok checked]
+  exact ⟨List.mem_toArray.mp listed, unslashed⟩
 
 /-- Moving the lookahead shifts every proposer back by one epoch.
 

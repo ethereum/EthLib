@@ -1,8 +1,8 @@
 module
 
 public import EthLib.Consensus.Proofs.Builders
+public import EthLib.Consensus.Proofs.Time
 public import EthLib.Consensus.Proofs.Transition.BuilderDebt
-public import EthLib.Consensus.Proofs.Transition.BuilderPayments
 
 /-!
 # Proofs: the epoch step of the builder payments keeps the builder debt invariant
@@ -97,18 +97,15 @@ private theorem processBuilderPendingPayments_of_noWrap (positive : preset.Payme
   obtain ⟨one, small⟩ := positive.slotsPerEpoch_bounds
   obtain ⟨quorum, found, queue, shifted⟩ := processBuilderPendingPayments_spec computed
   have least := getBuilderPaymentQuorumThreshold_pos positive found
-  obtain ⟨builders, header, bid⟩ : after.builders = state.builders ∧
-      after.latestBlockHeader = state.latestBlockHeader ∧
-      after.latestExecutionPayloadBid = state.latestExecutionPayloadBid := by
-    unfold EthLib.Consensus.processBuilderPendingPayments at computed
-    obtain ⟨_, _, rest⟩ := bind_ok_iff.mp computed
-    cases rest
-    exact ⟨rfl, rfl, rfl⟩
-  have movedBuilders : ({ after with slot := next }).builders = state.builders := builders
+  have same := processBuilderPendingPayments_eq computed
+  have movedBuilders : ({ after with slot := next }).builders = state.builders := by
+    rw [same]
   have movedBid : ({ after with slot := next }).latestExecutionPayloadBid =
-      state.latestExecutionPayloadBid := bid
+      state.latestExecutionPayloadBid := by
+    rw [same]
   have movedHeader : ({ after with slot := next }).latestBlockHeader.slot =
-      state.latestBlockHeader.slot := congrArg (·.slot) header
+      state.latestBlockHeader.slot := by
+    rw [same]
   have movedSlot : ({ after with slot := next }).slot = next := rfl
   have movedPayments : ({ after with slot := next }).builderPendingPayments gloas =
       shiftPayments (state.builderPendingPayments gloas) := shifted
@@ -117,23 +114,8 @@ private theorem processBuilderPendingPayments_of_noWrap (positive : preset.Payme
         releasedPayments (state.builderPendingPayments gloas).elements.toList
           preset.SLOTS_PER_EPOCH.toNat quorum := queue
   generalize { after with slot := next } = moved at *
-  have early : ∀ j, j < preset.SLOTS_PER_EPOCH.toNat →
-      paymentAt moved gloas j = paymentAt state gloas (j + preset.SLOTS_PER_EPOCH.toNat) := by
-    intro j inside
-    rw [paymentAt_of_lt (by omega), paymentAt_of_lt (by omega)]
-    simp only [movedPayments]
-    exact getElem_shiftPayments_early _ inside
-  have late : ∀ j, preset.SLOTS_PER_EPOCH.toNat ≤ j → j < 2 * preset.SLOTS_PER_EPOCH.toNat →
-      paymentAt moved gloas j = .empty := by
-    intro j low high
-    rw [paymentAt_of_lt high]
-    simp only [movedPayments]
-    exact getElem_shiftPayments_late _ low high
-  have beyond : ∀ j, preset.SLOTS_PER_EPOCH.toNat ≤ j → paymentAt moved gloas j = .empty := by
-    intro j low
-    by_cases high : j < 2 * preset.SLOTS_PER_EPOCH.toNat
-    · exact late j low high
-    · simp [paymentAt, Nat.not_lt.mp high]
+  have early := fun j => paymentAt_shiftPayments_early (position := j) movedPayments
+  have beyond := fun j => paymentAt_shiftPayments_late (position := j) movedPayments
   have shiftedEmpty : ∀ j, (j < preset.SLOTS_PER_EPOCH.toNat →
       paymentAt state gloas (j + preset.SLOTS_PER_EPOCH.toNat) = .empty) →
       paymentAt moved gloas j = .empty := by
@@ -211,7 +193,7 @@ private theorem processBuilderPendingPayments_of_noWrap (positive : preset.Payme
       unfold getCurrentEpoch
       rw [movedSlot]
       exact boundary
-    unfold parentPaymentPosition getPreviousEpoch
+    unfold parentPaymentPosition slotPaymentPosition getPreviousEpoch
     rw [current, saturatingSub_succ noWrap, movedHeader]
   have offset : (state.latestBlockHeader.slot % preset.SLOTS_PER_EPOCH).toNat <
       preset.SLOTS_PER_EPOCH.toNat := by
@@ -303,7 +285,7 @@ private theorem processBuilderPendingPayments_of_noWrap (positive : preset.Payme
     by_cases ahead : parent = epoch + 1
     · rw [ite_eq_left ahead] at positionAfter
       have empty : paymentAt moved gloas (preset.SLOTS_PER_EPOCH + k).toNat = .empty :=
-        late _ (by omega) (by omega)
+        beyond _ (by omega)
       have opened : latePaymentOpen moved gloas = latePaymentOpen state gloas := by
         rw [openedBefore]
         simp only [latePaymentOpen, positionAfter, empty]
@@ -339,25 +321,18 @@ theorem BuilderDebtCovered.processBuilderPendingPayments (positive : preset.Paym
     (computed : processBuilderPendingPayments state gloas = .ok after) {next : Slot}
     (advance : next.toNat = state.slot.toNat + 1) (first : next % preset.SLOTS_PER_EPOCH = 0) :
     BuilderDebtCovered { after with slot := next } gloas := by
-  have pos := positive.slotsPerEpoch_bounds.1
-  have divides : preset.SLOTS_PER_EPOCH.toNat ∣ state.slot.toNat + 1 := by
-    rw [← advance]
-    exact Nat.dvd_of_mod_eq_zero (by simpa [UInt64.toNat_mod] using congrArg UInt64.toNat first)
-  have quotient : (state.slot.toNat + 1) / preset.SLOTS_PER_EPOCH.toNat =
-      state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat + 1 :=
-    Nat.succ_div_of_dvd divides
+  have epochs := nextSlot_epoch_of_boundary advance first
   have small := next.toNat_lt
   have least : state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat + 1 ≤ next.toNat := by
-    rw [advance, ← quotient]
+    rw [← epochs]
     exact Nat.div_le_self _ _
   have successor : (getCurrentEpoch state + 1).toNat =
       state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat + 1 := by
-    simp only [getCurrentEpoch, computeEpochAtSlot, UInt64.toNat_add, UInt64.toNat_div,
-      UInt64.toNat_one]
+    rw [UInt64.toNat_add, getCurrentEpoch_toNat, UInt64.toNat_one]
     exact Nat.mod_eq_of_lt (by omega)
   refine processBuilderPendingPayments_of_noWrap positive holds computed ?_ ?_
   · apply UInt64.toNat_inj.mp
-    rw [successor, computeEpochAtSlot, UInt64.toNat_div, advance, quotient]
+    rw [successor, computeEpochAtSlot, UInt64.toNat_div, epochs]
   · intro wraps
     have := congrArg UInt64.toNat wraps
     rw [successor] at this

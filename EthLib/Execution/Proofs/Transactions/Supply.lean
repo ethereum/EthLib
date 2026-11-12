@@ -250,49 +250,69 @@ theorem supply_settleGas {env : BlockEnvironment fork} {state state' : State.Tra
 
 /-! ## The deletions -/
 
-/-- The deletions at the end of a transaction keep or lower the supply, and keep created accounts.
+/-- The balances that the deletions at the end of a transaction remove, in the state `state`.
 
-They keep the supply from Glamsterdam, or when no account is to be deleted. -/
-theorem supply_deleteAccounts {state state' : State.TransactionState} {output : CallOutput}
-    (h : deleteAccounts fork state output = .ok state') :
-    state'.supply ≤ state.supply ∧ state'.createdAccounts = state.createdAccounts ∧
-      (.glamsterdam ≤ fork ∨ (∀ address, address ∉ output.accountsToDelete) →
-        state'.supply = state.supply) := by
-  have fold : ∀ (l : List Address) (init final : State.TransactionState),
-      l.foldlM (fun state address =>
+They are the balances of its accounts to delete, each counted once.
+
+From Glamsterdam, the deletions keep every balance, so they remove nothing. -/
+def deletedBalances (fork : Fork) (state : State.TransactionState) (output : CallOutput) : Nat :=
+  if fork ≥ .glamsterdam then 0
+  else (output.accountsToDelete.toList.map state.balanceOf).sum
+/-- Deleting distinct accounts one by one lowers the supply by their balances.
+
+It keeps the created accounts. -/
+private theorem foldlM_deleteAccount {fork : Fork} :
+    ∀ (addresses : List Address), addresses.Nodup →
+      ∀ (init final : State.TransactionState),
+      addresses.foldlM (fun state address =>
         if fork ≥ .glamsterdam then state.clearAccountPreservingBalance fork address
         else pure (state.destroyAccount address)) init = .ok final →
-      final.supply ≤ init.supply ∧ final.createdAccounts = init.createdAccounts ∧
-        (.glamsterdam ≤ fork ∨ l = [] → final.supply = init.supply) := by
-    intro l
-    induction l with
-    | nil =>
-      intro init final h
-      cases h
-      exact ⟨Nat.le_refl _, rfl, fun _ => rfl⟩
-    | cons address rest ih =>
-      intro init final h
-      obtain ⟨mid, hmid, h⟩ := bind_ok_iff.mp h
-      obtain ⟨hle, hc, heq⟩ := ih mid final h
-      split at hmid
-      · rename_i hglam
-        have hs := State.TransactionState.supply_clearAccountPreservingBalance hmid
-        have hcm : mid.createdAccounts = init.createdAccounts := by
-          dsimp only at hmid
-          unfold State.TransactionState.clearAccountPreservingBalance at hmid
-          rw [State.TransactionState.createdAccounts_modifyState hmid]; rfl
-        exact ⟨by omega, hc.trans hcm, fun _ => (heq (.inl hglam)).trans hs⟩
-      · cases hmid
-        have := State.TransactionState.supply_destroyAccount init address
-        refine ⟨by omega, hc, fun hcase => ?_⟩
-        rcases hcase with hglam | hnil
-        · exact absurd hglam ‹_›
-        · cases hnil
-  unfold deleteAccounts at h
-  obtain ⟨mid, hmid, h⟩ := bind_ok_iff.mp h
-  cases h
-  rw [Std.ExtTreeSet.foldlM_eq_foldlM_toList] at hmid
-  obtain ⟨hle, hc, heq⟩ := fold _ _ _ hmid
+      final.supply + (if fork ≥ .glamsterdam then 0 else
+        (addresses.map init.balanceOf).sum) = init.supply ∧
+      final.createdAccounts = init.createdAccounts := by
+  intro addresses
+  induction addresses with
+  | nil =>
+    intro _ init final h
+    cases h
+    simp
+  | cons address rest ih =>
+    intro distinct init final h
+    obtain ⟨notMem, distinct⟩ := List.nodup_cons.mp distinct
+    obtain ⟨mid, hm, h⟩ := bind_ok_iff.mp h
+    obtain ⟨tail, hc⟩ := ih distinct mid final h
+    split at hm
+    · rename_i hfork
+      have hs := State.TransactionState.supply_clearAccountPreservingBalance hm
+      refine ⟨?_, ?_⟩
+      · simp only [hfork, ↓reduceIte, Nat.add_zero] at tail ⊢
+        exact tail.trans hs
+      · have hmc := hm
+        dsimp only at hmc
+        unfold State.TransactionState.clearAccountPreservingBalance at hmc
+        rw [hc, State.TransactionState.createdAccounts_modifyState hmc]
+        rfl
+    · rename_i hfork
+      cases hm
+      refine ⟨?_, hc⟩
+      have hs := State.TransactionState.supply_destroyAccount init address
+      have balances : rest.map (init.destroyAccount address).balanceOf =
+          rest.map init.balanceOf := by
+        refine List.map_congr_left fun other mem => ?_
+        have hne : other ≠ address := fun same => notMem (same ▸ mem)
+        simp only [State.TransactionState.balanceOf,
+          State.TransactionState.getAccount_destroyAccount, hne, ↓reduceIte]
+      simp only [hfork, ↓reduceIte, balances] at tail
+      simp only [hfork, ↓reduceIte, List.map_cons, List.sum_cons]
+      omega
+
+/-- The deletions of a transaction lower the supply by the removed balances.
+
+They keep the created accounts. -/
+private theorem deleteAccounts_facts {state state' : State.TransactionState}
+    {output : CallOutput} (h : deleteAccounts fork state output = .ok state') :
+    state'.supply + deletedBalances fork state output = state.supply ∧
+      state'.createdAccounts = state.createdAccounts := by
   have hcreated : ∀ (touched : List Address) (s : State.TransactionState),
       (s.destroyTouchedEmptyAccounts fork touched).createdAccounts = s.createdAccounts := by
     intro touched s
@@ -304,14 +324,77 @@ theorem supply_deleteAccounts {state state' : State.TransactionState} {output : 
       | cons address rest ih =>
         rw [List.foldl_cons, ih]
         split <;> rfl
+  unfold deleteAccounts at h
+  obtain ⟨mid, hm, h⟩ := bind_ok_iff.mp h
+  cases h
+  rw [Std.ExtTreeSet.foldlM_eq_foldlM_toList] at hm
+  have distinct : output.accountsToDelete.toList.Nodup :=
+    (Std.ExtTreeSet.distinct_toList).imp fun hne same => hne (by simp [same])
+  obtain ⟨hs, hc⟩ := foldlM_deleteAccount _ distinct _ _ hm
   rw [State.TransactionState.supply_destroyTouchedEmptyAccounts, hcreated]
-  refine ⟨hle, hc, fun hcase => heq ?_⟩
+  exact ⟨hs, hc⟩
+
+/-- The deletions of a transaction lower the supply by exactly the balances they remove. -/
+theorem supply_deleteAccounts_eq {state state' : State.TransactionState} {output : CallOutput}
+    (h : deleteAccounts fork state output = .ok state') :
+    state'.supply + deletedBalances fork state output = state.supply :=
+  (deleteAccounts_facts h).1
+
+/-- The deletions at the end of a transaction keep the created accounts. -/
+theorem createdAccounts_deleteAccounts {state state' : State.TransactionState}
+    {output : CallOutput} (h : deleteAccounts fork state output = .ok state') :
+    state'.createdAccounts = state.createdAccounts :=
+  (deleteAccounts_facts h).2
+
+/-- The deletions at the end of a transaction keep or lower the supply, and keep created accounts.
+
+They keep the supply from Glamsterdam, or when no account is to be deleted. -/
+theorem supply_deleteAccounts {state state' : State.TransactionState} {output : CallOutput}
+    (h : deleteAccounts fork state output = .ok state') :
+    state'.supply ≤ state.supply ∧ state'.createdAccounts = state.createdAccounts ∧
+      (.glamsterdam ≤ fork ∨ (∀ address, address ∉ output.accountsToDelete) →
+        state'.supply = state.supply) := by
+  have eq := supply_deleteAccounts_eq h
+  refine ⟨by omega, createdAccounts_deleteAccounts h, fun hcase => ?_⟩
   rcases hcase with hglam | hnone
-  · exact .inl hglam
-  · exact .inr (List.eq_nil_iff_forall_not_mem.mpr fun address hmem =>
-      hnone address (Std.ExtTreeSet.mem_toList.mp hmem))
+  · have : deletedBalances fork state output = 0 := by
+      unfold deletedBalances
+      simp only [ge_iff_le, hglam, ↓reduceIte]
+    omega
+  · have hnil : output.accountsToDelete.toList = [] :=
+      List.eq_nil_iff_forall_not_mem.mpr fun address hmem =>
+        hnone address (Std.ExtTreeSet.mem_toList.mp hmem)
+    have : deletedBalances fork state output = 0 := by
+      unfold deletedBalances
+      split <;> simp [hnil]
+    omega
 
 /-! ## The transaction -/
+
+/-- Buying the gas and settling it lower the supply by exactly the burned fees, around a message.
+
+The message runs from the state `bought` that the purchase gives to the state `ended`.
+
+The settlement runs on `ended` and gives the state `settled` and the gas used.
+
+The gas limit must cover the least gas, and the price must cover the base fee. -/
+theorem supply_buyGas_settleGas {env : BlockEnvironment fork}
+    {state bought ended settled : State.TransactionState} {sender : Address}
+    {gasLeft refund used : Nat} (hMin : minimumGas fork sender tx ≤ tx.gas.toNat)
+    (hPrice : baseFeeOf env ≤ effectiveGasPrice (baseFeeOf env) tx)
+    (hb : buyGas env state sender tx = .ok bought)
+    (hs : settleGas env ended sender tx gasLeft refund = .ok (settled, used)) :
+    settled.supply + burnedFees env tx used + bought.supply = ended.supply + state.supply := by
+  obtain ⟨hbuy, -⟩ := supply_buyGas hb
+  have hset := supply_settleGas hs
+  have hused := settleGas_gasUsed hs
+  have conserve := settlement_conserves hMin hPrice gasLeft refund
+  dsimp only at hset conserve
+  simp only [settlement, priorityFeeOf] at hset conserve
+  simp only [burnedFees]
+  rw [hused]
+  generalize gasUsed fork sender tx gasLeft refund = g at hset conserve ⊢
+  omega
 
 /-- A transaction that runs with any gas meter lowers the supply by at least its burned fees.
 
@@ -331,20 +414,10 @@ theorem runTransaction_supply {Meter : Type} [GasMeter Meter] [LawfulGasMeter Me
           (State.TransactionState.ofBlock block).supply) := by
   obtain ⟨target, bought, message, output, settled, -, hbought, -, houtput, -, hs, hd⟩ :=
     runTransaction_eq_ok h
-  obtain ⟨hbuy, -⟩ := supply_buyGas hbought
   have hmsg := supplyLe_processMessageCall houtput
-  have hset := supply_settleGas hs
   have cset := createdAccounts_settleGas hs
   obtain ⟨hdel, cdel, hdelEq⟩ := supply_deleteAccounts hd
-  have hused := settleGas_gasUsed hs
-  have conserve := settlement_conserves hMin hPrice (output.gasLeft + output.reservoir)
-    output.refund
-  dsimp only at hset conserve
-  simp only [settlement, priorityFeeOf] at hset conserve
-  simp only [burnedFees]
-  rw [hused]
-  generalize gasUsed fork included.sender tx (output.gasLeft + output.reservoir) output.refund =
-    g at hset conserve ⊢
+  have hfees := supply_buyGas_settleGas hMin hPrice hbought hs
   refine ⟨by have := hmsg.1; omega, fun burns => ?_⟩
   -- The message burns nothing, and neither do the deletions.
   have burnsOut : BurnsNone fork output.state := by

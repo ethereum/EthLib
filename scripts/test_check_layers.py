@@ -80,6 +80,7 @@ class Tree:
         lakefile: str = LAKEFILE,
         baseline: str = "",
         architecture: str = ARCHITECTURE,
+        kinds: str | None = "models = []\nrefinement = []\n",
     ):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
@@ -87,6 +88,9 @@ class Tree:
         (self.root / "ARCHITECTURE.md").write_text(architecture)
         (self.root / "scripts").mkdir()
         (self.root / "scripts" / "check_layers_baseline.txt").write_text(baseline)
+        if kinds is not None:
+            (self.root / "coverage").mkdir()
+            (self.root / "coverage" / "kinds.toml").write_text(kinds)
         for name, body in modules.items():
             path = self.root.joinpath(*name.split(".")).with_suffix(".lean")
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -116,6 +120,40 @@ def with_modules(*added: dict[str, list[str]]) -> dict[str, list[str] | str]:
     return tree
 
 
+def with_proofs(*added: dict[str, list[str] | str]) -> dict[str, list[str] | str]:
+    """The good tree with more property modules, each imported by the root `EthLib.Proofs`."""
+    tree: dict[str, list[str] | str] = {k: list(v) for k, v in GOOD.items()}
+    root = list(GOOD["EthLib.Proofs"])
+    for module in added:
+        tree |= module
+        root += list(module)
+    tree["EthLib.Proofs"] = root
+    return tree
+
+
+MODEL = "EthLib.Execution.Proofs.Models.M"
+# A model, a property that imports it, and a property that imports that property.
+MODEL_TREE: dict[str, list[str] | str] = {
+    MODEL: ["EthLib.Execution.A"],
+    "EthLib.Execution.Proofs.R": [MODEL],
+    "EthLib.Execution.Proofs.S": ["EthLib.Execution.Proofs.R"],
+}
+MODELLED = with_proofs(MODEL_TREE)
+# A property module whose body holds only an import of the model.
+GATHERER: dict[str, list[str] | str] = {
+    "EthLib.Execution.Proofs.All": f"module\n\npublic import {MODEL}\n"
+}
+
+
+def kinds(models: list[str], refinement: list[str]) -> str:
+    """A kinds file that declares the given models and refinement modules."""
+
+    def quoted(names: list[str]) -> str:
+        return "[" + ", ".join(f'"{name}"' for name in names) + "]"
+
+    return f"models = {quoted(models)}\nrefinement = {quoted(refinement)}\n"
+
+
 class Rules(unittest.TestCase):
     def assert_fails(self, tree: dict, text: str) -> None:
         problems = Tree(tree).problems()
@@ -138,6 +176,48 @@ class Rules(unittest.TestCase):
             with_imports("EthLib.Cryptography.A", "EthLib.Serialization.A"),
             "Cryptography sits below Serialization",
         )
+
+    def test_hash_imports_a_signature(self):
+        tree = with_modules(
+            {"EthLib.Cryptography.Hash.A": ["EthLib.Cryptography.Bls.A"]},
+            {"EthLib.Cryptography.Bls.A": []},
+        )
+        self.assert_fails(
+            tree,
+            "EthLib/Cryptography/Hash/A.lean: imports EthLib.Cryptography.Bls.A, "
+            "but hashes and Merkle trees import no other part of Cryptography",
+        )
+
+    def test_merkle_tree_imports_a_module_beside_the_tiers(self):
+        tree = with_modules(
+            {"EthLib.Cryptography.Merkle": ["EthLib.Cryptography.Montgomery"]},
+            {"EthLib.Cryptography.Montgomery": []},
+        )
+        self.assert_fails(tree, "hashes and Merkle trees import no other part of Cryptography")
+
+    def test_first_tier_imports_itself_and_base(self):
+        tree = with_modules(
+            {"EthLib.Cryptography.Hash.A": ["EthLib.Cryptography.Hash.B", "EthLib.Base.A"]},
+            {"EthLib.Cryptography.Hash.B": ["EthLib.Cryptography.Merkle.Tree"]},
+            {"EthLib.Cryptography.Merkle.Tree": []},
+            {"EthLib.Cryptography.Bls.A": ["EthLib.Cryptography.Hash.A"]},
+        )
+        self.assertEqual(Tree(tree).problems(), [])
+
+    def test_property_of_a_hash_imports_other_cryptography(self):
+        tree = with_imports("EthLib.Proofs", "EthLib.Cryptography.Hash.Proofs.A")
+        tree |= {
+            "EthLib.Cryptography.Hash.Proofs.A": ["EthLib.Cryptography.A"],
+        }
+        self.assertEqual(Tree(tree).problems(), [])
+
+    def test_hash_imports_a_property_once(self):
+        # The import breaks the rule for properties, so it is reported once, for that rule.
+        tree = with_modules({"EthLib.Cryptography.Hash.A": ["EthLib.Cryptography.Proofs.A"]})
+        tree |= with_imports("EthLib.Proofs", "EthLib.Cryptography.Proofs.A")
+        tree["EthLib"] = [*GOOD["EthLib"], "EthLib.Cryptography.Hash.A"]
+        tree["EthLib.Cryptography.Proofs.A"] = []
+        self.assert_fails(tree, "a specification never imports a property")
 
     def test_higher_layer_from_a_property(self):
         tree = with_imports("EthLib.Execution.Proofs.A", "EthLib.Consensus.A")
@@ -179,6 +259,140 @@ class Rules(unittest.TestCase):
             with_imports("EthLib.Execution.Exports.A", "Mathlib.Tactic"),
             "a C export imports only EthLib",
         )
+
+    def test_export_meta_imports_the_specification(self):
+        tree: dict[str, list[str] | str] = dict(with_imports("EthLib.Exports"))
+        tree["EthLib.Execution.Exports.A"] = (
+            "module\n\npublic import EthLib.Execution.A\npublic meta import EthLib.Execution.A\n"
+        )
+        self.assert_fails(
+            tree,
+            "EthLib/Execution/Exports/A.lean:4: meta-imports EthLib.Execution.A, "
+            "but no export runs specification code while it is elaborated",
+        )
+
+    def test_export_proof_meta_imports_the_specification(self):
+        tree: dict[str, list[str] | str] = dict(
+            with_imports("EthLib.Exports", "EthLib.Execution.Exports.Proofs.A")
+        )
+        tree["EthLib.Execution.Exports.Proofs.A"] = "module\n\nmeta import EthLib.Execution.A\n"
+        self.assert_fails(tree, "meta-imports EthLib.Execution.A")
+
+    def test_imported_property_meta_imports_the_specification(self):
+        # The property can define an `elab` that runs specification code inside the export.
+        tree: dict[str, list[str] | str] = dict(
+            with_imports("EthLib.Execution.Exports.A", "EthLib.Execution.Proofs.A")
+        )
+        tree["EthLib.Execution.Proofs.A"] = (
+            "module\n\npublic import EthLib.Execution.A\npublic meta import EthLib.Execution.A\n"
+        )
+        self.assert_fails(
+            tree,
+            "EthLib/Execution/Proofs/A.lean:4: meta-imports EthLib.Execution.A, "
+            "but EthLib.Execution.Exports.A reaches it, "
+            "and no export runs specification code while it is elaborated",
+        )
+
+    def test_specification_meta_imports_the_specification(self):
+        # An export imports `EthLib.Execution.A` plainly, so only the meta import breaks a rule.
+        tree: dict[str, list[str] | str] = dict(GOOD)
+        tree["EthLib.Execution.A"] = (
+            "module\n\npublic import EthLib.Networking.A\npublic import EthLib.Base.A\n"
+            "public meta import EthLib.Base.A\n"
+        )
+        self.assert_fails(
+            tree,
+            "EthLib/Execution/A.lean:5: meta-imports EthLib.Base.A, "
+            "but a specification never uses `meta import`",
+        )
+
+    def test_specification_that_no_export_reaches_meta_imports(self):
+        tree = with_modules({"EthLib.Networking.B": []})
+        tree["EthLib.Networking.B"] = "module\n\nmeta import Lean.Elab.Command\n"
+        self.assert_fails(
+            tree,
+            "EthLib/Networking/B.lean:3: meta-imports Lean.Elab.Command, "
+            "but a specification never uses `meta import`",
+        )
+
+    def test_specification_meta_imports_the_toolchain(self):
+        tree: dict[str, list[str] | str] = dict(GOOD)
+        tree["EthLib.Base.A"] = "module\n\npublic meta import Lean.Elab.Command\n"
+        self.assert_fails(tree, "a specification never uses `meta import`")
+
+    def test_export_meta_imports_a_property_that_reaches_the_specification(self):
+        tree: dict[str, list[str] | str] = dict(with_imports("EthLib.Exports"))
+        # The property imports only the specification, so no other rule applies.
+        tree["EthLib.Execution.Proofs.A"] = ["EthLib.Execution.A"]
+        tree["EthLib.Execution.Exports.A"] = (
+            "module\n\npublic import EthLib.Execution.A\n"
+            "public meta import EthLib.Execution.Proofs.A\n"
+        )
+        self.assert_fails(tree, "meta-imports EthLib.Execution.Proofs.A")
+
+    def test_export_meta_imports_the_toolchain(self):
+        tree: dict[str, list[str] | str] = dict(with_imports("EthLib.Exports"))
+        tree["EthLib.Execution.Exports.A"] = (
+            "module\n\npublic import EthLib.Execution.A\npublic meta import Lean.Elab.Command\n"
+        )
+        self.assertEqual(Tree(tree).problems(), [])
+
+    def test_export_meta_imports_an_export_of_the_toolchain(self):
+        # As `derive_py` would be, if its module imported only the toolchain.
+        tree: dict[str, list[str] | str] = dict(
+            with_imports("EthLib.Exports", "EthLib.Execution.Exports.Derive")
+        )
+        tree["EthLib.Execution.Exports.Derive"] = ["Lean.Elab.Command"]
+        tree["EthLib.Execution.Exports.A"] = (
+            "module\n\npublic import EthLib.Execution.A\n"
+            "public meta import EthLib.Execution.Exports.Derive\n"
+        )
+        self.assertEqual(Tree(tree).problems(), [])
+
+    def test_property_meta_imports_the_specification(self):
+        # No export reaches the property, so its elaboration never runs inside an export.
+        tree: dict[str, list[str] | str] = dict(with_imports("EthLib.Proofs"))
+        tree["EthLib.Execution.Proofs.A"] = (
+            "module\n\npublic import EthLib.Execution.A\nmeta import EthLib.Execution.A\n"
+        )
+        self.assertEqual(Tree(tree).problems(), [])
+
+    def test_export_reaches_outside_through_a_property(self):
+        self.assert_fails(
+            with_imports("EthLib.Execution.Exports.A", "EthLib.Execution.Proofs.A"),
+            "EthLib/Execution/Exports/A.lean: imports EthLib.Execution.Proofs.A, "
+            "which reaches Mathlib.Tactic, "
+            "but a C export reaches nothing beyond EthLib and the toolchain",
+        )
+
+    def test_export_reaches_outside_through_two_properties(self):
+        tree = with_imports("EthLib.Proofs", "EthLib.Execution.Proofs.B")
+        tree["EthLib.Execution.Proofs.B"] = ["EthLib.Execution.Proofs.A"]
+        tree["EthLib.Execution.Exports.A"] = ["EthLib.Execution.A", "EthLib.Execution.Proofs.B"]
+        self.assert_fails(tree, "imports EthLib.Execution.Proofs.B, which reaches Mathlib.Tactic")
+
+    def test_export_reaches_outside_through_another_export(self):
+        tree = with_imports("EthLib.Exports", "EthLib.Execution.Exports.B")
+        tree["EthLib.Execution.Exports.B"] = ["EthLib.Execution.Exports.A"]
+        tree["EthLib.Execution.Exports.A"] = ["EthLib.Execution.A", "EthLib.Execution.Proofs.A"]
+        self.assert_fails(
+            tree, "EthLib/Execution/Exports/A.lean: imports EthLib.Execution.Proofs.A"
+        )
+
+    def test_export_reaches_outside_once_through_a_chain_of_exports(self):
+        # Only the property that the second export imports is reported, where the import is written.
+        tree = with_imports("EthLib.Exports", "EthLib.Execution.Exports.B")
+        tree["EthLib.Execution.Proofs.B"] = ["EthLib.Execution.Exports.A"]
+        tree["EthLib.Execution.Exports.B"] = ["EthLib.Execution.A", "EthLib.Execution.Proofs.B"]
+        tree["EthLib.Execution.Exports.A"] = ["EthLib.Execution.A", "EthLib.Execution.Proofs.A"]
+        self.assert_fails(
+            tree, "EthLib/Execution/Exports/A.lean: imports EthLib.Execution.Proofs.A"
+        )
+
+    def test_export_imports_a_property_inside_ethlib(self):
+        tree = with_imports("EthLib.Exports", "EthLib.Execution.Exports.Proofs.A")
+        tree["EthLib.Execution.Exports.Proofs.A"] = ["EthLib.Execution.Exports.A"]
+        self.assertEqual(Tree(tree).problems(), [])
 
     def test_orphan(self):
         self.assert_fails(GOOD | {"EthLib.Base.B": []}, "EthLib/Base/B.lean: no library root")
@@ -228,6 +442,191 @@ class Rules(unittest.TestCase):
         self.assertEqual(Tree(tree).problems(), [])
 
 
+REFINEMENT = "EthLib.Execution.Proofs.R"
+# The direct import of the model in `MODELLED`, as the check reports it.
+DIRECT = (
+    f"EthLib/Execution/Proofs/R.lean: imports the model {MODEL}, "
+    "but coverage/kinds.toml does not declare it a refinement module"
+)
+
+
+class KindsRule(unittest.TestCase):
+    def problems(
+        self,
+        tree: Mapping[str, list[str] | str],
+        refinement: list[str],
+        models: list[str] | None = None,
+        baseline: str = "",
+    ) -> list[str]:
+        declared = kinds(
+            ["EthLib.Execution.Proofs.Models"] if models is None else models, refinement
+        )
+        return Tree(tree, kinds=declared, baseline=baseline).problems()
+
+    def test_refinement_module_imports_a_model(self):
+        self.assertEqual(self.problems(MODELLED, [REFINEMENT]), [])
+
+    def test_property_imports_a_model(self):
+        self.assertEqual(self.problems(MODELLED, []), [DIRECT])
+
+    def test_property_reaches_a_model_through_a_refinement_module(self):
+        # S imports R, which imports the model: only a direct import breaks the rule.
+        self.assertEqual(self.problems(MODELLED, [REFINEMENT, "EthLib.Execution.Proofs.S"]), [])
+
+    def test_module_of_imports_only(self):
+        self.assertEqual(self.problems(with_proofs(MODEL_TREE, GATHERER), [REFINEMENT]), [])
+
+    def test_aggregator_imports_a_model(self):
+        # The aggregator has a body, so only its place among the aggregators exempts it.
+        self.assertIn(MODEL, MODELLED["EthLib.Proofs"])
+        self.assertEqual(self.problems(MODELLED, [REFINEMENT]), [])
+
+    def test_model_imports_a_model(self):
+        tree = with_proofs(MODEL_TREE, {"EthLib.Execution.Proofs.Models.N": [MODEL]})
+        self.assertEqual(self.problems(tree, [REFINEMENT]), [])
+
+    def test_specification_imports_a_model(self):
+        tree = with_imports("EthLib.Engine.A", MODEL) | {
+            k: v for k, v in MODELLED.items() if "Proofs" in k
+        }
+        problems = self.problems(tree, [REFINEMENT])
+        self.assertEqual(
+            problems,
+            [
+                f"EthLib/Engine/A.lean: imports {MODEL}, "
+                "but a specification never imports a property"
+            ],
+        )
+
+    def test_listed_import_passes(self):
+        baseline = f"# Why.\nEthLib.Execution.Proofs.R {MODEL}\n"
+        self.assertEqual(self.problems(MODELLED, [], baseline=baseline), [])
+
+    def test_listed_import_of_a_refinement_module_is_stale(self):
+        baseline = f"# Why.\nEthLib.Execution.Proofs.R {MODEL}\n"
+        self.assertEqual(
+            self.problems(MODELLED, [REFINEMENT], baseline=baseline),
+            [
+                f"scripts/check_layers_baseline.txt: EthLib.Execution.Proofs.R {MODEL} "
+                "breaks no rule any more; remove the entry"
+            ],
+        )
+
+    def test_listed_transitive_import_is_stale(self):
+        baseline = "# Why.\nEthLib.Execution.Proofs.S EthLib.Execution.Proofs.R\n"
+        self.assertEqual(
+            self.problems(MODELLED, [REFINEMENT], baseline=baseline),
+            [
+                "scripts/check_layers_baseline.txt: EthLib.Execution.Proofs.S "
+                "EthLib.Execution.Proofs.R breaks no rule any more; remove the entry"
+            ],
+        )
+
+    def test_refinement_module_reaches_no_model(self):
+        self.assertEqual(
+            self.problems(MODELLED, [REFINEMENT, "EthLib.Execution.Proofs.A"]),
+            [
+                "coverage/kinds.toml: the refinement module EthLib.Execution.Proofs.A "
+                "reaches no model"
+            ],
+        )
+
+    def test_refinement_module_does_not_exist(self):
+        self.assertEqual(
+            self.problems(MODELLED, [REFINEMENT, "EthLib.Execution.Proofs.Gone"]),
+            [
+                "coverage/kinds.toml: the refinement module "
+                "EthLib.Execution.Proofs.Gone does not exist"
+            ],
+        )
+
+    def test_refinement_module_of_the_wrong_kind(self):
+        tree = with_proofs(MODEL_TREE, GATHERER)
+        cases = {
+            "EthLib.Execution.A": "is not a property module",
+            MODEL: "is a model",
+            "EthLib.Execution.Proofs.All": "only gathers imports",
+            "EthLib.Proofs": "is an aggregator",
+        }
+        for name, reason in cases.items():
+            with self.subTest(name=name):
+                self.assertEqual(
+                    self.problems(tree, [REFINEMENT, name]),
+                    [f"coverage/kinds.toml: the refinement module {name} {reason}"],
+                )
+
+    def test_model_matches_no_module(self):
+        models = ["EthLib.Execution.Proofs.Models", "EthLib.Consensus.Proofs.Models"]
+        self.assertEqual(
+            self.problems(MODELLED, [REFINEMENT], models=models),
+            ["coverage/kinds.toml: no module is under the model EthLib.Consensus.Proofs.Models"],
+        )
+
+    def test_model_outside_proofs(self):
+        models = ["EthLib.Execution.Proofs.Models", "EthLib.Engine.A"]
+        self.assertEqual(
+            self.problems(MODELLED, [REFINEMENT], models=models),
+            ["coverage/kinds.toml: the model EthLib.Engine.A is not under a Proofs directory"],
+        )
+
+    def test_model_prefix_matches_whole_components(self):
+        # `EthLib.Execution.Proofs.Model` names no module, and is no prefix of `Models.M`.
+        models = ["EthLib.Execution.Proofs.Model"]
+        self.assertEqual(
+            self.problems(MODELLED, [], models=models),
+            ["coverage/kinds.toml: no module is under the model EthLib.Execution.Proofs.Model"],
+        )
+
+    def test_missing_file(self):
+        self.assertEqual(Tree(GOOD, kinds=None).problems(), ["coverage/kinds.toml: missing"])
+
+    def test_unreadable_file_keeps_the_baseline_of_the_rule(self):
+        # Without the declarations, the check cannot tell whether the entry is still needed.
+        baseline = f"# Why.\nEthLib.Execution.Proofs.R {MODEL}\n"
+        cases = {None: r"missing", "models = [": r"not valid TOML: .+"}
+        for declared, message in cases.items():
+            with self.subTest(declared=declared):
+                problems = Tree(MODELLED, kinds=declared, baseline=baseline).problems()
+                self.assertEqual(len(problems), 1, problems)
+                self.assertRegex(problems[0], f"^coverage/kinds\\.toml: {message}$")
+
+    def test_invalid_file_is_reported(self):
+        problems = Tree(GOOD, kinds='models = []\nrefinement = "EthLib.Proofs"\n').problems()
+        self.assertEqual(
+            problems,
+            ["coverage/kinds.toml: refinement must be a list of module names, each a string"],
+        )
+
+
+class ReadKinds(unittest.TestCase):
+    def test_valid(self):
+        self.assertEqual(
+            layers.read_kinds('models = ["A"]\nrefinement = ["B", "C"]\n'),
+            layers.Kinds(models=("A",), refinement=("B", "C")),
+        )
+
+    def test_invalid(self):
+        cases = {
+            "models = [": r"not valid TOML: .+",
+            'models = []\nrefinement = []\nrefinements = ["A"]\n': (
+                r"unknown keys \['refinements'\]; the file holds only \['models', 'refinement'\]"
+            ),
+            "models = []\n": r"the key refinement is missing",
+            'models = "A"\nrefinement = []\n': (
+                r"models must be a list of module names, each a string"
+            ),
+            'models = ["A", 1]\nrefinement = []\n': (
+                r"models must be a list of module names, each a string"
+            ),
+            'models = []\nrefinement = ["A", "B", "A"]\n': (
+                r"refinement lists \['A'\] more than once"
+            ),
+        }
+        for text, message in cases.items():
+            with self.subTest(text=text), self.assertRaisesRegex(layers.KindsError, f"^{message}$"):
+                layers.read_kinds(text)
+
+
 class Header(unittest.TestCase):
     def test_import_forms(self):
         text = (
@@ -239,8 +638,24 @@ class Header(unittest.TestCase):
             layers.imports(text), ["EthLib.A", "EthLib.B", "EthLib.C", "EthLib.D", "EthLib.E"]
         )
 
+    def test_meta_imports(self):
+        text = (
+            "module\n\npublic import EthLib.A\npublic meta import EthLib.B\n"
+            "meta import all EthLib.C\n"
+        )
+        self.assertEqual(
+            layers.header_imports(text),
+            [("EthLib.A", False, 3), ("EthLib.B", True, 4), ("EthLib.C", True, 5)],
+        )
+
     def test_header_ends_at_the_first_command(self):
         self.assertEqual(layers.imports("module\nimport A\ndef x := 1\nimport B\n"), ["A"])
+
+    def test_code_after_the_header(self):
+        imported, rest = layers.read_header("module\nimport A\n-- note\ndef x := 1\n")
+        self.assertEqual([item.module for item in imported], ["A"])
+        self.assertEqual(rest.strip(), "def x := 1")
+        self.assertEqual(layers.read_header("module\nimport A\n/- only -/\n")[1].strip(), "")
 
     def test_library_roots(self):
         self.assertEqual(
