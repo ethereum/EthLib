@@ -101,6 +101,25 @@ theorem getBlockRootAtSlot_advanceSlot {slot : Slot} {root : Root}
   rw [readCircular_writeCircular_of_ne written other]
   exact readOk
 
+/-- Caching a slot fills the state root of the latest block header, when it is zero.
+
+The root that fills it is the root of the state before. -/
+theorem processSlot_latestBlockHeader {cached : BeaconState preset fork}
+    (computed : processSlot state = .ok cached) :
+    ∃ root, SszType.hashTreeRoot state = .ok root ∧
+      cached.latestBlockHeader =
+        if state.latestBlockHeader.stateRoot = Vector.replicate 32 0 then
+          { state.latestBlockHeader with stateRoot := root } else state.latestBlockHeader := by
+  unfold processSlot at computed
+  simp only [bind_ok_iff, liftSsz_ok, liftAccessor_ok] at computed
+  obtain ⟨root, hashed, _, _, _, _, _, _, computed⟩ := computed
+  refine ⟨root, hashed, ?_⟩
+  split at computed
+  · obtain ⟨_, _, _, _, rfl⟩ := unsetNextPayloadAvailability_ok (liftAccessor_ok.mp computed)
+    rfl
+  · cases computed
+    rfl
+
 /-- After one slot, the latest block header is the one before, with its state root filled if zero.
 
 The root that fills it is the root of the state before the slot. -/
@@ -111,15 +130,7 @@ theorem advanceSlot_latestBlockHeader (computed : advanceSlot config checks stat
           { state.latestBlockHeader with stateRoot := root } else state.latestBlockHeader := by
   obtain ⟨cached, cachedOk, -, -, header, -⟩ := advanceSlot_cachedRoots computed
   rw [header]
-  unfold processSlot at cachedOk
-  simp only [bind_ok_iff, liftSsz_ok, liftAccessor_ok] at cachedOk
-  obtain ⟨root, hashed, _, _, _, _, _, _, cachedOk⟩ := cachedOk
-  refine ⟨root, hashed, ?_⟩
-  split at cachedOk
-  · obtain ⟨_, _, _, _, rfl⟩ := unsetNextPayloadAvailability_ok (liftAccessor_ok.mp cachedOk)
-    rfl
-  · cases cachedOk
-    rfl
+  exact processSlot_latestBlockHeader cachedOk
 
 /-- A root that one slot makes readable was readable before, or is the root of the new header.
 

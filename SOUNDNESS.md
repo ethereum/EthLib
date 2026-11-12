@@ -2611,6 +2611,27 @@ Adding votes and allowed weights keeps slack links, justification and finalizati
 `FfgFinalityMonotonicity.lean` puts the finalized checkpoint of a chain in such larger sets, with the same validator sets and second sets.
 This does not identify validator indices or establish root ancestry across two chains.
 
+The direct theorems of `Consensus/Proofs/DirectSafety/Safety.lean` do not go through the model.
+They take two runs of the state transition from one genesis built from deposits, which share a prefix up to a state `x`.
+A run keeps the inputs of each step: the slots, and the blocks with their state roots checked (`Run`, `Consensus/Proofs/Transition/Trace.lean`).
+A key is accountable when the two runs accepted two of its votes that `isSlashableAttestationData` flags.
+It is also accountable when a block of either run applied a slashing that names it.
+The votes are those of the attestations that the blocks applied, read by public key in the registry before each block.
+The weights are effective balances.
+`accountable_safety` takes conflicting finalized checkpoints of the two last states, with `x` no later than the first slot of the earlier finalized epoch.
+Then the active stake at `x` is at most three times the accountable stake at `x`, plus twice the larger drift of the two tails.
+Otherwise the runs show evidence about the hash (`HashEvidence`), so no theorem assumes that the hash is injective.
+The evidence is two different inputs of the node hash with one digest, read in the roots of the headers of the runs.
+Or it is a header or a state of the runs whose root is zero.
+The drift of a tail is the largest over its states up to one epoch past the later finalized epoch.
+It is observed, not bounded in closed form.
+The theorems need one slot per epoch, a buffer of roots of four epochs and more than `MIN_SEED_LOOKAHEAD + 2` epochs of RANDAO mixes.
+Each run also needs an active stake above one and a half increments at each end of an epoch (`EnoughStake`).
+They take no bound on the fork, so they hold at every fork that the transition of this revision defines.
+`verifiedConflict_of_accountable` gives, for each accountable key, two checks of its conflicting messages.
+Each is a call of `isValidIndexedAttestation` or `checkHeaderSignature` that a block of a run executed, and that accepted.
+It assumes nothing about the signature checks, so it does not say who signed.
+
 ### Engine API
 
 The Engine API is the interface through which the consensus layer drives the execution layer.
