@@ -117,4 +117,61 @@ theorem tag_eq_of_decrypt_eq_ok (key : Key) (nonce : Nonce)
         rw [hfail] at h'
         exact absurd h' (by simp)
 
+/-! ## The clamp of the Poly1305 key
+
+RFC 8439 §2.5 clears the top four bits of bytes 3, 7, 11 and 15 of `r`.
+
+It also clears the bottom two bits of bytes 4, 8 and 12.
+
+One theorem gives every bit of `r` in those terms, so a clamp with another mask fails it.
+
+So `r` stays below `2 ^ 124`, where a key's low half alone only stays below `2 ^ 128`.
+-/
+
+/-- The mask keeps a bit exactly when RFC 8439 §2.5 keeps it. -/
+private theorem testBit_clampMask (i : Nat) :
+    (0x0ffffffc0ffffffc0ffffffc0fffffff : Nat).testBit i
+      = (decide (i < 128) && decide (i % 32 < 28) && (decide (i < 32) || decide (2 ≤ i % 32))) := by
+  by_cases h : i < 128
+  · have hall : ∀ j < 128, (0x0ffffffc0ffffffc0ffffffc0fffffff : Nat).testBit j
+        = (decide (j % 32 < 28) && (decide (j < 32) || decide (2 ≤ j % 32))) := by
+      decide
+    simp only [h, decide_true, Bool.true_and]
+    exact hall i h
+  · simp only [h, decide_false, Bool.false_and]
+    apply Nat.testBit_lt_two_pow
+    calc (0x0ffffffc0ffffffc0ffffffc0fffffff : Nat) < 2 ^ 128 := by decide
+      _ ≤ 2 ^ i := Nat.pow_le_pow_right (by decide) (by omega)
+
+/-- Every bit of `r`, RFC 8439 §2.5.
+
+Bit `i` is bit `i % 8` of byte `i / 8`, so it is bit `i % 32` of word `i / 32`.
+
+The clamp clears bits 28 to 31 of every word: the top four bits of bytes 3, 7, 11 and 15.
+
+It clears bits 0 and 1 of every word but the first: the bottom two bits of bytes 4, 8 and 12.
+
+Every other bit below 128 is the bit of the key's low half, and no bit from 128 up is set. -/
+theorem testBit_clampR (key : Key) (i : Nat) :
+    (clampR key).testBit i
+      = ((Base.bytesToUint (Vector.ofFn fun j : Fin 16 => key[j.val]'(by omega))).testBit i
+          && (decide (i < 128) && decide (i % 32 < 28)
+            && (decide (i < 32) || decide (2 ≤ i % 32)))) := by
+  rw [← testBit_clampMask]
+  simp [clampR, Nat.testBit_and]
+
+/-- The clamp keeps `r` below `2 ^ 124`. -/
+theorem clampR_lt (key : Key) : clampR key < 2 ^ 124 :=
+  Nat.lt_of_le_of_lt Nat.and_le_right (by decide)
+
+/-! ## The accumulator -/
+
+/-- The accumulator stays below the prime `2 ^ 130 - 5`, whatever `r` and the message.
+
+Each step reduces modulo the prime, so this does not depend on the clamp. -/
+theorem poly1305Accumulator_lt (r : Nat) (message : ByteArray) :
+    poly1305Accumulator r message < 2 ^ 130 - 5 := by
+  have hp : 0 < 2 ^ 130 - 5 := by decide
+  exact List.foldlRecOn (motive := (· < 2 ^ 130 - 5)) _ _ hp fun _ _ _ _ => Nat.mod_lt _ hp
+
 end EthLib.Cryptography.ChaCha20Poly1305
