@@ -12,9 +12,9 @@ Not yet released.
 - In Lean, the gossip message ID has its length in its type.
   `Gossip.messageId` returns `Vector UInt8 20` in place of a `ByteArray`.
   A caller that needs a `ByteArray` takes `Base.packBytes (messageId fork topic data)`.
-  `messageId_size` goes, since the type states it.
+  `messageId_size` is removed, since the type states the length.
   `messageId_of_ok` and `messageId_of_error` state the ID as `(Sha256.hash32 input).take 20`.
-  `packBytes_messageId_of_ok` and `packBytes_messageId_of_error` keep their former statements, through `Base.packBytes`.
+  The new `packBytes_messageId_of_ok` and `packBytes_messageId_of_error` state their former equations, through `Base.packBytes`.
   The C export `eth_gossip_message_id` and the Python `gossip.message_id` are unchanged.
 
 - Slashing-protection imports use EIP-3076's minimal strategy ([#1963](https://github.com/ethereum/EthLib/issues/1963)).

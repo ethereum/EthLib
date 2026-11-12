@@ -12,7 +12,7 @@ Properties of the gossip message ID.
 
 - Data that decompresses is hashed as its payload under the domain `01 00 00 00`.
 - Other data is hashed as it is under the domain `00 00 00 00`.
-- As a byte string, the ID is the first 20 bytes of `sha256` of the hash input.
+- As a byte string, the ID is the first 20 bytes of the SHA-256 digest of the hash input.
 - Two byte strings that decompress to one payload get one ID on one topic.
 - Before Altair the topic does not change the ID.
 - Each hash input determines its domain and its bytes, and under Altair its topic.
@@ -48,20 +48,24 @@ theorem messageId_of_error (fork : Base.Fork) (topic : ByteArray) {data : ByteAr
 
 /-! ## The ID as a byte string -/
 
-/-- The first 20 bytes of `hash32`, as a byte string, are the first 20 bytes of `sha256`. -/
+/-- The first 20 bytes of a SHA-256 digest are the same in its fixed-size and byte-string forms. -/
 theorem packBytes_hash32_take (input : ByteArray) :
     Base.packBytes ((hash32 input).take 20) = (sha256 input).extract 0 20 := by
   apply ByteArray.ext
   simp [Base.packBytes, hash32, sha256]
 
-/-- As a byte string, the ID of data that decompresses is cut from `sha256` of its payload. -/
+/-- As a byte string, the ID of data that decompresses is the first 20 bytes of a SHA-256 digest.
+
+The hash input holds the payload, under the valid domain. -/
 theorem packBytes_messageId_of_ok (fork : Base.Fork) (topic : ByteArray)
     {data payload : ByteArray} (h : decompress data = .ok payload) :
     Base.packBytes (messageId fork topic data) =
       (sha256 (hashInput fork MESSAGE_DOMAIN_VALID_SNAPPY topic payload)).extract 0 20 := by
   rw [messageId_of_ok fork topic h, packBytes_hash32_take]
 
-/-- As a byte string, the ID of data that does not decompress is cut from `sha256` of the data. -/
+/-- As a byte string, the ID of other data is the first 20 bytes of a SHA-256 digest.
+
+The hash input holds the data as it is, under the invalid domain. -/
 theorem packBytes_messageId_of_error (fork : Base.Fork) (topic : ByteArray) {data : ByteArray}
     {e : SnappyError} (h : decompress data = .error e) :
     Base.packBytes (messageId fork topic data) =
