@@ -204,7 +204,8 @@ So its messages live in `EthLib/Execution/Network/`, which has those types and i
 
 A protocol layer owns the tables that give bytes their meaning.
 For example, Consensus gives the SSZ type of each gossip topic and of each request, in `EthLib/Consensus/Gossip/Bounds.lean` and `EthLib/Consensus/ReqResp/Bounds.lean`.
-Networking owns the framing, and applies the length bounds that its caller passes, as `decodePayload` does.
+Networking owns the framing and its own payload cap.
+It applies the smaller of that cap and the length bound that its caller passes, as `decodePayload` does.
 
 ## Rules
 
@@ -311,22 +312,24 @@ Existing ones, such as `ExecutionEngine`, `SignatureChecks` and `BlockSources`, 
 The conversions between Lean values and Python values, `ToPy` and `FromPy`, are not boundaries.
 No specification takes them as an argument, so their laws `LawfulPy` and `LawfulPyItems` stay with them in the library `Exports`.
 
-The card has these fields, in this order:
+The card is a list in the doc comment, with one item per field, in this order:
 
-```text
-Boundary     which layer uses the operations, which provides them, and where the production instance lives
-Owns         each type and state that crosses the boundary, with the layer that owns it
-Operations   the Lean names of the operations, and of the test stubs
-Laws         the Prop of laws, and the theorem or the assumption in SOUNDNESS.md that covers the production instance
-Failure      the error type, what each outcome means, and what the user must do on each
-Guarantees   what success implies, and what it does not
-Assumes      what each side assumes of the other
-Readings     the reading taken where two sources disagree, or where a source is silent
-```
+- Boundary: which layer uses the operations, which provides them, and where the production instance lives.
+- Owns: each type and state that crosses the boundary, with the layer that owns it.
+- Operations: what each operation answers, and what each test stub answers.
+- Laws: what the laws require, and whether a theorem or an assumption in `SOUNDNESS.md` covers the production instance.
+- Failure: the error type, what each outcome means, and what the user must do on each.
+- Guarantees: what success implies, and what it does not.
+- Assumes: what each side assumes of the other.
+- Readings: where the primary sources disagree or are silent, the reading taken, with the EIP, paper, RFC or standard that supports it.
 
 A field with nothing to record says "none", so a reader can tell an empty field from a forgotten one.
 The card holds the coarse facts that the types do not show.
-It names the operations and the laws, and does not restate their definitions.
+It describes the operations and the laws, and does not restate their definitions.
+It follows the rules for doc comments in [`CONTRIBUTING.md`](CONTRIBUTING.md#doc-comments-in-lean), so it is a plain list and not a `text` block.
+Its fields describe behaviour, and name no declaration, so that a renamed definition leaves the card correct.
+Like the rest of the code, the Readings field cites only primary sources as the authority, as [Sources](#sources) says.
+Where none of them settles a reading, the field states the reading itself.
 
 ## Forks
 
