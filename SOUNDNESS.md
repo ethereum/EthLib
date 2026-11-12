@@ -1985,6 +1985,10 @@ The theorems in `Consensus/Proofs/HonestValidator.lean` relate these duties to t
 `processRandao_ne_invalidRandaoReveal` shows that the RANDAO reveal of the proposer never fails the RANDAO check.
 Both assume a block of the current epoch, and a proposer whose public key is that of the secret key.
 The gossip checks of a selection proof and of an aggregate and proof read the target epoch, so their theorems assume it is the epoch of the slot.
+`isValidSignatureAtSlot_getSyncCommitteeSelectionProof` shows that a sync committee selection proof passes the check at the epoch of its slot.
+That check reads the selection data of the same slot and subcommittee, under the public key of the secret key.
+`getContributionAndProof_spec` shows that a contribution and proof keeps its aggregator and its contribution.
+Its selection proof passes that check for the slot and subcommittee of the contribution.
 
 `getCommitteeAssignment_sound` shows that an assignment is a committee of the epoch that holds the validator.
 `getCommitteeAssignment_unique` shows that no other committee of the epoch holds it.
@@ -2057,6 +2061,8 @@ A key counts once for each of its selected seats, and each seat takes the first 
 The gossip corollaries characterize acceptance of the aggregate's committee check and the contribution topic by their remaining conditions.
 These include the checks of time, membership and the aggregator's signatures.
 The corollaries assume that the head state of the receiver is the state of the construction.
+`validateContributionAndProof_eq_accept_of_getContributionAndProof` removes the two signature checks of the aggregator from the conditions of the contribution topic.
+It assumes instead that the aggregator made and signed the contribution and proof with the secret key of its registered public key.
 
 The contribution takes the sync committee as an argument.
 The caller passes the committee of the next slot, which gossip and the next block check.
