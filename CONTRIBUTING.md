@@ -97,8 +97,6 @@ The specification and the exports import nothing beyond the Lean toolchain.
   This is advice, not a rule: a loop whose speed matters can keep `do`.
 - Prefer not to restate the elaborated body of a loop in a theorem, since any edit of the loop then breaks the statement.
   Write the loop as a recursion or a fold.
-  Or keep the loop as the source writes it, and prove once that it equals such a helper.
-  The other theorems are then about the helper.
 - Prefer an `Except` `do` block for a chain of steps that can fail, so that it reads like the source.
   Prefer proofs through `bind_ok_iff` and the other lemmas of `EthLib/Base/Except.lean` to rewriting the chain as a `match`.
 - A definition that a kernel-checked fact evaluates needs a recursion that the kernel can reduce.
