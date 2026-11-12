@@ -682,6 +682,22 @@ theorem addValidatorToRegistry_validators_eq_push {pubkey : BLSPubkey}
       rfl
     · cases computed
 
+/-- Adding a validator keeps the slot. -/
+theorem addValidatorToRegistry_slot {pubkey : BLSPubkey}
+    {withdrawalCredentials : Bytes32} {amount : Gwei}
+    (computed : addValidatorToRegistry state pubkey withdrawalCredentials amount = .ok after) :
+    after.slot = state.slot := by
+  unfold addValidatorToRegistry at computed
+  split at computed
+  · simp only [addValidatorToRegistryAltair, liftAccessor_ok, bind_ok_iff, pure, Except.pure,
+      Except.ok.injEq] at computed
+    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := computed
+    rfl
+  split at computed
+  · cases computed
+    rfl
+  · cases computed
+
 /-- A new validator joins a registry of fewer than `2^64` validators.
 
 So its position fits a validator index. -/

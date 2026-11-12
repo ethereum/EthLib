@@ -16,17 +16,15 @@ A deposit to a key that no validator has adds at most one validator.
 
 That validator goes at the end of the registry, with that key.
 
-It adds none when its signature is invalid.
+A deposit with an invalid signature adds none.
 
-It adds none for a pending deposit with BLS withdrawal credentials, from Heze.
+From Heze, a pending deposit to a new key with BLS withdrawal credentials adds none.
 
 Before Electra a block credits a deposit at once.
 
 From Electra a block registers a new key with no balance and queues the deposit.
 
 A pending deposit, applied at an epoch, then raises a balance or adds a validator.
-
-The index of a new validator is checked against `2^64`, so the registry needs no bound on its size.
 
 So the public keys before a step are a prefix of the keys after it.
 
@@ -37,6 +35,10 @@ That holds at every fork the specification covers, for slots, epochs, blocks and
 The genesis state has distinct keys, since it is built from the empty registry by deposits.
 
 So along a chain from genesis the keys of the validators stay distinct.
+
+The specification defines genesis only before Altair.
+
+A chain from a later state keeps its keys distinct when they are distinct in that state.
 -/
 
 @[expose] public section

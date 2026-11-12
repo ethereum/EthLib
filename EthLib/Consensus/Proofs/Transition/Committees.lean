@@ -1,6 +1,5 @@
 module
 
-public import EthLib.Consensus.Proofs.Transition.BuilderDebtSlots
 public import EthLib.Consensus.Proofs.Transition.Invariants
 
 /-!
@@ -747,7 +746,7 @@ theorem activeStep_addValidatorToRegistry {pubkey : Cryptography.Bls.BLSPubkey}
     (computed : addValidatorToRegistry state pubkey withdrawalCredentials amount = .ok after) :
     ActiveStep state after := by
   have pushed := addValidatorToRegistry_validators_eq_push computed
-  refine ⟨(builderFrame_addValidatorToRegistry computed).slot, fun epoch _ position => ?_⟩
+  refine ⟨addValidatorToRegistry_slot computed, fun epoch _ position => ?_⟩
   unfold isActiveAt
   rw [pushed, Array.getElem?_push]
   split

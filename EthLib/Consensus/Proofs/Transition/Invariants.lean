@@ -593,7 +593,11 @@ private theorem getValidatorFromDeposit_aligned (maxAligned : MaxEffectiveBalanc
 
 /-- A new validator exits and withdraws at the far future epoch.
 
-A fresh key goes to the end of the registry, so the keys before stay a prefix, and stay distinct. -/
+The key must be one that no validator has.
+
+It goes at the end of the registry, so the keys before stay a prefix.
+
+Distinct keys stay distinct. -/
 theorem frame_addValidatorToRegistry {pubkey : BLSPubkey}
     {withdrawalCredentials : Bytes32} {amount : Gwei}
     (computed : addValidatorToRegistry state pubkey withdrawalCredentials amount = .ok after)
@@ -769,7 +773,7 @@ theorem setValidator_of_sameBalance {index : ValidatorIndex} {validator old : Va
 
 /-- A validator write at a plain position follows the relation when it keeps the balance.
 
-Its key stays the key of the old validator.
+It must keep the public key of the old validator.
 
 Its exit must come no later than its withdrawal, when the exits of the state are ordered. -/
 theorem setValidatorAt_of_sameBalance {position : Nat} {validator old : Validator}
