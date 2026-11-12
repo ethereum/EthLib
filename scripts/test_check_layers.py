@@ -222,6 +222,43 @@ class Rules(unittest.TestCase):
             "a C export imports only EthLib",
         )
 
+    def test_export_reaches_outside_through_a_property(self):
+        self.assert_fails(
+            with_imports("EthLib.Execution.Exports.A", "EthLib.Execution.Proofs.A"),
+            "EthLib/Execution/Exports/A.lean: imports EthLib.Execution.Proofs.A, "
+            "which reaches Mathlib.Tactic, "
+            "but a C export reaches nothing beyond EthLib and the toolchain",
+        )
+
+    def test_export_reaches_outside_through_two_properties(self):
+        tree = with_imports("EthLib.Proofs", "EthLib.Execution.Proofs.B")
+        tree["EthLib.Execution.Proofs.B"] = ["EthLib.Execution.Proofs.A"]
+        tree["EthLib.Execution.Exports.A"] = ["EthLib.Execution.A", "EthLib.Execution.Proofs.B"]
+        self.assert_fails(tree, "imports EthLib.Execution.Proofs.B, which reaches Mathlib.Tactic")
+
+    def test_export_reaches_outside_through_another_export(self):
+        tree = with_imports("EthLib.Exports", "EthLib.Execution.Exports.B")
+        tree["EthLib.Execution.Exports.B"] = ["EthLib.Execution.Exports.A"]
+        tree["EthLib.Execution.Exports.A"] = ["EthLib.Execution.A", "EthLib.Execution.Proofs.A"]
+        self.assert_fails(
+            tree, "EthLib/Execution/Exports/A.lean: imports EthLib.Execution.Proofs.A"
+        )
+
+    def test_export_reaches_outside_once_through_a_chain_of_exports(self):
+        # Only the property that the second export imports is reported, where the import is written.
+        tree = with_imports("EthLib.Exports", "EthLib.Execution.Exports.B")
+        tree["EthLib.Execution.Proofs.B"] = ["EthLib.Execution.Exports.A"]
+        tree["EthLib.Execution.Exports.B"] = ["EthLib.Execution.A", "EthLib.Execution.Proofs.B"]
+        tree["EthLib.Execution.Exports.A"] = ["EthLib.Execution.A", "EthLib.Execution.Proofs.A"]
+        self.assert_fails(
+            tree, "EthLib/Execution/Exports/A.lean: imports EthLib.Execution.Proofs.A"
+        )
+
+    def test_export_imports_a_property_inside_ethlib(self):
+        tree = with_imports("EthLib.Exports", "EthLib.Execution.Exports.Proofs.A")
+        tree["EthLib.Execution.Exports.Proofs.A"] = ["EthLib.Execution.Exports.A"]
+        self.assertEqual(Tree(tree).problems(), [])
+
     def test_orphan(self):
         self.assert_fails(GOOD | {"EthLib.Base.B": []}, "EthLib/Base/B.lean: no library root")
 
