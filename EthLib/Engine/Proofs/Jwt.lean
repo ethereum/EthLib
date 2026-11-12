@@ -250,18 +250,156 @@ theorem authenticate_build {secret : ByteArray} {time : Nat} {token : String}
   rw [authenticate_compact (header := headerPart) (claims := claimsPart time) hs
     (dot_not_mem_encode _) (dot_not_mem_encode _), issuedAt_claimsPart]
 
+
+/-! ## The NumericDate comparison
+
+`within` compares a JSON number with the clock exactly, whatever its exponent.
+
+Two theorems give it in full, one for each sign of that exponent.
+
+Each scales the bounds instead of dividing the date, so neither expands a huge exponent.
+
+The two shortcuts that let the comparison avoid that expansion hold for every input.
+
+A test can only sample them: an exponent of `10 ^ 18` overflows any evaluation of the power.
+-/
+
+/-- A value written with `k` digits is below `10 ^ k`. -/
+private theorem lt_ten_pow_length_repr (n : Nat) : n < 10 ^ n.repr.length :=
+  (Nat.length_repr_le_iff Nat.length_repr_pos).mp (Nat.le_refl _)
+
+/-- Past the digits of the bound, a power of ten overshoots it. -/
+private theorem lt_ten_pow_of_length_lt {n k : Nat} (h : n.repr.length < k) : n < 10 ^ k := by
+  have h1 := lt_ten_pow_length_repr n
+  have h2 : (10 : Nat) ^ n.repr.length ≤ 10 ^ k :=
+    Nat.pow_le_pow_right (by decide) (Nat.le_of_lt h)
+  omega
+
+/-- A date of a whole number of seconds passes exactly within 60 seconds of the clock. -/
+theorem within_eq_true_iff_of_nonneg {time : Json.Number} (he : 0 ≤ time.exponent)
+    (clock : Nat) :
+    Json.within time clock = true ↔
+      (clock : Int) - 60 ≤ time.mantissa * (10 ^ time.exponent.toNat : Nat) ∧
+        time.mantissa * (10 ^ time.exponent.toNat : Nat) ≤ (clock : Int) + 60 := by
+  unfold Json.within
+  dsimp only
+  rw [ite_eq_left he]
+  split
+  · rename_i hm
+    rw [hm]
+    simp
+  · split
+    · rename_i hm hbig
+      -- The power of ten overshoots the bound, so no multiple of it lands inside.
+      have hpow : clock + 60 < 10 ^ time.exponent.toNat := lt_ten_pow_of_length_lt hbig
+      have hcast : ((clock + 60 : Nat) : Int) < ((10 ^ time.exponent.toNat : Nat) : Int) := by
+        exact_mod_cast hpow
+      have hone : (1 : Int) ≤ time.mantissa ∨ time.mantissa ≤ -1 := by omega
+      refine iff_of_false (by simp) ?_
+      rintro ⟨hlo, hhi⟩
+      have hP : (0 : Int) ≤ ((10 ^ time.exponent.toNat : Nat) : Int) := by positivity
+      rcases hone with h1 | h1
+      · have : ((10 ^ time.exponent.toNat : Nat) : Int)
+            ≤ time.mantissa * ((10 ^ time.exponent.toNat : Nat) : Int) := by
+          have := Int.mul_le_mul_of_nonneg_right h1 hP
+          rwa [Int.one_mul] at this
+        push_cast at hcast hhi this
+        omega
+      · have : time.mantissa * ((10 ^ time.exponent.toNat : Nat) : Int)
+            ≤ -((10 ^ time.exponent.toNat : Nat) : Int) := by
+          have := Int.mul_le_mul_of_nonneg_right h1 hP
+          rwa [Int.neg_one_mul] at this
+        push_cast at hcast hlo this
+        omega
+    · simp
+
+/-- A date with a fraction of a second passes exactly within 60 seconds of the clock.
+
+The comparison scales the bounds rather than dividing the date, so it is the exact one. -/
+theorem within_eq_true_iff_of_neg {time : Json.Number} (he : time.exponent < 0) (clock : Nat) :
+    Json.within time clock = true ↔
+      ((clock : Int) - 60) * ((10 ^ (-time.exponent).toNat : Nat) : Int) ≤ time.mantissa ∧
+        time.mantissa ≤ ((clock : Int) + 60) * ((10 ^ (-time.exponent).toNat : Nat) : Int) := by
+  unfold Json.within
+  dsimp only
+  rw [ite_eq_right (by omega : ¬ time.exponent ≥ 0)]
+  have hS : (0 : Int) < ((10 ^ (-time.exponent).toNat : Nat) : Int) := by positivity
+  split
+  · -- The magnitude is below one scale, so the floor and the ceiling are known outright.
+    rename_i hsmall
+    have hm : time.mantissa.natAbs < 10 ^ (-time.exponent).toNat :=
+      lt_ten_pow_of_length_lt hsmall
+    have hmS : |time.mantissa| < ((10 ^ (-time.exponent).toNat : Nat) : Int) := by
+      rw [Int.abs_eq_natAbs]
+      exact_mod_cast hm
+    rw [abs_lt] at hmS
+    split
+    · rename_i hz
+      rw [hz]
+      simp only [decide_eq_true_eq]
+      constructor
+      · intro h
+        exact ⟨by nlinarith [h.1], by nlinarith [h.2]⟩
+      · intro h
+        exact ⟨by nlinarith [h.1], by nlinarith [h.2]⟩
+    · split
+      · rename_i hz hpos
+        simp only [decide_eq_true_eq]
+        constructor
+        · intro h
+          exact ⟨by nlinarith [h.1], by nlinarith [h.2]⟩
+        · intro h
+          exact ⟨by nlinarith [h.1], by nlinarith [h.2]⟩
+      · rename_i hz hneg
+        simp only [decide_eq_true_eq]
+        have hlt : time.mantissa < 0 := by omega
+        constructor
+        · intro h
+          exact ⟨by nlinarith [h.1], by nlinarith [h.2]⟩
+        · intro h
+          exact ⟨by nlinarith [h.1], by nlinarith [h.2]⟩
+  · -- The scale divides out, so the floor is the quotient and the ceiling follows the remainder.
+    simp only [decide_eq_true_eq]
+    rw [Int.le_ediv_iff_mul_le hS]
+    split
+    · rename_i hdvd
+      have : time.mantissa / ((10 ^ (-time.exponent).toNat : Nat) : Int)
+          * ((10 ^ (-time.exponent).toNat : Nat) : Int) = time.mantissa :=
+        Int.ediv_mul_cancel (Int.dvd_of_emod_eq_zero hdvd)
+      constructor
+      · intro h
+        refine ⟨h.1, ?_⟩
+        have := (Int.mul_le_mul_iff_of_pos_right hS).mpr h.2
+        omega
+      · intro h
+        refine ⟨h.1, ?_⟩
+        exact (Int.mul_le_mul_iff_of_pos_right hS).mp (by omega)
+    · rename_i hdvd
+      have hne : time.mantissa ≠ ((clock : Int) + 60)
+          * ((10 ^ (-time.exponent).toNat : Nat) : Int) := by
+        intro heq
+        rw [heq] at hdvd
+        exact hdvd (Int.mul_emod_left _ _)
+      constructor
+      · intro h
+        refine ⟨h.1, ?_⟩
+        have : time.mantissa / ((10 ^ (-time.exponent).toNat : Nat) : Int) < (clock : Int) + 60 :=
+          by omega
+        have := (Int.ediv_lt_iff_lt_mul hS).mp this
+        omega
+      · intro h
+        refine ⟨h.1, ?_⟩
+        have hlt : time.mantissa < ((clock : Int) + 60)
+            * ((10 ^ (-time.exponent).toNat : Nat) : Int) := by omega
+        have := (Int.ediv_lt_iff_lt_mul hS).mpr hlt
+        omega
+
 /-- Integral NumericDates pass exactly within 60 seconds of the integral clock. -/
 theorem within_nat_iff (time clock : Nat) :
     Json.within ⟨time, 0⟩ clock = true ↔ clock ≤ time + 60 ∧ time ≤ clock + 60 := by
-  unfold Json.within
-  dsimp only
-  rw [ite_eq_left (by decide : (0 : Int) ≥ 0)]
-  split
-  · simp only [decide_eq_true_eq]
-    omega
-  · rw [ite_eq_right (by simp : ¬(0 : Int).toNat > (clock + 60).repr.length)]
-    simp only [Int.toNat_zero, pow_zero, Int.ofNat_one, mul_one, decide_eq_true_eq]
-    omega
+  rw [within_eq_true_iff_of_nonneg (time := ⟨time, 0⟩) (Int.le_refl 0)]
+  simp only [Int.toNat_zero, pow_zero, Int.ofNat_one, mul_one]
+  omega
 
 /-- A successfully built token passes with the same secret at every clock within 60 seconds. -/
 theorem check_build {secret : ByteArray} {time clock : Nat} {token : String}
