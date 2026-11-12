@@ -656,9 +656,11 @@ theorem frame_addValidatorToRegistry {pubkey : BLSPubkey}
 
 They leave out justification, the builder payments and the rotation of the flags.
 
-A validator write at a plain position must relate its states when it meets three conditions.
+A validator write at a plain position must relate its states when it meets four conditions.
 
 It keeps the public key of the old validator.
+
+It keeps the slashed flag of the old validator.
 
 Its exit comes no later than its withdrawal, when the exits of the state are ordered.
 
@@ -673,6 +675,7 @@ structure EpochFrameLaws (R : BeaconState preset fork → BeaconState preset for
     state.setValidatorAt position validator = .ok after →
     getValidatorAt state position = .ok old →
     validator.pubkey = old.pubkey →
+    validator.slashed = old.slashed →
     (ExitsOrdered state → validator.exitEpoch ≤ validator.withdrawableEpoch) →
     (MaxEffectiveBalancesAligned preset → EffectiveBalancesAligned state →
       validator.effectiveBalance % preset.EFFECTIVE_BALANCE_INCREMENT = 0) → R state after
@@ -707,7 +710,8 @@ structure EpochFrameLaws (R : BeaconState preset fork → BeaconState preset for
 theorem mutatorEpochFrameLaws : EpochFrameLaws (@MutatorFrame preset fork) where
   refl := MutatorFrame.refl
   trans := MutatorFrame.trans
-  setValidatorAt := frame_setValidatorAt_of_whole
+  setValidatorAt := fun set found key _ le whole =>
+    frame_setValidatorAt_of_whole set found key le whole
   increaseBalance := frame_increaseBalance
   decreaseBalance := frame_decreaseBalance
   initiateValidatorExit := frame_initiateValidatorExit
@@ -739,9 +743,11 @@ theorem foldlM {α ε : Type} {step : BeaconState preset fork → α → Except 
   foldlM_ok_invariant (R state) (fun _ _ _ before ok => laws.trans before (frame _ _ _ ok))
     (laws.refl state) computed
 
-/-- A validator write follows the relation when it meets the three conditions of a write.
+/-- A validator write follows the relation when it meets the four conditions of a write.
 
 It keeps the public key of the old validator.
+
+It keeps the slashed flag of the old validator.
 
 Its exit comes no later than its withdrawal, when the exits of the state are ordered.
 
@@ -749,40 +755,40 @@ Its effective balance is a whole number of increments, when the preset and the s
 theorem setValidator {index : ValidatorIndex} {validator old : Validator}
     (set : state.setValidator index validator = .ok after)
     (found : getValidator state index = .ok old)
-    (key : validator.pubkey = old.pubkey)
+    (key : validator.pubkey = old.pubkey) (flag : validator.slashed = old.slashed)
     (le : ExitsOrdered state → validator.exitEpoch ≤ validator.withdrawableEpoch)
     (whole : MaxEffectiveBalancesAligned preset → EffectiveBalancesAligned state →
       validator.effectiveBalance % preset.EFFECTIVE_BALANCE_INCREMENT = 0) : R state after :=
   laws.setValidatorAt (by rwa [← setValidator_eq_setValidatorAt])
-    (by rwa [← getValidator_eq_getValidatorAt]) key le whole
+    (by rwa [← getValidator_eq_getValidatorAt]) key flag le whole
 
 /-- A validator write that keeps the effective balance follows the relation.
 
-It must also keep the public key.
+It must also keep the public key and the slashed flag.
 
 It must exit no later than it withdraws, when the exits of the state are ordered. -/
 theorem setValidator_of_sameBalance {index : ValidatorIndex} {validator old : Validator}
     (set : state.setValidator index validator = .ok after)
     (found : getValidator state index = .ok old)
-    (key : validator.pubkey = old.pubkey)
+    (key : validator.pubkey = old.pubkey) (flag : validator.slashed = old.slashed)
     (le : ExitsOrdered state → validator.exitEpoch ≤ validator.withdrawableEpoch)
     (balance : validator.effectiveBalance = old.effectiveBalance := by rfl) : R state after :=
-  laws.setValidator set found key le fun _ holds => by
+  laws.setValidator set found key flag le fun _ holds => by
     rw [balance]
     exact holds old (mem_of_getValidator found)
 
 /-- A validator write at a plain position follows the relation when it keeps the balance.
 
-It must keep the public key of the old validator.
+It must keep the public key and the slashed flag of the old validator.
 
 Its exit must come no later than its withdrawal, when the exits of the state are ordered. -/
 theorem setValidatorAt_of_sameBalance {position : Nat} {validator old : Validator}
     (set : state.setValidatorAt position validator = .ok after)
     (found : getValidatorAt state position = .ok old)
-    (key : validator.pubkey = old.pubkey)
+    (key : validator.pubkey = old.pubkey) (flag : validator.slashed = old.slashed)
     (le : ExitsOrdered state → validator.exitEpoch ≤ validator.withdrawableEpoch)
     (balance : validator.effectiveBalance = old.effectiveBalance := by rfl) : R state after :=
-  laws.setValidatorAt set found key le fun _ holds => by
+  laws.setValidatorAt set found key flag le fun _ holds => by
     rw [balance]
     exact holds old (mem_of_getValidatorAt found)
 
@@ -1569,8 +1575,10 @@ theorem updateRegistryEntry {index : Nat}
   simp only [Consensus.updateRegistryEntry, bind_ok_iff, liftAccessor_ok] at computed
   obtain ⟨validator, found, queued, queuedOk, marked, markedOk, computed⟩ := computed
   obtain ⟨exitSame, withdrawableSame⟩ := queueForActivation_epochs queuedOk
+  have flag : queued.slashed = validator.slashed := by
+    rcases queueForActivation_cases queuedOk with rfl | ⟨_, rfl⟩ <;> rfl
   have set : R state marked := laws.setValidatorAt_of_sameBalance markedOk found
-    (queueForActivation_pubkey queuedOk) fun ordered => by
+    (queueForActivation_pubkey queuedOk) flag fun ordered => by
       rw [exitSame, withdrawableSame]
       exact ordered validator (mem_of_getValidatorAt found)
     (balance := queueForActivation_effectiveBalance queuedOk)
@@ -1585,7 +1593,7 @@ theorem activateValidator {index : ValidatorIndex}
     (computed : Consensus.activateValidator state index = .ok after) : R state after := by
   simp only [Consensus.activateValidator, bind_ok_iff, liftAccessor_ok] at computed
   obtain ⟨validator, found, _, _, set⟩ := computed
-  exact laws.setValidator_of_sameBalance set found rfl fun ordered =>
+  exact laws.setValidator_of_sameBalance set found rfl rfl fun ordered =>
     ordered validator (mem_of_getValidator found)
 
 theorem updateRegistryEntryElectra {activationEpoch : Epoch} {index : Nat}
@@ -1599,14 +1607,14 @@ theorem updateRegistryEntryElectra {activationEpoch : Epoch} {index : Nat}
   split at computed
   · simp only [bind_ok_iff, liftAccessor_ok] at computed
     obtain ⟨_, _, set⟩ := computed
-    exact laws.setValidatorAt_of_sameBalance set found rfl kept
+    exact laws.setValidatorAt_of_sameBalance set found rfl rfl kept
   split at computed
   · simp only [bind_ok_iff, liftAccessor_ok] at computed
     obtain ⟨_, _, exited⟩ := computed
     exact laws.initiateValidatorExit exited
   split at computed
   · rw [liftAccessor_ok] at computed
-    exact laws.setValidatorAt_of_sameBalance computed found rfl kept
+    exact laws.setValidatorAt_of_sameBalance computed found rfl rfl kept
   · simp only [pure, Except.pure, Except.ok.injEq] at computed
     exact computed ▸ laws.refl _
 
@@ -1682,7 +1690,7 @@ theorem updateEffectiveBalance {index : Nat}
     (computed : Consensus.updateEffectiveBalance state index = .ok after) : R state after := by
   simp only [Consensus.updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at computed
   obtain ⟨validator, found, _, _, _, updated, set⟩ := computed
-  refine laws.setValidatorAt set found rfl
+  refine laws.setValidatorAt set found rfl rfl
     (fun ordered => ordered validator (mem_of_getValidatorAt found)) fun maxAligned holds => ?_
   exact updatedEffectiveBalance_aligned (withdrawalMaxEffectiveBalance_aligned maxAligned validator)
     (holds validator (mem_of_getValidatorAt found)) updated
