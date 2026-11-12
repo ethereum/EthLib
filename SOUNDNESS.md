@@ -2969,6 +2969,47 @@ Only the proofs import them.
 The Lean toolchain is `leanprover/lean4:v4.35.0`.
 <!-- end generated -->
 
+VCVio defines the oracle computations and probabilities in which the security games are stated.
+The proofs below import it, directly or through another file.
+A directory is listed when at least one file under it imports VCVio, or when the file of the same name beside it does, such as `Wots.lean` beside `Wots/`.
+So a listed directory can hold files that do not import VCVio.
+The files named `Proofs.lean` are roots that gather the proofs of a domain, so they are not listed.
+
+<!-- generated: vcvio-users -->
+- `EthLib/Consensus/Proofs/Accessors/`
+- `EthLib/Consensus/Proofs/DataAvailability/`
+- `EthLib/Consensus/Proofs/Gossip/`
+- `EthLib/Consensus/Proofs/LightClient/`
+- `EthLib/Consensus/Proofs/PqKeys/`
+- `EthLib/Cryptography/Proofs/Aes/`
+- `EthLib/Cryptography/Proofs/BadOnBudget.lean`
+- `EthLib/Cryptography/Proofs/BadOnGrowth.lean`
+- `EthLib/Cryptography/Proofs/Bls/`
+- `EthLib/Cryptography/Proofs/DerivationTable.lean`
+- `EthLib/Cryptography/Proofs/EvalDistEq.lean`
+- `EthLib/Cryptography/Proofs/ExceptTAnswers.lean`
+- `EthLib/Cryptography/Proofs/HashSig/`
+- `EthLib/Cryptography/Proofs/IndependentAnswers.lean`
+- `EthLib/Cryptography/Proofs/IndependentOutside.lean`
+- `EthLib/Cryptography/Proofs/Kzg/`
+- `EthLib/Cryptography/Proofs/LazyPermutation.lean`
+- `EthLib/Cryptography/Proofs/LogKeys.lean`
+- `EthLib/Cryptography/Proofs/LoggedUntilBad.lean`
+- `EthLib/Cryptography/Proofs/Merkle/`
+- `EthLib/Cryptography/Proofs/ProgrammedPermutation.lean`
+- `EthLib/Cryptography/Proofs/QueryAvoidance.lean`
+- `EthLib/Cryptography/Proofs/Secp256k1/`
+- `EthLib/Cryptography/Proofs/Sphincs/`
+- `EthLib/Cryptography/Proofs/TaggedLazyPermutation.lean`
+- `EthLib/Cryptography/Proofs/Vrf/`
+- `EthLib/Cryptography/Proofs/Wots/`
+- `EthLib/Cryptography/Proofs/Xmss/`
+- `EthLib/Execution/Proofs/Trie/`
+- `EthLib/Serialization/Proofs/Ssz/`
+
+No specification file imports it.
+<!-- end generated -->
+
 ### D3. The KZG trusted setup
 
 The setup raises three separate assumptions, and each use of KZG relies on a different subset of them.
