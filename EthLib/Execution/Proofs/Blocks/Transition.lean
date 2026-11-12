@@ -636,6 +636,72 @@ theorem checkBlock_parent {config : ChainConfig} {checkSeal : Bool} {recent : Li
     · simp [hle, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
   · simp [throw, throwThe, MonadExceptOf.throw] at h
 
+/-- The chain after a block has the state after it. -/
+theorem BlockChain.addBlock_state {chain : BlockChain} {block : Block fork Transaction}
+    {post : State} : (chain.addBlock block post).state = post :=
+  rfl
+
+/-- The recent blocks of the chain after a block are its last 255, with the block last. -/
+theorem BlockChain.addBlock_recent {chain : BlockChain} {block : Block fork Transaction}
+    {post : State} :
+    (chain.addBlock block post).recent =
+      (chain.recent ++ [(⟨fork, block.header, block.ommers⟩ : RecentBlock)]).drop
+        ((chain.recent ++ [(⟨fork, block.header, block.ommers⟩ : RecentBlock)]).length - 255) := by
+  simp only [BlockChain.addBlock]
+
+/-- The last recent block of the chain after a block is that block. -/
+theorem BlockChain.addBlock_getLast? {chain : BlockChain} {block : Block fork Transaction}
+    {post : State} :
+    (chain.addBlock block post).recent.getLast? = some ⟨fork, block.header, block.ommers⟩ := by
+  simp [BlockChain.addBlock, List.getLast?_drop]
+  omega
+
+/-- A block that passes its checks has a header that passes the checks against its parent.
+
+The parent is the last recent block. -/
+theorem checkBlock_checkHeader {config : ChainConfig} {checkSeal : Bool}
+    {recent : List RecentBlock} {block : Block fork Transaction}
+    (h : checkBlock config checkSeal recent block = .ok ()) :
+    ∃ parent, recent.getLast? = some parent ∧ ∃ hFork : parent.fork ≤ fork,
+      checkHeader hFork parent.header block.header
+        (Fees.BlobBaseFee.chainBlobSchedule config fork block.header.number
+          block.header.timestamp.toNat) = .ok () := by
+  unfold checkBlock at h
+  obtain ⟨_, _, h⟩ := bind_ok_iff.mp h
+  obtain ⟨_, _, h⟩ := bind_ok_iff.mp h
+  split at h
+  · rename_i parent hparent
+    by_cases hF : parent.fork ≤ fork
+    · simp only [hF, ↓reduceDIte] at h
+      refine ⟨parent, hparent, hF, ?_⟩
+      cases hs : checkSeal
+      · simp only [hs, Bool.false_eq_true, ↓reduceIte] at h
+        cases hc : checkHeader hF parent.header block.header
+            (Fees.BlobBaseFee.chainBlobSchedule config fork block.header.number
+              block.header.timestamp.toNat) with
+        | ok u => rfl
+        | error e => simp [hc, bind, Except.bind] at h
+      · simp only [hs, ↓reduceIte] at h
+        cases hc : validateHeader hF parent.header block.header
+            (Fees.BlobBaseFee.chainBlobSchedule config fork block.header.number
+              block.header.timestamp.toNat) with
+        | ok u => exact checkHeader_of_validateHeader hc
+        | error e => simp [hc, bind, Except.bind] at h
+    · simp [hF, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
+  · simp [throw, throwThe, MonadExceptOf.throw] at h
+
+/-- A block that passes its checks is numbered one above its parent, the last recent block.
+
+Its parent hash is the hash of that parent. -/
+theorem checkBlock_link {config : ChainConfig} {checkSeal : Bool} {recent : List RecentBlock}
+    {block : Block fork Transaction} (h : checkBlock config checkSeal recent block = .ok ()) :
+    ∃ parent, recent.getLast? = some parent ∧
+      block.header.number = parent.header.number + 1 ∧
+      parent.header.hash = .ok block.header.parentHash := by
+  obtain ⟨parent, hlast, hFork, hhead⟩ := checkBlock_checkHeader h
+  obtain ⟨-, -, -, -, -, -, -, hnumber, -, -, -, hhash⟩ := checkHeader_eq_ok_iff.mp hhead
+  exact ⟨parent, hlast, hnumber, hhash⟩
+
 /-- A block that passes its transition has a parent, the last recent block of its chain.
 
 The fork of the parent is at most the fork of the block. -/

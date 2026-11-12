@@ -404,9 +404,11 @@ theorem stateTransition_body {chain : BlockChain} {block : Block fork Transactio
 
 Each block passes its transition on the chain after the blocks before it.
 
-That next chain holds the state after the block, and the block as its last recent block.
+That next chain is the chain after the block.
 
-Its configuration and its older recent blocks are free, since no claim reads them. -/
+It holds the state after the block, and the block as its last recent block.
+
+Its configuration is that of the chain before. -/
 inductive ChainRun : BlockChain → List ((fork : Fork) × Block fork Transaction) → Prop
   /-- No block. -/
   | nil (chain : BlockChain) : ChainRun chain []
@@ -414,8 +416,7 @@ inductive ChainRun : BlockChain → List ((fork : Fork) × Block fork Transactio
   | cons {chain next : BlockChain} {fork : Fork} {block : Block fork Transaction}
       {post : State} {rest : List ((fork : Fork) × Block fork Transaction)} (checkSeal : Bool)
       (transition : stateTransition chain block checkSeal = .ok post)
-      (state : next.state = post)
-      (last : next.recent.getLast? = some ⟨fork, block.header, block.ommers⟩)
+      (hnext : next = chain.addBlock block post)
       (tail : ChainRun next rest) :
       ChainRun chain (⟨fork, block⟩ :: rest)
 
@@ -446,6 +447,19 @@ private theorem transactionAt_succ {b : (fork : Fork) × Block fork Transaction}
     transactionAt (b :: rest) (i + 1) j = transactionAt rest i j :=
   rfl
 
+/-- The state of the next chain of a run is the state after the block. -/
+private theorem ChainRun.next_state {chain next : BlockChain} {block : Block fork Transaction}
+    {post : State} (hnext : next = chain.addBlock block post) : next.state = post := by
+  rw [hnext]
+  exact BlockChain.addBlock_state
+
+/-- The last recent block of the next chain of a run is the block. -/
+private theorem ChainRun.next_last {chain next : BlockChain} {block : Block fork Transaction}
+    {post : State} (hnext : next = chain.addBlock block post) :
+    next.recent.getLast? = some ⟨fork, block.header, block.ommers⟩ := by
+  rw [hnext]
+  exact BlockChain.addBlock_getLast?
+
 /-- An account above `n` at the fork of the last block sends later only nonces above `n`. -/
 private theorem ChainRun.nonce_gt {chain : BlockChain}
     {blocks : List ((fork : Fork) × Block fork Transaction)} (run : ChainRun chain blocks)
@@ -455,7 +469,9 @@ private theorem ChainRun.nonce_gt {chain : BlockChain}
     (hs : recoverSender f tx = .ok sender) : n < tx.nonce.toNat := by
   induction run generalizing parent i with
   | nil => simp [transactionAt] at at₁
-  | cons checkSeal transition state last tail ih =>
+  | cons checkSeal transition hnext tail ih =>
+    have state := ChainRun.next_state hnext
+    have last := ChainRun.next_last hnext
     obtain ⟨p, hp, hle⟩ := stateTransition_parent transition
     obtain rfl : p = parent := Option.some.inj (hp.symm.trans hlast)
     have above' := above.mono hle
@@ -477,7 +493,7 @@ private theorem ChainRun.exists_recoverSender {chain : BlockChain}
     ∃ sender, recoverSender f tx = .ok sender := by
   induction run generalizing i with
   | nil => simp [transactionAt] at at₁
-  | cons checkSeal transition state last tail ih =>
+  | cons checkSeal transition _ tail ih =>
     cases i with
     | zero =>
       obtain ⟨rfl, hj, rfl⟩ := transactionAt_zero at₁
@@ -497,7 +513,9 @@ theorem ChainRun.nonce_lt {chain : BlockChain}
     (before : i < i' ∨ (i = i' ∧ j < j')) : tx.nonce.toNat < tx'.nonce.toNat := by
   induction run generalizing i i' with
   | nil => simp [transactionAt] at at₁
-  | cons checkSeal transition state last tail ih =>
+  | cons checkSeal transition hnext tail ih =>
+    have state := ChainRun.next_state hnext
+    have last := ChainRun.next_last hnext
     obtain ⟨env, output, hbody, hread⟩ := stateTransition_body transition
     cases i with
     | zero =>
