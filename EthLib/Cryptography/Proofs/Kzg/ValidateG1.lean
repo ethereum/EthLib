@@ -138,4 +138,38 @@ theorem bytesToKzgProof_of_validateKzgG1Point_error {b : Bytes48} {e : KzgError}
     cases h
   rw [bytesToKzgProof, ite_eq_right hv]
 
+/-- A commitment that converts and then decodes is the input bytes, and validation gives its point.
+
+This is the commitment of the specification: `bytes_to_kzg_commitment`, then `bytes48_to_G1`. -/
+theorem validateKzgG1Point_of_bytesToKzgCommitment {b : Bytes48} {c : KZGCommitment} {C : G1}
+    (hc : bytesToKzgCommitment b = .ok c) (hC : uncompressG1 c = .ok C) :
+    c = b ∧ validateKzgG1Point b = .ok C := by
+  unfold bytesToKzgCommitment at hc
+  split at hc
+  · rename_i hv
+    cases hc
+    -- Valid bytes decode to a point of the subgroup, and decompression returns that same point.
+    obtain ⟨Q, hQ⟩ := exists_validateKzgG1Point_of_validateKzgG1 hv
+    rw [uncompressG1_of_validateKzgG1Point hQ] at hC
+    cases hC
+    exact ⟨rfl, hQ⟩
+  · cases hc
+
+/-- A proof that converts and then decodes is the input bytes, and validation gives its point.
+
+This is the proof of the specification: `bytes_to_kzg_proof`, then `bytes48_to_G1`. -/
+theorem validateKzgG1Point_of_bytesToKzgProof {b : Bytes48} {p : KZGProof} {P : G1}
+    (hp : bytesToKzgProof b = .ok p) (hP : uncompressG1 p = .ok P) :
+    p = b ∧ validateKzgG1Point b = .ok P := by
+  unfold bytesToKzgProof at hp
+  split at hp
+  · rename_i hv
+    cases hp
+    -- Valid bytes decode to a point of the subgroup, and decompression returns that same point.
+    obtain ⟨Q, hQ⟩ := exists_validateKzgG1Point_of_validateKzgG1 hv
+    rw [uncompressG1_of_validateKzgG1Point hQ] at hP
+    cases hP
+    exact ⟨rfl, hQ⟩
+  · cases hp
+
 end EthLib.Cryptography.Kzg

@@ -105,9 +105,13 @@ theorem natDegree_blobOpeningError_le {F : Type*} [Field F] {f g : F[X]} {n : Na
 
 Assume a well-formed setup of the secret `τ`.
 
-Let the blob decode, and let the commitment and the proof pass validation.
+Let the blob decode.
 
-Let those points represent `f(τ)` and `g(τ)`, for two polynomials `f` and `g` of degree below 4096.
+Let the commitment and the proof convert, as `bytes_to_kzg_commitment` and `bytes_to_kzg_proof` do.
+
+Let the converted values decode, as `bytes48_to_G1` does, to points `C` and `P`.
+
+Let `C` and `P` represent `f(τ)` and `g(τ)`, for two polynomials `f` and `g` of degree below 4096.
 
 Let the check accept, and let `p` be the interpolant of the blob's decoded values.
 
@@ -121,12 +125,15 @@ Then one of three cases holds, with `h = f - p(z) - g (X - z)`:
 
 This theorem gives no bound on the cost of finding such polynomials when `τ` is secret. -/
 theorem verifyBlobKzgProof_binding {s : TrustedSetup} {τ : Fr}
-    (hs : s.WellFormed τ) {blob : Blob} {commitment proof : Bytes48} {poly : Polynomial}
+    (hs : s.WellFormed τ) {blob : Blob} {commitmentBytes proofBytes : Bytes48}
+    {commitment : KZGCommitment} {proof : KZGProof} {poly : Polynomial}
     {C P : G1} {f g : Fr[X]} (hblob : blobToPolynomial blob = .ok poly)
-    (hC : validateKzgG1Point commitment = .ok C) (hf : G1.Represents C (f.eval τ))
-    (hP : validateKzgG1Point proof = .ok P) (hg : G1.Represents P (g.eval τ))
+    (hc : bytesToKzgCommitment commitmentBytes = .ok commitment)
+    (hC : uncompressG1 commitment = .ok C) (hf : G1.Represents C (f.eval τ))
+    (hp : bytesToKzgProof proofBytes = .ok proof)
+    (hP : uncompressG1 proof = .ok P) (hg : G1.Represents P (g.eval τ))
     (hfdeg : f.natDegree < FIELD_ELEMENTS_PER_BLOB) (hgdeg : g.natDegree < FIELD_ELEMENTS_PER_BLOB)
-    (h : verifyBlobKzgProof s blob commitment proof = .ok true) :
+    (h : verifyBlobKzgProof s blob commitmentBytes proofBytes = .ok true) :
     f = interpolant poly ∨
       f ≠ interpolant poly ∧ (f - interpolant poly).natDegree < FIELD_ELEMENTS_PER_BLOB ∧
         (f - interpolant poly).eval (computeChallenge blob commitment) = 0 ∨
@@ -140,6 +147,9 @@ theorem verifyBlobKzgProof_binding {s : TrustedSetup} {τ : Fr}
       (hb : b.natDegree < FIELD_ELEMENTS_PER_BLOB) :
       (a - b).natDegree < FIELD_ELEMENTS_PER_BLOB :=
     lt_of_le_of_lt (natDegree_sub_le a b) (max_lt ha hb)
+  -- The conversions return their input bytes, and validation gives the decoded points.
+  obtain ⟨rfl, hC⟩ := validateKzgG1Point_of_bytesToKzgCommitment hc hC
+  obtain ⟨rfl, hP⟩ := validateKzgG1Point_of_bytesToKzgProof hp hP
   obtain ⟨poly', C', P', hblob', hC', hP', hv⟩ := verifyBlobKzgProof_eq_ok_true h
   cases hblob.symm.trans hblob'
   cases hC.symm.trans hC'
