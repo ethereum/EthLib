@@ -107,7 +107,8 @@ For a well-formed setup, a proof that the computation returns verifies.
 
 It holds for every point `z`, inside or outside the domain. -/
 theorem verifyKzgProof_computeKzgProof {s : TrustedSetup} {τ : Fr}
-    (hs : s.WellFormed τ) {blob : Blob} {C P : KZGCommitment} {zBytes yBytes : Bytes32}
+    (hs : s.WellFormed τ) {blob : Blob} {C : KZGCommitment} {P : KZGProof}
+    {zBytes yBytes : Bytes32}
     (hC : blobToKzgCommitment s blob = .ok C)
     (hP : computeKzgProof s blob zBytes = .ok (P, yBytes)) :
     verifyKzgProof s C zBytes yBytes P = .ok true := by
@@ -281,7 +282,7 @@ theorem verifyBlobKzgProof_eq_ok_true {s : TrustedSetup} {blob : Blob}
 
 For a well-formed setup, a blob's proof verifies against its commitment. -/
 theorem verifyBlobKzgProof_computeBlobKzgProof {s : TrustedSetup}
-    {τ : Fr} (hs : s.WellFormed τ) {blob : Blob} {C P : KZGCommitment}
+    {τ : Fr} (hs : s.WellFormed τ) {blob : Blob} {C : KZGCommitment} {P : KZGProof}
     (hC : blobToKzgCommitment s blob = .ok C)
     (hP : computeBlobKzgProof s blob C = .ok P) :
     verifyBlobKzgProof s blob C P = .ok true := by

@@ -1,9 +1,11 @@
 """Keep the facts in SOUNDNESS.md that the repository can state for itself."""
 
 import argparse
+import importlib.util
 import json
 import re
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -254,12 +256,74 @@ def pins(root: Path) -> str:
     )
 
 
+def lean_imports() -> Callable[[str], list[str]]:
+    """The import reader of `check_layers.py`, loaded by path: `scripts` is not a package."""
+    # Loaded on use, because `check_layers.py` loads this file for `strip_lean`.
+    spec = importlib.util.spec_from_file_location(
+        "check_layers", Path(__file__).resolve().parent / "check_layers.py"
+    )
+    assert spec and spec.loader
+    layers = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(layers)
+    return layers.imports
+
+
+def vcvio_users(root: Path) -> str:
+    """
+    The Lean files and proof directories whose imports reach VCVio.
+
+    A file reaches VCVio when it imports a VCVio module, or a file under `EthLib/` that reaches it.
+
+    A file under a directory inside `Proofs` is named by that directory.
+    A file directly inside `Proofs` is named by its own path.
+    A file `X.lean` beside a directory `X/` is the root of that directory, so `X/` names it too.
+    A file named `Proofs.lean` is a root that gathers the proofs of a domain, so it is left out.
+    """
+    files = {
+        ".".join(path.relative_to(root).with_suffix("").parts): path
+        for path in sorted((root / "EthLib").rglob("*.lean"))
+    }
+    read = lean_imports()
+    imports = {module: read(path.read_text(encoding="utf-8")) for module, path in files.items()}
+    reached = {m for m, names in imports.items() if any(n.split(".")[0] == "VCVio" for n in names)}
+    # Add each file that imports a reached file, until a pass adds none.
+    grown = True
+    while grown:
+        grown = False
+        for module, names in imports.items():
+            if module not in reached and any(n in reached for n in names):
+                reached.add(module)
+                grown = True
+
+    users: set[str] = set()
+    spec: list[str] = []
+    for module in sorted(reached):
+        path = files[module]
+        rel = path.relative_to(root)
+        parts = rel.with_suffix("").parts
+        if parts[-1] == "Proofs":
+            continue
+        if "Proofs" not in parts:
+            spec.append(rel.as_posix())
+        elif len(parts) > parts.index("Proofs") + 2 or path.with_suffix("").is_dir():
+            users.add("/".join(parts[: parts.index("Proofs") + 2]) + "/")
+        else:
+            users.add(rel.as_posix())
+    text = "".join(f"- `{user}`\n" for user in sorted(users)) or "No proof imports it.\n"
+    if spec:
+        return (
+            text + "\nSpecification files that import it:\n\n" + "".join(f"- `{f}`\n" for f in spec)
+        )
+    return text + "\nNo specification file imports it.\n"
+
+
 GENERATORS = {
     "native": native,
     "unfoldable": unfoldable,
     "exports": exports,
     "c-lines": c_lines,
     "pins": pins,
+    "vcvio-users": vcvio_users,
 }
 
 

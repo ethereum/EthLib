@@ -33,14 +33,20 @@ CACHE = fetch_archives.cache_from_environment()
 DISAGREEMENTS_FILE = REPO / "tests" / "parity" / "disagreements.toml"
 
 
+def disagreement_entries() -> list[dict]:
+    """Every listed disagreement, of every suite, in the order of the file."""
+    return tomllib.loads(DISAGREEMENTS_FILE.read_text()).get("disagreement", [])
+
+
 def disagreements(suite: str) -> dict[tuple[str, str | None], dict]:
     """The listed disagreements of a suite, by case and group.
 
     An entry without a group holds for every group of its case.
     """
-    entries = tomllib.loads(DISAGREEMENTS_FILE.read_text()).get("disagreement", [])
     return {
-        (entry["case"], entry.get("group")): entry for entry in entries if entry["suite"] == suite
+        (entry["case"], entry.get("group")): entry
+        for entry in disagreement_entries()
+        if entry["suite"] == suite
     }
 
 

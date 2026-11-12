@@ -25,7 +25,11 @@ package «EthLib» where
 
 require "leanprover-community" / "mathlib" @ git "v4.35.0"
 
--- Probability and oracle computations, for the leanXMSS and BLS security proofs only.
+-- Probability and oracle computations, for the security proofs.
+--
+-- `SOUNDNESS.md` (D2) lists the proofs that import it, directly or through another file.
+--
+-- `scripts/soundness_facts.py` generates that list.
 --
 -- The library code never imports it.
 --

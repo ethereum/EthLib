@@ -35,6 +35,7 @@ public import EthLib.Cryptography.Proofs.Aes
 public import EthLib.Cryptography.Proofs.Ethash
 public import EthLib.Cryptography.Proofs.Montgomery
 public import EthLib.Cryptography.Proofs.BaseField
+public import EthLib.Cryptography.Proofs.X25519
 public import EthLib.Cryptography.Proofs.ChaCha20Poly1305
 public import EthLib.Cryptography.Proofs.Keystore
 public import EthLib.Cryptography.Proofs.MillerFunction

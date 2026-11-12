@@ -139,16 +139,104 @@ def test_read_rejected(text: bytes, code: int, message: str):
     assert info.value.code == code
 
 
-def test_import_keeps_every_record():
-    held = interchange([entry(blocks=[block(1, ROOT_A)])])
-    file = interchange([entry(attestations=[vote(2, 3)]), entry(OTHER_KEY)], root="0x" + "00" * 32)
-    merged = json.loads(consensus.import_slashing_interchange(held, file))
-    # The held file keeps its chain, and the entries of the file come after its own.
-    assert merged == json.loads(
-        interchange(
-            [entry(blocks=[block(1, ROOT_A)]), entry(attestations=[vote(2, 3)]), entry(OTHER_KEY)]
-        )
+def test_import_keeps_independent_limits():
+    held = interchange([entry(blocks=[block(1, ROOT_A)], attestations=[vote(9, 10, ROOT_A)])])
+    file = interchange(
+        [entry(blocks=[block(100, ROOT_B)], attestations=[vote(7, 20, ROOT_B)]), entry(OTHER_KEY)],
+        root="0x" + "00" * 32,
     )
+    merged = json.loads(consensus.import_slashing_interchange(held, file))
+    # Source 9 comes from the held vote and target 20 from the file; no limit keeps a signing root.
+    # The record keeps its own chain root, not the file's.
+    assert merged == json.loads(
+        interchange([entry(blocks=[block(100)], attestations=[vote(9, 20)]), entry(OTHER_KEY)])
+    )
+
+
+def test_import_refuses_the_gap_and_boundary_repeat():
+    held = interchange([entry(blocks=[block(10, ROOT_A)])])
+    file = interchange([entry(blocks=[block(100, ROOT_B)])])
+    record = consensus.import_slashing_interchange(held, file)
+    with raises(ERROR, "slashing protection failed with code 4") as info:
+        consensus.check_block_signing(record, _bytes(KEY), 50, _bytes(ROOT_A))
+    assert info.value.code == 4
+    # The imported boundary has no root, so even its original block cannot be repeated.
+    with raises(ERROR, "slashing protection failed with code 3") as info:
+        consensus.check_block_signing(record, _bytes(KEY), 100, _bytes(ROOT_B))
+    assert info.value.code == 3
+    consensus.check_block_signing(record, _bytes(KEY), 101, _bytes(ROOT_A))
+
+
+VOTE_LIMITS = (
+    interchange([entry(attestations=[vote(9, 10, ROOT_A)])]),
+    interchange([entry(attestations=[vote(7, 20, ROOT_B)])]),
+)
+
+
+@pytest.mark.parametrize(
+    ("source", "target", "code"),
+    [(8, 19, 6), (9, 19, 7), (9, 20, 5)],
+    ids=["source", "target", "double"],
+)
+def test_import_refuses_below_vote_limits(source: int, target: int, code: int):
+    record = consensus.import_slashing_interchange(*VOTE_LIMITS)
+    with raises(ERROR, f"slashing protection failed with code {code}") as info:
+        consensus.check_attestation_signing(record, _bytes(KEY), source, target, _bytes(ROOT_B))
+    assert info.value.code == code
+
+
+def test_import_accepts_above_vote_limits():
+    record = consensus.import_slashing_interchange(*VOTE_LIMITS)
+    consensus.check_attestation_signing(record, _bytes(KEY), 9, 21, _bytes(ROOT_A))
+
+
+def test_import_coalesces_duplicate_keys_and_keeps_empty_lists():
+    file = interchange(
+        [
+            entry(blocks=[block(3, ROOT_A)], attestations=[vote(12, 13, ROOT_A)]),
+            entry(OTHER_KEY),
+            entry(blocks=[block(8, ROOT_B)], attestations=[vote(10, 15, ROOT_B)]),
+        ]
+    )
+    record = consensus.import_slashing_interchange(interchange([]), file)
+    assert json.loads(record) == json.loads(
+        interchange([entry(blocks=[block(8)], attestations=[vote(12, 15)]), entry(OTHER_KEY)])
+    )
+    assert json.loads(consensus.import_slashing_interchange(record, file)) == json.loads(record)
+    assert json.loads(consensus.import_slashing_interchange(record, interchange([]))) == json.loads(
+        record
+    )
+    assert json.loads(consensus.import_slashing_interchange(interchange([]), interchange([]))) == (
+        json.loads(interchange([]))
+    )
+
+
+def test_import_limits_survive_reload_and_checked_recording():
+    record = interchange([entry(blocks=[block(10)], attestations=[vote(1, 2)])])
+    # The greatest file comes second, so a later import that dropped the held limits would show.
+    for slot, source, target in [(100, 9, 20), (200, 10, 30), (50, 7, 15)]:
+        file = interchange(
+            [entry(blocks=[block(slot, ROOT_A)], attestations=[vote(source, target)])]
+        )
+        record = consensus.import_slashing_interchange(record, file)
+        record = consensus.read_slashing_interchange(record)
+    assert json.loads(record) == json.loads(
+        interchange([entry(blocks=[block(200)], attestations=[vote(10, 30)])])
+    )
+    consensus.check_block_signing(record, _bytes(KEY), 201, _bytes(ROOT_A))
+    record = consensus.record_block_signing(record, _bytes(KEY), 201, _bytes(ROOT_A))
+    consensus.check_attestation_signing(record, _bytes(KEY), 10, 31, _bytes(ROOT_A))
+    record = consensus.record_attestation_signing(record, _bytes(KEY), 10, 31, _bytes(ROOT_A))
+    # A recorded message keeps its signing root, so it may be signed again.
+    consensus.check_block_signing(record, _bytes(KEY), 201, _bytes(ROOT_A))
+    consensus.check_attestation_signing(record, _bytes(KEY), 10, 31, _bytes(ROOT_A))
+    # The rootless limits are still held: each conflicts with a new message at its slot or target.
+    with raises(ERROR, "slashing protection failed with code 3") as info:
+        consensus.check_block_signing(record, _bytes(KEY), 200, _bytes(ROOT_B))
+    assert info.value.code == 3
+    with raises(ERROR, "slashing protection failed with code 5") as info:
+        consensus.check_attestation_signing(record, _bytes(KEY), 10, 30, _bytes(ROOT_B))
+    assert info.value.code == 5
 
 
 # ---- The conditions on blocks --------------------------------------------------------------------
@@ -302,7 +390,7 @@ GENERATED = f"{ARCHIVE_ROOT}/tests/generated"
 
 
 def _run(case: dict) -> None:
-    """Run a case as a signer that keeps every message, the complete strategy of the tests."""
+    """Run a case as a signer that imports with the minimal strategy, against `should_succeed`."""
     held = interchange([], root=case["genesis_validators_root"])
     for step in case["steps"]:
         file = step["interchange"]
@@ -313,7 +401,7 @@ def _run(case: dict) -> None:
         assert step["should_succeed"]
         held = consensus.import_slashing_interchange(held, json.dumps(file).encode())
         for signing in step["blocks"]:
-            expected = signing.get("should_succeed_complete", signing["should_succeed"])
+            expected = signing["should_succeed"]
             key, root, slot = (
                 _bytes(signing["pubkey"]),
                 _bytes(signing["signing_root"]),
@@ -327,7 +415,7 @@ def _run(case: dict) -> None:
             assert expected, (case["name"], signing)
             held = consensus.record_block_signing(held, key, slot, root)
         for signing in step["attestations"]:
-            expected = signing.get("should_succeed_complete", signing["should_succeed"])
+            expected = signing["should_succeed"]
             key, root = _bytes(signing["pubkey"]), _bytes(signing["signing_root"])
             source, target = int(signing["source_epoch"]), int(signing["target_epoch"])
             try:
