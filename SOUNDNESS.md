@@ -680,7 +680,12 @@ A caller that edits the state can therefore complete with a remote whose signatu
 `Produced.complete_isOk` says that completion of such a state after message 3 succeeds.
 These are acceptance theorems, not a proof of protocol security, confidentiality or constant-time execution.
 They relate the identity to the transport keys only through the shared handshake state.
-No theorem says that the chaining key mixed a Diffie-Hellman output with the remote static key, and none covers the handshake hash.
+The symmetric state of Noise §5.2 has its own theorems (`Networking/Proofs/Noise.lean`).
+`mixHash_eq` and `mixKey_eq` give the whole state that each mix returns, so a mix that moved bytes between the three fields would fail them.
+`chainingKey_foldl_mixHash` and `cipher_foldl_mixHash` prove that a run of transcript mixes reaches neither the chaining key nor the cipher.
+`nonce_mixKey` proves that a mix of a key resets the nonce, so its key is never used at a spent nonce.
+`hash_mixHash_inj` proves that two transcripts that end alike agree on the bytes last mixed, or SHA-256 repeats itself.
+No theorem says that the chaining key mixed a Diffie-Hellman output with the remote static key, and none bounds the cost of that collision.
 Only the libp2p read verifies an identity, and completion checks that the stored remote has the remote static key of the handshake.
 The raw transport split of an XX state checks neither.
 The Python tests compare the raw XX handshake with a published test vector.

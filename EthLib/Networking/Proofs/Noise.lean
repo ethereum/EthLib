@@ -289,4 +289,98 @@ theorem decryptAndHash_encryptAndHash {s next : SymmetricState} {plaintext messa
     rw [decryptWithAd_encryptWithAd hc]
     rfl
 
+/-! ## The transcript of the handshake
+
+Noise §5.2 starts the chaining key and the transcript hash at the padded protocol name.
+
+The two start equal, whichever of the two forms of §5.2 the name takes.
+
+Each mix has one theorem for the whole state it returns.
+
+A mix that moved bytes between the three fields would fail it.
+
+A run of transcript mixes leaves the chaining key and the cipher, however long the run.
+
+Two transcripts that end alike agree on the last bytes mixed, or SHA-256 repeats itself.
+-/
+
+/-- The whole state the handshake starts from, Noise §5.2.
+
+The chaining key and the transcript start equal, and the cipher starts with no key. -/
+theorem initializeSymmetric_eq :
+    initializeSymmetric
+      = ⟨⟨initializeSymmetric.hash.bytes⟩, initializeSymmetric.hash, initializeKey none⟩ := rfl
+
+/-- The whole state a mix of bytes returns, Noise §5.2.
+
+Only the transcript changes, and it becomes the hash of the old one with those bytes. -/
+theorem mixHash_eq (s : SymmetricState) (bytes : ByteArray) :
+    mixHash s bytes
+      = ⟨s.chainingKey, ⟨Hash.Sha256.hash32 (packBytes s.hash.bytes ++ bytes)⟩, s.cipher⟩ := rfl
+
+/-- The whole state a mix of a key returns, Noise §§4.3 and 5.2.
+
+The transcript stays, and the chaining key takes the first output of the derivation.
+
+The cipher takes the second output, with a fresh nonce. -/
+theorem mixKey_eq (s : SymmetricState) (input : Key) :
+    mixKey s input
+      = ⟨⟨(hkdf2 s.chainingKey (packBytes input)).1⟩, s.hash,
+          initializeKey (some (hkdf2 s.chainingKey (packBytes input)).2)⟩ := rfl
+
+/-- A mix of a key resets the nonce, so its key is never used at a spent nonce, Noise §5.2. -/
+theorem nonce_mixKey (s : SymmetricState) (input : Key) : (mixKey s input).cipher.nonce = 0 := by
+  rw [mixKey_eq]
+  rfl
+
+/-! ## A run of mixes
+
+The chaining key carries the key material, so no run of transcript mixes may reach it.
+-/
+
+/-- A run of transcript mixes leaves the chaining key, however long the run. -/
+theorem chainingKey_foldl_mixHash (s : SymmetricState) (l : List ByteArray) :
+    (l.foldl mixHash s).chainingKey = s.chainingKey := by
+  induction l generalizing s with
+  | nil => rfl
+  | cons b t ih => rw [List.foldl_cons, ih, mixHash_eq]
+
+/-- A run of transcript mixes leaves the cipher, so it reaches no key and no nonce. -/
+theorem cipher_foldl_mixHash (s : SymmetricState) (l : List ByteArray) :
+    (l.foldl mixHash s).cipher = s.cipher := by
+  induction l generalizing s with
+  | nil => rfl
+  | cons b t ih => rw [List.foldl_cons, ih, mixHash_eq]
+
+/-- Two transcripts that end alike agree on the bytes last mixed, or SHA-256 repeats itself.
+
+So a transcript separates two handshakes unless their mixed bytes collide under SHA-256. -/
+theorem hash_mixHash_inj {s t : SymmetricState} {a b : ByteArray}
+    (h : (mixHash s a).hash = (mixHash t b).hash) :
+    Hash.Sha256.hash32 (packBytes s.hash.bytes ++ a)
+      = Hash.Sha256.hash32 (packBytes t.hash.bytes ++ b) := by
+  rw [mixHash_eq, mixHash_eq] at h
+  exact congrArg HandshakeHash.bytes h
+
+/-! ## The frame of a transport message -/
+
+/-- Fewer than two bytes carry no length, Noise §3 framing. -/
+theorem unframe_eq_error_of_size_lt {bytes : ByteArray} (h : bytes.size < 2) :
+    unframe bytes = .error .truncated := by
+  simp [unframe, Nat.not_le.mpr h, throw, throwThe, MonadExceptOf.throw]
+
+/-- An accepted frame carries the length that its two leading bytes declare. -/
+theorem size_of_unframe_eq_ok {bytes body : ByteArray} (h : unframe bytes = .ok body) :
+    body.size + 2 = bytes.size := by
+  unfold unframe at h
+  split at h
+  · rename_i hs
+    by_cases hsize : bytesToNat (readBytes bytes 0 2 hs).toList + 2 = bytes.size
+    · simp only [hsize, reduceIte, pure, Except.pure, Except.ok.injEq] at h
+      subst h
+      simp only [ByteArray.size_extract]
+      omega
+    · simp [hsize, throw, throwThe, MonadExceptOf.throw] at h
+  · simp [throw, throwThe, MonadExceptOf.throw] at h
+
 end EthLib.Networking.Noise
