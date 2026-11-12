@@ -41,11 +41,13 @@ It also asks the zero root before the root of slot zero.
 
 Each justified block is then in the chain of the block of its recent epoch.
 
-Each vote that a block step casts comes from an attestation of the block.
+Each vote that a block step casts is in an indexed attestation with the data of the vote.
 
-The block checked the indexed form of that attestation, and the check accepted.
+The block checked it on a state inside the block, and the check accepted.
 
 That state and the place of the check in the block are also given.
+
+The place is an attestation or an attester slashing of the block.
 
 It holds for any signature checks, with more than `MIN_SEED_LOOKAHEAD + 2` epochs of mixes.
 
@@ -107,9 +109,11 @@ private theorem processAttestation_checked {fork : Fork} {state after : BeaconSt
     simp only [altair, ↓reduceIte]
     exact ⟨indexed, indexedOk, validOk⟩
 
-/-- Where the attestations of a block check an indexed attestation, and on which state.
+/-- Where the operations of a block check an indexed attestation, and on which state.
 
 The operations start at the given state, and the attestations read the given parent slot.
+
+An attester slashing checks both of its attestations on the state before it.
 
 From Altair an attestation is checked on the state before it.
 
@@ -119,6 +123,16 @@ That state is the one that the attestation returns. -/
 inductive AttestationSite (config : Config) (checks : SignatureChecks) {fork : Fork}
     (input : BeaconState preset fork) (body : BeaconBlockBody preset fork) (parentSlot : Slot) :
     BeaconState preset fork → IndexedAttestation preset fork → Prop where
+  | slashing {proposersDone checked next : BeaconState preset fork}
+      {pre post : List (AttesterSlashing preset fork)} {slashing : AttesterSlashing preset fork}
+      {indexed : IndexedAttestation preset fork}
+      (split : body.attesterSlashings.data.toList = pre ++ slashing :: post)
+      (proposers : body.proposerSlashings.data.toList.foldlM
+        (processProposerSlashing config checks) input = .ok proposersDone)
+      (earlier : pre.foldlM (processAttesterSlashing config checks) proposersDone = .ok checked)
+      (processed : processAttesterSlashing config checks checked slashing = .ok next)
+      (which : indexed = slashing.attestation1 ∨ indexed = slashing.attestation2) :
+      AttestationSite config checks input body parentSlot checked indexed
   | attestation {proposersDone slashingsDone mid next : BeaconState preset fork}
       {pre post : List (Attestation preset fork)} {attestation : Attestation preset fork}
       {indexed : IndexedAttestation preset fork}
@@ -135,13 +149,38 @@ inductive AttestationSite (config : Config) (checks : SignatureChecks) {fork : F
       AttestationSite config checks input body parentSlot
         (if .altair ≤ fork then mid else next) indexed
 
-/-- A vote of a block that applies comes from an attestation whose indexed form the block checked.
+/-- The state where a block checks an indexed attestation follows from the input of its operations.
+
+The steps between them are slashings and attestations, so they form a frame. -/
+theorem AttestationSite.frame {fork : Fork} {input checked : BeaconState preset fork}
+    {body : BeaconBlockBody preset fork} {parentSlot : Slot}
+    {indexed : IndexedAttestation preset fork}
+    (site : AttestationSite config checks input body parentSlot checked indexed) :
+    Frame input checked := by
+  cases site with
+  | slashing _ proposers earlier =>
+    exact (BlockFrame.foldlM (fun _ _ _ ok => frame_processProposerSlashing ok)
+      proposers).toFrame.trans
+        (BlockFrame.foldlM (fun _ _ _ ok => frame_processAttesterSlashing ok) earlier).toFrame
+  | attestation _ proposers slashings earlier processed =>
+    have mid : Frame input _ :=
+      (BlockFrame.foldlM (fun _ _ _ ok => frame_processProposerSlashing ok)
+        proposers).toFrame.trans <|
+      (BlockFrame.foldlM (fun _ _ _ ok => frame_processAttesterSlashing ok)
+        slashings).toFrame.trans
+          (Frame.foldlM (fun _ _ _ ok => frame_processAttestation ok) earlier)
+    -- Before Altair the check runs after the attestation, on the state that it returns.
+    split
+    · exact mid
+    · exact mid.trans (frame_processAttestation processed)
+
+/-- A vote of a block that applies is in an indexed attestation that the block checked.
 
 The voter is among its attesters, and its data is the data of the vote.
 
 The check ran on a state inside the block, and it accepted.
 
-The result also says where in the block the check ran.
+The result also says where in the block the check ran: at an attestation or an attester slashing.
 
 It holds for any signature checks.
 
@@ -197,7 +236,7 @@ theorem blockVotes_verified
     simpa using iMem
   · rw [indexedData, ← dataEq]
 
-/-- A vote that a block step casts comes from an attestation whose indexed form the block checked.
+/-- A vote that a block step casts is in an indexed attestation that the block checked.
 
 The step applies a signed block, and the check ran inside that block and accepted.
 
