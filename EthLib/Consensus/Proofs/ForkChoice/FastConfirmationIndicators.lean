@@ -856,11 +856,15 @@ The theorems above state the LMD-GHOST indicator of the rule, Definition 4 of th
 
 The rule also has two FFG indicators, which weigh the honest support against the active balance.
 
-One checks that no checkpoint in conflict with the current target can be justified.
+One stands for no checkpoint in conflict with the current target becoming justified.
 
-It asks for more than a third of the balance, unless the target is the unrealized justification.
+It asks for more than a third of the balance.
 
-The other checks that the current target will be justified, and asks for two thirds of the balance.
+It accepts at once when the target is the unrealized justified checkpoint of the store.
+
+The other stands for the current target becoming justified, and asks for two thirds of it.
+
+Here both are only tests of the support against the balance.
 
 So reaching two thirds implies the weaker test, for a nonzero balance increment.
 -/
@@ -968,7 +972,9 @@ private theorem exists_getCurrentTarget_of_support {head : Root} {support : Gwei
 
 /-- When the two-thirds test accepts, the one-third test accepts too.
 
-The total active balance is at least one balance increment, so it is nonzero.
+The balance increment is assumed nonzero.
+
+The total active balance is at least one increment, so it is nonzero too.
 
 Two thirds of a nonzero balance is above a third of it.
 -/
