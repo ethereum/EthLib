@@ -747,48 +747,13 @@ private theorem operations_backed {fork : Fork} {state after : BeaconState prese
     (attesters : ∀ sl ∈ body.attesterSlashings.data.toList, ∀ i ∈ slashingIndices sl, ∀ old,
       state.validators.data[i.toNat]? = some old → evidence old.pubkey) :
     SlashedBacked evidence after := by
-  unfold processOperations at ok
-  split at ok
-  · unfold processOperationsGloas at ok
-    simp only [bind_ok_iff, ← Array.foldlM_toList] at ok
-    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, proposed, proposersOk,
-      slashed, attestersOk, attested, attestations, exited, exits, changed, changes, paid⟩ := ok
-    have proposedBacked : SlashedBacked evidence proposed := by
-      refine fold_slashings_backed (fun sl => [sl.signedHeader1.message.proposerIndex])
-        (fun _ _ _ ok => (frame_processProposerSlashing ok).pubkeysPrefix)
-        (fun _ _ _ ok => sameSizes_processProposerSlashing ok) ?_ _ (List.prefix_refl _) rfl
-        evidence backed ?_ proposersOk
-      · intro s sl t ok evidence backed selected
-        exact proposerSlashing_backed ok evidence backed (selected _ (by simp))
-      · intro sl member i inIndices
-        simp only [List.mem_singleton] at inIndices
-        subst i
-        exact proposers sl member
-    have proposedIdentity := (BlockFrame.foldlM
-      (fun _ _ _ ok => frame_processProposerSlashing ok) proposersOk).pubkeysPrefix
-    have proposedSize : SameSizes state proposed :=
-      (foldlM_ok_steps SameSizes SameSizes.refl SameSizes.trans
-        (fun _ _ _ ok => sameSizes_processProposerSlashing ok) proposersOk).1
-    have slashedBacked := fold_slashings_backed slashingIndices
-      (fun _ _ _ ok => (frame_processAttesterSlashing ok).pubkeysPrefix)
-      (fun _ _ _ ok => sameSizes_processAttesterSlashing ok)
-      (fun _ _ _ ok => attesterSlashing_backed ok) _ proposedIdentity proposedSize.1
-      evidence proposedBacked attesters attestersOk
-    -- Payload attestations change payment weights, not validator slashing flags.
-    have rest : SlashedKept slashed after :=
-      (SlashedKept.foldlM
-        (fun _ _ _ ok => SlashedKept.of_validators (by rw [(processAttestation_registry ok).1]))
-        attestations).trans <|
-      (SlashedKept.foldlM (fun _ _ _ ok => SlashedKept.processVoluntaryExit ok) exits).trans <|
-      (SlashedKept.foldlM
-        (fun _ _ _ ok => SlashedKept.processBlsToExecutionChange ok) changes).trans <|
-      SlashedKept.foldlM (fun _ _ _ ok => by
-        rw [processPayloadAttestation_eq ok]; exact SlashedKept.of_validators) paid
-    exact rest evidence slashedBacked
-  simp only [bind_ok_iff, ensure_ok_iff,
-    ← Array.foldlM_toList] at ok
-  obtain ⟨_, _, _, _, proposed, proposersOk, slashed, attestersOk, attested, attestations,
-    deposited, deposits, exited, exits, changed, changesOk, requestsOk⟩ := ok
+  -- The operations after the attestations keep the slashed flags.
+  obtain ⟨proposed, slashed, attested, proposersOk, attestersOk, attestations, tail⟩ :=
+    processOperations_folds_of (fun s t => SlashedKept s t) SlashedKept.refl
+      (fun one two => one.trans two) SlashedKept.processDeposit
+      SlashedKept.processVoluntaryExit SlashedKept.processBlsToExecutionChange
+      SlashedKept.processExecutionRequests
+      (fun ok => by rw [processPayloadAttestation_eq ok]; exact SlashedKept.of_validators) ok
   have proposedBacked : SlashedBacked evidence proposed := by
     refine fold_slashings_backed (fun sl => [sl.signedHeader1.message.proposerIndex])
       (fun _ _ _ ok => (frame_processProposerSlashing ok).pubkeysPrefix)
@@ -800,34 +765,20 @@ private theorem operations_backed {fork : Fork} {state after : BeaconState prese
       simp only [List.mem_singleton] at inIndices
       subst i
       exact proposers sl member
-  have proposedIdentity := (BlockFrame.foldlM
-    (fun _ _ _ ok => frame_processProposerSlashing ok) proposersOk).pubkeysPrefix
-  have proposedSize : SameSizes state proposed := by
-    exact (foldlM_ok_steps SameSizes SameSizes.refl SameSizes.trans
+  have proposedSize : SameSizes state proposed :=
+    (foldlM_ok_steps SameSizes SameSizes.refl SameSizes.trans
       (fun _ _ _ ok => sameSizes_processProposerSlashing ok) proposersOk).1
   have slashedBacked := fold_slashings_backed slashingIndices
     (fun _ _ _ ok => (frame_processAttesterSlashing ok).pubkeysPrefix)
     (fun _ _ _ ok => sameSizes_processAttesterSlashing ok)
-    (fun _ _ _ ok => attesterSlashing_backed ok) _ proposedIdentity proposedSize.1
-    evidence proposedBacked attesters attestersOk
+    (fun _ _ _ ok => attesterSlashing_backed ok) _
+    (BlockFrame.foldlM (fun _ _ _ ok => frame_processProposerSlashing ok) proposersOk).pubkeysPrefix
+    proposedSize.1 evidence proposedBacked attesters attestersOk
+  -- Attestations keep the registry.
   have attestedKept : SlashedKept slashed attested := SlashedKept.foldlM
     (fun _ _ _ ok => SlashedKept.of_validators (by rw [(processAttestation_registry ok).1]))
     attestations
-  have changes : SlashedKept exited changed := by
-    unfold processBlsToExecutionChanges at changesOk
-    split at changesOk
-    · rw [← Array.foldlM_toList] at changesOk
-      exact SlashedKept.foldlM
-        (fun _ _ _ ok => SlashedKept.processBlsToExecutionChange ok) changesOk
-    · cases changesOk; exact .refl _
-  have requests : SlashedKept changed after := by
-    split at requestsOk
-    · exact SlashedKept.processExecutionRequests requestsOk
-    · cases requestsOk; exact .refl _
-  exact (attestedKept.trans <|
-    (SlashedKept.foldlM (fun _ _ _ ok => SlashedKept.processDeposit ok) deposits).trans <|
-    (SlashedKept.foldlM (fun _ _ _ ok => SlashedKept.processVoluntaryExit ok) exits).trans <|
-    changes.trans requests) evidence slashedBacked
+  exact (attestedKept.trans tail) evidence slashedBacked
 
 /-- The payload of the parent keeps the size of the registry.
 
@@ -942,42 +893,23 @@ private theorem block_backed {fork : Fork} {state after : BeaconState preset for
       ∀ i ∈ slashingIndices sl, ∀ old,
       state.validators.data[i.toNat]? = some old → evidence old.pubkey) :
     SlashedBacked evidence after := by
+  obtain ⟨input, last, started, operated, -, synced⟩ := processBlock_operationsInput ok
   -- The evidence of the block names validators before it, and they keep their keys to its input.
-  have operated {input t : BeaconState preset fork} {parentSlot : Slot}
-      (started : OperationsInput config checks engine state block input)
-      (ok : processOperations config checks input block.body parentSlot = .ok t) :
-      SlashedBacked evidence t := by
-    have kept := (frame_operationsInput started).pubkeysPrefix
-    obtain ⟨slashedKept, size⟩ := slashedKept_operationsInput started
-    apply operations_backed ok evidence (slashedKept evidence backed)
+  have kept := (frame_operationsInput started).pubkeysPrefix
+  obtain ⟨slashedKept, size⟩ := slashedKept_operationsInput started
+  have operatedBacked : SlashedBacked evidence last := by
+    apply operations_backed operated evidence (slashedKept evidence backed)
     · intro sl member old found
       obtain ⟨original, originalAt, same⟩ := key_of_same_size kept size found
       exact same ▸ proposers sl member original originalAt
     · intro sl member i inIndices old found
       obtain ⟨original, originalAt, same⟩ := key_of_same_size kept size found
       exact same ▸ attesters sl member i inIndices original originalAt
-  unfold processBlock at ok
-  split at ok
-  · unfold processBlockAltair at ok
-    simp only [bind_ok_iff] at ok
-    obtain ⟨_, paidOk, _, headedOk, _, executedOk, _, revealedOk, _, votedOk, _, operatedOk,
-      synced⟩ := ok
-    exact SlashedKept.processSyncAggregate synced evidence
-      (operated ⟨_, _, _, _, paidOk, headedOk, executedOk, revealedOk, votedOk⟩ operatedOk)
-  · rename_i altair
-    simp only [bind_ok_iff] at ok
-    obtain ⟨_, headerOk, _, randaoOk, _, eth1Ok, operatedOk⟩ := ok
-    -- Before Altair neither the payload of the parent nor the execution part runs.
-    have gloas : ¬ Fork.glamsterdam ≤ fork := fun h => altair (Nat.le_trans (by decide) h)
-    have bellatrix : ¬ Fork.bellatrix ≤ fork := fun h => altair (Nat.le_trans (by decide) h)
-    have early : fork < .hegota := Nat.lt_trans (Nat.lt_of_not_le altair) (by decide)
-    refine operated ⟨state, _, _, _, ?_, headerOk, ?_, randaoOk, ?_⟩ operatedOk
-    · simp only [gloas, ↓reduceDIte]
-      rfl
-    · simp only [bellatrix, ↓reduceDIte]
-      rfl
-    · simp only [early, ↓reduceDIte]
-      exact eth1Ok
+  -- From Altair the sync aggregate follows, and it keeps the slashed flags.
+  split at synced
+  · exact SlashedKept.processSyncAggregate synced evidence operatedBacked
+  · cases synced
+    exact operatedBacked
 
 /-- A slashed validator of the last state has a slashing in a block of the run that names its key.
 

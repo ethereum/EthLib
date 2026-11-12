@@ -1208,6 +1208,87 @@ theorem frame_processSyncAggregate {altair : .altair ≤ fork} {aggregate : Sync
 
 /-! ## Blocks -/
 
+/-- The operations of a block run three folds in order, then the steps after the attestations.
+
+The folds are its proposer slashings, its attester slashings and its attestations.
+
+They name the states that the computation passes through.
+
+The attestations read `parentSlot`, the slot of the parent block.
+
+The steps after them are a step of the relation.
+
+The relation must hold of each kind of operation after the attestations.
+
+It must hold of each state to itself, and chain.
+
+Before Gloas those are the deposits, the exits, the changes of credentials and the requests.
+
+The changes of credentials run from Capella, and the requests from Electra.
+
+From Gloas they are the exits, the changes of credentials and the payload attestations. -/
+theorem processOperations_folds_of
+    (step : BeaconState preset fork → BeaconState preset fork → Prop)
+    (refl : ∀ state, step state state)
+    (trans : ∀ {first second third}, step first second → step second third → step first third)
+    (deposit : ∀ {state after} {before : fork < .hegota} {deposit : Deposit},
+      processDeposit config checks before state deposit = .ok after → step state after)
+    (exit : ∀ {state after} {signed : SignedVoluntaryExit},
+      processVoluntaryExit config checks state signed = .ok after → step state after)
+    (change : ∀ {state after} {signed : SignedBLSToExecutionChange},
+      processBlsToExecutionChange config checks state signed = .ok after → step state after)
+    (requests : ∀ {state after} {body : BeaconBlockBody preset fork}
+      {electra : .pectra ≤ fork ∧ fork < .glamsterdam},
+      processExecutionRequests config state body electra = .ok after → step state after)
+    (payload : ∀ {state after} {gloas : .glamsterdam ≤ fork}
+      {attestation : PayloadAttestation preset},
+      processPayloadAttestation config checks state gloas attestation = .ok after →
+        step state after)
+    {body : BeaconBlockBody preset fork} {parentSlot : Slot}
+    (computed : processOperations config checks state body parentSlot = .ok after) :
+    ∃ proposersDone slashingsDone attested,
+      body.proposerSlashings.data.toList.foldlM (processProposerSlashing config checks) state =
+        .ok proposersDone ∧
+      body.attesterSlashings.data.toList.foldlM (processAttesterSlashing config checks)
+        proposersDone = .ok slashingsDone ∧
+      body.attestations.data.toList.foldlM (processAttestation config checks · parentSlot ·)
+        slashingsDone = .ok attested ∧
+      step attested after := by
+  have folds {α : Type} {f : BeaconState preset fork → α → Except TransitionError _}
+      (each : ∀ s x t, f s x = .ok t → step s t) {items : List α} {s t : BeaconState preset fork}
+      (ok : items.foldlM f s = .ok t) : step s t :=
+    (foldlM_ok_steps step refl trans each ok).1
+  unfold processOperations at computed
+  split at computed
+  · rename_i gloas
+    unfold processOperationsGloas at computed
+    simp only [bind_ok_iff, ← Array.foldlM_toList] at computed
+    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, proposersOk, _, attestersOk, _,
+      attestedOk, _, exitsOk, _, changesOk, paid⟩ := computed
+    refine ⟨_, _, _, proposersOk, attestersOk, attestedOk, ?_⟩
+    exact trans (folds (fun _ _ _ ok => exit ok) exitsOk) <|
+      trans (folds (fun _ _ _ ok => change ok) changesOk)
+        (folds (fun _ _ _ ok => payload ok) paid)
+  simp only [bind_ok_iff, ensure_ok_iff, ← Array.foldlM_toList] at computed
+  obtain ⟨_, _, _, _, _, proposersOk, _, attestersOk, _, attestedOk, _, depositedOk, exited,
+    exitsOk, changed, changesOk, requestsOk⟩ := computed
+  -- From Capella the changes of credentials run, and from Electra the requests.
+  have changes : step exited changed := by
+    unfold processBlsToExecutionChanges at changesOk
+    split at changesOk
+    · rw [← Array.foldlM_toList] at changesOk
+      exact folds (fun _ _ _ ok => change ok) changesOk
+    · simp only [pure, Except.pure, Except.ok.injEq] at changesOk
+      exact changesOk ▸ refl _
+  have requested : step changed after := by
+    split at requestsOk
+    · exact requests requestsOk
+    · simp only [pure, Except.pure, Except.ok.injEq] at requestsOk
+      exact requestsOk ▸ refl _
+  refine ⟨_, _, _, proposersOk, attestersOk, attestedOk, ?_⟩
+  exact trans (folds (fun _ _ _ ok => deposit ok) depositedOk) <|
+    trans (folds (fun _ _ _ ok => exit ok) exitsOk) (trans changes requested)
+
 /-- The operations of a block run three folds in order, then a block frame.
 
 The folds are its proposer slashings, its attester slashings and its attestations.
@@ -1224,38 +1305,12 @@ theorem processOperations_folds {body : BeaconBlockBody preset fork} {parentSlot
         proposersDone = .ok slashingsDone ∧
       body.attestations.data.toList.foldlM (processAttestation config checks · parentSlot ·)
         slashingsDone = .ok attested ∧
-      BlockFrame attested after := by
-  unfold processOperations at computed
-  split at computed
-  · unfold processOperationsGloas at computed
-    simp only [bind_ok_iff, ← Array.foldlM_toList] at computed
-    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, proposersOk, _, attestersOk, _,
-      attestedOk, _, exitsOk, _, changesOk, paid⟩ := computed
-    refine ⟨_, _, _, proposersOk, attestersOk, attestedOk, ?_⟩
-    exact (BlockFrame.foldlM (fun _ _ _ ok => frame_processVoluntaryExit ok) exitsOk).trans <|
-      (BlockFrame.foldlM (fun _ _ _ ok => frame_processBlsToExecutionChange ok) changesOk).trans <|
-      BlockFrame.foldlM (fun _ _ _ ok => by
-        rw [processPayloadAttestation_eq ok]
-        exact BlockFrame.refl _) paid
-  simp only [bind_ok_iff, ensure_ok_iff, ← Array.foldlM_toList] at computed
-  obtain ⟨_, _, _, _, _, proposersOk, _, attestersOk, _, attestedOk, _, depositedOk, exited,
-    exitsOk, changed, changesOk, requestsOk⟩ := computed
-  have changes : BlockFrame exited changed := by
-    unfold processBlsToExecutionChanges at changesOk
-    split at changesOk
-    · rw [← Array.foldlM_toList] at changesOk
-      exact BlockFrame.foldlM (fun _ _ _ ok => frame_processBlsToExecutionChange ok) changesOk
-    · simp only [pure, Except.pure, Except.ok.injEq] at changesOk
-      exact changesOk ▸ BlockFrame.refl _
-  have requests : BlockFrame changed after := by
-    split at requestsOk
-    · exact frame_processExecutionRequests requestsOk
-    · simp only [pure, Except.pure, Except.ok.injEq] at requestsOk
-      exact requestsOk ▸ BlockFrame.refl _
-  refine ⟨_, _, _, proposersOk, attestersOk, attestedOk, ?_⟩
-  exact (BlockFrame.foldlM (fun _ _ _ ok => frame_processDeposit ok) depositedOk).trans <|
-    (BlockFrame.foldlM (fun _ _ _ ok => frame_processVoluntaryExit ok) exitsOk).trans <|
-    changes.trans requests
+      BlockFrame attested after :=
+  processOperations_folds_of BlockFrame BlockFrame.refl BlockFrame.trans
+    frame_processDeposit frame_processVoluntaryExit frame_processBlsToExecutionChange
+    frame_processExecutionRequests (fun ok => by
+      rw [processPayloadAttestation_eq ok]
+      exact BlockFrame.refl _) computed
 
 /-- The operations of a block are a step, its attestations in order, then a block frame.
 
@@ -1382,20 +1437,27 @@ theorem frame_operationsInput {engine : ExecutionEngine preset fork}
 
 /-- A block runs the steps of its operations input, then its operations, then a block frame.
 
-The operations read the parent slot from the latest block header before the block. -/
+The operations read the parent slot from the latest block header before the block.
+
+The block frame is the sync aggregate from Altair, and before Altair nothing. -/
 theorem processBlock_operationsInput {block : BeaconBlock preset fork}
     (computed : processBlock config checks engine state block = .ok after) :
     ∃ input last, OperationsInput config checks engine state block input ∧
       processOperations config checks input block.body state.latestBlockHeader.slot = .ok last ∧
-      BlockFrame last after := by
+      BlockFrame last after ∧
+      (if altair : .altair ≤ fork then
+          processSyncAggregate config checks last altair (block.body.syncAggregate altair)
+        else pure last) = .ok after := by
   unfold processBlock at computed
   split at computed
   · unfold processBlockAltair at computed
     simp only [bind_ok_iff] at computed
     obtain ⟨_, paidOk, _, headedOk, _, executedOk, _, revealedOk, _, votedOk, _, operatedOk,
       synced⟩ := computed
-    exact ⟨_, _, ⟨_, _, _, _, paidOk, headedOk, executedOk, revealedOk, votedOk⟩, operatedOk,
-      frame_processSyncAggregate synced⟩
+    refine ⟨_, _, ⟨_, _, _, _, paidOk, headedOk, executedOk, revealedOk, votedOk⟩, operatedOk,
+      frame_processSyncAggregate synced, ?_⟩
+    simp only [‹Fork.altair ≤ fork›, ↓reduceDIte]
+    exact synced
   · rename_i altair
     simp only [bind_ok_iff] at computed
     obtain ⟨_, headerOk, _, randaoOk, _, eth1Ok, operationsOk⟩ := computed
@@ -1404,13 +1466,15 @@ theorem processBlock_operationsInput {block : BeaconBlock preset fork}
     have bellatrix : ¬ Fork.bellatrix ≤ fork := fun h => altair (Nat.le_trans (by decide) h)
     have early : fork < .hegota := Nat.lt_trans (Nat.lt_of_not_le altair) (by decide)
     refine ⟨_, _, ⟨state, _, _, _, ?_, headerOk, ?_, randaoOk, ?_⟩, operationsOk,
-      BlockFrame.refl _⟩
+      BlockFrame.refl _, ?_⟩
     · simp only [gloas, ↓reduceDIte]
       rfl
     · simp only [bellatrix, ↓reduceDIte]
       rfl
     · simp only [early, ↓reduceDIte]
       exact eth1Ok
+    · simp only [altair, ↓reduceDIte]
+      rfl
 
 /-- A block runs the steps of its operations input, then three folds, then a block frame.
 
@@ -1431,7 +1495,7 @@ theorem processBlock_folds {block : BeaconBlock preset fork}
         (processAttestation config checks · state.latestBlockHeader.slot ·) slashingsDone =
         .ok attested ∧
       BlockFrame attested after := by
-  obtain ⟨input, last, started, operated, tail⟩ := processBlock_operationsInput computed
+  obtain ⟨input, last, started, operated, tail, -⟩ := processBlock_operationsInput computed
   obtain ⟨proposersDone, slashingsDone, attested, proposersOk, slashingsOk, attestedOk, rest⟩ :=
     processOperations_folds operated
   exact ⟨input, proposersDone, slashingsDone, attested, started, proposersOk, slashingsOk,
@@ -1445,7 +1509,7 @@ theorem processBlock_split {block : BeaconBlock preset fork}
     ∃ first last, BlockFrame state first ∧
       processOperations config checks first block.body state.latestBlockHeader.slot = .ok last ∧
       BlockFrame last after := by
-  obtain ⟨input, last, started, operated, tail⟩ := processBlock_operationsInput computed
+  obtain ⟨input, last, started, operated, tail, -⟩ := processBlock_operationsInput computed
   exact ⟨input, last, frame_operationsInput started, operated, tail⟩
 
 /-- The operations of a block form a frame. -/
