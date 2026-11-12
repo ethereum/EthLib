@@ -496,7 +496,9 @@ theorem foldlM_ok_steps {g : β → α → Except ε β} (R : β → β → Prop
 
 /-- A fold that succeeds runs its step at each member.
 
-The list splits at the member, and the step runs on the state that the earlier members leave. -/
+The list splits at the member, and the step runs on the state that the earlier members leave.
+
+This is the append form of `foldlM_ok_steps`, for a caller that stores the split of the list. -/
 theorem foldlM_ok_of_mem {g : β → α → Except ε β} {xs : List α} {x : α} {start done : β}
     (member : x ∈ xs) (computed : xs.foldlM g start = .ok done) :
     ∃ pre post before after, xs = pre ++ x :: post ∧ pre.foldlM g start = .ok before ∧

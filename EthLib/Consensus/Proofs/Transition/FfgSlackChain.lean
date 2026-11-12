@@ -133,13 +133,71 @@ inductive AttestationSite (config : Config) (checks : SignatureChecks) {fork : F
       AttestationSite config checks input body parentSlot
         (if .altair ≤ fork then mid else next) indexed
 
-/-- A vote that a block step casts comes from an attestation whose aggregate check the block ran.
+/-- A vote of a block comes from an attestation whose aggregate check the block ran.
 
 The block executed `isValidIndexedAttestation` on the state `checked`, and that check accepted.
+
+`AttestationSite` says where in the block that happened.
 
 The signature checks are not assumed to mean anything.
 
 There must be more than `MIN_SEED_LOOKAHEAD + 2` epochs of mixes. -/
+theorem blockVotes_verified
+    (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    {fork : Fork} {engine : ExecutionEngine preset fork} {state after : BeaconState preset fork}
+    {block : BeaconBlock preset fork} {vote : ValidatorIndex × AttestationData}
+    (computed : processBlock config checks engine state block = .ok after)
+    (cast : vote ∈ blockVotes state block) :
+    ∃ (input checked : BeaconState preset fork) (indexed : IndexedAttestation preset fork),
+      OperationsInput config checks engine state block input ∧
+      AttestationSite config checks input block.body state.latestBlockHeader.slot checked
+        indexed ∧
+      vote.1 ∈ indexed.attestingIndices.data.toList ∧ indexed.data = vote.2 ∧
+      isValidIndexedAttestation config checks checked indexed = .ok true := by
+  obtain ⟨attestation, included, dataEq, indices, indicesOk, iMem⟩ := cast
+  obtain ⟨input, proposersDone, slashingsDone, _, started, proposers, slashings, folded, -⟩ :=
+    processBlock_folds computed
+  -- The attestation sits at a position of the attestations of the block.
+  obtain ⟨pre, post, mid, next, split, earlier, processedA⟩ :=
+    foldlM_ok_of_mem (Array.mem_toList_iff.mpr included) folded
+  have same := getAttestingIndices_attestationsStart apart started proposers slashings folded
+    (Array.mem_toList_iff.mpr included)
+  -- Up to the attestation, the registry and the mixes are those where the attestations start.
+  have midKept : mid.validators = slashingsDone.validators ∧
+      mid.randaoMixes = slashingsDone.randaoMixes :=
+    foldlM_ok_invariant (fun s => s.validators = slashingsDone.validators ∧
+        s.randaoMixes = slashingsDone.randaoMixes)
+      (fun _ _ _ held ok => ⟨(processAttestation_registry ok).1.trans held.1,
+        (processAttestation_registry ok).2.trans held.2⟩) ⟨rfl, rfl⟩ earlier
+  have kept : (if .altair ≤ fork then mid else next).validators = slashingsDone.validators ∧
+      (if .altair ≤ fork then mid else next).randaoMixes = slashingsDone.randaoMixes := by
+    by_cases altair : Fork.altair ≤ fork
+    · simp only [altair, ↓reduceIte]
+      exact midKept
+    · simp only [altair, ↓reduceIte]
+      exact ⟨(processAttestation_registry processedA).1.trans midKept.1,
+        (processAttestation_registry processedA).2.trans midKept.2⟩
+  -- The attesters at the check are those that the vote used.
+  obtain ⟨indexed, indexedOk, valid⟩ := processAttestation_checked processedA
+  have attestersX : getAttestingIndices (if .altair ≤ fork then mid else next) attestation =
+      .ok indices :=
+    ((getAttestingIndices_eq_of_eq (congrArg (·.data) kept.1)
+      (congrArg (·.elements) kept.2) attestation).trans same).trans indicesOk
+  obtain ⟨indexed', indexedOk', listed, indexedData, -⟩ :=
+    getIndexedAttestation_of_getAttestingIndices attestersX
+  have indexedEq : indexed' = indexed := Except.ok.inj (indexedOk'.symm.trans indexedOk)
+  subst indexedEq
+  refine ⟨input, _, indexed', started,
+    .attestation split proposers slashings earlier processedA indexedOk, ?_, ?_, valid⟩
+  · rw [listed]
+    simpa using iMem
+  · rw [indexedData, ← dataEq]
+
+/-- A vote that a block step casts comes from an attestation whose aggregate check the block ran.
+
+It is `blockVotes_verified` for the block of the step.
+
+This is the sentence of the docstring of `blockStepVotes`. -/
 theorem blockStepVotes_verified
     (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
     {forked after : ForkedBeaconState preset} {vote : ValidatorIndex × AttestationData}
@@ -155,49 +213,12 @@ theorem blockStepVotes_verified
         forked.state.latestBlockHeader.slot checked indexed ∧
       vote.1 ∈ indexed.attestingIndices.data.toList ∧ indexed.data = vote.2 ∧
       isValidIndexedAttestation config checks checked indexed = .ok true := by
-  obtain ⟨engine, signed, validateResult, state, afterEq, applied, attestation, included,
-    dataEq, indices, indicesOk, iMem⟩ := cast
+  obtain ⟨engine, signed, validateResult, state, afterEq, applied, voted⟩ := cast
   obtain ⟨-, processed, -⟩ := applySignedBlock_ok applied
-  obtain ⟨input, proposersDone, slashingsDone, _, started, proposers, slashings, folded, -⟩ :=
-    processBlock_folds processed
-  -- The attestation sits at a position of the attestations of the block.
-  obtain ⟨pre, post, mid, next, split, earlier, processedA⟩ :=
-    foldlM_ok_of_mem (Array.mem_toList_iff.mpr included) folded
-  have same := getAttestingIndices_attestationsStart apart started proposers slashings earlier
-    processedA
-  -- Up to the attestation, the registry and the mixes are those where the attestations start.
-  have midKept : mid.validators = slashingsDone.validators ∧
-      mid.randaoMixes = slashingsDone.randaoMixes :=
-    foldlM_ok_invariant (fun s => s.validators = slashingsDone.validators ∧
-        s.randaoMixes = slashingsDone.randaoMixes)
-      (fun _ _ _ held ok => ⟨(processAttestation_registry ok).1.trans held.1,
-        (processAttestation_registry ok).2.trans held.2⟩) ⟨rfl, rfl⟩ earlier
-  have kept : (if .altair ≤ forked.fork then mid else next).validators =
-      slashingsDone.validators ∧
-      (if .altair ≤ forked.fork then mid else next).randaoMixes = slashingsDone.randaoMixes := by
-    by_cases altair : Fork.altair ≤ forked.fork
-    · simp only [altair, ↓reduceIte]
-      exact midKept
-    · simp only [altair, ↓reduceIte]
-      exact ⟨(processAttestation_registry processedA).1.trans midKept.1,
-        (processAttestation_registry processedA).2.trans midKept.2⟩
-  -- The attesters at the check are those that the vote used.
-  obtain ⟨indexed, indexedOk, valid⟩ := processAttestation_checked processedA
-  have attestersX : getAttestingIndices (if .altair ≤ forked.fork then mid else next)
-      attestation = .ok indices :=
-    ((getAttestingIndices_eq_of_eq (congrArg (·.data) kept.1)
-      (congrArg (·.elements) kept.2) attestation).trans same).trans indicesOk
-  obtain ⟨attesters, attestersOk, listed⟩ :=
-    getAttestingIndices_of_getIndexedAttestation indexedOk
-  obtain rfl : attesters = indices := Except.ok.inj (attestersOk.symm.trans attestersX)
-  obtain ⟨indexed', indexedOk', _, indexedData, _⟩ :=
-    getIndexedAttestation_of_getAttestingIndices attestersX
-  have indexedEq : indexed' = indexed := Except.ok.inj (indexedOk'.symm.trans indexedOk)
-  refine ⟨engine, signed, validateResult, state, input, _, indexed, afterEq, applied, started,
-    .attestation split proposers slashings earlier processedA indexedOk, ?_, ?_, valid⟩
-  · rw [listed]
-    simpa using iMem
-  · rw [← indexedEq, indexedData, ← dataEq]
+  obtain ⟨input, checked, indexed, started, site, signs, dataEq, valid⟩ :=
+    blockVotes_verified apart processed voted
+  exact ⟨engine, signed, validateResult, state, input, checked, indexed, afterEq, applied,
+    started, site, signs, dataEq, valid⟩
 
 /-- The properties of a state that the steps of a chain keep.
 

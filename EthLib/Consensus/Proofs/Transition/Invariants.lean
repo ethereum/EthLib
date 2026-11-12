@@ -1293,7 +1293,7 @@ They are the payload of the parent from Gloas and the header.
 
 The execution part follows from Bellatrix, then the RANDAO reveal.
 
-The vote on the deposit contract comes last, before Hegota. -/
+The vote on the deposit contract comes last, before Heze. -/
 def OperationsInput (config : Config) (checks : SignatureChecks) {fork : Fork}
     (engine : ExecutionEngine preset fork) (before : BeaconState preset fork)
     (block : BeaconBlock preset fork) (input : BeaconState preset fork) : Prop :=
@@ -1349,7 +1349,7 @@ theorem OperationsInput.step_of
     · exact execution _ executionOk
     · cases executionOk
       exact refl _
-  -- Hegota drops the vote on the deposit contract.
+  -- Heze drops the vote on the deposit contract.
   have eth1Step : step revealed input := by
     split at eth1Ok
     · exact eth1 _ eth1Ok
