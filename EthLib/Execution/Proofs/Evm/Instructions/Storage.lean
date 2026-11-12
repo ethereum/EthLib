@@ -242,6 +242,12 @@ theorem accessStorageKey_snd (evm : Evm fork Meter) (a : Address) (key : Bytes32
   · exact ⟨_, rfl⟩
   · exact ⟨evm.substate.accessedStorageKeys, rfl⟩
 
+/-- An access to a storage key changes only the substate, so the state stays exactly as it was. -/
+theorem state_accessStorageKey (evm : Evm fork Meter) (address : Address) (key : Bytes32) :
+    (accessStorageKey evm address key).2.state = evm.state := by
+  unfold accessStorageKey
+  split <;> rfl
+
 variable [GasMeter Meter]
 
 /-- SLOAD on a key: access the slot, pay, read the slot, put its word in place of the key.

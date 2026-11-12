@@ -189,37 +189,10 @@ theorem getAccount_of_staticStep {a b : Evm fork Meter} (h : StaticStep a b)
 /-- A creation never completes in a static frame. -/
 theorem createStep_ne_ok_of_isStatic {create2 : Bool} {evm : Evm fork Meter}
     {result : StepResult fork Meter} (static : evm.message.isStatic = true) :
-    createStep create2 evm ≠ .ok result := by
-  intro h
-  unfold createStep at h
-  by_cases hs : fork ≥ .glamsterdam ∧ evm.message.isStatic = true
-  · simp only [hs, and_self, ↓reduceIte] at h
-    cases h
-  simp only [hs, ↓reduceIte] at h
-  obtain ⟨⟨_, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨⟨_, e2⟩, h2, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨⟨_, e3⟩, h3, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨⟨_, e4⟩, h4, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨e5, h5, h⟩ := Base.bind_ok_iff.mp h
-  have m4 : e4.message = e3.message := by
-    unfold popSalt at h4
-    split at h4
-    · obtain ⟨⟨_, _⟩, hp, h4⟩ := Base.bind_ok_iff.mp h4
-      cases h4
-      exact (popWord_sameContext hp).message
-    · cases h4
-      rfl
-  have m5 : e5.message = evm.message :=
-    (chargeGasAndMemory_sameContext h5).message.trans (m4.trans
-      ((popWord_sameContext h3).message.trans ((popWord_sameContext h2).message.trans
-        (popWord_sameContext h1).message)))
-  unfold genericCreate at h
-  split at h
-  · cases h
-  · split at h
-    · cases h
-    · rw [m5] at *
-      simp [static] at *
+    createStep create2 evm ≠ .ok result := fun h => by
+  obtain ⟨-, -, -, -, -, -, -, -, -, notStatic, -, -⟩ := createStep_eq_ok h
+  rw [static] at notStatic
+  cases notStatic
 
 /-- A frame that runs a static message.
 

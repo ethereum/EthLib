@@ -216,14 +216,43 @@ The epochs never move back, so the amounts placed up to an epoch are the first o
 So the balance placed up to an epoch is at most the churn left, plus a full churn per later epoch.
 -/
 theorem churnQueue_foldlM_le {firstEpoch perEpochChurn earliestEpoch churnLeft epoch left :
-    UInt64} {amounts : List UInt64} (first : firstEpoch ≤ earliestEpoch)
+    UInt64} {amounts : List UInt64}
     (computed : amounts.foldlM (fun (queue : UInt64 × UInt64) amount =>
         churnQueue queue.1 firstEpoch perEpochChurn queue.2 amount)
       (earliestEpoch, churnLeft) = .ok (epoch, left)) :
     (amounts.map UInt64.toNat).sum ≤
       churnLeft.toNat + (epoch.toNat - earliestEpoch.toNat) * perEpochChurn.toNat := by
-  have := churnQueue_foldlM_spend first computed
-  omega
+  by_cases first : firstEpoch ≤ earliestEpoch
+  · have := churnQueue_foldlM_spend first computed
+    omega
+  cases amounts with
+  | nil => simp
+  | cons amount rest =>
+    simp only [List.foldlM_cons, bind_ok_iff] at computed
+    obtain ⟨⟨middle, middleLeft⟩, step, folded⟩ := computed
+    have idle : earliestEpoch < firstEpoch := UInt64.not_le.mp first
+    have open_ : max earliestEpoch firstEpoch = firstEpoch := by
+      simp only [UInt64.max_def, UInt64.le_of_lt idle, ↓reduceIte]
+    -- An idle queue starts with a full churn at the first permitted epoch.
+    rw [churnQueue_normalize] at step
+    simp only [open_, idle, ↓reduceIte] at step
+    have normalized : (amount :: rest).foldlM (fun (queue : UInt64 × UInt64) amount =>
+        churnQueue queue.1 firstEpoch perEpochChurn queue.2 amount)
+        (firstEpoch, perEpochChurn) = .ok (epoch, left) := by
+      rw [List.foldlM_cons, step]
+      exact folded
+    have total := churnQueue_foldlM_spend (UInt64.le_refl _) normalized
+    have later := churnQueue_foldlM_epoch (UInt64.le_refl _) normalized
+    simp only [List.map_cons, List.sum_cons] at total
+    -- The epochs skipped while idle pay for that full churn in the original budget.
+    have gap : epoch.toNat - firstEpoch.toNat + 1 ≤ epoch.toNat - earliestEpoch.toNat := by
+      have := UInt64.lt_iff_toNat_lt.mp idle
+      have := UInt64.le_iff_toNat_le.mp later
+      omega
+    have allowance := Nat.mul_le_mul_right perEpochChurn.toNat gap
+    simp only [Nat.add_mul, Nat.one_mul] at allowance
+    simp only [List.map_cons, List.sum_cons]
+    omega
 
 /-- In Electra, the churns of consolidations and of activations and exits add up to the whole churn.
 -/

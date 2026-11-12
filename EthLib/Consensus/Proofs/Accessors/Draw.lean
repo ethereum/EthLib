@@ -5,8 +5,10 @@ public import EthLib.Consensus.Accessors
 public import Mathlib.Data.Finset.Card
 public import Mathlib.Data.Finset.Prod
 
+import EthLib.Base.Proofs.LittleEndian
+
 /-!
-# Proofs: acceptance of one balance-weighted draw
+# Proofs: acceptance and inputs of balance-weighted draws
 
 It counts the values one draw accepts, as a function of the balance.
 
@@ -17,6 +19,14 @@ It also shows that the checked draw makes the same comparison on natural numbers
 This holds when the balance is at most the largest, and the largest times the scale fits in 64 bits.
 
 It states counts, not probabilities.
+
+Two draw inputs with block numbers below `2^64` are equal only for equal seeds and blocks.
+
+The draw inputs have 40 bytes, so they differ from the shuffle inputs of 33 or 37 bytes.
+
+The seed of each slot also hashes 40 bytes in the same layout, so its inputs are not separated here.
+
+Different draws in one hash block read disjoint bytes of its hash.
 -/
 
 @[expose] public section
@@ -175,5 +185,70 @@ theorem drawAccepts_eq_of_pectra (preset : Preset) (fork : Base.Fork)
   have rightFits' : e.toNat * (2 ^ 16 - 1 : UInt64).toNat < 2 ^ 64 := by rwa [scaleNat]
   simpa only [valueNat, scaleNat] using
     checked_draw_comparison _ e _ (2 ^ 16 - 1) leftFits' rightFits'
+
+/-! ## Hash inputs and byte positions -/
+
+/-- A draw input has 32 seed bytes and eight bytes for its block number. -/
+@[simp] theorem size_drawInput (seed : Bytes32) (block : Nat) :
+    (drawInput seed block).size = 40 := by
+  change (seed.toArray ++ (uintToBytes 8 block).toArray).size = 40
+  simp
+
+/-- A shuffle pivot input has 32 seed bytes and one byte for its round. -/
+@[simp] theorem Shuffle.size_roundInput (seed : Bytes32) (round : Nat) :
+    (Shuffle.roundInput seed round).size = 33 := by
+  change (seed.toArray.push (UInt8.ofNat round)).size = 33
+  simp
+
+/-- A shuffle bucket input has the 33 bytes of its round and four bytes for its bucket. -/
+@[simp] theorem Shuffle.size_bucketInput (seed : Bytes32) (round bucket : Nat) :
+    (Shuffle.bucketInput seed round bucket).size = 37 := by
+  change (seed.toArray.push (UInt8.ofNat round) ++ (uintToBytes 4 bucket).toArray).size = 37
+  simp
+
+/-- Two draw inputs are equal exactly when their seeds and their block numbers are equal.
+
+This needs block numbers below `2^64`, since the eight-byte encoding keeps them modulo `2^64`. -/
+theorem drawInput_eq_iff {seed other : Bytes32} {block block' : Nat}
+    (leftFits : block < 2 ^ 64) (rightFits : block' < 2 ^ 64) :
+    drawInput seed block = drawInput other block' ↔ seed = other ∧ block = block' := by
+  constructor
+  · intro same
+    obtain ⟨seeds, bytes⟩ := Array.append_inj (ByteArray.mk.inj same) (by simp)
+    exact ⟨Vector.toArray_inj.mp seeds,
+      uintToBytes_inj leftFits rightFits (Vector.toArray_inj.mp bytes)⟩
+  · rintro ⟨rfl, rfl⟩
+    rfl
+
+/-- A draw input is never a shuffle pivot input, whatever the two seeds. -/
+theorem drawInput_ne_roundInput (seed other : Bytes32) (block round : Nat) :
+    drawInput seed block ≠ Shuffle.roundInput other round := by
+  intro same
+  simpa using congrArg ByteArray.size same
+
+/-- A draw input is never a shuffle bucket input, whatever the two seeds. -/
+theorem drawInput_ne_bucketInput (seed other : Bytes32) (block round bucket : Nat) :
+    drawInput seed block ≠ Shuffle.bucketInput other round bucket := by
+  intro same
+  simpa using congrArg ByteArray.size same
+
+/-- Before Electra, distinct draws of one hash block read different bytes. -/
+theorem draw_byte_ne_of_before_pectra {fork : Base.Fork} {i j : Nat}
+    (before : ¬ .pectra ≤ fork) (same : i / drawsPerHash fork = j / drawsPerHash fork)
+    (different : i ≠ j) : i % 32 ≠ j % 32 := by
+  simp only [drawsPerHash, before, ↓reduceIte] at same
+  have left := Nat.mod_add_div i 32
+  have right := Nat.mod_add_div j 32
+  omega
+
+/-- From Electra, the two-byte ranges of distinct draws of one hash block do not overlap. -/
+theorem draw_bytes_ne_of_pectra {fork : Base.Fork} {i j a b : Nat}
+    (electra : .pectra ≤ fork) (same : i / drawsPerHash fork = j / drawsPerHash fork)
+    (different : i ≠ j) (leftByte : a < 2) (rightByte : b < 2) :
+    i % 16 * 2 + a ≠ j % 16 * 2 + b := by
+  simp only [drawsPerHash, electra, ↓reduceIte] at same
+  have left := Nat.mod_add_div i 16
+  have right := Nat.mod_add_div j 16
+  omega
 
 end EthLib.Consensus
