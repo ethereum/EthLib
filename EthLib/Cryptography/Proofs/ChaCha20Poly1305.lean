@@ -279,7 +279,9 @@ RFC 8439 §2.8 starts the counter at 1, since §2.6 makes the Poly1305 key from 
 
 One theorem gives every byte of the cipher's output in those terms, and another the AEAD's output.
 
-A keystream shorter than the input, which leaves the bytes past its end in plaintext, fails them.
+A cipher whose keystream is shorter than the input leaves the bytes past its end in plaintext.
+
+Such a cipher fails them.
 -/
 
 /-- One more block appends the block whose counter is the initial counter plus their number. -/
@@ -323,7 +325,7 @@ theorem byteAt_keyStream (key : Key) (counter : UInt32) (nonce : Nonce) (blocks 
 
 /-- The cipher accepts exactly when the counter does not wrap.
 
-RFC 8439 §2.8 limits the block counter to 32 bits, and §2.4 adds `j / 64` to it at byte `j`.
+RFC 8439 §2.3 makes the block counter 32 bits, and §2.4 adds `j / 64` to it at byte `j`.
 
 Its output then has the length of the input.
 
