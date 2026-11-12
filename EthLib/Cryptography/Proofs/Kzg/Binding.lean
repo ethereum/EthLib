@@ -148,7 +148,7 @@ theorem verifyKzgProof_eq_ok_true {s : TrustedSetup} {commitmentBytes proofBytes
       validateKzgG1Point proofBytes = .ok P ∧ bytesToBlsField zBytes = .ok z ∧
       bytesToBlsField yBytes = .ok y ∧ verifyKzgProofImpl s C z y P = true := by
   unfold verifyKzgProof at h
-  -- The checks run in the order of the specification: the commitment, `z`, `y`, then the proof.
+  -- The checks run in the order of EIP-4844: the commitment, `z`, `y`, then the proof.
   cases hC : validateKzgG1Point commitmentBytes with
   | error e =>
     rw [bytesToKzgCommitment_of_validateKzgG1Point_error hC] at h

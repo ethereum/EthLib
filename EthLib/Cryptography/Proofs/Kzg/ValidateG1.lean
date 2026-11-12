@@ -97,13 +97,13 @@ theorem uncompressG1_of_validateKzgG1Point {b : Bytes48} {P : G1}
   rw [(validateKzgG1Point_eq_ok_iff.mp h).1]
   rfl
 
-/-! ## The conversions of the specification
+/-! ## The conversions of EIP-4844
 
-`bytes_to_kzg_commitment` and `bytes_to_kzg_proof` validate their bytes and return them unchanged.
+The conversion of a commitment or a proof validates its bytes and returns them unchanged.
 
-The verifiers then decode the bytes, as `bytes48_to_G1` does in the specification.
+The verifiers then decode the bytes, as EIP-4844 does.
 
-The four theorems below give the result of a conversion from the result of `validateKzgG1Point`.
+The theorems below relate each conversion to KZG validation.
 -/
 
 /-- Bytes that decode to a point of the subgroup convert to a commitment, unchanged. -/
