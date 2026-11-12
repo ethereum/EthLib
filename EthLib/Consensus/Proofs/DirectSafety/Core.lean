@@ -37,20 +37,15 @@ private theorem counted_recent {fork : Fork} {state : BeaconState preset fork}
       (if current then getCurrentEpoch state else getPreviousEpoch state) := by
     intro i member
     rw [targetEpoch] at counted
-    unfold targetIndices at counted
-    split at counted
-    · exact (mem_getUnslashedParticipatingIndices (liftAccessor_ok.mp counted) i member).1
-    · rename_i before
-      simp only [bind_ok_iff] at counted
-      obtain ⟨attestations, matching, counted⟩ := counted
-      -- A count is after the two epochs where equal justified fields are required.
+    rcases targetIndices_ok counted with ⟨_, counted⟩ | ⟨before, _, matching, counted⟩
+    · exact (mem_getUnslashedParticipatingIndices counted i member).1
+    · -- A count is after the two epochs where equal justified fields are required.
       have notEarly : JustifiedEarly state := by
         intro small
         have smallNat := UInt64.le_iff_toNat_le.mp small
         have laterNat := UInt64.lt_iff_toNat_lt.mp later
         omega
-      exact (PendingVoted.attester (Nat.lt_of_not_le before) pending notEarly current matching
-        (liftAccessor_ok.mp counted) member).1
+      exact (PendingVoted.attester before pending notEarly current matching counted member).1
   intro key member
   simp only [keysAt, List.mem_toFinset, List.mem_filterMap] at member
   obtain ⟨i, member, found⟩ := member

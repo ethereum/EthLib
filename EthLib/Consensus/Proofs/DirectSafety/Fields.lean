@@ -278,12 +278,9 @@ private theorem counted_accepted {g a : ForkedBeaconState preset} (run : Run con
   obtain ⟨validator, validatorFound, keyEq⟩ := Option.map_eq_some_iff.mp found
   have voted : ∃ vote, LinkVote state current index.toNat vote ∧ vote ∈ run.votes := by
     rw [targetEpoch] at counted
-    unfold targetIndices at counted
-    split at counted
-    · exact (backed.2.attester ‹_› late current (liftAccessor_ok.mp counted) inside).2
-    · simp only [bind_ok_iff, liftAccessor_ok] at counted
-      obtain ⟨pending, matching, indicesOk⟩ := counted
-      obtain ⟨_, data, link, cast⟩ := backed.1.attester (Nat.lt_of_not_le ‹_›)
+    rcases targetIndices_ok counted with ⟨altair, counted⟩ | ⟨before, _, matching, indicesOk⟩
+    · exact (backed.2.attester altair late current counted inside).2
+    · obtain ⟨_, data, link, cast⟩ := backed.1.attester before
         (fun first => False.elim (late first)) current matching indicesOk inside
       exact ⟨(index, data), link, cast⟩
   obtain ⟨vote, link, cast⟩ := voted

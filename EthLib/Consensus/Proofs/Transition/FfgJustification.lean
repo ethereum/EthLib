@@ -355,18 +355,14 @@ theorem processJustificationAndFinalization_weighed
     cases recent
     · exact previousOk
     · exact currentOk
-  unfold targetIndices at counted
-  split at counted
-  · rename_i altair
-    -- From Altair the counted attesters hold the target flag of the epoch.
-    exact TargetFlagsVoted.attester altair flagsVoted (UInt64.not_le.mpr late) recent
-      (liftAccessor_ok.mp counted) member
-  · rename_i notAltair
-    -- Before Altair the counted attesters cast a pending attestation of the epoch.
-    simp only [bind_ok_iff, liftAccessor_ok] at counted
-    obtain ⟨pending, pendingOk, indicesOk⟩ := counted
+  rcases targetIndices_ok counted with ⟨altair, counted⟩ |
+    ⟨before, pending, pendingOk, indicesOk⟩
+  · -- From Altair the counted attesters hold the target flag of the epoch.
+    exact TargetFlagsVoted.attester altair flagsVoted (UInt64.not_le.mpr late) recent counted
+      member
+  · -- Before Altair the counted attesters cast a pending attestation of the epoch.
     have early : JustifiedEarly state := fun first => absurd first (UInt64.not_le.mpr late)
-    obtain ⟨active, data, link, signed⟩ := PendingVoted.attester (Nat.lt_of_not_le notAltair)
+    obtain ⟨active, data, link, signed⟩ := PendingVoted.attester before
       pendingVoted early recent pendingOk indicesOk member
     exact ⟨active, (index, data), link, signed⟩
 

@@ -1298,9 +1298,9 @@ theorem frame_settleParentPayment {gloas : .glamsterdam ≤ fork}
   rw [settleParentPayment_eq computed]
   exact BlockFrame.of_validators ⟨rfl, rfl⟩
 
-/-- A relation holds across the payload of the parent when it holds across each exit request.
+/-- A relation holds across the payload of the parent when it holds across each validator request.
 
-The exit requests are the withdrawal requests and the consolidation requests of validators.
+The validator requests are the withdrawal requests and the consolidation requests.
 
 The relation must hold of each state to itself, and chain.
 

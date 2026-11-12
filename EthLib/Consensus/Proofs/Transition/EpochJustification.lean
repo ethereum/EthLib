@@ -316,6 +316,23 @@ def targetIndices (state : BeaconState preset fork) (epoch : Epoch) :
     let pending ← getMatchingTargetAttestations state (Nat.lt_of_not_le altair) epoch
     liftAccessor (getUnslashedAttestingIndices state pending)
 
+/-- The target indices come from the target flags from Altair.
+
+Before Altair they come from the unslashed attesters of the matching target attestations. -/
+theorem targetIndices_ok {epoch : Epoch} {indices : List ValidatorIndex}
+    (computed : targetIndices state epoch = .ok indices) :
+    (∃ altair : .altair ≤ fork,
+      getUnslashedParticipatingIndices state altair TIMELY_TARGET_FLAG_INDEX epoch = .ok indices) ∨
+      ∃ (before : fork < .altair) (pending : _),
+        getMatchingTargetAttestations state before epoch = .ok pending ∧
+        getUnslashedAttestingIndices state pending = .ok indices := by
+  unfold targetIndices at computed
+  split at computed
+  · exact .inl ⟨‹_›, liftAccessor_ok.mp computed⟩
+  · simp only [bind_ok_iff, liftAccessor_ok] at computed
+    obtain ⟨pending, matching, indicesOk⟩ := computed
+    exact .inr ⟨_, pending, matching, indicesOk⟩
+
 /-- What a successful justification and finalization read, and what it did.
 
 In the first two epochs it changed nothing.
