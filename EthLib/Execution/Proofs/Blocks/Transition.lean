@@ -150,6 +150,65 @@ theorem checkBlock_validateOmmers {config : ChainConfig} {checkSeal : Bool}
       MonadExceptOf.throw] at h
     repeat' (first | contradiction | (split at h))
 
+/-- A block that passes its checks has transactions that all encode as items of its body. -/
+theorem checkBlock_transactions {config : ChainConfig} {checkSeal : Bool}
+    {recent : List RecentBlock} {block : Block fork Transaction}
+    (h : checkBlock config checkSeal recent block = .ok ()) :
+    ∃ items, block.transactions.mapM bodyItem = .ok items := by
+  unfold checkBlock at h
+  obtain ⟨_, hitems, -⟩ := bind_ok_iff.mp h
+  unfold bodyItems at hitems
+  cases hm : block.transactions.mapM bodyItem with
+  | error e => simp [hm, Except.mapError, bind, Except.bind] at hitems
+  | ok items => exact ⟨items, rfl⟩
+
+/-- From Paris, a block that passes its checks has no ommers, and its header commits to none. -/
+theorem checkBlock_paris {config : ChainConfig} {checkSeal : Bool}
+    {recent : List RecentBlock} {block : Block fork Transaction} (hp : ¬ fork < .paris)
+    (h : checkBlock config checkSeal recent block = .ok ()) :
+    block.ommers = [] ∧ block.header.ommersHash = EMPTY_OMMER_HASH := by
+  unfold checkBlock at h
+  obtain ⟨_, _, h⟩ := bind_ok_iff.mp h
+  obtain ⟨_, _, h⟩ := bind_ok_iff.mp h
+  split at h
+  · rename_i parent hparent
+    by_cases hF : parent.fork ≤ fork
+    · simp only [hF, ↓reduceDIte] at h
+      have hhead : checkHeader hF parent.header block.header
+          (Fees.BlobBaseFee.chainBlobSchedule config fork block.header.number
+            block.header.timestamp.toNat) = .ok () := by
+        cases hs : checkSeal
+        · simp only [hs, Bool.false_eq_true, ↓reduceIte] at h
+          cases hc : checkHeader hF parent.header block.header
+              (Fees.BlobBaseFee.chainBlobSchedule config fork block.header.number
+                block.header.timestamp.toNat) with
+          | ok u => rfl
+          | error e => simp [hc, bind, Except.bind] at h
+        · simp only [hs, ↓reduceIte] at h
+          cases hc : validateHeader hF parent.header block.header
+              (Fees.BlobBaseFee.chainBlobSchedule config fork block.header.number
+                block.header.timestamp.toNat) with
+          | ok u => exact checkHeader_of_validateHeader hc
+          | error e => simp [hc, bind, Except.bind] at h
+      obtain ⟨-, -, -, -, -, -, -, -, -, -, hpar, -⟩ := checkHeader_eq_ok_iff.mp hhead
+      refine ⟨?_, (hpar hp).2.2⟩
+      refine Classical.byContradiction fun hne => ?_
+      have hne' : ¬ block.ommers.isEmpty = true := fun he => hne (List.isEmpty_iff.mp he)
+      cases hs : checkSeal
+      · simp only [hs, Bool.false_eq_true, ↓reduceIte] at h
+        simp [hhead, bind, Except.bind, hp, hne', throw, throwThe, MonadExceptOf.throw] at h
+        split at h <;> cases h
+      · simp only [hs, ↓reduceIte] at h
+        cases hc : validateHeader hF parent.header block.header
+            (Fees.BlobBaseFee.chainBlobSchedule config fork block.header.number
+              block.header.timestamp.toNat) with
+        | ok u =>
+          simp [hc, bind, Except.bind, hp, hne', throw, throwThe, MonadExceptOf.throw] at h
+          split at h <;> cases h
+        | error e => simp [hc, bind, Except.bind] at h
+    · simp [hF, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
+  · simp [throw, throwThe, MonadExceptOf.throw] at h
+
 /-! ## The checks against the output -/
 
 /-- The roots that the output gives hold the state root of the state after the block. -/
@@ -189,6 +248,58 @@ theorem of_outputChecks {header : Header fork} {output : BlockOutput fork} {root
   · exact of_decide_eq_true (first _ (.tail _ (.tail _ (.head _))))
   · have := first _ (.tail _ (.tail _ (.tail _ (.tail _ (.head _)))))
     simpa using this
+
+/-- The roots of an output hold the transactions root of the transactions. -/
+theorem outputRoots_transactions {transactions : List Transaction}
+    {withdrawals : Since .shapella fork (List Withdrawal)} {output : BlockOutput fork}
+    {post : State} {roots : OutputRoots}
+    (h : outputRoots transactions withdrawals output post = .ok roots) :
+    transactionsRoot transactions = .ok roots.transactions := by
+  unfold outputRoots at h
+  obtain ⟨_, htx, h⟩ := bind_ok_iff.mp h
+  obtain ⟨_, _, h⟩ := bind_ok_iff.mp h
+  obtain ⟨_, _, h⟩ := bind_ok_iff.mp h
+  obtain ⟨_, _, h⟩ := bind_ok_iff.mp h
+  cases h
+  exact mapError_ok_iff.mp htx
+
+/-- From Shapella, the roots of an output hold the withdrawals root of the withdrawals. -/
+theorem outputRoots_withdrawals {transactions : List Transaction}
+    {withdrawals : Since .shapella fork (List Withdrawal)} {output : BlockOutput fork}
+    {post : State} {roots : OutputRoots} (hs : .shapella ≤ fork)
+    (h : outputRoots transactions withdrawals output post = .ok roots) :
+    ∃ r, withdrawalsRoot (withdrawals hs) = .ok r ∧ roots.withdrawals = some r := by
+  unfold outputRoots at h
+  obtain ⟨_, _, h⟩ := bind_ok_iff.mp h
+  obtain ⟨_, _, h⟩ := bind_ok_iff.mp h
+  obtain ⟨_, _, h⟩ := bind_ok_iff.mp h
+  obtain ⟨w, hw, h⟩ := bind_ok_iff.mp h
+  cases h
+  simp only [withdrawalsRootOf, hs, ↓reduceDIte] at hw
+  cases hr : withdrawalsRoot (withdrawals hs) with
+  | error e => simp only [hr, Functor.map, Except.map, Except.mapError] at hw; cases hw
+  | ok r =>
+    simp only [hr, Functor.map, Except.map, Except.mapError, Except.ok.injEq] at hw
+    exact ⟨r, rfl, hw.symm⟩
+
+/-- A block that passes its output checks has the transactions root of its body. -/
+theorem outputChecks_transactions {header : Header fork} {output : BlockOutput fork}
+    {roots : OutputRoots} (h : firstFailure (outputChecks header output roots) = .ok ()) :
+    roots.transactions = header.transactionsRoot := by
+  have all := (firstFailure_eq_ok_iff _).mp h
+  have := all (decide (roots.transactions = header.transactionsRoot), .wrongTransactionsRoot)
+    (by simp [outputChecks])
+  simpa using this
+
+/-- From Shapella, a block that passes its output checks has the withdrawals root of its body. -/
+theorem outputChecks_withdrawals {header : Header fork} {output : BlockOutput fork}
+    {roots : OutputRoots} (hs : .shapella ≤ fork)
+    (h : firstFailure (outputChecks header output roots) = .ok ()) :
+    roots.withdrawals = some (header.withdrawalsRoot hs) := by
+  have all := (firstFailure_eq_ok_iff _).mp h
+  have := all (decide (roots.withdrawals = some (header.withdrawalsRoot hs)),
+    .wrongWithdrawalsRoot) (by simp [outputChecks, hs])
+  simpa using this
 
 /-- From Glamsterdam, a block that passes the checks commits to the list of its body.
 

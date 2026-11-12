@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Execution.Network.Blocks
+public import EthLib.Execution.Network.Bodies
 public import EthLib.Execution.Network.Cells
 public import EthLib.Execution.Network.Message
 public import EthLib.Execution.Network.Protocol
