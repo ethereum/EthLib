@@ -28,6 +28,7 @@ theorem uncompress_G1_POINT_AT_INFINITY :
   have hsz : (⟨G1_POINT_AT_INFINITY.toArray⟩ : ByteArray).size = 48 := by decide
   rw [G1.uncompress, ite_eq_right (by rw [hsz]; decide)]
   -- Select the branch by the flags, so the kernel does not reduce the decoding of a coordinate.
+  --
   -- `decide` reads the head byte and the zero tail of the literal encoding.
   simp (config := { decide := true }) only
 

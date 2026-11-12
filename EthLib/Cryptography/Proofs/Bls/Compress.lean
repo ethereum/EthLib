@@ -370,6 +370,7 @@ private theorem uncompress_infinityBytes :
   have hsz : infinityBytes.size = 48 := by decide
   rw [uncompress, ite_eq_right (show ¬ infinityBytes.size ≠ 48 from fun h => h hsz)]
   -- `dsimp only` is slow here when `Fp` is in Montgomery form.
+  --
   -- `decide` reads the head byte and the zero tail of the literal encoding.
   simp (config := { decide := true }) only
 

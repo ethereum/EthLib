@@ -87,6 +87,7 @@ end Sqrt
 
 Example: `tailAllZero ⟨#[0xc0, 0, 0]⟩ 1 = true`, and `tailAllZero ⟨#[0xc0, 0, 1]⟩ 1 = false`. -/
 -- The exposed decoders need this body for downstream reduction.
+--
 -- `List.all` recurses on the list, so the kernel reduces it on a literal encoding.
 def tailAllZero (bytes : ByteArray) (start : Nat) : Bool :=
   (bytes.data.toList.drop start).all (· == 0)
