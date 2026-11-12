@@ -196,6 +196,34 @@ So the types that cross a module boundary are fixed here, and `EthLib/Base/` def
 - A construction that is generic in its hash, such as a Merkle tree or a hash-based signature, takes the hash as an argument.
   The specification passes the concrete hash.
   A model passes a random oracle, and its theorems then hold for the same definition.
+- A hash taken as an argument is one case of a resource.
+  A resource is what a specification takes as an argument, so that a model, a test or another layer can supply it.
+  The KZG trusted setup, the BLS signature checks and the execution engine are other cases.
+  A resource enters as an explicit argument, either data or a record of operations.
+  Resources that one caller supplies together can share one record, as in `BlockSources`.
+  A hash that no model or test replaces is not a resource, and stays concrete, as Keccak-256 does in the EVM.
+- A resource is one of two kinds.
+  A protocol resource has a value that the protocol fixes or computes, such as the trusted setup or the BLS checks.
+  It has one named production instance.
+  That instance lives in the lowest layer that can import both the declaration of the resource and the code that computes its value.
+  So `SignatureChecks.bls` lives in Consensus, `TrustedSetup.ofHex` in Cryptography, and `executionEngine` in Engine.
+  An environment oracle answers what the specification leaves to the node, such as `BlockSources.blobsAndProofs`.
+  It has no production instance, and the theorems about it hold for every answer, or for every answer that meets its laws.
+- The laws of a resource are a separate `Prop`, written as a property in the proof library of the lowest layer that can state it.
+  A theorem shows that the production instance meets them.
+  Where no theorem does yet, `SOUNDNESS.md` names the missing proof as an assumption.
+- A security property that holds only with high probability is not such a law.
+  The theorems take it as a hypothesis, and `SOUNDNESS.md` names it as an assumption, as it does for `SignatureChecks.AggregateSound`.
+- A test stub of a resource is an instance written for tests.
+  It has a name, and a docstring that says which answers it fixes.
+  Where a theorem can show it, a theorem shows that the stub breaks the laws or the assumptions.
+  `SignatureChecks.acceptAll` accepts every signature, and `SignatureChecks.not_aggregateSound_acceptAll` shows that it fails `AggregateSound` when no key signed anything.
+  A C export passes the production instance, unless it replays test vectors built for a stub.
+  Its docstring then says so.
+- A gas meter is not a resource.
+  The protocol computes gas, and the EVM takes the meter as a class so that one definition runs with the meter of each fork.
+  The two meters, `Nat` and `StateGasMeter`, and the class of their laws, `LawfulGasMeter`, stay in the specification library.
+  The definition of a message call, `processMessage`, needs those laws to show that execution ends.
 
 ## Forks
 
