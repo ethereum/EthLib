@@ -20,16 +20,16 @@ A `SHA256SUMS` starts with one `# Source:` line for each source of its cases, an
 The `kzg/` cases and the `eth_*` cases of `bls/` come from the general test archive of consensus-specs `v1.7.0-alpha.12`.
 They match the cases in its `general.tar.gz` byte for byte, and that archive has sha256 `329f3cf58927df2614ecafbce78eb3c5258a13e8731d2f410bb31d8e4a5b9eaf`.
 That release came out before consensus-specs#5398, which removed the KZG specification and its generators from consensus-specs and pointed to this repository.
-At that release, the reference tests replace ten public KZG functions of the specification with a KZG library outside the specifications.
+At that release, the reference tests replace ten public KZG functions of the specification with an external KZG library.
 The `Makefile` of that release selects that library by default ([line 205](https://github.com/ethereum/consensus-specs/blob/v1.7.0-alpha.12/Makefile#L205)).
-So in the run of that release, the external library computed 325 of the 344 cases.
+So when that release generated its reference tests, the external KZG library computed 325 of the 344 cases.
 The Python specification computed the other 19, those of `compute_challenge` and `compute_verify_cell_kzg_proof_batch_challenge`.
 EthLib computed none of these cases, and the digests preserve that independent provenance for the cases committed here.
 
 Later releases of consensus-specs hold no KZG cases, so the `kzg/` cases are pinned to `ethereum/c-kzg-4844` at commit `a751e2d92abcd63b01d1400789789f5ea289a8b0`.
 Its `tests/` directory holds the same 344 cases, byte for byte.
 They are its copies of the cases of consensus-specs runs from `v1.5.0-alpha.9` to `v1.6.0-beta.0`.
-Those runs used the specification's own KZG functions, with an external library only for the group arithmetic.
+Those runs used the specification's own KZG functions, with an external library only for the elliptic-curve arithmetic.
 That library is pinned in [`setup.py`](https://github.com/ethereum/consensus-specs/blob/v1.5.0-alpha.9/setup.py#L579) at `v1.5.0-alpha.9` and in [`pyproject.toml`](https://github.com/ethereum/consensus-specs/blob/v1.6.0-beta.0/pyproject.toml#L24) at `v1.6.0-beta.0`.
 The `eth_*` cases of `bls/` are pinned to consensus-specs `v1.7.0-beta.4`, at commit `aa16bb4c156184e9548a997d53efaf2a228a6304`.
 Its `general.tar.gz` holds the same 20 cases, byte for byte, and has sha256 `c4f395f71f606c28093500e32067990e430cc73a2277be6f3bf5090adcce3f67`.
