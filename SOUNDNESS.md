@@ -666,7 +666,7 @@ The X25519 proofs cover the clamp of RFC 7748 §5 and the decoding of a coordina
 `val_decodeUCoordinate` proves that decoding clears bit 255 and reduces modulo the field prime, so a noncanonical coordinate is accepted.
 `decodeUCoordinate_encodeUCoordinate` proves that decoding the bytes of a reduced coordinate returns it.
 `ladder_mod_two_pow` proves that the bits of the scalar above bit 254 do not change the ladder.
-So no test of the scalar multiplication can observe the cleared bit 255; only the clamp theorems record it.
+So no run of the ladder can observe the cleared bit 255; only the clamp theorems record it.
 `swap_ladder_decodeScalar` proves that a clamped scalar leaves no swap pending at the end of the ladder.
 No theorem relates the ladder to the curve, so it is not proved to compute a scalar multiple.
 

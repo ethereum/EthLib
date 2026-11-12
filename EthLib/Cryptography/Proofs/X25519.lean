@@ -215,7 +215,7 @@ private theorem swap_ladder (scalar : Nat) (u : Fp) :
   rw [ladder, show (255 : Nat) = 254 + 1 from rfl, List.range_succ, List.foldl_append]
   simp [ladderStep]
 
-/-- A clamped scalar leaves no swap pending, so the last swap of the multiplication does nothing.
+/-- A clamped scalar leaves no swap pending at the end of the ladder.
 
 Bit 0 of a clamped scalar is clear, RFC 7748 §5. -/
 theorem swap_ladder_decodeScalar (key : Key) (u : Fp) :
@@ -240,7 +240,9 @@ private theorem foldl_ladderStep_congr {a b : Nat} (u : Fp) (l : List Nat)
 
 A scalar runs the ladder exactly as the same scalar with bit 255 cleared does.
 
-So only the upper bound on a clamped scalar shows that the clamp clears bit 255. -/
+So the ladder cannot observe bit 255.
+
+Only the clamp theorems record that the clamp clears it. -/
 theorem ladder_mod_two_pow (scalar : Nat) (u : Fp) :
     ladder (scalar % 2 ^ 255) u = ladder scalar u := by
   unfold ladder
