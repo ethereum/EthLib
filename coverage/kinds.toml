@@ -1,0 +1,46 @@
+# The models and the refinement modules of ARCHITECTURE.md "Three kinds of content".
+#
+# A model is listed by a module prefix: the module of that name and every module under it.
+# A refinement module is a property module that states a refinement theorem, or uses one in a proof.
+# It is listed by its full name, and only it may import a model directly.
+# scripts/check_layers.py reads this file.
+# It fails on a property module that imports a model directly but is not listed here.
+# It also fails on an entry that names no module, or a module that reaches no model.
+# A module that only gathers imports, an aggregator and a model are exempt from the rule.
+# An import listed in scripts/check_layers_baseline.txt passes, each one with its reason.
+
+models = [
+  # Casper FFG, LMD-GHOST, the payload tree of Gloas, the network and the stake.
+  "EthLib.Consensus.Proofs.Models",
+  # Keccak-f[1600] over bit vectors.
+  "EthLib.Cryptography.Proofs.Models",
+]
+
+refinement = [
+  # The fork choice of the specification against the models of LMD-GHOST and of the network.
+  "EthLib.Consensus.Proofs.ForkChoice.FastConfirmationIndicators",
+  "EthLib.Consensus.Proofs.ForkChoice.FastConfirmationSets",
+  "EthLib.Consensus.Proofs.ForkChoice.Ghost",
+  "EthLib.Consensus.Proofs.ForkChoice.HonestDuties",
+  "EthLib.Consensus.Proofs.ForkChoice.Network",
+  "EthLib.Consensus.Proofs.ForkChoice.Optimistic",
+  "EthLib.Consensus.Proofs.ForkChoice.PayloadGhost",
+  "EthLib.Consensus.Proofs.ForkChoice.PayloadReveal",
+  "EthLib.Consensus.Proofs.ForkChoice.Reachable",
+  "EthLib.Consensus.Proofs.ForkChoice.Supporters",
+  # The justification and finality of the state transition against the model of Casper FFG.
+  "EthLib.Consensus.Proofs.Transition.FfgFinality",
+  "EthLib.Consensus.Proofs.Transition.FfgFinalityChain",
+  "EthLib.Consensus.Proofs.Transition.FfgFinalityMonotonicity",
+  "EthLib.Consensus.Proofs.Transition.FfgJustification",
+  "EthLib.Consensus.Proofs.Transition.FfgSlack",
+  "EthLib.Consensus.Proofs.Transition.FfgSlackActive",
+  "EthLib.Consensus.Proofs.Transition.FfgSlackChain",
+  "EthLib.Consensus.Proofs.Transition.FfgStake",
+  "EthLib.Consensus.Proofs.Transition.FfgVotes",
+  "EthLib.Consensus.Proofs.Transition.InactivityLeakStake",
+  "EthLib.Consensus.Proofs.Transition.WeakSubjectivitySafety",
+  # The Keccak permutation and sponge of the specification against the model over bit vectors.
+  "EthLib.Cryptography.Proofs.Hash.KeccakBitsPermutation",
+  "EthLib.Cryptography.Proofs.Hash.KeccakBitsSponge",
+]

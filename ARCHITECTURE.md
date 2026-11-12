@@ -149,7 +149,14 @@ A specification never imports a property or a model.
 A property never imports a model directly, unless it is a refinement module.
 So a property module that imports a model directly, but neither states nor uses a refinement theorem, breaks the rule.
 A property may import a refinement module, and so reach a model through it, without being a refinement module itself.
-No file lists the refinement modules yet, and no check enforces the rule.
+`coverage/kinds.toml` lists the models and the refinement modules.
+`scripts/check_layers.py` fails on a property module that imports a listed model directly, unless the file lists the module as a refinement module.
+The check sees only the models that the file lists.
+The check cannot see whether a listed module states or uses a refinement theorem, so the reviewer of the module confirms it.
+The check exempts three cases, none of which states anything about a model.
+A module whose body holds only imports gathers other modules, such as `EthLib/Consensus/Proofs.lean`.
+The aggregators `EthLib.lean`, `EthLib/Proofs.lean` and `EthLib/Exports.lean` import every layer.
+A model may import another model.
 
 ## Layers
 
@@ -220,6 +227,8 @@ A pull request that breaks one says why in its description.
 - A specification under `Cryptography/Hash/` or `Cryptography/Merkle/`, or in their roots `Hash.lean` and `Merkle.lean`, imports no other part of Cryptography.
 - A cryptographic module never imports Serialization.
 - A specification never imports a property, a C export or a model.
+- A property imports a model directly only if `coverage/kinds.toml` lists it as a refinement module.
+  A module that only gathers imports, an aggregator and a model are exempt.
 - A specification imports nothing outside the Lean toolchain, which ships `Init`, `Std` and `Lean`.
   Mathlib and the probability libraries enter only in properties and models.
 - No export runs specification code while it is elaborated.

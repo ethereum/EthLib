@@ -80,6 +80,7 @@ class Tree:
         lakefile: str = LAKEFILE,
         baseline: str = "",
         architecture: str = ARCHITECTURE,
+        kinds: str | None = "models = []\nrefinement = []\n",
     ):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
@@ -87,6 +88,9 @@ class Tree:
         (self.root / "ARCHITECTURE.md").write_text(architecture)
         (self.root / "scripts").mkdir()
         (self.root / "scripts" / "check_layers_baseline.txt").write_text(baseline)
+        if kinds is not None:
+            (self.root / "coverage").mkdir()
+            (self.root / "coverage" / "kinds.toml").write_text(kinds)
         for name, body in modules.items():
             path = self.root.joinpath(*name.split(".")).with_suffix(".lean")
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -114,6 +118,33 @@ def with_modules(*added: dict[str, list[str]]) -> dict[str, list[str] | str]:
         root += list(module)
     tree["EthLib"] = root
     return tree
+
+
+def with_proofs(*added: dict[str, list[str] | str]) -> dict[str, list[str] | str]:
+    """The good tree with more property modules, each imported by the root `EthLib.Proofs`."""
+    tree: dict[str, list[str] | str] = {k: list(v) for k, v in GOOD.items()}
+    root = list(GOOD["EthLib.Proofs"])
+    for module in added:
+        tree |= module
+        root += list(module)
+    tree["EthLib.Proofs"] = root
+    return tree
+
+
+MODEL = "EthLib.Execution.Proofs.Models.M"
+# A model, a property that imports it, and a property that imports that property.
+MODELLED = with_proofs(
+    {MODEL: ["EthLib.Execution.A"]},
+    {"EthLib.Execution.Proofs.R": [MODEL]},
+    {"EthLib.Execution.Proofs.S": ["EthLib.Execution.Proofs.R"]},
+)
+
+
+def kinds(models: list[str], refinement: list[str]) -> str:
+    def quoted(names: list[str]) -> str:
+        return "[" + ", ".join(f'"{name}"' for name in names) + "]"
+
+    return f"models = {quoted(models)}\nrefinement = {quoted(refinement)}\n"
 
 
 class Rules(unittest.TestCase):
@@ -404,6 +435,184 @@ class Rules(unittest.TestCase):
         self.assertEqual(Tree(tree).problems(), [])
 
 
+REFINEMENT = "EthLib.Execution.Proofs.R"
+# The direct import of the model in `MODELLED`, as the check reports it.
+DIRECT = (
+    f"EthLib/Execution/Proofs/R.lean: imports the model {MODEL}, "
+    "but coverage/kinds.toml does not declare it a refinement module"
+)
+
+
+class Kinds(unittest.TestCase):
+    def problems(
+        self,
+        tree: Mapping[str, list[str] | str],
+        refinement: list[str],
+        models: list[str] | None = None,
+        baseline: str = "",
+    ) -> list[str]:
+        declared = kinds(
+            ["EthLib.Execution.Proofs.Models"] if models is None else models, refinement
+        )
+        return Tree(tree, kinds=declared, baseline=baseline).problems()
+
+    def test_refinement_module_imports_a_model(self):
+        self.assertEqual(self.problems(MODELLED, [REFINEMENT]), [])
+
+    def test_property_imports_a_model(self):
+        self.assertEqual(self.problems(MODELLED, []), [DIRECT])
+
+    def test_property_reaches_a_model_through_a_refinement_module(self):
+        # S imports R, which imports the model: only a direct import breaks the rule.
+        self.assertEqual(self.problems(MODELLED, [REFINEMENT, "EthLib.Execution.Proofs.S"]), [])
+
+    def test_module_of_imports_only(self):
+        gatherer: dict[str, list[str] | str] = {
+            "EthLib.Execution.Proofs.All": f"module\n\npublic import {MODEL}\n"
+        }
+        tree = with_proofs(*({k: v} for k, v in MODELLED.items() if "Proofs." in k), gatherer)
+        self.assertEqual(self.problems(tree, [REFINEMENT]), [])
+
+    def test_aggregator_imports_a_model(self):
+        # The aggregator has a body, so only its place among the aggregators exempts it.
+        self.assertIn(MODEL, MODELLED["EthLib.Proofs"])
+        self.assertEqual(self.problems(MODELLED, [REFINEMENT]), [])
+
+    def test_model_imports_a_model(self):
+        tree = with_proofs(
+            *({k: v} for k, v in MODELLED.items() if "Proofs." in k),
+            {"EthLib.Execution.Proofs.Models.N": [MODEL]},
+        )
+        self.assertEqual(self.problems(tree, [REFINEMENT]), [])
+
+    def test_specification_imports_a_model(self):
+        tree = with_imports("EthLib.Engine.A", MODEL) | {
+            k: v for k, v in MODELLED.items() if "Proofs" in k
+        }
+        problems = self.problems(tree, [REFINEMENT])
+        self.assertEqual(
+            problems,
+            [
+                f"EthLib/Engine/A.lean: imports {MODEL}, "
+                "but a specification never imports a property"
+            ],
+        )
+
+    def test_listed_import_passes(self):
+        baseline = f"# Why.\nEthLib.Execution.Proofs.R {MODEL}\n"
+        self.assertEqual(self.problems(MODELLED, [], baseline=baseline), [])
+
+    def test_listed_import_of_a_refinement_module_is_stale(self):
+        baseline = f"# Why.\nEthLib.Execution.Proofs.R {MODEL}\n"
+        self.assertEqual(
+            self.problems(MODELLED, [REFINEMENT], baseline=baseline),
+            [
+                f"scripts/check_layers_baseline.txt: EthLib.Execution.Proofs.R {MODEL} "
+                "breaks no rule any more; remove the entry"
+            ],
+        )
+
+    def test_listed_transitive_import_is_stale(self):
+        baseline = "# Why.\nEthLib.Execution.Proofs.S EthLib.Execution.Proofs.R\n"
+        problems = self.problems(MODELLED, [REFINEMENT], baseline=baseline)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("breaks no rule any more", problems[0])
+
+    def test_refinement_module_reaches_no_model(self):
+        self.assertEqual(
+            self.problems(MODELLED, [REFINEMENT, "EthLib.Execution.Proofs.A"]),
+            [
+                "coverage/kinds.toml: EthLib.Execution.Proofs.A reaches no model, "
+                "so it is no refinement module"
+            ],
+        )
+
+    def test_refinement_module_does_not_exist(self):
+        self.assertEqual(
+            self.problems(MODELLED, [REFINEMENT, "EthLib.Execution.Proofs.Gone"]),
+            [
+                "coverage/kinds.toml: the refinement module "
+                "EthLib.Execution.Proofs.Gone does not exist"
+            ],
+        )
+
+    def test_refinement_module_is_not_a_property(self):
+        gatherer: dict[str, list[str] | str] = {
+            "EthLib.Execution.Proofs.All": f"module\n\npublic import {MODEL}\n"
+        }
+        tree = with_proofs(*({k: v} for k, v in MODELLED.items() if "Proofs." in k), gatherer)
+        for name in ("EthLib.Execution.A", MODEL, "EthLib.Execution.Proofs.All", "EthLib.Proofs"):
+            with self.subTest(name=name):
+                self.assertEqual(
+                    self.problems(tree, [REFINEMENT, name]),
+                    [
+                        f"coverage/kinds.toml: {name} is not a property module, "
+                        "so it is no refinement module"
+                    ],
+                )
+
+    def test_model_matches_no_module(self):
+        models = ["EthLib.Execution.Proofs.Models", "EthLib.Consensus.Proofs.Models"]
+        self.assertEqual(
+            self.problems(MODELLED, [REFINEMENT], models=models),
+            ["coverage/kinds.toml: no module is under the model EthLib.Consensus.Proofs.Models"],
+        )
+
+    def test_model_outside_proofs(self):
+        models = ["EthLib.Execution.Proofs.Models", "EthLib.Engine.A"]
+        self.assertEqual(
+            self.problems(MODELLED, [REFINEMENT], models=models),
+            ["coverage/kinds.toml: the model EthLib.Engine.A is not under a Proofs directory"],
+        )
+
+    def test_model_prefix_matches_whole_components(self):
+        # `EthLib.Execution.Proofs.Model` names no module, and is no prefix of `Models.M`.
+        models = ["EthLib.Execution.Proofs.Model"]
+        self.assertEqual(
+            self.problems(MODELLED, [], models=models),
+            ["coverage/kinds.toml: no module is under the model EthLib.Execution.Proofs.Model"],
+        )
+
+    def test_missing_file(self):
+        self.assertEqual(Tree(GOOD, kinds=None).problems(), ["coverage/kinds.toml: missing"])
+
+    def test_invalid_file_is_reported(self):
+        problems = Tree(GOOD, kinds='models = []\nrefinement = "EthLib.Proofs"\n').problems()
+        self.assertEqual(
+            problems,
+            ["coverage/kinds.toml: refinement must be a list of module names, each a string"],
+        )
+
+
+class ReadKinds(unittest.TestCase):
+    def test_valid(self):
+        self.assertEqual(
+            layers.read_kinds('models = ["A"]\nrefinement = ["B", "C"]\n'),
+            layers.Kinds(models=["A"], refinement=["B", "C"]),
+        )
+
+    def test_invalid(self):
+        cases = {
+            "models = [": r"not valid TOML: .+",
+            'models = []\nrefinement = []\nrefinements = ["A"]\n': (
+                r"unknown keys \['refinements'\]; the file holds only \['models', 'refinement'\]"
+            ),
+            "models = []\n": r"the key refinement is missing",
+            'models = "A"\nrefinement = []\n': (
+                r"models must be a list of module names, each a string"
+            ),
+            'models = ["A", 1]\nrefinement = []\n': (
+                r"models must be a list of module names, each a string"
+            ),
+            'models = []\nrefinement = ["A", "B", "A"]\n': (
+                r"refinement lists \['A'\] more than once"
+            ),
+        }
+        for text, message in cases.items():
+            with self.subTest(text=text), self.assertRaisesRegex(layers.KindsError, f"^{message}$"):
+                layers.read_kinds(text)
+
+
 class Header(unittest.TestCase):
     def test_import_forms(self):
         text = (
@@ -427,6 +636,11 @@ class Header(unittest.TestCase):
 
     def test_header_ends_at_the_first_command(self):
         self.assertEqual(layers.imports("module\nimport A\ndef x := 1\nimport B\n"), ["A"])
+
+    def test_code_after_the_header(self):
+        found, rest = layers.read_header("module\nimport A\n-- note\ndef x := 1\n")
+        self.assertEqual(([found.module for found in found], rest.strip()), (["A"], "def x := 1"))
+        self.assertEqual(layers.read_header("module\nimport A\n/- only -/\n")[1].strip(), "")
 
     def test_library_roots(self):
         self.assertEqual(
