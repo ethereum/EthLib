@@ -1,9 +1,14 @@
 module
 
 public import EthLib.Execution.Blocks.ProofOfWork
+public import EthLib.Execution.Proofs.Blocks.Header
 
 /-!
 # Proofs: the proof of work of a header
+
+Before Shapella, the seal item is the item of the header without the mix digest and the nonce.
+
+So the seal hash covers every other field in its order, with the base fee from London on.
 
 A header passes the check exactly when Ethash gives its mix digest and a result within the target.
 
@@ -19,7 +24,30 @@ The official proof-of-work vectors are in the Python suite, through the bindings
 namespace EthLib.Execution.Blocks
 
 open EthLib.Base
+open EthLib.Serialization.Rlp
 open EthLib.Cryptography.Ethash (PowOutput)
+
+namespace Header
+
+/-- Before Shapella, the seal item is the item of the header without its 14th and 15th items.
+
+Those two are the mix digest and the nonce, and from Paris on the first holds the random value.
+
+So it keeps the first 13 fields in their order, then the base fee from London on.
+
+From Shapella on, the header has fields that the seal item leaves out. -/
+theorem sealItem_eq {fork : Fork} (h : Header fork) {items : List Item}
+    (hItem : Codec.toItem h = .list items) (hFork : fork < .shapella) :
+    h.sealItem = .list (items.take 13 ++ items.drop 15) := by
+  rw [toItem_eq] at hItem
+  obtain rfl := Item.list.inj hItem
+  -- Every field added from Shapella on holds no item.
+  have hNot : ∀ f : Fork, Fork.shapella ≤ f → ¬f ≤ fork := fun _ hf hle =>
+    Nat.not_le_of_lt hFork (Nat.le_trans hf hle)
+  simp (disch := decide) only [Item.ofSince, hNot, dite_false, List.append_nil]
+  rfl
+
+end Header
 
 /-- An output seals a header exactly when it has the header's mix digest and a result in target. -/
 theorem checkPowOutput_eq_ok_iff {fork : Fork} (h : Header fork) (out : PowOutput) :
