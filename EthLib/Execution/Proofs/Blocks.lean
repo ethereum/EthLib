@@ -15,6 +15,7 @@ public import EthLib.Execution.Proofs.Blocks.Difficulty
 public import EthLib.Execution.Proofs.Blocks.Genesis
 public import EthLib.Execution.Proofs.Blocks.ProofOfWork
 public import EthLib.Execution.Proofs.Blocks.Header
+public import EthLib.Execution.Proofs.Blocks.History
 public import EthLib.Execution.Proofs.Blocks.Ommers
 public import EthLib.Execution.Proofs.Blocks.Receipt
 public import EthLib.Execution.Proofs.Blocks.Replay

@@ -75,7 +75,11 @@ It also keeps the genesis time, the fork versions and the genesis validators roo
 
 The registry never shrinks.
 
-When they hold before it, it also keeps one balance for each validator.
+The public keys of the validators before it are a prefix of the public keys after it.
+
+When no two validators share a key before it, none share a key after it.
+
+When each validator has one balance before it, each has one after it.
 
 It then also keeps each exit no later than its withdrawal.
 
@@ -92,13 +96,15 @@ structure Frame (state after : BeaconState preset fork) : Prop where
   forkVersions : after.forkVersions = state.forkVersions
   genesisValidatorsRoot : after.genesisValidatorsRoot = state.genesisValidatorsRoot
   registryGrows : state.validators.data.size ≤ after.validators.data.size
+  pubkeysPrefix : validatorKeys state <+: validatorKeys after
+  pubkeysDistinct : PubkeysDistinct state → PubkeysDistinct after
   balancesMatch : BalancesMatch state → BalancesMatch after
   exitsOrdered : ExitsOrdered state → ExitsOrdered after
   aligned : MaxEffectiveBalancesAligned preset → EffectiveBalancesAligned state →
     EffectiveBalancesAligned after
 
 theorem Frame.refl (state : BeaconState preset fork) : Frame state state :=
-  ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, Nat.le_refl _, id, id,
+  ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, Nat.le_refl _, List.prefix_refl _, id, id, id,
     fun _ => id⟩
 
 theorem Frame.trans {first second third : BeaconState preset fork} (one : Frame first second)
@@ -110,6 +116,7 @@ theorem Frame.trans {first second third : BeaconState preset fork} (one : Frame 
     two.forkVersions.trans one.forkVersions,
     two.genesisValidatorsRoot.trans one.genesisValidatorsRoot,
     Nat.le_trans one.registryGrows two.registryGrows,
+    one.pubkeysPrefix.trans two.pubkeysPrefix, two.pubkeysDistinct ∘ one.pubkeysDistinct,
     two.balancesMatch ∘ one.balancesMatch, two.exitsOrdered ∘ one.exitsOrdered,
     fun maxAligned => two.aligned maxAligned ∘ one.aligned maxAligned⟩
 
@@ -133,6 +140,8 @@ theorem Frame.of_validators (sizes : SameSizes state after)
     Frame state after :=
   ⟨slot, finalized, previousJustified, currentJustified, justificationBits, genesisTime,
     forkVersions, genesisValidatorsRoot, by rw [validators]; exact Nat.le_refl _,
+    by rw [validatorKeys, validatorKeys, validators]; exact List.prefix_refl _,
+    by unfold PubkeysDistinct validatorKeys; rw [validators]; exact id,
     balancesMatch_of_sameSizes sizes,
     fun ordered => by rw [ExitsOrdered, validators]; exact ordered,
     fun _ holds => by rw [EffectiveBalancesAligned, validators]; exact holds⟩
@@ -265,9 +274,11 @@ theorem BlockFrame.foldlM {α ε : Type} {step : BeaconState preset fork → α 
 
 So it is also a block frame.
 
-The mutators of a balance, of the exit queue and of a validator form one.
+The mutators of a balance and of the exit queue form one.
 
-So do the steps that add a validator to the registry.
+So does a write to a validator that keeps its public key.
+
+So do the steps that add a validator to the registry with a key that no validator has.
 
 So does each step of an epoch after justification, other than the rotation of the flags. -/
 structure MutatorFrame (state after : BeaconState preset fork) : Prop extends EpochFrame state after
@@ -316,20 +327,37 @@ theorem ExitsOrdered.putValidator {index : Nat} {validator : Validator}
 
 /-- Replacing a validator at a plain position forms a mutator frame.
 
-The new one must exit no later than it withdraws.
+The new one must keep the public key of the old one.
+
+It must exit no later than it withdraws.
 
 Let the largest values of the preset and the effective balances before be aligned.
 
 Then the new one must have an aligned effective balance. -/
-theorem frame_setValidatorAt_of_whole {position : Nat} {validator : Validator}
+theorem frame_setValidatorAt_of_whole {position : Nat} {validator old : Validator}
     (set : state.setValidatorAt position validator = .ok after)
+    (found : getValidatorAt state position = .ok old)
+    (key : validator.pubkey = old.pubkey)
     (le : ExitsOrdered state → validator.exitEpoch ≤ validator.withdrawableEpoch)
     (whole : MaxEffectiveBalancesAligned preset → EffectiveBalancesAligned state →
       validator.effectiveBalance % preset.EFFECTIVE_BALANCE_INCREMENT = 0) :
     MutatorFrame state after := by
   obtain ⟨inside, rfl⟩ := setValidatorAt_ok set
   have sizes := sameSizes_putValidator state inside validator
+  have oldEq : state.validators.data[position] = old := by
+    simpa [getValidatorAt, inside] using found
+  -- The write changes the key at the position to the key it had.
+  have keys : validatorKeys (state.putValidator position inside validator) =
+      validatorKeys state := by
+    simp only [validatorKeys, BeaconState.putValidator, RootedForkList.data_set,
+      Array.toList_set, List.map_set]
+    rw [key, ← oldEq]
+    have atKey : (state.validators.data.toList.map (·.pubkey))[position]'(by simpa using inside) =
+        state.validators.data[position].pubkey := by simp
+    rw [← atKey]
+    exact List.set_getElem_self _
   exact ⟨⟨⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, Nat.le_of_eq sizes.1.symm,
+    by rw [keys]; exact List.prefix_refl _, by unfold PubkeysDistinct; rw [keys]; exact id,
     balancesMatch_of_sameSizes sizes,
     fun ordered => ordered.putValidator inside (le ordered),
     fun maxAligned holds =>
@@ -338,27 +366,35 @@ theorem frame_setValidatorAt_of_whole {position : Nat} {validator : Validator}
 
 /-- Replacing a validator forms a mutator frame, if the new one exits no later than it withdraws.
 
+The new one must keep the public key of the old one.
+
 Let the largest values of the preset and the effective balances before be aligned.
 
 Then the new one must have an aligned effective balance. -/
-theorem frame_setValidator_of_whole {index : ValidatorIndex} {validator : Validator}
+theorem frame_setValidator_of_whole {index : ValidatorIndex} {validator old : Validator}
     (set : state.setValidator index validator = .ok after)
+    (found : getValidator state index = .ok old)
+    (key : validator.pubkey = old.pubkey)
     (le : ExitsOrdered state → validator.exitEpoch ≤ validator.withdrawableEpoch)
     (whole : MaxEffectiveBalancesAligned preset → EffectiveBalancesAligned state →
       validator.effectiveBalance % preset.EFFECTIVE_BALANCE_INCREMENT = 0) :
     MutatorFrame state after :=
-  frame_setValidatorAt_of_whole (by rwa [← setValidator_eq_setValidatorAt]) le whole
+  frame_setValidatorAt_of_whole (by rwa [← setValidator_eq_setValidatorAt])
+    (by rwa [← getValidator_eq_getValidatorAt]) key le whole
 
 /-- Replacing a validator by one with the same effective balance forms a mutator frame.
 
-The new one must exit no later than it withdraws. -/
+The new one must keep the public key of the old one.
+
+It must exit no later than it withdraws. -/
 theorem frame_setValidator {index : ValidatorIndex} {validator old : Validator}
     (set : state.setValidator index validator = .ok after)
     (found : getValidator state index = .ok old)
+    (key : validator.pubkey = old.pubkey)
     (le : ExitsOrdered state → validator.exitEpoch ≤ validator.withdrawableEpoch)
     (balance : validator.effectiveBalance = old.effectiveBalance := by rfl) :
     MutatorFrame state after :=
-  frame_setValidator_of_whole set le fun _ holds => by
+  frame_setValidator_of_whole set found key le fun _ holds => by
     rw [balance]
     exact holds old (mem_of_getValidator found)
 
@@ -401,7 +437,7 @@ theorem frame_initiateValidatorExit {index : ValidatorIndex}
   · exact MutatorFrame.refl _
   · have same := (exitQueue_validators queue).1
     refine (frame_exitQueue queue).trans (frame_setValidator (old := validator) set
-      (by rw [getValidator, same]; exact found) fun _ => ?_)
+      (by rw [getValidator, same]; exact found) rfl fun _ => ?_)
     have sum := (addChecked_ok_iff.mp summed).2
     exact UInt64.le_iff_toNat_le.mpr (by simp only at sum ⊢; omega)
 
@@ -428,7 +464,7 @@ theorem frame_slashValidator {slashedIndex : ValidatorIndex}
   obtain ⟨_, validator, _, _, _, _, _, _, _, _, _, last, exitedOk, found, -, markedOk, -, -, -,
     loweredOk, -, -, raisedOk, lastOk, done⟩ := slashValidator_ok computed
   refine (frame_initiateValidatorExit exitedOk).trans <|
-    ((frame_setValidator markedOk found
+    ((frame_setValidator markedOk found rfl
       fun ordered => ?_).trans
       (frame_slashings _ _)).trans <|
     (frame_decreaseBalance loweredOk).trans <| (frame_increaseBalance raisedOk).trans <|
@@ -555,11 +591,32 @@ private theorem getValidatorFromDeposit_aligned (maxAligned : MaxEffectiveBalanc
       preset.EFFECTIVE_BALANCE_INCREMENT = 0 := by
   exact min_sub_mod_mod_self _ (withdrawalMaxEffectiveBalance_aligned maxAligned _)
 
-/-- A new validator exits and withdraws at the far future epoch. -/
+/-- A new validator exits and withdraws at the far future epoch.
+
+The key must be one that no validator has.
+
+It goes at the end of the registry, so the keys before stay a prefix.
+
+Distinct keys stay distinct. -/
 theorem frame_addValidatorToRegistry {pubkey : BLSPubkey}
     {withdrawalCredentials : Bytes32} {amount : Gwei}
-    (computed : addValidatorToRegistry state pubkey withdrawalCredentials amount = .ok after) :
+    (computed : addValidatorToRegistry state pubkey withdrawalCredentials amount = .ok after)
+    (fresh : pubkey ∉ validatorKeys state) :
     MutatorFrame state after := by
+  have keys : validatorKeys after = validatorKeys state ++ [pubkey] := by
+    simp [validatorKeys, addValidatorToRegistry_validators_eq_push computed,
+      getValidatorFromDeposit]
+  have kept : validatorKeys state <+: validatorKeys after := by
+    rw [keys]
+    exact List.prefix_append _ _
+  have distinct : PubkeysDistinct state → PubkeysDistinct after := by
+    unfold PubkeysDistinct
+    intro unique
+    simp only [keys, List.nodup_append]
+    refine ⟨unique, by simp, ?_⟩
+    intro a member b equal same
+    have eq : b = pubkey := List.mem_singleton.mp equal
+    exact fresh (eq ▸ same ▸ member)
   have balances := balancesMatch_addValidatorToRegistry computed
   have exits : ExitsOrdered state → ExitsOrdered after := fun ordered validator member => by
     obtain ⟨_, found⟩ := Array.getElem?_of_mem member
@@ -579,8 +636,8 @@ theorem frame_addValidatorToRegistry {pubkey : BLSPubkey}
       Except.ok.injEq] at computed
     obtain ⟨_, _, _, _, _, _, previous, previousOk, current, currentOk, _, _, rfl⟩ := computed
     -- The new validator gets a zero byte of flags, and each other byte stays.
-    refine ⟨⟨⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, grows, balances, exits, aligned⟩,
-      rfl, rfl, rfl, rfl⟩, fun _ position flags => ⟨fun found => ?_, fun found => ?_⟩⟩
+    refine ⟨⟨⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, grows, kept, distinct, balances, exits,
+      aligned⟩, rfl, rfl, rfl, rfl⟩, fun _ position flags => ⟨fun found => ?_, fun found => ?_⟩⟩
     · rw [setOrAppendList_getElem? previousOk] at found
       split at found
       · exact .inr (Option.some.inj found).symm
@@ -591,27 +648,31 @@ theorem frame_addValidatorToRegistry {pubkey : BLSPubkey}
       · exact .inl found
   split at computed
   · cases computed
-    exact ⟨⟨⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, grows, balances, exits, aligned⟩,
-      rfl, rfl, rfl, rfl⟩, .of_eq rfl rfl⟩
+    exact ⟨⟨⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, grows, kept, distinct, balances, exits,
+      aligned⟩, rfl, rfl, rfl, rfl⟩, .of_eq rfl rfl⟩
   · cases computed
 
 /-- The laws that carry a reflexive, transitive relation through most steps of an epoch.
 
 They leave out justification, the builder payments and the rotation of the flags.
 
-A validator write at a plain position must relate its states when it meets two conditions.
+A validator write at a plain position must relate its states when it meets three conditions.
+
+It keeps the public key of the old validator.
 
 Its exit comes no later than its withdrawal, when the exits of the state are ordered.
 
 Its effective balance is a whole number of increments, when the preset and the state are aligned.
 
-The other laws cover balance changes, exits, new validators and the record updates of the steps. -/
+The other laws cover balance changes, exits, new validators with a fresh key and record updates. -/
 structure EpochFrameLaws (R : BeaconState preset fork → BeaconState preset fork → Prop) : Prop where
   refl : ∀ state, R state state
   trans : ∀ {first second third}, R first second → R second third → R first third
   setValidatorAt : ∀ {state after : BeaconState preset fork} {position : Nat}
-    {validator : Validator},
+    {validator old : Validator},
     state.setValidatorAt position validator = .ok after →
+    getValidatorAt state position = .ok old →
+    validator.pubkey = old.pubkey →
     (ExitsOrdered state → validator.exitEpoch ≤ validator.withdrawableEpoch) →
     (MaxEffectiveBalancesAligned preset → EffectiveBalancesAligned state →
       validator.effectiveBalance % preset.EFFECTIVE_BALANCE_INCREMENT = 0) → R state after
@@ -622,7 +683,8 @@ structure EpochFrameLaws (R : BeaconState preset fork → BeaconState preset for
   initiateValidatorExit : ∀ {config state after index},
     initiateValidatorExit config state index = .ok after → R state after
   addValidatorToRegistry : ∀ {state after pubkey withdrawalCredentials amount},
-    addValidatorToRegistry state pubkey withdrawalCredentials amount = .ok after → R state after
+    addValidatorToRegistry state pubkey withdrawalCredentials amount = .ok after →
+    pubkey ∉ validatorKeys state → R state after
   eth1DataVotes : ∀ state votes, R state { state with eth1DataVotes := votes }
   inactivityScores : ∀ state scores, R state { state with inactivityScores := scores }
   slashings : ∀ state slashings, R state { state with slashings }
@@ -677,59 +739,60 @@ theorem foldlM {α ε : Type} {step : BeaconState preset fork → α → Except 
   foldlM_ok_invariant (R state) (fun _ _ _ before ok => laws.trans before (frame _ _ _ ok))
     (laws.refl state) computed
 
-/-- A validator write follows the relation when it meets the two conditions of a write.
+/-- A validator write follows the relation when it meets the three conditions of a write.
+
+It keeps the public key of the old validator.
 
 Its exit comes no later than its withdrawal, when the exits of the state are ordered.
 
 Its effective balance is a whole number of increments, when the preset and the state are aligned. -/
-theorem setValidator {index : ValidatorIndex} {validator : Validator}
+theorem setValidator {index : ValidatorIndex} {validator old : Validator}
     (set : state.setValidator index validator = .ok after)
+    (found : getValidator state index = .ok old)
+    (key : validator.pubkey = old.pubkey)
     (le : ExitsOrdered state → validator.exitEpoch ≤ validator.withdrawableEpoch)
     (whole : MaxEffectiveBalancesAligned preset → EffectiveBalancesAligned state →
       validator.effectiveBalance % preset.EFFECTIVE_BALANCE_INCREMENT = 0) : R state after :=
-  laws.setValidatorAt (by rwa [← setValidator_eq_setValidatorAt]) le whole
+  laws.setValidatorAt (by rwa [← setValidator_eq_setValidatorAt])
+    (by rwa [← getValidator_eq_getValidatorAt]) key le whole
 
 /-- A validator write that keeps the effective balance follows the relation.
 
-It must also exit no later than it withdraws, when the exits of the state are ordered. -/
+It must also keep the public key.
+
+It must exit no later than it withdraws, when the exits of the state are ordered. -/
 theorem setValidator_of_sameBalance {index : ValidatorIndex} {validator old : Validator}
     (set : state.setValidator index validator = .ok after)
     (found : getValidator state index = .ok old)
+    (key : validator.pubkey = old.pubkey)
     (le : ExitsOrdered state → validator.exitEpoch ≤ validator.withdrawableEpoch)
     (balance : validator.effectiveBalance = old.effectiveBalance := by rfl) : R state after :=
-  laws.setValidator set le fun _ holds => by
+  laws.setValidator set found key le fun _ holds => by
     rw [balance]
     exact holds old (mem_of_getValidator found)
 
 /-- A validator write at a plain position follows the relation when it keeps the balance.
 
+It must keep the public key of the old validator.
+
 Its exit must come no later than its withdrawal, when the exits of the state are ordered. -/
 theorem setValidatorAt_of_sameBalance {position : Nat} {validator old : Validator}
     (set : state.setValidatorAt position validator = .ok after)
     (found : getValidatorAt state position = .ok old)
+    (key : validator.pubkey = old.pubkey)
     (le : ExitsOrdered state → validator.exitEpoch ≤ validator.withdrawableEpoch)
     (balance : validator.effectiveBalance = old.effectiveBalance := by rfl) : R state after :=
-  laws.setValidatorAt set le fun _ holds => by
+  laws.setValidatorAt set found key le fun _ holds => by
     rw [balance]
     exact holds old (mem_of_getValidatorAt found)
 
 theorem applyPendingDeposit {deposit : PendingDeposit}
     (computed : Consensus.applyPendingDeposit config checks state deposit = .ok after) :
     R state after := by
-  unfold Consensus.applyPendingDeposit at computed
-  split at computed
-  · split at computed
-    · cases computed
-      exact laws.refl _
-    simp only [bind_ok_iff] at computed
-    obtain ⟨_, _, computed⟩ := computed
-    split at computed
-    · exact laws.addValidatorToRegistry computed
-    · simp only [pure, Except.pure, Except.ok.injEq] at computed
-      exact computed ▸ laws.refl _
-  · simp only [liftAccessor_ok, bind_ok_iff] at computed
-    obtain ⟨_, _, computed⟩ := computed
-    exact laws.increaseBalance computed
+  rcases applyPendingDeposit_cases computed with rfl | ⟨_, raised⟩ | ⟨fresh, added⟩
+  · exact laws.refl _
+  · exact laws.increaseBalance raised
+  · exact laws.addValidatorToRegistry added fresh
 
 end EpochFrameLaws
 
@@ -740,13 +803,17 @@ theorem frame_applyDepositElectra {electra : .pectra ≤ fork} {pubkey : BLSPubk
     MutatorFrame state after := by
   unfold applyDepositElectra at computed
   split at computed
-  · simp only [bind_ok_iff] at computed
+  · rename_i absent
+    have fresh : pubkey ∉ validatorKeys state := by
+      simp only [Array.findIdx?_eq_none_iff, beq_eq_false_iff_ne] at absent
+      simpa [validatorKeys, List.mem_map] using absent
+    simp only [bind_ok_iff] at computed
     obtain ⟨_, _, computed⟩ := computed
     split at computed
     · simp only [bind_ok_iff, liftAccessor_ok] at computed
       obtain ⟨_, added, pushed⟩ := computed
       obtain ⟨_, rfl⟩ := addPendingDeposit_eq pushed
-      exact (frame_addValidatorToRegistry added).trans
+      exact (frame_addValidatorToRegistry added fresh).trans
         ⟨EpochFrame.of_validators ⟨rfl, rfl⟩, .of_eq rfl rfl⟩
     · cases computed
       exact MutatorFrame.refl _
@@ -865,7 +932,7 @@ theorem frame_switchToCompoundingValidator {electra : .pectra ≤ fork} {index :
     BlockFrame state after := by
   simp only [switchToCompoundingValidator, bind_ok_iff] at computed
   obtain ⟨validator, found, _, set, queued⟩ := computed
-  exact (frame_setValidator set found fun ordered =>
+  exact (frame_setValidator set found rfl fun ordered =>
     ordered validator (mem_of_getValidator found)).toBlockFrame.trans
     (frame_queueExcessActiveBalance queued)
 
@@ -890,7 +957,8 @@ theorem frame_queueConsolidation {electra : .pectra ≤ fork} {sourceIndex : Val
   have validators : churnedState.validators = state.validators :=
     (computeConsolidationEpochAndUpdateChurn_earliest churned).2.1
   refine (frame_computeConsolidationEpochAndUpdateChurn churned).trans <|
-    (frame_setValidator_of_whole set
+    (frame_setValidator_of_whole (old := state.validators.data[sourceIndex.toNat]) set
+      (by simp [getValidator_eq_getValidatorAt, getValidatorAt, validators, inside]) rfl
       (fun _ => le) fun _ holds => holds state.validators.data[sourceIndex.toNat] (by
         rw [validators]; exact Array.getElem_mem inside)
       ).toBlockFrame.trans (BlockFrame.of_validators ⟨rfl, rfl⟩)
@@ -1021,7 +1089,7 @@ theorem frame_processBlsToExecutionChange {signed : SignedBLSToExecutionChange}
     (computed : processBlsToExecutionChange config checks state signed = .ok after) :
     BlockFrame state after := by
   obtain ⟨validator, found, _, _, _, set⟩ := processBlsToExecutionChange_ok computed
-  exact (frame_setValidator set found fun ordered =>
+  exact (frame_setValidator set found rfl fun ordered =>
     ordered validator (mem_of_getValidator found)).toBlockFrame
 
 /-! ## The parent payload and the execution part of a block -/
@@ -1134,38 +1202,30 @@ theorem frame_processSyncAggregate {altair : .altair ≤ fork} {aggregate : Sync
 
 /-! ## Blocks -/
 
-/-- The operations of a block are a step, its attestations in order, then a block frame.
+/-- The operations of a block run three folds in order, then a block frame.
 
-The step holds of the two kinds of slashings, which run before the attestations.
+The folds are its proposer slashings, its attester slashings and its attestations.
 
-It must hold of each state to itself, and chain. -/
-theorem processOperations_split_of
-    (step : BeaconState preset fork → BeaconState preset fork → Prop)
-    (refl : ∀ state, step state state)
-    (trans : ∀ {first second third}, step first second → step second third → step first third)
-    (proposer : ∀ {state after} {slashing : ProposerSlashing},
-      processProposerSlashing config checks state slashing = .ok after → step state after)
-    (attester : ∀ {state after} {slashing : AttesterSlashing preset fork},
-      processAttesterSlashing config checks state slashing = .ok after → step state after)
-    {body : BeaconBlockBody preset fork} {parentSlot : Slot}
+They name the states that the computation passes through.
+
+The attestations read `parentSlot`, the slot of the parent block. -/
+theorem processOperations_folds {body : BeaconBlockBody preset fork} {parentSlot : Slot}
     (computed : processOperations config checks state body parentSlot = .ok after) :
-    ∃ first last, step state first ∧
+    ∃ proposersDone slashingsDone attested,
+      body.proposerSlashings.data.toList.foldlM (processProposerSlashing config checks) state =
+        .ok proposersDone ∧
+      body.attesterSlashings.data.toList.foldlM (processAttesterSlashing config checks)
+        proposersDone = .ok slashingsDone ∧
       body.attestations.data.toList.foldlM (processAttestation config checks · parentSlot ·)
-        first = .ok last ∧ BlockFrame last after := by
-  have slashed : ∀ {middle : BeaconState preset fork}
-      {proposers : List ProposerSlashing} {attesters : List (AttesterSlashing preset fork)},
-      proposers.foldlM (processProposerSlashing config checks) state = .ok middle →
-      ∀ {first}, attesters.foldlM (processAttesterSlashing config checks) middle = .ok first →
-        step state first := fun proposersOk _ attestersOk =>
-    trans (foldlM_ok_steps step refl trans (fun _ _ _ ok => proposer ok) proposersOk).1
-      (foldlM_ok_steps step refl trans (fun _ _ _ ok => attester ok) attestersOk).1
+        slashingsDone = .ok attested ∧
+      BlockFrame attested after := by
   unfold processOperations at computed
   split at computed
   · unfold processOperationsGloas at computed
     simp only [bind_ok_iff, ← Array.foldlM_toList] at computed
     obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, proposersOk, _, attestersOk, _,
       attestedOk, _, exitsOk, _, changesOk, paid⟩ := computed
-    refine ⟨_, _, slashed proposersOk attestersOk, attestedOk, ?_⟩
+    refine ⟨_, _, _, proposersOk, attestersOk, attestedOk, ?_⟩
     exact (BlockFrame.foldlM (fun _ _ _ ok => frame_processVoluntaryExit ok) exitsOk).trans <|
       (BlockFrame.foldlM (fun _ _ _ ok => frame_processBlsToExecutionChange ok) changesOk).trans <|
       BlockFrame.foldlM (fun _ _ _ ok => by
@@ -1186,10 +1246,35 @@ theorem processOperations_split_of
     · exact frame_processExecutionRequests requestsOk
     · simp only [pure, Except.pure, Except.ok.injEq] at requestsOk
       exact requestsOk ▸ BlockFrame.refl _
-  refine ⟨_, _, slashed proposersOk attestersOk, attestedOk, ?_⟩
+  refine ⟨_, _, _, proposersOk, attestersOk, attestedOk, ?_⟩
   exact (BlockFrame.foldlM (fun _ _ _ ok => frame_processDeposit ok) depositedOk).trans <|
     (BlockFrame.foldlM (fun _ _ _ ok => frame_processVoluntaryExit ok) exitsOk).trans <|
     changes.trans requests
+
+/-- The operations of a block are a step, its attestations in order, then a block frame.
+
+The step holds of the two kinds of slashings, which run before the attestations.
+
+It must hold of each state to itself, and chain. -/
+theorem processOperations_split_of
+    (step : BeaconState preset fork → BeaconState preset fork → Prop)
+    (refl : ∀ state, step state state)
+    (trans : ∀ {first second third}, step first second → step second third → step first third)
+    (proposer : ∀ {state after} {slashing : ProposerSlashing},
+      processProposerSlashing config checks state slashing = .ok after → step state after)
+    (attester : ∀ {state after} {slashing : AttesterSlashing preset fork},
+      processAttesterSlashing config checks state slashing = .ok after → step state after)
+    {body : BeaconBlockBody preset fork} {parentSlot : Slot}
+    (computed : processOperations config checks state body parentSlot = .ok after) :
+    ∃ first last, step state first ∧
+      body.attestations.data.toList.foldlM (processAttestation config checks · parentSlot ·)
+        first = .ok last ∧ BlockFrame last after := by
+  obtain ⟨_, first, last, proposersOk, attestersOk, attestedOk, tail⟩ :=
+    processOperations_folds computed
+  exact ⟨first, last,
+    trans (foldlM_ok_steps step refl trans (fun _ _ _ ok => proposer ok) proposersOk).1
+      (foldlM_ok_steps step refl trans (fun _ _ _ ok => attester ok) attestersOk).1,
+    attestedOk, tail⟩
 
 /-- The operations of a block are a block frame, its attestations in order, then a block frame. -/
 theorem processOperations_split {body : BeaconBlockBody preset fork} {parentSlot : Slot}
@@ -1200,23 +1285,48 @@ theorem processOperations_split {body : BeaconBlockBody preset fork} {parentSlot
   processOperations_split_of BlockFrame BlockFrame.refl BlockFrame.trans
     frame_processProposerSlashing frame_processAttesterSlashing computed
 
-/-- A block is a step, its operations, then a block frame.
+/-- The state at which a block starts its operations, from the state before the block.
+
+The equations are the steps that the block runs before its operations, at every fork.
+
+From Gloas the payload of the parent comes first.
+
+At every fork the header follows.
+
+From Bellatrix the execution part comes next.
+
+At every fork the RANDAO reveal follows.
+
+The vote on the deposit contract comes last, before Heze. -/
+def OperationsInput (config : Config) (checks : SignatureChecks) {fork : Fork}
+    (engine : ExecutionEngine preset fork) (before : BeaconState preset fork)
+    (block : BeaconBlock preset fork) (input : BeaconState preset fork) : Prop :=
+  ∃ parented headed executed revealed : BeaconState preset fork,
+    (if gloas : .glamsterdam ≤ fork then
+        processParentExecutionPayload config checks before gloas block.body
+      else pure before) = .ok parented ∧
+    processBlockHeader parented block = .ok headed ∧
+    (if bellatrix : .bellatrix ≤ fork then
+        processBlockExecution config checks engine headed block.body bellatrix
+      else pure headed) = .ok executed ∧
+    processRandao config checks executed block.body = .ok revealed ∧
+    (if early : fork < .hegota then processEth1Data early revealed block.body
+      else pure revealed) = .ok input
+
+/-- The steps of a block before its operations are a step.
 
 The step holds of each part of the block that runs before its operations.
 
-Those are the header and the RANDAO reveal, at every fork.
+Those are the payload of the parent from Gloas, the header and the execution part from Bellatrix.
 
-They are also the payload of the parent from Gloas and the execution part from Bellatrix.
+They also include the RANDAO reveal and, before Heze, the vote on the deposit contract.
 
-The last is the vote on the deposit contract, before Heze.
-
-It must hold of each state to itself, and chain.
-
-The operations read the parent slot from the latest block header before the block. -/
-theorem processBlock_split_of
+It must hold of each state to itself, and chain. -/
+theorem OperationsInput.step_of
     (step : BeaconState preset fork → BeaconState preset fork → Prop)
     (refl : ∀ state, step state state)
     (trans : ∀ {first second third}, step first second → step second third → step first third)
+    {engine : ExecutionEngine preset fork} {state input : BeaconState preset fork}
     {block : BeaconBlock preset fork}
     (paid : ∀ {state after} (gloas : .glamsterdam ≤ fork),
       processParentExecutionPayload config checks state gloas block.body = .ok after →
@@ -1229,41 +1339,97 @@ theorem processBlock_split_of
       processRandao config checks state block.body = .ok after → step state after)
     (eth1 : ∀ {state after} (before : fork < .hegota),
       processEth1Data before state block.body = .ok after → step state after)
+    (started : OperationsInput config checks engine state block input) :
+    step state input := by
+  obtain ⟨parented, headed, executed, revealed, paidOk, headerOk, executionOk, randaoOk,
+    eth1Ok⟩ := started
+  -- From Gloas the payload of the parent runs before the header.
+  have paidStep : step state parented := by
+    split at paidOk
+    · exact paid _ paidOk
+    · cases paidOk
+      exact refl _
+  -- From Bellatrix the execution part runs between the header and the RANDAO reveal.
+  have executionStep : step headed executed := by
+    split at executionOk
+    · exact execution _ executionOk
+    · cases executionOk
+      exact refl _
+  -- Heze drops the vote on the deposit contract.
+  have eth1Step : step revealed input := by
+    split at eth1Ok
+    · exact eth1 _ eth1Ok
+    · cases eth1Ok
+      exact refl _
+  exact trans paidStep <| trans (header headerOk) <|
+    trans executionStep <| trans (randao randaoOk) eth1Step
+
+/-- The steps of a block before its operations are a block frame. -/
+theorem frame_operationsInput {engine : ExecutionEngine preset fork}
+    {state input : BeaconState preset fork} {block : BeaconBlock preset fork}
+    (started : OperationsInput config checks engine state block input) :
+    BlockFrame state input :=
+  started.step_of BlockFrame BlockFrame.refl BlockFrame.trans
+    (fun _ ok => frame_processParentExecutionPayload ok) frame_processBlockHeader
+    (fun _ ok => frame_processBlockExecution ok) frame_processRandao
+    (fun _ ok => frame_processEth1Data ok)
+
+/-- A block runs the steps of its operations input, then its operations, then a block frame.
+
+The operations read the parent slot from the latest block header before the block. -/
+theorem processBlock_operationsInput {block : BeaconBlock preset fork}
     (computed : processBlock config checks engine state block = .ok after) :
-    ∃ first last, step state first ∧
-      processOperations config checks first block.body state.latestBlockHeader.slot = .ok last ∧
+    ∃ input last, OperationsInput config checks engine state block input ∧
+      processOperations config checks input block.body state.latestBlockHeader.slot = .ok last ∧
       BlockFrame last after := by
   unfold processBlock at computed
   split at computed
   · unfold processBlockAltair at computed
     simp only [bind_ok_iff] at computed
-    obtain ⟨paid', paidOk, headed, headedOk, executed, executedOk, revealed, revealedOk, voted,
-      votedOk, _, operatedOk, synced⟩ := computed
-    -- From Gloas the payload of the parent runs before the header.
-    have paidStep : step state paid' := by
-      split at paidOk
-      · exact paid _ paidOk
-      · cases paidOk
-        exact refl _
-    -- From Bellatrix the execution part runs between the header and the RANDAO reveal.
-    have executedStep : step headed executed := by
-      split at executedOk
-      · exact execution _ executedOk
-      · cases executedOk
-        exact refl _
-    -- Heze drops the vote on the deposit contract.
-    have votedStep : step revealed voted := by
-      split at votedOk
-      · exact eth1 _ votedOk
-      · cases votedOk
-        exact refl _
-    exact ⟨_, _, trans paidStep <| trans (header headedOk) <|
-      trans executedStep <| trans (randao revealedOk) votedStep, operatedOk,
+    obtain ⟨_, paidOk, _, headedOk, _, executedOk, _, revealedOk, _, votedOk, _, operatedOk,
+      synced⟩ := computed
+    exact ⟨_, _, ⟨_, _, _, _, paidOk, headedOk, executedOk, revealedOk, votedOk⟩, operatedOk,
       frame_processSyncAggregate synced⟩
-  simp only [bind_ok_iff] at computed
-  obtain ⟨_, headerOk, _, randaoOk, _, eth1Ok, operationsOk⟩ := computed
-  exact ⟨_, _, trans (header headerOk) <| trans (randao randaoOk) <|
-    eth1 _ eth1Ok, operationsOk, BlockFrame.refl _⟩
+  · rename_i altair
+    simp only [bind_ok_iff] at computed
+    obtain ⟨_, headerOk, _, randaoOk, _, eth1Ok, operationsOk⟩ := computed
+    -- Before Altair neither the payload of the parent nor the execution part runs.
+    have gloas : ¬ Fork.glamsterdam ≤ fork := fun h => altair (Nat.le_trans (by decide) h)
+    have bellatrix : ¬ Fork.bellatrix ≤ fork := fun h => altair (Nat.le_trans (by decide) h)
+    have early : fork < .hegota := Nat.lt_trans (Nat.lt_of_not_le altair) (by decide)
+    refine ⟨_, _, ⟨state, _, _, _, ?_, headerOk, ?_, randaoOk, ?_⟩, operationsOk,
+      BlockFrame.refl _⟩
+    · simp only [gloas, ↓reduceDIte]
+      rfl
+    · simp only [bellatrix, ↓reduceDIte]
+      rfl
+    · simp only [early, ↓reduceDIte]
+      exact eth1Ok
+
+/-- A block runs the steps of its operations input, then three folds, then a block frame.
+
+The folds are the proposer slashings, the attester slashings and the attestations.
+
+They run from the input in that order.
+
+The attestations read the slot of the latest block header before the block. -/
+theorem processBlock_folds {block : BeaconBlock preset fork}
+    (computed : processBlock config checks engine state block = .ok after) :
+    ∃ input proposersDone slashingsDone attested,
+      OperationsInput config checks engine state block input ∧
+      block.body.proposerSlashings.data.toList.foldlM (processProposerSlashing config checks)
+        input = .ok proposersDone ∧
+      block.body.attesterSlashings.data.toList.foldlM (processAttesterSlashing config checks)
+        proposersDone = .ok slashingsDone ∧
+      block.body.attestations.data.toList.foldlM
+        (processAttestation config checks · state.latestBlockHeader.slot ·) slashingsDone =
+        .ok attested ∧
+      BlockFrame attested after := by
+  obtain ⟨input, last, started, operated, tail⟩ := processBlock_operationsInput computed
+  obtain ⟨proposersDone, slashingsDone, attested, proposersOk, slashingsOk, attestedOk, rest⟩ :=
+    processOperations_folds operated
+  exact ⟨input, proposersDone, slashingsDone, attested, started, proposersOk, slashingsOk,
+    attestedOk, rest.trans tail⟩
 
 /-- A block is a block frame, its operations, then a block frame.
 
@@ -1272,11 +1438,9 @@ theorem processBlock_split {block : BeaconBlock preset fork}
     (computed : processBlock config checks engine state block = .ok after) :
     ∃ first last, BlockFrame state first ∧
       processOperations config checks first block.body state.latestBlockHeader.slot = .ok last ∧
-      BlockFrame last after :=
-  processBlock_split_of BlockFrame BlockFrame.refl BlockFrame.trans
-    (fun _ ok => frame_processParentExecutionPayload ok) frame_processBlockHeader
-    (fun _ ok => frame_processBlockExecution ok) frame_processRandao
-    (fun _ ok => frame_processEth1Data ok) computed
+      BlockFrame last after := by
+  obtain ⟨input, last, started, operated, tail⟩ := processBlock_operationsInput computed
+  exact ⟨input, last, frame_operationsInput started, operated, tail⟩
 
 /-- The operations of a block form a frame. -/
 theorem frame_processOperations {body : BeaconBlockBody preset fork} {parentSlot : Slot}
@@ -1294,30 +1458,37 @@ theorem frame_processBlock {block : BeaconBlock preset fork}
 
 /-! ## Relations through the steps of an epoch -/
 
+/-- Joining the activation queue keeps the validator, or sets its activation eligibility epoch. -/
+private theorem queueForActivation_cases {validator queued : Validator}
+    (computed : queueForActivation state validator = .ok queued) :
+    queued = validator ∨
+      ∃ epoch, queued = { validator with activationEligibilityEpoch := epoch } := by
+  unfold queueForActivation at computed
+  split at computed
+  · simp only [bind_ok_iff, liftAccessor_ok, pure, Except.pure, Except.ok.injEq] at computed
+    obtain ⟨epoch, _, rfl⟩ := computed
+    exact .inr ⟨epoch, rfl⟩
+  · simp only [pure, Except.pure, Except.ok.injEq] at computed
+    exact .inl computed.symm
+
 /-- Joining the activation queue changes neither the exit nor the withdrawable epoch. -/
 theorem queueForActivation_epochs {validator queued : Validator}
     (computed : queueForActivation state validator = .ok queued) :
     queued.exitEpoch = validator.exitEpoch ∧
       queued.withdrawableEpoch = validator.withdrawableEpoch := by
-  unfold queueForActivation at computed
-  split at computed
-  · simp only [bind_ok_iff, liftAccessor_ok, pure, Except.pure, Except.ok.injEq] at computed
-    obtain ⟨_, _, rfl⟩ := computed
-    exact ⟨rfl, rfl⟩
-  · simp only [pure, Except.pure, Except.ok.injEq] at computed
-    exact computed ▸ ⟨rfl, rfl⟩
+  rcases queueForActivation_cases computed with rfl | ⟨_, rfl⟩ <;> exact ⟨rfl, rfl⟩
 
 /-- Joining the activation queue keeps the effective balance. -/
 private theorem queueForActivation_effectiveBalance {validator queued : Validator}
     (computed : queueForActivation state validator = .ok queued) :
     queued.effectiveBalance = validator.effectiveBalance := by
-  unfold queueForActivation at computed
-  split at computed
-  · simp only [bind_ok_iff, liftAccessor_ok, pure, Except.pure, Except.ok.injEq] at computed
-    obtain ⟨_, _, rfl⟩ := computed
-    rfl
-  · simp only [pure, Except.pure, Except.ok.injEq] at computed
-    exact computed ▸ rfl
+  rcases queueForActivation_cases computed with rfl | ⟨_, rfl⟩ <;> rfl
+
+/-- Joining the activation queue keeps the public key. -/
+private theorem queueForActivation_pubkey {validator queued : Validator}
+    (computed : queueForActivation state validator = .ok queued) :
+    queued.pubkey = validator.pubkey := by
+  rcases queueForActivation_cases computed with rfl | ⟨_, rfl⟩ <;> rfl
 
 /-- The state that the epoch transition reaches before the step of the payments.
 
@@ -1399,7 +1570,7 @@ theorem updateRegistryEntry {index : Nat}
   obtain ⟨validator, found, queued, queuedOk, marked, markedOk, computed⟩ := computed
   obtain ⟨exitSame, withdrawableSame⟩ := queueForActivation_epochs queuedOk
   have set : R state marked := laws.setValidatorAt_of_sameBalance markedOk found
-    fun ordered => by
+    (queueForActivation_pubkey queuedOk) fun ordered => by
       rw [exitSame, withdrawableSame]
       exact ordered validator (mem_of_getValidatorAt found)
     (balance := queueForActivation_effectiveBalance queuedOk)
@@ -1414,7 +1585,7 @@ theorem activateValidator {index : ValidatorIndex}
     (computed : Consensus.activateValidator state index = .ok after) : R state after := by
   simp only [Consensus.activateValidator, bind_ok_iff, liftAccessor_ok] at computed
   obtain ⟨validator, found, _, _, set⟩ := computed
-  exact laws.setValidator_of_sameBalance set found fun ordered =>
+  exact laws.setValidator_of_sameBalance set found rfl fun ordered =>
     ordered validator (mem_of_getValidator found)
 
 theorem updateRegistryEntryElectra {activationEpoch : Epoch} {index : Nat}
@@ -1428,14 +1599,14 @@ theorem updateRegistryEntryElectra {activationEpoch : Epoch} {index : Nat}
   split at computed
   · simp only [bind_ok_iff, liftAccessor_ok] at computed
     obtain ⟨_, _, set⟩ := computed
-    exact laws.setValidatorAt_of_sameBalance set found kept
+    exact laws.setValidatorAt_of_sameBalance set found rfl kept
   split at computed
   · simp only [bind_ok_iff, liftAccessor_ok] at computed
     obtain ⟨_, _, exited⟩ := computed
     exact laws.initiateValidatorExit exited
   split at computed
   · rw [liftAccessor_ok] at computed
-    exact laws.setValidatorAt_of_sameBalance computed found kept
+    exact laws.setValidatorAt_of_sameBalance computed found rfl kept
   · simp only [pure, Except.pure, Except.ok.injEq] at computed
     exact computed ▸ laws.refl _
 
@@ -1511,7 +1682,7 @@ theorem updateEffectiveBalance {index : Nat}
     (computed : Consensus.updateEffectiveBalance state index = .ok after) : R state after := by
   simp only [Consensus.updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at computed
   obtain ⟨validator, found, _, _, _, updated, set⟩ := computed
-  refine laws.setValidatorAt set
+  refine laws.setValidatorAt set found rfl
     (fun ordered => ordered validator (mem_of_getValidatorAt found)) fun maxAligned holds => ?_
   exact updatedEffectiveBalance_aligned (withdrawalMaxEffectiveBalance_aligned maxAligned validator)
     (holds validator (mem_of_getValidatorAt found)) updated

@@ -680,6 +680,16 @@ The clamp of the Poly1305 key has its own theorem.
 So a clamp with another mask would fail it.
 `clampR_lt` bounds `r` by `2 ^ 124`.
 `poly1305Accumulator_lt` proves that the accumulator stays below the prime `2 ^ 130 - 5`, whatever `r` and the message, since each step reduces modulo the prime.
+The cipher and the keystream have their own theorems.
+`crypt_eq_ok_iff` gives every byte of the output of the cipher.
+Byte `j` is byte `j` of the input XOR byte `j % 64` of the block whose counter is the initial counter plus `j / 64`.
+So a keystream shorter than the input, which leaves its last bytes in plaintext, or a counter that repeats, would fail it.
+`encrypt_eq_ok_iff` gives the AEAD ciphertext in the same terms, with the counter starting at 1.
+It gives the tag too: the Poly1305 tag of the MAC input of RFC 8439 §2.8, written out, under the first 32 bytes of block 0.
+`byteAt_keyStream` and `size_keyStream` give the keystream itself.
+`pad16_eq_iff` proves that the padding of the MAC input is the fewest zero bytes that complete a multiple of 16, so aligned input gets none.
+`getElem_serializeState` gives each byte of the serialized state, the least significant byte of each word first.
+`stateOfBytes_serializeState` and `serializeState_stateOfBytes` prove that reading 64 bytes as a state undoes the serialization.
 No theorem relates ChaCha20-Poly1305 to an independent model of RFC 8439.
 The Python tests compare the bindings with the RFC 7748 and RFC 8439 vectors.
 The million-iteration X25519 vector requires `ETHLIB_SLOW_VECTORS=1`.
@@ -704,6 +714,14 @@ Only the libp2p read verifies an identity, and completion checks that the stored
 The raw transport split of an XX state checks neither.
 The Python tests compare the raw XX handshake with a published test vector.
 No published vector covers the libp2p payload, so its tests check the keys and signatures with independent code.
+
+The DER signature of an identity has its own theorems (`Networking/Proofs/Libp2p/PeerId.lean`).
+`derInteger_eq` proves that the content of the DER INTEGER of a number below `2 ^ 256` is that number in big-endian bytes, on the fewest bytes such that the first has its top bit clear.
+`exists_derByteCount` shows that such a byte count, from 1 to 33, exists for every number below `2 ^ 256`.
+So a positive number gets a leading zero byte exactly when its first nonzero byte is `0x80` or more, and zero is the single byte `0x00`.
+`decodeSignature_eq_ok_iff` proves that the decoder accepts exactly the encodings of r in [1, N) and s in [1, N/2], where N is the order of the secp256k1 group, and returns r and s.
+So each accepted pair r, s has exactly one byte encoding.
+No theorem relates the encoder to an independent model of X.690, and none is about ECDSA verification.
 
 The bindings take explicit keys and state tuples.
 Callers must use fresh ephemeral keys and use the returned state after each successful cipher call.
@@ -743,6 +761,25 @@ Before parsing, the export refuses deep nesting, long digit runs and large posit
 Decryption takes the caller's limits on memory and work, and refuses a key derivation whose modeled memory or work exceeds them.
 The model counts bytes of buffers and calls of 64-byte block functions; no theorem shows that it bounds the code.
 The Python binding sets default limits.
+
+### scrypt
+
+The scrypt proofs state the length each step returns, the inputs each step accepts, and the table of ROMix and the integer that picks its index (`Proofs/Hash/Scrypt.lean`).
+`validCost_iff` states the cost test as the bound of RFC 7914 §2: a power of two above 1 and below `2^(16 r)`.
+`salsa208_ok_iff`, `blockMix_ok_iff`, `romix_ok_iff` and `scrypt_ok_iff` state which inputs each step accepts.
+`scrypt_ok_iff` also carries the bounds that PBKDF2 needs on the password and the salt.
+`salsa208_size`, `blockMix_size`, `romix_size` and `scrypt_size` state the length each step returns.
+`integerify_eq` states Integerify of RFC 7914 §5, whose remainder mod `N` is the index, as the last 64 bytes of the value read little-endian through `Base.bytesToUint`.
+`romixFill_replicate_fst_get` states that entry `j` of the table that ROMix fills is BlockMix applied `j` times to the input.
+It holds for every `j` below `N`, and `romixFill_fst_get` holds for a fill that starts from any index.
+`romixFill_fst_get_lt` states that the fill leaves the entries below its starting index unchanged.
+`romixFill_snd` states that the value the fill returns is BlockMix applied `count` times to its start value, so `N` times in ROMix.
+ROMix reads its table at indices that depend on its input, so a test vector checks only the entries that it reaches.
+`mixBlocks_append` states that mixing a block appends to the output it is given.
+`mixBlocks_eq_append` states that when mixing from an empty output succeeds, mixing from any output puts that output before the same blocks.
+No theorem states the read loop of RFC 7914 §5, step 3, or that block `k` of the mixed output is ROMix of block `k` of the input.
+No theorem relates Salsa20/8, BlockMix or the derivation to an independent model of RFC 7914.
+The Python tests (`bindings/python/tests/hmac_kdf/test_password_kdf.py`) check the Salsa20/8, BlockMix, ROMix, PBKDF2-HMAC-SHA256 and scrypt vectors of RFC 7914 §§8 to 12.
 
 ### RIPEMD-160
 
@@ -1424,6 +1461,28 @@ Both hold for every bound on the gas of messages and every runner of messages.
 It assumes a runner that never fails on those messages.
 `Logic.not_runsOk_of_lt` proves that no run with less gas than `cost` succeeds, from a specification to a halt that pays `cost`, as above.
 
+BLOCKHASH reads its hash from a list that the block transition builds from the recent blocks of the chain.
+The Yellow Paper (Appendix H.2, [`Paper.tex`][yp-blockhash]) defines the result by a walk up the parent hashes instead.
+So the two agree when the recent blocks are linked and reach back far enough.
+`BlockChain.addBlock` (`Execution/Blocks/Transition.lean`) defines the chain after a block, and keeps its last 255 recent blocks.
+`HistoryOk` (`Execution/Proofs/Blocks/History.lean`) says that the recent blocks are linked and not empty.
+Each one is numbered one above the one before it and names the hash of that one as its parent hash.
+The chain also holds at least as many recent blocks as the number of its last block, or 255 when that number is higher.
+`stateTransition_historyOk` proves that a block that passes the transition keeps `HistoryOk`, and `genesis_historyOk` gives the start.
+On such a chain, `blockHash_ancestor` proves that each of the last 256 blocks has an entry in the list, and that BLOCKHASH reads it.
+For a block number `n` in the window, the entry is the hash of the last block when `n` is its number.
+Otherwise it is the parent hash of the recent block numbered `n + 1`.
+When a recent block is numbered `n`, the entry is its hash.
+`ChainRun.windows` carries the whole result along a run of blocks.
+
+The theorems assume `HistoryOk` of the first chain.
+A chain with too few recent blocks does not meet it.
+`blockHash_of_short` proves that on such a chain, BLOCKHASH gives 0 for a block inside the window that the list does not reach.
+For example, from block 100 with only that block recent, BLOCKHASH in block 101 gives 0 for block 98, where the Yellow Paper gives the hash of block 98.
+No theorem relates the recent blocks of a chain to a real network.
+
+[yp-blockhash]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
+
 ### System contracts
 
 The four modules under `Execution/Proofs/Blocks/SystemCall/` for beacon roots, historical block hashes, withdrawal requests and consolidation requests prove the effects of their deployed bytecode.
@@ -1769,6 +1828,40 @@ The storage value of a slot that is not set is 0, so the answer must give that w
 EIP-1186 does not say which fields the answer holds for an address without an account.
 So the check judges no field of an absent account, and reports the absence.
 
+### The block headers of the eth protocol
+
+`checkHeaders` (`Execution/Network/Blocks.lean`) checks an answer to a GetBlockHeaders request of the eth protocol.
+`checkHeaders_eq_ok_iff` (`Execution/Proofs/Network/Blocks.lean`) states the conditions under which an answer passes: it holds at most as many headers as asked, its first header is the start block, and each header follows the one before it.
+`followsIn_eq_ok_iff` states that one header follows another exactly when it has the next number of the request and, when the request skips no block, the later block names the earlier one by its hash.
+`headerParent_of_checkHeaders` draws the consequence for a whole answer to a request that skips no block.
+No theorem checks a header against the chain or its validity rules.
+
+### The block bodies of the eth protocol
+
+A node fetches the bodies of blocks after their headers, with the BlockBodies message of the eth protocol.
+`checkBody` (`Execution/Network/Bodies.lean`) checks such a body against the header that the node asked it for.
+It follows "Block Encoding and Validity" in [`caps/eth.md`](https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/eth.md#block-encoding-and-validity).
+The body must be the list of the transactions and the ommers, with the withdrawals from Shapella.
+The transactions and the withdrawals must have the roots of the header.
+The ommers list must hold at most two items, and its Keccak-256 hash must be the ommers hash of the header.
+No ommer may have a number above the block's.
+A transaction sent as a byte string must start with a type below `0x80`, as EIP-2718 asks, so that it cannot stand for a legacy transaction.
+
+`checkBody_complete` (`Execution/Proofs/Network/Bodies.lean`) proves that the body of every block that passes `stateTransition` passes this check.
+So a correct node never rejects it.
+`checkBody_binding` proves that two bodies that pass for one header are equal in each part, or that a Keccak-256 collision is named.
+For the transactions and the withdrawals, the search of the trie binding returns the collision; for the ommers, the two encodings are the collision.
+It reuses `indexedRoot_binding` and `withdrawalsRoot_binding` for the roots, and `encode_injective` for the ommers.
+`checkBody_tooManyOmmers` and `checkBody_tooManyOmmers_shapella` show that a body with three ommers is rejected once the earlier checks pass.
+No theorem bounds the probability of finding two bodies that pass for one header and differ.
+
+The check leaves four rules of that section to other checks.
+It does not check the header itself, which the header checks of the eth protocol decide before the body is asked for.
+It does not run the transactions or look at the state, so it does not say that the transactions are valid for the block.
+It does not check the ommer headers against the chain, which needs the recent blocks that `validateOmmers` reads.
+It does not ask that the sum of the gas limits of the transactions is at most the gas limit of the block, as `caps/eth.md` says.
+Block validity asks only that each transaction fits in the gas that the block still has, so the stricter rule would reject valid blocks.
+
 ### Weak subjectivity
 
 A node that starts from a recent checkpoint trusts it only for a limited time, the weak subjectivity period.
@@ -1906,6 +1999,14 @@ The ancestry needs only the two block reads and that local slot order, not `Reac
 It assumes Assumption 2 on the active members of the empty-slot committees, no honest known equivocator, aligned effective balances, and an increment divisible by 100 Gwei.
 These are store-local facts: no theorem here shows that a recorded honest vote is its voter's latest actual vote, or that it remains the recorded vote at a later store.
 
+`Consensus/Proofs/ForkChoice/FastConfirmationIndicators.lean` also states the two FFG tests of the rule on the target of the current epoch.
+`getCurrentTarget_eq_ok_iff` states that target as the checkpoint of the store's epoch in the chain of the head, and `epoch_eq_of_getCurrentTarget` gives its epoch.
+`willCurrentTargetBeJustified_eq_ok_true_iff` states the two-thirds test, with both products checked for overflow.
+`two_mul_le_three_mul_of_willCurrentTargetBeJustified` states the bound it gives on naturals: three times the honest support reaches twice the total active balance.
+`willNoConflictingCheckpointBeJustified_eq_ok_true_iff` states the one-third test: it accepts a target that is the unrealized justified checkpoint, and otherwise asks that three times the honest support exceed the balance.
+`willNoConflictingCheckpointBeJustified_of_willCurrentTargetBeJustified` shows that the one-third test passes wherever the two-thirds test does, for a nonzero effective balance increment.
+No theorem relates either test to the justification of the target in a later state.
+
 `Consensus/Proofs/ForkChoice/FastConfirmationConfirmedRoot.lean` states where the confirmed block of a slot comes from.
 `Store.onFastConfirmation_confirmedRoot` shows that the rule starts from the block stored before, the finalized block or the observed justified block.
 It keeps the block stored before only when that block is in the chain of the head, and at the first slot of an epoch only when `isConfirmedChainSafe` accepts it.
@@ -1925,7 +2026,7 @@ For the start they leave out the other checks that compare the epochs and the sl
 For the walks they leave out the checks on the epochs of the start and of the walked blocks.
 They also leave out the check that the head of the slot before holds each block of the first walk.
 They leave out the checks that a voting source or an unrealized justification is recent.
-They also leave out `willNoConflictingCheckpointBeJustified` and `willCurrentTargetBeJustified`, which are about the justification of the target of the current epoch.
+They also leave out the calls to `willNoConflictingCheckpointBeJustified` and `willCurrentTargetBeJustified`, whose tests `FastConfirmationIndicators.lean` states on their own.
 No theorem yet relates the list of stores to the stores of an honest validator in an execution.
 
 ### Balance-weighted draws
@@ -1959,6 +2060,10 @@ The theorems in `Consensus/Proofs/HonestValidator.lean` relate these duties to t
 `processRandao_ne_invalidRandaoReveal` shows that the RANDAO reveal of the proposer never fails the RANDAO check.
 Both assume a block of the current epoch, and a proposer whose public key is that of the secret key.
 The gossip checks of a selection proof and of an aggregate and proof read the target epoch, so their theorems assume it is the epoch of the slot.
+`isValidSignatureAtSlot_getSyncCommitteeSelectionProof` shows that a sync committee selection proof passes the check at the epoch of its slot.
+That check reads the selection data of the same slot and subcommittee, under the public key of the secret key.
+`getContributionAndProof_spec` shows that a contribution and proof keeps its aggregator and its contribution.
+Its selection proof passes that check for the slot and subcommittee of the contribution.
 
 `getCommitteeAssignment_sound` shows that an assignment is a committee of the epoch that holds the validator.
 `getCommitteeAssignment_unique` shows that no other committee of the epoch holds it.
@@ -2031,6 +2136,8 @@ A key counts once for each of its selected seats, and each seat takes the first 
 The gossip corollaries characterize acceptance of the aggregate's committee check and the contribution topic by their remaining conditions.
 These include the checks of time, membership and the aggregator's signatures.
 The corollaries assume that the head state of the receiver is the state of the construction.
+`validateContributionAndProof_eq_accept_of_getContributionAndProof` removes the two signature checks of the aggregator from the conditions of the contribution topic.
+It assumes instead that the aggregator made and signed the contribution and proof with the secret key of its registered public key.
 
 The contribution takes the sync committee as an argument.
 The caller passes the committee of the next slot, which gossip and the next block check.
@@ -2147,7 +2254,7 @@ It assumes that the vectors whose length the preset sets have a positive length,
 It rests on `BeaconBlock.hashTreeRoot_header`, which shows that a block has the root of its header.
 It also rests on `latestBlockHash_processBlock`, which shows that from Gloas the latest block hash after a block is the parent hash of the latest bid.
 `latestExecutionPayloadBid_processBlock` shows that from Gloas a block leaves its own bid as the latest bid.
-`latestBlockHeader_processBlock` shows that from Gloas a block leaves its header, with a zero state root, as the latest block header.
+`latestBlockHeader_processBlock` shows that at every fork a block leaves its header, with a zero state root, as the latest block header.
 These rest on `PayloadInputs`, the fields that the checks of a payload and of a bid read.
 From Gloas the parent, header, RANDAO and bid steps each change one of them, and the other steps keep them all.
 No theorem covers the signature, the time or the withdrawals of the envelope, or the answer of the execution layer.
@@ -2506,8 +2613,26 @@ The step also needs the previous justified epoch below the previous epoch once j
 `slackJustifiedCheckpoints_activeSetAt_of_chainSteps` (`FfgSlackActive.lean`) takes the votes that the block steps of the run cast, the active sets and the effective balances.
 Its step asks only the active stake, the order of the blocks and the preset.
 The order of the blocks asks that the map from roots to blocks keeps in order the roots that a state records at two consecutive slots, and the zero root before the root of slot zero (`rootLinks`, `Consensus/Proofs/Transition/FfgRoots.lean`).
-Two consecutive slots record the same root, or a block and its child, since the header check makes the parent root of a block the root recorded at the slot before it; no theorem states that yet.
-Without a collision of header roots, such pairs order the roots by ancestry.
+Two consecutive slots record the same root, or a block and its child, since the header check makes the parent root of a block the root recorded at the slot before it.
+
+`rootLinks_cases_of_chainSteps` (`Consensus/Proofs/Transition/RootLinks.lean`) states that for a run of a chain, upgrades included.
+A block step may skip the check of the state root, so the root of its block is that of the block with its state root replaced by the root of the state after the step.
+The step that checks the state root leaves the block as it is.
+The other cases are a pair that the first state records, the first pair, and a state of the run that hashes to the zero root.
+The first pair is the pair that the first slot of the run adds: the root at the slot before the first state, or the zero root at slot zero, then the root of the first header filled with the root of the first state.
+A state that hashes to the zero root leaves the header of the latest block unfilled at its slot.
+So the next slot records the root of the header as it was.
+The first state must be at slot zero, or have its latest header at its own slot, as after a block, or record the root of its latest header at the slot before it.
+Genesis and every state that a block or a slot produces meet this, so a run may start at the state of a stored block.
+The theorem assumes that the vectors whose length the preset sets have a positive length, as the root of a block needs.
+`zeroPreimage_or_rootLinks_le_of_chainSteps` gives the `links` hypothesis of `RootsAbove.of_chainStep` for the last state of a run.
+It takes a map from roots to a preorder that orders the parent root of each block step between the first and the last state before the root of its block, as `rootLinks_cases_of_chainSteps` computes it.
+The map must also order the pairs of the first state and the first pair, and the result fails only on a zero preimage.
+For one transition, `getBlockRootAtSlot_stateTransition_cases` shows that each root recorded from the slot of the state on is the parent root of the block.
+The other case is that the state before the transition hashes to the zero root, and the root is that of the latest header as it was.
+`getBlockRootAtSlot_stateTransition_of_lt` shows that the roots of older slots are those of the state before.
+
+Without a collision of header roots, the pairs of consecutive slots order the roots by ancestry.
 `RootsAbove.of_chainStep` then keeps each justified checkpoint below every root that the state records from its epoch on, which gives the source block of each recent link in the chain of its target block.
 `slackJustifiedCheckpoints_chainRoot_of_chainSteps` (`FfgSlackActive.lean`) takes the roots themselves as the blocks of the model, ordered by the links of every state that genesis reaches (`ChainRoot`), so the order holds by construction and the step asks only the active stake.
 That order does not depend on the last state, so two branches from one genesis share it.
@@ -2548,6 +2673,9 @@ With the state of a chain, `valid_iff_of_newPayloadOnChain` shows that the answe
 The JSON decoders read back the hex encoding of any bytes (`bytesOf_hexString`, `Proofs/Json.lean`).
 An address decodes exactly from `0x` and two hex digits for each byte, in either case, whose lowercase forms encode the address (`address_eq_ok_iff_map_toLower`).
 A 64-bit number decodes to `x` exactly when the number read with the bound `2^64` is `x` (`uint64_eq_ok_iff`).
+The encoder of numbers writes the only text that decodes to the number, at any bound `2^bits` above it (`quantity_eq_ok_iff`).
+So two numbers never share an encoding (`quantityJson_inj`).
+A withdrawal, and a list of withdrawals, decode back from their encodings (`withdrawal_withdrawalJson`, `array_withdrawal_listJson`).
 A payload of version 4 decodes exactly when it holds the fields of version 4 and each part decodes (`payloadV4_eq_ok_iff`).
 A field that appears at a fork decodes exactly when it is present from that fork on and absent before (`exists_since_iff`, `Proofs/ExecutionEngine.lean`).
 So a decoded payload takes a fork exactly when its version is that of the fork (`exists_atFork_iff_of_anyPayload`).
@@ -2859,12 +2987,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 380 operations and 49 size constants.
-The Python extension calls 380 of the operations and 49 of the constants.
+Lean exports 381 operations and 49 size constants.
+The Python extension calls 381 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-9888 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (1791), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (303), `engine.c` (113), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (225), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (80), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (102), `module.c` (1401), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (140), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (663), `x25519.c` (21), `xmss.c` (134).
+9918 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (1791), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (303), `engine.c` (113), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (253), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (80), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (102), `module.c` (1402), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (140), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (664), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

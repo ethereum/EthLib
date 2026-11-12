@@ -92,6 +92,15 @@ lean_exe «check-decls» where
   -- The checker loads private proof bodies to inspect their dependencies.
   allowNonModules := true
 
+/-- Runs pinned test vectors through the compiled specification, with no export in between.
+
+No default target builds it.
+
+`lake exe known-answers` builds and runs it. -/
+lean_exe «known-answers» where
+  srcDir := "scripts"
+  root := `KnownAnswers
+
 /-- Writes the binding contract from the Lean docstrings and error codes.
 
 Run it after `lake build Exports` with `lake exe gen-bindings`.
@@ -109,4 +118,16 @@ lean_lib «CheckDeclsTest» where
   srcDir := "scripts"
   roots := #[`CheckDeclsTest, `CheckDeclsForeign]
   -- The classic root checks findings behind ordinary module boundaries.
+  allowNonModules := true
+
+/-- Lists the defaulting accessors of the specification, such as `xs[i]!`, `set!` and `get!`.
+
+It compares them with an exact list that may only shrink.
+
+Run it after `lake build` with `lake exe check-accessors`. -/
+lean_exe «check-accessors» where
+  srcDir := "scripts"
+  root := `CheckAccessors
+  supportInterpreter := true
+  -- The checker loads private definition bodies to find the accessors they call.
   allowNonModules := true

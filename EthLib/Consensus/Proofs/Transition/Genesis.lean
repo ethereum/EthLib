@@ -56,7 +56,7 @@ theorem frame_activateAtGenesis {index : Nat}
     (computed : activateAtGenesis state index = .ok after) : Frame state after := by
   simp only [activateAtGenesis, bind_ok_iff, liftAccessor_ok] at computed
   obtain ⟨validator, found, _, _, set⟩ := computed
-  refine (frame_setValidatorAt_of_whole set (fun ordered => ?_)
+  refine (frame_setValidatorAt_of_whole set found (by split <;> rfl) (fun ordered => ?_)
     fun maxAligned _ => ?_).toFrame
   · have le := ordered validator (mem_of_getValidatorAt found)
     split <;> exact le

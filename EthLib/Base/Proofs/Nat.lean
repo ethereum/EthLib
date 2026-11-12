@@ -6,6 +6,8 @@ module
 Facts about natural numbers that Lean core does not prove and that several layers use.
 
 A number below `p` equals its remainder `r` mod `n` when `p <= r + n`.
+
+Applying a step once more before its repetitions is one more repetition.
 -/
 
 @[expose] public section
@@ -23,5 +25,12 @@ theorem eq_of_mod_eq_of_lt {x n r p : Nat} (hx : x % n = r) (hlt : x < p) (hp : 
     omega
   · have := Nat.le_mul_of_pos_right n (Nat.pos_of_ne_zero h0)
     omega
+
+/-- Iterating `k` times from `f a` is iterating `k + 1` times from `a`. -/
+theorem repeat_apply_eq_repeat_succ {α : Type} (f : α → α) (k : Nat) (a : α) :
+    Nat.repeat f k (f a) = Nat.repeat f (k + 1) a := by
+  induction k with
+  | zero => rfl
+  | succ k ih => exact congrArg f ih
 
 end EthLib.Base

@@ -197,6 +197,13 @@ def encodeTransaction : Transaction → Except RlpError ByteArray
   | .blob tx => typedBytes 3 <$> Codec.encode tx
   | .setCode tx => typedBytes 4 <$> Codec.encode tx
 
+/-- The item of a transaction in the body of a block.
+
+A legacy transaction is its RLP list, and a typed transaction the byte string of its bytes. -/
+def bodyItem : Transaction → Except RlpError Item
+  | .legacy tx => .ok (Codec.toItem tx)
+  | tx => .bytes <$> encodeTransaction tx
+
 /-- The typed transaction of type `type` that `payload` encodes.
 
 A type that no fork has holds no transaction. -/
