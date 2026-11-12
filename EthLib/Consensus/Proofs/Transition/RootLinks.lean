@@ -12,7 +12,7 @@ A state records the root of its latest block header at each slot that it passes.
 
 The first slot after a block fills the state root of that header.
 
-So it records the root of the block.
+So it records the root of the block, when the block step checks its state root.
 
 The header check of the next block makes its parent root the root recorded at the slot before it.
 
@@ -26,15 +26,19 @@ That slot then records the root of the header as it was.
 
 The same holds along a run of a chain, where blocks and upgrades come between the slots.
 
-Two consecutive slots record the same root, or the parent root and the root of a block of the run.
+Two consecutive slots record the same root, or the parent root and the root of a block step.
 
 The other cases are a pair that the first state records, the genesis pair, and a zero preimage.
 
-The genesis pair is the zero root with the root recorded at slot zero.
+The genesis pair is the zero root with the root of the first header.
+
+It arises when the run starts at slot zero.
 
 A zero preimage is a state of the run that hashes to the zero root.
 
-Without it, a map from roots to blocks that orders each block after its parent orders the pairs.
+Without it, a map from roots that orders each block step after its parent orders the pairs.
+
+The pairs of the first state and the genesis pair must be in order too.
 -/
 
 @[expose] public section
@@ -330,17 +334,18 @@ private def LinkCases (config : Config) (checks : SignatureChecks)
     (first last : ForkedBeaconState preset) (link : Root × Root) : Prop :=
   link.1 = link.2 ∨
     (∃ (fork : Fork) (engine : ExecutionEngine preset fork) (pre post : BeaconState preset fork)
-        (signed : SignedBeaconBlock preset fork),
+        (signed : SignedBeaconBlock preset fork) (validateResult : Bool) (stateRoot : Root),
       Relation.ReflTransGen (ChainStep config checks) first ⟨fork, pre⟩ ∧
-      applySignedBlock config checks engine pre signed true = .ok post ∧
+      applySignedBlock config checks engine pre signed validateResult = .ok post ∧
       Relation.ReflTransGen (ChainStep config checks) ⟨fork, post⟩ last ∧
-      signed.message.parentRoot = link.1 ∧ hashTreeRoot signed.message = .ok link.2) ∨
+      signed.message.parentRoot = link.1 ∧ hashTreeRoot post = .ok stateRoot ∧
+      hashTreeRoot { signed.message with stateRoot := stateRoot } = .ok link.2) ∨
     link ∈ rootLinks first.state ∨
-    (first.state.slot = 0 ∧ link.1 = Vector.replicate 32 0 ∧
-      ∃ forked : ForkedBeaconState preset,
-        Relation.ReflTransGen (ChainStep config checks) first forked ∧
-        Relation.ReflTransGen (ChainStep config checks) forked last ∧
-        getBlockRootAtSlot forked.state 0 = .ok link.2) ∨
+    (first.state.slot = 0 ∧ link.1 = Vector.replicate 32 0 ∧ ∃ stateRoot,
+      hashTreeRoot first.state = .ok stateRoot ∧
+      hashTreeRoot (if first.state.latestBlockHeader.stateRoot = Vector.replicate 32 0 then
+        { first.state.latestBlockHeader with stateRoot := stateRoot }
+      else first.state.latestBlockHeader) = .ok link.2) ∨
     ZeroPreimage config checks first last
 
 /-- What a state of a run says about the root that the next slot records.
@@ -400,12 +405,6 @@ variable [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat] [NeZero preset.SYNC_COMMITTE
 
 The state also records the root of its latest header at the slot before it, or follows a block. -/
 private theorem rootLinks_cases_aux {first last : ForkedBeaconState preset}
-    (validated : ∀ (fork : Fork) (engine : ExecutionEngine preset fork)
-      (pre post : BeaconState preset fork) (signed : SignedBeaconBlock preset fork)
-      (validateResult : Bool),
-      Relation.ReflTransGen (ChainStep config checks) first ⟨fork, pre⟩ →
-      applySignedBlock config checks engine pre signed validateResult = .ok post →
-      Relation.ReflTransGen (ChainStep config checks) ⟨fork, post⟩ last → validateResult = true)
     (recorded : first.state.slot = 0 ∨ ∃ root,
       getBlockRootAtSlot first.state (first.state.slot - 1) = .ok root ∧
         hashTreeRoot first.state.latestBlockHeader = .ok root ∧
@@ -413,14 +412,14 @@ private theorem rootLinks_cases_aux {first last : ForkedBeaconState preset}
     ∀ {forked : ForkedBeaconState preset},
       Relation.ReflTransGen (ChainStep config checks) first forked →
       Relation.ReflTransGen (ChainStep config checks) forked last →
-      first.state.slot.toNat ≤ forked.state.slot.toNat ∧
+      first.state.slot.toNat ≤ forked.state.slot.toNat ∧ (forked.state.slot = 0 → forked = first) ∧
         (∀ link ∈ rootLinks forked.state, LinkCases config checks first last link) ∧
         HeaderCases config checks first last forked := by
   intro forked reach
   induction reach with
   | refl =>
     intro _
-    refine ⟨Nat.le_refl _, fun link member => .inr (.inr (.inl member)), ?_⟩
+    refine ⟨Nat.le_refl _, fun _ => rfl, fun link member => .inr (.inr (.inl member)), ?_⟩
     rcases recorded with slot | ⟨root, read, rooted, filled⟩
     · exact .inl (.inl slot)
     · exact .inl (.inr ⟨root, (getBlockRootAtSlot_read read).2, rooted,
@@ -429,12 +428,15 @@ private theorem rootLinks_cases_aux {first last : ForkedBeaconState preset}
     intro toLast
     have toBefore := Relation.ReflTransGen.head step toLast
     have toAfter := Relation.ReflTransGen.tail reach step
-    obtain ⟨floor, links, header⟩ := ih toBefore
+    obtain ⟨floor, atZero, links, header⟩ := ih toBefore
     cases step with
     | slot computed =>
       obtain ⟨sum, ⟨written, rooted, writtenRead⟩, origin, stateRoot, hashed, filled⟩ :=
         advanceSlotAcross_cases computed
-      refine ⟨by omega, ?_, ?_⟩
+      refine ⟨by omega, fun zero => ?_, ?_, ?_⟩
+      · have := congrArg UInt64.toNat zero
+        simp at this
+        omega
       · rintro ⟨root₁, root₂⟩ (⟨slot, readA, readB⟩ | ⟨isZero, readZero⟩)
         · -- Two consecutive slots: both were recorded before, or the second is the new root.
           obtain ⟨ltA, -⟩ := getBlockRootAtSlot_read readA
@@ -466,21 +468,23 @@ private theorem rootLinks_cases_aux {first last : ForkedBeaconState preset}
               have := congrArg UInt64.toNat sameA
               omega
         · -- The zero root and the root at slot zero.
-          rcases origin readZero with ⟨-, read0⟩ | ⟨sameZero, -⟩
+          rcases origin readZero with ⟨-, read0⟩ | ⟨sameZero, rootedZero⟩
           · exact links (root₁, root₂) (.inr ⟨isZero, read0⟩)
-          · have : before.state.slot.toNat = 0 := by
+          · -- No block comes at slot zero, so the state before is the first one.
+            have zeroSlot : before.state.slot = 0 := by
               have := congrArg UInt64.toNat sameZero
-              simpa using this.symm
-            have first0 : first.state.slot = 0 := UInt64.toNat_inj.mp (by simp; omega)
-            exact .inr (.inr (.inr (.inl ⟨first0, isZero, after, toAfter, toLast, readZero⟩)))
+              exact UInt64.toNat_inj.mp (by simpa using this.symm)
+            have same : before = first := atZero zeroSlot
+            have first0 : first.state.slot = 0 := same ▸ zeroSlot
+            rw [same] at hashed filled
+            rw [filled] at rootedZero
+            exact .inr (.inr (.inr (.inl ⟨first0, isZero, stateRoot, hashed, rootedZero⟩)))
       · -- The new header was filled by the state before it, unless the state hashed to zero.
         refine .inl (.inr ⟨written, writtenRead, rooted, fun empty => ?_⟩)
         obtain ⟨zero, -⟩ := unfilled_of_filled filled empty
         exact ⟨before, reach, toBefore, zero ▸ hashed⟩
     | @block fork pre post engine signed validateResult applied =>
-      have valid := validated fork engine pre post signed validateResult reach applied toLast
-      subst valid
-      obtain ⟨-, blockOk, stateRoot⟩ := applySignedBlock_ok applied
+      obtain ⟨-, blockOk, -⟩ := applySignedBlock_ok applied
       have slot := processBlock_slot blockOk
       have roots := processBlock_blockRoots blockOk
       obtain ⟨atSlot, newer, parentHashed⟩ := processBlock_parentRoot blockOk
@@ -500,7 +504,10 @@ private theorem rootLinks_cases_aux {first last : ForkedBeaconState preset}
         · exact ⟨parent, readParent, Except.ok.inj (parentHashed.symm.trans hashedHeader)⟩
         · rw [headerSlot, atSlot] at newer
           exact absurd newer (UInt64.lt_irrefl _)
-      refine ⟨by rw [slot]; exact floor, fun link member => ?_, .inr ⟨?_, ?_, ?_, parent, ?_, ?_⟩⟩
+      refine ⟨by rw [slot]; exact floor, fun zero => ?_, fun link member => ?_,
+        .inr ⟨?_, ?_, ?_, parent, ?_, ?_⟩⟩
+      · rw [slot] at zero
+        exact absurd zero moved
       · rw [rootLinks_congr slot roots] at member
         exact links link member
       · rw [slot]
@@ -510,26 +517,32 @@ private theorem rootLinks_cases_aux {first last : ForkedBeaconState preset}
       · rw [headerEq]
       · rw [roots, slot]
         exact readParent
-      · intro stateRoot' root hashed rooted
-        have same : stateRoot' = signed.message.stateRoot :=
-          Except.ok.inj (hashed.symm.trans (stateRoot rfl))
-        subst same
+      · intro stateRoot root hashed rooted
         rw [headerEq] at rooted
-        change hashTreeRoot (BeaconBlockHeader.mk signed.message.slot signed.message.proposerIndex
-          signed.message.parentRoot signed.message.stateRoot bodyRoot) = _ at rooted
-        rw [BeaconBlock.hashTreeRoot_header bodyRooted] at rooted
-        exact .inr
-          (.inl ⟨fork, engine, pre, post, signed, reach, applied, toLast, isParent, rooted⟩)
+        have block := BeaconBlock.hashTreeRoot_header
+          (block := { signed.message with stateRoot := stateRoot }) bodyRooted
+        exact .inr (.inl ⟨fork, engine, pre, post, signed, validateResult, stateRoot, reach,
+          applied, toLast, isParent, hashed, block.symm.trans rooted⟩)
 
 /-- The roots that a state records at consecutive slots, along a run of a chain.
 
-Two consecutive slots record the same root, or the parent root and the root of a block of the run.
+Two consecutive slots record the same root, or the parent root and the root of a block step.
 
-The block steps of the run must validate the state root of their block.
+The block step is on a run between the first and the last state, as in `chainSteps_and`.
 
-The pair may be one that the first state records.
+It may skip the check of the state root.
 
-When the run starts at slot zero, it may be the zero root with the root recorded at slot zero.
+So the root of the block is that of the block with another state root.
+
+That state root is the root of the state after the step.
+
+For a step that checks the state root, `applySignedBlock_ok` shows that this block is the block.
+
+The pair may also be one that the first state records.
+
+When the run starts at slot zero, it may be the zero root with the root of the first header.
+
+That header is filled with the root of the first state.
 
 Or a state of the run hashes to the zero root, which leaves the latest header unfilled at its slot.
 
@@ -540,12 +553,6 @@ The state root of that header must not be zero.
 Otherwise the first slot can add a pair that no case covers. -/
 theorem rootLinks_cases_of_chainSteps {first last : ForkedBeaconState preset}
     (steps : Relation.ReflTransGen (ChainStep config checks) first last)
-    (validated : ∀ (fork : Fork) (engine : ExecutionEngine preset fork)
-      (pre post : BeaconState preset fork) (signed : SignedBeaconBlock preset fork)
-      (validateResult : Bool),
-      Relation.ReflTransGen (ChainStep config checks) first ⟨fork, pre⟩ →
-      applySignedBlock config checks engine pre signed validateResult = .ok post →
-      Relation.ReflTransGen (ChainStep config checks) ⟨fork, post⟩ last → validateResult = true)
     (recorded : first.state.slot = 0 ∨ ∃ root,
       getBlockRootAtSlot first.state (first.state.slot - 1) = .ok root ∧
         hashTreeRoot first.state.latestBlockHeader = .ok root ∧
@@ -553,59 +560,63 @@ theorem rootLinks_cases_of_chainSteps {first last : ForkedBeaconState preset}
     {root₁ root₂ : Root} (member : (root₁, root₂) ∈ rootLinks last.state) :
     root₁ = root₂ ∨
       (∃ (fork : Fork) (engine : ExecutionEngine preset fork) (pre post : BeaconState preset fork)
-          (signed : SignedBeaconBlock preset fork),
+          (signed : SignedBeaconBlock preset fork) (validateResult : Bool) (stateRoot : Root),
         Relation.ReflTransGen (ChainStep config checks) first ⟨fork, pre⟩ ∧
-        applySignedBlock config checks engine pre signed true = .ok post ∧
+        applySignedBlock config checks engine pre signed validateResult = .ok post ∧
         Relation.ReflTransGen (ChainStep config checks) ⟨fork, post⟩ last ∧
-        signed.message.parentRoot = root₁ ∧ hashTreeRoot signed.message = .ok root₂) ∨
+        signed.message.parentRoot = root₁ ∧ hashTreeRoot post = .ok stateRoot ∧
+        hashTreeRoot { signed.message with stateRoot := stateRoot } = .ok root₂) ∨
       (root₁, root₂) ∈ rootLinks first.state ∨
-      (first.state.slot = 0 ∧ root₁ = Vector.replicate 32 0 ∧
-        ∃ forked : ForkedBeaconState preset,
-          Relation.ReflTransGen (ChainStep config checks) first forked ∧
-          Relation.ReflTransGen (ChainStep config checks) forked last ∧
-          getBlockRootAtSlot forked.state 0 = .ok root₂) ∨
+      (first.state.slot = 0 ∧ root₁ = Vector.replicate 32 0 ∧ ∃ stateRoot,
+        hashTreeRoot first.state = .ok stateRoot ∧
+        hashTreeRoot (if first.state.latestBlockHeader.stateRoot = Vector.replicate 32 0 then
+          { first.state.latestBlockHeader with stateRoot := stateRoot }
+        else first.state.latestBlockHeader) = .ok root₂) ∨
       ∃ forked : ForkedBeaconState preset,
         Relation.ReflTransGen (ChainStep config checks) first forked ∧
         Relation.ReflTransGen (ChainStep config checks) forked last ∧
         hashTreeRoot forked.state = .ok (Vector.replicate 32 0) :=
-  (rootLinks_cases_aux validated recorded steps Relation.ReflTransGen.refl).2.1 (root₁, root₂)
-    member
+  (rootLinks_cases_aux recorded steps Relation.ReflTransGen.refl).2.2.1 (root₁, root₂) member
 
-/-- Along a run, a map from roots that orders each block after its parent orders the links.
+/-- Along a run, a map from roots that orders each block step after its parent orders the links.
 
 The map goes to a preorder.
 
-It orders the pairs of a block of the run with its parent root, and the pairs of the first state.
+It orders the parent root of each block step before the root of its block.
 
-When the run starts at slot zero, it orders the zero root before the root recorded at slot zero.
+The step is on a run between the first and the last state.
+
+The root of its block is as in `rootLinks_cases_of_chainSteps`.
+
+It also orders the pairs of the first state.
+
+When the run starts at slot zero, it orders the zero root before the root of the first header.
 
 The links of the last state are then in order, unless a state of the run hashes to the zero root.
 
 So it gives the hypothesis `links` of `RootsAbove.of_chainStep` for the last state. -/
-theorem rootLinks_le_or_zeroPreimage_of_chainSteps {β : Type*} [Preorder β] {block : Root → β}
+theorem zeroPreimage_or_rootLinks_le_of_chainSteps {β : Type*} [Preorder β] {block : Root → β}
     {first last : ForkedBeaconState preset}
     (steps : Relation.ReflTransGen (ChainStep config checks) first last)
-    (validated : ∀ (fork : Fork) (engine : ExecutionEngine preset fork)
-      (pre post : BeaconState preset fork) (signed : SignedBeaconBlock preset fork)
-      (validateResult : Bool),
-      Relation.ReflTransGen (ChainStep config checks) first ⟨fork, pre⟩ →
-      applySignedBlock config checks engine pre signed validateResult = .ok post →
-      Relation.ReflTransGen (ChainStep config checks) ⟨fork, post⟩ last → validateResult = true)
     (recorded : first.state.slot = 0 ∨ ∃ root,
       getBlockRootAtSlot first.state (first.state.slot - 1) = .ok root ∧
         hashTreeRoot first.state.latestBlockHeader = .ok root ∧
         first.state.latestBlockHeader.stateRoot ≠ Vector.replicate 32 0)
     (start : ∀ link ∈ rootLinks first.state, block link.1 ≤ block link.2)
-    (genesis : first.state.slot = 0 → ∀ forked : ForkedBeaconState preset, ∀ root : Root,
-      Relation.ReflTransGen (ChainStep config checks) first forked →
-      Relation.ReflTransGen (ChainStep config checks) forked last →
-      getBlockRootAtSlot forked.state 0 = .ok root → block (Vector.replicate 32 0) ≤ block root)
+    (genesis : first.state.slot = 0 → ∀ stateRoot root : Root,
+      hashTreeRoot first.state = .ok stateRoot →
+      hashTreeRoot (if first.state.latestBlockHeader.stateRoot = Vector.replicate 32 0 then
+        { first.state.latestBlockHeader with stateRoot := stateRoot }
+      else first.state.latestBlockHeader) = .ok root → block (Vector.replicate 32 0) ≤ block root)
     (ordered : ∀ (fork : Fork) (engine : ExecutionEngine preset fork)
-      (pre post : BeaconState preset fork) (signed : SignedBeaconBlock preset fork) (root : Root),
+      (pre post : BeaconState preset fork) (signed : SignedBeaconBlock preset fork)
+      (validateResult : Bool) (stateRoot root : Root),
       Relation.ReflTransGen (ChainStep config checks) first ⟨fork, pre⟩ →
-      applySignedBlock config checks engine pre signed true = .ok post →
+      applySignedBlock config checks engine pre signed validateResult = .ok post →
       Relation.ReflTransGen (ChainStep config checks) ⟨fork, post⟩ last →
-      hashTreeRoot signed.message = .ok root → block signed.message.parentRoot ≤ block root) :
+      hashTreeRoot post = .ok stateRoot →
+      hashTreeRoot { signed.message with stateRoot := stateRoot } = .ok root →
+      block signed.message.parentRoot ≤ block root) :
     (∃ forked : ForkedBeaconState preset,
       Relation.ReflTransGen (ChainStep config checks) first forked ∧
       Relation.ReflTransGen (ChainStep config checks) forked last ∧
@@ -617,16 +628,17 @@ theorem rootLinks_le_or_zeroPreimage_of_chainSteps {β : Type*} [Preorder β] {b
     hashTreeRoot forked.state = .ok (Vector.replicate 32 0)
   · exact .inl zero
   · refine .inr fun link member => ?_
-    rcases rootLinks_cases_of_chainSteps steps validated recorded
-      (root₁ := link.1) (root₂ := link.2) member with
-      same | ⟨fork, engine, pre, post, signed, before, applied, after, parent, rooted⟩ | recorded' |
-      ⟨slot, isZero, forked, reachFirst, reachLast, read⟩ | found
+    rcases rootLinks_cases_of_chainSteps steps recorded (root₁ := link.1) (root₂ := link.2)
+      member with
+      same | ⟨fork, engine, pre, post, signed, validateResult, stateRoot, before, applied, after,
+        parent, hashed, rooted⟩ | recorded' | ⟨slot, isZero, stateRoot, hashed, rooted⟩ | found
     · exact (congrArg block same).le
     · rw [← parent]
-      exact ordered fork engine pre post signed link.2 before applied after rooted
+      exact ordered fork engine pre post signed validateResult stateRoot link.2 before applied after
+        hashed rooted
     · exact start link recorded'
     · rw [isZero]
-      exact genesis slot forked link.2 reachFirst reachLast read
+      exact genesis slot stateRoot link.2 hashed rooted
     · exact absurd found zero
 
 end EthLib.Consensus
