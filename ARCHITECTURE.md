@@ -118,8 +118,10 @@ A module that imports VCVio is a property when its theorems are about the specif
 
 Each kind depends only on the kinds before it, and refinement modules are the one exception.
 A specification never imports a property or a model.
-A property never imports a model, directly or through another module, unless it is a refinement module.
+A property never imports a model directly, unless it is a refinement module.
 So a property module that imports a model, but neither states nor uses a refinement theorem, breaks the rule.
+The rule applies to direct imports only.
+A property may import a refinement module, and so reach a model through it, without being a refinement module itself.
 No file lists the refinement modules yet, and no check enforces the rule.
 
 ## Layers
