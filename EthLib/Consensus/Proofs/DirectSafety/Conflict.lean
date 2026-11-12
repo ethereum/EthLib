@@ -66,35 +66,6 @@ def EitherCall.state {g a b : ForkedBeaconState preset} {left : Run config check
   | .inl c => ⟨c.before.fork, c.cached⟩
   | .inr c => ⟨c.before.fork, c.cached⟩
 
-/-- Each reachable state keeps the invariants and the early and separated justified checkpoints. -/
-private theorem run_justified_separated {g a : ForkedBeaconState preset}
-    (run : Run config checks g a)
-    (genesis : Genesis (config := config) (checks := checks) g) :
-    Invariant a.state ∧ JustifiedEarly a.state ∧ JustifiedSeparated a.state := by
-  induction run with
-  | nil =>
-    obtain ⟨hash, time, deposits, ok⟩ := genesis
-    refine ⟨(initializeBeaconStateFromEth1_invariant ok).2,
-      JustifiedEarly.of_initializeBeaconStateFromEth1 ok, ?_⟩
-    obtain ⟨_, _, _, _, _, frame, equal⟩ := initializeBeaconStateFromEth1_frame ok
-    rw [equal]
-    intro later
-    have slot := frame.slot
-    simp only [getCurrentEpoch, slot, emptyGenesisState] at later
-    simp [GENESIS_SLOT, GENESIS_EPOCH, computeEpochAtSlot, UInt64.lt_iff_toNat_lt] at later
-  | snoc pre step ih =>
-    rcases ih with ⟨holds, early, separated⟩
-    cases step with
-    | slot ok =>
-      obtain ⟨advanced, advancedOk, upgraded⟩ := bind_ok_iff.mp ok
-      exact ⟨(advanceSlotAcross_invariant holds ok).1,
-        (early.of_advanceSlot advancedOk).of_processUpgrades upgraded,
-        (separated.of_advanceSlot early holds.settled advancedOk).of_processUpgrades upgraded⟩
-    | block engine signed due ok =>
-      obtain ⟨_, blockOk, _⟩ := applySignedBlock_ok ok
-      have frame := frame_processBlock blockOk
-      exact ⟨frame.invariant holds, early.of_frame frame, separated.of_frame frame⟩
-
 /-- The justified checkpoint that a link names as its source is older than its target. -/
 private theorem link_source_lt {fork : Fork} {state : BeaconState preset fork}
     (settled : JustifiedSettled state) (separated : JustifiedSeparated state)
@@ -274,7 +245,7 @@ Then two quorum calls of the runs have target epochs between the two epochs.
 
 The common voters of the two calls are slashable.
 
-Otherwise the headers and states of the runs show a collision of the node hash or a zero root.
+Otherwise SHA-256 collides in the root of a header of the runs, or a header or state has root zero.
 
 The runs start at one genesis built from deposits, and the preset meets the parameters. -/
 theorem conflicting_fields_quorums {g a b : ForkedBeaconState preset}
@@ -311,7 +282,9 @@ theorem conflicting_fields_quorums {g a b : ForkedBeaconState preset}
       · exact justified_fields right genesis j (.inl previous)
       · exact justified_fields right genesis j (.inr current)
       · subst j
-        exact finalized_history right genesis
+        rcases finalized_field right genesis with initial | ⟨call, _, rule⟩
+        · exact .inl initial
+        · exact (finalization_rule_quorums right genesis call _ rule).choose_spec.2.2.1
     rcases alternatives with equal | history
     · have zero : j.epoch.toNat = 0 := by rw [equal]; rfl
       exact False.elim (by dsimp [f] at positive; omega)

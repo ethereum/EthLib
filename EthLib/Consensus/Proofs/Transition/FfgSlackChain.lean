@@ -370,6 +370,53 @@ theorem advanceSlotAcross_slot_ne {forked after : ForkedBeaconState preset}
   rw [← processUpgrades_slot upgraded, same] at next
   omega
 
+/-- A slot step keeps the target flags and the pending attestations backed by a set of votes.
+
+An epoch must have at least one slot, and the buffer of roots must cover two epochs.
+
+The seed lookahead must leave room in the buffer of RANDAO mixes.
+
+In the first two epochs the two justified checkpoints of the state must be equal. -/
+theorem votedParticipation_advanceSlotAcross (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
+    (window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
+    (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    {forked after : ForkedBeaconState preset} (early : JustifiedEarly forked.state)
+    (flagsVoted : TargetFlagsVoted attested forked.state)
+    (pendingVoted : PendingVoted attested forked.state)
+    (computed : advanceSlotAcross config checks forked = .ok after) :
+    TargetFlagsVoted attested after.state ∧ PendingVoted attested after.state := by
+  obtain ⟨advanced, advancedOk, upgraded⟩ := bind_ok_iff.mp computed
+  have pending : PendingVoted attested advanced := by
+    by_cases before : forked.fork < .altair
+    · exact pendingVoted.of_advanceSlot before apart early advancedOk
+    · exact fun before' => absurd before' before
+  have flags := flagsVoted.of_advanceSlot positive window early advancedOk
+  refine ⟨?_, pending.of_processUpgrades upgraded⟩
+  -- Before Altair the upgrade builds the target flags from the pending attestations.
+  by_cases altair : .altair ≤ forked.fork
+  · exact TargetFlagsVoted.of_processUpgrades (forked := ⟨forked.fork, advanced⟩) altair
+      flags upgraded
+  · exact TargetFlagsVoted.of_processUpgrades_of_lt_altair (forked := ⟨forked.fork, advanced⟩)
+      (Nat.lt_of_not_le altair) pending upgraded
+
+/-- A block keeps the target flags and the pending attestations backed by a set of votes.
+
+The set must hold the votes of the block.
+
+The seed lookahead must leave room in the buffer of RANDAO mixes. -/
+theorem votedParticipation_processBlock
+    (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    {fork : Fork} {engine : ExecutionEngine preset fork} {state after : BeaconState preset fork}
+    {block : BeaconBlock preset fork}
+    (flagsVoted : TargetFlagsVoted attested state) (pendingVoted : PendingVoted attested state)
+    (sub : blockVotes state block ⊆ attested)
+    (computed : processBlock config checks engine state block = .ok after) :
+    TargetFlagsVoted attested after ∧ PendingVoted attested after :=
+  ⟨(flagsVoted.of_voteFrame (voteFrame_processBlock apart computed)).mono
+      (Set.union_subset subset_rfl sub),
+    fun before => (PendingVoted.of_processBlock before apart pendingVoted computed).mono
+      (Set.union_subset subset_rfl sub) before⟩
+
 /-- One step of a chain keeps the properties of its states.
 
 An epoch must have at least one slot, and the buffer of roots must cover two epochs.
@@ -389,11 +436,8 @@ theorem SlackChainInvariant.of_chainStep (positive : 0 < preset.SLOTS_PER_EPOCH.
     have early := holds.early.of_advanceSlot advancedOk
     have moved := advanceSlotAcross_slot_ne computed
     obtain ⟨previousKept, currentKept⟩ := processUpgrades_justified upgraded
-    have pending : PendingVoted attested advanced := by
-      by_cases before : forked.fork < .altair
-      · exact holds.pendingVoted.of_advanceSlot before apart holds.early advancedOk
-      · exact fun before' => absurd before' before
-    have flags := holds.flagsVoted.of_advanceSlot positive window holds.early advancedOk
+    obtain ⟨flags, pending⟩ := votedParticipation_advanceSlotAcross positive window apart
+      holds.early holds.flagsVoted holds.pendingVoted computed
     have slack := advanceSlot_slackJustifiedCheckpoints window holds.flagsVoted
       holds.pendingVoted (hypotheses.large moved) block subset_rfl
       holds.invariant.settled
@@ -408,27 +452,20 @@ theorem SlackChainInvariant.of_chainStep (positive : 0 < preset.SLOTS_PER_EPOCH.
     refine ⟨(advanceSlotAcross_invariant holds.invariant computed).1,
       early.of_processUpgrades upgraded,
       (holds.separated.of_advanceSlot holds.early holds.invariant.settled
-        advancedOk).of_processUpgrades upgraded, ?_, pending.of_processUpgrades upgraded,
+        advancedOk).of_processUpgrades upgraded, flags, pending,
       RootsAbove.of_chainStep positive window holds.roots hypotheses.links (.slot computed), ?_⟩
-    · by_cases altair : .altair ≤ forked.fork
-      · exact TargetFlagsVoted.of_processUpgrades (forked := ⟨forked.fork, advanced⟩) altair
-          flags upgraded
-      · exact TargetFlagsVoted.of_processUpgrades_of_lt_altair (forked := ⟨forked.fork, advanced⟩)
-          (Nat.lt_of_not_le altair) pending upgraded
     · unfold SlackJustifiedCheckpoints
       rw [previousKept, currentKept]
       exact slack
   | @block _ pre _ engine signed validateResult applied =>
     obtain ⟨-, blockOk, -⟩ := applySignedBlock_ok applied
     have frame := frame_processBlock blockOk
-    have voteFrame := voteFrame_processBlock apart blockOk
     have sub : blockVotes pre signed.message ⊆ attested := fun vote member =>
       hypotheses.applied ⟨engine, signed, validateResult, _, rfl, applied, member⟩
+    obtain ⟨flags, pending⟩ :=
+      votedParticipation_processBlock apart holds.flagsVoted holds.pendingVoted sub blockOk
     refine ⟨frame.invariant holds.invariant, holds.early.of_frame frame,
-      holds.separated.of_frame frame,
-      (holds.flagsVoted.of_voteFrame voteFrame).mono (Set.union_subset subset_rfl sub),
-      fun before => (PendingVoted.of_processBlock before apart holds.pendingVoted blockOk).mono
-        (Set.union_subset subset_rfl sub) before,
+      holds.separated.of_frame frame, flags, pending,
       RootsAbove.of_chainStep positive window holds.roots hypotheses.links
         (.block engine signed validateResult applied), ?_⟩
     unfold SlackJustifiedCheckpoints

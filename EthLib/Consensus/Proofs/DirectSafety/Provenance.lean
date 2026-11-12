@@ -24,22 +24,40 @@ def ParticipationBacked {g a : ForkedBeaconState preset} (run : Run config check
     {fork : Fork} (state : BeaconState preset fork) : Prop :=
   PendingVoted run.votes state ∧ TargetFlagsVoted run.votes state
 
--- Epoch rotation needs equal justified checkpoints in the first two epochs.
-private theorem run_justifiedEarly {g a : ForkedBeaconState preset}
-    (run : Run config checks g a) (genesis : Genesis (config := config) (checks := checks) g) :
-    JustifiedEarly a.state := by
+/-- The last state of a run keeps the invariant of valid blocks and its justified checkpoints apart.
+
+In the first two epochs its two justified checkpoints are equal.
+
+Later its previous justified checkpoint is before the previous epoch.
+
+The run starts at a genesis built from deposits. -/
+theorem run_justified_separated {g a : ForkedBeaconState preset}
+    (run : Run config checks g a)
+    (genesis : Genesis (config := config) (checks := checks) g) :
+    Invariant a.state ∧ JustifiedEarly a.state ∧ JustifiedSeparated a.state := by
   induction run with
   | nil =>
-    obtain ⟨_, _, _, ok⟩ := genesis
-    exact .of_initializeBeaconStateFromEth1 ok
+    obtain ⟨hash, time, deposits, ok⟩ := genesis
+    refine ⟨(initializeBeaconStateFromEth1_invariant ok).2,
+      JustifiedEarly.of_initializeBeaconStateFromEth1 ok, ?_⟩
+    obtain ⟨_, _, _, _, _, frame, equal⟩ := initializeBeaconStateFromEth1_frame ok
+    rw [equal]
+    intro later
+    have slot := frame.slot
+    simp only [getCurrentEpoch, slot, emptyGenesisState] at later
+    simp [GENESIS_SLOT, GENESIS_EPOCH, computeEpochAtSlot, UInt64.lt_iff_toNat_lt] at later
   | snoc pre step ih =>
+    rcases ih with ⟨holds, early, separated⟩
     cases step with
     | slot ok =>
-      obtain ⟨_, advanced, upgraded⟩ := bind_ok_iff.mp ok
-      exact (ih.of_advanceSlot advanced).of_processUpgrades upgraded
+      obtain ⟨advanced, advancedOk, upgraded⟩ := bind_ok_iff.mp ok
+      exact ⟨(advanceSlotAcross_invariant holds ok).1,
+        (early.of_advanceSlot advancedOk).of_processUpgrades upgraded,
+        (separated.of_advanceSlot early holds.settled advancedOk).of_processUpgrades upgraded⟩
     | block engine signed due ok =>
-      obtain ⟨_, processed, _⟩ := applySignedBlock_ok ok
-      exact ih.of_frame (frame_processBlock processed)
+      obtain ⟨_, blockOk, _⟩ := applySignedBlock_ok ok
+      have frame := frame_processBlock blockOk
+      exact ⟨frame.invariant holds, early.of_frame frame, separated.of_frame frame⟩
 
 private theorem votes_snoc {g a b : ForkedBeaconState preset} (run : Run config checks g a)
     (step : Step config checks a b) : run.votes ∪ step.votes ⊆ (run.snoc step).votes := by
@@ -58,61 +76,26 @@ private theorem genesis_participation {g : ForkedBeaconState preset}
   · intro altair
     exact False.elim (Nat.not_le_of_lt (initializeBeaconStateFromEth1_invariant ok).1 altair)
 
-/-- This includes epoch rotation and every due upgrade, in particular pending-to-flag conversion. -/
-private theorem slot_participation {g a b : ForkedBeaconState preset} (run : Run config checks g a)
-    (parameters : Parameters preset) (genesis : Genesis (config := config) (checks := checks) g)
-    (ok : advanceSlotAcross config checks a = .ok b)
-    (backed : ParticipationBacked run a.state) :
-    ParticipationBacked (run.snoc (.slot ok)) b.state := by
-  obtain ⟨advanced, advancedOk, upgraded⟩ := bind_ok_iff.mp ok
-  have pending : PendingVoted run.votes advanced := by
-    by_cases before : a.fork < .altair
-    · exact backed.1.of_advanceSlot before parameters.lookahead
-        (run_justifiedEarly run genesis) advancedOk
-    · intro beforeAltair
-      exact False.elim (before beforeAltair)
-  have flags : TargetFlagsVoted run.votes b.state := by
-    by_cases before : a.fork < .altair
-    -- The upgrade translates the pending witnesses after the slot's epoch rotation.
-    · exact TargetFlagsVoted.of_processUpgrades_of_lt_altair
-        (forked := ⟨a.fork, advanced⟩) before pending upgraded
-    · have advancedFlags : TargetFlagsVoted run.votes advanced :=
-        backed.2.of_advanceSlot (by have := parameters.slots; omega)
-          (by have := parameters.roots; omega) (run_justifiedEarly run genesis)
-          advancedOk
-      exact TargetFlagsVoted.of_processUpgrades (forked := ⟨a.fork, advanced⟩)
-        (Nat.le_of_not_lt before) advancedFlags upgraded
-  have sub : run.votes ⊆ (run.snoc (.slot ok)).votes := fun _ voted =>
-    votes_snoc run (.slot ok) (.inl voted)
-  exact ⟨(pending.of_processUpgrades upgraded).mono sub, flags.mono sub⟩
-
-private theorem block_participation {g : ForkedBeaconState preset} {fork : Fork}
-    {a b : BeaconState preset fork} (run : Run config checks g ⟨fork, a⟩)
-    (parameters : Parameters preset) (engine : ExecutionEngine preset fork)
-    (signed : SignedBeaconBlock preset fork) (due : upgradeDue config ⟨fork, a⟩ = false)
-    (ok : applySignedBlock config checks engine a signed true = .ok b)
-    (backed : ParticipationBacked run a) :
-    ParticipationBacked (run.snoc (.block engine signed due ok)) b := by
-  obtain ⟨_, processed, _⟩ := applySignedBlock_ok ok
-  have pending : PendingVoted (run.votes ∪ blockVotes a signed.message) b := by
-    by_cases before : fork < .altair
-    · exact backed.1.of_processBlock before parameters.lookahead processed
-    · intro beforeAltair
-      exact False.elim (before beforeAltair)
-  have flags := backed.2.of_voteFrame (voteFrame_processBlock parameters.lookahead processed)
-  exact ⟨pending.mono (votes_snoc run (.block engine signed due ok)),
-    flags.mono (votes_snoc run (.block engine signed due ok))⟩
-
 private theorem run_participation {g a : ForkedBeaconState preset} (run : Run config checks g a)
     (parameters : Parameters preset) (genesis : Genesis (config := config) (checks := checks) g) :
     ParticipationBacked run a.state := by
   induction run with
   | nil => exact genesis_participation genesis
-  | snoc pre step backed =>
+  | @snoc middle last pre step backed =>
+    -- The votes of the step join those of the run before it.
+    have sub := votes_snoc pre step
     cases step with
-    | slot ok => exact slot_participation pre parameters genesis ok backed
+    | slot ok =>
+      obtain ⟨flags, pending⟩ := votedParticipation_advanceSlotAcross
+        (by have := parameters.slots; omega) (by have := parameters.roots; omega)
+        parameters.lookahead (run_justified_separated pre genesis).2.1 backed.2 backed.1 ok
+      exact ⟨pending.mono (fun _ voted => sub (.inl voted)),
+        flags.mono (fun _ voted => sub (.inl voted))⟩
     | block engine signed due ok =>
-      exact block_participation pre parameters engine signed due ok backed
+      obtain ⟨flags, pending⟩ := votedParticipation_processBlock parameters.lookahead
+        (backed.2.mono Set.subset_union_left) (backed.1.mono Set.subset_union_left)
+        Set.subset_union_right (applySignedBlock_ok ok).2.1
+      exact ⟨pending.mono sub, flags.mono sub⟩
 
 /-- At the end of a prefix, the pending attestations and target flags hold votes of the whole run.
 
