@@ -170,7 +170,14 @@ What an entry point does with a wrong input is part of the protocol, so its sour
 ### Known answers
 
 A known answer pins one input to one output, byte for byte.
-Known answers belong in the Python test suite, in `bindings/python/tests/`, and never in Lean.
+Known answers never enter the default build: the libraries `EthLib`, `Proofs` and `Exports`, which `lake build` builds.
+They may run in three places outside it:
+
+- The Python test suite, in `bindings/python/tests/`, runs them through the bindings, which are the surface that clients call.
+- A fixture runner, a Lean executable that no default target builds, may run pinned fixtures through the definitions of the specification.
+  It reaches an internal step that has no C export, and it runs compiled code, as the Python suite does.
+- A Lean library of kernel vectors, which no default target imports, may prove known answers.
+  CI must build it in its own step on every pull request, so that a failure points at the pull request that caused it.
 
 In Lean, a known answer is a theorem or an `example` that evaluates a definition on concrete inputs.
 It compares the result with an expected value, by `rfl`, `decide`, `decide +kernel` or `simp`.
@@ -178,11 +185,16 @@ The build must then run the definition on those inputs.
 One such proof can need several gigabytes of memory and minutes of build time.
 It also checks only one input.
 
-So state each Lean theorem for all inputs.
-Test concrete inputs from Python, through the bindings.
-If a function has no C export yet, add the export and its binding.
+So the library of kernel vectors holds such a proof only under a budget.
+Each proof takes its input from the specification's own vectors, or covers every value of a finite type.
+Each file of the library elaborates in under 20 s of CPU, with a peak memory under 2 GiB.
+The budget is for the whole file, run alone with `lake env lean` after its imports are built, as `scripts/check_memory.py` runs it.
 
-Lean keeps one kind of concrete fact: a small decidable fact that a definition needs to be correct.
+State each theorem of the default build for all inputs.
+Test concrete inputs from Python, through the bindings, or through a fixture runner.
+If a function that clients call has no C export yet, add the export and its binding.
+
+The default build keeps one kind of concrete fact: a small decidable fact that a definition needs to be correct.
 Examples are a constant checked against the algorithm that generates it, or a Pratt certificate.
 The order of the fork timeline is another example.
 Each such proof must take a few seconds at most.
@@ -193,6 +205,8 @@ For example: "one honest signature at epoch 7", or "one empty slot processed".
 Next to the vectors, record their pinned origin, such as the commit they come from.
 
 Never regenerate an expected value from the code under test and call it a check.
+A snapshot of values that the code computes, compared in CI, is a change detector and not a check.
+A pull request that changes such a snapshot names the source of each changed line.
 
 ### No examples
 
