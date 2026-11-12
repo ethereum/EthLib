@@ -22,11 +22,9 @@ variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 
 /-- The conditions on the preset that the direct safety proof uses.
 
-An epoch has a slot, and the buffer of block roots covers four epochs.
+An epoch has at least one slot, and the buffer of block roots covers four epochs.
 
-There are more than `MIN_SEED_LOOKAHEAD + 2` epochs of RANDAO mixes, to recompute committees.
-
-The mainnet and minimal presets meet them. -/
+There are more than `MIN_SEED_LOOKAHEAD + 2` epochs of RANDAO mixes, to recompute committees. -/
 structure Parameters (preset : Preset) : Prop where
   slots : 1 ≤ preset.SLOTS_PER_EPOCH.toNat
   roots : 4 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat

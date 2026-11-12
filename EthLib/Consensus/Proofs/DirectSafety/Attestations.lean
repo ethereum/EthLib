@@ -8,7 +8,7 @@ public import EthLib.Consensus.Proofs.Transition.ValidatorKeys
 /-!
 # Accepted attestations of one selected execution
 
-The votes are upstream blockVotes, taken only from the actual validated block inputs.
+The votes are those that the blocks of the run cast, taken from the blocks that the run applied.
 
 Each index is interpreted in the registry before its own block, not in the other branch.
 

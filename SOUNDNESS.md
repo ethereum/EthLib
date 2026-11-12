@@ -2621,12 +2621,12 @@ The weights are effective balances.
 `accountable_safety` takes conflicting finalized checkpoints of the two last states, with `x` no later than the first slot of the earlier finalized epoch.
 Then the active stake at `x` is at most three times the accountable stake at `x`, plus twice the larger drift of the two tails.
 Otherwise the runs show evidence about the hash (`HashEvidence`), so no theorem assumes that the hash is injective.
-The evidence is two different inputs of the node hash with one digest, read in the roots of the headers of the runs.
+The evidence is two different inputs of the SHA-256 node hash with one digest, read in the roots of the headers of the runs.
 Or it is a header or a state of the runs whose root is zero.
 The drift of a tail is the largest over its states up to one epoch past the later finalized epoch.
 It is observed, not bounded in closed form.
-The theorems need one slot per epoch, a buffer of roots of four epochs and more than `MIN_SEED_LOOKAHEAD + 2` epochs of RANDAO mixes.
-Each run also needs an active stake above one and a half increments at each end of an epoch (`EnoughStake`).
+The theorems need at least one slot per epoch, a buffer of roots of four epochs and more than `MIN_SEED_LOOKAHEAD + 2` epochs of RANDAO mixes.
+Each run also needs an active stake above one and a half increments at each epoch call after epoch 1 (`EnoughStake`).
 They take no bound on the fork, so they hold at every fork that the transition of this revision defines.
 `verifiedConflict_of_accountable` gives, for each accountable key, two checks of its conflicting messages.
 Each is a call of `isValidIndexedAttestation` or `checkHeaderSignature` that a block of a run executed, and that accepted.

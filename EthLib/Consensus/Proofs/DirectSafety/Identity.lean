@@ -35,40 +35,6 @@ def effectiveWeight {fork : Fork} (state : BeaconState preset fork) (key : BLSPu
   ((state.validators.data.toList.find? fun v => v.pubkey == key).map
     (·.effectiveBalance.toNat)).getD 0
 
-/-- A genesis state built from deposits has distinct validator keys. -/
-theorem genesis_unique {g : ForkedBeaconState preset}
-    (genesis : Genesis (config := config) (checks := checks) g) : PubkeysDistinct g.state := by
-  obtain ⟨_, _, _, ok⟩ := genesis
-  exact (validatorKeys_prefix_and_distinct_of_genesis_chainSteps ok
-    (last := g) .refl).2
-
-/-- A run keeps distinct validator keys distinct. -/
-theorem _root_.EthLib.Consensus.Run.unique {g a : ForkedBeaconState preset}
-    (run : Run config checks g a)
-    (initial : PubkeysDistinct g.state) : PubkeysDistinct a.state :=
-  (validatorKeys_prefix_and_distinct_of_chainSteps run.chainSteps).2 initial
-
-/-- A run keeps the key of each validator at its position. -/
-theorem _root_.EthLib.Consensus.Run.key_preserved {g a : ForkedBeaconState preset}
-    (run : Run config checks g a)
-    (i : Nat) (old : Validator) (found : g.state.validators.data[i]? = some old) :
-    ∃ current, a.state.validators.data[i]? = some current ∧ current.pubkey = old.pubkey := by
-  exact validators_getElem?_of_validatorKeys_prefix
-    (validatorKeys_prefix_and_distinct_of_chainSteps run.chainSteps).1 found
-
-private theorem key_preserved_from_member {g a before after : ForkedBeaconState preset}
-    {run : Run config checks g a} {step : Step config checks before after}
-    (member : run.Contains step) (i : Nat) (old : Validator)
-    (found : before.state.validators.data[i]? = some old) :
-    ∃ current, a.state.validators.data[i]? = some current ∧ current.pubkey = old.pubkey := by
-  induction member with
-  | last pre step => exact (Run.nil.snoc step).key_preserved i old found
-  | earlier member next ih =>
-    obtain ⟨middle, foundMiddle, same⟩ := ih found
-    obtain ⟨current, foundCurrent, lastSame⟩ :=
-      (Run.nil.snoc next).key_preserved i middle foundMiddle
-    exact ⟨current, foundCurrent, lastSame.trans same⟩
-
 /-- A vote of the run at an index is accepted under the key that the last state has there.
 
 The index is read in the registry of the run itself, before the block of the vote. -/
@@ -95,7 +61,11 @@ theorem selected_vote_key {g a : ForkedBeaconState preset} (run : Run config che
         exact Nat.lt_of_le_of_lt (Nat.mod_le _ _) bound
       exact ⟨before.validators.data[i.toNat], by simp [small]⟩
   obtain ⟨old, oldFound⟩ := atStart
-  obtain ⟨current, currentFound, same⟩ := key_preserved_from_member member i.toNat old oldFound
+  -- The keys of the state before the step are a prefix of the keys at the end of the run.
+  obtain ⟨_, post, -⟩ := run.contains_split step member
+  obtain ⟨current, currentFound, same⟩ := validators_getElem?_of_validatorKeys_prefix
+    (validatorKeys_prefix_and_distinct_of_chainSteps
+      ((Run.nil.snoc step).append post).chainSteps).1 oldFound
   have equal : current = v := Option.some.inj (currentFound.symm.trans found)
   exact ⟨before, after, step, member, i, old, vote, oldFound, by simpa [equal] using same.symm⟩
 
