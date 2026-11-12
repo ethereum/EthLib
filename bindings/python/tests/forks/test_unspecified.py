@@ -8,6 +8,7 @@ import pytest
 from ethlib import consensus
 from ethlib.errors import EthLibError
 from ethlib.execution import blocks, fees, pow as proof_of_work, transactions
+from ethlib.execution.network import check_body
 from ethlib.networking import enr
 from ethlib.precompiles import price, run
 from ethlib.serialization import rlp
@@ -71,11 +72,13 @@ EXPORTS = {
     "consensus_entries": lambda f: enr.consensus_entries(f, b""),
     "consensus_parameters": lambda f: consensus.parameters("mainnet", f),
     "ssz_static": lambda f: consensus.ssz_static("mainnet", f, "Checkpoint", bytes(40)),
+    "check_body": lambda f: check_body(f, HEADER, rlp.encode([[], [], []])),
 }
 
 # The exports whose rules hold at Glamsterdam:
 # - the forms of transactions, blocks and receipts
 # - the checks of a header and of a transaction
+# - the check of a block body
 # - the blob schedule
 # - proof of work
 # - the precompiles
@@ -108,6 +111,7 @@ AT_GLAMSTERDAM = {
     "intrinsic_gas",
     "check",
     "ssz_static",
+    "check_body",
 }
 
 # The exports whose rules hold at Hegotá:

@@ -87,7 +87,7 @@ theorem latestExecutionPayloadBid_slot_processBlock (gloas : .glamsterdam ≤ fo
   obtain ⟨-, -, atSlot, -⟩ := checkExecutionPayloadBid_ok_iff.mp
     (processExecutionPayloadBid_ok biddedOk).1
   obtain ⟨blockSlot, -⟩ := processBlockHeader_checks headedOk
-  obtain ⟨_, -, header⟩ := latestBlockHeader_processBlock gloas computed
+  obtain ⟨_, -, header⟩ := latestBlockHeader_processBlock computed
   rw [latestExecutionPayloadBid_processBlock gloas computed, header]
   refine atSlot.trans ?_
   exact ((payloadInputs_processWithdrawals withdrawnOk).slot.trans

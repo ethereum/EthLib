@@ -49,6 +49,13 @@ eth_receipts_match(
 );
 
 extern lean_object*
+eth_check_body(
+  lean_object* fork,
+  lean_object* header,
+  lean_object* body
+);
+
+extern lean_object*
 eth_access_lists_answer(
   uint64_t version,
   lean_object* request,
@@ -180,6 +187,27 @@ py_eth_receipts_match(
   lean_object* fork = mk_bytearray((const uint8_t*) utf8, (size_t) len);
   return except_into_pybool(
     eth_receipts_match(version, fork, root, receipts), ETH_WIRE_ERROR);
+}
+
+PyObject*
+py_eth_check_body(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *fork_obj, *header_obj, *body_obj;
+  if (!PyArg_ParseTuple(args, "OOO", &fork_obj, &header_obj, &body_obj)) return NULL;
+  if (!PyUnicode_Check(fork_obj)) {
+    PyErr_SetString(PyExc_TypeError, "fork must be str");
+    return NULL;
+  }
+  Py_ssize_t len;
+  const char* utf8 = PyUnicode_AsUTF8AndSize(fork_obj, &len);
+  if (!utf8) return NULL;
+  lean_object *header, *body;
+  if (parse_bytes(header_obj, "header", &header)) return NULL;
+  if (parse_bytes(body_obj, "body", &body)) { lean_dec(header); return NULL; }
+  lean_object* fork = mk_bytearray((const uint8_t*) utf8, (size_t) len);
+  return except_into_pybool(eth_check_body(fork, header, body), ETH_WIRE_ERROR);
 }
 
 PyObject*
