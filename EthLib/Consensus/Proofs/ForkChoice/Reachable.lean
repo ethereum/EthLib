@@ -333,12 +333,12 @@ theorem Reachable.known_of_blockState
     rw [blocks]
     exact ih found
   | attestation _ attested ih =>
-    obtain ⟨-, blocks, states⟩ := onAttestation_frame attested
+    obtain ⟨-, blocks, states, -⟩ := onAttestation_frame attested
     rw [states] at found
     rw [blocks]
     exact ih found
   | attesterSlashing _ slashed ih =>
-    obtain ⟨-, blocks, states⟩ := onAttesterSlashing_frame slashed
+    obtain ⟨-, blocks, states, -⟩ := onAttesterSlashing_frame slashed
     rw [states] at found
     rw [blocks]
     exact ih found
@@ -392,10 +392,10 @@ theorem Reachable.linked (reachable : Reachable config anchorState anchorBlock s
     obtain ⟨-, -, blocks, states⟩ := onTick_frame ticked
     exact holds.imp (·.of_maps blocks states) (blocks ▸ ·)
   | attestation _ attested holds =>
-    obtain ⟨-, blocks, states⟩ := onAttestation_frame attested
+    obtain ⟨-, blocks, states, -⟩ := onAttestation_frame attested
     exact holds.imp (·.of_maps blocks states) (blocks ▸ ·)
   | attesterSlashing _ slashed holds =>
-    obtain ⟨-, blocks, states⟩ := onAttesterSlashing_frame slashed
+    obtain ⟨-, blocks, states, -⟩ := onAttesterSlashing_frame slashed
     exact holds.imp (·.of_maps blocks states) (blocks ▸ ·)
   | payloadAttestation _ voted holds =>
     obtain ⟨-, blocks, states⟩ := (onPayloadAttestationMessage_onlyPtcVotes voted).frame
@@ -485,9 +485,9 @@ theorem Reachable.oneGenesisTime (reachable : Reachable config anchorState ancho
     intro _ _ _ _ found otherFound
     rw [only found, only otherFound]
   | tick _ ticked holds => exact holds.of_states (onTick_frame ticked).2.2.2
-  | attestation _ attested holds => exact holds.of_states (onAttestation_frame attested).2.2
+  | attestation _ attested holds => exact holds.of_states (onAttestation_frame attested).2.2.1
   | attesterSlashing _ slashed holds =>
-    exact holds.of_states (onAttesterSlashing_frame slashed).2.2
+    exact holds.of_states (onAttesterSlashing_frame slashed).2.2.1
   | payloadAttestation _ voted holds =>
     exact holds.of_states (onPayloadAttestationMessage_onlyPtcVotes voted).frame.2.2
   | envelope _ accepted holds =>
@@ -545,10 +545,10 @@ theorem Reachable.statesKeepBids (reachable : Reachable config anchorState ancho
     obtain ⟨-, -, blocks, states⟩ := onTick_frame ticked
     exact holds.of_maps blocks states
   | attestation _ attested holds =>
-    obtain ⟨-, blocks, states⟩ := onAttestation_frame attested
+    obtain ⟨-, blocks, states, -⟩ := onAttestation_frame attested
     exact holds.of_maps blocks states
   | attesterSlashing _ slashed holds =>
-    obtain ⟨-, blocks, states⟩ := onAttesterSlashing_frame slashed
+    obtain ⟨-, blocks, states, -⟩ := onAttesterSlashing_frame slashed
     exact holds.of_maps blocks states
   | payloadAttestation _ voted holds =>
     obtain ⟨-, blocks, states⟩ := (onPayloadAttestationMessage_onlyPtcVotes voted).frame
@@ -630,10 +630,10 @@ private theorem Reachable.orphansLow (reachable : Reachable config anchorState a
     obtain ⟨-, -, blocks, states⟩ := onTick_frame ticked
     exact holds.of_maps blocks states
   | attestation _ attested holds =>
-    obtain ⟨-, blocks, states⟩ := onAttestation_frame attested
+    obtain ⟨-, blocks, states, -⟩ := onAttestation_frame attested
     exact holds.of_maps blocks states
   | attesterSlashing _ slashed holds =>
-    obtain ⟨-, blocks, states⟩ := onAttesterSlashing_frame slashed
+    obtain ⟨-, blocks, states, -⟩ := onAttesterSlashing_frame slashed
     exact holds.of_maps blocks states
   | payloadAttestation _ voted holds =>
     obtain ⟨-, blocks, states⟩ := (onPayloadAttestationMessage_onlyPtcVotes voted).frame

@@ -181,41 +181,36 @@ theorem onTick_ordered {timeMs : UInt64} (ordered : store.EpochsOrdered)
   obtain ⟨tickSlot, -, caught, caughtUp, ticked⟩ := ticked
   exact onTickPerSlot_ordered (catchUp_ordered ordered caughtUp) ticked
 
+/-- A store with the checkpoints of an ordered store is ordered. -/
+private theorem EpochsOrdered.of_checkpoints (ordered : store.EpochsOrdered)
+    (justified : after.justifiedCheckpoint = store.justifiedCheckpoint)
+    (finalized : after.finalizedCheckpoint = store.finalizedCheckpoint)
+    (unrealizedJustified : after.unrealizedJustifiedCheckpoint =
+      store.unrealizedJustifiedCheckpoint)
+    (unrealizedFinalized : after.unrealizedFinalizedCheckpoint =
+      store.unrealizedFinalizedCheckpoint) :
+    after.EpochsOrdered := by
+  unfold EpochsOrdered
+  rw [justified, finalized, unrealizedJustified, unrealizedFinalized]
+  exact ordered
+
 /-- An attestation keeps the checkpoints. -/
 theorem onAttestation_ordered {checks : SignatureChecks} {attestation : Attestation preset fork}
     {isFromBlock : Bool} (ordered : store.EpochsOrdered)
     (attested : store.onAttestation config checks attestation isFromBlock = .ok after) :
     after.EpochsOrdered := by
-  unfold onAttestation at attested
-  simp only [bind_ok_iff] at attested
-  obtain ⟨_, _, stored, storing, _, _, _, _, _, _, valid, _, attested⟩ := attested
-  have kept : stored.EpochsOrdered := by
-    unfold storeTargetCheckpointState at storing
-    split at storing
-    · simp only [pure, Except.pure, Except.ok.injEq] at storing
-      subst storing
-      exact ordered
-    · simp only [bind_ok_iff] at storing
-      obtain ⟨_, _, storing⟩ := storing
-      simp only [pure, Except.pure, Except.ok.injEq] at storing
-      subst storing
-      exact ordered
-  split at attested
-  · simp only [pure, Except.pure, Except.ok.injEq] at attested
-    subst attested
-    exact kept
-  · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at attested
+  obtain ⟨-, -, -, justified, finalized, unrealizedJustified, unrealizedFinalized⟩ :=
+    onAttestation_frame attested
+  exact ordered.of_checkpoints justified finalized unrealizedJustified unrealizedFinalized
 
 /-- An attester slashing keeps the checkpoints. -/
 theorem onAttesterSlashing_ordered {checks : SignatureChecks}
     {slashing : AttesterSlashing preset fork} (ordered : store.EpochsOrdered)
     (slashed : store.onAttesterSlashing config checks slashing = .ok after) :
     after.EpochsOrdered := by
-  unfold onAttesterSlashing at slashed
-  simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at slashed
-  obtain ⟨_, _, slashed⟩ := slashed
-  subst slashed
-  exact ordered
+  obtain ⟨-, -, -, justified, finalized, unrealizedJustified, unrealizedFinalized⟩ :=
+    onAttesterSlashing_frame slashed
+  exact ordered.of_checkpoints justified finalized unrealizedJustified unrealizedFinalized
 
 /-- From Gloas, a vote of the payload committee keeps the checkpoints. -/
 theorem onPayloadAttestationMessage_ordered {checks : SignatureChecks}
@@ -283,24 +278,14 @@ theorem onBlock_ordered {checks : SignatureChecks}
     obtain ⟨pre, found, -, -, transition⟩ := validateOnBlock_ok valid
     have invariant := (stateTransition_invariant (holds found) transition).1
     have recordedOrdered : recorded.EpochsOrdered := by
-      unfold recordBlockTimeliness at record
-      simp only [bind_ok_iff, pure, Except.pure] at record
-      obtain ⟨_, _, _, _, _, _, _, _, record⟩ := record
-      split at record
-      · simp only [bind_ok_iff, Except.ok.injEq] at record
-        obtain ⟨_, _, rfl⟩ := record
-        exact ordered
-      · cases record
-        exact ordered
+      obtain ⟨-, -, -, -, justified, finalized, unrealizedJustified, unrealizedFinalized⟩ :=
+        recordBlockTimeliness_frame record
+      exact ordered.of_checkpoints justified finalized unrealizedJustified unrealizedFinalized
     have boostedOrdered : boosted.EpochsOrdered := by
-      unfold updateProposerBoostRoot at boost
-      split at boost
-      rotate_left
-      · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at boost
-      simp only [bind_ok_iff, pure_bind] at boost
-      obtain ⟨_, _, _, _, _, _, boost⟩ := boost
-      split at boost <;> simp only [pure, Except.pure, Except.ok.injEq] at boost <;>
-        subst boost <;> exact recordedOrdered
+      obtain ⟨-, -, -, -, justified, finalized, unrealizedJustified, unrealizedFinalized⟩ :=
+        updateProposerBoostRoot_frame boost
+      exact recordedOrdered.of_checkpoints justified finalized unrealizedJustified
+        unrealizedFinalized
     have statesHold : (boosted.updateCheckpoints state.currentJustifiedCheckpoint
         state.finalizedCheckpoint).StatesHold := by
       refine StatesHold.of_eq (store := { store with
@@ -568,10 +553,10 @@ theorem Store.Reachable.ordered (anchor : Invariant anchorState)
     exact ⟨Store.onBlock_ordered ih.1 ih.2 added, Store.onBlock_statesHold ih.2 added⟩
   | attestation _ attested ih =>
     exact ⟨Store.onAttestation_ordered ih.1 attested,
-      Store.StatesHold.of_eq ih.2 (Store.onAttestation_frame attested).2.2⟩
+      Store.StatesHold.of_eq ih.2 (Store.onAttestation_frame attested).2.2.1⟩
   | attesterSlashing _ slashed ih =>
     exact ⟨Store.onAttesterSlashing_ordered ih.1 slashed,
-      Store.StatesHold.of_eq ih.2 (Store.onAttesterSlashing_frame slashed).2.2⟩
+      Store.StatesHold.of_eq ih.2 (Store.onAttesterSlashing_frame slashed).2.2.1⟩
   | payloadAttestation _ voted ih =>
     exact ⟨Store.onPayloadAttestationMessage_ordered ih.1 voted,
       Store.StatesHold.of_eq ih.2 (onPayloadAttestationMessage_onlyPtcVotes voted).frame.2.2⟩
@@ -728,7 +713,7 @@ theorem Store.Reachable.checkpointStatesFromBlocks
     simp only [other, ↓reduceIte]
     exact baseFound
   | attestation _ attested ih =>
-    obtain ⟨-, -, states⟩ := Store.onAttestation_frame attested
+    obtain ⟨-, -, states, -⟩ := Store.onAttestation_frame attested
     unfold Store.onAttestation at attested
     simp only [bind_ok_iff] at attested
     obtain ⟨_, _, stored, storing, _, _, _, _, _, _, _, _, attested⟩ := attested
@@ -757,7 +742,7 @@ theorem Store.Reachable.checkpointStatesFromBlocks
       exact storedFrom found
     · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at attested
   | attesterSlashing _ slashed ih =>
-    exact ih.of_maps (Store.onAttesterSlashing_frame slashed).2.2
+    exact ih.of_maps (Store.onAttesterSlashing_frame slashed).2.2.1
       (Store.onAttesterSlashing_checkpointStates_latestMessages slashed).1
   | payloadAttestation _ voted ih =>
     obtain ⟨_, _, rfl⟩ := onPayloadAttestationMessage_onlyPtcVotes voted

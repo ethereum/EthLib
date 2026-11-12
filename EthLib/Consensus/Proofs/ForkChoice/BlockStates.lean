@@ -152,13 +152,13 @@ theorem Store.Reachable.blockStatesFromParents
       simp only [parentNe hp, ↓reduceIte]
       exact hp
   | attestation _ attested ih =>
-    obtain ⟨-, blocks, states⟩ := Store.onAttestation_frame attested
+    obtain ⟨-, blocks, states, -⟩ := Store.onAttestation_frame attested
     intro root block found
     rw [blocks] at found
     rw [states]
     exact ih found
   | attesterSlashing _ slashed ih =>
-    obtain ⟨-, blocks, states⟩ := Store.onAttesterSlashing_frame slashed
+    obtain ⟨-, blocks, states, -⟩ := Store.onAttesterSlashing_frame slashed
     intro root block found
     rw [blocks] at found
     rw [states]

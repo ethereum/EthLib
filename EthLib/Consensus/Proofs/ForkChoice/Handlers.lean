@@ -379,43 +379,54 @@ theorem storeTargetCheckpointState_frame {checks : SignatureChecks} {target : Ch
     {after : Store preset fork}
     (stored : store.storeTargetCheckpointState config checks target = .ok after) :
     store.EpochsLe after ∧ after.blocks = store.blocks ∧ after.blockStates = store.blockStates ∧
-      SameClock store after := by
+      SameClock store after ∧ after.justifiedCheckpoint = store.justifiedCheckpoint ∧
+      after.finalizedCheckpoint = store.finalizedCheckpoint ∧
+      after.unrealizedJustifiedCheckpoint = store.unrealizedJustifiedCheckpoint ∧
+      after.unrealizedFinalizedCheckpoint = store.unrealizedFinalizedCheckpoint := by
   unfold storeTargetCheckpointState at stored
   split at stored
   · simp only [pure, Except.pure, Except.ok.injEq] at stored
     subst stored
-    exact ⟨EpochsLe.refl _, rfl, rfl, .refl _⟩
+    exact ⟨EpochsLe.refl _, rfl, rfl, .refl _, rfl, rfl, rfl, rfl⟩
   · simp only [bind_ok_iff] at stored
     obtain ⟨_, _, stored⟩ := stored
     simp only [pure, Except.pure, Except.ok.injEq] at stored
     subst stored
-    exact ⟨EpochsLe.of_eq (by rfl) (by rfl), rfl, rfl, ⟨rfl, rfl⟩⟩
+    exact ⟨EpochsLe.of_eq (by rfl) (by rfl), rfl, rfl, ⟨rfl, rfl⟩, rfl, rfl, rfl, rfl⟩
 
-/-- An attestation lowers no epoch, and keeps the blocks and their states. -/
+/-- An attestation keeps the checkpoints, the blocks and their states. -/
 theorem onAttestation_frame {checks : SignatureChecks} {attestation : Attestation preset fork}
     {isFromBlock : Bool} {after : Store preset fork}
     (attested : store.onAttestation config checks attestation isFromBlock = .ok after) :
-    store.EpochsLe after ∧ after.blocks = store.blocks ∧ after.blockStates = store.blockStates := by
+    store.EpochsLe after ∧ after.blocks = store.blocks ∧ after.blockStates = store.blockStates ∧
+      after.justifiedCheckpoint = store.justifiedCheckpoint ∧
+      after.finalizedCheckpoint = store.finalizedCheckpoint ∧
+      after.unrealizedJustifiedCheckpoint = store.unrealizedJustifiedCheckpoint ∧
+      after.unrealizedFinalizedCheckpoint = store.unrealizedFinalizedCheckpoint := by
   unfold onAttestation at attested
   simp only [bind_ok_iff] at attested
   obtain ⟨_, _, stored, storing, _, _, _, _, _, _, valid, _, attested⟩ := attested
-  obtain ⟨le, b, bs, -⟩ := storeTargetCheckpointState_frame storing
+  obtain ⟨le, b, bs, -, checkpoints⟩ := storeTargetCheckpointState_frame storing
   split at attested
   · simp only [pure, Except.pure, Except.ok.injEq] at attested
     subst attested
-    exact ⟨le, b, bs⟩
+    exact ⟨le, b, bs, checkpoints⟩
   · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at attested
 
-/-- An attester slashing lowers no epoch, and keeps the blocks and their states. -/
+/-- An attester slashing keeps the checkpoints, the blocks and their states. -/
 theorem onAttesterSlashing_frame {checks : SignatureChecks}
     {slashing : AttesterSlashing preset fork} {after : Store preset fork}
     (slashed : store.onAttesterSlashing config checks slashing = .ok after) :
-    store.EpochsLe after ∧ after.blocks = store.blocks ∧ after.blockStates = store.blockStates := by
+    store.EpochsLe after ∧ after.blocks = store.blocks ∧ after.blockStates = store.blockStates ∧
+      after.justifiedCheckpoint = store.justifiedCheckpoint ∧
+      after.finalizedCheckpoint = store.finalizedCheckpoint ∧
+      after.unrealizedJustifiedCheckpoint = store.unrealizedJustifiedCheckpoint ∧
+      after.unrealizedFinalizedCheckpoint = store.unrealizedFinalizedCheckpoint := by
   unfold onAttesterSlashing at slashed
   simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at slashed
   obtain ⟨_, _, slashed⟩ := slashed
   subst slashed
-  exact ⟨EpochsLe.of_eq (by rfl) (by rfl), rfl, rfl⟩
+  exact ⟨EpochsLe.of_eq (by rfl) (by rfl), rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 /-- An attestation keeps the clock. -/
 theorem onAttestation_sameClock {checks : SignatureChecks} {attestation : Attestation preset fork}
@@ -425,7 +436,7 @@ theorem onAttestation_sameClock {checks : SignatureChecks} {attestation : Attest
   unfold onAttestation at attested
   simp only [bind_ok_iff] at attested
   obtain ⟨_, _, stored, storing, _, _, _, _, _, _, valid, _, attested⟩ := attested
-  have first := (storeTargetCheckpointState_frame storing).2.2.2
+  have first := (storeTargetCheckpointState_frame storing).2.2.2.1
   split at attested
   · simp only [pure, Except.pure, Except.ok.injEq] at attested
     subst attested
@@ -443,20 +454,25 @@ theorem onAttesterSlashing_sameClock {checks : SignatureChecks}
   subst slashed
   exact ⟨rfl, rfl⟩
 
-/-- Recording the timeliness of a block changes only the timeliness, and keeps the clock. -/
+/-- Recording the timeliness of a block changes only the timeliness, and keeps the clock.
+
+It keeps the checkpoints too. -/
 theorem recordBlockTimeliness_frame {root : Root} {after : Store preset fork}
     (recorded : store.recordBlockTimeliness config root = .ok after) :
     store.EpochsLe after ∧ after.blocks = store.blocks ∧ after.blockStates = store.blockStates ∧
-      SameClock store after := by
+      SameClock store after ∧ after.justifiedCheckpoint = store.justifiedCheckpoint ∧
+      after.finalizedCheckpoint = store.finalizedCheckpoint ∧
+      after.unrealizedJustifiedCheckpoint = store.unrealizedJustifiedCheckpoint ∧
+      after.unrealizedFinalizedCheckpoint = store.unrealizedFinalizedCheckpoint := by
   unfold recordBlockTimeliness at recorded
   simp only [bind_ok_iff, pure, Except.pure] at recorded
   obtain ⟨_, _, _, _, _, _, _, _, recorded⟩ := recorded
   split at recorded
   · simp only [bind_ok_iff, Except.ok.injEq] at recorded
     obtain ⟨_, _, rfl⟩ := recorded
-    exact ⟨EpochsLe.of_eq (by rfl) (by rfl), rfl, rfl, ⟨rfl, rfl⟩⟩
+    exact ⟨EpochsLe.of_eq (by rfl) (by rfl), rfl, rfl, ⟨rfl, rfl⟩, rfl, rfl, rfl, rfl⟩
   · cases recorded
-    exact ⟨EpochsLe.of_eq (by rfl) (by rfl), rfl, rfl, ⟨rfl, rfl⟩⟩
+    exact ⟨EpochsLe.of_eq (by rfl) (by rfl), rfl, rfl, ⟨rfl, rfl⟩, rfl, rfl, rfl, rfl⟩
 
 /-- From Gloas a recorded block also gets whether it came before the payload committee's deadline.
 
@@ -477,11 +493,16 @@ theorem recordBlockTimeliness_ptc {root : Root} {after : Store preset fork}
   exact ⟨block, current, time, deadline, block_ok_iff.mp found, currentOk, timeOk, deadlineOk,
     by simp⟩
 
-/-- Updating the boost changes only the boosted root, and keeps the clock. -/
+/-- Updating the boost changes only the boosted root, and keeps the clock.
+
+It keeps the checkpoints too. -/
 theorem updateProposerBoostRoot_frame {head root : Root} {after : Store preset fork}
     (updated : store.updateProposerBoostRoot config head root = .ok after) :
     store.EpochsLe after ∧ after.blocks = store.blocks ∧ after.blockStates = store.blockStates ∧
-      SameClock store after := by
+      SameClock store after ∧ after.justifiedCheckpoint = store.justifiedCheckpoint ∧
+      after.finalizedCheckpoint = store.finalizedCheckpoint ∧
+      after.unrealizedJustifiedCheckpoint = store.unrealizedJustifiedCheckpoint ∧
+      after.unrealizedFinalizedCheckpoint = store.unrealizedFinalizedCheckpoint := by
   unfold updateProposerBoostRoot at updated
   split at updated
   rotate_left
@@ -489,7 +510,8 @@ theorem updateProposerBoostRoot_frame {head root : Root} {after : Store preset f
   simp only [bind_ok_iff, pure_bind] at updated
   obtain ⟨_, _, _, _, _, _, updated⟩ := updated
   split at updated <;> simp only [pure, Except.pure, Except.ok.injEq] at updated <;>
-    subst updated <;> exact ⟨EpochsLe.of_eq (by rfl) (by rfl), rfl, rfl, ⟨rfl, rfl⟩⟩
+    subst updated <;>
+    exact ⟨EpochsLe.of_eq (by rfl) (by rfl), rfl, rfl, ⟨rfl, rfl⟩, rfl, rfl, rfl, rfl⟩
 
 /-- The store changes at most in its two vote maps of the payload committee. -/
 def OnlyPtcVotes (before after : Store preset fork) : Prop :=
@@ -1041,8 +1063,8 @@ theorem onBlock_sameClock {checks : SignatureChecks} {sources : BlockSources pre
     simp only [bind_ok_iff] at added
     obtain ⟨state, valid, head, -, voted, vote, recorded, record, boosted, boost, added⟩ := added
     obtain ⟨_, _, rfl⟩ := recordBlockPtcVotes_onlyPtcVotes vote
-    have first := (recordBlockTimeliness_frame record).2.2.2
-    have second := (updateProposerBoostRoot_frame boost).2.2.2
+    have first := (recordBlockTimeliness_frame record).2.2.2.1
+    have second := (updateProposerBoostRoot_frame boost).2.2.2.1
     have third := (computePulledUpTip_frame added).2.2.2
     refine ⟨?_, ?_⟩
     · rw [third.1, updateCheckpoints_timeMs, second.1, first.1]
