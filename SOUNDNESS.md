@@ -680,6 +680,16 @@ The clamp of the Poly1305 key has its own theorem.
 So a clamp with another mask would fail it.
 `clampR_lt` bounds `r` by `2 ^ 124`.
 `poly1305Accumulator_lt` proves that the accumulator stays below the prime `2 ^ 130 - 5`, whatever `r` and the message, since each step reduces modulo the prime.
+The cipher and the keystream have their own theorems.
+`crypt_eq_ok_iff` gives every byte of the output of the cipher.
+Byte `j` is byte `j` of the input XOR byte `j % 64` of the block whose counter is the initial counter plus `j / 64`.
+So a keystream shorter than the input, which leaves its last bytes in plaintext, or a counter that repeats, would fail it.
+`encrypt_eq_ok_iff` gives the AEAD ciphertext in the same terms, with the counter starting at 1.
+It gives the tag too: the Poly1305 tag of the MAC input of RFC 8439 §2.8, written out, under the first 32 bytes of block 0.
+`byteAt_keyStream` and `size_keyStream` give the keystream itself.
+`pad16_eq_iff` proves that the padding of the MAC input is the fewest zero bytes that complete a multiple of 16, so aligned input gets none.
+`getElem_serializeState` gives each byte of the serialized state, the least significant byte of each word first.
+`stateOfBytes_serializeState` and `serializeState_stateOfBytes` prove that reading 64 bytes as a state undoes the serialization.
 No theorem relates ChaCha20-Poly1305 to an independent model of RFC 8439.
 The Python tests compare the bindings with the RFC 7748 and RFC 8439 vectors.
 The million-iteration X25519 vector requires `ETHLIB_SLOW_VECTORS=1`.
@@ -1985,6 +1995,10 @@ The theorems in `Consensus/Proofs/HonestValidator.lean` relate these duties to t
 `processRandao_ne_invalidRandaoReveal` shows that the RANDAO reveal of the proposer never fails the RANDAO check.
 Both assume a block of the current epoch, and a proposer whose public key is that of the secret key.
 The gossip checks of a selection proof and of an aggregate and proof read the target epoch, so their theorems assume it is the epoch of the slot.
+`isValidSignatureAtSlot_getSyncCommitteeSelectionProof` shows that a sync committee selection proof passes the check at the epoch of its slot.
+That check reads the selection data of the same slot and subcommittee, under the public key of the secret key.
+`getContributionAndProof_spec` shows that a contribution and proof keeps its aggregator and its contribution.
+Its selection proof passes that check for the slot and subcommittee of the contribution.
 
 `getCommitteeAssignment_sound` shows that an assignment is a committee of the epoch that holds the validator.
 `getCommitteeAssignment_unique` shows that no other committee of the epoch holds it.
@@ -2057,6 +2071,8 @@ A key counts once for each of its selected seats, and each seat takes the first 
 The gossip corollaries characterize acceptance of the aggregate's committee check and the contribution topic by their remaining conditions.
 These include the checks of time, membership and the aggregator's signatures.
 The corollaries assume that the head state of the receiver is the state of the construction.
+`validateContributionAndProof_eq_accept_of_getContributionAndProof` removes the two signature checks of the aggregator from the conditions of the contribution topic.
+It assumes instead that the aggregator made and signed the contribution and proof with the secret key of its registered public key.
 
 The contribution takes the sync committee as an argument.
 The caller passes the committee of the next slot, which gossip and the next block check.
