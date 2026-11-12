@@ -1985,7 +1985,8 @@ The theorems in `Consensus/Proofs/HonestValidator.lean` relate these duties to t
 `processRandao_ne_invalidRandaoReveal` shows that the RANDAO reveal of the proposer never fails the RANDAO check.
 Both assume a block of the current epoch, and a proposer whose public key is that of the secret key.
 The gossip checks of a selection proof and of an aggregate and proof read the target epoch, so their theorems assume it is the epoch of the slot.
-`isValidSignatureAtSlot_getSyncCommitteeSelectionProof` shows that from Altair a sync committee selection proof passes the check at the epoch of its slot, on the selection data of that slot and subcommittee.
+`isValidSignatureAtSlot_getSyncCommitteeSelectionProof` shows that a sync committee selection proof passes the check at the epoch of its slot.
+That check reads the selection data of the same slot and subcommittee, under the public key of the secret key.
 `getContributionAndProof_spec` shows that a contribution and proof keeps its aggregator and its contribution.
 Its selection proof passes that check for the slot and subcommittee of the contribution.
 

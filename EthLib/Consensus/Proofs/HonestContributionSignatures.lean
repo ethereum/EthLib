@@ -16,7 +16,7 @@ Repeated messages for a key do not add signatures: each seat takes the first mat
 
 The selected secret keys must not sum to zero.
 
-An aggregator that makes and signs the contribution and proof passes both of its signature checks.
+A contribution and proof that its aggregator makes and signs passes both of its signature checks.
 -/
 
 @[expose] public section
@@ -322,11 +322,15 @@ theorem validateContributionAndProof_eq_accept_of_construct
 
 /-- An honest contribution and proof is accepted on its topic exactly when the other checks pass.
 
-The aggregator makes it from the contribution and signs it, with the secret key of its public key.
+The aggregator makes it from the contribution and signs it.
+
+It uses the secret key behind its registered public key.
+
+It signs with the head state of the receiver.
 
 Its selection proof and its signature then pass their checks with no further hypothesis.
 
-The clock, head state and committee computations must succeed. -/
+The clock, head state, domain, signing root and committee computations must succeed. -/
 theorem validateContributionAndProof_eq_accept_of_getContributionAndProof
     {config : Config} {state : BeaconState preset fork} {committee : SyncCommittee preset}
     {blockRoot : Root} {subcommitteeIndex : UInt64} {messages : List SyncCommitteeMessage}
