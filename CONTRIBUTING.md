@@ -93,7 +93,17 @@ The specification and the exports import nothing beyond the Lean toolchain.
   #106 tracks the ones in KZG.
 - Prefer structural recursion, `map` and folds to `Id.run do` with mutable variables.
   A proof then follows the shape of the definition.
+  A theorem about a `do` loop restates its elaborated body, so any edit of the loop breaks the statement.
+  For a loop that can stop early, prefer `foldlM` in `Option` or `Except`.
   This is advice, not a rule: a loop whose speed matters can keep `do`.
+- Prefer an `Except` `do` block for a chain of steps that can fail, so that it reads like the source.
+  In proofs, prefer `bind_ok_iff` and the other lemmas of `EthLib/Base/Except.lean` to unfolding the chain into nested `match` expressions.
+- A small decidable fact that [Known answers](#known-answers) allows, such as a constant checked against its algorithm, evaluates a definition in the kernel.
+  That definition needs a recursion that the kernel can reduce.
+  `decide` and `rfl` need structural recursion or fuel, because Lean makes a well-founded definition irreducible.
+  `decide +kernel` also reduces a well-founded recursion whose measure is a single `Nat`, which Lean builds on `WellFounded.Nat.fix`.
+  Do not count on it for a lexicographic measure, such as a pair, which Lean builds on `WellFounded.fix`.
+  Lean documents only `WellFounded.Nat.fix` as reducing on closed terms.
 
 ### Proofs
 
@@ -103,6 +113,10 @@ The specification and the exports import nothing beyond the Lean toolchain.
 - Do not use a tactic that trusts compiled code, such as `native_decide`, `bv_decide` or `decide +native`.
   Their computed results are justified by compiler-trusting axioms rather than kernel evaluation.
   `lake exe check-decls` fails on any use.
+- Do not use `vcgen` or `mvcgen` in library proofs while `vcgen` is marked experimental.
+  The reason is stability across toolchains, not soundness: the kernel checks a proof that `vcgen` builds like any other proof.
+  In Lean v4.35.0, `mvcgen` is deprecated in favour of `vcgen`, and `vcgen` warns that it is experimental unless the option `experimental.vcgen` is set.
+  Check this rule again at each update of the toolchain.
 - After a proof change, check its axioms with `lake exe check-decls`.
   The goal is `propext`, `Classical.choice` and `Quot.sound`, nothing else.
 - Name each theorem by the [naming conventions of Mathlib](https://leanprover-community.github.io/contribute/naming.html).
