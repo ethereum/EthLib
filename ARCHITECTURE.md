@@ -44,8 +44,11 @@ Each part names the EIPs that define it where they exist, and a later fork adds 
 ### Networking
 
 - Discovery: Ethereum Node Records of EIP-778, and the discovery protocols that exchange them.
-- Execution-layer peers: the encrypted RLPx transport, and the "p2p" capability that opens a session.
+- Execution-layer peers: the encrypted RLPx transport, the "p2p" capability that opens a session, the states that a session passes through, and the snap capability.
+  A node uses snap to download the state of a recent block.
 - Consensus-layer peers: gossip topics and their message IDs, request and response protocols, and the Snappy compression and length prefixes they use.
+- Consensus-layer connections: the libp2p transports, the Noise handshake, the negotiation of protocols and the multiplexing of streams.
+- Gossip: the gossipsub router that relays messages between consensus-layer peers.
 
 ### Execution layer
 
@@ -66,6 +69,7 @@ Each part names the EIPs that define it where they exist, and a later fork adds 
 - Validators: deposits, exits, withdrawals, consolidations, shuffling into committees, and the selection of proposers and sync committees.
 - Fork choice: LMD-GHOST with Casper FFG, proposer boost, optimistic sync, and fast confirmation.
 - The interface to the execution layer: what the consensus layer asks of an execution engine, and what it learns back.
+  Between two clients, the Engine API of [Interfaces](#interfaces) carries these calls.
 - Honest validator duties: proposing, attesting, aggregating and serving on a sync committee.
 - Light clients: the sync protocol that follows the chain from sync committee signatures.
 - Weak subjectivity: how long a checkpoint stays safe to start from.
@@ -74,6 +78,28 @@ Each part names the EIPs that define it where they exist, and a later fork adds 
 - History files: the era files of the beacon blocks and states, one group per era, with their slot indices.
 - The protocols proposed to replace the current ones: faster finality, available chains with a finality gadget, and a consensus layer built on post-quantum signatures.
 
+### Interfaces
+
+Independent teams write the parts of a node and the tools around it.
+So the interfaces between those parts have published specifications, and EthLib is to specify each of them:
+
+- Engine API: the calls between the consensus client and the execution client of a node, from `ethereum/execution-apis`.
+- Execution JSON-RPC API: the methods of an execution client, from `ethereum/execution-apis`, such as the account proof that `eth_getProof` returns (EIP-1186).
+- Beacon API: the methods of a consensus client, from `ethereum/beacon-APIs`.
+- Builder API: the messages between a proposer and the builders that bid for its payload, from `ethereum/builder-specs`.
+- Relay API: what a relay serves to the builders that submit blocks and to anyone who reads its data, from `flashbots/relay-specs`.
+- Keymanager API: the calls that management tools make to a validator client, which holds the keys and the anti-slashing database, from `ethereum/keymanager-APIs`.
+- Remote-signing API: the calls that a validator client makes to a remote signer, which holds the keys and signs for it, from `ethereum/remote-signing-api`.
+
+The relay API and the two validator-client APIs come after the others in the order of work.
+The relay API stays in scope because no rule excludes it.
+Its containers build on the builder API and on the consensus containers.
+So EthLib keeps those compatible with it: each relay container can be written with EthLib's types, and encodes as `flashbots/relay-specs` defines it.
+
+The keymanager API and the remote-signing API need feedback from the implementers that use them: validator clients, key-management tools and remote signers.
+That feedback settles what their sources leave open, and which parts come first.
+Work on them can start before it, but their specification is accepted only with it.
+
 ### Models
 
 - Signatures and commitments: unforgeability of each signature scheme, and binding of each commitment, in the random oracle model where the scheme needs it.
@@ -81,7 +107,8 @@ Each part names the EIPs that define it where they exist, and a later fork adds 
 - Refinement: for each model, a theorem that the specification is an instance of it.
 
 A client is out of scope.
-Peer management, storage, sync strategies, the mempool and the RPC are choices each client makes, and no specification fixes them.
+Peer management, storage, sync strategies and the mempool are choices each client makes, and no specification fixes them.
+What a client must share with other nodes, or with the other parts of a node, is in scope where a published specification fixes it.
 A client can build on EthLib, and the bindings exist so that clients can run its definitions.
 
 There is one definition of each function, and clients run that definition.
@@ -317,7 +344,8 @@ The rules that wait for its other changes reject it as not yet specified.
 The parity catalogue lists the cases of each pinned devnet, and a case runs only once its change has entered.
 `scripts/check_spec_releases.py` reports when the specification repositories start the tests of a new upgrade, which tells a reviewer that a branch is due.
 
-The Scope section lists what EthLib covers in the end, not the order of the work.
+The Scope section lists what EthLib covers in the end.
+It gives no order of work, except that the relay API and the two validator-client APIs come last.
 
 ### A rule takes the fork
 
