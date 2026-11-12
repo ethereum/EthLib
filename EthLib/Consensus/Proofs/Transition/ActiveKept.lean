@@ -1061,6 +1061,56 @@ theorem getAttestingIndices_eq_of_foldlM {first last : BeaconState preset fork}
     rcases recent with same | same <;> rw [same] <;> omega
   exact getAttestingIndices_eq_of_activeKept apart (active.mono low) mixes low high
 
+/-- The steps of a block before its attestations are a step before votes. -/
+private theorem beforeVotes_attestationsStart {engine : ExecutionEngine preset fork}
+    {state input proposersDone first : BeaconState preset fork}
+    {block : BeaconBlock preset fork}
+    (started : OperationsInput config checks engine state block input)
+    (proposers : block.body.proposerSlashings.data.toList.foldlM
+      (processProposerSlashing config checks) input = .ok proposersDone)
+    (slashings : block.body.attesterSlashings.data.toList.foldlM
+      (processAttesterSlashing config checks) proposersDone = .ok first) :
+    BeforeVotes state first :=
+  (started.step_of BeforeVotes BeforeVotes.refl BeforeVotes.trans
+    (fun _ ok => BeforeVotes.of_mixes (frame_processParentExecutionPayload ok)
+      (stepKeeps_processParentExecutionPayload ok)
+      (payloadInputs_processParentExecutionPayload ok).randaoMixes)
+    beforeVotes_processBlockHeader
+    (fun _ ok => BeforeVotes.of_mixes (frame_processBlockExecution ok)
+      (stepKeeps_processBlockExecution ok) (randaoMixes_processBlockExecution ok))
+    beforeVotes_processRandao (fun _ ok => beforeVotes_processEth1Data ok)).trans <|
+    (foldlM_ok_steps BeforeVotes BeforeVotes.refl BeforeVotes.trans
+      (fun _ _ _ ok => beforeVotes_processProposerSlashing ok) proposers).1.trans <|
+    (foldlM_ok_steps BeforeVotes BeforeVotes.refl BeforeVotes.trans
+      (fun _ _ _ ok => beforeVotes_processAttesterSlashing ok) slashings).1
+
+/-- Where the attestations of a block start, each has the attesters of the state before it.
+
+The start is the state after the operations input and the slashings of the block.
+
+The attestations succeed when they are processed in order from that start.
+
+There must be more than `MIN_SEED_LOOKAHEAD + 2` epochs of mixes. -/
+theorem getAttestingIndices_attestationsStart
+    (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    {engine : ExecutionEngine preset fork} {state : BeaconState preset fork}
+    {block : BeaconBlock preset fork}
+    {input proposersDone first last : BeaconState preset fork}
+    (started : OperationsInput config checks engine state block input)
+    (proposers : block.body.proposerSlashings.data.toList.foldlM
+      (processProposerSlashing config checks) input = .ok proposersDone)
+    (slashings : block.body.attesterSlashings.data.toList.foldlM
+      (processAttesterSlashing config checks) proposersDone = .ok first)
+    (attested : block.body.attestations.data.toList.foldlM
+      (processAttestation config checks · state.latestBlockHeader.slot ·) first = .ok last)
+    {attestation : Attestation preset fork}
+    (member : attestation ∈ block.body.attestations.data.toList) :
+    getAttestingIndices first attestation = getAttestingIndices state attestation :=
+  let head := beforeVotes_attestationsStart started proposers slashings
+  getAttestingIndices_eq_of_foldlM apart head.frame.slot
+    (head.step.2.2.mono (getCurrentEpoch_le_activityFixedEpoch _)) head.mixes attested
+    attestation member
+
 /-- A block runs its attestations in order, between two block frames.
 
 Where they start, the attesters of each of them are those of the state before the block.
@@ -1076,24 +1126,11 @@ theorem processBlock_attestationSplit
       block.body.attestations.data.toList.foldlM
         (processAttestation config checks · state.latestBlockHeader.slot ·) first = .ok last ∧
       BlockFrame last after := by
-  obtain ⟨operatedFirst, operatedLast, blockHead, operated, blockTail⟩ :=
-    processBlock_split_of BeforeVotes BeforeVotes.refl BeforeVotes.trans
-      (fun _ ok => BeforeVotes.of_mixes (frame_processParentExecutionPayload ok)
-        (stepKeeps_processParentExecutionPayload ok)
-        (payloadInputs_processParentExecutionPayload ok).randaoMixes)
-      beforeVotes_processBlockHeader
-      (fun _ ok => BeforeVotes.of_mixes (frame_processBlockExecution ok)
-        (stepKeeps_processBlockExecution ok) (randaoMixes_processBlockExecution ok))
-      beforeVotes_processRandao (fun _ ok => beforeVotes_processEth1Data ok) computed
-  obtain ⟨first, last, operationsHead, attested, operationsTail⟩ :=
-    processOperations_split_of BeforeVotes BeforeVotes.refl BeforeVotes.trans
-      beforeVotes_processProposerSlashing beforeVotes_processAttesterSlashing operated
-  have head := blockHead.trans operationsHead
-  have tail := operationsTail.trans blockTail
-  have active := head.step.2.2.mono (getCurrentEpoch_le_activityFixedEpoch _)
-  exact ⟨first, last, head.frame, fun attestation member =>
-    getAttestingIndices_eq_of_foldlM apart head.frame.slot active head.mixes attested attestation
-      (Array.mem_toList_iff.mpr member), attested, tail⟩
+  obtain ⟨input, proposersDone, first, last, started, proposers, slashings, attested, tail⟩ :=
+    processBlock_folds computed
+  exact ⟨first, last, (beforeVotes_attestationsStart started proposers slashings).frame,
+    fun _ member => getAttestingIndices_attestationsStart apart started proposers slashings
+      attested (Array.mem_toList_iff.mpr member), attested, tail⟩
 
 /-- One slot keeps activity up to the current epoch plus `MAX_SEED_LOOKAHEAD`, at every fork. -/
 theorem activeKept_advanceSlot
