@@ -1,8 +1,7 @@
 module
 
+public import Batteries.Data.List.Basic
 public import EthLib.Cryptography.Bls.KeyPath
-
-public import Mathlib.Data.List.Forall2
 
 import Batteries.Data.String.Lemmas
 import EthLib.Base.Except
@@ -19,7 +18,9 @@ Parsing the written form of a path gives back the same path, at any depth.
 
 An index is accepted exactly when it is a non-empty run of decimal digits with a value below 2^32.
 
-A path is accepted exactly when it is `m` and at least four such indices, the first of them 12381.
+A path is accepted exactly when it is `m`, then at least four such indices, each after a `/`.
+
+The first index is 12381.
 -/
 
 @[expose] public section
@@ -191,43 +192,6 @@ theorem parseIndex_toString (index : UInt32) :
     exact (le_and_le_iff_isDigit c).mpr (Nat.isDigit_of_mem_toDigits (by decide) (by decide) hc)
   · simp [Nat.ofDigitChars_ten_toDigits]
 
-private theorem slash_not_mem_toString (n : Nat) : '/' ∉ (toString n).toList := by
-  rw [Nat.toString_eq_ofList_toDigits, String.toList_ofList]
-  intro hc
-  have := Nat.isDigit_of_mem_toDigits (by decide) (by decide) hc
-  contradiction
-
-/-- Parsing the written form of a path gives back the same path, at any depth. -/
-theorem parsePath_toString (path : Path) : parsePath path.toString = .ok path := by
-  -- Write `m` as the first segment, so that splitting at `/` undoes the join.
-  have hf : path.toString = "/".intercalate ("m" ::
-      path.indices.map (fun index => toString index.toNat)) := by
-    simp [Path.toString, Path.indices, String.append_assoc]
-  have hs : (path.toString.split '/').toList.map String.Slice.copy =
-      "m" :: path.indices.map (fun index => toString index.toNat) := by
-    rw [hf]
-    have hnone : ∀ s ∈ "m" :: path.indices.map (fun index => toString index.toNat),
-        '/' ∉ s.toList := by
-      intro s hs
-      rcases List.mem_cons.mp hs with rfl | hs
-      · decide
-      · obtain ⟨index, _, rfl⟩ := List.mem_map.mp hs
-        exact slash_not_mem_toString index.toNat
-    simpa using String.toList_split_intercalate (c := '/') hnone
-  unfold parsePath
-  rw [String.splitToList_of_valid, ← List.splitOn_eq_splitOnP,
-    ← String.toList_split_char, hs]
-  simp only [Path.indices, List.map_cons]
-  simp only [parseIndex_toString]
-  simp only [List.mapM_map, Function.comp_def, parseIndex_toString]
-  simp only [Bind.bind, Except.bind]
-  have hm : (path.subpath.mapM fun x => (Except.ok x : Except KeyPathError UInt32)) =
-      .ok path.subpath := by
-    change path.subpath.mapM pure = pure path.subpath
-    simpa using (List.mapM_pure (m := Except KeyPathError) (l := path.subpath) (f := id))
-  rw [hm]
-  rfl
-
 /-- An index is written with decimal digits alone, so it holds no `/`. -/
 private theorem slash_not_mem_of_parseIndex {segment : String} {index : UInt32}
     (h : parseIndex segment = .ok index) : '/' ∉ segment.toList := by
@@ -251,7 +215,13 @@ Any deeper indices are the subpath, in order.
 
 Each index is written as a single index is, so no index has a hardened marker or a space.
 
-The coin type may be any index, as ERC-2334, Coin Type, fixes none. -/
+The coin type may be any index, since [ERC-2334, Coin Type][coin] fixes none.
+
+Only [its beacon chain parameters][beacon] choose 3600.
+
+[coin]: https://github.com/ethereum/ERCs/blob/be307c948f28897adb8f25afcc253c2c909de35d/ERCS/erc-2334.md#coin-type
+[beacon]: https://github.com/ethereum/ERCs/blob/be307c948f28897adb8f25afcc253c2c909de35d/ERCS/erc-2334.md#coin-type-1
+-/
 theorem parsePath_eq_ok_iff {text : String} {path : Path} :
     parsePath text = .ok path ↔
       ∃ purpose segments, text = "/".intercalate ("m" :: purpose :: segments) ∧
@@ -310,5 +280,18 @@ theorem parsePath_eq_ok_iff {text : String} {path : Path} :
     simp only [bne_self_eq_false, Bool.false_eq_true, ↓reduceIte, hp, hc, ha, hu,
       EthLib.Base.mapM_ok_of_forall₂ hsub]
     rfl
+
+/-- Parsing the written form of a path gives back the same path, at any depth. -/
+theorem parsePath_toString (path : Path) : parsePath path.toString = .ok path := by
+  -- Write `m` as the first segment, so that the path is joined at `/`.
+  have hf : path.toString = "/".intercalate ("m" ::
+      path.indices.map (fun index => toString index.toNat)) := by
+    simp [Path.toString, Path.indices, String.append_assoc]
+  refine parsePath_eq_ok_iff.mpr ⟨toString PURPOSE.toNat,
+    (path.coinType :: path.account :: path.use :: path.subpath).map
+      (fun index => toString index.toNat), by simpa [Path.indices] using hf,
+    parseIndex_toString PURPOSE, ?_⟩
+  exact List.forall₂_map_left_iff.mpr
+    (List.forall₂_same.mpr fun index _ => parseIndex_toString index)
 
 end EthLib.Cryptography.Bls.KeyPath
