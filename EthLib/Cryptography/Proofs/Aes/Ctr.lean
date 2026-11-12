@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Aes.Ctr
 public import EthLib.Base.Proofs.BigEndian
+public import EthLib.Base.Proofs.Nat
 
 /-!
 # Proofs: `Aes.Ctr`
@@ -156,13 +157,6 @@ theorem ctr_ctr (ciph : Block → Block) (m : Nat) (T : Block) (data : ByteArray
   simp only [ctr, List.toList_toArray]
   rw [xorKeystream_xorKeystream _ _ _ _ _ (by rw [Array.length_toList]; show data.size ≤ _; omega)]
 
-/-- Iterating `k` times from `f a` is iterating `k + 1` times from `a`. -/
-theorem repeat_apply_eq_repeat_succ {α : Type} (f : α → α) (k : Nat) (a : α) :
-    Nat.repeat f k (f a) = Nat.repeat f (k + 1) a := by
-  induction k with
-  | zero => rfl
-  | succ k ih => exact congrArg f ih
-
 /-- Block `j` of the output, counted from 0, is block `j` of the data XORed with a cipher output.
 
 It holds for each of the `n` blocks that the loop runs.
@@ -188,7 +182,7 @@ theorem xorKeystream_block (ciph : Block → Block) (m : Nat) {n j : Nat} (hj : 
       exact List.take_of_length_le (by simp; omega)
   | succ j ih =>
     obtain ⟨n, rfl⟩ : ∃ n', n = n' + 1 := ⟨n - 1, by omega⟩
-    rw [xorKeystream_succ, ← repeat_apply_eq_repeat_succ]
+    rw [xorKeystream_succ, ← Base.repeat_apply_eq_repeat_succ]
     by_cases full : 16 ≤ data.length
     · -- The first output block has 16 bytes, so block `j + 1` is block `j` of the rest.
       have hfirst :
