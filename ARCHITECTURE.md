@@ -403,12 +403,20 @@ When a constant depends on both, the function of the fork takes the preset as an
 ## Sources
 
 EthLib is a specification at the same level as execution-specs and consensus-specs, so its code stands on its own.
-The code cites only primary sources: an EIP or an RFC with its section, a NIST or SEC standard, or a paper.
+The code cites only primary sources as the authority for a rule.
+Such a source is an EIP or an RFC with its section, a NIST or SEC standard, or a paper.
 Where no primary source states a rule, the doc comment states the rule itself, in words and in mathematics.
 A reader then needs no other specification.
-A contributor may read execution-specs and consensus-specs to understand a rule and to check the work, but the code does not cite them.
+A contributor may read execution-specs and consensus-specs to understand a rule and to check the work.
+The code does not cite them as the authority for a rule.
 
-Test vectors are the exception, because a test must say what it checks against.
+A comment in the code may still name execution-specs or consensus-specs in a provenance note.
+The note names the text and the commit where a rule is stated.
+If it is known, the note also names the commit that EthLib took the rule from.
+[`CONTRIBUTING.md`](CONTRIBUTING.md#sources-of-truth) says when to write one, and where.
+A provenance note is not a citation of authority.
+
+Test vectors are a further exception, because a test must say what it checks against.
 Each fixture keeps its pinned origin and digests in `tests/`.
 Two tests that pin two commits of one repository can disagree without anyone noticing.
 So each repository that fixtures come from has one pinned commit, recorded in `tests/sources.toml`, and every test that reads from the repository uses it.
