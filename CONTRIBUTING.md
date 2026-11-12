@@ -68,6 +68,7 @@ A new domain with exports adds its export root to the `Exports` library.
 
 These three libraries form one package, `EthLib`.
 A property or a model may import Mathlib, Batteries or VCVio, and it goes in `EthLib/<Domain>/Proofs/<Module>/` like any other property.
+Among the properties, only a refinement module imports a model directly, as [`ARCHITECTURE.md`](ARCHITECTURE.md#three-kinds-of-content) explains.
 The specification and the exports import nothing beyond the Lean toolchain.
 [`ARCHITECTURE.md`](ARCHITECTURE.md#packages) describes the package.
 
@@ -89,10 +90,53 @@ The specification and the exports import nothing beyond the Lean toolchain.
   Each one hides a failure: it returns a default value, or it changes nothing.
   Index with `Fin` or a `Vector`, walk arrays of equal length together with `zip`, or return a typed error.
   Older modules still use these accessors, and pull requests remove them module by module.
-  #106 tracks the ones in KZG.
+- Remove such an accessor even when no input that the source accepts reaches its default.
+  A caller of a public function can still reach it, with arguments that break a precondition the type does not state.
+  Change the definition in place, and keep no copy of the old one beside it.
+  Wherever the old index was in range, the result must not change.
+  Existing theorems and tests keep their meaning, and change their statements only where the type of the result changes.
+  If any input reached a default where the source gives another outcome, the change is a `fix`.
+  It cites the rule of the source that it restores.
+  Take its test vectors from the source's own suite when one holds them.
+  Otherwise take the expected value of each one from that rule, never from EthLib.
+  Describe what each vector pins, and record its origin next to it, as [Known answers](#known-answers) asks.
 - Prefer structural recursion, `map` and folds to `Id.run do` with mutable variables.
   A proof then follows the shape of the definition.
+  A theorem about a `do` loop restates its elaborated body, so any edit of the loop breaks the statement.
+  For a loop that can stop early, prefer `foldlM` in `Option` or `Except`.
   This is advice, not a rule: a loop whose speed matters can keep `do`.
+- Prefer an `Except` `do` block for a chain of steps that can fail, so that it reads like the source.
+  In proofs, prefer `bind_ok_iff` and the other lemmas of `EthLib/Base/Except.lean` to unfolding the chain into nested `match` expressions.
+- A small decidable fact that [Known answers](#known-answers) allows, such as a constant checked against its algorithm, evaluates a definition in the kernel.
+  That definition needs a recursion that the kernel can reduce.
+  `decide` and `rfl` need structural recursion or fuel, because Lean makes a well-founded definition irreducible.
+  `decide +kernel` also reduces a well-founded recursion whose measure is a single `Nat`, which Lean builds on `WellFounded.Nat.fix`.
+  Do not count on it for a lexicographic measure, such as a pair, which Lean builds on `WellFounded.fix`.
+  Lean documents only `WellFounded.Nat.fix` as reducing on closed terms.
+
+### Failure at an entry point
+
+An entry point is a public operation that a client or another layer calls.
+Examples are a state transition, a gossip validation and an Engine API method.
+What an entry point does with a wrong input is part of the protocol, so its source often says what it returns.
+
+- Where the source defines the outcomes of an operation, return them as a type.
+  For example, the Engine API answers a payload with one of five statuses, and gossip validation returns a `ValidationResult`: accept, ignore or reject.
+  Map the internal errors to that type with total functions, close to the entry point.
+  For example, after the checks of a payload, `newPayloadOnChain` maps an execution that aborts to `.syncing`, and any other failed transition to `.invalid`.
+- Return a `Bool` only where the source defines one.
+  A caller that the source requires to tell outcomes apart, for example to import or to queue a block, receives the richer type.
+- Where the source fixes the order of its checks, and the order changes the outcome, follow that order.
+  Pin it with a theorem, or with a test whose input fails two checks.
+  Elsewhere, the source fixes only that the operation rejects the input.
+  The consensus specification, for example, says only which state transitions are invalid.
+  This guide does not say whether EthLib also promises which error such an input gets.
+  Many proofs and Python tests pin the exact error today, and `bindings/contract/contract.json` lists the error codes of its methods.
+- Where the source requires the state to be unchanged on failure, state that in a theorem.
+  When the operation returns its input state on failure, state it as equality of the returned state.
+  Inside a step, such as an EVM call that fails, state it over the values a caller can read: balances, nonces, code, storage and transient storage.
+  Do not state it over the fields of the representation, since a new representation would break the statement.
+  `processMessage_sameWrites_of_error` states it over the fields of `SameWrites`; a new theorem states it over readable values.
 
 ### Proofs
 
@@ -102,6 +146,10 @@ The specification and the exports import nothing beyond the Lean toolchain.
 - Do not use a tactic that trusts compiled code, such as `native_decide`, `bv_decide` or `decide +native`.
   Their computed results are justified by compiler-trusting axioms rather than kernel evaluation.
   `lake exe check-decls` fails on any use.
+- Do not use `vcgen` or `mvcgen` in library proofs while `vcgen` is marked experimental.
+  The reason is stability across toolchains, not soundness: the kernel checks a proof that `vcgen` builds like any other proof.
+  In Lean v4.35.0, `mvcgen` is deprecated in favour of `vcgen`, and `vcgen` warns that it is experimental unless the option `experimental.vcgen` is set.
+  Check this rule again at each update of the toolchain.
 - After a proof change, check its axioms with `lake exe check-decls`.
   The goal is `propext`, `Classical.choice` and `Quot.sound`, nothing else.
 - Name each theorem by the [naming conventions of Mathlib](https://leanprover-community.github.io/contribute/naming.html).

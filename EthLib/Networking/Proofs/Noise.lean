@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.BigEndian
 public import EthLib.Cryptography.Proofs.Hash.Hkdf
 public import EthLib.Networking.Noise
 public import EthLib.Cryptography.Proofs.ChaCha20Poly1305
@@ -288,5 +289,93 @@ theorem decryptAndHash_encryptAndHash {s next : SymmetricState} {plaintext messa
     cases h
     rw [decryptWithAd_encryptWithAd hc]
     rfl
+
+/-! ## The transcript of the handshake
+
+A run of transcript mixes of Noise §5.2 leaves the chaining key and the cipher, however long.
+
+Two mixes that end at one handshake hash started at one handshake hash and mixed the same bytes.
+
+Otherwise their two inputs to SHA-256 differ and hash alike, so that pair is a collision.
+-/
+
+/-- A run of transcript mixes leaves the chaining key, however long the run. -/
+theorem chainingKey_foldl_mixHash (s : SymmetricState) (l : List ByteArray) :
+    (l.foldl mixHash s).chainingKey = s.chainingKey := by
+  induction l generalizing s with
+  | nil => rfl
+  | cons b t ih => exact ih (mixHash s b)
+
+/-- A run of transcript mixes leaves the cipher, so it changes no key and no nonce. -/
+theorem cipher_foldl_mixHash (s : SymmetricState) (l : List ByteArray) :
+    (l.foldl mixHash s).cipher = s.cipher := by
+  induction l generalizing s with
+  | nil => rfl
+  | cons b t ih => exact ih (mixHash s b)
+
+/-- Two mixes that end at one handshake hash started at one such hash and mixed the same bytes.
+
+Otherwise the two inputs to SHA-256, each an old hash and the bytes mixed, collide. -/
+theorem eq_or_collision_of_hash_mixHash_eq {s t : SymmetricState} {a b : ByteArray}
+    (h : (mixHash s a).hash = (mixHash t b).hash) :
+    (s.hash = t.hash ∧ a = b) ∨
+      (packBytes s.hash.bytes ++ a ≠ packBytes t.hash.bytes ++ b ∧
+        Hash.Sha256.hash32 (packBytes s.hash.bytes ++ a)
+          = Hash.Sha256.hash32 (packBytes t.hash.bytes ++ b)) := by
+  by_cases he : packBytes s.hash.bytes ++ a = packBytes t.hash.bytes ++ b
+  · -- Both transcripts are 32 bytes, so equal inputs split into equal parts.
+    have hp := ByteArray.append_inj_left he (by simp)
+    rw [hp, ByteArray.append_right_inj] at he
+    exact .inl ⟨congrArg HandshakeHash.mk (packBytes_injective hp), he⟩
+  · exact .inr ⟨he, congrArg HandshakeHash.bytes h⟩
+
+/-! ## The frame of a transport message
+
+The frame is the one of the noise-libp2p "Wire Format": a 16-bit big-endian length, then the body.
+-/
+
+/-- Fewer than two bytes hold no length, and are refused as truncated. -/
+theorem unframe_eq_error_of_size_lt {bytes : ByteArray} (h : bytes.size < 2) :
+    unframe bytes = .error .truncated := by
+  simp [unframe, Nat.not_le.mpr h, throw, throwThe, MonadExceptOf.throw]
+
+/-- Bytes whose leading two declare another length for the rest are refused. -/
+theorem unframe_eq_error_of_length_ne {bytes : ByteArray} (h : 2 ≤ bytes.size)
+    (hne : bytesToNat (readBytes bytes 0 2 h).toList + 2 ≠ bytes.size) :
+    unframe bytes = .error .frameLength := by
+  simp [unframe, h, hne, throw, throwThe, MonadExceptOf.throw]
+
+/-- Reading back a written frame returns the message it was written from. -/
+theorem unframe_frame {message bytes : ByteArray} (h : frame message = .ok bytes) :
+    unframe bytes = .ok message := by
+  unfold frame at h
+  split at h
+  · rename_i hm
+    cases h
+    have hlen := natToBytes_length 2 message.size
+    have hs : 2 ≤ (⟨(natToBytes 2 message.size).toArray⟩ ++ message : ByteArray).size := by
+      rw [ByteArray.size_append]
+      show 2 ≤ (natToBytes 2 message.size).toArray.size + message.size
+      simp [hlen]
+    have hread : (readBytes (⟨(natToBytes 2 message.size).toArray⟩ ++ message) 0 2 hs).toList
+        = natToBytes 2 message.size := by
+      apply List.ext_getElem
+      · simp [hlen]
+      · intro i h1 h2
+        simp only [readBytes, Vector.toList_ofFn, List.getElem_ofFn, Nat.zero_add,
+          ByteArray.data_append]
+        rw [Array.getElem_append_left (by simp [hlen]; simp at h1; omega)]
+        simp
+    have hval : bytesToNat (natToBytes 2 message.size) = message.size :=
+      bytesToNat_natToBytes_of_lt (by omega)
+    have hp : (⟨(natToBytes 2 message.size).toArray⟩ : ByteArray).size = 2 := by
+      show (natToBytes 2 message.size).toArray.size = 2
+      simp [hlen]
+    unfold unframe
+    rw [dite_eq_left_of_eq_true (eq_true hs)]
+    simp only [hread, hval, ByteArray.size_append, hp]
+    rw [ite_eq_left (by omega)]
+    exact congrArg Except.ok (ByteArray.extract_append_eq_right hp.symm (by rw [hp]))
+  · cases h
 
 end EthLib.Networking.Noise

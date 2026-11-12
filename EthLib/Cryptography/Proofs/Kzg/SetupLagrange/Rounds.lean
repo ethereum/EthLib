@@ -42,21 +42,6 @@ open EthLib.Base (array_mapM_ok)
 /-! ## Points by position -/
 
 
-/-- Each string of a decoded list gives the byte string at its position. -/
-theorem hexListToBytes_getElem {hex : Array String} {bytes : Array ByteArray}
-    (h : TrustedSetup.hexListToBytes hex = .ok bytes) :
-    bytes.size = hex.size ∧
-      ∀ (i : Nat) (hi : i < hex.size), TrustedSetup.hexToBytes? hex[i] = some bytes[i]! := by
-  obtain ⟨hsize, hget⟩ := array_mapM_ok h
-  refine ⟨hsize, fun i hi => ?_⟩
-  have hj : i < bytes.size := hsize ▸ hi
-  have he := hget i hi hj
-  rw [getElem!_pos bytes i hj]
-  split at he
-  · rename_i b hb
-    rw [hb, Except.ok.inj he]
-  · cases he
-
 /-- Each point of a decoded setup decompresses from the bytes at its position.
 
 Lagrange point `i` comes from position `reverseBits i 4096`. -/
@@ -261,8 +246,8 @@ theorem lagrangeOfMonomial_of_checks {s : TrustedSetup} (hs : TrustedSetup.ofHex
     | error e => cases h
     | ok gb =>
     obtain ⟨hum, hul⟩ := ofBytes_getElem h i
-    have hmget := (hexListToBytes_getElem hm).2
-    have hlget := (hexListToBytes_getElem hl).2
+    have hmget := (TrustedSetup.hexListToBytes_getElem hm).2
+    have hlget := (TrustedSetup.hexListToBytes_getElem hl).2
     have hr : reverseBits i.val FIELD_ELEMENTS_PER_BLOB < 4096 := reverseBits_lt_two_pow i.val 12
     constructor
     · have hd := encodes_of_chunks hMsize hM i.isLt

@@ -17,6 +17,12 @@ theorem hexValue?_hexDigitChar (n : Fin 16) : hexValue? (hexDigitChar n) = some 
   revert n
   decide
 
+/-- Each uppercase digit decodes to the same value. -/
+theorem hexValue?_toUpper_hexDigitChar (n : Fin 16) :
+    hexValue? (hexDigitChar n).toUpper = some n.val.toUInt8 := by
+  revert n
+  decide
+
 /-- A byte is sixteen times its high digit plus its low digit. -/
 theorem toUInt8_div_add_mod (byte : UInt8) :
     16 * (byte.toNat / 16).toUInt8 + (byte.toNat % 16).toUInt8 = byte := by
