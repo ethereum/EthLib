@@ -11,7 +11,7 @@ public import EthLib.Cryptography.Proofs.Secp256k1.Encoding
 - A peer ID decodes back to its key, and the decoder accepts only peer IDs of keys.
 - Two different points of the curve have two different peer IDs.
 - A decoded key's peer ID is the two bytes `00 25`, then the key protobuf.
-- A number below `2 ^ 256` is written as a DER INTEGER on the fewest bytes whose top bit is clear.
+- A number below `2 ^ 256` is a DER INTEGER on the fewest bytes, the first with its top bit clear.
 - The signature decoder accepts exactly the encodings of r and low s in range, and returns them.
 -/
 
@@ -139,7 +139,7 @@ Its content is the number on `k` big-endian bytes, for the `k` that meets two bo
 
 The number is below `2 ^ (8 * k - 1)`, and, for `k` above 1, at least `2 ^ (8 * (k - 1) - 1)`.
 
-These bounds pick the fewest bytes whose top bit is clear.
+These bounds pick the fewest bytes such that the first has its top bit clear.
 
 With them, the first content byte is below `0x80`, and it is `0x00` only before `0x80` or more.
 
@@ -192,7 +192,7 @@ theorem derInteger_eq {n k : Nat} (hn : n < 2 ^ 256) (high : n < 2 ^ (8 * k - 1)
 -- The bound for 33 bytes is `2 ^ 263`, above the default threshold for evaluating a power.
 set_option exponentiation.threshold 263 in
 /-- Every number below `2 ^ 256` has a byte count from 1 to 33 that meets the bounds above. -/
-private theorem exists_byteCount {n : Nat} (hn : n < 2 ^ 256) :
+theorem exists_derByteCount {n : Nat} (hn : n < 2 ^ 256) :
     ∃ k, 1 ≤ k ∧ k ≤ 33 ∧ n < 2 ^ (8 * k - 1) ∧
       (k = 1 ∨ 2 ^ (8 * (k - 1) - 1) ≤ n) := by
   suffices h : ∀ k, 1 ≤ k → k ≤ 33 → n < 2 ^ (8 * k - 1) →
@@ -215,7 +215,7 @@ private theorem exists_byteCount {n : Nat} (hn : n < 2 ^ 256) :
 private theorem exists_derInteger_eq {n : Nat} (hn : n < 2 ^ 256) :
     ∃ k, 1 ≤ k ∧ k ≤ 33 ∧ n < 256 ^ k ∧
       derInteger n = [0x02, UInt8.ofNat k] ++ natToBytes k n := by
-  obtain ⟨k, h1, h33, high, low⟩ := exists_byteCount hn
+  obtain ⟨k, h1, h33, high, low⟩ := exists_derByteCount hn
   refine ⟨k, h1, h33, ?_, derInteger_eq hn high low⟩
   have : 2 ^ (8 * k - 1) ≤ 256 ^ k := by
     rw [show (256 : Nat) = 2 ^ 8 by rfl, ← Nat.pow_mul]
