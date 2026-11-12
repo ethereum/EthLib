@@ -55,7 +55,11 @@ It is 0 unless the block is one of the 256 blocks before the current one.
 
 The last hash is the parent's, so block `current - k` has the `k`-th hash from the end.
 
-A list too short to hold that hash gives 0 too. -/
+A list too short to hold that hash gives 0 too.
+
+No list is too short inside the window on a chain whose recent blocks are linked.
+
+They must also number at least 255, or the number of the last block when that is fewer. -/
 def blockHash (hashes : List Hash32) (current n : Nat) : U256 :=
   if n < current ∧ current ≤ n + 256 then
     match hashes.reverse[current - n - 1]? with
