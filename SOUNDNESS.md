@@ -675,13 +675,11 @@ The ChaCha20-Poly1305 proofs cover output length, counter exhaustion, rejection 
 `decrypt_encrypt` proves that decryption of an honest ciphertext and tag returns the plaintext.
 `tag_eq_of_decrypt_eq_ok` proves that no other tag passes for that ciphertext.
 These are statements about the definitions alone, not about their security.
-The clamp of the Poly1305 key has its own theorems.
-`testBit_clampR` gives every bit of `r`: the key's own bit where the mask of RFC 8439 §2.5 keeps it, and clear where it does not.
-The rest are corollaries of it, so a clamp that cleared another bit would fail them.
-`testBit_clampR_high` proves that the mask clears the four high bits of each word.
-`testBit_clampR_low` proves that it clears the two low bits of every word but the first.
-`clampR_lt` and `clampR_lt_prime` bound `r` by `2 ^ 124` and by the prime `2 ^ 130 - 5`.
-`poly1305Accumulator_lt` proves that the accumulator stays below the prime, whatever `r` and the message.
+The clamp of the Poly1305 key has its own theorem.
+`testBit_clampR` gives every bit of `r` in the terms of RFC 8439 §2.5, with no mask: the top four bits of bytes 3, 7, 11 and 15 and the bottom two bits of bytes 4, 8 and 12 are clear, and every other bit of the low 16 bytes of the key is kept.
+So a clamp that cleared another bit, or kept one it should clear, would fail it.
+`clampR_lt` bounds `r` by `2 ^ 124`.
+`poly1305Accumulator_lt` proves that the accumulator stays below the prime `2 ^ 130 - 5`, whatever `r` and the message, since each step reduces modulo the prime.
 No theorem relates ChaCha20-Poly1305 to an independent model of RFC 8439.
 The Python tests compare the bindings with the RFC 7748 and RFC 8439 vectors.
 The million-iteration X25519 vector requires `ETHLIB_SLOW_VECTORS=1`.

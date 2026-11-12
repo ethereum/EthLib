@@ -119,81 +119,59 @@ theorem tag_eq_of_decrypt_eq_ok (key : Key) (nonce : Nonce)
 
 /-! ## The clamp of the Poly1305 key
 
-One theorem gives every bit of `r`.
+RFC 8439 §2.5 clears the top four bits of bytes 3, 7, 11 and 15 of `r`.
 
-It is the key's own bit where the mask keeps it, and clear where the mask does not.
+It also clears the bottom two bits of bytes 4, 8 and 12.
 
-So a clamp that cleared another bit, or kept one it should clear, would fail it.
+One theorem gives every bit of `r` in those terms, so a clamp with another mask fails it.
 
-The bits the mask clears and the bounds that follow are corollaries of that one theorem.
-
-So `r` stays below the prime of the field, and the accumulator never reduces it.
+So `r` stays below `2 ^ 124`, where a key's low half alone only stays below `2 ^ 128`.
 -/
 
-/-- Every bit of `r` is the key's bit where the mask keeps it, and clear where it does not.
+/-- The mask keeps a bit exactly when RFC 8439 §2.5 keeps it. -/
+private theorem testBit_clampMask (i : Nat) :
+    (0x0ffffffc0ffffffc0ffffffc0fffffff : Nat).testBit i
+      = (decide (i < 128) && decide (i % 32 < 28) && (decide (i < 32) || decide (2 ≤ i % 32))) := by
+  by_cases h : i < 128
+  · have hall : ∀ j < 128, (0x0ffffffc0ffffffc0ffffffc0fffffff : Nat).testBit j
+        = (decide (j % 32 < 28) && (decide (j < 32) || decide (2 ≤ j % 32))) := by
+      decide
+    simp only [h, decide_true, Bool.true_and]
+    exact hall i h
+  · simp only [h, decide_false, Bool.false_and]
+    apply Nat.testBit_lt_two_pow
+    calc (0x0ffffffc0ffffffc0ffffffc0fffffff : Nat) < 2 ^ 128 := by decide
+      _ ≤ 2 ^ i := Nat.pow_le_pow_right (by decide) (by omega)
 
-This gives the clamp of RFC 8439 §2.5 in full: the facts below are corollaries of it. -/
+/-- Every bit of `r`, RFC 8439 §2.5.
+
+Bit `i` is bit `i % 8` of byte `i / 8`, so it is bit `i % 32` of word `i / 32`.
+
+The clamp clears bits 28 to 31 of every word: the top four bits of bytes 3, 7, 11 and 15.
+
+It clears bits 0 and 1 of every word but the first: the bottom two bits of bytes 4, 8 and 12.
+
+Every other bit below 128 is the bit of the key's low half, and no bit from 128 up is set. -/
 theorem testBit_clampR (key : Key) (i : Nat) :
     (clampR key).testBit i
       = ((Base.bytesToUint (Vector.ofFn fun j : Fin 16 => key[j.val]'(by omega))).testBit i
-          && (0x0ffffffc0ffffffc0ffffffc0fffffff : Nat).testBit i) := by
+          && (decide (i < 128) && decide (i % 32 < 28)
+            && (decide (i < 32) || decide (2 ≤ i % 32)))) := by
+  rw [← testBit_clampMask]
   simp [clampR, Nat.testBit_and]
 
-/-- A bit that the mask clears is clear in `r`. -/
-private theorem testBit_clampR_of_mask_false {i : Nat}
-    (h : (0x0ffffffc0ffffffc0ffffffc0fffffff : Nat).testBit i = false) (key : Key) :
-    (clampR key).testBit i = false := by
-  rw [testBit_clampR, h, Bool.and_false]
-
-/-- A bit that the mask keeps is the key's own bit, so the clamp clears nothing else. -/
-theorem testBit_clampR_of_mask_true {i : Nat}
-    (h : (0x0ffffffc0ffffffc0ffffffc0fffffff : Nat).testBit i = true) (key : Key) :
-    (clampR key).testBit i
-      = (Base.bytesToUint (Vector.ofFn fun j : Fin 16 => key[j.val]'(by omega))).testBit i := by
-  rw [testBit_clampR, h, Bool.and_true]
-
-/-- The mask clears the four high bits of each of its four words. -/
-private theorem testBit_mask_high : ∀ w < 4, ∀ i < 32, 28 ≤ i →
-    (0x0ffffffc0ffffffc0ffffffc0fffffff : Nat).testBit (32 * w + i) = false := by decide
-
-/-- The mask clears the two low bits of each of its words but the first. -/
-private theorem testBit_mask_low : ∀ w < 4, 0 < w → ∀ i < 2,
-    (0x0ffffffc0ffffffc0ffffffc0fffffff : Nat).testBit (32 * w + i) = false := by decide
-
-/-- The clamp clears the four high bits of every word of `r`, RFC 8439 §2.5. -/
-theorem testBit_clampR_high (key : Key) {w i : Nat} (hw : w < 4) (hi : i < 32) (h : 28 ≤ i) :
-    (clampR key).testBit (32 * w + i) = false :=
-  testBit_clampR_of_mask_false (testBit_mask_high w hw i hi h) key
-
-/-- The clamp clears the two low bits of every word of `r` but the first, RFC 8439 §2.5. -/
-theorem testBit_clampR_low (key : Key) {w i : Nat} (hw : w < 4) (hw0 : 0 < w) (hi : i < 2) :
-    (clampR key).testBit (32 * w + i) = false :=
-  testBit_clampR_of_mask_false (testBit_mask_low w hw hw0 i hi) key
-
-/-- The clamp keeps no bit that its mask clears. -/
-private theorem clampR_le (key : Key) :
-    clampR key ≤ 0x0ffffffc0ffffffc0ffffffc0fffffff := Nat.and_le_right
-
-/-- The clamp keeps `r` below `2 ^ 124`, RFC 8439 §2.5. -/
+/-- The clamp keeps `r` below `2 ^ 124`. -/
 theorem clampR_lt (key : Key) : clampR key < 2 ^ 124 :=
-  Nat.lt_of_le_of_lt (clampR_le key) (by decide)
+  Nat.lt_of_le_of_lt Nat.and_le_right (by decide)
 
-/-- The clamp keeps `r` below the prime `2 ^ 130 - 5`, so the accumulator never reduces it. -/
-theorem clampR_lt_prime (key : Key) : clampR key < 2 ^ 130 - 5 :=
-  Nat.lt_of_le_of_lt (clampR_le key) (by decide)
+/-! ## The accumulator -/
 
-/-- A fold whose every step lands below a bound stays below it. -/
-private theorem foldl_lt_of_step {α : Type} {p : Nat} {g : Nat → α → Nat}
-    (hg : ∀ acc a, g acc a < p) : ∀ (l : List α) (acc : Nat), acc < p → l.foldl g acc < p := by
-  intro l
-  induction l with
-  | nil => intro acc h; exact h
-  | cons a t ih => intro acc _; exact ih _ (hg acc a)
+/-- The accumulator stays below the prime `2 ^ 130 - 5`, whatever `r` and the message.
 
-/-- The accumulator stays below the prime, whatever `r` and the message, RFC 8439 §2.5. -/
+Each step reduces modulo the prime, so this does not depend on the clamp. -/
 theorem poly1305Accumulator_lt (r : Nat) (message : ByteArray) :
     poly1305Accumulator r message < 2 ^ 130 - 5 := by
   have hp : 0 < 2 ^ 130 - 5 := by decide
-  exact foldl_lt_of_step (fun _ _ => Nat.mod_lt _ hp) _ 0 hp
+  exact List.foldlRecOn (motive := (· < 2 ^ 130 - 5)) _ _ hp fun _ _ _ _ => Nat.mod_lt _ hp
 
 end EthLib.Cryptography.ChaCha20Poly1305
