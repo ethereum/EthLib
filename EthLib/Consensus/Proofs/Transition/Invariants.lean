@@ -1313,7 +1313,9 @@ def OperationsInput (config : Config) (checks : SignatureChecks) {fork : Fork}
 
 The step holds of each part of the block that runs before its operations.
 
-Those are the same parts as in `processBlock_split_of`.
+Those are the payload of the parent from Gloas, the header and the execution part from Bellatrix.
+
+They also include the RANDAO reveal and, before Heze, the vote on the deposit contract.
 
 It must hold of each state to itself, and chain. -/
 theorem OperationsInput.step_of
@@ -1424,43 +1426,6 @@ theorem processBlock_folds {block : BeaconBlock preset fork}
     processOperations_folds operated
   exact ⟨input, proposersDone, slashingsDone, attested, started, proposersOk, slashingsOk,
     attestedOk, rest.trans tail⟩
-
-/-- A block is a step, its operations, then a block frame.
-
-The step holds of each part of the block that runs before its operations.
-
-Those are the header and the RANDAO reveal, at every fork.
-
-They are also the payload of the parent from Gloas and the execution part from Bellatrix.
-
-The last is the vote on the deposit contract, before Heze.
-
-It must hold of each state to itself, and chain.
-
-The operations read the parent slot from the latest block header before the block. -/
-theorem processBlock_split_of
-    (step : BeaconState preset fork → BeaconState preset fork → Prop)
-    (refl : ∀ state, step state state)
-    (trans : ∀ {first second third}, step first second → step second third → step first third)
-    {block : BeaconBlock preset fork}
-    (paid : ∀ {state after} (gloas : .glamsterdam ≤ fork),
-      processParentExecutionPayload config checks state gloas block.body = .ok after →
-        step state after)
-    (header : ∀ {state after}, processBlockHeader state block = .ok after → step state after)
-    (execution : ∀ {state after} (bellatrix : .bellatrix ≤ fork),
-      processBlockExecution config checks engine state block.body bellatrix = .ok after →
-        step state after)
-    (randao : ∀ {state after},
-      processRandao config checks state block.body = .ok after → step state after)
-    (eth1 : ∀ {state after} (before : fork < .hegota),
-      processEth1Data before state block.body = .ok after → step state after)
-    (computed : processBlock config checks engine state block = .ok after) :
-    ∃ first last, step state first ∧
-      processOperations config checks first block.body state.latestBlockHeader.slot = .ok last ∧
-      BlockFrame last after := by
-  obtain ⟨input, last, started, operated, tail⟩ := processBlock_operationsInput computed
-  exact ⟨input, last, started.step_of step refl trans paid header execution randao eth1,
-    operated, tail⟩
 
 /-- A block is a block frame, its operations, then a block frame.
 
