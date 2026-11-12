@@ -1,0 +1,26 @@
+# Defaulting accessors that the specification uses today, each one to be removed.
+#
+# `xs[i]!`, `get!`, `set!`, `panic` and the like return a default value, or change nothing,
+# in place of failing.
+# The kernel and the compiled code agree on that value, so no check fails.
+#
+# One entry per line: the accessor, the declaration, and how many sites the check counts there.
+# `lake exe check-accessors` fails on a site not listed here.
+# It also fails on an entry that no longer matches.
+# So this file is always the exact list.
+# Remove or lower an entry in the pull request that removes its sites.
+# Never add one: a new site is fixed, not listed.
+ByteArray.get! EthLib.Cryptography.Bls.G1.compress 2
+ByteArray.set! EthLib.Cryptography.Bls.G1.compress 2
+ByteArray.get! EthLib.Cryptography.Bls.G1.uncompress 1
+ByteArray.set! EthLib.Cryptography.Bls.G1.uncompress 1
+ByteArray.get! EthLib.Cryptography.Bls.G2.compress 2
+ByteArray.set! EthLib.Cryptography.Bls.G2.compress 2
+ByteArray.get! EthLib.Cryptography.Bls.G2.uncompress 1
+ByteArray.set! EthLib.Cryptography.Bls.G2.uncompress 1
+GetElem?.getElem! EthLib.Cryptography.Bls.HashToCurve.hashToG2 2
+ByteArray.set! EthLib.Cryptography.Bls.size_set! 1
+ByteArray.get! EthLib.Serialization.Rlp.decodeItem 3
+ByteArray.get! EthLib.Serialization.Rlp.readBigEndian 1
+ByteArray.get! EthLib.Serialization.Rlp.readPrefix.readLongLength 1
+GetElem?.getElem! EthLib.Serialization.Ssz.Desc.resolveStep 1
