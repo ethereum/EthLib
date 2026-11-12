@@ -2970,8 +2970,9 @@ The Lean toolchain is `leanprover/lean4:v4.35.0`.
 <!-- end generated -->
 
 VCVio defines the oracle computations and probabilities in which the security games are stated.
-The proofs below import it, directly or through another file, so their statements can use its definitions.
-A directory stands for its files and for the file of the same name beside it, such as `Wots.lean` beside `Wots/`.
+The proofs below import it, directly or through another file.
+A directory is listed when at least one file under it imports VCVio, or when the file of the same name beside it does, such as `Wots.lean` beside `Wots/`.
+So a listed directory can hold files that do not import VCVio.
 The files named `Proofs.lean` are roots that gather the proofs of a domain, so they are not listed.
 
 <!-- generated: vcvio-users -->

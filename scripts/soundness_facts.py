@@ -1,9 +1,11 @@
 """Keep the facts in SOUNDNESS.md that the repository can state for itself."""
 
 import argparse
+import importlib.util
 import json
 import re
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -254,8 +256,16 @@ def pins(root: Path) -> str:
     )
 
 
-# One import command of a Lean header, with the module it names.
-LEAN_IMPORT = re.compile(r"^\s*(?:(?:public|meta|private)\s+)*import\s+(?:all\s+)?(\S+)", re.M)
+def lean_imports() -> Callable[[str], list[str]]:
+    """The import reader of `check_layers.py`, loaded by path: `scripts` is not a package."""
+    # Loaded on use, because `check_layers.py` loads this file for `strip_lean`.
+    spec = importlib.util.spec_from_file_location(
+        "check_layers", Path(__file__).resolve().parent / "check_layers.py"
+    )
+    assert spec and spec.loader
+    layers = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(layers)
+    return layers.imports
 
 
 def vcvio_users(root: Path) -> str:
@@ -273,12 +283,10 @@ def vcvio_users(root: Path) -> str:
         ".".join(path.relative_to(root).with_suffix("").parts): path
         for path in sorted((root / "EthLib").rglob("*.lean"))
     }
-    imports = {
-        module: LEAN_IMPORT.findall(strip_lean(path.read_text(encoding="utf-8")))
-        for module, path in files.items()
-    }
+    read = lean_imports()
+    imports = {module: read(path.read_text(encoding="utf-8")) for module, path in files.items()}
     reached = {m for m, names in imports.items() if any(n.split(".")[0] == "VCVio" for n in names)}
-    # Lean imports form no cycle, so this grows the set until no file is added.
+    # Add each file that imports a reached file, until a pass adds none.
     grown = True
     while grown:
         grown = False
@@ -287,7 +295,8 @@ def vcvio_users(root: Path) -> str:
                 reached.add(module)
                 grown = True
 
-    users, spec = set(), []
+    users: set[str] = set()
+    spec: list[str] = []
     for module in sorted(reached):
         path = files[module]
         rel = path.relative_to(root)
