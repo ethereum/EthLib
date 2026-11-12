@@ -369,6 +369,12 @@ theorem unframe_eq_error_of_size_lt {bytes : ByteArray} (h : bytes.size < 2) :
     unframe bytes = .error .truncated := by
   simp [unframe, Nat.not_le.mpr h, throw, throwThe, MonadExceptOf.throw]
 
+/-- A frame whose declared length is not its own refuses it, Noise §3 framing. -/
+theorem unframe_eq_error_of_length_ne {bytes : ByteArray} (h : 2 ≤ bytes.size)
+    (hne : bytesToNat (readBytes bytes 0 2 h).toList + 2 ≠ bytes.size) :
+    unframe bytes = .error .frameLength := by
+  simp [unframe, h, hne, throw, throwThe, MonadExceptOf.throw]
+
 /-- An accepted frame carries the length that its two leading bytes declare. -/
 theorem size_of_unframe_eq_ok {bytes body : ByteArray} (h : unframe bytes = .ok body) :
     body.size + 2 = bytes.size := by
