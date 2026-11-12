@@ -224,8 +224,26 @@ So the types that cross a module boundary are fixed here, and `EthLib/Base/` def
 - Bytes of any length are a `ByteArray`.
 - Bytes of a fixed length `n` are a `Vector UInt8 n`.
   The length is then part of the type, as `CONTRIBUTING.md` asks, and a 48-byte commitment cannot be passed where a 96-byte signature is expected.
+  Such a value crosses a module boundary in its typed form, not as a `ByteArray`.
+  The exceptions today are `kzgCommitmentToVersionedHash`, `Bls.Signatures.verify` and `messageId`, which later pull requests convert.
+  At an external interface, one parser turns the bytes into the typed value or a typed error.
+  A C export, EVM call data and a wire format are such interfaces.
 - A fixed-size type keeps the name its source gives it, defined once by the layer that owns the concept.
   `Hash32`, `Bytes32` and `Address` belong to Base, `BLSPubkey` to Cryptography, `Root` and `Slot` to Consensus.
+- Two of these types can have the same bytes and different meanings.
+  A KZG commitment and a KZG proof are both 48 bytes.
+  In consensus-specs, a Merkle root and the hash of an execution block are two classes of 32 bytes.
+  A one-field structure over `Vector UInt8 n` keeps such types apart, because Lean then rejects one where the other is expected.
+  This form applies to `KZGCommitment` and `VersionedHash`, which stay abbreviations until a pull request converts them.
+  Another type takes the form only by a pull request that converts it and reports the cost of its port.
+  That cost is the conversions at call sites, the edited theorems and the breaking change for Lean importers.
+- Such a structure follows its source.
+  It names a role, not validity, so a check such as `KeyValidate` stays a function or a separate type.
+  A conversion between two of these types appears only where the source converts, as `Root(header.execution_block_hash)` does in consensus-specs.
+  A name that the source only aliases, such as `Hash32 = Bytes32` in execution-specs, stays an `abbrev`.
+  Two sources can disagree on whether a name is a type of its own, as they do for `Hash32`.
+  Its definition then records both readings and the choice.
+  `EthLib/Base/Hash32.lean` does not record them yet.
 - An integer keeps the range its source gives it.
   An unbounded integer is a `Nat`, and a 64-bit one is a `UInt64`.
   Where the source makes overflow invalid, an operation that would overflow is an error, never a silent wrap.
