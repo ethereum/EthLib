@@ -6,6 +6,10 @@ public import EthLib.Base.Except
 public import EthLib.Base.Proofs.MapM
 public import EthLib.Base.Proofs.Bytes
 public import EthLib.Base.Proofs.Fork
+public import Std.Data.TreeMap.Raw.WF
+public import Std.Data.TreeMap.Raw.Lemmas
+-- The fields of an encoded object unfold Lean's `Json.mkObj`.
+import all Lean.Data.Json.Basic
 -- The digits of `Nat.toDigits` must unfold for `decide` to read them.
 import all Init.Data.Repr
 
@@ -47,6 +51,10 @@ A byte string of a fixed size, such as an address, decodes exactly to the vector
 A number below the bound, written in lowercase hex without leading zeros, decodes to itself.
 
 No other text decodes to a number.
+
+The encoder of numbers writes exactly that text, so two numbers never share an encoding.
+
+The encoders of withdrawals and of lists write what the decoders read back.
 
 A byte string without uppercase digits decodes exactly from `0x` and two lowercase digits per byte.
 
@@ -594,7 +602,8 @@ The text is `0x` and the digits of the number, without leading zeros, and `0x0` 
 
 The converse also holds: no other text decodes to the number. -/
 theorem quantity_toDigits (what : String) {bits v : Nat} (hv : v < 2 ^ bits) :
-    quantity what bits (.str ("0x" ++ String.ofList (Nat.toDigits 16 v))) = .ok v := by
+    quantity what bits (quantityJson v) = .ok v := by
+  unfold quantityJson
   obtain ⟨hall, hval, hhead⟩ := toDigits_hex v
   have hascii : ∀ c ∈ Nat.toDigits 16 v, c.val ≤ 0x7F := by
     intro c hc
@@ -636,7 +645,7 @@ theorem quantity_toDigits (what : String) {bits v : Nat} (hv : v < 2 ^ bits) :
 
 /-- The decoder of 64-bit numbers reads back any 64-bit number, written in lowercase hex. -/
 theorem uint64_toDigits (what : String) (x : UInt64) :
-    uint64 what (.str ("0x" ++ String.ofList (Nat.toDigits 16 x.toNat))) = .ok x :=
+    uint64 what (quantityJson x.toNat) = .ok x :=
   uint64_eq_ok_iff.mpr (quantity_toDigits what x.toNat_lt)
 
 /-! ## Only the canonical text decodes -/
@@ -765,8 +774,8 @@ The number must also be below the bound of the decoder.
 
 So uppercase digits, leading zeros, `0x` alone and any other text are rejected. -/
 theorem quantity_eq_ok_iff {what : String} {bits : Nat} {j : Lean.Json} {v : Nat} :
-    quantity what bits j = .ok v ↔
-      v < 2 ^ bits ∧ j = .str ("0x" ++ String.ofList (Nat.toDigits 16 v)) := by
+    quantity what bits j = .ok v ↔ v < 2 ^ bits ∧ j = quantityJson v := by
+  unfold quantityJson
   constructor
   · intro h
     refine ⟨lt_of_quantity h, ?_⟩
@@ -1172,6 +1181,134 @@ theorem address_eq_ok_iff_map_toLower {what : String} {j : Lean.Json} {a : Addre
         ds.map Char.toLower = a.toList.flatMap byteHexDigits := by
   rw [address_eq_ok_iff, bytesOf_true_eq_ok_iff]
   exact Iff.rfl
+
+/-! ## The encoders
+
+The decoder of numbers takes only the text that the encoder writes, at any bound above the number.
+
+So two numbers never share a text, however large they are.
+
+A list decodes from its encoding exactly as its items decode from theirs, in order.
+
+A withdrawal, and a list of withdrawals, decode back from what the encoders write for them.
+-/
+
+/-- Two numbers have the same encoding only when they are equal. -/
+theorem quantityJson_inj {m n : Nat} : quantityJson m = quantityJson n ↔ m = n := by
+  refine ⟨fun h => ?_, fun h => h ▸ rfl⟩
+  -- Both numbers are below one bound, and the decoder reads each back from the shared text.
+  have hm : m < 2 ^ (m + n) := Nat.lt_of_lt_of_le (Nat.lt_two_pow_self) (Nat.pow_le_pow_right
+    (by decide) (Nat.le_add_right m n))
+  have hn : n < 2 ^ (m + n) := Nat.lt_of_lt_of_le (Nat.lt_two_pow_self) (Nat.pow_le_pow_right
+    (by decide) (Nat.le_add_left n m))
+  have h1 := quantity_eq_ok_iff (what := "") (j := quantityJson m) |>.mpr ⟨hm, rfl⟩
+  rw [(quantity_eq_ok_iff (what := "")).mpr ⟨hn, h⟩] at h1
+  exact (Except.ok.inj h1).symm
+
+/-- A list decodes from its encoding exactly as its items decode from theirs, in order. -/
+theorem array_listJson {α β : Type} (what : String) (f : Lean.Json → Decode α) (g : β → Lean.Json)
+    (items : List β) :
+    array what f (listJson g items) = items.mapM fun x => f (g x) := by
+  simp only [array, listJson, Array.toList_map]
+  induction items with
+  | nil => rfl
+  | cons x xs ih => simp only [List.map_cons, List.mapM_cons, ih]
+
+open Std in
+/-- An object built from pairs with distinct names holds exactly those pairs, no two of one name. -/
+private theorem toList_mkObj {pairs : List (String × Lean.Json)}
+    (distinct : pairs.Pairwise fun a b => a.1 ≠ b.1) :
+    ∃ kvs, Lean.Json.mkObj pairs = .obj kvs ∧ kvs.toList.length = pairs.length ∧
+      (∀ p, p ∈ kvs.toList ↔ p ∈ pairs) ∧ kvs.toList.Pairwise fun a b => a.1 ≠ b.1 := by
+  have keys : pairs.Pairwise (fun a b => ¬ compare a.1 b.1 = .eq) :=
+    distinct.imp fun different equal => different (compare_eq_iff_eq.mp equal)
+  have wf : (Std.TreeMap.Raw.ofList pairs (cmp := compare)).WF := Std.TreeMap.Raw.WF.ofList
+  refine ⟨_, rfl, ?_, ?_, ?_⟩
+  · rw [Std.TreeMap.Raw.length_toList wf, Std.TreeMap.Raw.size_ofList keys]
+  · rintro ⟨k, v⟩
+    rw [Std.TreeMap.Raw.mem_toList_iff_getElem?_eq_some wf]
+    refine ⟨fun h => ?_, fun hm => Std.TreeMap.Raw.getElem?_ofList_of_mem compare_self keys hm⟩
+    -- A name that no pair carries reads as absent, so the name is that of a pair.
+    by_cases hk : (pairs.map Prod.fst).contains k = true
+    · obtain ⟨v', hm⟩ : ∃ v', (k, v') ∈ pairs := by simpa using hk
+      rw [Std.TreeMap.Raw.getElem?_ofList_of_mem compare_self keys hm] at h
+      cases h
+      exact hm
+    · rw [Std.TreeMap.Raw.getElem?_ofList_of_contains_eq_false (by simpa using hk)] at h
+      cases h
+  · exact (Std.TreeMap.Raw.distinct_keys_toList wf).imp fun h e => h (compare_eq_iff_eq.mpr e)
+
+/-- A pair of a list with distinct names is what the list holds under its name. -/
+private theorem lookup_of_mem {fs : List (String × Lean.Json)} {k : String} {v : Lean.Json}
+    (distinct : fs.Pairwise fun a b => a.1 ≠ b.1) (h : (k, v) ∈ fs) : fs.lookup k = some v := by
+  induction fs with
+  | nil => cases h
+  | cons p fs ih =>
+    obtain ⟨hp, hrest⟩ := List.pairwise_cons.mp distinct
+    obtain ⟨k', v'⟩ := p
+    rcases List.mem_cons.mp h with h | hm
+    · cases h
+      simp [List.lookup]
+    · -- The name of the first pair is another name, so the lookup reads on.
+      have hne : k' ≠ k := hp _ hm
+      have hb : (k == k') = false := by simpa using Ne.symm hne
+      simp only [List.lookup, hb]
+      exact ih hrest hm
+
+/-- The object of a withdrawal holds exactly its four fields, each the encoding of its value. -/
+private theorem fields_withdrawalJson (w : Execution.Blocks.Withdrawal) :
+    ∃ fs, fields "withdrawal" (withdrawalJson w) = .ok fs ∧
+      hasExactly fs ["index", "validatorIndex", "address", "amount"] = true ∧
+      fs.lookup "index" = some (quantityJson w.index.toNat) ∧
+      fs.lookup "validatorIndex" = some (quantityJson w.validatorIndex.toNat) ∧
+      fs.lookup "address" = some (dataJson w.address.toList) ∧
+      fs.lookup "amount" = some (quantityJson w.amount.toNat) := by
+  obtain ⟨kvs, hobj, hlen, hmem, hd⟩ := toList_mkObj (pairs := [
+    ("index", quantityJson w.index.toNat), ("validatorIndex", quantityJson w.validatorIndex.toNat),
+    ("address", dataJson w.address.toList), ("amount", quantityJson w.amount.toNat)])
+    (by simp)
+  -- No field is `null`, so every field of the object counts.
+  have hkeep : kvs.toList.filter (fun (_, v) => !v.isNull) = kvs.toList := by
+    refine List.filter_eq_self.mpr fun p hp => ?_
+    have h := (hmem p).mp hp
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at h
+    rcases h with rfl | rfl | rfl | rfl <;> rfl
+  have hm : ∀ p, p ∈ [("index", quantityJson w.index.toNat),
+      ("validatorIndex", quantityJson w.validatorIndex.toNat),
+      ("address", dataJson w.address.toList), ("amount", quantityJson w.amount.toNat)] →
+      p ∈ kvs.toList := fun p h => (hmem p).mpr h
+  refine ⟨kvs.toList, by rw [withdrawalJson, hobj, fields, hkeep]; rfl, ?_,
+    lookup_of_mem hd (hm ("index", quantityJson w.index.toNat) (by simp)),
+    lookup_of_mem hd (hm ("validatorIndex", quantityJson w.validatorIndex.toNat) (by simp)),
+    lookup_of_mem hd (hm ("address", dataJson w.address.toList) (by simp)),
+    lookup_of_mem hd (hm ("amount", quantityJson w.amount.toNat) (by simp))⟩
+  simp only [hasExactly, hlen, List.length_cons, List.length_nil, beq_self_eq_true,
+    Bool.true_and, List.all_eq_true, List.any_eq_true, beq_iff_eq]
+  intro name hname
+  simp only [List.mem_cons, List.mem_nil_iff, or_false] at hname
+  rcases hname with rfl | rfl | rfl | rfl
+  · exact ⟨("index", quantityJson w.index.toNat), hm _ (by simp), rfl⟩
+  · exact ⟨("validatorIndex", quantityJson w.validatorIndex.toNat), hm _ (by simp), rfl⟩
+  · exact ⟨("address", dataJson w.address.toList), hm _ (by simp), rfl⟩
+  · exact ⟨("amount", quantityJson w.amount.toNat), hm _ (by simp), rfl⟩
+
+/-- The decoder of withdrawals reads back the object that the encoder writes for a withdrawal. -/
+theorem withdrawal_withdrawalJson (w : Execution.Blocks.Withdrawal) :
+    withdrawal (withdrawalJson w) = .ok w := by
+  obtain ⟨fs, hfs, hx, h1, h2, h3, h4⟩ := fields_withdrawalJson w
+  exact withdrawal_eq_ok_iff.mpr ⟨fs, hfs, hx, _, _, _, _, h1, h2, h3, h4,
+    uint64_toDigits _ _, uint64_toDigits _ _, fixed_hexString _ 20 _ true, uint64_toDigits _ _⟩
+
+/-- The decoder of lists of withdrawals reads back the encoding of any list of withdrawals. -/
+theorem array_withdrawal_listJson (what : String) (ws : List Execution.Blocks.Withdrawal) :
+    array what withdrawal (listJson withdrawalJson ws) = .ok ws := by
+  rw [array_listJson]
+  induction ws with
+  | nil => rfl
+  | cons w ws ih =>
+    simp only [List.mapM_cons]
+    rw [ih, withdrawal_withdrawalJson]
+    rfl
 
 /-! ## A field from a fork -/
 
