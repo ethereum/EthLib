@@ -26,6 +26,8 @@ A peer controls every byte, so decoding is total and names each way a stream can
 
 The decoder reads the whole stream at once.
 
+A reader can also stop at the chunk that completes a given number of bytes.
+
 The encoder writes uncompressed chunks only.
 
 It gives proofs, tests and bindings a stream to decode, and it is not a compressor.
@@ -183,6 +185,48 @@ def decodeFramesList (bs : List UInt8) : Except FrameError (List UInt8) :=
 /-- The bytes a framed stream decodes to, or why it is not a valid stream. -/
 def decodeFrames (bs : ByteArray) : Except FrameError ByteArray :=
   (decodeFramesList bs.data.toList).map fun out => ⟨out.toArray⟩
+
+/-- Read the chunks of a stream until they hold `need` bytes.
+
+It returns the decoded bytes of the chunks read and the bytes after the last of them.
+
+It reads at least one chunk unless the stream is empty, even when `need` is 0.
+
+A chunk is read whole, so the output can be longer than `need`.
+
+The stream can end first, and then the output is shorter.
+
+The fuel bounds the number of chunks. -/
+def readChunks (need : Nat) : List UInt8 → Nat →
+    Except FrameError (List UInt8 × List UInt8)
+  | [], _ => .ok ([], [])
+  | type :: l0 :: l1 :: l2 :: rest, fuel + 1 =>
+      let len := bytesToUint #v[l0, l1, l2]
+      if rest.length < len then
+        .error .chunkPastEnd
+      else
+        match decodeChunk type (rest.take len) with
+        | .error e => .error e
+        | .ok out =>
+          if need ≤ out.length then .ok (out, rest.drop len)
+          else (readChunks (need - out.length) (rest.drop len) fuel).map
+            fun read => (out ++ read.1, read.2)
+  -- A header cut short, or out of fuel: the second is unreachable with enough fuel.
+  | _, _ => .error .headerTruncated
+
+/-- Read a framed stream until it holds `n` bytes, and return its output with the bytes after.
+
+The stream starts with the stream identifier, which the reader reads even when `n` is 0.
+
+It stops at the chunk that completes `n` bytes, so a caller can reject any byte after it.
+-/
+def readFrames (n : Nat) (bs : List UInt8) :
+    Except FrameError (List UInt8 × List UInt8) :=
+  match bs with
+  | type :: _ =>
+      if type == streamIdentifierType then readChunks n bs bs.length
+      else .error .missingStreamIdentifier
+  | [] => .error .missingStreamIdentifier
 
 /-- One uncompressed data chunk that holds `data`, at most 65536 bytes (§4.3).
 

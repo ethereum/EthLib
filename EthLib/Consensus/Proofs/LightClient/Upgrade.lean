@@ -12,6 +12,8 @@ An upgrade keeps the beacon header of a light client header.
 
 So the upgrade of a store keeps its finalized and optimistic beacon headers, and their slots.
 
+Before Gloas, the upgrade of a header from Capella carries the upgrade of its execution header.
+
 The Gloas header of a valid Electra header is valid too, under three conditions.
 
 The header is not the empty one, and its slot comes before Gloas.
@@ -313,6 +315,22 @@ theorem LightClientHeader.upgrade_beacon {config : Config} {pre post : Fork}
   · cases computed
     rfl
 
+/-- Before Gloas, the upgrade of a header from Capella carries the upgraded execution header.
+
+Each field of the execution header carries over, and a field of a later fork is zero. -/
+theorem LightClientHeader.upgrade_execution {config : Config} {pre post : Fork}
+    {later : pre ≤ post} (capella : .shapella ≤ pre) (postBefore : post < .glamsterdam)
+    {header : LightClientHeader preset pre} {upgraded : LightClientHeader preset post}
+    (computed : header.upgrade config post later = .ok upgraded) :
+    upgraded.execution ⟨Nat.le_trans capella later, postBefore⟩ =
+      (header.execution ⟨capella, Nat.lt_of_le_of_lt later postBefore⟩).upgrade post := by
+  have early : ¬ Fork.glamsterdam ≤ pre := Nat.not_le_of_lt (Nat.lt_of_le_of_lt later postBefore)
+  have postEarly : ¬ Fork.glamsterdam ≤ post := Nat.not_le_of_lt postBefore
+  unfold LightClientHeader.upgrade at computed
+  simp only [early, postEarly, ↓reduceDIte, pure, Except.pure, Except.ok.injEq] at computed
+  subst computed
+  simp [LightClientHeader.upgradeFields, capella]
+
 /-- A payload header with the empty SSZ value keeps it when upgraded.
 
 Both forks are from Capella.
@@ -341,7 +359,7 @@ private theorem ExecutionPayloadHeader.toCapella_upgrade {pre post : Fork}
 /-- A payload header from Deneb keeps its root when upgraded to another fork from Deneb.
 
 The two forks give it the same fields and the same field names. -/
-private theorem ExecutionPayloadHeader.hashTreeRoot_upgrade {pre post : Fork}
+theorem ExecutionPayloadHeader.hashTreeRoot_upgrade {pre post : Fork}
     (deneb : .dencun ≤ pre) (postDeneb : .dencun ≤ post)
     (execution : ExecutionPayloadHeader preset pre) :
     SszType.hashTreeRoot (execution.upgrade post) = SszType.hashTreeRoot execution := by

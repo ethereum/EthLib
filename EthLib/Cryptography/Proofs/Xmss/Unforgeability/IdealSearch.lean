@@ -193,8 +193,7 @@ theorem simulateQ_findCodeword (pp : PublicParam) (layer : Layer) (e : UInt32) (
         OracleComp OracleWorld _) =
       Internal.findCodeword hashD pp layer e msg base c fuel := by
   rw [findCodeword_map_monad (simulateQ (HashSpec.withDerivationsLift PrfInput HashOutput))
-    (fun b => simulateQ_pure _ b) (fun x f => simulateQ_bind _ x f) _
-    (fun f x => simulateQ_map _ x f)]
+    (fun b => simulateQ_pure _ b) (fun x f => simulateQ_bind _ x f)]
   simp only [simulateQ_queryH]
 
 /-- In the ideal game, the search runs as over the random oracle, and keeps the table. -/

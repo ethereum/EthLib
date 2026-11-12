@@ -9,6 +9,48 @@ Not yet released.
 
 ### Changes that break callers
 
+- Slashing-protection imports use EIP-3076's minimal strategy ([#1963](https://github.com/ethereum/EthLib/issues/1963)).
+  Import compacts both the held record and the file: each key keeps its greatest block slot and its greatest source and target epochs, taken independently, without signing roots.
+  So a repeat of any message held before the import is refused, and so is a block at or before the slot limit, or a vote with a source before the source limit or a target at or before the target limit.
+  The keys of the record come out in byte order.
+  The JSON format and the C and Python signatures are unchanged.
+
+- The cumulative churn bounds also hold for idle queues ([#1451](https://github.com/ethereum/EthLib/issues/1451)).
+  In Lean, `churnQueue_foldlM_le` drops its `first` argument, and `computeExitEpochAndUpdateChurn_foldlM_le` and `computeConsolidationEpochAndUpdateChurn_foldlM_le` drop their `open_` argument.
+  Callers remove that argument.
+  The exact `_spend` equalities keep it.
+- A req/resp payload now fails when bytes follow the chunk that completes its declared length.
+  A reader must reject any bytes that remain after it has read the declared number of SSZ bytes.
+  The decoder read the whole Snappy stream.
+  So it accepted chunks after the one that completes the length, if they add no bytes: padding, reserved skippable chunks, a second stream identifier or an empty data chunk.
+  With a declared length of 0, the reader now reads the stream identifier alone, so any chunk after it fails too.
+  `reqresp.decode_payload` and `reqresp.decode_response_chunk` raise `ReqRespError` with the message "N bytes follow the last chunk of the payload", and the C exports return the new error code 10.
+  In Lean, `decodePayload` reads the stream with the new `Snappy.readFrames`, which stops at the chunk that completes the declared length and returns the bytes after it.
+  `Snappy.readChunks` is its chunk loop, and the new module `Networking.Proofs.Snappy.Read` proves their properties.
+  `ReqRespError` gains the constructor `trailingBytes`.
+  The last conjunct of `decodePayload_ok` and `decodePayload_eq_ok_iff` is now `Snappy.readFrames … = .ok (d.data.toList, [])` in place of `Snappy.decodeFrames … = .ok d`.
+  `decodeFramesList_of_readFrames` gives the list form of the old conjunct, and the new `decodePayload_append_ne_ok` proves that bytes appended to a payload that decodes make it fail.
+- The leanXMSS signing lemmas over a map of monads now derive, from the monad laws, that the map keeps `map` ([#1385](https://github.com/ethereum/EthLib/issues/1385#issuecomment-6722640861)).
+  `findCodeword_map_monad`, `otsSign_map_monad`, `signLayer_map_monad` and `signDerived_map_monad` require `LawfulMonad` instances for both monads instead of an explicit `map_map` argument.
+  Drop that argument at each call.
+  `Sphincs.Unforgeability.map_monad_map` moves to `HashSig.map_monad_map`, so leanXMSS and leanSPHINCS share one proof that such a map keeps `map`.
+- From Gloas, the discount for empty slots of the fast confirmation rule also counts the votes for the pending node of the parent ([#1368](https://github.com/ethereum/EthLib/issues/1368), [#1458](https://github.com/ethereum/EthLib/issues/1458)).
+  A parent has three nodes from Gloas: a pending one, and a full and an empty one for the two answers on its payload.
+  The discount counted only the votes for the full or the empty node that the block builds on.
+  It counts the votes for that node and for the pending node, and the votes for the other of the two stay out.
+  A vote cast in the slot of the block it names supports the pending node of that block.
+  A member of the committees of the empty slots can hold such a vote for the parent, and the discount missed it.
+  Before Gloas the parent has only its pending node, and the discount keeps its value.
+  No signature of a C export or Python function changes.
+  From Gloas the threshold can be lower, so a `fast_confirmation` step of `fork_choice` can confirm a block sooner.
+  In Lean, `Store.getNodeSupportBetweenSlots` takes a list of nodes in place of a node, and counts a vote for any of them.
+  `getNodeSupportBetweenSlots_le` takes that list too.
+- The block supply bound and the Glamsterdam equality now follow from the exact block supply equation ([#1902](https://github.com/ethereum/EthLib/issues/1902)).
+  No C export or Python function changes.
+  In Lean, `supply_systemCall`, `supply_systemCall_join`, `supply_startSystemCalls`, `supply_blockRequests` and `applyTransactions_supply` are gone from `EthLib.Execution.Proofs.Blocks.Supply`.
+  The new `SystemCallBurns.total_eq_zero_of_glamsterdam`, `StartSystemCallsBurns.total_eq_zero_of_glamsterdam`, `TransactionsBurns.total_eq_zero_of_glamsterdam`, `RequestsBurns.total_eq_zero_of_glamsterdam`, `BlockRequestsBurns.total_eq_zero_of_glamsterdam` and `BodyBurns.total_eq_zero_of_glamsterdam` in `EthLib.Execution.Proofs.Blocks.Burn` prove that the certified losses are 0 from Glamsterdam.
+  `withdrawnWei`, `rewardWei`, `createdWei`, `burnedWei` and the supply lemmas of the DAO transfer, the withdrawals and the rewards move to `EthLib.Execution.Proofs.Blocks.Burn`, with the same names.
+  `EthLib.Execution.Proofs.Blocks.Burn` no longer imports `EthLib.Execution.Proofs.Blocks.Supply`, so import the latter for `headerBurnedWei`, the `applyBody_supply` theorems and the `stateTransition_supply` bounds.
 - From Gloas, the rewards and penalties and the inactivity updates of an epoch now fail where a registry position of 2^64 or more would become a validator index ([#1883](https://github.com/ethereum/EthLib/issues/1883)).
   The specification builds a `ValidatorIndex` for each position when it applies the deltas, and for each eligible validator when it lists the eligible indices.
   EthLib took such a position modulo 2^64, so it credited the balance, or updated the inactivity score, of another validator.
