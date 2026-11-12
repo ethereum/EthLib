@@ -8,7 +8,7 @@ public import EthLib.Execution.Proofs.Blocks.Header
 
 Before Shapella, the seal item is the item of the header without the mix digest and the nonce.
 
-So the seal hash keeps every other field in its order, the base fee from London included.
+So the seal hash covers every other field in its order, with the base fee from London on.
 
 A header passes the check exactly when Ethash gives its mix digest and a result within the target.
 
@@ -26,33 +26,26 @@ namespace EthLib.Execution.Blocks
 open EthLib.Base
 open EthLib.Serialization.Rlp
 open EthLib.Cryptography.Ethash (PowOutput)
-open EthLib.Cryptography.Hash.Keccak (keccak256)
 
 namespace Header
 
 /-- Before Shapella, the seal item is the item of the header without its 14th and 15th items.
 
-Those two are the mix digest and the nonce.
+Those two are the mix digest and the nonce, and from Paris on the first holds the random value.
 
-So it keeps the first 13 fields in their order, then the base fee from London. -/
+So it keeps the first 13 fields in their order, then the base fee from London on.
+
+From Shapella on, the header has fields that the seal item leaves out. -/
 theorem sealItem_eq {fork : Fork} (h : Header fork) {items : List Item}
     (hItem : Codec.toItem h = .list items) (hFork : fork < .shapella) :
     h.sealItem = .list (items.take 13 ++ items.drop 15) := by
   rw [toItem_eq] at hItem
   obtain rfl := Item.list.inj hItem
   -- Every field added from Shapella on holds no item.
-  have hNot : ∀ f : Fork, Fork.shapella ≤ f → ¬f ≤ fork := fun f hf hle =>
-    absurd (Nat.lt_of_le_of_lt (Nat.le_trans hf hle) hFork) (Nat.lt_irrefl _)
-  simp only [Item.ofSince, hNot .shapella (by decide), hNot .dencun (by decide),
-    hNot .pectra (by decide), hNot .glamsterdam (by decide), dite_false, List.append_nil]
+  have hNot : ∀ f : Fork, Fork.shapella ≤ f → ¬f ≤ fork := fun _ hf hle =>
+    Nat.not_le_of_lt hFork (Nat.le_trans hf hle)
+  simp (disch := decide) only [Item.ofSince, hNot, dite_false, List.append_nil]
   rfl
-
-/-- Before Shapella, the seal hash hashes the header item without its 14th and 15th items. -/
-theorem sealHash_eq {fork : Fork} (h : Header fork) {items : List Item}
-    (hItem : Codec.toItem h = .list items) (hFork : fork < .shapella) :
-    h.sealHash = keccak256 <$> encode (.list (items.take 13 ++ items.drop 15)) := by
-  rw [sealHash, ← sealItem_eq h hItem hFork]
-  cases encode h.sealItem <;> rfl
 
 end Header
 
