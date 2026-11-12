@@ -85,13 +85,11 @@ def meta_problems(
 
     Under the module system, a module runs imported code at elaboration only through `meta import`.
     But an `elab` defined in another module runs while the module that uses it is elaborated.
-    `derive_py` is such an `elab`: it runs while an export is elaborated.
-    Its module meta-imports only the toolchain.
     So the check walks every module that an export reaches through its imports, of any kind.
     A `meta import` also makes the code of every module that the imported one reaches runnable.
-    So no module on that walk meta-imports a module that reaches the specification.
+    So no module on that walk meta-imports a module that reaches a specification.
 
-    A specification never uses `meta import`, whether an export reaches it today or not.
+    A specification never uses `meta import`, whether an export reaches it or not.
     An `elab` or a `meta def` written in a specification with no `meta import` is not seen here.
     """
     reaches: dict[str, bool] = {}

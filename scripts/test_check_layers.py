@@ -256,7 +256,7 @@ class Rules(unittest.TestCase):
         )
 
     def test_specification_meta_imports_the_specification(self):
-        # An export imports `EthLib.Execution.A` plainly, as `PyValue` imports `Hex`.
+        # An export imports `EthLib.Execution.A` plainly, so only the meta import breaks a rule.
         tree: dict[str, list[str] | str] = dict(GOOD)
         tree["EthLib.Execution.A"] = (
             "module\n\npublic import EthLib.Networking.A\npublic import EthLib.Base.A\n"
@@ -265,6 +265,15 @@ class Rules(unittest.TestCase):
         self.assert_fails(
             tree,
             "EthLib/Execution/A.lean:5: meta-imports EthLib.Base.A, "
+            "but a specification never uses `meta import`",
+        )
+
+    def test_specification_that_no_export_reaches_meta_imports(self):
+        tree = with_modules({"EthLib.Networking.B": []})
+        tree["EthLib.Networking.B"] = "module\n\nmeta import Lean.Elab.Command\n"
+        self.assert_fails(
+            tree,
+            "EthLib/Networking/B.lean:3: meta-imports Lean.Elab.Command, "
             "but a specification never uses `meta import`",
         )
 
