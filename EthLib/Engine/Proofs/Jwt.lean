@@ -267,7 +267,9 @@ A test can run those shortcuts, but on a huge exponent it cannot compute the val
 private theorem lt_ten_pow_of_length_lt {n k : Nat} (h : n.repr.length < k) : n < 10 ^ k :=
   (Nat.length_repr_le_iff (by omega)).mp (Nat.le_of_lt h)
 
-/-- A date with a nonnegative exponent passes exactly when its value is within 60 seconds. -/
+/-- A date with a nonnegative exponent passes exactly when it is within 60 seconds of the clock.
+
+Its value is the mantissa times that power of ten. -/
 theorem within_eq_true_iff_of_nonneg {time : Json.Number} (he : 0 ≤ time.exponent)
     (clock : Nat) :
     Json.within time clock = true ↔
