@@ -38,6 +38,9 @@ Not yet released.
   The keys of the record come out in byte order.
   The JSON format and the C and Python signatures are unchanged.
 
+- The theorem that a block leaves its header as the latest block header holds at every fork.
+  In Lean, `latestBlockHeader_processBlock` drops its `gloas` argument, and its conclusion is unchanged.
+  Callers remove that argument.
 - The cumulative churn bounds also hold for idle queues ([#1451](https://github.com/ethereum/EthLib/issues/1451)).
   In Lean, `churnQueue_foldlM_le` drops its `first` argument, and `computeExitEpochAndUpdateChurn_foldlM_le` and `computeConsolidationEpochAndUpdateChurn_foldlM_le` drop their `open_` argument.
   Callers remove that argument.

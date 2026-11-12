@@ -13,7 +13,7 @@ At two consecutive slots it records the same root, or a block and its child.
 
 The parent root of a block is the root recorded at the slot before it, by the check of its header.
 
-No theorem here states that.
+`rootLinks_cases_of_chainSteps` in `RootLinks.lean` states that for a run of a chain.
 
 Without a collision of header roots, these pairs order the roots by ancestry.
 
@@ -192,7 +192,7 @@ theorem RootsAbove.of_initializeBeaconStateFromEth1 {fork : Fork}
   · cases current <;> simp [recentJustified, previous, current, GENESIS_EPOCH]
 
 /-- Two states with the same slot and buffer of roots have the same links. -/
-private theorem rootLinks_congr {fork post : Fork} {state : BeaconState preset fork}
+theorem rootLinks_congr {fork post : Fork} {state : BeaconState preset fork}
     {other : BeaconState preset post} (slot : other.slot = state.slot)
     (roots : other.blockRoots = state.blockRoots) : rootLinks other = rootLinks state := by
   simp only [rootLinks, getBlockRootAtSlot_congr slot roots]

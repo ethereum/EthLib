@@ -28,7 +28,9 @@ So from Gloas the parent step keeps the proposer that the header step reads.
 
 The RANDAO step changes only the mixes, and the bid step only the latest bid.
 
-So from Gloas a block leaves its own bid as the latest bid, and its header as the latest header.
+So from Gloas a block leaves its own bid as the latest bid.
+
+At every fork a block leaves its own header as the latest header, and names the header before it.
 
 The latest block hash after the block is then the parent hash of that bid.
 
@@ -769,23 +771,153 @@ theorem latestBlockHash_processBlock (gloas : .glamsterdam ≤ fork)
   rw [hash, kept, latestExecutionPayloadBid_processExecutionPayloadBid bid, parentHash]
   exact congrFun (payloadInputs_processExecutionPayloadBid bid).latestBlockHash gloas
 
-/-- From Gloas, a block leaves its header as the latest block header.
+/-- The operations of a block keep the latest block header, at every fork.
+
+Before Gloas the deposits and, from Electra, the requests of the execution layer run too. -/
+private theorem latestBlockHeader_processOperations {body : BeaconBlockBody preset fork}
+    {parentSlot : Slot}
+    (computed : processOperations config checks state body parentSlot = .ok after) :
+    after.latestBlockHeader = state.latestBlockHeader := by
+  have fold {α ε : Type} {step : BeaconState preset fork → α → Except ε (BeaconState preset fork)}
+      (kept : ∀ s x t, step s x = .ok t → t.latestBlockHeader = s.latestBlockHeader)
+      {s t : BeaconState preset fork} {items : List α} (ok : items.foldlM step s = .ok t) :
+      t.latestBlockHeader = s.latestBlockHeader :=
+    foldlM_ok_invariant (fun t => t.latestBlockHeader = s.latestBlockHeader)
+      (fun _ _ _ before ok => (kept _ _ _ ok).trans before) rfl ok
+  by_cases gloas : .glamsterdam ≤ fork
+  · exact (payloadInputs_processOperations gloas computed).latestBlockHeader
+  simp only [processOperations, gloas, ↓reduceDIte, bind_ok_iff, ensure_ok_iff,
+    ← Array.foldlM_toList] at computed
+  obtain ⟨_, _, _, _, _, proposers, _, attesters, _, attestations, _, deposits, exited, exits,
+    changed, changes, requests⟩ := computed
+  have changesKept : changed.latestBlockHeader = exited.latestBlockHeader := by
+    unfold processBlsToExecutionChanges at changes
+    split at changes
+    · rw [← Array.foldlM_toList] at changes
+      exact fold (fun _ _ _ ok => (payloadInputs_processBlsToExecutionChange ok).latestBlockHeader)
+        changes
+    · cases changes
+      rfl
+  have requestsKept : after.latestBlockHeader = changed.latestBlockHeader := by
+    split at requests
+    · simp only [processExecutionRequests, bind_ok_iff, ← Array.foldlM_toList] at requests
+      obtain ⟨_, deposited, _, withdrawn, consolidated⟩ := requests
+      exact (fold (fun _ _ _ ok =>
+        (payloadInputs_processConsolidationRequest ok).latestBlockHeader) consolidated).trans <|
+        (fold (fun _ _ _ ok =>
+          (payloadInputs_processWithdrawalRequest ok).latestBlockHeader) withdrawn).trans <|
+        fold (fun _ _ _ ok => (payloadInputs_processDepositRequest ok).latestBlockHeader) deposited
+    · cases requests
+      rfl
+  exact requestsKept.trans <| changesKept.trans <|
+    (fold (fun _ _ _ ok => (payloadInputs_processVoluntaryExit ok).latestBlockHeader)
+      exits).trans <|
+    (fold (fun _ _ _ ok => by
+      obtain ⟨_, _, _, _, applied⟩ := processDeposit_ok ok
+      exact (frame_applyDeposit applied).latestBlockHeader) deposits).trans <|
+    (fold (fun _ _ _ ok => (payloadInputs_processAttestation ok).latestBlockHeader)
+      attestations).trans <|
+    (fold (fun _ _ _ ok => (payloadInputs_processAttesterSlashing ok).latestBlockHeader)
+      attesters).trans <|
+    fold (fun _ _ _ ok => (payloadInputs_processProposerSlashing ok).latestBlockHeader) proposers
+
+/-- The execution part of a block keeps the latest block header. -/
+private theorem latestBlockHeader_processBlockExecution {body : BeaconBlockBody preset fork}
+    {bellatrix : .bellatrix ≤ fork}
+    (computed : processBlockExecution config checks engine state body bellatrix = .ok after) :
+    after.latestBlockHeader = state.latestBlockHeader := by
+  have payload {before after : BeaconState preset fork}
+      {during : .bellatrix ≤ fork ∧ fork < .glamsterdam}
+      (ok : processExecutionPayload config engine before body during = .ok after) :
+      after.latestBlockHeader = before.latestBlockHeader := by
+    obtain ⟨_, _, _, rfl⟩ := processExecutionPayload_ok ok
+    rfl
+  unfold processBlockExecution at computed
+  split at computed
+  · obtain ⟨_, withdrawn, bid⟩ := bind_ok_iff.mp computed
+    exact (payloadInputs_processExecutionPayloadBid bid).latestBlockHeader.trans
+      (payloadInputs_processWithdrawals withdrawn).latestBlockHeader
+  · split at computed
+    · obtain ⟨_, withdrawn, executed⟩ := bind_ok_iff.mp computed
+      exact (payload executed).trans (payloadInputs_processWithdrawals withdrawn).latestBlockHeader
+    · dsimp only at computed
+      split at computed
+      · exact payload computed
+      · cases computed
+        rfl
+
+/-- A block runs its header step on a state with the slot and latest header of the state before it.
+
+Only the parent payload of a block can come first, from Gloas, and it keeps both.
+
+No later step changes the latest block header, so the result has the one that the header step set.
+-/
+private theorem processBlock_header_split {block : BeaconBlock preset fork}
+    (computed : processBlock config checks engine state block = .ok after) :
+    ∃ parented headed, parented.slot = state.slot ∧
+      parented.latestBlockHeader = state.latestBlockHeader ∧
+      processBlockHeader parented block = .ok headed ∧
+      after.latestBlockHeader = headed.latestBlockHeader := by
+  by_cases gloas : .glamsterdam ≤ fork
+  · obtain ⟨parented, headed, withdrawn, _, _, parentOk, headedOk, withdrawnOk, bid, -, header, -,
+      -⟩ := processBlock_steps gloas computed
+    have kept := payloadInputs_processParentExecutionPayload parentOk
+    exact ⟨parented, headed, kept.slot, kept.latestBlockHeader, headedOk,
+      header.trans ((payloadInputs_processExecutionPayloadBid bid).latestBlockHeader.trans
+        (payloadInputs_processWithdrawals withdrawnOk).latestBlockHeader)⟩
+  · unfold processBlock at computed
+    split at computed
+    · simp only [processBlockAltair, gloas, ↓reduceDIte, pure_bind, bind_ok_iff] at computed
+      obtain ⟨headed, headedOk, executed, executedOk, revealed, revealedOk, voted, votedOk,
+        operated, operatedOk, synced⟩ := computed
+      have executedKept : executed.latestBlockHeader = headed.latestBlockHeader := by
+        split at executedOk
+        · exact latestBlockHeader_processBlockExecution executedOk
+        · cases executedOk
+          rfl
+      have votedKept : voted.latestBlockHeader = revealed.latestBlockHeader := by
+        split at votedOk
+        · exact (payloadInputs_processEth1Data votedOk).latestBlockHeader
+        · cases votedOk
+          rfl
+      exact ⟨state, headed, rfl, rfl, headedOk,
+        (payloadInputs_processSyncAggregate synced).latestBlockHeader.trans <|
+          (latestBlockHeader_processOperations operatedOk).trans <| votedKept.trans <|
+          (payloadInputs_processRandao revealedOk).latestBlockHeader.trans executedKept⟩
+    · simp only [bind_ok_iff] at computed
+      obtain ⟨headed, headedOk, revealed, revealedOk, voted, votedOk, operatedOk⟩ := computed
+      exact ⟨state, headed, rfl, rfl, headedOk,
+        (latestBlockHeader_processOperations operatedOk).trans <|
+          (payloadInputs_processEth1Data votedOk).latestBlockHeader.trans
+            (payloadInputs_processRandao revealedOk).latestBlockHeader⟩
+
+/-- At every fork, a block leaves its header as the latest block header.
 
 The header holds the slot, the proposer and the parent root of the block, and the root of its body.
 
 Its state root is zero. -/
-theorem latestBlockHeader_processBlock (gloas : .glamsterdam ≤ fork)
-    {block : BeaconBlock preset fork}
+theorem latestBlockHeader_processBlock {block : BeaconBlock preset fork}
     (computed : processBlock config checks engine state block = .ok after) :
     ∃ bodyRoot, Serialization.Ssz.SszType.hashTreeRoot block.body = .ok bodyRoot ∧
       after.latestBlockHeader =
         { slot := block.slot, proposerIndex := block.proposerIndex,
           parentRoot := block.parentRoot, stateRoot := Vector.replicate 32 0, bodyRoot } := by
-  obtain ⟨_, _, _, _, _, _, headedOk, withdrawnOk, bid, -, header, -, -⟩ :=
-    processBlock_steps gloas computed
+  obtain ⟨_, _, -, -, headedOk, header⟩ := processBlock_header_split computed
   obtain ⟨bodyRoot, rooted, rfl⟩ := processBlockHeader_eq headedOk
-  refine ⟨bodyRoot, rooted, ?_⟩
-  exact header.trans ((payloadInputs_processExecutionPayloadBid bid).latestBlockHeader.trans
-    (payloadInputs_processWithdrawals withdrawnOk).latestBlockHeader)
+  exact ⟨bodyRoot, rooted, header⟩
+
+/-- At every fork, a block names the latest block header before it as its parent.
+
+The block is at the slot of the state, after the slot of that header.
+
+Its parent root is the root of that header. -/
+theorem processBlock_parentRoot {block : BeaconBlock preset fork}
+    (computed : processBlock config checks engine state block = .ok after) :
+    block.slot = state.slot ∧ state.latestBlockHeader.slot < block.slot ∧
+      Serialization.Ssz.SszType.hashTreeRoot state.latestBlockHeader = .ok block.parentRoot := by
+  obtain ⟨_, _, slot, header, headedOk, -⟩ := processBlock_header_split computed
+  obtain ⟨atSlot, newer, -, parent, -⟩ := processBlockHeader_checks headedOk
+  rw [header] at newer parent
+  exact ⟨atSlot.trans slot, newer, parent⟩
 
 end EthLib.Consensus

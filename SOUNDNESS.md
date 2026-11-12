@@ -2147,7 +2147,7 @@ It assumes that the vectors whose length the preset sets have a positive length,
 It rests on `BeaconBlock.hashTreeRoot_header`, which shows that a block has the root of its header.
 It also rests on `latestBlockHash_processBlock`, which shows that from Gloas the latest block hash after a block is the parent hash of the latest bid.
 `latestExecutionPayloadBid_processBlock` shows that from Gloas a block leaves its own bid as the latest bid.
-`latestBlockHeader_processBlock` shows that from Gloas a block leaves its header, with a zero state root, as the latest block header.
+`latestBlockHeader_processBlock` shows that at every fork a block leaves its header, with a zero state root, as the latest block header.
 These rest on `PayloadInputs`, the fields that the checks of a payload and of a bid read.
 From Gloas the parent, header, RANDAO and bid steps each change one of them, and the other steps keep them all.
 No theorem covers the signature, the time or the withdrawals of the envelope, or the answer of the execution layer.
@@ -2506,7 +2506,21 @@ The step also needs the previous justified epoch below the previous epoch once j
 `slackJustifiedCheckpoints_activeSetAt_of_chainSteps` (`FfgSlackActive.lean`) takes the votes that the block steps of the run cast, the active sets and the effective balances.
 Its step asks only the active stake, the order of the blocks and the preset.
 The order of the blocks asks that the map from roots to blocks keeps in order the roots that a state records at two consecutive slots, and the zero root before the root of slot zero (`rootLinks`, `Consensus/Proofs/Transition/FfgRoots.lean`).
-Two consecutive slots record the same root, or a block and its child, since the header check makes the parent root of a block the root recorded at the slot before it; no theorem states that yet.
+Two consecutive slots record the same root, or a block and its child, since the header check makes the parent root of a block the root recorded at the slot before it.
+`rootLinks_cases_of_chainSteps` (`Consensus/Proofs/Transition/RootLinks.lean`) states that for a run of a chain, upgrades included.
+The block steps of the run must validate their state roots.
+The other cases are a pair that the first state records, the zero root with the root of slot zero, and a state of the run that hashes to the zero root.
+Such a state leaves the header of the latest block unfilled at its slot.
+So the next slot records the root of the header as it was.
+The first state must be at slot zero, or record the root of its latest header at the slot before it.
+The state root of that header must not be zero.
+Otherwise its first slot adds a pair that no case covers.
+The theorem assumes that the vectors whose length the preset sets have a positive length, as the root of a block needs.
+`rootLinks_le_or_zeroPreimage_of_chainSteps` gives the `links` hypothesis of `RootsAbove.of_chainStep` for the last state of a run.
+It takes a map from roots to a preorder that orders each block of the run after its parent root, and it fails only on a zero preimage.
+For one transition, `getBlockRootAtSlot_stateTransition_cases` shows that each root recorded from the slot of the state on is the parent root of the block.
+The other case is that the state before the transition hashes to the zero root, and the root is that of the latest header as it was.
+`getBlockRootAtSlot_stateTransition_of_lt` shows that the roots of older slots are those of the state before.
 Without a collision of header roots, such pairs order the roots by ancestry.
 `RootsAbove.of_chainStep` then keeps each justified checkpoint below every root that the state records from its epoch on, which gives the source block of each recent link in the chain of its target block.
 `slackJustifiedCheckpoints_chainRoot_of_chainSteps` (`FfgSlackActive.lean`) takes the roots themselves as the blocks of the model, ordered by the links of every state that genesis reaches (`ChainRoot`), so the order holds by construction and the step asks only the active stake.
