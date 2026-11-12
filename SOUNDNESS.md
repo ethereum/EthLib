@@ -707,9 +707,9 @@ They must discard handshake state after an error.
 ### Engine API authentication
 
 `Jwt.check_build_of_size` (`Engine/Proofs/Jwt.lean`) proves that a token built with a 32-byte secret passes with that secret at clocks within 60 seconds of its issued-at time.
-`Json.within_eq_true_iff_of_nonneg` and `Json.within_eq_true_iff_of_neg` give that comparison in full, one for each sign of the exponent of the date.
-Each scales the bounds instead of dividing the date, so the comparison is the exact one.
-They cover the two shortcuts that let it avoid expanding a huge exponent, which no test can reach: the power itself overflows.
+`Jwt.within_eq_true_iff_of_nonneg` and `Jwt.within_eq_true_iff_of_neg` give the clock comparison of the issued-at time in full, one for each sign of the exponent of the date.
+For a negative exponent the statement scales the bounds instead of dividing the date, so it is the exact comparison.
+They prove correct the two shortcuts that avoid expanding a huge exponent, where a test can run the shortcut but cannot compute the value it replaces.
 The builder validates the JSON it generates, and `Jwt.build_eq_ok` proves that this validation never fails.
 `Jwt.authenticate_eq_error_of_tag_ne` proves that a token whose tag differs from the HS256 tag of its parts is refused before any JSON is read.
 `Jwt.compact_signature_of_check` proves that an accepted token is the compact form of its parts with their HS256 tag under the secret.

@@ -250,32 +250,24 @@ theorem authenticate_build {secret : ByteArray} {time : Nat} {token : String}
   rw [authenticate_compact (header := headerPart) (claims := claimsPart time) hs
     (dot_not_mem_encode _) (dot_not_mem_encode _), issuedAt_claimsPart]
 
-
 /-! ## The NumericDate comparison
 
-`within` compares a JSON number with the clock exactly, whatever its exponent.
+The clock check compares a JSON number with the clock exactly, whatever its exponent.
 
 Two theorems give it in full, one for each sign of that exponent.
 
-Each scales the bounds instead of dividing the date, so neither expands a huge exponent.
+For a negative exponent, the statement scales the bounds instead of dividing the date.
 
-The two shortcuts that let the comparison avoid that expansion hold for every input.
+So the theorems prove the two shortcuts of the check correct for every input.
 
-A test can only sample them: an exponent of `10 ^ 18` overflows any evaluation of the power.
+A test can run those shortcuts, but on a huge exponent it cannot compute the value they replace.
 -/
 
-/-- A value written with `k` digits is below `10 ^ k`. -/
-private theorem lt_ten_pow_length_repr (n : Nat) : n < 10 ^ n.repr.length :=
-  (Nat.length_repr_le_iff Nat.length_repr_pos).mp (Nat.le_refl _)
+/-- Past the digits of a bound, a power of ten overshoots it. -/
+private theorem lt_ten_pow_of_length_lt {n k : Nat} (h : n.repr.length < k) : n < 10 ^ k :=
+  (Nat.length_repr_le_iff (by omega)).mp (Nat.le_of_lt h)
 
-/-- Past the digits of the bound, a power of ten overshoots it. -/
-private theorem lt_ten_pow_of_length_lt {n k : Nat} (h : n.repr.length < k) : n < 10 ^ k := by
-  have h1 := lt_ten_pow_length_repr n
-  have h2 : (10 : Nat) ^ n.repr.length ≤ 10 ^ k :=
-    Nat.pow_le_pow_right (by decide) (Nat.le_of_lt h)
-  omega
-
-/-- A date of a whole number of seconds passes exactly within 60 seconds of the clock. -/
+/-- A date with a nonnegative exponent passes exactly when its value is within 60 seconds. -/
 theorem within_eq_true_iff_of_nonneg {time : Json.Number} (he : 0 ≤ time.exponent)
     (clock : Nat) :
     Json.within time clock = true ↔
@@ -313,9 +305,9 @@ theorem within_eq_true_iff_of_nonneg {time : Json.Number} (he : 0 ≤ time.expon
         omega
     · simp
 
-/-- A date with a fraction of a second passes exactly within 60 seconds of the clock.
+/-- A date with a negative exponent passes exactly when the scaled bounds enclose its mantissa.
 
-The comparison scales the bounds rather than dividing the date, so it is the exact one. -/
+That is the exact comparison of its value with the clock, with no division. -/
 theorem within_eq_true_iff_of_neg {time : Json.Number} (he : time.exponent < 0) (clock : Nat) :
     Json.within time clock = true ↔
       ((clock : Int) - 60) * ((10 ^ (-time.exponent).toNat : Nat) : Int) ≤ time.mantissa ∧
