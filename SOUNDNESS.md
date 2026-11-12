@@ -760,6 +760,13 @@ The Python tests (`bindings/python/tests/precompile/test_ripemd160.py`) check th
 
 ### KZG
 
+No text is agreed yet as the normative KZG specification.
+The specifications in consensus-specs point to this repository through a redirect that names no commit.
+The Final EIPs pin an older consensus-specs text.
+The [KZG README](EthLib/Cryptography/Kzg/README.md#the-normative-text) gives the three readings, and no one has settled on one.
+The theorems below are about the definitions of EthLib.
+Which source text EthLib's definitions match depends on the reading.
+
 The KZG and PeerDAS proofs use `Bls.pairingLaws`, which proves the pairing law of the check.
 Their theorems take no pairing-law hypothesis.
 
