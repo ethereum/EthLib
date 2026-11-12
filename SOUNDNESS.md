@@ -714,12 +714,13 @@ Only the libp2p read verifies an identity, and completion checks that the stored
 The raw transport split of an XX state checks neither.
 The Python tests compare the raw XX handshake with a published test vector.
 No published vector covers the libp2p payload, so its tests check the keys and signatures with independent code.
+
 The DER signature of an identity has its own theorems (`Networking/Proofs/Libp2p/PeerId.lean`).
-`derInteger_eq` proves that the content of the DER INTEGER of a number below `2 ^ 256` is that number in big-endian bytes.
-It takes the fewest bytes whose top bit stays clear.
-So a number whose first byte is `0x80` or more gets one leading zero byte, and no other number does.
-`decodeSignature_eq_ok_iff` proves that the decoder accepts exactly the encodings of r in [1, n) and s in [1, n/2], and returns r and s.
-So a signature has one accepted form.
+`derInteger_eq` proves that the content of the DER INTEGER of a number below `2 ^ 256` is that number in big-endian bytes, on the fewest bytes whose top bit is clear.
+So a positive number gets a leading zero byte exactly when its first nonzero byte is `0x80` or more, and zero is the single byte `0x00`.
+`decodeSignature_eq_ok_iff` proves that the decoder accepts exactly the encodings of r in [1, N) and s in [1, N/2], where N is the order of the secp256k1 group, and returns r and s.
+So each accepted pair r, s has exactly one byte encoding.
+No theorem relates the encoder to an independent model of X.690, and none is about ECDSA verification.
 
 The bindings take explicit keys and state tuples.
 Callers must use fresh ephemeral keys and use the returned state after each successful cipher call.

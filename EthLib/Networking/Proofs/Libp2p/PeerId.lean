@@ -5,14 +5,14 @@ public import EthLib.Networking.Libp2p.PeerId
 public import EthLib.Cryptography.Proofs.Secp256k1.Encoding
 
 /-!
-# Proofs: libp2p secp256k1 public keys and peer IDs
+# Proofs: libp2p secp256k1 public keys, peer IDs and DER signatures
 
 - A point of the curve, other than infinity, encodes to a key protobuf that decodes back to it.
 - A peer ID decodes back to its key, and the decoder accepts only peer IDs of keys.
 - Two different points of the curve have two different peer IDs.
 - A decoded key's peer ID is the two bytes `00 25`, then the key protobuf.
-- A number below `2 ^ 256` is a DER INTEGER on the fewest bytes whose top bit stays clear.
-- The signature decoder accepts exactly the encodings of r and s in range, and returns them.
+- A number below `2 ^ 256` is written as a DER INTEGER on the fewest bytes whose top bit is clear.
+- The signature decoder accepts exactly the encodings of r and low s in range, and returns them.
 -/
 
 @[expose] public section
@@ -96,31 +96,24 @@ theorem peerId_of_decodePublicKey {key : ByteArray} {point : Point}
 
 /-! ## DER signatures
 
-BIP 62 rule 1 asks for strict DER, where an INTEGER takes the fewest bytes of its two's complement.
+Rule 1 of BIP 62 asks for strict DER, which its section [DER encoding][bip62der] spells out.
 
-So a positive number has one leading zero byte exactly when its first byte is `0x80` or more.
+An INTEGER content starts with `0x00` only when the next byte is `0x80` or more.
+
+So a positive number gets a leading zero byte exactly when its first nonzero byte is `0x80` or more.
 
 The decoder accepts a signature only when the encoder writes the same bytes back.
+
+[bip62der]: https://github.com/bitcoin/bips/blob/24e96e870fffaa257b465ce1f0370c14aac588e8/bip-0062.mediawiki#der-encoding
 -/
 
-/-- On `i + 1` bytes, the first byte is `n / 256 ^ i`, then `n` follows on `i` bytes. -/
+/-- On `i + 1` bytes, the first byte is `n / 256 ^ i` modulo 256, then `n` follows on `i` bytes. -/
 private theorem natToBytes_succ_eq_cons (i n : Nat) :
     natToBytes (i + 1) n = UInt8.ofNat (n / 256 ^ i) :: natToBytes i n := by
   rw [Nat.add_comm, natToBytes_add]
   rfl
 
-/-- A byte written from a number below 256 reads back as that number. -/
-private theorem toNat_ofNat_of_lt {x : Nat} (h : x < 256) : (UInt8.ofNat x).toNat = x := by
-  simp; omega
-
-/-- Dropping the leading zeros of zeros followed by a nonzero byte leaves that byte first. -/
-private theorem dropWhile_replicate_append (k : Nat) {b : UInt8} (rest : List UInt8)
-    (hb : b ≠ 0) : (List.replicate k 0 ++ b :: rest).dropWhile (· == 0) = b :: rest := by
-  induction k with
-  | zero => simp [hb]
-  | succ k ih => simpa [List.replicate_succ, List.dropWhile_cons] using ih
-
-/-- A number with exactly `i + 1` significant bytes keeps those bytes once its leading zeros go. -/
+/-- On 32 bytes, a number with `i + 1` significant bytes keeps them once its leading zeros go. -/
 private theorem dropWhile_natToBytes {n i : Nat} (hi : i < 32) (low : 256 ^ i ≤ n)
     (high : n < 256 ^ (i + 1)) :
     (natToBytes 32 n).dropWhile (· == 0) = natToBytes (i + 1) n := by
@@ -131,21 +124,24 @@ private theorem dropWhile_natToBytes {n i : Nat} (hi : i < 32) (low : 256 ^ i �
   have hlow : 1 ≤ n / 256 ^ i := (Nat.le_div_iff_mul_le hpos).mpr (by omega)
   have hhigh : n / 256 ^ i < 256 :=
     (Nat.div_lt_iff_lt_mul hpos).mpr (by rw [Nat.pow_succ] at high; omega)
-  rw [hsplit, natToBytes_succ_eq_cons]
-  apply dropWhile_replicate_append
-  intro h
-  have := congrArg UInt8.toNat h
-  rw [toNat_ofNat_of_lt hhigh] at this
-  simp at this
-  omega
+  have nonzero : UInt8.ofNat (n / 256 ^ i) ≠ 0 := by
+    intro h
+    have := congrArg UInt8.toNat h
+    rw [UInt8.toNat_ofNat_of_lt' hhigh] at this
+    simp at this
+    omega
+  rw [hsplit, natToBytes_succ_eq_cons, List.dropWhile_append_of_pos (by simp)]
+  simp [nonzero]
 
-/-- The DER INTEGER of a number below `2 ^ 256`, BIP 62.
+/-- The DER INTEGER of a number below `2 ^ 256`, as BIP 62 spells out strict DER.
 
-Its content is the number on `k` big-endian bytes, the fewest bytes whose top bit stays clear.
+Its content is the number on `k` big-endian bytes, for the `k` that meets two bounds.
 
-So the number is below `2 ^ (8 * k - 1)`, and, for `k` above 1, at least `2 ^ (8 * (k - 1) - 1)`.
+The number is below `2 ^ (8 * k - 1)`, and, for `k` above 1, at least `2 ^ (8 * (k - 1) - 1)`.
 
-The first content byte is then below `0x80`, and it is `0x00` only before a byte of `0x80` or more.
+These bounds pick the fewest bytes whose top bit is clear.
+
+With them, the first content byte is below `0x80`, and it is `0x00` only before `0x80` or more.
 
 Zero is one content byte, `0x00`. -/
 theorem derInteger_eq {n k : Nat} (hn : n < 2 ^ 256) (high : n < 2 ^ (8 * k - 1))
@@ -164,7 +160,7 @@ theorem derInteger_eq {n k : Nat} (hn : n < 2 ^ 256) (high : n < 2 ^ (8 * k - 1)
     have hdrop := dropWhile_natToBytes hj32 hj (by rw [Nat.pow_succ]; omega)
     rw [natToBytes_succ_eq_cons j n] at hdrop ⊢
     have : ¬ (UInt8.ofNat (n / 256 ^ j)).toNat ≥ 128 := by
-      rw [toNat_ofNat_of_lt (by omega)]; omega
+      rw [UInt8.toNat_ofNat_of_lt' (by rw [UInt8.size]; omega)]; omega
     simp only [derInteger, hdrop]
     rw [ite_eq_right this]
     simp [natToBytes_length]
@@ -188,14 +184,14 @@ theorem derInteger_eq {n k : Nat} (hn : n < 2 ^ 256) (high : n < 2 ^ (8 * k - 1)
       rw [natToBytes_succ_eq_cons (i + 1) n, Nat.div_eq_of_lt (by omega),
         natToBytes_succ_eq_cons i n]
       have : (UInt8.ofNat (n / 256 ^ i)).toNat ≥ 128 := by
-        rw [toNat_ofNat_of_lt hdiv256]; omega
+        rw [UInt8.toNat_ofNat_of_lt' hdiv256]; omega
       simp only [derInteger, hdrop]
       rw [ite_eq_left this]
       simp [natToBytes_length]
 
 -- The bound for 33 bytes is `2 ^ 263`, above the default threshold for evaluating a power.
 set_option exponentiation.threshold 263 in
-/-- Every number below `2 ^ 256` has a byte count of at most 33 that meets the bounds. -/
+/-- Every number below `2 ^ 256` has a byte count from 1 to 33 that meets the bounds above. -/
 private theorem exists_byteCount {n : Nat} (hn : n < 2 ^ 256) :
     ∃ k, 1 ≤ k ∧ k ≤ 33 ∧ n < 2 ^ (8 * k - 1) ∧
       (k = 1 ∨ 2 ^ (8 * (k - 1) - 1) ≤ n) := by
@@ -226,11 +222,17 @@ private theorem exists_derInteger_eq {n : Nat} (hn : n < 2 ^ 256) :
     exact Nat.pow_le_pow_right (by decide) (by omega)
   omega
 
-/-- The decoder accepts exactly the encodings of r in [1, n) and s in [1, n/2], BIP 62.
+/-- The decoder accepts exactly the encodings of r in [1, N) and s in [1, N/2], BIP 62.
 
-It returns those r and s.
+Here N is the order of the secp256k1 group, and N/2 rounds down.
 
-So no other bytes decode to the same r and s, and a signature has one accepted form. -/
+The decoder returns those r and s.
+
+Its last check is that the encoder writes the same bytes back, so acceptance gives the encoding.
+
+The converse is the content: the decoder parses back every encoding of scalars in those ranges.
+
+So each accepted pair r, s has exactly one byte encoding. -/
 theorem decodeSignature_eq_ok_iff {signature : ByteArray} {r s : Nat} :
     decodeSignature signature = .ok (r, s) ↔
       0 < r ∧ r < Fn.modulus ∧ 0 < s ∧ s ≤ Fn.modulus / 2 ∧
@@ -268,9 +270,10 @@ theorem decodeSignature_eq_ok_iff {signature : ByteArray} {r s : Nat} :
       rw [ByteArray.size, ← Array.length_toList, hdata]
       simp [natToBytes_length]
       omega
-    have hkr8 : (UInt8.ofNat kr).toNat = kr := toNat_ofNat_of_lt (by omega)
-    have hks8 : (UInt8.ofNat ks).toNat = ks := toNat_ofNat_of_lt (by omega)
-    have htotal : (UInt8.ofNat (kr + ks + 4)).toNat = kr + ks + 4 := toNat_ofNat_of_lt (by omega)
+    have hkr8 : (UInt8.ofNat kr).toNat = kr := UInt8.toNat_ofNat_of_lt' (by rw [UInt8.size]; omega)
+    have hks8 : (UInt8.ofNat ks).toNat = ks := UInt8.toNat_ofNat_of_lt' (by rw [UInt8.size]; omega)
+    have htotal : (UInt8.ofNat (kr + ks + 4)).toNat = kr + ks + 4 :=
+      UInt8.toNat_ofNat_of_lt' (by rw [UInt8.size]; omega)
     have hcond : 0 < r ∧ r < Fn.modulus ∧ 0 < s ∧ s ≤ Fn.modulus / 2 ∧
         encodeSignature r s = encodeSignature r s := ⟨hr, hrn, hs, hsn, rfl⟩
     unfold decodeSignature
@@ -280,6 +283,5 @@ theorem decodeSignature_eq_ok_iff {signature : ByteArray} {r s : Nat} :
       List.drop_left' (natToBytes_length kr r), natToBytes_length,
       bytesToNat_natToBytes_of_lt hrk, bytesToNat_natToBytes_of_lt hsk]
     simp [hcond]
-
 
 end EthLib.Networking.Proofs.Libp2p.PeerId
