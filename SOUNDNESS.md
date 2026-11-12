@@ -695,7 +695,7 @@ A caller that edits the state can therefore complete with a remote whose signatu
 These are acceptance theorems, not a proof of protocol security, confidentiality or constant-time execution.
 They relate the identity to the transport keys only through the shared handshake state.
 The transcript of Noise §5.2 has its own theorems (`Networking/Proofs/Noise.lean`).
-`chainingKey_foldl_mixHash` and `cipher_foldl_mixHash` prove that a run of transcript mixes reaches neither the chaining key nor the cipher.
+`chainingKey_foldl_mixHash` and `cipher_foldl_mixHash` prove that a run of transcript mixes leaves the chaining key and the cipher unchanged.
 `eq_or_collision_of_hash_mixHash_eq` proves that two mixes that end at one handshake hash started at one handshake hash and mixed the same bytes, or else names the two different SHA-256 inputs that hash alike.
 No theorem assumes or bounds the collision resistance of SHA-256, and none binds the whole transcript of a handshake.
 `unframe_frame` proves that reading back a written frame of the noise-libp2p "Wire Format" returns its message.
