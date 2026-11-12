@@ -24,7 +24,7 @@ public import EthLib.Cryptography.Hash.Sha256
 
 @[expose] public section
 
--- Definitions and theorems.
+-- Definitions, and the theorems that ARCHITECTURE.md keeps beside them.
 ```
 
 Each part of that shape has a reason.
