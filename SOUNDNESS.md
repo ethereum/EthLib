@@ -746,21 +746,22 @@ The Python binding sets default limits.
 
 ### scrypt
 
-The scrypt proofs state the length each step returns, the inputs each step accepts, and the values that ROMix computes (`Proofs/Hash/Scrypt.lean`).
+The scrypt proofs state the length each step returns, the inputs each step accepts, and the table and the index of ROMix (`Proofs/Hash/Scrypt.lean`).
 `validCost_iff` states the cost test as the bound of RFC 7914 §2: a power of two above 1 and below `2^(16 r)`.
 `salsa208_ok_iff`, `blockMix_ok_iff`, `romix_ok_iff` and `scrypt_ok_iff` state which inputs each step accepts.
 `scrypt_ok_iff` also carries the bounds that PBKDF2 needs on the password and the salt.
 `salsa208_size`, `blockMix_size`, `romix_size` and `scrypt_size` state the length each step returns.
-`integerify_eq` states the index of RFC 7914 §5 as the last 64 bytes of the value, read little-endian through `Base.bytesToUint`.
+`integerify_eq` states Integerify of RFC 7914 §5, whose remainder mod `N` is the index, as the last 64 bytes of the value read little-endian through `Base.bytesToUint`.
 `romixFill_replicate_fst_get` states that entry `j` of the table that ROMix fills is BlockMix applied `j` times to the input.
 It holds for every `j` below `N`, and `romixFill_fst_get` holds for a fill that starts from any index.
-`romixFill_fst_get_lt` states that the fill leaves the entries below the index it starts from.
-`romixFill_snd` states that the value the fill carries on is BlockMix applied `N` times.
-ROMix reads its table at indices that the password decides, so a wrong entry shows only for the passwords that reach it.
+`romixFill_fst_get_lt` states that the fill leaves the entries below its starting index unchanged.
+`romixFill_snd` states that the value the fill returns is BlockMix applied `count` times to its start value, so `N` times in ROMix.
+ROMix reads its table at indices that depend on its input, so a test vector checks only the entries that it reaches.
 `mixBlocks_append` states that mixing a block appends to the output it is given.
-`mixBlocks_eq_append` states the consequence: the `p` blocks of RFC 7914 §6 are mixed independently.
+`mixBlocks_eq_append` states that mixing from any output gives that output, then the blocks mixed from an empty one.
+No theorem states the read loop of RFC 7914 §5, step 3, or that block `k` of the mixed output is ROMix of block `k` of the input.
 No theorem relates Salsa20/8, BlockMix or the derivation to an independent model of RFC 7914.
-The Python tests (`bindings/python/tests/hmac_kdf/test_password_kdf.py`) check the Salsa20/8, BlockMix, ROMix and scrypt vectors of RFC 7914 §§8 to 12.
+The Python tests (`bindings/python/tests/hmac_kdf/test_password_kdf.py`) check the Salsa20/8, BlockMix, ROMix, PBKDF2-HMAC-SHA256 and scrypt vectors of RFC 7914 §§8 to 12.
 
 ### RIPEMD-160
 
