@@ -560,9 +560,8 @@ theorem getAncestor_getHeadFrom (before : fork < .glamsterdam) {nodes : List For
             omega
           have upper := ih child lower walk childPending childFound
           rw [getAncestor_trans (UInt64.le_of_lt higher) upper,
-            getAncestor_step childFound (UInt64.not_le.mpr higher) (parent ▸ found) higher,
-            parentPayloadStatus_of_lt before, parent, ← pending,
-            getAncestor_of_le found (UInt64.le_refl _)]
+            getAncestor_parent_of_slot_lt childFound (parent ▸ found) higher,
+            parentPayloadStatus_of_lt before, parent, ← pending]
         · cases walk
 
 /-- A node whose viable subtree can be computed is a known block.
@@ -603,8 +602,7 @@ theorem isAncestor_getHead_of_lt_gloas (before : fork < .glamsterdam) {head : Fo
     obtain ⟨justifiedBlock, justifiedFound⟩ := filterNodeTree_known tree
     simp only [tree, bind, Except.bind, later, false_and, ↓reduceIte] at found
     have walked := getAncestor_getHeadFrom before found rfl justifiedFound
-    simp [isAncestor, block_ok_iff.mpr justifiedFound, walked, later, bind, Except.bind, pure,
-      Except.pure]
+    exact isAncestor_of_getAncestor walked
 
 /-- From Gloas, let the walk from a known node end at some node.
 
@@ -666,9 +664,8 @@ theorem getAncestor_getHeadFrom_of_gloas (gloas : .glamsterdam ≤ fork)
             obtain ⟨ancestor, upper, rootEq, -⟩ := ih source lower walk childFound
             have step : store.getAncestor head startBlock.slot = .ok start := by
               rw [getAncestor_trans (UInt64.le_of_lt higher) upper,
-                getAncestor_step (rootEq ▸ childFound) (UInt64.not_le.mpr higher)
-                  (parent ▸ found) higher,
-                built, parent, getAncestor_of_le found (UInt64.le_refl _)]
+                getAncestor_parent_of_slot_lt (rootEq ▸ childFound) (parent ▸ found) higher,
+                built, parent]
             exact ⟨start, step, rfl, .inl rfl⟩
         · cases walk
 
