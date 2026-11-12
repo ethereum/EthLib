@@ -48,7 +48,7 @@ def fixedBytesOf (what : String) (size : Nat) (bytes : ByteArray) : Result (Vect
 def readSlashingInterchangeExport (text : ByteArray) : Result ByteArray := do
   return interchangeText (← interchangeOf text)
 
-/-- The record of a signer that keeps every message, after it imports a file, as JSON text. -/
+/-- The record after importing a file with the minimal strategy of EIP-3076, as JSON text. -/
 @[export eth_consensus_import_slashing_interchange]
 def importSlashingInterchangeExport (held file : ByteArray) : Result ByteArray := do
   return interchangeText ((← interchangeOf held).importFile (← interchangeOf file))

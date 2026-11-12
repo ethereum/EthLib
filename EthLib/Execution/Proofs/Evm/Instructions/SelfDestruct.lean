@@ -27,6 +27,10 @@ No SELFDESTRUCT pays state gas before Glamsterdam.
 
 SELFDESTRUCT keeps memory.
 
+Its transfer reads the originator and the beneficiary.
+
+From Paris, it also reads the written keys of an account that it leaves empty, even for a moment.
+
 From Glamsterdam, it writes the transfer log of the balance it moves, and none before.
 -/
 
@@ -182,6 +186,207 @@ theorem code_finishSelfdestruct {beneficiary : Address} {refund : Nat}
   · obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
     cases h
     rfl
+
+omit [GasMeter Meter] in
+/-- The end of SELFDESTRUCT keeps the error. -/
+theorem error_finishSelfdestruct {beneficiary : Address} {refund : Nat}
+    {evm after : Evm fork Meter} (h : finishSelfdestruct fork beneficiary refund evm = .ok after) :
+    after.error = evm.error := by
+  unfold finishSelfdestruct at h
+  split at h
+  · cases h
+  · obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
+    cases h
+    rfl
+
+/-- The transfer of SELFDESTRUCT adds the originator and the beneficiary to the account reads. -/
+theorem accountReads_selfdestructTransfer {tx tx' : State.TransactionState}
+    {originator beneficiary : Address}
+    (h : selfdestructTransfer fork tx originator beneficiary = .ok tx') :
+    tx'.accountReads = (tx.accountReads.insert originator).insert beneficiary := by
+  unfold selfdestructTransfer at h
+  dsimp only at h
+  split at h
+  · obtain ⟨mid, hmove, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨hmid, -⟩ := State.TransactionState.reads_moveEther hmove
+    split at h
+    · obtain ⟨hset, -⟩ := State.TransactionState.reads_setAccountBalance h
+      rw [hset, hmid]
+      ext a
+      simp [Std.ExtTreeSet.mem_insert, or_left_comm]
+    · cases h
+      exact hmid
+  · obtain ⟨mid, hcreate, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨hmid, -⟩ := State.TransactionState.reads_createEther hcreate
+    obtain ⟨hset, -⟩ := State.TransactionState.reads_setAccountBalance h
+    rw [hset, hmid]
+    ext a
+    simp [Std.ExtTreeSet.mem_insert, or_left_comm]
+
+/-- The transfer of SELFDESTRUCT can read the written keys of the originator and the beneficiary.
+
+From Paris, an originator whose nonce and code are empty has its written keys read.
+
+From Paris, a beneficiary that the transfer leaves empty has its written keys read.
+
+Every other address keeps its storage reads, and before Paris every address keeps them. -/
+theorem getElem?_storageReads_selfdestructTransfer {tx tx' : State.TransactionState}
+    {originator beneficiary : Address}
+    (h : selfdestructTransfer fork tx originator beneficiary = .ok tx') (address : Address) :
+    tx'.storageReads[address]? =
+      if fork ≥ .paris ∧
+          ((address = originator ∧
+              { tx.getAccount originator with balance := 0 } = State.EMPTY_ACCOUNT) ∨
+            (address = beneficiary ∧ tx'.getAccount beneficiary = State.EMPTY_ACCOUNT)) then
+        (tx.destroyStorage address).storageReads[address]?
+      else tx.storageReads[address]? := by
+  unfold selfdestructTransfer at h
+  dsimp only at h
+  split at h
+  · obtain ⟨mid, hmove, h⟩ := Base.bind_ok_iff.mp h
+    have hsub : (tx.getAccount originator).balance - (tx.getAccount originator).balance = 0 :=
+      BitVec.sub_self _
+    split at h
+    · obtain ⟨_, hf, hread, hother⟩ := State.TransactionState.modifyState_eq_ok h
+      cases hf
+      by_cases ha : address = originator
+      · subst ha
+        rw [State.TransactionState.getElem?_storageReads_modifyState_self h, hread]
+        have hm := State.TransactionState.getElem?_storageReads_moveEther hmove address
+        have hw := State.TransactionState.getD_storageWrites_moveEther hmove address
+        rw [hsub] at hm hw
+        have hmid_orig : mid.getAccount address =
+            { tx.getAccount address with balance :=
+                if address = beneficiary then (tx.getAccount address).balance else 0 } := by
+          by_cases hab : address = beneficiary
+          · subst hab
+            rw [(State.TransactionState.moveEther_self hmove).1]
+            cases tx.getAccount address
+            simp
+          · rw [(State.TransactionState.moveEther_eq_ok hab hmove).2.2.1, hsub]
+            simp [hab]
+        have hsame_empty : { mid.getAccount address with balance := 0 } = State.EMPTY_ACCOUNT ↔
+            { tx.getAccount address with balance := 0 } = State.EMPTY_ACCOUNT := by
+          rw [hmid_orig]
+        by_cases hp : fork ≥ .paris
+        · by_cases he : { tx.getAccount address with balance := 0 } = State.EMPTY_ACCOUNT
+          · have he_mid : { mid.getAccount address with balance := 0 } = State.EMPTY_ACCOUNT :=
+              hsame_empty.mpr he
+            have hw0 : mid.storageWrites.getD address ∅ = ∅ := by
+              rw [hw, ite_eq_left_of_eq_true _ _ (eq_true ⟨hp, .inl ⟨rfl, he⟩⟩)]
+            have hr0 : mid.storageReads[address]? =
+                (tx.destroyStorage address).storageReads[address]? := by
+              rw [hm, ite_eq_left_of_eq_true _ _ (eq_true ⟨hp, .inl ⟨rfl, he⟩⟩)]
+            have hd : (mid.destroyStorage address).storageReads[address]? =
+                (tx.destroyStorage address).storageReads[address]? :=
+              State.TransactionState.getElem?_storageReads_destroyStorage_of_wiped hw0 hr0
+            rw [ite_eq_left_of_eq_true _ _ (eq_true ⟨hp, he_mid⟩),
+              ite_eq_left_of_eq_true _ _ (eq_true ⟨hp, .inl ⟨rfl, he⟩⟩), hd]
+          · have he_mid : { mid.getAccount address with balance := 0 } ≠ State.EMPTY_ACCOUNT :=
+              mt hsame_empty.mp he
+            have he_tx' : tx'.getAccount address ≠ State.EMPTY_ACCOUNT := by
+              rw [hread]
+              exact he_mid
+            have he_mid_acc : mid.getAccount address ≠ State.EMPTY_ACCOUNT := by
+              intro hc
+              apply he_mid
+              rw [hc]
+              rfl
+            have hr0 : mid.storageReads[address]? = tx.storageReads[address]? := by
+              rw [hm, ite_eq_right_of_eq_false _ _ (eq_false fun hc => ?_)]
+              rcases hc.2 with ⟨-, h1⟩ | ⟨rfl, h2⟩
+              · exact he h1
+              · exact he_mid_acc h2
+            rw [ite_eq_right_of_eq_false _ _ (eq_false fun hc => he_mid hc.2), hr0,
+              ite_eq_right_of_eq_false _ _ (eq_false fun hc => ?_)]
+            rcases hc.2 with ⟨-, h1⟩ | ⟨rfl, h2⟩
+            · exact he h1
+            · exact he_tx' h2
+        · rw [hm]
+          simp [hp]
+      · rw [State.TransactionState.getElem?_storageReads_modifyState_of_ne ha h,
+          State.TransactionState.getElem?_storageReads_moveEther hmove address, hsub]
+        by_cases hab : address = beneficiary
+        · subst hab
+          rw [hother address ha]
+        · simp [ha, hab]
+    · cases h
+      rw [State.TransactionState.getElem?_storageReads_moveEther hmove address, hsub]
+  · obtain ⟨mid, hcreate, h⟩ := Base.bind_ok_iff.mp h
+    rw [State.TransactionState.getElem?_storageReads_modifyState_modifyState hcreate h address]
+    obtain ⟨_, hf, hread, hother⟩ := State.TransactionState.modifyState_eq_ok h
+    cases hf
+    by_cases hp : fork ≥ .paris
+    · by_cases ha : address = originator
+      · subst ha
+        by_cases hab : address = beneficiary
+        · subst hab
+          obtain ⟨-, hn, hc⟩ := State.TransactionState.getAccount_createEther hcreate address
+          have heq_zero : { mid.getAccount address with balance := 0 } =
+              { tx.getAccount address with balance := 0 } := by
+            cases hmid_acc : mid.getAccount address
+            cases htx_acc : tx.getAccount address
+            rw [hmid_acc, htx_acc] at hn hc
+            dsimp only at hn hc
+            subst hn hc
+            rfl
+          have htx'_zero : tx'.getAccount address =
+              { tx.getAccount address with balance := 0 } :=
+            hread.trans heq_zero
+          have hiff : (mid.getAccount address = State.EMPTY_ACCOUNT ∨
+              tx'.getAccount address = State.EMPTY_ACCOUNT) ↔
+              ({ tx.getAccount address with balance := 0 } = State.EMPTY_ACCOUNT ∨
+                tx'.getAccount address = State.EMPTY_ACCOUNT) := by
+            rw [htx'_zero, or_self]
+            refine ⟨fun h => h.elim (fun hm => ?_) id, Or.inr⟩
+            rw [← heq_zero, hm]
+            rfl
+          by_cases he : { tx.getAccount address with balance := 0 } = State.EMPTY_ACCOUNT
+          · have h1 : mid.getAccount address = State.EMPTY_ACCOUNT ∨
+                tx'.getAccount address = State.EMPTY_ACCOUNT :=
+              hiff.mpr (.inl he)
+            rw [ite_eq_left_of_eq_true _ _ (eq_true ⟨hp, by simpa using h1⟩),
+              ite_eq_left_of_eq_true _ _ (eq_true ⟨hp, .inl ⟨rfl, he⟩⟩)]
+          · have hne_tx' : tx'.getAccount address ≠ State.EMPTY_ACCOUNT := by
+              rw [htx'_zero]
+              exact he
+            have h1 : ¬(mid.getAccount address = State.EMPTY_ACCOUNT ∨
+                tx'.getAccount address = State.EMPTY_ACCOUNT) := by
+              rw [hiff]
+              exact not_or.mpr ⟨he, hne_tx'⟩
+            rw [ite_eq_right_of_eq_false _ _ (eq_false fun hc => h1 (by simpa using hc.2)),
+              ite_eq_right_of_eq_false _ _ (eq_false fun hc =>
+                (not_or.mpr ⟨he, hne_tx'⟩) (by simpa using hc.2))]
+        · obtain ⟨_, _, _, hrest⟩ := State.TransactionState.modifyState_eq_ok hcreate
+          have hne_ba : address ≠ beneficiary := hab
+          rw [hread, hrest address hne_ba]
+          simp [hp, hab]
+      · by_cases hab : address = beneficiary
+        · subst hab
+          rw [hother address ha]
+          simp [hp, ha]
+        · simp [hp, ha, hab]
+    · simp [hp]
+
+/-- The transfer of SELFDESTRUCT adds the originator and the beneficiary to the account reads.
+
+From Paris, it reads the written keys of an originator whose nonce and code are empty.
+
+So it does for a beneficiary that it leaves empty.
+
+Every other address keeps its storage reads, and before Paris every address keeps them. -/
+theorem reads_selfdestructTransfer {tx tx' : State.TransactionState}
+    {originator beneficiary : Address}
+    (h : selfdestructTransfer fork tx originator beneficiary = .ok tx') :
+    tx'.accountReads = (tx.accountReads.insert originator).insert beneficiary ∧
+      ∀ address, tx'.storageReads[address]? =
+        if fork ≥ .paris ∧
+            ((address = originator ∧
+                { tx.getAccount originator with balance := 0 } = State.EMPTY_ACCOUNT) ∨
+              (address = beneficiary ∧ tx'.getAccount beneficiary = State.EMPTY_ACCOUNT)) then
+          (tx.destroyStorage address).storageReads[address]?
+        else tx.storageReads[address]? :=
+  ⟨accountReads_selfdestructTransfer h, getElem?_storageReads_selfdestructTransfer h⟩
 
 /-- SELFDESTRUCT keeps memory. -/
 theorem memory_selfdestructOpStep {op : Op}

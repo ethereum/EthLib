@@ -41,7 +41,7 @@ It keeps the genesis time.
 From Gloas it also keeps the latest block hash and the latest bid.
 
 It moves to the next slot. -/
-private theorem advanceSlot_cachedRoots
+theorem advanceSlot_cachedRoots
     (computed : advanceSlot config checks state = .ok after) :
     ∃ cached, processSlot state = .ok cached ∧ after.genesisTime = cached.genesisTime ∧
       after.blockRoots = cached.blockRoots ∧
@@ -107,6 +107,68 @@ theorem getBlockRoot_advanceSlot {epoch : Epoch} {root : Root}
   refine ⟨start, startOk, getBlockRootAtSlot_advanceSlot computed read ?_⟩
   rw [(mulChecked_ok_iff.mp startOk).2]
   exact recent
+
+/-- A state one slot later with the same roots reads the same root of an epoch.
+
+The first slot of the epoch must be before the slot of the earlier state and stay in the buffer. -/
+theorem getBlockRoot_succ_iff {other : BeaconState preset fork}
+    (roots : other.blockRoots = state.blockRoots) (slot : other.slot.toNat = state.slot.toNat + 1)
+    {epoch : Epoch} {root : Root}
+    (before : epoch.toNat * preset.SLOTS_PER_EPOCH.toNat < state.slot.toNat)
+    (recent : state.slot.toNat <
+      epoch.toNat * preset.SLOTS_PER_EPOCH.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat) :
+    getBlockRoot other epoch = .ok root ↔ getBlockRoot state epoch = .ok root := by
+  rw [getBlockRoot_ok_iff, getBlockRoot_ok_iff]
+  refine exists_congr fun start => and_congr_right fun startOk => ?_
+  have startEq := (mulChecked_ok_iff.mp startOk).2
+  rw [getBlockRootAtSlot_ok_iff, getBlockRootAtSlot_ok_iff, roots, slot]
+  constructor
+  · rintro ⟨-, fits, -, read⟩
+    exact ⟨by omega, fits, by omega, read⟩
+  · rintro ⟨-, fits, -, read⟩
+    exact ⟨by omega, fits, by omega, read⟩
+
+/-- The caching of a slot keeps the root recorded at a slot while that slot stays in the buffer.
+
+It writes the entry of the current slot only. -/
+theorem getBlockRootAtSlot_processSlot {cached : BeaconState preset fork} {slot : Slot}
+    (computed : processSlot state = .ok cached)
+    (recent : state.slot.toNat < slot.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat) :
+    getBlockRootAtSlot cached slot = getBlockRootAtSlot state slot := by
+  obtain ⟨_, -, written⟩ := processSlot_blockRoots computed
+  unfold getBlockRootAtSlot
+  rw [processSlot_slot computed]
+  by_cases lt : slot < state.slot
+  · simp only [lt, ↓reduceIte]
+    rcases sum : addChecked slot preset.SLOTS_PER_HISTORICAL_ROOT with _ | bound
+    · rfl
+    · by_cases within : state.slot ≤ bound
+      · simp only [liftArith, Except.mapError, within, ↓reduceIte, bind, Except.bind]
+        refine readCircular_writeCircular_of_ne written fun same => ?_
+        have same' := congrArg UInt64.toNat same
+        rw [UInt64.toNat_mod, UInt64.toNat_mod] at same'
+        have lt' := UInt64.lt_iff_toNat_lt.mp lt
+        exact Nat.mod_ne_of_sub_lt lt' (by omega) same'
+      · simp only [liftArith, Except.mapError, within, ↓reduceIte, bind, Except.bind]
+        rfl
+  · simp only [lt, ↓reduceIte]
+    rfl
+
+/-- The caching of a slot keeps the root of the block at the first slot of an epoch.
+
+That slot must stay in the buffer of roots. -/
+theorem getBlockRoot_processSlot {cached : BeaconState preset fork} {epoch : Epoch}
+    (computed : processSlot state = .ok cached)
+    (recent : state.slot.toNat <
+      epoch.toNat * preset.SLOTS_PER_EPOCH.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat) :
+    getBlockRoot cached epoch = getBlockRoot state epoch := by
+  unfold getBlockRoot
+  rcases start : computeStartSlotAtEpoch preset epoch with _ | first
+  · rfl
+  · simp only [liftArith, Except.mapError, bind, Except.bind]
+    refine getBlockRootAtSlot_processSlot computed ?_
+    rw [(mulChecked_ok_iff.mp start).2]
+    exact recent
 
 /-- After one slot, the root at the slot before the new one is that of the header. -/
 private theorem advanceSlot_latestBlockRoot

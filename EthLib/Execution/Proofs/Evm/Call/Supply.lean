@@ -89,6 +89,138 @@ theorem SupplyLe.of_eq {tx tx' : TransactionState} (supply : tx'.supply = tx.sup
 
 /-! ## The writes of the state -/
 
+/-- The wei that the move of the balance of SELFDESTRUCT burns, in the state `tx`.
+
+It burns the balance of the account it runs in, when that account is its own beneficiary.
+
+Before Cancun, it burns it for every such account.
+
+From Cancun, it burns it only for an account created in the same transaction.
+
+From Glamsterdam, it never burns it. -/
+def selfdestructBurn (fork : Fork) (tx : TransactionState) (originator beneficiary : Address) :
+    Nat :=
+  if originator = beneficiary ∧
+      (fork < .dencun ∨ (fork < .glamsterdam ∧ originator ∈ tx.createdAccounts)) then
+    tx.balanceOf originator
+  else 0
+
+/-- A successful move of the balance of SELFDESTRUCT lowers the supply by exactly its burn. -/
+theorem supply_selfdestructTransfer {tx tx' : TransactionState}
+    {originator beneficiary : Address}
+    (h : selfdestructTransfer fork tx originator beneficiary = .ok tx') :
+    tx'.supply + selfdestructBurn fork tx originator beneficiary = tx.supply := by
+  have h0 : (0 : U256).toNat = 0 := rfl
+  unfold selfdestructTransfer at h
+  split at h
+  · rename_i hdencun
+    obtain ⟨mid, hm, h⟩ := Base.bind_ok_iff.mp h
+    have moved := TransactionState.supply_moveEther hm
+    have created := TransactionState.createdAccounts_moveEther hm
+    split at h
+    · -- An account created here and its own beneficiary loses the balance it gets back.
+      rename_i hburn
+      have hs := TransactionState.supply_setAccountBalance h
+      rw [h0] at hs
+      by_cases same : originator = beneficiary
+      · subst same
+        have balance := (TransactionState.moveEther_self hm).1
+        simp only [selfdestructBurn, true_and, created ▸ hburn, or_true, ↓reduceIte]
+        unfold TransactionState.balanceOf at hs ⊢
+        rw [balance] at hs
+        omega
+      · obtain ⟨-, -, balance, -⟩ := TransactionState.moveEther_eq_ok same hm
+        have hb : mid.balanceOf originator = 0 := by
+          unfold TransactionState.balanceOf
+          rw [balance, BitVec.sub_self]
+          rfl
+        simp only [selfdestructBurn, same, false_and, ↓reduceIte]
+        omega
+    · rename_i hburn
+      cases h
+      have notBurn : ¬(originator = beneficiary ∧
+          (fork < .dencun ∨ (fork < .glamsterdam ∧ originator ∈ tx.createdAccounts))) := by
+        rintro ⟨-, hlt | hcreated⟩
+        · exact Nat.not_lt_of_ge hdencun hlt
+        · exact hburn (created ▸ hcreated)
+      simp only [selfdestructBurn, notBurn, ↓reduceIte, Nat.add_zero]
+      exact moved
+  · -- Before Cancun, the balance goes to the beneficiary, then the account is set to 0.
+    rename_i hdencun
+    obtain ⟨mid, hm, h⟩ := Base.bind_ok_iff.mp h
+    have added := TransactionState.supply_createEther hm
+    have hs := TransactionState.supply_setAccountBalance h
+    have balance := (TransactionState.getAccount_createEther hm originator).1
+    rw [h0] at hs
+    unfold TransactionState.balanceOf at hs
+    rw [balance] at hs
+    by_cases same : originator = beneficiary
+    · subst same
+      simp only [selfdestructBurn, true_and,
+        (show fork < .dencun from Nat.lt_of_not_ge hdencun), true_or, ↓reduceIte]
+      simp only [↓reduceIte] at hs
+      unfold TransactionState.balanceOf
+      omega
+    · simp only [selfdestructBurn, same, false_and, ↓reduceIte]
+      simp only [Ne.symm same, ↓reduceIte] at hs
+      omega
+
+/-- An account with no balance burns nothing. -/
+theorem selfdestructBurn_eq_zero_of_balanceOf_eq_zero {state : TransactionState}
+    {originator beneficiary : Address}
+    (balance : state.balanceOf originator = 0) :
+    selfdestructBurn fork state originator beneficiary = 0 := by
+  unfold selfdestructBurn
+  split <;> first | assumption | rfl
+
+/-- A move of the balance of SELFDESTRUCT that burns some wei leaves its account with no balance. -/
+theorem balanceOf_selfdestructTransfer_eq_zero {state after : TransactionState}
+    {originator beneficiary : Address}
+    (h : selfdestructTransfer fork state originator beneficiary = .ok after)
+    (nonzero : selfdestructBurn fork state originator beneficiary ≠ 0) :
+    after.balanceOf originator = 0 := by
+  have setZero : ∀ {a b : TransactionState}, a.setAccountBalance fork originator 0 = .ok b →
+      b.balanceOf originator = 0 := by
+    intro a b h
+    obtain ⟨account, changed, read, -⟩ := TransactionState.modifyState_eq_ok h
+    cases changed
+    unfold TransactionState.balanceOf
+    rw [read]
+    rfl
+  unfold selfdestructTransfer at h
+  split at h
+  · rename_i hdencun
+    obtain ⟨mid, moved, h⟩ := Base.bind_ok_iff.mp h
+    split at h
+    · exact setZero h
+    · rename_i notCreated
+      cases h
+      apply False.elim
+      apply nonzero
+      unfold selfdestructBurn
+      split
+      · rename_i condition
+        rcases condition.2 with early | created
+        · exact False.elim (Nat.not_lt_of_ge hdencun early)
+        · exact False.elim (notCreated
+            (TransactionState.createdAccounts_moveEther moved ▸ created))
+      · rfl
+  · obtain ⟨mid, _, h⟩ := Base.bind_ok_iff.mp h
+    exact setZero h
+
+/-- A burn of SELFDESTRUCT above 0 is from an account to itself, at a fork before Glamsterdam. -/
+theorem of_selfdestructBurn_ne_zero {tx : TransactionState} {originator beneficiary : Address}
+    (h : selfdestructBurn fork tx originator beneficiary ≠ 0) :
+    originator = beneficiary ∧ fork < .glamsterdam := by
+  unfold selfdestructBurn at h
+  split at h
+  · rename_i condition
+    refine ⟨condition.1, ?_⟩
+    rcases condition.2 with early | created
+    · exact Nat.lt_trans early (by decide)
+    · exact created.1
+  · exact absurd rfl h
+
 /-- A successful move of the balance of SELFDESTRUCT keeps or lowers the supply.
 
 It keeps it exactly from Glamsterdam, and from Cancun when the end state has no created account. -/
@@ -97,34 +229,22 @@ theorem supplyLe_selfdestructTransfer {tx tx' : TransactionState}
     (h : selfdestructTransfer fork tx originator beneficiary = .ok tx') :
     SupplyLe fork tx tx' := by
   have created := createdAccounts_selfdestructTransfer h
-  have h0 : (0 : U256).toNat = 0 := rfl
-  unfold selfdestructTransfer at h
-  split at h
-  · obtain ⟨mid, h1, h⟩ := Base.bind_ok_iff.mp h
-    have moved := TransactionState.supply_moveEther h1
-    split at h
-    · -- An account created here and its own beneficiary loses the balance it gets back.
-      rename_i hburn
-      have hs := TransactionState.supply_setAccountBalance h
-      refine ⟨by omega, fun _ hx => created ▸ hx, fun burns => absurd burns ?_⟩
-      rintro (hglam | ⟨-, hnone⟩)
-      · exact Nat.lt_irrefl _ (Nat.lt_of_lt_of_le hburn.1 hglam)
-      · exact hnone originator
-          (TransactionState.createdAccounts_modifyState h ▸ hburn.2)
-    · cases h
-      exact SupplyLe.of_eq moved created
-  · -- Before Cancun, the balance goes to the beneficiary, then the account is set to 0.
-    rename_i hlt
-    obtain ⟨mid, h1, h⟩ := Base.bind_ok_iff.mp h
-    have hcreate := TransactionState.supply_createEther h1
-    have hs := TransactionState.supply_setAccountBalance h
-    have hbal := (TransactionState.getAccount_createEther h1 originator).1
-    unfold TransactionState.balanceOf at hs
-    refine ⟨?_, fun _ hx => created ▸ hx, fun burns => absurd burns ?_⟩
-    · split at hbal <;> omega
-    · rintro (hglam | ⟨hdencun, -⟩)
-      · exact hlt (Nat.le_trans (by decide) hglam)
-      · exact hlt hdencun
+  have burned := supply_selfdestructTransfer h
+  refine ⟨by omega, fun _ hx => created ▸ hx, fun burns => ?_⟩
+  suffices selfdestructBurn fork tx originator beneficiary = 0 by omega
+  unfold selfdestructBurn
+  split
+  rotate_left
+  · rfl
+  rename_i burnt
+  exfalso
+  obtain ⟨-, early | ⟨early, hcreated⟩⟩ := burnt
+  · rcases burns with hglam | ⟨hdencun, -⟩
+    · exact Nat.lt_irrefl _ (Nat.lt_of_lt_of_le early (Nat.le_trans (by decide) hglam))
+    · exact Nat.lt_irrefl _ (Nat.lt_of_lt_of_le early hdencun)
+  · rcases burns with hglam | ⟨-, hnone⟩
+    · exact Nat.lt_irrefl _ (Nat.lt_of_lt_of_le early hglam)
+    · exact hnone originator (created ▸ hcreated)
 
 omit [GasMeter Meter] in
 /-- The end of a successful SELFDESTRUCT keeps or lowers the supply. -/
@@ -138,16 +258,20 @@ theorem supplyLe_finishSelfdestruct {beneficiary : Address} {refund : Nat}
     cases h
     exact supplyLe_selfdestructTransfer (Base.mapError_ok_iff.mp hst)
 
-/-- A successful preparation of a creation keeps the supply. -/
-theorem supplyLe_prepareCreation {tx tx' : TransactionState} {address : Address}
-    (h : prepareCreation fork tx address = .ok tx') : SupplyLe fork tx tx' := by
-  refine SupplyLe.of_supply_eq ?_ (createdLe_prepareCreation h)
+/-- A successful preparation of a creation keeps the supply exactly. -/
+theorem supply_prepareCreation {tx tx' : TransactionState} {address : Address}
+    (h : prepareCreation fork tx address = .ok tx') : tx'.supply = tx.supply := by
   unfold prepareCreation at h
   split at h
   · rw [TransactionState.supply_incrementNonce (Base.mapError_ok_iff.mp h),
       TransactionState.supply_markAccountCreated, TransactionState.supply_destroyStorage]
   · cases h
     rw [TransactionState.supply_markAccountCreated, TransactionState.supply_destroyStorage]
+
+/-- A successful preparation of a creation keeps the supply. -/
+theorem supplyLe_prepareCreation {tx tx' : TransactionState} {address : Address}
+    (h : prepareCreation fork tx address = .ok tx') : SupplyLe fork tx tx' :=
+  SupplyLe.of_supply_eq (supply_prepareCreation h) (createdLe_prepareCreation h)
 
 /-- The state that a message starts its frame from has the supply of the state it is sent from. -/
 theorem supply_startState (message : Message fork) (state : TransactionState) :
@@ -156,6 +280,17 @@ theorem supply_startState (message : Message fork) (state : TransactionState) :
   split
   · exact TransactionState.supply_touchAccount _ _
   · rfl
+
+/-- The state that a message enters has the supply of the state it is sent from.
+
+A move of its value keeps the supply. -/
+theorem supply_entered {message : Message fork} {state entry : TransactionState}
+    {substate entrySubstate : Substate}
+    (h : Entered fork message state substate entry entrySubstate) :
+    entry.supply = state.supply := by
+  rcases h with ⟨-, rfl, -⟩ | ⟨-, moved, -⟩
+  · exact supply_startState _ _
+  · exact (TransactionState.supply_moveEther moved).trans (supply_startState _ _)
 
 /-- A successful deposit of code ends with the supply of the snapshot, or of the init code's end.
 
@@ -201,6 +336,17 @@ theorem stepRules_supplyLe :
       (TransactionState.createdAccounts_modifyState h)
   incorporate h := by rw [state_incorporateChild]; exact h
 
+/-- Each write of a step other than SELFDESTRUCT keeps the supply exactly. -/
+theorem ordinaryStepRules_supply :
+    OrdinaryStepRules fork (fun a b : Evm fork Meter => b.state.supply = a.state.supply) where
+  trans hab hbc := hbc.trans hab
+  static h := TransactionState.supply_eq_of_sameOutside h.state
+  sstore _ _ _ _ _ _ h := TransactionState.supply_setStorage h
+  tstore _ _ _ _ := rfl
+  log _ hs _ _ _ := by rw [hs]
+  incrementNonce _ _ _ h := TransactionState.supply_incrementNonce h
+  incorporate h := by rw [state_incorporateChild]; exact h
+
 /-! ## Messages -/
 
 /-- Every successful call and creation keeps or lowers the supply, at every fork.
@@ -224,15 +370,9 @@ theorem processMessage_supplyLe [LawfulGasMeter Meter] (n : Nat) :
     (M := fun _ state _ _ ended =>
       SupplyLe fork state ended.state ∧ ended.state.parent = state.parent)
     (fun {message state state1 _ _ _ ended} hentry hrun => by
-      have h1 : SupplyLe fork state state1 ∧ state1.parent = state.parent := by
-        rcases hentry with ⟨-, rfl, -⟩ | ⟨-, hm, -⟩
-        · exact ⟨SupplyLe.of_eq (supply_startState message state)
-            (createdAccounts_startState message state), parent_startState message state⟩
-        · exact ⟨SupplyLe.of_eq
-            ((TransactionState.supply_moveEther hm).trans (supply_startState message state))
-            ((TransactionState.createdAccounts_moveEther hm).trans
-              (createdAccounts_startState message state)),
-            (TransactionState.parent_moveEther hm).trans (parent_startState message state)⟩
+      have h1 : SupplyLe fork state state1 ∧ state1.parent = state.parent :=
+        ⟨SupplyLe.of_eq (supply_entered hentry) (createdAccounts_entered hentry),
+          parent_entered hentry⟩
       obtain ⟨hle, hpar⟩ := hrun
       have hp : ended.state.parent = state.parent := hpar.trans h1.2
       refine ⟨?_, (parent_rollbackOnError state ended).trans hp⟩

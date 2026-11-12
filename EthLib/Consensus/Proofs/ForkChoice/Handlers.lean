@@ -14,6 +14,8 @@ Nor does a block together with the votes that it carries.
 
 A tick sets the clock to its time, and the catch-up loop never stalls.
 
+Every other handler keeps the clock.
+
 A new block enters the store with the state that the transition computes for it.
 
 At Deneb and Electra the node held its blobs, and their proofs matched its commitments.
@@ -169,17 +171,20 @@ theorem EpochsLe.of_eq {a b : Store preset fork}
   by_cases j : store.unrealizedJustifiedCheckpoint.epoch < justified.epoch <;>
     by_cases f : store.unrealizedFinalizedCheckpoint.epoch < finalized.epoch <;> simp [j, f]
 
-/-- The tip pulled up to the end of its epoch lowers neither epoch, and keeps the blocks. -/
-theorem computePulledUpTip_frame {root : Root} {after : Store preset fork}
-    (pulled : store.computePulledUpTip config root = .ok after) :
-    store.EpochsLe after ∧ after.blocks = store.blocks ∧ after.blockStates = store.blockStates := by
-  unfold computePulledUpTip at pulled
-  simp only [bind_ok_iff] at pulled
-  obtain ⟨state, -, pulledState, -, block, -, epoch, -, pulled⟩ := pulled
-  split at pulled <;> simp only [pure, Except.pure, Except.ok.injEq] at pulled <;> subst pulled
-  · exact ⟨(EpochsLe.of_eq (by simp) (by simp)).trans (updateCheckpoints_epochsLe _ _),
-      by simp, by simp⟩
-  · exact ⟨EpochsLe.of_eq (by simp) (by simp), by simp, by simp⟩
+/-- Updating the unrealized checkpoints keeps the time. -/
+@[simp] theorem updateUnrealizedCheckpoints_timeMs (justified finalized : Checkpoint) :
+    (store.updateUnrealizedCheckpoints justified finalized).timeMs = store.timeMs := by
+  unfold updateUnrealizedCheckpoints
+  by_cases j : store.unrealizedJustifiedCheckpoint.epoch < justified.epoch <;>
+    by_cases f : store.unrealizedFinalizedCheckpoint.epoch < finalized.epoch <;> simp [j, f]
+
+/-- Updating the unrealized checkpoints keeps the time of genesis. -/
+@[simp] theorem updateUnrealizedCheckpoints_genesisTimeMs (justified finalized : Checkpoint) :
+    (store.updateUnrealizedCheckpoints justified finalized).genesisTimeMs =
+      store.genesisTimeMs := by
+  unfold updateUnrealizedCheckpoints
+  by_cases j : store.unrealizedJustifiedCheckpoint.epoch < justified.epoch <;>
+    by_cases f : store.unrealizedFinalizedCheckpoint.epoch < finalized.epoch <;> simp [j, f]
 
 @[simp] theorem updateCheckpoints_timeMs (justified finalized : Checkpoint) :
     (store.updateCheckpoints justified finalized).timeMs = store.timeMs := by
@@ -192,6 +197,38 @@ theorem computePulledUpTip_frame {root : Root} {after : Store preset fork}
   unfold updateCheckpoints
   by_cases j : store.justifiedCheckpoint.epoch < justified.epoch <;>
     by_cases f : store.finalizedCheckpoint.epoch < finalized.epoch <;> simp [j, f]
+
+/-- Two stores with one clock: the same time and the same time of genesis. -/
+def SameClock (store after : Store preset fork) : Prop :=
+  after.timeMs = store.timeMs ∧ after.genesisTimeMs = store.genesisTimeMs
+
+/-- A store has the clock of itself. -/
+theorem SameClock.refl (store : Store preset fork) : SameClock store store := ⟨rfl, rfl⟩
+
+/-- One clock passes from store to store. -/
+theorem SameClock.trans {a b c : Store preset fork} (ab : SameClock a b)
+    (bc : SameClock b c) : SameClock a c := ⟨bc.1.trans ab.1, bc.2.trans ab.2⟩
+
+/-- Two stores with one clock are at the same slot. -/
+theorem SameClock.getCurrentSlot {after : Store preset fork} (same : SameClock store after) :
+    after.getCurrentSlot config = store.getCurrentSlot config := by
+  unfold Store.getCurrentSlot
+  rw [same.1, same.2]
+
+/-- The tip pulled up to the end of its epoch lowers neither epoch, and keeps the blocks.
+
+It also keeps the clock. -/
+theorem computePulledUpTip_frame {root : Root} {after : Store preset fork}
+    (pulled : store.computePulledUpTip config root = .ok after) :
+    store.EpochsLe after ∧ after.blocks = store.blocks ∧ after.blockStates = store.blockStates ∧
+      SameClock store after := by
+  unfold computePulledUpTip at pulled
+  simp only [bind_ok_iff] at pulled
+  obtain ⟨state, -, pulledState, -, block, -, epoch, -, pulled⟩ := pulled
+  split at pulled <;> simp only [pure, Except.pure, Except.ok.injEq] at pulled <;> subst pulled
+  · exact ⟨(EpochsLe.of_eq (by simp) (by simp)).trans (updateCheckpoints_epochsLe _ _),
+      by simp, by simp, by simp, by simp⟩
+  · exact ⟨EpochsLe.of_eq (by simp) (by simp), by simp, by simp, by simp, by simp⟩
 
 /-- A tick within a slot sets the clock to its time, keeps the blocks and lowers no epoch. -/
 theorem onTickPerSlot_frame {timeMs : UInt64} {after : Store preset fork}
@@ -246,6 +283,18 @@ theorem onTick_frame {timeMs : UInt64} {after : Store preset fork}
   obtain ⟨-, le, b, bs⟩ := catchUp_frame caughtUp
   obtain ⟨time, -, le', b', bs'⟩ := onTickPerSlot_frame ticked
   exact ⟨time, le.trans le', b'.trans b, bs'.trans bs⟩
+
+/-- After a tick, the current slot is the slot of the time of the tick. -/
+theorem getCurrentSlot_onTick {timeMs : UInt64} {after : Store preset fork}
+    (ticked : store.onTick config timeMs = .ok after) :
+    after.getCurrentSlot config =
+      (computeSlotAtTimeMs config store.genesisTimeMs timeMs).mapError .arith := by
+  unfold onTick at ticked
+  simp only [bind_ok_iff] at ticked
+  obtain ⟨tickSlot, -, caught, caughtUp, ticked⟩ := ticked
+  unfold Store.getCurrentSlot
+  rw [(onTickPerSlot_frame ticked).1, (onTickPerSlot_frame ticked).2.1,
+    (catchUp_frame caughtUp).1]
 
 /-- A tick within a slot fails only on an arithmetic error, never as a stalled clock. -/
 theorem onTickPerSlot_ne_tickNotAdvancing {timeMs : UInt64} {slot : Slot} :
@@ -325,21 +374,22 @@ theorem catchUp_ne_tickNotAdvancing {tickSlot slot : Slot} (start : Store preset
                 omega
       · simp [pure, Except.pure] at stalled
 
-/-- Storing the state of a target keeps the checkpoints, the blocks and their states. -/
+/-- Storing the state of a target keeps the checkpoints, the blocks, their states and the clock. -/
 theorem storeTargetCheckpointState_frame {checks : SignatureChecks} {target : Checkpoint}
     {after : Store preset fork}
     (stored : store.storeTargetCheckpointState config checks target = .ok after) :
-    store.EpochsLe after ∧ after.blocks = store.blocks ∧ after.blockStates = store.blockStates := by
+    store.EpochsLe after ∧ after.blocks = store.blocks ∧ after.blockStates = store.blockStates ∧
+      SameClock store after := by
   unfold storeTargetCheckpointState at stored
   split at stored
   · simp only [pure, Except.pure, Except.ok.injEq] at stored
     subst stored
-    exact ⟨EpochsLe.refl _, rfl, rfl⟩
+    exact ⟨EpochsLe.refl _, rfl, rfl, .refl _⟩
   · simp only [bind_ok_iff] at stored
     obtain ⟨_, _, stored⟩ := stored
     simp only [pure, Except.pure, Except.ok.injEq] at stored
     subst stored
-    exact ⟨EpochsLe.of_eq (by rfl) (by rfl), rfl, rfl⟩
+    exact ⟨EpochsLe.of_eq (by rfl) (by rfl), rfl, rfl, ⟨rfl, rfl⟩⟩
 
 /-- An attestation lowers no epoch, and keeps the blocks and their states. -/
 theorem onAttestation_frame {checks : SignatureChecks} {attestation : Attestation preset fork}
@@ -348,8 +398,8 @@ theorem onAttestation_frame {checks : SignatureChecks} {attestation : Attestatio
     store.EpochsLe after ∧ after.blocks = store.blocks ∧ after.blockStates = store.blockStates := by
   unfold onAttestation at attested
   simp only [bind_ok_iff] at attested
-  obtain ⟨_, _, stored, storing, _, _, _, _, valid, _, attested⟩ := attested
-  obtain ⟨le, b, bs⟩ := storeTargetCheckpointState_frame storing
+  obtain ⟨_, _, stored, storing, _, _, _, _, _, _, valid, _, attested⟩ := attested
+  obtain ⟨le, b, bs, -⟩ := storeTargetCheckpointState_frame storing
   split at attested
   · simp only [pure, Except.pure, Except.ok.injEq] at attested
     subst attested
@@ -367,19 +417,46 @@ theorem onAttesterSlashing_frame {checks : SignatureChecks}
   subst slashed
   exact ⟨EpochsLe.of_eq (by rfl) (by rfl), rfl, rfl⟩
 
-/-- Recording the timeliness of a block changes only the timeliness. -/
+/-- An attestation keeps the clock. -/
+theorem onAttestation_sameClock {checks : SignatureChecks} {attestation : Attestation preset fork}
+    {isFromBlock : Bool} {after : Store preset fork}
+    (attested : store.onAttestation config checks attestation isFromBlock = .ok after) :
+    SameClock store after := by
+  unfold onAttestation at attested
+  simp only [bind_ok_iff] at attested
+  obtain ⟨_, _, stored, storing, _, _, _, _, _, _, valid, _, attested⟩ := attested
+  have first := (storeTargetCheckpointState_frame storing).2.2.2
+  split at attested
+  · simp only [pure, Except.pure, Except.ok.injEq] at attested
+    subst attested
+    exact first
+  · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at attested
+
+/-- An attester slashing keeps the clock. -/
+theorem onAttesterSlashing_sameClock {checks : SignatureChecks}
+    {slashing : AttesterSlashing preset fork} {after : Store preset fork}
+    (slashed : store.onAttesterSlashing config checks slashing = .ok after) :
+    SameClock store after := by
+  unfold onAttesterSlashing at slashed
+  simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at slashed
+  obtain ⟨_, _, slashed⟩ := slashed
+  subst slashed
+  exact ⟨rfl, rfl⟩
+
+/-- Recording the timeliness of a block changes only the timeliness, and keeps the clock. -/
 theorem recordBlockTimeliness_frame {root : Root} {after : Store preset fork}
     (recorded : store.recordBlockTimeliness config root = .ok after) :
-    store.EpochsLe after ∧ after.blocks = store.blocks ∧ after.blockStates = store.blockStates := by
+    store.EpochsLe after ∧ after.blocks = store.blocks ∧ after.blockStates = store.blockStates ∧
+      SameClock store after := by
   unfold recordBlockTimeliness at recorded
   simp only [bind_ok_iff, pure, Except.pure] at recorded
   obtain ⟨_, _, _, _, _, _, _, _, recorded⟩ := recorded
   split at recorded
   · simp only [bind_ok_iff, Except.ok.injEq] at recorded
     obtain ⟨_, _, rfl⟩ := recorded
-    exact ⟨EpochsLe.of_eq (by rfl) (by rfl), rfl, rfl⟩
+    exact ⟨EpochsLe.of_eq (by rfl) (by rfl), rfl, rfl, ⟨rfl, rfl⟩⟩
   · cases recorded
-    exact ⟨EpochsLe.of_eq (by rfl) (by rfl), rfl, rfl⟩
+    exact ⟨EpochsLe.of_eq (by rfl) (by rfl), rfl, rfl, ⟨rfl, rfl⟩⟩
 
 /-- From Gloas a recorded block also gets whether it came before the payload committee's deadline.
 
@@ -400,10 +477,11 @@ theorem recordBlockTimeliness_ptc {root : Root} {after : Store preset fork}
   exact ⟨block, current, time, deadline, block_ok_iff.mp found, currentOk, timeOk, deadlineOk,
     by simp⟩
 
-/-- Updating the boost changes only the boosted root. -/
+/-- Updating the boost changes only the boosted root, and keeps the clock. -/
 theorem updateProposerBoostRoot_frame {head root : Root} {after : Store preset fork}
     (updated : store.updateProposerBoostRoot config head root = .ok after) :
-    store.EpochsLe after ∧ after.blocks = store.blocks ∧ after.blockStates = store.blockStates := by
+    store.EpochsLe after ∧ after.blocks = store.blocks ∧ after.blockStates = store.blockStates ∧
+      SameClock store after := by
   unfold updateProposerBoostRoot at updated
   split at updated
   rotate_left
@@ -411,7 +489,7 @@ theorem updateProposerBoostRoot_frame {head root : Root} {after : Store preset f
   simp only [bind_ok_iff, pure_bind] at updated
   obtain ⟨_, _, _, _, _, _, updated⟩ := updated
   split at updated <;> simp only [pure, Except.pure, Except.ok.injEq] at updated <;>
-    subst updated <;> exact ⟨EpochsLe.of_eq (by rfl) (by rfl), rfl, rfl⟩
+    subst updated <;> exact ⟨EpochsLe.of_eq (by rfl) (by rfl), rfl, rfl, ⟨rfl, rfl⟩⟩
 
 /-- The store changes at most in its two vote maps of the payload committee. -/
 def OnlyPtcVotes (before after : Store preset fork) : Prop :=
@@ -466,6 +544,16 @@ theorem onPayloadAttestationMessage_onlyPtcVotes {checks : SignatureChecks}
       obtain ⟨_, -, accepted⟩ := accepted
       exact recordPtcVotes_onlyPtcVotes accepted
     · exact recordPtcVotes_onlyPtcVotes (by simpa using accepted)
+
+/-- From Gloas, a vote of the payload committee keeps the clock. -/
+theorem onPayloadAttestationMessage_sameClock {checks : SignatureChecks}
+    {gloas : .glamsterdam ≤ fork} {message : PayloadAttestationMessage} {isFromBlock : Bool}
+    {after : Store preset fork}
+    (accepted : store.onPayloadAttestationMessage config checks gloas message isFromBlock =
+      .ok after) :
+    SameClock store after := by
+  obtain ⟨_, _, rfl⟩ := onPayloadAttestationMessage_onlyPtcVotes accepted
+  exact ⟨rfl, rfl⟩
 
 /-- The votes of the payload committee that a block carries change only the vote maps. -/
 theorem notifyPtcMessages_onlyPtcVotes {checks : SignatureChecks}
@@ -836,9 +924,9 @@ theorem addBlock_ok {checks : SignatureChecks} {sources : BlockSources preset fo
   simp only [bind_ok_iff] at added
   obtain ⟨state, valid, head, -, voted, vote, recorded, record, boosted, boost, added⟩ := added
   obtain ⟨le0, b0, bs0⟩ := (recordBlockPtcVotes_onlyPtcVotes vote).frame
-  obtain ⟨le1, b1, bs1⟩ := recordBlockTimeliness_frame record
-  obtain ⟨le2, b2, bs2⟩ := updateProposerBoostRoot_frame boost
-  obtain ⟨le3, b3, bs3⟩ := computePulledUpTip_frame added
+  obtain ⟨le1, b1, bs1, -⟩ := recordBlockTimeliness_frame record
+  obtain ⟨le2, b2, bs2, -⟩ := updateProposerBoostRoot_frame boost
+  obtain ⟨le3, b3, bs3, -⟩ := computePulledUpTip_frame added
   refine ⟨((EpochsLe.of_eq rfl rfl).trans (le0.trans (le1.trans le2))).trans
     ((updateCheckpoints_epochsLe _ _).trans le3), ?_, ?_⟩
   · rw [b3, updateCheckpoints_blocks, b2, b1, b0]
@@ -892,9 +980,9 @@ theorem onBlock_insert {checks : SignatureChecks} {sources : BlockSources preset
   simp only [bind_ok_iff] at added
   obtain ⟨state, valid, head, -, voted, vote, recorded, record, boosted, boost, added⟩ := added
   obtain ⟨-, b0, bs0⟩ := (recordBlockPtcVotes_onlyPtcVotes vote).frame
-  obtain ⟨-, b1, bs1⟩ := recordBlockTimeliness_frame record
-  obtain ⟨-, b2, bs2⟩ := updateProposerBoostRoot_frame boost
-  obtain ⟨-, b3, bs3⟩ := computePulledUpTip_frame added
+  obtain ⟨-, b1, bs1, -⟩ := recordBlockTimeliness_frame record
+  obtain ⟨-, b2, bs2, -⟩ := updateProposerBoostRoot_frame boost
+  obtain ⟨-, b3, bs3, -⟩ := computePulledUpTip_frame added
   obtain ⟨pre, found, -, -, transition⟩ := validateOnBlock_ok valid
   refine ⟨by rw [b3, updateCheckpoints_blocks, b2, b1, b0], pre, state, found, transition, ?_⟩
   rw [bs3, updateCheckpoints_blockStates, bs2, bs1, bs0]
@@ -935,20 +1023,69 @@ theorem onBlock_epochsLe {checks : SignatureChecks} {sources : BlockSources pres
       exact EpochsLe.refl _
     · exact (onBlock_new root known added).1
 
+/-- A block keeps the clock. -/
+theorem onBlock_sameClock {checks : SignatureChecks} {sources : BlockSources preset fork}
+    {signed : SignedBeaconBlock preset fork} {after : Store preset fork}
+    (added : store.onBlock config checks sources signed = .ok after) : SameClock store after := by
+  cases root : SszType.hashTreeRoot signed.message with
+  | error e =>
+    simp [onBlock, root, bind, Except.bind, Except.mapError] at added
+  | ok blockRoot =>
+    by_cases known : store.blocks.contains blockRoot
+    · rw [onBlock_known root known] at added
+      cases added
+      exact .refl _
+    simp only [onBlock, root, known, bind, Except.bind, Except.mapError, ↓reduceIte,
+      Bool.false_eq_true] at added
+    unfold addBlock at added
+    simp only [bind_ok_iff] at added
+    obtain ⟨state, valid, head, -, voted, vote, recorded, record, boosted, boost, added⟩ := added
+    obtain ⟨_, _, rfl⟩ := recordBlockPtcVotes_onlyPtcVotes vote
+    have first := (recordBlockTimeliness_frame record).2.2.2
+    have second := (updateProposerBoostRoot_frame boost).2.2.2
+    have third := (computePulledUpTip_frame added).2.2.2
+    refine ⟨?_, ?_⟩
+    · rw [third.1, updateCheckpoints_timeMs, second.1, first.1]
+    · rw [third.2, updateCheckpoints_genesisTimeMs, second.2, first.2]
+
+/-- A property that a block, each attestation from it and each slashing in it keep is kept.
+
+It is kept by the block with its votes. -/
+theorem onBlockWithVotes_preserves {P : Store preset fork → Prop} {checks : SignatureChecks}
+    {sources : BlockSources preset fork} {signed : SignedBeaconBlock preset fork}
+    {after : Store preset fork}
+    (block : ∀ {s s'}, P s → s.onBlock config checks sources signed = .ok s' → P s')
+    (attestation : ∀ {s s'} (a : Attestation preset fork), P s →
+      s.onAttestation config checks a true = .ok s' → P s')
+    (slashing : ∀ {s s'} (sl : AttesterSlashing preset fork), P s →
+      s.onAttesterSlashing config checks sl = .ok s' → P s')
+    (holds : P store) (added : store.onBlockWithVotes config checks sources signed = .ok after) :
+    P after := by
+  unfold onBlockWithVotes at added
+  simp only [bind_ok_iff, ← Array.foldlM_toList] at added
+  obtain ⟨blocked, blockOk, voted, attested, slashed⟩ := added
+  have votes := foldlM_ok_invariant P (fun _ a _ h step => attestation a h step)
+    (block holds blockOk) attested
+  exact foldlM_ok_invariant P (fun _ sl _ h step => slashing sl h step) votes slashed
+
 /-- A block and the votes that it carries lower no epoch. -/
 theorem onBlockWithVotes_epochsLe {checks : SignatureChecks} {sources : BlockSources preset fork}
     {signed : SignedBeaconBlock preset fork} {after : Store preset fork}
     (added : store.onBlockWithVotes config checks sources signed = .ok after) :
-    store.EpochsLe after := by
-  unfold onBlockWithVotes at added
-  simp only [bind_ok_iff, ← Array.foldlM_toList] at added
-  obtain ⟨blocked, block, voted, attested, slashed⟩ := added
-  -- Each fold keeps the epochs of the store it starts from at or below those of its store.
-  have votes := foldlM_ok_invariant blocked.EpochsLe
-    (fun _ _ _ le step => le.trans (onAttestation_frame step).1) (EpochsLe.refl _) attested
-  have slashings := foldlM_ok_invariant voted.EpochsLe
-    (fun _ _ _ le step => le.trans (onAttesterSlashing_frame step).1) (EpochsLe.refl _) slashed
-  exact (onBlock_epochsLe block).trans (votes.trans slashings)
+    store.EpochsLe after :=
+  onBlockWithVotes_preserves (P := store.EpochsLe) (fun le step => le.trans
+    (onBlock_epochsLe step)) (fun _ le step => le.trans (onAttestation_frame step).1)
+    (fun _ le step => le.trans (onAttesterSlashing_frame step).1) (.refl _) added
+
+/-- A block with the votes that it carries keeps the clock. -/
+theorem onBlockWithVotes_sameClock {checks : SignatureChecks}
+    {sources : BlockSources preset fork} {signed : SignedBeaconBlock preset fork}
+    {after : Store preset fork}
+    (added : store.onBlockWithVotes config checks sources signed = .ok after) :
+    SameClock store after :=
+  onBlockWithVotes_preserves (P := SameClock store) (fun same step => same.trans
+    (onBlock_sameClock step)) (fun _ same step => same.trans (onAttestation_sameClock step))
+    (fun _ same step => same.trans (onAttesterSlashing_sameClock step)) (.refl _) added
 
 /-- A vote keeps every other vote at or after its rank at or after it. -/
 theorem recordVote_keeps {equivocating : List ValidatorIndex} {message : LatestMessage fork}
@@ -1020,6 +1157,141 @@ theorem foldl_recordVote {equivocating : List ValidatorIndex} {message : LatestM
       exact keep rest _ m found late
     · exact ih _ voted
 
+/-- One vote leaves a vote as it was, or sets it to the new vote for the voter. -/
+private theorem recordVote_cases {equivocating : List ValidatorIndex}
+    {message : LatestMessage fork} {messages : Std.TreeMap ValidatorIndex (LatestMessage fork)}
+    {index validator : ValidatorIndex} {latest : LatestMessage fork}
+    (found : (recordVote equivocating message messages index)[validator]? = some latest) :
+    messages[validator]? = some latest ∨ (validator = index ∧ latest = message) := by
+  have inserted : (messages.insert index message)[validator]? = some latest →
+      messages[validator]? = some latest ∨ (validator = index ∧ latest = message) := by
+    intro found
+    rw [Std.TreeMap.getElem?_insert] at found
+    simp only [Std.LawfulEqCmp.compare_eq_iff_eq] at found
+    split at found
+    · rename_i same
+      cases found
+      exact .inr ⟨same.symm, rfl⟩
+    · exact .inl found
+  unfold recordVote at found
+  split at found
+  · exact .inl found
+  · split at found
+    · split at found
+      · exact inserted found
+      · exact .inl found
+    · exact inserted found
+
+/-- A run of votes leaves a vote as it was, or sets it to the new vote for one of the voters. -/
+theorem foldl_recordVote_cases {equivocating : List ValidatorIndex} {message : LatestMessage fork}
+    (indices : List ValidatorIndex) (messages : Std.TreeMap ValidatorIndex (LatestMessage fork))
+    {validator : ValidatorIndex} {latest : LatestMessage fork}
+    (found : (indices.foldl (recordVote equivocating message) messages)[validator]? =
+      some latest) :
+    messages[validator]? = some latest ∨ (validator ∈ indices ∧ latest = message) := by
+  induction indices generalizing messages with
+  | nil => exact .inl found
+  | cons index rest ih =>
+    rw [List.foldl_cons] at found
+    rcases ih _ found with kept | ⟨voter, rfl⟩
+    · rcases recordVote_cases kept with kept | ⟨rfl, rfl⟩
+      · exact .inl kept
+      · exact .inr ⟨List.mem_cons_self, rfl⟩
+    · exact .inr ⟨List.mem_cons_of_mem _ voter, rfl⟩
+
+/-- A step that throws before the rest passes only when its condition fails. -/
+private theorem ite_throw_bind_ok {ε α β : Type} {c : Prop} [Decidable c] {e : ε}
+    {f : α → Except ε β} {k : Except ε β} {y : β} :
+    (if c then throw e >>= f else k) = .ok y ↔ ¬ c ∧ k = .ok y := by
+  by_cases h : c <;> simp [h, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
+
+/-- A check that throws passes only when its condition fails. -/
+private theorem ite_throw_ok {ε : Type} {c : Prop} [Decidable c] {e : ε} :
+    (if c then throw e else pure () : Except ε Unit) = .ok () ↔ ¬ c := by
+  by_cases h : c <;> simp [h, throw, throwThe, MonadExceptOf.throw, pure, Except.pure]
+
+/-- The checks that an attestation passes give the facts on its vote, target and slot. -/
+private theorem validateOnAttestation_facts {attestation : Attestation preset fork}
+    {voted : BeaconBlock preset fork} {checkpoint : Root} {due current : Slot}
+    (epoch : ¬ attestation.data.target.epoch ≠ computeEpochAtSlot preset attestation.data.slot)
+    (votedOk : store.block attestation.data.beaconBlockRoot = .ok voted)
+    (notFuture : ¬ attestation.data.slot < voted.slot)
+    (checkpointOk : store.getCheckpointBlock attestation.data.beaconBlockRoot
+      attestation.data.target.epoch = .ok checkpoint)
+    (same : ¬ attestation.data.target.root ≠ checkpoint)
+    (dueOk : (addChecked attestation.data.slot 1).mapError ForkChoiceError.arith = .ok due)
+    (currentOk : store.getCurrentSlot config = .ok current) (notLate : ¬ current < due) :
+    (∃ block, store.blocks[attestation.data.beaconBlockRoot]? = some block ∧
+      block.slot ≤ attestation.data.slot) ∧
+    attestation.data.target.epoch = computeEpochAtSlot preset attestation.data.slot ∧
+    store.getCheckpointBlock attestation.data.beaconBlockRoot attestation.data.target.epoch =
+      .ok attestation.data.target.root ∧
+    ∃ current, store.getCurrentSlot config = .ok current ∧ attestation.data.slot < current := by
+  refine ⟨⟨voted, block_ok_iff.mp votedOk, UInt64.not_lt.mp notFuture⟩, Classical.not_not.mp epoch,
+    by rw [checkpointOk, Classical.not_not.mp same], current, currentOk, ?_⟩
+  obtain ⟨-, dueNat⟩ := addChecked_ok_iff.mp (mapError_ok_iff.mp dueOk)
+  have le := UInt64.le_iff_toNat_le.mp (UInt64.not_lt.mp notLate)
+  rw [UInt64.lt_iff_toNat_lt]
+  simp only [UInt64.toNat_one] at dueNat
+  omega
+
+/-- An attestation that passes its checks votes for a known block.
+
+Its slot is the slot of that block or later.
+
+Its target is in the epoch of its slot, with the checkpoint block of the chain of its vote as root.
+
+The current slot is after its slot. -/
+theorem validateOnAttestation_ok {attestation : Attestation preset fork} {isFromBlock : Bool}
+    (valid : store.validateOnAttestation config attestation isFromBlock = .ok ()) :
+    (∃ block, store.blocks[attestation.data.beaconBlockRoot]? = some block ∧
+      block.slot ≤ attestation.data.slot) ∧
+    attestation.data.target.epoch = computeEpochAtSlot preset attestation.data.slot ∧
+    store.getCheckpointBlock attestation.data.beaconBlockRoot attestation.data.target.epoch =
+      .ok attestation.data.target.root ∧
+    ∃ current, store.getCurrentSlot config = .ok current ∧ attestation.data.slot < current := by
+  unfold validateOnAttestation at valid
+  cases isFromBlock <;> by_cases gloas : Fork.glamsterdam ≤ fork <;>
+    simp only [gloas, Bool.false_eq_true, ↓reduceIte, ↓reduceDIte, bind_ok_iff,
+      ite_throw_bind_ok, ite_throw_ok] at valid
+  · obtain ⟨-, -, epoch, -, -, voted, votedOk, notFuture, -, -, checkpoint, checkpointOk, same,
+      due, dueOk, current, currentOk, notLate⟩ := valid
+    exact validateOnAttestation_facts epoch votedOk notFuture checkpointOk same dueOk currentOk
+      notLate
+  · obtain ⟨-, -, epoch, -, -, voted, votedOk, notFuture, checkpoint, checkpointOk, same,
+      due, dueOk, current, currentOk, notLate⟩ := valid
+    exact validateOnAttestation_facts epoch votedOk notFuture checkpointOk same dueOk currentOk
+      notLate
+  · obtain ⟨epoch, -, -, voted, votedOk, notFuture, -, -, checkpoint, checkpointOk, same,
+      due, dueOk, current, currentOk, notLate⟩ := valid
+    exact validateOnAttestation_facts epoch votedOk notFuture checkpointOk same dueOk currentOk
+      notLate
+  · obtain ⟨epoch, -, -, voted, votedOk, notFuture, checkpoint, checkpointOk, same,
+      due, dueOk, current, currentOk, notLate⟩ := valid
+    exact validateOnAttestation_facts epoch votedOk notFuture checkpointOk same dueOk currentOk
+      notLate
+
+/-- An attestation that the store takes has the committees of its slot, as in a block.
+
+They are read in the state of its target, which the store then keeps. -/
+theorem onAttestation_committees {checks : SignatureChecks}
+    {attestation : Attestation preset fork} {isFromBlock : Bool} {after : Store preset fork}
+    (attested : store.onAttestation config checks attestation isFromBlock = .ok after) :
+    ∃ targetState, after.checkpointStates[attestation.data.target]? = some targetState ∧
+      checkAttestationCommittees targetState attestation = .ok () := by
+  unfold onAttestation at attested
+  simp only [bind_ok_iff] at attested
+  obtain ⟨_, _, stored, _, targetState, found, _, mapped, indexed, _, valid, _, attested⟩ :=
+    attested
+  split at attested
+  · simp only [pure, Except.pure, Except.ok.injEq] at attested
+    subst attested
+    refine ⟨targetState, ?_, ?_⟩
+    · simpa [updateLatestMessages] using checkpointState_ok_iff.mp found
+    · cases g : checkAttestationCommittees targetState attestation <;>
+        simp_all [Except.mapError]
+  · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at attested
+
 /-- After an attestation, each of its voters that does not equivocate has a recent vote.
 
 That vote is at the rank of the attestation's vote or later.
@@ -1035,7 +1307,8 @@ theorem onAttestation_voted {checks : SignatureChecks} {attestation : Attestatio
           (LatestMessage.ofAttestation attestation).rank ≤ m.rank := by
   unfold onAttestation at attested
   simp only [bind_ok_iff] at attested
-  obtain ⟨_, _, stored, _, targetState, found, indexed, mapped, valid, _, attested⟩ := attested
+  obtain ⟨_, _, stored, _, targetState, found, _, _, indexed, mapped, valid, _, attested⟩ :=
+    attested
   split at attested
   · simp only [pure, Except.pure, Except.ok.injEq] at attested
     subst attested
@@ -1292,6 +1565,24 @@ theorem onInclusionList_frame {checks : SignatureChecks} {heze : .hegota ≤ for
     store.EpochsLe after ∧ after.blocks = store.blocks ∧ after.blockStates = store.blockStates := by
   obtain ⟨_, _, rfl⟩ := onInclusionList_ok heze accepted
   exact ⟨EpochsLe.refl _, rfl, rfl⟩
+
+/-- From Gloas, an accepted envelope keeps the clock. -/
+theorem onExecutionPayloadEnvelope_sameClock {checks : SignatureChecks}
+    {sources : BlockSources preset fork} {gloas : .glamsterdam ≤ fork}
+    {signed : SignedExecutionPayloadEnvelope preset fork} {after : Store preset fork}
+    (accepted : store.onExecutionPayloadEnvelope config checks sources gloas signed = .ok after) :
+    SameClock store after := by
+  obtain ⟨_, _, _, _, _, record, rfl⟩ := onExecutionPayloadEnvelope_ok accepted
+  obtain ⟨_, rfl⟩ := recordEnvelope_frame record
+  exact ⟨rfl, rfl⟩
+
+/-- From Heze, an accepted inclusion list keeps the clock. -/
+theorem onInclusionList_sameClock {checks : SignatureChecks} {heze : .hegota ≤ fork}
+    {signed : SignedInclusionList} {after : Store preset fork}
+    (accepted : store.onInclusionList config checks heze signed = .ok after) :
+    SameClock store after := by
+  obtain ⟨_, _, rfl⟩ := onInclusionList_ok heze accepted
+  exact ⟨rfl, rfl⟩
 
 /-- From Gloas: the rule for a possible dependent block, once the head is computed.
 

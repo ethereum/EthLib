@@ -2,7 +2,10 @@ module
 
 public import EthLib.Execution.Proofs.State.Account
 public import EthLib.Execution.Proofs.State.AccountProof
+public import EthLib.Execution.Proofs.State.Agreement
+public import EthLib.Execution.Proofs.State.CodeAvailability
 public import EthLib.Execution.Proofs.State.Root
+public import EthLib.Execution.Proofs.State.Rebuild
 public import EthLib.Execution.Proofs.State.Tracker
 public import EthLib.Execution.Proofs.State.Errors
 public import EthLib.Execution.Proofs.State.Frame

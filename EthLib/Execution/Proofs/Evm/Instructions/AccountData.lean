@@ -72,6 +72,12 @@ theorem accessAddress_snd (evm : Evm fork Meter) (a : Address) :
   · exact ⟨_, rfl⟩
   · exact ⟨evm.substate.accessedAddresses, rfl⟩
 
+/-- An access to an address changes only the substate, so the state stays exactly as it was. -/
+theorem state_accessAddress (evm : Evm fork Meter) (address : Address) :
+    (accessAddress evm address).2.state = evm.state := by
+  unfold accessAddress
+  split <;> rfl
+
 /-- BALANCE on an address word with room on the stack: access, pay, read, push the balance. -/
 theorem balanceStep_cons [GasMeter Meter] {evm : Evm fork Meter} {word : U256} {rest : List U256}
     (h : evm.stack.val = word :: rest) :

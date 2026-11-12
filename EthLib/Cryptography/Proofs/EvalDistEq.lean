@@ -11,6 +11,8 @@ public import VCVio.EvalDist.Monad.UniformTable
 Elaboration aids and small lemmas for two computations with the same output distribution.
 
 Uniform samplers and uniform tables are the main cases.
+
+Two inequalities bound an event after a common draw, from a bound at each output of the draw.
 -/
 
 @[expose] public section
@@ -55,6 +57,36 @@ theorem evalDistEq_uniformSample_map_comp_injective {A B R : Type} [Finite A] [F
   let : MeasurableSpace R := ⊤
   EvalDistEq.of_evalDist_eq (evalDist_map_table_comp_injective ($ᵗ (A → R)) ($ᵗ (B → R))
     SampleableType.evalDist_uniformSample SampleableType.evalDist_uniformSample he)
+
+/-- Reading a uniform vector at distinct positions gives a uniform table of the values read. -/
+theorem evalDistEq_uniformSample_vector_map_getElem_injective {R : Type} {m n : Nat} [Finite R]
+    [Nonempty R] [SampleableType (Vector R m)] [SampleableType (Fin m → R)]
+    [SampleableType (Fin n → R)] {e : Fin n → Fin m} (he : Function.Injective e) :
+    ((fun v : Vector R m => fun j => v[(e j).val]) <$> ($ᵗ (Vector R m))) =ᵈ
+      ($ᵗ (Fin n → R)) :=
+  calc
+    _ =ᵈ ((fun g : Fin m → R => g ∘ e) <$>
+        (arrayVectorEquivFin R m <$> ($ᵗ (Vector R m)))) := by
+      simp only [Functor.map_map]
+      exact EvalDistEq.rfl
+    _ =ᵈ ((fun g : Fin m → R => g ∘ e) <$> ($ᵗ (Fin m → R))) :=
+      (SampleableType.map_uniformSample_evalDistEq_of_bijective
+        (arrayVectorEquivFin R m).bijective).map _
+    _ =ᵈ ($ᵗ (Fin n → R)) := evalDistEq_uniformSample_map_comp_injective he
+
+/-- A bound on each continuation, over the support, bounds the binds.
+
+The event of one continuation is at most the sum of the events of two others.
+
+The sum is taken after a common draw. -/
+theorem OracleComp.prEvent_bind_le_add_of_forall_le_of_support {α β γ δ : Type}
+    (oa : ProbComp α) (g : α → ProbComp β) (h : α → ProbComp γ) (k : α → ProbComp δ)
+    (p : β → Prop) (q : γ → Prop) (r : δ → Prop)
+    (hle : ∀ y ∈ support oa,
+      Pr{let z ← g y}[p z] ≤ Pr{let z ← h y}[q z] + Pr{let z ← k y}[r z]) :
+    Pr{let z ← oa >>= g}[p z] ≤ Pr{let z ← oa >>= h}[q z] + Pr{let z ← oa >>= k}[r z] := by
+  rw [bind_eq_attach_bind oa g, bind_eq_attach_bind oa h, bind_eq_attach_bind oa k]
+  exact prEvent_bind_le_add_of_forall_le _ _ _ _ p q r fun y => hle y.1 y.2
 
 open MeasureTheory in
 /-- Take continuation events within `ε` of each other at every possible output of a common prefix.

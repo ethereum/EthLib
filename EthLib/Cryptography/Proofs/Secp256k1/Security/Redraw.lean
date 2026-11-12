@@ -121,9 +121,7 @@ theorem card_filter_encode_eq {scheme : Scheme F G A M} (hg : scheme.g ≠ 0) (h
     Finset.mem_singleton]
   constructor
   · rintro ⟨hb, he⟩
-    rcases hsemi _ _ (smul_ne_zero ha hg) (smul_ne_zero hb hg) he.symm with h | h
-    · exact Or.inl (smul_left_injective F hg h)
-    · exact Or.inr (smul_left_injective F hg (h.trans (neg_smul a scheme.g).symm))
+    exact Scheme.eq_or_eq_neg_of_encode_smul_eq hsemi hg ha hb he
   · rintro (rfl | rfl)
     · exact ⟨ha, rfl⟩
     · exact ⟨neg_ne_zero.2 ha, by rw [neg_smul, hneg]⟩

@@ -2,7 +2,7 @@ module
 
 public import EthLib.Consensus.Proofs.Transition.BuilderRequests
 public import EthLib.Consensus.Proofs.Transition.Invariants
-public import EthLib.Consensus.Proofs.Transition.TargetVotes
+public import EthLib.Consensus.Proofs.Transition.TargetFlags
 public import EthLib.Consensus.Transition.Upgrade
 
 /-!
@@ -34,8 +34,6 @@ The latest bid differs from the Gloas bid only by its inclusion list bits, which
 
 Each upgrade keeps the slot, the three checkpoints and the block roots.
 
-It keeps the keys while the registry stays below 2^64 validators.
-
 From Altair, an upgrade adds no target flag.
 
 Each upgrade keeps the invariant that each valid block keeps, and the finalized checkpoint.
@@ -51,17 +49,39 @@ variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 
 /-! ## Upgrade frames -/
 
+/-- A step that keeps each byte of flags or zeroes it adds no target flag. -/
+theorem TargetFlagAt.of_flagsKeptOrZero {fork : Fork} {state after : BeaconState preset fork}
+    {altair : .altair ≤ fork} {current : Bool} {position : Nat}
+    (kept : FlagsKeptOrZero state after)
+    (flagged : TargetFlagAt (recentParticipation after altair current) position) :
+    TargetFlagAt (recentParticipation state altair current) position := by
+  obtain ⟨flags, found, set⟩ := flagged
+  have kept := kept altair position flags
+  cases current
+  · rcases kept.1 found with old | rfl
+    · exact ⟨flags, old, set⟩
+    · exact absurd set (by decide)
+  · rcases kept.2 found with old | rfl
+    · exact ⟨flags, old, set⟩
+    · exact absurd set (by decide)
+
 /-- An upgrade to a fork no earlier than the fork before.
 
-It keeps the slot, the three checkpoints, the block roots and the genesis validators root.
+It keeps the slot, the three checkpoints, the bits of justification and the block roots.
+
+It also keeps the genesis validators root.
 
 The current fork version becomes the previous one, and the new one is that of the fork after.
 
-It never shrinks the registry, and keeps the keys while the registry stays below 2^64 validators.
+It never shrinks the registry.
 
 When each validator has one balance before it, each has one after it.
 
 When each validator may withdraw no earlier than it exits before it, the same holds after it.
+
+Let the largest effective balances of the preset be whole numbers of increments.
+
+When each effective balance is a whole number of increments before it, the same holds after it.
 
 From Altair, a target flag after it was a target flag at its position before. -/
 structure UpgradeFrame (config : Config) {fork post : Fork} (pre : BeaconState preset fork)
@@ -71,14 +91,16 @@ structure UpgradeFrame (config : Config) {fork post : Fork} (pre : BeaconState p
   finalized : after.finalizedCheckpoint = pre.finalizedCheckpoint
   previousJustified : after.previousJustifiedCheckpoint = pre.previousJustifiedCheckpoint
   currentJustified : after.currentJustifiedCheckpoint = pre.currentJustifiedCheckpoint
+  justificationBits : after.justificationBits = pre.justificationBits
   blockRoots : after.blockRoots = pre.blockRoots
   genesisValidatorsRoot : after.genesisValidatorsRoot = pre.genesisValidatorsRoot
   previousVersion : after.forkVersions.previousVersion = pre.forkVersions.currentVersion
   currentVersion : after.forkVersions.currentVersion = config.forkVersion post
   registryGrows : pre.validators.data.size ≤ after.validators.data.size
-  keysKept : after.validators.data.size < 2 ^ 64 → KeysKept pre after
   balancesMatch : BalancesMatch pre → BalancesMatch after
   exitsOrdered : ExitsOrdered pre → ExitsOrdered after
+  aligned : MaxEffectiveBalancesAligned preset → EffectiveBalancesAligned pre →
+    EffectiveBalancesAligned after
   flags : ∀ (altair : .altair ≤ fork) (current : Bool) (position : Nat),
     TargetFlagAt (recentParticipation after (Nat.le_trans altair forward) current) position →
       TargetFlagAt (recentParticipation pre altair current) position
@@ -91,6 +113,7 @@ theorem UpgradeFrame.of_carried {fork post : Fork} {pre : BeaconState preset for
     (finalized : after.finalizedCheckpoint = pre.finalizedCheckpoint)
     (previousJustified : after.previousJustifiedCheckpoint = pre.previousJustifiedCheckpoint)
     (currentJustified : after.currentJustifiedCheckpoint = pre.currentJustifiedCheckpoint)
+    (justificationBits : after.justificationBits = pre.justificationBits)
     (blockRoots : after.blockRoots = pre.blockRoots)
     (genesisValidatorsRoot : after.genesisValidatorsRoot = pre.genesisValidatorsRoot)
     (previousVersion : after.forkVersions.previousVersion = pre.forkVersions.currentVersion)
@@ -106,18 +129,22 @@ theorem UpgradeFrame.of_carried {fork post : Fork} {pre : BeaconState preset for
   finalized := finalized
   previousJustified := previousJustified
   currentJustified := currentJustified
+  justificationBits := justificationBits
   blockRoots := blockRoots
   genesisValidatorsRoot := genesisValidatorsRoot
   previousVersion := previousVersion
   currentVersion := currentVersion
   registryGrows := by rw [validators]; exact Nat.le_refl _
-  keysKept _ := KeysKept.of_validators validators
   balancesMatch holds := by
     unfold BalancesMatch at holds ⊢
     rw [balances, validators]
     exact holds
   exitsOrdered holds := by
     unfold ExitsOrdered at holds ⊢
+    rw [validators]
+    exact holds
+  aligned _ holds := by
+    unfold EffectiveBalancesAligned at holds ⊢
     rw [validators]
     exact holds
   flags altair current position flagged := by
@@ -133,15 +160,15 @@ theorem UpgradeFrame.trans_blockFrame {fork post : Fork} {pre : BeaconState pres
   finalized := two.finalized.trans one.finalized
   previousJustified := two.previousJustified.trans one.previousJustified
   currentJustified := two.currentJustified.trans one.currentJustified
+  justificationBits := two.justificationBits.trans one.justificationBits
   blockRoots := two.blockRoots.trans one.blockRoots
   genesisValidatorsRoot := two.genesisValidatorsRoot.trans one.genesisValidatorsRoot
   previousVersion := by rw [two.forkVersions]; exact one.previousVersion
   currentVersion := by rw [two.forkVersions]; exact one.currentVersion
   registryGrows := Nat.le_trans one.registryGrows two.registryGrows
-  keysKept small :=
-    (one.keysKept (Nat.lt_of_le_of_lt two.registryGrows small)).trans (two.keysKept small)
   balancesMatch := two.balancesMatch ∘ one.balancesMatch
   exitsOrdered := two.exitsOrdered ∘ one.exitsOrdered
+  aligned maxAligned := two.aligned maxAligned ∘ one.aligned maxAligned
   flags altair current position flagged :=
     one.flags altair current position (flagged.of_flagsKeptOrZero two.flags)
 
@@ -161,6 +188,7 @@ theorem UpgradeFrame.invariant {fork post : Fork} {pre : BeaconState preset fork
     unfold JustifiedSettled getPreviousEpoch getCurrentEpoch at this ⊢
     rw [frame.currentJustified, frame.slot]
     exact this
+  aligned maxAligned := frame.aligned maxAligned (holds.aligned maxAligned)
 
 /-! ## The upgrades -/
 
@@ -262,7 +290,7 @@ private theorem upgradeToAltair_frame_spec {pre : BeaconState preset .phase0}
   obtain ⟨previous, current, scores⟩ := carryFields_of_lt_altair (config := config)
     (post := .altair) pre (by decide) (by decide) (by decide) (by decide)
   refine ⟨?_, rfl, rfl, ?_, ?_, ?_, rfl, rfl⟩
-  · exact UpgradeFrame.of_carried (by decide) rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl
+  · exact UpgradeFrame.of_carried (by decide) rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl
       fun altair => absurd altair (by decide)
   · show participation.data.size = _
     rw [same, previous, Array.size_replicate]
@@ -348,8 +376,8 @@ theorem frame_queuePreActivation {fork : Fork} {state after : BeaconState preset
   have sizes := sameSizes_setBalance set₁
   obtain ⟨_, rfl⟩ := setBalance_ok set₁
   have zeroed := BlockFrame.of_validators sizes
-  have reset := frame_setValidator set₂ found rfl fun ordered =>
-    ordered validator (mem_of_getValidator found)
+  have reset := frame_setValidator_of_whole set₂
+    (fun ordered => ordered validator (mem_of_getValidator found)) fun _ _ => UInt64.zero_mod
   exact (zeroed.trans reset.toBlockFrame).trans (BlockFrame.of_validators ⟨rfl, rfl⟩)
 
 /-- Queueing the excess balance of a validator with compounding credentials keeps the frame.
@@ -383,7 +411,7 @@ private theorem upgradeToElectra_frame_spec {pre : BeaconState preset .dencun}
       (BlockFrame.foldlM (fun _ _ _ ok => frame_queuePreActivation ok) queued)).trans_blockFrame
       (BlockFrame.foldlM (fun _ _ _ ok => frame_queueCompoundingExcess ok) compounded))
     have altair : Fork.altair ≤ Fork.dencun := by decide
-    exact UpgradeFrame.of_carried (by decide) rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl
+    exact UpgradeFrame.of_carried (by decide) rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl
       fun _ current => by cases current <;>
         simp [recentParticipation, carryFields, carryList, altair]
   have first := foldlM_ok_invariant (ElectraKept _)
@@ -417,7 +445,7 @@ private theorem upgradeToFulu_frame_spec {pre : BeaconState preset .pectra}
   obtain ⟨_, -, rfl⟩ := computed
   have altair : Fork.altair ≤ Fork.pectra := by decide
   refine ⟨?_, rfl, rfl, rfl⟩
-  exact UpgradeFrame.of_carried (by decide) rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl
+  exact UpgradeFrame.of_carried (by decide) rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl
     fun _ current => by cases current <;> simp [recentParticipation, carryFields, carryList, altair]
 
 /-- The upgrade to Fulu keeps the registry and the balances.
@@ -482,6 +510,7 @@ theorem onboardDeposit_cases {validatorKeys : List BLSPubkey}
   split at computed
   · -- A known builder adds the amount to its balance.
     rename_i index _
+    obtain ⟨_, _, computed⟩ := bind_ok_iff.mp computed
     obtain ⟨balance, summed, rest⟩ := bind_ok_iff.mp computed
     rw [liftAccessor_ok, liftArith, mapError_ok_iff, addChecked_ok_iff] at summed
     cases rest
@@ -501,13 +530,16 @@ theorem onboardDeposit_cases {validatorKeys : List BLSPubkey}
   obtain ⟨valid, checked, rest⟩ := bind_ok_iff.mp rest
   split at rest
   · -- A new key with a valid signature becomes a builder.
+    obtain ⟨_, added, rest⟩ := bind_ok_iff.mp rest
     cases rest
-    refine .inr (.inl ⟨rfl, builderBalanceSum_addBuilderToRegistry, ?_⟩)
-    unfold addBuilderToRegistry BeaconState.putBuilder
-    dsimp only
-    split
-    · exact ⟨_, rfl⟩
-    · exact ⟨_, rfl⟩
+    refine .inr (.inl ⟨rfl, builderBalanceSum_addBuilderToRegistry added, ?_⟩)
+    simp only [addBuilderToRegistry, bind_ok_iff] at added
+    obtain ⟨_, _, added⟩ := added
+    split at added
+    · cases added
+      exact ⟨_, rfl⟩
+    · cases added
+      exact ⟨_, rfl⟩
   · cases rest
     rename_i invalid
     simp only [Bool.not_eq_true] at invalid
@@ -590,7 +622,7 @@ private theorem upgradeToGloas_frame_spec {pre : BeaconState preset .fusaka}
   obtain ⟨window, -, onboarded⟩ := bind_ok_iff.mp rest
   obtain ⟨⟨builders, pending, rfl⟩, -⟩ := onboardBuildersFromPendingDeposits_spec onboarded
   refine ⟨?_, rfl, rfl, rfl, rfl, rfl⟩
-  exact UpgradeFrame.of_carried (by decide) rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl
+  exact UpgradeFrame.of_carried (by decide) rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl
     fun _ current => by cases current <;> rfl
 
 /-- The upgrade of a Fulu state keeps its registry and balances, and the hash of its payload.
@@ -608,6 +640,21 @@ theorem upgradeToGloas_spec {pre : BeaconState preset .fusaka}
       after.forkVersions =
         ⟨pre.forkVersions.currentVersion, config.GLOAS_FORK_VERSION, getCurrentEpoch pre⟩ :=
   (upgradeToGloas_frame_spec computed).2
+
+/-- The upgrade to Gloas starts with no pending payment and no pending withdrawal of a builder.
+
+The latest bid of the upgraded state has no value. -/
+theorem upgradeToGloas_builderFields {pre : BeaconState preset .fusaka}
+    {after : BeaconState preset .glamsterdam}
+    (computed : upgradeToGloas config checks pre = .ok after) :
+    (after.builderPendingPayments (by decide)).elements = Vector.replicate _ .empty ∧
+      (after.builderPendingWithdrawals (by decide)).data = #[] ∧
+      (after.latestExecutionPayloadBid (by decide)).value = 0 := by
+  unfold upgradeToGloas at computed
+  obtain ⟨root, -, rest⟩ := bind_ok_iff.mp computed
+  obtain ⟨window, -, onboarded⟩ := bind_ok_iff.mp rest
+  obtain ⟨⟨builders, pending, rfl⟩, -⟩ := onboardBuildersFromPendingDeposits_spec onboarded
+  exact ⟨rfl, rfl, rfl⟩
 
 /-- The upgraded bid keeps every field of the Gloas bid, and sets no inclusion list bit. -/
 theorem upgradeBidToHeze_spec (bid : ExecutionPayloadBid preset .glamsterdam) :
@@ -741,7 +788,7 @@ theorem upgradeToHeze_error_iff {pre : BeaconState preset .glamsterdam}
 theorem upgradeFrame_carryFields {fork post : Fork} (pre : BeaconState preset fork)
     (upgrade : fork < post) (before : post < .glamsterdam) :
     UpgradeFrame config pre (carryFields config post pre upgrade before) :=
-  UpgradeFrame.of_carried (Nat.le_of_lt upgrade) rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl
+  UpgradeFrame.of_carried (Nat.le_of_lt upgrade) rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl
     fun altair current => by
       cases current <;> simp [recentParticipation, carryFields, altair, carryList]
 
@@ -774,7 +821,7 @@ theorem upgradeFrame_upgradeToHeze {pre : BeaconState preset .glamsterdam}
     {after : BeaconState preset .hegota} (computed : upgradeToHeze config pre = .ok after) :
     UpgradeFrame config pre after := by
   obtain ⟨-, rfl⟩ := upgradeToHeze_ok_iff.mp computed
-  exact UpgradeFrame.of_carried (by decide) rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl
+  exact UpgradeFrame.of_carried (by decide) rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl
     fun _ current => by cases current <;> rfl
 
 /-! ## The invariant across an upgrade -/

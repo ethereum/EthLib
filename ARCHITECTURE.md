@@ -221,26 +221,37 @@ Muir Glacier, Arrow Glacier and Gray Glacier only delay the difficulty bomb.
 Bellatrix and Paris, the two halves of the Merge, are two forks, because Bellatrix activated on 6 September 2022 and Paris on 15 September.
 A rule that none of these forks changed never mentions them.
 
-A drafted change is not yet a point on the timeline.
-The consensus specifications keep such drafts as features, most of them built on a named fork with a placeholder fork version.
-For example, the draft of EIP-8321 starts from a Heze state, but "Heze with EIP-8321" is neither Heze nor the fork after it.
-So one rule, for both layers, says when a change becomes work in EthLib: when a fork of the specifications includes it, and not before.
-On the consensus layer, that is when its document leaves the feature drafts (`specs/_features` in consensus-specs) for a fork directory such as `specs/heze`.
-On the execution layer, the default branch of execution-specs holds the next fork, and an EIP enters when it merges there.
-The first merge creates the fork's tests directory, such as `tests/bogota`, and a `tests@` release that holds this directory marks the same event.
-`scripts/check_spec_releases.py` reports both signals for the first EIP of a fork, and a reviewer checks the later merges.
-Until then, a draft gets no fork branch in any rule.
+### When a change enters EthLib
 
-The rule governs changes, not forks.
-A fork such as Hegotá keeps its constructor of `Fork` once some of its changes have entered.
+A change to the protocol reaches mainnet through the stages of a network upgrade, which [EIP-7723](https://github.com/ethereum/EIPs/blob/b4552f44e3e3a79fa522abc346f065924142232d/EIPS/eip-7723.md) defines.
+An EIP is first Proposed for Inclusion in an upgrade, then Considered for Inclusion, which means client teams intend to try it on devnets.
+It is then Scheduled for Inclusion, and finally Included when the upgrade activates.
+At any stage it can be Declined for Inclusion.
+These stages, and not the status of the EIP document itself, decide where the specification of a change lives.
+
+- An EIP that no upgrade has yet considered stays outside EthLib.
+  To prototype or verify it, work in a fork of the repository.
+  Another project can also import a pinned revision of EthLib and build on it.
+- An EIP Considered or Scheduled for Inclusion in a named upgrade lives on a branch of ethereum/EthLib named after that upgrade.
+  The work is then visible to everyone, and it follows the devnets of the upgrade.
+- An upgrade merges into `master` once it is Scheduled for mainnet, with only its Scheduled EIPs.
+  An EIP Declined for Inclusion leaves the branch.
+
+So a contribution that adds an EIP ahead of its stage is not accepted, whoever or whatever writes it.
+This keeps the repository free of changes that may never activate.
+
+A few components are the exception, because EthLib means to be their reference by the time they reach mainnet, several upgrades ahead.
+The hash-based signatures XMSS and SPHINCS are such components.
+The maintainers choose these components, and each has an issue that records the decision.
+Each is specified on its own, outside `Fork`, so no rule of an upgrade uses it.
+It joins the timeline by the rule above, when an upgrade schedules it.
+
+The stages apply to changes, not to forks.
+A constructor of `Fork`, such as Hegotá, exists as soon as one of its changes has entered.
 The rules that wait for its other changes reject it as not yet specified.
-The parity catalogue lists the Bogota cases of each pinned devnet, but none of them runs.
-Each waits, with its plan, for a merge into the Bogota fork branch or a release of Bogota.
+The parity catalogue lists the cases of each pinned devnet, and a case runs only once its change has entered.
+`scripts/check_spec_releases.py` reports when the specification repositories start the tests of a new upgrade, which tells a reviewer that a branch is due.
 
-A component that no fork uses yet, such as a new state tree, can still be specified on its own, outside `Fork`.
-Its EIP must first be stable enough to cite.
-For example, the binary tree of EIP-7864 could be specified with its root and its proofs, but no block rule would use it.
-It joins the timeline by the same rule, when a fork includes it.
 The Scope section lists what EthLib covers in the end, not the order of the work.
 
 ### A rule takes the fork

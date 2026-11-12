@@ -58,9 +58,9 @@ def computeProposerIndices (state : BeaconState preset fork) (epoch : Epoch) (se
     let slot ← liftArith (addChecked start offset.toUInt64)
     computeSlotProposer state indices (proposerSlotSeed seed slot)
 
-/-- The candidates to propose in an epoch: its active validators, unslashed from Gloas. -/
-def proposerCandidates (state : BeaconState preset fork) (epoch : Epoch) : Array ValidatorIndex :=
-  let active := (getActiveValidatorIndices state epoch).toArray
+/-- The candidates to propose among the active validators of an epoch, unslashed from Gloas. -/
+def proposerCandidates (state : BeaconState preset fork) (active : Array ValidatorIndex) :
+    Array ValidatorIndex :=
   if .glamsterdam ≤ fork then
     active.filter fun index =>
       match state.validators.data[index.toNat]? with
@@ -71,8 +71,9 @@ def proposerCandidates (state : BeaconState preset fork) (epoch : Epoch) : Array
 /-- The proposers of the slots of an epoch. -/
 def getBeaconProposerIndices (state : BeaconState preset fork) (epoch : Epoch) :
     Except AccessorError (Vector ValidatorIndex preset.SLOTS_PER_EPOCH.toNat) := do
+  let active ← getActiveValidatorIndicesChecked state epoch
   let seed ← getSeed state epoch DOMAIN_BEACON_PROPOSER
-  computeProposerIndices state epoch seed (proposerCandidates state epoch)
+  computeProposerIndices state epoch seed (proposerCandidates state active.toArray)
 
 /-- From Fulu: the proposers of the current epoch and of each epoch of the seed lookahead.
 

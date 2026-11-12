@@ -52,9 +52,12 @@ def addFlag (flags : ParticipationFlags) (flagIndex : UInt64) : ParticipationFla
 def hasFlag (flags : ParticipationFlags) (flagIndex : UInt64) : Bool :=
   flags &&& flagBit flagIndex == flagBit flagIndex
 
-/-- From Altair: the index of the next validator to join the registry, the size of the registry. -/
-def getIndexForNewValidator (state : BeaconState preset fork) : ValidatorIndex :=
-  state.validators.data.size.toUInt64
+/-- From Altair: the index of the next validator to join the registry, the size of the registry.
+
+A registry of `2^64` validators or more has no such index, an overflow. -/
+def getIndexForNewValidator (state : BeaconState preset fork) :
+    Except AccessorError ValidatorIndex :=
+  liftArith (ofNatChecked state.validators.data.size)
 
 /-- From Altair: a list with the entry at an index set.
 
@@ -128,7 +131,7 @@ def getUnslashedParticipatingIndices (state : BeaconState preset fork) (altair :
     let participation :=
       if epoch = current then (state.currentEpochParticipation altair).data
       else (state.previousEpochParticipation altair).data
-    let read ← (getActiveValidatorIndices state epoch).mapM fun index => do
+    let read ← (← getActiveValidatorIndicesChecked state epoch).mapM fun index => do
       let some flags := participation[index.toNat]? | throw (.indexOutOfRange index)
       return (index, hasFlag flags flagIndex && !(← getValidator state index).slashed)
     return (read.filter (·.2)).map (·.1)

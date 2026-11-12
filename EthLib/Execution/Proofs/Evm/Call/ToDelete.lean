@@ -178,6 +178,15 @@ theorem createdAccounts_startState (message : Message fork) (state : Transaction
   · exact TransactionState.createdAccounts_touchAccount _ _
   · rfl
 
+/-- The state that a message enters has the created accounts of the state it is sent from. -/
+theorem createdAccounts_entered {message : Message fork} {state entry : TransactionState}
+    {substate entrySubstate : Substate}
+    (h : Entered fork message state substate entry entrySubstate) :
+    entry.createdAccounts = state.createdAccounts := by
+  rcases h with ⟨-, rfl, -⟩ | ⟨-, moved, -⟩
+  · exact createdAccounts_startState _ _
+  · exact (TransactionState.createdAccounts_moveEther moved).trans (createdAccounts_startState _ _)
+
 /-- A rollback keeps the created accounts and the substate of the frame. -/
 theorem createdAccounts_rollbackOnError (snapshot : TransactionState) (evm : Evm fork Meter) :
     (rollbackOnError snapshot evm).state.createdAccounts = evm.state.createdAccounts ∧
@@ -227,10 +236,8 @@ theorem deletesCreated_processMessage_induction [LawfulGasMeter Meter] (hfork : 
     (fun {message state state1 substate substate1 _ ended} hentry hd => by
       have h12 : state1.createdAccounts = state.createdAccounts ∧
           substate1.accountsToDelete = substate.accountsToDelete := by
-        rcases hentry with ⟨-, rfl, rfl⟩ | ⟨-, hm, rfl⟩
-        · exact ⟨createdAccounts_startState message state, rfl⟩
-        · exact ⟨(TransactionState.createdAccounts_moveEther hm).trans
-            (createdAccounts_startState message state), rfl⟩
+        refine ⟨createdAccounts_entered hentry, ?_⟩
+        rcases hentry with ⟨-, -, rfl⟩ | ⟨-, -, rfl⟩ <;> rfl
       obtain ⟨hc, hs⟩ := createdAccounts_rollbackOnError state ended
       refine ⟨fun x hx => ?_, fun x hx => ?_⟩
       · rw [hc]

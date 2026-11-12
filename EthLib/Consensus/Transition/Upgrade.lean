@@ -361,6 +361,7 @@ def onboardDeposit (config : Config) (checks : SignatureChecks)
   if deposit.pubkey ∈ validatorKeys then return (state, kept.push deposit)
   match findBuilderByPubkey state gloas deposit.pubkey with
   | some index =>
+    let _ ← liftAccessor (liftArith (ofNatChecked index.val))
     let builder := (state.builders gloas).data[index]
     let balance ← liftAccessor (liftArith (addChecked builder.balance deposit.amount))
     return (state.putBuilder gloas index index.isLt { builder with balance }, kept)
@@ -371,8 +372,9 @@ def onboardDeposit (config : Config) (checks : SignatureChecks)
       return (state, kept.push deposit)
     if ← isValidDepositSignature config checks deposit.pubkey deposit.withdrawalCredentials
         deposit.amount deposit.signature then
-      return (addBuilderToRegistry state gloas deposit.pubkey PAYLOAD_BUILDER_VERSION
-        (credentialAddress deposit.withdrawalCredentials) deposit.amount deposit.slot, kept)
+      let state ← addBuilderToRegistry state gloas deposit.pubkey PAYLOAD_BUILDER_VERSION
+        (credentialAddress deposit.withdrawalCredentials) deposit.amount deposit.slot
+      return (state, kept)
     else return (state, kept)
 
 /-- The state after the pending deposits of builders become builders, at the fork. -/

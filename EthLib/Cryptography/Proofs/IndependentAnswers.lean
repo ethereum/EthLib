@@ -47,38 +47,74 @@ variable {A : Type} [FinEnum A]
 
 /-! ## Uniform draws that avoid a list -/
 
-/-- A uniform value of `A` that avoids a list puts at least the mass of a uniform value of `A`.
+/-- Draw a uniform value outside a list, and keep it only when it is outside a larger list.
 
-This holds for each event, and the uniform value of `A` counts only when it avoids the list. -/
-theorem prEvent_uniformOutside_nil_and_notMem_le (used : List A) (d d' : A) (p : A → Prop) :
-    Pr{let y ← uniformOutside [] d}[p y ∧ y ∉ used] ≤
-      Pr{let y ← uniformOutside used d'}[p y] := by
+That puts at most the mass of a uniform value outside the larger list, on each event. -/
+theorem prEvent_uniformOutside_and_notMem_le {used used' : List A} (h : used ⊆ used')
+    (d d' : A) (p : A → Prop) :
+    Pr{let y ← uniformOutside used d}[p y ∧ y ∉ used'] ≤
+      Pr{let y ← uniformOutside used' d'}[p y] := by
   classical
-  have hne : FinEnum.toList A ≠ [] := List.ne_nil_of_mem (FinEnum.mem_toList d)
-  have hcount : (FinEnum.toList A).countP (fun y => decide (p y ∧ y ∉ used)) =
-      ((FinEnum.toList A).filter fun b => b ∉ used).countP (fun y => decide (p y)) := by
-    rw [List.countP_filter]
-    simp only [Bool.decide_and]
-  have hnil : ((FinEnum.toList A).filter fun b => b ∉ []) = FinEnum.toList A := by simp
-  rw [uniformOutside, hnil, prEvent_uniformFrom_eq_countP hne d, hcount]
-  by_cases hf : ((FinEnum.toList A).filter fun b => b ∉ used) = []
+  have hsub : ∀ y, y ∉ used' → y ∉ used := fun _ hy hu => hy (h hu)
+  by_cases hL : ((FinEnum.toList A).filter fun b => b ∉ used) = []
+  · have hd : d ∈ used := by
+      by_contra hd
+      have hmem : d ∈ (FinEnum.toList A).filter fun b => b ∉ used :=
+        List.mem_filter.2 ⟨FinEnum.mem_toList d, by simpa using hd⟩
+      rw [hL] at hmem
+      simp at hmem
+    rw [uniformOutside, hL, uniformFrom]
+    simp [h hd]
+  have hcount : ((FinEnum.toList A).filter fun b => b ∉ used).countP
+      (fun y => decide (p y ∧ y ∉ used')) =
+      ((FinEnum.toList A).filter fun b => b ∉ used').countP (fun y => decide (p y)) := by
+    rw [List.countP_filter, List.countP_filter]
+    refine List.countP_congr fun y _ => ?_
+    by_cases hy : y ∈ used' <;> simp [hy, hsub y]
+  rw [uniformOutside, prEvent_uniformFrom_eq_countP hL d, hcount]
+  by_cases hf : ((FinEnum.toList A).filter fun b => b ∉ used') = []
   · rw [hf]
     simp
   · rw [uniformOutside, prEvent_uniformFrom_eq_countP hf d']
-    exact ENNReal.div_le_div_left (by exact_mod_cast List.length_filter_le _ _) _
+    refine ENNReal.div_le_div_left ?_ _
+    rw [← List.countP_eq_length_filter, ← List.countP_eq_length_filter]
+    exact_mod_cast List.countP_mono_left fun y _ hy => by simpa using hsub y (by simpa using hy)
+
+/-- Draw a uniform value of `A`, and keep it only when it is outside a list.
+
+That puts at most the mass of a uniform value outside the list, on each event. -/
+theorem prEvent_uniformOutside_nil_and_notMem_le (used : List A) (d d' : A) (p : A → Prop) :
+    Pr{let y ← uniformOutside [] d}[p y ∧ y ∉ used] ≤
+      Pr{let y ← uniformOutside used d'}[p y] :=
+  prEvent_uniformOutside_and_notMem_le (List.nil_subset _) d d' p
+
+/-- A uniform value outside a list lies in a second list with chance at most a ratio.
+
+Let `n` be the length of the first list.
+
+The ratio is the length of the second list over `|A| - n`. -/
+theorem prEvent_uniformOutside_mem_le (used L : List A) (d : A) :
+    Pr{let y ← uniformOutside used d}[y ∈ L] ≤
+      (L.length : ℝ≥0∞) / ((FinEnum.card A - used.length : ℕ) : ℝ≥0∞) := by
+  have hcard := card_sub_length_le_length_filter used
+  by_cases hL : ((FinEnum.toList A).filter fun b => b ∉ used) = []
+  · rw [hL, List.length_nil, Nat.le_zero] at hcard
+    rw [hcard, Nat.cast_zero]
+    rcases L with _ | ⟨y, L⟩
+    · rw [prEvent_eq_zero_of_forall_not _ _ fun y hy => List.not_mem_nil hy]
+      exact zero_le
+    · rw [ENNReal.div_zero (by simp)]
+      exact le_top
+  · rw [uniformOutside, prEvent_uniformFrom_eq_countP hL d]
+    refine ENNReal.div_le_div ?_ (by exact_mod_cast hcard)
+    rw [List.countP_eq_length_filter]
+    exact_mod_cast (List.subperm_of_subset ((FinEnum.nodup_toList).filter _ |>.filter _)
+      fun y hy => by simpa using (List.mem_filter.1 hy).2).length_le
 
 /-- A uniform value of `A` lies in a list with chance at most its length over `|A|`. -/
 theorem prEvent_uniformOutside_nil_mem_le (used : List A) (d : A) :
     Pr{let y ← uniformOutside [] d}[y ∈ used] ≤ (used.length : ℝ≥0∞) / FinEnum.card A := by
-  have hne : FinEnum.toList A ≠ [] := List.ne_nil_of_mem (FinEnum.mem_toList d)
-  have hnil : ((FinEnum.toList A).filter fun b => b ∉ []) = FinEnum.toList A := by simp
-  rw [uniformOutside, hnil, prEvent_uniformFrom_eq_countP hne d]
-  have hlen : (FinEnum.toList A).length = FinEnum.card A := by simp [FinEnum.toList]
-  rw [hlen]
-  refine ENNReal.div_le_div_right ?_ _
-  rw [List.countP_eq_length_filter]
-  exact_mod_cast ((List.subperm_of_subset ((FinEnum.nodup_toList).filter _)
-    fun y hy => by simpa using (List.mem_filter.1 hy).2).length_le)
+  simpa using prEvent_uniformOutside_mem_le [] used d
 
 /-- A uniform value of `A` avoiding nothing is the framework's uniform sample of `A`. -/
 theorem uniformOutside_nil_evalDistEq [SampleableType A] (d : A) :
@@ -155,22 +191,6 @@ theorem indepPermOracle_inr_run (b : A) (c : PermCache A) (f : Bool) :
       | none => (fun a => (a, ((a, b) :: c, f || decide (a ∈ c.map Prod.fst)))) <$>
         (uniformOutside [] b : ProbComp A) := rfl
 
-/-- A forward query to the lazy permutation reads the cache, or draws outside the images. -/
-theorem lazyPermOracle_inl_run (a : A) (c : PermCache A) :
-    (lazyPermOracle (.inl a)).run c =
-      match c.lookup a with
-      | some b => pure (b, c)
-      | none => (fun b => (b, (a, b) :: c)) <$>
-        (uniformOutside (c.map Prod.snd) a : ProbComp A) := rfl
-
-/-- An inverse query to the lazy permutation reads the cache, or draws outside the queries. -/
-theorem lazyPermOracle_inr_run (b : A) (c : PermCache A) :
-    (lazyPermOracle (.inr b)).run c =
-      match (c.map Prod.swap).lookup b with
-      | some a => pure (a, c)
-      | none => (fun a => (a, (a, b) :: c)) <$>
-        (uniformOutside (c.map Prod.fst) b : ProbComp A) := rfl
-
 /-- A query of the permutation keeps the state, or adds one pair and keeps a raised flag. -/
 theorem indepPermOracle_step (q : (PermSpec A).Domain) (s : IndepState A) (z)
     (hz : z ∈ support ((indepPermOracle q).run s)) :
@@ -195,15 +215,11 @@ theorem indepPermOracle_step (q : (PermSpec A).Domain) (s : IndepState A) (z)
 /-- Once raised, the flag stays. -/
 theorem indepPermImpl_preservesInv_flag :
     QueryImpl.PreservesInv (indepPermImpl (A := A)) fun s => s.2 = true := by
-  rintro (n | q) s hs z hz
-  · rw [passthrough_add_inl_run] at hz
-    simp only [support_map, Set.mem_image] at hz
-    obtain ⟨_, -, rfl⟩ := hz
+  refine (preservesInv_passthrough _).add fun q s hs z hz => ?_
+  rcases indepPermOracle_step q s z hz with h | ⟨_, -, h⟩
+  · rw [h]
     exact hs
-  · rcases indepPermOracle_step q s z hz with h | ⟨_, -, h⟩
-    · rw [h]
-      exact hs
-    · exact h hs
+  · exact h hs
 
 /-- Each step adds at most one pair, and only a query of the permutation adds one. -/
 theorem length_le_of_mem_support_indepPermImpl (t : (unifSpec + PermSpec A).Domain)
@@ -218,23 +234,34 @@ theorem length_le_of_mem_support_indepPermImpl (t : (unifSpec + PermSpec A).Doma
     · simp [h]
     · simp [h]
 
+/-- Coins passed through keep a domination of permutation oracles until bad.
+
+Beside the coins, an oracle dominated by the lazy permutation stays dominated by it. -/
+theorem dominatedUntilBad_passthrough_add {σ : Type}
+    {perm : QueryImpl (PermSpec A) (StateT σ ProbComp)} {f : σ → PermCache A}
+    {inv bad : σ → Prop} (h : QueryImpl.DominatedUntilBad perm lazyPermOracle f inv bad) :
+    QueryImpl.DominatedUntilBad (unifSpec.passthrough + perm) lazyPermImpl f inv bad := by
+  rintro (n | t) s hs hb Q
+  · rw [passthrough_add_inl_run, passthrough_add_inl_run, prEvent_map, prEvent_map]
+    exact prEvent_mono _ _ _ fun _ h => h.1
+  · exact h t s hs hb Q
+
 /-- With no flag raised, each step of the lazy permutation dominates the step here.
 
 Read the state here through its cache, and count only the outcomes that raise no flag. -/
 theorem dominatedUntilBad_indepPermImpl :
     QueryImpl.DominatedUntilBad (indepPermImpl (A := A)) lazyPermImpl Prod.fst (fun _ => True)
       fun s => s.2 = true := by
-  rintro (n | a | b) ⟨c, f⟩ - hf P
-  · rw [passthrough_add_inl_run, passthrough_add_inl_run, prEvent_map, prEvent_map]
-    exact prEvent_mono _ _ _ fun _ h => h.1
-  · rw [indepPermImpl_inr, lazyPermImpl_inr, indepPermOracle_inl_run, lazyPermOracle_inl_run]
+  refine dominatedUntilBad_passthrough_add ?_
+  rintro (a | b) ⟨c, f⟩ - hf P
+  · rw [indepPermOracle_inl_run, lazyPermOracle_inl_run]
     simp only [Bool.not_eq_true] at hf
     cases c.lookup a with
     | some b => exact prEvent_pure_le_pure _ _ _ _ fun h => h.1
     | none =>
       simp only [prEvent_map, hf, Bool.false_or, decide_eq_true_eq]
       exact prEvent_uniformOutside_nil_and_notMem_le _ a a _
-  · rw [indepPermImpl_inr, lazyPermImpl_inr, indepPermOracle_inr_run, lazyPermOracle_inr_run]
+  · rw [indepPermOracle_inr_run, lazyPermOracle_inr_run]
     simp only [Bool.not_eq_true] at hf
     cases (c.map Prod.swap).lookup b with
     | some a => exact prEvent_pure_le_pure _ _ _ _ fun h => h.1

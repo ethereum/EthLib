@@ -89,6 +89,14 @@ theorem stake_supportersOf {node : ForkChoiceNode} {state : BeaconState preset f
     fun entry member => balance entry (List.mem_of_mem_filter member))).trans
       (sum_map_filter entries _ _)
 
+/-- The vote of each supporter of a node counts for that node. -/
+theorem voteCountsFor_of_mem_supportersOf {state : BeaconState preset fork}
+    {node : ForkChoiceNode} {v : ValidatorIndex} (member : v ∈ store.supportersOf state node) :
+    store.voteCountsFor node v = true := by
+  simp only [supportersOf, List.mem_toFinset, List.mem_map, List.mem_filter] at member
+  obtain ⟨⟨index, gwei⟩, ⟨-, counts⟩, rfl⟩ := member
+  exact counts
+
 /-- A supporter is active in the state that it counts in.
 
 The registry of the state must stay within the limit of the preset. -/

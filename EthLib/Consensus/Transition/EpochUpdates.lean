@@ -55,12 +55,13 @@ A validator eligible for the activation queue joins it at the next epoch.
 An active validator whose effective balance is at most the ejection balance starts to exit. -/
 def updateRegistryEntry (config : Config) (state : BeaconState preset fork) (index : Nat) :
     Except TransitionError (BeaconState preset fork) := do
-  let validator ← liftAccessor (getValidator state index.toUInt64)
+  let validator ← liftAccessor (getValidatorAt state index)
   let validator ← queueForActivation state validator
-  let state ← liftAccessor (state.setValidator index.toUInt64 validator)
+  let state ← liftAccessor (state.setValidatorAt index validator)
   if isActiveValidator validator (getCurrentEpoch state) &&
-      validator.effectiveBalance ≤ config.EJECTION_BALANCE then
-    liftAccessor (initiateValidatorExit config state index.toUInt64)
+      validator.effectiveBalance ≤ config.EJECTION_BALANCE then do
+    let validatorIndex ← liftAccessor (liftArith (ofNatChecked index))
+    liftAccessor (initiateValidatorExit config state validatorIndex)
   else pure state
 
 /-- The validators eligible for activation, in the order of their queue.
@@ -94,16 +95,17 @@ Otherwise a validator eligible for activation is activated at the given epoch.
 def updateRegistryEntryElectra (config : Config) (activationEpoch : Epoch)
     (state : BeaconState preset fork) (index : Nat) :
     Except TransitionError (BeaconState preset fork) := do
-  let validator ← liftAccessor (getValidator state index.toUInt64)
+  let validator ← liftAccessor (getValidatorAt state index)
   let currentEpoch := getCurrentEpoch state
   if isEligibleForActivationQueue preset fork validator then
     let activationEligibilityEpoch ← liftAccessor (liftArith (addChecked currentEpoch 1))
-    liftAccessor (state.setValidator index.toUInt64 { validator with activationEligibilityEpoch })
+    liftAccessor (state.setValidatorAt index { validator with activationEligibilityEpoch })
   else if isActiveValidator validator currentEpoch &&
-      validator.effectiveBalance ≤ config.EJECTION_BALANCE then
-    liftAccessor (initiateValidatorExit config state index.toUInt64)
+      validator.effectiveBalance ≤ config.EJECTION_BALANCE then do
+    let validatorIndex ← liftAccessor (liftArith (ofNatChecked index))
+    liftAccessor (initiateValidatorExit config state validatorIndex)
   else if isEligibleForActivation state validator then
-    liftAccessor (state.setValidator index.toUInt64 { validator with activationEpoch })
+    liftAccessor (state.setValidatorAt index { validator with activationEpoch })
   else return state
 
 /-- The state after the registry updates.
@@ -153,7 +155,7 @@ The share is counted in increments, so that the product does not overflow. -/
 def applySlashingPenalty (state : BeaconState preset fork)
     (totalBalance adjustedSlashingBalance : Gwei) (index : Nat) :
     Except TransitionError (BeaconState preset fork) := do
-  let validator ← liftAccessor (getValidator state index.toUInt64)
+  let validator ← liftAccessor (getValidatorAt state index)
   if validator.slashed then
     let due ← liftAccessor (liftArith
       (addChecked (getCurrentEpoch state) (preset.EPOCHS_PER_SLASHINGS_VECTOR / 2)))
@@ -162,7 +164,8 @@ def applySlashingPenalty (state : BeaconState preset fork)
       let numerator ← liftAccessor (liftArith
         (mulChecked (validator.effectiveBalance / increment) adjustedSlashingBalance))
       let penalty ← liftAccessor (liftArith (mulChecked (numerator / totalBalance) increment))
-      liftAccessor (decreaseBalance state index.toUInt64 penalty)
+      let validatorIndex ← liftAccessor (liftArith (ofNatChecked index))
+      liftAccessor (decreaseBalance state validatorIndex penalty)
     else pure state
   else pure state
 
@@ -173,14 +176,15 @@ It is due for a slashed validator halfway through its time before it may withdra
 The penalty is a penalty per increment times the effective balance counted in increments. -/
 def applySlashingPenaltyElectra (state : BeaconState preset fork) (perIncrement : Gwei)
     (index : Nat) : Except TransitionError (BeaconState preset fork) := do
-  let validator ← liftAccessor (getValidator state index.toUInt64)
+  let validator ← liftAccessor (getValidatorAt state index)
   if validator.slashed then
     let due ← liftAccessor (liftArith
       (addChecked (getCurrentEpoch state) (preset.EPOCHS_PER_SLASHINGS_VECTOR / 2)))
     if due = validator.withdrawableEpoch then
       let penalty ← liftAccessor (liftArith (mulChecked perIncrement
         (validator.effectiveBalance / preset.EFFECTIVE_BALANCE_INCREMENT)))
-      liftAccessor (decreaseBalance state index.toUInt64 penalty)
+      let validatorIndex ← liftAccessor (liftArith (ofNatChecked index))
+      liftAccessor (decreaseBalance state validatorIndex penalty)
     else pure state
   else pure state
 
@@ -258,11 +262,11 @@ def updatedEffectiveBalance (preset : Preset) (largest balance effectiveBalance 
 Its largest effective balance is that of the fork, which from Electra depends on its credentials. -/
 def updateEffectiveBalance (state : BeaconState preset fork) (index : Nat) :
     Except TransitionError (BeaconState preset fork) := do
-  let validator ← liftAccessor (getValidator state index.toUInt64)
-  let balance ← liftAccessor (getBalance state index.toUInt64)
+  let validator ← liftAccessor (getValidatorAt state index)
+  let balance ← liftAccessor (getBalanceAt state index)
   let effectiveBalance ← updatedEffectiveBalance preset
     (withdrawalMaxEffectiveBalance preset fork validator) balance validator.effectiveBalance
-  liftAccessor (state.setValidator index.toUInt64 { validator with effectiveBalance })
+  liftAccessor (state.setValidatorAt index { validator with effectiveBalance })
 
 /-- The state after the update of the effective balances.
 

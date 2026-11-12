@@ -22,6 +22,8 @@ No creation deploys code longer than 65536 bytes from Glamsterdam.
 A creation keeps the size of memory a multiple of 32, and so does the creator once it ends.
 
 So does every instruction that may send a message.
+
+A successful CREATE or CREATE2 reads its operands from the stack, grows memory, then launches.
 -/
 
 @[expose] public section
@@ -91,6 +93,114 @@ theorem launchCreate_of_preflight {evm : Evm fork Meter} {value : U256} {initCod
     obtain ⟨_, -, h1⟩ := Base.bind_ok_iff.mp h1
     cases h1
     exact ⟨rfl, rfl, rfl⟩
+
+omit [GasMeter Meter] in
+/-- Popping the salt of a creation takes the top word for CREATE2, and none for CREATE.
+
+It keeps the context of the frame, and its memory. -/
+theorem popSalt_eq_ok {create2 : Bool} {evm after : Evm fork Meter} {salt : Option U256}
+    (h : popSalt create2 evm = .ok (salt, after)) :
+    (∃ word, salt = (if create2 then some word else none) ∧
+      evm.stack.val = (if create2 then [word] else []) ++ after.stack.val) ∧
+      SameContext evm after ∧ after.memory = evm.memory := by
+  unfold popSalt at h
+  cases create2
+  · cases h
+    exact ⟨⟨0, rfl, rfl⟩, SameContext.refl _, rfl⟩
+  · obtain ⟨⟨word, _⟩, hp, h⟩ := Base.bind_ok_iff.mp h
+    cases h
+    obtain ⟨hst, hmem, -⟩ := popWord_eq_ok hp
+    exact ⟨⟨word, rfl, hst⟩, popWord_sameContext hp, hmem⟩
+
+/-- A creation after payment succeeds only in a frame that is not static.
+
+From Shanghai, its init code must also fit the limit.
+
+It then gives the result of the launch that follows those two checks. -/
+theorem genericCreate_eq_ok {evm : Evm fork Meter} {value : U256} {initCode : ByteArray}
+    {salt : Option U256} {result : StepResult fork Meter}
+    (h : genericCreate evm value initCode salt = .ok result) :
+    (fork ≥ .shapella → initCode.size ≤ maxInitCodeSize fork) ∧
+      evm.message.isStatic = false ∧
+      launchCreate evm value initCode salt = .ok result := by
+  unfold genericCreate at h
+  split at h
+  · cases h
+  split at h
+  · cases h
+  rename_i hlim hstatic
+  refine ⟨fun hs => Nat.not_lt.mp fun hlt => hlim ⟨hs, hlt⟩, ?_, h⟩
+  revert hstatic
+  cases evm.message.isStatic <;> simp
+
+/-- A successful step of CREATE or CREATE2 reads its operands, grows memory and launches.
+
+Its frame is not static, and from Shanghai its init code fits the limit.
+
+The salt of CREATE2 is the fourth word of the stack, and the frame keeps its context. -/
+theorem createStep_eq_ok {create2 : Bool} {evm : Evm fork Meter} {result : StepResult fork Meter}
+    (h : createStep create2 evm = .ok result) :
+    ∃ value start size salt rest paid,
+      evm.stack.val = value :: start :: size :: ((if create2 then [salt] else []) ++ rest) ∧
+      SameContext evm paid ∧
+      paid.memory =
+        memoryExtend evm.memory (extendMemory evm.memory.size [(start, size)]).expandBy ∧
+      evm.message.isStatic = false ∧
+      (fork ≥ .shapella →
+        (memoryReadBytes paid.memory start.toNat size.toNat).size ≤ maxInitCodeSize fork) ∧
+      launchCreate paid value (memoryReadBytes paid.memory start.toNat size.toNat)
+        (if create2 then some salt else none) = .ok result := by
+  unfold createStep at h
+  by_cases hs : fork ≥ .glamsterdam ∧ evm.message.isStatic = true
+  · simp [hs, bind, Except.bind, throw, throwThe, MonadExceptOf.throw] at h
+  rw [ite_eq_right_of_eq_false _ _ (eq_false hs)] at h
+  obtain ⟨⟨value, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨start, e2⟩, h2, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨size, e3⟩, h3, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨salt, e4⟩, h4, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨paid, h5, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨word, hsalt, s4⟩, sc4, m4⟩ := popSalt_eq_ok h4
+  obtain ⟨hlim, hstatic, hlaunch⟩ := genericCreate_eq_ok h
+  obtain ⟨s1, m1, -⟩ := popWord_eq_ok h1
+  obtain ⟨s2, m2, -⟩ := popWord_eq_ok h2
+  obtain ⟨s3, m3, -⟩ := popWord_eq_ok h3
+  have sc : SameContext evm paid := (((((popWord_sameContext h1).trans
+    (popWord_sameContext h2)).trans (popWord_sameContext h3)).trans sc4).trans
+    (chargeGasAndMemory_sameContext h5))
+  have hm4 : e4.memory = evm.memory := m4.trans (m3.trans (m2.trans m1))
+  have hmem : paid.memory =
+      memoryExtend evm.memory (extendMemory evm.memory.size [(start, size)]).expandBy := by
+    rw [memory_chargeGasAndMemory h5, hm4]
+  refine ⟨value, start, size, word, e4.stack.val, paid, ?_, sc, hmem, sc.message ▸ hstatic,
+    hlim, hsalt ▸ hlaunch⟩
+  rw [s1, s2, s3, s4]
+
+/-- A successful step of CREATE or CREATE2 launches from a frame with the same context.
+
+The launch takes the init code from the grown memory, and the salt word for CREATE2. -/
+theorem launchCreate_of_createStep {create2 : Bool} {evm : Evm fork Meter}
+    {value start size salt : U256} {rest : List U256} {result : StepResult fork Meter}
+    (hs : evm.stack.val = value :: start :: size :: ((if create2 then [salt] else []) ++ rest))
+    (h : createStep create2 evm = .ok result) :
+    ∃ paid, SameContext evm paid ∧
+      launchCreate paid value
+        (memoryReadBytes
+          (memoryExtend evm.memory (extendMemory evm.memory.size [(start, size)]).expandBy)
+          start.toNat size.toNat)
+        (if create2 then some salt else none) = .ok result := by
+  obtain ⟨v, st, sz, w, r, paid, hstack, sc, hmem, -, -, hlaunch⟩ := createStep_eq_ok h
+  have same := hstack.symm.trans hs
+  simp only [List.cons.injEq] at same
+  obtain ⟨rfl, rfl, rfl, same⟩ := same
+  -- CREATE has no salt word, and CREATE2 pops the one of the stack.
+  have hsalt : (if create2 then some w else none) = if create2 then some salt else none := by
+    cases create2
+    · rfl
+    · simp only [↓reduceIte, List.singleton_append, List.cons.injEq] at same
+      rw [same.1]
+  rw [hsalt] at hlaunch
+  rw [hmem] at hlaunch
+  exact ⟨paid, sc, hlaunch⟩
 
 /-! ## The refill -/
 
@@ -208,32 +318,8 @@ It grows memory for its init code before the init code runs. -/
 theorem memoryAligned_createStep {create2 : Bool} {evm : Evm fork Meter}
     {result : StepResult fork Meter} (hmod : evm.memory.size % 32 = 0)
     (h : createStep create2 evm = .ok result) : result.MemoryAligned := by
-  unfold createStep at h
-  by_cases hs : fork ≥ .glamsterdam ∧ evm.message.isStatic = true
-  · simp [hs, bind, Except.bind, throw, throwThe, MonadExceptOf.throw] at h
-  rw [ite_eq_right_of_eq_false _ _ (eq_false hs)] at h
-  obtain ⟨⟨_, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨⟨_, e2⟩, h2, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨⟨_, e3⟩, h3, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨⟨salt, e4⟩, h4, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨e5, h5, h⟩ := Base.bind_ok_iff.mp h
-  have m4 : e4.memory = e3.memory := by
-    unfold popSalt at h4
-    split at h4
-    · obtain ⟨⟨_, e⟩, he, h4⟩ := Base.bind_ok_iff.mp h4
-      cases h4
-      exact (popWord_eq_ok he).2.1
-    · cases h4
-      rfl
-  have hmod5 := size_chargeGasAndMemory_mod (by
-    rw [m4, (popWord_eq_ok h3).2.1, (popWord_eq_ok h2).2.1, (popWord_eq_ok h1).2.1]
-    exact hmod) h5
-  unfold genericCreate at h
-  split at h
-  · cases h
-  split at h
-  · cases h
-  exact memoryAligned_launchCreate hmod5 h
+  obtain ⟨_, start, size, _, _, paid, -, -, hmem, -, -, hlaunch⟩ := createStep_eq_ok h
+  exact memoryAligned_launchCreate (hmem ▸ size_memoryExtend_mod hmod [(start, size)]) hlaunch
 
 /-- Each creation keeps the size of memory a multiple of 32, and so does the creator after it. -/
 theorem memoryAligned_createInstruction {op : Op}

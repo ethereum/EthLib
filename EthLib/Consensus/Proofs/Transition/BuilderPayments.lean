@@ -12,6 +12,8 @@ After the step, the first half of the payments is the old second half.
 The second half then holds the payment of no bid.
 
 The withdrawals queue gains the withdrawals of the old first half that reach the quorum, in order.
+
+The step keeps every other field of the state.
 -/
 
 @[expose] public section
@@ -54,5 +56,17 @@ theorem processBuilderPendingPayments_spec {state after : BeaconState preset for
   obtain ⟨quorum, found, rest⟩ := bind_ok_iff.mp computed
   cases rest
   exact ⟨quorum, found, by simp, rfl⟩
+
+/-- The step changes only the queue of builder withdrawals and the pending payments. -/
+theorem processBuilderPendingPayments_eq {state after : BeaconState preset fork}
+    {gloas : .glamsterdam ≤ fork}
+    (computed : processBuilderPendingPayments state gloas = .ok after) :
+    after = { state with
+      builderPendingWithdrawals := after.builderPendingWithdrawals
+      builderPendingPayments := after.builderPendingPayments } := by
+  unfold processBuilderPendingPayments at computed
+  obtain ⟨_, _, rest⟩ := bind_ok_iff.mp computed
+  cases rest
+  rfl
 
 end EthLib.Consensus

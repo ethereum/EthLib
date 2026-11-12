@@ -67,6 +67,18 @@ theorem processUpgrades_fork_le {forked after : ForkedBeaconState preset}
     cases computed
     exact Nat.le_refl _
 
+/-- Upgrades that end no later than the fork they start from leave the state as it is. -/
+theorem processUpgrades_eq_of_fork_le {forked after : ForkedBeaconState preset}
+    (computed : processUpgrades config checks forked = .ok after)
+    (stays : after.fork ≤ forked.fork) : after = forked := by
+  rw [processUpgrades] at computed
+  split at computed
+  · obtain ⟨next, -, rest⟩ := bind_ok_iff.mp computed
+    exact absurd (Nat.lt_of_lt_of_le next.property
+      (Nat.le_trans (processUpgrades_fork_le rest) stays)) (Nat.lt_irrefl _)
+  · cases computed
+    rfl
+
 /-- Before the first slot of the next fork epoch, no upgrade is due. -/
 theorem upgradeDue_of_before {forked : ForkedBeaconState preset}
     (before : ∀ next ∈ config.nextFork forked.fork,
@@ -209,6 +221,21 @@ theorem upgradeNext_invariant {pre : ForkedBeaconState preset}
       post.val.state.finalizedCheckpoint = pre.state.finalizedCheckpoint := by
   have frame := upgradeFrame_upgradeNext computed
   exact ⟨frame.invariant holds, frame.finalized⟩
+
+/-- The upgrades due at a slot keep a property of states that each upgrade keeps. -/
+theorem processUpgrades_induction {property : ForkedBeaconState preset → Prop}
+    (step : ∀ {pre : ForkedBeaconState preset}
+      {post : {post : ForkedBeaconState preset // pre.fork < post.fork}},
+      property pre → upgradeNext config checks pre = .ok post → property post.val)
+    {forked after : ForkedBeaconState preset} (holds : property forked)
+    (computed : processUpgrades config checks forked = .ok after) : property after := by
+  fun_induction processUpgrades config checks forked generalizing after with
+  | case1 forked _ more =>
+    obtain ⟨next, nextOk, rest⟩ := bind_ok_iff.mp computed
+    exact more next (step holds nextOk) rest
+  | case2 forked _ =>
+    cases computed
+    exact holds
 
 /-- The upgrades due at a slot keep the invariant and the finalized checkpoint. -/
 theorem processUpgrades_invariant {forked after : ForkedBeaconState preset}
