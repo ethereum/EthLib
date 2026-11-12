@@ -102,8 +102,8 @@ The specification and the exports import nothing beyond the Lean toolchain.
   That definition needs a recursion that the kernel can reduce.
   `decide` and `rfl` need structural recursion or fuel, because Lean makes a well-founded definition irreducible.
   `decide +kernel` also reduces a well-founded recursion whose measure is a single `Nat`, which Lean builds on `WellFounded.Nat.fix`.
-  It does not reduce one with a lexicographic measure, such as a pair, which Lean builds on `WellFounded.fix`.
-  Unlike `WellFounded.Nat.fix`, that operator does not reduce on closed terms.
+  Do not count on it for a lexicographic measure, such as a pair, which Lean builds on `WellFounded.fix`.
+  Lean documents only `WellFounded.Nat.fix` as reducing on closed terms.
 
 ### Proofs
 
