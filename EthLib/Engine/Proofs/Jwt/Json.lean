@@ -18,7 +18,7 @@ Every other surrogate is refused, from either half of the range.
 
 The grammar admits a lone surrogate ([§8.2][lone]), but this reader refuses one.
 
-The reader refuses a character below `0x20` that is not escaped.
+The reader refuses a character below `0x20` that comes next in a string unescaped.
 
 [json]: https://www.rfc-editor.org/rfc/rfc8259#section-7
 [lone]: https://www.rfc-editor.org/rfc/rfc8259#section-8.2
@@ -152,6 +152,11 @@ theorem hex4_eq_drop {chars rest : List Char} {n : Nat} (h : hex4 chars = some (
     rest = chars.drop 4 := (hex4_lt_and_eq_drop h).2
 
 /-! ## The code point an escape returns -/
+
+/-- An escape without four hex digits is refused. -/
+theorem unicodeEscape_eq_none_of_hex4 {chars : List Char} (h : hex4 chars = none) :
+    unicodeEscape chars = none := by
+  simp [unicodeEscape, h, bind, Option.bind]
 
 /-- A value that is a Unicode scalar value is the code point of its character. -/
 private theorem toNat_ofNat {n : Nat} (h : n < 0xd800 ∨ (0xe000 ≤ n ∧ n < 0x110000)) :
