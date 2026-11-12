@@ -24,7 +24,7 @@ public import EthLib.Cryptography.Hash.Sha256
 
 @[expose] public section
 
--- Definitions and theorems.
+-- Definitions, and the theorems that ARCHITECTURE.md keeps beside them.
 ```
 
 Each part of that shape has a reason.
@@ -35,13 +35,33 @@ A file that only imports other files needs no section.
 The helper definitions of an exposed implementation must be public as well, since the exposed body refers to them.
 C exports use a plain `public section`, because clients execute them through the bindings.
 
+A module that hides its representation is the other exception.
+It holds a container that many specifications and proofs share, such as a registry.
+A module hides such a container only when a measured change of its representation breaks code outside the file of its laws.
+An intermediate description whose clients are its own theory, such as the SSZ layout, keeps its bodies exposed.
+
+Such a module uses a plain `public section`, with a private constructor and private fields.
+A public abstraction function maps the container to the model that the source uses.
+Each primitive operation has one law, a public theorem that states the operation through that function.
+Only the operations built from the primitives carry `@[expose]`.
+A client then reasons through the laws, so a change of representation breaks only the proofs of the laws.
+The file of the laws imports the module with a targeted `import all`, as the next paragraph describes.
+Even so, prove each law with tactics that unfold the primitive, such as `unfold` and then `rfl`, not with the term `rfl`.
+Lean checks a public theorem whose proof is the term `rfl` against exposed bodies only, so it rejects such a law.
+
 Proofs sometimes need more than the public interface offers.
 A proof-only import can use a plain `import` when it contributes nothing to the public API.
 When you reason about a dependency, prefer its public equations.
 If a proof needs the body of a definition, a targeted `import all` can provide it, either from the same package or from a dependency that permits private imports.
 Comment the exact definition whose body the proof needs.
+EthLib does not set Lake's option `allowImportAll`, so a package that depends on EthLib cites the laws of a hidden module instead.
+Lake v4.35.0 does not enforce that option, so the build allows such an import, and this is a rule of the repository.
 Give a public definition an explicit result type when a delayed proof cannot infer it.
 Keep compatibility options such as `backward.proofsInPublic` disabled.
+
+The module system hides a body only from files that have a `module` header.
+In such a file, `rfl`, `unfold`, `decide` and `decide +kernel` stop at the hidden body, and the proof cites a law instead.
+A downstream file without a `module` header sees hidden bodies, so the module system does not hold it to the laws.
 
 The library, the proofs and the C exports remain three separate Lake libraries.
 The declaration checker loads modules at Lean's `.private` level, so that it can inspect proof bodies and private helpers.
@@ -141,7 +161,7 @@ A file that needs more than 4 GiB gets a warning, and a file that needs more tha
 A clean build runs as many Lean processes at once as `LEAN_NUM_THREADS` allows, so their memory adds up.
 On master `b001695`, a clean `lake build --wfail` peaked at 8.1 GiB of Lean processes with 4 at once, and at 9.2 GiB with 8.
 No file needed more than 3.8 GiB, and the largest is the order certificate of secp256k1.
-Known answers stay out of Lean, since one of them can need several GiB, and their vectors run in the Python suite, as [CONTRIBUTING.md](CONTRIBUTING.md#known-answers) asks.
+Known answers stay out of the default build, since one of them can need several GiB, as [CONTRIBUTING.md](CONTRIBUTING.md#known-answers) asks.
 To build with fewer processes, set the thread count with the CPU affinity, as in `LEAN_NUM_THREADS=4 taskset -c 0-3 lake build --wfail`, because Lake ignores `taskset` when it sizes its pool.
 
 To measure files on your machine, build their imports first, then run:
@@ -149,3 +169,29 @@ To measure files on your machine, build their imports first, then run:
 ```bash
 uv run --no-project --python 3.12 python scripts/check_memory.py <file>...
 ```
+
+## API documentation
+
+[doc-gen4](https://github.com/leanprover/doc-gen4) renders the doc comments of the specification as HTML, one page per module.
+It runs in `docbuild/`, a separate Lake package that requires EthLib, so EthLib itself does not depend on doc-gen4.
+
+```bash
+lake build EthLib
+cd docbuild
+lake build EthLib:docs
+python3 -m http.server -d .lake/build/doc
+```
+
+The pages are in `docbuild/.lake/build/doc`.
+Open them through a local server, because a browser blocks some of their scripts when it opens them as files.
+
+`docbuild` keeps its packages in the repository root's `.lake/packages`, through `packagesDir`.
+So doc-gen4 and its own dependencies are fetched there, beside those of EthLib.
+The manifest of `docbuild` is not committed: Lake writes it when it is missing.
+EthLib's dependencies then keep the pins of the root manifest, and doc-gen4's dependencies take the pins of doc-gen4's manifest.
+`Cli` is a dependency of both, and the two manifests pin it to the same commit.
+The doc-gen4 tag in `docbuild/lakefile.toml` names the toolchain version.
+No check raises it, so a pull request that upgrades the toolchain raises it to the same tag.
+
+Only the library `EthLib` has pages, not `Proofs` or `Exports`.
+Most of the output documents `Init`, `Lean`, `Lake` and `Std`, which doc-gen4 always includes.

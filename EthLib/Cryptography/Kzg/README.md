@@ -37,6 +37,33 @@ Recovery follows the [FFT method for Reed-Solomon erasure recovery][rs-fft].
 The trusted setup is the output of the KZG ceremony.
 `TrustedSetupData.lean` records the file it comes from and its sha256.
 
+## The normative text
+
+[ethereum/consensus-specs#5398][cs-5398] removed the KZG specification from consensus-specs on 2026-07-29.
+Seven places in its specifications now say that the KZG functions are defined in `ethereum/cryptography-specs`.
+GitHub redirects that name to this repository, and no link names a commit or a release.
+
+No one has settled which text is normative for KZG.
+EthLib's maintainers, the EIP editors and the consensus-specs maintainers may all have a say.
+Three readings exist:
+
+1. The frozen consensus-specs text that the Final EIPs pin.
+   EIP-4844 pins commit [`86fb82b2`][cs-4844], and EIP-7594 pins commit [`9d377fd5`][cs-7594] for cells.
+2. This module, which consensus-specs now points to.
+3. The consensus-specs text in force when each fork activated, with its amendments up to that removal.
+
+The readings differ in at least one rule.
+At `86fb82b2`, the text decodes field elements as little-endian integers.
+It also gives the contents of the trusted setup as "TBD".
+consensus-specs changed the text to big-endian in commit `5b983f40`, and this module decodes big-endian.
+The precompile of EIP-4844 also reads `z` and `y` as big-endian values.
+
+This page describes the module and does not choose a reading.
+
+[cs-5398]: https://github.com/ethereum/consensus-specs/pull/5398
+[cs-4844]: https://github.com/ethereum/consensus-specs/blob/86fb82b221474cc89387fa6436806507b3849d88/specs/deneb/polynomial-commitments.md
+[cs-7594]: https://github.com/ethereum/consensus-specs/tree/9d377fd53d029536e57cfda1a4d2c700c59f86bf/specs/fulu
+
 ## Operations
 
 These ten operations are public:
@@ -87,7 +114,10 @@ The C exports read untyped bytes into these types, and reject a wrong length the
 | `verify_kzg_proof` | 122 |
 
 They match the consensus-specs `v1.7.0-alpha.12` general vectors and the `ethereum/c-kzg-4844` cases byte for byte.
-Their expected values come from the Python specification, not from EthLib.
+When consensus-specs `v1.7.0-alpha.12` generated these cases, an external KZG library computed 325 of them, and the Python specification the other 19.
+The `ethereum/c-kzg-4844` cases hold the same bytes, from consensus-specs runs of `v1.5.0-alpha.9` to `v1.6.0-beta.0`.
+Those runs used the specification's own KZG functions.
+None of the cases comes from EthLib.
 `tests/cryptography/kzg/SHA256SUMS` pins each one, and CI checks the pins.
 
 [`tests/cryptography/README.md`](../../../tests/cryptography/README.md) explains the pins and the check against the upstream archive.

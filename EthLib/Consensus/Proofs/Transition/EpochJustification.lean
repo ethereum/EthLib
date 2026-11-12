@@ -326,6 +326,15 @@ theorem processJustificationAndFinalization_ok
     obtain ⟨_, _, _, _, total, _, previous, _, current, _, weighed⟩ := computed
     exact .inr ⟨total, previous, current, weighed⟩
 
+/-- Justification and finalization keep the slot. -/
+theorem processJustificationAndFinalization_slot
+    (computed : processJustificationAndFinalization state = .ok after) :
+    after.slot = state.slot := by
+  rcases processJustificationAndFinalization_ok computed with rfl | ⟨_, _, _, weighed⟩
+  · rfl
+  · obtain ⟨_, _, _, rest⟩ := weighJustificationAndFinalization_checkpoints weighed
+    rw [← rest]
+
 /-- Justification and finalization keep the current justified checkpoint, or justify a recent one.
 
 A recent epoch is the previous or the current epoch of the state before.

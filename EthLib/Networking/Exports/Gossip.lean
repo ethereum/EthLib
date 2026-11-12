@@ -49,7 +49,7 @@ derive_py Rpc
 derive_py_laws Rpc
 
 /-- The message ID of a message on a topic of a named fork, from the topic and the data. -/
-def messageIdOf (args : String × ByteArray × ByteArray) : Result ByteArray := do
+def messageIdOf (args : String × ByteArray × ByteArray) : Result (Vector UInt8 20) := do
   let (fork, topic, data) := args
   return messageId (← forkOfName fork.toUTF8) topic data
 

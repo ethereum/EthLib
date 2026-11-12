@@ -3,6 +3,7 @@ module
 public import EthLib.Base.Except
 public import EthLib.Base.Proofs.MapM
 public import EthLib.Base.Proofs.Forall2
+public import EthLib.Base.Proofs.Uint64
 public import EthLib.Consensus.DataAvailability.Blob
 public import EthLib.Consensus.HonestProposer
 public import EthLib.Consensus.Proofs.Containers.Requests
@@ -29,6 +30,8 @@ From Altair, the sync aggregate sets the bits that the contributions set, each i
 Reading the requests of the execution layer inverts the list that the execution layer receives.
 
 The signed header of a block carries the root of its body.
+
+The total effective balance of some validators is their sum, with a repeated index counted again.
 
 The custody requirement of a node is at most the number of custody groups.
 
@@ -1012,6 +1015,83 @@ theorem getExecutionRequests_eq_ok_iff {list : List ByteArray}
       rw [untouched type (firsts ▸ mem), requestSlot_empty]
 
 /-! ## Custody -/
+
+/-- Adding effective balances to a start succeeds exactly when two conditions hold.
+
+Every index names a validator, and the start plus their effective balances is below 2^64.
+
+It then gives that sum, with a repeated index counted again. -/
+private theorem foldlM_addEffectiveBalance {state : BeaconState preset fork} :
+    ∀ (validatorIndices : List ValidatorIndex) (start total : Gwei),
+      validatorIndices.foldlM (fun sum index => do
+          let validator ← (getValidator state index).mapError ProposerError.accessor
+          (addChecked sum validator.effectiveBalance).mapError ProposerError.arith) start =
+          .ok total ↔
+        (∀ index ∈ validatorIndices, index.toNat < state.validators.data.size) ∧
+          start.toNat + (validatorIndices.map fun index =>
+            ((state.validators.data[index.toNat]?).map (·.effectiveBalance.toNat)).getD 0).sum <
+              2 ^ 64 ∧
+          total.toNat = start.toNat + (validatorIndices.map fun index =>
+            ((state.validators.data[index.toNat]?).map (·.effectiveBalance.toNat)).getD 0).sum
+  | [], start, total => by
+    simp only [List.foldlM_nil, pure, Except.pure, Except.ok.injEq, List.not_mem_nil,
+      false_imp_iff, implies_true, List.map_nil, List.sum_nil, Nat.add_zero, true_and]
+    constructor
+    · rintro rfl
+      exact ⟨UInt64.toNat_lt_size start, rfl⟩
+    · rintro ⟨-, same⟩
+      exact (UInt64.toNat_inj.mp same).symm
+  | index :: rest, start, total => by
+    rw [List.foldlM_cons, bind_ok_iff]
+    cases found : state.validators.data[index.toNat]? with
+    | none =>
+      have outside : state.validators.data.size ≤ index.toNat :=
+        Array.getElem?_eq_none_iff.mp found
+      simp only [bind_ok_iff, mapError_ok_iff, getValidator, found, reduceCtorEq, false_and,
+        exists_false, false_iff, List.forall_mem_cons]
+      rintro ⟨⟨inside, -⟩, -⟩
+      omega
+    | some validator =>
+      have inside : index.toNat < state.validators.data.size :=
+        (Array.getElem?_eq_some_iff.mp found).1
+      -- The step adds the effective balance of the validator at the index.
+      have step : ∀ middle : Gwei, (do
+          let validator ← (getValidator state index).mapError ProposerError.accessor
+          (addChecked start validator.effectiveBalance).mapError ProposerError.arith) =
+            Except.ok middle ↔
+          start.toNat + validator.effectiveBalance.toNat < 2 ^ 64 ∧
+            middle.toNat = start.toNat + validator.effectiveBalance.toNat := by
+        intro middle
+        simp only [bind_ok_iff, mapError_ok_iff, getValidator, found, Except.ok.injEq,
+          exists_eq_left', addChecked_ok_iff]
+      simp only [step, foldlM_addEffectiveBalance rest, List.map_cons, List.sum_cons, found,
+        Option.map_some, Option.getD_some, List.forall_mem_cons]
+      constructor
+      · rintro ⟨middle, ⟨-, middleSum⟩, restInside, below, totalSum⟩
+        exact ⟨⟨inside, restInside⟩, by omega, by omega⟩
+      · rintro ⟨⟨-, restInside⟩, below, totalSum⟩
+        have added : (start + validator.effectiveBalance).toNat =
+            start.toNat + validator.effectiveBalance.toNat := toNat_add_of_lt (by omega)
+        exact ⟨start + validator.effectiveBalance, ⟨by omega, added⟩, restInside, by omega,
+          by omega⟩
+
+/-- The sum of the effective balances of some validators exists exactly when two conditions hold.
+
+Every index names a validator, and the sum of their effective balances is below 2^64.
+
+It is then that sum, with a repeated index counted again. -/
+theorem totalEffectiveBalance_eq_ok_iff {state : BeaconState preset fork}
+    {validatorIndices : List ValidatorIndex} {total : Gwei} :
+    totalEffectiveBalance state validatorIndices = .ok total ↔
+      (∀ index ∈ validatorIndices, index.toNat < state.validators.data.size) ∧
+        (validatorIndices.map fun index =>
+          ((state.validators.data[index.toNat]?).map (·.effectiveBalance.toNat)).getD 0).sum <
+            2 ^ 64 ∧
+        total.toNat = (validatorIndices.map fun index =>
+          ((state.validators.data[index.toNat]?).map (·.effectiveBalance.toNat)).getD 0).sum := by
+  unfold totalEffectiveBalance
+  simpa only [UInt64.toNat_zero, Nat.zero_add] using
+    foldlM_addEffectiveBalance (state := state) validatorIndices 0 total
 
 /-- The custody requirement is the count of balance increments, held between its two bounds.
 

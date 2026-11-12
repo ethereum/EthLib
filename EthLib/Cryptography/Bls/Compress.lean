@@ -85,11 +85,12 @@ end Sqrt
 
 /-- True iff `bytes[start..]` are all zero. -/
 -- The exposed decoders need this body for downstream reduction.
-def tailAllZero (bytes : ByteArray) (start : Nat) : Bool := Id.run do
-  let mut ok := true
-  for h : i in [start : bytes.size] do
-    if bytes[i]'h.upper ≠ 0 then ok := false
-  return ok
+--
+-- The check recurses on the number of tail bytes, so the kernel reduces it on a literal encoding.
+--
+-- Compiled, it is a loop over the bytes in place that stops at the first nonzero byte.
+def tailAllZero (bytes : ByteArray) (start : Nat) : Bool :=
+  (bytes.size - start).all fun i h => bytes[start + i]'(by omega) == 0
 
 /-! ## G1 -/
 

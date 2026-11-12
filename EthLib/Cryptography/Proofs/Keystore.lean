@@ -21,6 +21,14 @@ A successful derivation gives at least 32 bytes, so verification never refuses i
 Decryption returns as many bytes as the ciphertext holds.
 
 AES-128-CTR undoes itself: decrypting the secret under its own checksum gives back the ciphertext.
+
+The prepared password bytes encode the NFKD form of the password, in order, less its control codes.
+
+A password already in NFKD form and free of control codes prepares to its own UTF-8 bytes.
+
+A well-formed key derivation other than PBKDF2 and scrypt is refused before any parameter is read.
+
+A store of a version other than 4 is refused before any other field is read.
 -/
 
 @[expose] public section
@@ -157,5 +165,59 @@ theorem decryptWithKey_decryptWithKey {store : Store} {key secret : ByteArray}
   obtain rfl := Except.ok.inj h
   simp [decryptWithKey, hsize, hcheck, Aes.ctr_ctr]
   rfl
+
+/-! ## The password that the reader prepares -/
+
+/-- The prepared bytes are the UTF-8 encoding of a subsequence of the NFKD form of the password.
+
+That subsequence holds no control code of ERC-2335, "Password requirements".
+
+It keeps every other character as often as the NFKD form holds it.
+
+These three facts determine the prepared string. -/
+theorem exists_passwordBytes_eq_toUTF8 (password : String) :
+    ∃ prepared : String, passwordBytes password = prepared.toUTF8 ∧
+      prepared.toList.Sublist (Base.Unicode.nfkd password).toList ∧
+      (∀ c ∈ prepared.toList, isControl c = false) ∧
+      ∀ c, isControl c = false →
+        prepared.toList.count c = (Base.Unicode.nfkd password).toList.count c := by
+  refine ⟨_, rfl, ?_, ?_, ?_⟩
+  · rw [String.toList_ofList]
+    exact List.filter_sublist
+  · intro c hc
+    rw [String.toList_ofList] at hc
+    simpa using (List.mem_filter.mp hc).2
+  · intro c hc
+    rw [String.toList_ofList]
+    exact List.count_filter (by simp [hc])
+
+/-- A password already in NFKD form and free of control codes prepares to its own UTF-8 bytes. -/
+theorem passwordBytes_eq_toUTF8 {password : String}
+    (hn : Base.Unicode.nfkd password = password)
+    (hc : ∀ c ∈ password.toList, isControl c = false) :
+    passwordBytes password = password.toUTF8 := by
+  unfold passwordBytes
+  rw [hn, List.filter_eq_self.mpr (by simpa using hc), String.ofList_toList]
+
+/-! ## What the reader refuses -/
+
+/-- A well-formed key derivation other than PBKDF2 and scrypt is refused as unsupported.
+
+No field of its parameters is read, so an unsupported function is reported before any of them. -/
+theorem readKdf_eq_error_of_unsupported {value : Lean.Json} {name : String}
+    {params message : Lean.Json}
+    (h : moduleFields "kdf" value = .ok (name, params, message))
+    (hp : name ≠ "pbkdf2") (hs : name ≠ "scrypt") :
+    readKdf value = .error (.unsupportedFunction "kdf" name) := by
+  simp [readKdf, h, hp, hs, bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
+
+/-- A store of a version other than 4 is refused before any other field is read.
+
+ERC-2335 fixes the version at 4 under "Version". -/
+theorem readStore_eq_error_of_version_ne {value json : Lean.Json} {version : Nat}
+    (hf : field "keystore" value "version" = .ok json)
+    (hn : number "version" json = .ok version) (hv : version ≠ 4) :
+    readStore value = .error (.unsupportedVersion version) := by
+  simp [readStore, hf, hn, hv, bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
 
 end EthLib.Cryptography.Keystore

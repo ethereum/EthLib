@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Bytes
 public import EthLib.Networking.Gossip.MessageId
 public import EthLib.Serialization.Proofs.Ssz.Codec.LengthBinding
 public import EthLib.Serialization.Proofs.Ssz.Codec.Table
@@ -9,9 +10,9 @@ public import EthLib.Serialization.Proofs.Ssz.Codec.Table
 
 Properties of the gossip message ID.
 
-- Every ID is 20 bytes.
 - Data that decompresses is hashed as its payload under the domain `01 00 00 00`.
 - Other data is hashed as it is under the domain `00 00 00 00`.
+- As a byte string, the ID is the first 20 bytes of the SHA-256 digest of the hash input.
 - Two byte strings that decompress to one payload get one ID on one topic.
 - Before Altair the topic does not change the ID.
 - Each hash input determines its domain and its bytes, and under Altair its topic.
@@ -26,19 +27,8 @@ namespace EthLib.Networking.Proofs.Gossip.MessageId
 open EthLib.Networking.Gossip
 open EthLib.Networking.Snappy (decompress SnappyError)
 open EthLib.Cryptography.Hash (sha256)
+open EthLib.Cryptography.Hash.Sha256 (hash32)
 open EthLib.Serialization.Ssz (uintBytes_size uintBytes_injective)
-
-/-! ## Length -/
-
-/-- The first 20 bytes of a SHA-256 digest are 20 bytes, since the digest has 32. -/
-private theorem sha256_extract_size (input : ByteArray) : ((sha256 input).extract 0 20).size = 20 := by
-  simp [sha256, ByteArray.size_extract]
-
-/-- Every message ID is 20 bytes. -/
-theorem messageId_size (fork : Base.Fork) (topic data : ByteArray) :
-    (messageId fork topic data).size = 20 := by
-  unfold messageId
-  split <;> exact sha256_extract_size _
 
 /-! ## The two cases -/
 
@@ -46,15 +36,41 @@ theorem messageId_size (fork : Base.Fork) (topic data : ByteArray) :
 theorem messageId_of_ok (fork : Base.Fork) (topic : ByteArray) {data payload : ByteArray}
     (h : decompress data = .ok payload) :
     messageId fork topic data =
-      (sha256 (hashInput fork MESSAGE_DOMAIN_VALID_SNAPPY topic payload)).extract 0 20 := by
+      (hash32 (hashInput fork MESSAGE_DOMAIN_VALID_SNAPPY topic payload)).take 20 := by
   simp only [messageId, h]
 
 /-- Data that does not decompress is hashed as it is, under the invalid domain. -/
 theorem messageId_of_error (fork : Base.Fork) (topic : ByteArray) {data : ByteArray}
     {e : SnappyError} (h : decompress data = .error e) :
     messageId fork topic data =
-      (sha256 (hashInput fork MESSAGE_DOMAIN_INVALID_SNAPPY topic data)).extract 0 20 := by
+      (hash32 (hashInput fork MESSAGE_DOMAIN_INVALID_SNAPPY topic data)).take 20 := by
   simp only [messageId, h]
+
+/-! ## The ID as a byte string -/
+
+/-- The first 20 bytes of a SHA-256 digest are the same in its fixed-size and byte-string forms. -/
+theorem packBytes_hash32_take (input : ByteArray) :
+    Base.packBytes ((hash32 input).take 20) = (sha256 input).extract 0 20 := by
+  apply ByteArray.ext
+  simp [Base.packBytes, hash32, sha256]
+
+/-- As a byte string, the ID of data that decompresses is the first 20 bytes of a SHA-256 digest.
+
+The hash input holds the payload, under the valid domain. -/
+theorem packBytes_messageId_of_ok (fork : Base.Fork) (topic : ByteArray)
+    {data payload : ByteArray} (h : decompress data = .ok payload) :
+    Base.packBytes (messageId fork topic data) =
+      (sha256 (hashInput fork MESSAGE_DOMAIN_VALID_SNAPPY topic payload)).extract 0 20 := by
+  rw [messageId_of_ok fork topic h, packBytes_hash32_take]
+
+/-- As a byte string, the ID of other data is the first 20 bytes of a SHA-256 digest.
+
+The hash input holds the data as it is, under the invalid domain. -/
+theorem packBytes_messageId_of_error (fork : Base.Fork) (topic : ByteArray) {data : ByteArray}
+    {e : SnappyError} (h : decompress data = .error e) :
+    Base.packBytes (messageId fork topic data) =
+      (sha256 (hashInput fork MESSAGE_DOMAIN_INVALID_SNAPPY topic data)).extract 0 20 := by
+  rw [messageId_of_error fork topic h, packBytes_hash32_take]
 
 /--
 Two byte strings that decompress to one payload get one ID on one topic.
