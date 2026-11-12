@@ -32,6 +32,8 @@ LAYERS = {
 AGGREGATORS = {"EthLib", "EthLib.Proofs", "EthLib.Exports"}
 # The packages of the Lean toolchain, which a specification and a C export may import.
 TOOLCHAIN = {"Init", "Std", "Lean"}
+# The first tier of Cryptography: hashes and Merkle trees, which import no other part of it.
+FIRST_TIER = ("Hash", "Merkle")
 # The two hash-based signatures, whose modules never reach each other through their imports.
 SCHEMES = ("Xmss", "Sphincs")
 KIND_NAMES = {"specification": "a specification", "property": "a property", "export": "a C export"}
@@ -150,6 +152,12 @@ def layer(module: str) -> str | None:
     return parts[1] if len(parts) > 1 and parts[0] == "EthLib" and parts[1] in LAYERS else None
 
 
+def first_tier(module: str) -> bool:
+    """Whether a module sits in the first tier of Cryptography."""
+    parts = module.split(".")
+    return parts[:2] == ["EthLib", "Cryptography"] and len(parts) > 2 and parts[2] in FIRST_TIER
+
+
 def scheme(module: str) -> str | None:
     """The hash-based signature whose tree holds a module, if exactly one does."""
     found = [name for name in SCHEMES if name in module.split(".")]
@@ -179,6 +187,58 @@ def scheme_problems(graph: dict[str, list[str]]) -> list[tuple[str, str, str]]:
     return problems
 
 
+def external_reached(graph: dict[str, list[str]]) -> dict[str, str]:
+    """
+    The first module outside EthLib and the toolchain that each property reaches, if any.
+
+    The search passes only through properties.
+    A specification or an export on the way reports its own imports.
+    So an import that breaks the rule is reported once, where it is written.
+    """
+    found: dict[str, str | None] = {}
+
+    def visit(name: str) -> str | None:
+        if name in found:
+            return found[name]
+        # Lean rejects a cycle of imports; the mark only keeps a broken tree from looping.
+        found[name] = None
+        for imported in graph[name]:
+            package = imported.split(".")[0]
+            if package != "EthLib":
+                reached = None if package in TOOLCHAIN else imported
+            elif imported in graph and kind(imported) == "property":
+                reached = visit(imported)
+            else:
+                reached = None
+            if reached is not None:
+                found[name] = reached
+                break
+        return found[name]
+
+    for name in sorted(graph):
+        if kind(name) == "property":
+            visit(name)
+    return {name: reached for name, reached in found.items() if reached is not None}
+
+
+def reach_problems(graph: dict[str, list[str]]) -> list[tuple[str, str, str]]:
+    """
+    Each import of a property through which a C export reaches another library.
+
+    Each problem is the export, the property it imports, and the module outside that it reaches.
+    An export that imports an outside module itself breaks another rule, so it is not reported here.
+    """
+    reached = external_reached(graph)
+    problems = []
+    for name in sorted(graph):
+        if kind(name) != "export":
+            continue
+        for imported in graph[name]:
+            if imported in reached and kind(imported) == "property":
+                problems.append((name, imported, reached[imported]))
+    return problems
+
+
 def library_roots(lakefile: str) -> list[str]:
     """The root modules of each `lean_lib` of the lakefile; without `roots`, the library itself."""
     roots = []
@@ -201,6 +261,14 @@ def import_problems(module: str, imported: str) -> list[str]:
         return problems
     if source == "specification" and target != "specification":
         problems.append(f"a specification never imports {KIND_NAMES[target]}")
+    if (
+        source == "specification"
+        and first_tier(module)
+        and layer(imported) == "Cryptography"
+        and target == "specification"
+        and not first_tier(imported)
+    ):
+        problems.append("hashes and Merkle trees import no other part of Cryptography")
     here, there = layer(module), layer(imported)
     if module not in AGGREGATORS and here and there and here != there:
         if LAYERS[there] > LAYERS[here]:
@@ -264,6 +332,12 @@ def check(root: Path) -> list[str]:
         problems.append(
             f"{modules[name].relative_to(root)}: imports {imported}{via}, "
             f"but {scheme(name)} and {scheme(target)} never import each other"
+        )
+
+    for name, imported, target in reach_problems(graph):
+        problems.append(
+            f"{modules[name].relative_to(root)}: imports {imported}, which reaches {target}, "
+            "but a C export reaches nothing beyond EthLib and the toolchain"
         )
 
     roots = [
