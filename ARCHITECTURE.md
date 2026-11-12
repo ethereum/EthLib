@@ -538,8 +538,8 @@ EthLib is one Lake package, and three libraries hold its code.
 - The library `Exports` holds the C exports that the Python bindings call.
 
 The package also builds three executables: `check-decls`, which checks the compiled declarations, `check-accessors`, which lists the defaulting accessors of the specification, and `gen-bindings`, which writes the binding contract from Lean.
-A fourth library, `CheckDeclsTest`, holds the test cases of `check-decls`, in `scripts/`.
-It is not a default target, and `scripts/test_check_decls.sh` builds it.
+Two more libraries hold test cases, in `scripts/`: `CheckDeclsTest` for `check-decls`, and `CheckAccessorsTest` for `check-accessors`.
+They are not default targets, and `scripts/test_check_decls.sh` and `scripts/test_check_accessors.sh` build them.
 
 The package requires Mathlib and VCVio, a library of probabilistic computations.
 Only the properties and the models may import them, or Batteries.
