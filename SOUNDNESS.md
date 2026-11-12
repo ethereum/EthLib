@@ -1769,6 +1769,23 @@ The storage value of a slot that is not set is 0, so the answer must give that w
 EIP-1186 does not say which fields the answer holds for an address without an account.
 So the check judges no field of an absent account, and reports the absence.
 
+A BlockBodies answer of the eth protocol is checked against its header by `checkBody` (`Execution/Network/Bodies.lean`).
+It checks that the body is `[transactions, ommers]`, with the withdrawals from Shapella, and that the transactions and withdrawals have the roots of the header.
+It checks that the ommers list holds at most two items.
+It checks that the Keccak-256 hash of that list is the ommers hash of the header.
+It checks that no ommer has a number above the block's.
+`checkBody_complete` (`Execution/Proofs/Network/Bodies.lean`) proves that the body of every block that passes `stateTransition` passes this check, so a correct node never rejects it.
+`checkBody_binding` proves that two bodies that pass for one header agree in three parts, or that a Keccak-256 collision follows.
+Their transactions have the same bytes, their withdrawals are equal, and their ommers lists are equal.
+It reuses `indexedRoot_binding` and `withdrawalsRoot_binding` for the roots, and `encode_injective` for the ommers.
+The transactions are bound by their bytes only: the check reads each transaction no further than its outer RLP item.
+`checkBody_tooManyOmmers` and `checkBody_tooManyOmmers_shapella` show that a body with three ommers is rejected once the earlier checks pass.
+The check does not run the transactions or look at the state, so it does not say that the transactions are valid for the block.
+It does not check the ommer headers against the chain, which needs the recent blocks that `validateOmmers` reads.
+It does not ask that the sum of the gas limits of the transactions is at most the gas limit of the block, as `caps/eth.md` says.
+Block validity asks only that each gas limit is at most the gas that the block still has (`gasAllowanceExceeded`), so the stricter rule would reject valid blocks.
+No theorem bounds the probability of finding two bodies that pass for one header and differ.
+
 ### Weak subjectivity
 
 A node that starts from a recent checkpoint trusts it only for a limited time, the weak subjectivity period.

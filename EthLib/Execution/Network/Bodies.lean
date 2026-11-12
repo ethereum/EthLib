@@ -3,6 +3,7 @@ module
 public import EthLib.Execution.Blocks.Block
 public import EthLib.Execution.Blocks.Ommers
 public import EthLib.Execution.Blocks.Roots
+public import EthLib.Execution.Blocks.Transition
 public import EthLib.Execution.Network.Blocks
 
 /-!
@@ -29,6 +30,7 @@ open EthLib.Base
 open EthLib.Serialization.Rlp
 open EthLib.Execution.Blocks
 open EthLib.Execution.Trie
+open EthLib.Execution.Transactions
 open EthLib.Cryptography.Hash.Keccak (keccak256)
 
 /-- Why a body does not belong to a header. -/
@@ -154,5 +156,12 @@ def checkBody {fork : Fork} (header : Header fork) (body : Item) : Except BodyEr
       checkOmmers header ommers
     | [_, _, _] => throw .unexpectedWithdrawals
     | _ => throw (.decoding (.wrongFieldCount 2 items.length))
+
+/-- The body of a block as it crosses the wire: `[transactions, ommers]`, then the withdrawals from Shapella.
+
+Each transaction is its item in the body of a block. -/
+def bodyOf {fork : Fork} (block : Block fork Transaction) : Except RlpError Item := do
+  let transactions ← block.transactions.mapM bodyItem
+  return .list ([.list transactions, ommersItem block.ommers] ++ Item.ofSince block.withdrawals)
 
 end EthLib.Execution.Network
