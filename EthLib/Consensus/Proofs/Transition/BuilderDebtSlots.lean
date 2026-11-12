@@ -106,11 +106,11 @@ private theorem builderEpochFrameLaws : EpochFrameLaws (@BuilderFrame preset for
     where
   refl := BuilderFrame.refl
   trans := BuilderFrame.trans
-  setValidatorAt := fun set _ _ => builderFrame_setValidatorAt set
+  setValidatorAt := fun set _ _ _ _ => builderFrame_setValidatorAt set
   increaseBalance := builderFrame_increaseBalance
   decreaseBalance := builderFrame_decreaseBalance
   initiateValidatorExit := builderFrame_initiateValidatorExit
-  addValidatorToRegistry := builderFrame_addValidatorToRegistry
+  addValidatorToRegistry := fun computed _ => builderFrame_addValidatorToRegistry computed
   eth1DataVotes _ _ := ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
   inactivityScores _ _ := ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
   slashings _ _ := ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩

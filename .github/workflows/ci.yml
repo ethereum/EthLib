@@ -147,6 +147,12 @@ jobs:
         if: ${{ !cancelled() }}
         run: bash scripts/build_timing_report.sh run declarations "$BUILD_TIMING_RESULTS" -- lake exe check-decls
 
+      # Find every defaulting accessor of the specification, such as xs[i]!.
+      # Only the sites listed in scripts/check_accessors_baseline.txt pass.
+      - name: defaulting accessors
+        if: ${{ !cancelled() }}
+        run: lake exe check-accessors
+
       # The check must report exactly what its fixtures plant.
       - name: declaration check fixtures
         if: ${{ !cancelled() }}

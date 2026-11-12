@@ -119,7 +119,7 @@ private theorem stepKeeps_addValidatorToRegistry {pubkey : Cryptography.Bls.BLSP
     {withdrawalCredentials : Bytes32} {amount : Gwei}
     (computed : addValidatorToRegistry state pubkey withdrawalCredentials amount = .ok after) :
     StepKeeps state after :=
-  StepKeeps.of_step (frame_addValidatorToRegistry computed).registryGrows
+  StepKeeps.of_step (by rw [addValidatorToRegistry_validators_eq_push computed]; simp)
     (activeStep_addValidatorToRegistry computed)
 
 /-! ## Deposits -/
