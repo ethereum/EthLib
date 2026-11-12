@@ -676,8 +676,8 @@ The ChaCha20-Poly1305 proofs cover output length, counter exhaustion, rejection 
 `tag_eq_of_decrypt_eq_ok` proves that no other tag passes for that ciphertext.
 These are statements about the definitions alone, not about their security.
 The clamp of the Poly1305 key has its own theorem.
-`testBit_clampR` gives every bit of `r` in the terms of RFC 8439 §2.5, with no mask: the top four bits of bytes 3, 7, 11 and 15 and the bottom two bits of bytes 4, 8 and 12 are clear, and every other bit of the low 16 bytes of the key is kept.
-So a clamp that cleared another bit, or kept one it should clear, would fail it.
+`testBit_clampR` gives every bit of `r` without the mask, by its place in the little-endian 32-bit words of `r`: the top four bits of bytes 3, 7, 11 and 15 and the bottom two bits of bytes 4, 8 and 12 are clear, and every other bit of the low 16 bytes of the key is kept.
+So a clamp with another mask would fail it.
 `clampR_lt` bounds `r` by `2 ^ 124`.
 `poly1305Accumulator_lt` proves that the accumulator stays below the prime `2 ^ 130 - 5`, whatever `r` and the message, since each step reduces modulo the prime.
 No theorem relates ChaCha20-Poly1305 to an independent model of RFC 8439.
