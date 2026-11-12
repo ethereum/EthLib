@@ -187,6 +187,26 @@ theorem processBuilderExitRequest_cases {request : BuilderExitRequest}
       · exact .inl (Except.ok.inj rest).symm
     · exact .inl (Except.ok.inj rest).symm
 
+/-- A builder deposit changes only the registry of builders. -/
+theorem processBuilderDepositRequest_builders {request : BuilderDepositRequest}
+    (computed : processBuilderDepositRequest config checks state gloas request = .ok after) :
+    ∃ builders, after = { state with builders } := by
+  unfold processBuilderDepositRequest addBuilderToRegistry at computed
+  simp only [bind, Except.bind, pure, Except.pure] at computed
+  repeat' split at computed
+  all_goals first | (cases computed; done) | (cases computed; exact ⟨_, rfl⟩)
+
+/-- A builder exit request changes only the registry of builders. -/
+theorem processBuilderExitRequest_builders {request : BuilderExitRequest}
+    (computed : processBuilderExitRequest config state gloas request = .ok after) :
+    ∃ builders, after = { state with builders } := by
+  rcases processBuilderExitRequest_cases computed with rfl | ⟨_, _, _, _, _, exited⟩
+  · exact ⟨_, rfl⟩
+  · simp only [initiateBuilderExit, bind_ok_iff] at exited
+    obtain ⟨_, _, _, _, set⟩ := exited
+    obtain ⟨_, rfl⟩ := setBuilder_ok set
+    exact ⟨_, rfl⟩
+
 /-- Registering a builder rejects its chosen position when it is at least `2^64`. -/
 theorem addBuilderToRegistry_error_of_le {pubkey : BLSPubkey} {version : UInt8}
     {executionAddress : ExecutionAddress} {amount : Gwei} {slot : Slot}

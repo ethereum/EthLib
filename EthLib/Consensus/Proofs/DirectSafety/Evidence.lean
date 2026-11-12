@@ -186,311 +186,19 @@ private theorem slashedKeptLaws :
   proposerLookahead _ _ := of_validators
   ptcWindow _ _ := of_validators
 
-
-private theorem applyDeposit {pubkey : BLSPubkey} {credentials : Bytes32} {amount : Gwei}
-    {signature : BLSSignature}
-    (ok : Consensus.applyDeposit config checks state pubkey credentials amount signature =
-      .ok after) : SlashedKept state after := by
-  unfold Consensus.applyDeposit at ok
-  split at ok
-  · unfold applyDepositElectra at ok
-    split at ok
-    · simp only [bind_ok_iff] at ok
-      obtain ⟨_, _, ok⟩ := ok
-      split at ok
-      · simp only [bind_ok_iff, liftAccessor_ok] at ok
-        obtain ⟨middle, added, queued⟩ := ok
-        obtain ⟨_, rfl⟩ := addPendingDeposit_eq queued
-        exact (append (addValidatorToRegistry_validators_eq_push added) rfl).trans
-          (of_validators (state := middle))
-      · cases ok; exact refl _
-    · obtain ⟨_, rfl⟩ := addPendingDeposit_eq (liftAccessor_ok.mp ok)
-      exact of_validators
-  · exact slashedKeptLaws.applyPendingDeposit ok
-
-private theorem processDeposit {before : fork < .hegota} {deposit : Deposit}
-    (ok : Consensus.processDeposit config checks before state deposit = .ok after) :
-    SlashedKept state after := by
-  obtain ⟨_, _, next, _, credited⟩ := processDeposit_ok ok
-  exact (of_validators (state := state)
-    (after := { state with eth1DepositIndex := fun _ => next })).trans (applyDeposit credited)
-
-private theorem genesisDeposit {before : fork < .hegota} {leaves : Array DepositData}
-    {entry : Deposit × Nat}
-    (ok : Consensus.genesisDeposit config checks before leaves state entry = .ok after) :
-    SlashedKept state after := by
-  simp only [Consensus.genesisDeposit, bind_ok_iff] at ok
-  obtain ⟨root, _, deposited⟩ := ok
-  exact (of_validators (state := state)
-    (after := { state with
-      eth1Data := fun _ => { state.eth1Data before with depositRoot := root } })).trans
-    (processDeposit deposited)
-
-private theorem activateAtGenesis {index : Nat}
-    (ok : Consensus.activateAtGenesis state index = .ok after) : SlashedKept state after := by
-  simp only [Consensus.activateAtGenesis, bind_ok_iff, liftAccessor_ok] at ok
-  obtain ⟨v, found, _, _, set⟩ := ok
-  apply setValidatorAt found _ _ set <;> split <;> rfl
+-- A step of a block that keeps the registry keeps the slashed flags.
+private theorem keep {after : BeaconState preset fork} (_ : BlockFrame state after)
+    (same : after.validators = state.validators) : SlashedKept state after :=
+  of_validators (congrArg (·.data) same)
 
 private theorem genesis {hash : Hash32} {time : UInt64} {deposits : Array Deposit}
     (ok : initializeBeaconStateFromEth1 config checks hash time deposits = .ok after) :
     SlashedBacked (fun _ => False) after := by
   obtain ⟨before, genesisTime, root, deposited, activated, finalRoot, depositedOk, activatedOk,
     rfl⟩ := initializeBeaconStateFromEth1_ok ok
-  have first := foldlM (fun _ _ _ ok => genesisDeposit ok) depositedOk
-  have second := foldlM (fun _ _ _ ok => activateAtGenesis ok) activatedOk
+  have first := foldlM (fun _ _ _ ok => slashedKeptLaws.genesisDeposit keep ok) depositedOk
+  have second := foldlM (fun _ _ _ ok => slashedKeptLaws.activateAtGenesis ok) activatedOk
   exact (first.trans second) (fun _ => False) (by simp [SlashedBacked, emptyGenesisState])
-
-private theorem processDepositRequest {electra : .pectra ≤ fork} {request : DepositRequest}
-    (ok : Consensus.processDepositRequest state electra request = .ok after) :
-    SlashedKept state after := by
-  obtain ⟨start, recorded⟩ :=
-    recordDepositRequestsStart_eq (state := state) (index := request.index)
-  simp only [Consensus.processDepositRequest, recorded, liftAccessor_ok, addPendingDeposit,
-    bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
-  obtain ⟨_, _, rfl⟩ := ok
-  exact of_validators
-
-private theorem requestPartialWithdrawal {electra : .pectra ≤ fork} {index : ValidatorIndex}
-    {v : Validator} {amount owed : Gwei}
-    (ok : Consensus.requestPartialWithdrawal config state electra index v amount owed = .ok after) :
-    SlashedKept state after := by
-  simp only [Consensus.requestPartialWithdrawal, bind_ok_iff, liftAccessor_ok, pure, Except.pure]
-    at ok
-  obtain ⟨_, _, _, _, ok⟩ := ok
-  split at ok
-  · simp only [bind_ok_iff, liftAccessor_ok, Except.ok.injEq] at ok
-    obtain ⟨⟨_, _⟩, churned, _, _, _, _, rfl⟩ := ok
-    exact of_validators (by rw [(computeExitEpochAndUpdateChurn_earliest churned).2.1])
-  · cases ok; exact refl _
-
-private theorem processWithdrawalRequest {electra : .pectra ≤ fork} {request : WithdrawalRequest}
-    (ok : Consensus.processWithdrawalRequest config state electra request = .ok after) :
-    SlashedKept state after := by
-  unfold Consensus.processWithdrawalRequest at ok
-  simp only [bind, Except.bind, pure, Except.pure] at ok
-  repeat' split at ok
-  all_goals first
-    | (cases ok; done)
-    | (cases ok; exact refl _)
-    | exact initiateValidatorExit (liftAccessor_ok.mp ok)
-    | exact requestPartialWithdrawal ok
-
-private theorem queueExcessActiveBalance {electra : .pectra ≤ fork} {index : ValidatorIndex}
-    (ok : Consensus.queueExcessActiveBalance state electra index = .ok after) :
-    SlashedKept state after := by
-  simp only [Consensus.queueExcessActiveBalance, bind_ok_iff] at ok
-  obtain ⟨_, _, ok⟩ := ok
-  split at ok
-  · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
-    obtain ⟨_, _, _, _, _, set, rfl⟩ := ok
-    obtain ⟨_, rfl⟩ := setBalance_ok set
-    exact of_validators
-  · cases ok; exact refl _
-
-private theorem switchToCompoundingValidator {electra : .pectra ≤ fork} {index : ValidatorIndex}
-    (ok : Consensus.switchToCompoundingValidator state electra index = .ok after) :
-    SlashedKept state after := by
-  simp only [Consensus.switchToCompoundingValidator, bind_ok_iff] at ok
-  obtain ⟨_, found, _, set, queued⟩ := ok
-  exact (setValidator found (by rfl) (by rfl) set).trans (queueExcessActiveBalance queued)
-
-private theorem queueConsolidation {electra : .pectra ≤ fork}
-    {sourceIndex targetIndex : ValidatorIndex} {source : Validator}
-    (found : state.validators.data[sourceIndex.toNat]? = some source)
-    (ok : Consensus.queueConsolidation config state electra sourceIndex source targetIndex =
-      .ok after) : SlashedKept state after := by
-  simp only [Consensus.queueConsolidation, bind_ok_iff, liftAccessor_ok, liftArith,
-    mapError_ok_iff, Uint64.addChecked_ok_iff, pure, Except.pure] at ok
-  obtain ⟨⟨churnedState, exitEpoch⟩, churned, withdrawal, _, _, set, _, _, ok⟩ := ok
-  simp only [Except.ok.injEq] at ok
-  subst ok
-  have validators := (computeConsolidationEpochAndUpdateChurn_earliest churned).2.1
-  have first : SlashedKept state churnedState := of_validators (by rw [validators])
-  have found' : getValidator churnedState sourceIndex = .ok source := by
-    rw [getValidator, validators, found]
-  exact first.trans ((setValidator found' (by rfl) (by rfl) set).trans of_validators)
-
-private theorem processConsolidationRequest {electra : .pectra ≤ fork}
-    {request : ConsolidationRequest}
-    (ok : Consensus.processConsolidationRequest config state electra request = .ok after) :
-    SlashedKept state after := by
-  unfold Consensus.processConsolidationRequest at ok
-  simp only [bind, Except.bind, pure, Except.pure] at ok
-  repeat' split at ok
-  all_goals first
-    | (cases ok; done)
-    | (cases ok; exact refl _)
-    | exact switchToCompoundingValidator (liftAccessor_ok.mp ok)
-    | exact queueConsolidation (getElem?_toNat_of_ofNatChecked (by assumption)) ok
-
--- EIP-8282, Consensus Layer Processing: builder requests touch a separate registry.
-private theorem builderDeposit {gloas : .glamsterdam ≤ fork} {request : BuilderDepositRequest}
-    (ok : processBuilderDepositRequest config checks state gloas request = .ok after) :
-    SlashedKept state after := by
-  unfold processBuilderDepositRequest addBuilderToRegistry at ok
-  simp only [bind, Except.bind, pure, Except.pure] at ok
-  repeat' split at ok
-  all_goals first | (cases ok; done) | (cases ok; exact of_validators)
-
-private theorem builderExit {gloas : .glamsterdam ≤ fork} {request : BuilderExitRequest}
-    (ok : processBuilderExitRequest config state gloas request = .ok after) :
-    SlashedKept state after := by
-  rcases processBuilderExitRequest_cases ok with rfl | ⟨_, _, _, _, _, exited⟩
-  · exact refl _
-  · simp only [initiateBuilderExit, bind_ok_iff] at exited
-    obtain ⟨_, _, _, _, set⟩ := exited
-    obtain ⟨_, rfl⟩ := setBuilder_ok set
-    exact of_validators
-
--- EIP-7732, Beacon chain changes: requests move to the parent payload's processing.
-private theorem parentPayload {gloas : .glamsterdam ≤ fork} {body : BeaconBlockBody preset fork}
-    (ok : processParentExecutionPayload config checks state gloas body = .ok after) :
-    SlashedKept state after := by
-  rcases processParentExecutionPayload_ok ok with ⟨_, _, rfl⟩ |
-    ⟨_, settled, _, _, _, _, _, _, settledOk, depositsOk, withdrawalsOk, consolidationsOk,
-      buildersOk, exitsOk, _, rfl⟩
-  · exact refl _
-  · have first : SlashedKept state settled := by
-      rw [settleParentPayment_eq settledOk]
-      exact of_validators
-    exact first.trans <|
-      (foldlM (fun _ _ _ ok => processDepositRequest ok) depositsOk).trans <|
-      (foldlM (fun _ _ _ ok => processWithdrawalRequest ok) withdrawalsOk).trans <|
-      (foldlM (fun _ _ _ ok => processConsolidationRequest ok) consolidationsOk).trans <|
-      (foldlM (fun _ _ _ ok => builderDeposit ok) buildersOk).trans <|
-      (foldlM (fun _ _ _ ok => builderExit ok) exitsOk).trans of_validators
-
-private theorem executionPayloadBid {gloas : .glamsterdam ≤ fork}
-    {signed : SignedExecutionPayloadBid preset fork}
-    (ok : processExecutionPayloadBid config checks state gloas signed = .ok after) :
-    SlashedKept state after := by
-  obtain ⟨_, recorded, recordedOk, rfl⟩ := processExecutionPayloadBid_ok ok
-  by_cases paid : 0 < signed.message.value
-  · obtain ⟨_, _, _, _, rfl⟩ := recordBidPayment_of_pos paid recordedOk
-    exact of_validators
-  · simp only [recordBidPayment, paid, ↓reduceIte, pure, Except.pure, Except.ok.injEq] at recordedOk
-    subst recordedOk
-    exact of_validators
-
-private theorem processExecutionRequests {body : BeaconBlockBody preset fork}
-    {electra : .pectra ≤ fork ∧ fork < .glamsterdam}
-    (ok : Consensus.processExecutionRequests config state body electra = .ok after) :
-    SlashedKept state after := by
-  simp only [Consensus.processExecutionRequests, bind_ok_iff, ← Array.foldlM_toList] at ok
-  obtain ⟨_, deposits, _, withdrawals, consolidations⟩ := ok
-  exact (foldlM (fun _ _ _ ok => processDepositRequest ok) deposits).trans
-    ((foldlM (fun _ _ _ ok => processWithdrawalRequest ok) withdrawals).trans
-      (foldlM (fun _ _ _ ok => processConsolidationRequest ok) consolidations))
-
-private theorem applyWithdrawal {withdrawal : Withdrawal}
-    (ok : Consensus.applyWithdrawal state withdrawal = .ok after) : SlashedKept state after := by
-  unfold Consensus.applyWithdrawal at ok
-  split at ok
-  · simp only [bind_ok_iff] at ok
-    obtain ⟨_, _, set⟩ := ok
-    obtain ⟨_, rfl⟩ := setBuilder_ok set
-    exact of_validators
-  · exact decreaseBalance ok
-
-private theorem applyExpectedWithdrawals {capella : .shapella ≤ fork}
-    {expected : ExpectedWithdrawals}
-    (ok : Consensus.applyExpectedWithdrawals state capella expected = .ok after) :
-    SlashedKept state after := by
-  unfold Consensus.applyExpectedWithdrawals at ok
-  simp only [bind_ok_iff] at ok
-  obtain ⟨applied, appliedOk, indexed, indexedOk, finished, sweptOk, last⟩ := ok
-  have one : SlashedKept state applied := by
-    unfold applyWithdrawals at appliedOk
-    rw [← Array.foldlM_toList] at appliedOk
-    exact foldlM (fun _ _ _ ok => applyWithdrawal ok) appliedOk
-  have indexedStep : SlashedKept applied indexed := by
-    unfold updateNextWithdrawalIndex at indexedOk
-    split at indexedOk
-    · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at indexedOk
-      obtain ⟨_, _, rfl⟩ := indexedOk
-      exact of_validators
-    · cases indexedOk; exact refl _
-  have queued : ∀ s : BeaconState preset fork,
-      SlashedKept s (if gloas : .glamsterdam ≤ fork then
-        updateBuilderPendingWithdrawals
-          (updatePayloadExpectedWithdrawals s gloas expected.withdrawals) gloas
-          expected.processedBuilderWithdrawalsCount else s) := by
-    intro s
-    split <;> exact of_validators
-  have partials : ∀ s : BeaconState preset fork,
-      SlashedKept s (if electra : .pectra ≤ fork then
-        updatePendingPartialWithdrawals s electra expected.processedPartialWithdrawalsCount
-      else s) := by
-    intro s
-    split <;> exact of_validators
-  have swept : ∀ s : BeaconState preset fork,
-      (if gloas : .glamsterdam ≤ fork then
-        updateNextWithdrawalBuilderIndex s gloas expected.processedBuildersSweepCount
-      else pure s) = .ok finished → SlashedKept s finished := by
-    intro s computed
-    split at computed
-    · unfold updateNextWithdrawalBuilderIndex at computed
-      dsimp only at computed
-      split at computed
-      · cases computed; exact of_validators
-      · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-        obtain ⟨_, _, rfl⟩ := computed
-        exact of_validators
-    · cases computed; exact refl _
-  have lastStep : SlashedKept finished after := by
-    unfold updateNextWithdrawalValidatorIndex at last
-    simp only [bind_ok_iff] at last
-    obtain ⟨_, _, last⟩ := last
-    split at last
-    · cases last
-    · cases last; exact of_validators
-  exact one.trans (indexedStep.trans ((queued _).trans ((partials _).trans
-    ((swept _ sweptOk).trans lastStep))))
-
-private theorem processWithdrawals {capella : .shapella ≤ fork}
-    {payload : Until .glamsterdam fork (ExecutionPayload preset fork)}
-    (ok : Consensus.processWithdrawals state capella payload = .ok after) :
-    SlashedKept state after := by
-  unfold Consensus.processWithdrawals at ok
-  split at ok
-  · split at ok
-    · simp only [bind_ok_iff, liftAccessor_ok] at ok
-      obtain ⟨_, _, applied⟩ := ok
-      exact applyExpectedWithdrawals applied
-    · cases ok; exact refl _
-  · simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, _, _, applied⟩ := ok
-    exact applyExpectedWithdrawals applied
-
-private theorem processBlsToExecutionChange {signed : SignedBLSToExecutionChange}
-    (ok : Consensus.processBlsToExecutionChange config checks state signed = .ok after) :
-    SlashedKept state after := by
-  obtain ⟨_, found, _, _, _, set⟩ := processBlsToExecutionChange_ok ok
-  exact setValidator found (by rfl) (by rfl) set
-
-private theorem processSyncAggregate {altair : .altair ≤ fork} {aggregate : SyncAggregate preset}
-    (ok : Consensus.processSyncAggregate config checks state altair aggregate = .ok after) :
-    SlashedKept state after := by
-  unfold Consensus.processSyncAggregate at ok
-  simp only [bind_ok_iff] at ok
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, folded⟩ := ok
-  rw [← Array.foldlM_toList] at folded
-  refine foldlM (fun _ _ _ ok => ?_) folded
-  unfold applySyncReward at ok
-  split at ok
-  · simp only [bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, raised, _, _, paid⟩ := ok
-    exact (increaseBalance raised).trans (increaseBalance paid)
-  · exact decreaseBalance (liftAccessor_ok.mp ok)
-
-private theorem processVoluntaryExit {signed : SignedVoluntaryExit}
-    (ok : Consensus.processVoluntaryExit config checks state signed = .ok after) :
-    SlashedKept state after := by
-  unfold Consensus.processVoluntaryExit at ok
-  simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok, liftSsz_ok] at ok
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, exited⟩ := ok
-  exact initiateValidatorExit exited
 
 private theorem processJustificationAndFinalization
     (ok : Consensus.processJustificationAndFinalization state = .ok after) :
@@ -506,9 +214,7 @@ private theorem processEpoch (ok : Consensus.processEpoch config checks state = 
     obtain ⟨justified, justifiedOk, head⟩ := slashedKeptLaws.epochBeforePayments_split pendingOk
     have paidStep : SlashedKept pending paid := by
       split at paidOk
-      · simp only [processBuilderPendingPayments, liftAccessor_ok, bind_ok_iff, pure,
-          Except.pure, Except.ok.injEq] at paidOk
-        obtain ⟨_, _, rfl⟩ := paidOk
+      · rw [processBuilderPendingPayments_eq (liftAccessor_ok.mp paidOk)]
         exact of_validators
       · cases paidOk; exact refl _
     exact (processJustificationAndFinalization justifiedOk).trans <| head.trans <|
@@ -541,34 +247,14 @@ private theorem advanceSlot (ok : Consensus.advanceSlot config checks state = .o
     · cases epochedOk; exact refl _
   exact (first.trans second).trans of_validators
 
-private theorem queuePreActivation {electra : .pectra ≤ fork} {index : ValidatorIndex}
-    (ok : Consensus.queuePreActivation state electra index = .ok after) :
-    SlashedKept state after := by
-  simp only [Consensus.queuePreActivation, bind_ok_iff, liftAccessor_ok, pure, Except.pure,
-    Except.ok.injEq] at ok
-  obtain ⟨v, found, _, _, _, _, _, set₁, _, set₂, rfl⟩ := ok
-  obtain ⟨_, rfl⟩ := setBalance_ok set₁
-  exact (of_validators (state := state)).trans <|
-    (setValidator (by exact found) (by rfl) (by rfl) set₂).trans of_validators
-
-private theorem queueCompoundingExcess {electra : .pectra ≤ fork} {index : Nat}
-    (ok : Consensus.queueCompoundingExcess state electra index = .ok after) :
-    SlashedKept state after := by
-  unfold Consensus.queueCompoundingExcess at ok
-  split at ok
-  · split at ok
-    · exact queueExcessActiveBalance (liftAccessor_ok.mp ok)
-    · cases ok; exact refl _
-  · cases ok; exact refl _
-
 private theorem upgradeToElectra {pre : BeaconState preset .dencun}
     {post : BeaconState preset .pectra}
     (ok : Consensus.upgradeToElectra config pre = .ok post) : SlashedKept pre post := by
   simp only [Consensus.upgradeToElectra, bind_ok_iff] at ok
   obtain ⟨_, _, _, _, _, _, _, _, _, queued, compounded⟩ := ok
   exact (of_validators (state := pre)).trans <|
-    (foldlM (fun _ _ _ ok => queuePreActivation ok) queued).trans
-      (foldlM (fun _ _ _ ok => queueCompoundingExcess ok) compounded)
+    (foldlM (fun _ _ _ ok => slashedKeptLaws.queuePreActivation keep ok) queued).trans
+      (foldlM (fun _ _ _ ok => slashedKeptLaws.queueCompoundingExcess keep ok) compounded)
 
 private theorem upgradeNext {pre : ForkedBeaconState preset}
     {post : {post : ForkedBeaconState preset // pre.fork < post.fork}}
@@ -750,9 +436,10 @@ private theorem operations_backed {fork : Fork} {state after : BeaconState prese
   -- The operations after the attestations keep the slashed flags.
   obtain ⟨proposed, slashed, attested, proposersOk, attestersOk, attestations, tail⟩ :=
     processOperations_folds_of (fun s t => SlashedKept s t) SlashedKept.refl
-      (fun one two => one.trans two) SlashedKept.processDeposit
-      SlashedKept.processVoluntaryExit SlashedKept.processBlsToExecutionChange
-      SlashedKept.processExecutionRequests
+      (fun one two => one.trans two) (SlashedKept.slashedKeptLaws.processDeposit SlashedKept.keep)
+      SlashedKept.slashedKeptLaws.processVoluntaryExit
+      SlashedKept.slashedKeptLaws.processBlsToExecutionChange
+      (SlashedKept.slashedKeptLaws.processExecutionRequests SlashedKept.keep)
       (fun ok => by rw [processPayloadAttestation_eq ok]; exact SlashedKept.of_validators) ok
   have proposedBacked : SlashedBacked evidence proposed := by
     refine fold_slashings_backed (fun sl => [sl.signedHeader1.message.proposerIndex])
@@ -780,81 +467,6 @@ private theorem operations_backed {fork : Fork} {state after : BeaconState prese
     attestations
   exact (attestedKept.trans tail) evidence slashedBacked
 
-/-- The payload of the parent keeps the size of the registry.
-
-Its requests queue deposits and act on the builders, so no validator joins. -/
-private theorem size_processParentExecutionPayload {fork : Fork}
-    {state after : BeaconState preset fork} {gloas : .glamsterdam ≤ fork}
-    {body : BeaconBlockBody preset fork}
-    (ok : processParentExecutionPayload config checks state gloas body = .ok after) :
-    after.validators.data.size = state.validators.data.size := by
-  rcases processParentExecutionPayload_ok ok with ⟨_, _, rfl⟩ |
-    ⟨_, settled, _, _, _, _, _, _, settledOk, depositsOk, withdrawalsOk,
-      consolidationsOk, buildersOk, exitsOk, _, rfl⟩
-  · rfl
-  have foldSize {α : Type} {step : BeaconState preset fork → α → Except TransitionError _}
-      (keeps : ∀ s x t, step s x = .ok t → t.validators.data.size = s.validators.data.size)
-      {xs : List α} {s t : BeaconState preset fork} (ok : xs.foldlM step s = .ok t) :
-      t.validators.data.size = s.validators.data.size :=
-    foldlM_ok_invariant (fun t => t.validators.data.size = s.validators.data.size)
-      (fun _ _ _ before computed => (keeps _ _ _ computed).trans before) rfl ok
-  have depositSize := foldSize (fun _ _ _ ok =>
-    congrArg (fun vs => vs.data.size) (processDepositRequest_ok ok).2.1) depositsOk
-  have withdrawalSize := foldSize (fun _ _ _ ok =>
-    (sameSizes_processWithdrawalRequest ok).1) withdrawalsOk
-  have consolidationSize := foldSize (fun _ _ _ ok =>
-    (sameSizes_processConsolidationRequest ok).1) consolidationsOk
-  have builderSize := foldSize (fun _ _ _ ok => by
-    unfold processBuilderDepositRequest addBuilderToRegistry at ok
-    simp only [bind, Except.bind, pure, Except.pure] at ok
-    repeat' split at ok
-    all_goals first | (cases ok; done) | (cases ok; rfl)) buildersOk
-  have exitSize := foldSize (fun _ _ _ ok => by
-    rcases processBuilderExitRequest_cases ok with rfl | ⟨_, _, _, _, _, exited⟩
-    · rfl
-    · simp only [initiateBuilderExit, bind_ok_iff] at exited
-      obtain ⟨_, _, _, _, set⟩ := exited
-      obtain ⟨_, rfl⟩ := setBuilder_ok set
-      rfl) exitsOk
-  exact exitSize.trans <| builderSize.trans <| consolidationSize.trans <|
-    withdrawalSize.trans <| depositSize.trans (by rw [settleParentPayment_eq settledOk])
-
-/-- The execution part of a block keeps the slashed flags and the size of the registry. -/
-private theorem slashedKept_processBlockExecution {fork : Fork}
-    {state after : BeaconState preset fork} {engine : ExecutionEngine preset fork}
-    {body : BeaconBlockBody preset fork} {bellatrix : .bellatrix ≤ fork}
-    (ok : processBlockExecution config checks engine state body bellatrix = .ok after) :
-    SlashedKept state after ∧ after.validators.data.size = state.validators.data.size := by
-  have payload {s t : BeaconState preset fork}
-      {execution : .bellatrix ≤ fork ∧ fork < .glamsterdam}
-      (ok : processExecutionPayload config engine s body execution = .ok t) :
-      SlashedKept s t ∧ t.validators.data = s.validators.data := by
-    obtain ⟨_, _, _, rfl⟩ := processExecutionPayload_ok ok
-    exact ⟨SlashedKept.of_validators, rfl⟩
-  unfold processBlockExecution at ok
-  split at ok
-  · obtain ⟨middle, withdrawn, executed⟩ := bind_ok_iff.mp ok
-    have size : after.validators.data.size = middle.validators.data.size := by
-      obtain ⟨_, recorded, recordedOk, rfl⟩ := processExecutionPayloadBid_ok executed
-      by_cases paid : 0 < (body.signedExecutionPayloadBid (by assumption)).message.value
-      · obtain ⟨_, _, _, _, rfl⟩ := recordBidPayment_of_pos paid recordedOk
-        rfl
-      · simp only [recordBidPayment, paid, ↓reduceIte, pure, Except.pure,
-          Except.ok.injEq] at recordedOk
-        subst recordedOk
-        rfl
-    exact ⟨(SlashedKept.processWithdrawals withdrawn).trans
-      (SlashedKept.executionPayloadBid executed),
-      size.trans (sameSizes_processWithdrawals withdrawn).1⟩
-  split at ok
-  · obtain ⟨middle, withdrawn, executed⟩ := bind_ok_iff.mp ok
-    exact ⟨(SlashedKept.processWithdrawals withdrawn).trans (payload executed).1,
-      (congrArg Array.size (payload executed).2).trans (sameSizes_processWithdrawals withdrawn).1⟩
-  · dsimp only at ok
-    split at ok
-    · exact ⟨(payload ok).1, congrArg Array.size (payload ok).2⟩
-    · cases ok; exact ⟨.refl _, rfl⟩
-
 /-- The steps of a block before its operations keep the slashed flags and the size of the registry.
 
 The keys of the registry are a prefix, by the block frame of the same steps. -/
@@ -862,25 +474,33 @@ private theorem slashedKept_operationsInput {fork : Fork}
     {state input : BeaconState preset fork} {engine : ExecutionEngine preset fork}
     {block : BeaconBlock preset fork}
     (started : OperationsInput config checks engine state block input) :
-    SlashedKept state input ∧ input.validators.data.size = state.validators.data.size :=
-  started.step_of
-    (fun s t => SlashedKept s t ∧ t.validators.data.size = s.validators.data.size)
-    (fun _ => ⟨.refl _, rfl⟩) (fun one two => ⟨one.1.trans two.1, two.2.trans one.2⟩)
-    (fun _ ok => ⟨SlashedKept.parentPayload ok, size_processParentExecutionPayload ok⟩)
-    (fun ok => by
-      refine ⟨?_, (sameSizes_processBlockHeader ok).1⟩
-      obtain ⟨_, _, rfl⟩ := processBlockHeader_eq ok
-      exact SlashedKept.of_validators)
-    (fun _ ok => slashedKept_processBlockExecution ok)
-    (fun ok => by
-      refine ⟨?_, (sameSizes_processRandao ok).1⟩
-      obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq ok
-      exact SlashedKept.of_validators)
-    (fun _ ok => by
-      refine ⟨?_, (sameSizes_processEth1Data ok).1⟩
-      obtain ⟨_, _, rest⟩ := processEth1Data_eq ok
-      rw [← rest]
-      exact SlashedKept.of_validators)
+    SlashedKept state input ∧ input.validators.data.size = state.validators.data.size := by
+  let Sized (s t : BeaconState preset fork) :=
+    SlashedKept s t ∧ t.validators.data.size = s.validators.data.size
+  have refl (s : BeaconState preset fork) : Sized s s := ⟨.refl _, rfl⟩
+  have trans {s t u : BeaconState preset fork} (one : Sized s t) (two : Sized t u) : Sized s u :=
+    ⟨one.1.trans two.1, two.2.trans one.2⟩
+  have keep {s t : BeaconState preset fork} (frame : BlockFrame s t)
+      (same : t.validators = s.validators) : Sized s t :=
+    ⟨SlashedKept.keep frame same, congrArg (·.data.size) same⟩
+  have laws := SlashedKept.slashedKeptLaws (preset := preset) (fork := fork)
+  refine started.step_of Sized refl trans
+    (fun _ ok => processParentExecutionPayload_step_of Sized refl trans keep
+      (fun ok => ⟨laws.processWithdrawalRequest SlashedKept.keep ok,
+        (sameSizes_processWithdrawalRequest ok).1⟩)
+      (fun ok => ⟨laws.processConsolidationRequest SlashedKept.keep ok,
+        (sameSizes_processConsolidationRequest ok).1⟩) ok)
+    (fun ok => ?_)
+    (fun _ ok => processBlockExecution_step_of Sized refl trans keep
+      (fun ok => ⟨laws.processWithdrawals SlashedKept.keep ok, (sameSizes_processWithdrawals ok).1⟩)
+      ok)
+    (fun ok => ?_) (fun _ ok => ?_)
+  · obtain ⟨_, _, rfl⟩ := processBlockHeader_eq ok
+    exact keep (frame_processBlockHeader ok) rfl
+  · obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq ok
+    exact keep (frame_processRandao ok) rfl
+  · obtain ⟨_, _, rest⟩ := processEth1Data_eq ok
+    exact keep (frame_processEth1Data ok) (by rw [← rest])
 
 private theorem block_backed {fork : Fork} {state after : BeaconState preset fork}
     {engine : ExecutionEngine preset fork} {block : BeaconBlock preset fork}
@@ -907,7 +527,7 @@ private theorem block_backed {fork : Fork} {state after : BeaconState preset for
       exact same ▸ attesters sl member i inIndices original originalAt
   -- From Altair the sync aggregate follows, and it keeps the slashed flags.
   split at synced
-  · exact SlashedKept.processSyncAggregate synced evidence operatedBacked
+  · exact SlashedKept.slashedKeptLaws.processSyncAggregate synced evidence operatedBacked
   · cases synced
     exact operatedBacked
 
