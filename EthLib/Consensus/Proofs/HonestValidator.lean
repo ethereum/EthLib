@@ -207,6 +207,37 @@ theorem isValidSignatureAtSlot_getContributionAndProofSignature
       proof.contribution.slot proof (Signatures.skToPk key) signature = .ok true :=
   isValidSignatureAtEpoch_of_signAtEpoch signed
 
+/-- A sync committee selection proof passes the check of a signature at the epoch of its slot.
+
+The check reads the selection data of the same slot and subcommittee. -/
+theorem isValidSignatureAtSlot_getSyncCommitteeSelectionProof {config : Config}
+    {state : BeaconState preset fork} {slot : Slot} {subcommitteeIndex : UInt64}
+    {key : Signatures.SecretKey} {proof : BLSSignature}
+    (signed : getSyncCommitteeSelectionProof config state slot subcommitteeIndex key = .ok proof) :
+    isValidSignatureAtSlot config .bls state DOMAIN_SYNC_COMMITTEE_SELECTION_PROOF slot
+      (SyncAggregatorSelectionData.mk slot subcommitteeIndex) (Signatures.skToPk key) proof =
+        .ok true :=
+  isValidSignatureAtEpoch_of_signAtEpoch signed
+
+/-- A contribution and proof keeps its aggregator and its contribution.
+
+Its selection proof passes the check for the slot and subcommittee of the contribution. -/
+theorem getContributionAndProof_spec {config : Config} {state : BeaconState preset fork}
+    {aggregatorIndex : ValidatorIndex} {contribution : SyncCommitteeContribution preset}
+    {key : Signatures.SecretKey} {proof : ContributionAndProof preset}
+    (made : getContributionAndProof config state aggregatorIndex contribution key = .ok proof) :
+    proof.aggregatorIndex = aggregatorIndex ∧ proof.contribution = contribution ∧
+      isValidSignatureAtSlot config .bls state DOMAIN_SYNC_COMMITTEE_SELECTION_PROOF
+        proof.contribution.slot
+        (SyncAggregatorSelectionData.mk proof.contribution.slot
+          proof.contribution.subcommitteeIndex)
+        (Signatures.skToPk key) proof.selectionProof = .ok true := by
+  unfold getContributionAndProof at made
+  obtain ⟨selectionProof, signed, made⟩ := bind_ok_iff.mp made
+  simp only [pure, Except.pure, Except.ok.injEq] at made
+  subst made
+  exact ⟨rfl, rfl, isValidSignatureAtSlot_getSyncCommitteeSelectionProof signed⟩
+
 /-! ## Committee assignments -/
 
 /-- A search over a list that returns a value found it at one element of the list. -/
