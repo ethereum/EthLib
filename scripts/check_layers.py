@@ -5,6 +5,7 @@ import re
 import sys
 from collections import deque
 from pathlib import Path
+from typing import NamedTuple
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -38,24 +39,94 @@ SCHEMES = ("Xmss", "Sphincs")
 KIND_NAMES = {"specification": "a specification", "property": "a property", "export": "a C export"}
 
 HEADER_WORD = re.compile(r"\s*(module|prelude)\b")
-IMPORT = re.compile(r"\s*(?:public\s+)?(?:meta\s+)?import\s+(?:all\s+)?([^\s]+)")
+IMPORT = re.compile(r"\s*(?:public\s+)?(meta\s+)?import\s+(?:all\s+)?([^\s]+)")
 LIBRARY = re.compile(r"^lean_lib\s+«?([A-Za-z0-9_]+)»?\s+where(.*?)(?=^\S|\Z)", re.M | re.S)
 ROOTS = re.compile(r"roots\s*:=\s*#\[(.*?)\]", re.S)
 LAYER_ROW = re.compile(r"^\|\s*([A-Za-z]+)\s*\|.*\|\s*`EthLib/([A-Za-z]+)/`\s*\|\s*$", re.M)
 
 
-def imports(text: str) -> list[str]:
-    """The modules that a Lean file imports, read from its header."""
+class Import(NamedTuple):
+    """One import line of a module header."""
+
+    module: str
+    meta: bool
+    line: int
+
+
+def header_imports(text: str) -> list[Import]:
+    """The imports of a Lean file, read from its header."""
     code = strip_lean(text)
     found, index = [], 0
     while True:
         if word := HEADER_WORD.match(code, index):
             index = word.end()
         elif match := IMPORT.match(code, index):
-            found.append(match.group(1).replace("«", "").replace("»", ""))
+            module = match.group(2).replace("«", "").replace("»", "")
+            # `strip_lean` keeps every newline, so the line number is the one in the file.
+            line = code.count("\n", 0, match.start(2)) + 1
+            found.append(Import(module, bool(match.group(1)), line))
             index = match.end()
         else:
             return found
+
+
+def imports(text: str) -> list[str]:
+    """The modules that a Lean file imports, read from its header."""
+    return [found.module for found in header_imports(text)]
+
+
+def meta_problems(
+    headers: dict[str, list[Import]], graph: dict[str, list[str]]
+) -> list[tuple[str, Import, str]]:
+    """
+    Each `meta import` that could let an export run specification code while it is elaborated.
+
+    Each problem is the module that writes the import, the import, and the rule it breaks.
+
+    Under the module system, a module runs imported code at elaboration only through `meta import`.
+    But an `elab` defined in another module runs while the module that uses it is elaborated.
+    So the check walks every module that an export reaches through its imports, of any kind.
+    A `meta import` also makes the code of every module that the imported one reaches runnable.
+    So no module on that walk meta-imports a module that reaches a specification.
+
+    A specification never uses `meta import`, whether an export reaches it or not.
+    An `elab` or a `meta def` written in a specification with no `meta import` is not seen here.
+    """
+    reaches: dict[str, bool] = {}
+
+    def reaches_specification(module: str) -> bool:
+        if module not in reaches:
+            # Lean rejects a cycle of imports; the mark only keeps a broken tree from looping.
+            reaches[module] = False
+            reaches[module] = module in graph and (
+                kind(module) == "specification"
+                or any(reaches_specification(imported) for imported in graph[module])
+            )
+        return reaches[module]
+
+    # Walk breadth first, and remember an export that reaches each module.
+    exports = [name for name in sorted(graph) if "Exports" in name.split(".")]
+    reached = {name: name for name in exports}
+    queue = deque(exports)
+    while queue:
+        current = queue.popleft()
+        for imported in graph[current]:
+            if imported in graph and imported not in reached:
+                reached[imported] = reached[current]
+                queue.append(imported)
+
+    problems = []
+    for name in sorted(headers):
+        for found in headers[name]:
+            if not found.meta:
+                continue
+            if kind(name) == "specification":
+                problems.append((name, found, "a specification never uses `meta import`"))
+            elif name in reached and reaches_specification(found.module):
+                via = "" if reached[name] == name else f"{reached[name]} reaches it, and "
+                rule = f"{via}no export runs specification code while it is elaborated"
+                problems.append((name, found, rule))
+    return problems
 
 
 def module_name(path: Path, root: Path) -> str:
@@ -221,7 +292,10 @@ def check(root: Path) -> list[str]:
     problems = []
     files = sorted((root / "EthLib").rglob("*.lean")) + sorted(root.glob("EthLib.lean"))
     modules = {module_name(path, root): path for path in files}
-    graph = {name: imports(path.read_text(encoding="utf-8")) for name, path in modules.items()}
+    headers = {
+        name: header_imports(path.read_text(encoding="utf-8")) for name, path in modules.items()
+    }
+    graph = {name: [found.module for found in lines] for name, lines in headers.items()}
 
     for name, path in modules.items():
         if name not in AGGREGATORS and layer(name) is None:
@@ -243,6 +317,12 @@ def check(root: Path) -> list[str]:
         problems.append(
             f"scripts/check_layers_baseline.txt: {name} {imported} "
             "breaks no rule any more; remove the entry"
+        )
+
+    for name, found, rule in meta_problems(headers, graph):
+        problems.append(
+            f"{modules[name].relative_to(root)}:{found.line}: meta-imports {found.module}, "
+            f"but {rule}"
         )
 
     for name, imported, target in scheme_problems(graph):

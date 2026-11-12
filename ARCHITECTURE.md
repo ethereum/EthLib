@@ -167,6 +167,10 @@ A pull request that breaks one says why in its description.
 - A specification never imports a property, a C export or a model.
 - A specification imports nothing outside the Lean toolchain, which ships `Init`, `Std` and `Lean`.
   Mathlib and the probability libraries enter only in properties and models.
+- No export runs specification code while it is elaborated.
+  No export, and no module that an export reaches through its imports, meta-imports a module that reaches a specification.
+  A specification never uses `meta import`, since an export may reach it later.
+  The command that derives the Python conversions of an export runs while the export is elaborated, and its module meta-imports only the Lean toolchain.
 - A C export imports only EthLib and the Lean toolchain, and a property that it imports reaches nothing else, directly or through other properties.
 - A construction shared by two modules is written once, in the lowest layer both can import.
   A binary Merkle tree used by SSZ and by a hash-based signature is one example.
