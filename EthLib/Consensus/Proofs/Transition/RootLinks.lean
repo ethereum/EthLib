@@ -127,7 +127,7 @@ private theorem latestBlockHeader_upgradeNext {pre : ForkedBeaconState preset}
     rfl
 
 /-- The upgrades due at a slot keep the latest block header. -/
-private theorem latestBlockHeader_processUpgrades {forked after : ForkedBeaconState preset}
+theorem latestBlockHeader_processUpgrades {forked after : ForkedBeaconState preset}
     (computed : processUpgrades config checks forked = .ok after) :
     after.state.latestBlockHeader = forked.state.latestBlockHeader :=
   processUpgrades_induction

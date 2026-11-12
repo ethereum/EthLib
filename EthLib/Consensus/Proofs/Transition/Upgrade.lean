@@ -373,22 +373,49 @@ theorem electraKept_queueCompoundingExcess {fork : Fork} {state after : BeaconSt
   · cases computed
     exact ⟨SameSizes.refl _, rfl, rfl⟩
 
+/-- Queueing a validator that is not yet active keeps its key and its flag.
+
+It changes no exit epoch. -/
+theorem EpochFrameLaws.queuePreActivation {fork : Fork}
+    {R : BeaconState preset fork → BeaconState preset fork → Prop} (laws : EpochFrameLaws R)
+    (keep : ∀ {state after : BeaconState preset fork}, BlockFrame state after →
+      after.validators = state.validators → R state after)
+    {state after : BeaconState preset fork} {electra : .pectra ≤ fork} {index : ValidatorIndex}
+    (computed : Consensus.queuePreActivation state electra index = .ok after) : R state after := by
+  simp only [Consensus.queuePreActivation, bind_ok_iff, liftAccessor_ok, pure, Except.pure,
+    Except.ok.injEq] at computed
+  obtain ⟨validator, found, _, -, _, -, _, set₁, _, set₂, rfl⟩ := computed
+  have sizes := sameSizes_setBalance set₁
+  obtain ⟨_, rfl⟩ := setBalance_ok set₁
+  exact laws.trans (keep (BlockFrame.of_validators sizes) rfl) <|
+    laws.trans (laws.setValidator (old := validator) set₂ found rfl rfl
+      (fun ordered => ordered validator (mem_of_getValidator found)) fun _ _ => UInt64.zero_mod)
+      (keep (BlockFrame.of_validators ⟨rfl, rfl⟩) rfl)
+
+theorem EpochFrameLaws.queueCompoundingExcess {fork : Fork}
+    {R : BeaconState preset fork → BeaconState preset fork → Prop} (laws : EpochFrameLaws R)
+    (keep : ∀ {state after : BeaconState preset fork}, BlockFrame state after →
+      after.validators = state.validators → R state after)
+    {state after : BeaconState preset fork} {electra : .pectra ≤ fork} {index : Nat}
+    (computed : Consensus.queueCompoundingExcess state electra index = .ok after) :
+    R state after := by
+  unfold Consensus.queueCompoundingExcess at computed
+  split at computed
+  · split at computed
+    · exact laws.queueExcessActiveBalance keep (liftAccessor_ok.mp computed)
+    · cases computed
+      exact laws.refl _
+  · cases computed
+    exact laws.refl _
+
 /-- Queueing a validator that is not yet active changes no exit epoch.
 
 It keeps the block roots, and keeps each byte of flags or zeroes it. -/
 theorem frame_queuePreActivation {fork : Fork} {state after : BeaconState preset fork}
     {electra : .pectra ≤ fork} {index : ValidatorIndex}
     (computed : queuePreActivation state electra index = .ok after) :
-    BlockFrame state after := by
-  simp only [queuePreActivation, bind_ok_iff, liftAccessor_ok, pure, Except.pure,
-    Except.ok.injEq] at computed
-  obtain ⟨validator, found, _, -, _, -, _, set₁, _, set₂, rfl⟩ := computed
-  have sizes := sameSizes_setBalance set₁
-  obtain ⟨_, rfl⟩ := setBalance_ok set₁
-  have zeroed := BlockFrame.of_validators sizes
-  have reset := frame_setValidator_of_whole (old := validator) set₂ found rfl
-    (fun ordered => ordered validator (mem_of_getValidator found)) fun _ _ => UInt64.zero_mod
-  exact (zeroed.trans reset.toBlockFrame).trans (BlockFrame.of_validators ⟨rfl, rfl⟩)
+    BlockFrame state after :=
+  blockEpochFrameLaws.queuePreActivation (fun frame _ => frame) computed
 
 /-- Queueing the excess balance of a validator with compounding credentials keeps the frame.
 
@@ -396,15 +423,8 @@ It keeps the block roots, and keeps each byte of flags or zeroes it. -/
 theorem frame_queueCompoundingExcess {fork : Fork} {state after : BeaconState preset fork}
     {electra : .pectra ≤ fork} {index : Nat}
     (computed : queueCompoundingExcess state electra index = .ok after) :
-    BlockFrame state after := by
-  unfold queueCompoundingExcess at computed
-  split at computed
-  · split at computed
-    · exact frame_queueExcessActiveBalance (liftAccessor_ok.mp computed)
-    · cases computed
-      exact BlockFrame.refl _
-  · cases computed
-    exact BlockFrame.refl _
+    BlockFrame state after :=
+  blockEpochFrameLaws.queueCompoundingExcess (fun frame _ => frame) computed
 
 private theorem upgradeToElectra_frame_spec {pre : BeaconState preset .dencun}
     {after : BeaconState preset .pectra} (computed : upgradeToElectra config pre = .ok after) :

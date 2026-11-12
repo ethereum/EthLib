@@ -715,6 +715,14 @@ The raw transport split of an XX state checks neither.
 The Python tests compare the raw XX handshake with a published test vector.
 No published vector covers the libp2p payload, so its tests check the keys and signatures with independent code.
 
+The DER signature of an identity has its own theorems (`Networking/Proofs/Libp2p/PeerId.lean`).
+`derInteger_eq` proves that the content of the DER INTEGER of a number below `2 ^ 256` is that number in big-endian bytes, on the fewest bytes such that the first has its top bit clear.
+`exists_derByteCount` shows that such a byte count, from 1 to 33, exists for every number below `2 ^ 256`.
+So a positive number gets a leading zero byte exactly when its first nonzero byte is `0x80` or more, and zero is the single byte `0x00`.
+`decodeSignature_eq_ok_iff` proves that the decoder accepts exactly the encodings of r in [1, N) and s in [1, N/2], where N is the order of the secp256k1 group, and returns r and s.
+So each accepted pair r, s has exactly one byte encoding.
+No theorem relates the encoder to an independent model of X.690, and none is about ECDSA verification.
+
 The bindings take explicit keys and state tuples.
 Callers must use fresh ephemeral keys and use the returned state after each successful cipher call.
 They must discard handshake state after an error.
@@ -837,7 +845,8 @@ It is not computational binding: no theorem bounds the cost of finding two such 
 For a well-formed setup, honest KZG proofs and blob proofs verify (`verifyKzgProof_computeKzgProof`, `verifyBlobKzgProof_computeBlobKzgProof`, `Proofs/Kzg/Verify.lean`).
 `verifyKzgProofImpl_iff` states when the check accepts: `c - y = w (τ - z)`, for decoded points representing `c` and `w`.
 On a well-formed setup (assumption D3), `verifyBlobKzgProof_binding` (`Proofs/Kzg/BlobBinding.lean`) splits an accepted blob opening into three cases.
-Let the validated commitment and proof represent `f(τ)` and `g(τ)` for polynomials `f` and `g` of degree below 4096.
+Let the commitment and the proof convert with `bytesToKzgCommitment` and `bytesToKzgProof`, as in EIP-4844.
+Let their decoded points represent `f(τ)` and `g(τ)` for polynomials `f` and `g` of degree below 4096.
 Let `p` be the interpolant of the blob's decoded values, and let `z` be the evaluation challenge.
 Then `f = p`; or `f ≠ p`, `f - p` has degree below 4096, and `z` is a root of `f - p`.
 Or `h = f - p(z) - g (X - z)` is nonzero of degree at most 4096, and the secret `τ` is a root of `h`.
@@ -1453,6 +1462,28 @@ Both hold for every bound on the gas of messages and every runner of messages.
 It assumes a runner that never fails on those messages.
 `Logic.not_runsOk_of_lt` proves that no run with less gas than `cost` succeeds, from a specification to a halt that pays `cost`, as above.
 
+BLOCKHASH reads its hash from a list that the block transition builds from the recent blocks of the chain.
+The Yellow Paper (Appendix H.2, [`Paper.tex`][yp-blockhash]) defines the result by a walk up the parent hashes instead.
+So the two agree when the recent blocks are linked and reach back far enough.
+`BlockChain.addBlock` (`Execution/Blocks/Transition.lean`) defines the chain after a block, and keeps its last 255 recent blocks.
+`HistoryOk` (`Execution/Proofs/Blocks/History.lean`) says that the recent blocks are linked and not empty.
+Each one is numbered one above the one before it and names the hash of that one as its parent hash.
+The chain also holds at least as many recent blocks as the number of its last block, or 255 when that number is higher.
+`stateTransition_historyOk` proves that a block that passes the transition keeps `HistoryOk`, and `genesis_historyOk` gives the start.
+On such a chain, `blockHash_ancestor` proves that each of the last 256 blocks has an entry in the list, and that BLOCKHASH reads it.
+For a block number `n` in the window, the entry is the hash of the last block when `n` is its number.
+Otherwise it is the parent hash of the recent block numbered `n + 1`.
+When a recent block is numbered `n`, the entry is its hash.
+`ChainRun.windows` carries the whole result along a run of blocks.
+
+The theorems assume `HistoryOk` of the first chain.
+A chain with too few recent blocks does not meet it.
+`blockHash_of_short` proves that on such a chain, BLOCKHASH gives 0 for a block inside the window that the list does not reach.
+For example, from block 100 with only that block recent, BLOCKHASH in block 101 gives 0 for block 98, where the Yellow Paper gives the hash of block 98.
+No theorem relates the recent blocks of a chain to a real network.
+
+[yp-blockhash]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
+
 ### System contracts
 
 The four modules under `Execution/Proofs/Blocks/SystemCall/` for beacon roots, historical block hashes, withdrawal requests and consolidation requests prove the effects of their deployed bytecode.
@@ -1832,6 +1863,22 @@ It does not check the ommer headers against the chain, which needs the recent bl
 It does not ask that the sum of the gas limits of the transactions is at most the gas limit of the block, as `caps/eth.md` says.
 Block validity asks only that each transaction fits in the gas that the block still has, so the stricter rule would reject valid blocks.
 
+### The block access lists and the cells of the eth protocol
+
+`accessListsResponse` (`Execution/Network/Message.lean`) checks a BlockAccessLists answer of eth/71 against the access list hashes of the requested blocks.
+It follows "BlockAccessLists (0x13)" in [`caps/eth.md`](https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/eth.md#blockaccesslists-0x13).
+`accessListsResponse_eq_true_iff` (`Execution/Proofs/Network/Message.lean`) states when an answer passes: it repeats the request ID and has one entry for each hash that the caller gives.
+Each entry is the RLP empty string, or its RLP encoding has that hash under Keccak-256.
+`accessListsAnswer_eq_true_iff` (`Execution/Proofs/Network/Snap.lean`) states the check of the entries alone, which snap/2 shares.
+There the peer may cut the list short, so that check asks only for no more entries than hashes.
+The caller gives the access list hash of each requested block, in the order of the request.
+The check trusts these hashes: it reads neither the block hashes of the request nor their number.
+
+`checkCellsResponse_eq_ok_iff` (`Execution/Proofs/Network/Message.lean`) states that a Cells answer of eth/72 passes exactly when it repeats the request ID and its cells pass `checkCells` (`Execution/Network/Cells.lean`).
+That check follows "Cells (0x15)" in [`caps/eth.md`](https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/eth.md#cells-0x15).
+`checkCells_eq_ok_iff` (`Execution/Proofs/Network/Cells.lean`) states the rules of those cells.
+The caller gives the number of blobs of each transaction, and the check trusts it.
+
 ### Weak subjectivity
 
 A node that starts from a recent checkpoint trusts it only for a limited time, the weak subjectivity period.
@@ -1969,6 +2016,14 @@ The ancestry needs only the two block reads and that local slot order, not `Reac
 It assumes Assumption 2 on the active members of the empty-slot committees, no honest known equivocator, aligned effective balances, and an increment divisible by 100 Gwei.
 These are store-local facts: no theorem here shows that a recorded honest vote is its voter's latest actual vote, or that it remains the recorded vote at a later store.
 
+`Consensus/Proofs/ForkChoice/FastConfirmationIndicators.lean` also states the two FFG tests of the rule on the target of the current epoch.
+`getCurrentTarget_eq_ok_iff` states that target as the checkpoint of the store's epoch in the chain of the head, and `epoch_eq_of_getCurrentTarget` gives its epoch.
+`willCurrentTargetBeJustified_eq_ok_true_iff` states the two-thirds test, with both products checked for overflow.
+`two_mul_le_three_mul_of_willCurrentTargetBeJustified` states the bound it gives on naturals: three times the honest support reaches twice the total active balance.
+`willNoConflictingCheckpointBeJustified_eq_ok_true_iff` states the one-third test: it accepts a target that is the unrealized justified checkpoint, and otherwise asks that three times the honest support exceed the balance.
+`willNoConflictingCheckpointBeJustified_of_willCurrentTargetBeJustified` shows that the one-third test passes wherever the two-thirds test does, for a nonzero effective balance increment.
+No theorem relates either test to the justification of the target in a later state.
+
 `Consensus/Proofs/ForkChoice/FastConfirmationConfirmedRoot.lean` states where the confirmed block of a slot comes from.
 `Store.onFastConfirmation_confirmedRoot` shows that the rule starts from the block stored before, the finalized block or the observed justified block.
 It keeps the block stored before only when that block is in the chain of the head, and at the first slot of an epoch only when `isConfirmedChainSafe` accepts it.
@@ -1988,7 +2043,7 @@ For the start they leave out the other checks that compare the epochs and the sl
 For the walks they leave out the checks on the epochs of the start and of the walked blocks.
 They also leave out the check that the head of the slot before holds each block of the first walk.
 They leave out the checks that a voting source or an unrealized justification is recent.
-They also leave out `willNoConflictingCheckpointBeJustified` and `willCurrentTargetBeJustified`, which are about the justification of the target of the current epoch.
+They also leave out the calls to `willNoConflictingCheckpointBeJustified` and `willCurrentTargetBeJustified`, whose tests `FastConfirmationIndicators.lean` states on their own.
 No theorem yet relates the list of stores to the stores of an honest validator in an execution.
 
 ### Balance-weighted draws
@@ -2611,6 +2666,35 @@ Adding votes and allowed weights keeps slack links, justification and finalizati
 `FfgFinalityMonotonicity.lean` puts the finalized checkpoint of a chain in such larger sets, with the same validator sets and second sets.
 This does not identify validator indices or establish root ancestry across two chains.
 
+The direct theorems of `Consensus/Proofs/DirectSafety/Safety.lean` do not go through the model.
+They take two runs of the state transition from one genesis built from deposits, which share a prefix up to a state `x`.
+A run keeps the inputs of each step: the slots, and the blocks with their state roots checked (`Run`, `Consensus/Proofs/Transition/Trace.lean`).
+A key is accountable when the two runs accepted two of its votes that `isSlashableAttestationData` flags.
+It is also accountable when a block of either run applied a slashing that names it.
+That slashing may be a proposer slashing, and it may be in the shared prefix, before `x`.
+So a key slashed before `x` and still active at `x` counts as accountable, although justification no longer counts its votes, and the bound is weaker by that stake.
+The votes are those of the attestations that the blocks applied, read by public key in the registry before each block.
+The weights are effective balances.
+Two checkpoints conflict when the runs applied different block headers up to the first slot of the earlier of their two epochs (`Conflict`, `DirectSafety/Execution.lean`).
+So, unless the roots of their headers collide, the runs disagree on the checkpoint of that epoch, even when one of the two finalized blocks is an ancestor of the other.
+`accountable_safety` takes conflicting finalized checkpoints of the two last states, with `x` no later than the first slot of the earlier finalized epoch.
+Then the active stake at `x` is at most three times the accountable stake at `x`, plus twice the larger drift of the two tails.
+The drift is zero when the active validators and their effective balances stay the same from the epoch before `x` to one epoch past the later finalized epoch.
+Then the accountable keys hold at least one third of the active stake at `x`.
+Otherwise the runs show evidence about the hash (`HashEvidence`), so no theorem assumes that the hash is injective.
+The evidence is two different inputs of the SHA-256 node hash with one digest, read in the roots of the headers of the runs.
+Or it is a header or a state of the runs whose root is zero.
+The drift of a tail is the largest over its states up to one epoch past the later finalized epoch.
+At a state, it charges twice the stake at `x` that the state no longer supports, outside the keys slashed by then.
+It charges once the recent stake of the state that `x` did not hold, and twice the stake active at the previous epoch of the state but not at its current epoch.
+It is observed, not bounded in closed form.
+The theorems need at least one slot per epoch, a buffer of roots of four epochs and more than `MIN_SEED_LOOKAHEAD + 2` epochs of RANDAO mixes.
+Each run also needs an active stake above one and a half increments at each epoch call after epoch 1 (`EnoughStake`).
+They take no bound on the fork, so a run may cross every upgrade that the transition of this revision defines, from a genesis before Altair.
+`verifiedConflict_of_accountable` gives, for each accountable key, two checks of its conflicting messages.
+Each is a call of `isValidIndexedAttestation` or `checkHeaderSignature` that a block of a run executed, and that accepted.
+It assumes nothing about the signature checks, so it does not say who signed.
+
 ### Engine API
 
 The Engine API is the interface through which the consensus layer drives the execution layer.
@@ -2635,6 +2719,9 @@ With the state of a chain, `valid_iff_of_newPayloadOnChain` shows that the answe
 The JSON decoders read back the hex encoding of any bytes (`bytesOf_hexString`, `Proofs/Json.lean`).
 An address decodes exactly from `0x` and two hex digits for each byte, in either case, whose lowercase forms encode the address (`address_eq_ok_iff_map_toLower`).
 A 64-bit number decodes to `x` exactly when the number read with the bound `2^64` is `x` (`uint64_eq_ok_iff`).
+The encoder of numbers writes the only text that decodes to the number, at any bound `2^bits` above it (`quantity_eq_ok_iff`).
+So two numbers never share an encoding (`quantityJson_inj`).
+A withdrawal, and a list of withdrawals, decode back from their encodings (`withdrawal_withdrawalJson`, `array_withdrawal_listJson`).
 A payload of version 4 decodes exactly when it holds the fields of version 4 and each part decodes (`payloadV4_eq_ok_iff`).
 A field that appears at a fork decodes exactly when it is present from that fork on and absent before (`exists_since_iff`, `Proofs/ExecutionEngine.lean`).
 So a decoded payload takes a fork exactly when its version is that of the fork (`exists_atFork_iff_of_anyPayload`).

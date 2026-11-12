@@ -1,5 +1,6 @@
 module
 
+import Mathlib.Algebra.BigOperators.Ring.Finset
 public import Mathlib.Algebra.Order.BigOperators.Group.Finset
 
 /-!
@@ -174,6 +175,107 @@ theorem stake_inter [DecidableEq ν] {V A B : Finset ν} (hA : A ⊆ V) (hB : B 
   have h := two_mul_stake_le_stake_inter_add V hA hB hA' hB'
   simp only [Finset.sdiff_self, stake, Finset.sum_empty] at h
   simp only [stake]
+  omega
+
+/-- The weight `w v` inside `S`, and zero outside it. -/
+def supported [DecidableEq ν] (S : Finset ν) (w : ν → ℕ) (v : ν) : ℕ :=
+  if v ∈ S then w v else 0
+
+private theorem sum_supported [DecidableEq ν] (S U : Finset ν) (w : ν → ℕ)
+    (inside : S ⊆ U) : (∑ v ∈ U, supported S w v) = stake w S := by
+  unfold stake
+  rw [← Finset.sum_subset inside]
+  · exact Finset.sum_congr rfl (fun v hv => by simp [supported, hv])
+  · intro v _ hv
+    simp [supported, hv]
+
+/-- Transfer two quorums together, excluding accountable validators from the weight loss.
+
+Gains cost once, losses twice, and support outside each active denominator costs twice.
+
+Bounding each quorum on its own would also charge the losses of accountable keys. -/
+theorem stake_le_accountable_add_change [DecidableEq ν]
+    (reference active₁ active₂ s₁ s₂ q₁ q₂ accountable : Finset ν)
+    (old w₁ w₂ : ν → ℕ) (loss₁ loss₂ gain₁ gain₂ outside₁ outside₂ : ℕ)
+    (activeInside₁ : active₁ ⊆ s₁) (activeInside₂ : active₂ ⊆ s₂)
+    (votersInside₁ : q₁ ⊆ s₁) (votersInside₂ : q₂ ⊆ s₂)
+    (quorum₁ : 2 * stake w₁ active₁ ≤ 3 * stake w₁ q₁)
+    (quorum₂ : 2 * stake w₂ active₂ ≤ 3 * stake w₂ q₂)
+    (overlap : q₁ ∩ q₂ ⊆ accountable)
+    (lossOne : (∑ k ∈ reference \ accountable, (old k - supported s₁ w₁ k)) ≤ loss₁)
+    (lossTwo : (∑ k ∈ reference \ accountable, (old k - supported s₂ w₂ k)) ≤ loss₂)
+    (gainOne : (∑ k ∈ s₁, (w₁ k - supported reference old k)) ≤ gain₁)
+    (gainTwo : (∑ k ∈ s₂, (w₂ k - supported reference old k)) ≤ gain₂)
+    (outsideOne : stake w₁ (s₁ \ active₁) ≤ outside₁)
+    (outsideTwo : stake w₂ (s₂ \ active₂) ≤ outside₂) :
+    stake old reference ≤ 3 * stake old (reference ∩ accountable) +
+      2 * (loss₁ + loss₂) + (gain₁ + gain₂) + 2 * (outside₁ + outside₂) := by
+  let u := reference ∪ s₁ ∪ s₂
+  have refU : reference ⊆ u := by intro k hk; simp [u, hk]
+  have oneU : s₁ ⊆ u := by intro k hk; simp [u, hk]
+  have twoU : s₂ ⊆ u := by intro k hk; simp [u, hk]
+  -- Factor the voter and denominator memberships out of the reference-weight arithmetic.
+  have voter_le (q s : Finset ν) (w : ν → ℕ) (inside : q ⊆ s) (k : ν) :
+      supported q w k ≤ supported s w k := by
+    by_cases h : k ∈ q
+    · simp [supported, h, inside h]
+    · simp [supported, h]
+  have sub_supported (s t : Finset ν) (w v : ν → ℕ) (k : ν) :
+      supported s (fun k => w k - supported t v k) k =
+        supported s w k - supported t v k := by
+    by_cases h : k ∈ s <;> simp [supported, h]
+  have localBound : ∀ k, supported reference old k +
+      3 * supported q₁ w₁ k + 3 * supported q₂ w₂ k ≤
+      3 * supported (reference ∩ accountable) old k +
+        2 * supported (reference \ accountable) (fun k => old k - supported s₁ w₁ k) k +
+        2 * supported (reference \ accountable) (fun k => old k - supported s₂ w₂ k) k +
+        supported s₁ (fun k => w₁ k - supported reference old k) k +
+        supported s₂ (fun k => w₂ k - supported reference old k) k +
+        2 * supported s₁ w₁ k + 2 * supported s₂ w₂ k := by
+    intro k
+    have le₁ := voter_le q₁ s₁ w₁ votersInside₁ k
+    have le₂ := voter_le q₂ s₂ w₂ votersInside₂ k
+    have exclusive : k ∉ accountable →
+        supported q₁ w₁ k + supported q₂ w₂ k ≤
+          max (supported s₁ w₁ k) (supported s₂ w₂ k) := by
+      intro notBad
+      have disjoint : ¬(k ∈ q₁ ∧ k ∈ q₂) := fun h =>
+        notBad (overlap (Finset.mem_inter.mpr h))
+      by_cases h₁ : k ∈ q₁
+      · have h₂ : k ∉ q₂ := fun h => disjoint ⟨h₁, h⟩
+        simpa only [supported, h₂, ↓reduceIte, Nat.add_zero] using
+          le₁.trans (le_max_left _ _)
+      · simpa only [supported, h₁, ↓reduceIte, Nat.zero_add] using
+          le₂.trans (le_max_right _ _)
+    rw [sub_supported s₁ reference, sub_supported s₂ reference]
+    by_cases hb : k ∈ accountable
+    · by_cases hr : k ∈ reference <;>
+        simp only [supported, Finset.mem_inter, Finset.mem_sdiff, hb, hr,
+          and_true, not_true_eq_false, and_false, ↓reduceIte]
+          at le₁ le₂ ⊢ <;> omega
+    · have bound := exclusive hb
+      by_cases hr : k ∈ reference <;>
+        simp only [supported, Finset.mem_inter, Finset.mem_sdiff, hb, hr,
+          and_false, not_false_eq_true, and_true, ↓reduceIte]
+          at bound ⊢ <;> omega
+  have total := Finset.sum_le_sum (s := u) (fun k _ => localBound k)
+  simp only [Finset.sum_add_distrib, ← Finset.mul_sum] at total
+  rw [sum_supported reference u old refU,
+    sum_supported q₁ u w₁ (votersInside₁.trans oneU),
+    sum_supported q₂ u w₂ (votersInside₂.trans twoU),
+    sum_supported (reference ∩ accountable) u old (Finset.inter_subset_left.trans refU),
+    sum_supported (reference \ accountable) u _ (Finset.sdiff_subset.trans refU),
+    sum_supported (reference \ accountable) u _ (Finset.sdiff_subset.trans refU),
+    sum_supported s₁ u _ oneU, sum_supported s₂ u _ twoU,
+    sum_supported s₁ u w₁ oneU, sum_supported s₂ u w₂ twoU] at total
+  have split₁ : stake w₁ active₁ + stake w₁ (s₁ \ active₁) = stake w₁ s₁ :=
+    (stake_add_stake_sdiff (w := w₁) active₁ s₁).trans (by
+      simp [Finset.sdiff_eq_empty_iff_subset.mpr activeInside₁])
+  have split₂ : stake w₂ active₂ + stake w₂ (s₂ \ active₂) = stake w₂ s₂ :=
+    (stake_add_stake_sdiff (w := w₂) active₂ s₂).trans (by
+      simp [Finset.sdiff_eq_empty_iff_subset.mpr activeInside₂])
+  unfold stake at *
+  dsimp only at *
   omega
 
 /-- The Byzantine validators of `V` hold at most the fraction `num / den` of its stake.

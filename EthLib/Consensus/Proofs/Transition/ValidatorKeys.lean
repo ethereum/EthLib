@@ -49,6 +49,22 @@ open Base Serialization.Ssz
 
 variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureChecks}
 
+/-- A validator keeps its public key at its position when the keys of the registry grow by suffix.
+
+The two states may be at different forks. -/
+theorem validators_getElem?_of_validatorKeys_prefix {post : Fork}
+    {state : BeaconState preset fork} {after : BeaconState preset post}
+    (kept : validatorKeys state <+: validatorKeys after) {i : Nat} {old : Validator}
+    (found : state.validators.data[i]? = some old) :
+    ∃ current, after.validators.data[i]? = some current ∧ current.pubkey = old.pubkey := by
+  obtain ⟨inside, oldEq⟩ := Array.getElem?_eq_some_iff.mp found
+  have small : i < (validatorKeys state).length := by simpa [validatorKeys] using inside
+  have afterSmall : i < after.validators.data.size := by
+    simpa [validatorKeys] using Nat.lt_of_lt_of_le small kept.length_le
+  refine ⟨after.validators.data[i], by simp [afterSmall], ?_⟩
+  have same := kept.getElem small
+  simpa [validatorKeys, oldEq] using same.symm
+
 /-- One slot keeps the public keys as a prefix, and keeps distinct keys distinct. -/
 private theorem keys_advanceSlot {state after : BeaconState preset fork}
     (computed : advanceSlot config checks state = .ok after) :

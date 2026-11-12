@@ -632,7 +632,8 @@
       {"constructor": "badIndicesBytesSize", "code": 22},
       {"constructor": "invalidTrustedSetup", "code": 23}]}],
    "error_class": "KzgError",
-   "docstring": "Verify a KZG proof, taking inputs as raw bytes."},
+   "docstring":
+   "Verify a KZG proof, taking inputs as raw bytes.\n\nIt checks its arguments in the order of [EIP-4844][eip-4844].\n\nThat order is the commitment, `z`, `y`, then the proof.\n\nThe first invalid argument gives the error.\n\n[eip-4844]: https://eips.ethereum.org/EIPS/eip-4844#cryptographic-helpers"},
   {"summary": "Compute the KZG proof of a blob against a commitment.",
    "signature": "(blob: bytes, commitment: bytes) -> bytes",
    "operation": "EthLib.Cryptography.Kzg.computeBlobKzgProof",
@@ -697,7 +698,8 @@
       {"constructor": "badIndicesBytesSize", "code": 22},
       {"constructor": "invalidTrustedSetup", "code": 23}]}],
    "error_class": "KzgError",
-   "docstring": "Verify that `blob` corresponds to `commitment` via `proof`."},
+   "docstring":
+   "Verify that `blob` corresponds to `commitment` via `proof`.\n\nIt checks the commitment, then decodes the blob, then checks the proof.\n\nThat is the order of [EIP-4844][eip-4844], and the first failure gives the error.\n\n[eip-4844]: https://eips.ethereum.org/EIPS/eip-4844#cryptographic-helpers"},
   {"summary": "Verify a batch of triples of a blob, a commitment and a proof.",
    "signature":
    "(blobs: list[bytes], commitments: list[bytes], proofs: list[bytes]) -> bool",
@@ -731,7 +733,7 @@
       {"constructor": "invalidTrustedSetup", "code": 23}]}],
    "error_class": "KzgError",
    "docstring":
-   "Verify a batch of triples of a blob, a commitment and a proof.\n\nEach triple checks its commitment, then decodes its blob, then checks its proof.\n\nThe first failure gives the error.\n\nThe empty batch verifies."},
+   "Verify a batch of triples of a blob, a commitment and a proof.\n\nEach triple checks its commitment, then decodes its blob, then checks its proof.\n\nThat is the order of [EIP-4844][eip-4844], and the first failure gives the error.\n\nThe empty batch verifies.\n\n[eip-4844]: https://eips.ethereum.org/EIPS/eip-4844#cryptographic-helpers"},
   {"summary": "Reed-Solomon-extend `blob` and return its cells.",
    "signature": "(blob: bytes) -> list[bytes]",
    "operation": "EthLib.Cryptography.Kzg.computeCells",

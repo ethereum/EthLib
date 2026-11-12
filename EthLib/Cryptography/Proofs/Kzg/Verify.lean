@@ -73,8 +73,11 @@ theorem verifyKzgProof_of_represents {s : TrustedSetup} {τ : Fr}
   obtain ⟨C', hC', hrC⟩ := validateKzgG1Point_compressG1 hC
   obtain ⟨P', hP', hrP⟩ := validateKzgG1Point_compressG1 hP
   unfold verifyKzgProof
-  rw [hC', hP', hz, bytesToBlsField_blsFieldToBytes]
-  simp only [bind, Except.bind, pure, Except.pure]
+  rw [bytesToKzgCommitment_of_validateKzgG1Point hC', hz, bytesToBlsField_blsFieldToBytes,
+    bytesToKzgProof_of_validateKzgG1Point hP']
+  simp only [bind, Except.bind]
+  rw [uncompressG1_of_validateKzgG1Point hC', uncompressG1_of_validateKzgG1Point hP']
+  simp only [pure, Except.pure]
   rw [(verifyKzgProofImpl_iff hs hrC hrP z y).mpr hid]
 
 /-- The proof that the computation returns represents the quotient at `τ`. -/
@@ -232,8 +235,11 @@ theorem verifyBlobKzgProof_of_blobOpeningValid {s : TrustedSetup}
     verifyBlobKzgProof s blob commitment proof = .ok true := by
   obtain ⟨poly, C, c, P, w, hblob, hC, hrC, hP, hrP, hid⟩ := h
   unfold verifyBlobKzgProof
-  rw [hC, hblob, hP]
-  simp only [bind, Except.bind, pure, Except.pure]
+  rw [bytesToKzgCommitment_of_validateKzgG1Point hC, hblob,
+    bytesToKzgProof_of_validateKzgG1Point hP]
+  simp only [bind, Except.bind]
+  rw [uncompressG1_of_validateKzgG1Point hC, uncompressG1_of_validateKzgG1Point hP]
+  simp only [pure, Except.pure]
   rw [evaluatePolynomialInEvaluationForm_eq_interpolate poly _
     (size_blobToPolynomial blob poly hblob)]
   exact congrArg Except.ok ((verifyKzgProofImpl_iff hs hrC hrP _ _).mpr hid)
@@ -253,29 +259,27 @@ theorem verifyBlobKzgProof_eq_ok_true {s : TrustedSetup} {blob : Blob}
   unfold verifyBlobKzgProof at h
   cases hC : validateKzgG1Point commitment with
   | error e =>
-    rw [hC] at h
-    simp only [bind, Except.bind, throw, throwThe, MonadExceptOf.throw] at h
+    rw [bytesToKzgCommitment_of_validateKzgG1Point_error hC] at h
     exact nomatch h
   | ok C =>
+    rw [bytesToKzgCommitment_of_validateKzgG1Point hC] at h
     cases hblob : blobToPolynomial blob with
     | error e =>
-      rw [hC, hblob] at h
-      simp only [bind, Except.bind, pure, Except.pure] at h
+      rw [hblob] at h
       exact nomatch h
     | ok poly =>
+      rw [hblob] at h
+      simp only [bind, Except.bind, pure, Except.pure] at h
+      rw [evaluatePolynomialInEvaluationForm_eq_interpolate poly _
+        (size_blobToPolynomial blob poly hblob)] at h
       cases hP : validateKzgG1Point proof with
       | error e =>
-        rw [hC, hblob, hP] at h
-        simp only [bind, Except.bind, pure, Except.pure, throw, throwThe,
-          MonadExceptOf.throw] at h
-        rw [evaluatePolynomialInEvaluationForm_eq_interpolate poly _
-          (size_blobToPolynomial blob poly hblob)] at h
+        rw [bytesToKzgProof_of_validateKzgG1Point_error hP] at h
         exact nomatch h
       | ok P =>
-        rw [hC, hblob, hP] at h
-        simp only [bind, Except.bind, pure, Except.pure] at h
-        rw [evaluatePolynomialInEvaluationForm_eq_interpolate poly _
-          (size_blobToPolynomial blob poly hblob)] at h
+        rw [bytesToKzgProof_of_validateKzgG1Point hP, uncompressG1_of_validateKzgG1Point hC] at h
+        simp only at h
+        rw [uncompressG1_of_validateKzgG1Point hP] at h
         exact ⟨poly, C, P, rfl, rfl, rfl, Except.ok.inj h⟩
 
 /-- **Honest blob proofs verify.**

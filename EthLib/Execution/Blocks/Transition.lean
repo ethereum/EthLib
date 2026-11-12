@@ -102,6 +102,19 @@ structure BlockChain where
   /-- The recent blocks, oldest first, the last block last. -/
   recent : List RecentBlock
 
+/-- The chain after a block that passes its transition.
+
+It keeps the configuration and takes the state after the block.
+
+It appends the block to the recent blocks, and keeps the last 255 of them.
+
+The hashes of the blocks before the next block read only those 255, so no older block is needed.
+-/
+def BlockChain.addBlock (chain : BlockChain) {fork : Fork} (block : Block fork Transaction)
+    (post : State) : BlockChain :=
+  let recent := chain.recent ++ [⟨fork, block.header, block.ommers⟩]
+  { chain with state := post, recent := recent.drop (recent.length - 255) }
+
 /-- The hashes of the blocks before a block, oldest first, from the recent blocks of its chain.
 
 They are the parent hash of each of the last 255 blocks, then the hash of the last block. -/
