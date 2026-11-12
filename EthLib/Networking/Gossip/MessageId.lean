@@ -107,13 +107,13 @@ Before Altair the topic is not hashed.
 
 A missing topic or data field of the protobuf message is the empty byte string.
 -/
-def messageId (fork : Base.Fork) (topic data : ByteArray) : ByteArray :=
+def messageId (fork : Base.Fork) (topic data : ByteArray) : Vector UInt8 20 :=
   match Snappy.decompress data with
   | .ok payload =>
-    (Cryptography.Hash.sha256 (hashInput fork MESSAGE_DOMAIN_VALID_SNAPPY topic payload)).extract
-      0 20
+    (Cryptography.Hash.Sha256.hash32
+      (hashInput fork MESSAGE_DOMAIN_VALID_SNAPPY topic payload)).take 20
   | .error _ =>
-    (Cryptography.Hash.sha256 (hashInput fork MESSAGE_DOMAIN_INVALID_SNAPPY topic data)).extract
-      0 20
+    (Cryptography.Hash.Sha256.hash32
+      (hashInput fork MESSAGE_DOMAIN_INVALID_SNAPPY topic data)).take 20
 
 end EthLib.Networking.Gossip
