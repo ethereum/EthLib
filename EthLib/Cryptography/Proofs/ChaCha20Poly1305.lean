@@ -4,7 +4,7 @@ public import EthLib.Cryptography.ChaCha20Poly1305
 public import EthLib.Base.Proofs.Bytes
 
 /-!
-# Proofs: the ChaCha20-Poly1305 boundaries and round trip
+# Proofs: the ChaCha20-Poly1305 boundaries, round trip and bytes
 
 Counter exhaustion is rejected, output length is preserved, and a wrong tag reveals no plaintext.
 
@@ -12,9 +12,9 @@ The cipher undoes itself, as [RFC 8439 §2.4][rfc] says: decryption is done in t
 
 So decryption of an honest ciphertext and tag returns the plaintext, and no other tag passes.
 
-Every byte of the cipher and of the AEAD ciphertext is stated, with its block and counter.
+Each byte of the cipher's output and of the AEAD ciphertext is given by its block and counter.
 
-The padding of the MAC input and the serialization of the state are stated too.
+The tag, the padding of the MAC input and the serialization of the state are stated too.
 
 [rfc]: https://www.rfc-editor.org/rfc/rfc8439#section-2.4
 -/
@@ -275,11 +275,11 @@ RFC 8439 §2.4 encrypts byte `j` of the input with byte `j % 64` of a block.
 
 That block has the initial counter plus `j / 64`, so each block of the input has its own counter.
 
-RFC 8439 §2.8 starts the counter at 1, since block 0 makes the Poly1305 key.
+RFC 8439 §2.8 starts the counter at 1, since §2.6 makes the Poly1305 key from block 0.
 
 One theorem gives every byte of the cipher's output in those terms, and another the AEAD's output.
 
-Without them, a keystream shorter than the input leaves the bytes past its end in plaintext.
+A keystream shorter than the input, which leaves the bytes past its end in plaintext, fails them.
 -/
 
 /-- One more block appends the block whose counter is the initial counter plus their number. -/
@@ -321,7 +321,9 @@ theorem byteAt_keyStream (key : Key) (counter : UInt32) (nonce : Nonce) (blocks 
       · simp [hj, show ¬j < 64 * (n + 1) by omega]
         exact Base.byteAt_of_size_le (by simp; omega)
 
-/-- The cipher accepts exactly when the counter does not wrap, RFC 8439 §§2.4 and 2.8.
+/-- The cipher accepts exactly when the counter does not wrap.
+
+RFC 8439 §2.8 limits the block counter to 32 bits, and §2.4 adds `j / 64` to it at byte `j`.
 
 Its output then has the length of the input.
 
@@ -357,7 +359,9 @@ theorem crypt_eq_ok_iff (key : Key) (counter : UInt32) (nonce : Nonce)
     · rw [ite_eq_left hj, hb j hj, hks j hj]
     · rw [ite_eq_right hj, Base.byteAt_of_size_le (by omega)]
 
-/-- The AEAD accepts exactly when the lengths are encodable, RFC 8439 §2.8.
+/-- The AEAD accepts exactly when the AAD length fits in 64 bits and the counter does not wrap.
+
+These are the limits of RFC 8439 §2.8.
 
 The AAD is below `2 ^ 64` bytes, and the plaintext is at most `2 ^ 32 - 1` blocks of 64 bytes.
 
@@ -365,7 +369,11 @@ Its ciphertext then has the length of the plaintext.
 
 Byte `j` of the ciphertext is byte `j` of the plaintext XOR byte `j % 64` of block `1 + j / 64`.
 
-Its tag is the Poly1305 tag of the padded AAD, ciphertext and lengths, under the key of block 0. -/
+Its tag is the Poly1305 tag of the padded AAD, ciphertext and lengths, RFC 8439 §2.8.
+
+The lengths are 8 bytes each, least significant first.
+
+The Poly1305 key is the first 32 bytes of block 0, RFC 8439 §2.6. -/
 theorem encrypt_eq_ok_iff (key : Key) (nonce : Nonce) (aad plaintext ciphertext : ByteArray)
     (tag : Tag) :
     encrypt key nonce aad plaintext = .ok (ciphertext, tag) ↔
@@ -373,7 +381,10 @@ theorem encrypt_eq_ok_iff (key : Key) (nonce : Nonce) (aad plaintext ciphertext 
         ciphertext.size = plaintext.size ∧
         (∀ j < plaintext.size, Base.byteAt ciphertext j = Base.byteAt plaintext j ^^^
           (block key (1 + UInt32.ofNat (j / 64)) nonce)[j % 64]'(Nat.mod_lt _ (by decide))) ∧
-        tag = poly1305 (poly1305Key key nonce) (macData aad ciphertext) := by
+        tag = poly1305 (Vector.ofFn fun i : Fin 32 => (block key 0 nonce)[i.val]'(by omega))
+          (aad ++ pad16 aad ++ ciphertext ++ pad16 ciphertext ++
+            Base.packBytes (Base.uintToBytes 8 aad.size) ++
+            Base.packBytes (Base.uintToBytes 8 ciphertext.size)) := by
   unfold encrypt checkLengths
   by_cases ha : aad.size ≥ 2 ^ 64
   · simp only [ha, ite_true, bind, Except.bind, reduceCtorEq, false_iff]
