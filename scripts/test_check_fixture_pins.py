@@ -27,6 +27,23 @@ directories = ["tests/suite/a"]
 
 SUMS = "0000  case/data.yaml\n"
 
+GENERATORS = """\
+[generators.tool]
+computes = "the tool"
+version = "1.0"
+source = "its README"
+
+[[directories."tests/suite/a"]]
+cases = ["**"]
+generator = "tool"
+
+[[directories."tests/suite/b"]]
+cases = ["case/*"]
+generator = "ethlib"
+
+[runtime]
+"""
+
 
 class Tree:
     """A temporary repository with two pinned vector directories that pass the check."""
@@ -39,15 +56,16 @@ class Tree:
         self.write("tests/suite/b/SHA256SUMS", "# Source: RFC 1\n" + SUMS)
         self.write("tests/suite/README.md", f"The cases of `a/` come from org/vectors at {PIN}.\n")
         self.write("bindings/python/tests/test_a.py", f'"""At commit {PIN[:7]}."""\n')
+        self.write("tests/generators.toml", GENERATORS)
 
     def write(self, name: str, text: str) -> None:
         path = self.root / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text)
 
-    def problems(self) -> list[str]:
+    def problems(self, members: dict[str, list[str]] | None = None) -> list[str]:
         try:
-            return pins.check(self.root)
+            return pins.check(self.root, members)
         finally:
             self.tmp.cleanup()
 
@@ -164,12 +182,21 @@ sha256 = "{"3" * 64}"
 """
 
 
+ARCHIVE_GROUP = """
+[[archives."vectors/v1/all"]]
+cases = ["**"]
+generator = "not established"
+checked = "the release notes"
+"""
+
+
 class Archives(unittest.TestCase):
     def tree(self, archive: str = ARCHIVE) -> Tree:
         """The intact tree, with one archive that a test names."""
         tree = Tree()
         tree.write("tests/sources.toml", SOURCES + archive)
         tree.write("bindings/python/tests/test_b.py", 'ARCHIVE = "vectors/v1/all"\n')
+        tree.write("tests/generators.toml", GENERATORS + ARCHIVE_GROUP)
         return tree
 
     def test_named_archive_passes(self):
@@ -202,6 +229,309 @@ class Archives(unittest.TestCase):
                 problems = self.tree(ARCHIVE.replace(old, new)).problems()
                 self.assertEqual(len(problems), 1, problems)
                 self.assertIn(f"the archive vectors/v1/all needs {text}", problems[0])
+
+    def test_archive_without_generator(self):
+        tree = self.tree()
+        tree.write("tests/generators.toml", GENERATORS)
+        self.assertEqual(
+            tree.problems(),
+            ["tests/generators.toml: vectors/v1/all has no entry in the table archives"],
+        )
+
+    def members_problems(self, cases: str, *more: str) -> list[str]:
+        """The problems of the tree whose archive group has `cases`, against a member list."""
+        tree = self.tree()
+        tree.write(
+            "tests/generators.toml",
+            GENERATORS + ARCHIVE_GROUP.replace('cases = ["**"]', cases) + "".join(more),
+        )
+        members = ["top/a/data.yaml", "top/b/data.yaml", "top/README.md"]
+        return tree.problems({"vectors/v1/all": members})
+
+    def test_groups_match_the_member_list(self):
+        self.assertEqual(self.members_problems('cases = ["top/a/**", "top/b/*"]'), [])
+
+    def test_glob_that_matches_no_member(self):
+        self.assertEqual(
+            self.members_problems('cases = ["top/a/**", "top/c/**"]'),
+            [
+                "tests/generators.toml: vectors/v1/all, group 1: "
+                "top/c/** matches no member of the archive"
+            ],
+        )
+
+    def test_member_in_no_group_passes(self):
+        # A source archive also holds a README and a Makefile, which hold no case.
+        self.assertEqual(self.members_problems('cases = ["top/*/data.yaml"]'), [])
+
+    def test_shared_member_needs_a_subset(self):
+        group = '\n[[archives."vectors/v1/all"]]\ncases = ["top/a/**"]\ngenerator = "tool"\n'
+        problems = self.members_problems('cases = ["**"]', group)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("vectors/v1/all/top/a/data.yaml is in several groups", problems[0])
+
+    def test_member_lists_of_the_cache(self):
+        tree = self.tree()
+        try:
+            cache = tree.root / "cache"
+            cache.mkdir()
+            self.assertEqual(pins.archive_members(tree.root, None), {})
+            self.assertEqual(pins.archive_members(tree.root, cache), {})
+            (cache / f"{'3' * 64}.members.json").write_text('["top/a/data.yaml"]')
+            self.assertEqual(
+                pins.archive_members(tree.root, cache), {"vectors/v1/all": ["top/a/data.yaml"]}
+            )
+        finally:
+            tree.tmp.cleanup()
+
+
+class Generators(unittest.TestCase):
+    def problems(self, generators: str, *files: tuple[str, str]) -> list[str]:
+        """The problems of the intact tree with `generators` in place, and `files` written."""
+        tree = Tree()
+        tree.write("tests/generators.toml", generators)
+        for name, text in files:
+            tree.write(name, text)
+        return tree.problems()
+
+    def assert_fails(self, text: str, generators: str, *files: tuple[str, str]) -> None:
+        problems = self.problems(generators, *files)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn(text, problems[0])
+
+    def test_missing_file(self):
+        tree = Tree()
+        (tree.root / "tests/generators.toml").unlink()
+        self.assertEqual(tree.problems(), ["tests/generators.toml is missing"])
+
+    def test_directory_without_entry(self):
+        text = GENERATORS.replace(
+            '[[directories."tests/suite/b"]]', '[[directories."tests/suite/c"]]'
+        )
+        problems = self.problems(text)
+        self.assertIn(
+            "tests/generators.toml: tests/suite/b has no entry in the table directories", problems
+        )
+        self.assertIn(
+            "tests/generators.toml: tests/suite/c is in the table directories, "
+            "but not in tests/sources.toml",
+            problems,
+        )
+
+    def test_file_in_no_group(self):
+        sums = "# Source: RFC 1\n" + SUMS + "1111  other/data.yaml\n"
+        self.assert_fails(
+            "tests/suite/b/other/data.yaml belongs to no group",
+            GENERATORS,
+            ("tests/suite/b/SHA256SUMS", sums),
+        )
+
+    def test_licence_and_script_need_no_group(self):
+        sums = "# Source: RFC 1\n" + SUMS + "1111  LICENSE\n2222  generate.py\n"
+        self.assertEqual(self.problems(GENERATORS, ("tests/suite/b/SHA256SUMS", sums)), [])
+
+    def test_glob_that_matches_nothing(self):
+        text = GENERATORS.replace('cases = ["case/*"]', 'cases = ["case/*", "missing/*"]')
+        self.assert_fails("tests/suite/b, group 1: missing/* matches no pinned file", text)
+
+    def test_shared_file_needs_a_subset(self):
+        group = '\n[[directories."tests/suite/b"]]\ncases = ["**"]\ngenerator = "tool"\n'
+        self.assert_fails("tests/suite/b/case/data.yaml is in several groups", GENERATORS + group)
+        both = GENERATORS.replace('cases = ["case/*"]', 'cases = ["case/*"]\nsubset = "the inputs"')
+        self.assertEqual(
+            self.problems(both + group.replace("generator", 'subset = "the outputs"\ngenerator')),
+            [],
+        )
+
+    def test_generator_names(self):
+        for old, new, text in (
+            ('generator = "tool"', 'generator = "other"', "the generator 'other' is not defined"),
+            ("[generators.tool]", '[generators."ethlib"]', "the generator 'ethlib' is reserved"),
+            ('version = "1.0"\n', "", "the generator 'tool' needs version"),
+            ('cases = ["**"]', "cases = []", "group 1: needs a list of globs in cases"),
+            ('generator = "ethlib"', 'generator = "ethlib"\nnote = "x"', "unknown field note"),
+            ('version = "1.0"', 'version = "1.0"\nimports = "ssz"', "a list of names in imports"),
+        ):
+            with self.subTest(text=text):
+                problems = self.problems(GENERATORS.replace(old, new))
+                self.assertTrue(any(text in p for p in problems), problems)
+
+    def test_unused_generator(self):
+        text = GENERATORS.replace(
+            "[runtime]",
+            '[generators.spare]\ncomputes = "x"\nversion = "1"\nsource = "y"\n\n[runtime]',
+        )
+        self.assert_fails("the generator 'spare' is defined but no group names it", text)
+
+    def test_not_established_needs_what_was_checked(self):
+        text = GENERATORS.replace('generator = "ethlib"', 'generator = "not established"')
+        self.assert_fails(
+            "needs checked when, and only when, the generator is not established", text
+        )
+        self.assertEqual(
+            self.problems(
+                text.replace('"not established"', '"not established"\nchecked = "the README"')
+            ),
+            [],
+        )
+
+    def test_script_import_needs_its_generator(self):
+        script = ("tests/suite/a/generate.py", "import json\nimport ssz\n")
+        self.assert_fails(
+            "a script in tests/suite/a imports ssz, "
+            "which no generator of the directory names in imports",
+            GENERATORS,
+            script,
+        )
+        named = GENERATORS.replace(
+            'source = "its README"', 'source = "its README"\nimports = ["ssz"]'
+        )
+        self.assertEqual(self.problems(named, script), [])
+
+    def test_import_that_no_script_makes(self):
+        named = GENERATORS.replace(
+            'source = "its README"', 'source = "its README"\nimports = ["ssz"]'
+        )
+        self.assert_fails(
+            "the generator 'tool' names ssz in imports, which no script of its directories imports",
+            named,
+        )
+
+    def test_module_next_to_a_script_needs_no_entry(self):
+        files = (
+            ("tests/suite/a/helpers.py", "X = 1\n"),
+            (
+                "tests/suite/a/generate.py",
+                "import helpers\nfrom ethlib import x\nfrom . import y\n",
+            ),
+        )
+        self.assertEqual(self.problems(GENERATORS, *files), [])
+
+
+LOCK = """\
+[[package]]
+name = "py-ecc"
+version = "8.0.0"
+"""
+
+ORACLE = """
+[runtime.oracles.py_ecc]
+package = "py-ecc"
+version = "8.0.0"
+computes = "BLS signatures"
+"""
+
+
+class Runtime(unittest.TestCase):
+    def problems(self, generators: str, *files: tuple[str, str]) -> list[str]:
+        tree = Tree()
+        tree.write("tests/generators.toml", generators)
+        tree.write("uv.lock", LOCK)
+        for name, text in files:
+            tree.write(name, text)
+        return tree.problems()
+
+    def test_listed_oracle_passes(self):
+        test = ("bindings/python/tests/test_c.py", "from py_ecc.bls import G2ProofOfPossession\n")
+        self.assertEqual(self.problems(GENERATORS + ORACLE, test), [])
+
+    def test_unlisted_import(self):
+        test = ("bindings/python/tests/test_c.py", "import py_ecc\n")
+        self.assertEqual(
+            self.problems(GENERATORS, test),
+            [
+                "tests/generators.toml: the tests import py_ecc, "
+                "which the table runtime does not list"
+            ],
+        )
+
+    def test_standard_library_and_local_modules_need_no_entry(self):
+        files = (
+            ("bindings/python/tests/helpers.py", "import json\n"),
+            (
+                "bindings/python/tests/test_c.py",
+                "import hashlib\nimport helpers\nfrom ethlib import x\nfrom . import y\n",
+            ),
+        )
+        self.assertEqual(self.problems(GENERATORS, *files), [])
+
+    def test_entry_that_no_test_imports(self):
+        self.assertEqual(
+            self.problems(GENERATORS + ORACLE),
+            ["tests/generators.toml: the table runtime lists py_ecc, which no test imports"],
+        )
+
+    def test_version_differs_from_the_lock_file(self):
+        test = ("bindings/python/tests/test_c.py", "import py_ecc\n")
+        self.assertEqual(
+            self.problems(
+                GENERATORS + ORACLE.replace('version = "8.0.0"', 'version = "7.0.0"'), test
+            ),
+            ["tests/generators.toml: the oracle py_ecc has version 7.0.0, but uv.lock has 8.0.0"],
+        )
+
+    def test_standard_library_and_local_oracles(self):
+        oracles = (
+            '\n[runtime.oracles.hashlib]\npackage = "python"\ncomputes = "SHA-256"\n'
+            '\n[runtime.oracles.reference]\npath = "bindings/python/tests/reference.py"\n'
+            'computes = "a trie"\n'
+        )
+        files = (
+            ("bindings/python/tests/reference.py", "X = 1\n"),
+            ("bindings/python/tests/test_c.py", "import hashlib\nimport reference\n"),
+        )
+        self.assertEqual(self.problems(GENERATORS + oracles, *files), [])
+        not_standard = oracles.replace("hashlib", "py_ecc")
+        test = ("bindings/python/tests/test_d.py", "import py_ecc\n")
+        problems = self.problems(GENERATORS + not_standard, *files, test)
+        self.assertIn(
+            "tests/generators.toml: the oracle py_ecc is not in the standard library", problems
+        )
+
+    def test_tool_with_a_reason_passes(self):
+        tools = GENERATORS + '\n[runtime.tools]\npytest = "runs the tests"\n'
+        test = ("bindings/python/tests/test_c.py", "import pytest\n")
+        self.assertEqual(self.problems(tools, test), [])
+
+    def test_tool_without_a_reason(self):
+        tools = GENERATORS + '\n[runtime.tools]\npytest = " "\n'
+        test = ("bindings/python/tests/test_c.py", "import pytest\n")
+        self.assertEqual(
+            self.problems(tools, test), ["tests/generators.toml: the tool pytest needs a reason"]
+        )
+
+    def test_oracle_moved_to_the_tools(self):
+        # A move that keeps the old form, a list of names, gives no reason.
+        test = ("bindings/python/tests/test_c.py", "import py_ecc\n")
+        listed = GENERATORS.replace("[runtime]", '[runtime]\ntools = ["py_ecc"]')
+        self.assertIn(
+            "tests/generators.toml: runtime.tools needs a table of modules and reasons",
+            self.problems(listed, test),
+        )
+        unexplained = GENERATORS + '\n[runtime.tools]\npy_ecc = ""\n'
+        self.assertEqual(
+            self.problems(unexplained, test),
+            ["tests/generators.toml: the tool py_ecc needs a reason"],
+        )
+        both = GENERATORS + ORACLE + '\n[runtime.tools]\npy_ecc = "draws points"\n'
+        self.assertEqual(
+            self.problems(both, test),
+            ["tests/generators.toml: py_ecc is both a tool and an oracle"],
+        )
+
+    def test_nested_module_is_not_local(self):
+        # Only the top of the tests is on the import path, so `cases` is a third-party name here.
+        files = (
+            ("bindings/python/tests/suite/cases.py", "X = 1\n"),
+            ("bindings/python/tests/suite/test_c.py", "import cases\nimport suite\n"),
+        )
+        self.assertEqual(
+            self.problems(GENERATORS, *files),
+            [
+                "tests/generators.toml: the tests import cases, "
+                "which the table runtime does not list"
+            ],
+        )
 
 
 if __name__ == "__main__":
