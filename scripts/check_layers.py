@@ -31,6 +31,8 @@ LAYERS = {
 AGGREGATORS = {"EthLib", "EthLib.Proofs", "EthLib.Exports"}
 # The packages of the Lean toolchain, which a specification and a C export may import.
 TOOLCHAIN = {"Init", "Std", "Lean"}
+# The first tier of Cryptography: hashes and Merkle trees, which import no other part of it.
+FIRST_TIER = ("Hash", "Merkle")
 # The two hash-based signatures, whose modules never reach each other through their imports.
 SCHEMES = ("Xmss", "Sphincs")
 KIND_NAMES = {"specification": "a specification", "property": "a property", "export": "a C export"}
@@ -75,6 +77,12 @@ def layer(module: str) -> str | None:
     """The layer of an `EthLib` module, or None outside the layers."""
     parts = module.split(".")
     return parts[1] if len(parts) > 1 and parts[0] == "EthLib" and parts[1] in LAYERS else None
+
+
+def first_tier(module: str) -> bool:
+    """Whether a module sits in the first tier of Cryptography."""
+    parts = module.split(".")
+    return parts[:2] == ["EthLib", "Cryptography"] and len(parts) > 2 and parts[2] in FIRST_TIER
 
 
 def scheme(module: str) -> str | None:
@@ -182,6 +190,14 @@ def import_problems(module: str, imported: str) -> list[str]:
         return problems
     if source == "specification" and target != "specification":
         problems.append(f"a specification never imports {KIND_NAMES[target]}")
+    if (
+        source == "specification"
+        and first_tier(module)
+        and layer(imported) == "Cryptography"
+        and target == "specification"
+        and not first_tier(imported)
+    ):
+        problems.append("hashes and Merkle trees import no other part of Cryptography")
     here, there = layer(module), layer(imported)
     if module not in AGGREGATORS and here and there and here != there:
         if LAYERS[there] > LAYERS[here]:
