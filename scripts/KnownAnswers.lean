@@ -1,26 +1,29 @@
 module
 
+import EthLib.Base.Hex
 import EthLib.Consensus.Shuffle
 import EthLib.Cryptography.Hash.Sha256
 
 /-!
+# Known answers through the compiled specification
+
 Run pinned test vectors through the specification, with no export and no binding in between.
 
 The Python suite reaches the specification through the C exports and the Python extension.
 
-This program calls the same definitions that the theorems are about, compiled, on the same files.
+This program calls the definitions that the theorems are about, compiled.
 
 So a disagreement lies in the specification, in the compiler or in how this program reads files.
 
-The exports and the bindings play no part.
+Both families also run in the Python suite: here they check the specification without the bindings.
 
-Each family reads its vectors from `tests/`, at the pins of `tests/sources.toml`.
+Each family reads its vectors from `tests/`, whose pinned origins `tests/sources.toml` records.
 
-It prints one line per family, then fails when any case disagrees.
+It prints one line per family, and the paths of up to five cases that disagree.
 
-```text
-    lake exe known-answers [repository root]
-```
+It fails when any case disagrees, or when a family finds no case.
+
+Run it as `lake exe known-answers`, optionally followed by the repository root.
 -/
 
 open EthLib
@@ -35,22 +38,13 @@ def splitChars (sep : Char) (text : List Char) : List (List Char) :=
     | [] => [[c]]) [[]]
 
 /-- The bytes of a hex string, with or without `0x`, or none for a malformed string. -/
-def hexBytes (text : String) : Option ByteArray := do
+def hexBytes (text : String) : Option ByteArray :=
   let chars := text.toList
-  let digits := if chars.take 2 == ['0', 'x'] then chars.drop 2 else chars
-  -- Two hex digits per byte, so an odd count is malformed.
-  if digits.length % 2 ≠ 0 then none
-  let nibble (c : Char) : Option UInt8 :=
-    if '0' ≤ c ∧ c ≤ '9' then some (c.toNat - '0'.toNat).toUInt8
-    else if 'a' ≤ c ∧ c ≤ 'f' then some (c.toNat - 'a'.toNat + 10).toUInt8
-    else if 'A' ≤ c ∧ c ≤ 'F' then some (c.toNat - 'A'.toNat + 10).toUInt8
-    else none
-  let rec go : List Char → ByteArray → Option ByteArray
-    | hi :: lo :: rest, acc => do go rest (acc.push ((← nibble hi) * 16 + (← nibble lo)))
-    | _, acc => some acc
-  go digits .empty
+  Base.hexBytes? (if chars.take 2 == ['0', 'x'] then chars.drop 2 else chars)
 
-/-- The value of `key` in a flat YAML file, without quotes and spaces, or none if it is absent. -/
+/-- The value of the first line that starts with `key` and a colon, after leading spaces.
+
+Single quotes and spaces are dropped, and a key that no line starts with gives none. -/
 def field (yaml : String) (key : String) : Option String :=
   let label := key.toList ++ [':']
   (splitChars '\n' yaml.toList).findSome? fun line =>
@@ -61,7 +55,7 @@ def field (yaml : String) (key : String) : Option String :=
 
 /-- The numbers of the first YAML flow list in the text, such as `[6, 9, 2]`.
 
-A malformed list gives none.
+A malformed list gives none, and text with no list gives the empty list.
 
 A long list wraps onto several lines, so the line breaks and spaces between items are dropped. -/
 def numbers (text : String) : Option (List Nat) :=
@@ -76,7 +70,7 @@ def caseDirs (dir : System.FilePath) : IO (Array System.FilePath) := do
   let dirs ← entries.filterM fun e => e.path.isDir
   return (dirs.map (·.path)).qsort (·.toString < ·.toString)
 
-/-- The counts of one family: cases run, cases that disagree, and the names of the first few. -/
+/-- The counts of one family: cases run, cases that disagree, and the paths of the first five. -/
 structure Tally where
   run : Nat := 0
   failed : Nat := 0
@@ -93,7 +87,12 @@ def Tally.add (t : Tally) (name : String) (ok : Bool) : Tally :=
 
 The list holds the shuffled index of every index below the count.
 
-`tests/formats/shuffling/README.md` of consensus-specs describes the format. -/
+It runs the vectors of the minimal and the mainnet presets.
+
+The [format of consensus-specs][format] describes the files.
+
+[format]: https://github.com/ethereum/consensus-specs/blob/aa16bb4c156184e9548a997d53efaf2a228a6304/tests/formats/shuffling/README.md
+-/
 def shuffling (root : System.FilePath) : IO Tally := do
   let mut tally : Tally := {}
   for (presetName, preset) in [("minimal", Consensus.Preset.minimal),
@@ -105,7 +104,7 @@ def shuffling (root : System.FilePath) : IO Tally := do
         let some seedHex := field yaml "seed" | return false
         let some count := (field yaml "count").bind (·.toNat?) | return false
         let some seed := hexBytes seedHex | return false
-        -- A seed of another length is a malformed vector, not a disagreement of the shuffle.
+        -- A seed of another length cannot reach the shuffle, so the case fails.
         if h : seed.size = 32 then
           -- The list is the only one in the file, and it can span several lines.
           let some expected := numbers yaml | return false
@@ -130,7 +129,7 @@ def sha256 (root : System.FilePath) : IO Tally := do
     tally := tally.add case.toString ok
   return tally
 
-/-- Run one family, print its counts and its time, and say whether every case agreed. -/
+/-- Run one family, print its counts and its time, and say whether it ran a case and all agreed. -/
 def report (name : String) (family : IO Tally) : IO Bool := do
   let start ← IO.monoNanosNow
   let tally ← family
