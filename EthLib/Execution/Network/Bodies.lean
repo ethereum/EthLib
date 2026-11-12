@@ -76,11 +76,14 @@ def transactionBytes : Item → Except RlpError ByteArray
   | .bytes b => .ok b
   | item@(.list _) => encode item
 
+/-- The bytes of each transaction of a body, in order. -/
+def transactionValues (transactions : Item) : Except RlpError (List ByteArray) := do
+  (← transactions.toItems).mapM transactionBytes
+
 /-- The transactions of a body match the transactions root of the header. -/
 def checkTransactions {fork : Fork} (header : Header fork) (transactions : Item) :
     Except BodyError Unit := do
-  let items ← transactions.toItems.mapError .decoding
-  let values ← (items.mapM transactionBytes).mapError .decoding
+  let values ← (transactionValues transactions).mapError .decoding
   let root ← (indexedRoot values).mapError .trie
   ensure (root == header.transactionsRoot) .wrongTransactionsRoot
 
