@@ -1,12 +1,14 @@
 module
 
 public import EthLib.Execution.Evm.Precompiles.PointEvaluation
+import EthLib.Cryptography.Proofs.Kzg.TrustedSetup
 
 /-!
 # Proofs: `Evm.Precompiles.PointEvaluation`
 
 - A call succeeds exactly when the call data has 192 bytes, the gas covers 50000, the versioned hash names the commitment and the proof verifies.
 - Every successful call returns the same 64 bytes: 4096, then the BLS12-381 group order.
+- When the embedded setup decodes, the setup point `[tau]_2` of the call is its `G2` point 1.
 -/
 
 @[expose] public section
@@ -83,5 +85,48 @@ theorem PointEvaluationError.code_injective (e₁ e₂ : PointEvaluationError) (
   -- Two distinct constructors have two distinct literal codes, which `decide` separates.
   cases e₁ <;> cases e₂ <;>
     first | rfl | (simp only [PointEvaluationError.code] at h; exact absurd h (by decide))
+
+open EthLib.Cryptography.Kzg in
+/-- The 96 bytes of the precompile's `[tau]_2` are entry 1 of `g2_monomial` in the embedded setup.
+
+The definition of `[tau]_2` says that it is this entry, and this fact checks that claim.
+
+It decodes one hex string of 192 characters. -/
+private theorem hexToBytes_g2MonomialHex_one :
+    (TrustedSetup.hexToBytes? (TrustedSetupData.g2MonomialHex[1]'(by decide))).map ByteArray.data =
+      some KZG_SETUP_G2_MONOMIAL_1.data := by
+  decide +kernel
+
+open EthLib.Cryptography.Kzg in
+/-- The setup point of the call decompresses to entry 1 of the `G2` points of the embedded setup.
+
+It assumes that the embedded setup decodes, as the other theorems about that setup do.
+
+So the `[tau]_2` of the precompile is the one that the KZG theorems about a decoded setup use. -/
+theorem uncompress_KZG_SETUP_G2_MONOMIAL_1 {s : TrustedSetup} (h : TrustedSetup.ofHex = .ok s) :
+    Cryptography.Bls.G2.uncompress KZG_SETUP_G2_MONOMIAL_1 = .ok (s.g2Monomial[1]'(by decide)) := by
+  unfold TrustedSetup.ofHex at h
+  -- The three lists stay abstract, so no step evaluates the decoding of the 8257 hex strings.
+  generalize TrustedSetup.hexListToBytes TrustedSetupData.g1LagrangeHex = a at h
+  generalize TrustedSetup.hexListToBytes TrustedSetupData.g1MonomialHex = b at h
+  generalize hc : TrustedSetup.hexListToBytes TrustedSetupData.g2MonomialHex = c at h
+  cases a with
+  | error => cases h
+  | ok a =>
+  cases b with
+  | error => cases h
+  | ok b =>
+  cases c with
+  | error => cases h
+  | ok c =>
+  simp only [bind, Except.bind] at h
+  obtain ⟨hc1, hu⟩ := TrustedSetup.ofBytes_g2Monomial h 1 (by decide)
+  -- Entry 1 of the decoded list is the decoding of hex string 1, which is the constant.
+  obtain ⟨-, hget⟩ := TrustedSetup.hexListToBytes_getElem hc
+  have hg := hexToBytes_g2MonomialHex_one
+  rw [hget 1 (by decide), Option.map_some, Option.some.injEq] at hg
+  have hd : c[1]! = KZG_SETUP_G2_MONOMIAL_1 := ByteArray.ext hg
+  rw [← hd, getElem!_pos c 1 hc1]
+  exact hu
 
 end EthLib.Execution.Evm.Precompiles.PointEvaluation
