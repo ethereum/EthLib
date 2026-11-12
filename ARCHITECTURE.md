@@ -225,7 +225,7 @@ So the types that cross a module boundary are fixed here, and `EthLib/Base/` def
 - Bytes of a fixed length `n` are a `Vector UInt8 n`.
   The length is then part of the type, as `CONTRIBUTING.md` asks, and a 48-byte commitment cannot be passed where a 96-byte signature is expected.
   Such a value crosses a module boundary in its typed form, not as a `ByteArray`.
-  The exceptions today are `kzgCommitmentToVersionedHash`, `Bls.Signatures.verify` and `messageId`, which later pull requests convert.
+  The exceptions today are `kzgCommitmentToVersionedHash` and `Bls.Signatures.verify`, which later pull requests convert.
   At an external interface, one parser turns the bytes into the typed value or a typed error.
   A C export, EVM call data and a wire format are such interfaces.
 - A fixed-size type keeps the name its source gives it, defined once by the layer that owns the concept.
