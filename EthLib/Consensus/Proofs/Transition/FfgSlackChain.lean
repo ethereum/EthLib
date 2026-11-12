@@ -417,6 +417,26 @@ theorem votedParticipation_processBlock
     fun before => (PendingVoted.of_processBlock before apart pendingVoted computed).mono
       (Set.union_subset subset_rfl sub) before⟩
 
+/-- One step of a chain keeps the state invariant and the justified checkpoints apart.
+
+In the first two epochs the two justified checkpoints are equal.
+
+Later the previous justified checkpoint is before the previous epoch. -/
+theorem invariant_justified_of_chainStep {forked after : ForkedBeaconState preset}
+    (holds : Invariant forked.state) (early : JustifiedEarly forked.state)
+    (separated : JustifiedSeparated forked.state) (step : ChainStep config checks forked after) :
+    Invariant after.state ∧ JustifiedEarly after.state ∧ JustifiedSeparated after.state := by
+  cases step with
+  | slot computed =>
+    obtain ⟨advanced, advancedOk, upgraded⟩ := bind_ok_iff.mp computed
+    exact ⟨(advanceSlotAcross_invariant holds computed).1,
+      (early.of_advanceSlot advancedOk).of_processUpgrades upgraded,
+      (separated.of_advanceSlot early holds.settled advancedOk).of_processUpgrades upgraded⟩
+  | block engine signed _ applied =>
+    obtain ⟨-, blockOk, -⟩ := applySignedBlock_ok applied
+    have frame := frame_processBlock blockOk
+    exact ⟨frame.invariant holds, early.of_frame frame, separated.of_frame frame⟩
+
 /-- One step of a chain keeps the properties of its states.
 
 An epoch must have at least one slot, and the buffer of roots must cover two epochs.
@@ -430,10 +450,11 @@ theorem SlackChainInvariant.of_chainStep (positive : 0 < preset.SLOTS_PER_EPOCH.
     (hypotheses : SlackStepHypotheses config checks V U W attested block forked after)
     (step : ChainStep config checks forked after) :
     SlackChainInvariant V U W genesis attested block after := by
+  obtain ⟨invariant, early, separated⟩ :=
+    invariant_justified_of_chainStep holds.invariant holds.early holds.separated step
   cases step with
   | slot computed =>
     obtain ⟨advanced, advancedOk, upgraded⟩ := bind_ok_iff.mp computed
-    have early := holds.early.of_advanceSlot advancedOk
     have moved := advanceSlotAcross_slot_ne computed
     obtain ⟨previousKept, currentKept⟩ := processUpgrades_justified upgraded
     obtain ⟨flags, pending⟩ := votedParticipation_advanceSlotAcross positive window apart
@@ -449,10 +470,7 @@ theorem SlackChainInvariant.of_chainStep (positive : 0 < preset.SLOTS_PER_EPOCH.
         · rw [recent]
           exact hypotheses.sets moved boundary true)
       (fun _ => holds.roots.le_of_getBlockRoot) holds.slack advancedOk
-    refine ⟨(advanceSlotAcross_invariant holds.invariant computed).1,
-      early.of_processUpgrades upgraded,
-      (holds.separated.of_advanceSlot holds.early holds.invariant.settled
-        advancedOk).of_processUpgrades upgraded, flags, pending,
+    refine ⟨invariant, early, separated, flags, pending,
       RootsAbove.of_chainStep positive window holds.roots hypotheses.links (.slot computed), ?_⟩
     · unfold SlackJustifiedCheckpoints
       rw [previousKept, currentKept]
@@ -464,8 +482,7 @@ theorem SlackChainInvariant.of_chainStep (positive : 0 < preset.SLOTS_PER_EPOCH.
       hypotheses.applied ⟨engine, signed, validateResult, _, rfl, applied, member⟩
     obtain ⟨flags, pending⟩ :=
       votedParticipation_processBlock apart holds.flagsVoted holds.pendingVoted sub blockOk
-    refine ⟨frame.invariant holds.invariant, holds.early.of_frame frame,
-      holds.separated.of_frame frame, flags, pending,
+    refine ⟨invariant, early, separated, flags, pending,
       RootsAbove.of_chainStep positive window holds.roots hypotheses.links
         (.block engine signed validateResult applied), ?_⟩
     unfold SlackJustifiedCheckpoints

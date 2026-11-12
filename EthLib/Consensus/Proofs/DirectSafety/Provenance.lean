@@ -24,7 +24,7 @@ def ParticipationBacked {g a : ForkedBeaconState preset} (run : Run config check
     {fork : Fork} (state : BeaconState preset fork) : Prop :=
   PendingVoted run.votes state ∧ TargetFlagsVoted run.votes state
 
-/-- The last state of a run keeps the invariant of valid blocks and its justified checkpoints apart.
+/-- The last state of a run keeps the state invariant and its justified checkpoints apart.
 
 In the first two epochs its two justified checkpoints are equal.
 
@@ -47,17 +47,8 @@ theorem run_justified_separated {g a : ForkedBeaconState preset}
     simp only [getCurrentEpoch, slot, emptyGenesisState] at later
     simp [GENESIS_SLOT, GENESIS_EPOCH, computeEpochAtSlot, UInt64.lt_iff_toNat_lt] at later
   | snoc pre step ih =>
-    rcases ih with ⟨holds, early, separated⟩
-    cases step with
-    | slot ok =>
-      obtain ⟨advanced, advancedOk, upgraded⟩ := bind_ok_iff.mp ok
-      exact ⟨(advanceSlotAcross_invariant holds ok).1,
-        (early.of_advanceSlot advancedOk).of_processUpgrades upgraded,
-        (separated.of_advanceSlot early holds.settled advancedOk).of_processUpgrades upgraded⟩
-    | block engine signed due ok =>
-      obtain ⟨_, blockOk, _⟩ := applySignedBlock_ok ok
-      have frame := frame_processBlock blockOk
-      exact ⟨frame.invariant holds, early.of_frame frame, separated.of_frame frame⟩
+    obtain ⟨holds, early, separated⟩ := ih
+    exact invariant_justified_of_chainStep holds early separated step.chainStep
 
 private theorem votes_snoc {g a b : ForkedBeaconState preset} (run : Run config checks g a)
     (step : Step config checks a b) : run.votes ∪ step.votes ⊆ (run.snoc step).votes := by

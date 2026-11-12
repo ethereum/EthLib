@@ -69,7 +69,7 @@ inductive Run.Contains {first : ForkedBeaconState preset} :
       (next : Step config checks middle last) : Contains (.snoc pre next) step
 
 /-- A step of a run is a step of a chain. -/
-private theorem Step.chainStep {x y : ForkedBeaconState preset} (step : Step config checks x y) :
+theorem Step.chainStep {x y : ForkedBeaconState preset} (step : Step config checks x y) :
     ChainStep config checks x y := by
   cases step with
   | slot ok => exact .slot ok
