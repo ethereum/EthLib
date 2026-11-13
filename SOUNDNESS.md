@@ -853,7 +853,7 @@ Completion returns, on each side, the static key, the identity key and the exten
 The chaining key of each peer has its own theorems (`Networking/Proofs/Noise/Handshake.lean`).
 For each message of XX, one theorem for writing it and one for reading it name the X25519 outputs that the chaining key mixes, in order; message 1 mixes none.
 `chainingKey_writeMessage_readMessage_writeMessage` and `chainingKey_readMessage_writeMessage_readMessage` compose them for the initiator and the responder.
-After message 3, each chaining key is the one that the protocol name sets, with `ee`, `es` and `se` mixed in that order.
+After message 3, each chaining key starts from the one that the protocol name sets, then mixes `ee`, `es` and `se` in that order.
 Each token takes the local key that Noise §5.3 assigns to its role, and each remote key is the one that the final state stores.
 If both peers computed `es` or `se` from their two ephemeral keys, they would still agree and `handshake_complete` would still hold, but these theorems would not.
 No theorem ties a stored remote ephemeral key to the bytes of the message that carried it, and none states the cipher key that each mix sets.

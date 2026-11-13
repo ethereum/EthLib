@@ -232,7 +232,7 @@ For each message of XX, the theorems below name the X25519 outputs that the chai
 
 They give the local key of each token, and the field of the state that holds its remote key.
 
-A token that used another local key or another remote field would make them false.
+A token that used another local key or remote field would make the theorem of its message false.
 -/
 
 /-- Mixing a key sets the chaining key to the first HKDF output of the chaining key and that key. -/
