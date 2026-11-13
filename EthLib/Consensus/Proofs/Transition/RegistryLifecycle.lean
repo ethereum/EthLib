@@ -1176,21 +1176,11 @@ private theorem applyDeposit {pubkey : BLSPubkey} {credentials : Bytes32} {amoun
     {signature : BLSSignature}
     (ok : Consensus.applyDeposit config checks state pubkey credentials amount signature =
       .ok after) : UnassignedKept state after := by
-  unfold Consensus.applyDeposit at ok
-  split at ok
-  · unfold applyDepositElectra at ok
-    split at ok
-    · simp only [bind_ok_iff] at ok
-      obtain ⟨_, _, ok⟩ := ok
-      split at ok
-      · simp only [bind_ok_iff, liftAccessor_ok] at ok
-        obtain ⟨middle, added, queued⟩ := ok
-        obtain ⟨_, rfl⟩ := addPendingDeposit_eq queued
-        exact (append (addValidatorToRegistry_validators_eq_push added) ⟨rfl, rfl⟩).trans
-          (of_data (state := middle))
-      · cases ok; exact refl _
-    · obtain ⟨_, rfl⟩ := addPendingDeposit_eq (liftAccessor_ok.mp ok)
-      exact of_data
+  rcases applyDeposit_cases ok with rfl | ⟨_, middle, _, rfl | added, rfl⟩ | ⟨_, ok⟩
+  · exact refl _
+  · exact of_data
+  · exact (append (addValidatorToRegistry_validators_eq_push added) ⟨rfl, rfl⟩).trans
+      (of_data (state := middle))
   · exact applyPendingDeposit ok
 
 private theorem processDeposit {before : fork < .hegota} {deposit : Deposit}
