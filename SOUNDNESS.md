@@ -2930,9 +2930,10 @@ An older vote has a source at most, and a target before, those of each vote of t
 Each of these theorems needs the file to hold one or more messages of its kind for the key.
 A vote with the target of a kept vote is not older, so the theorem on votes says nothing about it.
 The signer of these theorems records every message it signs, so a signer that prunes as it goes is not covered here.
-A signer of blocks that prunes is covered below, but no theorem covers a signer of votes that prunes.
+A signer of blocks or votes that prunes is covered below.
 `mem_blocksOf` and `mem_attestationsOf` show that the messages of a key are those of its own entries.
-The proofs read only conditions 2, 4 and 5, through `lt_slot_of_checkBlockSlot`, `le_sourceEpoch_of_checkSourceEpoch` and `lt_targetEpoch_of_checkTargetEpoch`.
+The proofs read conditions 2, 4 and 5 through `lt_slot_of_checkBlockSlot`, `le_sourceEpoch_of_checkSourceEpoch` and `lt_targetEpoch_of_checkTargetEpoch`.
+Through the import steps of `importAndSignBlocks` and `importAndSignAttestations`, they also read the clause of conditions 1 and 3 that refuses each message at the slot or target of a record without a signing root.
 
 Import follows the [minimal strategy](https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-3076.md#advice-for-minimal-databases) of the EIP, for the held record and for the file.
 For each key it keeps one block limit, the greatest slot, and one vote limit, the greatest source epoch and the greatest target epoch, without signing roots.
@@ -2958,7 +2959,21 @@ So the signer signs nothing at the slot of a block of that file without a signin
 `checkBlockSigning_of_importAndSignBlocks_of_importFile` concludes the same for each file imported before the header.
 `importFile_of_data_eq_nil` shows that importing a file without entries puts the record in its minimal form, which prunes it.
 So these theorems also cover a signer of blocks that prunes its record with the minimal strategy as it goes.
-No theorem chains imports with votes recorded between them.
+
+`importAndSignAttestations` models a signer of votes that also imports files, from any starting file.
+`importAndSignAttestations_map_signAttestation` shows that a run without imports is `signAttestations`.
+`signingRoot_eq_of_importAndSignAttestations`, `isSlashableWith_eq_false_of_importAndSignAttestations` and `isSlashableAttestationData_eq_false_of_importAndSignAttestations` state the three theorems on `signAttestations` for it, and the theorems on `signAttestations` follow from them.
+Each holds whatever files the signer imports.
+
+`checkAttestationSigning_of_importAndSignAttestations` shows that each vote that the signer signs meets conditions 3, 4 and 5 of the starting file.
+`le_sourceEpoch_of_importAndSignAttestations` follows from it: if each vote of that file has a source at least an epoch, so does each signed vote.
+`lt_targetEpoch_of_importAndSignAttestations` does the same for a target after an epoch.
+Both need that file to hold one or more votes of the key.
+
+`le_sourceEpoch_of_importAndSignAttestations_of_importFile` shows that a vote signed after an import has a source at least each source of the file and of the starting file.
+`lt_targetEpoch_of_importAndSignAttestations_of_importFile` shows that the target of such a vote is after each target of both files.
+`checkAttestationSigning_of_importAndSignAttestations_of_importFile` concludes that such a vote meets conditions 3, 4 and 5 of each file imported before it.
+Since `importFile_of_data_eq_nil` makes a prune the import of an empty file, the theorems on `importAndSignAttestations` also cover a signer of votes that prunes its record with the minimal strategy as it goes.
 
 `readUInt64_uint64Json` and `readBytes_bytesJson` show that each integer and each byte string of a file reads back as written.
 `ofJson_toJson` shows that a whole file reads back as itself from the document that `toJson` writes, whatever its records.
@@ -3347,7 +3362,7 @@ This covers one chain; `accountable_safety` (`Consensus/Proofs/DirectSafety/Safe
 These theorems have one other case, an anchor state that hashes to the zero root.
 `Store.Reachable.finalized_ancestor_or_accountable` (`Consensus/Proofs/ForkChoice/CheckpointAncestry.lean`) ties together the two checkpoints of the store, which may come from the states of different blocks.
 The finalized epoch is at or before the anchor epoch, or the finalized checkpoint is on the chain of the justified checkpoint at the first slot of its epoch.
-Otherwise two runs from the anchor to the held states behind the two checkpoints bound the accountable stake at the anchor state, or show hash evidence.
+Otherwise two runs from the anchor to the held states behind the two checkpoints bound the unslashed active stake at the anchor state by the accountable stake, or show hash evidence.
 A checkpoint may come from one justification and finalization step on a held state, as fork choice runs it; `accountable_safety_justified_terminal` (`Safety.lean`) states direct accountable safety for such views.
 The drift of that bound is counted from the anchor, so the bound loosens as the justified epoch moves away from the anchor epoch.
 The theorem assumes that every block was imported with the setting of the signature checks of the run from genesis, and that no upgrade is due at a held slot.
@@ -3374,19 +3389,28 @@ The direct theorems of `Consensus/Proofs/DirectSafety/Safety.lean` do not go thr
 They take two runs of the state transition from one genesis built from deposits, which share a prefix up to a state `x`.
 A run keeps the inputs of each step: the slots, and the blocks with their state roots checked (`Run`, `Consensus/Proofs/Transition/Trace.lean`).
 A key is accountable when the two runs accepted two of its votes that `isSlashableAttestationData` flags.
-It is also accountable when a block of either run applied a slashing that names it.
-That slashing may be a proposer slashing, and it may be in the shared prefix, before `x`.
-So a key slashed before `x` and still active at `x` counts as accountable, although justification no longer counts its votes, and the bound is weaker by that stake.
+It is also accountable when a block of either tail, after `x`, applied a slashing that names it (`Accountable`, `DirectSafety/Conflict.lean`).
+That slashing may be a proposer slashing, since two signed headers for one slot are slashable too.
 The votes are those of the attestations that the blocks applied, read by public key in the registry before each block.
 The weights are effective balances.
+The reference set is the unslashed keys active at `x` (`unslashedKeys`), and the accountable keys are those of that set (`accountableKeys`).
+A slashing in the shared prefix does not make a key accountable by itself.
+A key that it slashed leaves the reference set and the accountable set.
+The predicate `Accountable shared left right k` can still hold for such a key, but `accountableKeys` filters `unslashedKeys x`.
+A prefix attester slashing can name a key without slashing it, because `slashIfSlashable` skips it.
+Such a key can stay in the reference set, and it can still count through double votes or through evidence in a tail.
+The stake of a prefix-slashed key is absent from the later drift and support only while its slashed flag stays set.
+These theorems do not need that fact, because the drift is observed.
+Recent keys are unslashed too, and justification counts only unslashed voters, so the voters of each quorum stay inside the support (`quorum_voters_recent`, `DirectSafety/Core.lean`).
+A key slashed at a call and unslashed at `x` has evidence in the tail of the call (`Run.slashed_evidence`, `DirectSafety/Evidence.lean`).
 Two checkpoints conflict when the runs applied different block headers up to the first slot of the earlier of their two epochs (`Conflict`, `DirectSafety/Execution.lean`).
 So, unless the roots of their headers collide, the runs disagree on the checkpoint of that epoch, even when one of the two finalized blocks is an ancestor of the other.
 `accountable_safety` takes conflicting finalized checkpoints of the two last states.
 The conflict implies that `x` is no later than the first slot of the earlier finalized epoch (`Run.slot_le_of_checkpointPath_ne`, `DirectSafety/Hashes.lean`).
 So the theorem takes no separate premise on `x`.
-Then the active stake at `x` is at most three times the accountable stake at `x`, plus twice the larger drift of the two tails.
+Then the unslashed active stake at `x` is at most three times the accountable stake at `x`, plus twice the larger drift of the two tails.
 The drift is zero when the active validators and their effective balances stay the same from the epoch before `x` to one epoch past the later finalized epoch.
-Then the accountable keys hold at least one third of the active stake at `x`.
+Then the accountable keys hold at least one third of the unslashed active stake at `x`.
 Otherwise the runs show evidence about the hash (`HashEvidence`), so no theorem assumes that the hash is injective.
 The evidence is what two searches find among the objects of the runs.
 `findMessageCollision` returns two different inputs of the SHA-256 node hash with one digest, read in the roots of the headers of the runs.
@@ -3394,8 +3418,9 @@ The evidence is what two searches find among the objects of the runs.
 `hashEvidence_iff` says that the searches find something exactly when such inputs exist or such an object exists.
 `findZeroRoot_valid` and `findZeroRoot_eq_none_iff` show that the zero search returns only such an object, and fails on runs that have none.
 The drift of a tail is the largest over its states up to one epoch past the later finalized epoch.
-At a state, it charges twice the stake at `x` that the state no longer supports, outside the keys slashed by then.
-It charges once the recent stake of the state that `x` did not hold, and twice the stake active at the previous epoch of the state but not at its current epoch.
+At a state, it charges twice the unslashed stake at `x` that the state no longer supports, outside the keys slashed by then.
+It charges once the recent stake of the state that the unslashed keys at `x` did not hold.
+It charges twice the recent stake that is not active at the current epoch of the state.
 It is observed, not bounded in closed form.
 The theorems need at least one slot per epoch, a buffer of roots of four epochs and more than `MIN_SEED_LOOKAHEAD + 2` epochs of RANDAO mixes.
 Each run also needs an active stake above one and a half increments at epoch calls after epoch 1 through one epoch past the target horizon (`EnoughStake run high`).
@@ -3750,6 +3775,10 @@ The source leaves several cases open: a block hash with a bound, an empty topic 
 The module header gives the choice for each, and follows the official fixtures where they decide.
 A log with fewer topics than the filter has positions does not match, even when each extra position takes any topic (`Filter.selects_eq_false_of_length_lt`).
 No fixture filter ends with a position that takes any topic, and no text of the source decides the case.
+
+The account queries of [`state.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth/state.yaml) read the state after the block that their parameter names, `latest` by default (`Execution/Rpc/Account.lean`).
+`eth_getStorageValues` gives, for each key of each address of its request, the word that `eth_getStorageAt` gives for the same block (`storageValues_agree`).
+An address with no account has balance and nonce zero and empty code (`balance_of_none`, `nonce_of_none`, `code_of_none`), as the fixtures expect, though no text states it.
 
 The Python suite replays the official test chain into a view and answers the official fixtures of the methods that EthLib serves.
 That chain mines its blocks before the merge with a zero mix hash and a zero nonce, so the suite runs the transition without the proof-of-work check.

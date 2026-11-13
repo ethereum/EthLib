@@ -8,6 +8,7 @@ public import EthLib.Execution.Proofs.Transactions.Codes
 public import EthLib.Execution.Proofs.Transactions.Deletion
 public import EthLib.Execution.Proofs.Transactions.Envelope
 public import EthLib.Execution.Proofs.Transactions.Failed
+public import EthLib.Execution.Proofs.Transactions.Funded
 public import EthLib.Execution.Proofs.Transactions.Inclusion
 public import EthLib.Execution.Proofs.Transactions.LogsPaid
 public import EthLib.Execution.Proofs.Transactions.Network
