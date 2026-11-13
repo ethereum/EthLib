@@ -19,7 +19,7 @@ It then gives the validator credentials that name the address of the change.
 
 A validator can withdraw its whole balance exactly when its credentials, epoch and balance allow it.
 
-Its credentials name an address when their first byte is `0x01`, or `0x02` from Electra.
+Its credentials name an address exactly when their first byte is `0x01`, or `0x02` from Electra.
 
 Before Electra, a validator with any other first byte is neither fully nor partially withdrawable.
 
@@ -1288,8 +1288,10 @@ theorem isFullyWithdrawableValidator_eq_true_iff {fork : Base.Fork} {validator :
 
 /-- Whether the credentials of a validator name an address depends on their first byte and the fork.
 
-The byte `0x01` names one before and after Electra, and the byte `0x02` only from Electra. -/
-theorem hasWithdrawalAddress_eq_true_iff {fork : Base.Fork} {validator : Validator} :
+The byte `0x01` names one before and after Electra, and the byte `0x02` only from Electra.
+
+No other byte names one. -/
+theorem hasWithdrawalAddress_eq_true_iff {validator : Validator} :
     hasWithdrawalAddress fork validator = true ↔
       validator.withdrawalCredentials[0] = 0x01 ∨
         (.pectra ≤ fork ∧ validator.withdrawalCredentials[0] = 0x02) := by
