@@ -9,7 +9,9 @@ public import EthLib.Consensus.Proofs.Transition.RunKept
 
 In a reachable store, each block state is at or after the anchor state.
 
-So each known block is at or after the anchor block, when the anchor block is not after its state.
+So each known block is at or after the anchor block.
+
+This needs the anchor block not to be after the anchor state.
 
 The walk back from a block to an earlier slot passes through blocks whose states form a run.
 
@@ -17,9 +19,11 @@ So the state of the ancestor that the walk reaches runs on to the state of the b
 
 With one setting of the signature checks, the state of a checkpoint also runs on.
 
-It runs to the state of each block whose ancestor at the start of the epoch is the checkpoint block.
+It runs to the state of each block that has the checkpoint block as its ancestor.
 
-That block must be at or after that start.
+That ancestor is taken at the start of the checkpoint epoch.
+
+The block must be at or after that start.
 -/
 
 @[expose] public section
@@ -130,7 +134,11 @@ theorem Store.Reachable.runKept_of_getAncestor
         subst same
         simp [notLower, throw, throwThe, MonadExceptOf.throw] at walk
 
-/-- A walk back that moves ends at the parent of a block on the walk, above the slot. -/
+/-- A walk back stays at a block at or below the slot.
+
+Otherwise it ends at the parent of a block above the slot.
+
+The walk to the slot of that block reaches it. -/
 private theorem Store.getAncestor_last {node ancestor : ForkChoiceNode} {slot : Slot}
     {block : BeaconBlock preset fork} (found : store.blocks[node.root]? = some block)
     (walk : store.getAncestor node slot = .ok ancestor) :
@@ -184,7 +192,7 @@ private theorem Store.getAncestor_last {node ancestor : ForkChoiceNode} {slot : 
         subst same
         simp [notLower, throw, throwThe, MonadExceptOf.throw] at walk
 
-/-- In a store with one setting of the checks, the state of a checkpoint runs on to a block state.
+/-- In a store built with one setting of the checks, a checkpoint state runs on to a block state.
 
 The checkpoint block must be the ancestor of that block at the start of the epoch.
 

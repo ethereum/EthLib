@@ -25,7 +25,9 @@ The run stays within one fork, as the states of a store do.
 
 Slots processed to a later slot pass through each slot between.
 
-So a block at or after a slot runs on from the state at that slot, under one setting of the checks.
+So the state before a block, processed to a slot at or before it, runs on to the state after it.
+
+Both use one setting of the signature checks.
 -/
 
 @[expose] public section
@@ -118,7 +120,7 @@ theorem runKept_stateTransition {signed : SignedBeaconBlock preset fork} {valida
   obtain ⟨advanced, slotsOk, -, -, blockOk, -⟩ := stateTransition_ok computed
   exact (runKept_processSlots slotsOk).trans (runKept_processBlock blockOk)
 
-/-- Some count of slots followed by more slots splits into the two counts. -/
+/-- Advancing by a sum of slot counts advances by the first count, then by the second. -/
 private theorem advanceSlots_add :
     ∀ (first : Nat) {second : Nat} {state after : BeaconState preset fork},
       advanceSlots config checks (first + second) state = .ok after →
@@ -151,7 +153,9 @@ theorem processSlots_split {middle slot : Slot} (low : state.slot < middle)
     omega)
   exact ⟨mid, ⟨(), low, midOk⟩, (), midSlot ▸ high, midSlot ▸ restOk⟩
 
-/-- A block at or after a slot runs on from the state at that slot.
+/-- Take the state before a block, with its slots processed to a slot at or before the block.
+
+That state runs on to the state after the block.
 
 The state at that slot and the block use the same setting of the signature checks. -/
 theorem runKept_of_processSlots_of_stateTransition {middle : Slot}
