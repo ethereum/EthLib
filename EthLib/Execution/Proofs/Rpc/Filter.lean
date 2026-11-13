@@ -17,6 +17,8 @@ It lies between the lowest block that the node holds and the head.
 
 A number bound above the head is an invalid range, whatever the other bound.
 
+Any bounds in order between the lowest block and the head read blocks, even two equal bounds.
+
 In a valid view, take a canonical block after the lowest.
 
 The Bloom filter of its header covers the logs of its receipts.
@@ -192,6 +194,31 @@ theorem filterBlocks_range {v : ChainView} {fromBlock toBlock : Option BlockPara
         · simp only [hh, hl, hp, ite_false, pure, Except.pure] at h
           cases h
           exact ⟨first, last, h1, h2, by omega, by omega, by omega, rfl⟩
+
+/-- A range reads blocks exactly when its bounds are in order between the lowest block and the head.
+
+It then reads the canonical blocks between its two bounds.
+
+So the two bounds of a range may be the same block, and the last bound may be the head. -/
+theorem filterBlocks_range_eq_ok_iff {v : ChainView} {fromBlock toBlock : Option BlockParam}
+    {blocks : List BlockRecord} :
+    v.filterBlocks (.range fromBlock toBlock) = .ok blocks ↔
+      ∃ first last, v.boundNumber fromBlock = .ok first ∧ v.boundNumber toBlock = .ok last ∧
+        v.lowest.block.header.number ≤ first ∧ first ≤ last ∧
+        last ≤ v.head.block.header.number ∧
+        blocks = v.canonical.filter fun r =>
+          first ≤ r.block.header.number && r.block.header.number ≤ last := by
+  refine ⟨filterBlocks_range, ?_⟩
+  rintro ⟨first, last, h1, h2, hp, hl, hh, rfl⟩
+  have hA : ∀ {p : Option BlockParam} {n : Nat}, v.boundNumber p = .ok n →
+      n ≤ v.head.block.header.number → v.aboveHead p = false := by
+    intro p n hb hn
+    rcases p with _ | ⟨_ | _ | _⟩ <;> simp_all [aboveHead, boundNumber]
+  have hA1 := hA h1 (by omega)
+  have hA2 := hA h2 hh
+  unfold filterBlocks
+  simp [hA1, hA2, h1, h2, Nat.not_lt.mpr hh, Nat.not_lt.mpr hl, Nat.not_lt.mpr hp, bind,
+    Except.bind, pure, Except.pure]
 
 /-- A block hash reads the one block of that hash that the node holds. -/
 theorem filterBlocks_hash {v : ChainView} {hash : Hash32} {blocks : List BlockRecord}
