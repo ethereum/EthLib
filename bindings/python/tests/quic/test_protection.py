@@ -97,12 +97,11 @@ def test_initial_requires_aes() -> None:
     packet = quic.protect(AES, secret, 0, 9, header, bytes(3))
     assert quic.unprotect(AES, secret, 0, 9, packet) == (header, bytes(3))
     # An Initial with three PADDING bytes, sealed by ChaCha20-Poly1305 under these keys.
-    # It authenticates, so the suite check reports an authenticated-header error.
+    # It authenticates, and the suite check then rejects it.
     forbidden = bytes.fromhex("c700000001000000148005373807da97a14899e58ec96d558d14903ddc")
-    message = "EthLib.Networking.Quic.Protection.Error.authenticatedHeader"
-    with raises(quic.QuicProtectionError, message) as info:
+    with raises(quic.QuicProtectionError, "EthLib.Networking.Quic.Protection.Error.header") as info:
         quic.unprotect(CHACHA, secret, 0, 9, forbidden)
-    assert info.value.code == 8
+    assert info.value.code == 1
     # A bad tag still fails authentication before the suite check.
     corrupted = forbidden[:-1] + bytes([forbidden[-1] ^ 1])
     with raises(
@@ -115,13 +114,13 @@ def test_initial_requires_aes() -> None:
 
 def test_reserved_bits_fail_after_authentication() -> None:
     # A short header with a reserved bit set, sealed directly (RFC 9001 §§5.3, 5.4.3).
-    # Authentication succeeds, so the reserved bit is reported, as RFC 9000 §17.3.1 requires.
+    # Authentication succeeds, so the reserved bit is a connection error (RFC 9000 §17.3.1).
     key, iv, hp = quic.packet_keys(AES, bytes(32))
     header = b"\x48\x00"
     sealed = header + aes.gcm_encrypt(key, iv, bytes(3), header)
     mask = aes.encrypt_block(hp, sealed[5:21])
     packet = bytes([sealed[0] ^ (mask[0] & 0x1F), sealed[1] ^ mask[1]]) + sealed[2:]
-    message = "EthLib.Networking.Quic.Protection.Error.authenticatedHeader"
+    message = "EthLib.Networking.Quic.Protection.Error.reservedBits"
     with raises(quic.QuicProtectionError, message) as info:
         quic.unprotect(AES, bytes(32), 0, 1, packet)
     assert info.value.code == 8

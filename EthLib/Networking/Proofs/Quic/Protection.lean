@@ -201,6 +201,22 @@ theorem encryptPayload_sizes (suite : CipherSuite) (keys : PacketKeys suite)
       obtain ⟨rfl, rfl⟩ := h
       exact ⟨ChaCha20Poly1305.encrypt_size _ _ _ _ _ _ he, size_packBytes _⟩
 
+/-- A header that passes the header checks has zero reserved bits. -/
+theorem checkReservedBits_of_checkHeader {suite : CipherSuite} {header : ByteArray}
+    {protectedLength : Nat} (h : checkHeader suite header protectedLength = .ok ()) :
+    checkReservedBits header = .ok () := by
+  have ha : checkAuthenticatedHeader header = .ok () := by
+    cases hc : checkAuthenticatedHeader header with
+    | error e => simp [checkHeader, hc, bind, Except.bind] at h
+    | ok u => rfl
+  unfold checkAuthenticatedHeader at ha
+  unfold checkReservedBits
+  split
+  · rename_i hs
+    simp only [hs, ↓reduceDIte, ensure_ok_iff] at ha
+    exact ensure_ok_iff.mpr (Or.inr ha.2)
+  · rfl
+
 /-- The whole protected packet returns its header and payload when number reconstruction is exact.
 
 RFC 9001 §5.5 allows authentication to fail when a delayed packet reconstructs to another number.
@@ -286,7 +302,7 @@ theorem unprotect_protect (suite : CipherSuite) (keys : PacketKeys suite)
             rw [hn', hreconstruct]
             dsimp only
             rw [decryptPayload_encryptPayload suite keys number header plaintext ciphertext tag he]
-            rw [htext, htag, hcheck]
+            rw [htext, htag, checkReservedBits_of_checkHeader hcheck, hcheck]
             rfl
 
 /-- An error map keeps success and its value. -/
@@ -294,7 +310,7 @@ private theorem mapError_eq_ok {ε ε' α : Type} (f : ε → ε') (x : Except �
     x.mapError f = .ok a ↔ x = .ok a := by
   cases x <;> simp [Except.mapError]
 
-/-- An AEAD failure is the result, before any check of the recovered header, RFC 9000 §17.2. -/
+/-- An AEAD failure is the result, before the checks of the authenticated header, RFC 9000 §17.2. -/
 theorem unprotect_eq_error_of_decryptPayload (suite : CipherSuite) (keys : PacketKeys suite)
     (expected offset : Nat) (packet : ByteArray) (recovered : Unmasked) (number : PacketNumber)
     (error : Error) (hr : removeHeaderProtection suite keys.hp offset packet = .ok recovered)
@@ -318,21 +334,134 @@ theorem unprotect_ok_iff (suite : CipherSuite) (keys : PacketKeys suite)
         reconstructNumber recovered.width recovered.truncatedNumber expected = .ok number ∧
         decryptPayload suite keys number recovered.header recovered.ciphertext recovered.tag =
           .ok plaintext ∧
+        checkReservedBits recovered.header = .ok () ∧
         checkHeader suite recovered.header (recovered.ciphertext.size + recovered.tag.size) =
           .ok () ∧
         recovered.header = header := by
   simp only [unprotect, bind_ok_iff, mapError_eq_ok]
   constructor
-  · rintro ⟨recovered, hr, number, hn, output, ho, u, hu, hf⟩
+  · rintro ⟨recovered, hr, number, hn, output, ho, u, hres, v, hu, hf⟩
     have hp : (recovered.header, output) = (header, plaintext) := Except.ok.inj hf
     obtain ⟨hh, hp⟩ := Prod.mk.inj hp
-    exact ⟨recovered, number, hr, hn, hp ▸ ho, (Subsingleton.elim u ()) ▸ hu, hh⟩
-  · rintro ⟨recovered, number, hr, hn, ho, hu, hh⟩
-    exact ⟨recovered, hr, number, hn, plaintext, ho, (), hu, by simp [hh]; rfl⟩
+    exact ⟨recovered, number, hr, hn, hp ▸ ho, (Subsingleton.elim u ()) ▸ hres,
+      (Subsingleton.elim v ()) ▸ hu, hh⟩
+  · rintro ⟨recovered, number, hr, hn, ho, hres, hu, hh⟩
+    exact ⟨recovered, hr, number, hn, plaintext, ho, (), hres, (), hu, by simp [hh]; rfl⟩
 
 /-- A sample needs 20 bytes from the packet-number offset, RFC 9001 §5.4.2. -/
 theorem sample_eq_error_of_short (packet : ByteArray) (offset : Nat)
     (h : packet.size < offset + 20) : sample packet offset = .error .sample := by
   simp [sample, show ¬offset + 4 + 16 ≤ packet.size by omega]
+
+/-- An error map can only return a mapped error. -/
+private theorem mapError_eq_error {ε ε' α : Type} {f : ε → ε'} {x : Except ε α} {e : ε'}
+    (h : x.mapError f = .error e) : ∃ e', e = f e' := by
+  cases x with
+  | error a =>
+    simp only [Except.mapError, Except.error.injEq] at h
+    exact ⟨a, h.symm⟩
+  | ok a => simp [Except.mapError] at h
+
+private theorem ensure_eq_error {ε : Type} {c : Prop} [Decidable c] {e e' : ε}
+    (h : ensure c e = .error e') : e' = e := by
+  unfold ensure at h
+  split at h <;> simp_all
+
+private theorem removeHeaderProtection_ne (suite : CipherSuite)
+    (hp : Vector UInt8 suite.keyLength) (offset : Nat) (packet : ByteArray) :
+    removeHeaderProtection suite hp offset packet ≠ .error .reservedBits := by
+  intro h
+  unfold removeHeaderProtection at h
+  simp only [bind, Except.bind, pure, Except.pure] at h
+  split at h
+  · rename_i err heq
+    have := ensure_eq_error heq
+    simp_all
+  · split at h
+    · rename_i err heq
+      unfold sample at heq
+      split at heq <;> simp_all
+    · split at h
+      · split at h
+        · rename_i err heq
+          have := ensure_eq_error heq
+          simp_all
+        · simp at h
+      · cases h
+
+private theorem reconstructNumber_ne (width : Packet.PacketNumberLength)
+    (truncated expected : Nat) :
+    reconstructNumber width truncated expected ≠ .error .reservedBits := by
+  intro h
+  unfold reconstructNumber at h
+  cases hd : Packet.decodePacketNumber width truncated expected <;>
+    simp only [hd, bind, Except.bind, Except.mapError, pure, Except.pure] at h
+  · cases h
+  · split at h
+    · cases h
+    · cases h
+
+private theorem decryptPayload_ne (suite : CipherSuite) (keys : PacketKeys suite)
+    (number : PacketNumber) (header ciphertext tag : ByteArray) :
+    decryptPayload suite keys number header ciphertext tag ≠ .error .reservedBits := by
+  intro h
+  unfold decryptPayload at h
+  split at h
+  · obtain ⟨e, he⟩ := mapError_eq_error h
+    cases he
+  · split at h
+    · obtain ⟨e, he⟩ := mapError_eq_error h
+      cases he
+    · cases h
+
+/-- A reserved-bit error comes only from a packet that authenticates, RFC 9000 §§17.2, 17.3.1.
+
+So a caller can treat it as a connection error without acting on unauthenticated bytes. -/
+theorem unprotect_eq_reservedBits_iff (suite : CipherSuite) (keys : PacketKeys suite)
+    (expected offset : Nat) (packet : ByteArray) :
+    unprotect suite keys expected offset packet = .error .reservedBits ↔
+      ∃ recovered number plaintext,
+        removeHeaderProtection suite keys.hp offset packet = .ok recovered ∧
+        reconstructNumber recovered.width recovered.truncatedNumber expected = .ok number ∧
+        decryptPayload suite keys number recovered.header recovered.ciphertext recovered.tag =
+          .ok plaintext ∧
+        checkReservedBits recovered.header = .error .reservedBits := by
+  constructor
+  · intro h
+    unfold unprotect at h
+    cases hr : removeHeaderProtection suite keys.hp offset packet with
+    | error e =>
+      simp only [hr, bind, Except.bind] at h
+      cases h
+      exact absurd hr (removeHeaderProtection_ne _ _ _ _)
+    | ok recovered =>
+      simp only [hr, bind, Except.bind] at h
+      cases hn : reconstructNumber recovered.width recovered.truncatedNumber expected with
+      | error e =>
+        simp only [hn] at h
+        cases h
+        exact absurd hn (reconstructNumber_ne _ _ _)
+      | ok number =>
+        simp only [hn] at h
+        cases hd : decryptPayload suite keys number recovered.header recovered.ciphertext
+            recovered.tag with
+        | error e =>
+          simp only [hd] at h
+          cases h
+          exact absurd hd (decryptPayload_ne _ _ _ _ _ _)
+        | ok plaintext =>
+          simp only [hd] at h
+          cases hc : checkReservedBits recovered.header with
+          | error e =>
+            simp only [hc] at h
+            cases h
+            exact ⟨recovered, number, plaintext, rfl, hn, hd, hc⟩
+          | ok u =>
+            simp only [hc] at h
+            cases hh : checkHeader suite recovered.header
+                (recovered.ciphertext.size + recovered.tag.size) <;>
+              simp [hh, Except.mapError, pure, Except.pure] at h
+  · rintro ⟨recovered, number, plaintext, hr, hn, hd, hc⟩
+    simp only [unprotect, bind, Except.bind, hr, hn, hd, hc]
 
 end EthLib.Networking.Quic.Protection

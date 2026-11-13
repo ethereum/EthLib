@@ -11325,7 +11325,7 @@
       {"constructor": "aes", "code": 5},
       {"constructor": "chacha", "code": 6},
       {"constructor": "connectionId", "code": 7},
-      {"constructor": "authenticatedHeader", "code": 8}]}],
+      {"constructor": "reservedBits", "code": 8}]}],
    "error_class": "QuicProtectionError",
    "docstring":
    "Protect a QUIC v1 header and payload using a SHA-256 traffic secret, RFC 9001 §§5.1 to 5.4."},
@@ -11345,7 +11345,7 @@
       {"constructor": "aes", "code": 5},
       {"constructor": "chacha", "code": 6},
       {"constructor": "connectionId", "code": 7},
-      {"constructor": "authenticatedHeader", "code": 8}]}],
+      {"constructor": "reservedBits", "code": 8}]}],
    "error_class": "QuicProtectionError",
    "docstring":
    "Authenticate one isolated QUIC v1 packet, RFC 9001 §§5.3 to 5.4.\n\n`expected` is zero initially, or one greater than the largest authenticated packet number."},
@@ -11364,7 +11364,7 @@
       {"constructor": "aes", "code": 5},
       {"constructor": "chacha", "code": 6},
       {"constructor": "connectionId", "code": 7},
-      {"constructor": "authenticatedHeader", "code": 8}]}],
+      {"constructor": "reservedBits", "code": 8}]}],
    "error_class": "QuicProtectionError",
    "docstring":
    "Compute a QUIC v1 Retry tag from the original destination ID and untagged Retry, RFC 9001 §5.8."},

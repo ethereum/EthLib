@@ -194,7 +194,7 @@ class QuicError(EthLibError, ValueError):
 
 
 class QuicProtectionError(EthLibError, ValueError):
-    """A QUIC packet or Retry fails a header, sample, number, tag, AEAD or connection-ID check."""
+    """A QUIC packet or Retry fails a check; code 8 is a reserved bit in an authenticated packet."""
 
 
 class QuicVarintError(EthLibError, ValueError):

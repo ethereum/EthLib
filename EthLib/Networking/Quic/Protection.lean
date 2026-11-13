@@ -33,7 +33,7 @@ open EthLib.Base EthLib.Cryptography
 /-- A full packet number, a QUIC integer below `2^62` (RFC 9000 §12.3). -/
 abbrev PacketNumber := Varint
 
-/-- Failures of packet protection and Retry integrity: header, sample, number, tag, AEAD or ID. -/
+/-- Failures of packet protection and Retry integrity, reserved bits after AEAD included. -/
 inductive Error where
   | header
   | sample
@@ -42,8 +42,8 @@ inductive Error where
   | aes (reason : Aes.Gcm.Error)
   | chacha (reason : ChaCha20Poly1305.ChaCha20Poly1305Error)
   | connectionId
-  /-- The payload authenticated, but its header breaks the format, RFC 9000 §17.2. -/
-  | authenticatedHeader
+  /-- The payload authenticated, but a reserved bit is set, RFC 9000 §§17.2, 17.3.1. -/
+  | reservedBits
   deriving DecidableEq, Repr
 
 /-- Stable codes for packet-protection failures at the Python boundary. -/
@@ -55,7 +55,7 @@ def Error.code : Error → UInt32
   | .aes _ => 5
   | .chacha _ => 6
   | .connectionId => 7
-  | .authenticatedHeader => 8
+  | .reservedBits => 8
 
 /-- XOR the IV with the left-zero-padded, network-order packet number, RFC 9001 §5.3. -/
 def nonce (iv : Vector UInt8 12) (number : PacketNumber) : Vector UInt8 12 :=
@@ -161,6 +161,16 @@ def checkAuthenticatedHeader (header : ByteArray) : Except Error Unit :=
     ensure (first &&& 0x40 != 0 ∧ first &&& reserved = 0) .header
   else .error .header
 
+/-- Reject nonzero reserved bits in an authenticated version 1 header, RFC 9000 §§17.2, 17.3.1.
+
+A header without the fixed bit is not a version 1 packet, and the header checks discard it. -/
+def checkReservedBits (header : ByteArray) : Except Error Unit :=
+  if h : 0 < header.size then
+    let first := header[0]
+    let reserved := if first &&& 0x80 != 0 then 0x0c else 0x18
+    ensure (first &&& 0x40 = 0 ∨ first &&& reserved = 0) .reservedBits
+  else .ok ()
+
 /-- Initial packets always use AES-128-GCM, independently of TLS negotiation, RFC 9001 §5. -/
 def checkSuite (suite : CipherSuite) : Packet.Header → Except Error Unit
   | .initial .. => ensure (suite = .aes128GcmSha256) .header
@@ -221,17 +231,18 @@ The caller supplies the packet-number offset from the clear header fields and co
 
 The expected number is one greater than the largest authenticated number, or zero initially.
 
-A header that fails its checks after authentication gives a separate error.
+Nonzero reserved bits in an authenticated header give their own error, before the other checks.
 
-RFC 9000 §17.2 makes nonzero reserved bits there a connection error, not a discard. -/
+RFC 9000 §§17.2 and 17.3.1 make them a connection error, while the other failures are discards. -/
 def unprotect (suite : CipherSuite) (keys : PacketKeys suite) (expected : Nat)
     (offset : Nat) (packet : ByteArray) : Except Error (ByteArray × ByteArray) := do
   let recovered ← removeHeaderProtection suite keys.hp offset packet
   let number ← reconstructNumber recovered.width recovered.truncatedNumber expected
   let plaintext ← decryptPayload suite keys number recovered.header
     recovered.ciphertext recovered.tag
+  checkReservedBits recovered.header
   (checkHeader suite recovered.header (recovered.ciphertext.size + recovered.tag.size)).mapError
-    fun _ => .authenticatedHeader
+    fun _ => .header
   return (recovered.header, plaintext)
 
 /-- The fixed QUIC v1 Retry key, RFC 9001 §5.8. -/
