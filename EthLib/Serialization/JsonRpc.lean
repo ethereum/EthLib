@@ -29,6 +29,10 @@ A caller turns that reason into its own error, such as an invalid parameter of t
 
 The writers write the canonical form: lowercase hex, and numbers without leading zeros.
 
+A failed request answers with an error object of JSON-RPC 2.0: a code, a message and optional data.
+
+Each API keeps its own table of codes and messages.
+
 [v3]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/cancun.md#specification
 [types]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/schemas/base-types.yaml
 -/
@@ -150,5 +154,60 @@ def listJson {α : Type} (f : α → Json) (items : List α) : Json := .arr (ite
 /-- A number as a quantity: `0x`, then its hex digits without leading zeros. -/
 def quantityJson (n : Nat) : Json :=
   .str ("0x" ++ String.ofList (Nat.toDigits 16 n))
+
+/-! ## The error object -/
+
+/-- An integer: a number that Lean holds with no decimal places, such as `-32602` but not `1.0`. -/
+def integer (what : String) : Json → Read Int
+  | .num ⟨m, 0⟩ => pure m
+  | _ => reject s!"{what}: not an integer"
+
+/-- A JSON string. -/
+def string (what : String) : Json → Read String
+  | .str s => pure s
+  | _ => reject s!"{what}: not a string"
+
+/-- The error object of a JSON-RPC response.
+
+It holds an integer code, a message, and optional data.
+
+Section 5.1 of [JSON-RPC 2.0][rpc] defines it.
+
+[rpc]: https://www.jsonrpc.org/specification#error_object -/
+structure RpcError where
+  /-- The code: the kind of the error. -/
+  code : Int
+  /-- A short description of the error. -/
+  message : String
+  /-- More about the error, absent when the error has nothing to add. -/
+  data : Option Json := none
+
+/-- The error of invalid parameters, code `-32602`, with the reason as its data.
+
+The code and the message are those of section 5.1 of [JSON-RPC 2.0][rpc].
+
+[rpc]: https://www.jsonrpc.org/specification#error_object -/
+def RpcError.invalidParams (reason : String) : RpcError :=
+  { code := -32602, message := "Invalid params", data := some (.str reason) }
+
+/-- The error object as JSON: the code, the message, and the data when it has some. -/
+def rpcErrorJson (e : RpcError) : Json :=
+  Json.mkObj ([("code", .num (.fromInt e.code)), ("message", .str e.message)] ++
+    match e.data with
+    | some d => [("data", d)]
+    | none => [])
+
+/-- An error object: a code and a message, and data or not, with no other member.
+
+A member `data` whose value is `null` is data, the JSON `null`. -/
+def rpcErrorOfJson : Json → Read RpcError
+  | .obj kvs => do
+    let members := kvs.toList
+    unless members.all fun (name, _) => name == "code" || name == "message" || name == "data" do
+      reject "error: a member other than code, message and data"
+    let code ← integer "code" (← field "error" members "code")
+    let message ← string "message" (← field "error" members "message")
+    return ⟨code, message, members.lookup "data"⟩
+  | _ => reject "error: not an object"
 
 end EthLib.Serialization.JsonRpc

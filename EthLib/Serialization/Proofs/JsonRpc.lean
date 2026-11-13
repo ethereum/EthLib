@@ -1130,4 +1130,57 @@ theorem lookup_of_mem {fs : List (String × Lean.Json)} {k : String} {v : Lean.J
       simp only [List.lookup, hb]
       exact ih hrest hm
 
+/-! ## The error object -/
+
+/-- The reader of error objects reads back the error object that the writer writes for any error.
+
+That holds for data of any value, the JSON `null` among them. -/
+theorem rpcErrorOfJson_json (e : RpcError) : rpcErrorOfJson (rpcErrorJson e) = .ok e := by
+  obtain ⟨c, m, d⟩ := e
+  cases d with
+  | none =>
+    obtain ⟨kvs, hobj, -, hmem, hd⟩ := toList_mkObj (pairs :=
+      [("code", .num (.fromInt c)), ("message", .str m)]) (by simp)
+    have hc := lookup_of_mem hd ((hmem _).mpr (by simp : ("code", Lean.Json.num (.fromInt c)) ∈
+      [("code", Lean.Json.num (.fromInt c)), ("message", Lean.Json.str m)]))
+    have hm := lookup_of_mem hd ((hmem _).mpr (by simp : ("message", Lean.Json.str m) ∈
+      [("code", Lean.Json.num (.fromInt c)), ("message", Lean.Json.str m)]))
+    have hdata : kvs.toList.lookup "data" = none := by
+      rw [List.lookup_eq_none_iff]
+      intro p hp
+      have := (hmem p).mp hp
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at this
+      rcases this with rfl | rfl <;> simp
+    have hall : (kvs.toList.all fun (name, _) =>
+        name == "code" || name == "message" || name == "data") = true := by
+      rw [List.all_eq_true]
+      intro p hp
+      have := (hmem p).mp hp
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at this
+      rcases this with rfl | rfl <;> simp
+    have hobj' : rpcErrorJson ⟨c, m, none⟩ = .obj kvs := hobj
+    rw [hobj']
+    simp only [rpcErrorOfJson, hall, field, hc, hm, hdata]
+    rfl
+  | some v =>
+    obtain ⟨kvs, hobj, -, hmem, hd⟩ := toList_mkObj (pairs :=
+      [("code", .num (.fromInt c)), ("message", .str m), ("data", v)]) (by simp)
+    have hc := lookup_of_mem hd ((hmem _).mpr (by simp : ("code", Lean.Json.num (.fromInt c)) ∈
+      [("code", Lean.Json.num (.fromInt c)), ("message", Lean.Json.str m), ("data", v)]))
+    have hm := lookup_of_mem hd ((hmem _).mpr (by simp : ("message", Lean.Json.str m) ∈
+      [("code", Lean.Json.num (.fromInt c)), ("message", Lean.Json.str m), ("data", v)]))
+    have hdata := lookup_of_mem hd ((hmem _).mpr (by simp : ("data", v) ∈
+      [("code", Lean.Json.num (.fromInt c)), ("message", Lean.Json.str m), ("data", v)]))
+    have hall : (kvs.toList.all fun (name, _) =>
+        name == "code" || name == "message" || name == "data") = true := by
+      rw [List.all_eq_true]
+      intro p hp
+      have := (hmem p).mp hp
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at this
+      rcases this with rfl | rfl | rfl <;> simp
+    have hobj' : rpcErrorJson ⟨c, m, some v⟩ = .obj kvs := hobj
+    rw [hobj']
+    simp only [rpcErrorOfJson, hall, field, hc, hm, hdata]
+    rfl
+
 end EthLib.Serialization.JsonRpc
