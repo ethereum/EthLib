@@ -28,7 +28,7 @@ The other exception is a held state on the source chain that hashes to the zero 
 
 Such a state leaves the latest block header unfilled, and its next slot records the stale root.
 
-The finalized checkpoint of the store is on the chain of its justified checkpoint in the same way.
+The store's finalized checkpoint is on its justified chain at the first slot of the finalized epoch.
 
 Otherwise the runs to the two held states of those checkpoints bound the accountable stake.
 
