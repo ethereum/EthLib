@@ -3390,6 +3390,19 @@ The methods write the object with the hash that the view keeps for the block, so
 The header of `pending` is `null` (`headerByNumber_pending`), and any other block parameter gives the header of the block that it resolves to, or `null` for none (`headerByNumber_of_ne`).
 In a valid view, the object of each block that the node holds is what the writer gives, so the theorems above apply to it (`Valid.headerJson_eq`).
 
+The block object has exactly the names of the header object of its fork and `size`, `uncles`, `transactions` and, from Shapella, `withdrawals` (`keys_blockJson`, `Proofs/Rpc/Block.lean`).
+No name comes twice (`nodup_headerNames_append_blockNames`).
+On each name of the header, the block object of a block holds what its header object holds (`getObjVal_blockJson`).
+The block object lists the transactions by their hashes, or by their objects when they are hydrated (`transactions_blockJson_false`, `transactions_blockJson_true`).
+The objects carry those hashes in the same order (`transactionHashes_of_transactionInfos`).
+Each list has one entry per transaction of the block (`length_transactionInfos`, `length_transactionHashes`), and the transaction count methods return that length by definition.
+These properties hold whenever the writer gives an object.
+The writer fails with `-32603` when the node cannot compute the RLP form of the block, the hash of an ommer or a transaction, or a sender in it.
+No theorem yet shows that it succeeds on the blocks of a valid view.
+For the tag `pending`, the header method answers `null`.
+The block and count methods read the pending block of the view instead, since only the header methods of [`block.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth/block.yaml) answer `null` for `pending`.
+The schema gives `size` only the title "Block size"; here it is the length of the RLP form of the block, which the fixtures pin.
+
 The Python suite replays the official test chain into a view and answers the official fixtures of the methods that EthLib serves.
 That chain mines its blocks before the merge with a zero mix hash and a zero nonce, so the suite runs the transition without the proof-of-work check.
 
