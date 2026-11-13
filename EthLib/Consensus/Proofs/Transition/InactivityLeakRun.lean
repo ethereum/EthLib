@@ -2,10 +2,11 @@ module
 
 public import EthLib.Consensus.Proofs.Transition.InactivityLeakBetween
 public import EthLib.Consensus.Proofs.Transition.InactivityLeakBound
+public import EthLib.Consensus.Proofs.Transition.InactivityLeakStake
 public import EthLib.Consensus.Proofs.Transition.InactivityLeakTrace
 
 /-!
-# Proofs: a run of a leak brings an absent validator to a threshold
+# Proofs: a run of a leak brings the absent validators to a threshold
 
 The trace bound of an inactivity leak takes four sequences of one validator as hypotheses.
 
@@ -23,7 +24,7 @@ Then slots that end no epoch, and blocks that credit nothing to the validator, l
 
 Each epoch leaks and does not raise the finalized epoch.
 
-So if finality advances, the run stops there, and the bound speaks of a shorter run.
+The bound for one validator assumes this over the whole run.
 
 While the effective balance of the validator is above the threshold, it is eligible.
 
@@ -36,6 +37,12 @@ The bound then only needs its balance not to rise.
 The run assumes that the largest effective balance of the validator stays fixed.
 
 A consolidation request can switch its credentials to compounding and raise that cap.
+
+The module then applies the run to every absent validator.
+
+Either the leak stops or finality advances during the run.
+
+Otherwise the voters hold two thirds of the active stake at its end.
 -/
 
 @[expose] public section
@@ -219,5 +226,134 @@ theorem effectiveBalance_le_of_leakRun (altair : .altair ≤ fork)
   obtain ⟨now, atNow, -, -⟩ := present epochs (Nat.le_refl _)
   refine ⟨now, atNow, ?_⟩
   simpa only [effectiveAt, atNow, Option.map_some, Option.getD_some] using bound
+
+/-- A run of a leak stops leaking, advances finality, or ends with two thirds for the voters.
+
+This holds from Altair.
+
+The run visits a state before each of its epoch transitions.
+
+The slot that leaves each such state ends an epoch, and leads to a second state.
+
+Steps that credit nothing to any absent validator then lead to the next visited state.
+
+Each absent validator keeps its own key and its own largest effective balance over the run.
+
+Each one is in the registry at the start, with its key and a balance at most a common limit.
+
+At the start its effective balance is a whole number of increments, and so is its cap.
+
+At the start its balance is at most its effective balance plus the upward band.
+
+Otherwise its effective balance is at least its cap.
+
+No pending deposit carries the key of one, and no pending consolidation targets one.
+
+While the effective balance of one is above the threshold, it is eligible and misses the target.
+
+In the final state, each active validator is a voter or an absent validator.
+
+The voters are meant to be the unslashed attesters of the target, but any list works.
+
+The voters need not be active, so their balance may count inactive validators.
+
+Twice the number of absent validators times the threshold is at most the balance of the voters.
+
+That balance is read in the final state.
+
+The threshold is a whole number of increments, and with an increment it exceeds the downward band.
+
+The run lasts at least the number of epochs of the trace bound, from that common limit.
+
+The score bias and the penalty quotient must be positive.
+
+The increment must be positive and at most the upward band, as on mainnet.
+
+The mixes must span more than the seed lookahead plus two epochs.
+
+The registry stays within its limit, up to the final state.
+
+The run stays within one fork.
+
+Then some visited state does not leak, or the finalized epoch rises in the slot that leaves it.
+
+Otherwise, in the final state, twice the active balance is at most three times that of the voters.
+
+On mainnet a run meets these hypotheses only for a threshold at least the ejection balance. -/
+theorem twoThirds_of_leakRun (altair : .altair ≤ fork)
+    (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    (bands : preset.IncrementWithinUpwardBand)
+    (biasPos : 0 < config.INACTIVITY_SCORE_BIAS.toNat)
+    (quotientPos : 0 < (parameters preset fork).INACTIVITY_PENALTY_QUOTIENT.toNat)
+    {states slotted : Nat → BeaconState preset fork} {epochs threshold start : Nat}
+    {voters : List ValidatorIndex} {absents : List Nat}
+    {keys : Nat → Cryptography.Bls.BLSPubkey} {largest : Nat → Gwei} {total voterTotal : Gwei}
+    (ends : ∀ t < epochs, ((states t).slot + 1) % preset.SLOTS_PER_EPOCH = 0)
+    (epochSlot : ∀ t < epochs, advanceSlot config checks (states t) = .ok (slotted t))
+    (quiet : ∀ j ∈ absents, ∀ t < epochs,
+      Relation.ReflTransGen (QuietStep config checks j (keys j)) (slotted t) (states (t + 1)))
+    (within : ∀ t ≤ epochs, (states t).RegistryWithinLimit)
+    (unnamed : ∀ j ∈ absents, ∀ t < epochs, ∀ electra : .pectra ≤ fork,
+      ∀ deposit ∈ ((states t).pendingDeposits electra).data, deposit.pubkey ≠ keys j)
+    (untargeted : ∀ t < epochs, ∀ electra : .pectra ≤ fork,
+      ∀ consolidation ∈ ((states t).pendingConsolidations electra).data,
+        consolidation.targetIndex.toNat ∉ absents)
+    (capped : ∀ j ∈ absents, ∀ t < epochs, ∀ validator,
+      (states t).validators.data[j]? = some validator →
+        withdrawalMaxEffectiveBalance preset fork validator = largest j)
+    (absent : ∀ j ∈ absents, ∀ t < epochs, ∀ validator,
+      (states t).validators.data[j]? = some validator →
+        threshold < validator.effectiveBalance.toNat →
+        isEligibleValidator (getPreviousEpoch (states t)) validator = .ok true ∧
+          ∀ flags, ((states t).previousEpochParticipation altair).data[j]? = some flags →
+            hasFlag flags TIMELY_TARGET_FLAG_INDEX = false)
+    (started : ∀ j ∈ absents, ∃ validator balance,
+      (states 0).validators.data[j]? = some validator ∧ validator.pubkey = keys j ∧
+      (states 0).balances.data[j]? = some balance ∧
+      validator.effectiveBalance % preset.EFFECTIVE_BALANCE_INCREMENT = 0 ∧
+      (balance.toNat ≤ validator.effectiveBalance.toNat + preset.upwardBand ∨
+        largest j ≤ validator.effectiveBalance) ∧
+      balance.toNat ≤ start)
+    (largestAligned : ∀ j ∈ absents, largest j % preset.EFFECTIVE_BALANCE_INCREMENT = 0)
+    (thresholdAligned : threshold % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0)
+    (wide : preset.downwardBand < threshold + preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
+    (active : getTotalActiveBalance (states epochs) = .ok total)
+    (voting : getTotalBalance (states epochs) voters = .ok voterTotal)
+    (covered : ∀ j (inside : j < (states epochs).validators.data.size),
+      isActiveValidator (states epochs).validators.data[j] (getCurrentEpoch (states epochs)) =
+        true → j.toUInt64 ∈ voters ∨ j ∈ absents)
+    (strong : 2 * absents.length * threshold ≤ voterTotal.toNat)
+    (long : leakEpochs (threshold + preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
+      config.INACTIVITY_SCORE_BIAS.toNat
+      (config.INACTIVITY_SCORE_BIAS.toNat *
+        (parameters preset fork).INACTIVITY_PENALTY_QUOTIENT.toNat)
+      (start + preset.downwardBand + 1 -
+        (threshold + preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) ≤ epochs) :
+    (∃ t < epochs, isInInactivityLeak (states t) ≠ .ok true ∨
+      (states t).finalizedCheckpoint.epoch < (slotted t).finalizedCheckpoint.epoch) ∨
+      2 * total.toNat ≤ 3 * voterTotal.toNat := by
+  by_cases stopped : ∃ t < epochs, isInInactivityLeak (states t) ≠ .ok true ∨
+      (states t).finalizedCheckpoint.epoch < (slotted t).finalizedCheckpoint.epoch
+  · exact .inl stopped
+  simp only [not_exists, not_and, not_or, ne_eq, not_not, UInt64.not_lt] at stopped
+  have leak : ∀ t < epochs, isInInactivityLeak (states t) = .ok true :=
+    fun t during => (stopped t during).1
+  have stalled : ∀ t < epochs,
+      (slotted t).finalizedCheckpoint.epoch ≤ (states t).finalizedCheckpoint.epoch :=
+    fun t during => (stopped t during).2
+  refine .inr (twoThirds_of_effectiveBalance_le (within epochs (Nat.le_refl _)) active voting
+    covered (fun j member inside => ?_) strong)
+  obtain ⟨validator, balance, found, keyed, held, startAligned, startAbove, bounded⟩ :=
+    started j member
+  obtain ⟨now, atNow, low⟩ := effectiveBalance_le_of_leakRun altair apart bands biasPos
+    quotientPos ends epochSlot (quiet j member) (fun t during => within t (Nat.le_of_lt during))
+    leak stalled (unnamed j member)
+    (fun t during electra consolidation listed same =>
+      untargeted t during electra consolidation listed (same ▸ member))
+    (capped j member) (absent j member) found keyed held startAligned (largestAligned j member)
+    thresholdAligned startAbove wide
+    (Nat.le_trans (leakEpochs_mono (by omega)) long)
+  rw [(Array.getElem?_eq_some_iff.mp atNow).2]
+  exact low
 
 end EthLib.Consensus
