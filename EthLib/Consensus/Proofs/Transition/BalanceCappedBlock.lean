@@ -97,7 +97,7 @@ def ExecutionRequests.NoneFrom (key : Cryptography.Bls.BLSPubkey)
 /-! ## Balances that do not fall -/
 
 /-- A fold keeps a property when each step of an item of the list keeps it. -/
-private theorem foldlM_ok_invariant_of_mem {α β ε : Type} {g : β → α → Except ε β}
+theorem foldlM_ok_invariant_of_mem {α β ε : Type} {g : β → α → Except ε β}
     (P : β → Prop) :
     ∀ {xs : List α}, (∀ b x b', x ∈ xs → P b → g b x = .ok b' → P b') →
       ∀ {b b' : β}, P b → xs.foldlM g b = .ok b' → P b'
@@ -608,6 +608,45 @@ private theorem still_processDepositRequest {electra : .pectra ≤ fork} {reques
     pure, Except.pure, Except.ok.injEq] at computed
   obtain ⟨_, _, rfl⟩ := computed
   exact Still.of_eq rfl rfl rfl index
+
+/-! ## The balance alone -/
+
+/-- A proposer slashing of another validator keeps the balance of this one from falling. -/
+theorem balanceRises_processProposerSlashing {slashing : ProposerSlashing}
+    (computed : processProposerSlashing config checks state slashing = .ok after) {index : Nat}
+    (other : slashing.signedHeader1.message.proposerIndex.toNat ≠ index) :
+    BalanceRises index state after :=
+  (rise_processProposerSlashing computed other).1
+
+/-- An attester slashing of other validators keeps the balance of this one from falling. -/
+theorem balanceRises_processAttesterSlashing {slashing : AttesterSlashing preset fork}
+    (computed : processAttesterSlashing config checks state slashing = .ok after) {index : Nat}
+    (other : ∀ slashed ∈ slashingIndices slashing, slashed.toNat ≠ index) :
+    BalanceRises index state after :=
+  (rise_processAttesterSlashing computed other).1
+
+/-- An attestation keeps every balance from falling. -/
+theorem balanceRises_processAttestation {attestation : Attestation preset fork}
+    {parentSlot : Slot}
+    (computed : processAttestation config checks state parentSlot attestation = .ok after)
+    (index : Nat) : BalanceRises index state after :=
+  (rise_processAttestation computed index).1
+
+/-- A deposit of a block keeps a balance of the registry from falling. -/
+theorem balanceRises_processDeposit {before : fork < .hegota} {deposit : Deposit}
+    (computed : processDeposit config checks before state deposit = .ok after) {index : Nat}
+    (inside : index < state.validators.data.size) : BalanceRises index state after :=
+  (rise_processDeposit computed inside).1
+
+/-- A consolidation request from another key keeps the balance of this validator. -/
+theorem balanceStays_processConsolidationRequest {electra : .pectra ≤ fork}
+    {request : ConsolidationRequest}
+    (computed : processConsolidationRequest config state electra request = .ok after)
+    {index : Nat} {validator : Validator} (found : state.validators.data[index]? = some validator)
+    (other : request.sourcePubkey ≠ validator.pubkey) : BalanceStays index state after := by
+  intro earlier atIndex
+  rw [(still_processConsolidationRequest computed found other).1]
+  exact atIndex
 
 /-! ## The steps of a block -/
 
