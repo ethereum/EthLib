@@ -2424,7 +2424,6 @@ The block must commit to the root of the state after it.
 The theorem shows that the envelope of that payload passes the checks of the block root and of the parent root against that state.
 It also shows that the envelope passes the checks of the builder, the mix, the gas limit, the block hash and the root of the requests.
 It shows that the payload builds on the latest block hash, and that the slot of the bid is the slot of the state.
-It assumes that the vectors whose length the preset sets have a positive length, as the root of the block needs.
 It rests on `BeaconBlock.hashTreeRoot_header`, which shows that a block has the root of its header.
 It also rests on `latestBlockHash_processBlock`, which shows that from Gloas the latest block hash after a block is the parent hash of the latest bid.
 `latestExecutionPayloadBid_processBlock` shows that from Gloas a block leaves its own bid as the latest bid.
@@ -2814,7 +2813,6 @@ A state that hashes to the zero root leaves the header of the latest block unfil
 So the next slot records the root of the header as it was.
 The first state must be at slot zero, or have its latest header at its own slot, as after a block, or record the root of its latest header at the slot before it.
 Genesis and every state that a block or a slot produces meet this, so a run may start at the state of a stored block.
-The theorem assumes that the vectors whose length the preset sets have a positive length, as the root of a block needs.
 `zeroPreimage_or_rootLinks_le_of_chainSteps` gives the `links` hypothesis of `RootsAbove.of_chainStep` for the last state of a run.
 It takes a map from roots to a preorder that orders the parent root of each block step between the first and the last state before the root of its block, as `rootLinks_cases_of_chainSteps` computes it.
 The map must also order the pairs of the first state and the first pair, and the result fails only on a zero preimage.
@@ -2831,7 +2829,12 @@ Along a run, the chain is the roots that the states of the run record (`ChainRoo
 `Run.finalized_le_currentJustified` then puts the finalized block at or before the current justified block, for a map from roots that orders the links of each state of the run, when the first state has the invariant and the finalized epoch starts after the first slot of the run.
 `Run.zeroPreimage_or_finalized_le_currentJustified` takes that order from `zeroPreimage_or_rootLinks_le_of_chainSteps`, so its only other case is a state between the first and the last state, by chain steps, that hashes to the zero root.
 Its order on block steps covers every path of chain steps between those states, not only the blocks of the run.
-This covers one chain; `accountable_safety` (`Consensus/Proofs/DirectSafety/Safety.lean`) treats two chains, and no theorem yet places the checkpoints of a fork-choice store.
+This covers one chain; `accountable_safety` (`Consensus/Proofs/DirectSafety/Safety.lean`) treats two chains.
+`Store.Reachable.chainRoots` (`Consensus/Proofs/ForkChoice/CheckpointBlocks.lean`) carries this agreement along the parents of each block of a reachable fork-choice store, where the chain of a block holds, at each slot, the root of its latest ancestor up to that slot.
+`Store.Reachable.getCheckpointBlock_of_blockState` reads from it that each checkpoint of the state of a block after the anchor epoch, before or after justification and finalization, has the checkpoint block of that block as root, and that the store knows it.
+`Store.Reachable.getCheckpointBlock_of_unrealizedJustification` gives the same for the unrealized justification of each block.
+`Store.Reachable.checkpoints_known` shows that each of the four checkpoints of the store is the anchor checkpoint or names a known block.
+These theorems have one other case, an anchor state that hashes to the zero root, and they do not tie together two checkpoints that come from the states of different blocks.
 
 Without a collision of header roots, the pairs of consecutive slots order the roots by ancestry.
 `RootsAbove.of_chainStep` then keeps each justified checkpoint below every root that the state records from its epoch on, which gives the source block of each recent link in the chain of its target block.

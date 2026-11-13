@@ -683,9 +683,7 @@ The finalized epoch must start after the first slot of the run.
 
 The first state needs the invariant of valid blocks, and the buffer must cover two epochs. -/
 theorem Run.zeroPreimage_or_finalized_le_currentJustified {β : Type*} [Preorder β]
-    {block : Root → β} [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat]
-    [NeZero preset.SYNC_COMMITTEE_SIZE.toNat] [NeZero preset.MAX_COMMITTEES_PER_SLOT.toNat]
-    [NeZero preset.PTC_SIZE.toNat] [NeZero preset.INCLUSION_LIST_COMMITTEE_SIZE.toNat]
+    {block : Root → β}
     (window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
     {first last : ForkedBeaconState preset} (holds : Invariant first.state)
     (run : Run config checks first last)
