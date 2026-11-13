@@ -4,6 +4,7 @@ public import EthLib.Consensus.Proofs.Transition.Trace
 public import EthLib.Consensus.Proofs.Transition.RegistryLifecycle
 public import EthLib.Consensus.Proofs.Transition.Genesis
 import EthLib.Consensus.Proofs.Transition.BalanceDrift
+import EthLib.Consensus.Proofs.Transition.Committees
 import EthLib.Consensus.Proofs.Transition.EpochPending
 import EthLib.Consensus.Proofs.Transition.Totality.EpochBeforeAltair
 
@@ -598,24 +599,9 @@ private theorem bls {signed : SignedBLSToExecutionChange}
   exact set found written (fun _ => UInt64.le_refl _)
 
 private theorem attestation {attestation : Attestation preset fork} {parentSlot : Slot}
-    (electra : .pectra ≤ fork)
     (ok : processAttestation config checks state parentSlot attestation = .ok after) :
-    WithdrawalKept state after := by
-  have same : after.validators = state.validators := by
-    unfold processAttestation at ok
-    rw [dite_eq_left (show .altair ≤ fork from Nat.le_trans (by decide) electra)] at ok
-    unfold processAttestationAltair at ok
-    simp only [bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
-      _, _, raised, raisedOk, final⟩ := ok
-    have flagged : ∀ (current : Bool) (p : EpochParticipation preset fork),
-        (setEpochParticipation state current p).validators = state.validators := by
-      intro current p; unfold setEpochParticipation; split <;> rfl
-    have before := (increaseBalance_validators raisedOk).trans (flagged _ _)
-    split at final
-    · rw [recordPaymentWeight_eq final]; exact before
-    · cases final; exact before
-  exact of_data (congrArg (·.data) same)
+    WithdrawalKept state after :=
+  of_data (congrArg (·.data) (processAttestation_registry ok).1)
 
 private theorem blockDeposit {before : fork < .hegota} {deposit : Deposit}
     (electra : .pectra ≤ fork)
@@ -962,7 +948,7 @@ private theorem block (early : fork < .glamsterdam)
     (registryLifecycle_processAttesterSlashing ok) (WithdrawalKept.attester ok)
     (frame_processAttesterSlashing ok).slot) p slashingsOk
   have att := fold (fun _ _ _ h ok => h.framed (SamePendingQueue.attestation electra ok)
-    (registryLifecycle_processAttestation ok) (WithdrawalKept.attestation electra ok)
+    (registryLifecycle_processAttestation ok) (WithdrawalKept.attestation ok)
     (frame_processAttestation ok).slot) a attestedOk
   exact tail (rest att)
 

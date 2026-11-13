@@ -1549,9 +1549,8 @@ theorem coverage_bls {fork : Fork} {s t : BeaconState preset fork}
     {signed : SignedBLSToExecutionChange}
     (ok : processBlsToExecutionChange config checks s signed = .ok t) :
     t.balances = s.balances := by
-  simp only [processBlsToExecutionChange, bind_ok_iff] at ok
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, set⟩ := ok
-  obtain ⟨_, rfl⟩ := setValidator_ok (liftAccessor_ok.mp set)
+  obtain ⟨_, _, _, _, _, set⟩ := processBlsToExecutionChange_ok ok
+  obtain ⟨_, rfl⟩ := setValidator_ok set
   rfl
 
 /-- A withdrawal request keeps the balances. -/
