@@ -34,7 +34,7 @@ The operations of a block hold every outstanding deposit, up to the most per blo
 
 They keep one balance for each validator.
 
-From Gloas an attestation weighs the payment of its slot by its attesters that had no flag before.
+From Gloas, an attestation weighs the payment of its slot by the balances of its new attesters.
 -/
 
 @[expose] public section
@@ -484,13 +484,13 @@ theorem recordPaymentWeight_of_noWeight {gloas : .glamsterdam ≤ fork} {data : 
 
 /-- From Gloas, the weight of a payment after one attester.
 
-The attester must have flags in both participation lists, else the index is out of range.
+The attester must have an entry in both participation lists, else the index is out of range.
 
 It adds its effective balance exactly when it had no flag before and has one after.
 
-The sum must then be below `2^64`, else it is an overflow.
+It must then be in the registry, and the sum must be below `2^64`, else it is an overflow.
 
-Otherwise the weight stays as it was, even when the attester gains a flag. -/
+An attester that had a flag before, or has none after, leaves the weight as it was. -/
 theorem addPaymentWeight_eq_ok_iff {before updated : EpochParticipation preset fork}
     {weight result : Gwei} {index : ValidatorIndex} :
     addPaymentWeight state before updated weight index = .ok result ↔
@@ -508,17 +508,17 @@ theorem addPaymentWeight_eq_ok_iff {before updated : EpochParticipation preset f
   simp only [Option.some.injEq, exists_and_left, exists_eq_left']
   by_cases zero : old = 0
   · subst zero
-    by_cases none : new = 0
-    · subst none
+    by_cases unflagged : new = 0
+    · subst unflagged
       simp [pure, Except.pure, eq_comm]
     · rcases found : state.validators.data[index.toNat]? with _ | validator <;>
-        simp [none, found, getValidator, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
+        simp [unflagged, found, getValidator, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
           addChecked_ok_iff]
   · simp [zero, pure, Except.pure, eq_comm]
 
 /-- From Gloas, an attester that already had a flag in the epoch adds no weight to a payment.
 
-That holds even when the attestation gives it a new flag. -/
+That holds even when the attester gains another flag. -/
 theorem addPaymentWeight_of_ne_zero {before updated : EpochParticipation preset fork}
     {weight : Gwei} {index : ValidatorIndex} {old new : ParticipationFlags}
     (oldAt : before.data[index.toNat]? = some old) (flagged : old ≠ 0)
@@ -526,7 +526,7 @@ theorem addPaymentWeight_of_ne_zero {before updated : EpochParticipation preset 
     addPaymentWeight state before updated weight index = .ok weight :=
   addPaymentWeight_eq_ok_iff.mpr ⟨old, new, oldAt, newAt, by simp [flagged]⟩
 
-/-- From Gloas, the attesters of an attestation add their effective balances to a weight.
+/-- From Gloas, when no attester fails, the attesters add their effective balances to a weight.
 
 Each adds its balance when it had no flag before and has one after, and nothing otherwise. -/
 theorem foldlM_addPaymentWeight {before updated : EpochParticipation preset fork} :
@@ -561,7 +561,7 @@ A new attester had no flag in the epoch before the attestation and has one after
 
 Only a vote for the block of its own slot weighs, and only a payment of a positive amount.
 
-The payment keeps its withdrawal. -/
+Only the weight of the payment changes. -/
 theorem recordPaymentWeight_weight {gloas : .glamsterdam ≤ fork} {data : AttestationData}
     {current : Bool} {before updated : EpochParticipation preset fork}
     {attesters : List ValidatorIndex} {sameSlot : Bool} {payment : BuilderPendingPayment}
