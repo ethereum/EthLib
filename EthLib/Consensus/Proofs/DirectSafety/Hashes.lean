@@ -195,6 +195,19 @@ private theorem path_append_stable {g a b : ForkedBeaconState preset}
     simpa only [Run.append, Run.checkpointPath, Run.headers, List.filter_append, empty,
       List.append_nil] using ih
 
+/-- Differing checkpoint paths put the shared state no later than the epoch's first slot. -/
+theorem _root_.EthLib.Consensus.Run.slot_le_of_checkpointPath_ne
+    {g x a b : ForkedBeaconState preset}
+    (shared : Run config checks g x) (left : Run config checks x a)
+    (right : Run config checks x b) (epoch : Epoch)
+    (differ : (shared.append left).checkpointPath epoch ≠
+      (shared.append right).checkpointPath epoch) :
+    x.state.slot.toNat ≤ epoch.toNat * preset.SLOTS_PER_EPOCH.toNat := by
+  by_contra later
+  have before := Nat.lt_of_not_ge later
+  exact differ ((path_append_stable shared left epoch before).trans
+    (path_append_stable shared right epoch before).symm)
+
 private inductive HeaderChain (objects : List (HashObject preset)) :
     List BeaconBlockHeader → BeaconBlockHeader → Prop where
   | genesis {header} (zero : header.slot = 0) :
