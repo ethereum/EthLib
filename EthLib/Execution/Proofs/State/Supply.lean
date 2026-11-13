@@ -151,6 +151,70 @@ theorem supply_update {tx tx' : TransactionState} {address : Address}
     supply_eq_sum d fun a ha => mem a (.inr (.inl (mem_addresses_of_balanceOf_ne_zero ha)))]
   exact sum_map_add_eq_of_eq_off h d (mem address (.inr (.inr rfl)))
 
+/-- The balances over a list of distinct addresses add up to at most the supply. -/
+private theorem sum_balanceOf_le_supply (tx : TransactionState) {xs : List Address}
+    (d : xs.Nodup) : (xs.map tx.balanceOf).sum ≤ tx.supply := by
+  have d' : (xs ++ tx.addresses.filter fun x => decide (x ∉ xs)).Nodup := by
+    refine List.nodup_append.mpr ⟨d, (nodup_eraseDups _).filter _, fun a ha b hb => ?_⟩
+    rintro rfl
+    simp only [List.mem_filter, decide_eq_true_eq] at hb
+    exact hb.2 ha
+  rw [supply_eq_sum d' fun a ha => ?_, List.map_append, List.sum_append]
+  · exact Nat.le_add_right _ _
+  · by_cases hmem : a ∈ xs
+    · exact List.mem_append_left _ hmem
+    · exact List.mem_append_right _
+        (List.mem_filter.mpr ⟨mem_addresses_of_balanceOf_ne_zero ha, decide_eq_true hmem⟩)
+
+/-- The balances of two distinct addresses add up to at most the supply. -/
+theorem balanceOf_add_balanceOf_le_supply (tx : TransactionState) {address other : Address}
+    (hne : address ≠ other) : tx.balanceOf address + tx.balanceOf other ≤ tx.supply := by
+  have := sum_balanceOf_le_supply tx (xs := [address, other]) (by simpa using hne)
+  simpa using this
+
+/-- The balance of one address is at most the supply. -/
+theorem balanceOf_le_supply (tx : TransactionState) (address : Address) :
+    tx.balanceOf address ≤ tx.supply := by
+  simpa using sum_balanceOf_le_supply tx (xs := [address]) (by simp)
+
+/-- A move of ether never overflows a balance when the supply is below `2^256`.
+
+Two distinct balances add up to at most the supply.
+
+A move from an account to itself gives back the amount it takes. -/
+theorem moveEther_ne_balanceOverflow {fork : Fork} {tx : TransactionState}
+    (fits : tx.supply < 2 ^ 256) (sender recipient : Address) (amount : U256)
+    (address : Address) :
+    tx.moveEther fork sender recipient amount ≠ .error (.balanceOverflow address) := by
+  intro h
+  by_cases hne : sender = recipient
+  · subst hne
+    obtain ⟨-, he⟩ := moveEther_self_eq_error.mp h
+    cases he
+  · rcases (moveEther_eq_error hne).mp h with ⟨-, he⟩ | ⟨hfunds, hover, -⟩
+    · cases he
+    · have hle : amount.toNat ≤ (tx.getAccount sender).balance.toNat := by
+        simpa [BitVec.lt_def] using hfunds
+      have := balanceOf_add_balanceOf_le_supply tx hne
+      unfold balanceOf at this
+      omega
+
+/-- A creation of ether never overflows a balance when the supply plus the amount fits.
+
+That sum must be below `2^256`. -/
+theorem createEther_ne_balanceOverflow {fork : Fork} {tx : TransactionState}
+    {recipient : Address} {amount : U256} (fits : tx.supply + amount.toNat < 2 ^ 256)
+    (address : Address) :
+    tx.createEther fork recipient amount ≠ .error (.balanceOverflow address) := by
+  intro h
+  have h := modifyState_eq_error.mp h
+  have := balanceOf_le_supply tx recipient
+  unfold balanceOf at this
+  unfold Account.credit at h
+  split at h
+  · cases h
+  · omega
+
 /-! ## The writes of one account -/
 
 /-- A change of one account by `f` changes the supply by the change of its balance.
