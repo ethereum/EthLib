@@ -15,8 +15,8 @@ Not yet released.
   An existing unbounded floor proof adapts as `fun call _ => oldEnough call`.
   Pass a target-epoch bound as the new `within` argument of `quorum_count`.
   Remove the `starts` argument from `accountable_safety` and `accountable_safety_justified`, but keep it for `accountable_justified_unique`.
-  Removing `starts` is an equivalent restatement under `conflict`, not a strengthening.
-  `accountable_safety` uses the finalized epoch of `b` instead of the maximum, which is equal under `ordered`.
+  `conflict` and `ordered` imply the removed bound on the slot of `x`, so the theorems cover the same runs as before.
+  The drift horizon in the conclusion of `accountable_safety` is the finalized epoch of `b`, not the larger of the two finalized epochs; `ordered` makes them equal.
 
 - `verify_kzg_proof` checks its inputs in the order of EIP-4844: the commitment, `z`, `y`, then the proof.
   When more than one input is invalid, the first in that order gives the error.

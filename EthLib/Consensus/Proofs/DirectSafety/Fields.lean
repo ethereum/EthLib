@@ -116,7 +116,7 @@ noncomputable def QuorumCall.voters {g a : ForkedBeaconState preset}
     {run : Run config checks g a} (call : QuorumCall run) : Finset BLSPubkey :=
   keysAt call.cached call.indices
 
-/-- A quorum call targets its current epoch or the epoch before. -/
+/-- The current epoch of a quorum call is at most one past its target epoch. -/
 theorem QuorumCall.currentEpoch_le {g a : ForkedBeaconState preset}
     {run : Run config checks g a} (call : QuorumCall run) :
     (getCurrentEpoch call.cached).toNat ≤ call.target.epoch.toNat + 1 := by
