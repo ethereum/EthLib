@@ -7,9 +7,9 @@ public import EthLib.Consensus.Proofs.Transition.Committees
 /-!
 # Validator effective-balance caps
 
-The cap predicate is the inequality used by `WithinBudget.capped`.
+Each validator's effective balance is at most the cap of its withdrawal credentials.
 
-Genesis supplies it without a fixed global budget.
+Genesis gives it, and every step keeps it before Gloas.
 -/
 
 @[expose] public section
@@ -20,6 +20,7 @@ open Base
 
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 
+/-- At genesis, each validator's effective balance is at most the cap of its credentials. -/
 theorem Genesis.effectiveBalance_capped {g : ForkedBeaconState preset}
     (genesis : Genesis (config := config) (checks := checks) g) :
     ∀ validator ∈ g.state.validators.data,
@@ -656,7 +657,10 @@ private theorem CapStep.run {s t : ForkedBeaconState preset}
     exact (ih (Nat.lt_of_le_of_lt step.chainStep.fork_le early)).trans
       (CapStep.step step activation compounding early)
 
-/-- Every reachable validator is below its credential-dependent cap before Gloas. -/
+/-- Before Gloas, each validator reached from genesis has an effective balance at most its cap.
+
+The preset caps are assumed in order, `MAX_EFFECTIVE_BALANCE` up to `MAX_EFFECTIVE_BALANCE_ELECTRA`.
+-/
 theorem Run.effectiveBalance_capped {g x : ForkedBeaconState preset}
     (run : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)
     (activation : preset.MAX_EFFECTIVE_BALANCE ≤ preset.MIN_ACTIVATION_BALANCE)

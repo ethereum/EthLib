@@ -2283,8 +2283,19 @@ These updates keep the slot and the validators, so the churn stays fixed.
 Their sum fits the churn left at the start plus one full churn for each later epoch of the queue.
 The bounds also hold for an idle queue, whose earliest open epoch is before the first permitted epoch.
 The exact equalities require the first permitted epoch to be no later than the earliest open epoch at the start.
-In a block, other writes to the registry and to the pending queues come between these updates, and no theorem yet covers that interleaving.
-Nor does any theorem yet bound how the churn changes between slots, or derive the change of the active set.
+In a block, other writes to the registry and to the pending queues come between these updates, and these theorems do not cover that interleaving.
+
+`departure_charges_le_window` (`Consensus/Proofs/DirectSafety/DepartureQueue.lean`) covers it for the exits of a run, before Gloas.
+It takes a run from genesis to a state `x`, and a run on from `x` to a state before Gloas.
+The charge of a validator is its effective balance, counted when a step of the second run first assigns its exit epoch.
+The charges whose exit epoch is at most `high + 1` fit the unspent capacity of the exit and consolidation queues at `x`, plus one cap for each epoch from the epoch of `x` to `high + 1`.
+The cap is `MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT` plus `consolidationCap`.
+If `x` is before Electra, the cap also adds the churn of validators for a bound on the size of the registry, times `MAX_EFFECTIVE_BALANCE`.
+`consolidationCap` is an assumption: it bounds the consolidation churn of the state where each step of the second run starts, from Electra.
+That churn follows the total active balance, and no theorem yet bounds how the churn changes between slots.
+The theorem also assumes that the preset orders its caps, `MAX_EFFECTIVE_BALANCE` at most `MIN_ACTIVATION_BALANCE` at most `MAX_EFFECTIVE_BALANCE_ELECTRA`; `CapOrder.mainnet` and `CapOrder.minimal` show that both presets do.
+The bound counts exits at their assigned exit epochs, so it does not bound the exits that the blocks of one epoch initiate.
+It does not bound activations, and no theorem yet derives the change of the active set or puts this bound into `accountable_safety_of_change`.
 
 From Phase 0 to Deneb, `accountable_safety_of_weakSubjectivityPeriod_of_lt_electra` covers the period in part.
 The rule counts `N` active validators of average balance `t` ether, rounded down, a largest effective balance `T` ether, a churn of `delta` validators and `Delta` top-ups per epoch.

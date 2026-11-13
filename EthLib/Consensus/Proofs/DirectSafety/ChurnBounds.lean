@@ -28,70 +28,22 @@ open Base
 
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 
-/-- The pre-Electra validator-count churn limit of a registry with `size` entries. -/
+/-- The pre-Electra churn limit, in validators, for `size` active validators. -/
 def cohortCap (config : Config) (size : Nat) : Nat :=
   max config.MIN_PER_EPOCH_CHURN_LIMIT.toNat (size / config.CHURN_LIMIT_QUOTIENT.toNat)
 
-/-- Variable-rate calls spend at most initial capacity plus the cap per elapsed queue epoch.
-
-The first eligible epoch may also vary; a reset discards rather than preserves old capacity. -/
-theorem churnQueue_window_le (cap : Nat) :
-    ∀ (calls : List (UInt64 × UInt64 × UInt64)) (earliest available epoch left : UInt64),
-      (∀ call ∈ calls, call.2.1.toNat ≤ cap) →
-      calls.foldlM (fun (queue : UInt64 × UInt64) call =>
-        churnQueue queue.1 call.1 call.2.1 queue.2 call.2.2) (earliest, available) =
-          .ok (epoch, left) →
-      earliest.toNat ≤ epoch.toNat ∧
-        left.toNat + (calls.map fun c => c.2.2.toNat).sum ≤
-          available.toNat + (epoch.toNat - earliest.toNat) * cap := by
-  intro calls
-  induction calls with
-  | nil =>
-    intro earliest available epoch left _ computed
-    cases Except.ok.inj computed
-    simp
-  | cons call rest ih =>
-    intro earliest available epoch left rates computed
-    simp only [List.foldlM_cons, Base.bind_ok_iff] at computed
-    obtain ⟨⟨middle, remaining⟩, queued, restOk⟩ := computed
-    obtain ⟨placed, spent, _⟩ := churnQueue_spend queued
-    have rate := rates call (by simp)
-    have later := UInt64.le_iff_toNat_le.mp placed
-    rw [Base.Uint64.toNat_max] at later
-    have firstLe : earliest.toNat ≤ middle.toNat := Nat.le_trans (Nat.le_max_left _ _) later
-    obtain ⟨lastLe, tailBound⟩ := ih middle remaining epoch left
-      (fun c hc => rates c (List.mem_cons_of_mem _ hc)) restOk
-    have oneBound : remaining.toNat + call.2.2.toNat ≤
-        available.toNat + (middle.toNat - earliest.toNat) * cap := by
-      split at spent
-      · rename_i reset
-        have reset := UInt64.lt_iff_toNat_lt.mp reset
-        rw [Base.Uint64.toNat_max] at reset
-        have distance : middle.toNat - max earliest.toNat call.1.toNat + 1 ≤
-            middle.toNat - earliest.toNat := by omega
-        rw [Base.Uint64.toNat_max] at spent
-        have product := Nat.mul_le_mul distance rate
-        rw [Nat.add_mul, Nat.one_mul] at product
-        omega
-      · rw [Base.Uint64.toNat_max] at spent
-        have distance : middle.toNat - max earliest.toNat call.1.toNat ≤
-            middle.toNat - earliest.toNat := by omega
-        have product := Nat.mul_le_mul distance rate
-        omega
-    refine ⟨Nat.le_trans firstLe lastLe, ?_⟩
-    have distance : epoch.toNat - earliest.toNat =
-        (epoch.toNat - middle.toNat) + (middle.toNat - earliest.toNat) := by omega
-    simp only [List.map_cons, List.sum_cons]
-    rw [distance, Nat.add_mul]
-    omega
-
-/-- The charge visible when a selected transition assigns a previously unset exit epoch. -/
+/-- A departure: a validator, its new exit epoch and its effective balance before the step. -/
 structure DepartureCharge where
+  /-- The position of the validator in the registry. -/
   index : Nat
+  /-- The exit epoch that the step assigns. -/
   epoch : Nat
+  /-- The effective balance before the step, in Gwei. -/
   amount : Nat
 
-/-- Effective balances are read before scheduling, not after the later effective-balance pass. -/
+/-- The departure charges of one step, one for each validator whose exit epoch it assigns.
+
+A charge reads the effective balance before the step, not after the effective-balance updates. -/
 def _root_.EthLib.Consensus.Step.departureCharges {x y : ForkedBeaconState preset}
     (_step : Step config checks x y) : List DepartureCharge :=
   x.state.validators.data.toList.zipIdx.filterMap fun (v, i) =>
@@ -107,6 +59,13 @@ def _root_.EthLib.Consensus.Run.departureCharges {x : ForkedBeaconState preset} 
   | _, .nil => []
   | _, .snoc pre step => pre.departureCharges ++ step.departureCharges
 
+/-- The departure charges of two runs in turn are those of the first, then the second. -/
+theorem _root_.EthLib.Consensus.Run.departureCharges_append {a b c : ForkedBeaconState preset}
+    (one : Run config checks a b) (two : Run config checks b c) :
+    (one.append two).departureCharges = one.departureCharges ++ two.departureCharges := by
+  induction two with
+  | nil => simp [Run.append, Run.departureCharges]
+  | snoc two step ih => simp only [Run.append, Run.departureCharges, ih, List.append_assoc]
 
 /-- Every recorded charge names an exit that remains assigned at the interval endpoint. -/
 theorem _root_.EthLib.Consensus.Run.departure_charge_exit
@@ -333,7 +292,9 @@ private theorem ElectraQueuesKept.total {a b : BeaconState preset .pectra}
   rw [kept.size] at sum
   simp only [getTotalBalance, kept.size, sum]
 
-/-- A reachable Electra upgrade starts the exit queue after all previously scheduled exits. -/
+/-- The Electra upgrade keeps the epoch and opens the exit queue after every exit already scheduled.
+
+Both queues start with the churn limits of the upgraded state. -/
 theorem electra_crossing_queues {pre : BeaconState preset .dencun}
     {post : BeaconState preset .pectra} (ok : upgradeToElectra config pre = .ok post) :
     getCurrentEpoch post = getCurrentEpoch pre ∧
@@ -406,7 +367,9 @@ theorem electra_crossing_queues {pre : BeaconState preset .dencun}
     rw [same]
     exact liftAccessor_ok.mp consolidationOk
 
-/-- The entire crossing step includes its preceding epoch and any simultaneous upgrades. -/
+/-- A run that starts before Electra and reaches it splits at one step from a fork before Electra.
+
+That step holds the epoch before the upgrade and every upgrade that it runs. -/
 theorem split_electra_crossing {x y : ForkedBeaconState preset} (tail : Run config checks x y)
     (early : x.fork < .pectra) (late : .pectra ≤ y.fork) :
     ∃ u v, ∃ head : Run config checks x u, ∃ step : Step config checks u v,

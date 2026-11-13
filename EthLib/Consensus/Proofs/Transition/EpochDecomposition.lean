@@ -6,7 +6,9 @@ public import EthLib.Consensus.Transition.StateTransition
 /-!
 # Equation-bearing epoch schedules
 
-The fixed schedule records each epoch operation, including identities at inactive forks.
+The fixed schedule records each epoch operation.
+
+A stage that a fork does not run is the identity at that fork.
 
 A successful trace retains the intermediate states and the equation of each operation.
 -/
@@ -221,7 +223,7 @@ theorem processEpochAltair_eq_run (config : Config) (checks : SignatureChecks)
     simp [processEpochAltair, processPendingBalances, run, epochStages, prefixStages,
       middleStages, tailStages, List.foldlM_cons, action, altair, electra, capella, bind_assoc]
 
-/-- The schedule also computes the Phase 0 transition, with the same error results. -/
+/-- The schedule computes the epoch transition at every fork, with the same error results. -/
 theorem processEpoch_eq_run (config : Config) (checks : SignatureChecks)
     (state : BeaconState preset fork) :
     processEpoch config checks state = run (action config checks) epochStages state := by

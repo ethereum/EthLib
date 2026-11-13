@@ -2267,7 +2267,9 @@ theorem epochBeforePayments_split
     refine laws.toEpochStepLaws.epochEdge ⟨?_, ?_, ?_, deposits⟩ ok <;> rintro rfl <;>
       simp at member
 
-/-- The two ordinary intervals around participation rotation compose through payments. -/
+/-- From Altair, the epoch is justification, then steps in the relation, then the flag rotation.
+
+Then steps in the relation follow it, assuming the builder payments are in the relation. -/
 theorem processEpochAltair_rotationSplit
     (payments : ∀ {state after : BeaconState preset fork} (gloas : .glamsterdam ≤ fork),
       processBuilderPendingPayments state gloas = .ok after → R state after)

@@ -15,7 +15,11 @@ A queue call records its assigned epoch as well as the balance that it spends.
 
 Partial withdrawals spend exit capacity without assigning a validator's exit.
 
-The departure charges of a run fit the queue capacity of a window of epochs.
+Before Gloas, the departure charges of a run fit the queue capacity of a window of epochs.
+
+The balance queues are specified by [EIP-7251].
+
+[EIP-7251]: https://eips.ethereum.org/EIPS/eip-7251#consensus-layer-1
 -/
 
 @[expose] public section
@@ -1273,7 +1277,7 @@ private theorem compoundingExcess_departureQueues {fork : Fork} {s t : BeaconSta
     · cases ok; rfl
   · cases ok; rfl
 
-/-- Electra initializes its queues once; subsequent upgrade folds preserve all four fields. -/
+/-- The Electra upgrade sets both departure queues, and its two folds keep all four fields. -/
 private theorem electra_departure_initialization {s : BeaconState preset .dencun}
     {t : BeaconState preset .pectra} (ok : upgradeToElectra config s = .ok t) :
     ∃ first exitEpoch exitRate consolidationRate,
@@ -2006,7 +2010,7 @@ private theorem voluntaryExits_indexedTrace {fork : Fork} {s t : BeaconState pre
 /-- Successful consolidation requests record the input to their balance-queue call.
 
 Credential switches and ignored requests do not call that queue. -/
-def consolidationRequestCalls {fork : Fork} (config : Config)
+private def consolidationRequestCalls {fork : Fork} (config : Config)
     (state : BeaconState preset fork) (electra : .pectra ≤ fork)
     (request : ConsolidationRequest) : Except TransitionError Bool := do
   if request.sourcePubkey == request.targetPubkey then return false
@@ -2036,7 +2040,8 @@ def consolidationRequestCalls {fork : Fork} (config : Config)
   let _ ← queueConsolidation config state electra sourceIndex source targetIndex
   return true
 
-def consolidationRequestSites {fork : Fork} (config : Config)
+/-- The state of a consolidation request when it calls the consolidation queue, else none. -/
+private def consolidationRequestSites {fork : Fork} (config : Config)
     (state : BeaconState preset fork) (electra : .pectra ≤ fork)
     (request : ConsolidationRequest) :
     Except TransitionError (List (ForkedBeaconState preset)) := do
@@ -2178,7 +2183,7 @@ private theorem consolidationRequestCalls_result {fork : Fork} {s t : BeaconStat
     all_goals first | exact ⟨false, rfl⟩ | exact ⟨true, rfl⟩
 
 /-- Replay requests in order, retaining each actual consolidation queue input. -/
-def consolidationRequestsSites {fork : Fork} (config : Config) (electra : .pectra ≤ fork)
+private def consolidationRequestsSites {fork : Fork} (config : Config) (electra : .pectra ≤ fork)
     (state : BeaconState preset fork) : List ConsolidationRequest →
       Except TransitionError (BeaconState preset fork × List (ForkedBeaconState preset))
   | [] => pure (state, [])
@@ -2482,7 +2487,7 @@ private theorem operationsPrefix_coverage {fork : Fork} (electra : .pectra ≤ f
       (((firstLife.trans secondLife).trans votesLife).trans depositsLife).size_le
 
 /-- The block prefix reaches execution requests before any consolidation queue call. -/
-def blockConsolidationSites {fork : Fork} (config : Config) (checks : SignatureChecks)
+private def blockConsolidationSites {fork : Fork} (config : Config) (checks : SignatureChecks)
     (engine : ExecutionEngine preset fork) (state : BeaconState preset fork)
     (block : BeaconBlock preset fork) :
     Except TransitionError (List (ForkedBeaconState preset)) := do
@@ -2815,17 +2820,28 @@ private theorem block_indexedTrace_sites {fork : Fork} (electra : .pectra ≤ fo
   · intro called member
     exact (List.mem_append.mp member).elim (firstRates called) (exitRates called)
 
-def _root_.EthLib.Consensus.Step.consolidationSites {x y : ForkedBeaconState preset}
+/-- The states at which a block reads the consolidation churn limit, in order. -/
+private def _root_.EthLib.Consensus.Step.consolidationSites {x y : ForkedBeaconState preset}
     (step : Step config checks x y) : List (ForkedBeaconState preset) :=
   match step with
   | .slot _ => []
   | .block engine signed _ _ =>
     ((blockConsolidationSites config checks engine x.state signed.message).toOption).getD []
 
-def _root_.EthLib.Consensus.Run.consolidationSites {x : ForkedBeaconState preset} :
+/-- The states at which the blocks of a run read the consolidation churn limit, in order. -/
+private def _root_.EthLib.Consensus.Run.consolidationSites {x : ForkedBeaconState preset} :
     {y : ForkedBeaconState preset} → Run config checks x y → List (ForkedBeaconState preset)
   | _, .nil => []
   | _, .snoc pre step => pre.consolidationSites ++ step.consolidationSites
+
+/-- The consolidation sites of two runs in turn are those of the first, then the second. -/
+private theorem _root_.EthLib.Consensus.Run.consolidationSites_append
+    {a b c : ForkedBeaconState preset} (one : Run config checks a b)
+    (two : Run config checks b c) :
+    (one.append two).consolidationSites = one.consolidationSites ++ two.consolidationSites := by
+  induction two with
+  | nil => simp [Run.append, Run.consolidationSites]
+  | snoc two step ih => simp only [Run.append, Run.consolidationSites, ih, List.append_assoc]
 
 private theorem slot_consolidationFrame {fork : Fork} {s t : BeaconState preset fork}
     (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
@@ -3993,6 +4009,42 @@ private theorem consolidationSite_epoch_total {x y : ForkedBeaconState preset}
               kept.effective
             exact second.trans first
 
+/-- A consolidation site reads the consolidation churn of the input state of a step of the run. -/
+private theorem consolidationSite_rate {x y : ForkedBeaconState preset}
+    (tail : Run config checks x y) (early : y.fork < .glamsterdam)
+    (site : ForkedBeaconState preset) (member : site ∈ tail.consolidationSites) :
+    ∃ (u w : ForkedBeaconState preset) (step : Step config checks u w), tail.Contains step ∧
+      (.pectra ≤ site.fork → .pectra ≤ u.fork) ∧
+      ∀ rate : Gwei, getConsolidationChurnLimit config site.state = .ok rate →
+        getConsolidationChurnLimit config u.state = .ok rate := by
+  induction tail with
+  | nil => simp [Run.consolidationSites] at member
+  | @snoc middle last pre step ih =>
+    have middleEarly := Nat.lt_of_le_of_lt step.chainStep.fork_le early
+    rcases List.mem_append.mp member with previous | current
+    · obtain ⟨u, w, found, contained, forks, rate⟩ := ih middleEarly previous
+      exact ⟨u, w, found, .earlier contained step, forks, rate⟩
+    · cases step with
+      | slot ok => simp [Step.consolidationSites] at current
+      | @block fork before after engine signed due applied =>
+        unfold Step.consolidationSites at current
+        cases replay : blockConsolidationSites config checks engine before signed.message with
+        | error err => simp [replay, Except.toOption] at current
+        | ok sites =>
+          simp only [replay, Except.toOption, Option.getD_some] at current
+          obtain ⟨u, rfl, kept⟩ := blockConsolidationSites_prefix replay site current
+          have epoch : getCurrentEpoch u = getCurrentEpoch before := by
+            simp only [getCurrentEpoch, kept.active.1]
+          have total := total_active_congr middleEarly middleEarly
+            (kept.active.2.mono (getCurrentEpoch_le_activityFixedEpoch before)) epoch
+            kept.effective
+          refine ⟨_, _, _, .last pre (.block engine signed due applied), id, ?_⟩
+          intro rate computed
+          have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt middleEarly
+          rw [← computed]
+          simp only [getConsolidationChurnLimit, notGloas, ↓reduceIte,
+            getActivationExitChurnLimit, getBalanceChurnLimit, total]
+
 private theorem DepartureQueueTrace.window_le_initialized
     {earliest epoch : Epoch} {available left : Gwei} {calls : List DepartureQueueCall}
     (trace : DepartureQueueTrace earliest available calls epoch left) (start high cap : Nat)
@@ -4182,39 +4234,49 @@ private theorem initialized_charges_le_window {x y : ForkedBeaconState preset}
   rw [Nat.mul_add]
   omega
 
-/-- The departure charges of a run, for exit epochs up to `high + 1`, fit a window of epochs.
+/-- Before Gloas, the departure charges of a run fit the queue capacity of a window of epochs.
+
+The run starts at a state `x` reached from genesis and ends at a state `y` before Gloas.
 
 A charge is a validator's effective balance, counted when its unset exit epoch becomes assigned.
 
-The bound is the carry at `x` plus `H` times the per-epoch caps, where `H = high + 2 - e`.
+The bound covers the charges whose exit epoch is at most `high + 1`.
 
-Here `e` is the current epoch of `x`, so `H` counts the epochs from `e` to `high + 1` inclusively.
+It is the carry at `x` plus `H` times the per-epoch caps, where `H = high + 2 - e`.
 
-If `.pectra ≤ x.fork`, the carry is the unspent capacity of the exit and consolidation queues.
+Here `e` is the current epoch of `x`, so `H` counts the epochs from `e` to `high + 1` inclusive.
 
-Otherwise the carry is zero.
+From Electra at `x`, the carry is the unspent capacity of the exit and consolidation queues.
+
+A queue adds its capacity only when its earliest open epoch is at most `high + 1`.
+
+Before Electra at `x`, the carry is zero.
 
 The carry is unspent queue capacity, not departures that are already assigned.
 
 The caps are `MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT` and `consolidationCap`.
 
-Only if `x.fork < .pectra`, the caps also add the legacy cap `L * MAX_EFFECTIVE_BALANCE`.
+Before Electra at `x`, the caps also add `L * MAX_EFFECTIVE_BALANCE`.
 
-Here `L = max 1 (cohortCap config registryBound)` is the count-limited cohort cap.
+Here `L` is the larger of 1 and the pre-Electra churn limit of `registryBound` validators.
 
-The cohort cap reads `registryBound`, which bounds the size of the registry at `y`.
+`registryBound` bounds the size of the registry at `y`.
 
-`consolidationCap` is a hypothesis: it bounds each consolidation churn rate at a call site. -/
+From Electra, the consolidation churn where each step starts is at most `consolidationCap`.
+
+That bound on the churn is an assumption.
+
+The preset caps are assumed in order, `MAX_EFFECTIVE_BALANCE` up to `MAX_EFFECTIVE_BALANCE_ELECTRA`.
+-/
 theorem departure_charges_le_window {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (tail : Run config checks x y)
     (genesis : Genesis (config := config) (checks := checks) g)
     (caps : CapOrder preset)
     (early : y.fork < .glamsterdam) (high registryBound consolidationCap : Nat)
     (registryBounded : y.state.validators.data.size ≤ registryBound)
-    (rates : ∀ site ∈ tail.consolidationSites,
-      .pectra ≤ site.fork → ∀ (rate : Gwei),
-        getConsolidationChurnLimit config site.state = .ok rate →
-          rate.toNat ≤ consolidationCap) :
+    (rates : ∀ {u w : ForkedBeaconState preset} (step : Step config checks u w),
+      tail.Contains step → .pectra ≤ u.fork → ∀ rate : Gwei,
+        getConsolidationChurnLimit config u.state = .ok rate → rate.toNat ≤ consolidationCap) :
     ((tail.departureCharges.filter fun c => c.epoch ≤ high + 1).map (·.amount)).sum ≤
       (if electra : .pectra ≤ x.fork then
         (if (x.state.earliestExitEpoch electra).toNat ≤ high + 1 then
@@ -4226,6 +4288,11 @@ theorem departure_charges_le_window {g x y : ForkedBeaconState preset}
         ((if x.fork < .pectra then max 1 (cohortCap config registryBound) *
           preset.MAX_EFFECTIVE_BALANCE.toNat else 0) +
          config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat + consolidationCap) := by
+  replace rates : ∀ site ∈ tail.consolidationSites, .pectra ≤ site.fork → ∀ (rate : Gwei),
+      getConsolidationChurnLimit config site.state = .ok rate → rate.toNat ≤ consolidationCap := by
+    intro site member electra rate computed
+    obtain ⟨_, _, step, contained, forks, same⟩ := consolidationSite_rate tail early site member
+    exact rates step contained (forks electra) rate (same rate computed)
   by_cases electra : .pectra ≤ x.fork
   · have bound := departure_charges_le_window_electra tail electra early high
       consolidationCap rates
@@ -4252,16 +4319,7 @@ theorem departure_charges_le_window {g x y : ForkedBeaconState preset}
         (by
           intro site member h rate computed
           apply rates site _ h rate computed
-          have appended : ∀ {a b c : ForkedBeaconState preset}
-              (one : Run config checks a b) (two : Run config checks b c),
-              (one.append two).consolidationSites =
-                one.consolidationSites ++ two.consolidationSites := by
-            intro a b c one two
-            induction two with
-            | nil => simp [Run.append, Run.consolidationSites]
-            | snoc two step ih =>
-              simp only [Run.append, Run.consolidationSites, ih, List.append_assoc]
-          rw [appended]
+          rw [Run.consolidationSites_append]
           exact List.mem_append_right _ member)
       have ordered := UInt64.le_iff_toNat_le.mp
         (currentEpoch_le_of_chainSteps (pre.snoc crossing).chainSteps)
@@ -4269,15 +4327,7 @@ theorem departure_charges_le_window {g x y : ForkedBeaconState preset}
           high + 2 - (getCurrentEpoch x.state).toNat := Nat.sub_le_sub_left ordered _
       have balance := balance.trans (Nat.mul_le_mul_right
         (config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat + consolidationCap) suffix)
-      have charges : ∀ {a b c : ForkedBeaconState preset}
-          (one : Run config checks a b) (two : Run config checks b c),
-          (one.append two).departureCharges = one.departureCharges ++ two.departureCharges := by
-        intro a b c one two
-        induction two with
-        | nil => simp [Run.append, Run.departureCharges]
-        | snoc two step ih =>
-          simp only [Run.append, Run.departureCharges, ih, List.append_assoc]
-      rw [charges, List.filter_append, List.map_append, List.sum_append]
+      rw [Run.departureCharges_append, List.filter_append, List.map_append, List.sum_append]
       simp only [Nat.add_assoc, Nat.reduceAdd] at legacy balance
       rw [Nat.add_assoc, Nat.mul_add]
       exact Nat.add_le_add legacy balance
