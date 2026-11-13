@@ -18,6 +18,11 @@ eth_rpc_pruned_history_unavailable(
   lean_object* args
 );
 
+extern lean_object*
+eth_rpc_serve(
+  lean_object* args
+);
+
 /* ---- Wrappers --------------------------------------------------------- */
 
 PyObject*
@@ -42,4 +47,12 @@ py_rpc_pruned_history_unavailable(
   PyObject* args
 ) {
   return call_pyvalue_export(eth_rpc_pruned_history_unavailable, args, 0, RPC_ERROR);
+}
+
+PyObject*
+py_rpc_serve(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_rpc_serve, args, 2, RPC_ERROR);
 }

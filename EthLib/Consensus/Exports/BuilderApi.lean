@@ -1,6 +1,8 @@
 module
 
 public import EthLib.Consensus.BuilderApi
+public import EthLib.Consensus.BuilderApi.Bid
+public import EthLib.Consensus.BuilderApi.GloasBid
 public import EthLib.Consensus.BuilderApi.Registration
 public import EthLib.Consensus.Exports.Parameters
 public import EthLib.Serialization.Exports.Ssz
@@ -8,7 +10,9 @@ public import EthLib.Serialization.Exports.Ssz
 /-!
 # `Exports.BuilderApi`
 
-C-ABI exports for Builder API signature checks, registrations, unblinding and capped bid valuation.
+C-ABI exports for Builder API signature checks, registrations, bids, unblinding and bid valuation.
+
+The value of a bid is capped by the proposer's cap on the execution payment.
 
 From Bellatrix to Fulu, a signed registration or bid carries the key that signed it.
 
@@ -134,6 +138,146 @@ The time is that of the builder's clock, in seconds. -/
 @[export eth_consensus_process_registration]
 def processRegistrationExport (args : PyValue) : Result PyValue :=
   pyExport processRegistrationOf args
+
+/-- The value that SSZ bytes encode, with code 0 and a name for the input when they do not. -/
+def decodeRejected (α : Type) [SszType α] (what : String) (bytes : ByteArray) : Result α :=
+  (SszType.deserialize α bytes).mapError fun e => (0, s!"{what} rejected: {reprStr e}")
+
+/-- Whether a builder serves a request for a bid, on its state transitioned to the slot. -/
+def isEligibleForBidOf
+    (args : String × String × ByteArray × List ByteArray × UInt64 × Hash32 ×
+      Cryptography.Bls.BLSPubkey) : Result Bool := do
+  let (name, fork, state, kept, slot, parentHash, pubkey) := args
+  let preset ← presetOf name
+  let fork ← forkOf fork.toUTF8
+  if range : HasBuilderApi fork then
+    let state ← decodeRejected (BeaconState preset fork) "state" state
+    let entries ← kept.mapM (decodeRejected ValidatorRegistrationV1 "registry")
+    (liftAccessor (BuilderApi.isEligibleForBid state range ⟨entries⟩ slot parentHash
+      pubkey)).mapError fun e => (e.code, reprStr e)
+  else throw (0, s!"no Builder API messages at {fork.name}")
+
+/-- Whether a builder serves a request for a bid.
+
+The arguments are the name of the preset, the fork, the state and the registrations kept.
+
+Then come the slot, the parent hash and the key of the request.
+
+The state is the builder's state, transitioned to the slot.
+
+Bytes that do not decode have code 0, and a state with no proposer keeps the code of its error. -/
+@[export eth_consensus_is_eligible_for_bid]
+def isEligibleForBidExport (args : PyValue) : Result PyValue :=
+  pyExport isEligibleForBidOf args
+
+/-- The name of the rule that refuses a bid. -/
+def BidError.reason : BuilderApi.BidError → String
+  | .wrongParentHash => "wrong_parent_hash"
+  | .wrongFeeRecipient => "wrong_fee_recipient"
+  | .badSignature => "bad_signature"
+  | .root _ => "root"
+
+/-- None when a proposer accepts a signed bid, or the rule that refuses it. -/
+def processBidOf
+    (args : String × String × Option PyValue × ByteArray × ByteArray × ExecutionAddress) :
+    Result (Option String) := do
+  let (name, fork, replacements, state, data, feeRecipient) := args
+  let preset ← presetOf name
+  let fork ← forkOf fork.toUTF8
+  if range : HasBuilderApi fork then
+    let config ← configWithValue name replacements
+    let state ← runSsz "state rejected" (SszType.deserialize (BeaconState preset fork) state)
+    let signed ← runSsz "input rejected"
+      (SszType.deserialize (SignedBuilderBid preset fork) data)
+    match BuilderApi.processBid config .bls state range signed feeRecipient with
+    | .ok () => return none
+    | .error (.root fault) => runSsz "root rejected" (.error fault)
+    | .error e => return some (BidError.reason e)
+  else throw (0, s!"no Builder API messages at {fork.name}")
+
+/-- None when a proposer accepts a signed bid, or the name of the rule that refuses it.
+
+The arguments are the name of the preset and of the configuration, the fork and replacements.
+
+Then come the state of the proposal, the signed bid and the fee recipient that was registered. -/
+@[export eth_consensus_process_bid]
+def processBidExport (args : PyValue) : Result PyValue :=
+  pyExport processBidOf args
+
+/-- From Gloas: whether a builder serves a request for a bid, on its state at the slot.
+
+The preferences are those received on gossip, found by the index of their validator. -/
+def isEligibleForBidGloasOf
+    (args : String × String × ByteArray × List ByteArray × UInt64 × Hash32 × Root ×
+      Cryptography.Bls.BLSPubkey) : Result Bool := do
+  let (name, fork, state, received, slot, parentHash, parentRoot, pubkey) := args
+  let preset ← presetOf name
+  let fork ← forkOf fork.toUTF8
+  if gloas : .glamsterdam ≤ fork then
+    let state ← decodeRejected (BeaconState preset fork) "state" state
+    let received ← received.mapM (decodeRejected ProposerPreferences "preferences")
+    let preferences (index : ValidatorIndex) := received.find? (·.validatorIndex = index)
+    (BuilderApi.isEligibleForBidGloas state gloas preferences slot parentHash parentRoot
+      pubkey).mapError fun e => (e.code, reprStr e)
+  else throw (0, s!"no Gloas bids at {fork.name}")
+
+/-- From Gloas: whether a builder serves a request for a bid.
+
+The arguments are the name of the preset, the fork, the state and the preferences received.
+
+Then come the slot, the parent hash, the parent root and the key of the request.
+
+Bytes that do not decode have code 0, and a value that cannot be read keeps its own code. -/
+@[export eth_consensus_is_eligible_for_bid_gloas]
+def isEligibleForBidGloasExport (args : PyValue) : Result PyValue :=
+  pyExport isEligibleForBidGloasOf args
+
+/-- The name of the rule that refuses a fetched bid. -/
+def ValidateBidError.reason : BuilderApi.ValidateBidError → String
+  | .inactiveBuilder => "inactive_builder"
+  | .wrongSlot => "wrong_slot"
+  | .wrongFeeRecipient => "wrong_fee_recipient"
+  | .wrongParentHash => "wrong_parent_hash"
+  | .wrongParentRoot => "wrong_parent_root"
+  | .wrongPrevRandao => "wrong_prev_randao"
+  | .incompatibleGasLimit => "incompatible_gas_limit"
+  | .cannotCoverBid => "cannot_cover_bid"
+  | .fault _ => "fault"
+
+/-- From Gloas: None when a proposer accepts a fetched bid, or the rule that refuses it. -/
+def validateBidOf
+    (args : String × String × Option PyValue × ByteArray × ByteArray × UInt64 × ByteArray ×
+      ExecutionAddress) : Result (Option String) := do
+  let (name, fork, replacements, state, preferences, parentGasLimit, data, feeRecipient) := args
+  let preset ← presetOf name
+  let fork ← forkOf fork.toUTF8
+  if gloas : .glamsterdam ≤ fork then
+    let config ← configWithValue name replacements
+    let state ← decodeRejected (BeaconState preset fork) "state" state
+    let preferences ← decodeRejected ProposerPreferences "preferences" preferences
+    let signed ← decodeRejected (SignedExecutionPayloadBid preset fork) "bid" data
+    match BuilderApi.validateBid config .bls state gloas preferences parentGasLimit signed
+        feeRecipient with
+    | .ok true => return none
+    | .ok false => return some "bad_signature"
+    | .error (.fault e) => throw (e.code, reprStr e)
+    | .error e => return some (ValidateBidError.reason e)
+  else throw (0, s!"no Gloas bids at {fork.name}")
+
+/-- From Gloas: None when a proposer accepts a fetched bid, or the name of the rule that refuses it.
+
+The arguments are the name of the preset and of the configuration, the fork and replacements.
+
+Then come the state, the proposer's preferences and the gas limit of the parent payload.
+
+Then come the signed bid and the proposer's fee recipient.
+
+A signature that does not verify is named, bytes that do not decode have code 0.
+
+A value that cannot be read keeps its own code. -/
+@[export eth_consensus_validate_bid]
+def validateBidExport (args : PyValue) : Result PyValue :=
+  pyExport validateBidOf args
 
 /-- Whether a proposer key signed a Gloas request authentication. -/
 def verifyBuilderRequestAuthSignatureOf

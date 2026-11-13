@@ -2140,39 +2140,27 @@ theorem processEpochAltair_paymentSplit {altair : .altair ≤ fork}
       rw [epochBeforePayments_eq_run]
       exact EpochTrace.run_ok_iff.mpr initial
 
-/-- Before Altair, all stages after justification preserve the relation. -/
-theorem processEpoch_beforeAltair (before : ¬ .altair ≤ fork)
+/-- Before Altair, the epoch transition is justification, then steps in the relation. -/
+theorem processEpoch_split_of_lt_altair (before : fork < .altair)
     (computed : Consensus.processEpoch config checks state = .ok after) :
-    ∃ justified, processJustificationAndFinalization state = .ok justified ∧ R justified after := by
-  have trace := processEpoch_trace computed
-  change EpochTrace _ (.justification :: _) _ _ at trace
-  cases trace with
-  | cons first rest =>
-    refine ⟨_, first, rest.transport R laws.refl laws.trans ?_⟩
-    intro k member a b ok
-    have eq := EpochStage.action_cases.mp ok
-    -- Payments and pending deposits come later than Altair, so they are identities here.
-    by_cases payment : k = .payments
-    · subst k
-      have disabled : ¬ Fork.glamsterdam ≤ fork :=
-        fun h => before (Nat.le_trans (by decide) h)
-      simp only [EpochStage.Edge, disabled, ↓reduceDIte] at eq
-      exact eq ▸ laws.refl _
-    by_cases deposits : k = .pendingDeposits
-    · subst k
-      have disabled : ¬ Fork.pectra ≤ fork :=
-        fun h => before (Nat.le_trans (by decide) h)
-      simp only [EpochStage.Edge, disabled, ↓reduceDIte] at eq
-      exact eq ▸ laws.refl _
-    by_cases rotation : k = .participation
-    · subst k
-      simp only [EpochStage.Edge, before, ↓reduceDIte] at eq
-      exact laws.processParticipationRecordUpdates eq
-    have ordinary : k ≠ .justification := by
-      intro same
-      subst k
-      simp [EpochStage.middleStages, EpochStage.tailStages] at member
-    exact laws.epochEdge ⟨ordinary, payment, rotation, deposits⟩ ok
+    ∃ justified, processJustificationAndFinalization state = .ok justified ∧
+      R justified after := by
+  have notAltair : ¬ .altair ≤ fork := Nat.not_le_of_lt before
+  unfold Consensus.processEpoch at computed
+  simp only [notAltair, ↓reduceDIte, bind_ok_iff] at computed
+  obtain ⟨justified, justifiedOk, rewarded, rewardedOk, registered, registeredOk, slashed,
+    slashedOk, reset, resetOk, balanced, balancedOk, cleared, clearedOk, mixed, mixedOk, rooted,
+    rootedOk, rotated⟩ := computed
+  exact ⟨justified, justifiedOk,
+    laws.trans (laws.processRewardsAndPenalties rewardedOk) <|
+    laws.trans (laws.processRegistryUpdates registeredOk) <|
+    laws.trans (laws.processSlashings slashedOk) <|
+    laws.trans (laws.processEth1DataReset resetOk) <|
+    laws.trans (laws.processEffectiveBalanceUpdates balancedOk) <|
+    laws.trans (laws.processSlashingsReset clearedOk) <|
+    laws.trans (laws.processRandaoMixesReset mixedOk) <|
+    laws.trans (laws.processHistoricalRootsUpdate rootedOk)
+      (laws.processParticipationRecordUpdates rotated)⟩
 
 end EpochStepLaws
 
@@ -2461,12 +2449,13 @@ This holds at every fork. -/
 theorem processEpoch_frame (computed : processEpoch config checks state = .ok after) :
     ∃ justified, processJustificationAndFinalization state = .ok justified ∧
       EpochFrame justified after := by
-  by_cases altair : Fork.altair ≤ fork
-  · simp only [processEpoch, altair, ↓reduceDIte] at computed
+  by_cases altair : .altair ≤ fork
+  · unfold processEpoch at computed
+    simp only [altair, ↓reduceDIte] at computed
     exact processEpochAltair_frame computed
-  · obtain ⟨justified, first, rest⟩ :=
-      mutatorEpochFrameLaws.processEpoch_beforeAltair altair computed
-    exact ⟨justified, first, rest.toEpochFrame⟩
+  obtain ⟨justified, justifiedOk, frame⟩ :=
+    mutatorEpochFrameLaws.processEpoch_split_of_lt_altair (Nat.lt_of_not_le altair) computed
+  exact ⟨justified, justifiedOk, frame.toEpochFrame⟩
 
 /-! ## Justification and the epoch transition -/
 

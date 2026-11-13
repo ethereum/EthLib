@@ -27,6 +27,8 @@ Slots processed to a later slot pass through each slot between.
 
 So the state before a block, processed to a slot at or before it, runs on to the state after it.
 
+Two runs from one state agree on the committees of a nearby epoch and on their count.
+
 Both use one setting of the signature checks.
 -/
 
@@ -197,5 +199,41 @@ theorem RunKept.committeesKept (run : RunKept state after)
   rw [UInt64.toNat_mod, UInt64.toNat_mod] at same
   exact Nat.mod_ne_of_sub_lt (low := written.toNat) (high := shifted.toNat)
     (length := preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat) (by omega) (by omega) same.symm
+
+/-- A run keeps the committees of an epoch, and their count per slot.
+
+The count needs no bound beyond those the committees need. -/
+theorem RunKept.committees_count (run : RunKept state after) {epoch : Epoch}
+    (final : epoch.toNat ≤ (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat)
+    (fixed : epoch ≤ activityFixedEpoch state)
+    (inRing : (getCurrentEpoch after).toNat + preset.MIN_SEED_LOOKAHEAD.toNat + 1 <
+      epoch.toNat + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat) :
+    CommitteesKept epoch state after ∧
+      getCommitteeCountPerSlot after epoch = getCommitteeCountPerSlot state epoch := by
+  refine ⟨run.committeesKept final fixed inRing, ?_⟩
+  unfold getCommitteeCountPerSlot
+  rw [run.active.getActiveValidatorIndices_eq fixed]
+
+/-- Two runs from one state agree on the committees of an epoch, and on their count per slot.
+
+The epoch must be at most the current epoch of the common state plus `MIN_SEED_LOOKAHEAD`.
+
+It must also be at most the fixed epoch of activity of the common state.
+
+Both runs must end before the mix that the seed of the epoch reads is written again. -/
+theorem RunKept.committees_agree {common other : BeaconState preset fork}
+    (one : RunKept common state) (two : RunKept common other) {epoch : Epoch}
+    (final : epoch.toNat ≤ (getCurrentEpoch common).toNat + preset.MIN_SEED_LOOKAHEAD.toNat)
+    (fixed : epoch ≤ activityFixedEpoch common)
+    (inRing : (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat + 1 <
+      epoch.toNat + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    (otherInRing : (getCurrentEpoch other).toNat + preset.MIN_SEED_LOOKAHEAD.toNat + 1 <
+      epoch.toNat + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat) :
+    CommitteesKept epoch state other ∧
+      getCommitteeCountPerSlot other epoch = getCommitteeCountPerSlot state epoch := by
+  obtain ⟨keptOne, countOne⟩ := one.committees_count final fixed inRing
+  obtain ⟨keptTwo, countTwo⟩ := two.committees_count final fixed otherInRing
+  exact ⟨fun slot index inside => (keptTwo slot index inside).trans
+    (keptOne slot index inside).symm, countTwo.trans countOne.symm⟩
 
 end EthLib.Consensus

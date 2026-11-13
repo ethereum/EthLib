@@ -11,7 +11,7 @@ import pytest
 from py_ecc.bls import G2ProofOfPossession
 
 from ethlib import consensus
-from ethlib.errors import SszError
+from ethlib.errors import SszError, TransitionError
 from ethlib.networking import snappy
 from raising import raises
 
@@ -746,3 +746,152 @@ def test_registration_rules_in_order():
     assert _register(signed[:MESSAGE_SIZE] + bytes(96), 100) == "unknown_validator"
     state = _with_epochs(_state(), 0, 0)
     assert _register(_signed_registration(150), 100, state) == "not_eligible"
+
+
+# Where a minimal state stores the offset of its latest payload header, from Bellatrix to Fulu.
+HEADER_OFFSET_AT = 10_229
+# The block hash follows 472 bytes of the header: the parent hash, the fee recipient, two roots,
+# the bloom, the RANDAO mix, four numbers, the offset of the extra data and the base fee.
+BLOCK_HASH_IN_HEADER = 472
+# The slot follows the genesis time and the genesis validators root.
+SLOT_AT = 40
+# A fee recipient that no pinned bid names.
+OTHER_RECIPIENT = bytes(19) + b"\x13"
+
+
+def _fork_state(source: str) -> bytes:
+    """The pinned minimal state of the fork of a consensus version."""
+    path = (
+        Path(__file__).resolve().parents[4]
+        / f"tests/consensus/light_client/minimal/{source}/light_client/single_merkle_proof"
+        / "BeaconState/current_sync_committee_merkle_proof/object.ssz_snappy"
+    )
+    return snappy.decompress(path.read_bytes())
+
+
+def _block_hash_at(state: bytes) -> int:
+    """The position of the block hash of the latest payload header of a minimal state."""
+    (header,) = struct.unpack_from("<I", state, HEADER_OFFSET_AT)
+    return header + BLOCK_HASH_IN_HEADER
+
+
+def _with_block_hash(state: bytes, block_hash: bytes) -> bytes:
+    """The state with another block hash in its latest payload header."""
+    at = _block_hash_at(state)
+    return state[:at] + block_hash + state[at + 32 :]
+
+
+def _minimal_bid(source: str, key: int = SECRET_KEY) -> bytes:
+    """The example bid of a fork, with the test key as builder, signed for the minimal chain."""
+    message, _ = _split(_example(source, "signed_builder_bid"))
+    at = VALUE_AT[source] + 32
+    message = message[:at] + PUBKEY + message[at + 48 :]
+    fork = consensus.consensus_version_fork(source)
+    root, again = consensus.ssz_static("minimal", fork, "BuilderBid", message)
+    assert again == message
+    version = bytes.fromhex(consensus.config("minimal")["GENESIS_FORK_VERSION"][2:])
+    signature = G2ProofOfPossession.Sign(key, _sha(root + _builder_domain(version)))
+    return struct.pack("<I", 4 + 96) + signature + message
+
+
+def _bid_header(signed: bytes) -> tuple[bytes, bytes]:
+    """The parent hash and the fee recipient of the header of a signed bid."""
+    message, _ = _split(signed)
+    (header,) = struct.unpack_from("<I", message, 0)
+    return message[header : header + 32], message[header + 32 : header + 52]
+
+
+def _process_bid(source: str, state: bytes, signed: bytes, fee_recipient: bytes) -> str | None:
+    """The rule that refuses a bid on a minimal state, or None when the proposer accepts it."""
+    fork = consensus.consensus_version_fork(source)
+    return consensus.process_bid("minimal", fork, state, signed, fee_recipient)
+
+
+@pytest.mark.parametrize("source", VERSIONS)
+def test_process_bid(source: str):
+    signed = _minimal_bid(source)
+    parent, recipient = _bid_header(signed)
+    state = _with_block_hash(_fork_state(source), parent)
+    assert _process_bid(source, state, signed, recipient) is None
+    assert _process_bid(source, state, signed, OTHER_RECIPIENT) == "wrong_fee_recipient"
+    other_parent = bytes(a ^ 1 for a in parent)
+    moved = _with_block_hash(state, other_parent)
+    assert _process_bid(source, moved, signed, recipient) == "wrong_parent_hash"
+    # The rules run in order: the parent hash is checked before the fee recipient.
+    assert _process_bid(source, moved, signed, OTHER_RECIPIENT) == "wrong_parent_hash"
+
+
+@pytest.mark.parametrize("source", VERSIONS)
+def test_process_bid_signed_by_another_key(source: str):
+    # The bid names the test key, and another key signed it.
+    signed = _minimal_bid(source, key=SECRET_KEY + 1)
+    parent, recipient = _bid_header(signed)
+    state = _with_block_hash(_fork_state(source), parent)
+    assert _process_bid(source, state, signed, recipient) == "bad_signature"
+    # The signature is checked last.
+    assert _process_bid(source, state, signed, OTHER_RECIPIENT) == "wrong_fee_recipient"
+    moved = _with_block_hash(state, bytes(a ^ 1 for a in parent))
+    assert _process_bid(source, moved, signed, recipient) == "wrong_parent_hash"
+
+
+def _proposer(source: str, state: bytes) -> int:
+    """The index of the proposer of the slot of a minimal state."""
+    fork = consensus.consensus_version_fork(source)
+    index = 0
+    while not consensus.is_proposer("minimal", fork, state, index):
+        index += 1
+    return index
+
+
+def _registered(index: int) -> bytes:
+    """A registration message of a validator of the pinned states, whose secret key is index + 1."""
+    pubkey = G2ProofOfPossession.SkToPk(index + 1)
+    return bytes(20) + struct.pack("<QQ", 30_000_000, 100) + pubkey
+
+
+def _eligible(
+    source: str, state: bytes, kept: Sequence[bytes], slot: int, parent: bytes, pubkey: bytes
+) -> bool:
+    """Whether a builder serves a request for a bid on a minimal state."""
+    fork = consensus.consensus_version_fork(source)
+    return consensus.is_eligible_for_bid("minimal", fork, state, list(kept), slot, parent, pubkey)
+
+
+@pytest.mark.parametrize("source", VERSIONS)
+def test_is_eligible_for_bid(source: str):
+    state = _fork_state(source)
+    (slot,) = struct.unpack_from("<Q", state, SLOT_AT)
+    at = _block_hash_at(state)
+    parent = state[at : at + 32]
+    proposer = _proposer(source, state)
+    other = proposer + 1
+    pubkey = G2ProofOfPossession.SkToPk(proposer + 1)
+    kept = [_registered(proposer), _registered(other)]
+    assert _eligible(source, state, kept, slot, parent, pubkey)
+    # A request for another slot than that of the state.
+    assert not _eligible(source, state, kept, slot + 1, parent, pubkey)
+    # A proposer that has not registered.
+    assert not _eligible(source, state, kept[1:], slot, parent, pubkey)
+    # A registered validator that does not propose at the slot.
+    other_key = G2ProofOfPossession.SkToPk(other + 1)
+    assert not _eligible(source, state, kept, slot, parent, other_key)
+    # Another parent hash than the latest block hash of the state.
+    assert not _eligible(source, state, kept, slot, bytes(a ^ 1 for a in parent), pubkey)
+
+
+@pytest.mark.parametrize("fork", ["altair", "glamsterdam"])
+def test_no_bids_outside_bellatrix_to_fulu(fork: str):
+    with raises(ERROR, f"no Builder API messages at {fork}") as info:
+        consensus.process_bid("minimal", fork, b"", b"", bytes(20))
+    assert info.value.code == 0
+    with raises(TransitionError, f"no Builder API messages at {fork}") as info:
+        consensus.is_eligible_for_bid("minimal", fork, b"", [], 0, ZERO, bytes(48))
+    assert info.value.code == 0
+
+
+def test_is_eligible_for_bid_state_that_does_not_decode():
+    with raises(
+        TransitionError, "state rejected: EthLib.Serialization.Ssz.Err.scopeTooSmall 10233 0"
+    ) as info:
+        consensus.is_eligible_for_bid("minimal", "bellatrix", b"", [], 0, ZERO, bytes(48))
+    assert info.value.code == 0

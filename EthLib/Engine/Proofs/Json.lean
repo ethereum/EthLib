@@ -421,6 +421,48 @@ theorem payloadV4_executionPayloadV4Json {fork : Fork} (p : ExecutionPayload for
   · exact bytes_dataJson _ _
   · exact uint64_toDigits _ _
 
+/-- The name of every status reads back as that status. -/
+theorem statusOfName_name (s : Status) : statusOfName s.name = some s := by
+  cases s <;> rfl
+
+/-- The decoder of a payload status reads back the JSON of every status and validation error. -/
+theorem payloadStatusOfJson_json (s : PayloadStatus) (e : Option String) :
+    payloadStatusOfJson (payloadStatusJson s e) = .ok (s, e) := by
+  have hd : [("status", Lean.Json.str s.status.name),
+      ("latestValidHash", optionJson (dataJson ·.toList) s.latestValidHash),
+      ("validationError", optionJson .str e)].Pairwise fun a b => a.1 ≠ b.1 := by simp
+  obtain ⟨fs, hfs, hp⟩ := fields_mkObj_filter "payloadStatus" hd
+  have look := lookup_of_perm_filter hp hd
+  have k1 : ∀ a b c : Lean.Json,
+      [("status", a), ("latestValidHash", b), ("validationError", c)].lookup "status" = some a :=
+    fun _ _ _ => rfl
+  have k2 : ∀ a b c : Lean.Json,
+      [("status", a), ("latestValidHash", b), ("validationError", c)].lookup "latestValidHash" =
+        some b := fun _ _ _ => rfl
+  have k3 : ∀ a b c : Lean.Json,
+      [("status", a), ("latestValidHash", b), ("validationError", c)].lookup "validationError" =
+        some c := fun _ _ _ => rfl
+  have l1 : fs.lookup "status" = some (.str s.status.name) := by
+    rw [look, k1]; rfl
+  have l2 : fs.lookup "latestValidHash" = s.latestValidHash.map (dataJson ·.toList) := by
+    rw [look, k2]; cases s.latestValidHash <;> rfl
+  have l3 : fs.lookup "validationError" = e.map .str := by
+    rw [look, k3]; cases e <;> rfl
+  have hall : (fs.all (payloadStatusFields.contains ·.1)) = true := by
+    rw [List.all_eq_true]
+    intro p hm
+    obtain ⟨hm, -⟩ := List.mem_filter.mp (hp.mem_iff.mp hm)
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hm
+    rcases hm with rfl | rfl | rfl <;> simp [payloadStatusFields]
+  unfold payloadStatusOfJson payloadStatusJson
+  have hf : field "payloadStatus" fs "status" = .ok (.str s.status.name) := by
+    simp [field, l1]; rfl
+  have hs : string "status" (.str s.status.name) = .ok s.status.name := rfl
+  simp only [hfs, liftM_ok, ok_bind, hall, ite_true, hf, l2, l3, hs, statusOfName_name]
+  obtain ⟨st, lvh⟩ := s
+  cases lvh <;> cases e <;> simp [lift, fixed_dataJson, string, Option.mapM]
+  all_goals rfl
+
 end EthLib.Engine.Json
 
 namespace EthLib.Engine

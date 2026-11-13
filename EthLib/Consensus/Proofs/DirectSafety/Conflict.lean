@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.Proofs.DirectSafety.Evidence
+public import EthLib.Consensus.Proofs.DirectSafety.Fields
 
 /-!
 # Conflicting concrete checkpoint fields expose slashable quorum pairs
@@ -84,13 +85,13 @@ private theorem link_source_lt {fork : Fork} {state : BeaconState preset fork}
     have laterNat := UInt64.lt_iff_toNat_lt.mp later
     apply UInt64.lt_iff_toNat_lt.mpr
     simp only [getPreviousEpoch_toNat] at settledNat
-    have one : (GENESIS_EPOCH + 1 : Epoch).toNat = 1 := by decide
+    have one := toNat_genesisEpoch_add_one
     rw [one] at laterNat
     simp only [↓reduceIte]
     omega
 
 private theorem call_epochs {g a : ForkedBeaconState preset} (run : Run config checks g a)
-    (genesis : Genesis (config := config) (checks := checks) g)
+    (genesis : Genesis config checks g)
     (call : QuorumCall run) : call.source.epoch < call.target.epoch := by
   obtain ⟨pre, _, _, frame, _⟩ := call.toEpochCall.selected_prefix
   obtain ⟨holds, _, separated⟩ := run_justified_separated pre genesis
@@ -104,7 +105,7 @@ Each common voter has a vote of the runs for each target, so it voted twice in t
 The runs start at one genesis built from deposits, and the preset meets the parameters. -/
 theorem same_epoch_histories {g a b : ForkedBeaconState preset}
     (left : Run config checks g a) (right : Run config checks g b)
-    (parameters : Parameters preset) (genesis : Genesis (config := config) (checks := checks) g)
+    (parameters : Parameters preset) (genesis : Genesis config checks g)
     (one : QuorumCall left) (two : QuorumCall right)
     (epoch : one.target.epoch = two.target.epoch) (different : one.target ≠ two.target) :
     ∀ key ∈ one.voters ∩ two.voters, Slashable left right key := by
@@ -169,7 +170,7 @@ private theorem history_crossing {g a : ForkedBeaconState preset} {run : Run con
 
 private theorem surround_quorums {g a b : ForkedBeaconState preset}
     (left : Run config checks g a) (right : Run config checks g b)
-    (parameters : Parameters preset) (genesis : Genesis (config := config) (checks := checks) g)
+    (parameters : Parameters preset) (genesis : Genesis config checks g)
     (outer : QuorumCall left) (inner : QuorumCall right)
     (source : outer.source.epoch < inner.source.epoch)
     (target : inner.target.epoch < outer.target.epoch) :
@@ -207,7 +208,7 @@ private theorem checkpointPath_zero {g a : ForkedBeaconState preset}
         (simp [Option.toList]; try omega)
 
 private theorem history_target_bound {g a : ForkedBeaconState preset}
-    (run : Run config checks g a) (genesis : Genesis (config := config) (checks := checks) g)
+    (run : Run config checks g a) (genesis : Genesis config checks g)
     {c : Checkpoint} (history : JustificationHistory run c)
     (call : QuorumCall run) (member : call ∈ history.calls) :
     call.target.epoch.toNat ≤ c.epoch.toNat := by
@@ -239,6 +240,59 @@ private theorem history_target_bound {g a : ForkedBeaconState preset}
         · exact tailBound call member
   exact bound history.calls history.finish history.consecutive call member
 
+private theorem call_target_window {g a : ForkedBeaconState preset}
+    {run : Run config checks g a} (parameters : Parameters preset) (call : QuorumCall run) :
+    call.target.epoch.toNat * preset.SLOTS_PER_EPOCH.toNat < call.before.state.slot.toNat ∧
+      call.before.state.slot.toNat < call.target.epoch.toNat * preset.SLOTS_PER_EPOCH.toNat +
+        preset.SLOTS_PER_HISTORICAL_ROOT.toNat := by
+  have frame := frame_processSlot call.cachedOk
+  -- The successful root read puts the target's first slot strictly before the cached slot.
+  have started := getBlockRoot_start_lt call.targetRoot
+  rw [frame.slot] at started
+  have current : (getCurrentEpoch call.cached).toNat =
+      call.before.state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat := by
+    simp [getCurrentEpoch_toNat, frame.slot]
+  have prev := getPreviousEpoch_toNat call.cached
+  have positive : 0 < preset.SLOTS_PER_EPOCH.toNat := by have := parameters.slots; omega
+  have division := Nat.mod_add_div call.before.state.slot.toNat preset.SLOTS_PER_EPOCH.toNat
+  have remainder := Nat.mod_lt call.before.state.slot.toNat positive
+  have date := congrArg UInt64.toNat call.targetEpoch
+  have roots := parameters.roots
+  refine ⟨started, ?_⟩
+  split at date
+  · rw [current] at date
+    rw [← date, Nat.mul_comm preset.SLOTS_PER_EPOCH.toNat] at division
+    omega
+  · rw [prev, current] at date
+    have late := UInt64.lt_iff_toNat_lt.mp call.later
+    simp only [GENESIS_EPOCH, UInt64.reduceAdd, UInt64.reduceToNat, current] at late
+    have epochPositive : 0 < call.before.state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat := by omega
+    have pred : call.before.state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat =
+        call.target.epoch.toNat + 1 := by omega
+    rw [pred, Nat.mul_add, Nat.mul_comm preset.SLOTS_PER_EPOCH.toNat] at division
+    simp only [Nat.mul_one] at division
+    omega
+
+/-- Two quorum calls of the runs with one target have the same headers up to the target epoch.
+
+Otherwise SHA-256 collides in the root of a header of the runs, or a header or state has root zero.
+
+The runs start at one genesis built from deposits, and the preset meets the parameters. -/
+theorem call_target_binding {g a b : ForkedBeaconState preset}
+    (left : Run config checks g a) (right : Run config checks g b)
+    (parameters : Parameters preset) (genesis : Genesis config checks g)
+    (one : QuorumCall left) (two : QuorumCall right) (same : one.target = two.target) :
+    left.checkpointPath one.target.epoch = right.checkpointPath two.target.epoch ∨
+      HashEvidence (left.hashObjects ++ right.hashObjects) := by
+  obtain ⟨earlyOne, recentOne⟩ := call_target_window parameters one
+  obtain ⟨earlyTwo, recentTwo⟩ := call_target_window parameters two
+  have result := checkpoint_binding_cached left right genesis
+    one.advanced two.advanced one.member two.member one.cached two.cached
+    one.cachedOk two.cachedOk one.target.epoch one.target.root one.targetRoot
+    (by simpa [same] using two.targetRoot) earlyOne
+    (by simpa [same] using earlyTwo) recentOne (by simpa [same] using recentTwo)
+  simpa [same] using result
+
 /-- A finalized field of the left run conflicts with a field of the right run at its epoch or later.
 
 The field of the right run is justified or finalized.
@@ -252,7 +306,7 @@ Otherwise SHA-256 collides in the root of a header of the runs, or a header or s
 The runs start at one genesis built from deposits, and the preset meets the parameters. -/
 theorem conflicting_fields_quorums {g a b : ForkedBeaconState preset}
     (left : Run config checks g a) (right : Run config checks g b)
-    (parameters : Parameters preset) (genesis : Genesis (config := config) (checks := checks) g)
+    (parameters : Parameters preset) (genesis : Genesis config checks g)
     (j : Checkpoint)
     (field : j = b.state.previousJustifiedCheckpoint ∨ j = b.state.currentJustifiedCheckpoint ∨
       j = b.state.finalizedCheckpoint)

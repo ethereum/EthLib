@@ -66,7 +66,7 @@ noncomputable def accountableKeys {g a b : ForkedBeaconState preset}
 
 private theorem accountable_pair_bound {g x a b : ForkedBeaconState preset}
     (shared : Run config checks g x) (left : Run config checks x a) (right : Run config checks x b)
-    (parameters : Parameters preset) (genesis : Genesis (config := config) (checks := checks) g)
+    (parameters : Parameters preset) (genesis : Genesis config checks g)
     {high : Nat} (enoughA : EnoughStake (shared.append left) high)
     (enoughB : EnoughStake (shared.append right) high)
     (one two : EitherCall (shared.append left) (shared.append right))
@@ -174,7 +174,7 @@ Each run's active stake exceeds 1.5 increments at epoch calls after epoch 1 thro
 -/
 theorem accountable_safety_at_calls {g x a b : ForkedBeaconState preset}
     (shared : Run config checks g x) (left : Run config checks x a) (right : Run config checks x b)
-    (parameters : Parameters preset) (genesis : Genesis (config := config) (checks := checks) g)
+    (parameters : Parameters preset) (genesis : Genesis config checks g)
     (j : Checkpoint)
     (enoughA : EnoughStake (shared.append left) j.epoch.toNat)
     (enoughB : EnoughStake (shared.append right) j.epoch.toNat)
@@ -287,7 +287,7 @@ The floor covers epoch calls after epoch 1 through one epoch past the right fina
 Each run has active stake above 1.5 increments at each covered call. -/
 theorem accountable_safety {g x a b : ForkedBeaconState preset}
     (shared : Run config checks g x) (left : Run config checks x a) (right : Run config checks x b)
-    (parameters : Parameters preset) (genesis : Genesis (config := config) (checks := checks) g)
+    (parameters : Parameters preset) (genesis : Genesis config checks g)
     (enoughA : EnoughStake (shared.append left) b.state.finalizedCheckpoint.epoch.toNat)
     (enoughB : EnoughStake (shared.append right) b.state.finalizedCheckpoint.epoch.toNat)
     (ordered : a.state.finalizedCheckpoint.epoch ≤ b.state.finalizedCheckpoint.epoch)
@@ -332,7 +332,7 @@ Each run's active stake exceeds 1.5 increments at epoch calls after epoch 1 thro
 -/
 theorem accountable_safety_justified {g x a b : ForkedBeaconState preset}
     (shared : Run config checks g x) (left : Run config checks x a) (right : Run config checks x b)
-    (parameters : Parameters preset) (genesis : Genesis (config := config) (checks := checks) g)
+    (parameters : Parameters preset) (genesis : Genesis config checks g)
     (j : Checkpoint)
     (enoughA : EnoughStake (shared.append left) j.epoch.toNat)
     (enoughB : EnoughStake (shared.append right) j.epoch.toNat)
@@ -377,7 +377,7 @@ Each run's active stake exceeds 1.5 increments at epoch calls after epoch 1 thro
 theorem accountable_justified_unique {g x a b : ForkedBeaconState preset}
     (shared : Run config checks g x) (left : Run config checks x a)
     (right : Run config checks x b) (parameters : Parameters preset)
-    (genesis : Genesis (config := config) (checks := checks) g)
+    (genesis : Genesis config checks g)
     (j k : Checkpoint)
     (enoughA : EnoughStake (shared.append left) j.epoch.toNat)
     (enoughB : EnoughStake (shared.append right) j.epoch.toNat)
@@ -400,7 +400,7 @@ theorem accountable_justified_unique {g x a b : ForkedBeaconState preset}
     let call := history.calls.getLast history.nonempty
     have target := history.finish call (List.getLast?_eq_some_getLast history.nonempty)
     have later := UInt64.lt_iff_toNat_lt.mp call.later
-    have one : (GENESIS_EPOCH + 1 : Epoch).toNat = 1 := by decide
+    have one := toNat_genesisEpoch_add_one
     rw [one] at later
     rw [← target, call.targetEpoch]
     cases call.current <;> simp only [Bool.false_eq_true, ↓reduceIte,

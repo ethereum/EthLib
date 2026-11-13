@@ -212,7 +212,7 @@ theorem processEpoch_registryLoad_le (computed : processEpoch config checks stat
     rw [LoadKept.registryLoad_eq tail, LoadKept.registryLoad_eq rotated,
       LoadKept.registryLoad_eq middle, LoadKept.registryLoad_eq paidKept]
   · obtain ⟨justified, justifiedOk, rest⟩ :=
-      loadKeptLaws.processEpoch_beforeAltair altair computed
+      loadKeptLaws.processEpoch_split_of_lt_altair (Nat.lt_of_not_le altair) computed
     exact Nat.le_of_eq ((LoadKept.registryLoad_eq rest).trans
       (LoadKept.registryLoad_eq (loadKept_justification justifiedOk)))
 

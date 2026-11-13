@@ -9,6 +9,18 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the results on slashed flags state them at each position of the registry, as `(state.validators.data[position]?).map (·.slashed)`.
+  From Gloas the registry has no limit in its type, so a position may lie beyond every `ValidatorIndex`.
+  `slashedFlag_initiateValidatorExit` takes a `position : Nat` in place of an index.
+  The second conjunct of `slashValidator_slashedFlag` holds at each position other than `slashedIndex.toNat`.
+  A caller that read either at an index `i` reads it at `i.toNat`, and `getValidator_eq_ok_iff` converts the result.
+  `slashIfSlashable_ok` and `foldlM_slashIfSlashable` gain a last conjunct: no flag changes at a position that none of their indices names.
+  An `obtain` of their three parts binds a fourth.
+  `UpgradeFrame` gains the field `slashed`, since each upgrade keeps every slashed flag, and `ElectraKept` gains the same conjunct.
+  `UpgradeFrame.trans_blockFrame` takes the new premise `flags`: the steps after the upgrade keep every slashed flag.
+  A block frame alone may slash, so it cannot give the field.
+  Compose the block frames of the steps first, and pass their flags once.
+
 - In Lean, `EpochFrameLaws` now extends `EpochStepLaws`, which holds every law except those for a new validator and for the queue of pending deposits.
   The theorems that need neither law moved from the `EpochFrameLaws` namespace to the `EpochStepLaws` namespace, with the same statements, and they now take the smaller structure.
   Dot notation on a value of either structure still finds them; a full name such as `EpochFrameLaws.processSyncAggregate` becomes `EpochStepLaws.processSyncAggregate`.

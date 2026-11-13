@@ -168,6 +168,23 @@ def get_payload(
     return _native.engine_get_payload(config, entries, request)
 
 
+def read_payload_status(status: dict[str, Any]) -> tuple[str, bytes | None, str | None]:
+    """The status name, latest valid hash and validation error of a PayloadStatusV1 object."""
+    return _native.engine_read_payload_status(status)
+
+
+def read_forkchoice_response(
+    response: dict[str, Any],
+) -> tuple[str, bytes | None, str | None, bytes | None]:
+    """The status, latest valid hash, validation error and payload ID of a forkchoice response."""
+    return _native.engine_read_forkchoice_response(response)
+
+
+def read_get_payload_result(method: str, fork: str, result: dict[str, Any]) -> dict[str, Any]:
+    """The result of an `engine_getPayload` method at a fork, read and written back as JSON."""
+    return _native.engine_read_get_payload_result(method, fork, result)
+
+
 def rewrite_params(method: str, params: list[Any]) -> list[Any]:
     """The parameters of an Engine API request, read by the decoder and written by the writer."""
     # The writer writes lowercase hex and quantities without leading zeros.
@@ -268,6 +285,9 @@ __all__ = [
     "get_payload_bodies",
     "BodyEntry",
     "rewrite_params",
+    "read_payload_status",
+    "read_forkchoice_response",
+    "read_get_payload_result",
     "WithdrawalEntry",
     "prepare_execution_payload",
     "prepare_execution_payload_gloas",
