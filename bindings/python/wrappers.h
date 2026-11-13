@@ -589,6 +589,8 @@ PyObject* py_gossip_message_id                            (PyObject* self, PyObj
 PyObject* py_gossip_decode_payload                        (PyObject* self, PyObject* args);
 PyObject* py_gossip_rpc_decode                            (PyObject* self, PyObject* args);
 PyObject* py_gossip_rpc_encode                            (PyObject* self, PyObject* args);
+PyObject* py_gossip_parameters                            (PyObject* self, PyObject* args);
+PyObject* py_gossip_receive_rpc                           (PyObject* self, PyObject* args);
 
 PyObject* py_rlpx_ecies_encrypt                           (PyObject* self, PyObject* args);
 PyObject* py_rlpx_ecies_decrypt                           (PyObject* self, PyObject* args);

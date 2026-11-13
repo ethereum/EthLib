@@ -10519,6 +10519,26 @@
    "error_class": "GossipError",
    "docstring": "The bytes of an RPC."},
   {"summary":
+   "The gossipsub parameters, given the slot duration in milliseconds and the slots per epoch.",
+   "signature":
+   "(slot_duration_ms: int, slots_per_epoch: int) -> dict[str, Any]",
+   "operation": "EthLib.Networking.Gossip.gossipsubParameters",
+   "method": "gossip_parameters",
+   "errors": [],
+   "error_class": "GossipError",
+   "docstring":
+   "The gossipsub parameters, given the slot duration in milliseconds and the slots per epoch.\n\nA seen message ID lasts two epochs, in whole seconds, with the remainder dropped."},
+  {"summary":
+   "What the router does with one RPC, with its client choices given as tables.",
+   "signature":
+   "(fork: str, params: dict[str, Any], backoff_ms: int, prune_backoff_ms: int, standing: list[tuple[bytes, dict[str, Any]]], validation: list[tuple[bytes, str | tuple[str, str]]], now: int, src: bytes, rpc: dict[str, Any], state: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]",
+   "operation": "EthLib.Networking.Gossip.Exports.receiveRpcOf",
+   "method": "gossip_receive_rpc",
+   "errors": [],
+   "error_class": "GossipError",
+   "docstring":
+   "What the router does with one RPC, with its client choices given as tables.\n\nThe arguments come in this order.\n\n- The name of a fork, whose rule gives the ID of every message, whatever the digest of its topic.\n- The gossipsub parameters, then the two durations in milliseconds that the router takes.\n- The standing of some peers; any other peer has every flag false.\n- The validation result of some message IDs; any other message is ignored.\n- The time in milliseconds, the peer that sent the RPC, the RPC and the state.\n\nIn each table, the first entry for a key counts.\n\nOne rule for every message fits a router whose topics all carry digests of forks with that rule.\n\nPhase 0 has one rule, and every fork from Altair on has another."},
+  {"summary":
    "The bytes of a receipt, decoded at the fork and encoded again with its transaction type.",
    "signature": "(fork: str, receipt: bytes) -> bytes",
    "operation": "EthLib.Execution.Blocks.Exports.receiptReencodeExport",
