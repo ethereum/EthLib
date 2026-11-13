@@ -2958,6 +2958,25 @@
    "docstring":
    "The status of the builder at an index of a state, as its name.\n\nThe arguments are the name, the fork, the SSZ bytes of the state and the index."},
   {"summary":
+   "The JSON response to a query on the registries of a state, as a `dict`.",
+   "signature":
+   "(name: str, fork: str, state: bytes, query: str, ids: list[str] | None, statuses: list[str] | None, in_query: bool) -> dict[str, Any]",
+   "operation": "EthLib.Consensus.Exports.apiRegistryQueryExport",
+   "method": "consensus_api_registry_query",
+   "errors": [],
+   "error_class": "ConsensusError",
+   "docstring":
+   "The JSON response to a query on the registries of a state, as a `dict`.\n\nThe arguments are the name, the fork, the SSZ bytes of the state and the query.\n\nThen come the identifiers, the statuses, and whether the identifiers come in a query string.\n\nThe queries are the validators, one validator, the balances, the identities and the builders."},
+  {"summary": "The SSZ body of the balances answer, as `bytes`.",
+   "signature":
+   "(name: str, fork: str, state: bytes, ids: list[str] | None, in_query: bool) -> bytes",
+   "operation": "EthLib.Consensus.Exports.apiValidatorBalancesSszExport",
+   "method": "consensus_api_validator_balances_ssz",
+   "errors": [],
+   "error_class": "ConsensusError",
+   "docstring":
+   "The SSZ body of the balances answer, as `bytes`.\n\nThe arguments are the name, the fork, the SSZ bytes of the state and the identifiers.\n\nThe last argument says whether the identifiers come in a query string."},
+  {"summary":
    "The answer to each query, against the store after the steps of a fork choice case.",
    "signature":
    "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, queries: list) -> list",

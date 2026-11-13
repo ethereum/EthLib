@@ -609,6 +609,14 @@ def consensus_api_builder_status(name: str, fork: str, state: bytes, index: int)
     """The status of the builder at an index of a state, as its name."""
     ...
 
+def consensus_api_registry_query(name: str, fork: str, state: bytes, query: str, ids: list[str] | None, statuses: list[str] | None, in_query: bool) -> dict[str, Any]:
+    """The JSON response to a query on the registries of a state, as a `dict`."""
+    ...
+
+def consensus_api_validator_balances_ssz(name: str, fork: str, state: bytes, ids: list[str] | None, in_query: bool) -> bytes:
+    """The SSZ body of the balances answer, as `bytes`."""
+    ...
+
 def consensus_api_resolve(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, queries: list) -> list:
     """The answer to each query, against the store after the steps of a fork choice case."""
     ...

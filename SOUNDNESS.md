@@ -3574,7 +3574,7 @@ No theorem yet shows that every validator of a reachable state meets that hypoth
 `builderStatus_unique` shows that the status of a builder of the state is the only one whose condition holds.
 The Python suite (`bindings/python/tests/consensus/test_beacon_api_validators.py`) checks each of the nine statuses and the three builder statuses on hand-made inputs.
 
-The answers that read the registry of validators are in `Consensus/BeaconApi/Registries.lean`: the validators, their balances and their identities.
+The answers that read the registries of validators and builders are in `Consensus/BeaconApi/Registries.lean`: the validators, their balances, their identities, and the builders.
 `stateValidators_mem` (`Consensus/Proofs/BeaconApi/Registries.lean`) says which entries the validators answer holds.
 An entry is there exactly when the request names its index and its record and balance are those of the state.
 Its status must also be the status at the current epoch, and pass the filter.
@@ -3584,9 +3584,17 @@ Its status must also be the status at the current epoch, and pass the filter.
 An entry of the balances answer needs only a balance, and an entry of the identities answer only a record.
 `stateValidator_ok` says the same of the endpoint for one validator.
 `stateValidator_error_code` shows that it answers code 404 otherwise: when the identifier names no validator, or names one without a balance.
-The source gives no order, so the acceptance predicates take any permutation of the entries, and `IsValidatorsAnswer.mem_iff` and its two siblings show that such an answer has the same entries.
+The source gives no order, so the acceptance predicates take any permutation of the entries.
+`IsValidatorsAnswer.mem_iff` and its three siblings show that such an answer has the same entries.
 The reader of a request refuses more than 64 identifiers in a query string with code 414 (`readValidatorIds_too_many`), and a text that is neither an index nor a public key with code 400.
 `StatusName.parse_status_name` and `StatusName.parse_group_name` show that the reader of a filter takes the name of each status and of each group.
+From Gloas, the builders answer follows the same rule, with the status that the state gives each builder.
+`stateBuilders_mem` says which entries it holds, and `stateBuilders_nodup` that each index appears at most once.
+`resolveBuilderId_index` and `resolveBuilderId_pubkey` say which builder an index or a public key names.
+`buildersResponse_before_gloas` shows that a state before Gloas gets code 400, and `BuilderStatus.parse_name` that the reader takes the name of each builder status.
+The Python suite (`bindings/python/tests/consensus/test_beacon_api_registries.py`) checks each answer against a hand-made registry of the minimal preset.
+Its registry holds one validator of each of the nine statuses, and one builder of each of the three.
+It covers a filter on each status and each group, the errors with codes 400, 404 and 414, and the SSZ body of the balances.
 
 Points that remain open:
 
@@ -4085,12 +4093,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 441 operations and 49 size constants.
-The Python extension calls 441 of the operations and 49 of the constants.
+Lean exports 443 operations and 49 size constants.
+The Python extension calls 443 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-10735 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2094), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (194), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (106), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (147), `module.c` (1500), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (71), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (58), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (730), `x25519.c` (21), `xmss.c` (134).
+10763 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2116), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (194), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (106), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (147), `module.c` (1504), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (71), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (58), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (732), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

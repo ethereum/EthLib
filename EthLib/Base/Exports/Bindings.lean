@@ -588,6 +588,14 @@ def bindings : List Binding := [
   ⟨"consensus_api_builder_status", `EthLib.Consensus.Exports.apiBuilderStatusExport,
     "(name: str, fork: str, state: bytes, index: int) -> str",
     [], some "ConsensusError"⟩,
+  ⟨"consensus_api_registry_query", `EthLib.Consensus.Exports.apiRegistryQueryExport,
+    "(name: str, fork: str, state: bytes, query: str, ids: list[str] | None, " ++
+      "statuses: list[str] | None, in_query: bool) -> dict[str, Any]",
+    [], some "ConsensusError"⟩,
+  ⟨"consensus_api_validator_balances_ssz",
+    `EthLib.Consensus.Exports.apiValidatorBalancesSszExport,
+    "(name: str, fork: str, state: bytes, ids: list[str] | None, in_query: bool) -> bytes",
+    [], some "ConsensusError"⟩,
   ⟨"consensus_api_resolve", `EthLib.Consensus.Exports.apiResolveExport,
     "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, " ++
       "verify: bool, queries: list) -> list",
