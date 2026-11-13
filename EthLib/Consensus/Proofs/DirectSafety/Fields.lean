@@ -254,7 +254,7 @@ def StepRule {fork : Fork} (state after : BeaconState preset fork)
 
 /-- The four rules by which justification finalizes a checkpoint, read from the bits of a call.
 
-This is `StepRule` for the cached state before the call and the weighed state after it. -/
+It is the step rule for the cached state before the call and the weighed state after it. -/
 def FinalizationRule {g a : ForkedBeaconState preset} {run : Run config checks g a}
     (call : EpochCall run) (checkpoint : Checkpoint) : Prop :=
   StepRule call.cached call.weighed checkpoint
