@@ -298,7 +298,8 @@ def scheduledActivationEpoch (state : BeaconState preset fork) : Nat :=
   (getCurrentEpoch state).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat
 
 /-- Non-genesis activation cohorts are bounded and precede the next registry pass. -/
-private structure ActivationCohortBound (config : Config) (state : BeaconState preset fork) : Prop where
+private structure ActivationCohortBound (config : Config) (state : BeaconState preset fork) :
+    Prop where
   count : ∀ e, e ≠ FAR_FUTURE_EPOCH → e ≠ GENESIS_EPOCH →
     validatorCohort Validator.activationEpoch state e ≤
       cohortCap config state.validators.data.size
