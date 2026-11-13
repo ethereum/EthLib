@@ -22,8 +22,10 @@ variable {preset : Preset} {config : Config} {checks : SignatureChecks}
   {fork : Fork} {state after : BeaconState preset fork}
 
 /-- The pre-Electra validator-count churn limit of a registry with `size` entries. -/
-def cohortCap (config : Config) (size : Nat) : Nat :=
+def DirectSafety.cohortCap (config : Config) (size : Nat) : Nat :=
   max config.MIN_PER_EPOCH_CHURN_LIMIT.toNat (size / config.CHURN_LIMIT_QUOTIENT.toNat)
+
+open DirectSafety (cohortCap)
 
 private theorem cohortCap_mono {n m : Nat} (le : n ≤ m) :
     cohortCap config n ≤ cohortCap config m := by
