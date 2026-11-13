@@ -733,8 +733,8 @@ In both cases the host signature verifies over `libp2p-tls-handshake:` and the c
 `authenticate_single`, `authenticate_empty`, `authenticate_validity`, `authenticate_extension` and `authenticate_critical` reject a chain of another length, a time outside the interval, a missing libp2p extension and another critical extension.
 `authenticatePeer_peerId` proves that a dialer that succeeds gets the peer ID it expected.
 These are correctness properties of the checks, not an unforgeability theorem.
-`read_ok_iff` (`Serialization/Proofs/Der.lean`) states the DER reader in the terms of X.690 §§8.1.2, 8.1.3 and 10.1.
-A read takes a low-number identifier octet, the length on the fewest octets, the content and the rest.
+`read_ok_iff` (`Serialization/Proofs/Der.lean`) states the DER reader in the terms of X.690 §§8.1.2, 8.1.3, 8.1.5 and 10.1.
+A read takes one identifier octet with a low tag number, other than 0, the length on the fewest octets, the content and the rest.
 `encoded_eq_of_read_ok` derives that a tag and a content have a single encoding.
 `integer_ok_iff` states that an INTEGER reads as `i` exactly when its content is `i` in two's complement on the fewest octets (X.690 §8.3).
 `natural_ok_iff` states the nonnegative case.

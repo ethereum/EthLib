@@ -11,10 +11,11 @@ A successful typed read has the requested tag and a complete read consumes its i
 
 The reader is stated against X.690 itself, in terms of octets and numbers.
 
-- A read succeeds exactly on a tag, the length on the fewest octets, the content and the rest.
+- A read is exactly a tag octet, the length on the fewest octets, the content and the rest.
 - So a tag and a content have a single encoding.
 - An INTEGER reads as `i` exactly when its content is `i` in two's complement on the fewest octets.
-- So an integer has a single content, and a nonnegative one is its big-endian octets.
+- So an integer has a single content.
+- A nonnegative one is its big-endian octets, after a zero octet when the top bit is set.
 -/
 
 @[expose] public section
@@ -74,7 +75,9 @@ private theorem toList_extract (b : ByteArray) (x y : Nat) :
 
 /-- A read gives `value` and `rest` exactly when the input is the encoding of `value`, then `rest`.
 
-The identifier is one octet: its five low bits are not all set and it is not zero (X.690 §8.1.2).
+The identifier is one octet whose five low bits are not all set (X.690 §8.1.2).
+
+It is not zero, the identifier of the end-of-contents octets (X.690 §8.1.5).
 
 The length is definite and on the fewest octets (X.690 §§8.1.3, 10.1).
 
@@ -308,9 +311,8 @@ private theorem emod_cases {i M : Int} (lo : -M ≤ 2 * i) (hi : 2 * i < M) :
   · refine .inr ⟨by omega, ?_⟩
     rw [Int.emod_eq_add_self_emod, Int.emod_eq_of_lt (by omega) (by omega)]
 
-/-- Bytes without a redundant sign octet read as `i` exactly when they are `i` on the fewest octets.
-
-This is the arithmetic behind the INTEGER theorem. -/
+/-- Bytes with no redundant sign octet read as `i` exactly when they hold `i` on the fewest octets.
+-/
 private theorem twos_complement_iff (first : UInt8) (rest : List UInt8) (i : Int) :
     ((∀ next tail, rest = next :: tail →
         ¬ ((first = 0 ∧ next.toNat < 128) ∨ (first = 255 ∧ 128 ≤ next.toNat))) ∧
@@ -415,13 +417,13 @@ private theorem twos_complement_iff (first : UInt8) (rest : List UInt8) (i : Int
 
 /-- An INTEGER reads as `i` exactly when its tag is 2 and its content is `i` on the fewest octets.
 
-The octets are two's complement (X.690 §8.3).
+The octets are two's complement (X.690 §8.3.3).
 
 The content is `i` modulo `256 ^ (k + 1)` on `k + 1` big-endian octets.
 
 `i` lies in `[-(128 * 256 ^ k), 128 * 256 ^ k)`, the range of `k + 1` octets.
 
-No shorter content holds `i`, so a first octet 0 or 255 is never redundant. -/
+No shorter content holds `i`, so a first octet 0 or 255 is never redundant (X.690 §8.3.2). -/
 theorem integer_ok_iff {value : Value} {i : Int} :
     integer value = .ok i ↔ value.tag = 2 ∧ ∃ k : Nat,
       -(128 * 256 ^ k : Int) ≤ i ∧ i < 128 * 256 ^ k ∧
@@ -458,7 +460,7 @@ theorem integer_ok_iff {value : Value} {i : Int} :
         simp [hr, pure, Except.pure, eq_comm]
   · simp [ht, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
 
-/-- Two INTEGERs that read as one value have one content, so each value has one encoding. -/
+/-- Two INTEGERs that read as one value have one content. -/
 theorem content_eq_of_integer_ok {v w : Value} {i : Int} (hv : integer v = .ok i)
     (hw : integer w = .ok i) : v.content = w.content := by
   obtain ⟨-, k, lo, hi, hmin, hc⟩ := integer_ok_iff.mp hv
@@ -474,7 +476,7 @@ theorem content_eq_of_integer_ok {v w : Value} {i : Int} (hv : integer v = .ok i
 
 /-- A nonnegative INTEGER reads as `n` exactly when its tag is 2 and its content is `n` big-endian.
 
-The content has the fewest octets that leave the top bit of the first clear (X.690 §8.3).
+The content has the fewest octets that leave the top bit of the first clear (X.690 §8.3.2).
 
 The content has `k + 1` octets, and `n` is below `128 * 256 ^ k`.
 
