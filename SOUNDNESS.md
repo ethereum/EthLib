@@ -2683,6 +2683,9 @@ It rests on `fastAggregateVerify_sign`: an honest signature passes the fast aggr
 `isAssignedToSyncCommittee_ok_iff` states when the sync committee seat check succeeds.
 Its answer is then whether the validator's key is in the current or the next committee.
 `computeSubnetsForSyncCommittee_ok` shows that its sync committee subnets come once each, in increasing order, from the seats of its key.
+`syncCommitteeAtNextSlot_eq` (`Consensus/Proofs/Gossip/SyncCommittee.lean`) states the committee that signs in the slot after a state.
+It is the next committee of the state when that slot starts a period, and the current one otherwise; it fails with an overflow at the largest slot.
+`getSyncSubcommitteePubkeys_eq` states that, for a subcommittee index below the number of subnets, the keys that gossip checks are the slice of that committee.
 The Python suite checks each duty signature against py_ecc, on signing roots computed in the test, and each committee against the shuffle export.
 It checks each payload timeliness assignment and the upcoming proposal slots against the window and the lookahead that it reads from a Gloas state.
 

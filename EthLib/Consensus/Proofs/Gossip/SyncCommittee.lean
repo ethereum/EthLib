@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.Uint64
 public import EthLib.Consensus.Gossip.SyncCommittee
 public import EthLib.Networking.Proofs.Gossip.Validation
 
@@ -17,6 +18,10 @@ A valid message records its keys, and the same message is then ignored.
 A fresh node has seen no bits, and in the minimal preset every selection proof selects.
 
 So the checks of the seen bits and of the selection can pass, as the iffs need for an accept.
+
+The keys a topic checks come from the next committee of a state when the next slot starts a period.
+
+Otherwise they come from its current committee.
 -/
 
 @[expose] public section
@@ -75,6 +80,81 @@ theorem mem_syncSubnetsOfPubkey {committee : SyncCommittee preset} {pubkey : BLS
     exact ⟨position, by simpa using found, rfl⟩
   · rintro ⟨position, found, rfl⟩
     exact ⟨(pubkey, position), by simpa using found, rfl, rfl⟩
+
+/-! ## The committee of the next slot -/
+
+/-- A slot and the slot after it share a period exactly when the slot after does not start one.
+
+A period is the slots of a fixed number of epochs. -/
+private theorem period_eq_iff {slot : Slot} (fits : slot.toNat + 1 < 2 ^ 64) :
+    computeSyncCommitteePeriod preset (computeEpochAtSlot preset slot) =
+        computeSyncCommitteePeriodAtSlot preset (slot + 1) ↔
+      (slot.toNat + 1) %
+        (preset.SLOTS_PER_EPOCH.toNat * preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat) ≠ 0 := by
+  simp only [computeSyncCommitteePeriodAtSlot, computeSyncCommitteePeriod, computeEpochAtSlot,
+    ← UInt64.toNat_inj, UInt64.toNat_div, Uint64.toNat_add_of_lt (a := slot) (b := 1) fits,
+    UInt64.toNat_one, Nat.div_div_eq_div_mul]
+  generalize preset.SLOTS_PER_EPOCH.toNat * preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat = length
+  rcases Nat.eq_zero_or_pos length with zero | pos
+  · simp [zero]
+  · rw [Nat.succ_div, Ne, ← Nat.dvd_iff_mod_eq_zero]
+    split <;> simp_all
+
+/-- The sync committee of the slot after a state.
+
+When that slot starts a period, it is the next committee of the state.
+
+Otherwise it is the current committee of the state.
+
+A period is the slots of a fixed number of epochs.
+
+It fails with an overflow when the slot of the state is the largest 64-bit integer. -/
+theorem syncCommitteeAtNextSlot_eq :
+    syncCommitteeAtNextSlot state altair =
+      if state.slot.toNat + 1 < 2 ^ 64 then
+        .ok (if (state.slot.toNat + 1) %
+            (preset.SLOTS_PER_EPOCH.toNat * preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat) = 0
+          then (state.nextSyncCommittee altair).value
+          else (state.currentSyncCommittee altair).value)
+      else .error .overflow := by
+  unfold syncCommitteeAtNextSlot
+  split
+  · rename_i fits
+    rw [addChecked_of_lt fits]
+    simp only [getCurrentEpoch, bind, Except.bind, pure, Except.pure, Except.ok.injEq,
+      beq_iff_eq, period_eq_iff fits]
+    split <;> simp_all
+  · rename_i over
+    simp [addChecked, over, bind, Except.bind]
+
+/-- The keys of a subcommittee whose index is below the number of subnets.
+
+They are its slice of the sync committee of the slot after the state.
+
+They fail exactly when that committee does. -/
+theorem getSyncSubcommitteePubkeys_eq {subcommitteeIndex : UInt64}
+    (inRange : subcommitteeIndex < SYNC_COMMITTEE_SUBNET_COUNT) :
+    getSyncSubcommitteePubkeys state altair subcommitteeIndex =
+      (syncCommitteeAtNextSlot state altair).map
+        (syncSubcommitteePubkeys · subcommitteeIndex.toNat) := by
+  have below : subcommitteeIndex.toNat < 4 := by
+    simpa [SYNC_COMMITTEE_SUBNET_COUNT, Networking.Enr.SYNC_COMMITTEE_SUBNET_COUNT,
+      UInt64.lt_iff_toNat_lt] using inRange
+  have size : syncSubcommitteeSize preset < 2 ^ 62 := by
+    have := preset.SYNC_COMMITTEE_SIZE.toNat_lt
+    simp only [syncSubcommitteeSize, Networking.Enr.SYNC_COMMITTEE_SUBNET_COUNT]
+    omega
+  have small : (syncSubcommitteeSize preset).toUInt64.toNat < 2 ^ 62 := by
+    rw [Nat.toUInt64_eq, UInt64.toNat_ofNat_of_lt' (by unfold UInt64.size; omega)]
+    exact size
+  have product :
+      subcommitteeIndex.toNat * (syncSubcommitteeSize preset).toUInt64.toNat < 2 ^ 64 := by
+    have := Nat.mul_le_mul_right (syncSubcommitteeSize preset).toUInt64.toNat
+      (show subcommitteeIndex.toNat ≤ 3 by omega)
+    omega
+  unfold getSyncSubcommitteePubkeys
+  cases syncCommitteeAtNextSlot state altair <;>
+    simp [mulChecked_of_lt product, bind, Except.bind, pure, Except.pure, Except.map]
 
 /-! ## Sync committee messages -/
 
