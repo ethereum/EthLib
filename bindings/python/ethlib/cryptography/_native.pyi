@@ -569,8 +569,40 @@ def consensus_api_ssz(name: str, fork: str, type: str, document: Any) -> bytes:
     """The SSZ bytes of the value that a JSON document of the API holds."""
     ...
 
+def consensus_api_spec(name: str, config: dict[str, Any] | None) -> dict[str, Any]:
+    """The spec map of a preset and a configuration, as a `dict`."""
+    ...
+
+def consensus_api_fork_schedule(name: str, config: dict[str, Any] | None) -> list[dict[str, str]]:
+    """The fork schedule of a configuration, as a `list` of `dict`."""
+    ...
+
+def consensus_api_deposit_contract(name: str, config: dict[str, Any] | None) -> dict[str, str]:
+    """The deposit contract of a configuration, as a `dict`."""
+    ...
+
+def consensus_api_genesis(name: str, fork: str, state: bytes, config: dict[str, Any] | None) -> dict[str, str]:
+    """The genesis that a genesis state gives, as a `dict`."""
+    ...
+
+def consensus_api_state_query(name: str, fork: str, state: bytes, query: str, epoch: int | None) -> dict[str, Any]:
+    """The JSON response to a query on a state, as a `dict`."""
+    ...
+
+def consensus_api_state_query_ssz(name: str, fork: str, state: bytes, query: str) -> bytes:
+    """The SSZ body of the response to a query on a state, as `bytes`."""
+    ...
+
 def consensus_api_resolve(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, queries: list) -> list:
     """The answer to each query, against the store after the steps of a fork choice case."""
+    ...
+
+def consensus_builder_api_json(name: str, fork: str, type: str, data: bytes) -> Any:
+    """The JSON body of a response of the Builder API: the version of the fork and the data."""
+    ...
+
+def consensus_builder_api_ssz(name: str, fork: str, type: str, document: Any) -> bytes:
+    """The SSZ bytes of the value that a JSON body of the Builder API holds."""
     ...
 
 def consensus_is_valid_builder_signature(name: str, fork: str, config: dict[str, Any] | None, type: str, data: bytes) -> bool:
@@ -603,6 +635,14 @@ def consensus_unblind_signed_blinded_block(name: str, fork: str, blinded: bytes,
 
 def consensus_verify_builder_request_auth_signature(name: str, fork: str, config: dict[str, Any] | None, pubkey: bytes, data: bytes) -> bool:
     """Whether a proposer key signed a Gloas request authentication given in SSZ."""
+    ...
+
+def consensus_builder_request_auth_failures(name: str, fork: str, config: dict[str, Any] | None, agreed: bytes, path_slot: int, pubkey: bytes, version_header: str | None, data: bytes) -> list[str]:
+    """From Gloas: the failed checks of a request for a bid, by name, in order."""
+    ...
+
+def consensus_builder_preferences_failures(name: str, fork: str, config: dict[str, Any] | None, agreed: bytes, current_slot: int, pubkey: bytes, version_header: str | None, data: bytes) -> list[str]:
+    """From Gloas: the failed checks of a request that submits preferences, by name, in order."""
     ...
 
 def consensus_builder_bid_value(value: int, execution_payment: int, max_execution_payment: int) -> int:
@@ -1297,6 +1337,10 @@ def snap_access_lists_answer(request: bytes, response: bytes, expected: list[byt
     """Whether `response` answers a GetBlockAccessLists `request`, given each block's access list hash."""
     ...
 
+def snap_trie_nodes_answer(request: bytes, response: bytes) -> bool:
+    """Whether the snap/1 TrieNodes data `response` answers the GetTrieNodes data `request`."""
+    ...
+
 def snap_full_account(slim: bytes) -> bytes:
     """The full RLP form of an account in slim form."""
     ...
@@ -1355,6 +1399,14 @@ def uvarint_encode(value: int) -> bytes:
 
 def uvarint_decode(data: bytes) -> tuple[int, bytes]:
     """The value of the unsigned varint at the start of the bytes, and the bytes after it."""
+    ...
+
+def quic_varint_encode(value: int) -> bytes:
+    """Encode a value below `2^62` with its shortest QUIC representation, RFC 9000 §16."""
+    ...
+
+def quic_varint_decode(data: bytes) -> tuple[int, bytes]:
+    """Read a QUIC integer and return its value and the trailing bytes, RFC 9000 §16."""
     ...
 
 def multistream_encode(message: bytes) -> bytes:
@@ -1603,6 +1655,18 @@ def engine_read_forkchoice_response(response: dict[str, Any]) -> tuple[str, byte
 
 def engine_read_get_payload_result(method: str, fork: str, result: dict[str, Any]) -> dict[str, Any]:
     """The result of an `engine_getPayload` method at a fork, read from its JSON and written back."""
+    ...
+
+def engine_read_payload_bodies_result(method: str, result: Any) -> list[dict[str, Any] | None]:
+    """The result of an `engine_getPayloadBodiesByHash` or `ByRange` method, read and written back."""
+    ...
+
+def engine_read_get_blobs_result(method: str, result: Any) -> list[dict[str, Any] | None] | None:
+    """The result of an `engine_getBlobs` method, read from its JSON and written back."""
+    ...
+
+def engine_exchange_transition_configuration(terminal_total_difficulty: int, terminal_block_hash: bytes, terminal_block_number: int, request: dict) -> dict[str, Any]:
+    """The answer to an `engine_exchangeTransitionConfigurationV1` request, from a configuration."""
     ...
 
 def engine_rewrite_params(method: str, params: list[Any]) -> list[Any]:

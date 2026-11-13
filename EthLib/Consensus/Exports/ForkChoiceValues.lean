@@ -100,7 +100,7 @@ instance : LawfulPy ReadRequest where
     rw [h]
     rfl
 
-/-- The verdict of the execution layer on the payload of the next block. -/
+/-- The verdict of the execution layer on a payload, of a block or of an envelope. -/
 structure PayloadVerdict where
   /-- The status, by its Engine API name. -/
   status : String
@@ -138,7 +138,7 @@ inductive ForkChoiceStep where
   | checks (read : ReadRequest)
   /-- A block of proof of work becomes known, in SSZ, for the merge check of later blocks. -/
   | powBlock (data : ByteArray)
-  /-- The verdict of the execution layer on the payload of the next block. -/
+  /-- The verdict of the execution layer on the next payload, of a block or of an envelope. -/
   | payload (verdict : PayloadVerdict)
   /-- The fast confirmation of the slot runs. -/
   | fastConfirmation (nothing : Unit)

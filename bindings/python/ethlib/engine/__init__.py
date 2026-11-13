@@ -185,6 +185,30 @@ def read_get_payload_result(method: str, fork: str, result: dict[str, Any]) -> d
     return _native.engine_read_get_payload_result(method, fork, result)
 
 
+def read_payload_bodies_result(method: str, result: Any) -> list[dict[str, Any] | None]:
+    """The result of an `engine_getPayloadBodiesByHash` or `ByRange` method, read and written."""
+    return _native.engine_read_payload_bodies_result(method, result)
+
+
+def read_get_blobs_result(method: str, result: Any) -> list[dict[str, Any] | None] | None:
+    """The result of an `engine_getBlobs` method, read and written back as JSON."""
+    return _native.engine_read_get_blobs_result(method, result)
+
+
+def exchange_transition_configuration(
+    terminal_total_difficulty: int,
+    terminal_block_hash: bytes,
+    terminal_block_number: int,
+    method: str,
+    params: list,
+) -> dict[str, Any]:
+    """The answer to an `engine_exchangeTransitionConfigurationV1` call at a configured node."""
+    request = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
+    return _native.engine_exchange_transition_configuration(
+        terminal_total_difficulty, terminal_block_hash, terminal_block_number, request
+    )
+
+
 def rewrite_params(method: str, params: list[Any]) -> list[Any]:
     """The parameters of an Engine API request, read by the decoder and written by the writer."""
     # The writer writes lowercase hex and quantities without leading zeros.
@@ -288,6 +312,9 @@ __all__ = [
     "read_payload_status",
     "read_forkchoice_response",
     "read_get_payload_result",
+    "read_payload_bodies_result",
+    "read_get_blobs_result",
+    "exchange_transition_configuration",
     "WithdrawalEntry",
     "prepare_execution_payload",
     "prepare_execution_payload_gloas",

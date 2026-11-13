@@ -425,8 +425,32 @@
 #define DOC_consensus_api_ssz \
   "The SSZ bytes of the value that a JSON document of the API holds."
 
+#define DOC_consensus_api_spec \
+  "The spec map of a preset and a configuration, as a `dict`."
+
+#define DOC_consensus_api_fork_schedule \
+  "The fork schedule of a configuration, as a `list` of `dict`."
+
+#define DOC_consensus_api_deposit_contract \
+  "The deposit contract of a configuration, as a `dict`."
+
+#define DOC_consensus_api_genesis \
+  "The genesis that a genesis state gives, as a `dict`."
+
+#define DOC_consensus_api_state_query \
+  "The JSON response to a query on a state, as a `dict`."
+
+#define DOC_consensus_api_state_query_ssz \
+  "The SSZ body of the response to a query on a state, as `bytes`."
+
 #define DOC_consensus_api_resolve \
   "The answer to each query, against the store after the steps of a fork choice case."
+
+#define DOC_consensus_builder_api_json \
+  "The JSON body of a response of the Builder API: the version of the fork and the data."
+
+#define DOC_consensus_builder_api_ssz \
+  "The SSZ bytes of the value that a JSON body of the Builder API holds."
 
 #define DOC_consensus_is_valid_builder_signature \
   "Whether the signature of a signed message of the Builder API verifies."
@@ -451,6 +475,12 @@
 
 #define DOC_consensus_verify_builder_request_auth_signature \
   "Whether a proposer key signed a Gloas request authentication given in SSZ."
+
+#define DOC_consensus_builder_request_auth_failures \
+  "From Gloas: the failed checks of a request for a bid, by name, in order."
+
+#define DOC_consensus_builder_preferences_failures \
+  "From Gloas: the failed checks of a request that submits preferences, by name, in order."
 
 #define DOC_consensus_builder_bid_value \
   "The value of a builder's bid from its two payments and the proposer's execution payment cap."
@@ -971,6 +1001,9 @@
 #define DOC_snap_access_lists_answer \
   "Whether `response` answers a GetBlockAccessLists `request`, given each block's access list hash."
 
+#define DOC_snap_trie_nodes_answer \
+  "Whether the snap/1 TrieNodes data `response` answers the GetTrieNodes data `request`."
+
 #define DOC_snap_full_account \
   "The full RLP form of an account in slim form."
 
@@ -1015,6 +1048,12 @@
 
 #define DOC_uvarint_decode \
   "The value of the unsigned varint at the start of the bytes, and the bytes after it."
+
+#define DOC_quic_varint_encode \
+  "Encode a value below `2^62` with its shortest QUIC representation, RFC 9000 §16."
+
+#define DOC_quic_varint_decode \
+  "Read a QUIC integer and return its value and the trailing bytes, RFC 9000 §16."
 
 #define DOC_multistream_encode \
   "The bytes of one multistream-select message: its length, its bytes, then a newline."
@@ -1201,6 +1240,15 @@
 
 #define DOC_engine_read_get_payload_result \
   "The result of an `engine_getPayload` method at a fork, read from its JSON and written back."
+
+#define DOC_engine_read_payload_bodies_result \
+  "The result of an `engine_getPayloadBodiesByHash` or `ByRange` method, read and written back."
+
+#define DOC_engine_read_get_blobs_result \
+  "The result of an `engine_getBlobs` method, read from its JSON and written back."
+
+#define DOC_engine_exchange_transition_configuration \
+  "The answer to an `engine_exchangeTransitionConfigurationV1` request, from a configuration."
 
 #define DOC_engine_rewrite_params \
   "The parameters of an Engine API request, read by the decoder and written by the writer."

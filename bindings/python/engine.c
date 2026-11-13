@@ -41,6 +41,9 @@ extern lean_object* eth_engine_rewrite_params(lean_object* args);
 extern lean_object* eth_engine_read_payload_status(lean_object* args);
 extern lean_object* eth_engine_read_forkchoice_response(lean_object* args);
 extern lean_object* eth_engine_read_get_payload_result(lean_object* args);
+extern lean_object* eth_engine_read_payload_bodies_result(lean_object* args);
+extern lean_object* eth_engine_read_get_blobs_result(lean_object* args);
+extern lean_object* eth_engine_exchange_transition_configuration(lean_object* args);
 
 /* ---- Wrappers --------------------------------------------------------- */
 
@@ -146,4 +149,28 @@ py_engine_read_get_payload_result(
   PyObject* args
 ) {
   return call_pyvalue_export(eth_engine_read_get_payload_result, args, 3, ENGINE_ERROR);
+}
+
+PyObject*
+py_engine_read_payload_bodies_result(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_engine_read_payload_bodies_result, args, 2, ENGINE_ERROR);
+}
+
+PyObject*
+py_engine_read_get_blobs_result(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_engine_read_get_blobs_result, args, 2, ENGINE_ERROR);
+}
+
+PyObject*
+py_engine_exchange_transition_configuration(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_engine_exchange_transition_configuration, args, 4, ENGINE_ERROR);
 }

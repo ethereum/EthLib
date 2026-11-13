@@ -23,6 +23,8 @@ This needs the block state before the call to be rebuildable.
 
 Its code matches its hash, and no empty account holds storage.
 
+It also assumes that no account with nonce 0 has the code hash of a delegation indicator.
+
 [eip7610]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-7610.md#specification
 -/
 
@@ -36,8 +38,8 @@ open EthLib.Execution.State
 open EthLib.Execution.Transactions
 
 /-- The access-list builder follows every state with the rebuild property on its block. -/
-theorem _root_.EthLib.Execution.Evm.RebuildState.followable {block : BlockState}
-    {tx : TransactionState} (valid : RebuildState block tx) : Followable block tx :=
+theorem _root_.EthLib.Execution.Evm.RebuildEnd.followable {block : BlockState}
+    {tx : TransactionState} (valid : RebuildEnd block tx) : Followable block tx :=
   ⟨valid.parent, fun _ _ hslot => valid.getStorage_of_slot_eq_none hslot,
     fun _ _ code _ hread => valid.code _ code hread⟩
 
@@ -60,7 +62,7 @@ private theorem prepareFirstFrame_systemMessage {fork : Fork} {Meter : Type} [Ga
   let s1 := (TransactionState.ofBlock block).recordAccountRead target
   have hs1_sw : SameWrites s1 (.ofBlock block) := SameWrites.recordAccountRead _ _
   have hs1_p : s1.parent = (TransactionState.ofBlock block).parent := rfl
-  have vs1 : RebuildState block s1 := valid.of_sameWrites hs1_sw hs1_p
+  have vs1 : RebuildState block s1 := valid.of_sameWrites hs1_sw hs1_p rfl
   obtain ⟨code, hcode_map, h⟩ := bind_ok_iff.mp h
   have hcode : s1.getCode (s1.getAccount target).codeHash = .ok code :=
     mapError_ok_iff.mp hcode_map
@@ -84,7 +86,7 @@ private theorem prepareFirstFrame_systemMessage {fork : Fork} {Meter : Type} [Ga
     let s2 := s1.recordAccountRead delegate
     have hs2_sw : SameWrites s2 s1 := SameWrites.recordAccountRead _ _
     have hs2_p : s2.parent = s1.parent := rfl
-    have vs2 : RebuildState block s2 := vs1.of_sameWrites hs2_sw hs2_p
+    have vs2 : RebuildState block s2 := vs1.of_sameWrites hs2_sw hs2_p rfl
     have hs2_nc : HasNonceOrCode s2 target :=
       (SameWrites.keepsNonceOrCode hs2_sw hs2_p).2 target hs1_nc
     dsimp only at h
@@ -104,11 +106,11 @@ private theorem prepareFirstFrame_systemMessage {fork : Fork} {Meter : Type} [Ga
 private theorem processMessageCall_systemMessage {fork : Fork} {Meter : Type} [GasMeter Meter]
     [LawfulGasMeter Meter] (hfork : .spuriousDragon ≤ fork) {env : BlockEnvironment fork}
     {block : BlockState} {target : Address} {data : ByteArray} {out : CallOutput}
-    (valid : Rebuildable block)
+    (valid : Rebuildable block) (delegations : DelegationsHaveNonce (.ofBlock block))
     (h : processMessageCall (Meter := Meter) env.chainId.toNat (systemMessage env target data)
       (.ofBlock block) Substate.empty = .ok out) :
     RebuildState block out.state := by
-  have v0 := RebuildState.ofBlock valid
+  have v0 := RebuildState.ofBlock valid delegations
   unfold processMessageCall at h
   rcases hprep : prepareFirstFrame (Meter := Meter) env.chainId.toNat
       (systemMessage env target data) (.ofBlock block) Substate.empty [] ∅ with ⟨e, read⟩ | first
@@ -117,7 +119,7 @@ private theorem processMessageCall_systemMessage {fork : Fork} {Meter : Type} [G
     split at h
     · cases h
     · cases h
-      exact v0.of_sameWrites (SameWrites.withReadsOf _ _) rfl
+      exact v0.of_sameWrites (SameWrites.withReadsOf _ _) rfl rfl
   · rw [hprep] at h
     obtain ⟨vfirst, hval, hcode⟩ := prepareFirstFrame_systemMessage v0 hprep
     have htarget : (systemMessage env target data).target = some target := rfl
@@ -135,33 +137,43 @@ private theorem processMessageCall_systemMessage {fork : Fork} {Meter : Type} [G
     rw [hframe_state]
     exact vended
 
-/-- From Spurious Dragon, a system call keeps the rebuild property of its block state. -/
+/-- From Spurious Dragon, a system call keeps the rebuild property of its block state.
+
+It assumes that no account with nonce 0 in the block has the hash of a delegation indicator. -/
 theorem systemCall_rebuildState {fork : Fork} (hfork : .spuriousDragon ≤ fork)
     {env : BlockEnvironment fork} {block : BlockState} {target : Address} {data : ByteArray}
     {out : SystemCallOutput} (valid : Rebuildable block)
+    (delegations : DelegationsHaveNonce (.ofBlock block))
     (h : systemCall env block target data = .ok out) :
     RebuildState block out.state := by
   unfold systemCall at h
   split at h <;>
   · obtain ⟨call, hcall, hpure⟩ := bind_ok_iff.mp h
     cases hpure
-    exact processMessageCall_systemMessage hfork valid hcall
+    exact processMessageCall_systemMessage hfork valid delegations hcall
 
-/-- From Spurious Dragon, the access-list builder follows each system call. -/
+/-- From Spurious Dragon, the access-list builder follows each system call.
+
+It assumes that no account with nonce 0 in the block has the hash of a delegation indicator. -/
 theorem systemCall_followable {fork : Fork} (hfork : .spuriousDragon ≤ fork)
     {env : BlockEnvironment fork} {block : BlockState} {target : Address} {data : ByteArray}
     {out : SystemCallOutput} (valid : Rebuildable block)
+    (delegations : DelegationsHaveNonce (.ofBlock block))
     (h : systemCall env block target data = .ok out) :
     Followable block out.state :=
-  (systemCall_rebuildState hfork valid h).followable
+  (systemCall_rebuildState hfork valid delegations h).followable
 
-/-- From Spurious Dragon, after a system call, the block state can still be rebuilt. -/
+/-- From Spurious Dragon, after a system call, the block state can still be rebuilt.
+
+It assumes that no account with nonce 0 in the block has the hash of a delegation indicator. -/
 theorem systemCall_rebuildable {fork : Fork} (hfork : .spuriousDragon ≤ fork)
     {env : BlockEnvironment fork} {block : BlockState} {target : Address} {data : ByteArray}
     {out : SystemCallOutput} (valid : Rebuildable block)
+    (delegations : DelegationsHaveNonce (.ofBlock block))
     (h : systemCall env block target data = .ok out) :
     Rebuildable out.block :=
-  (systemCall_rebuildState hfork valid h).toRebuildInvariant.ofBlock_incorporateTxIntoBlock
+  (systemCall_rebuildState hfork valid delegations
+    h).toRebuildInvariant.ofBlock_incorporateTxIntoBlock
 
 /-- From Paris, the empty block state can be rebuilt, and a system call on it succeeds.
 
@@ -202,11 +214,36 @@ theorem exists_rebuildable_systemCall {fork : Fork} (hfork : .paris ≤ fork)
     have hnone' : (∅ : Std.ExtTreeMap Address Account)[BEACON_ROOTS_ADDRESS]? = none :=
       Std.ExtTreeMap.getElem?_empty
     simp only [hnone, hnone', Option.getD_none, EMPTY_ACCOUNT, ↓reduceIte, Except.mapError]
+  have hdeleg : DelegationsHaveNonce (.ofBlock block) := by
+    intro address code _ hhash _
+    exfalso
+    apply hhash
+    unfold TransactionState.getAccount TransactionState.getAccountOptional
+      TransactionState.ofBlock State.getAccountOptional
+    dsimp only [block]
+    have hnone : (∅ : Std.ExtTreeMap Address (Option Account))[address]? = none :=
+      Std.ExtTreeMap.getElem?_empty
+    have hnone' : (∅ : Std.ExtTreeMap Address Account)[address]? = none :=
+      Std.ExtTreeMap.getElem?_empty
+    simp only [hnone, hnone', Option.getD_none, EMPTY_ACCOUNT]
   have hcall := SystemContract.systemCall_of_empty (env := env) (block := block)
     (target := BEACON_ROOTS_ADDRESS) (data := data) hfork hcode hpre
   have hsd : .spuriousDragon ≤ fork := Nat.le_trans (by decide) hfork
   exact ⟨block, _, hvalid, hcall, rfl,
-    systemCall_followable hsd hvalid hcall,
-    systemCall_rebuildable hsd hvalid hcall⟩
+    systemCall_followable hsd hvalid hdeleg hcall,
+    systemCall_rebuildable hsd hvalid hdeleg hcall⟩
+
+/-- From Spurious Dragon, a system call keeps the delegation property.
+
+No account with nonce 0 has the code hash of a delegation indicator.
+
+It assumes that the block state before the call can be rebuilt. -/
+theorem systemCall_delegationsHaveNonce {fork : Fork} (hfork : .spuriousDragon ≤ fork)
+    {env : BlockEnvironment fork} {block : BlockState} {target : Address} {data : ByteArray}
+    {out : SystemCallOutput} (valid : Rebuildable block)
+    (delegations : DelegationsHaveNonce (.ofBlock block))
+    (h : systemCall env block target data = .ok out) :
+    DelegationsHaveNonce (.ofBlock out.block) :=
+  (systemCall_rebuildState hfork valid delegations h).delegations.ofBlock_incorporateTxIntoBlock
 
 end EthLib.Execution.Blocks

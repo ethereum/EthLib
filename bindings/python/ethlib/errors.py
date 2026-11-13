@@ -185,6 +185,10 @@ class UvarintError(EthLibError, ValueError):
     """The bytes do not start with a multiformats unsigned varint, or a value is out of range."""
 
 
+class QuicVarintError(EthLibError, ValueError):
+    """The bytes end before the QUIC integer they start, or a value is not below 2^62."""
+
+
 class MultistreamError(EthLibError, ValueError):
     """The bytes do not start with a multistream-select message."""
 
@@ -360,6 +364,7 @@ __all__ = [
     "SszError",
     "VarintError",
     "UvarintError",
+    "QuicVarintError",
     "MultistreamError",
     "MplexError",
     "YamuxError",

@@ -8,6 +8,7 @@ __all__ = [
     "forkid",
     "gossip",
     "libp2p",
+    "quic",
     "reqresp",
     "rlpx",
     "snappy",

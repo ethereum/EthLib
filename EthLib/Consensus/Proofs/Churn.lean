@@ -392,4 +392,13 @@ theorem computeConsolidationEpochAndUpdateChurn_first {config : Config}
   split at placed <;> rename_i order <;> simp only [UInt64.le_iff_toNat_le] at order ⊢ <;>
     omega
 
+/-- An amount rounded down to whole increments has the value of the rounded amount. -/
+theorem toNat_roundToIncrement (preset : Preset) (amount : Gwei) :
+    (roundToIncrement preset amount).toNat =
+      amount.toNat - amount.toNat % preset.EFFECTIVE_BALANCE_INCREMENT.toNat := by
+  unfold roundToIncrement
+  rw [UInt64.toNat_sub_of_le _ _ (UInt64.le_iff_toNat_le.mpr (by
+    rw [UInt64.toNat_mod]
+    exact Nat.mod_le _ _)), UInt64.toNat_mod]
+
 end EthLib.Consensus

@@ -162,6 +162,7 @@ extern PyObject* SSZ_ERROR;
 extern PyObject* SNAPPY_ERROR;
 extern PyObject* VARINT_ERROR;
 extern PyObject* UVARINT_ERROR;
+extern PyObject* QUIC_VARINT_ERROR;
 extern PyObject* MULTISTREAM_ERROR;
 extern PyObject* MPLEX_ERROR;
 extern PyObject* YAMUX_ERROR;
@@ -388,6 +389,14 @@ PyObject* py_consensus_ssz_static                         (PyObject* self, PyObj
 PyObject* py_consensus_api_json                           (PyObject* self, PyObject* args);
 PyObject* py_consensus_api_ssz                            (PyObject* self, PyObject* args);
 PyObject* py_consensus_api_resolve                        (PyObject* self, PyObject* args);
+PyObject* py_consensus_builder_api_json                   (PyObject* self, PyObject* args);
+PyObject* py_consensus_builder_api_ssz                    (PyObject* self, PyObject* args);
+PyObject* py_consensus_api_spec                           (PyObject* self, PyObject* args);
+PyObject* py_consensus_api_fork_schedule                  (PyObject* self, PyObject* args);
+PyObject* py_consensus_api_deposit_contract               (PyObject* self, PyObject* args);
+PyObject* py_consensus_api_genesis                        (PyObject* self, PyObject* args);
+PyObject* py_consensus_api_state_query                    (PyObject* self, PyObject* args);
+PyObject* py_consensus_api_state_query_ssz                (PyObject* self, PyObject* args);
 PyObject* py_consensus_is_valid_builder_signature (PyObject* self, PyObject* args);
 PyObject* py_consensus_process_registration (PyObject* self, PyObject* args);
 PyObject* py_consensus_is_eligible_for_bid (PyObject* self, PyObject* args);
@@ -396,6 +405,8 @@ PyObject* py_consensus_is_eligible_for_bid_gloas (PyObject* self, PyObject* args
 PyObject* py_consensus_validate_bid (PyObject* self, PyObject* args);
 PyObject* py_consensus_unblind_signed_blinded_block (PyObject* self, PyObject* args);
 PyObject* py_consensus_verify_builder_request_auth_signature (PyObject* self, PyObject* args);
+PyObject* py_consensus_builder_request_auth_failures (PyObject* self, PyObject* args);
+PyObject* py_consensus_builder_preferences_failures (PyObject* self, PyObject* args);
 PyObject* py_consensus_builder_bid_value (PyObject* self, PyObject* args);
 PyObject* py_consensus_consensus_version (PyObject* self, PyObject* args);
 PyObject* py_consensus_consensus_version_fork (PyObject* self, PyObject* args);
@@ -553,6 +564,8 @@ PyObject* py_varint_encode                                (PyObject* self, PyObj
 PyObject* py_varint_decode                                (PyObject* self, PyObject* args);
 PyObject* py_uvarint_encode                               (PyObject* self, PyObject* args);
 PyObject* py_uvarint_decode                               (PyObject* self, PyObject* args);
+PyObject* py_quic_varint_encode                           (PyObject* self, PyObject* args);
+PyObject* py_quic_varint_decode                           (PyObject* self, PyObject* args);
 PyObject* py_multistream_encode                           (PyObject* self, PyObject* args);
 PyObject* py_multistream_decode                           (PyObject* self, PyObject* args);
 PyObject* py_multistream_listen                           (PyObject* self, PyObject* args);
@@ -599,6 +612,7 @@ PyObject* py_eth_check_partial_receipts                   (PyObject* self, PyObj
 PyObject* py_snap_message_decode                          (PyObject* self, PyObject* args);
 PyObject* py_snap_codes_answer                            (PyObject* self, PyObject* args);
 PyObject* py_snap_access_lists_answer                     (PyObject* self, PyObject* args);
+PyObject* py_snap_trie_nodes_answer                       (PyObject* self, PyObject* args);
 PyObject* py_snap_full_account                            (PyObject* self, PyObject* args);
 PyObject* py_snap_verify_account_range                    (PyObject* self, PyObject* args);
 PyObject* py_snap_verify_storage_ranges                   (PyObject* self, PyObject* args);
@@ -652,6 +666,9 @@ PyObject* py_engine_get_payload                          (PyObject* self, PyObje
 PyObject* py_engine_read_payload_status                  (PyObject* self, PyObject* args);
 PyObject* py_engine_read_forkchoice_response             (PyObject* self, PyObject* args);
 PyObject* py_engine_read_get_payload_result              (PyObject* self, PyObject* args);
+PyObject* py_engine_read_payload_bodies_result           (PyObject* self, PyObject* args);
+PyObject* py_engine_read_get_blobs_result                (PyObject* self, PyObject* args);
+PyObject* py_engine_exchange_transition_configuration     (PyObject* self, PyObject* args);
 PyObject* py_engine_rewrite_params                       (PyObject* self, PyObject* args);
 PyObject* py_engine_prepare_execution_payload            (PyObject* self, PyObject* args);
 PyObject* py_engine_prepare_execution_payload_gloas      (PyObject* self, PyObject* args);

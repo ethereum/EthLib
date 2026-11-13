@@ -70,6 +70,16 @@ def api_ssz(name: str, fork: str, type_name: str, document: object) -> bytes:
     return _native.consensus_api_ssz(name, fork, type_name, document)
 
 
+def builder_api_json(name: str, fork: str, type_name: str, data: bytes) -> dict[str, Any]:
+    """The versioned Builder API body of the container that SSZ bytes encode, or SszError."""
+    return _native.consensus_builder_api_json(name, fork, type_name, data)
+
+
+def builder_api_ssz(name: str, fork: str, type_name: str, document: object) -> bytes:
+    """The SSZ bytes of the container in a Builder API response body of the fork, or SszError."""
+    return _native.consensus_builder_api_ssz(name, fork, type_name, document)
+
+
 def is_valid_builder_signature(
     name: str,
     fork: str,
@@ -174,6 +184,40 @@ def verify_builder_request_auth_signature(
 ) -> bool:
     """Whether the proposer key signed a Gloas request authentication; data and slot unchecked."""
     return _native.consensus_verify_builder_request_auth_signature(name, fork, config, pubkey, data)
+
+
+def builder_request_auth_failures(
+    name: str,
+    fork: str,
+    agreed: bytes,
+    path_slot: int,
+    pubkey: bytes,
+    version_header: str | None,
+    data: bytes,
+    # `Any`, because `dict` is invariant in its values.
+    config: dict[str, Any] | None = None,
+) -> list[str]:
+    """The names of the checks that fail on a Gloas request for a bid, in order."""
+    return _native.consensus_builder_request_auth_failures(
+        name, fork, config, agreed, path_slot, pubkey, version_header, data
+    )
+
+
+def builder_preferences_failures(
+    name: str,
+    fork: str,
+    agreed: bytes,
+    current_slot: int,
+    pubkey: bytes,
+    version_header: str | None,
+    data: bytes,
+    # `Any`, because `dict` is invariant in its values.
+    config: dict[str, Any] | None = None,
+) -> list[str]:
+    """The names of the checks that fail on a Gloas request that submits preferences, in order."""
+    return _native.consensus_builder_preferences_failures(
+        name, fork, config, agreed, current_slot, pubkey, version_header, data
+    )
 
 
 def builder_bid_value(value: int, execution_payment: int, max_execution_payment: int) -> int:
@@ -755,7 +799,8 @@ def fork_choice(
     # From Fulu a block may come as (block, columns): the node samples those SSZ columns for it.
     # An empty list of columns means that the node cannot get them.
     # A "payload" step is (status, latest valid hash or None).
-    # It is the verdict of the execution layer on the payload of the next block.
+    # It is the verdict of the execution layer on the payload of the next block before Gloas.
+    # From Gloas it judges the payload of the next "execution_payload" step instead.
     # The status is given by its Engine API name.
     # A "fast_confirmation" step, with data None, runs the fast confirmation of the slot.
     return _native.consensus_fork_choice(
@@ -787,6 +832,51 @@ def api_resolve(
     return _native.consensus_api_resolve(
         name, fork, anchor_state, anchor_block, steps, verify, queries
     )
+
+
+def api_spec(name: str, config: dict[str, Any] | None = None) -> dict[str, Any]:
+    """The Beacon API spec map of a preset and the configuration of the same name."""
+    # A number is a str of decimal digits, bytes are a str of 0x and lowercase hex, a name is text.
+    # A schedule is a list of dicts of decimal strs.
+    # The values are `Any`, so that a caller indexes a schedule without narrowing it.
+    return _native.consensus_api_spec(name, config)
+
+
+def api_fork_schedule(name: str, config: dict[str, Any] | None = None) -> list[dict[str, str]]:
+    """The Beacon API fork schedule of a configuration, Phase 0 first."""
+    return _native.consensus_api_fork_schedule(name, config)
+
+
+def api_deposit_contract(name: str, config: dict[str, Any] | None = None) -> dict[str, str]:
+    """The Beacon API deposit contract of a configuration."""
+    return _native.consensus_api_deposit_contract(name, config)
+
+
+def api_genesis(
+    name: str, fork: str, state: bytes, config: dict[str, Any] | None = None
+) -> dict[str, str]:
+    """The Beacon API genesis of a genesis state and a configuration, or ConsensusError."""
+    # The time and the root come from the state, the version from the configuration.
+    return _native.consensus_api_genesis(name, fork, state, config)
+
+
+def api_state_query(
+    name: str, fork: str, state: bytes, query: str, epoch: int | None = None
+) -> dict[str, Any]:
+    """The Beacon API response to a query that reads one field of a state, or ConsensusError."""
+    # The query is the last segment of the endpoint path, such as "finality_checkpoints".
+    # The response holds the data, and the version where the endpoint names one.
+    # The flags execution_optimistic and finalized come from the store and are absent.
+    # The values are `Any`, since the data differs by query.
+    # Only "randao" takes an epoch; an epoch on another query, or an unknown query, has code 0.
+    # A state before the fork that adds the field raises ConsensusError with code 400.
+    return _native.consensus_api_state_query(name, fork, state, query, epoch)
+
+
+def api_state_query_ssz(name: str, fork: str, state: bytes, query: str) -> bytes:
+    """The Beacon API SSZ body of a query that reads one field of a state, or ConsensusError."""
+    # Only the queues, the proposer lookahead and the builder fields have an SSZ body.
+    return _native.consensus_api_state_query_ssz(name, fork, state, query)
 
 
 def gossip_validation(
@@ -1391,6 +1481,14 @@ __all__ = [
     "ssz_static",
     "api_json",
     "api_ssz",
+    "builder_api_json",
+    "builder_api_ssz",
+    "api_spec",
+    "api_fork_schedule",
+    "api_deposit_contract",
+    "api_genesis",
+    "api_state_query",
+    "api_state_query_ssz",
     "is_valid_builder_signature",
     "process_registration",
     "is_eligible_for_bid",
@@ -1399,6 +1497,8 @@ __all__ = [
     "validate_bid",
     "unblind_signed_blinded_block",
     "verify_builder_request_auth_signature",
+    "builder_request_auth_failures",
+    "builder_preferences_failures",
     "builder_bid_value",
     "consensus_version",
     "consensus_version_fork",
