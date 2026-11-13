@@ -20,6 +20,8 @@ The purchase of gas raises a nonce and takes a fee, and the refunds change only 
 Deletions leave the empty code.
 
 Every lookup of code then succeeds, so such a transaction never aborts for a missing code.
+
+The same holds for a call that runs on a block outside any transaction.
 -/
 
 @[expose] public section
@@ -560,6 +562,25 @@ private theorem noMiss_runTransaction [LawfulGasMeter Meter] {env : BlockEnviron
     cases hee
     exact deleteAccounts_ne_missingCode _ _ c he
   · cases h
+
+/-- A call on a block that holds every code keeps the code of each account available. -/
+theorem processMessageCall_hasCodes [LawfulGasMeter Meter] {chainId : Nat}
+    {message : Message fork} {block : BlockState} {substate : Substate}
+    {auths : List Authorization} {paid : Std.ExtTreeSet Address} {output : CallOutput}
+    (available : HasCodes (TransactionState.ofBlock block))
+    (h : processMessageCall (Meter := Meter) chainId message (.ofBlock block) substate auths
+      paid = .ok output) :
+    HasCodes output.state :=
+  (allCodes_processMessageCall (allCodes_ofBlock available) h).1
+
+/-- A call on a block that holds every code never aborts for a missing code. -/
+theorem processMessageCall_ne_missingCode [LawfulGasMeter Meter] {chainId : Nat}
+    {message : Message fork} {block : BlockState} {substate : Substate}
+    {auths : List Authorization} {paid : Std.ExtTreeSet Address}
+    (available : HasCodes (TransactionState.ofBlock block)) (codeHash : Hash32) :
+    processMessageCall (Meter := Meter) chainId message (.ofBlock block) substate auths paid ≠
+      .error (.state (.missingCode codeHash)) :=
+  noMiss_processMessageCall (allCodes_ofBlock available) codeHash
 
 end
 
