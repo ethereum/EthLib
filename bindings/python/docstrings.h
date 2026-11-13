@@ -431,6 +431,12 @@
 #define DOC_consensus_process_registration \
   "None when a builder keeps a signed registration, or the name of the rule that refuses it."
 
+#define DOC_consensus_is_eligible_for_bid \
+  "Whether a builder serves a request for a bid."
+
+#define DOC_consensus_process_bid \
+  "None when a proposer accepts a signed bid, or the name of the rule that refuses it."
+
 #define DOC_consensus_unblind_signed_blinded_block \
   "The root and the bytes of the signed block that a signed blinded block and a payload give."
 
