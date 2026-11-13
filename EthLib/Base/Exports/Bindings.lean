@@ -607,6 +607,32 @@ def bindings : List Binding := [
     "(name: str, fork: str, block: bytes, blobs: list[bytes], " ++
       "hashes: list[bytes] | None) -> bytes",
     [], some "ConsensusError"⟩,
+  ⟨"consensus_api_block_query_ssz", `EthLib.Consensus.Exports.apiBlockQuerySszExport,
+    "(name: str, fork: str, block: bytes, query: str) -> bytes",
+    [], some "ConsensusError"⟩,
+  ⟨"consensus_api_header", `EthLib.Consensus.Exports.apiHeaderExport,
+    "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, " ++
+      "verify: bool, block: bytes) -> dict[str, Any]",
+    [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
+  ⟨"consensus_api_headers", `EthLib.Consensus.Exports.apiHeadersExport,
+    "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, " ++
+      "verify: bool, headers: list[bytes], slot: int | None, " ++
+      "parent_root: bytes | None) -> dict[str, Any]",
+    [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
+  ⟨"consensus_api_columns", `EthLib.Consensus.Exports.apiColumnsExport,
+    "(name: str, fork: str, sidecars: list[bytes], indices: list[int] | None) -> dict[str, Any]",
+    [], some "ConsensusError"⟩,
+  ⟨"consensus_api_columns_ssz", `EthLib.Consensus.Exports.apiColumnsSszExport,
+    "(name: str, fork: str, sidecars: list[bytes], indices: list[int] | None) -> bytes",
+    [], some "ConsensusError"⟩,
+  ⟨"consensus_api_payload_envelope", `EthLib.Consensus.Exports.apiPayloadEnvelopeExport,
+    "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, " ++
+      "verify: bool, root: bytes, envelope: bytes) -> dict[str, Any]",
+    [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
+  ⟨"consensus_api_payload_envelope_ssz", `EthLib.Consensus.Exports.apiPayloadEnvelopeSszExport,
+    "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, " ++
+      "verify: bool, root: bytes, envelope: bytes) -> bytes",
+    [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
   ⟨"consensus_api_committees", `EthLib.Consensus.Exports.apiCommitteesExport,
     "(name: str, fork: str, state: bytes, epoch: int | None, index: int | None, " ++
       "slot: int | None) -> dict[str, Any]",

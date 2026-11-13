@@ -629,6 +629,34 @@ def consensus_api_blobs_ssz(name: str, fork: str, block: bytes, blobs: list[byte
     """The SSZ body of the blobs answer, as `bytes`."""
     ...
 
+def consensus_api_block_query_ssz(name: str, fork: str, block: bytes, query: str) -> bytes:
+    """The SSZ body of the answer to a query on a signed block, as `bytes`."""
+    ...
+
+def consensus_api_header(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, block: bytes) -> dict[str, Any]:
+    """The JSON response of the header endpoint for a signed block, as a `dict`."""
+    ...
+
+def consensus_api_headers(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, headers: list[bytes], slot: int | None, parent_root: bytes | None) -> dict[str, Any]:
+    """The JSON response of the headers endpoint, as a `dict`."""
+    ...
+
+def consensus_api_columns(name: str, fork: str, sidecars: list[bytes], indices: list[int] | None) -> dict[str, Any]:
+    """The JSON response of the columns endpoint, as a `dict`."""
+    ...
+
+def consensus_api_columns_ssz(name: str, fork: str, sidecars: list[bytes], indices: list[int] | None) -> bytes:
+    """The SSZ body of the columns answer, as `bytes`."""
+    ...
+
+def consensus_api_payload_envelope(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, root: bytes, envelope: bytes) -> dict[str, Any]:
+    """The JSON response of the envelope endpoint, as a `dict`."""
+    ...
+
+def consensus_api_payload_envelope_ssz(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, root: bytes, envelope: bytes) -> bytes:
+    """The SSZ body of the envelope answer, as `bytes`."""
+    ...
+
 def consensus_api_committees(name: str, fork: str, state: bytes, epoch: int | None, index: int | None, slot: int | None) -> dict[str, Any]:
     """The JSON response of the committees endpoint, as a `dict`."""
     ...

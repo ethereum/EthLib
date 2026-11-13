@@ -3804,6 +3804,26 @@ It checks that the blinded block, encoded again, has that pinned root too.
 It checks the block, the attestations and the blinded block against the JSON of that block.
 It checks the blobs answer, with and without hashes, against versioned hashes that it computes with SHA-256 itself.
 
+The same module gives the headers, the data column sidecars and the payload envelope of a block, and the SSZ bodies of the block and the blinded block.
+`headers_canonical_head` shows that the header answer of the head block says that the block is canonical; it rests on `isCanonical_head`.
+`isCanonical_of_unknown` shows that a block the store does not hold is not canonical.
+`headerOf_ok` shows that a header answer carries its header and the root of its message, and `headerOf_blockRoot` that this root is the root of the block.
+`headersOf_mem` shows that each entry of the headers answer is the answer for a held header at the requested slot, with the requested parent root.
+`headersSlot_default` shows that without filters the headers answer reads the slot of the head.
+`IsColumnsAnswer` accepts any order of the requested sidecars, so the selection in input order is one answer by definition.
+`IsColumnsAnswer.mem_iff` shows that a sidecar is in an answer exactly when the node holds it and its index is requested.
+`selectColumns_none` shows that without indices all are kept, and `selectColumns_some_nil` that an empty list keeps none.
+`columnsResponse_before_fulu` shows that before Fulu the columns answer gets code 400.
+`payloadEnvelopeOf_ok` shows that the envelope answer is the given signed envelope, from Gloas, and that its message has the root of the envelope that the store holds for the block.
+`payloadEnvelopeOf_of_stored` shows the converse: such an envelope is the answer.
+`payloadEnvelopeOf_before_gloas` shows that before Gloas the answer gets code 404, and `blindedBlockSsz_gloas` that from Gloas the blinded block has no SSZ body either.
+The Python suite builds the store of a Gloas fork choice case with one block and its envelope.
+It checks the header and headers answers of that block and of the anchor, with each filter, against headers that it builds from the JSON of the blocks.
+It checks the envelope answer against the pinned envelope, and code 404 for the anchor and for another message.
+It checks the columns answer and its SSZ body for Fulu and Gloas, with and without indices, and code 400 before Fulu.
+It checks the SSZ bodies of the block and the blinded block against the JSON answers.
+It checks code 400 for the blinded block from Gloas, and that the attestations answer has no SSZ body.
+
 Points that remain open:
 
 - The reader refuses a key that a container does not declare, while the source says that a field may be added to the data without a new version.
@@ -3860,6 +3880,24 @@ Points that remain open:
 - The block answers take the signed block as an input, since the store of the fork choice keeps blocks without their signatures.
 - The blobs answer takes the blobs of the block as an input, one for each commitment; another count gets code 500.
   Which blobs a node keeps, and whether it rebuilds them from columns, is its own matter.
+- The headers endpoint fetches "current head slot blocks" by default; EthLib reads this as the slot of the head block, not the slot of the clock.
+  It uses that slot only when neither filter is given.
+  With only a parent root, it keeps every slot.
+  A store without a head then gets code 500.
+- The headers answers take the signed headers that the node holds, of any fork, as an input.
+  A block is canonical when it is the ancestor of the head at its own slot.
+  Canonicity is decided against the blocks of the store, so a block below the anchor is reported as not canonical.
+- The columns answer takes the sidecars that the node holds for the block as an input, and names the consensus version of the fork.
+  It gives the order of the input, which the source leaves free.
+  An empty list of indices requests no sidecar, since the parameter is then specified.
+  The input is assumed to hold at most one sidecar for each index, the sidecars of one block.
+  The source lists the versions Fulu and Gloas only; EthLib gives code 400 before Fulu.
+- The envelope answer takes the signed envelope as an input, since the store keeps envelopes without their signatures.
+  It compares the hash tree roots of the two messages, and gets code 404 when they differ.
+  It does not check the signature of the given envelope; the caller vouches for it.
+  Before Gloas it gets code 404, since no envelope exists; the source names only the version Gloas.
+- From Hegotá the envelope and columns answers carry no version, since the source names none for that fork yet.
+- The source gives no SSZ body for the attestations answer; EthLib gives none.
 
 ### Builder API
 
@@ -4347,12 +4385,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 459 operations and 49 size constants.
-The Python extension calls 459 of the operations and 49 of the constants.
+Lean exports 466 operations and 49 size constants.
+The Python extension calls 466 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-10987 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2204), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (194), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1530), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (71), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (58), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (750), `x25519.c` (21), `xmss.c` (134).
+11085 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2281), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (194), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1544), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (71), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (58), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (757), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

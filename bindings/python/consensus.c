@@ -184,6 +184,27 @@ extern lean_object*
 eth_consensus_api_blobs_ssz(lean_object* args);
 
 extern lean_object*
+eth_consensus_api_block_query_ssz(lean_object* args);
+
+extern lean_object*
+eth_consensus_api_header(lean_object* args);
+
+extern lean_object*
+eth_consensus_api_headers(lean_object* args);
+
+extern lean_object*
+eth_consensus_api_columns(lean_object* args);
+
+extern lean_object*
+eth_consensus_api_columns_ssz(lean_object* args);
+
+extern lean_object*
+eth_consensus_api_payload_envelope(lean_object* args);
+
+extern lean_object*
+eth_consensus_api_payload_envelope_ssz(lean_object* args);
+
+extern lean_object*
 eth_consensus_api_committees(lean_object* args);
 
 extern lean_object*
@@ -797,6 +818,62 @@ py_consensus_api_blobs_ssz(
   PyObject* args
 ) {
   return call_pyvalue_export(eth_consensus_api_blobs_ssz, args, 5, CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_api_block_query_ssz(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_block_query_ssz, args, 4, CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_api_header(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_header, args, 7, FORK_CHOICE_ERROR);
+}
+
+PyObject*
+py_consensus_api_headers(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_headers, args, 9, FORK_CHOICE_ERROR);
+}
+
+PyObject*
+py_consensus_api_columns(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_columns, args, 4, CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_api_columns_ssz(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_columns_ssz, args, 4, CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_api_payload_envelope(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_payload_envelope, args, 8, FORK_CHOICE_ERROR);
+}
+
+PyObject*
+py_consensus_api_payload_envelope_ssz(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_payload_envelope_ssz, args, 8, FORK_CHOICE_ERROR);
 }
 
 PyObject*

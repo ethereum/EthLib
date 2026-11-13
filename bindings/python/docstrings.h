@@ -470,6 +470,27 @@
 #define DOC_consensus_api_blobs_ssz \
   "The SSZ body of the blobs answer, as `bytes`."
 
+#define DOC_consensus_api_block_query_ssz \
+  "The SSZ body of the answer to a query on a signed block, as `bytes`."
+
+#define DOC_consensus_api_header \
+  "The JSON response of the header endpoint for a signed block, as a `dict`."
+
+#define DOC_consensus_api_headers \
+  "The JSON response of the headers endpoint, as a `dict`."
+
+#define DOC_consensus_api_columns \
+  "The JSON response of the columns endpoint, as a `dict`."
+
+#define DOC_consensus_api_columns_ssz \
+  "The SSZ body of the columns answer, as `bytes`."
+
+#define DOC_consensus_api_payload_envelope \
+  "The JSON response of the envelope endpoint, as a `dict`."
+
+#define DOC_consensus_api_payload_envelope_ssz \
+  "The SSZ body of the envelope answer, as `bytes`."
+
 #define DOC_consensus_api_committees \
   "The JSON response of the committees endpoint, as a `dict`."
 
