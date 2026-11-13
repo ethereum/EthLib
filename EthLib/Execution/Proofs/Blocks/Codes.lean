@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Execution.Proofs.Blocks.Failures
 public import EthLib.Execution.Proofs.Blocks.SystemCall
 public import EthLib.Execution.Proofs.Blocks.Transition
 public import EthLib.Execution.Proofs.Transactions.Codes
@@ -265,69 +266,6 @@ theorem applyBody_hasCodes {config : ChainConfig} {env : BlockEnvironment fork}
 private def Missing (e : BlockError) : Prop :=
   ∃ c, e = .aborted (.state (.missingCode c)) ∨ e = .state (.missingCode c)
 
-/-- Every failure of a result meets a property. -/
-private def Fails {α : Type} (P : BlockError → Prop) (r : Except BlockError α) : Prop :=
-  ∀ e, r = .error e → P e
-
-/-- A success has no failure. -/
-private theorem Fails.ok {α : Type} {P : BlockError → Prop} (a : α) :
-    Fails P (.ok a : Except BlockError α) :=
-  fun _ h => by cases h
-
-/-- A pure result has no failure. -/
-private theorem Fails.pure {α : Type} {P : BlockError → Prop} (a : α) :
-    Fails P (Pure.pure a : Except BlockError α) :=
-  fun _ h => by cases h
-
-/-- A failure with an error that meets the property meets it. -/
-private theorem Fails.error {α : Type} {P : BlockError → Prop} {e : BlockError} (h : P e) :
-    Fails P (.error e : Except BlockError α) :=
-  fun _ he => by cases he; exact h
-
-/-- A throw of an error that meets the property meets it. -/
-private theorem Fails.throw {α : Type} {P : BlockError → Prop} {e : BlockError} (h : P e) :
-    Fails P (MonadExcept.throw e : Except BlockError α) :=
-  fun _ he => by cases he; exact h
-
-/-- A sequence meets the property when its first part does, and its rest after it. -/
-private theorem Fails.bind {α β : Type} {P : BlockError → Prop} {x : Except BlockError α}
-    {f : α → Except BlockError β} (hx : Fails P x) (hf : ∀ a, x = .ok a → Fails P (f a)) :
-    Fails P (x >>= f) := by
-  intro e h
-  rcases Base.bind_eq_error h with h | ⟨a, ha, h⟩
-  · exact hx e h
-  · exact hf a ha e h
-
-/-- A map of a result that meets the property meets it. -/
-private theorem Fails.map {α β : Type} {P : BlockError → Prop} {x : Except BlockError α}
-    (f : α → β) (hx : Fails P x) : Fails P (f <$> x) := by
-  intro e h
-  cases hx' : x with
-  | error e' => rw [hx'] at h; cases h; exact hx e hx'
-  | ok a => rw [hx'] at h; cases h
-
-/-- A change of error meets the property when each changed failure does. -/
-private theorem Fails.mapError {ε α : Type} {P : BlockError → Prop} {x : Except ε α}
-    {f : ε → BlockError} (hf : ∀ e, x = .error e → P (f e)) : Fails P (x.mapError f) := by
-  intro e h
-  cases hx : x with
-  | error e' => rw [hx] at h; cases h; exact hf e' hx
-  | ok a => rw [hx] at h; cases h
-
-/-- A fold whose steps fail only with errors of a property fails only with them.
-
-The steps need only do so from an accumulator that holds an invariant. -/
-private theorem foldlM_error_of_step {ε α β : Type} {g : β → α → Except ε β} (I : β → Prop)
-    (Q : ε → Prop) (keep : ∀ b x b', I b → g b x = .ok b' → I b')
-    (step : ∀ b x e, I b → g b x = .error e → Q e) :
-    ∀ (xs : List α) (b : β) (e : ε), I b → xs.foldlM g b = .error e → Q e
-  | [], _, _, _, h => by cases h
-  | x :: xs, b, e, hb, h => by
-    rw [List.foldlM_cons] at h
-    rcases Base.bind_eq_error h with h | ⟨b', hb', h⟩
-    · exact step b x e hb h
-    · exact foldlM_error_of_step I Q keep step xs b' e (keep b x b' hb hb') h
-
 /-- A move of ether never fails for a missing code. -/
 private theorem moveEther_ne_missingCode (tx : TransactionState) (sender recipient : Address)
     (amount : U256) (c : Hash32) :
@@ -351,7 +289,7 @@ private theorem foldlM_ne_missingCode {α β : Type} {g : β → α → Except S
     (step : ∀ b x c, g b x ≠ .error (.missingCode c)) (xs : List α) (b : β) (c : Hash32) :
     xs.foldlM g b ≠ .error (.missingCode c) := fun h =>
   foldlM_error_of_step (fun _ => True) (· ≠ .missingCode c) (fun _ _ _ _ _ => trivial)
-    (fun b x _ _ he => by rintro rfl; exact step b x c he) xs b _ trivial h rfl
+    (fun b x _ _ he => by rintro rfl; exact step b x c he) trivial h rfl
 
 /-- The rewards never fail for a missing code. -/
 private theorem payRewards_ne_missingCode (tx : TransactionState) (coinbase : Address)
@@ -376,45 +314,38 @@ private theorem applyDaoFork_ne_missingCode (tx : TransactionState) (c : Hash32)
   foldlM_ne_missingCode (fun _ _ c => moveEther_ne_missingCode _ _ _ _ c) _ _ c
 
 /-- An error of the state that is never a missing code gives no missing code of the block. -/
-private theorem Fails.mapError_state {α : Type} {x : Except State.StateError α}
-    (h : ∀ c, x ≠ .error (.missingCode c)) : Fails (¬Missing ·) (x.mapError .state) :=
-  Fails.mapError fun e he ⟨c, hc⟩ => by
+private theorem notMissing_state {α : Type} {x : Except State.StateError α}
+    (h : ∀ c, x ≠ .error (.missingCode c)) : ∀ e, x = .error e → ¬Missing (.state e) :=
+  fun e he ⟨c, hc⟩ => by
     rcases hc with hc | hc
     · cases hc
     · cases hc
       exact h c he
 
 /-- An abort with no missing code is no missing code of the block. -/
-private theorem Fails.mapError_aborted {α : Type} {x : Except EvmError α}
-    (h : ∀ c, x ≠ .error (.state (.missingCode c))) : Fails (¬Missing ·) (x.mapError .aborted) :=
-  Fails.mapError fun e he ⟨c, hc⟩ => by
+private theorem notMissing_aborted {α : Type} {x : Except EvmError α}
+    (h : ∀ c, x ≠ .error (.state (.missingCode c))) : ∀ e, x = .error e → ¬Missing (.aborted e) :=
+  fun e he ⟨c, hc⟩ => by
     rcases hc with hc | hc
     · cases hc
       exact h c he
     · cases hc
 
 /-- A call that holds every code joins the body, so the join has no failure. -/
-private theorem Fails.join {P : BlockError → Prop} (body : BodyState) {tx : TransactionState}
-    (available : HasCodes tx) : Fails P ((body.join tx).mapError .state) := by
+private theorem ErrorsMeet.join {P : BlockError → Prop} (body : BodyState) {tx : TransactionState}
+    (available : HasCodes tx) : ErrorsMeet P ((body.join tx).mapError .state) := by
   obtain ⟨b, hb⟩ := BodyState.join_ok_of_hasCodes body available
   intro e h
   rw [hb] at h
   cases h
 
-/-- A step on a block state that never fails for a missing code gives no missing code. -/
-private theorem Fails.onBlock {block : BlockState}
-    {step : TransactionState → Except State.StateError TransactionState}
-    (h : ∀ c, step (.ofBlock block) ≠ .error (.missingCode c)) :
-    Fails (¬Missing ·) (onBlock block step) :=
-  Fails.bind (Fails.mapError_state h) fun _ _ => Fails.pure _
-
 /-- The DAO transfer never fails for a missing code, as a failure of the block. -/
-private theorem fails_daoTransfer (config : ChainConfig) (number : Nat) (start : BlockState) :
-    Fails (¬Missing ·) (daoTransfer config fork number start) := by
+private theorem errorsMeet_daoTransfer (config : ChainConfig) (number : Nat) (start : BlockState) :
+    ErrorsMeet (¬Missing ·) (daoTransfer config fork number start) := by
   unfold daoTransfer
   split
-  · exact Fails.onBlock (applyDaoFork_ne_missingCode _)
-  · exact Fails.pure _
+  · exact ErrorsMeet.onBlock (notMissing_state (applyDaoFork_ne_missingCode _))
+  · exact ErrorsMeet.pure _
 
 /-- A system call that joins a body that holds every code never aborts for a missing code. -/
 private theorem systemCall_join_ne_missingCode {env : BlockEnvironment fork} {body : BodyState}
@@ -462,104 +393,146 @@ private theorem startSystemCalls_ne_missingCode {env : BlockEnvironment fork}
       exact second _ available h
 
 /-- A transaction on a body that holds every code never fails for a missing code. -/
-private theorem fails_applyTransaction {env : BlockEnvironment fork} {index : Nat}
+private theorem errorsMeet_applyTransaction {env : BlockEnvironment fork} {index : Nat}
     {before : BodyOutput fork} (tx : Transaction) (available : HasCodes (.ofBlock before.block)) :
-    Fails (¬Missing ·) (applyTransaction env index before tx) := by
+    ErrorsMeet (¬Missing ·) (applyTransaction env index before tx) := by
   unfold applyTransaction
-  refine Fails.bind (Fails.mapError fun _ _ ⟨_, h⟩ => by rcases h with h | h <;> cases h)
+  refine ErrorsMeet.bind (ErrorsMeet.mapError fun _ _ ⟨_, h⟩ => by rcases h with h | h <;> cases h)
     fun included _ => ?_
-  refine Fails.bind (Fails.mapError_aborted
-    (Transactions.processTransaction_ne_missingCode available)) fun out hout => ?_
+  refine ErrorsMeet.bind (ErrorsMeet.aborted
+    (notMissing_aborted (Transactions.processTransaction_ne_missingCode available)))
+    fun out hout => ?_
   have codes := (Transactions.processTransaction_hasCodes (mapError_ok_iff.mp hout) available).1
-  refine Fails.bind (Fails.join _ codes) fun body _ => ?_
+  refine ErrorsMeet.bind (ErrorsMeet.join _ codes) fun body _ => ?_
   dsimp only
   split
-  · exact Fails.bind (Fails.pure _) fun _ _ => Fails.pure _
-  · exact Fails.bind (Fails.map _ (Fails.mapError fun _ _ ⟨_, h⟩ => by
-      rcases h with h | h <;> cases h)) fun _ _ => Fails.pure _
+  · exact ErrorsMeet.bind (ErrorsMeet.pure _) fun _ _ => ErrorsMeet.pure _
+  · exact ErrorsMeet.bind (ErrorsMeet.map _ (ErrorsMeet.mapError fun _ _ ⟨_, h⟩ => by
+      rcases h with h | h <;> cases h)) fun _ _ => ErrorsMeet.pure _
 
 /-- The transactions on a body that holds every code never fail for a missing code. -/
-private theorem fails_applyTransactions {env : BlockEnvironment fork} {body : BodyState}
+private theorem errorsMeet_applyTransactions {env : BlockEnvironment fork} {body : BodyState}
     (transactions : List Transaction) (available : HasCodes (.ofBlock body.block)) :
-    Fails (¬Missing ·) (applyTransactions env body transactions) := fun e h =>
+    ErrorsMeet (¬Missing ·) (applyTransactions env body transactions) := fun _ h =>
   foldlM_error_of_step (fun before : BodyOutput fork => HasCodes (.ofBlock before.block))
     (¬Missing ·) (fun _ _ _ fit h => applyTransaction_hasCodes fit h)
-    (fun _ _ e fit h => fails_applyTransaction _ fit e h) transactions.zipIdx
-    ⟨body, .zero, 0, [], []⟩ e available h
+    (fun _ _ e fit h => errorsMeet_applyTransaction _ fit e h) (b := ⟨body, .zero, 0, [], []⟩)
+    available h
 
 /-- A checked system call on a block that holds every code never fails for a missing code. -/
-private theorem fails_checkedSystemCall {env : BlockEnvironment fork} {block : BlockState}
+private theorem errorsMeet_checkedSystemCall {env : BlockEnvironment fork} {block : BlockState}
     (target : Address) (data : ByteArray) (available : HasCodes (.ofBlock block)) :
-    Fails (¬Missing ·) (checkedSystemCall env block target data) := by
+    ErrorsMeet (¬Missing ·) (checkedSystemCall env block target data) := by
   obtain ⟨code, hcode⟩ := available target
   have hat : codeAt block target = .ok code := by
     simp only [codeAt, hcode]
     rfl
   unfold checkedSystemCall
   rw [hat]
-  refine Fails.bind (Fails.ok _) fun _ _ => ?_
-  have rest : Fails (¬Missing ·) (do
+  refine ErrorsMeet.bind (ErrorsMeet.ok _) fun _ _ => ?_
+  have rest : ErrorsMeet (¬Missing ·) (do
       let out ← (systemCall env block target data).mapError BlockError.aborted
       match out.error with
       | some error => throw (BlockError.systemCallFailed target error)
       | none => pure out) := by
-    refine Fails.bind
-      (Fails.mapError_aborted (systemCall_ne_missingCode env target data available))
-      fun _ _ => ?_
+    refine ErrorsMeet.bind (ErrorsMeet.aborted
+      (notMissing_aborted (systemCall_ne_missingCode env target data available))) fun _ _ => ?_
     split
-    · exact Fails.throw fun ⟨_, h⟩ => by rcases h with h | h <;> cases h
-    · exact Fails.pure _
+    · exact ErrorsMeet.throw fun ⟨_, h⟩ => by rcases h with h | h <;> cases h
+    · exact ErrorsMeet.pure _
   dsimp only
   split
-  · exact Fails.bind (Fails.throw fun ⟨_, h⟩ => by rcases h with h | h <;> cases h)
+  · exact ErrorsMeet.bind (ErrorsMeet.throw fun ⟨_, h⟩ => by rcases h with h | h <;> cases h)
       fun _ _ => rest
   · exact rest
 
 /-- A read of a request contract on a body that holds every code never fails for a missing code. -/
-private theorem fails_readRequest {env : BlockEnvironment fork}
+private theorem errorsMeet_readRequest {env : BlockEnvironment fork}
     {state : BodyState × List ByteArray} (contract : UInt8 × Address)
     (available : HasCodes (.ofBlock state.1.block)) :
-    Fails (¬Missing ·) (readRequest env state contract) := by
+    ErrorsMeet (¬Missing ·) (readRequest env state contract) := by
   unfold readRequest
-  refine Fails.bind (fails_checkedSystemCall _ _ available) fun out hout => ?_
-  refine Fails.bind (Fails.join _
-    (systemCall_hasCodes available (checkedSystemCall_ok hout).2.1)) fun _ _ => Fails.pure _
+  refine ErrorsMeet.bind (errorsMeet_checkedSystemCall _ _ available) fun out hout => ?_
+  refine ErrorsMeet.bind (ErrorsMeet.join _
+    (systemCall_hasCodes available (checkedSystemCall_ok hout).2.1)) fun _ _ => ErrorsMeet.pure _
 
 /-- The request reads on a body that holds every code never fail for a missing code. -/
-private theorem fails_readRequests {env : BlockEnvironment fork} {body : BodyState}
-    (available : HasCodes (.ofBlock body.block)) : Fails (¬Missing ·) (readRequests env body) := by
+private theorem errorsMeet_readRequests {env : BlockEnvironment fork} {body : BodyState}
+    (available : HasCodes (.ofBlock body.block)) :
+    ErrorsMeet (¬Missing ·) (readRequests env body) := by
   unfold readRequests
   split
-  · intro e h
+  · intro _ h
     refine foldlM_error_of_step
       (fun st : BodyState × List ByteArray => HasCodes (.ofBlock st.1.block)) (¬Missing ·)
-      (fun st c st' fit hstep => ?_) (fun _ c e fit h => fails_readRequest c fit e h) _
-      (body, []) e available h
+      (fun st c st' fit hstep => ?_) (fun _ c e fit h => errorsMeet_readRequest c fit e h)
+      available h
     obtain ⟨out, hout, hjoin, -⟩ := readRequest_eq_ok hstep
     exact join_systemCall_hasCodes fit (checkedSystemCall_ok hout).2.1 hjoin
-  · exact Fails.ok _
+  · exact ErrorsMeet.ok _
 
 /-- The requests of a body that holds every code never fail for a missing code. -/
-private theorem fails_blockRequests {depositContract : Address} {env : BlockEnvironment fork}
+private theorem errorsMeet_blockRequests {depositContract : Address} {env : BlockEnvironment fork}
     {body : BodyState} (logs : List Log) (available : HasCodes (.ofBlock body.block)) :
-    Fails (¬Missing ·) (blockRequests depositContract env body logs) := by
+    ErrorsMeet (¬Missing ·) (blockRequests depositContract env body logs) := by
   unfold blockRequests
   split
-  · refine Fails.bind (Fails.mapError fun _ _ ⟨_, h⟩ => by rcases h with h | h <;> cases h)
+  · refine ErrorsMeet.bind
+      (ErrorsMeet.mapError fun _ _ ⟨_, h⟩ => by rcases h with h | h <;> cases h)
       fun _ _ => ?_
-    refine Fails.bind (fails_readRequests available) fun r _ => ?_
-    exact Fails.pure _
-  · exact Fails.pure _
+    refine ErrorsMeet.bind (errorsMeet_readRequests available) fun r _ => ?_
+    exact ErrorsMeet.pure _
+  · exact ErrorsMeet.pure _
 
 /-- The hash of the block access list never fails for a missing code. -/
-private theorem fails_accessListHashOf (body : BodyState) (gasLimit : Nat) :
-    Fails (¬Missing ·) (accessListHashOf fork body gasLimit) := by
+private theorem errorsMeet_accessListHashOf (body : BodyState) (gasLimit : Nat) :
+    ErrorsMeet (¬Missing ·) (accessListHashOf fork body gasLimit) := by
   unfold accessListHashOf
   split
-  · refine Fails.bind (Fails.mapError fun _ _ ⟨_, h⟩ => by rcases h with h | h <;> cases h)
+  · refine ErrorsMeet.bind
+      (ErrorsMeet.mapError fun _ _ ⟨_, h⟩ => by rcases h with h | h <;> cases h)
       fun _ _ => ?_
-    exact Fails.map _ (Fails.mapError fun _ _ ⟨_, h⟩ => by rcases h with h | h <;> cases h)
-  · exact Fails.pure _
+    exact ErrorsMeet.map _
+      (ErrorsMeet.mapError fun _ _ ⟨_, h⟩ => by rcases h with h | h <;> cases h)
+  · exact ErrorsMeet.pure _
+
+/-- The body of a block on a block state that holds every code never fails for a missing code. -/
+private theorem errorsMeet_applyBody {config : ChainConfig} {env : BlockEnvironment fork}
+    {block : Block fork Transaction} {start : BlockState} (available : HasCodes (.ofBlock start)) :
+    ErrorsMeet (¬Missing ·) (applyBody config env block start) := by
+  unfold applyBody
+  refine ErrorsMeet.bind (errorsMeet_daoTransfer _ _ _) fun state hstate => ?_
+  have c1 := daoTransfer_hasCodes available hstate
+  refine ErrorsMeet.bind (ErrorsMeet.aborted
+    (notMissing_aborted (startSystemCalls_ne_missingCode (body := .init state) c1)))
+    fun body hbody => ?_
+  have c2 := startSystemCalls_hasCodes c1 (mapError_ok_iff.mp hbody)
+  refine ErrorsMeet.bind (errorsMeet_applyTransactions _ c2) fun output houtput => ?_
+  have c3 := applyTransactions_hasCodes c2 houtput
+  dsimp only
+  split
+  · refine ErrorsMeet.bind (ErrorsMeet.mapError
+      (notMissing_state (withdrawalState_ne_missingCode _ _)))
+      fun tx htx => ?_
+    have ctx : HasCodes tx := foldlM_ok_invariant HasCodes
+      (fun _ _ _ fit step => Transactions.hasCodes_createEther step fit) c3
+      (mapError_ok_iff.mp htx)
+    refine ErrorsMeet.bind (ErrorsMeet.join _ ctx) fun b hb => ?_
+    have cb := BodyState.hasCodes_join (mapError_ok_iff.mp hb) ctx
+    refine ErrorsMeet.bind (errorsMeet_blockRequests _ cb) fun r _ => ?_
+    obtain ⟨requested, requests⟩ := r
+    refine ErrorsMeet.bind (ErrorsMeet.onBlock
+      (notMissing_state fun c => payRewards_ne_missingCode _ _ _ _ c))
+      fun _ _ => ?_
+    exact ErrorsMeet.bind (errorsMeet_accessListHashOf _ _) fun _ _ => ErrorsMeet.pure _
+  · refine ErrorsMeet.bind (ErrorsMeet.pure _) fun b hb => ?_
+    cases hb
+    refine ErrorsMeet.bind (errorsMeet_blockRequests _ c3) fun r _ => ?_
+    obtain ⟨requested, requests⟩ := r
+    refine ErrorsMeet.bind (ErrorsMeet.onBlock
+      (notMissing_state fun c => payRewards_ne_missingCode _ _ _ _ c))
+      fun _ _ => ?_
+    exact ErrorsMeet.bind (errorsMeet_accessListHashOf _ _) fun _ _ => ErrorsMeet.pure _
 
 /-- The body of a block on a block state that holds every code never aborts for a missing code.
 
@@ -568,121 +541,9 @@ theorem applyBody_ne_missingCode (config : ChainConfig) (env : BlockEnvironment 
     (block : Block fork Transaction) {start : BlockState} (available : HasCodes (.ofBlock start))
     (codeHash : Hash32) :
     applyBody config env block start ≠ .error (.aborted (.state (.missingCode codeHash))) ∧
-      applyBody config env block start ≠ .error (.state (.missingCode codeHash)) := by
-  have fails : Fails (¬Missing ·) (applyBody config env block start) := by
-    unfold applyBody
-    refine Fails.bind (fails_daoTransfer _ _ _) fun state hstate => ?_
-    have c1 := daoTransfer_hasCodes available hstate
-    refine Fails.bind (Fails.mapError_aborted
-      (startSystemCalls_ne_missingCode (body := .init state) c1)) fun body hbody => ?_
-    have c2 := startSystemCalls_hasCodes c1 (mapError_ok_iff.mp hbody)
-    refine Fails.bind (fails_applyTransactions _ c2) fun output houtput => ?_
-    have c3 := applyTransactions_hasCodes c2 houtput
-    dsimp only
-    split
-    · refine Fails.bind (Fails.mapError_state (withdrawalState_ne_missingCode _ _))
-        fun tx htx => ?_
-      have ctx : HasCodes tx := foldlM_ok_invariant HasCodes
-        (fun _ _ _ fit step => Transactions.hasCodes_createEther step fit) c3
-        (mapError_ok_iff.mp htx)
-      refine Fails.bind (Fails.join _ ctx) fun b hb => ?_
-      have cb := BodyState.hasCodes_join (mapError_ok_iff.mp hb) ctx
-      refine Fails.bind (fails_blockRequests _ cb) fun r _ => ?_
-      obtain ⟨requested, requests⟩ := r
-      refine Fails.bind (Fails.onBlock fun c => payRewards_ne_missingCode _ _ _ _ c)
-        fun _ _ => ?_
-      exact Fails.bind (fails_accessListHashOf _ _) fun _ _ => Fails.pure _
-    · refine Fails.bind (Fails.pure _) fun b hb => ?_
-      cases hb
-      refine Fails.bind (fails_blockRequests _ c3) fun r _ => ?_
-      obtain ⟨requested, requests⟩ := r
-      refine Fails.bind (Fails.onBlock fun c => payRewards_ne_missingCode _ _ _ _ c)
-        fun _ _ => ?_
-      exact Fails.bind (fails_accessListHashOf _ _) fun _ _ => Fails.pure _
-  exact ⟨fun h => fails _ h ⟨codeHash, .inl rfl⟩, fun h => fails _ h ⟨codeHash, .inr rfl⟩⟩
-
-/-- Whether an error of a block is neither an abort nor an error of the state. -/
-private def Plain (e : BlockError) : Prop :=
-  (∀ error, e ≠ .aborted error) ∧ ∀ error, e ≠ .state error
-
-/-- The first failure of a list of checks is one of their errors. -/
-private theorem fails_firstFailure {P : BlockError → Prop} :
-    ∀ (l : List (Bool × BlockError)), (∀ x ∈ l, P x.2) → Fails P (firstFailure l)
-  | [], _ => Fails.ok _
-  | (b, e) :: rest, h => by
-    unfold firstFailure
-    split
-    · exact fails_firstFailure rest fun x hx => h x (List.mem_cons_of_mem _ hx)
-    · exact Fails.error (h (b, e) List.mem_cons_self)
-
-/-- The checks of a header against its parent fail with no abort and no error of the state. -/
-private theorem plain_headerChecks {parentFork : Fork} (hFork : parentFork ≤ fork)
-    (parent : Header parentFork) (header : Header fork)
-    (schedule : Since .dencun fork BlobSchedule) :
-    ∀ x ∈ headerChecks hFork parent header schedule, Plain x.2 := by
-  unfold headerChecks
-  dsimp only
-  simp only [List.forall_mem_append, List.forall_mem_cons]
-  and_intros
-  all_goals repeat' split
-  all_goals simp [Plain]
-
-/-- A check of a header against its parent fails with no abort and no error of the state. -/
-private theorem fails_validateHeader {parentFork : Fork} (hFork : parentFork ≤ fork)
-    (parent : Header parentFork) (header : Header fork)
-    (schedule : Since .dencun fork BlobSchedule) :
-    Fails Plain (validateHeader hFork parent header schedule) := by
-  unfold validateHeader
-  refine Fails.bind (fails_firstFailure _ (plain_headerChecks hFork parent header schedule))
-    fun _ _ => ?_
-  split
-  · exact Fails.mapError fun _ _ => ⟨fun _ => nofun, fun _ => nofun⟩
-  · exact Fails.pure _
-
-/-- The checks of a block before its body never fail with an abort or an error of the state. -/
-theorem checkBlock_eq_error {config : ChainConfig} {checkSeal : Bool} {recent : List RecentBlock}
-    {block : Block fork Transaction} {e : BlockError}
-    (h : checkBlock config checkSeal recent block = .error e) :
-    (∀ error, e ≠ .aborted error) ∧ ∀ error, e ≠ .state error := by
-  have fails : Fails Plain (checkBlock config checkSeal recent block) := by
-    unfold checkBlock
-    refine Fails.bind ?_ fun items _ => ?_
-    · unfold bodyItems
-      exact Fails.bind (Fails.mapError fun _ _ => ⟨fun _ => nofun, fun _ => nofun⟩)
-        fun _ _ => Fails.pure _
-    refine Fails.bind ?_ fun _ _ => ?_
-    · unfold validateBlockSize
-      split
-      · refine Fails.bind (Fails.mapError fun _ _ => ⟨fun _ => nofun, fun _ => nofun⟩)
-          fun _ _ => fails_firstFailure _ ?_
-        simp [Plain]
-      · exact Fails.ok _
-    have ommers : Fails Plain (if fork < .paris then
-        (validateOmmers config checkSeal recent block.header block.ommers).mapError .ommers
-      else if block.ommers.isEmpty = true then pure () else throw .ommersAfterParis) := by
-      split
-      · exact Fails.mapError fun _ _ => ⟨fun _ => nofun, fun _ => nofun⟩
-      · split
-        · exact Fails.pure _
-        · exact Fails.throw ⟨fun _ => nofun, fun _ => nofun⟩
-    split
-    · dsimp only
-      split
-      · split
-        · refine Fails.bind (fails_validateHeader _ _ _ _) fun _ _ => ?_
-          split
-          · exact ommers
-          · exact Fails.bind (Fails.throw ⟨fun _ => nofun, fun _ => nofun⟩) fun _ _ => ommers
-        · refine Fails.bind (fails_firstFailure _ (plain_headerChecks _ _ _ _)) fun _ _ => ?_
-          split
-          · exact ommers
-          · exact Fails.bind (Fails.throw ⟨fun _ => nofun, fun _ => nofun⟩) fun _ _ => ommers
-      · refine Fails.bind (Fails.throw ⟨fun _ => nofun, fun _ => nofun⟩) fun _ _ => ?_
-        split
-        · exact ommers
-        · exact Fails.bind (Fails.throw ⟨fun _ => nofun, fun _ => nofun⟩) fun _ _ => ommers
-    · exact Fails.throw ⟨fun _ => nofun, fun _ => nofun⟩
-  exact fails e h
+      applyBody config env block start ≠ .error (.state (.missingCode codeHash)) :=
+  ⟨fun h => errorsMeet_applyBody available _ h ⟨codeHash, .inl rfl⟩,
+    fun h => errorsMeet_applyBody available _ h ⟨codeHash, .inr rfl⟩⟩
 
 /-- A block that passes its transition leaves a state that holds every code.
 
@@ -708,64 +569,10 @@ theorem stateTransition_ne_missingCode (chain : BlockChain) (block : Block fork 
     (checkSeal : Bool) (available : chain.state.HasCodes) (codeHash : Hash32) :
     stateTransition chain block checkSeal ≠ .error (.aborted (.state (.missingCode codeHash))) ∧
       stateTransition chain block checkSeal ≠ .error (.state (.missingCode codeHash)) := by
-  have plain : ∀ e, Plain e → ¬Missing e := by
-    rintro e ⟨ha, hs⟩ ⟨c, h | h⟩
-    · exact ha _ h
-    · exact hs _ h
-  have fails : Fails (¬Missing ·) (stateTransition chain block checkSeal) := by
-    have rest : Fails (¬Missing ·) (do
-        checkBlock chain.config checkSeal chain.recent block
-        let result ← runBody chain block
-        firstFailure (outputChecks block.header result.output result.roots)
-        pure result.post : Except BlockError State) := by
-      refine Fails.bind (fun e h => plain e (checkBlock_eq_error h)) fun _ _ => ?_
-      refine Fails.bind ?_ fun result _ => ?_
-      · unfold runBody
-        refine Fails.bind ?_ fun hashes _ => ?_
-        · unfold recentHashes
-          dsimp only
-          split
-          · exact Fails.pure _
-          · exact Fails.bind (Fails.mapError fun _ _ => plain _ ⟨fun _ => nofun, fun _ => nofun⟩)
-              fun _ _ => Fails.pure _
-        refine Fails.bind (fun e h => ?_) fun output _ => ?_
-        · have body := applyBody_ne_missingCode chain.config
-            (blockEnvironment chain.config hashes block.header) block
-            ((State.State.hasCodes_ofState_iff _).mpr available)
-          rintro ⟨c, h' | h'⟩ <;> subst h'
-          · exact (body c).1 h
-          · exact (body c).2 h
-        refine Fails.bind ?_ fun _ _ => Fails.pure _
-        unfold outputRoots
-        refine Fails.bind (Fails.mapError fun _ _ => plain _ ⟨fun _ => nofun, fun _ => nofun⟩)
-          fun _ _ => ?_
-        refine Fails.bind (Fails.mapError fun _ _ => plain _ ⟨fun _ => nofun, fun _ => nofun⟩)
-          fun _ _ => ?_
-        refine Fails.bind (Fails.mapError fun _ _ => plain _ ⟨fun _ => nofun, fun _ => nofun⟩)
-          fun _ _ => ?_
-        refine Fails.bind ?_ fun _ _ => Fails.pure _
-        unfold withdrawalsRootOf
-        split
-        · exact Fails.map _ (Fails.mapError fun _ _ => plain _ ⟨fun _ => nofun, fun _ => nofun⟩)
-        · exact Fails.ok _
-      refine Fails.bind (fails_firstFailure _ ?_) fun _ _ => Fails.pure _
-      unfold outputChecks
-      dsimp only
-      simp only [List.forall_mem_append, List.forall_mem_cons]
-      and_intros
-      all_goals repeat' split
-      all_goals simp [Missing]
-    unfold stateTransition
-    dsimp only
-    split
-    · refine Fails.bind (Fails.throw ?_) fun _ _ => ?_
-      · rintro ⟨c, h | h⟩ <;> cases h
-      split
-      · exact rest
-      · exact Fails.bind (Fails.throw (plain _ ⟨fun _ => nofun, fun _ => nofun⟩)) fun _ _ => rest
-    · split
-      · exact rest
-      · exact Fails.bind (Fails.throw (plain _ ⟨fun _ => nofun, fun _ => nofun⟩)) fun _ _ => rest
+  have fails : ErrorsMeet (¬Missing ·) (stateTransition chain block checkSeal) :=
+    errorsMeet_stateTransition (fun _ ha hs ⟨_, h⟩ => h.elim (ha _) (hs _))
+      (fun _ ⟨_, h⟩ => by rcases h with h | h <;> cases h)
+      fun _ => errorsMeet_applyBody ((State.State.hasCodes_ofState_iff _).mpr available)
   exact ⟨fun h => fails _ h ⟨codeHash, .inl rfl⟩, fun h => fails _ h ⟨codeHash, .inr rfl⟩⟩
 
 end EthLib.Execution.Blocks
