@@ -26,6 +26,7 @@ public import EthLib.Consensus.Proofs.DirectSafety.DepartureQueue
 public import EthLib.Consensus.Proofs.DirectSafety.FundingBlock
 public import EthLib.Consensus.Proofs.DirectSafety.FundingEpoch
 public import EthLib.Consensus.Proofs.DirectSafety.FundingSlot
+public import EthLib.Consensus.Proofs.DirectSafety.IntervalBounds
 public import EthLib.Consensus.Proofs.DirectSafety.IntervalFunding
 public import EthLib.Consensus.Proofs.DirectSafety.Safety
 public import EthLib.Consensus.Proofs.Mutators
