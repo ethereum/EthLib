@@ -225,6 +225,11 @@ def default_auth_data(url: str) -> bytes:
     return _native.consensus_default_auth_data(url)
 
 
+def relay_submission_bid(name: str, fork: str, data: bytes, pubkey: bytes) -> bytes:
+    """The SSZ bytes of the bid that a relay serves from an SSZ block submission, with the key."""
+    return _native.consensus_relay_submission_bid(name, fork, data, pubkey)
+
+
 def builder_bid_value(value: int, execution_payment: int, max_execution_payment: int) -> int:
     """The bid's value in Gwei, with its execution payment capped, not reduced to 64 bits."""
     return _native.consensus_builder_bid_value(value, execution_payment, max_execution_payment)
@@ -884,6 +889,36 @@ def api_state_query_ssz(name: str, fork: str, state: bytes, query: str) -> bytes
     return _native.consensus_api_state_query_ssz(name, fork, state, query)
 
 
+def api_registry_query(
+    name: str,
+    fork: str,
+    state: bytes,
+    query: str,
+    *,
+    ids: list[str] | None = None,
+    statuses: list[str] | None = None,
+    in_query: bool = False,
+) -> dict[str, Any]:
+    """The Beacon API response to a query on the registries of a state, or ConsensusError."""
+    # The query is the last segment of the endpoint path, such as "validator_balances".
+    # The query "validator" is the endpoint for one validator, and needs exactly one id.
+    # The ids and statuses are texts as the API writes them; None or an empty list means all ids.
+    # Only "validators" and "builders" take statuses.
+    # Only "validators" and "validator_balances" take in_query; more than 64 ids then raise 414.
+    # An argument that the query does not take raises ConsensusError with code 0.
+    # The flags execution_optimistic and finalized come from the store and are absent.
+    return _native.consensus_api_registry_query(name, fork, state, query, ids, statuses, in_query)
+
+
+def api_validator_balances_ssz(
+    name: str, fork: str, state: bytes, *, ids: list[str] | None = None, in_query: bool = False
+) -> bytes:
+    """The Beacon API SSZ body of the validator balances answer, or ConsensusError."""
+    # None or an empty list of ids means all validators.
+    # Set in_query for ids that come in a query string, where more than 64 raise code 414.
+    return _native.consensus_api_validator_balances_ssz(name, fork, state, ids, in_query)
+
+
 def api_validator_status(validator: dict[str, Any], balance: int, epoch: int) -> tuple[str, str]:
     """The Beacon API status of a validator and the name of its group, or ConsensusError."""
     # The validator is the JSON of the API, as api_json writes a Validator.
@@ -1506,6 +1541,8 @@ __all__ = [
     "api_genesis",
     "api_state_query",
     "api_state_query_ssz",
+    "api_registry_query",
+    "api_validator_balances_ssz",
     "api_validator_status",
     "api_builder_status",
     "is_valid_builder_signature",
@@ -1519,6 +1556,7 @@ __all__ = [
     "builder_request_auth_failures",
     "builder_preferences_failures",
     "default_auth_data",
+    "relay_submission_bid",
     "builder_bid_value",
     "consensus_version",
     "consensus_version_fork",

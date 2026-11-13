@@ -7,9 +7,9 @@ public import EthLib.Consensus.BeaconApi.Validators
 /-!
 # `Consensus.BeaconApi.Registries`
 
-The answers of the Beacon API that read the registry of validators of a state.
+The answers of the Beacon API that read the registries of validators and of builders of a state.
 
-The [validators], [balances] and [identities] endpoints give one entry per validator that a request names.
+The [validators], [balances] and [identities] endpoints give one entry per named validator.
 
 A request names validators by index or by public key, and an empty list names them all.
 
@@ -21,6 +21,10 @@ The source gives no order, so an answer is any permutation of the entries.
 
 The [validator] endpoint gives the entry of one validator, and code 404 when there is none.
 
+From Gloas, the [builders] endpoint gives the builders alike, with a filter on their status.
+
+It gives code 400 for a state before Gloas.
+
 The flags `execution_optimistic` and `finalized` come from the store, not from the state.
 
 SOUNDNESS.md records the points that the source leaves open.
@@ -29,6 +33,7 @@ SOUNDNESS.md records the points that the source leaves open.
 [validator]: https://github.com/ethereum/beacon-APIs/blob/7911555e6a30c51f9b69bb168111a59f1ff8ee49/apis/beacon/states/validator.yaml
 [balances]: https://github.com/ethereum/beacon-APIs/blob/7911555e6a30c51f9b69bb168111a59f1ff8ee49/apis/beacon/states/validator_balances.yaml
 [identities]: https://github.com/ethereum/beacon-APIs/blob/7911555e6a30c51f9b69bb168111a59f1ff8ee49/apis/beacon/states/validator_identities.yaml
+[builders]: https://github.com/ethereum/beacon-APIs/blob/7911555e6a30c51f9b69bb168111a59f1ff8ee49/apis/beacon/states/builders.yaml
 -/
 
 @[expose] public section
@@ -41,16 +46,20 @@ variable {preset : Preset} {fork : Fork}
 
 /-! ## Selection -/
 
-/-- The indices that a list of identifiers names in a state, once each.
+/-- The indices that a list of identifiers names in a registry of a given size, once each.
 
 An empty list names every index of the registry that fits in 64 bits. -/
+def selectIndices (size : Nat) (resolve : ValidatorId → Option UInt64)
+    (ids : List ValidatorId) : List UInt64 :=
+  if ids.isEmpty then
+    (List.range (min size UInt64.size)).map UInt64.ofNat
+  else
+    ((ids.filterMap resolve).eraseDups).mergeSort fun a b => a.toNat ≤ b.toNat
+
+/-- The indices that a list of identifiers names in the registry of validators, once each. -/
 def selectValidators (state : BeaconState preset fork) (ids : List ValidatorId) :
     List ValidatorIndex :=
-  if ids.isEmpty then
-    (List.range (min state.validators.data.size UInt64.size)).map UInt64.ofNat
-  else
-    ((ids.filterMap (resolveValidatorId state)).eraseDups).mergeSort
-      fun a b => a.toNat ≤ b.toNat
+  selectIndices state.validators.data.size (resolveValidatorId state) ids
 
 /-- A name in a status filter: one status, or a group of statuses. -/
 inductive StatusName where
@@ -212,6 +221,12 @@ def readValidatorIds (inQuery : Bool) (texts : List String) :
 def readStatusFilter (texts : List String) : Except ErrorMessage StatusFilter :=
   texts.mapM StatusName.parse
 
+/-- The builder identifiers of a request, or an error with code 400 for a text that is none.
+
+A builder is named as a validator is, and the request is a body, with any number of identifiers. -/
+def readBuilderIds (texts : List String) : Except ErrorMessage (List ValidatorId) :=
+  texts.mapM fun text => (parseValidatorId text).mapError fun _ => invalidId "builder" text
+
 /-! ## Responses -/
 
 /-- The response of the validators endpoint, without the two flags that come from the store. -/
@@ -242,5 +257,72 @@ The source gives no list type for its SSZ body, so there is none here. -/
 def identitiesResponse (state : BeaconState preset fork) (ids : List ValidatorId) :
     Except ErrorMessage ApiEnvelope := do
   return { data := .arr (← (stateIdentities state ids).mapM apiJsonOr500).toArray }
+
+/-! ## Builders -/
+
+/-- From Gloas: the index of the builder that an identifier names in a state, or none.
+
+A builder is named as a validator is: by its index, or by its public key.
+
+An index names a builder when it is below the size of the registry.
+
+A public key names the first builder of the registry that holds it. -/
+def resolveBuilderId (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork) :
+    ValidatorId → Option BuilderIndex
+  | .index index => if index.toNat < (state.builders gloas).data.size then some index else none
+  | .pubkey pubkey => ((state.builders gloas).data.findIdx? (·.pubkey == pubkey)).map UInt64.ofNat
+
+/-- The builder status that a text gives, as the API writes it, or an error with code 400. -/
+def BuilderStatus.parse (text : String) : Except ErrorMessage BuilderStatus :=
+  match [BuilderStatus.pending, .active, .exited].find? (·.name == text) with
+  | some found => .ok found
+  | none => .error { code := 400, message := s!"Invalid builder status: {text}" }
+
+/-- Whether a builder status passes a filter: the filter is empty, or it holds the status. -/
+def builderStatusPasses (filter : List BuilderStatus) (status : BuilderStatus) : Bool :=
+  filter.isEmpty || filter.contains status
+
+/-- An entry of the builders answer: the index, status and record of a builder. -/
+structure BuilderResponse where
+  /-- The index in the registry of builders. -/
+  index : BuilderIndex
+  /-- The status of the builder. -/
+  status : BuilderStatus
+  /-- The record of the builder. -/
+  builder : Builder
+  deriving DecidableEq, Repr
+
+/-- The JSON of an entry of the builders answer, with the status as the API names it. -/
+def BuilderResponse.toJson (entry : BuilderResponse) : Except Err Json := do
+  return Json.mkObj [("index", .str (toString entry.index.toNat)),
+    ("status", .str entry.status.name), ("builder", ← toApiJson entry.builder)]
+
+/-- From Gloas: the entries of the builders answer, for the requested builders.
+
+Each builder whose status does not pass the filter gives no entry. -/
+def stateBuilders (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork)
+    (ids : List ValidatorId) (filter : List BuilderStatus) : List BuilderResponse :=
+  (selectIndices (state.builders gloas).data.size (resolveBuilderId state gloas) ids).filterMap
+    fun index => do
+      let builder ← (state.builders gloas).data[index.toNat]?
+      let status ← (builderStatus state gloas index).toOption
+      if builderStatusPasses filter status then some { index, status, builder } else none
+
+/-- Whether a list is an answer of the builders endpoint: the entries in any order. -/
+def IsBuildersAnswer (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork)
+    (ids : List ValidatorId) (filter : List BuilderStatus) (answer : List BuilderResponse) :
+    Prop :=
+  answer.Perm (stateBuilders state gloas ids filter)
+
+/-- The response of the builders endpoint, without the two flags that come from the store.
+
+A state before Gloas gives the error with code 400. -/
+def buildersResponse (state : BeaconState preset fork) (ids : List ValidatorId)
+    (filter : List BuilderStatus) : Except ErrorMessage ApiEnvelope := do
+  if gloas : .glamsterdam ≤ fork then
+    let entries ← (stateBuilders state gloas ids filter).mapM fun entry =>
+      entry.toJson.mapError fun fault => internalError (reprStr fault)
+    return { data := .arr entries.toArray }
+  else .error (beforeFork "builders" .glamsterdam)
 
 end EthLib.Consensus.BeaconApi

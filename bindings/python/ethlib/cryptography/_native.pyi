@@ -609,6 +609,14 @@ def consensus_api_builder_status(name: str, fork: str, state: bytes, index: int)
     """The status of the builder at an index of a state, as its name."""
     ...
 
+def consensus_api_registry_query(name: str, fork: str, state: bytes, query: str, ids: list[str] | None, statuses: list[str] | None, in_query: bool) -> dict[str, Any]:
+    """The JSON response to a query on the registries of a state, as a `dict`."""
+    ...
+
+def consensus_api_validator_balances_ssz(name: str, fork: str, state: bytes, ids: list[str] | None, in_query: bool) -> bytes:
+    """The SSZ body of the balances answer, as `bytes`."""
+    ...
+
 def consensus_api_resolve(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, queries: list) -> list:
     """The answer to each query, against the store after the steps of a fork choice case."""
     ...
@@ -663,6 +671,10 @@ def consensus_builder_preferences_failures(name: str, fork: str, config: dict[st
 
 def consensus_default_auth_data(url: str) -> bytes:
     """The default data that a proposer and a builder agree, from the builder's URL."""
+    ...
+
+def consensus_relay_submission_bid(name: str, fork: str, data: bytes, pubkey: bytes) -> bytes:
+    """The SSZ bytes of the bid that a relay serves from a submission, under a key."""
     ...
 
 def consensus_builder_bid_value(value: int, execution_payment: int, max_execution_payment: int) -> int:
@@ -1677,8 +1689,8 @@ def engine_build_payload(config: dict, state: bytes, recent: list[tuple[str, byt
     """Build a payload on a chain, from attributes, the builder's choices and transactions."""
     ...
 
-def engine_forkchoice_updated(config: dict, tree: list, finalized: str | None, request: dict) -> dict:
-    """The response to an `engine_forkchoiceUpdated` request, against a tree of payloads."""
+def engine_forkchoice_updated(config: dict, tree: list, finalized: str | None, terminal_total_difficulty: int, request: dict) -> dict:
+    """The response to an `engine_forkchoiceUpdated` request, against a tree of known blocks."""
     ...
 
 def engine_get_blobs(pool: list[tuple[bytes, bytes | None, bytes | None, list[tuple[bytes, bytes] | None] | None]], serving: bool, max_request: int, fork: str, request: dict) -> list | None:
