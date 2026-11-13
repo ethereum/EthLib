@@ -16,7 +16,9 @@ From eth/69 on, the reader of a receipt gives its consensus form.
 
 On eth/68, a list reads as a legacy receipt, and a byte string as a receipt of another type.
 
-The receipts of a block match a root exactly when their consensus forms, in order, have that root.
+The receipts of a block match a root exactly when two conditions hold.
+
+Each reads in consensus form, and those forms, in order, have that root.
 
 From eth/70, a partial list of receipts passes the EIP-7975 checks exactly when three bounds hold.
 
@@ -85,8 +87,10 @@ theorem consensusOfItem_eq_ok_iff {version : EthVersion} (hv : version ≠ .eth6
   cases hd : (Codec.ofItem item : Except RlpError (WireReceipt fork)) <;>
     simp [consensusOfItem, hv, hd, Functor.map, Except.map, Except.mapError, eq_comm]
 
-/-- Bytes that hold a receipt of type 0 are exactly those whose first byte is at least `0xc0`. -/
-private theorem eq_zero_iff_of_decodeReceipt {bytes : ByteArray} {type : UInt8}
+/-- When bytes hold a receipt, they are not empty.
+
+Its type is 0 exactly when the first byte is at least `0xc0`. -/
+private theorem type_eq_zero_iff_of_decodeReceipt {bytes : ByteArray} {type : UInt8}
     {r : Receipt fork} (h : decodeReceipt fork bytes = .ok (type, r)) :
     ∃ h0 : 0 < bytes.size, (type = 0 ↔ (0xc0 : UInt8) ≤ bytes[0]) := by
   unfold decodeReceipt at h
@@ -149,13 +153,13 @@ theorem consensusOfItem_eth68_eq_ok_iff {item : Item} {type : UInt8} {r : Receip
     · intro h
       split at h
       · rename_i hLow
-        obtain ⟨h0, hiff⟩ := eq_zero_iff_of_decodeReceipt h
+        obtain ⟨h0, hiff⟩ := type_eq_zero_iff_of_decodeReceipt h
         rw [head?_toList h0] at hLow
         simp only [Option.all_some, decide_eq_true_eq] at hLow
         exact ⟨fun hz => absurd (hiff.mp hz) (UInt8.not_le.mpr hLow), h⟩
       · cases h
     · rintro ⟨hne, h⟩
-      obtain ⟨h0, hiff⟩ := eq_zero_iff_of_decodeReceipt h
+      obtain ⟨h0, hiff⟩ := type_eq_zero_iff_of_decodeReceipt h
       have hLow : b.data.toList.head?.all (· < 0xc0) = true := by
         rw [head?_toList h0]
         simpa using UInt8.not_le.mp (mt hiff.mpr hne)
