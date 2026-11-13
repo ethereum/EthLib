@@ -1477,14 +1477,6 @@ private theorem admissionFunded_exit {f : Fork} {s t : BeaconState preset f}
   exact admissionFunded_kept holds (effectiveKept_exit ok) (sameSizes_initiateValidatorExit ok).1
     balances
 
-private theorem admissionFunded_voluntaryExit {f : Fork} {s t : BeaconState preset f}
-    {n : Nat} {signed : SignedVoluntaryExit} (holds : AdmissionFunded n s)
-    (ok : processVoluntaryExit config checks s signed = .ok t) : AdmissionFunded n t := by
-  unfold processVoluntaryExit at ok
-  simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok, liftSsz_ok] at ok
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, exited⟩ := ok
-  exact admissionFunded_exit holds exited
-
 private theorem admissionFunded_blsChange {f : Fork} {s t : BeaconState preset f}
     {n : Nat} {signed : SignedBLSToExecutionChange} (holds : AdmissionFunded n s)
     (ok : processBlsToExecutionChange config checks s signed = .ok t) : AdmissionFunded n t := by
@@ -1675,7 +1667,7 @@ private theorem admissionFunded_operations {f : Fork} {s t : BeaconState preset 
         ⟨admissionFunded_processDeposit funded m deposited,
           balancesMatch_processDeposit deposited m⟩⟩)
       (fun exited => ⟨registryLifecycle_processVoluntaryExit exited, fun _ funded m =>
-        ⟨admissionFunded_voluntaryExit funded exited,
+        ⟨admissionFunded_exit funded (processVoluntaryExit_initiates exited),
           balancesMatch_of_sameSizes (sameSizes_processVoluntaryExit exited) m⟩⟩)
       (fun changed => ⟨registryLifecycle_processBlsToExecutionChange changed, fun _ funded m =>
         ⟨admissionFunded_blsChange funded changed,
@@ -1712,30 +1704,23 @@ private theorem admissionFunded_block {f : Fork} {s t : BeaconState preset f}
       ∀ key ∈ (s.currentSyncCommittee altair).value.pubkeys.toList, key ∈ validatorKeys s)
     (ok : processBlock config checks engine s block = .ok t) :
     AdmissionFunded s.validators.data.size t := by
-  let Same (a b : BeaconState preset f) : Prop := b.validators = a.validators ∧
-    ∀ altair, b.currentSyncCommittee altair = a.currentSyncCommittee altair
   obtain ⟨input, last, started, operated, -, synced⟩ := processBlock_operationsInput ok
-  have head : Same s input :=
-    OperationsInput.step_of Same (fun _ => ⟨rfl, fun _ => rfl⟩)
-      (fun one two => ⟨two.1.trans one.1, fun altair => (two.2 altair).trans (one.2 altair)⟩)
+  have head (altair : .altair ≤ f) :
+      input.currentSyncCommittee altair = s.currentSyncCommittee altair :=
+    OperationsInput.step_of (fun a b : BeaconState preset f =>
+        b.currentSyncCommittee altair = a.currentSyncCommittee altair) (fun _ => rfl)
+      (fun one two => two.trans one)
       (fun gloas _ => absurd gloas (Nat.not_le_of_lt early))
-      (fun headed => by
-        obtain ⟨_, _, rfl⟩ := processBlockHeader_eq headed
-        exact ⟨rfl, fun _ => rfl⟩)
-      (fun _ executed => ⟨processBlockExecution_step_of (fun a b => b.validators = a.validators)
-          (fun _ => rfl) (fun one two => two.trans one) (fun _ validators => validators)
-          processWithdrawals_validators executed,
-        fun altair => processBlockExecution_currentSyncCommittee altair executed⟩)
+      (fun headed => by obtain ⟨_, _, rfl⟩ := processBlockHeader_eq headed; rfl)
+      (fun _ executed => processBlockExecution_currentSyncCommittee altair executed)
       (fun revealed => by
         obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq revealed
-        exact ⟨rfl, fun _ => rfl⟩)
-      (fun _ voted => by
-        obtain ⟨_, _, rest⟩ := processEth1Data_eq voted
-        exact ⟨by rw [← rest], fun _ => by rw [← rest]⟩)
+        rfl)
+      (fun _ voted => by obtain ⟨_, _, rest⟩ := processEth1Data_eq voted; rw [← rest])
       started
   have frame := frame_operationsInput started
   have funded := admissionFunded_operations early (frame.balancesMatch matched) operated
-  rw [head.1] at funded
+  rw [OperationsInput.validators_eq early started] at funded
   split at synced
   · rename_i altair
     apply admissionFunded_sync funded ?_ synced
@@ -1745,7 +1730,7 @@ private theorem admissionFunded_block {f : Fork} {s t : BeaconState preset f}
       (frame.pubkeysPrefix.trans (frame_processOperations operated).pubkeysPrefix)
     apply keys altair key
     have same : last.currentSyncCommittee altair = s.currentSyncCommittee altair := by
-      rw [processOperations_currentSyncCommittee altair operated, head.2 altair]
+      rw [processOperations_currentSyncCommittee altair operated, head altair]
     simpa only [same, Vector.toList_toArray] using (Array.mem_toList_iff.mpr member)
   · cases synced
     exact funded
