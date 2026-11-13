@@ -21,12 +21,6 @@ The effective balances are aligned when each is a whole number of increments.
 
 When the largest values of the preset are aligned, so is the largest of each validator.
 
-That largest value is the largest of the preset before Electra, whatever the credentials.
-
-From Electra it is the largest Electra value for credentials that start with `0x02`.
-
-Otherwise it is the activation balance.
-
 A marked sum of effective balances is their sum over the marked positions.
 
 A total balance reads its indices as a set: their order and their repeats do not matter.
@@ -126,21 +120,6 @@ theorem withdrawalMaxEffectiveBalance_aligned (maxAligned : MaxEffectiveBalances
     · exact maxAligned.2.2
     · exact maxAligned.2.1
   · exact maxAligned.1
-
-/-- The largest effective balance of a validator, by fork and the first byte of its credentials.
-
-Before Electra it is the largest of the preset, whatever the credentials.
-
-From Electra it is the largest Electra balance for the byte `0x02`, else the activation balance. -/
-theorem withdrawalMaxEffectiveBalance_eq (preset : Preset) (fork : Base.Fork)
-    (validator : Validator) :
-    withdrawalMaxEffectiveBalance preset fork validator =
-      if .pectra ≤ fork then
-        if validator.withdrawalCredentials[0] = 0x02 then preset.MAX_EFFECTIVE_BALANCE_ELECTRA
-        else preset.MIN_ACTIVATION_BALANCE
-      else preset.MAX_EFFECTIVE_BALANCE := by
-  simp [withdrawalMaxEffectiveBalance, getMaxEffectiveBalance, hasCompoundingWithdrawalCredential,
-    isCompoundingWithdrawalCredential, COMPOUNDING_WITHDRAWAL_PREFIX]
 
 /-- A position of the validator registry, as a validator index, keeps its value.
 
