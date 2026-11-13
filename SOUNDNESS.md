@@ -3862,6 +3862,41 @@ The account queries of [`state.yaml`](https://github.com/ethereum/execution-apis
 `eth_getStorageValues` gives, for each key of each address of its request, the word that `eth_getStorageAt` gives for the same block (`storageValues_agree`).
 An address with no account has balance and nonce zero and empty code (`balance_of_none`, `nonce_of_none`, `code_of_none`), as the fixtures expect, though no text states it.
 
+`eth_call` of [`execute.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth/execute.yaml) runs the message of a transaction on the state after a block, and commits nothing (`Execution/Rpc/Call.lean`).
+The request is a `GenericTransaction`, whose fields are all optional and which has no field outside its schema.
+A field of the schema whose value is `null` counts as absent.
+The call prepares its message with the steps of a transaction, then runs it with `processMessageCall`, the function that the state transition runs.
+`runTransaction` takes the same steps as `transactionStart` once it has bought its gas (`runTransaction_eq_transactionStart`), so a change to one breaks the build.
+It answers data exactly when that message ends without an error, and that data is the output of the message (`ethCall_eq_ok_iff`, `Proofs/Rpc/Call.lean`).
+It answers the revert error, code 3, exactly when the message reverts, and the data of that error is the output of the revert (`ethCall_eq_revertError_iff`).
+The message runs on the state after the block that the request names, from the sender to the recipient (`prepareCall_message`).
+It carries the value of the request, and the input of the request as its data when it has a recipient.
+A request that names no fee takes no wei from its sender before its message (`prepareCall_balance_of_namesFee_false`).
+Such a request, from a sender that holds its value, never fails with code 809 (`ethCall_ne_insufficientFunds`).
+Since it pays no fee, that is how EthLib meets the rule of the source.
+A sender that holds less than the value of its request gets no data (`ethCall_ne_ok_of_balance_lt_value`).
+
+The source leaves most of the call to the node, and `CallChoices` takes those choices as one input:
+
+- the fork and the block environment of the call, by default those of the header of the named block;
+- the gas limit of a request that names none, by default the gas limit of that environment;
+- the price per gas that the code sees when the request names no fee, by default 0;
+- the sender of a request without `from`, by default the zero address.
+
+The dispatcher serves `eth_call` with the default choices.
+The other rules are choices of EthLib, and the header of `Execution/Rpc/Call.lean` lists them.
+A request that names no fee pays none, and runs with a base fee of 0, as the fixture `call-callenv.io` expects.
+A request that names a fee buys its gas with `buyGas`, as a transaction does, and the sender must hold that fee plus the value.
+A transaction must hold its fee at its caps instead, and its blob fee cap is checked; a call checks neither.
+The type must be active at the fork of the call, and the gas limit must cover the intrinsic gas and, from Pectra, the floor of EIP-7623.
+The checks of the blobs, of the authorization list and of a sender with code do not run, and neither the nonce of the request nor that of the sender is checked.
+The default gas limit is that of the block, which may exceed the cap of EIP-7825.
+The hashes that BLOCKHASH reads are those of the canonical blocks that the view holds.
+They leave out the blocks of the history, and they are not the ancestors of a block off the canonical chain.
+A revert has the message `"execution reverted"`, the only text that the source gives, though the fixtures append the reason.
+A halt that is not a revert has code 801 for a lack of gas, 4 for an invalid opcode, and `-32000` otherwise.
+The error groups of the source define these codes, but no text assigns them to `eth_call`.
+
 The Python suite replays the official test chain into a view and answers the official fixtures of the methods that EthLib serves.
 That chain mines its blocks before the merge with a zero mix hash and a zero nonce, so the suite runs the transition without the proof-of-work check.
 
