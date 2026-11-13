@@ -14,6 +14,10 @@ Each other block has the state that its transition gives from the state of its p
 So along a chain of known blocks above the anchor, each state is the transition of the one before.
 
 When every handler runs with one setting of the signature checks, each transition uses it.
+
+A block from the future is refused, and the clock of an honest node only moves forward.
+
+So in a store with a forward clock each block state is at or before the current slot.
 -/
 
 @[expose] public section
@@ -246,5 +250,82 @@ theorem Store.ForwardReachableWith.blockStatesFromParents {checks : SignatureChe
   | inclusionList _ accepted ih =>
     obtain ⟨-, blocks, states⟩ := Store.onInclusionList_frame accepted
     exact .of_maps blocks states ih
+
+/-- A handler that changes neither the block states nor the clock keeps their slot bound. -/
+private theorem blockStates_le_of_same {after : Store preset fork}
+    (states : after.blockStates = store.blockStates) (clock : Store.SameClock store after)
+    (holds : ∀ ⦃root : Root⦄ ⦃state : BeaconState preset fork⦄,
+      store.blockStates[root]? = some state →
+        ∃ current, store.getCurrentSlot config = .ok current ∧ state.slot ≤ current) :
+    ∀ ⦃root : Root⦄ ⦃state : BeaconState preset fork⦄, after.blockStates[root]? = some state →
+      ∃ current, after.getCurrentSlot config = .ok current ∧ state.slot ≤ current := by
+  intro root state found
+  rw [states] at found
+  rw [clock.getCurrentSlot]
+  exact holds found
+
+/-- In a store with a forward clock, each block state is at or before the current slot. -/
+theorem Store.ForwardReachable.slot_le_of_blockState_of_getCurrentSlot
+    (forward : Store.ForwardReachable config anchorState anchorBlock store) {root : Root}
+    {state : BeaconState preset fork} {current : Slot}
+    (stateFound : store.blockStates[root]? = some state)
+    (slotOk : store.getCurrentSlot config = .ok current) : state.slot ≤ current := by
+  suffices holds : ∀ ⦃root : Root⦄ ⦃state : BeaconState preset fork⦄,
+      store.blockStates[root]? = some state →
+        ∃ current, store.getCurrentSlot config = .ok current ∧ state.slot ≤ current by
+    obtain ⟨other, otherOk, le⟩ := holds stateFound
+    rw [slotOk, Except.ok.injEq] at otherOk
+    exact otherOk ▸ le
+  have positive := Store.slotDuration_pos slotOk
+  clear stateFound slotOk
+  induction forward with
+  | anchor made =>
+    -- The only block state is the anchor state, at the current slot.
+    intro root state found
+    obtain ⟨anchorRoot, -, -, states⟩ := getForkchoiceStore_maps made
+    rw [states, getElem?_insert_root] at found
+    split at found
+    · rw [Option.some.injEq] at found
+      subst found
+      exact ⟨_, getCurrentSlot_getForkchoiceStore positive made, UInt64.le_refl _⟩
+    · simp at found
+  | tick previous forward ticked ih =>
+    intro root state found
+    obtain ⟨-, -, -, states⟩ := Store.onTick_frame ticked
+    rw [states] at found
+    obtain ⟨current, slotOk, le⟩ := ih found
+    obtain ⟨later, laterOk, laterLe⟩ := Store.exists_getCurrentSlot_onTick_ge forward ticked slotOk
+    exact ⟨later, laterOk, UInt64.le_trans le laterLe⟩
+  | block _ added ih =>
+    -- A new block is not from the future, and its state is at its slot.
+    rcases Store.onBlock_same_or_insert added with
+      same | ⟨blockRoot, hashed, fresh, -, pre, newState, -, transition, states⟩
+    · subst same
+      exact ih
+    intro root state found
+    rw [(Store.onBlock_sameClock added).getCurrentSlot]
+    rw [states, getElem?_insert_root] at found
+    split at found
+    · rw [Option.some.injEq] at found
+      subst found
+      obtain ⟨current, slotOk, le⟩ := (Store.onBlock_checks hashed
+        (by simp [Std.TreeMap.contains_eq_isSome_getElem?, fresh]) added).1
+      exact ⟨current, slotOk, (stateTransition_slot transition).2 ▸ le⟩
+    · exact ih found
+  | attestation _ attested ih =>
+    exact blockStates_le_of_same (Store.onAttestation_frame attested).2.2
+      (Store.onAttestation_sameClock attested) ih
+  | attesterSlashing _ slashed ih =>
+    exact blockStates_le_of_same (Store.onAttesterSlashing_frame slashed).2.2
+      (Store.onAttesterSlashing_sameClock slashed) ih
+  | payloadAttestation _ voted ih =>
+    exact blockStates_le_of_same (onPayloadAttestationMessage_onlyPtcVotes voted).frame.2.2
+      (Store.onPayloadAttestationMessage_sameClock voted) ih
+  | envelope _ accepted ih =>
+    exact blockStates_le_of_same (Store.onExecutionPayloadEnvelope_frame accepted).2.2
+      (Store.onExecutionPayloadEnvelope_sameClock accepted) ih
+  | inclusionList _ accepted ih =>
+    exact blockStates_le_of_same (Store.onInclusionList_frame accepted).2.2
+      (Store.onInclusionList_sameClock accepted) ih
 
 end EthLib.Consensus

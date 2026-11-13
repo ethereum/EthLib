@@ -1165,6 +1165,23 @@ theorem fields_mkObj (what : String) {pairs : List (String × Lean.Json)}
       fun l h => h.imp_of_mem (fun {a b} _ _ hne heq => hne (by rw [heq]))
     exact (List.perm_ext_iff_of_nodup (nodup _ hd) (nodup _ distinct)).mpr hmem
 
+/-- An object built from pairs with distinct names has the pairs that are not `null` as fields.
+
+They may come in another order. -/
+theorem fields_mkObj_filter (what : String) {pairs : List (String × Lean.Json)}
+    (distinct : pairs.Pairwise fun a b => a.1 ≠ b.1) :
+    ∃ fs, fields what (Lean.Json.mkObj pairs) = .ok fs ∧
+      fs.Perm (pairs.filter fun p => !p.2.isNull) := by
+  obtain ⟨kvs, hobj, -, hmem, hd⟩ := toList_mkObj distinct
+  refine ⟨kvs.toList.filter (fun (_, v) => !v.isNull), ?_, ?_⟩
+  · rw [hobj]
+    rfl
+  · have nodup : ∀ l : List (String × Lean.Json), (l.Pairwise fun a b => a.1 ≠ b.1) → l.Nodup :=
+      fun l h => h.imp_of_mem (fun {a b} _ _ hne heq => hne (by rw [heq]))
+    refine (List.perm_ext_iff_of_nodup ((nodup _ hd).filter _)
+      ((nodup _ distinct).filter _)).mpr fun p => ?_
+    simp only [List.mem_filter, hmem]
+
 /-- Fields that are some pairs in another order hold exactly the names of those pairs. -/
 theorem hasExactly_of_perm {fs pairs : List (String × Lean.Json)} (h : fs.Perm pairs) :
     hasExactly fs (pairs.map Prod.fst) = true := by
@@ -1210,6 +1227,40 @@ theorem lookup_of_perm {fs pairs : List (String × Lean.Json)} (h : fs.Perm pair
     obtain ⟨l₁, l₂, rfl, -⟩ := List.lookup_eq_some_iff.mp hl
     exact lookup_of_mem ((h.pairwise_iff fun hab => Ne.symm hab).mpr distinct)
       (h.mem_iff.mpr (by simp))
+
+/-- Fields that hold the pairs not `null` of a list with distinct names read each name as the list.
+
+A name whose value is `null` reads as absent. -/
+theorem lookup_of_perm_filter {fs pairs : List (String × Lean.Json)}
+    (h : fs.Perm (pairs.filter fun p => !p.2.isNull))
+    (distinct : pairs.Pairwise fun a b => a.1 ≠ b.1) (k : String) :
+    fs.lookup k = (pairs.lookup k).filter fun v => !v.isNull := by
+  have hdf : (pairs.filter fun p => !p.2.isNull).Pairwise fun a b => a.1 ≠ b.1 :=
+    List.Pairwise.sublist List.filter_sublist distinct
+  have hd : fs.Pairwise fun a b => a.1 ≠ b.1 := (h.pairwise_iff fun hab => Ne.symm hab).mpr hdf
+  cases hl : pairs.lookup k with
+  | none =>
+    rw [List.lookup_eq_none_iff] at hl
+    rw [Option.filter_none, List.lookup_eq_none_iff]
+    intro p hp
+    exact hl p (List.mem_filter.mp (h.mem_iff.mp hp)).1
+  | some v =>
+    have hv : (k, v) ∈ pairs := by
+      obtain ⟨l₁, l₂, rfl, -⟩ := List.lookup_eq_some_iff.mp hl
+      simp
+    by_cases hn : v.isNull = true
+    · simp only [Option.filter_some, hn, Bool.not_true, Bool.false_eq_true, ↓reduceIte]
+      rw [List.lookup_eq_none_iff]
+      intro p hp
+      obtain ⟨hp, hpn⟩ := List.mem_filter.mp (h.mem_iff.mp hp)
+      by_cases hk : p.1 = k
+      · have := lookup_of_mem distinct hp
+        rw [hk, hl] at this
+        cases this
+        simp_all
+      · simpa using Ne.symm hk
+    · simp only [Option.filter_some, hn, Bool.not_false, ↓reduceIte]
+      exact lookup_of_mem hd (h.mem_iff.mpr (List.mem_filter.mpr ⟨hv, by simpa using hn⟩))
 
 /-! ## The error object -/
 

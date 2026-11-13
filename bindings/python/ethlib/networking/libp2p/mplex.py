@@ -1,5 +1,6 @@
 """mplex frames: a header of stream ID and flag, a length, then the data."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import Enum
 
@@ -44,4 +45,9 @@ def decode(data: bytes) -> tuple[Frame, bytes]:
     return frame, rest
 
 
-__all__ = ["Flag", "Frame", "MplexError", "decode", "encode"]
+def session(events: Sequence[tuple[bool, bytes]]) -> list[tuple[int, bool, str]]:
+    """Each stream ID, whether this side opened it, and its final state, in table order."""
+    return _native.mplex_session(list(events))
+
+
+__all__ = ["Flag", "Frame", "MplexError", "decode", "encode", "session"]

@@ -99,6 +99,10 @@ theorem advanceSlot_kept (computed : advanceSlot config checks state = .ok after
     subst epochedOk
     exact ⟨rfl, rfl, Nat.le_refl _⟩
 
+/-- The epoch after the genesis epoch is epoch 1. -/
+theorem toNat_genesisEpoch_add_one : (GENESIS_EPOCH + 1 : Epoch).toNat = 1 := by
+  decide
+
 /-- A frame keeps the two justified checkpoints equal in the first two epochs. -/
 theorem JustifiedEarly.of_frame (frame : Frame state after) (early : JustifiedEarly state) :
     JustifiedEarly after := by
@@ -114,7 +118,7 @@ theorem JustifiedEarly.of_advanceSlot (early : JustifiedEarly state)
   obtain ⟨next, cached, epoched, sum, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok computed
   have cachedFrame := frame_processSlot cachedOk
   have cachedEarly := early.of_frame cachedFrame
-  have one : (GENESIS_EPOCH + 1 : Epoch).toNat = 1 := by decide
+  have one := toNat_genesisEpoch_add_one
   have cachedEpoch := getCurrentEpoch_toNat cached
   rw [cachedFrame.slot] at cachedEpoch
   intro afterEarly
@@ -162,7 +166,7 @@ theorem JustifiedSeparated.of_advanceSlot (early : JustifiedEarly state)
     (computed : advanceSlot config checks state = .ok after) : JustifiedSeparated after := by
   obtain ⟨next, cached, epoched, sum, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok computed
   have cachedFrame := frame_processSlot cachedOk
-  have one : (GENESIS_EPOCH + 1 : Epoch).toNat = 1 := by decide
+  have one := toNat_genesisEpoch_add_one
   have cachedEpoch := getCurrentEpoch_toNat cached
   rw [cachedFrame.slot] at cachedEpoch
   have afterEpoch := getCurrentEpoch_toNat { epoched with slot := next }
