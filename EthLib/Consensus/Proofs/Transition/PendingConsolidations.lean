@@ -641,6 +641,66 @@ theorem blockExecution {body : BeaconBlockBody preset fork} {bellatrix : .bellat
 
 end SamePendingQueue
 
+/-- A property of the pending consolidation queue crosses an upgrade before Gloas.
+
+It holds vacuously before Electra, the Electra upgrade starts with an empty queue, and Fulu
+must carry it. -/
+private theorem upgradeNext_pending (P : ∀ {f : Fork}, BeaconState preset f → Prop)
+    (vacuous : ∀ {f : Fork} (s : BeaconState preset f), f < .pectra → P s)
+    (empty : ∀ t : BeaconState preset .pectra,
+      (∀ electra, (t.pendingConsolidations electra).data.toList = []) → P t)
+    (fulu : ∀ {s : BeaconState preset .pectra} {t : BeaconState preset .fusaka},
+      upgradeToFulu config s = .ok t → P s → P t)
+    {pre : ForkedBeaconState preset}
+    {post : {post : ForkedBeaconState preset // pre.fork < post.fork}}
+    (holds : P pre.state) (ok : upgradeNext config checks pre = .ok post)
+    (early : post.val.fork < .glamsterdam) : P post.val.state := by
+  obtain ⟨fork, state⟩ := pre
+  cases fork <;>
+    simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq, throw,
+      throwThe, MonadExceptOf.throw, reduceCtorEq] at ok
+  · obtain ⟨_, _, rfl⟩ := ok
+    exact vacuous _ (show Fork.altair < .pectra by decide)
+  · subst ok; exact vacuous _ (show Fork.bellatrix < .pectra by decide)
+  · subst ok; exact vacuous _ (show Fork.shapella < .pectra by decide)
+  · subst ok; exact vacuous _ (show Fork.dencun < .pectra by decide)
+  · obtain ⟨_, upgraded, rfl⟩ := ok
+    simp only [upgradeToElectra, bind_ok_iff] at upgraded
+    obtain ⟨_, _, _, _, _, _, _, _, _, queued, compounded⟩ := upgraded
+    have kept := SamePendingQueue.fold (fun _ _ _ ok => by
+      simp only [queuePreActivation, bind_ok_iff, liftAccessor_ok, pure, Except.pure,
+        Except.ok.injEq] at ok
+      obtain ⟨_, _, _, _, _, _, b, balance, _, set, rfl⟩ := ok
+      obtain ⟨_, rfl⟩ := setBalance_ok balance
+      have same := SamePendingQueue.setValidator set
+      exact same) queued
+    have kept' := SamePendingQueue.fold (fun _ _ _ ok => by
+      unfold queueCompoundingExcess at ok
+      split at ok
+      · split at ok
+        · simp only [liftAccessor_ok, queueExcessActiveBalance, bind_ok_iff] at ok
+          obtain ⟨_, _, ok⟩ := ok
+          split at ok
+          · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
+            obtain ⟨_, _, _, _, _, set, rfl⟩ := ok
+            obtain ⟨_, rfl⟩ := setBalance_ok set
+            rfl
+          · cases ok; rfl
+        · cases ok; rfl
+      · cases ok; rfl) compounded
+    have queue := kept.trans kept'
+    apply empty
+    intro electra
+    unfold SamePendingQueue at queue
+    rw [queue]
+    simp [carryFields, show ¬ Fork.pectra ≤ .dencun from by decide]
+  · obtain ⟨_, upgraded, rfl⟩ := ok
+    exact fulu upgraded holds
+  · obtain ⟨_, _, rfl⟩ := ok
+    exact False.elim (Nat.lt_irrefl _ early)
+  · obtain ⟨_, _, rfl⟩ := ok
+    exact False.elim (Nat.not_le_of_lt early (show Fork.glamsterdam ≤ .hegota from by decide))
+
 namespace PendingSources
 
 private theorem fold {α ε : Type}
@@ -759,62 +819,17 @@ private theorem upgrade {pre : ForkedBeaconState preset}
     {post : {post : ForkedBeaconState preset // pre.fork < post.fork}}
     (holds : PendingSources pre.state)
     (ok : upgradeNext config checks pre = .ok post)
-    (early : post.val.fork < .glamsterdam) : PendingSources post.val.state := by
-  obtain ⟨fork, state⟩ := pre
-  cases fork <;>
-    simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq, throw,
-      throwThe, MonadExceptOf.throw, reduceCtorEq] at ok
-  · obtain ⟨_, upgraded, rfl⟩ := ok
-    intro electra
-    exact False.elim (Nat.not_le_of_lt (show Fork.altair < .pectra from by decide) electra)
-  · subst ok
-    intro electra
-    exact False.elim (Nat.not_le_of_lt (show Fork.bellatrix < .pectra from by decide) electra)
-  · subst ok
-    intro electra
-    exact False.elim (Nat.not_le_of_lt (show Fork.shapella < .pectra from by decide) electra)
-  · subst ok
-    intro electra
-    exact False.elim (Nat.not_le_of_lt (show Fork.dencun < .pectra from by decide) electra)
-  · obtain ⟨_, upgraded, rfl⟩ := ok
-    simp only [upgradeToElectra, bind_ok_iff] at upgraded
-    obtain ⟨_, _, _, _, _, _, _, _, _, queued, compounded⟩ := upgraded
-    have kept := SamePendingQueue.fold (fun _ _ _ ok => by
-      simp only [queuePreActivation, bind_ok_iff, liftAccessor_ok, pure, Except.pure,
-        Except.ok.injEq] at ok
-      obtain ⟨_, _, _, _, _, _, b, balance, _, set, rfl⟩ := ok
-      obtain ⟨_, rfl⟩ := setBalance_ok balance
-      have same := SamePendingQueue.setValidator set
-      exact same) queued
-    have kept' := SamePendingQueue.fold (fun _ _ _ ok => by
-      unfold queueCompoundingExcess at ok
-      split at ok
-      · split at ok
-        · simp only [liftAccessor_ok, queueExcessActiveBalance, bind_ok_iff] at ok
-          obtain ⟨_, _, ok⟩ := ok
-          split at ok
-          · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
-            obtain ⟨_, _, _, _, _, set, rfl⟩ := ok
-            obtain ⟨_, rfl⟩ := setBalance_ok set
-            rfl
-          · cases ok; rfl
-        · cases ok; rfl
-      · cases ok; rfl) compounded
-    have queue := kept.trans kept'
-    intro electra entry mem
-    unfold SamePendingQueue at queue
-    rw [queue] at mem
-    simp [carryFields, show ¬ Fork.pectra ≤ .dencun from by decide] at mem
-  · obtain ⟨_, upgraded, rfl⟩ := ok
-    simp only [upgradeToFulu, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at upgraded
-    obtain ⟨_, _, rfl⟩ := upgraded
-    intro electra entry mem
-    exact holds (show Fork.pectra ≤ .pectra from Nat.le_refl _) entry
-      (by simpa [carryFields, carryList] using mem)
-  · obtain ⟨_, _, rfl⟩ := ok
-    exact False.elim (Nat.lt_irrefl _ early)
-  · obtain ⟨_, _, rfl⟩ := ok
-    exact False.elim (Nat.not_le_of_lt early (show Fork.glamsterdam ≤ .hegota from by decide))
+    (early : post.val.fork < .glamsterdam) : PendingSources post.val.state :=
+  upgradeNext_pending (P := PendingSources)
+    (fun _ before electra => absurd electra (Nat.not_le_of_lt before))
+    (fun _ empty electra entry mem => by simp [empty electra] at mem)
+    (fun upgraded holds => by
+      simp only [upgradeToFulu, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at upgraded
+      obtain ⟨_, _, rfl⟩ := upgraded
+      intro electra entry mem
+      exact holds (show Fork.pectra ≤ .pectra from Nat.le_refl _) entry
+        (by simpa [carryFields, carryList] using mem))
+    holds ok early
 
 private theorem step {x y : ForkedBeaconState preset}
     (step : Step config checks x y) (early : y.fork < .glamsterdam)
@@ -1600,62 +1615,17 @@ private theorem upgrade {pre : ForkedBeaconState preset}
     (holds : PendingConsolidationInvariant config pre.state)
     (ok : upgradeNext config checks pre = .ok post)
     (early : post.val.fork < .glamsterdam) :
-    PendingConsolidationInvariant config post.val.state := by
-  obtain ⟨fork, state⟩ := pre
-  cases fork <;>
-    simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq, throw,
-      throwThe, MonadExceptOf.throw, reduceCtorEq] at ok
-  · obtain ⟨_, upgraded, rfl⟩ := ok
-    intro electra
-    exact False.elim (Nat.not_le_of_lt (show Fork.altair < .pectra from by decide) electra)
-  · subst ok
-    intro electra
-    exact False.elim (Nat.not_le_of_lt (show Fork.bellatrix < .pectra from by decide) electra)
-  · subst ok
-    intro electra
-    exact False.elim (Nat.not_le_of_lt (show Fork.shapella < .pectra from by decide) electra)
-  · subst ok
-    intro electra
-    exact False.elim (Nat.not_le_of_lt (show Fork.dencun < .pectra from by decide) electra)
-  · obtain ⟨_, upgraded, rfl⟩ := ok
-    simp only [upgradeToElectra, bind_ok_iff] at upgraded
-    obtain ⟨_, _, _, _, _, _, _, _, _, queued, compounded⟩ := upgraded
-    have kept := SamePendingQueue.fold (fun _ _ _ ok => by
-      simp only [queuePreActivation, bind_ok_iff, liftAccessor_ok, pure, Except.pure,
-        Except.ok.injEq] at ok
-      obtain ⟨_, _, _, _, _, _, b, balance, _, set, rfl⟩ := ok
-      obtain ⟨_, rfl⟩ := setBalance_ok balance
-      have same := SamePendingQueue.setValidator set
-      exact same) queued
-    have kept' := SamePendingQueue.fold (fun _ _ _ ok => by
-      unfold queueCompoundingExcess at ok
-      split at ok
-      · split at ok
-        · simp only [liftAccessor_ok, queueExcessActiveBalance, bind_ok_iff] at ok
-          obtain ⟨_, _, ok⟩ := ok
-          split at ok
-          · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
-            obtain ⟨_, _, _, _, _, set, rfl⟩ := ok
-            obtain ⟨_, rfl⟩ := setBalance_ok set
-            rfl
-          · cases ok; rfl
-        · cases ok; rfl
-      · cases ok; rfl) compounded
-    have queue := kept.trans kept'
-    intro electra
-    unfold SamePendingQueue at queue
-    rw [queue]
-    simp [carryFields, show ¬ Fork.pectra ≤ .dencun from by decide]
-  · obtain ⟨_, upgraded, rfl⟩ := ok
-    simp only [upgradeToFulu, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at upgraded
-    obtain ⟨_, _, rfl⟩ := upgraded
-    intro electra
-    simpa [carryFields, carryList, carryRooted, getCurrentEpoch] using
-      holds (show Fork.pectra ≤ .pectra from Nat.le_refl _)
-  · obtain ⟨_, _, rfl⟩ := ok
-    exact False.elim (Nat.lt_irrefl _ early)
-  · obtain ⟨_, _, rfl⟩ := ok
-    exact False.elim (Nat.not_le_of_lt early (show Fork.glamsterdam ≤ .hegota from by decide))
+    PendingConsolidationInvariant config post.val.state :=
+  upgradeNext_pending (P := PendingConsolidationInvariant config)
+    (fun _ before electra => absurd electra (Nat.not_le_of_lt before))
+    (fun _ empty electra => by simp [empty electra])
+    (fun upgraded holds => by
+      simp only [upgradeToFulu, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at upgraded
+      obtain ⟨_, _, rfl⟩ := upgraded
+      intro electra
+      simpa [carryFields, carryList, carryRooted, getCurrentEpoch] using
+        holds (show Fork.pectra ≤ .pectra from Nat.le_refl _))
+    holds ok early
 
 private theorem step {x y : ForkedBeaconState preset}
     (step : Step config checks x y) (early : y.fork < .glamsterdam)
