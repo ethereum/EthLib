@@ -547,6 +547,10 @@ def bindings : List Binding := [
     `EthLib.Consensus.Exports.isValidBuilderSignatureExport,
     "(name: str, fork: str, config: dict[str, Any] | None, type: str, data: bytes) -> bool",
     [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
+  ⟨"consensus_process_registration", `EthLib.Consensus.Exports.processRegistrationExport,
+    "(name: str, fork: str, config: dict[str, Any] | None, state: bytes, " ++
+      "registry: list[bytes], signed: bytes, now: int) -> str | None",
+    [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
   ⟨"consensus_unblind_signed_blinded_block", `EthLib.Consensus.Exports.unblindExport,
     "(name: str, fork: str, blinded: bytes, revealed: bytes) -> tuple[bytes, bytes] | None",
     [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,

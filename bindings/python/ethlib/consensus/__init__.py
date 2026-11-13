@@ -67,6 +67,20 @@ def is_valid_builder_signature(
     return _native.consensus_is_valid_builder_signature(name, fork, config, type_name, data)
 
 
+def process_registration(
+    name: str,
+    fork: str,
+    state: bytes,
+    registry: list[bytes],
+    signed: bytes,
+    now: int,
+    # `Any`, because `dict` is invariant in its values.
+    config: dict[str, Any] | None = None,
+) -> str | None:
+    """None when a builder keeps a signed registration, or the name of the rule that refuses it."""
+    return _native.consensus_process_registration(name, fork, config, state, registry, signed, now)
+
+
 def unblind_signed_blinded_block(
     name: str, fork: str, blinded: bytes, revealed: bytes
 ) -> tuple[bytes, bytes] | None:
@@ -1274,6 +1288,7 @@ __all__ = [
     "compute_columns_for_custody_group",
     "ssz_static",
     "is_valid_builder_signature",
+    "process_registration",
     "unblind_signed_blinded_block",
     "verify_builder_request_auth_signature",
     "builder_bid_value",

@@ -3158,6 +3158,21 @@ From Bellatrix to Fulu, the proposer signs a blinded block, and the builder then
 `BlindedBeaconBlockBody.unblind_eq_headerMismatch_iff` shows that unblinding fails exactly when the header of the payload differs from that of the blinded body, and `BlindedBeaconBlockBody.unblind_ne_header` that no other failure occurs.
 `verifyBlockSignature_unblind` shows that the one signature of the proposer verifies on the full block exactly as on the blinded block, when the block names the proposer of the state.
 
+From Bellatrix to Fulu, a builder keeps a registration only when five rules hold, in the order of the source.
+`processRegistration_ok_iff` (`Consensus/Proofs/BuilderApi/Registration.lean`) states them on the inputs.
+The key names a validator of the state; that validator is active or pending in the current epoch; the time is at most ten seconds ahead of the builder's clock; it is not earlier than the registration kept for the key; and the signature verifies.
+The source adds the ten seconds to the clock as a 64-bit integer, which fails past `2^64 - 11`, so EthLib refuses such a clock too.
+`processRegistration_signature` shows that a kept registration carries a valid signature, and `processRegistration_monotone` that keeping it does not move the time of its key back.
+`processRegistration_exited` shows that a validator that has activated and exited by the current epoch is refused.
+The pseudocode of the source has two defects, which EthLib reads by their evident meaning:
+
+- `process_registration` reads `pubkey`, which it never binds; EthLib reads the key of the registration.
+- It rebinds `registration` to the message, then passes it to the signature check, which takes the signed registration; EthLib checks the signed registration.
+
+The endpoint takes a list of registrations.
+The source does not say whether one invalid entry rejects the whole list, nor whether earlier entries of the same list count as kept registrations.
+EthLib specifies one registration and leaves the list open.
+
 From Deneb to Fulu, a builder reveals the payload with a blobs bundle: the blobs, their commitments and their proofs.
 `BuilderBlobsBundle.names_nodup` and `ExecutionPayloadAndBlobsBundle.names_nodup` (`Consensus/Proofs/Containers/BuilderApi.lean`) give both containers distinct field names, so they decode back from their bytes when the logs bloom has a byte.
 From Fulu the Fulu builder document bounds the proofs by `FIELD_ELEMENTS_PER_EXT_BLOB * MAX_BLOB_COMMITMENTS_PER_BLOCK`, 2^25 in the mainnet preset.
@@ -3451,12 +3466,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 394 operations and 49 size constants.
-The Python extension calls 394 of the operations and 49 of the constants.
+Lean exports 395 operations and 49 size constants.
+The Python extension calls 395 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-10079 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (1853), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (122), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (80), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (129), `module.c` (1422), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (140), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (677), `x25519.c` (21), `xmss.c` (134).
+10095 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (1866), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (122), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (80), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (129), `module.c` (1424), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (140), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (678), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.
