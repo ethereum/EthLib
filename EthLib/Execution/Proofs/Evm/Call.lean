@@ -8,6 +8,8 @@ public import EthLib.Execution.Proofs.Evm.Call.Delegation
 public import EthLib.Execution.Proofs.Evm.Call.Fresh
 public import EthLib.Execution.Proofs.Evm.Call.Instructions
 public import EthLib.Execution.Proofs.Evm.Call.LogWeight
+public import EthLib.Execution.Proofs.Evm.Call.LogsPaid
+public import EthLib.Execution.Proofs.Evm.Call.LogsPaidSteps
 public import EthLib.Execution.Proofs.Evm.Call.Marks
 public import EthLib.Execution.Proofs.Evm.Call.MessageCall
 public import EthLib.Execution.Proofs.Evm.Call.MeterRules

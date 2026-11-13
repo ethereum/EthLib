@@ -61,7 +61,7 @@ theorem runFrame (rules : MeterRules Q) [LawfulGasMeter Meter] {bound : Nat}
     Q evm.gas after.gas :=
   rel_runFrame (R := fun a b => Q a.gas b.gas) (C := fun _ _ _ => True) (Inv := fun _ => True)
     (fun evm => rules.refl evm.gas) rules.trans (fun _ _ => trivial)
-    (fun evm _ _ => rules.exhaust evm.gas) (fun _ h => rules.step h)
+    (fun evm _ _ => rules.exhaust evm.gas) (fun _ _ h => rules.step h)
     (fun _ _ _ _ _ _ => trivial) trivial h
 
 /-- A precompile keeps the relation. -/

@@ -489,7 +489,7 @@ theorem runFrame [LawfulGasMeter Meter] (rules : StepRules fork R) {bound : Nat}
     (h : Evm.runFrame (Evm.step fork) (step_decreases fork) bound runChild evm within = .ok after) :
     R evm after :=
   rel_runFrame (Inv := fun _ => True) rules.refl rules.trans (fun _ _ => trivial)
-    (fun _ _ _ => rules.static (staticStep_exceptionalHalt _ _)) (fun _ h => rules.step h)
+    (fun _ _ _ => rules.static (staticStep_exceptionalHalt _ _)) (fun _ _ h => rules.step h)
     (fun _ _ _ _ _ => runs _ _ _ _) trivial h
 
 /-- Every successful call and creation satisfies a relation `M` of messages.
