@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.Accessors
+public import EthLib.Consensus.BeaconApi.Encoding
 public import EthLib.Consensus.BuilderApi
 public import EthLib.Consensus.Builders
 public import EthLib.Consensus.Churn

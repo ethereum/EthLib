@@ -2918,7 +2918,7 @@ The tree of known payloads and the known finalized block are inputs of each call
 ### Beacon API
 
 The Beacon API is the HTTP interface of a consensus client, as release `v5.0.0-beta.0` of `ethereum/beacon-APIs` defines it.
-EthLib specifies the consensus version that its responses carry, and leaves out the transport.
+EthLib specifies the consensus version that its responses carry and their JSON encodings; it leaves out the transport.
 
 A response names the fork of its data by a consensus version, one name for each fork of the consensus layer.
 `ConsensusVersion.ofName?_name` and `ConsensusVersion.name_of_ofName?` (`Consensus/Proofs/ConsensusVersion.lean`) show that the reader accepts exactly the eight names of the schema, spelled exactly.
@@ -2928,6 +2928,24 @@ A response names the fork of its data by a consensus version, one name for each 
 So the name that a response carries determines the fork version of its fork.
 `Fork.consensusVersion?_mono` shows that versions never move back along the timeline.
 The source names no version for Heze yet, so Hegotá has none until a release of the source names it.
+
+The data of a response is a value of the consensus layer, in the JSON mapping of SSZ.
+`ofApiJson_toApiJson` (`Consensus/Proofs/BeaconApi/Encoding.lean`) shows that the reader gives back every value that the writer writes, for every lawful type and every spelling of the byte alias.
+`toApiJson_total` shows that the writer never fails on a value of a lawful type whose spelling marks no byte alias.
+It rests on `jsonOf_opaque_ok` (`Serialization/Proofs/Ssz/Codec/JsonTotal.lean`): a well-formed SSZ type writes every value that it admits.
+`ApiEnvelope.ofJson_toJson` shows that an envelope reads back as written, and `readVersioned_envelope` that a response reads as its data under its version, whatever its other metadata.
+`readVersioned_version` shows that a response read under a version carries that exact name, so data of one fork never reads as data of another.
+`ofHex_uppercase` (`Serialization/Proofs/Ssz/Codec/JsonHexCase.lean`) shows that hex reads the same in uppercase, as the patterns of the source allow.
+`ofApiJson_uppercase` lifts it to a byte vector or a byte list read alone; a statement for every hex leaf of a document remains open.
+The error bodies read back as written (`ErrorMessage.ofJson_toJson`, `IndexedErrorMessage.ofJson_toJson`).
+
+Points that remain open:
+
+- The reader refuses a key that a container does not declare, while the source says that a field may be added to the data without a new version.
+- The source types the codes of the error bodies as JSON numbers; EthLib reads a number whose value is a natural number.
+- The source writes each integer leaf as a string, and its pattern for `Uint8` admits leading zeros; the JSON mapping of SSZ also reads a bare number, and refuses leading zeros.
+- EthLib gives participation flags the SSZ type of a byte list, which the JSON mapping writes as hex, while the API writes them as a list of decimal strings.
+- From Gloas, transactions and the block access list are progressive lists of one-byte integers, which the API writes as hex; the JSON of their containers needs its own spelling (#2076).
 
 ### What cannot be proved yet
 
