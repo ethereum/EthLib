@@ -2224,23 +2224,25 @@ It also assumes that the increment of the preset is a whole number of 100 Gwei, 
 No theorem yet derives that from the state transition.
 The update of effective balances keeps it, but the other steps and the upgrades have no proof.
 It also assumes that each supporter of the block is a member of the committees of the range.
-No theorem yet proves that assumption.
 The store checks a vote against the committees in the state of its target, while the rule reads them in the state of the head.
 In a store with a forward clock, `Store.ForwardReachable.votesHaveOrigins` gives each latest vote the facts of its attestation.
 From those facts, `VoteOrigin.exists_mem_committee` (`Consensus/Proofs/ForkChoice/VoteOrigins.lean`) places the voter in a committee of the slot of its attestation, in the state of its target.
 `mem_getCommitteesBetweenSlots` (`Consensus/Proofs/ForkChoice/FastConfirmation.lean`) places each member of a committee of a slot of the range, in the state of the head, among the members that the rule reads.
-What remains is that the slot of the vote lies in the range, and that the two states agree on the count and the committees of that slot.
-They should agree when both states hold the same RANDAO mix of the epoch `MIN_SEED_LOOKAHEAD + 1` epochs before the epoch of the slot, two in both presets, and the same active validators in the epoch of the slot.
-No theorem yet proves that.
-For a range with part of an epoch that should hold when the head descends from the block, since the range then lies in the epoch of the block and the next one.
-Both corollaries apply `lt_two_mul_honest_supportersOf_of_weighed`, which builds those sets for any `W` that holds the supporters and the active members of the committees, and whose stake the weight covers.
+`Store.ForwardReachableWith.supportersOf_mem_committees` (`Consensus/Proofs/ForkChoice/FastConfirmationCommittees.lean`) proves the assumption for a range with part of an epoch, when the head descends from the block.
+It needs a store built with a forward clock and one setting of the signature checks, as on an honest node.
+Such a range ends at most one epoch after its start, so the vote of each supporter is at most one epoch after the block.
+`Store.ForwardReachable.slot_le_of_blockState_of_getCurrentSlot` (`Consensus/Proofs/ForkChoice/BlockStates.lean`) puts each block state of a store with a forward clock at or before the current slot.
+So the state of the head is at most one epoch after the vote.
+`Store.ForwardReachableWith.committeesKept_of_voteOrigin` (`Consensus/Proofs/ForkChoice/CommitteeAgreement.lean`) then makes the state of the target and the state of the head agree on the count and the committees of the slot of the vote.
+`Store.ForwardReachableWith.supportersOf_mem_committees` also needs an anchor block not after its state, the start of the range at or before the block, both lookaheads of the seed at least one epoch, and a ring of mixes longer than the minimum lookahead plus two epochs; both presets satisfy the last two.
+`Store.ForwardReachableWith.lt_two_mul_honest_supportersOf_of_partialRange` is the corollary without the assumption.
+The corollaries apply `lt_two_mul_honest_supportersOf_of_weighed`, which builds those sets for any `W` that holds the supporters and the active members of the committees, and whose stake the weight covers.
 `lt_two_mul_honest_supportersOf_of_covered` drops that assumption when the range of the adversary holds a whole epoch.
 Its set `W` is then every validator active in the source of balances, which holds each supporter.
 Its Byzantine bound is Assumption 2 when every validator active in the source is a member of a committee of the range.
 Otherwise it implies Assumption 2 when the validators that have left the committees are Byzantine, as Assumption 1 of the paper ensures.
 With an honest one gone the two bounds are incomparable.
 The tally of the source still counts the votes of validators that have left the committees, so the proof bounds their stake.
-For a range with part of an epoch the assumption on the supporters stays.
 The paper assumes a static set of validators, Assumption 1.
 `StaticPair` (`Consensus/Proofs/ForkChoice/StaticValidators.lean`) states the part of it that the proofs use.
 It relates a reference state to each state that a store holds.
