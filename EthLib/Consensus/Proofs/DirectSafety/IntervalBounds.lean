@@ -1419,35 +1419,6 @@ private theorem intervalLoss_charge_site {x y : ForkedBeaconState preset}
             assigned.1, assigned.2, rfl, rfl⟩
         · cases charged
 
-private theorem intervalLoss_keys_sum {fork : Fork} (s : BeaconState preset fork)
-    (indices : List ValidatorIndex) (unique : PubkeysDistinct s) (distinct : indices.Nodup)
-    (inside : ∀ i ∈ indices, i.toNat < s.validators.data.size)
-    (weight : Cryptography.Bls.BLSPubkey → Nat) :
-    (∑ k ∈ keysAt s indices, weight k) =
-      (indices.map fun i => ((s.validators.data[i.toNat]?).map
-        (fun v => weight v.pubkey)).getD 0).sum := by
-  let key (i : ValidatorIndex) (hi : i ∈ indices.toFinset) :=
-    (s.validators.data[i.toNat]'(inside i (List.mem_toFinset.mp hi))).pubkey
-  rw [← List.sum_toFinset _ distinct]
-  symm
-  apply Finset.sum_bij key
-  · intro i hi
-    simp only [keysAt, List.mem_toFinset, List.mem_filterMap]
-    exact ⟨i, List.mem_toFinset.mp hi, by simp [key, inside i (List.mem_toFinset.mp hi)]⟩
-  · intro i hi j hj same
-    apply UInt64.toNat_inj.mp
-    apply unique.eq_of_getElem_eq
-      (by simpa [validatorKeys] using inside i (List.mem_toFinset.mp hi))
-      (by simpa [validatorKeys] using inside j (List.mem_toFinset.mp hj))
-    simpa [validatorKeys, key] using same
-  · intro k hk
-    simp only [keysAt, List.mem_toFinset, List.mem_filterMap] at hk
-    obtain ⟨i, hi, found⟩ := hk
-    exact ⟨i, List.mem_toFinset.mpr hi, by
-      simpa [key, Array.getElem?_eq_getElem, inside i hi] using found⟩
-  · intro i hi
-    simp [key, inside i (List.mem_toFinset.mp hi)]
-
 /-- The reference loss as a sum over the active indices of the reference state.
 
 An index whose validator is slashed at the reference or at the later state contributes nothing. -/
@@ -1472,9 +1443,9 @@ private theorem intervalLoss_reference_indices {g x y : ForkedBeaconState preset
     simpa [List.Nodup] using (getActiveValidatorIndices_sorted within _).imp UInt64.ne_of_lt
   unfold referenceLoss unslashedKeys
   rw [Finset.filter_filter, Finset.sum_filter, activeKeys,
-    intervalLoss_keys_sum x.state _ unique distinct (fun i member => by
+    keys_sum x.state _ unique (fun i member => by
       obtain ⟨v, found, _⟩ := (mem_getActiveValidatorIndices within).mp member
-      exact (Array.getElem?_eq_some_iff.mp found).1)]
+      exact (Array.getElem?_eq_some_iff.mp found).1), List.sum_toFinset _ distinct]
   congr 1
   apply List.map_congr_left
   intro i member
