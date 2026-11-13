@@ -3772,6 +3772,9 @@ For a non-pending query, successful JSON and raw answers both read back as the r
 In a valid view, the raw answer for a canonical block after the lowest hashes to the `blockAccessListHash` of its header (`Valid.rawBlockAccessList_hash`).
 The proof uses the list built by execution and the state transition's check of its hash.
 `Valid.blockAccessList_answers` proves that both methods succeed when a non-pending query resolves to such a block with a retained list.
+`Valid.check_accessList` derives the retained list's order, uniqueness and gas-limit checks from execution.
+`call_blockAccessList` and `call_rawBlockAccessList` connect the public RPC method names to the view methods after parameter decoding.
+`Valid.call_blockAccessList_answers` proves that both dispatched replies recover the checked retained list and that the raw bytes hash to its header.
 The lowest block, side blocks and the pending block are inputs, so that hash guarantee does not cover their retained lists.
 
 An unknown block gives `null` to `eth_getBlockAccessList` and `-32001` to `debug_getRawBlockAccessList`.

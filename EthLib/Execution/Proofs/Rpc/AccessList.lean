@@ -299,6 +299,25 @@ end BlockRecord
 
 namespace ChainView
 
+/-- The JSON RPC name dispatches a successfully read block parameter to its view method. -/
+theorem call_blockAccessList {v : ChainView} {j : Json} {p : BlockParam}
+    (hp : blockNumberOrTagOrHash "block" j = .ok p) :
+    v.call "eth_getBlockAccessList" [j] = v.blockAccessList p := by
+  change ((blockNumberOrTagOrHash "block" j).mapError RpcError.invalidParams >>=
+    v.blockAccessList) = _
+  rw [hp]
+  rfl
+
+/-- The raw RPC name writes the bytes returned by its view method as hexadecimal data. -/
+theorem call_rawBlockAccessList {v : ChainView} {j : Json} {p : BlockParam}
+    (hp : blockNumberOrTagOrHash "block" j = .ok p) :
+    v.call "debug_getRawBlockAccessList" [j] =
+      (fun raw => dataJson raw.data.toList) <$> v.rawBlockAccessList p := by
+  change ((blockNumberOrTagOrHash "block" j).mapError RpcError.invalidParams >>= fun p =>
+    (fun raw => dataJson raw.data.toList) <$> v.rawBlockAccessList p) = _
+  rw [hp]
+  rfl
+
 /-- The JSON method answers `null` for `pending`, even if the view has a pending record. -/
 @[simp] theorem blockAccessList_pending (v : ChainView) :
     v.blockAccessList (.tag .pending) = .ok .null := rfl
@@ -385,6 +404,19 @@ theorem Valid.accessList_hash {v : ChainView} {checkSeal : Bool} (hv : v.Valid c
   rw [← hkept bal hb, heq] at hhash
   exact hhash
 
+/-- A retained list of an executed canonical block passes the order, uniqueness and size checks. -/
+theorem Valid.check_accessList {v : ChainView} {checkSeal : Bool} (hv : v.Valid checkSeal)
+    {i : Nat} (hi : i + 1 < v.canonical.length) (hf : .glamsterdam ≤ v.canonical[i + 1].fork)
+    {bal : BlockAccessList} (hb : v.canonical[i + 1].accessList = some bal) :
+    BlockAccessList.check bal v.canonical[i + 1].block.header.gasLimit = .ok () := by
+  obtain ⟨-, result, hbody, -, -, hkept⟩ := hv.follows i hi
+  obtain ⟨hashes, -, hout, -⟩ := runBody_eq_ok.mp hbody
+  obtain ⟨-, -, -, -, requested, -, -, -, -, -, -, -, hBuilder, hHash, -⟩ :=
+    applyBody_eq_ok hout
+  have hcheck := (accessListHashOf_eq_ok hHash hf).1
+  rw [← hBuilder, ← hkept bal hb] at hcheck
+  exact hcheck
+
 /-- A valid executed canonical block with a retained list has both answers, bound to its header. -/
 theorem Valid.blockAccessList_answers {v : ChainView} {checkSeal : Bool} (hv : v.Valid checkSeal)
     {p : BlockParam} (hne : p ≠ .tag .pending) {i : Nat} (hi : i + 1 < v.canonical.length)
@@ -404,6 +436,28 @@ theorem Valid.blockAccessList_answers {v : ChainView} {checkSeal : Bool} (hv : v
   · apply ofBlock_eq_ok.mpr
     exact ⟨v.canonical[i + 1], hp,
       BlockRecord.rawBlockAccessList_eq_ok_iff.mpr ⟨bal, hf, hb, he⟩⟩
+
+/-- The dispatched replies recover a checked retained list whose raw bytes hash to its header. -/
+theorem Valid.call_blockAccessList_answers {v : ChainView} {checkSeal : Bool}
+    (hv : v.Valid checkSeal) {j : Json} {p : BlockParam}
+    (hj : blockNumberOrTagOrHash "block" j = .ok p) (hne : p ≠ .tag .pending)
+    {i : Nat} (hi : i + 1 < v.canonical.length)
+    (hp : v.resolve p = .ok (some v.canonical[i + 1]))
+    (hf : .glamsterdam ≤ v.canonical[i + 1].fork) {bal : BlockAccessList}
+    (hb : v.canonical[i + 1].accessList = some bal) :
+    ∃ raw, v.call "eth_getBlockAccessList" [j] = .ok (blockAccessListJson bal) ∧
+      v.call "debug_getRawBlockAccessList" [j] = .ok (dataJson raw.data.toList) ∧
+      blockAccessListOfJson (blockAccessListJson bal) = .ok bal ∧
+      Codec.decode raw = .ok bal ∧
+      BlockAccessList.check bal v.canonical[i + 1].block.header.gasLimit = .ok () ∧
+      keccak256 raw = v.canonical[i + 1].block.header.blockAccessListHash hf := by
+  obtain ⟨raw, hjson, hraw, hdecode, hhash⟩ := hv.blockAccessList_answers hne hi hp hf hb
+  refine ⟨raw, ?_, ?_, blockAccessListOfJson_blockAccessListJson bal, hdecode,
+    hv.check_accessList hi hf hb, hhash⟩
+  · rw [call_blockAccessList hj]
+    exact hjson
+  · rw [call_rawBlockAccessList hj, hraw]
+    rfl
 
 /-- A raw answer for a checked canonical block hashes to that block's header field. -/
 theorem Valid.rawBlockAccessList_hash {v : ChainView} {checkSeal : Bool} (hv : v.Valid checkSeal)

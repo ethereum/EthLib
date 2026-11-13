@@ -10,6 +10,7 @@ import pytest
 
 from ethlib.cryptography.keccak import keccak256
 from ethlib.execution import rpc
+from ethlib.serialization import rlp
 from raising import raises
 
 from .chain import FIXTURES, block_hash, replay_chain
@@ -160,6 +161,62 @@ def test_lookup_forms(method: str, answers: dict[str, dict[str, Any]]) -> None:
         assert answers[_request(method, [block])]["result"] == expected
 
 
+@pytest.mark.parametrize(("safe", "finalized"), [(59, 58), (27, 56)])
+def test_distinct_forkchoice_tags(safe: int, finalized: int) -> None:
+    """Safe and finalized select their own blocks, including blocks before Amsterdam."""
+    chain = replay_chain()
+    chain = replace(
+        chain,
+        forkchoice=tuple(block_hash(chain.blocks[n]) for n in (60, safe, finalized)),
+    )
+    calls = [
+        (method, tag, n)
+        for method in METHODS
+        for tag, n in [("safe", safe), ("finalized", finalized)]
+    ]
+    responses = chain.serve([_request(method, [tag]) for method, tag, _ in calls])
+    for (method, _, number), text in zip(calls, responses, strict=True):
+        assert text is not None
+        response = json.loads(text)
+        if number < 57:
+            assert response == {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "error": {**NOT_FOUND, "data": "block predates Amsterdam"},
+            }
+            continue
+        pinned = json.loads((FIXTURES / "bal" / f"block-{number:05d}.json").read_text())
+        assert set(response) == {"jsonrpc", "id", "result"}
+        assert response["jsonrpc"] == "2.0" and response["id"] == 1
+        if method == METHODS[0]:
+            assert response["result"] == [_account(entry) for entry in pinned["blockAccessList"]]
+        else:
+            assert (
+                "0x" + keccak256(bytes.fromhex(response["result"][2:])).hex()
+                == pinned["blockAccessListHash"]
+            )
+
+
+def test_forged_access_list_commitment() -> None:
+    # EIP-7928, State Transition Function: reject a list whose hash differs from the header.
+    chain = replay_chain()
+    fork, raw = chain.blocks[60]
+    block = rlp.decode(raw)
+    pinned = json.loads((FIXTURES / "bal" / "block-00060.json").read_text())
+    assert "0x" + block[0][-2].hex() == pinned["blockAccessListHash"]
+    block[0][-2] = bytes(32)
+    forged = (fork, rlp.encode(block))
+    zero = bytes(32)
+    chain = replace(
+        chain,
+        blocks=(*chain.blocks[:60], forged),
+        forkchoice=(block_hash(forged), zero, zero),
+    )
+    with raises(rpc.RpcError, "block 60: block invalid: wrongBlockAccessListHash") as error:
+        chain.serve([_request(method, ["latest"]) for method in METHODS])
+    assert error.value.code == 256
+
+
 def test_future_schedule_keeps_past_answers(answers: dict[str, dict[str, Any]]) -> None:
     """A fork after the head cannot change the access list of a block already executed."""
     chain = replay_chain()
@@ -290,6 +347,37 @@ def test_code_change_encoding() -> None:
     # The change is c4 80 82 60 00; its list is c5 ..., the account df ..., the outer list e0 ... .
     expected = bytes.fromhex("e0df94" + "00" * 20 + "c0c0c0c0c5c480826000")
     assert rpc.encode_block_access_list([CODE_CHANGE]) == expected
+
+
+def test_scalar_limits_and_bytecode_encoding() -> None:
+    # EIP-7928 at EIPs 46976b2a, RLP Encoding: integers are minimal; bytecode keeps its bytes.
+    # One account changes slot 1 to zero and reads slot 2; indexes, balance and nonce are maximal.
+    # Account contents are 101 bytes (f8 65); the outer contents are 103 bytes (f8 67).
+    account = {
+        "address": ADDRESS,
+        "storageChanges": [
+            {
+                "key": "0x" + "00" * 31 + "01",
+                "changes": [{"index": "0xffffffff", "value": "0x" + "00" * 32}],
+            }
+        ],
+        "storageReads": ["0x" + "00" * 31 + "02"],
+        "balanceChanges": [{"index": "0xffffffff", "value": "0x" + "ff" * 32}],
+        "nonceChanges": [{"index": "0xffffffff", "value": "0xffffffffffffffff"}],
+        "codeChanges": [{"index": "0xffffffff", "code": "0x006000"}],
+    }
+    expected = bytes.fromhex(
+        "f867f86594"
+        + "00" * 20
+        + "cac901c7c684ffffffff80"
+        + "c102"
+        + "e7e684ffffffffa0"
+        + "ff" * 32
+        + "cfce84ffffffff88"
+        + "ff" * 8
+        + "cac984ffffffff83006000"
+    )
+    assert rpc.encode_block_access_list([account]) == expected
 
 
 @pytest.mark.parametrize(
