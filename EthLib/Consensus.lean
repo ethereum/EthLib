@@ -4,6 +4,7 @@ public import EthLib.Consensus.Accessors
 public import EthLib.Consensus.BeaconApi.Config
 public import EthLib.Consensus.BeaconApi.Encoding
 public import EthLib.Consensus.BeaconApi.Identifiers
+public import EthLib.Consensus.BeaconApi.Registries
 public import EthLib.Consensus.BeaconApi.Spelling
 public import EthLib.Consensus.BeaconApi.StateQueries
 public import EthLib.Consensus.BeaconApi.Validators
