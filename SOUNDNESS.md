@@ -3842,6 +3842,25 @@ It checks the columns answer and its SSZ body for Fulu and Gloas, with and witho
 It checks the SSZ bodies of the block and the blinded block against the JSON answers.
 It checks code 400 for the blinded block from Gloas, and that the attestations answer has no SSZ body.
 
+The duty answers are in `Consensus/BeaconApi/Duties.lean`: attester, proposer, sync committee and PTC duties, with their dependent roots.
+`attesterDuties_committee` (`Consensus/Proofs/BeaconApi/Duties.lean`) shows that each attester duty names a committee of its slot.
+The committee has the length of the duty and holds the validator at the position of the duty.
+`attesterDuties_complete` shows that a requested validator with a committee assignment has exactly one duty, when the request repeats no index.
+`attesterDuties_epoch` shows that each attester duty is in the requested epoch, with the count of committees per slot of the epoch and an index below it.
+`attesterDuties_epoch_bound` and `ptcDuties_epoch_bound` show that a request for an epoch after the next one gets the error of an invalid epoch, code 400.
+`proposerDuties_beaconProposer` shows that in the current epoch each proposer duty names the proposer of the state advanced to its slot.
+`proposerDuties_current_slot` shows the same at the slot of the state itself.
+`syncDuties_seats` shows that each seat of a sync duty holds the key of the validator, in the committee of the period, and that a duty has a seat.
+`dependentRoot_genesis` shows that the dependent root of the first two epochs, with a lag of one, is the genesis root.
+`dependentRoot_genesis_zero` shows the same for epoch 0 without a lag.
+`dependentRoot_eq` unfolds the case past the underflow: the block root at the slot before the start of the epoch a lag before.
+The Python suite (`bindings/python/tests/consensus/test_beacon_api_duties.py`) reads the minimal states of the committee tests.
+It checks the attester duties against the committees answer, and the PTC duties against the assignments of the guide.
+It checks the proposer duties against the lookahead of the state from Fulu, and against the proposer of each slot before Fulu.
+It checks the sync duties against the keys of the committees in the JSON of the state.
+It gives the state a different block root at each place, and checks each dependent root against it.
+It checks code 400 for an empty request, a repeated PTC index, a PTC epoch before the previous one, and an attester epoch too old for the block roots; no theorem states these refusals.
+
 Points that remain open:
 
 - The reader refuses a key that a container does not declare, while the source says that a field may be added to the data without a new version.
@@ -3916,6 +3935,24 @@ Points that remain open:
   Before Gloas it gets code 404, since no envelope exists; the source names only the version Gloas.
 - From Hegotá the envelope and columns answers carry no version, since the source names none for that fork yet.
 - The source gives no SSZ body for the attestations answer; EthLib gives none.
+- The source does not say which state answers a duty request; the duty answers take the state as an input.
+- The attester epoch "Should only be allowed 1 epoch ahead"; EthLib refuses a later epoch with code 400.
+  The PTC epoch "Must not be greater than the next epoch"; EthLib refuses a later one with code 400 too.
+  Both answers also refuse an epoch whose seed the mixes of the state do not hold, as the committees answer does.
+  The PTC answer also refuses an epoch before the previous one, or before Gloas, which the window of the state does not hold.
+  An epoch too old for the block roots of the state gets code 400 when its dependent root is read.
+- The source asks for at least one index in the attester, sync and PTC requests; an empty request gets code 400.
+- The proposer duties read the lookahead of the state from Fulu, for the current epoch and the seed lookahead.
+  Before Fulu they are drawn for the current epoch only, since later effective balances are not known yet.
+  Another epoch gets code 400.
+- The second version of the proposer endpoint uses a lag of one for its dependent root at every fork, as the source writes it.
+- The first version of the proposer endpoint answers for the current epoch only, since the root at the last slot before a later epoch is not known yet.
+- The dependent root is read from the block roots of the state, which must be past that slot and still hold it; otherwise it gets code 400.
+  The caller supplies the genesis block root, which EthLib does not check.
+- An index that names no validator of the state gets code 400; a validator with no duty in the epoch is left out.
+  The PTC request asks for distinct indices, so a repeated one gets code 400.
+  The attester and sync requests do not, so a repeated index gives its duty once for each time it is named.
+- The sync duties answer for the current period or the next, since the state holds only those committees; another period gets code 400.
 
 ### Builder API
 
@@ -4445,12 +4482,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 472 operations and 49 size constants.
-The Python extension calls 472 of the operations and 49 of the constants.
+Lean exports 473 operations and 49 size constants.
+The Python extension calls 473 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-11169 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2347), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (194), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1556), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (71), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (58), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (763), `x25519.c` (21), `xmss.c` (134).
+11183 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2358), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (194), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1558), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (71), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (58), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (764), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

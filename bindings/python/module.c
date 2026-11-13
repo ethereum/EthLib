@@ -835,6 +835,8 @@ static PyMethodDef methods[] = {
    DOC_consensus_api_payload_envelope},
   {"consensus_api_payload_envelope_ssz", py_consensus_api_payload_envelope_ssz, METH_VARARGS,
    DOC_consensus_api_payload_envelope_ssz},
+  {"consensus_api_duties", py_consensus_api_duties, METH_VARARGS,
+   DOC_consensus_api_duties},
   {"consensus_api_committees", py_consensus_api_committees, METH_VARARGS,
    DOC_consensus_api_committees},
   {"consensus_api_sync_committees", py_consensus_api_sync_committees, METH_VARARGS,
