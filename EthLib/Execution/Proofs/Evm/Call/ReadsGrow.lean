@@ -58,7 +58,7 @@ variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 /-! ## The writes of the state -/
 
 /-- A change of one account keeps every read. -/
-private theorem readsLe_modifyState {tx tx' : TransactionState} {address : Address}
+theorem readsLe_modifyState {tx tx' : TransactionState} {address : Address}
     {f : Account → Except StateError Account} (h : tx.modifyState fork address f = .ok tx') :
     tx.ReadsLe tx' := by
   obtain ⟨_, _, hacc, hst⟩ := TransactionState.reads_modifyState h
@@ -78,7 +78,7 @@ private theorem readsLe_moveEther {tx tx' : TransactionState} {sender recipient 
   exact (readsLe_modifyState h1).trans (readsLe_modifyState h2)
 
 /-- A write of code keeps every read. -/
-private theorem readsLe_setCode {tx tx' : TransactionState} {address : Address}
+theorem readsLe_setCode {tx tx' : TransactionState} {address : Address}
     {code : ByteArray} (h : tx.setCode fork address code = .ok tx') : tx.ReadsLe tx' := by
   unfold TransactionState.setCode at h
   dsimp only at h

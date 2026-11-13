@@ -1,0 +1,540 @@
+module
+
+public import EthLib.Consensus.Proofs.Transition.BalanceDrift
+public import EthLib.Consensus.Proofs.Transition.EpochUpdates
+public import EthLib.Consensus.Proofs.Transition.EpochPending
+public import EthLib.Consensus.Proofs.Transition.Requests
+public import Mathlib.Algebra.Order.BigOperators.Group.Finset
+public import Mathlib.Algebra.BigOperators.Group.Finset.Piecewise
+
+/-!
+# Bounds for the sources of balance drift
+
+These contracts use the amounts computed by the transition, not arbitrary accounting caps.
+
+Epoch-interval bounds sum the per-call amounts, including queues inherited at the first state.
+
+Deposits to withdrawn validators bypass the Electra churn and are accounted separately.
+
+Consolidations count both their debit and credit even though their net balance change is zero.
+-/
+
+@[expose] public section
+
+namespace EthLib.Consensus
+
+open Base Cryptography.Bls Uint64
+
+variable {preset : Preset} {config : Config} {checks : SignatureChecks}
+
+/-- Positive changes are summed per index, so a transfer cannot cancel a loss elsewhere. -/
+def balanceCredits {fork : Fork} (s t : BeaconState preset fork) : Nat :=
+  ∑ i ∈ Finset.range t.balances.data.size,
+    (actualBalanceAt ⟨fork, t⟩ i - actualBalanceAt ⟨fork, s⟩ i)
+
+/-- Negative changes are summed per index, as for the credits. -/
+def balanceDebits {fork : Fork} (s t : BeaconState preset fork) : Nat :=
+  ∑ i ∈ Finset.range s.balances.data.size,
+    (actualBalanceAt ⟨fork, s⟩ i - actualBalanceAt ⟨fork, t⟩ i)
+
+/-- Raising one balance credits exactly the amount and debits nothing. -/
+theorem credits_increase {fork : Fork} {s t : BeaconState preset fork}
+    {i : ValidatorIndex} {amount : Gwei}
+    (ok : increaseBalance s i amount = .ok t) :
+    balanceCredits s t = amount.toNat ∧ balanceDebits s t = 0 := by
+  obtain ⟨inside, fits, rfl⟩ := increaseBalance_eq_ok_iff.mp ok
+  have point (j : Nat) :
+      actualBalanceAt ⟨fork, s.putBalance i.toNat inside (s.balances.data[i.toNat] + amount)⟩ j =
+        actualBalanceAt ⟨fork, s⟩ j + if j = i.toNat then amount.toNat else 0 := by
+    by_cases same : j = i.toNat
+    · subst j
+      simp [actualBalanceAt, BeaconState.putBalance, inside, toNat_add_of_lt fits]
+    · simp [actualBalanceAt, BeaconState.putBalance, same, Ne.symm same]
+  have size : (s.putBalance i.toNat inside
+      (s.balances.data[i.toNat] + amount)).balances.data.size =
+        s.balances.data.size := by simp [BeaconState.putBalance]
+  simp [balanceCredits, balanceDebits, size, point, Finset.sum_ite_eq', inside]
+
+/-- Lowering one balance credits nothing and debits at most the amount. -/
+theorem debits_decrease {fork : Fork} {s t : BeaconState preset fork}
+    {i : ValidatorIndex} {amount : Gwei}
+    (ok : decreaseBalance s i amount = .ok t) :
+    balanceCredits s t = 0 ∧ balanceDebits s t ≤ amount.toNat := by
+  obtain ⟨inside, rfl⟩ := decreaseBalance_eq_ok_iff.mp ok
+  have point (j : Nat) :
+      actualBalanceAt ⟨fork, s.putBalance i.toNat inside
+        (saturatingSub s.balances.data[i.toNat] amount)⟩ j =
+        actualBalanceAt ⟨fork, s⟩ j - if j = i.toNat then amount.toNat else 0 := by
+    by_cases same : j = i.toNat
+    · subst j
+      simp [actualBalanceAt, BeaconState.putBalance, inside, toNat_saturatingSub]
+    · simp [actualBalanceAt, BeaconState.putBalance, same, Ne.symm same]
+  have size : (s.putBalance i.toNat inside
+      (saturatingSub s.balances.data[i.toNat] amount)).balances.data.size =
+        s.balances.data.size := by simp [BeaconState.putBalance]
+  constructor
+  · simp [balanceCredits, size, point]
+  · unfold balanceDebits
+    simp only [point]
+    calc
+      _ ≤ ∑ j ∈ Finset.range s.balances.data.size,
+          if j = i.toNat then amount.toNat else 0 := by
+        apply Finset.sum_le_sum
+        intro j _
+        omega
+      _ = amount.toNat := by simp [Finset.sum_ite_eq', inside]
+
+/-- The credits from a first state to a third are at most those through a second state. -/
+theorem credits_triangle {fork : Fork} (s u t : BeaconState preset fork)
+    (size : t.balances.data.size = u.balances.data.size) :
+    balanceCredits s t ≤ balanceCredits s u + balanceCredits u t := by
+  unfold balanceCredits
+  rw [← size, ← Finset.sum_add_distrib]
+  apply Finset.sum_le_sum
+  intro i _
+  omega
+
+/-- The debits from a first state to a third are at most those through a second state. -/
+theorem debits_triangle {fork : Fork} (s u t : BeaconState preset fork)
+    (size : s.balances.data.size = u.balances.data.size) :
+    balanceDebits s t ≤ balanceDebits s u + balanceDebits u t := by
+  unfold balanceDebits
+  rw [← size, ← Finset.sum_add_distrib]
+  apply Finset.sum_le_sum
+  intro i _
+  omega
+
+/-- Rewards and ordinary penalties are kept separate from the inactivity pass. -/
+def rewardPasses {fork : Fork} (s : BeaconState preset fork) :
+    Except TransitionError (List (Array Gwei × Array Gwei)) := do
+  if getCurrentEpoch s = GENESIS_EPOCH then return []
+  if altair : .altair ≤ fork then
+    (List.finRange PARTICIPATION_FLAG_WEIGHTS.length).mapM (getFlagIndexDeltas s altair)
+  else
+    let early := Nat.lt_of_not_le altair
+    return [← getSourceDeltas s early, ← getTargetDeltas s early,
+      ← getHeadDeltas s early, ← getInclusionDelayDeltas s early]
+
+/-- Both recipient credits are included, also when proposer and whistleblower coincide. -/
+theorem initial_slashing_bounds {fork : Fork} (s t : BeaconState preset fork)
+    (i : ValidatorIndex) (whistleblower : Option ValidatorIndex) (v : Validator)
+    (found : getValidator s i = .ok v)
+    (ok : slashValidator config s i whistleblower = .ok t) :
+    balanceDebits s t ≤ v.effectiveBalance.toNat /
+      (EthLib.Consensus.parameters preset fork).MIN_SLASHING_PENALTY_QUOTIENT.toNat ∧
+    balanceCredits s t ≤ v.effectiveBalance.toNat /
+      (EthLib.Consensus.parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat := by
+  obtain ⟨exited, validator, withdrawable, marked, slashed, total, slashings, lowered,
+    proposer, reward, raised, last, exit, validatorOk, _, mark, _, _, _, lower, _, share,
+    raise, lastOk, final⟩ := slashValidator_ok ok
+  have exitFacts : exited.balances = s.balances ∧
+      validator.effectiveBalance = v.effectiveBalance := by
+    obtain ⟨balances, -, -, e, eFound, effective⟩ :=
+      effectiveBalance_initiateValidatorExit found exit
+    rw [validatorOk, Except.ok.injEq] at eFound
+    subst eFound
+    exact ⟨balances, effective⟩
+  have markedBalance : marked.balances = s.balances := by
+    obtain ⟨_, rfl⟩ := setValidator_ok mark
+    exact exitFacts.1
+  have shareLe : reward.toNat ≤
+      (validator.effectiveBalance /
+        (EthLib.Consensus.parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT).toNat :=
+    proposerShare_le share
+  have lo := debits_decrease lower
+  have up := credits_increase raise
+  have tail := credits_increase lastOk
+  have firstCredits := credits_triangle { marked with slashings } lowered raised
+    (sameSizes_increaseBalance raise).2
+  have firstDebits := debits_triangle { marked with slashings } lowered raised
+    (sameSizes_decreaseBalance lower).2.symm
+  have secondCredits := credits_triangle { marked with slashings } raised last
+    (sameSizes_increaseBalance lastOk).2
+  have secondDebits := debits_triangle { marked with slashings } raised last
+    ((sameSizes_increaseBalance raise).2.trans (sameSizes_decreaseBalance lower).2).symm
+  have leftReward : (validator.effectiveBalance /
+      (EthLib.Consensus.parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT - reward).toNat =
+        (validator.effectiveBalance /
+          (EthLib.Consensus.parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT).toNat -
+            reward.toNat := UInt64.toNat_sub_of_le _ _ (UInt64.le_iff_toNat_le.mpr shareLe)
+  have bound : balanceDebits { marked with slashings } last ≤
+      (validator.effectiveBalance /
+        (EthLib.Consensus.parameters preset fork).MIN_SLASHING_PENALTY_QUOTIENT).toNat ∧
+      balanceCredits { marked with slashings } last ≤
+      (validator.effectiveBalance /
+        (EthLib.Consensus.parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT).toNat := by
+    omega
+  have finalBalance : t.balances = last.balances := by
+    rw [final]
+    split <;> rfl
+  simpa only [balanceDebits, balanceCredits, actualBalanceAt, finalBalance, markedBalance,
+    UInt64.toNat_div, exitFacts.2] using bound
+
+/-- Sum only due penalties, with the fork's actual rounding and adjusted slashing balance. -/
+def delayedSlashingLimit {fork : Fork} (s : BeaconState preset fork) :
+    Except TransitionError Nat := do
+  let total ← liftAccessor (getTotalActiveBalance s)
+  let slashed ← slashingsSum s
+  let adjusted := min (slashed.toNat *
+    (EthLib.Consensus.parameters preset fork).PROPORTIONAL_SLASHING_MULTIPLIER.toNat) total.toNat
+  let increment := preset.EFFECTIVE_BALANCE_INCREMENT.toNat
+  return (s.validators.data.toList.map fun v =>
+    if SlashingPenaltyDue preset (getCurrentEpoch s) v then
+      if .pectra ≤ fork then
+        adjusted / (total.toNat / increment) * (v.effectiveBalance.toNat / increment)
+      else v.effectiveBalance.toNat / increment * adjusted / total.toNat * increment
+    else 0).sum
+
+/-- No penalty is charged merely because a validator has effective stake. -/
+theorem delayed_slashing_bounds {fork : Fork} (s t : BeaconState preset fork)
+    (within : s.RegistryWithinLimit)
+    (ok : processSlashings s = .ok t) :
+    ∃ limit, delayedSlashingLimit s = .ok limit ∧
+      balanceCredits s t = 0 ∧ balanceDebits s t ≤ limit := by
+  have sumLookup (xs : List Nat) (n : Nat) :
+      (∑ i ∈ Finset.range n, xs[i]?.getD 0) ≤ xs.sum := by
+    induction xs generalizing n with
+    | nil => simp
+    | cons x xs ih =>
+      cases n with
+      | zero => simp
+      | succ n =>
+        rw [Finset.sum_range_succ']
+        simpa [Nat.add_comm] using Nat.add_le_add_right (ih n) x
+  have aggregate (penalty : Validator → Nat)
+      (point : ∀ i, actualBalanceAt ⟨fork, t⟩ i = actualBalanceAt ⟨fork, s⟩ i -
+        ((s.validators.data[i]?).map penalty).getD 0) :
+      balanceCredits s t = 0 ∧
+      balanceDebits s t ≤ (s.validators.data.toList.map penalty).sum := by
+    constructor
+    · simp [balanceCredits, point]
+    · calc
+        balanceDebits s t ≤ ∑ i ∈ Finset.range s.balances.data.size,
+            ((s.validators.data[i]?).map penalty).getD 0 := by
+          unfold balanceDebits
+          apply Finset.sum_le_sum
+          intro i _
+          rw [point]
+          omega
+        _ ≤ _ := by
+          simpa using sumLookup (s.validators.data.toList.map penalty) s.balances.data.size
+  have pointOf (penalty : Validator → Nat)
+      (each : ∀ i, (i < s.validators.data.size → ∃ v,
+        s.validators.data[i]? = some v ∧
+        t.balances.data[i]?.map UInt64.toNat = s.balances.data[i]?.map
+          (fun b => b.toNat - penalty v)) ∧
+        (s.validators.data.size ≤ i → t.balances.data[i]? = s.balances.data[i]?)) :
+      ∀ i, actualBalanceAt ⟨fork, t⟩ i = actualBalanceAt ⟨fork, s⟩ i -
+        ((s.validators.data[i]?).map penalty).getD 0 := by
+    intro i
+    -- The slashing pass leaves balances beyond the registry unchanged.
+    by_cases inside : i < s.validators.data.size
+    · obtain ⟨v, found, h⟩ := (each i).1 inside
+      unfold actualBalanceAt
+      rw [h, found]
+      cases s.balances.data[i]? <;> simp
+    · simp [actualBalanceAt, (each i).2 (Nat.le_of_not_gt inside),
+        Array.getElem?_eq_none (Nat.le_of_not_gt inside)]
+  by_cases electra : .pectra ≤ fork
+  · obtain ⟨total, slashed, totalOk, slashedOk, _, each⟩ :=
+      processSlashings_balances_toNat_of_electra electra within ok
+    let penalty (v : Validator) : Nat :=
+      if SlashingPenaltyDue preset (getCurrentEpoch s) v then
+        min (slashed.toNat *
+          (EthLib.Consensus.parameters preset fork).PROPORTIONAL_SLASHING_MULTIPLIER.toNat)
+          total.toNat / (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) *
+            (v.effectiveBalance.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
+      else 0
+    refine ⟨(s.validators.data.toList.map penalty).sum, ?_,
+      aggregate penalty (pointOf penalty each)⟩
+    simp [delayedSlashingLimit, liftAccessor, totalOk, slashedOk, electra, penalty,
+      bind, Except.bind, pure, Except.pure, Except.mapError]
+  · obtain ⟨total, slashed, totalOk, slashedOk, _, each⟩ :=
+      processSlashings_balances_toNat_of_lt_electra (Nat.lt_of_not_le electra) ok
+    let penalty (v : Validator) : Nat :=
+      if SlashingPenaltyDue preset (getCurrentEpoch s) v then
+        v.effectiveBalance.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
+          min (slashed.toNat *
+            (EthLib.Consensus.parameters preset fork).PROPORTIONAL_SLASHING_MULTIPLIER.toNat)
+            total.toNat / total.toNat * preset.EFFECTIVE_BALANCE_INCREMENT.toNat
+      else 0
+    refine ⟨(s.validators.data.toList.map penalty).sum, ?_,
+      aggregate penalty (pointOf penalty each)⟩
+    simp [delayedSlashingLimit, liftAccessor, totalOk, slashedOk, electra, penalty,
+      bind, Except.bind, pure, Except.pure, Except.mapError]
+
+theorem sync_reward_bounds {fork : Fork} (s t : BeaconState preset fork)
+    (reward proposerReward : Gwei) (proposer : Except AccessorError ValidatorIndex)
+    (member : ValidatorIndex × Bool)
+    (ok : applySyncReward reward proposerReward proposer s member = .ok t) :
+    balanceCredits s t ≤ (if member.2 then reward.toNat + proposerReward.toNat else 0) ∧
+    balanceDebits s t ≤ (if member.2 then 0 else reward.toNat) := by
+  unfold applySyncReward at ok
+  split at ok
+  · rename_i signed
+    simp only [liftAccessor_ok, bind_ok_iff] at ok
+    obtain ⟨u, first, p, _, last⟩ := ok
+    have firstBounds := credits_increase first
+    have lastBounds := credits_increase last
+    have credits := credits_triangle s u t (sameSizes_increaseBalance last).2
+    have debits := debits_triangle s u t (sameSizes_increaseBalance first).2.symm
+    simp only [signed, ↓reduceIte]
+    omega
+  · rename_i absent
+    have bounds := debits_decrease (liftAccessor_ok.mp ok)
+    simpa [absent] using bounds
+
+/-- Recompute the proposer credit from the newly set participation flags. -/
+def attestationCredit {fork : Fork} (s : BeaconState preset fork)
+    (att : Attestation preset fork) (parent : Slot) : Except TransitionError Nat := do
+  if altair : .altair ≤ fork then
+    let earned ← liftAccessor
+      (getAttestationParticipationFlagIndices s att.data (s.slot - att.data.slot) parent)
+    let participation := if att.data.target.epoch == getCurrentEpoch s then
+        s.currentEpochParticipation altair else s.previousEpochParticipation altair
+    let total ← liftAccessor (getTotalActiveBalance s)
+    let attesters ← liftAccessor (getAttestingIndices s att)
+    let (_, numerator) ← attesters.foldlM (addAttesterFlags s total earned) (participation, 0)
+    let denominator :=
+      (WEIGHT_DENOMINATOR - PROPOSER_WEIGHT) * WEIGHT_DENOMINATOR / PROPOSER_WEIGHT
+    return (numerator / denominator).toNat
+  else return 0
+
+/-- Attestation proposer rewards are the checked numerator divided by the protocol denominator. -/
+theorem attestation_proposer_bound {fork : Fork} (s t : BeaconState preset fork)
+    (att : Attestation preset fork) (parent : Slot) (early : fork < .glamsterdam)
+    (ok : processAttestation config checks s parent att = .ok t) :
+    ∃ credit, attestationCredit s att parent = .ok credit ∧
+      balanceDebits s t = 0 ∧ balanceCredits s t ≤ credit := by
+  by_cases altair : .altair ≤ fork
+  · simp only [processAttestation, altair, ↓reduceDIte, processAttestationAltair,
+      bind_ok_iff, liftAccessor_ok] at ok
+    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, earned, earnedOk, _, _, _, _, _, _, total,
+      totalOk, attesters, attestersOk, pair, flagsOk, proposer, _, u, raised, final⟩ := ok
+    have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt early
+    simp only [notGloas, ↓reduceDIte, pure, Except.pure, Except.ok.injEq] at final
+    subst t
+    refine ⟨(pair.2 /
+      ((WEIGHT_DENOMINATOR - PROPOSER_WEIGHT) * WEIGHT_DENOMINATOR / PROPOSER_WEIGHT)).toNat,
+      ?_, ?_⟩
+    · simp only [attestationCredit, altair, ↓reduceDIte, liftAccessor, earnedOk, totalOk,
+        attestersOk, Except.mapError, bind, Except.bind, flagsOk]
+      rfl
+    · have bounds := credits_increase raised
+      have kept : (setEpochParticipation s
+          (att.data.target.epoch == getCurrentEpoch s) pair.1).balances = s.balances := by
+        unfold setEpochParticipation
+        split <;> rfl
+      simpa only [balanceCredits, balanceDebits, actualBalanceAt, kept]
+        using And.intro bounds.2 bounds.1.le
+  · obtain ⟨_, _, _, _, _, recorded, _⟩ :=
+      processAttestation_records (Nat.lt_of_not_le altair) ok
+    have kept : t.balances = s.balances := by
+      have h := recordPendingAttestation_ok recorded
+      split at h <;> have eq := congrArg (fun x => x.balances) h.2 <;> exact eq
+    refine ⟨0, by simp [attestationCredit, altair, pure, Except.pure], ?_⟩
+    simp [balanceDebits, balanceCredits, actualBalanceAt, kept]
+
+/-- The amount is an input, so top-ups are not silently bounded by activation churn. -/
+theorem deposit_credit_bound {fork : Fork} (s t : BeaconState preset fork)
+    («matches» : BalancesMatch s)
+    (deposit : PendingDeposit) (ok : applyPendingDeposit config checks s deposit = .ok t) :
+    balanceDebits s t = 0 ∧ balanceCredits s t ≤ deposit.amount.toNat := by
+  have append {t : BeaconState preset fork}
+      (balances : t.balances.data = s.balances.data.push deposit.amount) :
+      balanceDebits s t = 0 ∧ balanceCredits s t ≤ deposit.amount.toNat := by
+    -- Matching lengths makes a new validator append, rather than overwrite, a balance.
+    have old (j : Nat) (hj : j < s.balances.data.size) :
+        actualBalanceAt ⟨fork, t⟩ j = actualBalanceAt ⟨fork, s⟩ j := by
+      simp [actualBalanceAt, balances, Array.getElem?_push, hj, Nat.ne_of_lt hj]
+    constructor
+    · apply Finset.sum_eq_zero
+      intro j hj
+      simp [old j (Finset.mem_range.mp hj)]
+    · unfold balanceCredits
+      have size : t.balances.data.size = s.balances.data.size + 1 := by
+        simp [balances]
+      rw [size, Finset.sum_range_succ]
+      have zero : (∑ j ∈ Finset.range s.balances.data.size,
+          (actualBalanceAt ⟨fork, t⟩ j - actualBalanceAt ⟨fork, s⟩ j)) = 0 := by
+        apply Finset.sum_eq_zero
+        intro j hj
+        simp [old j (Finset.mem_range.mp hj)]
+      rw [zero]
+      simp [actualBalanceAt, balances]
+  rcases applyPendingDeposit_cases ok with rfl | ⟨_, added⟩ | ⟨_, ok⟩
+  · simp [balanceCredits, balanceDebits]
+  · have bounds := credits_increase added
+    exact ⟨bounds.2, bounds.1.le⟩
+  · exact append (addValidatorToRegistry_push ok «matches»).2
+
+/-- Deposits retained or postponed by the real pass are not charged in this interval. -/
+def consumedDeposits {fork : Fork} (s t : BeaconState preset fork) (electra : .pectra ≤ fork) :
+    Nat :=
+  ((s.pendingDeposits electra).data.toList.map fun d => d.amount.toNat).sum -
+    ((t.pendingDeposits electra).data.toList.map fun d => d.amount.toNat).sum
+
+/-- The real pass removes a prefix; slashed entries are dropped without a transfer. -/
+def consumedConsolidations {fork : Fork} (s t : BeaconState preset fork)
+    (electra : .pectra ≤ fork) : Nat :=
+  (((s.pendingConsolidations electra).data.toList.take
+    ((s.pendingConsolidations electra).data.size - (t.pendingConsolidations electra).data.size)).map
+      fun c => match s.validators.data[c.sourceIndex.toNat]? with
+        | none => 0
+        | some v => if v.slashed then 0 else v.effectiveBalance.toNat).sum
+
+theorem withdrawal_debit_bound {fork : Fork} (s t : BeaconState preset fork)
+    (withdrawals : Array Withdrawal) (ok : applyWithdrawals s withdrawals = .ok t) :
+    balanceCredits s t = 0 ∧ balanceDebits s t ≤
+      (withdrawals.toList.map fun w => w.amount.toNat).sum := by
+  have one {s t : BeaconState preset fork} (w : Withdrawal)
+      (ok : applyWithdrawal s w = .ok t) :
+      balanceCredits s t = 0 ∧ balanceDebits s t ≤ w.amount.toNat := by
+    unfold applyWithdrawal at ok
+    split at ok
+    · simp only [bind_ok_iff] at ok
+      obtain ⟨builder, _, set⟩ := ok
+      obtain ⟨_, rfl⟩ := setBuilder_ok set
+      simp [balanceCredits, balanceDebits, actualBalanceAt, BeaconState.putBuilder]
+    · exact debits_decrease ok
+  have fold (ws : List Withdrawal) (s t : BeaconState preset fork)
+      (ok : ws.foldlM applyWithdrawal s = .ok t) :
+      balanceCredits s t = 0 ∧
+        balanceDebits s t ≤ (ws.map fun w => w.amount.toNat).sum ∧
+        t.balances.data.size = s.balances.data.size := by
+    induction ws generalizing s with
+    | nil =>
+      cases ok
+      simp [balanceCredits, balanceDebits]
+    | cons w ws ih =>
+      simp only [List.foldlM_cons, bind_ok_iff] at ok
+      obtain ⟨u, first, last⟩ := ok
+      have a := one w first
+      have b := ih u last
+      have sizes := (sameSizes_applyWithdrawal first).2
+      have credits := credits_triangle s u t b.2.2
+      have debits := debits_triangle s u t sizes.symm
+      simp only [List.map_cons, List.sum_cons]
+      exact ⟨by omega, by omega, b.2.2.trans sizes⟩
+  exact (fold withdrawals.toList s t (by simpa [applyWithdrawals,
+    ← Array.foldlM_toList] using ok)).imp_right And.left
+
+theorem excess_queue_debit {fork : Fork} (s t : BeaconState preset fork)
+    (electra : .pectra ≤ fork) (i : ValidatorIndex) (balance : Gwei)
+    (read : getBalance s i = .ok balance)
+    (ok : queueExcessActiveBalance s electra i = .ok t) :
+    balanceCredits s t = 0 ∧ balanceDebits s t ≤
+      (balance.toNat - preset.MIN_ACTIVATION_BALANCE.toNat) := by
+  simp only [queueExcessActiveBalance, read, bind_ok_iff, Except.ok.injEq,
+    exists_eq_left'] at ok
+  split at ok
+  · rename_i above
+    simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
+    obtain ⟨validator, _, pending, _, u, set, rfl⟩ := ok
+    have decreased : decreaseBalance s i
+        (balance - preset.MIN_ACTIVATION_BALANCE) = .ok u := by
+      simp only [decreaseBalance, read, bind, Except.bind]
+      have eq : saturatingSub balance (balance - preset.MIN_ACTIVATION_BALANCE) =
+          preset.MIN_ACTIVATION_BALANCE := by
+        apply UInt64.toNat_inj.mp
+        rw [toNat_saturatingSub, UInt64.toNat_sub_of_le _ _ (UInt64.le_of_lt above)]
+        have := UInt64.lt_iff_toNat_lt.mp above
+        omega
+      simpa [eq] using set
+    have bounds := debits_decrease decreased
+    simpa [balanceCredits, balanceDebits, actualBalanceAt,
+      UInt64.toNat_sub_of_le _ _ (UInt64.le_of_lt above)] using bounds
+  · simp only [pure, Except.pure, Except.ok.injEq] at ok
+    subst t
+    simp [balanceCredits, balanceDebits]
+
+/-- The crossing queues balance instead of losing it; the debit is counted before later credits. -/
+theorem electra_upgrade_debit (s : BeaconState preset .dencun) (t : BeaconState preset .pectra)
+    (ok : upgradeToElectra config s = .ok t) :
+    (∑ i ∈ Finset.range t.balances.data.size,
+      (actualBalanceAt ⟨.pectra, t⟩ i - actualBalanceAt ⟨.dencun, s⟩ i)) = 0 ∧
+    (∑ i ∈ Finset.range s.balances.data.size,
+      (actualBalanceAt ⟨.dencun, s⟩ i - actualBalanceAt ⟨.pectra, t⟩ i)) ≤
+      ((t.pendingDeposits (by decide)).data.toList.map fun d => d.amount.toNat).sum := by
+  let queued (s : BeaconState preset .pectra) :=
+    ((s.pendingDeposits (by decide)).data.toList.map fun d => d.amount.toNat).sum
+  let bound (s t : BeaconState preset .pectra) :=
+    t.balances.data.size = s.balances.data.size ∧ balanceCredits s t = 0 ∧
+      balanceDebits s t + queued s ≤ queued t
+  -- Each upgrade pass pays for its debit by appending the same amount to the queue.
+  have excess (s t : BeaconState preset .pectra) (i : ValidatorIndex)
+      (ok : queueExcessActiveBalance s (by decide) i = .ok t) : bound s t := by
+    have read : ∃ b, getBalance s i = .ok b := by
+      have steps := ok
+      simp only [queueExcessActiveBalance, bind_ok_iff] at steps
+      obtain ⟨b, read, _⟩ := steps
+      exact ⟨b, read⟩
+    obtain ⟨b, read⟩ := read
+    have bounds := excess_queue_debit s t (by decide) i b read ok
+    obtain ⟨_, added, queue, amount⟩ := queueExcessActiveBalance_balance read ok
+    have sum : queued t = queued s + (added.map fun d => d.amount.toNat).sum := by
+      simp only [queued, queue, List.map_append, List.sum_append]
+    have minimum : (min b preset.MIN_ACTIVATION_BALANCE).toNat ≤
+        preset.MIN_ACTIVATION_BALANCE.toNat := by
+      rw [toNat_min]
+      exact Nat.min_le_right _ _
+    exact ⟨(sameSizes_queueExcessActiveBalance ok).2, bounds.1, by omega⟩
+  have pre (s t : BeaconState preset .pectra) (i : ValidatorIndex)
+      (ok : queuePreActivation s (by decide) i = .ok t) : bound s t := by
+    simp only [queuePreActivation, bind_ok_iff, liftAccessor_ok, pure, Except.pure,
+      Except.ok.injEq] at ok
+    obtain ⟨v, _, b, read, pending, appended, u, setBalance, w, setValidator, rfl⟩ := ok
+    have decreased : decreaseBalance s i b = .ok u := by
+      simpa [decreaseBalance, read, bind, Except.bind, saturatingSub] using setBalance
+    have bounds := debits_decrease decreased
+    have size := (sameSizes_decreaseBalance decreased).2
+    obtain ⟨_, rfl⟩ := setValidator_ok setValidator
+    have sum : (pending.data.toList.map fun d => d.amount.toNat).sum = queued s + b.toNat := by
+      rw [appendWithinLimit_data appended]
+      simp [queued]
+    refine ⟨size, bounds.1, ?_⟩
+    change balanceDebits s u + queued s ≤ _
+    change balanceDebits s u + queued s ≤
+      (pending.data.toList.map fun d => d.amount.toNat).sum
+    omega
+  have compound (s t : BeaconState preset .pectra) (i : Nat)
+      (ok : queueCompoundingExcess s (by decide) i = .ok t) : bound s t := by
+    unfold queueCompoundingExcess at ok
+    split at ok
+    · split at ok
+      · exact excess s t _ (liftAccessor_ok.mp ok)
+      · cases ok
+        simp [bound, balanceCredits, balanceDebits]
+    · cases ok
+      simp [bound, balanceCredits, balanceDebits]
+  have fold {α : Type} (f : BeaconState preset .pectra → α →
+      Except TransitionError (BeaconState preset .pectra))
+      (step : ∀ s t a, f s a = .ok t → bound s t)
+      (xs : List α) (s t : BeaconState preset .pectra)
+      (ok : xs.foldlM f s = .ok t) : bound s t := by
+    induction xs generalizing s with
+    | nil => cases ok; simp [bound, balanceCredits, balanceDebits]
+    | cons x xs ih =>
+      simp only [List.foldlM_cons, bind_ok_iff] at ok
+      obtain ⟨u, first, last⟩ := ok
+      have a := step s u x first
+      have b := ih u last
+      have credits := credits_triangle s u t b.1
+      have debits := debits_triangle s u t a.1.symm
+      exact ⟨b.1.trans a.1, by omega, by omega⟩
+  simp only [upgradeToElectra, bind_ok_iff, liftAccessor_ok] at ok
+  obtain ⟨activationExit, _, earliestExit, _, exitChurn, _, consolidationChurn, _,
+    u, first, last⟩ := ok
+  have firstBound := fold _ pre _ _ u first
+  have lastBound := fold _ compound _ u t last
+  have trans {s u t : BeaconState preset .pectra} (a : bound s u) (b : bound u t) :
+      bound s t := by
+    have credits := credits_triangle s u t b.1
+    have debits := debits_triangle s u t a.1.symm
+    exact ⟨b.1.trans a.1, by omega, by omega⟩
+  have combined := trans firstBound lastBound
+  have before : ¬ Fork.pectra ≤ Fork.dencun := by decide
+  simpa [bound, queued, balanceCredits, balanceDebits, actualBalanceAt,
+    carryFields, carryList, before] using combined.2
+
+end EthLib.Consensus

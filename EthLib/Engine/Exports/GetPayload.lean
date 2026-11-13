@@ -84,7 +84,7 @@ def getPayloadOf (args : PyValue × List PayloadEntry × PyValue) : Result PyVal
   let some version := getPayloadVersion method | throw (0, s!"no method {method}")
   let id ← (getPayloadParams (request.getObjValD "params")).mapError
     fun e => (e.code, s!"engine error: {reprStr e}")
-  let setup ← Cryptography.Kzg.Exports.embeddedSetup.mapError
+  let setup ← (Cryptography.Kzg.Exports.embeddedSetup ()).mapError
     fun e => (0, s!"setup: {e.message}")
   let r ← (getPayload config setup (fun id => entries.lookup id) version id).mapError fun
     | .engine e => (e.code, s!"engine error: {reprStr e}")

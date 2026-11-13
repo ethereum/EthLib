@@ -576,10 +576,16 @@ theorem processBlock_header_of_lt_gloas (before : fork < .glamsterdam)
   have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
   unfold processBlock at computed
   split at computed
-  · simp only [processBlockAltair, notGloas, ↓reduceDIte, pure_bind, bind_ok_iff] at computed
+  · simp only [processBlockAltair, stateBeforeOperations, notGloas, ↓reduceDIte, pure_bind,
+      bind_assoc, bind_ok_iff] at computed
     obtain ⟨headed, headedOk, -⟩ := computed
     exact ⟨headed, headedOk⟩
-  · simp only [bind_ok_iff] at computed
+  · rename_i notAltair
+    have notGloas' : ¬ Fork.glamsterdam ≤ fork := fun h => notAltair (Nat.le_trans (by decide) h)
+    have notBellatrix' : ¬ Fork.bellatrix ≤ fork := fun h => notAltair (Nat.le_trans (by decide) h)
+    have early' : fork < .hegota := Nat.lt_trans (Nat.lt_of_not_le notAltair) (by decide)
+    simp only [stateBeforeOperations, notGloas', notBellatrix', early', ↓reduceDIte, pure_bind,
+      bind_assoc, bind_ok_iff] at computed
     obtain ⟨headed, headedOk, -⟩ := computed
     exact ⟨headed, headedOk⟩
 
@@ -605,10 +611,11 @@ theorem processBlock_steps_of_lt_gloas (capella : .shapella ≤ fork) (before : 
   have altair : .altair ≤ fork := Nat.le_trans (by decide) capella
   have bellatrix : .bellatrix ≤ fork := Nat.le_trans (by decide) capella
   have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
-  simp only [processBlock, altair, ↓reduceDIte, processBlockAltair, notGloas, bellatrix,
-    processBlockExecution, capella, pure_bind, bind_ok_iff] at computed
+  simp only [processBlock, altair, ↓reduceDIte, processBlockAltair, stateBeforeOperations,
+    notGloas, bellatrix, processBlockExecution, capella, pure_bind, bind_assoc,
+    bind_ok_iff] at computed
   -- Before Gloas no parent step comes first, and from Capella the withdrawals precede the payload.
-  obtain ⟨headed, headedOk, paid, ⟨withdrawn, withdrawnOk, paidOk⟩, -⟩ := computed
+  obtain ⟨headed, headedOk, withdrawn, withdrawnOk, paid, paidOk, -⟩ := computed
   exact ⟨headed, withdrawn, paid, headedOk, withdrawnOk, paidOk⟩
 
 /-! ## A block from Gloas -/
@@ -697,9 +704,9 @@ theorem processBlock_gloas_ok (gloas : .glamsterdam ≤ fork) {block : BeaconBlo
         (block.body.syncAggregate (Nat.le_trans (by decide) gloas)) = .ok after := by
   have altair : .altair ≤ fork := Nat.le_trans (by decide) gloas
   have bellatrix : .bellatrix ≤ fork := Nat.le_trans (by decide) gloas
-  simp only [processBlock, altair, ↓reduceDIte, processBlockAltair, gloas, bellatrix,
-    processBlockExecution, bind_ok_iff] at computed
-  obtain ⟨parented, parentOk, headed, headedOk, bidded, ⟨withdrawn, withdrawnOk, biddedOk⟩,
+  simp only [processBlock, altair, ↓reduceDIte, processBlockAltair, stateBeforeOperations,
+    gloas, bellatrix, processBlockExecution, bind_assoc, bind_ok_iff] at computed
+  obtain ⟨parented, parentOk, headed, headedOk, withdrawn, withdrawnOk, bidded, biddedOk,
     revealed, revealedOk, voted, votedOk, operated, operatedOk, synced⟩ := computed
   refine ⟨parented, headed, withdrawn, bidded, revealed, voted, operated, _, parentOk, headedOk,
     withdrawnOk, biddedOk, revealedOk, fun before => ?_, fun heze => ?_, operatedOk, synced⟩
@@ -867,7 +874,8 @@ private theorem processBlock_header_split {block : BeaconBlock preset fork}
         (payloadInputs_processWithdrawals withdrawnOk).latestBlockHeader)⟩
   · unfold processBlock at computed
     split at computed
-    · simp only [processBlockAltair, gloas, ↓reduceDIte, pure_bind, bind_ok_iff] at computed
+    · simp only [processBlockAltair, stateBeforeOperations, gloas, ↓reduceDIte, pure_bind,
+        bind_assoc, bind_ok_iff] at computed
       obtain ⟨headed, headedOk, executed, executedOk, revealed, revealedOk, voted, votedOk,
         operated, operatedOk, synced⟩ := computed
       have executedKept : executed.latestBlockHeader = headed.latestBlockHeader := by
@@ -884,7 +892,13 @@ private theorem processBlock_header_split {block : BeaconBlock preset fork}
         (payloadInputs_processSyncAggregate synced).latestBlockHeader.trans <|
           (latestBlockHeader_processOperations operatedOk).trans <| votedKept.trans <|
           (payloadInputs_processRandao revealedOk).latestBlockHeader.trans executedKept⟩
-    · simp only [bind_ok_iff] at computed
+    · rename_i notAltair
+      have notGloas' : ¬ Fork.glamsterdam ≤ fork := fun h => notAltair (Nat.le_trans (by decide) h)
+      have notBellatrix' : ¬ Fork.bellatrix ≤ fork :=
+        fun h => notAltair (Nat.le_trans (by decide) h)
+      have early' : fork < .hegota := Nat.lt_trans (Nat.lt_of_not_le notAltair) (by decide)
+      simp only [stateBeforeOperations, notGloas', notBellatrix', early', ↓reduceDIte, pure_bind,
+        bind_assoc, bind_ok_iff] at computed
       obtain ⟨headed, headedOk, revealed, revealedOk, voted, votedOk, operatedOk⟩ := computed
       exact ⟨state, headed, rfl, rfl, headedOk,
         (latestBlockHeader_processOperations operatedOk).trans <|

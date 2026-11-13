@@ -171,7 +171,8 @@ theorem processSyncAggregate_balance {config : Config} {checks : SignatureChecks
               (if chosen.toNat = j then proposerReward.toNat else 0)
             else if member.1.toNat = j then balance - reward.toNat else balance) balance.toNat := by
   unfold processSyncAggregate at computed
-  simp only [bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff] at computed
+  simp only [syncProposerReward, bind_ok_iff, liftAccessor_ok, liftArith,
+    mapError_ok_iff] at computed
   obtain ⟨_, _, _, _, _, _, _, _, _, _, reward, rewardOk, proposerReward, proposerRewardOk,
     members, membersOk, folded⟩ := computed
   obtain ⟨scaled, scaledOk, proposerRewardOk⟩ := proposerRewardOk

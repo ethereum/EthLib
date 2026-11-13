@@ -87,7 +87,14 @@ def hexListToBytes (hex : Array String) : Except KzgError (Array ByteArray) :=
     | some b => .ok b
     | none   => .error .invalidTrustedSetup
 
-/-- Decode the embedded setup of the mainnet ceremony. -/
+/-- Decode the embedded setup of the mainnet ceremony.
+
+Compiled Lean evaluates each constant when its module is initialized.
+
+The attribute below inlines this slow decode at each compiled use, so no module initializer runs it.
+
+Every export reads the setup through one cached copy, so it decodes the setup once per process. -/
+@[macro_inline]
 def ofHex : Except KzgError TrustedSetup := do
   ofBytes (← hexListToBytes TrustedSetupData.g1LagrangeHex)
     (← hexListToBytes TrustedSetupData.g1MonomialHex)

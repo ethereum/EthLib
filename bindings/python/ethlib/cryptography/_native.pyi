@@ -657,6 +657,30 @@ def consensus_api_payload_envelope_ssz(name: str, fork: str, anchor_state: bytes
     """The SSZ body of the envelope answer, as `bytes`."""
     ...
 
+def consensus_api_light_client_bootstrap(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, config: dict[str, Any] | None, root: bytes) -> dict[str, Any]:
+    """The JSON response of the bootstrap endpoint, as a `dict`."""
+    ...
+
+def consensus_api_light_client_bootstrap_ssz(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, config: dict[str, Any] | None, root: bytes) -> bytes:
+    """The SSZ body of the bootstrap answer, as `bytes`."""
+    ...
+
+def consensus_api_light_client_updates(name: str, config: dict[str, Any] | None, known: list[tuple[int, str, bytes]], start_period: int, count: int) -> list[dict[str, Any]]:
+    """The JSON response of the updates endpoint, as a `list` of `dict`."""
+    ...
+
+def consensus_api_light_client_updates_ssz(name: str, config: dict[str, Any] | None, genesis_validators_root: bytes, known: list[tuple[int, str, bytes]], start_period: int, count: int) -> bytes:
+    """The SSZ body of the updates answer, as `bytes`."""
+    ...
+
+def consensus_api_light_client_decode_updates(name: str, config: dict[str, Any] | None, genesis_validators_root: bytes, data: bytes) -> list[tuple[str, bytes]]:
+    """The fork name and the SSZ bytes of each update of the SSZ body of an updates answer."""
+    ...
+
+def consensus_api_light_client_latest(name: str, fork: str, kind: str, update: bytes | None) -> dict[str, Any]:
+    """The JSON response of the finality or the optimistic update endpoint, as a `dict`."""
+    ...
+
 def consensus_api_attestation_data(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, optimistic_roots: list[bytes], slot: int, committee_index: int) -> dict[str, Any]:
     """The JSON response of the attestation data endpoint, as a `dict`."""
     ...
@@ -665,12 +689,56 @@ def consensus_api_payload_attestation_data(name: str, fork: str, anchor_state: b
     """The JSON response of the payload attestation data endpoint, as a `dict`, or None for 204."""
     ...
 
+def consensus_api_fork_choice(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, optimistic_roots: list[bytes], config: dict[str, Any] | None) -> dict[str, Any]:
+    """The JSON response of the fork choice endpoint, as a `dict`."""
+    ...
+
+def consensus_api_chain_heads(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, optimistic_roots: list[bytes], config: dict[str, Any] | None) -> dict[str, Any]:
+    """The JSON response of the heads endpoint, as a `dict`."""
+    ...
+
 def consensus_api_aggregate_attestation(name: str, fork: str, state: bytes, attestations: list[bytes], singles: list[bytes], optimistic_roots: list[bytes], data_root: bytes, slot: int, committee_index: int) -> dict[str, Any]:
     """The JSON response of the aggregate endpoint, as a `dict`."""
     ...
 
 def consensus_api_sync_committee_contribution(name: str, fork: str, state: bytes, messages: list[bytes], optimistic_roots: list[bytes], slot: int, subcommittee_index: int, root: bytes) -> dict[str, Any]:
     """The JSON response of the contribution endpoint, as a `dict`."""
+    ...
+
+def consensus_api_attestation_rewards(name: str, fork: str, state: bytes, replacements: dict[str, Any] | None, epoch: int, ids: list[str]) -> dict[str, Any]:
+    """The JSON response of the attestation rewards endpoint, as a `dict`."""
+    ...
+
+def consensus_api_block_rewards(name: str, fork: str, state: bytes, block: bytes, replacements: dict[str, Any] | None) -> dict[str, Any]:
+    """The JSON response of the block rewards endpoint, as a `dict`."""
+    ...
+
+def consensus_api_consensus_block_value(name: str, fork: str, state: bytes, block: bytes, replacements: dict[str, Any] | None) -> int:
+    """The consensus value of a signed block, in Wei."""
+    ...
+
+def consensus_api_prefer_local_v3(local_value: int, builder_value: int, builder_boost_factor: int) -> bool:
+    """From Bellatrix to Fulu: whether the node returns its local payload rather than the builder's."""
+    ...
+
+def consensus_api_capped_bid_value(bid: dict[str, Any]) -> int:
+    """The value of a bid, in Gwei: its value plus its execution payment, counted up to its cap."""
+    ...
+
+def consensus_api_bid_accepted(bid: dict[str, Any]) -> bool:
+    """Whether the terms of a bid accept it."""
+    ...
+
+def consensus_api_select_payload(local_value: int, bids: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """From Gloas: the bid that the node commits to, or none for its local payload."""
+    ...
+
+def consensus_api_builder_config_terms(data: bytes, slot: int) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """From Gloas, the terms that the SSZ bytes of a builder configuration give."""
+    ...
+
+def consensus_api_sync_committee_rewards(name: str, fork: str, state: bytes, aggregate: bytes, ids: list[str]) -> dict[str, Any]:
+    """The JSON response of the sync committee rewards endpoint, as a `dict`."""
     ...
 
 def consensus_api_duties(name: str, fork: str, state: bytes, replacements: dict[str, Any] | None, kind: str, epoch: int, indices: list[int], genesis_root: bytes) -> dict[str, Any]:
@@ -1051,6 +1119,14 @@ def consensus_fork_choice(name: str, fork: str, anchor_state: bytes, anchor_bloc
 
 def consensus_gossip_validation(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, blocks: list[tuple[int, int | None, bytes] | tuple[int, int | None, bytes, bytes | None]], finalized: tuple[int, bytes] | None, topic: str, messages: list[tuple[int, int, bytes] | tuple[int, int, bytes, str]], config: dict[str, Any] | None, verify: bool) -> list[tuple[str, str | None]]:
     """Validate the messages of a topic in turn, against the store of an anchor and later blocks."""
+    ...
+
+def consensus_api_post(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, blocks: list[tuple[int, int | None, bytes] | tuple[int, int | None, bytes, bytes | None]], finalized: tuple[int, bytes] | None, requests: list[tuple[int, str, list[bytes]] | tuple[int, str, list[bytes], str | None]], config: dict[str, Any] | None, verify: bool) -> list[tuple[int, list[tuple[int, str]], list[tuple[str, str]]]]:
+    """Answer the requests to pool and publish endpoints in turn."""
+    ...
+
+def consensus_api_gossip_event(name: str, fork: str, topic: str, data: bytes) -> tuple[str, str] | None:
+    """The event that an object gives if gossip accepts it, by the name of its gossip topic."""
     ...
 
 def consensus_light_client_sync(name: str, fork: str, bootstrap_fork: str, config: dict[str, Any] | None, trusted: bytes, genesis_validators_root: bytes, bootstrap: bytes, steps: list[tuple[str, str, int, bytes] | tuple[str, int] | tuple[str, str]]) -> list[tuple[tuple[int, bytes, bytes], tuple[int, bytes, bytes]]]:
@@ -1937,8 +2013,16 @@ def rpc_pruned_history_unavailable() -> tuple[tuple[bool, int], str]:
     """The code of history that the node pruned, with its message."""
     ...
 
-def rpc_serve(view: tuple[dict[str, Any], bytes, list[tuple[str, bytes]], tuple[bytes, bytes, bytes], int, bool], requests: list[str]) -> list[str | None]:
+def rpc_serve(view: tuple[dict[str, Any], bytes, list[tuple[str, bytes]], tuple[bytes, bytes, bytes], int, bool], numbers: list[int], requests: list[str]) -> list[str | None]:
     """Answer requests of the execution JSON-RPC API from the chain that the arguments build."""
+    ...
+
+def rpc_encode_block_access_list(value: object) -> bytes:
+    """Encode a block access-list JSON value as its EIP-7928 RLP bytes."""
+    ...
+
+def rpc_apply_overrides(state: bytes, overrides: object) -> bytes:
+    """The state root after the account overrides of one block of `eth_simulateV1`."""
     ...
 
 def pyvalue_echo(value: object) -> object:

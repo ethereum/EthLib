@@ -13,10 +13,6 @@ from raising import raises
 # `fixtures/README.md` gives the origin of the files and their licence.
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
-# The `eth_getProof` requests of the same commit, which the trie suite vendors.
-# `trie/getproof/README.md` gives their origin and their licence.
-GETPROOF = Path(__file__).resolve().parents[1] / "trie" / "getproof"
-
 # The block hash that the balance and call fixtures name.
 BLOCK_HASH = bytes.fromhex("6146b2fa7dd4d923ed43e2f25c8a2895369d15463ba974f83937f9a6fa58adbf")
 
@@ -152,19 +148,22 @@ BLOCKS = [
         FIXTURES / "eth_call/call-block-hash-object.io", 1, ("hash", BLOCK_HASH, False), id="call"
     ),
     pytest.param(
-        GETPROOF / "get-account-proof-block-hash-object.io",
+        FIXTURES / "eth_getProof/get-account-proof-block-hash-object.io",
         2,
         ("hash", HEAD_HASH, False),
         id="getProof-hash-object",
     ),
     pytest.param(
-        GETPROOF / "get-account-proof-blockhash.io",
+        FIXTURES / "eth_getProof/get-account-proof-blockhash.io",
         2,
         ("hash", HEAD_HASH, False),
         id="getProof-hash-string",
     ),
     pytest.param(
-        GETPROOF / "get-account-proof-latest.io", 2, ("tag", "latest"), id="getProof-latest"
+        FIXTURES / "eth_getProof/get-account-proof-latest.io",
+        2,
+        ("tag", "latest"),
+        id="getProof-latest",
     ),
 ]
 

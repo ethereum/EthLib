@@ -35,13 +35,6 @@ section
 
 variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
-/-- A failure after a change of error comes from a failure before it. -/
-private theorem mapError_eq_error {ε ε' α : Type} {f : ε → ε'} {x : Except ε α} {e : ε'}
-    (h : x.mapError f = .error e) : ∃ e', x = .error e' ∧ f e' = e := by
-  cases x with
-  | error e' => exact ⟨e', rfl, by cases h; rfl⟩
-  | ok a => cases h
-
 /-- A read of code never fails for a short balance. -/
 theorem getCode_ne_insufficientBalance (state : TransactionState) (codeHash : Hash32)
     (address : Address) : state.getCode codeHash ≠ .error (.insufficientBalance address) := by
@@ -231,7 +224,7 @@ private theorem chargeAuthorization_ne_insufficientBalance [LawfulGasMeter Meter
     | cases h
     | cases LawfulGasMeter.charge_error h
     | cases LawfulGasMeter.chargeState_error h
-    | (obtain ⟨e', he', hee⟩ := mapError_eq_error h
+    | (obtain ⟨e', he', hee⟩ := Base.mapError_eq_error h
        cases hee
        exact getCode_ne_insufficientBalance _ _ _ he')
 
@@ -249,7 +242,7 @@ private theorem applyAuthorization_ne_insufficientBalance [LawfulGasMeter Meter]
     | split at h
   all_goals first
     | cases h
-    | (obtain ⟨e', he', hee⟩ := mapError_eq_error h
+    | (obtain ⟨e', he', hee⟩ := Base.mapError_eq_error h
        simp only [Function.comp_apply, Prod.mk.injEq, EvmError.state.injEq] at hee
        obtain ⟨rfl, -⟩ := hee
        first
@@ -300,7 +293,7 @@ private theorem prepareFirstFrame_ne_insufficientBalance [LawfulGasMeter Meter] 
   all_goals first
     | (cases h; done)
     | exact foldlM_applyAuthorization_ne_insufficientBalance address read h
-    | (obtain ⟨e', he', hee⟩ := mapError_eq_error h
+    | (obtain ⟨e', he', hee⟩ := Base.mapError_eq_error h
        simp only [Prod.mk.injEq, EvmError.state.injEq] at hee
        obtain ⟨rfl, -⟩ := hee
        first
@@ -353,7 +346,7 @@ private theorem runTransaction_ne_insufficientBalance [LawfulGasMeter Meter]
   · unfold messageTarget at h
     split at h
     · cases h
-    · obtain ⟨e, -, he⟩ := mapError_eq_error h
+    · obtain ⟨e, -, he⟩ := Base.mapError_eq_error h
       cases he
   obtain ⟨bought, hBought, kept⟩ := buyGas_ok funds
   rw [hBought] at h
@@ -366,7 +359,7 @@ private theorem runTransaction_ne_insufficientBalance [LawfulGasMeter Meter]
       cases x with
       | error e' =>
         cases h
-        obtain ⟨e'', he'', hee⟩ := mapError_eq_error hx
+        obtain ⟨e'', he'', hee⟩ := Base.mapError_eq_error hx
         cases hee
         exact getCode_ne_insufficientBalance _ _ _ he''
       | ok _ => cases h
@@ -387,7 +380,7 @@ private theorem runTransaction_ne_insufficientBalance [LawfulGasMeter Meter]
   rcases Base.bind_eq_error h with h | ⟨output, -, h⟩
   · exact processMessageCall_ne_insufficientBalance funded address h
   rcases Base.bind_eq_error h with h | ⟨⟨settled, used⟩, -, h⟩
-  · obtain ⟨e, he, hee⟩ := mapError_eq_error h
+  · obtain ⟨e, he, hee⟩ := Base.mapError_eq_error h
     cases hee
     unfold settleGas at he
     rcases Base.bind_eq_error he with he | ⟨mid, -, he⟩
@@ -399,7 +392,7 @@ private theorem runTransaction_ne_insufficientBalance [LawfulGasMeter Meter]
       · exact creditEther_ne_insufficientBalance _ _ _ _ he
     · cases he
   rcases Base.bind_eq_error h with h | ⟨deleted, -, h⟩
-  · obtain ⟨e, he, hee⟩ := mapError_eq_error h
+  · obtain ⟨e, he, hee⟩ := Base.mapError_eq_error h
     cases hee
     exact deleteAccounts_ne_insufficientBalance _ _ _ he
   · cases h

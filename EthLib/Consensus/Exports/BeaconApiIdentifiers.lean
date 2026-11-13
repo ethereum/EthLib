@@ -105,18 +105,27 @@ abbrev StoreCase := String × String × ByteArray × ByteArray × List ForkChoic
 abbrev StoreCaseArgs (α : Type) :=
   String × String × ByteArray × ByteArray × List ForkChoiceStep × Bool × α
 
-/-- The configuration and the store after the steps of a fork choice case. -/
-def storeOfCase (case : StoreCase) :
+/-- The configuration and the store after the steps of a fork choice case.
+
+The configuration of the preset takes the given replacements, if any.
+
+A case with its own configuration passes it that way. -/
+def storeOfCaseWith (case : StoreCase) (replacements : Option PyValue) :
     Result ((preset : Preset) × (fork : Fork) × Config × Store preset fork) := do
   let (name, fork, anchorState, anchorBlock, steps, verify) := case
   let preset ← presetOf name
   let fork ← forkOf fork.toUTF8
-  let config ← configWithValue name none
+  let config ← configWithValue name replacements
   let checks := if verify then SignatureChecks.bls else SignatureChecks.acceptAll
   let anchorState ← decodeInput (BeaconState preset fork) anchorState
   let anchorBlock ← decodeInput (BeaconBlock preset fork) anchorBlock
   let (store, _) ← replayForkChoice config checks anchorState anchorBlock steps
   return ⟨preset, fork, config, store⟩
+
+/-- The configuration and the store after the steps of a fork choice case. -/
+def storeOfCase (case : StoreCase) :
+    Result ((preset : Preset) × (fork : Fork) × Config × Store preset fork) :=
+  storeOfCaseWith case none
 
 /-- The answer to each query, against the store after the steps of a fork choice case. -/
 def apiResolve (args : String × String × ByteArray × ByteArray × List ForkChoiceStep × Bool ×

@@ -21,7 +21,7 @@ public section
 namespace EthLib.Execution.Rpc.ChainView
 
 open Lean (Json)
-open EthLib.Serialization.JsonRpc (optionJson)
+open EthLib.Serialization.JsonRpc (optionJson RpcError)
 
 /-- A notification gets no response. -/
 theorem answerJson_notification (v : ChainView) {j : Json} (h : isNotification j = true) :
@@ -30,15 +30,19 @@ theorem answerJson_notification (v : ChainView) {j : Json} (h : isNotification j
 
 /-- A request of a method that the view does not serve fails with the code of a method not found. -/
 theorem call_unknown (v : ChainView) {method : String} (params : List Json)
-    (h : method ∉ ["eth_blockNumber", "eth_chainId", "net_version", "eth_getTransactionByHash",
+    (h : method ∉ ["eth_blockNumber", "eth_chainId", "eth_config", "net_version",
+      "eth_getTransactionByHash",
       "eth_getTransactionByBlockHashAndIndex", "eth_getTransactionByBlockNumberAndIndex",
       "eth_getHeaderByHash", "eth_getHeaderByNumber", "eth_getBlockByHash", "eth_getBlockByNumber",
       "eth_getBlockTransactionCountByHash", "eth_getBlockTransactionCountByNumber",
-      "eth_getTransactionReceipt", "eth_getBlockReceipts", "eth_getLogs", "debug_getRawHeader",
-      "debug_getRawBlock", "debug_getRawTransaction", "debug_getRawReceipts"]) :
+      "eth_getTransactionReceipt", "eth_getBlockReceipts", "eth_getLogs", "eth_getBalance",
+      "eth_getTransactionCount", "eth_getCode", "eth_getStorageAt", "eth_getStorageValues",
+      "eth_getProof", "eth_call", "eth_estimateGas", "eth_createAccessList",
+      "eth_feeHistory", "eth_baseFee", "eth_sendRawTransaction", "debug_getRawHeader",
+      "debug_getRawBlock", "debug_getRawTransaction", "debug_getRawReceipts",
+      "eth_getBlockAccessList", "debug_getRawBlockAccessList", "eth_simulateV1"]) :
     v.call method params = .error (methodNotFound.toRpcError (some (.str method))) := by
   simp only [List.mem_cons, List.not_mem_nil, or_false, not_or] at h
-  obtain ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13, h14, h15, h16, h17, h18, h19⟩ := h
   unfold call
   split <;> simp_all
 
@@ -71,5 +75,11 @@ theorem Valid.headerJson_eq {v : ChainView} {checkSeal : Bool} (hv : v.Valid che
   rcases hr with hr | hr
   · exact headerJson_eq_headerObject (hv.hash r hr)
   · exact headerJson_eq_headerObject (hv.pending r hr).1
+
+/-- A request that its reader rejects gets the code of invalid parameters, `-32602`. -/
+theorem call_simulate_rejected (v : ChainView) {s : Json} {rest : List Json} {reason : String}
+    (h : simulatePayload s = .error reason) :
+    v.call "eth_simulateV1" (s :: rest) = .error (RpcError.invalidParams reason) := by
+  simp [call, readParam, h, Except.mapError, bind, Except.bind]
 
 end EthLib.Execution.Rpc.ChainView

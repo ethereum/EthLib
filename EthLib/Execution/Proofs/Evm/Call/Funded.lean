@@ -177,7 +177,7 @@ private theorem pushWord_ne_state (evm : Evm fork Meter) (x : Base.U256)
   · cases h
 
 /-- The resume of a caller after a message it sent fails with no error of the state. -/
-private theorem resume_ne_state {evm caller child : Evm fork Meter} {message : Message fork}
+theorem resume_ne_state {evm caller child : Evm fork Meter} {message : Message fork}
     {resume : Evm fork Meter → Except EvmError (Evm fork Meter)}
     (h : step fork evm = .ok (.child caller message resume)) (s : State.StateError) :
     resume child ≠ .error (.state s) := by
@@ -250,7 +250,7 @@ private theorem balance_prepareCreation {state prepared : TransactionState} {add
     rw [marked]
 
 /-- A write of the state that succeeds gives the frame no error of the state. -/
-private theorem mapError_ne_of_isOk {α : Type} {x : Except State.StateError α}
+theorem mapError_ne_of_isOk {α : Type} {x : Except State.StateError α}
     (hx : ∃ a, x = .ok a) (e : State.StateError) :
     x.mapError EvmError.state ≠ .error (.state e) := by
   obtain ⟨a, rfl⟩ := hx
