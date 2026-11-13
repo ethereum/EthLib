@@ -12,7 +12,9 @@ public import EthLib.Base.BigEndian
 
 Payload protection and header protection follow RFC 9001 §§5.3 to 5.4.
 
-The caller supplies the packet-number offset from the header codec and isolates one packet.
+The caller isolates one packet and supplies its packet-number offset.
+
+The offset comes from the clear header fields and connection context.
 
 Packet-number reconstruction belongs to the header codec.
 
@@ -190,7 +192,7 @@ def checkHeader (suite : CipherSuite) (header : ByteArray) (protectedLength : Na
 
 /-- Protect a header and payload, RFC 9001 §§5.3 to 5.4.
 
-The header codec supplies `offset` and a header ending in the truncated packet number.
+The caller supplies `offset` and a header ending in the truncated packet number.
 
 An insufficient ciphertext sample is an error, so callers add PADDING frames before sealing. -/
 def protect (suite : CipherSuite) (keys : PacketKeys suite) (number : PacketNumber)
@@ -218,7 +220,7 @@ def reconstructNumber (width : NumberLength) (truncated expected : Nat) :
 
 /-- Authenticate one isolated packet, RFC 9001 §§5.3 to 5.4.
 
-The header codec supplies the packet-number offset.
+The caller supplies the packet-number offset from the clear header fields and connection context.
 
 `expected` is one greater than the largest authenticated number, or zero initially.
 
@@ -243,7 +245,9 @@ def RETRY_NONCE : Vector UInt8 12 :=
 
 /-- Authenticate the Retry pseudo-packet with empty plaintext, RFC 9001 §5.8.
 
-`retry` is the Retry packet without its integrity tag. The header codec checks its format. -/
+`retry` is the Retry packet without its integrity tag.
+
+The caller checks its header format. -/
 def retryTag (originalDcid retry : ByteArray) : Except Error ByteArray := do
   ensure (originalDcid.size ≤ 20) .connectionId
   let aad := ByteArray.mk #[UInt8.ofNat originalDcid.size] ++ originalDcid ++ retry
