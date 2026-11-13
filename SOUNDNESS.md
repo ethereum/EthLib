@@ -3966,6 +3966,38 @@ The comparison is exact.
 Before London the base fee is 0, so a tip is the whole gas price.
 A ratio is written with at most 18 decimal places, rounded down, and the rewards are left out when the request names no percentile.
 
+`eth_sendRawTransaction` of [`submit.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth/submit.yaml) submits a signed transaction in its raw form (`Execution/Rpc/Submit.lean`).
+A blob transaction must come in its network form at the fork of the next block.
+Before Fusaka that form has one proof per blob, and from Fusaka it has cell proofs.
+The hash of an accepted submission is the hash of the transaction that the raw form holds, without blobs, commitments or proofs (`ChainView.sendRawTransaction_hash`, `Proofs/Rpc/Submit.lean`).
+When the first byte is not 3, it is the Keccak-256 hash of the raw bytes (`ChainView.sendRawTransaction_keccak`).
+The dispatcher reads the raw bytes and answers with that hash (`ChainView.call_sendRawTransaction`).
+Each code that `rpcCode` gives is in a group that the method lists, within the range of that group (`rpcCode_mem`).
+Two errors with one code are of one kind (`rpcCode_injective`).
+The mapping is: `insufficientGas` to 800, `gasAllowanceExceeded` to 803, `priorityFeeGreaterThanMaxFee` to 804, `insufficientMaxFeePerGas` to 806, `insufficientBalance` to 809, `nonceTooLow` to 1, `nonceTooHigh` to 2, and `invalidSignature` to 1001.
+Two conditions are wider than their messages.
+The code 800 also covers a gas limit below the floor of EIP-7623.
+The cost behind 809 also counts the blob gas at its fee cap.
+The method checks a transaction with no gas used before it, so the allowance of the block is exceeded exactly when the gas limit is above the block's, the condition of 803.
+
+Which transactions a pool keeps is the choice of the node, and EthLib fixes one simple rule.
+The rule accepts a transaction whose raw form decodes, whose blob counts and versioned hashes match, and which passes the inclusion checks in the next block against the state of the head.
+That next block is one second after the head, its earliest time, as in the fee history.
+It takes the fork, the base fees and the blob schedule of the fee history, and the gas limit of the head.
+Its base fee is the last base fee of the fee history (`ChainView.baseFeeOf_nextEnvironment`).
+A nonce above that of the sender is a future transaction, which the rule accepts.
+The checks then read the head with the nonce of the sender raised to that of the transaction (`withFutureNonce_nonce`), so the code 2 never arises.
+The rule does not verify the KZG proofs yet.
+From Fusaka, the source lets a node accept proofs per blob and convert them to cell proofs; the rule takes the choice that this "may" leaves, and rejects that form.
+A raw form that does not decode, or whose blobs do not match its counts or versioned hashes, gets `-32000`.
+A failed inclusion check without a code gets `-32003`.
+The errors of EthLib without a code are `emptyTransaction`, `unsupportedType`, `decoding`, `encoding`, `initCodeTooLarge`, `gasLimitExceeded`, `nonceOverflow`, `wrongChainId`, `noBlobData`, `blobCountExceeded`, `invalidBlobVersionedHash`, `emptyAuthorizationList`, `blobGasLimitExceeded`, `insufficientMaxFeePerBlobGas`, `senderNotEoa` and `missingCode`.
+`intrinsicGasAboveLimit` also has none.
+The message of 800 is "Intrinsic gas too low / Intrinsic gas exceeds gas limit", and the cap of EIP-7825 is not a gas limit.
+The code 802 names a minimum that the node configures.
+The codes 805, 807 and 808 name values that the decoder already rejects.
+The code 1000 names a transaction that the node already knows, and the codes `-32000` to `-32006` name no single condition.
+
 The Python suite replays the official test chain into a view and answers the official fixtures of the methods that EthLib serves.
 That chain mines its blocks before the merge with a zero mix hash and a zero nonce, so the suite runs the transition without the proof-of-work check.
 
