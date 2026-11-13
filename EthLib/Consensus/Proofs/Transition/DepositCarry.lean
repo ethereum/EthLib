@@ -182,13 +182,13 @@ private theorem kept_upgradeNext {s : ForkedBeaconState preset}
 theorem depositCarry_processUpgrades {s t : ForkedBeaconState preset}
     (ok : processUpgrades config checks s = .ok t) (early : t.fork < .glamsterdam) :
     (if h : .pectra ≤ t.fork then (t.state.depositBalanceToConsume h).toNat else 0) =
-      (if h : .pectra ≤ s.fork then (s.state.depositBalanceToConsume h).toNat else 0) := by
-  fun_induction processUpgrades config checks s generalizing t with
-  | case1 s due ih =>
-    obtain ⟨next, nextOk, rest⟩ := bind_ok_iff.mp ok
-    exact (ih next rest early).trans (kept_upgradeNext nextOk
-      (Nat.lt_of_le_of_lt (processUpgrades_fork_le rest) early))
-  | case2 s notDue => cases ok; rfl
+      (if h : .pectra ≤ s.fork then (s.state.depositBalanceToConsume h).toNat else 0) :=
+  processUpgrades_induction (property := fun u => u.fork < .glamsterdam →
+      (if h : .pectra ≤ u.fork then (u.state.depositBalanceToConsume h).toNat else 0) =
+        (if h : .pectra ≤ s.fork then (s.state.depositBalanceToConsume h).toNat else 0))
+    (fun {_ post} held nextOk later =>
+      (kept_upgradeNext nextOk later).trans (held (Nat.lt_trans post.property later)))
+    (fun _ => rfl) ok early
 
 private theorem kept_slash {index : ValidatorIndex} {whistleblower : Option ValidatorIndex}
     (ok : slashValidator config s index whistleblower = .ok t) : Kept s t := by

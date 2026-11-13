@@ -176,13 +176,12 @@ private theorem funding_slot_upgrade {s : ForkedBeaconState preset}
 
 private theorem funding_slot_upgrades {s t : ForkedBeaconState preset}
     (ok : processUpgrades config checks s = .ok t)
-    (early : t.fork < .glamsterdam) : fundedStake t ≤ fundedStake s := by
-  fun_induction processUpgrades config checks s generalizing t with
-  | case1 s due ih =>
-    obtain ⟨next, nextOk, rest⟩ := bind_ok_iff.mp ok
-    exact (ih next rest early).trans
-      (funding_slot_upgrade nextOk (Nat.lt_of_le_of_lt (processUpgrades_fork_le rest) early))
-  | case2 s notDue => cases ok; exact Nat.le_refl _
+    (early : t.fork < .glamsterdam) : fundedStake t ≤ fundedStake s :=
+  processUpgrades_induction (property := fun u => u.fork < .glamsterdam →
+      fundedStake u ≤ fundedStake s)
+    (fun {_ post} held nextOk later =>
+      (funding_slot_upgrade nextOk later).trans (held (Nat.lt_trans post.property later)))
+    (fun _ => Nat.le_refl _) ok early
 
 /-- Slot conservation follows from epoch conservation, without an epoch-step placeholder. -/
 private theorem funding_slot_of_epoch_bound
