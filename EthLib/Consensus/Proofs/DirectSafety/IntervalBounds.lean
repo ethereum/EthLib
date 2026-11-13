@@ -664,13 +664,7 @@ It carries the exit and consolidation balance that the queues hold for the windo
 The Electra churn is charged only when the window reaches the Electra fork epoch. -/
 def exitWindow (x : ForkedBeaconState preset) (high : Nat)
     (events : List (BalanceEvent preset)) : Nat :=
-  scheduledExitCarry x high +
-    (if electra : .pectra ≤ x.fork then
-      (if (x.state.earliestExitEpoch electra).toNat ≤ high + 1 then
-        (x.state.exitBalanceToConsume electra).toNat else 0) +
-      (if (x.state.earliestConsolidationEpoch electra).toNat ≤ high + 1 then
-        (x.state.consolidationBalanceToConsume electra).toNat else 0)
-    else 0) +
+  scheduledExitCarry x high + queueCarry x high +
     driftHorizon x high *
       ((if x.fork < .pectra then max 1 (cohortCap config (registryWindow x high)) *
         preset.MAX_EFFECTIVE_BALANCE.toNat else 0) +
@@ -2387,7 +2381,6 @@ private theorem nonaccountable_losses_over_interval {g x y : ForkedBeaconState p
   have losses := intervalLoss_departure_bound shared tail genesis caps aligned
     early high endEpoch events replayed
   unfold exitWindow
-  simp only [queueCarry] at charges
   omega
 
 private theorem intervalGain_existing_funding {x y : ForkedBeaconState preset}
