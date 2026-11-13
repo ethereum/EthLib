@@ -3756,6 +3756,34 @@ A bundle holds at most `MAX_BLOB_COMMITMENTS_PER_BLOCK` blobs, so it needs at mo
 EthLib keeps the bound as written: it admits bundles with more proofs than any blob needs, and it sets the depth of the Merkle tree of the proofs.
 Whether the builder specification intends this bound is an open point.
 
+### Relay API
+
+The Relay API, as `flashbots/relay-specs` defines it, lets a builder submit blocks to a relay, and lets anyone read the relay's data.
+The source has no tag and no release, so EthLib cites commit `a4e0a50d`, its Fulu update; it has no Gloas part.
+
+From Bellatrix to Fulu, a builder submits a block as a bid trace, the payload, from Deneb the blobs bundle, from Electra the requests, and its signature.
+The source restates the payload, the withdrawals, the requests, the blobs bundle and their bounds; EthLib uses its own containers for them.
+`SubmitBlockRequest.names_nodup` (`Consensus/Proofs/Containers/RelayApi.lean`) gives a submission distinct field names at every fork, so it decodes back from its bytes when the logs bloom has a byte.
+`BidTrace.serialize_size` (same file) shows that every bid trace serializes to 236 bytes.
+The Python suite computes the roots of the restated containers from the documents of the source, and compares them with EthLib's.
+They agree, except for the requests, where the source has a defect:
+
+- The Electra document of the source bounds the consolidation requests of a payload by 1, where the mainnet preset of the consensus layer bounds them by 2.
+  The bound sets the depth of the tree of the list, so a relay that follows the document gives the requests, and the submission, another root than EthLib.
+  Such a relay also refuses a payload with two consolidation requests, which the consensus layer accepts.
+  EthLib keeps the bound of the preset, so the requests of a submission are those of the payload.
+
+The source leaves two points about the containers open:
+
+- It defines a container whose one field, named after the fork, holds the submission, but it does not say where it is used.
+  Its Fulu note says that the new field replaces "the `bellatrix` field", where it replaces the Electra one.
+  EthLib defines the container, with the field named after the consensus version of the fork.
+- The JSON examples of its submissions are not complete vectors.
+  Their bid traces lack `proposer_pubkey`, so EthLib refuses them.
+  The source says that missing fields default to zero when a container is instantiated.
+  EthLib reads that as a rule of the source's Python notation, not of its JSON, so its reader requires every field.
+  The blobs of the Deneb and Electra examples hold 32 bytes instead of 131,072, so EthLib refuses those bundles too.
+
 ### What cannot be proved yet
 
 Some definitions cannot be unfolded by the kernel, so the kernel cannot evaluate them, and their intended computational properties remain unproved.

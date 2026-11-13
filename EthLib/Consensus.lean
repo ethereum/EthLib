@@ -35,6 +35,7 @@ public import EthLib.Consensus.Containers.Operations
 public import EthLib.Consensus.Containers.PayloadAttestation
 public import EthLib.Consensus.Containers.PowBlock
 public import EthLib.Consensus.Containers.ProposerPreferences
+public import EthLib.Consensus.Containers.RelayApi
 public import EthLib.Consensus.Containers.Requests
 public import EthLib.Consensus.Containers.Signing
 public import EthLib.Consensus.Containers.State

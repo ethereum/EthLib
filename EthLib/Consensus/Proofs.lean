@@ -39,6 +39,7 @@ public import EthLib.Consensus.Proofs.Containers.Execution
 public import EthLib.Consensus.Proofs.Containers.InclusionList
 public import EthLib.Consensus.Proofs.Containers.Misc
 public import EthLib.Consensus.Proofs.Containers.ProposerPreferences
+public import EthLib.Consensus.Proofs.Containers.RelayApi
 public import EthLib.Consensus.Proofs.Containers.Requests
 public import EthLib.Consensus.Proofs.Containers.Signing
 public import EthLib.Consensus.Proofs.Containers.State
