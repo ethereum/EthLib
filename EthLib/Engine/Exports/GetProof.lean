@@ -3,6 +3,7 @@ module
 public import EthLib.Base.Exports.Proofs.PyValue
 public import EthLib.Cryptography.Hash.Keccak
 public import EthLib.Engine.Json
+public import EthLib.Execution.Rpc.Base
 public import EthLib.Execution.State.AccountProof
 
 /-!
@@ -38,19 +39,8 @@ namespace EthLib.Engine.Exports
 open Lean (Json)
 open EthLib.Exports (Result PyValue pyExport)
 open EthLib.Base
-open EthLib.Serialization.JsonRpc (Read address array bytes field fields fixed hexDigits
-  hexValue quantity reject)
-
-/-- A storage key: at most 64 lowercase hex digits, read as a number on 32 big-endian bytes. -/
-def storageKey (j : Json) : Read Bytes32 := do
-  let digits ← hexDigits "key" j
-  if digits.size > 64 then reject "key: more than 64 hex digits" else
-  let mut value := 0
-  for c in digits do
-    match hexValue false c with
-    | some d => value := 16 * value + d.toNat
-    | none => reject "key: not a hex digit"
-  return Vector.ofFn fun i : Fin 32 => (value / 256 ^ (31 - i.val) % 256).toUInt8
+open EthLib.Serialization.JsonRpc (Read address array bytes field fields fixed quantity)
+open EthLib.Execution.Rpc (bytesMax32)
 
 /-- The nodes of a proof, each a byte string. -/
 def proofNodes (what : String) (j : Json) : Read (List ByteArray) :=
@@ -59,7 +49,7 @@ def proofNodes (what : String) (j : Json) : Read (List ByteArray) :=
 /-- One slot of an answer: its key, its value and the nodes of its proof. -/
 def storageProofOfJson (j : Json) : Read Execution.State.StorageProof := do
   let fs ← fields "slot" j
-  return ⟨← storageKey (← field "slot" fs "key"),
+  return ⟨← bytesMax32 "key" (← field "slot" fs "key"),
     BitVec.ofNat 256 (← quantity "value" 256 (← field "slot" fs "value")),
     ← proofNodes "proof" (← field "slot" fs "proof")⟩
 

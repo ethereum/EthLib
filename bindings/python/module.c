@@ -122,6 +122,7 @@ PyObject* VALIDATOR_DUTY_ERROR;
 PyObject* PROPOSER_ERROR;
 PyObject* SLASHING_PROTECTION_ERROR;
 PyObject* BINDING_ERROR;
+PyObject* RPC_ERROR;
 
 /* ---- Lean externs: size accessors ------------------------------------ */
 
@@ -784,8 +785,18 @@ static PyMethodDef methods[] = {
   {"consensus_get_custody_column_bits", py_consensus_get_custody_column_bits, METH_VARARGS,
    DOC_consensus_get_custody_column_bits},
   {"consensus_ssz_static", py_consensus_ssz_static, METH_VARARGS, DOC_consensus_ssz_static},
+  {"consensus_api_json", py_consensus_api_json, METH_VARARGS, DOC_consensus_api_json},
+  {"consensus_api_ssz", py_consensus_api_ssz, METH_VARARGS, DOC_consensus_api_ssz},
   {"consensus_is_valid_builder_signature", py_consensus_is_valid_builder_signature,
    METH_VARARGS, DOC_consensus_is_valid_builder_signature},
+  {"consensus_process_registration", py_consensus_process_registration,
+   METH_VARARGS, DOC_consensus_process_registration},
+  {"consensus_is_eligible_for_bid", py_consensus_is_eligible_for_bid,
+   METH_VARARGS, DOC_consensus_is_eligible_for_bid},
+  {"consensus_process_bid", py_consensus_process_bid,
+   METH_VARARGS, DOC_consensus_process_bid},
+  {"consensus_unblind_signed_blinded_block", py_consensus_unblind_signed_blinded_block,
+   METH_VARARGS, DOC_consensus_unblind_signed_blinded_block},
   {"consensus_verify_builder_request_auth_signature",
    py_consensus_verify_builder_request_auth_signature,
    METH_VARARGS, DOC_consensus_verify_builder_request_auth_signature},
@@ -1103,8 +1114,12 @@ static PyMethodDef methods[] = {
   {"uvarint_decode", py_uvarint_decode, METH_VARARGS, DOC_uvarint_decode},
   {"multistream_encode", py_multistream_encode, METH_VARARGS, DOC_multistream_encode},
   {"multistream_decode", py_multistream_decode, METH_VARARGS, DOC_multistream_decode},
+  {"multistream_listen", py_multistream_listen, METH_VARARGS, DOC_multistream_listen},
+  {"multistream_dial", py_multistream_dial, METH_VARARGS, DOC_multistream_dial},
+  {"libp2p_upgrade", py_libp2p_upgrade, METH_VARARGS, DOC_libp2p_upgrade},
   {"mplex_encode", py_mplex_encode, METH_VARARGS, DOC_mplex_encode},
   {"mplex_decode", py_mplex_decode, METH_VARARGS, DOC_mplex_decode},
+  {"mplex_session", py_mplex_session, METH_VARARGS, DOC_mplex_session},
   {"yamux_encode", py_yamux_encode, METH_VARARGS, DOC_yamux_encode},
   {"yamux_decode", py_yamux_decode, METH_VARARGS, DOC_yamux_decode},
   {"libp2p_public_key", py_libp2p_public_key, METH_VARARGS, DOC_libp2p_public_key},
@@ -1160,12 +1175,22 @@ static PyMethodDef methods[] = {
   {"engine_get_payload", py_engine_get_payload, METH_VARARGS, DOC_engine_get_payload},
   {"engine_get_payload_bodies", py_engine_get_payload_bodies, METH_VARARGS,
    DOC_engine_get_payload_bodies},
+  {"engine_read_payload_status", py_engine_read_payload_status, METH_VARARGS,
+   DOC_engine_read_payload_status},
+  {"engine_read_forkchoice_response", py_engine_read_forkchoice_response, METH_VARARGS,
+   DOC_engine_read_forkchoice_response},
+  {"engine_rewrite_params", py_engine_rewrite_params, METH_VARARGS,
+   DOC_engine_rewrite_params},
   {"engine_prepare_execution_payload", py_engine_prepare_execution_payload, METH_VARARGS,
    DOC_engine_prepare_execution_payload},
   {"engine_prepare_execution_payload_gloas", py_engine_prepare_execution_payload_gloas,
    METH_VARARGS, DOC_engine_prepare_execution_payload_gloas},
   {"engine_finalized_execution_block_hash", py_engine_finalized_execution_block_hash,
    METH_VARARGS, DOC_engine_finalized_execution_block_hash},
+  {"rpc_read_param", py_rpc_read_param, METH_VARARGS, DOC_rpc_read_param},
+  {"rpc_error_groups", py_rpc_error_groups, METH_VARARGS, DOC_rpc_error_groups},
+  {"rpc_pruned_history_unavailable", py_rpc_pruned_history_unavailable, METH_VARARGS,
+   DOC_rpc_pruned_history_unavailable},
   {"pyvalue_echo", py_pyvalue_echo, METH_VARARGS, DOC_pyvalue_echo},
   {NULL, NULL, 0, NULL},
 };
@@ -1249,6 +1274,7 @@ PyInit__native(void) {
     PROPOSER_ERROR = PyObject_GetAttrString(errors, "ProposerError");
     SLASHING_PROTECTION_ERROR = PyObject_GetAttrString(errors, "SlashingProtectionError");
     BINDING_ERROR = PyObject_GetAttrString(errors, "BindingError");
+    RPC_ERROR = PyObject_GetAttrString(errors, "RpcError");
     Py_DECREF(errors);
     if (PyErr_Occurred()) return NULL;
 

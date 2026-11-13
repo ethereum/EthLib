@@ -561,8 +561,32 @@ def consensus_ssz_static(name: str, fork: str, type: str, data: bytes) -> tuple[
     """The root of the value that the bytes encode, and the bytes of that value, as a pair."""
     ...
 
+def consensus_api_json(name: str, fork: str, type: str, data: bytes) -> Any:
+    """The JSON of the API for the value that SSZ bytes encode."""
+    ...
+
+def consensus_api_ssz(name: str, fork: str, type: str, document: Any) -> bytes:
+    """The SSZ bytes of the value that a JSON document of the API holds."""
+    ...
+
 def consensus_is_valid_builder_signature(name: str, fork: str, config: dict[str, Any] | None, type: str, data: bytes) -> bool:
     """Whether the signature of a signed message of the Builder API verifies."""
+    ...
+
+def consensus_process_registration(name: str, fork: str, config: dict[str, Any] | None, state: bytes, registry: list[bytes], signed: bytes, now: int) -> str | None:
+    """None when a builder keeps a signed registration, or the name of the rule that refuses it."""
+    ...
+
+def consensus_is_eligible_for_bid(name: str, fork: str, state: bytes, registry: list[bytes], slot: int, parent_hash: bytes, pubkey: bytes) -> bool:
+    """Whether a builder serves a request for a bid."""
+    ...
+
+def consensus_process_bid(name: str, fork: str, config: dict[str, Any] | None, state: bytes, signed: bytes, fee_recipient: bytes) -> str | None:
+    """None when a proposer accepts a signed bid, or the name of the rule that refuses it."""
+    ...
+
+def consensus_unblind_signed_blinded_block(name: str, fork: str, blinded: bytes, revealed: bytes) -> tuple[bytes, bytes] | None:
+    """The root and the bytes of the signed block that a signed blinded block and a payload give."""
     ...
 
 def consensus_verify_builder_request_auth_signature(name: str, fork: str, config: dict[str, Any] | None, pubkey: bytes, data: bytes) -> bool:
@@ -1329,12 +1353,28 @@ def multistream_decode(data: bytes) -> tuple[bytes, bytes]:
     """The multistream-select message at the start of the bytes, and the bytes after it."""
     ...
 
+def multistream_listen(supported: list[bytes], data: bytes) -> tuple[str, bytes, bytes, bytes]:
+    """What a listener does with the bytes it receives, from its start."""
+    ...
+
+def multistream_dial(proposals: list[bytes], data: bytes) -> tuple[str, bytes, bytes, bytes]:
+    """What a dialer does with the bytes it receives, from its start."""
+    ...
+
+def libp2p_upgrade(dialer_yamux: bool, listener_yamux: bool) -> tuple[bytes, bytes]:
+    """The security protocol and the multiplexer of a TCP connection between consensus nodes."""
+    ...
+
 def mplex_encode(frame: dict[str, Any]) -> bytes:
     """The bytes of a valid mplex frame."""
     ...
 
 def mplex_decode(data: bytes) -> tuple[dict[str, Any], bytes]:
     """The mplex frame at the start of the bytes, and the bytes after it."""
+    ...
+
+def mplex_session(events: list[tuple[bool, bytes]]) -> list[tuple[int, bool, str]]:
+    """The streams of one side after the frames it receives and sends, from an empty table."""
     ...
 
 def yamux_encode(frame: dict[str, Any]) -> bytes:
@@ -1537,6 +1577,18 @@ def engine_get_payload_bodies(store: list[tuple[bytes, int | None, str, list[byt
     """The answer to a payload bodies request, from a store of bodies."""
     ...
 
+def engine_read_payload_status(status: dict[str, Any]) -> tuple[str, bytes | None, str | None]:
+    """A payload status read from its JSON, as `json.loads` gives it."""
+    ...
+
+def engine_read_forkchoice_response(response: dict[str, Any]) -> tuple[str, bytes | None, str | None, bytes | None]:
+    """A forkchoice response read from its JSON, as `json.loads` gives it."""
+    ...
+
+def engine_rewrite_params(method: str, params: list[Any]) -> list[Any]:
+    """The parameters of an Engine API request, read by the decoder and written by the writer."""
+    ...
+
 def engine_prepare_execution_payload(name: str, fork: str, state: bytes, config: dict | None, safe_block_hash: bytes, finalized_block_hash: bytes, suggested_fee_recipient: bytes, pow_chain: list[bytes]) -> dict | None:
     """From Bellatrix to Fulu: the forkchoice update of a proposer, as the value of its JSON."""
     ...
@@ -1547,6 +1599,18 @@ def engine_prepare_execution_payload_gloas(name: str, fork: str, anchor_state: b
 
 def engine_finalized_execution_block_hash(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, config: dict | None) -> bytes:
     """From Bellatrix: the 32 bytes of the finalized block hash of a store."""
+    ...
+
+def rpc_read_param(schema: str, value: object) -> int | bytes | tuple[Literal['number'], int] | tuple[Literal['tag'], Literal['earliest', 'finalized', 'safe', 'latest', 'pending']] | tuple[Literal['hash'], bytes, bool]:
+    """Read a parameter of the execution JSON-RPC API under the schema of the given name."""
+    ...
+
+def rpc_error_groups() -> list[tuple[str, tuple[tuple[bool, int], tuple[bool, int]] | None, list[tuple[tuple[bool, int], str]]]]:
+    """The groups of error codes of the execution JSON-RPC API, in the order of the source."""
+    ...
+
+def rpc_pruned_history_unavailable() -> tuple[tuple[bool, int], str]:
+    """The code of history that the node pruned, with its message."""
     ...
 
 def pyvalue_echo(value: object) -> object:

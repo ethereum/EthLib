@@ -6,7 +6,9 @@ public import EthLib.Consensus.Proofs.Accessors.DrawProbability
 public import EthLib.Consensus.Proofs.Accessors.DrawRandomOracle
 public import EthLib.Consensus.Proofs.BeaconApi.Encoding
 public import EthLib.Consensus.Proofs.BuilderApi
+public import EthLib.Consensus.Proofs.BuilderApi.Bid
 public import EthLib.Consensus.Proofs.BuilderApi.Encoding
+public import EthLib.Consensus.Proofs.BuilderApi.Registration
 public import EthLib.Consensus.Proofs.Builders
 public import EthLib.Consensus.Proofs.Churn
 public import EthLib.Consensus.Proofs.ChurnReservations
@@ -37,11 +39,14 @@ public import EthLib.Consensus.Proofs.DataAvailability.Custody
 public import EthLib.Consensus.Proofs.DepositTree
 public import EthLib.Consensus.Proofs.ForkChoice.AncestorRoots
 public import EthLib.Consensus.Proofs.ForkChoice.AttestationScores
+public import EthLib.Consensus.Proofs.ForkChoice.BlockRuns
 public import EthLib.Consensus.Proofs.ForkChoice.BlockStates
 public import EthLib.Consensus.Proofs.ForkChoice.CheckpointAncestry
 public import EthLib.Consensus.Proofs.ForkChoice.CheckpointBlocks
 public import EthLib.Consensus.Proofs.ForkChoice.Checkpoints
+public import EthLib.Consensus.Proofs.ForkChoice.CommitteeAgreement
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation
+public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmationCommittees
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmationConfirmedRoot
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmationIndicators
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmationSets
@@ -189,6 +194,8 @@ public import EthLib.Consensus.Proofs.Transition.Totality.Inactivity
 public import EthLib.Consensus.Proofs.Transition.Totality.Justification
 public import EthLib.Consensus.Proofs.Transition.Totality.Registry
 public import EthLib.Consensus.Proofs.Transition.Totality.RegistryLoad
+public import EthLib.Consensus.Proofs.Transition.Totality.RegistryLoadBlock
+public import EthLib.Consensus.Proofs.Transition.Totality.RegistryLoadChain
 public import EthLib.Consensus.Proofs.Transition.Totality.RegistryLoadUpgrades
 public import EthLib.Consensus.Proofs.Transition.Totality.Rewards
 public import EthLib.Consensus.Proofs.Transition.Totality.RewardsBeforeAltair

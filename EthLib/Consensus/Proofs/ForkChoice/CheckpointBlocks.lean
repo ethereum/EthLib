@@ -128,24 +128,6 @@ private theorem Store.ancestorRoots_parentRoot {root : Root}
   Store.ancestorRoots_of_parent found parentFound lower below
     ⟨_, Store.getAncestor_of_le parentFound above, rfl⟩
 
-/-- In a reachable store, a known block is at or before the slot of its state. -/
-private theorem Store.Reachable.slot_le_of_blockState
-    (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
-    (reachable : Store.Reachable config anchorState anchorBlock store) {root : Root}
-    {block : BeaconBlock preset fork} {state : BeaconState preset fork}
-    (found : store.blocks[root]? = some block)
-    (stateFound : store.blockStates[root]? = some state) : block.slot ≤ state.slot := by
-  obtain ⟨kept, keptFound, isAnchor, notAnchor⟩ := reachable.blockStatesFromParents found
-  rw [stateFound, Option.some.injEq] at keptFound
-  subst keptFound
-  by_cases same : block = anchorBlock
-  · rw [isAnchor same, same]
-    exact anchorSlot
-  · obtain ⟨parentState, checks, engine, signed, -, message, parentFound, transition⟩ :=
-      notAnchor same
-    rw [(stateTransition_slot transition).2, message]
-    exact UInt64.le_refl _
-
 /-- In a reachable store, take a block other than the anchor, whose state hashes to the zero root.
 
 Its latest header then has the root of that block. -/

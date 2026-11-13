@@ -55,6 +55,21 @@ def ssz_static(name: str, fork: str, type_name: str, data: bytes) -> tuple[bytes
     return _native.consensus_ssz_static(name, fork, type_name, data)
 
 
+def api_json(name: str, fork: str, type_name: str, data: bytes) -> dict[str, Any]:
+    """The Beacon API JSON of the beacon container that SSZ bytes encode, or SszError."""
+    # A value is a dict, a list, a str or a bool, nested as the container is.
+    # The values are `Any`, so that a caller indexes nested values without narrowing them.
+    # The order of the keys of a dict carries no meaning.
+    return _native.consensus_api_json(name, fork, type_name, data)
+
+
+def api_ssz(name: str, fork: str, type_name: str, document: object) -> bytes:
+    """The SSZ bytes of the container that a Beacon API JSON document holds, or SszError."""
+    # A value that the bindings cannot pass to Lean, such as a float, raises TypeError.
+    # A negative or too large int, a nesting deeper than 64, or too many parts raise ValueError.
+    return _native.consensus_api_ssz(name, fork, type_name, document)
+
+
 def is_valid_builder_signature(
     name: str,
     fork: str,
@@ -65,6 +80,55 @@ def is_valid_builder_signature(
 ) -> bool:
     """Whether a signed registration or bid of the Builder API verifies."""
     return _native.consensus_is_valid_builder_signature(name, fork, config, type_name, data)
+
+
+def process_registration(
+    name: str,
+    fork: str,
+    state: bytes,
+    registry: list[bytes],
+    signed: bytes,
+    now: int,
+    # `Any`, because `dict` is invariant in its values.
+    config: dict[str, Any] | None = None,
+) -> str | None:
+    """None when a builder keeps a signed registration, or the name of the rule that refuses it."""
+    return _native.consensus_process_registration(name, fork, config, state, registry, signed, now)
+
+
+def is_eligible_for_bid(
+    name: str,
+    fork: str,
+    state: bytes,
+    registry: list[bytes],
+    slot: int,
+    parent_hash: bytes,
+    pubkey: bytes,
+) -> bool:
+    """Whether a builder serves a request for a bid on its state at the slot, or TransitionError."""
+    return _native.consensus_is_eligible_for_bid(
+        name, fork, state, registry, slot, parent_hash, pubkey
+    )
+
+
+def process_bid(
+    name: str,
+    fork: str,
+    state: bytes,
+    signed: bytes,
+    fee_recipient: bytes,
+    # `Any`, because `dict` is invariant in its values.
+    config: dict[str, Any] | None = None,
+) -> str | None:
+    """None when a proposer accepts a signed bid, or the name of the rule that refuses it."""
+    return _native.consensus_process_bid(name, fork, config, state, signed, fee_recipient)
+
+
+def unblind_signed_blinded_block(
+    name: str, fork: str, blinded: bytes, revealed: bytes
+) -> tuple[bytes, bytes] | None:
+    """The root and bytes of the signed block that a signed blinded block and a payload give."""
+    return _native.consensus_unblind_signed_blinded_block(name, fork, blinded, revealed)
 
 
 def verify_builder_request_auth_signature(
@@ -1266,7 +1330,13 @@ __all__ = [
     "get_custody_column_bits",
     "compute_columns_for_custody_group",
     "ssz_static",
+    "api_json",
+    "api_ssz",
     "is_valid_builder_signature",
+    "process_registration",
+    "is_eligible_for_bid",
+    "process_bid",
+    "unblind_signed_blinded_block",
     "verify_builder_request_auth_signature",
     "builder_bid_value",
     "consensus_version",

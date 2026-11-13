@@ -193,6 +193,7 @@ extern PyObject* VALIDATOR_DUTY_ERROR;
 extern PyObject* PROPOSER_ERROR;
 extern PyObject* SLASHING_PROTECTION_ERROR;
 extern PyObject* BINDING_ERROR;
+extern PyObject* RPC_ERROR;
 
 /* ---- Argument parsing helpers ---------------------------------------- */
 
@@ -384,7 +385,13 @@ PyObject* py_consensus_get_custody_groups                 (PyObject* self, PyObj
 PyObject* py_consensus_get_custody_column_bits            (PyObject* self, PyObject* args);
 PyObject* py_consensus_compute_columns_for_custody_group  (PyObject* self, PyObject* args);
 PyObject* py_consensus_ssz_static                         (PyObject* self, PyObject* args);
+PyObject* py_consensus_api_json                           (PyObject* self, PyObject* args);
+PyObject* py_consensus_api_ssz                            (PyObject* self, PyObject* args);
 PyObject* py_consensus_is_valid_builder_signature (PyObject* self, PyObject* args);
+PyObject* py_consensus_process_registration (PyObject* self, PyObject* args);
+PyObject* py_consensus_is_eligible_for_bid (PyObject* self, PyObject* args);
+PyObject* py_consensus_process_bid (PyObject* self, PyObject* args);
+PyObject* py_consensus_unblind_signed_blinded_block (PyObject* self, PyObject* args);
 PyObject* py_consensus_verify_builder_request_auth_signature (PyObject* self, PyObject* args);
 PyObject* py_consensus_builder_bid_value (PyObject* self, PyObject* args);
 PyObject* py_consensus_consensus_version (PyObject* self, PyObject* args);
@@ -545,8 +552,12 @@ PyObject* py_uvarint_encode                               (PyObject* self, PyObj
 PyObject* py_uvarint_decode                               (PyObject* self, PyObject* args);
 PyObject* py_multistream_encode                           (PyObject* self, PyObject* args);
 PyObject* py_multistream_decode                           (PyObject* self, PyObject* args);
+PyObject* py_multistream_listen                           (PyObject* self, PyObject* args);
+PyObject* py_multistream_dial                             (PyObject* self, PyObject* args);
+PyObject* py_libp2p_upgrade                               (PyObject* self, PyObject* args);
 PyObject* py_mplex_encode                                 (PyObject* self, PyObject* args);
 PyObject* py_mplex_decode                                 (PyObject* self, PyObject* args);
+PyObject* py_mplex_session                                (PyObject* self, PyObject* args);
 PyObject* py_yamux_encode                                 (PyObject* self, PyObject* args);
 PyObject* py_yamux_decode                                 (PyObject* self, PyObject* args);
 PyObject* py_libp2p_public_key                            (PyObject* self, PyObject* args);
@@ -634,9 +645,18 @@ PyObject* py_engine_forkchoice_updated                   (PyObject* self, PyObje
 PyObject* py_engine_get_blobs                            (PyObject* self, PyObject* args);
 PyObject* py_engine_get_payload_bodies                   (PyObject* self, PyObject* args);
 PyObject* py_engine_get_payload                          (PyObject* self, PyObject* args);
+PyObject* py_engine_read_payload_status                  (PyObject* self, PyObject* args);
+PyObject* py_engine_read_forkchoice_response             (PyObject* self, PyObject* args);
+PyObject* py_engine_rewrite_params                       (PyObject* self, PyObject* args);
 PyObject* py_engine_prepare_execution_payload            (PyObject* self, PyObject* args);
 PyObject* py_engine_prepare_execution_payload_gloas      (PyObject* self, PyObject* args);
 PyObject* py_engine_finalized_execution_block_hash       (PyObject* self, PyObject* args);
+
+/* ---- Execution JSON-RPC API (`rpc.c`) --------------------------------- */
+
+PyObject* py_rpc_read_param                              (PyObject* self, PyObject* args);
+PyObject* py_rpc_error_groups                            (PyObject* self, PyObject* args);
+PyObject* py_rpc_pruned_history_unavailable              (PyObject* self, PyObject* args);
 
 /* ---- Typed values (`pyvalue.c`) --------------------------------------- */
 

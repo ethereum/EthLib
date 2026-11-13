@@ -2,6 +2,7 @@ module
 
 public import EthLib.Execution.Rpc.Base
 public import EthLib.Serialization.Proofs.JsonRpc
+import EthLib.Base.Proofs.BigEndian
 -- The hex digits of a number must unfold for the decision procedure to read them.
 import all Init.Data.Repr
 
@@ -13,6 +14,8 @@ Each reader of a base type reads back what its writer writes.
 A byte reads back from the digits of its value, and a decimal number from its decimal digits.
 
 The 32-bit and 256-bit numbers read back from their quantities.
+
+A storage slot reads back from the hex digits of its 32 bytes.
 -/
 
 public section
@@ -185,5 +188,81 @@ theorem uintDecimal_uintDecimalJson (what : String) (n : Nat) :
         decide
       have h0 : Nat.digitChar d = '0' := key d hd hx48
       simp [h0])
+
+/-- The two hex digits of each byte, read as one number, give the number that the bytes write. -/
+private theorem foldl_byteHexDigits (data : List UInt8) (acc : Nat) :
+    ((data.flatMap byteHexDigits).map fun c => c.val.toUInt8).foldl
+        (fun a c => 16 * a + ((hexValue false c).getD 0).toNat) acc =
+      data.foldl (fun a b => a * 256 + b.toNat) acc := by
+  induction data generalizing acc with
+  | nil => rfl
+  | cons b data ih =>
+    rw [List.flatMap_cons, List.map_append, List.foldl_append, List.foldl_cons, ← ih]
+    have hv := fun n => hexValue_hexDigitChar false n
+    simp only [Char.toUInt8] at hv
+    simp only [byteHexDigits, List.map_cons, List.map_nil, List.foldl_cons, List.foldl_nil, hv,
+      Option.getD_some]
+    have hb := b.toNat_lt
+    congr 1
+    simp only [Nat.toUInt8_eq, UInt8.toNat_ofNat']
+    omega
+
+/-- Byte `i` of a number written on `len` bytes is its digit worth `256 ^ (len - 1 - i)`. -/
+private theorem getElem_natToBytes {len n i : Nat} (hi : i < len) :
+    (natToBytes len n)[i]'(by rw [natToBytes_length]; exact hi) =
+      UInt8.ofNat (n / 256 ^ (len - 1 - i) % 256) := by
+  have hsplit := natToBytes_add (i + 1) (len - 1 - i) n
+  rw [show i + 1 + (len - 1 - i) = len by omega, natToBytes_succ] at hsplit
+  simp only [hsplit]
+  rw [List.getElem_append_left (by simp [natToBytes_length]),
+    List.getElem_append_right (by simp [natToBytes_length])]
+  simp [natToBytes_length]
+
+/-- A loop whose step multiplies by sixteen and adds the value of a digit computes the fold. -/
+private theorem forIn_hex {ds : List UInt8}
+    {f : UInt8 → Nat → Except String (ForInStep Nat)}
+    (h : ∀ c ∈ ds, ∀ s, f c s = .ok (.yield (16 * s + ((hexValue false c).getD 0).toNat)))
+    (acc : Nat) :
+    forIn ds acc f =
+      .ok (ds.foldl (fun a c => 16 * a + ((hexValue false c).getD 0).toNat) acc) := by
+  induction ds generalizing acc with
+  | nil => rfl
+  | cons c ds ih =>
+    rw [List.forIn_cons, h c (by simp) acc]
+    exact ih (fun c' hc' s => h c' (by simp [hc']) s) _
+
+/-- The reader of storage slots reads back the 32 bytes that the writer of bytes writes. -/
+theorem bytesMax32_dataJson (what : String) (v : Bytes32) :
+    bytesMax32 what (dataJson v.toList) = .ok v := by
+  unfold bytesMax32 dataJson
+  rw [hexDigits_hexString]
+  simp only [bind, Except.bind]
+  have hsize : ((v.toList.flatMap byteHexDigits).map fun c => c.val.toUInt8).toByteArray.size =
+      64 := by
+    simp [byteHexDigits, List.map_const']
+  rw [ite_eq_right (by rw [hsize]; omega), forIn_eq_forIn_toList]
+  have hdata : ((v.toList.flatMap byteHexDigits).map fun c => c.val.toUInt8).toByteArray.data.toList
+      = (v.toList.flatMap byteHexDigits).map fun c => c.val.toUInt8 := by simp
+  rw [hdata, forIn_hex, foldl_byteHexDigits]
+  · simp only [pure, Except.pure, Except.ok.injEq]
+    apply Vector.ext
+    intro i hi
+    have hv := natToBytes_bytesToNat v.toList
+    simp only [Vector.length_toList] at hv
+    rw [Vector.getElem_ofFn]
+    have h := congrArg (·[i]?) hv
+    rw [List.getElem?_eq_getElem (by rw [natToBytes_length]; exact hi), getElem_natToBytes hi,
+      List.getElem?_eq_getElem (by simpa using hi), Option.some.injEq,
+      Vector.getElem_toList] at h
+    rw [← h]
+    rfl
+  · intro c hc s
+    simp only [List.mem_map, List.mem_flatMap, byteHexDigits, List.mem_cons, List.not_mem_nil,
+      or_false] at hc
+    obtain ⟨_, ⟨b, -, rfl | rfl⟩, rfl⟩ := hc <;>
+    · have hv := hexValue_hexDigitChar false
+      simp only [Char.toUInt8] at hv
+      rw [hv]
+      rfl
 
 end EthLib.Execution.Rpc

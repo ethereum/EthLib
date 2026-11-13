@@ -45,6 +45,7 @@ directories = [
 [repositories."ethereum/beacon-APIs"]
 commit = "7911555e6a30c51f9b69bb168111a59f1ff8ee49"
 release = "v5.0.0-beta.0"
+directories = ["tests/consensus/beacon_api"]
 
 [repositories."ethereum/builder-specs"]
 commit = "fce64468a81a87892d7cb9b4858272bb3d010e50"
@@ -123,7 +124,7 @@ directories = ["bindings/python/tests/ethash/spec"]
 
 [repositories."ethereum/execution-apis"]
 commit = "3284ee80c3da3e516c53782dde75157cccf1ebdc"
-directories = ["bindings/python/tests/trie/getproof"]
+directories = ["bindings/python/tests/rpc/fixtures", "bindings/python/tests/trie/getproof", "tests/engine"]
 
 [repositories."ethereum/yellowpaper"]
 commit = "efc5f9a1f356cba376c978eedb63cb0363c2aa85"

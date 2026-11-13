@@ -3,6 +3,7 @@
 import hashlib
 import json
 import struct
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -10,7 +11,8 @@ import pytest
 from py_ecc.bls import G2ProofOfPossession
 
 from ethlib import consensus
-from ethlib.errors import SszError
+from ethlib.errors import SszError, TransitionError
+from ethlib.networking import snappy
 from raising import raises
 
 ERROR = SszError
@@ -377,6 +379,97 @@ def test_no_blobs_bundle_outside_deneb_to_fulu(fork: str, name: str):
     assert info.value.code == 0
 
 
+# The example of the payload that a builder reveals, by fork.
+REVEALED = {
+    "bellatrix": "execution_payload",
+    "capella": "execution_payload",
+    "deneb": "execution_payload_and_blobs_bundle",
+    "electra": "execution_payload_and_blobs_bundle",
+    "fulu": "execution_payload_and_blobs_bundle",
+}
+# The generalized index of the transactions root of a payload: 16 leaves before Deneb, 32 from it.
+TRANSACTIONS_AT = {"bellatrix": 29, "capella": 29, "deneb": 45, "electra": 45, "fulu": 45}
+# The header of a payload holds the transactions root after 504 bytes.
+# From Capella the withdrawals root follows it.
+HEADER_TRANSACTIONS_AT = 504
+
+
+def _payload(source: str) -> bytes:
+    """The payload alone of the example that a builder reveals at a fork."""
+    data = _example(source, REVEALED[source])
+    if source in ("bellatrix", "capella"):
+        return data
+    payload_at, bundle_at = struct.unpack_from("<II", data, 0)
+    return data[payload_at:bundle_at]
+
+
+def _header_at(signed: bytes) -> int:
+    """Where the header of the payload starts in a signed blinded block."""
+    (message_at,) = struct.unpack_from("<I", signed, 0)
+    (body_at,) = struct.unpack_from("<I", signed, message_at + 80)
+    # Before the header: the reveal, the eth1 vote, the graffiti, five offsets, the sync aggregate.
+    (header_at,) = struct.unpack_from("<I", signed, message_at + body_at + 96 + 72 + 32 + 20 + 160)
+    return message_at + body_at + header_at
+
+
+def _matching_blinded(source: str) -> bytes:
+    """The example blinded block, with the payload's transactions and withdrawals roots."""
+    fork = consensus.consensus_version_fork(source)
+    payload = _payload(source)
+    signed = bytearray(_example(source, "signed_blinded_beacon_block"))
+    at = _header_at(bytes(signed)) + HEADER_TRANSACTIONS_AT
+    for offset in range(2 if source != "bellatrix" else 1):
+        gindex = TRANSACTIONS_AT[source] + offset
+        node, _ = consensus.merkle_proof("mainnet", fork, "ExecutionPayload", payload, gindex)
+        signed[at + 32 * offset : at + 32 * offset + 32] = node
+    return bytes(signed)
+
+
+@pytest.mark.parametrize("source", VERSIONS)
+def test_unblind(source: str):
+    # A blinded block whose header is that of the payload unblinds to a block of the same root.
+    fork = consensus.consensus_version_fork(source)
+    blinded = _matching_blinded(source)
+    blinded_root, _ = consensus.ssz_static("mainnet", fork, "SignedBlindedBeaconBlock", blinded)
+    revealed = _example(source, REVEALED[source])
+    result = consensus.unblind_signed_blinded_block("mainnet", fork, blinded, revealed)
+    assert result is not None
+    root, full = result
+    assert consensus.ssz_static("mainnet", fork, "SignedBeaconBlock", full) == (root, full)
+    # The block has the root of the blinded block, keeps its signature and holds the payload.
+    assert root == blinded_root
+    assert full[4:100] == blinded[4:100]
+    assert _payload(source) in full
+
+
+@pytest.mark.parametrize("source", VERSIONS)
+def test_unblind_example_pair(source: str):
+    # The pinned blinded block carries placeholder roots, so its header is not that of the payload.
+    fork = consensus.consensus_version_fork(source)
+    blinded = _example(source, "signed_blinded_beacon_block")
+    revealed = _example(source, REVEALED[source])
+    assert consensus.unblind_signed_blinded_block("mainnet", fork, blinded, revealed) is None
+
+
+def test_unblind_changed_payload():
+    # One bit of the block hash changes the header, so the payload no longer matches.
+    blinded = _matching_blinded("deneb")
+    revealed = bytearray(_example("deneb", REVEALED["deneb"]))
+    (payload_at,) = struct.unpack_from("<I", revealed, 0)
+    revealed[payload_at + 472] ^= 1
+    assert (
+        consensus.unblind_signed_blinded_block("mainnet", "dencun", blinded, bytes(revealed))
+        is None
+    )
+
+
+@pytest.mark.parametrize("fork", ["altair", "glamsterdam"])
+def test_no_unblinding_outside_bellatrix_to_fulu(fork: str):
+    with raises(ERROR, f"no Builder API messages at {fork}") as info:
+        consensus.unblind_signed_blinded_block("mainnet", fork, b"", b"")
+    assert info.value.code == 0
+
+
 def test_unknown_message():
     with raises(ERROR, "no signed message SignedBlindedBeaconBlock in the Builder API") as info:
         consensus.is_valid_builder_signature(
@@ -556,4 +649,247 @@ def test_builder_bid_value_out_of_range(value: int, position: int):
     amounts[position] = value
     with raises(consensus.ConsensusError, f"expected an int below {2**64}, got {value}") as info:
         consensus.builder_bid_value(*amounts)
+    assert info.value.code == 0
+
+
+# A minimal Bellatrix state of the consensus tests, whose validator i has the secret key i + 1.
+STATE = (
+    Path(__file__).resolve().parents[4]
+    / "tests/consensus/light_client/minimal/bellatrix/light_client/single_merkle_proof"
+    / "BeaconState/current_sync_committee_merkle_proof/object.ssz_snappy"
+)
+# The validator of the registrations below, and its secret key.
+INDEX = 3
+# A registration message: fee recipient, gas limit, timestamp and key.
+MESSAGE_SIZE = 20 + 8 + 8 + 48
+REGISTRANT_KEY = INDEX + 1
+# The activation epoch follows the key, credentials, balance, slashed flag and eligibility.
+ACTIVATION_AFTER_KEY = 48 + 32 + 8 + 1 + 8
+FAR_FUTURE = 2**64 - 1
+
+
+def _state() -> bytes:
+    """The pinned state, which every registration below reads."""
+    return snappy.decompress(STATE.read_bytes())
+
+
+def _with_epochs(state: bytes, activation: int, exit_epoch: int) -> bytes:
+    """The state with new activation and exit epochs for the registering validator."""
+    at = state.index(G2ProofOfPossession.SkToPk(REGISTRANT_KEY)) + ACTIVATION_AFTER_KEY
+    return state[:at] + struct.pack("<QQ", activation, exit_epoch) + state[at + 16 :]
+
+
+def _signed_registration(timestamp: int, key: int = REGISTRANT_KEY) -> bytes:
+    """A registration of a key at a time, signed by that key under the Builder API domain."""
+    pubkey = G2ProofOfPossession.SkToPk(key)
+    message = bytes(20) + struct.pack("<QQ", 30_000_000, timestamp) + pubkey
+    # The minimal configuration has its own genesis fork version, which enters the domain.
+    version = bytes.fromhex(consensus.config("minimal")["GENESIS_FORK_VERSION"][2:])
+    root = _sha(_registration_root(message) + _builder_domain(version))
+    return message + G2ProofOfPossession.Sign(key, root)
+
+
+def _register(
+    signed: bytes, now: int, state: bytes | None = None, kept: Sequence[bytes] = ()
+) -> str | None:
+    """The rule that refuses a registration on the pinned state, or None when it is kept."""
+    state = _state() if state is None else state
+    return consensus.process_registration("minimal", "bellatrix", state, list(kept), signed, now)
+
+
+@pytest.mark.parametrize(
+    ("now", "expected"),
+    [(89, "too_far_in_future"), (90, None), (100, None)],
+    ids=["eleven seconds ahead", "ten seconds ahead", "on time"],
+)
+def test_registration_lookahead(now: int, expected: str | None):
+    # A registration may be at most ten seconds ahead of the builder's clock.
+    assert _register(_signed_registration(100), now) == expected
+
+
+def test_registration_older_than_kept():
+    kept = _signed_registration(101)[:MESSAGE_SIZE]
+    assert _register(_signed_registration(100), 100, kept=[kept]) == "older_than_previous"
+    assert _register(_signed_registration(101), 100, kept=[kept]) is None
+
+
+def test_registration_of_unknown_key():
+    assert _register(_signed_registration(100, key=10**6), 100) == "unknown_validator"
+
+
+def test_registration_of_exited_validator():
+    state = _with_epochs(_state(), 0, 0)
+    assert _register(_signed_registration(100), 100, state) == "not_eligible"
+
+
+def test_registration_of_pending_validator():
+    # A validator whose activation is still ahead may register.
+    state = _with_epochs(_state(), FAR_FUTURE, FAR_FUTURE)
+    assert _register(_signed_registration(100), 100, state) is None
+
+
+def test_registration_with_another_signature():
+    signed = _signed_registration(100)
+    other = _signed_registration(101)
+    assert _register(signed[:MESSAGE_SIZE] + other[MESSAGE_SIZE:], 100) == "bad_signature"
+
+
+def test_registration_clock_overflow():
+    # The source adds the lookahead to the clock as a 64-bit integer, which fails at the end.
+    assert _register(_signed_registration(100), 2**64 - 10) == "clock_overflow"
+    assert _register(_signed_registration(100), 2**64 - 11) is None
+
+
+def test_registration_rules_in_order():
+    # The first rule that fails names the refusal.
+    signed = _signed_registration(150, key=10**6)
+    assert _register(signed[:MESSAGE_SIZE] + bytes(96), 100) == "unknown_validator"
+    state = _with_epochs(_state(), 0, 0)
+    assert _register(_signed_registration(150), 100, state) == "not_eligible"
+
+
+# Where a minimal state stores the offset of its latest payload header, from Bellatrix to Fulu.
+HEADER_OFFSET_AT = 10_229
+# The block hash follows 472 bytes of the header: the parent hash, the fee recipient, two roots,
+# the bloom, the RANDAO mix, four numbers, the offset of the extra data and the base fee.
+BLOCK_HASH_IN_HEADER = 472
+# The slot follows the genesis time and the genesis validators root.
+SLOT_AT = 40
+# A fee recipient that no pinned bid names.
+OTHER_RECIPIENT = bytes(19) + b"\x13"
+
+
+def _fork_state(source: str) -> bytes:
+    """The pinned minimal state of the fork of a consensus version."""
+    path = (
+        Path(__file__).resolve().parents[4]
+        / f"tests/consensus/light_client/minimal/{source}/light_client/single_merkle_proof"
+        / "BeaconState/current_sync_committee_merkle_proof/object.ssz_snappy"
+    )
+    return snappy.decompress(path.read_bytes())
+
+
+def _block_hash_at(state: bytes) -> int:
+    """The position of the block hash of the latest payload header of a minimal state."""
+    (header,) = struct.unpack_from("<I", state, HEADER_OFFSET_AT)
+    return header + BLOCK_HASH_IN_HEADER
+
+
+def _with_block_hash(state: bytes, block_hash: bytes) -> bytes:
+    """The state with another block hash in its latest payload header."""
+    at = _block_hash_at(state)
+    return state[:at] + block_hash + state[at + 32 :]
+
+
+def _minimal_bid(source: str, key: int = SECRET_KEY) -> bytes:
+    """The example bid of a fork, with the test key as builder, signed for the minimal chain."""
+    message, _ = _split(_example(source, "signed_builder_bid"))
+    at = VALUE_AT[source] + 32
+    message = message[:at] + PUBKEY + message[at + 48 :]
+    fork = consensus.consensus_version_fork(source)
+    root, again = consensus.ssz_static("minimal", fork, "BuilderBid", message)
+    assert again == message
+    version = bytes.fromhex(consensus.config("minimal")["GENESIS_FORK_VERSION"][2:])
+    signature = G2ProofOfPossession.Sign(key, _sha(root + _builder_domain(version)))
+    return struct.pack("<I", 4 + 96) + signature + message
+
+
+def _bid_header(signed: bytes) -> tuple[bytes, bytes]:
+    """The parent hash and the fee recipient of the header of a signed bid."""
+    message, _ = _split(signed)
+    (header,) = struct.unpack_from("<I", message, 0)
+    return message[header : header + 32], message[header + 32 : header + 52]
+
+
+def _process_bid(source: str, state: bytes, signed: bytes, fee_recipient: bytes) -> str | None:
+    """The rule that refuses a bid on a minimal state, or None when the proposer accepts it."""
+    fork = consensus.consensus_version_fork(source)
+    return consensus.process_bid("minimal", fork, state, signed, fee_recipient)
+
+
+@pytest.mark.parametrize("source", VERSIONS)
+def test_process_bid(source: str):
+    signed = _minimal_bid(source)
+    parent, recipient = _bid_header(signed)
+    state = _with_block_hash(_fork_state(source), parent)
+    assert _process_bid(source, state, signed, recipient) is None
+    assert _process_bid(source, state, signed, OTHER_RECIPIENT) == "wrong_fee_recipient"
+    other_parent = bytes(a ^ 1 for a in parent)
+    moved = _with_block_hash(state, other_parent)
+    assert _process_bid(source, moved, signed, recipient) == "wrong_parent_hash"
+    # The rules run in order: the parent hash is checked before the fee recipient.
+    assert _process_bid(source, moved, signed, OTHER_RECIPIENT) == "wrong_parent_hash"
+
+
+@pytest.mark.parametrize("source", VERSIONS)
+def test_process_bid_signed_by_another_key(source: str):
+    # The bid names the test key, and another key signed it.
+    signed = _minimal_bid(source, key=SECRET_KEY + 1)
+    parent, recipient = _bid_header(signed)
+    state = _with_block_hash(_fork_state(source), parent)
+    assert _process_bid(source, state, signed, recipient) == "bad_signature"
+    # The signature is checked last.
+    assert _process_bid(source, state, signed, OTHER_RECIPIENT) == "wrong_fee_recipient"
+    moved = _with_block_hash(state, bytes(a ^ 1 for a in parent))
+    assert _process_bid(source, moved, signed, recipient) == "wrong_parent_hash"
+
+
+def _proposer(source: str, state: bytes) -> int:
+    """The index of the proposer of the slot of a minimal state."""
+    fork = consensus.consensus_version_fork(source)
+    index = 0
+    while not consensus.is_proposer("minimal", fork, state, index):
+        index += 1
+    return index
+
+
+def _registered(index: int) -> bytes:
+    """A registration message of a validator of the pinned states, whose secret key is index + 1."""
+    pubkey = G2ProofOfPossession.SkToPk(index + 1)
+    return bytes(20) + struct.pack("<QQ", 30_000_000, 100) + pubkey
+
+
+def _eligible(
+    source: str, state: bytes, kept: Sequence[bytes], slot: int, parent: bytes, pubkey: bytes
+) -> bool:
+    """Whether a builder serves a request for a bid on a minimal state."""
+    fork = consensus.consensus_version_fork(source)
+    return consensus.is_eligible_for_bid("minimal", fork, state, list(kept), slot, parent, pubkey)
+
+
+@pytest.mark.parametrize("source", VERSIONS)
+def test_is_eligible_for_bid(source: str):
+    state = _fork_state(source)
+    (slot,) = struct.unpack_from("<Q", state, SLOT_AT)
+    at = _block_hash_at(state)
+    parent = state[at : at + 32]
+    proposer = _proposer(source, state)
+    other = proposer + 1
+    pubkey = G2ProofOfPossession.SkToPk(proposer + 1)
+    kept = [_registered(proposer), _registered(other)]
+    assert _eligible(source, state, kept, slot, parent, pubkey)
+    # A request for another slot than that of the state.
+    assert not _eligible(source, state, kept, slot + 1, parent, pubkey)
+    # A proposer that has not registered.
+    assert not _eligible(source, state, kept[1:], slot, parent, pubkey)
+    # A registered validator that does not propose at the slot.
+    other_key = G2ProofOfPossession.SkToPk(other + 1)
+    assert not _eligible(source, state, kept, slot, parent, other_key)
+    # Another parent hash than the latest block hash of the state.
+    assert not _eligible(source, state, kept, slot, bytes(a ^ 1 for a in parent), pubkey)
+
+
+@pytest.mark.parametrize("fork", ["altair", "glamsterdam"])
+def test_no_bids_outside_bellatrix_to_fulu(fork: str):
+    with raises(ERROR, f"no Builder API messages at {fork}") as info:
+        consensus.process_bid("minimal", fork, b"", b"", bytes(20))
+    assert info.value.code == 0
+    with raises(TransitionError, f"no Builder API messages at {fork}") as info:
+        consensus.is_eligible_for_bid("minimal", fork, b"", [], 0, ZERO, bytes(48))
+    assert info.value.code == 0
+
+
+def test_is_eligible_for_bid_state_that_does_not_decode():
+    with raises(TransitionError, "state rejected: EthLib.Serialization.Ssz.Err.scopeTooSmall 10233 0") as info:
+        consensus.is_eligible_for_bid("minimal", "bellatrix", b"", [], 0, ZERO, bytes(48))
     assert info.value.code == 0

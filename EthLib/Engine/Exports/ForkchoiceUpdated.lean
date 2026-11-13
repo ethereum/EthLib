@@ -84,16 +84,28 @@ def forkchoiceUpdatedOf (args : PyValue × PyValue × PyValue × PyValue) : Resu
     | throw (0, "request: no method")
   let some version := forkchoiceUpdatedVersion method | throw (0, s!"no method {method}")
   let answer := forkchoiceUpdatedCall config version tree finalized (request.getObjValD "params")
-  let (status, head, attributes) ←
-    answer.mapError fun e => (e.code, s!"engine error: {reprStr e}")
+  let result ← answer.mapError fun e => (e.code, s!"engine error: {reprStr e}")
   -- Step 8: valid attributes on an applied valid head start a build, named by its ID.
-  let id := match head, attributes with
-    | some h, some a => dataJson (payloadId h a.2).toList
-    | _, _ => .null
-  let response := Json.mkObj [
-    ("payloadStatus", statusJson status none),
-    ("payloadId", id)]
-  return .ofJson response
+  let (status, id) := forkchoiceUpdatedResponse result
+  return .ofJson (forkchoiceUpdatedResponseJson status none id)
+
+/-- A forkchoice response read from its JSON: the status name, the hash, the error, the ID.
+
+The hash, the error and the ID are `None` in Python when the JSON has no value for them. -/
+def readForkchoiceResponseOf (response : PyValue) :
+    Result (String × Option ByteArray × Option String × Option ByteArray) := do
+  let (s, e, id) ← (forkchoiceUpdatedResponseOfJson response.toJson).mapError
+    fun e => (e.code, s!"engine error: {reprStr e}")
+  return (s.status.name, s.latestValidHash.map (⟨·.toArray⟩), e, id.map (⟨·.toArray⟩))
+
+/-- A forkchoice response read from its JSON, as `json.loads` gives it.
+
+The result is the status name, the latest valid hash, the validation error and the payload ID.
+
+A response that does not decode is an invalid parameter, with code 32602. -/
+@[export eth_engine_read_forkchoice_response]
+def readForkchoiceResponseExport (args : PyValue) : Result PyValue :=
+  pyExport readForkchoiceResponseOf args
 
 /-- The response to an `engine_forkchoiceUpdated` request, against a tree of payloads.
 

@@ -67,6 +67,26 @@ eth_consensus_is_valid_builder_signature(
 );
 
 extern lean_object*
+eth_consensus_process_registration(
+  lean_object* args
+);
+
+extern lean_object*
+eth_consensus_is_eligible_for_bid(
+  lean_object* args
+);
+
+extern lean_object*
+eth_consensus_process_bid(
+  lean_object* args
+);
+
+extern lean_object*
+eth_consensus_unblind_signed_blinded_block(
+  lean_object* args
+);
+
+extern lean_object*
 eth_consensus_verify_builder_request_auth_signature(
   lean_object* args
 );
@@ -86,6 +106,12 @@ extern lean_object*
 eth_consensus_ssz_static(
   lean_object* args
 );
+
+extern lean_object*
+eth_consensus_api_json(lean_object* args);
+
+extern lean_object*
+eth_consensus_api_ssz(lean_object* args);
 
 extern lean_object*
 eth_pq_keys_ssz(
@@ -548,11 +574,59 @@ py_consensus_ssz_static(
 }
 
 PyObject*
+py_consensus_api_json(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_json, args, 4, SSZ_ERROR);
+}
+
+PyObject*
+py_consensus_api_ssz(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_ssz, args, 4, SSZ_ERROR);
+}
+
+PyObject*
 py_consensus_is_valid_builder_signature(
   PyObject* self,
   PyObject* args
 ) {
   return call_pyvalue_export(eth_consensus_is_valid_builder_signature, args, 5, SSZ_ERROR);
+}
+
+PyObject*
+py_consensus_process_registration(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_process_registration, args, 7, SSZ_ERROR);
+}
+
+PyObject*
+py_consensus_is_eligible_for_bid(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_is_eligible_for_bid, args, 7, TRANSITION_ERROR);
+}
+
+PyObject*
+py_consensus_process_bid(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_process_bid, args, 6, SSZ_ERROR);
+}
+
+PyObject*
+py_consensus_unblind_signed_blinded_block(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_unblind_signed_blinded_block, args, 4, SSZ_ERROR);
 }
 
 PyObject*

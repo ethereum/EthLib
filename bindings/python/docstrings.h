@@ -419,8 +419,26 @@
 #define DOC_consensus_ssz_static \
   "The root of the value that the bytes encode, and the bytes of that value, as a pair."
 
+#define DOC_consensus_api_json \
+  "The JSON of the API for the value that SSZ bytes encode."
+
+#define DOC_consensus_api_ssz \
+  "The SSZ bytes of the value that a JSON document of the API holds."
+
 #define DOC_consensus_is_valid_builder_signature \
   "Whether the signature of a signed message of the Builder API verifies."
+
+#define DOC_consensus_process_registration \
+  "None when a builder keeps a signed registration, or the name of the rule that refuses it."
+
+#define DOC_consensus_is_eligible_for_bid \
+  "Whether a builder serves a request for a bid."
+
+#define DOC_consensus_process_bid \
+  "None when a proposer accepts a signed bid, or the name of the rule that refuses it."
+
+#define DOC_consensus_unblind_signed_blinded_block \
+  "The root and the bytes of the signed block that a signed blinded block and a payload give."
 
 #define DOC_consensus_verify_builder_request_auth_signature \
   "Whether a proposer key signed a Gloas request authentication given in SSZ."
@@ -995,11 +1013,23 @@
 #define DOC_multistream_decode \
   "The multistream-select message at the start of the bytes, and the bytes after it."
 
+#define DOC_multistream_listen \
+  "What a listener does with the bytes it receives, from its start."
+
+#define DOC_multistream_dial \
+  "What a dialer does with the bytes it receives, from its start."
+
+#define DOC_libp2p_upgrade \
+  "The security protocol and the multiplexer of a TCP connection between consensus nodes."
+
 #define DOC_mplex_encode \
   "The bytes of a valid mplex frame."
 
 #define DOC_mplex_decode \
   "The mplex frame at the start of the bytes, and the bytes after it."
+
+#define DOC_mplex_session \
+  "The streams of one side after the frames it receives and sends, from an empty table."
 
 #define DOC_yamux_encode \
   "The bytes of a valid yamux frame."
@@ -1151,6 +1181,15 @@
 #define DOC_engine_get_payload_bodies \
   "The answer to a payload bodies request, from a store of bodies."
 
+#define DOC_engine_read_payload_status \
+  "A payload status read from its JSON, as `json.loads` gives it."
+
+#define DOC_engine_read_forkchoice_response \
+  "A forkchoice response read from its JSON, as `json.loads` gives it."
+
+#define DOC_engine_rewrite_params \
+  "The parameters of an Engine API request, read by the decoder and written by the writer."
+
 #define DOC_engine_prepare_execution_payload \
   "From Bellatrix to Fulu: the forkchoice update of a proposer, as the value of its JSON."
 
@@ -1159,6 +1198,15 @@
 
 #define DOC_engine_finalized_execution_block_hash \
   "From Bellatrix: the 32 bytes of the finalized block hash of a store."
+
+#define DOC_rpc_read_param \
+  "Read a parameter of the execution JSON-RPC API under the schema of the given name."
+
+#define DOC_rpc_error_groups \
+  "The groups of error codes of the execution JSON-RPC API, in the order of the source."
+
+#define DOC_rpc_pruned_history_unavailable \
+  "The code of history that the node pruned, with its message."
 
 #define DOC_pyvalue_echo \
   "The value that Python passes, back to Python, with each failure tuple read as a failure."

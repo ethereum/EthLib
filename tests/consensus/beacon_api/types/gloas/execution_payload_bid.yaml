@@ -1,0 +1,43 @@
+Gloas:
+  ExecutionPayloadBid:
+    type: object
+    description: "The [`ExecutionPayloadBid`](https://github.com/ethereum/consensus-specs/blob/v1.7.0-beta.0/specs/gloas/beacon-chain.md#executionpayloadbid) object from the CL Gloas spec."
+    required: [parent_block_hash, parent_block_root, block_hash, prev_randao, fee_recipient, gas_limit, builder_index, slot, value, execution_payment, blob_kzg_commitments, execution_requests_root]
+    properties:
+      parent_block_hash:
+        $ref: "../primitive.yaml#/Hash32"
+      parent_block_root:
+        $ref: "../primitive.yaml#/Root"
+      block_hash:
+        $ref: "../primitive.yaml#/Hash32"
+      prev_randao:
+        $ref: "../primitive.yaml#/Bytes32"
+      fee_recipient:
+        $ref: "../primitive.yaml#/ExecutionAddress"
+      gas_limit:
+        $ref: "../primitive.yaml#/Uint64"
+      builder_index:
+        $ref: "../primitive.yaml#/Uint64"
+      slot:
+        $ref: "../primitive.yaml#/Uint64"
+      value:
+        $ref: "../primitive.yaml#/Gwei"
+      execution_payment:
+        $ref: "../primitive.yaml#/Gwei"
+      blob_kzg_commitments:
+        type: array
+        maxItems: 4096
+        items:
+          $ref: '../primitive.yaml#/KZGCommitment'
+      execution_requests_root:
+        $ref: "../primitive.yaml#/Root"
+
+  SignedExecutionPayloadBid:
+    type: object
+    description: "The [`SignedExecutionPayloadBid`](https://github.com/ethereum/consensus-specs/blob/v1.7.0-beta.0/specs/gloas/beacon-chain.md#signedexecutionpayloadbid) object from the CL Gloas spec."
+    required: [message, signature]
+    properties:
+      message:
+        $ref: "#/Gloas/ExecutionPayloadBid"
+      signature:
+        $ref: "../primitive.yaml#/Signature"

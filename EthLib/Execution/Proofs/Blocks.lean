@@ -29,6 +29,7 @@ public import EthLib.Execution.Proofs.Blocks.SystemCall.BeaconRoots
 public import EthLib.Execution.Proofs.Blocks.SystemCall.Contract
 public import EthLib.Execution.Proofs.Blocks.SystemCall.ConsolidationRequests
 public import EthLib.Execution.Proofs.Blocks.SystemCall.HistoryStorage
+public import EthLib.Execution.Proofs.Blocks.SystemCall.LowGas
 public import EthLib.Execution.Proofs.Blocks.SystemCall.RequestQueue
 public import EthLib.Execution.Proofs.Blocks.SystemCall.WithdrawalRequests
 public import EthLib.Execution.Proofs.Blocks.SystemCallFollow
