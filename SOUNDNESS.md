@@ -3373,13 +3373,27 @@ They also run the example version and commit of `ClientVersionV1`, codes in eith
 
 The theorems about `engine_forkchoiceUpdated` are in `Proofs/ForkchoiceUpdated.lean`.
 `forkchoiceUpdated_valid` shows that a valid answer selects a valid head that the execution layer holds, with its safe and finalized blocks on its chain.
+The chain of that head also passes the terminal block check, and its safe and finalized hashes are not zero after the transition.
 The exception is step 2 of the method, which `forkchoiceUpdated_of_belowFinalized` covers.
 `onChain_of_forkchoiceUpdated` shows that an applied head is the head that the state names, and `mem_chainOf_of_onChain` that a nonzero safe or finalized hash then names a block of its chain.
 A valid head below the finalized block that the execution layer knows is `VALID` there, and the head does not change.
-`forkchoiceUpdated_of_invalid` gives the answer for an invalid head, and `latestValid_eq_some_iff` with `getElem?_succ_chainOf` shows that its latest valid hash is the valid ancestor nearest the head.
+`forkchoiceUpdated_of_invalid` gives the answer for an invalid head, and `latestValid_eq_some_iff` with `getElem?_succ_chainOf` shows that its latest valid block is the valid ancestor nearest the head.
+That block gives the latest valid hash, which is zero when the block is of proof of work, as step 3 of payload validation requires (`latestValidHash_spec`, `latestValidHash_of_isPow`).
+
+The tree that the execution layer knows may hold blocks of proof of work, each with its total difficulty and that of its parent.
+The most recent block of proof of work on the chain of the head, the head included, must be terminal by the conditions of EIP-3675.
+Step 3 of the method asks this of a head of proof of work, and step 2 of payload validation of a payload.
+`forkchoiceUpdated_of_not_terminal` shows that a head whose chain fails the check is `INVALID`, with the zero hash, and that the head does not change.
+`forkchoiceUpdated_of_pow_not_terminal` states the same for a head of proof of work that is not terminal.
+A chain with no block of proof of work in the tree passes the check, since its terminal block is not known.
+The forkchoice state allows zero safe and finalized hashes only until the transition block is finalized.
+The model takes that block as finalized when the finalized block that the execution layer knows is a payload of the tree.
+`forkchoiceUpdated_zero_after_transition` shows that a zero safe or finalized hash then gives `-38002`.
+No step of the method names that error for this case, so the model reads it as an invalid forkchoice state of step 9.
 In version 4, custody columns that decode never change the answer (`forkchoiceUpdatedCall_custody`), and without payload attributes every version gives the same answer (`forkchoiceUpdatedCall_of_null`).
-The model has no timestamps, so it checks neither the fork of the payload attributes nor that their timestamp is above the head's.
-For the same reason, version 2 takes both structures of the attributes at any time.
+`checkAttributes_eq_ok_iff` states when attributes pass their checks against the head: the version takes their fork, their structure is that of the fork, and their timestamp is above the head's.
+A fork that the version does not take gives `-38005` (`checkAttributes_eq_error_of_unsupportedFork`).
+A structure that is not that of the fork, or a timestamp not above the head's, gives `-38003` (`checkAttributes_eq_error_of_wrong_structure`, `checkAttributes_eq_error_of_not_after_head`).
 When the update applies a valid head, attributes whose fields fit no structure of the version give `-38003` (`forkchoiceUpdatedCall_eq_error_of_attributes`, with `payloadAttributesOfVersion_eq_error_iff` and `payloadAttributesOfJson_wrong_fields`), and when it applies none they are not read (`forkchoiceUpdatedCall_of_no_head`).
 Version 1 names no code for a wrong structure, and the model gives it `-38003`, the answer of its step 9 for invalid attributes.
 The OpenRPC description of the method makes the payload attributes optional, but the model asks for them, as `null` when there are none.

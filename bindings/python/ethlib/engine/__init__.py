@@ -1,7 +1,7 @@
 """The Engine API between the consensus and the execution layers."""
 
 from collections.abc import Sequence
-from typing import Any, TypeAlias
+from typing import Any, Final, TypeAlias
 
 # Every domain links into one extension module.
 # That module lives in the `cryptography` package.
@@ -76,14 +76,28 @@ def build_payload(
     )
 
 
+# The terminal total difficulty that both layers hold while it is not decided: 2^256 - 2^10.
+UNDECIDED_TERMINAL_TOTAL_DIFFICULTY: Final = 2**256 - 2**10
+
+
 def forkchoice_updated(
-    config: dict, tree: list, method: str, params: list, finalized: str | None = None
+    config: dict,
+    tree: list,
+    method: str,
+    params: list,
+    finalized: str | None = None,
+    *,
+    terminal_total_difficulty: int = UNDECIDED_TERMINAL_TOTAL_DIFFICULTY,
 ) -> dict:
-    """The response to an `engine_forkchoiceUpdated` call, against a tree of known payloads."""
-    # Each payload of the tree has a block hash, a parent hash, a validity, a number and a time.
+    """The response to an `engine_forkchoiceUpdated` call, against a tree of known blocks."""
+    # Each block of the tree has a block hash, a parent hash, a validity, a number and a time.
+    # A block of proof of work also has `totalDifficulty` and `parentTotalDifficulty`.
+    # The most recent one on the chain of the head must be terminal for `terminal_total_difficulty`.
     # The execution layer may know a finalized block, the latest one an earlier update named.
     request = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
-    return _native.engine_forkchoice_updated(config, tree, finalized, request)
+    return _native.engine_forkchoice_updated(
+        config, tree, finalized, terminal_total_difficulty, request
+    )
 
 
 # One entry of a blob pool: the versioned hash, the blob, the blob proof, and the 128 cells.
@@ -327,6 +341,7 @@ __all__ = [
     "new_payload",
     "new_payload_on_chain",
     "forkchoice_updated",
+    "UNDECIDED_TERMINAL_TOTAL_DIFFICULTY",
     "get_blobs",
     "PoolEntry",
     "get_payload",

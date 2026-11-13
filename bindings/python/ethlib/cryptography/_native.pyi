@@ -1685,7 +1685,7 @@ def engine_build_payload(config: dict, state: bytes, recent: list[tuple[str, byt
     """Build a payload on a chain, from attributes, the builder's choices and transactions."""
     ...
 
-def engine_forkchoice_updated(config: dict, tree: list, finalized: str | None, request: dict) -> dict:
+def engine_forkchoice_updated(config: dict, tree: list, finalized: str | None, terminal_total_difficulty: int, request: dict) -> dict:
     """The response to an `engine_forkchoiceUpdated` request, against a tree of payloads."""
     ...
 

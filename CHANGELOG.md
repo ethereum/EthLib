@@ -9,6 +9,17 @@ Not yet released.
 
 ### Changes that break callers
 
+- `engine_forkchoiceUpdated` checks that the most recent block of proof of work on the chain of the head is terminal, as step 3 of the method and step 2 of payload validation of Paris require.
+  A head whose chain fails the check is `INVALID`, with the zero hash, and the head does not change.
+  Once the known finalized block is a payload, a zero safe or finalized hash gives `-38002`.
+  The latest valid hash of an invalid head is zero when its latest valid block is of proof of work.
+  In Lean, `KnownPayload` has the new field `powTotalDifficulty`, `none` for a payload, so its anonymous constructor takes a fifth value.
+  `forkchoiceUpdated` takes a `TransitionConfiguration` first, and `forkchoiceUpdatedCall` takes one after the chain configuration.
+  `forkchoiceUpdated_valid`, `forkchoiceUpdated_of_belowFinalized`, `forkchoiceUpdated_valid_none_iff`, `forkchoiceUpdated_of_invalid`, `forkchoiceUpdated_of_onChain` and `forkchoiceUpdated_eq_error_iff` state the terminal block check.
+  `forkchoiceUpdated_valid`, `forkchoiceUpdated_of_onChain` and `forkchoiceUpdated_eq_error_iff` also state the rule on zero hashes, and `forkchoiceUpdated_of_invalid` answers `latestValidHash` in place of `latestValid`.
+  In Python, a block of the tree of `engine.forkchoice_updated` may carry `totalDifficulty` and `parentTotalDifficulty`.
+  The function takes the keyword-only argument `terminal_total_difficulty`, which defaults to `2**256 - 2**10`, the value of a terminal total difficulty not yet decided.
+  The native `engine_forkchoice_updated` takes that value after the finalized block.
 - `engine_newPayload` on a chain checks that a parent of proof of work is a terminal block, as step 2 of payload validation of Paris requires.
   A parent that fails the check makes the payload `INVALID`, with the zero hash and the new reason code 407.
   In Lean, `PayloadError` has the new constructor `invalidTerminalBlock`, with that code.
