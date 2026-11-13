@@ -146,7 +146,9 @@ def encodeOptional : Option Varint → List UInt8
 def encodeRanges (ranges : List AckRange) : List UInt8 :=
   ranges.flatMap fun (gap, length) => Varint.encode gap ++ Varint.encode length
 
-/-- Encode fields after the frame type, rejecting malformed input before writing (§19). -/
+/-- Encode the fields after the frame type (§19).
+
+`encode` checks the format constraints before calling this helper. -/
 def encodeBody : Frame → Except Error (List UInt8)
   | .padding | .ping | .handshakeDone => .ok []
   | .ack a => do

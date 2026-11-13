@@ -7,7 +7,7 @@ public import EthLib.Networking.Quic.Wire
 
 RFC 9000 §17 defines the QUIC version 1 headers and the version-independent negotiation packet.
 
-The decoder reads headers after both header and payload authentication.
+For protected packets, remove header protection and authenticate the payload before decoding.
 
 In particular, reserved-bit errors must not be exposed before authentication (RFC 9000 §17.2).
 
