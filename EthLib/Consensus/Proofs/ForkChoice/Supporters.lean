@@ -36,15 +36,6 @@ def supportersOf (state : BeaconState preset fork) (node : ForkChoiceNode) :
 
 variable {store}
 
-/-- A sum over the entries of a list that pass a test is a sum over all of them, with zeros. -/
-private theorem sum_map_filter {α : Type} (entries : List α) (test : α → Bool) (value : α → ℕ) :
-    ((entries.filter test).map value).sum =
-      (entries.map fun entry => if test entry then value entry else 0).sum := by
-  induction entries with
-  | nil => rfl
-  | cons entry rest ih =>
-    by_cases passes : test entry <;> simp [passes, ih]
-
 /-- The votes that the store counts for a node are the stake of its supporters.
 
 A validator weighs its effective balance in the state.
@@ -87,7 +78,8 @@ theorem stake_supportersOf {node : ForkChoiceNode} {state : BeaconState preset f
     store.getAttestationScore_toNat_eq_sum computed]
   exact (congrArg List.sum (List.map_congr_left (g := fun entry => entry.2.toNat)
     fun entry member => balance entry (List.mem_of_mem_filter member))).trans
-      (sum_map_filter entries _ _)
+      (by simpa using (EthLib.Base.sum_map_ite_eq_sum_filter
+        (fun entry => store.voteCountsFor node entry.1 = true) _ entries).symm)
 
 /-- The vote of each supporter of a node counts for that node. -/
 theorem voteCountsFor_of_mem_supportersOf {state : BeaconState preset fork}

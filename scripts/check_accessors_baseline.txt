@@ -14,4 +14,3 @@ GetElem?.getElem! EthLib.Cryptography.Bls.HashToCurve.hashToG2 2
 ByteArray.get! EthLib.Serialization.Rlp.decodeItem 3
 ByteArray.get! EthLib.Serialization.Rlp.readBigEndian 1
 ByteArray.get! EthLib.Serialization.Rlp.readPrefix.readLongLength 1
-GetElem?.getElem! EthLib.Serialization.Ssz.Desc.resolveStep 1
