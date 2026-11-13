@@ -1489,18 +1489,6 @@ private theorem admissionFunded_processDeposit {f : Fork} {s t : BeaconState pre
   exact admissionFunded_applyDeposit
     (s := { s with eth1DepositIndex := fun _ => next }) holds matched credited
 
-private theorem admissionFunded_fold {f : Fork} {s t : BeaconState preset f}
-    {n : Nat} {α ε : Type} {step : BeaconState preset f → α → Except ε _} {xs : List α}
-    (holds : AdmissionFunded n s) (matched : BalancesMatch s)
-    (keeps : ∀ a item b, step a item = .ok b → AdmissionFunded n a → BalancesMatch a →
-      AdmissionFunded n b)
-    (matching : ∀ a item b, step a item = .ok b → BalancesMatch a → BalancesMatch b)
-    (ok : xs.foldlM step s = .ok t) : AdmissionFunded n t :=
-  (foldlM_ok_invariant (fun a => AdmissionFunded n a ∧ BalancesMatch a)
-    (fun a item b prior computed =>
-      ⟨keeps a item b computed prior.1 prior.2, matching a item b computed prior.2⟩)
-    ⟨holds, matched⟩ ok).1
-
 private theorem admissionFunded_kept {f : Fork} {s t : BeaconState preset f}
     {n : Nat} (holds : AdmissionFunded n s) (kept : EffectiveKept s t)
     (size : t.validators.data.size = s.validators.data.size)
@@ -1694,74 +1682,64 @@ private theorem balanceDrift_unassigned_before {f h : Fork}
   · by_contra assigned
     exact assigned ((life.exitEpoch assigned).symm.trans epochs.2)
 
+/-- Block operations fund every validator that they admit, from its deposit.
+
+The three folds before the deposits keep the registry size, so no entry needs funding there.
+
+After them each step funds new entries if the entries of its end state are still unassigned.
+
+The end state of the operations has all new entries unassigned. -/
 private theorem admissionFunded_operations {f : Fork} {s t : BeaconState preset f}
     (early : f < .glamsterdam) {body : BeaconBlockBody preset f} {parentSlot : Slot}
     (matched : BalancesMatch s)
     (ok : processOperations config checks s body parentSlot = .ok t) :
     AdmissionFunded s.validators.data.size t := by
-  have pending := processOperations_new_validator_epochs_unassigned ok
-  unfold processOperations at ok
-  split at ok
-  · exact False.elim (Nat.not_le_of_lt early (by assumption))
-  simp only [bind_ok_iff, ensure_ok_iff, ← Array.foldlM_toList] at ok
-  obtain ⟨_, _, _, _, proposers, proposersOk, attesters, attestersOk, attested, attestedOk,
-    deposited, depositedOk, exited, exitsOk, changed, changesOk, requestsOk⟩ := ok
+  let n := s.validators.data.size
+  let Pending (a : BeaconState preset f) : Prop := ∀ i v, n ≤ i → a.validators.data[i]? = some v →
+    v.activationEpoch = FAR_FUTURE_EPOCH ∧ v.exitEpoch = FAR_FUTURE_EPOCH
+  let Funds (a b : BeaconState preset f) : Prop := RegistryLifecycle a b ∧
+    (Pending b → AdmissionFunded n a → BalancesMatch a → AdmissionFunded n b ∧ BalancesMatch b)
+  have refl (a : BeaconState preset f) : Funds a a := ⟨.refl a, fun _ funded m => ⟨funded, m⟩⟩
+  have trans {a b c : BeaconState preset f} (one : Funds a b) (two : Funds b c) : Funds a c :=
+    ⟨one.1.trans two.1, fun pending funded m =>
+      have middle := one.2 (balanceDrift_unassigned_before two.1 pending) funded m
+      two.2 pending middle.1 middle.2⟩
+  obtain ⟨_, _, attested, proposersOk, slashingsOk, attestedOk, rest⟩ :=
+    processOperations_folds_of Funds refl trans
+      (fun deposited => ⟨registryLifecycle_processDeposit deposited, fun _ funded m =>
+        ⟨admissionFunded_processDeposit funded m deposited,
+          balancesMatch_processDeposit deposited m⟩⟩)
+      (fun exited => ⟨registryLifecycle_processVoluntaryExit exited, fun _ funded m =>
+        ⟨admissionFunded_voluntaryExit funded exited,
+          balancesMatch_of_sameSizes (sameSizes_processVoluntaryExit exited) m⟩⟩)
+      (fun changed => ⟨registryLifecycle_processBlsToExecutionChange changed, fun _ funded m =>
+        ⟨admissionFunded_blsChange funded changed,
+          balancesMatch_of_sameSizes (sameSizes_processBlsToExecutionChange changed) m⟩⟩)
+      (fun requested => ⟨registryLifecycle_processExecutionRequests requested,
+        fun pending funded m => ⟨admissionFunded_requests funded (balanceDrift_unassigned_before
+          (registryLifecycle_processExecutionRequests requested) pending) requested,
+          (frame_processExecutionRequests requested).toFrame.balancesMatch m⟩⟩)
+      (fun {_ _ gloas} _ => absurd gloas (Nat.not_le_of_lt early)) ok
   have sizes {α : Type} {step : BeaconState preset f → α → Except TransitionError _}
       (keeps : ∀ a b c, step a b = .ok c → SameSizes a c) {xs : List α}
       {a b : BeaconState preset f} (ok : xs.foldlM step a = .ok b) : SameSizes a b :=
     foldlM_ok_invariant (SameSizes a)
       (fun _ _ _ prior ok => prior.trans (keeps _ _ _ ok)) (SameSizes.refl _) ok
   have before := (sizes (fun _ _ _ => sameSizes_processProposerSlashing) proposersOk).trans
-    ((sizes (fun _ _ _ => sameSizes_processAttesterSlashing) attestersOk).trans
+    ((sizes (fun _ _ _ => sameSizes_processAttesterSlashing) slashingsOk).trans
       (sizes (fun _ _ _ => sameSizes_processAttestation) attestedOk))
-  have initial : AdmissionFunded s.validators.data.size attested := by
-    rw [← before.1]; exact admissionFunded_empty _
-  have atDeposited := admissionFunded_fold initial (balancesMatch_of_sameSizes before matched)
-    (fun _ _ _ ok holds matched => admissionFunded_processDeposit holds matched ok)
-    (fun _ _ _ => balancesMatch_processDeposit) depositedOk
-  have depositMatch := foldlM_ok_invariant BalancesMatch
-    (fun _ _ _ prior ok => balancesMatch_processDeposit ok prior)
-    (balancesMatch_of_sameSizes before matched) depositedOk
-  have atExited := admissionFunded_fold atDeposited depositMatch
-    (fun _ _ _ ok holds _ => admissionFunded_voluntaryExit holds ok)
-    (fun _ _ _ ok => balancesMatch_of_sameSizes (sameSizes_processVoluntaryExit ok)) exitsOk
-  have exitMatch := balancesMatch_of_sameSizes
-    (sizes (fun _ _ _ => sameSizes_processVoluntaryExit) exitsOk) depositMatch
-  have atChanged : AdmissionFunded s.validators.data.size changed := by
-    unfold processBlsToExecutionChanges at changesOk
-    split at changesOk
-    · rw [← Array.foldlM_toList] at changesOk
-      exact admissionFunded_fold atExited exitMatch
-        (fun _ _ _ ok holds _ => admissionFunded_blsChange holds ok)
-        (fun _ _ _ ok => balancesMatch_of_sameSizes (sameSizes_processBlsToExecutionChange ok))
-        changesOk
-    · cases changesOk; exact atExited
-  split at requestsOk
-  · exact admissionFunded_requests atChanged
-      (balanceDrift_unassigned_before
-        (registryLifecycle_processExecutionRequests requestsOk) pending)
-      requestsOk
-  · cases requestsOk; exact atChanged
+  have initial : AdmissionFunded n attested := by
+    change AdmissionFunded s.validators.data.size attested
+    rw [← before.1]
+    exact admissionFunded_empty _
+  exact (rest.2 (processOperations_new_validator_epochs_unassigned ok) initial
+    (balancesMatch_of_sameSizes before matched)).1
 
-private theorem balanceDrift_execution_sizes {f : Fork} {s t : BeaconState preset f}
-    {engine : ExecutionEngine preset f} {body : BeaconBlockBody preset f}
-    {bellatrix : .bellatrix ≤ f} (early : f < .glamsterdam)
-    (ok : processBlockExecution config checks engine s body bellatrix = .ok t) : SameSizes s t := by
-  have payload {a b : BeaconState preset f} {supported : .bellatrix ≤ f ∧ f < .glamsterdam}
-      (ok : processExecutionPayload config engine a body supported = .ok b) : SameSizes a b := by
-    obtain ⟨_, _, _, rfl⟩ := processExecutionPayload_ok ok
-    exact ⟨rfl, rfl⟩
-  unfold processBlockExecution at ok
-  split at ok
-  · exact False.elim (Nat.not_le_of_lt early (by assumption))
-  split at ok
-  · obtain ⟨_, withdrawn, paid⟩ := bind_ok_iff.mp ok
-    exact (sameSizes_processWithdrawals withdrawn).trans (payload paid)
-  · dsimp only at ok
-    split at ok
-    · exact payload ok
-    · cases ok; exact SameSizes.refl _
+/-- A block funds every validator that it admits.
 
+The steps before the operations keep the validators, the current sync committee and the keys.
+
+The sync aggregate then pays only validators whose keys were in the registry before the block. -/
 private theorem admissionFunded_block {f : Fork} {s t : BeaconState preset f}
     {engine : ExecutionEngine preset f} {block : BeaconBlock preset f}
     (early : f < .glamsterdam) (matched : BalancesMatch s)
@@ -1769,81 +1747,43 @@ private theorem admissionFunded_block {f : Fork} {s t : BeaconState preset f}
       ∀ key ∈ (s.currentSyncCommittee altair).value.pubkeys.toList, key ∈ validatorKeys s)
     (ok : processBlock config checks engine s block = .ok t) :
     AdmissionFunded s.validators.data.size t := by
-  have header {a b : BeaconState preset f} (ok : processBlockHeader a block = .ok b) :
-      b.currentSyncCommittee = a.currentSyncCommittee := by
-    obtain ⟨_, _, rfl⟩ := processBlockHeader_eq ok
-    rfl
-  have randao {a b : BeaconState preset f}
-      (ok : processRandao config checks a block.body = .ok b) :
-      b.currentSyncCommittee = a.currentSyncCommittee := by
-    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq ok
-    rfl
-  have vote {a b : BeaconState preset f} {before : f < .hegota}
-      (ok : processEth1Data before a block.body = .ok b) :
-      b.currentSyncCommittee = a.currentSyncCommittee := by
-    obtain ⟨_, _, rest⟩ := processEth1Data_eq ok
-    rw [← rest]
-  unfold processBlock at ok
-  split at ok
+  let Same (a b : BeaconState preset f) : Prop := b.validators = a.validators ∧
+    ∀ altair, b.currentSyncCommittee altair = a.currentSyncCommittee altair
+  obtain ⟨input, last, started, operated, -, synced⟩ := processBlock_operationsInput ok
+  have head : Same s input :=
+    OperationsInput.step_of Same (fun _ => ⟨rfl, fun _ => rfl⟩)
+      (fun one two => ⟨two.1.trans one.1, fun altair => (two.2 altair).trans (one.2 altair)⟩)
+      (fun gloas _ => absurd gloas (Nat.not_le_of_lt early))
+      (fun headed => by
+        obtain ⟨_, _, rfl⟩ := processBlockHeader_eq headed
+        exact ⟨rfl, fun _ => rfl⟩)
+      (fun _ executed => ⟨processBlockExecution_step_of (fun a b => b.validators = a.validators)
+          (fun _ => rfl) (fun one two => two.trans one) (fun _ validators => validators)
+          processWithdrawals_validators executed,
+        fun altair => processBlockExecution_currentSyncCommittee altair executed⟩)
+      (fun revealed => by
+        obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq revealed
+        exact ⟨rfl, fun _ => rfl⟩)
+      (fun _ voted => by
+        obtain ⟨_, _, rest⟩ := processEth1Data_eq voted
+        exact ⟨by rw [← rest], fun _ => by rw [← rest]⟩)
+      started
+  have frame := frame_operationsInput started
+  have funded := admissionFunded_operations early (frame.balancesMatch matched) operated
+  rw [head.1] at funded
+  split at synced
   · rename_i altair
-    unfold processBlockAltair at ok
-    simp only [bind_ok_iff] at ok
-    obtain ⟨paid, paidOk, headed, headedOk, executed, executedOk, revealed, revealedOk, voted,
-      votedOk, operated, operatedOk, synced⟩ := ok
-    have paidSame : paid = s := by
-      split at paidOk
-      · exact False.elim (Nat.not_le_of_lt early (by assumption))
-      · cases paidOk; rfl
-    subst paid
-    have executionSize : SameSizes headed executed := by
-      split at executedOk
-      · exact balanceDrift_execution_sizes early executedOk
-      · cases executedOk; exact .refl _
-    have executionKeys : validatorKeys headed <+: validatorKeys executed := by
-      split at executedOk
-      · exact (frame_processBlockExecution executedOk).pubkeysPrefix
-      · cases executedOk; exact List.prefix_refl _
-    have executionCommittee : executed.currentSyncCommittee altair =
-        headed.currentSyncCommittee altair := by
-      split at executedOk
-      · exact processBlockExecution_currentSyncCommittee altair executedOk
-      · cases executedOk; rfl
-    have votedSize : SameSizes revealed voted := by
-      split at votedOk
-      · exact sameSizes_processEth1Data votedOk
-      · cases votedOk; exact .refl _
-    have votedKeys : validatorKeys revealed <+: validatorKeys voted := by
-      split at votedOk
-      · exact (frame_processEth1Data votedOk).pubkeysPrefix
-      · cases votedOk; exact List.prefix_refl _
-    have votedCommittee : voted.currentSyncCommittee = revealed.currentSyncCommittee := by
-      split at votedOk
-      · exact vote votedOk
-      · cases votedOk; rfl
-    have before := (sameSizes_processBlockHeader headedOk).trans
-      (executionSize.trans ((sameSizes_processRandao revealedOk).trans votedSize))
-    have funded := admissionFunded_operations early
-      (balancesMatch_of_sameSizes before matched) operatedOk
-    rw [before.1] at funded
     apply admissionFunded_sync funded ?_ synced
     intro key member index indexed
     apply balanceDrift_indexOfPubkey_lt ?_ indexed
     apply balanceDrift_old_key
-      ((frame_processBlockHeader headedOk).pubkeysPrefix.trans (executionKeys.trans
-        ((frame_processRandao revealedOk).pubkeysPrefix.trans (votedKeys.trans
-          (frame_processOperations operatedOk).pubkeysPrefix))))
+      (frame.pubkeysPrefix.trans (frame_processOperations operated).pubkeysPrefix)
     apply keys altair key
-    have same : operated.currentSyncCommittee altair = s.currentSyncCommittee altair := by
-      rw [processOperations_currentSyncCommittee altair operatedOk, votedCommittee,
-        randao revealedOk, executionCommittee, header headedOk]
+    have same : last.currentSyncCommittee altair = s.currentSyncCommittee altair := by
+      rw [processOperations_currentSyncCommittee altair operated, head.2 altair]
     simpa only [same, Vector.toList_toArray] using (Array.mem_toList_iff.mpr member)
-  · simp only [bind_ok_iff] at ok
-    obtain ⟨headed, headedOk, revealed, revealedOk, voted, votedOk, operated⟩ := ok
-    have before := (sameSizes_processBlockHeader headedOk).trans
-      ((sameSizes_processRandao revealedOk).trans (sameSizes_processEth1Data votedOk))
-    have funded := admissionFunded_operations early
-      (balancesMatch_of_sameSizes before matched) operated
-    simpa only [before.1] using funded
+  · cases synced
+    exact funded
 
 private theorem admissionFunded_pendingDeposits {f : Fork} {s t : BeaconState preset f}
     {n : Nat} {electra : .pectra ≤ f} (holds : AdmissionFunded n s)
