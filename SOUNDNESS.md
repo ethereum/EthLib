@@ -2781,7 +2781,8 @@ A file may also keep only the latest messages of a key, as the [minimal strategy
 An older vote has a source at most, and a target before, those of each vote of the file.
 Each of these theorems needs the file to hold one or more messages of its kind for the key.
 A vote with the target of a kept vote is not older, so the theorem on votes says nothing about it.
-The signer of these theorems records every message it signs, so a signer that prunes as it goes is not covered.
+The signer of these theorems records every message it signs, so a signer that prunes as it goes is not covered here.
+A signer of blocks that prunes is covered below, but no theorem covers a signer of votes that prunes.
 `mem_blocksOf` and `mem_attestationsOf` show that the messages of a key are those of its own entries.
 The proofs read only conditions 2, 4 and 5, through `lt_slot_of_checkBlockSlot`, `le_sourceEpoch_of_checkSourceEpoch` and `lt_targetEpoch_of_checkTargetEpoch`.
 
@@ -2795,7 +2796,21 @@ Since no limit carries a signing root, no imported message can be signed again.
 `checkAttestationSigning_of_foldl_importFile` does so for a vote and conditions 3, 4 and 5.
 Both include the initial held file, allow repeated imports and duplicate-key entries, and assume only that the final check passes.
 These two theorems cover a record built by imports alone.
-The theorems on one import take any held record, but no theorem chains imports with messages recorded between them.
+The theorems on one import take any held record.
+
+`importAndSignBlocks` models a signer of blocks that also imports files, from any starting file.
+`importAndSignBlocks_map_signBlock` shows that a run without imports is `signBlocks`.
+`signingRoot_eq_of_importAndSignBlocks` and `lt_slot_of_importAndSignBlocks` state `signingRoot_eq_of_signBlocks` and `lt_slot_of_signBlocks` for it, and the theorems on `signBlocks` follow from them.
+`signingRoot_eq_of_importAndSignBlocks_of_processProposerSlashing` and `processProposerSlashing_ne_ok_of_importAndSignBlocks` are their proposer slashing corollaries.
+Each holds whatever files the signer imports.
+`signingRoot_eq_some_of_importAndSignBlocks` shows that a block of the starting file holds the signing root of each header that the signer signs at that slot.
+So the signer signs nothing at the slot of a block of that file without a signing root, as condition 1 asks.
+`lt_slot_of_importAndSignBlocks_of_importFile` shows that a header signed after an import is after every block of the file and of the starting file.
+`checkBlockSigning_of_importAndSignBlocks` concludes that each header that the signer signs meets conditions 1 and 2 of the starting file.
+`checkBlockSigning_of_importAndSignBlocks_of_importFile` concludes the same for each file imported before the header.
+`importFile_of_data_eq_nil` shows that importing a file without entries puts the record in its minimal form, which prunes it.
+So these theorems also cover a signer of blocks that prunes its record with the minimal strategy as it goes.
+No theorem chains imports with votes recorded between them.
 
 `readUInt64_uint64Json` and `readBytes_bytesJson` show that each integer and each byte string of a file reads back as written.
 `ofJson_toJson` shows that a whole file reads back as itself from the document that `toJson` writes, whatever its records.
