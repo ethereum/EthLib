@@ -548,6 +548,9 @@
 #define DOC_consensus_relay_submission_bid \
   "The SSZ bytes of the bid that a relay serves from a submission, under a key."
 
+#define DOC_consensus_relay_validators \
+  "At Fulu only: the list of validators that a relay serves, as a `list` of `dict`."
+
 #define DOC_consensus_builder_bid_value \
   "The value of a builder's bid from its two payments and the proposer's execution payment cap."
 

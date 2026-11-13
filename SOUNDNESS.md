@@ -4084,6 +4084,21 @@ The source leaves four points about a submission open, and EthLib specifies none
 - The simulation of the payload, which the relay runs "to verify properties and proposer payment".
   So EthLib does not check that the bid trace agrees with the payload, and the served bid takes the value of the bid trace as it is.
 
+A relay lists for builders the validators "scheduled to propose in the current and next epoch", each with its slot, its index and its signed registration ([`validators.yaml`](https://github.com/flashbots/relay-specs/blob/a4e0a50d9d46bfe881fd74cc7e0db366371f4eed/apis/relay/builder/validators.yaml)).
+"Slots without a registered validator are omitted."
+`ValidatorsResponse.Sound` (`Consensus/RelayApi.lean`) states this for any schedule of proposers: every entry lies in the two epochs and names the proposer of its slot with the registration kept for its key, and every slot of the two epochs whose proposer has a registration has exactly one entry.
+
+`scheduledEntries_sound` (`Consensus/Proofs/RelayApi.lean`) shows that the entries built from a schedule satisfy it, for any schedule.
+The source does not say how a relay learns the schedule.
+From Fulu, the state holds the proposers of the current and next epoch in its lookahead ([EIP-7917](https://eips.ethereum.org/EIPS/eip-7917#specification)), so EthLib builds the list from it.
+`validatorsResponse_sound` shows that this list satisfies the rule with the lookahead as the schedule.
+`validatorsResponse_proposer` shows that each entry after the slot of the state names the proposer that the state reaches at that slot, when the slots of the transition succeed.
+`validatorsResponse_proposer_self` shows that an entry for the slot of the state names the proposer of the state.
+The entries for earlier slots of the current epoch are tied to the consensus layer only through the lookahead, by `validatorsResponse_sound`.
+Before Fulu, the state does not hold the proposers of the next epoch.
+They can change with the balances until that epoch starts, so the agreement with the consensus schedule is proved from Fulu only.
+The export gives the list at Fulu only, because the relay source has no part after Fulu.
+
 ### What cannot be proved yet
 
 Some definitions cannot be unfolded by the kernel, so the kernel cannot evaluate them, and their intended computational properties remain unproved.
@@ -4385,12 +4400,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 466 operations and 49 size constants.
-The Python extension calls 466 of the operations and 49 of the constants.
+Lean exports 467 operations and 49 size constants.
+The Python extension calls 467 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-11085 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2281), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (194), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1544), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (71), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (58), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (757), `x25519.c` (21), `xmss.c` (134).
+11099 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2292), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (194), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1546), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (71), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (58), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (758), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.
