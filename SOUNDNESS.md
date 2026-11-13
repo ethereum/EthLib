@@ -747,7 +747,12 @@ The days are counted in a calendar model of year and month lengths, not in the r
 `readValidity_eq_ok_iff` says that a validity reads as two such times in order.
 `readCertificate_validity` says that the endpoints of a parsed certificate are what its own validity field reads as.
 That field is located in the signed part that the input bytes encode.
-No theorem states the other DER types that a certificate holds.
+`boolean_ok_iff` states that a BOOLEAN is one octet, FF for TRUE and 00 for FALSE (X.690 §11.1).
+`bitString_ok_iff` states that an octet-aligned BIT STRING is the octet 0, then its octets.
+`validBits_ok_iff` states that BIT STRING contents count at most 7 unused bits, all zero (X.690 §§8.6.2, 11.2.1).
+`fixedString_eq_true_iff` states that BMPString and UniversalString contents write Unicode scalar values big-endian.
+`validate_boolean_ok_iff`, `validate_bitString_ok_iff` and `validate_fixedString_ok_iff` derive what these tags accept inside a Name or a parameter.
+No theorem states OBJECT IDENTIFIER, NULL or the other strings that a certificate holds.
 Nothing in Lean shows that authentication can succeed; the Python tests check vectors 1 to 4 of libp2p TLS.
 
 ### QUIC wire encodings
