@@ -69,4 +69,20 @@ theorem quorum_voters_recent {g a : ForkedBeaconState preset} (run : Run config 
   counted_recent (cached_participation run parameters genesis call.toEpochCall).1
     call.later call.current call.target call.targetEpoch call.counted
 
+/-- The keys that a quorum counts are recent at the state of its test.
+
+The quorum is a quorum call of the run, or the test of one justification step at its last state.
+
+The run starts at a genesis built from deposits, and the preset meets the parameters. -/
+theorem view_voters_recent {g a : ForkedBeaconState preset} (run : Run config checks g a)
+    (parameters : Parameters preset) (genesis : Genesis (config := config) (checks := checks) g)
+    {view : TerminalView a} (call : ViewQuorum run view) :
+    call.voters ⊆ recentKeys call.state.state := by
+  cases call with
+  | inl c => exact quorum_voters_recent run parameters genesis c
+  | inr c =>
+    -- The step counts at the last state, whose pending votes are those of the whole run.
+    exact counted_recent (inherited_participation run .nil parameters genesis).1 c.later
+      c.current c.target c.targetEpoch c.counted
+
 end EthLib.Consensus.DirectSafety

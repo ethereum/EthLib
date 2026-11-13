@@ -461,6 +461,34 @@ private theorem hashEvidence_mono {one two : List (HashObject preset)}
     exact ⟨x, mem xm, y, mem ym, collision⟩
   · exact .inr ⟨object, subset member, zero⟩
 
+/-- Two runs whose prefixes record one root for an epoch have the same headers up to it.
+
+Each prefix ends after the first slot of the epoch, so the rest of its run adds no such header.
+
+Otherwise SHA-256 collides in the root of a header of the runs, or a header or state has root zero.
+
+The runs start at one genesis built from deposits. -/
+theorem checkpoint_binding_prefixes {g a b a' b' : ForkedBeaconState preset}
+    (genesis : Genesis (config := config) (checks := checks) g)
+    (preA : Run config checks g a') (tailA : Run config checks a' a)
+    (preB : Run config checks g b') (tailB : Run config checks b' b)
+    (epoch : Epoch) (root : Root)
+    (readA : getBlockRoot a'.state epoch = .ok root)
+    (readB : getBlockRoot b'.state epoch = .ok root)
+    (earlyA : epoch.toNat * preset.SLOTS_PER_EPOCH.toNat < a'.state.slot.toNat)
+    (earlyB : epoch.toNat * preset.SLOTS_PER_EPOCH.toNat < b'.state.slot.toNat) :
+    (preA.append tailA).checkpointPath epoch = (preB.append tailB).checkpointPath epoch ∨
+      HashEvidence ((preA.append tailA).hashObjects ++ (preB.append tailB).hashObjects) := by
+  rcases checkpoint_binding preA preB genesis epoch root readA readB with same | evidence
+  · exact .inl ((path_append_stable preA tailA epoch earlyA).trans
+      (same.trans (path_append_stable preB tailB epoch earlyB).symm))
+  · right
+    apply hashEvidence_mono (one := preA.hashObjects ++ preB.hashObjects) _ evidence
+    intro object member
+    rcases List.mem_append.mp member with member | member
+    · exact List.mem_append_left _ (hashObjects_append_subset preA tailA member)
+    · exact List.mem_append_right _ (hashObjects_append_subset preB tailB member)
+
 /-- Two slot steps of the runs that cache one root for an epoch give the same headers up to it.
 
 Each step comes after the first slot of the epoch, while its root is still in the buffer.
@@ -492,19 +520,8 @@ theorem checkpoint_binding_cached {g a b before₁ after₁ before₂ after₂ :
   rw [getBlockRoot_processSlot cachedOk₂ recent₂] at read₂
   obtain ⟨pre₁, post₁, rfl⟩ := left.contains_split (.slot ok₁) member₁
   obtain ⟨pre₂, post₂, rfl⟩ := right.contains_split (.slot ok₂) member₂
-  have paths₁ := path_append_stable pre₁ ((Run.nil.snoc (.slot ok₁)).append post₁) epoch early₁
-  have paths₂ := path_append_stable pre₂ ((Run.nil.snoc (.slot ok₂)).append post₂) epoch early₂
-  rw [Run.append_assoc] at paths₁ paths₂
-  rcases checkpoint_binding pre₁ pre₂ genesis epoch root
-      read₁ read₂ with same | evidence
-  · exact .inl (paths₁.trans (same.trans paths₂.symm))
-  · right
-    apply hashEvidence_mono (one := pre₁.hashObjects ++ pre₂.hashObjects) _ evidence
-    intro object member
-    rcases List.mem_append.mp member with member | member
-    · exact List.mem_append_left _ (hashObjects_append_subset _ post₁
-        (List.mem_append_left _ member))
-    · exact List.mem_append_right _ (hashObjects_append_subset _ post₂
-        (List.mem_append_left _ member))
+  have result := checkpoint_binding_prefixes genesis pre₁ ((Run.nil.snoc (.slot ok₁)).append post₁)
+    pre₂ ((Run.nil.snoc (.slot ok₂)).append post₂) epoch root read₁ read₂ early₁ early₂
+  rwa [Run.append_assoc, Run.append_assoc] at result
 
 end EthLib.Consensus.DirectSafety
