@@ -181,10 +181,10 @@ theorem PathSelects.unionOption {selectors : List Nat} {options : List Desc}
     simp [merkleLayout, chosen, selectorWord, checkSelector_of_range bounded, layout,
       Bind.bind, Except.bind, Pure.pure, Except.pure]
   obtain ⟨slot, named, found⟩ := lookupOption_position selectors options selector child chosen
-  -- The successful lookup justifies reading the selected option at that exact ordinal.
-  have option : options[slot]! = child := by simp [List.getElem!_eq_getElem?_getD, found]
+  -- The successful lookup supplies the child at that exact ordinal.
   apply PathSelects.nestedMixed (ordinal := 0) laid rfl rfl (by decide) rfl rfl _ suffix
-  simpa [option, nextPow2, depthFor] using resolveStep_compatibleUnion selectors options selector slot named
+  simpa [nextPow2, depthFor] using
+    resolveStep_compatibleUnion selectors options selector slot child named found
 
 /-- An admissible value supplies the empty path's selected root. -/
 theorem PathSelects.admissibleRoot {shape : Desc} {value : Value}

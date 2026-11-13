@@ -12,11 +12,11 @@ The decoder of eth/68 rejects the Status of eth/69.
 
 The decoder of each later version rejects the Status of eth/68.
 
-A node accepts a Status that carries its own version, its own fork identifier and a valid range.
+A node accepts a Status that carries its own version and fork identifier and a range in order.
 
 It accepts a Status exactly when the version matches and the fork identifier passes.
 
-From eth/69 the range must also be valid.
+From eth/69 the range must also not start after it ends, so a range of one block passes.
 
 At every version, the network ID and the genesis hash play no part.
 -/
@@ -80,23 +80,25 @@ theorem StatusError.code_injective (e₁ e₂ : StatusError) (h : e₁.code = e�
 /--
 A node accepts a Status from eth/69 on that carries three things.
 
-They are the negotiated version, the node's own fork identifier and a valid range.
+They are the negotiated version, the node's own fork identifier and a range in order.
+
+A range is in order when it does not start after it ends.
 
 The forks of the node must fit rule 1a, and its head must be a real block.
 -/
 theorem checkStatus_own {version : EthVersion} {s : Schedule} {number timestamp : Nat}
     (hs : s.Separated) (hn : number ≤ TIMESTAMP_THRESHOLD) (networkId : Nat) (genesis : Hash32)
-    {r : BlockRange} (hr : r.Valid) :
+    {r : BlockRange} (hr : r.earliest ≤ r.latest) :
     checkStatus version s number timestamp
       (.eth69 version.number networkId genesis (s.forkId number timestamp) r) = .ok () := by
   simp [checkStatus, Status.version, Status.forkId, s.validate_forkId_self number timestamp hs hn,
-    hr, Except.mapError, bind, Except.bind, pure, Except.pure]
+    BlockRange.Valid, hr, Except.mapError, bind, Except.bind, pure, Except.pure]
 
 /-- A node accepts a Status exactly when three conditions hold.
 
 The Status carries the version of the node, and its fork identifier passes the check of the node.
 
-From eth/69, the announced range does not start after it ends.
+From eth/69, the announced range does not start after it ends, so a range of one block passes.
 
 The conditions do not read the network ID or the genesis hash. -/
 theorem checkStatus_eq_ok_iff {version : EthVersion} {s : Schedule} {number timestamp : Nat}
@@ -105,7 +107,7 @@ theorem checkStatus_eq_ok_iff {version : EthVersion} {s : Schedule} {number time
       status.version = version.number ∧ s.validate number timestamp status.forkId = .ok () ∧
         match status with
         | .eth68 .. => True
-        | .eth69 _ _ _ _ r => r.Valid := by
+        | .eth69 _ _ _ _ r => r.earliest ≤ r.latest := by
   unfold checkStatus
   by_cases hv : status.version = version.number
   · cases hf : s.validate number timestamp status.forkId with
@@ -114,9 +116,9 @@ theorem checkStatus_eq_ok_iff {version : EthVersion} {s : Schedule} {number time
       cases status with
       | eth68 => simp [hv, Except.mapError, bind, Except.bind, pure, Except.pure]
       | eth69 _ _ _ _ r =>
-        by_cases hr : r.Valid <;>
-          simp [hv, hr, Except.mapError, bind, Except.bind, pure, Except.pure, throw,
-            throwThe, MonadExceptOf.throw]
+        by_cases hr : r.earliest ≤ r.latest <;>
+          simp [BlockRange.Valid, hv, hr, Except.mapError, bind, Except.bind, pure, Except.pure,
+            throw, throwThe, MonadExceptOf.throw]
   · simp [hv, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
 
 end EthLib.Execution.Network

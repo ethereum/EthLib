@@ -1909,6 +1909,14 @@ That check follows "Cells (0x15)" in [`caps/eth.md`](https://github.com/ethereum
 `checkCells_eq_ok_iff` (`Execution/Proofs/Network/Cells.lean`) states the rules of those cells.
 The caller gives the number of blobs of each transaction, and the check trusts it.
 
+`CellMask.has_eq_true_iff` states which index a bitmap marks: index `i` exactly when `i < 128` and bit `i % 8` of byte `i / 8` is set, counting from the least significant bit.
+"Cells (0x15)" fixes no bit order, and the check reads the bitmaps only through the subset rule and the count.
+`CellMask.subset_eq_true_iff` states the subset rule in those marks: one bitmap is a subset of another exactly when the other marks each index that it marks.
+`CellMask.count_eq_sum` states that the count of a bitmap, the `popcount` of "Cells (0x15)", is the number of set bits of its 16 bytes.
+`CellMask.count_le_count_of_subset` states that a subset counts no more indices than the bitmap that holds it.
+Together, `checkCells_eq_ok_iff` and `CellMask.count_le_count_of_subset` give that a response that passes has no more cells for each blob than the request asks for.
+No export calls the cells check, so no test of the bindings runs it.
+
 ### Weak subjectivity
 
 A node that starts from a recent checkpoint trusts it only for a limited time, the weak subjectivity period.
@@ -2512,6 +2520,13 @@ The search is over the two branch climbs, or over the hash inputs of two executi
 
 From Gloas, `isValidLightClientHeader_parentBlockHash` binds the block hash of a header at a slot from Gloas to the parent block hash of the bid of a Gloas body.
 `isValidLightClientHeader_executionBlockHash` binds it, for an earlier slot from Capella, to the block hash of the payload of a body from Capella to Fulu that is from Deneb exactly when the slot is.
+For such a slot, `getLcExecutionRoot_rebuild` shows that the execution root is rebuilt from the block hash.
+The rebuilt execution header is a Deneb header for a slot from Deneb, and a Capella header before Deneb.
+`rebuildLcExecutionRoot_eq` states the rebuilt root on every input.
+At the genesis slot it is the root of the empty execution header of that fork.
+Otherwise the block hash climbs as field 12 of the execution header, through a slice of the branch that ends before its last 4 nodes.
+The slice has the 5 nodes before them from Deneb, and the 4 before them before Deneb; a shorter branch gives a length error.
+These two are rewrite lemmas: no theorem yet binds the rebuilt root to the payload of a body.
 The headers that the client checks are valid: `initializeLightClientStore_header_valid`, `validateLightClientUpdate_attestedHeader_valid`, and `validateLightClientUpdate_finalizedHeader_valid` after the genesis slot.
 The index theorems `executionPayloadGindex_eq`, `payloadHeaderBlockHashGindex_eq`, `executionBlockHashGindex_eq` and `executionBlockHashGindexGloas_eq` hold at every preset.
 

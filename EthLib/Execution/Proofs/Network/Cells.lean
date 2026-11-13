@@ -13,6 +13,18 @@ It holds only requested transactions, in order, with one group of cells for each
 Each group has one cell of 2048 bytes for each blob of its transaction and each marked index.
 
 A response passes the check exactly when it keeps these rules.
+
+A bitmap marks index `i` exactly when `i < 128` and bit `i % 8` of byte `i / 8` is set.
+
+Bits count from the least significant bit.
+
+The source fixes no bit order.
+
+A bitmap is a subset of another exactly when the other marks each index that it marks.
+
+The count of a bitmap is the number of set bits of its 16 bytes.
+
+A subset counts no more indices than the bitmap that holds it.
 -/
 
 @[expose] public section
@@ -20,6 +32,84 @@ A response passes the check exactly when it keeps these rules.
 namespace EthLib.Execution.Network
 
 open EthLib.Base
+
+/-- Bit `j < 8` of a byte, read by a shift and a mask of 1, is bit `j` of its number. -/
+private theorem shift_and_one (x : UInt8) {j : Nat} (hj : j < 8) :
+    ((x >>> j.toUInt8) &&& 1 == 1) = x.toNat.testBit j := by
+  have bound : j < UInt8.size := by change j < 256; omega
+  apply Bool.eq_iff_iff.mpr
+  simp only [beq_iff_eq, ← UInt8.toNat_inj, UInt8.toNat_and, UInt8.toNat_shiftRight,
+    Nat.toUInt8_eq, UInt8.toNat_ofNat_of_lt' bound, Nat.mod_eq_of_lt hj, UInt8.toNat_one,
+    Nat.and_one_is_mod, Nat.shiftRight_eq_div_pow, Nat.testBit_eq_decide_div_mod_eq,
+    decide_eq_true_eq]
+
+/-- A bitmap marks index `i` exactly when `i < 128` and bit `i % 8` of byte `i / 8` is set. -/
+theorem CellMask.has_eq_true_iff {mask : CellMask} {i : Nat} :
+    mask.has i = true ↔ ∃ h : i < 128, (mask[i / 8]'(by omega)).toNat.testBit (i % 8) = true := by
+  unfold CellMask.has
+  by_cases h : i < 128
+  · have h' : i / 8 < 16 := by omega
+    simp only [h', ↓reduceDIte, shift_and_one _ (Nat.mod_lt i (by decide) : i % 8 < 8), h,
+      exists_true_left]
+  · have h' : ¬ i / 8 < 16 := by omega
+    simp [h, h']
+
+/-- A bitmap marks no index from 128 on. -/
+private theorem CellMask.has_of_le {mask : CellMask} {i : Nat} (h : 128 ≤ i) :
+    mask.has i = false := by
+  cases hm : mask.has i
+  · rfl
+  · obtain ⟨hi, _⟩ := CellMask.has_eq_true_iff.mp hm
+    omega
+
+/-- A bitmap is a subset of another exactly when the other marks each index that it marks. -/
+theorem CellMask.subset_eq_true_iff {a b : CellMask} :
+    a.subset b = true ↔ ∀ i, a.has i = true → b.has i = true := by
+  simp only [CellMask.subset, CELL_INDICES, List.all_eq_true, List.mem_range, Bool.or_eq_true,
+    Bool.not_eq_true']
+  constructor
+  · intro H i hi
+    by_cases hlt : i < 128
+    · rcases H i hlt with h | h
+      · simp [h] at hi
+      · exact h
+    · simp [CellMask.has_of_le (Nat.le_of_not_lt hlt)] at hi
+  · intro H i _
+    cases hi : a.has i
+    · exact Or.inl rfl
+    · exact Or.inr (H i hi)
+
+/-- The count of a bitmap is the sum, over its 16 bytes, of the number of set bits of each. -/
+theorem CellMask.count_eq_sum {mask : CellMask} :
+    mask.count =
+      (mask.toList.map fun x => (List.range 8).countP fun j => x.toNat.testBit j).sum := by
+  have hr : List.range 128 =
+      (List.range 16).flatMap (fun k => (List.range 8).map (8 * k + ·)) := by
+    decide
+  unfold CellMask.count
+  rw [CELL_INDICES, hr, ← List.countP_eq_length_filter, List.countP_flatMap]
+  congr 1
+  apply List.ext_getElem (by simp)
+  intro k h1 _
+  simp only [List.length_map, List.length_range] at h1
+  simp only [List.getElem_map, List.getElem_range, Vector.getElem_toList, Function.comp_apply,
+    List.countP_map]
+  apply List.countP_congr
+  intro j hj
+  have hj8 : j < 8 := List.mem_range.mp hj
+  have hdiv : (8 * k + j) / 8 = k := by omega
+  have hmod : (8 * k + j) % 8 = j := by omega
+  simp only [Function.comp_apply]
+  rw [CellMask.has_eq_true_iff]
+  simp only [hdiv, hmod]
+  exact ⟨fun ⟨_, h⟩ => h, fun h => ⟨by omega, h⟩⟩
+
+/-- A subset counts no more indices than the bitmap that holds it. -/
+theorem CellMask.count_le_count_of_subset {a b : CellMask} (h : a.subset b = true) :
+    a.count ≤ b.count := by
+  unfold CellMask.count
+  rw [← List.countP_eq_length_filter, ← List.countP_eq_length_filter]
+  exact List.countP_mono_left fun i _ hi => CellMask.subset_eq_true_iff.mp h i hi
 
 /-- A response passes the check exactly when it keeps every rule of a Cells answer.
 
