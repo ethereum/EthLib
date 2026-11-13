@@ -2007,6 +2007,35 @@ The consensus layer names only Noise for TCP, and does not say whether a node ma
 The profile proposes Noise alone.
 Which messages share a packet is not modelled; the recommendation to send the header with the first proposal or answer changes no message.
 
+### The gossip RPC and the partial message extension
+
+The gossip RPC (`Networking/Gossip/Rpc.lean`) carries the fields of the partial message extension, from the [gossipsub v1.3 schema](https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/pubsub/gossipsub/gossipsub-v1.3.md#protobuf) and the [partial messages schema](https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/pubsub/gossipsub/partial-messages.md#protobuf).
+They are the two partial flags of a subscription change, the extensions of a control message, and the partial message of an RPC.
+The partial columns of the consensus layer travel in these fields.
+`decodeRpc_encode` (`Networking/Proofs/Gossip/Rpc.lean`) covers them, and three theorems prove that a subscription change, a control message or an RPC without these fields decodes them at their defaults.
+`ofGroupId` (`Consensus/DataAvailability/Column.lean`) reads a group ID back, and `ofGroupId_toGroupId` proves that it reads the ID of every group back to that group.
+`ofGroupId_version` proves that an ID whose first byte is not the version 0 names no group.
+
+The model takes these readings.
+
+- A singular message field that occurs twice keeps its last occurrence whole, and so do the extensions across the occurrences of the control field.
+  Protobuf merges the occurrences field by field, so the readings differ whenever the last occurrence leaves out a field that an earlier one set.
+- The encoder writes the flags only when true, and the extensions, the partial message, its partial message bytes and its parts metadata only when present.
+  So an RPC without extensions encodes as before, and a node can leave out the partial message bytes that a peer did not ask for, as the partial messages document requires.
+  The topic and group ID of a partial message are always written.
+- The experimental extension fields are skipped, like any field the schema does not name.
+- `SubOpts.sendsPartial` reads a request for partial messages as support for sending them, as the schema says, and both flags count only in a subscription; `SubOpts.sendsPartial_of_asksPartial` and `SubOpts.partial_of_unsubscribe` prove both.
+- `checkExtensionsOrder` checks that only the first RPC of a stream carries extensions; the router does not call it.
+  Two extensions within one RPC are not seen there, since the decoder keeps the last one.
+
+The sources leave these points open.
+
+- The consensus layer fixes the protocol ID `/meshsub/1.1.0`, while the extension belongs to `/meshsub/1.3.0`, and no fork document changes the ID.
+  EthLib adds the wire fields only.
+- The partial columns document says that a peer sets "the `partial` field" of a subscription, while the schema names two fields, `requestsPartial` and `supportsSendingPartial`.
+- The partial messages document is a working draft, and gossipsub v1.3 a candidate recommendation.
+  The partial columns document cites the extension through a pull request, not a pinned file.
+
 ### The gossipsub caches
 
 `MessageCache` and `SeenCache` (`Networking/Gossip/Cache.lean`) are the two caches of [gossipsub v1.0, "Message Cache"](https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/pubsub/gossipsub/gossipsub-v1.0.md#message-cache).

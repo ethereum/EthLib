@@ -436,6 +436,16 @@ instance {fork : Fork} : SszType (PartialDataColumnGroupID fork) :=
 def toGroupId {fork : Fork} (group : PartialDataColumnGroupID fork) : Except Err ByteArray := do
   return ByteArray.mk #[0] ++ (← SszType.serialize group)
 
+/-- The group that a gossip group ID names.
+
+An ID whose first byte is not the version 0 names no group, since an unknown version is ignored.
+
+Nor does an ID whose remaining bytes are not the SSZ bytes of a group. -/
+def ofGroupId (fork : Fork) (bytes : ByteArray) : Option (PartialDataColumnGroupID fork) :=
+  if bytes.data[0]? = some 0 then
+    (SszType.deserialize (PartialDataColumnGroupID fork) (bytes.extract 1 bytes.size)).toOption
+  else none
+
 end PartialDataColumnGroupID
 
 /-- Whether the branch of a header climbs from its commitments to its body root. -/
