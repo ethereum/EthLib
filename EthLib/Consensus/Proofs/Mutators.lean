@@ -28,7 +28,7 @@ From Gloas, slashing a validator cancels exactly the builder payments of the blo
 
 From Altair the proposer takes one eighth of the whistleblower reward of a slashing.
 
-A slashing changes the balance of the validator, of the whistleblower and of one more index.
+A slashing changes no balance other than those of the validator, the whistleblower and one more index.
 
 From Fulu that index is the proposer of the slot.
 
