@@ -39,7 +39,7 @@ Otherwise such a head is valid and becomes the head.
 
 A head that the execution layer does not hold gives a syncing update.
 
-An invalid head names the valid block of its chain nearest the head.
+An invalid head names as latest valid hash the valid block of its chain nearest the head.
 
 There is none when no block of the chain is valid.
 
@@ -182,7 +182,7 @@ theorem getElem?_succ_chainOf {h b : Hash32} {i : Nat} (hb : (chainOf tree h)[i 
 
 /-- The latest valid hash of a block is zero, or a valid payload of its chain.
 
-Otherwise it is not the hash of a block of proof of work. -/
+So it is never the hash of a held block of proof of work, unless that hash is zero. -/
 theorem latestValidHash_spec {h v : Hash32} (hv : latestValidHash tree h = some v) :
     v = ZERO_HASH ∨
       v ∈ chainOf tree h ∧ ∃ p, tree.lookup v = some p ∧ p.valid = true ∧ p.isPow = false := by
@@ -264,8 +264,9 @@ theorem two_le_length_of_lookup {a b : Hash32} {p q : KnownPayload}
       · have hak : (a == k) = false := by simp [hka]
         simp [List.lookup, hak] at ha
 
-/-- The latest block of proof of work on the chain of a held payload is its parent, if that is one.
--/
+/-- On the chain of a held payload, the latest totals of proof of work are those of its parent.
+
+The tree must hold the parent, as a block of proof of work. -/
 theorem latestPow_of_parent {h : Hash32} {p q : KnownPayload} {totals : Nat × Nat}
     (hp : tree.lookup h = some p) (hPayload : p.powTotalDifficulty = none)
     (hq : tree.lookup p.parentHash = some q) (hPow : q.powTotalDifficulty = some totals) :

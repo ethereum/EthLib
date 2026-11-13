@@ -24,7 +24,9 @@ A block of proof of work also has its total difficulty and that of its parent, a
 
 They are the fields `totalDifficulty` and `parentTotalDifficulty`, both present or both absent.
 
-A genesis block of a chain that starts at Paris carries no totals, since it is a payload.
+Give no totals for a genesis block of a chain that starts at Paris.
+
+The model then treats it as a payload, so its descendants pass the terminal block check.
 
 No two of them have the same block hash.
 

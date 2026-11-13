@@ -3387,7 +3387,7 @@ Step 3 of the method asks this of a head of proof of work, and step 2 of payload
 `forkchoiceUpdated_of_pow_not_terminal` states the same for a head of proof of work that is not terminal, and `forkchoiceUpdated_of_parent_not_terminal` for a payload whose parent is such a block.
 The model lets a chain with no block of proof of work in the tree pass the check.
 It assumes such a chain is past the transition; the source would ask for the missing blocks first.
-The check runs before step 2 of the method, so a head below the known finalized block must pass it too; the source does not order the two steps.
+The check runs before step 2 of the method, so a head below the known finalized block must pass it too, since step 2 applies only to a valid block.
 The forkchoice state allows zero safe and finalized hashes only until the transition block is finalized.
 The model takes that block as finalized when the finalized block that the execution layer knows is a payload of the tree.
 The finalized hash of the request itself does not count.

@@ -38,7 +38,7 @@ A valid head below that block is valid, and the forkchoice state is neither chec
 
 Its chain must still pass the terminal block check, which this model runs first.
 
-The source does not order step 2 and step 3, and a block that fails step 3 is not valid.
+Step 2 applies only to a valid block, and a chain that fails that check is not valid.
 
 The source allows the update to be skipped there, and this model skips it.
 
