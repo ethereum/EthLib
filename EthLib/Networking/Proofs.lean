@@ -23,6 +23,7 @@ public import EthLib.Networking.Proofs.Enr.Eth
 public import EthLib.Networking.Proofs.Enr.Record
 public import EthLib.Networking.Proofs.Enr.Security
 public import EthLib.Networking.Proofs.Enr.V4
+public import EthLib.Networking.Proofs.Gossip.Cache
 public import EthLib.Networking.Proofs.Gossip.MessageId
 public import EthLib.Networking.Proofs.Gossip.Payload
 public import EthLib.Networking.Proofs.Gossip.Rpc
