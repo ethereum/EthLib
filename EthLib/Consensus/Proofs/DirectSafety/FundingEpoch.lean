@@ -42,10 +42,10 @@ private theorem funding_kept_prefix {fork : Fork} {s t : BeaconState preset fork
   have sources : fundingSources t = fundingSources s := by
     unfold fundingSources
     rw [queue]
-  have bound := funding_potential_change (fundingSources t) (fundingSources s)
+  have bound := fundingPotential_change (fundingSources t) (fundingSources s)
     (fun i => actualBalanceAt ⟨fork, t⟩ i - actualBalanceAt ⟨fork, s⟩ i)
     size life (by rw [epoch]) (fun _ h => Or.inl (sources ▸ h)) (fun i => ?_)
-  · rw [funding_potential_eq, funding_potential_eq] at bound
+  · rw [fundingPotential_eq, fundingPotential_eq] at bound
     omega
   · by_cases inside : i < s.validators.data.size
     · rw [effective i inside]; omega
@@ -177,8 +177,8 @@ private theorem funding_before {fork : Fork} {s t : BeaconState preset fork}
     (ok : epochBeforePayments config checks s = .ok t)
     (events : List (BalanceEvent preset))
     (replayed : epochBalanceReplay (config := config) (checks := checks) s = .ok (t, events)) :
-    fundedStake ⟨fork, t⟩ + funding_carry ⟨fork, t⟩ ≤
-      fundedStake ⟨fork, s⟩ + funding_carry ⟨fork, s⟩ +
+    fundedStake ⟨fork, t⟩ + fundingCarry ⟨fork, t⟩ ≤
+      fundedStake ⟨fork, s⟩ + fundingCarry ⟨fork, s⟩ +
         config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat +
         (events.map fundingCredit).sum := by
   obtain ⟨justified, scored, rewarded, registered, slashed, reset, deposited, rewardEvents, limit,
@@ -244,7 +244,7 @@ private theorem funding_before {fork : Fork} {s t : BeaconState preset fork}
         resetPending pendingOk
     rw [Except.ok.inj (depositedOk'.symm.trans depositedOk), carry] at pendingFunding
     simp only [electra, ↓reduceDIte, List.map_cons, List.map_nil, List.sum_cons, List.sum_nil,
-      fundingCredit, funding_carry, ↓reduceIte, Nat.add_zero]
+      fundingCredit, fundingCarry, ↓reduceIte, Nat.add_zero]
     have withdrawn : withdrawnConsolidationCredit
         ⟨.deposits, ⟨fork, reset⟩, ⟨fork, deposited⟩, consumedDeposits reset deposited electra,
           0⟩ =
@@ -254,7 +254,7 @@ private theorem funding_before {fork : Fork} {s t : BeaconState preset fork}
   · -- Before Electra the pending stages are absent and nothing is carried.
     simp only [EpochStage.Edge, electra, ↓reduceDIte] at depositedOk consolidatedOk
     subst depositedOk consolidatedOk
-    simp only [electra, ↓reduceDIte, List.map_nil, List.sum_nil, funding_carry]
+    simp only [electra, ↓reduceDIte, List.map_nil, List.sum_nil, fundingCarry]
     omega
 
 /-- The stages after the effective-balance update keep the funding and the deposit carry. -/
@@ -262,8 +262,8 @@ private theorem funding_late {fork : Fork} {s t : BeaconState preset fork}
     (trace : EpochTrace (EpochStage.action config checks)
       [.slashingsReset, .randaoReset, .history, .participation, .syncCommittees,
         .proposerLookahead, .ptcWindow] s t) :
-    fundedStake ⟨fork, t⟩ + funding_carry ⟨fork, t⟩ =
-      fundedStake ⟨fork, s⟩ + funding_carry ⟨fork, s⟩ := by
+    fundedStake ⟨fork, t⟩ + fundingCarry ⟨fork, t⟩ =
+      fundedStake ⟨fork, s⟩ + fundingCarry ⟨fork, s⟩ := by
   let Same (a b : BeaconState preset fork) : Prop :=
     fundedStake ⟨fork, b⟩ = fundedStake ⟨fork, a⟩ ∧
       b.depositBalanceToConsume = a.depositBalanceToConsume
@@ -278,7 +278,7 @@ private theorem funding_late {fork : Fork} {s t : BeaconState preset fork}
       rcases member with rfl | rfl | rfl | rfl | rfl | rfl | rfl <;>
         exact ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩
     exact ⟨funding_stage edge other, (edge.records other).2.2.2.1⟩
-  simp only [funding_carry, same.1, same.2]
+  simp only [fundingCarry, same.1, same.2]
 
 /-- The epoch passes conserve funding apart from churn and the recorded external credits.
 
@@ -294,8 +294,8 @@ theorem funding_epoch {fork : Fork} {s t middle : BeaconState preset fork}
     (ok : processEpoch config checks s = .ok t)
     (events : List (BalanceEvent preset))
     (replayed : epochBalanceReplay (config := config) (checks := checks) s = .ok (middle, events)) :
-    fundedStake ⟨fork, t⟩ + funding_carry ⟨fork, t⟩ ≤
-      fundedStake ⟨fork, s⟩ + funding_carry ⟨fork, s⟩ +
+    fundedStake ⟨fork, t⟩ + fundingCarry ⟨fork, t⟩ ≤
+      fundedStake ⟨fork, s⟩ + fundingCarry ⟨fork, s⟩ +
         config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat +
         (events.map fundingCredit).sum := by
   have gloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt early
@@ -327,10 +327,10 @@ theorem funding_epoch {fork : Fork} {s t middle : BeaconState preset fork}
     unfold fundingSources
     rw [show updated.pendingConsolidations = before.pendingConsolidations from queue]
   have effective : fundedStake ⟨fork, updated⟩ ≤ fundedStake ⟨fork, before⟩ := by
-    rw [← funding_potential_eq, ← funding_potential_eq, sources]
+    rw [← fundingPotential_eq, ← fundingPotential_eq, sources]
     exact funding_effective_updates (fundingSources before) updatedEdge
   have carry := updatedEdge.depositCarry nofun
-  simp only [funding_carry, carry] at late bound ⊢
+  simp only [fundingCarry, carry] at late bound ⊢
   omega
 
 end

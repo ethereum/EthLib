@@ -24,9 +24,9 @@ variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 private theorem funding_slot_increment {fork : Fork} (s : BeaconState preset fork)
     (next : Slot) (later : s.slot.toNat ≤ next.toNat) :
     fundedStake ⟨fork, { s with slot := next }⟩ ≤ fundedStake ⟨fork, s⟩ := by
-  rw [← funding_potential_eq, ← funding_potential_eq]
+  rw [← fundingPotential_eq, ← fundingPotential_eq]
   -- Advancing the epoch can remove support, but cannot create support for an unchanged validator.
-  have bound := funding_potential_change (fundingSources s) (fundingSources s) (fun _ => 0)
+  have bound := fundingPotential_change (fundingSources s) (fundingSources s) (fun _ => 0)
     (s := s) (t := { s with slot := next }) rfl
     (.of_data rfl) (by
       simp only [getCurrentEpoch_toNat]
@@ -46,8 +46,8 @@ private theorem funding_lowered {fork : Fork} {s t : BeaconState preset fork}
   have sources : fundingSources t = fundingSources s := by
     unfold fundingSources
     rw [queue]
-  rw [← funding_potential_eq, ← funding_potential_eq]
-  simpa using funding_potential_change (fundingSources t) (fundingSources s) (fun _ => 0) size
+  rw [← fundingPotential_eq, ← fundingPotential_eq]
+  simpa using fundingPotential_change (fundingSources t) (fundingSources s) (fun _ => 0) size
     life (by simp [getCurrentEpoch, slot]) (fun _ h => Or.inl (sources ▸ h))
     (fun i => by simpa using lowered i)
 
@@ -193,7 +193,7 @@ theorem funding_slot {x y : ForkedBeaconState preset}
     (ok : advanceSlotAcross config checks x = .ok y)
     (events : List (BalanceEvent preset))
     (replayed : (Step.slot ok).balanceEvents = .ok events) :
-    fundedStake y + funding_carry y ≤ fundedStake x + funding_carry x +
+    fundedStake y + fundingCarry y ≤ fundedStake x + fundingCarry x +
       ((getCurrentEpoch y.state).toNat - (getCurrentEpoch x.state).toNat) *
         config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat +
       (events.map fundingCredit).sum := by
@@ -203,7 +203,7 @@ theorem funding_slot {x y : ForkedBeaconState preset}
   obtain ⟨crossings, crossingOk, _⟩ := upgradeBalanceReplay_bounded upgrades
   have fundedUpgrade := funding_slot_upgrades (s := ⟨x.fork, advanced⟩) upgrades early
   have carryUpgrade := depositCarry_processUpgrades upgrades early
-  change funding_carry y = funding_carry ⟨x.fork, advanced⟩ at carryUpgrade
+  change fundingCarry y = fundingCarry ⟨x.fork, advanced⟩ at carryUpgrade
   rw [carryUpgrade]
   apply (Nat.add_le_add_right fundedUpgrade _).trans
   have slotUpgrade := processUpgrades_slot upgrades
@@ -216,7 +216,7 @@ theorem funding_slot {x y : ForkedBeaconState preset}
   obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
   have cachedFund : fundedStake ⟨x.fork, cached⟩ = fundedStake x := by
     rw [cachedEq]; rfl
-  have cachedCarry : funding_carry ⟨x.fork, cached⟩ = funding_carry x := by
+  have cachedCarry : fundingCarry ⟨x.fork, cached⟩ = fundingCarry x := by
     rw [cachedEq]; rfl
   have cachedSlot : cached.slot = x.state.slot := by rw [cachedEq]
   have epochedSlot : epoched.slot = cached.slot := by
@@ -233,8 +233,8 @@ theorem funding_slot {x y : ForkedBeaconState preset}
       rw [← epochOk]
   have increment := funding_slot_increment epoched next (by
     rw [epochedSlot, cachedSlot]; omega)
-  have finalBound : fundedStake ⟨x.fork, advanced⟩ + funding_carry ⟨x.fork, advanced⟩ ≤
-      fundedStake ⟨x.fork, epoched⟩ + funding_carry ⟨x.fork, epoched⟩ := by
+  have finalBound : fundedStake ⟨x.fork, advanced⟩ + fundingCarry ⟨x.fork, advanced⟩ ≤
+      fundedStake ⟨x.fork, epoched⟩ + fundingCarry ⟨x.fork, epoched⟩ := by
     subst advanced
     exact Nat.add_le_add_right increment _
   apply finalBound.trans

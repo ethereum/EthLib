@@ -1786,7 +1786,7 @@ private theorem funding_source_inactive (v : Validator) (current next : Epoch)
 /-- The funded stake with an explicit queue of pending consolidations.
 
 During the pass, only the unprocessed suffix supplies pending-source support. -/
-def funding_potential {fork : Fork} (s : BeaconState preset fork)
+def fundingPotential {fork : Fork} (s : BeaconState preset fork)
     (queue : List PendingConsolidation) : Nat :=
   ∑ i ∈ Finset.range s.validators.data.size,
     (s.validators.data[i]?.map fun v =>
@@ -1801,8 +1801,8 @@ def fundingSources {fork : Fork} (s : BeaconState preset fork) : List PendingCon
   if electra : .pectra ≤ fork then (s.pendingConsolidations electra).data.toList else []
 
 /-- With the state's own queue, the potential is the funded stake. -/
-theorem funding_potential_eq {fork : Fork} (s : BeaconState preset fork) :
-    funding_potential s (fundingSources s) = fundedStake ⟨fork, s⟩ := by
+theorem fundingPotential_eq {fork : Fork} (s : BeaconState preset fork) :
+    fundingPotential s (fundingSources s) = fundedStake ⟨fork, s⟩ := by
   unfold fundedStake fundingSources
   rw [funding_sum_zipIdx s.validators.data.toList (fun v i =>
     if isActiveValidator v (getCurrentEpoch s) ||
@@ -1812,13 +1812,13 @@ theorem funding_potential_eq {fork : Fork} (s : BeaconState preset fork) :
           else false)
       then max (effectiveAt ⟨fork, s⟩ i) (actualBalanceAt ⟨fork, s⟩ i) else 0)]
   by_cases electra : .pectra ≤ fork
-  · simp only [funding_potential, electra, ↓reduceDIte, Array.length_toList,
+  · simp only [fundingPotential, electra, ↓reduceDIte, Array.length_toList,
       Array.getElem?_toList, Array.any_toList]
-  · simp [funding_potential, electra]
+  · simp [fundingPotential, electra]
 
-private theorem funding_potential_mono {fork : Fork} (s : BeaconState preset fork)
+private theorem fundingPotential_mono {fork : Fork} (s : BeaconState preset fork)
     {one two : List PendingConsolidation} (included : ∀ c ∈ one, c ∈ two) :
-    funding_potential s one ≤ funding_potential s two := by
+    fundingPotential s one ≤ fundingPotential s two := by
   apply Finset.sum_le_sum
   intro i _
   cases found : s.validators.data[i]? with
@@ -1840,7 +1840,7 @@ private theorem funding_potential_mono {fork : Fork} (s : BeaconState preset for
 The epoch must not decrease, and each validator's funding must rise by at most its credit.
 
 Each pending source in the later queue is pending, active or not yet activated before the step. -/
-theorem funding_potential_change {fork : Fork} {s t : BeaconState preset fork}
+theorem fundingPotential_change {fork : Fork} {s t : BeaconState preset fork}
     (queue beforeQueue : List PendingConsolidation) (credits : Nat → Nat)
     (size : t.validators.data.size = s.validators.data.size)
     (life : RegistryLifecycle s t)
@@ -1851,9 +1851,9 @@ theorem funding_potential_change {fork : Fork} {s t : BeaconState preset fork}
           (isActiveValidator v (getCurrentEpoch s) = true ∨ getCurrentEpoch s < v.activationEpoch))
     (funding : ∀ i, max (effectiveAt ⟨fork, t⟩ i) (actualBalanceAt ⟨fork, t⟩ i) ≤
       max (effectiveAt ⟨fork, s⟩ i) (actualBalanceAt ⟨fork, s⟩ i) + credits i) :
-    funding_potential t queue ≤ funding_potential s beforeQueue +
+    fundingPotential t queue ≤ fundingPotential s beforeQueue +
       ∑ i ∈ Finset.range s.validators.data.size, credits i := by
-  unfold funding_potential
+  unfold fundingPotential
   rw [size, ← Finset.sum_add_distrib]
   apply Finset.sum_le_sum
   intro i member
@@ -1880,11 +1880,11 @@ theorem funding_potential_change {fork : Fork} {s t : BeaconState preset fork}
 private theorem funding_balance_change {fork : Fork} {s t : BeaconState preset fork}
     (queue : List PendingConsolidation) (registry : t.validators = s.validators)
     (slot : t.slot = s.slot) :
-    funding_potential t queue ≤ funding_potential s queue +
+    fundingPotential t queue ≤ fundingPotential s queue +
       ∑ i ∈ Finset.range s.validators.data.size,
         (actualBalanceAt ⟨fork, t⟩ i - actualBalanceAt ⟨fork, s⟩ i) := by
   have epoch : getCurrentEpoch t = getCurrentEpoch s := by simp [getCurrentEpoch, slot]
-  apply funding_potential_change queue queue _ (congrArg (·.data.size) registry)
+  apply fundingPotential_change queue queue _ (congrArg (·.data.size) registry)
     (.of_data (congrArg (·.data) registry)) (by rw [epoch]) (fun _ h => Or.inl h)
   intro i
   have effective : effectiveAt ⟨fork, t⟩ i = effectiveAt ⟨fork, s⟩ i := by
@@ -1897,11 +1897,11 @@ private theorem funding_append {fork : Fork} {s t : BeaconState preset fork}
     (registry : t.validators.data = s.validators.data.push v)
     (balances : t.balances.data = s.balances.data.push amount)
     (matched : BalancesMatch s) (slot : t.slot = s.slot) :
-    funding_potential t queue ≤ funding_potential s queue +
+    fundingPotential t queue ≤ fundingPotential s queue +
       max v.effectiveBalance.toNat amount.toNat := by
   change s.balances.data.size = s.validators.data.size at matched
   have epoch : getCurrentEpoch t = getCurrentEpoch s := by simp [getCurrentEpoch, slot]
-  unfold funding_potential
+  unfold fundingPotential
   rw [registry, Array.size_push, Finset.sum_range_succ]
   have old : (∑ i ∈ Finset.range s.validators.data.size,
       ((s.validators.data.push v)[i]?.map fun w =>
@@ -1939,7 +1939,7 @@ theorem funding_registration {fork : Fork} {s t : BeaconState preset fork}
     {credentials : Bytes32} {amount : Gwei}
     (matched : BalancesMatch s)
     (ok : addValidatorToRegistry s key credentials amount = .ok t) :
-    funding_potential t queue ≤ funding_potential s queue + amount.toNat := by
+    fundingPotential t queue ≤ fundingPotential s queue + amount.toNat := by
   obtain ⟨registry, balances⟩ := addValidatorToRegistry_push ok matched
   have rounded : amount % preset.EFFECTIVE_BALANCE_INCREMENT ≤ amount := by
     rw [UInt64.le_iff_toNat_le, UInt64.toNat_mod]
@@ -1955,17 +1955,17 @@ theorem funding_registration {fork : Fork} {s t : BeaconState preset fork}
 /-- Effective-balance updates do not raise the potential. -/
 theorem funding_effective_updates {fork : Fork} {s t : BeaconState preset fork}
     (queue : List PendingConsolidation) (ok : processEffectiveBalanceUpdates s = .ok t) :
-    funding_potential t queue ≤ funding_potential s queue := by
+    fundingPotential t queue ≤ fundingPotential s queue := by
   have slot := (frame_processEffectiveBalanceUpdates ok).slot
   have epoch : getCurrentEpoch t = getCurrentEpoch s := by simp [getCurrentEpoch, slot]
-  have bound := funding_potential_change queue queue (fun _ => 0)
+  have bound := fundingPotential_change queue queue (fun _ => 0)
     (sameSizes_processEffectiveBalanceUpdates ok).1
     (registryLifecycle_processEffectiveBalanceUpdates ok)
     (by rw [epoch]) (fun _ h => Or.inl h)
     (fun i => by simpa using processEffectiveBalanceUpdates_max_le ok i)
   simpa using bound
 
-private theorem funding_potential_transfer {fork : Fork} {s t : BeaconState preset fork}
+private theorem fundingPotential_transfer {fork : Fork} {s t : BeaconState preset fork}
     (c : PendingConsolidation) (rest : List PendingConsolidation) (v : Validator) (moved : Nat)
     (registry : t.validators = s.validators) (slot : t.slot = s.slot)
     (found : s.validators.data[c.sourceIndex.toNat]? = some v)
@@ -1975,7 +1975,7 @@ private theorem funding_potential_transfer {fork : Fork} {s t : BeaconState pres
     (funded : moved ≤ v.effectiveBalance.toNat)
     (balances : ∀ i, actualBalanceAt ⟨fork, t⟩ i ≤ actualBalanceAt ⟨fork, s⟩ i +
       if i = c.targetIndex.toNat then moved else 0) :
-    funding_potential t rest ≤ funding_potential s (c :: rest) := by
+    fundingPotential t rest ≤ fundingPotential s (c :: rest) := by
   let before := fun i => (s.validators.data[i]?.map fun w =>
     if isActiveValidator w (getCurrentEpoch s) ||
         decide (getCurrentEpoch s < w.activationEpoch) ||
@@ -2056,7 +2056,7 @@ private theorem funding_pass_consolidations {fork : Fork} {next : Epoch}
         v.activationEpoch ≤ getCurrentEpoch s ∧
         v.exitEpoch.toNat + config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat ≤
           v.withdrawableEpoch.toNat) →
-      funding_potential result.1 (queue.drop result.2) ≤ funding_potential s queue
+      fundingPotential result.1 (queue.drop result.2) ≤ fundingPotential s queue
   | [], s, result, ok, _, _, _ => by
     cases ok
     exact Nat.le_refl _
@@ -2073,7 +2073,7 @@ private theorem funding_pass_consolidations {fork : Fork} {next : Epoch}
       obtain ⟨result', passed, rfl⟩ := ok
       have ih := funding_pass_consolidations delay passed nextEq distinct'.2
         (fun d member => sources d (List.mem_cons_of_mem c member))
-      exact ih.trans (funding_potential_mono s (fun d member => List.mem_cons_of_mem c member))
+      exact ih.trans (fundingPotential_mono s (fun d member => List.mem_cons_of_mem c member))
     · simp only [slashed] at ok
       by_cases waits : next < v.withdrawableEpoch
       · simp only [waits, ↓reduceIte, pure, Except.pure] at ok
@@ -2094,7 +2094,7 @@ private theorem funding_pass_consolidations {fork : Fork} {next : Epoch}
           intro d member
           obtain ⟨w, found, activated, ordered⟩ := sources d (List.mem_cons_of_mem c member)
           exact ⟨w, by rw [registry]; exact found, epoch ▸ activated, ordered⟩)
-        have one := funding_potential_transfer c rest v (min balance v.effectiveBalance).toNat
+        have one := fundingPotential_transfer c rest v (min balance v.effectiveBalance).toNat
           registry slot found
           (funding_source_inactive v _ _ nextEq delay ordered (UInt64.not_lt.mp waits))
           activated (by
@@ -2121,14 +2121,14 @@ private theorem funding_consolidations {fork : Fork} {s t : BeaconState preset f
     (mapError_ok_iff.mp (liftAccessor_ok.mp nextOk))).2
   simp only [UInt64.toNat_one] at nextEq
   have bound := funding_pass_consolidations delay passed nextEq distinct sources
-  rw [← funding_potential_eq, ← funding_potential_eq]
+  rw [← fundingPotential_eq, ← fundingPotential_eq]
   simp only [fundingSources, electra, ↓reduceDIte]
   have takeEq : ((s.pendingConsolidations electra).data.toList.drop result.2).take
       ((s.pendingConsolidations electra).data.size - result.2) =
       (s.pendingConsolidations electra).data.toList.drop result.2 :=
     List.take_of_length_le (by simp)
   convert bound using 1
-  simp only [funding_potential, Array.toList_extract, takeEq, effectiveAt, actualBalanceAt,
+  simp only [fundingPotential, Array.toList_extract, takeEq, effectiveAt, actualBalanceAt,
     getCurrentEpoch]
   congr 3
 
@@ -2242,7 +2242,7 @@ private theorem funding_selected_credit {fork : Fork} (s t : BeaconState preset 
 private theorem funding_supported_balance_change {fork : Fork} {s t : BeaconState preset fork}
     (queue : List PendingConsolidation) (registry : t.validators = s.validators)
     (slot : t.slot = s.slot) :
-    funding_potential t queue ≤ funding_potential s queue +
+    fundingPotential t queue ≤ fundingPotential s queue +
       ∑ i ∈ Finset.range s.validators.data.size,
         (s.validators.data[i]?.map fun v =>
           if isActiveValidator v (getCurrentEpoch s) ||
@@ -2251,7 +2251,7 @@ private theorem funding_supported_balance_change {fork : Fork} {s t : BeaconStat
             actualBalanceAt ⟨fork, t⟩ i - actualBalanceAt ⟨fork, s⟩ i
           else 0).getD 0 := by
   have epoch : getCurrentEpoch t = getCurrentEpoch s := by simp [getCurrentEpoch, slot]
-  unfold funding_potential
+  unfold fundingPotential
   rw [registry, ← Finset.sum_add_distrib]
   apply Finset.sum_le_sum
   intro i _
@@ -2274,7 +2274,7 @@ private theorem funding_balance_selection {fork : Fork} {s t : BeaconState prese
     (queue : List PendingConsolidation) (registry : t.validators = s.validators)
     (slot : t.slot = s.slot) (ordered : ExitsOrdered s)
     (activation : ∀ v ∈ s.validators.data, v.activationEpoch ≤ v.exitEpoch) :
-    funding_potential t queue ≤ funding_potential s queue +
+    fundingPotential t queue ≤ fundingPotential s queue +
       ∑ i ∈ Finset.range s.validators.data.size,
         (s.validators.data[i]?.map fun v =>
           if v.withdrawableEpoch ≤ getCurrentEpoch s then
@@ -2303,7 +2303,7 @@ private theorem funding_balance_selection {fork : Fork} {s t : BeaconState prese
 private theorem funding_pending_deposit {fork : Fork} {s t : BeaconState preset fork}
     (queue : List PendingConsolidation) (matched : BalancesMatch s) {deposit : PendingDeposit}
     (ok : applyPendingDeposit config checks s deposit = .ok t) :
-    funding_potential t queue ≤ funding_potential s queue + deposit.amount.toNat := by
+    fundingPotential t queue ≤ fundingPotential s queue + deposit.amount.toNat := by
   have credit := (deposit_credit_bound s t matched deposit ok).2
   rcases applyPendingDeposit_cases ok with rfl | ⟨_, ok⟩ | ⟨_, ok⟩
   · omega
@@ -2334,7 +2334,7 @@ private theorem funding_withdrawn_change {fork : Fork} {s t : BeaconState preset
     (ordered : ExitsOrdered s)
     (activation : ∀ v ∈ s.validators.data, v.activationEpoch ≤ v.exitEpoch)
     (ok : applyPendingDeposit config checks s deposit = .ok t) :
-    funding_potential t queue ≤ funding_potential s queue +
+    fundingPotential t queue ≤ fundingPotential s queue +
       ∑ i ∈ Finset.range s.validators.data.size,
         (s.validators.data[i]?.map fun v =>
           if v.withdrawableEpoch ≤ getCurrentEpoch s ∧
@@ -2379,7 +2379,7 @@ private theorem funding_withdrawn_selected {fork : Fork} {s t : BeaconState pres
     (selected : ∀ i, i ∉ indices → queue.any (fun c => c.sourceIndex.toNat == i) = true →
       ∀ v, s.validators.data[i]? = some v → ¬ v.withdrawableEpoch < nextEpoch)
     (ok : applyPendingDeposit config checks s deposit = .ok t) :
-    funding_potential t queue ≤ funding_potential s queue +
+    fundingPotential t queue ≤ fundingPotential s queue +
       ∑ i ∈ indices, (actualBalanceAt ⟨fork, t⟩ i - actualBalanceAt ⟨fork, s⟩ i) := by
   apply (funding_withdrawn_change queue status nextEq ordered activation ok).trans
   apply Nat.add_le_add_left
@@ -2439,8 +2439,8 @@ private theorem funding_pass_potential {fork : Fork} {stop : PendingDeposit → 
       nextEpoch.toNat = (getCurrentEpoch s).toNat + 1 →
       (∀ i, i ∉ indices → queue.any (fun c => c.sourceIndex.toNat == i) = true →
         ∀ v, s.validators.data[i]? = some v → ¬ v.withdrawableEpoch < nextEpoch) →
-      funding_potential pass.1.state queue + processed.toNat ≤
-        funding_potential s queue + pass.1.processed.toNat +
+      fundingPotential pass.1.state queue + processed.toNat ≤
+        fundingPotential s queue + pass.1.processed.toNat +
           ∑ i ∈ indices,
             (actualBalanceAt ⟨fork, pass.1.state⟩ i - actualBalanceAt ⟨fork, s⟩ i)
   | [], _, _, _, _, _, ok, _, _, _, _, _ => by cases ok; simp
@@ -2533,8 +2533,8 @@ private theorem funding_pending_potential {fork : Fork} {s t : BeaconState prese
       ∀ v, s.validators.data[i]? = some v →
         (getCurrentEpoch s).toNat < v.withdrawableEpoch.toNat)
     (ok : processPendingDeposits config checks s electra = .ok t) :
-    funding_potential t queue + (t.depositBalanceToConsume electra).toNat ≤
-      funding_potential s queue + (s.depositBalanceToConsume electra).toNat +
+    fundingPotential t queue + (t.depositBalanceToConsume electra).toNat ≤
+      fundingPotential s queue + (s.depositBalanceToConsume electra).toNat +
         config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat +
         ∑ i ∈ indices, (actualBalanceAt ⟨fork, t⟩ i - actualBalanceAt ⟨fork, s⟩ i) := by
   obtain ⟨next, churn, available, finalized, pass, nextOk, _, passed, registry, balances, spent⟩ :=
@@ -2553,8 +2553,8 @@ private theorem funding_pending_potential {fork : Fork} {s t : BeaconState prese
     rfl facts.applies
   have finalSlot : t.slot = pass.1.state.slot :=
     (frame_processPendingDeposits ok).slot.trans slot.symm
-  have potential : funding_potential t queue = funding_potential pass.1.state queue := by
-    simp only [funding_potential, registry, balances, effectiveAt, actualBalanceAt,
+  have potential : fundingPotential t queue = fundingPotential pass.1.state queue := by
+    simp only [fundingPotential, registry, balances, effectiveAt, actualBalanceAt,
       getCurrentEpoch, finalSlot]
     congr 3
   have credits : (∑ i ∈ indices, (actualBalanceAt ⟨fork, t⟩ i - actualBalanceAt ⟨fork, s⟩ i)) =
@@ -2608,7 +2608,7 @@ private theorem funding_pending_funded {fork : Fork} {s t : BeaconState preset f
     | some v => simp [Bool.and_eq_true]
   have queue := processPendingDeposits_pendingConsolidations ok
   rw [credit] at bound
-  rw [← funding_potential_eq s, ← funding_potential_eq t]
+  rw [← fundingPotential_eq s, ← fundingPotential_eq t]
   simpa only [fundingSources, electra, ↓reduceDIte, queue] using bound
 
 /-- The pending deposits and consolidations raise the funding by at most one epoch of churn.
@@ -2638,7 +2638,7 @@ theorem funding_pending_balances {fork : Fork} {s t : BeaconState preset fork}
   omega
 
 /-- Unspent deposit capacity retained across post-Electra operations. -/
-def funding_carry (x : ForkedBeaconState preset) : Nat :=
+def fundingCarry (x : ForkedBeaconState preset) : Nat :=
   if h : .pectra ≤ x.fork then (x.state.depositBalanceToConsume h).toNat else 0
 
 /-- Before Gloas, the stages before the payments and the events of their replay.
@@ -2767,13 +2767,13 @@ theorem funding_window_of_steps {x y : ForkedBeaconState preset}
     (stepBound : ∀ {a b : ForkedBeaconState preset}, Run config checks x a →
       ∀ (step : Step config checks a b), b.fork < .glamsterdam →
       ∀ added, step.balanceEvents = .ok added →
-      fundedStake b + funding_carry b ≤ fundedStake a + funding_carry a +
+      fundedStake b + fundingCarry b ≤ fundedStake a + fundingCarry a +
         ((getCurrentEpoch b.state).toNat - (getCurrentEpoch a.state).toNat) *
           config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat +
         (added.map fundingCredit).sum) :
     Models.stake (effectiveWeight y.state) (activeKeys y.state) ≤
       activeStakeWindow (config := config) x high events := by
-  have bound := funding_run_bound (fun s => fundedStake s + funding_carry s) (fun _ => 0)
+  have bound := funding_run_bound (fun s => fundedStake s + fundingCarry s) (fun _ => 0)
     fundingCredit tail early high endEpoch events replayed (fun pre step early added ok => by
       simpa using stepBound pre step early added ok)
   rw [show ∀ l : List (BalanceEvent preset), (l.map fun _ => 0).sum = 0 by simp,
@@ -2783,7 +2783,7 @@ theorem funding_window_of_steps {x y : ForkedBeaconState preset}
       driftHorizon x high := by unfold driftHorizon; omega
   have larger := Nat.mul_le_mul_right
     config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat count
-  simp only [activeStakeWindow, delay, ↓reduceIte, depositWindow, funding_carry] at *
+  simp only [activeStakeWindow, delay, ↓reduceIte, depositWindow, fundingCarry] at *
   omega
 
 end

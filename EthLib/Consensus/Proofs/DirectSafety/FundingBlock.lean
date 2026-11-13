@@ -30,8 +30,8 @@ private theorem funding_block_change {fork : Fork} {s t : BeaconState preset for
       ∃ v, s.validators.data[i]? = some v ∧
         (isActiveValidator v (getCurrentEpoch s) = true ∨ getCurrentEpoch s < v.activationEpoch)) :
     fundedStake ⟨fork, t⟩ ≤ fundedStake ⟨fork, s⟩ + balanceCredits s t := by
-  rw [← funding_potential_eq t, ← funding_potential_eq s]
-  have bound := funding_potential_change (fundingSources t) (fundingSources s)
+  rw [← fundingPotential_eq t, ← fundingPotential_eq s]
+  have bound := fundingPotential_change (fundingSources t) (fundingSources s)
     (fun i => actualBalanceAt ⟨fork, t⟩ i - actualBalanceAt ⟨fork, s⟩ i)
     size life (by simp [getCurrentEpoch, slot]) pending (fun i => by
       by_cases inside : i < s.validators.data.size
@@ -143,7 +143,7 @@ private theorem funding_block_deposit {fork : Fork} {s t : BeaconState preset fo
   · exact Nat.le_add_right _ _
   · exact Nat.le_add_right _ _
   · have queue := SamePendingQueue.deposit electra ok
-    rw [← funding_potential_eq, ← funding_potential_eq, funding_sources_kept (fun _ => queue)]
+    rw [← fundingPotential_eq, ← fundingPotential_eq, funding_sources_kept (fun _ => queue)]
     simp only [electra, ↓reduceIte, Nat.add_zero]
     exact funding_registration (fundingSources s) siteMatched added
   have notElectra : ¬ .pectra ≤ fork := Nat.not_le_of_lt early
@@ -160,7 +160,7 @@ private theorem funding_block_deposit {fork : Fork} {s t : BeaconState preset fo
     have bound := funding_registration [] siteMatched added
     have empty (u : BeaconState preset fork) : fundingSources u = [] := by
       simp [fundingSources, notElectra]
-    rw [← funding_potential_eq, ← funding_potential_eq, empty, empty]
+    rw [← fundingPotential_eq, ← fundingPotential_eq, empty, empty]
     apply bound.trans
     apply Nat.add_le_add_left
     have size : site.balances.data.size < t.balances.data.size := by simp [balances]
@@ -509,8 +509,8 @@ theorem funding_block {fork : Fork} {s t : BeaconState preset fork}
     (events : List (BalanceEvent preset))
     (replayed : blockBalanceReplay (config := config) (checks := checks)
       early engine s block = .ok (t, events)) :
-    fundedStake ⟨fork, t⟩ + funding_carry ⟨fork, t⟩ ≤
-      fundedStake ⟨fork, s⟩ + funding_carry ⟨fork, s⟩ + (events.map fundingCredit).sum := by
+    fundedStake ⟨fork, t⟩ + fundingCarry ⟨fork, t⟩ ≤
+      fundedStake ⟨fork, s⟩ + fundingCarry ⟨fork, s⟩ + (events.map fundingCredit).sum := by
   have bound := (funding_block_replay early matched engine block replayed).2
   change fundedStake ⟨fork, t⟩ ≤
     fundedStake ⟨fork, s⟩ + (events.map funding_block_cost).sum at bound
@@ -518,8 +518,8 @@ theorem funding_block {fork : Fork} {s t : BeaconState preset fork}
     (blockBalanceReplay_bounded early engine block matched replayed)
   change (events.map funding_block_cost).sum ≤ (events.map fundingCredit).sum at costs
   have carry := depositCarry_processBlock early ok
-  have same : funding_carry ⟨fork, t⟩ = funding_carry ⟨fork, s⟩ := by
-    simp only [funding_carry, carry]
+  have same : fundingCarry ⟨fork, t⟩ = fundingCarry ⟨fork, s⟩ := by
+    simp only [fundingCarry, carry]
   rw [same]
   omega
 
