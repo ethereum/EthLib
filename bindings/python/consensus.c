@@ -175,6 +175,15 @@ extern lean_object*
 eth_consensus_api_validator_balances_ssz(lean_object* args);
 
 extern lean_object*
+eth_consensus_api_block_query(lean_object* args);
+
+extern lean_object*
+eth_consensus_api_blobs(lean_object* args);
+
+extern lean_object*
+eth_consensus_api_blobs_ssz(lean_object* args);
+
+extern lean_object*
 eth_consensus_api_committees(lean_object* args);
 
 extern lean_object*
@@ -764,6 +773,30 @@ py_consensus_api_validator_balances_ssz(
   PyObject* args
 ) {
   return call_pyvalue_export(eth_consensus_api_validator_balances_ssz, args, 5, CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_api_block_query(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_block_query, args, 4, CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_api_blobs(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_blobs, args, 5, CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_api_blobs_ssz(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_blobs_ssz, args, 5, CONSENSUS_ERROR);
 }
 
 PyObject*

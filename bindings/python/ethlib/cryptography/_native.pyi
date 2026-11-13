@@ -617,6 +617,18 @@ def consensus_api_validator_balances_ssz(name: str, fork: str, state: bytes, ids
     """The SSZ body of the balances answer, as `bytes`."""
     ...
 
+def consensus_api_block_query(name: str, fork: str, block: bytes, query: str) -> dict[str, Any]:
+    """The JSON response to a query on a signed block, as a `dict`."""
+    ...
+
+def consensus_api_blobs(name: str, fork: str, block: bytes, blobs: list[bytes], hashes: list[bytes] | None) -> dict[str, Any]:
+    """The JSON response of the blobs endpoint, as a `dict`."""
+    ...
+
+def consensus_api_blobs_ssz(name: str, fork: str, block: bytes, blobs: list[bytes], hashes: list[bytes] | None) -> bytes:
+    """The SSZ body of the blobs answer, as `bytes`."""
+    ...
+
 def consensus_api_committees(name: str, fork: str, state: bytes, epoch: int | None, index: int | None, slot: int | None) -> dict[str, Any]:
     """The JSON response of the committees endpoint, as a `dict`."""
     ...

@@ -3674,6 +3674,21 @@ The Python suite (`bindings/python/tests/consensus/test_beacon_api_committees.py
 It reads the active validators, the keys of the sync committees and the window of the PTC from the JSON of the state.
 It checks each committee against the assignment that the honest validator guide gives each active validator.
 
+The answers that read one signed block are in `Consensus/BeaconApi/Blocks.lean`: the block, its root, its attestations, its blinded form and its blobs.
+`signedHeader_root` (`Consensus/Proofs/BeaconApi/Blocks.lean`) shows that the header of a block has the root of the block and carries its signature.
+`blindedBlock_root` shows the same of the blinded block from Bellatrix to Fulu; it rests on `BeaconBlock.hashTreeRoot_blind`, and assumes that the logs bloom of the preset is not empty.
+`blindedBlock_total` shows that such a block always has a blinded form.
+So the root endpoint gives one root for the block, its header and its blinded form.
+`blindedBlockResponse_before_bellatrix` shows that before Bellatrix the blinded block endpoint gives the block itself, and `blindedBlockResponse_gloas` that from Gloas it gets code 400.
+`blobsOf_ok` shows that the blobs endpoint answers with `blockBlobs` over the commitments of the block, and `blockCommitments_before_deneb` that a block before Deneb has none.
+`blockBlobs_sublist` shows that the blobs answer keeps the order of the blobs of the block, and `blockBlobs_none` that it gives them all without hashes.
+`blockBlobs_versionedHash` shows that each blob it gives sits at the place of a commitment whose versioned hash is requested.
+`blockBlobs_commitment` shows that each such blob commits to a commitment of the block whose versioned hash is requested, when each blob of the block commits to the commitment at its place.
+The Python suite (`bindings/python/tests/consensus/test_beacon_api_blocks.py`) checks the root of the random static block of each fork from Phase 0 to Heze against its pinned root.
+It checks that the blinded block, encoded again, has that pinned root too.
+It checks the block, the attestations and the blinded block against the JSON of that block.
+It checks the blobs answer, with and without hashes, against versioned hashes that it computes with SHA-256 itself.
+
 Points that remain open:
 
 - The reader refuses a key that a container does not declare, while the source says that a field may be added to the data without a new version.
@@ -3724,6 +3739,12 @@ Points that remain open:
   A key that no validator holds gives code 500.
 - The source has the sync committees answer read "the current sync committee", but takes an epoch; EthLib answers the committee of the period of the epoch, the current one or the next, and gives code 400 for any other period.
 - Every error of the PTC answer has code 400, since the source names no other code for a slot that the window does not hold.
+- The blinded block endpoint "only supports forks through Fulu" and names no code for a later block; EthLib gives code 400.
+- The blobs answer reads an empty list of versioned hashes as a request for no blob, since the parameter is then specified.
+  The schema marks the hashes as unique but gives no code for a repeated one; EthLib accepts it.
+- The block answers take the signed block as an input, since the store of the fork choice keeps blocks without their signatures.
+- The blobs answer takes the blobs of the block as an input, one for each commitment; another count gets code 500.
+  Which blobs a node keeps, and whether it rebuilds them from columns, is its own matter.
 
 ### Builder API
 
@@ -4211,12 +4232,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 448 operations and 49 size constants.
-The Python extension calls 448 of the operations and 49 of the constants.
+Lean exports 451 operations and 49 size constants.
+The Python extension calls 451 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-10833 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2171), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (194), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (106), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (147), `module.c` (1514), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (71), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (58), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (737), `x25519.c` (21), `xmss.c` (134).
+10875 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2204), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (194), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (106), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (147), `module.c` (1520), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (71), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (58), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (740), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

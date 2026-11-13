@@ -596,6 +596,17 @@ def bindings : List Binding := [
     `EthLib.Consensus.Exports.apiValidatorBalancesSszExport,
     "(name: str, fork: str, state: bytes, ids: list[str] | None, in_query: bool) -> bytes",
     [], some "ConsensusError"⟩,
+  ⟨"consensus_api_block_query", `EthLib.Consensus.Exports.apiBlockQueryExport,
+    "(name: str, fork: str, block: bytes, query: str) -> dict[str, Any]",
+    [], some "ConsensusError"⟩,
+  ⟨"consensus_api_blobs", `EthLib.Consensus.Exports.apiBlobsExport,
+    "(name: str, fork: str, block: bytes, blobs: list[bytes], " ++
+      "hashes: list[bytes] | None) -> dict[str, Any]",
+    [], some "ConsensusError"⟩,
+  ⟨"consensus_api_blobs_ssz", `EthLib.Consensus.Exports.apiBlobsSszExport,
+    "(name: str, fork: str, block: bytes, blobs: list[bytes], " ++
+      "hashes: list[bytes] | None) -> bytes",
+    [], some "ConsensusError"⟩,
   ⟨"consensus_api_committees", `EthLib.Consensus.Exports.apiCommitteesExport,
     "(name: str, fork: str, state: bytes, epoch: int | None, index: int | None, " ++
       "slot: int | None) -> dict[str, Any]",
