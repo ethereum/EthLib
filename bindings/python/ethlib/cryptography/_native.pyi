@@ -585,6 +585,14 @@ def consensus_process_bid(name: str, fork: str, config: dict[str, Any] | None, s
     """None when a proposer accepts a signed bid, or the name of the rule that refuses it."""
     ...
 
+def consensus_is_eligible_for_bid_gloas(name: str, fork: str, state: bytes, preferences: list[bytes], slot: int, parent_hash: bytes, parent_root: bytes, pubkey: bytes) -> bool:
+    """From Gloas: whether a builder serves a request for a bid."""
+    ...
+
+def consensus_validate_bid(name: str, fork: str, config: dict[str, Any] | None, state: bytes, preferences: bytes, parent_gas_limit: int, signed: bytes, fee_recipient: bytes) -> str | None:
+    """From Gloas: None when a proposer accepts a fetched bid, or the name of the rule that refuses it."""
+    ...
+
 def consensus_unblind_signed_blinded_block(name: str, fork: str, blinded: bytes, revealed: bytes) -> tuple[bytes, bytes] | None:
     """The root and the bytes of the signed block that a signed blinded block and a payload give."""
     ...
@@ -1585,6 +1593,10 @@ def engine_read_forkchoice_response(response: dict[str, Any]) -> tuple[str, byte
     """A forkchoice response read from its JSON, as `json.loads` gives it."""
     ...
 
+def engine_read_get_payload_result(method: str, fork: str, result: dict[str, Any]) -> dict[str, Any]:
+    """The result of an `engine_getPayload` method at a fork, read from its JSON and written back."""
+    ...
+
 def engine_rewrite_params(method: str, params: list[Any]) -> list[Any]:
     """The parameters of an Engine API request, read by the decoder and written by the writer."""
     ...
@@ -1611,6 +1623,10 @@ def rpc_error_groups() -> list[tuple[str, tuple[tuple[bool, int], tuple[bool, in
 
 def rpc_pruned_history_unavailable() -> tuple[tuple[bool, int], str]:
     """The code of history that the node pruned, with its message."""
+    ...
+
+def rpc_serve(view: tuple[dict[str, Any], bytes, list[tuple[str, bytes]], tuple[bytes, bytes, bytes], int, bool], requests: list[str]) -> list[str | None]:
+    """Answer requests of the execution JSON-RPC API from the chain that the arguments build."""
     ...
 
 def pyvalue_echo(value: object) -> object:

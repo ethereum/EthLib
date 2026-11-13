@@ -230,7 +230,8 @@ private theorem processEpoch (ok : Consensus.processEpoch config checks state = 
         (fun _ paid => by rw [processBuilderPendingPayments_eq paid]; exact of_validators) ok
     exact (processJustificationAndFinalization justifiedOk).trans <| head.trans <|
       (of_validators (state := rooted)).trans tail
-  · obtain ⟨justified, justifiedOk, rest⟩ := slashedKeptLaws.processEpoch_beforeAltair altair ok
+  · obtain ⟨justified, justifiedOk, rest⟩ :=
+      slashedKeptLaws.processEpoch_split_of_lt_altair (Nat.lt_of_not_le altair) ok
     exact (processJustificationAndFinalization justifiedOk).trans rest
 
 private theorem advanceSlot (ok : Consensus.advanceSlot config checks state = .ok after) :

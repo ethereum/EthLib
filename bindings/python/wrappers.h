@@ -391,6 +391,8 @@ PyObject* py_consensus_is_valid_builder_signature (PyObject* self, PyObject* arg
 PyObject* py_consensus_process_registration (PyObject* self, PyObject* args);
 PyObject* py_consensus_is_eligible_for_bid (PyObject* self, PyObject* args);
 PyObject* py_consensus_process_bid (PyObject* self, PyObject* args);
+PyObject* py_consensus_is_eligible_for_bid_gloas (PyObject* self, PyObject* args);
+PyObject* py_consensus_validate_bid (PyObject* self, PyObject* args);
 PyObject* py_consensus_unblind_signed_blinded_block (PyObject* self, PyObject* args);
 PyObject* py_consensus_verify_builder_request_auth_signature (PyObject* self, PyObject* args);
 PyObject* py_consensus_builder_bid_value (PyObject* self, PyObject* args);
@@ -647,6 +649,7 @@ PyObject* py_engine_get_payload_bodies                   (PyObject* self, PyObje
 PyObject* py_engine_get_payload                          (PyObject* self, PyObject* args);
 PyObject* py_engine_read_payload_status                  (PyObject* self, PyObject* args);
 PyObject* py_engine_read_forkchoice_response             (PyObject* self, PyObject* args);
+PyObject* py_engine_read_get_payload_result              (PyObject* self, PyObject* args);
 PyObject* py_engine_rewrite_params                       (PyObject* self, PyObject* args);
 PyObject* py_engine_prepare_execution_payload            (PyObject* self, PyObject* args);
 PyObject* py_engine_prepare_execution_payload_gloas      (PyObject* self, PyObject* args);
@@ -657,6 +660,7 @@ PyObject* py_engine_finalized_execution_block_hash       (PyObject* self, PyObje
 PyObject* py_rpc_read_param                              (PyObject* self, PyObject* args);
 PyObject* py_rpc_error_groups                            (PyObject* self, PyObject* args);
 PyObject* py_rpc_pruned_history_unavailable              (PyObject* self, PyObject* args);
+PyObject* py_rpc_serve                                   (PyObject* self, PyObject* args);
 
 /* ---- Typed values (`pyvalue.c`) --------------------------------------- */
 

@@ -3077,7 +3077,7 @@ They do it for the 239 requests of `tests/engine/new_payload.json` that decode, 
 They also do it for a forkchoice state with each payload of `tests/engine/forkchoice.json` as the head, and no attributes.
 The other 11 are among the 75 whose fixtures expect invalid parameters, and the decoder rejects them.
 The 64 others of those 75 decode, and a later check rejects them.
-Six of the OpenRPC examples do not follow the specification, and the tests check that the decoder rejects them.
+Six of the OpenRPC request examples do not follow the specification, and the tests check that the decoder rejects them.
 The other two examples are of methods that EthLib does not specify, and the tests check that they fail as unknown methods.
 
 The answers have a JSON form too, written and read back.
@@ -3089,6 +3089,22 @@ Its response names a build exactly when the update applies a head and the attrib
 The ID is then that of the head and the attributes.
 The Python tests read the status examples of `engine_newPayload` and the response examples of `engine_forkchoiceUpdated` in the OpenRPC method files.
 They also read back the status that EthLib answers to each request of `new_payload.json` that expects no error, and each response to the chains of `forkchoice.json`.
+
+The result of `engine_getPayload` is read at a version of the method and the fork of its payload.
+A blobs bundle reads back from its JSON exactly when it passes the length rules of its version (`blobsBundleOfJson_json_iff`, `Proofs/GetPayload.lean`).
+Every bundle that decodes passes them (`blobsBundleOfJson_lengths`).
+Versions 3 and 4 of the method return a bundle of version 1, and versions 5 and 6 a bundle of version 2.
+Both versions of the bundle ask for one commitment per blob.
+Version 1 of the bundle asks for one proof per blob, and version 2 for `CELLS_PER_EXT_BLOB`, which is 128, per blob.
+From version 3, the bundle of every response passes the length rules of the bundle that the method returns (`getPayloadResultJson_bundle`).
+The result of every response reads back at its version and its fork (`getPayloadResultOfJson_json`).
+It holds the payload and each field of its version: the block value, the bundle, the override flag and the requests.
+The method returns no payload with more than 32 bytes of extra data, the bound of the Engine API.
+So `getPayloadResultOfJson_json` needs no hypothesis other than a successful call.
+Hence what the execution layer writes is what the consensus layer reads.
+The Python tests read back the result examples of versions 1 to 5 in the OpenRPC method files, and check each length rule.
+At the pinned commit, the example of version 6 has no slot number in its payload, so the decoder rejects it.
+The tests read back a result of version 6 built from the example of version 5 with an access list and a slot.
 
 The theorems about `engine_forkchoiceUpdated` are in `Proofs/ForkchoiceUpdated.lean`.
 `forkchoiceUpdated_valid` shows that a valid answer selects a valid head that the execution layer holds, with its safe and finalized blocks on its chain.
@@ -3113,7 +3129,6 @@ From Deneb, the block of the payload reads the parent root of the latest block h
 From Deneb, the blob transactions must carry the versioned hashes of the commitments of the block, in the order of the commitments.
 The consensus test vectors fix the answer of the execution layer, so none of them checks the versioned hashes or the parent root that a block puts in its request.
 
-No payload build is specified, so `engine_getPayload` has no definition, and the export refuses payload attributes on a new valid head.
 The tree of known payloads and the known finalized block are inputs of each call, not state that the model keeps between calls.
 
 ### Execution JSON-RPC API
@@ -3143,6 +3158,22 @@ The error codes of the source come in groups.
 Every code of a group that declares a range lies in that range (`code_mem_range`, `Proofs/Rpc/Errors.lean`).
 No code appears twice (`codes_nodup`), and the code `4444` of pruned history is in no group (`prunedHistoryUnavailable_not_mem`).
 The messages of the groups are not fixed: the official fixtures show other texts.
+
+A query reads a *chain view* (`Execution/Rpc/View.lean`): the blocks that a node holds, with their states, receipts and logs.
+`ChainView.Valid` says that the view follows the state transition.
+Each block's hash is the hash of its header, and each canonical block after the lowest is what the transition and the body give on the chain before it.
+The state of the lowest block and the recent blocks before it are inputs.
+`Valid` asks only that this state have the state root of the lowest header, and that the last recent block be its parent.
+The blocks off the canonical chain are checked for their hash and their fork only, so their states are trusted inputs.
+The pending block is checked for its hash, its parent, its number and its fork; its contents are the node's choice.
+A number resolves only to a canonical block of that number, and a hash only to a block of that hash (`resolve_number`, `resolve_hash`); with `requireCanonical`, only to a canonical one (`resolve_hash_canonical`).
+In a valid view, every number from the lowest block to the head resolves (`Valid.resolve_number`), and the state of each canonical block has the state root of its header (`Valid.stateRoot_eq`).
+Take a forkchoice update that sets a new head, and a view whose canonical chain is the chain of that head.
+The head of the view is the head of the update (`head_hash_of_forkchoiceUpdated`, `Engine/Proofs/RpcView.lean`).
+The view resolves `safe` and `finalized` to the blocks that the update named, when their hashes are not zero (`resolve_safe_of_forkchoiceUpdated`, `resolve_finalized_of_forkchoiceUpdated`).
+A notification gets no response (`answerJson_notification`).
+The Python suite replays the official test chain into a view and answers the official fixtures of the methods that EthLib serves.
+That chain mines its blocks before the merge with a zero mix hash and a zero nonce, so the suite runs the transition without the proof-of-work check.
 
 ### Beacon API
 
@@ -3246,6 +3277,21 @@ The pseudocode of the source has three defects, which EthLib reads by their evid
 - `get_bid` takes `execution_payload` but reads `payload`; EthLib reads the argument.
 - `verify_bid_signature` computes its signing root from `signed_registration.message`, a name it never binds; EthLib uses the message of the bid, as `get_bid_signature` does.
 - `process_bid` calls `verify_bid_signature` without asserting its result, so read literally it accepts any signature; EthLib refuses a bid whose signature does not verify.
+
+From Gloas, a builder checks a request for a bid with six rules, and a proposer checks a bid it fetched with eight rules and the signature.
+`isEligibleForBidGloas_ok_true_iff` (`Consensus/Proofs/BuilderApi/GloasBid.lean`) states the builder's rules.
+The slot is that of the state, and the key is that of the proposer of the slot, which is active.
+That proposer sent preferences on gossip, the parent hash is that of the parent with or without its payload, and the parent root is the root of the latest header.
+`isEligibleForBidGloas_proposer` shows that a served request names the active proposer.
+The source asserts each rule, and EthLib answers false where an assertion fails.
+
+`validateBid_ok_true_iff` states the proposer's rules, in the order of the source.
+The builder is active, and the slot, the fee recipient, the parent hash, the parent root and the RANDAO mix match.
+The gas limit moves toward the proposer's target, the builder can pay a bid of positive value, and the signature verifies.
+The source asserts the eight rules and returns the signature check, so EthLib names the first failed rule as an error and returns the signature check as the result.
+`validateBid_zero_value` shows that a bid of value zero is never refused for the funds of its builder.
+`validateBid_not_selfBuild` shows that a bid naming the index of a self-built payload is never accepted, while the registry of builders is shorter than that index.
+The cap that a proposer sets on the execution payment limits how much of it counts when a bid is valued; it is not a rule of validity.
 
 From Deneb to Fulu, a builder reveals the payload with a blobs bundle: the blobs, their commitments and their proofs.
 `BuilderBlobsBundle.names_nodup` and `ExecutionPayloadAndBlobsBundle.names_nodup` (`Consensus/Proofs/Containers/BuilderApi.lean`) give both containers distinct field names, so they decode back from their bytes when the logs bloom has a byte.
@@ -3540,12 +3586,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 405 operations and 49 size constants.
-The Python extension calls 405 of the operations and 49 of the constants.
+Lean exports 409 operations and 49 size constants.
+The Python extension calls 409 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-10246 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (1914), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (140), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (80), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (138), `module.c` (1441), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (45), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (140), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (692), `x25519.c` (21), `xmss.c` (134).
+10305 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (1940), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (149), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (80), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (138), `module.c` (1448), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (58), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (140), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (696), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

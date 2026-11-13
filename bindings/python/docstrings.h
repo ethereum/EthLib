@@ -437,6 +437,12 @@
 #define DOC_consensus_process_bid \
   "None when a proposer accepts a signed bid, or the name of the rule that refuses it."
 
+#define DOC_consensus_is_eligible_for_bid_gloas \
+  "From Gloas: whether a builder serves a request for a bid."
+
+#define DOC_consensus_validate_bid \
+  "From Gloas: None when a proposer accepts a fetched bid, or the name of the rule that refuses it."
+
 #define DOC_consensus_unblind_signed_blinded_block \
   "The root and the bytes of the signed block that a signed blinded block and a payload give."
 
@@ -1187,6 +1193,9 @@
 #define DOC_engine_read_forkchoice_response \
   "A forkchoice response read from its JSON, as `json.loads` gives it."
 
+#define DOC_engine_read_get_payload_result \
+  "The result of an `engine_getPayload` method at a fork, read from its JSON and written back."
+
 #define DOC_engine_rewrite_params \
   "The parameters of an Engine API request, read by the decoder and written by the writer."
 
@@ -1207,6 +1216,9 @@
 
 #define DOC_rpc_pruned_history_unavailable \
   "The code of history that the node pruned, with its message."
+
+#define DOC_rpc_serve \
+  "Answer requests of the execution JSON-RPC API from the chain that the arguments build."
 
 #define DOC_pyvalue_echo \
   "The value that Python passes, back to Python, with each failure tuple read as a failure."

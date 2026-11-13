@@ -3,6 +3,8 @@ module
 public import EthLib.Engine.GetPayload
 public import EthLib.Engine.Proofs.Json
 public import EthLib.Execution.Proofs.Transactions.Network
+-- Showing that a written result is not `null` unfolds the null test of Lean's JSON.
+import all Lean.Data.Json.Basic
 
 /-!
 # Proofs: `engine_getPayload`
@@ -20,6 +22,10 @@ Its blob or cell proofs pass the KZG verifier.
 Versions 3 and 4 return one proof per blob, and versions 5 and 6 return 128 per blob.
 
 The decoder reads back the parameters that the writer writes.
+
+The result of a response reads back at its version and its fork.
+
+A bundle reads back exactly when it passes the length rules of its version.
 -/
 
 public section
@@ -212,5 +218,252 @@ theorem getPayloadParams_json (id : PayloadId) :
     getPayloadParams (getPayloadParamsJson id) = .ok id := by
   simp [getPayloadParams, getPayloadParamsJson, Serialization.JsonRpc.paramsArray, pure,
     Except.pure, bind, Except.bind, Serialization.JsonRpc.fixed_dataJson]
+
+/-! ## The result -/
+
+/-- The decoder of fixed-size byte strings reads back a list of them written as data. -/
+private theorem array_fixed_dataJson {n : Nat} (what w : String) (l : List (Vector UInt8 n)) :
+    Serialization.JsonRpc.array what (Serialization.JsonRpc.fixed w n)
+      (Serialization.JsonRpc.listJson (Serialization.JsonRpc.dataJson ·.toList) l) = .ok l := by
+  rw [Serialization.JsonRpc.array_listJson]
+  simp only [Serialization.JsonRpc.fixed_dataJson]
+  induction l with
+  | nil => rfl
+  | cons x xs ih => simp only [List.mapM_cons, ih]; rfl
+
+/-- A bundle that passes the length rules of a version reads back from its JSON at that version. -/
+theorem blobsBundleOfJson_json (version : Nat) (b : BlobsBundle)
+    (h : b.lengthsHold version = true) :
+    blobsBundleOfJson version (blobsBundleJson b) = .ok b := by
+  have hd : [("blobs", Serialization.JsonRpc.listJson (Serialization.JsonRpc.dataJson ·.toList)
+      b.blobs), ("commitments", Serialization.JsonRpc.listJson
+      (Serialization.JsonRpc.dataJson ·.toList) b.commitments), ("proofs",
+      Serialization.JsonRpc.listJson (Serialization.JsonRpc.dataJson ·.toList) b.proofs)].Pairwise
+      fun a b => a.1 ≠ b.1 := by simp
+  obtain ⟨fs, hfs, hp⟩ := Serialization.JsonRpc.fields_mkObj "blobsBundle" hd
+    (by simp [Serialization.JsonRpc.listJson, Serialization.JsonRpc.isNull_arr])
+  have hex : Serialization.JsonRpc.hasExactly fs blobsBundleFields = true :=
+    Serialization.JsonRpc.hasExactly_of_perm hp
+  unfold blobsBundleOfJson blobsBundleJson
+  have r1 := Serialization.JsonRpc.field_of_perm (what := "blobsBundle") hp hd
+    (List.mem_cons_self ..)
+  have r2 := Serialization.JsonRpc.field_of_perm (what := "blobsBundle") hp hd
+    (List.mem_cons_of_mem _ (List.mem_cons_self ..))
+  have r3 := Serialization.JsonRpc.field_of_perm (what := "blobsBundle") hp hd
+    (List.mem_cons_of_mem _ (List.mem_cons_of_mem _ (List.mem_cons_self ..)))
+  simp only [hfs, hex, r1, r2, r3, array_fixed_dataJson, Json.liftM_ok, bind, Except.bind,
+    ite_true, h]
+  rfl
+
+/-- A payload form of a block holds at most 32 bytes of extra data. -/
+theorem payloadOfBlock_extraData {fork : Fork} {block : Block fork Transaction}
+    {p : ExecutionPayload fork} (h : payloadOfBlock block = some p) : p.extraData.size ≤ 32 := by
+  unfold payloadOfBlock at h
+  split at h
+  · exact of_decide_eq_true (Option.filter_eq_some_iff.mp h).2
+  · cases h
+
+/-- A bundle that decodes at a version passes the length rules of that version. -/
+theorem blobsBundleOfJson_lengths {version : Nat} {j : Lean.Json} {b : BlobsBundle}
+    (h : blobsBundleOfJson version j = .ok b) : b.lengthsHold version = true := by
+  unfold blobsBundleOfJson at h
+  simp only [bind, Except.bind, pure, Except.pure, Json.invalid_eq] at h
+  repeat' split at h
+  all_goals cases h
+  assumption
+
+/-- A bundle reads back from its JSON at a version exactly when it passes its length rules. -/
+theorem blobsBundleOfJson_json_iff (version : Nat) (b : BlobsBundle) :
+    blobsBundleOfJson version (blobsBundleJson b) = .ok b ↔ b.lengthsHold version = true :=
+  ⟨blobsBundleOfJson_lengths, blobsBundleOfJson_json version b⟩
+
+/-- From version 3, the bundle of a response passes the length rules of the bundle it returns.
+
+So the bundle that the execution layer writes is one that the consensus layer accepts. -/
+theorem getPayloadResultJson_bundle {r : GetPayloadResponse}
+    (h : getPayload config setup store version id = .ok r) (hv : 3 ≤ version) :
+    r.stored.bundle.lengthsHold (blobsBundleVersion version) = true := by
+  have hc := (getPayload_bundle h hv).2.1
+  by_cases h5 : 5 ≤ version
+  · simp [BlobsBundle.lengthsHold, blobsBundleVersion, BlobsBundle.proofsPerBlob, hc, h5,
+      getPayload_cell_proof_count h h5]
+  · simp [BlobsBundle.lengthsHold, blobsBundleVersion, BlobsBundle.proofsPerBlob, hc, h5,
+      getPayload_blob_proof_count h hv (by omega)]
+
+/-- The payload of a result reads back with its access list and slot, in the form of its fork. -/
+private theorem resultPayloadOfJson_payloadJson {fork : Fork} (r : GetPayloadResult fork)
+    (extra : r.payload.extraData.size ≤ 32) (v4 : Bool) (hv4 : v4 = true ↔ .glamsterdam ≤ fork) :
+    resultPayloadOfJson v4 fork r.payloadJson =
+      .ok (r.payload, r.blockAccessList, r.slotNumber) := by
+  by_cases hg : Fork.glamsterdam ≤ fork
+  · obtain rfl := hv4.mpr hg
+    obtain ⟨any, hany, hat⟩ := Json.payloadV4_executionPayloadV4Json r.payload
+      (r.blockAccessList hg) (r.slotNumber hg) (Std.le_trans (by decide) hg) extra
+    have h1 : Json.since "blockAccessList" (some (r.blockAccessList hg)) =
+        .ok r.blockAccessList := Json.since_eq_ok_iff.mpr (by simp [sinceValue, hg])
+    have h2 : Json.since "slotNumber" (some (r.slotNumber hg)) = .ok r.slotNumber :=
+      Json.since_eq_ok_iff.mpr (by simp [sinceValue, hg])
+    simp only [resultPayloadOfJson, GetPayloadResult.payloadJson, hg, dite_true, ite_true, hany,
+      hat, Functor.map, Except.map, bind, Except.bind, Option.map, h1, h2, pure, Except.pure]
+  · have hf : v4 = false := by simpa [hg] using hv4
+    subst hf
+    obtain ⟨any, hany, hat⟩ := Json.anyPayload_executionPayloadJson r.payload extra
+    have h1 : Json.since "blockAccessList" (none : Option ByteArray) = .ok r.blockAccessList :=
+      Json.since_eq_ok_iff.mpr (by simp [sinceValue, hg])
+    have h2 : Json.since "slotNumber" (none : Option UInt64) = .ok r.slotNumber :=
+      Json.since_eq_ok_iff.mpr (by simp [sinceValue, hg])
+    simp only [resultPayloadOfJson, GetPayloadResult.payloadJson, hg, dite_false, hany,
+      Bool.false_eq_true, ite_false,
+      hat, Functor.map, Except.map, bind, Except.bind, Option.map, h1, h2, pure, Except.pure]
+
+/-- At a fork that a version serves, the payload is of version 4 exactly in version 6.
+
+From version 4, the fork is Pectra or later. -/
+private theorem fork_of_accepts {version : Nat} {fork : Fork}
+    (hf : acceptsGetPayloadFork version fork = true) :
+    (decide (version = 6) = true ↔ .glamsterdam ≤ fork) ∧ (4 ≤ version → .pectra ≤ fork) := by
+  match version, hf with
+  | 0, hf => simp [acceptsGetPayloadFork] at hf
+  | 1, hf =>
+    simp only [acceptsGetPayloadFork, beq_iff_eq] at hf
+    subst hf; decide
+  | 2, hf =>
+    simp only [acceptsGetPayloadFork, Bool.or_eq_true, beq_iff_eq] at hf
+    rcases hf with rfl | rfl <;> decide
+  | 3, hf =>
+    simp only [acceptsGetPayloadFork, beq_iff_eq] at hf
+    subst hf; decide
+  | 4, hf =>
+    simp only [acceptsGetPayloadFork, beq_iff_eq] at hf
+    subst hf; decide
+  | 5, hf =>
+    simp only [acceptsGetPayloadFork, Bool.and_eq_true, decide_eq_true_eq] at hf
+    refine ⟨⟨fun h => absurd h (by decide), fun h => absurd (Nat.lt_of_lt_of_le hf.2 h)
+      (Nat.lt_irrefl _)⟩, fun _ => Std.le_trans (by decide) hf.1⟩
+  | 6, hf =>
+    simp only [acceptsGetPayloadFork, beq_iff_eq] at hf
+    subst hf; decide
+  | n + 7, hf => simp [acceptsGetPayloadFork] at hf
+
+/-- The payload of a result is an object, so not `null`. -/
+private theorem payloadJson_isNull {fork : Fork} (r : GetPayloadResult fork) :
+    r.payloadJson.isNull = false := by
+  unfold GetPayloadResult.payloadJson Json.executionPayloadV4Json Json.executionPayloadJson
+  split <;> rfl
+
+/-- The decoder of lists of requests reads back a list of byte strings written as data. -/
+private theorem array_requests (rs : List ByteArray) :
+    Serialization.JsonRpc.array "executionRequests" (Serialization.JsonRpc.bytes "request")
+      (Serialization.JsonRpc.listJson (Serialization.JsonRpc.dataJson ·.data.toList) rs) =
+        .ok rs := by
+  have hb : ∀ b : ByteArray,
+      Serialization.JsonRpc.bytes "request" (Serialization.JsonRpc.dataJson b.data.toList) =
+        .ok b := by
+    intro b
+    rw [Serialization.JsonRpc.dataJson, Serialization.JsonRpc.bytes_hexString]
+    congr 1
+    apply ByteArray.ext
+    apply Array.toList_inj.mp
+    simp
+  rw [Serialization.JsonRpc.array_listJson]
+  simp only [hb]
+  induction rs with
+  | nil => rfl
+  | cons x xs ih => simp only [List.mapM_cons, ih]; rfl
+
+/-- The result of a response, written and read back at its version and its fork, is that result.
+
+So the reader gets the payload and each field that the version returns. -/
+theorem getPayloadResultOfJson_json {r : GetPayloadResponse}
+    (h : getPayload config setup store version id = .ok r) :
+    getPayloadResultOfJson version r.stored.fork (getPayloadResultJson (r.result version)) =
+      .ok (r.result version) := by
+  obtain ⟨-, -, hf, hreq, hbv, hpb, -, -⟩ := of_getPayload_eq_ok h
+  have extra := payloadOfBlock_extraData hpb
+  have hpay := resultPayloadOfJson_payloadJson (r.result version) extra
+  by_cases h1 : version = 1
+  · subst h1
+    have hg : ¬Fork.glamsterdam ≤ r.stored.fork := by
+      simp only [acceptsGetPayloadFork, beq_iff_eq] at hf
+      rw [hf]; decide
+    have hp := hpay false (by simp [hg])
+    have hb : (r.result 1).blockValue = none := rfl
+    simp only [getPayloadResultOfJson, getPayloadResultJson, hb, hf, hp, ite_true, bind,
+      Except.bind, pure, Except.pure]
+    rfl
+  have h2 : 2 ≤ version := by
+    rcases Nat.lt_or_ge version 2 with hl | hl
+    · obtain rfl | rfl : version = 0 ∨ version = 1 := by omega
+      · simp [acceptsGetPayloadFork] at hf
+      · exact absurd rfl h1
+    · exact hl
+  have hb : (r.result version).blockValue = some r.stored.built.blockValue := by
+    simp [GetPayloadResponse.result, h2]
+  obtain ⟨hg6, hpec⟩ := fork_of_accepts hf
+  have hp := hpay _ hg6
+  have hq := Serialization.JsonRpc.quantity_toDigits "blockValue" hbv
+  have hbb : (r.result version).blobsBundle =
+      if 3 ≤ version then some r.stored.bundle else none := rfl
+  have hso : (r.result version).shouldOverrideBuilder =
+      if 3 ≤ version then some r.stored.shouldOverrideBuilder else none := rfl
+  have her : (r.result version).executionRequests =
+      if 4 ≤ version then some r.stored.built.requests else none := rfl
+  -- The pairs of the result object, which hold the fields of its version.
+  obtain ⟨L, hL⟩ : ∃ L : List (String × Lean.Json), L =
+      [("executionPayload", (r.result version).payloadJson),
+        ("blockValue", Serialization.JsonRpc.quantityJson r.stored.built.blockValue)] ++
+      ((r.result version).blobsBundle.map fun b => ("blobsBundle", blobsBundleJson b)).toList ++
+      ((r.result version).shouldOverrideBuilder.map fun o =>
+        ("shouldOverrideBuilder", Lean.Json.bool o)).toList ++
+      ((r.result version).executionRequests.map fun rs => ("executionRequests",
+        Serialization.JsonRpc.listJson (Serialization.JsonRpc.dataJson ·.data.toList) rs)).toList :=
+    ⟨_, rfl⟩
+  have hj : getPayloadResultJson (r.result version) = Lean.Json.mkObj L := by
+    simp only [getPayloadResultJson, hb, hL]
+  have hd : L.Pairwise fun a b => a.1 ≠ b.1 := by
+    by_cases h3 : 3 ≤ version <;> by_cases h4 : 4 ≤ version <;> simp [hL, hbb, hso, her, h3, h4]
+  have hbn : (blobsBundleJson r.stored.bundle).isNull = false := by
+    unfold blobsBundleJson; rfl
+  have hbo : ∀ o : Bool, (Lean.Json.bool o).isNull = false := fun _ => rfl
+  have hpres : ∀ p ∈ L, p.2.isNull = false := by
+    by_cases h3 : 3 ≤ version <;> by_cases h4 : 4 ≤ version <;>
+      simp [hL, hbb, hso, her, h3, h4, hbn, hbo, payloadJson_isNull,
+        Serialization.JsonRpc.quantityJson, Serialization.JsonRpc.isNull_str,
+        Serialization.JsonRpc.isNull_arr, Serialization.JsonRpc.listJson]
+  obtain ⟨fs, hfs, hperm⟩ := Serialization.JsonRpc.fields_mkObj "result" hd hpres
+  have hex : Serialization.JsonRpc.hasExactly fs (getPayloadResultFields version) = true := by
+    have := Serialization.JsonRpc.hasExactly_of_perm hperm
+    have hn : L.map Prod.fst = getPayloadResultFields version := by
+      by_cases h3 : 3 ≤ version <;> by_cases h4 : 4 ≤ version <;>
+        simp [hL, hbb, hso, her, h3, h4, getPayloadResultFields]
+    rwa [hn] at this
+  have rd : ∀ k v, (k, v) ∈ L → Serialization.JsonRpc.field "result" fs k = .ok v :=
+    fun _ _ hm => Serialization.JsonRpc.field_of_perm hperm hd hm
+  have r1 := rd "executionPayload" (r.result version).payloadJson (by simp [hL])
+  have r2 := rd "blockValue" (Serialization.JsonRpc.quantityJson r.stored.built.blockValue)
+    (by simp [hL])
+  rw [hj]
+  simp only [getPayloadResultOfJson, hf, h1, hfs, hex, r1, r2, hp, hq, Json.liftM_ok, ite_true,
+    ite_false, bind, Except.bind, pure, Except.pure]
+  by_cases h3 : 3 ≤ version
+  · have r3 := rd "blobsBundle" (blobsBundleJson r.stored.bundle) (by simp [hL, hbb, h3])
+    have r4 := rd "shouldOverrideBuilder" (.bool r.stored.shouldOverrideBuilder)
+      (by simp [hL, hso, h3])
+    have hbj := blobsBundleOfJson_json _ _ (getPayloadResultJson_bundle h h3)
+    by_cases h4 : 4 ≤ version
+    · have r5 := rd "executionRequests" (Serialization.JsonRpc.listJson
+        (Serialization.JsonRpc.dataJson ·.data.toList) r.stored.built.requests)
+        (by simp [hL, her, h4])
+      have hvr : validRequests r.stored.built.requests = true := by
+        simpa [requestsOfFork, hpec h4] using hreq
+      simp only [h3, h4, r3, r4, r5, hbj, array_requests, hvr, Json.liftM_ok, ite_true,
+        Functor.map, Except.map, boolOfJson, pure, Except.pure]
+      simp only [GetPayloadResponse.result, h2, h3, h4, ite_true]
+    · simp only [h3, h4, r3, r4, hbj, Json.liftM_ok, ite_true, ite_false, Functor.map,
+        Except.map, boolOfJson, pure, Except.pure]
+      simp only [GetPayloadResponse.result, h2, h3, h4, ite_true, ite_false]
+  · have h4 : ¬4 ≤ version := by omega
+    simp only [h3, h4, ite_false]
+    simp only [GetPayloadResponse.result, h2, h3, h4, ite_true, ite_false]
 
 end EthLib.Engine
