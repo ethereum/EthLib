@@ -700,7 +700,7 @@ def residualCredit (high : Nat) (event : BalanceEvent preset) : Nat :=
       if high + 1 < config.ELECTRA_FORK_EPOCH.toNat then 0 else event.creditLimit
   | _ => event.creditLimit
 
-/-- Deposits before Electra, in a window that ends before the fork, charged per reference key.
+/-- The initial excess and the pre-Electra deposits of a window before the fork, per reference key.
 
 Each key active at the reference is charged its initial excess and its deposits together.
 
