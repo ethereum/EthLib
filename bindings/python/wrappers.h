@@ -546,6 +546,9 @@ PyObject* py_uvarint_encode                               (PyObject* self, PyObj
 PyObject* py_uvarint_decode                               (PyObject* self, PyObject* args);
 PyObject* py_multistream_encode                           (PyObject* self, PyObject* args);
 PyObject* py_multistream_decode                           (PyObject* self, PyObject* args);
+PyObject* py_multistream_listen                           (PyObject* self, PyObject* args);
+PyObject* py_multistream_dial                             (PyObject* self, PyObject* args);
+PyObject* py_libp2p_upgrade                               (PyObject* self, PyObject* args);
 PyObject* py_mplex_encode                                 (PyObject* self, PyObject* args);
 PyObject* py_mplex_decode                                 (PyObject* self, PyObject* args);
 PyObject* py_yamux_encode                                 (PyObject* self, PyObject* args);

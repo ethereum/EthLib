@@ -9092,6 +9092,47 @@
    "error_class": "MultistreamError",
    "docstring":
    "The multistream-select message at the start of the bytes, and the bytes after it."},
+  {"summary":
+   "What a listener does with the bytes it receives, from its start.",
+   "signature":
+   "(supported: list[bytes], data: bytes) -> tuple[str, bytes, bytes, bytes]",
+   "operation": "EthLib.Networking.Libp2p.Exports.multistreamListenExport",
+   "method": "multistream_listen",
+   "errors":
+   [{"type": "EthLib.Networking.Libp2p.Multistream.MultistreamError",
+     "codes":
+     [{"constructor": "length", "code": 1},
+      {"constructor": "empty", "code": 2},
+      {"constructor": "truncated", "code": 3},
+      {"constructor": "missingNewline", "code": 4}]}],
+   "error_class": "MultistreamError",
+   "docstring":
+   "What a listener does with the bytes it receives, from its start.\n\nIt returns its state, the agreed protocol or empty, the bytes it sent, and the unread bytes.\n\nA message that does not decode raises its error, and names its index."},
+  {"summary": "What a dialer does with the bytes it receives, from its start.",
+   "signature":
+   "(proposals: list[bytes], data: bytes) -> tuple[str, bytes, bytes, bytes]",
+   "operation": "EthLib.Networking.Libp2p.Exports.multistreamDialExport",
+   "method": "multistream_dial",
+   "errors":
+   [{"type": "EthLib.Networking.Libp2p.Multistream.MultistreamError",
+     "codes":
+     [{"constructor": "length", "code": 1},
+      {"constructor": "empty", "code": 2},
+      {"constructor": "truncated", "code": 3},
+      {"constructor": "missingNewline", "code": 4}]}],
+   "error_class": "MultistreamError",
+   "docstring":
+   "What a dialer does with the bytes it receives, from its start.\n\nIt proposes the protocols in order.\n\nIt returns its state, its protocol, the bytes it sent, and the unread bytes.\n\nThe protocol is the agreed one, or an answer that is neither its proposal nor `na`, else empty.\n\nA message that does not decode raises its error, and names its index."},
+  {"summary":
+   "The security protocol and the multiplexer of a TCP connection between consensus nodes.",
+   "signature":
+   "(dialer_yamux: bool, listener_yamux: bool) -> tuple[bytes, bytes]",
+   "operation": "EthLib.Networking.Libp2p.Exports.upgradeExport",
+   "method": "libp2p_upgrade",
+   "errors": [],
+   "error_class": "MultistreamError",
+   "docstring":
+   "The security protocol and the multiplexer of a TCP connection between consensus nodes.\n\nEach node says whether it supports yamux, the dialer first.\n\nTwo such nodes always agree, so the upgrade never fails."},
   {"summary": "The bytes of a valid mplex frame.",
    "signature": "(frame: dict[str, Any]) -> bytes",
    "operation": "EthLib.Networking.Libp2p.Exports.mplexEncodeExport",
