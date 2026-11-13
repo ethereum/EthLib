@@ -20,6 +20,3 @@ ByteArray.get! EthLib.Cryptography.Bls.G2.uncompress 1
 ByteArray.set! EthLib.Cryptography.Bls.G2.uncompress 1
 GetElem?.getElem! EthLib.Cryptography.Bls.HashToCurve.hashToG2 2
 ByteArray.set! EthLib.Cryptography.Bls.size_set! 1
-ByteArray.get! EthLib.Serialization.Rlp.decodeItem 3
-ByteArray.get! EthLib.Serialization.Rlp.readBigEndian 1
-ByteArray.get! EthLib.Serialization.Rlp.readPrefix.readLongLength 1

@@ -26,6 +26,12 @@ A loop over the bytes of a string runs as a loop over the list of those bytes, i
 
 namespace EthLib.Base
 
+/-- A bounded byte read agrees with the defaulting read at the same index. -/
+theorem byteArray_get_eq_get! (bytes : ByteArray) (index : Nat) (inside : index < bytes.size) :
+    bytes[index]'inside = bytes.get! index := by
+  change bytes.data[index] = bytes.data[index]!
+  exact (getElem!_pos bytes.data index inside).symm
+
 /-- A fixed-size object serializes to exactly its own length. -/
 @[simp] theorem size_packBytes {n : Nat} (v : Vector UInt8 n) :
     (packBytes v).size = n := v.size_toArray

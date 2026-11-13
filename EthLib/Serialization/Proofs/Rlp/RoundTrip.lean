@@ -1,5 +1,6 @@
 module
 
+import EthLib.Base.Proofs.Bytes
 public import EthLib.Serialization.Proofs.Rlp.Bytes
 public import EthLib.Serialization.Proofs.Rlp.Loops
 public import EthLib.Serialization.Rlp.Decode
@@ -30,9 +31,11 @@ Each step also holds wherever the encoding sits in the array that the decoder re
 
 namespace EthLib.Serialization.Rlp
 
+open EthLib.Base (byteArray_get_eq_get!)
+
 /-- The short prefix `offset + length` reads back as its kind and its length. -/
 theorem readPrefix_short (kind : PayloadKind) (length : Nat) (h : length < 56) (input : ByteArray)
-    (pos stop : Nat) :
+    (pos stop : Nat) (bounded : stop ≤ input.size := by omega) :
     readPrefix input (UInt8.ofNat (kind.offset + length)) pos stop = .ok (kind, 0, length) := by
   cases kind
   · have hMod : (128 + length) % 256 = 128 + length := Nat.mod_eq_of_lt (by omega)
@@ -77,11 +80,12 @@ theorem readPrefix_long (kind : PayloadKind) (length : Nat) (h1 : 56 ≤ length)
     rw [extract_toList_cons input pos _ (by omega) (by omega)] at hBytes
     intro h0
     exact bigEndian_head_ne_zero length (input.get! pos) (by rw [← hBytes]; rfl) h0
-  have hLong : readPrefix.readLongLength input pos stop kind (bigEndian length).size
+  have hLong : readPrefix.readLongLength input pos stop (by omega) kind (bigEndian length).size
       = .ok (kind, (bigEndian length).size, length) := by
     simp only [readPrefix.readLongLength,
       readBigEndian_zero input pos (bigEndian length).size (by omega), hBytes, bigEndian_value]
-    simp [hHead, show ¬ stop - pos < (bigEndian length).size by omega,
+    simp [byteArray_get_eq_get!, hHead, show (bigEndian length).size ≠ 0 by omega,
+      show ¬ stop - pos < (bigEndian length).size by omega,
       show ¬ length < 56 by omega]
   cases kind
   · have hMod : (128 + 55 + (bigEndian length).size) % 256 = 183 + (bigEndian length).size :=
@@ -100,7 +104,8 @@ theorem readPrefix_long (kind : PayloadKind) (length : Nat) (h1 : 56 ≤ length)
 theorem lengthPrefix_readPrefix (kind : PayloadKind) (length : Nat) (pre : ByteArray)
     (h : lengthPrefix kind length = .ok pre) :
     ∃ first lengthBytes, pre.data.toList = first :: lengthBytes ∧ 0x80 ≤ first ∧
-      ∀ (input : ByteArray) (pos stop : Nat) (rest : List UInt8), pos ≤ stop → stop ≤ input.size →
+      ∀ (input : ByteArray) (pos stop : Nat) (rest : List UInt8), pos ≤ stop →
+        ∀ hBound : stop ≤ input.size,
         (input.extract pos stop).data.toList = lengthBytes ++ rest →
         readPrefix input first pos stop = .ok (kind, lengthBytes.length, length) := by
   unfold lengthPrefix at h
@@ -128,11 +133,13 @@ theorem lengthPrefix_readPrefix (kind : PayloadKind) (length : Nat) (pre : ByteA
       cases h
 
 /-- The item read from the bytes of `input` from `pos` to `stop`, and the position after it. -/
-def readItem (input : ByteArray) (pos stop : Nat) : Except RlpError (Item × Nat) :=
+def readItem (input : ByteArray) (pos stop : Nat)
+    (bounded : stop ≤ input.size := by omega) : Except RlpError (Item × Nat) :=
   (decodeItem input pos stop).map fun (item, next) => (item, next.val)
 
 /-- When the parser succeeds, the decoder of one item succeeds with the same item and position. -/
 theorem decodeItem_of_readItem {input : ByteArray} {pos stop next : Nat} {item : Item}
+    {bounded : stop ≤ input.size}
     (h : readItem input pos stop = .ok (item, next)) :
     ∃ hNext, decodeItem input pos stop = .ok (item, ⟨next, hNext⟩) := by
   unfold readItem at h
@@ -151,7 +158,7 @@ theorem readItem_prefix {input : ByteArray} {pos stop : Nat} {first : UInt8}
     {lengthBytes payload rest : List UInt8} {kind : PayloadKind} (hStop : stop ≤ input.size)
     (hFirst : 0x80 ≤ first)
     (hRead : ∀ (input : ByteArray) (pos stop : Nat) (rest : List UInt8), pos ≤ stop →
-      stop ≤ input.size → (input.extract pos stop).data.toList = lengthBytes ++ rest →
+      ∀ hBound : stop ≤ input.size, (input.extract pos stop).data.toList = lengthBytes ++ rest →
       readPrefix input first pos stop = .ok (kind, lengthBytes.length, payload.length))
     (hInput : (input.extract pos stop).data.toList = first :: (lengthBytes ++ payload ++ rest)) :
     pos < stop ∧ input.get! pos = first ∧ ¬ first < 0x80 ∧
@@ -173,7 +180,7 @@ theorem readItem_list {input : ByteArray} {pos stop : Nat} {payload rest : List 
     {items : List Item} {pre : ByteArray} (hStop : stop ≤ input.size)
     (h : lengthPrefix .list payload.length = .ok pre)
     (hInput : (input.extract pos stop).data.toList = pre.data.toList ++ payload ++ rest)
-    (hItems : ∀ start, start + payload.length ≤ input.size →
+    (hItems : ∀ start, ∀ hBound : start + payload.length ≤ input.size,
       (input.extract start (start + payload.length)).data.toList = payload →
       decodeItems input start (start + payload.length) = .ok items) :
     readItem input pos stop = .ok (.list items, pos + pre.size + payload.length) := by
@@ -185,7 +192,8 @@ theorem readItem_list {input : ByteArray} {pos stop : Nat} {payload rest : List 
     simp [← ByteArray.size_data, ← Array.length_toList, hPre]
   unfold readItem
   rw [decodeItem.eq_def]
-  simp only [hPos, hGet, hHigh, hRP, dite_true, ite_false, bind, Except.bind, hFit,
+  simp only [byteArray_get_eq_get!, hPos, hGet, hHigh, hRP, dite_true, ite_false,
+    bind, Except.bind, hFit,
     hItems _ (by omega) hPayload, Except.map, Except.ok.injEq, Prod.mk.injEq, true_and]
   omega
 
@@ -222,9 +230,18 @@ theorem readItem_bytes {input : ByteArray} {pos stop : Nat} (data : ByteArray) {
     exact hLow
   unfold readItem
   rw [decodeItem.eq_def]
-  simp only [hPos, hGet, hHigh, hRP, dite_true, ite_false, bind, Except.bind, hFit, hOne, hData,
-    Except.map, Except.ok.injEq, Prod.mk.injEq, true_and]
-  omega
+  simp only [byteArray_get_eq_get!, hPos, hGet, hHigh, hRP, dite_true, ite_false,
+    bind, Except.bind, hFit]
+  by_cases hLength : data.size = 1
+  · have hLow : ¬ input.get! (pos + 1 + lengthBytes.length) < 0x80 :=
+      fun hLow => hOne ⟨hLength, hLow⟩
+    simp only [hLength] at hData
+    simp only [hLength, dite_true, hLow, ite_false, hData,
+      Except.map, Except.ok.injEq, Prod.mk.injEq, true_and]
+    omega
+  · simp only [hLength, dite_false, hData,
+      Except.map, Except.ok.injEq, Prod.mk.injEq, true_and]
+    omega
 
 /-- A single byte below `0x80` reads back as itself. -/
 theorem readItem_single {input : ByteArray} {pos stop : Nat} (data : ByteArray) {rest : List UInt8}
@@ -242,7 +259,8 @@ theorem readItem_single {input : ByteArray} {pos stop : Nat} (data : ByteArray) 
       obtain ⟨hPos, hGet, -⟩ := extract_toList_eq_cons hStop hInput
       unfold readItem
       rw [decodeItem.eq_def]
-      simp [hPos, hGet, hLow', Except.map, ByteArray.size]
+      simp only [byteArray_get_eq_get!, hPos, dite_true, hGet, hLow', ite_true, Except.map]
+      rfl
   · cases h
 
 /-- What a successful encoding of a list is made of. -/
@@ -309,7 +327,7 @@ mutual
 
 /-- An encoding, then more bytes, reads back as the item and the position after the encoding. -/
 theorem readItem_encode : (x : Item) → (e : ByteArray) → encode x = .ok e →
-    ∀ {input : ByteArray} {pos stop : Nat} {rest : List UInt8}, stop ≤ input.size →
+    ∀ {input : ByteArray} {pos stop : Nat} {rest : List UInt8}, ∀ hBound : stop ≤ input.size,
       (input.extract pos stop).data.toList = e.data.toList ++ rest →
       readItem input pos stop = .ok (x, pos + e.size)
   | .bytes data, e, h, input, pos, stop, rest, hStop, hInput => by
@@ -323,42 +341,47 @@ theorem readItem_encode : (x : Item) → (e : ByteArray) → encode x = .ok e �
     have hSize : payload.size = payload.data.toList.length := Array.length_toList.symm
     rw [hSize] at hPre
     rw [ByteArray.toList_data_append] at hInput
-    have hItems : ∀ start, start + payload.data.toList.length ≤ input.size →
+    have hItems : ∀ start, ∀ hBound : start + payload.data.toList.length ≤ input.size,
         (input.extract start (start + payload.data.toList.length)).data.toList =
           payload.data.toList →
         decodeItems input start (start + payload.data.toList.length) = .ok items := by
       intro start hEnd hBytes
-      rw [← hSize] at hEnd hBytes ⊢
+      simp only [← hSize] at *
       exact decodeItems_joinEncodings items payload hJoin hEnd hBytes
     rw [readItem_list hStop hPre hInput hItems, ByteArray.size_append, ← hSize, Nat.add_assoc]
 termination_by structural x => x
 
 /-- Decoding the encodings of items, one after another, gives back the items. -/
 theorem decodeItems_joinEncodings : (xs : List Item) → (e : ByteArray) → joinEncodings xs = .ok e →
-    ∀ {input : ByteArray} {pos : Nat}, pos + e.size ≤ input.size →
+    ∀ {input : ByteArray} {pos : Nat}, ∀ hBound : pos + e.size ≤ input.size,
       (input.extract pos (pos + e.size)).data.toList = e.data.toList →
       decodeItems input pos (pos + e.size) = .ok xs
   | [], e, h, input, pos, _, _ => by
     simp [joinEncodings] at h
     subst h
-    rw [decodeItems_eq]
-    simp [ByteArray.size_empty]
+    change decodeItems input pos pos (by omega) = .ok []
+    rw [decodeItems_eq input pos pos (by omega)]
+    simp
   | x :: xs, e, h, input, pos, hEnd, hBytes => by
     obtain ⟨head, tail, hHead, hTail, rfl⟩ := joinEncodings_cons_ok x xs e h
     rw [ByteArray.toList_data_append] at hBytes
-    rw [ByteArray.size_append] at hEnd hBytes ⊢
+    simp only [ByteArray.size_append] at *
+    have hEnd' : pos + (head.size + tail.size) ≤ input.size := by
+      simpa only [ByteArray.size_append] using hEnd
     -- The first item reads back from the front, and the rest is the encodings of the others.
-    obtain ⟨hNext, hDecode⟩ := decodeItem_of_readItem (readItem_encode x head hHead hEnd hBytes)
+    obtain ⟨hNext, hDecode⟩ :=
+      decodeItem_of_readItem (bounded := hEnd') (readItem_encode x head hHead hEnd' hBytes)
     have hHeadLen : head.data.toList.length = head.size := Array.length_toList
-    obtain ⟨-, -, hRest⟩ := extract_toList_eq_append (by omega) hEnd hBytes
+    obtain ⟨-, -, hRest⟩ := extract_toList_eq_append (by omega) hEnd' hBytes
     rw [hHeadLen] at hRest
     have hTailItems := decodeItems_joinEncodings xs tail hTail (input := input)
       (pos := pos + head.size)
       (by omega) (by rw [show pos + head.size + tail.size = pos + (head.size + tail.size) by omega]
                      exact hRest)
-    rw [decodeItems_eq, ite_eq_left (by omega)]
-    rw [show pos + head.size + tail.size = pos + (head.size + tail.size) by omega] at hTailItems
-    simp [hDecode, bind, Except.bind, hTailItems]
+    rw [decodeItems_eq input pos (pos + (head.size + tail.size)) hEnd',
+      ite_eq_left (by omega)]
+    simp only [Nat.add_assoc] at hTailItems
+    simp only [hDecode, bind, Except.bind, hTailItems]
 termination_by structural xs => xs
 
 end

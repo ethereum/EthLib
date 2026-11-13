@@ -1,5 +1,6 @@
 module
 
+import EthLib.Base.Proofs.Bytes
 public import EthLib.Serialization.Proofs.Rlp.RoundTrip
 
 /-!
@@ -28,6 +29,8 @@ The proof runs the decoder backwards:
 
 namespace EthLib.Serialization.Rlp
 
+open EthLib.Base (byteArray_get_eq_get!)
+
 /-- Bytes read in base 256 from a running value `acc` stay below `(acc + 1) * 256^count`. -/
 theorem foldl_bigEndian_lt (bytes : List UInt8) (acc : Nat) :
     bytes.foldl (fun acc byte => 256 * acc + byte.toNat) acc < (acc + 1) * 256 ^ bytes.length := by
@@ -54,38 +57,36 @@ theorem ofBigEndian_lt (bytes : List UInt8) : ofBigEndian bytes < 256 ^ bytes.le
 /-- What an accepted length in the long form is made of. -/
 theorem readLongLength_ok {input : ByteArray} {pos stop : Nat} {kind kind' : PayloadKind}
     {k k' length : Nat} (hStop : stop ≤ input.size)
-    (h : readPrefix.readLongLength input pos stop kind k = .ok (kind', k', length)) :
+    (h : readPrefix.readLongLength input pos stop (by omega) kind k = .ok (kind', k', length)) :
     kind' = kind ∧ k' = k ∧ k ≤ stop - pos ∧ 56 ≤ length ∧ length < 256 ^ k ∧
       (bigEndian length).data.toList = (input.extract pos (pos + k)).data.toList := by
   unfold readPrefix.readLongLength at h
-  by_cases hShort : stop - pos < k
-  · simp [hShort] at h
-  · simp only [hShort, ite_false] at h
-    by_cases hZero : k ≠ 0 ∧ input.get! pos = 0
-    · simp [hZero] at h
-    · simp only [hZero, ite_false] at h
-      -- A length of no bytes is 0, below 56, so at least one byte writes the length.
-      by_cases hk : k = 0
-      · subst hk
-        simp [readBigEndian] at h
-      have hEnd : pos + k ≤ input.size := by omega
-      rw [readBigEndian_zero input pos k hEnd] at h
-      by_cases hSmall : ofBigEndian (input.extract pos (pos + k)).data.toList < 56
-      · rw [ite_eq_left hSmall] at h
-        cases h
-      · rw [ite_eq_right hSmall, Except.ok.injEq, Prod.mk.injEq, Prod.mk.injEq] at h
-        obtain ⟨rfl, rfl, rfl⟩ := h
-        have hLen := length_extract_toList input pos (pos + k) hEnd
-        refine ⟨rfl, rfl, by omega, by omega, ?_, ?_⟩
-        · have := ofBigEndian_lt (input.extract pos (pos + k)).data.toList
-          rwa [hLen, show pos + k - pos = k by omega] at this
-        · -- The length bytes have no leading zero, so they are `BE` of the length.
-          apply bigEndian_unique
-          intro b hb hb0
-          subst hb0
-          rw [extract_toList_cons input pos (pos + k) (by omega) hEnd] at hb
-          simp only [List.head?_cons, Option.mem_def, Option.some.injEq] at hb
-          exact hZero ⟨hk, hb⟩
+  split at h
+  · cases h
+  · split at h
+    · cases h
+    · rename_i hShort hk
+      split at h
+      · cases h
+      · rename_i hHead
+        have hEnd : pos + k ≤ input.size := by omega
+        rw [readBigEndian_zero input pos k hEnd] at h
+        by_cases hSmall : ofBigEndian (input.extract pos (pos + k)).data.toList < 56
+        · rw [ite_eq_left hSmall] at h
+          cases h
+        · rw [ite_eq_right hSmall, Except.ok.injEq, Prod.mk.injEq, Prod.mk.injEq] at h
+          obtain ⟨rfl, rfl, rfl⟩ := h
+          have hLen := length_extract_toList input pos (pos + k) hEnd
+          refine ⟨rfl, rfl, by omega, by omega, ?_, ?_⟩
+          · have := ofBigEndian_lt (input.extract pos (pos + k)).data.toList
+            rwa [hLen, show pos + k - pos = k by omega] at this
+          · -- The length bytes have no leading zero, so they are `BE` of the length.
+            apply bigEndian_unique
+            intro b hb hb0
+            subst hb0
+            rw [extract_toList_cons input pos (pos + k) (by omega) hEnd] at hb
+            simp only [List.head?_cons, Option.mem_def, Option.some.injEq] at hb
+            exact hHead (by simpa only [byteArray_get_eq_get!] using hb)
 
 /-- The long prefix of a length, from its first byte and its `k` length bytes. -/
 theorem lengthPrefix_long_toList (kind : PayloadKind) (length k : Nat) (lengthBytes : List UInt8)
@@ -194,7 +195,8 @@ theorem isSingleLowByte_eq_false (data : ByteArray)
 
 The step assumes the same of every list payload shorter than the bytes read. -/
 theorem readItem_canonical {input : ByteArray} {pos stop : Nat} (hStop : stop ≤ input.size)
-    (hItems : ∀ a b, b ≤ input.size → b - a < stop - pos → ∀ xs, decodeItems input a b = .ok xs →
+    (hItems : ∀ a b, ∀ hBound : b ≤ input.size, b - a < stop - pos →
+      ∀ xs, decodeItems input a b = .ok xs →
       ∃ e, joinEncodings xs = .ok e ∧ e.data.toList = (input.extract a b).data.toList)
     {x : Item} {next : Nat} (h : readItem input pos stop = .ok (x, next)) :
     ∃ e, encode x = .ok e ∧ (input.extract pos next).data.toList = e.data.toList := by
@@ -204,7 +206,7 @@ theorem readItem_canonical {input : ByteArray} {pos stop : Nat} (hStop : stop �
   case neg =>
     -- No byte is left, so there is no item.
     simp [hPos, Except.map] at h
-  simp only [hPos, dite_true] at h
+  simp only [byteArray_get_eq_get!, hPos, dite_true] at h
   have hCons := extract_toList_cons input pos stop hPos hStop
   by_cases hLow : input.get! pos < 0x80
   · -- A single byte below `0x80` is its own encoding.
@@ -248,9 +250,17 @@ theorem readItem_canonical {input : ByteArray} {pos stop : Nat} (hStop : stop �
     | bytes =>
       dsimp only at h
       by_cases hOne : length = 1 ∧ input.get! (pos + 1 + k) < 0x80
-      · simp [hOne, Except.map] at h
-      simp only [hOne, ite_false, Except.map, Except.ok.injEq, Prod.mk.injEq] at h
-      obtain ⟨rfl, rfl⟩ := h
+      · obtain ⟨hLength, hLow⟩ := hOne
+        simp [hLength, hLow, Except.map] at h
+      have hPair :
+          (.bytes (input.extract (pos + 1 + k) (pos + 1 + k + length)),
+            pos + 1 + k + length) = (x, next) := by
+        by_cases hLength : length = 1
+        · have hLow : ¬ input.get! (pos + 1 + k) < 0x80 :=
+            fun hLow => hOne ⟨hLength, hLow⟩
+          simpa only [hLength, dite_true, hLow, ite_false, Except.map, Except.ok.injEq] using h
+        · simpa only [hLength, dite_false, Except.map, Except.ok.injEq] using h
+      obtain ⟨rfl, rfl⟩ := Prod.mk.inj hPair
       -- A payload that is not one low byte encodes as the bytes read.
       have hSize : (input.extract (pos + 1 + k) (pos + 1 + k + length)).size = length := by
         rw [← ByteArray.size_data, ← Array.length_toList, hPayloadLen]
@@ -297,10 +307,10 @@ What the decoder reads from at most `n` bytes is encoded as exactly those bytes.
 - An item read from the front of the bytes is encoded as the bytes before the position after it.
 - The items of a list payload are encoded, one after another, as the whole payload. -/
 theorem canonical_upTo (n : Nat) :
-    (∀ (input : ByteArray) (pos stop : Nat), stop ≤ input.size → stop - pos ≤ n →
+    (∀ (input : ByteArray) (pos stop : Nat), ∀ hBound : stop ≤ input.size, stop - pos ≤ n →
       ∀ x next, readItem input pos stop = .ok (x, next) →
       ∃ e, encode x = .ok e ∧ (input.extract pos next).data.toList = e.data.toList) ∧
-    (∀ (input : ByteArray) (pos stop : Nat), stop ≤ input.size → stop - pos ≤ n →
+    (∀ (input : ByteArray) (pos stop : Nat), ∀ hBound : stop ≤ input.size, stop - pos ≤ n →
       ∀ xs, decodeItems input pos stop = .ok xs →
       ∃ e, joinEncodings xs = .ok e ∧ e.data.toList = (input.extract pos stop).data.toList) := by
   induction n with
@@ -309,19 +319,20 @@ theorem canonical_upTo (n : Nat) :
       readItem_canonical hStop (fun a b _ hab => by omega) h, ?_⟩
     -- No byte is left, and no bytes hold no item.
     intro input pos stop hStop hLen xs h
-    rw [decodeItems_eq, ite_eq_right (by omega)] at h
+    rw [decodeItems_eq (bounded := by assumption), ite_eq_right (by omega)] at h
     cases h
     exact ⟨.empty, rfl, by rw [extract_toList_of_le input pos stop (by omega)]; rfl⟩
   | succ m ih =>
     -- Items first: a list payload is shorter than its item, so induction applies.
-    have hItem : ∀ (input : ByteArray) (pos stop : Nat), stop ≤ input.size → stop - pos ≤ m + 1 →
+    have hItem : ∀ (input : ByteArray) (pos stop : Nat),
+        ∀ hBound : stop ≤ input.size, stop - pos ≤ m + 1 →
         ∀ x next, readItem input pos stop = .ok (x, next) →
         ∃ e, encode x = .ok e ∧ (input.extract pos next).data.toList = e.data.toList :=
       fun input pos stop hStop hLen x next h =>
         readItem_canonical hStop (fun a b hb hab => ih.2 input a b hb (by omega)) h
     refine ⟨hItem, ?_⟩
     intro input pos stop hStop hLen xs h
-    rw [decodeItems_eq] at h
+    rw [decodeItems_eq (bounded := by assumption)] at h
     by_cases hPos : pos < stop
     case neg =>
       -- No byte is left, so there is no item.
