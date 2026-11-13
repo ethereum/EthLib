@@ -1,5 +1,6 @@
 module
 
+import EthLib.Base.Proofs.Bytes
 public import EthLib.Cryptography.Bls.G2
 public import EthLib.Cryptography.Bls.Compress
 public import EthLib.Cryptography.Proofs.Bls.Fp2
@@ -32,6 +33,8 @@ That holds because `x^3 + 4 (1 + i)` has no root in `Fp2`.
 -/
 
 @[expose] public section
+
+open EthLib.Base (byteArray_getElem_eq_get! byteArray_set_eq_set!)
 
 /-- Equality of `G2` points, coordinate by coordinate.
 
@@ -160,7 +163,7 @@ private theorem compress_noninf {p : G2} (hinf : ¬ p.isInfinity = true)
   -- Unfold Id.run past the infinity guard and substitute p.toAffine = (xa, ya).
   unfold G2.compress
   simp only [Id.run, hinf, hpa, Bool.false_eq_true, ↓reduceIte]
-  split <;> rfl
+  split <;> simp only [byteArray_getElem_eq_get!, byteArray_set_eq_set!] <;> rfl
 
 private theorem ba_size_set! (b : ByteArray) (j : Nat) (v : UInt8) :
     (b.set! j v).size = b.size := Array.size_setIfInBounds
@@ -170,12 +173,13 @@ theorem uncompress_infinityBytes : G2.uncompress G2.infinityBytes = .ok G2.zero 
   have hsz : infinityBytes.size = 96 := by decide
   have hhead : infinityBytes.get! 0 = 0xc0 := by decide
   have htail : tailAllZero infinityBytes 1 = true := by decide +kernel
-  rw [uncompress, ite_eq_right (show ¬ infinityBytes.size ≠ 96 from fun h => h hsz)]
+  rw [uncompress, dite_eq_right (show ¬ infinityBytes.size ≠ 96 from fun h => h hsz)]
   extract_lets head isC isI yS
-  have hC : ¬ (!decide isC) = true := by simp only [isC, head, hhead]; decide
-  have hI : isI := by simp only [isI, head, hhead]; decide
+  have hC : ¬ (!decide isC) = true := by
+    simp only [isC, head, byteArray_getElem_eq_get!, hhead]; decide
+  have hI : isI := by simp only [isI, head, byteArray_getElem_eq_get!, hhead]; decide
   have hflags : ¬ (decide yS || decide (head ≠ 0xc0) || !tailAllZero infinityBytes 1) = true := by
-    simp only [yS, head, hhead, htail]; decide
+    simp only [yS, head, byteArray_getElem_eq_get!, hhead, htail]; decide
   rw [ite_eq_right hC, ite_eq_left hI, ite_eq_right hflags]
 
 /-! ## Rejection of malformed compressed inputs -/
@@ -191,7 +195,7 @@ theorem uncompress_uncompressed {bytes : ByteArray} (hsz : bytes.size = 96)
     (h : (bytes.get! 0 &&& 0x80) = 0) :
     G2.uncompress bytes = .error .invalidG2Point := by
   unfold G2.uncompress
-  simp [hsz, h]
+  simp [hsz, byteArray_getElem_eq_get!, h]
 
 set_option maxRecDepth 4000 in
 private theorem head_e0_flags (head : UInt8) (h : (head &&& 0xe0) = 0xe0) :
@@ -206,7 +210,7 @@ theorem uncompress_infinity_sign_set {bytes : ByteArray} (hsz : bytes.size = 96)
   -- All three top bits 0x80, 0x40, and 0x20 are set in byte 0.
   obtain ⟨hc, hi, hs⟩ := head_e0_flags (bytes.get! 0) h
   unfold G2.uncompress
-  simp [hsz, hc, hi, hs]
+  simp [hsz, byteArray_getElem_eq_get!, hc, hi, hs]
 
 set_option maxRecDepth 4000 in
 private theorem head_c0_flags (head : UInt8) (h : (head &&& 0xc0) = 0xc0) :
@@ -226,10 +230,10 @@ theorem uncompress_infinity_nonzero_tail {bytes : ByteArray} (hsz : bytes.size =
     rw [Bool.eq_false_iff]
     intro hok
     exact hne (tailAllZero_ok bytes hok i hi1 (by omega))
-  rw [uncompress, ite_eq_right (show ¬ bytes.size ≠ 96 from fun h => h hsz)]
+  rw [uncompress, dite_eq_right (show ¬ bytes.size ≠ 96 from fun h => h hsz)]
   extract_lets head isC isI yS
-  have hC : ¬ (!decide isC) = true := by simp [isC, head, hc]
-  have hI : isI := by simp [isI, head, hinf]
+  have hC : ¬ (!decide isC) = true := by simp [isC, head, byteArray_getElem_eq_get!, hc]
+  have hI : isI := by simp [isI, head, byteArray_getElem_eq_get!, hinf]
   rw [ite_eq_right hC, ite_eq_left hI, htail]
   -- With the tail check false, the three-way disjunction in the infinity check is true.
   exact ite_eq_left (by simp)
@@ -241,12 +245,14 @@ theorem uncompress_noncanonical_c1 {bytes : ByteArray} {e : BlsError}
     (hi : (bytes.get! 0 &&& 0x40) = 0)
     (herr : Fp.fromBytesBE ((bytes.set! 0 (bytes.get! 0 &&& 0x1f)).extract 0 48) = .error e) :
     G2.uncompress bytes = .error .invalidG2Point := by
-  rw [uncompress, ite_eq_right (show ¬ bytes.size ≠ 96 from fun h => h hsz)]
+  rw [uncompress, dite_eq_right (show ¬ bytes.size ≠ 96 from fun h => h hsz)]
   extract_lets head isC isI yS cleared c1Bytes c0Bytes
-  have hC : ¬ (!decide isC) = true := by simp [isC, head, hc]
-  have hI : ¬ isI := by simp [isI, head, hi]
+  have hC : ¬ (!decide isC) = true := by simp [isC, head, byteArray_getElem_eq_get!, hc]
+  have hI : ¬ isI := by simp [isI, head, byteArray_getElem_eq_get!, hi]
   -- Enter the finite branch; the pair match then fails on its first component, with no evaluation.
-  rw [ite_eq_right hC, ite_eq_right hI, show Fp.fromBytesBE c1Bytes = .error e from herr]
+  rw [ite_eq_right hC, ite_eq_right hI, show Fp.fromBytesBE c1Bytes = .error e from by
+    simpa only [c1Bytes, cleared, head, byteArray_getElem_eq_get!, byteArray_set_eq_set!]
+      using herr]
 
 -- The decoder's matchers are named on purpose: their equations select branches without evaluation.
 set_option linter.auxLemma false in
@@ -257,12 +263,14 @@ theorem uncompress_noncanonical_c0 {bytes : ByteArray} {e : BlsError}
     (hi : (bytes.get! 0 &&& 0x40) = 0)
     (herr : Fp.fromBytesBE ((bytes.set! 0 (bytes.get! 0 &&& 0x1f)).extract 48 96) = .error e) :
     G2.uncompress bytes = .error .invalidG2Point := by
-  rw [uncompress, ite_eq_right (show ¬ bytes.size ≠ 96 from fun h => h hsz)]
+  rw [uncompress, dite_eq_right (show ¬ bytes.size ≠ 96 from fun h => h hsz)]
   extract_lets head isC isI yS cleared c1Bytes c0Bytes
-  have hC : ¬ (!decide isC) = true := by simp [isC, head, hc]
-  have hI : ¬ isI := by simp [isI, head, hi]
+  have hC : ¬ (!decide isC) = true := by simp [isC, head, byteArray_getElem_eq_get!, hc]
+  have hI : ¬ isI := by simp [isI, head, byteArray_getElem_eq_get!, hi]
   -- Enter the finite branch, then take the error case of the pair match on the failed c0 decode.
-  rw [ite_eq_right hC, ite_eq_right hI, show Fp.fromBytesBE c0Bytes = .error e from herr]
+  rw [ite_eq_right hC, ite_eq_right hI, show Fp.fromBytesBE c0Bytes = .error e from by
+    simpa only [c0Bytes, cleared, head, byteArray_getElem_eq_get!, byteArray_set_eq_set!]
+      using herr]
   simp (config := { zeta := false, iota := false, beta := false }) only
     [uncompress.match_3.eq_2, reduceCtorEq, false_implies, implies_true]
 
@@ -307,7 +315,7 @@ private theorem uncompress_ok_cases {b : ByteArray} {q : G2} (h : uncompress b =
   split at h
   · cases h
   rename_i hcomp
-  refine ⟨fun h0 => hcomp (by simp [isC, head, h0]), ?_⟩
+  refine ⟨fun h0 => hcomp (by simp [isC, head, byteArray_getElem_eq_get!, h0]), ?_⟩
   -- Infinity flag set: only the canonical encoding gives the identity.
   split at h
   · split at h
@@ -316,36 +324,44 @@ private theorem uncompress_ok_cases {b : ByteArray} {q : G2} (h : uncompress b =
     cases h
     simp only [Bool.or_eq_true, not_or, Bool.not_eq_true] at hflags
     obtain ⟨⟨_, hhead⟩, htail⟩ := hflags
-    exact Or.inl ⟨Classical.not_not.mp (of_decide_eq_false hhead),
-      by simpa only [Bool.not_eq_false'] using htail, rfl⟩
+    refine Or.inl ⟨?_, by simpa only [Bool.not_eq_false'] using htail, rfl⟩
+    simpa only [head, byteArray_getElem_eq_get!] using
+      Classical.not_not.mp (of_decide_eq_false hhead)
   rename_i hinf
-  refine Or.inr ⟨not_ne_iff.mp hinf, ?_⟩
-  -- Infinity flag clear: name the two decoded halves, then select the branch by rewriting.
-  generalize hd1 : Fp.fromBytesBE c1Bytes = d1 at h
-  generalize hd0 : Fp.fromBytesBE c0Bytes = d0 at h
-  cases d1
-  · simp (config := { zeta := false, iota := false, beta := false }) only
-      [uncompress.match_3.eq_2, reduceCtorEq] at h
-  rename_i c1
-  cases d0
-  · simp (config := { zeta := false, iota := false, beta := false }) only
-      [uncompress.match_3.eq_2, reduceCtorEq] at h
-  rename_i c0
-  simp (config := { zeta := false, iota := false, beta := false }) only
-    [uncompress.match_3.eq_1] at h
-  -- Name the square root of x^3 + bTwist, then select its branch the same way.
-  extract_lets x rhs at h
-  generalize hs : Fp2.sqrt rhs = s at h
-  cases s
-  · simp (config := { zeta := false, iota := false, beta := false }) only
-      [uncompress.match_1.eq_1] at h
+  refine Or.inr ⟨?_, ?_⟩
+  · simpa only [isI, head, byteArray_getElem_eq_get!] using not_ne_iff.mp hinf
+  · -- Infinity flag clear: name the two decoded halves, then select the branch by rewriting.
+    generalize hd1 : Fp.fromBytesBE c1Bytes = d1 at h
+    generalize hd0 : Fp.fromBytesBE c0Bytes = d0 at h
+    cases d1
+    · simp (config := { zeta := false, iota := false, beta := false }) only
+        [uncompress.match_3.eq_2, reduceCtorEq] at h
+    rename_i c1
+    cases d0
+    · simp (config := { zeta := false, iota := false, beta := false }) only
+        [uncompress.match_3.eq_2, reduceCtorEq] at h
+    rename_i c0
+    simp (config := { zeta := false, iota := false, beta := false }) only
+      [uncompress.match_3.eq_1] at h
+    -- Name the square root of x^3 + bTwist, then select its branch the same way.
+    extract_lets x rhs at h
+    generalize hs : Fp2.sqrt rhs = s at h
+    cases s
+    · simp (config := { zeta := false, iota := false, beta := false }) only
+        [uncompress.match_1.eq_1] at h
+      cases h
+    rename_i yPos
+    simp (config := { zeta := false, iota := false, beta := false }) only
+      [uncompress.match_1.eq_2] at h
+    extract_lets yNeg y at h
     cases h
-  rename_i yPos
-  simp (config := { zeta := false, iota := false, beta := false }) only
-    [uncompress.match_1.eq_2] at h
-  extract_lets yNeg y at h
-  cases h
-  refine ⟨c1, c0, yPos, ?_, ?_, ?_, rfl⟩ <;> first | rfl | assumption
+    refine ⟨c1, c0, yPos, ?_, ?_, ?_, ?_⟩
+    · simpa only [c1Bytes, cleared, head, byteArray_getElem_eq_get!, byteArray_set_eq_set!]
+        using hd1
+    · simpa only [c0Bytes, cleared, head, byteArray_getElem_eq_get!, byteArray_set_eq_set!]
+        using hd0
+    · exact hs
+    · simp only [x, y, yNeg, yS, head, byteArray_getElem_eq_get!]
 
 /-- A decoded point is either infinity or a point on the twist with `z = 1`.
 
@@ -592,11 +608,12 @@ private theorem uncompress_of_facts {xa ya yPos : Fp2} {cb : ByteArray}
     (hsqrt : Fp2.sqrt (xa * xa * xa + bTwist) = .ok yPos)
     (hysq : yPos * yPos = ya * ya) :
     G2.uncompress cb = .ok ⟨xa, ya, Fp2.one⟩ := by
-  rw [uncompress, ite_eq_right (show ¬ cb.size ≠ 96 from fun h => h hsize)]
+  rw [uncompress, dite_eq_right (show ¬ cb.size ≠ 96 from fun h => h hsize)]
   extract_lets head isC isI yS cleared c1Bytes c0Bytes
-  have hC : ¬ (!decide isC) = true := by simp [isC, head, hc]
-  have hI : ¬ isI := by simp [isI, head, hi]
-  have hcl : cleared = fp2ToBytes xa := hmaskeq
+  have hC : ¬ (!decide isC) = true := by simp [isC, head, byteArray_getElem_eq_get!, hc]
+  have hI : ¬ isI := by simp [isI, head, byteArray_getElem_eq_get!, hi]
+  have hcl : cleared = fp2ToBytes xa := by
+    simpa only [cleared, head, byteArray_getElem_eq_get!, byteArray_set_eq_set!] using hmaskeq
   have h1 : Fp.fromBytesBE c1Bytes = .ok xa.c1 := by
     rw [show c1Bytes = cleared.extract 0 48 from rfl, hcl, fromBytesBE_fp2ToBytes_c1]
   have h0 : Fp.fromBytesBE c0Bytes = .ok xa.c0 := by
@@ -608,7 +625,8 @@ private theorem uncompress_of_facts {xa ya yPos : Fp2} {cb : ByteArray}
   rw [show Fp2.sqrt rhs = .ok yPos from hsqrt]
   simp (config := { zeta := false, iota := false, beta := false }) only [uncompress.match_1.eq_2]
   extract_lets yNeg y
-  rw [show y = ya from sign_recovery_fp2' hysq hsg]
+  rw [show y = ya from by
+    simpa only [y, yS, head, byteArray_getElem_eq_get!] using sign_recovery_fp2' hysq hsg]
 
 /-- A finite point on the twist decodes back to its affine form with `z = 1`. -/
 theorem uncompress_compress_noninf {p : G2} (h : G2.isOnTwist p = true)

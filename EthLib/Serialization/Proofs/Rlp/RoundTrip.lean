@@ -31,7 +31,7 @@ Each step also holds wherever the encoding sits in the array that the decoder re
 
 namespace EthLib.Serialization.Rlp
 
-open EthLib.Base (byteArray_get_eq_get!)
+open EthLib.Base (byteArray_getElem_eq_get!)
 
 /-- The short prefix `offset + length` reads back as its kind and its length. -/
 theorem readPrefix_short (kind : PayloadKind) (length : Nat) (h : length < 56) (input : ByteArray)
@@ -84,7 +84,7 @@ theorem readPrefix_long (kind : PayloadKind) (length : Nat) (h1 : 56 ≤ length)
       = .ok (kind, (bigEndian length).size, length) := by
     simp only [readPrefix.readLongLength,
       readBigEndian_zero input pos (bigEndian length).size (by omega), hBytes, bigEndian_value]
-    simp [byteArray_get_eq_get!, hHead, show (bigEndian length).size ≠ 0 by omega,
+    simp [byteArray_getElem_eq_get!, hHead, show (bigEndian length).size ≠ 0 by omega,
       show ¬ stop - pos < (bigEndian length).size by omega,
       show ¬ length < 56 by omega]
   cases kind
@@ -192,7 +192,7 @@ theorem readItem_list {input : ByteArray} {pos stop : Nat} {payload rest : List 
     simp [← ByteArray.size_data, ← Array.length_toList, hPre]
   unfold readItem
   rw [decodeItem.eq_def]
-  simp only [byteArray_get_eq_get!, hPos, hGet, hHigh, hRP, dite_true, ite_false,
+  simp only [byteArray_getElem_eq_get!, hPos, hGet, hHigh, hRP, dite_true, ite_false,
     bind, Except.bind, hFit,
     hItems _ (by omega) hPayload, Except.map, Except.ok.injEq, Prod.mk.injEq, true_and]
   omega
@@ -230,7 +230,7 @@ theorem readItem_bytes {input : ByteArray} {pos stop : Nat} (data : ByteArray) {
     exact hLow
   unfold readItem
   rw [decodeItem.eq_def]
-  simp only [byteArray_get_eq_get!, hPos, hGet, hHigh, hRP, dite_true, ite_false,
+  simp only [byteArray_getElem_eq_get!, hPos, hGet, hHigh, hRP, dite_true, ite_false,
     bind, Except.bind, hFit]
   by_cases hLength : data.size = 1
   · have hLow : ¬ input.get! (pos + 1 + lengthBytes.length) < 0x80 :=
@@ -259,7 +259,7 @@ theorem readItem_single {input : ByteArray} {pos stop : Nat} (data : ByteArray) 
       obtain ⟨hPos, hGet, -⟩ := extract_toList_eq_cons hStop hInput
       unfold readItem
       rw [decodeItem.eq_def]
-      simp only [byteArray_get_eq_get!, hPos, dite_true, hGet, hLow', ite_true, Except.map]
+      simp only [byteArray_getElem_eq_get!, hPos, dite_true, hGet, hLow', ite_true, Except.map]
       rfl
   · cases h
 

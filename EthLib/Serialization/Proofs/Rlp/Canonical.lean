@@ -29,7 +29,7 @@ The proof runs the decoder backwards:
 
 namespace EthLib.Serialization.Rlp
 
-open EthLib.Base (byteArray_get_eq_get!)
+open EthLib.Base (byteArray_getElem_eq_get!)
 
 /-- Bytes read in base 256 from a running value `acc` stay below `(acc + 1) * 256^count`. -/
 theorem foldl_bigEndian_lt (bytes : List UInt8) (acc : Nat) :
@@ -86,7 +86,7 @@ theorem readLongLength_ok {input : ByteArray} {pos stop : Nat} {kind kind' : Pay
             subst hb0
             rw [extract_toList_cons input pos (pos + k) (by omega) hEnd] at hb
             simp only [List.head?_cons, Option.mem_def, Option.some.injEq] at hb
-            exact hHead (by simpa only [byteArray_get_eq_get!] using hb)
+            exact hHead (by simpa only [byteArray_getElem_eq_get!] using hb)
 
 /-- The long prefix of a length, from its first byte and its `k` length bytes. -/
 theorem lengthPrefix_long_toList (kind : PayloadKind) (length k : Nat) (lengthBytes : List UInt8)
@@ -206,7 +206,7 @@ theorem readItem_canonical {input : ByteArray} {pos stop : Nat} (hStop : stop â‰
   case neg =>
     -- No byte is left, so there is no item.
     simp [hPos, Except.map] at h
-  simp only [byteArray_get_eq_get!, hPos, dite_true] at h
+  simp only [byteArray_getElem_eq_get!, hPos, dite_true] at h
   have hCons := extract_toList_cons input pos stop hPos hStop
   by_cases hLow : input.get! pos < 0x80
   Â· -- A single byte below `0x80` is its own encoding.
