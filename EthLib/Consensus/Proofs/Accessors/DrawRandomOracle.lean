@@ -12,9 +12,23 @@ A draw whose input is absent from the cache has the acceptance probability of a 
 
 These probabilities hold for the oracle only; no theorem bounds the draw when SHA-256 answers.
 
-The seed is fixed, and freshness is a condition on the hashed input of the draw's block of draws.
+The seed is fixed.
 
-No theorem here covers seed derivation or the whole proposer search.
+A draw is fresh when the input its block of draws hashes has no answer in the cache yet.
+
+With fresh inputs and bounded balances, the first draws of one seed have independent outcomes.
+
+The same draw serves the proposer, the sync committee and the payload timeliness committee.
+
+The balance of each draw is given: the shuffle that picks the candidates is not modelled.
+
+The cache may hold other answers, such as those of shuffle inputs.
+
+The draws are made whether or not an earlier one accepts.
+
+A search that stops at its first acceptance reads a prefix of them.
+
+No theorem here covers seed derivation.
 -/
 
 @[expose] public section
@@ -118,5 +132,367 @@ theorem prEvent_queryProposerDraw_pair_of_fresh (preset : Preset) (fork : Base.F
     prEvent_bind_bind_and ($ᵗ Bytes32) ($ᵗ Bytes32)
     (fun random => drawAccepts preset fork random i e = .ok true)
     (fun random => drawAccepts preset fork random j f = .ok true)
+
+/-- The first `n` draws of one seed, each with its hash call exposed to a shared oracle.
+
+Draw `i` weighs a candidate whose effective balance is the `i`-th given balance. -/
+def queryDraws (preset : Preset) (fork : Base.Fork) (seed : Bytes32) (balance : Nat → Gwei)
+    (n : Nat) : OracleComp (ByteArray →ₒ Bytes32) (List (Except AccessorError Bool)) :=
+  (List.range n).mapM fun i => queryProposerDraw preset fork seed i (balance i)
+
+/-- Answering the exposed hash calls with SHA-256 gives the specified draws. -/
+theorem evalWithAnswerFn_queryDraws (preset : Preset) (fork : Base.Fork) (seed : Bytes32)
+    (balance : Nat → Gwei) (n : Nat) :
+    evalWithAnswerFn (QueryImpl.ofFn Cryptography.Hash.Sha256.hash32)
+      (queryDraws preset fork seed balance n) =
+      (List.range n).map fun i => proposerDraw preset fork seed i (balance i) := by
+  unfold queryDraws
+  induction (List.range n) with
+  | nil => rfl
+  | cons x L ih =>
+    rw [List.mapM_cons, List.map_cons, ← evalWithAnswerFn_queryProposerDraw, ← ih]
+    simp only [evalWithAnswerFn_bind, evalWithAnswerFn_pure]
+
+/-- Reads through a lazy random oracle equal reads of a uniform table behind the cache.
+
+It needs two elements to query one input exactly when they share a cell. -/
+private theorem run_mapM_query_evalDistEq {D R α β : Type} [DecidableEq D] [SampleableType R]
+    {N : Nat} [SampleableType (Fin N → R)] (q : α → D) (g : α → Fin N) (f : α → R → β)
+    (L : List α) (same : ∀ x ∈ L, ∀ y ∈ L, q x = q y ↔ g x = g y)
+    (cache : (D →ₒ R).QueryCache) :
+    ((simulateQ (D →ₒ R).randomOracle
+      (L.mapM fun x => f x <$> liftM ((D →ₒ R).query (q x)))).run' cache) =ᵈ
+      ((fun T : Fin N → R => L.map fun x => f x ((cache (q x)).getD (T (g x)))) <$>
+        ($ᵗ (Fin N → R))) := by
+  induction L generalizing cache with
+  | nil =>
+    simp only [List.mapM_nil, simulateQ_pure, StateT.run'_pure', List.map_nil]
+    exact (EvalDistEq.map_const _ _).symm
+  | cons x L ih =>
+    have rest := ih fun a ha b hb =>
+      same a (List.mem_cons_of_mem x ha) b (List.mem_cons_of_mem x hb)
+    simp only [List.mapM_cons, simulateQ_bind, simulateQ_map, simulateQ_pure, simulateQ_spec_query,
+      StateT.run'_eq, StateT.run_bind, StateT.run_map, randomOracle.run_eq]
+    cases hc : cache (q x) with
+    | some u =>
+      refine (EvalDistEq.of_eq ?_).trans
+        (((rest cache).map (List.cons (f x u))).trans (EvalDistEq.of_eq ?_))
+      · simp [StateT.run'_eq]
+      · simp [hc, Functor.map_map]
+    | none =>
+      -- A fresh answer is the cell of its input in a uniform table, overwritten by the answer.
+      have later (u : R) (T : Fin N → R) : (L.map fun y =>
+          f y (((cache.cacheQuery (q x) u) (q y)).getD (T (g y)))) =
+          L.map fun y => f y ((cache (q y)).getD (Function.update T (g x) u (g y))) := by
+        refine List.map_congr_left fun y hy => ?_
+        by_cases shared : g y = g x
+        · have query : q y = q x :=
+            (same y (List.mem_cons_of_mem x hy) x List.mem_cons_self).mpr shared
+          rw [shared, Function.update_self]
+          generalize q y = t at query ⊢
+          subst query
+          simp [hc, QueryCache.cacheQuery_self]
+        · have query : q y ≠ q x := fun h =>
+            shared ((same y (List.mem_cons_of_mem x hy) x List.mem_cons_self).mp h)
+          simp [QueryCache.cacheQuery_of_ne _ _ query, Function.update_of_ne shared]
+      calc
+        _ = ($ᵗ R >>= fun u => List.cons (f x u) <$>
+            (simulateQ (D →ₒ R).randomOracle
+              (L.mapM fun x => f x <$> liftM ((D →ₒ R).query (q x)))).run'
+                (cache.cacheQuery (q x) u)) := by
+          simp [StateT.run'_eq]
+        _ =ᵈ ($ᵗ R >>= fun u => List.cons (f x u) <$>
+            ((fun T : Fin N → R => L.map fun y =>
+              f y (((cache.cacheQuery (q x) u) (q y)).getD (T (g y)))) <$> ($ᵗ (Fin N → R)))) :=
+          EvalDistEq.bind_right _ fun u => (rest _).map _
+        _ = ($ᵗ R >>= fun u => $ᵗ (Fin N → R) >>= fun T =>
+            pure ((x :: L).map fun y =>
+              f y ((cache (q y)).getD (Function.update T (g x) u (g y))))) := by
+          simp [later, hc, map_eq_bind_pure_comp]
+        _ =ᵈ ($ᵗ (Fin N → R) >>= fun T =>
+            pure ((x :: L).map fun y => f y ((cache (q y)).getD (T (g y))))) :=
+          evalDistEq_uniformSample_bind_update (g x)
+            (fun T => pure ((x :: L).map fun y => f y ((cache (q y)).getD (T (g y)))))
+        _ = _ := by rw [map_eq_bind_pure_comp]; rfl
+
+/-- Independent uniform samples equal reads of a uniform table at distinct cells. -/
+private theorem mapM_uniformSample_evalDistEq {R α β : Type} [SampleableType R] {N : Nat}
+    [SampleableType (Fin N → R)] (g : α → Fin N) (f : α → R → β) (L : List α)
+    (distinct : (L.map g).Nodup) :
+    (L.mapM fun x => f x <$> ($ᵗ R)) =ᵈ
+      ((fun T : Fin N → R => L.map fun x => f x (T (g x))) <$> ($ᵗ (Fin N → R))) := by
+  induction L with
+  | nil =>
+    simp only [List.mapM_nil, List.map_nil]
+    exact (EvalDistEq.map_const _ _).symm
+  | cons x L ih =>
+    rw [List.map_cons, List.nodup_cons] at distinct
+    -- The cell of the first sample is read by no later sample.
+    have later (u : R) (T : Fin N → R) : (L.map fun y => f y (T (g y))) =
+        L.map fun y => f y (Function.update T (g x) u (g y)) := by
+      refine List.map_congr_left fun y hy => ?_
+      have other : g y ≠ g x := fun h => distinct.1 (h ▸ List.mem_map_of_mem hy)
+      rw [Function.update_of_ne other]
+    calc
+      _ = ($ᵗ R >>= fun u => List.cons (f x u) <$> L.mapM fun x => f x <$> ($ᵗ R)) := by
+        simp [map_eq_bind_pure_comp]
+      _ =ᵈ ($ᵗ R >>= fun u => List.cons (f x u) <$>
+          ((fun T : Fin N → R => L.map fun y => f y (T (g y))) <$> ($ᵗ (Fin N → R)))) :=
+        EvalDistEq.bind_right _ fun u => (ih distinct.2).map _
+      _ = ($ᵗ R >>= fun u => $ᵗ (Fin N → R) >>= fun T =>
+          pure ((x :: L).map fun y => f y (Function.update T (g x) u (g y)))) := by
+        simp only [map_eq_bind_pure_comp, bind_assoc, pure_bind, Function.comp_apply,
+          List.map_cons, Function.update_self]
+        exact bind_congr fun u => bind_congr fun T => by rw [later u T]
+      _ =ᵈ ($ᵗ (Fin N → R) >>= fun T => pure ((x :: L).map fun y => f y (T (g y)))) :=
+        evalDistEq_uniformSample_bind_update (g x)
+          (fun T => pure ((x :: L).map fun y => f y (T (g y))))
+      _ = _ := by rw [map_eq_bind_pure_comp]; rfl
+
+/-- Reads of a uniform table of vectors at distinct cells and positions form a uniform table. -/
+private theorem evalDistEq_uniformSample_table_reads {R A : Type} [Finite A] [SampleableType R]
+    {B m : Nat} [SampleableType (Fin B → Vector R m)] [SampleableType (A → R)]
+    {e : A → Fin B × Fin m} (he : Function.Injective e) :
+    ((fun T : Fin B → Vector R m => fun a => (T (e a).1)[(e a).2.val]) <$>
+      ($ᵗ (Fin B → Vector R m))) =ᵈ ($ᵗ (A → R)) := by
+  let flat : (Fin B → Vector R m) ≃ (Fin B × Fin m → R) :=
+    (Equiv.arrowCongr (Equiv.refl _) (arrayVectorEquivFin R m)).trans
+      (Equiv.curry (Fin B) (Fin m) R).symm
+  let : SampleableType (Fin B × Fin m → R) := SampleableType.ofEquiv flat
+  calc
+    _ =ᵈ ((fun W : Fin B × Fin m → R => W ∘ e) <$> (flat <$> ($ᵗ (Fin B → Vector R m)))) := by
+      simp only [Functor.map_map]
+      exact EvalDistEq.rfl
+    _ =ᵈ ((fun W : Fin B × Fin m → R => W ∘ e) <$> ($ᵗ (Fin B × Fin m → R))) :=
+      (SampleableType.map_uniformSample_evalDistEq_of_bijective flat.bijective).map _
+    _ =ᵈ ($ᵗ (A → R)) := evalDistEq_uniformSample_map_comp_injective he
+
+/-- Draws that share a uniform digest per block are equal in distribution to independent draws.
+
+Each draw reads its own positions of the digest, and no two draws of one block share a position.
+
+The table has one more cell than there are draws, so every block and every draw has a cell. -/
+private theorem evalDistEq_uniformSample_blocks {β : Type} (n d k : Nat)
+    (h : Nat → Bytes32 → β) (H : Nat → (Fin k → UInt8) → β) (pos : Nat → Fin k → Fin 32)
+    (reads : ∀ i random, h i random = H i fun j => random[(pos i j).val])
+    (apart : ∀ i i' j j', i / d = i' / d → pos i j = pos i' j' → i = i' ∧ j = j') :
+    ((fun T : Fin (n + 1) → Bytes32 => (List.range n).map fun i =>
+      h i (T ⟨i / d % (n + 1), Nat.mod_lt _ n.succ_pos⟩)) <$> ($ᵗ (Fin (n + 1) → Bytes32))) =ᵈ
+      ((fun S : Fin (n + 1) → Bytes32 => (List.range n).map fun i =>
+        h i (S ⟨i % (n + 1), Nat.mod_lt _ n.succ_pos⟩)) <$> ($ᵗ (Fin (n + 1) → Bytes32))) := by
+  let cell (i : Nat) : Fin (n + 1) := ⟨i % (n + 1), Nat.mod_lt _ n.succ_pos⟩
+  let block (i : Nat) : Fin (n + 1) := ⟨i / d % (n + 1), Nat.mod_lt _ n.succ_pos⟩
+  let common (W : Fin (n + 1) × Fin k → UInt8) : List β :=
+    (List.range n).map fun i => H i fun j => W (cell i, j)
+  -- Both tables of digests give a uniform table of the bytes that the draws read.
+  have side (place : Nat → Fin (n + 1))
+      (distinct : Function.Injective fun a : Fin (n + 1) × Fin k => (place a.1.val, pos a.1 a.2)) :
+      ((fun T : Fin (n + 1) → Bytes32 => (List.range n).map fun i => h i (T (place i))) <$>
+        ($ᵗ (Fin (n + 1) → Bytes32))) =ᵈ (common <$> ($ᵗ (Fin (n + 1) × Fin k → UInt8))) := by
+    refine EvalDistEq.trans (EvalDistEq.of_eq ?_)
+      ((evalDistEq_uniformSample_table_reads distinct).map common)
+    rw [Functor.map_map]
+    congr 1
+    funext T
+    refine List.map_congr_left fun i hi => ?_
+    have small : i < n + 1 := by have := List.mem_range.mp hi; omega
+    have same : (cell i).val = i := Nat.mod_eq_of_lt small
+    rw [reads]
+    simp only [same]
+  refine (side block ?_).trans (side cell ?_).symm
+  · rintro ⟨a, j⟩ ⟨b, l⟩ equal
+    simp only [Prod.mk.injEq, block, Fin.mk.injEq] at equal
+    rw [Nat.mod_eq_of_lt (lt_of_le_of_lt (Nat.div_le_self _ _) a.isLt),
+      Nat.mod_eq_of_lt (lt_of_le_of_lt (Nat.div_le_self _ _) b.isLt)] at equal
+    obtain ⟨first, second⟩ := apart _ _ _ _ equal.1 equal.2
+    exact Prod.ext (Fin.ext first) second
+  · rintro ⟨a, j⟩ ⟨b, l⟩ equal
+    simp only [Prod.mk.injEq, cell, Fin.mk.injEq] at equal
+    rw [Nat.mod_eq_of_lt a.isLt, Nat.mod_eq_of_lt b.isLt] at equal
+    obtain ⟨cells, places⟩ := equal
+    exact Prod.ext (Fin.ext cells) (apart _ _ _ _ (by rw [cells]) places).2
+
+/-- Each draw reads one byte of its digest before Electra and two bytes from Electra.
+
+No two draws of one block read the same byte. -/
+private theorem drawAccepts_reads (preset : Preset) (fork : Base.Fork) (balance : Nat → Gwei) :
+    ∃ (k : Nat) (H : Nat → (Fin k → UInt8) → Except AccessorError Bool)
+      (pos : Nat → Fin k → Fin 32),
+      (∀ i random, drawAccepts preset fork random i (balance i) =
+        H i fun j => random[(pos i j).val]) ∧
+      ∀ i i' j j', i / drawsPerHash fork = i' / drawsPerHash fork → pos i j = pos i' j' →
+        i = i' ∧ j = j' := by
+  by_cases electra : .pectra ≤ fork
+  · refine ⟨2, fun i bytes => drawAccepts preset fork (Vector.ofFn fun t : Fin 32 =>
+      if t.val = i % 16 * 2 then bytes 0 else bytes 1) i (balance i),
+      fun i j => ⟨i % 16 * 2 + j.val, by have := Nat.mod_lt i (show 16 > 0 by decide); omega⟩,
+      fun i random => ?_, fun i i' j j' blocks places => ?_⟩
+    · simp only [drawAccepts, electra, ↓reduceIte, Vector.getElem_ofFn]
+      simp
+    · simp only [drawsPerHash, electra, ↓reduceIte, Fin.mk.injEq] at blocks places
+      have left := Nat.mod_add_div i 16
+      have right := Nat.mod_add_div i' 16
+      have := j.isLt
+      have := j'.isLt
+      exact ⟨by omega, Fin.ext (by omega)⟩
+  · refine ⟨1, fun i bytes => drawAccepts preset fork (Vector.replicate 32 (bytes 0)) i (balance i),
+      fun i _ => ⟨i % 32, Nat.mod_lt i (by decide)⟩, fun i random => ?_,
+      fun i i' j j' blocks places => ?_⟩
+    · simp only [drawAccepts, electra, ↓reduceIte, Vector.getElem_replicate]
+    · simp only [drawsPerHash, electra, ↓reduceIte, Fin.mk.injEq] at blocks places
+      have left := Nat.mod_add_div i 32
+      have right := Nat.mod_add_div i' 32
+      exact ⟨by omega, Subsingleton.elim _ _⟩
+
+/-- The first `n` draws of one seed behave as draws on independent uniform digests.
+
+This holds when no draw input of the seed has an answer in the shared cache yet.
+
+It needs at most `2^64` draws, as many as the 64-bit counter of the search allows.
+
+The draws of one block read one answer at disjoint bytes, so they stay independent. -/
+theorem run_queryDraws_evalDistEq (preset : Preset) (fork : Base.Fork) (seed : Bytes32)
+    (balance : Nat → Gwei) (n : Nat) (cache : (ByteArray →ₒ Bytes32).QueryCache)
+    (bounded : n ≤ 2 ^ 64)
+    (fresh : ∀ i < n, cache (drawInput seed (i / drawsPerHash fork)) = none) :
+    ((simulateQ (ByteArray →ₒ Bytes32).randomOracle
+      (queryDraws preset fork seed balance n)).run' cache) =ᵈ
+      (List.range n).mapM fun i =>
+        (fun random => drawAccepts preset fork random i (balance i)) <$> ($ᵗ Bytes32) := by
+  obtain ⟨k, H, pos, reads, apart⟩ := drawAccepts_reads preset fork balance
+  let block (i : Nat) : Fin (n + 1) := ⟨i / drawsPerHash fork % (n + 1), Nat.mod_lt _ n.succ_pos⟩
+  let cell (i : Nat) : Fin (n + 1) := ⟨i % (n + 1), Nat.mod_lt _ n.succ_pos⟩
+  -- Draws of one block hash one input, and distinct blocks below `2^64` hash distinct inputs.
+  have same : ∀ i ∈ List.range n, ∀ j ∈ List.range n,
+      drawInput seed (i / drawsPerHash fork) = drawInput seed (j / drawsPerHash fork) ↔
+        block i = block j := by
+    intro i hi j hj
+    have left : i / drawsPerHash fork < n := lt_of_le_of_lt (Nat.div_le_self _ _)
+      (List.mem_range.mp hi)
+    have right : j / drawsPerHash fork < n := lt_of_le_of_lt (Nat.div_le_self _ _)
+      (List.mem_range.mp hj)
+    rw [drawInput_eq_iff (by omega) (by omega), Fin.ext_iff]
+    simp only [block, Nat.mod_eq_of_lt (Nat.lt_succ_of_lt left),
+      Nat.mod_eq_of_lt (Nat.lt_succ_of_lt right), true_and]
+  have distinct : ((List.range n).map cell).Nodup := by
+    refine List.Nodup.map_on (fun i hi j hj equal => ?_) List.nodup_range
+    have left := List.mem_range.mp hi
+    have right := List.mem_range.mp hj
+    simpa [cell, Fin.ext_iff, Nat.mod_eq_of_lt (Nat.lt_succ_of_lt left),
+      Nat.mod_eq_of_lt (Nat.lt_succ_of_lt right)] using equal
+  refine (run_mapM_query_evalDistEq (fun i => drawInput seed (i / drawsPerHash fork)) block
+    (fun i random => drawAccepts preset fork random i (balance i)) (List.range n) same
+    cache).trans ((EvalDistEq.of_eq ?_).trans ((evalDistEq_uniformSample_blocks n
+      (drawsPerHash fork) k _ H pos reads apart).trans
+      (mapM_uniformSample_evalDistEq cell
+        (fun i random => drawAccepts preset fork random i (balance i)) (List.range n)
+        distinct).symm))
+  congr 1
+  funext T
+  refine List.map_congr_left fun i hi => ?_
+  rw [fresh i (List.mem_range.mp hi)]
+  rfl
+
+/-- Independent computations give a list of outputs with the product of their chances. -/
+private theorem prEvent_mapM_eq_map {α γ : Type} (m : α → ProbComp γ) (v : α → γ) (L : List α) :
+    Pr{let z ← L.mapM m}[z = L.map v] = (L.map fun x => Pr{let y ← m x}[y = v x]).prod := by
+  induction L with
+  | nil => simp
+  | cons x L ih =>
+    rw [List.mapM_cons, List.map_cons, List.map_cons, List.prod_cons, ← ih]
+    simp [List.cons.injEq]
+
+/-- The first `n` draws have the product chance, from the chance of each draw to accept.
+
+Each draw must return a verdict rather than fail. -/
+private theorem prEvent_queryDraws_of_chance (preset : Preset) (fork : Base.Fork) (seed : Bytes32)
+    (balance : Nat → Gwei) (n : Nat) (cache : (ByteArray →ₒ Bytes32).QueryCache)
+    (bounded : n ≤ 2 ^ 64)
+    (fresh : ∀ i < n, cache (drawInput seed (i / drawsPerHash fork)) = none)
+    (chance : Nat → ℝ≥0∞)
+    (verdict : ∀ i < n, ∀ random, ∃ b, drawAccepts preset fork random i (balance i) = .ok b)
+    (accepts : ∀ i < n,
+      Pr{let random ← $ᵗ Bytes32}[drawAccepts preset fork random i (balance i) = .ok true] =
+        chance i)
+    (outcome : Nat → Bool) :
+    Pr{let z ← (simulateQ (ByteArray →ₒ Bytes32).randomOracle
+      (queryDraws preset fork seed balance n)).run' cache}[
+        z = (List.range n).map fun i => .ok (outcome i)] =
+      ∏ i ∈ Finset.range n, if outcome i then chance i else 1 - chance i := by
+  rw [(run_queryDraws_evalDistEq preset fork seed balance n cache bounded fresh).prEvent_eq,
+    prEvent_mapM_eq_map, ← List.toFinset_range, List.prod_toFinset _ List.nodup_range]
+  refine congrArg List.prod (List.map_congr_left fun i hi => ?_)
+  have small := List.mem_range.mp hi
+  rw [prEvent_map]
+  cases outcome i with
+  | true => exact accepts i small
+  | false =>
+    rw [← accepts i small, ← OracleComp.prEvent_not_eq_one_sub]
+    refine prEvent_congr _ _ _ fun random => ?_
+    obtain ⟨b, result⟩ := verdict i small random
+    cases b <;> simp [result]
+
+/-- Before Electra, the first `n` draws of one seed have independent outcomes.
+
+Here `e_i` is the balance of draw `i` and `M` the largest effective balance.
+
+Draw `i` accepts with chance `(⌊e_i * (2^8 - 1) / M⌋ + 1) / 2^8`, whatever earlier draws gave.
+
+So each pattern of outcomes has the product chance.
+
+It needs `0 < M`, each `e_i ≤ M` and `M * (2^8 - 1) < 2^64`.
+
+It also needs at most `2^64` draws, and no draw input of the seed in the shared cache. -/
+theorem prEvent_queryDraws_of_before_pectra (preset : Preset) (fork : Base.Fork)
+    (before : ¬ .pectra ≤ fork) (seed : Bytes32) (balance : Nat → Gwei) (n : Nat)
+    (cache : (ByteArray →ₒ Bytes32).QueryCache) (bounded : n ≤ 2 ^ 64)
+    (fresh : ∀ i < n, cache (drawInput seed (i / drawsPerHash fork)) = none)
+    (positive : 0 < preset.MAX_EFFECTIVE_BALANCE.toNat)
+    (balances : ∀ i < n, (balance i).toNat ≤ preset.MAX_EFFECTIVE_BALANCE.toNat)
+    (fits : preset.MAX_EFFECTIVE_BALANCE.toNat * (2 ^ 8 - 1) < 2 ^ 64) (outcome : Nat → Bool) :
+    Pr{let z ← (simulateQ (ByteArray →ₒ Bytes32).randomOracle
+      (queryDraws preset fork seed balance n)).run' cache}[
+        z = (List.range n).map fun i => .ok (outcome i)] =
+      ∏ i ∈ Finset.range n,
+        let chance : ℝ≥0∞ := ((balance i).toNat * (2 ^ 8 - 1) /
+          preset.MAX_EFFECTIVE_BALANCE.toNat + 1 : Nat) / 2 ^ 8
+        if outcome i then chance else 1 - chance :=
+  prEvent_queryDraws_of_chance preset fork seed balance n cache bounded fresh _
+    (fun i small random => ⟨_, drawAccepts_eq_of_before_pectra preset fork before random i _ fits
+      (balances i small)⟩)
+    (fun i small => prEvent_drawAccepts_uniform_of_before_pectra preset fork before i _ positive
+      (balances i small) fits) outcome
+
+/-- From Electra, the first `n` draws of one seed have independent outcomes.
+
+Here `e_i` is the balance of draw `i` and `M` the largest effective balance.
+
+Draw `i` accepts with chance `(⌊e_i * (2^16 - 1) / M⌋ + 1) / 2^16`, whatever earlier draws gave.
+
+So each pattern of outcomes has the product chance.
+
+It needs `0 < M`, each `e_i ≤ M` and `M * (2^16 - 1) < 2^64`.
+
+It also needs at most `2^64` draws, and no draw input of the seed in the shared cache. -/
+theorem prEvent_queryDraws_of_pectra (preset : Preset) (fork : Base.Fork)
+    (electra : .pectra ≤ fork) (seed : Bytes32) (balance : Nat → Gwei) (n : Nat)
+    (cache : (ByteArray →ₒ Bytes32).QueryCache) (bounded : n ≤ 2 ^ 64)
+    (fresh : ∀ i < n, cache (drawInput seed (i / drawsPerHash fork)) = none)
+    (positive : 0 < preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat)
+    (balances : ∀ i < n, (balance i).toNat ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat)
+    (fits : preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat * (2 ^ 16 - 1) < 2 ^ 64)
+    (outcome : Nat → Bool) :
+    Pr{let z ← (simulateQ (ByteArray →ₒ Bytes32).randomOracle
+      (queryDraws preset fork seed balance n)).run' cache}[
+        z = (List.range n).map fun i => .ok (outcome i)] =
+      ∏ i ∈ Finset.range n,
+        let chance : ℝ≥0∞ := ((balance i).toNat * (2 ^ 16 - 1) /
+          preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat + 1 : Nat) / 2 ^ 16
+        if outcome i then chance else 1 - chance :=
+  prEvent_queryDraws_of_chance preset fork seed balance n cache bounded fresh _
+    (fun i small random => ⟨_, drawAccepts_eq_of_pectra preset fork electra random i _ fits
+      (balances i small)⟩)
+    (fun i small => prEvent_drawAccepts_uniform_of_pectra preset fork electra i _ positive
+      (balances i small) fits) outcome
 
 end EthLib.Consensus
