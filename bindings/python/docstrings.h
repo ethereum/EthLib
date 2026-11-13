@@ -1109,6 +1109,12 @@
 #define DOC_gossip_rpc_encode \
   "The bytes of an RPC."
 
+#define DOC_gossip_parameters \
+  "The gossipsub parameters, given the slot duration in milliseconds and the slots per epoch."
+
+#define DOC_gossip_receive_rpc \
+  "What the router does with one RPC, with its client choices given as tables."
+
 #define DOC_receipt_reencode \
   "The bytes of a receipt, decoded at the fork and encoded again with its transaction type."
 

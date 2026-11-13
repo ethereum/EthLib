@@ -91,6 +91,10 @@ class Rpc:
     control: Control = field(default_factory=Control)
 
 
+def _message(value: dict[str, Any]) -> Message:
+    return Message(data=value["data"], topic=value["topic"])
+
+
 def _control(value: dict[str, Any]) -> Control:
     return Control(
         ihave=tuple(
@@ -123,7 +127,7 @@ def decode(data: bytes) -> Rpc:
             SubOpts(subscribe=s["subscribe"], topic_id=s["topic_id"])
             for s in value["subscriptions"]
         ),
-        publish=tuple(Message(data=m["data"], topic=m["topic"]) for m in value["publish"]),
+        publish=tuple(_message(m) for m in value["publish"]),
         control=_control(value["control"]),
     )
 
