@@ -12,6 +12,7 @@ public import EthLib.Execution.Proofs.Transactions.Funded
 public import EthLib.Execution.Proofs.Transactions.Inclusion
 public import EthLib.Execution.Proofs.Transactions.LogsPaid
 public import EthLib.Execution.Proofs.Transactions.Network
+public import EthLib.Execution.Proofs.Transactions.NoAccount
 public import EthLib.Execution.Proofs.Transactions.NoncesFit
 public import EthLib.Execution.Proofs.Transactions.Process
 public import EthLib.Execution.Proofs.Transactions.Rebuild
