@@ -432,6 +432,11 @@ PyObject* py_consensus_builder_preferences_failures (PyObject* self, PyObject* a
 PyObject* py_consensus_default_auth_data (PyObject* self, PyObject* args);
 PyObject* py_consensus_relay_submission_bid (PyObject* self, PyObject* args);
 PyObject* py_consensus_relay_validators (PyObject* self, PyObject* args);
+PyObject* py_consensus_relay_delivered_payload (PyObject* self, PyObject* args);
+PyObject* py_consensus_relay_received_bid (PyObject* self, PyObject* args);
+PyObject* py_consensus_relay_delivered_keeps (PyObject* self, PyObject* args);
+PyObject* py_consensus_relay_received_keeps (PyObject* self, PyObject* args);
+PyObject* py_consensus_relay_sort_delivered (PyObject* self, PyObject* args);
 PyObject* py_consensus_builder_bid_value (PyObject* self, PyObject* args);
 PyObject* py_consensus_consensus_version (PyObject* self, PyObject* args);
 PyObject* py_consensus_consensus_version_fork (PyObject* self, PyObject* args);

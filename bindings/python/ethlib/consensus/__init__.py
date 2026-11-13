@@ -237,6 +237,52 @@ def relay_validators(
     return _native.consensus_relay_validators(name, fork, state, registry)
 
 
+def relay_delivered_payload(document: dict[str, Any]) -> dict[str, Any]:
+    """A delivered payload of the relay data API, checked and written back as canonical JSON."""
+    return _native.consensus_relay_delivered_payload(document)
+
+
+def relay_received_bid(document: dict[str, Any]) -> dict[str, Any]:
+    """A received bid of the relay data API, checked and written back as canonical JSON."""
+    return _native.consensus_relay_received_bid(document)
+
+
+def relay_delivered_keeps(
+    document: dict[str, Any],
+    *,
+    slot: int | None = None,
+    block_hash: bytes | None = None,
+    block_number: int | None = None,
+    proposer_pubkey: bytes | None = None,
+    builder_pubkey: bytes | None = None,
+) -> bool:
+    """Whether a query of delivered payloads with these filters keeps the payload."""
+    return _native.consensus_relay_delivered_keeps(
+        document, slot, block_hash, block_number, proposer_pubkey, builder_pubkey
+    )
+
+
+def relay_received_keeps(
+    document: dict[str, Any],
+    *,
+    slot: int | None = None,
+    block_hash: bytes | None = None,
+    block_number: int | None = None,
+    builder_pubkey: bytes | None = None,
+) -> bool:
+    """Whether a query of received bids with these filters keeps the bid."""
+    return _native.consensus_relay_received_keeps(
+        document, slot, block_hash, block_number, builder_pubkey
+    )
+
+
+def relay_sort_delivered(
+    order: Literal["value", "-value"], documents: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Delivered payloads sorted by value in an order; payloads of equal value keep their order."""
+    return _native.consensus_relay_sort_delivered(order, documents)
+
+
 def builder_bid_value(value: int, execution_payment: int, max_execution_payment: int) -> int:
     """The bid's value in Gwei, with its execution payment capped, not reduced to 64 bits."""
     return _native.consensus_builder_bid_value(value, execution_payment, max_execution_payment)
@@ -1780,6 +1826,11 @@ __all__ = [
     "default_auth_data",
     "relay_submission_bid",
     "relay_validators",
+    "relay_delivered_payload",
+    "relay_received_bid",
+    "relay_delivered_keeps",
+    "relay_received_keeps",
+    "relay_sort_delivered",
     "builder_bid_value",
     "consensus_version",
     "consensus_version_fork",

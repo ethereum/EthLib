@@ -737,6 +737,26 @@ def consensus_relay_validators(name: str, fork: str, state: bytes, registry: lis
     """At Fulu only: the list of validators that a relay serves, as a `list` of `dict`."""
     ...
 
+def consensus_relay_delivered_payload(document: dict[str, Any]) -> dict[str, Any]:
+    """A delivered payload, read from its JSON and written back as a `dict`."""
+    ...
+
+def consensus_relay_received_bid(document: dict[str, Any]) -> dict[str, Any]:
+    """A received bid, read from its JSON and written back as a `dict`."""
+    ...
+
+def consensus_relay_delivered_keeps(document: dict[str, Any], slot: int | None, block_hash: bytes | None, block_number: int | None, proposer_pubkey: bytes | None, builder_pubkey: bytes | None) -> bool:
+    """Whether the filters of a query of delivered payloads keep the payload of a JSON object."""
+    ...
+
+def consensus_relay_received_keeps(document: dict[str, Any], slot: int | None, block_hash: bytes | None, block_number: int | None, builder_pubkey: bytes | None) -> bool:
+    """Whether the filters of a query of received bids keep the bid of a JSON object."""
+    ...
+
+def consensus_relay_sort_delivered(order: str, documents: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Delivered payloads sorted by value in the given order, as a `list` of `dict`."""
+    ...
+
 def consensus_builder_bid_value(value: int, execution_payment: int, max_execution_payment: int) -> int:
     """The value of a builder's bid from its two payments and the proposer's execution payment cap."""
     ...

@@ -1015,6 +1015,61 @@ py_consensus_relay_validators(
   return call_pyvalue_export(eth_consensus_relay_validators, args, 4, SSZ_ERROR);
 }
 
+extern lean_object*
+eth_consensus_relay_delivered_payload(lean_object* args);
+
+PyObject*
+py_consensus_relay_delivered_payload(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_relay_delivered_payload, args, 1, SSZ_ERROR);
+}
+
+extern lean_object*
+eth_consensus_relay_received_bid(lean_object* args);
+
+PyObject*
+py_consensus_relay_received_bid(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_relay_received_bid, args, 1, SSZ_ERROR);
+}
+
+extern lean_object*
+eth_consensus_relay_delivered_keeps(lean_object* args);
+
+PyObject*
+py_consensus_relay_delivered_keeps(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_relay_delivered_keeps, args, 6, SSZ_ERROR);
+}
+
+extern lean_object*
+eth_consensus_relay_received_keeps(lean_object* args);
+
+PyObject*
+py_consensus_relay_received_keeps(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_relay_received_keeps, args, 5, SSZ_ERROR);
+}
+
+extern lean_object*
+eth_consensus_relay_sort_delivered(lean_object* args);
+
+PyObject*
+py_consensus_relay_sort_delivered(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_relay_sort_delivered, args, 2, SSZ_ERROR);
+}
+
 PyObject*
 py_consensus_builder_bid_value(
   PyObject* self,

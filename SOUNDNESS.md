@@ -4114,6 +4114,33 @@ Before Fulu, the state does not hold the proposers of the next epoch.
 They can change with the balances until that epoch starts, so the agreement with the consensus schedule is proved from Fulu only.
 The export gives the list at Fulu only, because the relay source has no part after Fulu.
 
+The data API lists the payloads that a relay delivered to proposers and the bids from builders that it received and verified ([`proposer_payload_delivered.yaml`](https://github.com/flashbots/relay-specs/blob/a4e0a50d9d46bfe881fd74cc7e0db366371f4eed/apis/relay/data/proposer_payload_delivered.yaml), [`builder_blocks_received.yaml`](https://github.com/flashbots/relay-specs/blob/a4e0a50d9d46bfe881fd74cc7e0db366371f4eed/apis/relay/data/builder_blocks_received.yaml)).
+A delivered payload is a bid trace with `block_number` and `num_tx`, and a received bid adds `timestamp` and `timestamp_ms` ([`bids.yaml`](https://github.com/flashbots/relay-specs/blob/a4e0a50d9d46bfe881fd74cc7e0db366371f4eed/types/bids.yaml)).
+`BidTraceV2.ofApiJson_toApiJson` (`Consensus/Proofs/RelayApi.lean`) shows that the JSON of a delivered payload reads back as that payload.
+`BidTraceV2WithTimestamp.ofJson_toJson` shows the same for a received bid.
+`BidTraceV2WithTimestamp.toJson_total` shows that the writer of a received bid never fails.
+The source gives each timestamp the type `Int64`, a string ([`misc.yaml`](https://github.com/flashbots/relay-specs/blob/a4e0a50d9d46bfe881fd74cc7e0db366371f4eed/types/misc.yaml)), and EthLib writes it in decimal, as the source's example does.
+`BidTraceV2WithTimestamp.int64Json_of_readInt64` shows that a timestamp is read only from the string that the writer gives for it.
+So a plus sign, a leading zero and `-0` are refused.
+
+A query keeps an entry when each filter that it gives equals the field of the entry.
+The source of delivered payloads says so ("Query arguments are used as filters"), and EthLib reads the query of received bids the same way.
+`DeliveredFilter.keeps_empty` and `ReceivedFilter.keeps_empty` show that a query with no filter keeps every entry.
+`DeliveredFilter.keeps_slot` and `ReceivedFilter.keeps_slot` show that a query whose only filter is a slot keeps exactly the entries of that slot.
+A query may sort delivered payloads by value, lowest or highest first ([`misc.yaml`](https://github.com/flashbots/relay-specs/blob/a4e0a50d9d46bfe881fd74cc7e0db366371f4eed/types/misc.yaml)).
+`sortBy_descending` shows that a sort by `-value` gives the payloads with values that never increase, and keeps every payload.
+`sortBy_ascending` shows the same for `value`, with values that never decrease.
+
+The source leaves three points about the data API open, and EthLib specifies none of them:
+
+- What `cursor` means, beyond "A starting slot for multiple results", and in which direction it reads.
+  EthLib models neither the cursor nor the limit of a query.
+- The order of the results without `order_by`, and the order of payloads of equal value with it.
+  EthLib's sort keeps payloads of equal value in their input order, as a merge sort does; no theorem states this yet.
+- Which field of a payload `block_number` and `num_tx` come from.
+  Their names suggest the number of the block and the count of its transactions, but the source does not say so.
+  So they are fields of the entry, not values computed from the payload.
+
 ### What cannot be proved yet
 
 Some definitions cannot be unfolded by the kernel, so the kernel cannot evaluate them, and their intended computational properties remain unproved.
@@ -4415,12 +4442,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 467 operations and 49 size constants.
-The Python extension calls 467 of the operations and 49 of the constants.
+Lean exports 472 operations and 49 size constants.
+The Python extension calls 472 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-11099 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2292), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (194), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1546), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (71), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (58), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (758), `x25519.c` (21), `xmss.c` (134).
+11169 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2347), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (194), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1556), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (71), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (58), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (763), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.
