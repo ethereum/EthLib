@@ -3,6 +3,7 @@ module
 public import EthLib.Consensus.Proofs.Transition.Invariants
 public import EthLib.Consensus.Proofs.Transition.Upgrade
 public import EthLib.Consensus.Proofs.Transition.ForkBoundary
+import EthLib.Consensus.Proofs.Transition.RegistryLifecycle
 
 /-!
 # Preservation of the deposit carry
@@ -389,7 +390,10 @@ private theorem kept_addValidator {pubkey : BLSPubkey} {credentials : Bytes32} {
       Except.ok.injEq] at ok
     obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := ok
     rfl
-  split at ok <;> cases ok <;> rfl
+  split at ok
+  · cases ok
+    rfl
+  · cases ok
 
 private theorem kept_applyDeposit {pubkey : BLSPubkey} {credentials : Bytes32} {amount : Gwei}
     {signature : BLSSignature}
@@ -580,11 +584,7 @@ theorem depositCarry_processBlock {engine : ExecutionEngine preset fork}
         obtain ⟨_, _, _, _, applied⟩ := processDeposit_ok deposited
         have same := kept_applyDeposit applied
         exact same)
-      (fun exited => by
-        unfold processVoluntaryExit at exited
-        simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok, liftSsz_ok] at exited
-        obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, exit⟩ := exited
-        exact kept_exit exit)
+      (fun exited => kept_exit (processVoluntaryExit_initiates exited))
       (fun changed => by
         obtain ⟨_, _, _, _, _, set⟩ := processBlsToExecutionChange_ok changed
         exact kept_setValidator set)
@@ -592,16 +592,8 @@ theorem depositCarry_processBlock {engine : ExecutionEngine preset fork}
       (fun paid => by rw [processPayloadAttestation_eq paid]) operated
   have tail : Kept last t := by
     split at synced
-    · unfold processSyncAggregate at synced
-      simp only [bind_ok_iff, ← Array.foldlM_toList] at synced
-      obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, folded⟩ := synced
-      refine kept_fold (fun _ _ _ ok => ?_) folded
-      unfold applySyncReward at ok
-      split at ok
-      · simp only [bind_ok_iff, liftAccessor_ok] at ok
-        obtain ⟨_, raised, _, _, paid⟩ := ok
-        exact (kept_increase paid).trans (kept_increase raised)
-      · exact kept_decrease (liftAccessor_ok.mp ok)
+    · obtain ⟨_, rfl⟩ := processSyncAggregate_eq synced
+      rfl
     · cases synced
       rfl
   exact trans head <| trans (folds (fun _ _ _ ok => kept_proposer ok) proposersOk) <|
