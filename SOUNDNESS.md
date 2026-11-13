@@ -4208,7 +4208,7 @@ The source leaves three points about the data API open, and EthLib specifies non
 - What `cursor` means, beyond "A starting slot for multiple results", and in which direction it reads.
   EthLib models neither the cursor nor the limit of a query.
 - The order of the results without `order_by`, and the order of payloads of equal value with it.
-  EthLib's sort keeps payloads of equal value in their input order, as a merge sort does.
+  EthLib's sort keeps payloads of equal value in their input order, as stated above.
 - Which field of a payload `block_number` and `num_tx` come from.
   Their names suggest the number of the block and the count of its transactions, but the source does not say so.
   So they are fields of the entry, not values computed from the payload.
