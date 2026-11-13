@@ -607,6 +607,36 @@ def bindings : List Binding := [
     "(name: str, fork: str, block: bytes, blobs: list[bytes], " ++
       "hashes: list[bytes] | None) -> bytes",
     [], some "ConsensusError"⟩,
+  ⟨"consensus_api_block_query_ssz", `EthLib.Consensus.Exports.apiBlockQuerySszExport,
+    "(name: str, fork: str, block: bytes, query: str) -> bytes",
+    [], some "ConsensusError"⟩,
+  ⟨"consensus_api_header", `EthLib.Consensus.Exports.apiHeaderExport,
+    "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, " ++
+      "verify: bool, block: bytes) -> dict[str, Any]",
+    [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
+  ⟨"consensus_api_headers", `EthLib.Consensus.Exports.apiHeadersExport,
+    "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, " ++
+      "verify: bool, headers: list[bytes], slot: int | None, " ++
+      "parent_root: bytes | None) -> dict[str, Any]",
+    [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
+  ⟨"consensus_api_columns", `EthLib.Consensus.Exports.apiColumnsExport,
+    "(name: str, fork: str, sidecars: list[bytes], indices: list[int] | None) -> dict[str, Any]",
+    [], some "ConsensusError"⟩,
+  ⟨"consensus_api_columns_ssz", `EthLib.Consensus.Exports.apiColumnsSszExport,
+    "(name: str, fork: str, sidecars: list[bytes], indices: list[int] | None) -> bytes",
+    [], some "ConsensusError"⟩,
+  ⟨"consensus_api_payload_envelope", `EthLib.Consensus.Exports.apiPayloadEnvelopeExport,
+    "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, " ++
+      "verify: bool, root: bytes, envelope: bytes) -> dict[str, Any]",
+    [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
+  ⟨"consensus_api_payload_envelope_ssz", `EthLib.Consensus.Exports.apiPayloadEnvelopeSszExport,
+    "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, " ++
+      "verify: bool, root: bytes, envelope: bytes) -> bytes",
+    [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
+  ⟨"consensus_api_duties", `EthLib.Consensus.Exports.apiDutiesExport,
+    "(name: str, fork: str, state: bytes, replacements: dict[str, Any] | None, kind: str, " ++
+      "epoch: int, indices: list[int], genesis_root: bytes) -> dict[str, Any]",
+    [], some "ConsensusError"⟩,
   ⟨"consensus_api_committees", `EthLib.Consensus.Exports.apiCommitteesExport,
     "(name: str, fork: str, state: bytes, epoch: int | None, index: int | None, " ++
       "slot: int | None) -> dict[str, Any]",
@@ -677,6 +707,27 @@ def bindings : List Binding := [
     "(url: str) -> bytes", [`EthLib.Consensus.BuilderApi.AuthDataError], some "ConsensusError"⟩,
   ⟨"consensus_relay_submission_bid", `EthLib.Consensus.Exports.relaySubmissionBidExport,
     "(name: str, fork: str, data: bytes, pubkey: bytes) -> bytes",
+    [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
+  ⟨"consensus_relay_validators", `EthLib.Consensus.Exports.relayValidatorsExport,
+    "(name: str, fork: str, state: bytes, registry: list[bytes]) -> list[dict[str, Any]]",
+    [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
+  ⟨"consensus_relay_delivered_payload", `EthLib.Consensus.Exports.relayDeliveredPayloadExport,
+    "(document: dict[str, Any]) -> dict[str, Any]",
+    [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
+  ⟨"consensus_relay_received_bid", `EthLib.Consensus.Exports.relayReceivedBidExport,
+    "(document: dict[str, Any]) -> dict[str, Any]",
+    [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
+  ⟨"consensus_relay_delivered_keeps", `EthLib.Consensus.Exports.relayDeliveredKeepsExport,
+    "(document: dict[str, Any], slot: int | None, block_hash: bytes | None, " ++
+      "block_number: int | None, proposer_pubkey: bytes | None, " ++
+      "builder_pubkey: bytes | None) -> bool",
+    [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
+  ⟨"consensus_relay_received_keeps", `EthLib.Consensus.Exports.relayReceivedKeepsExport,
+    "(document: dict[str, Any], slot: int | None, block_hash: bytes | None, " ++
+      "block_number: int | None, builder_pubkey: bytes | None) -> bool",
+    [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
+  ⟨"consensus_relay_sort_delivered", `EthLib.Consensus.Exports.relaySortDeliveredExport,
+    "(order: str, documents: list[dict[str, Any]]) -> list[dict[str, Any]]",
     [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
   ⟨"consensus_builder_bid_value", `EthLib.Consensus.Exports.builderBidValueExport,
     "(value: int, execution_payment: int, max_execution_payment: int) -> int",
@@ -1468,6 +1519,25 @@ def bindings : List Binding := [
       "standing: list[tuple[bytes, dict[str, Any]]], " ++
       "validation: list[tuple[bytes, str | tuple[str, str]]], now: int, src: bytes, " ++
       "rpc: dict[str, Any], state: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]",
+    [], some "GossipError"⟩,
+  ⟨"gossip_join", `EthLib.Networking.Gossip.Exports.joinOf,
+    "(params: dict[str, Any], standing: list[tuple[bytes, dict[str, Any]]], now: int, " ++
+      "topic: str, state: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]",
+    [], some "GossipError"⟩,
+  ⟨"gossip_leave", `EthLib.Networking.Gossip.Exports.leaveOf,
+    "(params: dict[str, Any], choices: dict[str, Any], now: int, topic: str, " ++
+      "state: dict[str, Any]) -> " ++
+      "tuple[dict[str, Any], dict[str, Any]]",
+    [], some "GossipError"⟩,
+  ⟨"gossip_publish", `EthLib.Networking.Gossip.Exports.publishOf,
+    "(fork: str, params: dict[str, Any], choices: dict[str, Any], " ++
+      "standing: list[tuple[bytes, dict[str, Any]]], now: int, message: dict[str, Any], " ++
+      "state: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]",
+    [], some "GossipError"⟩,
+  ⟨"gossip_heartbeat", `EthLib.Networking.Gossip.Exports.heartbeatOf,
+    "(params: dict[str, Any], choices: dict[str, Any], ranking: list[bytes], " ++
+      "standing: list[tuple[bytes, dict[str, Any]]], now: int, state: dict[str, Any]) -> " ++
+      "tuple[dict[str, Any], dict[str, Any]]",
     [], some "GossipError"⟩,
   ⟨"receipt_reencode", `EthLib.Execution.Blocks.Exports.receiptReencodeExport,
     "(fork: str, receipt: bytes) -> bytes",

@@ -2155,6 +2155,75 @@ The sources leave these points open, and the router takes one reading of each.
 - The `peers.floodsub` set of v1.0 is left out: the consensus layer fixes `/meshsub/1.1.0` and names no floodsub peer.
 - A message ID that is not 20 bytes is never requested and never answered, since no consensus message has one.
 
+### The gossipsub heartbeat, topic membership and publishing
+
+`join`, `leave`, `publish` and `heartbeat` (`Networking/Gossip/Router.lean`) follow [gossipsub v1.0, "Topic Membership"](https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/pubsub/gossipsub/gossipsub-v1.0.md#topic-membership), the list on publishing at the end of ["Message Processing"](https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/pubsub/gossipsub/gossipsub-v1.0.md#message-processing), and ["Heartbeat"](https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/pubsub/gossipsub/gossipsub-v1.0.md#heartbeat).
+They add these rules of gossipsub v1.1: ["Heartbeat Maintenance"](https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/pubsub/gossipsub/gossipsub-v1.1.md#heartbeat-maintenance), ["Outbound Mesh Quotas"](https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/pubsub/gossipsub/gossipsub-v1.1.md#outbound-mesh-quotas), ["Adaptive Gossip Dissemination"](https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/pubsub/gossipsub/gossipsub-v1.1.md#adaptive-gossip-dissemination) and ["Flood Publishing"](https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/pubsub/gossipsub/gossipsub-v1.1.md#flood-publishing).
+Each is a pure function of the parameters, the router state, the time, its topic or message, and the choices of the client.
+
+The client choices are arguments, so every theorem holds for each choice that meets its hypotheses.
+
+- The choice among candidate peers, which gossipsub makes at random, is a function of a count and the candidates.
+  The theorems that need it ask for a lawful one: a sublist of the candidates, of the count or of all of them.
+- The order of the peers by score, which v1.1 uses to keep the best peers of a pruned mesh.
+- The standing of each peer, as for a received RPC.
+- The values that v1.1 leaves open and the consensus layer does not fix.
+  They are `D_score`, `D_out`, the gossip factor and its rounding, flood publishing, and the backoffs of a pruned mesh and of an unsubscribe.
+
+`ClientChoices.Valid` states the bounds of v1.1 on `D_out`: `D_out < D_low` and `2 · D_out ≤ D`.
+It adds a gossip factor in `[0, 1]` and positive backoffs, since a PRUNE with no backoff asks its receiver for the default.
+No theorem assumes it: each takes the bounds it needs as hypotheses.
+
+The theorems in `Networking/Proofs/Gossip/Heartbeat.lean` state these properties.
+
+- After a heartbeat, every mesh has at most `D_high + D_out` peers, at most `D_high` of them not outbound, and none twice.
+  The two bounds need `D ≤ D_high`, as the consensus layer sets it.
+- A mesh of a joined topic below `D_low`, once its negative peers leave, fills up to `D`, or takes every peer that it may GRAFT.
+- No mesh holds a peer with a negative score.
+- A mesh of a joined topic pruned for oversubscription keeps `D_out` outbound peers, or all the outbound peers it held once its negative peers left.
+  This needs `D ≤ D_high` and `D_out ≤ D`.
+- Every peer added to a mesh gets a GRAFT.
+- Every peer removed from the mesh of a joined topic gets a PRUNE with the backoff of a pruned mesh.
+  The backoff of this node for that peer then ends no earlier than that backoff from now.
+- No IHAVE goes to a peer below the gossip threshold, or in the mesh or fanout of its topic after the heartbeat.
+- When the gossip windows of a topic hold message IDs, the gossip of any state reaches `max D_lazy (share of the candidates)` of them, or all of them when there are fewer.
+  The heartbeat sends that gossip for the state after the mesh and fanout are maintained.
+- A fanout topic not published to for more than `fanout_ttl` is gone.
+
+The theorems in `Networking/Proofs/Gossip/Membership.lean` cover joining, leaving and publishing.
+Joining a topic not yet joined sends one GRAFT per peer of the new mesh.
+With a lawful choice, that mesh has at most `D` peers, each one that the node could GRAFT before.
+Leaving sends a PRUNE with the unsubscribe backoff to each mesh peer, and sets that backoff on this node.
+A published message goes only to explicit peers and to peers not below the publish threshold.
+With flood publishing, a message not in the seen cache goes to every such peer of the mesh and of the topic.
+`publish_receiveRpc` proves that a message this node published is not forwarded or delivered again within the lifetime of the seen cache.
+It holds when only received RPCs come after the publish, and the last of them uses the parameters and the message ID function of the publish.
+
+The exports `gossip_join`, `gossip_leave`, `gossip_publish` and `gossip_heartbeat` fix the choice among candidates to the first ones, in candidate order.
+`Select.first_lawful` proves that this choice is lawful.
+So the theorems hold for the exports, under the hypotheses that each states on the parameters.
+The exports take the order of the peers as a list, the best first, with every unlisted peer after them.
+A pruned mesh keeps its `D_score` best-ranked peers, then the first other peers in mesh order.
+The exports reject client choices outside `ClientChoices.Valid`.
+`gossip_publish` computes the message ID by the rule of one named fork, as `gossip_receive_rpc` does.
+
+The sources leave these points open, and EthLib takes one reading of each.
+
+- The rounding of the gossip factor times the number of candidates is a client choice.
+  The gossip share counts the peers of the topic outside its mesh and fanout that are neither explicit nor below the gossip threshold.
+- Outbound grafts may take a mesh past `D_high`.
+  So `heartbeat_mesh_le` bounds a mesh by `D_high + D_out`, and `heartbeat_mesh_le_inbound` bounds its peers that are not outbound by `D_high`.
+- Opportunistic grafting, a "may" of v1.1 with a count that the application sets, is left out.
+- Joining again within the backoff of a leave is allowed: the peers still in backoff are skipped, so the mesh may be smaller.
+  v1.1 says only that the backoff "should be finished" first.
+- The mesh steps run in order: negative peers leave, then the low bound, the high bound, and the outbound quota.
+  When pruning keeps too few outbound peers, the last kept peers that are not outbound give way to the best-ranked outbound peers left out.
+- The heartbeat drops the meshes of topics not joined, with no PRUNE.
+- Peers below the publish threshold leave the fanout, and fanout top-ups take neither them nor explicit peers.
+- A published message goes to every explicit peer, whatever its topics, and is not published again while its ID is in the seen cache.
+- The heartbeat drops the expired entries of the seen cache and keeps ended backoffs, which are read by time.
+- PRUNEs that this node sends offer no peers.
+
 ### The streams of an mplex connection
 
 `step`, `receive` and `send` (`Networking/Libp2p/MplexSession.lean`) check each mplex frame against the streams of one side.
@@ -2414,7 +2483,11 @@ One slot from a leaking state ends in a leaking state, unless the finalized epoc
 `BalanceNotRaised.lean` proves the epoch part of that condition, from Altair (`balanceNotRaised_processEpochAltair`).
 From the rewards up to the update of the effective balances, the balance of a validator does not rise.
 This holds when no pending deposit carries its key and no pending consolidation targets it.
-No theorem yet derives the part of the blocks, nor the sequences over a run.
+`BalanceNotRaisedBlock.lean` proves the part of the blocks, at every fork (`balanceNotRaised_processBlock`).
+A block raises no balance of a validator that has a balance and is not its proposer.
+From Altair the validator must sign no sync aggregate, and no deposit of the block may carry its key.
+It needs more than `MIN_SEED_LOOKAHEAD + 2` epochs of RANDAO mixes.
+No theorem yet derives the sequences over a run.
 
 ### Fast confirmation rule
 
@@ -2611,6 +2684,9 @@ It rests on `fastAggregateVerify_sign`: an honest signature passes the fast aggr
 `isAssignedToSyncCommittee_ok_iff` states when the sync committee seat check succeeds.
 Its answer is then whether the validator's key is in the current or the next committee.
 `computeSubnetsForSyncCommittee_ok` shows that its sync committee subnets come once each, in increasing order, from the seats of its key.
+`syncCommitteeAtNextSlot_eq` (`Consensus/Proofs/Gossip/SyncCommittee.lean`) states the committee that signs in the slot after a state.
+It is the next committee of the state when that slot starts a period, and the current one otherwise; it fails with an overflow at the largest slot.
+`getSyncSubcommitteePubkeys_eq` states that, for a subcommittee index below the number of subnets, the keys that gossip checks are the slice of that committee.
 The Python suite checks each duty signature against py_ecc, on signing roots computed in the test, and each committee against the shuffle export.
 It checks each payload timeliness assignment and the upcoming proposal slots against the window and the lookahead that it reads from a Gloas state.
 
@@ -3463,6 +3539,15 @@ From Deneb, the block of the payload reads the parent root of the latest block h
 From Deneb, the blob transactions must carry the versioned hashes of the commitments of the block, in the order of the commitments.
 The consensus test vectors fix the answer of the execution layer, so none of them checks the versioned hashes or the parent root that a block puts in its request.
 
+Between the two clients of a node, the consensus layer sends its payload attributes as JSON.
+`forkchoiceUpdatedCall_payloadAttributesJson` (`Proofs/ForkchoiceUpdated.lean`) shows that the execution layer reads back the values sent.
+It holds for any attributes, given a forkchoice update that applies the head of its forkchoice state.
+The method then answers with that head and with attributes at the fork of the next block, which carry every value of the attributes sent.
+The hypotheses are the checks of the attributes against the head: the active fork at the next number and the timestamp is a fork that the version takes.
+That fork must have the structure of the fork of the attributes, and the timestamp must be above the head's.
+The fork of the attributes and that of the next block can differ, as Bellatrix and Paris do, so the theorem compares their structures.
+`forkchoiceUpdatedCall_payloadAttributesJson_of_gloas` states the same from Gloas at version 4, where the checks reduce to the next block being of Glamsterdam and the timestamp being above the head's.
+
 The tree of known payloads and the known finalized block are inputs of each call, not state that the model keeps between calls.
 
 ### Execution JSON-RPC API
@@ -3573,6 +3658,23 @@ The base fee of the block is at most the maximum fee of each transaction (`Valid
 So the effective gas price of each receipt object follows the formula of the description, read in integers (`Valid.effectiveGasPrice_receiptInfos`, `effectiveGasPrice_description`).
 From Glamsterdam, EIP-7778 makes the cumulative gas of a receipt the gas that the senders paid.
 As a choice of EthLib, the object copies it, so `gasUsed` is the gas that the sender paid, while the descriptions of `receipt.yaml` read "gas used".
+
+`eth_getLogs` reads the logs that a filter of [`filter.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/schemas/filter.yaml) selects (`Execution/Rpc/Filter.lean`).
+A filter names one block by its hash, or a range of canonical blocks by its bounds, and then the addresses and the topics at each position that it takes.
+A range reads exactly the canonical blocks between its bounds, whose two bounds are in order, the first at least the lowest block and the last at most the head (`filterBlocks_range`).
+A number bound above the head makes the range invalid, whatever the other bound, as the method requires (`filterBlocks_aboveHead`).
+So do bounds that resolve above the head or out of order, whatever the pruned history (`filterBlocks_invalid`).
+A block hash reads the one block of that hash (`filterBlocks_hash`).
+The returned logs are the matching logs of the receipt objects of those blocks, in block order, then in their order in each block (`getLogs_eq_ok`).
+Every returned log matches the filter and is a log of a receipt object of a block that the filter reads (`getLogs_sound`).
+When the method answers, every such log that matches is returned, and so is every matching log of the receipts of those blocks (`getLogs_complete`, `getLogs_complete_log`).
+In a valid view, take a canonical block after the lowest.
+The logs of its receipts are its logs (`Valid.logs_receipts`), and the Bloom filter of its header is that of its logs (`Valid.logsBloom_eq`).
+So the block has no log that a filter selects when its Bloom filter has none of the addresses of a nonempty list that the filter takes, or none of the topics of a nonempty list that the filter takes at some position (`Valid.not_selects_of_bloom`).
+The source leaves several cases open: a block hash with a bound, an empty topic list at a position, an empty address list, a log with fewer topics than the filter, an omitted bound, the order of the results, a block below the lowest one (`4444` here) and an unknown block (`-32001` here).
+The module header gives the choice for each, and follows the official fixtures where they decide.
+A log with fewer topics than the filter has positions does not match, even when each extra position takes any topic (`Filter.selects_eq_false_of_length_lt`).
+No fixture filter ends with a position that takes any topic, and no text of the source decides the case.
 
 The Python suite replays the official test chain into a view and answers the official fixtures of the methods that EthLib serves.
 That chain mines its blocks before the merge with a zero mix hash and a zero nonce, so the suite runs the transition without the proof-of-work check.
@@ -3721,6 +3823,45 @@ It checks that the blinded block, encoded again, has that pinned root too.
 It checks the block, the attestations and the blinded block against the JSON of that block.
 It checks the blobs answer, with and without hashes, against versioned hashes that it computes with SHA-256 itself.
 
+The same module gives the headers, the data column sidecars and the payload envelope of a block, and the SSZ bodies of the block and the blinded block.
+`headers_canonical_head` shows that the header answer of the head block says that the block is canonical; it rests on `isCanonical_head`.
+`isCanonical_of_unknown` shows that a block the store does not hold is not canonical.
+`headerOf_ok` shows that a header answer carries its header and the root of its message, and `headerOf_blockRoot` that this root is the root of the block.
+`headersOf_mem` shows that each entry of the headers answer is the answer for a held header at the requested slot, with the requested parent root.
+`headersSlot_default` shows that without filters the headers answer reads the slot of the head.
+`IsColumnsAnswer` accepts any order of the requested sidecars, so the selection in input order is one answer by definition.
+`IsColumnsAnswer.mem_iff` shows that a sidecar is in an answer exactly when the node holds it and its index is requested.
+`selectColumns_none` shows that without indices all are kept, and `selectColumns_some_nil` that an empty list keeps none.
+`columnsResponse_before_fulu` shows that before Fulu the columns answer gets code 400.
+`payloadEnvelopeOf_ok` shows that the envelope answer is the given signed envelope, from Gloas, and that its message has the root of the envelope that the store holds for the block.
+`payloadEnvelopeOf_of_stored` shows the converse: such an envelope is the answer.
+`payloadEnvelopeOf_before_gloas` shows that before Gloas the answer gets code 404, and `blindedBlockSsz_gloas` that from Gloas the blinded block has no SSZ body either.
+The Python suite builds the store of a Gloas fork choice case with one block and its envelope.
+It checks the header and headers answers of that block and of the anchor, with each filter, against headers that it builds from the JSON of the blocks.
+It checks the envelope answer against the pinned envelope, and code 404 for the anchor and for another message.
+It checks the columns answer and its SSZ body for Fulu and Gloas, with and without indices, and code 400 before Fulu.
+It checks the SSZ bodies of the block and the blinded block against the JSON answers.
+It checks code 400 for the blinded block from Gloas, and that the attestations answer has no SSZ body.
+
+The duty answers are in `Consensus/BeaconApi/Duties.lean`: attester, proposer, sync committee and PTC duties, with their dependent roots.
+`attesterDuties_committee` (`Consensus/Proofs/BeaconApi/Duties.lean`) shows that each attester duty names a committee of its slot.
+The committee has the length of the duty and holds the validator at the position of the duty.
+`attesterDuties_complete` shows that a requested validator with a committee assignment has exactly one duty, when the request repeats no index.
+`attesterDuties_epoch` shows that each attester duty is in the requested epoch, with the count of committees per slot of the epoch and an index below it.
+`attesterDuties_epoch_bound` and `ptcDuties_epoch_bound` show that a request for an epoch after the next one gets the error of an invalid epoch, code 400.
+`proposerDuties_beaconProposer` shows that in the current epoch each proposer duty names the proposer of the state advanced to its slot.
+`proposerDuties_current_slot` shows the same at the slot of the state itself.
+`syncDuties_seats` shows that each seat of a sync duty holds the key of the validator, in the committee of the period, and that a duty has a seat.
+`dependentRoot_genesis` shows that the dependent root of the first two epochs, with a lag of one, is the genesis root.
+`dependentRoot_genesis_zero` shows the same for epoch 0 without a lag.
+`dependentRoot_eq` unfolds the case past the underflow: the block root at the slot before the start of the epoch a lag before.
+The Python suite (`bindings/python/tests/consensus/test_beacon_api_duties.py`) reads the minimal states of the committee tests.
+It checks the attester duties against the committees answer, and the PTC duties against the assignments of the guide.
+It checks the proposer duties against the lookahead of the state from Fulu, and against the proposer of each slot before Fulu.
+It checks the sync duties against the keys of the committees in the JSON of the state.
+It gives the state a different block root at each place, and checks each dependent root against it.
+It checks code 400 for an empty request, a repeated PTC index, a PTC epoch before the previous one, and an attester epoch too old for the block roots; no theorem states these refusals.
+
 Points that remain open:
 
 - The reader refuses a key that a container does not declare, while the source says that a field may be added to the data without a new version.
@@ -3777,6 +3918,42 @@ Points that remain open:
 - The block answers take the signed block as an input, since the store of the fork choice keeps blocks without their signatures.
 - The blobs answer takes the blobs of the block as an input, one for each commitment; another count gets code 500.
   Which blobs a node keeps, and whether it rebuilds them from columns, is its own matter.
+- The headers endpoint fetches "current head slot blocks" by default; EthLib reads this as the slot of the head block, not the slot of the clock.
+  It uses that slot only when neither filter is given.
+  With only a parent root, it keeps every slot.
+  A store without a head then gets code 500.
+- The headers answers take the signed headers that the node holds, of any fork, as an input.
+  A block is canonical when it is the ancestor of the head at its own slot.
+  Canonicity is decided against the blocks of the store, so a block below the anchor is reported as not canonical.
+- The columns answer takes the sidecars that the node holds for the block as an input, and names the consensus version of the fork.
+  It gives the order of the input, which the source leaves free.
+  An empty list of indices requests no sidecar, since the parameter is then specified.
+  The input is assumed to hold at most one sidecar for each index, the sidecars of one block.
+  The source lists the versions Fulu and Gloas only; EthLib gives code 400 before Fulu.
+- The envelope answer takes the signed envelope as an input, since the store keeps envelopes without their signatures.
+  It compares the hash tree roots of the two messages, and gets code 404 when they differ.
+  It does not check the signature of the given envelope; the caller vouches for it.
+  Before Gloas it gets code 404, since no envelope exists; the source names only the version Gloas.
+- From Hegotá the envelope and columns answers carry no version, since the source names none for that fork yet.
+- The source gives no SSZ body for the attestations answer; EthLib gives none.
+- The source does not say which state answers a duty request; the duty answers take the state as an input.
+- The attester epoch "Should only be allowed 1 epoch ahead"; EthLib refuses a later epoch with code 400.
+  The PTC epoch "Must not be greater than the next epoch"; EthLib refuses a later one with code 400 too.
+  Both answers also refuse an epoch whose seed the mixes of the state do not hold, as the committees answer does.
+  The PTC answer also refuses an epoch before the previous one, or before Gloas, which the window of the state does not hold.
+  An epoch too old for the block roots of the state gets code 400 when its dependent root is read.
+- The source asks for at least one index in the attester, sync and PTC requests; an empty request gets code 400.
+- The proposer duties read the lookahead of the state from Fulu, for the current epoch and the seed lookahead.
+  Before Fulu they are drawn for the current epoch only, since later effective balances are not known yet.
+  Another epoch gets code 400.
+- The second version of the proposer endpoint uses a lag of one for its dependent root at every fork, as the source writes it.
+- The first version of the proposer endpoint answers for the current epoch only, since the root at the last slot before a later epoch is not known yet.
+- The dependent root is read from the block roots of the state, which must be past that slot and still hold it; otherwise it gets code 400.
+  The caller supplies the genesis block root, which EthLib does not check.
+- An index that names no validator of the state gets code 400; a validator with no duty in the epoch is left out.
+  The PTC request asks for distinct indices, so a repeated one gets code 400.
+  The attester and sync requests do not, so a repeated index gives its duty once for each time it is named.
+- The sync duties answer for the current period or the next, since the state holds only those committees; another period gets code 400.
 
 ### Builder API
 
@@ -3962,6 +4139,48 @@ The source leaves four points about a submission open, and EthLib specifies none
 - The order of submissions that reach the relay at the same time.
 - The simulation of the payload, which the relay runs "to verify properties and proposer payment".
   So EthLib does not check that the bid trace agrees with the payload, and the served bid takes the value of the bid trace as it is.
+
+A relay lists for builders the validators "scheduled to propose in the current and next epoch", each with its slot, its index and its signed registration ([`validators.yaml`](https://github.com/flashbots/relay-specs/blob/a4e0a50d9d46bfe881fd74cc7e0db366371f4eed/apis/relay/builder/validators.yaml)).
+"Slots without a registered validator are omitted."
+`ValidatorsResponse.Sound` (`Consensus/RelayApi.lean`) states this for any schedule of proposers: every entry lies in the two epochs and names the proposer of its slot with the registration kept for its key, and every slot of the two epochs whose proposer has a registration has exactly one entry.
+
+`scheduledEntries_sound` (`Consensus/Proofs/RelayApi.lean`) shows that the entries built from a schedule satisfy it, for any schedule.
+The source does not say how a relay learns the schedule.
+From Fulu, the state holds the proposers of the current and next epoch in its lookahead ([EIP-7917](https://eips.ethereum.org/EIPS/eip-7917#specification)), so EthLib builds the list from it.
+`validatorsResponse_sound` shows that this list satisfies the rule with the lookahead as the schedule.
+`validatorsResponse_proposer` shows that each entry after the slot of the state names the proposer that the state reaches at that slot, when the slots of the transition succeed.
+`validatorsResponse_proposer_self` shows that an entry for the slot of the state names the proposer of the state.
+The entries for earlier slots of the current epoch are tied to the consensus layer only through the lookahead, by `validatorsResponse_sound`.
+Before Fulu, the state does not hold the proposers of the next epoch.
+They can change with the balances until that epoch starts, so the agreement with the consensus schedule is proved from Fulu only.
+The export gives the list at Fulu only, because the relay source has no part after Fulu.
+
+The data API lists the payloads that a relay delivered to proposers and the bids from builders that it received and verified ([`proposer_payload_delivered.yaml`](https://github.com/flashbots/relay-specs/blob/a4e0a50d9d46bfe881fd74cc7e0db366371f4eed/apis/relay/data/proposer_payload_delivered.yaml), [`builder_blocks_received.yaml`](https://github.com/flashbots/relay-specs/blob/a4e0a50d9d46bfe881fd74cc7e0db366371f4eed/apis/relay/data/builder_blocks_received.yaml)).
+A delivered payload is a bid trace with `block_number` and `num_tx`, and a received bid adds `timestamp` and `timestamp_ms` ([`bids.yaml`](https://github.com/flashbots/relay-specs/blob/a4e0a50d9d46bfe881fd74cc7e0db366371f4eed/types/bids.yaml)).
+`BidTraceV2.ofApiJson_toApiJson` (`Consensus/Proofs/RelayApi.lean`) shows that the JSON of a delivered payload reads back as that payload.
+`BidTraceV2WithTimestamp.ofJson_toJson` shows the same for a received bid.
+`BidTraceV2WithTimestamp.toJson_total` shows that the writer of a received bid never fails.
+The source gives each timestamp the type `Int64`, a string ([`misc.yaml`](https://github.com/flashbots/relay-specs/blob/a4e0a50d9d46bfe881fd74cc7e0db366371f4eed/types/misc.yaml)), and EthLib writes it in decimal, as the source's example does.
+`BidTraceV2WithTimestamp.int64Json_of_readInt64` shows that a timestamp is read only from the string that the writer gives for it.
+So a plus sign, a leading zero and `-0` are refused.
+
+A query keeps an entry when each filter that it gives equals the field of the entry.
+The source of delivered payloads says so ("Query arguments are used as filters"), and EthLib reads the query of received bids the same way.
+`DeliveredFilter.keeps_empty` and `ReceivedFilter.keeps_empty` show that a query with no filter keeps every entry.
+`DeliveredFilter.keeps_slot` and `ReceivedFilter.keeps_slot` show that a query whose only filter is a slot keeps exactly the entries of that slot.
+A query may sort delivered payloads by value, lowest or highest first ([`misc.yaml`](https://github.com/flashbots/relay-specs/blob/a4e0a50d9d46bfe881fd74cc7e0db366371f4eed/types/misc.yaml)).
+`sortBy_descending` shows that a sort by `-value` gives the payloads with values that never increase, and keeps every payload.
+`sortBy_ascending` shows the same for `value`, with values that never decrease.
+
+The source leaves three points about the data API open, and EthLib specifies none of them:
+
+- What `cursor` means, beyond "A starting slot for multiple results", and in which direction it reads.
+  EthLib models neither the cursor nor the limit of a query.
+- The order of the results without `order_by`, and the order of payloads of equal value with it.
+  EthLib's sort keeps payloads of equal value in their input order, as a merge sort does; no theorem states this yet.
+- Which field of a payload `block_number` and `num_tx` come from.
+  Their names suggest the number of the block and the count of its transactions, but the source does not say so.
+  So they are fields of the entry, not values computed from the payload.
 
 ### What cannot be proved yet
 
@@ -4264,12 +4483,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 455 operations and 49 size constants.
-The Python extension calls 455 of the operations and 49 of the constants.
+Lean exports 473 operations and 49 size constants.
+The Python extension calls 473 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-10927 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2204), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (194), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (106), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1526), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (71), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (58), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (746), `x25519.c` (21), `xmss.c` (134).
+11183 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2358), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (194), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1558), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (71), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (58), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (764), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.
@@ -4425,6 +4644,7 @@ The files named `Proofs.lean` are roots that gather the proofs of a domain, so t
 - `EthLib/Cryptography/Proofs/Secp256k1/`
 - `EthLib/Cryptography/Proofs/Sphincs/`
 - `EthLib/Cryptography/Proofs/TaggedLazyPermutation.lean`
+- `EthLib/Cryptography/Proofs/UniformReads.lean`
 - `EthLib/Cryptography/Proofs/Vrf/`
 - `EthLib/Cryptography/Proofs/Wots/`
 - `EthLib/Cryptography/Proofs/Xmss/`

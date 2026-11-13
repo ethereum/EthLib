@@ -96,10 +96,19 @@ def answerQuery {preset : Preset} {fork : Fork} (config : Config) (store : Store
         (BeaconApi.resolveValidatorId state validatorId).map fun index =>
           { read with index := some index }
 
-/-- The answer to each query, against the store after the steps of a fork choice case. -/
-def apiResolve (args : String × String × ByteArray × ByteArray × List ForkChoiceStep × Bool ×
-    List ApiQuery) : Result (List ApiAnswer) := do
-  let (name, fork, anchorState, anchorBlock, steps, verify, queries) := args
+/-- The fork choice case that builds a store: the preset, the fork, the anchor and the steps.
+
+The flag says whether the signature checks run. -/
+abbrev StoreCase := String × String × ByteArray × ByteArray × List ForkChoiceStep × Bool
+
+/-- The arguments of a fork choice case, then those of a query, in one flat tuple. -/
+abbrev StoreCaseArgs (α : Type) :=
+  String × String × ByteArray × ByteArray × List ForkChoiceStep × Bool × α
+
+/-- The configuration and the store after the steps of a fork choice case. -/
+def storeOfCase (case : StoreCase) :
+    Result ((preset : Preset) × (fork : Fork) × Config × Store preset fork) := do
+  let (name, fork, anchorState, anchorBlock, steps, verify) := case
   let preset ← presetOf name
   let fork ← forkOf fork.toUTF8
   let config ← configWithValue name none
@@ -107,6 +116,13 @@ def apiResolve (args : String × String × ByteArray × ByteArray × List ForkCh
   let anchorState ← decodeInput (BeaconState preset fork) anchorState
   let anchorBlock ← decodeInput (BeaconBlock preset fork) anchorBlock
   let (store, _) ← replayForkChoice config checks anchorState anchorBlock steps
+  return ⟨preset, fork, config, store⟩
+
+/-- The answer to each query, against the store after the steps of a fork choice case. -/
+def apiResolve (args : String × String × ByteArray × ByteArray × List ForkChoiceStep × Bool ×
+    List ApiQuery) : Result (List ApiAnswer) := do
+  let (name, fork, anchorState, anchorBlock, steps, verify, queries) := args
+  let ⟨_, _, config, store⟩ ← storeOfCase (name, fork, anchorState, anchorBlock, steps, verify)
   return queries.map (answerQuery config store)
 
 /-- The answer to each query, against the store after the steps of a fork choice case.

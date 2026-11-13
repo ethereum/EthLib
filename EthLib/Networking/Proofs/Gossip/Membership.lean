@@ -215,4 +215,8 @@ theorem publish_receiveRpc {m : Message}
   exact Router.receiveRpc_seen_skip p backoffMs pruneBackoffMs standing' msgId validate now' src
     rpc _ he' ht hid
 
+/-- The choice of the first candidates is lawful, so every result holds for it. -/
+theorem Select.first_lawful : Select.first.Lawful := fun n l =>
+  ⟨List.take_sublist n l, by simp [Select.first, List.length_take]⟩
+
 end EthLib.Networking.Proofs.Gossip.Membership
