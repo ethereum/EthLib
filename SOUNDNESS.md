@@ -723,6 +723,15 @@ The transcript of Noise §5.2 has its own theorems (`Networking/Proofs/Noise.lea
 `eq_or_collision_of_hash_mixHash_eq` proves that two mixes that end at one handshake hash started at one handshake hash and mixed the same bytes, or else names the two different SHA-256 inputs that hash alike.
 No theorem assumes or bounds the collision resistance of SHA-256, and none binds the whole transcript of a handshake.
 `unframe_frame` proves that reading back a written frame of the noise-libp2p "Wire Format" returns its message.
+
+`handshake_complete` (`Networking/Proofs/Noise/Handshake.lean`) is the correctness theorem of the raw XX handshake.
+Two honest peers, with any static and ephemeral secrets and one prologue that both use, complete the three messages when each payload fits in its message.
+Each read returns the payload that the other peer wrote.
+Both peers end with the same symmetric state, and each stores the static public key of the other.
+The send cipher of each peer is then the receive cipher of the other.
+The proof uses `x25519_agree` for the three tokens `ee`, `es` and `se`, so it needs no assumption on X25519.
+It says nothing about a peer that deviates from the specification, nor about secrecy.
+
 No theorem says that the chaining key mixed a Diffie-Hellman output with the remote static key.
 Only the libp2p read verifies an identity, and completion checks that the stored remote has the remote static key of the handshake.
 The raw transport split of an XX state checks neither.
