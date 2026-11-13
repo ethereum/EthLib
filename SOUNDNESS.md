@@ -1863,6 +1863,21 @@ It does not check the ommer headers against the chain, which needs the recent bl
 It does not ask that the sum of the gas limits of the transactions is at most the gas limit of the block, as `caps/eth.md` says.
 Block validity asks only that each transaction fits in the gas that the block still has, so the stricter rule would reject valid blocks.
 
+### The receipts of the eth protocol
+
+`receiptsMatch` (`Execution/Network/Receipts.lean`) checks the receipts of one block in a Receipts answer against the receipts root of its header.
+It follows "Receipt Encoding and Validity" in [`caps/eth.md`](https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/eth.md#receipt-encoding-and-validity).
+Each receipt is put back in its consensus form, with the Bloom filter of its logs.
+The trie root of the list must be the root of the header.
+`receiptsMatch_eq_true_iff` (`Execution/Proofs/Network/Receipts.lean`) states when the receipts of a block pass.
+Each reads as a receipt in consensus form.
+The receipts root of those forms, in the order of the list, is the root that the caller gives.
+`consensusOfItem_eth68_eq_ok_iff` states how a receipt reads on eth/68.
+A list reads as a legacy receipt, of type 0, and a byte string as a receipt whose type is not 0.
+So a legacy receipt sent as a byte string does not read.
+`consensusOfItem_eq_ok_iff` states that from eth/69 on a receipt reads as the list of EIP-7642, with the Bloom filter of its logs computed again.
+The caller gives the receipts root and the fork of the block, and the check trusts them.
+
 ### The block access lists and the cells of the eth protocol
 
 `accessListsResponse` (`Execution/Network/Message.lean`) checks a BlockAccessLists answer of eth/71 against the access list hashes of the requested blocks.
