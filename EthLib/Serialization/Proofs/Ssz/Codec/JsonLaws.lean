@@ -81,23 +81,23 @@ theorem valueOf_jsonOf_uint {spelling : Spelling} {width n : Nat} {document : Js
     (fitted : n < 2 ^ (8 * width))
     (written : jsonOf (.uint width) spelling (.uint n) = .ok document) :
     valueOf (.uint width) spelling document = .ok (.uint n) := by
-  have wide : ¬ (2 ^ (8 * width) ≤ n) := Nat.not_le.mpr fitted
+  have fits : ¬ ((!uintFits width n) = true) := by simpa using fitted
   rw [jsonOf] at written
   by_cases alias? : (spelling.isByte && width == 1) = true
   · have single : width = 1 := by simpa using ((Bool.and_eq_true ..).mp alias?).2
     have small : n < 256 := by rw [single] at fitted; simpa using fitted
     have byte : (UInt8.ofNat n).toNat = n := by
       simpa [UInt8.toNat_ofNat] using Nat.mod_eq_of_lt small
-    simp only [wide, ite_false, alias?, ite_true, Except.ok.injEq] at written
+    simp only [fits, Bool.false_eq_true, ite_false, alias?, ite_true, Except.ok.injEq] at written
     subst written
     rw [valueOf, ite_eq_left alias?]
     simp [ofHex_toHex, byte, Bind.bind, Except.bind, pure, Except.pure]
-  · rw [ite_eq_right wide, ite_eq_right (by simpa using alias?), Except.ok.injEq] at written
+  · rw [ite_eq_right fits, ite_eq_right (by simpa using alias?), Except.ok.injEq] at written
     subst written
     -- The digits have to be a constructor before the reader's own match can reduce.
     simp only [decimal]
     rw [valueOf, ite_eq_right alias?, readNat_str]
-    simp [wide, Bind.bind, Except.bind, pure, Except.pure]
+    simp [fits, Bind.bind, Except.bind, pure, Except.pure]
 
 /-- A byte array document reads back as the bytes it was written from. -/
 theorem valueOf_jsonOf_byteVector {spelling : Spelling} {length : Nat} {data : Bytes}

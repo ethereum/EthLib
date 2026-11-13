@@ -203,7 +203,7 @@ def jsonOf (shape : Desc) (spelling : Spelling) (value : Value) : Except Err Jso
   match shape, value with
   | .bool, .bool b => .ok (.bool b)
   | .uint width, .uint n =>
-    if n ≥ 2 ^ (8 * width) then .error (.uintRange (2 ^ (8 * width)) n)
+    if !uintFits width n then .error (.uintRange (2 ^ (8 * width)) n)
     -- The alias is a one-byte integer, so no wider integer is written as hex.
     else if spelling.isByte && width == 1 then .ok (.str (toHex #[UInt8.ofNat n]))
     else .ok (decimal n)
@@ -283,7 +283,7 @@ def valueOf (shape : Desc) (spelling : Spelling) (document : Json) : Except Err 
       if data.size != 1 then throw (.hexLength 1 data.size)
       return .uint (data[0]?.getD 0).toNat
     let n ← readNat document
-    if n ≥ 2 ^ (8 * width) then throw (.uintRange (2 ^ (8 * width)) n)
+    if !uintFits width n then throw (.uintRange (2 ^ (8 * width)) n)
     return .uint n
   | .byteVector length => do
     let data ← ofHex (← collectionHex document)
