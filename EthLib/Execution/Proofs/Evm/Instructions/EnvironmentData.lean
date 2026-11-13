@@ -21,6 +21,8 @@ Then BLOCKHASH puts the hash of the block in place of the number.
 
 BLOBHASH puts the versioned hash in place of the index.
 
+CHAINID pays the base price and pushes the chain id, from Istanbul on.
+
 SLOTNUM pays the base price and pushes the slot of the block, from Glamsterdam on.
 
 Each instruction exists exactly from the fork that adds its opcode.
@@ -129,6 +131,21 @@ theorem isSome_environmentStep {op : Op} :
       op.since ≤ fork := by
   cases op <;> simp [environmentStep, Op.since, Fork.frontier_le] <;> split <;>
     simp_all
+
+/-- CHAINID, from Istanbul, on a stack with room: pay the base price, push the chain id.
+
+Its price is the base price, 2 gas, as EIP-1344 gives. -/
+theorem environmentStep_chainid (h : .istanbul ≤ fork) {evm : Evm fork Meter}
+    (room : evm.stack.val.length < STACK_LIMIT) :
+    ∃ step, environmentStep fork .chainid = some step ∧
+      step evm = (GasMeter.charge evm.gas GasCosts.BASE).map fun gas =>
+        { evm with
+          gas
+          stack := ⟨BitVec.ofNat 256 evm.message.blockEnv.chainId.toNat :: evm.stack.val, room⟩
+          pc := evm.pc + 1 } :=
+  ⟨readFrame GasCosts.OPCODE_CHAINID fun evm =>
+      BitVec.ofNat 256 evm.message.blockEnv.chainId.toNat,
+    by simp [environmentStep, h], readFrame_of_length_lt room⟩
 
 /-- SLOTNUM, from Glamsterdam, on a stack with room: pay the base price, push the slot.
 
