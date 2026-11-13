@@ -1,5 +1,7 @@
 module
 
+public import EthLib.Cryptography.Proofs.Hash.Tls13
+
 public import EthLib.Cryptography.Proofs.Hash.Crc
 public import EthLib.Cryptography.Proofs.Hash.Crc32c
 public import EthLib.Cryptography.Proofs.Hash.Crc32

@@ -95,6 +95,7 @@ PyObject* SNAPPY_ERROR;
 PyObject* VARINT_ERROR;
 PyObject* UVARINT_ERROR;
 PyObject* QUIC_VARINT_ERROR;
+PyObject* TLS13_ERROR;
 PyObject* MULTISTREAM_ERROR;
 PyObject* MPLEX_ERROR;
 PyObject* YAMUX_ERROR;
@@ -1137,6 +1138,10 @@ static PyMethodDef methods[] = {
   {"varint_decode", py_varint_decode, METH_VARARGS, DOC_varint_decode},
   {"uvarint_encode", py_uvarint_encode, METH_VARARGS, DOC_uvarint_encode},
   {"uvarint_decode", py_uvarint_decode, METH_VARARGS, DOC_uvarint_decode},
+  {"tls13_hkdf_label", py_tls13_hkdf_label, METH_VARARGS, DOC_tls13_hkdf_label},
+  {"tls13_expand_label", py_tls13_expand_label, METH_VARARGS, DOC_tls13_expand_label},
+  {"quic_initial_secrets", py_quic_initial_secrets, METH_VARARGS, DOC_quic_initial_secrets},
+  {"quic_packet_keys", py_quic_packet_keys, METH_VARARGS, DOC_quic_packet_keys},
   {"quic_varint_encode", py_quic_varint_encode, METH_VARARGS, DOC_quic_varint_encode},
   {"quic_varint_decode", py_quic_varint_decode, METH_VARARGS, DOC_quic_varint_decode},
   {"multistream_encode", py_multistream_encode, METH_VARARGS, DOC_multistream_encode},
@@ -1280,6 +1285,7 @@ PyInit__native(void) {
     SNAPPY_ERROR = PyObject_GetAttrString(errors, "SnappyError");
     VARINT_ERROR = PyObject_GetAttrString(errors, "VarintError");
     UVARINT_ERROR = PyObject_GetAttrString(errors, "UvarintError");
+    TLS13_ERROR = PyObject_GetAttrString(errors, "Tls13Error");
     QUIC_VARINT_ERROR = PyObject_GetAttrString(errors, "QuicVarintError");
     MULTISTREAM_ERROR = PyObject_GetAttrString(errors, "MultistreamError");
     MPLEX_ERROR = PyObject_GetAttrString(errors, "MplexError");

@@ -720,6 +720,15 @@ The Python suite checks the examples of RFC 9000 Appendix A.1, the bounds of Tab
 It also checks three longer forms of 37 and every proper prefix of one encoding of each width.
 Packet headers, packet numbers and frames remain unspecified.
 
+### QUIC v1 key derivation
+
+The labelled HKDF proofs (`Cryptography/Proofs/Hash/Tls13.lean`) state its field bounds, encoding and agreement with HKDF-SHA-256.
+The QUIC proofs (`Networking/Proofs/Quic/Keys.lean`) state the Initial and packet key derivations of RFC 9001 §§5.1 to 5.2 and prove that they succeed.
+The keys have their required lengths in their types for AES-128-GCM and ChaCha20-Poly1305 with SHA-256.
+The Python suite checks the keys of RFC 9001 Appendices A.1 and A.5.
+Packet encryption, header protection and Retry integrity remain unspecified.
+These results establish neither cryptographic security nor constant-time execution.
+
 ### Noise XX and libp2p identities
 
 `readLibp2p_authenticates` (`Networking/Proofs/Noise/Identity.lean`) says that the read of message 2 or 3 accepts only a payload whose signature verifies on the static key that the message carries.
