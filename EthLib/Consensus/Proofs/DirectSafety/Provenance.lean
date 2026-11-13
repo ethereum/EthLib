@@ -33,7 +33,7 @@ Later its previous justified checkpoint is before the previous epoch.
 The run starts at a genesis built from deposits. -/
 theorem run_justified_separated {g a : ForkedBeaconState preset}
     (run : Run config checks g a)
-    (genesis : Genesis (config := config) (checks := checks) g) :
+    (genesis : Genesis config checks g) :
     Invariant a.state ∧ JustifiedEarly a.state ∧ JustifiedSeparated a.state := by
   induction run with
   | nil =>
@@ -57,7 +57,7 @@ private theorem votes_snoc {g a b : ForkedBeaconState preset} (run : Run config 
   · exact ⟨a, b, step, .last run step, voted⟩
 
 private theorem genesis_participation {g : ForkedBeaconState preset}
-    (genesis : Genesis (config := config) (checks := checks) g) :
+    (genesis : Genesis config checks g) :
     ParticipationBacked (Run.nil : Run config checks g g) g.state := by
   obtain ⟨_, _, _, ok⟩ := genesis
   constructor
@@ -68,7 +68,7 @@ private theorem genesis_participation {g : ForkedBeaconState preset}
     exact False.elim (Nat.not_le_of_lt (initializeBeaconStateFromEth1_invariant ok).1 altair)
 
 private theorem run_participation {g a : ForkedBeaconState preset} (run : Run config checks g a)
-    (parameters : Parameters preset) (genesis : Genesis (config := config) (checks := checks) g) :
+    (parameters : Parameters preset) (genesis : Genesis config checks g) :
     ParticipationBacked run a.state := by
   induction run with
   | nil => exact genesis_participation genesis
@@ -93,7 +93,7 @@ private theorem run_participation {g a : ForkedBeaconState preset} (run : Run co
 The run starts at a genesis built from deposits, and the preset meets the parameters. -/
 theorem inherited_participation {g x a : ForkedBeaconState preset}
     (shared : Run config checks g x) (tail : Run config checks x a)
-    (parameters : Parameters preset) (genesis : Genesis (config := config) (checks := checks) g) :
+    (parameters : Parameters preset) (genesis : Genesis config checks g) :
     ParticipationBacked (shared.append tail) x.state := by
   have backed := run_participation shared parameters genesis
   have sub : shared.votes ⊆ (shared.append tail).votes := by
