@@ -466,159 +466,45 @@ private theorem CapStep.voluntaryExit {f : Fork} {s t : BeaconState preset f}
   obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, exited⟩ := ok
   exact CapStep.exit exited
 
-private theorem CapStep.operations {f : Fork} {s t : BeaconState preset f}
-    (early : f < .glamsterdam) {body : BeaconBlockBody preset f} {parentSlot : Slot}
-    (order : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
-    (ok : processOperations config checks s body parentSlot = .ok t) : CapStep s t := by
-  unfold processOperations at ok
-  split at ok
-  · rename_i later
-    exact False.elim (Nat.not_le_of_lt early later)
-  simp only [bind_ok_iff, ensure_ok_iff, ← Array.foldlM_toList] at ok
-  obtain ⟨_, _, _, _, _, proposers, _, attesters, _, attestations, _, deposits, exited,
-    exits, changed, changesOk, requestsOk⟩ := ok
-  have changes : CapStep exited changed := by
-    unfold processBlsToExecutionChanges at changesOk
-    split at changesOk
-    · rw [← Array.foldlM_toList] at changesOk
-      exact CapStep.fold (fun _ _ _ => CapStep.blsChange) changesOk
-    · cases changesOk; exact CapStep.refl _
-  have requests : CapStep changed t := by
-    split at requestsOk
-    · exact CapStep.requests order requestsOk
-    · cases requestsOk; exact CapStep.refl _
-  exact (CapStep.fold (fun _ _ _ => CapStep.proposerSlashing) proposers).trans <|
-    (CapStep.fold (fun _ _ _ => CapStep.attesterSlashing) attesters).trans <|
-    (CapStep.fold (fun _ _ _ ok => CapStep.data
-      (by rw [(processAttestation_registry ok).1])) attestations).trans <|
-    (CapStep.fold (fun _ _ _ => CapStep.processDeposit) deposits).trans <|
-    (CapStep.fold (fun _ _ _ => CapStep.voluntaryExit) exits).trans (changes.trans requests)
-
-private theorem CapStep.withdrawals {f : Fork} {s t : BeaconState preset f}
-    {capella : .shapella ≤ f} {payload : Until .glamsterdam f (ExecutionPayload preset f)}
-    (ok : processWithdrawals s capella payload = .ok t) : CapStep s t := by
-  have applied {s t : BeaconState preset f} {expected : ExpectedWithdrawals}
-      (ok : applyExpectedWithdrawals s capella expected = .ok t) : CapStep s t := by
-    unfold applyExpectedWithdrawals at ok
-    simp only [bind_ok_iff] at ok
-    obtain ⟨applied, appliedOk, indexed, indexedOk, finished, sweptOk, last⟩ := ok
-    have one : CapStep s applied := by
-      unfold applyWithdrawals at appliedOk
-      rw [← Array.foldlM_toList] at appliedOk
-      refine CapStep.fold (fun _ _ _ ok => ?_) appliedOk
-      unfold applyWithdrawal at ok
-      split at ok
-      · simp only [bind_ok_iff] at ok
-        obtain ⟨_, _, set⟩ := ok
-        obtain ⟨_, rfl⟩ := setBuilder_ok set
-        exact CapStep.data rfl
-      · exact CapStep.decrease ok
-    have indexedSame : indexed.validators = applied.validators := by
-      unfold updateNextWithdrawalIndex at indexedOk
-      split at indexedOk
-      · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at indexedOk
-        obtain ⟨_, _, rfl⟩ := indexedOk
-        rfl
-      · cases indexedOk; rfl
-    have sweptSame : finished.validators = indexed.validators := by
-      have swept {a : BeaconState preset f}
-          (computed : (if gloas : .glamsterdam ≤ f then
-            updateNextWithdrawalBuilderIndex a gloas expected.processedBuildersSweepCount
-            else pure a) = .ok finished) : finished.validators = a.validators := by
-        split at computed
-        · unfold updateNextWithdrawalBuilderIndex at computed
-          dsimp only at computed
-          split at computed
-          · cases computed; rfl
-          · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-            obtain ⟨_, _, rfl⟩ := computed
-            rfl
-        · cases computed; rfl
-      rw [swept sweptOk]
-      split <;> (try split) <;> rfl
-    have lastSame : t.validators = finished.validators := by
-      unfold updateNextWithdrawalValidatorIndex at last
-      simp only [bind_ok_iff] at last
-      obtain ⟨_, _, last⟩ := last
-      split at last
-      · cases last
-      · cases last; rfl
-    exact one.trans (CapStep.data (by rw [lastSame, sweptSame, indexedSame]))
-  unfold processWithdrawals at ok
-  split at ok
-  · split at ok
-    · simp only [bind_ok_iff, liftAccessor_ok] at ok
-      obtain ⟨_, _, appliedOk⟩ := ok
-      exact applied appliedOk
-    · cases ok; exact CapStep.refl _
-  · simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, _, _, appliedOk⟩ := ok
-    exact applied appliedOk
-
 private theorem CapStep.block {f : Fork} {s t : BeaconState preset f}
     {engine : ExecutionEngine preset f} {block : BeaconBlock preset f}
     (early : f < .glamsterdam)
     (order : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
     (ok : processBlock config checks engine s block = .ok t) : CapStep s t := by
-  have header {a b : BeaconState preset f} {block : BeaconBlock preset f}
-      (ok : processBlockHeader a block = .ok b) : b.validators = a.validators := by
-    obtain ⟨_, _, rfl⟩ := processBlockHeader_eq ok
-    rfl
-  have randao {a b : BeaconState preset f} {body : BeaconBlockBody preset f}
-      (ok : processRandao config checks a body = .ok b) : b.validators = a.validators := by
-    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq ok
-    rfl
-  have vote {a b : BeaconState preset f} {body : BeaconBlockBody preset f} {before : f < .hegota}
-      (ok : processEth1Data before a body = .ok b) : b.validators = a.validators := by
-    obtain ⟨_, _, rest⟩ := processEth1Data_eq ok
-    rw [← rest]
-  have execution {a b : BeaconState preset f} {body : BeaconBlockBody preset f}
-      {bellatrix : .bellatrix ≤ f}
-      (ok : processBlockExecution config checks engine a body bellatrix = .ok b) :
-      CapStep a b := by
-    have payload {a b : BeaconState preset f} {bellatrix : .bellatrix ≤ f ∧ f < .glamsterdam}
-        (ok : processExecutionPayload config engine a body bellatrix = .ok b) :
-        b.validators = a.validators := by
-      obtain ⟨_, _, _, rfl⟩ := processExecutionPayload_ok ok
-      rfl
-    unfold processBlockExecution at ok
-    split at ok
-    · exact False.elim (Nat.not_le_of_lt early (by assumption))
-    split at ok
-    · simp only [bind_ok_iff] at ok
-      obtain ⟨_, withdrawn, paid⟩ := ok
-      exact (CapStep.withdrawals withdrawn).trans (CapStep.data (by rw [payload paid]))
-    · dsimp only at ok
-      split at ok
-      · exact CapStep.data (congrArg (·.data) (payload ok))
-      · cases ok; exact CapStep.refl _
-  unfold processBlock at ok
-  split at ok
-  · unfold processBlockAltair at ok
-    simp only [bind_ok_iff] at ok
-    obtain ⟨paid, paidOk, headed, headedOk, executed, executedOk, revealed, revealedOk, voted,
-      votedOk, operated, operatedOk, synced⟩ := ok
-    have paidSame : paid = s := by
-      split at paidOk
-      · exact False.elim (Nat.not_le_of_lt early (by assumption))
-      · cases paidOk; rfl
-    subst paid
-    have executionStep : CapStep headed executed := by
-      split at executedOk
-      · exact execution executedOk
-      · cases executedOk; exact CapStep.refl _
-    have votedSame : voted.validators = revealed.validators := by
-      split at votedOk
-      · exact vote votedOk
-      · cases votedOk; rfl
-    exact (CapStep.data (by rw [header headedOk])).trans <|
-      executionStep.trans <|
-      (CapStep.data (by rw [votedSame, randao revealedOk])).trans <|
-      (CapStep.operations early order operatedOk).trans (CapStep.sync synced)
-  · simp only [bind_ok_iff] at ok
-    obtain ⟨_, headed, _, revealed, _, voted, operated⟩ := ok
-    exact (CapStep.data (by rw [vote voted, randao revealed, header headed])).trans
-      (CapStep.operations early order operated)
+  have same {a b : BeaconState preset f} (validators : b.validators = a.validators) :
+      CapStep a b :=
+    CapStep.data (congrArg (·.data) validators)
+  obtain ⟨input, last, started, operated, -, synced⟩ := processBlock_operationsInput ok
+  have head : CapStep s input :=
+    OperationsInput.step_of CapStep CapStep.refl (fun one two => one.trans two)
+      (fun gloas _ => absurd gloas (Nat.not_le_of_lt early))
+      (fun headed => by
+        obtain ⟨_, _, rfl⟩ := processBlockHeader_eq headed
+        exact same rfl)
+      (fun _ executed => processBlockExecution_step_of CapStep CapStep.refl
+        (fun one two => one.trans two) (fun _ validators => same validators)
+        (fun withdrawn => same (processWithdrawals_validators withdrawn)) executed)
+      (fun revealed => by
+        obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq revealed
+        exact same rfl)
+      (fun _ voted => by
+        obtain ⟨_, _, rest⟩ := processEth1Data_eq voted
+        exact same (by rw [← rest]))
+      started
+  obtain ⟨_, _, _, proposersOk, slashingsOk, attestedOk, rest⟩ :=
+    processOperations_folds_of CapStep CapStep.refl (fun one two => one.trans two)
+      CapStep.processDeposit CapStep.voluntaryExit CapStep.blsChange (CapStep.requests order)
+      (fun attested => same (by rw [processPayloadAttestation_eq attested])) operated
+  have tail : CapStep last t := by
+    split at synced
+    · exact CapStep.sync synced
+    · cases synced
+      exact CapStep.refl _
+  exact head.trans <|
+    (CapStep.fold (fun _ _ _ => CapStep.proposerSlashing) proposersOk).trans <|
+    (CapStep.fold (fun _ _ _ => CapStep.attesterSlashing) slashingsOk).trans <|
+    (CapStep.fold (fun _ _ _ attested => same (processAttestation_registry attested).1)
+      attestedOk).trans (rest.trans tail)
 
 private theorem CapStep.pending {f : Fork} {s t : BeaconState preset f}
     {electra : .pectra ≤ f} (ok : processPendingDeposits config checks s electra = .ok t) :

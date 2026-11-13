@@ -591,95 +591,87 @@ theorem registryLifecycle_processExecutionRequests {body : BeaconBlockBody prese
 
 /-! ## Withdrawals -/
 
-theorem registryLifecycle_applyWithdrawal {withdrawal : Withdrawal}
-    (computed : applyWithdrawal state withdrawal = .ok after) : RegistryLifecycle state after := by
-  unfold applyWithdrawal at computed
-  split at computed
-  · simp only [bind_ok_iff] at computed
-    obtain ⟨_, _, set⟩ := computed
-    obtain ⟨_, rfl⟩ := setBuilder_ok set
-    exact .of_data rfl
-  · exact .decreaseBalance computed
-
-private theorem registryLifecycle_applyExpectedWithdrawals {capella : .shapella ≤ fork}
-    {expected : ExpectedWithdrawals}
-    (computed : applyExpectedWithdrawals state capella expected = .ok after) :
-    RegistryLifecycle state after := by
-  unfold applyExpectedWithdrawals at computed
-  simp only [bind_ok_iff] at computed
-  obtain ⟨applied, appliedOk, indexed, indexedOk, finished, sweptOk, last⟩ := computed
-  have one : RegistryLifecycle state applied := by
-    unfold applyWithdrawals at appliedOk
-    rw [← Array.foldlM_toList] at appliedOk
-    exact RegistryLifecycle.foldlM (fun _ _ _ ok => registryLifecycle_applyWithdrawal ok) appliedOk
-  have two : RegistryLifecycle applied indexed := by
-    unfold updateNextWithdrawalIndex at indexedOk
-    split at indexedOk
-    · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at indexedOk
-      obtain ⟨_, _, rfl⟩ := indexedOk
-      exact .of_data rfl
-    · cases indexedOk
-      exact .refl _
-  have queued : ∀ kept : BeaconState preset fork,
-      RegistryLifecycle kept (if gloas : .glamsterdam ≤ fork then
-        updateBuilderPendingWithdrawals
-          (updatePayloadExpectedWithdrawals kept gloas expected.withdrawals) gloas
-          expected.processedBuilderWithdrawalsCount
-      else kept) := by
-    intro kept
-    split
-    · exact .of_data rfl
-    · exact .refl _
-  have partials : ∀ kept : BeaconState preset fork,
-      RegistryLifecycle kept (if electra : .pectra ≤ fork then
-        updatePendingPartialWithdrawals kept electra expected.processedPartialWithdrawalsCount
-      else kept) := by
-    intro kept
-    split
-    · exact .of_data rfl
-    · exact .refl _
-  have swept : ∀ kept : BeaconState preset fork,
-      (if gloas : .glamsterdam ≤ fork then
-        updateNextWithdrawalBuilderIndex kept gloas expected.processedBuildersSweepCount
-      else pure kept) = .ok finished → RegistryLifecycle kept finished := by
-    intro kept ok
-    split at ok
-    · unfold updateNextWithdrawalBuilderIndex at ok
-      dsimp only at ok
-      split at ok
-      · cases ok
-        exact .of_data rfl
-      · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
-        obtain ⟨_, _, rfl⟩ := ok
-        exact .of_data rfl
-    · simp only [pure, Except.pure, Except.ok.injEq] at ok
-      exact ok ▸ .refl _
-  have lastKept : RegistryLifecycle finished after := by
-    unfold updateNextWithdrawalValidatorIndex at last
-    simp only [bind_ok_iff] at last
-    obtain ⟨_, _, last⟩ := last
-    split at last
-    · cases last
-    · cases last
-      exact .of_data rfl
-  exact one.trans <| two.trans <| (queued _).trans <| (partials _).trans <|
-    (swept _ sweptOk).trans lastKept
-
-private theorem registryLifecycle_processWithdrawals {capella : .shapella ≤ fork}
+/-- Withdrawals change balances and withdrawal bookkeeping, never the validators. -/
+theorem processWithdrawals_validators {capella : .shapella ≤ fork}
     {payload : Until .glamsterdam fork (ExecutionPayload preset fork)}
     (computed : processWithdrawals state capella payload = .ok after) :
-    RegistryLifecycle state after := by
+    after.validators = state.validators := by
+  have expected {expected : ExpectedWithdrawals}
+      (ok : applyExpectedWithdrawals state capella expected = .ok after) :
+      after.validators = state.validators := by
+    unfold applyExpectedWithdrawals at ok
+    simp only [bind_ok_iff] at ok
+    obtain ⟨applied, appliedOk, indexed, indexedOk, finished, sweptOk, last⟩ := ok
+    have paid : applied.validators = state.validators := by
+      unfold applyWithdrawals at appliedOk
+      rw [← Array.foldlM_toList] at appliedOk
+      refine foldlM_ok_invariant (fun t => t.validators = state.validators) ?_ rfl appliedOk
+      intro _ _ _ kept stepped
+      unfold applyWithdrawal at stepped
+      split at stepped
+      · obtain ⟨_, _, set⟩ := bind_ok_iff.mp stepped
+        obtain ⟨_, rfl⟩ := setBuilder_ok set
+        exact kept
+      · exact (decreaseBalance_validators stepped).trans kept
+    have moved : indexed.validators = applied.validators := by
+      unfold updateNextWithdrawalIndex at indexedOk
+      split at indexedOk
+      · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at indexedOk
+        obtain ⟨_, _, rfl⟩ := indexedOk
+        rfl
+      · cases indexedOk
+        rfl
+    -- The queue updates and the sweep of builders write only their own fields.
+    have queued : ∀ kept : BeaconState preset fork,
+        (if gloas : .glamsterdam ≤ fork then
+          updateBuilderPendingWithdrawals
+            (updatePayloadExpectedWithdrawals kept gloas expected.withdrawals) gloas
+            expected.processedBuilderWithdrawalsCount
+        else kept).validators = kept.validators := by
+      intro kept
+      split <;> rfl
+    have partials : ∀ kept : BeaconState preset fork,
+        (if electra : .pectra ≤ fork then
+          updatePendingPartialWithdrawals kept electra expected.processedPartialWithdrawalsCount
+        else kept).validators = kept.validators := by
+      intro kept
+      split <;> rfl
+    have sweep : ∀ kept : BeaconState preset fork,
+        (if gloas : .glamsterdam ≤ fork then
+          updateNextWithdrawalBuilderIndex kept gloas expected.processedBuildersSweepCount
+        else pure kept) = .ok finished → finished.validators = kept.validators := by
+      intro kept ok
+      split at ok
+      · unfold updateNextWithdrawalBuilderIndex at ok
+        dsimp only at ok
+        split at ok
+        · cases ok
+          rfl
+        · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
+          obtain ⟨_, _, rfl⟩ := ok
+          rfl
+      · simp only [pure, Except.pure, Except.ok.injEq] at ok
+        subst ok
+        rfl
+    have final : after.validators = finished.validators := by
+      unfold updateNextWithdrawalValidatorIndex at last
+      simp only [bind_ok_iff] at last
+      obtain ⟨_, _, last⟩ := last
+      split at last
+      · cases last
+      · cases last
+        rfl
+    rw [final, sweep _ sweptOk, partials, queued, moved, paid]
   unfold processWithdrawals at computed
   split at computed
   · split at computed
-    · simp only [bind_ok_iff, liftAccessor_ok] at computed
-      obtain ⟨_, _, applied⟩ := computed
-      exact registryLifecycle_applyExpectedWithdrawals applied
+    · obtain ⟨_, _, applied⟩ := bind_ok_iff.mp computed
+      exact expected (liftAccessor_ok.mp applied)
     · cases computed
-      exact .refl _
+      rfl
   · simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok] at computed
     obtain ⟨_, _, _, _, applied⟩ := computed
-    exact registryLifecycle_applyExpectedWithdrawals applied
+    exact expected applied
 
 /-- A change to an execution address changes only the withdrawal credentials of the validator. -/
 theorem registryLifecycle_processBlsToExecutionChange {signed : SignedBLSToExecutionChange}
@@ -697,7 +689,7 @@ private theorem registryLifecycle_processBlockExecution {body : BeaconBlockBody 
     RegistryLifecycle state after :=
   processBlockExecution_step_of RegistryLifecycle .refl (fun one two => one.trans two)
     (fun _ same => .of_data (congrArg (·.data) same))
-    (fun ok => registryLifecycle_processWithdrawals ok) computed
+    (fun ok => .of_data (congrArg (·.data) (processWithdrawals_validators ok))) computed
 
 /-! ## The sync aggregate -/
 
