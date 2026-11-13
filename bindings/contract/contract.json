@@ -2976,6 +2976,33 @@
    "error_class": "ConsensusError",
    "docstring":
    "The SSZ body of the balances answer, as `bytes`.\n\nThe arguments are the name, the fork, the SSZ bytes of the state and the identifiers.\n\nThe last argument says whether the identifiers come in a query string."},
+  {"summary": "The JSON response to a query on a signed block, as a `dict`.",
+   "signature":
+   "(name: str, fork: str, block: bytes, query: str) -> dict[str, Any]",
+   "operation": "EthLib.Consensus.Exports.apiBlockQueryExport",
+   "method": "consensus_api_block_query",
+   "errors": [],
+   "error_class": "ConsensusError",
+   "docstring":
+   "The JSON response to a query on a signed block, as a `dict`.\n\nThe arguments are the name, the fork, the SSZ bytes of the signed block and the query.\n\nThe queries are the block, its root, its attestations and its blinded form."},
+  {"summary": "The JSON response of the blobs endpoint, as a `dict`.",
+   "signature":
+   "(name: str, fork: str, block: bytes, blobs: list[bytes], hashes: list[bytes] | None) -> dict[str, Any]",
+   "operation": "EthLib.Consensus.Exports.apiBlobsExport",
+   "method": "consensus_api_blobs",
+   "errors": [],
+   "error_class": "ConsensusError",
+   "docstring":
+   "The JSON response of the blobs endpoint, as a `dict`.\n\nThe arguments are the name, the fork, the SSZ bytes of the signed block and its blobs.\n\nThe last argument is the requested versioned hashes, or None for every blob."},
+  {"summary": "The SSZ body of the blobs answer, as `bytes`.",
+   "signature":
+   "(name: str, fork: str, block: bytes, blobs: list[bytes], hashes: list[bytes] | None) -> bytes",
+   "operation": "EthLib.Consensus.Exports.apiBlobsSszExport",
+   "method": "consensus_api_blobs_ssz",
+   "errors": [],
+   "error_class": "ConsensusError",
+   "docstring":
+   "The SSZ body of the blobs answer, as `bytes`.\n\nThe arguments are those of the JSON answer."},
   {"summary": "The JSON response of the committees endpoint, as a `dict`.",
    "signature":
    "(name: str, fork: str, state: bytes, epoch: int | None, index: int | None, slot: int | None) -> dict[str, Any]",

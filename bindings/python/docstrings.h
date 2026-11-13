@@ -461,6 +461,15 @@
 #define DOC_consensus_api_validator_balances_ssz \
   "The SSZ body of the balances answer, as `bytes`."
 
+#define DOC_consensus_api_block_query \
+  "The JSON response to a query on a signed block, as a `dict`."
+
+#define DOC_consensus_api_blobs \
+  "The JSON response of the blobs endpoint, as a `dict`."
+
+#define DOC_consensus_api_blobs_ssz \
+  "The SSZ body of the blobs answer, as `bytes`."
+
 #define DOC_consensus_api_committees \
   "The JSON response of the committees endpoint, as a `dict`."
 

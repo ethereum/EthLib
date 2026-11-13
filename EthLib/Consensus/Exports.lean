@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.Exports.BeaconApi
+public import EthLib.Consensus.Exports.BeaconApiBlocks
 public import EthLib.Consensus.Exports.BeaconApiCommittees
 public import EthLib.Consensus.Exports.BeaconApiConfig
 public import EthLib.Consensus.Exports.BeaconApiIdentifiers
