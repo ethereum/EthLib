@@ -831,8 +831,12 @@ theorem processBlock_pendingSplit (before : fork < .altair) {block : BeaconBlock
     Nat.not_le_of_lt (Nat.lt_trans before (by decide : Fork.altair < Fork.pectra))
   have notGloas : ¬Fork.glamsterdam ≤ fork :=
     Nat.not_le_of_lt (Nat.lt_trans before (by decide : Fork.altair < Fork.glamsterdam))
+  have notBellatrix : ¬Fork.bellatrix ≤ fork :=
+    Nat.not_le_of_lt (Nat.lt_trans before (by decide : Fork.altair < Fork.bellatrix))
+  have early : fork < .hegota := Nat.lt_trans before (by decide)
   unfold processBlock at computed
-  simp only [notAltair, ↓reduceDIte, bind_ok_iff] at computed
+  simp only [notAltair, ↓reduceDIte, stateBeforeOperations, notGloas, notBellatrix, early,
+    pure_bind, bind_assoc, bind_ok_iff] at computed
   obtain ⟨headed, headerOk, revealed, randaoOk, voted, eth1Ok, operationsOk⟩ := computed
   unfold processOperations at operationsOk
   simp only [notGloas, notElectra, ↓reduceDIte, bind_ok_iff, ensure_ok_iff,

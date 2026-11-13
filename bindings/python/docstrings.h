@@ -530,6 +530,9 @@
 #define DOC_consensus_api_attestation_rewards \
   "The JSON response of the attestation rewards endpoint, as a `dict`."
 
+#define DOC_consensus_api_block_rewards \
+  "The JSON response of the block rewards endpoint, as a `dict`."
+
 #define DOC_consensus_api_sync_committee_rewards \
   "The JSON response of the sync committee rewards endpoint, as a `dict`."
 
@@ -817,6 +820,9 @@
 
 #define DOC_consensus_gossip_validation \
   "Validate the messages of a topic in turn, against the store of an anchor and later blocks."
+
+#define DOC_consensus_api_pool \
+  "Answer the requests to pool endpoints in turn, against the store of an anchor and later blocks."
 
 #define DOC_consensus_light_client_sync \
   "The headers of a sync, step by step, from a bootstrap for a trusted block root."
