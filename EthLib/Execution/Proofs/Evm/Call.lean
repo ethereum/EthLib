@@ -16,6 +16,7 @@ public import EthLib.Execution.Proofs.Evm.Call.Marks
 public import EthLib.Execution.Proofs.Evm.Call.MessageCall
 public import EthLib.Execution.Proofs.Evm.Call.MeterRules
 public import EthLib.Execution.Proofs.Evm.Call.MeterSteps
+public import EthLib.Execution.Proofs.Evm.Call.MissingCode
 public import EthLib.Execution.Proofs.Evm.Call.Nonce
 public import EthLib.Execution.Proofs.Evm.Call.NoncesFit
 public import EthLib.Execution.Proofs.Evm.Call.Parent
