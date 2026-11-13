@@ -879,6 +879,18 @@ def api_state_query_ssz(name: str, fork: str, state: bytes, query: str) -> bytes
     return _native.consensus_api_state_query_ssz(name, fork, state, query)
 
 
+def api_validator_status(validator: dict[str, Any], balance: int, epoch: int) -> tuple[str, str]:
+    """The Beacon API status of a validator and the name of its group, or ConsensusError."""
+    # The validator is the JSON of the API, as api_json writes a Validator.
+    # A Validator has the same fields at every fork, so the call takes no name and no fork.
+    return _native.consensus_api_validator_status(validator, balance, epoch)
+
+
+def api_builder_status(name: str, fork: str, state: bytes, index: int) -> str:
+    """The Beacon API status of the builder at an index of a state, or ConsensusError."""
+    return _native.consensus_api_builder_status(name, fork, state, index)
+
+
 def gossip_validation(
     name: str,
     fork: str,
@@ -1489,6 +1501,8 @@ __all__ = [
     "api_genesis",
     "api_state_query",
     "api_state_query_ssz",
+    "api_validator_status",
+    "api_builder_status",
     "is_valid_builder_signature",
     "process_registration",
     "is_eligible_for_bid",

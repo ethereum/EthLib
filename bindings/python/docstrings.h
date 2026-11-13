@@ -449,6 +449,12 @@
 #define DOC_consensus_api_state_query_ssz \
   "The SSZ body of the response to a query on a state, as `bytes`."
 
+#define DOC_consensus_api_validator_status \
+  "The status of a validator with a balance at an epoch, and the name of its group."
+
+#define DOC_consensus_api_builder_status \
+  "The status of the builder at an index of a state, as its name."
+
 #define DOC_consensus_api_resolve \
   "The answer to each query, against the store after the steps of a fork choice case."
 
