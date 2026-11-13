@@ -451,6 +451,24 @@ def test_unblind_example_pair(source: str):
     assert consensus.unblind_signed_blinded_block("mainnet", fork, blinded, revealed) is None
 
 
+@pytest.mark.parametrize(
+    ("source", "other", "message"),
+    [
+        ("deneb", "capella", "firstOffset 8 1309511375"),
+        ("capella", "deneb", "firstOffset 512 1"),
+    ],
+    ids=["payload alone at deneb", "bundle at capella"],
+)
+def test_unblind_payload_of_another_form(source: str, other: str, message: str):
+    # The fork chooses the form of the payload, and the other form does not decode.
+    fork = consensus.consensus_version_fork(source)
+    blinded = _example(source, "signed_blinded_beacon_block")
+    revealed = _example(other, REVEALED[other])
+    with raises(ERROR, f"payload rejected: EthLib.Serialization.Ssz.Err.{message}") as info:
+        consensus.unblind_signed_blinded_block("mainnet", fork, blinded, revealed)
+    assert info.value.code == 7
+
+
 def test_unblind_changed_payload():
     # One bit of the block hash changes the header, so the payload no longer matches.
     blinded = _matching_blinded("deneb")
@@ -613,6 +631,188 @@ def test_no_request_authentication_before_gloas():
     assert info.value.code == 0
 
 
+# The data that the test signs in a request authentication, as its builder agreed it.
+AGREED = b"builder.example.com"
+# The data of the pinned Gloas examples.
+PINNED_DATA = bytes.fromhex("1234567890abcdef")
+
+
+def _auth_failures(
+    signed: bytes,
+    agreed: bytes = AGREED,
+    path_slot: int = 1,
+    pubkey: bytes = PUBKEY,
+    header: str | None = "gloas",
+    fork: str = "glamsterdam",
+) -> list[str]:
+    """The failed checks of a request for a bid."""
+    return consensus.builder_request_auth_failures(
+        "mainnet", fork, agreed, path_slot, pubkey, header, signed
+    )
+
+
+def _preferences_request(signed: bytes, cap: int = 10**9) -> bytes:
+    """The SSZ bytes of a preferences request: the cap, then the offset of the authentication."""
+    return struct.pack("<QI", cap, 12) + signed
+
+
+def _preferences_failures(
+    request: bytes,
+    current_slot: int = 1,
+    agreed: bytes = AGREED,
+    pubkey: bytes = PUBKEY,
+    header: str | None = "gloas",
+) -> list[str]:
+    """The failed checks of a request that submits preferences, at Gloas."""
+    return consensus.builder_preferences_failures(
+        "mainnet", "glamsterdam", agreed, current_slot, pubkey, header, request
+    )
+
+
+def _pinned_signed_auth() -> bytes:
+    """The pinned authentication, signed again by the test key in place of its placeholder."""
+    return _signed_auth(_example("gloas", "signed_builder_request_auth")[100:])
+
+
+def _pinned_request() -> bytes:
+    """The pinned preferences request, with its authentication signed by the test key."""
+    request = _example("gloas", "builder_preferences_request")
+    return request[:12] + _signed_auth(request[112:])
+
+
+@pytest.mark.parametrize("fork", ["glamsterdam", "hegota"])
+def test_request_auth_passes(fork: str):
+    assert _auth_failures(_signed_auth(), fork=fork) == []
+
+
+@pytest.mark.parametrize(
+    ("change", "failures"),
+    [
+        ({"path_slot": 2}, ["slot_mismatch"]),
+        ({"agreed": b"other.example.com"}, ["data_mismatch"]),
+        ({"pubkey": G2ProofOfPossession.SkToPk(SECRET_KEY + 1)}, ["bad_signature"]),
+        ({"header": None}, ["bad_version"]),
+        ({"header": ""}, ["bad_version"]),
+        ({"header": "phase0"}, ["bad_version"]),
+        ({"header": "fulu"}, ["bad_version"]),
+        ({"header": "Gloas"}, ["bad_version"]),
+        ({"header": " gloas"}, ["bad_version"]),
+    ],
+    ids=[
+        "other slot",
+        "other data",
+        "other key",
+        "no header",
+        "empty header",
+        "phase0",
+        "fork before the body",
+        "wrong case",
+        "space",
+    ],
+)
+def test_request_auth_one_failure(change: dict[str, Any], failures: list[str]):
+    assert _auth_failures(_signed_auth(), **change) == failures
+
+
+def test_request_auth_empty_data():
+    # Empty data fails even when the agreed data is empty too.
+    signed = _signed_auth(_auth_message(b""))
+    assert _auth_failures(signed, agreed=b"") == ["empty_data"]
+    assert _auth_failures(signed) == ["empty_data", "data_mismatch"]
+
+
+def test_request_auth_every_failure():
+    # Every failed check is listed, in the order of the checks: the header comes first.
+    signed = _signed_auth(_auth_message(b""))
+    other = G2ProofOfPossession.SkToPk(SECRET_KEY + 1)
+    assert _auth_failures(signed, path_slot=2, pubkey=other, header=None) == [
+        "bad_version",
+        "empty_data",
+        "data_mismatch",
+        "slot_mismatch",
+        "bad_signature",
+    ]
+
+
+def test_request_auth_pinned_example():
+    # The pinned example carries a placeholder signature, so only that check fails.
+    signed = _example("gloas", "signed_builder_request_auth")
+    assert _auth_failures(signed, agreed=PINNED_DATA) == ["bad_signature"]
+
+
+def test_request_auth_pinned_example_signed():
+    signed = _pinned_signed_auth()
+    assert _auth_failures(signed, agreed=PINNED_DATA) == []
+    assert _auth_failures(signed, agreed=PINNED_DATA, path_slot=2) == ["slot_mismatch"]
+
+
+def test_request_auth_other_genesis_version():
+    # The configuration reaches the signature check through the domain.
+    config = {"GENESIS_FORK_VERSION": "0x10000910"}
+    domain = bytes([11, 0, 0, 1]) + _builder_domain(bytes.fromhex("10000910"))[4:]
+    signed = _signed_auth(domain=domain)
+    args = ("mainnet", "glamsterdam", AGREED, 1, PUBKEY, "gloas", signed)
+    assert consensus.builder_request_auth_failures(*args, config) == []
+    assert consensus.builder_request_auth_failures(*args) == ["bad_signature"]
+
+
+def test_preferences_pinned_example_signed():
+    # The slot of the request has not passed at the builder's slot 1, since 1 < 1 is false.
+    request = _pinned_request()
+    assert _preferences_failures(request, agreed=PINNED_DATA) == []
+    assert _preferences_failures(request, current_slot=2, agreed=PINNED_DATA) == ["slot_passed"]
+
+
+def test_preferences_for_a_later_slot():
+    # A request ahead of the builder's slot passes: only a past slot fails.
+    assert _preferences_failures(_preferences_request(_signed_auth()), current_slot=0) == []
+
+
+def test_preferences_signature_does_not_cover_the_cap():
+    # The signature covers the data and the slot, so another cap keeps it valid.
+    assert _preferences_failures(_preferences_request(_signed_auth(), cap=0)) == []
+
+
+def test_preferences_every_failure():
+    request = _preferences_request(_signed_auth(_auth_message(b"")))
+    other = G2ProofOfPossession.SkToPk(SECRET_KEY + 1)
+    assert _preferences_failures(request, current_slot=2, pubkey=other, header=None) == [
+        "bad_version",
+        "empty_data",
+        "data_mismatch",
+        "slot_passed",
+        "bad_signature",
+    ]
+
+
+def test_preferences_pinned_example():
+    request = _example("gloas", "builder_preferences_request")
+    assert _preferences_failures(request, agreed=PINNED_DATA) == ["bad_signature"]
+    assert _preferences_failures(request, current_slot=2, agreed=PINNED_DATA) == [
+        "slot_passed",
+        "bad_signature",
+    ]
+
+
+def test_request_checks_malformed_body():
+    with raises(ERROR, "input rejected: EthLib.Serialization.Ssz.Err.scopeTooSmall 100 0") as info:
+        _auth_failures(b"")
+    assert info.value.code == 4
+    request = struct.pack("<QI", 0, 13) + _signed_auth()
+    with raises(ERROR, "input rejected: EthLib.Serialization.Ssz.Err.firstOffset 12 13") as info:
+        _preferences_failures(request)
+    assert info.value.code == 7
+
+
+def test_no_request_checks_before_gloas():
+    with raises(ERROR, "no builder request authentication at fusaka") as info:
+        _auth_failures(_signed_auth(), fork="fusaka")
+    assert info.value.code == 0
+    with raises(ERROR, "no builder request authentication at fusaka") as info:
+        consensus.builder_preferences_failures("mainnet", "fusaka", AGREED, 1, PUBKEY, "gloas", b"")
+    assert info.value.code == 0
+
+
 def test_builder_request_auth_short_key():
     with raises(ERROR, "expected 48 bytes, got 47") as info:
         consensus.verify_builder_request_auth_signature(
@@ -750,8 +950,9 @@ def test_registration_rules_in_order():
 
 # Where a minimal state stores the offset of its latest payload header, from Bellatrix to Fulu.
 HEADER_OFFSET_AT = 10_229
-# The block hash follows 472 bytes of the header: the parent hash, the fee recipient, two roots,
-# the bloom, the RANDAO mix, four numbers, the offset of the extra data and the base fee.
+# The block hash follows 472 bytes of the header.
+# They hold the parent hash, the fee recipient, two roots, the bloom and the RANDAO mix.
+# Four numbers, the offset of the extra data and the base fee come next.
 BLOCK_HASH_IN_HEADER = 472
 # The slot follows the genesis time and the genesis validators root.
 SLOT_AT = 40

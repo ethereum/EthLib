@@ -21,9 +21,22 @@ Not yet released.
   A block frame alone may slash, so it cannot give the field.
   Compose the block frames of the steps first, and pass their flags once.
 
+- `engine_newPayload` on a chain checks that a parent of proof of work is a terminal block, as step 2 of payload validation of Paris requires.
+  A parent that fails the check makes the payload `INVALID`, with the zero hash and the new reason code 407.
+  In Lean, `PayloadError` has the new constructor `invalidTerminalBlock`, with that code.
+  `newPayloadOnChain` takes two new arguments before the chain: a `TransitionConfiguration`, and the total difficulty of the last block of the chain.
+  Its theorems take both values, and `newPayloadOnChain_of_stateTransition_ok`, `newPayloadOnChain_of_stateTransition_error` and `newPayloadOnChain_of_buildPayload` take the hypothesis that the parent passes the check.
+  In Python, `engine.new_payload_on_chain` takes the required keyword-only arguments `terminal_total_difficulty` and `total_difficulty`, and the native `engine_new_payload_on_chain` takes them after the recent blocks.
+  A last block from Paris on passes the check, so then any total difficulty, and any terminal total difficulty below `2^256`, do.
+- In Lean, the bound on the extra data of an Engine payload is the named constant `Execution.Blocks.MAX_EXTRA_DATA_BYTES`, in place of the literal `32`.
+  The statements of `anyPayload_executionPayloadJson`, `payloadV4_executionPayloadV4Json`, `payloadOfBlock_extraData` and `newPayloadParams_json` change only by that name, and so do `payloadOfBlock` and `anyPayload`.
+  The constant is `32`, so a proof that used `omega` on the bound first unfolds it, as in `simp only [MAX_EXTRA_DATA_BYTES]; omega`.
 - In Lean, `EpochFrameLaws` now extends `EpochStepLaws`, which holds every law except those for a new validator and for the queue of pending deposits.
   The theorems that need neither law moved from the `EpochFrameLaws` namespace to the `EpochStepLaws` namespace, with the same statements, and they now take the smaller structure.
   Dot notation on a value of either structure still finds them; a full name such as `EpochFrameLaws.processSyncAggregate` becomes `EpochStepLaws.processSyncAggregate`.
+- In Lean, `processEpoch_split_of_lt_altair` moved from the `EpochFrameLaws` namespace to the `EpochStepLaws` namespace, with the same statement, and it now takes the smaller structure.
+  Dot notation on an `EpochFrameLaws` value still finds it.
+  A call by the full name `EpochFrameLaws.processEpoch_split_of_lt_altair laws` becomes `EpochStepLaws.processEpoch_split_of_lt_altair laws.toEpochStepLaws`.
 - In Lean, the JSON readers and writers of the base types moved from `EthLib.Engine.Json` to `EthLib.Serialization.JsonRpc`, with their theorems.
   They are `hexValue`, `hexDigits`, `bytesOf`, `bytes`, `fixed`, `address`, `quantity`, `bytesMax`, `uint64`, `paramsArray`, `array`, `fields`, `hasExactly`, `field`, `dataJson`, `quantityJson`, `listJson` and `optionJson`.
   Their namespace is now `EthLib.Serialization.JsonRpc`.
@@ -89,6 +102,38 @@ Not yet released.
   So a repeat of any message held before the import is refused, and so is a block at or before the slot limit, or a vote with a source before the source limit or a target at or before the target limit.
   The keys of the record come out in byte order.
   The JSON format and the C and Python signatures are unchanged.
+
+- A checkpoint of a fork-choice store comes from the anchor, a held state or its pull-up ([#1423](https://github.com/ethereum/EthLib/issues/1423)).
+  No C export or Python function changes.
+  In Lean, `Store.Reachable.justified_origins` and `Store.Reachable.finalized_origins` state this for a reachable store.
+  In the new module `Consensus.Proofs.ForkChoice.CheckpointAncestry`, `Store.Reachable.finalized_ancestor_or_accountable` gives three cases for the finalized checkpoint of the store.
+  It is at or before the anchor epoch, or it is on the chain of the justified checkpoint at the first slot of its epoch.
+  Otherwise two runs from the anchor to held states of the store bound the accountable stake, or show hash evidence.
+  It asks that every block was imported with the setting of the signature checks of the run from genesis, as `Store.BlockStatesFromParents`, which `Store.ForwardReachableWith.blockStatesFromParents` gives.
+  The drift of its bound counts from the anchor, so the bound loosens as the justified epoch moves away from the anchor epoch.
+  `DirectSafety.TerminalView` reads the checkpoints of the last state of a run, or of one justification step on it, as fork choice runs it.
+  `DirectSafety.accountable_safety_justified_terminal` states direct accountable safety for two such views, and like the theorems it extends it asks no bound on the fork of either run.
+  `DirectSafety.accountable_safety_justified` is its case without a step, and its statement is unchanged.
+  The other new Lean declarations are `TerminalView.state`, `TerminalView.enough`, `TerminalQuorum`, `TerminalQuorum.source`, `TerminalQuorum.voters`, `TerminalQuorum.currentEpoch_le`, `ViewQuorum`, `ViewQuorum.source`, `ViewQuorum.target`, `ViewQuorum.voters`, `ViewQuorum.state`, `ViewQuorum.eq_inl_of_realized`, `view_field_crossing`, `view_finalized_quorums`, `view_quorum_attestations`, `view_quorum_count`, `view_quorum_target_binding`, `view_conflicting_fields_quorums`, `view_voters_recent`, `checkpoint_binding_prefixes` and `hashObjects_append_subset`, all in `DirectSafety`, and `Store.ancestorRoots_of_parent`, `Store.updateCheckpoints_unrealizedJustifications` and `Store.updateUnrealizedCheckpoints_unrealizedJustifications`.
+  The new `Store.SameCheckpoints` says that two stores have the same justified, finalized, unrealized justified and unrealized finalized checkpoints.
+  `Store.SameCheckpoints.refl`, `.justified`, `.finalized`, `.unrealizedJustified` and `.unrealizedFinalized` read it; a caller that names these projections does not depend on the order of the four checkpoints.
+  `Store.storeTargetCheckpointState_frame`, `Store.onAttestation_frame`, `Store.onAttesterSlashing_frame`, `Store.recordBlockTimeliness_frame` and `Store.updateProposerBoostRoot_frame` end with two new conjuncts.
+  They state `Store.SameCheckpoints` of the store and the result, and that the unrealized justifications are unchanged.
+  `Store.onTickPerSlot_frame` ends with a new conjunct: a store `moved`, the store itself or `updateCheckpoints` with its unrealized checkpoints, has `Store.SameCheckpoints` with the result, and the unrealized justifications are unchanged.
+  `Store.computePulledUpTip_frame` ends with a new conjunct: the held state of the tip and the result of its justification and finalization.
+  The conjunct also gives a store `moved` with `Store.SameCheckpoints` of the result, built from that result, and the unrealized justifications with that result's current justified checkpoint added for the tip.
+  A pattern that destructures the four checkpoints destructures them in one nested pattern.
+  A caller that destructures one of these seven results adds one pattern, and only if its last pattern named the old last conjunct.
+  A pattern that ends in `-` needs no change.
+  A projection of the old last conjunct gains `.1`.
+  So `.2.2` of `Store.onAttestation_frame` and `Store.onAttesterSlashing_frame` becomes `.2.2.1`, and `.2.2.2.2` of `Store.onTickPerSlot_frame` becomes `.2.2.2.2.1`.
+  The `.2.2.2` of the other four frames becomes `.2.2.2.1`.
+  The new `Store.catchUp_preserves` states that catch-up keeps each property of the store that every tick within a slot keeps.
+  It has the form of `Store.onBlockWithVotes_preserves`.
+  `Store.catchUp_frame`, `Store.catchUp_ordered` and the catch-up step of `Store.onTick_checkpointStates_latestMessages` now read it, with unchanged statements.
+  The new `Store.onTick_ok` splits a tick into the slot of its time, the catch-up to that slot and one tick within it.
+  `Store.onTick_frame`, `Store.getCurrentSlot_onTick`, `Store.onTick_ordered`, `Store.onTick_checkpointStates_latestMessages` and `Store.exists_getCurrentSlot_onTick_ge` now read it, with unchanged statements.
+  The new `Store.Reachable.linked_of_unknown` gives the links of a reachable store whose anchor parent is unknown, and `Store.Reachable.parentsBelow` keeps its statement.
 
 - The theorem that a block leaves its header as the latest block header holds at every fork ([#2061](https://github.com/ethereum/EthLib/issues/2061)).
   In Lean, `latestBlockHeader_processBlock` drops its `gloas` argument, and its conclusion is unchanged.

@@ -1,11 +1,18 @@
 module
 
 public import EthLib.Consensus.Accessors
+public import EthLib.Consensus.BeaconApi.Config
 public import EthLib.Consensus.BeaconApi.Encoding
+public import EthLib.Consensus.BeaconApi.Identifiers
+public import EthLib.Consensus.BeaconApi.Registries
 public import EthLib.Consensus.BeaconApi.Spelling
+public import EthLib.Consensus.BeaconApi.StateQueries
+public import EthLib.Consensus.BeaconApi.Validators
 public import EthLib.Consensus.BuilderApi
+public import EthLib.Consensus.BuilderApi.AuthData
 public import EthLib.Consensus.BuilderApi.Bid
 public import EthLib.Consensus.BuilderApi.Encoding
+public import EthLib.Consensus.BuilderApi.RequestAuth
 public import EthLib.Consensus.BuilderApi.GloasBid
 public import EthLib.Consensus.BuilderApi.Registration
 public import EthLib.Consensus.Builders

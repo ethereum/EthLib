@@ -185,8 +185,7 @@ theorem processRandao_eq {config : Config} {checks : SignatureChecks}
       getBeaconProposerIndex state = .ok index ∧ getValidator state index = .ok proposer ∧
       getDomain config state DOMAIN_RANDAO = .ok domain ∧
       computeSigningRoot (getCurrentEpoch state) domain = .ok signingRoot ∧
-      checks.verify (packBytes proposer.pubkey) (packBytes signingRoot)
-        (packBytes body.randaoReveal) = true ∧
+      checks.verify proposer.pubkey (packBytes signingRoot) body.randaoReveal = true ∧
       getRandaoMix state (getCurrentEpoch state) = .ok mix ∧
       writeCircularRooted state.randaoMixes (getCurrentEpoch state)
         (Vector.zipWith (· ^^^ ·) mix
@@ -289,13 +288,12 @@ theorem isValidIndexedAttestation_signature {config : Config} {checks : Signatur
     (valid : isValidIndexedAttestation config checks state attestation = .ok true) :
     ∃ pubkeys domain signingRoot,
       attestation.attestingIndices.data.toList.toArray.mapM
-          (fun index => do return packBytes (← liftAccessor (getValidator state index)).pubkey) =
+          (fun index => do return (← liftAccessor (getValidator state index)).pubkey) =
         .ok pubkeys ∧
       getDomain config state DOMAIN_BEACON_ATTESTER (some attestation.data.target.epoch) =
         .ok domain ∧
       computeSigningRoot attestation.data domain = .ok signingRoot ∧
-      checks.fastAggregateVerify pubkeys (packBytes signingRoot)
-        (packBytes attestation.signature) = true := by
+      checks.fastAggregateVerify pubkeys (packBytes signingRoot) attestation.signature = true := by
   simp only [isValidIndexedAttestation] at valid
   split at valid
   · simp [pure, Except.pure] at valid
@@ -314,8 +312,7 @@ theorem checkHeaderSignature_ok {config : Config} {checks : SignatureChecks}
       getDomain config state DOMAIN_BEACON_PROPOSER
           (some (computeEpochAtSlot preset signed.message.slot)) = .ok domain ∧
       computeSigningRoot signed.message domain = .ok signingRoot ∧
-      checks.verify (packBytes pubkey) (packBytes signingRoot) (packBytes signed.signature) =
-        true := by
+      checks.verify pubkey (packBytes signingRoot) signed.signature = true := by
   simp only [checkHeaderSignature, bind_ok_iff, ensure_ok_iff, liftAccessor_ok,
     liftSsz_ok] at computed
   obtain ⟨domain, domainOk, signingRoot, rootOk, verified⟩ := computed

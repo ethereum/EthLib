@@ -105,10 +105,11 @@ The aggregate check runs fast aggregate verification against `h`, on `msg` only.
 The light client never checks a single signature, so that check rejects. -/
 noncomputable def oracleChecks (msg : ByteArray) (h : G2Sub) : SignatureChecks where
   verify _ _ _ := false
-  fastAggregateVerify keys m sig := decide (m = msg) && byteFastAggregateVerify keys sig h
+  fastAggregateVerify keys m sig :=
+    decide (m = msg) && byteFastAggregateVerify (keys.map packBytes) (packBytes sig) h
 
 /-- With the hash to `G2` of the message, the aggregate check is the light client's. -/
-theorem oracleChecks_hashPoint (msg : ByteArray) (keys : Array ByteArray) (sig : ByteArray) :
+theorem oracleChecks_hashPoint (msg : ByteArray) (keys : Array BLSPubkey) (sig : BLSSignature) :
     (oracleChecks msg (hashPoint msg)).fastAggregateVerify keys msg sig =
       SignatureChecks.bls.fastAggregateVerify keys msg sig := by
   simp only [oracleChecks, decide_true, Bool.true_and, SignatureChecks.bls,

@@ -605,8 +605,8 @@ def processVoluntaryExit (config : Config) (checks : SignatureChecks)
     checkNoPendingWithdrawal state exit.validatorIndex
     let domain ← voluntaryExitDomain config state exit.epoch
     let signingRoot ← liftSsz (computeSigningRoot exit domain)
-    ensure (checks.verify (packBytes validator.pubkey) (packBytes signingRoot)
-      (packBytes signed.signature) = true) .invalidExitSignature
+    ensure (checks.verify validator.pubkey (packBytes signingRoot)
+      signed.signature = true) .invalidExitSignature
     liftAccessor (initiateValidatorExit config state exit.validatorIndex)
 
 /-! ## All the operations of a block -/

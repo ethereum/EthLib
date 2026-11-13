@@ -78,8 +78,8 @@ theorem processBlsToExecutionChange_ok {state after : BeaconState preset fork}
         computeDomain config DOMAIN_BLS_TO_EXECUTION_CHANGE
           (genesisValidatorsRoot := state.genesisValidatorsRoot) = .ok domain ∧
         computeSigningRoot signed.message domain = .ok signingRoot ∧
-        checks.verify (packBytes signed.message.fromBlsPubkey) (packBytes signingRoot)
-          (packBytes signed.signature) = true) ∧
+        checks.verify signed.message.fromBlsPubkey (packBytes signingRoot)
+          signed.signature = true) ∧
       state.setValidator signed.message.validatorIndex
         { validator with
           withdrawalCredentials := executionCredentials signed.message.toExecutionAddress } =

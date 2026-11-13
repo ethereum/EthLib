@@ -28,13 +28,24 @@ def new_payload(config: dict, method: str, params: list) -> dict:
 
 
 def new_payload_on_chain(
-    config: dict, state: bytes, recent: Sequence[RecentBlock], method: str, params: list
+    config: dict,
+    state: bytes,
+    recent: Sequence[RecentBlock],
+    method: str,
+    params: list,
+    *,
+    terminal_total_difficulty: int,
+    total_difficulty: int,
 ) -> tuple[dict, bytes | None, bytes | None]:
     """The payload status of an `engine_newPayload` call, on a chain that holds the parent."""
+    # `total_difficulty` is that of the last recent block.
+    # A last block before Paris must be terminal for `terminal_total_difficulty`.
     # A valid payload also gives the RLP encodings of its header and of the accounts after it.
     request = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
     items = [(name, header, list(ommers)) for name, header, ommers in recent]
-    return _native.engine_new_payload_on_chain(config, state, items, request)
+    return _native.engine_new_payload_on_chain(
+        config, state, items, terminal_total_difficulty, total_difficulty, request
+    )
 
 
 def build_payload(
@@ -185,6 +196,44 @@ def read_get_payload_result(method: str, fork: str, result: dict[str, Any]) -> d
     return _native.engine_read_get_payload_result(method, fork, result)
 
 
+def read_payload_bodies_result(method: str, result: Any) -> list[dict[str, Any] | None]:
+    """The result of an `engine_getPayloadBodiesByHash` or `ByRange` method, read and written."""
+    return _native.engine_read_payload_bodies_result(method, result)
+
+
+def read_get_blobs_result(method: str, result: Any) -> list[dict[str, Any] | None] | None:
+    """The result of an `engine_getBlobs` method, read and written back as JSON."""
+    return _native.engine_read_get_blobs_result(method, result)
+
+
+def exchange_transition_configuration(
+    terminal_total_difficulty: int,
+    terminal_block_hash: bytes,
+    terminal_block_number: int,
+    method: str,
+    params: list,
+) -> dict[str, Any]:
+    """The answer to an `engine_exchangeTransitionConfigurationV1` call at a configured node."""
+    request = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
+    return _native.engine_exchange_transition_configuration(
+        terminal_total_difficulty, terminal_block_hash, terminal_block_number, request
+    )
+
+
+def exchange_capabilities(method: str, params: list[Any]) -> list[str]:
+    """The answer to an `engine_exchangeCapabilities` call: the methods that EthLib defines."""
+    request = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
+    return _native.engine_exchange_capabilities(request)
+
+
+def get_client_version(
+    code: str, name: str, version: str, commit: bytes, method: str, params: list[Any]
+) -> list[dict[str, str]]:
+    """The answer to an `engine_getClientVersionV1` call at a node with a 4-byte commit."""
+    request = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
+    return _native.engine_get_client_version(code, name, version, commit, request)
+
+
 def rewrite_params(method: str, params: list[Any]) -> list[Any]:
     """The parameters of an Engine API request, read by the decoder and written by the writer."""
     # The writer writes lowercase hex and quantities without leading zeros.
@@ -288,6 +337,11 @@ __all__ = [
     "read_payload_status",
     "read_forkchoice_response",
     "read_get_payload_result",
+    "read_payload_bodies_result",
+    "read_get_blobs_result",
+    "exchange_transition_configuration",
+    "exchange_capabilities",
+    "get_client_version",
     "WithdrawalEntry",
     "prepare_execution_payload",
     "prepare_execution_payload_gloas",

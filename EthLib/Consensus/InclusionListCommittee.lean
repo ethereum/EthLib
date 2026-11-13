@@ -86,8 +86,8 @@ def isValidInclusionListSignature (config : Config) (state : BeaconState preset 
     (signed : SignedInclusionList) : Except AccessorError Bool := do
   let validator ← getValidator state signed.message.validatorIndex
   let root ← (inclusionListSigningRoot config state signed.message).mapError fun _ => .ssz
-  return Signatures.verify (packBytes validator.pubkey) (packBytes root)
-    (packBytes signed.signature)
+  return Signatures.verify validator.pubkey (packBytes root)
+    signed.signature
 
 /-- An error of a member that signs an inclusion list. -/
 inductive InclusionListSigningError where

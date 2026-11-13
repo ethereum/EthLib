@@ -216,8 +216,8 @@ private theorem verify_of_signed {key : Signatures.SecretKey}
         let root ← rootResult.mapError BuilderSigningError.root
         (Signatures.sign key (packBytes root)).mapError .bls :
           Except BuilderSigningError BLSSignature) = .ok signature) :
-    ∃ root, rootResult = .ok root ∧ Signatures.verify (packBytes (Signatures.skToPk key))
-      (packBytes root) (packBytes signature) = true := by
+    ∃ root, rootResult = .ok root ∧ Signatures.verify (Signatures.skToPk key)
+      (packBytes root) signature = true := by
   -- Split the bind with lemmas, so the kernel never evaluates the signature.
   obtain ⟨root, rooted, signs⟩ := bind_ok_iff.mp signedBy
   rw [mapError_ok_iff] at rooted signs
@@ -244,8 +244,8 @@ theorem verifyExecutionPayloadBidSignature_of_sign {config : Config}
   unfold verifyExecutionPayloadBidSignature
   rw [show liftAccessor (getBuilder state gloas signed.message.builderIndex) = .ok builder by
     rw [registered]; rfl, rooted]
-  show Except.ok (Signatures.verify (packBytes builder.pubkey) (packBytes root)
-    (packBytes signed.signature)) = .ok true
+  show Except.ok (Signatures.verify builder.pubkey (packBytes root)
+    signed.signature) = .ok true
   rw [owned]
   exact congrArg Except.ok verifies
 
@@ -280,8 +280,8 @@ theorem verifyExecutionPayloadEnvelopeSignature_of_sign {config : Config}
   obtain ⟨root, rooted, verifies⟩ := verify_of_signed signedBy
   unfold verifyExecutionPayloadEnvelopeSignature
   rw [owned, show builderSigningRoot config state signed.message = .ok root from rooted]
-  show Except.ok (Signatures.verify (packBytes (Signatures.skToPk key)) (packBytes root)
-    (packBytes signed.signature)) = .ok true
+  show Except.ok (Signatures.verify (Signatures.skToPk key) (packBytes root)
+    signed.signature) = .ok true
   exact congrArg Except.ok verifies
 
 end EthLib.Consensus

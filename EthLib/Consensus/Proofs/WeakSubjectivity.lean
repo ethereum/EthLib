@@ -3,6 +3,7 @@ module
 public import EthLib.Base.Except
 public import EthLib.Base.Proofs.MapM
 public import EthLib.Base.Proofs.Uint64
+public import EthLib.Consensus.Proofs.Churn
 public import EthLib.Consensus.WeakSubjectivity
 
 /-!
@@ -432,15 +433,6 @@ theorem min_le_computeWeakSubjectivityPeriod {config : Config}
   exact UInt64.le_iff_toNat_le.mpr (hsum ▸ Nat.le_add_right _ _)
 
 /-! ## An upper bound from Electra -/
-
-/-- An amount rounded down to whole increments has the value of the rounded amount. -/
-theorem toNat_roundToIncrement (preset : Preset) (amount : Gwei) :
-    (roundToIncrement preset amount).toNat =
-      amount.toNat - amount.toNat % preset.EFFECTIVE_BALANCE_INCREMENT.toNat := by
-  unfold roundToIncrement
-  rw [UInt64.toNat_sub_of_le _ _ (UInt64.le_iff_toNat_le.mpr (by
-    rw [UInt64.toNat_mod]
-    exact Nat.mod_le _ _)), UInt64.toNat_mod]
 
 /-- An amount rounded down to whole increments is more than the amount less one increment.
 

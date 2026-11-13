@@ -4,15 +4,24 @@ public import EthLib.Consensus.Proofs.Accessors
 public import EthLib.Consensus.Proofs.Accessors.Draw
 public import EthLib.Consensus.Proofs.Accessors.DrawProbability
 public import EthLib.Consensus.Proofs.Accessors.DrawRandomOracle
+public import EthLib.Consensus.Proofs.BeaconApi.Config
 public import EthLib.Consensus.Proofs.BeaconApi.Encoding
+public import EthLib.Consensus.Proofs.BeaconApi.Identifiers
+public import EthLib.Consensus.Proofs.BeaconApi.Registries
+public import EthLib.Consensus.Proofs.BeaconApi.StateQueries
+public import EthLib.Consensus.Proofs.BeaconApi.Validators
 public import EthLib.Consensus.Proofs.BuilderApi
+public import EthLib.Consensus.Proofs.BuilderApi.AuthData
 public import EthLib.Consensus.Proofs.BuilderApi.Bid
 public import EthLib.Consensus.Proofs.BuilderApi.Encoding
+public import EthLib.Consensus.Proofs.BuilderApi.RequestAuth
 public import EthLib.Consensus.Proofs.BuilderApi.GloasBid
 public import EthLib.Consensus.Proofs.BuilderApi.Registration
 public import EthLib.Consensus.Proofs.Builders
 public import EthLib.Consensus.Proofs.Churn
 public import EthLib.Consensus.Proofs.ChurnReservations
+public import EthLib.Consensus.Proofs.DirectSafety.ChurnBounds
+public import EthLib.Consensus.Proofs.DirectSafety.DepartureQueue
 public import EthLib.Consensus.Proofs.DirectSafety.Safety
 public import EthLib.Consensus.Proofs.Mutators
 public import EthLib.Consensus.Proofs.Participation
@@ -42,6 +51,7 @@ public import EthLib.Consensus.Proofs.ForkChoice.AncestorRoots
 public import EthLib.Consensus.Proofs.ForkChoice.AttestationScores
 public import EthLib.Consensus.Proofs.ForkChoice.BlockRuns
 public import EthLib.Consensus.Proofs.ForkChoice.BlockStates
+public import EthLib.Consensus.Proofs.ForkChoice.CheckpointAncestry
 public import EthLib.Consensus.Proofs.ForkChoice.CheckpointBlocks
 public import EthLib.Consensus.Proofs.ForkChoice.Checkpoints
 public import EthLib.Consensus.Proofs.ForkChoice.CommitteeAgreement
@@ -67,6 +77,7 @@ public import EthLib.Consensus.Proofs.ForkChoice.PayloadVotes
 public import EthLib.Consensus.Proofs.ForkChoice.ProposerHead
 public import EthLib.Consensus.Proofs.ForkChoice.Reachable
 public import EthLib.Consensus.Proofs.ForkChoice.SharedAncestry
+public import EthLib.Consensus.Proofs.ForkChoice.SiblingCap
 public import EthLib.Consensus.Proofs.ForkChoice.StaticValidators
 public import EthLib.Consensus.Proofs.ForkChoice.Supporters
 public import EthLib.Consensus.Proofs.ForkChoice.Store
@@ -125,6 +136,7 @@ public import EthLib.Consensus.Proofs.ShufflePermutation
 public import EthLib.Consensus.Proofs.Signing
 public import EthLib.Consensus.Proofs.Time
 public import EthLib.Consensus.Proofs.Transition.ActiveKept
+public import EthLib.Consensus.Proofs.Transition.BalanceDrift
 public import EthLib.Consensus.Proofs.Transition.Block
 public import EthLib.Consensus.Proofs.Transition.BlockRewards
 public import EthLib.Consensus.Proofs.Transition.BuilderDebt
@@ -173,6 +185,7 @@ public import EthLib.Consensus.Proofs.Transition.PaymentReleaseChain
 public import EthLib.Consensus.Proofs.Transition.PaymentReleaseInvariants
 public import EthLib.Consensus.Proofs.Transition.PaymentReleaseRun
 public import EthLib.Consensus.Proofs.Transition.PaymentReleaseWithdrawals
+public import EthLib.Consensus.Proofs.Transition.RegistryLifecycle
 public import EthLib.Consensus.Proofs.Transition.Requests
 public import EthLib.Consensus.Proofs.Transition.RewardDeltas
 public import EthLib.Consensus.Proofs.Transition.RootLinks
@@ -193,7 +206,10 @@ public import EthLib.Consensus.Proofs.Transition.Totality.EpochBeforeAltair
 public import EthLib.Consensus.Proofs.Transition.Totality.Genesis
 public import EthLib.Consensus.Proofs.Transition.Totality.Inactivity
 public import EthLib.Consensus.Proofs.Transition.Totality.Justification
+public import EthLib.Consensus.Proofs.Transition.Totality.PendingDeposits
+public import EthLib.Consensus.Proofs.Transition.Totality.ProposerLookahead
 public import EthLib.Consensus.Proofs.Transition.Totality.Registry
+public import EthLib.Consensus.Proofs.Transition.Totality.RegistryElectra
 public import EthLib.Consensus.Proofs.Transition.Totality.RegistryLoad
 public import EthLib.Consensus.Proofs.Transition.Totality.RegistryLoadBlock
 public import EthLib.Consensus.Proofs.Transition.Totality.RegistryLoadChain
@@ -202,7 +218,9 @@ public import EthLib.Consensus.Proofs.Transition.Totality.Rewards
 public import EthLib.Consensus.Proofs.Transition.Totality.RewardsBeforeAltair
 public import EthLib.Consensus.Proofs.Transition.Totality.Slashings
 public import EthLib.Consensus.Proofs.Transition.Totality.Slot
+public import EthLib.Consensus.Proofs.Transition.Totality.SyncCommittee
 public import EthLib.Consensus.Proofs.Transition.Upgrade
+public import EthLib.Consensus.Proofs.Transition.ValidatorCaps
 public import EthLib.Consensus.Proofs.Transition.ValidatorKeys
 public import EthLib.Consensus.Proofs.Transition.WeakSubjectivitySafety
 public import EthLib.Consensus.Proofs.Transition.WithdrawalAmounts

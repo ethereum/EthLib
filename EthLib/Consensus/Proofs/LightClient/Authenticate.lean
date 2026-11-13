@@ -220,8 +220,8 @@ theorem validateLightClientUpdate_proves {config : Config} {checks : SignatureCh
       ∃ signingRoot, syncCommitteeSigningRoot config update genesisValidatorsRoot =
           .ok signingRoot ∧
         checks.fastAggregateVerify
-          (((store.signatureCommittee update).participantKeys update.syncAggregate).map packBytes)
-          (packBytes signingRoot) (packBytes update.syncAggregate.syncCommitteeSignature) =
+          ((store.signatureCommittee update).participantKeys update.syncAggregate)
+          (packBytes signingRoot) update.syncAggregate.syncCommitteeSignature =
           true := by
   unfold validateLightClientUpdate at accepted
   simp only [Base.bind_ok_iff, LightClientError.require_ok] at accepted
@@ -510,7 +510,7 @@ Ethereum's keys carry deposit signatures instead.
 
 The theorems below reason about one accepted update, so they take the assumption instead. -/
 def SignatureChecks.AggregateSound (checks : SignatureChecks)
-    (signed : ByteArray → ByteArray → Prop) : Prop :=
+    (signed : Cryptography.Bls.BLSPubkey → ByteArray → Prop) : Prop :=
   ∀ keys message signature, checks.fastAggregateVerify keys message signature = true →
     ∀ key ∈ keys, signed key message
 
@@ -519,7 +519,8 @@ def SignatureChecks.AggregateSound (checks : SignatureChecks)
 Here no key signed any message, and the checks still accept a signature by one key. -/
 theorem SignatureChecks.not_aggregateSound_acceptAll :
     ¬SignatureChecks.acceptAll.AggregateSound fun _ _ => False :=
-  fun sound => sound #[.empty] .empty .empty rfl .empty (by simp)
+  fun sound =>
+    sound #[Vector.replicate _ 0] .empty (Vector.replicate _ 0) rfl (Vector.replicate _ 0) (by simp)
 
 /-- Keys whose bit is set number as many as the set bits, when there is a key for each bit. -/
 theorem length_filterMap_zip_bits {β : Type} :
@@ -564,17 +565,18 @@ theorem validateLightClientUpdate_signed {config : Config} {checks : SignatureCh
     {currentSlot : Slot} {genesisValidatorsRoot : Root}
     (accepted : validateLightClientUpdate config checks store update currentSlot
       genesisValidatorsRoot = .ok ())
-    {signed : ByteArray → ByteArray → Prop} (sound : checks.AggregateSound signed) :
+    {signed : Cryptography.Bls.BLSPubkey → ByteArray → Prop}
+    (sound : checks.AggregateSound signed) :
     ∃ signingRoot, syncCommitteeSigningRoot config update genesisValidatorsRoot =
         .ok signingRoot ∧
       preset.MIN_SYNC_COMMITTEE_PARTICIPANTS.toNat ≤
         ((store.signatureCommittee update).participantKeys update.syncAggregate).size ∧
       ∀ key ∈ (store.signatureCommittee update).participantKeys update.syncAggregate,
-        signed (packBytes key) (packBytes signingRoot) := by
+        signed key (packBytes signingRoot) := by
   obtain ⟨participants, -, -, -, signingRoot, rooted, verified⟩ :=
     validateLightClientUpdate_proves accepted
   refine ⟨signingRoot, rooted, by rw [SyncCommittee.size_participantKeys]; exact participants,
-    fun key member => sound _ _ _ verified _ (Array.mem_map_of_mem member)⟩
+    fun key member => sound _ _ _ verified _ member⟩
 
 /-- An accepted update was signed by a member outside any set that holds fewer committee seats.
 
@@ -590,14 +592,14 @@ theorem validateLightClientUpdate_signed_outside {config : Config} {checks : Sig
     {currentSlot : Slot} {genesisValidatorsRoot : Root}
     (accepted : validateLightClientUpdate config checks store update currentSlot
       genesisValidatorsRoot = .ok ())
-    {signed : ByteArray → ByteArray → Prop} (sound : checks.AggregateSound signed)
+    {signed : Cryptography.Bls.BLSPubkey → ByteArray → Prop} (sound : checks.AggregateSound signed)
     (excluded : Cryptography.Bls.BLSPubkey → Bool)
     (few : (store.signatureCommittee update).pubkeys.toList.countP excluded <
       update.syncAggregate.participants) :
     ∃ signingRoot, syncCommitteeSigningRoot config update genesisValidatorsRoot =
         .ok signingRoot ∧
       ∃ key ∈ (store.signatureCommittee update).participantKeys update.syncAggregate,
-        excluded key = false ∧ signed (packBytes key) (packBytes signingRoot) := by
+        excluded key = false ∧ signed key (packBytes signingRoot) := by
   obtain ⟨signingRoot, rooted, -, all⟩ := validateLightClientUpdate_signed accepted sound
   refine ⟨signingRoot, rooted, ?_⟩
   -- The signers are seats of the committee, so the set holds fewer of them than there are.

@@ -125,6 +125,10 @@ class HkdfError(EthLibError, ValueError):
     """HKDF rejected its input."""
 
 
+class Tls13Error(EthLibError, ValueError):
+    """A TLS 1.3 key derivation rejected its input."""
+
+
 class Pbkdf2Error(EthLibError, ValueError):
     """PBKDF2 rejected its input."""
 
@@ -185,6 +189,10 @@ class UvarintError(EthLibError, ValueError):
     """The bytes do not start with a multiformats unsigned varint, or a value is out of range."""
 
 
+class QuicVarintError(EthLibError, ValueError):
+    """The bytes end before the QUIC integer they start, or a value is not below 2^62."""
+
+
 class MultistreamError(EthLibError, ValueError):
     """The bytes do not start with a multistream-select message."""
 
@@ -198,7 +206,11 @@ class MplexError(EthLibError, ValueError):
 
 
 class YamuxError(EthLibError, ValueError):
-    """The bytes do not start with a yamux frame, or a frame is outside the format."""
+    """
+    The bytes do not start with a yamux frame, a frame is outside the format, or a side refuses it.
+
+    Stream errors have codes from 101.
+    """
 
 
 class Libp2pIdentityError(EthLibError, ValueError):
@@ -342,6 +354,7 @@ __all__ = [
     "LightClientError",
     "ForkChoiceError",
     "HkdfError",
+    "Tls13Error",
     "Pbkdf2Error",
     "ScryptError",
     "X25519Error",
@@ -356,6 +369,7 @@ __all__ = [
     "SszError",
     "VarintError",
     "UvarintError",
+    "QuicVarintError",
     "MultistreamError",
     "MplexError",
     "YamuxError",

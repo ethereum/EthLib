@@ -187,10 +187,10 @@ theorem Store.Reachable.blockStatesFromParents
     exact .of_maps blocks states ih
   | block previous added ih => exact .onBlock trivial previous ih added
   | attestation _ attested ih =>
-    obtain ⟨-, blocks, states⟩ := Store.onAttestation_frame attested
+    obtain ⟨-, blocks, states, -⟩ := Store.onAttestation_frame attested
     exact .of_maps blocks states ih
   | attesterSlashing _ slashed ih =>
-    obtain ⟨-, blocks, states⟩ := Store.onAttesterSlashing_frame slashed
+    obtain ⟨-, blocks, states, -⟩ := Store.onAttesterSlashing_frame slashed
     exact .of_maps blocks states ih
   | payloadAttestation _ voted ih =>
     obtain ⟨-, blocks, states⟩ := (onPayloadAttestationMessage_onlyPtcVotes voted).frame
@@ -236,10 +236,10 @@ theorem Store.ForwardReachableWith.blockStatesFromParents {checks : SignatureChe
     exact .of_maps blocks states ih
   | block previous added ih => exact .onBlock rfl previous.reachable ih added
   | attestation _ attested ih =>
-    obtain ⟨-, blocks, states⟩ := Store.onAttestation_frame attested
+    obtain ⟨-, blocks, states, -⟩ := Store.onAttestation_frame attested
     exact .of_maps blocks states ih
   | attesterSlashing _ slashed ih =>
-    obtain ⟨-, blocks, states⟩ := Store.onAttesterSlashing_frame slashed
+    obtain ⟨-, blocks, states, -⟩ := Store.onAttesterSlashing_frame slashed
     exact .of_maps blocks states ih
   | payloadAttestation _ voted ih =>
     obtain ⟨-, blocks, states⟩ := (onPayloadAttestationMessage_onlyPtcVotes voted).frame
@@ -313,10 +313,10 @@ theorem Store.ForwardReachable.slot_le_of_blockState_of_getCurrentSlot
       exact ⟨current, slotOk, (stateTransition_slot transition).2 ▸ le⟩
     · exact ih found
   | attestation _ attested ih =>
-    exact blockStates_le_of_same (Store.onAttestation_frame attested).2.2
+    exact blockStates_le_of_same (Store.onAttestation_frame attested).2.2.1
       (Store.onAttestation_sameClock attested) ih
   | attesterSlashing _ slashed ih =>
-    exact blockStates_le_of_same (Store.onAttesterSlashing_frame slashed).2.2
+    exact blockStates_le_of_same (Store.onAttesterSlashing_frame slashed).2.2.1
       (Store.onAttesterSlashing_sameClock slashed) ih
   | payloadAttestation _ voted ih =>
     exact blockStates_le_of_same (onPayloadAttestationMessage_onlyPtcVotes voted).frame.2.2

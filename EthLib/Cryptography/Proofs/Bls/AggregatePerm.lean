@@ -21,10 +21,10 @@ namespace EthLib.Cryptography.Bls.Signatures
 open scoped EthLib.Cryptography.Bls.Fr
 
 /-- Permuting honest public keys leaves fast aggregate verification unchanged. -/
-theorem fastAggregateVerify_pkBytes_perm {keys keys' : List SecretKey}
-    (perm : keys.Perm keys') (msg sig : ByteArray) :
-    fastAggregateVerify (keys.map pkBytes).toArray msg sig =
-      fastAggregateVerify (keys'.map pkBytes).toArray msg sig := by
+theorem fastAggregateVerify_skToPk_perm {keys keys' : List SecretKey}
+    (perm : keys.Perm keys') (msg : ByteArray) (sig : BLSSignature) :
+    fastAggregateVerify (keys.map skToPk).toArray msg sig =
+      fastAggregateVerify (keys'.map skToPk).toArray msg sig := by
   by_cases nonempty : keys = []
   · subst keys
     have empty : keys' = [] := perm.symm.eq_nil

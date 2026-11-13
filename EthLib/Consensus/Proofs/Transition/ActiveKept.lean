@@ -1232,4 +1232,87 @@ theorem registryGrows_of_chainSteps {first last : ForkedBeaconState preset}
     first.state.validators.data.size ≤ last.state.validators.data.size :=
   (chainSteps_kept steps).1
 
+/-! ## Activity through block operations -/
+
+/-- The block header keeps the slot and activity. -/
+theorem activeStep_processBlockHeader {block : BeaconBlock preset fork}
+    (computed : processBlockHeader state block = .ok after) : ActiveStep state after :=
+  (stepKeeps_processBlockHeader computed).2
+
+/-- The execution part of a block keeps the slot and activity. -/
+theorem activeStep_processBlockExecution {body : BeaconBlockBody preset fork}
+    {bellatrix : .bellatrix ≤ fork}
+    (computed : processBlockExecution config checks engine state body bellatrix = .ok after) :
+    ActiveStep state after :=
+  (stepKeeps_processBlockExecution computed).2
+
+/-- The RANDAO reveal keeps the slot and activity. -/
+theorem activeStep_processRandao {body : BeaconBlockBody preset fork}
+    (computed : processRandao config checks state body = .ok after) : ActiveStep state after :=
+  (stepKeeps_processRandao computed).2
+
+/-- The vote on the deposit contract keeps the slot and activity. -/
+theorem activeStep_processEth1Data {before : fork < .hegota}
+    {body : BeaconBlockBody preset fork}
+    (computed : processEth1Data before state body = .ok after) : ActiveStep state after :=
+  (stepKeeps_processEth1Data computed).2
+
+/-- A proposer slashing keeps the slot and activity. -/
+theorem activeStep_processProposerSlashing {slashing : ProposerSlashing}
+    (computed : processProposerSlashing config checks state slashing = .ok after) :
+    ActiveStep state after :=
+  (stepKeeps_processProposerSlashing computed).2
+
+/-- An attester slashing keeps the slot and activity. -/
+theorem activeStep_processAttesterSlashing {slashing : AttesterSlashing preset fork}
+    (computed : processAttesterSlashing config checks state slashing = .ok after) :
+    ActiveStep state after :=
+  (stepKeeps_processAttesterSlashing computed).2
+
+/-- An attestation keeps the slot and activity. -/
+theorem activeStep_processAttestation {attestation : Attestation preset fork}
+    {parentSlot : Slot}
+    (computed : processAttestation config checks state parentSlot attestation = .ok after) :
+    ActiveStep state after :=
+  (stepKeeps_processAttestation computed).2
+
+/-- A deposit keeps the slot and activity. -/
+theorem activeStep_processDeposit {before : fork < .hegota} {deposit : Deposit}
+    (computed : processDeposit config checks before state deposit = .ok after) :
+    ActiveStep state after :=
+  (stepKeeps_processDeposit computed).2
+
+/-- A voluntary exit keeps the slot and activity. -/
+theorem activeStep_processVoluntaryExit {signed : SignedVoluntaryExit}
+    (computed : processVoluntaryExit config checks state signed = .ok after) :
+    ActiveStep state after :=
+  (stepKeeps_processVoluntaryExit computed).2
+
+/-- A change to an execution address keeps the slot and activity. -/
+theorem activeStep_processBlsToExecutionChange {signed : SignedBLSToExecutionChange}
+    (computed : processBlsToExecutionChange config checks state signed = .ok after) :
+    ActiveStep state after :=
+  (stepKeeps_processBlsToExecutionChange computed).2
+
+/-- A deposit request keeps the slot and activity. -/
+theorem activeStep_processDepositRequest {electra : .pectra ≤ fork}
+    {request : DepositRequest}
+    (computed : processDepositRequest state electra request = .ok after) :
+    ActiveStep state after :=
+  (stepKeeps_processDepositRequest computed).2
+
+/-- A withdrawal request keeps the slot and activity. -/
+theorem activeStep_processWithdrawalRequest {electra : .pectra ≤ fork}
+    {request : WithdrawalRequest}
+    (computed : processWithdrawalRequest config state electra request = .ok after) :
+    ActiveStep state after :=
+  (stepKeeps_processWithdrawalRequest computed).2
+
+/-- A consolidation request keeps the slot and activity. -/
+theorem activeStep_processConsolidationRequest {electra : .pectra ≤ fork}
+    {request : ConsolidationRequest}
+    (computed : processConsolidationRequest config state electra request = .ok after) :
+    ActiveStep state after :=
+  (stepKeeps_processConsolidationRequest computed).2
+
 end EthLib.Consensus

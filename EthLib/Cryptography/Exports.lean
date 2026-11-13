@@ -9,6 +9,7 @@ public import EthLib.Cryptography.Exports.Crc32
 public import EthLib.Cryptography.Exports.Crc32c
 public import EthLib.Cryptography.Exports.Aes
 public import EthLib.Cryptography.Exports.Hmac
+public import EthLib.Cryptography.Exports.Tls13
 public import EthLib.Cryptography.Exports.PasswordKdf
 public import EthLib.Cryptography.Exports.X25519
 public import EthLib.Cryptography.Exports.ChaCha20Poly1305
