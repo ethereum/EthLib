@@ -42,7 +42,11 @@ It proves that the fork has an opcode when every fork has it.
 
 It also does so when a hypothesis names a fork that has the opcode.
 
-A second tactic closes a run at STOP, or at the end of the code.
+A variant of the first tactic proves triples over the steps from frames monotone in gas.
+
+It steps over the same opcodes, except GAS.
+
+Another tactic closes a run at STOP, or at the end of the code.
 
 A last rule replaces the stack, the memory and the gas of a frame by equal ones.
 
@@ -245,6 +249,104 @@ macro_rules
       | (refine' Triple.seq (gas_rule ?lt ?op ?gas ?room) ?next
          case lt => evm_code [$ls,*]
          case op => evm_code [$ls,*]
+         case gas => evm_gas
+         case room => evm_room)
+      | fail "no rule of a step applies to the opcode at the program counter") <;> evm_tidy))
+
+/-- Runs the opcode at the program counter of the first frame of the goal, by its rule.
+
+The goal is a triple over the steps from frames that are monotone in gas.
+
+It starts from a frame of a code at a known program counter.
+
+The rewrite rules `ls` turn the facts about the code into facts about numbers.
+
+It steps over the same opcodes as the tactic above, except GAS, which is not monotone in gas.
+
+The goal that is left starts from the frame after the step. -/
+syntax "evm_stepG" " [" simpLemma,* "]" : tactic
+
+macro_rules
+  | `(tactic| evm_stepG [$ls,*]) => `(tactic| ((try unfold SpecG) <;> (first
+      | (refine' Triple.seq (push_of_decodeG ?lt ?op ?dec ?n ?word ?gas ?room) ?next
+         case lt => evm_code [$ls,*]
+         case op => evm_code [$ls,*]
+         case dec => rfl
+         case n => decide
+         case word => evm_code [$ls,*]
+         case gas => evm_gas
+         case room => evm_room)
+      | (refine' Triple.seq (push0G ?fork ?lt ?op ?gas ?room) ?next
+         case fork => evm_fork
+         case lt => evm_code [$ls,*]
+         case op => evm_code [$ls,*]
+         case gas => evm_gas
+         case room => evm_room)
+      | (refine' Triple.seq (binaryG ?lt ?op ?dec ?run ?gas) ?next
+         case lt => evm_code [$ls,*]
+         case op => evm_code [$ls,*]
+         case dec => refine ofByte_of_decode rfl ?_; evm_fork
+         case run => exact instruction_of_stackOnlyStep rfl
+         case gas => evm_gas)
+      | (refine' Triple.seq (dup_of_decodeG ?lt ?op ?dec ?x ?gas ?room) ?next
+         case lt => evm_code [$ls,*]
+         case op => evm_code [$ls,*]
+         case dec => rfl
+         case x => rfl
+         case gas => evm_gas
+         case room => evm_room)
+      | (refine' Triple.seq (swap_of_decodeG ?lt ?op ?dec ?x ?gas) ?next
+         case lt => evm_code [$ls,*]
+         case op => evm_code [$ls,*]
+         case dec => rfl
+         case x => rfl
+         case gas => evm_gas)
+      | (refine' Triple.seq (popG ?lt ?op ?gas) ?next
+         case lt => evm_code [$ls,*]
+         case op => evm_code [$ls,*]
+         case gas => evm_gas)
+      | (refine' Triple.seq (unaryG ?lt ?op ?dec ?run ?gas) ?next
+         case lt => evm_code [$ls,*]
+         case op => evm_code [$ls,*]
+         case dec => refine ofByte_of_decode rfl ?_; evm_fork
+         case run => exact instruction_of_stackOnlyStep rfl
+         case gas => evm_gas)
+      | (refine' Triple.seq (ternaryG ?lt ?op ?dec ?run ?gas) ?next
+         case lt => evm_code [$ls,*]
+         case op => evm_code [$ls,*]
+         case dec => refine ofByte_of_decode rfl ?_; evm_fork
+         case run => exact instruction_of_stackOnlyStep rfl
+         case gas => evm_gas)
+      | (refine' Triple.seq (jumpdestG ?lt ?op ?gas) ?next
+         case lt => evm_code [$ls,*]
+         case op => evm_code [$ls,*]
+         case gas => evm_gas)
+      | (refine' Triple.seq (calldataloadG ?lt ?op ?gas) ?next
+         case lt => evm_code [$ls,*]
+         case op => evm_code [$ls,*]
+         case gas => evm_gas)
+      | (refine' Triple.seq (jumpG ?lt ?op ?gas ?dest) ?next
+         case lt => evm_code [$ls,*]
+         case op => evm_code [$ls,*]
+         case gas => evm_gas
+         case dest => evm_dest [$ls,*])
+      | (refine' Triple.seq (jumpi_takenG ?lt ?op ?gas ?nz ?dest) ?next
+         case lt => evm_code [$ls,*]
+         case op => evm_code [$ls,*]
+         case gas => evm_gas
+         case nz => first | assumption | decide
+         case dest => evm_dest [$ls,*])
+      | (refine' Triple.seq (jumpi_of_eq_zeroG ?lt ?op ?gas ?zero) ?next
+         case lt => evm_code [$ls,*]
+         case op => evm_code [$ls,*]
+         case gas => evm_gas
+         case zero => first | assumption | decide)
+      | (refine' Triple.seq (push_of_readFrameG ?lt ?op ?dec ?run ?word ?gas ?room) ?next
+         case lt => evm_code [$ls,*]
+         case op => evm_code [$ls,*]
+         case dec => refine ofByte_of_decode rfl ?_; evm_fork
+         case run => rfl
+         case word => intro _ hc hm hp hmem; (try simp only [hc, hm, hp, hmem]); rfl
          case gas => evm_gas
          case room => evm_room)
       | fail "no rule of a step applies to the opcode at the program counter") <;> evm_tidy))
