@@ -11,7 +11,7 @@ A sequence, a map and a change of error keep that, so a proof follows the steps 
 
 The checks of a block before its body fail with no abort and no error of the state.
 
-Nor do they fail for a system call.
+Nor do they fail for a system call or for a transaction kept out of the block.
 
 Nor do the recent hashes, the roots and the checks of its output.
 
@@ -20,6 +20,8 @@ So the transition of a block fails only with errors of a property when its body 
 The property must also hold for the other errors of the block, and for the abort from Hegotá on.
 
 A failed system call can be left out of the property as well, since the checks never give one.
+
+So can a transaction kept out of the block, for the same reason.
 -/
 
 @[expose] public section
@@ -108,12 +110,17 @@ theorem errorsMeet_firstFailure {P : BlockError → Prop} :
 
 /-! ## The checks of a block -/
 
-/-- Whether an error of a block is no abort, no state error and no failed system call. -/
+/-- Whether an error of a block is no abort, no state error and no failed system call.
+
+Nor is it a transaction kept out of the block. -/
 private def Plain (e : BlockError) : Prop :=
   (∀ error, e ≠ .aborted error) ∧ (∀ error, e ≠ .state error) ∧
-    ∀ address error, e ≠ .systemCallFailed address error
+    (∀ address error, e ≠ .systemCallFailed address error) ∧
+    ∀ index error, e ≠ .invalidTransaction index error
 
-/-- The checks of a header against its parent fail with no abort, state error or failed call. -/
+/-- The checks of a header against its parent fail with no abort, state error or failed call.
+
+Nor do they keep a transaction out. -/
 private theorem plain_headerChecks {parentFork : Fork} (hFork : parentFork ≤ fork)
     (parent : Header parentFork) (header : Header fork)
     (schedule : Since .dencun fork BlobSchedule) :
@@ -125,7 +132,9 @@ private theorem plain_headerChecks {parentFork : Fork} (hFork : parentFork ≤ f
   all_goals repeat' split
   all_goals simp [Plain]
 
-/-- A check of a header against its parent fails with no abort, state error or failed call. -/
+/-- A check of a header against its parent fails with no abort, state error or failed call.
+
+Nor does it keep a transaction out. -/
 private theorem plain_validateHeader {parentFork : Fork} (hFork : parentFork ≤ fork)
     (parent : Header parentFork) (header : Header fork)
     (schedule : Since .dencun fork BlobSchedule) :
@@ -134,22 +143,24 @@ private theorem plain_validateHeader {parentFork : Fork} (hFork : parentFork ≤
   refine ErrorsMeet.bind
     (errorsMeet_firstFailure _ (plain_headerChecks hFork parent header schedule)) fun _ _ => ?_
   split
-  · exact ErrorsMeet.mapError fun _ _ => ⟨nofun, nofun, nofun⟩
+  · exact ErrorsMeet.mapError fun _ _ => ⟨nofun, nofun, nofun, nofun⟩
   · exact ErrorsMeet.pure _
 
-/-- The checks of a block before its body fail with no abort, state error or failed call. -/
+/-- The checks of a block before its body fail with no abort, state error or failed call.
+
+Nor do they keep a transaction out. -/
 private theorem plain_checkBlock {config : ChainConfig} {checkSeal : Bool}
     {recent : List RecentBlock} {block : Block fork Transaction} :
     ErrorsMeet Plain (checkBlock config checkSeal recent block) := by
   unfold checkBlock
   refine ErrorsMeet.bind ?_ fun items _ => ?_
   · unfold bodyItems
-    exact ErrorsMeet.bind (ErrorsMeet.mapError fun _ _ => ⟨nofun, nofun, nofun⟩)
+    exact ErrorsMeet.bind (ErrorsMeet.mapError fun _ _ => ⟨nofun, nofun, nofun, nofun⟩)
       fun _ _ => ErrorsMeet.pure _
   refine ErrorsMeet.bind ?_ fun _ _ => ?_
   · unfold validateBlockSize
     split
-    · refine ErrorsMeet.bind (ErrorsMeet.mapError fun _ _ => ⟨nofun, nofun, nofun⟩)
+    · refine ErrorsMeet.bind (ErrorsMeet.mapError fun _ _ => ⟨nofun, nofun, nofun, nofun⟩)
         fun _ _ => errorsMeet_firstFailure _ ?_
       simp [Plain]
     · exact ErrorsMeet.ok _
@@ -157,10 +168,10 @@ private theorem plain_checkBlock {config : ChainConfig} {checkSeal : Bool}
       (validateOmmers config checkSeal recent block.header block.ommers).mapError .ommers
     else if block.ommers.isEmpty = true then pure () else throw .ommersAfterParis) := by
     split
-    · exact ErrorsMeet.mapError fun _ _ => ⟨nofun, nofun, nofun⟩
+    · exact ErrorsMeet.mapError fun _ _ => ⟨nofun, nofun, nofun, nofun⟩
     · split
       · exact ErrorsMeet.pure _
-      · exact ErrorsMeet.throw ⟨nofun, nofun, nofun⟩
+      · exact ErrorsMeet.throw ⟨nofun, nofun, nofun, nofun⟩
   split
   · dsimp only
     split
@@ -168,20 +179,20 @@ private theorem plain_checkBlock {config : ChainConfig} {checkSeal : Bool}
       · refine ErrorsMeet.bind (plain_validateHeader _ _ _ _) fun _ _ => ?_
         split
         · exact ommers
-        · exact ErrorsMeet.bind (ErrorsMeet.throw ⟨nofun, nofun, nofun⟩)
+        · exact ErrorsMeet.bind (ErrorsMeet.throw ⟨nofun, nofun, nofun, nofun⟩)
             fun _ _ => ommers
       · refine ErrorsMeet.bind (errorsMeet_firstFailure _ (plain_headerChecks _ _ _ _))
           fun _ _ => ?_
         split
         · exact ommers
-        · exact ErrorsMeet.bind (ErrorsMeet.throw ⟨nofun, nofun, nofun⟩)
+        · exact ErrorsMeet.bind (ErrorsMeet.throw ⟨nofun, nofun, nofun, nofun⟩)
             fun _ _ => ommers
-    · refine ErrorsMeet.bind (ErrorsMeet.throw ⟨nofun, nofun, nofun⟩) fun _ _ => ?_
+    · refine ErrorsMeet.bind (ErrorsMeet.throw ⟨nofun, nofun, nofun, nofun⟩) fun _ _ => ?_
       split
       · exact ommers
-      · exact ErrorsMeet.bind (ErrorsMeet.throw ⟨nofun, nofun, nofun⟩)
+      · exact ErrorsMeet.bind (ErrorsMeet.throw ⟨nofun, nofun, nofun, nofun⟩)
           fun _ _ => ommers
-  · exact ErrorsMeet.throw ⟨nofun, nofun, nofun⟩
+  · exact ErrorsMeet.throw ⟨nofun, nofun, nofun, nofun⟩
 
 /-- The checks of a block before its body never fail with an abort or an error of the state. -/
 theorem checkBlock_eq_error {config : ChainConfig} {checkSeal : Bool} {recent : List RecentBlock}
@@ -196,18 +207,22 @@ theorem checkBlock_eq_error {config : ChainConfig} {checkSeal : Bool} {recent : 
 
 The property must hold for every error that is no abort, no state error and no failed system call.
 
+It need not hold for a failed system call or a transaction kept out of the block.
+
+The checks never give one, so only the body must meet it there.
+
 It must hold for the abort from Hegotá on, for a fork whose rules are not yet specified. -/
 theorem errorsMeet_stateTransition_of_plain {chain : BlockChain} {block : Block fork Transaction}
     {checkSeal : Bool} {P : BlockError → Prop}
     (plain : ∀ e, (∀ x, e ≠ .aborted x) → (∀ x, e ≠ .state x) →
-      (∀ a x, e ≠ .systemCallFailed a x) → P e)
+      (∀ a x, e ≠ .systemCallFailed a x) → (∀ i x, e ≠ .invalidTransaction i x) → P e)
     (hegota : .hegota ≤ fork → P (.aborted (.forkNotYetSpecified fork)))
     (body : ∀ env, ErrorsMeet P (applyBody chain.config env block ⟨chain.state, ∅, ∅, ∅, ∅⟩)) :
     ErrorsMeet P (stateTransition chain block checkSeal) := by
   have other : ∀ {β : Type} {x : Except BlockError β}, ErrorsMeet Plain x → ErrorsMeet P x :=
-    fun hx e h => plain e (hx e h).1 (hx e h).2.1 (hx e h).2.2
+    fun hx e h => plain e (hx e h).1 (hx e h).2.1 (hx e h).2.2.1 (hx e h).2.2.2
   have trie : ∀ {β : Type} (x : Except Trie.TrieError β), ErrorsMeet P (x.mapError .trie) :=
-    fun _ => other (ErrorsMeet.mapError fun _ _ => ⟨nofun, nofun, nofun⟩)
+    fun _ => other (ErrorsMeet.mapError fun _ _ => ⟨nofun, nofun, nofun, nofun⟩)
   have rest : ErrorsMeet P (do
       checkBlock chain.config checkSeal chain.recent block
       let result ← runBody chain block
@@ -222,7 +237,7 @@ theorem errorsMeet_stateTransition_of_plain {chain : BlockChain} {block : Block 
         split
         · exact ErrorsMeet.pure _
         · exact ErrorsMeet.bind
-            (other (ErrorsMeet.mapError fun _ _ => ⟨nofun, nofun, nofun⟩))
+            (other (ErrorsMeet.mapError fun _ _ => ⟨nofun, nofun, nofun, nofun⟩))
             fun _ _ => ErrorsMeet.pure _
       refine ErrorsMeet.bind (body _) fun output _ => ?_
       refine ErrorsMeet.bind ?_ fun _ _ => ErrorsMeet.pure _
@@ -249,11 +264,11 @@ theorem errorsMeet_stateTransition_of_plain {chain : BlockChain} {block : Block 
     refine ErrorsMeet.bind (ErrorsMeet.throw (hegota hle)) fun _ _ => ?_
     split
     · exact rest
-    · exact ErrorsMeet.bind (ErrorsMeet.throw (plain _ nofun nofun nofun))
+    · exact ErrorsMeet.bind (ErrorsMeet.throw (plain _ nofun nofun nofun nofun))
         fun _ _ => rest
   · split
     · exact rest
-    · exact ErrorsMeet.bind (ErrorsMeet.throw (plain _ nofun nofun nofun))
+    · exact ErrorsMeet.bind (ErrorsMeet.throw (plain _ nofun nofun nofun nofun))
         fun _ _ => rest
 
 /-- The transition of a block fails only with errors of a property when its body does.
@@ -267,6 +282,6 @@ theorem errorsMeet_stateTransition {chain : BlockChain} {block : Block fork Tran
     (hegota : .hegota ≤ fork → P (.aborted (.forkNotYetSpecified fork)))
     (body : ∀ env, ErrorsMeet P (applyBody chain.config env block ⟨chain.state, ∅, ∅, ∅, ∅⟩)) :
     ErrorsMeet P (stateTransition chain block checkSeal) :=
-  errorsMeet_stateTransition_of_plain (fun e ha hs _ => plain e ha hs) hegota body
+  errorsMeet_stateTransition_of_plain (fun e ha hs _ _ => plain e ha hs) hegota body
 
 end EthLib.Execution.Blocks
