@@ -3830,17 +3830,19 @@ private theorem total_active_congr {f h : Fork} {s : BeaconState preset f}
   simp only [getTotalBalance, sourceNone, targetNone, sumMarked_markIndices_eq_stake, sum]
 
 private structure SitePrefix {fork : Fork} (s t : BeaconState preset fork) : Prop where
-  grows : s.validators.data.size ≤ t.validators.data.size
+  keys : validatorKeys s <+: validatorKeys t
+  distinct : PubkeysDistinct s → PubkeysDistinct t
   active : ActiveStep s t
   effective : EffectiveKept s t
 
 private theorem SitePrefix.refl {fork : Fork} (s : BeaconState preset fork) : SitePrefix s s :=
-  ⟨Nat.le_refl _, .refl _, effectiveKept_refl _⟩
+  ⟨List.prefix_refl _, id, .refl _, effectiveKept_refl _⟩
 
 private theorem SitePrefix.trans {fork : Fork} {s t u : BeaconState preset fork}
     (one : SitePrefix s t) (two : SitePrefix t u) : SitePrefix s u :=
-  ⟨Nat.le_trans one.grows two.grows, one.active.trans two.active,
-    effectiveKept_trans one.effective two.effective one.grows⟩
+  ⟨one.keys.trans two.keys, two.distinct ∘ one.distinct, one.active.trans two.active,
+    effectiveKept_trans one.effective two.effective
+      (by simpa [validatorKeys] using one.keys.length_le)⟩
 
 private theorem SitePrefix.fold {fork : Fork} {α : Type}
     {action : BeaconState preset fork → α → Except TransitionError (BeaconState preset fork)}
@@ -3877,7 +3879,8 @@ private theorem consolidationRequestsSites_prefix {fork : Fork}
     · exact ⟨s, consolidationRequestSites_input recorded site first, .refl s⟩
     · obtain ⟨u, same, kept⟩ := ih replayed tail
       exact ⟨u, same, (SitePrefix.mk
-        (frame_processConsolidationRequest stepped).registryGrows
+        (frame_processConsolidationRequest stepped).pubkeysPrefix
+        (frame_processConsolidationRequest stepped).pubkeysDistinct
         (activeStep_processConsolidationRequest stepped)
         (effectiveKept_consolidationRequest stepped)).trans kept⟩
 
@@ -3897,59 +3900,150 @@ private theorem blockConsolidationSites_prefix {fork : Fork}
       votedAtt, votedAttOk, deposited, depositedOk, exited, exitedOk, changed, changedOk,
       requested, requestedOk, withdrawn, withdrawnOk, ⟨last, recorded⟩, replayed, rfl⟩ := ok
     have head : SitePrefix s headed := by
-      refine ⟨(frame_processBlockHeader headedOk).registryGrows,
+      refine ⟨(frame_processBlockHeader headedOk).pubkeysPrefix,
+        (frame_processBlockHeader headedOk).pubkeysDistinct,
         activeStep_processBlockHeader headedOk, ?_⟩
       obtain ⟨_, _, rfl⟩ := processBlockHeader_eq headedOk
       exact effectiveKept_refl _
     have execution : SitePrefix headed executed := by
-      refine ⟨(frame_processBlockExecution executedOk).registryGrows,
+      refine ⟨(frame_processBlockExecution executedOk).pubkeysPrefix,
+        (frame_processBlockExecution executedOk).pubkeysDistinct,
         activeStep_processBlockExecution executedOk, ?_⟩
       exact effectiveKept_data (congrArg (·.data) (processBlockExecution_validators executedOk))
     have randao : SitePrefix executed revealed := by
-      refine ⟨(frame_processRandao revealedOk).registryGrows,
+      refine ⟨(frame_processRandao revealedOk).pubkeysPrefix,
+        (frame_processRandao revealedOk).pubkeysDistinct,
         activeStep_processRandao revealedOk, ?_⟩
       obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq revealedOk
       exact effectiveKept_refl _
     have vote : SitePrefix revealed voted := by
-      refine ⟨(frame_processEth1Data votedOk).registryGrows,
+      refine ⟨(frame_processEth1Data votedOk).pubkeysPrefix,
+        (frame_processEth1Data votedOk).pubkeysDistinct,
         activeStep_processEth1Data votedOk, ?_⟩
       obtain ⟨_, _, rest⟩ := processEth1Data_eq votedOk
       exact effectiveKept_data (congrArg (·.validators.data) rest)
     have proposers : SitePrefix voted proposed := SitePrefix.fold
-      (fun _ _ _ h => ⟨(frame_processProposerSlashing h).registryGrows,
+      (fun _ _ _ h => ⟨(frame_processProposerSlashing h).pubkeysPrefix,
+        (frame_processProposerSlashing h).pubkeysDistinct,
         activeStep_processProposerSlashing h, effectiveKept_proposerSlashing h⟩) proposedOk
     have attesters : SitePrefix proposed attested := SitePrefix.fold
-      (fun _ _ _ h => ⟨(frame_processAttesterSlashing h).registryGrows,
+      (fun _ _ _ h => ⟨(frame_processAttesterSlashing h).pubkeysPrefix,
+        (frame_processAttesterSlashing h).pubkeysDistinct,
         activeStep_processAttesterSlashing h, effectiveKept_attesterSlashing h⟩) attestedOk
     have attestations : SitePrefix attested votedAtt := SitePrefix.fold
-      (fun _ _ _ h => ⟨(frame_processAttestation h).registryGrows,
+      (fun _ _ _ h => ⟨(frame_processAttestation h).pubkeysPrefix,
+        (frame_processAttestation h).pubkeysDistinct,
         activeStep_processAttestation h,
         effectiveKept_data (by rw [(processAttestation_registry h).1])⟩) votedAttOk
     have deposits : SitePrefix votedAtt deposited := SitePrefix.fold
-      (fun _ _ _ h => ⟨(frame_processDeposit h).registryGrows,
+      (fun _ _ _ h => ⟨(frame_processDeposit h).pubkeysPrefix,
+        (frame_processDeposit h).pubkeysDistinct,
         activeStep_processDeposit h, effectiveKept_processDeposit h⟩) depositedOk
     have exits : SitePrefix deposited exited := SitePrefix.fold
-      (fun _ _ _ h => ⟨(frame_processVoluntaryExit h).registryGrows,
+      (fun _ _ _ h => ⟨(frame_processVoluntaryExit h).pubkeysPrefix,
+        (frame_processVoluntaryExit h).pubkeysDistinct,
         activeStep_processVoluntaryExit h, effectiveKept_voluntaryExit h⟩) exitedOk
     have changes : SitePrefix exited changed := by
       unfold processBlsToExecutionChanges at changedOk
       split at changedOk
       · rw [← Array.foldlM_toList] at changedOk
         exact SitePrefix.fold (fun _ _ _ h =>
-          ⟨(frame_processBlsToExecutionChange h).registryGrows,
+          ⟨(frame_processBlsToExecutionChange h).pubkeysPrefix,
+          (frame_processBlsToExecutionChange h).pubkeysDistinct,
           activeStep_processBlsToExecutionChange h, effectiveKept_blsChange h⟩) changedOk
       · cases changedOk; exact .refl _
     have requests : SitePrefix changed requested := SitePrefix.fold
-      (fun _ _ _ h => ⟨(frame_processDepositRequest h).registryGrows,
+      (fun _ _ _ h => ⟨(frame_processDepositRequest h).pubkeysPrefix,
+        (frame_processDepositRequest h).pubkeysDistinct,
         activeStep_processDepositRequest h, effectiveKept_depositRequest h⟩) requestedOk
     have withdrawals : SitePrefix requested withdrawn := SitePrefix.fold
-      (fun _ _ _ h => ⟨(frame_processWithdrawalRequest h).registryGrows,
+      (fun _ _ _ h => ⟨(frame_processWithdrawalRequest h).pubkeysPrefix,
+        (frame_processWithdrawalRequest h).pubkeysDistinct,
         activeStep_processWithdrawalRequest h, effectiveKept_withdrawalRequest h⟩) withdrawnOk
     obtain ⟨u, same, kept⟩ := consolidationRequestsSites_prefix replayed site member
     exact ⟨u, same, head.trans (execution.trans (randao.trans (vote.trans (proposers.trans
       (attesters.trans (attestations.trans (deposits.trans (exits.trans (changes.trans
         (requests.trans (withdrawals.trans kept)))))))))))⟩
   · cases ok; simp at member
+
+/-- A site within a block has the active stake of the block's input state. -/
+private theorem SitePrefix.weight {fork : Fork} {s t : BeaconState preset fork}
+    (kept : SitePrefix s t) (unique : PubkeysDistinct s)
+    (bound : t.validators.data.size < 2 ^ 64) :
+    Models.stake (effectiveWeight t) (activeKeys t) =
+      Models.stake (effectiveWeight s) (activeKeys s) := by
+  classical
+  have epoch : getCurrentEpoch t = getCurrentEpoch s := by
+    simp only [getCurrentEpoch, kept.active.1]
+  have indices : getActiveValidatorIndices t (getCurrentEpoch t) =
+      getActiveValidatorIndices s (getCurrentEpoch s) := by
+    rw [epoch]
+    exact kept.active.2.getActiveValidatorIndices_eq (getCurrentEpoch_le_activityFixedEpoch s)
+  have grows : s.validators.data.size ≤ t.validators.data.size := by
+    simpa [validatorKeys] using kept.keys.length_le
+  have inside (u : BeaconState preset fork) (_small : u.validators.data.size < 2 ^ 64)
+      (i : ValidatorIndex) (member : i ∈ getActiveValidatorIndices u (getCurrentEpoch u)) :
+      i.toNat < u.validators.data.size := by
+    simp only [getActiveValidatorIndices, List.mem_filterMap, List.mem_zipIdx_iff_getElem?,
+      Prod.exists] at member
+    obtain ⟨v, index, found, chosen⟩ := member
+    split at chosen
+    · cases Option.some.inj chosen
+      have inside := (List.getElem?_eq_some_iff.mp found).1
+      simp only [Array.length_toList] at inside
+      exact Nat.lt_of_le_of_lt (Nat.mod_le _ _) inside
+    · cases chosen
+  rw [activeKeys, keys_weight t _ (kept.distinct unique) (inside t bound),
+    activeKeys, keys_weight s _ unique (inside s (Nat.lt_of_le_of_lt grows bound)), indices]
+  apply Finset.sum_congr rfl
+  intro i member
+  exact kept.effective i.toNat (inside s (Nat.lt_of_le_of_lt grows bound) i
+    (List.mem_toFinset.mp member))
+
+/-- Each consolidation call site is a state within one step of the run.
+
+It has the fork and the current epoch of that step's input.
+
+Its keys are distinct, and its active stake is at most that of the step's input. -/
+theorem consolidationSites_provenance {g x y : ForkedBeaconState preset}
+    (shared : Run config checks g x) (tail : Run config checks x y)
+    (genesis : Genesis (config := config) (checks := checks) g)
+    (early : y.fork < .glamsterdam)
+    (site : ForkedBeaconState preset) (member : site ∈ tail.consolidationSites) :
+    ∃ a b, ∃ pre : Run config checks x a, ∃ step : Step config checks a b,
+      ∃ post : Run config checks b y,
+        (pre.snoc step).append post = tail ∧
+        site.fork = a.fork ∧
+        getCurrentEpoch site.state = getCurrentEpoch a.state ∧
+        PubkeysDistinct site.state ∧
+        Models.stake (effectiveWeight site.state) (activeKeys site.state) ≤
+          Models.stake (effectiveWeight a.state) (activeKeys a.state) := by
+  induction tail with
+  | nil => simp [Run.consolidationSites] at member
+  | @snoc middle last pre step ih =>
+    rcases List.mem_append.mp member with previous | current
+    · obtain ⟨a, b, before, selected, after, same, fork, epoch, unique, weight⟩ :=
+        ih (Nat.lt_of_le_of_lt step.chainStep.fork_le early) previous
+      exact ⟨a, b, before, selected, after.snoc step,
+        congrArg (fun run => run.snoc step) same, fork, epoch, unique, weight⟩
+    · refine ⟨middle, last, pre, step, .nil, rfl, ?_⟩
+      -- The keys of the run's states are distinct, since it starts at genesis.
+      have ⟨_, _, _, initialized⟩ := genesis
+      have unique : PubkeysDistinct middle.state :=
+        (validatorKeys_prefix_and_distinct_of_genesis_chainSteps initialized
+          (shared.append pre).chainSteps).2
+      cases step with
+      | slot ok => simp [Step.consolidationSites] at current
+      | @block fork before after engine signed due applied =>
+        unfold Step.consolidationSites at current
+        cases replay : blockConsolidationSites config checks engine before signed.message with
+        | error err => simp [replay, Except.toOption] at current
+        | ok sites =>
+          simp only [replay, Except.toOption, Option.getD_some] at current
+          obtain ⟨u, rfl, kept⟩ := blockConsolidationSites_prefix replay site current
+          refine ⟨rfl, ?_, kept.distinct unique, Nat.le_of_eq (kept.weight unique ?_)⟩
+          · simp only [getCurrentEpoch, kept.active.1]
+          · exact Nat.lt_of_le_of_lt (u.validators.bound early) (UInt64.toNat_lt _)
 
 private theorem consolidationSite_epoch_total {x y : ForkedBeaconState preset}
     (tail : Run config checks x y) (electra : .pectra ≤ x.fork)
