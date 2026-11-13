@@ -20,7 +20,6 @@ Not yet released.
   `UpgradeFrame.trans_blockFrame` takes the new premise `flags`: the steps after the upgrade keep every slashed flag.
   A block frame alone may slash, so it cannot give the field.
   Compose the block frames of the steps first, and pass their flags once.
-  `Run.slashed_evidence` reads these results instead of walking the slashings and the upgrades again.
 
 - In Lean, `DirectSafety.EnoughStake run high` requires the stake floor only at epoch calls whose current epoch is at most `high + 1`.
   The floor reaches one epoch past the finalized epoch of `b` in `accountable_safety`, and one epoch past `j.epoch` in the other three direct safety endpoints.

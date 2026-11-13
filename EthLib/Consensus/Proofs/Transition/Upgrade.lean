@@ -363,9 +363,11 @@ theorem electraKept_queuePreActivation {fork : Fork} {state after : BeaconState 
   have sizes₁ := sameSizes_setBalance set₁
   have sizes₂ := sameSizes_setValidator set₂
   obtain ⟨_, rfl⟩ := setBalance_ok set₁
+  rw [getValidator_eq_getValidatorAt] at found
+  rw [setValidator_eq_setValidatorAt] at set₂
   -- The balance write keeps the registry, so the read of the validator holds after it.
-  have flags := slashed_setValidator (old := validator) (by exact found) set₂ rfl
-  obtain ⟨_, rfl⟩ := setValidator_ok set₂
+  have flags := slashed_setValidatorAt (old := validator) (by exact found) set₂ rfl
+  obtain ⟨_, rfl⟩ := setValidatorAt_ok set₂
   exact ⟨sizes₁.trans (sizes₂.trans ⟨rfl, rfl⟩), rfl, rfl, flags⟩
 
 theorem electraKept_queueCompoundingExcess {fork : Fork} {state after : BeaconState preset fork}

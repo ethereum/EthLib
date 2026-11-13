@@ -149,23 +149,14 @@ namespace SlashedKept
 variable {fork : Fork} {state after : BeaconState preset fork}
 
 private theorem setValidatorAt {position : Nat} {v old : Validator}
+    (set : state.setValidatorAt position v = .ok after)
     (found : getValidatorAt state position = .ok old)
     (key : v.pubkey = old.pubkey) (flag : v.slashed = old.slashed)
-    (set : state.setValidatorAt position v = .ok after) : SlashedKept state after := by
-  obtain ⟨inside, rfl⟩ := setValidatorAt_ok set
-  have oldEq : state.validators.data[position] = old := by
-    simpa [getValidatorAt, inside] using found
-  intro evidence backed current member slashed
-  simp only [BeaconState.putValidator, Serialization.Ssz.RootedForkList.data_set,
-    Array.toList_set] at member
-  rcases List.mem_or_eq_of_mem_set member with member | equal
-  · exact backed current member slashed
-  · subst current
-    rw [key]
-    apply backed old
-    · rw [← oldEq]
-      simp
-    · rwa [flag] at slashed
+    (le : ExitsOrdered state → v.exitEpoch ≤ v.withdrawableEpoch)
+    (whole : MaxEffectiveBalancesAligned preset → EffectiveBalancesAligned state →
+      v.effectiveBalance % preset.EFFECTIVE_BALANCE_INCREMENT = 0) : SlashedKept state after :=
+  SlashedKept.of_flags (frame_setValidatorAt_of_whole set found key le whole).pubkeysPrefix
+    (slashed_setValidatorAt found set flag)
 
 private theorem increaseBalance {index : ValidatorIndex} {amount : Gwei}
     (ok : Consensus.increaseBalance state index amount = .ok after) : SlashedKept state after :=
@@ -200,7 +191,7 @@ private theorem slashedKeptLaws :
     EpochFrameLaws (preset := preset) (fork := fork) fun s t => SlashedKept s t where
   refl := refl
   trans := trans
-  setValidatorAt := fun set found key flag _ _ => setValidatorAt found key flag set
+  setValidatorAt := setValidatorAt
   increaseBalance := increaseBalance
   decreaseBalance := decreaseBalance
   initiateValidatorExit := initiateValidatorExit

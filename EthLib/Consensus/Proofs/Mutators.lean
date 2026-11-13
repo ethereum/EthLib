@@ -571,14 +571,14 @@ theorem balance_decreaseBalance {state after : BeaconState preset fork}
 
 /-- A write that keeps the slashed flag of its validator keeps the slashed flag at each position.
 -/
-theorem slashed_setValidator {state after : BeaconState preset fork} {index : ValidatorIndex}
-    {old validator : Validator} (found : getValidator state index = .ok old)
-    (set : state.setValidator index validator = .ok after) (flag : validator.slashed = old.slashed)
-    (position : Nat) :
+theorem slashed_setValidatorAt {state after : BeaconState preset fork} {index : Nat}
+    {old validator : Validator} (found : getValidatorAt state index = .ok old)
+    (set : state.setValidatorAt index validator = .ok after)
+    (flag : validator.slashed = old.slashed) (position : Nat) :
     (after.validators.data[position]?).map (·.slashed) =
       (state.validators.data[position]?).map (·.slashed) := by
-  obtain ⟨_, rfl⟩ := setValidator_ok set
-  rw [getValidator_eq_ok_iff] at found
+  obtain ⟨_, rfl⟩ := setValidatorAt_ok set
+  rw [getValidatorAt_eq_ok_iff] at found
   simp only [BeaconState.putValidator, Serialization.Ssz.RootedForkList.data_set,
     Array.getElem?_set]
   split
@@ -596,8 +596,9 @@ theorem slashedFlag_initiateValidatorExit {config : Config}
     initiateValidatorExit_ok computed
   · rfl
   have same := (exitQueue_validators queue).1
-  rw [← getValidator_of_validators_eq same] at found
-  rw [slashed_setValidator found set rfl, same]
+  rw [← getValidator_of_validators_eq same, getValidator_eq_getValidatorAt] at found
+  rw [setValidator_eq_setValidatorAt] at set
+  rw [slashed_setValidatorAt found set rfl, same]
 
 /-- Slashing a validator sets its slashed flag, and changes no flag at another position. -/
 theorem slashValidator_slashedFlag {config : Config} {state after : BeaconState preset fork}
