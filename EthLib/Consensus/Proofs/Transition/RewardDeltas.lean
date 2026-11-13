@@ -76,9 +76,7 @@ theorem getEligibleValidatorIndices_ok {eligible : List ValidatorIndex}
       member.mpr ⟨inside, rfl⟩, by simp [ok, yes]⟩,
       toNat_eq (fits (state.validators.data[j], j) (member.mpr ⟨inside, rfl⟩) (by simp [ok, yes]))⟩
 
-/-- The unslashed attesters name each validator at most once.
-
-They come in increasing order. -/
+/-- The unslashed attesters name each validator at most once. -/
 theorem unslashedAmong_nodup {signers : List (List ValidatorIndex)}
     {attesters : List ValidatorIndex} (computed : unslashedAmong state signers = .ok attesters) :
     (attesters.map UInt64.toNat).Nodup := by
