@@ -3720,6 +3720,9 @@ The key names a validator of the state; that validator is active or pending in t
 The source adds the ten seconds to the clock as a 64-bit integer, which fails past `2^64 - 11`, so EthLib refuses such a clock too.
 `processRegistration_signature` shows that a kept registration carries a valid signature, and `processRegistration_monotone` that keeping it does not move the time of its key back.
 `processRegistration_exited` shows that a validator that has activated and exited by the current epoch is refused.
+The source keeps only the message of each registration; EthLib keeps the signed registration, which holds that message.
+The Relay API serves the signed registration of each upcoming proposer ([`responses.yaml`](https://github.com/flashbots/relay-specs/blob/a4e0a50d9d46bfe881fd74cc7e0db366371f4eed/types/responses.yaml)), so a relay needs the signature too.
+`Registry.find?_insert_self` shows that the registry gives back the signed registration just inserted for its key.
 The pseudocode of the source has two defects, which EthLib reads by their evident meaning:
 
 - `process_registration` reads `pubkey`, which it never binds; EthLib reads the key of the registration.

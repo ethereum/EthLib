@@ -3386,7 +3386,7 @@
       {"constructor": "undeclaredSelector", "code": 75}]}],
    "error_class": "SszError",
    "docstring":
-   "None when a builder keeps a signed registration, or the name of the rule that refuses it.\n\nThe arguments are the name of the preset and of the configuration, the fork and replacements.\n\nThen come the state, the registrations the builder keeps, the signed registration and the time.\n\nThe time is that of the builder's clock, in seconds."},
+   "None when a builder keeps a signed registration, or the name of the rule that refuses it.\n\nThe arguments are the name of the preset and of the configuration, the fork and replacements.\n\nThen come the state, the signed registrations the builder keeps, the one to check and the time.\n\nThe time is that of the builder's clock, in seconds."},
   {"summary": "Whether a builder serves a request for a bid.",
    "signature":
    "(name: str, fork: str, state: bytes, registry: list[bytes], slot: int, parent_hash: bytes, pubkey: bytes) -> bool",
@@ -3481,7 +3481,7 @@
       {"constructor": "wrongPayloadSlot", "code": 89}]}],
    "error_class": "TransitionError",
    "docstring":
-   "Whether a builder serves a request for a bid.\n\nThe arguments are the name of the preset, the fork, the state and the registrations kept.\n\nThen come the slot, the parent hash and the key of the request.\n\nThe state is the builder's state, transitioned to the slot.\n\nBytes that do not decode have code 0, and a state with no proposer keeps the code of its error."},
+   "Whether a builder serves a request for a bid.\n\nThe arguments are the name of the preset, the fork, the state and the signed registrations kept.\n\nThen come the slot, the parent hash and the key of the request.\n\nThe state is the builder's state, transitioned to the slot.\n\nBytes that do not decode have code 0, and a state with no proposer keeps the code of its error."},
   {"summary":
    "None when a proposer accepts a signed bid, or the name of the rule that refuses it.",
    "signature":
