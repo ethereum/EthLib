@@ -7,6 +7,7 @@ public import EthLib.Consensus.BeaconApi.Duties
 public import EthLib.Consensus.BeaconApi.Config
 public import EthLib.Consensus.BeaconApi.Debug
 public import EthLib.Consensus.BeaconApi.Encoding
+public import EthLib.Consensus.BeaconApi.Events
 public import EthLib.Consensus.BeaconApi.Identifiers
 public import EthLib.Consensus.BeaconApi.LightClient
 public import EthLib.Consensus.BeaconApi.Produce
