@@ -10549,7 +10549,7 @@
    "errors": [],
    "error_class": "RpcError",
    "docstring":
-   "Read a parameter of the execution JSON-RPC API under the schema of the given name.\n\nThe arguments are the name of a base type or a block schema, and the JSON value of the parameter.\n\nA number is an `int`, and a byte string, an address, a hash or a storage slot is `bytes`.\n\nA block parameter is a tuple of its kind and its number, its tag, or its hash and flag.\n\nA value that the schema rejects has code 32602, the code of invalid parameters without its sign.\n\nAn unknown schema has code 0."},
+   "Read a parameter of the execution JSON-RPC API under the schema of the given name.\n\nThe arguments are the name of a base type or a block schema, and the JSON value of the parameter.\n\nA number or a `byte` is an `int`, and a byte string, an address, a hash or a slot is `bytes`.\n\nA `bytes` value has an even number of digits, though the pattern of the source admits an odd one.\n\nA value that holds Python `bytes` at any depth has no JSON form, so every schema rejects it.\n\nA block parameter is a tuple of its kind and its number, its tag, or its hash and flag.\n\nA value that the schema rejects has code 32602, the code of invalid parameters without its sign.\n\nAn unknown schema has code 0."},
   {"summary":
    "The groups of error codes of the execution JSON-RPC API, in the order of the source.",
    "signature":

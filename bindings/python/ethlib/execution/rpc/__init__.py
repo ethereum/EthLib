@@ -77,10 +77,12 @@ def read_param(schema: BlockSchema, value: object) -> BlockParam: ...
 @overload
 def read_param(schema: Schema, value: object) -> int | bytes | BlockParam: ...
 def read_param(schema: Schema, value: object) -> int | bytes | BlockParam:
-    """Read the JSON value of a parameter, as `json.loads` gives it, under a schema of the API."""
-    # A block parameter is ("number", n), ("tag", name) or ("hash", hash, require_canonical).
-    # A value that the schema rejects raises RpcError with code 32602, and the reason as message.
-    # An unknown schema raises RpcError with code 0.
+    """
+    Read the JSON value of a parameter, as `json.loads` gives it, under a schema of the API.
+
+    A value that the schema rejects raises RpcError with code 32602, and the reason as message.
+    An unknown schema raises RpcError with code 0.
+    """
     return _native.rpc_read_param(schema, value)
 
 

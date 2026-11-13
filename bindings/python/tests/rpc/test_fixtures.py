@@ -12,16 +12,20 @@ from raising import raises
 # `fixtures/README.md` gives the origin of the files and their licence.
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
+# The `eth_getProof` requests of the same commit, which the trie suite vendors.
+# `trie/getproof/README.md` gives their origin and their licence.
+GETPROOF = Path(__file__).resolve().parents[1] / "trie" / "getproof"
+
 # The block hash that the balance and call fixtures name.
 BLOCK_HASH = bytes.fromhex("6146b2fa7dd4d923ed43e2f25c8a2895369d15463ba974f83937f9a6fa58adbf")
 
-# The hash of the head block, which the proof fixture names.
+# The hash of the head block, which the proof requests name.
 HEAD_HASH = bytes.fromhex("52bccfc9c4d4874b1898c0fbd0ae3b598a0edc7b94d9b796857dbbe1093c32e0")
 
 
-def exchange(name: str) -> tuple[list[object], dict]:
+def exchange(path: Path) -> tuple[list[object], dict[str, object]]:
     """The parameters of the request of a fixture, and its response."""
-    lines = (FIXTURES / name).read_text().splitlines()
+    lines = path.read_text().splitlines()
     request = next(json.loads(line[3:]) for line in lines if line.startswith(">> "))
     response = next(json.loads(line[3:]) for line in lines if line.startswith("<< "))
     return request["params"], response
@@ -89,53 +93,69 @@ def test_rejected_parameter(
     name: str, schemas: Sequence[rpc.Schema], rejected: int, reason: str
 ) -> None:
     """Every other parameter reads, and the rejected one raises the code of the fixture."""
-    params, response = exchange(name)
+    params, response = exchange(FIXTURES / name)
     assert len(params) == len(schemas)
     for index, (schema, value) in enumerate(zip(schemas, params, strict=True)):
         if index != rejected:
             rpc.read_param(schema, value)
     with raises(rpc.RpcError, reason) as error:
         rpc.read_param(schemas[rejected], params[rejected])
+    fault = response["error"]
+    assert isinstance(fault, dict)
     # The bindings carry a JSON-RPC code without its sign, as the Engine API exports do.
-    assert error.value.code == -response["error"]["code"]
+    assert error.value.code == -fault["code"]
 
 
-# Each request whose block parameter is a hash, alone or in an object of EIP-1898.
+# Each request whose block parameter is a tag, a hash, or an object of EIP-1898.
 # Each schema is that of the parameter in `src/eth/state.yaml` or `src/eth/execute.yaml`.
 BLOCKS = [
     pytest.param(
-        "eth_getBalance/get-balance-blockhash.io", 1, ("hash", BLOCK_HASH, False), id="hash-string"
+        FIXTURES / "eth_getBalance/get-balance-blockhash.io",
+        1,
+        ("hash", BLOCK_HASH, False),
+        id="hash-string",
     ),
     pytest.param(
-        "eth_getBalance/get-balance-block-hash-object.io",
+        FIXTURES / "eth_getBalance/get-balance-block-hash-object.io",
         1,
         ("hash", BLOCK_HASH, False),
         id="hash-object",
     ),
     pytest.param(
-        "eth_getBalance/get-balance-block-hash-object-require-canonical.io",
+        FIXTURES / "eth_getBalance/get-balance-block-hash-object-require-canonical.io",
         1,
         ("hash", BLOCK_HASH, True),
         id="hash-object-canonical",
     ),
     pytest.param(
-        "eth_getBalance/get-balance-block-number-object.io",
+        FIXTURES / "eth_getBalance/get-balance-block-number-object.io",
         1,
         ("number", 50),
         id="number-object",
     ),
-    pytest.param("eth_call/call-block-hash-object.io", 1, ("hash", BLOCK_HASH, False), id="call"),
     pytest.param(
-        "eth_getProof/get-account-proof-block-hash-object.io",
+        FIXTURES / "eth_call/call-block-hash-object.io", 1, ("hash", BLOCK_HASH, False), id="call"
+    ),
+    pytest.param(
+        GETPROOF / "get-account-proof-block-hash-object.io",
         2,
         ("hash", HEAD_HASH, False),
-        id="getProof",
+        id="getProof-hash-object",
+    ),
+    pytest.param(
+        GETPROOF / "get-account-proof-blockhash.io",
+        2,
+        ("hash", HEAD_HASH, False),
+        id="getProof-hash-string",
+    ),
+    pytest.param(
+        GETPROOF / "get-account-proof-latest.io", 2, ("tag", "latest"), id="getProof-latest"
     ),
 ]
 
 
-@pytest.mark.parametrize(("name", "index", "block"), BLOCKS)
-def test_block_parameter(name: str, index: int, block: rpc.BlockParam) -> None:
+@pytest.mark.parametrize(("path", "index", "block"), BLOCKS)
+def test_block_parameter(path: Path, index: int, block: rpc.BlockParam) -> None:
     """The block parameter of the request reads as the block that its JSON names."""
-    params, _ = exchange(name)
+    params, _ = exchange(path)
     assert rpc.read_param("BlockNumberOrTagOrHash", params[index]) == block

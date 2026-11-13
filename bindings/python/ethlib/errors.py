@@ -293,7 +293,11 @@ class EngineError(EthLibError, ValueError):
 
 
 class RpcError(EthLibError, ValueError):
-    """An execution JSON-RPC parameter was rejected, whose code is the negative of this code."""
+    """
+    An execution JSON-RPC parameter was rejected, with the JSON-RPC code without its sign.
+
+    An unknown schema has code 0.
+    """
 
 
 class JwtError(EthLibError, ValueError):

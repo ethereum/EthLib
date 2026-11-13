@@ -1,14 +1,19 @@
 """The rules of the readers of the parameters that the official fixtures do not cover."""
 
-from typing import get_args
+from typing import TYPE_CHECKING, get_args
 
 import pytest
 
 from ethlib.execution import rpc
 from raising import raises
 
-# The code of invalid parameters of JSON-RPC 2.0, -32602, without its sign.
-INVALID_PARAMS = 32602
+# The code of invalid parameters, from its group, without its sign.
+INVALID_PARAMS = -next(
+    error.code
+    for group in rpc.error_groups()
+    for error in group.errors
+    if error.message == "Invalid params"
+)
 
 # A hash of 32 bytes in hex, with a nonzero first digit.
 HASH = "0x" + "1" + "0" * 63
@@ -63,7 +68,10 @@ REJECTED = [
     pytest.param("uint", "0x01", "uint: leading zero", id="uint-leading-zero"),
     pytest.param("uint", "0x", "uint: no digits", id="uint-no-digits"),
     pytest.param("uint", 5, "uint: not a string", id="uint-json-number"),
+    # Python bytes have no JSON form, though the extension would carry them as hex text.
+    pytest.param("uint", b"0x1", "uint: not a JSON value", id="uint-python-bytes"),
     pytest.param("uint32", "0x100000000", "uint32: above 2^32", id="uint32-overflow"),
+    pytest.param("uint64", "0x10000000000000000", "uint64: above 2^64", id="uint64-overflow"),
     pytest.param("uint256", "0x1" + "0" * 64, "uint256: above 2^256", id="uint256-overflow"),
     pytest.param("uintDecimal", "012", "uintDecimal: leading zero", id="decimal-leading-zero"),
     pytest.param("uintDecimal", "12a", "uintDecimal: not a decimal digit", id="decimal-hex"),
@@ -130,7 +138,7 @@ def test_pending_is_no_block_of_a_range() -> None:
     [({}, False), ({"requireCanonical": False}, False), ({"requireCanonical": True}, True)],
     ids=["absent", "false", "true"],
 )
-def test_require_canonical(flag: dict, canonical: bool) -> None:
+def test_require_canonical(flag: dict[str, object], canonical: bool) -> None:
     """The flag of an object of EIP-1898 is false when it is absent."""
     value = {"blockHash": HASH, **flag}
     assert rpc.read_param("BlockNumberOrTagOrHash", value) == ("hash", HASH_BYTES, canonical)
@@ -170,8 +178,20 @@ REJECTED_OBJECTS = [
 
 
 @pytest.mark.parametrize(("value", "fault"), REJECTED_OBJECTS)
-def test_rejected_object(value: dict, fault: str) -> None:
+def test_rejected_object(value: dict[str, object], fault: str) -> None:
     """An object with another member, a null member, or not exactly one block is rejected."""
     with raises(rpc.RpcError, f"BlockNumberOrTagOrHash: {fault}") as error:
         rpc.read_param("BlockNumberOrTagOrHash", value)
     assert error.value.code == INVALID_PARAMS
+
+
+# The type checker checks what each overload returns.
+# These lines never run, since the suites also run on Python 3.10, which lacks `assert_type`.
+if TYPE_CHECKING:
+    from typing import assert_type
+
+    def check_overloads() -> None:
+        """A number schema reads as an int, a byte string as bytes, a block as a tuple."""
+        assert_type(rpc.read_param("uint64", "0x1"), int)
+        assert_type(rpc.read_param("hash32", HASH), bytes)
+        assert_type(rpc.read_param("BlockNumberOrTag", "latest"), rpc.BlockParam)
