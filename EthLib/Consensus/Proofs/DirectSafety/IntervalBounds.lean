@@ -3098,33 +3098,13 @@ private theorem intervalGain_active_sum (x : ForkedBeaconState preset)
         (x.state.validators.data[i.toNat]?.map fun v => f v.pubkey).getD 0).sum := by
   let indices := getActiveValidatorIndices x.state (getCurrentEpoch x.state)
   have within := x.state.validators.bound early
-  have inside (i) (hi : i ∈ indices) : i.toNat < x.state.validators.data.size := by
-    obtain ⟨v, found, _⟩ := (mem_getActiveValidatorIndices within).mp hi
-    exact (Array.getElem?_eq_some_iff.mp found).1
   have nodup : indices.Nodup := by
     simpa [indices, List.Nodup] using
       (getActiveValidatorIndices_sorted within (getCurrentEpoch x.state)).imp UInt64.ne_of_lt
-  rw [← List.sum_toFinset _ nodup]
-  let key (i : ValidatorIndex) (hi : i ∈ indices.toFinset) :=
-    (x.state.validators.data[i.toNat]'(inside i (List.mem_toFinset.mp hi))).pubkey
-  symm
-  apply Finset.sum_bij key
-  · intro i hi
-    simp only [activeKeys, keysAt, List.mem_toFinset, List.mem_filterMap]
-    exact ⟨i, List.mem_toFinset.mp hi, by simp [key, inside i (List.mem_toFinset.mp hi)]⟩
-  · intro i hi j hj same
-    apply UInt64.toNat_inj.mp
-    apply unique.eq_of_getElem_eq
-      (by simpa [validatorKeys] using inside i (List.mem_toFinset.mp hi))
-      (by simpa [validatorKeys] using inside j (List.mem_toFinset.mp hj))
-    simpa [validatorKeys, key] using same
-  · intro k hk
-    simp only [activeKeys, keysAt, List.mem_toFinset, List.mem_filterMap] at hk
-    obtain ⟨i, hi, found⟩ := hk
-    exact ⟨i, List.mem_toFinset.mpr hi, by
-      simpa [key, Array.getElem?_eq_getElem, inside i hi] using found⟩
-  · intro i hi
-    simp [key, inside i (List.mem_toFinset.mp hi)]
+  rw [activeKeys, keys_sum x.state _ unique (fun i member => by
+      obtain ⟨v, found, _⟩ := (mem_getActiveValidatorIndices within).mp member
+      exact (Array.getElem?_eq_some_iff.mp found).1),
+    List.sum_toFinset _ nodup]
 
 /-- Before Electra a reference-active key gains at most its credits and its room below the cap. -/
 private theorem intervalGain_active_path {g x y : ForkedBeaconState preset}
