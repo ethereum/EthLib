@@ -204,6 +204,84 @@ theorem executionEngine_accepts_iff {chain : BlockChain}
     · simp [found, hBlock, sinceValue, deneb, hashes deneb]
     · simp [hBlock, transition, Except.toBool]
 
+/-- From Bellatrix to Fulu, the execution layer accepts the payload request of a block as follows.
+
+The request lists of the block must be well formed, and its payload must have a block on the chain.
+
+That block reads the parent root of the latest block header of the state.
+
+From Deneb, its blob transactions carry the versioned hashes of the commitments of the block.
+
+They are the hashes of those commitments, in the order of the commitments.
+
+The block must pass the state transition of the chain. -/
+theorem executionEngine_accepts_newPayloadRequest_iff {chain : BlockChain}
+    {state : Consensus.BeaconState preset fork} {body : Consensus.BeaconBlockBody preset fork}
+    {bellatrix : .bellatrix ≤ fork ∧ fork < .glamsterdam} :
+    (executionEngine chain).verifyAndNotifyNewPayload (body.newPayloadRequest state bellatrix) =
+        .ok true ↔
+      ∃ requests : Since .pectra fork (List ByteArray),
+        (∀ electra : .pectra ≤ fork,
+          Consensus.getExecutionRequestsList (body.executionRequests ⟨electra, bellatrix.2⟩) =
+            .ok (requests electra)) ∧
+        ∃ f b, payloadBlock chain.config (body.executionPayload bellatrix)
+            (fun _ => state.latestBlockHeader.parentRoot) requests = some ⟨f, b⟩ ∧
+          (∀ deneb : .dencun ≤ fork, ExecutionPayload.blobVersionedHashes b.transactions =
+            (body.blobKzgCommitments ⟨deneb, bellatrix.2⟩).data.toList.map
+              Consensus.commitmentVersionedHash) ∧
+          ∃ post, stateTransition chain b (checkSeal := false) = .ok post := by
+  rw [executionEngine_accepts_iff]
+  constructor
+  · rintro ⟨requests, found, f, b, hBlock, hashes, post, transition⟩
+    refine ⟨requests, fun electra => ?_, f, b, hBlock, fun deneb => ?_, post, transition⟩
+    · simp only [Consensus.NewPayloadRequest.requestsList, electra, dite_true,
+        Consensus.BeaconBlockBody.newPayloadRequest] at found
+      cases listed : Consensus.getExecutionRequestsList
+          (body.executionRequests ⟨electra, bellatrix.2⟩) with
+      | error e => simp [listed, bind, Except.bind] at found
+      | ok lists =>
+        simp only [listed, bind, Except.bind, pure, Except.pure] at found
+        obtain rfl := Except.ok.inj found
+        rfl
+    · simpa [Consensus.BeaconBlockBody.newPayloadRequest] using hashes deneb
+  · rintro ⟨requests, found, f, b, hBlock, hashes, post, transition⟩
+    refine ⟨requests, ?_, f, b, hBlock, fun deneb => ?_, post, transition⟩
+    · unfold Consensus.NewPayloadRequest.requestsList
+      split
+      · rename_i electra
+        simp only [Consensus.BeaconBlockBody.newPayloadRequest, found electra, bind, Except.bind,
+          pure, Except.pure]
+      · rename_i electra
+        exact congrArg Except.ok (funext fun later => absurd later electra)
+    · simpa [Consensus.BeaconBlockBody.newPayloadRequest] using hashes deneb
+
+/-- From Bellatrix to Fulu, a payload step that succeeds on the chain has passed it as follows.
+
+The request lists of the block are well formed, and its payload has a block on the chain.
+
+That block reads the parent root of the latest block header of the state.
+
+From Deneb, its blob transactions carry the hashes of the commitments of the block, in order.
+
+The block passes the state transition of the chain. -/
+theorem processExecutionPayload_executionEngine {config : Consensus.Config} {chain : BlockChain}
+    {state after : Consensus.BeaconState preset fork} {body : Consensus.BeaconBlockBody preset fork}
+    {bellatrix : .bellatrix ≤ fork ∧ fork < .glamsterdam}
+    (computed :
+      Consensus.processExecutionPayload config (executionEngine chain) state body bellatrix =
+        .ok after) :
+    ∃ requests : Since .pectra fork (List ByteArray),
+      (∀ electra : .pectra ≤ fork,
+        Consensus.getExecutionRequestsList (body.executionRequests ⟨electra, bellatrix.2⟩) =
+          .ok (requests electra)) ∧
+      ∃ f b, payloadBlock chain.config (body.executionPayload bellatrix)
+          (fun _ => state.latestBlockHeader.parentRoot) requests = some ⟨f, b⟩ ∧
+        (∀ deneb : .dencun ≤ fork, ExecutionPayload.blobVersionedHashes b.transactions =
+          (body.blobKzgCommitments ⟨deneb, bellatrix.2⟩).data.toList.map
+            Consensus.commitmentVersionedHash) ∧
+        ∃ post, stateTransition chain b (checkSeal := false) = .ok post :=
+  executionEngine_accepts_newPayloadRequest_iff.mp (Consensus.processExecutionPayload_ok computed).1
+
 /-- From Bellatrix to Gloas, the version of the method at a fork takes some fork. -/
 theorem exists_acceptsFork_newPayloadVersion (h : .bellatrix ≤ fork ∧ fork < .hegota) :
     ∃ f, acceptsFork (newPayloadVersion fork) f = true := by
