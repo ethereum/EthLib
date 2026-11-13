@@ -718,8 +718,7 @@ theorem Store.Reachable.checkpoint_source_ancestor {config : Config}
     (field : checkpoint = view.previousJustifiedCheckpoint ∨
       checkpoint = view.currentJustifiedCheckpoint ∨ checkpoint = view.finalizedCheckpoint)
     (afterAnchor : getCurrentEpoch anchorState < checkpoint.epoch) :
-    (store.isAncestor ⟨root, .pending⟩ ⟨checkpoint.root, .pending⟩ = .ok true ∧
-      store.getCheckpointBlock root checkpoint.epoch = .ok checkpoint.root) ∨
+    store.getCheckpointBlock root checkpoint.epoch = .ok checkpoint.root ∨
     ∃ (badRoot : Root) (badState : BeaconState preset fork),
       store.blockStates[badRoot]? = some badState ∧
       SszType.hashTreeRoot badState = .ok (Vector.replicate 32 0) ∧
@@ -739,8 +738,7 @@ theorem Store.Reachable.checkpoint_source_ancestor {config : Config}
       exacts [holds.1, holds.2.1, holds.2.2]
     rcases fieldHolds _ viewHolds with old | path | ⟨badRoot, badState, slot, badHeld, zero, walk⟩
     · exact absurd afterAnchor (UInt64.not_lt.mpr old)
-    · obtain ⟨start, -, walk⟩ := Store.getCheckpointBlock_ok_iff.mp path
-      exact .inl ⟨Store.isAncestor_of_getAncestor_root linked.parentsBelow walk, path⟩
+    · exact .inl path
     · exact .inr ⟨badRoot, badState, badHeld, zero,
         Store.isAncestor_of_getAncestor_root linked.parentsBelow walk⟩
   have holds := reachable.checkpointsSatisfy_of_blockState sound positive window linked held
@@ -803,10 +801,10 @@ theorem Store.Reachable.postState_finalized_ancestor {config : Config}
   -- Both checkpoints lie on the chain of the same source block, or a zero-hashing state does.
   rcases reachable.checkpoint_source_ancestor sound positive window anchorSlot unknownParent held
       selected (checkpoint := view.finalizedCheckpoint) (.inr (.inr rfl)) afterF with
-    ⟨-, blockF⟩ | bad
+    blockF | bad
   · rcases reachable.checkpoint_source_ancestor sound positive window anchorSlot unknownParent
         held selected (checkpoint := view.currentJustifiedCheckpoint) (.inr (.inl rfl)) afterJ with
-      ⟨-, blockJ⟩ | bad
+      blockJ | bad
     · left
       obtain ⟨startF, startedF, walkF⟩ := Store.getCheckpointBlock_ok_iff.mp blockF
       obtain ⟨startJ, startedJ, walkJ⟩ := Store.getCheckpointBlock_ok_iff.mp blockJ

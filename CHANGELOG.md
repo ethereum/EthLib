@@ -53,6 +53,8 @@ Not yet released.
 - A checkpoint of a fork-choice store comes from the anchor, a held state or its pull-up ([#1423](https://github.com/ethereum/EthLib/issues/1423)).
   After the anchor epoch, a checkpoint of a held state or its pull-up lies on the chain of that state's block.
   The one exception is a held state on that chain that hashes to the zero root.
+  `Store.Reachable.checkpoint_source_ancestor` states that chain as the block of the checkpoint only, without an ancestor conjunct.
+  The ancestor relation between the finalized and the justified checkpoint stays in `Store.Reachable.postState_finalized_ancestor`.
   No C export or Python function changes.
   In Lean, the new module `Consensus.Proofs.ForkChoice.CheckpointAncestry` states this for a reachable store.
   `Store.storeTargetCheckpointState_frame`, `Store.onAttestation_frame`, `Store.onAttesterSlashing_frame`, `Store.recordBlockTimeliness_frame` and `Store.updateProposerBoostRoot_frame` end with four new conjuncts.
