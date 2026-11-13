@@ -15,13 +15,15 @@ The departure charges of a run are bounded by a window of queue capacity.
 
 That bound reads a cap on the consolidation churn at each step of the run.
 
-Here the cap is derived: the churn of a step is a rate of the active stake where it starts.
+Here the cap is derived: the churn of a step is at most a rate of the active stake where it starts.
 
 The active stake of every state of the run is at most the funded stake of the window.
 
 The funded stake counts the stake at the first state and the funding that the run replays.
 
-It does not depend on the endpoint of the run, so it bounds every state inside the run.
+A prefix of the run replays a prefix of its events.
+
+So the window of the whole run bounds every state inside it.
 -/
 
 @[expose] public section
@@ -34,7 +36,7 @@ noncomputable section
 
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 
-/-- With a withdrawal delay of two epochs, active stake fits the funded window. -/
+/-- With a withdrawal delay of at least two epochs, active stake fits the funded window. -/
 private theorem active_stake_le_window {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (tail : Run config checks x y)
     (genesis : Genesis (config := config) (checks := checks) g)
@@ -352,7 +354,7 @@ private theorem registry_run_bound {x y : ForkedBeaconState preset}
       simp only [newAllowance, Nat.add_zero, slot, epoch]
       exact ⟨slotsBefore, by omega⟩
 
-/-- The registry envelope is independent of the endpoint, including a mid-epoch start. -/
+/-- The registry window is independent of the endpoint, including a mid-epoch start. -/
 private theorem registry_le_window {x y : ForkedBeaconState preset} (tail : Run config checks x y)
     (early : y.fork < .glamsterdam) (high : Nat)
     (endEpoch : (getCurrentEpoch y.state).toNat ≤ high + 1)
@@ -384,7 +386,7 @@ private theorem registry_le_window {x y : ForkedBeaconState preset} (tail : Run 
   rw [Nat.mul_add, ← Nat.mul_assoc]
   omega
 
-/-- The consolidation churn before Gloas is the consolidation rate of the total active balance. -/
+/-- Before Gloas, the consolidation churn is at most the rate of a bound on the active balance. -/
 private theorem consolidation_rate_le {fork : Fork}
     {s : BeaconState preset fork} (early : fork < .glamsterdam)
     {total churn : Gwei} (read : getTotalActiveBalance s = .ok total)
@@ -515,9 +517,17 @@ They add these Electra caps only if the window reaches the Electra fork epoch.
 
 The consolidation rate is computed from the active stake that the funded window allows.
 
-With a withdrawal delay below two epochs, that stake is the registry window at the Electra maximum.
+With a withdrawal delay below two epochs, that stake is instead a registry bound.
 
-The window reads the balance events that the run replays up to `high`. -/
+It is the registry window times `MAX_EFFECTIVE_BALANCE_ELECTRA`.
+
+The window reads the balance events that the run replays up to `high`.
+
+That replay succeeds for every run that ends before Gloas.
+
+The run must end by epoch `high + 1`.
+
+It also assumes that the preset orders its caps and has positive divisors; both presets do. -/
 theorem departure_charges_le_funded_window {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (tail : Run config checks x y)
     (genesis : Genesis (config := config) (checks := checks) g)

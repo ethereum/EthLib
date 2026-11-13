@@ -868,7 +868,7 @@ theorem _root_.EthLib.Consensus.Step.balanceEvents_block {fork : Fork}
   subst replayed
   exact blockReplay
 
-/-- Start at this run's first state and include tests with target epoch at most `high`. -/
+/-- The balance events of the run, for each step that starts at an epoch of at most `high + 1`. -/
 def _root_.EthLib.Consensus.Run.balanceEvents {x : ForkedBeaconState preset} (high : Nat) :
     {y : ForkedBeaconState preset} → Run config checks x y →
       Except TransitionError (List (BalanceEvent preset))
@@ -1491,6 +1491,46 @@ theorem upgradeBalanceReplay_bounded {s t : ForkedBeaconState preset}
     rw [upgradeBalanceReplay]
     simp [due, pure, Except.pure]
 
+/-- Every step that ends before Gloas has a replay of its balance events. -/
+theorem _root_.EthLib.Consensus.Step.balanceEvents_ok {x y : ForkedBeaconState preset}
+    (step : Step config checks x y) (early : y.fork < .glamsterdam) :
+    ∃ events, step.balanceEvents = .ok events := by
+  have before : x.fork < .glamsterdam := Nat.lt_of_le_of_lt step.chainStep.fork_le early
+  cases step with
+  | block engine signed due ok =>
+    obtain ⟨events, replay⟩ :=
+      blockBalanceReplay_result _ _ before engine signed.message (applySignedBlock_ok ok).2.1
+    refine ⟨events, ?_⟩
+    simp only [Step.balanceEvents, before, ↓reduceDIte, replay, bind, Except.bind, pure,
+      Except.pure]
+  | slot ok =>
+    obtain ⟨advanced, advanceOk, upgrades⟩ := bind_ok_iff.mp ok
+    obtain ⟨crossings, crossingOk, _⟩ := upgradeBalanceReplay_bounded upgrades
+    have advanceCopy := advanceOk
+    simp only [advanceSlot, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at advanceCopy
+    obtain ⟨next, nextOk, cached, cachedOk, epoched, epochOk, _⟩ := advanceCopy
+    by_cases last : next % preset.SLOTS_PER_EPOCH = 0
+    · simp only [epochIfLast, last, ↓reduceIte] at epochOk
+      obtain ⟨_, _, added, replay, _⟩ := epochBalanceReplay_result cached epoched before epochOk
+      exact ⟨added ++ crossings, by simp only [Step.balanceEvents, cachedOk, nextOk, last,
+        ↓reduceIte, replay, advanceOk, crossingOk, bind, Except.bind, pure, Except.pure]⟩
+    · exact ⟨[] ++ crossings, by simp only [Step.balanceEvents, cachedOk, nextOk, last,
+        ↓reduceIte, advanceOk, crossingOk, bind, Except.bind, pure, Except.pure]⟩
+
+/-- Every run that ends before Gloas has a replay of its balance events, for every horizon.
+
+So a premise that names the replay of such a run always holds for some list of events. -/
+theorem _root_.EthLib.Consensus.Run.balanceEvents_ok {x y : ForkedBeaconState preset}
+    (run : Run config checks x y) (early : y.fork < .glamsterdam) (high : Nat) :
+    ∃ events, run.balanceEvents high = .ok events := by
+  induction run with
+  | nil => exact ⟨[], rfl⟩
+  | snoc pre step ih =>
+    obtain ⟨prior, priorOk⟩ := ih (Nat.lt_of_le_of_lt step.chainStep.fork_le early)
+    obtain ⟨added, addedOk⟩ := step.balanceEvents_ok early
+    simp only [Run.balanceEvents, priorOk, addedOk, bind, Except.bind, pure, Except.pure]
+    split <;> exact ⟨_, rfl⟩
+
 /-- The credit or the debit of validator `i` between two states. -/
 def coverageDelta (debit : Bool) (x y : ForkedBeaconState preset) (i : Nat) : Nat :=
   if debit then actualBalanceAt x i - actualBalanceAt y i
@@ -1594,13 +1634,15 @@ def queueCarry (x : ForkedBeaconState preset) (high : Nat) : Nat :=
       (x.state.consolidationBalanceToConsume electra).toNat else 0)
   else 0
 
-/-- Pre-Gloas consolidation churn is the whole balance churn less the activation/exit cap. -/
+/-- A bound on the consolidation churn before Gloas, for an active balance of at most `stake`.
+
+It skips the rounding to an increment, so it is at least the churn that the transition computes. -/
 def consolidationRate (stake : Nat) : Nat :=
   max config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA.toNat
     (max preset.EFFECTIVE_BALANCE_INCREMENT.toNat stake / config.CHURN_LIMIT_QUOTIENT.toNat) -
       config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat
 
-/-- Includes both epoch tests that can justify a target at high. -/
+/-- The number of epochs from the current epoch of `x` to `high + 1`, both included. -/
 def driftHorizon (x : ForkedBeaconState preset) (high : Nat) : Nat :=
   high + 2 - (getCurrentEpoch x.state).toNat
 
@@ -1654,7 +1696,7 @@ def fundingCredit (event : BalanceEvent preset) : Nat :=
 
 /-- Active stake is funded initially, by deposit churn, or by non-transfer credits.
 
-With a withdrawal delay below two epochs, it is the registry envelope. -/
+With a withdrawal delay below two epochs, it is the registry window times the largest balance. -/
 def activeStakeWindow (x : ForkedBeaconState preset) (high : Nat)
     (events : List (BalanceEvent preset)) : Nat :=
   if 2 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat then

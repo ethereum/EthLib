@@ -2506,7 +2506,8 @@ The bound counts exits at their assigned exit epochs, so it does not bound the e
 It does not bound activations, and no theorem yet derives the change of the active set or puts this bound into `accountable_safety_of_change`.
 
 `departure_charges_le_funded_window` (`Consensus/Proofs/DirectSafety/IntervalBounds.lean`) derives `consolidationCap` instead of assuming it.
-It reads `departure_charges_le_window` with the consolidation churn of a bound on the active balance, the funded window.
+It applies `departure_charges_le_window` with a cap computed from the funded window, a bound on the active balance.
+A window that ends before `ELECTRA_FORK_EPOCH` reads `departure_charges_le_window_before_fork` instead.
 The funded window starts from the funded stake at `x`.
 That stake counts the larger of the effective and the actual balance of each validator that is active, not yet active, or the source of a pending consolidation.
 The window adds the deposit balance left to consume at `x` and `MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT` for each epoch of the window.
@@ -2514,9 +2515,11 @@ It also adds the credits that the second run records.
 The window bounds the active balance at the state where each step of the second run starts, from Electra.
 So the derived cap is at least the consolidation churn of each of those states.
 It assumes that the second run ends at an epoch of at most `high + 1`, and that `tail.balanceEvents high` replays the balance events of the run.
+`Run.balanceEvents_ok` shows that this replay succeeds for every run that ends before Gloas, so the second assumption always holds for some events.
+The first assumption is a real restriction: no theorem yet cuts a longer run at `high + 1`, so for such a run `departure_charges_le_window` with its assumed cap is still the bound.
 These events record each change of balance with the limit that the transition computes for it.
-The recorded credits are the rewards and the deposits that the deposit churn does not limit.
-Those are the deposits before Electra and the Electra deposits to withdrawn sources of consolidations.
+The recorded credits are the rewards, including those of proposers, whistleblowers and sync committees, and the deposits that the deposit churn does not limit.
+Those are the deposits before Electra and, from Electra, the deposits to withdrawn sources of pending consolidations.
 They raise the bound, so it is only as tight as the credits of the run.
 The theorem charges `MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT` and the consolidation churn only if the window reaches `ELECTRA_FORK_EPOCH`, so it also covers a window that crosses the fork.
 With a withdrawal delay below two epochs, the theorem uses the registry window times `MAX_EFFECTIVE_BALANCE_ELECTRA` instead.
