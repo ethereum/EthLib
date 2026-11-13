@@ -3701,6 +3701,20 @@ From Electra, pending consolidations succeed when their source and target indice
 The current epoch plus one must fit in 64 bits.
 The source is debited before the target is credited, so the budget also covers equal source and target indices.
 
+From Altair, the sync committee update succeeds (`processSyncCommitteeUpdates_ok`) under the assumptions of `SyncDrawable`, asked only when the next epoch starts a period.
+One validator active in the next epoch must have the largest effective balance of the draw (`drawCap`), and no validator may have more.
+Before Electra that balance is 32 ETH, and from Electra it is the cap of a compounding validator, 2048 ETH.
+This is an assumption on the registry, not a bound that an epoch keeps: such a validator may never join, or may exit.
+The draw accepts such a validator on every pass over the candidates, so the committee fills within as many passes as members; `balanceWeightedSearch_ok` proves it.
+Without such a validator, whether the draw ends before its counter reaches `2^64` depends on the hashes, and the theorem says nothing.
+Before Electra, every effective balance must be at most 32 ETH, which the bound of 2048 ETH in the other totality theorems does not imply.
+Every key of the registry must also pass key validation, as each deposit checks before a validator joins; no theorem yet proves that along a chain.
+The registry holds at most `2^40` validators, and the committee size times the registry size stays below `2^64`.
+The next epoch plus the length of the history of mixes must fit in 64 bits, and the seed lookahead must be shorter than that history.
+The products of the draw must fit in 64 bits (`DrawFits`), and the preset must give a sync committee of at least one member.
+The keys of an empty committee have no aggregate, so with no member the update would fail at every period.
+`drawFits_presets`, `seedLookahead_lt_presets` and `syncCommitteeSize_ne_zero_presets` prove the three facts on the preset for mainnet and minimal.
+
 From Gloas, builder payment settlement succeeds when an epoch has at least six slots.
 The registry must also be within its limit, and the sum of effective balances below `2^64`.
 Mainnet and minimal have 32 and 8 slots an epoch.
