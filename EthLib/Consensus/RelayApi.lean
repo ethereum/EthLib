@@ -31,12 +31,26 @@ The source says "scheduled to propose", but not how a relay learns that schedule
 
 So the rule here holds for any schedule, and from Fulu the lookahead gives one: [EIP-7917].
 
+The data API lists the [delivered payloads] and the [received bids].
+
+Their entries have the types of [`bids.yaml`].
+
+A filter keeps the entries whose fields equal each value that it gives.
+
+The limit and the cursor of a query are not modelled here.
+
+Delivered payloads may also be sorted by value, lowest or highest first, as [`misc.yaml`] says.
+
 [submission endpoint]: https://github.com/flashbots/relay-specs/blob/a4e0a50d9d46bfe881fd74cc7e0db366371f4eed/apis/relay/builder/blocks.yaml
 [Deneb relaying rules]: https://github.com/ethereum/builder-specs/blob/fce64468a81a87892d7cb9b4858272bb3d010e50/specs/deneb/builder.md#bidding
 [Electra bid]: https://github.com/ethereum/builder-specs/blob/fce64468a81a87892d7cb9b4858272bb3d010e50/specs/electra/builder.md#builderbid
 [`validators.yaml`]: https://github.com/flashbots/relay-specs/blob/a4e0a50d9d46bfe881fd74cc7e0db366371f4eed/apis/relay/builder/validators.yaml
 [`responses.yaml`]: https://github.com/flashbots/relay-specs/blob/a4e0a50d9d46bfe881fd74cc7e0db366371f4eed/types/responses.yaml
 [EIP-7917]: https://eips.ethereum.org/EIPS/eip-7917#specification
+[delivered payloads]: https://github.com/flashbots/relay-specs/blob/a4e0a50d9d46bfe881fd74cc7e0db366371f4eed/apis/relay/data/proposer_payload_delivered.yaml
+[received bids]: https://github.com/flashbots/relay-specs/blob/a4e0a50d9d46bfe881fd74cc7e0db366371f4eed/apis/relay/data/builder_blocks_received.yaml
+[`bids.yaml`]: https://github.com/flashbots/relay-specs/blob/a4e0a50d9d46bfe881fd74cc7e0db366371f4eed/types/bids.yaml
+[`misc.yaml`]: https://github.com/flashbots/relay-specs/blob/a4e0a50d9d46bfe881fd74cc7e0db366371f4eed/types/misc.yaml
 -/
 
 @[expose] public section
@@ -166,6 +180,124 @@ def validatorsResponse (state : BeaconState preset fork) (fulu : .fusaka ≤ for
     (registry : Registry) : ValidatorsResponse :=
   scheduledEntries (lookaheadSchedule state fulu) (validatorPubkey? state) registry
     (currentEpochStart state) (2 * preset.SLOTS_PER_EPOCH.toNat)
+
+/-! ## The data API -/
+
+/-- A payload that a relay delivered to a proposer.
+
+It is the bid trace with the number of the block and the number of its transactions.
+
+A received bid adds two timestamps to it.
+
+The source does not say which field of the payload each number comes from.
+
+So both are fields of the entry, not values computed from the payload. -/
+structure BidTraceV2 where
+  /-- The bid trace. -/
+  trace : BidTrace
+  /-- The number of the block. -/
+  blockNumber : UInt64
+  /-- The number of transactions in the block. -/
+  numTx : UInt64
+  deriving DecidableEq
+
+/-- The JSON holds the fields of the bid trace, the number of the block and the count, flat. -/
+instance : SszType BidTraceV2 :=
+  .container (BidTrace.names ++ ["block_number", "num_tx"])
+    (fun b => (b.trace.slot, b.trace.parentHash, b.trace.blockHash, b.trace.builderPubkey,
+      b.trace.proposerPubkey, b.trace.proposerFeeRecipient, b.trace.gasLimit, b.trace.gasUsed,
+      b.trace.value, b.blockNumber, b.numTx))
+    (fun (slot, parentHash, blockHash, builderPubkey, proposerPubkey, proposerFeeRecipient,
+        gasLimit, gasUsed, value, blockNumber, numTx) =>
+      ⟨⟨slot, parentHash, blockHash, builderPubkey, proposerPubkey, proposerFeeRecipient,
+        gasLimit, gasUsed, value⟩, blockNumber, numTx⟩)
+
+/-- The JSON writes the integers as decimal strings, as `Uint64` and `Uint256` values of the API. -/
+instance : BeaconApi.ApiSpelling BidTraceV2 := .unmarked
+
+/-- A bid that a relay received from a builder: a delivered payload entry with two timestamps.
+
+The source gives each timestamp the type `Int64`, written as a string.
+
+It names them but does not say what they measure. -/
+structure BidTraceV2WithTimestamp where
+  /-- The bid. -/
+  bid : BidTraceV2
+  /-- The timestamp under the key `timestamp`. -/
+  timestamp : Int64
+  /-- The timestamp under the key `timestamp_ms`. -/
+  timestampMs : Int64
+  deriving DecidableEq
+
+/-- The order of the delivered payloads by their value: lowest first, or highest first. -/
+inductive OrderBy where
+  /-- Lowest value first. -/
+  | ascending
+  /-- Highest value first. -/
+  | descending
+  deriving DecidableEq, Repr
+
+namespace OrderBy
+
+/-- The string of an order in a query. -/
+def name : OrderBy → String
+  | .ascending => "value"
+  | .descending => "-value"
+
+/-- The order that a string names, if any. -/
+def ofName? : String → Option OrderBy
+  | "value" => some .ascending
+  | "-value" => some .descending
+  | _ => none
+
+end OrderBy
+
+/-- The filters of a query of delivered payloads; an absent filter keeps every payload. -/
+structure DeliveredFilter where
+  /-- The slot. -/
+  slot : Option Slot := none
+  /-- The hash of the block. -/
+  blockHash : Option Hash32 := none
+  /-- The number of the block. -/
+  blockNumber : Option UInt64 := none
+  /-- The key of the proposer. -/
+  proposerPubkey : Option BLSPubkey := none
+  /-- The key of the builder. -/
+  builderPubkey : Option BLSPubkey := none
+
+/-- Whether a filter keeps a delivered payload: each present filter equals its field. -/
+def DeliveredFilter.keeps (filter : DeliveredFilter) (entry : BidTraceV2) : Bool :=
+  filter.slot.all (· = entry.trace.slot) &&
+    filter.blockHash.all (· = entry.trace.blockHash) &&
+    filter.blockNumber.all (· = entry.blockNumber) &&
+    filter.proposerPubkey.all (· = entry.trace.proposerPubkey) &&
+    filter.builderPubkey.all (· = entry.trace.builderPubkey)
+
+/-- The filters of a query of received bids; an absent filter keeps every bid. -/
+structure ReceivedFilter where
+  /-- The slot. -/
+  slot : Option Slot := none
+  /-- The hash of the block. -/
+  blockHash : Option Hash32 := none
+  /-- The number of the block. -/
+  blockNumber : Option UInt64 := none
+  /-- The key of the builder. -/
+  builderPubkey : Option BLSPubkey := none
+
+/-- Whether a filter keeps a received bid: each present filter equals its field. -/
+def ReceivedFilter.keeps (filter : ReceivedFilter) (entry : BidTraceV2WithTimestamp) : Bool :=
+  filter.slot.all (· = entry.bid.trace.slot) &&
+    filter.blockHash.all (· = entry.bid.trace.blockHash) &&
+    filter.blockNumber.all (· = entry.bid.blockNumber) &&
+    filter.builderPubkey.all (· = entry.bid.trace.builderPubkey)
+
+/-- Delivered payloads, sorted by value in the given order.
+
+The source does not order payloads of equal value; here they keep their input order. -/
+def sortBy (order : OrderBy) (entries : List BidTraceV2) : List BidTraceV2 :=
+  match order with
+  | .ascending => entries.mergeSort fun a b => a.trace.value ≤ b.trace.value
+  | .descending => entries.mergeSort fun a b => b.trace.value ≤ a.trace.value
 
 end RelayApi
 
