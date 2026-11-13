@@ -90,7 +90,8 @@ fi
 # A root that ends in a separator has no last part to name its modules.
 lake exe check-accessors --root scripts/CheckAccessorsTest/ --baseline "$WORK/expected" \
   >"$WORK/out" 2>"$WORK/err"; got=$?
-if [ "$got" -eq 2 ]; then
+noroot="check-accessors: the root scripts/CheckAccessorsTest/ has no last part to name its modules"
+if [ "$got" -eq 2 ] && grep -qxF "$noroot" "$WORK/err"; then
   echo "ok:   a root with no last part is rejected"
 else
   echo "FAIL: exit $got on a root with no last part, expected 2"
