@@ -3417,6 +3417,7 @@ Only the last block of the chain is checked.
 Step 2 also says that every descendant of an invalid terminal block must be `INVALID`.
 The model keeps no invalid block, so a child of a payload rejected by the check is `SYNCING` instead.
 A chain whose last block is from Paris on is taken as valid, its terminal block included.
+
 Payload attributes of `engine_forkchoiceUpdated` answer by the version of the method and the fork of their timestamp.
 `exists_attributesTakeFork_iff` (`Proofs/ForkchoiceUpdated.lean`) shows that some version takes a fork exactly when the fork is from Paris to Glamsterdam.
 `attributesTakeFork_eq_true_iff` shows that a version takes such a fork exactly when it decodes the structure of the attributes at that fork.
