@@ -8,7 +8,7 @@ import EthLib.Consensus.Proofs.Transition.Committees
 import EthLib.Consensus.Proofs.Transition.Requests
 import EthLib.Consensus.Proofs.Transition.ValidatorCaps
 import EthLib.Consensus.Proofs.Transition.SyncCommitteeProvenance
-import EthLib.Consensus.Proofs.Transition.PendingConsolidations
+public import EthLib.Consensus.Proofs.Transition.PendingConsolidations
 import EthLib.Consensus.Proofs.Transition.BalanceNotRaised
 import EthLib.Consensus.Proofs.Transition.EpochPending
 
