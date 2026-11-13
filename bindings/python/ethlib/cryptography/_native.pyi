@@ -697,6 +697,14 @@ def consensus_api_chain_heads(name: str, fork: str, anchor_state: bytes, anchor_
     """The JSON response of the heads endpoint, as a `dict`."""
     ...
 
+def consensus_api_chain_events(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, first: int, genesis_root: bytes, optimistic_roots: list[bytes], config: dict[str, Any] | None) -> list[tuple[str, str]]:
+    """The events of the fork choice between two stores of a case."""
+    ...
+
+def consensus_api_fast_confirmation_event(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, config: dict[str, Any] | None) -> tuple[str, str]:
+    """The event of the last run of the fast confirmation rule in a case that passed."""
+    ...
+
 def consensus_api_aggregate_attestation(name: str, fork: str, state: bytes, attestations: list[bytes], singles: list[bytes], optimistic_roots: list[bytes], data_root: bytes, slot: int, committee_index: int) -> dict[str, Any]:
     """The JSON response of the aggregate endpoint, as a `dict`."""
     ...

@@ -315,6 +315,29 @@ py_consensus_api_chain_heads(
 }
 
 extern lean_object*
+eth_consensus_api_chain_events(lean_object* args);
+
+PyObject*
+py_consensus_api_chain_events(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_chain_events, args, 10, FORK_CHOICE_ERROR);
+}
+
+extern lean_object*
+eth_consensus_api_fast_confirmation_event(lean_object* args);
+
+PyObject*
+py_consensus_api_fast_confirmation_event(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(
+    eth_consensus_api_fast_confirmation_event, args, 7, FORK_CHOICE_ERROR);
+}
+
+extern lean_object*
 eth_consensus_api_aggregate_attestation(lean_object* args);
 
 PyObject*

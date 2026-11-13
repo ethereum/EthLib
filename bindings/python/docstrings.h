@@ -521,6 +521,12 @@
 #define DOC_consensus_api_chain_heads \
   "The JSON response of the heads endpoint, as a `dict`."
 
+#define DOC_consensus_api_chain_events \
+  "The events of the fork choice between two stores of a case."
+
+#define DOC_consensus_api_fast_confirmation_event \
+  "The event of the last run of the fast confirmation rule in a case that passed."
+
 #define DOC_consensus_api_aggregate_attestation \
   "The JSON response of the aggregate endpoint, as a `dict`."
 
