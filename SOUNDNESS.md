@@ -3238,7 +3238,17 @@ So `status_of_newPayloadWithoutState` shows that the method without the parent's
 One C export runs that method, and a second runs the method on a chain that holds the parent's state.
 With the state of a chain, `valid_iff_of_newPayloadOnChain` shows that the answer is `VALID` exactly when a block and a state come back.
 `of_newPayloadOnChain_some` adds that such a block passed the checks and the state transition, to that state.
+`passesTerminalCheck_of_newPayloadOnChain_some` adds that its parent passed the terminal block check.
 `newPayloadOnChain_of_stateTransition_ok` shows the converse for a block whose parent is the last block of the chain.
+That parent must also pass the terminal block check of step 2 of payload validation, which a block from Paris on always passes.
+The method takes the total difficulty of the last block as an input, since a chain does not record it.
+`newPayloadOnChain_of_not_terminal` takes a parent of proof of work that fails the conditions of EIP-3675.
+It shows that the payload is then `INVALID`, with the zero hash as the latest valid hash.
+`isTerminalPowBlock_eq_isValidTerminalPowBlock` (`Proofs/TransitionConfiguration.lean`) shows that these conditions are those of the consensus layer, when both layers hold the same terminal total difficulty.
+Only the last block of the chain is checked.
+Step 2 also says that every descendant of an invalid terminal block must be `INVALID`.
+The model keeps no invalid block, so a child of a payload rejected by the check is `SYNCING` instead.
+A chain whose last block is from Paris on is taken as valid, its terminal block included.
 
 The Engine API reads its base types with the readers that it shares with the execution JSON-RPC API.
 The readers live below the Execution layer, in `Serialization/JsonRpc.lean`, and their proofs in `Serialization/Proofs/JsonRpc.lean`.

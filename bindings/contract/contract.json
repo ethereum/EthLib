@@ -11466,7 +11466,7 @@
   {"summary":
    "The payload status of an `engine_newPayload` request, on a chain that holds the parent.",
    "signature":
-   "(config: dict, state: bytes, recent: list[tuple[str, bytes, list[bytes]]], request: dict) -> tuple[dict, bytes, bytes] | tuple[dict, None, None]",
+   "(config: dict, state: bytes, recent: list[tuple[str, bytes, list[bytes]]], terminal_total_difficulty: int, total_difficulty: int, request: dict) -> tuple[dict, bytes, bytes] | tuple[dict, None, None]",
    "operation": "EthLib.Engine.Exports.newPayloadOnChainExport",
    "method": "engine_new_payload_on_chain",
    "errors":
@@ -11480,7 +11480,7 @@
       {"constructor": "unknownPayload", "code": 38001}]}],
    "error_class": "EngineError",
    "docstring":
-   "The payload status of an `engine_newPayload` request, on a chain that holds the parent.\n\nThe arguments are the chain configuration, the state, the recent blocks and the request.\n\nA valid payload also gives the RLP forms of its header and of the accounts after it.\n\nOtherwise both are `None`."},
+   "The payload status of an `engine_newPayload` request, on a chain that holds the parent.\n\nThe arguments are the chain configuration, the state, the recent blocks, two totals and the request.\n\nThe totals are the terminal total difficulty, and the total difficulty of the last recent block.\n\nThe terminal total difficulty must be below `2^256`, or the export raises with code 0.\n\nA valid payload also gives the RLP forms of its header and of the accounts after it.\n\nOtherwise both are `None`."},
   {"summary":
    "Build a payload on a chain, from attributes, the builder's choices and transactions.",
    "signature":
@@ -11503,7 +11503,8 @@
       {"constructor": "wrongBlockHash", "code": 403},
       {"constructor": "wrongVersionedHashes", "code": 404},
       {"constructor": "invalidBlock", "code": 405},
-      {"constructor": "invalidBlockAccessList", "code": 406}]},
+      {"constructor": "invalidBlockAccessList", "code": 406},
+      {"constructor": "invalidTerminalBlock", "code": 407}]},
     {"type": "EthLib.Execution.Blocks.BlockError",
      "codes":
      [{"constructor": "genesisNumber", "code": 201},
