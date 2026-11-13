@@ -3523,6 +3523,18 @@ The receipts of the lowest block, of side blocks and of the pending block are in
 No result schema of the getters allows `null`.
 Here an unknown block or transaction gets `-32001`, the code that the getter of a block access list in the same file requires for an unknown block.
 
+The receipt methods return the object `ReceiptInfo` of [`receipt.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/schemas/receipt.yaml), with its logs as objects `Log` (`Execution/Rpc/Receipt.lean`).
+The receipt objects of a block are one for each receipt, in order, each built from its transaction and its receipt (`receiptInfos_eq_ok`, `receiptInfo_eq_ok`, `Proofs/Rpc/Receipt.lean`).
+Their logs are numbered `0, 1, 2, …` across the block (`logIndex_receiptInfos`), and the lookup of one receipt returns the object at its index among those of its block (`transactionReceipt_eq_ok`, `blockReceipts_of_resolve`).
+No text of a receipt or a log defines `logIndex`; the notes of `eth_simulateV1` state the rule and say that receipts use it.
+From Byzantium, the field `status` is `0x1` exactly when the receipt is a success (`outcomeOf_of_byzantium`).
+In a valid view, take a canonical block after the lowest.
+Each receipt has the Bloom filter of its logs, and so does each receipt object (`Valid.bloom_receipts`, `Valid.logsBloom_receiptInfos`).
+The cumulative gas of its receipts never decreases (`Valid.cumulativeGasUsed_receipts`), so the gas of the receipt objects adds up to the last cumulative gas (`Valid.sum_gasUsed`).
+Its base fee is at most the maximum fee of each transaction (`Valid.baseFee_le_maxFeePerGas`).
+So the effective gas price of each receipt object follows the formula of the description, read in integers (`Valid.effectiveGasPrice_receiptInfos`, `effectiveGasPrice_description`).
+From Glamsterdam, the cumulative gas of a receipt counts the gas that the senders paid, and the object keeps that field, while the descriptions still read "gas used".
+
 The Python suite replays the official test chain into a view and answers the official fixtures of the methods that EthLib serves.
 That chain mines its blocks before the merge with a zero mix hash and a zero nonce, so the suite runs the transition without the proof-of-work check.
 
