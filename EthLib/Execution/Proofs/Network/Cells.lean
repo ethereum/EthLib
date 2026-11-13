@@ -16,9 +16,15 @@ A response passes the check exactly when it keeps these rules.
 
 A bitmap marks index `i` exactly when `i < 128` and bit `i % 8` of byte `i / 8` is set.
 
+Bits count from the least significant bit.
+
+The source fixes no bit order, and the check does not depend on one.
+
 A bitmap is a subset of another exactly when the other marks each index that it marks.
 
 The count of a bitmap is the number of set bits of its 16 bytes.
+
+A subset counts no more indices than the bitmap that holds it.
 -/
 
 @[expose] public section
@@ -30,12 +36,12 @@ open EthLib.Base
 /-- Bit `j < 8` of a byte, read by a shift and a mask of 1, is bit `j` of its number. -/
 private theorem shift_and_one (x : UInt8) {j : Nat} (hj : j < 8) :
     ((x >>> j.toUInt8) &&& 1 == 1) = x.toNat.testBit j := by
-  have h1 : (j.toUInt8).toNat % 8 = j := by simp [Nat.toUInt8]; omega
-  rw [Bool.eq_iff_iff, beq_iff_eq, ← UInt8.toNat_inj]
-  simp only [UInt8.toNat_and, UInt8.toNat_shiftRight, h1, UInt8.reduceToNat]
-  rw [Nat.testBit, Nat.and_comm]
-  have : x.toNat >>> j &&& 1 < 2 := Nat.lt_of_le_of_lt Nat.and_le_right (by decide)
-  constructor <;> intro h <;> simp_all <;> omega
+  have bound : j < UInt8.size := by change j < 256; omega
+  apply Bool.eq_iff_iff.mpr
+  simp only [beq_iff_eq, ← UInt8.toNat_inj, UInt8.toNat_and, UInt8.toNat_shiftRight,
+    Nat.toUInt8_eq, UInt8.toNat_ofNat_of_lt' bound, Nat.mod_eq_of_lt hj, UInt8.toNat_one,
+    Nat.and_one_is_mod, Nat.shiftRight_eq_div_pow, Nat.testBit_eq_decide_div_mod_eq,
+    decide_eq_true_eq]
 
 /-- A bitmap marks index `i` exactly when `i < 128` and bit `i % 8` of byte `i / 8` is set. -/
 theorem CellMask.has_eq_true_iff {mask : CellMask} {i : Nat} :
@@ -98,9 +104,7 @@ theorem CellMask.count_eq_sum {mask : CellMask} :
   simp only [hdiv, hmod]
   exact ⟨fun ⟨_, h⟩ => h, fun h => ⟨by omega, h⟩⟩
 
-/-- A subset counts no more indices than the bitmap that holds it.
-
-So a response that passes the check has no more cells for each blob than the request asks for. -/
+/-- A subset counts no more indices than the bitmap that holds it. -/
 theorem CellMask.count_le_count_of_subset {a b : CellMask} (h : a.subset b = true) :
     a.count ≤ b.count := by
   unfold CellMask.count

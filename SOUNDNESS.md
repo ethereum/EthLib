@@ -1907,12 +1907,15 @@ The check trusts these hashes: it reads neither the block hashes of the request 
 `checkCellsResponse_eq_ok_iff` (`Execution/Proofs/Network/Message.lean`) states that a Cells answer of eth/72 passes exactly when it repeats the request ID and its cells pass `checkCells` (`Execution/Network/Cells.lean`).
 That check follows "Cells (0x15)" in [`caps/eth.md`](https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/eth.md#cells-0x15).
 `checkCells_eq_ok_iff` (`Execution/Proofs/Network/Cells.lean`) states the rules of those cells.
-`CellMask.has_eq_true_iff` states which index a bitmap marks: index `i` exactly when `i < 128` and bit `i % 8` of byte `i / 8` is set.
-`CellMask.subset_eq_true_iff` states the subset rule in those marks: the request marks each index that the response marks.
-`CellMask.count_eq_sum` states that the count of a bitmap is the number of set bits of its 16 bytes.
-So `CellMask.count_le_count_of_subset` gives each blob of a response no more cells than the request asks for.
-No export reaches these checks, so no test reads them.
 The caller gives the number of blobs of each transaction, and the check trusts it.
+
+`CellMask.has_eq_true_iff` states which index a bitmap marks: index `i` exactly when `i < 128` and bit `i % 8` of byte `i / 8` is set, counting from the least significant bit.
+"Cells (0x15)" fixes no bit order; the check reads the bitmaps only through the subset rule and the count, which do not depend on it.
+`CellMask.subset_eq_true_iff` states the subset rule in those marks: one bitmap is a subset of another exactly when the other marks each index that it marks.
+`CellMask.count_eq_sum` states that the count of a bitmap, the `popcount` of "Cells (0x15)", is the number of set bits of its 16 bytes.
+`CellMask.count_le_count_of_subset` states that a subset counts no more indices than the bitmap that holds it.
+With `checkCells_eq_ok_iff`, a response that passes has no more cells for each blob than the request asks for.
+No export calls the cells check, so no test of the bindings runs it.
 
 ### Weak subjectivity
 
