@@ -420,7 +420,7 @@ private theorem funding_block_replay {fork : Fork} {s : BeaconState preset fork}
     (fun _ _ ok => by obtain ⟨_, rfl⟩ := processSyncAggregate_eq ok; exact .of_data rfl)
     (fun _ _ ok => (sameSizes_processSyncAggregate ok).1)
     (fun _ _ ok => by obtain ⟨_, rfl⟩ := processSyncAggregate_eq ok; exact effectiveKept_data)
-    (fun _ _ ok => SamePendingQueue.syncAggregate ok) requestedBound synced
+    (fun _ _ ok => by obtain ⟨_, rfl⟩ := processSyncAggregate_eq ok; rfl) requestedBound synced
 
 /-- A block preserves funding except for its recorded external credits.
 

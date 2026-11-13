@@ -639,21 +639,6 @@ theorem blockExecution {body : BeaconBlockBody preset fork} {bellatrix : .bellat
       rfl
     · cases ok; rfl
 
-theorem syncAggregate {altair : .altair ≤ fork} {aggregate : SyncAggregate preset}
-    (ok : processSyncAggregate config checks state altair aggregate = .ok after) :
-    SamePendingQueue state after := by
-  unfold processSyncAggregate at ok
-  simp only [bind_ok_iff] at ok
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, folded⟩ := ok
-  rw [← Array.foldlM_toList] at folded
-  exact fold (fun _ _ _ ok => by
-    unfold applySyncReward at ok
-    split at ok
-    · simp only [bind_ok_iff, liftAccessor_ok] at ok
-      obtain ⟨_, raised, _, _, paid⟩ := ok
-      exact (increase raised).trans (increase paid)
-    · exact decrease (liftAccessor_ok.mp ok)) folded
-
 end SamePendingQueue
 
 namespace PendingSources
@@ -716,7 +701,7 @@ private theorem block (early : fork < .glamsterdam) (holds : PendingSources stat
   have tail : Kept last after := by
     split at synced
     · obtain ⟨_, rfl⟩ := processSyncAggregate_eq synced
-      exact fun h => h.kept (SamePendingQueue.syncAggregate synced) (Nat.le_refl _)
+      exact fun h => h.kept rfl (Nat.le_refl _)
     · cases synced
       exact id
   have p := fold (fun _ _ _ h ok => h.kept (SamePendingQueue.proposer ok)
@@ -1571,8 +1556,7 @@ private theorem block (early : fork < .glamsterdam)
   have tail : Kept last after := by
     split at synced
     · obtain ⟨_, rfl⟩ := processSyncAggregate_eq synced
-      exact fun h => h.framed (SamePendingQueue.syncAggregate synced) (.of_data rfl) .of_data
-        (frame_processSyncAggregate synced).slot
+      exact fun h => h.framed rfl (.of_data rfl) .of_data rfl
     · cases synced
       exact id
   have p := fold (fun _ _ _ h ok => h.framed (SamePendingQueue.proposer ok)
