@@ -28,7 +28,9 @@ No other step of a slot adds a validator or a pending deposit.
 
 So a slot never raises the count, at every fork.
 
-The upgrades between forks and the blocks are left to other statements.
+The upgrades between forks have their own statements.
+
+The blocks are left to other statements.
 -/
 
 @[expose] public section
