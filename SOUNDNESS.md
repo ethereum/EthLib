@@ -2999,6 +2999,32 @@ The consensus test vectors fix the answer of the execution layer, so none of the
 No payload build is specified, so `engine_getPayload` has no definition, and the export refuses payload attributes on a new valid head.
 The tree of known payloads and the known finalized block are inputs of each call, not state that the model keeps between calls.
 
+### Execution JSON-RPC API
+
+The execution JSON-RPC API is the interface through which wallets, indexers and test suites read an execution node.
+EthLib follows commit [`3284ee8`](https://github.com/ethereum/execution-apis/tree/3284ee80c3da3e516c53782dde75157cccf1ebdc) of `ethereum/execution-apis`, which is ahead of release `v1.0.0-beta.7`.
+The definitions are in `Execution/Rpc/`, and the theorems in `Execution/Proofs/Rpc/`.
+
+Each reader of a base type reads back what its writer writes.
+A number of any size reads back from its quantity, and that quantity is the only text that reads as it (`uint_quantityJson`, `uint_eq_ok_iff`, `Serialization/Proofs/JsonRpc.lean`).
+A byte reads back from the hex digits of its value (`byte_byteJson`).
+The schema of a byte also admits a leading zero, so `0x05` reads as the byte 5 but no writer writes it.
+A decimal number reads back from its decimal digits (`uintDecimal_uintDecimalJson`).
+A 32-bit and a 256-bit number read back from their quantities (`uint32_quantityJson`, `uint256_quantityJson`).
+
+A block parameter names a block by its number, by a tag, or by its hash.
+A number or a tag reads back from the writer (`blockNumberOrTag_number`, `blockNumberOrTag_tag`), and a range reads back every number (`blockNumberOrTagForRange_number`) and every tag but `pending` (`blockNumberOrTagForRange_tag`), which it rejects (`blockNumberOrTagForRange_pending`).
+The schema for a number, a tag or a hash is an `anyOf`, so a string of 64 hex digits whose first digit is not `0` matches both a number and a hash.
+The official fixtures read such a string as a hash, so the reader tries a hash first (`blockNumberOrTagOrHash_hashString`).
+A tag, and a hash in the object of EIP-1898, read back (`blockNumberOrTagOrHash_tag`, `blockNumberOrTagOrHash_hash`).
+A number reads back when its text is no hash (`blockNumberOrTagOrHash_number`), which holds below `2^252` (`hash32_quantityJson_of_lt`).
+
+The request and the response objects of JSON-RPC 2.0 read back from their writers (`request_requestJson`, `response_responseJson`), a result of `null` included, and so does the identifier of a request (`requestId_requestIdJson`).
+The error codes of the source come in groups.
+Every code of a group that declares a range lies in that range (`code_mem_range`, `Proofs/Rpc/Errors.lean`).
+No code appears twice (`codes_nodup`), and the code `4444` of pruned history is in no group (`prunedHistoryUnavailable_not_mem`).
+The messages of the groups are not fixed: the official fixtures show other texts.
+
 ### Beacon API
 
 The Beacon API is the HTTP interface of a consensus client, as release `v5.0.0-beta.0` of `ethereum/beacon-APIs` defines it.
