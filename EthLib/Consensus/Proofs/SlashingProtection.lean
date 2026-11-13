@@ -1407,7 +1407,7 @@ private theorem min?_map_append_singleton {α : Type} {xs : List α} {x : α}
     · exact bound value mapped
     · exact above
 
-/-- A vote that passes the last three with the record of an accepted vote passes them without it.
+/-- A vote that passes conditions 3, 4 and 5 after an accepted vote also passes them without it.
 
 The accepted vote passed them against the same votes. -/
 private theorem checkAttestationSigning_of_append {votes : List SignedAttestationRecord}

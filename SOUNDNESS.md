@@ -2933,7 +2933,7 @@ The signer of these theorems records every message it signs, so a signer that pr
 A signer of blocks or votes that prunes is covered below.
 `mem_blocksOf` and `mem_attestationsOf` show that the messages of a key are those of its own entries.
 The proofs read conditions 2, 4 and 5 through `lt_slot_of_checkBlockSlot`, `le_sourceEpoch_of_checkSourceEpoch` and `lt_targetEpoch_of_checkTargetEpoch`.
-They also read condition 1 through `lt_slot_of_importAndSignBlocks`, and condition 3 through `checkAttestationSigning_of_importAndSignAttestations`.
+Through the import steps of `importAndSignBlocks` and `importAndSignAttestations`, they also read the clause of conditions 1 and 3 that refuses each message at the slot or target of a record without a signing root.
 
 Import follows the [minimal strategy](https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-3076.md#advice-for-minimal-databases) of the EIP, for the held record and for the file.
 For each key it keeps one block limit, the greatest slot, and one vote limit, the greatest source epoch and the greatest target epoch, without signing roots.
@@ -2962,7 +2962,7 @@ So these theorems also cover a signer of blocks that prunes its record with the 
 
 `importAndSignAttestations` models a signer of votes that also imports files, from any starting file.
 `importAndSignAttestations_map_signAttestation` shows that a run without imports is `signAttestations`.
-`signingRoot_eq_of_importAndSignAttestations`, `isSlashableWith_eq_false_of_importAndSignAttestations` and `isSlashableAttestationData_eq_false_of_importAndSignAttestations` state the matching theorems on `signAttestations` for it, and those follow from them.
+`signingRoot_eq_of_importAndSignAttestations`, `isSlashableWith_eq_false_of_importAndSignAttestations` and `isSlashableAttestationData_eq_false_of_importAndSignAttestations` state the three theorems on `signAttestations` for it, and the theorems on `signAttestations` follow from them.
 Each holds whatever files the signer imports.
 
 `checkAttestationSigning_of_importAndSignAttestations` shows that each vote that the signer signs meets conditions 3, 4 and 5 of the starting file.
@@ -2973,7 +2973,7 @@ Both need that file to hold one or more votes of the key.
 `le_sourceEpoch_of_importAndSignAttestations_of_importFile` shows that a vote signed after an import has a source at least each source of the file and of the starting file.
 `lt_targetEpoch_of_importAndSignAttestations_of_importFile` shows that the target of such a vote is after each target of both files.
 `checkAttestationSigning_of_importAndSignAttestations_of_importFile` concludes that such a vote meets conditions 3, 4 and 5 of each file imported before it.
-So the theorems on `importAndSignAttestations` also cover a signer of votes that prunes its record with the minimal strategy as it goes.
+Since `importFile_of_data_eq_nil` makes a prune the import of an empty file, the theorems on `importAndSignAttestations` also cover a signer of votes that prunes its record with the minimal strategy as it goes.
 
 `readUInt64_uint64Json` and `readBytes_bytesJson` show that each integer and each byte string of a file reads back as written.
 `ofJson_toJson` shows that a whole file reads back as itself from the document that `toJson` writes, whatever its records.
