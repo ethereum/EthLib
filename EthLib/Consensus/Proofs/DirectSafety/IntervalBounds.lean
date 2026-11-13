@@ -123,21 +123,29 @@ private theorem active_stake_le_window {g x y : ForkedBeaconState preset}
   exact funding_assemble shared tail genesis electra early withdrawalDelay
     high endEpoch events replayed funding_block funding_slot
 
+/-- Before Electra exits spend count churn; afterwards they spend exit and consolidation churn.
+
+The Electra churn is charged only when the window reaches the Electra fork epoch. -/
 def exitWindow (x : ForkedBeaconState preset) (high : Nat)
     (events : List (BalanceEvent preset)) : Nat :=
   scheduledExitCarry x high + queueCarry x high +
     driftHorizon x high *
       ((if x.fork < .pectra then max 1 (cohortCap config (registryWindow x high)) *
         preset.MAX_EFFECTIVE_BALANCE.toNat else 0) +
-        config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat +
-        consolidationRate (preset := preset) (config := config)
-          (activeStakeWindow (config := config) x high events))
+        (if config.ELECTRA_FORK_EPOCH.toNat ≤ high + 1 then
+          config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat +
+          consolidationRate (preset := preset) (config := config)
+            (activeStakeWindow (config := config) x high events) else 0))
 
 /-- Before Electra activations spend count churn; afterwards funding spends deposit churn.
 
-Already funded inactive validators remain a carry-in because Electra activation has no count cap. -/
+Already funded inactive validators remain a carry-in because Electra activation has no count cap.
+
+The deposit churn is charged only when the window reaches the Electra fork epoch. -/
 def activationWindow (x : ForkedBeaconState preset) (high : Nat) : Nat :=
-  activationCarry x + depositWindow (config := config) x high +
+  activationCarry x +
+    (if config.ELECTRA_FORK_EPOCH.toNat ≤ high + 1 then depositWindow (config := config) x high
+      else 0) +
     (if x.fork < .pectra then driftHorizon x high * cohortCap config (registryWindow x high) *
       preset.MAX_EFFECTIVE_BALANCE.toNat else 0)
 
@@ -2274,15 +2282,32 @@ private theorem nonaccountable_losses_over_interval {g x y : ForkedBeaconState p
       rw [active] at bounded
       simpa only [Models.stake, balanceAt] using bounded
   -- Add scheduled exits and retained-key corrections to the queue window.
-  have charges := departure_charges_le_window shared tail genesis caps early high
-    (registryWindow x high)
-    (consolidationRate (preset := preset) (config := config)
-      (activeStakeWindow (config := config) x high events)) registry rates
   have losses := intervalLoss_departure_bound shared tail genesis caps aligned
     early high endEpoch events replayed
-  change _ ≤ queueCarry x high + driftHorizon x high * _ at charges
   unfold exitWindow
-  omega
+  by_cases preFork : high + 1 < config.ELECTRA_FORK_EPOCH.toNat
+  · -- A window before the fork has no Electra state, so it is charged only the count churn.
+    have before : x.fork < .pectra := by
+      apply Nat.lt_of_not_le
+      intro electra
+      have started := reachable_electra_epoch shared genesis electra
+      have ordered := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps tail.chainSteps)
+      omega
+    have charges := departure_charges_le_window_before_fork shared tail genesis caps early high
+      (registryWindow x high) _ registry rates before preFork
+    have notAfter : ¬ config.ELECTRA_FORK_EPOCH.toNat ≤ high + 1 := Nat.not_le_of_lt preFork
+    simp only [notAfter, before, ↓reduceIte, Nat.add_zero]
+    unfold driftHorizon
+    omega
+  · have charges := departure_charges_le_window shared tail genesis caps early high
+      (registryWindow x high)
+      (consolidationRate (preset := preset) (config := config)
+        (activeStakeWindow (config := config) x high events)) registry rates
+    have after : config.ELECTRA_FORK_EPOCH.toNat ≤ high + 1 := Nat.le_of_not_lt preFork
+    simp only [after, ↓reduceIte,
+      ← Nat.add_assoc (_ : Nat) config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat]
+    change _ ≤ queueCarry x high + driftHorizon x high * _ at charges
+    omega
 
 private theorem intervalGain_existing_funding {x y : ForkedBeaconState preset}
     (tail : Run config checks x y) (early : y.fork < .glamsterdam)
@@ -2879,6 +2904,7 @@ private theorem intervalGain_crossing_endpoint {g x y : ForkedBeaconState preset
   have sources := intervalGain_crossing_sources x y high events crossing bounded
     (depositWindow (config := config) x high) deposits
   unfold activationWindow
+  simp only [crossing, ↓reduceIte]
   omega
 
 private theorem intervalGain_deposit_filter_sum (y : ForkedBeaconState preset)
@@ -3185,67 +3211,6 @@ private theorem intervalGain_active_residual {g x y : ForkedBeaconState preset}
   · rw [intervalGain_residual_other x high e deposit]
     exact credit
 
-private theorem intervalGain_upgrade_epoch {s t : ForkedBeaconState preset}
-    (ok : processUpgrades config checks s = .ok t)
-    (initial : .pectra ≤ s.fork → config.ELECTRA_FORK_EPOCH.toNat ≤
-      (getCurrentEpoch s.state).toNat) :
-    .pectra ≤ t.fork → config.ELECTRA_FORK_EPOCH.toNat ≤
-      (getCurrentEpoch t.state).toNat := by
-  fun_induction processUpgrades config checks s generalizing t with
-  | case1 s due ih =>
-    obtain ⟨next, nextOk, rest⟩ := bind_ok_iff.mp ok
-    apply ih next rest
-    intro electra
-    have slot := (upgradeFrame_upgradeNext nextOk).slot
-    have epoch : getCurrentEpoch next.val.state = getCurrentEpoch s.state := by
-      simp only [getCurrentEpoch, slot]
-    rw [epoch]
-    by_cases old : .pectra ≤ s.fork
-    · exact initial old
-    · obtain ⟨fork, state⟩ := s
-      cases fork <;> simp only at old
-      all_goals try (exact False.elim (old (by decide)))
-      all_goals simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq,
-        throw] at nextOk
-      all_goals try contradiction
-      all_goals try (obtain ⟨_, _, rfl⟩ := nextOk)
-      all_goals try (exact False.elim (of_decide_eq_false rfl electra))
-      simp only [upgradeDue, Config.nextFork, Option.any_some, Bool.and_eq_true,
-        beq_iff_eq] at due
-      have scheduled : getCurrentEpoch state = config.ELECTRA_FORK_EPOCH := by
-        exact due.2
-      rw [scheduled]
-  | case2 s notDue => cases ok; exact initial
-
-private theorem intervalGain_reachable_epoch {g y : ForkedBeaconState preset}
-    (run : Run config checks g y) (genesis : Genesis (config := config) (checks := checks) g) :
-    .pectra ≤ y.fork → config.ELECTRA_FORK_EPOCH.toNat ≤
-      (getCurrentEpoch y.state).toNat := by
-  induction run with
-  | nil =>
-    intro electra
-    obtain ⟨hash, time, deposits, ok⟩ := genesis
-    have altair : Fork.altair ≤ g.fork := Nat.le_trans (by decide) electra
-    simp [initializeBeaconStateFromEth1, altair, throw] at ok
-  | @snoc middle last pre step ih =>
-    cases step with
-    | slot ok =>
-      obtain ⟨advanced, advanceOk, upgrades⟩ := bind_ok_iff.mp ok
-      apply intervalGain_upgrade_epoch upgrades
-      intro electra
-      have previous := ih electra
-      have moved := advanceSlot_slot advanceOk
-      have epochs : (getCurrentEpoch middle.state).toNat ≤
-          (getCurrentEpoch advanced).toNat := by
-        simp only [getCurrentEpoch_toNat]
-        exact Nat.div_le_div_right (by omega)
-      exact previous.trans epochs
-    | block engine signed due ok =>
-      intro electra
-      have previous := ih electra
-      have slot := (frame_processBlock (applySignedBlock_ok ok).2.1).slot
-      simpa only [getCurrentEpoch, slot] using previous
-
 private theorem intervalGain_boundary_carry (x : ForkedBeaconState preset)
     (early : x.fork < .glamsterdam) (unique : PubkeysDistinct x.state) :
     boundaryStake x ≤ activationCarry x := by
@@ -3313,8 +3278,8 @@ private theorem intervalGain_pre_electra_of_split {x y : ForkedBeaconState prese
     (Nat.mul_le_mul horizon count)
   refine (intervalGain_reference_partition tail).trans ?_
   unfold activationWindow
-  rw [ite_eq_left before]
-  omega
+  simp only [before, ↓reduceIte]
+  split <;> omega
 
 /-- Funding churn bounds Electra deposits that can contribute to recent voting stake.
 
@@ -3337,7 +3302,7 @@ private theorem gains_and_activations_over_interval {g x y : ForkedBeaconState p
   · have before : y.fork < .pectra := by
       apply Nat.lt_of_not_le
       intro electra
-      have scheduled := intervalGain_reachable_epoch (shared.append tail) genesis electra
+      have scheduled := reachable_electra_epoch (shared.append tail) genesis electra
       omega
     apply intervalGain_pre_electra_of_split tail parameters
       ((validatorKeys_prefix_and_distinct_of_genesis_chainSteps initialized
@@ -3394,9 +3359,18 @@ private theorem sourceDrift_le_of_prefix (x : ForkedBeaconState preset) (high : 
         (activeStakeWindow (config := config) x high after) :=
     Nat.sub_le_sub_right (max_le_max_left _
       (Nat.div_le_div_right (max_le_max_left _ active))) _
+  have gated : (if config.ELECTRA_FORK_EPOCH.toNat ≤ high + 1 then
+      config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat +
+        consolidationRate (preset := preset) (config := config)
+          (activeStakeWindow (config := config) x high before) else 0) ≤
+      (if config.ELECTRA_FORK_EPOCH.toNat ≤ high + 1 then
+        config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat +
+          consolidationRate (preset := preset) (config := config)
+            (activeStakeWindow (config := config) x high after) else 0) := by
+    split <;> omega
   have exits : exitWindow (config := config) x high before ≤
-      exitWindow (config := config) x high after := by
-    exact Nat.add_le_add_left (Nat.mul_le_mul_left _ (Nat.add_le_add_left rates _)) _
+      exitWindow (config := config) x high after :=
+    Nat.add_le_add_left (Nat.mul_le_mul_left _ (Nat.add_le_add_left gated _)) _
   have credits := sums (residualCredit (config := config) x high)
   unfold sourceDrift
   omega
