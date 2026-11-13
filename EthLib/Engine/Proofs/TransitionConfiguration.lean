@@ -2,7 +2,7 @@ module
 
 public import EthLib.Engine.TransitionConfiguration
 public import EthLib.Engine.Proofs.Json
-public import EthLib.Consensus.Config
+public import EthLib.Consensus.ForkChoice.Handlers
 
 /-!
 # Proofs: `engine_exchangeTransitionConfigurationV1`
@@ -16,6 +16,10 @@ It then answers the configuration of the execution node, whatever configuration 
 So the request that a consensus node writes always gets that answer.
 
 The undecided terminal total difficulty is `2^256 - 2^10`, the value of the minimal configuration.
+
+The terminal block check of the execution layer is that of the consensus layer.
+
+Both must hold the same terminal total difficulty.
 -/
 
 public section
@@ -87,5 +91,15 @@ theorem toNat_UNDECIDED_TERMINAL_TOTAL_DIFFICULTY :
 theorem minimal_terminalTotalDifficulty :
     Consensus.Config.minimal.TERMINAL_TOTAL_DIFFICULTY = UNDECIDED_TERMINAL_TOTAL_DIFFICULTY := by
   decide
+
+/-- The terminal block check of the execution layer agrees with that of the consensus layer.
+
+Both layers must hold the same terminal total difficulty. -/
+theorem isTerminalPowBlock_eq_isValidTerminalPowBlock {config : Consensus.Config}
+    {t : TransitionConfiguration} {block parent : Consensus.PowBlock}
+    (h : t.terminalTotalDifficulty = config.TERMINAL_TOTAL_DIFFICULTY) :
+    isTerminalPowBlock t block.totalDifficulty.toNat parent.totalDifficulty.toNat =
+      Consensus.isValidTerminalPowBlock config block parent := by
+  simp [isTerminalPowBlock, Consensus.isValidTerminalPowBlock, h, BitVec.le_def, BitVec.lt_def]
 
 end EthLib.Engine

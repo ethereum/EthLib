@@ -1532,6 +1532,7 @@ def bindings : List Binding := [
     "(secret: bytes, token: str, clock: int) -> bool", [], some "JwtError"⟩,
   ⟨"engine_new_payload_on_chain", `EthLib.Engine.Exports.newPayloadOnChainExport,
     "(config: dict, state: bytes, recent: list[tuple[str, bytes, list[bytes]]], " ++
+      "terminal_total_difficulty: int, total_difficulty: int, " ++
       "request: dict) -> tuple[dict, bytes, bytes] | tuple[dict, None, None]",
     [`EthLib.Engine.EngineError], some "EngineError"⟩,
   ⟨"engine_build_payload", `EthLib.Engine.Exports.buildPayloadExport,

@@ -3,6 +3,7 @@ module
 public import EthLib.Base.ChainConfig
 public import EthLib.Engine.Block
 public import EthLib.Engine.Json
+public import EthLib.Engine.TransitionConfiguration
 public import EthLib.Execution.Blocks.Transition
 
 /-!
@@ -46,19 +47,27 @@ A payload that fails these checks is invalid.
 
 A payload that passes them still needs its parent's state, so without it the status is syncing.
 
-With that state, the block of the payload runs, and its status is valid or invalid.
+With that state, a parent of proof of work must be terminal, by step 2 of payload validation.
+
+Otherwise the payload is invalid, with the zero hash as its latest valid hash.
+
+Then the block of the payload runs, and its status is valid or invalid.
 
 The consensus layer writes the parameters of each version as JSON, in the order it takes them.
 
-The method specifications state these rules, at commit `3284ee8` of execution-apis:
+These sources state the rules, at commit `3284ee8` of execution-apis and `46976b2` of EIPs:
 
 - [`engine_newPayloadV1`][v1], which also defines the statuses
 - [`engine_newPayloadV2`][v2], with the structure by fork
 - [`engine_newPayloadV3`][v3], and its update by Pectra in [`prague.md`][v3-prague]
 - [`engine_newPayloadV4`][v4], and its update by Amsterdam in [`amsterdam.md`][v4-amsterdam]
 - [`engine_newPayloadV5`][v5]
+- the [payload validation][validation] of Paris, with its terminal block check
+- the [transition block validity][eip3675] of EIP-3675
 
 [v1]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#engine_newpayloadv1
+[validation]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#payload-validation
+[eip3675]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-3675.md#transition-block-validity
 [v2]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/shanghai.md#engine_newpayloadv2
 [v3]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/cancun.md#engine_newpayloadv3
 [v3-prague]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/prague.md#update-the-methods-of-previous-forks
@@ -229,11 +238,33 @@ def newPayloadWithoutState (config : ChainConfig) (version : Nat) (params : Json
   | .error (status, reason) => return (status, some reason)
   | .ok _ => return (⟨.syncing, none⟩, none)
 
+/-- Whether the parent of a payload passes the terminal block check, given its total difficulty.
+
+A block from Paris on passes.
+
+A block of proof of work must be terminal.
+
+The total difficulty of its own parent is its total minus its difficulty.
+
+A total below the difficulty is not that of a real chain, so such a block fails. -/
+def passesTerminalCheck (transition : TransitionConfiguration) (totalDifficulty : Nat)
+    (parent : RecentBlock) : Bool :=
+  decide (.paris ≤ parent.fork) || (decide (parent.header.difficulty ≤ totalDifficulty) &&
+    isTerminalPowBlock transition totalDifficulty (totalDifficulty - parent.header.difficulty))
+
 /-- The status of `engine_newPayload` from an execution layer that holds the parent's state.
 
-The chain holds the state after its last recent block.
+The chain holds the state after its last recent block, whose total difficulty is given.
 
 A payload whose parent is not that block stays syncing, since its parent's state is missing.
+
+A parent of proof of work that is not terminal makes the payload invalid, by payload validation.
+
+Its latest valid hash is then zero, as that step requires.
+
+A parent from Paris on is not checked: the chain is taken as valid, its terminal block included.
+
+The method keeps no invalid block, so a child of an invalid payload is syncing, not invalid.
 
 Otherwise a payload that passes the checks before execution runs as the next block of the chain.
 
@@ -246,7 +277,8 @@ That of a payload invalid in execution is its parent's hash, or zero for a paren
 An execution that aborts, such as on missing code, leaves the payload syncing.
 
 A valid payload also gives its block, as the new last recent block, and the state after it. -/
-def newPayloadOnChain (chain : BlockChain) (version : Nat) (params : Json) :
+def newPayloadOnChain (transition : TransitionConfiguration) (totalDifficulty : Nat)
+    (chain : BlockChain) (version : Nat) (params : Json) :
     Except EngineError
       (PayloadStatus × Option PayloadError × Option (RecentBlock × Execution.State.State)) := do
   match ← checkNewPayload chain.config version params with
@@ -256,6 +288,8 @@ def newPayloadOnChain (chain : BlockChain) (version : Nat) (params : Json) :
     let some parent := chain.recent.getLast? | return (⟨.syncing, none⟩, none, none)
     unless parent.header.hash.toOption = some header.parentHash do
       return (⟨.syncing, none⟩, none, none)
+    unless passesTerminalCheck transition totalDifficulty parent do
+      return (⟨.invalid, some 0⟩, some .invalidTerminalBlock, none)
     match stateTransition chain checked.block (checkSeal := false) with
     | .ok post =>
       return (⟨.valid, header.hash.toOption⟩, none, some (⟨checked.fork, header, []⟩, post))
