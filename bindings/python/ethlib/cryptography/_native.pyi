@@ -573,6 +573,14 @@ def consensus_api_resolve(name: str, fork: str, anchor_state: bytes, anchor_bloc
     """The answer to each query, against the store after the steps of a fork choice case."""
     ...
 
+def consensus_builder_api_json(name: str, fork: str, type: str, data: bytes) -> Any:
+    """The JSON body of a response of the Builder API: the version of the fork and the data."""
+    ...
+
+def consensus_builder_api_ssz(name: str, fork: str, type: str, document: Any) -> bytes:
+    """The SSZ bytes of the value that a JSON body of the Builder API holds."""
+    ...
+
 def consensus_is_valid_builder_signature(name: str, fork: str, config: dict[str, Any] | None, type: str, data: bytes) -> bool:
     """Whether the signature of a signed message of the Builder API verifies."""
     ...

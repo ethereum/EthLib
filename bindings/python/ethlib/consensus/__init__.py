@@ -70,6 +70,16 @@ def api_ssz(name: str, fork: str, type_name: str, document: object) -> bytes:
     return _native.consensus_api_ssz(name, fork, type_name, document)
 
 
+def builder_api_json(name: str, fork: str, type_name: str, data: bytes) -> dict[str, Any]:
+    """The versioned Builder API body of the container that SSZ bytes encode, or SszError."""
+    return _native.consensus_builder_api_json(name, fork, type_name, data)
+
+
+def builder_api_ssz(name: str, fork: str, type_name: str, document: object) -> bytes:
+    """The SSZ bytes of the container in a Builder API response body of the fork, or SszError."""
+    return _native.consensus_builder_api_ssz(name, fork, type_name, document)
+
+
 def is_valid_builder_signature(
     name: str,
     fork: str,
@@ -1391,6 +1401,8 @@ __all__ = [
     "ssz_static",
     "api_json",
     "api_ssz",
+    "builder_api_json",
+    "builder_api_ssz",
     "is_valid_builder_signature",
     "process_registration",
     "is_eligible_for_bid",
