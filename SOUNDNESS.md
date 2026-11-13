@@ -1974,6 +1974,7 @@ An ID from `0x10` on goes to the shared capability that holds it, and `route` gi
 `receive_beforeHello`, `receive_hello_active`, `receive_ping` and `receive_closed` (`Networking/Proofs/Devp2p/Session.lean`) state these steps.
 `route_negotiate` states that each ID a shared capability holds routes to it, and `route_negotiate_of_lt` that no ID below `0x10` does.
 `route_injective` states that two IDs never route to one place, and `route_comm` that both peers route every ID the same way.
+`messageCount_le_iff` (`Execution/Proofs/Network/Message.lean`) states that the IDs an eth version holds end at the highest message ID that its decoder reads.
 No theorem says anything about a sequence of frames beyond one step, or about timeouts.
 
 The source leaves three points open, and the session reads them as follows.
