@@ -495,8 +495,8 @@ private theorem Tracked.computePulledUpTip {config : Config} {root : Root}
     (tracked : store.Tracked anchorState anchorBlock)
     (pulled : store.computePulledUpTip config root = .ok after) :
     after.Tracked anchorState anchorBlock := by
-  obtain ⟨-, -, states, -, state, counted, found, counting, moved, which, justified, finalized,
-    unrealizedJustified, unrealizedFinalized, justifications⟩ := computePulledUpTip_frame pulled
+  obtain ⟨-, -, states, -, state, counted, found, counting, moved, which, ⟨justified, finalized,
+    unrealizedJustified, unrealizedFinalized⟩, justifications⟩ := computePulledUpTip_frame pulled
   -- The new checkpoints come from the state of the block after justification.
   have source (field : BeaconState preset fork → Checkpoint) {kept : Store preset fork}
       (same : kept.blockStates = store.blockStates) : kept.FromState field (field counted) :=
@@ -523,8 +523,8 @@ private theorem Tracked.onTickPerSlot {config : Config} {timeMs : UInt64}
     (tracked : store.Tracked anchorState anchorBlock)
     (ticked : store.onTickPerSlot config timeMs = .ok after) :
     after.Tracked anchorState anchorBlock := by
-  obtain ⟨-, -, -, -, states, moved, which, justified, finalized, unrealizedJustified,
-    unrealizedFinalized, justifications⟩ := onTickPerSlot_frame ticked
+  obtain ⟨-, -, -, -, states, moved, which, ⟨justified, finalized, unrealizedJustified,
+    unrealizedFinalized⟩, justifications⟩ := onTickPerSlot_frame ticked
   rcases which with rfl | rfl
   · exact tracked.of_eq justified finalized unrealizedJustified unrealizedFinalized
       justifications states
@@ -584,7 +584,7 @@ private theorem Tracked.onAttestation {config : Config} {checks : SignatureCheck
     (tracked : store.Tracked anchorState anchorBlock)
     (attested : store.onAttestation config checks attestation isFromBlock = .ok after) :
     after.Tracked anchorState anchorBlock := by
-  obtain ⟨-, -, states, justified, finalized, unrealizedJustified, unrealizedFinalized,
+  obtain ⟨-, -, states, ⟨justified, finalized, unrealizedJustified, unrealizedFinalized⟩,
     justifications⟩ := onAttestation_frame attested
   exact tracked.of_eq justified finalized unrealizedJustified unrealizedFinalized justifications
     states
@@ -594,7 +594,7 @@ private theorem Tracked.onAttesterSlashing {config : Config} {checks : Signature
     {slashing : AttesterSlashing preset fork} (tracked : store.Tracked anchorState anchorBlock)
     (slashed : store.onAttesterSlashing config checks slashing = .ok after) :
     after.Tracked anchorState anchorBlock := by
-  obtain ⟨-, -, states, justified, finalized, unrealizedJustified, unrealizedFinalized,
+  obtain ⟨-, -, states, ⟨justified, finalized, unrealizedJustified, unrealizedFinalized⟩,
     justifications⟩ := onAttesterSlashing_frame slashed
   exact tracked.of_eq justified finalized unrealizedJustified unrealizedFinalized justifications
     states
@@ -639,13 +639,13 @@ private theorem Tracked.onBlock {config : Config} {checks : SignatureChecks}
         cases keptFound
       · simp only [same, ↓reduceIte]
         exact keptFound
-    obtain ⟨-, -, recordedStates, -, justified, finalized, unrealizedJustified,
-      unrealizedFinalized, justifications⟩ := recordBlockTimeliness_frame record
+    obtain ⟨-, -, recordedStates, -, ⟨justified, finalized, unrealizedJustified,
+      unrealizedFinalized⟩, justifications⟩ := recordBlockTimeliness_frame record
     have recordedTracked : recorded.Tracked anchorState anchorBlock :=
       inserted.of_eq justified finalized unrealizedJustified unrealizedFinalized justifications
         recordedStates
-    obtain ⟨-, -, boostedStates, -, justified, finalized, unrealizedJustified,
-      unrealizedFinalized, justifications⟩ := updateProposerBoostRoot_frame boost
+    obtain ⟨-, -, boostedStates, -, ⟨justified, finalized, unrealizedJustified,
+      unrealizedFinalized⟩, justifications⟩ := updateProposerBoostRoot_frame boost
     have boostedTracked : boosted.Tracked anchorState anchorBlock :=
       recordedTracked.of_eq justified finalized unrealizedJustified unrealizedFinalized
         justifications boostedStates
@@ -804,9 +804,15 @@ private theorem Store.Traced.origin {field : BeaconState preset fork → Checkpo
   · exact .inr (.inl ⟨root, state, found, same⟩)
   · exact .inr (.inr ⟨root, state, pulled, found, pulledOk, same⟩)
 
-/-- Each justified store field has an anchor, held-state, or successful pulled-up origin.
+/-- The justified checkpoints of a reachable store, realized or not, each come from one place.
 
-The checkpoint pair is retained in full, with no timing bound. -/
+The first is the anchor: the epoch of the anchor state and the root of the anchor block.
+
+The second is the current justified checkpoint of a held state.
+
+The third is that checkpoint after justification and finalization on a held state.
+
+The origin gives the whole checkpoint, its epoch and root, and bounds no epoch. -/
 theorem Store.Reachable.justified_origins {config : Config}
     {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
     {store : Store preset fork}
@@ -824,9 +830,15 @@ theorem Store.Reachable.justified_origins {config : Config}
   rintro checkpoint (rfl | rfl)
   exacts [reachable.tracked.justified.origin, reachable.tracked.unrealizedJustified.origin]
 
-/-- Each finalized store field has an anchor, held-state, or successful pulled-up origin.
+/-- The finalized checkpoints of a reachable store, realized or not, each come from one place.
 
-The checkpoint pair is retained in full, with no timing bound. -/
+The first is the anchor: the epoch of the anchor state and the root of the anchor block.
+
+The second is the finalized checkpoint of a held state.
+
+The third is that checkpoint after justification and finalization on a held state.
+
+The origin gives the whole checkpoint, its epoch and root, and bounds no epoch. -/
 theorem Store.Reachable.finalized_origins {config : Config}
     {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
     {store : Store preset fork}

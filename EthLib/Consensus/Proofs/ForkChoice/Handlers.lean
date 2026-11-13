@@ -236,6 +236,37 @@ theorem SameClock.getCurrentSlot {after : Store preset fork} (same : SameClock s
   unfold Store.getCurrentSlot
   rw [same.1, same.2]
 
+/-- Two stores with the same four checkpoints: justified, finalized and their unrealized ones. -/
+def SameCheckpoints (store after : Store preset fork) : Prop :=
+  after.justifiedCheckpoint = store.justifiedCheckpoint ∧
+    after.finalizedCheckpoint = store.finalizedCheckpoint ∧
+    after.unrealizedJustifiedCheckpoint = store.unrealizedJustifiedCheckpoint ∧
+    after.unrealizedFinalizedCheckpoint = store.unrealizedFinalizedCheckpoint
+
+/-- A store has the checkpoints of itself. -/
+theorem SameCheckpoints.refl (store : Store preset fork) : SameCheckpoints store store :=
+  ⟨rfl, rfl, rfl, rfl⟩
+
+/-- Two stores with the same checkpoints have the same justified checkpoint. -/
+theorem SameCheckpoints.justified {after : Store preset fork}
+    (same : SameCheckpoints store after) :
+    after.justifiedCheckpoint = store.justifiedCheckpoint := same.1
+
+/-- Two stores with the same checkpoints have the same finalized checkpoint. -/
+theorem SameCheckpoints.finalized {after : Store preset fork}
+    (same : SameCheckpoints store after) :
+    after.finalizedCheckpoint = store.finalizedCheckpoint := same.2.1
+
+/-- Two stores with the same checkpoints have the same unrealized justified checkpoint. -/
+theorem SameCheckpoints.unrealizedJustified {after : Store preset fork}
+    (same : SameCheckpoints store after) :
+    after.unrealizedJustifiedCheckpoint = store.unrealizedJustifiedCheckpoint := same.2.2.1
+
+/-- Two stores with the same checkpoints have the same unrealized finalized checkpoint. -/
+theorem SameCheckpoints.unrealizedFinalized {after : Store preset fork}
+    (same : SameCheckpoints store after) :
+    after.unrealizedFinalizedCheckpoint = store.unrealizedFinalizedCheckpoint := same.2.2.2
+
 /-- The tip pulled up to the end of its epoch lowers neither epoch, and keeps the blocks.
 
 It also keeps the clock.
@@ -244,7 +275,7 @@ It runs justification and finalization on the held state of the tip.
 
 The result updates the unrealized checkpoints of the store.
 
-When the block's epoch is before the store's current epoch, it updates the realized ones too.
+It may also update the realized checkpoints with that result.
 
 It records the current justified checkpoint of that result as the tip's unrealized justification. -/
 theorem computePulledUpTip_frame {root : Root} {after : Store preset fork}
@@ -257,11 +288,7 @@ theorem computePulledUpTip_frame {root : Root} {after : Store preset fork}
             moved = (store.updateUnrealizedCheckpoints counted.currentJustifiedCheckpoint
               counted.finalizedCheckpoint).updateCheckpoints counted.currentJustifiedCheckpoint
                 counted.finalizedCheckpoint) ∧
-          after.justifiedCheckpoint = moved.justifiedCheckpoint ∧
-          after.finalizedCheckpoint = moved.finalizedCheckpoint ∧
-          after.unrealizedJustifiedCheckpoint = moved.unrealizedJustifiedCheckpoint ∧
-          after.unrealizedFinalizedCheckpoint = moved.unrealizedFinalizedCheckpoint ∧
-          after.unrealizedJustifications =
+          SameCheckpoints moved after ∧ after.unrealizedJustifications =
             store.unrealizedJustifications.insert root counted.currentJustifiedCheckpoint := by
   unfold computePulledUpTip at pulled
   simp only [bind_ok_iff] at pulled
@@ -277,13 +304,13 @@ theorem computePulledUpTip_frame {root : Root} {after : Store preset fork}
       by_cases b : store.unrealizedFinalizedCheckpoint.epoch < counted.finalizedCheckpoint.epoch <;>
       by_cases c : store.justifiedCheckpoint.epoch < counted.currentJustifiedCheckpoint.epoch <;>
       by_cases d : store.finalizedCheckpoint.epoch < counted.finalizedCheckpoint.epoch <;>
-      simp [updateCheckpoints, updateUnrealizedCheckpoints, a, b, c, d]
+      simp [SameCheckpoints, updateCheckpoints, updateUnrealizedCheckpoints, a, b, c, d]
   · refine ⟨EpochsLe.of_eq (by simp) (by simp), by simp, by simp, ⟨by simp, by simp⟩, state,
       counted, origin.1, origin.2, _, .inl rfl, ?_⟩
     by_cases a :
         store.unrealizedJustifiedCheckpoint.epoch < counted.currentJustifiedCheckpoint.epoch <;>
       by_cases b : store.unrealizedFinalizedCheckpoint.epoch < counted.finalizedCheckpoint.epoch <;>
-      simp [updateUnrealizedCheckpoints, a, b]
+      simp [SameCheckpoints, updateUnrealizedCheckpoints, a, b]
 
 /-- A tick within a slot sets the clock to its time, keeps the blocks and lowers no epoch.
 
@@ -296,10 +323,7 @@ theorem onTickPerSlot_frame {timeMs : UInt64} {after : Store preset fork}
       after.blocks = store.blocks ∧ after.blockStates = store.blockStates ∧
       ∃ moved : Store preset fork, (moved = store ∨ moved = store.updateCheckpoints
           store.unrealizedJustifiedCheckpoint store.unrealizedFinalizedCheckpoint) ∧
-        after.justifiedCheckpoint = moved.justifiedCheckpoint ∧
-        after.finalizedCheckpoint = moved.finalizedCheckpoint ∧
-        after.unrealizedJustifiedCheckpoint = moved.unrealizedJustifiedCheckpoint ∧
-        after.unrealizedFinalizedCheckpoint = moved.unrealizedFinalizedCheckpoint ∧
+        SameCheckpoints moved after ∧
         after.unrealizedJustifications = store.unrealizedJustifications := by
   unfold onTickPerSlot at ticked
   simp only [bind_ok_iff] at ticked
@@ -315,11 +339,10 @@ theorem onTickPerSlot_frame {timeMs : UInt64} {after : Store preset fork}
               store.justifiedCheckpoint.epoch < store.unrealizedJustifiedCheckpoint.epoch <;>
             by_cases b :
               store.finalizedCheckpoint.epoch < store.unrealizedFinalizedCheckpoint.epoch <;>
-            simp [updateCheckpoints, a, b]
+            simp [SameCheckpoints, updateCheckpoints, a, b]
       · simp only [pure, Except.pure, Except.ok.injEq] at ticked
         subst ticked
-        exact ⟨rfl, rfl, EpochsLe.of_eq (by rfl) (by rfl), rfl, rfl, _, .inl rfl, rfl, rfl, rfl,
-          rfl, rfl⟩
+        exact ⟨rfl, rfl, EpochsLe.of_eq (by rfl) (by rfl), rfl, rfl, _, .inl rfl, .refl _, rfl⟩
 
 /-- The catch-up loop keeps every property of a store that each tick within a slot keeps. -/
 theorem catchUp_preserves {P : Store preset fork → Prop} {tickSlot : Slot}
@@ -472,21 +495,18 @@ theorem storeTargetCheckpointState_frame {checks : SignatureChecks} {target : Ch
     {after : Store preset fork}
     (stored : store.storeTargetCheckpointState config checks target = .ok after) :
     store.EpochsLe after ∧ after.blocks = store.blocks ∧ after.blockStates = store.blockStates ∧
-      SameClock store after ∧ after.justifiedCheckpoint = store.justifiedCheckpoint ∧
-      after.finalizedCheckpoint = store.finalizedCheckpoint ∧
-      after.unrealizedJustifiedCheckpoint = store.unrealizedJustifiedCheckpoint ∧
-      after.unrealizedFinalizedCheckpoint = store.unrealizedFinalizedCheckpoint ∧
+      SameClock store after ∧ SameCheckpoints store after ∧
       after.unrealizedJustifications = store.unrealizedJustifications := by
   unfold storeTargetCheckpointState at stored
   split at stored
   · simp only [pure, Except.pure, Except.ok.injEq] at stored
     subst stored
-    exact ⟨EpochsLe.refl _, rfl, rfl, .refl _, rfl, rfl, rfl, rfl, rfl⟩
+    exact ⟨EpochsLe.refl _, rfl, rfl, .refl _, .refl _, rfl⟩
   · simp only [bind_ok_iff] at stored
     obtain ⟨_, _, stored⟩ := stored
     simp only [pure, Except.pure, Except.ok.injEq] at stored
     subst stored
-    exact ⟨EpochsLe.of_eq (by rfl) (by rfl), rfl, rfl, ⟨rfl, rfl⟩, rfl, rfl, rfl, rfl, rfl⟩
+    exact ⟨EpochsLe.of_eq (by rfl) (by rfl), rfl, rfl, ⟨rfl, rfl⟩, .refl _, rfl⟩
 
 /-- An attestation keeps the checkpoints, the blocks and their states.
 
@@ -495,10 +515,7 @@ theorem onAttestation_frame {checks : SignatureChecks} {attestation : Attestatio
     {isFromBlock : Bool} {after : Store preset fork}
     (attested : store.onAttestation config checks attestation isFromBlock = .ok after) :
     store.EpochsLe after ∧ after.blocks = store.blocks ∧ after.blockStates = store.blockStates ∧
-      after.justifiedCheckpoint = store.justifiedCheckpoint ∧
-      after.finalizedCheckpoint = store.finalizedCheckpoint ∧
-      after.unrealizedJustifiedCheckpoint = store.unrealizedJustifiedCheckpoint ∧
-      after.unrealizedFinalizedCheckpoint = store.unrealizedFinalizedCheckpoint ∧
+      SameCheckpoints store after ∧
       after.unrealizedJustifications = store.unrealizedJustifications := by
   unfold onAttestation at attested
   simp only [bind_ok_iff] at attested
@@ -517,16 +534,13 @@ theorem onAttesterSlashing_frame {checks : SignatureChecks}
     {slashing : AttesterSlashing preset fork} {after : Store preset fork}
     (slashed : store.onAttesterSlashing config checks slashing = .ok after) :
     store.EpochsLe after ∧ after.blocks = store.blocks ∧ after.blockStates = store.blockStates ∧
-      after.justifiedCheckpoint = store.justifiedCheckpoint ∧
-      after.finalizedCheckpoint = store.finalizedCheckpoint ∧
-      after.unrealizedJustifiedCheckpoint = store.unrealizedJustifiedCheckpoint ∧
-      after.unrealizedFinalizedCheckpoint = store.unrealizedFinalizedCheckpoint ∧
+      SameCheckpoints store after ∧
       after.unrealizedJustifications = store.unrealizedJustifications := by
   unfold onAttesterSlashing at slashed
   simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at slashed
   obtain ⟨_, _, slashed⟩ := slashed
   subst slashed
-  exact ⟨EpochsLe.of_eq (by rfl) (by rfl), rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  exact ⟨EpochsLe.of_eq (by rfl) (by rfl), rfl, rfl, .refl _, rfl⟩
 
 /-- An attestation keeps the clock. -/
 theorem onAttestation_sameClock {checks : SignatureChecks} {attestation : Attestation preset fork}
@@ -637,10 +651,7 @@ It keeps the checkpoints and the unrealized justifications too. -/
 theorem recordBlockTimeliness_frame {root : Root} {after : Store preset fork}
     (recorded : store.recordBlockTimeliness config root = .ok after) :
     store.EpochsLe after ∧ after.blocks = store.blocks ∧ after.blockStates = store.blockStates ∧
-      SameClock store after ∧ after.justifiedCheckpoint = store.justifiedCheckpoint ∧
-      after.finalizedCheckpoint = store.finalizedCheckpoint ∧
-      after.unrealizedJustifiedCheckpoint = store.unrealizedJustifiedCheckpoint ∧
-      after.unrealizedFinalizedCheckpoint = store.unrealizedFinalizedCheckpoint ∧
+      SameClock store after ∧ SameCheckpoints store after ∧
       after.unrealizedJustifications = store.unrealizedJustifications := by
   unfold recordBlockTimeliness at recorded
   simp only [bind_ok_iff, pure, Except.pure] at recorded
@@ -648,9 +659,9 @@ theorem recordBlockTimeliness_frame {root : Root} {after : Store preset fork}
   split at recorded
   · simp only [bind_ok_iff, Except.ok.injEq] at recorded
     obtain ⟨_, _, rfl⟩ := recorded
-    exact ⟨EpochsLe.of_eq (by rfl) (by rfl), rfl, rfl, ⟨rfl, rfl⟩, rfl, rfl, rfl, rfl, rfl⟩
+    exact ⟨EpochsLe.of_eq (by rfl) (by rfl), rfl, rfl, ⟨rfl, rfl⟩, .refl _, rfl⟩
   · cases recorded
-    exact ⟨EpochsLe.of_eq (by rfl) (by rfl), rfl, rfl, ⟨rfl, rfl⟩, rfl, rfl, rfl, rfl, rfl⟩
+    exact ⟨EpochsLe.of_eq (by rfl) (by rfl), rfl, rfl, ⟨rfl, rfl⟩, .refl _, rfl⟩
 
 /-- From Gloas a recorded block also gets whether it came before the payload committee's deadline.
 
@@ -677,10 +688,7 @@ It keeps the checkpoints and the unrealized justifications too. -/
 theorem updateProposerBoostRoot_frame {head root : Root} {after : Store preset fork}
     (updated : store.updateProposerBoostRoot config head root = .ok after) :
     store.EpochsLe after ∧ after.blocks = store.blocks ∧ after.blockStates = store.blockStates ∧
-      SameClock store after ∧ after.justifiedCheckpoint = store.justifiedCheckpoint ∧
-      after.finalizedCheckpoint = store.finalizedCheckpoint ∧
-      after.unrealizedJustifiedCheckpoint = store.unrealizedJustifiedCheckpoint ∧
-      after.unrealizedFinalizedCheckpoint = store.unrealizedFinalizedCheckpoint ∧
+      SameClock store after ∧ SameCheckpoints store after ∧
       after.unrealizedJustifications = store.unrealizedJustifications := by
   unfold updateProposerBoostRoot at updated
   split at updated
@@ -690,7 +698,7 @@ theorem updateProposerBoostRoot_frame {head root : Root} {after : Store preset f
   obtain ⟨_, _, _, _, _, _, updated⟩ := updated
   split at updated <;> simp only [pure, Except.pure, Except.ok.injEq] at updated <;>
     subst updated <;>
-    exact ⟨EpochsLe.of_eq (by rfl) (by rfl), rfl, rfl, ⟨rfl, rfl⟩, rfl, rfl, rfl, rfl, rfl⟩
+    exact ⟨EpochsLe.of_eq (by rfl) (by rfl), rfl, rfl, ⟨rfl, rfl⟩, .refl _, rfl⟩
 
 /-- The store changes at most in its two vote maps of the payload committee. -/
 def OnlyPtcVotes (before after : Store preset fork) : Prop :=

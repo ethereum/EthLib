@@ -16,9 +16,11 @@ It is the latest block of that chain at or before the first slot of the checkpoi
 
 The one exception is an anchor state that hashes to the zero root.
 
-The store's finalized checkpoint is on its justified chain at the first slot of the finalized epoch.
+The store's finalized checkpoint may be at or before the anchor epoch.
 
-Otherwise the runs to the two held states of those checkpoints bound the accountable stake.
+Otherwise it is on its justified chain at the first slot of the finalized epoch.
+
+Failing that, the runs to the two held states of those checkpoints bound the accountable stake.
 
 Or their hashes show a collision or a zero root.
 
@@ -230,13 +232,7 @@ private theorem Store.Reachable.exists_run_of_blockState {config : Config}
     {g : ForkedBeaconState preset}
     (reachable : Store.Reachable config anchorState anchorBlock store)
     (linked : store.Linked anchorBlock.parentRoot)
-    (imported : ∀ ⦃root : Root⦄ ⦃block : BeaconBlock preset fork⦄
-      ⦃state : BeaconState preset fork⦄, store.blocks[root]? = some block →
-      store.blockStates[root]? = some state → block ≠ anchorBlock →
-      ∃ (parent : BeaconState preset fork) (engine : ExecutionEngine preset fork)
-        (signed : SignedBeaconBlock preset fork), signed.message = block ∧
-        store.blockStates[block.parentRoot]? = some parent ∧
-        stateTransition config checks engine parent signed true = .ok state)
+    (imported : store.BlockStatesFromParents config (· = checks) anchorState anchorBlock)
     (early : ∀ next ∈ config.nextFork fork, ∀ ⦃root : Root⦄ ⦃state : BeaconState preset fork⦄,
       store.blockStates[root]? = some state →
       state.slot.toNat < next.2.toNat * preset.SLOTS_PER_EPOCH.toNat)
@@ -262,8 +258,10 @@ private theorem Store.Reachable.exists_run_of_blockState {config : Config}
     subst same
     exact ⟨.nil, [], by simp [Run.append], fun slot later =>
       ⟨root, ⟨_, Store.getAncestor_of_le found later, rfl⟩, .inl ⟨by simp, reachable.root found⟩⟩⟩
-  obtain ⟨parent, engine, signed, message, parentHeld, transitioned⟩ :=
-    imported found held same
+  obtain ⟨imports, importsHeld, -, step⟩ := imported found
+  rw [held, Option.some.injEq] at importsHeld
+  subst imports
+  obtain ⟨parent, _, engine, signed, rfl, message, parentHeld, transitioned⟩ := step same
   subst message
   obtain ⟨parentBlock, parentFound, -⟩ := linked.stateAfter _ _ parentHeld
   have lower := linked.parentsBelow _ _ _ found parentFound
@@ -313,19 +311,19 @@ decreasing_by
   rw [bounds.2]
   exact UInt64.lt_iff_toNat_lt.mp bounds.1
 
-/-- The finalized checkpoint of a store is on the chain of its justified checkpoint, or it is early.
+/-- The finalized checkpoint of a store is early, or on the chain of its justified checkpoint.
 
 Otherwise two runs to held states of the store bound the accountable stake, or show hash evidence.
 
 The store is reachable from an anchor whose parent it does not hold.
 
+The anchor block is at or before the slot of the anchor state, and the preset meets the parameters.
+
 A run from a genesis built from deposits reaches the anchor state.
 
 Every block of the store was imported with one set of signature checks.
 
-No upgrade is due at a held slot, so the in-fork transitions of the store are steps of a run.
-
-These hypotheses are sufficient for the proof; they are not claimed to be necessary.
+We assume that no upgrade is due at a held slot, so the transitions of the store are steps of a run.
 
 The first alternative puts the finalized epoch at or before the epoch of the anchor state.
 
@@ -338,6 +336,8 @@ Each field is that of its held state, or of the justification step that fork cho
 The bound is that of direct accountable safety at the anchor state.
 
 Its drift observes the runs up to one epoch past the justified epoch.
+
+The drift counts from the anchor, so the bound loosens as the justified epoch moves away from it.
 
 The stake floor covers the epoch calls of every run from the anchor to a held state.
 
@@ -352,13 +352,7 @@ theorem Store.Reachable.finalized_ancestor_or_accountable {config : Config}
     (pre : Run config checks g ⟨fork, anchorState⟩)
     (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
     (unknownParent : store.blocks[anchorBlock.parentRoot]? = none)
-    (imported : ∀ ⦃root : Root⦄ ⦃block : BeaconBlock preset fork⦄
-      ⦃state : BeaconState preset fork⦄, store.blocks[root]? = some block →
-      store.blockStates[root]? = some state → block ≠ anchorBlock →
-      ∃ (parent : BeaconState preset fork) (engine : ExecutionEngine preset fork)
-        (signed : SignedBeaconBlock preset fork), signed.message = block ∧
-        store.blockStates[block.parentRoot]? = some parent ∧
-        stateTransition config checks engine parent signed true = .ok state)
+    (imported : store.BlockStatesFromParents config (· = checks) anchorState anchorBlock)
     (early : ∀ next ∈ config.nextFork fork, ∀ ⦃root : Root⦄ ⦃state : BeaconState preset fork⦄,
       store.blockStates[root]? = some state →
       state.slot.toNat < next.2.toNat * preset.SLOTS_PER_EPOCH.toNat)

@@ -32,7 +32,9 @@ The state of each checkpoint is the state of its block.
 
 It is processed to the start of the epoch of the checkpoint when it is before that start.
 
-The result does not say that the finalized block is an ancestor of the justified block.
+Another module ties the finalized checkpoint to the justified one after the anchor epoch.
+
+There it is on the justified chain, or two runs bound the accountable stake or show hash evidence.
 
 Other proofs take each checkpoint of a block state after the anchor epoch.
 
@@ -41,8 +43,6 @@ They show that it names an ancestor of that block.
 They also show that each checkpoint of the store is that of the anchor, or names a known block.
 
 The one exception is an anchor state that hashes to the zero root.
-
-Two checkpoints of the store may still come from the states of two different blocks.
 -/
 
 @[expose] public section
@@ -136,29 +136,22 @@ theorem updateUnrealizedCheckpoints_ordered {justified finalized : Checkpoint}
 
 /-- A store with the checkpoints of an ordered store is ordered. -/
 private theorem EpochsOrdered.of_checkpoints (ordered : store.EpochsOrdered)
-    (justified : after.justifiedCheckpoint = store.justifiedCheckpoint)
-    (finalized : after.finalizedCheckpoint = store.finalizedCheckpoint)
-    (unrealizedJustified : after.unrealizedJustifiedCheckpoint =
-      store.unrealizedJustifiedCheckpoint)
-    (unrealizedFinalized : after.unrealizedFinalizedCheckpoint =
-      store.unrealizedFinalizedCheckpoint) :
-    after.EpochsOrdered := by
+    (same : SameCheckpoints store after) : after.EpochsOrdered := by
   unfold EpochsOrdered
-  rw [justified, finalized, unrealizedJustified, unrealizedFinalized]
+  rw [same.justified, same.finalized, same.unrealizedJustified, same.unrealizedFinalized]
   exact ordered
 
 /-- The tip pulled up to the end of its epoch keeps the checkpoints ordered. -/
 theorem computePulledUpTip_ordered {root : Root}
     (ordered : store.EpochsOrdered) (holds : store.StatesHold)
     (pulled : store.computePulledUpTip config root = .ok after) : after.EpochsOrdered := by
-  obtain ⟨-, -, -, -, state, counted, found, countedOk, moved, which, justified, finalized,
-    unrealizedJustified, unrealizedFinalized, -⟩ := computePulledUpTip_frame pulled
+  obtain ⟨-, -, -, -, state, counted, found, countedOk, moved, which, same, -⟩ :=
+    computePulledUpTip_frame pulled
   have invariant : Invariant state := holds found
   have le := finalized_le_currentJustified
     (processJustificationAndFinalization_ordered invariant.ordered invariant.settled countedOk).1
   have unrealized := updateUnrealizedCheckpoints_ordered ordered le
-  refine EpochsOrdered.of_checkpoints ?_ justified finalized unrealizedJustified
-    unrealizedFinalized
+  refine EpochsOrdered.of_checkpoints ?_ same
   rcases which with rfl | rfl
   · exact unrealized
   · exact updateCheckpoints_ordered unrealized le
@@ -166,10 +159,8 @@ theorem computePulledUpTip_ordered {root : Root}
 /-- A tick within a slot keeps the checkpoints ordered. -/
 theorem onTickPerSlot_ordered {timeMs : UInt64} (ordered : store.EpochsOrdered)
     (ticked : store.onTickPerSlot config timeMs = .ok after) : after.EpochsOrdered := by
-  obtain ⟨-, -, -, -, -, moved, which, justified, finalized, unrealizedJustified,
-    unrealizedFinalized, -⟩ := onTickPerSlot_frame ticked
-  refine EpochsOrdered.of_checkpoints ?_ justified finalized unrealizedJustified
-    unrealizedFinalized
+  obtain ⟨-, -, -, -, -, moved, which, same, -⟩ := onTickPerSlot_frame ticked
+  refine EpochsOrdered.of_checkpoints ?_ same
   rcases which with rfl | rfl
   · exact ordered
   · exact updateCheckpoints_ordered ordered ordered.2
@@ -191,18 +182,14 @@ theorem onAttestation_ordered {checks : SignatureChecks} {attestation : Attestat
     {isFromBlock : Bool} (ordered : store.EpochsOrdered)
     (attested : store.onAttestation config checks attestation isFromBlock = .ok after) :
     after.EpochsOrdered := by
-  obtain ⟨-, -, -, justified, finalized, unrealizedJustified, unrealizedFinalized, -⟩ :=
-    onAttestation_frame attested
-  exact ordered.of_checkpoints justified finalized unrealizedJustified unrealizedFinalized
+  exact ordered.of_checkpoints (onAttestation_frame attested).2.2.2.1
 
 /-- An attester slashing keeps the checkpoints. -/
 theorem onAttesterSlashing_ordered {checks : SignatureChecks}
     {slashing : AttesterSlashing preset fork} (ordered : store.EpochsOrdered)
     (slashed : store.onAttesterSlashing config checks slashing = .ok after) :
     after.EpochsOrdered := by
-  obtain ⟨-, -, -, justified, finalized, unrealizedJustified, unrealizedFinalized, -⟩ :=
-    onAttesterSlashing_frame slashed
-  exact ordered.of_checkpoints justified finalized unrealizedJustified unrealizedFinalized
+  exact ordered.of_checkpoints (onAttesterSlashing_frame slashed).2.2.2.1
 
 /-- From Gloas, a vote of the payload committee keeps the checkpoints. -/
 theorem onPayloadAttestationMessage_ordered {checks : SignatureChecks}
@@ -269,15 +256,10 @@ theorem onBlock_ordered {checks : SignatureChecks}
     obtain ⟨_, _, rfl⟩ := recordBlockPtcVotes_onlyPtcVotes vote
     obtain ⟨pre, found, -, -, transition⟩ := validateOnBlock_ok valid
     have invariant := (stateTransition_invariant (holds found) transition).1
-    have recordedOrdered : recorded.EpochsOrdered := by
-      obtain ⟨-, -, -, -, justified, finalized, unrealizedJustified, unrealizedFinalized, -⟩ :=
-        recordBlockTimeliness_frame record
-      exact ordered.of_checkpoints justified finalized unrealizedJustified unrealizedFinalized
-    have boostedOrdered : boosted.EpochsOrdered := by
-      obtain ⟨-, -, -, -, justified, finalized, unrealizedJustified, unrealizedFinalized, -⟩ :=
-        updateProposerBoostRoot_frame boost
-      exact recordedOrdered.of_checkpoints justified finalized unrealizedJustified
-        unrealizedFinalized
+    have recordedOrdered : recorded.EpochsOrdered :=
+      ordered.of_checkpoints (recordBlockTimeliness_frame record).2.2.2.2.1
+    have boostedOrdered : boosted.EpochsOrdered :=
+      recordedOrdered.of_checkpoints (updateProposerBoostRoot_frame boost).2.2.2.2.1
     have statesHold : (boosted.updateCheckpoints state.currentJustifiedCheckpoint
         state.finalizedCheckpoint).StatesHold := by
       refine StatesHold.of_eq (store := { store with

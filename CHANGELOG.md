@@ -84,16 +84,20 @@ Not yet released.
   In the new module `Consensus.Proofs.ForkChoice.CheckpointAncestry`, `Store.Reachable.finalized_ancestor_or_accountable` gives three cases for the finalized checkpoint of the store.
   It is at or before the anchor epoch, or it is on the chain of the justified checkpoint at the first slot of its epoch.
   Otherwise two runs from the anchor to held states of the store bound the accountable stake, or show hash evidence.
-  The hypotheses of that theorem are sufficient for its proof, and they are not claimed to be minimal.
+  It asks that every block was imported with one setting of the signature checks, as `Store.BlockStatesFromParents`, which `Store.ForwardReachableWith.blockStatesFromParents` gives.
+  The drift of its bound counts from the anchor, so the bound loosens as the justified epoch moves away from the anchor epoch.
   `DirectSafety.TerminalView` reads the checkpoints of the last state of a run, or of one justification step on it, as fork choice runs it.
-  `DirectSafety.accountable_safety_justified_terminal` states direct accountable safety for two such views, with no bound on the fork.
+  `DirectSafety.accountable_safety_justified_terminal` states direct accountable safety for two such views, and like the theorems it extends it asks no bound on the fork of either run.
   `DirectSafety.accountable_safety_justified` is its case without a step, and its statement is unchanged.
   The other new Lean declarations are `TerminalView.state`, `TerminalView.enough`, `TerminalQuorum`, `TerminalQuorum.source`, `TerminalQuorum.voters`, `TerminalQuorum.currentEpoch_le`, `ViewQuorum`, `ViewQuorum.source`, `ViewQuorum.target`, `ViewQuorum.voters`, `ViewQuorum.state`, `ViewQuorum.eq_inl_of_realized`, `view_field_crossing`, `view_finalized_quorums`, `view_quorum_attestations`, `view_quorum_count`, `view_quorum_target_binding`, `view_conflicting_fields_quorums`, `view_voters_recent`, `checkpoint_binding_prefixes` and `hashObjects_append_subset`, all in `DirectSafety`, and `Store.ancestorRoots_of_parent`, `Store.updateCheckpoints_unrealizedJustifications` and `Store.updateUnrealizedCheckpoints_unrealizedJustifications`.
-  `Store.storeTargetCheckpointState_frame`, `Store.onAttestation_frame`, `Store.onAttesterSlashing_frame`, `Store.recordBlockTimeliness_frame` and `Store.updateProposerBoostRoot_frame` end with five new conjuncts.
-  They state that the justified, finalized, unrealized justified and unrealized finalized checkpoints are unchanged, and so are the unrealized justifications.
-  `Store.onTickPerSlot_frame` ends with a new conjunct: the four checkpoints are those of the store, or those of `updateCheckpoints` with its unrealized checkpoints, and the unrealized justifications are unchanged.
+  The new `Store.SameCheckpoints` says that two stores have the same justified, finalized, unrealized justified and unrealized finalized checkpoints.
+  `Store.SameCheckpoints.refl`, `.justified`, `.finalized`, `.unrealizedJustified` and `.unrealizedFinalized` read it; a caller that names these projections does not depend on the order of the four checkpoints.
+  `Store.storeTargetCheckpointState_frame`, `Store.onAttestation_frame`, `Store.onAttesterSlashing_frame`, `Store.recordBlockTimeliness_frame` and `Store.updateProposerBoostRoot_frame` end with two new conjuncts.
+  They state `Store.SameCheckpoints` of the store and the result, and that the unrealized justifications are unchanged.
+  `Store.onTickPerSlot_frame` ends with a new conjunct: a store `moved`, the store itself or `updateCheckpoints` with its unrealized checkpoints, has `Store.SameCheckpoints` with the result, and the unrealized justifications are unchanged.
   `Store.computePulledUpTip_frame` ends with a new conjunct: the held state of the tip and the result of its justification and finalization.
-  The conjunct also gives the four checkpoints that come from that result, and the unrealized justifications with that result's current justified checkpoint added for the tip.
+  The conjunct also gives a store `moved` with `Store.SameCheckpoints` of the result, built from that result, and the unrealized justifications with that result's current justified checkpoint added for the tip.
+  A pattern that destructures the four checkpoints destructures them in one nested pattern.
   A caller that destructures one of these seven results adds one pattern, and only if its last pattern named the old last conjunct.
   A pattern that ends in `-` needs no change.
   A projection of the old last conjunct gains `.1`.
