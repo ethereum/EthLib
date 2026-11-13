@@ -1097,6 +1097,10 @@ def consensus_gossip_validation(name: str, fork: str, anchor_state: bytes, ancho
     """Validate the messages of a topic in turn, against the store of an anchor and later blocks."""
     ...
 
+def consensus_api_pool(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, blocks: list[tuple[int, int | None, bytes] | tuple[int, int | None, bytes, bytes | None]], finalized: tuple[int, bytes] | None, requests: list[tuple[int, str, list[bytes]]], config: dict[str, Any] | None, verify: bool) -> list[list[tuple[int, str]]]:
+    """Answer the requests to pool endpoints in turn, against the store of an anchor and later blocks."""
+    ...
+
 def consensus_light_client_sync(name: str, fork: str, bootstrap_fork: str, config: dict[str, Any] | None, trusted: bytes, genesis_validators_root: bytes, bootstrap: bytes, steps: list[tuple[str, str, int, bytes] | tuple[str, int] | tuple[str, str]]) -> list[tuple[tuple[int, bytes, bytes], tuple[int, bytes, bytes]]]:
     """The headers of a sync, step by step, from a bootstrap for a trusted block root."""
     ...
