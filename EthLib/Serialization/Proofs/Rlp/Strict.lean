@@ -46,7 +46,7 @@ theorem decodeItem_singleByteWithPrefix (x : UInt8) (hx : x < 0x80) {input : Byt
   obtain ⟨hPos', hSecond, -⟩ := extract_toList_eq_cons hStop hTail
   rw [decodeItem.eq_def]
   simp [byteArray_getElem_eq_get!, hPos, hFirst, readPrefix, hx, bind, Except.bind, hSecond,
-    show pos + 1 + 1 ≤ stop by omega]
+    show pos + 1 + 1 ≤ stop by omega, show pos + 1 < input.size by omega]
 
 /-- `b7 + k`, then `k` length bytes of which the first is zero, for `1 <= k <= 8`. -/
 theorem decodeItem_leadingZero_bytes (k : Nat) (hk1 : 1 ≤ k) (hk8 : k ≤ 8) (lengthTail : List UInt8)

@@ -216,8 +216,9 @@ theorem readItem_bytes {input : ByteArray} {pos stop : Nat} (data : ByteArray) {
       (pos + 1 + lengthBytes.length + data.size) = data :=
     byteArray_eq_of_toList _ _ hPayload
   -- One byte below `0x80` would be its own encoding, which the byte string is not.
-  have hOne : ¬ (data.size = 1 ∧ input.get! (pos + 1 + lengthBytes.length) < 0x80) := by
-    rintro ⟨hOne, hLow⟩
+  have hOne : ¬ (data.size = 1 ∧ pos + 1 + lengthBytes.length < input.size ∧
+      input.get! (pos + 1 + lengthBytes.length) < 0x80) := by
+    rintro ⟨hOne, -, hLow⟩
     rw [hOne, extract_toList_cons input _ _ (by omega) (by omega),
       extract_toList_of_le input _ _ (by omega)] at hPayload
     obtain ⟨⟨l⟩⟩ := data
@@ -230,18 +231,10 @@ theorem readItem_bytes {input : ByteArray} {pos stop : Nat} (data : ByteArray) {
     exact hLow
   unfold readItem
   rw [decodeItem.eq_def]
-  simp only [byteArray_getElem_eq_get!, hPos, hGet, hHigh, hRP, dite_true, ite_false,
-    bind, Except.bind, hFit]
-  by_cases hLength : data.size = 1
-  · have hLow : ¬ input.get! (pos + 1 + lengthBytes.length) < 0x80 :=
-      fun hLow => hOne ⟨hLength, hLow⟩
-    simp only [hLength] at hData
-    simp only [hLength, dite_true, hLow, ite_false, hData,
-      Except.map, Except.ok.injEq, Prod.mk.injEq, true_and]
-    omega
-  · simp only [hLength, dite_false, hData,
-      Except.map, Except.ok.injEq, Prod.mk.injEq, true_and]
-    omega
+  simp only [byteArray_getElem_eq_get!, exists_prop, hPos, hGet, hHigh, hRP, dite_true,
+    ite_false, bind, Except.bind, hFit, hOne, dite_false, hData, Except.map, Except.ok.injEq,
+    Prod.mk.injEq, true_and]
+  omega
 
 /-- A single byte below `0x80` reads back as itself. -/
 theorem readItem_single {input : ByteArray} {pos stop : Nat} (data : ByteArray) {rest : List UInt8}

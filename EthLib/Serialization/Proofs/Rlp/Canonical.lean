@@ -248,19 +248,11 @@ theorem readItem_canonical {input : ByteArray} {pos stop : Nat} (hStop : stop �
       (by omega)
     cases kind with
     | bytes =>
-      dsimp only at h
-      by_cases hOne : length = 1 ∧ input.get! (pos + 1 + k) < 0x80
-      · obtain ⟨hLength, hLow⟩ := hOne
-        simp [hLength, hLow, Except.map] at h
-      have hPair :
-          (.bytes (input.extract (pos + 1 + k) (pos + 1 + k + length)),
-            pos + 1 + k + length) = (x, next) := by
-        by_cases hLength : length = 1
-        · have hLow : ¬ input.get! (pos + 1 + k) < 0x80 :=
-            fun hLow => hOne ⟨hLength, hLow⟩
-          simpa only [hLength, dite_true, hLow, ite_false, Except.map, Except.ok.injEq] using h
-        · simpa only [hLength, dite_false, Except.map, Except.ok.injEq] using h
-      obtain ⟨rfl, rfl⟩ := Prod.mk.inj hPair
+      simp only [exists_prop] at h
+      by_cases hOne : length = 1 ∧ pos + 1 + k < input.size ∧ input.get! (pos + 1 + k) < 0x80
+      · simp [hOne, Except.map] at h
+      simp only [hOne, dite_false, Except.map, Except.ok.injEq, Prod.mk.injEq] at h
+      obtain ⟨rfl, rfl⟩ := h
       -- A payload that is not one low byte encodes as the bytes read.
       have hSize : (input.extract (pos + 1 + k) (pos + 1 + k + length)).size = length := by
         rw [← ByteArray.size_data, ← Array.length_toList, hPayloadLen]
@@ -277,7 +269,7 @@ theorem readItem_canonical {input : ByteArray} {pos stop : Nat} (hStop : stop �
         rw [extract_toList_cons input _ _ (by omega) (by omega),
           extract_toList_of_le input _ _ (by omega)] at hb
         simp only [List.cons.injEq, and_true] at hb
-        exact hOne ⟨rfl, hb ▸ hbLow⟩
+        exact hOne ⟨rfl, by omega, hb ▸ hbLow⟩
       refine ⟨pre ++ input.extract (pos + 1 + k) (pos + 1 + k + length),
         encode_bytes_of_prefix _ pre hNotSingle (by rw [hSize]; exact hPre), ?_⟩
       rw [hSplit, ByteArray.toList_data_append]

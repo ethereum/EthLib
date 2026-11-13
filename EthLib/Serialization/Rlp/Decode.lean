@@ -73,10 +73,10 @@ where
     -- The `k` bytes of the length must all be there.
     if short : stop - pos < k then
       .error (.inputTooShort k (stop - pos))
-    -- A length of no bytes is zero, which takes the short form.
+    -- No length bytes would write a length of zero, which takes the short form.
     else if zero : k = 0 then
       .error (.longFormForShortLength 0)
-    -- `BE` has no leading zero byte.
+    -- `BE` has no leading zero byte, and `k` is at least 1 here.
     else if input[pos]'(by omega) = 0 then
       .error .leadingZeroInLength
     else
@@ -115,11 +115,10 @@ def decodeItem (input : ByteArray) (pos stop : Nat)
         match kind with
         | .bytes =>
           -- One byte below `0x80` is its own encoding, never `0x81` then the byte.
-          if one : length = 1 then
-            let byte := input[start]'(by omega)
-            if byte < 0x80 then .error (.singleByteWithPrefix byte)
-            else .ok (.bytes (input.extract start (start + length)), next)
-          else .ok (.bytes (input.extract start (start + length)), next)
+          if low : length = 1 ∧ ∃ inside : start < input.size, input[start] < 0x80 then
+            .error (.singleByteWithPrefix (input[start]'low.2.1))
+          else
+            .ok (.bytes (input.extract start (start + length)), next)
         | .list =>
           -- The payload of a list is its items, one after another, with nothing left over.
           let items ← decodeItems input start (start + length)
