@@ -209,6 +209,12 @@
 #define DOC_hkdf_sha256 \
   "HKDF, RFC 5869 §2: extract, then expand."
 
+#define DOC_tls13_hkdf_label \
+  "The HkdfLabel of RFC 8446 §7.1, for a label without its `tls13 ` prefix."
+
+#define DOC_tls13_expand_label \
+  "Expand a SHA-256 secret with a TLS 1.3 label and context, RFC 8446 §7.1."
+
 #define DOC_concat_kdf_sha256 \
   "The first `length` bytes of `K(1) | K(2) | ...`, SP 800-56C Rev. 2 §4.1."
 
@@ -1054,6 +1060,12 @@
 
 #define DOC_uvarint_decode \
   "The value of the unsigned varint at the start of the bytes, and the bytes after it."
+
+#define DOC_quic_initial_secrets \
+  "Derive the client and server Initial secrets for QUIC v1, RFC 9001 §5.2."
+
+#define DOC_quic_packet_keys \
+  "Derive the payload key, IV and header-protection key, in that order, RFC 9001 §5.1."
 
 #define DOC_quic_varint_encode \
   "Encode a value below `2^62` with its shortest QUIC representation, RFC 9000 §16."

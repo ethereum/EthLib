@@ -38,6 +38,7 @@ public import EthLib.Networking.Proofs.Libp2p.Upgrade
 public import EthLib.Networking.Proofs.Libp2p.PeerId
 public import EthLib.Networking.Proofs.Libp2p.Yamux
 public import EthLib.Networking.Proofs.Libp2p.YamuxSession
+public import EthLib.Networking.Proofs.Quic.Keys
 public import EthLib.Networking.Proofs.Quic.Varint
 public import EthLib.Networking.Proofs.ReqResp.Bounds
 public import EthLib.Networking.Proofs.ReqResp.Encoding

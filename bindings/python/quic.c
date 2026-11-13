@@ -19,3 +19,23 @@ py_quic_varint_decode(
 ) {
   return call_pyvalue_export(eth_quic_varint_decode, args, 1, QUIC_VARINT_ERROR);
 }
+
+extern lean_object* eth_quic_initial_secrets(lean_object* args);
+
+PyObject*
+py_quic_initial_secrets(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_quic_initial_secrets, args, 1, TLS13_ERROR);
+}
+
+extern lean_object* eth_quic_packet_keys(lean_object* args);
+
+PyObject*
+py_quic_packet_keys(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_quic_packet_keys, args, 2, TLS13_ERROR);
+}

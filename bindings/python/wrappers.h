@@ -149,6 +149,7 @@ extern PyObject* ETHASH_ERROR;
 extern PyObject* REQRESP_ERROR;
 extern PyObject* CONSENSUS_ERROR;
 extern PyObject* HKDF_ERROR;
+extern PyObject* TLS13_ERROR;
 extern PyObject* PBKDF2_ERROR;
 extern PyObject* SCRYPT_ERROR;
 extern PyObject* X25519_ERROR;
@@ -311,6 +312,8 @@ PyObject* py_aes_gcm_encrypt                              (PyObject* self, PyObj
 PyObject* py_aes_gcm_decrypt                              (PyObject* self, PyObject* args);
 PyObject* py_hmac_sha256                                 (PyObject* self, PyObject* args);
 PyObject* py_hkdf_sha256                                 (PyObject* self, PyObject* args);
+PyObject* py_tls13_hkdf_label                            (PyObject* self, PyObject* args);
+PyObject* py_tls13_expand_label                          (PyObject* self, PyObject* args);
 PyObject* py_concat_kdf_sha256                           (PyObject* self, PyObject* args);
 PyObject* py_pbkdf2_sha256                               (PyObject* self, PyObject* args);
 PyObject* py_salsa208                                    (PyObject* self, PyObject* args);
@@ -566,6 +569,8 @@ PyObject* py_varint_encode                                (PyObject* self, PyObj
 PyObject* py_varint_decode                                (PyObject* self, PyObject* args);
 PyObject* py_uvarint_encode                               (PyObject* self, PyObject* args);
 PyObject* py_uvarint_decode                               (PyObject* self, PyObject* args);
+PyObject* py_quic_initial_secrets                         (PyObject* self, PyObject* args);
+PyObject* py_quic_packet_keys                             (PyObject* self, PyObject* args);
 PyObject* py_quic_varint_encode                           (PyObject* self, PyObject* args);
 PyObject* py_quic_varint_decode                           (PyObject* self, PyObject* args);
 PyObject* py_multistream_encode                           (PyObject* self, PyObject* args);

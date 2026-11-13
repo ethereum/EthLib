@@ -720,6 +720,16 @@ The Python suite checks the examples of RFC 9000 Appendix A.1, the bounds of Tab
 It also checks three longer forms of 37 and every proper prefix of one encoding of each width.
 Packet headers, packet numbers and frames remain unspecified.
 
+### QUIC v1 key derivation
+
+The labelled HKDF proofs (`Cryptography/Proofs/Hash/Tls13.lean`) state the field bounds of RFC 8446 §7.1, the label encoding and agreement with HKDF-SHA-256.
+The QUIC proofs (`Networking/Proofs/Quic/Keys.lean`) state the Initial and packet key derivations of RFC 9001 §5.1 and §5.2 and prove that they succeed.
+The keys have their required lengths in their types for AES-128-GCM and ChaCha20-Poly1305 with SHA-256.
+The Python suite checks the secrets, keys and labels of RFC 9001 Appendix A.1, and the keys of Appendix A.5.
+Anyone who sees the client's first Destination Connection ID can compute the Initial secrets, as RFC 9001 §5.2 says.
+Packet encryption, header protection and Retry integrity remain unspecified.
+These results establish neither cryptographic security nor constant-time execution.
+
 ### Noise XX and libp2p identities
 
 `readLibp2p_authenticates` (`Networking/Proofs/Noise/Identity.lean`) says that the read of message 2 or 3 accepts only a payload whose signature verifies on the static key that the message carries.
@@ -3784,6 +3794,7 @@ BLS key generation, signing and the proof of possession handle secret data, and 
 The bindings `derive_master_sk`, `derive_child_sk` and `derive_path` handle secret seeds or keys.
 HMAC-SHA-256, HKDF and the Concatenation KDF take a secret key, input keying material or shared secret.
 The Python bindings expose them as `hmac_sha256`, `hkdf_extract`, `hkdf` and `concat_kdf`.
+HKDF-Expand-Label and the QUIC packet keys take a secret, and the bindings expose them as `tls13_expand_label` and `packet_keys`.
 PBKDF2 and scrypt take a secret password, and the bindings expose them as `pbkdf2` and `scrypt`.
 The steps of scrypt take values derived from the password, and the bindings expose them as `salsa208`, `scrypt_block_mix` and `scrypt_romix`.
 
@@ -3919,12 +3930,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 433 operations and 49 size constants.
-The Python extension calls 433 of the operations and 49 of the constants.
+Lean exports 437 operations and 49 size constants.
+The Python extension calls 437 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-10634 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2083), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (194), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (106), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (147), `module.c` (1489), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (21), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (58), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (721), `x25519.c` (21), `xmss.c` (134).
+10685 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2083), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (194), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (106), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (147), `module.c` (1495), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (41), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (58), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (726), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.
