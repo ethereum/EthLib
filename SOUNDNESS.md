@@ -2731,7 +2731,9 @@ The votes are those of the attestations that the blocks applied, read by public 
 The weights are effective balances.
 Two checkpoints conflict when the runs applied different block headers up to the first slot of the earlier of their two epochs (`Conflict`, `DirectSafety/Execution.lean`).
 So, unless the roots of their headers collide, the runs disagree on the checkpoint of that epoch, even when one of the two finalized blocks is an ancestor of the other.
-`accountable_safety` takes conflicting finalized checkpoints of the two last states, with `x` no later than the first slot of the earlier finalized epoch.
+`accountable_safety` takes conflicting finalized checkpoints of the two last states.
+The conflict implies that `x` is no later than the first slot of the earlier finalized epoch (`Run.slot_le_of_checkpointPath_ne`, `DirectSafety/Hashes.lean`).
+So the theorem takes no separate premise on `x`.
 Then the active stake at `x` is at most three times the accountable stake at `x`, plus twice the larger drift of the two tails.
 The drift is zero when the active validators and their effective balances stay the same from the epoch before `x` to one epoch past the later finalized epoch.
 Then the accountable keys hold at least one third of the active stake at `x`.
@@ -2743,8 +2745,11 @@ At a state, it charges twice the stake at `x` that the state no longer supports,
 It charges once the recent stake of the state that `x` did not hold, and twice the stake active at the previous epoch of the state but not at its current epoch.
 It is observed, not bounded in closed form.
 The theorems need at least one slot per epoch, a buffer of roots of four epochs and more than `MIN_SEED_LOOKAHEAD + 2` epochs of RANDAO mixes.
-Each run also needs an active stake above one and a half increments at each epoch call after epoch 1 (`EnoughStake`).
-They take no bound on the fork, so a run may cross every upgrade that the transition of this revision defines, from a genesis before Altair.
+Each run also needs an active stake above one and a half increments at epoch calls after epoch 1 through one epoch past the target horizon (`EnoughStake run high`).
+The horizon is the finalized epoch of `b` for `accountable_safety`, which `ordered` makes the later one.
+It is `j.epoch` for `accountable_safety_at_calls`, `accountable_safety_justified` and `accountable_justified_unique`.
+A call in epoch `high + 1` can count votes targeting epoch `high`, so the floor covers that call too.
+The theorems take no bound on the fork, so a run may cross every upgrade that the transition of this revision defines, from a genesis before Altair.
 `verifiedConflict_of_accountable` gives, for each accountable key, two checks of its conflicting messages.
 Each is a call of `isValidIndexedAttestation` or `checkHeaderSignature` that a block of a run executed, and that accepted.
 It assumes nothing about the signature checks, so it does not say who signed.
