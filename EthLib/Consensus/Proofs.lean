@@ -37,6 +37,7 @@ public import EthLib.Consensus.Proofs.DataAvailability.Custody
 public import EthLib.Consensus.Proofs.DepositTree
 public import EthLib.Consensus.Proofs.ForkChoice.AncestorRoots
 public import EthLib.Consensus.Proofs.ForkChoice.AttestationScores
+public import EthLib.Consensus.Proofs.ForkChoice.BlockRuns
 public import EthLib.Consensus.Proofs.ForkChoice.BlockStates
 public import EthLib.Consensus.Proofs.ForkChoice.CheckpointBlocks
 public import EthLib.Consensus.Proofs.ForkChoice.Checkpoints
