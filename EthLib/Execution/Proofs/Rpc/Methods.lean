@@ -30,7 +30,8 @@ theorem answerJson_notification (v : ChainView) {j : Json} (h : isNotification j
 
 /-- A request of a method that the view does not serve fails with the code of a method not found. -/
 theorem call_unknown (v : ChainView) {method : String} (params : List Json)
-    (h : method ∉ ["eth_blockNumber", "eth_chainId", "net_version", "eth_getTransactionByHash",
+    (h : method ∉ ["eth_blockNumber", "eth_chainId", "eth_config", "net_version",
+      "eth_getTransactionByHash",
       "eth_getTransactionByBlockHashAndIndex", "eth_getTransactionByBlockNumberAndIndex",
       "eth_getHeaderByHash", "eth_getHeaderByNumber", "eth_getBlockByHash", "eth_getBlockByNumber",
       "eth_getBlockTransactionCountByHash", "eth_getBlockTransactionCountByNumber",
@@ -41,7 +42,7 @@ theorem call_unknown (v : ChainView) {method : String} (params : List Json)
     v.call method params = .error (methodNotFound.toRpcError (some (.str method))) := by
   simp only [List.mem_cons, List.not_mem_nil, or_false, not_or] at h
   obtain ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13, h14, h15, h16, h17, h18,
-    h19, h20, h21, h22, h23, h24⟩ := h
+    h19, h20, h21, h22, h23, h24, h25⟩ := h
   unfold call
   split <;> simp_all
 

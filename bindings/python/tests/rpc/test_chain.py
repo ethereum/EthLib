@@ -20,6 +20,7 @@ from .chain import FIXTURES, ReplayChain, block_hash, read_fixture, replay_chain
 RESULT_SCHEMAS: Final[dict[str, rpc.Schema | None]] = {
     "eth_blockNumber": "uint",
     "eth_chainId": "uint",
+    "eth_config": None,
     "net_version": "uintDecimal",
     "eth_getTransactionByHash": None,
     "eth_getTransactionByBlockHashAndIndex": None,

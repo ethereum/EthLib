@@ -2,6 +2,7 @@ module
 
 public import EthLib.Execution.Rpc.Account
 public import EthLib.Execution.Rpc.Block
+public import EthLib.Execution.Rpc.Config
 public import EthLib.Execution.Rpc.Filter
 public import EthLib.Execution.Rpc.Request
 public import EthLib.Execution.Rpc.TransactionInfo
@@ -145,6 +146,7 @@ def call (v : ChainView) (method : String) (params : List Json) : Except RpcErro
   match method with
   | "eth_blockNumber" => noParams params v.blockNumber
   | "eth_chainId" => noParams params v.chainId
+  | "eth_config" => noParams params .null >>= fun _ => v.ethConfig
   | "net_version" => noParams params v.netVersion
   | "eth_getTransactionByHash" => oneParam params fun h => do
     transactionResult (v.transactionByHash (← readParam (hash32 "transaction hash") h))

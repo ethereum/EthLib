@@ -68,13 +68,16 @@ def invalidInput : ErrorCode := ⟨-32000, "Invalid input"⟩
 /-- The code of a resource that the node does not find, such as an unknown block. -/
 def resourceNotFound : ErrorCode := ⟨-32001, "Resource not found"⟩
 
+/-- The code of a method that the node does not support, or not for the request's state. -/
+def methodNotSupported : ErrorCode := ⟨-32004, "Method not supported"⟩
+
 /-- The codes that JSON-RPC 2.0 leaves to servers, as the execution API uses them. -/
 def rpcNonStandardErrors : ErrorGroup where
   name := "JSONRPCNonStandardErrors"
   range := none
   errors := [invalidInput, resourceNotFound,
     ⟨-32002, "Resource unavailable"⟩, ⟨-32003, "Transaction rejected"⟩,
-    ⟨-32004, "Method not supported"⟩, ⟨-32005, "Limit exceeded"⟩,
+    methodNotSupported, ⟨-32005, "Limit exceeded"⟩,
     ⟨-32006, "JSON-RPC version not supported"⟩]
 
 /-- The codes of a failed execution. -/

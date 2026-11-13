@@ -89,6 +89,10 @@ structure ChainView where
   pending : Option BlockRecord := none
   /-- The network ID of the node. -/
   networkId : Nat
+  /-- The genesis hash and timestamp, when the node has that fork-ID context. -/
+  genesis : Option (Hash32 × Nat) := none
+  /-- `FORK_NEXT_VALUE` of EIP-3675, the block that stands for Paris in the fork ID, if set. -/
+  mergeForkBlock : Option Nat := none
 
 namespace ChainView
 

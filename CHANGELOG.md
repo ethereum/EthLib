@@ -688,6 +688,14 @@ Not yet released.
   `decode` keeps its type, the inputs it accepts, its values and its errors.
   No C export or Python function changes.
 
+- `eth_config` reports the current, next and last scheduled configurations from Dencun through Glamsterdam.
+  In Lean, `ChainView` adds `genesis` and `mergeForkBlock` for the fork checksum.
+  Supply both fields in positional constructors, or use structure notation with their `none` defaults.
+  `call_unknown` also requires that the method name differ from `eth_config`.
+  The configuration given to `rpc_serve` takes the optional keys `mergeForkBlock`, `genesisHash` and `genesisTime`.
+  It rejects a malformed value of these keys, one of the genesis pair without the other, and a genesis pair that disagrees with block zero.
+  The C and Python function signatures stay the same.
+
 ## 0.3.0
 
 Released on 2026-11-06.
