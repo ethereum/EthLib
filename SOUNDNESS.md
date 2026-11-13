@@ -2090,7 +2090,18 @@ Otherwise it implies Assumption 2 when the validators that have left the committ
 With an honest one gone the two bounds are incomparable.
 The tally of the source still counts the votes of validators that have left the committees, so the proof bounds their stake.
 For a range with part of an epoch the assumption on the supporters stays.
-Like the paper, the theorem takes a static set of validators, Assumption 1.
+The paper assumes a static set of validators, Assumption 1.
+`StaticPair` (`Consensus/Proofs/ForkChoice/StaticValidators.lean`) states the part of it that the proofs use.
+It relates a reference state to each state that a store holds.
+No effective balance is above that of the reference, and each honest validator is active and not slashed in both states, with one effective balance.
+A Byzantine validator that is active and not slashed in the state is so in the reference too.
+`Models.Network.Execution.Static` asks it of every block state and checkpoint state of each honest store.
+No safety theorem takes it as a hypothesis yet.
+Under it the honest supporters of a node weigh the same in any two states that a store holds, such as those of the head and of the rule.
+The supporters of a node in such a state weigh at most its supporters in the reference.
+Both results need the registries of the states to stay within the limit of the preset.
+`StaticPair` does not cover the pulled-up state of the head, which the store does not hold, and it gives only an inclusion of the active Byzantine validators.
+So the agreement of shufflings and the total active balance need more than it.
 The honest support of the target of the current epoch takes the total active balance less the weight of the committees so far as the weight still to vote.
 No theorem proves that, which rests on the shuffling of the head and its pulled-up state agreeing on the active validators of the epoch.
 Each member of the committees must also be in the source of balances, or the rule fails; no theorem bounds the epochs between that source and the range.
