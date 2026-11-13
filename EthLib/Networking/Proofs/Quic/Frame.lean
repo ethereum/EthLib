@@ -180,9 +180,13 @@ theorem valid_of_decode {packet : Packet.PacketType} {input rest : List UInt8}
 
 /-- The ACK ranges after the first one, each as its largest and smallest packet number.
 
-The largest packet number of a range is the gap plus two below the smallest one before it.
+They start from the smallest packet number of the range before them.
 
-Its smallest packet number is the range length below its largest, RFC 9000 §19.3.1.
+The largest packet number of a range is its gap plus two below that smallest one.
+
+Its smallest packet number is its range length below its largest, RFC 9000 §19.3.1.
+
+The numbers are integers, so a range of an invalid frame can reach below 0.
 -/
 def ackedRangesFrom : Int → List AckRange → List (Int × Int)
   | _, [] => []
@@ -217,19 +221,35 @@ private theorem ackRangesValid_iff (previous : Nat) (ranges : List AckRange) :
       · intro h
         omega
 
+/-- Each additional range lowers the packet number by at least two. -/
+private theorem two_mul_length_le_of_ackRangesValid (previous : Nat) (ranges : List AckRange)
+    (h : ackRangesValid previous ranges) : 2 * ranges.length ≤ previous := by
+  induction ranges generalizing previous with
+  | nil => simp
+  | cons head rest ih =>
+    rcases head with ⟨gap, count⟩
+    simp only [ackRangesValid] at h
+    have := ih _ h.2
+    simp only [List.length_cons]
+    omega
+
 /-- An ACK frame is well formed exactly when no acknowledged packet number is negative.
 
-It must also hold fewer than `2^62` additional ranges, so that their count is a QUIC integer.
+Each additional range lowers the packet number by at least two.
+
+So their count stays below `2^62`, and is a QUIC integer.
 -/
 theorem valid_ack_iff (a : Ack) :
-    (Frame.ack a).Valid ↔
-      a.ranges.length < 2 ^ 62 ∧ ∀ range ∈ ackedRanges a, 0 ≤ range.2 := by
+    (Frame.ack a).Valid ↔ ∀ range ∈ ackedRanges a, 0 ≤ range.2 := by
   simp only [Frame.Valid, ackedRanges, List.mem_cons, forall_eq_or_imp]
+  have bound := a.largest.isLt
   by_cases fits : a.firstRange.val ≤ a.largest.val
   · have cast : (a.largest.val : Int) - a.firstRange.val =
         ((a.largest.val - a.firstRange.val : Nat) : Int) := by omega
     rw [cast, ← ackRangesValid_iff]
-    exact ⟨fun ⟨l, _, h⟩ => ⟨l, by omega, h⟩, fun ⟨l, _, h⟩ => ⟨l, fits, h⟩⟩
+    refine ⟨fun ⟨_, _, h⟩ => ⟨by omega, h⟩, fun ⟨_, h⟩ => ⟨?_, fits, h⟩⟩
+    have := two_mul_length_le_of_ackRangesValid _ _ h
+    omega
   · constructor
     · intro h
       omega
@@ -240,8 +260,7 @@ theorem valid_ack_iff (a : Ack) :
 theorem ackedRanges_nonneg_of_decode {packet : Packet.PacketType} {input rest : List UInt8}
     {a : Ack} (h : decode packet input = .ok (.ack a, rest)) :
     ∀ range ∈ ackedRanges a, 0 ≤ range.2 :=
-  ((valid_ack_iff a).mp (valid_of_decode h)).2
-
+  (valid_ack_iff a).mp (valid_of_decode h)
 
 /-- Decoding a permitted encoded frame recovers that frame and the following bytes.
 
