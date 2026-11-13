@@ -32,7 +32,7 @@ open EthLib.Execution.Transactions
 variable {fork : Fork}
 
 /-- Joining a state within the bound gives a body within the bound. -/
-private theorem noncesFit_join {body body' : BodyState} {tx : TransactionState}
+theorem BodyState.noncesFit_join {body body' : BodyState} {tx : TransactionState}
     (h : body.join tx = .ok body') (hfit : tx.NoncesFit) : body'.block.NoncesFit := by
   intro address
   rw [BodyState.getAccount_join h]
@@ -44,7 +44,7 @@ theorem applyTransaction_noncesFit {env : BlockEnvironment fork} {index : Nat}
     (h : applyTransaction env index before tx = .ok after) :
     after.block.NoncesFit := by
   obtain ⟨included, out, hcheck, hout, -, -, hjoin⟩ := applyTransaction_eq_ok h
-  exact noncesFit_join hjoin (noncesFit_processTransaction hfit hcheck hout)
+  exact BodyState.noncesFit_join hjoin (noncesFit_processTransaction hfit hcheck hout)
 
 /-- The transactions of a block keep every nonce within the bound. -/
 theorem applyTransactions_noncesFit {env : BlockEnvironment fork} {body : BodyState}
@@ -56,7 +56,7 @@ theorem applyTransactions_noncesFit {env : BlockEnvironment fork} {body : BodySt
     h).1 hfit
 
 /-- A system call keeps every nonce within the bound, at every fork. -/
-private theorem systemCall_noncesFit {env : BlockEnvironment fork} {block : BlockState}
+theorem systemCall_noncesFit {env : BlockEnvironment fork} {block : BlockState}
     {target : Address} {data : ByteArray} {out : SystemCallOutput} (hfit : block.NoncesFit)
     (h : systemCall env block target data = .ok out) : out.state.NoncesFit := by
   simp only [systemCall] at h
@@ -70,7 +70,7 @@ private theorem join_systemCall_noncesFit {env : BlockEnvironment fork} {body bo
     {target : Address} {data : ByteArray} {out : SystemCallOutput} (hfit : body.block.NoncesFit)
     (hcall : systemCall env body.block target data = .ok out)
     (hjoin : body.join out.state = .ok body') : body'.block.NoncesFit :=
-  noncesFit_join hjoin (systemCall_noncesFit hfit hcall)
+  BodyState.noncesFit_join hjoin (systemCall_noncesFit hfit hcall)
 
 /-- From Pectra, the request contracts keep every nonce within the bound. -/
 private theorem readRequests_noncesFit {env : BlockEnvironment fork} {body : BodyState}
@@ -132,7 +132,7 @@ private theorem onBlock_noncesFit {block block' : BlockState}
   exact hfit address
 
 /-- The DAO transfer keeps every nonce within the bound. -/
-private theorem daoTransfer_noncesFit {config : ChainConfig} {number : Nat}
+theorem daoTransfer_noncesFit {config : ChainConfig} {number : Nat}
     {start state : BlockState} (hfit : start.NoncesFit)
     (h : daoTransfer config fork number start = .ok state) : state.NoncesFit := by
   unfold daoTransfer at h

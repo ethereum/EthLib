@@ -122,7 +122,7 @@ private theorem calm_prepareFirstFrame {chainId : Nat} {message : Message fork}
 /-! ## The message and the run of a transaction -/
 
 /-- A transaction message from a state whose nonces fit fails only with an error of the state. -/
-private theorem processMessageCall_eq_error {chainId : Nat} {message : Message fork}
+theorem processMessageCall_eq_error {chainId : Nat} {message : Message fork}
     {state : TransactionState} {substate : Substate} {auths : List Authorization}
     {paid : Std.ExtTreeSet Base.Address} {e : EvmError} (hfit : state.NoncesFit)
     (h : processMessageCall (Meter := Meter) chainId message state substate auths paid =
