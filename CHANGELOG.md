@@ -84,7 +84,7 @@ Not yet released.
   In the new module `Consensus.Proofs.ForkChoice.CheckpointAncestry`, `Store.Reachable.finalized_ancestor_or_accountable` gives three cases for the finalized checkpoint of the store.
   It is at or before the anchor epoch, or it is on the chain of the justified checkpoint at the first slot of its epoch.
   Otherwise two runs from the anchor to held states of the store bound the accountable stake, or show hash evidence.
-  It asks that every block was imported with one setting of the signature checks, as `Store.BlockStatesFromParents`, which `Store.ForwardReachableWith.blockStatesFromParents` gives.
+  It asks that every block was imported with the setting of the signature checks of the run from genesis, as `Store.BlockStatesFromParents`, which `Store.ForwardReachableWith.blockStatesFromParents` gives.
   The drift of its bound counts from the anchor, so the bound loosens as the justified epoch moves away from the anchor epoch.
   `DirectSafety.TerminalView` reads the checkpoints of the last state of a run, or of one justification step on it, as fork choice runs it.
   `DirectSafety.accountable_safety_justified_terminal` states direct accountable safety for two such views, and like the theorems it extends it asks no bound on the fork of either run.

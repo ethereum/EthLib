@@ -2961,7 +2961,8 @@ The finalized epoch is at or before the anchor epoch, or the finalized checkpoin
 Otherwise two runs from the anchor to the held states behind the two checkpoints bound the accountable stake at the anchor state, or show hash evidence.
 A checkpoint may come from one justification and finalization step on a held state, as fork choice runs it; `accountable_safety_justified_terminal` (`Safety.lean`) states direct accountable safety for such views.
 The drift of that bound is counted from the anchor, so the bound loosens as the justified epoch moves away from the anchor epoch.
-The theorem assumes that every block was imported with one setting of the signature checks, and that no upgrade is due at a held slot.
+The theorem assumes that every block was imported with the setting of the signature checks of the run from genesis, and that no upgrade is due at a held slot.
+It also assumes a run from a genesis built from deposits to the anchor state, and the stake floor at each held state up to one epoch past the justified epoch.
 
 Without a collision of header roots, the pairs of consecutive slots order the roots by ancestry.
 `RootsAbove.of_chainStep` then keeps each justified checkpoint below every root that the state records from its epoch on, which gives the source block of each recent link in the chain of its target block.
@@ -3012,6 +3013,7 @@ Each run also needs an active stake above one and a half increments at epoch cal
 The horizon is the finalized epoch of `b` for `accountable_safety`, which `ordered` makes the later one.
 It is `j.epoch` for `accountable_safety_at_calls`, `accountable_safety_justified`, `accountable_safety_justified_terminal` and `accountable_justified_unique`.
 A call in epoch `high + 1` can count votes targeting epoch `high`, so the floor covers that call too.
+The terminal form also needs that floor at the last state of each view that takes a step.
 The theorems take no bound on the fork, so a run may cross every upgrade that the transition of this revision defines, from a genesis before Altair.
 `verifiedConflict_of_accountable` gives, for each accountable key, two checks of its conflicting messages.
 Each is a call of `isValidIndexedAttestation` or `checkHeaderSignature` that a block of a run executed, and that accepted.

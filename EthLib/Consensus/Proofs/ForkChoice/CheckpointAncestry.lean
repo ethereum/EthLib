@@ -217,7 +217,7 @@ private theorem getCheckpointBlock_eq_of_checkpointPath {config : Config}
 
 /-- A held state follows from the anchor state by a run whose blocks are those of its chain.
 
-Every block of the store was imported with one set of signature checks.
+Every block of the store was imported with the signature checks of the run.
 
 No upgrade is due at any held slot, so the in-fork transition of the store is a run of steps.
 
@@ -319,9 +319,9 @@ The store is reachable from an anchor whose parent it does not hold.
 
 The anchor block is at or before the slot of the anchor state, and the preset meets the parameters.
 
-A run from a genesis built from deposits reaches the anchor state.
+We assume a run from a genesis built from deposits to the anchor state.
 
-Every block of the store was imported with one set of signature checks.
+We assume that every block of the store was imported with the signature checks of that run.
 
 We assume that no upgrade is due at a held slot, so the transitions of the store are steps of a run.
 
@@ -339,9 +339,9 @@ Its drift observes the runs up to one epoch past the justified epoch.
 
 The drift counts from the anchor, so the bound loosens as the justified epoch moves away from it.
 
-The stake floor covers the epoch calls of every run from the anchor to a held state.
+We assume a stake floor at the epoch calls of every run from the anchor to a held state.
 
-It also covers each held state up to one epoch past the justified epoch, for that step. -/
+We assume it too at each held state up to one epoch past the justified epoch, for that step. -/
 theorem Store.Reachable.finalized_ancestor_or_accountable {config : Config}
     {checks : SignatureChecks}
     {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
