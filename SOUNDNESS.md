@@ -747,7 +747,18 @@ The days are counted in a calendar model of year and month lengths, not in the r
 `readValidity_eq_ok_iff` says that a validity reads as two such times in order.
 `readCertificate_validity` says that the endpoints of a parsed certificate are what its own validity field reads as.
 That field is located in the signed part that the input bytes encode.
-No theorem states the other DER types that a certificate holds.
+`boolean_ok_iff` states that a BOOLEAN is one octet, FF for TRUE and 00 for FALSE (X.690 §§8.2, 11.1).
+`bitString_ok_iff` states that the BIT STRING reader accepts exactly the octet 0, then the octets it returns.
+`validBits_ok_iff` states that BIT STRING contents count at most 7 unused bits, all zero (X.690 §§8.6.2, 11.2.1).
+The trailing zero bits of a named bit list (X.690 §11.2.2) are not checked, since the reader does not know the type.
+`fixedString_eq_true_iff` states that code units of a fixed width pass exactly when they write Unicode scalar values big-endian.
+The reader takes a scalar value to be at most 10FFFF and outside D800 to DFFF.
+X.690 also forbids a leading signature and some control functions (§§8.23.7 to 8.23.9), which the reader does not check.
+A BMPString may also hold FFFE or FFFF, which X.680 §41.15 leaves out of its character set.
+`validate_go_boolean_ok_iff`, `validate_go_bitString`, `validate_go_bmpString_ok_iff` and `validate_go_universalString_ok_iff` state what validation accepts for one value of these tags, for any positive fuel; no theorem shows that each nested value receives it.
+`validate_boolean_ok_iff`, `validate_bitString`, `validate_bmpString_ok_iff` and `validate_universalString_ok_iff` give the same at the top, as the certificate reader validates each Name attribute value and each algorithm parameter.
+No theorem states the validation of INTEGER, OCTET STRING, OBJECT IDENTIFIER, NULL, UTF8String, PrintableString or IA5String, nor the rejection of every other tag.
+No theorem states the validation of a SEQUENCE or a SET OF, its order or its children.
 Nothing in Lean shows that authentication can succeed; the Python tests check vectors 1 to 4 of libp2p TLS.
 
 ### QUIC wire encodings
@@ -850,7 +861,13 @@ Making a payload fails on the zero secret or when signing fails, so its success 
 Each read of message 2 or 3 then succeeds, so, by `readLibp2p_authenticates`, it verified the signature of the other peer's identity key.
 Completion returns, on each side, the static key, the identity key and the extensions of the other peer, with swapped ciphers.
 
-No theorem says that the chaining key mixed a Diffie-Hellman output with the remote static key.
+The chaining key of each peer has its own theorems (`Networking/Proofs/Noise/Handshake.lean`).
+For each message of XX, one theorem for writing it and one for reading it name the X25519 outputs that the chaining key mixes, in order; message 1 mixes none.
+`chainingKey_writeMessage_readMessage_writeMessage` and `chainingKey_readMessage_writeMessage_readMessage` compose them for the initiator and the responder.
+After message 3, each chaining key starts from the one that the protocol name sets, then mixes `ee`, `es` and `se` in that order.
+Each token takes the local key that Noise §5.3 assigns to its role, and each remote key is the one that the final state stores.
+If both peers computed `es` or `se` from their two ephemeral keys, they would still agree and `handshake_complete` would still hold, but these theorems would not.
+No theorem ties a stored remote ephemeral key to the bytes of the message that carried it, and none states the cipher key that each mix sets.
 Only the libp2p read verifies an identity, and completion checks that the stored remote has the remote static key of the handshake.
 The raw transport split of an XX state checks neither.
 The Python tests compare the raw XX handshake with a published test vector.
