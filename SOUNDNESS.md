@@ -3009,9 +3009,12 @@ The decoder of its parameters reads back the state, and the JSON of the attribut
 From version 4 this holds whatever custody columns follow, and the custody columns read back too (`custodyColumnsOfJson_json`).
 The theorems run the other way: a value that is written reads back.
 The Python tests check the converse on examples: a request that decodes is written back as the same JSON.
-They do it for the 239 requests of `tests/engine/new_payload.json` that decode, the requests that `tests/engine/forkchoice.json` gives, and 17 request examples of the OpenRPC method files.
-The other 11 requests of `new_payload.json` are rejected as invalid parameters, as their fixtures expect.
+They do it for the 239 requests of `tests/engine/new_payload.json` that decode, and for 17 request examples of the OpenRPC method files.
+They also do it for a forkchoice state with each payload of `tests/engine/forkchoice.json` as the head, and no attributes.
+The other 11 are among the 75 whose fixtures expect invalid parameters, and the decoder rejects them.
+The 64 others of those 75 decode, and a later check rejects them.
 Six of the OpenRPC examples do not follow the specification, and the tests check that the decoder rejects them.
+The other two examples are of methods that EthLib does not specify, and the tests check that they fail as unknown methods.
 
 The theorems about `engine_forkchoiceUpdated` are in `Proofs/ForkchoiceUpdated.lean`.
 `forkchoiceUpdated_valid` shows that a valid answer selects a valid head that the execution layer holds, with its safe and finalized blocks on its chain.

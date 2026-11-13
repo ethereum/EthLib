@@ -13,17 +13,11 @@ The C export that reads the parameters of an Engine API request, then writes the
 
 It reads them with the decoder of the method, and writes them with the writer of the method.
 
-So it shows in Python what a consensus node sends for the values that it means.
-
-It takes `engine_newPayload`, `engine_forkchoiceUpdated`, `engine_getPayload` and `engine_getBlobs`.
-
-It also takes the two methods of payload bodies, each at every version that EthLib reads.
+So Python can compare a request with the canonical JSON of the values that it holds.
 
 A payload is written with the structure that it was read with.
 
-An unknown method has code 0.
-
-Parameters that the decoder rejects have the code of their Engine API error.
+An unknown method raises an error of code 0, and rejected parameters the code of their error.
 -/
 
 public section
@@ -35,22 +29,26 @@ open EthLib.Exports (Result PyValue pyExport)
 open EthLib.Base
 open EthLib.Engine.Json (AnyPayload)
 
-/-- The fork whose payloads have the fields of a version of the structure, from 1 to 3.
+/-- A fork that a version of `engine_newPayload` takes, with payloads of a version of the structure.
 
-Version 1 is that of Paris, 2 of Shapella, and 3 of Dencun. -/
-def payloadStructureFork : Nat → Fork
-  | 0 | 1 => .paris
-  | 2 => .shapella
-  | _ => .dencun
+Version 5 takes Glamsterdam, and version 4 Pectra, whose payloads have version 3 of the structure.
+
+Below, version 1 of the structure is that of Paris, 2 of Shapella, and 3 of Dencun. -/
+def payloadFork (version layout : Nat) : Fork :=
+  if 5 ≤ version then .glamsterdam
+  else if version = 4 then .pectra
+  else match layout with
+    | 0 | 1 => .paris
+    | 2 => .shapella
+    | _ => .dencun
 
 /-- The parameters of a version of `engine_newPayload`, read and written back.
 
-A payload of version 4 of the structure is written at Glamsterdam. -/
+The payload is written with the structure it was read with, at a fork that the version takes. -/
 def rewriteNewPayloadParams (version : Nat) (params : Json) : Except EngineError Json := do
   let (any, amsterdam, hashes, beaconRoot, requests) ← newPayloadParams version params
-  let fork := if amsterdam.isSome then .glamsterdam else payloadStructureFork any.version
-  let payload ← any.atFork fork
-  -- Before version 3 the writer writes neither the hashes nor the root, so any value serves.
+  let payload ← any.atFork (payloadFork version any.version)
+  -- The writer leaves out the hashes and the root before version 3, and the requests before 4.
   return newPayloadParamsJson version payload amsterdam (hashes.getD [])
     (beaconRoot.getD ZERO_HASH) (requests.getD [])
 
