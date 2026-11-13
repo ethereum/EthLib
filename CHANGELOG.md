@@ -11,7 +11,8 @@ Not yet released.
 
 - In Lean, `slashedFlagAt state position` names the slashed flag at a position of the registry, `(state.validators.data[position]?).map (·.slashed)` ([#2187](https://github.com/ethereum/EthLib/issues/2187)).
   The results that state slashed flags at positions now read it: `slashedFlag_eq_of_slashed`, `slashed_setValidatorAt`, `slashedFlag_initiateValidatorExit`, `slashValidator_slashedFlag`, `slashIfSlashable_ok`, `foldlM_slashIfSlashable`, `UpgradeFrame.slashed`, `UpgradeFrame.trans_blockFrame` and `ElectraKept`.
-  Each statement is definitionally the same, but a `rw` with one of them now matches `slashedFlagAt`, so unfold `slashedFlagAt` first where a proof rewrote the spelled-out form.
+  Each statement is definitionally the same, but a `rw` with one of them now looks for `slashedFlagAt`.
+  A proof whose goal spells out the read may need to unfold the name in the lemma, as in `have h := …`, `simp only [slashedFlagAt] at h`, `rw [h]`, or to state its goal through `slashedFlagAt`.
   `slashedFlagAt_processProposerSlashing` and `slashedFlagAt_processAttesterSlashing` state that a slashing changes flags only at the positions that it names.
   `slashedFlagAt_foldlM` states the same for a fold of such steps.
 
