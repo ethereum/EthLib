@@ -168,7 +168,7 @@ theorem processJustificationAndFinalization_slackJustifiedCheckpoints
     SlackJustifiedCheckpoints V U W genesis votes block after := by
   by_cases early : getCurrentEpoch state ≤ GENESIS_EPOCH + 1
   · exact processJustificationAndFinalization_early_eq early computed ▸ holds
-  have one : (GENESIS_EPOCH + 1 : Epoch).toNat = 1 := by decide
+  have one := toNat_genesisEpoch_add_one
   have late : 1 < (getCurrentEpoch state).toNat := by
     have := mt UInt64.le_iff_toNat_le.mpr early
     omega

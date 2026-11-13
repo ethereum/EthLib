@@ -244,7 +244,7 @@ The target is at most `high`.
 
 The stake floor covers epoch calls through the epoch after `high`. -/
 theorem quorum_count {g a : ForkedBeaconState preset} (run : Run config checks g a)
-    (genesis : Genesis (config := config) (checks := checks) g)
+    (genesis : Genesis config checks g)
     {high : Nat} (enough : EnoughStake run high) (call : QuorumCall run)
     (within : call.target.epoch.toNat ≤ high) :
     2 * Models.stake (effectiveWeight call.cached) (activeKeys call.cached) ≤
@@ -261,7 +261,7 @@ theorem quorum_count {g a : ForkedBeaconState preset} (run : Run config checks g
 
 The run starts at a genesis built from deposits, and the preset meets the parameters. -/
 theorem cached_participation {g a : ForkedBeaconState preset} (run : Run config checks g a)
-    (parameters : Parameters preset) (genesis : Genesis (config := config) (checks := checks) g)
+    (parameters : Parameters preset) (genesis : Genesis config checks g)
     (call : EpochCall run) :
     ParticipationBacked run call.cached := by
   obtain ⟨pre, tail, same, _⟩ := call.selected_prefix
@@ -317,7 +317,7 @@ private theorem counted_accepted {g a : ForkedBeaconState preset} (run : Run con
 
 The run starts at a genesis built from deposits, and the preset meets the parameters. -/
 theorem quorum_attestations {g a : ForkedBeaconState preset} (run : Run config checks g a)
-    (parameters : Parameters preset) (genesis : Genesis (config := config) (checks := checks) g)
+    (parameters : Parameters preset) (genesis : Genesis config checks g)
     (call : QuorumCall run) :
     ∀ key ∈ call.voters, ∃ data, run.Accepted key data ∧
       data.source = call.source ∧ data.target = call.target := by
@@ -391,7 +391,7 @@ private theorem call_bits {g a : ForkedBeaconState preset} {run : Run config che
       quorum.target.epoch.toNat + i.val = (getCurrentEpoch call.cached).toNat) ∨
       ∃ j : Fin 4, j.val + 1 = i.val ∧ call.cached.justificationBits.bits[j] = true := by
   obtain ⟨reads⟩ := call_balances call
-  obtain ⟨threshold, pw, cw, thresholdOk, pwOk, cwOk, zero, one, two, _⟩ :=
+  obtain ⟨threshold, pw, cw, thresholdOk, pwOk, cwOk, zero, one, two, three, _⟩ :=
     weighJustificationAndFinalization_bits reads.weighed
   fin_cases i
   · obtain ⟨passes, root, rootOk, _⟩ := zero set
@@ -405,14 +405,7 @@ private theorem call_bits {g a : ForkedBeaconState preset} {run : Run config che
       omega
     · exact .inr ⟨0, rfl, old⟩
   · exact .inr ⟨1, rfl, two ▸ set⟩
-  · right
-    refine ⟨2, rfl, ?_⟩
-    have weighed := reads.weighed
-    simp only [weighJustificationAndFinalization, bind_ok_iff, liftAccessor_ok, pure,
-      Except.pure, Except.ok.injEq] at weighed
-    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, eq⟩ := weighed
-    rw [← eq] at set
-    simpa [shiftJustificationBits] using set
+  · exact .inr ⟨2, rfl, three ▸ set⟩
 
 private theorem call_new_bits {g a : ForkedBeaconState preset} {run : Run config checks g a}
     (call : EpochCall run) :
@@ -516,7 +509,7 @@ private theorem slot_step {before after : ForkedBeaconState preset}
     exact nextSlot_epoch_of_inside sum ‹_›
 
 private theorem run_bits {g a : ForkedBeaconState preset} (run : Run config checks g a)
-    (genesis : Genesis (config := config) (checks := checks) g)
+    (genesis : Genesis config checks g)
     (i : Fin 4) (set : a.state.justificationBits.bits[i] = true) :
     ∃ quorum : QuorumCall run,
       quorum.target.epoch.toNat + i.val + 1 = (getCurrentEpoch a.state).toNat := by
@@ -573,7 +566,7 @@ private theorem run_bits {g a : ForkedBeaconState preset} (run : Run config chec
 
 /-- A set bit identifies a successful test on this run, not merely an epoch number. -/
 private theorem justification_bit_call {g a : ForkedBeaconState preset}
-    (run : Run config checks g a) (genesis : Genesis (config := config) (checks := checks) g)
+    (run : Run config checks g a) (genesis : Genesis config checks g)
     (call : EpochCall run) (i : Fin 4) (set : call.weighed.justificationBits.bits[i] = true) :
     ∃ witness : QuorumCall run,
       witness.target.epoch.toNat + i.val = (getCurrentEpoch call.cached).toNat := by
@@ -608,7 +601,7 @@ private theorem call_current {g a : ForkedBeaconState preset} {run : Run config 
     cases now <;> simp [QuorumCall.source, EpochCall.Reads.quorum]
 
 private theorem run_zero {g a : ForkedBeaconState preset} (run : Run config checks g a)
-    (genesis : Genesis (config := config) (checks := checks) g)
+    (genesis : Genesis config checks g)
     (set : a.state.justificationBits.bits[0] = true) :
     ∃ quorum : QuorumCall run,
       quorum.source = a.state.previousJustifiedCheckpoint ∧
@@ -677,7 +670,7 @@ The history is a chain of quorum calls of the run.
 
 The run starts at a genesis built from deposits. -/
 theorem justified_fields {g a : ForkedBeaconState preset} (run : Run config checks g a)
-    (genesis : Genesis (config := config) (checks := checks) g) (c : Checkpoint)
+    (genesis : Genesis config checks g) (c : Checkpoint)
     (field : c = a.state.previousJustifiedCheckpoint ∨ c = a.state.currentJustifiedCheckpoint) :
     c = ⟨GENESIS_EPOCH, Vector.replicate 32 0⟩ ∨ Nonempty (JustificationHistory run c) := by
   induction run generalizing c with
@@ -731,7 +724,7 @@ theorem justified_fields {g a : ForkedBeaconState preset} (run : Run config chec
             exact .inr ((target.trans current.symm) ▸ history)
 
 private theorem quorum_source_history {g a : ForkedBeaconState preset} (run : Run config checks g a)
-    (genesis : Genesis (config := config) (checks := checks) g) (call : QuorumCall run) :
+    (genesis : Genesis config checks g) (call : QuorumCall run) :
     call.source = ⟨GENESIS_EPOCH, Vector.replicate 32 0⟩ ∨
       Nonempty (JustificationHistory run call.source) := by
   obtain ⟨pre, tail, same, frame, _⟩ := call.toEpochCall.selected_prefix
@@ -755,43 +748,7 @@ private theorem weighed_rule {g a : ForkedBeaconState preset} {run : Run config 
   rcases processJustificationAndFinalization_ok call.weighedOk with same |
     ⟨total, previous, current, ok⟩
   · exact .inl (congrArg BeaconState.finalizedCheckpoint same)
-  simp only [weighJustificationAndFinalization, bind_ok_iff, liftAccessor_ok, pure,
-    Except.pure, Except.ok.injEq] at ok
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, b₃, h₃, b₂, h₂, c₂, hc₂, c₁, hc₁, eq⟩ := ok
-  unfold FinalizationRule
-  rw [← eq]
-  dsimp only
-  split
-  · rename_i yes
-    right
-    right
-    refine ⟨rfl, ?_⟩
-    simp only [Bool.or_eq_true] at yes
-    rcases yes with yes | yes
-    · rw [yes] at hc₂
-      have rule := finalizes_eq_true hc₂
-      simp only [Bool.and_eq_true, UInt64.reduceToNat] at rule
-      exact .inl ⟨rule.1.1.1, rule.1.1.2, rule.1.2, rule.2⟩
-    · rw [yes] at hc₁
-      have rule := finalizes_eq_true hc₁
-      simp only [Bool.and_eq_true, UInt64.reduceToNat] at rule
-      exact .inr ⟨rule.1.1, rule.1.2, rule.2⟩
-  · split
-    · rename_i yes
-      right
-      left
-      refine ⟨rfl, ?_⟩
-      simp only [Bool.or_eq_true] at yes
-      rcases yes with yes | yes
-      · rw [yes] at h₃
-        have rule := finalizes_eq_true h₃
-        simp only [Bool.and_eq_true, UInt64.reduceToNat] at rule
-        exact .inl ⟨rule.1.1.1, rule.1.1.2, rule.1.2, rule.2⟩
-      · rw [yes] at h₂
-        have rule := finalizes_eq_true h₂
-        simp only [Bool.and_eq_true, UInt64.reduceToNat] at rule
-        exact .inr ⟨rule.1.1, rule.1.2, rule.2⟩
-    · exact .inl rfl
+  · exact weighJustificationAndFinalization_finalized ok
 
 /-- The finalized field of the last state is the genesis checkpoint, or an epoch call set it.
 
@@ -799,7 +756,7 @@ That call met a finalization rule for it.
 
 The run starts at a genesis built from deposits. -/
 theorem finalized_field {g a : ForkedBeaconState preset} (run : Run config checks g a)
-    (genesis : Genesis (config := config) (checks := checks) g) :
+    (genesis : Genesis config checks g) :
     a.state.finalizedCheckpoint = ⟨GENESIS_EPOCH, Vector.replicate 32 0⟩ ∨
       ∃ call : EpochCall run, call.weighed.finalizedCheckpoint = a.state.finalizedCheckpoint ∧
         FinalizationRule call a.state.finalizedCheckpoint := by
@@ -840,7 +797,7 @@ With a target two epochs ahead, a checkpoint of the epoch between them has a his
 
 The run starts at a genesis built from deposits. -/
 theorem finalization_rule_quorums {g a : ForkedBeaconState preset} (run : Run config checks g a)
-    (genesis : Genesis (config := config) (checks := checks) g) (call : EpochCall run)
+    (genesis : Genesis config checks g) (call : EpochCall run)
     (c : Checkpoint) (rule : FinalizationRule call c) :
     ∃ outgoing : QuorumCall run, outgoing.source = c ∧
       (outgoing.target.epoch.toNat = c.epoch.toNat + 1 ∨
@@ -908,58 +865,5 @@ theorem finalization_rule_quorums {g a : ForkedBeaconState preset} (run : Run co
     have dateNat := congrArg UInt64.toNat date
     exact finish outgoing (start.trans source.symm) (.inl (by omega))
       (fun gap => False.elim (by omega))
-
-private theorem call_target_window {g a : ForkedBeaconState preset}
-    {run : Run config checks g a} (parameters : Parameters preset) (call : QuorumCall run) :
-    call.target.epoch.toNat * preset.SLOTS_PER_EPOCH.toNat < call.before.state.slot.toNat ∧
-      call.before.state.slot.toNat < call.target.epoch.toNat * preset.SLOTS_PER_EPOCH.toNat +
-        preset.SLOTS_PER_HISTORICAL_ROOT.toNat := by
-  have frame := frame_processSlot call.cachedOk
-  -- The successful root read puts the target's first slot strictly before the cached slot.
-  have started := getBlockRoot_start_lt call.targetRoot
-  rw [frame.slot] at started
-  have current : (getCurrentEpoch call.cached).toNat =
-      call.before.state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat := by
-    simp [getCurrentEpoch_toNat, frame.slot]
-  have prev := getPreviousEpoch_toNat call.cached
-  have positive : 0 < preset.SLOTS_PER_EPOCH.toNat := by have := parameters.slots; omega
-  have division := Nat.mod_add_div call.before.state.slot.toNat preset.SLOTS_PER_EPOCH.toNat
-  have remainder := Nat.mod_lt call.before.state.slot.toNat positive
-  have date := congrArg UInt64.toNat call.targetEpoch
-  have roots := parameters.roots
-  refine ⟨started, ?_⟩
-  split at date
-  · rw [current] at date
-    rw [← date, Nat.mul_comm preset.SLOTS_PER_EPOCH.toNat] at division
-    omega
-  · rw [prev, current] at date
-    have late := UInt64.lt_iff_toNat_lt.mp call.later
-    simp only [GENESIS_EPOCH, UInt64.reduceAdd, UInt64.reduceToNat, current] at late
-    have epochPositive : 0 < call.before.state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat := by omega
-    have pred : call.before.state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat =
-        call.target.epoch.toNat + 1 := by omega
-    rw [pred, Nat.mul_add, Nat.mul_comm preset.SLOTS_PER_EPOCH.toNat] at division
-    simp only [Nat.mul_one] at division
-    omega
-
-/-- Two quorum calls of the runs with one target have the same headers up to the target epoch.
-
-Otherwise SHA-256 collides in the root of a header of the runs, or a header or state has root zero.
-
-The runs start at one genesis built from deposits, and the preset meets the parameters. -/
-theorem call_target_binding {g a b : ForkedBeaconState preset}
-    (left : Run config checks g a) (right : Run config checks g b)
-    (parameters : Parameters preset) (genesis : Genesis (config := config) (checks := checks) g)
-    (one : QuorumCall left) (two : QuorumCall right) (same : one.target = two.target) :
-    left.checkpointPath one.target.epoch = right.checkpointPath two.target.epoch ∨
-      HashEvidence (left.hashObjects ++ right.hashObjects) := by
-  obtain ⟨earlyOne, recentOne⟩ := call_target_window parameters one
-  obtain ⟨earlyTwo, recentTwo⟩ := call_target_window parameters two
-  have result := checkpoint_binding_cached left right genesis
-    one.advanced two.advanced one.member two.member one.cached two.cached
-    one.cachedOk two.cachedOk one.target.epoch one.target.root one.targetRoot
-    (by simpa [same] using two.targetRoot) earlyOne
-    (by simpa [same] using earlyTwo) recentOne (by simpa [same] using recentTwo)
-  simpa [same] using result
 
 end EthLib.Consensus.DirectSafety
