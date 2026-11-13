@@ -50,6 +50,7 @@ class RouterState:
     peer_topics: tuple[tuple[bytes, tuple[str, ...]], ...] = ()
     mesh: tuple[tuple[str, tuple[bytes, ...]], ...] = ()
     fanout: tuple[tuple[str, tuple[bytes, ...]], ...] = ()
+    last_publish: tuple[tuple[str, int], ...] = ()
     backoff: tuple[tuple[tuple[str, bytes], int], ...] = ()
     outbound: tuple[bytes, ...] = ()
     explicit: tuple[bytes, ...] = ()
@@ -101,6 +102,7 @@ def _state(value: dict[str, Any]) -> RouterState:
         peer_topics=tuple((peer, tuple(topics)) for peer, topics in value["peer_topics"]),
         mesh=tuple((topic, tuple(peers)) for topic, peers in value["mesh"]),
         fanout=tuple((topic, tuple(peers)) for topic, peers in value["fanout"]),
+        last_publish=tuple((topic, time) for topic, time in value["last_publish"]),
         backoff=tuple(((topic, peer), end) for (topic, peer), end in value["backoff"]),
         outbound=tuple(value["outbound"]),
         explicit=tuple(value["explicit"]),
