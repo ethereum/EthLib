@@ -4401,9 +4401,15 @@ They call the same dispatch as gossip, `validateGossipMessage` (`Consensus/Gossi
 `submitList_failures` shows that the entry of the answer at a position is the failure of its item, given the keys after the items before it.
 `submitList_failures_pairwise` shows that the answer names the failed positions in increasing order, so each once, and `submitList_failures_lt_length` that each lies within the list.
 `submitList_accepted_iff` shows that the answer is a success exactly when no item fails, and `submitList_failed_ne_nil` that a failed answer names at least one item.
+`PoolRequest.items_ne_nil` shows that every item of a request has a message, so no item passes without a check of gossip.
+`mem_syncSubnets_of_seat` shows that a validator that holds seats gets the subnets of its seats, once each, in increasing order.
+`syncSubnets_of_no_seat` shows that any other validator gets subnet 0 alone.
+`validateItem_syncSubnets_seat` shows that an item of a sync committee message passes only if its validator holds a seat at the slot after the head state.
+`submitPool_syncCommitteeMessages_seat` shows the same for each message of an accepted request.
 The Python suite (`bindings/python/tests/consensus/test_beacon_api_pool.py`) submits each object of the pinned gossip cases of the pool topics to its endpoint.
 It checks that the object fails exactly when gossip does not accept it, with the reason of the case.
 It leaves out the cases whose reason is a wrong subnet, since the node picks the subnet itself, and the cases that send objects of another topic.
+No case submits a sync committee message from a validator with no seat; only `validateItem_syncSubnets_seat` covers it.
 Every case of the bid topic also sends the envelopes of payloads, so those cases run in the suite of the publish endpoints.
 
 The publish endpoints of blocks and of payload envelopes check an object at the level that the client asks, before the node broadcasts it (`Consensus/BeaconApi/Publish.lean`).
@@ -4588,7 +4594,8 @@ Points that remain open:
 - The pool endpoints take the items in order, and the keys of a valid item apply to the next ones, so a list that repeats an object fails at each copy after the first.
 - The node picks the subnet of an attestation from its head state, and validates a sync committee message once on each subnet that holds a seat of its validator.
   When it finds no subnet, it validates the object on subnet 0, where gossip fails at or before its check of the subnet.
-  The order of the checks of the validators gives this; no theorem states it yet.
+  The order of the checks of the validators gives this.
+  For a sync committee message, `syncSubnets_of_no_seat` and `validateItem_syncSubnets_seat` state it; no theorem states it for an attestation.
   For a sync committee message, the first check of gossip reads the keys seen on that subnet.
   So with keys seen under another head, the reason on subnet 0 can be "already seen" where another subnet would give a wrong subnet.
 - A sync committee message is validated on every subnet, and each subnet where it passes keeps its keys; the item fails with the reason of the first subnet where it fails.
