@@ -10,9 +10,9 @@ public import EthLib.Consensus.Proofs.Time
 
 No handler lowers the epoch of the justified or of the finalized checkpoint.
 
-Each changes only to a checkpoint at a greater epoch.
-
 Nor does a block together with the votes that it carries.
+
+Each of these checkpoints stays as it was, or changes to one at a greater epoch.
 
 A tick sets the clock to its time, and the catch-up loop never stalls.
 
@@ -153,7 +153,7 @@ theorem blockState_ok_iff {root : Root} {state : BeaconState preset fork} :
   cases store.blockStates[root]? <;>
     simp [throw, throwThe, MonadExceptOf.throw, pure, Except.pure]
 
-/-- Replacing the checkpoints moves each only to one at a greater epoch. -/
+/-- Replacing the checkpoints keeps each, or moves it to one at a greater epoch. -/
 theorem updateCheckpoints_checkpointsAdvance (justified finalized : Checkpoint) :
     store.CheckpointsAdvance (store.updateCheckpoints justified finalized) := by
   unfold updateCheckpoints CheckpointsAdvance CheckpointAdvances
@@ -1258,7 +1258,7 @@ theorem onBlock_checks {checks : SignatureChecks} {sources : BlockSources preset
   obtain ⟨_, valid, -⟩ := added
   exact validateOnBlock_checks valid
 
-/-- No block lowers the epoch of the justified or the finalized checkpoint. -/
+/-- A block keeps each of its two checkpoints, or moves it to one at a greater epoch. -/
 theorem onBlock_checkpointsAdvance {checks : SignatureChecks} {sources : BlockSources preset fork}
     {signed : SignedBeaconBlock preset fork}
     {after : Store preset fork} (added : store.onBlock config checks sources signed = .ok after) :
@@ -1317,7 +1317,7 @@ theorem onBlockWithVotes_preserves {P : Store preset fork → Prop} {checks : Si
     (block holds blockOk) attested
   exact foldlM_ok_invariant P (fun _ sl _ h step => slashing sl h step) votes slashed
 
-/-- A block and the votes that it carries lower no epoch. -/
+/-- A block and the votes that it carries keep each checkpoint, or move it to a greater epoch. -/
 theorem onBlockWithVotes_checkpointsAdvance {checks : SignatureChecks}
     {sources : BlockSources preset fork}
     {signed : SignedBeaconBlock preset fork} {after : Store preset fork}

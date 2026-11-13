@@ -4336,12 +4336,14 @@ The topics and the messages of the event stream are in `Consensus/BeaconApi/Even
 The events of the fork choice are in `Consensus/BeaconApi/ChainEvents.lean` (#2091).
 `chainEvents` compares two stores: a head event comes when the head block changes, or when it stays and its payload moves from empty to full; a reorganization comes when the old head block is not an ancestor of the new head; a finalized event comes when the finalized checkpoint changes.
 `chainEvents_head_iff` and `chainEvents_reorg_iff` (`Consensus/Proofs/BeaconApi/ChainEvents.lean`) show when a head event and a reorganization come.
-`chainEvents_head` shows that a head event names the head of the later store, and `chainEvents_dependent_roots_duties` that its two dependent roots are those of the attester duties of its epoch and of the next one, read from the head state; the second needs at least two slots in an epoch.
-`dependentRoot_room` shows why: with two slots or more, the start slot of the last epoch overflows, so the root of the next epoch is read only when that epoch fits in 64 bits.
-With one slot in an epoch, the epoch after the last wraps to 0, whose dependent root is the genesis root, so the theorem leaves that preset out.
-`chainEvents_finalized_iff` shows that a finalized event comes exactly when the finalized checkpoint changes, and `chainEvents_finalized` that it names the new checkpoint.
-`chainEvents_finalized_epoch` shows that its epoch is above the finalized epoch of the earlier store, when the checkpoints advance from one store to the other.
-`Store.CheckpointsAdvance` (`Consensus/Proofs/ForkChoice/Handlers.lean`) says that each of the justified and finalized checkpoints stays as it was or moves to one at a greater epoch, and every handler of the fork choice keeps it, since a checkpoint is replaced only by one at a greater epoch.
+`chainEvents_head` shows that a head event names the head of the later store, and `chainEvents_dependent_roots_duties` that its two dependent roots are those of the attester duties of its epoch and of the next one, read from the head state; the second needs the next epoch to fit in 64 bits.
+`computeEpochAtSlot_succ_lt` shows that it does for every slot when an epoch has at least two slots.
+`chainEvents_finalized_iff` shows that a finalized event comes exactly when the finalized checkpoint changes, and `chainEvents_finalized` that it names the block and the epoch of the new checkpoint.
+`chainEvents_finalized_epoch` shows that the epoch of a finalized event is above the finalized epoch of the earlier store, when the finalized checkpoint advances from one store to the other.
+`Store.CheckpointsAdvance` (`Consensus/Proofs/ForkChoice/Handlers.lean`) says that each of the justified and finalized checkpoints stays as it was or moves to one at a greater epoch.
+A checkpoint is replaced only by one at a greater epoch.
+So the tick, the block, the attestation, the attester slashing, the envelope and the inclusion list each relate the store before to the store after, by their frame theorems.
+A vote of the payload committee changes only the votes (`onPayloadAttestationMessage_onlyPtcVotes`), so it relates them too.
 `fastConfirmationEvent_block` shows that the event of a run of the fast confirmation rule names its confirmed block and that block's slot.
 The source leaves these points open, decided here:
 

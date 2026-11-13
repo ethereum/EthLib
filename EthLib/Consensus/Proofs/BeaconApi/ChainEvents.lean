@@ -15,7 +15,9 @@ So a validator client can compare them to know when its duties change.
 
 A finalized event comes exactly when the finalized checkpoint changes.
 
-When the handlers lead from one store to the other, its epoch is then above the old one.
+Each handler of the fork choice keeps the finalized checkpoint or moves it to a greater epoch.
+
+When the stores are so related, the epoch of a finalized event is above the one before.
 -/
 
 @[expose] public section
@@ -160,26 +162,22 @@ theorem chainEvents_reorg_iff {config : Config} {optimistic : Root → Bool} {ge
     simp_all
 
 
-/-- The root without a lag for an epoch is read only when the next epoch fits in 64 bits.
-
-That needs at least two slots in an epoch, since the start slot of the last epoch then overflows.
--/
-theorem dependentRoot_room {state : BeaconState preset fork} {epoch : Epoch}
-    {genesisRoot root : Root} (wide : 1 < preset.SLOTS_PER_EPOCH.toNat)
-    (read : dependentRoot state 0 epoch genesisRoot = .ok root) :
-    epoch.toNat + 1 < 2 ^ 64 := by
-  by_contra full
-  have top : epoch.toNat = 2 ^ 64 - 1 := by have := epoch.toNat_lt; omega
-  have big : ¬epoch.toNat * preset.SLOTS_PER_EPOCH.toNat < 18446744073709551616 := by
-    rw [top]; omega
-  unfold dependentRoot computeStartSlotAtEpoch Uint64.mulChecked at read
-  simp [big, Except.mapError, bind, Except.bind] at read
+/-- With at least two slots in an epoch, the epoch after that of any slot fits in 64 bits. -/
+theorem computeEpochAtSlot_succ_lt (slot : Slot) (wide : 1 < preset.SLOTS_PER_EPOCH.toNat) :
+    (computeEpochAtSlot preset slot).toNat + 1 < 2 ^ 64 := by
+  unfold computeEpochAtSlot
+  rw [UInt64.toNat_div]
+  have := slot.toNat_lt
+  have : slot.toNat / preset.SLOTS_PER_EPOCH.toNat ≤ slot.toNat / 2 :=
+    Nat.div_le_div_left wide (by omega)
+  omega
 
 /-- The dependent roots of a head event are those of the attester duties, from the head state.
 
 The first is that of the duties of the epoch of the head, and the second that of the next epoch.
 
-The second needs at least two slots in an epoch. -/
+The second needs the next epoch to fit in 64 bits, as it does with at least two slots in an epoch.
+-/
 theorem chainEvents_dependent_roots_duties {config : Config} {optimistic : Root → Bool}
     {genesisRoot : Root} {before after : Store preset fork} {events : List ChainEvent}
     (made : chainEvents config optimistic genesisRoot before after = .ok events)
@@ -188,7 +186,7 @@ theorem chainEvents_dependent_roots_duties {config : Config} {optimistic : Root 
       (∀ indices envelope, dutiesResponse config state .attester
           (computeEpochAtSlot preset event.slot) indices genesisRoot = .ok envelope →
         envelope.dependentRoot = some event.currentEpochDependentRoot) ∧
-      (1 < preset.SLOTS_PER_EPOCH.toNat →
+      ((computeEpochAtSlot preset event.slot).toNat + 1 < 2 ^ 64 →
         ∀ indices envelope, dutiesResponse config state .attester
           (computeEpochAtSlot preset event.slot + 1) indices genesisRoot = .ok envelope →
         envelope.dependentRoot = some event.nextEpochDependentRoot) := by
@@ -198,9 +196,8 @@ theorem chainEvents_dependent_roots_duties {config : Config} {optimistic : Root 
   · intro indices envelope answer
     obtain ⟨root, read, carried⟩ := dutiesResponse_attester answer
     rw [carried, Except.ok.inj (read.symm.trans current)]
-  · intro wide indices envelope answer
+  · intro room indices envelope answer
     obtain ⟨root, read, carried⟩ := dutiesResponse_attester answer
-    have room := dependentRoot_room wide next
     rw [carried, Except.ok.inj (read.symm.trans (dependentRoot_succ_of_ok room next))]
 
 /-- A finalized event comes exactly when the finalized checkpoint changes. -/
@@ -227,8 +224,7 @@ theorem chainEvents_finalized {config : Config} {optimistic : Root → Bool}
     (made : chainEvents config optimistic genesisRoot before after = .ok events)
     {event : FinalizedCheckpointEvent} (listed : .finalizedCheckpoint event ∈ events) :
     event.block = after.finalizedCheckpoint.root ∧
-      event.epoch = after.finalizedCheckpoint.epoch ∧
-      before.finalizedCheckpoint ≠ after.finalizedCheckpoint := by
+      event.epoch = after.finalizedCheckpoint.epoch := by
   unfold chainEvents at made
   rcases h1 : before.getHead config with _ | old <;>
     rcases h2 : after.getHead config with _ | new <;>
@@ -241,21 +237,22 @@ theorem chainEvents_finalized {config : Config} {optimistic : Root → Bool}
     subst made
     simp only [List.mem_append, List.mem_cons, List.mem_nil_iff, reduceCtorEq, or_false,
       false_or, ChainEvent.finalizedCheckpoint.injEq] at listed
-  all_goals (subst listed; exact ⟨rfl, rfl, by assumption⟩)
+  all_goals (subst listed; exact ⟨rfl, rfl⟩)
 
 /-- A finalized event has an epoch above the finalized epoch before the change.
 
-That holds when the checkpoints advance from one store to the other, as each handler makes them.
+That holds when the finalized checkpoint advances from one store to the other.
+
+Each handler of the fork choice makes it advance.
 -/
 theorem chainEvents_finalized_epoch {config : Config} {optimistic : Root → Bool}
     {genesisRoot : Root} {before after : Store preset fork} {events : List ChainEvent}
     (made : chainEvents config optimistic genesisRoot before after = .ok events)
-    (advance : before.CheckpointsAdvance after)
+    (advance : CheckpointAdvances before.finalizedCheckpoint after.finalizedCheckpoint)
     {event : FinalizedCheckpointEvent} (listed : .finalizedCheckpoint event ∈ events) :
     before.finalizedCheckpoint.epoch < event.epoch := by
-  obtain ⟨-, epoch, changed⟩ := chainEvents_finalized made listed
-  rw [epoch]
-  exact advance.2.epoch_lt changed
+  rw [(chainEvents_finalized made listed).2]
+  exact advance.epoch_lt ((chainEvents_finalized_iff made).mp ⟨event, listed⟩)
 
 /-- The event of a run of the fast confirmation rule names the confirmed block and its slot. -/
 theorem fastConfirmationEvent_block {store : Store preset fork} {fcr : FastConfirmationStore}
