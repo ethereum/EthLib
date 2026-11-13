@@ -424,10 +424,14 @@ The proof is the branch from the leaf up, then the count as 32 little-endian byt
 
 Only a deposit that the tree holds and has not finalized has a proof.
 
+A tree whose count reaches the number of its leaves has no proof.
+
 The reference implementation of the EIP proves an empty leaf for an index past the deposits.
 -/
 def getProof (tree : DepositTree) (index : Nat) :
     Except DepositTreeError (Root × Vector Root (DEPOSIT_CONTRACT_TREE_DEPTH.toNat + 1)) := do
+  if 2 ^ DEPOSIT_CONTRACT_TREE_DEPTH.toNat ≤ tree.mixInLength then
+    throw (.countBeyondCapacity tree.mixInLength)
   let finalized := tree.tree.getFinalized.2
   if index < finalized then throw (.proofOfFinalized index finalized)
   if tree.mixInLength ≤ index then throw (.proofBeyondCount index tree.mixInLength)
