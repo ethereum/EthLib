@@ -145,6 +145,8 @@ public import EthLib.Consensus.Proofs.ShufflePermutation
 public import EthLib.Consensus.Proofs.Signing
 public import EthLib.Consensus.Proofs.Time
 public import EthLib.Consensus.Proofs.Transition.ActiveKept
+public import EthLib.Consensus.Proofs.Transition.BalanceCappedBlock
+public import EthLib.Consensus.Proofs.Transition.BalanceCappedWithdrawals
 public import EthLib.Consensus.Proofs.Transition.BalanceDrift
 public import EthLib.Consensus.Proofs.Transition.BalanceNotRaised
 public import EthLib.Consensus.Proofs.Transition.BalanceNotRaisedBlock
