@@ -10573,6 +10573,41 @@
    "error_class": "EngineError",
    "docstring":
    "The answer to a payload bodies request, from a store of bodies.\n\nThe arguments are the store's entries, the latest known block, the limit and the request.\n\nEach entry is the block hash, its canonical number or `None`, and its fork name.\n\nThen come its transactions, its withdrawals or `None`, and its block access list or `None`."},
+  {"summary": "A payload status read from its JSON, as `json.loads` gives it.",
+   "signature":
+   "(status: dict[str, Any]) -> tuple[str, bytes | None, str | None]",
+   "operation": "EthLib.Engine.Exports.readPayloadStatusExport",
+   "method": "engine_read_payload_status",
+   "errors":
+   [{"type": "EthLib.Engine.EngineError",
+     "codes":
+     [{"constructor": "invalidParams", "code": 32602},
+      {"constructor": "unsupportedFork", "code": 38005},
+      {"constructor": "invalidForkchoiceState", "code": 38002},
+      {"constructor": "tooLargeRequest", "code": 38004},
+      {"constructor": "invalidPayloadAttributes", "code": 38003},
+      {"constructor": "unknownPayload", "code": 38001}]}],
+   "error_class": "EngineError",
+   "docstring":
+   "A payload status read from its JSON, as `json.loads` gives it.\n\nThe result is the name of the status, the latest valid hash and the validation error.\n\nA status that does not decode is an invalid parameter, with code 32602."},
+  {"summary":
+   "A forkchoice response read from its JSON, as `json.loads` gives it.",
+   "signature":
+   "(response: dict[str, Any]) -> tuple[str, bytes | None, str | None, bytes | None]",
+   "operation": "EthLib.Engine.Exports.readForkchoiceResponseExport",
+   "method": "engine_read_forkchoice_response",
+   "errors":
+   [{"type": "EthLib.Engine.EngineError",
+     "codes":
+     [{"constructor": "invalidParams", "code": 32602},
+      {"constructor": "unsupportedFork", "code": 38005},
+      {"constructor": "invalidForkchoiceState", "code": 38002},
+      {"constructor": "tooLargeRequest", "code": 38004},
+      {"constructor": "invalidPayloadAttributes", "code": 38003},
+      {"constructor": "unknownPayload", "code": 38001}]}],
+   "error_class": "EngineError",
+   "docstring":
+   "A forkchoice response read from its JSON, as `json.loads` gives it.\n\nThe result is the status name, the latest valid hash, the validation error and the payload ID.\n\nA response that does not decode is an invalid parameter, with code 32602."},
   {"summary":
    "The parameters of an Engine API request, read by the decoder and written by the writer.",
    "signature": "(method: str, params: list[Any]) -> list[Any]",

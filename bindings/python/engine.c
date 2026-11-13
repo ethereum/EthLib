@@ -38,6 +38,8 @@ extern lean_object* eth_engine_jwt_check(lean_object* args);
 
 extern lean_object* eth_engine_get_payload(lean_object* args);
 extern lean_object* eth_engine_rewrite_params(lean_object* args);
+extern lean_object* eth_engine_read_payload_status(lean_object* args);
+extern lean_object* eth_engine_read_forkchoice_response(lean_object* args);
 
 /* ---- Wrappers --------------------------------------------------------- */
 
@@ -119,4 +121,20 @@ py_engine_rewrite_params(
   PyObject* args
 ) {
   return call_pyvalue_export(eth_engine_rewrite_params, args, 2, ENGINE_ERROR);
+}
+
+PyObject*
+py_engine_read_payload_status(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_engine_read_payload_status, args, 1, ENGINE_ERROR);
+}
+
+PyObject*
+py_engine_read_forkchoice_response(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_engine_read_forkchoice_response, args, 1, ENGINE_ERROR);
 }

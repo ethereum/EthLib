@@ -556,4 +556,52 @@ def payloadId (head : Hash32) (attributes : PayloadAttributes fork) : PayloadId 
     simp only [Cryptography.Hash.Keccak.DIGEST_LEN]
     omega)
 
+/-! ## The response -/
+
+/-- The response of a call, from its result: the status, and the ID of the build that it begins.
+
+The ID is that of the applied head and the attributes, when the call returns attributes.
+
+These are the answers of step 9 of [`engine_forkchoiceUpdatedV1`][fcu] that are not errors.
+
+[fcu]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#engine_forkchoiceupdatedv1 -/
+def forkchoiceUpdatedResponse
+    (result : PayloadStatus × Option Hash32 × Option (Σ fork, PayloadAttributes fork)) :
+    PayloadStatus × Option PayloadId :=
+  (result.1, result.2.1.bind fun head => result.2.2.map fun a => payloadId head a.2)
+
+/-- Whether a status is one that a forkchoice update answers: valid, invalid or syncing.
+
+`RestrictedPayloadStatusV1` of [`payload.yaml`][schema] and [step 9][fcu] allow only these.
+
+[schema]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/openrpc/schemas/payload.yaml
+[fcu]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#engine_forkchoiceupdatedv1 -/
+def Status.restricted : Status → Bool
+  | .valid | .invalid | .syncing => true
+  | .accepted | .invalidBlockHash => false
+
+/-- The response as JSON: the payload status, and the payload ID or `null`. -/
+def forkchoiceUpdatedResponseJson (status : PayloadStatus) (validationError : Option String)
+    (id : Option PayloadId) : Json :=
+  Json.mkObj [("payloadStatus", payloadStatusJson status validationError),
+    ("payloadId", optionJson (dataJson ·.toList) id)]
+
+/-- A forkchoice response read from its JSON: one of three statuses, and an ID.
+
+The ID is 8 bytes; a missing or `null` ID is absent.
+
+Any other field with a value other than `null` is invalid.
+
+The decoder does not check the pairing of status, hash and ID that step 9 asks of a client. -/
+def forkchoiceUpdatedResponseOfJson (j : Json) :
+    Decode (PayloadStatus × Option String × Option PayloadId) := do
+  let fs ← fields "forkchoiceUpdatedResponse" j
+  unless fs.all (["payloadStatus", "payloadId"].contains ·.1) do
+    invalid "forkchoiceUpdatedResponse: unknown field"
+  let (status, validationError) ←
+    payloadStatusOfJson (← field "forkchoiceUpdatedResponse" fs "payloadStatus")
+  unless status.status.restricted do invalid "payloadStatus: not a status of the method"
+  let id ← Json.lift ((fs.lookup "payloadId").mapM (fixed "payloadId" 8))
+  return (status, validationError, id)
+
 end EthLib.Engine
