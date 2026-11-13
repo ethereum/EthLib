@@ -3523,16 +3523,24 @@ It assumes nothing about the signature checks, so it does not say who signed.
 `source_safety` (`DirectSafety/SourceSafety.lean`) replaces the observed drift of `accountable_safety` by a source envelope for each tail (`sourceDrift`, `DirectSafety/IntervalBounds.lean`).
 `derivedDrift_le_sources` shows that the drift of a tail is at most its envelope.
 The envelope reads the reference state `x`, the balance replay of the tail up to the finalized epoch of `b`, and the largest exit cohort along the tail.
-It charges twice the exit and consolidation queues at `x` plus one exit churn and one consolidation rate per epoch of the window, before Electra one count churn.
-It charges once the funded inactive validators at `x` plus one deposit churn per epoch, before Electra one count churn.
-It charges twice the deficits of the unslashed keys active at `x`: the debits other than slashings beyond their balance above the effective balance, plus one increment of rounding each.
-It charges once the credits of the replay that no churn limits, the balance above the effective balance at `x`, and twice the largest exit cohort.
+It charges twice the exits already scheduled at `x` and the unspent exit and consolidation balances.
+If the window reaches Electra, it adds twice one exit churn and one consolidation rate per epoch.
+From a state before Electra, it adds twice one count churn per epoch.
+It charges once the validators that activate after `x` or were active only at its previous epoch, at the larger of their effective and actual balances.
+If the window reaches Electra, it adds once the deposit balance left to consume at `x` and one deposit churn per epoch.
+From a state before Electra, it adds once one count churn per epoch.
+It charges twice the deficits of the unslashed keys active at `x`.
+A deficit is the debits other than slashings beyond the balance above the effective balance, plus about one increment of rounding.
+It charges once the credits of the replay that no churn limits, and twice the largest exit cohort.
+For a window that reaches Electra, it charges once the balance above the effective balance at `x`.
+For a window that ends before Electra, it charges each key active at `x` its excess and its deposits, at most its room below the cap.
 Each tail must end before Gloas, `x` at most one epoch past the finalized epoch of `b`, and the withdrawal delay positive.
 The preset must meet the parameters of `accountable_safety`, have at least two slots per epoch, order its caps and keep its largest effective balances whole numbers of increments; both presets do.
 The envelope is an upper bound, and nothing says that a run attains it.
 Withdrawals are debits, so a key that the withdrawal sweep reaches inside the window has a deficit of about its rewards since `x`, and is charged its rounding increment.
-Over a window of 225 epochs on mainnet the sweep reaches up to about 115,000 keys.
+A payload withdraws from at most 16 keys, so over 225 epochs, about a day, at most about 115,000 keys are withdrawn from.
 Then this rounding alone adds up to about 1.3% of a stake of 36 million ether to the bound, and a tighter deficit is open.
+The premise on the withdrawal delay comes from the proof, which reads the invariant of pending consolidations, not from the bound.
 The envelope is not yet put into the weak subjectivity margin of `accountable_safety_of_weakSubjectivityPeriod`.
 
 ### Engine API

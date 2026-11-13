@@ -1926,7 +1926,7 @@ private theorem balanceDrift_join_of_sources {g x y : ForkedBeaconState preset}
 
 /-- New keys are bounded from their actual admission balance, not a fictitious zero receipt.
 
-The configuration must have a positive withdrawal delay. -/
+The withdrawal delay is positive. -/
 theorem joining_growth_from_admission {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (tail : Run config checks x y)
     (genesis : Genesis (config := config) (checks := checks) g) (early : y.fork < .glamsterdam)

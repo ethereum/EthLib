@@ -3411,6 +3411,8 @@ The run ends before Gloas, and the reference state is at most one epoch past the
 
 The preset meets the parameters, has at least two slots per epoch and orders its caps.
 
+Its largest effective balances are whole numbers of increments.
+
 The withdrawal delay is positive. -/
 theorem derivedDrift_le_sources {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (tail : Run config checks x y)

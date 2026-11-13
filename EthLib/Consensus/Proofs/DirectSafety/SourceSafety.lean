@@ -10,11 +10,13 @@ Two runs from a shared prefix finalize conflicting checkpoints.
 
 Then the hashes of the runs show evidence, or direct accountable safety holds with a new drift.
 
-That drift is twice the larger source envelope of the two runs.
+That drift is the larger source envelope of the two runs.
 
 The envelope reads the reference state, the balance replay of the run and its largest exit cohort.
 
-Over three, it weighs exits at four thirds and activations at two thirds, as in [EIP-8061].
+Twice the envelope over three weighs exits at four thirds and activations at two thirds.
+
+Those are the weights of [EIP-8061].
 
 [EIP-8061]: https://eips.ethereum.org/EIPS/eip-8061#weak-subjectivity-period
 -/
@@ -36,6 +38,10 @@ The bound adds twice the larger envelope of the two runs, or the hashes of the r
 Each envelope reads the balance replay of its run up to the finalized epoch of the right run.
 
 The theorem also returns those replays.
+
+The runs finalize conflicting checkpoints, and the right one is no earlier.
+
+Each run keeps enough active stake through one epoch past its finalized epoch.
 
 Each run ends before Gloas, and the reference state is at most one epoch past that epoch.
 
