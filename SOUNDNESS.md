@@ -2045,6 +2045,13 @@ The honest support of the target of the current epoch takes the total active bal
 No theorem proves that, which rests on the shuffling of the head and its pulled-up state agreeing on the active validators of the epoch.
 Each member of the committees must also be in the source of balances, or the rule fails; no theorem bounds the epochs between that source and the range.
 
+`Execution.equivocatingIndices_honest` (`Consensus/Proofs/ForkChoice/HonestEquivocators.lean`) proves, for the store of each honest validator in an execution of the network model, that no known equivocator is honest.
+It needs slots that last a positive time, and honest stores that start with no honest equivocator.
+A store built from an anchor starts with none, by `Store.getForkchoiceStore_equivocatingIndices`.
+In the model an honest validator signs a vote only after checking it against its own votes in its view.
+Each of its votes in a sent message stays in its view, so no two of them can be slashed together.
+`Execution.lt_two_mul_honest_supportersOf_of_isOneConfirmed` restates `Store.lt_two_mul_honest_supportersOf_of_isOneConfirmed` for such a store, without that assumption.
+
 `Store.parentVotersOf` in `Consensus/Proofs/ForkChoice/FastConfirmationSets.lean` names the committee members whose recorded votes the discount for empty slots counts.
 They are active and not slashed in the source of balances, are not known equivocators, and vote for the pending parent node or the parent payload node that the child builds on.
 `exists_stake_parentVotersOf_of_computeEmptySlotSupportDiscount` shows that the discount is their stake less the adversarial weight of the empty slots, with subtraction truncated at zero.
@@ -2052,6 +2059,7 @@ If the parent sits at an earlier slot than the child, both counted nodes are anc
 The ancestry needs only the two block reads and that local slot order, not `Reachable` or `ParentsBelow`.
 `le_honest_parentVotersOf_of_computeEmptySlotSupportDiscount` shows that the discount takes off at most the honest stake of these voters.
 It assumes Assumption 2 on the active members of the empty-slot committees, no honest known equivocator, aligned effective balances, and an increment divisible by 100 Gwei.
+In an execution of the network model, `Execution.equivocatingIndices_honest` gives the assumption on known equivocators for the store of an honest validator.
 These are store-local facts: no theorem here shows that a recorded honest vote is its voter's latest actual vote, or that it remains the recorded vote at a later store.
 
 `Consensus/Proofs/ForkChoice/FastConfirmationIndicators.lean` also states the two FFG tests of the rule on the target of the current epoch.

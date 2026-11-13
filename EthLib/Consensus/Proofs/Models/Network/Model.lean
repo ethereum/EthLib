@@ -225,6 +225,39 @@ theorem view_subset_sent (n : ℕ) (v : ν) : (e.world n).view v ⊆ (e.world n)
       exact Set.union_subset (ih v) (allowed v)
     | move validator state => exact ih v
 
+/-- A statement of an honest validator in a sent message is in a message of its own view.
+
+Another sender may carry it only after a sent message had it.
+
+A send enters the view of its sender. -/
+theorem signed_mem_view (n : ℕ) {v : ν} (honest : v ∈ J) {m : μ} (sent : m ∈ (e.world n).sent)
+    {x : ν × κ} (signs : x ∈ P.signed m) (signer : x.1 = v) :
+    ∃ m' ∈ (e.world n).view v, x ∈ P.signed m' := by
+  induction n generalizing m x with
+  | zero => simp [world_zero, World.initial] at sent
+  | succ n ih =>
+    have allowed := e.allowed_world n
+    -- An older view stays inside the next one.
+    have grow : ∀ m' ∈ (e.world n).view v, m' ∈ (e.world (n + 1)).view v :=
+      fun m' member => e.monotone_view v (Nat.le_succ n) member
+    have old : m ∈ (e.world n).sent → ∃ m' ∈ (e.world (n + 1)).view v, x ∈ P.signed m' :=
+      fun before => (ih before signs signer).elim fun m' ⟨member, has⟩ => ⟨m', grow m' member, has⟩
+    rw [world_succ] at sent
+    cases events : e.events n with
+    | send sender message =>
+      rw [events] at allowed sent
+      rcases sent with rfl | before
+      · by_cases same : sender = v
+        · subst same
+          exact ⟨m, by simp [world_succ, events, World.apply], signs⟩
+        · obtain ⟨m₀, sent₀, has₀⟩ := allowed.1 x signs (signer ▸ honest) (signer ▸ Ne.symm same)
+          obtain ⟨m', member, has⟩ := ih sent₀ has₀ signer
+          exact ⟨m', grow m' member, has⟩
+      · exact old before
+    | _ =>
+      rw [events] at sent
+      exact old sent
+
 /-- Only honest validators change their state, and each change follows the protocol. -/
 theorem state_succ (n : ℕ) (v : ν) : (e.world (n + 1)).state v = (e.world n).state v ∨
     v ∈ J ∧ P.Moves v (e.world n).time ((e.world n).view v) ((e.world n).state v)
