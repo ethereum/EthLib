@@ -1882,6 +1882,18 @@ def bindings : List Binding := [
       "suggested_fee_recipient: bytes, target_gas_limit: int, custody_columns: bytes | None, " ++
       "verify: bool, config: dict | None) -> dict",
     [`EthLib.Consensus.ProposerError], some "ProposerError"⟩,
+  ⟨"engine_payload_attributes_event", `EthLib.Engine.Exports.payloadAttributesEventExport,
+    "(name: str, fork: str, state: bytes, config: dict | None, safe_block_hash: bytes, " ++
+      "finalized_block_hash: bytes, suggested_fee_recipient: bytes, pow_chain: list[bytes], " ++
+      "terminal_number: int) -> tuple[str, str] | None",
+    [`EthLib.Consensus.ProposerError], some "ProposerError"⟩,
+  ⟨"engine_payload_attributes_event_gloas",
+    `EthLib.Engine.Exports.payloadAttributesEventGloasExport,
+    "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, " ++
+      "head_root: bytes, head_status: int, state: bytes, safe_block_hash: bytes, " ++
+      "suggested_fee_recipient: bytes, target_gas_limit: int, verify: bool, " ++
+      "config: dict | None) -> tuple[str, str]",
+    [`EthLib.Consensus.ProposerError], some "ProposerError"⟩,
   ⟨"engine_finalized_execution_block_hash",
     `EthLib.Engine.Exports.finalizedExecutionBlockHashExport,
     "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, " ++

@@ -325,6 +325,72 @@ def prepare_execution_payload_gloas(
     )
 
 
+def payload_attributes_event(
+    name: str,
+    fork: str,
+    state: bytes,
+    safe_block_hash: bytes,
+    finalized_block_hash: bytes,
+    suggested_fee_recipient: bytes,
+    pow_chain: list[bytes] | None = None,
+    # `Any`, because `dict` is invariant in its values.
+    config: dict[str, Any] | None = None,
+    *,
+    terminal_number: int = 0,
+) -> tuple[str, str] | None:
+    """Bellatrix to Fulu: the Beacon API payload attributes event of a proposer, or None."""
+    # The event is the name of its topic and the text of its JSON data.
+    # It is None when the proposer asks for nothing, before the merge.
+    # The terminal number is that of the terminal PoW block, taken on trust before the merge.
+    return _native.engine_payload_attributes_event(
+        name,
+        fork,
+        state,
+        config,
+        safe_block_hash,
+        finalized_block_hash,
+        suggested_fee_recipient,
+        pow_chain or [],
+        terminal_number,
+    )
+
+
+def payload_attributes_event_gloas(
+    name: str,
+    fork: str,
+    anchor_state: bytes,
+    anchor_block: bytes,
+    steps: list[ForkChoiceStep],
+    head_root: bytes,
+    head_status: int,
+    state: bytes,
+    safe_block_hash: bytes,
+    suggested_fee_recipient: bytes,
+    target_gas_limit: int,
+    verify: bool = True,
+    # `Any`, because `dict` is invariant in its values.
+    config: dict[str, Any] | None = None,
+) -> tuple[str, str]:
+    """Gloas: the Beacon API payload attributes event of a proposer on a store."""
+    # The arguments are those of `prepare_execution_payload_gloas`, without custody columns.
+    # The event reads the state of the attributes, the one on which the proposer builds.
+    return _native.engine_payload_attributes_event_gloas(
+        name,
+        fork,
+        anchor_state,
+        anchor_block,
+        steps,
+        head_root,
+        head_status,
+        state,
+        safe_block_hash,
+        suggested_fee_recipient,
+        target_gas_limit,
+        verify,
+        config,
+    )
+
+
 def finalized_execution_block_hash(
     name: str,
     fork: str,
@@ -367,6 +433,8 @@ __all__ = [
     "WithdrawalEntry",
     "prepare_execution_payload",
     "prepare_execution_payload_gloas",
+    "payload_attributes_event",
+    "payload_attributes_event_gloas",
     "finalized_execution_block_hash",
     "EngineError",
     "JwtError",

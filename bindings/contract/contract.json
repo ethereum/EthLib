@@ -13121,7 +13121,7 @@
       {"constructor": "missingCode", "code": 209}]}],
    "error_class": "TransactionError",
    "docstring":
-   "Check that a transaction may enter its block at `fork`, on the chain `chainId`.\n\nThe block has used the gas `used` before it, and `state` is the state.\n\nThe first check that fails gives the error, and the order depends on the fork.\n\nBefore Glamsterdam:\n\n- the rules alone, which read no sender then, so any address stands in for it;\n- the gas of the block, the chain, the signature and the base fee;\n- the blobs and the authorizations.\n\nFrom Glamsterdam:\n\n- the chain and the signature;\n- the rules alone, which check the blobs and the authorizations too;\n- the gas of the block and the base fee.\n\nAt every fork, the fee per blob gas and the sender come last."},
+   "Check that a transaction may enter its block at `fork`, on the chain `chainId`.\n\nThe block has used the gas `used` before it, and `state` is the state.\n\nThe first check that fails gives the error, and the order depends on the fork.\n\nBefore Glamsterdam:\n\n- the rules alone, which read no sender then, so any address stands in for it;\n- the gas of the block, the chain, the signature and the base fee;\n- the blobs and the authorizations.\n\nFrom Glamsterdam:\n\n- the chain and the signature;\n- the rules alone, which check the blobs and the authorizations too;\n- the gas of the block and the base fee.\n\nAt every fork, the fee per blob gas and the sender come last.\n\nA simulation may give the sender, which skips the signature and the rule on the sender's code.\n\nA legacy transaction then names no chain, since only its signature does."},
   {"summary":
    "Settle the gas of a transaction that passes the gas, nonce and fee rules.",
    "signature":
@@ -14156,6 +14156,61 @@
    "error_class": "ProposerError",
    "docstring":
    "From Gloas: the forkchoice update of a proposer, as the value of its JSON.\n\nThe arguments are the preset, the fork, the anchor state and the anchor block, and the steps.\n\nThen come the head root and status, the state, the safe hash and the fee recipient.\n\nThen come the target gas limit and the custody columns in SSZ, or `None`.\n\nLast come whether the signature checks run, and configuration replacements.\n\nThe finalized hash is that of the store."},
+  {"summary":
+   "From Bellatrix to Fulu: the event of the payload attributes of a proposer.",
+   "signature":
+   "(name: str, fork: str, state: bytes, config: dict | None, safe_block_hash: bytes, finalized_block_hash: bytes, suggested_fee_recipient: bytes, pow_chain: list[bytes], terminal_number: int) -> tuple[str, str] | None",
+   "operation": "EthLib.Engine.Exports.payloadAttributesEventExport",
+   "method": "engine_payload_attributes_event",
+   "errors":
+   [{"type": "EthLib.Consensus.ProposerError",
+     "codes":
+     [{"constructor": "arith", "code": 1},
+      {"constructor": "accessor", "code": 2},
+      {"constructor": "ssz", "code": 3},
+      {"constructor": "bls", "code": 4},
+      {"constructor": "transition", "code": 5},
+      {"constructor": "noAggregates", "code": 6},
+      {"constructor": "noCommittee", "code": 7},
+      {"constructor": "tooManyBits", "code": 8},
+      {"constructor": "unknownRequestType", "code": 9},
+      {"constructor": "emptyRequest", "code": 10},
+      {"constructor": "requestTypeOrder", "code": 11},
+      {"constructor": "subcommitteeOutOfRange", "code": 12},
+      {"constructor": "repeatedSubcommittee", "code": 13},
+      {"constructor": "unknownPowBlock", "code": 14},
+      {"constructor": "forkChoice", "code": 15},
+      {"constructor": "duty", "code": 16}]}],
+   "error_class": "ProposerError",
+   "docstring":
+   "From Bellatrix to Fulu: the event of the payload attributes of a proposer.\n\nThe arguments are those of the forkchoice update of a proposer to Fulu.\n\nLast comes the number of the terminal block of proof of work, read only before the merge.\n\nIt is `None` when the proposer asks for nothing, before the merge."},
+  {"summary": "Gloas: the event of the payload attributes of a proposer.",
+   "signature":
+   "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, head_root: bytes, head_status: int, state: bytes, safe_block_hash: bytes, suggested_fee_recipient: bytes, target_gas_limit: int, verify: bool, config: dict | None) -> tuple[str, str]",
+   "operation": "EthLib.Engine.Exports.payloadAttributesEventGloasExport",
+   "method": "engine_payload_attributes_event_gloas",
+   "errors":
+   [{"type": "EthLib.Consensus.ProposerError",
+     "codes":
+     [{"constructor": "arith", "code": 1},
+      {"constructor": "accessor", "code": 2},
+      {"constructor": "ssz", "code": 3},
+      {"constructor": "bls", "code": 4},
+      {"constructor": "transition", "code": 5},
+      {"constructor": "noAggregates", "code": 6},
+      {"constructor": "noCommittee", "code": 7},
+      {"constructor": "tooManyBits", "code": 8},
+      {"constructor": "unknownRequestType", "code": 9},
+      {"constructor": "emptyRequest", "code": 10},
+      {"constructor": "requestTypeOrder", "code": 11},
+      {"constructor": "subcommitteeOutOfRange", "code": 12},
+      {"constructor": "repeatedSubcommittee", "code": 13},
+      {"constructor": "unknownPowBlock", "code": 14},
+      {"constructor": "forkChoice", "code": 15},
+      {"constructor": "duty", "code": 16}]}],
+   "error_class": "ProposerError",
+   "docstring":
+   "Gloas: the event of the payload attributes of a proposer.\n\nThe arguments are the preset, the fork, the anchor state and the anchor block, and the steps.\n\nThen come the head root and status, the state, the safe hash, the fee recipient and the gas target.\n\nLast come whether the signature checks run, and replacements of the configuration.\n\nThe finalized hash is that of the store."},
   {"summary":
    "From Bellatrix: the 32 bytes of the finalized block hash of a store.",
    "signature":
