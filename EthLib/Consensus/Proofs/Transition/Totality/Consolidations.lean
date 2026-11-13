@@ -25,7 +25,8 @@ open Base Uint64
 
 variable {preset : Preset} {fork : Base.Fork}
 
-private theorem balance_le_sum (state : BeaconState preset fork) {i : Nat}
+/-- Each balance is at most the sum of the balances. -/
+theorem balance_le_balanceSum (state : BeaconState preset fork) {i : Nat}
     (inside : i < state.balances.data.size) :
     (state.balances.data[i]).toNat ≤ balanceSum state := by
   apply List.single_le_sum (fun _ _ => Nat.zero_le _)
@@ -52,7 +53,7 @@ private theorem moveBalance_exists_ok (state : BeaconState preset fork)
     rw [size.2]
     exact targetInside
   have taken := balanceSum_decreaseBalance sourceRead bounded down
-  have targetBound := balance_le_sum lowered targetLowered
+  have targetBound := balance_le_balanceSum lowered targetLowered
   -- After the debit, any target balance plus the moved amount fits the original sum.
   have fits : lowered.balances.data[target.toNat].toNat + amount.toNat < 2 ^ 64 := by omega
   let after := lowered.putBalance target.toNat targetLowered
