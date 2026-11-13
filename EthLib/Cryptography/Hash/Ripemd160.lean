@@ -192,11 +192,12 @@ def compress (h : Vector UInt32 5) (block : ByteArray) (start : Nat)
 /-! ## The hash -/
 
 /-- The final chaining variable as twenty bytes, each word little-endian. -/
-def digest (state : Vector UInt32 5) : ByteArray :=
-  ⟨Array.ofFn fun i : Fin 20 => (state[i.val / 4]'(by omega) >>> (8 * UInt32.ofNat (i.val % 4))).toUInt8⟩
+def digest (state : Vector UInt32 5) : Vector UInt8 20 :=
+  Vector.ofFn fun i : Fin 20 =>
+    (state[i.val / 4]'(by omega) >>> (8 * UInt32.ofNat (i.val % 4))).toUInt8
 
 /-- RIPEMD-160 of a message: every block of the padded message, in order, from the initial value. -/
-def hash (message : ByteArray) : ByteArray :=
+def hash (message : ByteArray) : Vector UInt8 20 :=
   let padded := pad message
   digest (Fin.foldl (padded.size / 64)
     (fun state i => compress state padded (64 * i.val) (by omega)) IV)
@@ -206,6 +207,6 @@ end EthLib.Cryptography.Hash.Ripemd160
 namespace EthLib.Cryptography.Hash
 
 /-- RIPEMD-160 of a byte string of any length. -/
-@[inline] def ripemd160 (data : ByteArray) : ByteArray := Ripemd160.hash data
+@[inline] def ripemd160 (data : ByteArray) : Vector UInt8 20 := Ripemd160.hash data
 
 end EthLib.Cryptography.Hash

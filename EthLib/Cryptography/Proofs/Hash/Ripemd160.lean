@@ -14,7 +14,6 @@ What is proved about RIPEMD-160:
 - Rotating a word left by `n` bits with `0 < n < 32` has left rotation by `32 - n` as its inverse.
 - Each step with a rotation of 1 to 31 bits permutes the five-word state, and so do both lines.
 - Padding fills whole blocks, with the least zeros that do, and keeps the message and the `0x80` byte in place.
-- Every digest is 20 bytes.
 - One block's compression, read as 32-bit vectors, is the compression of a model of the pseudo-code.
 - The hash of every message is the hash of the model, with no bound on the length of the message.
 
@@ -144,12 +143,12 @@ def blocks (message : ByteArray) (h : Vector Word 5) :
 The paper takes the last chaining variable as the hash result.
 
 The byte order is the one of MD4 (RFC 1320 §3.5), which the test values of the paper pin. -/
-def digest (h : Vector Word 5) : ByteArray :=
-  ⟨Array.ofFn fun i : Fin 20 =>
-    UInt8.ofNat ((h[i.val / 4]'(by omega)).toNat / 2 ^ (8 * (i.val % 4)) % 256)⟩
+def digest (h : Vector Word 5) : Vector UInt8 20 :=
+  Vector.ofFn fun i : Fin 20 =>
+    UInt8.ofNat ((h[i.val / 4]'(by omega)).toNat / 2 ^ (8 * (i.val % 4)) % 256)
 
 /-- RIPEMD-160 of a message: pad it, run every block from the initial value, and read the digest. -/
-def hash (message : ByteArray) : ByteArray :=
+def hash (message : ByteArray) : Vector UInt8 20 :=
   let input := padded message
   digest (blocks input initial (input.size / 64) (Nat.mul_div_le input.size 64))
 
@@ -574,10 +573,6 @@ theorem pad_length_suffix (message : ByteArray) :
 
 /-! ## The hash -/
 
-/-- Every digest is 20 bytes long, whatever the message. -/
-@[simp] theorem hash_size (message : ByteArray) : (hash message).size = 20 := by
-  simp only [hash, digest, ByteArray.size, Array.size_ofFn]
-
 /-- Byte `i` of the length is digit `i` in base 256 of the low 64 bits of the bit length. -/
 theorem lengthBytes_digit (size : Nat) (i : Fin 8) :
     ((lengthBytes size)[i.val]'(by simp)).toNat = size * 8 % 2 ^ 64 / 2 ^ (8 * i.val) % 256 := by
@@ -629,15 +624,13 @@ theorem foldl_compress_toBitVec (bytes : ByteArray) (h : Vector UInt32 5) (count
 /-- The digest is the model's digest. -/
 theorem digest_eq_spec (state : Vector UInt32 5) :
     digest state = Spec.digest (state.map UInt32.toBitVec) := by
-  apply ByteArray.ext
-  apply Array.ext
-  · simp [digest, Spec.digest]
-  · intro i _ _
-    apply UInt8.toNat_inj.mp
-    -- Each byte is one base-256 digit of its word.
-    simp [digest, Spec.digest, UInt32.toNat_shiftRight, Nat.shiftRight_eq_div_pow,
-      UInt32.toNat_mul, UInt32.toNat_ofNat]
-    rw [Nat.mod_eq_of_lt (show 8 * (i % 4) < 32 by omega)]
+  apply Vector.ext
+  intro i _
+  apply UInt8.toNat_inj.mp
+  -- Each byte is one base-256 digit of its word.
+  simp [digest, Spec.digest, UInt32.toNat_shiftRight, Nat.shiftRight_eq_div_pow,
+    UInt32.toNat_mul, UInt32.toNat_ofNat]
+  rw [Nat.mod_eq_of_lt (show 8 * (i % 4) < 32 by omega)]
 
 /--
 RIPEMD-160 is the hash of the authors' pseudo-code with the padding of MD4, for every message.
