@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.Proofs.Transition.EpochRewards
+import EthLib.Base.Proofs.FilterM
 
 /-!
 # Proofs: the amount of each reward and penalty
@@ -74,6 +75,14 @@ theorem getEligibleValidatorIndices_ok {eligible : List ValidatorIndex}
   · refine ⟨j.toUInt64, List.mem_filterMap.mpr ⟨(state.validators.data[j], j),
       member.mpr ⟨inside, rfl⟩, by simp [ok, yes]⟩,
       toNat_eq (fits (state.validators.data[j], j) (member.mpr ⟨inside, rfl⟩) (by simp [ok, yes]))⟩
+
+/-- The unslashed attesters name each validator at most once. -/
+theorem unslashedAmong_nodup {signers : List (List ValidatorIndex)}
+    {attesters : List ValidatorIndex} (computed : unslashedAmong state signers = .ok attesters) :
+    (attesters.map UInt64.toNat).Nodup := by
+  unfold unslashedAmong at computed
+  exact List.pairwise_map.mpr (((sortedSet_sorted _).sublist
+    (sublist_of_filterM_ok computed)).imp fun lt => Nat.ne_of_lt (UInt64.lt_iff_toNat_lt.mp lt))
 
 /-! ## One entry of a fold over distinct indices -/
 
