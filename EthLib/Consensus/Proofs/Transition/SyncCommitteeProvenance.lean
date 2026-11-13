@@ -452,21 +452,6 @@ private theorem processOperations {body : BeaconBlockBody preset fork} {parentSl
     (foldlM (fun _ _ _ ok => processAttesterSlashing ok) slashingsOk).trans <|
     (foldlM (fun _ _ _ ok => processAttestation ok) attestedOk).trans rest
 
-private theorem processSyncAggregate {altair : .altair ≤ fork} {aggregate : SyncAggregate preset}
-    (ok : Consensus.processSyncAggregate config checks state altair aggregate = .ok after) :
-    SameSyncCommittees state after := by
-  unfold Consensus.processSyncAggregate at ok
-  simp only [bind_ok_iff] at ok
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, folded⟩ := ok
-  rw [← Array.foldlM_toList] at folded
-  refine foldlM (fun _ _ _ ok => ?_) folded
-  unfold applySyncReward at ok
-  split at ok
-  · simp only [bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, raised, _, _, paid⟩ := ok
-    exact (increaseBalance raised).trans (increaseBalance paid)
-  · exact decreaseBalance (liftAccessor_ok.mp ok)
-
 private theorem processExecutionPayload {body : BeaconBlockBody preset fork}
     {engine : ExecutionEngine preset fork}
     {bellatrix : .bellatrix ≤ fork ∧ fork < .glamsterdam}
@@ -541,7 +526,8 @@ private theorem processBlock {block : BeaconBlock preset fork}
       (fun _ voted => processEth1Data voted) started
   have tail : SameSyncCommittees last after := by
     split at synced
-    · exact processSyncAggregate synced
+    · obtain ⟨_, rfl⟩ := processSyncAggregate_eq synced
+      exact .refl _
     · cases synced
       exact .refl _
   exact head.trans ((processOperations operated).trans tail)
