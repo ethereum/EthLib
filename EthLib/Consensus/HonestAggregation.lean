@@ -122,7 +122,7 @@ def getAttestationData (state : BeaconState preset fork) (headRoot : Root) (head
 It fails on an empty list, and on a signature that does not decode. -/
 def getAggregateSignature (attestations : List (Attestation preset fork)) :
     Except BlsError BLSSignature :=
-  Signatures.aggregate (attestations.map fun a => Base.packBytes a.signature).toArray
+  Signatures.aggregate (attestations.map (·.signature)).toArray
 
 /-- Before Electra: the attestation of a validator, with the one bit of its seat in its committee.
 
@@ -227,7 +227,7 @@ def constructAggregateOfSingleAttestations (state : BeaconState preset fork)
           same.any (·.attesterIndex = committee[seat])
         if bound : fork < .glamsterdam → bits.size ≤ maxAttesters preset fork then
           let signature ← (Signatures.aggregate
-            (same.map fun single => Base.packBytes single.signature).toArray).mapError .bls
+            (same.map (·.signature)).toArray).mapError .bls
           return {
             aggregationBits := ⟨bits, bound⟩, data, signature
             committeeBits := fun _ =>
@@ -296,8 +296,7 @@ def constructSyncCommitteeContribution (state : BeaconState preset fork)
       | some (_, other) => throw (.notInCommittee other.validatorIndex)
       | none =>
         let signatures := (List.finRange _).filterMap fun seat =>
-          (keyed.find? (·.1 = seatKey seat)).map fun (_, message) =>
-            Base.packBytes message.signature
+          (keyed.find? (·.1 = seatKey seat)).map fun (_, message) => message.signature
         let signature ← (Signatures.aggregate signatures.toArray).mapError .bls
         return {
           slot := state.slot, beaconBlockRoot := blockRoot, subcommitteeIndex

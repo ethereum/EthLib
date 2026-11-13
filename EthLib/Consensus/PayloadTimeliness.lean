@@ -197,12 +197,12 @@ def isValidIndexedPayloadAttestation (config : Config) (checks : SignatureChecks
   let indices := attestation.attestingIndices.data.toList
   if indices = [] ∨ indices ≠ indices.mergeSort (· ≤ ·) then return false
   let pubkeys ← indices.toArray.mapM fun index => do
-    return packBytes (← liftAccessor (getValidator state index)).pubkey
+    return (← liftAccessor (getValidator state index)).pubkey
   let domain ← liftAccessor (getDomain config state DOMAIN_PTC_ATTESTER
     (some (computeEpochAtSlot preset attestation.data.slot)))
   let signingRoot ← liftSsz (computeSigningRoot attestation.data domain)
   return checks.fastAggregateVerify pubkeys (packBytes signingRoot)
-    (packBytes attestation.signature)
+    attestation.signature
 
 /-- The state after a payload attestation of a block, which the state does not change.
 

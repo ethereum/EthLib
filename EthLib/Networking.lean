@@ -18,6 +18,7 @@ public import EthLib.Networking.Enr.Consensus
 public import EthLib.Networking.Enr.Eth
 public import EthLib.Networking.Enr.Record
 public import EthLib.Networking.Enr.V4
+public import EthLib.Networking.Gossip.Cache
 public import EthLib.Networking.Gossip.MessageId
 public import EthLib.Networking.Gossip.Parameters
 public import EthLib.Networking.Gossip.Payload
@@ -30,6 +31,7 @@ public import EthLib.Networking.Libp2p.MplexSession
 public import EthLib.Networking.Libp2p.Multistream
 public import EthLib.Networking.Libp2p.Upgrade
 public import EthLib.Networking.Libp2p.Yamux
+public import EthLib.Networking.Libp2p.YamuxSession
 public import EthLib.Networking.ReqResp.Bounds
 public import EthLib.Networking.ReqResp.Encoding
 public import EthLib.Networking.Rlpx.Ecies

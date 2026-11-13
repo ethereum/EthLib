@@ -763,6 +763,32 @@ def fork_choice(
     )
 
 
+# A query of the Beacon API: a state or a block identifier, or a state and a validator identifier.
+# It is a tagged tuple, with the tag first.
+ApiQuery: TypeAlias = tuple[Literal["state", "block"], str] | tuple[Literal["validator"], str, str]
+
+
+def api_resolve(
+    name: str,
+    fork: str,
+    anchor_state: bytes,
+    anchor_block: bytes,
+    steps: list[ForkChoiceStep],
+    queries: list[ApiQuery],
+    verify: bool = True,
+) -> list:
+    """Resolve Beacon API identifiers against the store after the steps of a fork choice case."""
+    # The steps are those of `fork_choice`.
+    # Each answer is a dict with the root and slot of the block, or of the block a state follows.
+    # The dict also says whether that block is finalized, and gives the index of a validator.
+    # An answer is ("found", the dict or None) or ("refused", code, message).
+    # An identifier that names nothing in the store is found as None.
+    # A text that is no identifier is refused with code 400.
+    return _native.consensus_api_resolve(
+        name, fork, anchor_state, anchor_block, steps, verify, queries
+    )
+
+
 def gossip_validation(
     name: str,
     fork: str,

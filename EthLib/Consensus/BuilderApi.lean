@@ -157,7 +157,7 @@ def verifyBuilderApiSignature {α : Type} [SszType α] (config : Config) (checks
     (object : α) (pubkey : BLSPubkey) (signature : BLSSignature)
     (domainType : DomainType := DOMAIN_APPLICATION_BUILDER) : Except Err Bool := do
   let signingRoot ← computeSigningRoot object (← builderDomain config domainType)
-  return checks.verify (packBytes pubkey) (packBytes signingRoot) (packBytes signature)
+  return checks.verify pubkey (packBytes signingRoot) signature
 
 /-- From Gloas: whether a proposer key signed the authentication of a request.
 
@@ -213,7 +213,7 @@ def verifyBlindedBlockSignature (config : Config) (checks : SignatureChecks)
   let proposer ← liftAccessor (getValidator state index)
   let domain ← liftAccessor (getDomain config state DOMAIN_BEACON_PROPOSER)
   let signingRoot ← liftSsz (computeSigningRoot signed.message domain)
-  return checks.verify (packBytes proposer.pubkey) (packBytes signingRoot)
-    (packBytes signed.signature)
+  return checks.verify proposer.pubkey (packBytes signingRoot)
+    signed.signature
 
 end EthLib.Consensus

@@ -1396,8 +1396,7 @@ theorem processVoluntaryExit_checks {signed : SignedVoluntaryExit}
       ∃ domain signingRoot,
         voluntaryExitDomain config state signed.message.epoch = .ok domain ∧
         computeSigningRoot signed.message domain = .ok signingRoot ∧
-        checks.verify (packBytes validator.pubkey) (packBytes signingRoot)
-          (packBytes signed.signature) = true := by
+        checks.verify validator.pubkey (packBytes signingRoot) signed.signature = true := by
   unfold processVoluntaryExit at computed
   simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok, liftSsz_ok, liftArith, mapError_ok_iff,
     addChecked_ok_iff] at computed

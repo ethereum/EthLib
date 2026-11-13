@@ -45,7 +45,7 @@ def isValidDepositMessageSignature (config : Config) (checks : SignatureChecks)
   let message : DepositMessage := ⟨pubkey, withdrawalCredentials, amount⟩
   let domain ← liftSsz (computeDomain config domainType)
   let signingRoot ← liftSsz (computeSigningRoot message domain)
-  return checks.verify (packBytes pubkey) (packBytes signingRoot) (packBytes signature)
+  return checks.verify pubkey (packBytes signingRoot) signature
 
 /-- Whether a validator deposit carries the signature of its key, under the deposit domain. -/
 def isValidDepositSignature (config : Config) (checks : SignatureChecks) (pubkey : BLSPubkey)

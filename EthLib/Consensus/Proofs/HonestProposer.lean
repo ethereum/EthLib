@@ -414,7 +414,7 @@ theorem computeOnChainAggregate_spec {electra : .pectra ≤ fork}
         (getCommitteeIndices (keyed.2.committeeBits electra)).head? = some keyed.1) ∧
       attestation.aggregationBits.bits =
         (ordered.map (·.2.aggregationBits.bits)).foldl (· ++ ·) #[] ∧
-      Signatures.aggregate (ordered.map fun entry => Base.packBytes entry.2.signature).toArray =
+      Signatures.aggregate (ordered.map fun entry => entry.2.signature).toArray =
         .ok attestation.signature ∧
       ∃ first, ordered.head? = some first ∧ attestation.data = first.2.data := by
   unfold computeOnChainAggregate at joined
@@ -499,8 +499,8 @@ theorem processSyncCommitteeContributions_spec
           participant.val =
             contribution.subcommitteeIndex.toNat * syncSubcommitteeSize preset + seat.val ∧
           contribution.aggregationBits.bits[seat.val] = true) ∧
-    Signatures.aggregate (contributions.map fun contribution =>
-      Base.packBytes contribution.signature).toArray = .ok aggregate.syncCommitteeSignature := by
+    Signatures.aggregate (contributions.map (·.signature)).toArray =
+      .ok aggregate.syncCommitteeSignature := by
   unfold processSyncCommitteeContributions at built
   split at built
   · simp [throw, throwThe, MonadExceptOf.throw] at built

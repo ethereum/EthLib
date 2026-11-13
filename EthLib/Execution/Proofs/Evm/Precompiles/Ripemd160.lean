@@ -23,8 +23,9 @@ private theorem padding_size :
   simp [ByteArray.size, OUTPUT_BYTES, DIGEST_BYTES]
 
 /-- The digest is 20 bytes. -/
-private theorem digest_size (data : ByteArray) : (Cryptography.Hash.ripemd160 data).size = 20 :=
-  Ripemd160.hash_size data
+private theorem digest_size (data : ByteArray) :
+    (Base.packBytes (Cryptography.Hash.ripemd160 data)).size = 20 := by
+  simp [Base.packBytes, ByteArray.size]
 
 /-- The output is 32 bytes, whatever the call data. -/
 @[simp] theorem output_size (data : ByteArray) : (output data).size = OUTPUT_BYTES := by
@@ -46,12 +47,12 @@ theorem output_leading_zeros (data : ByteArray) (i : Nat) (within : i < 12) :
 /-- The last twenty bytes are the RIPEMD-160 digest. -/
 theorem output_digest (data : ByteArray) (i : Nat) (within : i < 20) :
     (output data)[12 + i]'(by rw [output_size]; simp [OUTPUT_BYTES]; omega) =
-      (Cryptography.Hash.ripemd160 data)[i]'(by rw [digest_size]; omega) := by
+      (Cryptography.Hash.ripemd160 data)[i]'within := by
   -- Unfold the output with simp, which carries the index bound along.
   simp only [EthLib.Execution.Evm.Precompiles.Ripemd160.output]
   -- The digest is the right part of the concatenation, after the twelve zeros.
   rw [ByteArray.getElem_append_right (by rw [padding_size]; omega)]
-  simp [padding_size]
+  simp [padding_size, Base.packBytes, ByteArray.getElem_eq_getElem_data]
 
 /-! ## The price -/
 

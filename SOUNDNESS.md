@@ -1985,6 +1985,25 @@ The consensus layer names only Noise for TCP, and does not say whether a node ma
 The profile proposes Noise alone.
 Which messages share a packet is not modelled; the recommendation to send the header with the first proposal or answer changes no message.
 
+### The gossipsub caches
+
+`MessageCache` and `SeenCache` (`Networking/Gossip/Cache.lean`) are the two caches of [gossipsub v1.0, "Message Cache"](https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/pubsub/gossipsub/gossipsub-v1.0.md#message-cache).
+The message cache keeps history windows, the newest first, with `put`, `get`, `gossipIds` and `shift`, one per operation of the source.
+`shift len` starts a new window and keeps at most `len` windows.
+So a message put into the current window stays for `len` heartbeats, and `gossipIds gossip` reads at most the newest `gossip` windows.
+`get_shift_iterate` and `gossipIds_shift_iterate` (`Networking/Proofs/Gossip/Cache.lean`) prove these lifetimes for a history of at least one window.
+The second one also needs an ID that the cache did not hold before the put.
+`gossipIds_subset_get` proves that every ID told of in gossip is found by `get`.
+It needs no bound between the two window counts, since gossip reads only the newest of the windows that `get` searches.
+The seen cache keeps each ID with the time in milliseconds when it was inserted.
+`contains`, `insert` and `expire` read, add and remove entries for a lifetime in milliseconds.
+The consensus layer sets `seen_ttl` in seconds (`gossipsubParameters`), so a caller passes it times 1000 as the lifetime.
+
+The source calls the seen cache "a timed least-recently-used cache", and does not say whether a lookup refreshes the time of an entry.
+Here an entry keeps the time when it was inserted, and a lookup changes nothing.
+The source gives no bound on the size of either cache, so none is modelled.
+The caches take the 20-byte message IDs of the consensus layer, where gossipsub allows any bytes.
+
 ### The streams of an mplex connection
 
 `step`, `receive` and `send` (`Networking/Libp2p/MplexSession.lean`) check each mplex frame against the streams of one side.
@@ -2008,6 +2027,37 @@ Frames that the peer wrote before it learned of a reset by this side may also st
 The export decodes every frame first, and the decoder refuses data over 1 MiB and data on a close or a reset.
 So the table does not check them again.
 The stream name of a NewStream is not read, since the source says that the protocol does not consider it.
+
+### The streams of a yamux session
+
+`step`, `receive` and `send` (`Networking/Libp2p/YamuxSession.lean`) check each yamux frame against the streams of one side, and `run` checks a list of frames in turn.
+They follow [yamux, "Message Flow"](https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/yamux/README.md#message-flow), with the flags of ["Flag Field"](https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/yamux/README.md#flag-field) and the IDs of ["StreamID Field"](https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/yamux/README.md#streamid-field).
+A Data or Window Update frame with SYN opens a stream with a new nonzero ID of its writer's parity: odd for the client, even for the server.
+Data may follow SYN before the ACK, and the ACK must come from the side that did not open the stream.
+The source says that this side "must then reply" with ACK to accept or RST to reject, so its frames on the stream carry one of them until it has sent ACK; any other is `missingAck`.
+FIN closes the direction of its writer, and RST closes the stream at once.
+Data spends the window of its direction, which starts at 256 KiB by ["Flow Control"](https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/yamux/README.md#flow-control), and a Window Update adds its length to the window of the other direction.
+A Ping with SYN gets a Ping with ACK and the same value, and a Go Away from the peer marks the session.
+`receive_ping` (`Networking/Proofs/Libp2p/YamuxSession.lean`) proves the reply to a Ping.
+`run_parity` proves that every stream has a nonzero ID of its opener's parity.
+`send_window` proves that the data sent on a stream is at most 256 KiB plus the deltas of the Window Updates received on it.
+`closed_iff` proves that a stream is closed iff each side sent FIN on it and no frame on it carried RST.
+
+The source leaves several cases open, and each refused one gets its own error.
+Data beyond the window of the receiver is `windowExceeded`, though the source says only to track the window and names no reaction.
+A frame from this side after either RST is `afterReset`, and so is a frame from the peer after its own RST, if this side has not reset the stream.
+Frames that the peer wrote before it learned of a RST by this side may still arrive, so once this side has reset a stream, it accepts and drops every later frame of the peer on it without SYN, a RST included; a SYN on its ID is still `reusedId`.
+Nonempty data or FIN after its writer's FIN is `afterFin`, since FIN says "the sender will send no further data"; a Window Update after FIN is accepted, since the other direction may still be open.
+A second ACK is `unexpectedAck`, and so is an ACK from the side that opened the stream.
+A frame without SYN on a stream not in the table is `unknownStream`, and a closed or reset stream stays in the table, so its ID cannot open a stream again.
+A Data or Window Update frame on stream 0 is `sessionStream`, since the source reserves 0 for the session.
+The source says that SYN "should" be set to open a stream; a frame without SYN on a new ID is refused as `unknownStream`, a stricter reading.
+The windows are unbounded naturals, since the source fixes no maximum window.
+A Ping with both SYN and ACK is answered like a Ping with SYN.
+The source says only that Ping and Go Away "should" use stream 0, so they are read the same on any stream.
+Neither side is stopped from opening streams after a Go Away, since the source fixes no rule.
+The ACK backlog of 256 streams is a SHOULD under [yamux, "ACK backlog & backpressure"](https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/yamux/README.md#ack-backlog--backpressure), and is left out.
+The export decodes every frame first, so the table does not check the size of the data again.
 
 ### The block headers of the eth protocol
 
@@ -2955,7 +3005,14 @@ This covers one chain; `accountable_safety` (`Consensus/Proofs/DirectSafety/Safe
 `Store.Reachable.getCheckpointBlock_of_blockState` reads from it that each checkpoint of the state of a block after the anchor epoch, before or after justification and finalization, has the checkpoint block of that block as root, and that the store knows it.
 `Store.Reachable.getCheckpointBlock_of_unrealizedJustification` gives the same for the unrealized justification of each block.
 `Store.Reachable.checkpoints_known` shows that each of the four checkpoints of the store is the anchor checkpoint or names a known block.
-These theorems have one other case, an anchor state that hashes to the zero root, and they do not tie together two checkpoints that come from the states of different blocks.
+These theorems have one other case, an anchor state that hashes to the zero root.
+`Store.Reachable.finalized_ancestor_or_accountable` (`Consensus/Proofs/ForkChoice/CheckpointAncestry.lean`) ties together the two checkpoints of the store, which may come from the states of different blocks.
+The finalized epoch is at or before the anchor epoch, or the finalized checkpoint is on the chain of the justified checkpoint at the first slot of its epoch.
+Otherwise two runs from the anchor to the held states behind the two checkpoints bound the accountable stake at the anchor state, or show hash evidence.
+A checkpoint may come from one justification and finalization step on a held state, as fork choice runs it; `accountable_safety_justified_terminal` (`Safety.lean`) states direct accountable safety for such views.
+The drift of that bound is counted from the anchor, so the bound loosens as the justified epoch moves away from the anchor epoch.
+The theorem assumes that every block was imported with the setting of the signature checks of the run from genesis, and that no upgrade is due at a held slot.
+It also assumes a run from a genesis built from deposits to the anchor state, and the stake floor at each held state up to one epoch past the justified epoch.
 
 Without a collision of header roots, the pairs of consecutive slots order the roots by ancestry.
 `RootsAbove.of_chainStep` then keeps each justified checkpoint below every root that the state records from its epoch on, which gives the source block of each recent link in the chain of its target block.
@@ -3004,8 +3061,9 @@ It is observed, not bounded in closed form.
 The theorems need at least one slot per epoch, a buffer of roots of four epochs and more than `MIN_SEED_LOOKAHEAD + 2` epochs of RANDAO mixes.
 Each run also needs an active stake above one and a half increments at epoch calls after epoch 1 through one epoch past the target horizon (`EnoughStake run high`).
 The horizon is the finalized epoch of `b` for `accountable_safety`, which `ordered` makes the later one.
-It is `j.epoch` for `accountable_safety_at_calls`, `accountable_safety_justified` and `accountable_justified_unique`.
+It is `j.epoch` for `accountable_safety_at_calls`, `accountable_safety_justified`, `accountable_safety_justified_terminal` and `accountable_justified_unique`.
 A call in epoch `high + 1` can count votes targeting epoch `high`, so the floor covers that call too.
+The terminal form also needs that floor at the last state of each view that takes a step.
 The theorems take no bound on the fork, so a run may cross every upgrade that the transition of this revision defines, from a genesis before Altair.
 `verifiedConflict_of_accountable` gives, for each accountable key, two checks of its conflicting messages.
 Each is a call of `isValidIndexedAttestation` or `checkHeaderSignature` that a block of a run executed, and that accepted.
@@ -3204,6 +3262,20 @@ It reads the JSON back to the same bytes, with its hex in lowercase and in upper
 In one case of each container, it puts an example of the `types` files in place of one string of each type and shape, and reads the result.
 It skips a hex string whose fixed length the example does not have.
 It also reads the JSON examples of the builder specification to the bytes of those examples.
+It checks that each integer string is the plain decimal form of a value in range.
+It checks values against an oracle written apart from EthLib: a Gloas payload written by hand in SSZ and in JSON, and chosen participation flags of an Altair state.
+
+A path names a state, a block or a validator by an identifier (`Consensus/BeaconApi/Identifiers.lean`).
+`parseStateId_print`, `parseBlockId_print` and `parseValidatorId_print` (`Consensus/Proofs/BeaconApi/Identifiers.lean`) show that each identifier reads back from its text.
+`parseStateId_error_code`, `parseBlockId_error_code` and `parseValidatorId_error_code` show that a text that is no identifier gets code 400.
+`resolveBlockId_head` shows that the head of the API is the head of the fork choice, `getHead`.
+`resolveBlockId_slot` shows that a slot names a known block at that slot, the ancestor of that head at the slot.
+`isFinalizedRoot_of_slot_le` shows that a block of the chain of a head, at or below the finalized block of that chain, is reported finalized.
+`parseUInt64_print_of_some` shows that a slot or an index reads only from its plain decimal text, so a sign or a leading zero is refused.
+A state root names the state after the block whose `state_root` field it is.
+That rests on the store, which checks the field of each block that it imports and of its anchor; no theorem states it.
+The Python suite (`bindings/python/tests/consensus/test_beacon_api_identifiers.py`) checks the resolvers against a Capella fork choice vector of the minimal preset, not by a proof.
+The `execution_optimistic` flag reads the optimistic store; nothing exports or tests it.
 
 Points that remain open:
 
@@ -3212,6 +3284,11 @@ Points that remain open:
 - The source writes each integer leaf as a string, and its pattern for `Uint8` admits leading zeros; the JSON mapping of SSZ also reads a bare number, and refuses leading zeros.
 - The source defines no schema for Heze, or for containers such as `SigningData`, so their spellings are checked by review only.
 - The API defines no inclusion list yet, so the hex form of its transactions follows the form of a transaction in the API.
+- The source does not say whether `finalized` and `justified` name the state after the checkpoint block or the checkpoint state; EthLib reads the state after the block, which may sit before the checkpoint epoch.
+- The source does not say which state a slot without a block names; EthLib names none, so such a request gets no state, and the root of such a state names none.
+- The source does not say whether a slot or an index may carry a sign or leading zeros; EthLib refuses both.
+- The source does not say whether blocks outside the fork choice store are canonical; EthLib resolves only the blocks that the store holds.
+- A store anchored after genesis names no block at genesis, or below its anchor; a head that cannot be computed makes the head, genesis and slot identifiers name nothing.
 
 ### Builder API
 
@@ -3576,12 +3653,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 409 operations and 49 size constants.
-The Python extension calls 409 of the operations and 49 of the constants.
+Lean exports 411 operations and 49 size constants.
+The Python extension calls 411 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-10305 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (1940), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (149), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (80), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (138), `module.c` (1448), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (58), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (140), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (696), `x25519.c` (21), `xmss.c` (134).
+10329 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (1951), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (149), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (80), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (147), `module.c` (1450), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (58), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (140), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (698), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

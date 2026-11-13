@@ -425,6 +425,9 @@
 #define DOC_consensus_api_ssz \
   "The SSZ bytes of the value that a JSON document of the API holds."
 
+#define DOC_consensus_api_resolve \
+  "The answer to each query, against the store after the steps of a fork choice case."
+
 #define DOC_consensus_is_valid_builder_signature \
   "Whether the signature of a signed message of the Builder API verifies."
 
@@ -1042,6 +1045,9 @@
 
 #define DOC_yamux_decode \
   "The yamux frame at the start of the bytes, and the bytes after it."
+
+#define DOC_yamux_session \
+  "One side of a yamux session after the frames it receives and sends, from no stream."
 
 #define DOC_libp2p_public_key \
   "The public-key protobuf of a 32-byte big-endian secp256k1 secret in [1, n)."

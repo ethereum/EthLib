@@ -558,6 +558,10 @@ def bindings : List Binding := [
   ⟨"consensus_api_ssz", `EthLib.Consensus.Exports.apiSszExport,
     "(name: str, fork: str, type: str, document: Any) -> bytes",
     [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
+  ⟨"consensus_api_resolve", `EthLib.Consensus.Exports.apiResolveExport,
+    "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, " ++
+      "verify: bool, queries: list) -> list",
+    [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
   ⟨"consensus_is_valid_builder_signature",
     `EthLib.Consensus.Exports.isValidBuilderSignatureExport,
     "(name: str, fork: str, config: dict[str, Any] | None, type: str, data: bytes) -> bool",
@@ -1304,6 +1308,11 @@ def bindings : List Binding := [
   ⟨"yamux_decode", `EthLib.Networking.Libp2p.Exports.yamuxDecodeExport,
     "(data: bytes) -> tuple[dict[str, Any], bytes]",
     [`EthLib.Networking.Libp2p.Yamux.YamuxError], some "YamuxError"⟩,
+  ⟨"yamux_session", `EthLib.Networking.Libp2p.Exports.yamuxSessionExport,
+    "(is_client: bool, events: list[tuple[bool, bytes]]) -> " ++
+      "tuple[list[tuple[int, str, int, int]], bool, list[bytes]]",
+    [`EthLib.Networking.Libp2p.Yamux.YamuxError,
+      `EthLib.Networking.Libp2p.Yamux.YamuxSessionError], some "YamuxError"⟩,
   ⟨"libp2p_public_key", `EthLib.Networking.Libp2p.Exports.publicKeyExport,
     "(secret: bytes) -> bytes",
     [`EthLib.Networking.Libp2p.IdentityError], some "Libp2pIdentityError"⟩,

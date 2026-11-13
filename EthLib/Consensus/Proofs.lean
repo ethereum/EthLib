@@ -5,6 +5,7 @@ public import EthLib.Consensus.Proofs.Accessors.Draw
 public import EthLib.Consensus.Proofs.Accessors.DrawProbability
 public import EthLib.Consensus.Proofs.Accessors.DrawRandomOracle
 public import EthLib.Consensus.Proofs.BeaconApi.Encoding
+public import EthLib.Consensus.Proofs.BeaconApi.Identifiers
 public import EthLib.Consensus.Proofs.BuilderApi
 public import EthLib.Consensus.Proofs.BuilderApi.Bid
 public import EthLib.Consensus.Proofs.BuilderApi.Encoding
@@ -44,6 +45,7 @@ public import EthLib.Consensus.Proofs.ForkChoice.AncestorRoots
 public import EthLib.Consensus.Proofs.ForkChoice.AttestationScores
 public import EthLib.Consensus.Proofs.ForkChoice.BlockRuns
 public import EthLib.Consensus.Proofs.ForkChoice.BlockStates
+public import EthLib.Consensus.Proofs.ForkChoice.CheckpointAncestry
 public import EthLib.Consensus.Proofs.ForkChoice.CheckpointBlocks
 public import EthLib.Consensus.Proofs.ForkChoice.Checkpoints
 public import EthLib.Consensus.Proofs.ForkChoice.CommitteeAgreement

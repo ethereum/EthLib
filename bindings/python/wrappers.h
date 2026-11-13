@@ -387,6 +387,7 @@ PyObject* py_consensus_compute_columns_for_custody_group  (PyObject* self, PyObj
 PyObject* py_consensus_ssz_static                         (PyObject* self, PyObject* args);
 PyObject* py_consensus_api_json                           (PyObject* self, PyObject* args);
 PyObject* py_consensus_api_ssz                            (PyObject* self, PyObject* args);
+PyObject* py_consensus_api_resolve                        (PyObject* self, PyObject* args);
 PyObject* py_consensus_is_valid_builder_signature (PyObject* self, PyObject* args);
 PyObject* py_consensus_process_registration (PyObject* self, PyObject* args);
 PyObject* py_consensus_is_eligible_for_bid (PyObject* self, PyObject* args);
@@ -562,6 +563,7 @@ PyObject* py_mplex_decode                                 (PyObject* self, PyObj
 PyObject* py_mplex_session                                (PyObject* self, PyObject* args);
 PyObject* py_yamux_encode                                 (PyObject* self, PyObject* args);
 PyObject* py_yamux_decode                                 (PyObject* self, PyObject* args);
+PyObject* py_yamux_session                                (PyObject* self, PyObject* args);
 PyObject* py_libp2p_public_key                            (PyObject* self, PyObject* args);
 PyObject* py_libp2p_peer_id                               (PyObject* self, PyObject* args);
 PyObject* py_libp2p_decode_peer_id                        (PyObject* self, PyObject* args);

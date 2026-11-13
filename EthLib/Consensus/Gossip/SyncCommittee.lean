@@ -101,12 +101,12 @@ def isValidContributionSignature (config : Config) (checks : SignatureChecks)
     (state : BeaconState preset fork) (pubkeys : List BLSPubkey)
     (contribution : SyncCommitteeContribution preset) : Except ForkChoiceError Bool := do
   let participants := (pubkeys.zip contribution.aggregationBits.bits.toList).filterMap
-    fun (key, bit) => if bit then some (packBytes key) else none
+    fun (key, bit) => if bit then some key else none
   let domain ← (getDomain config state DOMAIN_SYNC_COMMITTEE
     (some (computeEpochAtSlot preset contribution.slot))).mapError .accessor
   let signingRoot ← (computeSigningRoot contribution.beaconBlockRoot domain).mapError .ssz
   return syncAggregateVerify checks participants.toArray (packBytes signingRoot)
-    (packBytes contribution.signature)
+    contribution.signature
 
 /-! ## Sync committee messages -/
 
