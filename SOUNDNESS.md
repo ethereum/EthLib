@@ -2688,15 +2688,6 @@ That root and each root before it in the walk then pass `isOneConfirmed`, with t
 The rule makes two walks, and `Store.getAncestorRoots_of_append` in `Consensus/Proofs/ForkChoice/AncestorRoots.lean` shows that the second walk is the part of the first walk after the root where the first walk stopped.
 No theorem yet shows that the roots of a walk are in the chain of the head.
 
-`Store.blockShouldBeFinalized_eq_ok_iff` (`Consensus/Proofs/ForkChoice/FastConfirmation.lean`) states when a block is due for finality.
-The next checkpoint is at the first epoch that starts at or after the slot of the block.
-The block is due from the first slot two epochs after that one.
-`Store.getRestartResilientConfirmedRoot_eq_ok_iff` states the confirmed block after a restart.
-The rule takes the block confirmed before the restart exactly when three conditions hold.
-That block is at a later slot than the confirmed block, is not yet due for finality, and is in the chain of the head.
-Otherwise it keeps the confirmed block.
-No theorem relates the block confirmed before a restart to a block that an earlier store confirmed.
-
 These theorems prove no safety: no theorem yet shows that a start is safe, or that a one-confirmed walk keeps a block in the chain of every honest head.
 They do not record every check of the rule.
 For the start they leave out the other checks that compare the epochs and the slots of the blocks.
@@ -2704,6 +2695,17 @@ For the walks they leave out the checks on the epochs of the start and of the wa
 They also leave out the check that the head of the slot before holds each block of the first walk.
 They leave out the checks that a voting source or an unrealized justification is recent.
 They also leave out the calls to `willNoConflictingCheckpointBeJustified` and `willCurrentTargetBeJustified`, whose tests `FastConfirmationIndicators.lean` states on their own.
+
+`Store.blockShouldBeFinalized_eq_ok_iff` (`Consensus/Proofs/ForkChoice/FastConfirmation.lean`) states when a block is due for finality.
+The next checkpoint is at the first epoch that starts at or after the slot of the block.
+The block is due from the first slot two epochs after that one.
+`Store.getRestartResilientConfirmedRoot_eq_ok_iff` states the confirmed block after a restart, when both blocks are stored and the current slot is known.
+The rule takes the block confirmed before the restart exactly when three conditions hold.
+That block is at a later slot than the confirmed block, is not yet due for finality, and is in the chain of the head.
+Otherwise it keeps the confirmed block.
+It fails when the test of finality overflows or the test of the chain fails.
+The root confirmed before the restart and the head are inputs.
+No theorem relates them to a block that an earlier store confirmed, or to the head that the fork choice finds, and the network model has no restart.
 
 `Consensus/Proofs/ForkChoice/HonestConfirmations.lean` puts the store of the rule into the state of an honest validator of the network model.
 An honest validator runs the rule at the start of a slot, at most once in each slot, with a store of the fork choice that is up to date with its view and whose clock is in that slot.

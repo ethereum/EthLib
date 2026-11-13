@@ -549,7 +549,9 @@ It is in the chain of the head.
 
 Otherwise the confirmed block stays.
 
-The restart fails when the test of finality overflows, or when the test of the chain fails. -/
+For a newer block, the restart fails when the test of finality overflows.
+
+For a newer block not yet due, it also fails when the test of the chain fails. -/
 theorem getRestartResilientConfirmedRoot_eq_ok_iff {fcr : FastConfirmationStore}
     {head rootBeforeRestart root : Root} {before confirmed : BeaconBlock preset fork}
     {currentSlot : Slot} (positive : 0 < preset.SLOTS_PER_EPOCH)
