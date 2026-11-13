@@ -28,7 +28,7 @@ From Electra, a request that meets every condition computes as the queueing of i
 
 Otherwise a request with two different keys that succeeds returns its state.
 
-It returns its state whenever the consolidation churn is at most the activation balance.
+With different keys, it returns its state while the churn is at most the activation balance.
 -/
 
 @[expose] public section
@@ -359,7 +359,7 @@ theorem sameSizes_processConsolidationRequest {electra : .pectra ≤ fork}
 
 /-! ## The consolidation request -/
 
-/-- From Electra: the conditions under which a request moves a source to a target.
+/-- From Electra: when a request queues its source to consolidate into a target.
 
 The two keys differ, and the pending consolidations are not at their limit.
 
