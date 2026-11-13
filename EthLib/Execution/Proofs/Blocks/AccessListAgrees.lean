@@ -106,9 +106,9 @@ private theorem checkInclusion_of_sender {fork : Fork} {chainId : UInt64}
     (hCode : other.getCode (state.getAccount included.sender).codeHash =
       state.getCode (state.getAccount included.sender).codeHash) :
     checkInclusion chainId env used other tx = .ok included := by
-  have hSender : ∀ sender, sender = included.sender →
-      checkSender fork other sender tx = checkSender fork state sender tx := by
-    rintro _ rfl
+  have hSender : ∀ sender signed, sender = included.sender →
+      checkSender fork other sender tx signed = checkSender fork state sender tx signed := by
+    rintro _ _ rfl
     unfold checkSender
     dsimp only
     rw [hAccount, hCode]
@@ -126,7 +126,7 @@ private theorem checkInclusion_of_sender {fork : Fork} {chainId : UInt64}
     obtain ⟨_, h7, h⟩ := bind_ok_iff.mp h
     obtain ⟨_, h8, h⟩ := bind_ok_iff.mp h
     cases h
-    rw [← hSender _ rfl] at h8
+    rw [← hSender _ _ rfl] at h8
     simp only [h1, h2, h3, h4, h5, h6, h7, h8, bind, Except.bind]
     rfl
   · rename_i hg
@@ -141,7 +141,7 @@ private theorem checkInclusion_of_sender {fork : Fork} {chainId : UInt64}
     obtain ⟨_, h8, h⟩ := bind_ok_iff.mp h
     obtain ⟨_, h9, h⟩ := bind_ok_iff.mp h
     cases h
-    rw [← hSender _ rfl] at h9
+    rw [← hSender _ _ rfl] at h9
     simp only [h1, h2, h3, h4, h5, h6, h7, h8, h9, bind, Except.bind]
     rfl
 

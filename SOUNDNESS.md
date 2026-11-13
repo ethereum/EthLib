@@ -3988,6 +3988,11 @@ An account override sets each field that it gives, and keeps the others (`applyA
 `stateDiff` keeps the slots that it does not name, and `state` clears them (`applyAccountOverride_stateDiff`, `applyAccountOverride_state`).
 The overrides of a block keep every account that they do not name (`applyOverrides_not_mem`), and act on each account they name as its override alone (`applyOverrides_mem`).
 The defaults of a call come with the simulated blocks.
+The execution core takes two exceptions of a simulated block as optional overrides, whose defaults leave a real block unchanged.
+They are a sender given in place of the signature, and the precompile that a call to each address runs.
+A known sender that the signature names, and that passes the rule on its code, gives the same check of the transaction (`checkInclusion_of_knownSender`, `Proofs/Transactions/Overrides.lean`).
+With the default map, a call runs the precompile at the address of its code (`precompileAddress_of_default`).
+A move leaves the addresses that are warm at the start of a transaction unchanged, as the notes say.
 
 Where the source is silent or conflicts with itself, EthLib follows the fixtures:
 

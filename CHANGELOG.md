@@ -9,6 +9,15 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the transaction environment gains the field `precompiles` ([#2108](https://github.com/ethereum/EthLib/issues/2108)).
+  It gives the address of the precompile that a call to each address runs.
+  Its default `some` keeps each precompile at its own address, so a real block is unchanged.
+  Supply that field in positional constructors, or use structure notation with its default.
+  The checks of a transaction, its run and the body of a block take optional simulation overrides.
+  A simulation can give the sender in place of the signature, and that sender may have code.
+  The sender check gains a flag for that case.
+  Nothing breaks in Python.
+
 - The execution RPC checks the requests of `eth_simulateV1` before their blocks run ([#2107](https://github.com/ethereum/EthLib/issues/2107)).
   A request that passes the checks gets `-32603` until the simulated blocks are specified.
   In Lean, `call_unknown` requires the method name to differ from `eth_simulateV1`.
