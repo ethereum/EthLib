@@ -1,7 +1,6 @@
 module
 
 public import EthLib.Consensus.BeaconApi.Rewards
-public import EthLib.Base.Proofs.FilterM
 public import EthLib.Consensus.Proofs.BeaconApi.Registries
 public import EthLib.Consensus.Proofs.Transition.BlockRewards
 public import EthLib.Consensus.Proofs.Transition.EpochRewards
@@ -27,11 +26,11 @@ When the penalties do not exhaust the balance, the balance moves by exactly that
 
 The answer reads the state that the rewards step of the epoch transition reads.
 
-Before Altair, the ideal rewards of a balance are the parts of a validator that voted right.
+Each ideal entry is read at a validator of the registry with the effective balance of the entry.
 
-Its vote is included one slot after it.
+Before Altair, its parts follow the formulas of the phase 0 deltas, with an inclusion delay of 1.
 
-An eligible validator that voted right, with such an inclusion, earns exactly those parts.
+An eligible validator whose votes matched, included one slot after its vote, earns those parts.
 
 The sync committee rewards name each requested member once, in order of index.
 
@@ -443,20 +442,14 @@ private theorem getBaseReward_congr {total : Gwei} {first second : ValidatorInde
     getBaseReward state total first = getBaseReward state total second := by
   simp only [getBaseReward, firstRead, secondRead, same, bind, Except.bind]
 
-/-- The effective balance of each eligible validator is listed, with a validator that has it. -/
-private theorem idealBalances_mem {balances : List (Gwei × ValidatorIndex)}
-    (computed : idealBalances state = .ok balances) {eligible : List ValidatorIndex}
-    (listed : getEligibleValidatorIndices state = .ok eligible) {index : ValidatorIndex}
-    (member : index ∈ eligible) {validator : Validator}
-    (read : getValidator state index = .ok validator) :
-    ∃ first firstValidator, (validator.effectiveBalance, first) ∈ balances ∧
-      getValidator state first = .ok firstValidator ∧
-      firstValidator.effectiveBalance = validator.effectiveBalance := by
+/-- Each listed balance names a validator of the registry with that effective balance. -/
+private theorem idealBalances_named {balances : List (Gwei × ValidatorIndex)}
+    (computed : idealBalances state = .ok balances) :
+    ∀ pair ∈ balances, ∃ pairValidator, getValidator state pair.2 = .ok pairValidator ∧
+      pairValidator.effectiveBalance = pair.1 := by
   simp only [idealBalances, bind_ok_iff, pure, Except.pure] at computed
-  obtain ⟨eligible', listed', firsts, folded, sortedOk⟩ := computed
-  obtain rfl := Except.ok.inj (listed.symm.trans listed')
+  obtain ⟨eligible, -, firsts, folded, sortedOk⟩ := computed
   obtain rfl := Except.ok.inj sortedOk.symm
-  -- Each listed pair names a validator with that balance.
   have named := foldlM_ok_invariant (fun found : List (Gwei × ValidatorIndex) =>
       ∀ pair ∈ found, ∃ pairValidator, getValidator state pair.2 = .ok pairValidator ∧
         pairValidator.effectiveBalance = pair.1)
@@ -472,6 +465,22 @@ private theorem idealBalances_mem {balances : List (Gwei × ValidatorIndex)}
         · obtain rfl := List.mem_singleton.mp new
           exact ⟨current, currentOk, rfl⟩)
     (by simp) folded
+  exact fun pair inside => named pair ((List.mergeSort_perm _ _).mem_iff.mp inside)
+
+/-- The effective balance of each eligible validator is listed, with a validator that has it. -/
+private theorem idealBalances_mem {balances : List (Gwei × ValidatorIndex)}
+    (computed : idealBalances state = .ok balances) {eligible : List ValidatorIndex}
+    (listed : getEligibleValidatorIndices state = .ok eligible) {index : ValidatorIndex}
+    (member : index ∈ eligible) {validator : Validator}
+    (read : getValidator state index = .ok validator) :
+    ∃ first firstValidator, (validator.effectiveBalance, first) ∈ balances ∧
+      getValidator state first = .ok firstValidator ∧
+      firstValidator.effectiveBalance = validator.effectiveBalance := by
+  have named := idealBalances_named computed
+  simp only [idealBalances, bind_ok_iff, pure, Except.pure] at computed
+  obtain ⟨eligible', listed', firsts, folded, sortedOk⟩ := computed
+  obtain rfl := Except.ok.inj (listed.symm.trans listed')
+  obtain rfl := Except.ok.inj sortedOk.symm
   -- The step of the validator lists its balance, and later steps keep every pair.
   obtain ⟨position, bound, rfl⟩ := List.getElem_of_mem member
   obtain ⟨-, steps⟩ := foldlM_ok_steps
@@ -498,10 +507,24 @@ private theorem idealBalances_mem {balances : List (Gwei × ValidatorIndex)}
     · obtain rfl := Except.ok.inj stepped
       exact ⟨_, List.mem_append_right _ (List.mem_singleton_self _)⟩
   obtain ⟨first, inside⟩ := listedPair
-  have final := kept _ inside
+  have final : _ ∈ firsts.mergeSort fun a b => decide (a.1.toNat ≤ b.1.toNat) :=
+    (List.mergeSort_perm _ _).mem_iff.mpr (kept _ inside)
   obtain ⟨firstValidator, firstRead, same⟩ := named _ final
-  exact ⟨first, firstValidator,
-    (List.mergeSort_perm _ _).mem_iff.mpr final, firstRead, same⟩
+  exact ⟨first, firstValidator, final, firstRead, same⟩
+
+/-- Each entry of the ideal rewards is read at a validator of the registry.
+
+That validator has the effective balance of the entry. -/
+theorem idealAttestationRewards_mem {ideal : List IdealAttestationRewards}
+    (idealed : idealAttestationRewards state = .ok ideal) {rates : IdealAttestationRewards}
+    (member : rates ∈ ideal) :
+    ∃ balance index validator, getValidator state index = .ok validator ∧
+      validator.effectiveBalance = balance ∧ idealRewardsOf state balance index = .ok rates := by
+  simp only [idealAttestationRewards, bind_ok_iff] at idealed
+  obtain ⟨balances, balanced, mapped⟩ := idealed
+  obtain ⟨⟨balance, index⟩, pairMember, computed⟩ := mapM_ok_mem mapped rates member
+  obtain ⟨validator, read, same⟩ := idealBalances_named balanced _ pairMember
+  exact ⟨balance, index, validator, read, same, computed⟩
 
 /-- From Altair, an eligible validator that set a flag earns the ideal reward of its balance for it.
 
@@ -605,7 +628,9 @@ theorem attestationRewards_ideal_of_altair {config : Config} (altair : .altair �
 
 /-- Before Altair, the attester part of the inclusion rewards of each validator.
 
-An unslashed signer of the matching source attestations has an earliest inclusion.
+The matching source attestations are those of the previous epoch.
+
+An unslashed signer of them has an earliest inclusion.
 
 Its part is its base reward less the proposer share, divided by the delay of that inclusion.
 
@@ -628,12 +653,7 @@ private theorem attesterInclusionRewards_getD (before : fork < .altair) {parts :
   simp only [attesterInclusionRewards, bind_ok_iff, liftAccessor_ok] at own
   obtain ⟨attestations, attestationsOk, signers, signersOk, attesters, attestersOk,
     total, totalOk, folded⟩ := own
-  have filtered := attestersOk
-  unfold unslashedAmong at filtered
-  -- The attesters are distinct, since they come in increasing order.
-  have distinct : (attesters.map UInt64.toNat).Nodup :=
-    List.pairwise_map.mpr (((sortedSet_sorted _).sublist (sublist_of_filterM_ok filtered)).imp
-      fun lt => Nat.ne_of_lt (UInt64.lt_iff_toNat_lt.mp lt))
+  have distinct := unslashedAmong_nodup attestersOk
   refine ⟨attestations, signers, attesters, total, attestationsOk, signersOk, attestersOk,
     totalOk, fun index => ?_⟩
   -- Only the step of the validator itself changes its entry, and it starts at zero.
@@ -758,7 +778,9 @@ private theorem idealInactivityPenalty_eq_netDelta {config : Config} (before : f
     rw [timely set, replicate_getD_zero, UInt64.toNat_zero, Nat.zero_add] at *
     simp only [netDelta, noReward, UInt64.toNat_zero, Int.natCast_zero, Int.zero_sub, value]
 
-/-- Before Altair, the ideal rewards of an effective balance, read at a validator of the registry.
+/-- Before Altair, the ideal rewards read at a validator, from its base reward.
+
+The balance is only copied into the entry.
 
 Each vote earns the reward of a validator whose vote matched.
 
@@ -768,7 +790,7 @@ Otherwise it is the base reward times the increments of the unslashed balance th
 
 That product is divided by the active increments, rounding down.
 
-The inclusion earns the base reward less the proposer share, as an inclusion one slot after does.
+The inclusion earns the base reward less the proposer share.
 
 In a leak the validator pays four base rewards less the proposer share, and otherwise nothing. -/
 theorem idealRewardsOf_parts_of_lt_altair (before : fork < .altair) {balance : Gwei}
