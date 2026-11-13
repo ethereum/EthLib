@@ -7,7 +7,6 @@ import EthLib.Consensus.Proofs.DirectSafety.FundingBlock
 import EthLib.Consensus.Proofs.DirectSafety.FundingSlot
 import EthLib.Consensus.Proofs.DirectSafety.Provenance
 import EthLib.Consensus.Proofs.DirectSafety.Cohorts
-import EthLib.Consensus.Proofs.Transition.ChainRoots
 import EthLib.Consensus.Proofs.Transition.SlashedPersistence
 import EthLib.Consensus.Proofs.Transition.ValidatorCaps
 
@@ -2036,6 +2035,18 @@ private theorem intervalLoss_rounding (before after deficit increment : Nat)
       omega
     · omega
   · omega
+
+/-- Every effective balance of a reachable state is a whole number of increments.
+
+This holds when the largest effective balances of the preset are whole numbers of increments. -/
+private theorem reachable_effective_alignment {g x : ForkedBeaconState preset}
+    (run : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)
+    (aligned : MaxEffectiveBalancesAligned preset) (v : Validator)
+    (found : v ∈ x.state.validators.data.toList) :
+    v.effectiveBalance.toNat % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 := by
+  have whole := (run_justified_separated run genesis).1.aligned aligned v (by simpa using found)
+  have numeric := congrArg UInt64.toNat whole
+  simpa only [UInt64.toNat_mod, UInt64.reduceToNat] using numeric
 
 private theorem intervalLoss_effective_loss {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (tail : Run config checks x y)
