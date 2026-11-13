@@ -31,6 +31,8 @@ SSZ gives a byte and a one-byte integer the same type, and so a byte list and a 
 
 The JSON mapping does not.
 
+SSZ also holds a text as a byte list, and the JSON mapping writes it as a string.
+
 A container marks each field where the two differ, and every other container marks nothing.
 
 - Before Gloas, participation flags are a byte list, written as one decimal string per byte.

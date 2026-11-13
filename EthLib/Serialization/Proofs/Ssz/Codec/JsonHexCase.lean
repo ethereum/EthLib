@@ -9,7 +9,7 @@ A hex digit reads the same in uppercase, so a hex string does too.
 
 A document reads the same with any hex digits of its strings in uppercase, at every shape.
 
-A spelling that writes a byte list as text is left out, since the case of a text is its own.
+A spelling that writes a byte list as text is left out, since the case of a text is part of it.
 -/
 
 @[expose] public section
@@ -253,20 +253,28 @@ private theorem lookup_same {left right : Std.TreeMap.Raw String Json}
   · exact .none
   · exact .some (each name _ _ inLeft inRight)
 
+/-- A list of spellings carries no text mark when none of its members does. -/
+theorem Spelling.anyText_eq_false {parts : List Spelling} :
+    Spelling.anyText parts = false ↔ ∀ part ∈ parts, part.hasText = false := by
+  induction parts with
+  | nil => simp [Spelling.anyText]
+  | cons part rest ih => simp [Spelling.anyText, ih]
+
 /-- A spelling with no text holds none in the declarations it holds. -/
 theorem Spelling.hasText_part {spelling : Spelling} (plain : spelling.hasText = false)
     (position : Nat) : (spelling.part position).hasText = false := by
   cases spelling with
-  | byte | digits => simp [Spelling.part, Spelling.opaque, Spelling.hasText]
+  | byte | digits => simp [Spelling.part, Spelling.opaque, Spelling.hasText, Spelling.anyText]
   | text => simp [Spelling.hasText] at plain
   | plain parts =>
     simp only [Spelling.part]
     by_cases inside : position < parts.length
     · rw [List.getD_eq_getElem?_getD, List.getElem?_eq_getElem inside, Option.getD_some]
-      simp only [Spelling.hasText, List.any_eq_false, List.mem_attach, true_implies] at plain
-      exact by simpa using plain ⟨_, List.getElem_mem inside⟩
+      simp only [Spelling.hasText, Spelling.anyText_eq_false] at plain
+      exact plain _ (List.getElem_mem inside)
     · have none : parts[position]? = none := List.getElem?_eq_none (by omega)
-      simp [List.getD_eq_getElem?_getD, none, Spelling.opaque, Spelling.hasText]
+      simp [List.getD_eq_getElem?_getD, none, Spelling.opaque, Spelling.hasText,
+        Spelling.anyText]
 
 /-- Whether matching documents read the same under a declaration, at every spelling with no text. -/
 private def ReadsSame (shape : Desc) : Prop :=

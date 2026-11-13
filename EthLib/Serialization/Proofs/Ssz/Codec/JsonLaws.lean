@@ -137,6 +137,18 @@ theorem valueOf_text {limit : Nat} {text : String} (fitted : text.utf8ByteSize �
   simp [valueOf, textBytes, Spelling.isDigits, Spelling.isText, fitted, Bind.bind, Except.bind,
     pure, Except.pure]
 
+/-- Decimal strings of bytes that spell a text are refused under the text spelling.
+
+So the text of a byte list is its only document. -/
+theorem valueOf_text_digits {limit : Nat} {data : Bytes} (valid : ByteArray.IsValidUTF8 ⟨data⟩) :
+    valueOf (.byteList limit) .text (byteDigitsJson data) = .error .typeMismatch := by
+  have digits := byteDigitsFrom_map data.toList #[]
+  simp only [Array.empty_append, Array.toArray_toList] at digits
+  have some : (String.fromUTF8? ⟨data⟩).isSome := by
+    simpa [String.fromUTF8?] using valid
+  simp [valueOf, textBytes, byteDigitsJson, Spelling.isDigits, Spelling.isText, digits, some,
+    Bind.bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
+
 /-- A byte list document reads back as the bytes it was written from. -/
 theorem valueOf_jsonOf_byteList {spelling : Spelling} {limit : Nat} {data : Bytes}
     {document : Json} (fitted : data.size ≤ limit)

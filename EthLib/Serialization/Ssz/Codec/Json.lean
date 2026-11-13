@@ -26,7 +26,7 @@ A spelling travels beside a declaration and holds one node for each node of it:
 - `Vector[Uint8, 2]`, spelled plain, is `["1", "2"]`.
 - `Vector[Byte, 2]`, with bytes as elements, is `"0x0102"`.
 - `List[Uint8, 4]`, held as a byte list and spelled as digits, is `["1", "2"]`.
-- `ByteList[8]`, spelled as text, is `"ab"`.
+- `ByteList[8]` holding the bytes `0x6162`, spelled as text, is `"ab"`.
 
 A mark has effect only where its shape allows it, and is ignored anywhere else.
 -/
@@ -70,11 +70,20 @@ def Spelling.isText : Spelling → Bool
   | .text => true
   | .byte | .digits | .plain _ => false
 
-/-- Whether a spelling writes some byte list as text, here or in a declaration it holds. -/
+mutual
+
+/-- Whether a spelling carries the text mark, here or in a declaration it holds. -/
 def Spelling.hasText : Spelling → Bool
   | .text => true
   | .byte | .digits => false
-  | .plain parts => parts.attach.any fun ⟨part, _⟩ => part.hasText
+  | .plain parts => Spelling.anyText parts
+
+/-- Whether one of the spellings carries the text mark. -/
+def Spelling.anyText : List Spelling → Bool
+  | [] => false
+  | part :: rest => part.hasText || Spelling.anyText rest
+
+end
 
 /-- Whether a declaration is a one-byte integer, the only one that the byte alias can mark. -/
 def Desc.isOneByte : Desc → Bool

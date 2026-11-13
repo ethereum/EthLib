@@ -12,7 +12,7 @@ A builder entry and a builder configuration decode back from their untyped value
 
 The JSON writer never fails on them, and the reader gives back what it wrote.
 
-Their URL is text, so bytes that are not UTF-8 never come out of an entry.
+Their URL is text, so SSZ bytes that are not UTF-8 fit their declaration and are refused.
 
 So the two types are not lawful, and these theorems stand in for the general ones.
 -/
@@ -29,17 +29,6 @@ private theorem ofValues_pair {α β : Type} [SszType α] [SszFields β] (a : α
     (tail : SszFields.ofValues (SszFields.toValues b) = .ok b) :
     SszFields.ofValues (SszFields.toValues (a, b)) = .ok (a, b) := by
   simp [SszFields.toValues, SszFields.ofValues, head, tail, bind, Except.bind, pure, Except.pure]
-
-/-- Elements that each read back from their value read back as a list. -/
-private theorem ofElements_map_of {α : Type} [SszType α]
-    (back : ∀ a : α, ofValue (toValue a) = .ok a) (items : List α) :
-    ofElements (items.map toValue) = .ok items.toArray := by
-  suffices read : (items.map toValue).mapM (ofValue (α := α)) = .ok items by
-    simp [SszType.ofElements_eq, read, Functor.map, Except.map]
-  induction items with
-  | nil => rfl
-  | cons item rest ih =>
-    simp [List.mapM_cons, back, ih, bind, Except.bind, pure, Except.pure]
 
 /-- The SSZ type of a builder entry is well formed. -/
 theorem BuilderEntry.wellFormed : (desc BuilderEntry).wellFormed = .ok () := by

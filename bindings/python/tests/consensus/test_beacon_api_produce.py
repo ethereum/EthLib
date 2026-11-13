@@ -301,9 +301,12 @@ def test_builder_config_rejects_bad_bytes(data: bytes, message: str):
         consensus.api_builder_config_terms(data, SLOT)
 
 
-# The source's example of a builder configuration, at ethereum/beacon-APIs 7911555e.
-# Each field takes the example of its type in the types files of the source.
-# Those are types/gloas/builder_entry.yaml, types/gloas/request_auth.yaml and primitive.yaml.
+# A builder configuration built from the examples of ethereum/beacon-APIs.
+# The source is pinned in tests/sources.toml.
+# Each field takes the example of the field, or of its type where the field has none.
+# Commit: 7911555e6a30c51f9b69bb168111a59f1ff8ee49
+# Files: types/gloas/builder_entry.yaml, types/gloas/request_auth.yaml, types/primitive.yaml
+# The source gives no example of a list of keys, so the list holds the one example key.
 EXAMPLE_PUBKEY = (
     "0x93247f2209abcacf57b75a51dafae777f9dd38bc7053d1af526f220a7489a6d3"
     "a2753e5f3e8b1cfe39b56f43611df74a"
@@ -313,6 +316,8 @@ EXAMPLE_SIGNATURE = (
     "cc411d61252fb6cb3fa0017b679f8bb2305b26a285fa2737f175668d0dff91cc"
     "1b66ac1fb663c9bc59509846d6ec05345bd908eda73e670af888da41af171505"
 )
+# The slot of the example's authentication, the example of a Uint64.
+EXAMPLE_SLOT = 1
 EXAMPLE_CONFIG = {
     "min_bid": "10000000",
     "builder_boost_factor": "100",
@@ -333,7 +338,7 @@ EXAMPLE_CONFIG = {
 
 
 def _entry_json(url: object) -> dict[str, Any]:
-    """The JSON of the builder entry that `_entry(url, [], 1, 2, 3)` encodes, with any URL."""
+    """The JSON of the builder entry that `_entry(url.encode(), [], 1, 2, 3)` encodes."""
     return {
         "url": url,
         "auth": {
@@ -355,10 +360,10 @@ def _entry_ssz(document: object) -> bytes:
 def test_builder_config_example_round_trip():
     data = consensus.api_ssz("mainnet", "glamsterdam", "BuilderConfig", EXAMPLE_CONFIG)
     assert consensus.api_json("mainnet", "glamsterdam", "BuilderConfig", data) == EXAMPLE_CONFIG
-    gossip, terms = consensus.api_builder_config_terms(data, 1)
+    gossip, terms = consensus.api_builder_config_terms(data, EXAMPLE_SLOT)
     assert gossip == _terms(min_bid=10_000_000)
     assert terms == [
-        _terms(pubkeys=[bytes.fromhex(EXAMPLE_PUBKEY[2:])], cap=GWEI, min_bid=10_000_000)
+        _terms(pubkeys=[bytes.fromhex(EXAMPLE_PUBKEY[2:])], cap=1_000_000_000, min_bid=10_000_000)
     ]
 
 
@@ -370,6 +375,7 @@ def test_builder_config_example_round_trip():
         "0x12",
         "0x" + b"https://a.example".hex(),
         "https://bücher.example/",
+        # The codec holds an empty URL; the source makes it invalid, so production skips its entry.
         "",
         # 2048 bytes in UTF-8, the limit.
         "é" * 1024,
@@ -384,10 +390,14 @@ def test_builder_entry_url_is_utf8_text(url: str):
 @pytest.mark.parametrize(
     ("url", "message"),
     [
-        # 2050 bytes in UTF-8, over the limit, though only 1025 characters.
-        ("é" * 1025, "document rejected: EthLib.Serialization.Ssz.Err.documentOverLimit 2048 2050"),
-        # Decimal strings are never the JSON of a URL.
+        # 2049 bytes in UTF-8, one over the limit, though only 1025 characters.
+        (
+            "é" * 1024 + "a",
+            "document rejected: EthLib.Serialization.Ssz.Err.documentOverLimit 2048 2049",
+        ),
+        # "h" has a text form, so its decimal form is refused.
         (["104"], "document rejected: EthLib.Serialization.Ssz.Err.typeMismatch"),
+        # A byte with no text form reads as digits, and the URL then refuses it.
         (["255"], "document rejected: EthLib.Serialization.Ssz.Err.notUtf8"),
     ],
 )
@@ -396,10 +406,23 @@ def test_builder_entry_url_rejects(url: object, message: str):
         _entry_ssz(_entry_json(url))
 
 
-def test_builder_entry_url_not_utf8():
-    data = _entry(b"\xff", [], 1, 2, 3)
+@pytest.mark.parametrize(
+    "url",
+    [
+        b"\xff",
+        # A sequence cut short.
+        b"\xc3",
+        # An overlong encoding of "/".
+        b"\xc0\xaf",
+        # A surrogate.
+        b"\xed\xa0\x80",
+    ],
+)
+def test_builder_entry_url_rejects_bytes_not_utf8(url: bytes):
+    data = _entry(url, [], 1, 2, 3)
     message = "input rejected: EthLib.Serialization.Ssz.Err.notUtf8"
     with raises(SszError, message):
         consensus.api_json("mainnet", "glamsterdam", "BuilderEntry", data)
+    # Such bytes are no URL of the source, so the body cannot be decoded, unlike an empty URL.
     with raises(SszError, message):
         consensus.api_builder_config_terms(_config(0, PROFIT, [data]), SLOT)
