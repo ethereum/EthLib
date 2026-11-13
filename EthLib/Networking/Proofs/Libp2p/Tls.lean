@@ -14,8 +14,9 @@ These theorems describe the concrete checks that a successful authentication pas
 - A certificate without the libp2p extension, or with another critical extension, is rejected.
 - The returned peer ID is that of the host key whose signature verifies over the certificate key.
 - A dialer that succeeds gets the peer ID it expected.
-- A certificate time reads exactly when it has the fixed RFC 5280 form of a valid date and time.
-- Its value is then the number of seconds from 1970-01-01T00:00:00Z, counted in a calendar model.
+- A certificate time reads exactly when it writes a valid date and time in an RFC 5280 form.
+- A GeneralizedTime before 2050 is accepted too.
+- Its value counts 86400 seconds for each day from 1970-01-01 in a calendar model, plus the time.
 - A validity reads as two such times in order.
 - The endpoints of a parsed certificate are what its own validity field reads as.
 -/
@@ -438,7 +439,7 @@ The reader takes seconds below 60, so no leap second, which RFC 5280 leaves open
 
 It also takes a GeneralizedTime before 2050, which issuers must write as UTCTime.
 
-Then `t` is the number of seconds from 1970-01-01T00:00:00Z, negative before it. -/
+Then `t` counts 86400 seconds for each day from 1970-01-01, negative before it, plus the time. -/
 theorem readTime_eq_ok_iff {value : Der.Value} {t : Int} :
     readTime value = .ok t ↔ ∃ year month day hour minute second,
       ((value.tag = 0x17 ∧ 1950 ≤ year ∧ year < 2050 ∧ value.content.data.toList =
