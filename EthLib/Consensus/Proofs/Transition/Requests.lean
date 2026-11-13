@@ -24,9 +24,11 @@ They lower no balance of a validator that is slashed or cannot withdraw in the n
 
 A source that is slashable in the next epoch keeps its consolidation and at least its balance.
 
-From Electra, a consolidation request with two keys queues its source when every condition holds.
+From Electra, a request that meets every condition computes as the queueing of its source.
 
-Otherwise it returns its state, as it does while the churn of consolidations is too small.
+Otherwise a request with two different keys that succeeds returns its state.
+
+It returns its state whenever the consolidation churn is at most the activation balance.
 -/
 
 @[expose] public section
@@ -369,11 +371,11 @@ The request comes from the address of the execution credentials of the source.
 
 The target has compounding credentials.
 
-Both are active and not exiting in the current epoch.
+Both are active in the current epoch, and neither has an exit epoch set.
 
 The source has been active for at least the shard committee period.
 
-No partial withdrawal of the source waits. -/
+The source has no pending balance to withdraw. -/
 structure ConsolidationAccepted (config : Config) (state : BeaconState preset fork)
     (electra : .pectra ≤ fork) (request : ConsolidationRequest) (sourceIndex : ValidatorIndex)
     (source : Validator) (targetIndex : ValidatorIndex) (target : Validator) : Prop where
@@ -398,9 +400,9 @@ structure ConsolidationAccepted (config : Config) (state : BeaconState preset fo
     (getCurrentEpoch state).toNat
   owed : getPendingBalanceToWithdraw state electra sourceIndex = .ok 0
 
-/-- From Electra, a consolidation request that meets every condition queues its source.
+/-- From Electra, a consolidation request that meets every condition is the queueing of its source.
 
-The source then exits to consolidate into the target. -/
+The queueing step may still fail on its own. -/
 theorem processConsolidationRequest_eq_queueConsolidation {electra : .pectra ≤ fork}
     {request : ConsolidationRequest} {sourceIndex targetIndex : ValidatorIndex}
     {source target : Validator}
@@ -435,7 +437,7 @@ theorem processConsolidationRequest_eq_queueConsolidation {electra : .pectra ≤
     sourceChecked, targetChecked, sourceIs, targetIs, execution, address, compounding,
     sourceActive, targetActive, sourceStays, targetStays, eligible, early, owed]
 
-/-- From Electra, a request with two keys that succeeds returns its state, unless it queues.
+/-- From Electra, a request with two different keys that succeeds returns its state, or queues.
 
 It queues only when every condition holds, for the first validators with the two keys. -/
 theorem eq_or_queueConsolidation_of_processConsolidationRequest {electra : .pectra ≤ fork}
@@ -474,9 +476,9 @@ theorem eq_or_queueConsolidation_of_processConsolidationRequest {electra : .pect
       credentials.1, credentials.2, compounding, active.1, active.2, stays.1, stays.2, served,
       none ▸ liftAccessor_ok.mp owedOk⟩, computed⟩
 
-/-- From Electra, a request with two keys returns its state while the churn is too small.
+/-- From Electra, a request with two different keys returns its state while the churn is too small.
 
-The churn of consolidations is then at most the activation balance. -/
+Too small means at most the activation balance. -/
 theorem processConsolidationRequest_eq_ok_of_churn_le {electra : .pectra ≤ fork}
     {request : ConsolidationRequest} (different : request.sourcePubkey ≠ request.targetPubkey)
     {churn : Gwei} (churnOk : getConsolidationChurnLimit config state = .ok churn)
