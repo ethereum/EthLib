@@ -1605,7 +1605,7 @@ private theorem blockBalanceReplay_bounded {fork : Fork} {s : BeaconState preset
         exact requestedBound.2
 
 /-- The fork upgrades of a slot have a replay, and its events are bounded. -/
-private theorem upgradeBalanceReplay_bounded {s t : ForkedBeaconState preset}
+theorem upgradeBalanceReplay_bounded {s t : ForkedBeaconState preset}
     (ok : processUpgrades config checks s = .ok t) :
     ∃ events, upgradeBalanceReplay (config := config) (checks := checks) s = .ok events ∧
       EventsBounded events := by
