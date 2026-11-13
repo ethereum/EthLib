@@ -23,6 +23,10 @@ Each block after the first names the hash of the header before as its parent.
 
 Each total difficulty after the first is the one before plus the difficulty of the block.
 
+In a file whose first number is 0, the first total difficulty is the difficulty of that block.
+
+An accepted file holds at most 8192 blocks.
+
 The accumulator is the SSZ root of the list of the hash and total difficulty of each block.
 
 Two errors of an era1 file with one code come from one constructor.
