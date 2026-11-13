@@ -77,151 +77,100 @@ theorem depositCarry_processSlot (ok : processSlot s = .ok t) :
   obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok ok
   rfl
 
-theorem depositCarry_processJustificationAndFinalization
-    (ok : processJustificationAndFinalization s = .ok t) :
-    t.depositBalanceToConsume = s.depositBalanceToConsume := by
+private theorem kept_justification {u : BeaconState preset fork}
+    (ok : processJustificationAndFinalization s = .ok u) : Kept s u := by
   obtain rfl | ⟨_, _, _, weighed⟩ := processJustificationAndFinalization_ok ok
   · rfl
   · obtain ⟨_, _, _, rest⟩ := weighJustificationAndFinalization_checkpoints weighed
     rw [← rest]
 
-theorem depositCarry_processInactivityUpdates {altair : .altair ≤ fork}
-    (ok : processInactivityUpdates config s altair = .ok t) :
-    t.depositBalanceToConsume = s.depositBalanceToConsume := by
-  unfold processInactivityUpdates at ok
-  split at ok
-  · cases ok
-    rfl
-  · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
-    obtain ⟨_, _, _, _, rfl⟩ := ok
-    rfl
+/-- The epoch steps keep the deposit balance to consume. -/
+theorem depositCarryLaws : EpochStepLaws (fork := fork) (preset := preset)
+    fun s t => t.depositBalanceToConsume = s.depositBalanceToConsume where
+  refl _ := rfl
+  trans one two := two.trans one
+  setValidatorAt set _ _ _ _ _ := kept_setValidatorAt set
+  increaseBalance := kept_increase
+  decreaseBalance := kept_decrease
+  initiateValidatorExit := kept_exit
+  eth1DataVotes _ _ := rfl
+  inactivityScores _ _ := rfl
+  slashings _ _ := rfl
+  randaoMixes _ _ := rfl
+  historicalRoots _ _ := rfl
+  historicalSummaries _ _ := rfl
+  participationRecords _ := rfl
+  pendingConsolidations _ _ := rfl
+  syncCommittees _ _ _ := rfl
+  proposerLookahead _ _ := rfl
+  ptcWindow _ _ := rfl
 
-theorem depositCarry_processRewardsAndPenalties
-    (ok : processRewardsAndPenalties config s = .ok t) :
+/-- Every epoch stage other than the pending deposits keeps the deposit balance to consume. -/
+theorem EpochStage.Edge.depositCarry {stage : EpochStage}
+    (edge : EpochStage.Edge config checks stage s t) (other : stage ≠ .pendingDeposits) :
     t.depositBalanceToConsume = s.depositBalanceToConsume := by
-  rw [processRewardsAndPenalties_frame ok]
+  have laws := depositCarryLaws (preset := preset) (fork := fork)
+  cases stage <;> simp only [EpochStage.Edge] at edge
+  case justification => exact kept_justification edge
+  case rewards => exact laws.processRewardsAndPenalties edge
+  case registry => exact laws.processRegistryUpdates edge
+  case slashings => exact laws.processSlashings edge
+  case effectiveBalances => exact laws.processEffectiveBalanceUpdates edge
+  case slashingsReset => exact laws.processSlashingsReset edge
+  case randaoReset => exact laws.processRandaoMixesReset edge
+  case pendingDeposits => exact absurd rfl other
+  case payments =>
+    split at edge
+    · rw [processBuilderPendingPayments_eq edge]
+    · exact edge ▸ rfl
+  case history =>
+    split at edge
+    · exact laws.processHistoricalSummariesUpdate edge
+    · exact laws.processHistoricalRootsUpdate edge
+  case participation =>
+    split at edge
+    · subst edge; rfl
+    · exact laws.processParticipationRecordUpdates edge
+  case inactivity =>
+    split at edge
+    · exact laws.processInactivityUpdates edge
+    · exact edge ▸ rfl
+  case eth1Reset =>
+    split at edge
+    · exact laws.processEth1DataReset edge
+    · exact edge ▸ rfl
+  case pendingConsolidations =>
+    split at edge
+    · exact laws.processPendingConsolidations edge
+    · exact edge ▸ rfl
+  case syncCommittees =>
+    split at edge
+    · exact laws.processSyncCommitteeUpdates edge
+    · exact edge ▸ rfl
+  case proposerLookahead =>
+    split at edge
+    · exact laws.processProposerLookahead edge
+    · exact edge ▸ rfl
+  case ptcWindow =>
+    split at edge
+    · exact laws.processPtcWindow edge
+    · exact edge ▸ rfl
 
-theorem depositCarry_processRegistryUpdates
-    (ok : processRegistryUpdates config s = .ok t) :
-    t.depositBalanceToConsume = s.depositBalanceToConsume := by
-  unfold processRegistryUpdates at ok
-  split at ok
-  · simp only [bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, ok⟩ := ok
-    refine kept_fold (fun _ _ _ ok => ?_) ok
-    simp only [updateRegistryEntryElectra, bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, ok⟩ := ok
-    split at ok
-    · simp only [bind_ok_iff, liftAccessor_ok] at ok
-      obtain ⟨_, _, set⟩ := ok
-      exact kept_setValidatorAt set
-    split at ok
-    · simp only [bind_ok_iff, liftAccessor_ok] at ok
-      obtain ⟨_, _, exited⟩ := ok
-      exact kept_exit exited
-    split at ok
-    · exact kept_setValidatorAt (liftAccessor_ok.mp ok)
-    · cases ok
-      rfl
-  simp only [bind_ok_iff] at ok
-  obtain ⟨_, updated, activated⟩ := ok
-  have one := kept_fold (fun _ _ _ ok => by
-    simp only [updateRegistryEntry, bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, _, _, _, marked, ok⟩ := ok
-    have same := kept_setValidatorAt marked
-    split at ok
-    · simp only [bind_ok_iff, liftAccessor_ok] at ok
-      obtain ⟨_, _, exited⟩ := ok
-      exact (kept_exit exited).trans same
-    · cases ok
-      exact same) updated
-  exact (kept_fold (fun _ _ _ ok => by
-    simp only [activateValidator, bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, _, _, set⟩ := ok
-    exact kept_setValidator set) activated).trans one
-
-theorem depositCarry_processSlashings (ok : processSlashings s = .ok t) :
-    t.depositBalanceToConsume = s.depositBalanceToConsume := by
-  obtain ⟨_, rfl⟩ := processSlashings_eq ok
-  rfl
-
-theorem depositCarry_processEth1DataReset {before : fork < .hegota}
-    (ok : processEth1DataReset before s = .ok t) :
-    t.depositBalanceToConsume = s.depositBalanceToConsume := by
-  simp only [processEth1DataReset, bind_ok_iff, liftAccessor_ok] at ok
-  obtain ⟨_, _, ok⟩ := ok
-  split at ok <;> cases ok <;> rfl
-
-private theorem kept_passConsolidations {nextEpoch : Epoch} :
-    ∀ {items : List PendingConsolidation} {s : BeaconState preset fork}
-      {result : BeaconState preset fork × Nat},
-      passPendingConsolidations nextEpoch s items = .ok result → Kept s result.1
-  | [], _, _, ok => by cases ok; rfl
-  | item :: rest, s, result, ok => by
-    simp only [passPendingConsolidations, bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, ok⟩ := ok
-    split at ok
-    · simp only [bind_ok_iff] at ok
-      obtain ⟨⟨passed, read⟩, passedOk, ok⟩ := ok
-      cases ok
-      exact kept_passConsolidations (result := (passed, read)) passedOk
-    split at ok
-    · cases ok; rfl
-    simp only [bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, _, lowered, _, raised, ⟨passed, read⟩, passedOk, ok⟩ := ok
-    cases ok
-    exact (kept_passConsolidations (result := (passed, read)) passedOk).trans
-      ((kept_increase raised).trans (kept_decrease lowered))
-
-theorem depositCarry_processPendingConsolidations {electra : .pectra ≤ fork}
-    (ok : processPendingConsolidations s electra = .ok t) :
-    t.depositBalanceToConsume = s.depositBalanceToConsume := by
-  unfold processPendingConsolidations at ok
-  simp only [bind, Except.bind, pure, Except.pure] at ok
-  repeat' (split at ok <;> try cases ok)
-  all_goals exact kept_passConsolidations ‹_›
-
-theorem depositCarry_processEffectiveBalanceUpdates
-    (ok : processEffectiveBalanceUpdates s = .ok t) :
-    t.depositBalanceToConsume = s.depositBalanceToConsume := by
-  refine kept_fold (fun _ _ _ ok => ?_) ok
-  simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at ok
-  obtain ⟨_, _, _, _, _, _, set⟩ := ok
-  exact kept_setValidatorAt set
-
-theorem depositCarry_processSlashingsReset (ok : processSlashingsReset s = .ok t) :
-    t.depositBalanceToConsume = s.depositBalanceToConsume := by
-  obtain ⟨_, _, _, _, rfl⟩ := processSlashingsReset_eq ok
-  rfl
-
-theorem depositCarry_processRandaoMixesReset (ok : processRandaoMixesReset s = .ok t) :
-    t.depositBalanceToConsume = s.depositBalanceToConsume := by
-  obtain ⟨_, _, _, _, _, _, rfl⟩ := processRandaoMixesReset_eq ok
-  rfl
-
-theorem depositCarry_processHistoricalSummariesUpdate {capella : .shapella ≤ fork}
-    (ok : processHistoricalSummariesUpdate s capella = .ok t) :
-    t.depositBalanceToConsume = s.depositBalanceToConsume := by
-  unfold processHistoricalSummariesUpdate at ok
-  simp only [bind, Except.bind, pure, Except.pure] at ok
-  repeat' (split at ok <;> try cases ok)
-  all_goals rfl
-
-theorem depositCarry_processSyncCommitteeUpdates {altair : .altair ≤ fork}
-    (ok : processSyncCommitteeUpdates s altair = .ok t) :
-    t.depositBalanceToConsume = s.depositBalanceToConsume := by
-  unfold processSyncCommitteeUpdates at ok
-  simp only [bind, Except.bind, pure, Except.pure] at ok
-  repeat' (split at ok <;> try cases ok)
-  all_goals rfl
-
-theorem depositCarry_processProposerLookahead {fulu : .fusaka ≤ fork}
-    (ok : liftAccessor (processProposerLookahead s fulu) = .ok t) :
-    t.depositBalanceToConsume = s.depositBalanceToConsume := by
-  rw [liftAccessor_ok] at ok
-  simp only [processProposerLookahead, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
-  obtain ⟨_, _, _, _, rfl⟩ := ok
-  rfl
+/-- The six stages before the pending deposits keep the deposit balance to consume. -/
+theorem depositCarry_beforePending {altair : .altair ≤ fork} {before : fork < .hegota}
+    {justified scored rewarded registered slashed reset : BeaconState preset fork}
+    (justifiedOk : processJustificationAndFinalization s = .ok justified)
+    (scoredOk : processInactivityUpdates config justified altair = .ok scored)
+    (rewardedOk : processRewardsAndPenalties config scored = .ok rewarded)
+    (registeredOk : processRegistryUpdates config rewarded = .ok registered)
+    (slashedOk : processSlashings registered = .ok slashed)
+    (resetOk : processEth1DataReset before slashed = .ok reset) :
+    reset.depositBalanceToConsume = s.depositBalanceToConsume := by
+  have laws := depositCarryLaws (preset := preset) (fork := fork)
+  rw [laws.processEth1DataReset resetOk, laws.processSlashings slashedOk,
+    laws.processRegistryUpdates registeredOk, laws.processRewardsAndPenalties rewardedOk,
+    laws.processInactivityUpdates scoredOk]
+  exact kept_justification justifiedOk
 
 private theorem kept_excess {electra : .pectra ≤ fork} {index : ValidatorIndex}
     (ok : queueExcessActiveBalance s electra index = .ok t) : Kept s t := by

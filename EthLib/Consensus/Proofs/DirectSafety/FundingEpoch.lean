@@ -239,11 +239,8 @@ private theorem funding_before {fork : Fork} {s t : BeaconState preset fork}
       resetPending pendingOk
   rw [Except.ok.inj (depositedOk'.symm.trans depositedOk)] at pendingFunding
   have carry : reset.depositBalanceToConsume = s.depositBalanceToConsume := by
-    rw [depositCarry_processEth1DataReset resetOk,
-      depositCarry_processSlashings slashedOk, depositCarry_processRegistryUpdates registeredOk,
-      depositCarry_processRewardsAndPenalties rewardedOk,
-      depositCarry_processInactivityUpdates scoredOk,
-      depositCarry_processJustificationAndFinalization justifiedOk]
+    exact depositCarry_beforePending justifiedOk scoredOk rewardedOk registeredOk slashedOk
+      resetOk
   rw [equal, List.map_append, List.map_append, List.map_append,
     List.sum_append, List.sum_append, List.sum_append]
   simp only [List.map_cons, List.map_nil, List.sum_cons, List.sum_nil, fundingCredit,
@@ -274,40 +271,35 @@ private theorem funding_late {fork : Fork} {s t : BeaconState preset fork}
       (fun one two => ⟨two.1.trans one.1, two.2.trans one.2⟩) ?_
     intro k member a b computed
     have edge := EpochStage.action_cases.mp computed
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at member
     -- Each late stage keeps the slot; the shared stage facts give the rest of the funding.
     have funded (slot : b.slot = a.slot) := funding_stage edge
-      (by simp only [List.mem_cons, List.not_mem_nil, or_false] at member
-          rcases member with rfl | rfl | rfl | rfl | rfl | rfl | rfl <;>
+      (by rcases member with rfl | rfl | rfl | rfl | rfl | rfl | rfl <;>
             exact ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩) slot
+    refine ⟨?_, edge.depositCarry (by rcases member with rfl | rfl | rfl | rfl | rfl | rfl | rfl
+      <;> exact nofun)⟩
     cases k <;> simp only [EpochStage.Edge] at edge
-    case slashingsReset =>
-      exact ⟨funded (frame_processSlashingsReset edge).slot,
-        depositCarry_processSlashingsReset edge⟩
-    case randaoReset =>
-      exact ⟨funded (frame_processRandaoMixesReset edge).slot,
-        depositCarry_processRandaoMixesReset edge⟩
+    case slashingsReset => exact funded (frame_processSlashingsReset edge).slot
+    case randaoReset => exact funded (frame_processRandaoMixesReset edge).slot
     case history =>
       simp only [capella, ↓reduceDIte] at edge
-      exact ⟨funded (frame_processHistoricalSummariesUpdate edge).slot,
-        depositCarry_processHistoricalSummariesUpdate edge⟩
+      exact funded (frame_processHistoricalSummariesUpdate edge).slot
     case participation =>
       simp only [altair, ↓reduceDIte] at edge
       subst edge
-      exact ⟨funded rfl, rfl⟩
+      exact funded rfl
     case syncCommittees =>
       simp only [altair, ↓reduceDIte] at edge
-      exact ⟨funded (frame_processSyncCommitteeUpdates edge).slot,
-        depositCarry_processSyncCommitteeUpdates edge⟩
+      exact funded (frame_processSyncCommitteeUpdates edge).slot
     case proposerLookahead =>
       split at edge
-      · exact ⟨funded (frame_processProposerLookahead edge).slot,
-          depositCarry_processProposerLookahead (liftAccessor_ok.mpr edge)⟩
+      · exact funded (frame_processProposerLookahead edge).slot
       · subst edge
-        exact ⟨rfl, rfl⟩
+        rfl
     case ptcWindow =>
       simp only [gloas, ↓reduceDIte] at edge
       subst edge
-      exact ⟨rfl, rfl⟩
+      rfl
     all_goals simp at member
   simp only [funding_carry, same.1, same.2]
 
@@ -358,7 +350,7 @@ theorem funding_epoch {fork : Fork} {s t middle : BeaconState preset fork}
     (before.pendingConsolidations electra).data.toList updatedEdge
   rw [← queue, funding_potential_eq updated electra] at effective
   rw [queue, funding_potential_eq before electra] at effective
-  have carry := depositCarry_processEffectiveBalanceUpdates updatedEdge
+  have carry := updatedEdge.depositCarry nofun
   simp only [funding_carry, electra, ↓reduceDIte, carry] at late bound ⊢
   omega
 

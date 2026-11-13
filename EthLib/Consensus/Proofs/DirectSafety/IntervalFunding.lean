@@ -3296,7 +3296,7 @@ theorem funding_pending_balances {fork : Fork} {s t : BeaconState preset fork}
     matched ordered activation depositedOk
   have consolidate := funding_consolidations_invariant electra delay
     (pending.pendingDeposits depositedOk) consolidatedOk
-  have carry := depositCarry_processPendingConsolidations consolidatedOk
+  have carry := depositCarryLaws.processPendingConsolidations consolidatedOk
   refine ⟨deposited, depositedOk, consolidatedOk, ?_⟩
   rw [carry]
   omega
@@ -3751,27 +3751,20 @@ private theorem funding_epoch_capacity {fork : Fork} {s t : BeaconState preset f
     List.sum_append, List.sum_append, List.sum_append, rewardsSum]
   simp only [List.map_cons, List.map_nil, List.sum_cons, List.sum_nil, funding_deposit_credit,
     electra, reduceCtorEq, false_and, and_self, ↓reduceIte, Nat.zero_add, Nat.add_zero]
-  rw [depositCarry_processPendingConsolidations consolidatedOk]
+  rw [depositCarryLaws.processPendingConsolidations consolidatedOk]
   have carry : reset.depositBalanceToConsume = s.depositBalanceToConsume := by
-    rw [depositCarry_processEth1DataReset resetOk,
-      depositCarry_processSlashings slashedOk, depositCarry_processRegistryUpdates registeredOk,
-      depositCarry_processRewardsAndPenalties rewardedOk,
-      depositCarry_processInactivityUpdates scoredOk,
-      depositCarry_processJustificationAndFinalization justifiedOk]
+    exact depositCarry_beforePending justifiedOk scoredOk rewardedOk registeredOk slashedOk
+      resetOk
   rw [carry] at bound
   exact bound
 
 /-- The epoch is cut after the stages before the payments.
 
-Before Gloas the payments are the identity, and the later stages keep the deposit balance. -/
+The later stages keep the deposit balance. -/
 private theorem funding_epoch_result {fork : Fork} {s t : BeaconState preset fork}
-    (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
     (ok : processEpoch config checks s = .ok t) :
     ∃ middle, epochBeforePayments config checks s = .ok middle ∧
       t.depositBalanceToConsume = middle.depositBalanceToConsume := by
-  have altair : .altair ≤ fork := Nat.le_trans (by decide) electra
-  have capella : .shapella ≤ fork := Nat.le_trans (by decide) electra
-  have gloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt early
   have trace := processEpoch_trace ok
   change EpochTrace _ (EpochStage.prefixStages ++ (EpochStage.middleStages ++
     EpochStage.tailStages)) _ _ at trace
@@ -3782,25 +3775,9 @@ private theorem funding_epoch_result {fork : Fork} {s t : BeaconState preset for
     (fun a b : BeaconState preset fork => b.depositBalanceToConsume = a.depositBalanceToConsume)
     (fun _ => rfl) (fun one two => two.trans one) ?_
   intro k member a b computed
-  have edge := EpochStage.action_cases.mp computed
-  cases k <;> simp only [EpochStage.Edge] at edge
-  case payments => simp only [gloas, ↓reduceDIte] at edge; rw [edge]
-  case effectiveBalances => exact depositCarry_processEffectiveBalanceUpdates edge
-  case slashingsReset => exact depositCarry_processSlashingsReset edge
-  case randaoReset => exact depositCarry_processRandaoMixesReset edge
-  case history =>
-    simp only [capella, ↓reduceDIte] at edge
-    exact depositCarry_processHistoricalSummariesUpdate edge
-  case participation => simp only [altair, ↓reduceDIte] at edge; rw [← edge]; rfl
-  case syncCommittees =>
-    simp only [altair, ↓reduceDIte] at edge
-    exact depositCarry_processSyncCommitteeUpdates edge
-  case proposerLookahead =>
-    split at edge
-    · exact depositCarry_processProposerLookahead (liftAccessor_ok.mpr edge)
-    · rw [edge]
-  case ptcWindow => simp only [gloas, ↓reduceDIte] at edge; rw [edge]
-  all_goals simp [EpochStage.middleStages, EpochStage.tailStages] at member
+  exact (EpochStage.action_cases.mp computed).depositCarry (by
+    rintro rfl
+    simp [EpochStage.middleStages, EpochStage.tailStages] at member)
 
 private theorem funding_step_capacity {x y : ForkedBeaconState preset}
     (step : Step config checks x y) (matched : BalancesMatch x.state)
@@ -3861,7 +3838,7 @@ private theorem funding_step_capacity {x y : ForkedBeaconState preset}
         omega
       rw [epochDiff, one_mul]
       by_cases electra : .pectra ≤ x.fork
-      · obtain ⟨site, siteOk, kept⟩ := funding_epoch_result electra before epochOk
+      · obtain ⟨site, siteOk, kept⟩ := funding_epoch_result epochOk
         obtain ⟨siteEvents, siteReplay⟩ := epochBalanceReplay_before siteOk
         have equal := Except.ok.inj (siteReplay.symm.trans replay)
         cases equal
