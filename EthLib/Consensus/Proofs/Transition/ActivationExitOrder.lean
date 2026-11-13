@@ -637,221 +637,6 @@ private theorem advanceSlot (ok : Consensus.advanceSlot config checks state = .o
     · cases epochedOk; exact refl _
   exact first.trans (second.trans of_data)
 
-private theorem applyWithdrawal {withdrawal : Withdrawal}
-    (ok : Consensus.applyWithdrawal state withdrawal = .ok after) :
-    Kept state after := by
-  unfold Consensus.applyWithdrawal at ok
-  split at ok
-  · simp only [bind_ok_iff] at ok
-    obtain ⟨_, _, set⟩ := ok
-    obtain ⟨_, rfl⟩ := setBuilder_ok set
-    exact of_data
-  · exact decreaseBalance ok
-
-private theorem applyExpectedWithdrawals {capella : .shapella ≤ fork}
-    {expected : ExpectedWithdrawals}
-    (ok : Consensus.applyExpectedWithdrawals state capella expected = .ok after) :
-    Kept state after := by
-  unfold Consensus.applyExpectedWithdrawals at ok
-  simp only [bind_ok_iff] at ok
-  obtain ⟨applied, appliedOk, indexed, indexedOk, finished, sweptOk, last⟩ := ok
-  have one : Kept state applied := by
-    unfold applyWithdrawals at appliedOk
-    rw [← Array.foldlM_toList] at appliedOk
-    exact foldlM (fun _ _ _ ok => applyWithdrawal ok) appliedOk
-  have two : Kept applied indexed := by
-    unfold updateNextWithdrawalIndex at indexedOk
-    split at indexedOk
-    · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at indexedOk
-      obtain ⟨_, _, rfl⟩ := indexedOk
-      exact of_data
-    · cases indexedOk; exact refl _
-  have queued : ∀ kept : BeaconState preset fork,
-      Kept kept (if gloas : .glamsterdam ≤ fork then
-        updateBuilderPendingWithdrawals
-          (updatePayloadExpectedWithdrawals kept gloas expected.withdrawals) gloas
-          expected.processedBuilderWithdrawalsCount
-      else kept) := by
-    intro kept
-    split <;> exact of_data
-  have partials : ∀ kept : BeaconState preset fork,
-      Kept kept (if electra : .pectra ≤ fork then
-        updatePendingPartialWithdrawals kept electra expected.processedPartialWithdrawalsCount
-      else kept) := by
-    intro kept
-    split <;> exact of_data
-  have swept : ∀ kept : BeaconState preset fork,
-      (if gloas : .glamsterdam ≤ fork then
-        updateNextWithdrawalBuilderIndex kept gloas expected.processedBuildersSweepCount
-      else pure kept) = .ok finished → Kept kept finished := by
-    intro kept ok
-    split at ok
-    · unfold updateNextWithdrawalBuilderIndex at ok
-      dsimp only at ok
-      split at ok
-      · cases ok; exact of_data
-      · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
-        obtain ⟨_, _, rfl⟩ := ok
-        exact of_data
-    · cases ok; exact refl _
-  have lastKept : Kept finished after := by
-    unfold updateNextWithdrawalValidatorIndex at last
-    simp only [bind_ok_iff] at last
-    obtain ⟨_, _, last⟩ := last
-    split at last
-    · cases last
-    · cases last; exact of_data
-  exact one.trans <| two.trans <| (queued _).trans <| (partials _).trans <|
-    (swept _ sweptOk).trans lastKept
-
-private theorem processWithdrawals {capella : .shapella ≤ fork}
-    {payload : Until .glamsterdam fork (ExecutionPayload preset fork)}
-    (ok : Consensus.processWithdrawals state capella payload = .ok after) :
-    Kept state after := by
-  unfold Consensus.processWithdrawals at ok
-  split at ok
-  · split at ok
-    · simp only [bind_ok_iff, liftAccessor_ok] at ok
-      obtain ⟨_, _, applied⟩ := ok
-      exact applyExpectedWithdrawals applied
-    · cases ok; exact refl _
-  · simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, _, _, applied⟩ := ok
-    exact applyExpectedWithdrawals applied
-
-private theorem executionPayload {body : BeaconBlockBody preset fork}
-    {bellatrix : .bellatrix ≤ fork ∧ fork < .glamsterdam}
-    (ok : processExecutionPayload config engine state body bellatrix = .ok after) :
-    Kept state after := by
-  obtain ⟨_, _, _, rfl⟩ := processExecutionPayload_ok ok
-  exact of_data
-
-private theorem executionPayloadBid {gloas : .glamsterdam ≤ fork}
-    {signed : SignedExecutionPayloadBid preset fork}
-    (ok : processExecutionPayloadBid config checks state gloas signed = .ok after) :
-    Kept state after := by
-  obtain ⟨_, recorded, recordedOk, rfl⟩ := processExecutionPayloadBid_ok ok
-  by_cases paid : 0 < signed.message.value
-  · obtain ⟨_, _, _, _, rfl⟩ := recordBidPayment_of_pos paid recordedOk
-    exact of_data
-  · simp only [recordBidPayment, paid, ↓reduceIte, pure, Except.pure, Except.ok.injEq] at recordedOk
-    subst recordedOk
-    exact of_data
-
-private theorem blockExecution {body : BeaconBlockBody preset fork} {bellatrix : .bellatrix ≤ fork}
-    (ok : processBlockExecution config checks engine state body bellatrix = .ok after) :
-    Kept state after := by
-  unfold processBlockExecution at ok
-  split at ok
-  · simp only [bind_ok_iff] at ok
-    obtain ⟨_, withdrawn, bid⟩ := ok
-    exact (processWithdrawals withdrawn).trans (executionPayloadBid bid)
-  split at ok
-  · simp only [bind_ok_iff] at ok
-    obtain ⟨_, withdrawn, paid⟩ := ok
-    exact (processWithdrawals withdrawn).trans (executionPayload paid)
-  · dsimp only at ok
-    split at ok
-    · exact executionPayload ok
-    · cases ok; exact refl _
-
-private theorem builderDeposit {gloas : .glamsterdam ≤ fork} {request : BuilderDepositRequest}
-    (ok : processBuilderDepositRequest config checks state gloas request = .ok after) :
-    Kept state after := by
-  unfold processBuilderDepositRequest addBuilderToRegistry at ok
-  simp only [bind, Except.bind, pure, Except.pure] at ok
-  repeat' split at ok
-  all_goals first | (cases ok; done) | (cases ok; exact of_data)
-
-private theorem builderExit {gloas : .glamsterdam ≤ fork} {request : BuilderExitRequest}
-    (ok : processBuilderExitRequest config state gloas request = .ok after) :
-    Kept state after := by
-  rcases processBuilderExitRequest_cases ok with rfl | ⟨_, _, _, _, _, exited⟩
-  · exact refl _
-  · simp only [initiateBuilderExit, bind_ok_iff] at exited
-    obtain ⟨_, _, _, _, set⟩ := exited
-    obtain ⟨_, rfl⟩ := setBuilder_ok set
-    exact of_data
-
-private theorem parentPayload {gloas : .glamsterdam ≤ fork} {body : BeaconBlockBody preset fork}
-    (ok : processParentExecutionPayload config checks state gloas body = .ok after) :
-    Kept state after := by
-  rcases processParentExecutionPayload_ok ok with ⟨_, _, rfl⟩ |
-    ⟨_, settled, _, _, _, _, _, _, settledOk, depositsOk, withdrawalsOk, consolidationsOk,
-      buildersOk, exitsOk, _, rfl⟩
-  · exact refl _
-  · have first : Kept state settled := by
-      rw [settleParentPayment_eq settledOk]; exact of_data
-    exact first.trans <|
-      (foldlM (fun _ _ _ ok => processDepositRequest ok) depositsOk).trans <|
-      (foldlM (fun _ _ _ ok => processWithdrawalRequest ok) withdrawalsOk).trans <|
-      (foldlM (fun _ _ _ ok => processConsolidationRequest ok) consolidationsOk).trans <|
-      (foldlM (fun _ _ _ ok => builderDeposit ok) buildersOk).trans <|
-      (foldlM (fun _ _ _ ok => builderExit ok) exitsOk).trans of_data
-
-private theorem attestation {attestation : Attestation preset fork} {parentSlot : Slot}
-    (ok : processAttestation config checks state parentSlot attestation = .ok after) :
-    Kept state after := by
-  unfold processAttestation at ok
-  split at ok
-  · unfold processAttestationAltair at ok
-    simp only [bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
-      _, _, raised, raisedOk, final⟩ := ok
-    have last : Kept raised after := by
-      split at final
-      · rw [recordPaymentWeight_eq final]; exact of_data
-      · cases final; exact refl _
-    have flagged : ∀ (current : Bool) (participation : EpochParticipation preset fork),
-        Kept state (setEpochParticipation state current participation) := by
-      intro current participation
-      unfold setEpochParticipation
-      split <;> exact of_data
-    exact (flagged _ _).trans ((increaseBalance raisedOk).trans last)
-  simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok, pure, Except.pure,
-    Except.ok.injEq] at ok
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
-    _, _, _, _, _, _, _, _, _, _, recorded, _, _, _, _, _, _, rfl⟩ := ok
-  have kept := recordPendingAttestation_ok recorded
-  split at kept <;>
-  · obtain ⟨_, rest⟩ := kept
-    exact of_data (by rw [← rest])
-
-private theorem operations {body : BeaconBlockBody preset fork} {parentSlot : Slot}
-    (ok : processOperations config checks state body parentSlot = .ok after) :
-    Kept state after := by
-  unfold processOperations at ok
-  split at ok
-  · unfold processOperationsGloas at ok
-    simp only [bind_ok_iff, ← Array.foldlM_toList] at ok
-    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, proposers, _, attesters, _,
-      attested, _, exits, _, changes, paid⟩ := ok
-    exact (foldlM (fun _ _ _ ok => processProposerSlashing ok) proposers).trans <|
-      (foldlM (fun _ _ _ ok => processAttesterSlashing ok) attesters).trans <|
-      (foldlM (fun _ _ _ ok => attestation ok) attested).trans <|
-      (foldlM (fun _ _ _ ok => processVoluntaryExit ok) exits).trans <|
-      (foldlM (fun _ _ _ ok => processBlsToExecutionChange ok) changes).trans <|
-      foldlM (fun _ _ _ ok => by rw [processPayloadAttestation_eq ok]; exact refl _) paid
-  simp only [bind_ok_iff, ensure_ok_iff, ← Array.foldlM_toList] at ok
-  obtain ⟨_, _, _, _, _, proposers, _, attesters, _, attested, _, deposits, exited,
-    exits, changed, changes, requests⟩ := ok
-  have changesKept : Kept exited changed := by
-    unfold processBlsToExecutionChanges at changes
-    split at changes
-    · rw [← Array.foldlM_toList] at changes
-      exact foldlM (fun _ _ _ ok => processBlsToExecutionChange ok) changes
-    · cases changes; exact refl _
-  have requestsKept : Kept changed after := by
-    split at requests
-    · exact processExecutionRequests requests
-    · cases requests; exact refl _
-  exact (foldlM (fun _ _ _ ok => processProposerSlashing ok) proposers).trans <|
-    (foldlM (fun _ _ _ ok => processAttesterSlashing ok) attesters).trans <|
-    (foldlM (fun _ _ _ ok => attestation ok) attested).trans <|
-    (foldlM (fun _ _ _ ok => processDeposit ok) deposits).trans <|
-    (foldlM (fun _ _ _ ok => processVoluntaryExit ok) exits).trans <|
-    changesKept.trans requestsKept
-
 private theorem blockHeader {block : BeaconBlock preset fork}
     (ok : processBlockHeader state block = .ok after) : Kept state after := by
   obtain ⟨_, _, rfl⟩ := processBlockHeader_eq ok
@@ -882,34 +667,37 @@ private theorem syncAggregate {altair : .altair ≤ fork} {aggregate : SyncAggre
       exact (increaseBalance raised).trans (increaseBalance paid)
     · exact decreaseBalance (liftAccessor_ok.mp ok)) folded
 
+/-- A block keeps the order: master's decomposition of a block reaches every step of it.
+
+Each step that keeps the validators keeps the order, and so does each validator write. -/
 private theorem processBlock {block : BeaconBlock preset fork}
     (ok : Consensus.processBlock config checks engine state block = .ok after) :
     Kept state after := by
-  unfold Consensus.processBlock at ok
-  split at ok
-  · unfold processBlockAltair at ok
-    simp only [bind_ok_iff] at ok
-    obtain ⟨paid, paidOk, headed, headedOk, executed, executedOk, revealed, revealedOk, voted,
-      votedOk, _, operatedOk, synced⟩ := ok
-    have paidKept : Kept state paid := by
-      split at paidOk
-      · exact parentPayload paidOk
-      · cases paidOk; exact refl _
-    have executedKept : Kept headed executed := by
-      split at executedOk
-      · exact blockExecution executedOk
-      · cases executedOk; exact refl _
-    have votedKept : Kept revealed voted := by
-      split at votedOk
-      · exact eth1Data votedOk
-      · cases votedOk; exact refl _
-    exact paidKept.trans <| (blockHeader headedOk).trans <|
-      executedKept.trans <| (randao revealedOk).trans <|
-      votedKept.trans <| (operations operatedOk).trans (syncAggregate synced)
-  simp only [bind_ok_iff] at ok
-  obtain ⟨_, headerOk, _, randaoOk, _, eth1Ok, operationsOk⟩ := ok
-  exact (blockHeader headerOk).trans <| (randao randaoOk).trans <|
-    (eth1Data eth1Ok).trans (operations operationsOk)
+  have keep {a b : BeaconState preset fork} (_ : BlockFrame a b)
+      (same : b.validators = a.validators) : Kept a b := of_data (congrArg (·.data) same)
+  obtain ⟨input, last, started, operated, -, synced⟩ := processBlock_operationsInput ok
+  have head : Kept state input :=
+    OperationsInput.step_of Kept refl (fun one two => one.trans two)
+      (fun _ paid => processParentExecutionPayload_step_of Kept refl (fun one two => one.trans two)
+        keep processWithdrawalRequest processConsolidationRequest paid)
+      blockHeader
+      (fun _ executed => processBlockExecution_step_of Kept refl (fun one two => one.trans two)
+        keep (fun withdrawn =>
+          of_data (congrArg (·.data) (processWithdrawals_validators withdrawn))) executed)
+      randao (fun _ voted => eth1Data voted) started
+  obtain ⟨_, _, _, proposersOk, slashingsOk, attestedOk, rest⟩ :=
+    processOperations_folds_of Kept refl (fun one two => one.trans two) processDeposit
+      processVoluntaryExit processBlsToExecutionChange processExecutionRequests
+      (fun paid => by rw [processPayloadAttestation_eq paid]; exact refl _) operated
+  have tail : Kept last after := by
+    split at synced
+    · exact syncAggregate synced
+    · cases synced
+      exact refl _
+  exact head.trans <| (foldlM (fun _ _ _ ok => processProposerSlashing ok) proposersOk).trans <|
+    (foldlM (fun _ _ _ ok => processAttesterSlashing ok) slashingsOk).trans <|
+    (foldlM (fun _ _ _ ok => of_data (congrArg (·.data) (processAttestation_registry ok).1))
+      attestedOk).trans <| rest.trans tail
 
 end Kept
 
