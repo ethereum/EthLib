@@ -2112,6 +2112,15 @@ They leave out the checks that a voting source or an unrealized justification is
 They also leave out the calls to `willNoConflictingCheckpointBeJustified` and `willCurrentTargetBeJustified`, whose tests `FastConfirmationIndicators.lean` states on their own.
 No theorem yet relates the list of stores to the stores of an honest validator in an execution.
 
+A safety argument moves ancestry facts from the store of one node to the store of another.
+`Store.getAncestor_transport_or_collision` and `Store.isAncestor_transport_or_collision` (`Consensus/Proofs/ForkChoice/SharedAncestry.lean`) do that for any two stores, at every fork.
+The second store must hold a block at each root that the walk of the first visits.
+For ancestry, the second store must also hold the root of the ancestor.
+The walk then gives the same result in both stores, or `Store.findBlockCollision`, run over a list of roots that holds the walk, names a root where the two stores hold different blocks.
+For two reachable stores, `Store.findBlockCollision_valid` shows that those two blocks differ and both have that root as their hash tree root.
+So the alternative is a collision of the hash tree root of blocks.
+No theorem yet shows that the store of an honest node holds those blocks.
+
 ### Balance-weighted draws
 
 `Consensus/Proofs/Accessors/DrawProbability.lean` samples one digest uniformly from the 32-byte values.
