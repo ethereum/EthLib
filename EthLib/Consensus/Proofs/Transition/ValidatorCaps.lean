@@ -475,22 +475,7 @@ private theorem CapStep.block {f : Fork} {s t : BeaconState preset f}
       CapStep a b :=
     CapStep.data (congrArg (·.data) validators)
   obtain ⟨input, last, started, operated, -, synced⟩ := processBlock_operationsInput ok
-  have head : CapStep s input :=
-    OperationsInput.step_of CapStep CapStep.refl (fun one two => one.trans two)
-      (fun gloas _ => absurd gloas (Nat.not_le_of_lt early))
-      (fun headed => by
-        obtain ⟨_, _, rfl⟩ := processBlockHeader_eq headed
-        exact same rfl)
-      (fun _ executed => processBlockExecution_step_of CapStep CapStep.refl
-        (fun one two => one.trans two) (fun _ validators => same validators)
-        (fun withdrawn => same (processWithdrawals_validators withdrawn)) executed)
-      (fun revealed => by
-        obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq revealed
-        exact same rfl)
-      (fun _ voted => by
-        obtain ⟨_, _, rest⟩ := processEth1Data_eq voted
-        exact same (by rw [← rest]))
-      started
+  have head : CapStep s input := same (started.validators_eq early)
   obtain ⟨_, _, _, proposersOk, slashingsOk, attestedOk, rest⟩ :=
     processOperations_folds_of CapStep CapStep.refl (fun one two => one.trans two)
       CapStep.processDeposit CapStep.voluntaryExit CapStep.blsChange (CapStep.requests order)

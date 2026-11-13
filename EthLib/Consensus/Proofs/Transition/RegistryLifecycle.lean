@@ -3,6 +3,7 @@ module
 public import EthLib.Consensus.Proofs.Transition.EpochParticipation
 public import EthLib.Consensus.Proofs.Transition.Invariants
 public import EthLib.Consensus.Proofs.Transition.Trace
+import EthLib.Consensus.Proofs.Transition.Withdrawals
 
 /-!
 # Proofs: the lifecycle of a validator, at every fork
@@ -607,12 +608,8 @@ theorem processWithdrawals_validators {capella : .shapella ≤ fork}
       rw [← Array.foldlM_toList] at appliedOk
       refine foldlM_ok_invariant (fun t => t.validators = state.validators) ?_ rfl appliedOk
       intro _ _ _ kept stepped
-      unfold applyWithdrawal at stepped
-      split at stepped
-      · obtain ⟨_, _, set⟩ := bind_ok_iff.mp stepped
-        obtain ⟨_, rfl⟩ := setBuilder_ok set
-        exact kept
-      · exact (decreaseBalance_validators stepped).trans kept
+      rw [applyWithdrawal_eq stepped]
+      exact kept
     have moved : indexed.validators = applied.validators := by
       unfold updateNextWithdrawalIndex at indexedOk
       split at indexedOk
@@ -672,6 +669,28 @@ theorem processWithdrawals_validators {capella : .shapella ≤ fork}
   · simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok] at computed
     obtain ⟨_, _, _, _, applied⟩ := computed
     exact expected applied
+
+/-- Before Gloas, the steps of a block before its operations keep the validators.
+
+From Gloas the payload of the parent runs first, and its requests can start exits. -/
+theorem OperationsInput.validators_eq {block : BeaconBlock preset fork}
+    {input : BeaconState preset fork} (early : fork < .glamsterdam)
+    (started : OperationsInput config checks engine state block input) :
+    input.validators = state.validators :=
+  started.step_of (fun a b => b.validators = a.validators) (fun _ => rfl)
+    (fun one two => two.trans one) (fun gloas _ => absurd gloas (Nat.not_le_of_lt early))
+    (fun headed => by
+      obtain ⟨_, _, rfl⟩ := processBlockHeader_eq headed
+      rfl)
+    (fun _ executed => processBlockExecution_step_of (fun a b => b.validators = a.validators)
+      (fun _ => rfl) (fun one two => two.trans one) (fun _ same => same)
+      processWithdrawals_validators executed)
+    (fun revealed => by
+      obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq revealed
+      rfl)
+    (fun _ voted => by
+      obtain ⟨_, _, rest⟩ := processEth1Data_eq voted
+      rw [← rest])
 
 /-- A change to an execution address changes only the withdrawal credentials of the validator. -/
 theorem registryLifecycle_processBlsToExecutionChange {signed : SignedBLSToExecutionChange}

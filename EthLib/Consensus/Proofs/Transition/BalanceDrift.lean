@@ -371,22 +371,7 @@ theorem effectiveKept_block {f : Fork} {s t : BeaconState preset f}
     foldlM_ok_invariant (Kept a) (fun _ _ _ before stepped => trans before (each _ _ _ stepped))
       (refl a) computed
   obtain ⟨input, last, started, operated, -, synced⟩ := processBlock_operationsInput ok
-  have head : Kept s input :=
-    OperationsInput.step_of Kept refl trans
-      (fun gloas _ => absurd gloas (Nat.not_le_of_lt early))
-      (fun headed => by
-        obtain ⟨_, _, rfl⟩ := processBlockHeader_eq headed
-        exact same rfl)
-      (fun _ executed => processBlockExecution_step_of Kept refl trans
-        (fun _ validators => same validators)
-        (fun withdrawn => same (processWithdrawals_validators withdrawn)) executed)
-      (fun revealed => by
-        obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq revealed
-        exact same rfl)
-      (fun _ voted => by
-        obtain ⟨_, _, rest⟩ := processEth1Data_eq voted
-        exact same (by rw [← rest]))
-      started
+  have head : Kept s input := same (started.validators_eq early)
   obtain ⟨_, _, _, proposersOk, slashingsOk, attestedOk, rest⟩ :=
     processOperations_folds_of Kept refl trans
       (fun deposited => ⟨effectiveKept_processDeposit deposited,

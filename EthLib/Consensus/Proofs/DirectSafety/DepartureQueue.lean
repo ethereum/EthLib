@@ -3455,24 +3455,8 @@ private theorem CountCohortStep.block {f : Fork} {s t : BeaconState preset f}
       (by simp only [getCurrentEpoch, slot]; exact Nat.le_refl _)
   obtain ⟨input, last, started, operated, -, synced⟩ := processBlock_operationsInput ok
   have head : CountCohortStep config bound s input :=
-    OperationsInput.step_of (CountCohortStep config bound) (fun a => .refl a bound)
-      (fun one two => one.trans two) (fun gloas _ => absurd gloas notGloas)
-      (fun headed => by
-        obtain ⟨_, _, rfl⟩ := processBlockHeader_eq headed
-        exact .data bound rfl)
-      (fun _ executed => processBlockExecution_step_of (CountCohortStep config bound)
-        (fun a => .refl a bound) (fun one two => one.trans two)
-        (fun frame same => data same frame.slot)
-        (fun withdrawn => data (processWithdrawals_validators withdrawn)
-          (frame_processWithdrawals withdrawn).slot) executed)
-      (fun revealed => by
-        obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq revealed
-        exact .data bound rfl)
-      (fun _ voted => by
-        obtain ⟨_, _, rest⟩ := processEth1Data_eq voted
-        rw [← rest]
-        exact .data bound rfl)
-      started
+    data (started.validators_eq (Nat.lt_trans early (by decide)))
+      (frame_operationsInput started).slot
   obtain ⟨_, _, _, proposersOk, slashingsOk, attestedOk, rest⟩ :=
     processOperations_folds_of (CountCohortStep config bound) (fun a => .refl a bound)
       (fun one two => one.trans two) (CountCohortStep.processDeposit early bound)
