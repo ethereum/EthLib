@@ -2047,6 +2047,14 @@ The theorems state these properties.
 - No explicit peer enters a mesh.
 - An IWANT is answered only with messages that it named and that the message cache holds after the RPC.
 - A graylisted peer that is not explicit changes nothing.
+- A GRAFT for a joined topic within the backoff of its sender puts the sender out of the mesh.
+  This holds for a sender that is neither explicit nor graylisted.
+- No RPC removes an entry of the seen cache.
+- A forwarded or delivered message has its ID in the seen cache, with the time of the RPC.
+- So after a message is forwarded or delivered, no later RPC forwards or delivers its ID.
+  This holds within the lifetime of the seen cache, whatever RPCs come between, with any parameters, standing and validation.
+  The first and the last RPC use the same parameters and the same message ID function.
+  No theorem covers two messages with the same ID in one RPC: a lifetime of zero lets both through.
 
 The sources leave these points open, and the router takes one reading of each.
 
@@ -3284,6 +3292,20 @@ The undecided terminal total difficulty of step 7, `2^256 - 2^10`, is a named co
 EIP-3675 gives the mainnet terminal total difficulty but no mainnet terminal block hash or number, so EthLib gives no mainnet configuration.
 The Python tests run the OpenRPC example, the undecided total difficulty, a block number of 0, malformed and missing fields, the wrong number of parameters, another method, and a configuration out of range.
 
+`engine_exchangeCapabilities` and `engine_getClientVersionV1` tell each layer which methods and which program the other runs (`Engine/Capabilities.lean`).
+Each method succeeds exactly when its one parameter decodes, and then answers what the execution node holds, whatever the request says (`exchangeCapabilities_eq_ok_iff` and `getClientVersion_eq_ok_iff`, `Proofs/Capabilities.lean`).
+The parameters of `engine_exchangeCapabilities`, and a version object with a two-letter code, read back from their JSON (`exchangeCapabilitiesParams_json` and `clientVersionOfJson_json`).
+A version object decodes only with a code of two ASCII letters (`isClientCode_of_clientVersionOfJson`), in either case, since the source states no rule on the case.
+Which methods a node supports is its own choice, so the method takes the list to answer.
+EthLib fixes one table, the last version of each method that it defines, and builds from it the list of every version of each; the C exports read the versions of their methods from it (`methodVersion_eq_some_iff`).
+Every name in it has the form `engine_`, a method, `V` and a positive version, and no name appears twice (`isVersionedMethod_specifiedMethods`).
+So it does not hold `engine_exchangeCapabilities`, as step 3 of that method requires (`exchangeCapabilities_not_mem_specifiedMethods`).
+It holds a method at a version exactly when EthLib defines that method up to that version (`mem_specifiedMethods` and its corollaries for each method).
+The decoder of `engine_exchangeCapabilities` takes any string as a name, since the source does not say how to treat a request name without a version.
+What the methods leave to clients is not modelled: when to call them, logging, the reserved client codes, and the arrays that a multiplexer joins.
+The Python tests check the shape of the answer to the OpenRPC request of `engine_exchangeCapabilities`, whose example result is one client's list, and the full list that EthLib answers.
+They also run the example version and commit of `ClientVersionV1`, codes in either case, malformed and missing fields, and the wrong number of parameters.
+
 The theorems about `engine_forkchoiceUpdated` are in `Proofs/ForkchoiceUpdated.lean`.
 `forkchoiceUpdated_valid` shows that a valid answer selects a valid head that the execution layer holds, with its safe and finalized blocks on its chain.
 The exception is step 2 of the method, which `forkchoiceUpdated_of_belowFinalized` covers.
@@ -3689,6 +3711,20 @@ From Electra, pending consolidations succeed when their source and target indice
 The current epoch plus one must fit in 64 bits.
 The source is debited before the target is credited, so the budget also covers equal source and target indices.
 
+From Altair, the sync committee update succeeds (`processSyncCommitteeUpdates_ok`) under the assumptions of `SyncDrawable`, asked only when the next epoch starts a period.
+One validator active in the next epoch must have the largest effective balance of the draw (`drawCap`), and no validator may have more.
+Before Electra that balance is 32 ETH, and from Electra it is the cap of a compounding validator, 2048 ETH.
+This is an assumption on the registry, not a bound that an epoch keeps: such a validator may never join, or may exit.
+The draw accepts such a validator on every pass over the candidates, so the committee fills within as many passes as members; `balanceWeightedSearch_ok` proves it.
+Without such a validator, whether the draw ends before its counter reaches `2^64` depends on the hashes, and the theorem says nothing.
+Before Electra, every effective balance must be at most 32 ETH, which the bound of 2048 ETH in the other totality theorems does not imply.
+Every key of the registry must also pass key validation, as each deposit checks before a validator joins; no theorem yet proves that along a chain.
+The registry holds at most `2^40` validators, and the committee size times the registry size stays below `2^64`.
+The next epoch plus the length of the history of mixes must fit in 64 bits, and the seed lookahead must be shorter than that history.
+The products of the draw must fit in 64 bits (`DrawFits`), and the preset must give a sync committee of at least one member.
+The keys of an empty committee have no aggregate, so with no member the update would fail at every period.
+`drawFits_presets`, `seedLookahead_lt_presets` and `syncCommitteeSize_ne_zero_presets` prove the three facts on the preset for mainnet and minimal.
+
 From Gloas, builder payment settlement succeeds when an epoch has at least six slots.
 The registry must also be within its limit, and the sum of effective balances below `2^64`.
 Mainnet and minimal have 32 and 8 slots an epoch.
@@ -3866,12 +3902,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 431 operations and 49 size constants.
-The Python extension calls 431 of the operations and 49 of the constants.
+Lean exports 433 operations and 49 size constants.
+The Python extension calls 433 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-10603 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2061), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (176), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (80), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (147), `module.c` (1485), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (41), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (58), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (720), `x25519.c` (21), `xmss.c` (134).
+10627 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2061), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (194), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (80), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (147), `module.c` (1489), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (41), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (58), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (722), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

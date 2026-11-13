@@ -23,6 +23,8 @@ The base types state the patterns in [`base-types.yaml`][types].
 
 So the extra data of a payload has at most 32 bytes, as its type `bytesMax32` says.
 
+That is also the bound of the extra data of a block header.
+
 Step 1 of [`engine_newPayloadV3`][v3] asks for exactly the expected fields, with `null` as absent.
 
 Version 4 of the payload holds the fields of version 3, the block access list and the slot number.
@@ -44,7 +46,7 @@ open Lean (Json)
 open EthLib.Base
 open EthLib.Serialization.JsonRpc
 open EthLib.Execution.Rpc (withdrawal withdrawalJson)
-open EthLib.Execution.Blocks (Withdrawal)
+open EthLib.Execution.Blocks (Withdrawal MAX_EXTRA_DATA_BYTES)
 
 /-- A decoding that fails with an invalid parameter. -/
 abbrev Decode := Except EngineError
@@ -105,7 +107,7 @@ def anyPayload (j : Json) : Decode AnyPayload := do
     gasLimit := ← uint64 "gasLimit" (← get "gasLimit")
     gasUsed := ← uint64 "gasUsed" (← get "gasUsed")
     timestamp := ← uint64 "timestamp" (← get "timestamp")
-    extraData := ← bytesMax "extraData" 32 (← get "extraData")
+    extraData := ← bytesMax "extraData" MAX_EXTRA_DATA_BYTES (← get "extraData")
     baseFeePerGas := BitVec.ofNat 256 (← quantity "baseFeePerGas" 256 (← get "baseFeePerGas"))
     blockHash := ← fixed "blockHash" 32 (← get "blockHash")
     transactions := ← array "transactions" (bytes "transaction") (← get "transactions")

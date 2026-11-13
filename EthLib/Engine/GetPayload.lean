@@ -57,7 +57,7 @@ namespace EthLib.Engine
 
 open EthLib.Base
 open EthLib.Cryptography.Kzg
-open EthLib.Execution.Blocks (Block)
+open EthLib.Execution.Blocks (Block MAX_EXTRA_DATA_BYTES)
 open EthLib.Execution.Transactions
 open EthLib.Serialization.JsonRpc (dataJson fixed paramsArray fields hasExactly field array bytes
   quantity quantityJson listJson bool)
@@ -141,7 +141,7 @@ Its extra data must hold at most 32 bytes, the bound of [its type][p] in the Eng
 def payloadOfBlock {fork : Fork} (block : Block fork Transaction) :
     Option (ExecutionPayload fork) :=
   if h : .paris ≤ fork then
-    (ExecutionPayload.ofBlock h block).filter (·.extraData.size ≤ 32)
+    (ExecutionPayload.ofBlock h block).filter (·.extraData.size ≤ MAX_EXTRA_DATA_BYTES)
   else none
 
 /-- The block that a payload gives back, with the stored requests and access list.

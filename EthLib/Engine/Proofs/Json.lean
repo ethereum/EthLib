@@ -42,6 +42,7 @@ namespace EthLib.Engine.Json
 
 open EthLib.Base
 open EthLib.Serialization.JsonRpc
+open EthLib.Execution.Blocks (MAX_EXTRA_DATA_BYTES)
 
 /-- A failure with an invalid parameter is that error, never a value. -/
 @[simp] theorem invalid_eq {α : Type} (reason : String) :
@@ -226,7 +227,8 @@ private theorem bytesMax_dataJson (what : String) (n : Nat) (b : ByteArray) (h :
 
 /-- Fields that are those of a payload decode as a payload that reads back at its fork. -/
 private theorem anyPayload_of_perm {fork : Fork} (p : ExecutionPayload fork)
-    (extra : p.extraData.size ≤ 32) {j : Lean.Json} {fs : List (String × Lean.Json)}
+    (extra : p.extraData.size ≤ MAX_EXTRA_DATA_BYTES) {j : Lean.Json}
+    {fs : List (String × Lean.Json)}
     (hfs : fields "payload" j = .ok fs) (hp : fs.Perm (executionPayloadFields p)) :
     ∃ any, anyPayload j = .ok any ∧ any.atFork fork = .ok p := by
   have hd := names_distinct p
@@ -336,7 +338,7 @@ private theorem anyPayload_of_perm {fork : Fork} (p : ExecutionPayload fork)
 
 The extra data must hold at most 32 bytes, the bound of its type in the Engine API. -/
 theorem anyPayload_executionPayloadJson {fork : Fork} (p : ExecutionPayload fork)
-    (extra : p.extraData.size ≤ 32) :
+    (extra : p.extraData.size ≤ MAX_EXTRA_DATA_BYTES) :
     ∃ any, anyPayload (executionPayloadJson p) = .ok any ∧ any.atFork fork = .ok p := by
   obtain ⟨fs, hfs, hp⟩ := fields_mkObj "payload" (names_distinct p) (fields_present p)
   exact anyPayload_of_perm p extra hfs hp
@@ -348,7 +350,7 @@ It reads the payload at its fork, the block access list and the slot number.
 The extra data must hold at most 32 bytes, the bound of its type in the Engine API. -/
 theorem payloadV4_executionPayloadV4Json {fork : Fork} (p : ExecutionPayload fork)
     (blockAccessList : ByteArray) (slotNumber : UInt64) (dencun : .dencun ≤ fork)
-    (extra : p.extraData.size ≤ 32) :
+    (extra : p.extraData.size ≤ MAX_EXTRA_DATA_BYTES) :
     ∃ any, payloadV4 (executionPayloadV4Json p blockAccessList slotNumber) =
       .ok (any, blockAccessList, slotNumber) ∧ any.atFork fork = .ok p := by
   have h1 : Fork.shapella ≤ fork := Std.le_trans (by decide) dencun

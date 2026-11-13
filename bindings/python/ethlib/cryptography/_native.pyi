@@ -1685,6 +1685,14 @@ def engine_exchange_transition_configuration(terminal_total_difficulty: int, ter
     """The answer to an `engine_exchangeTransitionConfigurationV1` request, from a configuration."""
     ...
 
+def engine_exchange_capabilities(request: dict) -> list[str]:
+    """The answer to an `engine_exchangeCapabilities` request: the methods that EthLib defines."""
+    ...
+
+def engine_get_client_version(code: str, name: str, version: str, commit: bytes, request: dict) -> list[dict[str, str]]:
+    """The answer to an `engine_getClientVersionV1` request, from a version object."""
+    ...
+
 def engine_rewrite_params(method: str, params: list[Any]) -> list[Any]:
     """The parameters of an Engine API request, read by the decoder and written by the writer."""
     ...

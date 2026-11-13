@@ -2,6 +2,7 @@ module
 
 public import EthLib.Execution.Proofs.Transactions.Authorization
 public import EthLib.Execution.Proofs.Transactions.Burn
+public import EthLib.Execution.Proofs.Transactions.Candidate
 public import EthLib.Execution.Proofs.Transactions.Deletion
 public import EthLib.Execution.Proofs.Transactions.Envelope
 public import EthLib.Execution.Proofs.Transactions.Failed

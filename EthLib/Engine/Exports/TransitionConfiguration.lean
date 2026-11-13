@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Exports.Proofs.PyValue
+public import EthLib.Engine.Capabilities
 public import EthLib.Engine.TransitionConfiguration
 
 /-!
@@ -49,7 +50,8 @@ def exchangeTransitionConfigurationOf (args : Nat × Bytes32 × Nat × PyValue) 
   let request := request.toJson
   let some method := (request.getObjValAs? String "method").toOption
     | throw (0, "request: no method")
-  unless method = "engine_exchangeTransitionConfigurationV1" do throw (0, s!"no method {method}")
+  unless methodVersion "exchangeTransitionConfiguration" method = some 1 do
+    throw (0, s!"no method {method}")
   let answer ← (exchangeTransitionConfiguration own (request.getObjValD "params")).mapError
     fun e => (e.code, s!"engine error: {reprStr e}")
   return .ofJson (transitionConfigurationJson answer)
