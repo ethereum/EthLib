@@ -4463,8 +4463,8 @@ Points that remain open:
   EthLib reads the circular buffer at the epoch modulo its length and refuses no epoch.
   So an epoch outside the window that the buffer holds gives the mix of another epoch.
 - The source says that a state before finalization reports epoch 0 and the zero root.
-  `finalityCheckpoints_of_genesis_chainSteps` covers each state that a chain from the genesis state of deposits reaches.
-  No theorem ties the states of a store started from another anchor to such a chain.
+  `finalityCheckpoints_of_genesis_chainSteps` covers each state that a chain from the Phase 0 genesis state of deposits reaches.
+  No theorem yet ties the states that a store keeps, from any anchor, to such a chain, so the answers of the API are not covered.
 - The source puts the `Eth-Consensus-Version` header on the SSZ answers too; the SSZ export gives the bytes only, and the version is the one of the JSON answer.
 - The source fixes the proposer lookahead at 64 items, the mainnet value; EthLib follows the preset, as the SSZ type of the source does, so the minimal preset gives 16.
 - The schema describes the nine validator statuses in words only.

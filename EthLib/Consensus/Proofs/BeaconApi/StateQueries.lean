@@ -192,7 +192,7 @@ private theorem GenesisCheckpointsZero.of_advanceSlot {state after : BeaconState
 
 /-- One step of a chain keeps the zero root at epoch 0.
 
-The upgrades and the blocks copy the checkpoints. -/
+A slot keeps it, and the upgrades and the blocks copy the checkpoints. -/
 private theorem GenesisCheckpointsZero.of_chainStep {forked after : ForkedBeaconState preset}
     (holds : GenesisCheckpointsZero forked.state) (step : ChainStep config checks forked after) :
     GenesisCheckpointsZero after.state := by
