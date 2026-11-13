@@ -65,7 +65,7 @@ theorem verifyAndNotify_ok_true_iff {isValidBlockHash notifyNewPayload : Payload
       · exact .inr (hashes deneb)
       · exact .inl (Nat.lt_of_not_le deneb)
 
-/-- A payload request has some request lists exactly when, from Electra, its requests have them.
+/-- A payload request has given request lists exactly when, from Electra, its requests give them.
 
 Before Electra it has the only value of their type. -/
 theorem NewPayloadRequest.requestsList_eq_ok_iff {request : NewPayloadRequest preset fork}

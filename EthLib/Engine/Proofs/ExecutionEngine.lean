@@ -204,7 +204,7 @@ theorem executionEngine_accepts_iff {chain : BlockChain}
     · simp [found, hBlock, sinceValue, deneb, hashes deneb]
     · simp [hBlock, transition, Except.toBool]
 
-/-- From Bellatrix to Fulu, the execution layer accepts the payload request of a block as follows.
+/-- From Bellatrix to Fulu, the execution layer of a chain accepts a block's request as follows.
 
 From Electra, the request lists of the requests of the block must be well formed.
 
