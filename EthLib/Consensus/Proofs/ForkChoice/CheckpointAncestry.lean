@@ -87,19 +87,16 @@ private theorem Store.checkpointFields_of_computePulledUpTip {config : Config}
     (computed : store.computePulledUpTip config root = .ok after) :
     P after.justifiedCheckpoint ∧ P after.unrealizedJustifiedCheckpoint ∧
       Q after.finalizedCheckpoint ∧ Q after.unrealizedFinalizedCheckpoint := by
-  unfold Store.computePulledUpTip at computed
-  simp only [bind_ok_iff] at computed
-  obtain ⟨state, found, pulled, processed, block, -, epoch, -, computed⟩ := computed
-  obtain ⟨justified, finalized⟩ := counted state pulled (Store.blockState_ok_iff.mp found)
-    (mapError_ok_iff.mp processed)
-  have unrealized := Store.checkpointFields_of_updateUnrealizedCheckpoints
-    (store := { store with unrealizedJustifications :=
-      store.unrealizedJustifications.insert root pulled.currentJustifiedCheckpoint })
-    fields justified finalized
-  split at computed <;> simp only [pure, Except.pure, Except.ok.injEq] at computed <;>
-    subst after
-  · exact Store.checkpointFields_of_updateCheckpoints unrealized justified finalized
+  obtain ⟨-, -, -, -, state, pulled, found, processed, moved, which, movedJustified,
+    movedFinalized, movedUnrealized, movedUnrealizedFinal⟩ :=
+    Store.computePulledUpTip_frame computed
+  obtain ⟨justified, finalized⟩ := counted state pulled found processed
+  have unrealized :=
+    Store.checkpointFields_of_updateUnrealizedCheckpoints fields justified finalized
+  rw [movedJustified, movedFinalized, movedUnrealized, movedUnrealizedFinal]
+  rcases which with rfl | rfl
   · exact unrealized
+  · exact Store.checkpointFields_of_updateCheckpoints unrealized justified finalized
 
 /-- A tick within a slot realizes only the unrealized checkpoints. -/
 private theorem Store.checkpointFields_of_onTickPerSlot {config : Config}
@@ -109,39 +106,12 @@ private theorem Store.checkpointFields_of_onTickPerSlot {config : Config}
     (ticked : store.onTickPerSlot config time = .ok after) :
     P after.justifiedCheckpoint ∧ P after.unrealizedJustifiedCheckpoint ∧
       Q after.finalizedCheckpoint ∧ Q after.unrealizedFinalizedCheckpoint := by
-  unfold Store.onTickPerSlot at ticked
-  simp only [bind_ok_iff] at ticked
-  obtain ⟨previous, -, current, -, ticked⟩ := ticked
-  split at ticked <;>
-    obtain ⟨offset, -, ticked⟩ := ticked <;>
-    split at ticked <;>
-    simp only [pure, Except.pure, Except.ok.injEq] at ticked <;> subst after <;>
-    first
-    | exact Store.checkpointFields_of_updateCheckpoints fields fields.2.1 fields.2.2.2
-    | exact fields
-
-/-- Catch-up keeps a property of each pair of checkpoints through every tick. -/
-private theorem Store.checkpointFields_of_catchUp {config : Config}
-    {store after : Store preset fork} {slot : Slot} {P Q : Checkpoint → Prop}
-    (fields : P store.justifiedCheckpoint ∧ P store.unrealizedJustifiedCheckpoint ∧
-      Q store.finalizedCheckpoint ∧ Q store.unrealizedFinalizedCheckpoint)
-    (caught : Store.catchUp config store slot = .ok after) :
-    P after.justifiedCheckpoint ∧ P after.unrealizedJustifiedCheckpoint ∧
-      Q after.finalizedCheckpoint ∧ Q after.unrealizedFinalizedCheckpoint := by
-  induction store using Store.catchUp.induct config slot with
-  | _ store ih =>
-    rw [Store.catchUp.eq_1] at caught
-    simp only [bind_ok_iff] at caught
-    obtain ⟨current, -, caught⟩ := caught
-    split at caught
-    · simp only [bind_ok_iff] at caught
-      obtain ⟨next, -, nextTime, -, ticked, tick, caught⟩ := caught
-      split at caught
-      · exact ih ticked ‹_› (Store.checkpointFields_of_onTickPerSlot fields tick) caught
-      · cases caught
-    · simp only [pure, Except.pure, Except.ok.injEq] at caught
-      subst after
-      exact fields
+  obtain ⟨-, -, -, -, -, moved, which, movedJustified, movedFinalized, movedUnrealized,
+    movedUnrealizedFinal⟩ := Store.onTickPerSlot_frame ticked
+  rw [movedJustified, movedFinalized, movedUnrealized, movedUnrealizedFinal]
+  rcases which with rfl | rfl
+  · exact fields
+  · exact Store.checkpointFields_of_updateCheckpoints fields fields.2.1 fields.2.2.2
 
 /-- A full tick keeps a property of each pair of checkpoints, through catch-up and its last tick.
 -/
@@ -155,8 +125,10 @@ private theorem Store.checkpointFields_of_onTick {config : Config}
   unfold Store.onTick at ticked
   simp only [bind_ok_iff] at ticked
   obtain ⟨slot, -, caught, catchUp, ticked⟩ := ticked
-  exact Store.checkpointFields_of_onTickPerSlot
-    (Store.checkpointFields_of_catchUp fields catchUp) ticked
+  exact Store.checkpointFields_of_onTickPerSlot (Store.catchUp_preserves
+    (P := fun s => P s.justifiedCheckpoint ∧ P s.unrealizedJustifiedCheckpoint ∧
+      Q s.finalizedCheckpoint ∧ Q s.unrealizedFinalizedCheckpoint)
+    Store.checkpointFields_of_onTickPerSlot fields catchUp) ticked
 
 /-- An accepted block takes new checkpoints only from held states and their pull-ups. -/
 private theorem Store.checkpointFields_of_onBlock {config : Config} {checks : SignatureChecks}

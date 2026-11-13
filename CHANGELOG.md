@@ -50,12 +50,23 @@ Not yet released.
   The keys of the record come out in byte order.
   The JSON format and the C and Python signatures are unchanged.
 
-- A checkpoint of a fork-choice store comes from the anchor, a held state or its pull-up, and lies on the chain of its source ([#1423](https://github.com/ethereum/EthLib/issues/1423)).
+- A checkpoint of a fork-choice store comes from the anchor, a held state or its pull-up ([#1423](https://github.com/ethereum/EthLib/issues/1423)).
+  After the anchor epoch, a checkpoint of a held state or its pull-up lies on the chain of that state's block.
+  The one exception is a held state on that chain that hashes to the zero root.
   No C export or Python function changes.
   In Lean, the new module `Consensus.Proofs.ForkChoice.CheckpointAncestry` states this for a reachable store.
   `Store.storeTargetCheckpointState_frame`, `Store.onAttestation_frame`, `Store.onAttesterSlashing_frame`, `Store.recordBlockTimeliness_frame` and `Store.updateProposerBoostRoot_frame` end with four new conjuncts.
   They state that the justified, finalized, unrealized justified and unrealized finalized checkpoints are unchanged.
-  A caller that destructures their result adds four patterns at the end, and a projection such as `.2.2` of the attestation frames becomes `.2.2.1`.
+  `Store.onTickPerSlot_frame` ends with a new conjunct: the four checkpoints are those of the store, or those of `updateCheckpoints` with its unrealized checkpoints.
+  `Store.computePulledUpTip_frame` ends with a new conjunct: the held state of the tip and its successful justification and finalization, and the four checkpoints that come from them.
+  A caller that destructures one of these seven results adds one pattern, and only if its last pattern named the old last conjunct.
+  A pattern that ends in `-` needs no change.
+  A projection of the old last conjunct gains `.1`.
+  So `.2.2` of `Store.onAttestation_frame` and `Store.onAttesterSlashing_frame` becomes `.2.2.1`, and `.2.2.2.2` of `Store.onTickPerSlot_frame` becomes `.2.2.2.2.1`.
+  The `.2.2.2` of the other four frames becomes `.2.2.2.1`.
+  The new `Store.catchUp_preserves` states that catch-up keeps each property of the store that every tick within a slot keeps.
+  It has the form of `Store.onBlockWithVotes_preserves`.
+  `Store.catchUp_frame`, `Store.catchUp_ordered` and the catch-up step of `Store.onTick_checkpointStates_latestMessages` now read it, with unchanged statements.
   The new `Store.Reachable.linked_of_unknown` gives the links of a reachable store whose anchor parent is unknown, and `Store.Reachable.parentsBelow` keeps its statement.
   The new `getBlockRootAtSlot_advanceSlots_cases` gives the roots that a state within a transition records.
 

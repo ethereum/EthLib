@@ -122,65 +122,6 @@ theorem updateUnrealizedCheckpoints_ordered {justified finalized : Checkpoint}
   · exact UInt64.le_trans le (le_of_not_lt' j)
   · exact o2
 
-/-- The tip pulled up to the end of its epoch keeps the checkpoints ordered. -/
-theorem computePulledUpTip_ordered {root : Root}
-    (ordered : store.EpochsOrdered) (holds : store.StatesHold)
-    (pulled : store.computePulledUpTip config root = .ok after) : after.EpochsOrdered := by
-  unfold computePulledUpTip at pulled
-  simp only [bind_ok_iff] at pulled
-  obtain ⟨state, found, pulledState, weighed, block, -, epoch, -, pulled⟩ := pulled
-  have invariant : Invariant state := holds (blockState_ok_iff.mp found)
-  have le := finalized_le_currentJustified
-    (processJustificationAndFinalization_ordered invariant.ordered invariant.settled
-      (Base.mapError_ok_iff.mp weighed)).1
-  have unrealized := updateUnrealizedCheckpoints_ordered (store := { store with
-    unrealizedJustifications :=
-      store.unrealizedJustifications.insert root pulledState.currentJustifiedCheckpoint })
-    ordered le
-  split at pulled <;> simp only [pure, Except.pure, Except.ok.injEq] at pulled <;> subst pulled
-  · exact updateCheckpoints_ordered unrealized le
-  · exact unrealized
-
-/-- A tick within a slot keeps the checkpoints ordered. -/
-theorem onTickPerSlot_ordered {timeMs : UInt64} (ordered : store.EpochsOrdered)
-    (ticked : store.onTickPerSlot config timeMs = .ok after) : after.EpochsOrdered := by
-  unfold onTickPerSlot at ticked
-  simp only [bind_ok_iff] at ticked
-  obtain ⟨previous, -, current, -, ticked⟩ := ticked
-  split at ticked <;>
-    · obtain ⟨_, _, ticked⟩ := ticked
-      split at ticked <;> simp only [pure, Except.pure, Except.ok.injEq] at ticked <;>
-        subst ticked
-      · exact updateCheckpoints_ordered ordered ordered.2
-      · exact ordered
-
-/-- The catch-up loop keeps the checkpoints ordered. -/
-theorem catchUp_ordered {tickSlot : Slot} {start : Store preset fork}
-    (ordered : start.EpochsOrdered) (caught : catchUp config start tickSlot = .ok after) :
-    after.EpochsOrdered := by
-  induction start using catchUp.induct config tickSlot with
-  | _ start ih =>
-    rw [catchUp.eq_1] at caught
-    simp only [bind_ok_iff] at caught
-    obtain ⟨current, -, caught⟩ := caught
-    split at caught
-    · simp only [bind_ok_iff] at caught
-      obtain ⟨next, -, nextTimeMs, -, ticked, tick, caught⟩ := caught
-      split at caught
-      · exact ih ticked ‹_› (onTickPerSlot_ordered ordered tick) caught
-      · cases caught
-    · simp only [pure, Except.pure, Except.ok.injEq] at caught
-      subst caught
-      exact ordered
-
-/-- A tick keeps the checkpoints ordered. -/
-theorem onTick_ordered {timeMs : UInt64} (ordered : store.EpochsOrdered)
-    (ticked : store.onTick config timeMs = .ok after) : after.EpochsOrdered := by
-  unfold onTick at ticked
-  simp only [bind_ok_iff] at ticked
-  obtain ⟨tickSlot, -, caught, caughtUp, ticked⟩ := ticked
-  exact onTickPerSlot_ordered (catchUp_ordered ordered caughtUp) ticked
-
 /-- A store with the checkpoints of an ordered store is ordered. -/
 private theorem EpochsOrdered.of_checkpoints (ordered : store.EpochsOrdered)
     (justified : after.justifiedCheckpoint = store.justifiedCheckpoint)
@@ -193,6 +134,47 @@ private theorem EpochsOrdered.of_checkpoints (ordered : store.EpochsOrdered)
   unfold EpochsOrdered
   rw [justified, finalized, unrealizedJustified, unrealizedFinalized]
   exact ordered
+
+/-- The tip pulled up to the end of its epoch keeps the checkpoints ordered. -/
+theorem computePulledUpTip_ordered {root : Root}
+    (ordered : store.EpochsOrdered) (holds : store.StatesHold)
+    (pulled : store.computePulledUpTip config root = .ok after) : after.EpochsOrdered := by
+  obtain ⟨-, -, -, -, state, counted, found, countedOk, moved, which, justified, finalized,
+    unrealizedJustified, unrealizedFinalized⟩ := computePulledUpTip_frame pulled
+  have invariant : Invariant state := holds found
+  have le := finalized_le_currentJustified
+    (processJustificationAndFinalization_ordered invariant.ordered invariant.settled countedOk).1
+  have unrealized := updateUnrealizedCheckpoints_ordered ordered le
+  refine EpochsOrdered.of_checkpoints ?_ justified finalized unrealizedJustified
+    unrealizedFinalized
+  rcases which with rfl | rfl
+  · exact unrealized
+  · exact updateCheckpoints_ordered unrealized le
+
+/-- A tick within a slot keeps the checkpoints ordered. -/
+theorem onTickPerSlot_ordered {timeMs : UInt64} (ordered : store.EpochsOrdered)
+    (ticked : store.onTickPerSlot config timeMs = .ok after) : after.EpochsOrdered := by
+  obtain ⟨-, -, -, -, -, moved, which, justified, finalized, unrealizedJustified,
+    unrealizedFinalized⟩ := onTickPerSlot_frame ticked
+  refine EpochsOrdered.of_checkpoints ?_ justified finalized unrealizedJustified
+    unrealizedFinalized
+  rcases which with rfl | rfl
+  · exact ordered
+  · exact updateCheckpoints_ordered ordered ordered.2
+
+/-- The catch-up loop keeps the checkpoints ordered. -/
+theorem catchUp_ordered {tickSlot : Slot} {start : Store preset fork}
+    (ordered : start.EpochsOrdered) (caught : catchUp config start tickSlot = .ok after) :
+    after.EpochsOrdered :=
+  catchUp_preserves (fun ordered tick => onTickPerSlot_ordered ordered tick) ordered caught
+
+/-- A tick keeps the checkpoints ordered. -/
+theorem onTick_ordered {timeMs : UInt64} (ordered : store.EpochsOrdered)
+    (ticked : store.onTick config timeMs = .ok after) : after.EpochsOrdered := by
+  unfold onTick at ticked
+  simp only [bind_ok_iff] at ticked
+  obtain ⟨tickSlot, -, caught, caughtUp, ticked⟩ := ticked
+  exact onTickPerSlot_ordered (catchUp_ordered ordered caughtUp) ticked
 
 /-- An attestation keeps the checkpoints. -/
 theorem onAttestation_ordered {checks : SignatureChecks} {attestation : Attestation preset fork}
@@ -345,23 +327,13 @@ private theorem onTickPerSlot_checkpointStates_latestMessages {timeMs : UInt64}
 private theorem catchUp_checkpointStates_latestMessages {tickSlot : Slot}
     {start : Store preset fork} (caught : catchUp config start tickSlot = .ok after) :
     after.checkpointStates = start.checkpointStates ∧
-      after.latestMessages = start.latestMessages := by
-  induction start using catchUp.induct config tickSlot with
-  | _ start ih =>
-    rw [catchUp.eq_1] at caught
-    simp only [bind_ok_iff] at caught
-    obtain ⟨current, -, caught⟩ := caught
-    split at caught
-    · simp only [bind_ok_iff] at caught
-      obtain ⟨next, -, nextTimeMs, -, ticked, tick, caught⟩ := caught
-      split at caught
-      · have rest := ih ticked ‹_› caught
-        have step := onTickPerSlot_checkpointStates_latestMessages tick
-        exact ⟨rest.1.trans step.1, rest.2.trans step.2⟩
-      · cases caught
-    · simp only [pure, Except.pure, Except.ok.injEq] at caught
-      subst caught
-      exact ⟨rfl, rfl⟩
+      after.latestMessages = start.latestMessages :=
+  catchUp_preserves (P := fun s => s.checkpointStates = start.checkpointStates ∧
+      s.latestMessages = start.latestMessages)
+    (fun same tick => by
+      have step := onTickPerSlot_checkpointStates_latestMessages tick
+      exact ⟨step.1.trans same.1, step.2.trans same.2⟩)
+    ⟨rfl, rfl⟩ caught
 
 /-- A tick keeps the states of the checkpoints and the latest votes. -/
 theorem onTick_checkpointStates_latestMessages {timeMs : UInt64}

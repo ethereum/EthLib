@@ -217,24 +217,60 @@ theorem SameClock.getCurrentSlot {after : Store preset fork} (same : SameClock s
 
 /-- The tip pulled up to the end of its epoch lowers neither epoch, and keeps the blocks.
 
-It also keeps the clock. -/
+It also keeps the clock.
+
+It counts the held state of the tip, and its four checkpoints come from that count.
+
+They are those of the store with the unrealized checkpoints moved, then perhaps the others too. -/
 theorem computePulledUpTip_frame {root : Root} {after : Store preset fork}
     (pulled : store.computePulledUpTip config root = .ok after) :
     store.EpochsLe after ∧ after.blocks = store.blocks ∧ after.blockStates = store.blockStates ∧
-      SameClock store after := by
+      SameClock store after ∧ ∃ state counted, store.blockStates[root]? = some state ∧
+        processJustificationAndFinalization state = .ok counted ∧ ∃ moved : Store preset fork,
+          (moved = store.updateUnrealizedCheckpoints counted.currentJustifiedCheckpoint
+              counted.finalizedCheckpoint ∨
+            moved = (store.updateUnrealizedCheckpoints counted.currentJustifiedCheckpoint
+              counted.finalizedCheckpoint).updateCheckpoints counted.currentJustifiedCheckpoint
+                counted.finalizedCheckpoint) ∧
+          after.justifiedCheckpoint = moved.justifiedCheckpoint ∧
+          after.finalizedCheckpoint = moved.finalizedCheckpoint ∧
+          after.unrealizedJustifiedCheckpoint = moved.unrealizedJustifiedCheckpoint ∧
+          after.unrealizedFinalizedCheckpoint = moved.unrealizedFinalizedCheckpoint := by
   unfold computePulledUpTip at pulled
   simp only [bind_ok_iff] at pulled
-  obtain ⟨state, -, pulledState, -, block, -, epoch, -, pulled⟩ := pulled
+  obtain ⟨state, found, counted, countedOk, block, -, epoch, -, pulled⟩ := pulled
+  have origin : store.blockStates[root]? = some state ∧
+      processJustificationAndFinalization state = .ok counted :=
+    ⟨blockState_ok_iff.mp found, mapError_ok_iff.mp countedOk⟩
   split at pulled <;> simp only [pure, Except.pure, Except.ok.injEq] at pulled <;> subst pulled
-  · exact ⟨(EpochsLe.of_eq (by simp) (by simp)).trans (updateCheckpoints_epochsLe _ _),
-      by simp, by simp, by simp, by simp⟩
-  · exact ⟨EpochsLe.of_eq (by simp) (by simp), by simp, by simp, by simp, by simp⟩
+  · refine ⟨(EpochsLe.of_eq (by simp) (by simp)).trans (updateCheckpoints_epochsLe _ _),
+      by simp, by simp, ⟨by simp, by simp⟩, state, counted, origin.1, origin.2, _, .inr rfl, ?_⟩
+    by_cases a :
+        store.unrealizedJustifiedCheckpoint.epoch < counted.currentJustifiedCheckpoint.epoch <;>
+      by_cases b : store.unrealizedFinalizedCheckpoint.epoch < counted.finalizedCheckpoint.epoch <;>
+      by_cases c : store.justifiedCheckpoint.epoch < counted.currentJustifiedCheckpoint.epoch <;>
+      by_cases d : store.finalizedCheckpoint.epoch < counted.finalizedCheckpoint.epoch <;>
+      simp [updateCheckpoints, updateUnrealizedCheckpoints, a, b, c, d]
+  · refine ⟨EpochsLe.of_eq (by simp) (by simp), by simp, by simp, ⟨by simp, by simp⟩, state,
+      counted, origin.1, origin.2, _, .inl rfl, ?_⟩
+    by_cases a :
+        store.unrealizedJustifiedCheckpoint.epoch < counted.currentJustifiedCheckpoint.epoch <;>
+      by_cases b : store.unrealizedFinalizedCheckpoint.epoch < counted.finalizedCheckpoint.epoch <;>
+      simp [updateUnrealizedCheckpoints, a, b]
 
-/-- A tick within a slot sets the clock to its time, keeps the blocks and lowers no epoch. -/
+/-- A tick within a slot sets the clock to its time, keeps the blocks and lowers no epoch.
+
+Its four checkpoints are those of the store, or those with the unrealized checkpoints realized. -/
 theorem onTickPerSlot_frame {timeMs : UInt64} {after : Store preset fork}
     (ticked : store.onTickPerSlot config timeMs = .ok after) :
     after.timeMs = timeMs ∧ after.genesisTimeMs = store.genesisTimeMs ∧ store.EpochsLe after ∧
-      after.blocks = store.blocks ∧ after.blockStates = store.blockStates := by
+      after.blocks = store.blocks ∧ after.blockStates = store.blockStates ∧
+      ∃ moved : Store preset fork, (moved = store ∨ moved = store.updateCheckpoints
+          store.unrealizedJustifiedCheckpoint store.unrealizedFinalizedCheckpoint) ∧
+        after.justifiedCheckpoint = moved.justifiedCheckpoint ∧
+        after.finalizedCheckpoint = moved.finalizedCheckpoint ∧
+        after.unrealizedJustifiedCheckpoint = moved.unrealizedJustifiedCheckpoint ∧
+        after.unrealizedFinalizedCheckpoint = moved.unrealizedFinalizedCheckpoint := by
   unfold onTickPerSlot at ticked
   simp only [bind_ok_iff] at ticked
   obtain ⟨previous, -, current, -, ticked⟩ := ticked
@@ -243,18 +279,24 @@ theorem onTickPerSlot_frame {timeMs : UInt64} {after : Store preset fork}
       split at ticked
       · simp only [pure, Except.pure, Except.ok.injEq] at ticked
         subst ticked
-        refine ⟨by simp, by simp, ?_, by simp, by simp⟩
-        exact (EpochsLe.of_eq (by rfl) (by rfl)).trans (updateCheckpoints_epochsLe _ _)
+        refine ⟨by simp, by simp, ?_, by simp, by simp, _, .inr rfl, ?_⟩
+        · exact (EpochsLe.of_eq (by rfl) (by rfl)).trans (updateCheckpoints_epochsLe _ _)
+        · by_cases a :
+              store.justifiedCheckpoint.epoch < store.unrealizedJustifiedCheckpoint.epoch <;>
+            by_cases b :
+              store.finalizedCheckpoint.epoch < store.unrealizedFinalizedCheckpoint.epoch <;>
+            simp [updateCheckpoints, a, b]
       · simp only [pure, Except.pure, Except.ok.injEq] at ticked
         subst ticked
-        exact ⟨rfl, rfl, EpochsLe.of_eq (by rfl) (by rfl), rfl, rfl⟩
+        exact ⟨rfl, rfl, EpochsLe.of_eq (by rfl) (by rfl), rfl, rfl, _, .inl rfl, rfl, rfl, rfl,
+          rfl⟩
 
-
-/-- The catch-up loop keeps the time of genesis and the blocks, and lowers no epoch. -/
-theorem catchUp_frame {tickSlot : Slot} {start after : Store preset fork}
-    (caught : catchUp config start tickSlot = .ok after) :
-    after.genesisTimeMs = start.genesisTimeMs ∧ start.EpochsLe after ∧
-      after.blocks = start.blocks ∧ after.blockStates = start.blockStates := by
+/-- The catch-up loop keeps every property of a store that each tick within a slot keeps. -/
+theorem catchUp_preserves {P : Store preset fork → Prop} {tickSlot : Slot}
+    {start after : Store preset fork}
+    (tick : ∀ {s s' : Store preset fork} {timeMs : UInt64}, P s →
+      s.onTickPerSlot config timeMs = .ok s' → P s')
+    (holds : P start) (caught : catchUp config start tickSlot = .ok after) : P after := by
   induction start using catchUp.induct config tickSlot with
   | _ start ih =>
     rw [catchUp.eq_1] at caught
@@ -262,15 +304,25 @@ theorem catchUp_frame {tickSlot : Slot} {start after : Store preset fork}
     obtain ⟨current, -, caught⟩ := caught
     split at caught
     · simp only [bind_ok_iff] at caught
-      obtain ⟨next, -, nextTimeMs, -, ticked, tick, caught⟩ := caught
+      obtain ⟨next, -, nextTimeMs, -, ticked, ticking, caught⟩ := caught
       split at caught
-      · obtain ⟨g, le, b, bs⟩ := ih ticked ‹_› caught
-        obtain ⟨-, g', le', b', bs'⟩ := onTickPerSlot_frame tick
-        exact ⟨g.trans g', le'.trans le, b.trans b', bs.trans bs'⟩
+      · exact ih ticked ‹_› (tick holds ticking) caught
       · cases caught
     · simp only [pure, Except.pure, Except.ok.injEq] at caught
       subst caught
-      exact ⟨rfl, EpochsLe.refl _, rfl, rfl⟩
+      exact holds
+
+/-- The catch-up loop keeps the time of genesis and the blocks, and lowers no epoch. -/
+theorem catchUp_frame {tickSlot : Slot} {start after : Store preset fork}
+    (caught : catchUp config start tickSlot = .ok after) :
+    after.genesisTimeMs = start.genesisTimeMs ∧ start.EpochsLe after ∧
+      after.blocks = start.blocks ∧ after.blockStates = start.blockStates :=
+  catchUp_preserves (P := fun s => s.genesisTimeMs = start.genesisTimeMs ∧ start.EpochsLe s ∧
+      s.blocks = start.blocks ∧ s.blockStates = start.blockStates)
+    (fun ⟨g, le, b, bs⟩ tick => by
+      obtain ⟨-, g', le', b', bs', -⟩ := onTickPerSlot_frame tick
+      exact ⟨g'.trans g, le.trans le', b'.trans b, bs'.trans bs⟩)
+    ⟨rfl, EpochsLe.refl _, rfl, rfl⟩ caught
 
 /-- A tick sets the clock to its time, keeps the blocks and lowers no epoch. -/
 theorem onTick_frame {timeMs : UInt64} {after : Store preset fork}
@@ -281,7 +333,7 @@ theorem onTick_frame {timeMs : UInt64} {after : Store preset fork}
   simp only [bind_ok_iff] at ticked
   obtain ⟨tickSlot, -, caught, caughtUp, ticked⟩ := ticked
   obtain ⟨-, le, b, bs⟩ := catchUp_frame caughtUp
-  obtain ⟨time, -, le', b', bs'⟩ := onTickPerSlot_frame ticked
+  obtain ⟨time, -, le', b', bs', -⟩ := onTickPerSlot_frame ticked
   exact ⟨time, le.trans le', b'.trans b, bs'.trans bs⟩
 
 /-- After a tick, the current slot is the slot of the time of the tick. -/
@@ -1065,7 +1117,7 @@ theorem onBlock_sameClock {checks : SignatureChecks} {sources : BlockSources pre
     obtain ⟨_, _, rfl⟩ := recordBlockPtcVotes_onlyPtcVotes vote
     have first := (recordBlockTimeliness_frame record).2.2.2.1
     have second := (updateProposerBoostRoot_frame boost).2.2.2.1
-    have third := (computePulledUpTip_frame added).2.2.2
+    have third := (computePulledUpTip_frame added).2.2.2.1
     refine ⟨?_, ?_⟩
     · rw [third.1, updateCheckpoints_timeMs, second.1, first.1]
     · rw [third.2, updateCheckpoints_genesisTimeMs, second.2, first.2]
