@@ -558,4 +558,49 @@ theorem weight_withBoost (boosted : Option β) (score : ℕ) (b : β) :
   rw [Nat.add_comm]
   rfl
 
+/-- The supporters of a block in a set of validators have the same stake with and without the boost.
+
+With the boost, the set is a set of voters that holds a validator exactly when the old set does.
+
+The boost is not in it, so it adds nothing. -/
+theorem stake_supporters_withBoost (J : Set ν) [DecidablePred (· ∈ J)] (J' : Set (Option ν))
+    [DecidablePred (· ∈ J')] (hsome : ∀ v, some v ∈ J' ↔ v ∈ J) (hnone : none ∉ J')
+    (boosted : Option β) (score : ℕ) (b : β) :
+    stake (boostStake w score) {o ∈ supporters V.insertNone (G.withBoost boosted) b | o ∈ J'} =
+      stake w {v ∈ supporters V G b | v ∈ J} := by
+  -- The lifted supporters are the supporters in `J`, each as a voter of the view with the boost.
+  have lifted : {o ∈ supporters V.insertNone (G.withBoost boosted) b | o ∈ J'} =
+      {v ∈ supporters V G b | v ∈ J}.map Function.Embedding.some := by
+    ext o
+    cases o with
+    | none => simp [hnone]
+    | some v =>
+      have inner : some v ∈ supporters V.insertNone (G.withBoost boosted) b ↔
+          v ∈ supporters V G b := by
+        classical
+        unfold supporters
+        rw [Finset.mem_filter, Finset.mem_filter, Finset.some_mem_insertNone]
+        rfl
+      simp only [Finset.mem_filter, Finset.mem_map, Function.Embedding.some_apply,
+        Option.some.injEq, exists_eq_right, inner, hsome]
+  rw [lifted, stake, Finset.sum_map, stake]
+  rfl
+
+/-- With the boost, two distinct children of one block together gain at most the score of the boost.
+
+The boosted block lies in the subtree of at most one of them. -/
+theorem weight_withBoost_add_le {p c c' : β} (hc : T.IsChild c p) (hc' : T.IsChild c' p)
+    (hne : c ≠ c') (boosted : Option β) (score : ℕ) :
+    weight V.insertNone (boostStake w score) (G.withBoost boosted) c +
+        weight V.insertNone (boostStake w score) (G.withBoost boosted) c' ≤
+      weight V w G c + weight V w G c' + score := by
+  classical
+  rw [weight_withBoost, weight_withBoost]
+  split_ifs with h h'
+  · obtain ⟨m, rfl, hm⟩ := h
+    obtain ⟨m', hm', hm''⟩ := h'
+    cases hm'
+    exact (hc.disjoint hc' hne hm hm'').elim
+  all_goals omega
+
 end EthLib.Consensus.Models.ForkChoice
