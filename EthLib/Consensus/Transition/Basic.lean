@@ -293,12 +293,13 @@ def liftSsz {α : Type} (result : Except Err α) : Except TransitionError α :=
 
 /-- The BLS signature checks that the transition runs.
 
-Each takes the public keys, the message and the signature, all as bytes. -/
+Each takes the public keys, the message as bytes, and the signature. -/
 structure SignatureChecks where
   /-- The check of one signature by one key. -/
-  verify : ByteArray → ByteArray → ByteArray → Bool
+  verify : Cryptography.Bls.BLSPubkey → ByteArray → Cryptography.Bls.BLSSignature → Bool
   /-- The check of one signature by several keys on one message. -/
-  fastAggregateVerify : Array ByteArray → ByteArray → ByteArray → Bool
+  fastAggregateVerify :
+    Array Cryptography.Bls.BLSPubkey → ByteArray → Cryptography.Bls.BLSSignature → Bool
 
 /-- The checks of the BLS signature scheme, which the transition runs on a real chain. -/
 def SignatureChecks.bls : SignatureChecks where

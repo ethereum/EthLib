@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Bytes
 public import EthLib.Cryptography.Bls.HashToCurve
 public import EthLib.Cryptography.Bls.Pairing
 public import EthLib.Cryptography.Bls.Errors
@@ -12,6 +13,10 @@ The signatures of the IRTF BLS signature draft, version 4, and the Ethereum wrap
 <https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signature-04>
 
 Ethereum uses the proof-of-possession scheme of §3.3, with keys in `G1` and signatures in `G2`.
+
+The scheme operations take public keys and signatures with their size in the type.
+
+The core verifications of §2.7 and §2.9 take the encodings as bytes, as the draft writes them.
 -/
 
 @[expose] public section
@@ -28,7 +33,7 @@ end EthLib.Cryptography.Bls
 
 namespace EthLib.Cryptography.Bls.Signatures
 
-open EthLib.Cryptography.Bls
+open EthLib.Base EthLib.Cryptography.Bls
 
 /-- The domain separation tag for messages in the proof-of-possession ciphersuite (§4.2.3). -/
 def DST : ByteArray :=
@@ -108,10 +113,11 @@ def coreVerify (pk msg sig dst : ByteArray) : Bool :=
 It fails on an empty list and on a signature that does not decode.
 
 As in the draft, it does not check that a signature lies in the subgroup. -/
-def aggregate (sigs : Array ByteArray) : Except BlsError BLSSignature := do
+def aggregate (sigs : Array BLSSignature) : Except BlsError BLSSignature := do
   if sigs.isEmpty then throw .emptySignatureList
   -- Adding a point to the point at infinity returns that point exactly.
-  let agg ← sigs.foldlM (fun agg sig => return G2.add agg (← G2.uncompress sig)) G2.zero
+  let agg ← sigs.foldlM
+    (fun agg sig => return G2.add agg (← G2.uncompress (packBytes sig))) G2.zero
   return pointToSignature agg
 
 /-- The core aggregate verification: check `e(P, R) = prod_i e(PK_i, H(message_i))` (§2.9).
@@ -141,13 +147,15 @@ The key is secret, and this function does not run in constant time. -/
 def sign (sk : SecretKey) (msg : ByteArray) : Except BlsError BLSSignature := coreSign sk msg DST
 
 /-- Verify a signature under the message tag. -/
-def verify (pk msg sig : ByteArray) : Bool := coreVerify pk msg sig DST
+def verify (pk : BLSPubkey) (msg : ByteArray) (sig : BLSSignature) : Bool :=
+  coreVerify (packBytes pk) msg (packBytes sig) DST
 
 /-- Verify an aggregate signature on several messages under the message tag.
 
 The scheme does not require the messages to differ. -/
-def aggregateVerify (pks msgs : Array ByteArray) (sig : ByteArray) : Bool :=
-  coreAggregateVerify pks msgs sig DST
+def aggregateVerify (pks : Array BLSPubkey) (msgs : Array ByteArray) (sig : BLSSignature) :
+    Bool :=
+  coreAggregateVerify (pks.map packBytes) msgs (packBytes sig) DST
 
 /-- The proof of possession `SK * H'(PK)`, with `H'` the hash under the public key tag (§3.3.2).
 
@@ -160,17 +168,15 @@ def popProve (sk : SecretKey) : Except BlsError BLSSignature :=
 /-- Verify a proof of possession (§3.3.3).
 
 It is the core verification of the public key as message, under the public key tag. -/
-def popVerify (pk proof : ByteArray) : Bool := coreVerify pk pk proof POP_DST
+def popVerify (pk : BLSPubkey) (proof : BLSSignature) : Bool :=
+  coreVerify (packBytes pk) (packBytes pk) (packBytes proof) POP_DST
 
 /-- Add one validated public key to a running point sum.
 
-It rejects a key that is not 48 bytes, and reports its size.
-
 It rejects a key that fails key validation (§2.5), and reports its position in the list. -/
-def addPubkeyPoint (agg : G1) (entry : ByteArray × Nat) : Except BlsError G1 := do
+def addPubkeyPoint (agg : G1) (entry : BLSPubkey × Nat) : Except BlsError G1 := do
   let (pk, i) := entry
-  if pk.size ≠ 48 then throw (.badPubkeySize pk.size)
-  match G1.keyValidatePoint pk with
+  match G1.keyValidatePoint (packBytes pk) with
   | .error _ => throw (.invalidPubkey (some i))
   | .ok p => return G1.add agg p
 
@@ -178,29 +184,27 @@ def addPubkeyPoint (agg : G1) (entry : ByteArray × Nat) : Except BlsError G1 :=
 
 These are the first steps of fast aggregate verification, §3.3.4, with key validation added.
 
-It fails on an empty list, on a key that is not 48 bytes and on a key that fails key validation. -/
-def aggregatePubkeyPoint (pubkeys : Array ByteArray) : Except BlsError G1 := do
+It fails on an empty list and on a key that fails key validation. -/
+def aggregatePubkeyPoint (pubkeys : Array BLSPubkey) : Except BlsError G1 := do
   if pubkeys.isEmpty then throw .emptyPubkeyList
   pubkeys.zipIdx.foldlM addPubkeyPoint G1.zero
 
 /-- Sum the public keys, then verify the signature under the sum (§3.3.4).
 
-It returns `false` on an empty list and on a key that is not 48 bytes.
-
-It also returns `false` on a key that fails key validation. -/
+It returns `false` on an empty list and on a key that fails key validation. -/
 def fastAggregateVerify
-    (pubkeys : Array ByteArray) (msg : ByteArray) (sigBytes : ByteArray) : Bool :=
+    (pubkeys : Array BLSPubkey) (msg : ByteArray) (sig : BLSSignature) : Bool :=
   match aggregatePubkeyPoint pubkeys with
   | .error _ => false
-  | .ok agg => verify (G1.compress agg) msg sigBytes
+  | .ok agg => verify (pointToPubkey agg) msg sig
 
 /-! ## Ethereum wrappers -/
 
 /-- The aggregation of Ethereum public keys: the sum of the validated keys.
 
 It fails on an empty list and on any invalid key. -/
-def ethAggregatePubkeys (pubkeys : Array ByteArray) : Except BlsError ByteArray := do
-  return G1.compress (← aggregatePubkeyPoint pubkeys)
+def ethAggregatePubkeys (pubkeys : Array BLSPubkey) : Except BlsError BLSPubkey := do
+  return pointToPubkey (← aggregatePubkeyPoint pubkeys)
 
 /-- The fast aggregate verification of Ethereum.
 
@@ -208,10 +212,10 @@ It is the fast aggregate verification of the draft, except on an empty key list.
 
 An empty key list passes exactly with the signature of the point at infinity. -/
 def ethFastAggregateVerify
-    (pubkeys : Array ByteArray) (msg : ByteArray) (sigBytes : ByteArray) : Bool :=
+    (pubkeys : Array BLSPubkey) (msg : ByteArray) (sig : BLSSignature) : Bool :=
   if pubkeys.isEmpty then
-    sigBytes = G2_POINT_AT_INFINITY
+    sig = infinitySignature
   else
-    fastAggregateVerify pubkeys msg sigBytes
+    fastAggregateVerify pubkeys msg sig
 
 end EthLib.Cryptography.Bls.Signatures

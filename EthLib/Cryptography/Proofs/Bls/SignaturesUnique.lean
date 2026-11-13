@@ -3,6 +3,7 @@ module
 public import EthLib.Cryptography.Proofs.Bls.SignaturesCorrect
 public import EthLib.Cryptography.Proofs.Bls.PairingCongr
 import EthLib.Cryptography.Proofs.Bls.PairingAte
+import EthLib.Base.Proofs.Bytes
 
 /-!
 # Proofs: unique signatures, and the rogue-key attack
@@ -28,6 +29,8 @@ namespace EthLib.Cryptography.Bls
 open scoped EthLib.Cryptography.Bls.Fr
 
 namespace Signatures
+
+open EthLib.Base
 
 /-- The scalar equation of a verification fixes the signature scalar. -/
 private theorem eq_of_verify_scalars (c a b : Fr) (h : 1 * c + -a * b = 0) :
@@ -95,9 +98,9 @@ theorem coreVerify_unique {pk msg sig sig' dst : ByteArray}
   exact G2.compress_congr hRrep.1 hR'rep.1 (hRrep.2.trans hR'rep.2.symm)
 
 /-- A key and a message have at most one signature that verifies, byte for byte. -/
-theorem verify_unique {pk msg sig sig' : ByteArray}
+theorem verify_unique {pk : BLSPubkey} {msg : ByteArray} {sig sig' : BLSSignature}
     (h : verify pk msg sig = true) (h' : verify pk msg sig' = true) : sig = sig' :=
-  coreVerify_unique h h'
+  packBytes_injective (coreVerify_unique h h')
 
 /-- The rogue key cancels the victim's key in the key sum. -/
 private theorem rogue_sum (a c : Fr) : [a, c + -a].sum = c := by
@@ -119,8 +122,8 @@ theorem fastAggregateVerify_rogue (sk : SecretKey) {c : Fr} (hc0 : c ≠ 0)
     (hc : c ≠ sk.val) (msg : ByteArray) :
     ∃ P Q, G1.keyValidatePoint (pkBytes sk) = .ok P ∧ HashToCurve.hashToG2 msg DST = .ok Q ∧
       fastAggregateVerify
-        #[pkBytes sk, G1.compress (G1.add (G1.mul G1.generator c) (G1.neg P))] msg
-        (G2.compress (G2.mul Q c)) = true := by
+        #[skToPk sk, pointToPubkey (G1.add (G1.mul G1.generator c) (G1.neg P))] msg
+        (pointToSignature (G2.mul Q c)) = true := by
   obtain ⟨P, hP, hPrep⟩ := G1.keyValidatePoint_compress_mul sk.property
   obtain ⟨Q, hQ, hQv, hQs⟩ := HashToCurve.hashToG2_total_inSubgroup msg DST
   obtain ⟨b, hb⟩ := (G2.inSubgroup_iff_exists_represents hQv).mp hQs
@@ -129,10 +132,11 @@ theorem fastAggregateVerify_rogue (sk : SecretKey) {c : Fr} (hc0 : c ≠ 0)
   let rogue : SecretKey := ⟨c + -sk.val, rogue_ne_zero hc⟩
   have hrep : G1.Represents (G1.add (G1.mul G1.generator c) (G1.neg P)) rogue.val :=
     (G1.represents_mul_generator c).add hPrep.neg
-  have hrogue : G1.compress (G1.add (G1.mul G1.generator c) (G1.neg P)) = pkBytes rogue :=
-    (G1.compress_congr hrep.1 (G1.represents_mul_generator rogue.val).1 hrep.2).trans
-      (pkBytes_eq rogue).symm
-  have hkeys : #[pkBytes sk, pkBytes rogue] = ([sk, rogue].map pkBytes).toArray := rfl
+  have hrogue : pointToPubkey (G1.add (G1.mul G1.generator c) (G1.neg P)) = skToPk rogue := by
+    apply packBytes_injective
+    rw [packBytes_pointToPubkey, packBytes_skToPk]
+    exact G1.compress_congr hrep.1 (G1.represents_mul_generator rogue.val).1 hrep.2
+  have hkeys : #[skToPk sk, skToPk rogue] = ([sk, rogue].map skToPk).toArray := rfl
   have hsum : ([sk, rogue].map (·.val)).sum = c := rogue_sum sk.val c
   rw [hrogue, hkeys]
   have h1 : ([sk, rogue].map (·.val)).sum ≠ 0 := by rw [hsum]; exact hc0

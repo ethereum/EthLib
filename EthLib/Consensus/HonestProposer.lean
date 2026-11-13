@@ -269,7 +269,7 @@ def computeOnChainAggregate (electra : .pectra ≤ fork)
   let bits := (aggregates.map (·.2.aggregationBits.bits)).foldl (· ++ ·) #[]
   if bound : fork < .glamsterdam → bits.size ≤ maxAttesters preset fork then
     let signature ← (Signatures.aggregate
-      (aggregates.map fun entry => Base.packBytes entry.2.signature).toArray).mapError .bls
+      (aggregates.map (·.2.signature)).toArray).mapError .bls
     let committees := aggregates.map (·.1)
     return {
       aggregationBits := ⟨bits, bound⟩
@@ -307,7 +307,7 @@ def processSyncCommitteeContributions (contributions : List (SyncCommitteeContri
     contributions.any fun contribution =>
       contribution.subcommitteeIndex.toNat = participant.val / size &&
         contribution.aggregationBits.bits.toArray.getD (participant.val % size) false
-  let signatures := contributions.map fun contribution => Base.packBytes contribution.signature
+  let signatures := contributions.map (·.signature)
   let signature ← (Signatures.aggregate signatures.toArray).mapError .bls
   return { syncCommitteeBits := ⟨bits⟩, syncCommitteeSignature := signature }
 

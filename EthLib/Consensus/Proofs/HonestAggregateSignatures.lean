@@ -81,7 +81,7 @@ private theorem indexed_attestation_of_aggregate {config : Config}
     (signed : List.Forall₂ (fun secret signature =>
       Signatures.sign secret (Base.packBytes root) = .ok signature) (signers.map key) signatures)
     (sum : ((signers.map key).map (·.val)).sum ≠ 0)
-    (aggregated : Signatures.aggregate (signatures.map Signatures.sigBytes).toArray =
+    (aggregated : Signatures.aggregate signatures.toArray =
       .ok attestation.signature) :
     ∃ indexed, getIndexedAttestation state attestation = .ok indexed ∧
       isValidIndexedAttestation config .bls state indexed = .ok true := by
@@ -94,28 +94,27 @@ private theorem indexed_attestation_of_aggregate {config : Config}
     intro empty
     exact nonempty (empty ▸ permuted.symm).eq_nil
   have keysOf : indices.toArray.mapM (fun index => do
-      return Base.packBytes (← liftAccessor (getValidator state index)).pubkey) =
-        .ok ((indices.map fun index => Signatures.pkBytes (key index)).toArray) := by
+      return (← liftAccessor (getValidator state index)).pubkey) =
+        .ok ((indices.map fun index => Signatures.skToPk (key index)).toArray) := by
     rw [Array.mapM_eq_mapM_toList]
     have mapped := mapM_eq_ok_map (xs := indices)
       (f := fun index => do
-        return Base.packBytes (← liftAccessor (getValidator state index)).pubkey)
-      (g := fun index => Signatures.pkBytes (key index)) fun index member => by
+        return (← liftAccessor (getValidator state index)).pubkey)
+      (g := fun index => Signatures.skToPk (key index)) fun index member => by
         obtain ⟨validator, found, owned⟩ :=
           registered index (permuted.mem_iff.mp member)
         simp only [found, liftAccessor, Except.mapError, bind, Except.bind, pure, Except.pure,
-          owned, Signatures.pkBytes, Base.packBytes]
+          owned]
     rw [mapped]
     rfl
   have verifies := Signatures.fastAggregateVerify_aggregate_of_forall₂
     signed (by simpa using nonempty) sum aggregated
-  have permutes := Signatures.fastAggregateVerify_pkBytes_perm (permuted.map key)
-    (Base.packBytes root) (Signatures.sigBytes attestation.signature)
+  have permutes := Signatures.fastAggregateVerify_skToPk_perm (permuted.map key)
+    (Base.packBytes root) attestation.signature
   have verifiesSorted : Signatures.fastAggregateVerify
-      ((indices.map fun index => Signatures.pkBytes (key index)).toArray)
-      (Base.packBytes root) (Base.packBytes attestation.signature) = true := by
-    simpa only [List.map_map, Function.comp_def, Signatures.sigBytes, Base.packBytes]
-      using permutes.trans verifies
+      ((indices.map fun index => Signatures.skToPk (key index)).toArray)
+      (Base.packBytes root) attestation.signature = true := by
+    simpa only [List.map_map, Function.comp_def] using permutes.trans verifies
   refine ⟨indexed, indexedOf, ?_⟩
   unfold isValidIndexedAttestation
   have readIndices : indexed.attestingIndices.data.toList = indices := by
@@ -194,8 +193,7 @@ theorem isValidIndexedAttestation_constructAggregate {config : Config}
     exact False.elim (Nat.not_le_of_lt before (le_trans (by decide) gloas))
   apply indexed_attestation_of_aggregate computed sameData permuted nonempty bounded registered
     domained rooted signed sum
-  simpa only [getAggregateSignature, List.map_map, Function.comp_def, Signatures.sigBytes,
-    Base.packBytes] using aggregateSignature
+  simpa only [getAggregateSignature, List.map_map, Function.comp_def] using aggregateSignature
 
 /-- A single attestation holds its signer's index, committee, data and signature. -/
 private theorem single_attestation_spec {config : Config} {state : BeaconState preset fork}
@@ -270,8 +268,7 @@ theorem isValidIndexedAttestation_constructAggregateOfSingleAttestations {config
       attestation_sign_eq domained rooted (single_attestation_spec made).2.2.2
   apply indexed_attestation_of_aggregate computed sameData permuted nonempty bounded registered
     domained rooted signed sum
-  simpa only [List.map_map, Function.comp_def, Signatures.sigBytes, Base.packBytes]
-    using aggregateSignature
+  simpa only [List.map_map, Function.comp_def] using aggregateSignature
 
 /-- The topic's committee check accepts an honest aggregate exactly when its other checks pass.
 

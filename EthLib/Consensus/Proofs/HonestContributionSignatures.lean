@@ -107,14 +107,12 @@ private theorem contributionEntries_verify
         Signatures.sign (secret entry.1) message = .ok entry.2.signature)
     {signature : BLSSignature}
     (aggregated : Signatures.aggregate
-      ((contributionEntries keyed pubkeys).map fun entry =>
-        Base.packBytes entry.2.signature).toArray =
+      ((contributionEntries keyed pubkeys).map fun entry => entry.2.signature).toArray =
         .ok signature)
     (nonzero : (((contributionEntries keyed pubkeys).map fun entry => secret entry.1).map
       (·.val)).sum ≠ 0) :
     Signatures.fastAggregateVerify
-      (((contributionEntries keyed pubkeys).map Prod.fst).map Base.packBytes).toArray message
-      (Base.packBytes signature) = true := by
+      ((contributionEntries keyed pubkeys).map Prod.fst).toArray message signature = true := by
   have signed : List.Forall₂ (fun key sig => Signatures.sign key message = .ok sig)
       ((contributionEntries keyed pubkeys).map fun entry => secret entry.1)
       ((contributionEntries keyed pubkeys).map fun entry => entry.2.signature) := by
@@ -125,17 +123,15 @@ private theorem contributionEntries_verify
     intro empty
     simp [empty] at nonzero
   have verifies := Signatures.fastAggregateVerify_aggregate_of_forall₂ signed nonempty nonzero
-    (by simpa [List.map_map, Signatures.sigBytes, Base.packBytes, Function.comp_def]
-      using aggregated)
+    (by simpa [List.map_map, Function.comp_def] using aggregated)
   have keys : (((contributionEntries keyed pubkeys).map fun entry => secret entry.1).map
-      Signatures.pkBytes) =
-      ((contributionEntries keyed pubkeys).map Prod.fst).map Base.packBytes := by
+      Signatures.skToPk) =
+      (contributionEntries keyed pubkeys).map Prod.fst := by
     simp only [List.map_map]
     apply List.map_congr_left
     intro entry member
-    exact congrArg Base.packBytes
-      (honest entry (mem_keyed_of_mem_contributionEntries member)).1.symm
-  simpa only [keys, Signatures.sigBytes, Base.packBytes] using verifies
+    exact (honest entry (mem_keyed_of_mem_contributionEntries member)).1.symm
+  simpa only [keys] using verifies
 
 /-- A contribution of honest messages passes the signature check of its topic.
 
@@ -200,8 +196,8 @@ theorem isValidContributionSignature_constructSyncCommitteeContribution
       exact honest original sameMessage.1 (of_decide_eq_true sameMessage.2).1
         (of_decide_eq_true sameMessage.2).2 validator (mapError_ok_iff.mp found)
     have aggregated' : Signatures.aggregate
-        ((contributionEntries keyed pubkeys).map fun entry =>
-          Base.packBytes entry.2.signature).toArray = .ok signature := by
+        ((contributionEntries keyed pubkeys).map fun entry => entry.2.signature).toArray =
+          .ok signature := by
       rw [mapError_ok_iff] at aggregated
       simpa only [contributionEntries, pubkeys, pubkeysEq, List.map_filterMap,
         List.filterMap_map, Function.comp_def] using aggregated
@@ -221,17 +217,9 @@ theorem isValidContributionSignature_constructSyncCommitteeContribution
       entriesHonest aggregated' nonzero'
     have participants :
         (pubkeys.zip (pubkeys.map fun pubkey => keyed.any (·.1 = pubkey))).filterMap
-          (fun entry => if entry.2 then some (Base.packBytes entry.1) else none) =
-        ((contributionEntries keyed pubkeys).map Prod.fst).map Base.packBytes := by
-      have projection :
-          (fun entry : BLSPubkey × Bool =>
-            if entry.2 then some (Base.packBytes entry.1) else none) =
-          (fun (pubkey, bit) => if bit then some (Base.packBytes pubkey) else none) := by
-        funext entry
-        cases entry
-        rfl
-      rw [projection]
-      rw [← map_selected, ← contributionEntries_keys]
+          (fun entry => if entry.2 then some entry.1 else none) =
+        (contributionEntries keyed pubkeys).map Prod.fst :=
+      (contributionEntries_keys keyed pubkeys).symm
     simp only [isValidContributionSignature, domained, rooted, Except.mapError, bind,
       Except.bind, pure, Except.pure]
     apply congrArg (Except.ok (ε := ForkChoiceError))

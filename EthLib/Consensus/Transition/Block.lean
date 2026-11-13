@@ -58,8 +58,8 @@ def processRandao (config : Config) (checks : SignatureChecks) (state : BeaconSt
   let proposer ← liftAccessor (getValidator state (← liftAccessor (getBeaconProposerIndex state)))
   let domain ← liftAccessor (getDomain config state DOMAIN_RANDAO)
   let signingRoot ← liftSsz (computeSigningRoot epoch domain)
-  ensure (checks.verify (packBytes proposer.pubkey) (packBytes signingRoot)
-    (packBytes body.randaoReveal) = true) .invalidRandaoReveal
+  ensure (checks.verify proposer.pubkey (packBytes signingRoot)
+    body.randaoReveal = true) .invalidRandaoReveal
   let mix ← liftAccessor (getRandaoMix state epoch)
   let mix :=
     Vector.zipWith (· ^^^ ·) mix (Cryptography.Hash.Sha256.hash32 (packBytes body.randaoReveal))
@@ -114,12 +114,12 @@ def isValidIndexedAttestation (config : Config) (checks : SignatureChecks)
     return false
   else
     let pubkeys ← indices.toArray.mapM fun index => do
-      return packBytes (← liftAccessor (getValidator state index)).pubkey
+      return (← liftAccessor (getValidator state index)).pubkey
     let domain ← liftAccessor
       (getDomain config state DOMAIN_BEACON_ATTESTER (some attestation.data.target.epoch))
     let signingRoot ← liftSsz (computeSigningRoot attestation.data domain)
     return checks.fastAggregateVerify pubkeys (packBytes signingRoot)
-      (packBytes attestation.signature)
+      attestation.signature
 
 /-- The check that a signed header is signed by a key, in the epoch of its slot. -/
 def checkHeaderSignature (config : Config) (checks : SignatureChecks)
@@ -128,7 +128,7 @@ def checkHeaderSignature (config : Config) (checks : SignatureChecks)
   let domain ← liftAccessor (getDomain config state DOMAIN_BEACON_PROPOSER
     (some (computeEpochAtSlot preset signed.message.slot)))
   let signingRoot ← liftSsz (computeSigningRoot signed.message domain)
-  ensure (checks.verify (packBytes pubkey) (packBytes signingRoot) (packBytes signed.signature) =
+  ensure (checks.verify pubkey (packBytes signingRoot) signed.signature =
     true) .invalidHeaderSignature
 
 /-- The state after a proposer slashing.
@@ -196,7 +196,7 @@ def verifyBlockSignature (config : Config) (checks : SignatureChecks)
   let proposer ← liftAccessor (getValidator state signed.message.proposerIndex)
   let domain ← liftAccessor (getDomain config state DOMAIN_BEACON_PROPOSER)
   let signingRoot ← liftSsz (computeSigningRoot signed.message domain)
-  return checks.verify (packBytes proposer.pubkey) (packBytes signingRoot)
-    (packBytes signed.signature)
+  return checks.verify proposer.pubkey (packBytes signingRoot)
+    signed.signature
 
 end EthLib.Consensus
