@@ -163,6 +163,21 @@ def test_chain_blob_schedule_without_fork() -> None:
     assert error(chain) == {**INTERNAL_ERROR, "data": "eth_config: blob schedule without a fork"}
 
 
+def synthetic_genesis(fork: str, state: bytes) -> bytes:
+    """An empty genesis block of a fork at time 100."""
+    return blocks.genesis_block(
+        fork,
+        state,
+        timestamp=100,
+        coinbase=bytes(20),
+        difficulty=0,
+        gas_limit=30000000,
+        extra_data=b"",
+        mix_hash=ZERO,
+        nonce=bytes(8),
+    )
+
+
 def genesis_chain() -> ReplayChain:
     """A Cancun genesis at time 100, with two scheduled timestamp upgrades."""
     state = rlp.encode([])
@@ -173,17 +188,7 @@ def genesis_chain() -> ReplayChain:
     }
     first = (
         "dencun",
-        blocks.genesis_block(
-            "dencun",
-            state,
-            timestamp=100,
-            coinbase=bytes(20),
-            difficulty=0,
-            gas_limit=30000000,
-            extra_data=b"",
-            mix_hash=ZERO,
-            nonce=bytes(8),
-        ),
+        synthetic_genesis("dencun", state),
     )
     return ReplayChain(
         config=config,
@@ -263,17 +268,60 @@ def test_matching_genesis_context() -> None:
     assert caught.value.code == 0
 
 
+def with_activations(chain: ReplayChain, *activations: list[object]) -> ReplayChain:
+    """The chain with more fork activations appended to its configuration."""
+    config = {**chain.config, "activations": [*chain.config["activations"], *activations]}
+    return replace(chain, config=config)
+
+
 def test_unsupported_future_fork() -> None:
-    """A configured fork beyond the implemented report range gets no invented contract set."""
+    """EIP-7910 leaves out a future fork that the node does not support."""
     chain = genesis_chain()
-    chain = replace(
-        chain,
-        config={
-            **chain.config,
-            "activations": [*chain.config["activations"], ["hegota", "time", 400]],
-        },
-    )
-    assert error(chain) == {**NOT_SUPPORTED, "data": "eth_config: unsupported fork"}
+    later = answer(with_activations(chain, ["hegota", "time", 400]))["result"]
+    assert later == answer(chain)["result"]
+    assert later["last"]["activationTime"] == 300
+
+
+def test_only_unsupported_future_fork() -> None:
+    """With no supported fork after the head, the next and last configurations are null."""
+    chain = genesis_chain()
+    activations = [["dencun", "block", 0], ["hegota", "time", 400]]
+    chain = replace(chain, config={**chain.config, "activations": activations})
+    report = answer(chain)["result"]
+    assert (report["next"], report["last"]) == (None, None)
+    assert report["current"]["activationTime"] == 0
+
+
+def time_chain(*activations: list[object]) -> ReplayChain:
+    """A Prague head at number 100 and time 100, with a genesis context and these forks."""
+    chain = genesis_chain()
+    header = rlp.decode(synthetic_genesis("pectra", rlp.encode([])))
+    # Number 100 puts the head after the fork blocks of the activations below.
+    header[0][8] = (100).to_bytes(1, "big")
+    first = ("pectra", rlp.encode(header))
+    chain = replace(chain, blocks=(first,), forkchoice=(block_hash(first), ZERO, ZERO))
+    genesis_hash = block_hash(genesis_chain().blocks[0])
+    config = {
+        **chain.config,
+        "genesisHash": "0x" + genesis_hash.hex(),
+        "genesisTime": 0,
+        "activations": [["frontier", "block", 0], *activations],
+    }
+    return replace(chain, config=config)
+
+
+def test_fork_without_activation_time() -> None:
+    """A passed fork set by block, other than the current one, no longer fails the report."""
+    chain = time_chain(["dencun", "block", 90], ["pectra", "time", 100], ["fusaka", "time", 300])
+    report = answer(chain)["result"]
+    times = [report[name]["activationTime"] for name in ("current", "next", "last")]
+    assert times == [100, 300, 300]
+
+
+def test_current_fork_without_activation_time() -> None:
+    """The current configuration cannot be left out, so its unknown time fails the method."""
+    chain = time_chain(["dencun", "block", 50], ["pectra", "block", 90], ["fusaka", "time", 300])
+    assert error(chain) == {**INTERNAL_ERROR, "data": "eth_config: activation time is unknown"}
 
 
 def test_config_extra_parameters() -> None:
@@ -308,20 +356,20 @@ def test_config_activation_overflow() -> None:
     assert error(chain) == {**INTERNAL_ERROR, "data": "eth_config: activation is not below 2^64"}
 
 
-@pytest.mark.parametrize(
-    "changes",
-    [
-        pytest.param({"activations": [["dencun", "block", 0], ["pectra", "block", 10]]}, id="fork"),
-        pytest.param({"blobSchedules": [["block", 10, 3, 6, 3338477]]}, id="blob-schedule"),
-    ],
-)
-def test_config_unknown_activation_time(changes: Mapping[str, object]) -> None:
-    """A positive block activation cannot be reported as a fork active at genesis."""
+def test_pending_fork_block() -> None:
+    """A fork block above the head leaves the fork IDs of the reported activations unknown."""
     chain = genesis_chain()
-    assert error(replace(chain, config={**chain.config, **changes})) == {
-        **INTERNAL_ERROR,
-        "data": "eth_config: activation time is unknown",
-    }
+    activations = [["dencun", "block", 0], ["pectra", "block", 10]]
+    chain = replace(chain, config={**chain.config, "activations": activations})
+    assert error(chain) == {**INTERNAL_ERROR, "data": "eth_config: fork block not reached"}
+
+
+def test_blob_schedule_by_block() -> None:
+    """EIP-7892 ties each blob schedule to a fork, so one at a block after genesis is refused."""
+    chain = genesis_chain()
+    schedules = [["block", 10, 3, 6, 3338477]]
+    chain = replace(chain, config={**chain.config, "blobSchedules": schedules})
+    assert error(chain) == {**INTERNAL_ERROR, "data": "eth_config: blob schedule without a fork"}
 
 
 @pytest.mark.parametrize(
