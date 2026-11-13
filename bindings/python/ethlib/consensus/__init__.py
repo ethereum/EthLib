@@ -237,6 +237,52 @@ def relay_validators(
     return _native.consensus_relay_validators(name, fork, state, registry)
 
 
+def relay_delivered_payload(document: dict[str, Any]) -> dict[str, Any]:
+    """A delivered payload of the relay data API, checked and written back as canonical JSON."""
+    return _native.consensus_relay_delivered_payload(document)
+
+
+def relay_received_bid(document: dict[str, Any]) -> dict[str, Any]:
+    """A received bid of the relay data API, checked and written back as canonical JSON."""
+    return _native.consensus_relay_received_bid(document)
+
+
+def relay_delivered_keeps(
+    document: dict[str, Any],
+    *,
+    slot: int | None = None,
+    block_hash: bytes | None = None,
+    block_number: int | None = None,
+    proposer_pubkey: bytes | None = None,
+    builder_pubkey: bytes | None = None,
+) -> bool:
+    """Whether a query of delivered payloads with these filters keeps the payload."""
+    return _native.consensus_relay_delivered_keeps(
+        document, slot, block_hash, block_number, proposer_pubkey, builder_pubkey
+    )
+
+
+def relay_received_keeps(
+    document: dict[str, Any],
+    *,
+    slot: int | None = None,
+    block_hash: bytes | None = None,
+    block_number: int | None = None,
+    builder_pubkey: bytes | None = None,
+) -> bool:
+    """Whether a query of received bids with these filters keeps the bid."""
+    return _native.consensus_relay_received_keeps(
+        document, slot, block_hash, block_number, builder_pubkey
+    )
+
+
+def relay_sort_delivered(
+    order: Literal["value", "-value"], documents: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Delivered payloads sorted by value in an order; payloads of equal value keep their order."""
+    return _native.consensus_relay_sort_delivered(order, documents)
+
+
 def builder_bid_value(value: int, execution_payment: int, max_execution_payment: int) -> int:
     """The bid's value in Gwei, with its execution payment capped, not reduced to 64 bits."""
     return _native.consensus_builder_bid_value(value, execution_payment, max_execution_payment)
@@ -1077,6 +1123,137 @@ def api_payload_envelope_ssz(
     )
 
 
+def api_attestation_data(
+    name: str,
+    fork: str,
+    anchor_state: bytes,
+    anchor_block: bytes,
+    steps: list[ForkChoiceStep],
+    slot: int,
+    committee_index: int,
+    *,
+    optimistic_roots: Sequence[bytes] = (),
+    verify: bool = True,
+) -> dict[str, Any]:
+    """The Beacon API attestation data for a slot at the head of a store, or ForkChoiceError."""
+    # The store is built from the steps of a fork choice case.
+    # The committee index is read before Electra only; a request without one passes 0.
+    # An API error carries its HTTP code in `.code`.
+    # A head root among the optimistic roots raises code 503; a slot before the head, code 400.
+    return _native.consensus_api_attestation_data(
+        name,
+        fork,
+        anchor_state,
+        anchor_block,
+        steps,
+        verify,
+        list(optimistic_roots),
+        slot,
+        committee_index,
+    )
+
+
+def api_payload_attestation_data(
+    name: str,
+    fork: str,
+    anchor_state: bytes,
+    anchor_block: bytes,
+    steps: list[ForkChoiceStep],
+    slot: int,
+    *,
+    payload_present: bool,
+    blob_data_available: bool,
+    verify: bool = True,
+) -> dict[str, Any] | None:
+    """The Beacon API payload attestation data for a slot, None for 204, or ForkChoiceError."""
+    # None means the chain of the head has no block at the slot.
+    # An API error carries its HTTP code in `.code`.
+    # Before Gloas the request raises code 400.
+    return _native.consensus_api_payload_attestation_data(
+        name,
+        fork,
+        anchor_state,
+        anchor_block,
+        steps,
+        verify,
+        slot,
+        payload_present,
+        blob_data_available,
+    )
+
+
+def api_aggregate_attestation(
+    name: str,
+    fork: str,
+    state: bytes,
+    data_root: bytes,
+    slot: int,
+    committee_index: int,
+    *,
+    attestations: Sequence[bytes] = (),
+    singles: Sequence[bytes] = (),
+    optimistic_roots: Sequence[bytes] = (),
+) -> dict[str, Any]:
+    """The Beacon API aggregate of the collected attestations, or ConsensusError."""
+    # Attestations count before Electra and single attestations from Electra, all as SSZ.
+    # No match raises code 404; a block root of the data among the optimistic roots, code 503.
+    # An API error carries its HTTP code in `.code`.
+    return _native.consensus_api_aggregate_attestation(
+        name,
+        fork,
+        state,
+        list(attestations),
+        list(singles),
+        list(optimistic_roots),
+        data_root,
+        slot,
+        committee_index,
+    )
+
+
+def api_sync_committee_contribution(
+    name: str,
+    fork: str,
+    state: bytes,
+    slot: int,
+    subcommittee_index: int,
+    root: bytes,
+    *,
+    messages: Sequence[bytes] = (),
+    optimistic_roots: Sequence[bytes] = (),
+) -> dict[str, Any]:
+    """The Beacon API sync committee contribution of the collected messages, or ConsensusError."""
+    # The messages are SSZ sync committee messages; the slot must be that of the state.
+    # No match raises code 404; a root among the optimistic roots, code 503.
+    # An API error carries its HTTP code in `.code`.
+    return _native.consensus_api_sync_committee_contribution(
+        name, fork, state, list(messages), list(optimistic_roots), slot, subcommittee_index, root
+    )
+
+
+def api_duties(
+    name: str,
+    fork: str,
+    state: bytes,
+    kind: str,
+    epoch: int,
+    genesis_root: bytes,
+    *,
+    indices: Sequence[int] = (),
+    config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """The Beacon API duties of an epoch, computed from a state, or ConsensusError."""
+    # The kind is "attester", "proposer", "proposer_v2", "sync" or "ptc".
+    # The proposer duties read no indices; the sync answer has no dependent root.
+    # An epoch the state cannot answer for, or an index of no validator, raises code 400.
+    # So does an empty list of indices for the attester, sync and PTC duties.
+    # The first proposer version answers for the current epoch of the state only.
+    # The flag execution_optimistic comes from the store and is absent.
+    return _native.consensus_api_duties(
+        name, fork, state, config, kind, epoch, list(indices), genesis_root
+    )
+
+
 def api_committees(
     name: str,
     fork: str,
@@ -1761,6 +1938,11 @@ __all__ = [
     "api_columns_ssz",
     "api_payload_envelope",
     "api_payload_envelope_ssz",
+    "api_attestation_data",
+    "api_payload_attestation_data",
+    "api_aggregate_attestation",
+    "api_sync_committee_contribution",
+    "api_duties",
     "api_committees",
     "api_sync_committees",
     "api_ptc",
@@ -1780,6 +1962,11 @@ __all__ = [
     "default_auth_data",
     "relay_submission_bid",
     "relay_validators",
+    "relay_delivered_payload",
+    "relay_received_bid",
+    "relay_delivered_keeps",
+    "relay_received_keeps",
+    "relay_sort_delivered",
     "builder_bid_value",
     "consensus_version",
     "consensus_version_fork",

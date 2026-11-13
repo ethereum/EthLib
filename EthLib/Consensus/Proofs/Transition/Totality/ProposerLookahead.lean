@@ -240,4 +240,69 @@ theorem processProposerLookahead_ok (fulu : .fusaka ≤ fork) {state : BeaconSta
     bind, Except.bind, Except.mapError, drawn]
   exact ⟨_, rfl, rfl⟩
 
+/-- The first lookahead of proposers succeeds under bounds; the upgrade to Fulu computes it.
+
+It covers the current epoch and each epoch of the seed lookahead after it.
+
+Each of these epochs has an active validator at the cap of the draw, unslashed from Gloas.
+
+No effective balance is above that cap, and the registry holds at most `2^40` validators.
+
+The products of the draw fit in 64 bits.
+
+The last epoch drawn plus the length of the history of mixes stays below `2^64`.
+
+The seed lookahead is shorter than that history.
+
+The first slot of the epoch after the last one drawn is at most `2^64`.
+
+So every slot drawn fits in 64 bits. -/
+theorem initializeProposerLookahead_ok {state : BeaconState preset fork}
+    (fits : DrawFits preset fork)
+    (seedRoom : (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat +
+      preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat < 2 ^ 64)
+    (lookahead : preset.MIN_SEED_LOOKAHEAD.toNat < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    (slotRoom : ((getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat + 1) *
+      preset.SLOTS_PER_EPOCH.toNat ≤ 2 ^ 64)
+    (drawable : ∀ offset ≤ preset.MIN_SEED_LOOKAHEAD.toNat,
+      ProposersDrawable state (getCurrentEpoch state + offset.toUInt64)) :
+    ∃ proposers, initializeProposerLookahead state = .ok proposers := by
+  have each : ∀ offset ∈ (Vector.range (preset.MIN_SEED_LOOKAHEAD.toNat + 1)).toList, ∃ y,
+      (do
+        let epoch ← liftArith (Uint64.addChecked (getCurrentEpoch state) offset.toUInt64)
+        getBeaconProposerIndices state epoch :
+        Except AccessorError (Vector ValidatorIndex preset.SLOTS_PER_EPOCH.toNat)) = .ok y := by
+    intro offset member
+    have lt : offset < preset.MIN_SEED_LOOKAHEAD.toNat + 1 := by simpa using member
+    have offsetNat : offset.toUInt64.toNat = offset := by
+      have small := preset.MIN_SEED_LOOKAHEAD.toNat_lt
+      rw [Nat.toUInt64_eq, UInt64.toNat_ofNat_of_lt' (by
+        have : UInt64.size = 2 ^ 64 := rfl
+        omega)]
+    have fitsEpoch : (getCurrentEpoch state).toNat + offset.toUInt64.toNat < 2 ^ 64 := by
+      omega
+    have epochNat := Uint64.toNat_add_of_lt fitsEpoch
+    obtain ⟨proposers, drawn⟩ := getBeaconProposerIndices_ok (state := state)
+      (epoch := getCurrentEpoch state + offset.toUInt64) fits (by omega) lookahead
+      (by
+        rw [epochNat, offsetNat]
+        exact Nat.le_trans (Nat.mul_le_mul_right _ (by omega)) slotRoom)
+      (drawable offset (by omega))
+    exact ⟨proposers, by
+      simp only [liftArith, Uint64.addChecked_of_lt fitsEpoch, bind, Except.bind,
+        Except.mapError]
+      exact drawn⟩
+  choose! out outOk using each
+  have mapped := vector_mapM_eq_ok_iff (f := fun offset => (do
+      let epoch ← liftArith (Uint64.addChecked (getCurrentEpoch state) offset.toUInt64)
+      getBeaconProposerIndices state epoch :
+      Except AccessorError (Vector ValidatorIndex preset.SLOTS_PER_EPOCH.toNat)))
+    (xs := Vector.range (preset.MIN_SEED_LOOKAHEAD.toNat + 1))
+    (ys := Vector.ofFn fun i => out i.val) |>.mpr fun i hi => by
+      simpa using outOk i (by simpa using hi)
+  unfold initializeProposerLookahead
+  simp only [bind, Except.bind, pure, Except.pure] at mapped ⊢
+  rw [mapped]
+  exact ⟨_, rfl⟩
+
 end EthLib.Consensus

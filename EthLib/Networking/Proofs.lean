@@ -42,6 +42,7 @@ public import EthLib.Networking.Proofs.Libp2p.Tls
 public import EthLib.Networking.Proofs.Libp2p.Yamux
 public import EthLib.Networking.Proofs.Libp2p.YamuxSession
 public import EthLib.Networking.Proofs.Quic.Keys
+public import EthLib.Networking.Proofs.Quic.Protection
 public import EthLib.Networking.Proofs.Quic.Tls
 public import EthLib.Networking.Proofs.Quic.Varint
 public import EthLib.Networking.Proofs.ReqResp.Bounds
@@ -56,6 +57,8 @@ public import EthLib.Networking.Proofs.Snappy.Encode
 public import EthLib.Networking.Proofs.Snappy.Frame
 public import EthLib.Networking.Proofs.Snappy.FrameEncode
 public import EthLib.Networking.Proofs.Snappy.Read
+
+public import EthLib.Networking.Proofs.Quic.Frame
 
 /-!
 # `EthLib.Networking.Proofs`
