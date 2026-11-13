@@ -13,7 +13,9 @@ A requested validator in a committee of the epoch has exactly one duty.
 
 A request for an epoch after the next one is refused.
 
-From Gloas, a PTC request is answered from the previous epoch to the next one, and not before Gloas.
+From Gloas, a PTC request is refused outside the previous epoch to the next one.
+
+It is also refused before the Gloas fork epoch.
 
 In the current epoch, each proposer duty from the slot of the state on names its proposer.
 
@@ -166,11 +168,15 @@ The epoch must be from the previous epoch to the next one, and not before the Gl
 
 The mixes of the state must also still hold the seed of the epoch.
 
+In that window it holds whenever the mixes outlast the seed lookahead by more than two epochs.
+
 Any other epoch gets the error of an invalid epoch, code 400.
 
 For an epoch in that range, a repeated index gets code 400 too.
 
-Else the answer keeps the duties of the requested validators, in request order. -/
+Else the answer runs the duty of each requested validator in turn, in request order.
+
+It keeps the validators in the PTC; an index that names no validator makes the answer code 400. -/
 theorem ptcDuties_eq {config : Config} {state : BeaconState preset fork}
     {gloas : .glamsterdam ≤ fork} {epoch : Epoch} {indices : List ValidatorIndex} :
     ptcDuties config state gloas epoch indices =
