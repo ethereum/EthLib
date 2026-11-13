@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Engine.BeaconApiEvents
 public import EthLib.Engine.Block
 public import EthLib.Engine.BuildPayload
 public import EthLib.Engine.Capabilities

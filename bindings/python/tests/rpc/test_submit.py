@@ -7,6 +7,7 @@ from typing import Any, Final
 import pytest
 
 from ethlib.cryptography.keccak import keccak256
+from ethlib.cryptography.kzg import BYTES_PER_BLOB, blob_to_kzg_commitment
 from ethlib.serialization import rlp
 
 from .chain import FIXTURES, read_fixture, replay_chain
@@ -125,6 +126,29 @@ def test_blob_versioned_hash() -> None:
     raw = b"\x03" + rlp.encode([body, version, blobs, [changed], proofs])
     error = {"code": -32000, "message": "Invalid input"}
     error["data"] = "a commitment does not hash to its versioned hash"
+    assert _error(raw) == error
+
+
+def test_blob_proof_rejected() -> None:
+    """A cell proof that is a valid point but not the proof of its cell fails the batch check."""
+    # The blob of the fixture is zero, so its commitment and its cell proofs are the identity.
+    # The commitment of a blob with one nonzero value is a point other than the identity.
+    body, version, blobs, commitments, proofs = _blob_form()
+    other = blob_to_kzg_commitment(bytes(31) + b"\x01" + bytes(BYTES_PER_BLOB - 32))
+    changed = [other, *proofs[1:]]
+    raw = b"\x03" + rlp.encode([body, version, blobs, commitments, changed])
+    error = {"code": -32000, "message": "Invalid input"}
+    error["data"] = "the proofs do not match the blobs"
+    assert _error(raw) == error
+
+
+def test_blob_proof_not_a_point() -> None:
+    """A cell proof of 48 zero bytes lacks the compression flag, so it is no G1 point."""
+    body, version, blobs, commitments, proofs = _blob_form()
+    changed = [bytes(48), *proofs[1:]]
+    raw = b"\x03" + rlp.encode([body, version, blobs, commitments, changed])
+    error = {"code": -32000, "message": "Invalid input"}
+    error["data"] = "a blob, a commitment or a proof is not a valid KZG input"
     assert _error(raw) == error
 
 

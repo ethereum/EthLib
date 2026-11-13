@@ -28,6 +28,11 @@ eth_rpc_encode_block_access_list(
   lean_object* args
 );
 
+extern lean_object*
+eth_rpc_apply_overrides(
+  lean_object* args
+);
+
 /* ---- Wrappers --------------------------------------------------------- */
 
 PyObject*
@@ -68,4 +73,12 @@ py_rpc_encode_block_access_list(
   PyObject* args
 ) {
   return call_pyvalue_export(eth_rpc_encode_block_access_list, args, 1, RPC_ERROR);
+}
+
+PyObject*
+py_rpc_apply_overrides(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_rpc_apply_overrides, args, 2, RPC_ERROR);
 }

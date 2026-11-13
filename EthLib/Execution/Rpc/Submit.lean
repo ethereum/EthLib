@@ -33,6 +33,7 @@ Here the pool accepts each transaction that passes these checks:
 
 - its raw form decodes at the fork of the next block;
 - the counts of its blobs, commitments and proofs match, and each commitment has its hash;
+- its KZG proofs verify against the trusted setup of the view;
 - the inclusion checks pass in the next block, against the state of the head.
 
 The next block is taken one second after the head, its earliest time, as in the fee history.
@@ -49,9 +50,7 @@ So the checks read the state of the head with the nonce of the sender raised to 
 
 A nonce below that of the sender still fails.
 
-These checks do not verify the KZG proofs yet.
-
-A raw form that does not decode, or whose blobs do not match its counts or hashes, gets `-32000`.
+A raw form that does not decode, or whose blobs fail their counts, hashes or proofs, gets `-32000`.
 
 A failed inclusion check gets the code of the error groups that names its condition.
 
@@ -184,11 +183,7 @@ def sendRawTransaction (v : ChainView) (bytes : ByteArray) : Except RpcError Has
     invalidInput.toRpcError (some (.str (networkErrorText e)))
   let raw ← (decodeRawTransaction fork bytes).mapError invalid
   if let .network w := raw then
-    unless countsMatch fork w do
-      throw (invalid (.countMismatch w.tx.blobVersionedHashes.length w.blobs.length
-        w.commitments.length w.proofs.length))
-    unless hashesMatch w.tx.blobVersionedHashes w.commitments do
-      throw (invalid .versionedHashMismatch)
+    (validateNetwork v.setup fork w).mapError invalid
   let head := TransactionState.ofBlock ⟨v.head.state, ∅, ∅, ∅, ∅⟩
   -- A signature that names no sender fails in the inclusion checks, with its own code.
   let state := match recoverSender fork raw.tx with

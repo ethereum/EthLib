@@ -95,6 +95,10 @@ structure ChainView where
   genesis : Option (Hash32 × Nat) := none
   /-- `FORK_NEXT_VALUE` of EIP-3675, the block that stands for Paris in the fork ID, if set. -/
   mergeForkBlock : Option Nat := none
+  /-- The KZG trusted setup against which the proofs of a submitted blob transaction are checked.
+
+  The exports pass the embedded setup. -/
+  setup : Cryptography.Kzg.TrustedSetup
 
 namespace ChainView
 

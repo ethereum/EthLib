@@ -250,7 +250,7 @@ def validateGossipInput {preset : Preset} {fork : Fork} (config : Config)
     (checks : SignatureChecks) (store : Store preset fork) (statuses : PayloadStatuses)
     (topic : String) (seen : Seen) (input : GossipInput) : Result (ValidationResult × Seen) := do
   let message ← decodeGossipInput topic input
-  let setup ← runForkChoice (embeddedSetup.mapError .kzg)
+  let setup ← runForkChoice ((embeddedSetup ()).mapError .kzg)
   runForkChoice
     (validateGossipMessage config checks setup seen store statuses input.currentTimeMs message)
 
@@ -269,7 +269,7 @@ def validatePartialInputs {preset : Preset} {fork : Fork} (config : Config)
     (checks : SignatureChecks) (store : Store preset fork) (inputs : List GossipInput) :
     Result (List (String × Option String)) := do
   if fulu : .fusaka ≤ fork then
-    let setup ← runForkChoice (embeddedSetup.mapError .kzg)
+    let setup ← runForkChoice ((embeddedSetup ()).mapError .kzg)
     let groupEnd := if .glamsterdam ≤ fork then 41 else 33
     let mut headers : PartialHeaders preset fork := []
     let mut out := #[]

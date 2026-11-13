@@ -2262,6 +2262,9 @@ The theorems in `Networking/Proofs/Gossip/Heartbeat.lean` state these properties
 - After a heartbeat, every mesh has at most `D_high + D_out` peers, at most `D_high` of them not outbound, and none twice.
   The two bounds need `D ≤ D_high`, as the consensus layer sets it.
 - A mesh of a joined topic below `D_low`, once its negative peers leave, fills up to `D`, or takes every peer that it may GRAFT.
+- A mesh of a joined topic between `D_low` and `D_high`, once its negative peers leave, keeps those peers in their order.
+  It takes only outbound peers that it may GRAFT, until it holds `D_out` outbound peers or runs out of them.
+  So a mesh at `D_low` takes no peer to reach `D`, and one that holds at least `D_out` outbound peers is unchanged.
 - No mesh holds a peer with a negative score.
 - A mesh of a joined topic pruned for oversubscription keeps `D_out` outbound peers, or all the outbound peers it held once its negative peers left.
   This needs `D ≤ D_high` and `D_out ≤ D`.
@@ -3972,6 +3975,33 @@ The result reports the gas used and the error message of that second call (`crea
 A rejection of the second call, such as a gas limit that no longer covers the list, is the error of the method.
 The list is not iterated to a fixed point, so a call whose accesses change with its access list can report a list that the second call does not match.
 
+`eth_simulateV1` of [`execute.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth/execute.yaml) runs calls in a sequence of blocks on top of a base block (`Execution/Rpc/Simulate.lean`).
+EthLib specifies its request and the checks before the execution.
+The simulated blocks are not yet specified, so a request that passes the checks gets `-32603`.
+The reader rejects a key outside the schema of block or account overrides (`blockOverrides_unknown_key`, `accountOverride_unknown_key`, `Proofs/Rpc/Simulate.lean`).
+It rejects an account override with both `state` and `stateDiff`, even when one is `null` (`accountOverride_state_and_stateDiff`).
+A rejected override rejects the whole request (`simulatePayload_rejects` and the lemmas before it), with code `-32602` (`call_simulate_rejected`).
+Each block keeps the number and the time that the request gives it (`planBlocks_number`, `planBlocks_time`).
+Without these overrides, the order check passes (`checkOrder_planBlocks_of_none`).
+It passes exactly when the numbers and the times strictly increase from the base block, gap blocks included (`checkOrder_planBlocks_iff`).
+An account override sets each field that it gives, and keeps the others (`applyAccountOverride_nonce` and the lemmas after it).
+`stateDiff` keeps the slots that it does not name, and `state` clears them (`applyAccountOverride_stateDiff`, `applyAccountOverride_state`).
+The overrides of a block keep every account that they do not name (`applyOverrides_not_mem`), and act on each account they name as its override alone (`applyOverrides_mem`).
+The defaults of a call come with the simulated blocks.
+
+Where the source is silent or conflicts with itself, EthLib follows the fixtures:
+
+- times strictly increase, as the notes say, though the schema lets a time stay the same;
+- a block without a time comes 12 seconds after the block before it, as the notes say, though the schema says one second;
+- a gap block comes a block time after the block before it, 12 seconds by default, and counts toward the limit of 256 blocks;
+- an unknown base block, and a move of an address that is not a precompile, get `-32000`;
+- a precompile moved to its own address gets `-38022`;
+- the text of `-38023` is ambiguous, and the fixtures move two precompiles to one address without an error, so EthLib never gives it;
+- `state` with `stateDiff` gets `-32602`, for which the source gives no code;
+- an address or a slot given twice, in hex digits of another case, gets `-32602`;
+- block and account overrides support no key beyond their schema, `difficulty` included, nor a key that differs from one only in case;
+- the payload and each block ignore a key outside their schema, as the schema allows.
+
 `eth_feeHistory` and `eth_baseFee` of [`fee_market.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth/fee_market.yaml) report base fees, gas ratios and tips (`Execution/Rpc/Fees.lean`).
 A history is the one of the blocks of its range, when its percentiles strictly increase and the node holds its newest block (`ChainView.feeHistory_eq_ok`, `Proofs/Rpc/Fees.lean`).
 The base fee of each block of the range is that of its header, or 0 before London (`ChainView.feeHistory_baseFeePerGas`).
@@ -4002,6 +4032,7 @@ Before Fusaka that form has one proof per blob, and from Fusaka it has cell proo
 The hash of an accepted submission is the hash of the transaction that the raw form holds, without blobs, commitments or proofs (`ChainView.sendRawTransaction_hash`, `Proofs/Rpc/Submit.lean`).
 When the first byte is not 3, it is the Keccak-256 hash of the raw bytes (`ChainView.sendRawTransaction_keccak`).
 The dispatcher reads the raw bytes and answers with that hash (`ChainView.call_sendRawTransaction`).
+A network form is accepted only when its KZG proofs verify against the trusted setup of the view (`ChainView.proofsVerify_of_sendRawTransaction`).
 Each code that `rpcCode` gives is in a group that the method lists, within the range of that group (`rpcCode_mem`).
 Two errors with one code are of one kind (`rpcCode_injective`).
 The mapping is: `insufficientGas` to 800, `gasAllowanceExceeded` to 803, `priorityFeeGreaterThanMaxFee` to 804, `insufficientMaxFeePerGas` to 806, `insufficientBalance` to 809, `nonceTooLow` to 1, `nonceTooHigh` to 2, and `invalidSignature` to 1001.
@@ -4011,15 +4042,15 @@ The cost behind 809 also counts the blob gas at its fee cap.
 The method checks a transaction with no gas used before it, so the allowance of the block is exceeded exactly when the gas limit is above the block's, the condition of 803.
 
 Which transactions a pool keeps is the choice of the node, and EthLib fixes one simple rule.
-The rule accepts a transaction whose raw form decodes, whose blob counts and versioned hashes match, and which passes the inclusion checks in the next block against the state of the head.
+The rule accepts a transaction whose raw form decodes and whose blob counts, versioned hashes and KZG proofs are valid (`ChainView.validateNetwork_of_sendRawTransaction`).
+The transaction must also pass the inclusion checks in the next block, against the state of the head.
 That next block is one second after the head, its earliest time, as in the fee history.
 It takes the fork, the base fees and the blob schedule of the fee history, and the gas limit of the head.
 Its base fee is the last base fee of the fee history (`ChainView.baseFeeOf_nextEnvironment`).
 A nonce above that of the sender is a future transaction, which the rule accepts.
 The checks then read the head with the nonce of the sender raised to that of the transaction (`withFutureNonce_nonce`), so the code 2 never arises.
-The rule does not verify the KZG proofs yet.
 From Fusaka, the source lets a node accept proofs per blob and convert them to cell proofs; the rule takes the choice that this "may" leaves, and rejects that form.
-A raw form that does not decode, or whose blobs do not match its counts or versioned hashes, gets `-32000`.
+A raw form that does not decode, or whose blobs fail their counts, their versioned hashes or their proofs, gets `-32000`.
 A failed inclusion check without a code gets `-32003`.
 The errors of EthLib without a code are `emptyTransaction`, `unsupportedType`, `decoding`, `encoding`, `initCodeTooLarge`, `gasLimitExceeded`, `nonceOverflow`, `wrongChainId`, `noBlobData`, `blobCountExceeded`, `invalidBlobVersionedHash`, `emptyAuthorizationList`, `blobGasLimitExceeded`, `insufficientMaxFeePerBlobGas`, `senderNotEoa` and `missingCode`.
 `intrinsicGasAboveLimit` also has none.
@@ -4373,10 +4404,54 @@ The source leaves these points open, decided here:
 - Emission on other payload transitions is optional, so a head event comes only on the transition from empty to full that the source requires.
 
 The optimistic flag of each event is an input, since it depends on what the node has verified.
-The payload attributes event, the exports and their Python tests remain for #2091.
+The event of the payload attributes is in `Engine/BeaconApiEvents.lean`, since it needs the types of the Engine API.
+`payloadAttributesEvent_fields` (`Engine/Proofs/BeaconApiEvents.lean`) shows that the Engine API and the event write the fields of the attributes from one list.
+The event writes each name in snake case and each integer as decimal text, where the Engine API keeps the name and writes the integer in hexadecimal.
+`payloadAttributesEvent_spec` shows that the event names the slot of the state, the proposer that the state gives, the root of its latest block header and the head of the forkchoice update.
+`payloadAttributesEvent_prepareExecutionPayload` shows that before Gloas, for the update of a proposer, the event names the head that the proposer chose, from Deneb the parent root of the attributes, and the slot that gives their timestamp.
+`payloadAttributesEvent_prepareExecutionPayloadGloas` shows the same from Gloas, for the event of the state that the attributes read: it names the parent on which the proposer builds, the safe and finalized blocks given, the parent root of the attributes, and their slot number, which gives their timestamp.
+Until Gloas, the number of the parent execution block is that of the latest payload header of the state.
+Before the merge the parent is a block of proof of work, which the state does not describe, so the caller gives its number.
+The event covers Bellatrix to Gloas (the forks before Heze), and these gaps remain:
+
+- From Heze, the fifth version of the attributes adds the transactions of the inclusion lists, which the attributes of EthLib lack, and the pinned API names no consensus version for Heze, so the event is not defined there.
+- The parent root is the root of the latest block header of the state, which is right only for a state at the slot of the proposal, after its empty slots; the event takes that state as given.
+- How often the event is sent may depend on the node, so only its content is specified.
+
+The exports of the events and their Python tests remain for #2091.
 The light client events and the event of an available payload depend on what the node has received, and are not defined here.
 
-No definition yet says when an event of a received object fires (#2090).
+The events of received objects are in `Consensus/BeaconApi/ObjectEvents.lean` (#2090).
+An object from a peer and one from a client take the same path: the gossip dispatch, then, for a block or an envelope, the handler of the fork choice.
+`eventsOfGossip_accept` (`Consensus/Proofs/BeaconApi/ObjectEvents.lean`) shows that an object whose topic has an event gives it exactly when gossip accepts the object.
+`receiveGossip_accept` shows that any event of a received message means that the dispatch accepted it.
+`receiveGossip_of_pass` and `publish_receiveGossip` show that a message which passes the gossip check of an endpoint, or which a publish endpoint does not refuse, gives the events that it gives from a peer.
+`itemEvents_singleton_of_pass` and `itemEvents_singleton_of_fail` show that the gossip event of an item of one message follows the same check.
+`eventsOfBlockImport_block` shows that a block event names a block that is new to the store and that the store then holds, and `eventsOfBlockImport_new` that such a block gives it.
+`blockEvent_gloas` shows that from Gloas a block event names the builder and the block hash of the bid of its block, and none before.
+`eventsOfEnvelopeImport_ok` and `eventsOfEnvelopeImport_of_accepted` show that an envelope is imported exactly when the envelope handler accepts it, and that the store then counts its payload as verified.
+`envelopeEvent?_eq_some` shows that it gives a payload event exactly when its payload is new to the store.
+`publishBlock_eventsOfBlockImport` and `publishEnvelope_eventsOfEnvelopeImport` show that an object that a publish endpoint integrates gives the store and the events of an import.
+`publishBlockEvents_integrated` and `publishEnvelopeEvents_integrated` show that such an object gives its gossip event, then its import event; `publishBlockEvents_of_fail` and `publishEnvelopeEvents_of_fail` show that an object that fails gossip gives none.
+The source leaves these points open, decided here:
+
+- The payloads are fixed only by examples; the field names and kinds come from them, and an object that an event carries is written whole in the JSON of the API.
+- The source does not say whether an object gives two events when it arrives twice. Each acceptance by gossip gives one gossip event; the rules of a topic ignore a copy whose keys they have seen. A block that the store already holds gives no block event, since the block handler then leaves the store as it was; an envelope whose payload the store already holds gives no payload event.
+- An object that passes gossip at a publish endpoint gives its gossip event even when a later check of its level refuses it, since the source names only the rules of the topic.
+- The example of the `attestation` event has the form of Electra, with committee bits, but from Electra the attestation subnets carry single attestations. Turning one into an attestation needs its committee, which the source does not specify for the event. So the `attestation` event comes before Electra, and the `single_attestation` event from Electra.
+- The source lists only the network as the origin of the payload attestation event, unlike the other gossip events. Here a payload vote submitted through the API gives it too, since it passes the same rules.
+- The aggregate, sync committee message and inclusion list topics have no event in the source, so they give none. The release removed the blob sidecar event, so blob sidecars give none at Deneb and Electra.
+- The slot of a payload event is the slot number of its payload, which gossip and the envelope handler check to equal the slot of its block.
+- The bid, payload vote and proposer preferences events name the consensus version of the fork, as their examples do. The source names no version for Heze, so from Heze these events carry none.
+
+The optimistic flag of a block is an input, as for the events of the fork choice.
+The pool and publish export gives the events of each request, and another export gives the event of one object that gossip accepts.
+The Python tests check that each example of an object that an event carries whole is the event of that object.
+They check the block, payload and column events against the gossip vectors, with block roots that the SSZ export computes where the object holds none.
+The pool tests check that a request gives the event of its topic exactly for the objects that gossip accepts, and the publish tests check the events of blocks and envelopes.
+The import events come only through the publish endpoints; the fork choice and gossip exports give no events.
+The execution layer of the export accepts every payload, so no event there is optimistic.
+The `attestation` example is checked without its committee bits, before Electra.
 
 The debug answers show the tree of the fork choice and its leaves (`Consensus/BeaconApi/Debug.lean`).
 `mem_treeNodes` (`Consensus/Proofs/BeaconApi/Debug.lean`) shows that the listed nodes are exactly the nodes of the tree, and `nodeViews_nodes` shows that the views follow that list, by root and status as the API names them: one per block before Gloas, and from Gloas the pending and empty nodes of each block, with the full node once its payload is verified.
@@ -5151,12 +5226,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 506 operations and 49 size constants.
-The Python extension calls 506 of the operations and 49 of the constants.
+Lean exports 508 operations and 49 size constants.
+The Python extension calls 508 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-11636 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2598), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (207), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1619), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (161), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (71), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (800), `x25519.c` (21), `xmss.c` (134).
+11666 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2607), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (207), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1625), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (161), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (802), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.
