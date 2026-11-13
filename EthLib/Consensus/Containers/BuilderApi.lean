@@ -17,6 +17,8 @@ The [builder specification] defines them at Bellatrix.
 
 Its documents for [Capella], [Deneb] and [Electra] extend the bid and the blinded body.
 
+From Deneb the builder reveals the blobs of its payload alongside it, in a blobs bundle.
+
 The [Fulu] document changes only the blobs bundle, so Fulu keeps the bid and body of Electra.
 
 From Gloas the bid is part of the protocol.
@@ -42,7 +44,7 @@ The [Gloas builder] document gives the authentication data limit and the executi
 
 namespace EthLib.Consensus
 
-open Base Cryptography.Bls Serialization.Ssz
+open Base Cryptography.Bls Cryptography.Kzg Serialization.Ssz
 
 variable {preset : Preset} {fork : Fork}
 
@@ -170,6 +172,78 @@ structure SignedBuilderBid (preset : Preset) (fork : Fork) where
 instance : SszType (SignedBuilderBid preset fork) :=
   .container ["message", "signature"] (fun s => (s.message, s.signature))
     (fun (message, signature) => ⟨message, signature⟩)
+
+/-- The bound on the proofs of a blobs bundle at a fork.
+
+Before Fusaka the bound is that of the blobs: one proof per blob.
+
+From Fusaka the [Fulu] document bounds them by the field elements of all extended blobs.
+
+That is more than the cell proofs that a bundle can need, so it admits bundles that no block uses.
+
+The bound also sets the depth of the Merkle tree of the proofs.
+
+[Fulu]: https://github.com/ethereum/builder-specs/blob/fce64468a81a87892d7cb9b4858272bb3d010e50/specs/fulu/builder.md#blobsbundle
+-/
+def builderBlobProofsLimit (preset : Preset) (fork : Fork) : Nat :=
+  if .fusaka ≤ fork then
+    preset.FIELD_ELEMENTS_PER_EXT_BLOB.toNat * preset.MAX_BLOB_COMMITMENTS_PER_BLOCK.toNat
+  else preset.MAX_BLOB_COMMITMENTS_PER_BLOCK.toNat
+
+/-- From Deneb to Fulu: the blobs of a payload, with their commitments and their proofs.
+
+The source calls it a blobs bundle; this name keeps it apart from that of the Engine API.
+
+The [Deneb] document defines it, and the [Fulu] document changes the bound on its proofs.
+
+[Deneb]: https://github.com/ethereum/builder-specs/blob/fce64468a81a87892d7cb9b4858272bb3d010e50/specs/deneb/builder.md#blobsbundle
+[Fulu]: https://github.com/ethereum/builder-specs/blob/fce64468a81a87892d7cb9b4858272bb3d010e50/specs/fulu/builder.md#blobsbundle
+-/
+structure BuilderBlobsBundle (preset : Preset) (fork : Fork) where
+  /-- The commitments to the blobs. -/
+  commitments : SszList KZGCommitment preset.MAX_BLOB_COMMITMENTS_PER_BLOCK.toNat
+  /-- The proofs: one per blob before Fusaka, and the cell proofs of the blobs from Fusaka. -/
+  proofs : SszList KZGProof (builderBlobProofsLimit preset fork)
+  /-- The blobs. -/
+  blobs : SszList Blob preset.MAX_BLOB_COMMITMENTS_PER_BLOCK.toNat
+
+namespace BuilderBlobsBundle
+
+/-- The names of the fields of a blobs bundle, in their order. -/
+def names : List String := ["commitments", "proofs", "blobs"]
+
+instance : SszType (BuilderBlobsBundle preset fork) :=
+  .container names (fun b => (b.commitments, b.proofs, b.blobs))
+    (fun (commitments, proofs, blobs) => ⟨commitments, proofs, blobs⟩)
+
+end BuilderBlobsBundle
+
+/-- From Deneb to Fulu: a payload with its blobs bundle, which a builder reveals.
+
+Before Deneb a builder reveals the payload alone, and Electra keeps the container of Deneb.
+
+The [Deneb] and [Fulu] documents define it, and [`blinded_blocks.yaml`] gives it as the response.
+
+[Deneb]: https://github.com/ethereum/builder-specs/blob/fce64468a81a87892d7cb9b4858272bb3d010e50/specs/deneb/builder.md#executionpayloadandblobsbundle
+[Fulu]: https://github.com/ethereum/builder-specs/blob/fce64468a81a87892d7cb9b4858272bb3d010e50/specs/fulu/builder.md#executionpayloadandblobsbundle
+[`blinded_blocks.yaml`]: https://github.com/ethereum/builder-specs/blob/fce64468a81a87892d7cb9b4858272bb3d010e50/apis/builder/blinded_blocks.yaml
+-/
+structure ExecutionPayloadAndBlobsBundle (preset : Preset) (fork : Fork) where
+  /-- The payload. -/
+  executionPayload : ExecutionPayload preset fork
+  /-- The blobs of the payload, with their commitments and proofs. -/
+  blobsBundle : BuilderBlobsBundle preset fork
+
+namespace ExecutionPayloadAndBlobsBundle
+
+/-- The names of the fields of a payload with its bundle, in their order. -/
+def names : List String := ["execution_payload", "blobs_bundle"]
+
+instance : SszType (ExecutionPayloadAndBlobsBundle preset fork) :=
+  .container names (fun p => (p.executionPayload, p.blobsBundle))
+    (fun (executionPayload, blobsBundle) => ⟨executionPayload, blobsBundle⟩)
+
+end ExecutionPayloadAndBlobsBundle
 
 /-- A beacon block body with the header of its payload in place of the payload.
 
