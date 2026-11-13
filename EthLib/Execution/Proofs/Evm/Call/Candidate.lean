@@ -19,7 +19,9 @@ A step never lowers a nonce, and gives code only to the address of a creation.
 
 That address had its storage wiped when the creation started, and a rollback restores a snapshot.
 
-So each write of a step keeps the relation, and the shared rules for steps carry it to every step.
+So each write of a step keeps the candidates.
+
+The shared rules for steps carry that to every step.
 
 A call also keeps its message, so the deposit of code knows the address of its creation.
 
@@ -271,7 +273,7 @@ private theorem keepsCandidates_finishSelfdestruct {beneficiary : Address} {refu
 
 /-! ## Steps of a frame -/
 
-/-- Each write of a step keeps the candidates, static frame or not. -/
+/-- Each write of a step keeps the candidates, in any frame. -/
 theorem stepRules_keepsCandidates :
     StepRules fork (fun a b : Evm fork Meter => KeepsCandidates a.state b.state) where
   trans := KeepsCandidates.trans
@@ -298,7 +300,9 @@ private theorem stepRules_candidateStep :
     StepRules fork (CandidateStep (fork := fork) (Meter := Meter)) :=
   stepRules_keepsCandidates.and stepRules_messageCode
 
-/-- A step keeps the candidates, its message and its code, when the child it sends does. -/
+/-- A step keeps the candidates, its message and its code.
+
+That needs the child it sends to keep the candidates. -/
 theorem step_keepsCandidates {evm : Evm fork Meter} {result : StepResult fork Meter}
     (h : step fork evm = .ok result) : result.Keeps CandidateStep CandidateChild evm := by
   have r := stepRules_candidateStep.step h

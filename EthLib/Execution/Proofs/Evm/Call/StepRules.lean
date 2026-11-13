@@ -49,7 +49,7 @@ It also relates a caller to the frame that ends each message the caller sends. -
 structure OrdinaryStepRules (fork : Fork) (R : Evm fork Meter → Evm fork Meter → Prop) : Prop where
   /-- The relation is transitive. -/
   trans : ∀ {a b c}, R a b → R b c → R a c
-  /-- A step that keeps the state up to the records of its reads keeps the relation. -/
+  /-- A step that only adds reads keeps the relation. -/
   static : ∀ {a b}, StaticStep a b → R a b
   /-- A write of storage that changes the refund counter keeps the relation. -/
   sstore : ∀ (evm : Evm fork Meter) (address : Address) (key : Bytes32) (value : U256)
