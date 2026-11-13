@@ -658,7 +658,9 @@ The sum must stay below the far future epoch, so that no new exit lands on it.
 
 The churn left over plus three churn bounds must fit too.
 
-After the step, the end of the queue plus the cost still owed is at most the ceiling plus the cost.
+After the step, the end of the queue plus the cost still owed is at most a sum.
+
+That sum is the ceiling plus the cost before the step.
 
 The same holds for each exit epoch.
 
