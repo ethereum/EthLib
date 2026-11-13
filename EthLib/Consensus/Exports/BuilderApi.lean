@@ -80,10 +80,8 @@ def unblindOf (args : String × String × ByteArray × ByteArray) :
   if range : HasBuilderApi fork then
     let signed ← runSsz "input rejected"
       (SszType.deserialize (SignedBlindedBeaconBlock preset fork) blinded)
-    let payload ← if .dencun ≤ fork then
-        (·.executionPayload) <$> runSsz "payload rejected"
-          (SszType.deserialize (ExecutionPayloadAndBlobsBundle preset fork) revealed)
-      else runSsz "payload rejected" (SszType.deserialize (ExecutionPayload preset fork) revealed)
+    let payload ← (·.executionPayload) <$> runSsz "payload rejected"
+      (SszType.deserialize (RevealedPayload preset fork) revealed)
     match signed.unblind range payload with
     | .error .headerMismatch => return none
     | .error (.header fault) => runSsz "header rejected" (.error fault)
