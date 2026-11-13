@@ -2544,23 +2544,6 @@ def blockConsolidationSites {fork : Fork} (config : Config) (checks : SignatureC
       requests.consolidations.data.toList).2
   else return []
 
-private theorem sync_registry {fork : Fork} {s t : BeaconState preset fork}
-    {altair : .altair ≤ fork} {aggregate : SyncAggregate preset}
-    (ok : processSyncAggregate config checks s altair aggregate = .ok t) :
-    t.validators = s.validators := by
-  unfold processSyncAggregate at ok
-  simp only [bind_ok_iff] at ok
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, folded⟩ := ok
-  rw [← Array.foldlM_toList] at folded
-  refine foldlM_ok_invariant (fun t => t.validators = s.validators) ?_ rfl folded
-  intro a reward b kept stepped
-  unfold applySyncReward at stepped
-  split at stepped
-  · simp only [bind_ok_iff, liftAccessor_ok] at stepped
-    obtain ⟨_, raised, _, _, paid⟩ := stepped
-    exact (increaseBalance_validators paid).trans ((increaseBalance_validators raised).trans kept)
-  · exact (decreaseBalance_validators (liftAccessor_ok.mp stepped)).trans kept
-
 private theorem exitUpdate_consolidationFrame {fork : Fork} {s t : BeaconState preset fork}
     (electra : .pectra ≤ fork) {amount : Gwei} {epoch : Epoch}
     (ok : computeExitEpochAndUpdateChurn config s electra amount = .ok (t, epoch)) :
@@ -2811,7 +2794,7 @@ private theorem block_indexedTrace_sites {fork : Fork} (electra : .pectra ≤ fo
       ((first ++ exits) ++ consolidations) := by
     simpa only [List.append_assoc] using
       firstCoverage.append_of_effectiveKept covered firstLife requestsLife firstBalances
-  have tailData := sync_registry syncedOk
+  have tailData := processSyncAggregate_validators syncedOk
   refine ⟨sites, recorded, first ++ exits, consolidations, ?_, ?_, ?_, ?_, ?_, consolidationRates,
     consolidationSites⟩
   · simpa only [List.append_assoc] using firstFrom.append requestsFrom
@@ -3404,7 +3387,7 @@ private theorem CountCohortStep.block {f : Fork} {s t : BeaconState preset f}
       (fun {_ _ gloas _} _ => absurd gloas notGloas) operated
   have tail : CountCohortStep config bound last t := by
     split at synced
-    · exact data (sync_registry synced) (frame_processSyncAggregate synced).slot
+    · exact data (processSyncAggregate_validators synced) (frame_processSyncAggregate synced).slot
     · cases synced
       exact .refl _ bound
   exact head.trans <|

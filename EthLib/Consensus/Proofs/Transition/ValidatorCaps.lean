@@ -419,21 +419,6 @@ private theorem CapStep.requests {f : Fork} {s t : BeaconState preset f}
     ((CapStep.fold (fun _ _ _ => CapStep.withdrawalRequest) withdrawals).trans
       (CapStep.fold (fun _ _ _ => CapStep.consolidationRequest order) consolidations))
 
-private theorem CapStep.sync {f : Fork} {s t : BeaconState preset f}
-    {altair : .altair ≤ f} {aggregate : SyncAggregate preset}
-    (ok : processSyncAggregate config checks s altair aggregate = .ok t) : CapStep s t := by
-  unfold processSyncAggregate at ok
-  simp only [bind_ok_iff] at ok
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, folded⟩ := ok
-  rw [← Array.foldlM_toList] at folded
-  refine CapStep.fold (fun _ _ _ ok => ?_) folded
-  unfold applySyncReward at ok
-  split at ok
-  · simp only [bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, raised, _, _, paid⟩ := ok
-    exact (CapStep.increase raised).trans (CapStep.increase paid)
-  · exact CapStep.decrease (liftAccessor_ok.mp ok)
-
 private theorem CapStep.proposerSlashing {f : Fork} {s t : BeaconState preset f}
     {slashing : ProposerSlashing}
     (ok : processProposerSlashing config checks s slashing = .ok t) : CapStep s t := by
@@ -482,7 +467,7 @@ private theorem CapStep.block {f : Fork} {s t : BeaconState preset f}
       (fun attested => same (by rw [processPayloadAttestation_eq attested])) operated
   have tail : CapStep last t := by
     split at synced
-    · exact CapStep.sync synced
+    · exact same (processSyncAggregate_validators synced)
     · cases synced
       exact CapStep.refl _
   exact head.trans <|

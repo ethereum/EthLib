@@ -291,23 +291,6 @@ private theorem effectiveKept_requests {f : Fork} {s t : BeaconState preset f}
       (fun _ _ _ ok => (registryLifecycle_processConsolidationRequest ok).size_le) consolidations)
     grows'.size_le) grows.size_le
 
-private theorem effectiveKept_sync {f : Fork} {s t : BeaconState preset f}
-    {altair : .altair ≤ f} {aggregate : SyncAggregate preset}
-    (ok : processSyncAggregate config checks s altair aggregate = .ok t) : EffectiveKept s t := by
-  unfold processSyncAggregate at ok
-  simp only [bind_ok_iff] at ok
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, folded⟩ := ok
-  rw [← Array.foldlM_toList] at folded
-  refine effectiveKept_fold (fun _ _ _ ok => ?_)
-    (fun _ _ _ ok => (frame_applySyncReward ok).registryGrows) folded
-  unfold applySyncReward at ok
-  split at ok
-  · simp only [bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, raised, _, _, paid⟩ := ok
-    exact effectiveKept_trans (effectiveKept_increase raised) (effectiveKept_increase paid)
-      (frame_increaseBalance raised).registryGrows
-  · exact effectiveKept_decrease (liftAccessor_ok.mp ok)
-
 theorem effectiveKept_proposerSlashing {f : Fork} {s t : BeaconState preset f}
     {slashing : ProposerSlashing}
     (ok : processProposerSlashing config checks s slashing = .ok t) : EffectiveKept s t := by
@@ -385,7 +368,7 @@ theorem effectiveKept_block {f : Fork} {s t : BeaconState preset f}
       (fun attested => same (by rw [processPayloadAttestation_eq attested])) operated
   have tail : Kept last t := by
     split at synced
-    · exact ⟨effectiveKept_sync synced, (frame_processSyncAggregate synced).registryGrows⟩
+    · exact same (processSyncAggregate_validators synced)
     · cases synced
       exact refl _
   exact (trans head <| trans (folds (fun _ _ _ slashed => ⟨effectiveKept_proposerSlashing slashed,

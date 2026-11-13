@@ -670,6 +670,24 @@ theorem processWithdrawals_validators {capella : .shapella ≤ fork}
     obtain ⟨_, _, _, _, applied⟩ := computed
     exact expected applied
 
+/-- The sync aggregate changes balances only, never the validators. -/
+theorem processSyncAggregate_validators {altair : .altair ≤ fork}
+    {aggregate : SyncAggregate preset}
+    (computed : processSyncAggregate config checks state altair aggregate = .ok after) :
+    after.validators = state.validators := by
+  unfold processSyncAggregate at computed
+  simp only [bind_ok_iff] at computed
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, folded⟩ := computed
+  rw [← Array.foldlM_toList] at folded
+  refine foldlM_ok_invariant (fun t => t.validators = state.validators) ?_ rfl folded
+  intro _ _ _ kept stepped
+  unfold applySyncReward at stepped
+  split at stepped
+  · simp only [bind_ok_iff, liftAccessor_ok] at stepped
+    obtain ⟨_, raised, _, _, paid⟩ := stepped
+    exact (increaseBalance_validators paid).trans ((increaseBalance_validators raised).trans kept)
+  · exact (decreaseBalance_validators (liftAccessor_ok.mp stepped)).trans kept
+
 /-- Before Gloas, the steps of a block before its operations keep the validators.
 
 From Gloas the payload of the parent runs first, and its requests can start exits. -/
@@ -712,22 +730,6 @@ private theorem registryLifecycle_processBlockExecution {body : BeaconBlockBody 
 
 /-! ## The sync aggregate -/
 
-private theorem registryLifecycle_processSyncAggregate {altair : .altair ≤ fork}
-    {aggregate : SyncAggregate preset}
-    (computed : processSyncAggregate config checks state altair aggregate = .ok after) :
-    RegistryLifecycle state after := by
-  unfold processSyncAggregate at computed
-  simp only [bind_ok_iff] at computed
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, folded⟩ := computed
-  rw [← Array.foldlM_toList] at folded
-  refine RegistryLifecycle.foldlM (fun _ _ _ ok => ?_) folded
-  unfold applySyncReward at ok
-  split at ok
-  · simp only [bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, raised, _, _, paid⟩ := ok
-    exact (RegistryLifecycle.increaseBalance raised).trans (.increaseBalance paid)
-  · exact .decreaseBalance (liftAccessor_ok.mp ok)
-
 /-! ## Blocks -/
 
 private theorem registryLifecycle_processBlock {block : BeaconBlock preset fork}
@@ -752,7 +754,7 @@ private theorem registryLifecycle_processBlock {block : BeaconBlock preset fork}
       (fun ok => by rw [processPayloadAttestation_eq ok]; exact .refl _) operated
   have tail : RegistryLifecycle last after := by
     split at synced
-    · exact registryLifecycle_processSyncAggregate synced
+    · exact .of_data (congrArg (·.data) (processSyncAggregate_validators synced))
     · cases synced
       exact .refl _
   exact head.trans <|
