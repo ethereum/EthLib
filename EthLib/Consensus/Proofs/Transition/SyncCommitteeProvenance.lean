@@ -446,39 +446,17 @@ private theorem processBlsToExecutionChange {signed : SignedBLSToExecutionChange
   obtain ⟨_, _, _, _, _, set⟩ := processBlsToExecutionChange_ok ok
   exact setValidator set
 
+/-- Block operations keep both committees, read through master's folds of the operations. -/
 private theorem processOperations {body : BeaconBlockBody preset fork} {parentSlot : Slot}
     (ok : Consensus.processOperations config checks state body parentSlot = .ok after) :
     SameSyncCommittees state after := by
-  unfold Consensus.processOperations at ok
-  split at ok
-  · unfold processOperationsGloas at ok
-    simp only [bind_ok_iff, ← Array.foldlM_toList] at ok
-    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, proposers, _, attesters, _,
-      attestations, _, exits, _, changes, paid⟩ := ok
-    exact (foldlM (fun _ _ _ ok => processProposerSlashing ok) proposers).trans <|
-      (foldlM (fun _ _ _ ok => processAttesterSlashing ok) attesters).trans <|
-      (foldlM (fun _ _ _ ok => processAttestation ok) attestations).trans <|
-      (foldlM (fun _ _ _ ok => processVoluntaryExit ok) exits).trans <|
-      (foldlM (fun _ _ _ ok => processBlsToExecutionChange ok) changes).trans <|
-      foldlM (fun _ _ _ ok => by rw [processPayloadAttestation_eq ok]; exact .refl _) paid
-  simp only [bind_ok_iff, ensure_ok_iff, ← Array.foldlM_toList] at ok
-  obtain ⟨_, _, _, _, _, proposers, _, attesters, _, attestations, _, deposits, exited,
-    exits, changed, changesOk, requestsOk⟩ := ok
-  have changes : SameSyncCommittees exited changed := by
-    unfold processBlsToExecutionChanges at changesOk
-    split at changesOk
-    · rw [← Array.foldlM_toList] at changesOk
-      exact foldlM (fun _ _ _ ok => processBlsToExecutionChange ok) changesOk
-    · cases changesOk; exact .refl _
-  have requests : SameSyncCommittees changed after := by
-    split at requestsOk
-    · exact processExecutionRequests requestsOk
-    · cases requestsOk; exact .refl _
-  exact (foldlM (fun _ _ _ ok => processProposerSlashing ok) proposers).trans <|
-    (foldlM (fun _ _ _ ok => processAttesterSlashing ok) attesters).trans <|
-    (foldlM (fun _ _ _ ok => processAttestation ok) attestations).trans <|
-    (foldlM (fun _ _ _ ok => processDeposit ok) deposits).trans <|
-    (foldlM (fun _ _ _ ok => processVoluntaryExit ok) exits).trans <| changes.trans requests
+  obtain ⟨_, _, _, proposersOk, slashingsOk, attestedOk, rest⟩ :=
+    processOperations_folds_of SameSyncCommittees .refl (fun one two => one.trans two)
+      processDeposit processVoluntaryExit processBlsToExecutionChange processExecutionRequests
+      (fun paid => by rw [processPayloadAttestation_eq paid]; exact .refl _) ok
+  exact (foldlM (fun _ _ _ ok => processProposerSlashing ok) proposersOk).trans <|
+    (foldlM (fun _ _ _ ok => processAttesterSlashing ok) slashingsOk).trans <|
+    (foldlM (fun _ _ _ ok => processAttestation ok) attestedOk).trans rest
 
 private theorem processSyncAggregate {altair : .altair ≤ fork} {aggregate : SyncAggregate preset}
     (ok : Consensus.processSyncAggregate config checks state altair aggregate = .ok after) :
@@ -552,35 +530,27 @@ private theorem processEth1Data {before : fork < .hegota} {body : BeaconBlockBod
   rw [← rest]
   exact ⟨rfl, rfl⟩
 
+/-- A block keeps both committees, read through master's decomposition of a block.
+
+A block frame does not carry the committees.
+
+So the parent payload and the execution part keep their own short proofs. -/
 private theorem processBlock {block : BeaconBlock preset fork}
     {engine : ExecutionEngine preset fork}
     (ok : Consensus.processBlock config checks engine state block = .ok after) :
     SameSyncCommittees state after := by
-  unfold Consensus.processBlock at ok
-  split at ok
-  · unfold processBlockAltair at ok
-    simp only [bind_ok_iff] at ok
-    obtain ⟨paid, paidOk, headed, headedOk, executed, executedOk, revealed, revealedOk, voted,
-      votedOk, _, operatedOk, synced⟩ := ok
-    have paidStep : SameSyncCommittees state paid := by
-      split at paidOk
-      · exact processParentExecutionPayload paidOk
-      · cases paidOk; exact .refl _
-    have execution : SameSyncCommittees headed executed := by
-      split at executedOk
-      · exact processBlockExecution executedOk
-      · cases executedOk; exact .refl _
-    have vote : SameSyncCommittees revealed voted := by
-      split at votedOk
-      · exact processEth1Data votedOk
-      · cases votedOk; exact .refl _
-    exact paidStep.trans <| (processBlockHeader headedOk).trans <| execution.trans <|
-      (processRandao revealedOk).trans <| vote.trans <|
-      (processOperations operatedOk).trans (processSyncAggregate synced)
-  simp only [bind_ok_iff] at ok
-  obtain ⟨_, header, _, randao, _, eth1, operations⟩ := ok
-  exact (processBlockHeader header).trans <| (processRandao randao).trans <|
-    (processEth1Data eth1).trans (processOperations operations)
+  obtain ⟨input, last, started, operated, -, synced⟩ := processBlock_operationsInput ok
+  have head : SameSyncCommittees state input :=
+    OperationsInput.step_of SameSyncCommittees .refl (fun one two => one.trans two)
+      (fun _ paid => processParentExecutionPayload paid) processBlockHeader
+      (fun _ executed => processBlockExecution executed) processRandao
+      (fun _ voted => processEth1Data voted) started
+  have tail : SameSyncCommittees last after := by
+    split at synced
+    · exact processSyncAggregate synced
+    · cases synced
+      exact .refl _
+  exact head.trans ((processOperations operated).trans tail)
 
 private theorem applyDeltas {rewards penalties : Array Gwei} {index : Nat}
     (ok : Consensus.applyDeltas rewards penalties state index = .ok after) :
