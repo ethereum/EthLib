@@ -251,7 +251,7 @@ So the types that cross a module boundary are fixed here, and `EthLib/Base/` def
   The length is then part of the type, as `CONTRIBUTING.md` asks, and a 48-byte commitment cannot be passed where a 96-byte signature is expected.
   Such a value crosses a module boundary in its typed form, not as a `ByteArray`.
   Some functions still take or return such a value as a `ByteArray`.
-  [#2189](https://github.com/ethereum/EthLib/issues/2189) lists them, and each pull request that converts one removes it there.
+  [#2189](https://github.com/ethereum/EthLib/issues/2189) lists those found so far, and each pull request that converts one removes it there.
   At an external interface, one parser turns the bytes into the typed value or a typed error.
   A C export, EVM call data and a wire format are such interfaces.
 - A fixed-size type keeps the name its source gives it, defined once by the layer that owns the concept.
