@@ -680,69 +680,55 @@ private theorem executionRequests {body : BeaconBlockBody preset fork}
     (registryLifecycle_processWithdrawalRequest ok).size_le) first withdrawals
   exact fold (fun _ _ _ h ok => h.request ok) second consolidations
 
-private theorem operations {body : BeaconBlockBody preset fork} {parentSlot : Slot}
-    (early : fork < .glamsterdam) (electra : .pectra ≤ fork) (holds : PendingSources state)
-    (ok : processOperations config checks state body parentSlot = .ok after) :
-    PendingSources after := by
-  unfold processOperations at ok
-  rw [dite_eq_right (show ¬ .glamsterdam ≤ fork from Nat.not_le_of_lt early)] at ok
-  simp only [bind_ok_iff, ensure_ok_iff, ← Array.foldlM_toList] at ok
-  obtain ⟨_, _, _, _, _, proposers, _, attesters, _, attested, _, deposits, exited,
-    exits, changed, changes, requests⟩ := ok
-  have p := fold (fun _ _ _ h ok => h.kept (SamePendingQueue.proposer ok)
-    (registryLifecycle_processProposerSlashing ok).size_le) holds proposers
-  have a := fold (fun _ _ _ h ok => h.kept (SamePendingQueue.attester ok)
-    (registryLifecycle_processAttesterSlashing ok).size_le) p attesters
-  have att := fold (fun _ _ _ h ok => h.kept (SamePendingQueue.attestation electra ok)
-    (registryLifecycle_processAttestation ok).size_le) a attested
-  have d := fold (fun _ _ _ h ok => h.kept (SamePendingQueue.deposit electra ok)
-    (registryLifecycle_processDeposit ok).size_le) att deposits
-  have e := fold (fun _ _ _ h ok => h.kept (SamePendingQueue.voluntary ok)
-    (registryLifecycle_processVoluntaryExit ok).size_le) d exits
-  have c : PendingSources changed := by
-    unfold processBlsToExecutionChanges at changes
-    split at changes
-    · rw [← Array.foldlM_toList] at changes
-      exact fold (fun _ _ _ h ok => h.kept (SamePendingQueue.bls ok)
-        (registryLifecycle_processBlsToExecutionChange ok).size_le) e changes
-    · cases changes; exact e
-  rw [dite_eq_left electra] at requests
-  exact c.executionRequests requests
+/-- A block keeps the sources inside the registry, read through master's decomposition.
 
+A block frame does not carry the queue, so each step reads its own queue lemma. -/
 private theorem block (early : fork < .glamsterdam) (holds : PendingSources state)
     {block : BeaconBlock preset fork}
     (ok : processBlock config checks engine state block = .ok after) : PendingSources after := by
   by_cases electra : .pectra ≤ fork
-  · unfold processBlock at ok
-    rw [dite_eq_left (show .altair ≤ fork from Nat.le_trans (by decide) electra)] at ok
-    unfold processBlockAltair at ok
-    simp only [bind_ok_iff] at ok
-    obtain ⟨paid, paidOk, headed, headedOk, executed, executedOk, revealed, revealedOk, voted,
-      votedOk, operated, operatedOk, synced⟩ := ok
-    rw [dite_eq_right (show ¬ .glamsterdam ≤ fork from Nat.not_le_of_lt early)] at paidOk
-    cases paidOk
-    have h : PendingSources headed := by
-      obtain ⟨_, _, rfl⟩ := processBlockHeader_eq headedOk
-      exact holds
-    have e : PendingSources executed := by
-      split at executedOk
-      · exact h.kept (SamePendingQueue.blockExecution early executedOk)
-          (registryLifecycle_processBlockExecution executedOk).size_le
-      · cases executedOk; exact h
-    have r : PendingSources revealed := by
-      obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq revealedOk
-      exact e
-    have v : PendingSources voted := by
-      split at votedOk
-      · obtain ⟨_, _, rest⟩ := processEth1Data_eq votedOk
-        have queue : SamePendingQueue revealed voted := by
-          unfold SamePendingQueue; rw [← rest]
-        exact r.kept queue (registryLifecycle_processEth1Data votedOk).size_le
-      · cases votedOk; exact r
-    exact (operations early electra v operatedOk).kept (SamePendingQueue.syncAggregate synced)
-      (registryLifecycle_processSyncAggregate synced).size_le
-  · intro witness
-    exact False.elim (electra witness)
+  case neg => exact fun witness => absurd witness electra
+  have noGloas : ¬ Fork.glamsterdam ≤ fork := Nat.not_le_of_lt early
+  let Kept (a b : BeaconState preset fork) : Prop := PendingSources a → PendingSources b
+  have trans {a b c : BeaconState preset fork} (one : Kept a b) (two : Kept b c) : Kept a c :=
+    two ∘ one
+  obtain ⟨input, last, started, operated, -, synced⟩ := processBlock_operationsInput ok
+  have head : Kept state input :=
+    OperationsInput.step_of Kept (fun _ => id) trans (fun gloas _ => absurd gloas noGloas)
+      (fun headed => by obtain ⟨_, _, rfl⟩ := processBlockHeader_eq headed; exact id)
+      (fun _ executed h => h.kept (SamePendingQueue.blockExecution early executed)
+        (registryLifecycle_processBlockExecution executed).size_le)
+      (fun revealed => by
+        obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq revealed
+        exact id)
+      (fun {a b} _ voted h => by
+        obtain ⟨_, _, rest⟩ := processEth1Data_eq voted
+        have queue : SamePendingQueue a b := by unfold SamePendingQueue; rw [← rest]
+        exact h.kept queue (registryLifecycle_processEth1Data voted).size_le)
+      started
+  obtain ⟨_, _, _, proposersOk, slashingsOk, attestedOk, rest⟩ :=
+    processOperations_folds_of Kept (fun _ => id) trans
+      (fun deposited h => h.kept (SamePendingQueue.deposit electra deposited)
+        (registryLifecycle_processDeposit deposited).size_le)
+      (fun exited h => h.kept (SamePendingQueue.voluntary exited)
+        (registryLifecycle_processVoluntaryExit exited).size_le)
+      (fun changed h => h.kept (SamePendingQueue.bls changed)
+        (registryLifecycle_processBlsToExecutionChange changed).size_le)
+      (fun requested h => h.executionRequests requested)
+      (fun {_ _ gloas} _ => absurd gloas noGloas) operated
+  have tail : Kept last after := by
+    split at synced
+    · exact fun h => h.kept (SamePendingQueue.syncAggregate synced)
+        (registryLifecycle_processSyncAggregate synced).size_le
+    · cases synced
+      exact id
+  have p := fold (fun _ _ _ h ok => h.kept (SamePendingQueue.proposer ok)
+    (registryLifecycle_processProposerSlashing ok).size_le) (head holds) proposersOk
+  have a := fold (fun _ _ _ h ok => h.kept (SamePendingQueue.attester ok)
+    (registryLifecycle_processAttesterSlashing ok).size_le) p slashingsOk
+  have att := fold (fun _ _ _ h ok => h.kept (SamePendingQueue.attestation electra ok)
+    (registryLifecycle_processAttestation ok).size_le) a attestedOk
+  exact tail (rest att)
 
 /-- An epoch keeps the sources inside the registry; only pending consolidations drop entries.
 
@@ -1242,70 +1228,13 @@ private theorem withdrawalRequest {electra : .pectra ≤ fork} {request : Withdr
     | exact exit (liftAccessor_ok.mp ok)
     | exact partialWithdrawal ok
 
-private theorem withdrawals {capella : .shapella ≤ fork}
-    {payload : Until .glamsterdam fork (ExecutionPayload preset fork)}
-    (early : fork < .glamsterdam)
-    (ok : processWithdrawals state capella payload = .ok after) :
-    WithdrawalKept state after := by
-  have same : after.validators = state.validators := by
-    unfold processWithdrawals at ok
-    rw [dite_eq_right (show ¬ .glamsterdam ≤ fork from Nat.not_le_of_lt early)] at ok
-    simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, _, _, applied⟩ := ok
-    unfold applyExpectedWithdrawals at applied
-    simp only [bind_ok_iff] at applied
-    obtain ⟨applied, appliedOk, indexed, indexedOk, finished, sweptOk, last⟩ := applied
-    have one : applied.validators = state.validators := by
-      unfold applyWithdrawals at appliedOk
-      rw [← Array.foldlM_toList] at appliedOk
-      exact foldlM_ok_invariant (fun s => s.validators = state.validators)
-        (fun _ _ _ prior ok => by
-          unfold applyWithdrawal at ok
-          split at ok
-          · simp only [bind_ok_iff] at ok
-            obtain ⟨_, _, set⟩ := ok
-            obtain ⟨_, rfl⟩ := setBuilder_ok set
-            exact prior
-          · exact (decreaseBalance_validators ok).trans prior) rfl appliedOk
-    have two : indexed.validators = applied.validators := by
-      unfold updateNextWithdrawalIndex at indexedOk
-      split at indexedOk
-      · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at indexedOk
-        obtain ⟨_, _, rfl⟩ := indexedOk
-        rfl
-      · cases indexedOk; rfl
-    simp only [dite_eq_right (show ¬ .glamsterdam ≤ fork from Nat.not_le_of_lt early),
-      pure, Except.pure, Except.ok.injEq] at sweptOk
-    subst finished
-    have lastKept : after.validators = indexed.validators := by
-      split at last <;>
-      unfold updateNextWithdrawalValidatorIndex at last
-      all_goals
-        simp only [bind_ok_iff] at last
-        obtain ⟨_, _, last⟩ := last
-        split at last
-        · cases last
-        · cases last; rfl
-    exact lastKept.trans (two.trans one)
-  exact of_data (congrArg (·.data) same)
-
+/-- The execution part of a block keeps the validators, so it keeps their withdrawal epochs. -/
 private theorem blockExecution {body : BeaconBlockBody preset fork} {bellatrix : .bellatrix ≤ fork}
-    (early : fork < .glamsterdam)
     (ok : processBlockExecution config checks engine state body bellatrix = .ok after) :
-    WithdrawalKept state after := by
-  unfold processBlockExecution at ok
-  rw [dite_eq_right (show ¬ .glamsterdam ≤ fork from Nat.not_le_of_lt early)] at ok
-  split at ok
-  · simp only [bind_ok_iff] at ok
-    obtain ⟨_, withdrawn, paid⟩ := ok
-    obtain ⟨_, _, _, rfl⟩ := processExecutionPayload_ok paid
-    have kept := withdrawals early withdrawn
-    exact kept
-  · dsimp only at ok
-    split at ok
-    · obtain ⟨_, _, _, rfl⟩ := processExecutionPayload_ok ok
-      exact of_data
-    · cases ok; exact of_data
+    WithdrawalKept state after :=
+  of_data (congrArg (·.data) (processBlockExecution_step_of (fun a b => b.validators = a.validators)
+    (fun _ => rfl) (fun one two => two.trans one) (fun _ same => same)
+    processWithdrawals_validators ok))
 
 private theorem syncAggregate {altair : .altair ≤ fork} {aggregate : SyncAggregate preset}
     (ok : processSyncAggregate config checks state altair aggregate = .ok after) :
@@ -1629,43 +1558,9 @@ private theorem executionRequests {body : BeaconBlockBody preset fork}
     (frame_processWithdrawalRequest ok).slot) first withdrawals
   exact fold (fun _ _ _ h ok => h.request delay ok) second consolidations
 
-private theorem operations {body : BeaconBlockBody preset fork} {parentSlot : Slot}
-    (early : fork < .glamsterdam) (electra : .pectra ≤ fork)
-    (holds : PendingConsolidationInvariant config state)
-    (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
-    (ok : processOperations config checks state body parentSlot = .ok after) :
-    PendingConsolidationInvariant config after := by
-  unfold processOperations at ok
-  rw [dite_eq_right (show ¬ .glamsterdam ≤ fork from Nat.not_le_of_lt early)] at ok
-  simp only [bind_ok_iff, ensure_ok_iff, ← Array.foldlM_toList] at ok
-  obtain ⟨_, _, _, _, _, proposers, _, attesters, _, attested, _, deposits, exited,
-    exits, changed, changes, requests⟩ := ok
-  have p := fold (fun _ _ _ h ok => h.framed (SamePendingQueue.proposer ok)
-    (registryLifecycle_processProposerSlashing ok) (WithdrawalKept.proposer ok)
-    (frame_processProposerSlashing ok).slot) holds proposers
-  have a := fold (fun _ _ _ h ok => h.framed (SamePendingQueue.attester ok)
-    (registryLifecycle_processAttesterSlashing ok) (WithdrawalKept.attester ok)
-    (frame_processAttesterSlashing ok).slot) p attesters
-  have att := fold (fun _ _ _ h ok => h.framed (SamePendingQueue.attestation electra ok)
-    (registryLifecycle_processAttestation ok) (WithdrawalKept.attestation electra ok)
-    (frame_processAttestation ok).slot) a attested
-  have d := fold (fun _ _ _ h ok => h.framed (SamePendingQueue.deposit electra ok)
-    (registryLifecycle_processDeposit ok) (WithdrawalKept.blockDeposit electra ok)
-    (frame_processDeposit ok).slot) att deposits
-  have e := fold (fun _ _ _ h ok => h.framed (SamePendingQueue.voluntary ok)
-    (registryLifecycle_processVoluntaryExit ok) (WithdrawalKept.voluntary ok)
-    (frame_processVoluntaryExit ok).slot) d exits
-  have c : PendingConsolidationInvariant config changed := by
-    unfold processBlsToExecutionChanges at changes
-    split at changes
-    · rw [← Array.foldlM_toList] at changes
-      exact fold (fun _ _ _ h ok => h.framed (SamePendingQueue.bls ok)
-        (registryLifecycle_processBlsToExecutionChange ok) (WithdrawalKept.bls ok)
-        (frame_processBlsToExecutionChange ok).slot) e changes
-    · cases changes; exact e
-  rw [dite_eq_left electra] at requests
-  exact c.executionRequests delay requests
+/-- A block keeps the invariant, read through master's decomposition of a block.
 
+A block frame does not carry the queue, so each step reads its own queue lemma. -/
 private theorem block (early : fork < .glamsterdam)
     (holds : PendingConsolidationInvariant config state)
     (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
@@ -1673,38 +1568,57 @@ private theorem block (early : fork < .glamsterdam)
     (ok : processBlock config checks engine state block = .ok after) :
     PendingConsolidationInvariant config after := by
   by_cases electra : .pectra ≤ fork
-  · unfold processBlock at ok
-    rw [dite_eq_left (show .altair ≤ fork from Nat.le_trans (by decide) electra)] at ok
-    unfold processBlockAltair at ok
-    simp only [bind_ok_iff] at ok
-    obtain ⟨paid, paidOk, headed, headedOk, executed, executedOk, revealed, revealedOk, voted,
-      votedOk, operated, operatedOk, synced⟩ := ok
-    rw [dite_eq_right (show ¬ .glamsterdam ≤ fork from Nat.not_le_of_lt early)] at paidOk
-    cases paidOk
-    have h : PendingConsolidationInvariant config headed := by
-      obtain ⟨_, _, rfl⟩ := processBlockHeader_eq headedOk
-      exact holds
-    have e : PendingConsolidationInvariant config executed := by
-      split at executedOk
-      · exact h.framed (SamePendingQueue.blockExecution early executedOk)
-          (registryLifecycle_processBlockExecution executedOk)
-          (WithdrawalKept.blockExecution early executedOk)
-          (frame_processBlockExecution executedOk).slot
-      · cases executedOk; exact h
-    have r : PendingConsolidationInvariant config revealed := by
-      obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq revealedOk
-      exact e
-    have v : PendingConsolidationInvariant config voted := by
-      split at votedOk
-      · obtain ⟨_, _, rest⟩ := processEth1Data_eq votedOk
-        rw [← rest] at r
-        exact r
-      · cases votedOk; exact r
-    exact (operations early electra v delay operatedOk).framed
-      (SamePendingQueue.syncAggregate synced) (registryLifecycle_processSyncAggregate synced)
-      (WithdrawalKept.syncAggregate synced) (frame_processSyncAggregate synced).slot
-  · intro witness
-    exact False.elim (electra witness)
+  case neg => exact fun witness => absurd witness electra
+  have noGloas : ¬ Fork.glamsterdam ≤ fork := Nat.not_le_of_lt early
+  let Kept (a b : BeaconState preset fork) : Prop :=
+    PendingConsolidationInvariant config a → PendingConsolidationInvariant config b
+  have trans {a b c : BeaconState preset fork} (one : Kept a b) (two : Kept b c) : Kept a c :=
+    two ∘ one
+  obtain ⟨input, last, started, operated, -, synced⟩ := processBlock_operationsInput ok
+  have head : Kept state input :=
+    OperationsInput.step_of Kept (fun _ => id) trans (fun gloas _ => absurd gloas noGloas)
+      (fun headed => by obtain ⟨_, _, rfl⟩ := processBlockHeader_eq headed; exact id)
+      (fun _ executed h => h.framed (SamePendingQueue.blockExecution early executed)
+        (registryLifecycle_processBlockExecution executed) (WithdrawalKept.blockExecution executed)
+        (frame_processBlockExecution executed).slot)
+      (fun revealed => by
+        obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq revealed
+        exact id)
+      (fun _ voted h => by
+        obtain ⟨_, _, rest⟩ := processEth1Data_eq voted
+        rw [← rest] at h
+        exact h)
+      started
+  obtain ⟨_, _, _, proposersOk, slashingsOk, attestedOk, rest⟩ :=
+    processOperations_folds_of Kept (fun _ => id) trans
+      (fun deposited h => h.framed (SamePendingQueue.deposit electra deposited)
+        (registryLifecycle_processDeposit deposited) (WithdrawalKept.blockDeposit electra deposited)
+        (frame_processDeposit deposited).slot)
+      (fun exited h => h.framed (SamePendingQueue.voluntary exited)
+        (registryLifecycle_processVoluntaryExit exited) (WithdrawalKept.voluntary exited)
+        (frame_processVoluntaryExit exited).slot)
+      (fun changed h => h.framed (SamePendingQueue.bls changed)
+        (registryLifecycle_processBlsToExecutionChange changed) (WithdrawalKept.bls changed)
+        (frame_processBlsToExecutionChange changed).slot)
+      (fun requested h => h.executionRequests delay requested)
+      (fun {_ _ gloas} _ => absurd gloas noGloas) operated
+  have tail : Kept last after := by
+    split at synced
+    · exact fun h => h.framed (SamePendingQueue.syncAggregate synced)
+        (registryLifecycle_processSyncAggregate synced) (WithdrawalKept.syncAggregate synced)
+        (frame_processSyncAggregate synced).slot
+    · cases synced
+      exact id
+  have p := fold (fun _ _ _ h ok => h.framed (SamePendingQueue.proposer ok)
+    (registryLifecycle_processProposerSlashing ok) (WithdrawalKept.proposer ok)
+    (frame_processProposerSlashing ok).slot) (head holds) proposersOk
+  have a := fold (fun _ _ _ h ok => h.framed (SamePendingQueue.attester ok)
+    (registryLifecycle_processAttesterSlashing ok) (WithdrawalKept.attester ok)
+    (frame_processAttesterSlashing ok).slot) p slashingsOk
+  have att := fold (fun _ _ _ h ok => h.framed (SamePendingQueue.attestation electra ok)
+    (registryLifecycle_processAttestation ok) (WithdrawalKept.attestation electra ok)
+    (frame_processAttestation ok).slot) a attestedOk
+  exact tail (rest att)
 
 private theorem advance (holds : PendingConsolidationInvariant config state)
     (ok : advanceSlot config checks state = .ok after) :
