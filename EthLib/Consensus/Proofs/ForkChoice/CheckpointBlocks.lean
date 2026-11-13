@@ -26,6 +26,10 @@ So each checkpoint of the store is that of the anchor, or names a known block.
 The one exception is an anchor state that hashes to the zero root.
 
 Its first slot then leaves the latest header of the anchor state as it was.
+
+Each store checkpoint besides the anchor one keeps its field from a block state or its pull-up.
+
+The justified ones are current justified checkpoints there, and the finalized ones are finalized.
 -/
 
 @[expose] public section
@@ -308,33 +312,41 @@ theorem Store.Reachable.getCheckpointBlock_of_blockState (anchor : Invariant anc
 
 namespace Store
 
-/-- A checkpoint of a block state, or of that state after justification. -/
-private def FromState (store : Store preset fork) (checkpoint : Checkpoint) : Prop :=
+/-- A checkpoint that a field reads in a block state, or in that state after justification. -/
+private def FromState (store : Store preset fork) (field : BeaconState preset fork → Checkpoint)
+    (checkpoint : Checkpoint) : Prop :=
   ∃ (root : Root) (state : BeaconState preset fork), store.blockStates[root]? = some state ∧
-    (checkpoint ∈ [state.currentJustifiedCheckpoint, state.previousJustifiedCheckpoint,
-        state.finalizedCheckpoint] ∨
+    (checkpoint = field state ∨
       ∃ pulled, processJustificationAndFinalization state = .ok pulled ∧
-        checkpoint ∈ [pulled.currentJustifiedCheckpoint, pulled.previousJustifiedCheckpoint,
-          pulled.finalizedCheckpoint])
+        checkpoint = field pulled)
 
-/-- The anchor checkpoint, or a later checkpoint of a block state. -/
+/-- The anchor checkpoint, or a later checkpoint that a field reads in a block state. -/
 private def Traced (store : Store preset fork) (anchorState : BeaconState preset fork)
-    (anchorBlock : BeaconBlock preset fork) (checkpoint : Checkpoint) : Prop :=
+    (anchorBlock : BeaconBlock preset fork) (field : BeaconState preset fork → Checkpoint)
+    (checkpoint : Checkpoint) : Prop :=
   (checkpoint.epoch = getCurrentEpoch anchorState ∧
       hashTreeRoot anchorBlock = .ok checkpoint.root) ∨
-    (getCurrentEpoch anchorState < checkpoint.epoch ∧ store.FromState checkpoint)
+    (getCurrentEpoch anchorState < checkpoint.epoch ∧ store.FromState field checkpoint)
 
 /-- A store whose four checkpoints are each the anchor checkpoint or come from a block state.
+
+The two justified checkpoints come from the current justified checkpoint of a state.
+
+The two finalized checkpoints come from the finalized checkpoint of a state.
 
 Each unrealized justification has the anchor epoch.
 
 Otherwise it is the current justified checkpoint of its block state after justification. -/
 private structure Tracked (store : Store preset fork) (anchorState : BeaconState preset fork)
     (anchorBlock : BeaconBlock preset fork) : Prop where
-  justified : store.Traced anchorState anchorBlock store.justifiedCheckpoint
-  finalized : store.Traced anchorState anchorBlock store.finalizedCheckpoint
-  unrealizedJustified : store.Traced anchorState anchorBlock store.unrealizedJustifiedCheckpoint
-  unrealizedFinalized : store.Traced anchorState anchorBlock store.unrealizedFinalizedCheckpoint
+  justified : store.Traced anchorState anchorBlock (·.currentJustifiedCheckpoint)
+    store.justifiedCheckpoint
+  finalized : store.Traced anchorState anchorBlock (·.finalizedCheckpoint)
+    store.finalizedCheckpoint
+  unrealizedJustified : store.Traced anchorState anchorBlock (·.currentJustifiedCheckpoint)
+    store.unrealizedJustifiedCheckpoint
+  unrealizedFinalized : store.Traced anchorState anchorBlock (·.finalizedCheckpoint)
+    store.unrealizedFinalizedCheckpoint
   justifications : ∀ (root : Root) (checkpoint : Checkpoint),
     store.unrealizedJustifications[root]? = some checkpoint →
       checkpoint.epoch = getCurrentEpoch anchorState ∨
@@ -345,26 +357,28 @@ private structure Tracked (store : Store preset fork) (anchorState : BeaconState
 variable {after : Store preset fork}
 
 /-- A checkpoint of a block state stays one when the store keeps every block state. -/
-private theorem FromState.mono {checkpoint : Checkpoint}
+private theorem FromState.mono {field : BeaconState preset fork → Checkpoint}
+    {checkpoint : Checkpoint}
     (grow : ∀ {root : Root} {state : BeaconState preset fork},
       store.blockStates[root]? = some state → after.blockStates[root]? = some state)
-    (source : store.FromState checkpoint) : after.FromState checkpoint := by
+    (source : store.FromState field checkpoint) : after.FromState field checkpoint := by
   obtain ⟨root, state, found, member⟩ := source
   exact ⟨root, state, grow found, member⟩
 
 /-- A traced checkpoint stays traced when the store keeps every block state. -/
-private theorem Traced.mono {checkpoint : Checkpoint}
+private theorem Traced.mono {field : BeaconState preset fork → Checkpoint}
+    {checkpoint : Checkpoint}
     (grow : ∀ {root : Root} {state : BeaconState preset fork},
       store.blockStates[root]? = some state → after.blockStates[root]? = some state)
-    (traced : store.Traced anchorState anchorBlock checkpoint) :
-    after.Traced anchorState anchorBlock checkpoint := by
+    (traced : store.Traced anchorState anchorBlock field checkpoint) :
+    after.Traced anchorState anchorBlock field checkpoint := by
   rcases traced with anchored | ⟨later, root, state, found, member⟩
   · exact .inl anchored
   · exact .inr ⟨later, root, state, grow found, member⟩
 
 /-- A traced checkpoint is at or after the anchor epoch. -/
-private theorem Traced.epoch_le {checkpoint : Checkpoint}
-    (traced : store.Traced anchorState anchorBlock checkpoint) :
+private theorem Traced.epoch_le {field : BeaconState preset fork → Checkpoint}
+    {checkpoint : Checkpoint} (traced : store.Traced anchorState anchorBlock field checkpoint) :
     getCurrentEpoch anchorState ≤ checkpoint.epoch := by
   rcases traced with ⟨same, -⟩ | ⟨later, -⟩
   · rw [same]
@@ -374,10 +388,10 @@ private theorem Traced.epoch_le {checkpoint : Checkpoint}
 /-- A checkpoint that replaces a traced one at a later epoch is traced.
 
 It must be a checkpoint that is traced or comes from a block state. -/
-private theorem Traced.adopt {old new : Checkpoint}
-    (traced : store.Traced anchorState anchorBlock old)
-    (candidate : store.Traced anchorState anchorBlock new ∨ store.FromState new)
-    (later : old.epoch < new.epoch) : store.Traced anchorState anchorBlock new := by
+private theorem Traced.adopt {field : BeaconState preset fork → Checkpoint} {old new : Checkpoint}
+    (traced : store.Traced anchorState anchorBlock field old)
+    (candidate : store.Traced anchorState anchorBlock field new ∨ store.FromState field new)
+    (later : old.epoch < new.epoch) : store.Traced anchorState anchorBlock field new := by
   rcases candidate with traced' | source
   · exact traced'
   · exact .inr ⟨UInt64.lt_of_le_of_lt traced.epoch_le later, source⟩
@@ -408,8 +422,11 @@ private theorem Tracked.of_grow (tracked : store.Tracked anchorState anchorBlock
 Each new one must be a checkpoint that is traced or comes from a block state. -/
 private theorem Tracked.updateCheckpoints {justified finalized : Checkpoint}
     (tracked : store.Tracked anchorState anchorBlock)
-    (justifiedSource : store.Traced anchorState anchorBlock justified ∨ store.FromState justified)
-    (finalizedSource : store.Traced anchorState anchorBlock finalized ∨ store.FromState finalized) :
+    (justifiedSource :
+      store.Traced anchorState anchorBlock (·.currentJustifiedCheckpoint) justified ∨
+        store.FromState (·.currentJustifiedCheckpoint) justified)
+    (finalizedSource : store.Traced anchorState anchorBlock (·.finalizedCheckpoint) finalized ∨
+      store.FromState (·.finalizedCheckpoint) finalized) :
     (store.updateCheckpoints justified finalized).Tracked anchorState anchorBlock := by
   unfold Store.updateCheckpoints
   by_cases j : store.justifiedCheckpoint.epoch < justified.epoch <;>
@@ -428,8 +445,11 @@ private theorem Tracked.updateCheckpoints {justified finalized : Checkpoint}
 Each new one must be a checkpoint that is traced or comes from a block state. -/
 private theorem Tracked.updateUnrealizedCheckpoints {justified finalized : Checkpoint}
     (tracked : store.Tracked anchorState anchorBlock)
-    (justifiedSource : store.Traced anchorState anchorBlock justified ∨ store.FromState justified)
-    (finalizedSource : store.Traced anchorState anchorBlock finalized ∨ store.FromState finalized) :
+    (justifiedSource :
+      store.Traced anchorState anchorBlock (·.currentJustifiedCheckpoint) justified ∨
+        store.FromState (·.currentJustifiedCheckpoint) justified)
+    (finalizedSource : store.Traced anchorState anchorBlock (·.finalizedCheckpoint) finalized ∨
+      store.FromState (·.finalizedCheckpoint) finalized) :
     (store.updateUnrealizedCheckpoints justified finalized).Tracked anchorState anchorBlock := by
   unfold Store.updateUnrealizedCheckpoints
   by_cases j : store.unrealizedJustifiedCheckpoint.epoch < justified.epoch <;>
@@ -462,10 +482,9 @@ private theorem Tracked.computePulledUpTip {config : Config} {root : Root}
   obtain ⟨state, found, pulledState, weighed, block, -, epoch, -, pulled⟩ := pulled
   have stateFound := blockState_ok_iff.mp found
   have weighedOk := Base.mapError_ok_iff.mp weighed
-  have source : ∀ checkpoint ∈ [pulledState.currentJustifiedCheckpoint,
-      pulledState.previousJustifiedCheckpoint, pulledState.finalizedCheckpoint],
-      store.FromState checkpoint :=
-    fun checkpoint member => ⟨root, state, stateFound, .inr ⟨pulledState, weighedOk, member⟩⟩
+  have source (field : BeaconState preset fork → Checkpoint) :
+      store.FromState field (field pulledState) :=
+    ⟨root, state, stateFound, .inr ⟨pulledState, weighedOk, rfl⟩⟩
   -- The new unrealized justification comes from the state of the block.
   have inserted : ({ store with
       unrealizedJustifications := store.unrealizedJustifications.insert root
@@ -482,8 +501,8 @@ private theorem Tracked.computePulledUpTip {config : Config} {root : Root}
       exact .inr ⟨state, pulledState, stateFound, weighedOk, keyFound.symm⟩
     · simp only [same, ↓reduceIte] at keyFound
       exact tracked.justifications key checkpoint keyFound
-  have justified := source pulledState.currentJustifiedCheckpoint (by simp)
-  have finalized := source pulledState.finalizedCheckpoint (by simp)
+  have justified := source (·.currentJustifiedCheckpoint)
+  have finalized := source (·.finalizedCheckpoint)
   have unrealized := inserted.updateUnrealizedCheckpoints (.inr justified) (.inr finalized)
   split at pulled <;> simp only [pure, Except.pure, Except.ok.injEq] at pulled <;> subst pulled
   · have grow : ∀ {key : Root} {kept : BeaconState preset fork},
@@ -689,13 +708,11 @@ private theorem Tracked.onBlock {config : Config} {checks : SignatureChecks}
     have stateFound : boosted.blockStates[blockRoot]? = some state := by
       rw [(updateProposerBoostRoot_frame boost).2.2.1, (recordBlockTimeliness_frame record).2.2.1]
       exact (getElem?_insert_root).trans (by simp)
-    have source : ∀ checkpoint ∈ [state.currentJustifiedCheckpoint,
-        state.previousJustifiedCheckpoint, state.finalizedCheckpoint],
-        boosted.FromState checkpoint :=
-      fun checkpoint member => ⟨blockRoot, state, stateFound, .inl member⟩
-    exact (boostedTracked.updateCheckpoints
-      (.inr (source state.currentJustifiedCheckpoint (by simp)))
-      (.inr (source state.finalizedCheckpoint (by simp)))).computePulledUpTip added
+    have source (field : BeaconState preset fork → Checkpoint) :
+        boosted.FromState field (field state) :=
+      ⟨blockRoot, state, stateFound, .inl rfl⟩
+    exact (boostedTracked.updateCheckpoints (.inr (source (·.currentJustifiedCheckpoint)))
+      (.inr (source (·.finalizedCheckpoint)))).computePulledUpTip added
 
 end Store
 
@@ -709,13 +726,13 @@ private theorem Store.Reachable.tracked
       unrealizedFinalized⟩ := getForkchoiceStore_anchor made
     obtain ⟨anchorRoot', hashed', justifications⟩ :=
       getForkchoiceStore_unrealizedJustifications made
-    have anchored : ∀ checkpoint : Checkpoint,
+    have anchored : ∀ (field : BeaconState preset fork → Checkpoint) (checkpoint : Checkpoint),
         checkpoint = ⟨getCurrentEpoch anchorState, anchorRoot⟩ →
-        st.Traced anchorState anchorBlock checkpoint := by
-      rintro checkpoint rfl
+        st.Traced anchorState anchorBlock field checkpoint := by
+      rintro field checkpoint rfl
       exact .inl ⟨rfl, hashed⟩
-    refine ⟨anchored _ justified, anchored _ finalized, anchored _ unrealizedJustified,
-      anchored _ unrealizedFinalized, ?_⟩
+    refine ⟨anchored _ _ justified, anchored _ _ finalized, anchored _ _ unrealizedJustified,
+      anchored _ _ unrealizedFinalized, ?_⟩
     intro root checkpoint found
     rw [justifications, getElem?_insert_root] at found
     by_cases same : anchorRoot' = root
@@ -790,13 +807,18 @@ theorem Store.Reachable.checkpoints_known (anchor : Invariant anchorState)
       (getCurrentEpoch anchorState < checkpoint.epoch ∧ store.blocks.contains checkpoint.root) ∨
       hashTreeRoot anchorState = .ok (Vector.replicate 32 0) := by
   have tracked := reachable.tracked
-  have traced : store.Traced anchorState anchorBlock checkpoint := by
+  -- Each checkpoint of the store is traced through a field that is one of the three of a state.
+  have traced : ∃ field : BeaconState preset fork → Checkpoint,
+      (∀ state : BeaconState preset fork, field state ∈ [state.currentJustifiedCheckpoint,
+        state.previousJustifiedCheckpoint, state.finalizedCheckpoint]) ∧
+      store.Traced anchorState anchorBlock field checkpoint := by
     simp only [List.mem_cons, List.not_mem_nil, or_false] at member
     rcases member with rfl | rfl | rfl | rfl
-    · exact tracked.justified
-    · exact tracked.finalized
-    · exact tracked.unrealizedJustified
-    · exact tracked.unrealizedFinalized
+    · exact ⟨_, by simp, tracked.justified⟩
+    · exact ⟨_, by simp, tracked.finalized⟩
+    · exact ⟨_, by simp, tracked.unrealizedJustified⟩
+    · exact ⟨_, by simp, tracked.unrealizedFinalized⟩
+  obtain ⟨field, listed, traced⟩ := traced
   rcases traced with ⟨epoch, hashed⟩ | ⟨later, root, state, stateFound, source⟩
   · -- The store knows the anchor block at its own root.
     obtain ⟨anchorRoot, anchorHashed, anchorFound⟩ := reachable.anchor_known
@@ -805,9 +827,77 @@ theorem Store.Reachable.checkpoints_known (anchor : Invariant anchorState)
     refine .inl ⟨epoch, hashed, ?_⟩
     rw [Std.TreeMap.contains_eq_isSome_getElem?, anchorFound]
     rfl
+  have member : checkpoint ∈ [state.currentJustifiedCheckpoint,
+        state.previousJustifiedCheckpoint, state.finalizedCheckpoint] ∨
+      ∃ pulled, processJustificationAndFinalization state = .ok pulled ∧
+        checkpoint ∈ [pulled.currentJustifiedCheckpoint, pulled.previousJustifiedCheckpoint,
+          pulled.finalizedCheckpoint] := by
+    rcases source with rfl | ⟨pulled, pulledOk, rfl⟩
+    · exact .inl (listed state)
+    · exact .inr ⟨pulled, pulledOk, listed pulled⟩
   rcases reachable.getCheckpointBlock_of_blockState anchor anchorSlot positive window stateFound
-      source later with ⟨-, known⟩ | zero
+      member later with ⟨-, known⟩ | zero
   · exact .inr (.inl ⟨later, known⟩)
   · exact .inr (.inr zero)
+
+/-! ## The field that gives each checkpoint of a store -/
+
+/-- A traced checkpoint is the anchor checkpoint, or the field of a block state or of its pull-up.
+
+The anchor checkpoint has the epoch of the anchor state and the root of the anchor block. -/
+private theorem Store.Traced.origin {field : BeaconState preset fork → Checkpoint}
+    {checkpoint : Checkpoint} (traced : store.Traced anchorState anchorBlock field checkpoint) :
+    (∃ root, SszType.hashTreeRoot anchorBlock = .ok root ∧
+      checkpoint = (⟨getCurrentEpoch anchorState, root⟩ : Checkpoint)) ∨
+      (∃ (root : Root) (state : BeaconState preset fork), store.blockStates[root]? = some state ∧
+        checkpoint = field state) ∨
+      ∃ (root : Root) (state pulled : BeaconState preset fork),
+        store.blockStates[root]? = some state ∧
+        processJustificationAndFinalization state = .ok pulled ∧
+        checkpoint = field pulled := by
+  rcases traced with ⟨epoch, hashed⟩ | ⟨-, root, state, found, same | ⟨pulled, pulledOk, same⟩⟩
+  · exact .inl ⟨checkpoint.root, hashed, by rw [← epoch]⟩
+  · exact .inr (.inl ⟨root, state, found, same⟩)
+  · exact .inr (.inr ⟨root, state, pulled, found, pulledOk, same⟩)
+
+/-- Each justified store field has an anchor, held-state, or successful pulled-up origin.
+
+The checkpoint pair is retained in full, with no timing bound. -/
+theorem Store.Reachable.justified_origins {config : Config}
+    {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
+    {store : Store preset fork}
+    (reachable : Store.Reachable config anchorState anchorBlock store) :
+    ∀ checkpoint, (checkpoint = store.justifiedCheckpoint ∨
+      checkpoint = store.unrealizedJustifiedCheckpoint) →
+      (∃ root, SszType.hashTreeRoot anchorBlock = .ok root ∧
+        checkpoint = (⟨getCurrentEpoch anchorState, root⟩ : Checkpoint)) ∨
+      (∃ (root : Root) (state : BeaconState preset fork), store.blockStates[root]? = some state ∧
+        checkpoint = state.currentJustifiedCheckpoint) ∨
+      ∃ (root : Root) (state pulled : BeaconState preset fork),
+        store.blockStates[root]? = some state ∧
+        processJustificationAndFinalization state = .ok pulled ∧
+        checkpoint = pulled.currentJustifiedCheckpoint := by
+  rintro checkpoint (rfl | rfl)
+  exacts [reachable.tracked.justified.origin, reachable.tracked.unrealizedJustified.origin]
+
+/-- Each finalized store field has an anchor, held-state, or successful pulled-up origin.
+
+The checkpoint pair is retained in full, with no timing bound. -/
+theorem Store.Reachable.finalized_origins {config : Config}
+    {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
+    {store : Store preset fork}
+    (reachable : Store.Reachable config anchorState anchorBlock store) :
+    ∀ checkpoint, (checkpoint = store.finalizedCheckpoint ∨
+      checkpoint = store.unrealizedFinalizedCheckpoint) →
+      (∃ root, SszType.hashTreeRoot anchorBlock = .ok root ∧
+        checkpoint = (⟨getCurrentEpoch anchorState, root⟩ : Checkpoint)) ∨
+      (∃ (root : Root) (state : BeaconState preset fork), store.blockStates[root]? = some state ∧
+        checkpoint = state.finalizedCheckpoint) ∨
+      ∃ (root : Root) (state pulled : BeaconState preset fork),
+        store.blockStates[root]? = some state ∧
+        processJustificationAndFinalization state = .ok pulled ∧
+        checkpoint = pulled.finalizedCheckpoint := by
+  rintro checkpoint (rfl | rfl)
+  exacts [reachable.tracked.finalized.origin, reachable.tracked.unrealizedFinalized.origin]
 
 end EthLib.Consensus

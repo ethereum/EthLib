@@ -77,8 +77,8 @@ Not yet released.
 
 - A checkpoint of a fork-choice store comes from the anchor, a held state or its pull-up ([#1423](https://github.com/ethereum/EthLib/issues/1423)).
   No C export or Python function changes.
-  In Lean, the new module `Consensus.Proofs.ForkChoice.CheckpointAncestry` states this for a reachable store.
-  Its `Store.Reachable.finalized_ancestor_or_accountable` gives three cases for the finalized checkpoint of the store.
+  In Lean, `Store.Reachable.justified_origins` and `Store.Reachable.finalized_origins` state this for a reachable store.
+  In the new module `Consensus.Proofs.ForkChoice.CheckpointAncestry`, `Store.Reachable.finalized_ancestor_or_accountable` gives three cases for the finalized checkpoint of the store.
   It is at or before the anchor epoch, or it is on the chain of the justified checkpoint at the first slot of its epoch.
   Otherwise two runs from the anchor to held states of the store bound the accountable stake, or show hash evidence.
   The hypotheses of that theorem are sufficient for its proof, and they are not claimed to be minimal.
