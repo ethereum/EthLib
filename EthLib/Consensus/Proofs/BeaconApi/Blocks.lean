@@ -2,6 +2,7 @@ module
 
 public import EthLib.Consensus.BeaconApi.Blocks
 public import EthLib.Consensus.Proofs.BuilderApi
+public import EthLib.Consensus.Proofs.ForkChoice.Store
 public import EthLib.Consensus.Proofs.Containers.Block
 
 /-!
@@ -154,5 +155,137 @@ theorem blobsOf_ok {block : SignedBeaconBlock preset fork} {blobs : List Blob}
   unfold blobsOf at computed
   simp only at computed
   split at computed <;> simp_all
+
+/-- A known head is canonical: the ancestor of the head at its own slot is the head. -/
+theorem isCanonical_head {config : Config} {store : Store preset fork} {head : Root}
+    {block : BeaconBlock preset fork} (headIs : headRoot config store = some head)
+    (found : store.blocks[head]? = some block) : isCanonical config store head = true := by
+  have walk := Store.getAncestor_of_le (node := ⟨head, .pending⟩) found (UInt64.le_refl _)
+  simp [isCanonical, found, headIs, blockAtSlot, walk, Except.toOption]
+
+/-- A block that the store does not hold is not canonical. -/
+theorem isCanonical_of_unknown {config : Config} {store : Store preset fork} {root : Root}
+    (unknown : store.blocks[root]? = none) : isCanonical config store root = false := by
+  simp [isCanonical, unknown]
+
+/-- The answer for a signed header carries that header, and the root of its message. -/
+theorem headerOf_ok {config : Config} {store : Store preset fork}
+    {header : SignedBeaconBlockHeader} {response : HeaderResponse}
+    (computed : headerOf config store header = .ok response) :
+    response.header = header ∧
+      Serialization.Ssz.SszType.hashTreeRoot header.message = .ok response.root ∧
+      response.canonical = isCanonical config store response.root := by
+  unfold headerOf at computed
+  cases rooted : Serialization.Ssz.SszType.hashTreeRoot header.message with
+  | error e => simp [rooted, Except.mapError, bind, Except.bind] at computed
+  | ok root =>
+    simp [rooted, Except.mapError, bind, Except.bind, pure, Except.pure] at computed
+    subst computed
+    exact ⟨rfl, rfl, rfl⟩
+
+/-- The header answer of a block has the root of the block. -/
+theorem headerOf_blockRoot {config : Config} {store : Store preset fork}
+    {block : SignedBeaconBlock preset fork} {header : SignedBeaconBlockHeader}
+    {response : HeaderResponse} (signed : block.signedHeader = .ok header)
+    (computed : headerOf config store header = .ok response) :
+    blockRoot block = .ok response.root := by
+  rw [← (signedHeader_root signed).1]
+  exact (headerOf_ok computed).2.1
+
+/-- The header answer of the head block says that the block is canonical. -/
+theorem headers_canonical_head {config : Config} {store : Store preset fork} {head : Root}
+    {block : BeaconBlock preset fork} (headIs : headRoot config store = some head)
+    (found : store.blocks[head]? = some block) {header : SignedBeaconBlockHeader}
+    {response : HeaderResponse} (computed : headerOf config store header = .ok response)
+    (rootIs : response.root = head) : response.canonical = true := by
+  rw [(headerOf_ok computed).2.2, rootIs]
+  exact isCanonical_head headIs found
+
+/-- Each selected header is one of the input, at the requested slot, with the requested parent. -/
+theorem selectHeaders_mem {headers : List SignedBeaconBlockHeader} {slot : Option Slot}
+    {parentRoot : Option Root} {header : SignedBeaconBlockHeader}
+    (mem : header ∈ selectHeaders headers slot parentRoot) :
+    header ∈ headers ∧ (∀ s ∈ slot, header.message.slot = s) ∧
+      ∀ parent ∈ parentRoot, header.message.parentRoot = parent := by
+  simp only [selectHeaders, List.mem_filter, Bool.and_eq_true] at mem
+  obtain ⟨found, slotOk, parentOk⟩ := mem
+  refine ⟨found, ?_, ?_⟩
+  · rintro s rfl
+    exact (by simpa using slotOk : s = header.message.slot).symm
+  · rintro parent rfl
+    exact (by simpa using parentOk : parent = header.message.parentRoot).symm
+
+/-- Without a slot and a parent root, the headers endpoint filters on the slot of the head. -/
+theorem headersSlot_default {config : Config} {store : Store preset fork} {head : Root}
+    {block : BeaconBlock preset fork} (headIs : headRoot config store = some head)
+    (found : store.blocks[head]? = some block) :
+    headersSlot config store none none = .ok (some block.slot) := by
+  simp [headersSlot, headIs, found]
+
+/-- The selected sidecars are the request, in the order of the input. -/
+theorem selectColumns_isColumnsAnswer (sidecars : List (DataColumnSidecar preset fork))
+    (indices : Option (List DataAvailability.ColumnIndex)) :
+    IsColumnsAnswer sidecars indices (selectColumns sidecars indices) :=
+  List.Perm.refl _
+
+/-- Without indices, the selection is every sidecar. -/
+theorem selectColumns_none (sidecars : List (DataColumnSidecar preset fork)) :
+    selectColumns sidecars none = sidecars := by
+  simp [selectColumns]
+
+/-- Each sidecar of an answer is a sidecar of the block, with a requested index. -/
+theorem IsColumnsAnswer.mem {sidecars : List (DataColumnSidecar preset fork)}
+    {indices : Option (List DataAvailability.ColumnIndex)}
+    {answer : List (DataColumnSidecar preset fork)}
+    (valid : IsColumnsAnswer sidecars indices answer)
+    {sidecar : DataColumnSidecar preset fork} (mem : sidecar ∈ answer) :
+    sidecar ∈ sidecars ∧ ∀ requested ∈ indices, sidecar.index ∈ requested := by
+  have kept := valid.mem_iff.1 mem
+  simp only [selectColumns, List.mem_filter] at kept
+  refine ⟨kept.1, ?_⟩
+  rintro requested rfl
+  simpa using kept.2
+
+/-- An envelope answer is the given envelope, whose message has the root of the stored one. -/
+theorem payloadEnvelopeOf_ok {store : Store preset fork} {root : Root}
+    {signed answer : SignedExecutionPayloadEnvelope preset fork}
+    (computed : payloadEnvelopeOf store root signed = .ok answer) :
+    answer = signed ∧ ∃ (gloas : .glamsterdam ≤ fork)
+      (stored : ExecutionPayloadEnvelope preset fork) (held : Root), (store.payloads gloas)[root]? = some stored ∧
+        Serialization.Ssz.SszType.hashTreeRoot stored = .ok held ∧
+        Serialization.Ssz.SszType.hashTreeRoot signed.message = .ok held := by
+  unfold payloadEnvelopeOf at computed
+  split at computed
+  · rename_i gloas
+    split at computed
+    · rename_i stored found
+      split at computed
+      · rename_i given held givenIs heldIs
+        split at computed
+        · rename_i same
+          cases computed
+          exact ⟨rfl, gloas, stored, held, found, heldIs, same ▸ givenIs⟩
+        · cases computed
+      · cases computed
+    · cases computed
+  · cases computed
+
+/-- Before Gloas, the envelope endpoint gives the error with code 404. -/
+theorem payloadEnvelopeOf_before_gloas {store : Store preset fork} {root : Root}
+    {signed : SignedExecutionPayloadEnvelope preset fork} (early : fork < .glamsterdam) :
+    payloadEnvelopeOf store root signed = .error envelopeNotFound := by
+  have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le.2 early
+  simp [payloadEnvelopeOf, notGloas]
+
+/-- From Gloas, the blinded block endpoint has no SSZ body either: it gives the error with code 400.
+-/
+theorem blindedBlockSsz_gloas {block : SignedBeaconBlock preset fork}
+    (gloas : .glamsterdam ≤ fork) :
+    blindedBlockSsz block =
+      .error { code := 400, message := "Blocks from Gloas on do not have a blinded form" } := by
+  have none : ¬ HasBuilderApi fork := fun range => absurd range.2 (Nat.not_lt.2 gloas)
+  have late : ¬ fork < .bellatrix := Nat.not_lt.2
+    (Nat.le_trans (by decide : Fork.bellatrix.ctorIdx ≤ Fork.glamsterdam.ctorIdx) gloas)
+  simp [blindedBlockSsz, none, late]
 
 end EthLib.Consensus.BeaconApi

@@ -1,4 +1,4 @@
-"""The Beacon API answers that read one signed block, on the pinned static blocks."""
+"""The Beacon API answers that read signed blocks and their data, on pinned vectors."""
 
 import copy
 import hashlib
@@ -15,6 +15,7 @@ from ethlib.networking import snappy
 from raising import raises
 
 from .containers import FORKS
+from .test_fork_choice import _hex, _inputs, _load, _read
 
 STATIC = Path(__file__).resolve().parents[4] / "tests" / "consensus" / "ssz_static" / "minimal"
 
@@ -173,3 +174,167 @@ def test_blobs_that_do_not_match_the_commitments(count: int) -> None:
     with raises(consensus.ConsensusError, message) as error:
         consensus.api_blobs_ssz("minimal", FORKS["deneb"], block, blobs)
     assert error.value.code == 500
+
+
+@pytest.mark.parametrize("fork", ALL)
+def test_block_ssz_is_the_signed_block(fork: str) -> None:
+    body = consensus.api_block_query_ssz("minimal", FORKS[fork], _signed(fork), "block")
+    assert body == _signed(fork)
+
+
+@pytest.mark.parametrize("fork", ["phase0", "bellatrix", "fulu"])
+def test_blinded_block_ssz_encodes_the_json_answer(fork: str) -> None:
+    kind = "SignedBeaconBlock" if fork == "phase0" else "SignedBlindedBeaconBlock"
+    document = _query(fork, "blinded_block")["data"]
+    encoded = consensus.api_ssz("minimal", FORKS[fork], kind, document)
+    body = consensus.api_block_query_ssz("minimal", FORKS[fork], _signed(fork), "blinded_block")
+    assert body == encoded
+
+
+def test_no_blinded_block_ssz_from_gloas() -> None:
+    message = "Blocks from Gloas on do not have a blinded form"
+    with raises(consensus.ConsensusError, message) as error:
+        consensus.api_block_query_ssz("minimal", FORKS["gloas"], _signed("gloas"), "blinded_block")
+    assert error.value.code == 400
+
+
+def test_attestations_have_no_ssz_body() -> None:
+    message = "no block query with an SSZ body is named attestations"
+    with raises(consensus.ConsensusError, message) as error:
+        consensus.api_block_query_ssz("minimal", FORKS["deneb"], _signed("deneb"), "attestations")
+    assert error.value.code == 0
+
+
+# A Gloas case: a block at slot 1 on the anchor, then the envelope of its payload.
+ENVELOPE_CASE = (
+    Path(__file__).resolve().parents[4]
+    / "tests/consensus/fork_choice/minimal/gloas/fork_choice/on_execution_payload_envelope"
+    / "pyspec_tests/on_execution_payload_envelope_valid"
+)
+ANCHOR_ROOT = "0xde6ee16691ac31262a6bb5552e4854c07abb7a9ac8539c616ba4ed4e9aaa1adc"
+BLOCK_ROOT = "0x29874e204fad82a30293db7910390d39dc70d4e7c5a7302cfbc10a1b8f17dcf4"
+ENVELOPE = (
+    "execution_payload_envelope_0x131ab93ae0a85b4dae8dd199874c24c136c7c8645f3a7b21bb0135cff179e47a"
+)
+GLOAS = FORKS["gloas"]
+
+
+@cache
+def _store_case() -> tuple[str, str, bytes, bytes, list]:
+    """The arguments that build the store after every step of the envelope case."""
+    raw_steps = _load(ENVELOPE_CASE / "steps.yaml")
+    steps = [step for raw in raw_steps for step in _inputs(ENVELOPE_CASE, raw)]
+    anchor_state = _read(ENVELOPE_CASE, "anchor_state")
+    return "minimal", GLOAS, anchor_state, _read(ENVELOPE_CASE, "anchor_block"), steps
+
+
+def _block_bytes() -> bytes:
+    return _read(ENVELOPE_CASE, f"block_{BLOCK_ROOT}")
+
+
+def _anchor_signed() -> bytes:
+    """The anchor block of the case, with a signature."""
+    anchor_block = _read(ENVELOPE_CASE, "anchor_block")
+    anchor = consensus.api_json("minimal", GLOAS, "BeaconBlock", anchor_block)
+    signed = {"message": anchor, "signature": SIGNATURE}
+    return consensus.api_ssz("minimal", GLOAS, "SignedBeaconBlock", signed)
+
+
+def _header(signed: bytes) -> tuple[bytes, dict[str, Any]]:
+    """The SSZ and the JSON of the signed header of a signed block."""
+    block = consensus.api_json("minimal", GLOAS, "SignedBeaconBlock", signed)
+    message = block["message"]
+    body = consensus.api_ssz("minimal", GLOAS, "BeaconBlockBody", message["body"])
+    body_root, _ = consensus.ssz_static("minimal", GLOAS, "BeaconBlockBody", body)
+    fields = ("slot", "proposer_index", "parent_root", "state_root")
+    header = {
+        "message": {**{key: message[key] for key in fields}, "body_root": "0x" + body_root.hex()},
+        "signature": block["signature"],
+    }
+    return consensus.api_ssz("minimal", GLOAS, "SignedBeaconBlockHeader", header), header
+
+
+def test_header_of_the_head_is_canonical() -> None:
+    answer = consensus.api_header(*_store_case(), _block_bytes())
+    _, header = _header(_block_bytes())
+    assert answer == {"data": {"root": BLOCK_ROOT, "canonical": True, "header": header}}
+
+
+def test_header_of_the_anchor_is_canonical() -> None:
+    answer = consensus.api_header(*_store_case(), _anchor_signed())
+    _, header = _header(_anchor_signed())
+    assert answer == {"data": {"root": ANCHOR_ROOT, "canonical": True, "header": header}}
+
+
+def test_header_of_an_unknown_block_is_not_canonical() -> None:
+    answer = consensus.api_header(*_store_case(), _signed("gloas"))
+    assert answer["data"]["canonical"] is False
+
+
+def test_headers_filters() -> None:
+    block, block_json = _header(_block_bytes())
+    anchor, anchor_json = _header(_anchor_signed())
+
+    def headers(**filters: Any) -> list[dict[str, Any]]:
+        return consensus.api_headers(*_store_case(), [anchor, block], **filters)["data"]
+
+    on_block = {"root": BLOCK_ROOT, "canonical": True, "header": block_json}
+    on_anchor = {"root": ANCHOR_ROOT, "canonical": True, "header": anchor_json}
+    # With no filter, the headers at the slot of the head, which is slot 1.
+    assert headers() == [on_block]
+    assert headers(slot=0) == [on_anchor]
+    assert headers(parent_root=_hex(ANCHOR_ROOT)) == [on_block]
+    assert headers(slot=0, parent_root=_hex(ANCHOR_ROOT)) == []
+    assert headers(slot=5) == []
+
+
+def test_payload_envelope_of_the_block() -> None:
+    signed = _read(ENVELOPE_CASE, ENVELOPE)
+    answer = consensus.api_payload_envelope(*_store_case(), _hex(BLOCK_ROOT), signed)
+    document = consensus.api_json("minimal", GLOAS, "SignedExecutionPayloadEnvelope", signed)
+    assert answer == {"version": "gloas", "data": document}
+    body = consensus.api_payload_envelope_ssz(*_store_case(), _hex(BLOCK_ROOT), signed)
+    assert body == signed
+
+
+def test_payload_envelope_not_held() -> None:
+    signed = _read(ENVELOPE_CASE, ENVELOPE)
+    document = consensus.api_json("minimal", GLOAS, "SignedExecutionPayloadEnvelope", signed)
+    builder = int(document["message"]["builder_index"])
+    document["message"]["builder_index"] = str((builder + 1) % 2**64)
+    other = consensus.api_ssz("minimal", GLOAS, "SignedExecutionPayloadEnvelope", document)
+    # The anchor has no envelope, and another message is not the one that the store holds.
+    for root, envelope in [(ANCHOR_ROOT, signed), (BLOCK_ROOT, other)]:
+        with raises(consensus.ForkChoiceError, "Execution payload envelope not found") as error:
+            consensus.api_payload_envelope(*_store_case(), _hex(root), envelope)
+        assert error.value.code == 404
+
+
+def _sidecar(fork: str, index: int) -> bytes:
+    """The SSZ of the pinned random sidecar of a fork, at another index."""
+    case = STATIC / fork / "ssz_static" / "DataColumnSidecar" / "ssz_random" / "case_0"
+    data = snappy.decompress((case / "serialized.ssz_snappy").read_bytes())
+    document = consensus.api_json("minimal", FORKS[fork], "DataColumnSidecar", data)
+    document["index"] = str(index)
+    return consensus.api_ssz("minimal", FORKS[fork], "DataColumnSidecar", document)
+
+
+@pytest.mark.parametrize("fork", ["fulu", "gloas"])
+def test_columns_with_the_requested_indices(fork: str) -> None:
+    held = [_sidecar(fork, i) for i in (5, 2, 9)]
+
+    def documents(indices: list[int]) -> list[dict[str, Any]]:
+        return [
+            consensus.api_json("minimal", FORKS[fork], "DataColumnSidecar", _sidecar(fork, i))
+            for i in indices
+        ]
+
+    answer = consensus.api_columns("minimal", FORKS[fork], held)
+    assert answer == {"version": fork, "data": documents([5, 2, 9])}
+    chosen = consensus.api_columns("minimal", FORKS[fork], held, indices=[9, 2, 4])
+    assert sorted(chosen["data"], key=lambda d: int(d["index"])) == documents([2, 9])
+    assert consensus.api_columns("minimal", FORKS[fork], held, indices=[])["data"] == []
+    # A list of one variable-size sidecar: its four-byte offset, then the sidecar.
+    body = consensus.api_columns_ssz("minimal", FORKS[fork], held, indices=[2])
+    assert body == (4).to_bytes(4, "little") + _sidecar(fork, 2)
+    assert consensus.api_columns_ssz("minimal", FORKS[fork], held, indices=[]) == b""
