@@ -30,9 +30,10 @@ from raising import raises
 
 # The rules are in libp2p/specs at commit c750236de43cd8b246a824b377dfdb26bae686db.
 # Message handling is "Message Processing" of pubsub/gossipsub/gossipsub-v1.0.md.
-# The v1.1 rules are "Extended Validators", "PRUNE Backoff and Peer Exchange",
-# "Explicit Peering Agreements", "Outbound Mesh Quotas", "Spam Protection Measures"
-# and "Score Thresholds" of pubsub/gossipsub/gossipsub-v1.1.md.
+# The v1.1 rules are six sections of pubsub/gossipsub/gossipsub-v1.1.md.
+# The first two are "Extended Validators" and "PRUNE Backoff and Peer Exchange".
+# The next two are "Explicit Peering Agreements" and "Outbound Mesh Quotas".
+# The last two are "Spam Protection Measures" and "Score Thresholds".
 # Neither document publishes vectors, so each case below is built by hand.
 
 FORK = "fusaka"
