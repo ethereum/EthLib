@@ -198,9 +198,8 @@ private theorem epochBeforePayments_registryLoad_le
 /-- The epoch transition never raises the validators plus the pending deposits, at every fork. -/
 theorem processEpoch_registryLoad_le (computed : processEpoch config checks state = .ok after) :
     registryLoad after ≤ registryLoad state := by
-  unfold processEpoch at computed
-  split at computed
-  · rename_i altair
+  by_cases altair : Fork.altair ≤ fork
+  · simp only [processEpoch, altair, ↓reduceDIte] at computed
     obtain ⟨pending, paid, rooted, pendingOk, paidOk, middle, tail⟩ :=
       loadKeptLaws.processEpochAltair_paymentSplit computed
     have paidKept : LoadKept pending paid := by
@@ -212,20 +211,10 @@ theorem processEpoch_registryLoad_le (computed : processEpoch config checks stat
     refine Nat.le_trans (Nat.le_of_eq ?_) (epochBeforePayments_registryLoad_le pendingOk)
     rw [LoadKept.registryLoad_eq tail, LoadKept.registryLoad_eq rotated,
       LoadKept.registryLoad_eq middle, LoadKept.registryLoad_eq paidKept]
-  · simp only [bind_ok_iff] at computed
-    obtain ⟨_, justified, _, rewarded, _, registered, _, slashed, _, reset, _, balanced, _,
-      cleared, _, mixed, _, rooted, records⟩ := computed
-    refine Nat.le_of_eq ?_
-    rw [LoadKept.registryLoad_eq (loadKeptLaws.processParticipationRecordUpdates records),
-      LoadKept.registryLoad_eq (loadKeptLaws.processHistoricalRootsUpdate rooted),
-      LoadKept.registryLoad_eq (loadKeptLaws.processRandaoMixesReset mixed),
-      LoadKept.registryLoad_eq (loadKeptLaws.processSlashingsReset cleared),
-      LoadKept.registryLoad_eq (loadKeptLaws.processEffectiveBalanceUpdates balanced),
-      LoadKept.registryLoad_eq (loadKeptLaws.processEth1DataReset reset),
-      LoadKept.registryLoad_eq (loadKeptLaws.processSlashings slashed),
-      LoadKept.registryLoad_eq (loadKeptLaws.processRegistryUpdates registered),
-      LoadKept.registryLoad_eq (loadKeptLaws.processRewardsAndPenalties rewarded),
-      LoadKept.registryLoad_eq (loadKept_justification justified)]
+  · obtain ⟨justified, justifiedOk, rest⟩ :=
+      loadKeptLaws.processEpoch_split_of_lt_altair (Nat.lt_of_not_le altair) computed
+    exact Nat.le_of_eq ((LoadKept.registryLoad_eq rest).trans
+      (LoadKept.registryLoad_eq (loadKept_justification justifiedOk)))
 
 /-- A slot never raises the validators plus the pending deposits, at every fork.
 
