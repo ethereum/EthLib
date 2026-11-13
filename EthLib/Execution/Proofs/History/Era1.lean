@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.MapM
 public import EthLib.Execution.History.Era1
 public import EthLib.Serialization.Proofs.E2store
 
@@ -20,9 +21,9 @@ Their headers carry the numbers from the first number of the index on.
 
 Each block after the first names the hash of the header before as its parent.
 
-Each total difficulty is the one before plus the difficulty of the block.
+Each total difficulty after the first is the one before plus the difficulty of the block.
 
-The accumulator is the SSZ root of the hash and total difficulty of each block.
+The accumulator is the SSZ root of the list of the hash and total difficulty of each block.
 
 Two errors of an era1 file with one code come from one constructor.
 -/
@@ -83,7 +84,7 @@ private theorem readBlock_header {start i : Nat}
       | (simp only [pure, Except.pure, Except.ok.injEq] at h; subst h; rfl)
       | cases h
 
-/-- A block read alone has a header of one RLP item, with the number of its place.
+/-- A read block has a header that decodes to one RLP item, with the number its place asks.
 
 The difficulty and the parent hash that come back are those of that item. -/
 private theorem readBlock_item {start i : Nat}
@@ -99,37 +100,12 @@ private theorem readBlock_item {start i : Nat}
   simp only [bind, Except.bind, Except.mapError, pure, Except.pure] at h
   repeat (first | (split at h <;> try cases h))
   rename_i _ item hi _ _ _ _ _ _ _ n hn hnum _ _ _ _ _ hd hp
-  have e : ∀ {α : Type} {x : Except Rlp.RlpError α} {v : α},
-      Except.mapError (Era1Error.rlp i) x = .ok v → x = .ok v := by
-    intro α x v h
-    cases x <;> cases h
-    rfl
-  exact ⟨item, e hi, hnum ▸ e hn, e hd, e hp⟩
+  exact ⟨item, Base.mapError_ok_iff.mp hi, hnum ▸ Base.mapError_ok_iff.mp hn,
+    Base.mapError_ok_iff.mp hd, Base.mapError_ok_iff.mp hp⟩
 
-/-- Reading blocks reads the first block, then the others after it. -/
-private theorem readBlocks_cons {start i : Nat} {before : Option (Base.Hash32 × Nat)}
-    {r : E2store.Record × E2store.Record × E2store.Record × E2store.Record}
-    {rest : List (E2store.Record × E2store.Record × E2store.Record × E2store.Record)}
-    {blocks : List Era1Block} (h : readBlocks start i before (r :: rest) = .ok blocks) :
-    ∃ result bs after, readBlock start i r = .ok result ∧
-      readBlocks start (i + 1) after rest = .ok bs ∧ blocks = result.1 :: bs := by
-  rw [readBlocks] at h
-  cases hr : readBlock start i r with
-  | error e => simp [hr, bind, Except.bind] at h
-  | ok result =>
-    simp [hr, bind, Except.bind] at h
-    cases hb : readBlocks start (i + 1)
-        (some (Cryptography.Hash.Keccak.keccak256 result.1.header,
-          result.1.totalDifficulty.toNat)) rest with
-    | error e =>
-      repeat' split at h
-      all_goals cases h <;> simp_all
-    | ok bs =>
-      refine ⟨result, bs, _, rfl, hb, ?_⟩
-      repeat' split at h
-      all_goals cases h <;> simp_all
+/-- Reading blocks reads the first block, checks it against the block before, then reads on.
 
-/-- Reading blocks reads the first block, checks it against the block before, then reads on. -/
+A first block numbered from 0 with no block before has its difficulty as total difficulty. -/
 private theorem readBlocks_link {start i : Nat} {before : Option (Base.Hash32 × Nat)}
     {r : E2store.Record × E2store.Record × E2store.Record × E2store.Record}
     {rest : List (E2store.Record × E2store.Record × E2store.Record × E2store.Record)}
@@ -167,7 +143,7 @@ private theorem readBlocks_spec {start i : Nat} {before : Option (Base.Hash32 ×
     cases h
     exact ⟨rfl, fun k hk => absurd hk (Nat.not_lt_zero _)⟩
   | cons r rest ih =>
-    obtain ⟨result, bs, after, hr, hbs, rfl⟩ := readBlocks_cons h
+    obtain ⟨block, _, _, bs, hr, -, -, hbs, rfl⟩ := readBlocks_link h
     obtain ⟨hl, hk⟩ := ih hbs
     refine ⟨by simp [hl], fun k hk1 hk2 => ?_⟩
     cases k with
@@ -176,11 +152,13 @@ private theorem readBlocks_spec {start i : Nat} {before : Option (Base.Hash32 ×
 
 /-- Read blocks form a chain from the block before them.
 
-The header of each is one RLP item, with the number of its place.
+The header of each decodes to one RLP item, with the number its place asks.
 
-The first names the hash of the block before as its parent, and adds its difficulty to it.
+After a block before, the first names its hash as parent.
 
-With no block before and a first number of 0, the first total difficulty is its difficulty.
+Its total difficulty is the one before plus its difficulty.
+
+With no block before and a numbering that starts at 0, the first total difficulty is its difficulty.
 
 Each later block names the Keccak-256 hash of the header before as its parent.
 
@@ -226,7 +204,7 @@ private theorem readBlocks_chain {start i : Nat} {before : Option (Base.Hash32 �
       | zero => exact (h0 (by omega)).1 _ _ rfl
       | succ j => exact hj j (by omega)
 
-/-- What an accepted file passed on its way: its records, its block index and its blocks. -/
+/-- What an accepted file passed on its way: its records, its index, blocks and accumulator. -/
 private theorem decodeEra1_facts {bytes : ByteArray} {era1 : Era1}
     (h : decodeEra1 bytes = .ok era1) :
     ∃ (records : List E2store.Record) (idx : E2store.Record) (index : E2store.Index),
@@ -336,56 +314,81 @@ theorem decodeEra1_offset {bytes : ByteArray} {era1 : Era1} (h : decodeEra1 byte
     rw [hx]
     exact hhd i hi hit
 
-/-- An accepted file is a chain of blocks, numbered on from its first number.
+/-- The header of each block of an accepted file decodes to one RLP item.
 
-The header of each block is one RLP item, with the number of its place in the file.
-
-The block numbered 0 is the genesis block, whose total difficulty is its difficulty.
-
-Each block after the first names the Keccak-256 hash of the header before as its parent.
-
-Its total difficulty is the one before plus its difficulty. -/
-theorem decodeEra1_chain {bytes : ByteArray} {era1 : Era1} (h : decodeEra1 bytes = .ok era1)
+That item has a difficulty. -/
+theorem decodeEra1_header {bytes : ByteArray} {era1 : Era1} (h : decodeEra1 bytes = .ok era1)
     {k : Nat} (hk : k < era1.blocks.length) :
     ∃ item difficulty, Rlp.decode era1.blocks[k].header = .ok item ∧
-      Execution.Network.headerNumber item = .ok (era1.startingNumber + k) ∧
-      Execution.Network.headerDifficulty item = .ok difficulty ∧
-      (era1.startingNumber + k = 0 → era1.blocks[k].totalDifficulty.toNat = difficulty) ∧
-      ∀ j (hj : k = j + 1),
-        Execution.Network.headerParent item =
-            .ok (Cryptography.Hash.Keccak.keccak256 (era1.blocks[j]'(by omega)).header) ∧
-          era1.blocks[k].totalDifficulty.toNat =
-            (era1.blocks[j]'(by omega)).totalDifficulty.toNat + difficulty := by
+      Execution.Network.headerDifficulty item = .ok difficulty := by
+  obtain ⟨_, _, _, -, -, -, -, hrb, -, -, -⟩ := decodeEra1_facts h
+  obtain ⟨item, d, hi, -, hd, -⟩ := readBlocks_chain hrb hk
+  exact ⟨item, d, hi, hd⟩
+
+/-- In an accepted file, the header of each block carries the first number plus its place. -/
+theorem decodeEra1_number {bytes : ByteArray} {era1 : Era1} (h : decodeEra1 bytes = .ok era1)
+    {k : Nat} (hk : k < era1.blocks.length) {item : Rlp.Item}
+    (hi : Rlp.decode era1.blocks[k].header = .ok item) :
+    Execution.Network.headerNumber item = .ok (era1.startingNumber + k) := by
   obtain ⟨_, _, _, -, -, -, -, hrb, -, hstart, -⟩ := decodeEra1_facts h
-  obtain ⟨item, d, hi, hnum, hd, h0, hj⟩ := readBlocks_chain hrb hk
-  refine ⟨item, d, hi, by rw [hnum, hstart, Nat.zero_add], hd, fun hz => ?_, hj⟩
-  exact (h0 (by omega)).2 rfl (by omega)
+  obtain ⟨item', _, hi', hnum, -⟩ := readBlocks_chain hrb hk
+  cases hi.symm.trans hi'
+  rw [hnum, hstart, Nat.zero_add]
 
-/-- The accumulator of an accepted file is the SSZ root of the header records of its blocks.
+/-- In an accepted file, each block after the first names the hash of the header before. -/
+theorem decodeEra1_parent {bytes : ByteArray} {era1 : Era1} (h : decodeEra1 bytes = .ok era1)
+    {k : Nat} (hk : k + 1 < era1.blocks.length) {item : Rlp.Item}
+    (hi : Rlp.decode era1.blocks[k + 1].header = .ok item) :
+    Execution.Network.headerParent item =
+      .ok (Cryptography.Hash.Keccak.keccak256 era1.blocks[k].header) := by
+  obtain ⟨_, _, _, -, -, -, -, hrb, -, -, -⟩ := decodeEra1_facts h
+  obtain ⟨item', _, hi', -, -, -, hj⟩ := readBlocks_chain hrb hk
+  cases hi.symm.trans hi'
+  exact (hj k rfl).1
 
-A file holds at most 8192 blocks.
+/-- In an accepted file, each block after the first adds its difficulty to the total before. -/
+theorem decodeEra1_totalDifficulty {bytes : ByteArray} {era1 : Era1}
+    (h : decodeEra1 bytes = .ok era1) {k : Nat} (hk : k + 1 < era1.blocks.length)
+    {item : Rlp.Item} {difficulty : Nat} (hi : Rlp.decode era1.blocks[k + 1].header = .ok item)
+    (hd : Execution.Network.headerDifficulty item = .ok difficulty) :
+    era1.blocks[k + 1].totalDifficulty.toNat =
+      era1.blocks[k].totalDifficulty.toNat + difficulty := by
+  obtain ⟨_, _, _, -, -, -, -, hrb, -, -, -⟩ := decodeEra1_facts h
+  obtain ⟨item', d, hi', -, hd', -, hj⟩ := readBlocks_chain hrb hk
+  cases hi.symm.trans hi'
+  cases hd.symm.trans hd'
+  exact (hj k rfl).2
 
-The record of a block is the Keccak-256 hash of its header and its total difficulty. -/
-theorem decodeEra1_accumulator {bytes : ByteArray} {era1 : Era1}
-    (h : decodeEra1 bytes = .ok era1) :
-    ∃ bound : era1.blocks.length ≤ 8192,
-      Ssz.SszType.hashTreeRoot
-        (⟨era1.blocks.toArray.map fun block =>
-            (⟨Cryptography.Hash.Keccak.keccak256 block.header, block.totalDifficulty⟩ :
-              HeaderRecord), by simpa using bound⟩ :
-          Ssz.SszList HeaderRecord 8192) = .ok era1.accumulator := by
+/-- In an accepted file whose first number is 0, the first total difficulty is its difficulty. -/
+theorem decodeEra1_totalDifficulty_zero {bytes : ByteArray} {era1 : Era1}
+    (h : decodeEra1 bytes = .ok era1) (hs : era1.startingNumber = 0)
+    (hk : 0 < era1.blocks.length) {item : Rlp.Item} {difficulty : Nat}
+    (hi : Rlp.decode era1.blocks[0].header = .ok item)
+    (hd : Execution.Network.headerDifficulty item = .ok difficulty) :
+    era1.blocks[0].totalDifficulty.toNat = difficulty := by
+  obtain ⟨_, _, _, -, -, -, -, hrb, -, hstart, -⟩ := decodeEra1_facts h
+  obtain ⟨item', d, hi', -, hd', h0, -⟩ := readBlocks_chain hrb hk
+  cases hi.symm.trans hi'
+  cases hd.symm.trans hd'
+  exact (h0 rfl).2 rfl (hstart ▸ hs)
+
+/-- An accepted file holds at most 8192 blocks. -/
+theorem decodeEra1_blocks_length_le {bytes : ByteArray} {era1 : Era1}
+    (h : decodeEra1 bytes = .ok era1) : era1.blocks.length ≤ MAX_ERA1_BLOCKS := by
   obtain ⟨_, _, _, -, -, -, -, -, -, -, hacc⟩ := decodeEra1_facts h
   unfold accumulatorRoot at hacc
   dsimp only at hacc
   split at hacc
   · rename_i bound
-    refine ⟨by simpa [MAX_ERA1_BLOCKS] using bound, ?_⟩
-    cases hr : Ssz.SszType.hashTreeRoot (⟨_, bound⟩ : Ssz.SszList HeaderRecord MAX_ERA1_BLOCKS)
-    · rw [hr] at hacc
-      simp [Except.mapError] at hacc
-    · rw [hr] at hacc
-      simp only [Except.mapError, Except.ok.injEq] at hacc
-      exact hacc ▸ hr
+    simpa using bound
   · cases hacc
+
+/-- The accumulator of an accepted file is the SSZ root of a list with one entry per block.
+
+The entry of a block is the Keccak-256 hash of its header and its total difficulty. -/
+theorem decodeEra1_accumulator {bytes : ByteArray} {era1 : Era1}
+    (h : decodeEra1 bytes = .ok era1) : accumulatorRoot era1.blocks = .ok era1.accumulator := by
+  obtain ⟨_, _, _, -, -, -, -, -, -, -, hacc⟩ := decodeEra1_facts h
+  exact hacc
 
 end EthLib.Execution.History
