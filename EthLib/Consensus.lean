@@ -8,6 +8,7 @@ public import EthLib.Consensus.BeaconApi.Spelling
 public import EthLib.Consensus.BuilderApi
 public import EthLib.Consensus.BuilderApi.Bid
 public import EthLib.Consensus.BuilderApi.Encoding
+public import EthLib.Consensus.BuilderApi.RequestAuth
 public import EthLib.Consensus.BuilderApi.GloasBid
 public import EthLib.Consensus.BuilderApi.Registration
 public import EthLib.Consensus.Builders

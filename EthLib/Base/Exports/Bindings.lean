@@ -611,6 +611,16 @@ def bindings : List Binding := [
     `EthLib.Consensus.Exports.verifyBuilderRequestAuthSignatureExport,
     "(name: str, fork: str, config: dict[str, Any] | None, pubkey: bytes, data: bytes) -> bool",
     [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
+  ⟨"consensus_builder_request_auth_failures",
+    `EthLib.Consensus.Exports.builderRequestAuthFailuresExport,
+    "(name: str, fork: str, config: dict[str, Any] | None, agreed: bytes, path_slot: int, " ++
+      "pubkey: bytes, version_header: str | None, data: bytes) -> list[str]",
+    [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
+  ⟨"consensus_builder_preferences_failures",
+    `EthLib.Consensus.Exports.builderPreferencesFailuresExport,
+    "(name: str, fork: str, config: dict[str, Any] | None, agreed: bytes, current_slot: int, " ++
+      "pubkey: bytes, version_header: str | None, data: bytes) -> list[str]",
+    [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
   ⟨"consensus_builder_bid_value", `EthLib.Consensus.Exports.builderBidValueExport,
     "(value: int, execution_payment: int, max_execution_payment: int) -> int",
     [], some "ConsensusError"⟩,

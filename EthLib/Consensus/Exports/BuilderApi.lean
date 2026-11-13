@@ -5,6 +5,7 @@ public import EthLib.Consensus.BuilderApi.Bid
 public import EthLib.Consensus.BuilderApi.Encoding
 public import EthLib.Consensus.BuilderApi.GloasBid
 public import EthLib.Consensus.BuilderApi.Registration
+public import EthLib.Consensus.BuilderApi.RequestAuth
 public import EthLib.Consensus.Exports.Parameters
 public import EthLib.Consensus.Exports.Ssz
 public import EthLib.Serialization.Exports.Ssz
@@ -297,6 +298,65 @@ def verifyBuilderRequestAuthSignatureOf
 @[export eth_consensus_verify_builder_request_auth_signature]
 def verifyBuilderRequestAuthSignatureExport (args : PyValue) : Result PyValue :=
   pyExport verifyBuilderRequestAuthSignatureOf args
+
+/-- The name of a failed check of a request to a builder. -/
+def AuthFailure.reason : BuilderApi.AuthFailure → String
+  | .badVersion => "bad_version"
+  | .emptyData => "empty_data"
+  | .dataMismatch => "data_mismatch"
+  | .slotMismatch => "slot_mismatch"
+  | .slotPassed => "slot_passed"
+  | .badSignature => "bad_signature"
+
+/-- From Gloas: the failed checks of a request for a bid, by name. -/
+def builderRequestAuthFailuresOf
+    (args : String × String × Option PyValue × ByteArray × UInt64 × Cryptography.Bls.BLSPubkey ×
+      Option String × ByteArray) : Result (List String) := do
+  let (name, fork, replacements, agreed, pathSlot, pubkey, header, data) := args
+  let fork ← forkOf fork.toUTF8
+  unless .glamsterdam ≤ fork do
+    throw (0, s!"no builder request authentication at {fork.name}")
+  let config ← configWithValue name replacements
+  let signed ← runSsz "input rejected" (SszType.deserialize SignedBuilderRequestAuth data)
+  let failures ← runSsz "root rejected"
+    (BuilderApi.authFailures config .bls agreed pathSlot pubkey header signed)
+  return failures.map AuthFailure.reason
+
+/-- From Gloas: the failed checks of a request for a bid, by name, in order.
+
+The arguments are the name of the preset and of the configuration, the fork and replacements.
+
+Then come the agreed data, the slot of the path, the key of the path and the version header.
+
+Then come the SSZ bytes of the signed authentication. -/
+@[export eth_consensus_builder_request_auth_failures]
+def builderRequestAuthFailuresExport (args : PyValue) : Result PyValue :=
+  pyExport builderRequestAuthFailuresOf args
+
+/-- From Gloas: the failed checks of a request that submits preferences, by name. -/
+def builderPreferencesFailuresOf
+    (args : String × String × Option PyValue × ByteArray × UInt64 × Cryptography.Bls.BLSPubkey ×
+      Option String × ByteArray) : Result (List String) := do
+  let (name, fork, replacements, agreed, currentSlot, pubkey, header, data) := args
+  let fork ← forkOf fork.toUTF8
+  unless .glamsterdam ≤ fork do
+    throw (0, s!"no builder request authentication at {fork.name}")
+  let config ← configWithValue name replacements
+  let request ← runSsz "input rejected" (SszType.deserialize BuilderPreferencesRequest data)
+  let failures ← runSsz "root rejected"
+    (BuilderApi.preferencesFailures config .bls agreed currentSlot pubkey header request)
+  return failures.map AuthFailure.reason
+
+/-- From Gloas: the failed checks of a request that submits preferences, by name, in order.
+
+The arguments are the name of the preset and of the configuration, the fork and replacements.
+
+Then come the agreed data, the builder's current slot, the key of the path and the version header.
+
+Then come the SSZ bytes of the request. -/
+@[export eth_consensus_builder_preferences_failures]
+def builderPreferencesFailuresExport (args : PyValue) : Result PyValue :=
+  pyExport builderPreferencesFailuresOf args
 
 /-- The value of a builder's bid from its two payments and the proposer's execution payment cap. -/
 @[export eth_consensus_builder_bid_value]

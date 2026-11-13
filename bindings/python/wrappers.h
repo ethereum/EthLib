@@ -403,6 +403,8 @@ PyObject* py_consensus_is_eligible_for_bid_gloas (PyObject* self, PyObject* args
 PyObject* py_consensus_validate_bid (PyObject* self, PyObject* args);
 PyObject* py_consensus_unblind_signed_blinded_block (PyObject* self, PyObject* args);
 PyObject* py_consensus_verify_builder_request_auth_signature (PyObject* self, PyObject* args);
+PyObject* py_consensus_builder_request_auth_failures (PyObject* self, PyObject* args);
+PyObject* py_consensus_builder_preferences_failures (PyObject* self, PyObject* args);
 PyObject* py_consensus_builder_bid_value (PyObject* self, PyObject* args);
 PyObject* py_consensus_consensus_version (PyObject* self, PyObject* args);
 PyObject* py_consensus_consensus_version_fork (PyObject* self, PyObject* args);

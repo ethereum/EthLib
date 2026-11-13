@@ -3512,6 +3512,25 @@ The source asserts the eight rules and returns the signature check, so EthLib na
 `validateBid_not_selfBuild` shows that a bid naming the index of a self-built payload is never accepted, while the registry of builders is shorter than that index.
 The cap that a proposer sets on the execution payment limits how much of it counts when a bid is valued; it is not a rule of validity.
 
+From Gloas, a proposer authenticates a request for a bid, and a request that submits preferences, with a signed message.
+`authFailures` and `preferencesFailures` (`Consensus/BuilderApi/RequestAuth.lean`) list every check of the authentication that fails, in the order header, data, slot, signature.
+The source also refuses a malformed body and a request for a bid without its timing headers; those rules are outside these checks.
+The version header must name the fork of the body's type, and these bodies exist from Gloas only, so EthLib requires `gloas` there, which is stricter than the version check of other bodies.
+`authFailures_nil_iff` (`Consensus/Proofs/BuilderApi/RequestAuth.lean`) shows that a request for a bid fails no check exactly when the header is `gloas`, the data is not empty and equals the agreed data, the slot is that of the path, and the signature verifies.
+`authFailures_signature_only` shows that a request for a bid whose only failed check is the signature fails with that check alone, and `allowedStatus_badSignature` that such a request gets 401 and no other status.
+`preferencesFailures_of_passed` shows that preferences for a slot before the builder's current slot fail whenever the checks run, and `PreferencesStore.submit_of_passed` that such a submission leaves the store as it was.
+`PreferencesStore.submit_of_accepted` and `PreferencesStore.get_keep` show that a submission that fails no check keeps its preferences under the key of the path and the slot of the request, and that no other entry changes.
+`bidHonorsPreferences_keep` shows that a bid honors preferences kept for its proposer at its slot exactly when its execution payment is within their cap.
+The agreed data is an input: EthLib does not compute the default, the hostname of the builder's URL that the source derives.
+The source leaves two points open:
+
+- When a request fails a check that gives 400 and the signature, which gives 401, the source does not say which status wins; `AllowedStatus` allows both.
+  When no check of the authentication fails, the other rules of the source decide the status.
+- A slot that "has already passed" is defined no more precisely; EthLib reads it as a slot before the builder's current slot.
+
+The signature covers the data and the slot, not the preferences of the request; `preferencesFailures_preferences` shows that a request with the same authentication and another cap passes the same checks.
+So a replay before its slot passes, or a copy with another cap, is accepted and replaces the kept preferences, although the source means the slot rule to stop a replay from rolling them back.
+
 From Deneb to Fulu, a builder reveals the payload with a blobs bundle: the blobs, their commitments and their proofs.
 `BuilderBlobsBundle.names_nodup` and `ExecutionPayloadAndBlobsBundle.names_nodup` (`Consensus/Proofs/Containers/BuilderApi.lean`) give both containers distinct field names, so they decode back from their bytes when the logs bloom has a byte.
 The response is the payload alone before Deneb and the payload with its bundle from Deneb, one type that the fork chooses.
@@ -3808,12 +3827,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 423 operations and 49 size constants.
-The Python extension calls 423 of the operations and 49 of the constants.
+Lean exports 425 operations and 49 size constants.
+The Python extension calls 425 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-10496 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2017), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (176), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (80), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (147), `module.c` (1471), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (21), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (58), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (711), `x25519.c` (21), `xmss.c` (134).
+10524 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2039), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (176), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (80), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (147), `module.c` (1475), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (21), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (58), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (713), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.
