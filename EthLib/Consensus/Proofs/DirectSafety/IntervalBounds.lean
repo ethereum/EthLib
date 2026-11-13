@@ -1479,11 +1479,8 @@ private theorem intervalLoss_recent_supported (y : ForkedBeaconState preset)
     Models.supported (recentKeys y.state) (effectiveWeight y.state) w.pubkey =
       effectiveAt y i.toNat := by
   have selected (epoch : Epoch) (active : isActiveValidator w epoch = true) :
-      w.pubkey ∈ keysAt y.state (getActiveValidatorIndices y.state epoch) := by
-    simp only [keysAt, List.mem_toFinset, List.mem_filterMap]
-    refine ⟨i, (mem_getActiveValidatorIndices (y.state.validators.bound early)).mpr
-      ⟨w, found, active⟩, ?_⟩
-    simp [found]
+      w.pubkey ∈ keysAt y.state (getActiveValidatorIndices y.state epoch) :=
+    (mem_keysAt_epoch early epoch w.pubkey).mpr ⟨i.toNat, w, found, rfl, active⟩
   have member : w.pubkey ∈ recentKeys y.state := by
     unfold recentKeys
     refine Finset.mem_filter.mpr ⟨?_, unslashed⟩
@@ -2499,32 +2496,20 @@ private theorem intervalGain_index_bound {g x y : ForkedBeaconState preset}
         using intervalGain_existing_funding tail early i present
 
 private theorem intervalGain_active_key {fork : Fork} (s : BeaconState preset fork)
-    (within : s.RegistryWithinLimit) (unique : PubkeysDistinct s)
+    (early : fork < .glamsterdam) (unique : PubkeysDistinct s)
     (i : Nat) (v : Validator) (found : s.validators.data[i]? = some v) :
     v.pubkey ∈ activeKeys s ↔ isActiveValidator v (getCurrentEpoch s) = true := by
-  have inside := (Array.getElem?_eq_some_iff.mp found).1
-  have small : i < 2 ^ 64 := by
-    exact (Nat.lt_of_lt_of_le inside within).trans (UInt64.toNat_lt _)
-  have numeric : i.toUInt64.toNat = i := by
-    rw [Nat.toUInt64_eq, UInt64.toNat_ofNat_of_lt' small]
+  rw [activeKeys, mem_keysAt_epoch early]
   constructor
-  · intro member
-    simp only [activeKeys, keysAt, List.mem_toFinset, List.mem_filterMap] at member
-    obtain ⟨j, active, key⟩ := member
-    obtain ⟨w, read, active⟩ := (mem_getActiveValidatorIndices within).mp active
-    have sameKey : w.pubkey = v.pubkey := by simpa [read] using key
+  · rintro ⟨j, w, read, sameKey, active⟩
     obtain ⟨hi, vi⟩ := Array.getElem?_eq_some_iff.mp found
     obtain ⟨hj, wj⟩ := Array.getElem?_eq_some_iff.mp read
-    have same : j.toNat = i := unique.eq_of_getElem_eq
+    have same : j = i := unique.eq_of_getElem_eq
       (by simpa [validatorKeys] using hj) (by simpa [validatorKeys] using hi)
       (by simpa [validatorKeys, vi, wj] using sameKey)
     have equal : w = v := Option.some.inj ((same ▸ read).symm.trans found)
     simpa [equal] using active
-  · intro active
-    simp only [activeKeys, keysAt, List.mem_toFinset, List.mem_filterMap]
-    refine ⟨i.toUInt64, (mem_getActiveValidatorIndices within).mpr
-      ⟨v, by simpa [numeric] using found, active⟩, ?_⟩
-    simp [numeric, found]
+  · exact fun active => ⟨i, v, found, rfl, active⟩
 
 private theorem intervalGain_reference_at {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (tail : Run config checks x y)
@@ -2567,36 +2552,18 @@ private theorem intervalGain_reference_at {g x y : ForkedBeaconState preset}
     have same : last = w := Option.some.inj (found.symm.trans after)
     have key : w.pubkey = v.pubkey := same ▸ preserved
     rw [key]
-    simp only [Models.supported, intervalGain_active_key x.state within uniqueX
+    simp only [Models.supported, intervalGain_active_key x.state earlyX uniqueX
       i v before, effectiveWeight_at x.state uniqueX i v before,
       Option.map_some, Option.getD_some]
 
 private theorem intervalGain_recent_key {fork : Fork} (s : BeaconState preset fork)
-    (within : s.RegistryWithinLimit)
+    (early : fork < .glamsterdam)
     (key : Cryptography.Bls.BLSPubkey) :
     key ∈ activeKeys s ∪ keysAt s (getActiveValidatorIndices s (getPreviousEpoch s)) ↔
       ∃ (i : Nat) (v : Validator), s.validators.data[i]? = some v ∧ v.pubkey = key ∧
       (isActiveValidator v (getCurrentEpoch s) = true ∨
         isActiveValidator v (getPreviousEpoch s) = true) := by
-  have member (epoch : Epoch) : key ∈ keysAt s (getActiveValidatorIndices s epoch) ↔
-      ∃ (i : Nat) (v : Validator), s.validators.data[i]? = some v ∧ v.pubkey = key ∧
-        isActiveValidator v epoch = true := by
-    constructor
-    · intro selected
-      simp only [keysAt, List.mem_toFinset, List.mem_filterMap] at selected
-      obtain ⟨i, active, keyEq⟩ := selected
-      obtain ⟨v, found, active⟩ := (mem_getActiveValidatorIndices within).mp active
-      exact ⟨i.toNat, v, found, by simpa [found] using keyEq, active⟩
-    · rintro ⟨i, v, found, keyEq, active⟩
-      have inside := (Array.getElem?_eq_some_iff.mp found).1
-      have small := (Nat.lt_of_lt_of_le inside within).trans (UInt64.toNat_lt _)
-      have numeric : i.toUInt64.toNat = i := by
-        rw [Nat.toUInt64_eq, UInt64.toNat_ofNat_of_lt' small]
-      simp only [keysAt, List.mem_toFinset, List.mem_filterMap]
-      refine ⟨i.toUInt64, (mem_getActiveValidatorIndices within).mpr
-        ⟨v, by simpa [numeric] using found, active⟩, ?_⟩
-      simp [numeric, found, keyEq]
-  simp only [Finset.mem_union, activeKeys, member]
+  simp only [Finset.mem_union, activeKeys, mem_keysAt_epoch early]
   constructor
   · rintro (⟨i, v, found, keyEq, active⟩ | ⟨i, v, found, keyEq, active⟩)
     · exact ⟨i, v, found, keyEq, Or.inl active⟩
@@ -2657,7 +2624,7 @@ private theorem intervalGain_reference_sum {g x y : ForkedBeaconState preset}
   apply Finset.sum_bij key
   · intro i hi
     obtain ⟨w, found, recent⟩ := (Finset.mem_filter.mp hi).2
-    apply (intervalGain_recent_key y.state (y.state.validators.bound early) _).mpr
+    apply (intervalGain_recent_key y.state early _).mpr
     refine ⟨i, w, found, ?_, recent⟩
     simp only [key, (Array.getElem?_eq_some_iff.mp found).2]
   · intro i hi j hj equal
@@ -2667,7 +2634,7 @@ private theorem intervalGain_reference_sum {g x y : ForkedBeaconState preset}
       (by simpa [validatorKeys, key] using equal)
   · intro k hk
     obtain ⟨i, w, found, same, recent⟩ :=
-      (intervalGain_recent_key y.state (y.state.validators.bound early) k).mp hk
+      (intervalGain_recent_key y.state early k).mp hk
     have hi : i ∈ intervalGain_indices y := Finset.mem_filter.mpr
       ⟨Finset.mem_range.mpr (Array.getElem?_eq_some_iff.mp found).1, w, found, recent⟩
     refine ⟨i, hi, ?_⟩
