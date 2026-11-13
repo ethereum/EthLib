@@ -14,9 +14,10 @@ These theorems describe the concrete checks that a successful authentication pas
 - A certificate without the libp2p extension, or with another critical extension, is rejected.
 - The returned peer ID is that of the host key whose signature verifies over the certificate key.
 - A dialer that succeeds gets the peer ID it expected.
-- A certificate time reads exactly when it writes a valid Gregorian date and time of day.
+- A certificate time reads exactly when it has the fixed RFC 5280 form of a valid date and time.
 - Its value is then the number of seconds from 1970-01-01T00:00:00Z, counted in a calendar model.
-- A validity reads as two such times in order, and so do the endpoints of a parsed certificate.
+- A validity reads as two such times in order.
+- The endpoints of a parsed certificate are what its own validity field reads as.
 -/
 
 @[expose] public section
@@ -207,7 +208,6 @@ theorem authenticatePeer_peerId {policy : Policy} {now : Nat} {expected : ByteAr
   subst peer
   exact sameId
 
-
 /-- The `width` ASCII decimal digits of `n`, most significant first. -/
 def decimalBytes : Nat → Nat → List UInt8
   | 0, _ => []
@@ -219,7 +219,9 @@ theorem decimalBytes_length (width n : Nat) : (decimalBytes width n).length = wi
   | zero => rfl
   | succ width ih => simp [decimalBytes, ih]
 
-/-- A byte string reads as `n` exactly when it is the decimal digits of `n` at its own length. -/
+/-- A byte string reads as `n` exactly when it is the digits of `n` at its length.
+
+The number `n` then fits in those digits. -/
 theorem decimal_eq_ok_iff {bytes : List UInt8} {n : Nat} :
     decimal bytes = .ok n ↔ bytes = decimalBytes bytes.length n ∧ n < 10 ^ bytes.length := by
   obtain ⟨r, rfl⟩ : ∃ r, bytes = r.reverse := ⟨bytes.reverse, by simp⟩
@@ -260,21 +262,22 @@ theorem decimal_eq_ok_iff {bytes : List UInt8} {n : Nat} :
         omega
       exact ⟨n / 10, ih.mpr ⟨hl, hlt'⟩, n, ⟨(), ⟨by omega, by omega⟩, by omega⟩, rfl⟩
 
-/-- The number of days of a year of the Gregorian calendar. -/
-def yearLength (year : Nat) : Nat :=
+/-- The number of days of a year of the proleptic Gregorian calendar. -/
+def daysInYear (year : Nat) : Nat :=
   if year % 4 = 0 ∧ (year % 100 ≠ 0 ∨ year % 400 = 0) then 366 else 365
 
 /-- The lengths of the twelve months of a year, from January. -/
 def monthLengths (year : Nat) : List Nat :=
-  [31, if yearLength year = 366 then 29 else 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+  [31, if daysInYear year = 366 then 29 else 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
 
 /-- The number of days from 1970-01-01 to January 1 of a year, negative before 1970. -/
 def yearStart (year : Nat) : Int :=
-  if 1970 ≤ year then ((List.range (year - 1970)).map (fun i => (yearLength (1970 + i) : Int))).sum
-  else -((List.range (1970 - year)).map (fun i => (yearLength (year + i) : Int))).sum
+  if 1970 ≤ year then ((List.range (year - 1970)).map (fun i => (daysInYear (1970 + i) : Int))).sum
+  else -((List.range (1970 - year)).map (fun i => (daysInYear (year + i) : Int))).sum
 
 /-- January 1 of the next year comes one year length later. -/
-theorem yearStart_succ (year : Nat) : yearStart (year + 1) = yearStart year + yearLength year := by
+private theorem yearStart_succ (year : Nat) :
+    yearStart (year + 1) = yearStart year + daysInYear year := by
   unfold yearStart
   by_cases h : 1970 ≤ year
   · simp only [show 1970 ≤ year + 1 by omega, h, ↓reduceIte]
@@ -291,27 +294,27 @@ theorem yearStart_succ (year : Nat) : yearStart (year + 1) = yearStart year + ye
       simp only [List.range_zero, List.map_nil, List.sum_nil, Nat.add_zero]
       omega
     · simp only [h', ↓reduceIte]
-      have hf : ((fun i => (yearLength (year + i) : Int)) ∘ Nat.succ) =
-          fun i => (yearLength (year + 1 + i) : Int) := by
+      have hf : ((fun i => (daysInYear (year + i) : Int)) ∘ Nat.succ) =
+          fun i => (daysInYear (year + 1 + i) : Int) := by
         funext i
         simp [Nat.add_assoc, Nat.add_comm 1 i]
       simp only [hf, Nat.add_zero]
       omega
 
-/-- Each year adds its length to the closed form that counts the days before it from year 1. -/
-theorem daysBefore_succ (x : Nat) :
+/-- The closed form of the days in years 1 to `x` grows by the length of year `x + 1`. -/
+private theorem daysBefore_succ (x : Nat) :
     365 * (x + 1) + (x + 1) / 4 - (x + 1) / 100 + (x + 1) / 400 =
-      365 * x + x / 4 - x / 100 + x / 400 + yearLength (x + 1) := by
+      365 * x + x / 4 - x / 100 + x / 400 + daysInYear (x + 1) := by
   simp only [Nat.succ_div, Nat.dvd_iff_mod_eq_zero]
   have a : x / 100 ≤ x / 4 := Nat.div_le_div_left (by omega) (by omega)
-  unfold yearLength
+  unfold daysInYear
   generalize x / 4 = p at *
   generalize x / 100 = q at *
   generalize x / 400 = r at *
   split <;> split <;> split <;> split <;> omega
 
 /-- January 1 of year `x + 1` is the closed form of the days before it, less those before 1970. -/
-theorem yearStart_eq (x : Nat) :
+private theorem yearStart_eq (x : Nat) :
     yearStart (x + 1) = ((365 * x + x / 4 - x / 100 + x / 400 : Nat) : Int) - 719162 := by
   -- The difference of the two sides does not change from one year to the next.
   have same : ∀ x, yearStart (x + 1) - ((365 * x + x / 4 - x / 100 + x / 400 : Nat) : Int) =
@@ -340,10 +343,11 @@ def timeBytes (month day hour minute second : Nat) : List UInt8 :=
 def dayNumber (year month day : Nat) : Int :=
   yearStart year + (((monthLengths year).take (month - 1)).sum : Int) + day - 1
 
-/-- A year field, five two-digit fields and `Z` read as numbers exactly when they are their digits.
+/-- The fields of a time read as numbers exactly when the bytes are their digits and `Z`.
 
-Each number is then below its power of ten. -/
-theorem timeFields_iff {width : Nat} {bytes : List UInt8} (length : bytes.length = width + 11)
+Each number then fits in its digits. -/
+private theorem timeFields_iff {width : Nat} {bytes : List UInt8}
+    (length : bytes.length = width + 11)
     {raw month day hour minute second : Nat} :
     (bytes.getLast? = some 90 ∧ decimal (bytes.take width) = .ok raw ∧
       decimal ((bytes.drop width).take 2) = .ok month ∧
@@ -378,13 +382,15 @@ theorem timeFields_iff {width : Nat} {bytes : List UInt8} (length : bytes.length
       exact ⟨h10, ⟨hA, hraw⟩, ⟨⟨h0, h1⟩, hm⟩, ⟨⟨h2, h3⟩, hd⟩, ⟨⟨h4, h5⟩, hh⟩, ⟨⟨h6, h7⟩, hi⟩,
         ⟨h8, h9⟩, hs⟩
 
-/-- A year is a leap year of the library exactly when it has 366 days. -/
-theorem leapYear_iff (year : Nat) : leapYear year = true ↔ yearLength year = 366 := by
-  unfold leapYear yearLength
+/-- The leap-year rule of the time reader gives exactly the years of 366 days. -/
+private theorem leapYear_iff (year : Nat) : leapYear year = true ↔ daysInYear year = 366 := by
+  unfold leapYear daysInYear
   split <;> simp_all
 
-/-- The library's month length is the entry of the month in the year's list of lengths. -/
-theorem monthDays_eq {year month : Nat} (low : 1 ≤ month) (high : month ≤ 12) :
+/-- For a month from 1 to 12, the reader's month length is its entry in the year's list.
+
+The lengths of the earlier months also sum to the same total. -/
+private theorem monthDays_eq {year month : Nat} (low : 1 ≤ month) (high : month ≤ 12) :
     monthDays year month = (monthLengths year).getD (month - 1) 0 ∧
       ((List.range (month - 1)).map (fun m => monthDays year (m + 1))).sum =
         ((monthLengths year).take (month - 1)).sum := by
@@ -392,11 +398,11 @@ theorem monthDays_eq {year month : Nat} (low : 1 ≤ month) (high : month ≤ 12
   rcases (by omega : month = 1 ∨ month = 2 ∨ month = 3 ∨ month = 4 ∨ month = 5 ∨ month = 6 ∨
     month = 7 ∨ month = 8 ∨ month = 9 ∨ month = 10 ∨ month = 11 ∨ month = 12) with
     rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl
-  all_goals by_cases hy : yearLength year = 366 <;>
+  all_goals by_cases hy : daysInYear year = 366 <;>
     simp [monthDays, monthLengths, List.range_succ, hy, leap]
 
-/-- The library's arithmetic gives 86400 seconds per day from the epoch, then the time of day. -/
-theorem timeSeconds_eq {year month day hour minute second : Nat} (positive : 0 < year)
+/-- The reader's closed form is 86400 seconds per day of the model, plus the time of day. -/
+private theorem timeSeconds_eq {year month day hour minute second : Nat} (positive : 0 < year)
     (low : 1 ≤ month) (high : month ≤ 12) (first : 1 ≤ day) :
     (Int.ofNat (365 * (year - 1) + (year - 1) / 4 - (year - 1) / 100 + (year - 1) / 400 +
       ((List.range (month - 1)).map (fun m => monthDays year (m + 1))).sum + day - 1) - 719162) *
@@ -411,20 +417,22 @@ theorem timeSeconds_eq {year month day hour minute second : Nat} (positive : 0 <
   generalize ((monthLengths (x + 1)).take (month - 1)).sum = M
   omega
 
-/-- No month of the library is longer than 31 days. -/
-theorem monthDays_le (year month : Nat) : monthDays year month ≤ 31 := by
+/-- No month of the time reader is longer than 31 days. -/
+private theorem monthDays_le (year month : Nat) : monthDays year month ≤ 31 := by
   unfold monthDays
   split
   · split <;> omega
   · split <;> omega
 
-/-- A certificate time reads as `t` exactly when it writes a valid date and time of day.
+/-- A certificate time reads as `t` exactly when it writes a valid date and time in a fixed form.
+
+The forms are those of [RFC 5280 §4.1.2.5](https://www.rfc-editor.org/rfc/rfc5280#section-4.1.2.5).
 
 A UTCTime (tag 23) writes a year from 1950 to 2049 as its last two digits.
 
 A GeneralizedTime (tag 24) writes a year from 1 to 9999 as four digits.
 
-Both end in `Z` (byte 90).
+Both end in `Z` (byte 90), with seconds below 60, so no leap second.
 
 Then `t` is the number of seconds from 1970-01-01T00:00:00Z, negative before it. -/
 theorem readTime_eq_ok_iff {value : Der.Value} {t : Int} :
@@ -526,16 +534,20 @@ theorem readValidity_eq_ok_iff {value : Der.Value} {notBefore notAfter : Int} :
     refine ⟨[first, last], hc, ?_⟩
     simp [ha, hb, hab, ensure, bind, Except.bind, pure, Except.pure]
 
-/-- A parsed certificate's validity endpoints are those that some validity field reads as. -/
+/-- The validity endpoints of a parsed certificate are what its own validity field reads as.
+
+That field is the fourth field of the signed part, after the version when there is one. -/
 theorem readCertificate_validity {bytes : ByteArray} {certificate : Certificate}
     (parsed : readCertificate bytes = .ok certificate) :
-    ∃ validity, readValidity validity = .ok (certificate.notBefore, certificate.notAfter) := by
+    ∃ tbs values validity, tbs.encoded = certificate.tbs ∧ fields 0x30 tbs = .ok values ∧
+      values[if values.head?.map (·.tag) = some 0xa0 then 4 else 3]? = some validity ∧
+      readValidity validity = .ok (certificate.notBefore, certificate.notAfter) := by
   unfold readCertificate at parsed
   simp only [bind_ok_iff] at parsed
   obtain ⟨_, _, children, _, h⟩ := parsed
   split at h
   · simp only [bind_ok_iff] at h
-    obtain ⟨_, _, _, _, values, _, h⟩ := h
+    obtain ⟨_, _, _, _, values, hValues, h⟩ := h
     split at h
     · split at h
       case' isTrue =>
@@ -551,7 +563,7 @@ theorem readCertificate_validity {bytes : ByteArray} {certificate : Certificate}
           split at h
           · simp only [bind_ok_iff, Except.ok.injEq] at h
             obtain ⟨_, _, _, _, _, _, rfl⟩ := h
-            exact ⟨_, hx⟩
+            exact ⟨_, _, _, rfl, hValues, by simp_all, hx⟩
           · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
         · simp [throw, throwThe, MonadExceptOf.throw] at h
     · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
