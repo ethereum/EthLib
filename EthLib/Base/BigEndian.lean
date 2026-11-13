@@ -24,6 +24,34 @@ An empty list reads as 0. -/
 def bytesToNat (bytes : List UInt8) : Nat :=
   bytes.foldl (fun acc b => acc * 256 + b.toNat) 0
 
+/-- Folding from any start value shifts it by one factor of 256 per byte. -/
+theorem foldl_bytesToNat (bytes : List UInt8) (acc : Nat) :
+    bytes.foldl (fun acc b => acc * 256 + b.toNat) acc
+      = acc * 256 ^ bytes.length + bytesToNat bytes := by
+  induction bytes generalizing acc with
+  | nil => simp [bytesToNat]
+  | cons b rest ih =>
+    -- Unfold one byte on both sides, then use the induction hypothesis twice.
+    have h0 := ih (b.toNat)
+    have h1 := ih (acc * 256 + b.toNat)
+    simp only [bytesToNat, List.foldl_cons, List.length_cons, Nat.zero_mul, Nat.zero_add] at *
+    rw [h1, h0, Nat.pow_succ, Nat.add_mul, Nat.add_assoc, Nat.mul_assoc, Nat.mul_comm 256]
+
+/-- A list of `k` bytes is worth less than `256 ^ k`. -/
+theorem bytesToNat_lt (bytes : List UInt8) : bytesToNat bytes < 256 ^ bytes.length := by
+  induction bytes with
+  | nil => simp [bytesToNat]
+  | cons b rest ih =>
+    -- The first byte is the most significant one, worth `256 ^ rest.length` per unit.
+    have hcons : bytesToNat (b :: rest) = b.toNat * 256 ^ rest.length + bytesToNat rest := by
+      simpa [bytesToNat] using foldl_bytesToNat rest b.toNat
+    have hb : b.toNat + 1 ≤ 256 := b.toNat_lt
+    rw [hcons, List.length_cons, Nat.pow_succ, Nat.mul_comm _ 256]
+    -- `b * 256^r + v < (b + 1) * 256^r ≤ 256 * 256^r`.
+    calc b.toNat * 256 ^ rest.length + bytesToNat rest
+        < (b.toNat + 1) * 256 ^ rest.length := by rw [Nat.succ_mul]; omega
+      _ ≤ 256 * 256 ^ rest.length := Nat.mul_le_mul_right _ hb
+
 /-- `n` as exactly `len` big-endian bytes, keeping only `n mod 256 ^ len`.
 
 A number that does not fit loses its higher bytes.

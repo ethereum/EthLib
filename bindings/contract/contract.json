@@ -9937,6 +9937,26 @@
    "docstring":
    "The value of the unsigned varint at the start of the bytes, and the bytes after it."},
   {"summary":
+   "Encode a value below `2^62` with its shortest QUIC representation, RFC 9000 §16.",
+   "signature": "(value: int) -> bytes",
+   "operation": "EthLib.Networking.Quic.Exports.encodeExport",
+   "method": "quic_varint_encode",
+   "errors": [],
+   "error_class": "QuicVarintError",
+   "docstring":
+   "Encode a value below `2^62` with its shortest QUIC representation, RFC 9000 §16."},
+  {"summary":
+   "Read a QUIC integer and return its value and the trailing bytes, RFC 9000 §16.",
+   "signature": "(data: bytes) -> tuple[int, bytes]",
+   "operation": "EthLib.Networking.Quic.Exports.decodeExport",
+   "method": "quic_varint_decode",
+   "errors":
+   [{"type": "EthLib.Networking.Quic.Varint.VarintError",
+     "codes": [{"constructor": "truncated", "code": 1}]}],
+   "error_class": "QuicVarintError",
+   "docstring":
+   "Read a QUIC integer and return its value and the trailing bytes, RFC 9000 §16."},
+  {"summary":
    "The bytes of one multistream-select message: its length, its bytes, then a newline.",
    "signature": "(message: bytes) -> bytes",
    "operation": "EthLib.Networking.Libp2p.Exports.multistreamEncodeExport",
