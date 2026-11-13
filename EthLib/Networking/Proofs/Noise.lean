@@ -111,6 +111,39 @@ theorem readMessage_ok {s next : HandshakeState} {message payload : ByteArray}
   next _ _ hi hs => (repeat' split at hv) <;> cases hv <;> exact ⟨rfl, rfl, .inr (.inr ⟨hi, hs⟩)⟩
   next => cases hv
 
+/-- Writing keeps the local keys and the remote ephemeral key. -/
+theorem keys_of_writeMessage {s next : HandshakeState} {payload message : ByteArray}
+    (h : writeMessage s payload = .ok (next, message)) :
+    next.staticKey = s.staticKey ∧ next.ephemeralKey = s.ephemeralKey ∧
+      next.remoteEphemeral = s.remoteEphemeral := by
+  dsimp only [writeMessage, Bind.bind, Pure.pure, Except.bind, Except.pure, throw, throwThe,
+    MonadExceptOf.throw] at h
+  split at h
+  · cases h
+  rename_i v hv
+  split at h
+  · cases h
+  rename_i w hw
+  cases h
+  exact ⟨rfl, rfl, rfl⟩
+
+/-- Reading keeps the local keys. -/
+theorem keys_of_readMessage {s next : HandshakeState} {message payload : ByteArray}
+    (h : readMessage s message = .ok (next, payload)) :
+    next.staticKey = s.staticKey ∧ next.ephemeralKey = s.ephemeralKey := by
+  dsimp only [readMessage, Bind.bind, Pure.pure, Except.bind, Except.pure, throw, throwThe,
+    MonadExceptOf.throw] at h
+  split at h
+  · cases h
+  split at h
+  · cases h
+  rename_i v hv
+  split at h
+  · cases h
+  rename_i w hw
+  cases h
+  split at hv <;> (repeat' split at hv) <;> cases hv <;> exact ⟨rfl, rfl⟩
+
 private theorem size_append_tag (c : ByteArray) (t : ChaCha20Poly1305.Tag) :
     (c ++ packBytes t).size = c.size + 16 := by
   rw [ByteArray.size_append, size_packBytes]

@@ -332,8 +332,7 @@ private theorem prepareCall_ok {v : ChainView} {tx : GenericTransaction} {p : Bl
     · rw [getAccount_ofBlock] at hbal
       omega
 
-/-- A call prepared again with its own gas limit as the gas of the request prepares the same call.
--/
+/-- The request with the gas limit of its prepared call prepares the same call. -/
 theorem prepareCall_gas_self {v : ChainView} {tx : GenericTransaction} {p : BlockParam}
     {c : CallChoices} {s : CallSetup} (h : v.prepareCall tx p c = .ok s) :
     v.prepareCall { tx with gas := some s.transaction.gas.toNat } p c = .ok s := by
@@ -350,7 +349,7 @@ theorem prepareCall_gas_self {v : ChainView} {tx : GenericTransaction} {p : Bloc
   rw [hg]
   exact hb
 
-/-- A call run again with its own gas limit as the gas of the request runs the same call. -/
+/-- The request with the gas limit of its prepared call runs the same call. -/
 theorem runCall_gas_self {v : ChainView} {tx : GenericTransaction} {p : BlockParam}
     {c : CallChoices} {s : CallSetup} (h : v.prepareCall tx p c = .ok s) :
     v.runCall { tx with gas := some s.transaction.gas.toNat } p c = v.runCall tx p c := by

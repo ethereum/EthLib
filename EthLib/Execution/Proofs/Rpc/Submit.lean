@@ -4,6 +4,7 @@ public import EthLib.Execution.Rpc.Methods
 public import EthLib.Execution.Proofs.State.Tracker
 public import EthLib.Execution.Proofs.Rpc.Errors
 public import EthLib.Execution.Proofs.Transactions.Envelope
+public import EthLib.Execution.Proofs.Transactions.Network
 
 /-!
 # Proofs: the submission of a raw transaction
@@ -13,6 +14,8 @@ The hash that a submission returns is the hash of the transaction that its raw f
 When the first byte of the raw form is not 3, that hash is the Keccak-256 hash of the raw bytes.
 
 The method of the dispatcher reads the raw bytes and returns that hash.
+
+A network form is accepted only when its blobs pass their checks, KZG proofs included.
 
 The next block in which a transaction is checked has the next base fee of the fee history.
 
@@ -54,16 +57,35 @@ theorem ChainView.sendRawTransaction_hash {v : ChainView} {bytes : ByteArray} {h
         · cases hok
         · cases hok
           assumption
-    · split at hok
-      · split at hok
+    · rcases hv : validateNetwork v.setup (v.head.nextFork v.config) w with e | u <;>
+        rw [hv] at hok
+      · cases hok
+      · dsimp only at hok
+        split at hok
+        · cases hok
         · split at hok
           · cases hok
-          · split at hok
-            · cases hok
-            · cases hok
-              assumption
-        · simp at hok
-      · simp at hok
+          · cases hok
+            assumption
+
+/-- A network form is accepted only when its counts, its versioned hashes and its proofs pass. -/
+theorem ChainView.validateNetwork_of_sendRawTransaction {v : ChainView} {bytes : ByteArray}
+    {h : Hash32} {w : NetworkBlobTransaction} (hok : v.sendRawTransaction bytes = .ok h)
+    (hd : decodeRawTransaction (v.head.nextFork v.config) bytes = .ok (.network w)) :
+    validateNetwork v.setup (v.head.nextFork v.config) w = .ok () := by
+  unfold ChainView.sendRawTransaction at hok
+  simp only [Except.mapError, bind, Except.bind, hd] at hok
+  rcases hv : validateNetwork v.setup (v.head.nextFork v.config) w with e | u
+  · rw [hv] at hok
+    cases hok
+  · rfl
+
+/-- A network form is accepted only when its KZG proofs verify. -/
+theorem ChainView.proofsVerify_of_sendRawTransaction {v : ChainView} {bytes : ByteArray}
+    {h : Hash32} {w : NetworkBlobTransaction} (hok : v.sendRawTransaction bytes = .ok h)
+    (hd : decodeRawTransaction (v.head.nextFork v.config) bytes = .ok (.network w)) :
+    proofsVerify v.setup (v.head.nextFork v.config) w = .ok true :=
+  ((validateNetwork_eq_ok_iff _ _ _).mp (validateNetwork_of_sendRawTransaction hok hd)).2.2
 
 /-- The hash of an accepted submission whose first byte is not 3 is the hash of its bytes.
 

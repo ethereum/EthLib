@@ -6,19 +6,11 @@ import EthLib.Execution.Proofs.Rpc.Call
 /-!
 # Proofs: `eth_estimateGas` and `eth_createAccessList`
 
-The answer of `eth_estimateGas` is a gas limit with which the call completes.
-
-It is at most the gas limit of the request, or the default one.
-
-With one gas less, the call does not complete, unless the answer is at most 1.
+The estimate is a gas limit with which the call completes.
 
 The method fails exactly when `eth_call` fails, with the same error.
 
-It is the least positive limit that completes when the limits that complete form an interval.
-
-Code that reads the gas left can break that.
-
-A call completes with a gas limit exactly when `eth_call` answers data at that limit.
+It is the least positive such limit when the limits that complete form an interval.
 
 The result of `eth_createAccessList` lists what the call read or wrote.
 
@@ -71,8 +63,7 @@ theorem searchGas_completes {lo hi : Nat} (h : v.Completes tx p c hi) :
 
 /-- The search answers at most each limit above `lo` with which the call completes.
 
-This holds when the call completes at `hi`, and the limits with which it completes form an interval.
--/
+It needs the call to complete at `hi`, and the limits that complete to form an interval. -/
 theorem searchGas_least
     (hconv : ∀ a b d, a ≤ b → b ≤ d → v.Completes tx p c a → v.Completes tx p c d →
       v.Completes tx p c b)
@@ -128,7 +119,9 @@ theorem estimateGas_completes {g : Nat} (h : v.estimateGas tx p c = .ok g) :
 
 /-- The estimate is at most each positive gas limit with which the call completes.
 
-This holds when the limits with which the call completes form an interval. -/
+This holds when the limits with which the call completes form an interval.
+
+Code that reads the gas left can break that hypothesis. -/
 theorem estimateGas_least
     (hconv : ∀ a b d, a ≤ b → b ≤ d → v.Completes tx p c a → v.Completes tx p c d →
       v.Completes tx p c b)
@@ -163,13 +156,9 @@ theorem estimateGas_eq_error_iff {e : Serialization.JsonRpc.RpcError} :
   simp only
   rcases callAnswer o with e' | out <;> simp [pure, Except.pure]
 
-/-- With one gas less than the answer of the search, the call does not complete.
+/-- With one gas less than the answer of the search, the call does not complete, or that gas is 0.
 
-Or one gas less than that answer is 0.
-
-This holds when `lo` is below `hi`.
-
-It also needs `lo` to be 0, or a limit with which the call does not complete. -/
+It needs `lo` below `hi`, and `lo` to be 0 or a limit with which the call does not complete. -/
 theorem searchGas_pred_not_completes {lo hi : Nat} (hlt : lo < hi)
     (hlo : lo = 0 ∨ ¬ v.Completes tx p c lo) :
     v.searchGas tx p c lo hi - 1 = 0 ∨ ¬ v.Completes tx p c (v.searchGas tx p c lo hi - 1) := by

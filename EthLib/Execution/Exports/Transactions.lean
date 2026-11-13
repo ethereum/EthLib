@@ -355,7 +355,7 @@ It returns the bytes of the transaction alone, as a block holds it.
 def networkCheckExport (fork bytes : ByteArray) : Result ByteArray := do
   let fork ← forkUpTo .bpo5 fork
   let w ← runNetwork (decodeNetwork fork bytes)
-  let setup ← runNetwork (Cryptography.Kzg.Exports.embeddedSetup.mapError .kzg)
+  let setup ← runNetwork ((Cryptography.Kzg.Exports.embeddedSetup ()).mapError .kzg)
   runNetwork (validateNetwork setup fork w)
   runNetwork ((encodeTransaction (.blob w.tx)).mapError (.transaction ∘ .encoding))
 

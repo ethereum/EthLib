@@ -133,6 +133,22 @@ theorem Handles.reachable {checks : SignatureChecks} {sources : BlockSources pre
   | envelope _ accepted => exact reachable.envelope accepted
   | inclusionList _ accepted => exact reachable.inclusionList accepted
 
+/-- A move of the store keeps each checkpoint, or moves it to one at a greater epoch. -/
+theorem Handles.checkpointsAdvance {checks : SignatureChecks}
+    {sources : BlockSources preset fork} {time : ℕ} {view : Set (Message preset fork)}
+    {store after : Store preset fork}
+    (handles : Handles config checks sources time view store after) :
+    store.CheckpointsAdvance after := by
+  cases handles with
+  | tick _ _ ticked => exact (Store.onTick_frame ticked).2.1
+  | block _ added => exact Store.onBlockWithVotes_checkpointsAdvance added
+  | attestation _ attested => exact (Store.onAttestation_frame attested).1
+  | attesterSlashing _ slashed => exact (Store.onAttesterSlashing_frame slashed).1
+  | payloadAttestation _ voted =>
+    exact (Store.onPayloadAttestationMessage_onlyPtcVotes voted).frame.1
+  | envelope _ accepted => exact (Store.onExecutionPayloadEnvelope_frame accepted).1
+  | inclusionList _ accepted => exact (Store.onInclusionList_frame accepted).1
+
 /-- Along an execution, the store of each honest validator stays reachable from the anchor.
 
 The stores of the honest validators must be reachable at the start. -/
