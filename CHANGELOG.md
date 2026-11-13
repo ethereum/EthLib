@@ -37,6 +37,11 @@ Not yet released.
   A proof that unfolds `HashEvidence` to take it apart first rewrites with `hashEvidence_iff`, or applies `hashEvidence_iff.mp`.
   A proof that builds the evidence as an `Or` of the old form applies `hashEvidence_iff.mpr`.
 
+- In Lean, `DirectSafety.StepRule state after checkpoint` is now public ([#2187](https://github.com/ethereum/EthLib/issues/2187)).
+  It states the four rules by which one justification step finalizes `checkpoint`, for the state before the step and the state after it.
+  `DirectSafety.FinalizationRule call checkpoint` is stated through it, as `StepRule call.cached call.weighed checkpoint`, with the same meaning and the same unfolded body.
+  No C export or Python function changes, and no theorem changes its statement.
+
 - `verify_kzg_proof` checks its inputs in the order of EIP-4844: the commitment, `z`, `y`, then the proof.
   When more than one input is invalid, the first in that order gives the error.
   Before, it checked the proof second, so an input with an invalid `z` and an invalid proof raised the error of the proof.
