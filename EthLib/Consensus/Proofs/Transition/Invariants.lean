@@ -2077,7 +2077,7 @@ theorem processPtcWindow {gloas : .glamsterdam ≤ fork}
 /-- One stage that is neither justification, the payments, the flag rotation nor the deposits.
 
 Each such stage relates its states under the laws of the steps. -/
-private theorem epochEdge {stage : EpochStage}
+theorem epochEdge {stage : EpochStage}
     (ordinary : stage ≠ .justification ∧ stage ≠ .payments ∧ stage ≠ .participation ∧
       stage ≠ .pendingDeposits)
     (computed : EpochStage.action config checks stage state = .ok after) : R state after := by

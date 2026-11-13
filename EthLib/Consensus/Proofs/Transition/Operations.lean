@@ -1164,6 +1164,41 @@ theorem applyPendingDeposit_cases {deposit : PendingDeposit}
     obtain ⟨index, _, computed⟩ := computed
     exact .inr (.inl ⟨index, computed⟩)
 
+/-- A block deposit changes nothing, queues a pending deposit, or applies at once.
+
+The first case covers a new key with an invalid signature.
+
+The second case is from Electra: it queues the deposit, after it adds a new key with no balance.
+
+The third case is before Electra: the deposit applies as a pending deposit. -/
+theorem applyDeposit_cases {pubkey : BLSPubkey} {credentials : Bytes32} {amount : Gwei}
+    {signature : BLSSignature}
+    (computed : applyDeposit config checks state pubkey credentials amount signature = .ok after) :
+    after = state ∨
+    (.pectra ≤ fork ∧ ∃ middle pending,
+      (middle = state ∨ addValidatorToRegistry state pubkey credentials 0 = .ok middle) ∧
+        after = { middle with pendingDeposits := fun _ => pending }) ∨
+    (fork < .pectra ∧ applyPendingDeposit config checks state
+      ⟨pubkey, credentials, amount, signature, GENESIS_SLOT⟩ = .ok after) := by
+  unfold applyDeposit at computed
+  split at computed
+  · rename_i electra
+    unfold applyDepositElectra at computed
+    split at computed
+    · simp only [bind_ok_iff] at computed
+      obtain ⟨_, _, computed⟩ := computed
+      split at computed
+      · simp only [bind_ok_iff, liftAccessor_ok] at computed
+        obtain ⟨middle, added, queued⟩ := computed
+        obtain ⟨pending, rfl⟩ := addPendingDeposit_eq queued
+        exact .inr (.inl ⟨electra, middle, pending, .inr added, rfl⟩)
+      · cases computed
+        exact .inl rfl
+    · obtain ⟨pending, rfl⟩ := addPendingDeposit_eq (liftAccessor_ok.mp computed)
+      exact .inr (.inl ⟨electra, state, pending, .inl rfl, rfl⟩)
+  · rename_i early
+    exact .inr (.inr ⟨Nat.lt_of_not_le early, computed⟩)
+
 /-- A deposit adds at most one entry to the registry, and keeps each validator there. -/
 theorem applyPendingDeposit_validators_size_le_and_mem {deposit : PendingDeposit}
     (computed : applyPendingDeposit config checks state deposit = .ok after) :

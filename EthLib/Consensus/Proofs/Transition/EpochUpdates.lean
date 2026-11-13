@@ -43,6 +43,12 @@ The RANDAO reset copies the mix of the current epoch to the next.
 
 The rotation of the pending attestations moves those of the current epoch to the previous one.
 
+The slashings change only the balances.
+
+The update of the effective balances changes only the registry.
+
+Before Heze, the reset of the deposit votes changes only those votes.
+
 A root joins the historical roots exactly when their list has room, and it joins at the end.
 
 Before Capella, a successful update at the start of a span adds the root of the batch of roots.
@@ -1324,6 +1330,103 @@ theorem processParticipationRecordUpdates_eq (before : fork < .altair) :
     currentEpochAttestations := fun _ => ⟨#[], by simp⟩ }, ?_, rfl, rfl, rfl⟩
   simp only [processParticipationRecordUpdates, notAltair, ↓reduceIte]
   try rfl
+
+/-! ## Fields kept by three steps -/
+
+/-- The slashing penalties change only the balances. -/
+theorem processSlashings_frame {after : BeaconState preset fork}
+    (computed : processSlashings state = .ok after) :
+    after = { state with balances := after.balances } := by
+  -- Each penalty writes one balance, or leaves the state as it is.
+  have chain : ∀ {middle next : BeaconState preset fork},
+      middle = { state with balances := middle.balances } →
+      next = { middle with balances := next.balances } →
+      next = { state with balances := next.balances } := by
+    intro middle next kept step
+    have swap : ∀ balances, { middle with balances } = { state with balances } :=
+      fun balances => by rw [kept]
+    exact step.trans (swap _)
+  have lowered : ∀ {middle next : BeaconState preset fork} {index : ValidatorIndex} {delta : Gwei},
+      decreaseBalance middle index delta = .ok next →
+      next = { middle with balances := next.balances } := by
+    intro middle next index delta computed
+    obtain ⟨_, set⟩ := decreaseBalance_ok computed
+    obtain ⟨_, rfl⟩ := setBalance_ok set
+    rfl
+  unfold processSlashings at computed
+  simp only [bind_ok_iff] at computed
+  obtain ⟨_, _, _, _, _, _, computed⟩ := computed
+  split at computed
+  · simp only [bind_ok_iff] at computed
+    obtain ⟨_, _, applied⟩ := computed
+    refine foldlM_ok_invariant
+      (fun current : BeaconState preset fork =>
+        current = { state with balances := current.balances })
+      (fun middle _ next kept step => chain kept ?_) rfl applied
+    simp only [applySlashingPenaltyElectra, bind_ok_iff, liftAccessor_ok] at step
+    obtain ⟨_, _, step⟩ := step
+    split at step
+    · simp only [bind_ok_iff] at step
+      obtain ⟨_, _, step⟩ := step
+      split at step
+      · simp only [bind_ok_iff, liftAccessor_ok] at step
+        obtain ⟨_, _, _, _, lower⟩ := step
+        exact lowered lower
+      · simp only [pure, Except.pure, Except.ok.injEq] at step
+        subst step
+        rfl
+    · simp only [pure, Except.pure, Except.ok.injEq] at step
+      subst step
+      rfl
+  · refine foldlM_ok_invariant
+      (fun current : BeaconState preset fork =>
+        current = { state with balances := current.balances })
+      (fun middle _ next kept step => chain kept ?_) rfl computed
+    simp only [applySlashingPenalty, bind_ok_iff, liftAccessor_ok] at step
+    obtain ⟨_, _, step⟩ := step
+    split at step
+    · simp only [bind_ok_iff] at step
+      obtain ⟨_, _, step⟩ := step
+      split at step
+      · simp only [bind_ok_iff, liftAccessor_ok] at step
+        obtain ⟨_, _, _, _, _, _, lower⟩ := step
+        exact lowered lower
+      · simp only [pure, Except.pure, Except.ok.injEq] at step
+        subst step
+        rfl
+    · simp only [pure, Except.pure, Except.ok.injEq] at step
+      subst step
+      rfl
+
+/-- The update of the effective balances changes only the registry. -/
+theorem processEffectiveBalanceUpdates_frame {after : BeaconState preset fork}
+    (computed : processEffectiveBalanceUpdates state = .ok after) :
+    after = { state with validators := after.validators } := by
+  unfold processEffectiveBalanceUpdates at computed
+  refine foldlM_ok_invariant
+    (fun current : BeaconState preset fork =>
+      current = { state with validators := current.validators })
+    (fun current _ next kept step => ?_) rfl computed
+  simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at step
+  obtain ⟨_, _, _, _, _, _, set⟩ := step
+  obtain ⟨_, rfl⟩ := setValidatorAt_ok set
+  have swap : ∀ validators, { current with validators } = { state with validators } :=
+    fun validators => by rw [kept]
+  exact swap _
+
+/-- Before Heze, the reset of the deposit votes changes only those votes. -/
+theorem processEth1DataReset_frame {hegota : fork < .hegota}
+    {after : BeaconState preset fork} (computed : processEth1DataReset hegota state = .ok after) :
+    after = { state with eth1DataVotes := after.eth1DataVotes } := by
+  simp only [processEth1DataReset, bind_ok_iff, liftAccessor_ok] at computed
+  obtain ⟨_, _, computed⟩ := computed
+  split at computed
+  · simp only [pure, Except.pure, Except.ok.injEq] at computed
+    subst computed
+    rfl
+  · simp only [pure, Except.pure, Except.ok.injEq] at computed
+    subst computed
+    rfl
 
 /-! ## Historical roots and summaries -/
 

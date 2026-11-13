@@ -1489,22 +1489,6 @@ private theorem exitChurnLimit_le_cap {fork : Fork} {s : BeaconState preset fork
   obtain ⟨whole, _, rfl⟩ := ok
   exact UInt64.le_iff_toNat_le.mp Std.min_le_left
 
-/-- Withdrawal requests either do nothing, initiate an exit, or spend partial-withdrawal churn. -/
-private theorem withdrawalRequest_cases {fork : Fork} {s t : BeaconState preset fork}
-    {electra : .pectra ≤ fork} {request : WithdrawalRequest}
-    (ok : processWithdrawalRequest config s electra request = .ok t) :
-    t = s ∨ (∃ index, initiateValidatorExit config s index = .ok t) ∨
-      ∃ index v owed,
-        requestPartialWithdrawal config s electra index v request.amount owed = .ok t := by
-  unfold processWithdrawalRequest at ok
-  simp only [bind, Except.bind, pure, Except.pure] at ok
-  repeat' split at ok
-  all_goals first
-    | (cases ok; exact .inl rfl)
-    | (cases ok)
-    | exact .inr (.inl ⟨_, liftAccessor_ok.mp ok⟩)
-    | exact .inr (.inr ⟨_, _, _, ok⟩)
-
 /-- An exit trace tags its call and covers every newly assigned validator exit. -/
 private theorem initiateExit_indexedTrace {fork : Fork} {s t : BeaconState preset fork}
     (electra : .pectra ≤ fork) (early : fork < .glamsterdam) {index : ValidatorIndex}
@@ -4210,6 +4194,108 @@ private theorem initialized_charges_le_window {x y : ForkedBeaconState preset}
   rw [Nat.mul_add]
   omega
 
+private theorem upgrades_electra_epoch {s t : ForkedBeaconState preset}
+    (ok : processUpgrades config checks s = .ok t)
+    (initial : .pectra ≤ s.fork → config.ELECTRA_FORK_EPOCH.toNat ≤
+      (getCurrentEpoch s.state).toNat) :
+    .pectra ≤ t.fork → config.ELECTRA_FORK_EPOCH.toNat ≤
+      (getCurrentEpoch t.state).toNat := by
+  fun_induction processUpgrades config checks s generalizing t with
+  | case1 s due ih =>
+    obtain ⟨next, nextOk, rest⟩ := bind_ok_iff.mp ok
+    apply ih next rest
+    intro electra
+    have slot := (upgradeFrame_upgradeNext nextOk).slot
+    have epoch : getCurrentEpoch next.val.state = getCurrentEpoch s.state := by
+      simp only [getCurrentEpoch, slot]
+    rw [epoch]
+    by_cases old : .pectra ≤ s.fork
+    · exact initial old
+    · obtain ⟨fork, state⟩ := s
+      cases fork <;> simp only at old
+      all_goals try (exact False.elim (old (by decide)))
+      all_goals simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq,
+        throw] at nextOk
+      all_goals try contradiction
+      all_goals try (obtain ⟨_, _, rfl⟩ := nextOk)
+      all_goals try (exact False.elim (of_decide_eq_false rfl electra))
+      simp only [upgradeDue, Config.nextFork, Option.any_some, Bool.and_eq_true,
+        beq_iff_eq] at due
+      have scheduled : getCurrentEpoch state = config.ELECTRA_FORK_EPOCH := by
+        exact due.2
+      rw [scheduled]
+  | case2 s notDue => cases ok; exact initial
+
+/-- A state of a run from genesis that is at Electra is at or after its fork epoch. -/
+theorem reachable_electra_epoch {g y : ForkedBeaconState preset}
+    (run : Run config checks g y) (genesis : Genesis (config := config) (checks := checks) g) :
+    .pectra ≤ y.fork → config.ELECTRA_FORK_EPOCH.toNat ≤
+      (getCurrentEpoch y.state).toNat := by
+  induction run with
+  | nil =>
+    intro electra
+    obtain ⟨hash, time, deposits, ok⟩ := genesis
+    have altair : Fork.altair ≤ g.fork := Nat.le_trans (by decide) electra
+    simp [initializeBeaconStateFromEth1, altair, throw] at ok
+  | @snoc middle last pre step ih =>
+    cases step with
+    | slot ok =>
+      obtain ⟨advanced, advanceOk, upgrades⟩ := bind_ok_iff.mp ok
+      apply upgrades_electra_epoch upgrades
+      intro electra
+      have previous := ih electra
+      have moved := advanceSlot_slot advanceOk
+      have epochs : (getCurrentEpoch middle.state).toNat ≤
+          (getCurrentEpoch advanced).toNat := by
+        simp only [getCurrentEpoch_toNat]
+        exact Nat.div_le_div_right (by omega)
+      exact previous.trans epochs
+    | block engine signed due ok =>
+      intro electra
+      have previous := ih electra
+      have slot := (frame_processBlock (applySignedBlock_ok ok).2.1).slot
+      simpa only [getCurrentEpoch, slot] using previous
+
+/-- A run that crosses into Electra charges the count churn before the crossing.
+
+After it, the run charges the Electra caps from the first Electra state `v` on. -/
+private theorem crossing_charges_split {g x y : ForkedBeaconState preset}
+    (shared : Run config checks g x) (tail : Run config checks x y)
+    (genesis : Genesis (config := config) (checks := checks) g)
+    (caps : CapOrder preset)
+    (early : y.fork < .glamsterdam) (high registryBound cap : Nat)
+    (registryBounded : y.state.validators.data.size ≤ registryBound)
+    (rates : ∀ site ∈ tail.consolidationSites, .pectra ≤ site.fork → ∀ (rate : Gwei),
+      getConsolidationChurnLimit config site.state = .ok rate → rate.toNat ≤ cap)
+    (before : x.fork < .pectra) (targetElectra : .pectra ≤ y.fork) :
+    ∃ v : ForkedBeaconState preset, Nonempty (Run config checks g v) ∧ .pectra ≤ v.fork ∧
+      (getCurrentEpoch x.state).toNat ≤ (getCurrentEpoch v.state).toNat ∧
+      ((tail.departureCharges.filter fun c => c.epoch ≤ high + 1).map (·.amount)).sum ≤
+        (high + 2 - (getCurrentEpoch x.state).toNat) *
+          (max 1 (cohortCap config registryBound) * preset.MAX_EFFECTIVE_BALANCE.toNat) +
+        (high + 2 - (getCurrentEpoch v.state).toNat) *
+          (config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat + cap) := by
+  obtain ⟨u, v, pre, crossing, post, uBefore, vElectra, same⟩ :=
+    split_electra_crossing tail before targetElectra
+  subst tail
+  have vEarly := Nat.lt_of_le_of_lt (fork_le_of_chainSteps post.chainSteps) early
+  have legacy := crossing_charges_le_window shared pre crossing genesis caps uBefore
+    vEarly (high + 1) registryBound
+    ((registryGrows_of_chainSteps post.chainSteps).trans registryBounded)
+  have balance := initialized_charges_le_window post vElectra early (high + 1)
+    cap (crossing_initialized crossing uBefore vElectra vEarly)
+    (by
+      intro site member h rate computed
+      apply rates site _ h rate computed
+      rw [Run.consolidationSites_append]
+      exact List.mem_append_right _ member)
+  have ordered := UInt64.le_iff_toNat_le.mp
+    (currentEpoch_le_of_chainSteps (pre.snoc crossing).chainSteps)
+  refine ⟨v, ⟨shared.append (pre.snoc crossing)⟩, vElectra, ordered, ?_⟩
+  rw [Run.departureCharges_append, List.filter_append, List.map_append, List.sum_append]
+  simp only [Nat.add_assoc, Nat.reduceAdd] at legacy balance
+  exact Nat.add_le_add legacy balance
+
 /-- Before Gloas, the departure charges of a run fit the queue capacity of a window of epochs.
 
 The run starts at a state `x` reached from genesis and ends at a state `y` before Gloas.
@@ -4287,29 +4373,58 @@ theorem departure_charges_le_window {g x y : ForkedBeaconState preset}
       apply bound.trans
       apply Nat.mul_le_mul_left
       omega
-    · obtain ⟨u, v, pre, crossing, post, uBefore, vElectra, same⟩ :=
-        split_electra_crossing tail before (Nat.le_of_not_lt targetBefore)
-      subst tail
-      have vEarly := Nat.lt_of_le_of_lt (fork_le_of_chainSteps post.chainSteps) early
-      have legacy := crossing_charges_le_window shared pre crossing genesis caps uBefore
-        vEarly (high + 1) registryBound
-        ((registryGrows_of_chainSteps post.chainSteps).trans registryBounded)
-      have balance := initialized_charges_le_window post vElectra early (high + 1)
-        consolidationCap (crossing_initialized crossing uBefore vElectra vEarly)
-        (by
-          intro site member h rate computed
-          apply rates site _ h rate computed
-          rw [Run.consolidationSites_append]
-          exact List.mem_append_right _ member)
-      have ordered := UInt64.le_iff_toNat_le.mp
-        (currentEpoch_le_of_chainSteps (pre.snoc crossing).chainSteps)
+    · obtain ⟨v, _, _, ordered, bound⟩ := crossing_charges_split shared tail genesis caps early
+        high registryBound consolidationCap registryBounded rates before
+        (Nat.le_of_not_lt targetBefore)
       have suffix : high + 2 - (getCurrentEpoch v.state).toNat ≤
           high + 2 - (getCurrentEpoch x.state).toNat := Nat.sub_le_sub_left ordered _
-      have balance := balance.trans (Nat.mul_le_mul_right
-        (config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat + consolidationCap) suffix)
-      rw [Run.departureCharges_append, List.filter_append, List.map_append, List.sum_append]
-      simp only [Nat.add_assoc, Nat.reduceAdd] at legacy balance
       rw [Nat.add_assoc, Nat.mul_add]
-      exact Nat.add_le_add legacy balance
+      exact bound.trans (Nat.add_le_add_left (Nat.mul_le_mul_right _ suffix) _)
+
+/-- A window that ends before the Electra fork epoch is charged only the count churn.
+
+The run starts at a state `x` before Electra, reached from genesis, and ends before Gloas.
+
+The bound is `H` times the cap `L * MAX_EFFECTIVE_BALANCE`, where `H = high + 2 - e`.
+
+Here `e` is the current epoch of `x`.
+
+`L` is the larger of 1 and the pre-Electra churn limit of `registryBound` validators.
+
+An Electra part of the run starts at the fork epoch, after the window, so it adds nothing. -/
+theorem departure_charges_le_window_before_fork {g x y : ForkedBeaconState preset}
+    (shared : Run config checks g x) (tail : Run config checks x y)
+    (genesis : Genesis (config := config) (checks := checks) g)
+    (caps : CapOrder preset)
+    (early : y.fork < .glamsterdam) (high registryBound : Nat)
+    (registryBounded : y.state.validators.data.size ≤ registryBound)
+    (before : x.fork < .pectra) (preFork : high + 1 < config.ELECTRA_FORK_EPOCH.toNat) :
+    ((tail.departureCharges.filter fun c => c.epoch ≤ high + 1).map (·.amount)).sum ≤
+      (high + 2 - (getCurrentEpoch x.state).toNat) *
+        (max 1 (cohortCap config registryBound) * preset.MAX_EFFECTIVE_BALANCE.toNat) := by
+  by_cases targetBefore : y.fork < .pectra
+  · simpa only [Nat.add_assoc, Nat.reduceAdd] using
+      pre_electra_charges_le_window shared tail genesis caps targetBefore (high + 1)
+        registryBound registryBounded
+  -- The Electra part has no epoch in the window, so any bound on its rates serves.
+  let cap := (tail.consolidationSites.map fun site =>
+    match getConsolidationChurnLimit config site.state with
+    | .ok rate => rate.toNat
+    | .error _ => 0).sum
+  have rates : ∀ site ∈ tail.consolidationSites, .pectra ≤ site.fork → ∀ (rate : Gwei),
+      getConsolidationChurnLimit config site.state = .ok rate → rate.toNat ≤ cap := by
+    intro site member _ rate computed
+    have listed := List.mem_map_of_mem (f := fun site : ForkedBeaconState preset =>
+      match getConsolidationChurnLimit config site.state with
+      | .ok rate => rate.toNat
+      | .error _ => 0) member
+    simp only [computed] at listed
+    exact List.le_sum_of_mem listed
+  obtain ⟨v, ⟨reached⟩, vElectra, _, bound⟩ := crossing_charges_split shared tail genesis caps
+    early high registryBound cap registryBounded rates before (Nat.le_of_not_lt targetBefore)
+  have late := reachable_electra_epoch reached genesis vElectra
+  have empty : high + 2 - (getCurrentEpoch v.state).toNat = 0 := by omega
+  rw [empty, Nat.zero_mul, Nat.add_zero] at bound
+  exact bound
 
 end EthLib.Consensus.DirectSafety
