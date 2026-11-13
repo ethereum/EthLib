@@ -756,7 +756,7 @@ theorem fixedString_eq_true_iff {width : Nat} (pos : 0 < width) {bytes : List UI
 
 /-! ## The certificate subset -/
 
-/-- At any depth, a value of tag 1 passes validation exactly when its content is 00 or FF. -/
+/-- With positive fuel, a value of tag 1 passes validation exactly when its content is 00 or FF. -/
 theorem validate_go_boolean_ok_iff {value : Value} (fuel : Nat) (tag : value.tag = 1) :
     validate.go (fuel + 1) value = .ok () ↔
       value.content.data.toList = [0x00] ∨ value.content.data.toList = [0xFF] := by
@@ -772,23 +772,31 @@ theorem validate_go_boolean_ok_iff {value : Value} (fuel : Nat) (tag : value.tag
   rw [← hb, validate.go, tag]
   cases boolean value <;> simp [bind, Except.bind, pure, Except.pure]
 
-/-- At any depth, a value of tag 3 passes validation exactly when its BIT STRING contents do. -/
+/-- With positive fuel, a value of tag 3 passes validation exactly when its contents do. -/
 theorem validate_go_bitString {value : Value} (fuel : Nat) (tag : value.tag = 3) :
     validate.go (fuel + 1) value = validBits value.content := by
   rw [validate.go, tag]
   rfl
 
-/-- At any depth, a value of tag 30 passes validation exactly when its two-octet code units pass. -/
+/-- With positive fuel, a value of tag 30 passes validation exactly when it writes scalar values.
+
+Each takes two octets. -/
 theorem validate_go_bmpString_ok_iff {value : Value} (fuel : Nat) (tag : value.tag = 30) :
-    validate.go (fuel + 1) value = .ok () ↔ fixedString 2 value.content.data.toList = true := by
-  rw [validate.go, tag]
+    validate.go (fuel + 1) value = .ok () ↔ ∃ chars : List Nat,
+      (∀ c ∈ chars, c < 256 ^ 2 ∧ c ≤ 0x10FFFF ∧ (c < 0xD800 ∨ 0xDFFF < c)) ∧
+      value.content.data.toList = chars.flatMap (natToBytes 2) := by
+  rw [← fixedString_eq_true_iff (by decide), validate.go, tag]
   dsimp only
   split <;> simp_all [pure, Except.pure, throw, throwThe, MonadExceptOf.throw]
 
-/-- At any depth, a value of tag 28 passes validation exactly when its four-octet code units do. -/
+/-- With positive fuel, a value of tag 28 passes validation exactly when it writes scalar values.
+
+Each takes four octets. -/
 theorem validate_go_universalString_ok_iff {value : Value} (fuel : Nat) (tag : value.tag = 28) :
-    validate.go (fuel + 1) value = .ok () ↔ fixedString 4 value.content.data.toList = true := by
-  rw [validate.go, tag]
+    validate.go (fuel + 1) value = .ok () ↔ ∃ chars : List Nat,
+      (∀ c ∈ chars, c < 256 ^ 4 ∧ c ≤ 0x10FFFF ∧ (c < 0xD800 ∨ 0xDFFF < c)) ∧
+      value.content.data.toList = chars.flatMap (natToBytes 4) := by
+  rw [← fixedString_eq_true_iff (by decide), validate.go, tag]
   dsimp only
   split <;> simp_all [pure, Except.pure, throw, throwThe, MonadExceptOf.throw]
 
@@ -807,14 +815,14 @@ theorem validate_bitString {value : Value} (tag : value.tag = 3) :
 theorem validate_bmpString_ok_iff {value : Value} (tag : value.tag = 30) :
     validate value = .ok () ↔ ∃ chars : List Nat,
       (∀ c ∈ chars, c < 256 ^ 2 ∧ c ≤ 0x10FFFF ∧ (c < 0xD800 ∨ 0xDFFF < c)) ∧
-      value.content.data.toList = chars.flatMap (natToBytes 2) := by
-  rw [validate, validate_go_bmpString_ok_iff _ tag, fixedString_eq_true_iff (by decide)]
+      value.content.data.toList = chars.flatMap (natToBytes 2) :=
+  validate_go_bmpString_ok_iff _ tag
 
 /-- A UniversalString passes validation exactly when it writes scalar values, four octets each. -/
 theorem validate_universalString_ok_iff {value : Value} (tag : value.tag = 28) :
     validate value = .ok () ↔ ∃ chars : List Nat,
       (∀ c ∈ chars, c < 256 ^ 4 ∧ c ≤ 0x10FFFF ∧ (c < 0xD800 ∨ 0xDFFF < c)) ∧
-      value.content.data.toList = chars.flatMap (natToBytes 4) := by
-  rw [validate, validate_go_universalString_ok_iff _ tag, fixedString_eq_true_iff (by decide)]
+      value.content.data.toList = chars.flatMap (natToBytes 4) :=
+  validate_go_universalString_ok_iff _ tag
 
 end EthLib.Serialization.Proofs.Der
