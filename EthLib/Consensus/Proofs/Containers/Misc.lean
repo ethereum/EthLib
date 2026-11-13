@@ -14,6 +14,8 @@ Each container has distinct field names, and converts to and from the tuple of i
 So its bytes decode back to it, and two values with one encoding are equal.
 
 A vector whose length comes from the preset needs that length to be positive.
+
+A summary of a span of slots has the root of the batch of that span.
 -/
 
 @[expose] public section
@@ -68,5 +70,35 @@ instance : LawfulSszType BLSToExecutionChange :=
 
 instance : LawfulSszType SignedBLSToExecutionChange :=
   .container (by decide) (fun _ => rfl) (fun _ => rfl)
+
+/-! ## Historical summaries -/
+
+/-- A summary of a span of slots has the root of the batch of that span.
+
+The summary holds the root of the block roots, then the root of the state roots.
+
+Its fields are the roots of the fields of the batch, so both merkleize the same two chunks. -/
+theorem hashTreeRoot_historicalSummary {preset : Preset} {batch : HistoricalBatch preset}
+    {blocks states : Root} (blocksRooted : SszType.hashTreeRoot batch.blockRoots = .ok blocks)
+    (statesRooted : SszType.hashTreeRoot batch.stateRoots = .ok states) :
+    SszType.hashTreeRoot
+        ({ blockSummaryRoot := blocks, stateSummaryRoot := states } : HistoricalSummary) =
+      SszType.hashTreeRoot batch := by
+  simp only [SszType.hashTreeRoot, bind, Except.bind] at blocksRooted statesRooted ⊢
+  cases blocksNode : SszType.root batch.blockRoots with
+  | error fault => simp [blocksNode] at blocksRooted
+  | ok blocksBytes =>
+  cases statesNode : SszType.root batch.stateRoots with
+  | error fault => simp [statesNode] at statesRooted
+  | ok statesBytes =>
+  simp only [blocksNode, statesNode] at blocksRooted statesRooted
+  simp only [SszType.root, Except.ok.injEq] at blocksNode statesNode
+  have chunk : ∀ root : Root,
+      hashTreeRoot (.byteVector 32) (.bytes root.toArray) = .ok root.toArray :=
+    fun root => hashTreeRoot_chunk (by simp [bytesPerChunk])
+  simp only [SszType.root, SszFields.roots, summaryRoot, blocksNode, statesNode,
+    toChunk_ok_iff.mp blocksRooted, toChunk_ok_iff.mp statesRooted, chunk, bind, Except.bind, pure,
+    Except.pure, List.map]
+  rw [hashTreeRoot_container_names]
 
 end EthLib.Consensus
