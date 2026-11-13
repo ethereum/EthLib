@@ -203,6 +203,8 @@ def RpcError.invalidParams (reason : String) : RpcError :=
 
 The code and the message are those of section 5.1 of [JSON-RPC 2.0][rpc].
 
+The error groups of the execution API write the message with a lowercase `r`.
+
 [rpc]: https://www.jsonrpc.org/specification#error_object -/
 def RpcError.invalidRequest (reason : String) : RpcError :=
   { code := -32600, message := "Invalid Request", data := some (.str reason) }

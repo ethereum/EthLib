@@ -2,7 +2,7 @@ module
 
 public import EthLib.Execution.Rpc.Base
 public import EthLib.Serialization.Proofs.JsonRpc
--- The digits of `Nat.toDigits` must unfold for `decide` to read them.
+-- The hex digits of a number must unfold for the decision procedure to read them.
 import all Init.Data.Repr
 
 /-!
@@ -22,7 +22,7 @@ namespace EthLib.Execution.Rpc
 open EthLib.Base
 open EthLib.Serialization.JsonRpc
 
-/-- The two hex digits of a byte are ASCII, one or two, read back as the byte. -/
+/-- The hex digits of a byte are one or two ASCII characters, and they read back as the byte. -/
 private theorem byte_digits : ∀ n, n < 256 →
     (∀ c ∈ Nat.toDigits 16 n, c.val ≤ 0x7F) ∧
       (0 < (Nat.toDigits 16 n).length ∧ (Nat.toDigits 16 n).length ≤ 2) ∧
@@ -65,7 +65,7 @@ theorem byte_byteJson (what : String) (b : UInt8) : byte what (byteJson b) = .ok
     simp [hd]
     rfl
 
-/-- Each decimal digit that `Nat.toDigits` writes is an ASCII digit whose code gives its value. -/
+/-- Each decimal digit of a number is an ASCII digit whose code gives its value. -/
 private theorem digitChar_dec : ∀ d, d < 10 →
     (Nat.digitChar d).val ≤ 0x7F ∧ 48 ≤ (Nat.digitChar d).val.toUInt8 ∧
       (Nat.digitChar d).val.toUInt8 ≤ 57 ∧

@@ -8,11 +8,11 @@ public import EthLib.Serialization.Proofs.JsonRpc
 
 Each reader of a block parameter reads back what the writer writes.
 
-A tag, and a hash in the object of EIP-1898, read back as their only reading.
+A tag, and a hash in the object of EIP-1898, read back.
 
-A number reads back as its first reading.
+A number reads back when its text is no hash, which holds for every number below `2^252`.
 
-It may have one more, as a hash, when its quantity has exactly 64 digits.
+A number with 64 hex digits reads as a hash, as the official fixtures read it.
 
 A range rejects the tag `pending`.
 -/
@@ -72,11 +72,6 @@ private theorem blockTag_quantity (what : String) (n : Nat) :
     rw [String.toList_append] at this
     exact name_ne_hex t _ this.symm
 
-/-- Mapping over a rejected reading leaves it rejected. -/
-private theorem toOption_map_none {α β : Type} (f : α → β) (r : Read α) (h : r.toOption = none) :
-    (f <$> r).toOption = none := by
-  cases r <;> simp_all [Functor.map, Except.map, Except.toOption]
-
 /-- The reader of numbers rejects a tag name. -/
 private theorem uint_name_none (what : String) (t : BlockTag) :
     (uint what (.str t.name)).toOption = none := by
@@ -130,18 +125,24 @@ theorem blockNumberOrTagForRange_pending (what : String) :
   rw [blockNumberOrTag_tag]
   rfl
 
-/-- A number, a tag or a hash reads back a tag, as its only reading. -/
+/-- A number, a tag or a hash reads back a tag. -/
 theorem blockNumberOrTagOrHash_tag (what : String) (t : BlockTag) :
-    blockNumberOrTagOrHash what (blockParamJson (.tag t)) = .ok [.tag t] := by
+    blockNumberOrTagOrHash what (blockParamJson (.tag t)) = .ok (.tag t) := by
+  have h1 := hash32_name_none what t
+  have h2 := uint_name_none what t
   unfold blockNumberOrTagOrHash
-  simp only [blockParamJson, List.filterMap_cons, List.filterMap_nil,
-    toOption_map_none _ _ (uint_name_none what t),
-    toOption_map_none _ _ (hash32_name_none what t), blockTag_name]
-  rfl
+  rw [blockParamJson, blockTag_name]
+  rcases e1 : hash32 what (.str t.name) with _ | _
+  · rcases e2 : uint what (.str t.name) with _ | _
+    · rfl
+    · rw [e2] at h2
+      cases h2
+  · rw [e1] at h1
+    cases h1
 
-/-- A number, a tag or a hash reads back a hash with its flag, as its only reading. -/
+/-- A number, a tag or a hash reads back a hash with its flag. -/
 theorem blockNumberOrTagOrHash_hash (what : String) (h : Hash32) (c : Bool) :
-    blockNumberOrTagOrHash what (blockParamJson (.hash h c)) = .ok [.hash h c] := by
+    blockNumberOrTagOrHash what (blockParamJson (.hash h c)) = .ok (.hash h c) := by
   obtain ⟨kvs, hobj, hlen, hmem, hd⟩ := toList_mkObj (pairs := [
     ("blockHash", dataJson h.toList), ("requireCanonical", .bool c)]) (by simp)
   have hnone : kvs.toList.lookup "blockNumber" = none := by
@@ -173,32 +174,49 @@ theorem blockNumberOrTagOrHash_hash (what : String) (h : Hash32) (c : Bool) :
   simp only [hnone, hh, hc, hall, requireCanonical, hx]
   rfl
 
-/-- A number, a tag or a hash reads back a number, as its first reading.
-
-Every other reading is a hash without the flag. -/
-theorem blockNumberOrTagOrHash_number (what : String) (n : Nat) :
-    ∃ rest, blockNumberOrTagOrHash what (blockParamJson (.number n)) = .ok (.number n :: rest) ∧
-      ∀ q ∈ rest, ∃ h, q = .hash h false := by
-  have hu : uint what (quantityJson n) = .ok n := uint_quantityJson what n
-  obtain ⟨e, he⟩ : ∃ e, blockTag what (quantityJson n) = .error e := by
-    cases h : blockTag what (quantityJson n) with
-    | error e => exact ⟨e, rfl⟩
-    | ok t =>
-      have := blockTag_quantity what n
-      rw [h] at this
-      cases this
-  cases hh : hash32 what (quantityJson n) with
-  | error e' =>
-    refine ⟨[], ?_, by simp⟩
-    unfold blockNumberOrTagOrHash
-    simp [blockParamJson, hu, he, hh, Functor.map, Except.map, Except.toOption, pure, Except.pure]
-    unfold quantityJson
-    rfl
+/-- The text of a number below `2^252` has fewer than 64 digits, so it is no hash. -/
+theorem hash32_quantityJson_of_lt (what : String) {n : Nat} (hn : n < 2 ^ 252) :
+    (hash32 what (quantityJson n)).toOption = none := by
+  cases h : hash32 what (quantityJson n) with
+  | error e => rfl
   | ok v =>
-    refine ⟨[.hash v false], ?_, by simp⟩
-    unfold blockNumberOrTagOrHash
-    simp [blockParamJson, hu, he, hh, Functor.map, Except.map, Except.toOption, pure, Except.pure]
-    unfold quantityJson
+    exfalso
+    unfold hash32 at h
+    rw [fixed_false_eq_ok_iff] at h
+    have h := congrArg String.toList (Lean.Json.str.inj h)
+    unfold quantityJson at h
+    rw [String.toList_append, toList_hexString, String.toList_ofList] at h
+    have h := congrArg List.length (List.append_cancel_left (as := ['0', 'x']) h)
+    have hl : ∀ l : List UInt8, (l.flatMap byteHexDigits).length = 2 * l.length := by
+      intro l
+      induction l with
+      | nil => rfl
+      | cons b l ih =>
+        simp only [List.flatMap_cons, List.length_append, ih]
+        simp [byteHexDigits]
+        omega
+    have hv := hl v.toList
+    have hs : v.toList.length = 32 := by simp
+    simp only [← List.flatMap_def] at h
+    have hd := (Nat.length_toDigits_le_iff (b := 16) (n := n) (k := 63) (by omega)
+      (by omega)).mpr (by
+        have : (16 : Nat) ^ 63 = 2 ^ 252 := by decide
+        omega)
+    simp only [String.toList_ofList] at h
+    omega
+
+/-- A number, a tag or a hash reads back a number whose text is no hash. -/
+theorem blockNumberOrTagOrHash_number (what : String) {n : Nat}
+    (hn : (hash32 what (quantityJson n)).toOption = none) :
+    blockNumberOrTagOrHash what (blockParamJson (.number n)) = .ok (.number n) := by
+  have hu := uint_quantityJson what n
+  unfold blockNumberOrTagOrHash
+  rw [blockParamJson]
+  unfold quantityJson at *
+  rcases e : hash32 what (.str ("0x" ++ String.ofList (Nat.toDigits 16 n))) with _ | _
+  · rw [hu]
     rfl
+  · rw [e] at hn
+    cases hn
 
 end EthLib.Execution.Rpc

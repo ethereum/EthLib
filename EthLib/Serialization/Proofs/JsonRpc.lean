@@ -468,7 +468,7 @@ private theorem forIn_digits {ds : List UInt8}
 
 The text is `0x` and the digits of the number, without leading zeros, and `0x0` for zero.
 
-The converse also holds: no other text decodes to the number. -/
+The converse, that no other text decodes to the number, is proved below. -/
 theorem uint_quantityJson (what : String) (v : Nat) : uint what (quantityJson v) = .ok v := by
   unfold quantityJson
   obtain ⟨hall, hval, hhead⟩ := toDigits_hex v

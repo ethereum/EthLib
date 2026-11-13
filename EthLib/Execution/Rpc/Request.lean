@@ -11,13 +11,15 @@ A request holds the version `2.0`, the name of a method, its parameters and an i
 
 The identifier is a string, a number or `null`; the response carries the same one back.
 
-A request without an identifier is a notification, which gets no response; it is out of scope.
+A request without an identifier is a notification, which gets no response.
+
+Notifications are out of scope, and the reader rejects them.
 
 The execution API passes the parameters by position, as an array.
 
 Its fixtures leave out `params` when the array is empty, and the writer does the same.
 
-The reader rejects parameters given by name, which the execution API never uses.
+The reader rejects parameters given by name, a form of JSON-RPC 2.0 that this API never uses.
 
 A response holds either the result of the method or an error object, never both.
 
@@ -31,7 +33,7 @@ A request that is not a valid request object has the error `-32600`, as section 
 
 A parameter that breaks its schema has the error `-32602`.
 
-[rpc]: https://www.jsonrpc.org/specification
+[rpc]: https://www.jsonrpc.org/specification#error_object
 -/
 
 @[expose] public section

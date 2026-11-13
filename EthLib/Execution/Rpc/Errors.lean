@@ -102,7 +102,7 @@ def errorGroups : List ErrorGroup :=
 
 /-- The code of history that the node pruned.
 
-The methods that read blocks, transactions, receipts, logs or traces list it. -/
+Many methods that read blocks, transactions, receipts, logs or traces list it. -/
 def prunedHistoryUnavailable : ErrorCode := ⟨4444, "Pruned history unavailable"⟩
 
 /-- The error object of a code, with its message and the given data. -/

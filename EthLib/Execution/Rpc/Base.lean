@@ -7,7 +7,7 @@ public import EthLib.Base.U256
 /-!
 # `Execution.Rpc.Base`
 
-The base types that only the execution JSON-RPC API exchanges, beyond those it shares.
+The base types of the execution JSON-RPC API that the shared JSON-RPC readers do not define.
 
 They are those of [`base-types.yaml`][types].
 
@@ -23,7 +23,11 @@ A `uintDecimal` is a number in decimal digits, without `0x` and without leading 
 
 A fixed byte string, such as `bytes4` or `hash32`, has exactly two lowercase digits per byte.
 
-The value `notFound` is the JSON `null`, which the writer of an absent value writes.
+The value `notFound` is the JSON `null`, which a method answers when it finds nothing.
+
+A `ratio` is a JSON number from 0 to 1.
+
+The source does not fix how many digits it has, so its writer takes that count as a parameter.
 
 [types]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/schemas/base-types.yaml
 -/
@@ -73,6 +77,15 @@ def uintDecimal (what : String) : Json → Read Nat
 
 /-- A number as JSON in decimal digits, without leading zeros. -/
 def uintDecimalJson (n : Nat) : Json := .str (String.ofList (Nat.toDigits 10 n))
+
+/-- The answer of a method that finds nothing: the JSON `null`. -/
+def notFound : Json := .null
+
+/-- The ratio `num / den` as a JSON number, rounded down to `places` decimal places.
+
+It lies from 0 to 1 when `num` is at most `den`; a denominator of 0 gives 0. -/
+def ratioJson (places num den : Nat) : Json :=
+  .num ⟨(num * 10 ^ places / den : Nat), places⟩
 
 /-- Four bytes. -/
 def bytes4 (what : String) (j : Json) : Read (Vector UInt8 4) := fixed what 4 j

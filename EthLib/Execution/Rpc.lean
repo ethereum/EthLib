@@ -11,5 +11,5 @@ public import EthLib.Execution.Rpc.Errors
 
 The JSON form of the execution types that the JSON-RPC APIs exchange.
 
-The base types, block parameters, requests, responses and error codes of the execution JSON-RPC API.
+It also gives the base types, block parameters, requests, responses and error codes of the API.
 -/

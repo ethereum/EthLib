@@ -11,5 +11,5 @@ public import EthLib.Execution.Proofs.Rpc.Errors
 
 Machine-checked properties of the JSON form of the execution types.
 
-Also the round trips and the error table of the execution JSON-RPC API.
+It also proves the round trips and the error groups of the execution JSON-RPC API.
 -/

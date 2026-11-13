@@ -2988,7 +2988,7 @@ The tree of known payloads and the known finalized block are inputs of each call
 ### Execution JSON-RPC API
 
 The execution JSON-RPC API is the interface through which wallets, indexers and test suites read an execution node.
-EthLib follows commit `3284ee8` of `ethereum/execution-apis`, which is ahead of release `v1.0.0-beta.7`.
+EthLib follows commit [`3284ee8`](https://github.com/ethereum/execution-apis/tree/3284ee80c3da3e516c53782dde75157cccf1ebdc) of `ethereum/execution-apis`, which is ahead of release `v1.0.0-beta.7`.
 The definitions are in `Execution/Rpc/`, and the theorems in `Execution/Proofs/Rpc/`.
 
 Each reader of a base type reads back what its writer writes.
@@ -3000,16 +3000,16 @@ A 32-bit and a 256-bit number read back from their quantities (`uint32_quantityJ
 
 A block parameter names a block by its number, by a tag, or by its hash.
 A number or a tag reads back from the writer (`blockNumberOrTag_number`, `blockNumberOrTag_tag`), and a range reads back every tag but `pending` (`blockNumberOrTagForRange_tag`), which it rejects (`blockNumberOrTagForRange_pending`).
-The third schema of the source lets a string of 64 hex digits whose first digit is not `0` read both as a number and as a hash.
-Its reader returns every reading, and the query chooses among them.
-A tag, and a hash in the object of EIP-1898, read back as their only reading (`blockNumberOrTagOrHash_tag`, `blockNumberOrTagOrHash_hash`).
-A number reads back as its first reading, and any other reading is a hash (`blockNumberOrTagOrHash_number`).
+The schema for a number, a tag or a hash is an `anyOf`, so a string of 64 hex digits whose first digit is not `0` matches both a number and a hash.
+The official fixtures read such a string as a hash, so the reader tries a hash first.
+A tag, and a hash in the object of EIP-1898, read back (`blockNumberOrTagOrHash_tag`, `blockNumberOrTagOrHash_hash`).
+A number reads back when its text is no hash (`blockNumberOrTagOrHash_number`), which holds below `2^252` (`hash32_quantityJson_of_lt`).
 
 The request and the response objects of JSON-RPC 2.0 read back from their writers (`request_requestJson`, `response_responseJson`), a result of `null` included.
 The error codes of the source come in groups.
 Every code of a group that declares a range lies in that range (`code_mem_range`, `Proofs/Rpc/Errors.lean`).
 No code appears twice (`codes_nodup`), and the code `4444` of pruned history is in no group (`prunedHistoryUnavailable_not_mem`).
-The messages of the groups are not fixed: the official fixtures show other texts, so only the code is compared.
+The messages of the groups are not fixed: the official fixtures show other texts.
 
 ### Beacon API
 
