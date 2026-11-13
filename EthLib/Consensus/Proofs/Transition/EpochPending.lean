@@ -26,7 +26,7 @@ It exits when its exit epoch is before the far future.
 
 It is withdrawn when its withdrawable epoch is before the next epoch.
 
-The validators it tests are those at the start of the pass.
+The validators a pass tests are those at its start.
 
 The balances plus the amounts in the queue never rise.
 
@@ -240,6 +240,43 @@ theorem depositTargetStatus_eq {state : BeaconState preset fork} {nextEpoch : Ep
     simp only [liftArith, converted, Except.mapError, bind, Except.bind,
       getElem?_toNat_eq_of_ofNatChecked converted, Array.getElem?_eq_getElem inside,
       Option.bind_some, pure, Except.pure, UInt64.lt_iff_toNat_lt, far]
+
+/-- A status that succeeds is the two tests on the first validator with the key.
+
+It exits when its exit epoch is below `2^64 - 1`, the far future.
+
+It is withdrawn when its withdrawable epoch is below the next epoch.
+
+A key that no validator has gives two false tests. -/
+theorem depositTargetStatus_of_ok {state : BeaconState preset fork} {nextEpoch : Epoch}
+    {pubkey : Cryptography.Bls.BLSPubkey} {status : Bool × Bool}
+    (ok : depositTargetStatus state nextEpoch pubkey = .ok status) :
+    status = (match state.validators.data.find? (·.pubkey == pubkey) with
+        | some validator => (decide (validator.exitEpoch.toNat < 2 ^ 64 - 1),
+            decide (validator.withdrawableEpoch.toNat < nextEpoch.toNat))
+        | none => (false, false)) := by
+  rw [Array.find?_eq_bind_findIdx?_getElem?]
+  unfold depositTargetStatus at ok
+  cases found : state.validators.data.findIdx? (·.pubkey == pubkey) with
+  | none =>
+    rw [found] at ok
+    simp only [pure, Except.pure, Except.ok.injEq] at ok
+    simp [ok]
+  | some position =>
+    rw [found] at ok
+    obtain ⟨inside, _⟩ := Array.findIdx?_eq_some_iff_getElem.mp found
+    by_cases small : position < 2 ^ 64
+    · have converted := ofNatChecked_of_lt small
+      have far : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
+      simp only [liftArith, converted, Except.mapError, bind, Except.bind,
+        getElem?_toNat_eq_of_ofNatChecked converted, Array.getElem?_eq_getElem inside,
+        Option.bind_some, pure, Except.pure, UInt64.lt_iff_toNat_lt, far,
+        Except.ok.injEq] at ok ⊢
+      exact ok.symm
+    · exfalso
+      cases converted : ofNatChecked position with
+      | error _ => simp [liftArith, converted, Except.mapError, bind, Except.bind] at ok
+      | ok _ => exact small (ofNatChecked_ok_iff.mp converted).1
 
 /-- The pending deposits of an epoch end with a pass over the queue from its front.
 
@@ -664,23 +701,22 @@ theorem processPendingDeposits_postponed {electra : .pectra ≤ fork}
     rw [← facts.movedFilter]
     simpa using facts.pushed
 
-/-- The pending deposits of an epoch postpone by the epochs of the validator with the key.
+/-- An epoch postpones exactly the deposits read whose validator exits and is not withdrawn.
 
-The registry holds fewer than `2^64` validators.
+That validator is the first with the key of the deposit.
 
-They read a prefix of the queue, at most the limit per epoch.
+Its exit epoch is below `2^64 - 1`, the far future.
 
-They postpone a deposit whose first validator with its key exits and is not withdrawn.
+Its withdrawable epoch is above the current epoch.
 
-The validator is the one in the state before.
+The validator and its epochs are those of the state before.
 
-That is, its exit epoch is below `2^64 - 1`, and its withdrawable epoch is above the current epoch.
+The epoch reads a prefix of the queue, at most the limit per epoch.
 
-They apply the others in order, and move the postponed ones to the end of the queue in order.
+It applies the others in order, and moves the postponed ones to the end of the queue in order.
 
 The state after is the state of those applied, with a new queue and a new churn left over. -/
-theorem processPendingDeposits_postponed_of_size_lt {electra : .pectra ≤ fork}
-    (small : state.validators.data.size < 2 ^ 64)
+theorem processPendingDeposits_postponed_epochs {electra : .pectra ≤ fork}
     (computed : processPendingDeposits config checks state electra = .ok after) :
     ∃ (read rest : List PendingDeposit) (next : BeaconState preset fork)
         (pending : PendingDeposits preset fork) (carried : Gwei),
@@ -703,17 +739,18 @@ theorem processPendingDeposits_postponed_of_size_lt {electra : .pectra ≤ fork}
   rw [liftArith, mapError_ok_iff, addChecked_ok_iff] at added
   have plusOne : (getCurrentEpoch state + 1).toNat = (getCurrentEpoch state).toNat + 1 :=
     toNat_add_of_lt added.1
-  obtain ⟨read, rest, next, pending, carried, split, queue, bounded, _, applies, record⟩ :=
+  obtain ⟨read, rest, next, pending, carried, split, queue, bounded, statusOk, applies, record⟩ :=
     processPendingDeposits_postponed computed
-  -- Each filter reads the two tests, which the whole function gives in epochs.
-  have tests : ∀ deposit : PendingDeposit,
+  -- Each filter reads the two tests of a deposit read, which succeed and give them in epochs.
+  have tests : ∀ deposit ∈ read,
       ((depositTargetStatus state (getCurrentEpoch state + 1) deposit.pubkey).toOption ==
         some (true, false)) =
       ((state.validators.data.find? (·.pubkey == deposit.pubkey)).any fun validator =>
         validator.exitEpoch.toNat < 2 ^ 64 - 1 &&
           (getCurrentEpoch state).toNat < validator.withdrawableEpoch.toNat) := by
-    intro deposit
-    rw [depositTargetStatus_eq small, plusOne]
+    intro deposit member
+    obtain ⟨status, ok⟩ := statusOk deposit member
+    rw [ok, depositTargetStatus_of_ok ok, plusOne]
     cases state.validators.data.find? (·.pubkey == deposit.pubkey) with
     | none => rfl
     | some validator =>
@@ -724,10 +761,10 @@ theorem processPendingDeposits_postponed_of_size_lt {electra : .pectra ≤ fork}
   refine ⟨read, rest, next, pending, carried, split, ?_, bounded, ?_, record⟩
   · rw [queue]
     congr 1
-    exact List.filter_congr fun deposit _ => tests deposit
+    exact List.filter_congr fun deposit member => tests deposit member
   · rw [← applies]
     congr 1
-    exact List.filter_congr fun deposit _ => by rw [bne, tests deposit]
+    exact List.filter_congr fun deposit member => by rw [bne, tests deposit member]
 
 /-- The queue before splits into the deposits added, the deposits dropped, and the queue after.
 
