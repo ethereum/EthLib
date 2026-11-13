@@ -17,11 +17,11 @@ The entry at a position is the failure of its item, given the keys after the ite
 
 So the answer is a success exactly when every item passes, each after the items before it.
 
-Every item of a request has a message.
+Every item of a request has at least one message.
 
 A sync committee message goes on the subnets of the seats of its validator, else on subnet 0 alone.
 
-Its item passes only if its validator holds a seat at the slot after the head state.
+Its item passes only if its validator holds a seat in the sync committee of the next slot.
 -/
 
 @[expose] public section
@@ -205,7 +205,21 @@ private theorem syncSubnets_ne_nil : syncSubnets context altair message ≠ [] :
   · simp
   · split <;> simp
 
-/-- A validator that holds seats gets the subnets of its seats, once each, in increasing order.
+/-- The subnets of a sync committee message come once each, in increasing order. -/
+theorem syncSubnets_pairwise : (syncSubnets context altair message).Pairwise (· < ·) := by
+  cases head : context.store.headState context.config with
+  | error => simp [syncSubnets, head]
+  | ok state =>
+    cases computed : computeSubnetsForSyncCommittee state altair message.validatorIndex with
+    | error => simp [syncSubnets, head, computed]
+    | ok subnets =>
+      cases subnets with
+      | nil => simp [syncSubnets, head, computed]
+      | cons subnet rest =>
+        obtain ⟨-, -, -, -, sorted, -⟩ := computeSubnetsForSyncCommittee_ok computed
+        simpa only [syncSubnets, head, computed] using sorted
+
+/-- A validator that holds a seat gets the subnets of its seats.
 
 The seats are those of the sync committee of the slot after the head state.
 
@@ -216,8 +230,7 @@ theorem mem_syncSubnets_of_seat {state : BeaconState preset fork} {validator : V
     (found : state.validators.data[message.validatorIndex.toNat]? = some validator)
     (seats : syncCommitteeAtNextSlot state altair = .ok committee)
     (seated : validator.pubkey ∈ committee.pubkeys.toList) :
-    (syncSubnets context altair message).Pairwise (· < ·) ∧
-      ∀ subnet, subnet ∈ syncSubnets context altair message ↔
+    ∀ subnet, subnet ∈ syncSubnets context altair message ↔
         ∃ position, committee.pubkeys.toList[position]? = some validator.pubkey ∧
           (position / syncSubcommitteeSize preset).toUInt64 = subnet := by
   generalize listed : (syncSubnetsOfPubkey committee validator.pubkey).mergeSort (· ≤ ·) =
@@ -226,7 +239,7 @@ theorem mem_syncSubnets_of_seat {state : BeaconState preset fork} {validator : V
       .ok subnets := by
     simp [computeSubnetsForSyncCommittee, seats, getValidator, found, listed, Except.mapError,
       bind, Except.bind, pure, Except.pure]
-  obtain ⟨committee', validator', seats', found', sorted, members⟩ :=
+  obtain ⟨committee', validator', seats', found', -, members⟩ :=
     computeSubnetsForSyncCommittee_ok computed
   rw [seats] at seats'
   cases seats'
@@ -237,7 +250,7 @@ theorem mem_syncSubnets_of_seat {state : BeaconState preset fork} {validator : V
   | nil => exact absurd ((members _).mpr ⟨position, held, rfl⟩) (by simp)
   | cons subnet rest =>
     simp only [syncSubnets, head, computed]
-    exact ⟨sorted, members⟩
+    exact members
 
 /-- A message whose validator holds no seat gets subnet 0 alone.
 
@@ -267,30 +280,9 @@ theorem syncSubnets_of_no_seat
         exact absurd ⟨state, validator, committee, head, found', seats,
           List.mem_of_getElem? held⟩ unseated
 
-/-- A sync committee message that gossip accepts on a subnet comes from a validator with a seat.
-
-The subnet is a subnet of a seat of the key of the validator. -/
-private theorem seat_of_accept {subnetId : UInt64}
-    (accepted : validateSyncCommitteeMessage context.config context.checks seen context.store
-      altair message context.currentTimeMs subnetId = .ok .accept) :
-    ∃ state validator committee, context.store.headState context.config = .ok state ∧
-      state.validators.data[message.validatorIndex.toNat]? = some validator ∧
-      syncCommitteeAtNextSlot state altair = .ok committee ∧
-      subnetId ∈ syncSubnetsOfPubkey committee validator.pubkey := by
-  unfold validateSyncCommitteeMessage at accepted
-  simp only [ignoreUnless_andThenM, rejectUnless_andThenM, bind, Except.bind, pure,
-    Except.pure] at accepted
-  repeat' split at accepted
-  all_goals first
-    | exact ⟨_, _, _, ‹_›, ‹_›, mapError_ok_iff.mp ‹_›,
-        by simpa using ‹(syncSubnetsOfPubkey _ _).contains subnetId = true›⟩
-    | simp at accepted
-
 /-- An item of a sync committee message passes only if its validator holds a seat.
 
-The seat is in the sync committee of the slot after the head state.
-
-So a validator with no seat fails on subnet 0, at or before the check of the subnet. -/
+The seat is in the sync committee of the slot after the head state. -/
 theorem validateItem_syncSubnets_seat
     (passes : (validateItem context seen ((syncSubnets context altair message).map
       (.syncCommitteeMessage altair message))).1 = none) :
@@ -298,11 +290,7 @@ theorem validateItem_syncSubnets_seat
       state.validators.data[message.validatorIndex.toNat]? = some validator ∧
       syncCommitteeAtNextSlot state altair = .ok committee ∧
       validator.pubkey ∈ committee.pubkeys.toList := by
-  obtain ⟨subnet, rest, listed⟩ : ∃ subnet rest,
-      syncSubnets context altair message = subnet :: rest := by
-    cases h : syncSubnets context altair message with
-    | nil => exact absurd h syncSubnets_ne_nil
-    | cons subnet rest => exact ⟨subnet, rest, rfl⟩
+  obtain ⟨subnet, rest, listed⟩ := List.exists_cons_of_ne_nil syncSubnets_ne_nil
   rw [listed, List.map_cons, validateItem_cons] at passes
   have first : (messageFailure context seen
       (.syncCommitteeMessage altair message subnet)).1 = none := by
@@ -314,12 +302,13 @@ theorem validateItem_syncSubnets_seat
     cases outcome <;> simp only [failureReason, reduceCtorEq] at first
     have validated := validateGossipMessage_outcome gossip
     simp only [GossipMessage.validate] at validated
-    obtain ⟨state, validator, committee, head, found, seats, mem⟩ := seat_of_accept validated
+    obtain ⟨state, validator, committee, head, found, seats, mem⟩ :=
+      seat_of_validateSyncCommitteeMessage_accept validated
     obtain ⟨position, held, -⟩ := mem_syncSubnetsOfPubkey.mp mem
     exact ⟨state, validator, committee, head, found, seats, List.mem_of_getElem? held⟩
   · simp at first
 
-/-- A request of sync committee messages is accepted only if each validator holds a seat.
+/-- An accepted request of sync committee messages has a seated validator for each message.
 
 The seat is in the sync committee of the slot after the head state. -/
 theorem submitPool_syncCommitteeMessages_seat {messages : List SyncCommitteeMessage}
@@ -336,8 +325,8 @@ theorem submitPool_syncCommitteeMessages_seat {messages : List SyncCommitteeMess
 
 end Sync
 
-/-- Every item of a request has a message, so no item passes without a check of gossip. -/
-theorem PoolRequest.items_ne_nil {request : PoolRequest preset fork}
+/-- Every item of a request has at least one message. -/
+theorem PoolRequest.ne_nil_of_mem_items {request : PoolRequest preset fork}
     {item : SubmitItem preset fork} (mem : item ∈ request.items context) : item ≠ [] := by
   cases request <;> simp only [PoolRequest.items, List.mem_map, List.mem_singleton] at mem
   all_goals first

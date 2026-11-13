@@ -255,6 +255,25 @@ theorem validateSyncCommitteeMessage_eq_accept
   repeat' split
   all_goals simp_all
 
+/-- A message accepted on a subnet comes from a validator with a seat in that subnet.
+
+The seat is in the sync committee of the slot after the head state. -/
+theorem seat_of_validateSyncCommitteeMessage_accept
+    (accepted : validateSyncCommitteeMessage config checks seen store altair message currentTimeMs
+      subnetId = .ok .accept) :
+    ∃ state validator committee, store.headState config = .ok state ∧
+      state.validators.data[message.validatorIndex.toNat]? = some validator ∧
+      syncCommitteeAtNextSlot state altair = .ok committee ∧
+      subnetId ∈ syncSubnetsOfPubkey committee validator.pubkey := by
+  unfold validateSyncCommitteeMessage at accepted
+  simp only [ignoreUnless_andThenM, rejectUnless_andThenM, bind, Except.bind, pure,
+    Except.pure] at accepted
+  repeat' split at accepted
+  all_goals first
+    | exact ⟨_, _, _, ‹_›, ‹_›, mapError_ok_iff.mp ‹_›,
+        by simpa using ‹(syncSubnetsOfPubkey _ _).contains subnetId = true›⟩
+    | simp at accepted
+
 end Message
 
 /-! ## Contributions -/
