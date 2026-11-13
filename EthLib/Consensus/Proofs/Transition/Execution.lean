@@ -65,6 +65,36 @@ theorem verifyAndNotify_ok_true_iff {isValidBlockHash notifyNewPayload : Payload
       · exact .inr (hashes deneb)
       · exact .inl (Nat.lt_of_not_le deneb)
 
+/-- A payload request has given request lists exactly when, from Electra, its requests give them.
+
+Before Electra it has the only value of their type. -/
+theorem NewPayloadRequest.requestsList_eq_ok_iff {request : NewPayloadRequest preset fork}
+    {requests : Since .pectra fork (List ByteArray)} :
+    request.requestsList = .ok requests ↔
+      ∀ electra : .pectra ≤ fork,
+        getExecutionRequestsList (request.executionRequests electra) = .ok (requests electra) := by
+  unfold NewPayloadRequest.requestsList
+  split
+  · rename_i electra
+    cases listed : getExecutionRequestsList (request.executionRequests electra) with
+    | error e =>
+      simp only [bind, Except.bind, reduceCtorEq, false_iff]
+      intro found
+      cases listed.symm.trans (found electra)
+    | ok lists =>
+      simp only [bind, Except.bind, pure, Except.pure]
+      constructor
+      · intro same later
+        rw [← (Except.ok.inj same : (fun _ => lists) = requests)]
+        exact listed
+      · intro found
+        refine congrArg Except.ok (funext fun later => ?_)
+        exact Except.ok.inj (listed.symm.trans (found later))
+  · rename_i electra
+    simp only [pure, Except.pure]
+    exact ⟨fun _ later => absurd later electra,
+      fun _ => congrArg Except.ok (funext fun later => absurd later electra)⟩
+
 /-- The default answer is the answer of an execution layer that does not change it. -/
 theorem ExecutionEngine.verifyAndNotifyNewPayload_default
     (isValidBlockHash notifyNewPayload : PayloadCheck preset fork)
