@@ -4070,6 +4070,12 @@ The committee has the length of the duty and holds the validator at the position
 `attesterDuties_complete` shows that a requested validator with a committee assignment has exactly one duty, when the request repeats no index.
 `attesterDuties_epoch` shows that each attester duty is in the requested epoch, with the count of committees per slot of the epoch and an index below it.
 `attesterDuties_epoch_bound` and `ptcDuties_epoch_bound` show that a request for an epoch after the next one gets the error of an invalid epoch, code 400.
+`ptcDuties_eq` states the PTC duties whole, from Gloas, before the dependent root.
+An empty request gets code 400, and so does an epoch outside a window.
+The window runs from the previous epoch to the next one, and not before the Gloas fork epoch.
+The mixes must also still hold the seed of the epoch.
+In the window a repeated index gets code 400.
+Distinct indices run the duty of each requested validator in turn, in request order, and the first index that fails ends the answer.
 `proposerDuties_beaconProposer` shows that in the current epoch each proposer duty names the proposer of the state advanced to its slot.
 `proposerDuties_current_slot` shows the same at the slot of the state itself.
 `syncDuties_seats` shows that each seat of a sync duty holds the key of the validator, in the committee of the period, and that a duty has a seat.
@@ -4081,7 +4087,9 @@ It checks the attester duties against the committees answer, and the PTC duties 
 It checks the proposer duties against the lookahead of the state from Fulu, and against the proposer of each slot before Fulu.
 It checks the sync duties against the keys of the committees in the JSON of the state.
 It gives the state a different block root at each place, and checks each dependent root against it.
-It checks code 400 for an empty request, a repeated PTC index, a PTC epoch before the previous one, and an attester epoch too old for the block roots; no theorem states these refusals.
+It checks code 400 for an empty request, a repeated PTC index, a PTC epoch before the previous one, and an attester epoch too old for the block roots.
+It never asks for PTC duties at the previous epoch or before the Gloas fork epoch; only `ptcDuties_eq` covers those two.
+No theorem states these refusals, among others: an attester or sync request with no index, an attester epoch whose seed is gone, and an attester epoch whose dependent root has left the block roots.
 
 The answers that hand a validator its data are in `Consensus/BeaconApi/ValidatorData.lean`: attestation data, payload attestation data, aggregates and sync committee contributions.
 `produceAttestationData_head` (`Consensus/Proofs/BeaconApi/ValidatorData.lean`) shows that the attestation data votes for the head of the store, at the requested slot, and that the head is not optimistic.
