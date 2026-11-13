@@ -75,6 +75,10 @@ The attributes at that fork keep every field.
 
 A fork that the version does not take, or no fork at all, gives `-38005`.
 
+A version takes the forks from Paris to Glamsterdam whose attribute structure it decodes.
+
+No version takes another fork.
+
 A structure that is not that of the fork, or a timestamp not above the head's, gives `-38003`.
 
 The decoders read back the state, the attributes and the parameters that the writers write.
@@ -888,6 +892,35 @@ theorem attributesForkAt_of_attributesTakeFork {version : Nat} (hv : version ≠
   | n + 4 =>
     revert h
     cases fork <;> simp [attributesTakeFork, attributesForkAt, attributesFork] <;> decide
+
+/-- A version takes exactly the forks from Paris to Glamsterdam whose structure it decodes.
+
+The structure is that of the payload attributes at the fork.
+
+Hegotá adds a field to the attributes, so no version takes it. -/
+theorem attributesTakeFork_eq_true_iff (version : Nat) (fork : Fork) :
+    attributesTakeFork version fork = true ↔
+      .paris ≤ fork ∧ fork < .hegota ∧
+        attributesForkAt fork ∈ (attributesVersions version).map attributesFork := by
+  match version with
+  | 0 | 1 | 2 | 3 => cases fork <;> decide
+  | n + 4 => cases fork <;> simp [attributesTakeFork, attributesVersions, attributesFork] <;> decide
+
+/-- Some version of the method takes a fork exactly when the fork is from Paris to Glamsterdam. -/
+theorem exists_attributesTakeFork_iff (fork : Fork) :
+    (∃ version, attributesTakeFork version fork = true) ↔ .paris ≤ fork ∧ fork < .hegota := by
+  constructor
+  · rintro ⟨version, h⟩
+    obtain ⟨hLow, hHigh, -⟩ := (attributesTakeFork_eq_true_iff version fork).mp h
+    exact ⟨hLow, hHigh⟩
+  · intro ⟨hLow, hHigh⟩
+    cases fork <;> first
+      | exact absurd hLow (by decide)
+      | exact absurd hHigh (by decide)
+      | exact ⟨1, rfl⟩
+      | exact ⟨2, rfl⟩
+      | exact ⟨3, rfl⟩
+      | exact ⟨4, rfl⟩
 
 /-- Attributes of a fork of the version, whose structure is not that of the fork, give `-38003`.
 
