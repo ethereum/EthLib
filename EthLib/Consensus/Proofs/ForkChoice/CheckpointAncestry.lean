@@ -1255,9 +1255,9 @@ theorem Store.Reachable.finalized_ancestor_or_accountable {config : Config}
         (pre.append left).hashObjects ++ (pre.append right).hashObjects)
       (hashed : SszType.hashTreeRoot state = .ok (Vector.replicate 32 0)) :
       DirectSafety.HashEvidence ((pre.append left).hashObjects ++
-        (pre.append right).hashObjects) := by
-    unfold DirectSafety.HashEvidence
-    exact .inr ⟨_, member, by simp [DirectSafety.HashObject.root, hashed, Except.toOption]⟩
+        (pre.append right).hashObjects) :=
+    DirectSafety.hashEvidence_iff.mpr
+      (.inr ⟨_, member, by simp [DirectSafety.HashObject.root, hashed, Except.toOption]⟩)
   by_cases paths : (pre.append left).checkpointPath store.finalizedCheckpoint.epoch =
       (pre.append right).checkpointPath store.finalizedCheckpoint.epoch
   · -- Equal paths put the finalized block of the left chain on the justified chain.
