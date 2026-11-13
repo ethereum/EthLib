@@ -2523,7 +2523,11 @@ It needs more than `MIN_SEED_LOOKAHEAD + 2` epochs of RANDAO mixes.
 `InactivityLeakRun.lean` derives those sequences for one validator from a run of the chain, from Altair, and so discharges the hypotheses of the bound (`effectiveBalance_le_of_leakRun`).
 The run is a series of slots that end an epoch, each followed by slots and blocks that credit nothing to the validator.
 It assumes that every epoch leaks, that the largest effective balance of the validator stays fixed, and that the validator is eligible and misses the target while above the threshold.
-No theorem yet composes the runs of all absent validators with the two-thirds bound.
+`twoThirds_of_leakRun` applies that run to each absent validator.
+Either some epoch of the run does not leak or raises the finalized epoch, or the voters hold two thirds of the active stake at the end.
+The first case is the expected one on mainnet when the voters vote: they should reach two thirds before the bound, and finality should resume; no theorem shows this.
+It reads the balance of the voters in the final state.
+No theorem yet bounds that balance from below by the one at the start of the run.
 
 ### Fast confirmation rule
 
