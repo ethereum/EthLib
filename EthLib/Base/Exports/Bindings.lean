@@ -633,6 +633,34 @@ def bindings : List Binding := [
     "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, " ++
       "verify: bool, root: bytes, envelope: bytes) -> bytes",
     [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
+  ⟨"consensus_api_light_client_bootstrap",
+    `EthLib.Consensus.Exports.apiLightClientBootstrapExport,
+    "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, " ++
+      "verify: bool, config: dict[str, Any] | None, root: bytes) -> dict[str, Any]",
+    [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
+  ⟨"consensus_api_light_client_bootstrap_ssz",
+    `EthLib.Consensus.Exports.apiLightClientBootstrapSszExport,
+    "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, " ++
+      "verify: bool, config: dict[str, Any] | None, root: bytes) -> bytes",
+    [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
+  ⟨"consensus_api_light_client_updates",
+    `EthLib.Consensus.Exports.apiLightClientUpdatesExport,
+    "(name: str, config: dict[str, Any] | None, known: list[tuple[int, str, bytes]], " ++
+      "start_period: int, count: int) -> list[dict[str, Any]]",
+    [], some "ConsensusError"⟩,
+  ⟨"consensus_api_light_client_updates_ssz",
+    `EthLib.Consensus.Exports.apiLightClientUpdatesSszExport,
+    "(name: str, config: dict[str, Any] | None, genesis_validators_root: bytes, " ++
+      "known: list[tuple[int, str, bytes]], start_period: int, count: int) -> bytes",
+    [], some "ConsensusError"⟩,
+  ⟨"consensus_api_light_client_decode_updates",
+    `EthLib.Consensus.Exports.apiLightClientDecodeUpdatesExport,
+    "(name: str, config: dict[str, Any] | None, genesis_validators_root: bytes, " ++
+      "data: bytes) -> list[tuple[str, bytes]]",
+    [], some "ConsensusError"⟩,
+  ⟨"consensus_api_light_client_latest", `EthLib.Consensus.Exports.apiLightClientLatestExport,
+    "(name: str, fork: str, kind: str, update: bytes | None) -> dict[str, Any]",
+    [`EthLib.Consensus.LightClientError], some "ConsensusError"⟩,
   ⟨"consensus_api_attestation_data", `EthLib.Consensus.Exports.apiAttestationDataExport,
     "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, " ++
       "verify: bool, optimistic_roots: list[bytes], slot: int, " ++
@@ -643,6 +671,16 @@ def bindings : List Binding := [
     "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, " ++
       "verify: bool, slot: int, payload_present: bool, " ++
       "blob_data_available: bool) -> dict[str, Any] | None",
+    [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
+  ⟨"consensus_api_fork_choice", `EthLib.Consensus.Exports.apiForkChoiceExport,
+    "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, " ++
+      "verify: bool, optimistic_roots: list[bytes], config: dict[str, Any] | None) " ++
+      "-> dict[str, Any]",
+    [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
+  ⟨"consensus_api_chain_heads", `EthLib.Consensus.Exports.apiChainHeadsExport,
+    "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, " ++
+      "verify: bool, optimistic_roots: list[bytes], config: dict[str, Any] | None) " ++
+      "-> dict[str, Any]",
     [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
   ⟨"consensus_api_aggregate_attestation",
     `EthLib.Consensus.Exports.apiAggregateAttestationExport,
@@ -655,6 +693,39 @@ def bindings : List Binding := [
     "(name: str, fork: str, state: bytes, messages: list[bytes], " ++
       "optimistic_roots: list[bytes], slot: int, subcommittee_index: int, " ++
       "root: bytes) -> dict[str, Any]",
+    [], some "ConsensusError"⟩,
+  ⟨"consensus_api_attestation_rewards", `EthLib.Consensus.Exports.apiAttestationRewardsExport,
+    "(name: str, fork: str, state: bytes, replacements: dict[str, Any] | None, epoch: int, " ++
+      "ids: list[str]) -> dict[str, Any]",
+    [], some "ConsensusError"⟩,
+  ⟨"consensus_api_block_rewards", `EthLib.Consensus.Exports.apiBlockRewardsExport,
+    "(name: str, fork: str, state: bytes, block: bytes, replacements: dict[str, Any] | None) " ++
+      "-> dict[str, Any]",
+    [], some "ConsensusError"⟩,
+  ⟨"consensus_api_consensus_block_value",
+    `EthLib.Consensus.Exports.apiConsensusBlockValueExport,
+    "(name: str, fork: str, state: bytes, block: bytes, replacements: dict[str, Any] | None) " ++
+      "-> int",
+    [`EthLib.Consensus.TransitionError], some "TransitionError"⟩,
+  ⟨"consensus_api_prefer_local_v3", `EthLib.Consensus.BeaconApi.preferLocalV3,
+    "(local_value: int, builder_value: int, builder_boost_factor: int) -> bool",
+    [], some "ConsensusError"⟩,
+  ⟨"consensus_api_capped_bid_value", `EthLib.Consensus.BeaconApi.cappedBidValue,
+    "(bid: dict[str, Any]) -> int",
+    [], some "ConsensusError"⟩,
+  ⟨"consensus_api_bid_accepted", `EthLib.Consensus.BeaconApi.bidAccepted,
+    "(bid: dict[str, Any]) -> bool",
+    [], some "ConsensusError"⟩,
+  ⟨"consensus_api_select_payload", `EthLib.Consensus.BeaconApi.selectPayload,
+    "(local_value: int, bids: list[dict[str, Any]]) -> dict[str, Any] | None",
+    [], some "ConsensusError"⟩,
+  ⟨"consensus_api_builder_config_terms",
+    `EthLib.Consensus.Exports.apiBuilderConfigTermsExport,
+    "(data: bytes, slot: int) -> tuple[dict[str, Any], list[dict[str, Any]]]",
+    [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
+  ⟨"consensus_api_sync_committee_rewards",
+    `EthLib.Consensus.Exports.apiSyncCommitteeRewardsExport,
+    "(name: str, fork: str, state: bytes, aggregate: bytes, ids: list[str]) -> dict[str, Any]",
     [], some "ConsensusError"⟩,
   ⟨"consensus_api_duties", `EthLib.Consensus.Exports.apiDutiesExport,
     "(name: str, fork: str, state: bytes, replacements: dict[str, Any] | None, kind: str, " ++
@@ -1025,6 +1096,14 @@ def bindings : List Binding := [
       "finalized: tuple[int, bytes] | None, topic: str, " ++
       "messages: list[tuple[int, int, bytes] | tuple[int, int, bytes, str]], " ++
       "config: dict[str, Any] | None, verify: bool) -> list[tuple[str, str | None]]",
+    [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
+  ⟨"consensus_api_pool", `EthLib.Consensus.Exports.apiPoolExport,
+    "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, " ++
+      "blocks: list[tuple[int, int | None, bytes] | " ++
+      "tuple[int, int | None, bytes, bytes | None]], " ++
+      "finalized: tuple[int, bytes] | None, " ++
+      "requests: list[tuple[int, str, list[bytes]]], " ++
+      "config: dict[str, Any] | None, verify: bool) -> list[list[tuple[int, str]]]",
     [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
   ⟨"consensus_light_client_sync", `EthLib.Consensus.Exports.lightClientSyncExport,
     "(name: str, fork: str, bootstrap_fork: str, config: dict[str, Any] | None, " ++
@@ -1806,8 +1885,10 @@ def bindings : List Binding := [
     [], some "RpcError"⟩,
   ⟨"rpc_serve", `EthLib.Execution.Rpc.Exports.serveExport,
     "(view: tuple[dict[str, Any], bytes, list[tuple[str, bytes]], tuple[bytes, bytes, bytes], " ++
-      "int, bool], requests: list[str]) -> list[str | None]",
+      "int, bool], numbers: list[int], requests: list[str]) -> list[str | None]",
     [`EthLib.Execution.Blocks.BlockError], some "RpcError"⟩,
+  ⟨"rpc_encode_block_access_list", `EthLib.Execution.Rpc.Exports.encodeBlockAccessListExport,
+    "(value: object) -> bytes", [], some "RpcError"⟩,
   ⟨"pyvalue_echo", `EthLib.Exports.pyValueEcho,
     "(value: object) -> object",
     [], some "BindingError"⟩

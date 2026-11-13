@@ -388,7 +388,7 @@ theorem address_eq_ok_iff {what : String} {j : Lean.Json} {a : Address} :
 /-! ## A number written in hex -/
 
 /-- The value of the code of a hex digit, or zero for any other code. -/
-private def digitValue (c : UInt8) : Nat := ((hexValue false c).getD 0).toNat
+@[expose] def digitValue (c : UInt8) : Nat := ((hexValue false c).getD 0).toNat
 
 /-- The digit that Lean core writes for a value below sixteen is the lowercase hex digit. -/
 private theorem digitChar_eq_hexDigitChar : ∀ n (h : n < 16),
@@ -396,7 +396,7 @@ private theorem digitChar_eq_hexDigitChar : ∀ n (h : n < 16),
   decide
 
 /-- Each digit that `Nat.toDigits 16` writes is a lowercase hex digit, read back as its value. -/
-private theorem hexValue_digitChar (n : Nat) (hn : n < 16) :
+theorem hexValue_digitChar (n : Nat) (hn : n < 16) :
     hexValue false (Nat.digitChar n).val.toUInt8 = some n.toUInt8 ∧
       (Nat.digitChar n).val ≤ 0x7F := by
   rw [digitChar_eq_hexDigitChar n hn]
@@ -409,7 +409,7 @@ private theorem digitChar_ne_zero : ∀ n, n < 16 → 0 < n → ¬ Nat.digitChar
 /-- The hex digits of a number are ASCII digits whose values, read from the first, give the number.
 
 A positive number does not start with the digit `0`. -/
-private theorem toDigits_hex (n : Nat) :
+theorem toDigits_hex (n : Nat) :
     (∀ c ∈ Nat.toDigits 16 n, ∃ d, d < 16 ∧ c = Nat.digitChar d) ∧
       ((Nat.toDigits 16 n).map fun c => c.val.toUInt8).foldl
         (fun acc c => 16 * acc + digitValue c) 0 = n ∧

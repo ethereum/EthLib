@@ -87,7 +87,7 @@ private theorem mapM_toChunk_eq_map :
     rw [List.map_cons, same, mapM_toChunk_eq_map restBuilt]
 
 /-- A branch vector holds the list it was made from. -/
-private theorem branchVector_toList {depth : Nat} {branch : List Bytes32}
+theorem branchVector_toList {depth : Nat} {branch : List Bytes32}
     {vector : Vector Bytes32 depth} (made : branchVector depth branch = .ok vector) :
     vector.toList = branch := by
   unfold branchVector at made

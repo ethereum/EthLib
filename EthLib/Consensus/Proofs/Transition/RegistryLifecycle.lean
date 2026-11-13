@@ -161,80 +161,52 @@ theorem decreaseBalance {index : ValidatorIndex} {delta : Gwei}
 
 end RegistryLifecycle
 
-/-- An epoch stage keeps the validators, unless it is one of three stages.
+/-- An epoch stage keeps five fields, unless it is one of six stages.
 
-Those are registry updates, pending deposits and effective-balance updates. -/
-theorem EpochStage.Edge.validators_eq {stage : EpochStage} {s t : BeaconState preset fork}
+Those are rewards, registry updates, slashings, the two pending stages and effective balances.
+
+The fields are the validators, balances, pending consolidations, deposit carry and slot. -/
+theorem EpochStage.Edge.records {stage : EpochStage} {s t : BeaconState preset fork}
     (edge : EpochStage.Edge config checks stage s t)
-    (other : stage ≠ .registry ∧ stage ≠ .pendingDeposits ∧ stage ≠ .effectiveBalances) :
-    t.validators = s.validators := by
-  -- A fold whose steps keep the validators keeps them.
-  have fold {step : BeaconState preset fork → Nat → Except TransitionError _} {xs : List Nat}
-      (kept : ∀ a i b, step a i = .ok b → b.validators = a.validators)
-      (ok : xs.foldlM step s = .ok t) : t.validators = s.validators :=
-    foldlM_ok_invariant (fun t => t.validators = s.validators)
-      (fun _ _ _ previous ok => (kept _ _ _ ok).trans previous) rfl ok
+    (other : stage ≠ .rewards ∧ stage ≠ .registry ∧ stage ≠ .slashings ∧
+      stage ≠ .pendingDeposits ∧ stage ≠ .pendingConsolidations ∧ stage ≠ .effectiveBalances) :
+    t.validators = s.validators ∧ t.balances = s.balances ∧
+      t.pendingConsolidations = s.pendingConsolidations ∧
+      t.depositBalanceToConsume = s.depositBalanceToConsume ∧ t.slot = s.slot := by
   cases stage <;> simp only [EpochStage.Edge] at edge
-  case justification => exact (processJustificationAndFinalization_keeps edge).2.2.2.2.2.1
+  case justification =>
+    obtain rfl | ⟨_, _, _, weighed⟩ := processJustificationAndFinalization_ok edge
+    · exact ⟨rfl, rfl, rfl, rfl, rfl⟩
+    · obtain ⟨_, _, _, rest⟩ := weighJustificationAndFinalization_checkpoints weighed
+      rw [← rest]
+      exact ⟨rfl, rfl, rfl, rfl, rfl⟩
   case inactivity =>
     split at edge
     · rw [processInactivityUpdates_frame edge]
-    · exact edge ▸ rfl
-  case rewards => rw [processRewardsAndPenalties_frame edge]
-  case slashings =>
-    unfold processSlashings at edge
-    simp only [bind_ok_iff] at edge
-    obtain ⟨_, _, _, _, _, _, edge⟩ := edge
-    split at edge
-    · obtain ⟨_, _, applied⟩ := bind_ok_iff.mp edge
-      refine fold (fun _ _ _ ok => ?_) applied
-      simp only [applySlashingPenaltyElectra, bind_ok_iff, liftAccessor_ok] at ok
-      obtain ⟨_, _, ok⟩ := ok
-      split at ok
-      · obtain ⟨_, _, ok⟩ := bind_ok_iff.mp ok
-        split at ok
-        · simp only [bind_ok_iff, liftAccessor_ok] at ok
-          obtain ⟨_, _, _, _, lowered⟩ := ok
-          exact decreaseBalance_validators lowered
-        · cases ok; rfl
-      · cases ok; rfl
-    · refine fold (fun _ _ _ ok => ?_) edge
-      simp only [applySlashingPenalty, bind_ok_iff, liftAccessor_ok] at ok
-      obtain ⟨_, _, ok⟩ := ok
-      split at ok
-      · obtain ⟨_, _, ok⟩ := bind_ok_iff.mp ok
-        split at ok
-        · simp only [bind_ok_iff, liftAccessor_ok] at ok
-          obtain ⟨_, _, _, _, _, _, lowered⟩ := ok
-          exact decreaseBalance_validators lowered
-        · cases ok; rfl
-      · cases ok; rfl
+      exact ⟨rfl, rfl, rfl, rfl, rfl⟩
+    · exact edge ▸ ⟨rfl, rfl, rfl, rfl, rfl⟩
   case eth1Reset =>
     split at edge
-    · simp only [processEth1DataReset, bind_ok_iff, liftAccessor_ok] at edge
-      obtain ⟨_, _, edge⟩ := edge
-      split at edge <;> cases edge <;> rfl
-    · exact edge ▸ rfl
-  case pendingConsolidations =>
-    split at edge
-    · exact (processPendingConsolidations_kept edge).1
-    · exact edge ▸ rfl
+    · rw [processEth1DataReset_frame edge]
+      exact ⟨rfl, rfl, rfl, rfl, rfl⟩
+    · exact edge ▸ ⟨rfl, rfl, rfl, rfl, rfl⟩
   case payments =>
     split at edge
     · rw [processBuilderPendingPayments_eq edge]
-    · exact edge ▸ rfl
+      exact ⟨rfl, rfl, rfl, rfl, rfl⟩
+    · exact edge ▸ ⟨rfl, rfl, rfl, rfl, rfl⟩
   case slashingsReset =>
     obtain ⟨_, _, _, _, rfl⟩ := processSlashingsReset_eq edge
-    rfl
+    exact ⟨rfl, rfl, rfl, rfl, rfl⟩
   case randaoReset =>
     obtain ⟨_, _, _, _, _, _, rfl⟩ := processRandaoMixesReset_eq edge
-    rfl
+    exact ⟨rfl, rfl, rfl, rfl, rfl⟩
   case history =>
     split at edge
     · unfold processHistoricalSummariesUpdate at edge
       simp only [bind, Except.bind, pure, Except.pure] at edge
       repeat' (split at edge <;> try cases edge)
-      all_goals rfl
+      all_goals exact ⟨rfl, rfl, rfl, rfl, rfl⟩
     · unfold processHistoricalRootsUpdate at edge
       split at edge
       · cases edge
@@ -243,37 +215,58 @@ theorem EpochStage.Edge.validators_eq {stage : EpochStage} {s t : BeaconState pr
       split at edge
       · simp only [bind_ok_iff, liftSsz_ok, pure, Except.pure, Except.ok.injEq] at edge
         obtain ⟨_, _, _, _, rfl⟩ := edge
-        rfl
-      · cases edge; rfl
+        exact ⟨rfl, rfl, rfl, rfl, rfl⟩
+      · cases edge; exact ⟨rfl, rfl, rfl, rfl, rfl⟩
   case participation =>
     split at edge
     · subst edge
-      rfl
-    · unfold processParticipationRecordUpdates at edge
-      split at edge
-      · cases edge
-      · cases edge; rfl
+      exact ⟨rfl, rfl, rfl, rfl, rfl⟩
+    · rename_i early
+      obtain ⟨u, computed, _, _, restored⟩ :=
+        processParticipationRecordUpdates_eq (state := s) (Nat.lt_of_not_le early)
+      obtain rfl := Except.ok.inj (computed.symm.trans edge)
+      exact ⟨congrArg (·.validators) restored, congrArg (·.balances) restored,
+        congrArg (·.pendingConsolidations) restored,
+        congrArg (·.depositBalanceToConsume) restored, congrArg (·.slot) restored⟩
   case syncCommittees =>
     split at edge
     · unfold processSyncCommitteeUpdates at edge
       simp only [bind, Except.bind, pure, Except.pure] at edge
       repeat' (split at edge <;> try cases edge)
-      all_goals rfl
-    · exact edge ▸ rfl
+      all_goals exact ⟨rfl, rfl, rfl, rfl, rfl⟩
+    · exact edge ▸ ⟨rfl, rfl, rfl, rfl, rfl⟩
   case proposerLookahead =>
     split at edge
     · simp only [processProposerLookahead, bind_ok_iff, pure, Except.pure,
         Except.ok.injEq] at edge
       obtain ⟨_, _, _, _, rfl⟩ := edge
-      rfl
-    · exact edge ▸ rfl
+      exact ⟨rfl, rfl, rfl, rfl, rfl⟩
+    · exact edge ▸ ⟨rfl, rfl, rfl, rfl, rfl⟩
   case ptcWindow =>
     split at edge
     · simp only [processPtcWindow, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at edge
       obtain ⟨_, _, _, _, rfl⟩ := edge
-      rfl
-    · exact edge ▸ rfl
+      exact ⟨rfl, rfl, rfl, rfl, rfl⟩
+    · exact edge ▸ ⟨rfl, rfl, rfl, rfl, rfl⟩
   all_goals simp at other
+
+/-- An epoch stage keeps the validators, unless it is one of three stages.
+
+Those are registry updates, pending deposits and effective-balance updates. -/
+theorem EpochStage.Edge.validators_eq {stage : EpochStage} {s t : BeaconState preset fork}
+    (edge : EpochStage.Edge config checks stage s t)
+    (other : stage ≠ .registry ∧ stage ≠ .pendingDeposits ∧ stage ≠ .effectiveBalances) :
+    t.validators = s.validators := by
+  cases stage
+  case rewards => rw [processRewardsAndPenalties_frame edge]
+  case slashings => rw [processSlashings_frame edge]
+  case pendingConsolidations =>
+    simp only [EpochStage.Edge] at edge
+    split at edge
+    · exact (processPendingConsolidations_kept edge).1
+    · exact edge ▸ rfl
+  case registry | pendingDeposits | effectiveBalances => simp at other
+  all_goals exact (edge.records ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩).1
 
 /-! ## Mutators -/
 
@@ -308,18 +301,18 @@ theorem registryLifecycle_slashValidator {slashedIndex : ValidatorIndex}
 
 /-! ## The steps of a block -/
 
-private theorem registryLifecycle_processBlockHeader {block : BeaconBlock preset fork}
+theorem registryLifecycle_processBlockHeader {block : BeaconBlock preset fork}
     (computed : processBlockHeader state block = .ok after) : RegistryLifecycle state after := by
   obtain ⟨_, _, rfl⟩ := processBlockHeader_eq computed
   exact .of_data rfl
 
-private theorem registryLifecycle_processRandao {body : BeaconBlockBody preset fork}
+theorem registryLifecycle_processRandao {body : BeaconBlockBody preset fork}
     (computed : processRandao config checks state body = .ok after) :
     RegistryLifecycle state after := by
   obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq computed
   exact .of_data rfl
 
-private theorem registryLifecycle_processEth1Data {before : fork < .hegota}
+theorem registryLifecycle_processEth1Data {before : fork < .hegota}
     {body : BeaconBlockBody preset fork}
     (computed : processEth1Data before state body = .ok after) : RegistryLifecycle state after := by
   obtain ⟨_, _, rest⟩ := processEth1Data_eq computed
@@ -522,7 +515,7 @@ private theorem registryLifecycle_queueExcessActiveBalance {electra : .pectra �
     exact .refl _
 
 /-- A switch to compounding changes only the withdrawal credentials of the validator. -/
-private theorem registryLifecycle_switchToCompoundingValidator {electra : .pectra ≤ fork}
+theorem registryLifecycle_switchToCompoundingValidator {electra : .pectra ≤ fork}
     {index : ValidatorIndex}
     (computed : switchToCompoundingValidator state electra index = .ok after) :
     RegistryLifecycle state after := by
@@ -807,7 +800,7 @@ private theorem registryLifecycle_activateValidator {index : ValidatorIndex} {va
   exact .setValidator oldFound set ⟨fun set => absurd far set, fun _ => rfl⟩
 
 /-- Each index in the activation queue is that of a validator eligible for activation. -/
-private theorem mem_activationQueue {index : ValidatorIndex}
+theorem mem_activationQueue {index : ValidatorIndex}
     (member : index ∈ activationQueue state) :
     ∃ (position : Nat) (validator : Validator), position.toUInt64 = index ∧
       state.validators.data[position]? = some validator ∧
@@ -825,7 +818,7 @@ private theorem mem_activationQueue {index : ValidatorIndex}
   · cases selected
 
 /-- The activation queue holds each index at most once, while the registry is below `2^64`. -/
-private theorem activationQueue_nodup (small : state.validators.data.size < 2 ^ 64) :
+theorem activationQueue_nodup (small : state.validators.data.size < 2 ^ 64) :
     (activationQueue state).Nodup := by
   let entries := state.validators.data.toList.zipIdx.filterMap fun (validator, index) =>
     if isEligibleForActivation state validator then

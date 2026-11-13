@@ -79,6 +79,8 @@ def chain_config(config: Mapping[str, Any]) -> dict[str, Any]:
         "depositContractAddress": config["depositContractAddress"],
         "activations": activations,
         "blobSchedules": schedules,
+        # The FORK_NEXT_VALUE of EIP-3675; without it, the fork ID would omit the Merge.
+        "mergeForkBlock": config["mergeNetsplitBlock"],
     }
 
 

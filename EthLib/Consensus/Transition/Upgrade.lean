@@ -51,7 +51,9 @@ Every other pending deposit stays in the queue, in its order.
 
 A 64-bit overflow of a builder balance is an error.
 
-[EIP-7732] adds the fields, and [EIP-8282] the onboarding of builders.
+[EIP-7732] adds the fields and the onboarding of builders at the fork.
+
+[EIP-8282] keeps that onboarding and specifies the contract for later builder deposits.
 
 The upgrade to Heze first asserts that the state has processed every deposit of the contract.
 

@@ -9,6 +9,14 @@ Not yet released.
 
 ### Changes that break callers
 
+- The execution RPC serves `eth_getBlockAccessList` and `debug_getRawBlockAccessList` ([#2106](https://github.com/ethereum/EthLib/issues/2106)).
+  In Lean, `BlockRecord` gains the optional field `accessList` for the retained list.
+  Supply that field in positional constructors, or use structure notation with its `none` default.
+  `Follows` requires each retained list to equal the execution builder's list.
+  `call_unknown` requires the method name to differ from both access-list method names.
+  Nothing breaks in Python: `rpc.serve` takes the new optional argument `pruned_access_lists` for block numbers whose lists are unavailable.
+  `rpc.encode_block_access_list` encodes a JSON list as its EIP-7928 RLP bytes.
+
 - In Lean, the results on slashed flags state them at each position of the registry, as `(state.validators.data[position]?).map (·.slashed)` ([#2187](https://github.com/ethereum/EthLib/issues/2187)).
   From Gloas the registry has no limit in its type, so a position may lie beyond every `ValidatorIndex`.
   `slashedFlag_initiateValidatorExit` takes a `position : Nat` in place of an index.
@@ -692,6 +700,21 @@ Not yet released.
   `readPrefix_short`, `decodeItemsFrom_eq` and `decodeItems_eq` take the same bound, and `decodeItem_of_readItem` takes it as an implicit argument.
   `decode` keeps its type, the inputs it accepts, its values and its errors.
   No C export or Python function changes.
+- In Lean, the reader of an `eth_getProof` answer moves into the specification ([#2099](https://github.com/ethereum/EthLib/issues/2099)).
+  `accountProofOfJson`, `storageProofOfJson` and `proofNodes` move from `EthLib.Engine.Exports` to `EthLib.Execution.Rpc`, in `Execution/Rpc/Proof.lean`.
+  They keep their types and their errors.
+  No C export or Python function changes.
+- The chain view serves `eth_getProof`, with the answer that `AccountProof.ofState` builds from the state after the block.
+
+- `eth_config` reports the current, next and last scheduled configurations from Dencun through Glamsterdam.
+  As EIP-7910 says, the report leaves out a future fork after Glamsterdam, and `next` and `last` are null when no supported fork remains.
+  A fork at a block after genesis is never a next or last configuration.
+  In Lean, `ChainView` adds `genesis` and `mergeForkBlock` for the fork checksum.
+  Supply both fields in positional constructors, or use structure notation with their `none` defaults.
+  `call_unknown` also requires that the method name differ from `eth_config`.
+  The configuration given to `rpc_serve` takes the optional keys `mergeForkBlock`, `genesisHash` and `genesisTime`.
+  It rejects a malformed value of these keys, one of the genesis pair without the other, and a genesis pair that disagrees with block zero.
+  The C and Python function signatures stay the same.
 
 ## 0.3.0
 

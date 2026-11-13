@@ -93,7 +93,9 @@ The mixes must span more than the seed lookahead plus two epochs.
 
 The run stays within one fork.
 
-On mainnet a run meets these hypotheses only for a threshold at least the ejection balance.
+On mainnet a validator that exits is no longer eligible.
+
+So the threshold must be at least the effective balance of an absent validator when it exits.
 
 Then the effective balance of the validator at the end of the run is at most the threshold. -/
 theorem effectiveBalance_le_of_leakRun (altair : .altair ≤ fork)
@@ -279,7 +281,9 @@ Then some visited state does not leak, or the finalized epoch rises in the slot 
 
 Otherwise, in the final state, twice the active balance is at most three times that of the voters.
 
-On mainnet a run meets these hypotheses only for a threshold at least the ejection balance. -/
+On mainnet a validator that exits is no longer eligible.
+
+So the threshold must be at least the effective balance of an absent validator when it exits. -/
 theorem twoThirds_of_leakRun (altair : .altair ≤ fork)
     (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
     (bands : preset.IncrementWithinUpwardBand)

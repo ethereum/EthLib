@@ -625,12 +625,13 @@ cases = ["*/*.io", "chain.rlp", "genesis.json", "forkenv.json", "headfcu.json"]
 generator = "rpctestgen on go-ethereum"
 
 [[directories."bindings/python/tests/rpc/fixtures"]]
+cases = ["bal/*.json"]
+generator = "not established"
+checked = "tools/chain/bal/block-00057.json through block-00060.json at execution-apis 3284ee80 name no generator or version"
+
+[[directories."bindings/python/tests/rpc/fixtures"]]
 cases = ["error-groups/*.yaml"]
 generator = "execution-apis error groups"
-
-[[directories."bindings/python/tests/trie/getproof"]]
-cases = ["**"]
-generator = "rpctestgen on go-ethereum"
 
 [[directories."bindings/python/tests/consensus/deposit_tree"]]
 cases = ["**"]

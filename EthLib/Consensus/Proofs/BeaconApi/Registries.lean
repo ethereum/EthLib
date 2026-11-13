@@ -461,4 +461,19 @@ theorem IsBuildersAnswer.mem_iff {state : BeaconState preset fork} {gloas : .gla
     entry ∈ answer ↔ entry ∈ stateBuilders state gloas ids filter :=
   List.Perm.mem_iff h
 
+/-- An index that a request selects names a validator of the registry. -/
+theorem lt_of_mem_selectValidators {state : BeaconState preset fork} {ids : List ValidatorId}
+    {index : ValidatorIndex}
+    (selected : index ∈ selectValidators state ids) :
+    index.toNat < state.validators.data.size := by
+  rcases mem_selectValidators.mp selected with ⟨_, inside⟩ | ⟨id, _, resolved⟩
+  · exact inside
+  · cases id with
+    | index i => exact (resolveValidatorId_index.mp resolved).2
+    | pubkey pubkey =>
+      obtain ⟨position, validator, found, _, _, rfl⟩ := resolveValidatorId_pubkey.mp resolved
+      have bound := (Array.getElem?_eq_some_iff.mp found).1
+      have : (UInt64.ofNat position).toNat ≤ position := by simp [Nat.mod_le]
+      omega
+
 end EthLib.Consensus.BeaconApi

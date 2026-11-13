@@ -83,6 +83,15 @@ def syncParticipantReward (state : BeaconState preset fork) : Except TransitionE
     let perSlot ← divChecked (← divChecked weighted WEIGHT_DENOMINATOR) preset.SLOTS_PER_EPOCH
     divChecked perSlot preset.SYNC_COMMITTEE_SIZE)
 
+/-- From Altair: the share of the proposer for each member that signs.
+
+It is the participant reward times the proposer weight, over the denominator less that weight.
+
+It rounds down. -/
+def syncProposerReward (reward : Gwei) : Except TransitionError Gwei :=
+  liftAccessor (liftArith do
+    divChecked (← mulChecked reward PROPOSER_WEIGHT) (WEIGHT_DENOMINATOR - PROPOSER_WEIGHT))
+
 /-- From Altair: one member's step of the sync rewards, with the proposer of the slot given.
 
 A member that signed earns the reward, and the proposer earns its share.
@@ -135,8 +144,7 @@ def processSyncAggregate (config : Config) (checks : SignatureChecks)
   ensure (syncAggregateVerify checks pubkeys (packBytes signingRoot)
     aggregate.syncCommitteeSignature = true) .invalidSyncAggregate
   let reward ← syncParticipantReward state
-  let proposerReward ← liftAccessor (liftArith do
-    divChecked (← mulChecked reward PROPOSER_WEIGHT) (WEIGHT_DENOMINATOR - PROPOSER_WEIGHT))
+  let proposerReward ← syncProposerReward reward
   let members ← committee.pubkeys.toArray.mapM (validatorIndexOfPubkey state)
   -- The proposer is read once: the rewards change only balances, which it does not read.
   let proposer := getBeaconProposerIndex state

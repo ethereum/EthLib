@@ -17,9 +17,11 @@ from .chain import FIXTURES, ReplayChain, block_hash, read_fixture, replay_chain
 
 # Each method that the view serves, with the schema of its result in `src/eth` of the source.
 # A result that is an object has no reader of its schema, so it maps to None.
+# `RESULT_CHECKS` checks the schema of some of those results.
 RESULT_SCHEMAS: Final[dict[str, rpc.Schema | None]] = {
     "eth_blockNumber": "uint",
     "eth_chainId": "uint",
+    "eth_config": None,
     "net_version": "uintDecimal",
     "eth_getTransactionByHash": None,
     "eth_getTransactionByBlockHashAndIndex": None,
@@ -33,10 +35,46 @@ RESULT_SCHEMAS: Final[dict[str, rpc.Schema | None]] = {
     "eth_getTransactionReceipt": None,
     "eth_getBlockReceipts": None,
     "eth_getLogs": None,
+    "eth_getBalance": "uint",
+    "eth_getTransactionCount": "uint",
+    "eth_getCode": "bytes",
+    "eth_getStorageAt": "bytes",
+    "eth_getStorageValues": None,
+    "eth_getProof": None,
+    "eth_call": "bytes",
+    "eth_estimateGas": "uint",
+    "eth_createAccessList": None,
     "debug_getRawHeader": "bytes",
     "debug_getRawBlock": "bytes",
     "debug_getRawTransaction": "bytes",
     "debug_getRawReceipts": None,
+}
+
+
+def _check_access_list_result(result: object) -> None:
+    """Raise unless the result fits the result schema of `eth_createAccessList` in the source."""
+    if not isinstance(result, dict) or not set(result) <= {"accessList", "error", "gasUsed"}:
+        raise ValueError("result: not an object of accessList, error and gasUsed")
+    entries = result.get("accessList", [])
+    if not isinstance(entries, list):
+        raise ValueError("accessList: not an array")
+    for entry in entries:
+        if not isinstance(entry, dict) or set(entry) != {"address", "storageKeys"}:
+            raise ValueError("accessList: an entry is not an address with its storage keys")
+        rpc.read_param("address", entry["address"])
+        if not isinstance(entry["storageKeys"], list):
+            raise ValueError("storageKeys: not an array")
+        for key in entry["storageKeys"]:
+            rpc.read_param("hash32", key)
+    if not isinstance(result.get("error", ""), str):
+        raise ValueError("error: not a string")
+    if "gasUsed" in result:
+        rpc.read_param("uint", result["gasUsed"])
+
+
+# The methods whose result is an object, with a check of its schema.
+RESULT_CHECKS: Final[dict[str, Callable[[object], None]]] = {
+    "eth_createAccessList": _check_access_list_result,
 }
 
 # Every fixture of a method that the view serves.
@@ -84,9 +122,12 @@ def test_fixture(path: Path, answers: dict[str, dict[str, Any]]) -> None:
         schema = RESULT_SCHEMAS[fixture.method]
         if schema is not None:
             rpc.read_param(schema, got["result"])
+        check = RESULT_CHECKS.get(fixture.method)
+        if check is not None:
+            check(got["result"])
         # A fixture marked speconly is checked against the schema only, as the source says.
-        # Without a reader of the schema, such a fixture would check nothing, so none may exist.
-        assert schema is not None or not fixture.speconly
+        # Without a check of the schema, such a fixture would check nothing, so none may exist.
+        assert schema is not None or check is not None or not fixture.speconly
         if not fixture.speconly:
             assert got["result"] == expected["result"]
 
@@ -361,9 +402,246 @@ def test_bad_filter(log_filter: dict[str, str], code: int) -> None:
     assert _error(json.dumps(request))["error"]["code"] == code
 
 
+# A contract of the test chain with code and a storage word at key 0, as the fixtures show.
+CONTRACT: Final = "0x7dcd17433742f4c0ca53122ab541d0ba67fc27df"
+KEY: Final = "0x" + "00" * 32
+# An account of the test chain that sends one transaction, as the nonce fixtures show.
+SENDER: Final = "0x0300100f529a704d19736a8714837adbc934db7f"
+
+# Each account query that the view rejects, with the code and the data of its error.
+BAD_ACCOUNT_QUERIES = [
+    pytest.param("eth_getBalance", [CONTRACT, "0x3d"], -32001, "unknown block", id="unknown-block"),
+    pytest.param("eth_getCode", [CONTRACT, "pending"], -32001, "unknown block", id="pending"),
+    pytest.param(
+        "eth_getStorageAt",
+        [CONTRACT, KEY, {"blockHash": "0x" + "11" * 32}],
+        -32001,
+        "unknown block",
+        id="unknown-hash-object",
+    ),
+    pytest.param(
+        "eth_getStorageValues",
+        [{CONTRACT: ["0xasdf"]}],
+        -32602,
+        "key: not a hex digit",
+        id="bad-key",
+    ),
+    pytest.param("eth_getBalance", [], -32602, "missing parameter", id="no-address"),
+    pytest.param("eth_getStorageAt", [CONTRACT], -32602, "missing parameter", id="no-key"),
+    pytest.param(
+        "eth_getTransactionCount",
+        [CONTRACT, "latest", "latest"],
+        -32602,
+        "too many parameters",
+        id="extra",
+    ),
+    pytest.param(
+        "eth_getStorageValues",
+        [{CONTRACT: [KEY], CONTRACT.upper().replace("0X", "0x"): [KEY]}],
+        -32602,
+        "requests: an address twice",
+        id="address-twice",
+    ),
+    # The keys of an address are an array, so null is no request for that address.
+    pytest.param(
+        "eth_getStorageValues",
+        [{CONTRACT: [KEY], "0x" + "aa" * 20: None}],
+        -32602,
+        "keys: not an array",
+        id="null-keys",
+    ),
+    pytest.param("eth_getProof", [CONTRACT], -32602, "missing parameter", id="proof-no-keys"),
+    pytest.param(
+        "eth_getProof",
+        [CONTRACT, KEY],
+        -32602,
+        "storage keys: not an array",
+        id="proof-keys-not-array",
+    ),
+    pytest.param(
+        "eth_getProof", [CONTRACT, [], "0x3d"], -32001, "unknown block", id="proof-unknown-block"
+    ),
+]
+
+
+@pytest.mark.parametrize(("method", "params", "code", "data"), BAD_ACCOUNT_QUERIES)
+def test_bad_account_query(method: str, params: list[object], code: int, data: str) -> None:
+    """The view rejects each bad account query with the expected error."""
+    request = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
+    error = _error(json.dumps(request))["error"]
+    assert (error["code"], error["data"]) == (code, data)
+
+
+def test_account_queries_agree() -> None:
+    """At each block, the storage values are the words that eth_getStorageAt gives."""
+    chain = replay_chain()
+    blocks = [hex(number) for number in range(len(chain.blocks))]
+    requests = [
+        json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params})
+        for block in blocks
+        for method, params in [
+            ("eth_getStorageAt", [CONTRACT, KEY, block]),
+            # A short key reads as a number, so "0x0" is the key of 32 zero bytes.
+            ("eth_getStorageValues", [{CONTRACT: [KEY, "0x0"], SENDER: []}, block]),
+        ]
+    ]
+    results = [json.loads(text)["result"] for text in chain.serve(requests) if text is not None]
+    assert len(results) == len(requests)
+    words = results[0::2]
+    assert results[1::2] == [{CONTRACT: [word, word], SENDER: []} for word in words]
+    # Slot 0 of the contract counts up from zero along the chain, so each block is read.
+    counts = [int(word, 16) for word in words]
+    assert counts == sorted(counts)
+    assert (counts[0], counts[-1]) == (0, 0x33)
+
+
+# An address with no account in the test chain.
+NOBODY: Final = "0x" + "ab" * 20
+
+
+# The queries of the proof test, each without its block parameter.
+PROOF_QUERIES: Final[list[tuple[str, list[object]]]] = [
+    ("eth_getHeaderByNumber", []),
+    ("eth_getBalance", [CONTRACT]),
+    ("eth_getTransactionCount", [CONTRACT]),
+    ("eth_getStorageAt", [CONTRACT, KEY]),
+    # Slot 6 of the contract is never set, so its proof shows it absent.
+    ("eth_getProof", [CONTRACT, [KEY, "0x6"]]),
+    ("eth_getProof", [NOBODY, ["0x1"]]),
+]
+
+
+def test_proof_at_each_block() -> None:
+    """At each block, the proofs hold against the header's state root and match the queries."""
+    chain = replay_chain()
+    requests = [
+        json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": [*params, hex(number)]})
+        for number in range(len(chain.blocks))
+        for method, params in PROOF_QUERIES
+    ]
+    results = [json.loads(text)["result"] for text in chain.serve(requests) if text is not None]
+    assert len(results) == len(requests)
+    size = len(PROOF_QUERIES)
+    for index in range(0, len(results), size):
+        header, balance, nonce, word, proof, absent = results[index : index + size]
+        root = bytes.fromhex(header["stateRoot"][2:])
+        # Slot 0 is set once it holds a word other than zero.
+        assert trie.verify_account_proof(root, proof) == [int(word, 16) != 0, False]
+        assert (proof["balance"], proof["nonce"]) == (balance, nonce)
+        assert [slot["key"] for slot in proof["storageProof"]] == ["0x0", "0x6"]
+        # The storage query gives a word on 32 bytes, and the proof a quantity.
+        assert [slot["value"] for slot in proof["storageProof"]] == [hex(int(word, 16)), "0x0"]
+        assert trie.verify_account_proof(root, absent) is None
+        slot = absent["storageProof"][0]
+        assert (absent["balance"], absent["nonce"], slot["key"], slot["value"]) == (
+            "0x0",
+            "0x0",
+            "0x1",
+            "0x0",
+        )
+
+
+def test_account_at_each_block() -> None:
+    """The nonce and the code of an account are those of the state after the named block."""
+    assert _call("eth_getTransactionCount", [SENDER, "0x0"]) == "0x0"
+    assert _call("eth_getTransactionCount", [SENDER, "latest"]) == "0x1"
+    # A contract that a transaction of the chain creates has no code before its block.
+    created = next(
+        (int(receipt["blockNumber"], 16), receipt["contractAddress"])
+        for number in range(len(replay_chain().blocks))
+        for receipt in _call("eth_getBlockReceipts", [hex(number)])
+        if receipt["contractAddress"] is not None
+    )
+    number, address = created
+    assert _call("eth_getCode", [address, hex(number - 1)]) == "0x"
+    assert _call("eth_getCode", [address, hex(number)]) != "0x"
+
+
+def test_storage_values_member_twice() -> None:
+    """A member name written twice in the text is one member, the last, as JSON is read."""
+    text = (
+        '{"jsonrpc":"2.0","id":1,"method":"eth_getStorageValues","params":'
+        f'[{{"{CONTRACT}":["0x1"],"{CONTRACT}":["{KEY}"]}},"latest"]}}'
+    )
+    assert _answer(text)["result"] == {CONTRACT: ["0x" + "00" * 31 + "33"]}
+
+
 def test_pending_header() -> None:
     """The header of the tag `pending` is null, as the method says."""
     assert _call("eth_getHeaderByNumber", ["pending"]) is None
+
+
+# Each request of `eth_estimateGas` in the fixtures that has a result.
+ESTIMATED: Final = [
+    pytest.param(exchange.request, id=f"{path.stem}-{exchange.response['id']}")
+    for path in sorted((FIXTURES / "eth_estimateGas").glob("*.io"))
+    for exchange in read_fixture(path).exchanges
+    if "result" in exchange.response
+]
+
+
+@pytest.mark.parametrize("request_text", ESTIMATED)
+def test_estimate_is_least(request_text: str) -> None:
+    """The call completes with the estimate as its gas limit, and fails with one gas less."""
+    params = json.loads(request_text)["params"]
+    transaction, rest = params[0], params[1:]
+    estimate = int(_call("eth_estimateGas", params), 16)
+    _call("eth_call", [{**transaction, "gas": hex(estimate)}, *rest])
+    answer = _error(
+        json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "eth_call",
+                "params": [{**transaction, "gas": hex(estimate - 1)}, *rest],
+            }
+        )
+    )
+    assert answer["error"]["code"] in {800, 801}
+
+
+# Each result that breaks the schema of `eth_createAccessList`, and the error of its check.
+BAD_ACCESS_LIST_RESULTS = [
+    pytest.param(
+        [], ValueError, "result: not an object of accessList, error and gasUsed", id="not-object"
+    ),
+    pytest.param({"accessList": {}}, ValueError, "accessList: not an array", id="list-not-array"),
+    pytest.param(
+        {"accessList": [{"address": "0x" + "00" * 20, "storageKeys": "0x"}]},
+        ValueError,
+        "storageKeys: not an array",
+        id="keys-not-array",
+    ),
+    pytest.param(
+        {"accessList": [], "gasUsed": "0x1", "extra": 1},
+        ValueError,
+        "result: not an object of accessList, error and gasUsed",
+        id="extra-member",
+    ),
+    pytest.param({"error": 3}, ValueError, "error: not a string", id="error-not-string"),
+    pytest.param(
+        {"accessList": [{"address": "0x" + "00" * 20}]},
+        ValueError,
+        "accessList: an entry is not an address with its storage keys",
+        id="entry-without-keys",
+    ),
+    pytest.param({"gasUsed": "0x01"}, rpc.RpcError, "uint: leading zero", id="gas-leading-zero"),
+    pytest.param(
+        {"accessList": [{"address": "0x" + "00" * 20, "storageKeys": ["0x01"]}]},
+        rpc.RpcError,
+        "hash32: 1 bytes, not 32",
+        id="short-key",
+    ),
+]
+
+
+@pytest.mark.parametrize(("result", "error", "message"), BAD_ACCESS_LIST_RESULTS)
+def test_access_list_result_check_rejects(
+    result: object, error: type[Exception], message: str
+) -> None:
+    """The check of the schema of an access-list result rejects a result that breaks it."""
+    with raises(error, message):
+        _check_access_list_result(result)
 
 
 # Each lookup by block and index that finds no transaction, so its result is null.

@@ -491,17 +491,68 @@
 #define DOC_consensus_api_payload_envelope_ssz \
   "The SSZ body of the envelope answer, as `bytes`."
 
+#define DOC_consensus_api_light_client_bootstrap \
+  "The JSON response of the bootstrap endpoint, as a `dict`."
+
+#define DOC_consensus_api_light_client_bootstrap_ssz \
+  "The SSZ body of the bootstrap answer, as `bytes`."
+
+#define DOC_consensus_api_light_client_updates \
+  "The JSON response of the updates endpoint, as a `list` of `dict`."
+
+#define DOC_consensus_api_light_client_updates_ssz \
+  "The SSZ body of the updates answer, as `bytes`."
+
+#define DOC_consensus_api_light_client_decode_updates \
+  "The fork name and the SSZ bytes of each update of the SSZ body of an updates answer."
+
+#define DOC_consensus_api_light_client_latest \
+  "The JSON response of the finality or the optimistic update endpoint, as a `dict`."
+
 #define DOC_consensus_api_attestation_data \
   "The JSON response of the attestation data endpoint, as a `dict`."
 
 #define DOC_consensus_api_payload_attestation_data \
   "The JSON response of the payload attestation data endpoint, as a `dict`, or None for 204."
 
+#define DOC_consensus_api_fork_choice \
+  "The JSON response of the fork choice endpoint, as a `dict`."
+
+#define DOC_consensus_api_chain_heads \
+  "The JSON response of the heads endpoint, as a `dict`."
+
 #define DOC_consensus_api_aggregate_attestation \
   "The JSON response of the aggregate endpoint, as a `dict`."
 
 #define DOC_consensus_api_sync_committee_contribution \
   "The JSON response of the contribution endpoint, as a `dict`."
+
+#define DOC_consensus_api_attestation_rewards \
+  "The JSON response of the attestation rewards endpoint, as a `dict`."
+
+#define DOC_consensus_api_block_rewards \
+  "The JSON response of the block rewards endpoint, as a `dict`."
+
+#define DOC_consensus_api_consensus_block_value \
+  "The consensus value of a signed block, in Wei."
+
+#define DOC_consensus_api_prefer_local_v3 \
+  "From Bellatrix to Fulu: whether the node returns its local payload rather than the builder's."
+
+#define DOC_consensus_api_capped_bid_value \
+  "The value of a bid, in Gwei: its value plus its execution payment, counted up to its cap."
+
+#define DOC_consensus_api_bid_accepted \
+  "Whether the terms of a bid accept it."
+
+#define DOC_consensus_api_select_payload \
+  "From Gloas: the bid that the node commits to, or none for its local payload."
+
+#define DOC_consensus_api_builder_config_terms \
+  "From Gloas, the terms that the SSZ bytes of a builder configuration give."
+
+#define DOC_consensus_api_sync_committee_rewards \
+  "The JSON response of the sync committee rewards endpoint, as a `dict`."
 
 #define DOC_consensus_api_duties \
   "The JSON response of a duties endpoint, as a `dict`."
@@ -787,6 +838,9 @@
 
 #define DOC_consensus_gossip_validation \
   "Validate the messages of a topic in turn, against the store of an anchor and later blocks."
+
+#define DOC_consensus_api_pool \
+  "Answer the requests to pool endpoints in turn, against the store of an anchor and later blocks."
 
 #define DOC_consensus_light_client_sync \
   "The headers of a sync, step by step, from a bootstrap for a trusted block root."
@@ -1453,6 +1507,9 @@
 
 #define DOC_rpc_serve \
   "Answer requests of the execution JSON-RPC API from the chain that the arguments build."
+
+#define DOC_rpc_encode_block_access_list \
+  "Encode a block access-list JSON value as its EIP-7928 RLP bytes."
 
 #define DOC_pyvalue_echo \
   "The value that Python passes, back to Python, with each failure tuple read as a failure."

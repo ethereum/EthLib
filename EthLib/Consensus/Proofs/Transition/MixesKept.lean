@@ -465,7 +465,7 @@ theorem mixesKeptBut_processBlock {block : BeaconBlock preset fork}
   unfold processBlock at computed
   split at computed
   · unfold processBlockAltair at computed
-    simp only [bind_ok_iff] at computed
+    simp only [stateBeforeOperations, bind_assoc, bind_ok_iff] at computed
     obtain ⟨paid, paidOk, headed, headedOk, executed, executedOk, revealed, revealedOk, voted,
       votedOk, _, operatedOk, synced⟩ := computed
     have paidStep : Writes state paid := by
@@ -489,7 +489,12 @@ theorem mixesKeptBut_processBlock {block : BeaconBlock preset fork}
       (randao revealedOk).trans <| votedStep.trans <|
       (Writes.of_kept (kept_processOperations operatedOk)).trans
       (Writes.of_kept (Kept.of_payloadInputs (payloadInputs_processSyncAggregate synced)))
-  simp only [bind_ok_iff] at computed
+  rename_i notAltair
+  have notGloas' : ¬ Fork.glamsterdam ≤ fork := fun h => notAltair (Nat.le_trans (by decide) h)
+  have notBellatrix' : ¬ Fork.bellatrix ≤ fork := fun h => notAltair (Nat.le_trans (by decide) h)
+  have early' : fork < .hegota := Nat.lt_trans (Nat.lt_of_not_le notAltair) (by decide)
+  simp only [stateBeforeOperations, notGloas', notBellatrix', early', ↓reduceDIte, pure_bind,
+    bind_assoc, bind_ok_iff] at computed
   obtain ⟨_, headerOk, _, randaoOk, _, eth1Ok, operationsOk⟩ := computed
   exact (header headerOk).trans <| (randao randaoOk).trans <|
     (Writes.of_kept (Kept.of_payloadInputs (payloadInputs_processEth1Data eth1Ok))).trans
