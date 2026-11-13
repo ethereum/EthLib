@@ -11,7 +11,7 @@ public import EthLib.Networking.Proofs.Encoding.Varint
 - The key needs a field number in range; a record also needs a value shorter than `2^64` bytes.
 - Reading a serialized message returns its records, for fields in range and a short message.
 - Short means fewer than `2^64` bytes.
-- The values of one field follow the order of the records.
+- The values of one field follow the order of the records, and so do its length-delimited values.
 - Two errors with one code come from one constructor.
 -/
 
@@ -216,6 +216,27 @@ theorem valuesOf_cons (r : Record) (rs : List Record) (field : Nat) :
 theorem valuesOf_append (rs rs' : List Record) (field : Nat) :
     valuesOf (rs ++ rs') field = valuesOf rs field ++ valuesOf rs' field := by
   simp [valuesOf]
+
+/-- The length-delimited values of one field, in the order of the records. -/
+def lenValues (rs : List Record) (field : Nat) : List ByteArray :=
+  (valuesOf rs field).filterMap fun
+    | .len bytes => some bytes
+    | _ => none
+
+/-- The length-delimited values of two sequences of records follow one another. -/
+theorem lenValues_append (rs rs' : List Record) (field : Nat) :
+    lenValues (rs ++ rs') field = lenValues rs field ++ lenValues rs' field := by
+  simp [lenValues, valuesOf_append]
+
+/-- A length-delimited record of the field has its one value. -/
+theorem lenValues_singleton_self (n : Nat) (b : ByteArray) :
+    lenValues [⟨n, .len b⟩] n = [b] := by
+  simp [lenValues, valuesOf]
+
+/-- A record of another field adds no value to the field that is read. -/
+theorem lenValues_singleton_of_ne {f n : Nat} (v : Value) (h : f ≠ n) :
+    lenValues [⟨f, v⟩] n = [] := by
+  simp [lenValues, valuesOf, h]
 
 /-- Two errors with one code come from one constructor. -/
 theorem _root_.EthLib.Networking.Encoding.Protobuf.ProtobufError.code_injective
