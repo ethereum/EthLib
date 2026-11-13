@@ -3912,6 +3912,30 @@ A revert has the message `"execution reverted"`, the only text that the source g
 A halt that is not a revert has code 801 for a lack of gas, 4 for an invalid opcode, and `-32000` otherwise.
 The error groups of the source define these codes, but no text assigns them to `eth_call`.
 
+`eth_feeHistory` and `eth_baseFee` of [`fee_market.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth/fee_market.yaml) report base fees, gas ratios and tips (`Execution/Rpc/Fees.lean`).
+A history is the one of the blocks of its range, when its percentiles strictly increase and the node holds its newest block (`ChainView.feeHistory_eq_ok`, `Proofs/Rpc/Fees.lean`).
+The base fee of each block of the range is that of its header, or 0 before London (`ChainView.feeHistory_baseFeePerGas`).
+The last base fee is `expectedBaseFeeAcross` of the newest header, the rule that checks the base fee of a header, or 0 when the next block is before London.
+In a valid view, take a canonical block that is not the head, and a next block and next fork from London on.
+The last base fee is then the base fee in the header of the next block (`ChainView.Valid.nextBaseFee`).
+That covers the first London block, which takes the initial base fee, and every block after a London block (`ChainView.Valid.london_le_next`).
+`eth_baseFee` gives the last base fee of the history of the head alone (`ChainView.baseFee_eq_feeHistory`).
+The lists of base fees have one more entry than the list of gas ratios (`ChainView.feeHistory_length`).
+Each reward of a block with transactions, whose receipts match them, is the tip of one of them (`BlockRecord.mem_rewards`).
+A block without transactions has rewards of 0 (`BlockRecord.rewards_nil`), and the rewards of a block do not decrease along the percentiles (`BlockRecord.rewards_sorted`).
+
+The source leaves several points of the fee history open, and EthLib decides them.
+The next timestamp is unknown, so the fork and the blob schedule of the next block are taken one second after the newest block, its earliest time.
+That is exact for a fork that activates by number, as London does, but it misses a fork or a blob schedule that activates later than that.
+The next base fee per blob gas uses the excess blob gas that the header rule gives to that block.
+A percentile is a JSON number from 0 to 100, and the list must strictly increase; otherwise the request gets `-32602`.
+The range holds the blocks that the node has, so it is shorter than the count when the node holds fewer blocks, as the source allows.
+A count of 0 gives an empty range, whose oldest block follows the newest one, and an unknown newest block gets `-32001`.
+The tip at a percentile is that of the first transaction, by ascending tip, at which the gas used so far reaches that share of the gas that the receipts record.
+The comparison is exact.
+Before London the base fee is 0, so a tip is the whole gas price.
+A ratio is written with at most 18 decimal places, rounded down, and the rewards are left out when the request names no percentile.
+
 The Python suite replays the official test chain into a view and answers the official fixtures of the methods that EthLib serves.
 That chain mines its blocks before the merge with a zero mix hash and a zero nonce, so the suite runs the transition without the proof-of-work check.
 
