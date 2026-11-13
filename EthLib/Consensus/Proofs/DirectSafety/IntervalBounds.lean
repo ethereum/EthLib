@@ -2,6 +2,7 @@ module
 
 public import EthLib.Consensus.Proofs.DirectSafety.DepartureQueue
 public import EthLib.Consensus.Proofs.DirectSafety.IntervalFunding
+public import EthLib.Consensus.Proofs.Transition.Totality.Bound
 import EthLib.Consensus.Proofs.DirectSafety.FundingBlock
 import EthLib.Consensus.Proofs.DirectSafety.FundingSlot
 import EthLib.Consensus.Proofs.Transition.ValidatorCaps
@@ -519,7 +520,7 @@ The window reads the balance events that the run replays up to `high`. -/
 theorem departure_charges_le_funded_window {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (tail : Run config checks x y)
     (genesis : Genesis (config := config) (checks := checks) g)
-    (caps : CapOrder preset) (slots : 0 < preset.SLOTS_PER_EPOCH.toNat)
+    (caps : CapOrder preset) (divisors : preset.DivisorsPositive)
     (early : y.fork < .glamsterdam) (high : Nat)
     (endEpoch : (getCurrentEpoch y.state).toNat ≤ high + 1)
     (events : List (BalanceEvent preset)) (replayed : tail.balanceEvents high = .ok events) :
@@ -532,6 +533,8 @@ theorem departure_charges_le_funded_window {g x y : ForkedBeaconState preset}
           consolidationRate (preset := preset) (config := config)
             (activeStakeWindow (config := config) x high events) else 0)) := by
   have ⟨_, _, _, initialized⟩ := genesis
+  have slots : 0 < preset.SLOTS_PER_EPOCH.toNat :=
+    Nat.pos_of_ne_zero fun zero => divisors.slotsPerEpoch (UInt64.toNat_inj.mp zero)
   have registry := registry_le_window tail early high endEpoch slots
   by_cases preFork : high + 1 < config.ELECTRA_FORK_EPOCH.toNat
   · -- A window before the fork has no Electra state, so it is charged only the count churn.
