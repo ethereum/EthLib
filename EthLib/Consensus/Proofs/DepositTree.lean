@@ -596,7 +596,7 @@ private theorem climbBranch_generateProof {index : Nat} :
   | _ + 1, .finalized .., _, _, walked, _ => by simp [generateProof] at walked
 
 /--
-A walk down to a leaf finds the leaf that the subtree holds at the index read by the walk.
+A walk down to a leaf finds the leaf that the subtree holds at the index modulo `2^height`.
 
 The walk reads only the bits of the index below the height.
 -/

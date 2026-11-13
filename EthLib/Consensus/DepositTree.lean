@@ -424,7 +424,9 @@ The proof is the branch from the leaf up, then the count as 32 little-endian byt
 
 Only a deposit that the tree holds and has not finalized has a proof.
 
-A tree whose count reaches the number of its leaves has no proof.
+A tree whose count reaches `2^32`, the leaves of the tree, has no proof.
+
+The reference implementation of the EIP has no such check.
 
 The reference implementation of the EIP proves an empty leaf for an index past the deposits.
 -/
