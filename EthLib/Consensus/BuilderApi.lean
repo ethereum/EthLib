@@ -18,6 +18,8 @@ The proposer signs a blinded block, which holds that header in place of the payl
 
 Only then does the builder reveal the payload, and publish the full block with that signature.
 
+The full block is the blinded block with the payload in place of its header.
+
 A registration and a bid are signed under the application domain of builders.
 
 That domain reads the genesis fork version and a zero root of the genesis validators.
@@ -73,6 +75,57 @@ def BeaconBlock.blind (block : BeaconBlock preset fork) (range : HasBuilderApi f
     Except Err (BlindedBeaconBlock preset fork) := do
   return ⟨block.slot, block.proposerIndex, block.parentRoot, block.stateRoot,
     ← block.body.blind range⟩
+
+/-- Why a blinded body does not unblind with a payload. -/
+inductive UnblindError where
+  /-- The header of the payload is not the header that the blinded body holds. -/
+  | headerMismatch
+  /-- The header of the payload cannot be computed. -/
+  | header (fault : Err)
+  deriving DecidableEq, Repr
+
+/-- From Bellatrix to Fulu: the body that a blinded body and a revealed payload give.
+
+The header of the payload must be the header that the blinded body holds.
+
+The payload takes the place of that header, and every other field is copied as it is. -/
+def BlindedBeaconBlockBody.unblind (body : BlindedBeaconBlockBody preset fork)
+    (range : HasBuilderApi fork) (payload : ExecutionPayload preset fork) :
+    Except UnblindError (BeaconBlockBody preset fork) :=
+  match payload.header with
+  | .error fault => .error (.header fault)
+  | .ok header =>
+    if header = body.executionPayloadHeader range then
+      .ok ⟨body.randaoReveal, body.eth1Data, body.graffiti, body.proposerSlashings,
+        body.attesterSlashings, body.attestations, body.deposits, body.voluntaryExits,
+        body.syncAggregate, fun _ => payload, body.blsToExecutionChanges,
+        body.blobKzgCommitments, body.executionRequests,
+        fun gloas => absurd gloas (Nat.not_le_of_lt range.2),
+        fun gloas => absurd gloas (Nat.not_le_of_lt range.2),
+        fun gloas => absurd gloas (Nat.not_le_of_lt range.2)⟩
+    else .error .headerMismatch
+
+/-- From Bellatrix to Fulu: the block that a blinded block and a revealed payload give.
+
+It keeps the slot, the proposer and the two roots, and unblinds the body. -/
+def BlindedBeaconBlock.unblind (block : BlindedBeaconBlock preset fork)
+    (range : HasBuilderApi fork) (payload : ExecutionPayload preset fork) :
+    Except UnblindError (BeaconBlock preset fork) := do
+  return ⟨block.slot, block.proposerIndex, block.parentRoot, block.stateRoot,
+    ← block.body.unblind range payload⟩
+
+/-- From Bellatrix to Fulu: the signed block that a signed blinded block and a payload give.
+
+The proposer signed the blinded block, and the full block keeps that signature.
+
+The [builder specification] has the proposer assemble the full block this way.
+
+[builder specification]: https://github.com/ethereum/builder-specs/blob/fce64468a81a87892d7cb9b4858272bb3d010e50/specs/bellatrix/validator.md#block-proposal
+-/
+def SignedBlindedBeaconBlock.unblind (signed : SignedBlindedBeaconBlock preset fork)
+    (range : HasBuilderApi fork) (payload : ExecutionPayload preset fork) :
+    Except UnblindError (SignedBeaconBlock preset fork) := do
+  return ⟨← signed.message.unblind range payload, signed.signature⟩
 
 /-- The domain type of the messages of the Builder API, an application domain.
 
