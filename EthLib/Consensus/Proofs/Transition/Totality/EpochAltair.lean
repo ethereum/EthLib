@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Consensus.Proofs.Transition.BalanceNotRaised
 public import EthLib.Consensus.Proofs.Transition.EpochDecomposition
 public import EthLib.Consensus.Proofs.Transition.Totality.EpochBeforeAltair
 public import EthLib.Consensus.Proofs.Transition.Totality.Rewards
@@ -29,56 +30,6 @@ open Base Uint64 EpochStage EpochTrace
 
 variable {preset : Preset} {fork : Base.Fork} {state : BeaconState preset fork}
 
-/-- Before Electra, the registry updates keep the historical summaries.
-
-Each write sets one validator, and the queue of exits changes only its own two fields. -/
-private theorem processRegistryUpdates_historicalSummaries {config : Config}
-    {after : BeaconState preset fork} (before : fork < .pectra)
-    (computed : processRegistryUpdates config state = .ok after) :
-    after.historicalSummaries = state.historicalSummaries := by
-  have notElectra : ¬Fork.pectra ≤ fork := Nat.not_le_of_lt before
-  have set : ∀ {first second : BeaconState preset fork} {position : Nat} {validator : Validator},
-      first.setValidatorAt position validator = .ok second →
-        second.historicalSummaries = first.historicalSummaries := by
-    intro first second position validator written
-    obtain ⟨_, rfl⟩ := setValidatorAt_ok written
-    rfl
-  have exit : ∀ {first second : BeaconState preset fork} {index : ValidatorIndex},
-      initiateValidatorExit config first index = .ok second →
-        second.historicalSummaries = first.historicalSummaries := by
-    intro first second index exited
-    obtain ⟨_, _, ⟨_, rfl⟩ | ⟨_, _, _, _, queue, _, written⟩⟩ := initiateValidatorExit_ok exited
-    · rfl
-    obtain ⟨_, _, rfl⟩ := exitQueue_eq queue
-    rw [setValidator_eq_setValidatorAt] at written
-    exact (set written).trans rfl
-  unfold processRegistryUpdates at computed
-  simp only [notElectra, ↓reduceIte, bind_ok_iff] at computed
-  obtain ⟨updated, updatedOk, activated⟩ := computed
-  -- Each entry joins the queue and may start an exit, and each activation sets one epoch.
-  have first := foldlM_ok_invariant
-    (fun middle : BeaconState preset fork =>
-      middle.historicalSummaries = state.historicalSummaries)
-    (fun middle index next kept ok => by
-      refine Eq.trans ?_ kept
-      simp only [updateRegistryEntry, bind_ok_iff, liftAccessor_ok] at ok
-      obtain ⟨_, _, _, _, marked, markedOk, ok⟩ := ok
-      split at ok
-      · simp only [bind_ok_iff, liftAccessor_ok] at ok
-        obtain ⟨_, _, exited⟩ := ok
-        exact (exit exited).trans (set markedOk)
-      · simp only [pure, Except.pure, Except.ok.injEq] at ok
-        exact ok ▸ set markedOk) rfl updatedOk
-  exact foldlM_ok_invariant
-    (fun middle : BeaconState preset fork =>
-      middle.historicalSummaries = state.historicalSummaries)
-    (fun middle index next kept ok => by
-      refine Eq.trans ?_ kept
-      simp only [activateValidator, bind_ok_iff, liftAccessor_ok] at ok
-      obtain ⟨_, _, _, _, written⟩ := ok
-      rw [setValidator_eq_setValidatorAt] at written
-      exact set written) first activated
-
 /-- After the update of the effective balances, each validator keeps the key of its old self.
 
 Its effective balance is unchanged, or at most the largest one its credentials allow. -/
@@ -98,19 +49,6 @@ private theorem processEffectiveBalanceUpdates_mem {after : BeaconState preset f
   rw [Array.getElem?_eq_getElem inside, Option.some.injEq] at read
   rw [read]
   exact ⟨_, Array.getElem_mem insideOld, rfl, bound.imp id And.right⟩
-
-/-- A frame that keeps the size of the registry keeps the key of each validator. -/
-private theorem exists_pubkey_of_frame {after : BeaconState preset fork}
-    (frame : Frame state after) (size : after.validators.data.size = state.validators.data.size)
-    {validator : Validator} (member : validator ∈ after.validators.data) :
-    ∃ old ∈ state.validators.data, old.pubkey = validator.pubkey := by
-  have same : validatorKeys state = validatorKeys after :=
-    frame.pubkeysPrefix.eq_of_length (by simp [validatorKeys, size])
-  have key : validator.pubkey ∈ validatorKeys state := by
-    rw [same]
-    exact List.mem_map_of_mem (Array.mem_toList_iff.mpr member)
-  obtain ⟨old, oldMember, eq⟩ := List.mem_map.mp key
-  exact ⟨old, Array.mem_toList_iff.mp oldMember, eq⟩
 
 /-- From Altair and before Electra, the epoch transition succeeds under bounds on the state.
 
@@ -293,30 +231,22 @@ theorem processEpoch_total_of_altair_of_lt_electra {config : Config} {checks : S
   obtain ⟨registered, registeredOk, -⟩ := processRegistryUpdates_total_of_lt_electra
     (config := config) rewarded before ceiling (by rw [currentEpoch3]; exact first)
     (by rw [validators3]; exact exits) (by rw [validators3]; exact exitRoom)
-  obtain ⟨slot4, balances4, slashings4, roots4, effective4⟩ :=
+  obtain ⟨slot4, balances4, slashings4, roots4, summaries4, effective4⟩ :=
     processRegistryUpdates_registryKept before registeredOk
   rw [validators3] at effective4
-  have summaries4 := processRegistryUpdates_historicalSummaries before registeredOk
   have size4 : registered.validators.data.size = state.validators.data.size := by
     simpa using congrArg Array.size effective4
-  have sum4 : effectiveBalanceSum registered = effectiveBalanceSum state := by
-    unfold effectiveBalanceSum
-    have := congrArg (fun balances : Array Gwei => (balances.toList.map UInt64.toNat).sum)
-      effective4
-    simpa [Array.toList_map, List.map_map, Function.comp_def] using this
+  have sum4 : effectiveBalanceSum registered = effectiveBalanceSum state :=
+    effectiveBalanceSum_eq_of_map effective4
   have old4 : ∀ validator ∈ registered.validators.data, ∃ old ∈ state.validators.data,
-      old.effectiveBalance = validator.effectiveBalance := fun validator member => by
-    have mapped : validator.effectiveBalance ∈
-        registered.validators.data.map (·.effectiveBalance) := Array.mem_map_of_mem member
-    rw [effective4] at mapped
-    exact Array.mem_map.mp mapped
+      old.effectiveBalance = validator.effectiveBalance := fun _ member =>
+    exists_effectiveBalance_of_map effective4 member
   have currentEpoch4 : getCurrentEpoch registered = getCurrentEpoch state := by
     simp only [getCurrentEpoch, slot4, slot3]
   have below4 : ∀ validator ∈ registered.validators.data,
       validator.effectiveBalance.toNat < 2 ^ 63 := fun validator member => by
     obtain ⟨old, oldMember, same⟩ := old4 validator member
-    have : old.effectiveBalance.toNat ≤ effectiveBalanceSum state :=
-      List.le_sum_of_mem (List.mem_map_of_mem (Array.mem_toList_iff.mpr oldMember))
+    have := effectiveBalance_le_effectiveBalanceSum oldMember
     rw [same] at this
     omega
   have matched4 := (frame_processRegistryUpdates registeredOk).balancesMatch matched3
@@ -447,11 +377,11 @@ theorem processEpoch_total_of_altair_of_lt_electra {config : Config} {checks : S
       obtain ⟨old, oldMember, key, -⟩ :=
         processEffectiveBalanceUpdates_mem matched6 updatedOk member
       rw [validators6] at oldMember
-      obtain ⟨first, firstMember, same⟩ := exists_pubkey_of_frame
-        (frame_processRegistryUpdates registeredOk).toFrame (size4.trans (by rw [validators3]))
-        oldMember
+      obtain ⟨first, firstMember, same, -⟩ :=
+        (processRegistryUpdates_kept registeredOk).1.exists_of_mem
+          (Nat.le_of_eq (size4.trans (by rw [validators3]))) oldMember
       rw [validators3] at firstMember
-      rw [key, ← same]
+      rw [key, same]
       exact keys boundary first firstMember
     · rw [validatorsFlagged] at member
       obtain ⟨old, oldMember, -, bound⟩ :=
