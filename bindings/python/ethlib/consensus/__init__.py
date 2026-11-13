@@ -1120,6 +1120,24 @@ def api_payload_envelope_ssz(
     """The Beacon API SSZ body of the signed payload envelope of a block, or ForkChoiceError."""
     return _native.consensus_api_payload_envelope_ssz(
         name, fork, anchor_state, anchor_block, steps, verify, root, envelope
+def api_duties(
+    name: str,
+    fork: str,
+    state: bytes,
+    kind: str,
+    epoch: int,
+    genesis_root: bytes,
+    *,
+    indices: Sequence[int] = (),
+    config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """The Beacon API duties of an epoch, computed from a state, or ConsensusError."""
+    # The kind is "attester", "proposer", "proposer_v2", "sync" or "ptc".
+    # The proposer duties read no indices; the sync answer has no dependent root.
+    # An epoch the state cannot answer for, or an index of no validator, raises code 400.
+    # The flag execution_optimistic comes from the store and is absent.
+    return _native.consensus_api_duties(
+        name, fork, state, config, kind, epoch, list(indices), genesis_root
     )
 
 
@@ -1807,6 +1825,7 @@ __all__ = [
     "api_columns_ssz",
     "api_payload_envelope",
     "api_payload_envelope_ssz",
+    "api_duties",
     "api_committees",
     "api_sync_committees",
     "api_ptc",
