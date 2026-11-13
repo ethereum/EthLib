@@ -9668,7 +9668,10 @@
    [{"type": "EthLib.Execution.Network.SnapError",
      "codes":
      [{"constructor": "unknownId", "code": 1},
-      {"constructor": "rlp", "code": 2}]}],
+      {"constructor": "rlp", "code": 2},
+      {"constructor": "pathLength", "code": 5},
+      {"constructor": "compactPath", "code": 6},
+      {"constructor": "emptyPathGroup", "code": 7}]}],
    "error_class": "SnapError",
    "docstring":
    "The canonical data of the message with the ID `id` and the data `data`, on a version.\n\nIt reads the message, then writes it back."},
@@ -9681,7 +9684,10 @@
    [{"type": "EthLib.Execution.Network.SnapError",
      "codes":
      [{"constructor": "unknownId", "code": 1},
-      {"constructor": "rlp", "code": 2}]}],
+      {"constructor": "rlp", "code": 2},
+      {"constructor": "pathLength", "code": 5},
+      {"constructor": "compactPath", "code": 6},
+      {"constructor": "emptyPathGroup", "code": 7}]}],
    "error_class": "SnapError",
    "docstring":
    "Whether the ByteCodes data `response` answers the GetByteCodes data `request`.\n\nIt must repeat the request ID, and the codes must hash to requested hashes, in order."},
@@ -9695,10 +9701,29 @@
    [{"type": "EthLib.Execution.Network.SnapError",
      "codes":
      [{"constructor": "unknownId", "code": 1},
-      {"constructor": "rlp", "code": 2}]}],
+      {"constructor": "rlp", "code": 2},
+      {"constructor": "pathLength", "code": 5},
+      {"constructor": "compactPath", "code": 6},
+      {"constructor": "emptyPathGroup", "code": 7}]}],
    "error_class": "SnapError",
    "docstring":
    "Whether `response` answers a GetBlockAccessLists `request`, given each block's access list hash.\n\nThe request is GetBlockAccessLists data, and the response BlockAccessLists data."},
+  {"summary":
+   "Whether the snap/1 TrieNodes data `response` answers the GetTrieNodes data `request`.",
+   "signature": "(request: bytes, response: bytes) -> bool",
+   "operation": "EthLib.Execution.Network.Snap.Exports.trieNodesAnswerExport",
+   "method": "snap_trie_nodes_answer",
+   "errors":
+   [{"type": "EthLib.Execution.Network.SnapError",
+     "codes":
+     [{"constructor": "unknownId", "code": 1},
+      {"constructor": "rlp", "code": 2},
+      {"constructor": "pathLength", "code": 5},
+      {"constructor": "compactPath", "code": 6},
+      {"constructor": "emptyPathGroup", "code": 7}]}],
+   "error_class": "SnapError",
+   "docstring":
+   "Whether the snap/1 TrieNodes data `response` answers the GetTrieNodes data `request`.\n\nIt must repeat the request ID, and hold at most one node per requested node.\n\nA path that cannot be read is an error."},
   {"summary": "The full RLP form of an account in slim form.",
    "signature": "(slim: bytes) -> bytes",
    "operation": "EthLib.Execution.Network.Snap.Exports.fullAccountExport",

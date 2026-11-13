@@ -604,6 +604,7 @@ PyObject* py_eth_check_partial_receipts                   (PyObject* self, PyObj
 PyObject* py_snap_message_decode                          (PyObject* self, PyObject* args);
 PyObject* py_snap_codes_answer                            (PyObject* self, PyObject* args);
 PyObject* py_snap_access_lists_answer                     (PyObject* self, PyObject* args);
+PyObject* py_snap_trie_nodes_answer                       (PyObject* self, PyObject* args);
 PyObject* py_snap_full_account                            (PyObject* self, PyObject* args);
 PyObject* py_snap_verify_account_range                    (PyObject* self, PyObject* args);
 PyObject* py_snap_verify_storage_ranges                   (PyObject* self, PyObject* args);

@@ -35,6 +35,11 @@ def access_lists_answer(request: bytes, response: bytes, expected: list[bytes]) 
     return _native.snap_access_lists_answer(request, response, expected)
 
 
+def trie_nodes_answer(request: bytes, response: bytes) -> bool:
+    """Whether the snap/1 TrieNodes data `response` answers the GetTrieNodes data `request`."""
+    return _native.snap_trie_nodes_answer(request, response)
+
+
 def full_account(slim: bytes) -> bytes:
     """The full RLP form of an account in slim form."""
     return _native.snap_full_account(slim)
@@ -86,6 +91,7 @@ __all__ = [
     "codes_answer",
     "decode_message",
     "full_account",
+    "trie_nodes_answer",
     "verify_account_range",
     "verify_storage_ranges",
 ]

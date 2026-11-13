@@ -977,6 +977,9 @@
 #define DOC_snap_access_lists_answer \
   "Whether `response` answers a GetBlockAccessLists `request`, given each block's access list hash."
 
+#define DOC_snap_trie_nodes_answer \
+  "Whether the snap/1 TrieNodes data `response` answers the GetTrieNodes data `request`."
+
 #define DOC_snap_full_account \
   "The full RLP form of an account in slim form."
 
