@@ -1113,36 +1113,22 @@ private theorem deposit_bounds {fork : Fork} {s t : BeaconState preset fork}
   let site := { s with eth1DepositIndex := fun _ => next }
   have matchedSite : BalancesMatch site := matched
   change applyDeposit config checks site _ _ _ _ = .ok t at applied
-  unfold applyDeposit at applied
-  split at applied
-  · rename_i electra
-    have notEarly : ¬ fork < .pectra := Nat.not_lt.mpr electra
+  rcases applyDeposit_cases applied with
+    ⟨electra, unchanged | ⟨u, _, added, rfl⟩⟩ | ⟨early, applied⟩
+  · subst unchanged
+    simp [balanceCredits, balanceDebits, actualBalanceAt, site]
+  · have notEarly : ¬ fork < .pectra := Nat.not_lt.mpr electra
     simp only [notEarly, ↓reduceIte]
-    have added {u : BeaconState preset fork}
-        (ok : addValidatorToRegistry site deposit.data.pubkey
-          deposit.data.withdrawalCredentials 0 = .ok u) :
-        balanceCredits s u = 0 ∧ balanceDebits s u = 0 := by
-      have balances := (addValidatorToRegistry_push ok matchedSite).2
-      have point (j : Nat) : actualBalanceAt ⟨fork, u⟩ j = actualBalanceAt ⟨fork, s⟩ j := by
-        simp only [actualBalanceAt, balances, site, Array.getElem?_push]
-        split <;> simp_all
+    rcases added with rfl | add
+    · simp [balanceCredits, balanceDebits, actualBalanceAt, site]
+    have balances := (addValidatorToRegistry_push add matchedSite).2
+    have point (j : Nat) : actualBalanceAt ⟨fork, u⟩ j = actualBalanceAt ⟨fork, s⟩ j := by
+      simp only [actualBalanceAt, balances, site, Array.getElem?_push]
+      split <;> simp_all
+    have zero : balanceCredits s u = 0 ∧ balanceDebits s u = 0 := by
       simp [balanceCredits, balanceDebits, point]
-    unfold applyDepositElectra at applied
-    split at applied
-    · simp only [bind_ok_iff] at applied
-      obtain ⟨valid, _, applied⟩ := applied
-      split at applied
-      · simp only [bind_ok_iff, liftAccessor_ok] at applied
-        obtain ⟨u, add, pending⟩ := applied
-        obtain ⟨_, rfl⟩ := addPendingDeposit_eq pending
-        exact ⟨(added add).1.le, (added add).2.le⟩
-      · have same : site = t := Except.ok.inj applied
-        rw [← same]
-        simp [balanceCredits, balanceDebits, actualBalanceAt, site]
-    · obtain ⟨_, rfl⟩ := addPendingDeposit_eq (liftAccessor_ok.mp applied)
-      simp [balanceCredits, balanceDebits, actualBalanceAt, site]
-  · rename_i notElectra
-    have early : fork < .pectra := Nat.lt_of_not_le notElectra
+    exact ⟨zero.1.le, zero.2.le⟩
+  · have early : fork < .pectra := early
     have bounds := deposit_credit_bound site t matchedSite _ applied
     simpa only [early, ↓reduceIte, balanceCredits, balanceDebits, actualBalanceAt, site]
       using And.intro bounds.2 bounds.1.le
@@ -2966,21 +2952,13 @@ private theorem funding_pending_deposit {fork : Fork} {s t : BeaconState preset 
     (ok : applyPendingDeposit config checks s deposit = .ok t) :
     funding_potential t queue ≤ funding_potential s queue + deposit.amount.toNat := by
   have credit := (deposit_credit_bound s t matched deposit ok).2
-  unfold applyPendingDeposit at ok
-  split at ok
-  · split at ok
-    · cases ok; omega
-    simp only [bind_ok_iff] at ok
-    obtain ⟨_, _, ok⟩ := ok
-    split at ok
-    · exact funding_registration queue matched ok
-    · cases ok; omega
-  · simp only [liftAccessor_ok, bind_ok_iff] at ok
-    obtain ⟨_, _, ok⟩ := ok
-    have bound := funding_balance_change queue (increaseBalance_validators ok)
+  rcases applyPendingDeposit_cases ok with rfl | ⟨_, ok⟩ | ⟨_, ok⟩
+  · omega
+  · have bound := funding_balance_change queue (increaseBalance_validators ok)
       (frame_increaseBalance ok).slot
     have selected := funding_selected_credit s t (Finset.range s.validators.data.size)
     omega
+  · exact funding_registration queue matched ok
 
 private theorem funding_deposit_monotone {fork : Fork} {s t : BeaconState preset fork}
     (matched : BalancesMatch s) {deposit : PendingDeposit}

@@ -473,27 +473,18 @@ theorem deposit {before : fork < .hegota} {deposit : Deposit}
     (ok : processDeposit config checks before state deposit = .ok after) :
     SamePendingQueue state after := by
   obtain ⟨_, _, next, _, applied⟩ := processDeposit_ok ok
-  unfold applyDeposit at applied
-  simp only [dite_eq_left electra] at applied
-  unfold applyDepositElectra at applied
-  split at applied
-  · simp only [bind_ok_iff] at applied
-    obtain ⟨_, _, applied⟩ := applied
-    split at applied
-    · simp only [bind_ok_iff, liftAccessor_ok] at applied
-      obtain ⟨_, added, pushed⟩ := applied
-      obtain ⟨_, rfl⟩ := addPendingDeposit_eq pushed
-      unfold addValidatorToRegistry at added
-      split at added
-      · simp only [addValidatorToRegistryAltair, bind_ok_iff, liftAccessor_ok,
-          pure, Except.pure, Except.ok.injEq] at added
-        obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := added
-        rfl
-      · split at added <;> cases added
-        rfl
-    · cases applied; rfl
-  · obtain ⟨_, rfl⟩ := addPendingDeposit_eq (liftAccessor_ok.mp applied)
-    rfl
+  rcases applyDeposit_cases applied with ⟨_, rfl | ⟨_, _, rfl | added, rfl⟩⟩ | ⟨early, _⟩
+  · rfl
+  · rfl
+  · unfold addValidatorToRegistry at added
+    split at added
+    · simp only [addValidatorToRegistryAltair, bind_ok_iff, liftAccessor_ok,
+        pure, Except.pure, Except.ok.injEq] at added
+      obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := added
+      rfl
+    · split at added <;> cases added
+      rfl
+  · exact absurd electra (Nat.not_le_of_lt early)
 
 theorem depositRequest {electra : .pectra ≤ fork} {request : DepositRequest}
     (ok : processDepositRequest state electra request = .ok after) :
@@ -1013,17 +1004,10 @@ private theorem append {v : Validator}
 private theorem deposit {deposit : PendingDeposit}
     (ok : applyPendingDeposit config checks state deposit = .ok after) :
     WithdrawalKept state after := by
-  unfold applyPendingDeposit at ok
-  split at ok
-  · split at ok
-    · cases ok; exact of_data
-    obtain ⟨_, _, ok⟩ := bind_ok_iff.mp ok
-    split at ok
-    · exact append (addValidatorToRegistry_validators_eq_push ok)
-    · cases ok; exact of_data
-  · simp only [bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, ok⟩ := ok
-    exact increase ok
+  rcases applyPendingDeposit_cases ok with rfl | ⟨_, ok⟩ | ⟨_, ok⟩
+  · exact of_data
+  · exact increase ok
+  · exact append (addValidatorToRegistry_validators_eq_push ok)
 
 private theorem pass {stop : PendingDeposit → Bool} {nextEpoch : Epoch} {available : Gwei} :
     ∀ {entries : List PendingDeposit} {s : BeaconState preset fork} {processed : Gwei}
@@ -1137,21 +1121,12 @@ private theorem blockDeposit {before : fork < .hegota} {deposit : Deposit}
     (ok : processDeposit config checks before state deposit = .ok after) :
     WithdrawalKept state after := by
   obtain ⟨_, _, next, _, applied⟩ := processDeposit_ok ok
-  unfold applyDeposit at applied
-  simp only [dite_eq_left electra] at applied
-  unfold applyDepositElectra at applied
-  split at applied
-  · simp only [bind_ok_iff] at applied
-    obtain ⟨_, _, applied⟩ := applied
-    split at applied
-    · simp only [bind_ok_iff, liftAccessor_ok] at applied
-      obtain ⟨_, added, pushed⟩ := applied
-      obtain ⟨_, rfl⟩ := addPendingDeposit_eq pushed
-      have data := addValidatorToRegistry_validators_eq_push added
-      exact append data
-    · cases applied; exact of_data
-  · obtain ⟨_, rfl⟩ := addPendingDeposit_eq (liftAccessor_ok.mp applied)
-    exact of_data
+  rcases applyDeposit_cases applied with ⟨_, rfl | ⟨_, _, rfl | added, rfl⟩⟩ | ⟨early, _⟩
+  · exact of_data
+  · exact of_data
+  · have data := addValidatorToRegistry_validators_eq_push added
+    exact append data
+  · exact absurd electra (Nat.not_le_of_lt early)
 
 private theorem depositRequest {electra : .pectra ≤ fork} {request : DepositRequest}
     (ok : processDepositRequest state electra request = .ok after) :

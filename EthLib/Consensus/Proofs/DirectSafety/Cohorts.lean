@@ -220,20 +220,10 @@ private theorem cohorts_admit {key : Cryptography.Bls.BLSPubkey} {credentials : 
 private theorem cohorts_pendingDeposit {deposit : PendingDeposit}
     (ok : applyPendingDeposit config checks state deposit = .ok after) :
     CohortsKept state after := by
-  unfold applyPendingDeposit at ok
-  split at ok
-  · split at ok
-    · cases ok
-      exact .refl _
-    · simp only [bind_ok_iff] at ok
-      obtain ⟨_, _, ok⟩ := ok
-      split at ok
-      · exact cohorts_admit ok
-      · cases ok
-        exact .refl _
-  · simp only [liftAccessor_ok, bind_ok_iff] at ok
-    obtain ⟨_, _, ok⟩ := ok
-    exact .increaseBalance ok
+  rcases applyPendingDeposit_cases ok with rfl | ⟨_, ok⟩ | ⟨_, ok⟩
+  · exact .refl _
+  · exact .increaseBalance ok
+  · exact cohorts_admit ok
 
 private theorem cohorts_deposit (early : fork < .pectra) {before : fork < .hegota}
     {deposit : Deposit} (ok : processDeposit config checks before state deposit = .ok after) :

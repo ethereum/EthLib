@@ -193,37 +193,19 @@ private theorem processVoluntaryExit {signed : SignedVoluntaryExit}
 private theorem applyPendingDeposit {deposit : PendingDeposit}
     (ok : Consensus.applyPendingDeposit config checks state deposit = .ok after) :
     Kept state after := by
-  unfold Consensus.applyPendingDeposit at ok
-  split at ok
-  · split at ok
-    · cases ok; exact refl _
-    simp only [bind_ok_iff] at ok
-    obtain ⟨_, _, ok⟩ := ok
-    split at ok
-    · exact append (addValidatorToRegistry_validators_eq_push ok) rfl
-    · cases ok; exact refl _
-  · simp only [liftAccessor_ok, bind_ok_iff] at ok
-    obtain ⟨_, _, ok⟩ := ok
-    exact increaseBalance ok
+  rcases applyPendingDeposit_cases ok with rfl | ⟨_, ok⟩ | ⟨_, ok⟩
+  · exact refl _
+  · exact increaseBalance ok
+  · exact append (addValidatorToRegistry_validators_eq_push ok) rfl
 
 private theorem applyDeposit {pubkey : BLSPubkey} {credentials : Bytes32} {amount : Gwei}
     {signature : BLSSignature}
     (ok : Consensus.applyDeposit config checks state pubkey credentials amount signature =
       .ok after) : Kept state after := by
-  unfold Consensus.applyDeposit at ok
-  split at ok
-  · unfold applyDepositElectra at ok
-    split at ok
-    · simp only [bind_ok_iff] at ok
-      obtain ⟨_, _, ok⟩ := ok
-      split at ok
-      · simp only [bind_ok_iff, liftAccessor_ok] at ok
-        obtain ⟨_, added, pushed⟩ := ok
-        obtain ⟨_, rfl⟩ := addPendingDeposit_eq pushed
-        exact (append (addValidatorToRegistry_validators_eq_push added) rfl).trans of_data
-      · cases ok; exact refl _
-    · obtain ⟨_, rfl⟩ := addPendingDeposit_eq (liftAccessor_ok.mp ok)
-      exact of_data
+  rcases applyDeposit_cases ok with ⟨_, rfl | ⟨_, _, rfl | added, rfl⟩⟩ | ⟨_, ok⟩
+  · exact refl _
+  · exact of_data
+  · exact (append (addValidatorToRegistry_validators_eq_push added) rfl).trans of_data
   · exact applyPendingDeposit ok
 
 private theorem processDeposit {before : fork < .hegota} {deposit : Deposit}

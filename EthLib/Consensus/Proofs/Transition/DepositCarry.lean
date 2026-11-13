@@ -367,33 +367,15 @@ private theorem kept_applyDeposit {pubkey : BLSPubkey} {credentials : Bytes32} {
     {signature : BLSSignature}
     (ok : applyDeposit config checks s pubkey credentials amount signature = .ok t) :
     Kept s t := by
-  unfold applyDeposit at ok
-  split at ok
-  · unfold applyDepositElectra at ok
-    split at ok
-    · simp only [bind_ok_iff] at ok
-      obtain ⟨_, _, ok⟩ := ok
-      split at ok
-      · simp only [bind_ok_iff, liftAccessor_ok] at ok
-        obtain ⟨_, added, pushed⟩ := ok
-        obtain ⟨_, rfl⟩ := addPendingDeposit_eq pushed
-        have same := kept_addValidator added
-        exact same
-      · cases ok; rfl
-    · obtain ⟨_, rfl⟩ := addPendingDeposit_eq (liftAccessor_ok.mp ok)
-      rfl
-  · unfold applyPendingDeposit at ok
-    split at ok
-    · split at ok
-      · cases ok; rfl
-      simp only [bind_ok_iff] at ok
-      obtain ⟨_, _, ok⟩ := ok
-      split at ok
-      · exact kept_addValidator ok
-      · cases ok; rfl
-    · simp only [bind_ok_iff, liftAccessor_ok] at ok
-      obtain ⟨_, _, ok⟩ := ok
-      exact kept_increase ok
+  rcases applyDeposit_cases ok with ⟨_, rfl | ⟨_, _, rfl | added, rfl⟩⟩ | ⟨_, ok⟩
+  · rfl
+  · rfl
+  · have same := kept_addValidator added
+    exact same
+  · rcases applyPendingDeposit_cases ok with rfl | ⟨_, ok⟩ | ⟨_, ok⟩
+    · rfl
+    · exact kept_increase ok
+    · exact kept_addValidator ok
 
 private theorem kept_withdrawalRequest {electra : .pectra ≤ fork} {request : WithdrawalRequest}
     (ok : processWithdrawalRequest config s electra request = .ok t) : Kept s t := by

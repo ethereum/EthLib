@@ -422,22 +422,11 @@ theorem deposit_credit_bound {fork : Fork} (s t : BeaconState preset fork)
         simp [old j (Finset.mem_range.mp hj)]
       rw [zero]
       simp [actualBalanceAt, balances]
-  unfold applyPendingDeposit at ok
-  split at ok
-  · split at ok
-    · cases ok
-      simp [balanceCredits, balanceDebits]
-    · simp only [bind, Except.bind] at ok
-      split at ok
-      · cases ok
-      · split at ok
-        · exact append (addValidatorToRegistry_push ok «matches»).2
-        · cases ok
-          simp [balanceCredits, balanceDebits]
-  · simp only [liftAccessor_ok, bind_ok_iff] at ok
-    obtain ⟨i, _, added⟩ := ok
-    have bounds := credits_increase added
+  rcases applyPendingDeposit_cases ok with rfl | ⟨_, added⟩ | ⟨_, ok⟩
+  · simp [balanceCredits, balanceDebits]
+  · have bounds := credits_increase added
     exact ⟨bounds.2, bounds.1.le⟩
+  · exact append (addValidatorToRegistry_push ok «matches»).2
 
 /-- Deposits retained or postponed by the real pass are not charged in this interval. -/
 def consumedDeposits {fork : Fork} (s t : BeaconState preset fork) (electra : .pectra ≤ fork) :
@@ -466,20 +455,11 @@ theorem pending_deposit_bound {fork : Fork} (s t : BeaconState preset fork)
       obtain ⟨u, first, last⟩ := ok
       have hu := (applyPendingDeposit_kept first).1 hm
       have sizes : s.balances.data.size ≤ u.balances.data.size := by
-        unfold applyPendingDeposit at first
-        split at first
-        · split at first
-          · cases first; exact Nat.le_refl _
-          · simp only [bind, Except.bind] at first
-            split at first
-            · cases first
-            · split at first
-              · rw [(addValidatorToRegistry_push first hm).2, Array.size_push]
-                omega
-              · cases first; exact Nat.le_refl _
-        · simp only [liftAccessor_ok, bind_ok_iff] at first
-          obtain ⟨_, _, first⟩ := first
-          exact (sameSizes_increaseBalance first).2.ge
+        rcases applyPendingDeposit_cases first with rfl | ⟨_, first⟩ | ⟨_, first⟩
+        · exact Nat.le_refl _
+        · exact (sameSizes_increaseBalance first).2.ge
+        · rw [(addValidatorToRegistry_push first hm).2, Array.size_push]
+          omega
       have a := deposit_credit_bound s u hm d first
       have b := ih u hu last
       have credits := credits_triangle_growing s u t b.2.2

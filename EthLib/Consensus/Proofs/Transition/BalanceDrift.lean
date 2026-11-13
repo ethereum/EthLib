@@ -1408,18 +1408,10 @@ private theorem admissionFunded_deposit {f : Fork} {s t : BeaconState preset f}
     {n : Nat} {deposit : PendingDeposit} (holds : AdmissionFunded n s)
     (matched : BalancesMatch s)
     (ok : applyPendingDeposit config checks s deposit = .ok t) : AdmissionFunded n t := by
-  unfold applyPendingDeposit at ok
-  split at ok
-  · split at ok
-    · cases ok; exact holds
-    simp only [bind_ok_iff] at ok
-    obtain ⟨_, _, ok⟩ := ok
-    split at ok
-    · exact admissionFunded_add holds matched ok
-    · cases ok; exact holds
-  · simp only [liftAccessor_ok, bind_ok_iff] at ok
-    obtain ⟨_, _, ok⟩ := ok
-    exact admissionFunded_increase holds ok
+  rcases applyPendingDeposit_cases ok with rfl | ⟨_, ok⟩ | ⟨_, ok⟩
+  · exact holds
+  · exact admissionFunded_increase holds ok
+  · exact admissionFunded_add holds matched ok
 
 private theorem admissionFunded_applyDeposit {f : Fork} {s t : BeaconState preset f}
     {n : Nat} {key : Cryptography.Bls.BLSPubkey} {credentials : Bytes32} {amount : Gwei}
@@ -1427,21 +1419,11 @@ private theorem admissionFunded_applyDeposit {f : Fork} {s t : BeaconState prese
     (matched : BalancesMatch s)
     (ok : applyDeposit config checks s key credentials amount signature = .ok t) :
     AdmissionFunded n t := by
-  unfold applyDeposit at ok
-  split at ok
-  · unfold applyDepositElectra at ok
-    split at ok
-    · simp only [bind_ok_iff] at ok
-      obtain ⟨_, _, ok⟩ := ok
-      split at ok
-      · simp only [bind_ok_iff, liftAccessor_ok] at ok
-        obtain ⟨middle, added, queued⟩ := ok
-        obtain ⟨_, rfl⟩ := addPendingDeposit_eq queued
-        simpa only [AdmissionFunded, effectiveAt, actualBalanceAt] using
-          admissionFunded_add holds matched added
-      · cases ok; exact holds
-    · obtain ⟨_, rfl⟩ := addPendingDeposit_eq (liftAccessor_ok.mp ok)
-      exact holds
+  rcases applyDeposit_cases ok with ⟨_, rfl | ⟨_, _, rfl | added, rfl⟩⟩ | ⟨_, ok⟩
+  · exact holds
+  · exact holds
+  · simpa only [AdmissionFunded, effectiveAt, actualBalanceAt] using
+      admissionFunded_add holds matched added
   · exact admissionFunded_deposit holds matched ok
 
 private theorem admissionFunded_processDeposit {f : Fork} {s t : BeaconState preset f}

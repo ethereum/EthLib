@@ -209,6 +209,38 @@ theorem processSlashings_validators {s t : BeaconState preset fork}
   obtain ⟨_, rfl⟩ := processSlashings_eq ok
   rfl
 
+/-- From Electra a deposit leaves the state unchanged or queues a pending deposit.
+
+For a new key it first adds a validator with no balance.
+
+Before Electra the deposit applies as a pending deposit. -/
+theorem applyDeposit_cases {pubkey : BLSPubkey} {credentials : Bytes32} {amount : Gwei}
+    {signature : BLSSignature}
+    (ok : applyDeposit config checks state pubkey credentials amount signature = .ok after) :
+    (.pectra ≤ fork ∧ (after = state ∨ ∃ middle pending,
+      (middle = state ∨ addValidatorToRegistry state pubkey credentials 0 = .ok middle) ∧
+        after = { middle with pendingDeposits := fun _ => pending })) ∨
+    (fork < .pectra ∧ applyPendingDeposit config checks state
+      ⟨pubkey, credentials, amount, signature, GENESIS_SLOT⟩ = .ok after) := by
+  unfold applyDeposit at ok
+  split at ok
+  · rename_i electra
+    refine .inl ⟨electra, ?_⟩
+    unfold applyDepositElectra at ok
+    split at ok
+    · simp only [bind_ok_iff] at ok
+      obtain ⟨_, _, ok⟩ := ok
+      split at ok
+      · simp only [bind_ok_iff, liftAccessor_ok] at ok
+        obtain ⟨middle, added, queued⟩ := ok
+        obtain ⟨pending, rfl⟩ := addPendingDeposit_eq queued
+        exact .inr ⟨middle, pending, .inr added, rfl⟩
+      · cases ok; exact .inl rfl
+    · obtain ⟨pending, rfl⟩ := addPendingDeposit_eq (liftAccessor_ok.mp ok)
+      exact .inr ⟨state, pending, .inl rfl, rfl⟩
+  · rename_i early
+    exact .inr ⟨Nat.lt_of_not_le early, ok⟩
+
 /-- An epoch stage keeps the validators, unless it is one of three stages.
 
 Those are registry updates, pending deposits and effective-balance updates. -/

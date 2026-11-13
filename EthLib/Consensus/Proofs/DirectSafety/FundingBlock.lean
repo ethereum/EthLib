@@ -129,23 +129,14 @@ private theorem funding_block_deposit {fork : Fork} {s t : BeaconState preset fo
   rw [← funding_potential_eq t electra, ← funding_potential_eq s electra]
   rw [SamePendingQueue.deposit electra ok]
   obtain ⟨_, _, next, _, applied⟩ := processDeposit_ok ok
-  unfold applyDeposit at applied
-  rw [dite_eq_left electra] at applied
-  unfold applyDepositElectra at applied
-  split at applied
-  · simp only [bind_ok_iff] at applied
-    obtain ⟨_, _, applied⟩ := applied
-    split at applied
-    · simp only [bind_ok_iff, liftAccessor_ok] at applied
-      obtain ⟨middle, added, queued⟩ := applied
-      obtain ⟨_, rfl⟩ := addPendingDeposit_eq queued
-      have bound := funding_registration (s.pendingConsolidations electra).data.toList
-        (s := {s with eth1DepositIndex := fun _ => next}) matched added
-      convert bound using 1 <;>
-        simp [funding_potential, getCurrentEpoch, effectiveAt, actualBalanceAt] <;> rfl
-    · cases applied; exact Nat.le_refl _
-  · obtain ⟨_, rfl⟩ := addPendingDeposit_eq (liftAccessor_ok.mp applied)
-    exact Nat.le_refl _
+  rcases applyDeposit_cases applied with ⟨_, rfl | ⟨_, _, rfl | added, rfl⟩⟩ | ⟨early, _⟩
+  · exact Nat.le_refl _
+  · exact Nat.le_refl _
+  · have bound := funding_registration (s.pendingConsolidations electra).data.toList
+      (s := {s with eth1DepositIndex := fun _ => next}) matched added
+    convert bound using 1 <;>
+      simp [funding_potential, getCurrentEpoch, effectiveAt, actualBalanceAt] <;> rfl
+  · exact absurd electra (Nat.not_le_of_lt early)
 
 private def funding_block_cost (event : BalanceEvent preset) : Nat :=
   if event.source = .deposits ∨ event.source = .consolidations then 0 else event.credits

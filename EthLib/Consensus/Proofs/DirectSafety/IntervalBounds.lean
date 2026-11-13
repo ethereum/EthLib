@@ -212,21 +212,11 @@ private theorem registry_deposit_bound {fork : Fork} {s t : BeaconState preset f
     (ok : processDeposit config checks before s deposit = .ok t) :
     t.validators.data.size ≤ s.validators.data.size + 1 := by
   obtain ⟨_, _, next, _, applied⟩ := processDeposit_ok ok
-  unfold applyDeposit at applied
-  split at applied
-  · unfold applyDepositElectra at applied
-    split at applied
-    · simp only [bind_ok_iff] at applied
-      obtain ⟨_, _, applied⟩ := applied
-      split at applied
-      · simp only [bind_ok_iff, liftAccessor_ok] at applied
-        obtain ⟨_, added, pushed⟩ := applied
-        obtain ⟨_, rfl⟩ := addPendingDeposit_eq pushed
-        rw [addValidatorToRegistry_validators_eq_push added]
-        simp
-      · cases applied; exact Nat.le_succ _
-    · obtain ⟨_, rfl⟩ := addPendingDeposit_eq (liftAccessor_ok.mp applied)
-      exact Nat.le_succ _
+  rcases applyDeposit_cases applied with ⟨_, rfl | ⟨_, _, rfl | added, rfl⟩⟩ | ⟨_, applied⟩
+  · exact Nat.le_succ _
+  · exact Nat.le_succ _
+  · rw [show _ = _ from addValidatorToRegistry_validators_eq_push added]
+    simp
   · exact (applyPendingDeposit_validators_size_le_and_mem applied).1
 
 private theorem registry_fold_size {fork : Fork} {α : Type}
