@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Execution.Rpc.Header
 public import EthLib.Execution.Rpc.Request
 public import EthLib.Execution.Rpc.TransactionInfo
 
@@ -41,6 +42,7 @@ A transaction whose sender or hash the node cannot compute gets `-32603`.
 namespace EthLib.Execution.Rpc
 
 open Lean (Json)
+open EthLib.Base (Hash32)
 open EthLib.Serialization.JsonRpc
 
 namespace ChainView
@@ -87,6 +89,21 @@ def twoParams (params : List Json) (f : Json → Json → Except RpcError Json) 
 def transactionResult (r : Except RpcError (Option TransactionInfo)) : Except RpcError Json :=
   optionJson transactionInfoJson <$> r
 
+/-- The header object of a block that the node holds, with the hash that the node keeps for it. -/
+def headerObject (r : BlockRecord) : Json :=
+  Json.mkObj (headerFields r.hash r.block.header)
+
+/-- The header of the block of a hash, canonical or not, or `null` when the node holds none. -/
+def headerByHash (v : ChainView) (hash : Hash32) : Json :=
+  optionJson headerObject (v.byHash hash)
+
+/-- The header of the block that a number or a tag names, or `null` when there is none.
+
+The tag `pending` gives `null`, as the method says. -/
+def headerByNumber (v : ChainView) : BlockParam → Except RpcError Json
+  | .tag .pending => .ok notFound
+  | p => optionJson headerObject <$> v.resolve p
+
 /-- The outcome of a method of the view, with its parameters by position. -/
 def call (v : ChainView) (method : String) (params : List Json) : Except RpcError Json :=
   match method with
@@ -101,6 +118,10 @@ def call (v : ChainView) (method : String) (params : List Json) : Except RpcErro
   | "eth_getTransactionByBlockNumberAndIndex" => twoParams params fun b i => do
     let block ← readParam (blockNumberOrTag "block") b
     transactionResult (v.transactionByBlockAndIndex block (← readParam (uint "index") i))
+  | "eth_getHeaderByHash" => oneParam params fun h => do
+    return v.headerByHash (← readParam (hash32 "block hash") h)
+  | "eth_getHeaderByNumber" => oneParam params fun b => do
+    v.headerByNumber (← readParam (blockNumberOrTag "block") b)
   | _ => .error (methodNotFound.toRpcError (some (.str method)))
 
 /-- The response of the view to a request. -/

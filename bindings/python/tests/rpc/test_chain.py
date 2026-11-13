@@ -24,6 +24,8 @@ RESULT_SCHEMAS: Final[dict[str, rpc.Schema | None]] = {
     "eth_getTransactionByHash": None,
     "eth_getTransactionByBlockHashAndIndex": None,
     "eth_getTransactionByBlockNumberAndIndex": None,
+    "eth_getHeaderByHash": None,
+    "eth_getHeaderByNumber": None,
 }
 
 # Every fixture of a method that the view serves.
@@ -130,6 +132,33 @@ def test_transaction_at_index() -> None:
         assert result["blockNumber"] == "0x1"
         # The lookup by hash returns the same object.
         assert _call("eth_getTransactionByHash", [expected]) == result
+
+
+def test_headers() -> None:
+    """A block has one header by number and by hash, with its hash and one key per RLP item."""
+    chain = replay_chain()
+    hashes = ["0x" + block_hash(block).hex() for block in chain.blocks]
+    by_number = [("eth_getHeaderByNumber", hex(number)) for number in range(len(hashes))]
+    by_hash = [("eth_getHeaderByHash", block) for block in hashes]
+    requests = [
+        json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": [param]})
+        for method, param in by_number + by_hash
+    ]
+    texts = chain.serve(requests)
+    results = [json.loads(text)["result"] for text in texts if text is not None]
+    assert len(results) == 2 * len(hashes)
+    headers = results[: len(hashes)]
+    assert headers == results[len(hashes) :]
+    for number, ((_, raw), header) in enumerate(zip(chain.blocks, headers, strict=True)):
+        assert header["hash"] == hashes[number]
+        assert header["number"] == hex(number)
+        # The object holds the hash and one key for each field of the RLP header, none other.
+        assert len(header) == len(rlp.decode(raw)[0]) + 1
+
+
+def test_pending_header() -> None:
+    """The header of the tag `pending` is null, as the method says."""
+    assert _call("eth_getHeaderByNumber", ["pending"]) is None
 
 
 # Each lookup by block and index that finds no transaction, so its result is null.
