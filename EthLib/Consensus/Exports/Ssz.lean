@@ -5,6 +5,7 @@ public import EthLib.Consensus.Containers.Attestation
 public import EthLib.Consensus.Containers.Bid
 public import EthLib.Consensus.Containers.Block
 public import EthLib.Consensus.Containers.BuilderApi
+public import EthLib.Consensus.Containers.BuilderConfig
 public import EthLib.Consensus.Containers.Builder
 public import EthLib.Consensus.Containers.Execution
 public import EthLib.Consensus.Containers.InclusionList
@@ -222,6 +223,8 @@ def containerOf (preset : Preset) (fork : Fork) : String → Option BeaconContai
   | "BuilderPreferences" => if .glamsterdam ≤ fork then some ⟨BuilderPreferences⟩ else none
   | "BuilderPreferencesRequest" =>
     if .glamsterdam ≤ fork then some ⟨BuilderPreferencesRequest⟩ else none
+  | "BuilderEntry" => if .glamsterdam ≤ fork then some ⟨BuilderEntry⟩ else none
+  | "BuilderConfig" => if .glamsterdam ≤ fork then some ⟨BuilderConfig⟩ else none
   | "BidTrace" => if HasBuilderApi fork then some ⟨BidTrace⟩ else none
   | "SubmitBlockRequest" =>
     if HasBuilderApi fork then some ⟨SubmitBlockRequest preset fork⟩ else none
@@ -234,7 +237,7 @@ def containerOf (preset : Preset) (fork : Fork) : String → Option BeaconContai
 Gloas and Heze change some containers, and EthLib holds those forms only as specified. -/
 def specifiedFromGlamsterdam : List String := [
   "BuilderRequestAuth", "SignedBuilderRequestAuth", "BuilderPreferences",
-  "BuilderPreferencesRequest",
+  "BuilderPreferencesRequest", "BuilderEntry", "BuilderConfig",
   "Fork", "ForkData", "SigningData", "Checkpoint", "Validator", "AttestationData", "Eth1Data",
   "DepositMessage", "DepositData", "BeaconBlockHeader", "SignedBeaconBlockHeader", "Eth1Block",
   "ProposerSlashing", "Deposit", "VoluntaryExit", "SignedVoluntaryExit", "SingleAttestation",

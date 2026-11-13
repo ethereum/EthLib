@@ -299,3 +299,107 @@ def test_builder_config_skips_malformed_entries():
 def test_builder_config_rejects_bad_bytes(data: bytes, message: str):
     with raises(SszError, message):
         consensus.api_builder_config_terms(data, SLOT)
+
+
+# The source's example of a builder configuration, at ethereum/beacon-APIs 7911555e.
+# Each field takes the example of its type in the types files of the source.
+# Those are types/gloas/builder_entry.yaml, types/gloas/request_auth.yaml and primitive.yaml.
+EXAMPLE_PUBKEY = (
+    "0x93247f2209abcacf57b75a51dafae777f9dd38bc7053d1af526f220a7489a6d3"
+    "a2753e5f3e8b1cfe39b56f43611df74a"
+)
+EXAMPLE_SIGNATURE = (
+    "0x1b66ac1fb663c9bc59509846d6ec05345bd908eda73e670af888da41af171505"
+    "cc411d61252fb6cb3fa0017b679f8bb2305b26a285fa2737f175668d0dff91cc"
+    "1b66ac1fb663c9bc59509846d6ec05345bd908eda73e670af888da41af171505"
+)
+EXAMPLE_CONFIG = {
+    "min_bid": "10000000",
+    "builder_boost_factor": "100",
+    "builders": [
+        {
+            "url": "https://builder.example.com",
+            "auth": {
+                "message": {"data": "0x1234567890abcdef", "slot": "1"},
+                "signature": EXAMPLE_SIGNATURE,
+            },
+            "builder_pubkeys": [EXAMPLE_PUBKEY],
+            "max_execution_payment": "1000000000",
+            "min_bid": "10000000",
+            "builder_boost_factor": "100",
+        }
+    ],
+}
+
+
+def _entry_json(url: object) -> dict[str, Any]:
+    """The JSON of the builder entry that `_entry(url, [], 1, 2, 3)` encodes, with any URL."""
+    return {
+        "url": url,
+        "auth": {
+            "message": {"data": "0x" + b"auth".hex(), "slot": str(SLOT)},
+            "signature": "0x" + "00" * 96,
+        },
+        "builder_pubkeys": [],
+        "max_execution_payment": "1",
+        "min_bid": "2",
+        "builder_boost_factor": "3",
+    }
+
+
+def _entry_ssz(document: object) -> bytes:
+    """The SSZ bytes of the builder entry that a JSON document holds, or SszError."""
+    return consensus.api_ssz("mainnet", "glamsterdam", "BuilderEntry", document)
+
+
+def test_builder_config_example_round_trip():
+    data = consensus.api_ssz("mainnet", "glamsterdam", "BuilderConfig", EXAMPLE_CONFIG)
+    assert consensus.api_json("mainnet", "glamsterdam", "BuilderConfig", data) == EXAMPLE_CONFIG
+    gossip, terms = consensus.api_builder_config_terms(data, 1)
+    assert gossip == _terms(min_bid=10_000_000)
+    assert terms == [
+        _terms(pubkeys=[bytes.fromhex(EXAMPLE_PUBKEY[2:])], cap=GWEI, min_bid=10_000_000)
+    ]
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://builder.example.com",
+        # A URL that looks like hex is text all the same.
+        "0x12",
+        "0x" + b"https://a.example".hex(),
+        "https://bücher.example/",
+        "",
+        # 2048 bytes in UTF-8, the limit.
+        "é" * 1024,
+    ],
+)
+def test_builder_entry_url_is_utf8_text(url: str):
+    data = _entry_ssz(_entry_json(url))
+    assert data == _entry(url.encode(), [], 1, 2, 3)
+    assert consensus.api_json("mainnet", "glamsterdam", "BuilderEntry", data) == _entry_json(url)
+
+
+@pytest.mark.parametrize(
+    ("url", "message"),
+    [
+        # 2050 bytes in UTF-8, over the limit, though only 1025 characters.
+        ("é" * 1025, "document rejected: EthLib.Serialization.Ssz.Err.documentOverLimit 2048 2050"),
+        # Decimal strings are never the JSON of a URL.
+        (["104"], "document rejected: EthLib.Serialization.Ssz.Err.typeMismatch"),
+        (["255"], "document rejected: EthLib.Serialization.Ssz.Err.notUtf8"),
+    ],
+)
+def test_builder_entry_url_rejects(url: object, message: str):
+    with raises(SszError, message):
+        _entry_ssz(_entry_json(url))
+
+
+def test_builder_entry_url_not_utf8():
+    data = _entry(b"\xff", [], 1, 2, 3)
+    message = "input rejected: EthLib.Serialization.Ssz.Err.notUtf8"
+    with raises(SszError, message):
+        consensus.api_json("mainnet", "glamsterdam", "BuilderEntry", data)
+    with raises(SszError, message):
+        consensus.api_builder_config_terms(_config(0, PROFIT, [data]), SLOT)

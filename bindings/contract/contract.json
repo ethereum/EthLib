@@ -2713,7 +2713,8 @@
       {"constructor": "undeclaredField", "code": 72},
       {"constructor": "missingField", "code": 73},
       {"constructor": "structNotAnObject", "code": 74},
-      {"constructor": "undeclaredSelector", "code": 75}]}],
+      {"constructor": "undeclaredSelector", "code": 75},
+      {"constructor": "notUtf8", "code": 76}]}],
    "error_class": "SszError",
    "docstring":
    "The root of the value that the bytes encode, and the bytes of that value, as a pair.\n\nThe arguments are the name of the preset, the fork, the container and the bytes."},
@@ -2798,7 +2799,8 @@
       {"constructor": "undeclaredField", "code": 72},
       {"constructor": "missingField", "code": 73},
       {"constructor": "structNotAnObject", "code": 74},
-      {"constructor": "undeclaredSelector", "code": 75}]}],
+      {"constructor": "undeclaredSelector", "code": 75},
+      {"constructor": "notUtf8", "code": 76}]}],
    "error_class": "SszError",
    "docstring":
    "The JSON of the API for the value that SSZ bytes encode.\n\nThe arguments are the name of the preset, the fork, the container and the bytes."},
@@ -2884,7 +2886,8 @@
       {"constructor": "undeclaredField", "code": 72},
       {"constructor": "missingField", "code": 73},
       {"constructor": "structNotAnObject", "code": 74},
-      {"constructor": "undeclaredSelector", "code": 75}]}],
+      {"constructor": "undeclaredSelector", "code": 75},
+      {"constructor": "notUtf8", "code": 76}]}],
    "error_class": "SszError",
    "docstring":
    "The SSZ bytes of the value that a JSON document of the API holds.\n\nThe arguments are the name of the preset, the fork, the container and the document.\n\nHex reads in either letter case, and a key that the container does not declare is refused."},
@@ -4116,7 +4119,8 @@
       {"constructor": "undeclaredField", "code": 72},
       {"constructor": "missingField", "code": 73},
       {"constructor": "structNotAnObject", "code": 74},
-      {"constructor": "undeclaredSelector", "code": 75}]}],
+      {"constructor": "undeclaredSelector", "code": 75},
+      {"constructor": "notUtf8", "code": 76}]}],
    "error_class": "SszError",
    "docstring":
    "From Gloas, the terms that the SSZ bytes of a builder configuration give.\n\nThe second argument is the slot of the request.\n\nThey are the terms of the bids received on gossip.\n\nThen come those of each entry that serves the slot, in order, without repeated requests."},
@@ -4322,7 +4326,8 @@
       {"constructor": "undeclaredField", "code": 72},
       {"constructor": "missingField", "code": 73},
       {"constructor": "structNotAnObject", "code": 74},
-      {"constructor": "undeclaredSelector", "code": 75}]}],
+      {"constructor": "undeclaredSelector", "code": 75},
+      {"constructor": "notUtf8", "code": 76}]}],
    "error_class": "SszError",
    "docstring":
    "The JSON body of a response of the Builder API: the version of the fork and the data.\n\nThe arguments are the name of the preset, the fork, the container and its SSZ bytes.\n\nAn unknown preset or fork, or a container that the API does not version at the fork, has code 0.\n\nBytes that do not decode keep the code of their SSZ error."},
@@ -4408,7 +4413,8 @@
       {"constructor": "undeclaredField", "code": 72},
       {"constructor": "missingField", "code": 73},
       {"constructor": "structNotAnObject", "code": 74},
-      {"constructor": "undeclaredSelector", "code": 75}]}],
+      {"constructor": "undeclaredSelector", "code": 75},
+      {"constructor": "notUtf8", "code": 76}]}],
    "error_class": "SszError",
    "docstring":
    "The SSZ bytes of the value that a JSON body of the Builder API holds.\n\nThe arguments are the name of the preset, the fork, the container and the body.\n\nThe body must name the version of the fork, and its data must hold the container.\n\nEvery other key is ignored, except the metadata keys of the Beacon API, which must hold their form.\n\nAn unknown preset or fork, or a container that the API does not version at the fork, has code 0.\n\nSo does a body that is not an object, lacks data, has a malformed key, or lacks the version.\n\nData that the container does not read keeps the code of its SSZ error."},
@@ -4495,7 +4501,8 @@
       {"constructor": "undeclaredField", "code": 72},
       {"constructor": "missingField", "code": 73},
       {"constructor": "structNotAnObject", "code": 74},
-      {"constructor": "undeclaredSelector", "code": 75}]}],
+      {"constructor": "undeclaredSelector", "code": 75},
+      {"constructor": "notUtf8", "code": 76}]}],
    "error_class": "SszError",
    "docstring":
    "Whether the signature of a signed message of the Builder API verifies.\n\nThe arguments are the name of the preset and of the configuration, the fork and replacements.\n\nThen come the name of the container and its SSZ bytes."},
@@ -4582,7 +4589,8 @@
       {"constructor": "undeclaredField", "code": 72},
       {"constructor": "missingField", "code": 73},
       {"constructor": "structNotAnObject", "code": 74},
-      {"constructor": "undeclaredSelector", "code": 75}]}],
+      {"constructor": "undeclaredSelector", "code": 75},
+      {"constructor": "notUtf8", "code": 76}]}],
    "error_class": "SszError",
    "docstring":
    "None when a builder keeps a signed registration, or the name of the rule that refuses it.\n\nThe arguments are the name of the preset and of the configuration, the fork and replacements.\n\nThen come the state, the signed registrations the builder keeps, the one to check and the time.\n\nThe time is that of the builder's clock, in seconds."},
@@ -4764,7 +4772,8 @@
       {"constructor": "undeclaredField", "code": 72},
       {"constructor": "missingField", "code": 73},
       {"constructor": "structNotAnObject", "code": 74},
-      {"constructor": "undeclaredSelector", "code": 75}]}],
+      {"constructor": "undeclaredSelector", "code": 75},
+      {"constructor": "notUtf8", "code": 76}]}],
    "error_class": "SszError",
    "docstring":
    "None when a proposer accepts a signed bid, or the name of the rule that refuses it.\n\nThe arguments are the name of the preset and of the configuration, the fork and replacements.\n\nThen come the state of the proposal, the signed bid and the fee recipient that was registered."},
@@ -5042,7 +5051,8 @@
       {"constructor": "undeclaredField", "code": 72},
       {"constructor": "missingField", "code": 73},
       {"constructor": "structNotAnObject", "code": 74},
-      {"constructor": "undeclaredSelector", "code": 75}]}],
+      {"constructor": "undeclaredSelector", "code": 75},
+      {"constructor": "notUtf8", "code": 76}]}],
    "error_class": "SszError",
    "docstring":
    "The root and the bytes of the signed block that a signed blinded block and a payload give.\n\nThe arguments are the name of the preset, the fork, the signed blinded block and the payload.\n\nThe payload is the SSZ response of the builder, with its blobs bundle from Deneb.\n\nNone when the header of the payload is not the header of the blinded block."},
@@ -5130,7 +5140,8 @@
       {"constructor": "undeclaredField", "code": 72},
       {"constructor": "missingField", "code": 73},
       {"constructor": "structNotAnObject", "code": 74},
-      {"constructor": "undeclaredSelector", "code": 75}]}],
+      {"constructor": "undeclaredSelector", "code": 75},
+      {"constructor": "notUtf8", "code": 76}]}],
    "error_class": "SszError",
    "docstring":
    "Whether a proposer key signed a Gloas request authentication given in SSZ."},
@@ -5217,7 +5228,8 @@
       {"constructor": "undeclaredField", "code": 72},
       {"constructor": "missingField", "code": 73},
       {"constructor": "structNotAnObject", "code": 74},
-      {"constructor": "undeclaredSelector", "code": 75}]}],
+      {"constructor": "undeclaredSelector", "code": 75},
+      {"constructor": "notUtf8", "code": 76}]}],
    "error_class": "SszError",
    "docstring":
    "From Gloas: the failed checks of a request for a bid, by name, in order.\n\nThe arguments are the name of the preset and of the configuration, the fork and replacements.\n\nThen come the agreed data, the slot of the path, the key of the path and the version header.\n\nThen come the SSZ bytes of the signed authentication."},
@@ -5304,7 +5316,8 @@
       {"constructor": "undeclaredField", "code": 72},
       {"constructor": "missingField", "code": 73},
       {"constructor": "structNotAnObject", "code": 74},
-      {"constructor": "undeclaredSelector", "code": 75}]}],
+      {"constructor": "undeclaredSelector", "code": 75},
+      {"constructor": "notUtf8", "code": 76}]}],
    "error_class": "SszError",
    "docstring":
    "From Gloas: the failed checks of a request that submits preferences, by name, in order.\n\nThe arguments are the name of the preset and of the configuration, the fork and replacements.\n\nThen come the agreed data, the builder's current slot, the key of the path and the version header.\n\nThen come the SSZ bytes of the request."},
@@ -5407,7 +5420,8 @@
       {"constructor": "undeclaredField", "code": 72},
       {"constructor": "missingField", "code": 73},
       {"constructor": "structNotAnObject", "code": 74},
-      {"constructor": "undeclaredSelector", "code": 75}]}],
+      {"constructor": "undeclaredSelector", "code": 75},
+      {"constructor": "notUtf8", "code": 76}]}],
    "error_class": "SszError",
    "docstring":
    "The SSZ bytes of the bid that a relay serves from a submission, under a key.\n\nThe arguments are the name of the preset, the fork, the SSZ bytes of the submission and the key."},
@@ -5494,7 +5508,8 @@
       {"constructor": "undeclaredField", "code": 72},
       {"constructor": "missingField", "code": 73},
       {"constructor": "structNotAnObject", "code": 74},
-      {"constructor": "undeclaredSelector", "code": 75}]}],
+      {"constructor": "undeclaredSelector", "code": 75},
+      {"constructor": "notUtf8", "code": 76}]}],
    "error_class": "SszError",
    "docstring":
    "At Fulu only: the list of validators that a relay serves, as a `list` of `dict`.\n\nThe arguments are the name of the preset, the fork, the state and the signed registrations kept.\n\nWhen two registrations share a key, the first one counts.\n\nThe list covers the current and next epoch of the state, by its lookahead of proposers.\n\nSo the state must first be advanced to the current slot of the relay."},
@@ -5580,7 +5595,8 @@
       {"constructor": "undeclaredField", "code": 72},
       {"constructor": "missingField", "code": 73},
       {"constructor": "structNotAnObject", "code": 74},
-      {"constructor": "undeclaredSelector", "code": 75}]}],
+      {"constructor": "undeclaredSelector", "code": 75},
+      {"constructor": "notUtf8", "code": 76}]}],
    "error_class": "SszError",
    "docstring":
    "A delivered payload, read from its JSON and written back as a `dict`.\n\nThe argument is the JSON object, as a `dict`."},
@@ -5666,7 +5682,8 @@
       {"constructor": "undeclaredField", "code": 72},
       {"constructor": "missingField", "code": 73},
       {"constructor": "structNotAnObject", "code": 74},
-      {"constructor": "undeclaredSelector", "code": 75}]}],
+      {"constructor": "undeclaredSelector", "code": 75},
+      {"constructor": "notUtf8", "code": 76}]}],
    "error_class": "SszError",
    "docstring":
    "A received bid, read from its JSON and written back as a `dict`.\n\nThe argument is the JSON object, as a `dict`."},
@@ -5753,7 +5770,8 @@
       {"constructor": "undeclaredField", "code": 72},
       {"constructor": "missingField", "code": 73},
       {"constructor": "structNotAnObject", "code": 74},
-      {"constructor": "undeclaredSelector", "code": 75}]}],
+      {"constructor": "undeclaredSelector", "code": 75},
+      {"constructor": "notUtf8", "code": 76}]}],
    "error_class": "SszError",
    "docstring":
    "Whether the filters of a query of delivered payloads keep the payload of a JSON object.\n\nThe arguments are the object, then the slot, the block hash and the block number.\n\nThe keys of the proposer and of the builder follow; each filter is `None` when absent."},
@@ -5840,7 +5858,8 @@
       {"constructor": "undeclaredField", "code": 72},
       {"constructor": "missingField", "code": 73},
       {"constructor": "structNotAnObject", "code": 74},
-      {"constructor": "undeclaredSelector", "code": 75}]}],
+      {"constructor": "undeclaredSelector", "code": 75},
+      {"constructor": "notUtf8", "code": 76}]}],
    "error_class": "SszError",
    "docstring":
    "Whether the filters of a query of received bids keep the bid of a JSON object.\n\nThe arguments are the object, then the slot, the block hash, the block number and the builder key.\n\nEach filter is `None` when absent."},
@@ -5927,7 +5946,8 @@
       {"constructor": "undeclaredField", "code": 72},
       {"constructor": "missingField", "code": 73},
       {"constructor": "structNotAnObject", "code": 74},
-      {"constructor": "undeclaredSelector", "code": 75}]}],
+      {"constructor": "undeclaredSelector", "code": 75},
+      {"constructor": "notUtf8", "code": 76}]}],
    "error_class": "SszError",
    "docstring":
    "Delivered payloads sorted by value in the given order, as a `list` of `dict`.\n\nThe arguments are the order, `value` or `-value`, and the JSON objects of the payloads."},
@@ -6042,7 +6062,8 @@
       {"constructor": "undeclaredField", "code": 72},
       {"constructor": "missingField", "code": 73},
       {"constructor": "structNotAnObject", "code": 74},
-      {"constructor": "undeclaredSelector", "code": 75}]}],
+      {"constructor": "undeclaredSelector", "code": 75},
+      {"constructor": "notUtf8", "code": 76}]}],
    "error_class": "SszError",
    "docstring":
    "The node at a generalized index of the value that the bytes encode, and its branch, as a pair.\n\nThe arguments are the name of the preset, the fork, the container, the bytes and the index.\n\nThe branch lists the sibling of each node on the path, from the node up to the root."},
@@ -6128,7 +6149,8 @@
       {"constructor": "undeclaredField", "code": 72},
       {"constructor": "missingField", "code": 73},
       {"constructor": "structNotAnObject", "code": 74},
-      {"constructor": "undeclaredSelector", "code": 75}]}],
+      {"constructor": "undeclaredSelector", "code": 75},
+      {"constructor": "notUtf8", "code": 76}]}],
    "error_class": "SszError",
    "docstring":
    "The root and the bytes of the Gloas form of a container of Fulu, as a pair.\n\nThe container is an attestation, an indexed attestation or an attester slashing.\n\nThe arguments are the name of the preset, the container and its bytes at Fulu.\n\nThe upgrade keeps every field and every element of a list.\n\nFrom Gloas the lists are progressive, and so are an attestation and its indexed form."},
@@ -6215,7 +6237,8 @@
       {"constructor": "undeclaredField", "code": 72},
       {"constructor": "missingField", "code": 73},
       {"constructor": "structNotAnObject", "code": 74},
-      {"constructor": "undeclaredSelector", "code": 75}]}],
+      {"constructor": "undeclaredSelector", "code": 75},
+      {"constructor": "notUtf8", "code": 76}]}],
    "error_class": "SszError",
    "docstring":
    "Whether the branch of a blob sidecar, given as bytes, climbs to the body root of its header."},
@@ -8552,7 +8575,8 @@
       {"constructor": "undeclaredField", "code": 72},
       {"constructor": "missingField", "code": 73},
       {"constructor": "structNotAnObject", "code": 74},
-      {"constructor": "undeclaredSelector", "code": 75}]}],
+      {"constructor": "undeclaredSelector", "code": 75},
+      {"constructor": "notUtf8", "code": 76}]}],
    "error_class": "SszError",
    "docstring":
    "From Gloas: the bid of a builder for a payload that it built on a state, as SSZ bytes."},
@@ -8640,7 +8664,8 @@
       {"constructor": "undeclaredField", "code": 72},
       {"constructor": "missingField", "code": 73},
       {"constructor": "structNotAnObject", "code": 74},
-      {"constructor": "undeclaredSelector", "code": 75}]}],
+      {"constructor": "undeclaredSelector", "code": 75},
+      {"constructor": "notUtf8", "code": 76}]}],
    "error_class": "SszError",
    "docstring":
    "From Gloas: the signed bid of a proposer that builds its own payload, as SSZ bytes."},
@@ -8727,7 +8752,8 @@
       {"constructor": "undeclaredField", "code": 72},
       {"constructor": "missingField", "code": 73},
       {"constructor": "structNotAnObject", "code": 74},
-      {"constructor": "undeclaredSelector", "code": 75}]}],
+      {"constructor": "undeclaredSelector", "code": 75},
+      {"constructor": "notUtf8", "code": 76}]}],
    "error_class": "SszError",
    "docstring":
    "From Gloas: the envelope that reveals a payload after the block of its bid, as SSZ bytes."},
@@ -9526,7 +9552,8 @@
       {"constructor": "undeclaredField", "code": 72},
       {"constructor": "missingField", "code": 73},
       {"constructor": "structNotAnObject", "code": 74},
-      {"constructor": "undeclaredSelector", "code": 75}]}],
+      {"constructor": "undeclaredSelector", "code": 75},
+      {"constructor": "notUtf8", "code": 76}]}],
    "error_class": "SszError",
    "docstring":
    "The fork digest at an epoch, on the chain with the given root of the genesis validators.\n\nThe configuration of the name holds, with the replacements that a `dict` gives."},
@@ -9641,7 +9668,8 @@
       {"constructor": "undeclaredField", "code": 72},
       {"constructor": "missingField", "code": 73},
       {"constructor": "structNotAnObject", "code": 74},
-      {"constructor": "undeclaredSelector", "code": 75}]}],
+      {"constructor": "undeclaredSelector", "code": 75},
+      {"constructor": "notUtf8", "code": 76}]}],
    "error_class": "SszError",
    "docstring":
    "The root of the value that the bytes encode, and the bytes of that value, as a pair.\n\nThe arguments are the name of the container and the bytes."},
@@ -9747,7 +9775,8 @@
       {"constructor": "undeclaredField", "code": 72},
       {"constructor": "missingField", "code": 73},
       {"constructor": "structNotAnObject", "code": 74},
-      {"constructor": "undeclaredSelector", "code": 75}]}],
+      {"constructor": "undeclaredSelector", "code": 75},
+      {"constructor": "notUtf8", "code": 76}]}],
    "error_class": "SszError",
    "docstring":
    "Whether a sidecar, given as bytes, has a valid shape.\n\nThe arguments are the name of the preset and the configuration, the fork and the sidecar.\n\nThen come the signed block, empty before Gloas, and replacements of values of the configuration."},
@@ -9834,7 +9863,8 @@
       {"constructor": "undeclaredField", "code": 72},
       {"constructor": "missingField", "code": 73},
       {"constructor": "structNotAnObject", "code": 74},
-      {"constructor": "undeclaredSelector", "code": 75}]}],
+      {"constructor": "undeclaredSelector", "code": 75},
+      {"constructor": "notUtf8", "code": 76}]}],
    "error_class": "SszError",
    "docstring":
    "Whether the branch of a sidecar, given as bytes, climbs to the body root of its header."},
@@ -9956,7 +9986,8 @@
       {"constructor": "undeclaredField", "code": 72},
       {"constructor": "missingField", "code": 73},
       {"constructor": "structNotAnObject", "code": 74},
-      {"constructor": "undeclaredSelector", "code": 75}]}],
+      {"constructor": "undeclaredSelector", "code": 75},
+      {"constructor": "notUtf8", "code": 76}]}],
    "error_class": "SszError",
    "docstring":
    "At Fulu: whether the branch of a partial header, given as bytes, climbs to its body root."},
@@ -10147,7 +10178,8 @@
       {"constructor": "undeclaredField", "code": 72},
       {"constructor": "missingField", "code": 73},
       {"constructor": "structNotAnObject", "code": 74},
-      {"constructor": "undeclaredSelector", "code": 75}]}],
+      {"constructor": "undeclaredSelector", "code": 75},
+      {"constructor": "notUtf8", "code": 76}]}],
    "error_class": "SszError",
    "docstring":
    "The column sidecars of a signed block, as the SSZ bytes of each, in a list.\n\nThe arguments are the name of the preset, the fork, the signed block and the rows of its blobs."},
@@ -10235,7 +10267,8 @@
       {"constructor": "undeclaredField", "code": 72},
       {"constructor": "missingField", "code": 73},
       {"constructor": "structNotAnObject", "code": 74},
-      {"constructor": "undeclaredSelector", "code": 75}]}],
+      {"constructor": "undeclaredSelector", "code": 75},
+      {"constructor": "notUtf8", "code": 76}]}],
    "error_class": "SszError",
    "docstring":
    "All the column sidecars of a block, as the SSZ bytes of each, in a list.\n\nThe arguments are the name of the preset, the fork, the bytes of one sidecar and the rows."},
@@ -10369,7 +10402,8 @@
       {"constructor": "undeclaredField", "code": 72},
       {"constructor": "missingField", "code": 73},
       {"constructor": "structNotAnObject", "code": 74},
-      {"constructor": "undeclaredSelector", "code": 75}]}],
+      {"constructor": "undeclaredSelector", "code": 75},
+      {"constructor": "notUtf8", "code": 76}]}],
    "error_class": "SszError",
    "docstring":
    "The root of the message that the bytes encode, and the bytes of that message, as a pair.\n\nThe arguments are the name of the preset and the configuration, the fork, the message and its bytes."},
@@ -10507,7 +10541,8 @@
       {"constructor": "undeclaredField", "code": 72},
       {"constructor": "missingField", "code": 73},
       {"constructor": "structNotAnObject", "code": 74},
-      {"constructor": "undeclaredSelector", "code": 75}]}],
+      {"constructor": "undeclaredSelector", "code": 75},
+      {"constructor": "notUtf8", "code": 76}]}],
    "error_class": "ConsensusError",
    "docstring":
    "Whether a response is valid for its request, as a Boolean.\n\nThe arguments are the name of the preset and the configuration, the fork and the protocol ID.\n\nThey go on with the request as SSZ bytes, the items of the response and the committee.\n\nEach item is the tuple of what the check reads, in the order of the fields of its form.\n\nA block is its slot, parent root and root; a sidecar its slot, block root and index.\n\nAn envelope is its slot, block root, parent hash and block hash.\n\nAn inclusion list is its slot, validator index and dependent root.\n\nThe committee is read only for inclusion lists, and must then have one validator per seat.\n\nA protocol without a check of its response, such as status, has code 0."},
@@ -11367,7 +11402,8 @@
       {"constructor": "undeclaredField", "code": 72},
       {"constructor": "missingField", "code": 73},
       {"constructor": "structNotAnObject", "code": 74},
-      {"constructor": "undeclaredSelector", "code": 75}]}],
+      {"constructor": "undeclaredSelector", "code": 75},
+      {"constructor": "notUtf8", "code": 76}]}],
    "error_class": "SszError",
    "docstring":
    "The SSZ bytes of a value of a type, both given in their tagged form."},
@@ -11453,7 +11489,8 @@
       {"constructor": "undeclaredField", "code": 72},
       {"constructor": "missingField", "code": 73},
       {"constructor": "structNotAnObject", "code": 74},
-      {"constructor": "undeclaredSelector", "code": 75}]}],
+      {"constructor": "undeclaredSelector", "code": 75},
+      {"constructor": "notUtf8", "code": 76}]}],
    "error_class": "SszError",
    "docstring":
    "The value that SSZ bytes hold for a type given in its tagged form, as a tagged `dict`."},
@@ -11539,7 +11576,8 @@
       {"constructor": "undeclaredField", "code": 72},
       {"constructor": "missingField", "code": 73},
       {"constructor": "structNotAnObject", "code": 74},
-      {"constructor": "undeclaredSelector", "code": 75}]}],
+      {"constructor": "undeclaredSelector", "code": 75},
+      {"constructor": "notUtf8", "code": 76}]}],
    "error_class": "SszError",
    "docstring":
    "The 32-byte hash tree root of a value of a type, both given in their tagged form."},

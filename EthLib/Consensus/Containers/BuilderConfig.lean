@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.Containers.BuilderApi
+public import EthLib.Serialization.Ssz.Typed.Text
 
 /-!
 # `Consensus.Containers.BuilderConfig`
@@ -35,8 +36,8 @@ def MAX_BUILDER_PUBKEYS : Nat := 64
 
 /-- From Gloas: one builder that the node asks for a bid, and the terms of that bid. -/
 structure BuilderEntry where
-  /-- Where the request for a bid goes, as the UTF-8 bytes of the URL. -/
-  url : SszList UInt8 MAX_BUILDER_URL_SIZE
+  /-- Where the request for a bid goes: a URL, held in SSZ as its UTF-8 bytes. -/
+  url : SszString MAX_BUILDER_URL_SIZE
   /-- The proposer's authentication of the request, which the node forwards unchanged. -/
   auth : SignedBuilderRequestAuth
   /-- The builder keys whose bids the entry accepts; none means any builder. -/
@@ -78,12 +79,12 @@ Its URL and its [authentication data] must not be empty, and its authentication 
 [authentication data]: https://github.com/ethereum/beacon-APIs/blob/7911555e6a30c51f9b69bb168111a59f1ff8ee49/types/gloas/request_auth.yaml
 -/
 def BuilderEntry.serves (entry : BuilderEntry) (slot : Slot) : Bool :=
-  entry.url.data.size != 0 && entry.auth.message.data.data.size != 0 &&
+  !entry.url.text.isEmpty && entry.auth.message.data.data.size != 0 &&
     entry.auth.message.slot == slot
 
 /-- Whether two builder entries share their URL and their authentication data. -/
 def BuilderEntry.sameRequest (a b : BuilderEntry) : Bool :=
-  a.url.data == b.url.data && a.auth.message.data.data == b.auth.message.data.data
+  a.url.text == b.url.text && a.auth.message.data.data == b.auth.message.data.data
 
 /-- From Gloas: the terms that apply to a bid.
 

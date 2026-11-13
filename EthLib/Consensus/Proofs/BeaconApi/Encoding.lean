@@ -46,10 +46,11 @@ theorem toApiJson_total {α : Type} [SszType α] [LawfulSszType α] [ApiSpelling
 
 /-- A document reads the same with some hex digits of its strings in uppercase.
 
-It holds for a refusal as well as a value. -/
-theorem ofApiJson_uppercase {α : Type} [SszType α] [ApiSpelling α] {left right : Json}
+It holds for a type that writes no text, for a refusal as well as a value. -/
+theorem ofApiJson_uppercase {α : Type} [SszType α] [ApiSpelling α]
+    (plain : (ApiSpelling.spelling α).hasText = false) {left right : Json}
     (same : SameUpToCase left right) : ofApiJson α left = ofApiJson α right := by
-  simp only [ofApiJson, valueOf_sameUpToCase _ _ same]
+  simp only [ofApiJson, valueOf_sameUpToCase _ plain same]
 
 /-- A metadata key that was written reads back, and one that was not written reads as absent. -/
 theorem readKey_mkObj {β : Type} {pairs : List (String × Json)}

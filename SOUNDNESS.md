@@ -4128,6 +4128,7 @@ A mark of the spelling has effect only where its shape allows it, so no mark mak
 `readVersioned_version` shows that a response read under a version carries that exact name, so data of one fork never reads as data of another.
 `valueOf_sameUpToCase` (`Serialization/Proofs/Ssz/Codec/JsonHexCase.lean`) shows that a document reads the same with any hex digits of its strings in uppercase, at every shape.
 The patterns of the source allow either case.
+It holds for every spelling that writes no text, since the case of a URL is part of the URL.
 `ofApiJson_uppercase` lifts it to the reader of the API.
 The error bodies read back as written (`ErrorMessage.ofJson_toJson`, `IndexedErrorMessage.ofJson_toJson`).
 
@@ -4411,7 +4412,14 @@ Four points of the source are decided here, and a reviewer may question them:
 - The source does not order two bids of the same weight; the first one in the list wins, which the Python tests check.
 - What makes a builder payload safe in v3 is the node's choice, so the rule takes the two values once both are valid.
 
-The JSON codec of the API has no form for a URL string, so a builder entry is given only in its SSZ form.
+The URL of a builder entry is a JSON string, and its SSZ form holds the UTF-8 bytes of that string.
+EthLib holds it as a Lean string, which is valid UTF-8, within the limit of 2048 bytes (`SszString` in `Serialization/Ssz/Typed/Text.lean`).
+The JSON codec writes it with the text spelling, so a URL such as `"0x12"` is never read as hex.
+`SszString.ofValue_toValue` (`Serialization/Proofs/Ssz/Typed/Text.lean`) shows that decoding the bytes of a URL gives it back, and SSZ bytes that are not UTF-8 are refused.
+So the type is not lawful, and `BuilderEntry.ofApiJson_toApiJson`, `BuilderConfig.ofApiJson_toApiJson` and the two `toApiJson_total` theorems (`Consensus/Proofs/BeaconApi/BuilderConfig.lean`) stand in for the general ones.
+`jsonOf_ok` and `valueOf_jsonOf` still hold for every value: bytes that are not UTF-8 have no text, so the codec writes them as one decimal string per byte, and reads such an array only when its bytes are not UTF-8.
+A typed URL never has such bytes, so the reader of a builder entry accepts only a string.
+The Python tests check that the example configuration of the source reads back from JSON and from SSZ.
 An entry with an empty URL or empty authentication data, or whose authentication names another slot, gives no bid.
 The other entries and the gossip terms still apply, since the source says that one bad entry never fails the request.
 The source forbids two entries with one URL and one authentication data, and EthLib keeps the first of them.

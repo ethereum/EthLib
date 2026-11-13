@@ -8,6 +8,8 @@ public import EthLib.Serialization.Ssz.Codec.Json
 A hex digit reads the same in uppercase, so a hex string does too.
 
 A document reads the same with any hex digits of its strings in uppercase, at every shape.
+
+A spelling that writes a byte list as text is left out, since the case of a text is its own.
 -/
 
 @[expose] public section
@@ -251,22 +253,40 @@ private theorem lookup_same {left right : Std.TreeMap.Raw String Json}
   · exact .none
   · exact .some (each name _ _ inLeft inRight)
 
-/-- Whether matching documents read the same under a declaration, at every spelling. -/
+/-- A spelling with no text holds none in the declarations it holds. -/
+theorem Spelling.hasText_part {spelling : Spelling} (plain : spelling.hasText = false)
+    (position : Nat) : (spelling.part position).hasText = false := by
+  cases spelling with
+  | byte | digits => simp [Spelling.part, Spelling.opaque, Spelling.hasText]
+  | text => simp [Spelling.hasText] at plain
+  | plain parts =>
+    simp only [Spelling.part]
+    by_cases inside : position < parts.length
+    · rw [List.getD_eq_getElem?_getD, List.getElem?_eq_getElem inside, Option.getD_some]
+      simp only [Spelling.hasText, List.any_eq_false, List.mem_attach, true_implies] at plain
+      exact by simpa using plain ⟨_, List.getElem_mem inside⟩
+    · have none : parts[position]? = none := List.getElem?_eq_none (by omega)
+      simp [List.getD_eq_getElem?_getD, none, Spelling.opaque, Spelling.hasText]
+
+/-- Whether matching documents read the same under a declaration, at every spelling with no text. -/
 private def ReadsSame (shape : Desc) : Prop :=
-  ∀ (spelling : Spelling) {left right : Json}, SameUpToCase left right →
+  ∀ (spelling : Spelling), spelling.hasText = false → ∀ {left right : Json},
+    SameUpToCase left right →
     valueOf shape spelling left = valueOf shape spelling right
 
 /-- Entries that match one by one read the same, entry by entry. -/
 private theorem valueOfEntries_same {element : Desc} (reads : ReadsSame element)
-    (spelling : Spelling) {left right : List Json} (same : EachSame left right) :
+    (spelling : Spelling) (plain : spelling.hasText = false) {left right : List Json}
+    (same : EachSame left right) :
     valueOfEntries element spelling left = valueOfEntries element spelling right := by
   induction same with
   | nil => rfl
-  | cons first _ ih => simp only [valueOfEntries, reads spelling first, ih]
+  | cons first _ ih => simp only [valueOfEntries, reads spelling plain first, ih]
 
 /-- Matching sequence documents hold the same elements. -/
 private theorem valueOfSequence_same {element : Desc} (reads : ReadsSame element)
-    (spelling : Spelling) {left right : Json} (same : SameUpToCase left right) :
+    (spelling : Spelling) (plain : spelling.hasText = false) {left right : Json}
+    (same : SameUpToCase left right) :
     valueOfSequence element spelling left = valueOfSequence element spelling right := by
   unfold valueOfSequence
   by_cases byte : (spelling.isByte && element.isOneByte) = true
@@ -274,13 +294,14 @@ private theorem valueOfSequence_same {element : Desc} (reads : ReadsSame element
     exact collectionHex_same same _
   · simp only [byte, Bool.false_eq_true, ↓reduceIte]
     cases same with
-    | arr size each => exact valueOfEntries_same reads spelling (eachSame_of_arr size each)
+    | arr size each => exact valueOfEntries_same reads spelling plain (eachSame_of_arr size each)
     | _ => rfl
 
 /-- Fields read the same out of documents that hold matching values at each name. -/
 private theorem valueOfFields_same {left right : Json}
     (lookup : ∀ name, Option.Rel SameUpToCase (left.getObjVal? name).toOption
-      (right.getObjVal? name).toOption) (names : List String) (spelling : Spelling) :
+      (right.getObjVal? name).toOption) (names : List String) (spelling : Spelling)
+    (plain : spelling.hasText = false) :
     ∀ (fields : List Desc), (∀ field ∈ fields, ReadsSame field) → ∀ position,
       valueOfFields fields names spelling position left =
         valueOfFields fields names spelling position right
@@ -295,19 +316,21 @@ private theorem valueOfFields_same {left right : Json}
     cases found with
     | none => rfl
     | some first =>
-      simp only [reads field (by simp) _ first,
-        valueOfFields_same lookup names spelling fields (fun f m => reads f (by simp [m]))]
+      simp only [reads field (by simp) _ (Spelling.hasText_part plain position) first,
+        valueOfFields_same lookup names spelling plain fields (fun f m => reads f (by simp [m]))]
 
 /-- The option a selector names reads the same out of matching payloads. -/
-private theorem valueOfOption_same (spelling : Spelling) {payload other : Json}
+private theorem valueOfOption_same (spelling : Spelling) (plain : spelling.hasText = false)
+    {payload other : Json}
     (same : SameUpToCase payload other) :
     ∀ (selectors : List Nat) (options : List Desc), (∀ option ∈ options, ReadsSame option) →
       ∀ position selector, valueOfOption selectors options spelling position selector payload =
         valueOfOption selectors options spelling position selector other
   | [], [], _, _, _ => by simp only [valueOfOption]
   | chosen :: selectors, option :: options, reads, position, selector => by
-    simp only [valueOfOption, reads option (by simp) _ same,
-      valueOfOption_same spelling same selectors options (fun o m => reads o (by simp [m]))]
+    simp only [valueOfOption,
+      reads option (by simp) _ (Spelling.hasText_part plain position) same,
+      valueOfOption_same spelling plain same selectors options (fun o m => reads o (by simp [m]))]
   | [], _ :: _, _, _, _ | _ :: _, [], _, _, _ => by simp only [valueOfOption]
 
 /-- Matching documents read the same under every declaration. -/
@@ -315,10 +338,10 @@ private theorem readsSame (shape : Desc) : ReadsSame shape := by
   induction shape using Desc.rec
     (motive_2 := fun fields => ∀ field ∈ fields, ReadsSame field) with
   | bool =>
-    intro spelling left right same
+    intro spelling plain left right same
     cases same <;> simp only [valueOf]
   | uint width =>
-    intro spelling left right same
+    intro spelling plain left right same
     unfold valueOf
     by_cases byte : (spelling.isByte && width == 1) = true
     · simp only [byte, ↓reduceIte]
@@ -327,54 +350,58 @@ private theorem readsSame (shape : Desc) : ReadsSame shape := by
       | _ => rfl
     · simp only [byte, Bool.false_eq_true, ↓reduceIte, readNat_same same]
   | byteVector length =>
-    intro spelling left right same
+    intro spelling plain left right same
     rw [valueOf, valueOf]
     exact collectionHex_same same _
   | byteList limit =>
-    intro spelling left right same
+    intro spelling plain left right same
     unfold valueOf
+    have notText : spelling.isText = false := by
+      cases spelling <;> simp_all [Spelling.hasText, Spelling.isText]
     by_cases digits : spelling.isDigits = true
     · simp only [digits, ↓reduceIte]
       cases same with
       | arr size each => simp only [byteDigitsFrom_same (eachSame_of_arr size each)]
       | _ => rfl
-    · simp only [digits, Bool.false_eq_true, ↓reduceIte]
+    · simp only [digits, notText, Bool.false_eq_true, ↓reduceIte]
       exact collectionHex_same same _
   | bitVector length =>
-    intro spelling left right same
+    intro spelling plain left right same
     rw [valueOf, valueOf, readBitfield, readBitfield]
     exact collectionHex_same same _
   | bitList limit =>
-    intro spelling left right same
+    intro spelling plain left right same
     rw [valueOf, valueOf, readBitfield, readBitfield]
     exact collectionHex_same same _
   | progressiveBitList limit =>
-    intro spelling left right same
+    intro spelling plain left right same
     rw [valueOf, valueOf, readBitfield, readBitfield]
     exact collectionHex_same same _
   | vector element length ih =>
-    intro spelling left right same
-    rw [valueOf, valueOf, valueOfSequence_same ih _ same]
+    intro spelling plain left right same
+    rw [valueOf, valueOf, valueOfSequence_same ih _ (Spelling.hasText_part plain 0) same]
   | list element limit ih =>
-    intro spelling left right same
-    rw [valueOf, valueOf, valueOfSequence_same ih _ same]
+    intro spelling plain left right same
+    rw [valueOf, valueOf, valueOfSequence_same ih _ (Spelling.hasText_part plain 0) same]
   | progressiveList element limit ih =>
-    intro spelling left right same
-    rw [valueOf, valueOf, valueOfSequence_same ih _ same]
+    intro spelling plain left right same
+    rw [valueOf, valueOf, valueOfSequence_same ih _ (Spelling.hasText_part plain 0) same]
   | container names fields ih =>
-    intro spelling left right same
+    intro spelling plain left right same
     cases same with
     | obj names present each =>
-      simp only [valueOf, names, valueOfFields_same (lookup_same present each) _ spelling fields ih]
+      simp only [valueOf, names,
+        valueOfFields_same (lookup_same present each) _ spelling plain fields ih]
     | _ => simp only [valueOf]
   | progressiveContainer active names fields ih =>
-    intro spelling left right same
+    intro spelling plain left right same
     cases same with
     | obj names present each =>
-      simp only [valueOf, names, valueOfFields_same (lookup_same present each) _ spelling fields ih]
+      simp only [valueOf, names,
+        valueOfFields_same (lookup_same present each) _ spelling plain fields ih]
     | _ => simp only [valueOf]
   | compatibleUnion selectors options ih =>
-    intro spelling left right same
+    intro spelling plain left right same
     cases same with
     | obj names present each =>
       simp only [valueOf, names]
@@ -393,7 +420,7 @@ private theorem readsSame (shape : Desc) : ReadsSame shape := by
         | none => rfl
         | some dataFirst =>
           simp only [readNat_same selectorFirst,
-            valueOfOption_same spelling dataFirst selectors options ih]
+            valueOfOption_same spelling plain dataFirst selectors options ih]
     | _ => simp only [valueOf]
   | nil =>
     rename_i field member
@@ -408,10 +435,10 @@ private theorem readsSame (shape : Desc) : ReadsSame shape := by
 
 Two documents that differ only in that case both read as their lowercase form, so they read alike.
 
-It holds at every shape and spelling, for a refusal as well as a value. -/
-theorem valueOf_sameUpToCase (shape : Desc) (spelling : Spelling) {left right : Json}
-    (same : SameUpToCase left right) :
+It holds at every shape, and at every spelling with no text, for a refusal as well as a value. -/
+theorem valueOf_sameUpToCase (shape : Desc) {spelling : Spelling}
+    (plain : spelling.hasText = false) {left right : Json} (same : SameUpToCase left right) :
     valueOf shape spelling left = valueOf shape spelling right := by
-  exact readsSame shape spelling same
+  exact readsSame shape spelling plain same
 
 end EthLib.Serialization.Ssz
