@@ -293,6 +293,28 @@ py_consensus_api_payload_attestation_data(
 }
 
 extern lean_object*
+eth_consensus_api_fork_choice(lean_object* args);
+
+PyObject*
+py_consensus_api_fork_choice(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_fork_choice, args, 8, FORK_CHOICE_ERROR);
+}
+
+extern lean_object*
+eth_consensus_api_chain_heads(lean_object* args);
+
+PyObject*
+py_consensus_api_chain_heads(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_chain_heads, args, 8, FORK_CHOICE_ERROR);
+}
+
+extern lean_object*
 eth_consensus_api_aggregate_attestation(lean_object* args);
 
 PyObject*

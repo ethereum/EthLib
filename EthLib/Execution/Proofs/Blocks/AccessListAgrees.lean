@@ -1,10 +1,11 @@
 module
 
 public import EthLib.Execution.Proofs.Blocks.AccessListComplete
+public import EthLib.Execution.Proofs.Blocks.CallsAgree
 public import EthLib.Execution.Proofs.Transactions.NoninterferenceRun
 
 /-!
-# Proofs: each transaction of a block depends only on what its access list names
+# Proofs: each transaction and call of a block depends only on what its access list names
 
 From Glamsterdam, a block that passes the transition commits to a block access list.
 
@@ -21,6 +22,12 @@ The other state must also hold the code of every account.
 Then the transaction is accepted alike, and gives the same gas used, block gas, logs and error.
 
 The states it leaves agree on what the list names, with the same tracker.
+
+The same holds for the calls of the body that are not transactions.
+
+These are the two system calls at its start, the withdrawals and the calls to the request contracts.
+
+None of them needs the other state to hold the code of every account.
 
 Source: [EIP-7928, Scope and Inclusion][bal].
 
@@ -65,6 +72,18 @@ abbrev _root_.EthLib.Execution.State.BlockState.AgreesOnList (bal : BlockAccessL
     (block other : BlockState) : Prop :=
   BlockState.AgreesOn bal.NamesAccount (bal.NamesCandidate block) bal.NamesKey
     (bal.NamesCode block) block other
+
+/-- Two transaction states agree on what a list names, for runs from the block state `block`.
+
+They agree on each named account and named storage key, with the same tracker.
+
+They agree on the whole storage of each named account with nonce 0 and no code in `block`.
+
+They agree on the code under the code hash, in `block`, of each named account. -/
+abbrev _root_.EthLib.Execution.State.TransactionState.AgreesOnList (bal : BlockAccessList)
+    (block : BlockState) (tx other : TransactionState) : Prop :=
+  TransactionState.AgreesOn bal.NamesAccount (bal.NamesCandidate block) bal.NamesKey
+    (bal.NamesCode block) tx other
 
 /-- A list that covers a transaction state names everything that the state read. -/
 private theorem BlockAccessList.Covers.readsIn {bal : BlockAccessList} {tx : TransactionState}
@@ -162,10 +181,8 @@ theorem stateTransition_transaction_agrees {fork : Fork} {chain : BlockChain}
             .ok included ∧
           ∃ out', processTransaction env other included block.transactions[i] = .ok out' ∧
             out' = { out with state := out'.state } ∧
-            TransactionState.AgreesOn output.body.builder.build.NamesAccount
-              (output.body.builder.build.NamesCandidate before.block)
-              output.body.builder.build.NamesKey
-              (output.body.builder.build.NamesCode before.block) out.state out'.state := by
+            TransactionState.AgreesOnList output.body.builder.build before.block
+              out.state out'.state := by
   obtain ⟨hashes, env, output, body, -, -, hHashes, hEnv, hOutput, hBal, -, hStart, -, hTx, -, -⟩ :=
     stateTransition_accessList_covers hFork h
   refine ⟨hashes, env, output, body, hHashes, hEnv, hOutput, hBal, hStart, fun i hi => ?_⟩
@@ -179,5 +196,80 @@ theorem stateTransition_transaction_agrees {fork : Fork} {chain : BlockChain}
   exact processTransaction_agrees hParis
     ⟨fun address h => ⟨address, h, rfl⟩, fun _ h hnonce hcode => ⟨h, hnonce, hcode⟩⟩
     hagree hcodes hRun hCovers.readsIn
+
+/-- From Glamsterdam, the calls of a block that passes depend only on what its list names.
+
+The list is the one whose hash the header commits to.
+
+They are the two system calls at the start, the withdrawals and each call to a request contract.
+
+Run one of them on another block state that agrees with its own on what the list names.
+
+A system call gives the same output there, and a state that agrees on what the list names.
+
+The withdrawals give a state that agrees on what the list names.
+
+From Hegotá the transition is not yet specified, so this holds from Glamsterdam up to Hegotá. -/
+theorem stateTransition_calls_agree {fork : Fork} {chain : BlockChain}
+    {block : Block fork Transaction} {checkSeal : Bool} {post : State.State}
+    (hFork : .glamsterdam ≤ fork) (h : stateTransition chain block checkSeal = .ok post) :
+    ∃ hashes env output body txOutput withdrawn,
+      recentHashes chain.recent = .ok hashes ∧
+      env = blockEnvironment chain.config hashes block.header ∧
+      applyBody chain.config env block ⟨chain.state, ∅, ∅, ∅, ∅⟩ = .ok output ∧
+      BlockAccessList.hash output.body.builder.build =
+        .ok (block.header.blockAccessListHash hFork) ∧
+      (∃ out mid out',
+        systemCall env ⟨chain.state, ∅, ∅, ∅, ∅⟩ BEACON_ROOTS_ADDRESS
+          ⟨(block.header.parentBeaconBlockRoot (Nat.le_trans (by decide) hFork)).toArray⟩ =
+          .ok out ∧
+        (BodyState.init ⟨chain.state, ∅, ∅, ∅, ∅⟩).join out.state = .ok mid ∧
+        systemCall env mid.block HISTORY_STORAGE_ADDRESS ⟨block.header.parentHash.toArray⟩ =
+          .ok out' ∧
+        (∀ other,
+          BlockState.AgreesOnList output.body.builder.build ⟨chain.state, ∅, ∅, ∅, ∅⟩ other →
+          ∃ o, systemCall env other BEACON_ROOTS_ADDRESS
+              ⟨(block.header.parentBeaconBlockRoot (Nat.le_trans (by decide) hFork)).toArray⟩ =
+              .ok o ∧ o = { out with state := o.state } ∧
+            TransactionState.AgreesOnList output.body.builder.build ⟨chain.state, ∅, ∅, ∅, ∅⟩
+              out.state o.state) ∧
+        ∀ other, BlockState.AgreesOnList output.body.builder.build mid.block other →
+          ∃ o, systemCall env other HISTORY_STORAGE_ADDRESS ⟨block.header.parentHash.toArray⟩ =
+              .ok o ∧ o = { out' with state := o.state } ∧
+            TransactionState.AgreesOnList output.body.builder.build mid.block out'.state o.state) ∧
+      startSystemCalls env block.header.parentHash (.init ⟨chain.state, ∅, ∅, ∅, ∅⟩) = .ok body ∧
+      applyTransactions env body block.transactions = .ok txOutput ∧
+      (∃ tx,
+        withdrawalState fork txOutput.body.block
+          (block.withdrawals (Nat.le_trans (by decide) hFork)) = .ok tx ∧
+        (txOutput.body.beginIndex (block.transactions.length + 1)).join tx = .ok withdrawn ∧
+        ∀ other, BlockState.AgreesOnList output.body.builder.build txOutput.body.block other →
+          ∃ tx', withdrawalState fork other
+              (block.withdrawals (Nat.le_trans (by decide) hFork)) = .ok tx' ∧
+            TransactionState.AgreesOnList output.body.builder.build txOutput.body.block tx tx') ∧
+      ∀ j (hj : j < (requestContracts fork).length), ∃ mid out,
+        ((requestContracts fork).take j).foldlM (readRequest env) (withdrawn, []) = .ok mid ∧
+        checkedSystemCall env mid.1.block (requestContracts fork)[j].2 .empty = .ok out ∧
+        ∀ other, BlockState.AgreesOnList output.body.builder.build mid.1.block other →
+          ∃ o, checkedSystemCall env other (requestContracts fork)[j].2 .empty = .ok o ∧
+            o = { out with state := o.state } ∧
+            TransactionState.AgreesOnList output.body.builder.build mid.1.block
+              out.state o.state := by
+  obtain ⟨hashes, env, output, body, txOutput, withdrawn, hHashes, hEnv, hOutput, hBal,
+    ⟨out, mid, out', hOut, hMid, hOut', hCovers, hCovers'⟩, hStart, hTx, -,
+    ⟨tx, hWithdrawn, hJoin, hCoversTx⟩, hRequests⟩ := stateTransition_accessList_covers hFork h
+  have covers (b : BlockState) : CoversBlock b output.body.builder.build.NamesAccount
+      (output.body.builder.build.NamesCandidate b) (output.body.builder.build.NamesCode b) :=
+    ⟨fun address h => ⟨address, h, rfl⟩, fun _ h hnonce hcode => ⟨h, hnonce, hcode⟩⟩
+  refine ⟨hashes, env, output, body, txOutput, withdrawn, hHashes, hEnv, hOutput, hBal,
+    ⟨out, mid, out', hOut, hMid, hOut',
+      fun _ hagree => systemCall_agrees (covers _) hagree hOut hCovers.readsIn,
+      fun _ hagree => systemCall_agrees (covers _) hagree hOut' hCovers'.readsIn⟩,
+    hStart, hTx,
+    ⟨tx, hWithdrawn, hJoin, fun _ hagree => withdrawalState_agrees hagree hWithdrawn
+      hCoversTx.readsIn⟩, fun j hj => ?_⟩
+  obtain ⟨mid, out, hMid, hCall, hCoversCall⟩ := hRequests j hj
+  exact ⟨mid, out, hMid, hCall,
+    fun _ hagree => checkedSystemCall_agrees (covers _) hagree hCall hCoversCall.readsIn⟩
 
 end EthLib.Execution.Blocks

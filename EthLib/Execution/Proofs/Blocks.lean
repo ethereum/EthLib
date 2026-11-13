@@ -12,6 +12,7 @@ public import EthLib.Execution.Proofs.Blocks.BodyFollow
 public import EthLib.Execution.Proofs.Blocks.BodyGas
 public import EthLib.Execution.Proofs.Blocks.Bloom
 public import EthLib.Execution.Proofs.Blocks.Burn
+public import EthLib.Execution.Proofs.Blocks.CallsAgree
 public import EthLib.Execution.Proofs.Blocks.Codes
 public import EthLib.Execution.Proofs.Blocks.DaoFork
 public import EthLib.Execution.Proofs.Blocks.Difficulty
