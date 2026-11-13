@@ -432,7 +432,11 @@ A UTCTime (tag 23) writes a year from 1950 to 2049 as its last two digits.
 
 A GeneralizedTime (tag 24) writes a year from 1 to 9999 as four digits.
 
-Both end in `Z` (byte 90), with seconds below 60, so no leap second.
+Both end in `Z` (byte 90).
+
+The reader takes seconds below 60, so no leap second, which RFC 5280 leaves open.
+
+It also takes a GeneralizedTime before 2050, which issuers must write as UTCTime.
 
 Then `t` is the number of seconds from 1970-01-01T00:00:00Z, negative before it. -/
 theorem readTime_eq_ok_iff {value : Der.Value} {t : Int} :
@@ -536,15 +540,19 @@ theorem readValidity_eq_ok_iff {value : Der.Value} {notBefore notAfter : Int} :
 
 /-- The validity endpoints of a parsed certificate are what its own validity field reads as.
 
-That field is the fourth field of the signed part, after the version when there is one. -/
+The signed part is the first field of the certificate that the input bytes encode.
+
+The validity is the fourth field of the signed part, after the version when there is one. -/
 theorem readCertificate_validity {bytes : ByteArray} {certificate : Certificate}
     (parsed : readCertificate bytes = .ok certificate) :
-    ∃ tbs values validity, tbs.encoded = certificate.tbs ∧ fields 0x30 tbs = .ok values ∧
+    ∃ outer tbs rest values validity, der (Der.exact 0x30 bytes) = .ok outer ∧
+      fields 0x30 outer = .ok (tbs :: rest) ∧ tbs.encoded = certificate.tbs ∧
+      fields 0x30 tbs = .ok values ∧
       values[if values.head?.map (·.tag) = some 0xa0 then 4 else 3]? = some validity ∧
       readValidity validity = .ok (certificate.notBefore, certificate.notAfter) := by
   unfold readCertificate at parsed
   simp only [bind_ok_iff] at parsed
-  obtain ⟨_, _, children, _, h⟩ := parsed
+  obtain ⟨_, hOuter, children, hChildren, h⟩ := parsed
   split at h
   · simp only [bind_ok_iff] at h
     obtain ⟨_, _, _, _, values, hValues, h⟩ := h
@@ -563,7 +571,7 @@ theorem readCertificate_validity {bytes : ByteArray} {certificate : Certificate}
           split at h
           · simp only [bind_ok_iff, Except.ok.injEq] at h
             obtain ⟨_, _, _, _, _, _, rfl⟩ := h
-            exact ⟨_, _, _, rfl, hValues, by simp_all, hx⟩
+            exact ⟨_, _, _, _, _, hOuter, hChildren, rfl, hValues, by simp_all, hx⟩
           · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
         · simp [throw, throwThe, MonadExceptOf.throw] at h
     · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h

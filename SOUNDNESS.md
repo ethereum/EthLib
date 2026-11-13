@@ -746,6 +746,7 @@ The value counts 86400 seconds for each day from 1970-01-01, then adds the time 
 The days are counted in a calendar model of year and month lengths, not in the reader's closed form.
 `readValidity_eq_ok_iff` says that a validity reads as two such times in order.
 `readCertificate_validity` says that the endpoints of a parsed certificate are what its own validity field reads as.
+That field is located in the signed part that the input bytes encode.
 No theorem states the other DER types that a certificate holds.
 Nothing in Lean shows that authentication can succeed; the Python tests check vectors 1 to 4 of libp2p TLS.
 
