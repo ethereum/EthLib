@@ -765,7 +765,8 @@ def fork_choice(
     # From Fulu a block may come as (block, columns): the node samples those SSZ columns for it.
     # An empty list of columns means that the node cannot get them.
     # A "payload" step is (status, latest valid hash or None).
-    # It is the verdict of the execution layer on the payload of the next block.
+    # It is the verdict of the execution layer on the payload of the next block before Gloas.
+    # From Gloas it judges the payload of the next "execution_payload" step instead.
     # The status is given by its Engine API name.
     # A "fast_confirmation" step, with data None, runs the fast confirmation of the slot.
     return _native.consensus_fork_choice(
