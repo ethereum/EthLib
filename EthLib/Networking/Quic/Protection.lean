@@ -14,11 +14,14 @@ Payload protection and header protection follow [RFC 9001 §§5.3 to 5.4][rfc].
 
 The caller isolates one packet and supplies its packet-number offset from the clear header.
 
+Retry integrity follows [RFC 9001 §5.8][retry].
+
 Nothing here tracks nonce reuse, key updates or the usage limits of §6.6.
 
 Nothing here claims constant-time execution.
 
 [rfc]: https://www.rfc-editor.org/rfc/rfc9001#section-5.3
+[retry]: https://www.rfc-editor.org/rfc/rfc9001#section-5.8
 -/
 
 @[expose] public section
@@ -39,6 +42,8 @@ inductive Error where
   | aes (reason : Aes.Gcm.Error)
   | chacha (reason : ChaCha20Poly1305.ChaCha20Poly1305Error)
   | connectionId
+  /-- The payload authenticated, but its header breaks the format, RFC 9000 §17.2. -/
+  | authenticatedHeader
   deriving DecidableEq, Repr
 
 /-- Stable codes for packet-protection failures at the Python boundary. -/
@@ -50,6 +55,7 @@ def Error.code : Error → UInt32
   | .aes _ => 5
   | .chacha _ => 6
   | .connectionId => 7
+  | .authenticatedHeader => 8
 
 /-- XOR the IV with the left-zero-padded, network-order packet number, RFC 9001 §5.3. -/
 def nonce (iv : Vector UInt8 12) (number : PacketNumber) : Vector UInt8 12 :=
@@ -213,16 +219,19 @@ def reconstructNumber (width : Packet.PacketNumberLength) (truncated expected : 
 
 The caller supplies the packet-number offset from the clear header fields and connection context.
 
-`expected` is one greater than the largest authenticated number, or zero initially.
+The expected number is one greater than the largest authenticated number, or zero initially.
 
-Reserved-bit errors are reported only after successful payload authentication. -/
+A header that fails its checks after authentication gives a separate error.
+
+RFC 9000 §17.2 makes nonzero reserved bits there a connection error, not a discard. -/
 def unprotect (suite : CipherSuite) (keys : PacketKeys suite) (expected : Nat)
     (offset : Nat) (packet : ByteArray) : Except Error (ByteArray × ByteArray) := do
   let recovered ← removeHeaderProtection suite keys.hp offset packet
   let number ← reconstructNumber recovered.width recovered.truncatedNumber expected
   let plaintext ← decryptPayload suite keys number recovered.header
     recovered.ciphertext recovered.tag
-  checkHeader suite recovered.header (recovered.ciphertext.size + recovered.tag.size)
+  (checkHeader suite recovered.header (recovered.ciphertext.size + recovered.tag.size)).mapError
+    fun _ => .authenticatedHeader
   return (recovered.header, plaintext)
 
 /-- The fixed QUIC v1 Retry key, RFC 9001 §5.8. -/

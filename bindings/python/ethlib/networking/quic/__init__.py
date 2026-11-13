@@ -156,14 +156,14 @@ def decode_packet_number(width: int, truncated: int, expected: int) -> int:
 def protect(
     suite: CipherSuite, secret: bytes, number: int, offset: int, header: bytes, plaintext: bytes
 ) -> bytes:
-    """Seal a header ending at its packet number at offset; pad a payload too short to sample."""
+    """Seal a header that ends at its packet number; a payload too short to sample raises."""
     return _native.quic_protect(suite, secret, number, offset, header, plaintext)
 
 
 def unprotect(
     suite: CipherSuite, secret: bytes, expected: int, offset: int, packet: bytes
 ) -> tuple[bytes, bytes]:
-    """Return the header and plaintext of one packet; expected is 1 + the largest seen, or 0."""
+    """Return header and plaintext; expected is 1 + the largest authenticated number, or 0."""
     return _native.quic_unprotect(suite, secret, expected, offset, packet)
 
 

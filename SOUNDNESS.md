@@ -795,6 +795,8 @@ RFC 9001 §5.5 notes that a long delay can break that reconstruction, and authen
 `unprotect_ok_iff` unfolds acceptance into header removal, packet-number reconstruction, AEAD authentication and the authenticated header checks.
 
 The decoder checks reserved bits only after authentication, and checks a long header's Length against the isolated payload.
+`unprotect_eq_error_of_decryptPayload` proves that an AEAD failure is reported before any check of the recovered header.
+A header that fails after authentication gives its own error, since RFC 9000 §17.2 makes nonzero reserved bits there a connection error.
 Initial packets require AES-128-GCM, as RFC 9001 §5 specifies.
 The Python suite compares complete packets and Retry tags with RFC 9001 Appendices A.2 to A.5.
 These operations do not track nonce reuse, key updates or AEAD usage limits, and the proofs establish no cryptographic security or constant-time execution.

@@ -194,7 +194,7 @@ class QuicError(EthLibError, ValueError):
 
 
 class QuicProtectionError(EthLibError, ValueError):
-    """A QUIC packet or Retry fails a header, sample, packet-number, tag, AEAD or ID check."""
+    """A QUIC packet or Retry fails a header, sample, number, tag, AEAD or connection-ID check."""
 
 
 class QuicVarintError(EthLibError, ValueError):

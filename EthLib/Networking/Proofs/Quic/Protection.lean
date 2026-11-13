@@ -289,6 +289,21 @@ theorem unprotect_protect (suite : CipherSuite) (keys : PacketKeys suite)
             rw [htext, htag, hcheck]
             rfl
 
+/-- An error map keeps success and its value. -/
+private theorem mapError_eq_ok {ε ε' α : Type} (f : ε → ε') (x : Except ε α) (a : α) :
+    x.mapError f = .ok a ↔ x = .ok a := by
+  cases x <;> simp [Except.mapError]
+
+/-- An AEAD failure is the result, before any check of the recovered header, RFC 9000 §17.2. -/
+theorem unprotect_eq_error_of_decryptPayload (suite : CipherSuite) (keys : PacketKeys suite)
+    (expected offset : Nat) (packet : ByteArray) (recovered : Unmasked) (number : PacketNumber)
+    (error : Error) (hr : removeHeaderProtection suite keys.hp offset packet = .ok recovered)
+    (hn : reconstructNumber recovered.width recovered.truncatedNumber expected = .ok number)
+    (hd : decryptPayload suite keys number recovered.header recovered.ciphertext
+      recovered.tag = .error error) :
+    unprotect suite keys expected offset packet = .error error := by
+  simp only [unprotect, bind, Except.bind, hr, hn, hd]
+
 /-- Header removal, number reconstruction, AEAD and authenticated header checks are the only gates.
 
 The AEAD authenticates the recovered header and uses the reconstructed number in its nonce.
@@ -306,7 +321,7 @@ theorem unprotect_ok_iff (suite : CipherSuite) (keys : PacketKeys suite)
         checkHeader suite recovered.header (recovered.ciphertext.size + recovered.tag.size) =
           .ok () ∧
         recovered.header = header := by
-  simp only [unprotect, bind_ok_iff]
+  simp only [unprotect, bind_ok_iff, mapError_eq_ok]
   constructor
   · rintro ⟨recovered, hr, number, hn, output, ho, u, hu, hf⟩
     have hp : (recovered.header, output) = (header, plaintext) := Except.ok.inj hf
@@ -315,7 +330,7 @@ theorem unprotect_ok_iff (suite : CipherSuite) (keys : PacketKeys suite)
   · rintro ⟨recovered, number, hr, hn, ho, hu, hh⟩
     exact ⟨recovered, hr, number, hn, plaintext, ho, (), hu, by simp [hh]; rfl⟩
 
-/-- No packet shorter than a complete sample reaches header protection, RFC 9001 §5.4.2. -/
+/-- A sample needs 20 bytes from the packet-number offset, RFC 9001 §5.4.2. -/
 theorem sample_eq_error_of_short (packet : ByteArray) (offset : Nat)
     (h : packet.size < offset + 20) : sample packet offset = .error .sample := by
   simp [sample, show ¬offset + 4 + 16 ≤ packet.size by omega]

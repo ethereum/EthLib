@@ -96,10 +96,13 @@ def test_initial_requires_aes() -> None:
         quic.protect(CHACHA, secret, 0, 9, header, bytes(3))
     packet = quic.protect(AES, secret, 0, 9, header, bytes(3))
     assert quic.unprotect(AES, secret, 0, 9, packet) == (header, bytes(3))
-    # This constructed ChaCha-protected Initial carries three PADDING bytes and a matching tag.
+    # An Initial with three PADDING bytes, sealed by ChaCha20-Poly1305 under these keys.
+    # It authenticates, so the suite check reports an authenticated-header error.
     forbidden = bytes.fromhex("c700000001000000148005373807da97a14899e58ec96d558d14903ddc")
-    with raises(quic.QuicProtectionError, "EthLib.Networking.Quic.Protection.Error.header"):
+    message = "EthLib.Networking.Quic.Protection.Error.authenticatedHeader"
+    with raises(quic.QuicProtectionError, message) as info:
         quic.unprotect(CHACHA, secret, 0, 9, forbidden)
+    assert info.value.code == 8
     # A bad tag still fails authentication before the suite check.
     corrupted = forbidden[:-1] + bytes([forbidden[-1] ^ 1])
     with raises(
@@ -118,9 +121,10 @@ def test_reserved_bits_fail_after_authentication() -> None:
     sealed = header + aes.gcm_encrypt(key, iv, bytes(3), header)
     mask = aes.encrypt_block(hp, sealed[5:21])
     packet = bytes([sealed[0] ^ (mask[0] & 0x1F), sealed[1] ^ mask[1]]) + sealed[2:]
-    with raises(quic.QuicProtectionError, "EthLib.Networking.Quic.Protection.Error.header") as info:
+    message = "EthLib.Networking.Quic.Protection.Error.authenticatedHeader"
+    with raises(quic.QuicProtectionError, message) as info:
         quic.unprotect(AES, bytes(32), 0, 1, packet)
-    assert info.value.code == 1
+    assert info.value.code == 8
 
 
 def test_unknown_suite() -> None:
