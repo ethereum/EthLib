@@ -168,6 +168,13 @@ def get_payload(
     return _native.engine_get_payload(config, entries, request)
 
 
+def rewrite_params(method: str, params: list[Any]) -> list[Any]:
+    """The parameters of an Engine API request, read by the decoder and written by the writer."""
+    # The writer writes lowercase hex and quantities without leading zeros.
+    # From version 4 of engine_forkchoiceUpdated it writes the custody columns, as `null` if absent.
+    return _native.engine_rewrite_params(method, params)
+
+
 def prepare_execution_payload(
     name: str,
     fork: str,
@@ -260,6 +267,7 @@ __all__ = [
     "PayloadEntry",
     "get_payload_bodies",
     "BodyEntry",
+    "rewrite_params",
     "WithdrawalEntry",
     "prepare_execution_payload",
     "prepare_execution_payload_gloas",
