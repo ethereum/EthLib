@@ -242,7 +242,7 @@ def viewOf (inputs : ViewInputs) : Result ChainView := do
   let genesis ← configGenesis configJson
   let mergeForkBlock ← configNat configJson "mergeForkBlock"
   let config ← ChainConfig.Exports.configOfJson configJson
-  let setup ← Cryptography.Kzg.Exports.runKzg Cryptography.Kzg.Exports.embeddedSetup
+  let setup ← Cryptography.Kzg.Exports.runKzg (Cryptography.Kzg.Exports.embeddedSetup ())
   let state ← (State.Exports.ofInput state).mapError fun e => (0, e.message)
   let (first, rest) ← match blocks with
     | [] => .error (0, "no block")

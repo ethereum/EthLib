@@ -168,7 +168,7 @@ def replayForkChoice {preset : Preset} {fork : Fork} (config : Config) (checks :
   let mut outcomes : Array StepOutcome := #[]
   let mut powBlocks : List PowBlock := []
   let mut verdict : Option (Option Hash32) := none
-  let setup ← Cryptography.Kzg.Exports.embeddedSetup.mapError fun e => (0, e.message)
+  let setup ← (Cryptography.Kzg.Exports.embeddedSetup ()).mapError fun e => (0, e.message)
   for step in steps do
     match step with
     | .powBlock data =>

@@ -1562,6 +1562,8 @@ PyInit__native(void) {
    * Each call builds its own Lean objects, and no two threads share one.
    * The objects that the Lean modules build when they load are persistent, so no count of theirs
    * changes after the load.
+   * The decoded KZG setup is a closed term evaluated on its first use.
+   * It is marked persistent before any thread can read it, so the same holds for it.
    * The exception classes and the sizes are written once, before the module is returned.
    * The wrappers read lists through a snapshot, so a list that another thread changes is safe. */
   PyUnstable_Module_SetGIL(m, Py_MOD_GIL_NOT_USED);

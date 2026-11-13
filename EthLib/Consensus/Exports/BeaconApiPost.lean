@@ -200,7 +200,7 @@ def apiPostOf (args : String × String × ByteArray × ByteArray × List GossipB
   let checks := if verify then SignatureChecks.bls else SignatureChecks.acceptAll
   let (store, statuses) ← gossipCaseStore (preset := preset) (fork := fork) config checks
     anchorState anchorBlock blocks finalized
-  let setup ← runForkChoice (embeddedSetup.mapError .kzg)
+  let setup ← runForkChoice ((embeddedSetup ()).mapError .kzg)
   let sources := emptySources setup
   let mut store := store
   let mut statuses := statuses
