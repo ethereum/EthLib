@@ -122,9 +122,7 @@ private theorem Store.checkpointFields_of_onTick {config : Config}
     (ticked : store.onTick config time = .ok after) :
     P after.justifiedCheckpoint ∧ P after.unrealizedJustifiedCheckpoint ∧
       Q after.finalizedCheckpoint ∧ Q after.unrealizedFinalizedCheckpoint := by
-  unfold Store.onTick at ticked
-  simp only [bind_ok_iff] at ticked
-  obtain ⟨slot, -, caught, catchUp, ticked⟩ := ticked
+  obtain ⟨_, caught, -, catchUp, ticked⟩ := Store.onTick_ok ticked
   exact Store.checkpointFields_of_onTickPerSlot (Store.catchUp_preserves
     (P := fun s => P s.justifiedCheckpoint ∧ P s.unrealizedJustifiedCheckpoint ∧
       Q s.finalizedCheckpoint ∧ Q s.unrealizedFinalizedCheckpoint)

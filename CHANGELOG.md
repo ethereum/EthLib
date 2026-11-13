@@ -58,7 +58,8 @@ Not yet released.
   `Store.storeTargetCheckpointState_frame`, `Store.onAttestation_frame`, `Store.onAttesterSlashing_frame`, `Store.recordBlockTimeliness_frame` and `Store.updateProposerBoostRoot_frame` end with four new conjuncts.
   They state that the justified, finalized, unrealized justified and unrealized finalized checkpoints are unchanged.
   `Store.onTickPerSlot_frame` ends with a new conjunct: the four checkpoints are those of the store, or those of `updateCheckpoints` with its unrealized checkpoints.
-  `Store.computePulledUpTip_frame` ends with a new conjunct: the held state of the tip and its successful justification and finalization, and the four checkpoints that come from them.
+  `Store.computePulledUpTip_frame` ends with a new conjunct: the held state of the tip and the result of its justification and finalization.
+  The conjunct also gives the four checkpoints that come from that result.
   A caller that destructures one of these seven results adds one pattern, and only if its last pattern named the old last conjunct.
   A pattern that ends in `-` needs no change.
   A projection of the old last conjunct gains `.1`.
@@ -67,6 +68,8 @@ Not yet released.
   The new `Store.catchUp_preserves` states that catch-up keeps each property of the store that every tick within a slot keeps.
   It has the form of `Store.onBlockWithVotes_preserves`.
   `Store.catchUp_frame`, `Store.catchUp_ordered` and the catch-up step of `Store.onTick_checkpointStates_latestMessages` now read it, with unchanged statements.
+  The new `Store.onTick_ok` splits a tick into the slot of its time, the catch-up to that slot and one tick within it.
+  `Store.onTick_frame`, `Store.getCurrentSlot_onTick`, `Store.onTick_ordered`, `Store.onTick_checkpointStates_latestMessages` and `Store.exists_getCurrentSlot_onTick_ge` now read it, with unchanged statements.
   The new `Store.Reachable.linked_of_unknown` gives the links of a reachable store whose anchor parent is unknown, and `Store.Reachable.parentsBelow` keeps its statement.
   The new `getBlockRootAtSlot_advanceSlots_cases` gives the roots that a state within a transition records.
 

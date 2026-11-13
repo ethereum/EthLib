@@ -171,9 +171,7 @@ theorem catchUp_ordered {tickSlot : Slot} {start : Store preset fork}
 /-- A tick keeps the checkpoints ordered. -/
 theorem onTick_ordered {timeMs : UInt64} (ordered : store.EpochsOrdered)
     (ticked : store.onTick config timeMs = .ok after) : after.EpochsOrdered := by
-  unfold onTick at ticked
-  simp only [bind_ok_iff] at ticked
-  obtain ⟨tickSlot, -, caught, caughtUp, ticked⟩ := ticked
+  obtain ⟨_, caught, -, caughtUp, ticked⟩ := onTick_ok ticked
   exact onTickPerSlot_ordered (catchUp_ordered ordered caughtUp) ticked
 
 /-- An attestation keeps the checkpoints. -/
@@ -340,9 +338,7 @@ theorem onTick_checkpointStates_latestMessages {timeMs : UInt64}
     (ticked : store.onTick config timeMs = .ok after) :
     after.checkpointStates = store.checkpointStates ∧
       after.latestMessages = store.latestMessages := by
-  unfold onTick at ticked
-  simp only [bind_ok_iff] at ticked
-  obtain ⟨tickSlot, -, caught, caughtUp, ticked⟩ := ticked
+  obtain ⟨_, caught, -, caughtUp, ticked⟩ := onTick_ok ticked
   have step := onTickPerSlot_checkpointStates_latestMessages ticked
   have rest := catchUp_checkpointStates_latestMessages caughtUp
   exact ⟨step.1.trans rest.1, step.2.trans rest.2⟩

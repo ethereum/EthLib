@@ -219,9 +219,11 @@ theorem SameClock.getCurrentSlot {after : Store preset fork} (same : SameClock s
 
 It also keeps the clock.
 
-It counts the held state of the tip, and its four checkpoints come from that count.
+It runs justification and finalization on the held state of the tip.
 
-They are those of the store with the unrealized checkpoints moved, then perhaps the others too. -/
+The result updates the unrealized checkpoints of the store.
+
+For a block of an earlier epoch than the store's, it updates the realized checkpoints too. -/
 theorem computePulledUpTip_frame {root : Root} {after : Store preset fork}
     (pulled : store.computePulledUpTip config root = .ok after) :
     store.EpochsLe after ∧ after.blocks = store.blocks ∧ after.blockStates = store.blockStates ∧
@@ -324,14 +326,25 @@ theorem catchUp_frame {tickSlot : Slot} {start after : Store preset fork}
       exact ⟨g'.trans g, le.trans le', b'.trans b, bs'.trans bs⟩)
     ⟨rfl, EpochsLe.refl _, rfl, rfl⟩ caught
 
+/-- A tick catches up to the slot of its time, then ticks once within that slot. -/
+theorem onTick_ok {timeMs : UInt64} {after : Store preset fork}
+    (ticked : store.onTick config timeMs = .ok after) :
+    ∃ tickSlot caught,
+      (computeSlotAtTimeMs config store.genesisTimeMs timeMs).mapError ForkChoiceError.arith =
+        .ok tickSlot ∧
+        catchUp config store tickSlot = .ok caught ∧
+        caught.onTickPerSlot config timeMs = .ok after := by
+  unfold onTick at ticked
+  simp only [bind_ok_iff] at ticked
+  obtain ⟨tickSlot, tickOk, caught, caughtUp, ticked⟩ := ticked
+  exact ⟨tickSlot, caught, tickOk, caughtUp, ticked⟩
+
 /-- A tick sets the clock to its time, keeps the blocks and lowers no epoch. -/
 theorem onTick_frame {timeMs : UInt64} {after : Store preset fork}
     (ticked : store.onTick config timeMs = .ok after) :
     after.timeMs = timeMs ∧ store.EpochsLe after ∧
       after.blocks = store.blocks ∧ after.blockStates = store.blockStates := by
-  unfold onTick at ticked
-  simp only [bind_ok_iff] at ticked
-  obtain ⟨tickSlot, -, caught, caughtUp, ticked⟩ := ticked
+  obtain ⟨_, caught, -, caughtUp, ticked⟩ := onTick_ok ticked
   obtain ⟨-, le, b, bs⟩ := catchUp_frame caughtUp
   obtain ⟨time, -, le', b', bs', -⟩ := onTickPerSlot_frame ticked
   exact ⟨time, le.trans le', b'.trans b, bs'.trans bs⟩
@@ -341,9 +354,7 @@ theorem getCurrentSlot_onTick {timeMs : UInt64} {after : Store preset fork}
     (ticked : store.onTick config timeMs = .ok after) :
     after.getCurrentSlot config =
       (computeSlotAtTimeMs config store.genesisTimeMs timeMs).mapError .arith := by
-  unfold onTick at ticked
-  simp only [bind_ok_iff] at ticked
-  obtain ⟨tickSlot, -, caught, caughtUp, ticked⟩ := ticked
+  obtain ⟨_, caught, -, caughtUp, ticked⟩ := onTick_ok ticked
   unfold Store.getCurrentSlot
   rw [(onTickPerSlot_frame ticked).1, (onTickPerSlot_frame ticked).2.1,
     (catchUp_frame caughtUp).1]

@@ -120,10 +120,7 @@ theorem exists_getCurrentSlot_onTick_ge {timeMs : UInt64} {current : Slot}
     (forward : store.timeMs ≤ timeMs) (ticked : store.onTick config timeMs = .ok after)
     (slotOk : store.getCurrentSlot config = .ok current) :
     ∃ later, after.getCurrentSlot config = .ok later ∧ current ≤ later := by
-  have slotAt := ticked
-  unfold onTick at slotAt
-  simp only [bind_ok_iff] at slotAt
-  obtain ⟨tickSlot, tickOk, -⟩ := slotAt
+  obtain ⟨tickSlot, _, tickOk, -⟩ := onTick_ok ticked
   refine ⟨tickSlot, ?_, ?_⟩
   · rw [getCurrentSlot_onTick ticked, tickOk]
   · exact getCurrentSlot_le_of_onTick forward ticked slotOk
