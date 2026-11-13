@@ -16,7 +16,7 @@ The Engine API types the amount as a 64-bit number, in [WithdrawalV1][wv1].
 
 The JSON-RPC schema [`Withdrawal`][wrpc] types it as a 256-bit number.
 
-EthLib holds the amount in 64 bits, so one writer serves both APIs.
+Every 64-bit number is below `2^256`, and both APIs write numbers alike, so one writer serves both.
 
 The reader keeps the 64-bit bound of the Engine API.
 

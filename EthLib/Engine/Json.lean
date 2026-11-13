@@ -13,7 +13,7 @@ The JSON form of the parameters of the Engine API.
 
 The Engine API is a JSON-RPC interface, with the encodings of the Ethereum JSON-RPC API.
 
-It reads the base types with the readers that it shares with the execution JSON-RPC API.
+This module reads the base types with readers that the execution JSON-RPC API shares.
 
 An input that such a reader rejects is an invalid parameter, with JSON-RPC code `-32602`.
 
@@ -53,7 +53,9 @@ def invalid {α : Type} (reason : String) : Decode α := throw (.invalidParams r
 /-- A shared reader as a decoding: a rejected input is an invalid parameter, for that reason. -/
 def lift {α : Type} (r : Read α) : Decode α := r.mapError .invalidParams
 
-/-- Each shared reader runs in a decoding, where it rejects with an invalid parameter. -/
+/-- Each shared reader runs in a decoding, where it rejects with an invalid parameter.
+
+The lift applies to every computation that fails with a string, not only to the shared readers. -/
 instance : MonadLift Read Decode := ⟨lift⟩
 
 /-- The fields of version 1 of an execution payload. -/

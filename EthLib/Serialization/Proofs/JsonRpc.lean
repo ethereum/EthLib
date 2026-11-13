@@ -15,17 +15,17 @@ import all Init.Data.Repr
 /-!
 # Proofs: the JSON form of the base types
 
-The decoders read the value of a hex digit from its ASCII byte.
+The readers read the value of a hex digit from its ASCII byte.
 
 They read back each digit that the hex encoder writes.
 
-Those digits are lowercase, so this holds whether or not the decoders accept uppercase.
+Those digits are lowercase, so this holds whether or not the readers accept uppercase.
 
-The byte string decoders read back the bytes of their hex encoding.
+The byte string readers read back the bytes of their hex encoding.
 
 That holds for byte strings of any length and of a given size.
 
-Whether the decoder accepts uppercase digits does not matter there.
+Whether the reader accepts uppercase digits does not matter there.
 
 The proofs rest on two facts about the encoding.
 
@@ -33,14 +33,13 @@ Its characters are ASCII.
 
 It writes two digits for each byte.
 
-A number that the decoder checks against `2^bits` is below `2^bits`.
+A number that the reader checks against `2^bits` is below `2^bits`.
 
-So the 64-bit decoder returns the decoded number itself, without wrapping.
+So the 64-bit reader returns the decoded number itself, without wrapping.
 
 A byte string decoded with a limit on its size has at most that many bytes.
 
 A field of an object decodes to the value that the object holds under its name.
-
 
 A list decodes exactly when the value is an array whose items each decode, in order.
 
@@ -52,7 +51,7 @@ No other text decodes to a number.
 
 The encoder of numbers writes exactly that text, so two numbers never share an encoding.
 
-The encoder of lists writes what the list decoder reads back, item by item.
+The encoder of lists writes what the list reader reads back, item by item.
 
 A byte string without uppercase digits decodes exactly from `0x` and two lowercase digits per byte.
 
@@ -60,9 +59,9 @@ An address, whose digits may be uppercase, decodes exactly from `0x` and two dig
 
 Each of those digits is in either case, and their lowercase forms are the hex encoding.
 
-The 64-bit decoder returns a number exactly when the decoder with the bound `2^64` returns it.
+The 64-bit reader returns a number exactly when the reader with the bound `2^64` returns it.
 
-The bounded byte decoder succeeds exactly when the byte decoder succeeds within the limit.
+The bounded byte reader succeeds exactly when the byte reader succeeds within the limit.
 
 An object built from pairs with distinct names holds exactly those pairs.
 -/

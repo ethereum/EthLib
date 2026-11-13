@@ -46,7 +46,7 @@ theorem withdrawal_eq_ok_iff {j : Lean.Json} {w : Blocks.Withdrawal} :
       obtain ⟨i, hl1, i', hf1, v, hl2, v', hf2, a, hl3, a', hf3, m, hl4, m', hf4, hw⟩ := h
       cases hw
       exact ⟨fs, hfs, hc, i, v, a, m, hl1, hl2, hl3, hl4, hf1, hf2, hf3, hf4⟩
-    -- An object with other fields fails with an invalid parameter, never with a withdrawal.
+    -- An object with other fields is rejected, never read as a withdrawal.
     · rw [ite_eq_right hc, bind_ok_iff] at h
       obtain ⟨_, hInvalid, -⟩ := h
       cases hInvalid

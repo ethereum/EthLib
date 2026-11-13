@@ -51,9 +51,11 @@ open EthLib.Serialization.JsonRpc (dataJson fixed uint64)
 def knownOfJson (j : Json) : Result (Hash32 × KnownPayload) := do
   let some valid := (j.getObjValAs? Bool "valid").toOption | throw (0, "tree: no validity")
   let hash (name : String) : Result Hash32 :=
-    (fixed name 32 (j.getObjValD name)).mapError fun e => (0, s!"tree: {e}")
+    (fixed name 32 (j.getObjValD name)).mapError fun e =>
+      (0, s!"tree: {reprStr (EngineError.invalidParams e)}")
   let number (name : String) : Result UInt64 :=
-    (uint64 name (j.getObjValD name)).mapError fun e => (0, s!"tree: {e}")
+    (uint64 name (j.getObjValD name)).mapError fun e =>
+      (0, s!"tree: {reprStr (EngineError.invalidParams e)}")
   return (← hash "blockHash",
     ⟨← hash "parentHash", valid, ← number "number", ← number "timestamp"⟩)
 
@@ -75,7 +77,8 @@ def forkchoiceUpdatedOf (args : PyValue × PyValue × PyValue × PyValue) : Resu
   let finalized := finalized.toJson
   -- The known finalized block is an input that the export reads itself, so its errors have code 0.
   let finalized : Option Hash32 ← if finalized.isNull then pure none else
-    some <$> (fixed "finalized" 32 finalized).mapError fun e => (0, s!"finalized: {e}")
+    some <$> (fixed "finalized" 32 finalized).mapError fun e =>
+      (0, s!"finalized: {reprStr (EngineError.invalidParams e)}")
   let request := request.toJson
   let some method := (request.getObjValAs? String "method").toOption
     | throw (0, "request: no method")

@@ -24,7 +24,7 @@ It is read as a number on 32 bytes.
 
 A field that is missing or out of its pattern, or a root that is not 32 bytes, has code 0.
 
-The export sits in the Engine layer, beside the readers of the patterns of the execution API.
+The export reads the answer with the readers of the base types that the JSON-RPC APIs share.
 
 The base types are those of [`base-types.yaml`][types].
 

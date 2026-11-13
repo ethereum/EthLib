@@ -11,8 +11,9 @@ Not yet released.
 
 - In Lean, the JSON readers and writers of the base types moved from `EthLib.Engine.Json` to `EthLib.Serialization.JsonRpc`, with their theorems.
   They are `hexValue`, `hexDigits`, `bytesOf`, `bytes`, `fixed`, `address`, `quantity`, `bytesMax`, `uint64`, `paramsArray`, `array`, `fields`, `hasExactly`, `field`, `dataJson`, `quantityJson`, `listJson` and `optionJson`.
-  They now reject an input with a reason, a string, in place of `EngineError.invalidParams`.
-  An Engine decoding lifts that reason to `EngineError.invalidParams`, so every Engine decoder returns what it returned before.
+  Their namespace is now `EthLib.Serialization.JsonRpc`.
+  The readers among them return `Read`, an alias of `Except String`, in place of `Except EngineError`, and reject an input with a reason.
+  An Engine decoding lifts that reason to `EngineError.invalidParams`, through `Engine.Json.lift` and its `MonadLift` instance, so every Engine decoder returns what it returned before.
   `withdrawal` and `withdrawalJson`, with their theorems, moved to `EthLib.Execution.Rpc`.
   The Python bindings are unchanged.
 

@@ -19,16 +19,17 @@ A number is lowercase hex behind `0x`, without leading zeros, and `0x0` for zero
 
 The base types state the patterns in [`base-types.yaml`][types].
 
-An object must hold exactly the fields of its structure.
+Readers of objects require exactly the named fields, as step 1 of [`engine_newPayloadV3`][v3] asks.
 
-A field whose value is `null` counts as absent.
+They count a field whose value is `null` as absent, as that step also asks.
 
 A reader that rejects its input gives the reason as a string.
 
-Each API turns that reason into its own error for an invalid parameter.
+A caller turns that reason into its own error, such as an invalid parameter of the Engine API.
 
 The writers write the canonical form: lowercase hex, and numbers without leading zeros.
 
+[v3]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/cancun.md#specification
 [types]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/schemas/base-types.yaml
 -/
 
@@ -124,7 +125,7 @@ def fields (what : String) : Json → Read (List (String × Json))
   | .obj kvs => pure (kvs.toList.filter fun (_, v) => !v.isNull)
   | _ => reject s!"{what}: not an object"
 
-/-- Whether an object has exactly the named fields, ignoring those whose value is `null`. -/
+/-- Whether a list of fields holds exactly the named fields. -/
 def hasExactly (fs : List (String × Json)) (names : List String) : Bool :=
   fs.length == names.length && names.all fun name => fs.any (·.1 == name)
 
