@@ -125,6 +125,10 @@ class HkdfError(EthLibError, ValueError):
     """HKDF rejected its input."""
 
 
+class Tls13Error(EthLibError, ValueError):
+    """A TLS 1.3 key derivation rejected its input."""
+
+
 class Pbkdf2Error(EthLibError, ValueError):
     """PBKDF2 rejected its input."""
 
@@ -350,6 +354,7 @@ __all__ = [
     "LightClientError",
     "ForkChoiceError",
     "HkdfError",
+    "Tls13Error",
     "Pbkdf2Error",
     "ScryptError",
     "X25519Error",

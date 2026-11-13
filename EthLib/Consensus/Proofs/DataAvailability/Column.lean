@@ -188,6 +188,35 @@ instance {fork : Fork} : LawfulSszType (PartialDataColumnGroupID fork) :=
      firstDuplicate_of_nodup _ PartialDataColumnGroupID.names_nodup⟩
     (fun _ => rfl) (fun _ => rfl)
 
+/-- Reading back the group ID of a group gives that group. -/
+theorem PartialDataColumnGroupID.ofGroupId_toGroupId {fork : Fork}
+    {group : PartialDataColumnGroupID fork} {bytes : ByteArray}
+    (h : group.toGroupId = .ok bytes) :
+    PartialDataColumnGroupID.ofGroupId fork bytes = some group := by
+  unfold PartialDataColumnGroupID.toGroupId at h
+  cases hs : SszType.serialize group with
+  | error e => simp [hs, bind, Except.bind] at h
+  | ok data =>
+    simp only [hs, bind, Except.bind, pure, Except.pure, Except.ok.injEq] at h
+    subst h
+    have hd := Serialization.Ssz.SszType.deserialize_serialize hs
+    have he : (ByteArray.mk #[0] ++ data).extract 1 (ByteArray.mk #[0] ++ data).size = data := by
+      apply ByteArray.ext
+      simp [ByteArray.data_append, ByteArray.data_extract]
+      right
+      rw [show (ByteArray.mk #[0]).size = 1 from rfl]
+      omega
+    have hc : (ByteArray.mk #[0] ++ data).data[0]? = some 0 := by simp [ByteArray.data_append]
+    unfold PartialDataColumnGroupID.ofGroupId
+    simp only [hc, ↓reduceIte, he, hd]
+    rfl
+
+/-- A group ID whose first byte is not the version 0 names no group. -/
+theorem PartialDataColumnGroupID.ofGroupId_version {fork : Fork} {bytes : ByteArray}
+    (h : bytes.data[0]? ≠ some 0) :
+    PartialDataColumnGroupID.ofGroupId fork bytes = none := by
+  simp [PartialDataColumnGroupID.ofGroupId, h]
+
 /-- A bitmap with every bit set names every blob, in order. -/
 theorem PartialDataColumnSidecar.blobIndices_of_all {preset : Preset} {fork : Fork}
     {sidecar : PartialDataColumnSidecar preset fork}

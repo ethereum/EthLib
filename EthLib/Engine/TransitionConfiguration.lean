@@ -76,6 +76,21 @@ structure TransitionConfiguration where
 Step 7 of the method sets it. -/
 def UNDECIDED_TERMINAL_TOTAL_DIFFICULTY : U256 := BitVec.ofNat 256 (2 ^ 256 - 2 ^ 10)
 
+/-- Whether a block of proof of work is terminal: the definition of [EIP-3675].
+
+Its total difficulty reaches the terminal total difficulty, and that of its parent does not.
+
+The totals are natural numbers, since the execution layer puts no bound on them.
+
+The terminal block hash plays no part: EIP-3675 uses it only in the fork choice of proof of work.
+
+[EIP-3675]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-3675.md#definitions
+-/
+def isTerminalPowBlock (config : TransitionConfiguration)
+    (totalDifficulty parentTotalDifficulty : Nat) : Bool :=
+  decide (config.terminalTotalDifficulty.toNat ≤ totalDifficulty) &&
+    decide (parentTotalDifficulty < config.terminalTotalDifficulty.toNat)
+
 /-- The three fields of the structure. -/
 def transitionConfigurationFields : List String :=
   ["terminalTotalDifficulty", "terminalBlockHash", "terminalBlockNumber"]

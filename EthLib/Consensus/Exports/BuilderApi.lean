@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.BuilderApi
+public import EthLib.Consensus.BuilderApi.AuthData
 public import EthLib.Consensus.BuilderApi.Bid
 public import EthLib.Consensus.BuilderApi.Encoding
 public import EthLib.Consensus.BuilderApi.GloasBid
@@ -16,6 +17,8 @@ public import EthLib.Serialization.Exports.Ssz
 C-ABI exports for Builder API signature checks, registrations, bids, unblinding and bid valuation.
 
 Two more exports write and read the JSON body of a response, which carries its version.
+
+One more gives the default data of a Gloas request, from the builder's URL.
 
 The value of a bid is capped by the proposer's cap on the execution payment.
 
@@ -357,6 +360,12 @@ Then come the SSZ bytes of the request. -/
 @[export eth_consensus_builder_preferences_failures]
 def builderPreferencesFailuresExport (args : PyValue) : Result PyValue :=
   pyExport builderPreferencesFailuresOf args
+
+/-- From Gloas: the default data of a request to a builder, from the builder's URL. -/
+@[export eth_consensus_default_auth_data]
+def defaultAuthDataExport (args : PyValue) : Result PyValue :=
+  pyExport (fun url => (BuilderApi.defaultAuthData url).mapError fun e => (e.code, reprStr e) :
+    String → Result ByteArray) args
 
 /-- The value of a builder's bid from its two payments and the proposer's execution payment cap. -/
 @[export eth_consensus_builder_bid_value]

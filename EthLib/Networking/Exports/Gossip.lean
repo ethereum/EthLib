@@ -5,12 +5,15 @@ public import EthLib.Base.Exports.PyDerive
 public import EthLib.Base.Exports.Proofs.PyValue
 public import EthLib.Networking.Gossip.MessageId
 public import EthLib.Networking.Gossip.Payload
+public import EthLib.Networking.Gossip.Router
 public import EthLib.Networking.Gossip.Rpc
 
 /-!
 # `Exports.Gossip`
 
-C-ABI exports for the gossip message ID, payload and RPC, callable from the Python C extension.
+C-ABI exports for the gossip message ID, payload, RPC and router.
+
+The Python C extension calls them.
 
 The message ID takes typed values: the name of a fork as a `str`, then the topic and the data.
 
@@ -43,6 +46,10 @@ derive_py Prune
 derive_py_laws Prune
 derive_py IDontWant
 derive_py_laws IDontWant
+derive_py ControlExtensions
+derive_py_laws ControlExtensions
+derive_py PartialMessagesExtension
+derive_py_laws PartialMessagesExtension
 derive_py Control
 derive_py_laws Control
 derive_py Rpc
@@ -76,5 +83,59 @@ def rpcDecodeExport (args : PyValue) : Result PyValue :=
 @[export eth_gossip_rpc_encode]
 def rpcEncodeExport (args : PyValue) : Result PyValue :=
   pyExport (fun (rpc : Rpc) => (pure rpc.encode : Result ByteArray)) args
+
+derive_py GossipsubParameters
+derive_py_laws GossipsubParameters
+derive_py ValidationResult
+derive_py_laws ValidationResult
+derive_py Standing
+derive_py_laws Standing
+derive_py MessageCache
+derive_py_laws MessageCache
+derive_py SeenCache
+derive_py_laws SeenCache
+derive_py RouterState
+derive_py_laws RouterState
+derive_py Out
+derive_py_laws Out
+
+/-- The gossipsub parameters, from the slot duration in milliseconds and the slots per epoch. -/
+@[export eth_gossip_parameters]
+def parametersExport (args : PyValue) : Result PyValue :=
+  pyExport (fun ((slotDurationMs, slotsPerEpoch) : Nat × Nat) =>
+    (pure (gossipsubParameters slotDurationMs slotsPerEpoch) : Result GossipsubParameters)) args
+
+/-- What the router does with one RPC, with its client choices given as tables.
+
+The arguments come in this order.
+
+- The name of a fork, whose rule gives the ID of every message, whatever the digest of its topic.
+- The gossipsub parameters, then the two durations in milliseconds that the router takes.
+- The standing of some peers; any other peer has every flag false.
+- The validation result of some message IDs; any other message is ignored.
+- The time in milliseconds, the peer that sent the RPC, the RPC and the state.
+
+In each table, the first entry for a key counts.
+
+One rule for every message fits a router whose topics all carry digests of forks with that rule.
+
+Phase 0 has one rule, and every fork from Altair on has another. -/
+def receiveRpcOf (args : String × GossipsubParameters × Nat × Nat × List (PeerId × Standing) ×
+    List (MessageId × ValidationResult) × Nat × PeerId × Rpc × RouterState) :
+    Result (RouterState × Out) := do
+  let (fork, p, backoffMs, pruneBackoffMs, standings, results, now, src, rpc, s) := args
+  let fork ← forkOfName fork.toUTF8
+  let msgId (m : Message) : MessageId := messageId fork m.topic.toUTF8 m.data
+  let standing (peer : PeerId) : Standing := (standings.lookup peer).getD {}
+  let validate (m : Message) : ValidationResult :=
+    (results.lookup (msgId m)).getD (.ignore "no validation result")
+  return receiveRpc p backoffMs pruneBackoffMs standing msgId validate now src rpc s
+
+/-- What the router does with one RPC, given a fork name, the parameters and the tables.
+
+The result is the new state, and what the router sends and delivers. -/
+@[export eth_gossip_receive_rpc]
+def receiveRpcExport (args : PyValue) : Result PyValue :=
+  pyExport receiveRpcOf args
 
 end EthLib.Networking.Gossip.Exports

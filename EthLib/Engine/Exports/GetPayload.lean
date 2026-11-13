@@ -2,6 +2,7 @@ module
 
 public import EthLib.Base.Exports.ChainConfig
 public import EthLib.Cryptography.Exports.Kzg
+public import EthLib.Engine.Capabilities
 public import EthLib.Engine.Exports.PayloadBodies
 public import EthLib.Engine.GetPayload
 public import EthLib.Execution.Exports.Transition
@@ -69,9 +70,7 @@ def storedPayloadOf (entry : PayloadEntry) : Result (PayloadId × StoredPayload)
   return (id, { fork, built, bundle := .ofNetwork network, shouldOverrideBuilder, blockAccessList })
 
 /-- The version of an `engine_getPayloadV1` through `engine_getPayloadV6` method name. -/
-def getPayloadVersion (method : String) : Option Nat :=
-  ["engine_getPayloadV1", "engine_getPayloadV2", "engine_getPayloadV3", "engine_getPayloadV4",
-    "engine_getPayloadV5", "engine_getPayloadV6"].idxOf? method |>.map (· + 1)
+def getPayloadVersion (method : String) : Option Nat := methodVersion "getPayload" method
 
 /-- The answer to a get-payload request, from a snapshot of build processes. -/
 def getPayloadOf (args : PyValue × List PayloadEntry × PyValue) : Result PyValue := do

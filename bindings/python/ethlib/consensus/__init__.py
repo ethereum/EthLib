@@ -220,6 +220,11 @@ def builder_preferences_failures(
     )
 
 
+def default_auth_data(url: str) -> bytes:
+    """From Gloas: a builder's default auth data, its URL's host lowercased, IPv6 compressed."""
+    return _native.consensus_default_auth_data(url)
+
+
 def builder_bid_value(value: int, execution_payment: int, max_execution_payment: int) -> int:
     """The bid's value in Gwei, with its execution payment capped, not reduced to 64 bits."""
     return _native.consensus_builder_bid_value(value, execution_payment, max_execution_payment)
@@ -879,6 +884,18 @@ def api_state_query_ssz(name: str, fork: str, state: bytes, query: str) -> bytes
     return _native.consensus_api_state_query_ssz(name, fork, state, query)
 
 
+def api_validator_status(validator: dict[str, Any], balance: int, epoch: int) -> tuple[str, str]:
+    """The Beacon API status of a validator and the name of its group, or ConsensusError."""
+    # The validator is the JSON of the API, as api_json writes a Validator.
+    # A Validator has the same fields at every fork, so the call takes no name and no fork.
+    return _native.consensus_api_validator_status(validator, balance, epoch)
+
+
+def api_builder_status(name: str, fork: str, state: bytes, index: int) -> str:
+    """The Beacon API status of the builder at an index of a state, or ConsensusError."""
+    return _native.consensus_api_builder_status(name, fork, state, index)
+
+
 def gossip_validation(
     name: str,
     fork: str,
@@ -1489,6 +1506,8 @@ __all__ = [
     "api_genesis",
     "api_state_query",
     "api_state_query_ssz",
+    "api_validator_status",
+    "api_builder_status",
     "is_valid_builder_signature",
     "process_registration",
     "is_eligible_for_bid",
@@ -1499,6 +1518,7 @@ __all__ = [
     "verify_builder_request_auth_signature",
     "builder_request_auth_failures",
     "builder_preferences_failures",
+    "default_auth_data",
     "builder_bid_value",
     "consensus_version",
     "consensus_version_fork",

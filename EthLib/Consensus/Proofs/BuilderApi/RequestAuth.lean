@@ -5,6 +5,8 @@ public import EthLib.Consensus.BuilderApi.RequestAuth
 /-!
 # Proofs: the checks of a Gloas request to a builder
 
+Without data agreed out of band, the agreed data is the default data from the builder's URL.
+
 A request for a bid fails no check exactly when its header, data, slot and signature all hold.
 
 A request whose only failed check is the signature gets 401, and no other status.
@@ -21,6 +23,14 @@ An accepted submission keeps its preferences for its key and slot, and changes n
 namespace EthLib.Consensus.BuilderApi
 
 open Base Cryptography.Bls Serialization.Ssz
+
+/-- Without data agreed out of band, the agreed data is the default data of the builder's URL. -/
+theorem agreedData_none (builderUrl : String) :
+    agreedData none builderUrl = defaultAuthData builderUrl := rfl
+
+/-- Data agreed out of band is the agreed data, whatever the builder's URL. -/
+theorem agreedData_some (data : ByteArray) (builderUrl : String) :
+    agreedData (some data) builderUrl = .ok data := rfl
 
 /-- A request for a bid fails no check exactly when every check holds. -/
 theorem authFailures_nil_iff {config : Config} {checks : SignatureChecks} {agreed : ByteArray}

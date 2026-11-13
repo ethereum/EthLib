@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Exports.Proofs.PyValue
+public import EthLib.Engine.Capabilities
 public import EthLib.Engine.GetBlobs
 
 /-!
@@ -58,9 +59,7 @@ def pooledOf (entry : PoolEntry) : Result (Bytes32 × PooledBlob) := do
   return (hash, ⟨blob, proof, cells⟩)
 
 /-- The version of a method name `engine_getBlobsV1` to `engine_getBlobsV4`. -/
-def getBlobsVersion (method : String) : Option Nat :=
-  ["engine_getBlobsV1", "engine_getBlobsV2", "engine_getBlobsV3",
-    "engine_getBlobsV4"].idxOf? method |>.map (· + 1)
+def getBlobsVersion (method : String) : Option Nat := methodVersion "getBlobs" method
 
 /-- The answer to an `engine_getBlobs` request, from a blob pool.
 
