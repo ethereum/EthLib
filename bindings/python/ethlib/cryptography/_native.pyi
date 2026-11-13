@@ -565,6 +565,10 @@ def consensus_is_valid_builder_signature(name: str, fork: str, config: dict[str,
     """Whether the signature of a signed message of the Builder API verifies."""
     ...
 
+def consensus_process_registration(name: str, fork: str, config: dict[str, Any] | None, state: bytes, registry: list[bytes], signed: bytes, now: int) -> str | None:
+    """None when a builder keeps a signed registration, or the name of the rule that refuses it."""
+    ...
+
 def consensus_unblind_signed_blinded_block(name: str, fork: str, blinded: bytes, revealed: bytes) -> tuple[bytes, bytes] | None:
     """The root and the bytes of the signed block that a signed blinded block and a payload give."""
     ...

@@ -3,6 +3,7 @@
 import hashlib
 import json
 import struct
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +12,7 @@ from py_ecc.bls import G2ProofOfPossession
 
 from ethlib import consensus
 from ethlib.errors import SszError
+from ethlib.networking import snappy
 from raising import raises
 
 ERROR = SszError
@@ -648,3 +650,99 @@ def test_builder_bid_value_out_of_range(value: int, position: int):
     with raises(consensus.ConsensusError, f"expected an int below {2**64}, got {value}") as info:
         consensus.builder_bid_value(*amounts)
     assert info.value.code == 0
+
+
+# A minimal Bellatrix state of the consensus tests, whose validator i has the secret key i + 1.
+STATE = (
+    Path(__file__).resolve().parents[4]
+    / "tests/consensus/light_client/minimal/bellatrix/light_client/single_merkle_proof"
+    / "BeaconState/current_sync_committee_merkle_proof/object.ssz_snappy"
+)
+# The validator of the registrations below, and its secret key.
+INDEX = 3
+# A registration message: fee recipient, gas limit, timestamp and key.
+MESSAGE_SIZE = 20 + 8 + 8 + 48
+REGISTRANT_KEY = INDEX + 1
+# The activation epoch follows the key, credentials, balance, slashed flag and eligibility.
+ACTIVATION_AFTER_KEY = 48 + 32 + 8 + 1 + 8
+FAR_FUTURE = 2**64 - 1
+
+
+def _state() -> bytes:
+    """The pinned state, which every registration below reads."""
+    return snappy.decompress(STATE.read_bytes())
+
+
+def _with_epochs(state: bytes, activation: int, exit_epoch: int) -> bytes:
+    """The state with new activation and exit epochs for the registering validator."""
+    at = state.index(G2ProofOfPossession.SkToPk(REGISTRANT_KEY)) + ACTIVATION_AFTER_KEY
+    return state[:at] + struct.pack("<QQ", activation, exit_epoch) + state[at + 16 :]
+
+
+def _signed_registration(timestamp: int, key: int = REGISTRANT_KEY) -> bytes:
+    """A registration of a key at a time, signed by that key under the Builder API domain."""
+    pubkey = G2ProofOfPossession.SkToPk(key)
+    message = bytes(20) + struct.pack("<QQ", 30_000_000, timestamp) + pubkey
+    # The minimal configuration has its own genesis fork version, which enters the domain.
+    version = bytes.fromhex(consensus.config("minimal")["GENESIS_FORK_VERSION"][2:])
+    root = _sha(_registration_root(message) + _builder_domain(version))
+    return message + G2ProofOfPossession.Sign(key, root)
+
+
+def _register(
+    signed: bytes, now: int, state: bytes | None = None, kept: Sequence[bytes] = ()
+) -> str | None:
+    """The rule that refuses a registration on the pinned state, or None when it is kept."""
+    state = _state() if state is None else state
+    return consensus.process_registration("minimal", "bellatrix", state, list(kept), signed, now)
+
+
+@pytest.mark.parametrize(
+    ("now", "expected"),
+    [(89, "too_far_in_future"), (90, None), (100, None)],
+    ids=["eleven seconds ahead", "ten seconds ahead", "on time"],
+)
+def test_registration_lookahead(now: int, expected: str | None):
+    # A registration may be at most ten seconds ahead of the builder's clock.
+    assert _register(_signed_registration(100), now) == expected
+
+
+def test_registration_older_than_kept():
+    kept = _signed_registration(101)[:MESSAGE_SIZE]
+    assert _register(_signed_registration(100), 100, kept=[kept]) == "older_than_previous"
+    assert _register(_signed_registration(101), 100, kept=[kept]) is None
+
+
+def test_registration_of_unknown_key():
+    assert _register(_signed_registration(100, key=10**6), 100) == "unknown_validator"
+
+
+def test_registration_of_exited_validator():
+    state = _with_epochs(_state(), 0, 0)
+    assert _register(_signed_registration(100), 100, state) == "not_eligible"
+
+
+def test_registration_of_pending_validator():
+    # A validator whose activation is still ahead may register.
+    state = _with_epochs(_state(), FAR_FUTURE, FAR_FUTURE)
+    assert _register(_signed_registration(100), 100, state) is None
+
+
+def test_registration_with_another_signature():
+    signed = _signed_registration(100)
+    other = _signed_registration(101)
+    assert _register(signed[:MESSAGE_SIZE] + other[MESSAGE_SIZE:], 100) == "bad_signature"
+
+
+def test_registration_clock_overflow():
+    # The source adds the lookahead to the clock as a 64-bit integer, which fails at the end.
+    assert _register(_signed_registration(100), 2**64 - 10) == "clock_overflow"
+    assert _register(_signed_registration(100), 2**64 - 11) is None
+
+
+def test_registration_rules_in_order():
+    # The first rule that fails names the refusal.
+    signed = _signed_registration(150, key=10**6)
+    assert _register(signed[:MESSAGE_SIZE] + bytes(96), 100) == "unknown_validator"
+    state = _with_epochs(_state(), 0, 0)
+    assert _register(_signed_registration(150), 100, state) == "not_eligible"

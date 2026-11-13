@@ -422,6 +422,9 @@
 #define DOC_consensus_is_valid_builder_signature \
   "Whether the signature of a signed message of the Builder API verifies."
 
+#define DOC_consensus_process_registration \
+  "None when a builder keeps a signed registration, or the name of the rule that refuses it."
+
 #define DOC_consensus_unblind_signed_blinded_block \
   "The root and the bytes of the signed block that a signed blinded block and a payload give."
 
