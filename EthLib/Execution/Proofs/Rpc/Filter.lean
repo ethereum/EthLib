@@ -93,6 +93,13 @@ private theorem applyBody_run {fork : Fork} {config : ChainConfig}
     cases h
     exact ⟨rfl, rfl⟩
 
+/-- A log with fewer topics than a filter has topic positions does not match it.
+
+This holds whatever each position takes. -/
+theorem Filter.selects_eq_false_of_length_lt {f : Filter} {log : Log}
+    (h : log.topics.length < f.topics.length) : f.selects log = false := by
+  simp [Filter.selects, Nat.not_le.mpr h]
+
 namespace ChainView
 
 /-- The logs that the method returns are the matching ones among the receipt objects of the blocks.
@@ -307,23 +314,22 @@ theorem Valid.not_selects_of_bloom {v : ChainView} {checkSeal : Bool} (hv : v.Va
       exact absurd this (by simp)
     have hemp : addresses.isEmpty = false := by simpa using hne
     simp [Filter.selects, hf, hnot, hemp]
-  · have hk' : (some ts, k) ∈ f.topics.zipIdx := by
-      obtain ⟨hlt, hget⟩ := List.getElem?_eq_some_iff.mp hk
-      exact List.mem_iff_getElem?.mpr ⟨k, by simp [hk]⟩
-    have hfalse : Filter.takesTopic (some ts) log.topics[k]? = false := by
-      rcases hl : log.topics[k]? with _ | t
-      · cases ts with
-        | nil => exact absurd rfl hne
-        | cons _ _ => rfl
-      · have ht : t ∈ log.topics := List.mem_of_getElem? hl
-        have hnot : t ∉ ts := fun hmem => by
-          have := hno _ hmem
-          rw [Bloom.mayContain_topic hlog ht] at this
-          exact absurd this (by simp)
-        cases ts with
-        | nil => exact absurd rfl hne
-        | cons _ _ => simpa [Filter.takesTopic] using hnot
-    have hall : f.topics.zipIdx.all (fun (taken, k) => Filter.takesTopic taken log.topics[k]?)
+  · rcases Nat.lt_or_ge log.topics.length f.topics.length with hlen | hlen
+    · exact Filter.selects_eq_false_of_length_lt hlen
+    obtain ⟨hk1, hget⟩ := List.getElem?_eq_some_iff.mp hk
+    have hk2 : k < log.topics.length := by omega
+    have hk' : (some ts, log.topics[k]) ∈ f.topics.zip log.topics := by
+      rw [List.mem_iff_getElem]
+      exact ⟨k, by simp; omega, by simp [hget]⟩
+    have hnot : log.topics[k] ∉ ts := fun hmem => by
+      have := hno _ hmem
+      rw [Bloom.mayContain_topic hlog (List.getElem_mem hk2)] at this
+      exact absurd this (by simp)
+    have hfalse : Filter.takesTopic (some ts) log.topics[k] = false := by
+      cases ts with
+      | nil => exact absurd rfl hne
+      | cons _ _ => simpa [Filter.takesTopic] using hnot
+    have hall : (f.topics.zip log.topics).all (fun (taken, t) => Filter.takesTopic taken t)
         = false := by
       rw [Bool.eq_false_iff]
       intro h

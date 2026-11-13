@@ -308,8 +308,8 @@ def test_logs_of_whole_chain() -> None:
         ("eth_getBlockReceipts", [hex(number)]) for number in range(len(chain.blocks))
     ]
     calls.append(("eth_getLogs", [{"fromBlock": "earliest", "toBlock": "latest"}]))
-    # An empty list of addresses takes any address, as an empty list of topics does.
-    calls.append(("eth_getLogs", [{"fromBlock": "earliest", "address": [], "topics": [[]]}]))
+    # An empty list of addresses takes any address, as a filter with no topic position does.
+    calls.append(("eth_getLogs", [{"fromBlock": "earliest", "address": [], "topics": []}]))
     requests = [
         json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params})
         for method, params in calls
@@ -321,6 +321,26 @@ def test_logs_of_whole_chain() -> None:
     assert expected
     assert logs == expected
     assert empty_lists == expected
+
+
+def test_logs_need_a_topic_at_each_position() -> None:
+    """A log needs a topic at each position of the filter, even one that takes any topic."""
+    logs = _call("eth_getLogs", [{"fromBlock": "earliest"}])
+    counts = {len(log["topics"]) for log in logs}
+    # The chain has logs of several topic counts, so some request below drops some logs.
+    assert len(counts) > 1
+    # Both null and an empty list take any topic at a position.
+    for wildcard in (None, []):
+        for size in range(max(counts) + 2):
+            topics = [wildcard] * size
+            result = _call("eth_getLogs", [{"fromBlock": "earliest", "topics": topics}])
+            assert result == [log for log in logs if len(log["topics"]) >= size]
+    # A position after a concrete topic needs a second topic, though it takes any.
+    first = next(log["topics"][0] for log in logs if len(log["topics"]) == 1)
+    result = _call("eth_getLogs", [{"fromBlock": "earliest", "topics": [first, None]}])
+    assert result == [
+        log for log in logs if log["topics"][:1] == [first] and len(log["topics"]) > 1
+    ]
 
 
 # Each filter that the method rejects, with the code of its error.
