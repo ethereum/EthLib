@@ -633,6 +633,34 @@ def bindings : List Binding := [
     "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, " ++
       "verify: bool, root: bytes, envelope: bytes) -> bytes",
     [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
+  ⟨"consensus_api_light_client_bootstrap",
+    `EthLib.Consensus.Exports.apiLightClientBootstrapExport,
+    "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, " ++
+      "verify: bool, config: dict[str, Any] | None, root: bytes) -> dict[str, Any]",
+    [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
+  ⟨"consensus_api_light_client_bootstrap_ssz",
+    `EthLib.Consensus.Exports.apiLightClientBootstrapSszExport,
+    "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, " ++
+      "verify: bool, config: dict[str, Any] | None, root: bytes) -> bytes",
+    [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
+  ⟨"consensus_api_light_client_updates",
+    `EthLib.Consensus.Exports.apiLightClientUpdatesExport,
+    "(name: str, config: dict[str, Any] | None, known: list[tuple[int, str, bytes]], " ++
+      "start_period: int, count: int) -> list[dict[str, Any]]",
+    [], some "ConsensusError"⟩,
+  ⟨"consensus_api_light_client_updates_ssz",
+    `EthLib.Consensus.Exports.apiLightClientUpdatesSszExport,
+    "(name: str, config: dict[str, Any] | None, genesis_validators_root: bytes, " ++
+      "known: list[tuple[int, str, bytes]], start_period: int, count: int) -> bytes",
+    [], some "ConsensusError"⟩,
+  ⟨"consensus_api_light_client_decode_updates",
+    `EthLib.Consensus.Exports.apiLightClientDecodeUpdatesExport,
+    "(name: str, config: dict[str, Any] | None, genesis_validators_root: bytes, " ++
+      "data: bytes) -> list[tuple[str, bytes]]",
+    [], some "ConsensusError"⟩,
+  ⟨"consensus_api_light_client_latest", `EthLib.Consensus.Exports.apiLightClientLatestExport,
+    "(name: str, fork: str, kind: str, update: bytes | None) -> dict[str, Any]",
+    [`EthLib.Consensus.LightClientError], some "ConsensusError"⟩,
   ⟨"consensus_api_attestation_data", `EthLib.Consensus.Exports.apiAttestationDataExport,
     "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, " ++
       "verify: bool, optimistic_roots: list[bytes], slot: int, " ++
