@@ -2,7 +2,7 @@ module
 
 public import EthLib.Execution.Rpc.Account
 public import EthLib.Execution.Rpc.Block
-public import EthLib.Execution.Rpc.Call
+public import EthLib.Execution.Rpc.Estimate
 public import EthLib.Execution.Rpc.Config
 public import EthLib.Execution.Rpc.Fees
 public import EthLib.Execution.Rpc.AccessList
@@ -226,6 +226,16 @@ def call (v : ChainView) (method : String) (params : List Json) : Except RpcErro
     | [] | [_] | [_, _] => .error (RpcError.invalidParams "missing parameter")
     | _ => .error (RpcError.invalidParams "the method takes three parameters")
   | "eth_baseFee" => noParams params (quantityJson v.baseFee)
+  | "eth_estimateGas" => match params with
+    | t :: rest => do
+      let tx ← readParam genericTransaction t
+      quantityJson <$> v.estimateGas tx (← optionalBlock rest) {}
+    | [] => .error (RpcError.invalidParams "missing parameter")
+  | "eth_createAccessList" => match params with
+    | t :: rest => do
+      let tx ← readParam genericTransaction t
+      accessListResultJson <$> v.createAccessList tx (← optionalBlock rest) {}
+    | [] => .error (RpcError.invalidParams "missing parameter")
   | "debug_getRawHeader" => oneParam params fun b => do
     (dataJson ·.toList) <$> v.rawHeader (← readParam (blockNumberOrTag "block") b)
   | "debug_getRawBlock" => oneParam params fun b => do
