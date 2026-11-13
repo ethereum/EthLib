@@ -3903,57 +3903,21 @@ private theorem funding_step_capacity {x y : ForkedBeaconState preset}
       simp only [funding_carry, cachedCarry]
       omega
 
-private theorem funding_run_capacity {x y : ForkedBeaconState preset}
+/-- A potential grows along a run by at most the churn per epoch plus the event credits. -/
+private theorem funding_run_bound (potential : ForkedBeaconState preset → Nat)
+    (spent gained : BalanceEvent preset → Nat) {x y : ForkedBeaconState preset}
     (tail : Run config checks x y) (early : y.fork < .glamsterdam)
     (high : Nat) (endEpoch : (getCurrentEpoch y.state).toNat ≤ high + 1)
     (events : List (BalanceEvent preset)) (replayed : tail.balanceEvents high = .ok events)
     (stepBound : ∀ {a b : ForkedBeaconState preset}, Run config checks x a →
       ∀ (step : Step config checks a b), b.fork < .glamsterdam →
       ∀ added, step.balanceEvents = .ok added →
-      funding_carry b + (added.map funding_deposit_credit).sum ≤
-        funding_carry a + ((getCurrentEpoch b.state).toNat -
-          (getCurrentEpoch a.state).toNat) *
-            config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat) :
-    funding_carry y + (events.map funding_deposit_credit).sum ≤
-      funding_carry x + ((getCurrentEpoch y.state).toNat -
-        (getCurrentEpoch x.state).toNat) *
-          config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat := by
-  induction tail generalizing events with
-  | nil => cases replayed; simp
-  | @snoc middle last pre step ih =>
-    have beforeEarly : middle.fork < .glamsterdam :=
-      Nat.lt_of_le_of_lt step.chainStep.fork_le early
-    have beforeEpoch := UInt64.le_iff_toNat_le.mp step.chainStep.currentEpoch_le
-    have within := beforeEpoch.trans endEpoch
-    simp only [Run.balanceEvents, bind_ok_iff] at replayed
-    obtain ⟨prior, priorOk, rest⟩ := replayed
-    simp only [within, ↓reduceIte, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at rest
-    obtain ⟨added, addedOk, rfl⟩ := rest
-    have previous := ih beforeEarly within prior priorOk
-    have latest := stepBound pre step early added addedOk
-    have start : (getCurrentEpoch x.state).toNat ≤ (getCurrentEpoch middle.state).toNat :=
-      UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps pre.chainSteps)
-    have count : (getCurrentEpoch last.state).toNat - (getCurrentEpoch x.state).toNat =
-        ((getCurrentEpoch middle.state).toNat - (getCurrentEpoch x.state).toNat) +
-        ((getCurrentEpoch last.state).toNat - (getCurrentEpoch middle.state).toNat) := by omega
-    rw [count, Nat.add_mul, List.map_append, List.sum_append]
-    omega
-
-private theorem funding_run_funded {x y : ForkedBeaconState preset}
-    (tail : Run config checks x y) (early : y.fork < .glamsterdam)
-    (high : Nat) (endEpoch : (getCurrentEpoch y.state).toNat ≤ high + 1)
-    (events : List (BalanceEvent preset)) (replayed : tail.balanceEvents high = .ok events)
-    (stepBound : ∀ {a b : ForkedBeaconState preset}, Run config checks x a →
-      ∀ (step : Step config checks a b), b.fork < .glamsterdam →
-      ∀ added, step.balanceEvents = .ok added →
-      fundedStake b + funding_carry b ≤ fundedStake a + funding_carry a +
+      potential b + (added.map spent).sum ≤ potential a +
         ((getCurrentEpoch b.state).toNat - (getCurrentEpoch a.state).toNat) *
-          config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat +
-        (added.map fundingCredit).sum) :
-    fundedStake y + funding_carry y ≤ fundedStake x + funding_carry x +
+          config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat + (added.map gained).sum) :
+    potential y + (events.map spent).sum ≤ potential x +
       ((getCurrentEpoch y.state).toNat - (getCurrentEpoch x.state).toNat) *
-        config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat +
-      (events.map fundingCredit).sum := by
+        config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat + (events.map gained).sum := by
   induction tail generalizing events with
   | nil => cases replayed; simp
   | @snoc middle last pre step ih =>
@@ -3972,7 +3936,7 @@ private theorem funding_run_funded {x y : ForkedBeaconState preset}
     have count : (getCurrentEpoch last.state).toNat - (getCurrentEpoch x.state).toNat =
         ((getCurrentEpoch middle.state).toNat - (getCurrentEpoch x.state).toNat) +
         ((getCurrentEpoch last.state).toNat - (getCurrentEpoch middle.state).toNat) := by omega
-    rw [count, Nat.add_mul, List.map_append, List.sum_append]
+    rw [count, Nat.add_mul, List.map_append, List.sum_append, List.map_append, List.sum_append]
     omega
 
 theorem funding_window_of_steps {x y : ForkedBeaconState preset}
@@ -3991,7 +3955,11 @@ theorem funding_window_of_steps {x y : ForkedBeaconState preset}
         (added.map fundingCredit).sum) :
     Models.stake (effectiveWeight y.state) (activeKeys y.state) ≤
       activeStakeWindow (config := config) x high events := by
-  have bound := funding_run_funded tail early high endEpoch events replayed stepBound
+  have bound := funding_run_bound (fun s => fundedStake s + funding_carry s) (fun _ => 0)
+    fundingCredit tail early high endEpoch events replayed (fun pre step early added ok => by
+      simpa using stepBound pre step early added ok)
+  rw [show ∀ l : List (BalanceEvent preset), (l.map fun _ => 0).sum = 0 by simp,
+    Nat.add_zero] at bound
   have active := funding_active_le y early unique
   have count : (getCurrentEpoch y.state).toNat - (getCurrentEpoch x.state).toNat ≤
       driftHorizon x high := by unfold driftHorizon; omega
@@ -4015,10 +3983,12 @@ theorem funding_deposit_capacity {g x y : ForkedBeaconState preset}
             decide (v.withdrawableEpoch.toNat ≤ (getCurrentEpoch e.before.state).toNat))).getD
             false then 0 else actualBalanceAt e.after i - actualBalanceAt e.before i
       else 0).sum ≤ depositWindow (config := config) x high := by
-  have bound := funding_run_capacity tail early high endEpoch events replayed
-    (fun pre step early added ok =>
-      funding_step_capacity step
+  have bound := funding_run_bound funding_carry funding_deposit_credit (fun _ => 0) tail early
+    high endEpoch events replayed (fun pre step early added ok => by
+      simpa using funding_step_capacity step
         ((shared.append pre).invariant_of_genesis genesis).balancesMatch early ok)
+  rw [show ∀ l : List (BalanceEvent preset), (l.map fun _ => 0).sum = 0 by simp,
+    Nat.add_zero] at bound
   have count : (getCurrentEpoch y.state).toNat - (getCurrentEpoch x.state).toNat ≤
       driftHorizon x high := by unfold driftHorizon; omega
   have larger := Nat.mul_le_mul_right
