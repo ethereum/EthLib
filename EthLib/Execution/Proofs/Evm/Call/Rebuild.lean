@@ -31,9 +31,14 @@ Every address with nonce 0 and no code keeps at least its balance from the block
 
 It also had nonce 0 and no code in the block state, and has no storage write in the transaction.
 
+Every account that the transaction created held no nonzero word in the block state.
+
+No account with nonce 0 has the code hash of a delegation indicator of [EIP-7702][eip7702].
+
 That ties the storage of a call to the storage of the block state at every key not written.
 
 [eip161]: https://eips.ethereum.org/EIPS/eip-161#specification
+[eip7702]: https://eips.ethereum.org/EIPS/eip-7702#behavior
 -/
 
 @[expose] public section
@@ -82,6 +87,46 @@ theorem KeepsNonceOrCode.trans {a b c : TransactionState}
     (hab : KeepsNonceOrCode a b) (hbc : KeepsNonceOrCode b c) : KeepsNonceOrCode a c :=
   ⟨hab.1.trans hbc.1, fun address h => hbc.2 address (hab.2 address h)⟩
 
+/-! ## Delegations and nonces -/
+
+/-- No account with nonce 0 has the code hash of a delegation indicator.
+
+The hash of empty code is left out, since every account without code has it.
+
+An authorization sets an indicator and then raises the nonce of its authority.
+
+From Spurious Dragon, a creation raises the nonce of its address before it deposits code. -/
+def DelegationsHaveNonce (tx : TransactionState) : Prop :=
+  ∀ address code, (tx.getAccount address).nonce = 0 →
+    (tx.getAccount address).codeHash ≠ EMPTY_CODE_HASH → isValidDelegation code = true →
+      keccak256 code ≠ (tx.getAccount address).codeHash
+
+/-- The property passes to a state whose accounts with nonce 0 and code are unchanged. -/
+private theorem DelegationsHaveNonce.of_unchanged {tx tx' : TransactionState}
+    (h : DelegationsHaveNonce tx)
+    (hacc : ∀ address, (tx'.getAccount address).nonce = 0 →
+      (tx'.getAccount address).codeHash ≠ EMPTY_CODE_HASH →
+      (tx.getAccount address).nonce = 0 ∧
+        (tx.getAccount address).codeHash = (tx'.getAccount address).codeHash) :
+    DelegationsHaveNonce tx' := by
+  intro address code hn hc hv
+  obtain ⟨hn', hc'⟩ := hacc address hn hc
+  rw [← hc']
+  exact h address code hn' (hc' ▸ hc) hv
+
+/-- The property passes to a state with the same accounts. -/
+private theorem DelegationsHaveNonce.congr {tx tx' : TransactionState}
+    (h : DelegationsHaveNonce tx)
+    (hacc : ∀ address, tx'.getAccount address = tx.getAccount address) :
+    DelegationsHaveNonce tx' :=
+  h.of_unchanged fun address hn _ => ⟨hacc address ▸ hn, by rw [hacc address]⟩
+
+/-- Incorporating a transaction into its block keeps every account with nonce 0 off delegations. -/
+theorem DelegationsHaveNonce.ofBlock_incorporateTxIntoBlock {tx : TransactionState}
+    (h : DelegationsHaveNonce tx) :
+    DelegationsHaveNonce (.ofBlock tx.incorporateTxIntoBlock.parent) :=
+  h.congr (TransactionState.getAccount_ofBlock_incorporateTxIntoBlock tx)
+
 /-! ## Same writes and the rebuild property -/
 
 /-- The property of a transaction state on `block` that execution from Spurious Dragon keeps. -/
@@ -102,15 +147,23 @@ structure RebuildState (block : BlockState) (tx : TransactionState) : Prop where
       ((TransactionState.ofBlock block).getAccount address).balance ≤
         (tx.getAccount address).balance ∧
       ∀ key, tx.storageWrites.slot address key = none
+  /-- Every account that the transaction created held no nonzero storage word in `block`. -/
+  created : ∀ address, address ∈ tx.createdAccounts →
+    ∀ key, (TransactionState.ofBlock block).getStorage address key = 0
+  /-- No account with nonce 0 has the code hash of a delegation indicator. -/
+  delegations : DelegationsHaveNonce tx
 
 /-- With no write on top of a block state that can be rebuilt, the rebuild property holds. -/
-theorem RebuildState.ofBlock {block : BlockState} (valid : Rebuildable block) :
+theorem RebuildState.ofBlock {block : BlockState} (valid : Rebuildable block)
+    (delegations : DelegationsHaveNonce (.ofBlock block)) :
     RebuildState block (.ofBlock block) where
   parent := rfl
   code := valid.code
   emptyStorage := valid.storage
   clears _ hmem := absurd hmem Std.ExtTreeSet.not_mem_empty
   plain _ hnc := ⟨hnc, BitVec.le_refl _, fun _ => rfl⟩
+  created _ hmem := absurd hmem Std.ExtTreeSet.not_mem_empty
+  delegations := delegations
 
 /-- The rebuild property implies the property of code and empty accounts alone. -/
 theorem RebuildState.toRebuildInvariant {block : BlockState} {tx : TransactionState}
@@ -126,10 +179,15 @@ theorem SameWrites.keepsNonceOrCode {tx snapshot : TransactionState}
     exact Nat.le_refl _
   · exact (HasNonceOrCode.congr (h.getAccount hp address)).mpr hnc
 
-/-- Same writes on the same block keep the rebuild property. -/
-theorem RebuildState.of_sameWrites {block : BlockState} {tx tx' : TransactionState}
-    (valid : RebuildState block tx) (h : SameWrites tx' tx) (hp : tx'.parent = tx.parent) :
+/-- Same writes on the same block keep the rebuild property, given the created accounts. -/
+private theorem RebuildState.of_sameWrites_of_created {block : BlockState}
+    {tx tx' : TransactionState} (valid : RebuildState block tx) (h : SameWrites tx' tx)
+    (hp : tx'.parent = tx.parent)
+    (hcreated : ∀ address, address ∈ tx'.createdAccounts →
+      ∀ key, (TransactionState.ofBlock block).getStorage address key = 0) :
     RebuildState block tx' where
+  created := hcreated
+  delegations := valid.delegations.congr (h.getAccount hp)
   parent := hp.trans valid.parent
   code hash code hread := valid.code hash code ((h.getCode hp hash).symm.trans hread)
   emptyStorage address hempty key := by
@@ -145,6 +203,19 @@ theorem RebuildState.of_sameWrites {block : BlockState} {tx tx' : TransactionSta
       exact hbal
     · rw [h.storageWrites]
       exact hslot key
+
+/-- Same writes on the same block, with the same created accounts, keep the rebuild property. -/
+theorem RebuildState.of_sameWrites {block : BlockState} {tx tx' : TransactionState}
+    (valid : RebuildState block tx) (h : SameWrites tx' tx) (hp : tx'.parent = tx.parent)
+    (hc : tx'.createdAccounts = tx.createdAccounts) : RebuildState block tx' :=
+  valid.of_sameWrites_of_created h hp fun address hmem => valid.created address (hc ▸ hmem)
+
+/-- Restoring a snapshot keeps the rebuild property that both states have. -/
+theorem RebuildState.restoreTxState {block : BlockState} {tx snapshot : TransactionState}
+    (vsnap : RebuildState block snapshot) (vtx : RebuildState block tx) :
+    RebuildState block (tx.restoreTxState snapshot) :=
+  vsnap.of_sameWrites_of_created (sameWrites_restoreTxState tx snapshot)
+    (vtx.parent.trans vsnap.parent.symm) vtx.created
 
 /-- Under the rebuild property, an empty account had no nonzero storage word in `block`. -/
 theorem RebuildState.blockStorage_of_empty {block : BlockState} {tx : TransactionState}
@@ -236,7 +307,8 @@ theorem RebuildState.setStorage {block : BlockState} {tx tx' : TransactionState}
   split at h
   · cases h
   cases h
-  refine ⟨valid.parent, valid.code, ?_, valid.clears, ?_⟩
+  refine ⟨valid.parent, valid.code, ?_, valid.clears, ?_, valid.created,
+    valid.delegations.congr hacc⟩
   · intro other hempty slot
     have hne : other ≠ address := fun heq => by
       subst heq
@@ -268,7 +340,8 @@ theorem RebuildState.setTransientStorage {block : BlockState} {tx : TransactionS
     (valid : RebuildState block tx) (address : Address) (key : Bytes32) (value : U256) :
     RebuildState block (tx.setTransientStorage address key value) ∧
       KeepsNonceOrCode tx (tx.setTransientStorage address key value) :=
-  ⟨⟨valid.parent, valid.code, valid.emptyStorage, valid.clears, valid.plain⟩,
+  ⟨⟨valid.parent, valid.code, valid.emptyStorage, valid.clears, valid.plain, valid.created,
+      valid.delegations.congr fun _ => rfl⟩,
     ⟨fun _ => Nat.le_refl _, fun _ h => h⟩⟩
 
 /-- Touching an account keeps the rebuild property. -/
@@ -293,6 +366,9 @@ theorem RebuildState.touchAccount {block : BlockState} {tx : TransactionState}
   have hwrites : (tx.touchAccount address).storageWrites = tx.storageWrites := by
     unfold TransactionState.touchAccount
     split <;> rfl
+  have hcreated : (tx.touchAccount address).createdAccounts = tx.createdAccounts := by
+    unfold TransactionState.touchAccount
+    split <;> rfl
   refine ⟨⟨(TransactionState.parent_touchAccount tx address).trans valid.parent,
       fun hash code hread => valid.code hash code
         ((TransactionState.getCode_touchAccount tx address hash).symm.trans hread),
@@ -308,7 +384,9 @@ theorem RebuildState.touchAccount {block : BlockState} {tx : TransactionState}
         · rw [hacc other]
           exact hbal
         · rw [hwrites]
-          exact hslot key⟩,
+          exact hslot key,
+      fun other hmem key => valid.created other (hcreated ▸ hmem) key,
+      valid.delegations.congr hacc⟩,
     ⟨nonceLe_touchAccount tx address,
       fun other hc => (HasNonceOrCode.congr (hacc other)).mpr hc⟩⟩
 
@@ -339,11 +417,14 @@ theorem RebuildState.incrementNonce {block : BlockState} {tx tx' : TransactionSt
   have hwrites : tx'.storageWrites = tx.storageWrites := by subst htx'; rfl
   have hst : ∀ other key, tx'.getStorage other key = tx.getStorage other key := by
     subst htx'; intros; rfl
+  have hcreated : tx'.createdAccounts = tx.createdAccounts := by subst htx'; rfl
   refine ⟨hp, fun hash code hread => valid.code hash code
       ((TransactionState.getCode_modifyState h) ▸ hread),
     fun other hempty key => ?_,
     fun other hmem key => valid.clears other (hclears ▸ hmem) key,
-    fun other hnot => ?_⟩
+    fun other hnot => ?_,
+    fun other hmem key => valid.created other (hcreated ▸ hmem) key,
+    valid.delegations.of_unchanged fun other hn _ => ?_⟩
   · have hne : other ≠ address := fun heq => hnc_self.ne_empty (heq ▸ hempty)
     have ho : tx'.getAccount other = tx.getAccount other := by
       simp only [TransactionState.getAccount, hother other hne]
@@ -360,6 +441,13 @@ theorem RebuildState.incrementNonce {block : BlockState} {tx tx' : TransactionSt
       exact hbal
     · rw [hwrites]
       exact hslot key
+  · have hne : other ≠ address := by
+      rintro rfl
+      rw [hself] at hn
+      exact Nat.succ_ne_zero _ hn
+    have ho : tx'.getAccount other = tx.getAccount other := by
+      simp only [TransactionState.getAccount, hother other hne]
+    exact ⟨ho ▸ hn, by rw [ho]⟩
 
 /-- Adding ether to `target` keeps the rebuild property. -/
 theorem RebuildState.createEther {block : BlockState} {tx tx' : TransactionState}
@@ -376,7 +464,10 @@ theorem RebuildState.createEther {block : BlockState} {tx tx' : TransactionState
   have hp : tx'.parent = block := (TransactionState.parent_createEther h).trans valid.parent
   have hinv := valid.toRebuildInvariant.createEther h
   have hempty_of_empty := getAccount_eq_empty_of_createEther h
-  refine ⟨hp, hinv.code, hinv.storage, ?_, ?_⟩
+  refine ⟨hp, hinv.code, hinv.storage, ?_, ?_,
+    fun other hmem key =>
+      valid.created other ((TransactionState.createdAccounts_modifyState h) ▸ hmem) key,
+    valid.delegations.of_unchanged fun other hn _ => ?_⟩
   · intro other hmem key
     obtain ⟨account, hf, hdef⟩ := TransactionState.modifyState_eq_ok_iff.mp h
     rw [hdef] at hmem
@@ -420,6 +511,8 @@ theorem RebuildState.createEther {block : BlockState} {tx tx' : TransactionState
             eq_comm (a := target), hne, ↓reduceIte]
           exact hslot key
       · exact hslot key
+  · obtain ⟨-, hn', hc'⟩ := TransactionState.getAccount_createEther h other
+    exact ⟨hn' ▸ hn, hc'.symm⟩
 
 /-- Changing an account that keeps a nonce or code keeps the rebuild property. -/
 private theorem RebuildState.modifyState_of_hasNonceOrCode {block : BlockState}
@@ -429,7 +522,9 @@ private theorem RebuildState.modifyState_of_hasNonceOrCode {block : BlockState}
     (hnonce : ∀ account, f (tx.getAccount address) = .ok account →
       (tx.getAccount address).nonce ≤ account.nonce)
     (hkeeps : ∀ account, f (tx.getAccount address) = .ok account →
-      1 ≤ account.nonce ∨ account.codeHash ≠ EMPTY_CODE_HASH) :
+      1 ≤ account.nonce ∨ account.codeHash ≠ EMPTY_CODE_HASH)
+    (hcode : ∀ account, f (tx.getAccount address) = .ok account → account.nonce = 0 →
+      account.codeHash = (tx.getAccount address).codeHash) :
     RebuildState block tx' ∧ KeepsNonceOrCode tx tx' ∧ HasNonceOrCode tx' address := by
   obtain ⟨account, hf, htx'⟩ := modifyState_eq_of_hasNonceOrCode h hkeeps
   obtain ⟨acc', hf', hself, hother⟩ := TransactionState.modifyState_eq_ok h
@@ -456,11 +551,14 @@ private theorem RebuildState.modifyState_of_hasNonceOrCode {block : BlockState}
   have hwrites : tx'.storageWrites = tx.storageWrites := by subst htx'; rfl
   have hst : ∀ other key, tx'.getStorage other key = tx.getStorage other key := by
     subst htx'; intros; rfl
+  have hcreated : tx'.createdAccounts = tx.createdAccounts := by subst htx'; rfl
   refine ⟨hp, fun hash code hread => valid.code hash code
       ((TransactionState.getCode_modifyState h) ▸ hread),
     fun other hempty key => ?_,
     fun other hmem key => valid.clears other (hclears ▸ hmem) key,
-    fun other hnot => ?_⟩
+    fun other hnot => ?_,
+    fun other hmem key => valid.created other (hcreated ▸ hmem) key,
+    valid.delegations.of_unchanged fun other hn _ => ?_⟩
   · have hne : other ≠ address := fun heq => hnc_self.ne_empty (heq ▸ hempty)
     rw [hst other key]
     exact valid.emptyStorage other ((hother other hne).symm.trans hempty) key
@@ -473,6 +571,12 @@ private theorem RebuildState.modifyState_of_hasNonceOrCode {block : BlockState}
       exact hbal
     · rw [hwrites]
       exact hslot key
+  · by_cases hne : other = address
+    · subst hne
+      rw [hself] at hn ⊢
+      exact ⟨Nat.eq_zero_of_le_zero (hn ▸ hnonce account hf), (hcode account hf hn).symm⟩
+    · rw [hother other hne] at hn ⊢
+      exact ⟨hn, rfl⟩
 
 /-- Setting the balance of an account that has a nonce or code keeps the rebuild property. -/
 theorem RebuildState.setAccountBalance {block : BlockState} {tx tx' : TransactionState}
@@ -482,6 +586,7 @@ theorem RebuildState.setAccountBalance {block : BlockState} {tx tx' : Transactio
   obtain ⟨valid', hk, -⟩ := valid.modifyState_of_hasNonceOrCode h
     (fun account hf => by cases hf; exact Nat.le_refl _)
     (fun account hf => by cases hf; exact hnc)
+    (fun account hf _ => by cases hf; rfl)
   exact ⟨valid', hk⟩
 
 /-- Moving ether from an account that has a nonce or code keeps the rebuild property. -/
@@ -505,6 +610,7 @@ theorem RebuildState.moveEther {block : BlockState} {tx tx' : TransactionState}
       obtain ⟨hn, hc⟩ := hdebit account hf
       rw [hn, hc]
       exact hnc)
+    (fun account hf _ => (hdebit account hf).2)
   obtain ⟨v2, k2⟩ := v1.createEther hcred
   exact ⟨v2, k1.trans k2⟩
 
@@ -559,7 +665,7 @@ private theorem RebuildState.destroyStorage_markAccountCreated {block : BlockSta
   have hacc : ∀ other,
       ((tx.destroyStorage address).markAccountCreated address).getAccount other =
         tx.getAccount other := fun _ => rfl
-  refine ⟨⟨valid.parent, valid.code, ?_, ?_, ?_⟩,
+  refine ⟨⟨valid.parent, valid.code, ?_, ?_, ?_, ?_, valid.delegations.congr hacc⟩,
     ⟨fun _ => Nat.le_refl _, fun _ h => h⟩⟩
   · intro other hempty key
     by_cases hne : other = address
@@ -591,6 +697,12 @@ private theorem RebuildState.destroyStorage_markAccountCreated {block : BlockSta
         StorageMap.slot, Std.ExtTreeMap.getElem?_erase, Std.compare_eq_iff_eq,
         eq_comm (a := address), hne, ↓reduceIte]
       exact hslot key
+  · intro other hmem key
+    simp only [TransactionState.markAccountCreated, TransactionState.destroyStorage,
+      Std.ExtTreeSet.mem_insert, Std.compare_eq_iff_eq] at hmem
+    rcases hmem with rfl | hmem
+    · exact hblock_zero key
+    · exact valid.created other hmem key
 
 /-- From Spurious Dragon, preparing a creation at a deployable address keeps the rebuild property.
 
@@ -638,6 +750,7 @@ theorem RebuildState.setCode {block : BlockState} {tx tx' : TransactionState}
   · obtain ⟨v, hk, -⟩ := valid.modifyState_of_hasNonceOrCode h
       (fun account hf => by cases hf; exact Nat.le_refl _)
       (fun account hf => by cases hf; exact .inl hnonce)
+      (fun account hf h0 => by cases hf; exact absurd h0 (Nat.pos_iff_ne_zero.mp hnonce))
     exact ⟨v, hk⟩
   · rename_i hne_hash
     let mid : TransactionState :=
@@ -647,10 +760,12 @@ theorem RebuildState.setCode {block : BlockState} {tx tx' : TransactionState}
         fun hash bytes hread => by
           rw [← TransactionState.getCode_modifyState h] at hread
           exact hcode hash bytes hread,
-        valid.emptyStorage, valid.clears, valid.plain⟩
+        valid.emptyStorage, valid.clears, valid.plain, valid.created,
+        valid.delegations.congr fun _ => rfl⟩
     obtain ⟨v, hk, -⟩ := hmid.modifyState_of_hasNonceOrCode h
       (fun account hf => by cases hf; exact Nat.le_refl _)
       (fun account hf => by cases hf; exact .inl hnonce)
+      (fun account hf h0 => by cases hf; exact absurd h0 (Nat.pos_iff_ne_zero.mp hnonce))
     exact ⟨v, hk⟩
 
 /-- Depositing code keeps the rebuild property.
@@ -668,7 +783,7 @@ theorem RebuildState.depositCode {block : BlockState} {snapshot : TransactionSta
     have hsw := sameWrites_restoreTxState evm.state snapshot
     have hp : (evm.state.restoreTxState snapshot).parent = snapshot.parent :=
       vevm.parent.trans vsnap.parent.symm
-    exact ⟨vsnap.of_sameWrites hsw hp, hsw.keepsNonceOrCode hp⟩
+    exact ⟨vsnap.restoreTxState vevm, hsw.keepsNonceOrCode hp⟩
   · rw [hsame]
     exact ⟨vevm, hk⟩
   · obtain ⟨vafter, kafter⟩ := vevm.setCode hnonce hset
@@ -696,7 +811,7 @@ theorem RebuildState.rollbackOnError {block : BlockState} {snapshot : Transactio
     have hsw := sameWrites_restoreTxState ended.state snapshot
     have hp : (ended.state.restoreTxState snapshot).parent = snapshot.parent :=
       vended.parent.trans vsnap.parent.symm
-    exact ⟨vsnap.of_sameWrites hsw hp, hsw.keepsNonceOrCode hp⟩
+    exact ⟨vsnap.restoreTxState vended, hsw.keepsNonceOrCode hp⟩
   · exact ⟨vended, hk⟩
 
 /-! ## Steps of an EVM frame -/
@@ -723,14 +838,15 @@ private theorem RebuildStep.trans {block : BlockState} {a b c : Evm fork Meter}
 omit [GasMeter Meter] in
 private theorem RebuildStep.of_sameWrites {block : BlockState} {a b : Evm fork Meter}
     (hsw : SameWrites b.state a.state) (hp : b.state.parent = a.state.parent)
-    (hm : b.message = a.message) (hc : b.code = a.code) : RebuildStep block a b :=
-  ⟨fun va => ⟨va.of_sameWrites hsw hp, hsw.keepsNonceOrCode hp⟩, hm, hc⟩
+    (hm : b.message = a.message) (hc : b.code = a.code)
+    (hcr : b.state.createdAccounts = a.state.createdAccounts) : RebuildStep block a b :=
+  ⟨fun va => ⟨va.of_sameWrites hsw hp hcr, hsw.keepsNonceOrCode hp⟩, hm, hc⟩
 
 omit [GasMeter Meter] in
 private theorem RebuildStep.of_sameContext {block : BlockState} {a b : Evm fork Meter}
     (h : SameContext a b) : RebuildStep block a b :=
   RebuildStep.of_sameWrites ⟨by rw [h.state], by rw [h.state], by rw [h.state], by rw [h.state],
-    by rw [h.state]⟩ (by rw [h.state]) h.message h.code
+    by rw [h.state]⟩ (by rw [h.state]) h.message h.code (by rw [h.state])
 
 omit [GasMeter Meter] in
 private theorem RebuildStep.advance {block : BlockState} {a b : Evm fork Meter}
@@ -740,13 +856,14 @@ private theorem RebuildStep.advance {block : BlockState} {a b : Evm fork Meter}
 omit [GasMeter Meter] in
 private theorem rebuildStep_recordAccountRead {block : BlockState} (evm : Evm fork Meter)
     (address : Address) : RebuildStep block evm (recordAccountRead evm address) :=
-  RebuildStep.of_sameWrites (SameWrites.recordAccountRead evm.state address) rfl rfl rfl
+  RebuildStep.of_sameWrites (SameWrites.recordAccountRead evm.state address) rfl rfl rfl rfl
 
 omit [GasMeter Meter] in
 private theorem rebuildStep_recordStorageRead {block : BlockState} (evm : Evm fork Meter)
     (address : Address) (key : Bytes32) :
     RebuildStep block evm (recordStorageRead evm address key) :=
   RebuildStep.of_sameWrites (SameWrites.recordStorageRead evm.state address key) rfl rfl rfl
+    rfl
 
 omit [GasMeter Meter] in
 private theorem rebuildStep_accessAddress {block : BlockState} (evm : Evm fork Meter)
@@ -765,13 +882,13 @@ private theorem rebuildStep_accessStorageKey {block : BlockState} (evm : Evm for
 
 private theorem rebuildStep_exceptionalHalt {block : BlockState} (evm : Evm fork Meter)
     (e : EvmError) : RebuildStep block evm (exceptionalHalt evm e) :=
-  RebuildStep.of_sameWrites ⟨rfl, rfl, rfl, rfl, rfl⟩ rfl rfl rfl
+  RebuildStep.of_sameWrites ⟨rfl, rfl, rfl, rfl, rfl⟩ rfl rfl rfl rfl
 
 private theorem rebuildStep_skipCall {block : BlockState} {evm after : Evm fork Meter}
     {gas reservoir : Nat} (h : skipCall evm gas reservoir = .ok after) :
     RebuildStep block evm after := by
   obtain ⟨_, -, rfl⟩ := skipCall_eq_ok h
-  exact RebuildStep.of_sameWrites ⟨rfl, rfl, rfl, rfl, rfl⟩ rfl rfl rfl
+  exact RebuildStep.of_sameWrites ⟨rfl, rfl, rfl, rfl, rfl⟩ rfl rfl rfl rfl
 
 private theorem rebuildStep_runPrecompile {block : BlockState} {address : Nat}
     {evm after : Evm fork Meter} (h : runPrecompile fork address evm = some after) :
@@ -785,7 +902,7 @@ private theorem rebuildStep_runPrecompile {block : BlockState} {address : Nat}
     · cases h
       exact rebuildStep_exceptionalHalt evm _
     · cases h
-      exact RebuildStep.of_sameWrites ⟨rfl, rfl, rfl, rfl, rfl⟩ rfl rfl rfl
+      exact RebuildStep.of_sameWrites ⟨rfl, rfl, rfl, rfl, rfl⟩ rfl rfl rfl rfl
 
 private theorem rebuildStep_returnOpStep {block : BlockState} {op : Op}
     {run : Evm fork Meter → Except EvmError (Evm fork Meter)}
@@ -857,7 +974,7 @@ private theorem rebuildStep_accountStep {block : BlockState} {op : Op}
       (.of_sameContext (popWord_sameContext h4))).trans ha).trans
       (.of_sameContext (chargeGasAndMemory_sameContext h6))).trans
       (rebuildStep_recordAccountRead _ _)).trans
-      (RebuildStep.of_sameWrites ⟨rfl, rfl, rfl, rfl, rfl⟩ rfl rfl rfl) |>.advance
+      (RebuildStep.of_sameWrites ⟨rfl, rfl, rfl, rfl, rfl⟩ rfl rfl rfl rfl) |>.advance
   case selfbalance =>
     split at hstep
     · cases hstep
@@ -960,6 +1077,7 @@ private theorem rebuildStep_selfdestructStep {block : BlockState} {evm after : E
       RebuildStep.of_sameWrites
         (hpaid_state ▸ SameWrites.recordAccountRead evm.state (toAddressMasked word))
         (by rw [hpaid_state]; rfl) hpaid_static.message hpaid_static.code
+        (by rw [hpaid_state]; rfl)
     unfold finishSelfdestruct at finished
     split at finished
     · cases finished
@@ -975,6 +1093,7 @@ private theorem rebuildStep_selfdestructStep {block : BlockState} {evm after : E
       RebuildStep.of_sameWrites
         (hpaid_state ▸ SameWrites.recordAccountRead evm.state (toAddressMasked word))
         (by rw [hpaid_state]; rfl) hpaid_static.message hpaid_static.code
+        (by rw [hpaid_state]; rfl)
     exact hpaid.trans (rebuildStep_exceptionalHalt paid error)
 
 private theorem rebuildStep_instruction {block : BlockState} {op : Op}
@@ -1009,7 +1128,7 @@ private theorem rebuildStep_instruction {block : BlockState} {op : Op}
     subst hf
     obtain ⟨_, -, -, hm, hc, hs, -⟩ := logStep_eq_ok h
     exact RebuildStep.of_sameWrites ⟨by rw [hs], by rw [hs], by rw [hs], by rw [hs], by rw [hs]⟩
-      (by rw [hs]) hm hc
+      (by rw [hs]) hm hc (by rw [hs])
   · cases op <;> simp only [selfdestructOpStep, Option.some.injEq, reduceCtorEq] at hf
     subst hf
     exact rebuildStep_selfdestructStep hnc h
@@ -1052,7 +1171,7 @@ private theorem rebuildStep_popCallOperands {block : BlockState} {kind : CallKin
   have hs := (staticStep_popCallOperands h).1
   have hst : after.state = evm.state := by rw [popCallOperands_eq_ok h]
   exact RebuildStep.of_sameWrites ⟨by rw [hst], by rw [hst], by rw [hst], by rw [hst],
-    by rw [hst]⟩ (by rw [hst]) hs.message hs.code
+    by rw [hst]⟩ (by rw [hst]) hs.message hs.code (by rw [hst])
 
 private theorem rebuildStep_incorporateChild {block : BlockState} {caller child : Evm fork Meter}
     (hc : RebuildState block caller.state →
@@ -1082,7 +1201,7 @@ private theorem rebuildStep_finishCall {block : BlockState} {kind : CallKind} {c
       memory := memoryExtend evm.memory expandBy, gas := GasMeter.drain evm.gas }
       evm.message.currentTarget) :=
     RebuildStep.of_sameWrites (SameWrites.recordAccountRead evm.state evm.message.currentTarget)
-      rfl rfl rfl
+      rfl rfl rfl rfl
   split at h
   · obtain ⟨after, hs, rfl⟩ := Base.map_ok_iff.mp h
     exact (pre.trans (.of_sameContext (sameContext_refillStateGas _ _))).trans
@@ -1453,7 +1572,7 @@ theorem processMessage_rebuildState_induction [LawfulGasMeter Meter]
   · intro evm result hinv h
     exact rebuild_step_child hinv h
   · intro evm _
-    exact RebuildStep.of_sameWrites ⟨rfl, rfl, rfl, rfl, rfl⟩ rfl rfl rfl
+    exact RebuildStep.of_sameWrites ⟨rfl, rfl, rfl, rfl, rfl⟩ rfl rfl rfl rfl
   · intro address evm after h _
     exact rebuildStep_runPrecompile h
   · intro message state entry substate entrySubstate meter ended hentered hrun vstate hcode hval
