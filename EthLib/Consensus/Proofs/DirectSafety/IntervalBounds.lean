@@ -158,18 +158,36 @@ def activationWindow (x : ForkedBeaconState preset) (high : Nat) : Nat :=
     (if x.fork < .pectra then driftHorizon x high * cohortCap config (registryWindow x high) *
       preset.MAX_EFFECTIVE_BALANCE.toNat else 0)
 
-/-- Deposits from Electra on are charged to the deposit window; earlier active top-ups stay here.
+/-- Each source other than deposits is charged its credit limit.
 
-Across Electra, pre-upgrade funding can bypass later deposit churn, so retain all such credits. -/
-def residualCredit (x : ForkedBeaconState preset) (high : Nat)
-    (event : BalanceEvent preset) : Nat :=
+Deposits from Electra on are charged to the deposit window, not here.
+
+Earlier deposits in a window that ends before the fork are charged per key, by the headroom term.
+
+A window that reaches the fork charges each earlier deposit in full.
+
+Its funding can become effective after the fork, beyond the room that its key had before. -/
+def residualCredit (high : Nat) (event : BalanceEvent preset) : Nat :=
   match event.source with
   | .deposits => if .pectra ≤ event.before.fork then 0 else
-      if high + 1 < config.ELECTRA_FORK_EPOCH.toNat then
-        ((getActiveValidatorIndices x.state (getCurrentEpoch x.state)).map fun i =>
-          actualBalanceAt event.after i.toNat - actualBalanceAt event.before i.toNat).sum
-      else event.creditLimit
+      if high + 1 < config.ELECTRA_FORK_EPOCH.toNat then 0 else event.creditLimit
   | _ => event.creditLimit
+
+/-- Deposits before Electra, in a window that ends before the fork, charged per reference key.
+
+Each key active at the reference is charged its deposits, up to its room below the cap.
+
+Before Electra no effective balance exceeds the cap, so the deposits raise a key by at most this.
+
+Other keys join through the activation cohorts, which the activation window charges. -/
+def depositHeadroom (x : ForkedBeaconState preset) (high : Nat)
+    (events : List (BalanceEvent preset)) : Nat :=
+  if high + 1 < config.ELECTRA_FORK_EPOCH.toNat then
+    ((getActiveValidatorIndices x.state (getCurrentEpoch x.state)).map fun i =>
+      min ((events.map fun e => if e.source = .deposits ∧ e.before.fork < .pectra then
+          actualBalanceAt e.after i.toNat - actualBalanceAt e.before i.toNat else 0).sum)
+        (preset.MAX_EFFECTIVE_BALANCE.toNat - effectiveAt x i.toNat)).sum
+  else 0
 
 /-- Per-reference-key non-slashing debits count while the key remains in the recent support. -/
 def referenceDebit (i : Nat) (event : BalanceEvent preset) : Nat :=
@@ -2832,35 +2850,32 @@ private theorem intervalGain_event_credit (y : ForkedBeaconState preset)
     Array.getElem?_eq_none_iff.mpr (by omega)
   simp [actualBalanceAt, absent] at nonzero
 
-private theorem intervalGain_residual_other (x : ForkedBeaconState preset) (high : Nat)
+private theorem intervalGain_residual_other (high : Nat)
     (e : BalanceEvent preset) (other : e.source ≠ .deposits) :
-    residualCredit (config := config) x high e = e.creditLimit := by
+    residualCredit (config := config) high e = e.creditLimit := by
   cases source : e.source <;> simp_all [residualCredit]
 
-private theorem intervalGain_residual_deposit (x : ForkedBeaconState preset) (high : Nat)
+private theorem intervalGain_residual_deposit (high : Nat)
     (e : BalanceEvent preset) (deposit : e.source = .deposits) :
-    residualCredit (config := config) x high e =
+    residualCredit (config := config) high e =
       if .pectra ≤ e.before.fork then 0 else
-        if high + 1 < config.ELECTRA_FORK_EPOCH.toNat then
-          ((getActiveValidatorIndices x.state (getCurrentEpoch x.state)).map fun i =>
-            actualBalanceAt e.after i.toNat - actualBalanceAt e.before i.toNat).sum
-        else e.creditLimit := by
+        if high + 1 < config.ELECTRA_FORK_EPOCH.toNat then 0 else e.creditLimit := by
   simp only [residualCredit, deposit]
 
-private theorem intervalGain_preupgrade_credit (x y : ForkedBeaconState preset) (high : Nat)
+private theorem intervalGain_preupgrade_credit (y : ForkedBeaconState preset) (high : Nat)
     (e : BalanceEvent preset) (deposit : e.source = .deposits)
     (before : e.before.fork < .pectra)
     (crossing : config.ELECTRA_FORK_EPOCH.toNat ≤ high + 1)
     (bounded : e.credits ≤ e.creditLimit) :
     (∑ i ∈ intervalGain_indices y, (actualBalanceAt e.after i - actualBalanceAt e.before i)) ≤
-      residualCredit (config := config) x high e := by
-  rw [intervalGain_residual_deposit x high e deposit]
+      residualCredit (config := config) high e := by
+  rw [intervalGain_residual_deposit high e deposit]
   have notElectra : ¬ Fork.pectra ≤ e.before.fork := Nat.not_le.mpr before
   have notBefore : ¬ high + 1 < config.ELECTRA_FORK_EPOCH.toNat := by omega
   simp only [notElectra, notBefore, ↓reduceIte]
   exact intervalGain_event_credit y e bounded
 
-private theorem intervalGain_crossing_sources (x y : ForkedBeaconState preset) (high : Nat)
+private theorem intervalGain_crossing_sources (y : ForkedBeaconState preset) (high : Nat)
     (events : List (BalanceEvent preset))
     (crossing : config.ELECTRA_FORK_EPOCH.toNat ≤ high + 1)
     (bounded : ∀ e ∈ events, e.credits ≤ e.creditLimit)
@@ -2871,23 +2886,23 @@ private theorem intervalGain_crossing_sources (x y : ForkedBeaconState preset) (
       else 0).sum ≤ depositBudget) :
     (events.map fun e => ∑ i ∈ intervalGain_indices y,
       (actualBalanceAt e.after i - actualBalanceAt e.before i)).sum ≤
-      depositBudget + (events.map (residualCredit (config := config) x high)).sum := by
+      depositBudget + (events.map (residualCredit (config := config) high)).sum := by
   have pointwise : ∀ e ∈ events,
       (∑ i ∈ intervalGain_indices y,
         (actualBalanceAt e.after i - actualBalanceAt e.before i)) ≤
       (if e.source = .deposits ∧ .pectra ≤ e.before.fork then
         ∑ i ∈ intervalGain_indices y, (actualBalanceAt e.after i - actualBalanceAt e.before i)
-      else 0) + residualCredit (config := config) x high e := by
+      else 0) + residualCredit (config := config) high e := by
     intro e member
     by_cases deposit : e.source = .deposits
     · by_cases electra : .pectra ≤ e.before.fork
       · simp only [deposit, electra, and_self, ↓reduceIte]
         omega
       · simp only [deposit, electra, and_false, ↓reduceIte, Nat.zero_add]
-        exact intervalGain_preupgrade_credit x y high e deposit (Nat.lt_of_not_le electra) crossing
+        exact intervalGain_preupgrade_credit y high e deposit (Nat.lt_of_not_le electra) crossing
           (bounded e member)
     · simp only [deposit, false_and, ↓reduceIte, Nat.zero_add]
-      rw [intervalGain_residual_other x high e deposit]
+      rw [intervalGain_residual_other high e deposit]
       exact intervalGain_event_credit y e (bounded e member)
   have sum := List.sum_le_sum pointwise
   rw [List.sum_map_add] at sum
@@ -2906,10 +2921,10 @@ private theorem intervalGain_crossing_endpoint {g x y : ForkedBeaconState preset
         ∑ i ∈ intervalGain_indices y, (actualBalanceAt e.after i - actualBalanceAt e.before i)
       else 0).sum ≤ depositWindow (config := config) x high) :
     referenceGain x y ≤ activationWindow (config := config) x high + initialExcess x +
-      (events.map (residualCredit (config := config) x high)).sum := by
+      (events.map (residualCredit (config := config) high)).sum := by
   have gain := intervalGain_replay_bound shared tail genesis twoSlots early high endEpoch
     events replayed
-  have sources := intervalGain_crossing_sources x y high events crossing bounded
+  have sources := intervalGain_crossing_sources y high events crossing bounded
     (depositWindow (config := config) x high) deposits
   unfold activationWindow
   simp only [crossing, ↓reduceIte]
@@ -2981,7 +2996,7 @@ private theorem intervalGain_crossing_of_interfaces {g x y : ForkedBeaconState p
     (events : List (BalanceEvent preset)) (replayed : tail.balanceEvents high = .ok events)
     (crossing : config.ELECTRA_FORK_EPOCH.toNat ≤ high + 1) :
     referenceGain x y ≤ activationWindow (config := config) x high + initialExcess x +
-      (events.map (residualCredit (config := config) x high)).sum := by
+      (events.map (residualCredit (config := config) high)).sum := by
   apply intervalGain_crossing_endpoint shared tail genesis twoSlots early high endEpoch
     events replayed crossing (fun e member =>
       (intervalGain_events_bounded shared tail genesis early high
@@ -3108,27 +3123,29 @@ private theorem intervalGain_active_sum (x : ForkedBeaconState preset)
   · intro i hi
     simp [key, inside i (List.mem_toFinset.mp hi)]
 
+/-- Before Electra a reference-active key gains at most its credits and its room below the cap. -/
 private theorem intervalGain_active_path {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (tail : Run config checks x y)
     (genesis : Genesis (config := config) (checks := checks) g)
-    (early : y.fork < .glamsterdam) :
-    gaining x y ≤ initialExcess x +
-      ((getActiveValidatorIndices x.state (getCurrentEpoch x.state)).map fun i =>
-        pathCredits i.toNat tail.balancePath).sum := by
+    (caps : CapOrder preset) (early : y.fork < .pectra) :
+    gaining x y ≤ ((getActiveValidatorIndices x.state (getCurrentEpoch x.state)).map fun i =>
+      min (actualBalanceAt x i.toNat - effectiveAt x i.toNat + pathCredits i.toNat tail.balancePath)
+        (preset.MAX_EFFECTIVE_BALANCE.toNat - effectiveAt x i.toNat)).sum := by
   have ⟨_, _, _, initialized⟩ := genesis
   have uniqueX := (validatorKeys_prefix_and_distinct_of_genesis_chainSteps initialized
       shared.chainSteps).2
   have uniqueY := (validatorKeys_prefix_and_distinct_of_genesis_chainSteps initialized
       (shared.append tail).chainSteps).2
-  have earlyX := Nat.lt_of_le_of_lt (fork_le_of_chainSteps tail.chainSteps) early
+  have gloas : y.fork < .glamsterdam := Nat.lt_trans early (by decide)
+  have earlyX := Nat.lt_of_le_of_lt (fork_le_of_chainSteps tail.chainSteps) gloas
+  have capped := (shared.append tail).effectiveBalance_capped genesis caps.activation
+    caps.compounding gloas
   have allKeys : gaining x y ≤ ∑ k ∈ activeKeys x.state,
       (effectiveWeight y.state k - effectiveWeight x.state k) := by
     apply Finset.sum_le_sum_of_subset
     exact Finset.inter_subset_left
   apply allKeys.trans
   rw [intervalGain_active_sum x uniqueX earlyX]
-  unfold initialExcess
-  rw [← List.sum_map_add]
   apply List.sum_le_sum
   intro i member
   obtain ⟨v, before, _⟩ :=
@@ -3137,37 +3154,21 @@ private theorem intervalGain_active_path {g x y : ForkedBeaconState preset}
       (validatorKeys_prefix_and_distinct_of_chainSteps tail.chainSteps).1 before
   have first := effectiveWeight_at x.state uniqueX i.toNat v before
   have last := effectiveWeight_at y.state uniqueY i.toNat w after
-  have gain := intervalGain_existing_funding tail early i.toNat
+  have gain := intervalGain_existing_funding tail gloas i.toNat
     (Array.getElem?_eq_some_iff.mp before).1
+  -- Before Electra the cap of every validator is the maximum effective balance.
+  have cap : effectiveAt y i.toNat ≤ preset.MAX_EFFECTIVE_BALANCE.toNat := by
+    have bound := capped w (Array.mem_of_getElem? after)
+    have notElectra : ¬ Fork.pectra ≤ y.fork := Nat.not_le_of_lt early
+    simp only [withdrawalMaxEffectiveBalance, notElectra, ↓reduceIte] at bound
+    simpa only [effectiveAt, after, Option.map_some, Option.getD_some] using
+      UInt64.le_iff_toNat_le.mp bound
   simp only [before, Option.map_some, Option.getD_some]
   rw [first, ← key, last]
   have etaX : (⟨x.fork, x.state⟩ : ForkedBeaconState preset) = x := by cases x; rfl
   have etaY : (⟨y.fork, y.state⟩ : ForkedBeaconState preset) = y := by cases y; rfl
   rw [etaX, etaY]
-  omega
-
-private theorem intervalGain_active_replay {g x y : ForkedBeaconState preset}
-    (shared : Run config checks g x) (tail : Run config checks x y)
-    (genesis : Genesis (config := config) (checks := checks) g)
-    (early : y.fork < .glamsterdam) (high : Nat)
-    (endEpoch : (getCurrentEpoch y.state).toNat ≤ high + 1)
-    (events : List (BalanceEvent preset)) (replayed : tail.balanceEvents high = .ok events) :
-    gaining x y ≤ initialExcess x +
-      (events.map fun e =>
-        ((getActiveValidatorIndices x.state (getCurrentEpoch x.state)).map fun i =>
-          actualBalanceAt e.after i.toNat - actualBalanceAt e.before i.toNat).sum).sum := by
-  have gain := intervalGain_active_path shared tail genesis early
-  have credits := List.sum_le_sum (l := getActiveValidatorIndices x.state (getCurrentEpoch x.state))
-    (fun i _ => coverage_run tail early high endEpoch replayed false i.toNat)
-  have exchange {α β : Type} (xs : List α) (ys : List β) (f : α → β → Nat) :
-      (xs.map fun a => (ys.map (f a)).sum).sum =
-        (ys.map fun b => (xs.map fun a => f a b).sum).sum := by
-    induction xs with
-    | nil => simp
-    | cons a rest ih => simp only [List.map_cons, List.sum_cons, ih, List.sum_map_add]
-  simp only [coveragePath, coverageDelta, Bool.false_eq_true, ↓reduceIte] at credits
-  rw [exchange] at credits
-  omega
+  exact le_min (by omega) (by omega)
 
 private theorem intervalGain_active_event (x : ForkedBeaconState preset)
     (early : x.fork < .glamsterdam) (e : BalanceEvent preset)
@@ -3193,31 +3194,90 @@ private theorem intervalGain_active_event (x : ForkedBeaconState preset)
     Array.getElem?_eq_none_iff.mpr (by omega)
   simp [actualBalanceAt, absent] at nonzero
 
+/-- Before Electra the reference-active gain is charged the initial excess and the credits.
+
+Each deposit is charged per key, up to the room of the key below the cap. -/
 private theorem intervalGain_active_residual {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (tail : Run config checks x y)
     (genesis : Genesis (config := config) (checks := checks) g)
-    (early : y.fork < .glamsterdam) (high : Nat)
+    (caps : CapOrder preset) (early : y.fork < .pectra) (high : Nat)
     (endEpoch : (getCurrentEpoch y.state).toNat ≤ high + 1)
-    (events : List (BalanceEvent preset)) (replayed : tail.balanceEvents high = .ok events)
-    (before : ∀ e ∈ events, e.source = .deposits → e.before.fork < .pectra) :
+    (preFork : high + 1 < config.ELECTRA_FORK_EPOCH.toNat)
+    (events : List (BalanceEvent preset)) (replayed : tail.balanceEvents high = .ok events) :
     gaining x y ≤ initialExcess x +
-      (events.map (residualCredit (config := config) x high)).sum := by
-  apply (intervalGain_active_replay shared tail genesis early high endEpoch events replayed).trans
-  apply Nat.add_le_add_left
-  apply List.sum_le_sum
-  intro e member
-  have credit := intervalGain_active_event x
-    (Nat.lt_of_le_of_lt (fork_le_of_chainSteps tail.chainSteps) early) e
-    (intervalGain_events_bounded shared tail genesis early high events replayed e member).1
-  by_cases deposit : e.source = .deposits
-  · rw [intervalGain_residual_deposit x high e deposit]
-    have notElectra : ¬ Fork.pectra ≤ e.before.fork := Nat.not_le.mpr (before e member deposit)
-    rw [ite_eq_right notElectra]
-    split
-    · exact Nat.le_refl _
-    · exact credit
-  · rw [intervalGain_residual_other x high e deposit]
-    exact credit
+      (events.map (residualCredit (config := config) high)).sum +
+      depositHeadroom (config := config) x high events := by
+  have gloas : y.fork < .glamsterdam := Nat.lt_trans early (by decide)
+  have earlyX := Nat.lt_of_le_of_lt (fork_le_of_chainSteps tail.chainSteps) gloas
+  let indices := getActiveValidatorIndices x.state (getCurrentEpoch x.state)
+  let deposit (e : BalanceEvent preset) : Prop := e.source = .deposits ∧ e.before.fork < .pectra
+  let credit (e : BalanceEvent preset) (i : Nat) : Nat :=
+    actualBalanceAt e.after i - actualBalanceAt e.before i
+  -- Every deposit of a run that ends before Electra is a deposit before Electra.
+  have earlier (e) (member : e ∈ events) (source : e.source = .deposits) : deposit e :=
+    ⟨source, Nat.lt_of_le_of_lt
+      (replay_event_fork_le shared tail genesis gloas high endEpoch events replayed e member)
+      early⟩
+  have exchange {α β : Type} (xs : List α) (ys : List β) (f : α → β → Nat) :
+      (xs.map fun a => (ys.map (f a)).sum).sum =
+        (ys.map fun b => (xs.map fun a => f a b).sum).sum := by
+    induction xs with
+    | nil => simp
+    | cons a rest ih => simp only [List.map_cons, List.sum_cons, ih, List.sum_map_add]
+  -- Per key, split the credits into deposits and the rest, and cap only the deposits.
+  have perKey : ∀ i ∈ indices,
+      min (actualBalanceAt x i.toNat - effectiveAt x i.toNat +
+          pathCredits i.toNat tail.balancePath)
+        (preset.MAX_EFFECTIVE_BALANCE.toNat - effectiveAt x i.toNat) ≤
+      (actualBalanceAt x i.toNat - effectiveAt x i.toNat) +
+        (events.map fun e => if deposit e then 0 else credit e i.toNat).sum +
+        min ((events.map fun e => if deposit e then credit e i.toNat else 0).sum)
+          (preset.MAX_EFFECTIVE_BALANCE.toNat - effectiveAt x i.toNat) := by
+    intro i _
+    have covered := coverage_run tail gloas high endEpoch replayed false i.toNat
+    simp only [coveragePath, coverageDelta, Bool.false_eq_true, ↓reduceIte] at covered
+    have split : (events.map fun e => credit e i.toNat).sum =
+        (events.map fun e => if deposit e then 0 else credit e i.toNat).sum +
+          (events.map fun e => if deposit e then credit e i.toNat else 0).sum := by
+      rw [← List.sum_map_add]
+      congr 1
+      apply List.map_congr_left
+      intro e _
+      split <;> simp
+    change _ ≤ (events.map fun e => credit e i.toNat).sum at covered
+    rw [split] at covered
+    rcases Nat.le_total (events.map fun e => if deposit e then credit e i.toNat else 0).sum
+      (preset.MAX_EFFECTIVE_BALANCE.toNat - effectiveAt x i.toNat) with small | large
+    · rw [min_eq_left small]
+      exact (min_le_left _ _).trans (by omega)
+    · rw [min_eq_right large]
+      exact (min_le_right _ _).trans (by omega)
+  -- The non-deposit credits of each event are within its residual charge.
+  have rest : (indices.map fun i =>
+      (events.map fun e => if deposit e then 0 else credit e i.toNat).sum).sum ≤
+      (events.map (residualCredit (config := config) high)).sum := by
+    rw [exchange]
+    apply List.sum_le_sum
+    intro e member
+    by_cases charged : deposit e
+    · simp [charged]
+    · simp only [charged, ↓reduceIte]
+      have source : e.source ≠ .deposits := fun source => charged (earlier e member source)
+      rw [intervalGain_residual_other high e source]
+      exact intervalGain_active_event x earlyX e
+        (intervalGain_events_bounded shared tail genesis gloas high events replayed e member).1
+  refine (intervalGain_active_path shared tail genesis caps early).trans ?_
+  refine (List.sum_le_sum perKey).trans ?_
+  rw [List.sum_map_add, List.sum_map_add]
+  have excess : initialExcess x = (indices.map fun i =>
+      actualBalanceAt x i.toNat - effectiveAt x i.toNat).sum := rfl
+  have headroom : depositHeadroom (config := config) x high events = (indices.map fun i =>
+      min ((events.map fun e => if deposit e then credit e i.toNat else 0).sum)
+        (preset.MAX_EFFECTIVE_BALANCE.toNat - effectiveAt x i.toNat)).sum := by
+    simp only [depositHeadroom, preFork, ↓reduceIte]
+    rfl
+  rw [excess, headroom]
+  omega
 
 private theorem intervalGain_boundary_carry (x : ForkedBeaconState preset)
     (early : x.fork < .glamsterdam) (unique : PubkeysDistinct x.state) :
@@ -3268,9 +3328,11 @@ private theorem intervalGain_pre_electra_of_split {x y : ForkedBeaconState prese
       Models.stake (effectiveWeight y.state)
         ((recentKeys y.state ∩ recentKeys x.state) \ activeKeys x.state) ≤ boundaryStake x)
     (gainBound : gaining x y ≤ initialExcess x +
-      (events.map (residualCredit (config := config) x high)).sum) :
+      (events.map (residualCredit (config := config) high)).sum +
+      depositHeadroom (config := config) x high events) :
     referenceGain x y ≤ activationWindow (config := config) x high + initialExcess x +
-      (events.map (residualCredit (config := config) x high)).sum := by
+      (events.map (residualCredit (config := config) high)).sum +
+      depositHeadroom (config := config) x high events := by
   have joined := intervalGain_joining_split tail _ _ splitBound.1 splitBound.2
   have before : x.fork < .pectra :=
     Nat.lt_of_le_of_lt (fork_le_of_chainSteps tail.chainSteps) early
@@ -3302,10 +3364,13 @@ private theorem gains_and_activations_over_interval {g x y : ForkedBeaconState p
     (events : List (BalanceEvent preset)) (replayed : tail.balanceEvents high = .ok events) :
     referenceGain x y ≤
       activationWindow (config := config) x high + initialExcess x +
-        (events.map (residualCredit (config := config) x high)).sum := by
+        (events.map (residualCredit (config := config) high)).sum +
+        depositHeadroom (config := config) x high events := by
   have ⟨_, _, _, initialized⟩ := genesis
   by_cases crossing : config.ELECTRA_FORK_EPOCH.toNat ≤ high + 1
-  · exact intervalGain_crossing_of_interfaces shared tail genesis twoSlots early high
+  · have notBefore : ¬ high + 1 < config.ELECTRA_FORK_EPOCH.toNat := by omega
+    simp only [depositHeadroom, notBefore, ↓reduceIte, Nat.add_zero]
+    exact intervalGain_crossing_of_interfaces shared tail genesis twoSlots early high
       endEpoch events replayed crossing
   · have before : y.fork < .pectra := by
       apply Nat.lt_of_not_le
@@ -3316,10 +3381,8 @@ private theorem gains_and_activations_over_interval {g x y : ForkedBeaconState p
       ((validatorKeys_prefix_and_distinct_of_genesis_chainSteps initialized
       shared.chainSteps).2) before high endEpoch events
       (joining_before_electra_split shared tail genesis twoSlots caps before)
-    apply intervalGain_active_residual shared tail genesis early high endEpoch events replayed
-    intro e member _
-    exact Nat.lt_of_le_of_lt
-      (replay_event_fork_le shared tail genesis early high endEpoch events replayed e member) before
+    exact intervalGain_active_residual shared tail genesis caps before high endEpoch
+      (Nat.lt_of_not_le crossing) events replayed
 
 /-- A conservative source envelope, separate from the exact observed-state drift.
 
@@ -3330,7 +3393,8 @@ def sourceDrift (x : ForkedBeaconState preset) (high boundary : Nat)
     (events : List (BalanceEvent preset)) : Nat :=
   2 * (exitWindow (config := config) x high events + lossCorrection x events) +
     activationWindow (config := config) x high + initialExcess x +
-    (events.map (residualCredit (config := config) x high)).sum + 2 * boundary
+    (events.map (residualCredit (config := config) high)).sum +
+    depositHeadroom (config := config) x high events + 2 * boundary
 
 /-- Extending a replay prefix and its boundary budget cannot shrink the source envelope. -/
 private theorem sourceDrift_le_of_prefix (x : ForkedBeaconState preset) (high : Nat)
@@ -3379,7 +3443,15 @@ private theorem sourceDrift_le_of_prefix (x : ForkedBeaconState preset) (high : 
   have exits : exitWindow (config := config) x high before ≤
       exitWindow (config := config) x high after :=
     Nat.add_le_add_left (Nat.mul_le_mul_left _ (Nat.add_le_add_left gated _)) _
-  have credits := sums (residualCredit (config := config) x high)
+  have credits := sums (residualCredit (config := config) high)
+  have headroom : depositHeadroom (config := config) x high before ≤
+      depositHeadroom (config := config) x high after := by
+    unfold depositHeadroom
+    split
+    · apply List.sum_le_sum
+      intro i _
+      exact min_le_min (sums _) (Nat.le_refl _)
+    · exact Nat.le_refl _
   unfold sourceDrift
   omega
 
