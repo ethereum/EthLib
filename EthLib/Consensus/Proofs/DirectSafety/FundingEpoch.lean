@@ -182,7 +182,7 @@ private theorem funding_before {fork : Fork} {s t : BeaconState preset fork}
         config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat +
         (events.map fundingCredit).sum := by
   obtain ⟨justified, scored, rewarded, registered, slashed, reset, deposited, rewardEvents, limit,
-    justifiedOk, scoredOk, rewardedOk, registeredOk, slashedOk, resetOk, depositedOk,
+    trace, justifiedOk, scoredOk, rewardedOk, registeredOk, slashedOk, resetOk, depositedOk,
     consolidatedOk, rewardReplay, equal⟩ := funding_epoch_site ok replayed
   -- Justification, inactivity and the eth1 reset keep the funding, as epoch stages.
   have justifiedFunding := funding_stage justifiedOk ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩
@@ -197,14 +197,6 @@ private theorem funding_before {fork : Fork} {s t : BeaconState preset fork}
   by_cases electra : .pectra ≤ fork
   · have altair : .altair ≤ fork := Nat.le_trans (by decide) electra
     have before : fork < .hegota := Nat.lt_trans early (by decide)
-    have trace : EpochTrace (EpochStage.action config checks)
-        [.justification, .inactivity, .rewards, .registry, .slashings, .eth1Reset] s reset :=
-      .cons (EpochStage.action_cases.mpr justifiedOk) <|
-        .cons (EpochStage.action_cases.mpr scoredOk) <|
-        .cons (EpochStage.action_cases.mpr rewardedOk) <|
-        .cons (EpochStage.action_cases.mpr registeredOk) <|
-        .cons (EpochStage.action_cases.mpr slashedOk) <|
-        .cons (EpochStage.action_cases.mpr resetOk) .nil
     have kept {P : BeaconState preset fork → Prop}
         (step : ∀ {k : EpochStage} {a b : BeaconState preset fork},
           EpochStage.Edge config checks k a b → P a → P b) (start : P s) : P reset :=
@@ -220,22 +212,17 @@ private theorem funding_before {fork : Fork} {s t : BeaconState preset fork}
               rcases member with rfl | rfl | rfl | rfl | rfl | rfl <;> exact nofun))
     simp only [EpochStage.Edge, altair, before, ↓reduceDIte] at scoredOk resetOk
     simp only [EpochStage.Edge, electra, ↓reduceDIte] at depositedOk consolidatedOk
-    have resetMatch : BalancesMatch reset :=
-      (frame_processEth1DataReset resetOk).balancesMatch <|
-      (frame_processSlashings slashedOk).balancesMatch <|
-      (frame_processRegistryUpdates registeredOk).balancesMatch <|
-      (frame_processRewardsAndPenalties rewardedOk).balancesMatch <|
-      (frame_processInactivityUpdates scoredOk).balancesMatch <|
+    -- After justification, the stages up to the eth1 reset are mutator frames.
+    have frame := (frame_processInactivityUpdates scoredOk).trans <|
+      (frame_processRewardsAndPenalties rewardedOk).trans <|
+      (frame_processRegistryUpdates registeredOk).trans <|
+      (frame_processSlashings slashedOk).trans (frame_processEth1DataReset resetOk)
+    have resetMatch : BalancesMatch reset := frame.balancesMatch <|
       balancesMatch_of_sameSizes (sameSizes_processJustificationAndFinalization justifiedOk)
         matched
-    have resetOrder : ExitsOrdered reset :=
-      (frame_processEth1DataReset resetOk).exitsOrdered <|
-      (frame_processSlashings slashedOk).exitsOrdered <|
-      (frame_processRegistryUpdates registeredOk).exitsOrdered <|
-      (frame_processRewardsAndPenalties rewardedOk).exitsOrdered <|
-      (frame_processInactivityUpdates scoredOk).exitsOrdered <|
-      (by simpa only [ExitsOrdered, (processJustificationAndFinalization_keeps
-        justifiedOk).2.2.2.2.2.1] using ordered)
+    have resetOrder : ExitsOrdered reset := frame.exitsOrdered <| by
+      simpa only [ExitsOrdered, (processJustificationAndFinalization_keeps
+        justifiedOk).2.2.2.2.2.1] using ordered
     have pendingOk : processPendingBalances config checks reset = .ok t := by
       simp only [processPendingBalances, electra, ↓reduceDIte, bind_ok_iff]
       exact ⟨deposited, depositedOk, consolidatedOk⟩

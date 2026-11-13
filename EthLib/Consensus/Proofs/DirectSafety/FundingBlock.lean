@@ -374,7 +374,9 @@ private theorem funding_block_replay {fork : Fork} {s : BeaconState preset fork}
       funding_block_same ((frame_processVoluntaryExit ok).balancesMatch h)
         (registryLifecycle_processVoluntaryExit ok) (sameSizes_processVoluntaryExit ok).1
         (frame_processVoluntaryExit ok).slot (effectiveKept_voluntaryExit ok)
-        (fun _ => SamePendingQueue.voluntary ok) (coverage_voluntary ok)⟩
+        (fun _ => SamePendingQueue.voluntary ok)
+        (initiateValidatorExit_balances_eq_and_pendingConsolidations_eq
+          (processVoluntaryExit_initiates ok)).1⟩
   have exitedBound := funding_block_carry
     (fun a _ ok h => (foldlM_ok_invariant (fun b => BalancesMatch b ∧
       fundedStake ⟨fork, b⟩ ≤ fundedStake ⟨fork, a⟩)

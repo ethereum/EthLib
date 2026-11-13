@@ -72,13 +72,6 @@ private theorem kept_exit {index : ValidatorIndex}
   · rfl
   · exact (kept_setValidator set).trans (kept_exitQueue queue)
 
-private theorem kept_justification {u : BeaconState preset fork}
-    (ok : processJustificationAndFinalization s = .ok u) : Kept s u := by
-  obtain rfl | ⟨_, _, _, weighed⟩ := processJustificationAndFinalization_ok ok
-  · rfl
-  · obtain ⟨_, _, _, rest⟩ := weighJustificationAndFinalization_checkpoints weighed
-    rw [← rest]
-
 /-- The epoch steps keep the deposit balance to consume. -/
 theorem depositCarryLaws : EpochStepLaws (fork := fork) (preset := preset)
     fun s t => t.depositBalanceToConsume = s.depositBalanceToConsume where
@@ -108,16 +101,9 @@ theorem EpochStage.Edge.depositCarry {stage : EpochStage}
       stage ≠ .pendingDeposits
   · exact depositCarryLaws.epochEdge ordinary (EpochStage.action_cases.mpr edge)
   -- The laws leave out justification, the payments and the rotation of the flags.
-  cases stage <;> simp only [EpochStage.Edge] at edge
-  case justification => exact kept_justification edge
-  case payments =>
-    split at edge
-    · rw [processBuilderPendingPayments_eq edge]
-    · exact edge ▸ rfl
-  case participation =>
-    split at edge
-    · subst edge; rfl
-    · exact depositCarryLaws.processParticipationRecordUpdates edge
+  cases stage
+  case justification | payments | participation =>
+    exact (edge.records ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩).2.2.2.1
   case pendingDeposits => exact absurd rfl other
   all_goals exact absurd ⟨nofun, nofun, nofun, nofun⟩ ordinary
 

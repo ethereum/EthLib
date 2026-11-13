@@ -1537,13 +1537,6 @@ theorem coverage_rewards {fork : Fork} {start : BeaconState preset fork}
   replayRewards_induction (ReplayCoverage start) (fun prior ok => coverage_record prior ok)
     (fun _ prior ok => coverage_record prior ok) initial ok
 
-/-- A voluntary exit keeps the balances. -/
-theorem coverage_voluntary {fork : Fork} {s t : BeaconState preset fork}
-    {signed : SignedVoluntaryExit} (ok : processVoluntaryExit config checks s signed = .ok t) :
-    t.balances = s.balances :=
-  (initiateValidatorExit_balances_eq_and_pendingConsolidations_eq
-    (processVoluntaryExit_initiates ok)).1
-
 /-- A BLS-to-execution change keeps the balances. -/
 theorem coverage_bls {fork : Fork} {s t : BeaconState preset fork}
     {signed : SignedBLSToExecutionChange}
@@ -2651,6 +2644,8 @@ theorem funding_epoch_site {fork : Fork} {s t : BeaconState preset fork}
     (replayed : epochBalanceReplay (config := config) (checks := checks) s = .ok (t, events)) :
     ∃ (justified scored rewarded registered slashed reset deposited : BeaconState preset fork)
       (rewardEvents : List (BalanceEvent preset)) (limit : Nat),
+      EpochTrace (EpochStage.action config checks)
+        [.justification, .inactivity, .rewards, .registry, .slashings, .eth1Reset] s reset ∧
       EpochStage.Edge config checks .justification s justified ∧
       EpochStage.Edge config checks .inactivity justified scored ∧
       processRewardsAndPenalties config scored = .ok rewarded ∧
@@ -2681,6 +2676,10 @@ theorem funding_epoch_site {fork : Fork} {s t : BeaconState preset fork}
   cases trace; rename_i deposited depositedOk trace
   cases trace; rename_i consolidatedOk trace
   cases trace
+  have early : EpochTrace (EpochStage.action config checks)
+      [.justification, .inactivity, .rewards, .registry, .slashings, .eth1Reset] s reset :=
+    .cons justifiedOk <| .cons scoredOk <| .cons rewardedOk <| .cons registeredOk <|
+      .cons slashedOk <| .cons resetOk .nil
   replace justifiedOk := EpochStage.action_cases.mp justifiedOk
   replace scoredOk := EpochStage.action_cases.mp scoredOk
   replace rewardedOk := EpochStage.action_cases.mp rewardedOk
@@ -2693,7 +2692,7 @@ theorem funding_epoch_site {fork : Fork} {s t : BeaconState preset fork}
   obtain ⟨rewardEvents, rewardReplay⟩ := replayRewards_result scored rewarded [] rewardedOk
   obtain ⟨limit, limitOk⟩ := delayedSlashingLimit_result slashedOk
   refine ⟨justified, scored, rewarded, registered, slashed, reset, deposited, rewardEvents, limit,
-    justifiedOk, scoredOk, rewardedOk, registeredOk, slashedOk, resetOk, depositedOk,
+    early, justifiedOk, scoredOk, rewardedOk, registeredOk, slashedOk, resetOk, depositedOk,
     consolidatedOk, rewardReplay, ?_⟩
   have slashReplay : epochReplayAction (config := config) (checks := checks) .slashings
       (registered, rewardEvents) = .ok
