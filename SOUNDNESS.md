@@ -2978,19 +2978,28 @@ The direct theorems of `Consensus/Proofs/DirectSafety/Safety.lean` do not go thr
 They take two runs of the state transition from one genesis built from deposits, which share a prefix up to a state `x`.
 A run keeps the inputs of each step: the slots, and the blocks with their state roots checked (`Run`, `Consensus/Proofs/Transition/Trace.lean`).
 A key is accountable when the two runs accepted two of its votes that `isSlashableAttestationData` flags.
-It is also accountable when a block of either run applied a slashing that names it.
-That slashing may be a proposer slashing, and it may be in the shared prefix, before `x`.
-So a key slashed before `x` and still active at `x` counts as accountable, although justification no longer counts its votes, and the bound is weaker by that stake.
+It is also accountable when a block of either tail, after `x`, applied a slashing that names it (`Accountable`, `DirectSafety/Conflict.lean`).
+That slashing may be a proposer slashing: a proposer slashing lowers the weights only through behaviour that is slashable.
 The votes are those of the attestations that the blocks applied, read by public key in the registry before each block.
 The weights are effective balances.
+The reference set is the unslashed keys active at `x` (`unslashedKeys`), and the accountable keys are those of that set (`accountableKeys`).
+A slashing in the shared prefix does not make a key accountable by itself.
+A key that it slashed leaves the reference set and the accountable set.
+The predicate `Accountable shared left right k` can still hold for such a key, but `accountableKeys` filters `unslashedKeys x`.
+A prefix attester slashing can name a key without slashing it, because `slashIfSlashable` skips it.
+Such a key stays in the reference set and can still count, through double votes or through evidence in a tail.
+The stake of a prefix-slashed key is absent from the later drift and support only because of forward persistence.
+These theorems do not need that fact, because the drift is observed.
+Recent keys are unslashed too, and justification counts only unslashed voters, so the voters of each quorum stay inside the support (`quorum_voters_recent`, `DirectSafety/Core.lean`).
+A key slashed at a call and unslashed at `x` has evidence in the tail of the call (`Run.slashed_evidence`, `DirectSafety/Evidence.lean`).
 Two checkpoints conflict when the runs applied different block headers up to the first slot of the earlier of their two epochs (`Conflict`, `DirectSafety/Execution.lean`).
 So, unless the roots of their headers collide, the runs disagree on the checkpoint of that epoch, even when one of the two finalized blocks is an ancestor of the other.
 `accountable_safety` takes conflicting finalized checkpoints of the two last states.
 The conflict implies that `x` is no later than the first slot of the earlier finalized epoch (`Run.slot_le_of_checkpointPath_ne`, `DirectSafety/Hashes.lean`).
 So the theorem takes no separate premise on `x`.
-Then the active stake at `x` is at most three times the accountable stake at `x`, plus twice the larger drift of the two tails.
+Then the unslashed active stake at `x` is at most three times the accountable stake at `x`, plus twice the larger drift of the two tails.
 The drift is zero when the active validators and their effective balances stay the same from the epoch before `x` to one epoch past the later finalized epoch.
-Then the accountable keys hold at least one third of the active stake at `x`.
+Then the accountable keys hold at least one third of the unslashed active stake at `x`.
 Otherwise the runs show evidence about the hash (`HashEvidence`), so no theorem assumes that the hash is injective.
 The evidence is what two searches find among the objects of the runs.
 `findMessageCollision` returns two different inputs of the SHA-256 node hash with one digest, read in the roots of the headers of the runs.
@@ -2998,8 +3007,9 @@ The evidence is what two searches find among the objects of the runs.
 `hashEvidence_iff` says that the searches find something exactly when such inputs exist or such an object exists.
 `findZeroRoot_valid` and `findZeroRoot_eq_none_iff` show that the zero search returns only such an object, and fails on runs that have none.
 The drift of a tail is the largest over its states up to one epoch past the later finalized epoch.
-At a state, it charges twice the stake at `x` that the state no longer supports, outside the keys slashed by then.
-It charges once the recent stake of the state that `x` did not hold, and twice the stake active at the previous epoch of the state but not at its current epoch.
+At a state, it charges twice the unslashed stake at `x` that the state no longer supports, outside the keys slashed by then.
+It charges once the recent stake of the state that the unslashed keys at `x` did not hold.
+It charges twice the recent stake that is not active at the current epoch of the state.
 It is observed, not bounded in closed form.
 The theorems need at least one slot per epoch, a buffer of roots of four epochs and more than `MIN_SEED_LOOKAHEAD + 2` epochs of RANDAO mixes.
 Each run also needs an active stake above one and a half increments at epoch calls after epoch 1 through one epoch past the target horizon (`EnoughStake run high`).
