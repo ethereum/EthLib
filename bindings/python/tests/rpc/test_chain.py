@@ -8,6 +8,7 @@ from typing import Any, Final
 
 import pytest
 
+from ethlib.cryptography.keccak import keccak256
 from ethlib.execution import rpc
 from ethlib.serialization import rlp
 from raising import raises
@@ -15,10 +16,14 @@ from raising import raises
 from .chain import FIXTURES, ReplayChain, block_hash, read_fixture, replay_chain
 
 # Each method that the view serves, with the schema of its result in `src/eth` of the source.
-RESULT_SCHEMAS: Final[dict[str, rpc.Schema]] = {
+# A result that is an object has no reader of its schema, so it maps to None.
+RESULT_SCHEMAS: Final[dict[str, rpc.Schema | None]] = {
     "eth_blockNumber": "uint",
     "eth_chainId": "uint",
     "net_version": "uintDecimal",
+    "eth_getTransactionByHash": None,
+    "eth_getTransactionByBlockHashAndIndex": None,
+    "eth_getTransactionByBlockNumberAndIndex": None,
 }
 
 # Every fixture of a method that the view serves.
@@ -62,9 +67,13 @@ def test_fixture(path: Path, answers: dict[str, dict[str, Any]]) -> None:
                 assert got["error"]["data"] == expected["error"]["data"]
             continue
         assert set(got) == {"jsonrpc", "id", "result"}
-        # Every result reads under the schema of its method.
-        rpc.read_param(RESULT_SCHEMAS[fixture.method], got["result"])
+        # Every result reads under the schema of its method, when a reader has one.
+        schema = RESULT_SCHEMAS[fixture.method]
+        if schema is not None:
+            rpc.read_param(schema, got["result"])
         # A fixture marked speconly is checked against the schema only, as the source says.
+        # Without a reader of the schema, such a fixture would check nothing, so none may exist.
+        assert schema is not None or not fixture.speconly
         if not fixture.speconly:
             assert got["result"] == expected["result"]
 
@@ -89,6 +98,57 @@ def _error(text: str) -> dict[str, Any]:
     answer = _answer(text)
     assert set(answer) == {"jsonrpc", "id", "error"}
     return answer
+
+
+def _transaction_hash(block: rpc.ChainBlock, index: int) -> bytes:
+    """The hash of a transaction of a block, from the raw block: the hash of its envelope."""
+    _, raw = block
+    item = rlp.decode(raw)[1][index]
+    # A legacy transaction is an RLP list; a typed one is already its envelope bytes.
+    return keccak256(rlp.encode(item) if isinstance(item, list) else item)
+
+
+def _call(method: str, params: list[object]) -> Any:
+    request = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
+    answer = _answer(json.dumps(request))
+    assert set(answer) == {"jsonrpc", "id", "result"}
+    return answer["result"]
+
+
+def test_transaction_at_index() -> None:
+    """Both lookups by block and index read the transaction at that index, not the first one."""
+    chain = replay_chain()
+    expected = "0x" + _transaction_hash(chain.blocks[1], 1).hex()
+    by_hash = "0x" + block_hash(chain.blocks[1]).hex()
+    for method, block in [
+        ("eth_getTransactionByBlockNumberAndIndex", "0x1"),
+        ("eth_getTransactionByBlockHashAndIndex", by_hash),
+    ]:
+        result = _call(method, [block, "0x1"])
+        assert result["hash"] == expected
+        assert result["transactionIndex"] == "0x1"
+        assert result["blockNumber"] == "0x1"
+        # The lookup by hash returns the same object.
+        assert _call("eth_getTransactionByHash", [expected]) == result
+
+
+# Each lookup by block and index that finds no transaction, so its result is null.
+NOT_FOUND = [
+    pytest.param("eth_getTransactionByBlockNumberAndIndex", ["0x3e8", "0x0"], id="unknown-number"),
+    pytest.param(
+        "eth_getTransactionByBlockHashAndIndex", ["0x" + "11" * 32, "0x0"], id="unknown-hash"
+    ),
+    pytest.param(
+        "eth_getTransactionByBlockNumberAndIndex", ["0x1", "0x10000000000000000"], id="past-end"
+    ),
+    pytest.param("eth_getTransactionByBlockNumberAndIndex", ["0x0", "0x0"], id="empty-block"),
+]
+
+
+@pytest.mark.parametrize(("method", "params"), NOT_FOUND)
+def test_transaction_not_found(method: str, params: list[object]) -> None:
+    """A block that the view does not hold, or an index past its end, gives null."""
+    assert _call(method, params) is None
 
 
 def test_unknown_method() -> None:
