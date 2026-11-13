@@ -478,7 +478,8 @@ private theorem checkpoint_binding {g a b : ForkedBeaconState preset}
     · exact False.elim (evidence collision)
   · exact False.elim (evidence collision)
 
-private theorem hashObjects_append_subset {g a b : ForkedBeaconState preset}
+/-- A run that extends another hashes every object that the run it extends hashes. -/
+theorem hashObjects_append_subset {g a b : ForkedBeaconState preset}
     (pre : Run config checks g a) (tail : Run config checks a b) :
     pre.hashObjects ⊆ (pre.append tail).hashObjects := by
   induction tail with

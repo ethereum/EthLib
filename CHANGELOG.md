@@ -86,11 +86,11 @@ Not yet released.
   `DirectSafety.accountable_safety_justified_terminal` states direct accountable safety for two such views, with no bound on the fork.
   `DirectSafety.accountable_safety_justified` is its case without a step, and its statement is unchanged.
   The other new Lean declarations are `TerminalView.state`, `TerminalView.enough`, `TerminalQuorum`, `TerminalQuorum.currentEpoch_le`, `ViewQuorum`, `ViewQuorum.eq_inl_of_realized`, `view_field_crossing`, `view_finalized_quorums`, `view_quorum_attestations`, `view_quorum_count`, `view_quorum_target_binding`, `view_conflicting_fields_quorums`, `view_voters_recent` and `checkpoint_binding_prefixes`, all in `DirectSafety`.
-  `Store.storeTargetCheckpointState_frame`, `Store.onAttestation_frame`, `Store.onAttesterSlashing_frame`, `Store.recordBlockTimeliness_frame` and `Store.updateProposerBoostRoot_frame` end with four new conjuncts.
-  They state that the justified, finalized, unrealized justified and unrealized finalized checkpoints are unchanged.
-  `Store.onTickPerSlot_frame` ends with a new conjunct: the four checkpoints are those of the store, or those of `updateCheckpoints` with its unrealized checkpoints.
+  `Store.storeTargetCheckpointState_frame`, `Store.onAttestation_frame`, `Store.onAttesterSlashing_frame`, `Store.recordBlockTimeliness_frame` and `Store.updateProposerBoostRoot_frame` end with five new conjuncts.
+  They state that the justified, finalized, unrealized justified and unrealized finalized checkpoints are unchanged, and so are the unrealized justifications.
+  `Store.onTickPerSlot_frame` ends with a new conjunct: the four checkpoints are those of the store, or those of `updateCheckpoints` with its unrealized checkpoints, and the unrealized justifications are unchanged.
   `Store.computePulledUpTip_frame` ends with a new conjunct: the held state of the tip and the result of its justification and finalization.
-  The conjunct also gives the four checkpoints that come from that result.
+  The conjunct also gives the four checkpoints that come from that result, and the unrealized justifications with that result's current justified checkpoint added for the tip.
   A caller that destructures one of these seven results adds one pattern, and only if its last pattern named the old last conjunct.
   A pattern that ends in `-` needs no change.
   A projection of the old last conjunct gains `.1`.

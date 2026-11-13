@@ -150,7 +150,7 @@ theorem computePulledUpTip_ordered {root : Root}
     (ordered : store.EpochsOrdered) (holds : store.StatesHold)
     (pulled : store.computePulledUpTip config root = .ok after) : after.EpochsOrdered := by
   obtain ⟨-, -, -, -, state, counted, found, countedOk, moved, which, justified, finalized,
-    unrealizedJustified, unrealizedFinalized⟩ := computePulledUpTip_frame pulled
+    unrealizedJustified, unrealizedFinalized, -⟩ := computePulledUpTip_frame pulled
   have invariant : Invariant state := holds found
   have le := finalized_le_currentJustified
     (processJustificationAndFinalization_ordered invariant.ordered invariant.settled countedOk).1
@@ -165,7 +165,7 @@ theorem computePulledUpTip_ordered {root : Root}
 theorem onTickPerSlot_ordered {timeMs : UInt64} (ordered : store.EpochsOrdered)
     (ticked : store.onTickPerSlot config timeMs = .ok after) : after.EpochsOrdered := by
   obtain ⟨-, -, -, -, -, moved, which, justified, finalized, unrealizedJustified,
-    unrealizedFinalized⟩ := onTickPerSlot_frame ticked
+    unrealizedFinalized, -⟩ := onTickPerSlot_frame ticked
   refine EpochsOrdered.of_checkpoints ?_ justified finalized unrealizedJustified
     unrealizedFinalized
   rcases which with rfl | rfl
@@ -189,7 +189,7 @@ theorem onAttestation_ordered {checks : SignatureChecks} {attestation : Attestat
     {isFromBlock : Bool} (ordered : store.EpochsOrdered)
     (attested : store.onAttestation config checks attestation isFromBlock = .ok after) :
     after.EpochsOrdered := by
-  obtain ⟨-, -, -, justified, finalized, unrealizedJustified, unrealizedFinalized⟩ :=
+  obtain ⟨-, -, -, justified, finalized, unrealizedJustified, unrealizedFinalized, -⟩ :=
     onAttestation_frame attested
   exact ordered.of_checkpoints justified finalized unrealizedJustified unrealizedFinalized
 
@@ -198,7 +198,7 @@ theorem onAttesterSlashing_ordered {checks : SignatureChecks}
     {slashing : AttesterSlashing preset fork} (ordered : store.EpochsOrdered)
     (slashed : store.onAttesterSlashing config checks slashing = .ok after) :
     after.EpochsOrdered := by
-  obtain ⟨-, -, -, justified, finalized, unrealizedJustified, unrealizedFinalized⟩ :=
+  obtain ⟨-, -, -, justified, finalized, unrealizedJustified, unrealizedFinalized, -⟩ :=
     onAttesterSlashing_frame slashed
   exact ordered.of_checkpoints justified finalized unrealizedJustified unrealizedFinalized
 
@@ -268,11 +268,11 @@ theorem onBlock_ordered {checks : SignatureChecks}
     obtain ⟨pre, found, -, -, transition⟩ := validateOnBlock_ok valid
     have invariant := (stateTransition_invariant (holds found) transition).1
     have recordedOrdered : recorded.EpochsOrdered := by
-      obtain ⟨-, -, -, -, justified, finalized, unrealizedJustified, unrealizedFinalized⟩ :=
+      obtain ⟨-, -, -, -, justified, finalized, unrealizedJustified, unrealizedFinalized, -⟩ :=
         recordBlockTimeliness_frame record
       exact ordered.of_checkpoints justified finalized unrealizedJustified unrealizedFinalized
     have boostedOrdered : boosted.EpochsOrdered := by
-      obtain ⟨-, -, -, -, justified, finalized, unrealizedJustified, unrealizedFinalized⟩ :=
+      obtain ⟨-, -, -, -, justified, finalized, unrealizedJustified, unrealizedFinalized, -⟩ :=
         updateProposerBoostRoot_frame boost
       exact recordedOrdered.of_checkpoints justified finalized unrealizedJustified
         unrealizedFinalized

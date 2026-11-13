@@ -97,7 +97,7 @@ variable {config : Config} {anchorState : BeaconState preset fork}
   {anchorBlock : BeaconBlock preset fork} {store : Store preset fork}
 
 /-- Below the slot of a block, its chain holds the chain of its parent. -/
-private theorem Store.ancestorRoots_of_parent {root : Root}
+theorem Store.ancestorRoots_of_parent {root : Root}
     {block parent : BeaconBlock preset fork} (found : store.blocks[root]? = some block)
     (parentFound : store.blocks[block.parentRoot]? = some parent)
     (lower : parent.slot < block.slot) {slot : Slot} {ancestor : Root}
@@ -472,96 +472,114 @@ private theorem Tracked.updateCheckpoints_unrealized
       store.unrealizedFinalizedCheckpoint).Tracked anchorState anchorBlock :=
   tracked.updateCheckpoints (.inl tracked.unrealizedJustified) (.inl tracked.unrealizedFinalized)
 
+/-- A store with the same checkpoints, justifications and block states is tracked. -/
+private theorem Tracked.of_eq (tracked : store.Tracked anchorState anchorBlock)
+    (justified : after.justifiedCheckpoint = store.justifiedCheckpoint)
+    (finalized : after.finalizedCheckpoint = store.finalizedCheckpoint)
+    (unrealizedJustified :
+      after.unrealizedJustifiedCheckpoint = store.unrealizedJustifiedCheckpoint)
+    (unrealizedFinalized :
+      after.unrealizedFinalizedCheckpoint = store.unrealizedFinalizedCheckpoint)
+    (justifications : after.unrealizedJustifications = store.unrealizedJustifications)
+    (states : after.blockStates = store.blockStates) :
+    after.Tracked anchorState anchorBlock :=
+  tracked.of_grow justified finalized unrealizedJustified unrealizedFinalized justifications
+    (fun found => states ▸ found)
+
+/-- Moving the checkpoints keeps the unrealized justifications. -/
+private theorem updateCheckpoints_unrealizedJustifications (justified finalized : Checkpoint) :
+    (store.updateCheckpoints justified finalized).unrealizedJustifications =
+      store.unrealizedJustifications := by
+  unfold Store.updateCheckpoints
+  by_cases j : store.justifiedCheckpoint.epoch < justified.epoch <;>
+    by_cases f : store.finalizedCheckpoint.epoch < finalized.epoch <;> simp [j, f]
+
+/-- Moving the unrealized checkpoints keeps the unrealized justifications. -/
+private theorem updateUnrealizedCheckpoints_unrealizedJustifications
+    (justified finalized : Checkpoint) :
+    (store.updateUnrealizedCheckpoints justified finalized).unrealizedJustifications =
+      store.unrealizedJustifications := by
+  unfold Store.updateUnrealizedCheckpoints
+  by_cases j : store.unrealizedJustifiedCheckpoint.epoch < justified.epoch <;>
+    by_cases f : store.unrealizedFinalizedCheckpoint.epoch < finalized.epoch <;> simp [j, f]
+
+/-- Recording the unrealized justification of a block keeps the store tracked.
+
+It must be the current justified checkpoint of the block state after justification. -/
+private theorem Tracked.insertJustification (tracked : store.Tracked anchorState anchorBlock)
+    {root : Root} {state counted : BeaconState preset fork}
+    (found : store.blockStates[root]? = some state)
+    (counting : processJustificationAndFinalization state = .ok counted) :
+    ({ store with unrealizedJustifications :=
+        store.unrealizedJustifications.insert root counted.currentJustifiedCheckpoint } :
+      Store preset fork).Tracked anchorState anchorBlock := by
+  refine ⟨tracked.justified, tracked.finalized, tracked.unrealizedJustified,
+    tracked.unrealizedFinalized, ?_⟩
+  intro key checkpoint keyFound
+  dsimp only at keyFound
+  rw [getElem?_insert_root] at keyFound
+  by_cases same : root = key
+  · simp only [same, ↓reduceIte, Option.some.injEq] at keyFound
+    subst same
+    exact .inr ⟨state, counted, found, counting, keyFound.symm⟩
+  · simp only [same, ↓reduceIte] at keyFound
+    exact tracked.justifications key checkpoint keyFound
+
 /-- The tip pulled up to the end of its epoch keeps the store tracked. -/
 private theorem Tracked.computePulledUpTip {config : Config} {root : Root}
     (tracked : store.Tracked anchorState anchorBlock)
     (pulled : store.computePulledUpTip config root = .ok after) :
     after.Tracked anchorState anchorBlock := by
-  unfold Store.computePulledUpTip at pulled
-  simp only [bind_ok_iff] at pulled
-  obtain ⟨state, found, pulledState, weighed, block, -, epoch, -, pulled⟩ := pulled
-  have stateFound := blockState_ok_iff.mp found
-  have weighedOk := Base.mapError_ok_iff.mp weighed
-  have source (field : BeaconState preset fork → Checkpoint) :
-      store.FromState field (field pulledState) :=
-    ⟨root, state, stateFound, .inr ⟨pulledState, weighedOk, rfl⟩⟩
-  -- The new unrealized justification comes from the state of the block.
-  have inserted : ({ store with
-      unrealizedJustifications := store.unrealizedJustifications.insert root
-        pulledState.currentJustifiedCheckpoint } : Store preset fork).Tracked
-      anchorState anchorBlock := by
-    refine ⟨tracked.justified, tracked.finalized, tracked.unrealizedJustified,
-      tracked.unrealizedFinalized, ?_⟩
-    intro key checkpoint keyFound
-    dsimp only at keyFound
-    rw [getElem?_insert_root] at keyFound
-    by_cases same : root = key
-    · simp only [same, ↓reduceIte, Option.some.injEq] at keyFound
-      subst same
-      exact .inr ⟨state, pulledState, stateFound, weighedOk, keyFound.symm⟩
-    · simp only [same, ↓reduceIte] at keyFound
-      exact tracked.justifications key checkpoint keyFound
-  have justified := source (·.currentJustifiedCheckpoint)
-  have finalized := source (·.finalizedCheckpoint)
-  have unrealized := inserted.updateUnrealizedCheckpoints (.inr justified) (.inr finalized)
-  split at pulled <;> simp only [pure, Except.pure, Except.ok.injEq] at pulled <;> subst pulled
-  · have grow : ∀ {key : Root} {kept : BeaconState preset fork},
-        store.blockStates[key]? = some kept →
-          ((({ store with unrealizedJustifications :=
-            store.unrealizedJustifications.insert root pulledState.currentJustifiedCheckpoint } :
-              Store preset fork).updateUnrealizedCheckpoints pulledState.currentJustifiedCheckpoint
-                pulledState.finalizedCheckpoint).blockStates[key]? = some kept) := by
-      intro key kept keptFound
-      rw [updateUnrealizedCheckpoints_blockStates]
-      exact keptFound
-    exact unrealized.updateCheckpoints (.inr (justified.mono grow)) (.inr (finalized.mono grow))
-  · exact unrealized
+  obtain ⟨-, -, states, -, state, counted, found, counting, moved, which, justified, finalized,
+    unrealizedJustified, unrealizedFinalized, justifications⟩ := computePulledUpTip_frame pulled
+  -- The new checkpoints come from the state of the block after justification.
+  have source (field : BeaconState preset fork → Checkpoint) {kept : Store preset fork}
+      (same : kept.blockStates = store.blockStates) : kept.FromState field (field counted) :=
+    ⟨root, state, by rw [same]; exact found, .inr ⟨counted, counting, rfl⟩⟩
+  have unrealized :=
+    tracked.updateUnrealizedCheckpoints (.inr (source _ rfl)) (.inr (source _ rfl))
+  have movedStates : moved.blockStates = store.blockStates := by
+    rcases which with rfl | rfl <;> simp
+  have movedTracked : moved.Tracked anchorState anchorBlock := by
+    rcases which with rfl | rfl
+    · exact unrealized
+    · exact unrealized.updateCheckpoints (.inr (source _ (by simp))) (.inr (source _ (by simp)))
+  have movedJustifications : moved.unrealizedJustifications = store.unrealizedJustifications := by
+    rcases which with rfl | rfl <;>
+      simp [updateCheckpoints_unrealizedJustifications,
+        updateUnrealizedCheckpoints_unrealizedJustifications]
+  -- The pull-up records the current justified checkpoint of that state for the block.
+  exact (movedTracked.insertJustification (by rw [movedStates]; exact found) counting).of_eq
+    justified finalized unrealizedJustified unrealizedFinalized
+    (by rw [justifications, movedJustifications]) (states.trans movedStates.symm)
 
 /-- A tick within a slot keeps the store tracked. -/
 private theorem Tracked.onTickPerSlot {config : Config} {timeMs : UInt64}
     (tracked : store.Tracked anchorState anchorBlock)
     (ticked : store.onTickPerSlot config timeMs = .ok after) :
     after.Tracked anchorState anchorBlock := by
-  unfold Store.onTickPerSlot at ticked
-  simp only [bind_ok_iff] at ticked
-  obtain ⟨previous, -, current, -, ticked⟩ := ticked
-  split at ticked <;>
-    · obtain ⟨_, _, ticked⟩ := ticked
-      split at ticked <;> simp only [pure, Except.pure, Except.ok.injEq] at ticked <;>
-        subst ticked
-      · refine Tracked.updateCheckpoints_unrealized ?_
-        refine tracked.of_grow ?_ ?_ ?_ ?_ ?_ ?_ <;> (try intro key kept keptFound) <;>
-          first | rfl | exact keptFound
-      · refine tracked.of_grow ?_ ?_ ?_ ?_ ?_ ?_ <;> (try intro key kept keptFound) <;>
-          first | rfl | exact keptFound
+  obtain ⟨-, -, -, -, states, moved, which, justified, finalized, unrealizedJustified,
+    unrealizedFinalized, justifications⟩ := onTickPerSlot_frame ticked
+  rcases which with rfl | rfl
+  · exact tracked.of_eq justified finalized unrealizedJustified unrealizedFinalized
+      justifications states
+  · exact tracked.updateCheckpoints_unrealized.of_eq justified finalized unrealizedJustified
+      unrealizedFinalized (by rw [justifications, updateCheckpoints_unrealizedJustifications])
+      (by rw [states, updateCheckpoints_blockStates])
 
 /-- The catch-up loop keeps the store tracked. -/
 private theorem Tracked.catchUp {config : Config} {tickSlot : Slot} {start : Store preset fork}
     (tracked : start.Tracked anchorState anchorBlock)
     (caught : Store.catchUp config start tickSlot = .ok after) :
-    after.Tracked anchorState anchorBlock := by
-  induction start using Store.catchUp.induct config tickSlot with
-  | _ start ih =>
-    rw [Store.catchUp.eq_1] at caught
-    simp only [bind_ok_iff] at caught
-    obtain ⟨current, -, caught⟩ := caught
-    split at caught
-    · simp only [bind_ok_iff] at caught
-      obtain ⟨next, -, nextTimeMs, -, ticked, tick, caught⟩ := caught
-      split at caught
-      · exact ih ticked ‹_› (tracked.onTickPerSlot tick) caught
-      · cases caught
-    · simp only [pure, Except.pure, Except.ok.injEq] at caught
-      subst caught
-      exact tracked
+    after.Tracked anchorState anchorBlock :=
+  catchUp_preserves (P := fun s => s.Tracked anchorState anchorBlock)
+    (fun tracked tick => tracked.onTickPerSlot tick) tracked caught
 
 /-- A tick keeps the store tracked. -/
 private theorem Tracked.onTick {config : Config} {timeMs : UInt64}
     (tracked : store.Tracked anchorState anchorBlock)
     (ticked : store.onTick config timeMs = .ok after) : after.Tracked anchorState anchorBlock := by
-  unfold Store.onTick at ticked
-  simp only [bind_ok_iff] at ticked
-  obtain ⟨tickSlot, -, caught, caughtUp, ticked⟩ := ticked
+  obtain ⟨_, caught, -, caughtUp, ticked⟩ := onTick_ok ticked
   exact (tracked.catchUp caughtUp).onTickPerSlot ticked
 
 end Store
@@ -595,56 +613,26 @@ namespace Store
 
 variable {after : Store preset fork}
 
-/-- A store with the same checkpoints, justifications and block states is tracked. -/
-private theorem Tracked.of_eq (tracked : store.Tracked anchorState anchorBlock)
-    (justified : after.justifiedCheckpoint = store.justifiedCheckpoint)
-    (finalized : after.finalizedCheckpoint = store.finalizedCheckpoint)
-    (unrealizedJustified :
-      after.unrealizedJustifiedCheckpoint = store.unrealizedJustifiedCheckpoint)
-    (unrealizedFinalized :
-      after.unrealizedFinalizedCheckpoint = store.unrealizedFinalizedCheckpoint)
-    (justifications : after.unrealizedJustifications = store.unrealizedJustifications)
-    (states : after.blockStates = store.blockStates) :
-    after.Tracked anchorState anchorBlock :=
-  tracked.of_grow justified finalized unrealizedJustified unrealizedFinalized justifications
-    (fun found => states ▸ found)
-
 /-- An attestation keeps the store tracked. -/
 private theorem Tracked.onAttestation {config : Config} {checks : SignatureChecks}
     {attestation : Attestation preset fork} {isFromBlock : Bool}
     (tracked : store.Tracked anchorState anchorBlock)
     (attested : store.onAttestation config checks attestation isFromBlock = .ok after) :
     after.Tracked anchorState anchorBlock := by
-  unfold Store.onAttestation at attested
-  simp only [bind_ok_iff] at attested
-  obtain ⟨_, _, stored, storing, _, _, _, _, _, _, valid, _, attested⟩ := attested
-  have kept : stored.Tracked anchorState anchorBlock := by
-    unfold storeTargetCheckpointState at storing
-    split at storing
-    · simp only [pure, Except.pure, Except.ok.injEq] at storing
-      subst storing
-      exact tracked
-    · simp only [bind_ok_iff] at storing
-      obtain ⟨_, _, storing⟩ := storing
-      simp only [pure, Except.pure, Except.ok.injEq] at storing
-      subst storing
-      exact tracked.of_eq rfl rfl rfl rfl rfl rfl
-  split at attested
-  · simp only [pure, Except.pure, Except.ok.injEq] at attested
-    subst attested
-    exact kept.of_eq rfl rfl rfl rfl rfl rfl
-  · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at attested
+  obtain ⟨-, -, states, justified, finalized, unrealizedJustified, unrealizedFinalized,
+    justifications⟩ := onAttestation_frame attested
+  exact tracked.of_eq justified finalized unrealizedJustified unrealizedFinalized justifications
+    states
 
 /-- An attester slashing keeps the store tracked. -/
 private theorem Tracked.onAttesterSlashing {config : Config} {checks : SignatureChecks}
     {slashing : AttesterSlashing preset fork} (tracked : store.Tracked anchorState anchorBlock)
     (slashed : store.onAttesterSlashing config checks slashing = .ok after) :
     after.Tracked anchorState anchorBlock := by
-  unfold Store.onAttesterSlashing at slashed
-  simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at slashed
-  obtain ⟨_, _, slashed⟩ := slashed
-  subst slashed
-  exact tracked.of_eq rfl rfl rfl rfl rfl rfl
+  obtain ⟨-, -, states, justified, finalized, unrealizedJustified, unrealizedFinalized,
+    justifications⟩ := onAttesterSlashing_frame slashed
+  exact tracked.of_eq justified finalized unrealizedJustified unrealizedFinalized justifications
+    states
 
 /-- A new block keeps the store tracked. -/
 private theorem Tracked.onBlock {config : Config} {checks : SignatureChecks}
@@ -686,27 +674,18 @@ private theorem Tracked.onBlock {config : Config} {checks : SignatureChecks}
         cases keptFound
       · simp only [same, ↓reduceIte]
         exact keptFound
-    have recordedTracked : recorded.Tracked anchorState anchorBlock := by
-      unfold recordBlockTimeliness at record
-      simp only [bind_ok_iff, pure, Except.pure] at record
-      obtain ⟨_, _, _, _, _, _, _, _, record⟩ := record
-      split at record
-      · simp only [bind_ok_iff, Except.ok.injEq] at record
-        obtain ⟨_, _, rfl⟩ := record
-        exact inserted.of_eq rfl rfl rfl rfl rfl rfl
-      · cases record
-        exact inserted.of_eq rfl rfl rfl rfl rfl rfl
-    have boostedTracked : boosted.Tracked anchorState anchorBlock := by
-      unfold updateProposerBoostRoot at boost
-      split at boost
-      rotate_left
-      · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at boost
-      simp only [bind_ok_iff, pure_bind] at boost
-      obtain ⟨_, _, _, _, _, _, boost⟩ := boost
-      split at boost <;> simp only [pure, Except.pure, Except.ok.injEq] at boost <;>
-        subst boost <;> exact recordedTracked.of_eq rfl rfl rfl rfl rfl rfl
+    obtain ⟨-, -, recordedStates, -, justified, finalized, unrealizedJustified,
+      unrealizedFinalized, justifications⟩ := recordBlockTimeliness_frame record
+    have recordedTracked : recorded.Tracked anchorState anchorBlock :=
+      inserted.of_eq justified finalized unrealizedJustified unrealizedFinalized justifications
+        recordedStates
+    obtain ⟨-, -, boostedStates, -, justified, finalized, unrealizedJustified,
+      unrealizedFinalized, justifications⟩ := updateProposerBoostRoot_frame boost
+    have boostedTracked : boosted.Tracked anchorState anchorBlock :=
+      recordedTracked.of_eq justified finalized unrealizedJustified unrealizedFinalized
+        justifications boostedStates
     have stateFound : boosted.blockStates[blockRoot]? = some state := by
-      rw [(updateProposerBoostRoot_frame boost).2.2.1, (recordBlockTimeliness_frame record).2.2.1]
+      rw [boostedStates, recordedStates]
       exact (getElem?_insert_root).trans (by simp)
     have source (field : BeaconState preset fork → Checkpoint) :
         boosted.FromState field (field state) :=

@@ -41,55 +41,39 @@ namespace Store
 
 variable {store : Store preset fork}
 
-/-- Below the slot of a block, the walk from it reaches the roots that its parent's walk reaches. -/
-private theorem getAncestor_root_of_parent {root : Root} {slot : Slot}
-    {block parent : BeaconBlock preset fork} (found : store.blocks[root]? = some block)
-    (parentFound : store.blocks[block.parentRoot]? = some parent)
-    (lower : parent.slot < block.slot) (below : slot < block.slot) :
-    (·.root) <$> store.getAncestor ⟨root, .pending⟩ slot =
-      (·.root) <$> store.getAncestor ⟨block.parentRoot, .pending⟩ slot := by
-  rw [getAncestor_step found (UInt64.not_le.mpr below) parentFound lower]
-  exact getAncestor_root _ _ _
-
-/-- A checkpoint block is the root that the walk from a pending node reaches at the epoch start. -/
+/-- A checkpoint block is the root of the chain of a block at the first slot of the epoch. -/
 private theorem getCheckpointBlock_ok_iff {root target : Root} {epoch : Epoch} :
     store.getCheckpointBlock root epoch = .ok target ↔ ∃ start,
-      computeStartSlotAtEpoch preset epoch = .ok start ∧
-        (·.root) <$> store.getAncestor ⟨root, .pending⟩ start = .ok target := by
-  unfold getCheckpointBlock
+      computeStartSlotAtEpoch preset epoch = .ok start ∧ store.ancestorRoots root start target := by
+  unfold getCheckpointBlock ancestorRoots
   cases computeStartSlotAtEpoch preset epoch with
   | error e => simp [Except.mapError, bind, Except.bind]
   | ok start =>
-    cases store.getAncestor ⟨root, .pending⟩ start <;>
-      simp [Except.mapError, bind, Except.bind, pure, Except.pure, Functor.map, Except.map]
+    cases reached : store.getAncestor ⟨root, .pending⟩ start <;>
+      simp [reached, Except.mapError, bind, Except.bind, pure, Except.pure]
 
-/-- A pending node descends from the pending node of each root that its walk reaches.
+/-- A pending node descends from the pending node of each root on its chain.
 
 Before Gloas the walk keeps the pending status, as each parent is pending then. -/
-private theorem isAncestor_of_getAncestor_root (lower : store.ParentsBelow) {root target : Root}
-    {slot : Slot}
-    (walk : (·.root) <$> store.getAncestor ⟨root, .pending⟩ slot = .ok target) :
+private theorem isAncestor_of_ancestorRoots (lower : store.ParentsBelow) {root target : Root}
+    {slot : Slot} (walk : store.ancestorRoots root slot target) :
     store.isAncestor ⟨root, .pending⟩ ⟨target, .pending⟩ = .ok true := by
-  cases reached : store.getAncestor ⟨root, .pending⟩ slot with
-  | error e => simp [reached, Functor.map, Except.map] at walk
-  | ok node =>
-    simp only [reached, Functor.map, Except.map, Except.ok.injEq] at walk
-    subst walk
-    by_cases gloas : .glamsterdam ≤ fork
-    · obtain ⟨block, found, le⟩ := getAncestor_le reached
-      have stops : store.getAncestor ⟨root, .pending⟩ block.slot = .ok node := by
-        rw [getAncestor_trans le reached, getAncestor_of_le found (UInt64.le_refl _)]
-      simp [isAncestor_pending gloas, block_ok_iff.mpr found, stops, bind, Except.bind, pure,
-        Except.pure]
-    · obtain ⟨-, origin, -⟩ := getAncestor_climbs (lower := lower) reached
-      obtain ⟨nodeRoot, status⟩ := node
-      have pending : status = .pending := by
-        rcases origin with same | ⟨_, _, _, _, _, _, parentStatus, _⟩
-        · cases same
-          rfl
-        · exact parentStatus.trans (parentPayloadStatus_of_lt (Nat.lt_of_not_le gloas))
-      subst pending
-      exact isAncestor_of_getAncestor reached
+  obtain ⟨node, reached, rfl⟩ := walk
+  by_cases gloas : .glamsterdam ≤ fork
+  · obtain ⟨block, found, le⟩ := getAncestor_le reached
+    have stops : store.getAncestor ⟨root, .pending⟩ block.slot = .ok node := by
+      rw [getAncestor_trans le reached, getAncestor_of_le found (UInt64.le_refl _)]
+    simp [isAncestor_pending gloas, block_ok_iff.mpr found, stops, bind, Except.bind, pure,
+      Except.pure]
+  · obtain ⟨-, origin, -⟩ := getAncestor_climbs (lower := lower) reached
+    obtain ⟨nodeRoot, status⟩ := node
+    have pending : status = .pending := by
+      rcases origin with same | ⟨_, _, _, _, _, _, parentStatus, _⟩
+      · cases same
+        rfl
+      · exact parentStatus.trans (parentPayloadStatus_of_lt (Nat.lt_of_not_le gloas))
+    subst pending
+    exact isAncestor_of_getAncestor reached
 
 /-- Two checkpoint blocks of one chain, at ordered epochs, are on one chain themselves.
 
@@ -100,22 +84,23 @@ private theorem getCheckpointBlock_of_le (lower : store.ParentsBelow)
     (lateBlock : store.getCheckpointBlock root lateEpoch = .ok late) :
     store.isAncestor ⟨late, .pending⟩ ⟨early, .pending⟩ = .ok true ∧
       store.getCheckpointBlock late earlyEpoch = .ok early := by
-  obtain ⟨startEarly, startedEarly, walkEarly⟩ := getCheckpointBlock_ok_iff.mp earlyBlock
-  obtain ⟨startLate, startedLate, walkLate⟩ := getCheckpointBlock_ok_iff.mp lateBlock
+  obtain ⟨startEarly, startedEarly, nodeEarly, walkEarly, rfl⟩ :=
+    getCheckpointBlock_ok_iff.mp earlyBlock
+  obtain ⟨startLate, startedLate, node, reached, rfl⟩ := getCheckpointBlock_ok_iff.mp lateBlock
   have startLe : startEarly ≤ startLate := by
     rw [computeStartSlotAtEpoch_ok_iff] at startedEarly startedLate
     rw [UInt64.le_iff_toNat_le, startedEarly.2, startedLate.2]
     exact Nat.mul_le_mul_right _ (UInt64.le_iff_toNat_le.mp ordered)
-  obtain ⟨node, reached, nodeRoot⟩ : ∃ node, store.getAncestor ⟨root, .pending⟩ startLate =
-      .ok node ∧ node.root = late := by
-    cases reaching : store.getAncestor ⟨root, .pending⟩ startLate <;>
-      simp_all [Functor.map, Except.map]
   -- The walk to the earlier start can stop at the later block on the way.
-  have walk : (·.root) <$> store.getAncestor ⟨late, .pending⟩ startEarly = .ok early := by
-    rw [← nodeRoot, ← getAncestor_root node .pending startEarly,
-      ← getAncestor_trans startLe reached]
-    exact walkEarly
-  exact ⟨isAncestor_of_getAncestor_root lower walk,
+  have walk : store.ancestorRoots node.root startEarly nodeEarly.root := by
+    have same := getAncestor_root (store := store) node .pending startEarly
+    rw [← getAncestor_trans startLe reached, walkEarly] at same
+    cases reaching : store.getAncestor ⟨node.root, .pending⟩ startEarly with
+    | error e => simp [reaching, Functor.map, Except.map] at same
+    | ok other =>
+      simp only [reaching, Functor.map, Except.map, Except.ok.injEq] at same
+      exact ⟨other, reaching, same.symm⟩
+  exact ⟨isAncestor_of_ancestorRoots lower walk,
     getCheckpointBlock_ok_iff.mpr ⟨startEarly, startedEarly, walk⟩⟩
 
 end Store
@@ -137,14 +122,11 @@ private theorem slot_le_of_getCurrentEpoch_lt {state : BeaconState preset fork} 
 private theorem state_mem_hashObjects_append {config : Config} {checks : SignatureChecks}
     {g x y : ForkedBeaconState preset} (pre : Run config checks g x)
     (tail : Run config checks x y) :
-    DirectSafety.HashObject.state x ∈ (pre.append tail).hashObjects := by
-  induction tail with
-  | nil =>
+    DirectSafety.HashObject.state x ∈ (pre.append tail).hashObjects :=
+  DirectSafety.hashObjects_append_subset pre tail (by
     cases pre with
-    | nil => simp [Run.append, Run.hashObjects]
-    | snoc pre step =>
-      exact List.mem_append.mpr (.inr (List.mem_append.mpr (.inl (by simp))))
-  | snoc tail step ih => exact List.mem_append_left _ ih
+    | nil => simp [Run.hashObjects]
+    | snoc pre step => exact List.mem_append.mpr (.inr (List.mem_append.mpr (.inl (by simp)))))
 
 /-- Slots of one fork before its next fork extend a run with slot steps.
 
@@ -187,13 +169,13 @@ private theorem getCheckpointBlock_eq_of_checkpointPath {config : Config}
     (headersLeft : (pre.append left).headers = pre.headers ++ extraLeft)
     (headersRight : (pre.append right).headers = pre.headers ++ extraRight)
     (lastLeft : ∀ slot : Slot, anchorBlock.slot ≤ slot → ∃ reached : Root,
-      (·.root) <$> store.getAncestor ⟨rootLeft, .pending⟩ slot = .ok reached ∧
+      store.ancestorRoots rootLeft slot reached ∧
       (((extraLeft.filter fun header => header.slot.toNat ≤ slot.toNat).getLast? = none ∧
           SszType.hashTreeRoot anchorBlock = .ok reached) ∨
         ∃ header, (extraLeft.filter fun header => header.slot.toNat ≤ slot.toNat).getLast? =
             some header ∧ SszType.hashTreeRoot header = .ok reached))
     (lastRight : ∀ slot : Slot, anchorBlock.slot ≤ slot → ∃ reached : Root,
-      (·.root) <$> store.getAncestor ⟨rootRight, .pending⟩ slot = .ok reached ∧
+      store.ancestorRoots rootRight slot reached ∧
       (((extraRight.filter fun header => header.slot.toNat ≤ slot.toNat).getLast? = none ∧
           SszType.hashTreeRoot anchorBlock = .ok reached) ∨
         ∃ header, (extraRight.filter fun header => header.slot.toNat ≤ slot.toNat).getLast? =
@@ -210,15 +192,15 @@ private theorem getCheckpointBlock_eq_of_checkpointPath {config : Config}
     unfold Run.checkpointPath at paths
     rw [headersLeft, headersRight, List.filter_append, List.filter_append] at paths
     simpa only [startEq] using List.append_cancel_left paths
-  obtain ⟨start', startOk', walkLeft⟩ := Store.getCheckpointBlock_ok_iff.mp found
+  obtain ⟨start', startOk', node, walkLeft, rfl⟩ := Store.getCheckpointBlock_ok_iff.mp found
   rw [startOk, Except.ok.injEq] at startOk'
   subst start'
-  obtain ⟨reachedLeft, walkLeft', casesLeft⟩ := lastLeft start later
+  obtain ⟨reachedLeft, ⟨node', walkLeft', rfl⟩, casesLeft⟩ := lastLeft start later
   rw [walkLeft, Except.ok.injEq] at walkLeft'
-  subst reachedLeft
+  subst node'
   obtain ⟨reachedRight, walkRight, casesRight⟩ := lastRight start later
   refine Store.getCheckpointBlock_ok_iff.mpr ⟨start, startOk, ?_⟩
-  rw [walkRight, Except.ok.injEq]
+  suffices reachedRight = node.root from this ▸ walkRight
   rw [← same] at casesRight
   rcases casesLeft with ⟨noneLeft, hashLeft⟩ | ⟨header, lastLeft, hashLeft⟩ <;>
     rcases casesRight with ⟨noneRight, hashRight⟩ | ⟨header', lastRight, hashRight⟩
@@ -265,7 +247,7 @@ private theorem Store.Reachable.exists_run_of_blockState {config : Config}
       (extra : List BeaconBlockHeader),
       (pre.append tail).headers = pre.headers ++ extra ∧
       ∀ slot : Slot, anchorBlock.slot ≤ slot → ∃ reached : Root,
-        (·.root) <$> store.getAncestor ⟨root, .pending⟩ slot = .ok reached ∧
+        store.ancestorRoots root slot reached ∧
         (((extra.filter fun header => header.slot.toNat ≤ slot.toNat).getLast? = none ∧
             SszType.hashTreeRoot anchorBlock = .ok reached) ∨
           ∃ header, (extra.filter fun header => header.slot.toNat ≤ slot.toNat).getLast? =
@@ -278,10 +260,8 @@ private theorem Store.Reachable.exists_run_of_blockState {config : Config}
   · -- The anchor state ends the run to the anchor, and every later walk stays at its block.
     obtain rfl := anchored same
     subst same
-    refine ⟨.nil, [], by simp [Run.append], fun slot later =>
-      ⟨root, ?_, .inl ⟨by simp, reachable.root found⟩⟩⟩
-    rw [Store.getAncestor_of_le found later]
-    rfl
+    exact ⟨.nil, [], by simp [Run.append], fun slot later =>
+      ⟨root, ⟨_, Store.getAncestor_of_le found later, rfl⟩, .inl ⟨by simp, reachable.root found⟩⟩⟩
   obtain ⟨parent, engine, signed, message, parentHeld, transitioned⟩ :=
     imported found held same
   subst message
@@ -318,12 +298,12 @@ private theorem Store.Reachable.exists_run_of_blockState {config : Config}
     rw [headersA, headersP, headerOk]
     simp
   · by_cases above : signed.message.slot ≤ slot
-    · refine ⟨root, by rw [Store.getAncestor_of_le found above]; rfl, .inr ⟨header, ?_, headerRoot⟩⟩
+    · refine ⟨root, ⟨_, Store.getAncestor_of_le found above, rfl⟩, .inr ⟨header, ?_, headerRoot⟩⟩
       have : header.slot.toNat ≤ slot.toNat := UInt64.le_iff_toNat_le.mp above
       simp [List.filter_append, this]
-    · rw [Store.getAncestor_root_of_parent found parentFound lower (UInt64.not_le.mp above)]
-      obtain ⟨reached, walk, cases⟩ := lastP slot later
-      refine ⟨reached, walk, ?_⟩
+    · obtain ⟨reached, walk, cases⟩ := lastP slot later
+      refine ⟨reached, Store.ancestorRoots_of_parent found parentFound lower
+        (UInt64.not_le.mp above) walk, ?_⟩
       have : ¬ header.slot.toNat ≤ slot.toNat := fun le =>
         above (UInt64.le_iff_toNat_le.mpr le)
       simpa [List.filter_append, this] using cases
