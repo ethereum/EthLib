@@ -670,6 +670,7 @@ def test_json_conforms_to_the_types(preset, fork, container, case):
     # Each string starts with 0x, or is an integer of a type whose decimal form _conform checks.
     for leaf in _leaves(document, schema, bounds=preset == "mainnet"):
         value = _at(document, leaf.path)
+        assert isinstance(value, str)
         assert value.startswith("0x") or leaf.type_name in INTEGER_BITS, leaf
 
 
