@@ -24,6 +24,7 @@ Registry updates keep them as well.
 Only rewards, slashings and the two pending stages can change the balances.
 
 An effective-balance update never raises the larger of the effective and the actual balance.
+
 Loss uses initial slack, balance debits and rounding; gain uses initial excess and credits.
 
 An epoch's effective-balance update reads its intermediate balance, before later upgrades.
