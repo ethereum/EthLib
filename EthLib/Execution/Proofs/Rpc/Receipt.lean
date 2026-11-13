@@ -181,7 +181,7 @@ From Dencun, its price is the base fee per blob gas at the excess blob gas of th
 
 That base fee follows the blob schedule of the chain at the number and timestamp of the block.
 
-Before Dencun, which has no blob transactions, the definition sets the price to 0. -/
+Before Dencun, the definition sets the price to 0. -/
 theorem receiptInfo_blob {r : BlockRecord} {config : ChainConfig}
     {index before firstLog : Nat} {tx : Transaction} {receipt : Receipt r.fork}
     {info : ReceiptInfo} (h : r.receiptInfo config index before firstLog tx receipt = .ok info) :

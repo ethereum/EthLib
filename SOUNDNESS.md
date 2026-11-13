@@ -3854,7 +3854,7 @@ The base fee of the block is at most the maximum fee of each transaction (`Valid
 So the effective gas price of each receipt object follows the formula of the description, read in integers (`Valid.effectiveGasPrice_receiptInfos`, `effectiveGasPrice_description`).
 The run of the block reaches each transaction, and on the state that the transaction starts from its sender can buy the gas (`Valid.buyGas_receiptInfos`).
 Buying it lowers the balance of the sender by exactly the gas limit of the transaction times `effectiveGasPrice`.
-A blob transaction also pays `blobGasUsed` times `blobGasPrice`; other types add nothing.
+A blob transaction also pays `blobGasUsed` times `blobGasPrice`; other types add nothing (`receiptInfo_blob`).
 The theorem states the purchase on that state; that the run of the transaction starts with it rests on the proof, not on the statement.
 From Glamsterdam, EIP-7778 makes the cumulative gas of a receipt the gas that the senders paid.
 As a choice of EthLib, the object copies it, so `gasUsed` is the gas that the sender paid, while the descriptions of `receipt.yaml` read "gas used".
