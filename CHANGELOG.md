@@ -66,6 +66,10 @@ Not yet released.
   The ancestor relation between the finalized and the justified checkpoint stays in `Store.Reachable.postState_finalized_ancestor`.
   No C export or Python function changes.
   In Lean, the new module `Consensus.Proofs.ForkChoice.CheckpointAncestry` states this for a reachable store.
+  Its `Store.Reachable.finalized_ancestor_or_accountable` gives three cases for the finalized checkpoint of the store.
+  It is at or before the anchor epoch, or it is on the chain of the justified checkpoint at the first slot of its epoch.
+  Otherwise two runs from the anchor to held states of the store bound the accountable stake, or show hash evidence.
+  The hypotheses of that theorem are sufficient for its proof, and they are not claimed to be minimal.
   `DirectSafety.TerminalView` reads the checkpoints of the last state of a run, or of one justification step on it, as fork choice runs it.
   `DirectSafety.accountable_safety_justified_terminal` states direct accountable safety for two such views, with no bound on the fork.
   `DirectSafety.accountable_safety_justified` is its case without a step, and its statement is unchanged.
