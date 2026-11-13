@@ -133,7 +133,7 @@ private theorem funding_rewards {fork : Fork} {s t : BeaconState preset fork}
     rw [processRewardsAndPenalties_frame ok]
   exact funding_kept_prefix electra _ (congrArg (·.data.size) registry)
     (.of_data (congrArg (·.data) registry)) (frame_processRewardsAndPenalties ok).slot
-    (processRewardsAndPenalties_pendingConsolidations ok)
+    (by rw [processRewardsAndPenalties_frame ok])
     (fun i _ => by simp only [effectiveAt, registry]) balanceBound
 
 private theorem funding_same {fork : Fork} {s t : BeaconState preset fork}
@@ -145,11 +145,12 @@ private theorem funding_same {fork : Fork} {s t : BeaconState preset fork}
   rfl
 
 private theorem funding_registry {fork : Fork} {s t : BeaconState preset fork}
-    (electra : .pectra ≤ fork) (ok : processRegistryUpdates config s = .ok t) :
+    (electra : .pectra ≤ fork) (ok : processRegistryUpdates config s = .ok t)
+    (queue : t.pendingConsolidations = s.pendingConsolidations) :
     fundedStake ⟨fork, t⟩ ≤ fundedStake ⟨fork, s⟩ := by
   have bound := funding_kept_prefix electra 0 (sameSizes_processRegistryUpdates ok).1
     (registryLifecycle_processRegistryUpdates ok) (frame_processRegistryUpdates ok).slot
-    (processRegistryUpdates_pendingConsolidations ok) (effectiveKept_registry ok)
+    queue (effectiveKept_registry ok)
     (by simp only [actualBalanceAt, coverage_registry ok, Nat.sub_self, Finset.sum_const_zero]
         exact Nat.le_refl _)
   simpa using bound
@@ -161,7 +162,7 @@ private theorem funding_slashings {fork : Fork} {s t : BeaconState preset fork}
   have registry := processSlashings_validators ok
   have bound := funding_kept_prefix electra 0 (sameSizes_processSlashings ok).1
     (.of_data (congrArg (·.data) registry)) (frame_processSlashings ok).slot
-    (processSlashings_pendingConsolidations ok)
+    (by obtain ⟨_, same⟩ := processSlashings_eq ok; rw [same])
     (fun i _ => by simp only [effectiveAt, registry]) ?_
   · simpa using bound
   · have covered := coverage_event_sum
@@ -175,10 +176,10 @@ private theorem funding_slashings {fork : Fork} {s t : BeaconState preset fork}
 private theorem funding_stage {fork : Fork} {k : EpochStage} {s t : BeaconState preset fork}
     (edge : EpochStage.Edge config checks k s t)
     (other : k ≠ .rewards ∧ k ≠ .registry ∧ k ≠ .slashings ∧ k ≠ .pendingDeposits ∧
-      k ≠ .pendingConsolidations ∧ k ≠ .effectiveBalances) (slot : t.slot = s.slot) :
+      k ≠ .pendingConsolidations ∧ k ≠ .effectiveBalances) :
     fundedStake ⟨fork, t⟩ = fundedStake ⟨fork, s⟩ :=
-  funding_same (edge.validators_eq ⟨other.2.1, other.2.2.2.1, other.2.2.2.2.2⟩)
-    (edge.balances_eq other) slot (edge.samePendingQueue other.2.2.2.2.1)
+  have kept := edge.records other
+  funding_same kept.1 kept.2.1 kept.2.2.2.2 kept.2.2.1
 
 /-- The stages before the payments, from Electra.
 
@@ -203,19 +204,23 @@ private theorem funding_before {fork : Fork} {s t : BeaconState preset fork}
     rewardEvents, limit, justifiedOk, scoredOk, rewardedOk, registeredOk, slashedOk, resetOk,
     depositedOk, consolidatedOk, resetMatch, rewardReplay, equal⟩ :=
     funding_epoch_site electra early ok replayed matched
+  have justifiedEdge : EpochStage.Edge config checks .justification s justified := justifiedOk
+  have scoredEdge : EpochStage.Edge config checks .inactivity justified scored := by
+    simp only [EpochStage.Edge, altair, ↓reduceDIte]; exact scoredOk
+  have rewardedEdge : EpochStage.Edge config checks .rewards scored rewarded := rewardedOk
+  have registeredEdge : EpochStage.Edge config checks .registry rewarded registered :=
+    registeredOk
+  have slashedEdge : EpochStage.Edge config checks .slashings registered slashed := slashedOk
+  have resetEdge : EpochStage.Edge config checks .eth1Reset slashed reset := by
+    simp only [EpochStage.Edge, before, ↓reduceDIte]; exact resetOk
   -- Justification, inactivity and the eth1 reset keep the funding, as epoch stages.
-  have justifiedFunding := funding_stage (config := config) (checks := checks)
-    (k := .justification) justifiedOk ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩
-    (randaoMixes_slot_processJustificationAndFinalization justifiedOk).2
-  have scoredFunding := funding_stage (checks := checks) (k := .inactivity)
-    (by simp only [EpochStage.Edge, altair, ↓reduceDIte]; exact scoredOk)
-    ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩ (frame_processInactivityUpdates scoredOk).slot
+  have justifiedFunding := funding_stage justifiedEdge ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩
+  have scoredFunding := funding_stage scoredEdge ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩
   have rewardFunding := funding_rewards electra rewardedOk rewardReplay
-  have registryFunding := funding_registry electra registeredOk
+  have registryFunding :=
+    funding_registry electra registeredOk (registeredEdge.samePendingQueue nofun)
   have slashFunding := funding_slashings electra early slashedOk
-  have resetFunding := funding_stage (config := config) (checks := checks) (k := .eth1Reset)
-    (by simp only [EpochStage.Edge, before, ↓reduceDIte]; exact resetOk)
-    ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩ (frame_processEth1DataReset resetOk).slot
+  have resetFunding := funding_stage resetEdge ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩
   have resetOrder : ExitsOrdered reset :=
     (frame_processEth1DataReset resetOk).exitsOrdered <|
     (frame_processSlashings slashedOk).exitsOrdered <|
@@ -224,13 +229,13 @@ private theorem funding_before {fork : Fork} {s t : BeaconState preset fork}
     (frame_processInactivityUpdates scoredOk).exitsOrdered <|
     (by simpa only [ExitsOrdered, (processJustificationAndFinalization_keeps
       justifiedOk).2.2.2.2.2.1] using ordered)
-  have a₁ := activation.processJustificationAndFinalization justifiedOk
-  have a₂ := a₁.processInactivityUpdates scoredOk
-  have a₃ := a₂.processRewardsAndPenalties rewardedOk
-  have a₄ := a₃.processRegistryUpdates registeredOk
-  have resetActivation := (a₄.processSlashings slashedOk).processEth1DataReset resetOk
-  have resetPending := (((((pending.justification justifiedOk).inactivity scoredOk).rewards
-    rewardedOk).registry registeredOk).slashings slashedOk).eth1Reset resetOk
+  have resetActivation := resetEdge.activationExitOrder <| slashedEdge.activationExitOrder <|
+    registeredEdge.activationExitOrder <| rewardedEdge.activationExitOrder <|
+    scoredEdge.activationExitOrder <| justifiedEdge.activationExitOrder activation
+  have resetPending := resetEdge.pendingConsolidationInvariant <|
+    slashedEdge.pendingConsolidationInvariant <| registeredEdge.pendingConsolidationInvariant <|
+    rewardedEdge.pendingConsolidationInvariant <| scoredEdge.pendingConsolidationInvariant <|
+    justifiedEdge.pendingConsolidationInvariant pending
   have pendingOk : processPendingBalances config checks reset = .ok t := by
     simp only [processPendingBalances, electra, ↓reduceDIte, bind_ok_iff]
     exact ⟨deposited, depositedOk, consolidatedOk⟩
@@ -254,15 +259,11 @@ private theorem funding_before {fork : Fork} {s t : BeaconState preset fork}
 
 /-- The stages after the effective-balance update keep the funding and the deposit carry. -/
 private theorem funding_late {fork : Fork} {s t : BeaconState preset fork}
-    (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
     (trace : EpochTrace (EpochStage.action config checks)
       [.slashingsReset, .randaoReset, .history, .participation, .syncCommittees,
         .proposerLookahead, .ptcWindow] s t) :
     fundedStake ⟨fork, t⟩ + funding_carry ⟨fork, t⟩ =
       fundedStake ⟨fork, s⟩ + funding_carry ⟨fork, s⟩ := by
-  have altair : .altair ≤ fork := Nat.le_trans (by decide) electra
-  have capella : .shapella ≤ fork := Nat.le_trans (by decide) electra
-  have gloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt early
   let Same (a b : BeaconState preset fork) : Prop :=
     fundedStake ⟨fork, b⟩ = fundedStake ⟨fork, a⟩ ∧
       b.depositBalanceToConsume = a.depositBalanceToConsume
@@ -270,37 +271,12 @@ private theorem funding_late {fork : Fork} {s t : BeaconState preset fork}
     refine trace.transport Same (fun _ => ⟨rfl, rfl⟩)
       (fun one two => ⟨two.1.trans one.1, two.2.trans one.2⟩) ?_
     intro k member a b computed
-    have edge := EpochStage.action_cases.mp computed
     simp only [List.mem_cons, List.not_mem_nil, or_false] at member
-    -- Each late stage keeps the slot; the shared stage facts give the rest of the funding.
-    have funded (slot : b.slot = a.slot) := funding_stage edge
+    -- Each late stage keeps the fields that the funding and the deposit carry read.
+    have kept := (EpochStage.action_cases.mp computed).records
       (by rcases member with rfl | rfl | rfl | rfl | rfl | rfl | rfl <;>
-            exact ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩) slot
-    refine ⟨?_, edge.depositCarry (by rcases member with rfl | rfl | rfl | rfl | rfl | rfl | rfl
-      <;> exact nofun)⟩
-    cases k <;> simp only [EpochStage.Edge] at edge
-    case slashingsReset => exact funded (frame_processSlashingsReset edge).slot
-    case randaoReset => exact funded (frame_processRandaoMixesReset edge).slot
-    case history =>
-      simp only [capella, ↓reduceDIte] at edge
-      exact funded (frame_processHistoricalSummariesUpdate edge).slot
-    case participation =>
-      simp only [altair, ↓reduceDIte] at edge
-      subst edge
-      exact funded rfl
-    case syncCommittees =>
-      simp only [altair, ↓reduceDIte] at edge
-      exact funded (frame_processSyncCommitteeUpdates edge).slot
-    case proposerLookahead =>
-      split at edge
-      · exact funded (frame_processProposerLookahead edge).slot
-      · subst edge
-        rfl
-    case ptcWindow =>
-      simp only [gloas, ↓reduceDIte] at edge
-      subst edge
-      rfl
-    all_goals simp at member
+            exact ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩)
+    exact ⟨funding_same kept.1 kept.2.1 kept.2.2.2.2 kept.2.2.1, kept.2.2.2.1⟩
   simp only [funding_carry, same.1, same.2]
 
 /-- The epoch passes conserve funding apart from churn and the recorded external credits.
@@ -344,7 +320,7 @@ theorem funding_epoch {fork : Fork} {s t middle : BeaconState preset fork}
   obtain rfl := (Prod.mk.inj (Except.ok.inj (recordedOk.symm.trans replayed))).1
   have bound := funding_before electra early delay matched ordered activation pending
     beforeOk events replayed
-  have late := funding_late electra early tail
+  have late := funding_late tail
   have queue := updatedEdge.samePendingQueue nofun
   have effective := funding_effective_updates
     (before.pendingConsolidations electra).data.toList updatedEdge

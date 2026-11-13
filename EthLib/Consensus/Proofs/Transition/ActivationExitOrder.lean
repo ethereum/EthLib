@@ -560,23 +560,9 @@ private theorem processEffectiveBalanceUpdates
   obtain ⟨_, found, _, _, _, _, set⟩ := ok
   exact setValidatorAt found set id
 
-private theorem slashings (ok : processSlashings state = .ok after) :
-    Kept state after := by
-  obtain ⟨_, rfl⟩ := processSlashings_eq ok
-  exact refl _
-
-private theorem eth1Reset {before : fork < .hegota}
-    (ok : processEth1DataReset before state = .ok after) : Kept state after := by
-  simp only [processEth1DataReset, bind_ok_iff, liftAccessor_ok] at ok
-  obtain ⟨_, _, ok⟩ := ok
-  split at ok <;> cases ok <;> exact of_data
-
-/-- An epoch keeps the order; only three of its stages change the validators. -/
-private theorem processEpoch (ok : Consensus.processEpoch config checks state = .ok after) :
-    Kept state after := by
-  apply (processEpoch_trace ok).transport Kept refl (fun a b => a.trans b)
-  intro k _ a b computed
-  have edge := EpochStage.action_cases.mp computed
+/-- Every epoch stage keeps the order; only three of them change the validators. -/
+private theorem stage {k : EpochStage} {s t : BeaconState preset fork}
+    (edge : EpochStage.Edge config checks k s t) : Kept s t := by
   cases k
   case registry => exact processRegistryUpdates edge
   case pendingDeposits =>
@@ -586,6 +572,13 @@ private theorem processEpoch (ok : Consensus.processEpoch config checks state = 
     · exact edge ▸ refl _
   case effectiveBalances => exact processEffectiveBalanceUpdates edge
   all_goals exact of_data (congrArg (·.data) (edge.validators_eq ⟨nofun, nofun, nofun⟩))
+
+/-- An epoch keeps the order, stage by stage of the epoch schedule. -/
+private theorem processEpoch (ok : Consensus.processEpoch config checks state = .ok after) :
+    Kept state after := by
+  apply (processEpoch_trace ok).transport Kept refl (fun a b => a.trans b)
+  intro k _ a b computed
+  exact stage (EpochStage.action_cases.mp computed)
 
 private theorem advanceSlot (ok : Consensus.advanceSlot config checks state = .ok after) :
     Kept state after := by
@@ -672,40 +665,16 @@ private theorem chainStep {first last : ForkedBeaconState preset}
   | block engine signed validate ok =>
     exact Kept.processBlock (applySignedBlock_ok ok).2.1 holds
 
-theorem processJustificationAndFinalization (holds : ActivationExitOrder state)
-    (ok : Consensus.processJustificationAndFinalization state = .ok after) :
-    ActivationExitOrder after :=
-  Kept.of_data (congrArg (·.data) (processJustificationAndFinalization_keeps ok).2.2.2.2.2.1)
-    holds
-
-theorem processInactivityUpdates {altair : .altair ≤ fork}
-    (holds : ActivationExitOrder state)
-    (ok : Consensus.processInactivityUpdates config state altair = .ok after) :
-    ActivationExitOrder after :=
-  Kept.of_data (by rw [processInactivityUpdates_frame ok]) holds
-
-theorem processRewardsAndPenalties (holds : ActivationExitOrder state)
-    (ok : Consensus.processRewardsAndPenalties config state = .ok after) :
-    ActivationExitOrder after :=
-  Kept.of_data (by rw [processRewardsAndPenalties_frame ok]) holds
-
-theorem processRegistryUpdates (holds : ActivationExitOrder state)
-    (ok : Consensus.processRegistryUpdates config state = .ok after) :
-    ActivationExitOrder after :=
-  Kept.processRegistryUpdates ok holds
-
-theorem processSlashings (holds : ActivationExitOrder state)
-    (ok : Consensus.processSlashings state = .ok after) : ActivationExitOrder after :=
-  Kept.slashings ok holds
-
-theorem processEth1DataReset {before : fork < .hegota} (holds : ActivationExitOrder state)
-    (ok : Consensus.processEth1DataReset before state = .ok after) : ActivationExitOrder after :=
-  Kept.eth1Reset ok holds
-
 theorem applyPendingDeposit {deposit : PendingDeposit} (holds : ActivationExitOrder state)
     (ok : Consensus.applyPendingDeposit config checks state deposit = .ok after) :
     ActivationExitOrder after :=
   Kept.applyPendingDeposit ok holds
+
+/-- Every epoch stage keeps the order. -/
+theorem _root_.EthLib.Consensus.EpochStage.Edge.activationExitOrder {k : EpochStage}
+    {s t : BeaconState preset fork} (edge : EpochStage.Edge config checks k s t)
+    (holds : ActivationExitOrder s) : ActivationExitOrder t :=
+  Kept.stage edge holds
 
 end ActivationExitOrder
 

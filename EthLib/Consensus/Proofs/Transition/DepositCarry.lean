@@ -110,51 +110,18 @@ theorem EpochStage.Edge.depositCarry {stage : EpochStage}
     (edge : EpochStage.Edge config checks stage s t) (other : stage ≠ .pendingDeposits) :
     t.depositBalanceToConsume = s.depositBalanceToConsume := by
   have laws := depositCarryLaws (preset := preset) (fork := fork)
-  cases stage <;> simp only [EpochStage.Edge] at edge
-  case justification => exact kept_justification edge
+  cases stage
+  case pendingDeposits => exact absurd rfl other
   case rewards => exact laws.processRewardsAndPenalties edge
   case registry => exact laws.processRegistryUpdates edge
   case slashings => exact laws.processSlashings edge
   case effectiveBalances => exact laws.processEffectiveBalanceUpdates edge
-  case slashingsReset => exact laws.processSlashingsReset edge
-  case randaoReset => exact laws.processRandaoMixesReset edge
-  case pendingDeposits => exact absurd rfl other
-  case payments =>
-    split at edge
-    · rw [processBuilderPendingPayments_eq edge]
-    · exact edge ▸ rfl
-  case history =>
-    split at edge
-    · exact laws.processHistoricalSummariesUpdate edge
-    · exact laws.processHistoricalRootsUpdate edge
-  case participation =>
-    split at edge
-    · subst edge; rfl
-    · exact laws.processParticipationRecordUpdates edge
-  case inactivity =>
-    split at edge
-    · exact laws.processInactivityUpdates edge
-    · exact edge ▸ rfl
-  case eth1Reset =>
-    split at edge
-    · exact laws.processEth1DataReset edge
-    · exact edge ▸ rfl
   case pendingConsolidations =>
+    simp only [EpochStage.Edge] at edge
     split at edge
     · exact laws.processPendingConsolidations edge
     · exact edge ▸ rfl
-  case syncCommittees =>
-    split at edge
-    · exact laws.processSyncCommitteeUpdates edge
-    · exact edge ▸ rfl
-  case proposerLookahead =>
-    split at edge
-    · exact laws.processProposerLookahead edge
-    · exact edge ▸ rfl
-  case ptcWindow =>
-    split at edge
-    · exact laws.processPtcWindow edge
-    · exact edge ▸ rfl
+  all_goals exact (edge.records ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩).2.2.2.1
 
 /-- The six stages before the pending deposits keep the deposit balance to consume. -/
 theorem depositCarry_beforePending {altair : .altair ≤ fork} {before : fork < .hegota}

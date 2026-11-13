@@ -542,78 +542,8 @@ theorem EpochStage.Edge.balances_eq {f : Fork} {stage : EpochStage}
     {s t : BeaconState preset f} (edge : EpochStage.Edge config checks stage s t)
     (other : stage ≠ .rewards ∧ stage ≠ .registry ∧ stage ≠ .slashings ∧
       stage ≠ .pendingDeposits ∧ stage ≠ .pendingConsolidations ∧ stage ≠ .effectiveBalances) :
-    t.balances = s.balances := by
-  cases stage <;> simp only [EpochStage.Edge] at edge
-  case justification =>
-    obtain rfl | ⟨_, _, _, weighed⟩ := processJustificationAndFinalization_ok edge
-    · rfl
-    · obtain ⟨_, _, _, rest⟩ := weighJustificationAndFinalization_checkpoints weighed
-      rw [← rest]
-  case inactivity =>
-    split at edge
-    · rw [processInactivityUpdates_frame edge]
-    · exact edge ▸ rfl
-  case eth1Reset =>
-    split at edge
-    · simp only [processEth1DataReset, bind_ok_iff, liftAccessor_ok] at edge
-      obtain ⟨_, _, edge⟩ := edge
-      split at edge <;> cases edge <;> rfl
-    · exact edge ▸ rfl
-  case payments =>
-    split at edge
-    · rw [processBuilderPendingPayments_eq edge]
-    · exact edge ▸ rfl
-  case slashingsReset =>
-    obtain ⟨_, _, _, _, rfl⟩ := processSlashingsReset_eq edge
-    rfl
-  case randaoReset =>
-    obtain ⟨_, _, _, _, _, _, rfl⟩ := processRandaoMixesReset_eq edge
-    rfl
-  case history =>
-    split at edge
-    · unfold processHistoricalSummariesUpdate at edge
-      simp only [bind, Except.bind, pure, Except.pure] at edge
-      repeat' (split at edge <;> try cases edge)
-      all_goals rfl
-    · unfold processHistoricalRootsUpdate at edge
-      split at edge
-      · cases edge
-      simp only [bind_ok_iff, liftAccessor_ok] at edge
-      obtain ⟨_, _, edge⟩ := edge
-      split at edge
-      · simp only [bind_ok_iff, liftSsz_ok, pure, Except.pure, Except.ok.injEq] at edge
-        obtain ⟨_, _, _, _, rfl⟩ := edge
-        rfl
-      · cases edge; rfl
-  case participation =>
-    split at edge
-    · subst edge
-      rfl
-    · unfold processParticipationRecordUpdates at edge
-      split at edge
-      · cases edge
-      · cases edge; rfl
-  case syncCommittees =>
-    split at edge
-    · unfold processSyncCommitteeUpdates at edge
-      simp only [bind, Except.bind, pure, Except.pure] at edge
-      repeat' (split at edge <;> try cases edge)
-      all_goals rfl
-    · exact edge ▸ rfl
-  case proposerLookahead =>
-    split at edge
-    · simp only [processProposerLookahead, bind_ok_iff, pure, Except.pure,
-        Except.ok.injEq] at edge
-      obtain ⟨_, _, _, _, rfl⟩ := edge
-      rfl
-    · exact edge ▸ rfl
-  case ptcWindow =>
-    split at edge
-    · simp only [processPtcWindow, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at edge
-      obtain ⟨_, _, _, _, rfl⟩ := edge
-      rfl
-    · exact edge ▸ rfl
-  all_goals simp at other
+    t.balances = s.balances :=
+  (edge.records other).2.1
 
 /-- Effective-balance updates write validators only, so they keep the balances. -/
 private theorem processEffectiveBalanceUpdates_balances {f : Fork} {s t : BeaconState preset f}
@@ -1844,26 +1774,12 @@ private theorem admissionFunded_epoch {f : Fork} {s t : BeaconState preset f}
     intro k member a b computed
     have edge := EpochStage.action_cases.mp computed
     cases k
-    case justification =>
-      exact ⟨sameSizes_processJustificationAndFinalization edge,
-        processJustificationAndFinalization_pendingConsolidations edge⟩
-    case rewards =>
-      exact ⟨processRewardsAndPenalties_sameSizes edge,
-        processRewardsAndPenalties_pendingConsolidations edge⟩
-    case registry =>
-      exact ⟨sameSizes_processRegistryUpdates edge,
-        processRegistryUpdates_pendingConsolidations edge⟩
-    case slashings =>
-      exact ⟨sameSizes_processSlashings edge, processSlashings_pendingConsolidations edge⟩
-    case inactivity | eth1Reset =>
-      refine ⟨⟨congrArg (·.data.size) (edge.validators_eq ⟨nofun, nofun, nofun⟩),
-        congrArg (·.data.size) (edge.balances_eq ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩)⟩, ?_⟩
-      simp only [EpochStage.Edge] at edge
-      split at edge
-      · first
-        | exact processInactivityUpdates_pendingConsolidations edge
-        | exact processEth1DataReset_pendingConsolidations edge
-      · exact edge ▸ rfl
+    case rewards => exact ⟨processRewardsAndPenalties_sameSizes edge, edge.samePendingQueue nofun⟩
+    case registry => exact ⟨sameSizes_processRegistryUpdates edge, edge.samePendingQueue nofun⟩
+    case slashings => exact ⟨sameSizes_processSlashings edge, edge.samePendingQueue nofun⟩
+    case justification | inactivity | eth1Reset =>
+      have kept := edge.records ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩
+      exact ⟨⟨congrArg (·.data.size) kept.1, congrArg (·.data.size) kept.2.1⟩, kept.2.2.1⟩
     all_goals simp at member
   have size := start.1.1
   cases tail
