@@ -701,6 +701,10 @@ def consensus_api_attestation_rewards(name: str, fork: str, state: bytes, replac
     """The JSON response of the attestation rewards endpoint, as a `dict`."""
     ...
 
+def consensus_api_sync_committee_rewards(name: str, fork: str, state: bytes, aggregate: bytes, ids: list[str]) -> dict[str, Any]:
+    """The JSON response of the sync committee rewards endpoint, as a `dict`."""
+    ...
+
 def consensus_api_duties(name: str, fork: str, state: bytes, replacements: dict[str, Any] | None, kind: str, epoch: int, indices: list[int], genesis_root: bytes) -> dict[str, Any]:
     """The JSON response of a duties endpoint, as a `dict`."""
     ...

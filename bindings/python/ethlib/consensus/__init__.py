@@ -1330,6 +1330,21 @@ def api_attestation_rewards(
     return _native.consensus_api_attestation_rewards(name, fork, state, config, epoch, list(ids))
 
 
+def api_sync_committee_rewards(
+    name: str,
+    fork: str,
+    state: bytes,
+    aggregate: bytes,
+    *,
+    ids: Sequence[str] = (),
+) -> dict[str, Any]:
+    """The Beacon API sync committee rewards of a block, or ConsensusError."""
+    # The state is the one the sync aggregate step reads; a state before Altair raises code 400.
+    # The identifiers are indices or public keys as the API writes them; none names every member.
+    # The flags execution_optimistic and finalized come from the store and are absent.
+    return _native.consensus_api_sync_committee_rewards(name, fork, state, aggregate, list(ids))
+
+
 def api_duties(
     name: str,
     fork: str,
@@ -2049,6 +2064,7 @@ __all__ = [
     "api_aggregate_attestation",
     "api_sync_committee_contribution",
     "api_attestation_rewards",
+    "api_sync_committee_rewards",
     "api_duties",
     "api_committees",
     "api_sync_committees",
