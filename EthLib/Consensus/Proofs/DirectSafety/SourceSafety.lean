@@ -14,25 +14,25 @@ The unslashed active stake at the reference state is at most three times the acc
 
 The bound adds twice the larger source envelope of the two runs.
 
-The source envelope of a run replaces the observed drift of `accountable_safety`.
+The source envelope of a run replaces the observed drift of direct accountable safety.
 
 It is computed from the run's balance replay up to the right finalized epoch.
 
-A slashing in the shared prefix no longer makes a key accountable by itself.
+A slashing in the shared prefix does not make a key accountable by itself.
 
 A key that it slashed leaves the reference set and the accountable set.
 
-`Accountable shared left right k` can still hold for such a key.
+The accountability predicate can still hold for such a key.
 
-But `accountableKeys` filters `unslashedKeys x`.
+But the accountable set keeps only the keys unslashed at the reference state.
 
-A prefix attester slashing can name a key without slashing it, when `slashIfSlashable` skips it.
+A prefix attester slashing can name a key without slashing it, when the key is not slashable.
 
 Such a key stays in the reference set and can still count, through double votes or tail evidence.
 
 Only forward persistence keeps a prefix-slashed key's stake out of the later drift and support.
 
-`sourceDrift` is a conservative source envelope, not the weak subjectivity formula.
+The source envelope is a conservative bound, not the weak subjectivity formula.
 
 In the bound, twice the envelope divided by three weighs exits at four thirds.
 

@@ -10,7 +10,7 @@ import EthLib.Consensus.Proofs.Transition.ValidatorCaps
 /-!
 # Source bounds over a selected execution interval
 
-The bounds use the concrete balance replay and funding lemmas from IntervalFunding.
+The bounds use the concrete balance replay and its funding lemmas.
 
 No caller supplies the amount of a source or an accounting cap.
 
@@ -141,7 +141,7 @@ def activationWindow (x : ForkedBeaconState preset) (high : Nat) : Nat :=
     (if x.fork < .pectra then driftHorizon x high * cohortCap config (registryWindow x high) *
       preset.MAX_EFFECTIVE_BALANCE.toNat else 0)
 
-/-- Electra deposits use depositWindow; pre-Electra active top-ups remain here.
+/-- Deposits from Electra on are charged to the deposit window; earlier active top-ups stay here.
 
 Across Electra, pre-upgrade funding can bypass later deposit churn, so retain all such credits. -/
 def residualCredit (x : ForkedBeaconState preset) (high : Nat)
@@ -2158,7 +2158,7 @@ private theorem intervalLoss_consolidation_rate {fork : Fork}
 
 The source envelope can charge a pre-exit deficit as well as the later departure.
 
-The exact referenceLoss does not double-count that key. -/
+The exact reference loss does not count that key twice. -/
 private theorem nonaccountable_losses_over_interval {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (tail : Run config checks x y)
     (genesis : Genesis (config := config) (checks := checks) g)
@@ -3358,9 +3358,9 @@ private theorem gains_and_activations_over_interval {g x y : ForkedBeaconState p
 
 /-- A conservative source envelope, separate from the exact observed-state drift.
 
-The boundary term is supplied by boundaryWindow, not by the cumulative exit envelope.
+The boundary term is the largest boundary stake along the run, not part of the exit envelope.
 
-Queue, registry and rounding bounds still need tighter transition proofs. -/
+The queue, registry and rounding terms are coarse upper bounds. -/
 def sourceDrift (x : ForkedBeaconState preset) (high boundary : Nat)
     (events : List (BalanceEvent preset)) : Nat :=
   2 * (exitWindow (config := config) x high events + lossCorrection x events) +

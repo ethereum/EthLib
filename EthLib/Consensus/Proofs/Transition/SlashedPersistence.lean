@@ -8,7 +8,7 @@ public import EthLib.Consensus.Proofs.Transition.RegistryLifecycle
 
 A successful transition cannot clear a slashed flag or remove its registry entry.
 
-Each result follows from the frame of its step, through `of_frame` and `of_upgradeFrame`.
+Each result follows from the frame of its step, or from the upgrade frame at a fork boundary.
 -/
 
 @[expose] public section

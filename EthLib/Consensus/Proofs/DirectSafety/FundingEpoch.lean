@@ -182,7 +182,7 @@ private theorem funding_stage {fork : Fork} {k : EpochStage} {s t : BeaconState 
 
 /-- The stages before the payments, from Electra.
 
-The replay events are those of `funding_epoch_site`.
+The replay events are the rewards, the slashings, the pending deposits and the consolidations.
 
 The stages before pending deposits change the funding by at most the credits they record.
 

@@ -2301,9 +2301,9 @@ def fundedStake (x : ForkedBeaconState preset) : Nat :=
       max (effectiveAt x i) (actualBalanceAt x i)
     else 0).sum
 
-/-- Retain withdrawn-source credits until queue chronology excludes them on reachable runs.
+/-- Consolidation credits whose source has already withdrawn stay explicit in the bound.
 
-Those exception credits do not consume deposit churn and must remain explicit. -/
+They do not consume deposit churn. -/
 def withdrawnConsolidationCredit (event : BalanceEvent preset) : Nat :=
   if electra : .pectra ≤ event.before.fork then
     (event.before.state.validators.data.toList.zipIdx.map fun (v, i) =>
@@ -2323,7 +2323,7 @@ def fundingCredit (event : BalanceEvent preset) : Nat :=
 
 /-- Electra active stake is funded initially, by deposit churn, or by non-transfer credits.
 
-Before Electra this retains the registry envelope until a count-churn funding proof is supplied. -/
+Before Electra, or with a withdrawal delay below two epochs, it is the registry envelope. -/
 def activeStakeWindow (x : ForkedBeaconState preset) (high : Nat)
     (events : List (BalanceEvent preset)) : Nat :=
   if .pectra ≤ x.fork ∧ 2 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat then

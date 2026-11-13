@@ -644,8 +644,9 @@ end SamePendingQueue
 
 /-- A property of the pending consolidation queue crosses an upgrade before Gloas.
 
-It holds vacuously before Electra, the Electra upgrade starts with an empty queue, and Fulu
-must carry it. -/
+It holds vacuously before Electra, and the Electra upgrade starts with an empty queue.
+
+The Fulu upgrade must carry it. -/
 private theorem upgradeNext_pending (P : ∀ {f : Fork}, BeaconState preset f → Prop)
     (vacuous : ∀ {f : Fork} (s : BeaconState preset f), f < .pectra → P s)
     (empty : ∀ t : BeaconState preset .pectra,

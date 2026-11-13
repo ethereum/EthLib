@@ -14,7 +14,7 @@ A successful draw reads each public key from the validator registry.
 
 The block and epoch proofs traverse the concrete operations to retain the two committee fields.
 
-Registry identity transports membership across those operations, including new validator admissions.
+The registry keys only grow by appending, so membership survives those operations and admissions.
 
 Altair initializes both committees, and epoch rotation samples the next one again.
 -/
