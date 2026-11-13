@@ -1305,6 +1305,54 @@ def api_chain_heads(
     )
 
 
+def api_chain_events(
+    name: str,
+    fork: str,
+    anchor_state: bytes,
+    anchor_block: bytes,
+    steps: list[ForkChoiceStep],
+    *,
+    first: int,
+    genesis_root: bytes,
+    optimistic_roots: Sequence[bytes] = (),
+    config: dict[str, Any] | None = None,
+    verify: bool = True,
+) -> list[tuple[str, str]]:
+    """The Beacon API events of the fork choice between two stores of a case, or ForkChoiceError."""
+    # The earlier store runs only the first `first` steps, the later one every step.
+    # Each event is the name of its topic and the text of its JSON data.
+    return _native.consensus_api_chain_events(
+        name,
+        fork,
+        anchor_state,
+        anchor_block,
+        steps,
+        verify,
+        first,
+        genesis_root,
+        list(optimistic_roots),
+        config,
+    )
+
+
+def api_fast_confirmation_event(
+    name: str,
+    fork: str,
+    anchor_state: bytes,
+    anchor_block: bytes,
+    steps: list[ForkChoiceStep],
+    *,
+    config: dict[str, Any] | None = None,
+    verify: bool = True,
+) -> tuple[str, str]:
+    """The Beacon API event of the last fast confirmation run of a case, or ForkChoiceError."""
+    # The slot of the clock is that of the store at that run.
+    # A case with no run of the rule that passed raises code 0.
+    return _native.consensus_api_fast_confirmation_event(
+        name, fork, anchor_state, anchor_block, steps, verify, config
+    )
+
+
 def api_aggregate_attestation(
     name: str,
     fork: str,
@@ -2227,6 +2275,8 @@ __all__ = [
     "api_payload_attestation_data",
     "api_fork_choice",
     "api_chain_heads",
+    "api_chain_events",
+    "api_fast_confirmation_event",
     "api_aggregate_attestation",
     "api_sync_committee_contribution",
     "api_attestation_rewards",

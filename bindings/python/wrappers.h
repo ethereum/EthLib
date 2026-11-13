@@ -427,6 +427,8 @@ PyObject* py_consensus_api_attestation_data      (PyObject* self, PyObject* args
 PyObject* py_consensus_api_payload_attestation_data(PyObject* self, PyObject* args);
 PyObject* py_consensus_api_fork_choice           (PyObject* self, PyObject* args);
 PyObject* py_consensus_api_chain_heads           (PyObject* self, PyObject* args);
+PyObject* py_consensus_api_chain_events          (PyObject* self, PyObject* args);
+PyObject* py_consensus_api_fast_confirmation_event(PyObject* self, PyObject* args);
 PyObject* py_consensus_api_aggregate_attestation (PyObject* self, PyObject* args);
 PyObject* py_consensus_api_sync_committee_contribution(PyObject* self, PyObject* args);
 PyObject* py_consensus_api_attestation_rewards(PyObject* self, PyObject* args);
