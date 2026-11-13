@@ -13,8 +13,8 @@ For every lawful choice of peers, and every rank and standing that a client pass
   At most the high bound of them are not outbound, and none appears twice.
 - A joined topic whose mesh is below the low bound, once negative peers leave, fills it.
   It reaches the target, or stops early only when it runs out of peers that it may GRAFT.
-- A joined topic whose mesh is between the bounds, once negative peers leave, keeps that mesh.
-  It takes only outbound peers that it may GRAFT, up to the outbound count.
+- A joined topic whose mesh is between the bounds, once negative peers leave, keeps those peers.
+  It adds only outbound peers that it may GRAFT, until it holds the outbound count or runs out.
 - No mesh holds a peer with a negative score.
 - A mesh of a joined topic pruned for oversubscription has the outbound count of outbound peers.
   It has fewer only when it held fewer once its negative peers left.
@@ -26,11 +26,11 @@ For every lawful choice of peers, and every rank and standing that a client pass
 - The gossip of a topic whose windows hold message IDs reaches its gossip share of the candidates.
 - A fanout topic not published to for longer than its lifetime is gone.
 
-The upper bounds and the outbound result need a target at most the high bound.
+The upper bounds and the outbound result of a pruned mesh need a target at most the high bound.
 
 The consensus layer sets them so.
 
-The outbound result also needs an outbound count at most the target.
+That outbound result also needs an outbound count at most the target.
 -/
 
 @[expose] public section
@@ -60,6 +60,10 @@ private theorem mesh_eq (t : String) :
     peersOf (heartbeat p c sel rank standing now s).1.mesh t =
       if t ∈ s.topics then meshAfter p c sel rank standing now s t else [] :=
   peersOf_map _ _ t
+
+/-- A lawful choice of no peers is empty. -/
+private theorem sel_zero (hsel : sel.Lawful) (l : List PeerId) : sel 0 l = [] :=
+  List.length_eq_zero_iff.1 ((hsel 0 l).2.trans (Nat.zero_min _))
 
 /-- A list splits into the peers outside a list and the peers in it. -/
 private theorem length_filter_split (l o : List PeerId) :
@@ -538,9 +542,9 @@ theorem heartbeat_outbound (hsel : sel.Lawful) (hD : p.D ≤ p.D_high) (hc : c.d
 
 It keeps those peers in their order, then takes outbound peers that it may GRAFT.
 
-It takes them up to the outbound count, counting the outbound peers it holds.
+It stops when it holds the outbound count of outbound peers, or when it runs out of them.
 
-So a mesh at the low bound or at the high bound takes no peer that is not outbound. -/
+So a mesh at the low bound does not grow to the target. -/
 theorem heartbeat_mesh_eq (hsel : sel.Lawful) {t : String} (ht : t ∈ s.topics)
     (hlow : p.D_low ≤ (nonNegativeMesh standing s t).length)
     (hhigh : (nonNegativeMesh standing s t).length ≤ p.D_high) :
@@ -560,26 +564,23 @@ theorem heartbeat_mesh_eq (hsel : sel.Lawful) {t : String} (ht : t ∈ s.topics)
   split
   · rfl
   · have h0 : c.dOut - (m1.filter (· ∈ s.outbound)).length = 0 := by omega
-    have hn := (hsel 0 ((graftCandidates standing now s t m1).filter (· ∈ s.outbound))).2
-    rw [h0, List.length_eq_zero_iff.1 (hn.trans (Nat.zero_min _)), List.append_nil]
+    rw [h0, sel_zero sel hsel, List.append_nil]
 
-/-- A joined topic between the bounds with the outbound count of outbound peers keeps its mesh.
+/-- A joined topic between the bounds, once negative peers leave, keeps that mesh.
 
-Only its negative peers leave. -/
+This holds when that mesh has at least the outbound count of outbound peers. -/
 theorem heartbeat_mesh_stable (hsel : sel.Lawful) {t : String} (ht : t ∈ s.topics)
     (hlow : p.D_low ≤ (nonNegativeMesh standing s t).length)
     (hhigh : (nonNegativeMesh standing s t).length ≤ p.D_high)
     (hout : c.dOut ≤ ((nonNegativeMesh standing s t).filter (· ∈ s.outbound)).length) :
     peersOf (heartbeat p c sel rank standing now s).1.mesh t = nonNegativeMesh standing s t := by
-  rw [heartbeat_mesh_eq p c sel rank standing now s hsel ht hlow hhigh, Nat.sub_eq_zero_of_le hout]
-  have hn := (hsel 0 ((graftCandidates standing now s t (nonNegativeMesh standing s t)).filter
-    (· ∈ s.outbound))).2
-  rw [List.length_eq_zero_iff.1 (hn.trans (Nat.zero_min _)), List.append_nil]
+  rw [heartbeat_mesh_eq p c sel rank standing now s hsel ht hlow hhigh, Nat.sub_eq_zero_of_le hout,
+    sel_zero sel hsel, List.append_nil]
 
-/-- A mesh of a joined topic between the bounds reaches the outbound count of outbound peers.
+/-- A joined topic between the bounds, once negative peers leave, reaches the outbound count.
 
-It reaches fewer only when it and its outbound peers that it may GRAFT number fewer. -/
-theorem heartbeat_outbound_ge (hsel : sel.Lawful) {t : String} (ht : t ∈ s.topics)
+It holds fewer outbound peers only when its own and those it may GRAFT number fewer. -/
+theorem heartbeat_outbound_between (hsel : sel.Lawful) {t : String} (ht : t ∈ s.topics)
     (hlow : p.D_low ≤ (nonNegativeMesh standing s t).length)
     (hhigh : (nonNegativeMesh standing s t).length ≤ p.D_high) :
     min c.dOut (((nonNegativeMesh standing s t).filter (· ∈ s.outbound)).length +
