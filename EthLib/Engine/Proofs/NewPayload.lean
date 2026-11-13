@@ -49,7 +49,7 @@ public section
 namespace EthLib.Engine
 
 open EthLib.Base
-open EthLib.Execution.Blocks (BlockChain RecentBlock stateTransition)
+open EthLib.Execution.Blocks (BlockChain RecentBlock stateTransition MAX_EXTRA_DATA_BYTES)
 open EthLib.Serialization.JsonRpc (fields hasExactly)
 
 /-- Two errors with one code come from one constructor. -/
@@ -531,7 +531,8 @@ The payload reads back as one whose form at its fork is the given payload. -/
 theorem newPayloadParams_json {fork : Fork} {version : Nat} (payload : ExecutionPayload fork)
     (amsterdam : Option (ByteArray × UInt64)) (hashes : List Hash32) (beaconRoot : Hash32)
     (requests : List ByteArray) (accepts : acceptsFork version fork = true)
-    (extra : payload.extraData.size ≤ 32) (five : amsterdam.isSome ↔ 5 ≤ version) :
+    (extra : payload.extraData.size ≤ MAX_EXTRA_DATA_BYTES)
+    (five : amsterdam.isSome ↔ 5 ≤ version) :
     ∃ any, newPayloadParams version
         (newPayloadParamsJson version payload amsterdam hashes beaconRoot requests) =
         .ok (any, amsterdam, if 3 ≤ version then some hashes else none,
