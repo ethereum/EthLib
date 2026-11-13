@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Serialization.Proofs.Ssz.Type.CompatibilitySymmetry
+public import EthLib.Serialization.Proofs.Ssz.Type.Legality
 public import EthLib.Serialization.Proofs.Ssz.Type.PathSteps
 
 /-! What the compatibility checks buy: the tree positions two compatible types agree on. -/
@@ -50,11 +51,29 @@ Together with the pairwise check, that is what EIP-8016 asks: one tree shape ser
 theorem union_options_share_one_tree {selectors : List Nat} {options : List Desc}
     (checked : Desc.optionsCompatible selectors options = .ok ()) :
     (∀ left ∈ options, ∀ right ∈ options, isCompatible left right = true) ∧
-      ∀ selector slot, selectors.idxOf? selector = some slot →
+      ∀ selector slot child, selectors.idxOf? selector = some slot →
+        options[slot]? = some child →
         Desc.resolveStep (.compatibleUnion selectors options) (.position selector)
-          = .ok (2, some options[slot]!) :=
+          = .ok (2, some child) :=
   ⟨optionsCompatible_pairwise selectors options checked,
-    fun selector slot found => resolveStep_compatibleUnion selectors options selector slot found⟩
+    fun selector slot child found chosen =>
+      resolveStep_compatibleUnion selectors options selector slot child found chosen⟩
+
+/-- A selector declared by a legal union always resolves to an existing option. -/
+theorem resolveStep_compatibleUnion_of_wellFormed (selectors : List Nat) (options : List Desc)
+    (selector slot : Nat) (sound : (Desc.compatibleUnion selectors options).wellFormed = .ok ())
+    (selected : selectors.idxOf? selector = some slot) :
+    ∃ child, options[slot]? = some child ∧
+      (Desc.compatibleUnion selectors options).resolveStep (.position selector) =
+        .ok (2, some child) := by
+  -- Validity pairs every selector with one option, so a selector's index is in range in both lists.
+  obtain ⟨_, _, sameLength, _, _, _, _⟩ :=
+    (wellFormed_compatibleUnion_iff selectors options).mp sound
+  obtain ⟨inside, _, _⟩ := List.idxOf?_eq_some_iff.mp selected
+  have bounded : slot < options.length := by omega
+  refine ⟨options[slot]'bounded, List.getElem?_eq_getElem bounded, ?_⟩
+  exact resolveStep_compatibleUnion selectors options selector slot _ selected
+    (List.getElem?_eq_getElem bounded)
 
 /-- Positions the set bits of a layout occupy, in declaration order. -/
 def activeSlots (active : List Bool) (start : Nat) : List Nat :=
