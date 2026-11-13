@@ -1130,6 +1130,72 @@ theorem lookup_of_mem {fs : List (String × Lean.Json)} {k : String} {v : Lean.J
       simp only [List.lookup, hb]
       exact ih hrest hm
 
+/-- An object built from pairs with distinct names, none of them `null`, has those pairs as fields.
+
+They may come in another order. -/
+theorem fields_mkObj (what : String) {pairs : List (String × Lean.Json)}
+    (distinct : pairs.Pairwise fun a b => a.1 ≠ b.1) (present : ∀ p ∈ pairs, p.2.isNull = false) :
+    ∃ fs, fields what (Lean.Json.mkObj pairs) = .ok fs ∧ fs.Perm pairs := by
+  obtain ⟨kvs, hobj, -, hmem, hd⟩ := toList_mkObj distinct
+  have hkeep : kvs.toList.filter (fun (_, v) => !v.isNull) = kvs.toList := by
+    rw [List.filter_eq_self]
+    intro p hp
+    simp [present p ((hmem p).mp hp)]
+  refine ⟨kvs.toList, ?_, ?_⟩
+  · rw [hobj]
+    simp only [fields, hkeep]
+    rfl
+  · -- Distinct names make both lists free of repeats, so equal members give a permutation.
+    have nodup : ∀ l : List (String × Lean.Json), (l.Pairwise fun a b => a.1 ≠ b.1) → l.Nodup :=
+      fun l h => h.imp_of_mem (fun {a b} _ _ hne heq => hne (by rw [heq]))
+    exact (List.perm_ext_iff_of_nodup (nodup _ hd) (nodup _ distinct)).mpr hmem
+
+/-- Fields that are some pairs in another order hold exactly the names of those pairs. -/
+theorem hasExactly_of_perm {fs pairs : List (String × Lean.Json)} (h : fs.Perm pairs) :
+    hasExactly fs (pairs.map Prod.fst) = true := by
+  simp only [hasExactly, List.length_map, h.length_eq, beq_self_eq_true, Bool.true_and,
+    List.all_eq_true, List.any_eq_true, List.mem_map]
+  rintro name ⟨p, hp, rfl⟩
+  exact ⟨p, h.mem_iff.mpr hp, by simp⟩
+
+/-- Fields that are pairs with distinct names, in another order, read each pair by its name. -/
+theorem field_of_perm {what k : String} {v : Lean.Json} {fs pairs : List (String × Lean.Json)}
+    (h : fs.Perm pairs) (distinct : pairs.Pairwise fun a b => a.1 ≠ b.1) (hm : (k, v) ∈ pairs) :
+    field what fs k = .ok v := by
+  have hd : fs.Pairwise fun a b => a.1 ≠ b.1 :=
+    (h.pairwise_iff fun hab => Ne.symm hab).mpr distinct
+  simp only [field, lookup_of_mem hd (h.mem_iff.mpr hm)]
+  rfl
+
+/-- The JSON of a string is not `null`. -/
+theorem isNull_str (s : String) : (Lean.Json.str s).isNull = false := by rfl
+
+/-- The JSON of an array is not `null`. -/
+theorem isNull_arr (a : Array Lean.Json) : (Lean.Json.arr a).isNull = false := by rfl
+
+/-- The decoder of byte strings of a size reads back a vector written as data. -/
+theorem fixed_dataJson {n : Nat} (what : String) (v : Vector UInt8 n) (upper : Bool) :
+    fixed what n (dataJson v.toList) upper = .ok v :=
+  fixed_hexString what n v upper
+
+/-- The decoder of addresses reads back an address written as data. -/
+theorem address_dataJson (what : String) (v : Vector UInt8 20) :
+    address what (dataJson v.toList) = .ok v :=
+  fixed_dataJson what v true
+
+/-- Fields that are some pairs in another order, with distinct names, read a name as those do. -/
+theorem lookup_of_perm {fs pairs : List (String × Lean.Json)} (h : fs.Perm pairs)
+    (distinct : pairs.Pairwise fun a b => a.1 ≠ b.1) (k : String) :
+    fs.lookup k = pairs.lookup k := by
+  cases hl : pairs.lookup k with
+  | none =>
+    rw [List.lookup_eq_none_iff] at hl ⊢
+    exact fun p hp => hl p (h.mem_iff.mp hp)
+  | some v =>
+    obtain ⟨l₁, l₂, rfl, -⟩ := List.lookup_eq_some_iff.mp hl
+    exact lookup_of_mem ((h.pairwise_iff fun hab => Ne.symm hab).mpr distinct)
+      (h.mem_iff.mpr (by simp))
+
 /-! ## The error object -/
 
 /-- The integer reader reads back the number that an integer writes. -/

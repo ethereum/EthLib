@@ -3,6 +3,8 @@ module
 public import EthLib.Engine.ForkchoiceUpdated
 public import EthLib.Base.Except
 public import EthLib.Engine.Proofs.Json
+-- Showing that a written field is not `null` unfolds the null test of Lean's JSON.
+import all Lean.Data.Json.Basic
 
 /-!
 # Proofs: the parameters, the head and the payload attributes of `engine_forkchoiceUpdated`
@@ -64,6 +66,8 @@ The attributes at that fork keep every field.
 A fork that the version does not take, or no fork at all, gives `-38005`.
 
 A structure that is not that of the fork, or a timestamp not above the head's, gives `-38003`.
+
+The decoders read back the state, the attributes and the parameters that the writers write.
 -/
 
 public section
@@ -71,7 +75,12 @@ public section
 namespace EthLib.Engine
 
 open EthLib.Base
-open EthLib.Serialization.JsonRpc (field_eq_ok_iff fields fixed hasExactly paramsArray)
+open EthLib.Serialization.JsonRpc (field field_eq_ok_iff fields fixed hasExactly paramsArray
+  dataJson quantityJson listJson optionJson fields_mkObj hasExactly_of_perm field_of_perm
+  lookup_of_mem fixed_hexString uint64 uint64_toDigits address array isNull_str isNull_arr
+  fixed_dataJson address_dataJson lookup_of_perm)
+open EthLib.Execution.Rpc (withdrawal withdrawalJson)
+open EthLib.Engine.Json (liftM_ok exists_since_iff sinceValue_of_since)
 
 variable {tree : PayloadTree} {finalized : Option Hash32} {state : ForkchoiceState}
   {config : ChainConfig}
@@ -664,5 +673,322 @@ theorem checkAttributes_eq_error_of_not_after_head {version : Nat} {head : Known
   have hNot : ¬ head.timestamp < a.2.timestamp := UInt64.not_lt.mpr hTime
   simp [checkAttributes, hFork, hTake, hAt, hNot, bind, Except.bind, throw, throwThe,
     MonadExceptOf.throw]
+
+/-! ## The writers -/
+
+/-- A computation that has succeeded passes its value on. -/
+private theorem ok_bind {α β : Type} (a : α) (f : α → Json.Decode β) :
+    (Except.ok a >>= f : Json.Decode β) = f a := rfl
+
+/-- The decoder of the forkchoice state reads back the JSON of every state. -/
+theorem forkchoiceStateOfJson_json (state : ForkchoiceState) :
+    forkchoiceStateOfJson (forkchoiceStateJson state) = .ok state := by
+  have hd : [("headBlockHash", dataJson state.headBlockHash.toList),
+      ("safeBlockHash", dataJson state.safeBlockHash.toList),
+      ("finalizedBlockHash", dataJson state.finalizedBlockHash.toList)].Pairwise
+      fun a b => a.1 ≠ b.1 := by simp
+  obtain ⟨fs, hfs, hp⟩ := fields_mkObj "forkchoiceState" hd
+    (by simp [dataJson, isNull_str])
+  refine forkchoiceStateOfJson_eq_ok_iff.mpr ⟨fs, hfs, hasExactly_of_perm hp,
+    dataJson state.headBlockHash.toList, dataJson state.safeBlockHash.toList,
+    dataJson state.finalizedBlockHash.toList,
+    lookup_of_mem (hp.pairwise_iff (fun h => Ne.symm h) |>.mpr hd) (hp.mem_iff.mpr (by simp)),
+    lookup_of_mem (hp.pairwise_iff (fun h => Ne.symm h) |>.mpr hd) (hp.mem_iff.mpr (by simp)),
+    lookup_of_mem (hp.pairwise_iff (fun h => Ne.symm h) |>.mpr hd) (hp.mem_iff.mpr (by simp)),
+    fixed_dataJson _ _ _, fixed_dataJson _ _ _, fixed_dataJson _ _ _⟩
+
+/-- The pairs of the JSON of payload attributes: those of the fields that their fork has. -/
+private def attributePairs {fork : Fork} (a : PayloadAttributes fork) :
+    List (String × Lean.Json) :=
+  [("timestamp", quantityJson a.timestamp.toNat), ("prevRandao", dataJson a.prevRandao.toList),
+      ("suggestedFeeRecipient", dataJson a.suggestedFeeRecipient.toList)] ++
+    (if h : .shapella ≤ fork then [("withdrawals", listJson withdrawalJson (a.withdrawals h))]
+      else []) ++
+    (if h : .dencun ≤ fork then
+      [("parentBeaconBlockRoot", dataJson (a.parentBeaconBlockRoot h).toList)] else []) ++
+    (if h : .glamsterdam ≤ fork then
+      [("slotNumber", quantityJson (a.slotNumber h).toNat),
+        ("targetGasLimit", quantityJson (a.targetGasLimit h).toNat)] else [])
+
+/-- The JSON of payload attributes is the object of their pairs. -/
+private theorem payloadAttributesJson_eq {fork : Fork} (a : PayloadAttributes fork) :
+    payloadAttributesJson a = Lean.Json.mkObj (attributePairs a) := rfl
+
+/-- The pairs of the JSON of payload attributes have distinct names. -/
+private theorem attributePairs_distinct {fork : Fork} (a : PayloadAttributes fork) :
+    (attributePairs a).Pairwise fun x y => x.1 ≠ y.1 := by
+  unfold attributePairs
+  by_cases h1 : Fork.shapella ≤ fork <;> by_cases h2 : Fork.dencun ≤ fork <;>
+    by_cases h3 : Fork.glamsterdam ≤ fork <;> simp [h1, h2, h3]
+
+/-- No pair of the JSON of payload attributes is `null`. -/
+private theorem attributePairs_present {fork : Fork} (a : PayloadAttributes fork) :
+    ∀ x ∈ attributePairs a, x.2.isNull = false := by
+  unfold attributePairs
+  by_cases h1 : Fork.shapella ≤ fork <;> by_cases h2 : Fork.dencun ≤ fork <;>
+    by_cases h3 : Fork.glamsterdam ≤ fork <;>
+    simp [h1, h2, h3, dataJson, quantityJson, listJson, isNull_str, isNull_arr]
+
+/-- When a version has the fork of the attributes, its fields are the names of the pairs. -/
+private theorem attributesFields_eq {fork : Fork} (a : PayloadAttributes fork) {v : Nat}
+    (hv : attributesFork v = attributesForkAt fork) :
+    attributesFields v = (attributePairs a).map Prod.fst := by
+  have h1 := shapella_le_attributesForkAt_iff fork
+  have h2 := dencun_le_attributesForkAt_iff fork
+  have h3 := glamsterdam_le_attributesForkAt_iff fork
+  rw [← hv] at h1 h2 h3
+  unfold attributePairs
+  rcases v with _ | _ | _ | _ | n <;>
+    simp (config := {decide := true}) [attributesFork] at h1 h2 h3 <;>
+    simp [attributesFields, attributesFieldsV1, attributesFieldsV2, attributesFieldsV3,
+      attributesFieldsV4, h1, h2, h3]
+
+/-- The withdrawals read from the pairs of attributes are the option the attributes give. -/
+private theorem attributePairs_lookup_withdrawals {fork : Fork} (a : PayloadAttributes fork) :
+    (attributePairs a).lookup "withdrawals" =
+      (sinceValue a.withdrawals).map (listJson withdrawalJson) := by
+  unfold attributePairs
+  by_cases h : Fork.shapella ≤ fork
+  · simp [h, sinceValue, List.lookup]
+  · simp only [sinceValue, h, dite_false, Option.map_none]
+    simp
+    rintro k b (⟨rfl, _⟩ | ⟨_, ⟨rfl, _⟩ | ⟨rfl, _⟩⟩) <;> decide
+
+/-- The parent beacon block root read from the pairs of attributes is the option they give. -/
+private theorem attributePairs_lookup_beacon {fork : Fork} (a : PayloadAttributes fork) :
+    (attributePairs a).lookup "parentBeaconBlockRoot" =
+      (sinceValue a.parentBeaconBlockRoot).map (dataJson ·.toList) := by
+  by_cases h : Fork.dencun ≤ fork
+  · rw [lookup_of_mem (attributePairs_distinct a) (k := "parentBeaconBlockRoot")
+      (v := dataJson (a.parentBeaconBlockRoot h).toList) (by simp [attributePairs, h])]
+    simp [sinceValue, h]
+  · unfold attributePairs
+    simp only [sinceValue, h, dite_false, Option.map_none]
+    simp
+    rintro k b (⟨rfl, _⟩ | ⟨_, ⟨rfl, _⟩ | ⟨rfl, _⟩⟩) <;> decide
+
+/-- The slot number read from the pairs of attributes is the option they give. -/
+private theorem attributePairs_lookup_slot {fork : Fork} (a : PayloadAttributes fork) :
+    (attributePairs a).lookup "slotNumber" =
+      (sinceValue a.slotNumber).map (quantityJson ·.toNat) := by
+  by_cases h : Fork.glamsterdam ≤ fork
+  · rw [lookup_of_mem (attributePairs_distinct a) (k := "slotNumber")
+      (v := quantityJson (a.slotNumber h).toNat) (by simp [attributePairs, h])]
+    simp [sinceValue, h]
+  · unfold attributePairs
+    simp only [sinceValue, h, dite_false, Option.map_none]
+    simp
+    rintro k b (⟨rfl, _⟩ | ⟨rfl, _⟩) <;> decide
+
+/-- The target gas limit read from the pairs of attributes is the option they give. -/
+private theorem attributePairs_lookup_target {fork : Fork} (a : PayloadAttributes fork) :
+    (attributePairs a).lookup "targetGasLimit" =
+      (sinceValue a.targetGasLimit).map (quantityJson ·.toNat) := by
+  by_cases h : Fork.glamsterdam ≤ fork
+  · rw [lookup_of_mem (attributePairs_distinct a) (k := "targetGasLimit")
+      (v := quantityJson (a.targetGasLimit h).toNat) (by simp [attributePairs, h])]
+    simp [sinceValue, h]
+  · unfold attributePairs
+    simp only [sinceValue, h, dite_false, Option.map_none]
+    simp
+    rintro k b (⟨rfl, _⟩ | ⟨rfl, _⟩) <;> decide
+
+/-- A field from a fork is present in the option that it gives exactly when the fork has it. -/
+private theorem isSome_sinceValue {f fork : Fork} {α : Type} (x : Since f fork α) :
+    (sinceValue x).isSome ↔ f ≤ fork := by
+  unfold sinceValue
+  by_cases h : f ≤ fork <;> simp [h]
+
+/-- The decoder of a version reads back the JSON of attributes at a fork of that version. -/
+private theorem payloadAttributesOfJson_json {fork : Fork} (a : PayloadAttributes fork) {v : Nat}
+    (hv : attributesFork v = attributesForkAt fork) :
+    ∃ c, payloadAttributesOfJson v (payloadAttributesJson a) = .ok c ∧
+      c.timestamp = a.timestamp ∧ c.prevRandao = a.prevRandao ∧
+      c.suggestedFeeRecipient = a.suggestedFeeRecipient ∧
+      sinceValue c.withdrawals = sinceValue a.withdrawals ∧
+      sinceValue c.parentBeaconBlockRoot = sinceValue a.parentBeaconBlockRoot ∧
+      sinceValue c.slotNumber = sinceValue a.slotNumber ∧
+      sinceValue c.targetGasLimit = sinceValue a.targetGasLimit := by
+  have hd := attributePairs_distinct a
+  obtain ⟨fs, hfs, hp⟩ := fields_mkObj "payloadAttributes" hd (attributePairs_present a)
+  have lk := lookup_of_perm hp hd
+  have hex : hasExactly fs (attributesFields v) = true := by
+    rw [attributesFields_eq a hv]
+    exact hasExactly_of_perm hp
+  have r1 : field "payloadAttributes" fs "timestamp" = .ok (quantityJson a.timestamp.toNat) :=
+    field_of_perm hp hd (by simp [attributePairs])
+  have r2 : field "payloadAttributes" fs "prevRandao" = .ok (dataJson a.prevRandao.toList) :=
+    field_of_perm hp hd (by simp [attributePairs])
+  have r3 : field "payloadAttributes" fs "suggestedFeeRecipient" =
+      .ok (dataJson a.suggestedFeeRecipient.toList) :=
+    field_of_perm hp hd (by simp [attributePairs])
+  have o1 : optionalField fs "withdrawals" (array "withdrawals" withdrawal) =
+      Except.ok (sinceValue a.withdrawals) := by
+    unfold optionalField
+    rw [lk, attributePairs_lookup_withdrawals]
+    cases hw : sinceValue a.withdrawals with
+    | none => rfl
+    | some ws =>
+      simp only [Option.map_some]
+      rw [Execution.Rpc.array_withdrawal_listJson]
+      rfl
+  have o2 : optionalField fs "parentBeaconBlockRoot" (fixed "parentBeaconBlockRoot" 32) =
+      Except.ok (sinceValue a.parentBeaconBlockRoot) := by
+    unfold optionalField
+    rw [lk, attributePairs_lookup_beacon]
+    cases hw : sinceValue a.parentBeaconBlockRoot with
+    | none => rfl
+    | some ws =>
+      simp only [Option.map_some]
+      rw [fixed_dataJson]
+      rfl
+  have o3 : optionalField fs "slotNumber" (uint64 "slotNumber") =
+      Except.ok (sinceValue a.slotNumber) := by
+    unfold optionalField
+    rw [lk, attributePairs_lookup_slot]
+    cases hw : sinceValue a.slotNumber with
+    | none => rfl
+    | some ws =>
+      simp only [Option.map_some]
+      rw [uint64_toDigits]
+      rfl
+  have o4 : optionalField fs "targetGasLimit" (uint64 "targetGasLimit") =
+      Except.ok (sinceValue a.targetGasLimit) := by
+    unfold optionalField
+    rw [lk, attributePairs_lookup_target]
+    cases hw : sinceValue a.targetGasLimit with
+    | none => rfl
+    | some ws =>
+      simp only [Option.map_some]
+      rw [uint64_toDigits]
+      rfl
+  have s1 := shapella_le_attributesForkAt_iff fork
+  have s2 := dencun_le_attributesForkAt_iff fork
+  have s3 := glamsterdam_le_attributesForkAt_iff fork
+  rw [← hv] at s1 s2 s3
+  obtain ⟨x1, hx1⟩ := exists_since_iff (what := "withdrawals") |>.mpr
+    ((isSome_sinceValue a.withdrawals).trans s1.symm)
+  obtain ⟨x2, hx2⟩ := exists_since_iff (what := "parentBeaconBlockRoot") |>.mpr
+    ((isSome_sinceValue a.parentBeaconBlockRoot).trans s2.symm)
+  obtain ⟨x3, hx3⟩ := exists_since_iff (what := "slotNumber") |>.mpr
+    ((isSome_sinceValue a.slotNumber).trans s3.symm)
+  obtain ⟨x4, hx4⟩ := exists_since_iff (what := "targetGasLimit") |>.mpr
+    ((isSome_sinceValue a.targetGasLimit).trans s3.symm)
+  unfold payloadAttributesOfJson
+  rw [payloadAttributesJson_eq]
+  simp only [hfs, liftM_ok, ok_bind]
+  rw [ite_eq_left hex]
+  simp only [r1, r2, r3, o1, o2, o3, o4, hx1, hx2, hx3, hx4, liftM_ok, ok_bind,
+    uint64_toDigits, fixed_dataJson, address_dataJson]
+  exact ⟨_, rfl, rfl, rfl, rfl, sinceValue_of_since hx1, sinceValue_of_since hx2,
+    sinceValue_of_since hx3, sinceValue_of_since hx4⟩
+
+/-- Two fields from a fork that give the same option are equal. -/
+private theorem since_ext {f fork : Fork} {α : Type} {x y : Since f fork α}
+    (h : sinceValue x = sinceValue y) : x = y := by
+  by_cases hf : f ≤ fork
+  · simp only [sinceValue, hf, dite_true, Option.some.injEq] at h
+    rw [Since.eq_const hf x, Since.eq_const hf y, h]
+  · exact Since.eq_of_not_le hf x y
+
+/-- Attributes of a structure that agree field by field with those of a fork are those at it. -/
+private theorem atFork_eq_some {fork : Fork} (a : PayloadAttributes fork)
+    (b : Σ f, PayloadAttributes f) (hb : b.1 = attributesForkAt fork)
+    (e1 : b.2.timestamp = a.timestamp) (e2 : b.2.prevRandao = a.prevRandao)
+    (e3 : b.2.suggestedFeeRecipient = a.suggestedFeeRecipient)
+    (e4 : sinceValue b.2.withdrawals = sinceValue a.withdrawals)
+    (e5 : sinceValue b.2.parentBeaconBlockRoot = sinceValue a.parentBeaconBlockRoot)
+    (e6 : sinceValue b.2.slotNumber = sinceValue a.slotNumber)
+    (e7 : sinceValue b.2.targetGasLimit = sinceValue a.targetGasLimit) :
+    PayloadAttributes.atFork b fork = some a := by
+  obtain ⟨b', hb'⟩ := Option.isSome_iff_exists.mp
+    (PayloadAttributes.atFork_isSome_iff.mpr hb.symm)
+  rw [hb']
+  obtain ⟨f1, f2, f3, f4, f5, f6, f7⟩ := PayloadAttributes.atFork_fields hb'
+  congr 1
+  cases a
+  cases b'
+  simp only [PayloadAttributes.mk.injEq]
+  exact ⟨f1.trans e1, f2.trans e2, f3.trans e3, since_ext (f4.trans e4), since_ext (f5.trans e5),
+    since_ext (f6.trans e6), since_ext (f7.trans e7)⟩
+
+/-- A version of the method reads back the JSON of attributes whose structure it takes.
+
+The structure of the fork of the attributes must be one that the version takes.
+
+The attributes read back are those of that structure, and at the fork they are the attributes. -/
+theorem payloadAttributesOfVersion_json {fork : Fork} (a : PayloadAttributes fork)
+    {version : Nat}
+    (takes : ∃ v ∈ attributesVersions version, attributesFork v = attributesForkAt fork) :
+    ∃ b, payloadAttributesOfVersion version (payloadAttributesJson a) = .ok b ∧
+      PayloadAttributes.atFork b fork = some a := by
+  obtain ⟨v, hmem, hv⟩ := takes
+  obtain ⟨c, hc, e1, e2, e3, e4, e5, e6, e7⟩ := payloadAttributesOfJson_json a hv
+  refine ⟨⟨attributesFork v, c⟩, ?_, atFork_eq_some a ⟨attributesFork v, c⟩ hv e1 e2 e3 e4 e5 e6 e7⟩
+  unfold payloadAttributesOfVersion
+  by_cases h2 : version = 2
+  · subst h2
+    simp only [attributesVersions, List.mem_cons, List.not_mem_nil, or_false] at hmem
+    rcases hmem with rfl | rfl
+    · simp [attributesVersions, hc, Except.toOption]
+    · -- Version 1 of the structure fails on an object with the four fields of version 2.
+      obtain ⟨fs, hfs, hp⟩ := fields_mkObj "payloadAttributes" (attributePairs_distinct a)
+        (attributePairs_present a)
+      have hex : hasExactly fs (attributesFields 2) = true := by
+        rw [attributesFields_eq a hv]
+        exact hasExactly_of_perm hp
+      have hne : hasExactly fs (attributesFields 1) = false := by
+        cases h : hasExactly fs (attributesFields 1)
+        · rfl
+        · simp only [hasExactly, Bool.and_eq_true, beq_iff_eq] at hex h
+          simp [attributesFields, attributesFieldsV1, attributesFieldsV2] at hex h
+          omega
+      have hfail := payloadAttributesOfJson_wrong_fields (v := 1)
+        (j := payloadAttributesJson a) (by rw [payloadAttributesJson_eq]; exact hfs) hne
+      simp [attributesVersions, List.findSome?, hfail, hc, Except.toOption]
+  · have hl : attributesVersions version = [version] := by
+      unfold attributesVersions
+      split
+      · exact absurd rfl h2
+      · rfl
+    rw [hl] at hmem
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hmem
+    subst hmem
+    simp [hl, hc, Except.toOption]
+
+/-- The decoder of the custody columns reads back the columns that the writer writes, or none. -/
+theorem custodyColumnsOfJson_json (custody : Option (Vector UInt8 16)) :
+    custodyColumnsOfJson (optionJson (dataJson ·.toList) custody) = .ok custody := by
+  cases custody with
+  | none => rfl
+  | some c =>
+    simp only [optionJson, custodyColumnsOfJson, dataJson, fixed_hexString, liftM_ok]
+    rfl
+
+/-- The decoder of the parameters reads back the state and the JSON of the attributes.
+
+From version 4 this holds whatever custody columns follow. -/
+theorem forkchoiceUpdatedParams_json {fork : Fork} (version : Nat) (state : ForkchoiceState)
+    (attributes : Option (PayloadAttributes fork)) (custody : Option (Vector UInt8 16)) :
+    forkchoiceUpdatedParams version (forkchoiceUpdatedParamsJson version state attributes custody) =
+      .ok (state, attributes.map payloadAttributesJson) := by
+  -- The attributes are `null` when there are none, and an object otherwise.
+  have hlast : optionJson payloadAttributesJson attributes = .null ∧
+        (state, attributes.map payloadAttributesJson) = (state, none) ∨
+      ∃ kvs, optionJson payloadAttributesJson attributes = .obj kvs ∧
+        (state, attributes.map payloadAttributesJson) = (state, some (.obj kvs)) := by
+    cases attributes with
+    | none => exact Or.inl ⟨rfl, rfl⟩
+    | some a =>
+      obtain ⟨kvs, hk⟩ : ∃ kvs, payloadAttributesJson a = .obj kvs := ⟨_, rfl⟩
+      exact Or.inr ⟨kvs, hk, by simp [hk]⟩
+  unfold forkchoiceUpdatedParamsJson
+  rw [forkchoiceUpdatedParams_eq_ok_iff]
+  by_cases h4 : 4 ≤ version
+  · refine ⟨forkchoiceStateJson state, optionJson payloadAttributesJson attributes,
+      optionJson (dataJson ·.toList) custody, state, Or.inr ⟨h4, by simp [h4]⟩,
+      forkchoiceStateOfJson_json state, ⟨custody, custodyColumnsOfJson_json custody⟩, hlast⟩
+  · exact ⟨forkchoiceStateJson state, optionJson payloadAttributesJson attributes, .null, state,
+      Or.inl ⟨by simp [h4], rfl⟩, forkchoiceStateOfJson_json state, ⟨none, rfl⟩, hlast⟩
 
 end EthLib.Engine

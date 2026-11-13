@@ -5,6 +5,8 @@ public import EthLib.Serialization.Proofs.JsonRpc
 public import EthLib.Execution.Proofs.Rpc.Json
 public import EthLib.Base.Except
 public import EthLib.Base.Proofs.Fork
+-- Showing that a payload field is not `null` unfolds the null test of Lean's JSON.
+import all Lean.Data.Json.Basic
 
 /-!
 # Proofs: the JSON decoders of the Engine API
@@ -28,6 +30,10 @@ The rest must decode as a payload of an earlier version.
 A field from a fork decodes exactly when it is present from that fork on and absent before.
 
 A field decodes from an option exactly when reading the field back gives that option.
+
+The decoders read back the payloads that the writers write.
+
+The extra data must then hold at most 32 bytes.
 -/
 
 public section
@@ -164,6 +170,256 @@ theorem since_eq_ok_iff {α : Type} {f : Fork} {what : String} {o : Option α}
   ⟨sinceValue_of_since, fun h => h ▸ since_sinceValue x⟩
 
 end Since
+
+/-! ## The writers of payloads -/
+
+/-- The fields of a payload have distinct names. -/
+private theorem names_distinct {fork : Fork} (p : ExecutionPayload fork) :
+    (executionPayloadFields p).Pairwise fun a b => a.1 ≠ b.1 := by
+  unfold executionPayloadFields
+  by_cases h1 : Fork.shapella ≤ fork <;> by_cases h2 : Fork.dencun ≤ fork <;> simp [h1, h2]
+
+/-- No field of a payload is `null`. -/
+private theorem fields_present {fork : Fork} (p : ExecutionPayload fork) :
+    ∀ x ∈ executionPayloadFields p, x.2.isNull = false := by
+  unfold executionPayloadFields
+  by_cases h1 : Fork.shapella ≤ fork <;> by_cases h2 : Fork.dencun ≤ fork <;>
+    simp [h1, h2, dataJson, quantityJson, listJson, isNull_str, isNull_arr]
+
+/-- A computation that has succeeded passes its value on. -/
+private theorem ok_bind {α β : Type} (a : α) (f : α → Decode β) :
+    (Except.ok a >>= f : Decode β) = f a := rfl
+
+/-- Mapping a function over a computation that has succeeded maps its value. -/
+private theorem map_ok {α β : Type} (f : α → β) (a : α) :
+    (f <$> (Except.ok a : Decode α) : Decode β) = .ok (f a) := rfl
+
+/-- The common part of a payload: the fields that every fork has, as the payload of Paris. -/
+private abbrev commonOf {fork : Fork} (p : ExecutionPayload fork) : ExecutionPayload .paris where
+  parentHash := p.parentHash
+  feeRecipient := p.feeRecipient
+  stateRoot := p.stateRoot
+  receiptsRoot := p.receiptsRoot
+  logsBloom := p.logsBloom
+  prevRandao := p.prevRandao
+  blockNumber := p.blockNumber
+  gasLimit := p.gasLimit
+  gasUsed := p.gasUsed
+  timestamp := p.timestamp
+  extraData := p.extraData
+  baseFeePerGas := p.baseFeePerGas
+  blockHash := p.blockHash
+  transactions := p.transactions
+  withdrawals := fun h => absurd h (by decide)
+  blobGasUsed := fun h => absurd h (by decide)
+  excessBlobGas := fun h => absurd h (by decide)
+
+/-- The decoder of byte strings reads back a byte string that holds its bytes as data. -/
+private theorem bytes_dataJson (what : String) (b : ByteArray) :
+    bytes what (dataJson b.data.toList) = .ok b := by
+  rw [dataJson, bytes_hexString]
+  congr 1
+  apply ByteArray.ext
+  apply Array.toList_inj.mp
+  simp
+
+/-- The decoder of lists of transactions reads back a list of transactions written as data. -/
+private theorem array_transactions (ts : List ByteArray) :
+    array "transactions" (bytes "transaction") (listJson (dataJson ·.data.toList) ts) = .ok ts := by
+  rw [array_listJson]
+  simp only [bytes_dataJson]
+  induction ts with
+  | nil => rfl
+  | cons t ts ih => simp only [List.mapM_cons, ih]; rfl
+
+/-- The decoder of numbers of 256 bits reads back a number of 256 bits written as a quantity. -/
+private theorem quantity_baseFee (what : String) (x : BitVec 256) :
+    quantity what 256 (quantityJson x.toNat) = .ok x.toNat :=
+  quantity_toDigits what x.isLt
+
+/-- The decoder of byte strings of a limit reads back a byte string that fits the limit. -/
+private theorem bytesMax_dataJson (what : String) (n : Nat) (b : ByteArray) (h : b.size ≤ n) :
+    bytesMax what n (dataJson b.data.toList) = .ok b :=
+  bytesMax_eq_ok_iff.mpr ⟨bytes_dataJson what b, h⟩
+
+/-- Fields that are those of a payload decode as a payload that reads back at its fork. -/
+private theorem anyPayload_of_perm {fork : Fork} (p : ExecutionPayload fork)
+    (extra : p.extraData.size ≤ 32) {j : Lean.Json} {fs : List (String × Lean.Json)}
+    (hfs : fields "payload" j = .ok fs) (hp : fs.Perm (executionPayloadFields p)) :
+    ∃ any, anyPayload j = .ok any ∧ any.atFork fork = .ok p := by
+  have hd := names_distinct p
+  have rd : ∀ k v, (k, v) ∈ executionPayloadFields p → field "payload" fs k = .ok v :=
+    fun k v hm => field_of_perm hp hd hm
+  have hex := hasExactly_of_perm hp
+  have hlen := hp.length_eq
+  -- Each of the fields of version 1 reads as the value that its JSON holds.
+  have r1 := rd "parentHash" (dataJson p.parentHash.toList)
+    (by simp [executionPayloadFields])
+  have r2 := rd "feeRecipient" (dataJson p.feeRecipient.toList)
+    (by simp [executionPayloadFields])
+  have r3 := rd "stateRoot" (dataJson p.stateRoot.toList)
+    (by simp [executionPayloadFields])
+  have r4 := rd "receiptsRoot" (dataJson p.receiptsRoot.toList)
+    (by simp [executionPayloadFields])
+  have r5 := rd "logsBloom" (dataJson p.logsBloom.toList)
+    (by simp [executionPayloadFields])
+  have r6 := rd "prevRandao" (dataJson p.prevRandao.toList)
+    (by simp [executionPayloadFields])
+  have r7 := rd "blockNumber" (quantityJson p.blockNumber.toNat)
+    (by simp [executionPayloadFields])
+  have r8 := rd "gasLimit" (quantityJson p.gasLimit.toNat)
+    (by simp [executionPayloadFields])
+  have r9 := rd "gasUsed" (quantityJson p.gasUsed.toNat)
+    (by simp [executionPayloadFields])
+  have r10 := rd "timestamp" (quantityJson p.timestamp.toNat)
+    (by simp [executionPayloadFields])
+  have r11 := rd "extraData" (dataJson p.extraData.data.toList)
+    (by simp [executionPayloadFields])
+  have r12 := rd "baseFeePerGas" (quantityJson p.baseFeePerGas.toNat)
+    (by simp [executionPayloadFields])
+  have r13 := rd "blockHash" (dataJson p.blockHash.toList)
+    (by simp [executionPayloadFields])
+  have r14 := rd "transactions" (listJson (dataJson ·.data.toList) p.transactions)
+    (by simp [executionPayloadFields])
+  have hbase : BitVec.ofNat 256 p.baseFeePerGas.toNat = p.baseFeePerGas := by simp
+  have key : ∃ v, anyPayload j = .ok ⟨v, commonOf p, sinceValue p.withdrawals,
+      sinceValue p.blobGasUsed, sinceValue p.excessBlobGas⟩ := by
+    by_cases h1 : Fork.shapella ≤ fork <;> by_cases h2 : Fork.dencun ≤ fork
+    · -- Version 3.
+      have hn : (executionPayloadFields p).map Prod.fst = payloadFieldsV3 := by
+        simp [executionPayloadFields, h1, h2, payloadFieldsV3, payloadFieldsV2, payloadFieldsV1]
+      have hl : fs.length = payloadFieldsV3.length := by rw [hlen, ← hn, List.length_map]
+      rw [hn] at hex
+      have ne1 : ¬ hasExactly fs payloadFieldsV1 = true := by
+        simp [hasExactly, hl, payloadFieldsV3, payloadFieldsV2, payloadFieldsV1]
+      have ne2 : ¬ hasExactly fs payloadFieldsV2 = true := by
+        simp [hasExactly, hl, payloadFieldsV3, payloadFieldsV2, payloadFieldsV1]
+      have r15 := rd "withdrawals" (listJson Execution.Rpc.withdrawalJson (p.withdrawals h1))
+        (by simp [executionPayloadFields, h1, h2])
+      have r16 := rd "blobGasUsed" (quantityJson (p.blobGasUsed h2).toNat)
+        (by simp [executionPayloadFields, h1, h2])
+      have r17 := rd "excessBlobGas" (quantityJson (p.excessBlobGas h2).toNat)
+        (by simp [executionPayloadFields, h1, h2])
+      refine ⟨3, ?_⟩
+      unfold anyPayload
+      simp only [hfs, liftM_ok, ok_bind, pure_bind]
+      rw [ite_eq_right ne1, ite_eq_right ne2, ite_eq_left hex]
+      simp only [r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13, r14, r15, r16, r17,
+        liftM_ok, ok_bind, fixed_dataJson, address_dataJson, uint64_toDigits, quantity_baseFee,
+        bytesMax_dataJson _ _ _ extra, array_transactions, ge_iff_le, Nat.reduceLeDiff,
+        reduceIte, map_ok, Execution.Rpc.array_withdrawal_listJson, hbase, sinceValue, h1, h2,
+        dite_true]
+      rfl
+    · -- Version 2.
+      have hn : (executionPayloadFields p).map Prod.fst = payloadFieldsV2 := by
+        simp [executionPayloadFields, h1, h2, payloadFieldsV2, payloadFieldsV1]
+      have hl : fs.length = payloadFieldsV2.length := by rw [hlen, ← hn, List.length_map]
+      rw [hn] at hex
+      have ne1 : ¬ hasExactly fs payloadFieldsV1 = true := by
+        simp [hasExactly, hl, payloadFieldsV2, payloadFieldsV1]
+      have r15 := rd "withdrawals" (listJson Execution.Rpc.withdrawalJson (p.withdrawals h1))
+        (by simp [executionPayloadFields, h1, h2])
+      refine ⟨2, ?_⟩
+      unfold anyPayload
+      simp only [hfs, liftM_ok, ok_bind, pure_bind]
+      rw [ite_eq_right ne1, ite_eq_left hex]
+      simp only [r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13, r14, r15,
+        liftM_ok, ok_bind, fixed_dataJson, address_dataJson, uint64_toDigits, quantity_baseFee,
+        bytesMax_dataJson _ _ _ extra, array_transactions, ge_iff_le, Nat.reduceLeDiff,
+        reduceIte, map_ok, Execution.Rpc.array_withdrawal_listJson, hbase, sinceValue, h1, h2,
+        dite_true, dite_false]
+      rfl
+    · -- The fork has no Dencun before Shapella.
+      exact absurd (Std.le_trans (by decide) h2) h1
+    · -- Version 1.
+      have hn : (executionPayloadFields p).map Prod.fst = payloadFieldsV1 := by
+        simp [executionPayloadFields, h1, h2, payloadFieldsV1]
+      rw [hn] at hex
+      refine ⟨1, ?_⟩
+      unfold anyPayload
+      simp only [hfs, liftM_ok, ok_bind, pure_bind]
+      rw [ite_eq_left hex]
+      simp only [r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13, r14,
+        liftM_ok, ok_bind, fixed_dataJson, address_dataJson, uint64_toDigits, quantity_baseFee,
+        bytesMax_dataJson _ _ _ extra, array_transactions, ge_iff_le, Nat.reduceLeDiff,
+        reduceIte, hbase, sinceValue, h1, h2, dite_false]
+      rfl
+  obtain ⟨v, hv⟩ := key
+  refine ⟨_, hv, ?_⟩
+  -- Each optional field reads back from the value that the payload gives for its fork.
+  simp only [AnyPayload.atFork, since_sinceValue, ok_bind]
+  rfl
+
+/-- The decoder of payloads of versions 1 to 3 reads back the JSON of a payload, at its fork.
+
+The extra data must hold at most 32 bytes, the bound of its type in the Engine API. -/
+theorem anyPayload_executionPayloadJson {fork : Fork} (p : ExecutionPayload fork)
+    (extra : p.extraData.size ≤ 32) :
+    ∃ any, anyPayload (executionPayloadJson p) = .ok any ∧ any.atFork fork = .ok p := by
+  obtain ⟨fs, hfs, hp⟩ := fields_mkObj "payload" (names_distinct p) (fields_present p)
+  exact anyPayload_of_perm p extra hfs hp
+
+/-- The decoder of payloads of version 4 reads back the JSON of a payload from Dencun on.
+
+It reads the payload at its fork, the block access list and the slot number.
+
+The extra data must hold at most 32 bytes, the bound of its type in the Engine API. -/
+theorem payloadV4_executionPayloadV4Json {fork : Fork} (p : ExecutionPayload fork)
+    (blockAccessList : ByteArray) (slotNumber : UInt64) (dencun : .dencun ≤ fork)
+    (extra : p.extraData.size ≤ 32) :
+    ∃ any, payloadV4 (executionPayloadV4Json p blockAccessList slotNumber) =
+      .ok (any, blockAccessList, slotNumber) ∧ any.atFork fork = .ok p := by
+  have h1 : Fork.shapella ≤ fork := Std.le_trans (by decide) dencun
+  have hn : (executionPayloadFields p).map Prod.fst = payloadFieldsV3 := by
+    simp [executionPayloadFields, h1, dencun, payloadFieldsV3, payloadFieldsV2, payloadFieldsV1]
+  have hd := names_distinct p
+  -- The pairs that the object holds: those of the payload, then the access list and the slot.
+  have hdist : (executionPayloadFields p ++ [("blockAccessList",
+      dataJson blockAccessList.data.toList), ("slotNumber", quantityJson slotNumber.toNat)]
+      ).Pairwise fun a b => a.1 ≠ b.1 := by
+    rw [List.pairwise_append]
+    refine ⟨hd, by simp, fun a ha b hb => ?_⟩
+    have ha' : a.1 ∈ payloadFieldsV3 := hn ▸ List.mem_map_of_mem ha
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hb
+    rcases hb with rfl | rfl <;>
+      simp [payloadFieldsV3, payloadFieldsV2, payloadFieldsV1] at ha' ⊢ <;>
+      intro e <;> rw [e] at ha' <;> simp at ha'
+  have hpres : ∀ x ∈ executionPayloadFields p ++ [("blockAccessList",
+      dataJson blockAccessList.data.toList), ("slotNumber", quantityJson slotNumber.toNat)],
+      x.2.isNull = false := by
+    intro x hx
+    rcases List.mem_append.mp hx with hx | hx
+    · exact fields_present p x hx
+    · simp only [List.mem_cons, List.not_mem_nil, or_false] at hx
+      rcases hx with rfl | rfl <;> exact isNull_str _
+  obtain ⟨fs, hfs, hp⟩ := fields_mkObj "payload" hdist hpres
+  have hfsd := (hp.pairwise_iff fun hab => Ne.symm hab).mpr hdist
+  have hex := hasExactly_of_perm hp
+  rw [List.map_append, hn] at hex
+  -- The pairs of version 3 are those that keep their name when the two new names are dropped.
+  have hflt : (executionPayloadFields p ++ [("blockAccessList",
+      dataJson blockAccessList.data.toList), ("slotNumber", quantityJson slotNumber.toNat)]).filter
+        (fun (name, _) => !amsterdamFields.contains name) = executionPayloadFields p := by
+    rw [List.filter_append, List.filter_eq_self.mpr]
+    · simp [amsterdamFields]
+    · intro x hx
+      have : x.1 ∈ payloadFieldsV3 := hn ▸ List.mem_map_of_mem hx
+      simp only [amsterdamFields, List.contains_cons, List.contains_nil,
+        Bool.or_false, Bool.not_eq_true', Bool.or_eq_false_iff, beq_eq_false_iff_ne]
+      refine ⟨fun h => ?_, fun h => ?_⟩ <;> rw [h] at this <;>
+        simp [payloadFieldsV3, payloadFieldsV2, payloadFieldsV1] at this
+  obtain ⟨fs', hfs', hp'⟩ := fields_mkObj "payload"
+    (hfsd.sublist (List.filter_sublist ..))
+    (fun x hx => hpres x (hp.mem_iff.mp (List.mem_filter.mp hx).1))
+  obtain ⟨any, hany, hat⟩ := anyPayload_of_perm p extra hfs'
+    (hp'.trans (hflt ▸ hp.filter _))
+  refine ⟨any, payloadV4_eq_ok_iff.mpr ⟨fs, hfs, ?_, hany,
+    dataJson blockAccessList.data.toList, quantityJson slotNumber.toNat, ?_, ?_, ?_, ?_⟩, hat⟩
+  · simpa [payloadFieldsV4, amsterdamFields] using hex
+  · exact lookup_of_mem hfsd (hp.mem_iff.mpr (by simp))
+  · exact lookup_of_mem hfsd (hp.mem_iff.mpr (by simp))
+  · exact bytes_dataJson _ _
+  · exact uint64_toDigits _ _
 
 end EthLib.Engine.Json
 
