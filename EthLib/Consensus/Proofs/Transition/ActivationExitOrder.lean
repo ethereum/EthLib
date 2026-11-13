@@ -652,21 +652,6 @@ private theorem eth1Data {before : fork < .hegota} {body : BeaconBlockBody prese
   obtain ⟨_, _, rest⟩ := processEth1Data_eq ok
   exact of_data (by rw [← rest])
 
-private theorem syncAggregate {altair : .altair ≤ fork} {aggregate : SyncAggregate preset}
-    (ok : processSyncAggregate config checks state altair aggregate = .ok after) :
-    Kept state after := by
-  unfold processSyncAggregate at ok
-  simp only [bind_ok_iff] at ok
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, folded⟩ := ok
-  rw [← Array.foldlM_toList] at folded
-  exact foldlM (fun _ _ _ ok => by
-    unfold applySyncReward at ok
-    split at ok
-    · simp only [bind_ok_iff, liftAccessor_ok] at ok
-      obtain ⟨_, raised, _, _, paid⟩ := ok
-      exact (increaseBalance raised).trans (increaseBalance paid)
-    · exact decreaseBalance (liftAccessor_ok.mp ok)) folded
-
 /-- A block keeps the order: master's decomposition of a block reaches every step of it.
 
 Each step that keeps the validators keeps the order, and so does each validator write. -/
@@ -691,7 +676,7 @@ private theorem processBlock {block : BeaconBlock preset fork}
       (fun paid => by rw [processPayloadAttestation_eq paid]; exact refl _) operated
   have tail : Kept last after := by
     split at synced
-    · exact syncAggregate synced
+    · exact of_data (congrArg (·.data) (processSyncAggregate_validators synced))
     · cases synced
       exact refl _
   exact head.trans <| (foldlM (fun _ _ _ ok => processProposerSlashing ok) proposersOk).trans <|
