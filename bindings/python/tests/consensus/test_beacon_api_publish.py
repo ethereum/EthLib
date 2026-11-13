@@ -9,7 +9,8 @@ from ethlib import consensus
 from raising import raises
 
 from .containers import FORKS
-from .test_beacon_api_pool import ENDPOINTS
+from .test_beacon_api_events import block_events, envelope_events
+from .test_beacon_api_pool import ENDPOINTS, event
 from .test_gossip_validation import FILES, MESSAGE_TOPICS, case_store, read, runs
 
 # The publish endpoint of each gossip topic whose objects a client may publish.
@@ -75,16 +76,26 @@ def test_case(preset: str, fork: str, case: Path) -> None:
     answers = consensus.api_post(
         name=preset, fork=FORKS[fork], requests=requests, **case_store(preset, fork, case, meta)
     )
-    for message, (status, failures) in zip(meta["messages"], answers, strict=True):
+    for message, request, answer in zip(meta["messages"], requests, answers, strict=True):
+        status, failures, events = answer
+        topic, item = _topic(meta, message), request[2][0]
         if message["expected"] != "valid":
-            assert (status, failures) == (400, [(0, message["reason"])])
-        elif TOPIC_ENDPOINTS[_topic(meta, message)] not in PUBLISH.values():
-            assert (status, failures) == (200, [])
+            # An object that fails gossip gives no event.
+            assert answer == (400, [(0, message["reason"])], [])
+        elif TOPIC_ENDPOINTS[topic] not in PUBLISH.values():
+            assert answer == (200, [], event(preset, fork, f"gossip_{topic}", item))
         else:
             # A valid object passes; whether the node then integrates it is not in the case.
             # It is broadcast but not integrated within the clock disparity, for example.
             assert failures == []
             assert status in {200, 202}
+            gossip, imported = (
+                block_events(fork, item, imported=True)
+                if topic == "beacon_block"
+                else envelope_events(item)
+            )
+            # An integrated object new to the store also gives its import event.
+            assert events in ([[gossip]] if status == 202 else [[gossip], [gossip, imported]])
 
 
 def _valid_block() -> tuple[Path, dict, bytes]:
@@ -107,7 +118,15 @@ def test_valid_block_is_integrated(level: str | None) -> None:
         **case_store("minimal", "capella", case, meta),
     )
     reason = "block is not the first valid block for this slot and proposer"
-    assert answers == [(200, []), (400, [(0, reason)])]
+    assert [(status, failures) for status, failures, _ in answers] == [
+        (200, []),
+        (400, [(0, reason)]),
+    ]
+    # The integrated block gives its gossip and block events, and the refused copy none.
+    assert [[topic for topic, _ in events] for _, _, events in answers] == [
+        ["block_gossip", "block"],
+        [],
+    ]
 
 
 def test_consensus_level_refuses_a_bad_state_root() -> None:
@@ -138,19 +157,29 @@ def test_consensus_level_refuses_a_bad_state_root() -> None:
     # A refused block is not seen, so the default level broadcasts it.
     # The gossip level then finds it already seen.
     seen = "block is not the first valid block for this slot and proposer"
-    assert answers == [
+    assert [(status, failures) for status, failures, _ in answers] == [
         (400, [(0, reason)]),
         (400, [(0, reason)]),
         (202, []),
         (400, [(0, seen)]),
+    ]
+    # A block that passes gossip gives its gossip event, even when its level refuses it.
+    assert [[topic for topic, _ in events] for _, _, events in answers] == [
+        ["block_gossip"],
+        ["block_gossip"],
+        ["block_gossip"],
+        [],
     ]
 
 
 @pytest.mark.parametrize(
     "level, answer",
     [
-        ("consensus", (200, [])),
-        ("consensus_and_equivocation", (400, [(0, "equivocation: the block has a rival")])),
+        ("consensus", (200, [], ["block_gossip", "block"])),
+        (
+            "consensus_and_equivocation",
+            (400, [(0, "equivocation: the block has a rival")], ["block_gossip"]),
+        ),
     ],
 )
 def test_equivocation_level_refuses_a_rival(level: str, answer: tuple) -> None:
@@ -167,7 +196,9 @@ def test_equivocation_level_refuses_a_rival(level: str, answer: tuple) -> None:
     answers = consensus.api_post(
         name="minimal", fork=FORKS["capella"], requests=[(time, "blocks", [block], level)], **store
     )
-    assert answers == [answer]
+    assert [
+        (status, failures, [topic for topic, _ in events]) for status, failures, events in answers
+    ] == [answer]
 
 
 @pytest.mark.parametrize("level", ["gossip", "consensus", "consensus_and_equivocation"])
@@ -185,7 +216,14 @@ def test_valid_envelope_is_integrated(level: str) -> None:
         **case_store("minimal", "gloas", case, meta),
     )
     reason = "already seen envelope for this block root from this builder"
-    assert answers == [(200, []), (400, [(0, reason)])]
+    assert [(status, failures) for status, failures, _ in answers] == [
+        (200, []),
+        (400, [(0, reason)]),
+    ]
+    assert [[topic for topic, _ in events] for _, _, events in answers] == [
+        ["execution_payload_gossip", "execution_payload"],
+        [],
+    ]
 
 
 @pytest.mark.parametrize(

@@ -2,6 +2,7 @@ module
 
 public import EthLib.Consensus.BeaconApi.ChainEvents
 public import EthLib.Consensus.Proofs.BeaconApi.Duties
+public import EthLib.Consensus.Proofs.ForkChoice.Network
 
 /-!
 # Proofs: the events of the fork choice
@@ -11,6 +12,12 @@ A head event names the head of the store after the change, with the status of it
 Its two dependent roots are those that the attester duties give for its epoch and the next one.
 
 So a validator client can compare them to know when its duties change.
+
+A finalized event comes exactly when the finalized checkpoint changes.
+
+Each handler of the fork choice keeps the finalized checkpoint or moves it to a greater epoch.
+
+When the stores are so related, the epoch of a finalized event is above the one before.
 -/
 
 @[expose] public section
@@ -155,11 +162,22 @@ theorem chainEvents_reorg_iff {config : Config} {optimistic : Root → Bool} {ge
     simp_all
 
 
+/-- With at least two slots in an epoch, the epoch after that of any slot fits in 64 bits. -/
+theorem computeEpochAtSlot_succ_lt (slot : Slot) (twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat) :
+    (computeEpochAtSlot preset slot).toNat + 1 < 2 ^ 64 := by
+  unfold computeEpochAtSlot
+  rw [UInt64.toNat_div]
+  have := slot.toNat_lt
+  have : slot.toNat / preset.SLOTS_PER_EPOCH.toNat ≤ slot.toNat / 2 :=
+    Nat.div_le_div_left twoSlots (by omega)
+  omega
+
 /-- The dependent roots of a head event are those of the attester duties, from the head state.
 
 The first is that of the duties of the epoch of the head, and the second that of the next epoch.
 
-The second needs the next epoch to fit in 64 bits. -/
+The second needs the next epoch to fit in 64 bits, as it does with at least two slots in an epoch.
+-/
 theorem chainEvents_dependent_roots_duties {config : Config} {optimistic : Root → Bool}
     {genesisRoot : Root} {before after : Store preset fork} {events : List ChainEvent}
     (made : chainEvents config optimistic genesisRoot before after = .ok events)
@@ -181,6 +199,71 @@ theorem chainEvents_dependent_roots_duties {config : Config} {optimistic : Root 
   · intro room indices envelope answer
     obtain ⟨root, read, carried⟩ := dutiesResponse_attester answer
     rw [carried, Except.ok.inj (read.symm.trans (dependentRoot_succ_of_ok room next))]
+
+/-- A finalized event comes exactly when the finalized checkpoint changes. -/
+theorem chainEvents_finalized_iff {config : Config} {optimistic : Root → Bool}
+    {genesisRoot : Root} {before after : Store preset fork} {events : List ChainEvent}
+    (made : chainEvents config optimistic genesisRoot before after = .ok events) :
+    (∃ event, .finalizedCheckpoint event ∈ events) ↔
+      before.finalizedCheckpoint ≠ after.finalizedCheckpoint := by
+  unfold chainEvents at made
+  rcases h1 : before.getHead config with _ | old <;>
+    rcases h2 : after.getHead config with _ | new <;>
+    simp only [h1, h2, Except.mapError, bind, Except.bind, pure, Except.pure,
+      reduceCtorEq] at made
+  all_goals repeat' split at made
+  all_goals try (cases made; done)
+  all_goals
+    injection made with made
+    subst made
+    simp_all
+
+/-- A finalized event names the finalized checkpoint of the store after the change. -/
+theorem chainEvents_finalized {config : Config} {optimistic : Root → Bool}
+    {genesisRoot : Root} {before after : Store preset fork} {events : List ChainEvent}
+    (made : chainEvents config optimistic genesisRoot before after = .ok events)
+    {event : FinalizedCheckpointEvent} (listed : .finalizedCheckpoint event ∈ events) :
+    event.block = after.finalizedCheckpoint.root ∧
+      event.epoch = after.finalizedCheckpoint.epoch := by
+  unfold chainEvents at made
+  rcases h1 : before.getHead config with _ | old <;>
+    rcases h2 : after.getHead config with _ | new <;>
+    simp only [h1, h2, Except.mapError, bind, Except.bind, pure, Except.pure,
+      reduceCtorEq] at made
+  all_goals repeat' split at made
+  all_goals try (cases made; done)
+  all_goals
+    injection made with made
+    subst made
+    simp only [List.mem_append, List.mem_cons, List.mem_nil_iff, reduceCtorEq, or_false,
+      false_or, ChainEvent.finalizedCheckpoint.injEq] at listed
+  all_goals (subst listed; exact ⟨rfl, rfl⟩)
+
+/-- A finalized event has an epoch above the finalized epoch before the change.
+
+That holds when the finalized checkpoint advances from one store to the other.
+
+Each handler of the fork choice makes it advance.
+-/
+theorem chainEvents_finalized_epoch {config : Config} {optimistic : Root → Bool}
+    {genesisRoot : Root} {before after : Store preset fork} {events : List ChainEvent}
+    (made : chainEvents config optimistic genesisRoot before after = .ok events)
+    (advance : CheckpointAdvances before.finalizedCheckpoint after.finalizedCheckpoint)
+    {event : FinalizedCheckpointEvent} (listed : .finalizedCheckpoint event ∈ events) :
+    before.finalizedCheckpoint.epoch < event.epoch := by
+  rw [(chainEvents_finalized made listed).2]
+  exact advance.epoch_lt ((chainEvents_finalized_iff made).mp ⟨event, listed⟩)
+
+/-- After one move of a store of the fork choice, a finalized event has a greater epoch. -/
+theorem chainEvents_finalized_epoch_of_handles {config : Config} {optimistic : Root → Bool}
+    {genesisRoot : Root} {checks : SignatureChecks} {sources : BlockSources preset fork}
+    {time : ℕ} {view : Set (Models.Network.Message preset fork)}
+    {before after : Store preset fork} {events : List ChainEvent}
+    (step : Models.Network.Handles config checks sources time view before after)
+    (made : chainEvents config optimistic genesisRoot before after = .ok events)
+    {event : FinalizedCheckpointEvent} (listed : .finalizedCheckpoint event ∈ events) :
+    before.finalizedCheckpoint.epoch < event.epoch :=
+  chainEvents_finalized_epoch made step.checkpointsAdvance.2 listed
 
 /-- The event of a run of the fast confirmation rule names the confirmed block and its slot. -/
 theorem fastConfirmationEvent_block {store : Store preset fork} {fcr : FastConfirmationStore}

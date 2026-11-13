@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Consensus.BeaconApi.ObjectEvents
 public import EthLib.Consensus.BeaconApi.Publish
 public import EthLib.Consensus.Exports.GossipValidation
 
@@ -41,6 +42,14 @@ From Heze it finds that every payload satisfies the inclusion lists.
 A block request is the signed block alone, without the blobs that the API body may carry.
 
 Each request gives its status code, and the position and the message of each item that failed.
+
+It also gives the events of the event stream that it causes, each as its topic and its JSON data.
+
+A message that passes gossip gives the event of its topic, if that topic has one.
+
+An integrated object new to the store also gives its import event.
+
+No event is optimistic, since the execution layer accepts every payload.
 
 An input that the export cannot read fails with code 0.
 
@@ -162,6 +171,13 @@ def decodePublishInput {preset : Preset} {fork : Fork} (input : PostInput) :
     else throw (0, "the envelope endpoint serves only from Gloas")
   | _ => return none
 
+/-- The events of a request, each as the name of its topic and its JSON data. -/
+def eventRecords {preset : Preset} {fork : Fork} (events : List (ObjectEvent preset fork)) :
+    Result (List (String × String)) :=
+  events.mapM fun event => do
+    let event ← runForkChoice ((event.toApiEvent fork).mapError .ssz)
+    return (event.topic.name, event.data.compress)
+
 /-- The status code and the failed items of the answer to a pool request. -/
 def submitAnswer : SubmitOutcome → Nat × List (Nat × String)
   | .accepted => (200, [])
@@ -188,10 +204,12 @@ def emptySources {preset : Preset} {fork : Fork} (setup : Cryptography.Kzg.Trust
 
 The store starts from an anchor and later blocks.
 
-Each answer gives its status code, and the position and the message of each item that failed. -/
+Each answer gives its status code, the position and the message of each item that failed.
+
+It also gives the events of the request. -/
 def apiPostOf (args : String × String × ByteArray × ByteArray × List GossipBlockInput ×
     Option (UInt64 × Root) × List PostInput × Option PyValue × Bool) :
-    Result (List (Nat × List (Nat × String))) := do
+    Result (List (Nat × List (Nat × String) × List (String × String))) := do
   let (name, fork, anchorState, anchorBlock, blocks, finalized, inputs, replacements, verify) :=
     args
   let preset ← presetOf name
@@ -200,8 +218,10 @@ def apiPostOf (args : String × String × ByteArray × ByteArray × List GossipB
   let checks := if verify then SignatureChecks.bls else SignatureChecks.acceptAll
   let (store, statuses) ← gossipCaseStore (preset := preset) (fork := fork) config checks
     anchorState anchorBlock blocks finalized
-  let setup ← runForkChoice (embeddedSetup.mapError .kzg)
+  let setup ← runForkChoice ((embeddedSetup ()).mapError .kzg)
   let sources := emptySources setup
+  -- The execution layer accepts every payload, so no block is optimistic.
+  let optimistic : Root → Bool := fun _ => false
   let mut store := store
   let mut statuses := statuses
   let mut seen : Seen := {}
@@ -221,6 +241,11 @@ def apiPostOf (args : String × String × ByteArray × ByteArray × List GossipB
       let (outcome, next, after) := match request with
         | .block signed => publishBlock context sources seen level signed
         | .envelope gloas signed => publishEnvelope context sources seen level gloas signed
+      let events ← runForkChoice <| Except.mapError .ssz <| match request with
+        | .block signed => publishBlockEvents context seen optimistic signed outcome
+        | .envelope gloas signed =>
+          publishEnvelopeEvents context seen optimistic gloas signed outcome
+      let events ← eventRecords events
       -- The execution layer of the node accepts the payload of an integrated object.
       -- From Gloas a block holds no payload, so only its envelope gets a status.
       if outcome == PublishOutcome.integrated then
@@ -233,11 +258,16 @@ def apiPostOf (args : String × String × ByteArray × ByteArray × List GossipB
         if let some root := root then statuses := statuses.insert root PAYLOAD_STATUS_VALID
       store := next
       seen := after
-      out := out.push (publishAnswer outcome)
+      let (status, failures) := publishAnswer outcome
+      out := out.push (status, failures, events)
     | none =>
-      let (outcome, next) := submitPool context seen (← decodePoolInput input)
+      let request ← decodePoolInput input
+      let items := request.items context
+      let events ← runForkChoice ((submittedEvents context seen items).mapError .ssz)
+      let (outcome, next) := submitList context seen items
       seen := next
-      out := out.push (submitAnswer outcome)
+      let (status, failures) := submitAnswer outcome
+      out := out.push (status, failures, ← eventRecords events)
   return out.toList
 
 /-- Answer the requests to pool and publish endpoints in turn.
@@ -248,8 +278,32 @@ Then come the later blocks, the finalized checkpoint or none, and the requests.
 
 Then come replacements of values of the configuration, and whether the signature checks run.
 
-Each answer gives its status code, and the position and the message of each item that failed. -/
+Each answer gives its status code, the position and the message of each item that failed.
+
+It also gives the events of the request, each as the name of its topic and its JSON data. -/
 @[export eth_consensus_api_post]
 def apiPostExport (args : PyValue) : Result PyValue := pyExport apiPostOf args
+
+/-- The event that an object gives if gossip accepts it, by the name of its gossip topic.
+
+It runs no gossip validation, and it is none for a topic without an event. -/
+def apiGossipEventOf (args : String × String × String × ByteArray) :
+    Result (Option (String × String)) := do
+  let (name, fork, topic, data) := args
+  let preset ← presetOf name
+  let fork ← forkOf fork.toUTF8
+  let message ← decodeGossipInput (preset := preset) (fork := fork) topic ⟨0, 0, topic, data⟩
+  let events ← runForkChoice ((eventsOfGossip .accept message).mapError .ssz)
+  return (← eventRecords events).head?
+
+/-- The event that an object gives if gossip accepts it, by the name of its gossip topic.
+
+It runs no gossip validation.
+
+The arguments are the names of the preset and the fork, the topic and the SSZ bytes of the object.
+
+The event is its topic and its JSON data, or none for a topic without an event. -/
+@[export eth_consensus_api_gossip_event]
+def apiGossipEventExport (args : PyValue) : Result PyValue := pyExport apiGossipEventOf args
 
 end EthLib.Consensus.Exports
