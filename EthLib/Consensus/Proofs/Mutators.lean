@@ -569,8 +569,17 @@ theorem balance_decreaseBalance {state after : BeaconState preset fork}
       by simp [toNat_saturatingSub]⟩
   · exact ⟨balance, by simp [BeaconState.putBalance, same, found], by simp [same]⟩
 
-/-- A write that keeps the slashed flag of its validator keeps the slashed flag at each position.
--/
+/-- Equal slashed flags at the position of an index give equal reads of the flag at that index. -/
+theorem slashedFlag_eq_of_slashed {state after : BeaconState preset fork} {index : ValidatorIndex}
+    (same : (after.validators.data[index.toNat]?).map (·.slashed) =
+      (state.validators.data[index.toNat]?).map (·.slashed)) :
+    slashedFlag after index = slashedFlag state index := by
+  unfold slashedFlag getValidator
+  revert same
+  cases after.validators.data[index.toNat]? <;> cases state.validators.data[index.toNat]? <;>
+    simp [Except.map]
+
+/-- A write that keeps the slashed flag of its validator keeps every slashed flag. -/
 theorem slashed_setValidatorAt {state after : BeaconState preset fork} {index : Nat}
     {old validator : Validator} (found : getValidatorAt state index = .ok old)
     (set : state.setValidatorAt index validator = .ok after)
@@ -600,7 +609,7 @@ theorem slashedFlag_initiateValidatorExit {config : Config}
   rw [setValidator_eq_setValidatorAt] at set
   rw [slashed_setValidatorAt found set rfl, same]
 
-/-- Slashing a validator sets its slashed flag, and changes no flag at another position. -/
+/-- Slashing a validator sets its slashed flag, and changes no slashed flag at another position. -/
 theorem slashValidator_slashedFlag {config : Config} {state after : BeaconState preset fork}
     {slashedIndex : ValidatorIndex} {whistleblowerIndex : Option ValidatorIndex}
     (computed : slashValidator config state slashedIndex whistleblowerIndex = .ok after) :

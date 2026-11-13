@@ -104,7 +104,7 @@ private theorem SlashedKept.foldlM {fork : Fork} {α ε : Type}
 
 A target inside the registry after the step was inside it before, with a key that has evidence.
 
-Then every slashed key after the step has evidence. -/
+If each slashed key before the step has evidence, so does each slashed key after it. -/
 private theorem SlashedBacked.of_flags {fork post : Fork} {state : BeaconState preset fork}
     {after : BeaconState preset post} {evidence : BLSPubkey → Prop} (target : Nat → Prop)
     (kept : validatorKeys state <+: validatorKeys after)
@@ -220,7 +220,7 @@ private theorem processJustificationAndFinalization
     SlashedKept state after :=
   of_validators (by rw [(processJustificationAndFinalization_keeps ok).2.2.2.2.2.1])
 
--- The generic splits of the epoch leave justification and the rotation of the flags exposed.
+-- From Altair the splits leave justification, the builder payments and the flag rotation to us.
 private theorem processEpoch (ok : Consensus.processEpoch config checks state = .ok after) :
     SlashedKept state after := by
   by_cases altair : Fork.altair ≤ fork

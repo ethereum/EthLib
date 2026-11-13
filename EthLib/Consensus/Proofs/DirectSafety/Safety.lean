@@ -43,7 +43,6 @@ That holds only because of forward persistence: a slashed flag stays set.
 
 The proofs here do not need that fact, because the drift is observed, not bounded.
 
-
 The drift charges twice the stake that leaves or loses balance after `x`.
 
 It charges once the stake that joins or gains balance.

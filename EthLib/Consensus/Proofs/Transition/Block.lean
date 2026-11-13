@@ -382,10 +382,8 @@ theorem slashIfSlashable_ok {config : Config} {step after : BeaconState preset f
     by_cases same : other = index
     · exact same ▸ flag
     · have positions : other.toNat ≠ index.toNat := fun equal => same (UInt64.toNat_inj.mp equal)
-      have flags := others _ positions
-      rw [slashedFlag, getValidator_eq_getValidatorAt, getValidatorAt] at set ⊢
-      split at set <;> split <;> simp_all [Except.map, bind, Except.bind, throw, throwThe,
-        MonadExceptOf.throw]
+      rw [slashedFlag_eq_of_slashed (others _ positions)]
+      exact set
   · simp only [pure, Except.pure, Except.ok.injEq] at computed
     subst computed
     exact ⟨SameSizes.refl _, fun _ set => set, .inl, fun _ _ => rfl⟩

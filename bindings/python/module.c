@@ -100,6 +100,7 @@ PyObject* MULTISTREAM_ERROR;
 PyObject* MPLEX_ERROR;
 PyObject* YAMUX_ERROR;
 PyObject* LIBP2P_IDENTITY_ERROR;
+PyObject* TLS_CERTIFICATE_ERROR;
 PyObject* GOSSIP_ERROR;
 PyObject* DISCV5_ERROR;
 PyObject* RLPX_ERROR;
@@ -810,6 +811,38 @@ static PyMethodDef methods[] = {
    DOC_consensus_api_validator_status},
   {"consensus_api_builder_status", py_consensus_api_builder_status, METH_VARARGS,
    DOC_consensus_api_builder_status},
+  {"consensus_api_registry_query", py_consensus_api_registry_query, METH_VARARGS,
+   DOC_consensus_api_registry_query},
+  {"consensus_api_validator_balances_ssz", py_consensus_api_validator_balances_ssz,
+   METH_VARARGS, DOC_consensus_api_validator_balances_ssz},
+  {"consensus_api_block_query", py_consensus_api_block_query, METH_VARARGS,
+   DOC_consensus_api_block_query},
+  {"consensus_api_blobs", py_consensus_api_blobs, METH_VARARGS,
+   DOC_consensus_api_blobs},
+  {"consensus_api_blobs_ssz", py_consensus_api_blobs_ssz, METH_VARARGS,
+   DOC_consensus_api_blobs_ssz},
+  {"consensus_api_block_query_ssz", py_consensus_api_block_query_ssz, METH_VARARGS,
+   DOC_consensus_api_block_query_ssz},
+  {"consensus_api_header", py_consensus_api_header, METH_VARARGS,
+   DOC_consensus_api_header},
+  {"consensus_api_headers", py_consensus_api_headers, METH_VARARGS,
+   DOC_consensus_api_headers},
+  {"consensus_api_columns", py_consensus_api_columns, METH_VARARGS,
+   DOC_consensus_api_columns},
+  {"consensus_api_columns_ssz", py_consensus_api_columns_ssz, METH_VARARGS,
+   DOC_consensus_api_columns_ssz},
+  {"consensus_api_payload_envelope", py_consensus_api_payload_envelope, METH_VARARGS,
+   DOC_consensus_api_payload_envelope},
+  {"consensus_api_payload_envelope_ssz", py_consensus_api_payload_envelope_ssz, METH_VARARGS,
+   DOC_consensus_api_payload_envelope_ssz},
+  {"consensus_api_committees", py_consensus_api_committees, METH_VARARGS,
+   DOC_consensus_api_committees},
+  {"consensus_api_sync_committees", py_consensus_api_sync_committees, METH_VARARGS,
+   DOC_consensus_api_sync_committees},
+  {"consensus_api_ptc", py_consensus_api_ptc, METH_VARARGS,
+   DOC_consensus_api_ptc},
+  {"consensus_api_ptc_ssz", py_consensus_api_ptc_ssz, METH_VARARGS,
+   DOC_consensus_api_ptc_ssz},
   {"consensus_is_valid_builder_signature", py_consensus_is_valid_builder_signature,
    METH_VARARGS, DOC_consensus_is_valid_builder_signature},
   {"consensus_process_registration", py_consensus_process_registration,
@@ -833,6 +866,10 @@ static PyMethodDef methods[] = {
    METH_VARARGS, DOC_consensus_builder_preferences_failures},
   {"consensus_default_auth_data", py_consensus_default_auth_data,
    METH_VARARGS, DOC_consensus_default_auth_data},
+  {"consensus_relay_submission_bid", py_consensus_relay_submission_bid,
+   METH_VARARGS, DOC_consensus_relay_submission_bid},
+  {"consensus_relay_validators", py_consensus_relay_validators,
+   METH_VARARGS, DOC_consensus_relay_validators},
   {"consensus_builder_bid_value", py_consensus_builder_bid_value,
    METH_VARARGS, DOC_consensus_builder_bid_value},
   {"consensus_consensus_version", py_consensus_consensus_version,
@@ -1165,6 +1202,10 @@ static PyMethodDef methods[] = {
   {"yamux_decode", py_yamux_decode, METH_VARARGS, DOC_yamux_decode},
   {"yamux_session", py_yamux_session, METH_VARARGS, DOC_yamux_session},
   {"libp2p_public_key", py_libp2p_public_key, METH_VARARGS, DOC_libp2p_public_key},
+  {"tls_certificate_read", py_tls_certificate_read, METH_VARARGS, DOC_tls_certificate_read},
+  {"tls_certificate_authenticate", py_tls_certificate_authenticate, METH_VARARGS, DOC_tls_certificate_authenticate},
+  {"tls_certificate_authenticate_peer", py_tls_certificate_authenticate_peer, METH_VARARGS, DOC_tls_certificate_authenticate_peer},
+  {"tls_certificate_verify_p256", py_tls_certificate_verify_p256, METH_VARARGS, DOC_tls_certificate_verify_p256},
   {"libp2p_peer_id", py_libp2p_peer_id, METH_VARARGS, DOC_libp2p_peer_id},
   {"libp2p_decode_peer_id", py_libp2p_decode_peer_id, METH_VARARGS, DOC_libp2p_decode_peer_id},
   {"gossip_message_id", py_gossip_message_id, METH_VARARGS, DOC_gossip_message_id},
@@ -1173,6 +1214,10 @@ static PyMethodDef methods[] = {
   {"gossip_rpc_encode", py_gossip_rpc_encode, METH_VARARGS, DOC_gossip_rpc_encode},
   {"gossip_parameters", py_gossip_parameters, METH_VARARGS, DOC_gossip_parameters},
   {"gossip_receive_rpc", py_gossip_receive_rpc, METH_VARARGS, DOC_gossip_receive_rpc},
+  {"gossip_join", py_gossip_join, METH_VARARGS, DOC_gossip_join},
+  {"gossip_leave", py_gossip_leave, METH_VARARGS, DOC_gossip_leave},
+  {"gossip_publish", py_gossip_publish, METH_VARARGS, DOC_gossip_publish},
+  {"gossip_heartbeat", py_gossip_heartbeat, METH_VARARGS, DOC_gossip_heartbeat},
   {"receipt_reencode", py_receipt_reencode, METH_VARARGS, DOC_receipt_reencode},
   {"receipt_logs_bloom", py_receipt_logs_bloom, METH_VARARGS, DOC_receipt_logs_bloom},
   {"block_make_receipts", py_block_make_receipts, METH_VARARGS, DOC_block_make_receipts},
@@ -1305,6 +1350,7 @@ PyInit__native(void) {
     MULTISTREAM_ERROR = PyObject_GetAttrString(errors, "MultistreamError");
     MPLEX_ERROR = PyObject_GetAttrString(errors, "MplexError");
     YAMUX_ERROR = PyObject_GetAttrString(errors, "YamuxError");
+    TLS_CERTIFICATE_ERROR = PyObject_GetAttrString(errors, "TlsCertificateError");
     LIBP2P_IDENTITY_ERROR = PyObject_GetAttrString(errors, "Libp2pIdentityError");
     GOSSIP_ERROR = PyObject_GetAttrString(errors, "GossipError");
     DISCV5_ERROR = PyObject_GetAttrString(errors, "Discv5Error");

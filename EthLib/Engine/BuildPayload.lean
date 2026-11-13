@@ -225,8 +225,9 @@ def buildPayloadOnChain (chain : BlockChain) (version : Nat) (attributes : Σ f,
     (choices : BuildChoices) (transactions : List ByteArray) :
     Except BuildError (Σ fork, BuiltPayload fork) := do
   let some parent := chain.recent.getLast? | throw (.block .noParent)
+  -- The checks of the attributes read only the number and the time of the head.
   let head : KnownPayload := ⟨parent.header.parentHash, true,
-    UInt64.ofNat parent.header.number, UInt64.ofNat parent.header.timestamp.toNat⟩
+    UInt64.ofNat parent.header.number, UInt64.ofNat parent.header.timestamp.toNat, none⟩
   let ⟨fork, attributes⟩ ←
     (checkAttributes chain.config version head attributes).mapError .attributes
   let transactions ← (decodeTransactions fork 0 transactions).mapError .transaction

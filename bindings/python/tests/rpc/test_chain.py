@@ -30,6 +30,9 @@ RESULT_SCHEMAS: Final[dict[str, rpc.Schema | None]] = {
     "eth_getBlockByNumber": None,
     "eth_getBlockTransactionCountByHash": "uint",
     "eth_getBlockTransactionCountByNumber": "uint",
+    "eth_getTransactionReceipt": None,
+    "eth_getBlockReceipts": None,
+    "eth_getLogs": None,
     "debug_getRawHeader": "bytes",
     "debug_getRawBlock": "bytes",
     "debug_getRawTransaction": "bytes",
@@ -267,6 +270,95 @@ def test_raw_tags() -> None:
     chain = replay_chain()
     assert _call("debug_getRawBlock", ["latest"]) == "0x" + chain.blocks[-1][1].hex()
     assert _call("debug_getRawBlock", ["earliest"]) == "0x" + chain.blocks[0][1].hex()
+
+
+def test_receipts() -> None:
+    """The receipts of each block number their logs, add up their gas, and match each lookup."""
+    chain = replay_chain()
+    hashes = [
+        "0x" + _transaction_hash(block, index).hex()
+        for block in chain.blocks
+        for index in range(len(rlp.decode(block[1])[1]))
+    ]
+    calls = [("eth_getBlockReceipts", [hex(number)]) for number in range(len(chain.blocks))]
+    calls += [("eth_getTransactionReceipt", [transaction]) for transaction in hashes]
+    requests = [
+        json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params})
+        for method, params in calls
+    ]
+    texts = chain.serve(requests)
+    results = [json.loads(text)["result"] for text in texts if text is not None]
+    assert len(results) == len(calls)
+    blocks, singles = results[: len(chain.blocks)], results[len(chain.blocks) :]
+    flat = [receipt for receipts in blocks for receipt in receipts]
+    # Each lookup by hash returns the object that the receipts of its block hold.
+    assert singles == flat
+    assert [receipt["transactionHash"] for receipt in flat] == hashes
+    for receipts in blocks:
+        logs = [log for receipt in receipts for log in receipt["logs"]]
+        assert [log["logIndex"] for log in logs] == [hex(index) for index in range(len(logs))]
+        gas = sum(int(receipt["gasUsed"], 16) for receipt in receipts)
+        assert gas == (int(receipts[-1]["cumulativeGasUsed"], 16) if receipts else 0)
+
+
+def test_logs_of_whole_chain() -> None:
+    """A filter over the whole chain returns every log of every receipt, in block order."""
+    chain = replay_chain()
+    calls: list[tuple[str, list[object]]] = [
+        ("eth_getBlockReceipts", [hex(number)]) for number in range(len(chain.blocks))
+    ]
+    calls.append(("eth_getLogs", [{"fromBlock": "earliest", "toBlock": "latest"}]))
+    # An empty list of addresses takes any address, as a filter with no topic position does.
+    calls.append(("eth_getLogs", [{"fromBlock": "earliest", "address": [], "topics": []}]))
+    requests = [
+        json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params})
+        for method, params in calls
+    ]
+    results = [json.loads(text)["result"] for text in chain.serve(requests) if text is not None]
+    assert len(results) == len(calls)
+    *blocks, logs, empty_lists = results
+    expected = [log for receipts in blocks for receipt in receipts for log in receipt["logs"]]
+    assert expected
+    assert logs == expected
+    assert empty_lists == expected
+
+
+def test_logs_need_a_topic_at_each_position() -> None:
+    """A log needs a topic at each position of the filter, even one that takes any topic."""
+    logs = _call("eth_getLogs", [{"fromBlock": "earliest"}])
+    counts = {len(log["topics"]) for log in logs}
+    # The chain has logs of several topic counts, so some request below drops some logs.
+    assert len(counts) > 1
+    # Both null and an empty list take any topic at a position.
+    for wildcard in (None, []):
+        for size in range(max(counts) + 2):
+            topics = [wildcard] * size
+            result = _call("eth_getLogs", [{"fromBlock": "earliest", "topics": topics}])
+            assert result == [log for log in logs if len(log["topics"]) >= size]
+    # A position after a concrete topic needs a second topic, though it takes any.
+    first = next(log["topics"][0] for log in logs if len(log["topics"]) == 1)
+    result = _call("eth_getLogs", [{"fromBlock": "earliest", "topics": [first, None]}])
+    assert result == [
+        log for log in logs if log["topics"][:1] == [first] and len(log["topics"]) > 1
+    ]
+
+
+# Each filter that the method rejects, with the code of its error.
+# The test chain holds blocks 0 to 60.
+BAD_FILTERS = [
+    pytest.param({"fromBlock": "0x3d"}, -32602, id="from-above-head"),
+    pytest.param({"fromBlock": "0x5", "toBlock": "0x4"}, -32602, id="reversed"),
+    pytest.param({"fromBlock": "safe", "toBlock": "0x3d"}, -32602, id="tag-to-above-head"),
+    pytest.param({"fromBlock": "pending"}, -32602, id="pending"),
+    pytest.param({"blockHash": "0x" + "11" * 32}, -32001, id="unknown-hash"),
+]
+
+
+@pytest.mark.parametrize(("log_filter", "code"), BAD_FILTERS)
+def test_bad_filter(log_filter: dict[str, str], code: int) -> None:
+    """The method rejects each bad filter with the expected error code."""
+    request = {"jsonrpc": "2.0", "id": 1, "method": "eth_getLogs", "params": [log_filter]}
+    assert _error(json.dumps(request))["error"]["code"] == code
 
 
 def test_pending_header() -> None:

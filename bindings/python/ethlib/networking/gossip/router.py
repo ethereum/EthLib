@@ -1,6 +1,6 @@
-"""The gossipsub router on one received RPC, with every client choice passed in."""
+"""The gossipsub router: a received RPC, membership, publishing and the heartbeat."""
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 from typing import Any, Literal, TypeAlias
 
@@ -33,6 +33,23 @@ class GossipsubParameters:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class ClientChoices:
+    """The values that gossipsub v1.1 leaves to the client, which the exports check."""
+
+    # The exports reject d_out of D_low or more, or above half of D.
+    # The gossip factor is a numerator and a nonzero denominator, at most 1.
+    # The two backoffs are positive whole seconds below 2**64, as a PRUNE carries them.
+    # The prune backoff that receive_rpc takes is in milliseconds instead.
+    d_score: int
+    d_out: int
+    gossip_factor: tuple[int, int]
+    gossip_round_up: bool
+    flood_publish: bool
+    prune_backoff_s: int
+    unsubscribe_backoff_s: int
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class Standing:
     """What the router reads of the score of a peer: below zero, and below three thresholds."""
 
@@ -50,6 +67,7 @@ class RouterState:
     peer_topics: tuple[tuple[bytes, tuple[str, ...]], ...] = ()
     mesh: tuple[tuple[str, tuple[bytes, ...]], ...] = ()
     fanout: tuple[tuple[str, tuple[bytes, ...]], ...] = ()
+    last_publish: tuple[tuple[str, int], ...] = ()
     backoff: tuple[tuple[tuple[str, bytes], int], ...] = ()
     outbound: tuple[bytes, ...] = ()
     explicit: tuple[bytes, ...] = ()
@@ -59,7 +77,7 @@ class RouterState:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class Out:
-    """What the router sends and delivers on one RPC, each list in the order it was produced."""
+    """What the router sends and delivers on one step, each list in the order it was produced."""
 
     forward: tuple[tuple[bytes, Message], ...] = ()
     answers: tuple[tuple[bytes, Message], ...] = ()
@@ -101,6 +119,7 @@ def _state(value: dict[str, Any]) -> RouterState:
         peer_topics=tuple((peer, tuple(topics)) for peer, topics in value["peer_topics"]),
         mesh=tuple((topic, tuple(peers)) for topic, peers in value["mesh"]),
         fanout=tuple((topic, tuple(peers)) for topic, peers in value["fanout"]),
+        last_publish=tuple((topic, time) for topic, time in value["last_publish"]),
         backoff=tuple(((topic, peer), end) for (topic, peer), end in value["backoff"]),
         outbound=tuple(value["outbound"]),
         explicit=tuple(value["explicit"]),
@@ -109,6 +128,10 @@ def _state(value: dict[str, Any]) -> RouterState:
         ),
         seen=tuple((id_, time) for id_, time in value["seen"]["entries"]),
     )
+
+
+def _standing_value(standing: Mapping[bytes, Standing]) -> list[tuple[bytes, dict[str, bool]]]:
+    return [(peer, asdict(s)) for peer, s in standing.items()]
 
 
 def _out(value: dict[str, Any]) -> Out:
@@ -142,7 +165,7 @@ def receive_rpc(
         _params_value(params),
         backoff_ms,
         prune_backoff_ms,
-        [(peer, asdict(s)) for peer, s in standing.items()],
+        _standing_value(standing),
         list(validation.items()),
         now_ms,
         src,
@@ -152,13 +175,98 @@ def receive_rpc(
     return _state(new_state), _out(out)
 
 
+# The exports below choose among candidate peers by taking the first ones, in candidate order.
+
+
+def join(
+    *,
+    params: GossipsubParameters,
+    standing: Mapping[bytes, Standing],
+    now_ms: int,
+    topic: str,
+    state: RouterState,
+) -> tuple[RouterState, Out]:
+    """The state after this node joins a topic, and the GRAFTs it sends."""
+    new_state, out = _native.gossip_join(
+        _params_value(params), _standing_value(standing), now_ms, topic, _state_value(state)
+    )
+    return _state(new_state), _out(out)
+
+
+def leave(
+    *,
+    params: GossipsubParameters,
+    choices: ClientChoices,
+    now_ms: int,
+    topic: str,
+    state: RouterState,
+) -> tuple[RouterState, Out]:
+    """The state after this node leaves a topic, and the PRUNEs it sends."""
+    # The parameters serve only to check the client choices.
+    new_state, out = _native.gossip_leave(
+        _params_value(params), asdict(choices), now_ms, topic, _state_value(state)
+    )
+    return _state(new_state), _out(out)
+
+
+def publish(
+    *,
+    fork: str,
+    params: GossipsubParameters,
+    choices: ClientChoices,
+    standing: Mapping[bytes, Standing],
+    now_ms: int,
+    message: Message,
+    state: RouterState,
+) -> tuple[RouterState, Out]:
+    """The state after this node publishes a message, and where the message goes."""
+    # The fork names the rule of the message ID, whatever the digest of the topic.
+    new_state, out = _native.gossip_publish(
+        fork,
+        _params_value(params),
+        asdict(choices),
+        _standing_value(standing),
+        now_ms,
+        asdict(message),
+        _state_value(state),
+    )
+    return _state(new_state), _out(out)
+
+
+def heartbeat(
+    *,
+    params: GossipsubParameters,
+    choices: ClientChoices,
+    ranking: Sequence[bytes],
+    standing: Mapping[bytes, Standing],
+    now_ms: int,
+    state: RouterState,
+) -> tuple[RouterState, Out]:
+    """The state after one heartbeat, and the control messages it sends."""
+    # The ranking lists peers by score, the best first; a peer missing from it ranks last.
+    new_state, out = _native.gossip_heartbeat(
+        _params_value(params),
+        asdict(choices),
+        list(ranking),
+        _standing_value(standing),
+        now_ms,
+        _state_value(state),
+    )
+    return _state(new_state), _out(out)
+
+
 __all__ = [
+    "ClientChoices",
     "GossipError",
     "GossipsubParameters",
     "Out",
     "RouterState",
     "Standing",
     "ValidationResult",
+    "heartbeat",
+    "join",
+    "leave",
     "parameters",
+    "publish",
     "receive_rpc",
 ]

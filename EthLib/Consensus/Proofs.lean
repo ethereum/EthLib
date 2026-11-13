@@ -4,6 +4,8 @@ public import EthLib.Consensus.Proofs.Accessors
 public import EthLib.Consensus.Proofs.Accessors.Draw
 public import EthLib.Consensus.Proofs.Accessors.DrawProbability
 public import EthLib.Consensus.Proofs.Accessors.DrawRandomOracle
+public import EthLib.Consensus.Proofs.BeaconApi.Blocks
+public import EthLib.Consensus.Proofs.BeaconApi.Committees
 public import EthLib.Consensus.Proofs.BeaconApi.Config
 public import EthLib.Consensus.Proofs.BeaconApi.Encoding
 public import EthLib.Consensus.Proofs.BeaconApi.Identifiers
@@ -27,6 +29,7 @@ public import EthLib.Consensus.Proofs.Mutators
 public import EthLib.Consensus.Proofs.Participation
 public import EthLib.Consensus.Proofs.PayloadTimeliness
 public import EthLib.Consensus.Proofs.Proposers
+public import EthLib.Consensus.Proofs.RelayApi
 public import EthLib.Consensus.Proofs.SyncCommittee
 public import EthLib.Consensus.Proofs.ConsensusVersion
 public import EthLib.Consensus.Proofs.Constants
@@ -39,6 +42,7 @@ public import EthLib.Consensus.Proofs.Containers.Execution
 public import EthLib.Consensus.Proofs.Containers.InclusionList
 public import EthLib.Consensus.Proofs.Containers.Misc
 public import EthLib.Consensus.Proofs.Containers.ProposerPreferences
+public import EthLib.Consensus.Proofs.Containers.RelayApi
 public import EthLib.Consensus.Proofs.Containers.Requests
 public import EthLib.Consensus.Proofs.Containers.Signing
 public import EthLib.Consensus.Proofs.Containers.State
@@ -137,6 +141,8 @@ public import EthLib.Consensus.Proofs.Signing
 public import EthLib.Consensus.Proofs.Time
 public import EthLib.Consensus.Proofs.Transition.ActiveKept
 public import EthLib.Consensus.Proofs.Transition.BalanceDrift
+public import EthLib.Consensus.Proofs.Transition.BalanceNotRaised
+public import EthLib.Consensus.Proofs.Transition.BalanceNotRaisedBlock
 public import EthLib.Consensus.Proofs.Transition.Block
 public import EthLib.Consensus.Proofs.Transition.BlockRewards
 public import EthLib.Consensus.Proofs.Transition.BuilderDebt
@@ -208,6 +214,7 @@ public import EthLib.Consensus.Proofs.Transition.Totality.Inactivity
 public import EthLib.Consensus.Proofs.Transition.Totality.Justification
 public import EthLib.Consensus.Proofs.Transition.Totality.PendingDeposits
 public import EthLib.Consensus.Proofs.Transition.Totality.ProposerLookahead
+public import EthLib.Consensus.Proofs.Transition.Totality.PtcWindow
 public import EthLib.Consensus.Proofs.Transition.Totality.Registry
 public import EthLib.Consensus.Proofs.Transition.Totality.RegistryElectra
 public import EthLib.Consensus.Proofs.Transition.Totality.RegistryLoad

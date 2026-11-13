@@ -166,11 +166,11 @@ theorem UpgradeFrame.of_carried {fork post : Fork} {pre : BeaconState preset for
 
 /-- An upgrade frame followed by a block frame of the new fork is an upgrade frame.
 
-The block frame may set a slashed flag, so the steps after the upgrade must keep each one. -/
+It needs the steps after the upgrade to keep every slashed flag, since a block frame may slash. -/
 theorem UpgradeFrame.trans_blockFrame {fork post : Fork} {pre : BeaconState preset fork}
     {middle after : BeaconState preset post} (one : UpgradeFrame config pre middle)
     (two : BlockFrame middle after)
-    (flags : ∀ position : Nat, (after.validators.data[position]?).map (·.slashed) =
+    (slashed : ∀ position : Nat, (after.validators.data[position]?).map (·.slashed) =
       (middle.validators.data[position]?).map (·.slashed)) :
     UpgradeFrame config pre after where
   forward := one.forward
@@ -191,7 +191,7 @@ theorem UpgradeFrame.trans_blockFrame {fork post : Fork} {pre : BeaconState pres
   aligned maxAligned := two.aligned maxAligned ∘ one.aligned maxAligned
   flags altair current position flagged :=
     one.flags altair current position (flagged.of_flagsKeptOrZero two.flags)
-  slashed position := (flags position).trans (one.slashed position)
+  slashed position := (slashed position).trans (one.slashed position)
 
 /-- An upgrade frame carries the invariant from the state before to the state after. -/
 theorem UpgradeFrame.invariant {fork post : Fork} {pre : BeaconState preset fork}
