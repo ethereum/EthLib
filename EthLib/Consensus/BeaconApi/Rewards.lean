@@ -4,6 +4,7 @@ public import EthLib.Consensus.BeaconApi.Committees
 public import EthLib.Consensus.BeaconApi.Registries
 public import EthLib.Consensus.Transition.EpochRewards
 public import EthLib.Consensus.Transition.EpochParticipation
+public import EthLib.Consensus.Transition.SyncAggregate
 
 /-!
 # `Consensus.BeaconApi.Rewards`
@@ -22,11 +23,16 @@ Before Altair the inclusion part leaves out the shares that a proposer earns for
 
 The ideal rewards give the same parts for a validator that voted right and in time.
 
+The [sync committee rewards] of a block give, for each member, what its seats earned or paid.
+
+They are read from the state that the sync aggregate step of the block reads.
+
 The response [types] fix the fields of each answer.
 
 SOUNDNESS.md records the points that the source leaves open.
 
 [attestation rewards]: https://github.com/ethereum/beacon-APIs/blob/7911555e6a30c51f9b69bb168111a59f1ff8ee49/apis/beacon/rewards/attestations.yaml
+[sync committee rewards]: https://github.com/ethereum/beacon-APIs/blob/7911555e6a30c51f9b69bb168111a59f1ff8ee49/apis/beacon/rewards/sync_committee.yaml
 [types]: https://github.com/ethereum/beacon-APIs/blob/7911555e6a30c51f9b69bb168111a59f1ff8ee49/types/rewards.yaml
 -/
 
@@ -290,5 +296,90 @@ def attestationRewardsResponse (config : Config) (state : BeaconState preset for
   let total ← (attestationRewards config state ids).mapError fault
   return { data := .mkObj [("ideal_rewards", .arr (ideal.map (·.toJson)).toArray),
     ("total_rewards", .arr (total.map (·.toJson)).toArray)] }
+
+/-! ## Sync committee rewards -/
+
+/-- What the seats of one validator in the sync committee earn or pay in a block, in Gwei.
+
+The amount is taken before a balance stops at zero.
+
+A negative amount is a net penalty. -/
+structure SyncCommitteeReward where
+  /-- The index of the validator in the registry. -/
+  validatorIndex : ValidatorIndex
+  /-- The net reward of its seats. -/
+  reward : Int
+  deriving DecidableEq, Repr
+
+/-- The JSON of the reward of one member, as the API writes it. -/
+def SyncCommitteeReward.toJson (entry : SyncCommitteeReward) : Json :=
+  .mkObj [("validator_index", uintJson entry.validatorIndex), ("reward", intJson entry.reward)]
+
+/-- From Altair: the seats of the sync committee, in committee order.
+
+Each seat gives the first validator that holds the key of the seat, and whether its bit is set.
+
+A key that no validator holds is an error. -/
+def syncRewardSeats (state : BeaconState preset fork) (altair : .altair ≤ fork)
+    (aggregate : SyncAggregate preset) :
+    Except TransitionError (List (ValidatorIndex × Bool)) := do
+  let members ← (state.currentSyncCommittee altair).value.pubkeys.toArray.mapM
+    (validatorIndexOfPubkey state)
+  return (members.zip aggregate.syncCommitteeBits.bits.toArray).toList
+
+/-- The net reward of one seat: the participant reward if it signed, and minus it otherwise. -/
+def seatReward (reward : Gwei) (signed : Bool) : Int :=
+  if signed then reward.toNat else -(reward.toNat : Int)
+
+/-- The sum of the net rewards of the seats that a validator holds. -/
+def seatsReward (reward : Gwei) (seats : List (ValidatorIndex × Bool)) (index : ValidatorIndex) :
+    Int :=
+  ((seats.filter (·.1 == index)).map fun seat => seatReward reward seat.2).sum
+
+/-- From Altair: what each named member of the sync committee earned or paid in a block.
+
+The state is the one that the sync aggregate step of the block reads.
+
+Each seat that signed earns the participant reward of that step, and each other seat pays it.
+
+A validator with several seats gets one entry, with the sum of its seats.
+
+The entries are in increasing order of index.
+
+An empty request names every member; an identifier that names no member gives no entry.
+
+A repeated identifier gives one entry. -/
+def syncCommitteeRewards (state : BeaconState preset fork) (altair : .altair ≤ fork)
+    (aggregate : SyncAggregate preset) (ids : List ValidatorId) :
+    Except TransitionError (List SyncCommitteeReward) := do
+  let seats ← syncRewardSeats state altair aggregate
+  let reward ← syncParticipantReward state
+  let members := sortedSet (seats.map (·.1))
+  -- The selection is read only for a request that names validators, since it may be long.
+  let named := if ids.isEmpty then members else members.filter (· ∈ selectValidators state ids)
+  return named.map fun index =>
+    { validatorIndex := index, reward := seatsReward reward seats index }
+
+/-- The error of a block that has no sync aggregate, before Altair, with code 400. -/
+def invalidSyncRewardsRequest : ErrorMessage :=
+  { code := 400, message := "Invalid request to retrieve sync committee rewards info" }
+
+/-- The response of the sync committee rewards endpoint, without the flags of the store.
+
+The state is the one that the sync aggregate step of the block reads, with that aggregate.
+
+The rewards do not check the signature of the aggregate, which the block passed.
+
+A state before Altair gives the error with code 400.
+
+A failure of the rewards computation gives the error with code 500. -/
+def syncCommitteeRewardsResponse (state : BeaconState preset fork)
+    (aggregate : SyncAggregate preset) (ids : List ValidatorId) :
+    Except ErrorMessage ApiEnvelope := do
+  if altair : .altair ≤ fork then
+    let entries ← (syncCommitteeRewards state altair aggregate ids).mapError
+      fun error => internalError (reprStr error)
+    return { data := .arr (entries.map (·.toJson)).toArray }
+  else throw invalidSyncRewardsRequest
 
 end EthLib.Consensus.BeaconApi
