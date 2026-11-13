@@ -2,7 +2,7 @@ module
 
 public import EthLib.Consensus.BeaconApi.ChainEvents
 public import EthLib.Consensus.Proofs.BeaconApi.Duties
-public import EthLib.Consensus.Proofs.ForkChoice.Handlers
+public import EthLib.Consensus.Proofs.ForkChoice.Network
 
 /-!
 # Proofs: the events of the fork choice
@@ -163,13 +163,13 @@ theorem chainEvents_reorg_iff {config : Config} {optimistic : Root → Bool} {ge
 
 
 /-- With at least two slots in an epoch, the epoch after that of any slot fits in 64 bits. -/
-theorem computeEpochAtSlot_succ_lt (slot : Slot) (wide : 1 < preset.SLOTS_PER_EPOCH.toNat) :
+theorem computeEpochAtSlot_succ_lt (slot : Slot) (twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat) :
     (computeEpochAtSlot preset slot).toNat + 1 < 2 ^ 64 := by
   unfold computeEpochAtSlot
   rw [UInt64.toNat_div]
   have := slot.toNat_lt
   have : slot.toNat / preset.SLOTS_PER_EPOCH.toNat ≤ slot.toNat / 2 :=
-    Nat.div_le_div_left wide (by omega)
+    Nat.div_le_div_left twoSlots (by omega)
   omega
 
 /-- The dependent roots of a head event are those of the attester duties, from the head state.
@@ -253,6 +253,17 @@ theorem chainEvents_finalized_epoch {config : Config} {optimistic : Root → Boo
     before.finalizedCheckpoint.epoch < event.epoch := by
   rw [(chainEvents_finalized made listed).2]
   exact advance.epoch_lt ((chainEvents_finalized_iff made).mp ⟨event, listed⟩)
+
+/-- After one move of a store of the fork choice, a finalized event has a greater epoch. -/
+theorem chainEvents_finalized_epoch_of_handles {config : Config} {optimistic : Root → Bool}
+    {genesisRoot : Root} {checks : SignatureChecks} {sources : BlockSources preset fork}
+    {time : ℕ} {view : Set (Models.Network.Message preset fork)}
+    {before after : Store preset fork} {events : List ChainEvent}
+    (step : Models.Network.Handles config checks sources time view before after)
+    (made : chainEvents config optimistic genesisRoot before after = .ok events)
+    {event : FinalizedCheckpointEvent} (listed : .finalizedCheckpoint event ∈ events) :
+    before.finalizedCheckpoint.epoch < event.epoch :=
+  chainEvents_finalized_epoch made step.checkpointsAdvance.2 listed
 
 /-- The event of a run of the fast confirmation rule names the confirmed block and its slot. -/
 theorem fastConfirmationEvent_block {store : Store preset fork} {fcr : FastConfirmationStore}

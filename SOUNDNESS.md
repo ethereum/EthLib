@@ -4344,6 +4344,7 @@ The events of the fork choice are in `Consensus/BeaconApi/ChainEvents.lean` (#20
 A checkpoint is replaced only by one at a greater epoch.
 So the tick, the block, the attestation, the attester slashing, the envelope and the inclusion list each relate the store before to the store after, by their frame theorems.
 A vote of the payload committee changes only the votes (`onPayloadAttestationMessage_onlyPtcVotes`), so it relates them too.
+`Handles.checkpointsAdvance` (`Consensus/Proofs/ForkChoice/Network.lean`) gathers these for every move of a store, and `chainEvents_finalized_epoch_of_handles` states the result after one move.
 `fastConfirmationEvent_block` shows that the event of a run of the fast confirmation rule names its confirmed block and that block's slot.
 The source leaves these points open, decided here:
 
