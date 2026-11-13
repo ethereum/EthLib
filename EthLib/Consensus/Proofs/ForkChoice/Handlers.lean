@@ -12,6 +12,8 @@ No handler lowers the epoch of the justified or of the finalized checkpoint.
 
 Nor does a block together with the votes that it carries.
 
+Each of these checkpoints stays as it was, or changes to one at a greater epoch.
+
 A tick sets the clock to its time, and the catch-up loop never stalls.
 
 Every other handler keeps the clock.
@@ -99,19 +101,48 @@ theorem mem_ptcPositions {committee : PayloadTimelinessCommittee preset}
     position ∈ ptcPositions committee validator ↔ committee[position] = validator := by
   simp [ptcPositions]
 
+/-- A checkpoint stays as it was, or moves to one at a greater epoch. -/
+def CheckpointAdvances (before after : Checkpoint) : Prop :=
+  after = before ∨ before.epoch < after.epoch
+
+theorem CheckpointAdvances.refl (checkpoint : Checkpoint) :
+    CheckpointAdvances checkpoint checkpoint :=
+  .inl rfl
+
+theorem CheckpointAdvances.trans {a b c : Checkpoint} (ab : CheckpointAdvances a b)
+    (bc : CheckpointAdvances b c) : CheckpointAdvances a c := by
+  rcases ab with rfl | ab <;> rcases bc with rfl | bc
+  · exact .inl rfl
+  · exact .inr bc
+  · exact .inr ab
+  · exact .inr (UInt64.lt_trans ab bc)
+
+/-- A checkpoint that advances keeps or raises its epoch. -/
+theorem CheckpointAdvances.epoch_le {before after : Checkpoint}
+    (advances : CheckpointAdvances before after) : before.epoch ≤ after.epoch := by
+  rcases advances with rfl | lt
+  · exact UInt64.le_refl _
+  · exact UInt64.le_of_lt lt
+
+/-- A checkpoint that advances and changes moves to a greater epoch. -/
+theorem CheckpointAdvances.epoch_lt {before after : Checkpoint}
+    (advances : CheckpointAdvances before after) (changed : before ≠ after) :
+    before.epoch < after.epoch :=
+  advances.resolve_left (Ne.symm changed)
+
 namespace Store
 
-/-- The justified and finalized epochs of one store are at most those of another. -/
-def EpochsLe (before after : Store preset fork) : Prop :=
-  before.justifiedCheckpoint.epoch ≤ after.justifiedCheckpoint.epoch ∧
-    before.finalizedCheckpoint.epoch ≤ after.finalizedCheckpoint.epoch
+/-- The justified and finalized checkpoints of one store each advance to those of another. -/
+def CheckpointsAdvance (before after : Store preset fork) : Prop :=
+  CheckpointAdvances before.justifiedCheckpoint after.justifiedCheckpoint ∧
+    CheckpointAdvances before.finalizedCheckpoint after.finalizedCheckpoint
 
-theorem EpochsLe.refl (store : Store preset fork) : store.EpochsLe store :=
-  ⟨UInt64.le_refl _, UInt64.le_refl _⟩
+theorem CheckpointsAdvance.refl (store : Store preset fork) : store.CheckpointsAdvance store :=
+  ⟨.refl _, .refl _⟩
 
-theorem EpochsLe.trans {a b c : Store preset fork} (ab : a.EpochsLe b) (bc : b.EpochsLe c) :
-    a.EpochsLe c :=
-  ⟨UInt64.le_trans ab.1 bc.1, UInt64.le_trans ab.2 bc.2⟩
+theorem CheckpointsAdvance.trans {a b c : Store preset fork} (ab : a.CheckpointsAdvance b)
+    (bc : b.CheckpointsAdvance c) : a.CheckpointsAdvance c :=
+  ⟨ab.1.trans bc.1, ab.2.trans bc.2⟩
 
 variable {config : Config} {store : Store preset fork}
 
@@ -122,20 +153,19 @@ theorem blockState_ok_iff {root : Root} {state : BeaconState preset fork} :
   cases store.blockStates[root]? <;>
     simp [throw, throwThe, MonadExceptOf.throw, pure, Except.pure]
 
-/-- Replacing the checkpoints lowers neither epoch. -/
-theorem updateCheckpoints_epochsLe (justified finalized : Checkpoint) :
-    store.EpochsLe (store.updateCheckpoints justified finalized) := by
-  unfold updateCheckpoints EpochsLe
+/-- Replacing the checkpoints keeps each, or moves it to one at a greater epoch. -/
+theorem updateCheckpoints_checkpointsAdvance (justified finalized : Checkpoint) :
+    store.CheckpointsAdvance (store.updateCheckpoints justified finalized) := by
+  unfold updateCheckpoints CheckpointsAdvance CheckpointAdvances
   by_cases j : store.justifiedCheckpoint.epoch < justified.epoch <;>
     by_cases f : store.finalizedCheckpoint.epoch < finalized.epoch <;>
-    simp [j, f, UInt64.le_of_lt]
+    simp [j, f]
 
-/-- Two stores with the same checkpoints have the same epochs. -/
-theorem EpochsLe.of_eq {a b : Store preset fork}
+/-- Two stores with the same checkpoints advance from one to the other. -/
+theorem CheckpointsAdvance.of_eq {a b : Store preset fork}
     (justified : b.justifiedCheckpoint = a.justifiedCheckpoint)
-    (finalized : b.finalizedCheckpoint = a.finalizedCheckpoint) : a.EpochsLe b := by
-  rw [EpochsLe, justified, finalized]
-  exact ⟨UInt64.le_refl _, UInt64.le_refl _⟩
+    (finalized : b.finalizedCheckpoint = a.finalizedCheckpoint) : a.CheckpointsAdvance b :=
+  ⟨.inl justified, .inl finalized⟩
 
 @[simp] theorem updateCheckpoints_blocks (justified finalized : Checkpoint) :
     (store.updateCheckpoints justified finalized).blocks = store.blocks := by
@@ -280,7 +310,8 @@ It may also update the realized checkpoints with that result.
 It records the current justified checkpoint of that result as the tip's unrealized justification. -/
 theorem computePulledUpTip_frame {root : Root} {after : Store preset fork}
     (pulled : store.computePulledUpTip config root = .ok after) :
-    store.EpochsLe after ∧ after.blocks = store.blocks ∧ after.blockStates = store.blockStates ∧
+    store.CheckpointsAdvance after ∧ after.blocks = store.blocks ∧
+      after.blockStates = store.blockStates ∧
       SameClock store after ∧ ∃ state counted, store.blockStates[root]? = some state ∧
         processJustificationAndFinalization state = .ok counted ∧ ∃ moved : Store preset fork,
           (moved = store.updateUnrealizedCheckpoints counted.currentJustifiedCheckpoint
@@ -297,16 +328,17 @@ theorem computePulledUpTip_frame {root : Root} {after : Store preset fork}
       processJustificationAndFinalization state = .ok counted :=
     ⟨blockState_ok_iff.mp found, mapError_ok_iff.mp countedOk⟩
   split at pulled <;> simp only [pure, Except.pure, Except.ok.injEq] at pulled <;> subst pulled
-  · refine ⟨(EpochsLe.of_eq (by simp) (by simp)).trans (updateCheckpoints_epochsLe _ _),
-      by simp, by simp, ⟨by simp, by simp⟩, state, counted, origin.1, origin.2, _, .inr rfl, ?_⟩
+  · refine ⟨(CheckpointsAdvance.of_eq (by simp) (by simp)).trans
+        (updateCheckpoints_checkpointsAdvance _ _), by simp, by simp, ⟨by simp, by simp⟩, state,
+      counted, origin.1, origin.2, _, .inr rfl, ?_⟩
     by_cases a :
         store.unrealizedJustifiedCheckpoint.epoch < counted.currentJustifiedCheckpoint.epoch <;>
       by_cases b : store.unrealizedFinalizedCheckpoint.epoch < counted.finalizedCheckpoint.epoch <;>
       by_cases c : store.justifiedCheckpoint.epoch < counted.currentJustifiedCheckpoint.epoch <;>
       by_cases d : store.finalizedCheckpoint.epoch < counted.finalizedCheckpoint.epoch <;>
       simp [SameCheckpoints, updateCheckpoints, updateUnrealizedCheckpoints, a, b, c, d]
-  · refine ⟨EpochsLe.of_eq (by simp) (by simp), by simp, by simp, ⟨by simp, by simp⟩, state,
-      counted, origin.1, origin.2, _, .inl rfl, ?_⟩
+  · refine ⟨CheckpointsAdvance.of_eq (by simp) (by simp), by simp, by simp,
+      ⟨by simp, by simp⟩, state, counted, origin.1, origin.2, _, .inl rfl, ?_⟩
     by_cases a :
         store.unrealizedJustifiedCheckpoint.epoch < counted.currentJustifiedCheckpoint.epoch <;>
       by_cases b : store.unrealizedFinalizedCheckpoint.epoch < counted.finalizedCheckpoint.epoch <;>
@@ -319,7 +351,8 @@ Its four checkpoints are those of the store, or those with the unrealized checkp
 It keeps the unrealized justifications. -/
 theorem onTickPerSlot_frame {timeMs : UInt64} {after : Store preset fork}
     (ticked : store.onTickPerSlot config timeMs = .ok after) :
-    after.timeMs = timeMs ∧ after.genesisTimeMs = store.genesisTimeMs ∧ store.EpochsLe after ∧
+    after.timeMs = timeMs ∧ after.genesisTimeMs = store.genesisTimeMs ∧
+      store.CheckpointsAdvance after ∧
       after.blocks = store.blocks ∧ after.blockStates = store.blockStates ∧
       ∃ moved : Store preset fork, (moved = store ∨ moved = store.updateCheckpoints
           store.unrealizedJustifiedCheckpoint store.unrealizedFinalizedCheckpoint) ∧
@@ -334,7 +367,8 @@ theorem onTickPerSlot_frame {timeMs : UInt64} {after : Store preset fork}
       · simp only [pure, Except.pure, Except.ok.injEq] at ticked
         subst ticked
         refine ⟨by simp, by simp, ?_, by simp, by simp, _, .inr rfl, ?_⟩
-        · exact (EpochsLe.of_eq (by rfl) (by rfl)).trans (updateCheckpoints_epochsLe _ _)
+        · exact (CheckpointsAdvance.of_eq (by rfl) (by rfl)).trans
+            (updateCheckpoints_checkpointsAdvance _ _)
         · by_cases a :
               store.justifiedCheckpoint.epoch < store.unrealizedJustifiedCheckpoint.epoch <;>
             by_cases b :
@@ -342,7 +376,8 @@ theorem onTickPerSlot_frame {timeMs : UInt64} {after : Store preset fork}
             simp [SameCheckpoints, updateCheckpoints, a, b]
       · simp only [pure, Except.pure, Except.ok.injEq] at ticked
         subst ticked
-        exact ⟨rfl, rfl, EpochsLe.of_eq (by rfl) (by rfl), rfl, rfl, _, .inl rfl, .refl _, rfl⟩
+        exact ⟨rfl, rfl, CheckpointsAdvance.of_eq (by rfl) (by rfl), rfl, rfl, _, .inl rfl,
+          .refl _, rfl⟩
 
 /-- The catch-up loop keeps every property of a store that each tick within a slot keeps. -/
 theorem catchUp_preserves {P : Store preset fork → Prop} {tickSlot : Slot}
@@ -368,14 +403,14 @@ theorem catchUp_preserves {P : Store preset fork → Prop} {tickSlot : Slot}
 /-- The catch-up loop keeps the time of genesis and the blocks, and lowers no epoch. -/
 theorem catchUp_frame {tickSlot : Slot} {start after : Store preset fork}
     (caught : catchUp config start tickSlot = .ok after) :
-    after.genesisTimeMs = start.genesisTimeMs ∧ start.EpochsLe after ∧
+    after.genesisTimeMs = start.genesisTimeMs ∧ start.CheckpointsAdvance after ∧
       after.blocks = start.blocks ∧ after.blockStates = start.blockStates :=
-  catchUp_preserves (P := fun s => s.genesisTimeMs = start.genesisTimeMs ∧ start.EpochsLe s ∧
-      s.blocks = start.blocks ∧ s.blockStates = start.blockStates)
+  catchUp_preserves (P := fun s => s.genesisTimeMs = start.genesisTimeMs ∧
+      start.CheckpointsAdvance s ∧ s.blocks = start.blocks ∧ s.blockStates = start.blockStates)
     (fun ⟨g, le, b, bs⟩ tick => by
       obtain ⟨-, g', le', b', bs', -⟩ := onTickPerSlot_frame tick
       exact ⟨g'.trans g, le.trans le', b'.trans b, bs'.trans bs⟩)
-    ⟨rfl, EpochsLe.refl _, rfl, rfl⟩ caught
+    ⟨rfl, CheckpointsAdvance.refl _, rfl, rfl⟩ caught
 
 /-- A tick catches up to the slot of its time, then ticks once within that slot. -/
 theorem onTick_ok {timeMs : UInt64} {after : Store preset fork}
@@ -393,7 +428,7 @@ theorem onTick_ok {timeMs : UInt64} {after : Store preset fork}
 /-- A tick sets the clock to its time, keeps the blocks and lowers no epoch. -/
 theorem onTick_frame {timeMs : UInt64} {after : Store preset fork}
     (ticked : store.onTick config timeMs = .ok after) :
-    after.timeMs = timeMs ∧ store.EpochsLe after ∧
+    after.timeMs = timeMs ∧ store.CheckpointsAdvance after ∧
       after.blocks = store.blocks ∧ after.blockStates = store.blockStates := by
   obtain ⟨_, caught, -, caughtUp, ticked⟩ := onTick_ok ticked
   obtain ⟨-, le, b, bs⟩ := catchUp_frame caughtUp
@@ -494,19 +529,20 @@ It keeps the unrealized justifications too. -/
 theorem storeTargetCheckpointState_frame {checks : SignatureChecks} {target : Checkpoint}
     {after : Store preset fork}
     (stored : store.storeTargetCheckpointState config checks target = .ok after) :
-    store.EpochsLe after ∧ after.blocks = store.blocks ∧ after.blockStates = store.blockStates ∧
+    store.CheckpointsAdvance after ∧ after.blocks = store.blocks ∧
+      after.blockStates = store.blockStates ∧
       SameClock store after ∧ SameCheckpoints store after ∧
       after.unrealizedJustifications = store.unrealizedJustifications := by
   unfold storeTargetCheckpointState at stored
   split at stored
   · simp only [pure, Except.pure, Except.ok.injEq] at stored
     subst stored
-    exact ⟨EpochsLe.refl _, rfl, rfl, .refl _, .refl _, rfl⟩
+    exact ⟨CheckpointsAdvance.refl _, rfl, rfl, .refl _, .refl _, rfl⟩
   · simp only [bind_ok_iff] at stored
     obtain ⟨_, _, stored⟩ := stored
     simp only [pure, Except.pure, Except.ok.injEq] at stored
     subst stored
-    exact ⟨EpochsLe.of_eq (by rfl) (by rfl), rfl, rfl, ⟨rfl, rfl⟩, .refl _, rfl⟩
+    exact ⟨CheckpointsAdvance.of_eq (by rfl) (by rfl), rfl, rfl, ⟨rfl, rfl⟩, .refl _, rfl⟩
 
 /-- An attestation keeps the checkpoints, the blocks and their states.
 
@@ -514,7 +550,8 @@ It keeps the unrealized justifications too. -/
 theorem onAttestation_frame {checks : SignatureChecks} {attestation : Attestation preset fork}
     {isFromBlock : Bool} {after : Store preset fork}
     (attested : store.onAttestation config checks attestation isFromBlock = .ok after) :
-    store.EpochsLe after ∧ after.blocks = store.blocks ∧ after.blockStates = store.blockStates ∧
+    store.CheckpointsAdvance after ∧ after.blocks = store.blocks ∧
+      after.blockStates = store.blockStates ∧
       SameCheckpoints store after ∧
       after.unrealizedJustifications = store.unrealizedJustifications := by
   unfold onAttestation at attested
@@ -533,14 +570,15 @@ It keeps the unrealized justifications too. -/
 theorem onAttesterSlashing_frame {checks : SignatureChecks}
     {slashing : AttesterSlashing preset fork} {after : Store preset fork}
     (slashed : store.onAttesterSlashing config checks slashing = .ok after) :
-    store.EpochsLe after ∧ after.blocks = store.blocks ∧ after.blockStates = store.blockStates ∧
+    store.CheckpointsAdvance after ∧ after.blocks = store.blocks ∧
+      after.blockStates = store.blockStates ∧
       SameCheckpoints store after ∧
       after.unrealizedJustifications = store.unrealizedJustifications := by
   unfold onAttesterSlashing at slashed
   simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at slashed
   obtain ⟨_, _, slashed⟩ := slashed
   subst slashed
-  exact ⟨EpochsLe.of_eq (by rfl) (by rfl), rfl, rfl, .refl _, rfl⟩
+  exact ⟨CheckpointsAdvance.of_eq (by rfl) (by rfl), rfl, rfl, .refl _, rfl⟩
 
 /-- An attestation keeps the clock. -/
 theorem onAttestation_sameClock {checks : SignatureChecks} {attestation : Attestation preset fork}
@@ -650,7 +688,8 @@ theorem mem_equivocatingIndices_of_onAttesterSlashing {checks : SignatureChecks}
 It keeps the checkpoints and the unrealized justifications too. -/
 theorem recordBlockTimeliness_frame {root : Root} {after : Store preset fork}
     (recorded : store.recordBlockTimeliness config root = .ok after) :
-    store.EpochsLe after ∧ after.blocks = store.blocks ∧ after.blockStates = store.blockStates ∧
+    store.CheckpointsAdvance after ∧ after.blocks = store.blocks ∧
+      after.blockStates = store.blockStates ∧
       SameClock store after ∧ SameCheckpoints store after ∧
       after.unrealizedJustifications = store.unrealizedJustifications := by
   unfold recordBlockTimeliness at recorded
@@ -659,9 +698,9 @@ theorem recordBlockTimeliness_frame {root : Root} {after : Store preset fork}
   split at recorded
   · simp only [bind_ok_iff, Except.ok.injEq] at recorded
     obtain ⟨_, _, rfl⟩ := recorded
-    exact ⟨EpochsLe.of_eq (by rfl) (by rfl), rfl, rfl, ⟨rfl, rfl⟩, .refl _, rfl⟩
+    exact ⟨CheckpointsAdvance.of_eq (by rfl) (by rfl), rfl, rfl, ⟨rfl, rfl⟩, .refl _, rfl⟩
   · cases recorded
-    exact ⟨EpochsLe.of_eq (by rfl) (by rfl), rfl, rfl, ⟨rfl, rfl⟩, .refl _, rfl⟩
+    exact ⟨CheckpointsAdvance.of_eq (by rfl) (by rfl), rfl, rfl, ⟨rfl, rfl⟩, .refl _, rfl⟩
 
 /-- From Gloas a recorded block also gets whether it came before the payload committee's deadline.
 
@@ -687,7 +726,8 @@ theorem recordBlockTimeliness_ptc {root : Root} {after : Store preset fork}
 It keeps the checkpoints and the unrealized justifications too. -/
 theorem updateProposerBoostRoot_frame {head root : Root} {after : Store preset fork}
     (updated : store.updateProposerBoostRoot config head root = .ok after) :
-    store.EpochsLe after ∧ after.blocks = store.blocks ∧ after.blockStates = store.blockStates ∧
+    store.CheckpointsAdvance after ∧ after.blocks = store.blocks ∧
+      after.blockStates = store.blockStates ∧
       SameClock store after ∧ SameCheckpoints store after ∧
       after.unrealizedJustifications = store.unrealizedJustifications := by
   unfold updateProposerBoostRoot at updated
@@ -698,7 +738,7 @@ theorem updateProposerBoostRoot_frame {head root : Root} {after : Store preset f
   obtain ⟨_, _, _, _, _, _, updated⟩ := updated
   split at updated <;> simp only [pure, Except.pure, Except.ok.injEq] at updated <;>
     subst updated <;>
-    exact ⟨EpochsLe.of_eq (by rfl) (by rfl), rfl, rfl, ⟨rfl, rfl⟩, .refl _, rfl⟩
+    exact ⟨CheckpointsAdvance.of_eq (by rfl) (by rfl), rfl, rfl, ⟨rfl, rfl⟩, .refl _, rfl⟩
 
 /-- The store changes at most in its two vote maps of the payload committee. -/
 def OnlyPtcVotes (before after : Store preset fork) : Prop :=
@@ -716,9 +756,9 @@ theorem OnlyPtcVotes.trans {a b c : Store preset fork} (ab : OnlyPtcVotes a b)
 
 /-- A store that changes only in its votes keeps its checkpoints, blocks and states. -/
 theorem OnlyPtcVotes.frame {a b : Store preset fork} (only : OnlyPtcVotes a b) :
-    a.EpochsLe b ∧ b.blocks = a.blocks ∧ b.blockStates = a.blockStates := by
+    a.CheckpointsAdvance b ∧ b.blocks = a.blocks ∧ b.blockStates = a.blockStates := by
   obtain ⟨_, _, rfl⟩ := only
-  exact ⟨EpochsLe.refl _, rfl, rfl⟩
+  exact ⟨CheckpointsAdvance.refl _, rfl, rfl⟩
 
 /-- Recording the votes of a payload vote changes only the vote maps. -/
 theorem recordPtcVotes_onlyPtcVotes {gloas : .glamsterdam ≤ fork}
@@ -1125,7 +1165,7 @@ theorem addBlock_ok {checks : SignatureChecks} {sources : BlockSources preset fo
     {signed : SignedBeaconBlock preset fork}
     {blockRoot : Root} {after : Store preset fork}
     (added : store.addBlock config checks sources signed blockRoot = .ok after) :
-    store.EpochsLe after ∧ after.blocks[blockRoot]? = some signed.message ∧
+    store.CheckpointsAdvance after ∧ after.blocks[blockRoot]? = some signed.message ∧
       ∃ pre state, store.blockStates[signed.message.parentRoot]? = some pre ∧
         stateTransition config checks sources.engine pre signed true = .ok state ∧
         after.blockStates[blockRoot]? = some state := by
@@ -1136,8 +1176,8 @@ theorem addBlock_ok {checks : SignatureChecks} {sources : BlockSources preset fo
   obtain ⟨le1, b1, bs1, -⟩ := recordBlockTimeliness_frame record
   obtain ⟨le2, b2, bs2, -⟩ := updateProposerBoostRoot_frame boost
   obtain ⟨le3, b3, bs3, -⟩ := computePulledUpTip_frame added
-  refine ⟨((EpochsLe.of_eq rfl rfl).trans (le0.trans (le1.trans le2))).trans
-    ((updateCheckpoints_epochsLe _ _).trans le3), ?_, ?_⟩
+  refine ⟨((CheckpointsAdvance.of_eq rfl rfl).trans (le0.trans (le1.trans le2))).trans
+    ((updateCheckpoints_checkpointsAdvance _ _).trans le3), ?_, ?_⟩
   · rw [b3, updateCheckpoints_blocks, b2, b1, b0]
     simp
   · obtain ⟨pre, found, -, -, transition⟩ := validateOnBlock_ok valid
@@ -1162,7 +1202,7 @@ theorem onBlock_new {checks : SignatureChecks} {sources : BlockSources preset fo
     (root : SszType.hashTreeRoot signed.message = .ok blockRoot)
     (new : ¬ store.blocks.contains blockRoot)
     (added : store.onBlock config checks sources signed = .ok after) :
-    store.EpochsLe after ∧ after.blocks[blockRoot]? = some signed.message ∧
+    store.CheckpointsAdvance after ∧ after.blocks[blockRoot]? = some signed.message ∧
       ∃ pre state, store.blockStates[signed.message.parentRoot]? = some pre ∧
         stateTransition config checks sources.engine pre signed true = .ok state ∧
         after.blockStates[blockRoot]? = some state := by
@@ -1218,18 +1258,18 @@ theorem onBlock_checks {checks : SignatureChecks} {sources : BlockSources preset
   obtain ⟨_, valid, -⟩ := added
   exact validateOnBlock_checks valid
 
-/-- No block lowers the epoch of the justified or the finalized checkpoint. -/
-theorem onBlock_epochsLe {checks : SignatureChecks} {sources : BlockSources preset fork}
+/-- A block keeps each of its two checkpoints, or moves it to one at a greater epoch. -/
+theorem onBlock_checkpointsAdvance {checks : SignatureChecks} {sources : BlockSources preset fork}
     {signed : SignedBeaconBlock preset fork}
     {after : Store preset fork} (added : store.onBlock config checks sources signed = .ok after) :
-    store.EpochsLe after := by
+    store.CheckpointsAdvance after := by
   cases root : SszType.hashTreeRoot signed.message with
   | error e => simp [onBlock, root, bind, Except.bind, Except.mapError] at added
   | ok blockRoot =>
     by_cases known : store.blocks.contains blockRoot
     · rw [onBlock_known root known] at added
       cases added
-      exact EpochsLe.refl _
+      exact CheckpointsAdvance.refl _
     · exact (onBlock_new root known added).1
 
 /-- A block keeps the clock. -/
@@ -1277,13 +1317,14 @@ theorem onBlockWithVotes_preserves {P : Store preset fork → Prop} {checks : Si
     (block holds blockOk) attested
   exact foldlM_ok_invariant P (fun _ sl _ h step => slashing sl h step) votes slashed
 
-/-- A block and the votes that it carries lower no epoch. -/
-theorem onBlockWithVotes_epochsLe {checks : SignatureChecks} {sources : BlockSources preset fork}
+/-- A block and the votes that it carries keep each checkpoint, or move it to a greater epoch. -/
+theorem onBlockWithVotes_checkpointsAdvance {checks : SignatureChecks}
+    {sources : BlockSources preset fork}
     {signed : SignedBeaconBlock preset fork} {after : Store preset fork}
     (added : store.onBlockWithVotes config checks sources signed = .ok after) :
-    store.EpochsLe after :=
-  onBlockWithVotes_preserves (P := store.EpochsLe) (fun le step => le.trans
-    (onBlock_epochsLe step)) (fun _ le step => le.trans (onAttestation_frame step).1)
+    store.CheckpointsAdvance after :=
+  onBlockWithVotes_preserves (P := store.CheckpointsAdvance) (fun le step => le.trans
+    (onBlock_checkpointsAdvance step)) (fun _ le step => le.trans (onAttestation_frame step).1)
     (fun _ le step => le.trans (onAttesterSlashing_frame step).1) (.refl _) added
 
 /-- A block with the votes that it carries keeps the clock. -/
@@ -1808,18 +1849,20 @@ theorem onExecutionPayloadEnvelope_frame {checks : SignatureChecks}
     {sources : BlockSources preset fork} {gloas : .glamsterdam ≤ fork}
     {signed : SignedExecutionPayloadEnvelope preset fork} {after : Store preset fork}
     (accepted : store.onExecutionPayloadEnvelope config checks sources gloas signed = .ok after) :
-    store.EpochsLe after ∧ after.blocks = store.blocks ∧ after.blockStates = store.blockStates := by
+    store.CheckpointsAdvance after ∧ after.blocks = store.blocks ∧
+      after.blockStates = store.blockStates := by
   obtain ⟨_, _, _, _, _, record, rfl⟩ := onExecutionPayloadEnvelope_ok accepted
   obtain ⟨_, rfl⟩ := recordEnvelope_frame record
-  exact ⟨EpochsLe.refl _, rfl, rfl⟩
+  exact ⟨CheckpointsAdvance.refl _, rfl, rfl⟩
 
 /-- From Heze: an accepted inclusion list lowers no epoch, and keeps the blocks and their states. -/
 theorem onInclusionList_frame {checks : SignatureChecks} {heze : .hegota ≤ fork}
     {signed : SignedInclusionList} {after : Store preset fork}
     (accepted : store.onInclusionList config checks heze signed = .ok after) :
-    store.EpochsLe after ∧ after.blocks = store.blocks ∧ after.blockStates = store.blockStates := by
+    store.CheckpointsAdvance after ∧ after.blocks = store.blocks ∧
+      after.blockStates = store.blockStates := by
   obtain ⟨_, _, rfl⟩ := onInclusionList_ok heze accepted
-  exact ⟨EpochsLe.refl _, rfl, rfl⟩
+  exact ⟨CheckpointsAdvance.refl _, rfl, rfl⟩
 
 /-- From Gloas, an accepted envelope keeps the clock. -/
 theorem onExecutionPayloadEnvelope_sameClock {checks : SignatureChecks}
