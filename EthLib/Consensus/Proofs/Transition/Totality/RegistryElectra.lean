@@ -593,7 +593,9 @@ The least churn and the largest shared churn must each be at least one increment
 
 A ceiling bounds the first epoch an exit may take, the end of the exit queue, and each exit epoch.
 
-The ceiling plus the cost of the exits not yet started, plus the withdrawability delay, must fit.
+Add to the ceiling the cost of the exits not yet started, and the withdrawability delay.
+
+The sum must stay below the far future epoch, so that no new exit lands on it.
 
 The churn left over plus three churn bounds must fit too.
 
@@ -617,7 +619,7 @@ theorem processRegistryUpdates_total_of_electra {config : Config}
     (exits : ∀ validator ∈ state.validators.data, validator.exitEpoch ≠ FAR_FUTURE_EPOCH →
       validator.exitEpoch.toNat ≤ ceiling)
     (room : ceiling + exitCost preset state + config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat <
-      2 ^ 64)
+      2 ^ 64 - 1)
     (carried : (state.exitBalanceToConsume electra).toNat + 3 * exitChurnCeiling config state <
       2 ^ 64) :
     ∃ after, processRegistryUpdates config state = .ok after ∧
