@@ -4,6 +4,7 @@ public import EthLib.Base.BigEndian
 public import EthLib.Base.ChainConfig
 public import EthLib.Cryptography.Hash.Keccak
 public import EthLib.Engine.Json
+public import EthLib.Engine.TransitionConfiguration
 public import EthLib.Execution.Blocks.Withdrawal
 
 /-!
@@ -15,13 +16,29 @@ The consensus layer names a head, a safe block and a finalized block.
 
 The execution layer knows a tree of payloads, each with its parent and its validity.
 
+The tree may also hold blocks of proof of work, each with its total difficulty and its parent's.
+
 A head that the tree does not hold is syncing.
 
+The most recent block of proof of work on the chain of the head must be terminal.
+
+The head itself counts.
+
+Step 3 asks this of a head of proof of work, and step 2 of payload validation of a payload.
+
+Otherwise the head is invalid, with the zero hash as its latest valid hash, and it is not applied.
+
 A head that is invalid stays invalid, with the latest valid ancestor as the latest valid hash.
+
+That hash is zero when the ancestor is a block of proof of work, by step 3 of payload validation.
 
 The execution layer may also know a finalized block, the latest one that an earlier update named.
 
 A valid head below that block is valid, and the forkchoice state is neither checked nor applied.
+
+Its chain must still pass the terminal block check, which this model runs first.
+
+Step 2 applies only to a valid block, and a chain that fails that check is not valid.
 
 The source allows the update to be skipped there, and this model skips it.
 
@@ -31,11 +48,17 @@ A valid head becomes the head of the canonical chain.
 
 The safe and the finalized block must then be the head or its ancestors, unless they are zero.
 
+Otherwise the state is invalid, with JSON-RPC code `-38002`.
+
 The source allows zero hashes only until the transition block is finalized.
 
-This model has no transition block, so it accepts zero hashes at any time.
+This model takes the transition block as finalized when the known finalized block is a held payload.
 
-Otherwise the state is invalid, with JSON-RPC code `-38002`.
+The finalized hash of the request itself does not count.
+
+A zero safe or finalized hash then gives `-38002`.
+
+No step names an error for that case, and this model reads it as an invalid state of step 9.
 
 The parameters are the forkchoice state, with exactly its three fields, and the payload attributes.
 
@@ -125,7 +148,10 @@ The consensus layer writes the forkchoice state, the payload attributes and the 
 
 The method specifications state these rules, at commit `3284ee8` of execution-apis:
 
-- [`engine_forkchoiceUpdatedV1`][v1], steps 2, 4, 5, 7, 8 and 9
+- [`engine_forkchoiceUpdatedV1`][v1], steps 2 to 5, 7, 8 and 9
+- the structure [`ForkchoiceStateV1`][fcs], with its note on zero hashes
+- the [payload validation][validation] of Paris, with its terminal block check
+- the [definitions][eip3675] of EIP-3675, for a terminal block of proof of work
 - [`engine_forkchoiceUpdatedV2`][v2] and [`engine_forkchoiceUpdatedV3`][v3]
 - [`engine_forkchoiceUpdatedV4`][v4], and the custody columns of [EIP-8070][eip8070]
 - the updates of earlier versions by [Cancun][v2-cancun] and [Prague][v3-prague]
@@ -138,6 +164,9 @@ Each version has its payload attributes: [version 1][a1], [version 2][a2] and [v
 From Glamsterdam, [version 4][a4] adds the slot number of EIP-7843 and a target gas limit.
 
 [v1]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#engine_forkchoiceupdatedv1
+[fcs]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#forkchoicestatev1
+[validation]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#payload-validation
+[eip3675]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-3675.md#definitions
 [v2]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/shanghai.md#engine_forkchoiceupdatedv2
 [v3]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/cancun.md#engine_forkchoiceupdatedv3
 [v4]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/amsterdam.md#engine_forkchoiceupdatedv4
@@ -181,17 +210,24 @@ structure PayloadAttributes (fork : Fork) : Type where
   /-- The target of the gas limit of the payload, from Glamsterdam. -/
   targetGasLimit : Since .glamsterdam fork UInt64
 
-/-- A payload that the execution layer holds: its parent, its validity, its number and its time. -/
+/-- A block that the execution layer holds: its parent, its validity, its number and its time.
+
+It is a payload, or a block of proof of work with its total difficulty and that of its parent. -/
 structure KnownPayload where
   /-- The block hash of the parent. -/
   parentHash : Hash32
-  /-- Whether the payload and its ancestors are valid. -/
+  /-- Whether the block and its ancestors are valid. -/
   valid : Bool
   /-- The number of the block. -/
   number : UInt64
   /-- The time of the block, in seconds since the Unix epoch. -/
   timestamp : UInt64
+  /-- For a block of proof of work, its total difficulty and its parent's; `none` otherwise. -/
+  powTotalDifficulty : Option (Nat × Nat)
   deriving DecidableEq, Repr
+
+/-- Whether a known block is a block of proof of work. -/
+def KnownPayload.isPow (p : KnownPayload) : Bool := p.powTotalDifficulty.isSome
 
 /-- The payloads that the execution layer holds, by block hash. -/
 abbrev PayloadTree := List (Hash32 × KnownPayload)
@@ -215,6 +251,49 @@ def chainOf (tree : PayloadTree) (hash : Hash32) : List Hash32 :=
 def latestValid (tree : PayloadTree) (hash : Hash32) : Option Hash32 :=
   (chainOf tree hash).find? fun h => (tree.lookup h).any (·.valid)
 
+/-- The latest valid hash of an invalid block: the latest valid block of its chain.
+
+It is zero when that block is of proof of work, by step 3 of payload validation. -/
+def latestValidHash (tree : PayloadTree) (hash : Hash32) : Option Hash32 :=
+  (latestValid tree hash).map fun v => if (tree.lookup v).any (·.isPow) then ZERO_HASH else v
+
+/-- The totals of the most recent block of proof of work on the chain of a block, if any.
+
+The block itself counts. -/
+def latestPow (tree : PayloadTree) (hash : Hash32) : Option (Nat × Nat) :=
+  (chainOf tree hash).findSome? fun h => (tree.lookup h).bind (·.powTotalDifficulty)
+
+/-- Whether the chain of a block passes the terminal block check.
+
+Its most recent block of proof of work must be terminal.
+
+The model lets a chain with no block of proof of work in the tree pass, as one after the transition.
+-/
+def chainPassesTerminalCheck (transition : TransitionConfiguration) (tree : PayloadTree)
+    (hash : Hash32) : Bool :=
+  match latestPow tree hash with
+  | some (totalDifficulty, parentTotalDifficulty) =>
+    isTerminalPowBlock transition totalDifficulty parentTotalDifficulty
+  | none => true
+
+/-- Whether the transition block is finalized: the known finalized block is a payload in the tree.
+
+Without a known finalized block, or with one that the tree does not hold, it is not.
+
+The finalized hash of the request does not count. -/
+def transitionFinalized (tree : PayloadTree) (finalized : Option Hash32) : Bool :=
+  match finalized.bind (tree.lookup ·) with
+  | some p => !p.isPow
+  | none => false
+
+/-- Whether the forkchoice state has a zero safe or finalized hash after the transition.
+
+The structure of the state allows zero hashes only until the transition block is finalized. -/
+def zeroAfterTransition (tree : PayloadTree) (finalized : Option Hash32)
+    (state : ForkchoiceState) : Bool :=
+  transitionFinalized tree finalized &&
+    (state.safeBlockHash == ZERO_HASH || state.finalizedBlockHash == ZERO_HASH)
+
 /-- Whether a block of the forkchoice state is zero or on the chain of the head. -/
 def onChain (tree : PayloadTree) (head hash : Hash32) : Bool :=
   hash == ZERO_HASH || (chainOf tree head).contains hash
@@ -229,17 +308,24 @@ def belowFinalized (tree : PayloadTree) (finalized : Option Hash32) (hash : Hash
 
 /-- The status of a forkchoice update, and the new head when it changes.
 
-The execution layer knows the payloads of the tree, and the finalized block of an earlier update.
--/
-def forkchoiceUpdated (tree : PayloadTree) (finalized : Option Hash32) (state : ForkchoiceState) :
+The execution layer knows the blocks of the tree, and the finalized block of an earlier update.
+
+Its configuration of the transition gives the terminal total difficulty. -/
+def forkchoiceUpdated (transition : TransitionConfiguration) (tree : PayloadTree)
+    (finalized : Option Hash32) (state : ForkchoiceState) :
     Except EngineError (PayloadStatus × Option Hash32) :=
   match tree.lookup state.headBlockHash with
   | none => pure (⟨.syncing, none⟩, none)
   | some head =>
-    if !head.valid then pure (⟨.invalid, latestValid tree state.headBlockHash⟩, none)
+    -- Step 3, and step 2 of payload validation: the latest block of proof of work must be terminal.
+    if !chainPassesTerminalCheck transition tree state.headBlockHash then
+      pure (⟨.invalid, some ZERO_HASH⟩, none)
+    else if !head.valid then pure (⟨.invalid, latestValidHash tree state.headBlockHash⟩, none)
     -- Step 2: a valid head below the known finalized block is valid, and the update is skipped.
     else if belowFinalized tree finalized state.headBlockHash then
       pure (⟨.valid, some state.headBlockHash⟩, none)
+    -- The note of the forkchoice state, read as an invalid state of step 9.
+    else if zeroAfterTransition tree finalized state then throw .invalidForkchoiceState
     else if onChain tree state.headBlockHash state.safeBlockHash &&
         onChain tree state.headBlockHash state.finalizedBlockHash then
       pure (⟨.valid, some state.headBlockHash⟩, some state.headBlockHash)
@@ -498,13 +584,15 @@ The attributes of a build are those of the fork of their timestamp.
 
 The versions of the method are 1 to 4; the C export passes no other.
 
+The configuration of the transition gives the terminal total difficulty.
+
 Version 0 reads as 1, and a version above 4 reads as 4. -/
-def forkchoiceUpdatedCall (config : ChainConfig) (version : Nat) (tree : PayloadTree)
-    (finalized : Option Hash32) (params : Json) :
+def forkchoiceUpdatedCall (config : ChainConfig) (transition : TransitionConfiguration)
+    (version : Nat) (tree : PayloadTree) (finalized : Option Hash32) (params : Json) :
     Except EngineError
       (PayloadStatus × Option Hash32 × Option (Σ fork, PayloadAttributes fork)) := do
   let (state, attributes) ← forkchoiceUpdatedParams version params
-  let (status, head) ← forkchoiceUpdated tree finalized state
+  let (status, head) ← forkchoiceUpdated transition tree finalized state
   match attributes, head with
   | some j, some h =>
     let decoded ← payloadAttributesOfVersion version j

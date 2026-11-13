@@ -2793,7 +2793,8 @@ A file may also keep only the latest messages of a key, as the [minimal strategy
 An older vote has a source at most, and a target before, those of each vote of the file.
 Each of these theorems needs the file to hold one or more messages of its kind for the key.
 A vote with the target of a kept vote is not older, so the theorem on votes says nothing about it.
-The signer of these theorems records every message it signs, so a signer that prunes as it goes is not covered.
+The signer of these theorems records every message it signs, so a signer that prunes as it goes is not covered here.
+A signer of blocks that prunes is covered below, but no theorem covers a signer of votes that prunes.
 `mem_blocksOf` and `mem_attestationsOf` show that the messages of a key are those of its own entries.
 The proofs read only conditions 2, 4 and 5, through `lt_slot_of_checkBlockSlot`, `le_sourceEpoch_of_checkSourceEpoch` and `lt_targetEpoch_of_checkTargetEpoch`.
 
@@ -2807,7 +2808,21 @@ Since no limit carries a signing root, no imported message can be signed again.
 `checkAttestationSigning_of_foldl_importFile` does so for a vote and conditions 3, 4 and 5.
 Both include the initial held file, allow repeated imports and duplicate-key entries, and assume only that the final check passes.
 These two theorems cover a record built by imports alone.
-The theorems on one import take any held record, but no theorem chains imports with messages recorded between them.
+The theorems on one import take any held record.
+
+`importAndSignBlocks` models a signer of blocks that also imports files, from any starting file.
+`importAndSignBlocks_map_signBlock` shows that a run without imports is `signBlocks`.
+`signingRoot_eq_of_importAndSignBlocks` and `lt_slot_of_importAndSignBlocks` state `signingRoot_eq_of_signBlocks` and `lt_slot_of_signBlocks` for it, and the theorems on `signBlocks` follow from them.
+`signingRoot_eq_of_importAndSignBlocks_of_processProposerSlashing` and `processProposerSlashing_ne_ok_of_importAndSignBlocks` are their proposer slashing corollaries.
+Each holds whatever files the signer imports.
+`signingRoot_eq_some_of_importAndSignBlocks` shows that a block of the starting file holds the signing root of each header that the signer signs at that slot.
+So the signer signs nothing at the slot of a block of that file without a signing root, as condition 1 asks.
+`lt_slot_of_importAndSignBlocks_of_importFile` shows that a header signed after an import is after every block of the file and of the starting file.
+`checkBlockSigning_of_importAndSignBlocks` concludes that each header that the signer signs meets conditions 1 and 2 of the starting file.
+`checkBlockSigning_of_importAndSignBlocks_of_importFile` concludes the same for each file imported before the header.
+`importFile_of_data_eq_nil` shows that importing a file without entries puts the record in its minimal form, which prunes it.
+So these theorems also cover a signer of blocks that prunes its record with the minimal strategy as it goes.
+No theorem chains imports with votes recorded between them.
 
 `readUInt64_uint64Json` and `readBytes_bytesJson` show that each integer and each byte string of a file reads back as written.
 `ofJson_toJson` shows that a whole file reads back as itself from the document that `toJson` writes, whatever its records.
@@ -2888,13 +2903,18 @@ The parent of that block need not be known, so a hash that names the payload und
 The walk assumes, as the execution layer promises, that the hash names a payload on the chain.
 When the hash names the payload of the block itself, nothing is removed, as `onInvalidPayload_of_gloas_self` shows.
 Otherwise the first invalid block is the earliest block of that walk whose payload is invalid; without a hash, or when the walk leaves the store first, it is the block itself.
-No theorem yet gives the result of the walk over a whole chain; the theorems below give each step.
+The theorems below give each step of the walk, and its result over a whole chain of known parents for a block in the store.
+For a block that the store does not hold, the step theorems reduce the walk to its parent, which the store holds when it is known.
 `removeFullDescendants_eq` shows that the removal drops exactly the known blocks that descend from the first invalid block with its payload, and never that block itself.
 `removeFullDescendants_self` shows that the first invalid block stays and loses its payload.
 `removeFullDescendants_of_empty` shows that every block built on the first invalid block without its payload stays.
 `removeFullDescendants_getSupportedNode` shows that no vote left supports the first invalid block with its payload.
 `onInvalidPayload_of_gloas_none` shows that without a hash the removal starts at the block itself.
 `firstInvalidPayload_of_named`, `firstInvalidPayload_of_orphan`, `firstInvalidPayload_of_full`, `firstInvalidPayload_of_empty` and `firstInvalidPayload_of_not_lower` give each step of the walk.
+For a block in the store, when every known block sits at a later slot than its known parent, `firstInvalidPayload_of_absent` shows that the walk finds nothing when no block of the chain builds on the hash.
+Otherwise take the nearest block of the chain that builds on the hash.
+`firstInvalidPayload_of_chain_full` shows that the walk returns the earliest block, from that block on, whose payload the chain builds on.
+`firstInvalidPayload_of_chain_empty` shows that, when the chain builds on no such payload, the walk returns its starting candidate, the block itself.
 `onInvalidPayload_of_gloas_self`, `onInvalidPayload_of_gloas_unnamed`, `onInvalidPayload_of_gloas_parent` and `onInvalidPayload_of_gloas_full_parent` give the removal for a latest valid hash.
 `onInvalidPayload_eq` shows that, at every fork, an invalid payload leaves the store as it was or applies the removal of its fork.
 `Linked.onInvalidPayload` shows that the removal keeps the store linked at every fork.
@@ -3385,13 +3405,30 @@ They also run the example version and commit of `ClientVersionV1`, codes in eith
 
 The theorems about `engine_forkchoiceUpdated` are in `Proofs/ForkchoiceUpdated.lean`.
 `forkchoiceUpdated_valid` shows that a valid answer selects a valid head that the execution layer holds, with its safe and finalized blocks on its chain.
+The chain of that head also passes the terminal block check, and its safe and finalized hashes are not zero after the transition.
 The exception is step 2 of the method, which `forkchoiceUpdated_of_belowFinalized` covers.
 `onChain_of_forkchoiceUpdated` shows that an applied head is the head that the state names, and `mem_chainOf_of_onChain` that a nonzero safe or finalized hash then names a block of its chain.
-A valid head below the finalized block that the execution layer knows is `VALID` there, and the head does not change.
-`forkchoiceUpdated_of_invalid` gives the answer for an invalid head, and `latestValid_eq_some_iff` with `getElem?_succ_chainOf` shows that its latest valid hash is the valid ancestor nearest the head.
+A valid head below the finalized block that the execution layer knows, whose chain passes the terminal block check, is `VALID` there, and the head does not change.
+`forkchoiceUpdated_of_invalid` gives the answer for an invalid head, and `latestValid_eq_some_iff` with `getElem?_succ_chainOf` shows that its latest valid block is the valid ancestor nearest the head.
+That block gives the latest valid hash, which is zero when the block is of proof of work, as step 3 of payload validation requires (`latestValidHash_eq_some_iff`, `latestValidHash_spec`).
+
+The tree that the execution layer knows may hold blocks of proof of work, each with its total difficulty and that of its parent.
+The most recent block of proof of work on the chain of the head, the head included, must be terminal by the conditions of EIP-3675.
+Step 3 of the method asks this of a head of proof of work, and step 2 of payload validation of a payload.
+`forkchoiceUpdated_of_not_terminal` shows that a head whose chain fails the check is `INVALID`, with the zero hash, and that the head does not change.
+`forkchoiceUpdated_of_pow_not_terminal` states the same for a head of proof of work that is not terminal, and `forkchoiceUpdated_of_parent_not_terminal` for a payload whose parent is such a block.
+The model lets a chain with no block of proof of work in the tree pass the check.
+It assumes such a chain is past the transition; the source would ask for the missing blocks first.
+The check runs before step 2 of the method, so a head below the known finalized block must pass it too, since step 2 applies only to a valid block.
+The forkchoice state allows zero safe and finalized hashes only until the transition block is finalized.
+The model takes that block as finalized when the finalized block that the execution layer knows is a payload of the tree.
+The finalized hash of the request itself does not count.
+`forkchoiceUpdated_zero_after_transition` shows that a zero safe or finalized hash then gives `-38002`.
+No step of the method names that error for this case, so the model reads it as an invalid forkchoice state of step 9.
 In version 4, custody columns that decode never change the answer (`forkchoiceUpdatedCall_custody`), and without payload attributes every version gives the same answer (`forkchoiceUpdatedCall_of_null`).
-The model has no timestamps, so it checks neither the fork of the payload attributes nor that their timestamp is above the head's.
-For the same reason, version 2 takes both structures of the attributes at any time.
+`checkAttributes_eq_ok_iff` states when attributes pass their checks against the head: the version takes their fork, their structure is that of the fork, and their timestamp is above the head's.
+A fork that the version does not take gives `-38005` (`checkAttributes_eq_error_of_unsupportedFork`).
+A structure that is not that of the fork, or a timestamp not above the head's, gives `-38003` (`checkAttributes_eq_error_of_wrong_structure`, `checkAttributes_eq_error_of_not_after_head`).
 When the update applies a valid head, attributes whose fields fit no structure of the version give `-38003` (`forkchoiceUpdatedCall_eq_error_of_attributes`, with `payloadAttributesOfVersion_eq_error_iff` and `payloadAttributesOfJson_wrong_fields`), and when it applies none they are not read (`forkchoiceUpdatedCall_of_no_head`).
 Version 1 names no code for a wrong structure, and the model gives it `-38003`, the answer of its step 9 for invalid attributes.
 The OpenRPC description of the method makes the payload attributes optional, but the model asks for them, as `null` when there are none.
@@ -3497,6 +3534,25 @@ In a valid view, the raw receipts of a canonical block after the lowest have the
 The receipts of the lowest block, of side blocks and of the pending block are inputs of the view, so no theorem ties them to a header.
 No result schema of the getters allows `null`.
 Here an unknown block or transaction gets `-32001`, the code that the getter of a block access list in the same file requires for an unknown block.
+
+The receipt methods return the object `ReceiptInfo` of [`receipt.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/schemas/receipt.yaml), with its logs as objects `Log` (`Execution/Rpc/Receipt.lean`).
+The receipt objects of a block are one for each receipt, in order, each built from its transaction and its receipt (`receiptInfos_eq_ok`, `receiptInfo_eq_ok`, `Proofs/Rpc/Receipt.lean`).
+Their logs are numbered `0, 1, 2, …` across the block (`logIndex_receiptInfos`), and the lookup of one receipt returns the object at its index among those of its block (`transactionReceipt_eq_ok`).
+In a valid view, when that block is canonical, it is the object at that index among the receipts of the number of the block, so both methods give each log the same `logIndex` (`Valid.transactionReceipt_blockReceipts`).
+A block off the canonical chain is checked for its hash only, so a receipt found there has no such guarantee.
+A creation has the address that the sender makes at its nonce, and a call has none (`receiptInfo_contractAddress`).
+No text of a receipt or a log defines `logIndex`; the section "Log index" of the [notes of `eth_simulateV1`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/docs-api/docs/ethsimulatev1-notes.mdx) states the rule and says that receipts use it.
+These properties hold whenever the receipt objects of a block are built.
+They fail with `-32603` when a block does not have one receipt for each transaction, or when the node cannot compute a sender, a hash or a contract address.
+No theorem yet shows that they succeed on the blocks of a valid view.
+From Byzantium, the outcome of a receipt object is a status, `true` exactly when the receipt is a success (`outcomeOf_of_byzantium`), which the object writes as `status` `0x1`; before Byzantium it is the state root, which the object writes as `root` (`outcomeOf_of_lt_byzantium`).
+In a valid view, take a canonical block after the lowest.
+Each receipt has the Bloom filter of its logs, and so does each receipt object (`Valid.bloom_receipts`, `Valid.logsBloom_receiptInfos`).
+The cumulative gas of its receipts never decreases (`Valid.cumulativeGasUsed_receipts`), so the gas of the receipt objects adds up to the last cumulative gas (`Valid.sum_gasUsed`).
+The base fee of the block is at most the maximum fee of each transaction (`Valid.baseFee_le_maxFeePerGas`).
+So the effective gas price of each receipt object follows the formula of the description, read in integers (`Valid.effectiveGasPrice_receiptInfos`, `effectiveGasPrice_description`).
+From Glamsterdam, EIP-7778 makes the cumulative gas of a receipt the gas that the senders paid.
+As a choice of EthLib, the object copies it, so `gasUsed` is the gas that the sender paid, while the descriptions of `receipt.yaml` read "gas used".
 
 The Python suite replays the official test chain into a view and answers the official fixtures of the methods that EthLib serves.
 That chain mines its blocks before the merge with a zero mix hash and a zero nonce, so the suite runs the transition without the proof-of-work check.
@@ -3804,6 +3860,30 @@ The source leaves two points about the containers open:
   EthLib reads that as a rule of the source's Python notation, not of its JSON, so its reader requires every field.
   The blobs of the Deneb and Electra examples hold 32 bytes instead of 131,072, so EthLib refuses those bundles too.
 
+The source says that a new submission by a builder replaces the previous one by the same key, "even if it is less profitable".
+The rule names no slot, so EthLib keeps the submissions of one slot in a store, which ignores a submission for another slot.
+`SubmissionStore.submit_overwrites` (`Consensus/Proofs/RelayApi.lean`) shows that after a submission for its slot the entry of its builder is that submission, whatever the value of the entry before.
+`SubmissionStore.submit_other` shows that the entries of other builders do not change, and `SubmissionStore.submit_other_slot` that a submission for another slot changes nothing.
+
+From Bellatrix to Fulu, a relay serves a submission to proposers as a bid of the Builder API.
+`SubmitBlockRequest.bid_total` shows that the bid always computes, and `SubmitBlockRequest.bid_header` that it holds the header of the payload.
+`SubmitBlockRequest.bid_value_pubkey` shows that it holds the value of the bid trace and the key it is served under.
+`SubmitBlockRequest.bid_commitments` shows that from Deneb it holds the commitments of the blobs bundle, as the [Deneb bidding rules](https://github.com/ethereum/builder-specs/blob/fce64468a81a87892d7cb9b4858272bb3d010e50/specs/deneb/builder.md#bidding) require.
+`SubmitBlockRequest.bid_requests` shows that from Electra it holds the requests of the submission.
+`SubmitBlockRequest.bid_unblind` shows that a blinded body that carries the header of the bid unblinds to a body that holds the payload of the submission.
+The source does not fix the key that signs the served bid, so it is an input.
+From Deneb, the [block scoring rules](https://github.com/ethereum/builder-specs/blob/fce64468a81a87892d7cb9b4858272bb3d010e50/specs/deneb/builder.md#block-scoring-1) forbid a relay to serve a submission whose value fails the check of the bid value.
+That check needs the balance change of the fee recipient from a simulation of the payload.
+It also subtracts withdrawal amounts in Gwei from that change in Wei, with no conversion, so EthLib does not yet say which submissions a relay may serve.
+
+The source leaves four points about a submission open, and EthLib specifies none of them:
+
+- The signature check of a submission: the source says only that the "builder signature is over the SSZ encoded `message`", and names no domain.
+- What a submission with `cancellations=1` changes, beyond "opt into bid cancellations".
+- The order of submissions that reach the relay at the same time.
+- The simulation of the payload, which the relay runs "to verify properties and proposer payment".
+  So EthLib does not check that the bid trace agrees with the payload, and the served bid takes the value of the bid trace as it is.
+
 ### What cannot be proved yet
 
 Some definitions cannot be unfolded by the kernel, so the kernel cannot evaluate them, and their intended computational properties remain unproved.
@@ -4105,12 +4185,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 449 operations and 49 size constants.
-The Python extension calls 449 of the operations and 49 of the constants.
+Lean exports 450 operations and 49 size constants.
+The Python extension calls 450 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-10839 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2116), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (194), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (106), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (147), `module.c` (1512), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (131), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (58), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (740), `x25519.c` (21), `xmss.c` (134).
+10853 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2127), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (194), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (106), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (147), `module.c` (1514), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (131), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (58), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (741), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.
