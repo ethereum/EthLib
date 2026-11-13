@@ -139,15 +139,15 @@ theorem hashToG2_eq_clearCofactor {msg dst : ByteArray} {P : G2}
     (h : hashToG2 msg dst = .ok P) : ∃ Q : G2, G2.Valid Q ∧ P = clearCofactor Q := by
   -- Each step is rewritten, never reduced, so the kernel never evaluates field arithmetic.
   rw [hashToG2] at h
-  cases hf : (hashToFieldFp2 msg dst 2 : Except BlsError (Array Fp2)) with
+  cases hf : (hashToFieldFp2 msg dst 2 : Except BlsError (Vector Fp2 2)) with
   | error e => rw [hf] at h; cases h
   | ok us =>
     rw [hf, ok_bind] at h
-    cases h0 : simpleSwu us[0]! with
+    cases h0 : simpleSwu us[0] with
     | error e => rw [h0] at h; cases h
     | ok p0 =>
       rw [h0, ok_bind] at h
-      cases h1 : simpleSwu us[1]! with
+      cases h1 : simpleSwu us[1] with
       | error e => rw [h1] at h; cases h
       | ok p1 =>
         rw [h1] at h
@@ -173,13 +173,12 @@ private theorem expandMessageXmd_256_ok (msg dst : ByteArray) :
   exact ⟨_, rfl⟩
 
 private theorem hashToFieldFp2_two_ok (msg dst : ByteArray) :
-    ∃ us : Array Fp2, hashToFieldFp2 msg dst 2 = .ok us := by
+    ∃ us : Vector Fp2 2, hashToFieldFp2 msg dst 2 = .ok us := by
   obtain ⟨uniform, hunif⟩ := expandMessageXmd_256_ok msg dst
   unfold hashToFieldFp2
   dsimp only
   rw [hunif]
   dsimp only [bind, Except.bind, pure, Except.pure]
-  rw [Std.Legacy.Range.forIn_eq_forIn_range']
   exact ⟨_, rfl⟩
 
 -- The pair matcher is named on purpose: its equation selects the branch without evaluation.
@@ -188,8 +187,8 @@ set_option linter.auxLemma false in
 theorem hashToG2_total (msg dst : ByteArray) :
     ∃ P : G2, hashToG2 msg dst = .ok P ∧ G2.Valid P := by
   obtain ⟨us, hus⟩ := hashToFieldFp2_two_ok msg dst
-  obtain ⟨p0, h0⟩ := simpleSwu_ok us[0]!
-  obtain ⟨p1, h1⟩ := simpleSwu_ok us[1]!
+  obtain ⟨p0, h0⟩ := simpleSwu_ok us[0]
+  obtain ⟨p1, h1⟩ := simpleSwu_ok us[1]
   have hok : ∃ P : G2, hashToG2 msg dst = .ok P := by
     rw [hashToG2, hus, ok_bind, h0, ok_bind, h1]
     rw [← Prod.mk.eta (p := p0), ← Prod.mk.eta (p := p1)]

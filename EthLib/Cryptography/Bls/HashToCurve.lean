@@ -82,19 +82,17 @@ def fpFromBytesL (b : ByteArray) : F :=
 
 def hashToFieldFp2
     (msg : ByteArray) (dst : ByteArray) (count : Nat)
-    : Except BlsError (Array (Fp2 F)) := do
+    : Except BlsError (Vector (Fp2 F) count) := do
   let l := 64           -- per RFC: ceil((ceil(log2(p)) + k) / 8) = 64 for BLS12-381
   let m := 2
   let lenInBytes := count * m * l
   let uniform ← expandMessageXmd msg dst lenInBytes
-  let mut out : Array (Fp2 F) := Array.mkEmpty count
-  for i in [:count] do
-    let off0 := l * (i * m)
-    let off1 := l * (i * m + 1)
+  return Vector.ofFn fun i =>
+    let off0 := l * (i.val * m)
+    let off1 := l * (i.val * m + 1)
     let c0 := fpFromBytesL (uniform.extract off0 (off0 + l))
     let c1 := fpFromBytesL (uniform.extract off1 (off1 + l))
-    out := out.push ⟨c0, c1⟩
-  return out
+    ⟨c0, c1⟩
 
 /-! ## `sgn0` for Fp / Fp2 (RFC 9380 §4.1) -/
 
@@ -260,8 +258,8 @@ def H_EFF_G2 : Nat :=
 /-- Hash a message + DST to a G2 point on BLS12-381. -/
 def hashToG2 [Inhabited F] (msg : ByteArray) (dst : ByteArray) : Except BlsError (G2 F) := do
   let us ← hashToFieldFp2 msg dst 2
-  let (x0, y0) ← simpleSwu us[0]!
-  let (x1, y1) ← simpleSwu us[1]!
+  let (x0, y0) ← simpleSwu us[0]
+  let (x1, y1) ← simpleSwu us[1]
   return clearCofactor (G2.add (isoMapG2 x0 y0) (isoMapG2 x1 y1))
 
 end EthLib.Cryptography.Bls.HashToCurve
