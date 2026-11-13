@@ -271,42 +271,6 @@ theorem EpochStage.Edge.validators_eq {stage : EpochStage} {s t : BeaconState pr
 
 /-! ## Mutators -/
 
-/-- A partial withdrawal writes the exit churn and the queue of partial withdrawals only. -/
-theorem requestPartialWithdrawal_kept {fork : Fork} {s t : BeaconState preset fork}
-    {electra : .pectra ≤ fork} {index : ValidatorIndex} {v : Validator} {amount owed : Gwei}
-    (ok : requestPartialWithdrawal config s electra index v amount owed = .ok t) :
-    t.validators = s.validators ∧ t.balances = s.balances ∧
-      t.pendingConsolidations = s.pendingConsolidations ∧
-      t.depositBalanceToConsume = s.depositBalanceToConsume := by
-  simp only [requestPartialWithdrawal, bind_ok_iff, liftAccessor_ok, pure, Except.pure] at ok
-  obtain ⟨_, _, _, _, ok⟩ := ok
-  split at ok
-  · simp only [bind_ok_iff, liftAccessor_ok, Except.ok.injEq] at ok
-    obtain ⟨⟨_, _⟩, churned, _, _, _, _, rfl⟩ := ok
-    simp only [computeExitEpochAndUpdateChurn, bind_ok_iff, pure, Except.pure,
-      Except.ok.injEq] at churned
-    obtain ⟨_, _, _, _, _, _, final⟩ := churned
-    cases final
-    exact ⟨rfl, rfl, rfl, rfl⟩
-  · cases ok
-    exact ⟨rfl, rfl, rfl, rfl⟩
-
-/-- Withdrawal requests either do nothing, initiate an exit, or spend partial-withdrawal churn. -/
-theorem withdrawalRequest_cases {fork : Fork} {s t : BeaconState preset fork}
-    {electra : .pectra ≤ fork} {request : WithdrawalRequest}
-    (ok : processWithdrawalRequest config s electra request = .ok t) :
-    t = s ∨ (∃ index, initiateValidatorExit config s index = .ok t) ∨
-      ∃ index v owed,
-        requestPartialWithdrawal config s electra index v request.amount owed = .ok t := by
-  unfold processWithdrawalRequest at ok
-  simp only [bind, Except.bind, pure, Except.pure] at ok
-  repeat' split at ok
-  all_goals first
-    | (cases ok; exact .inl rfl)
-    | (cases ok)
-    | exact .inr (.inl ⟨_, liftAccessor_ok.mp ok⟩)
-    | exact .inr (.inr ⟨_, _, _, ok⟩)
-
 theorem registryLifecycle_initiateValidatorExit {index : ValidatorIndex}
     (computed : initiateValidatorExit config state index = .ok after) :
     RegistryLifecycle state after := by
