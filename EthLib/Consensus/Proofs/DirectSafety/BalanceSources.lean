@@ -167,38 +167,18 @@ theorem initial_slashing_bounds {fork : Fork} (s t : BeaconState preset fork)
     raise, lastOk, final⟩ := slashValidator_ok ok
   have exitFacts : exited.balances = s.balances ∧
       validator.effectiveBalance = v.effectiveBalance := by
-    obtain ⟨v', found', exitedAlready | ⟨_, queued, epoch, withdrawable, queue, _, set⟩⟩ :=
-      initiateValidatorExit_ok exit
-    · have vv : v' = v := Except.ok.inj (found'.symm.trans found)
-      subst v'
-      rcases exitedAlready with ⟨_, rfl⟩
-      have vv : validator = v := Except.ok.inj (validatorOk.symm.trans found)
-      exact ⟨rfl, congrArg Validator.effectiveBalance vv⟩
-    · have vv : v' = v := Except.ok.inj (found'.symm.trans found)
-      subst v'
-      have vv := getValidator_setValidator_self set
-      have veq := Except.ok.inj (validatorOk.symm.trans vv)
-      have effective := congrArg (fun x => x.effectiveBalance) veq
-      obtain ⟨_, rfl⟩ := setValidator_ok set
-      exact ⟨(exitQueue_validators queue).2, effective⟩
+    obtain ⟨balances, -, -, e, eFound, effective⟩ :=
+      effectiveBalance_initiateValidatorExit found exit
+    rw [validatorOk, Except.ok.injEq] at eFound
+    subst eFound
+    exact ⟨balances, effective⟩
   have markedBalance : marked.balances = s.balances := by
     obtain ⟨_, rfl⟩ := setValidator_ok mark
     exact exitFacts.1
   have shareLe : reward.toNat ≤
       (validator.effectiveBalance /
-        (EthLib.Consensus.parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT).toNat := by
-    unfold proposerShare at share
-    split at share
-    · simp only [bind_ok_iff, liftArith, mapError_ok_iff, pure, Except.pure,
-        Except.ok.injEq] at share
-      obtain ⟨product, productOk, rfl⟩ := share
-      have productEq := (mulChecked_ok_iff.mp productOk).2
-      rw [UInt64.toNat_div, productEq]
-      change _ * 8 / 64 ≤ _
-      omega
-    · simp only [pure, Except.pure, Except.ok.injEq] at share
-      subst reward
-      exact Nat.div_le_self _ _
+        (EthLib.Consensus.parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT).toNat :=
+    proposerShare_le share
   have lo := debits_decrease lower
   have up := credits_increase raise
   have tail := credits_increase lastOk

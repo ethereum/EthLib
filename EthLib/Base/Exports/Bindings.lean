@@ -702,6 +702,27 @@ def bindings : List Binding := [
     "(name: str, fork: str, state: bytes, block: bytes, replacements: dict[str, Any] | None) " ++
       "-> dict[str, Any]",
     [], some "ConsensusError"⟩,
+  ⟨"consensus_api_consensus_block_value",
+    `EthLib.Consensus.Exports.apiConsensusBlockValueExport,
+    "(name: str, fork: str, state: bytes, block: bytes, replacements: dict[str, Any] | None) " ++
+      "-> int",
+    [`EthLib.Consensus.TransitionError], some "TransitionError"⟩,
+  ⟨"consensus_api_prefer_local_v3", `EthLib.Consensus.BeaconApi.preferLocalV3,
+    "(local_value: int, builder_value: int, builder_boost_factor: int) -> bool",
+    [], some "ConsensusError"⟩,
+  ⟨"consensus_api_capped_bid_value", `EthLib.Consensus.BeaconApi.cappedBidValue,
+    "(bid: dict[str, Any]) -> int",
+    [], some "ConsensusError"⟩,
+  ⟨"consensus_api_bid_accepted", `EthLib.Consensus.BeaconApi.bidAccepted,
+    "(bid: dict[str, Any]) -> bool",
+    [], some "ConsensusError"⟩,
+  ⟨"consensus_api_select_payload", `EthLib.Consensus.BeaconApi.selectPayload,
+    "(local_value: int, bids: list[dict[str, Any]]) -> dict[str, Any] | None",
+    [], some "ConsensusError"⟩,
+  ⟨"consensus_api_builder_config_terms",
+    `EthLib.Consensus.Exports.apiBuilderConfigTermsExport,
+    "(data: bytes, slot: int) -> tuple[dict[str, Any], list[dict[str, Any]]]",
+    [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
   ⟨"consensus_api_sync_committee_rewards",
     `EthLib.Consensus.Exports.apiSyncCommitteeRewardsExport,
     "(name: str, fork: str, state: bytes, aggregate: bytes, ids: list[str]) -> dict[str, Any]",
@@ -1075,6 +1096,14 @@ def bindings : List Binding := [
       "finalized: tuple[int, bytes] | None, topic: str, " ++
       "messages: list[tuple[int, int, bytes] | tuple[int, int, bytes, str]], " ++
       "config: dict[str, Any] | None, verify: bool) -> list[tuple[str, str | None]]",
+    [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
+  ⟨"consensus_api_pool", `EthLib.Consensus.Exports.apiPoolExport,
+    "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, " ++
+      "blocks: list[tuple[int, int | None, bytes] | " ++
+      "tuple[int, int | None, bytes, bytes | None]], " ++
+      "finalized: tuple[int, bytes] | None, " ++
+      "requests: list[tuple[int, str, list[bytes]]], " ++
+      "config: dict[str, Any] | None, verify: bool) -> list[list[tuple[int, str]]]",
     [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
   ⟨"consensus_light_client_sync", `EthLib.Consensus.Exports.lightClientSyncExport,
     "(name: str, fork: str, bootstrap_fork: str, config: dict[str, Any] | None, " ++

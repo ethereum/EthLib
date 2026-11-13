@@ -403,6 +403,20 @@ theorem applyTransaction_eq_ok {env : BlockEnvironment fork} {index : Nat}
   split at h <;>
     (obtain ⟨_, -, h⟩ := bind_ok_iff.mp h; cases h; exact ⟨rfl, rfl, mapError_ok_iff.mp hBody⟩)
 
+/-- A transaction that enters the body adds one receipt, with the new cumulative gas. -/
+theorem applyTransaction_receipts {env : BlockEnvironment fork} {index : Nat}
+    {before after : BodyOutput fork} {tx : Transaction}
+    (h : applyTransaction env index before tx = .ok after) :
+    ∃ outcome logs, after.receipts =
+      before.receipts ++ [(tx.type, makeReceipt outcome after.cumulativeGasUsed logs)] := by
+  unfold applyTransaction at h
+  obtain ⟨included, -, h⟩ := bind_ok_iff.mp h
+  obtain ⟨out, -, h⟩ := bind_ok_iff.mp h
+  obtain ⟨body, -, h⟩ := bind_ok_iff.mp h
+  dsimp only at h
+  split at h <;>
+    (obtain ⟨_, -, h⟩ := bind_ok_iff.mp h; cases h; exact ⟨_, _, rfl⟩)
+
 /-- A transaction that cannot enter its block makes the block invalid, with its error. -/
 theorem applyTransaction_of_checkInclusion {env : BlockEnvironment fork} {index : Nat}
     {before : BodyOutput fork} {tx : Transaction} {e : InclusionError}
@@ -520,6 +534,39 @@ theorem applyBody_eq_ok {config : ChainConfig} {env : BlockEnvironment fork}
     exact ⟨state, body, txs, _, requested, hState, mapError_ok_iff.mp hBody, hTxs,
       fun hYes => absurd hYes hShapella, fun _ => rfl, hRequests, hRewarded, rfl, hHash, rfl,
       rfl⟩
+
+/-- A body that runs takes the DAO transfer, then the system calls, then its transactions.
+
+Its receipts are those of the run of its transactions. -/
+theorem applyBody_receipts {config : ChainConfig} {env : BlockEnvironment fork}
+    {block : Block fork Transaction} {start : BlockState} {output : BlockOutput fork}
+    (h : applyBody config env block start = .ok output) :
+    ∃ state body txs, daoTransfer config fork block.header.number start = .ok state ∧
+      startSystemCalls env block.header.parentHash (.init state) = .ok body ∧
+      applyTransactions env body block.transactions = .ok txs ∧
+      output.receipts = txs.receipts := by
+  unfold applyBody at h
+  dsimp only at h
+  obtain ⟨state, hState, h⟩ := bind_ok_iff.mp h
+  obtain ⟨body, hBody, h⟩ := bind_ok_iff.mp h
+  obtain ⟨txs, hTxs, h⟩ := bind_ok_iff.mp h
+  refine ⟨state, body, txs, hState, mapError_ok_iff.mp hBody, hTxs, ?_⟩
+  split at h
+  · obtain ⟨tx, -, h⟩ := bind_ok_iff.mp h
+    obtain ⟨withdrawn, -, h⟩ := bind_ok_iff.mp h
+    obtain ⟨⟨requested, requests⟩, -, h⟩ := bind_ok_iff.mp h
+    dsimp only at h
+    obtain ⟨rewarded, -, h⟩ := bind_ok_iff.mp h
+    obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
+    cases h
+    rfl
+  · obtain ⟨withdrawn, -, h⟩ := bind_ok_iff.mp h
+    obtain ⟨⟨requested, requests⟩, -, h⟩ := bind_ok_iff.mp h
+    dsimp only at h
+    obtain ⟨rewarded, -, h⟩ := bind_ok_iff.mp h
+    obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
+    cases h
+    rfl
 
 /-- From Glamsterdam, a body gives the hash of the list that its builder built. -/
 theorem applyBody_accessListHash {config : ChainConfig} {env : BlockEnvironment fork}

@@ -713,6 +713,30 @@ def consensus_api_block_rewards(name: str, fork: str, state: bytes, block: bytes
     """The JSON response of the block rewards endpoint, as a `dict`."""
     ...
 
+def consensus_api_consensus_block_value(name: str, fork: str, state: bytes, block: bytes, replacements: dict[str, Any] | None) -> int:
+    """The consensus value of a signed block, in Wei."""
+    ...
+
+def consensus_api_prefer_local_v3(local_value: int, builder_value: int, builder_boost_factor: int) -> bool:
+    """From Bellatrix to Fulu: whether the node returns its local payload rather than the builder's."""
+    ...
+
+def consensus_api_capped_bid_value(bid: dict[str, Any]) -> int:
+    """The value of a bid, in Gwei: its value plus its execution payment, counted up to its cap."""
+    ...
+
+def consensus_api_bid_accepted(bid: dict[str, Any]) -> bool:
+    """Whether the terms of a bid accept it."""
+    ...
+
+def consensus_api_select_payload(local_value: int, bids: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """From Gloas: the bid that the node commits to, or none for its local payload."""
+    ...
+
+def consensus_api_builder_config_terms(data: bytes, slot: int) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """From Gloas, the terms that the SSZ bytes of a builder configuration give."""
+    ...
+
 def consensus_api_sync_committee_rewards(name: str, fork: str, state: bytes, aggregate: bytes, ids: list[str]) -> dict[str, Any]:
     """The JSON response of the sync committee rewards endpoint, as a `dict`."""
     ...
@@ -1095,6 +1119,10 @@ def consensus_fork_choice(name: str, fork: str, anchor_state: bytes, anchor_bloc
 
 def consensus_gossip_validation(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, blocks: list[tuple[int, int | None, bytes] | tuple[int, int | None, bytes, bytes | None]], finalized: tuple[int, bytes] | None, topic: str, messages: list[tuple[int, int, bytes] | tuple[int, int, bytes, str]], config: dict[str, Any] | None, verify: bool) -> list[tuple[str, str | None]]:
     """Validate the messages of a topic in turn, against the store of an anchor and later blocks."""
+    ...
+
+def consensus_api_pool(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, blocks: list[tuple[int, int | None, bytes] | tuple[int, int | None, bytes, bytes | None]], finalized: tuple[int, bytes] | None, requests: list[tuple[int, str, list[bytes]]], config: dict[str, Any] | None, verify: bool) -> list[list[tuple[int, str]]]:
+    """Answer the requests to pool endpoints in turn, against the store of an anchor and later blocks."""
     ...
 
 def consensus_light_client_sync(name: str, fork: str, bootstrap_fork: str, config: dict[str, Any] | None, trusted: bytes, genesis_validators_root: bytes, bootstrap: bytes, steps: list[tuple[str, str, int, bytes] | tuple[str, int] | tuple[str, str]]) -> list[tuple[tuple[int, bytes, bytes], tuple[int, bytes, bytes]]]:

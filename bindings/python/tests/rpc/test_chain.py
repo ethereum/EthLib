@@ -17,6 +17,7 @@ from .chain import FIXTURES, ReplayChain, block_hash, read_fixture, replay_chain
 
 # Each method that the view serves, with the schema of its result in `src/eth` of the source.
 # A result that is an object has no reader of its schema, so it maps to None.
+# `RESULT_CHECKS` checks the schema of some of those results.
 RESULT_SCHEMAS: Final[dict[str, rpc.Schema | None]] = {
     "eth_blockNumber": "uint",
     "eth_chainId": "uint",
@@ -40,10 +41,40 @@ RESULT_SCHEMAS: Final[dict[str, rpc.Schema | None]] = {
     "eth_getStorageAt": "bytes",
     "eth_getStorageValues": None,
     "eth_getProof": None,
+    "eth_call": "bytes",
+    "eth_estimateGas": "uint",
+    "eth_createAccessList": None,
     "debug_getRawHeader": "bytes",
     "debug_getRawBlock": "bytes",
     "debug_getRawTransaction": "bytes",
     "debug_getRawReceipts": None,
+}
+
+
+def _check_access_list_result(result: object) -> None:
+    """Raise unless the result fits the result schema of `eth_createAccessList` in the source."""
+    if not isinstance(result, dict) or not set(result) <= {"accessList", "error", "gasUsed"}:
+        raise ValueError("result: not an object of accessList, error and gasUsed")
+    entries = result.get("accessList", [])
+    if not isinstance(entries, list):
+        raise ValueError("accessList: not an array")
+    for entry in entries:
+        if not isinstance(entry, dict) or set(entry) != {"address", "storageKeys"}:
+            raise ValueError("accessList: an entry is not an address with its storage keys")
+        rpc.read_param("address", entry["address"])
+        if not isinstance(entry["storageKeys"], list):
+            raise ValueError("storageKeys: not an array")
+        for key in entry["storageKeys"]:
+            rpc.read_param("hash32", key)
+    if not isinstance(result.get("error", ""), str):
+        raise ValueError("error: not a string")
+    if "gasUsed" in result:
+        rpc.read_param("uint", result["gasUsed"])
+
+
+# The methods whose result is an object, with a check of its schema.
+RESULT_CHECKS: Final[dict[str, Callable[[object], None]]] = {
+    "eth_createAccessList": _check_access_list_result,
 }
 
 # Every fixture of a method that the view serves.
@@ -91,9 +122,12 @@ def test_fixture(path: Path, answers: dict[str, dict[str, Any]]) -> None:
         schema = RESULT_SCHEMAS[fixture.method]
         if schema is not None:
             rpc.read_param(schema, got["result"])
+        check = RESULT_CHECKS.get(fixture.method)
+        if check is not None:
+            check(got["result"])
         # A fixture marked speconly is checked against the schema only, as the source says.
-        # Without a reader of the schema, such a fixture would check nothing, so none may exist.
-        assert schema is not None or not fixture.speconly
+        # Without a check of the schema, such a fixture would check nothing, so none may exist.
+        assert schema is not None or check is not None or not fixture.speconly
         if not fixture.speconly:
             assert got["result"] == expected["result"]
 
@@ -535,6 +569,79 @@ def test_storage_values_member_twice() -> None:
 def test_pending_header() -> None:
     """The header of the tag `pending` is null, as the method says."""
     assert _call("eth_getHeaderByNumber", ["pending"]) is None
+
+
+# Each request of `eth_estimateGas` in the fixtures that has a result.
+ESTIMATED: Final = [
+    pytest.param(exchange.request, id=f"{path.stem}-{exchange.response['id']}")
+    for path in sorted((FIXTURES / "eth_estimateGas").glob("*.io"))
+    for exchange in read_fixture(path).exchanges
+    if "result" in exchange.response
+]
+
+
+@pytest.mark.parametrize("request_text", ESTIMATED)
+def test_estimate_is_least(request_text: str) -> None:
+    """The call completes with the estimate as its gas limit, and fails with one gas less."""
+    params = json.loads(request_text)["params"]
+    transaction, rest = params[0], params[1:]
+    estimate = int(_call("eth_estimateGas", params), 16)
+    _call("eth_call", [{**transaction, "gas": hex(estimate)}, *rest])
+    answer = _error(
+        json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "eth_call",
+                "params": [{**transaction, "gas": hex(estimate - 1)}, *rest],
+            }
+        )
+    )
+    assert answer["error"]["code"] in {800, 801}
+
+
+# Each result that breaks the schema of `eth_createAccessList`, and the error of its check.
+BAD_ACCESS_LIST_RESULTS = [
+    pytest.param(
+        [], ValueError, "result: not an object of accessList, error and gasUsed", id="not-object"
+    ),
+    pytest.param({"accessList": {}}, ValueError, "accessList: not an array", id="list-not-array"),
+    pytest.param(
+        {"accessList": [{"address": "0x" + "00" * 20, "storageKeys": "0x"}]},
+        ValueError,
+        "storageKeys: not an array",
+        id="keys-not-array",
+    ),
+    pytest.param(
+        {"accessList": [], "gasUsed": "0x1", "extra": 1},
+        ValueError,
+        "result: not an object of accessList, error and gasUsed",
+        id="extra-member",
+    ),
+    pytest.param({"error": 3}, ValueError, "error: not a string", id="error-not-string"),
+    pytest.param(
+        {"accessList": [{"address": "0x" + "00" * 20}]},
+        ValueError,
+        "accessList: an entry is not an address with its storage keys",
+        id="entry-without-keys",
+    ),
+    pytest.param({"gasUsed": "0x01"}, rpc.RpcError, "uint: leading zero", id="gas-leading-zero"),
+    pytest.param(
+        {"accessList": [{"address": "0x" + "00" * 20, "storageKeys": ["0x01"]}]},
+        rpc.RpcError,
+        "hash32: 1 bytes, not 32",
+        id="short-key",
+    ),
+]
+
+
+@pytest.mark.parametrize(("result", "error", "message"), BAD_ACCESS_LIST_RESULTS)
+def test_access_list_result_check_rejects(
+    result: object, error: type[Exception], message: str
+) -> None:
+    """The check of the schema of an access-list result rejects a result that breaks it."""
+    with raises(error, message):
+        _check_access_list_result(result)
 
 
 # Each lookup by block and index that finds no transaction, so its result is null.

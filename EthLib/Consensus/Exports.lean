@@ -8,7 +8,9 @@ public import EthLib.Consensus.Exports.BeaconApiConfig
 public import EthLib.Consensus.Exports.BeaconApiDebug
 public import EthLib.Consensus.Exports.BeaconApiIdentifiers
 public import EthLib.Consensus.Exports.BeaconApiLightClient
+public import EthLib.Consensus.Exports.BeaconApiPool
 public import EthLib.Consensus.Exports.BeaconApiRegistries
+public import EthLib.Consensus.Exports.BeaconApiProduce
 public import EthLib.Consensus.Exports.BeaconApiRewards
 public import EthLib.Consensus.Exports.BeaconApiStateQueries
 public import EthLib.Consensus.Exports.BeaconApiValidators

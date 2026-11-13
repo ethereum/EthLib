@@ -533,6 +533,24 @@
 #define DOC_consensus_api_block_rewards \
   "The JSON response of the block rewards endpoint, as a `dict`."
 
+#define DOC_consensus_api_consensus_block_value \
+  "The consensus value of a signed block, in Wei."
+
+#define DOC_consensus_api_prefer_local_v3 \
+  "From Bellatrix to Fulu: whether the node returns its local payload rather than the builder's."
+
+#define DOC_consensus_api_capped_bid_value \
+  "The value of a bid, in Gwei: its value plus its execution payment, counted up to its cap."
+
+#define DOC_consensus_api_bid_accepted \
+  "Whether the terms of a bid accept it."
+
+#define DOC_consensus_api_select_payload \
+  "From Gloas: the bid that the node commits to, or none for its local payload."
+
+#define DOC_consensus_api_builder_config_terms \
+  "From Gloas, the terms that the SSZ bytes of a builder configuration give."
+
 #define DOC_consensus_api_sync_committee_rewards \
   "The JSON response of the sync committee rewards endpoint, as a `dict`."
 
@@ -820,6 +838,9 @@
 
 #define DOC_consensus_gossip_validation \
   "Validate the messages of a topic in turn, against the store of an anchor and later blocks."
+
+#define DOC_consensus_api_pool \
+  "Answer the requests to pool endpoints in turn, against the store of an anchor and later blocks."
 
 #define DOC_consensus_light_client_sync \
   "The headers of a sync, step by step, from a bootstrap for a trusted block root."

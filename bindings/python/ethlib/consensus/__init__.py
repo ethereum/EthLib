@@ -1398,6 +1398,54 @@ def api_block_rewards(
     return _native.consensus_api_block_rewards(name, fork, state, block, config)
 
 
+def api_consensus_block_value(
+    name: str,
+    fork: str,
+    state: bytes,
+    block: bytes,
+    *,
+    config: dict[str, Any] | None = None,
+) -> int:
+    """The consensus value of a signed block, in Wei, or TransitionError."""
+    # The state is the one at the slot of the block, before it.
+    return _native.consensus_api_consensus_block_value(name, fork, state, block, config)
+
+
+def api_prefer_local_v3(
+    exec_node_payload_value: int, builder_payload_value: int, builder_boost_factor: int
+) -> bool:
+    """Whether the v3 block production rule returns the local payload rather than the builder's."""
+    # Both values are in Wei, and the factor is a 64-bit percentage of the builder's value.
+    return _native.consensus_api_prefer_local_v3(
+        exec_node_payload_value, builder_payload_value, builder_boost_factor
+    )
+
+
+def api_capped_bid_value(bid: dict[str, Any]) -> int:
+    """The Gwei value of a candidate bid, its execution payment capped, saturated at 2**64 - 1."""
+    # A bid has the keys signer, value, execution_payment and terms.
+    # Its terms have the keys builder_pubkeys, max_execution_payment, min_bid, builder_boost_factor.
+    return _native.consensus_api_capped_bid_value(bid)
+
+
+def api_bid_accepted(bid: dict[str, Any]) -> bool:
+    """Whether the terms of a candidate bid accept its signer and its value."""
+    return _native.consensus_api_bid_accepted(bid)
+
+
+def api_select_payload(local_value: int, bids: Sequence[dict[str, Any]]) -> dict[str, Any] | None:
+    """The bid that the v4 block production rule commits to, or None for the local payload."""
+    # The local value is in Wei, as the execution layer gives it; bid values are in Gwei.
+    return _native.consensus_api_select_payload(local_value, list(bids))
+
+
+def api_builder_config_terms(data: bytes, slot: int) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """The gossip and entry terms of an SSZ builder configuration for a slot, or SszError."""
+    # An entry with an empty URL or authentication data, or another slot, gives no terms.
+    # Of two entries with one URL and one authentication data, only the first gives terms.
+    return _native.consensus_api_builder_config_terms(data, slot)
+
+
 def api_duties(
     name: str,
     fork: str,
@@ -1511,6 +1559,36 @@ def gossip_validation(
         finalized,
         topic,
         list(messages),
+        config,
+        verify,
+    )
+
+
+def api_pool(
+    name: str,
+    fork: str,
+    anchor_state: bytes,
+    anchor_block: bytes,
+    requests: Sequence[tuple[int, str, Sequence[bytes]]],
+    verify: bool = True,
+    config: dict[str, Any] | None = None,
+    blocks: Sequence[tuple[int, int | None, bytes] | tuple[int, int | None, bytes, bytes | None]]
+    | None = None,
+    finalized: tuple[int, bytes] | None = None,
+) -> list[list[tuple[int, str]]]:
+    """The failed items of each request to a Beacon API pool endpoint, with their messages."""
+    # The store is built as for gossip_validation, from the anchor and the later blocks.
+    # A request is (time in milliseconds, endpoint name such as "attestations", SSZ items).
+    # The requests share the keys of the messages seen, which each accepted item extends.
+    # An item that gossip ignores or rejects fails, with the reason of gossip.
+    return _native.consensus_api_pool(
+        name,
+        fork,
+        anchor_state,
+        anchor_block,
+        list(blocks or []),
+        finalized,
+        [(time, endpoint, list(items)) for time, endpoint, items in requests],
         config,
         verify,
     )
@@ -2121,6 +2199,12 @@ __all__ = [
     "api_attestation_rewards",
     "api_sync_committee_rewards",
     "api_block_rewards",
+    "api_consensus_block_value",
+    "api_prefer_local_v3",
+    "api_capped_bid_value",
+    "api_bid_accepted",
+    "api_select_payload",
+    "api_builder_config_terms",
     "api_duties",
     "api_committees",
     "api_sync_committees",
@@ -2200,6 +2284,7 @@ __all__ = [
     "LightClientError",
     "ForkChoiceError",
     "fork_choice",
+    "api_pool",
     "gossip_validation",
     "light_client_sync",
     "SyncStep",

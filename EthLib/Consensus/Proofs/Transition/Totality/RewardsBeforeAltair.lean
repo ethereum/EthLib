@@ -559,10 +559,7 @@ private theorem getInclusionDelayDeltas_exists_le {budget : Nat} (before : fork 
     exact attestersOk
   have filtered := amongOk
   unfold unslashedAmong at filtered
-  -- The attesters are distinct, since they come in increasing order.
-  have distinct : (attesters.map UInt64.toNat).Nodup :=
-    List.pairwise_map.mpr (((sortedSet_sorted _).sublist (sublist_of_filterM_ok filtered)).imp
-      fun lt => Nat.ne_of_lt (UInt64.lt_iff_toNat_lt.mp lt))
+  have distinct := unslashedAmong_nodup amongOk
   let balanceAt : Nat → Nat := fun j =>
     ((state.validators.data[j]?).map (·.effectiveBalance.toNat)).getD 0
   let earliest := earliestInclusions state.validators.data.size
