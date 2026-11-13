@@ -126,9 +126,7 @@ private theorem funding_same {fork : Fork} {s t : BeaconState preset fork}
 private theorem funding_registry {fork : Fork} {s t : BeaconState preset fork}
     (ok : processRegistryUpdates config s = .ok t) :
     fundedStake ⟨fork, t⟩ ≤ fundedStake ⟨fork, s⟩ := by
-  -- The registry stage reads no signature checks, so any of them gives its edge.
-  have kept := EpochStage.Edge.balances_eq_and_pendingConsolidations_eq (stage := .registry)
-    (checks := .bls) ok ⟨nofun, nofun, nofun, nofun⟩
+  have kept := processRegistryUpdates_balances_eq_and_pendingConsolidations_eq ok
   have bound := funding_kept_prefix 0 (sameSizes_processRegistryUpdates ok).1
     (registryLifecycle_processRegistryUpdates ok) (frame_processRegistryUpdates ok).slot
     kept.2 (effectiveKept_registry ok)
@@ -159,9 +157,8 @@ private theorem funding_stage {fork : Fork} {k : EpochStage} {s t : BeaconState 
     (other : k ≠ .rewards ∧ k ≠ .registry ∧ k ≠ .slashings ∧ k ≠ .pendingDeposits ∧
       k ≠ .pendingConsolidations ∧ k ≠ .effectiveBalances) (slot : t.slot = s.slot) :
     fundedStake ⟨fork, t⟩ = fundedStake ⟨fork, s⟩ :=
-  have kept := edge.balances_eq_and_pendingConsolidations_eq
-    ⟨other.1, other.2.2.1, other.2.2.2.1, other.2.2.2.2.1⟩
-  funding_same (edge.validators_eq ⟨other.2.1, other.2.2.2.1, other.2.2.2.2.2⟩) kept.1 slot kept.2
+  have kept := edge.validators_balances_pendingConsolidations_eq other
+  funding_same kept.1 kept.2.1 slot kept.2.2
 
 /-- The stages before the payments, from Electra.
 

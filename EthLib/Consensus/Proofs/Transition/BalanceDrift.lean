@@ -445,14 +445,11 @@ theorem initiateValidatorExit_balances_eq_and_pendingConsolidations_eq {f : Fork
     obtain ⟨_, rfl⟩ := setValidator_ok set
     exact ⟨rfl, rfl⟩
 
-/-- An epoch stage keeps the balances and the pending consolidations, unless it is one of four.
+/-- The registry updates write validators and the exit queue only.
 
-Those are rewards, slashings and the two pending stages. -/
-theorem EpochStage.Edge.balances_eq_and_pendingConsolidations_eq {f : Fork}
-    {stage : EpochStage} {s t : BeaconState preset f}
-    (edge : EpochStage.Edge config checks stage s t)
-    (other : stage ≠ .rewards ∧ stage ≠ .slashings ∧ stage ≠ .pendingDeposits ∧
-      stage ≠ .pendingConsolidations) :
+So they keep the balances and the pending consolidations. -/
+theorem processRegistryUpdates_balances_eq_and_pendingConsolidations_eq {f : Fork}
+    {s t : BeaconState preset f} (edge : processRegistryUpdates config s = .ok t) :
     t.balances = s.balances ∧ t.pendingConsolidations = s.pendingConsolidations := by
   let Kept (a b : BeaconState preset f) : Prop :=
     b.balances = a.balances ∧ b.pendingConsolidations = a.pendingConsolidations
@@ -463,7 +460,6 @@ theorem EpochStage.Edge.balances_eq_and_pendingConsolidations_eq {f : Fork}
       (each : ∀ a x b, step a x = .ok b → Kept a b) (ok : xs.foldlM step a = .ok b) :
       Kept a b :=
     foldlM_ok_invariant (Kept a) (fun _ _ _ prior ok => trans prior (each _ _ _ ok)) ⟨rfl, rfl⟩ ok
-  -- The registry updates write validators and the exit queue only.
   have written {a b : BeaconState preset f} {position : Nat} {v : Validator}
       (ok : a.setValidatorAt position v = .ok b) : Kept a b := by
     obtain ⟨_, rfl⟩ := setValidatorAt_ok ok
@@ -471,116 +467,38 @@ theorem EpochStage.Edge.balances_eq_and_pendingConsolidations_eq {f : Fork}
   have exit {a b : BeaconState preset f} {index : ValidatorIndex}
       (ok : initiateValidatorExit config a index = .ok b) : Kept a b :=
     initiateValidatorExit_balances_eq_and_pendingConsolidations_eq ok
-  cases stage <;> simp only [EpochStage.Edge] at edge
-  case justification =>
-    obtain rfl | ⟨_, _, _, weighed⟩ := processJustificationAndFinalization_ok edge
-    · exact ⟨rfl, rfl⟩
-    · obtain ⟨_, _, _, rest⟩ := weighJustificationAndFinalization_checkpoints weighed
-      rw [← rest]
-      exact ⟨rfl, rfl⟩
-  case inactivity =>
-    split at edge
-    · rw [processInactivityUpdates_frame edge]
-      exact ⟨rfl, rfl⟩
-    · exact edge ▸ ⟨rfl, rfl⟩
-  case registry =>
-    unfold processRegistryUpdates at edge
-    split at edge
-    · simp only [bind_ok_iff, liftAccessor_ok] at edge
-      obtain ⟨_, _, edge⟩ := edge
-      refine fold (fun _ _ _ ok => ?_) edge
-      simp only [updateRegistryEntryElectra, bind_ok_iff, liftAccessor_ok] at ok
-      obtain ⟨_, _, ok⟩ := ok
-      split at ok
-      · simp only [bind_ok_iff, liftAccessor_ok] at ok
-        obtain ⟨_, _, set⟩ := ok
-        exact written set
-      split at ok
-      · simp only [bind_ok_iff, liftAccessor_ok] at ok
-        obtain ⟨_, _, exited⟩ := ok
-        exact exit exited
-      split at ok
-      · exact written (liftAccessor_ok.mp ok)
-      · cases ok; exact ⟨rfl, rfl⟩
-    simp only [bind_ok_iff] at edge
-    obtain ⟨_, updated, activated⟩ := edge
-    refine trans (fold (fun _ _ _ ok => ?_) updated) (fold (fun _ _ _ ok => ?_) activated)
-    · simp only [updateRegistryEntry, bind_ok_iff, liftAccessor_ok] at ok
-      obtain ⟨_, _, _, _, _, marked, ok⟩ := ok
-      split at ok
-      · simp only [bind_ok_iff, liftAccessor_ok] at ok
-        obtain ⟨_, _, exited⟩ := ok
-        exact trans (written marked) (exit exited)
-      · cases ok; exact written marked
-    · simp only [activateValidator, bind_ok_iff, liftAccessor_ok] at ok
-      obtain ⟨_, _, _, _, set⟩ := ok
-      obtain ⟨_, rfl⟩ := setValidator_ok set
-      exact ⟨rfl, rfl⟩
-  case effectiveBalances =>
-    rw [processEffectiveBalanceUpdates_frame edge]
+  unfold processRegistryUpdates at edge
+  split at edge
+  · simp only [bind_ok_iff, liftAccessor_ok] at edge
+    obtain ⟨_, _, edge⟩ := edge
+    refine fold (fun _ _ _ ok => ?_) edge
+    simp only [updateRegistryEntryElectra, bind_ok_iff, liftAccessor_ok] at ok
+    obtain ⟨_, _, ok⟩ := ok
+    split at ok
+    · simp only [bind_ok_iff, liftAccessor_ok] at ok
+      obtain ⟨_, _, set⟩ := ok
+      exact written set
+    split at ok
+    · simp only [bind_ok_iff, liftAccessor_ok] at ok
+      obtain ⟨_, _, exited⟩ := ok
+      exact exit exited
+    split at ok
+    · exact written (liftAccessor_ok.mp ok)
+    · cases ok; exact ⟨rfl, rfl⟩
+  simp only [bind_ok_iff] at edge
+  obtain ⟨_, updated, activated⟩ := edge
+  refine trans (fold (fun _ _ _ ok => ?_) updated) (fold (fun _ _ _ ok => ?_) activated)
+  · simp only [updateRegistryEntry, bind_ok_iff, liftAccessor_ok] at ok
+    obtain ⟨_, _, _, _, _, marked, ok⟩ := ok
+    split at ok
+    · simp only [bind_ok_iff, liftAccessor_ok] at ok
+      obtain ⟨_, _, exited⟩ := ok
+      exact trans (written marked) (exit exited)
+    · cases ok; exact written marked
+  · simp only [activateValidator, bind_ok_iff, liftAccessor_ok] at ok
+    obtain ⟨_, _, _, _, set⟩ := ok
+    obtain ⟨_, rfl⟩ := setValidator_ok set
     exact ⟨rfl, rfl⟩
-  case eth1Reset =>
-    split at edge
-    · rw [processEth1DataReset_frame edge]
-      exact ⟨rfl, rfl⟩
-    · exact edge ▸ ⟨rfl, rfl⟩
-  case payments =>
-    split at edge
-    · rw [processBuilderPendingPayments_eq edge]
-      exact ⟨rfl, rfl⟩
-    · exact edge ▸ ⟨rfl, rfl⟩
-  case slashingsReset =>
-    obtain ⟨_, _, _, _, rfl⟩ := processSlashingsReset_eq edge
-    exact ⟨rfl, rfl⟩
-  case randaoReset =>
-    obtain ⟨_, _, _, _, _, _, rfl⟩ := processRandaoMixesReset_eq edge
-    exact ⟨rfl, rfl⟩
-  case history =>
-    split at edge
-    · unfold processHistoricalSummariesUpdate at edge
-      simp only [bind, Except.bind, pure, Except.pure] at edge
-      repeat' (split at edge <;> try cases edge)
-      all_goals exact ⟨rfl, rfl⟩
-    · unfold processHistoricalRootsUpdate at edge
-      split at edge
-      · cases edge
-      simp only [bind_ok_iff, liftAccessor_ok] at edge
-      obtain ⟨_, _, edge⟩ := edge
-      split at edge
-      · simp only [bind_ok_iff, liftSsz_ok, pure, Except.pure, Except.ok.injEq] at edge
-        obtain ⟨_, _, _, _, rfl⟩ := edge
-        exact ⟨rfl, rfl⟩
-      · cases edge; exact ⟨rfl, rfl⟩
-  case participation =>
-    split at edge
-    · subst edge
-      exact ⟨rfl, rfl⟩
-    · rename_i early
-      obtain ⟨u, computed, _, _, restored⟩ :=
-        processParticipationRecordUpdates_eq (state := s) (Nat.lt_of_not_le early)
-      obtain rfl := Except.ok.inj (computed.symm.trans edge)
-      exact ⟨congrArg (·.balances) restored, congrArg (·.pendingConsolidations) restored⟩
-  case syncCommittees =>
-    split at edge
-    · unfold processSyncCommitteeUpdates at edge
-      simp only [bind, Except.bind, pure, Except.pure] at edge
-      repeat' (split at edge <;> try cases edge)
-      all_goals exact ⟨rfl, rfl⟩
-    · exact edge ▸ ⟨rfl, rfl⟩
-  case proposerLookahead =>
-    split at edge
-    · simp only [processProposerLookahead, bind_ok_iff, pure, Except.pure,
-        Except.ok.injEq] at edge
-      obtain ⟨_, _, _, _, rfl⟩ := edge
-      exact ⟨rfl, rfl⟩
-    · exact edge ▸ ⟨rfl, rfl⟩
-  case ptcWindow =>
-    split at edge
-    · simp only [processPtcWindow, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at edge
-      obtain ⟨_, _, _, _, rfl⟩ := edge
-      exact ⟨rfl, rfl⟩
-    · exact edge ▸ ⟨rfl, rfl⟩
-  all_goals simp at other
 
 /-- The stages after the effective-balance update keep the validators and the balances. -/
 theorem balanceDrift_late {f : Fork} {s t : BeaconState preset f}
@@ -596,8 +514,10 @@ theorem balanceDrift_late {f : Fork} {s t : BeaconState preset f}
   cases k
   case rewards | registry | slashings | pendingDeposits | pendingConsolidations
     | effectiveBalances => simp at member
-  all_goals exact ⟨edge.validators_eq ⟨nofun, nofun, nofun⟩,
-    (edge.balances_eq_and_pendingConsolidations_eq ⟨nofun, nofun, nofun, nofun⟩).1⟩
+  all_goals
+    have kept := edge.validators_balances_pendingConsolidations_eq
+      ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩
+    exact ⟨kept.1, kept.2.1⟩
 
 
 /-- An effective-balance update cannot increase the funding held at any registry position. -/

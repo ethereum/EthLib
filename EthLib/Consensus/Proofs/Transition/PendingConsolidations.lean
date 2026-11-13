@@ -145,7 +145,12 @@ theorem EpochStage.Edge.samePendingQueue {f : Fork} {stage : EpochStage}
     · exact processPendingDeposits_pendingConsolidations edge
     · exact edge ▸ rfl
   case pendingConsolidations => exact absurd rfl other
-  all_goals exact (edge.balances_eq_and_pendingConsolidations_eq ⟨nofun, nofun, nofun, nofun⟩).2
+  case registry => exact (processRegistryUpdates_balances_eq_and_pendingConsolidations_eq edge).2
+  case effectiveBalances =>
+    show t.pendingConsolidations = s.pendingConsolidations
+    rw [processEffectiveBalanceUpdates_frame edge]
+  all_goals exact (edge.validators_balances_pendingConsolidations_eq
+    ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩).2.2
 
 variable {fork : Fork} {state after : BeaconState preset fork}
   {engine : ExecutionEngine preset fork}
@@ -767,9 +772,7 @@ theorem registry (holds : PendingConsolidationInvariant config state)
     (ok : processRegistryUpdates config state = .ok after) :
     PendingConsolidationInvariant config after := by
   by_cases electra : .pectra ≤ fork
-  · -- The registry stage reads no signature checks, so any of them gives its edge.
-    apply holds.kept (EpochStage.Edge.balances_eq_and_pendingConsolidations_eq
-      (stage := .registry) (checks := .bls) ok ⟨nofun, nofun, nofun, nofun⟩).2
+  · apply holds.kept (processRegistryUpdates_balances_eq_and_pendingConsolidations_eq ok).2
       (registryLifecycle_processRegistryUpdates ok) (WithdrawalKept.registry electra ok)
     rw [show getCurrentEpoch after = getCurrentEpoch state from
       congrArg (computeEpochAtSlot preset) (frame_processRegistryUpdates ok).slot]
