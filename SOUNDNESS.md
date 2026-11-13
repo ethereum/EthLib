@@ -4004,6 +4004,23 @@ It checks the start, the count and the limit of 128 of a range, the versions of 
 It builds the store of a Gloas fork choice case, checks the bootstrap of the head and of the anchor, and starts a light client from each.
 It checks code 404 for an unknown block, for a schedule before Altair, and for a missing finality or optimistic update; no theorem states these codes.
 
+The answers that split the rewards of validators are in `Consensus/BeaconApi/Rewards.lean`: the attestation rewards of an epoch, and the ideal rewards of each effective balance.
+`attestationRewardsResponse_ok` (`Consensus/Proofs/BeaconApi/Rewards.lean`) shows that an answer comes from a state at the last slot of an epoch past the first, for the epoch before, and that both lists are read from the state that the rewards step of the epoch transition reads.
+`processEpoch_stateBeforeRewards` shows that the epoch transition runs its rewards step on that state, after justification and, from Altair, the inactivity scores.
+`attestationRewards_indices` shows that the answer names the requested validators, once each and in order of index, and `attestationRewards_ok` that the total rewards exist whenever the rewards step succeeds; no theorem says the same of the ideal rewards.
+`attestationRewards_parts_of_altair` and `attestationRewards_parts_of_lt_altair` show that each part is the reward minus the penalty of the deltas of its kind.
+Before Altair the inclusion part is the attester's own reward; `attesterInclusionRewards_split` shows that the inclusion deltas are those parts plus the proposer shares, and `attestationRewards_inclusionDelay_le_of_lt_altair` that the part is at most the deltas.
+`attestationRewards_sum_of_altair` and `attestationRewards_sum_of_lt_altair` show that the parts add up to what the transition applies; before Altair the inclusion deltas take the place of the inclusion part.
+`attestationRewards_balance_of_lt_altair` and `attestationRewards_balance_of_altair` show that the rewards step moves the balance of the validator by exactly that sum.
+Before Altair they assume that the balance plus the reward covers the penalty, and from Altair that the penalties do not exceed the balance: a balance stops at zero, so a larger penalty moves it by less.
+From Altair the assumption bounds the sum of the penalties of the epoch, since the flags apply one after the other; it is sufficient, not necessary.
+`idealAttestationRewards_sorted` shows that the ideal rewards list distinct effective balances in increasing order.
+`attestationRewards_ideal_of_altair` shows that from Altair an eligible validator that set every flag earns the ideal parts of its effective balance.
+No theorem describes the ideal rewards before Altair.
+The Python suite (`bindings/python/tests/consensus/test_beacon_api_rewards.py`) reads the states of the pinned rewards vectors, at every fork from phase 0.
+It takes each state to the last slot of its epoch, and checks each part of each validator against EthLib's deltas of its kind, which the rewards vectors check, on the state after justification and the inactivity scores.
+It checks that a validator that earned a reward for every vote gets the ideal parts of its effective balance, and code 400 and 404, including a state that is not at the last slot of its epoch.
+
 Points that remain open:
 
 - The reader refuses a key that a container does not declare, while the source says that a field may be added to the data without a new version.
@@ -4018,6 +4035,11 @@ Points that remain open:
 - A store anchored after genesis names no block at genesis, or below its anchor; a head that cannot be computed makes the head, genesis and slot identifiers name nothing.
 - The source says that the spec map should include the constants of each known fork, and its example has a domain; EthLib gives only the configuration and the presets, and leaves the choice of constants to the maintainers.
 - The source does not say whether a fork scheduled at the farthest epoch is one that the node "is aware" of; EthLib lists it.
+- The source does not say which state answers a query for the attestation rewards of an epoch; EthLib takes the state at the last slot of the next epoch, before its slot step and its epoch transition, since the slot step changes no root that the rewards read, and refuses a state of the first epoch, whose transition applies no rewards, with code 404.
+- The source defines the ideal rewards only as "Ideal rewards info"; EthLib gives, for each effective balance of the eligible validators, the parts of a validator that voted right, included one slot after its vote before Altair, and leaves the definition to the maintainers.
+- Before Altair, the inclusion deltas also hold the shares a validator earned as the proposer that included votes; the source calls the part the attester's inclusion reward, so EthLib leaves those shares out of it.
+- The request body of the attestation rewards is a set of identifiers; EthLib accepts a repeated identifier and answers for it once, and an identifier that names no validator gets no entry.
+- The ideal rewards cover only the effective balances of the eligible validators, whichever validators the request names.
 - The source does not say whether the genesis fork version is the one of the configuration or the one that the genesis state holds; EthLib reads the configuration, which the domain of a deposit uses, so a chain that starts at a later fork reports a version that its genesis state does not hold.
 - `forkSchedule_upgrade` assumes that the state before the upgrade holds the version of its own fork; no theorem yet shows this for every state that the transition reaches.
 - The format rule of the spec map names hex, numbers and arrays only; EthLib writes the names of the preset and of the configuration as text, as the files do.
@@ -4650,12 +4672,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 493 operations and 49 size constants.
-The Python extension calls 493 of the operations and 49 of the constants.
+Lean exports 494 operations and 49 size constants.
+The Python extension calls 494 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-11454 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2468), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (207), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1593), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (161), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (58), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (787), `x25519.c` (21), `xmss.c` (134).
+11468 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2479), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (207), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1595), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (161), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (58), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (788), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

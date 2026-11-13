@@ -1314,6 +1314,22 @@ def api_sync_committee_contribution(
     )
 
 
+def api_attestation_rewards(
+    name: str,
+    fork: str,
+    state: bytes,
+    epoch: int,
+    *,
+    ids: Sequence[str] = (),
+    config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """The Beacon API attestation rewards of an epoch, read from a state, or ConsensusError."""
+    # The state answers for its previous epoch; another epoch, or the first one, raises code 404.
+    # The identifiers are indices or public keys as the API writes them; none names every validator.
+    # The flags execution_optimistic and finalized come from the store and are absent.
+    return _native.consensus_api_attestation_rewards(name, fork, state, config, epoch, list(ids))
+
+
 def api_duties(
     name: str,
     fork: str,
@@ -2032,6 +2048,7 @@ __all__ = [
     "api_payload_attestation_data",
     "api_aggregate_attestation",
     "api_sync_committee_contribution",
+    "api_attestation_rewards",
     "api_duties",
     "api_committees",
     "api_sync_committees",
