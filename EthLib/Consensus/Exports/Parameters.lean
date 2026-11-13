@@ -5,8 +5,7 @@ public import EthLib.Base.Exports.Proofs.PyValue
 public import Lean.Data.Json
 public import EthLib.Base.Hex
 public import EthLib.Serialization.Ssz.Codec.Json
-public import EthLib.Consensus.Config
-public import EthLib.Consensus.Preset
+public import EthLib.Consensus.BeaconApi.Config
 public import EthLib.Networking.ReqResp.Encoding
 
 /-!
@@ -62,7 +61,6 @@ It stays local to this file, as the form of a 64-bit integer does. -/
 local instance (priority := high) : ToJson U256 where
   toJson n := toJson n.toNat
 
-deriving instance ToJson for Preset
 deriving instance ToJson for BlobScheduleEntry
 deriving instance ToJson for GasLimitScheduleEntry
 deriving instance ToJson for Networking.Gossip.SubnetParameters
@@ -92,13 +90,22 @@ deriving instance FromJson for GasLimitScheduleEntry
 deriving instance FromJson for Networking.Gossip.SubnetParameters
 deriving instance FromJson for Config
 
+/-- A value of the spec map of the Beacon API, with each number as a JSON number. -/
+def specValuePy : BeaconApi.SpecValue → Json
+  | .int value => toJson value
+  | .bytes value => hexString value
+  | .text value => .str value
+  | .list items => .arr (items.map specValuePy).toArray
+  | .entry fields => Json.mkObj (fields.map fun (name, value) => (name, toJson value))
+
+/-- The values of a preset or a configuration, each under its name, with numbers as numbers.
+
+They are the values of the spec map of the Beacon API, which names them all once. -/
+def entriesJson (entries : List (String × BeaconApi.SpecValue)) : Json :=
+  Json.mkObj (entries.map fun (name, value) => (name, specValuePy value))
+
 /-- The preset of a name, with the values that it derives from its fields. -/
-def presetJson (preset : Preset) : Json :=
-  (toJson preset).mergeObj <| Json.mkObj [
-    ("UPDATE_TIMEOUT", toJson preset.UPDATE_TIMEOUT),
-    ("FIELD_ELEMENTS_PER_EXT_BLOB", toJson preset.FIELD_ELEMENTS_PER_EXT_BLOB),
-    ("CELLS_PER_EXT_BLOB", toJson preset.CELLS_PER_EXT_BLOB),
-    ("NUMBER_OF_COLUMNS", toJson preset.NUMBER_OF_COLUMNS)]
+def presetJson (preset : Preset) : Json := entriesJson (BeaconApi.presetEntries preset)
 
 /-- The text of a name, or an error that a Python traceback shows. -/
 def nameOf (bytes : ByteArray) : Result String := do
@@ -160,9 +167,7 @@ def forkOf (name : ByteArray) : Result Fork := do
 def jsonBytes (value : Json) : ByteArray := value.compress.toUTF8
 
 /-- The configuration of a name, with the payload cap that every network shares. -/
-def configJson (config : Config) : Json :=
-  (toJson config).mergeObj <| Json.mkObj [
-    ("MAX_PAYLOAD_SIZE", toJson Networking.ReqResp.MAX_PAYLOAD_SIZE)]
+def configJson (config : Config) : Json := entriesJson (BeaconApi.configEntries config)
 
 /-- The preset of a name, as a `dict`. -/
 def presetValue (name : String) : Result PyValue := do
