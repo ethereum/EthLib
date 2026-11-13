@@ -1852,8 +1852,10 @@ def bindings : List Binding := [
     [], some "RpcError"⟩,
   ⟨"rpc_serve", `EthLib.Execution.Rpc.Exports.serveExport,
     "(view: tuple[dict[str, Any], bytes, list[tuple[str, bytes]], tuple[bytes, bytes, bytes], " ++
-      "int, bool], requests: list[str]) -> list[str | None]",
+      "int, bool], numbers: list[int], requests: list[str]) -> list[str | None]",
     [`EthLib.Execution.Blocks.BlockError], some "RpcError"⟩,
+  ⟨"rpc_encode_block_access_list", `EthLib.Execution.Rpc.Exports.encodeBlockAccessListExport,
+    "(value: object) -> bytes", [], some "RpcError"⟩,
   ⟨"pyvalue_echo", `EthLib.Exports.pyValueEcho,
     "(value: object) -> object",
     [], some "BindingError"⟩

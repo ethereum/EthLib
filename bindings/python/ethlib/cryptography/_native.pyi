@@ -1977,8 +1977,12 @@ def rpc_pruned_history_unavailable() -> tuple[tuple[bool, int], str]:
     """The code of history that the node pruned, with its message."""
     ...
 
-def rpc_serve(view: tuple[dict[str, Any], bytes, list[tuple[str, bytes]], tuple[bytes, bytes, bytes], int, bool], requests: list[str]) -> list[str | None]:
+def rpc_serve(view: tuple[dict[str, Any], bytes, list[tuple[str, bytes]], tuple[bytes, bytes, bytes], int, bool], numbers: list[int], requests: list[str]) -> list[str | None]:
     """Answer requests of the execution JSON-RPC API from the chain that the arguments build."""
+    ...
+
+def rpc_encode_block_access_list(value: object) -> bytes:
+    """Encode a block access-list JSON value as its EIP-7928 RLP bytes."""
     ...
 
 def pyvalue_echo(value: object) -> object:

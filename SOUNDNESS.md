@@ -3791,6 +3791,29 @@ The receipts of the lowest block, of side blocks and of the pending block are in
 No result schema of the getters allows `null`.
 Here an unknown block or transaction gets `-32001`, the code that the getter of a block access list in the same file requires for an unknown block.
 
+The block access-list methods of those same API files return the JSON list or its EIP-7928 RLP bytes (`Execution/Rpc/AccessList.lean`).
+The JSON writer keeps all six account fields, including empty arrays, and writes storage keys and values as 32-byte data.
+Every list reads back from its JSON form (`blockAccessListOfJson_blockAccessListJson`, `Proofs/Rpc/AccessList.lean`).
+`ChainView.blockAccessList_eq_ok_iff` identifies the resolved record and its retained list for every successful non-pending JSON query, or the unknown block that gives `null`.
+`ChainView.rawBlockAccessList_eq_ok_iff` identifies the resolved record, its retained list and its RLP encoding for every successful raw query.
+For a non-pending query, successful JSON and raw answers both read back as the retained list of the resolved block (`ChainView.blockAccessList_forms`).
+In a valid view, the raw answer for a canonical block after the lowest hashes to the `blockAccessListHash` of its header (`Valid.rawBlockAccessList_hash`).
+The proof uses the list built by execution and the state transition's check of its hash.
+`Valid.blockAccessList_answers` proves that both methods succeed when a non-pending query resolves to such a block with a retained list.
+`Valid.check_accessList` derives the retained list's order, uniqueness and gas-limit checks from execution.
+`call_blockAccessList` and `call_rawBlockAccessList` connect the public RPC method names to the view methods after parameter decoding.
+`Valid.call_blockAccessList_answers` proves that both dispatched replies recover the checked retained list and that the raw bytes hash to its header.
+The lowest block, side blocks and the pending block are inputs, so that hash guarantee does not cover their retained lists.
+
+An unknown block gives `null` to `eth_getBlockAccessList` and `-32001` to `debug_getRawBlockAccessList`.
+Both reject a block before Glamsterdam with `-32001`, and a missing retained list from that fork with `4444` (`retainedAccessList_of_lt`, `retainedAccessList_pruned`).
+The JSON method always gives `null` for `pending` (`blockAccessList_pending`).
+The source leaves `pending` open for the raw getter; it reads the pending record, as the other raw getters do.
+The binding retains the list of each block it executes; the lowest block has no retained list.
+Its `pruned_access_lists` argument removes lists at named block numbers while keeping the blocks.
+`encode_block_access_list` reads a JSON list under the same schema and returns its RLP bytes, so callers can check a JSON answer against a header hash.
+It does not check the order of the list, so only a list in canonical order gives the hash of the header.
+
 The receipt methods return the object `ReceiptInfo` of [`receipt.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/schemas/receipt.yaml), with its logs as objects `Log` (`Execution/Rpc/Receipt.lean`).
 The receipt objects of a block are one for each receipt, in order, each built from its transaction and its receipt (`receiptInfos_eq_ok`, `receiptInfo_eq_ok`, `Proofs/Rpc/Receipt.lean`).
 Their logs are numbered `0, 1, 2, …` across the block (`logIndex_receiptInfos`), and the lookup of one receipt returns the object at its index among those of its block (`transactionReceipt_eq_ok`).
@@ -4769,12 +4792,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 497 operations and 49 size constants.
-The Python extension calls 497 of the operations and 49 of the constants.
+Lean exports 498 operations and 49 size constants.
+The Python extension calls 498 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-11510 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2512), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (207), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1601), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (161), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (58), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (791), `x25519.c` (21), `xmss.c` (134).
+11526 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2512), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (207), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1603), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (161), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (71), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (792), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.
