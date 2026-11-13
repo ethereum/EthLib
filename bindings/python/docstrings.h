@@ -551,6 +551,21 @@
 #define DOC_consensus_relay_validators \
   "At Fulu only: the list of validators that a relay serves, as a `list` of `dict`."
 
+#define DOC_consensus_relay_delivered_payload \
+  "A delivered payload, read from its JSON and written back as a `dict`."
+
+#define DOC_consensus_relay_received_bid \
+  "A received bid, read from its JSON and written back as a `dict`."
+
+#define DOC_consensus_relay_delivered_keeps \
+  "Whether the filters of a query of delivered payloads keep the payload of a JSON object."
+
+#define DOC_consensus_relay_received_keeps \
+  "Whether the filters of a query of received bids keep the bid of a JSON object."
+
+#define DOC_consensus_relay_sort_delivered \
+  "Delivered payloads sorted by value in the given order, as a `list` of `dict`."
+
 #define DOC_consensus_builder_bid_value \
   "The value of a builder's bid from its two payments and the proposer's execution payment cap."
 
