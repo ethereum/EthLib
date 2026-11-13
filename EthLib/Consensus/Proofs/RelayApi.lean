@@ -264,6 +264,41 @@ theorem sortBy_descending (entries : List BidTraceV2) :
     entries
   simpa [sortBy] using sorted
 
+/-- Payloads of equal value keep their input order, in either order of the sort. -/
+theorem sortBy_stable (order : OrderBy) (entries : List BidTraceV2) (value : U256) :
+    (sortBy order entries).filter (fun entry => entry.trace.value = value) =
+      entries.filter (fun entry => entry.trace.value = value) := by
+  -- The payloads of one value form a sublist of the input that the sort keeps in place.
+  have stable (le : BidTraceV2 → BidTraceV2 → Bool)
+      (trans : ∀ a b c, le a b = true → le b c = true → le a c = true)
+      (total : ∀ a b, (le a b || le b a) = true)
+      (equal : ∀ a b, a.trace.value = b.trace.value → le a b = true) :
+      (entries.mergeSort le).filter (fun entry => entry.trace.value = value) =
+        entries.filter (fun entry => entry.trace.value = value) := by
+    have ordered : (entries.filter fun entry => entry.trace.value = value).Pairwise
+        (fun a b => le a b = true) := by
+      rw [List.pairwise_filter]
+      exact List.pairwise_of_forall fun a b first second => by
+        simp only [decide_eq_true_eq] at first second
+        exact equal a b (first.trans second.symm)
+    have kept := (List.sublist_mergeSort trans total ordered List.filter_sublist).filter
+      (fun entry : BidTraceV2 => decide (entry.trace.value = value))
+    rw [List.filter_filter, show (fun entry : BidTraceV2 =>
+        (decide (entry.trace.value = value) && decide (entry.trace.value = value)))
+          = fun entry => decide (entry.trace.value = value) by simp] at kept
+    exact (kept.eq_of_length ((List.mergeSort_perm _ _).filter _).length_eq.symm).symm
+  cases order
+  · exact stable _ (fun a b c first second => by
+      simp only [decide_eq_true_eq] at first second ⊢
+      bv_omega) (fun a b => by
+      simp only [Bool.or_eq_true, decide_eq_true_eq]
+      bv_omega) fun a b same => by simp [same]
+  · exact stable _ (fun a b c first second => by
+      simp only [decide_eq_true_eq] at first second ⊢
+      bv_omega) (fun a b => by
+      simp only [Bool.or_eq_true, decide_eq_true_eq]
+      bv_omega) fun a b same => by simp [same]
+
 /-! ## The validators that a relay lists -/
 
 instance : LawfulSszType ValidatorsResponseEntry :=

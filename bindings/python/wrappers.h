@@ -707,6 +707,7 @@ PyObject* py_engine_forkchoice_updated                   (PyObject* self, PyObje
 PyObject* py_engine_get_blobs                            (PyObject* self, PyObject* args);
 PyObject* py_engine_get_payload_bodies                   (PyObject* self, PyObject* args);
 PyObject* py_engine_get_payload                          (PyObject* self, PyObject* args);
+PyObject* py_engine_new_payload_routes                   (PyObject* self, PyObject* args);
 PyObject* py_engine_read_payload_status                  (PyObject* self, PyObject* args);
 PyObject* py_engine_read_forkchoice_response             (PyObject* self, PyObject* args);
 PyObject* py_engine_read_get_payload_result              (PyObject* self, PyObject* args);

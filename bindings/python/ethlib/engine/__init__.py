@@ -48,6 +48,17 @@ def new_payload_on_chain(
     )
 
 
+def new_payload_routes(
+    config: dict[str, Any], preset: str, fork: str, request: bytes
+) -> tuple[list[Any] | None, str | None, int | None, bool]:
+    """Run a beacon payload request in SSZ through the JSON method and the beacon engine."""
+    # The result is the JSON parameters, then the status of the method or the code of its error.
+    # Last comes whether the beacon engine accepts, with the state transition taken as passed.
+    # Neither route holds the parent's state, so both stop before execution.
+    # The parameters are None only for a preset whose logs Bloom filter is not 256 bytes.
+    return _native.engine_new_payload_routes(config, preset, fork, request)
+
+
 def build_payload(
     config: dict,
     state: bytes,
@@ -336,6 +347,7 @@ __all__ = [
     "jwt_check",
     "new_payload",
     "new_payload_on_chain",
+    "new_payload_routes",
     "forkchoice_updated",
     "get_blobs",
     "PoolEntry",

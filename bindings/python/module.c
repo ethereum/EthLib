@@ -1287,6 +1287,8 @@ static PyMethodDef methods[] = {
   {"engine_get_payload", py_engine_get_payload, METH_VARARGS, DOC_engine_get_payload},
   {"engine_get_payload_bodies", py_engine_get_payload_bodies, METH_VARARGS,
    DOC_engine_get_payload_bodies},
+  {"engine_new_payload_routes", py_engine_new_payload_routes, METH_VARARGS,
+   DOC_engine_new_payload_routes},
   {"engine_read_payload_status", py_engine_read_payload_status, METH_VARARGS,
    DOC_engine_read_payload_status},
   {"engine_read_forkchoice_response", py_engine_read_forkchoice_response, METH_VARARGS,

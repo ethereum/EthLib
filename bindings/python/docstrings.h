@@ -1391,6 +1391,9 @@
 #define DOC_engine_get_payload_bodies \
   "The answer to a payload bodies request, from a store of bodies."
 
+#define DOC_engine_new_payload_routes \
+  "The payload request of the beacon chain through the method and through its execution layer."
+
 #define DOC_engine_read_payload_status \
   "A payload status read from its JSON, as `json.loads` gives it."
 

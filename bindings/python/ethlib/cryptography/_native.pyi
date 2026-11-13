@@ -1857,6 +1857,10 @@ def engine_get_payload_bodies(store: list[tuple[bytes, int | None, str, list[byt
     """The answer to a payload bodies request, from a store of bodies."""
     ...
 
+def engine_new_payload_routes(config: dict, preset: str, fork: str, request: bytes) -> tuple[list | None, str | None, int | None, bool]:
+    """The payload request of the beacon chain through the method and through its execution layer."""
+    ...
+
 def engine_read_payload_status(status: dict[str, Any]) -> tuple[str, bytes | None, str | None]:
     """A payload status read from its JSON, as `json.loads` gives it."""
     ...
