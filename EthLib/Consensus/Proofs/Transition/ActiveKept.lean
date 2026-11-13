@@ -757,109 +757,71 @@ private theorem stepKeeps_passPendingDeposits {stop : PendingDeposit → Bool} {
     exact (stepKeeps_applyPendingDeposit credited).trans
       (stepKeeps_passPendingDeposits (deposits := rest) ‹_›)
 
-private theorem stepKeeps_processPendingBalances
-    (computed : processPendingBalances config checks state = .ok after) :
-    StepKeeps state after := by
-  unfold processPendingBalances at computed
-  split at computed
-  · simp only [bind_ok_iff] at computed
-    obtain ⟨middle, deposited, consolidated⟩ := computed
-    have deposits : StepKeeps state middle := by
-      unfold processPendingDeposits at deposited
-      simp only [bind, Except.bind, pure, Except.pure] at deposited
-      repeat' (split at deposited <;> try cases deposited)
-      all_goals
-        exact (stepKeeps_passPendingDeposits ‹_›).trans StepKeeps.of_validators
-    exact deposits.trans (StepKeeps.of_validators
-      (by rw [(processPendingConsolidations_kept consolidated).1])
-      (frame_processPendingConsolidations consolidated).slot)
-  · simp only [pure, Except.pure, Except.ok.injEq] at computed
-    exact computed ▸ StepKeeps.refl _
-
-private theorem stepKeeps_epochTail {altair : .altair ≤ fork}
-    {rooted synced looked : BeaconState preset fork}
-    (syncedOk : processSyncCommitteeUpdates (processParticipationFlagUpdates rooted altair)
-      altair = .ok synced)
-    (lookedOk : (if fulu : .fusaka ≤ fork then liftAccessor (processProposerLookahead synced fulu)
-      else pure synced) = .ok looked)
-    (windowed : (if gloas : .glamsterdam ≤ fork then liftAccessor (processPtcWindow looked gloas)
-      else pure looked) = .ok after) : StepKeeps rooted after := by
-  have syncedStep : StepKeeps (processParticipationFlagUpdates rooted altair) synced := by
-    unfold processSyncCommitteeUpdates at syncedOk
-    simp only [bind, Except.bind, pure, Except.pure] at syncedOk
-    repeat' (split at syncedOk <;> try cases syncedOk)
-    all_goals exact StepKeeps.refl _
-  have lookedStep : StepKeeps synced looked := by
-    split at lookedOk
-    · simp only [processProposerLookahead, liftAccessor_ok, bind_ok_iff, pure, Except.pure,
-        Except.ok.injEq] at lookedOk
-      obtain ⟨_, _, _, _, rfl⟩ := lookedOk
-      exact StepKeeps.of_validators
-    · simp only [pure, Except.pure, Except.ok.injEq] at lookedOk
-      exact lookedOk ▸ StepKeeps.refl _
-  have windowedStep : StepKeeps looked after := by
-    split at windowed
-    · simp only [processPtcWindow, liftAccessor_ok, bind_ok_iff, pure, Except.pure,
-        Except.ok.injEq] at windowed
-      obtain ⟨_, _, _, _, rfl⟩ := windowed
-      exact StepKeeps.of_validators
-    · simp only [pure, Except.pure, Except.ok.injEq] at windowed
-      exact windowed ▸ StepKeeps.refl _
-  exact (StepKeeps.of_validators : StepKeeps rooted _).trans <| syncedStep.trans <|
-    lookedStep.trans windowedStep
-
 private theorem stepKeeps_processEpochAltair {altair : .altair ≤ fork}
     (computed : processEpochAltair config checks state altair = .ok after) :
     StepKeeps state after := by
-  unfold processEpochAltair at computed
-  simp only [bind_ok_iff] at computed
-  obtain ⟨justified, justifiedOk, scored, scoredOk, rewarded, rewardedOk, registered,
-    registeredOk, slashed, slashedOk, reset, resetOk, pending, pendingOk, paid, paidOk, balanced,
-    balancedOk, cleared, clearedOk, mixed, mixedOk, computed⟩ := computed
-  have resetStep : StepKeeps slashed reset := by
-    split at resetOk
-    · exact StepKeeps.of_step (frame_processEth1DataReset resetOk).registryGrows
-        (activeStep_processEth1DataReset resetOk)
-    · simp only [pure, Except.pure, Except.ok.injEq] at resetOk
-      exact resetOk ▸ StepKeeps.refl _
-  have paidStep : StepKeeps pending paid := by
-    split at paidOk
-    · simp only [processBuilderPendingPayments, liftAccessor_ok, bind_ok_iff, pure, Except.pure,
-        Except.ok.injEq] at paidOk
-      obtain ⟨_, _, rfl⟩ := paidOk
+  rw [processEpochAltair_eq_run] at computed
+  apply (EpochTrace.run_ok_iff.mp computed).transport StepKeeps StepKeeps.refl
+    (fun a b => a.trans b)
+  intro k _ a b ok
+  have edge := EpochStage.action_cases.mp ok
+  cases k <;> simp only [EpochStage.Edge, altair, ↓reduceDIte] at edge
+  · exact stepKeeps_processJustificationAndFinalization edge
+  · exact stepKeeps_processInactivityUpdates edge
+  · exact StepKeeps.of_step (frame_processRewardsAndPenalties edge).registryGrows
+      (activeStep_processRewardsAndPenalties edge)
+  · exact stepKeeps_processRegistryUpdates edge
+  · exact StepKeeps.of_step (frame_processSlashings edge).registryGrows
+      (activeStep_processSlashings edge)
+  · split at edge
+    · exact StepKeeps.of_step (frame_processEth1DataReset edge).registryGrows
+        (activeStep_processEth1DataReset edge)
+    · exact edge ▸ StepKeeps.refl _
+  · split at edge
+    · unfold processPendingDeposits at edge
+      simp only [bind, Except.bind, pure, Except.pure] at edge
+      repeat' (split at edge <;> try cases edge)
+      all_goals exact (stepKeeps_passPendingDeposits ‹_›).trans StepKeeps.of_validators
+    · exact edge ▸ StepKeeps.refl _
+  · split at edge
+    · exact StepKeeps.of_validators
+        (by rw [(processPendingConsolidations_kept edge).1])
+        (frame_processPendingConsolidations edge).slot
+    · exact edge ▸ StepKeeps.refl _
+  · split at edge
+    · rw [processBuilderPendingPayments_eq edge]
       exact StepKeeps.of_validators
-    · simp only [pure, Except.pure, Except.ok.injEq] at paidOk
-      exact paidOk ▸ StepKeeps.refl _
-  have mixedStep : StepKeeps cleared mixed := by
-    obtain ⟨_, _, _, _, _, _, rfl⟩ := processRandaoMixesReset_eq mixedOk
+    · exact edge ▸ StepKeeps.refl _
+  · exact StepKeeps.of_step (frame_processEffectiveBalanceUpdates edge).registryGrows
+      (activeStep_processEffectiveBalanceUpdates edge)
+  · exact StepKeeps.of_step (frame_processSlashingsReset edge).registryGrows
+      (activeStep_processSlashingsReset edge)
+  · obtain ⟨_, _, _, _, _, _, rfl⟩ := processRandaoMixesReset_eq edge
     exact StepKeeps.of_validators
-  have head : StepKeeps state mixed :=
-    (stepKeeps_processJustificationAndFinalization justifiedOk).trans <|
-    (stepKeeps_processInactivityUpdates scoredOk).trans <|
-    (StepKeeps.of_step (frame_processRewardsAndPenalties rewardedOk).registryGrows
-      (activeStep_processRewardsAndPenalties rewardedOk)).trans <|
-    (stepKeeps_processRegistryUpdates registeredOk).trans <|
-    (StepKeeps.of_step (frame_processSlashings slashedOk).registryGrows
-      (activeStep_processSlashings slashedOk)).trans <|
-    resetStep.trans <|
-    (stepKeeps_processPendingBalances pendingOk).trans <|
-    paidStep.trans <|
-    (StepKeeps.of_step (frame_processEffectiveBalanceUpdates balancedOk).registryGrows
-      (activeStep_processEffectiveBalanceUpdates balancedOk)).trans <|
-    (StepKeeps.of_step (frame_processSlashingsReset clearedOk).registryGrows
-      (activeStep_processSlashingsReset clearedOk)).trans mixedStep
-  split at computed <;> simp only [bind_ok_iff] at computed <;>
-    obtain ⟨rooted, rootedOk, synced, syncedOk, looked, lookedOk, windowed⟩ := computed
-  · have rootedStep : StepKeeps mixed rooted := by
-      unfold processHistoricalSummariesUpdate at rootedOk
-      simp only [bind, Except.bind, pure, Except.pure] at rootedOk
-      repeat' (split at rootedOk <;> try cases rootedOk)
+  · split at edge
+    · unfold processHistoricalSummariesUpdate at edge
+      simp only [bind, Except.bind, pure, Except.pure] at edge
+      repeat' (split at edge <;> try cases edge)
       all_goals exact StepKeeps.refl _
-    exact head.trans <| rootedStep.trans (stepKeeps_epochTail syncedOk lookedOk windowed)
-  · exact head.trans <|
-      (StepKeeps.of_step (frame_processHistoricalRootsUpdate rootedOk).registryGrows
-        (activeStep_processHistoricalRootsUpdate rootedOk)).trans
-      (stepKeeps_epochTail syncedOk lookedOk windowed)
+    · exact StepKeeps.of_step (frame_processHistoricalRootsUpdate edge).registryGrows
+        (activeStep_processHistoricalRootsUpdate edge)
+  · subst b
+    exact StepKeeps.of_validators
+  · unfold processSyncCommitteeUpdates at edge
+    simp only [bind, Except.bind, pure, Except.pure] at edge
+    repeat' (split at edge <;> try cases edge)
+    all_goals exact StepKeeps.refl _
+  · split at edge
+    · simp only [processProposerLookahead, bind_ok_iff, pure, Except.pure,
+        Except.ok.injEq] at edge
+      obtain ⟨_, _, _, _, rfl⟩ := edge
+      exact StepKeeps.of_validators
+    · exact edge ▸ StepKeeps.refl _
+  · split at edge
+    · simp only [processPtcWindow, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at edge
+      obtain ⟨_, _, _, _, rfl⟩ := edge
+      exact StepKeeps.of_validators
+    · exact edge ▸ StepKeeps.refl _
 
 /-- The epoch step keeps activity up to the current epoch plus `MAX_SEED_LOOKAHEAD`.
 
