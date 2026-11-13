@@ -1046,57 +1046,6 @@ private theorem registry (electra : .pectra ≤ fork)
   · exact setAt found (liftAccessor_ok.mp ok) (fun _ => UInt64.le_refl _)
   · cases ok; exact of_data
 
-private theorem rewards
-    (ok : processRewardsAndPenalties config state = .ok after) : WithdrawalKept state after := by
-  have all {a b : BeaconState preset fork} {deltas : Array Gwei × Array Gwei}
-      (ok : applyAllDeltas a deltas = .ok b) : WithdrawalKept a b := by
-    refine fold (fun _ _ _ ok => ?_)
-      (fun _ _ _ ok => by
-        simp only [applyDeltas, bind_ok_iff, liftAccessor_ok] at ok
-        obtain ⟨_, _, _, raised, lowered⟩ := ok
-        exact (RegistryLifecycle.increaseBalance raised).trans (.decreaseBalance lowered)) ok
-    simp only [applyDeltas, bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, _, raised, lowered⟩ := ok
-    exact (increase raised).trans (decrease lowered) (.increaseBalance raised)
-  unfold processRewardsAndPenalties at ok
-  split at ok
-  · cases ok; exact of_data
-  split at ok
-  · simp only [bind_ok_iff] at ok
-    obtain ⟨_, _, _, _, applied⟩ := ok
-    exact fold (fun _ _ _ => all)
-      (fun _ _ _ ok => registryLifecycle_applyAllDeltas ok) applied
-  · obtain ⟨_, _, applied⟩ := bind_ok_iff.mp ok
-    exact all applied
-
-private theorem slashings (ok : processSlashings state = .ok after) :
-    WithdrawalKept state after := by
-  have unchanged : after.validators = state.validators := by
-    unfold processSlashings at ok
-    simp only [bind_ok_iff] at ok
-    obtain ⟨_, _, _, _, _, _, ok⟩ := ok
-    split at ok
-    · obtain ⟨_, _, applied⟩ := bind_ok_iff.mp ok
-      exact foldlM_ok_invariant (fun s => s.validators = state.validators)
-        (fun _ _ _ prior ok => by
-          unfold applySlashingPenaltyElectra at ok
-          simp only [bind, Except.bind, pure, Except.pure] at ok
-          repeat' split at ok
-          all_goals first
-            | (cases ok; done)
-            | (cases ok; exact prior)
-            | exact (decreaseBalance_validators (liftAccessor_ok.mp ok)).trans prior) rfl applied
-    · exact foldlM_ok_invariant (fun s => s.validators = state.validators)
-        (fun _ _ _ prior ok => by
-          unfold applySlashingPenalty at ok
-          simp only [bind, Except.bind, pure, Except.pure] at ok
-          repeat' split at ok
-          all_goals first
-            | (cases ok; done)
-            | (cases ok; exact prior)
-            | exact (decreaseBalance_validators (liftAccessor_ok.mp ok)).trans prior) rfl ok
-  exact of_data (congrArg (·.data) unchanged)
-
 private theorem append {v : Validator}
     (added : after.validators.data = state.validators.data.push v) :
     WithdrawalKept state after := by
@@ -1427,8 +1376,7 @@ theorem justification (holds : PendingConsolidationInvariant config state)
   obtain rfl | ⟨_, _, _, weighed⟩ := processJustificationAndFinalization_ok ok
   · exact holds
   · obtain ⟨_, _, _, rest⟩ := weighJustificationAndFinalization_checkpoints weighed
-    apply holds.kept (SamePendingQueue.justification ok)
-      (registryLifecycle_processJustificationAndFinalization ok)
+    apply holds.kept (SamePendingQueue.justification ok) (.of_data (by rw [← rest]))
     · exact WithdrawalKept.of_data (by rw [← rest])
     · rw [show getCurrentEpoch after = getCurrentEpoch state from by
         unfold getCurrentEpoch; rw [← rest]]
@@ -1447,8 +1395,9 @@ theorem inactivity (holds : PendingConsolidationInvariant config state) {altair 
 theorem rewards (holds : PendingConsolidationInvariant config state)
     (ok : processRewardsAndPenalties config state = .ok after) :
     PendingConsolidationInvariant config after := by
-  apply holds.kept (SamePendingQueue.rewards ok)
-    (registryLifecycle_processRewardsAndPenalties ok) (WithdrawalKept.rewards ok)
+  have same : after.validators.data = state.validators.data := by
+    rw [processRewardsAndPenalties_frame ok]
+  apply holds.kept (SamePendingQueue.rewards ok) (.of_data same) (WithdrawalKept.of_data same)
   rw [show getCurrentEpoch after = getCurrentEpoch state from
     congrArg (computeEpochAtSlot preset) (frame_processRewardsAndPenalties ok).slot]
   exact UInt64.le_refl _
@@ -1466,8 +1415,10 @@ theorem registry (holds : PendingConsolidationInvariant config state)
 
 theorem slashings (holds : PendingConsolidationInvariant config state)
     (ok : processSlashings state = .ok after) : PendingConsolidationInvariant config after := by
-  apply holds.kept (SamePendingQueue.slashings ok)
-    (registryLifecycle_processSlashings ok) (WithdrawalKept.slashings ok)
+  -- The slashings stage reads no signature checks, so any checks give its edge.
+  have same := congrArg (·.data) (EpochStage.Edge.validators_eq (stage := .slashings)
+    (config := config) (checks := .acceptAll) ok ⟨nofun, nofun, nofun⟩)
+  apply holds.kept (SamePendingQueue.slashings ok) (.of_data same) (WithdrawalKept.of_data same)
   rw [show getCurrentEpoch after = getCurrentEpoch state from
     congrArg (computeEpochAtSlot preset) (frame_processSlashings ok).slot]
   exact UInt64.le_refl _

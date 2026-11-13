@@ -816,4 +816,24 @@ theorem Run.effectiveBalance_capped {g x : ForkedBeaconState preset}
       v.effectiveBalance ≤ withdrawalMaxEffectiveBalance preset x.fork v :=
   (CapStep.run run activation compounding early).capped genesis.effectiveBalance_capped
 
+/-- An existing validator's cap cannot decrease along a pre-Gloas run. -/
+theorem Run.validatorCap_mono {x y : ForkedBeaconState preset}
+    (run : Run config checks x y)
+    (activation : preset.MAX_EFFECTIVE_BALANCE ≤ preset.MIN_ACTIVATION_BALANCE)
+    (compounding : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
+    (early : y.fork < .glamsterdam) (i : Nat) (v : Validator)
+    (found : x.state.validators.data[i]? = some v) :
+    ∃ w, y.state.validators.data[i]? = some w ∧
+      withdrawalMaxEffectiveBalance preset x.fork v ≤
+        withdrawalMaxEffectiveBalance preset y.fork w :=
+  (CapStep.run run activation compounding early).monotone i v found
+
+/-- The cap at an existing index cannot decrease during an epoch. -/
+theorem processEpoch_validatorCap_mono {f : Fork} {s t : BeaconState preset f}
+    (ok : processEpoch config checks s = .ok t)
+    (i : Nat) (v : Validator) (found : s.validators.data[i]? = some v) :
+    ∃ w, t.validators.data[i]? = some w ∧
+      withdrawalMaxEffectiveBalance preset f v ≤ withdrawalMaxEffectiveBalance preset f w :=
+  (CapStep.epoch ok).monotone i v found
+
 end EthLib.Consensus

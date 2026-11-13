@@ -18,6 +18,8 @@ Each chain step preserves assigned epochs, and composition gives the same result
 The epoch step is read through the shared epoch schedule.
 
 Only registry updates, pending deposits and effective-balance updates change the validators.
+
+Block operations leave a validator that they append with no activation or exit epoch.
 -/
 
 @[expose] public section
@@ -307,18 +309,18 @@ theorem registryLifecycle_slashValidator {slashedIndex : ValidatorIndex}
 
 /-! ## The steps of a block -/
 
-private theorem registryLifecycle_processBlockHeader {block : BeaconBlock preset fork}
+theorem registryLifecycle_processBlockHeader {block : BeaconBlock preset fork}
     (computed : processBlockHeader state block = .ok after) : RegistryLifecycle state after := by
   obtain ⟨_, _, rfl⟩ := processBlockHeader_eq computed
   exact .of_data rfl
 
-private theorem registryLifecycle_processRandao {body : BeaconBlockBody preset fork}
+theorem registryLifecycle_processRandao {body : BeaconBlockBody preset fork}
     (computed : processRandao config checks state body = .ok after) :
     RegistryLifecycle state after := by
   obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq computed
   exact .of_data rfl
 
-private theorem registryLifecycle_processEth1Data {before : fork < .hegota}
+theorem registryLifecycle_processEth1Data {before : fork < .hegota}
     {body : BeaconBlockBody preset fork}
     (computed : processEth1Data before state body = .ok after) : RegistryLifecycle state after := by
   obtain ⟨_, _, rest⟩ := processEth1Data_eq computed
@@ -525,7 +527,7 @@ private theorem registryLifecycle_queueExcessActiveBalance {electra : .pectra �
     exact .refl _
 
 /-- A switch to compounding changes only the withdrawal credentials of the validator. -/
-private theorem registryLifecycle_switchToCompoundingValidator {electra : .pectra ≤ fork}
+theorem registryLifecycle_switchToCompoundingValidator {electra : .pectra ≤ fork}
     {index : ValidatorIndex}
     (computed : switchToCompoundingValidator state electra index = .ok after) :
     RegistryLifecycle state after := by
@@ -691,7 +693,7 @@ theorem registryLifecycle_processBlsToExecutionChange {signed : SignedBLSToExecu
 /-! ## The execution part of a block -/
 
 /-- The execution part of a block changes the registry only through withdrawals. -/
-private theorem registryLifecycle_processBlockExecution {body : BeaconBlockBody preset fork}
+theorem registryLifecycle_processBlockExecution {body : BeaconBlockBody preset fork}
     {bellatrix : .bellatrix ≤ fork}
     (computed : processBlockExecution config checks engine state body bellatrix = .ok after) :
     RegistryLifecycle state after :=
@@ -701,7 +703,7 @@ private theorem registryLifecycle_processBlockExecution {body : BeaconBlockBody 
 
 /-! ## The sync aggregate -/
 
-private theorem registryLifecycle_processSyncAggregate {altair : .altair ≤ fork}
+theorem registryLifecycle_processSyncAggregate {altair : .altair ≤ fork}
     {aggregate : SyncAggregate preset}
     (computed : processSyncAggregate config checks state altair aggregate = .ok after) :
     RegistryLifecycle state after := by
@@ -799,8 +801,7 @@ private theorem registryLifecycle_activateValidator {index : ValidatorIndex} {va
   exact .setValidator oldFound set ⟨fun set => absurd far set, fun _ => rfl⟩
 
 /-- Each index in the activation queue is that of a validator eligible for activation. -/
-private theorem mem_activationQueue {index : ValidatorIndex}
-    (member : index ∈ activationQueue state) :
+theorem mem_activationQueue {index : ValidatorIndex} (member : index ∈ activationQueue state) :
     ∃ (position : Nat) (validator : Validator), position.toUInt64 = index ∧
       state.validators.data[position]? = some validator ∧
       isEligibleForActivation state validator = true := by
@@ -817,7 +818,7 @@ private theorem mem_activationQueue {index : ValidatorIndex}
   · cases selected
 
 /-- The activation queue holds each index at most once, while the registry is below `2^64`. -/
-private theorem activationQueue_nodup (small : state.validators.data.size < 2 ^ 64) :
+theorem activationQueue_nodup (small : state.validators.data.size < 2 ^ 64) :
     (activationQueue state).Nodup := by
   let entries := state.validators.data.toList.zipIdx.filterMap fun (validator, index) =>
     if isEligibleForActivation state validator then
@@ -998,7 +999,7 @@ private theorem registryLifecycle_processEpoch
 
 /-! ## Slots, upgrades and chains -/
 
-private theorem registryLifecycle_advanceSlot
+theorem registryLifecycle_advanceSlot
     (computed : advanceSlot config checks state = .ok after) :
     RegistryLifecycle state after := by
   simp only [advanceSlot, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
@@ -1028,7 +1029,7 @@ private theorem registryLifecycle_queuePreActivation {state after : BeaconState 
     ⟨fun _ => rfl, fun _ => rfl⟩
   exact RegistryLifecycle.trans (by exact .of_data rfl) (reset.trans (.of_data rfl))
 
-private theorem registryLifecycle_upgradeNext {pre : ForkedBeaconState preset}
+theorem registryLifecycle_upgradeNext {pre : ForkedBeaconState preset}
     {post : {post : ForkedBeaconState preset // pre.fork < post.fork}}
     (computed : upgradeNext config checks pre = .ok post) :
     RegistryLifecycle pre.state post.val.state := by
@@ -1086,5 +1087,330 @@ theorem Run.registryLifecycle {first last : ForkedBeaconState preset}
   induction run with
   | nil => exact .refl _
   | snoc pre step ih => exact ih.trans (RegistryLifecycle.chainStep step.chainStep)
+
+/-! ## Admissions within one step -/
+
+-- Keeping both epochs unassigned lets activity checks rule out a later exit request.
+private def Unassigned (v : Validator) : Prop :=
+  v.activationEpoch = FAR_FUTURE_EPOCH ∧ v.exitEpoch = FAR_FUTURE_EPOCH
+
+private def UnassignedFrom (n : Nat) {fork : Fork} (s : BeaconState preset fork) : Prop :=
+  ∀ i v, n ≤ i → s.validators.data[i]? = some v → Unassigned v
+
+private theorem unassignedFrom_size (s : BeaconState preset fork) :
+    UnassignedFrom s.validators.data.size s := by
+  intro i v large found
+  have := (Array.getElem?_eq_some_iff.mp found).1
+  omega
+
+private def UnassignedKept {f g : Fork} (s : BeaconState preset f)
+    (t : BeaconState preset g) : Prop :=
+  ∀ n, UnassignedFrom n s → UnassignedFrom n t
+
+namespace UnassignedKept
+
+private theorem refl (s : BeaconState preset fork) : UnassignedKept s s := fun _ => id
+
+private theorem trans {f g h : Fork} {s : BeaconState preset f} {t : BeaconState preset g}
+    {u : BeaconState preset h} (one : UnassignedKept s t) (two : UnassignedKept t u) :
+    UnassignedKept s u := fun n => two n ∘ one n
+
+private theorem of_data {g : Fork} {t : BeaconState preset g}
+    (same : t.validators.data = state.validators.data := by rfl) : UnassignedKept state t := by
+  intro n h i v hi found
+  exact h i v hi (same ▸ found)
+
+private theorem foldlM {α ε : Type} {step : BeaconState preset fork → α → Except ε _}
+    (keeps : ∀ s a t, step s a = .ok t → UnassignedKept s t) {xs : List α}
+    (ok : xs.foldlM step state = .ok after) : UnassignedKept state after :=
+  foldlM_ok_invariant (UnassignedKept state)
+    (fun _ _ _ h ok => h.trans (keeps _ _ _ ok)) (refl state) ok
+
+private theorem setValidatorAt {i : Nat} {old v : Validator}
+    (found : getValidatorAt state i = .ok old)
+    (set : state.setValidatorAt i v = .ok after)
+    (keeps : Unassigned old → Unassigned v) : UnassignedKept state after := by
+  obtain ⟨inside, rfl⟩ := setValidatorAt_ok set
+  have oldEq : state.validators.data[i] = old := by simpa [getValidatorAt, inside] using found
+  intro n h j w large read
+  simp only [BeaconState.putValidator, RootedForkList.data_set, Array.getElem?_set] at read
+  split at read
+  · rename_i same
+    subst j
+    cases read
+    apply keeps (h i old large ?_)
+    simp [Array.getElem?_eq_getElem inside, oldEq]
+  · exact h j w large read
+
+private theorem setValidator {i : ValidatorIndex} {old v : Validator}
+    (found : getValidator state i = .ok old)
+    (set : state.setValidator i v = .ok after)
+    (keeps : Unassigned old → Unassigned v) : UnassignedKept state after :=
+  setValidatorAt (by rwa [← getValidator_eq_getValidatorAt])
+    (by rwa [← setValidator_eq_setValidatorAt]) keeps
+
+private theorem append {v : Validator}
+    (added : after.validators.data = state.validators.data.push v)
+    (pending : Unassigned v) : UnassignedKept state after := by
+  intro n h i w large found
+  rw [added, Array.getElem?_push] at found
+  split at found
+  · cases found; exact pending
+  · exact h i w large found
+
+private theorem increaseBalance {i : ValidatorIndex} {amount : Gwei}
+    (ok : Consensus.increaseBalance state i amount = .ok after) : UnassignedKept state after :=
+  of_data (congrArg (·.data) (increaseBalance_validators ok))
+
+private theorem applyPendingDeposit {deposit : PendingDeposit}
+    (ok : Consensus.applyPendingDeposit config checks state deposit = .ok after) :
+    UnassignedKept state after := by
+  unfold Consensus.applyPendingDeposit at ok
+  split at ok
+  · split at ok
+    · cases ok; exact refl _
+    simp only [bind_ok_iff] at ok
+    obtain ⟨_, _, ok⟩ := ok
+    split at ok
+    · exact append (addValidatorToRegistry_validators_eq_push ok) ⟨rfl, rfl⟩
+    · cases ok; exact refl _
+  · simp only [liftAccessor_ok, bind_ok_iff] at ok
+    obtain ⟨_, _, ok⟩ := ok
+    exact increaseBalance ok
+
+private theorem applyDeposit {pubkey : BLSPubkey} {credentials : Bytes32} {amount : Gwei}
+    {signature : BLSSignature}
+    (ok : Consensus.applyDeposit config checks state pubkey credentials amount signature =
+      .ok after) : UnassignedKept state after := by
+  unfold Consensus.applyDeposit at ok
+  split at ok
+  · unfold applyDepositElectra at ok
+    split at ok
+    · simp only [bind_ok_iff] at ok
+      obtain ⟨_, _, ok⟩ := ok
+      split at ok
+      · simp only [bind_ok_iff, liftAccessor_ok] at ok
+        obtain ⟨middle, added, queued⟩ := ok
+        obtain ⟨_, rfl⟩ := addPendingDeposit_eq queued
+        exact (append (addValidatorToRegistry_validators_eq_push added) ⟨rfl, rfl⟩).trans
+          (of_data (state := middle))
+      · cases ok; exact refl _
+    · obtain ⟨_, rfl⟩ := addPendingDeposit_eq (liftAccessor_ok.mp ok)
+      exact of_data
+  · exact applyPendingDeposit ok
+
+private theorem processDeposit {before : fork < .hegota} {deposit : Deposit}
+    (ok : Consensus.processDeposit config checks before state deposit = .ok after) :
+    UnassignedKept state after := by
+  obtain ⟨_, _, next, _, credited⟩ := processDeposit_ok ok
+  exact (of_data (state := state)
+    (t := { state with eth1DepositIndex := fun _ => next })).trans (applyDeposit credited)
+
+private theorem inactive {v : Validator} (pending : Unassigned v) (e : Epoch) :
+    isActiveValidator v e = false := by
+  simp only [isActiveValidator, pending.1, pending.2, Bool.and_eq_false_iff,
+    decide_eq_false_iff_not]
+  by_cases h : FAR_FUTURE_EPOCH ≤ e
+  · exact Or.inr (UInt64.not_lt.mpr h)
+  · exact Or.inl h
+
+private theorem initiateValidatorExit {i : ValidatorIndex} {v : Validator}
+    (found : getValidator state i = .ok v) (notPending : ¬Unassigned v)
+    (ok : Consensus.initiateValidatorExit config state i = .ok after) :
+    UnassignedKept state after := by
+  obtain ⟨old, read, unchanged | ⟨_, queued, _, _, queue, _, set⟩⟩ :=
+    initiateValidatorExit_ok ok
+  · rw [unchanged.2]; exact refl _
+  · have equal := Except.ok.inj (read.symm.trans found)
+    have same := (exitQueue_validators queue).1
+    exact (of_data (congrArg (·.data) same)).trans <|
+      setValidator ((getValidator_of_validators_eq same i).trans read) set
+        (fun h => False.elim (notPending (equal ▸ h)))
+
+private theorem processVoluntaryExit {signed : SignedVoluntaryExit}
+    (ok : Consensus.processVoluntaryExit config checks state signed = .ok after) :
+    UnassignedKept state after := by
+  unfold Consensus.processVoluntaryExit at ok
+  simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok, liftSsz_ok] at ok
+  obtain ⟨v, found, _, active, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, exited⟩ := ok
+  exact initiateValidatorExit found (fun h => by rw [inactive h] at active; cases active) exited
+
+private theorem processBlsToExecutionChange {signed : SignedBLSToExecutionChange}
+    (ok : Consensus.processBlsToExecutionChange config checks state signed = .ok after) :
+    UnassignedKept state after := by
+  obtain ⟨_, found, _, _, _, set⟩ := processBlsToExecutionChange_ok ok
+  apply setValidator found set
+  rintro ⟨activation, exit⟩
+  exact ⟨activation, exit⟩
+
+private theorem queueExcessActiveBalance {electra : .pectra ≤ fork} {index : ValidatorIndex}
+    (ok : Consensus.queueExcessActiveBalance state electra index = .ok after) :
+    UnassignedKept state after := by
+  simp only [Consensus.queueExcessActiveBalance, bind_ok_iff] at ok
+  obtain ⟨_, _, ok⟩ := ok
+  split at ok
+  · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
+    obtain ⟨_, _, _, _, _, set, rfl⟩ := ok
+    obtain ⟨_, rfl⟩ := setBalance_ok set
+    exact of_data
+  · cases ok; exact refl _
+
+private theorem switchToCompoundingValidator {electra : .pectra ≤ fork} {index : ValidatorIndex}
+    (ok : Consensus.switchToCompoundingValidator state electra index = .ok after) :
+    UnassignedKept state after := by
+  simp only [Consensus.switchToCompoundingValidator, bind_ok_iff] at ok
+  obtain ⟨_, found, _, set, queued⟩ := ok
+  refine (setValidator found set (fun h => h)).trans (queueExcessActiveBalance queued)
+
+private theorem requestPartialWithdrawal {electra : .pectra ≤ fork}
+    {index : ValidatorIndex} {validator : Validator} {amount owed : Gwei}
+    (ok : Consensus.requestPartialWithdrawal config state electra index validator amount owed =
+      .ok after) : UnassignedKept state after := by
+  simp only [Consensus.requestPartialWithdrawal, bind_ok_iff, liftAccessor_ok, pure,
+    Except.pure] at ok
+  obtain ⟨_, _, _, _, ok⟩ := ok
+  split at ok
+  · simp only [bind_ok_iff, liftAccessor_ok, Except.ok.injEq] at ok
+    obtain ⟨⟨_, _⟩, churned, _, _, _, _, rfl⟩ := ok
+    have same := (computeExitEpochAndUpdateChurn_earliest churned).2.1
+    exact (of_data (by rw [same])).trans of_data
+  · cases ok; exact refl _
+
+private theorem cannotRequest {v : Validator} (pending : Unassigned v) :
+    canRequest config state v = .ok false := by
+  simp [canRequest, inactive pending, pure, Except.pure]
+
+private theorem processWithdrawalRequest {electra : .pectra ≤ fork} {request : WithdrawalRequest}
+    (ok : Consensus.processWithdrawalRequest config state electra request = .ok after) :
+    UnassignedKept state after := by
+  unfold Consensus.processWithdrawalRequest at ok
+  simp only [bind, Except.bind, pure, Except.pure] at ok
+  repeat' split at ok
+  all_goals first
+    | (cases ok; done)
+    | (cases ok; exact refl _)
+    | exact requestPartialWithdrawal ok
+    | (apply initiateValidatorExit (config := config)
+         (by rw [getValidator, getElem?_toNat_of_ofNatChecked (by assumption)])
+         ?_ (liftAccessor_ok.mp ok)
+       intro pending
+       have rejected := cannotRequest (config := config) (state := state) pending
+       simp_all)
+
+private theorem queueConsolidation {electra : .pectra ≤ fork}
+    {sourceIndex targetIndex : ValidatorIndex} {source : Validator}
+    (found : state.validators.data[sourceIndex.toNat]? = some source)
+    (notPending : ¬Unassigned source)
+    (ok : Consensus.queueConsolidation config state electra sourceIndex source targetIndex =
+      .ok after) : UnassignedKept state after := by
+  simp only [Consensus.queueConsolidation, bind_ok_iff, liftAccessor_ok, liftArith,
+    mapError_ok_iff, pure, Except.pure] at ok
+  obtain ⟨⟨churned, _⟩, churn, _, _, _, set, _, _, ok⟩ := ok
+  simp only [Except.ok.injEq] at ok
+  subst ok
+  have same := (computeConsolidationEpochAndUpdateChurn_earliest churn).2.1
+  have read : getValidator churned sourceIndex = .ok source := by
+    rw [getValidator, same, found]
+  exact (of_data (by rw [same])).trans <|
+    (setValidator read set (fun h => False.elim (notPending h))).trans of_data
+
+private theorem processConsolidationRequest {electra : .pectra ≤ fork}
+    {request : ConsolidationRequest}
+    (ok : Consensus.processConsolidationRequest config state electra request = .ok after) :
+    UnassignedKept state after := by
+  unfold Consensus.processConsolidationRequest at ok
+  simp only [bind, Except.bind, pure, Except.pure] at ok
+  repeat' split at ok
+  all_goals first
+    | (cases ok; done)
+    | (cases ok; exact refl _)
+    | exact switchToCompoundingValidator (liftAccessor_ok.mp ok)
+    | (apply queueConsolidation (getElem?_toNat_of_ofNatChecked (by assumption)) ?_ ok
+       intro pending
+       have no := inactive pending (getCurrentEpoch state)
+       simp_all)
+
+private theorem processDepositRequest {electra : .pectra ≤ fork} {request : DepositRequest}
+    (ok : Consensus.processDepositRequest state electra request = .ok after) :
+    UnassignedKept state after :=
+  of_data (congrArg (·.data) (processDepositRequest_ok ok).2.1)
+
+private theorem processExecutionRequests {body : BeaconBlockBody preset fork}
+    {electra : .pectra ≤ fork ∧ fork < .glamsterdam}
+    (ok : Consensus.processExecutionRequests config state body electra = .ok after) :
+    UnassignedKept state after := by
+  simp only [Consensus.processExecutionRequests, bind_ok_iff, ← Array.foldlM_toList] at ok
+  obtain ⟨_, deposits, _, withdrawals, consolidations⟩ := ok
+  exact (foldlM (fun _ _ _ ok => processDepositRequest ok) deposits).trans <|
+    (foldlM (fun _ _ _ ok => processWithdrawalRequest ok) withdrawals).trans
+      (foldlM (fun _ _ _ ok => processConsolidationRequest ok) consolidations)
+
+end UnassignedKept
+
+private theorem newUnassigned_processOperations {body : BeaconBlockBody preset fork}
+    {parentSlot : Slot} (ok : processOperations config checks state body parentSlot = .ok after) :
+    UnassignedFrom state.validators.data.size after := by
+  unfold processOperations at ok
+  split at ok
+  -- Gloas block requests enqueue deposits; they do not admit validators in this step.
+  · have sizes := (sameSizes_processOperationsGloas ok).1
+    rw [← sizes]
+    exact unassignedFrom_size after
+  simp only [bind_ok_iff, ensure_ok_iff, ← Array.foldlM_toList] at ok
+  obtain ⟨_, _, _, _, _, proposers, _, attesters, attested, attestations, _, deposited,
+    exited, exits, changed, changes, requests⟩ := ok
+  have sizes {α : Type} {step : BeaconState preset fork → α → Except TransitionError _}
+      (keeps : ∀ a b c, step a b = .ok c → SameSizes a c) {xs : List α}
+      {a b : BeaconState preset fork} (ok : xs.foldlM step a = .ok b) : SameSizes a b :=
+    foldlM_ok_invariant (SameSizes a)
+      (fun _ _ _ prior ok => prior.trans (keeps _ _ _ ok)) (SameSizes.refl _) ok
+  have before := (sizes (fun _ _ _ => sameSizes_processProposerSlashing) proposers).trans
+    ((sizes (fun _ _ _ => sameSizes_processAttesterSlashing) attesters).trans
+      (sizes (fun _ _ _ => sameSizes_processAttestation) attestations))
+  have changesKept : UnassignedKept exited changed := by
+    unfold processBlsToExecutionChanges at changes
+    split at changes
+    · rw [← Array.foldlM_toList] at changes
+      exact UnassignedKept.foldlM
+        (fun _ _ _ ok => UnassignedKept.processBlsToExecutionChange ok) changes
+    · cases changes; exact UnassignedKept.refl _
+  have requestsKept : UnassignedKept changed after := by
+    split at requests
+    · exact UnassignedKept.processExecutionRequests requests
+    · cases requests; exact UnassignedKept.refl _
+  apply ((UnassignedKept.foldlM (fun _ _ _ ok => UnassignedKept.processDeposit ok)
+    deposited).trans <|
+    (UnassignedKept.foldlM (fun _ _ _ ok => UnassignedKept.processVoluntaryExit ok) exits).trans <|
+    changesKept.trans requestsKept) _
+  rw [← before.1]
+  exact unassignedFrom_size attested
+
+/-- A withdrawal request retains unassigned activation and exit epochs. -/
+theorem processWithdrawalRequest_epochs_unassigned {n : Nat} {electra : .pectra ≤ fork}
+    {request : WithdrawalRequest}
+    (ok : processWithdrawalRequest config state electra request = .ok after)
+    (pending : ∀ i v, n ≤ i → state.validators.data[i]? = some v →
+      v.activationEpoch = FAR_FUTURE_EPOCH ∧ v.exitEpoch = FAR_FUTURE_EPOCH) :
+    ∀ i v, n ≤ i → after.validators.data[i]? = some v →
+      v.activationEpoch = FAR_FUTURE_EPOCH ∧ v.exitEpoch = FAR_FUTURE_EPOCH :=
+  UnassignedKept.processWithdrawalRequest ok n pending
+
+/-- A consolidation request retains unassigned activation and exit epochs. -/
+theorem processConsolidationRequest_epochs_unassigned {n : Nat} {electra : .pectra ≤ fork}
+    {request : ConsolidationRequest}
+    (ok : processConsolidationRequest config state electra request = .ok after)
+    (pending : ∀ i v, n ≤ i → state.validators.data[i]? = some v →
+      v.activationEpoch = FAR_FUTURE_EPOCH ∧ v.exitEpoch = FAR_FUTURE_EPOCH) :
+    ∀ i v, n ≤ i → after.validators.data[i]? = some v →
+      v.activationEpoch = FAR_FUTURE_EPOCH ∧ v.exitEpoch = FAR_FUTURE_EPOCH :=
+  UnassignedKept.processConsolidationRequest ok n pending
+
+/-- Block operations leave newly admitted validators with both epochs unassigned. -/
+theorem processOperations_new_validator_epochs_unassigned {body : BeaconBlockBody preset fork}
+    {parentSlot : Slot}
+    (ok : processOperations config checks state body parentSlot = .ok after) :
+    ∀ i v, state.validators.data.size ≤ i → after.validators.data[i]? = some v →
+      v.activationEpoch = FAR_FUTURE_EPOCH ∧ v.exitEpoch = FAR_FUTURE_EPOCH :=
+  newUnassigned_processOperations ok
 
 end EthLib.Consensus
