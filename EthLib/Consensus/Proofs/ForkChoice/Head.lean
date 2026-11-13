@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.ForkChoice.Head
+public import EthLib.Base.Proofs.FilterM
 public import EthLib.Base.Proofs.MapM
 public import EthLib.Consensus.Proofs.ForkChoice.Store
 
@@ -22,6 +23,8 @@ Such a node weighs nothing.
 Any other node weighs its votes in the justified state when the boost does not apply.
 
 The boost applies after a parent older than the previous slot, and after a parent that is not weak.
+
+After a weak parent it applies exactly when no other timely block of its proposer is in that slot.
 
 The head has no child among the viable nodes, so the walk stops only at a leaf.
 
@@ -305,11 +308,195 @@ private theorem nextSlot_ok {slot : Slot} (fits : slot.toNat + 1 < 2 ^ 64) :
   rw [mapError_ok_iff, Uint64.addChecked_ok_iff, nextSlot_toNat fits]
   exact ⟨fits, rfl⟩
 
+/-- A filter over the entries of a map, read through what its test decides on each entry.
+
+It succeeds only when every entry is known, and then keeps nothing exactly when none is chosen. -/
+private theorem filterM_entries_ok_iff {β ε : Type} {test : Root × β → Except ε Bool}
+    {entries : Std.TreeMap Root β} {known chosen : Root → β → Prop} {out : List (Root × β)}
+    (computed : entries.toList.filterM test = .ok out)
+    (element : ∀ root value passes, test (root, value) = .ok passes ↔
+      known root value ∧ (passes = true ↔ chosen root value)) :
+    (∀ root value, entries[root]? = some value → known root value) ∧
+      (out.isEmpty = true ↔
+        ∀ root value, entries[root]? = some value → ¬ chosen root value) := by
+  have tested := fun root value (entry : entries[root]? = some value) =>
+    tested_of_filterM_ok computed (root, value)
+      (Std.TreeMap.mem_toList_iff_getElem?_eq_some.mpr entry)
+  refine ⟨fun root value entry => ?_, ?_⟩
+  · obtain ⟨passes, passesOk⟩ := tested root value entry
+    exact ((element root value passes).mp passesOk).1
+  · rw [List.isEmpty_iff, filterM_ok_eq_nil_iff computed]
+    constructor
+    · intro none root value entry picked
+      obtain ⟨passes, passesOk⟩ := tested root value entry
+      have verdict := ((element root value passes).mp passesOk).2
+      exact none (root, value) (Std.TreeMap.mem_toList_iff_getElem?_eq_some.mpr entry)
+        (verdict.mpr picked ▸ passesOk)
+    · rintro none ⟨root, value⟩ member passesOk
+      exact none root value (Std.TreeMap.mem_toList_iff_getElem?_eq_some.mp member)
+        (((element root value true).mp passesOk).2.mp rfl)
+
+/-- A filter over the entries of a map fails only when some entry is not known. -/
+private theorem not_known_of_filterM_error {β ε : Type} {test : Root × β → Except ε Bool}
+    {entries : Std.TreeMap Root β} {known chosen : Root → β → Prop} {e : ε}
+    (computed : entries.toList.filterM test = .error e)
+    (element : ∀ root value passes, test (root, value) = .ok passes ↔
+      known root value ∧ (passes = true ↔ chosen root value)) :
+    ¬ ∀ root value, entries[root]? = some value → known root value := by
+  intro all
+  classical
+  obtain ⟨out, ok⟩ := filterM_exists_ok (test := test) (list := entries.toList)
+    fun ⟨root, value⟩ member => by
+      have entry := Std.TreeMap.mem_toList_iff_getElem?_eq_some.mp member
+      exact ⟨decide (chosen root value),
+        (element root value _).mpr ⟨all root value entry, by simp⟩⟩
+  rw [computed] at ok
+  cases ok
+
+/-- A filter over the entries of a map, then whether it kept nothing.
+
+It succeeds exactly when every entry is known, and it keeps nothing exactly when none is chosen. -/
+private theorem filterM_entries_isEmpty_iff {β ε : Type} {test : Root × β → Except ε Bool}
+    {entries : Std.TreeMap Root β} (known chosen : Root → β → Prop) {empty : Bool}
+    (element : ∀ root value passes, test (root, value) = .ok passes ↔
+      known root value ∧ (passes = true ↔ chosen root value)) :
+    Except.bind (entries.toList.filterM test) (fun out => Except.ok out.isEmpty) = .ok empty ↔
+      (∀ root value, entries[root]? = some value → known root value) ∧
+        (empty = true ↔ ∀ root value, entries[root]? = some value → ¬ chosen root value) := by
+  cases computed : entries.toList.filterM test with
+  | error e =>
+    simp only [Except.bind, reduceCtorEq, false_iff, not_and]
+    exact fun all => absurd all (not_known_of_filterM_error computed element)
+  | ok out =>
+    obtain ⟨all, none⟩ := filterM_entries_ok_iff computed element
+    simp only [Except.bind, Except.ok.injEq]
+    rw [← none]
+    exact ⟨fun same => ⟨all, by rw [same]⟩, fun ⟨_, same⟩ => Bool.eq_iff_iff.mpr same.symm⟩
+
+/-- Whether the boost applies, from Gloas, on the blocks of the store and their timeliness.
+
+Without a boosted block it does not apply.
+
+Otherwise the store must hold the boosted block and a parent that is not in the last slot.
+
+A parent older than the slot before the boosted block lets the boost apply.
+
+So does a parent of that slot or later that is not weak.
+
+After a weak parent, every block of the store must have its timeliness for the payload committee.
+
+A timely block of the parent's proposer must not be in the last slot either.
+
+The boost then applies exactly when each such block of the slot before is the parent itself. -/
+theorem shouldApplyProposerBoost_eq_ok_iff {apply : Bool} (gloas : .glamsterdam ≤ fork) :
+    store.shouldApplyProposerBoost config gloas = .ok apply ↔
+      store.proposerBoostRoot = Vector.replicate 32 0 ∧ apply = false ∨
+      store.proposerBoostRoot ≠ Vector.replicate 32 0 ∧ ∃ block parent,
+        store.blocks[store.proposerBoostRoot]? = some block ∧
+        store.blocks[block.parentRoot]? = some parent ∧
+        parent.slot.toNat + 1 < 2 ^ 64 ∧
+        (parent.slot.toNat + 1 < block.slot.toNat ∧ apply = true ∨
+          block.slot.toNat ≤ parent.slot.toNat + 1 ∧
+            (store.isHeadWeak config block.parentRoot = .ok false ∧ apply = true ∨
+              store.isHeadWeak config block.parentRoot = .ok true ∧
+                (∀ (root : Root) (other : BeaconBlock preset fork),
+                  store.blocks[root]? = some other →
+                  ∃ timely, (store.ptcTimeliness gloas)[root]? = some timely ∧
+                    (timely = true → other.proposerIndex = parent.proposerIndex →
+                      other.slot.toNat + 1 < 2 ^ 64)) ∧
+                (apply = true ↔ ∀ (root : Root) (other : BeaconBlock preset fork),
+                  store.blocks[root]? = some other →
+                  (store.ptcTimeliness gloas)[root]? = some true →
+                  other.proposerIndex = parent.proposerIndex →
+                  other.slot.toNat + 1 = block.slot.toNat → root = block.parentRoot))) := by
+  by_cases zero : store.proposerBoostRoot = Vector.replicate 32 0
+  · simp [shouldApplyProposerBoost, zero, pure, Except.pure, eq_comm]
+  cases foundBlock : store.blocks[store.proposerBoostRoot]? with
+  | none =>
+    simp [shouldApplyProposerBoost, zero, Store.block, foundBlock, bind, Except.bind, throw,
+      throwThe, MonadExceptOf.throw]
+  | some block =>
+  cases foundParent : store.blocks[block.parentRoot]? with
+  | none =>
+    simp [shouldApplyProposerBoost, zero, Store.block, foundBlock, foundParent, bind, Except.bind,
+      throw, throwThe, MonadExceptOf.throw, pure, Except.pure]
+  | some parent =>
+  by_cases overflow : 2 ^ 64 ≤ parent.slot.toNat + 1
+  · have fits : ¬ parent.slot.toNat + 1 < 2 ^ 64 := by omega
+    cases next : (Uint64.addChecked parent.slot 1) with
+    | ok value => exact absurd (Uint64.addChecked_ok_iff.mp next).1 fits
+    | error e =>
+      simp [shouldApplyProposerBoost, zero, Store.block, foundBlock, foundParent, next, fits,
+        bind, Except.bind, pure, Except.pure, Except.mapError]
+  have fits : parent.slot.toNat + 1 < 2 ^ 64 := by omega
+  by_cases old : parent.slot.toNat + 1 < block.slot.toNat
+  · have older : parent.slot + 1 < block.slot := by
+      rw [UInt64.lt_iff_toNat_lt, nextSlot_toNat fits]
+      exact old
+    have notRecent : ¬ block.slot.toNat ≤ parent.slot.toNat + 1 := by omega
+    simp [shouldApplyProposerBoost, zero, Store.block, foundBlock, foundParent, nextSlot_ok fits,
+      older, old, notRecent, fits, bind, Except.bind, pure, Except.pure, eq_comm]
+  have notOlder : ¬ parent.slot + 1 < block.slot := by
+    rw [UInt64.lt_iff_toNat_lt, nextSlot_toNat fits]
+    exact old
+  have recent : block.slot.toNat ≤ parent.slot.toNat + 1 := by omega
+  cases weakOk : store.isHeadWeak config block.parentRoot with
+  | error e =>
+    simp [shouldApplyProposerBoost, zero, Store.block, foundBlock, foundParent, nextSlot_ok fits,
+      notOlder, old, fits, weakOk, bind, Except.bind, pure, Except.pure]
+  | ok weak =>
+  cases weak
+  · simp [shouldApplyProposerBoost, zero, Store.block, foundBlock, foundParent, nextSlot_ok fits,
+      notOlder, old, fits, weakOk, recent, bind, Except.bind, pure, Except.pure, eq_comm]
+  simp only [shouldApplyProposerBoost, zero, Store.block, foundBlock, foundParent, nextSlot_ok fits,
+    notOlder, weakOk, bind, Except.bind, pure, Except.pure, ↓reduceIte, Bool.not_true,
+    Bool.false_eq_true]
+  simp only [ne_eq, zero, not_false_eq_true, true_and, false_and, false_or, Option.some.injEq]
+  refine filterM_entries_isEmpty_iff
+    (fun root (other : BeaconBlock preset fork) => ∃ timely,
+      (store.ptcTimeliness gloas)[root]? = some timely ∧
+        (timely = true → other.proposerIndex = parent.proposerIndex →
+          other.slot.toNat + 1 < 2 ^ 64))
+    (fun root (other : BeaconBlock preset fork) =>
+      (store.ptcTimeliness gloas)[root]? = some true ∧
+        other.proposerIndex = parent.proposerIndex ∧ other.slot.toNat + 1 = block.slot.toNat ∧
+          root ≠ block.parentRoot) ?_ |>.trans ?_
+  · intro root other passes
+    simp only [ptcTimely]
+    cases timeliness : (store.ptcTimeliness gloas)[root]? with
+    | none => simp [throw, throwThe, MonadExceptOf.throw]
+    | some timely =>
+      by_cases same : other.proposerIndex = parent.proposerIndex
+      · cases timely
+        · simp [pure, Except.pure, same]
+        by_cases fitsOther : other.slot.toNat + 1 < 2 ^ 64
+        · have slotEq :
+              other.slot + 1 = block.slot ↔ other.slot.toNat + 1 = block.slot.toNat := by
+            rw [← UInt64.toNat_inj, nextSlot_toNat fitsOther]
+          cases passes <;>
+            simp [pure, Except.pure, same, fitsOther, nextSlot_ok fitsOther, slotEq]
+        · cases next : Uint64.addChecked other.slot 1 with
+          | ok value => exact absurd (Uint64.addChecked_ok_iff.mp next).1 fitsOther
+          | error e => simp [pure, Except.pure, same, fitsOther, Except.mapError]
+      · cases timely <;> simp [pure, Except.pure, same]
+  · constructor
+    · rintro ⟨all, verdict⟩
+      simp only [not_and, Decidable.not_not] at verdict
+      exact ⟨block, parent, rfl, foundParent, fits, .inr ⟨recent, .inr ⟨weakOk, all, verdict⟩⟩⟩
+    · rintro ⟨_, other, rfl, otherFound, -, branch⟩
+      rw [foundParent, Option.some.injEq] at otherFound
+      subst otherFound
+      rcases branch with ⟨older, -⟩ | ⟨-, ⟨notWeak, -⟩ | ⟨-, all, verdict⟩⟩
+      · exact absurd older old
+      · exact absurd (weakOk.symm.trans notWeak) (by simp)
+      · simp only [not_and, Decidable.not_not]
+        exact ⟨all, verdict⟩
+
 /-- Without a boosted block the boost does not apply. -/
 theorem shouldApplyProposerBoost_of_zero (gloas : .glamsterdam ≤ fork)
     (noBoost : store.proposerBoostRoot = Vector.replicate 32 0) :
-    store.shouldApplyProposerBoost config gloas = .ok false := by
-  simp [shouldApplyProposerBoost, noBoost, pure, Except.pure]
+    store.shouldApplyProposerBoost config gloas = .ok false :=
+  (shouldApplyProposerBoost_eq_ok_iff gloas).mpr (.inl ⟨noBoost, rfl⟩)
 
 /-- The boost applies when the parent is older than the slot before the boosted block. -/
 theorem shouldApplyProposerBoost_of_old_parent {block parent : BeaconBlock preset fork}
@@ -317,13 +504,9 @@ theorem shouldApplyProposerBoost_of_old_parent {block parent : BeaconBlock prese
     (found : store.blocks[store.proposerBoostRoot]? = some block)
     (parentFound : store.blocks[block.parentRoot]? = some parent)
     (old : parent.slot.toNat + 1 < block.slot.toNat) :
-    store.shouldApplyProposerBoost config gloas = .ok true := by
-  have fits : parent.slot.toNat + 1 < 2 ^ 64 := Nat.lt_trans old block.slot.toNat_lt
-  have older : parent.slot + 1 < block.slot := by
-    rw [UInt64.lt_iff_toNat_lt, nextSlot_toNat fits]
-    exact old
-  simp [shouldApplyProposerBoost, boosted, Store.block, found, parentFound, nextSlot_ok fits,
-    older, bind, Except.bind, pure, Except.pure]
+    store.shouldApplyProposerBoost config gloas = .ok true :=
+  (shouldApplyProposerBoost_eq_ok_iff gloas).mpr <| .inr ⟨boosted, block, parent, found,
+    parentFound, Nat.lt_trans old block.slot.toNat_lt, .inl ⟨old, rfl⟩⟩
 
 /-- The boost applies when the parent of the boosted block is not weak.
 
@@ -334,12 +517,9 @@ theorem shouldApplyProposerBoost_of_not_weak {block parent : BeaconBlock preset 
     (parentFound : store.blocks[block.parentRoot]? = some parent)
     (recent : block.slot.toNat ≤ parent.slot.toNat + 1) (fits : parent.slot.toNat + 1 < 2 ^ 64)
     (notWeak : store.isHeadWeak config block.parentRoot = .ok false) :
-    store.shouldApplyProposerBoost config gloas = .ok true := by
-  have notOlder : ¬ parent.slot + 1 < block.slot := by
-    rw [UInt64.lt_iff_toNat_lt, nextSlot_toNat fits]
-    omega
-  simp [shouldApplyProposerBoost, boosted, Store.block, found, parentFound, nextSlot_ok fits,
-    notOlder, notWeak, bind, Except.bind, pure, Except.pure]
+    store.shouldApplyProposerBoost config gloas = .ok true :=
+  (shouldApplyProposerBoost_eq_ok_iff gloas).mpr <| .inr ⟨boosted, block, parent, found,
+    parentFound, fits, .inr ⟨recent, .inl ⟨notWeak, rfl⟩⟩⟩
 
 /-- A weighed node is the node, its weight and its tiebreaker. -/
 theorem weighNode_ok_iff {node : ForkChoiceNode} {weighed : WeightedNode} :
