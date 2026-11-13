@@ -81,25 +81,6 @@ structure CapOrder (preset : Preset) : Prop where
   activation : preset.MAX_EFFECTIVE_BALANCE ≤ preset.MIN_ACTIVATION_BALANCE
   compounding : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA
 
-/-- A run from a genesis built from deposits ends in a state that satisfies the invariant. -/
-theorem Run.invariant_of_genesis {g x : ForkedBeaconState preset}
-    (run : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g) :
-    Invariant x.state := by
-  obtain ⟨_, _, _, ok⟩ := genesis
-  exact run.invariant (initializeBeaconStateFromEth1_invariant ok).2
-
-/-- Every effective balance of a reachable state is a whole number of increments.
-
-This holds when the largest effective balances of the preset are whole numbers of increments. -/
-theorem reachable_effective_alignment {g x : ForkedBeaconState preset}
-    (run : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)
-    (aligned : MaxEffectiveBalancesAligned preset) (v : Validator)
-    (found : v ∈ x.state.validators.data.toList) :
-    v.effectiveBalance.toNat % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 := by
-  have whole := (run.invariant_of_genesis genesis).aligned aligned v (by simpa using found)
-  have numeric := congrArg UInt64.toNat whole
-  simpa only [UInt64.toNat_mod, UInt64.reduceToNat] using numeric
-
 /-- The mainnet preset orders its effective-balance caps. -/
 theorem CapOrder.mainnet : CapOrder Preset.mainnet := ⟨by decide, by decide⟩
 
@@ -1902,17 +1883,12 @@ private theorem balanceDrift_join_of_admission {g x y : ForkedBeaconState preset
       omega
     · exact (admitted (shared.append pre) step early (by omega)).trans (Nat.le_add_left _ _)
 
-private theorem balanceDrift_reachable_matches {g x : ForkedBeaconState preset}
-    (run : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g) :
-    BalancesMatch x.state := by
-  exact (run.invariant_of_genesis genesis).balancesMatch
-
 private theorem balanceDrift_admission_step {g x y : ForkedBeaconState preset}
     (run : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)
     (sources : PendingSources x.state) (step : Step config checks x y)
     (early : y.fork < .glamsterdam) (i : Nat) (absent : x.state.validators.data.size ≤ i) :
     max (effectiveAt y i) (actualBalanceAt y i) ≤ pathCredits i step.balancePath := by
-  have matched := balanceDrift_reachable_matches run genesis
+  have matched := reachable_balancesMatch run genesis
   change x.state.balances.data.size = x.state.validators.data.size at matched
   have zero : actualBalanceAt x i = 0 := by
     have missing : x.state.balances.data[i]? = none :=
@@ -1943,7 +1919,7 @@ private theorem balanceDrift_join_of_sources {g x y : ForkedBeaconState preset}
     effectiveAt y i ≤ pathCredits i tail.balancePath := by
   apply (Nat.le_max_left _ _).trans
   apply balanceDrift_join_of_admission shared tail early i newKey
-    (balanceDrift_reachable_matches shared genesis)
+    (reachable_balancesMatch shared genesis)
   intro a b run step early absent
   exact balanceDrift_admission_step run genesis
     (sources run (Nat.lt_of_le_of_lt step.chainStep.fork_le early)) step early i absent

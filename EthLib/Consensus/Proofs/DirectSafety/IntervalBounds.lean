@@ -7,6 +7,7 @@ import EthLib.Consensus.Proofs.DirectSafety.FundingBlock
 import EthLib.Consensus.Proofs.DirectSafety.FundingSlot
 import EthLib.Consensus.Proofs.DirectSafety.Provenance
 import EthLib.Consensus.Proofs.DirectSafety.Cohorts
+import EthLib.Consensus.Proofs.Transition.ChainRoots
 import EthLib.Consensus.Proofs.Transition.SlashedPersistence
 import EthLib.Consensus.Proofs.Transition.ValidatorCaps
 
@@ -1224,7 +1225,7 @@ private theorem replay_event_provenance {g x y : ForkedBeaconState preset}
       exact ⟨first, during, final.trans (RegistryLifecycle.chainStep step.chainStep),
         ordered, matched, lo, hi.trans (UInt64.le_iff_toNat_le.mp step.chainStep.currentEpoch_le)⟩
     · obtain ⟨first, during, final, ordered, matched, lo, hi, _⟩ :=
-        intervalLoss_step_sites step early ((shared.append pre).invariant_of_genesis genesis)
+        intervalLoss_step_sites step early (run_justified_separated (shared.append pre) genesis).1
           addedOk event added
       exact ⟨pre.registryLifecycle.trans first, during, final, ordered, matched,
         (runEpoch pre).trans lo, hi⟩
@@ -1254,7 +1255,7 @@ private theorem intervalLoss_event_slashed {g x y : ForkedBeaconState preset}
         ih (Nat.lt_of_le_of_lt step.chainStep.fork_le early) selected prior priorOk old
       exact ⟨before, during, final.trans step.slashedPersistence, source⟩
     · obtain ⟨_, _, _, _, _, _, _, before, during, final, source, _⟩ :=
-        intervalLoss_step_sites step early ((shared.append pre).invariant_of_genesis genesis)
+        intervalLoss_step_sites step early (run_justified_separated (shared.append pre) genesis).1
           addedOk event added
       exact ⟨before, during, final, source⟩
 
@@ -1278,7 +1279,7 @@ private theorem replay_event_fork_le {g x y : ForkedBeaconState preset}
         (ih (Nat.lt_of_le_of_lt step.chainStep.fork_le early) selected prior priorOk old)
         step.chainStep.fork_le
     · obtain ⟨_, _, _, _, _, _, _, _, _, _, _, bound⟩ :=
-        intervalLoss_step_sites step early ((shared.append pre).invariant_of_genesis genesis)
+        intervalLoss_step_sites step early (run_justified_separated (shared.append pre) genesis).1
           addedOk event added
       exact bound
 
@@ -1386,7 +1387,7 @@ private theorem replay_electra_deposit_epoch {g x y : ForkedBeaconState preset}
       · exact Or.inl zero
       · exact Or.inr (strict.trans_le (UInt64.le_iff_toNat_le.mp step.chainStep.currentEpoch_le))
     · exact intervalLoss_step_deposit_epoch step early
-        ((shared.append pre).invariant_of_genesis genesis) addedOk event added deposit electra
+        (run_justified_separated (shared.append pre) genesis).1 addedOk event added deposit electra
 
 private theorem intervalLoss_charge_site {x y : ForkedBeaconState preset}
     (tail : Run config checks x y) (charge : DepartureCharge)

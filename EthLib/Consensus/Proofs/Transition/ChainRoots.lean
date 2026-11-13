@@ -3,6 +3,7 @@ module
 public import EthLib.Consensus.Proofs.Transition.ForkBoundary
 public import EthLib.Consensus.Proofs.Transition.RootLinks
 public import EthLib.Consensus.Proofs.Transition.Trace
+import EthLib.Consensus.Proofs.Transition.Genesis
 
 /-!
 # Proofs: each checkpoint of a beacon state names a block of its own chain
@@ -509,7 +510,7 @@ private theorem Run.records_snoc {first middle last : ForkedBeaconState preset}
     · exact .inr ⟨same, got, succ⟩
 
 /-- The last state of a run keeps the invariant of the first. -/
-theorem Run.invariant {first last : ForkedBeaconState preset}
+private theorem Run.invariant {first last : ForkedBeaconState preset}
     (holds : Invariant first.state) (run : Run config checks first last) :
     Invariant last.state := by
   induction run with
@@ -519,6 +520,27 @@ theorem Run.invariant {first last : ForkedBeaconState preset}
     | slot computed => exact (advanceSlotAcross_invariant ih computed).1
     | block engine signed due applied =>
       exact (frame_processBlock (applySignedBlock_ok applied).2.1).invariant ih
+
+/-- A state reached from genesis has one balance for each validator. -/
+theorem reachable_balancesMatch {g x : ForkedBeaconState preset}
+    (run : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g) :
+    BalancesMatch x.state := by
+  obtain ⟨_, _, _, ok⟩ := genesis
+  exact (run.invariant (initializeBeaconStateFromEth1_invariant ok).2).balancesMatch
+
+/-- Every effective balance of a reachable state is a whole number of increments.
+
+This holds when the largest effective balances of the preset are whole numbers of increments. -/
+theorem reachable_effective_alignment {g x : ForkedBeaconState preset}
+    (run : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)
+    (aligned : MaxEffectiveBalancesAligned preset) (v : Validator)
+    (found : v ∈ x.state.validators.data.toList) :
+    v.effectiveBalance.toNat % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 := by
+  obtain ⟨_, _, _, ok⟩ := genesis
+  have whole := (run.invariant (initializeBeaconStateFromEth1_invariant ok).2).aligned aligned v
+    (by simpa using found)
+  have numeric := congrArg UInt64.toNat whole
+  simpa only [UInt64.toNat_mod, UInt64.reduceToNat] using numeric
 
 /-- The last state of a run agrees with the roots that the run records, above its first slot.
 

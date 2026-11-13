@@ -9,6 +9,7 @@ public import EthLib.Consensus.Proofs.Transition.PendingConsolidations
 public import EthLib.Consensus.Proofs.Transition.ActivationExitOrder
 import EthLib.Consensus.Proofs.Transition.Totality.EffectiveBalances
 import EthLib.Consensus.Proofs.Transition.BalanceNotRaised
+import EthLib.Consensus.Proofs.DirectSafety.Provenance
 
 /-!
 # Source bounds over a selected execution interval
@@ -1632,7 +1633,7 @@ theorem _root_.EthLib.Consensus.Run.balanceEvents_bounded {g x y : ForkedBeaconS
       ih (Nat.lt_of_le_of_lt step.chainStep.fork_le early)
     by_cases selected : (getCurrentEpoch middle.state).toNat ≤ high + 1
     · obtain ⟨added, addedOk, addedBound⟩ := stepBalanceEvents_bounded step
-        ((shared.append pre).invariant_of_genesis genesis).balancesMatch early
+        (run_justified_separated (shared.append pre) genesis).1.balancesMatch early
       refine ⟨prior ++ added, ?_, eventsBounded_append priorBound addedBound⟩
       simp [Run.balanceEvents, priorOk, selected, addedOk, pure, Except.pure, bind, Except.bind]
     · refine ⟨prior, ?_, priorBound⟩
@@ -3859,7 +3860,7 @@ theorem funding_deposit_capacity {g x y : ForkedBeaconState preset}
   have bound := funding_run_bound fundingCarry funding_deposit_credit (fun _ => 0) tail early
     high endEpoch events replayed (fun pre step early added ok => by
       simpa using funding_step_capacity step
-        ((shared.append pre).invariant_of_genesis genesis).balancesMatch early ok)
+        (run_justified_separated (shared.append pre) genesis).1.balancesMatch early ok)
   rw [show ∀ l : List (BalanceEvent preset), (l.map fun _ => 0).sum = 0 by simp,
     Nat.add_zero] at bound
   have count : (getCurrentEpoch y.state).toNat - (getCurrentEpoch x.state).toNat ≤
