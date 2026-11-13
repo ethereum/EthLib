@@ -78,6 +78,7 @@ PyObject* ETHASH_ERROR;
 PyObject* REQRESP_ERROR;
 PyObject* CONSENSUS_ERROR;
 PyObject* HKDF_ERROR;
+PyObject* TLS13_ERROR;
 PyObject* PBKDF2_ERROR;
 PyObject* SCRYPT_ERROR;
 PyObject* X25519_ERROR;
@@ -95,7 +96,6 @@ PyObject* SNAPPY_ERROR;
 PyObject* VARINT_ERROR;
 PyObject* UVARINT_ERROR;
 PyObject* QUIC_VARINT_ERROR;
-PyObject* TLS13_ERROR;
 PyObject* MULTISTREAM_ERROR;
 PyObject* MPLEX_ERROR;
 PyObject* YAMUX_ERROR;
@@ -715,6 +715,8 @@ static PyMethodDef methods[] = {
   {"aes_gcm_decrypt", py_aes_gcm_decrypt, METH_VARARGS, DOC_aes_gcm_decrypt},
   {"hmac_sha256", py_hmac_sha256, METH_VARARGS, DOC_hmac_sha256},
   {"hkdf_sha256", py_hkdf_sha256, METH_VARARGS, DOC_hkdf_sha256},
+  {"tls13_hkdf_label", py_tls13_hkdf_label, METH_VARARGS, DOC_tls13_hkdf_label},
+  {"tls13_expand_label", py_tls13_expand_label, METH_VARARGS, DOC_tls13_expand_label},
   {"concat_kdf_sha256", py_concat_kdf_sha256, METH_VARARGS, DOC_concat_kdf_sha256},
   {"pbkdf2_sha256", py_pbkdf2_sha256, METH_VARARGS, DOC_pbkdf2_sha256},
   {"salsa208", py_salsa208, METH_VARARGS, DOC_salsa208},
@@ -1138,8 +1140,6 @@ static PyMethodDef methods[] = {
   {"varint_decode", py_varint_decode, METH_VARARGS, DOC_varint_decode},
   {"uvarint_encode", py_uvarint_encode, METH_VARARGS, DOC_uvarint_encode},
   {"uvarint_decode", py_uvarint_decode, METH_VARARGS, DOC_uvarint_decode},
-  {"tls13_hkdf_label", py_tls13_hkdf_label, METH_VARARGS, DOC_tls13_hkdf_label},
-  {"tls13_expand_label", py_tls13_expand_label, METH_VARARGS, DOC_tls13_expand_label},
   {"quic_initial_secrets", py_quic_initial_secrets, METH_VARARGS, DOC_quic_initial_secrets},
   {"quic_packet_keys", py_quic_packet_keys, METH_VARARGS, DOC_quic_packet_keys},
   {"quic_varint_encode", py_quic_varint_encode, METH_VARARGS, DOC_quic_varint_encode},
@@ -1272,6 +1272,7 @@ PyInit__native(void) {
     REQRESP_ERROR = PyObject_GetAttrString(errors, "ReqRespError");
     CONSENSUS_ERROR = PyObject_GetAttrString(errors, "ConsensusError");
     HKDF_ERROR = PyObject_GetAttrString(errors, "HkdfError");
+    TLS13_ERROR = PyObject_GetAttrString(errors, "Tls13Error");
     PBKDF2_ERROR = PyObject_GetAttrString(errors, "Pbkdf2Error");
     SCRYPT_ERROR = PyObject_GetAttrString(errors, "ScryptError");
     X25519_ERROR = PyObject_GetAttrString(errors, "X25519Error");
@@ -1285,7 +1286,6 @@ PyInit__native(void) {
     SNAPPY_ERROR = PyObject_GetAttrString(errors, "SnappyError");
     VARINT_ERROR = PyObject_GetAttrString(errors, "VarintError");
     UVARINT_ERROR = PyObject_GetAttrString(errors, "UvarintError");
-    TLS13_ERROR = PyObject_GetAttrString(errors, "Tls13Error");
     QUIC_VARINT_ERROR = PyObject_GetAttrString(errors, "QuicVarintError");
     MULTISTREAM_ERROR = PyObject_GetAttrString(errors, "MultistreamError");
     MPLEX_ERROR = PyObject_GetAttrString(errors, "MplexError");

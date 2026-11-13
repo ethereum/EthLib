@@ -20,6 +20,10 @@ namespace EthLib.Cryptography.Hash.Tls13
 
 open EthLib.Base
 
+/-- The typed extraction is HKDF-Extract of RFC 5869 §2.2, byte for byte. -/
+theorem packBytes_extract (salt ikm : ByteArray) :
+    packBytes (extract salt ikm) = Hkdf.extract salt ikm := rfl
+
 /-- Label serialization accepts exactly the bounds of its three length fields. -/
 theorem hkdfLabel_ok_iff (label context : ByteArray) (length : Nat) :
     (∃ info, hkdfLabel label context length = .ok info) ↔

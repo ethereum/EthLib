@@ -6,8 +6,6 @@ public import EthLib.Cryptography.Hash.Hkdf
 /-!
 # Proofs: HKDF-SHA-256
 
-A successful expansion has exactly the requested length.
-
 HKDF expands the key `HMAC-Hash(salt, IKM)` of RFC 5869 §2.2.
 
 The expansion computes the blocks `T(1), T(2), ...` of [RFC 5869 §2.3][rfc5869].

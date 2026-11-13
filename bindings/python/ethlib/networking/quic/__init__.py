@@ -1,9 +1,14 @@
-"""QUIC encodings and key derivation."""
+"""QUIC v1: the integers of RFC 9000 §16 and the packet keys of RFC 9001 §5."""
+
+from typing import Literal, TypeAlias
 
 # Every domain links into one extension module.
 # That module lives in the `cryptography` package.
 from ethlib.cryptography import _native
 from ethlib.errors import QuicVarintError as QuicVarintError, Tls13Error as Tls13Error
+
+# The two SHA-256 cipher suites whose packet keys EthLib derives.
+CipherSuite: TypeAlias = Literal["TLS_AES_128_GCM_SHA256", "TLS_CHACHA20_POLY1305_SHA256"]
 
 
 def encode_varint(value: int) -> bytes:
@@ -16,33 +21,22 @@ def decode_varint(data: bytes) -> tuple[int, bytes]:
     return _native.quic_varint_decode(data)
 
 
+def initial_secrets(destination_connection_id: bytes) -> tuple[bytes, bytes]:
+    """The client and server Initial secrets of QUIC v1, in that order, RFC 9001 §5.2."""
+    return _native.quic_initial_secrets(destination_connection_id)
+
+
+def packet_keys(suite: CipherSuite, secret: bytes) -> tuple[bytes, bytes, bytes]:
+    """The payload key, IV and header-protection key, in that order, RFC 9001 §5.1."""
+    return _native.quic_packet_keys(suite, secret)
+
+
 __all__ = [
+    "CipherSuite",
     "QuicVarintError",
     "Tls13Error",
     "decode_varint",
     "encode_varint",
-    "hkdf_label",
-    "expand_label",
     "initial_secrets",
     "packet_keys",
 ]
-
-
-def hkdf_label(label: bytes, context: bytes, length: int) -> bytes:
-    """Serialize the checked TLS 1.3 HKDF label."""
-    return _native.tls13_hkdf_label(label, context, length)
-
-
-def expand_label(secret: bytes, label: bytes, context: bytes, length: int) -> bytes:
-    """Expand a SHA-256 secret using the TLS 1.3 label encoding."""
-    return _native.tls13_expand_label(secret, label, context, length)
-
-
-def initial_secrets(dcid: bytes) -> tuple[bytes, bytes]:
-    """Derive the QUIC v1 client and server Initial secrets, in that order."""
-    return _native.quic_initial_secrets(dcid)
-
-
-def packet_keys(suite: str, secret: bytes) -> tuple[bytes, bytes, bytes]:
-    """Derive a QUIC payload key, initialization vector and header-protection key."""
-    return _native.quic_packet_keys(suite, secret)

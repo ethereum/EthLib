@@ -13,6 +13,8 @@ The label carries the prefix `tls13 `, which separates these uses from other use
 
 Secrets have 32 bytes, and each expansion carries its output length in its type.
 
+The secrets are secret, and EthLib makes no constant-time claim for them (SOUNDNESS.md A3).
+
 [tls]: https://www.rfc-editor.org/rfc/rfc8446#section-7.1
 -/
 
@@ -22,7 +24,7 @@ namespace EthLib.Cryptography.Hash.Tls13
 
 open EthLib.Base
 
-/-- A SHA-256 secret of `Hash.length` bytes, RFC 8446 §7.1. -/
+/-- A SHA-256 secret of `Hash.length = 32` bytes, RFC 8446 §7.1. -/
 abbrev Secret := Vector UInt8 32
 
 /-- Malformed `HkdfLabel` fields or an output beyond the HKDF limit. -/
@@ -44,12 +46,14 @@ def Error.code : Error → UInt32
   | .lengthOverflow _ => 3
   | .hkdf _ => 4
 
-/-- Extract a 32-byte secret with HMAC-SHA-256, RFC 5869 §2.2. -/
+/-- HKDF-Extract of RFC 5869 §2.2, as a 32-byte secret.
+
+The input keying material is secret, and this function makes no constant-time claim. -/
 def extract (salt ikm : ByteArray) : Secret := Hmac.hmac32 salt ikm
 
 /-- Serialize `HkdfLabel` after checking the field bounds of RFC 8446 §7.1.
 
-The supplied label excludes the `tls13 ` prefix and any trailing NUL. -/
+The supplied label excludes the `tls13 ` prefix. -/
 def hkdfLabel (label context : ByteArray) (length : Nat) : Except Error ByteArray := do
   if label.size = 0 ∨ 249 < label.size then throw (.labelLength label.size)
   if 255 < context.size then throw (.contextLength context.size)
@@ -60,7 +64,9 @@ def hkdfLabel (label context : ByteArray) (length : Nat) : Except Error ByteArra
 
 /-- `HKDF-Expand-Label` with SHA-256, RFC 8446 §7.1.
 
-RFC 5869 §2.3 limits the output to `255 * 32` bytes. -/
+RFC 5869 §2.3 limits the output to `255 * 32` bytes.
+
+The secret is secret, and this function makes no constant-time claim. -/
 def expandLabel (secret : Secret) (label context : ByteArray) (length : Nat) :
     Except Error (Vector UInt8 length) := do
   let info ← hkdfLabel label context length

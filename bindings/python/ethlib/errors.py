@@ -125,6 +125,10 @@ class HkdfError(EthLibError, ValueError):
     """HKDF rejected its input."""
 
 
+class Tls13Error(EthLibError, ValueError):
+    """A TLS 1.3 key derivation rejected its input."""
+
+
 class Pbkdf2Error(EthLibError, ValueError):
     """PBKDF2 rejected its input."""
 
@@ -183,10 +187,6 @@ class VarintError(EthLibError, ValueError):
 
 class UvarintError(EthLibError, ValueError):
     """The bytes do not start with a multiformats unsigned varint, or a value is out of range."""
-
-
-class Tls13Error(EthLibError, ValueError):
-    """A TLS 1.3 key derivation rejected its input."""
 
 
 class QuicVarintError(EthLibError, ValueError):
@@ -354,6 +354,7 @@ __all__ = [
     "LightClientError",
     "ForkChoiceError",
     "HkdfError",
+    "Tls13Error",
     "Pbkdf2Error",
     "ScryptError",
     "X25519Error",
@@ -369,7 +370,6 @@ __all__ = [
     "VarintError",
     "UvarintError",
     "QuicVarintError",
-    "Tls13Error",
     "MultistreamError",
     "MplexError",
     "YamuxError",

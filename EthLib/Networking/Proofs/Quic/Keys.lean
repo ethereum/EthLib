@@ -8,9 +8,9 @@ import all Init.Data.String.Defs
 /-!
 # Proofs: QUIC v1 key derivation
 
-Initial secrets and packet keys always derive from a well-sized secret.
+Initial secrets and packet keys always derive successfully.
 
-The acceptance statements give their exact labels and keep the sending directions distinct.
+Each derivation uses exactly the labels and empty contexts of RFC 9001 §5.1 and §5.2.
 -/
 
 @[expose] public section
