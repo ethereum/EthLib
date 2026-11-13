@@ -121,15 +121,18 @@ theorem Answer.of_readsAs {after : TransactionState} {result : Option U256} {evm
     (reads : ReadsAs after state) (h : Answer after result evm) : Answer state result evm :=
   ⟨h.1.trans reads, h.2⟩
 
-/-- From Shapella, PUSH0, PUSH0 and REVERT revert with no output, and keep the state. -/
-theorem revertEmpty {stack : List U256} (hfork : .shapella ≤ fork) (hlt : pc + 2 < code.size)
-    (h0 : code[pc]'(by omega) = 0x5f) (h1 : code[pc + 1]'(by omega) = 0x5f)
-    (h2 : code[pc + 2] = 0xfd) (hstack : stack.length + 2 < STACK_LIMIT) (hgas : 4 ≤ gas) :
-    Spec fork (At code message pc stack .empty gas state substate returnData)
+/-- From Shapella, PUSH0, PUSH0 and REVERT revert with no output, and keep the state.
+
+It holds over the steps from frames that are monotone in gas. -/
+theorem revertEmptyG {stack : List U256} (hfork : .shapella ≤ fork)
+    (hlt : pc + 2 < code.size) (h0 : code[pc]'(by omega) = 0x5f)
+    (h1 : code[pc + 1]'(by omega) = 0x5f) (h2 : code[pc + 2] = 0xfd)
+    (hstack : stack.length + 2 < STACK_LIMIT) (hgas : 4 ≤ gas) :
+    SpecG fork (At code message pc stack .empty gas state substate returnData)
       (Answer state none) := by
-  refine Triple.seq (push0 hfork (by omega) h0 (by omega) (by omega)) ?_
-  refine Triple.seq (push0 hfork (by omega) h1 (by omega) (by simp; omega)) ?_
-  refine Spec.consequence (revert (Nat.le_trans (by decide) hfork) (by omega)
+  refine SpecG.seq (push0G hfork (by omega) h0 (by omega) (by omega)) ?_
+  refine SpecG.seq (push0G hfork (by omega) h1 (by omega) (by simp; omega)) ?_
+  refine SpecG.consequence (revertG (Nat.le_trans (by decide) hfork) (by omega)
     (by simp only [show pc + 1 + 1 = pc + 2 by omega]; exact h2)
     (by rw [extendMemory_of_length_eq_zero]; exact Nat.zero_le _)) (fun _ h => h) ?_
   rintro evm ⟨-, herr, hout, -, hst, -⟩
@@ -137,31 +140,41 @@ theorem revertEmpty {stack : List U256} (hfork : .shapella ≤ fork) (hlt : pc +
   rw [hout, extendMemory_of_length_eq_zero]
   rfl
 
+/-- From Shapella, PUSH0, PUSH0 and REVERT revert with no output, and keep the state. -/
+theorem revertEmpty {stack : List U256} (hfork : .shapella ≤ fork) (hlt : pc + 2 < code.size)
+    (h0 : code[pc]'(by omega) = 0x5f) (h1 : code[pc + 1]'(by omega) = 0x5f)
+    (h2 : code[pc + 2] = 0xfd) (hstack : stack.length + 2 < STACK_LIMIT) (hgas : 4 ≤ gas) :
+    Spec fork (At code message pc stack .empty gas state substate returnData)
+      (Answer state none) :=
+  (revertEmptyG hfork hlt h0 h1 h2 hstack hgas).toSpec
+
 /-- From Shapella, PUSH0, MSTORE, PUSH1 32, PUSH0 and RETURN return the word on the stack.
 
-The memory starts empty, and the run keeps the state. -/
-theorem returnWord {word : U256} (hfork : .shapella ≤ fork) (hlt : pc + 5 < code.size)
+The memory starts empty, and the run keeps the state.
+
+It holds over the steps from frames that are monotone in gas. -/
+theorem returnWordG {word : U256} (hfork : .shapella ≤ fork) (hlt : pc + 5 < code.size)
     (h0 : code[pc]'(by omega) = 0x5f) (h1 : code[pc + 1]'(by omega) = 0x52)
     (h2 : code[pc + 2]'(by omega) = 0x60) (h3 : code[pc + 3]'(by omega) = 0x20)
     (h4 : code[pc + 4]'(by omega) = 0x5f) (h5 : code[pc + 5] = 0xf3) (hgas : 20 ≤ gas) :
-    Spec fork (At code message pc [word] .empty gas state substate returnData)
+    SpecG fork (At code message pc [word] .empty gas state substate returnData)
       (Answer state (some word)) := by
-  refine Triple.seq (push0 hfork (by omega) h0 (by omega) (by simp [STACK_LIMIT])) ?_
-  refine Triple.seq (mstore (by omega) h1
+  refine SpecG.seq (push0G hfork (by omega) h0 (by omega) (by simp [STACK_LIMIT])) ?_
+  refine SpecG.seq (mstoreG (by omega) h1
     (by simp only [ByteArray.size_empty, extendMemory_word]; omega)) ?_
   rw [ByteArray.size_empty, extendMemory_word]
   dsimp only
   rw [show BitVec.toNat (0 : U256) = 0 from rfl,
     memoryWrite_whole (by rw [size_memoryExtend, size_wordBytes]; rfl)]
-  refine Triple.seq (push1 (by omega) h2
+  refine SpecG.seq (push1G (by omega) h2
     (by simp only [show pc + 1 + 1 + 1 = pc + 3 by omega]; exact h3) (by omega)
     (by simp [STACK_LIMIT])) ?_
-  refine Triple.seq (push0 hfork (by omega)
+  refine SpecG.seq (push0G hfork (by omega)
     (by simp only [show pc + 1 + 1 + 2 = pc + 4 by omega]; exact h4) (by omega)
     (by simp [STACK_LIMIT])) ?_
   have hle : extendMemory (wordBytes word).size [(0, BitVec.ofNat 256 (0x20 : UInt8).toNat)] =
       ⟨0, 0⟩ := extendMemory_of_le (by rw [size_wordBytes]; decide)
-  refine Spec.consequence («return» (by omega)
+  refine SpecG.consequence (returnG (by omega)
     (by simp only [show pc + 1 + 1 + 2 + 1 = pc + 5 by omega]; exact h5)
     (by rw [hle]; exact Nat.zero_le _)) (fun _ h => h) ?_
   rintro evm ⟨-, herr, hout, -, hst, -⟩
@@ -172,6 +185,17 @@ theorem returnWord {word : U256} (hfork : .shapella ≤ fork) (hlt : pc + 5 < co
   conv => rhs; rw [← memoryReadBytes_whole (memory := wordBytes word)]
   rw [size_wordBytes]
   rfl
+
+/-- From Shapella, PUSH0, MSTORE, PUSH1 32, PUSH0 and RETURN return the word on the stack.
+
+The memory starts empty, and the run keeps the state. -/
+theorem returnWord {word : U256} (hfork : .shapella ≤ fork) (hlt : pc + 5 < code.size)
+    (h0 : code[pc]'(by omega) = 0x5f) (h1 : code[pc + 1]'(by omega) = 0x52)
+    (h2 : code[pc + 2]'(by omega) = 0x60) (h3 : code[pc + 3]'(by omega) = 0x20)
+    (h4 : code[pc + 4]'(by omega) = 0x5f) (h5 : code[pc + 5] = 0xf3) (hgas : 20 ≤ gas) :
+    Spec fork (At code message pc [word] .empty gas state substate returnData)
+      (Answer state (some word)) :=
+  (returnWordG hfork hlt h0 h1 h2 h3 h4 h5 hgas).toSpec
 
 /-! ## The system call
 
