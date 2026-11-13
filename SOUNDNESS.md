@@ -4377,11 +4377,13 @@ The event of the payload attributes is in `Engine/BeaconApiEvents.lean`, since i
 `payloadAttributesEvent_fields` (`Engine/Proofs/BeaconApiEvents.lean`) shows that the Engine API and the event write the fields of the attributes in one order.
 The event writes each name in snake case and each integer as decimal text, where the Engine API keeps the name and writes the integer in hexadecimal.
 `payloadAttributesEvent_spec` shows that the event names the slot of the state, the proposer that the state gives, the root of its latest block header and the head of the forkchoice update.
-The source leaves these points open, decided here:
+Until Gloas, the number of the parent execution block is that of the latest payload header of the state.
+Before the merge the parent is a block of proof of work, which the state does not describe, so the caller gives its number.
+The event covers Bellatrix to Gloas (the forks before Heze), and these gaps remain:
 
-- Until Gloas, the number of the parent execution block is an input, since the execution layer holds it and the state does not before the merge.
-- From Heze, the fifth version of the attributes adds a field that the attributes of EthLib lack, so the event has the fields of the fourth version.
-- How often the event is sent depends on the node, so only its content is specified.
+- From Heze, the fifth version of the attributes adds the transactions of the inclusion lists, which the attributes of EthLib lack, and the pinned API names no consensus version for Heze, so the event is not defined there.
+- The parent root is the root of the latest block header of the state, which is right only for a state at the slot of the proposal, after its empty slots; the event takes that state as given.
+- How often the event is sent may depend on the node, so only its content is specified.
 
 The exports of the events and their Python tests remain for #2091.
 The light client events and the event of an available payload depend on what the node has received, and are not defined here.
