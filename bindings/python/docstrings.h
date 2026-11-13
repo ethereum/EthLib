@@ -431,6 +431,12 @@
 #define DOC_consensus_process_registration \
   "None when a builder keeps a signed registration, or the name of the rule that refuses it."
 
+#define DOC_consensus_is_eligible_for_bid \
+  "Whether a builder serves a request for a bid."
+
+#define DOC_consensus_process_bid \
+  "None when a proposer accepts a signed bid, or the name of the rule that refuses it."
+
 #define DOC_consensus_unblind_signed_blinded_block \
   "The root and the bytes of the signed block that a signed blinded block and a payload give."
 
@@ -1022,6 +1028,9 @@
 #define DOC_mplex_decode \
   "The mplex frame at the start of the bytes, and the bytes after it."
 
+#define DOC_mplex_session \
+  "The streams of one side after the frames it receives and sends, from an empty table."
+
 #define DOC_yamux_encode \
   "The bytes of a valid yamux frame."
 
@@ -1171,6 +1180,12 @@
 
 #define DOC_engine_get_payload_bodies \
   "The answer to a payload bodies request, from a store of bodies."
+
+#define DOC_engine_read_payload_status \
+  "A payload status read from its JSON, as `json.loads` gives it."
+
+#define DOC_engine_read_forkchoice_response \
+  "A forkchoice response read from its JSON, as `json.loads` gives it."
 
 #define DOC_engine_rewrite_params \
   "The parameters of an Engine API request, read by the decoder and written by the writer."

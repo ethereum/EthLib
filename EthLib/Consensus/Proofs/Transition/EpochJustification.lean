@@ -165,7 +165,65 @@ theorem finalizes_eq_true {justified : Bool} {source gap currentEpoch : Epoch}
     obtain ⟨sum, sumOk, rfl⟩ := computed
     exact ⟨rfl, ((addChecked_ok_iff.mp sumOk).2).symm⟩
 
-/-- What weighing the votes does to the three newest bits and to the finalized checkpoint.
+/-- The four rules by which weighing the votes finalizes a checkpoint, with every bit they read.
+
+The new finalized checkpoint is the old one, or an old justified one by one of the rules.
+
+The old previous justified checkpoint needs bits 1 and 2, and also bit 3 when three back.
+
+The old current justified checkpoint needs bits 0 and 1, and also bit 2 when two back.
+
+The bits are those after the step.
+
+A checkpoint is two or three back when its epoch is two or three before the current epoch. -/
+theorem weighJustificationAndFinalization_finalized {total previousBalance currentBalance : Gwei}
+    (computed : weighJustificationAndFinalization state total previousBalance currentBalance =
+      .ok after) :
+    after.finalizedCheckpoint = state.finalizedCheckpoint ∨
+      (after.finalizedCheckpoint = state.previousJustifiedCheckpoint ∧
+        ((after.justificationBits.bits[1] = true ∧ after.justificationBits.bits[2] = true ∧
+            after.justificationBits.bits[3] = true ∧
+            after.finalizedCheckpoint.epoch.toNat + 3 = (getCurrentEpoch state).toNat) ∨
+          (after.justificationBits.bits[1] = true ∧ after.justificationBits.bits[2] = true ∧
+            after.finalizedCheckpoint.epoch.toNat + 2 = (getCurrentEpoch state).toNat))) ∨
+      (after.finalizedCheckpoint = state.currentJustifiedCheckpoint ∧
+        ((after.justificationBits.bits[0] = true ∧ after.justificationBits.bits[1] = true ∧
+            after.justificationBits.bits[2] = true ∧
+            after.finalizedCheckpoint.epoch.toNat + 2 = (getCurrentEpoch state).toNat) ∨
+          (after.justificationBits.bits[0] = true ∧ after.justificationBits.bits[1] = true ∧
+            after.finalizedCheckpoint.epoch.toNat + 1 = (getCurrentEpoch state).toNat))) := by
+  simp only [weighJustificationAndFinalization, bind_ok_iff, liftAccessor_ok, pure,
+    Except.pure, Except.ok.injEq] at computed
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, b₃, h₃, b₂, h₂, c₂, hc₂, c₁, hc₁, eq⟩ := computed
+  subst eq
+  dsimp only
+  split
+  · rename_i yes
+    refine .inr (.inr ⟨rfl, ?_⟩)
+    rcases Bool.or_eq_true_iff.mp yes with yes | yes
+    · rw [yes] at hc₂
+      have rule := finalizes_eq_true hc₂
+      simp only [Bool.and_eq_true, UInt64.reduceToNat] at rule
+      exact .inl ⟨rule.1.1.1, rule.1.1.2, rule.1.2, rule.2⟩
+    · rw [yes] at hc₁
+      have rule := finalizes_eq_true hc₁
+      simp only [Bool.and_eq_true, UInt64.reduceToNat] at rule
+      exact .inr ⟨rule.1.1, rule.1.2, rule.2⟩
+  · split
+    · rename_i yes
+      refine .inr (.inl ⟨rfl, ?_⟩)
+      rcases Bool.or_eq_true_iff.mp yes with yes | yes
+      · rw [yes] at h₃
+        have rule := finalizes_eq_true h₃
+        simp only [Bool.and_eq_true, UInt64.reduceToNat] at rule
+        exact .inl ⟨rule.1.1.1, rule.1.1.2, rule.1.2, rule.2⟩
+      · rw [yes] at h₂
+        have rule := finalizes_eq_true h₂
+        simp only [Bool.and_eq_true, UInt64.reduceToNat] at rule
+        exact .inr ⟨rule.1.1, rule.1.2, rule.2⟩
+    · exact .inl rfl
+
+/-- What weighing the votes does to the four bits and to the finalized checkpoint.
 
 A set bit 0 means that the test of the current epoch passed.
 
@@ -175,7 +233,7 @@ A set bit 1 means that the test of the previous epoch passed, or that the old bi
 
 In the first case the state records a root for the previous epoch.
 
-Bit 2 is the old bit 1.
+Bits 2 and 3 are the old bits 1 and 2.
 
 The new finalized checkpoint is the old one, or an old justified one by one of the four rules.
 
@@ -196,6 +254,7 @@ theorem weighJustificationAndFinalization_bits {total previousBalance currentBal
             ∃ root, getBlockRoot state (getPreviousEpoch state) = .ok root) ∨
           state.justificationBits.bits[0] = true) ∧
       after.justificationBits.bits[2] = state.justificationBits.bits[1] ∧
+      after.justificationBits.bits[3] = state.justificationBits.bits[2] ∧
       (after.finalizedCheckpoint = state.finalizedCheckpoint ∨
         (after.finalizedCheckpoint = state.currentJustifiedCheckpoint ∧
           after.justificationBits.bits[0] = true ∧
@@ -208,6 +267,7 @@ theorem weighJustificationAndFinalization_bits {total previousBalance currentBal
             (after.justificationBits.bits[2] = true ∧
               state.previousJustifiedCheckpoint.epoch.toNat + 3 =
                 (getCurrentEpoch state).toNat)))) := by
+  have finalized := weighJustificationAndFinalization_finalized computed
   simp only [weighJustificationAndFinalization, bind_ok_iff, liftAccessor_ok, liftArith,
     mapError_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
   obtain ⟨previousWeight, previousOk, threshold, thresholdOk, first, firstOk, currentWeight,
@@ -225,7 +285,7 @@ theorem weighJustificationAndFinalization_bits {total previousBalance currentBal
   have bit2 : bits[2] = state.justificationBits.bits[1] := by
     simp [bitsEq, shiftJustificationBits]
   refine ⟨threshold, previousWeight, currentWeight, thresholdOk, previousOk, currentOk, ?_, ?_,
-    ?_, ?_⟩
+    ?_, ?_, ?_⟩
   · rw [bitsAfter, bit0]
     intro passed
     refine ⟨of_decide_eq_true passed, ?_⟩
@@ -244,35 +304,20 @@ theorem weighJustificationAndFinalization_bits {total previousBalance currentBal
         cases failed
     · exact .inr old
   · rw [bitsAfter, bit2]
-  have finalizedEq : after.finalizedCheckpoint =
-      if c || d then state.currentJustifiedCheckpoint
-      else if a || b then state.previousJustifiedCheckpoint
-      else state.finalizedCheckpoint := by
-    rw [← afterEq]
-  rw [bitsAfter]
-  by_cases byCurrent : (c || d) = true
-  · simp only [byCurrent, ↓reduceIte] at finalizedEq
-    refine .inr (.inl ⟨finalizedEq, ?_⟩)
-    rcases Bool.or_eq_true_iff.mp byCurrent with two | one
-    · obtain ⟨set, sum⟩ := finalizes_eq_true (two ▸ cOk)
-      simp only [Bool.and_eq_true] at set
-      exact ⟨set.1.1, .inr ⟨set.1.2, by simpa using sum⟩⟩
-    · obtain ⟨set, sum⟩ := finalizes_eq_true (one ▸ dOk)
-      simp only [Bool.and_eq_true] at set
-      exact ⟨set.1, .inl (by simpa using sum)⟩
-  simp only [byCurrent, Bool.false_eq_true, ↓reduceIte] at finalizedEq
-  by_cases byPrevious : (a || b) = true
-  · simp only [byPrevious, ↓reduceIte] at finalizedEq
-    refine .inr (.inr ⟨finalizedEq, ?_⟩)
-    rcases Bool.or_eq_true_iff.mp byPrevious with three | two
-    · obtain ⟨set, sum⟩ := finalizes_eq_true (three ▸ aOk)
-      simp only [Bool.and_eq_true] at set
-      exact ⟨set.1.1, .inr ⟨set.1.2, by simpa using sum⟩⟩
-    · obtain ⟨set, sum⟩ := finalizes_eq_true (two ▸ bOk)
-      simp only [Bool.and_eq_true] at set
-      exact ⟨set.1, .inl (by simpa using sum)⟩
-  simp only [byPrevious, Bool.false_eq_true, ↓reduceIte] at finalizedEq
-  exact .inl finalizedEq
+  · rw [bitsAfter]
+    simp [bitsEq, shiftJustificationBits]
+  rcases finalized with same | ⟨same, rule⟩ | ⟨same, rule⟩
+  · exact .inl same
+  · refine .inr (.inr ⟨same, ?_⟩)
+    rw [same] at rule
+    rcases rule with ⟨one, two, -, sum⟩ | ⟨one, -, sum⟩
+    · exact ⟨one, .inr ⟨two, sum⟩⟩
+    · exact ⟨one, .inl sum⟩
+  · refine .inr (.inl ⟨same, ?_⟩)
+    rw [same] at rule
+    rcases rule with ⟨zero, one, -, sum⟩ | ⟨zero, -, sum⟩
+    · exact ⟨zero, .inr ⟨one, sum⟩⟩
+    · exact ⟨zero, .inl sum⟩
 
 /-- Weighing the votes keeps the checkpoints in order.
 

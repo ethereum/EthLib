@@ -1985,6 +1985,30 @@ The consensus layer names only Noise for TCP, and does not say whether a node ma
 The profile proposes Noise alone.
 Which messages share a packet is not modelled; the recommendation to send the header with the first proposal or answer changes no message.
 
+### The streams of an mplex connection
+
+`step`, `receive` and `send` (`Networking/Libp2p/MplexSession.lean`) check each mplex frame against the streams of one side.
+`run` checks a list of frames in turn.
+They follow [mplex, "Protocol"](https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/mplex/README.md#protocol).
+A stream is known by its ID and by whether this side opened it, since "Both parties can open a substream with the same ID".
+The flag of a frame says whether its writer opened the stream, so a received Initiator flag names a stream that the peer opened.
+A close closes the stream for its writer, and a reset closes both directions.
+A side's writes after its own close or reset, or after a reset it received, are refused as "a protocol violation".
+`step_find?_of_ne` (`Networking/Proofs/Libp2p/MplexSession.lean`) proves that an accepted frame changes the state of its own stream only.
+`run_receive_writeAfterClose` proves that once the peer has closed or reset a stream, this side refuses its later data on it.
+
+The source leaves three cases open.
+A NewStream on an ID and opener already in the table is `reusedId`: the source says only that reusing an ID after a close "may result in undefined behaviour".
+A frame on a stream not in the table is `unknownStream`, and the source fixes no reaction.
+A second close or a second reset by one side gets no error of its own, and is refused as a write after a close or a reset.
+A closed or reset stream stays in the table, so a later NewStream with its ID and opener is `reusedId`.
+Each side has its own close and its own reset, and a side may reset a stream after it closed it.
+This side writes nothing after it has received a reset, but the peer's reset may cross one that this side sent.
+Frames that the peer wrote before it learned of a reset by this side may also still arrive, so this side accepts and drops them until the peer closes or resets.
+The export decodes every frame first, and the decoder refuses data over 1 MiB and data on a close or a reset.
+So the table does not check them again.
+The stream name of a NewStream is not read, since the source says that the protocol does not consider it.
+
 ### The block headers of the eth protocol
 
 `checkHeaders` (`Execution/Network/Blocks.lean`) checks an answer to a GetBlockHeaders request of the eth protocol.
@@ -2200,23 +2224,25 @@ It also assumes that the increment of the preset is a whole number of 100 Gwei, 
 No theorem yet derives that from the state transition.
 The update of effective balances keeps it, but the other steps and the upgrades have no proof.
 It also assumes that each supporter of the block is a member of the committees of the range.
-No theorem yet proves that assumption.
 The store checks a vote against the committees in the state of its target, while the rule reads them in the state of the head.
 In a store with a forward clock, `Store.ForwardReachable.votesHaveOrigins` gives each latest vote the facts of its attestation.
 From those facts, `VoteOrigin.exists_mem_committee` (`Consensus/Proofs/ForkChoice/VoteOrigins.lean`) places the voter in a committee of the slot of its attestation, in the state of its target.
 `mem_getCommitteesBetweenSlots` (`Consensus/Proofs/ForkChoice/FastConfirmation.lean`) places each member of a committee of a slot of the range, in the state of the head, among the members that the rule reads.
-What remains is that the slot of the vote lies in the range, and that the two states agree on the count and the committees of that slot.
-They should agree when both states hold the same RANDAO mix of the epoch `MIN_SEED_LOOKAHEAD + 1` epochs before the epoch of the slot, two in both presets, and the same active validators in the epoch of the slot.
-No theorem yet proves that.
-For a range with part of an epoch that should hold when the head descends from the block, since the range then lies in the epoch of the block and the next one.
-Both corollaries apply `lt_two_mul_honest_supportersOf_of_weighed`, which builds those sets for any `W` that holds the supporters and the active members of the committees, and whose stake the weight covers.
+`Store.ForwardReachableWith.supportersOf_mem_committees` (`Consensus/Proofs/ForkChoice/FastConfirmationCommittees.lean`) proves the assumption for a range with part of an epoch, when the head descends from the block.
+It needs a store built with a forward clock and one setting of the signature checks, as on an honest node.
+Such a range ends at most one epoch after its start, so the vote of each supporter is at most one epoch after the block.
+`Store.ForwardReachable.slot_le_of_blockState_of_getCurrentSlot` (`Consensus/Proofs/ForkChoice/BlockStates.lean`) puts each block state of a store with a forward clock at or before the current slot.
+So the state of the head is at most one epoch after the vote.
+`Store.ForwardReachableWith.committeesKept_of_voteOrigin` (`Consensus/Proofs/ForkChoice/CommitteeAgreement.lean`) then makes the state of the target and the state of the head agree on the count and the committees of the slot of the vote.
+`Store.ForwardReachableWith.supportersOf_mem_committees` also needs an anchor block not after its state, the start of the range at or before the block, both lookaheads of the seed at least one epoch, and a ring of mixes longer than the minimum lookahead plus two epochs; both presets satisfy the last two.
+`Store.ForwardReachableWith.lt_two_mul_honest_supportersOf_of_partialRange` is the corollary without the assumption.
+The corollaries apply `lt_two_mul_honest_supportersOf_of_weighed`, which builds those sets for any `W` that holds the supporters and the active members of the committees, and whose stake the weight covers.
 `lt_two_mul_honest_supportersOf_of_covered` drops that assumption when the range of the adversary holds a whole epoch.
 Its set `W` is then every validator active in the source of balances, which holds each supporter.
 Its Byzantine bound is Assumption 2 when every validator active in the source is a member of a committee of the range.
 Otherwise it implies Assumption 2 when the validators that have left the committees are Byzantine, as Assumption 1 of the paper ensures.
 With an honest one gone the two bounds are incomparable.
 The tally of the source still counts the votes of validators that have left the committees, so the proof bounds their stake.
-For a range with part of an epoch the assumption on the supporters stays.
 The paper assumes a static set of validators, Assumption 1.
 `StaticPair` (`Consensus/Proofs/ForkChoice/StaticValidators.lean`) states the part of it that the proofs use.
 It relates a reference state to each state that a store holds.
@@ -3044,9 +3070,20 @@ The 64 others of those 75 decode, and a later check rejects them.
 Six of the OpenRPC examples do not follow the specification, and the tests check that the decoder rejects them.
 The other two examples are of methods that EthLib does not specify, and the tests check that they fail as unknown methods.
 
+The answers have a JSON form too, written and read back.
+The decoder of a payload status reads back what its writer writes, for every status and validation error (`payloadStatusOfJson_json`, `Proofs/Json.lean`).
+The decoder of the response of `engine_forkchoiceUpdated` does the same for each status that the method answers (`forkchoiceUpdatedResponseOfJson_json`, `Proofs/ForkchoiceUpdated.lean`).
+Every answer of that method is `VALID`, `INVALID` or `SYNCING`, the restriction of step 9 of the method (`forkchoiceUpdatedCall_status`).
+So the decoder reads back the response of every call (`forkchoiceUpdatedResponseOfJson_call`).
+Its response names a build exactly when the update applies a head and the attributes pass their checks (`forkchoiceUpdatedResponse_payloadId`).
+The ID is then that of the head and the attributes.
+The Python tests read the status examples of `engine_newPayload` and the response examples of `engine_forkchoiceUpdated` in the OpenRPC method files.
+They also read back the status that EthLib answers to each request of `new_payload.json` that expects no error, and each response to the chains of `forkchoice.json`.
+
 The theorems about `engine_forkchoiceUpdated` are in `Proofs/ForkchoiceUpdated.lean`.
 `forkchoiceUpdated_valid` shows that a valid answer selects a valid head that the execution layer holds, with its safe and finalized blocks on its chain.
 The exception is step 2 of the method, which `forkchoiceUpdated_of_belowFinalized` covers.
+`onChain_of_forkchoiceUpdated` shows that an applied head is the head that the state names, and `mem_chainOf_of_onChain` that a nonzero safe or finalized hash then names a block of its chain.
 A valid head below the finalized block that the execution layer knows is `VALID` there, and the head does not change.
 `forkchoiceUpdated_of_invalid` gives the answer for an invalid head, and `latestValid_eq_some_iff` with `getElem?_succ_chainOf` shows that its latest valid hash is the valid ancestor nearest the head.
 In version 4, custody columns that decode never change the answer (`forkchoiceUpdatedCall_custody`), and without payload attributes every version gives the same answer (`forkchoiceUpdatedCall_of_null`).
@@ -3183,6 +3220,22 @@ The pseudocode of the source has two defects, which EthLib reads by their eviden
 The endpoint takes a list of registrations.
 The source does not say whether one invalid entry rejects the whole list, nor whether earlier entries of the same list count as kept registrations.
 EthLib specifies one registration and leaves the list open.
+
+From Bellatrix to Fulu, a builder serves a request for a bid only when four rules hold, and a proposer accepts a bid only when three rules hold.
+`isEligibleForBid_ok_true_iff` (`Consensus/Proofs/BuilderApi/Bid.lean`) states the builder's rules: the slot is that of the state, the key has a kept registration, the key is that of the proposer of the slot, and the parent hash is the latest block hash of the state.
+`isEligibleForBid_proposer` shows that a served request names the proposer, and `getHeaderStatus_wrong_slot` that a request for another slot gets 400.
+The source gives 400 for an invalid request, 204 when the builder cannot produce a header, and 200 with the bid otherwise.
+EthLib answers 500, the internal error of the source, when the proposer of the slot or its validator cannot be found; the source does not say which response that case gets.
+`processBid_ok_iff` states the proposer's rules: the parent hash of the header is the latest block hash of the state, the fee recipient is the registered one, and the signature verifies.
+`getBid_header` shows that the bid on a payload carries the header of that payload.
+`processBid_getBid` shows that such a bid is accepted when the payload extends the state, pays the registered fee recipient, and the signature verifies.
+The source gives the bid of a builder for Bellatrix only.
+From Deneb the commitments to the blobs, and from Electra the requests, are inputs, since the source gives no function that fills them.
+The pseudocode of the source has three defects, which EthLib reads by their evident meaning:
+
+- `get_bid` takes `execution_payload` but reads `payload`; EthLib reads the argument.
+- `verify_bid_signature` computes its signing root from `signed_registration.message`, a name it never binds; EthLib uses the message of the bid, as `get_bid_signature` does.
+- `process_bid` calls `verify_bid_signature` without asserting its result, so read literally it accepts any signature; EthLib refuses a bid whose signature does not verify.
 
 From Deneb to Fulu, a builder reveals the payload with a blobs bundle: the blobs, their commitments and their proofs.
 `BuilderBlobsBundle.names_nodup` and `ExecutionPayloadAndBlobsBundle.names_nodup` (`Consensus/Proofs/Containers/BuilderApi.lean`) give both containers distinct field names, so they decode back from their bytes when the logs bloom has a byte.
@@ -3477,12 +3530,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 400 operations and 49 size constants.
-The Python extension calls 400 of the operations and 49 of the constants.
+Lean exports 405 operations and 49 size constants.
+The Python extension calls 405 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-10179 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (1888), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (122), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (80), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (129), `module.c` (1432), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (45), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (140), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (687), `x25519.c` (21), `xmss.c` (134).
+10246 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (1914), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (140), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (80), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (138), `module.c` (1441), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (45), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (140), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (692), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

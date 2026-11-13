@@ -96,6 +96,34 @@ def process_registration(
     return _native.consensus_process_registration(name, fork, config, state, registry, signed, now)
 
 
+def is_eligible_for_bid(
+    name: str,
+    fork: str,
+    state: bytes,
+    registry: list[bytes],
+    slot: int,
+    parent_hash: bytes,
+    pubkey: bytes,
+) -> bool:
+    """Whether a builder serves a request for a bid on its state at the slot, or TransitionError."""
+    return _native.consensus_is_eligible_for_bid(
+        name, fork, state, registry, slot, parent_hash, pubkey
+    )
+
+
+def process_bid(
+    name: str,
+    fork: str,
+    state: bytes,
+    signed: bytes,
+    fee_recipient: bytes,
+    # `Any`, because `dict` is invariant in its values.
+    config: dict[str, Any] | None = None,
+) -> str | None:
+    """None when a proposer accepts a signed bid, or the name of the rule that refuses it."""
+    return _native.consensus_process_bid(name, fork, config, state, signed, fee_recipient)
+
+
 def unblind_signed_blinded_block(
     name: str, fork: str, blinded: bytes, revealed: bytes
 ) -> tuple[bytes, bytes] | None:
@@ -1306,6 +1334,8 @@ __all__ = [
     "api_ssz",
     "is_valid_builder_signature",
     "process_registration",
+    "is_eligible_for_bid",
+    "process_bid",
     "unblind_signed_blinded_block",
     "verify_builder_request_auth_signature",
     "builder_bid_value",

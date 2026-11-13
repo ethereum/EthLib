@@ -46,18 +46,30 @@ structure ErrorGroup where
   errors : List ErrorCode
   deriving DecidableEq, Repr
 
+/-- The code of a request that is not valid JSON. -/
+def parseError : ErrorCode := ⟨-32700, "Parse error"⟩
+
+/-- The code of a request whose method the node does not serve. -/
+def methodNotFound : ErrorCode := ⟨-32601, "Method not found"⟩
+
 /-- The codes of JSON-RPC 2.0 itself. -/
 def rpcStandardErrors : ErrorGroup where
   name := "JSONRPCStandardErrors"
   range := none
-  errors := [⟨-32700, "Parse error"⟩, ⟨-32600, "Invalid request"⟩, ⟨-32601, "Method not found"⟩,
+  errors := [parseError, ⟨-32600, "Invalid request"⟩, methodNotFound,
     ⟨-32602, "Invalid params"⟩, ⟨-32603, "Internal error"⟩]
+
+/-- The code of an input that the method rejects, such as a block that is not canonical. -/
+def invalidInput : ErrorCode := ⟨-32000, "Invalid input"⟩
+
+/-- The code of a resource that the node does not find, such as an unknown block. -/
+def resourceNotFound : ErrorCode := ⟨-32001, "Resource not found"⟩
 
 /-- The codes that JSON-RPC 2.0 leaves to servers, as the execution API uses them. -/
 def rpcNonStandardErrors : ErrorGroup where
   name := "JSONRPCNonStandardErrors"
   range := none
-  errors := [⟨-32000, "Invalid input"⟩, ⟨-32001, "Resource not found"⟩,
+  errors := [invalidInput, resourceNotFound,
     ⟨-32002, "Resource unavailable"⟩, ⟨-32003, "Transaction rejected"⟩,
     ⟨-32004, "Method not supported"⟩, ⟨-32005, "Limit exceeded"⟩,
     ⟨-32006, "JSON-RPC version not supported"⟩]

@@ -114,10 +114,6 @@ theorem SlackBits.congr {block : Root → β} {epoch : ℕ} {fork post : Fork}
     rw [rootEq] at read
     exact holds.previous set older root sum read
 
-/-- The epoch after genesis is epoch 1. -/
-private theorem toNat_genesisEpoch_add_one : (GENESIS_EPOCH + 1 : Epoch).toNat = 1 := by
-  decide
-
 /-- Two epochs before an epoch past the first two is two less as a number. -/
 private theorem toNat_sub_two {epoch : Epoch} (late : GENESIS_EPOCH + 1 < epoch) :
     (epoch - 2).toNat = epoch.toNat - 2 := by
@@ -199,7 +195,7 @@ theorem processJustificationAndFinalization_slackBits
   have late' := UInt64.lt_iff_toNat_lt.mp late
   rw [toNat_genesisEpoch_add_one] at late'
   obtain ⟨threshold, previousWeight, currentWeight, thresholdOk, previousOk, currentOk, newCurrent,
-    newPrevious, newOlder, finalizedCases⟩ := weighJustificationAndFinalization_bits weighed
+    newPrevious, newOlder, -, finalizedCases⟩ := weighJustificationAndFinalization_bits weighed
   obtain ⟨previousJustified, -, -, rest⟩ := weighJustificationAndFinalization_checkpoints weighed
   -- The step keeps the slot and the buffer of roots.
   have rootsEq : ∀ epoch, getBlockRoot after epoch = getBlockRoot state epoch := by

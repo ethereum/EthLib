@@ -577,6 +577,14 @@ def consensus_process_registration(name: str, fork: str, config: dict[str, Any] 
     """None when a builder keeps a signed registration, or the name of the rule that refuses it."""
     ...
 
+def consensus_is_eligible_for_bid(name: str, fork: str, state: bytes, registry: list[bytes], slot: int, parent_hash: bytes, pubkey: bytes) -> bool:
+    """Whether a builder serves a request for a bid."""
+    ...
+
+def consensus_process_bid(name: str, fork: str, config: dict[str, Any] | None, state: bytes, signed: bytes, fee_recipient: bytes) -> str | None:
+    """None when a proposer accepts a signed bid, or the name of the rule that refuses it."""
+    ...
+
 def consensus_unblind_signed_blinded_block(name: str, fork: str, blinded: bytes, revealed: bytes) -> tuple[bytes, bytes] | None:
     """The root and the bytes of the signed block that a signed blinded block and a payload give."""
     ...
@@ -1365,6 +1373,10 @@ def mplex_decode(data: bytes) -> tuple[dict[str, Any], bytes]:
     """The mplex frame at the start of the bytes, and the bytes after it."""
     ...
 
+def mplex_session(events: list[tuple[bool, bytes]]) -> list[tuple[int, bool, str]]:
+    """The streams of one side after the frames it receives and sends, from an empty table."""
+    ...
+
 def yamux_encode(frame: dict[str, Any]) -> bytes:
     """The bytes of a valid yamux frame."""
     ...
@@ -1563,6 +1575,14 @@ def engine_get_payload(config: dict, store: list[tuple[bytes, str, bytes, bytes,
 
 def engine_get_payload_bodies(store: list[tuple[bytes, int | None, str, list[bytes], list[tuple[int, int, bytes, int]] | None, bytes | None]], latest: int, max_request: int, request: dict) -> list[dict | None]:
     """The answer to a payload bodies request, from a store of bodies."""
+    ...
+
+def engine_read_payload_status(status: dict[str, Any]) -> tuple[str, bytes | None, str | None]:
+    """A payload status read from its JSON, as `json.loads` gives it."""
+    ...
+
+def engine_read_forkchoice_response(response: dict[str, Any]) -> tuple[str, bytes | None, str | None, bytes | None]:
+    """A forkchoice response read from its JSON, as `json.loads` gives it."""
     ...
 
 def engine_rewrite_params(method: str, params: list[Any]) -> list[Any]:
