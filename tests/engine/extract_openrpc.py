@@ -1,4 +1,4 @@
-"""Write the request examples of `openrpc.json` from the OpenRPC method files of the Engine API."""
+"""Write the examples of `openrpc.json` from the OpenRPC method files of the Engine API."""
 
 import json
 import sys
@@ -8,7 +8,7 @@ import yaml
 
 
 def main(methods: Path, out: Path) -> None:
-    """Keep the parameters of every example of every method, in file order."""
+    """Keep the parameters and the result of every example of every method, in file order."""
     examples = []
     for path in sorted(methods.glob("*.yaml")):
         for method in yaml.safe_load(path.read_text()):
@@ -19,6 +19,7 @@ def main(methods: Path, out: Path) -> None:
                         "method": method["name"],
                         "example": example["name"],
                         "params": [param["value"] for param in example["params"]],
+                        "result": example["result"]["value"],
                     }
                 )
     out.write_text(json.dumps(examples, indent=1) + "\n")
