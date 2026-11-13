@@ -1516,6 +1516,10 @@ def bindings : List Binding := [
     `EthLib.Execution.Rpc.Exports.prunedHistoryUnavailableExport,
     "() -> tuple[" ++ rpcSignedCodeType ++ ", str]",
     [], some "RpcError"⟩,
+  ⟨"rpc_serve", `EthLib.Execution.Rpc.Exports.serveExport,
+    "(view: tuple[dict[str, Any], bytes, list[tuple[str, bytes]], tuple[bytes, bytes, bytes], " ++
+      "int, bool], requests: list[str]) -> list[str | None]",
+    [`EthLib.Execution.Blocks.BlockError], some "RpcError"⟩,
   ⟨"pyvalue_echo", `EthLib.Exports.pyValueEcho,
     "(value: object) -> object",
     [], some "BindingError"⟩

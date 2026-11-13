@@ -1197,6 +1197,7 @@ static PyMethodDef methods[] = {
   {"rpc_error_groups", py_rpc_error_groups, METH_VARARGS, DOC_rpc_error_groups},
   {"rpc_pruned_history_unavailable", py_rpc_pruned_history_unavailable, METH_VARARGS,
    DOC_rpc_pruned_history_unavailable},
+  {"rpc_serve", py_rpc_serve, METH_VARARGS, DOC_rpc_serve},
   {"pyvalue_echo", py_pyvalue_echo, METH_VARARGS, DOC_pyvalue_echo},
   {NULL, NULL, 0, NULL},
 };

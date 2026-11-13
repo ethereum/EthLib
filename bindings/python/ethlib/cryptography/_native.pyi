@@ -1625,6 +1625,10 @@ def rpc_pruned_history_unavailable() -> tuple[tuple[bool, int], str]:
     """The code of history that the node pruned, with its message."""
     ...
 
+def rpc_serve(view: tuple[dict[str, Any], bytes, list[tuple[str, bytes]], tuple[bytes, bytes, bytes], int, bool], requests: list[str]) -> list[str | None]:
+    """Answer requests of the execution JSON-RPC API from the chain that the arguments build."""
+    ...
+
 def pyvalue_echo(value: object) -> object:
     """The value that Python passes, back to Python, with each failure tuple read as a failure."""
     ...

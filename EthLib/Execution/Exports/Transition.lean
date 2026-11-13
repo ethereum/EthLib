@@ -74,6 +74,22 @@ def blockErrorMessage : BlockError → String
   | .systemCallFailed address e => s!"system call to {oneLine address} failed: {oneLine e}"
   | e => s!"block invalid: {(oneLine e).replace "EthLib.Execution.Blocks.BlockError." ""}"
 
+/-- A block from the name of its fork and its RLP form, with its transactions decoded.
+
+Each ommer is at the fork of its own number on the chain `config`.
+
+A block or a transaction that does not decode has the code of its block error. -/
+def blockOf (config : ChainConfig) (fork : String) (block : ByteArray) :
+    Result ((fork : Fork) × Block fork Transactions.Transaction) := do
+  let fork ← forkUpTo .glamsterdam fork.toUTF8
+  let raw : Block fork Item ← (Block.decode (forkAtBlock config) block).mapError
+    fun e => ((BlockError.encoding e).code, s!"block rejected: {reprStr e}")
+  let transactions ← raw.transactions.zipIdx.mapM fun (item, index) =>
+    (Transactions.decodeBodyTransaction fork item).mapError fun e =>
+      ((BlockError.undecodableTransaction index e).code,
+        s!"transaction {index} does not decode: {message e}")
+  return ⟨fork, { raw with transactions }⟩
+
 /-- Run the state transition of a block on a chain, and give the state after it.
 
 Without the seal check, the proof of work is left out, as for test chains that run without one.
@@ -84,14 +100,8 @@ def stateTransitionOf
       Bool) : Result ByteArray := do
   let (config, state, recent, fork, block, checkSeal) := args
   let chain ← chainOf config state recent
-  let fork ← forkUpTo .glamsterdam fork.toUTF8
-  let raw : Block fork Item ← (Block.decode (forkAtBlock chain.config) block).mapError
-    fun e => ((BlockError.encoding e).code, s!"block rejected: {reprStr e}")
-  let transactions ← raw.transactions.zipIdx.mapM fun (item, index) =>
-    (Transactions.decodeBodyTransaction fork item).mapError fun e =>
-      ((BlockError.undecodableTransaction index e).code,
-        s!"transaction {index} does not decode: {message e}")
-  let post ← (stateTransition chain { raw with transactions } checkSeal).mapError
+  let ⟨_, block⟩ ← blockOf chain.config fork block
+  let post ← (stateTransition chain block checkSeal).mapError
     fun e => (e.code, blockErrorMessage e)
   let root ← State.Exports.rootOf post
   (encode (Item.list [Codec.toItem root, accountsItem post])).mapError
