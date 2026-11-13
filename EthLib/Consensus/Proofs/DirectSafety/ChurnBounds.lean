@@ -22,7 +22,7 @@ Electra exits spend balance churn, and consolidations spend their own queue's ch
 
 The Electra upgrade starts both queues with the churn of the upgraded state.
 
-Before Electra, the validator-count churn bounds the stake that leaves or joins a window.
+Before Electra, the validator-count churn bounds the stake that joins a window.
 
 The boundary support is the unslashed cohort that exits at the current epoch.
 
@@ -581,92 +581,6 @@ private theorem carry_key_same_epoch {g x y : ForkedBeaconState preset}
     UInt64.le_iff_toNat_le, UInt64.lt_iff_toNat_lt] at active
   rcases active with h | h <;> omega
 
-private theorem leaving_key_exit {x y : ForkedBeaconState preset}
-    (tail : Run config checks x y) (early : y.fork < .pectra)
-    {key : Cryptography.Bls.BLSPubkey} (member : key ∈ activeKeys x.state \ activeKeys y.state) :
-    ∃ v ∈ y.state.validators.data.toList, v.pubkey = key ∧
-      (getCurrentEpoch x.state).toNat < v.exitEpoch.toNat ∧
-      v.exitEpoch.toNat ≤ (getCurrentEpoch y.state).toNat := by
-  have xEarly := Nat.lt_of_le_of_lt (fork_le_of_chainSteps tail.chainSteps) early
-  obtain ⟨active, absent⟩ := Finset.mem_sdiff.mp member
-  obtain ⟨i, old, found, keyEq, active⟩ :=
-    (mem_keysAt_epoch (Nat.lt_trans xEarly (by decide)) _ key).mp active
-  obtain ⟨v, current, same⟩ := tail.key_preserved i old found
-  have kept := activeKept_of_chainSteps tail.chainSteps
-    (getCurrentEpoch x.state) (getCurrentEpoch_le_activityFixedEpoch _) i
-  have before : isActiveValidator v (getCurrentEpoch x.state) = true := by
-    simpa [isActiveAt, current, found, active] using kept
-  have after : ¬ isActiveValidator v (getCurrentEpoch y.state) = true := by
-    intro active
-    apply absent
-    exact (mem_keysAt_epoch (Nat.lt_trans early (by decide)) _ key).mpr
-      ⟨i, v, current, same.trans keyEq, active⟩
-  have epochs := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps tail.chainSteps)
-  simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq,
-    UInt64.le_iff_toNat_le, UInt64.lt_iff_toNat_lt] at before after
-  exact ⟨v, by simpa using Array.mem_of_getElem? current, same.trans keyEq, before.2, by omega⟩
-
-theorem leaving_before_electra {g x y : ForkedBeaconState preset}
-    (shared : Run config checks g x) (tail : Run config checks x y)
-    (genesis : Genesis (config := config) (checks := checks) g)
-    (twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat) (caps : CapOrder preset)
-    (early : y.fork < .pectra) :
-    Models.stake (effectiveWeight x.state) (activeKeys x.state \ activeKeys y.state) ≤
-      ((getCurrentEpoch y.state).toNat - (getCurrentEpoch x.state).toNat) *
-        max 1 (cohortCap config y.state.validators.data.size) *
-          preset.MAX_EFFECTIVE_BALANCE.toNat := by
-  classical
-  let departing := y.state.validators.data.toList.filter fun v =>
-    (getCurrentEpoch x.state).toNat < v.exitEpoch.toNat &&
-      v.exitEpoch.toNat ≤ (getCurrentEpoch y.state).toNat
-  have subset : activeKeys x.state \ activeKeys y.state ⊆
-      (departing.map (·.pubkey)).toFinset := by
-    intro key member
-    obtain ⟨v, present, keyEq, lower, upper⟩ := leaving_key_exit tail early member
-    exact List.mem_toFinset.mpr (List.mem_map.mpr
-      ⟨v, List.mem_filter.mpr ⟨present, by simp [lower, upper]⟩, keyEq⟩)
-  have cohorts := (shared.append tail).exitCohortBound early genesis.exitCohortBound
-  have count : departing.length ≤
-      ((getCurrentEpoch y.state).toNat - (getCurrentEpoch x.state).toNat) *
-        max 1 (cohortCap config y.state.validators.data.size) := by
-    apply count_epoch_window
-    intro n member
-    have upper := (Finset.mem_Ioc.mp member).2
-    have small : n < 2 ^ 64 := lt_of_le_of_lt upper (UInt64.toNat_lt _)
-    have numeric : n.toUInt64.toNat = n := by
-      rw [Nat.toUInt64_eq, UInt64.toNat_ofNat_of_lt' small]
-    have finite : n.toUInt64 ≠ FAR_FUTURE_EPOCH := by
-      intro equal
-      have far : n = 2 ^ 64 - 1 := by
-        have h := congrArg UInt64.toNat equal
-        rw [numeric] at h
-        exact h
-      have current := getCurrentEpoch_ne_farFuture twoSlots y.state
-      have currentNat := UInt64.toNat_lt (getCurrentEpoch y.state)
-      apply current
-      apply UInt64.toNat_inj.mp
-      change _ = 2 ^ 64 - 1
-      omega
-    have count := cohorts n.toUInt64 finite
-    have predicates : (fun v : Validator => v.exitEpoch.toNat == n) =
-        (fun v => v.exitEpoch == n.toUInt64) := by
-      funext v
-      apply Bool.eq_iff_iff.mpr
-      simp only [beq_iff_eq, ← UInt64.toNat_inj, numeric]
-    simpa only [predicates, validatorCohort, registryChurnCap, cohortCap] using count
-  have cards := (Finset.card_le_card subset).trans
-    (List.toFinset_card_le (departing.map (·.pubkey)))
-  simp only [List.length_map] at cards
-  have xEarly := Nat.lt_of_le_of_lt (fork_le_of_chainSteps tail.chainSteps) early
-  unfold Models.stake
-  calc
-    _ ≤ ∑ _key ∈ activeKeys x.state \ activeKeys y.state,
-        preset.MAX_EFFECTIVE_BALANCE.toNat :=
-      Finset.sum_le_sum (fun key _ => effectiveWeight_le_cap shared genesis caps xEarly key)
-    _ = (activeKeys x.state \ activeKeys y.state).card *
-        preset.MAX_EFFECTIVE_BALANCE.toNat := by simp
-    _ ≤ _ := Nat.mul_le_mul_right _ (cards.trans count)
-
 /-- New recent keys use only activation cohorts, including when their count cap is zero. -/
 private theorem new_recent_before_electra {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (tail : Run config checks x y)
@@ -1033,45 +947,5 @@ theorem split_electra_crossing {x y : ForkedBeaconState preset} (tail : Run conf
       exact ⟨u, v, head, crossing, rest.snoc step, before, after,
         congrArg (fun run => run.snoc step) same⟩
     · exact ⟨middle, last, pre, step, .nil, Nat.lt_of_not_ge crossed, late, rfl⟩
-
-/-- A queue charge can spend earlier epochs; an arbitrary window needs its carry-in. -/
-theorem exit_queue_charge {fork : Fork} (s t : BeaconState preset fork)
-    (electra : .pectra ≤ fork) (amount : Gwei) (epoch : Epoch)
-    (ok : computeExitEpochAndUpdateChurn config s electra amount = .ok (t, epoch)) :
-    ∃ first churn,
-      computeActivationExitEpoch preset (getCurrentEpoch s) = .ok first ∧
-      exitChurnLimit config s = .ok churn ∧
-      amount.toNat + (t.exitBalanceToConsume electra).toNat =
-        (if (s.earliestExitEpoch electra) < max (s.earliestExitEpoch electra) first
-          then churn.toNat else (s.exitBalanceToConsume electra).toNat) +
-        (epoch.toNat - (max (s.earliestExitEpoch electra) first).toNat) * churn.toNat := by
-  simp only [computeExitEpochAndUpdateChurn, Base.bind_ok_iff, liftArith,
-    Base.mapError_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
-  obtain ⟨first, firstOk, churn, churnOk, ⟨placed, left⟩, queued, result⟩ := ok
-  cases result
-  refine ⟨first, churn, firstOk, churnOk, ?_⟩
-  have spent := (churnQueue_spend queued).2.1
-  split at spent <;> rename_i branch
-  all_goals simp only [branch, ↓reduceIte]; omega
-
-theorem consolidation_queue_charge {fork : Fork} (s t : BeaconState preset fork)
-    (electra : .pectra ≤ fork) (amount : Gwei) (epoch : Epoch)
-    (ok : computeConsolidationEpochAndUpdateChurn config s electra amount = .ok (t, epoch)) :
-    ∃ first churn,
-      computeActivationExitEpoch preset (getCurrentEpoch s) = .ok first ∧
-      getConsolidationChurnLimit config s = .ok churn ∧
-      amount.toNat + (t.consolidationBalanceToConsume electra).toNat =
-        (if (s.earliestConsolidationEpoch electra) <
-            max (s.earliestConsolidationEpoch electra) first then churn.toNat
-          else (s.consolidationBalanceToConsume electra).toNat) +
-        (epoch.toNat - (max (s.earliestConsolidationEpoch electra) first).toNat) * churn.toNat := by
-  simp only [computeConsolidationEpochAndUpdateChurn, Base.bind_ok_iff, liftArith,
-    Base.mapError_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
-  obtain ⟨first, firstOk, churn, churnOk, ⟨placed, left⟩, queued, result⟩ := ok
-  cases result
-  refine ⟨first, churn, firstOk, churnOk, ?_⟩
-  have spent := (churnQueue_spend queued).2.1
-  split at spent <;> rename_i branch
-  all_goals simp only [branch, ↓reduceIte]; omega
 
 end EthLib.Consensus.DirectSafety
