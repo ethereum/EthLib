@@ -1,6 +1,8 @@
 module
 
 public import EthLib.Base.Exports.Proofs.PyValue
+public import EthLib.Execution.Exports.Network
+public import EthLib.Execution.Network.Session
 public import EthLib.Execution.Network.Snap
 public import EthLib.Networking.Devp2p.Session
 public import EthLib.Networking.Exports.Devp2p
@@ -19,6 +21,10 @@ An eth or snap capability takes the IDs its version needs, and any other capabil
 A rejected frame has the code of its session error.
 
 A bad argument, such as our own Hello that does not decode, has code 0.
+
+The eth session takes its messages as events, each sent or received, in order.
+
+A rejected eth message has the code of its message error or of its session error.
 -/
 
 public section
@@ -111,5 +117,63 @@ Last comes whether to send a Pong.
 A rejected frame raises the error of the session, and names the index of the frame. -/
 @[export eth_devp2p_session]
 def sessionExport (args : PyValue) : Result PyValue := pyExport sessionOf args
+
+/-- A message for a rejected eth message, phrased for someone reading a Python traceback. -/
+def ethSessionMessage : EthSessionError → String
+  | .beforeStatus => "message came before the peer's Status"
+  | .badStatus e => statusMessage e
+  | .secondStatus => "a second Status came in an active session"
+  | .unsolicited i => s!"response with request ID {i} answers no pending request"
+  | .badRange e l => s!"block range starts at {e}, after its end {l}"
+  | .transaction _ => "a received transaction has no RLP encoding"
+
+/-- The outcomes of the eth messages that a session sends and receives in turn.
+
+Each event says whether this node sends it, then gives its message ID and its RLP data.
+
+Each outcome is the verdict on the message and the number of pending requests after it. -/
+def ethSessionOf (args : Nat × ByteArray × Nat × Nat × List (Bool × Nat × ByteArray)) :
+    Result (List (String × Nat)) := do
+  let (version, schedule, number, timestamp, events) := args
+  let some v := EthVersion.ofNumber? version
+    | throw (0, s!"eth/{version} is not a version that EthLib specifies")
+  let s ← Networking.Devp2p.Exports.readSchedule schedule
+  let mut session := EthSession.init v
+  let mut outcomes := #[]
+  for ((sent, id, data), index) in events.zipIdx do
+    let m ← (Message.decode v id data).mapError fun e =>
+      (e.code, s!"event {index}: {ethMessage e}")
+    if sent then
+      match sendEth session m with
+      | some next =>
+        session := next
+        outcomes := outcomes.push ("sent", session.pending.length)
+      | none => outcomes := outcomes.push ("refused", session.pending.length)
+    else
+      match receiveEth s number timestamp session m with
+      | .error e => throw (e.code, s!"event {index}: {ethSessionMessage e}")
+      | .ok (next, verdict) =>
+        session := next
+        let name := match verdict with
+          | .accept => "accept"
+          | .discard => "discard"
+        outcomes := outcomes.push (name, session.pending.length)
+  return outcomes.toList
+
+/-- The outcomes of the eth messages that a session sends and receives in turn.
+
+The session runs on an eth version, for a node with a schedule and a head block.
+
+Each event says whether this node sends it, then gives its message ID and its RLP data.
+
+Each outcome gives the verdict and the number of requests still pending after the event.
+
+A received message is accepted or discarded, and a sent one is sent or refused.
+
+A message that does not decode, or that the session rejects, raises its error.
+
+The error names the index of the event. -/
+@[export eth_session]
+def ethSessionExport (args : PyValue) : Result PyValue := pyExport ethSessionOf args
 
 end EthLib.Execution.Network.Exports

@@ -917,6 +917,9 @@
 #define DOC_eth_check_pooled \
   "Whether `response` is PooledTransactions that answers the GetPooledTransactions `request`."
 
+#define DOC_eth_session \
+  "The outcomes of the eth messages that a session sends and receives in turn."
+
 #define DOC_eth_wire_hash \
   "The hash of a transaction as it crosses the wire."
 

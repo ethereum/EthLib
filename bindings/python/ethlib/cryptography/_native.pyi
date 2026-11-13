@@ -1225,6 +1225,10 @@ def eth_check_pooled(version: int, request: bytes, response: bytes) -> bool:
     """Whether `response` is PooledTransactions that answers the GetPooledTransactions `request`."""
     ...
 
+def eth_session(version: int, schedule: bytes, number: int, timestamp: int, events: list[tuple[bool, int, bytes]]) -> list[tuple[str, int]]:
+    """The outcomes of the eth messages that a session sends and receives in turn."""
+    ...
+
 def eth_wire_hash(tx: bytes) -> bytes:
     """The hash of a transaction as it crosses the wire."""
     ...
