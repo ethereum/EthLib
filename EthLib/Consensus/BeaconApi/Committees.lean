@@ -82,7 +82,13 @@ def epochCommittees (state : BeaconState preset fork) (epoch : Epoch)
 
 The epoch is that of the state when none is given, and it must be at most the next one.
 
-A later epoch, or a slot filter outside the epoch, gives the error with code 400.
+Its seed must read a RANDAO mix that the state still holds.
+
+So the epoch plus the length of the buffer of mixes must be after the next one plus the lookahead.
+
+An epoch outside these bounds, or a slot filter outside the epoch, gives the error with code 400.
+
+An index filter only restricts the list, so an index that names no committee gives an empty list.
 
 A committee that cannot be computed gives the error with code 500. -/
 def committeesResponse (state : BeaconState preset fork) (epoch : Option Epoch)
@@ -90,6 +96,9 @@ def committeesResponse (state : BeaconState preset fork) (epoch : Option Epoch)
   let epoch := epoch.getD (getCurrentEpoch state)
   unless epoch.toNat ≤ (getCurrentEpoch state).toNat + 1 do
     throw { code := 400, message := s!"Epoch {epoch.toNat} is after the next epoch" }
+  unless (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat + 1 <
+      epoch.toNat + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat do
+    throw { code := 400, message := s!"Epoch {epoch.toNat} is before the mixes of the state" }
   if slot.any (computeEpochAtSlot preset · != epoch) then
     throw { code := 400, message := "Slot does not belong in epoch" }
   let committees ← (epochCommittees state epoch index slot).mapError fun fault =>
@@ -186,7 +195,7 @@ So does a slot that the window of the state does not hold.
 
 The window holds the slots from Gloas on, from the epoch before that of the state.
 
-It ends with the lookahead of seeds after that epoch. -/
+It ends at the epoch of the state plus the lookahead of seeds. -/
 def statePtc (config : Config) (state : BeaconState preset fork) (slot : Option Slot) :
     Except ErrorMessage (PtcResponse preset) := do
   if gloas : .glamsterdam ≤ fork then

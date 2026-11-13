@@ -929,7 +929,7 @@ def api_committees(
     slot: int | None = None,
 ) -> dict[str, Any]:
     """The Beacon API beacon committees of an epoch of a state, or ConsensusError."""
-    # The epoch defaults to that of the state; one after the next epoch raises code 400.
+    # The epoch defaults to that of the state; an epoch after the next one raises code 400.
     # A slot outside the epoch raises code 400; index and slot filter the committees.
     return _native.consensus_api_committees(name, fork, state, epoch, index, slot)
 

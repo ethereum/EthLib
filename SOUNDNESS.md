@@ -3654,16 +3654,22 @@ It covers a filter on each status and each group, the errors with codes 400, 404
 
 The answers that list the committees of a state are in `Consensus/BeaconApi/Committees.lean`: the beacon committees of an epoch, the sync committee and, from Gloas, the payload timeliness committee (PTC) of a slot.
 `epochCommittees_mem` (`Consensus/Proofs/BeaconApi/Committees.lean`) says which committees the committees answer lists.
-A committee is listed exactly when its slot is in the epoch, its index is below the count of committees of a slot, and it matches each filter.
+When the answer has a value, a committee is listed exactly when its slot is in the epoch, its index is below the count of committees of a slot, and it matches each filter.
 Its members must also be those that `getBeaconCommittee` gives for its slot and index.
 `epochCommittees_partition` shows that, without a filter, the members of the committees of an epoch are a permutation of its active validators, so each active validator is in exactly one committee.
 It needs at least one slot in an epoch, and the number of active validators times the number of committees of the epoch must fit in 64 bits.
 `committeesResponse_epoch_bound` shows that an epoch after the next one gets code 400.
+`committeesResponse_epoch_old` shows that an epoch whose RANDAO mix the state no longer holds gets code 400 too.
+That is an epoch whose sum with the length of the buffer of mixes is at most the next epoch plus the lookahead of seeds.
 `epochSyncCommittees_validators` shows that each seat of the sync committee answer holds the first validator whose key is the key of the seat, in the committee of the period of the epoch.
+`syncAggregates_pubkeys` shows that the slices cut the keys of a committee as the subcommittees of the gossip rules do.
 `epochSyncCommittees_aggregates` shows that its slices, put end to end, give back that list, when the count of subnets divides the size of a sync committee.
 `statePtc_ok_iff` shows that, from Gloas, the PTC answer is the committee that `getPtc` reads in the window of the state.
-`statePtc_error_iff` shows that it is an error exactly when the state is before Gloas, the slot is before the Gloas fork epoch, or the epoch of the slot is before the epoch of the state minus one or after the lookahead of seeds.
-`statePtc_error_code` shows that each such error has code 400.
+`statePtc_error_iff` shows that it is an error exactly when one of four conditions holds.
+The state is before Gloas, or the epoch of the slot is before the Gloas fork epoch.
+Or that epoch is before the epoch of the state minus one, or after the epoch of the state plus the lookahead of seeds.
+It needs at least one slot in an epoch, and the last epoch of the lookahead and the length of the window must fit in 64 bits.
+`statePtc_error_code` shows that each such error has code 400; writing the answer in JSON or SSZ can still give code 500.
 The Python suite (`bindings/python/tests/consensus/test_beacon_api_committees.py`) checks the three answers on the base states of the pinned fork vectors of the minimal preset.
 It reads the active validators, the keys of the sync committees and the window of the PTC from the JSON of the state.
 It checks each committee against the assignment that the honest validator guide gives each active validator.
@@ -3706,9 +3712,14 @@ Points that remain open:
   The transition keeps one balance per validator, so this too matters only for a state built by hand.
 - The reader of a request checks the count of identifiers before it reads them, so a long list with a bad identifier gets code 414; the source does not fix this order.
 - The source does not say which epochs the committees answer accepts.
-  EthLib accepts the epochs up to the next one, as the honest validator guide does for an assignment, and gives code 400 for a later epoch.
-  It refuses no earlier epoch, so an epoch whose RANDAO mix the state no longer holds gives committees that use the mix of another epoch.
-- The committees answer gives code 400 for a slot filter outside the epoch, as the example of the source does; an index filter that names no committee gives an empty list.
+  EthLib accepts the epochs up to the next one, as the honest validator guide does for an assignment.
+  It also refuses an epoch whose seed would read a RANDAO mix that the state has overwritten, since its committees would use the mix of another epoch.
+  Both refusals get code 400.
+- The committees answer gives code 400 for a slot filter outside the epoch, as the example of the source does.
+  An index filter only restricts the list, so an index that names no committee gives an empty list.
+- The sync committees answer does not compare the epoch with the Altair fork epoch.
+  When Altair starts inside a period, an epoch of that period before the fork gets the committee that the upgrade made.
+- The PTC answer gives the same message for a slot before the Gloas fork epoch and for a slot outside the window; both get code 400.
 - A key of a sync committee names the first validator of the registry that holds it; the source does not say which validator a key held twice names.
   A key that no validator holds gives code 500.
 - The source has the sync committees answer read "the current sync committee", but takes an epoch; EthLib answers the committee of the period of the epoch, the current one or the next, and gives code 400 for any other period.

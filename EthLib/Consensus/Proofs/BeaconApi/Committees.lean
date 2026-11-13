@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.BeaconApi.Committees
+public import EthLib.Consensus.Gossip.SyncCommittee
 public import EthLib.Consensus.Proofs.Accessors
 public import EthLib.Consensus.Proofs.PayloadTimeliness
 public import EthLib.Consensus.Proofs.ShufflePermutation
@@ -21,9 +22,9 @@ The sync committee answer gives, for each seat, the first validator that holds i
 
 Its slices, put end to end, give back that list.
 
-The PTC answer is an error exactly when one of three conditions holds.
+The PTC answer is an error exactly when the state is before Gloas.
 
-The state is before Gloas, the slot is before Gloas, or the slot is outside the window of the state.
+Or the epoch of the slot is before the Gloas fork epoch, or outside the window of the state.
 -/
 
 @[expose] public section
@@ -268,6 +269,22 @@ theorem committeesResponse_epoch_bound {state : BeaconState preset fork} {epoch 
   simp only [committeesResponse, Option.getD_some, Nat.not_le.mpr late]
   exact ⟨_, rfl⟩
 
+/-- An epoch whose RANDAO mix the state no longer holds gives the error with code 400.
+
+Its mix is read from the buffer of the state.
+
+The epoch plus the length of that buffer is at most the next epoch plus the lookahead of seeds. -/
+theorem committeesResponse_epoch_old {state : BeaconState preset fork} {epoch : Epoch}
+    (old : epoch.toNat + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat ≤
+      (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat + 1)
+    (index : Option CommitteeIndex) (slot : Option Slot) :
+    ∃ message, committeesResponse state (some epoch) index slot =
+      .error { code := 400, message } := by
+  by_cases late : (getCurrentEpoch state).toNat + 1 < epoch.toNat
+  · exact committeesResponse_epoch_bound late index slot
+  · simp only [committeesResponse, Option.getD_some, Nat.not_lt.mp late, Nat.not_lt.mpr old]
+    exact ⟨_, rfl⟩
+
 /-! ## Sync committees -/
 
 /-- Each seat of the answer holds the first validator whose key is the key of the seat.
@@ -275,19 +292,28 @@ theorem committeesResponse_epoch_bound {state : BeaconState preset fork} {epoch 
 The keys are those of the sync committee of the period of the epoch. -/
 theorem epochSyncCommittees_validators {state : BeaconState preset fork}
     {altair : .altair ≤ fork} {epoch : Epoch} {answer : SyncCommitteeIndices}
+    {committee : SyncCommittee preset}
+    (committeeOk : syncCommitteeOf state altair epoch = .ok committee)
     (computed : epochSyncCommittees state altair epoch = .ok answer) :
-    ∃ committee, syncCommitteeOf state altair epoch = .ok committee ∧
-      answer.validators.length = preset.SYNC_COMMITTEE_SIZE.toNat ∧
+    answer.validators.length = preset.SYNC_COMMITTEE_SIZE.toNat ∧
       ∀ seat (seatLt : seat < preset.SYNC_COMMITTEE_SIZE.toNat),
         answer.validators[seat]? = resolveValidatorId state (.pubkey committee.pubkeys[seat]) := by
   simp only [epochSyncCommittees, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-  obtain ⟨committee, committeeOk, validators, validatorsOk, rfl⟩ := computed
+  obtain ⟨found, foundOk, validators, validatorsOk, rfl⟩ := computed
+  rw [committeeOk, Except.ok.injEq] at foundOk
+  subst foundOk
   have length := mapM_ok_length validatorsOk
   simp only [Vector.length_toList] at length
-  refine ⟨committee, committeeOk, length, fun seat seatLt => ?_⟩
+  refine ⟨length, fun seat seatLt => ?_⟩
   have step := mapM_ok_getElem validatorsOk seat (by simpa using seatLt)
   simp only [Vector.getElem_toList] at step
   split at step <;> simp_all
+
+/-- The slices of a committee are the key lists of its subcommittees, in order. -/
+theorem syncAggregates_pubkeys (committee : SyncCommittee preset) :
+    syncAggregates preset committee.pubkeys.toList =
+      (List.range Networking.Enr.SYNC_COMMITTEE_SUBNET_COUNT).map
+        (syncSubcommitteePubkeys committee) := rfl
 
 /-- The slices of the answer, put end to end, give back the indices of the seats.
 
