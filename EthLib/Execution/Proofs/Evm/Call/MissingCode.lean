@@ -132,7 +132,7 @@ private theorem NoMiss.mapError_state {α : Type} {x : Except State.StateError �
   | ok a => rw [hx] at hc; cases hc
 
 /-- A change of an account has no missing code when the change to the account has none. -/
-private theorem modifyState_ne_missingCode {tx : TransactionState} {address : Base.Address}
+theorem modifyState_ne_missingCode {tx : TransactionState} {address : Base.Address}
     {f : State.Account → Except State.StateError State.Account}
     (hf : ∀ account c, f account ≠ .error (.missingCode c)) (c : Hash32) :
     tx.modifyState fork address f ≠ .error (.missingCode c) := by
