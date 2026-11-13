@@ -14,10 +14,6 @@ The block object has the names of the header object of its fork and those of the
 
 On each name of the header, it holds what the header object of the same block holds.
 
-Each property holds whenever the writer gives an object.
-
-The writer fails when the node cannot encode the block, or recover a sender in it.
-
 Its transactions are their hashes, or their objects, which carry the same hashes in the same order.
 
 Each list has one entry for each transaction of the block.
@@ -25,6 +21,10 @@ Each list has one entry for each transaction of the block.
 The size of the object is the length of the RLP form of the block, in bytes.
 
 The object lists the hashes of the headers of the ommers, in order.
+
+Each property holds whenever the writer gives an object.
+
+The writer fails when the node cannot encode the block, or recover a sender in it.
 
 In a valid view, a canonical block after the lowest has an object exactly when it has an RLP form.
 

@@ -3801,9 +3801,9 @@ Its `uncles` lists the hashes of the headers of its ommers, in order (`uncles_bl
 These properties hold whenever the writer gives an object.
 The writer fails with `-32603` when the node cannot compute the RLP form of the block, the hash of an ommer or a transaction, or a sender in it.
 In a valid view, the writer gives the object of a canonical block after the lowest exactly when that block has an RLP form (`Valid.exists_blockJson_eq_ok_iff`).
-Before Fusaka no check bounds the size of a block, and the RLP encoder fails on a payload of `2^64` bytes or more, so that form stays a hypothesis.
+Before Fusaka no check bounds the length of the RLP form of a block, and the RLP encoder fails on a payload of `2^64` bytes or more, so that form stays a hypothesis.
 From Fusaka the size check of the block gives that form, of at most `8 * 2^20` bytes (`Valid.exists_rawBlock_of_fusaka_le`, `Valid.exists_blockJson_of_fusaka_le`).
-The lowest block, the blocks off the canonical chain and the pending block do not run.
+A valid view does not run the lowest block, a block off the canonical chain or the pending block through the state transition.
 So no theorem says that the writer succeeds on them.
 For the tag `pending`, the header method answers `null`.
 The block and count methods read the pending block of the view instead, since only the header methods of [`block.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth/block.yaml) answer `null` for `pending`.
