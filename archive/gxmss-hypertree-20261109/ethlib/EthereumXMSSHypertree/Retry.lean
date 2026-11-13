@@ -1,8 +1,4 @@
-/-
-Copyright (c) 2026 Trail of Bits.
-Released under CC0 1.0 Universal as described in the file LICENSE.
-Authors: Trail of Bits
--/
+/- Authors: Matthias Meijers -/
 
 module
 public import EthereumXMSSHypertree.HashInputs

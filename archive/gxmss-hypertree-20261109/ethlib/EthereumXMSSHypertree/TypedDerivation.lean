@@ -1,8 +1,4 @@
-/-
-Copyright (c) 2026 Matthias Meijers.
-Released under CC0 1.0 Universal as described in the file LICENSE.
-Authors: Matthias Meijers
--/
+/- Authors: Matthias Meijers -/
 
 module
 public import EthereumXMSSHypertree.QueryCache
