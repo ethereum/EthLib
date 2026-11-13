@@ -21,19 +21,19 @@ open Base
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
   {fork : Fork} {state after : BeaconState preset fork}
 
-/-- A registry-size bound on the validator-count churn limit. -/
-def registryChurnCap (config : Config) (size : Nat) : Nat :=
+/-- The pre-Electra validator-count churn limit of a registry with `size` entries. -/
+def cohortCap (config : Config) (size : Nat) : Nat :=
   max config.MIN_PER_EPOCH_CHURN_LIMIT.toNat (size / config.CHURN_LIMIT_QUOTIENT.toNat)
 
-private theorem registryChurnCap_mono {n m : Nat} (le : n ≤ m) :
-    registryChurnCap config n ≤ registryChurnCap config m := by
-  unfold registryChurnCap
+private theorem cohortCap_mono {n m : Nat} (le : n ≤ m) :
+    cohortCap config n ≤ cohortCap config m := by
+  unfold cohortCap
   exact Nat.max_le.mpr ⟨Nat.le_max_left _ _,
     Nat.le_trans (Nat.div_le_div_right le) (Nat.le_max_right _ _)⟩
 
-private theorem validatorChurnLimit_le_registryChurnCap :
+private theorem validatorChurnLimit_le_cohortCap :
     (getValidatorChurnLimit config state).toNat ≤
-      registryChurnCap config state.validators.data.size := by
+      cohortCap config state.validators.data.size := by
   have count : (getActiveValidatorIndices state (getCurrentEpoch state)).length ≤
       state.validators.data.size := by
     exact Nat.le_trans (List.length_filterMap_le _ _) (by simp)
@@ -41,7 +41,7 @@ private theorem validatorChurnLimit_le_registryChurnCap :
       state.validators.data.size := by
     change _ % 2 ^ 64 ≤ _
     exact Nat.le_trans (Nat.mod_le _ _) count
-  unfold getValidatorChurnLimit registryChurnCap
+  unfold getValidatorChurnLimit cohortCap
   rw [Uint64.toNat_max, UInt64.toNat_div]
   exact Nat.max_le.mpr ⟨Nat.le_max_left _ _,
     Nat.le_trans (Nat.div_le_div_right converted) (Nat.le_max_right _ _)⟩
@@ -328,7 +328,7 @@ def scheduledActivationEpoch (state : BeaconState preset fork) : Nat :=
 structure ActivationCohortBound (config : Config) (state : BeaconState preset fork) : Prop where
   count : ∀ e, e ≠ FAR_FUTURE_EPOCH → e ≠ GENESIS_EPOCH →
     validatorCohort Validator.activationEpoch state e ≤
-      registryChurnCap config state.validators.data.size
+      cohortCap config state.validators.data.size
   scheduled : ∀ v ∈ state.validators.data, v.activationEpoch ≠ FAR_FUTURE_EPOCH →
     v.activationEpoch.toNat < scheduledActivationEpoch state
 
@@ -387,7 +387,7 @@ private theorem activationCohort_processRegistryUpdates (early : fork < .pectra)
     validatorCohort Validator.activationEpoch after e ≤
       validatorCohort Validator.activationEpoch state e +
         if e.toNat = scheduledActivationEpoch state then
-          registryChurnCap config state.validators.data.size else 0 := by
+          cohortCap config state.validators.data.size else 0 := by
   have noElectra : ¬ Fork.pectra ≤ fork := Nat.not_le_of_lt early
   simp only [processRegistryUpdates, noElectra, ↓reduceIte, bind_ok_iff] at ok
   obtain ⟨updated, pass, activated⟩ := ok
@@ -404,8 +404,8 @@ private theorem activationCohort_processRegistryUpdates (early : fork < .pectra)
   rw [kept.activations e finite, same] at bound
   have limit : (if .dencun ≤ fork then getValidatorActivationChurnLimit config updated
       else getValidatorChurnLimit config updated).toNat ≤
-      registryChurnCap config state.validators.data.size := by
-    have churn := validatorChurnLimit_le_registryChurnCap (config := config) (state := updated)
+      cohortCap config state.validators.data.size := by
+    have churn := validatorChurnLimit_le_cohortCap (config := config) (state := updated)
     rw [sizes.1] at churn
     split
     · exact Nat.le_trans (getValidatorActivationChurnLimit_le).2 churn
@@ -423,7 +423,7 @@ private theorem activationCohortBound_registry_count (early : fork < .pectra)
     (bounded : ActivationCohortBound config state) (e : Epoch)
     (finite : e ≠ FAR_FUTURE_EPOCH) (nonGenesis : e ≠ GENESIS_EPOCH) :
     validatorCohort Validator.activationEpoch after e ≤
-      registryChurnCap config after.validators.data.size := by
+      cohortCap config after.validators.data.size := by
   have bound := activationCohort_processRegistryUpdates early ok e finite
   rw [(sameSizes_processRegistryUpdates ok).1]
   by_cases scheduled : e.toNat = scheduledActivationEpoch state
@@ -558,7 +558,7 @@ private theorem activationCohortBound_processEpoch (early : fork < .pectra)
     (bounded : ActivationCohortBound config state) :
     (∀ e, e ≠ FAR_FUTURE_EPOCH → e ≠ GENESIS_EPOCH →
       validatorCohort Validator.activationEpoch after e ≤
-        registryChurnCap config after.validators.data.size) ∧
+        cohortCap config after.validators.data.size) ∧
     (∀ v ∈ after.validators.data, v.activationEpoch ≠ FAR_FUTURE_EPOCH →
       v.activationEpoch.toNat ≤ scheduledActivationEpoch state) := by
   obtain ⟨before, registered, head, registeredOk, tail, slot, size, grow⟩ :=
@@ -577,7 +577,7 @@ private theorem activationCohortBound_processEpoch (early : fork < .pectra)
     rw [tail.activations e finite]
     have bound :=
       activationCohortBound_registry_count early registeredOk atRegistry e finite nonGenesis
-    exact Nat.le_trans bound (registryChurnCap_mono grow)
+    exact Nat.le_trans bound (cohortCap_mono grow)
   · have scheduled : ∀ v ∈ registered.validators.data,
         v.activationEpoch ≠ FAR_FUTURE_EPOCH →
         v.activationEpoch.toNat < scheduledActivationEpoch state + 1 := by
@@ -639,7 +639,7 @@ private theorem activationCohortBound_processBlock (early : fork < .pectra)
   · intro e finite nonGenesis
     rw [kept.activations e finite]
     exact Nat.le_trans (bounded.count e finite nonGenesis)
-      (registryChurnCap_mono frame.registryGrows)
+      (cohortCap_mono frame.registryGrows)
   · have same : scheduledActivationEpoch after = scheduledActivationEpoch state := by
       simp only [scheduledActivationEpoch, getCurrentEpoch, frame.slot]
     rw [same]

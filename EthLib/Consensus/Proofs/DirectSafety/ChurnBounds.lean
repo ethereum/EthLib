@@ -2,10 +2,10 @@ module
 
 public import EthLib.Consensus.Proofs.Transition.RegistryLifecycle
 public import EthLib.Consensus.Proofs.Churn
+public import EthLib.Consensus.Proofs.Transition.Cohorts
 public import EthLib.Consensus.Proofs.DirectSafety.Drift
 public import EthLib.Consensus.Proofs.Transition.BalanceDrift
 import EthLib.Consensus.Proofs.Transition.ActiveKept
-import EthLib.Consensus.Proofs.Transition.Cohorts
 import EthLib.Consensus.Proofs.Transition.Committees
 import EthLib.Consensus.Proofs.Transition.SlashedPersistence
 import EthLib.Consensus.Proofs.Transition.ValidatorCaps
@@ -38,10 +38,6 @@ namespace EthLib.Consensus.DirectSafety
 open Base
 
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
-
-/-- The pre-Electra validator-count churn limit of a registry with `size` entries. -/
-def cohortCap (config : Config) (size : Nat) : Nat :=
-  max config.MIN_PER_EPOCH_CHURN_LIMIT.toNat (size / config.CHURN_LIMIT_QUOTIENT.toNat)
 
 /-- Variable-rate calls spend at most initial capacity plus the cap per elapsed queue epoch.
 
@@ -619,7 +615,7 @@ private theorem new_recent_before_electra {g x y : ForkedBeaconState preset}
       funext v
       apply Bool.eq_iff_iff.mpr
       simp only [beq_iff_eq, ← UInt64.toNat_inj, numeric]
-    simpa only [predicates, validatorCohort, registryChurnCap, cohortCap] using bound
+    simpa only [predicates, validatorCohort] using bound
   have cards := (Finset.card_le_card subset).trans
     (List.toFinset_card_le (activated.map (·.pubkey)))
   simp only [List.length_map] at cards
