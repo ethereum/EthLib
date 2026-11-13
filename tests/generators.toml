@@ -705,6 +705,11 @@ cases = ["**"]
 generator = "not established"
 checked = "the file holds mainnet blocks 0 to 8191 with receipts and total difficulty, and records no exporting tool"
 
+[[archives."eth-clients/mainnet@8cad4805/genesis.ssz"]]
+cases = ["**"]
+generator = "not established"
+checked = "the file is the SSZ genesis state of mainnet; the tests read only its genesis validators root, and it records no generating tool"
+
 # The modules that the Python tests run.
 
 [runtime.tools]

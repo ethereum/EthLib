@@ -9,6 +9,14 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the JSON readers and writers of the base types moved from `EthLib.Engine.Json` to `EthLib.Serialization.JsonRpc`, with their theorems.
+  They are `hexValue`, `hexDigits`, `bytesOf`, `bytes`, `fixed`, `address`, `quantity`, `bytesMax`, `uint64`, `paramsArray`, `array`, `fields`, `hasExactly`, `field`, `dataJson`, `quantityJson`, `listJson` and `optionJson`.
+  Their namespace is now `EthLib.Serialization.JsonRpc`.
+  The readers among them return `Read`, an alias of `Except String`, in place of `Except EngineError`, and reject an input with a reason.
+  An Engine decoding lifts that reason to `EngineError.invalidParams`, through `Engine.Json.lift` and its `MonadLift` instance, so every Engine decoder returns what it returned before.
+  `withdrawal` and `withdrawalJson`, with their theorems, moved to `EthLib.Execution.Rpc`.
+  The Python bindings are unchanged.
+
 - In Lean, `DirectSafety.EnoughStake run high` requires the stake floor only at epoch calls whose current epoch is at most `high + 1`.
   The floor reaches one epoch past the finalized epoch of `b` in `accountable_safety`, and one epoch past `j.epoch` in the other three direct safety endpoints.
   Move `j` (and `k` for `accountable_justified_unique`) before the stake premises.
@@ -582,6 +590,13 @@ Not yet released.
   `map_hashToFieldFp2` maps with `Vector.map`, and `hashToFieldFp2_eq_spec` states the same equation over the vector.
   `hashToG2` no longer takes an `Inhabited` instance.
   `map_hashToG2` no longer takes the two instances, or the hypothesis that the map sends the default to the default.
+  No C export or Python function changes.
+- In Lean, the RLP decoder reads only bytes inside its input ([#2211](https://github.com/ethereum/EthLib/pull/2211)).
+  `readPrefix`, `decodeItem`, `decodeItems` and `decodeItemsFrom` take a proof of `stop ≤ input.size`, which `omega` supplies by default.
+  `readBigEndian` takes a proof of `pos + k ≤ input.size`.
+  The proof helper `readItem` takes the same bound as `decodeItem`, also supplied by `omega` by default.
+  `readPrefix_short`, `decodeItemsFrom_eq` and `decodeItems_eq` take the same bound, and `decodeItem_of_readItem` takes it as an implicit argument.
+  `decode` keeps its type, the inputs it accepts, its values and its errors.
   No C export or Python function changes.
 
 ## 0.3.0

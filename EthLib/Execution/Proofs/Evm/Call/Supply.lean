@@ -331,7 +331,7 @@ theorem stepRules_supplyLe :
   tstore _ _ _ _ := SupplyLe.of_eq rfl rfl
   log _ hs _ _ _ := by rw [hs]; exact SupplyLe.refl _
   selfdestruct _ _ h := supplyLe_finishSelfdestruct h
-  incrementNonce _ _ _ h :=
+  incrementNonce _ _ _ _ h :=
     SupplyLe.of_eq (TransactionState.supply_incrementNonce h)
       (TransactionState.createdAccounts_modifyState h)
   incorporate h := by rw [state_incorporateChild]; exact h
@@ -344,7 +344,7 @@ theorem ordinaryStepRules_supply :
   sstore _ _ _ _ _ _ h := TransactionState.supply_setStorage h
   tstore _ _ _ _ := rfl
   log _ hs _ _ _ := by rw [hs]
-  incrementNonce _ _ _ h := TransactionState.supply_incrementNonce h
+  incrementNonce _ _ _ _ h := TransactionState.supply_incrementNonce h
   incorporate h := by rw [state_incorporateChild]; exact h
 
 /-! ## Messages -/

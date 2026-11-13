@@ -7,6 +7,7 @@ public import EthLib.Execution.Proofs.Transactions.Envelope
 public import EthLib.Execution.Proofs.Transactions.Failed
 public import EthLib.Execution.Proofs.Transactions.Inclusion
 public import EthLib.Execution.Proofs.Transactions.Network
+public import EthLib.Execution.Proofs.Transactions.NoncesFit
 public import EthLib.Execution.Proofs.Transactions.Process
 public import EthLib.Execution.Proofs.Transactions.Replay
 public import EthLib.Execution.Proofs.Transactions.Settlement

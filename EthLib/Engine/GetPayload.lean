@@ -55,6 +55,7 @@ open EthLib.Base
 open EthLib.Cryptography.Kzg
 open EthLib.Execution.Blocks (Block)
 open EthLib.Execution.Transactions
+open EthLib.Serialization.JsonRpc (fixed paramsArray)
 
 /-- The blobs, commitments and proofs of the payload's network blob transactions, in order. -/
 structure BlobsBundle where
@@ -167,8 +168,8 @@ def getPayload (config : ChainConfig) (setup : TrustedSetup) (store : PayloadSto
 
 /-- The single eight-byte payload ID of the request. -/
 def getPayloadParams (params : Lean.Json) : Json.Decode PayloadId := do
-  match ← Json.paramsArray params with
-  | [id] => Json.fixed "payloadId" 8 id
+  match ← paramsArray params with
+  | [id] => fixed "payloadId" 8 id
   | values => Json.invalid s!"params: got {values.length}, expected 1"
 
 end EthLib.Engine

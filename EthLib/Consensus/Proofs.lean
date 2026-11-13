@@ -14,6 +14,7 @@ public import EthLib.Consensus.Proofs.Participation
 public import EthLib.Consensus.Proofs.PayloadTimeliness
 public import EthLib.Consensus.Proofs.Proposers
 public import EthLib.Consensus.Proofs.SyncCommittee
+public import EthLib.Consensus.Proofs.ConsensusVersion
 public import EthLib.Consensus.Proofs.Constants
 public import EthLib.Consensus.Proofs.Containers.Attestation
 public import EthLib.Consensus.Proofs.Containers.Bid
@@ -46,6 +47,7 @@ public import EthLib.Consensus.Proofs.ForkChoice.Ghost
 public import EthLib.Consensus.Proofs.ForkChoice.Handlers
 public import EthLib.Consensus.Proofs.ForkChoice.Head
 public import EthLib.Consensus.Proofs.ForkChoice.HonestDuties
+public import EthLib.Consensus.Proofs.ForkChoice.HonestEquivocators
 public import EthLib.Consensus.Proofs.ForkChoice.Network
 public import EthLib.Consensus.Proofs.ForkChoice.Optimistic
 public import EthLib.Consensus.Proofs.ForkChoice.OptimisticSync
@@ -54,10 +56,14 @@ public import EthLib.Consensus.Proofs.ForkChoice.PayloadReveal
 public import EthLib.Consensus.Proofs.ForkChoice.PayloadVotes
 public import EthLib.Consensus.Proofs.ForkChoice.ProposerHead
 public import EthLib.Consensus.Proofs.ForkChoice.Reachable
+public import EthLib.Consensus.Proofs.ForkChoice.SharedAncestry
+public import EthLib.Consensus.Proofs.ForkChoice.StaticValidators
 public import EthLib.Consensus.Proofs.ForkChoice.Supporters
 public import EthLib.Consensus.Proofs.ForkChoice.Store
+public import EthLib.Consensus.Proofs.ForkChoice.StoreEntries
 public import EthLib.Consensus.Proofs.ForkChoice.UnrealizedCheckpoints
 public import EthLib.Consensus.Proofs.ForkChoice.VoteOrigins
+public import EthLib.Consensus.Proofs.ForkDigest
 public import EthLib.Consensus.Proofs.ForkSchedule
 public import EthLib.Consensus.Proofs.Gossip.Attestation
 public import EthLib.Consensus.Proofs.Gossip.Bid
@@ -121,6 +127,7 @@ public import EthLib.Consensus.Proofs.Transition.BuilderDebtWithdrawals
 public import EthLib.Consensus.Proofs.Transition.BuilderPayments
 public import EthLib.Consensus.Proofs.Transition.BuilderRequests
 public import EthLib.Consensus.Proofs.Transition.Chain
+public import EthLib.Consensus.Proofs.Transition.ChainRoots
 public import EthLib.Consensus.Proofs.Transition.Committees
 public import EthLib.Consensus.Proofs.Transition.ConsolidationWindow
 public import EthLib.Consensus.Proofs.Transition.EpochJustification

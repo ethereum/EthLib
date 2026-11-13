@@ -38,6 +38,7 @@ Each part names the EIPs that define it where they exist, and a later fork adds 
 ### Serialization
 
 - e2store: the typed records of history files. The era1 and era files built on them belong to the execution and consensus layers.
+- JSON-RPC: the JSON form of the base types that the Engine API and the execution JSON-RPC API exchange.
 - RLP: the encoding of execution-layer objects, and its canonical form.
 - SSZ: basic and composite types, the progressive lists and containers of EIP-7916 and EIP-7495, merkleization, and Merkle proofs by generalized index.
 

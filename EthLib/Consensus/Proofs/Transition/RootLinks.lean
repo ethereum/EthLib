@@ -160,7 +160,7 @@ private theorem advanceSlots_latestBlockHeader_of_ne :
 /-- A header that the filling leaves with a zero state root was filled with the zero root.
 
 So the filling changed nothing. -/
-private theorem unfilled_of_filled {header filled : BeaconBlockHeader} {stateRoot : Root}
+theorem header_unfilled_of_filled {header filled : BeaconBlockHeader} {stateRoot : Root}
     (equation : filled = if header.stateRoot = Vector.replicate 32 0 then
       { header with stateRoot := stateRoot } else header)
     (unfilled : filled.stateRoot = Vector.replicate 32 0) :
@@ -178,7 +178,7 @@ private theorem unfilled_of_filled {header filled : BeaconBlockHeader} {stateRoo
 The header before counts only when the slot leaves it unfilled.
 
 Then the state before hashes to zero. -/
-private theorem hashTreeRoot_latestBlockHeader_advanceSlots {count : Nat}
+theorem hashTreeRoot_latestBlockHeader_advanceSlots {count : Nat}
     {next last : BeaconState preset fork}
     (step : advanceSlot config checks state = .ok next)
     (rest : advanceSlots config checks count next = .ok last) {root : Root}
@@ -188,7 +188,7 @@ private theorem hashTreeRoot_latestBlockHeader_advanceSlots {count : Nat}
         hashTreeRoot state.latestBlockHeader = .ok root) := by
   obtain ⟨stateRoot, hashed, header⟩ := advanceSlot_latestBlockHeader step
   by_cases filled : next.latestBlockHeader.stateRoot = Vector.replicate 32 0
-  · obtain ⟨zero, same⟩ := unfilled_of_filled header filled
+  · obtain ⟨zero, same⟩ := header_unfilled_of_filled header filled
     rw [same] at rooted
     exact .inr ⟨zero ▸ hashed, rooted⟩
   · exact .inl (by rw [advanceSlots_latestBlockHeader_of_ne count rest filled]; exact rooted)
@@ -296,7 +296,7 @@ It moves the slot on by one, and writes the root of the new header at the slot b
 A root that it makes readable was readable before it, or is that root.
 
 The new header is the one before, with its state root filled by the root of the state before. -/
-private theorem advanceSlotAcross_cases {forked after : ForkedBeaconState preset}
+theorem advanceSlotAcross_cases {forked after : ForkedBeaconState preset}
     (computed : advanceSlotAcross config checks forked = .ok after) :
     after.state.slot.toNat = forked.state.slot.toNat + 1 ∧
       (∃ root, hashTreeRoot after.state.latestBlockHeader = .ok root ∧
@@ -505,7 +505,7 @@ private theorem rootLinks_cases_aux {first last : ForkedBeaconState preset}
             exact isZero
       · -- The new header was filled by the state before it, unless the state hashed to zero.
         refine .inl (.inr ⟨written, writtenRead, rooted, fun empty => ?_⟩)
-        obtain ⟨zero, -⟩ := unfilled_of_filled filled empty
+        obtain ⟨zero, -⟩ := header_unfilled_of_filled filled empty
         exact ⟨before, reach, toBefore, zero ▸ hashed⟩
     | @block fork pre post engine signed validateResult applied =>
       obtain ⟨-, blockOk, -⟩ := applySignedBlock_ok applied
