@@ -542,7 +542,7 @@ private theorem updateEffectiveBalance_funding {fork : Fork} {s t : BeaconState 
       Serialization.Ssz.RootedForkList.data_set, Ne.symm same]
 
 /-- The full effective-balance pass cannot mint funding, including at inactive positions. -/
-theorem processEffectiveBalanceUpdates_funding {fork : Fork} {s t : BeaconState preset fork}
+theorem processEffectiveBalanceUpdates_max_le {fork : Fork} {s t : BeaconState preset fork}
     (ok : processEffectiveBalanceUpdates s = .ok t) (i : Nat) :
     max (effectiveAt ⟨fork, t⟩ i) (actualBalanceAt ⟨fork, t⟩ i) ≤
       max (effectiveAt ⟨fork, s⟩ i) (actualBalanceAt ⟨fork, s⟩ i) := by

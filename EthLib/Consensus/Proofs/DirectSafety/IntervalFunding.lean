@@ -1962,7 +1962,7 @@ theorem funding_effective_updates {fork : Fork} {s t : BeaconState preset fork}
     (sameSizes_processEffectiveBalanceUpdates ok).1
     (registryLifecycle_processEffectiveBalanceUpdates ok)
     (by rw [epoch]) (fun _ h => Or.inl h)
-    (fun i => by simpa using processEffectiveBalanceUpdates_funding ok i)
+    (fun i => by simpa using processEffectiveBalanceUpdates_max_le ok i)
   simpa using bound
 
 private theorem funding_potential_transfer {fork : Fork} {s t : BeaconState preset fork}
@@ -2430,11 +2430,7 @@ private theorem funding_pass_monotone {fork : Fork} {stop : PendingDeposit → B
 
 private theorem funding_pass_potential {fork : Fork} {stop : PendingDeposit → Bool}
     {nextEpoch : Epoch} {available : Gwei} (queue : List PendingConsolidation)
-    (indices : Finset Nat)
-    (activationKept : ∀ (s t : BeaconState preset fork) (deposit : PendingDeposit),
-      (∀ v ∈ s.validators.data, v.activationEpoch ≤ v.exitEpoch) →
-      applyPendingDeposit config checks s deposit = .ok t →
-      ∀ v ∈ t.validators.data, v.activationEpoch ≤ v.exitEpoch) :
+    (indices : Finset Nat) :
     ∀ {deposits : List PendingDeposit} {s : BeaconState preset fork} {processed : Gwei}
       {count : Nat} {postponed : Array PendingDeposit} {pass},
       passPendingDeposits config checks stop nextEpoch available s processed count postponed
@@ -2468,9 +2464,9 @@ private theorem funding_pass_potential {fork : Fork} {stop : PendingDeposit → 
       cases ok
       have frame := frame_applyPendingDeposit credited
       have epoch : getCurrentEpoch t = getCurrentEpoch s := by simp [getCurrentEpoch, frame.slot]
-      have ih := funding_pass_potential queue indices activationKept (deposits := rest) passed
+      have ih := funding_pass_potential queue indices (deposits := rest) passed
         (frame.balancesMatch matched) (frame.exitsOrdered ordered)
-        (activationKept s t deposit activation credited) (epoch ▸ nextEq)
+        (ActivationExitOrder.applyPendingDeposit activation credited) (epoch ▸ nextEq)
         (fun i outside pending => funding_deposit_selection credited i (selected i outside pending))
       have one := funding_withdrawn_selected queue indices (exited := status.1)
         (by
@@ -2494,7 +2490,7 @@ private theorem funding_pass_potential {fork : Fork} {stop : PendingDeposit → 
       · cases ok
       rename_i passed
       cases ok
-      exact funding_pass_potential queue indices activationKept (deposits := rest) passed
+      exact funding_pass_potential queue indices (deposits := rest) passed
         matched ordered activation nextEq selected
     split at ok
     · cases ok
@@ -2510,9 +2506,9 @@ private theorem funding_pass_potential {fork : Fork} {stop : PendingDeposit → 
     cases ok
     have frame := frame_applyPendingDeposit credited
     have epoch : getCurrentEpoch t = getCurrentEpoch s := by simp [getCurrentEpoch, frame.slot]
-    have ih := funding_pass_potential queue indices activationKept (deposits := rest) passed
+    have ih := funding_pass_potential queue indices (deposits := rest) passed
       (frame.balancesMatch matched) (frame.exitsOrdered ordered)
-      (activationKept s t deposit activation credited) (epoch ▸ nextEq)
+      (ActivationExitOrder.applyPendingDeposit activation credited) (epoch ▸ nextEq)
       (fun i outside pending => funding_deposit_selection credited i (selected i outside pending))
     have one := funding_pending_deposit queue matched credited
     have spent := (Uint64.addChecked_ok_iff.mp
@@ -2531,10 +2527,6 @@ private theorem funding_pass_potential {fork : Fork} {stop : PendingDeposit → 
 private theorem funding_pending_potential {fork : Fork} {s t : BeaconState preset fork}
     (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
     (queue : List PendingConsolidation) (indices : Finset Nat)
-    (activationKept : ∀ (s t : BeaconState preset fork) (deposit : PendingDeposit),
-      (∀ v ∈ s.validators.data, v.activationEpoch ≤ v.exitEpoch) →
-      applyPendingDeposit config checks s deposit = .ok t →
-      ∀ v ∈ t.validators.data, v.activationEpoch ≤ v.exitEpoch)
     (matched : BalancesMatch s) (ordered : ExitsOrdered s)
     (activation : ∀ v ∈ s.validators.data, v.activationEpoch ≤ v.exitEpoch)
     (selected : ∀ i, i ∉ indices → queue.any (fun c => c.sourceIndex.toNat == i) = true →
@@ -2549,7 +2541,7 @@ private theorem funding_pending_potential {fork : Fork} {s t : BeaconState prese
     funding_deposit_spending electra early ok
   have nextEq := (Uint64.addChecked_ok_iff.mp (mapError_ok_iff.mp nextOk)).2
   simp only [UInt64.toNat_one] at nextEq
-  have bound := funding_pass_potential queue indices activationKept passed matched ordered
+  have bound := funding_pass_potential queue indices passed matched ordered
     activation nextEq (by
       intro i outside pending v read
       have later := selected i outside pending v read
@@ -2575,10 +2567,6 @@ private theorem funding_pending_potential {fork : Fork} {s t : BeaconState prese
 
 private theorem funding_pending_funded {fork : Fork} {s t : BeaconState preset fork}
     (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
-    (activationKept : ∀ (s t : BeaconState preset fork) (deposit : PendingDeposit),
-      (∀ v ∈ s.validators.data, v.activationEpoch ≤ v.exitEpoch) →
-      applyPendingDeposit config checks s deposit = .ok t →
-      ∀ v ∈ t.validators.data, v.activationEpoch ≤ v.exitEpoch)
     (matched : BalancesMatch s) (ordered : ExitsOrdered s)
     (activation : ∀ v ∈ s.validators.data, v.activationEpoch ≤ v.exitEpoch)
     (ok : processPendingDeposits config checks s electra = .ok t) :
@@ -2591,7 +2579,7 @@ private theorem funding_pending_funded {fork : Fork} {s t : BeaconState preset f
       v.withdrawableEpoch.toNat ≤ (getCurrentEpoch s).toNat ∧
         (s.pendingConsolidations electra).data.any (fun c => c.sourceIndex.toNat == i)).getD false
   have bound := funding_pending_potential electra early
-    (s.pendingConsolidations electra).data.toList indices activationKept matched ordered activation
+    (s.pendingConsolidations electra).data.toList indices matched ordered activation
     (by
       intro i outside pending v read
       have inside := (Array.getElem?_eq_some_iff.mp read).1
@@ -2641,9 +2629,7 @@ theorem funding_pending_balances {fork : Fork} {s t : BeaconState preset fork}
           withdrawnConsolidationCredit ⟨.deposits, ⟨fork, s⟩, ⟨fork, deposited⟩, 0, 0⟩ := by
   simp only [processPendingBalances, electra, ↓reduceDIte, bind_ok_iff] at ok
   obtain ⟨deposited, depositedOk, consolidatedOk⟩ := ok
-  have deposit := funding_pending_funded electra early
-    (fun _ _ _ holds credited => ActivationExitOrder.applyPendingDeposit holds credited)
-    matched ordered activation depositedOk
+  have deposit := funding_pending_funded electra early matched ordered activation depositedOk
   have consolidate := funding_consolidations_invariant electra delay
     (pending.pendingDeposits depositedOk) consolidatedOk
   have carry := depositCarryLaws.processPendingConsolidations consolidatedOk

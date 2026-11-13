@@ -183,20 +183,8 @@ private theorem funding_slot_upgrades {s t : ForkedBeaconState preset}
       (funding_slot_upgrade nextOk later).trans (held (Nat.lt_trans post.property later)))
     (fun _ => Nat.le_refl _) ok early
 
-/-- Slot conservation follows from epoch conservation, without an epoch-step placeholder. -/
-private theorem funding_slot_of_epoch_bound
-    (epochBound : ∀ {fork : Fork} {s t middle : BeaconState preset fork},
-      fork < .glamsterdam →
-      2 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat →
-      BalancesMatch s → ExitsOrdered s → ActivationExitOrder s →
-      PendingConsolidationInvariant config s → processEpoch config checks s = .ok t →
-      ∀ events : List (BalanceEvent preset),
-      epochBalanceReplay (config := config) (checks := checks) s = .ok (middle, events) →
-      fundedStake ⟨fork, t⟩ + funding_carry ⟨fork, t⟩ ≤
-        fundedStake ⟨fork, s⟩ + funding_carry ⟨fork, s⟩ +
-          config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat +
-          (events.map fundingCredit).sum)
-    {x y : ForkedBeaconState preset}
+/-- One slot before Gloas conserves funding up to epoch churn and recorded source credits. -/
+theorem funding_slot {x y : ForkedBeaconState preset}
     (early : y.fork < .glamsterdam)
     (delay : 2 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     (matched : BalancesMatch x.state) (ordered : ExitsOrdered x.state)
@@ -255,7 +243,7 @@ private theorem funding_slot_of_epoch_bound
   · simp only [epochIfLast, last, ↓reduceIte] at epochOk
     obtain ⟨middle, updated, added, replay, _⟩ :=
       epochBalanceReplay_result cached epoched before epochOk
-    have bound := epochBound before delay
+    have bound := funding_epoch before delay
       ((frame_processSlot cachedOk).balancesMatch matched)
       ((frame_processSlot cachedOk).exitsOrdered ordered)
       (by rw [cachedEq]; exact activation) (by rw [cachedEq]; exact pending)
@@ -281,22 +269,5 @@ private theorem funding_slot_of_epoch_bound
     subst epoched
     rw [cachedFund, cachedCarry]
     omega
-
-/-- One slot before Gloas conserves funding up to epoch churn and recorded source credits. -/
-theorem funding_slot {x y : ForkedBeaconState preset}
-    (early : y.fork < .glamsterdam)
-    (delay : 2 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
-    (matched : BalancesMatch x.state) (ordered : ExitsOrdered x.state)
-    (activation : ActivationExitOrder x.state)
-    (pending : PendingConsolidationInvariant config x.state)
-    (ok : advanceSlotAcross config checks x = .ok y)
-    (events : List (BalanceEvent preset))
-    (replayed : (Step.slot ok).balanceEvents = .ok events) :
-    fundedStake y + funding_carry y ≤ fundedStake x + funding_carry x +
-      ((getCurrentEpoch y.state).toNat - (getCurrentEpoch x.state).toNat) *
-        config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat +
-      (events.map fundingCredit).sum :=
-  funding_slot_of_epoch_bound funding_epoch early delay matched ordered
-    activation pending ok events replayed
 
 end EthLib.Consensus.DirectSafety
