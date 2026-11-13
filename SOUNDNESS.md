@@ -4128,12 +4128,14 @@ A mark of the spelling has effect only where its shape allows it, so no mark mak
 `readVersioned_version` shows that a response read under a version carries that exact name, so data of one fork never reads as data of another.
 `valueOf_sameUpToCase` (`Serialization/Proofs/Ssz/Codec/JsonHexCase.lean`) shows that a document reads the same with any hex digits of its strings in uppercase, at every shape.
 The patterns of the source allow either case.
-`ofApiJson_uppercase` lifts it to the reader of the API.
+`valueOf_sameUpToCase` holds for every spelling that writes no text, since the case of a URL is part of the URL.
+`ofApiJson_uppercase` lifts it to the reader of the API, and `fieldSpelling_hasText` shows that every container spelled from its field marks, with no text mark among them, meets its hypothesis.
 The error bodies read back as written (`ErrorMessage.ofJson_toJson`, `IndexedErrorMessage.ofJson_toJson`).
 
 Each container declares its spelling in `Consensus/BeaconApi/Spelling.lean`, and none falls back to a default.
 Before Gloas, participation flags have the SSZ type of a byte list, and their spelling writes them as a list of decimal strings, as the API does.
 From Gloas, transactions and the block access list are progressive lists of one-byte integers, and their spelling writes them as hex, as the API does.
+From Gloas, the URL of a builder entry is a byte list that its spelling writes as text, as the API does.
 A container that holds one of these takes the spelling of the field that holds it.
 
 The spellings are checked by tests, not by a proof.
@@ -4411,12 +4413,27 @@ Four points of the source are decided here, and a reviewer may question them:
 - The source does not order two bids of the same weight; the first one in the list wins, which the Python tests check.
 - What makes a builder payload safe in v3 is the node's choice, so the rule takes the two values once both are valid.
 
-The JSON codec of the API has no form for a URL string, so a builder entry is given only in its SSZ form.
+The URL of a builder entry is a JSON string, and its SSZ form holds the UTF-8 bytes of that string.
+EthLib holds it as a Lean string, which is valid UTF-8, within the limit of 2048 bytes (`SszString` in `Serialization/Ssz/Typed/Text.lean`).
+The JSON codec writes it with the text spelling, so a URL such as `"0x12"` is never read as hex.
+`SszString.ofValue_toValue` (`Serialization/Proofs/Ssz/Typed/Text.lean`) shows that decoding the bytes of a URL gives it back.
+`SszString.ofValue_bytes_notUtf8` in the same file shows that SSZ bytes that are not UTF-8 are refused.
+So the type is not lawful, and `BuilderEntry.ofApiJson_toApiJson`, `BuilderConfig.ofApiJson_toApiJson` and the two `toApiJson_total` theorems (`Consensus/Proofs/BeaconApi/BuilderConfig.lean`) stand in for the general ones.
+`jsonOf_ok` and `valueOf_jsonOf` hold for every value.
+Bytes that are not UTF-8 have no text, so the codec writes them as one decimal string per byte.
+It reads such an array only when its bytes are not UTF-8, which `valueOf_text_digits` (`Serialization/Proofs/Ssz/Codec/JsonLaws.lean`) shows for the decimal strings that the codec writes; the reader accepts no others.
+A typed URL never has such bytes, so the reader of a builder entry accepts only a string.
+The Python tests check that the example configuration of the source reads back from JSON and from SSZ.
 An entry with an empty URL or empty authentication data, or whose authentication names another slot, gives no bid.
 The other entries and the gossip terms still apply, since the source says that one bad entry never fails the request.
 The source forbids two entries with one URL and one authentication data, and EthLib keeps the first of them.
 A candidate bid takes its signer from the registry, for the builder that the bid names, so its signature must have been checked first.
 The source limits a URL to 2048 characters in JSON and to 2048 bytes in SSZ, and EthLib follows the bytes.
+So a URL of 1025 two-byte characters is refused in both encodings.
+A body whose URL breaks a limit of its type cannot be decoded, so the whole request fails with 400, as the source says of such a body.
+EthLib counts SSZ bytes that are not UTF-8 in the same way: they are not "UTF-8 bytes of `url`, exactly as in JSON", and no JSON body holds them.
+A reviewer may question this, since the SSZ type of the source is a plain byte list, which would make such an entry fail alone.
+The JSON parser reads a lone surrogate escape in a string as U+FFFD, so `"\ud800"` and `"\ufffd"` name one URL; RFC 8259 §8.2 leaves such strings to the implementation.
 A URL is checked only to be non-empty, not to be a valid URI.
 
 The topics and the messages of the event stream are in `Consensus/BeaconApi/Events.lean`, shared by the events of received objects (#2090) and of the fork choice (#2091).

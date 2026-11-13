@@ -13,7 +13,7 @@ namespace EthLib.Serialization.Ssz
 open Lean
 
 /--
-Where a declaration spells a one-byte unsigned integer as the byte alias, or a byte list as digits.
+Whether a declaration writes a one-byte integer as the byte alias, and how it writes a byte list.
 
 SSZ gives the alias and the one-byte integer the same type, and the JSON mapping does not.
 
@@ -26,6 +26,7 @@ A spelling travels beside a declaration and holds one node for each node of it:
 - `Vector[Uint8, 2]`, spelled plain, is `["1", "2"]`.
 - `Vector[Byte, 2]`, with bytes as elements, is `"0x0102"`.
 - `List[Uint8, 4]`, held as a byte list and spelled as digits, is `["1", "2"]`.
+- `ByteList[8]` holding the bytes `0x6162`, spelled as text, is `"ab"`.
 
 A mark has effect only where its shape allows it, and is ignored anywhere else.
 -/
@@ -38,6 +39,10 @@ inductive Spelling where
 
   SSZ gives that list and a byte list the same type, and the JSON mapping does not. -/
   | digits
+  /-- A byte list written as the text that its UTF-8 bytes spell.
+
+  Bytes that spell no text are written as digits, so that no string stands for two values. -/
+  | text
   /-- Anything else, with one spelling for each declaration the shape holds. -/
   | plain (parts : List Spelling)
   deriving Inhabited
@@ -48,17 +53,37 @@ def Spelling.opaque : Spelling := .plain []
 /-- The spelling recorded for the declaration at one position. -/
 def Spelling.part : Spelling → Nat → Spelling
   | .plain parts, position => parts.getD position .opaque
-  | .byte, _ | .digits, _ => .opaque
+  | .byte, _ | .digits, _ | .text, _ => .opaque
 
 /-- Whether a one-byte integer here is the byte alias. -/
 def Spelling.isByte : Spelling → Bool
   | .byte => true
-  | .digits | .plain _ => false
+  | .digits | .text | .plain _ => false
 
 /-- Whether a byte list here is written as decimal digits. -/
 def Spelling.isDigits : Spelling → Bool
   | .digits => true
-  | .byte | .plain _ => false
+  | .byte | .text | .plain _ => false
+
+/-- Whether a byte list here is written as text. -/
+def Spelling.isText : Spelling → Bool
+  | .text => true
+  | .byte | .digits | .plain _ => false
+
+mutual
+
+/-- Whether a spelling carries the text mark, here or in a declaration it holds. -/
+def Spelling.hasText : Spelling → Bool
+  | .text => true
+  | .byte | .digits => false
+  | .plain parts => Spelling.anyText parts
+
+/-- Whether one of the spellings carries the text mark. -/
+def Spelling.anyText : List Spelling → Bool
+  | [] => false
+  | part :: rest => part.hasText || Spelling.anyText rest
+
+end
 
 /-- Whether a declaration is a one-byte integer, the only one that the byte alias can mark. -/
 def Desc.isOneByte : Desc → Bool
@@ -121,9 +146,17 @@ def byteElements (data : Bytes) : List Value :=
 /-- Digits in a string, which is how the mapping writes an integer. -/
 def decimal (n : Nat) : Json := .str (toString n)
 
-/-- The document of a byte list: one hex string, or one decimal string per byte. -/
+/-- One decimal string per byte. -/
+def byteDigitsJson (data : Bytes) : Json :=
+  .arr (data.map fun byte => decimal byte.toNat)
+
+/-- The document of a byte list: one hex string, its text, or one decimal string per byte. -/
 def byteListJson (spelling : Spelling) (data : Bytes) : Json :=
-  if spelling.isDigits then .arr (data.map fun byte => decimal byte.toNat)
+  if spelling.isDigits then byteDigitsJson data
+  else if spelling.isText then
+    match String.fromUTF8? ⟨data⟩ with
+    | some text => .str text
+    | none => byteDigitsJson data
   else .str (toHex data)
 
 /--
@@ -158,6 +191,22 @@ def byteDigitsFrom : List Json → Bytes → Except Err Bytes
     let n ← readNat entry
     if n ≥ 256 then throw (.uintRange 256 n)
     byteDigitsFrom rest (out.push (UInt8.ofNat n))
+
+/--
+The bytes of a byte list written as text: the UTF-8 bytes of a string.
+
+Bytes that spell no text are written as decimal strings.
+
+Decimal strings are read only for such bytes, so each value has one document.
+-/
+def textBytes (document : Json) : Except Err Bytes :=
+  match document with
+  | .str text => .ok text.toUTF8.data
+  | .arr entries => do
+    let data ← byteDigitsFrom entries.toList #[]
+    if (String.fromUTF8? ⟨data⟩).isSome then throw .typeMismatch
+    return data
+  | _ => .error .typeMismatch
 
 /--
 The hex a collection is written as.
@@ -293,6 +342,7 @@ def valueOf (shape : Desc) (spelling : Spelling) (document : Json) : Except Err 
     let data ← if spelling.isDigits then
         let .arr entries := document | throw .typeMismatch
         byteDigitsFrom entries.toList #[]
+      else if spelling.isText then textBytes document
       else ofHex (← collectionHex document)
     if data.size > limit then throw (.documentOverLimit limit data.size)
     return .bytes data
