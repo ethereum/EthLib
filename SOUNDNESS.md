@@ -2785,11 +2785,10 @@ The request lists must be well formed, and the payload must have a block at the 
 From Deneb, the blob transactions of that block must carry the versioned hashes of the request.
 The block must pass the state transition.
 `executionEngine_accepts_newPayloadRequest_iff` states the same for the payload request of a block, from Bellatrix to Fulu, in terms of the block and the state.
-The request lists are those of the requests of the block.
-The payload reads the parent root of the latest block header of the state.
+From Electra, the request lists are those of the requests of the block.
+From Deneb, the block of the payload reads the parent root of the latest block header of the state.
 From Deneb, the blob transactions must carry the versioned hashes of the commitments of the block, in the order of the commitments.
-`processExecutionPayload_executionEngine` draws the same conclusion from a payload step that succeeds with this execution layer.
-The test vectors fix the answer of the execution layer, so no vector reads the versioned hashes or the parent root of a request.
+The consensus test vectors fix the answer of the execution layer, so none of them checks the versioned hashes or the parent root that a block puts in its request.
 
 No payload build is specified, so `engine_getPayload` has no definition, and the export refuses payload attributes on a new valid head.
 The tree of known payloads and the known finalized block are inputs of each call, not state that the model keeps between calls.
