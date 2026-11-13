@@ -676,23 +676,27 @@ theorem processWithdrawals_validators {capella : .shapella ≤ fork}
     obtain ⟨_, _, _, _, applied⟩ := computed
     exact expected applied
 
-/-- The sync aggregate changes balances only, never the validators. -/
-theorem processSyncAggregate_validators {altair : .altair ≤ fork}
+/-- The sync aggregate changes only the balances. -/
+theorem processSyncAggregate_eq {altair : .altair ≤ fork}
     {aggregate : SyncAggregate preset}
     (computed : processSyncAggregate config checks state altair aggregate = .ok after) :
-    after.validators = state.validators := by
+    ∃ balances, after = { state with balances } := by
   unfold processSyncAggregate at computed
   simp only [bind_ok_iff] at computed
   obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, folded⟩ := computed
   rw [← Array.foldlM_toList] at folded
-  refine foldlM_ok_invariant (fun t => t.validators = state.validators) ?_ rfl folded
-  intro _ _ _ kept stepped
+  refine foldlM_ok_invariant (fun t => ∃ balances, t = { state with balances }) ?_
+    ⟨_, rfl⟩ folded
+  rintro _ _ _ ⟨_, rfl⟩ stepped
   unfold applySyncReward at stepped
   split at stepped
   · simp only [bind_ok_iff, liftAccessor_ok] at stepped
     obtain ⟨_, raised, _, _, paid⟩ := stepped
-    exact (increaseBalance_validators paid).trans ((increaseBalance_validators raised).trans kept)
-  · exact (decreaseBalance_validators (liftAccessor_ok.mp stepped)).trans kept
+    obtain ⟨_, _, rfl⟩ := increaseBalance_eq_ok_iff.mp raised
+    obtain ⟨_, _, rfl⟩ := increaseBalance_eq_ok_iff.mp paid
+    exact ⟨_, rfl⟩
+  · obtain ⟨_, rfl⟩ := decreaseBalance_eq_ok_iff.mp (liftAccessor_ok.mp stepped)
+    exact ⟨_, rfl⟩
 
 /-- Before Gloas, the steps of a block before its operations keep the validators.
 
@@ -760,7 +764,8 @@ private theorem registryLifecycle_processBlock {block : BeaconBlock preset fork}
       (fun ok => by rw [processPayloadAttestation_eq ok]; exact .refl _) operated
   have tail : RegistryLifecycle last after := by
     split at synced
-    · exact .of_data (congrArg (·.data) (processSyncAggregate_validators synced))
+    · obtain ⟨_, rfl⟩ := processSyncAggregate_eq synced
+      exact .of_data rfl
     · cases synced
       exact .refl _
   exact head.trans <|

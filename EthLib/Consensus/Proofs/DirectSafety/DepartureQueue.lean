@@ -921,26 +921,6 @@ private theorem attestation_departureQueues {fork : Fork} {s t : BeaconState pre
   unfold setEpochParticipation
   split <;> rfl
 
-/-- A sync aggregate changes balances without consuming departure churn. -/
-private theorem sync_departureQueues {fork : Fork} {s t : BeaconState preset fork}
-    (electra : .pectra ≤ fork) {altair : .altair ≤ fork} {aggregate : SyncAggregate preset}
-    (ok : processSyncAggregate config checks s altair aggregate = .ok t) :
-    departureQueues electra t = departureQueues electra s := by
-  unfold processSyncAggregate at ok
-  simp only [bind_ok_iff] at ok
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, folded⟩ := ok
-  rw [← Array.foldlM_toList] at folded
-  refine foldlM_ok_invariant (fun t => departureQueues electra t = departureQueues electra s)
-    ?_ rfl folded
-  intro a reward b kept stepped
-  unfold applySyncReward at stepped
-  split at stepped
-  · simp only [bind_ok_iff, liftAccessor_ok] at stepped
-    obtain ⟨_, raised, _, _, paid⟩ := stepped
-    exact (departureQueues_increase electra paid).trans
-      ((departureQueues_increase electra raised).trans kept)
-  · exact (departureQueues_decrease electra (liftAccessor_ok.mp stepped)).trans kept
-
 /-- Changing withdrawal credentials leaves both departure queues unchanged. -/
 private theorem credentials_departureQueues {fork : Fork} {s t : BeaconState preset fork}
     (electra : .pectra ≤ fork) {signed : SignedBLSToExecutionChange}
@@ -2779,12 +2759,15 @@ private theorem block_indexedTrace_sites {fork : Fork} (electra : .pectra ≤ fo
     rw [blockExecution_departureQueues electra early executedOk]
     obtain ⟨_, _, rfl⟩ := processBlockHeader_eq headedOk
     rfl
-  have tailFrame := sync_departureQueues electra syncedOk
+  obtain ⟨_, synced⟩ := processSyncAggregate_eq syncedOk
+  have tailFrame : departureQueues electra t = departureQueues electra operated := by
+    rw [synced]
+    rfl
   have operatedCoverage : DepartureCoverage voted operated
       ((first ++ exits) ++ consolidations) := by
     simpa only [List.append_assoc] using
       firstCoverage.append_of_effectiveKept covered firstLife requestsLife firstBalances
-  have tailData := processSyncAggregate_validators syncedOk
+  have tailData : t.validators = operated.validators := by rw [synced]
   refine ⟨sites, recorded, first ++ exits, consolidations, ?_, ?_, ?_, ?_, ?_, consolidationRates,
     consolidationSites⟩
   · simpa only [List.append_assoc] using firstFrom.append requestsFrom
@@ -3377,7 +3360,8 @@ private theorem CountCohortStep.block {f : Fork} {s t : BeaconState preset f}
       (fun {_ _ gloas _} _ => absurd gloas notGloas) operated
   have tail : CountCohortStep config bound last t := by
     split at synced
-    · exact data (processSyncAggregate_validators synced) (frame_processSyncAggregate synced).slot
+    · obtain ⟨_, rfl⟩ := processSyncAggregate_eq synced
+      exact data rfl rfl
     · cases synced
       exact .refl _ bound
   exact head.trans <|
