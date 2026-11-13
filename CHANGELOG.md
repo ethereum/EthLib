@@ -702,6 +702,8 @@ Not yet released.
 - The chain view serves `eth_getProof`, with the answer that `AccountProof.ofState` builds from the state after the block.
 
 - `eth_config` reports the current, next and last scheduled configurations from Dencun through Glamsterdam.
+  As EIP-7910 says, the report leaves out a future fork after Glamsterdam, and `next` and `last` are null when no supported fork remains.
+  A fork at a block after genesis is never a next or last configuration.
   In Lean, `ChainView` adds `genesis` and `mergeForkBlock` for the fork checksum.
   Supply both fields in positional constructors, or use structure notation with their `none` defaults.
   `call_unknown` also requires that the method name differ from `eth_config`.

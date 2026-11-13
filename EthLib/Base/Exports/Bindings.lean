@@ -688,6 +688,10 @@ def bindings : List Binding := [
     "(name: str, fork: str, state: bytes, replacements: dict[str, Any] | None, epoch: int, " ++
       "ids: list[str]) -> dict[str, Any]",
     [], some "ConsensusError"⟩,
+  ⟨"consensus_api_sync_committee_rewards",
+    `EthLib.Consensus.Exports.apiSyncCommitteeRewardsExport,
+    "(name: str, fork: str, state: bytes, aggregate: bytes, ids: list[str]) -> dict[str, Any]",
+    [], some "ConsensusError"⟩,
   ⟨"consensus_api_duties", `EthLib.Consensus.Exports.apiDutiesExport,
     "(name: str, fork: str, state: bytes, replacements: dict[str, Any] | None, kind: str, " ++
       "epoch: int, indices: list[int], genesis_root: bytes) -> dict[str, Any]",

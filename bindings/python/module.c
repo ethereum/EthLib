@@ -859,6 +859,8 @@ static PyMethodDef methods[] = {
    DOC_consensus_api_sync_committee_contribution},
   {"consensus_api_attestation_rewards", py_consensus_api_attestation_rewards, METH_VARARGS,
    DOC_consensus_api_attestation_rewards},
+  {"consensus_api_sync_committee_rewards", py_consensus_api_sync_committee_rewards, METH_VARARGS,
+   DOC_consensus_api_sync_committee_rewards},
   {"consensus_api_duties", py_consensus_api_duties, METH_VARARGS,
    DOC_consensus_api_duties},
   {"consensus_api_committees", py_consensus_api_committees, METH_VARARGS,
