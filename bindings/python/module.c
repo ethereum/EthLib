@@ -990,6 +990,8 @@ static PyMethodDef methods[] = {
     DOC_consensus_gossip_validation},
   {"consensus_api_post", py_consensus_api_post, METH_VARARGS,
    DOC_consensus_api_post},
+  {"consensus_api_gossip_event", py_consensus_api_gossip_event, METH_VARARGS,
+   DOC_consensus_api_gossip_event},
   {"consensus_initialize_genesis", py_consensus_initialize_genesis, METH_VARARGS,
    DOC_consensus_initialize_genesis},
   {"consensus_is_valid_genesis_state", py_consensus_is_valid_genesis_state, METH_VARARGS,

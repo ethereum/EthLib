@@ -1104,7 +1104,11 @@ def bindings : List Binding := [
       "finalized: tuple[int, bytes] | None, " ++
       "requests: list[tuple[int, str, list[bytes]] | " ++
       "tuple[int, str, list[bytes], str | None]], " ++
-      "config: dict[str, Any] | None, verify: bool) -> list[tuple[int, list[tuple[int, str]]]]",
+      "config: dict[str, Any] | None, verify: bool) -> " ++
+      "list[tuple[int, list[tuple[int, str]], list[tuple[str, str]]]]",
+    [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
+  ⟨"consensus_api_gossip_event", `EthLib.Consensus.Exports.apiGossipEventExport,
+    "(name: str, fork: str, topic: str, data: bytes) -> tuple[str, str] | None",
     [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
   ⟨"consensus_light_client_sync", `EthLib.Consensus.Exports.lightClientSyncExport,
     "(name: str, fork: str, bootstrap_fork: str, config: dict[str, Any] | None, " ++

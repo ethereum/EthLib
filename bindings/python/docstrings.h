@@ -842,6 +842,9 @@
 #define DOC_consensus_api_post \
   "Answer the requests to pool and publish endpoints in turn."
 
+#define DOC_consensus_api_gossip_event \
+  "The event that an object gives if gossip accepts it, by the name of its gossip topic."
+
 #define DOC_consensus_light_client_sync \
   "The headers of a sync, step by step, from a bootstrap for a trusted block root."
 
