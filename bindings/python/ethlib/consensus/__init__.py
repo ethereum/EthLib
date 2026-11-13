@@ -1120,6 +1120,9 @@ def api_payload_envelope_ssz(
     """The Beacon API SSZ body of the signed payload envelope of a block, or ForkChoiceError."""
     return _native.consensus_api_payload_envelope_ssz(
         name, fork, anchor_state, anchor_block, steps, verify, root, envelope
+    )
+
+
 def api_duties(
     name: str,
     fork: str,
