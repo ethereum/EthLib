@@ -55,6 +55,21 @@ def ssz_static(name: str, fork: str, type_name: str, data: bytes) -> tuple[bytes
     return _native.consensus_ssz_static(name, fork, type_name, data)
 
 
+def api_json(name: str, fork: str, type_name: str, data: bytes) -> dict[str, Any]:
+    """The Beacon API JSON of the beacon container that SSZ bytes encode, or SszError."""
+    # A value is a dict, a list, a str or a bool, nested as the container is.
+    # The values are `Any`, so that a caller indexes nested values without narrowing them.
+    # The order of the keys of a dict carries no meaning.
+    return _native.consensus_api_json(name, fork, type_name, data)
+
+
+def api_ssz(name: str, fork: str, type_name: str, document: object) -> bytes:
+    """The SSZ bytes of the container that a Beacon API JSON document holds, or SszError."""
+    # A value that the bindings cannot pass to Lean, such as a float, raises TypeError.
+    # A negative or too large int, a nesting deeper than 64, or too many parts raise ValueError.
+    return _native.consensus_api_ssz(name, fork, type_name, document)
+
+
 def is_valid_builder_signature(
     name: str,
     fork: str,
@@ -65,6 +80,27 @@ def is_valid_builder_signature(
 ) -> bool:
     """Whether a signed registration or bid of the Builder API verifies."""
     return _native.consensus_is_valid_builder_signature(name, fork, config, type_name, data)
+
+
+def process_registration(
+    name: str,
+    fork: str,
+    state: bytes,
+    registry: list[bytes],
+    signed: bytes,
+    now: int,
+    # `Any`, because `dict` is invariant in its values.
+    config: dict[str, Any] | None = None,
+) -> str | None:
+    """None when a builder keeps a signed registration, or the name of the rule that refuses it."""
+    return _native.consensus_process_registration(name, fork, config, state, registry, signed, now)
+
+
+def unblind_signed_blinded_block(
+    name: str, fork: str, blinded: bytes, revealed: bytes
+) -> tuple[bytes, bytes] | None:
+    """The root and bytes of the signed block that a signed blinded block and a payload give."""
+    return _native.consensus_unblind_signed_blinded_block(name, fork, blinded, revealed)
 
 
 def verify_builder_request_auth_signature(
@@ -82,6 +118,16 @@ def verify_builder_request_auth_signature(
 def builder_bid_value(value: int, execution_payment: int, max_execution_payment: int) -> int:
     """The bid's value in Gwei, with its execution payment capped, not reduced to 64 bits."""
     return _native.consensus_builder_bid_value(value, execution_payment, max_execution_payment)
+
+
+def consensus_version(fork: str) -> str | None:
+    """The Beacon API name of a fork's consensus version, or None before Phase 0 and at Hegotá."""
+    return _native.consensus_consensus_version(fork)
+
+
+def consensus_version_fork(name: str) -> str:
+    """The first fork of the consensus version with this exact Beacon API name."""
+    return _native.consensus_consensus_version_fork(name)
 
 
 def upgrade_operation(name: str, type_name: str, data: bytes) -> tuple[bytes, bytes]:
@@ -440,6 +486,25 @@ def compute_fork_digest(
 ) -> bytes:
     """The fork digest at an epoch, on the chain with the given root of the genesis validators."""
     return _native.consensus_compute_fork_digest(name, config, genesis_validators_root, epoch)
+
+
+def digest_epochs(name: str, config: dict[str, Any] | None = None) -> list[int]:
+    """The epochs at which the fork digest can change, in increasing order and without repeats."""
+    return _native.consensus_digest_epochs(name, config)
+
+
+def fork_of_digest(
+    name: str, genesis_validators_root: bytes, digest: bytes, config: dict[str, Any] | None = None
+) -> tuple[int, str] | None:
+    """The first epoch with the given digest, among those at which it can change, with its fork."""
+    return _native.consensus_fork_of_digest(name, config, genesis_validators_root, digest)
+
+
+def digests_identify(
+    name: str, genesis_validators_root: bytes, config: dict[str, Any] | None = None
+) -> bool:
+    """Whether the digest of each epoch at which it can change reads back the fork at that epoch."""
+    return _native.consensus_digests_identify(name, config, genesis_validators_root)
 
 
 def compute_matrix(blobs: Sequence[bytes]) -> list[bytes]:
@@ -1237,9 +1302,15 @@ __all__ = [
     "get_custody_column_bits",
     "compute_columns_for_custody_group",
     "ssz_static",
+    "api_json",
+    "api_ssz",
     "is_valid_builder_signature",
+    "process_registration",
+    "unblind_signed_blinded_block",
     "verify_builder_request_auth_signature",
     "builder_bid_value",
+    "consensus_version",
+    "consensus_version_fork",
     "upgrade_operation",
     "pq_keys_ssz",
     "pq_keys_possession_signing_root",
@@ -1307,6 +1378,9 @@ __all__ = [
     "light_client_gossip_full_node",
     "light_client_gossip_light_client",
     "compute_fork_digest",
+    "digest_epochs",
+    "fork_of_digest",
+    "digests_identify",
     "process_epoch",
     "rewards_deltas",
     "rewards_deltas_batch",

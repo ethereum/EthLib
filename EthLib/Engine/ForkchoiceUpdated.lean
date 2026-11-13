@@ -121,6 +121,8 @@ The model returns the attributes, as those of their fork.
 
 When the update applies no valid head, no build begins, so the attributes change nothing.
 
+The consensus layer writes the forkchoice state, the payload attributes and the parameters as JSON.
+
 The method specifications state these rules, at commit `3284ee8` of execution-apis:
 
 - [`engine_forkchoiceUpdatedV1`][v1], steps 2, 4, 5, 7, 8 and 9
@@ -158,6 +160,8 @@ namespace EthLib.Engine
 open EthLib.Base
 open EthLib.Execution.Blocks (Withdrawal)
 open EthLib.Engine.Json
+open EthLib.Serialization.JsonRpc
+open EthLib.Execution.Rpc (withdrawal withdrawalJson)
 open Lean (Json)
 
 /-- The attributes of a payload that the consensus layer asks the execution layer to build. -/
@@ -252,6 +256,12 @@ def forkchoiceStateOfJson (j : Json) : Decode ForkchoiceState := do
     safeBlockHash := ← fixed "safeBlockHash" 32 (← get "safeBlockHash")
     finalizedBlockHash := ← fixed "finalizedBlockHash" 32 (← get "finalizedBlockHash") }
 
+/-- The forkchoice state as JSON, with its three hashes. -/
+def forkchoiceStateJson (state : ForkchoiceState) : Json :=
+  Json.mkObj [("headBlockHash", dataJson state.headBlockHash.toList),
+    ("safeBlockHash", dataJson state.safeBlockHash.toList),
+    ("finalizedBlockHash", dataJson state.finalizedBlockHash.toList)]
+
 /-- The fields of version 1 of the payload attributes. -/
 def attributesFieldsV1 : List String := ["timestamp", "prevRandao", "suggestedFeeRecipient"]
 
@@ -286,7 +296,7 @@ def attributesFork : Nat → Fork
 
 /-- The value of a field of an object, decoded by `f`, or none when the object lacks it. -/
 def optionalField {α : Type} (fs : List (String × Json)) (name : String)
-    (f : Json → Decode α) : Decode (Option α) :=
+    (f : Json → Read α) : Read (Option α) :=
   match fs.lookup name with
   | some v => some <$> f v
   | none => pure none
@@ -314,6 +324,21 @@ def payloadAttributesOfJson (version : Nat) (j : Json) :
     slotNumber := ← since "slotNumber" (← optionalField fs "slotNumber" (uint64 "slotNumber"))
     targetGasLimit := ← since "targetGasLimit"
       (← optionalField fs "targetGasLimit" (uint64 "targetGasLimit")) }
+
+/-- Payload attributes as JSON, with the fields of their fork's structure, versions 1 to 4.
+
+The fifth version of the source, from Hegotá, adds a field that these attributes lack. -/
+def payloadAttributesJson {fork : Fork} (a : PayloadAttributes fork) : Json :=
+  Json.mkObj ([("timestamp", quantityJson a.timestamp.toNat),
+      ("prevRandao", dataJson a.prevRandao.toList),
+      ("suggestedFeeRecipient", dataJson a.suggestedFeeRecipient.toList)] ++
+    (if h : .shapella ≤ fork then [("withdrawals", listJson withdrawalJson (a.withdrawals h))]
+      else []) ++
+    (if h : .dencun ≤ fork then
+      [("parentBeaconBlockRoot", dataJson (a.parentBeaconBlockRoot h).toList)] else []) ++
+    (if h : .glamsterdam ≤ fork then
+      [("slotNumber", quantityJson (a.slotNumber h).toNat),
+        ("targetGasLimit", quantityJson (a.targetGasLimit h).toNat)] else []))
 
 /-- The versions of the structure of the payload attributes that a version of the method takes.
 
@@ -367,6 +392,18 @@ def forkchoiceUpdatedParams (version : Nat) (params : Json) :
   -- The custody set changes the blob pool only, never the answer, so its value is dropped.
   let _ ← custodyColumnsOfJson custody
   return (state, attributes)
+
+/-- The parameters of a version of the method as JSON.
+
+They are the forkchoice state, then the payload attributes or `null`.
+
+From version 4 the custody columns follow, as 16 bytes or `null`; before, they are left out.
+
+The attributes have the structure of their fork, which the version must take. -/
+def forkchoiceUpdatedParamsJson {fork : Fork} (version : Nat) (state : ForkchoiceState)
+    (attributes : Option (PayloadAttributes fork)) (custody : Option (Vector UInt8 16)) : Json :=
+  .arr ([forkchoiceStateJson state, optionJson payloadAttributesJson attributes] ++
+    if 4 ≤ version then [optionJson (dataJson ·.toList) custody] else []).toArray
 
 /-- Whether a version of the method takes payload attributes whose timestamp is in a fork.
 

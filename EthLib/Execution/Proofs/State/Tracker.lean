@@ -421,6 +421,13 @@ theorem nonce_eq_zero_of_accountDeployable {tx : TransactionState} {address : Ad
     (h : tx.accountDeployable address = true) : (tx.getAccount address).nonce = 0 :=
   (accountDeployable_eq_true_iff.mp h).1
 
+/-- Two states agree on whether an address holds storage when they agree on every key there. -/
+theorem accountHasStorage_congr {tx tx' : TransactionState} {address : Address}
+    (hstorage : ∀ key, tx'.getStorage address key = tx.getStorage address key) :
+    tx'.accountHasStorage address = tx.accountHasStorage address := by
+  rw [Bool.eq_iff_iff, accountHasStorage_eq_true_iff, accountHasStorage_eq_true_iff]
+  simp only [hstorage]
+
 /-- Two states agree on whether a contract may be deployed at an address they read alike.
 
 They must have the same account there and the same word at every key of its storage. -/
@@ -428,8 +435,8 @@ theorem accountDeployable_congr {tx tx' : TransactionState} {address : Address}
     (haccount : tx'.getAccount address = tx.getAccount address)
     (hstorage : ∀ key, tx'.getStorage address key = tx.getStorage address key) :
     tx'.accountDeployable address = tx.accountDeployable address := by
-  rw [Bool.eq_iff_iff, accountDeployable_eq_true_iff, accountDeployable_eq_true_iff, haccount]
-  simp only [hstorage]
+  unfold accountDeployable
+  rw [haccount, accountHasStorage_congr hstorage]
 
 /-- A change by `f` succeeds exactly when `f` does on the account.
 

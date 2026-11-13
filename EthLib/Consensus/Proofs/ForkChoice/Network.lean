@@ -24,6 +24,8 @@ What lies outside the beacon chain, such as the execution engine, is one source 
 The store of each honest validator stays reachable from the anchor along every execution.
 
 Along an execution of the network model, an honest store that starts with a forward clock keeps one.
+
+An honest store built with the signature checks of the model stays built that way.
 -/
 
 @[expose] public section
@@ -170,6 +172,40 @@ theorem Execution.forwardReachable {ν κ : Type*} [DecidableEq ν] {checks : Si
     (start : ∀ v ∈ J, Store.ForwardReachable config anchorState anchorBlock (e.start v)) (n : ℕ) :
     ∀ v ∈ J, Store.ForwardReachable config anchorState anchorBlock ((e.world n).state v) :=
   e.state_induction start (fun _ _ _ _ _ _ forward moved => moved.forwardReachable forward) n
+
+/-- A move of an honest validator keeps its store built with the setting of the checks of the model.
+
+The clock of that store also stays forward. -/
+theorem Handles.forwardReachableWith {checks : SignatureChecks}
+    {sources : BlockSources preset fork} {time : ℕ} {view : Set (Message preset fork)}
+    {store after : Store preset fork}
+    (handles : Handles config checks sources time view store after)
+    (reached : Store.ForwardReachableWith config checks anchorState anchorBlock store) :
+    Store.ForwardReachableWith config checks anchorState anchorBlock after := by
+  cases handles with
+  | tick le lt ticked =>
+    refine reached.tick ?_ ticked
+    rw [UInt64.le_iff_toNat_le, Nat.toUInt64, UInt64.toNat_ofNat_of_lt' lt]
+    exact le
+  | block _ added => exact reached.onBlockWithVotes added
+  | attestation _ attested => exact reached.attestation attested
+  | attesterSlashing _ slashed => exact reached.attesterSlashing slashed
+  | payloadAttestation _ voted => exact reached.payloadAttestation voted
+  | envelope _ accepted => exact reached.envelope accepted
+  | inclusionList _ accepted => exact reached.inclusionList accepted
+
+/-- Along an execution, each honest store stays built with the setting of the checks of the model.
+
+The stores of the honest validators must be built that way at the start. -/
+theorem Execution.forwardReachableWith {ν κ : Type*} [DecidableEq ν] {checks : SignatureChecks}
+    {sources : BlockSources preset fork} {signed : Message preset fork → Set (ν × κ)}
+    {sends : ν → ℕ → Set (Message preset fork) → Store preset fork → Message preset fork → Prop}
+    {J : Set ν} (e : Execution (forkChoice config checks sources signed sends) J)
+    (start : ∀ v ∈ J, Store.ForwardReachableWith config checks anchorState anchorBlock (e.start v))
+    (n : ℕ) :
+    ∀ v ∈ J, Store.ForwardReachableWith config checks anchorState anchorBlock
+      ((e.world n).state v) :=
+  e.state_induction start (fun _ _ _ _ _ _ reached moved => moved.forwardReachableWith reached) n
 
 /-- A store can start from a mainnet state at slot zero and a block with the root of that state.
 

@@ -30,6 +30,11 @@ namespace EthLib.Networking.Libp2p.Mplex
 
 open EthLib.Networking.Encoding
 
+/-- The name of mplex in multistream-select.
+
+The networking specification of the consensus layer gives it, since the mplex source does not. -/
+def protocolId : ByteArray := "/mplex/6.7.0".toUTF8
+
 /-- What a frame does to its stream, "Flag Values". -/
 inductive Flag where
   /-- Open a stream; the data is its name. -/

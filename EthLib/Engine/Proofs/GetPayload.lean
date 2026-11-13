@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Engine.GetPayload
+public import EthLib.Engine.Proofs.Json
 public import EthLib.Execution.Proofs.Transactions.Network
 
 /-!
@@ -17,6 +18,8 @@ From version 3, the bundle's commitments hash to the block's blob hashes, in ord
 Its blob or cell proofs pass the KZG verifier.
 
 Versions 3 and 4 return one proof per blob, and versions 5 and 6 return 128 per blob.
+
+The decoder reads back the parameters that the writer writes.
 -/
 
 public section
@@ -203,5 +206,11 @@ theorem getPayload_eq_error_of_validateBlobs_eq_error
     getPayload config setup store version id = .error (.bundle error) := by
   simp [getPayload, hs, hf, hv, hr, hb, hp, hh, hversion, hv3, bind, Except.bind,
     Except.mapError]
+
+/-- The decoder of the parameters reads back the payload ID that the writer writes. -/
+theorem getPayloadParams_json (id : PayloadId) :
+    getPayloadParams (getPayloadParamsJson id) = .ok id := by
+  simp [getPayloadParams, getPayloadParamsJson, Serialization.JsonRpc.paramsArray, pure,
+    Except.pure, bind, Except.bind, Serialization.JsonRpc.fixed_dataJson]
 
 end EthLib.Engine

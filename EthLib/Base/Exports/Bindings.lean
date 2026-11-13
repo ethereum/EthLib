@@ -35,6 +35,15 @@ def depositTreeType : String :=
 /-- The Python type of a deposit tree snapshot: its five fields, in order. -/
 def depositTreeSnapshotType : String := "tuple[list[bytes], bytes, int, bytes, int]"
 
+/-- The Python type of a block parameter: a number, a tag, or a hash and its flag. -/
+def rpcBlockParamType : String :=
+  "tuple[Literal['number'], int] | " ++
+    "tuple[Literal['tag'], Literal['earliest', 'finalized', 'safe', 'latest', 'pending']] | " ++
+    "tuple[Literal['hash'], bytes, bool]"
+
+/-- The Python type of an error code, which may be negative: its sign, then its absolute value. -/
+def rpcSignedCodeType : String := "tuple[bool, int]"
+
 /-- The Python type of gossip outcomes: valid with no reason, or ignore or reject with one. -/
 def gossipOutcomesType : String :=
   "list[tuple[Literal['valid'], None] | tuple[Literal['ignore', 'reject'], str]]"
@@ -543,9 +552,22 @@ def bindings : List Binding := [
   ⟨"consensus_ssz_static", `EthLib.Consensus.Exports.sszStaticExport,
     "(name: str, fork: str, type: str, data: bytes) -> tuple[bytes, bytes]",
     [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
+  ⟨"consensus_api_json", `EthLib.Consensus.Exports.apiJsonExport,
+    "(name: str, fork: str, type: str, data: bytes) -> Any",
+    [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
+  ⟨"consensus_api_ssz", `EthLib.Consensus.Exports.apiSszExport,
+    "(name: str, fork: str, type: str, document: Any) -> bytes",
+    [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
   ⟨"consensus_is_valid_builder_signature",
     `EthLib.Consensus.Exports.isValidBuilderSignatureExport,
     "(name: str, fork: str, config: dict[str, Any] | None, type: str, data: bytes) -> bool",
+    [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
+  ⟨"consensus_process_registration", `EthLib.Consensus.Exports.processRegistrationExport,
+    "(name: str, fork: str, config: dict[str, Any] | None, state: bytes, " ++
+      "registry: list[bytes], signed: bytes, now: int) -> str | None",
+    [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
+  ⟨"consensus_unblind_signed_blinded_block", `EthLib.Consensus.Exports.unblindExport,
+    "(name: str, fork: str, blinded: bytes, revealed: bytes) -> tuple[bytes, bytes] | None",
     [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
   ⟨"consensus_verify_builder_request_auth_signature",
     `EthLib.Consensus.Exports.verifyBuilderRequestAuthSignatureExport,
@@ -554,6 +576,10 @@ def bindings : List Binding := [
   ⟨"consensus_builder_bid_value", `EthLib.Consensus.Exports.builderBidValueExport,
     "(value: int, execution_payment: int, max_execution_payment: int) -> int",
     [], some "ConsensusError"⟩,
+  ⟨"consensus_consensus_version", `EthLib.Consensus.Exports.consensusVersionExport,
+    "(fork: str) -> str | None", [], some "ConsensusError"⟩,
+  ⟨"consensus_consensus_version_fork", `EthLib.Consensus.Exports.consensusVersionForkExport,
+    "(name: str) -> str", [], some "ConsensusError"⟩,
   ⟨"consensus_merkle_proof", `EthLib.Consensus.Exports.merkleProofExport,
     "(name: str, fork: str, type: str, data: bytes, gindex: int) -> tuple[bytes, list[bytes]]",
     [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
@@ -869,6 +895,14 @@ def bindings : List Binding := [
     "(name: str, config: dict[str, Any] | None, genesis_validators_root: bytes, " ++
       "epoch: int) -> bytes",
     [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
+  ⟨"consensus_digest_epochs", `EthLib.Consensus.Exports.digestEpochsExport,
+    "(name: str, config: dict[str, Any] | None) -> list[int]", [], some "ConsensusError"⟩,
+  ⟨"consensus_fork_of_digest", `EthLib.Consensus.Exports.forkOfDigestExport,
+    "(name: str, config: dict[str, Any] | None, genesis_validators_root: bytes, " ++
+      "digest: bytes) -> tuple[int, str] | None", [], some "ConsensusError"⟩,
+  ⟨"consensus_digests_identify", `EthLib.Consensus.Exports.digestsIdentifyExport,
+    "(name: str, config: dict[str, Any] | None, genesis_validators_root: bytes) -> bool",
+    [], some "ConsensusError"⟩,
   ⟨"pq_keys_ssz", `EthLib.Consensus.Exports.pqKeysSszExport,
     "(type: str, data: bytes) -> tuple[bytes, bytes]",
     [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
@@ -1092,6 +1126,14 @@ def bindings : List Binding := [
   ⟨"devp2p_encode_message", `EthLib.Networking.Devp2p.Exports.encodeMessageExport,
     "(snappy: bool, plain: bytes) -> bytes",
     [`EthLib.Networking.Devp2p.P2pError], some "Devp2pError"⟩,
+  ⟨"devp2p_route", `EthLib.Execution.Network.Exports.routeExport,
+    "(ours: list[tuple[bytes, int]], theirs: list[tuple[bytes, int]], message_id: int) -> " ++
+      "tuple[bytes, int, int] | None",
+    [], some "Devp2pError"⟩,
+  ⟨"devp2p_session", `EthLib.Execution.Network.Exports.sessionExport,
+    "(hello: bytes, frames: list[bytes]) -> " ++
+      "list[tuple[str, str, bytes, int, int, bytes, bool]]",
+    [`EthLib.Networking.Devp2p.SessionError], some "Devp2pError"⟩,
   ⟨"discv4_decode", `EthLib.Networking.Discv4.Exports.decodeExport,
     "(packet: bytes) -> bytes",
     [`EthLib.Networking.Discv4.Discv4Error], some "Discv4Error"⟩,
@@ -1131,6 +1173,12 @@ def bindings : List Binding := [
   ⟨"eth_check_pooled", `EthLib.Execution.Network.Message.checkPooledResponse,
     "(version: int, request: bytes, response: bytes) -> bool",
     [`EthLib.Execution.Network.EthError, `EthLib.Execution.Network.PoolError],
+    some "EthWireError"⟩,
+  ⟨"eth_session", `EthLib.Execution.Network.Exports.ethSessionExport,
+    "(version: int, schedule: bytes, number: int, timestamp: int, " ++
+      "events: list[tuple[bool, int, bytes]]) -> list[tuple[str, int]]",
+    [`EthLib.Execution.Network.EthError, `EthLib.Execution.Network.StatusError,
+      `EthLib.Execution.Network.EthSessionError],
     some "EthWireError"⟩,
   ⟨"eth_wire_hash", `EthLib.Execution.Network.wireHash,
     "(tx: bytes) -> bytes",
@@ -1215,6 +1263,15 @@ def bindings : List Binding := [
   ⟨"multistream_decode", `EthLib.Networking.Libp2p.Exports.multistreamDecodeExport,
     "(data: bytes) -> tuple[bytes, bytes]",
     [`EthLib.Networking.Libp2p.Multistream.MultistreamError], some "MultistreamError"⟩,
+  ⟨"multistream_listen", `EthLib.Networking.Libp2p.Exports.multistreamListenExport,
+    "(supported: list[bytes], data: bytes) -> tuple[str, bytes, bytes, bytes]",
+    [`EthLib.Networking.Libp2p.Multistream.MultistreamError], some "MultistreamError"⟩,
+  ⟨"multistream_dial", `EthLib.Networking.Libp2p.Exports.multistreamDialExport,
+    "(proposals: list[bytes], data: bytes) -> tuple[str, bytes, bytes, bytes]",
+    [`EthLib.Networking.Libp2p.Multistream.MultistreamError], some "MultistreamError"⟩,
+  ⟨"libp2p_upgrade", `EthLib.Networking.Libp2p.Exports.upgradeExport,
+    "(dialer_yamux: bool, listener_yamux: bool) -> tuple[bytes, bytes]",
+    [], some "MultistreamError"⟩,
   ⟨"mplex_encode", `EthLib.Networking.Libp2p.Exports.mplexEncodeExport,
     "(frame: dict[str, Any]) -> bytes",
     [], some "MplexError"⟩,
@@ -1399,6 +1456,9 @@ def bindings : List Binding := [
       "list[tuple[int, int, bytes, int]] | None, bytes | None]], latest: int, " ++
       "max_request: int, request: dict) -> list[dict | None]",
     [`EthLib.Engine.EngineError], some "EngineError"⟩,
+  ⟨"engine_rewrite_params", `EthLib.Engine.Exports.rewriteParamsExport,
+    "(method: str, params: list[Any]) -> list[Any]",
+    [`EthLib.Engine.EngineError], some "EngineError"⟩,
   ⟨"engine_prepare_execution_payload", `EthLib.Engine.Exports.prepareExecutionPayloadExport,
     "(name: str, fork: str, state: bytes, config: dict | None, safe_block_hash: bytes, " ++
       "finalized_block_hash: bytes, suggested_fee_recipient: bytes, pow_chain: list[bytes]) " ++
@@ -1416,6 +1476,17 @@ def bindings : List Binding := [
     "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, " ++
       "verify: bool, config: dict | None) -> bytes",
     [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
+  ⟨"rpc_read_param", `EthLib.Execution.Rpc.Exports.readParamExport,
+    "(schema: str, value: object) -> int | bytes | " ++ rpcBlockParamType,
+    [], some "RpcError"⟩,
+  ⟨"rpc_error_groups", `EthLib.Execution.Rpc.Exports.errorGroupsExport,
+    "() -> list[tuple[str, tuple[" ++ rpcSignedCodeType ++ ", " ++ rpcSignedCodeType ++
+      "] | None, list[tuple[" ++ rpcSignedCodeType ++ ", str]]]]",
+    [], some "RpcError"⟩,
+  ⟨"rpc_pruned_history_unavailable",
+    `EthLib.Execution.Rpc.Exports.prunedHistoryUnavailableExport,
+    "() -> tuple[" ++ rpcSignedCodeType ++ ", str]",
+    [], some "RpcError"⟩,
   ⟨"pyvalue_echo", `EthLib.Exports.pyValueEcho,
     "(value: object) -> object",
     [], some "BindingError"⟩

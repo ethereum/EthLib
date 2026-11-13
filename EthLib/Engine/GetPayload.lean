@@ -29,6 +29,8 @@ From version 3, the bundle's commitments must hash to the block's blob hashes, i
 
 Its proofs are checked, with one per blob before Fusaka and 128 cell proofs per blob from it.
 
+The consensus layer also writes the parameters as JSON: the payload ID alone.
+
 The method follows [version 1][v1], [2][v2], [3][v3], [4][v4], [5][v5] and [6][v6].
 
 The upper bounds of versions 2 to 5 come from the updates of later forks.
@@ -55,6 +57,7 @@ open EthLib.Base
 open EthLib.Cryptography.Kzg
 open EthLib.Execution.Blocks (Block)
 open EthLib.Execution.Transactions
+open EthLib.Serialization.JsonRpc (dataJson fixed paramsArray)
 
 /-- The blobs, commitments and proofs of the payload's network blob transactions, in order. -/
 structure BlobsBundle where
@@ -167,8 +170,11 @@ def getPayload (config : ChainConfig) (setup : TrustedSetup) (store : PayloadSto
 
 /-- The single eight-byte payload ID of the request. -/
 def getPayloadParams (params : Lean.Json) : Json.Decode PayloadId := do
-  match ← Json.paramsArray params with
-  | [id] => Json.fixed "payloadId" 8 id
+  match ← paramsArray params with
+  | [id] => fixed "payloadId" 8 id
   | values => Json.invalid s!"params: got {values.length}, expected 1"
+
+/-- The parameters of the request as JSON: the payload ID alone. -/
+def getPayloadParamsJson (id : PayloadId) : Lean.Json := .arr #[dataJson id.toList]
 
 end EthLib.Engine

@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Consensus.Proofs.ForkDigest
 public import EthLib.Consensus.ReqResp.ResponseBounds
 public import EthLib.Consensus.Proofs.ReqResp.Bounds
 public import EthLib.Serialization.Proofs.Ssz.Typed.Collections
@@ -26,6 +27,7 @@ The fork of a chunk is a parameter, which the caller reads from the context byte
 - That chunk decodes at those bounds, and its payload reads back as the value.
 - The decoder reads an error payload at the bounds of the error message type.
 - An error chunk that decodes holds an error message, whatever the bytes of its payload.
+- On a chain that passes the fork digest check, the receiver reads a chunk at the sender's type.
 -/
 
 @[expose] public section
@@ -236,5 +238,39 @@ theorem deserialize_errorMessage_of_decodeResponseChunk {contextBytes : Nat} {lo
   refine ⟨⟨chunk.payload.data, hsize⟩, SszList.deserialize_uint8_eq_ok_iff.mpr ⟨?_, rfl⟩, rfl⟩
   have : 2 ^ (8 * bytesPerOffset) = 4294967296 := rfl
   omega
+
+/-- On a chain whose digests identify the forks, the receiver reads a chunk at the right type.
+
+The sender serializes a value of the type of its fork, at an epoch.
+
+It puts the fork digest of that epoch in the context bytes of the chunk.
+
+The search finds an epoch for that digest, whose fork is the sender's.
+
+At the bounds of that fork, the chunk decodes with the same context bytes and payload.
+
+The payload reads back as the value. -/
+theorem decodeResponseChunk_forkOfDigest {α : Type} [SszType α] [LawfulSszType α] {a : α}
+    {data : ByteArray} {genesisValidatorsRoot : Root} {epoch : Epoch} {digest : ForkDigest}
+    (identify : digestsIdentify config genesisValidatorsRoot = true)
+    (computed : computeForkDigest config genesisValidatorsRoot epoch = .ok digest)
+    (h : responseDesc preset config (config.forkAtEpoch epoch) id = some (SszType.desc α))
+    (wrote : SszType.serialize a = .ok data) (hcap : data.size ≤ MAX_PAYLOAD_SIZE.toNat)
+    (hlimit : ∀ limit, id.protocol.sizeLimit preset config (config.forkAtEpoch epoch) =
+      some limit → data.size ≤ limit.toNat) :
+    ∃ start lo hi, forkOfDigest config genesisValidatorsRoot digest = some start ∧
+      config.forkAtEpoch start = config.forkAtEpoch epoch ∧
+      responseBounds preset config (config.forkAtEpoch start) id = some (lo, hi) ∧
+      decodeResponseChunk 4 lo hi (encodeResponseChunk ⟨.success, ⟨digest.toArray⟩, data⟩) =
+        .ok ⟨.success, ⟨digest.toArray⟩, data⟩ ∧
+      SszType.deserialize α data = .ok a := by
+  obtain ⟨start, found⟩ := Option.isSome_iff_exists.mp (forkOfDigest_isSome computed)
+  have recovers := forkOfDigest_recovers identify computed
+  rw [found] at recovers
+  have same : config.forkAtEpoch start = config.forkAtEpoch epoch := by simpa using recovers
+  obtain ⟨lo, hi, bounds, decoded, read⟩ :=
+    decodeResponseChunk_response (contextBytes := 4) (context := ⟨digest.toArray⟩) h wrote hcap
+      hlimit (by simp [ByteArray.size])
+  exact ⟨start, lo, hi, found, same, same ▸ bounds, decoded, read⟩
 
 end EthLib.Consensus.Proofs.ReqResp.ResponseBounds

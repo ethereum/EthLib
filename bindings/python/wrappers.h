@@ -193,6 +193,7 @@ extern PyObject* VALIDATOR_DUTY_ERROR;
 extern PyObject* PROPOSER_ERROR;
 extern PyObject* SLASHING_PROTECTION_ERROR;
 extern PyObject* BINDING_ERROR;
+extern PyObject* RPC_ERROR;
 
 /* ---- Argument parsing helpers ---------------------------------------- */
 
@@ -384,9 +385,15 @@ PyObject* py_consensus_get_custody_groups                 (PyObject* self, PyObj
 PyObject* py_consensus_get_custody_column_bits            (PyObject* self, PyObject* args);
 PyObject* py_consensus_compute_columns_for_custody_group  (PyObject* self, PyObject* args);
 PyObject* py_consensus_ssz_static                         (PyObject* self, PyObject* args);
+PyObject* py_consensus_api_json                           (PyObject* self, PyObject* args);
+PyObject* py_consensus_api_ssz                            (PyObject* self, PyObject* args);
 PyObject* py_consensus_is_valid_builder_signature (PyObject* self, PyObject* args);
+PyObject* py_consensus_process_registration (PyObject* self, PyObject* args);
+PyObject* py_consensus_unblind_signed_blinded_block (PyObject* self, PyObject* args);
 PyObject* py_consensus_verify_builder_request_auth_signature (PyObject* self, PyObject* args);
 PyObject* py_consensus_builder_bid_value (PyObject* self, PyObject* args);
+PyObject* py_consensus_consensus_version (PyObject* self, PyObject* args);
+PyObject* py_consensus_consensus_version_fork (PyObject* self, PyObject* args);
 PyObject* py_consensus_merkle_proof                       (PyObject* self, PyObject* args);
 PyObject* py_consensus_upgrade_operation (PyObject* self, PyObject* args);
 PyObject* py_consensus_verify_blob_sidecar_inclusion_proof (PyObject* self, PyObject* args);
@@ -474,6 +481,9 @@ PyObject* py_consensus_light_client_gossip_light_client (PyObject* self, PyObjec
 PyObject* py_consensus_block_to_light_client_header      (PyObject* self, PyObject* args);
 PyObject* py_consensus_light_client_update_proofs        (PyObject* self, PyObject* args);
 PyObject* py_consensus_compute_fork_digest               (PyObject* self, PyObject* args);
+PyObject* py_consensus_digest_epochs (PyObject* self, PyObject* args);
+PyObject* py_consensus_fork_of_digest (PyObject* self, PyObject* args);
+PyObject* py_consensus_digests_identify (PyObject* self, PyObject* args);
 PyObject* py_consensus_get_data_column_sidecars_from_block(PyObject* self, PyObject* args);
 PyObject* py_consensus_get_data_column_sidecars_from_column_sidecar(PyObject* self, PyObject* args);
 PyObject* py_consensus_compute_shuffled_permutation      (PyObject* self, PyObject* args);
@@ -540,6 +550,9 @@ PyObject* py_uvarint_encode                               (PyObject* self, PyObj
 PyObject* py_uvarint_decode                               (PyObject* self, PyObject* args);
 PyObject* py_multistream_encode                           (PyObject* self, PyObject* args);
 PyObject* py_multistream_decode                           (PyObject* self, PyObject* args);
+PyObject* py_multistream_listen                           (PyObject* self, PyObject* args);
+PyObject* py_multistream_dial                             (PyObject* self, PyObject* args);
+PyObject* py_libp2p_upgrade                               (PyObject* self, PyObject* args);
 PyObject* py_mplex_encode                                 (PyObject* self, PyObject* args);
 PyObject* py_mplex_decode                                 (PyObject* self, PyObject* args);
 PyObject* py_yamux_encode                                 (PyObject* self, PyObject* args);
@@ -556,6 +569,8 @@ PyObject* py_rlpx_ecies_encrypt                           (PyObject* self, PyObj
 PyObject* py_rlpx_ecies_decrypt                           (PyObject* self, PyObject* args);
 PyObject* py_devp2p_decode_message                        (PyObject* self, PyObject* args);
 PyObject* py_devp2p_encode_message                        (PyObject* self, PyObject* args);
+PyObject* py_devp2p_route (PyObject* self, PyObject* args);
+PyObject* py_devp2p_session (PyObject* self, PyObject* args);
 PyObject* py_discv4_decode                                (PyObject* self, PyObject* args);
 PyObject* py_discv4_encode                                (PyObject* self, PyObject* args);
 PyObject* py_discv4_record_signed_by                      (PyObject* self, PyObject* args);
@@ -568,6 +583,7 @@ PyObject* py_eth_message_decode                           (PyObject* self, PyObj
 PyObject* py_eth_check_status                             (PyObject* self, PyObject* args);
 PyObject* py_eth_check_headers                            (PyObject* self, PyObject* args);
 PyObject* py_eth_check_pooled                             (PyObject* self, PyObject* args);
+PyObject* py_eth_session                                  (PyObject* self, PyObject* args);
 PyObject* py_eth_wire_hash                                (PyObject* self, PyObject* args);
 PyObject* py_eth_receipts_match                           (PyObject* self, PyObject* args);
 PyObject* py_eth_check_body                               (PyObject* self, PyObject* args);
@@ -626,9 +642,16 @@ PyObject* py_engine_forkchoice_updated                   (PyObject* self, PyObje
 PyObject* py_engine_get_blobs                            (PyObject* self, PyObject* args);
 PyObject* py_engine_get_payload_bodies                   (PyObject* self, PyObject* args);
 PyObject* py_engine_get_payload                          (PyObject* self, PyObject* args);
+PyObject* py_engine_rewrite_params                       (PyObject* self, PyObject* args);
 PyObject* py_engine_prepare_execution_payload            (PyObject* self, PyObject* args);
 PyObject* py_engine_prepare_execution_payload_gloas      (PyObject* self, PyObject* args);
 PyObject* py_engine_finalized_execution_block_hash       (PyObject* self, PyObject* args);
+
+/* ---- Execution JSON-RPC API (`rpc.c`) --------------------------------- */
+
+PyObject* py_rpc_read_param                              (PyObject* self, PyObject* args);
+PyObject* py_rpc_error_groups                            (PyObject* self, PyObject* args);
+PyObject* py_rpc_pruned_history_unavailable              (PyObject* self, PyObject* args);
 
 /* ---- Typed values (`pyvalue.c`) --------------------------------------- */
 

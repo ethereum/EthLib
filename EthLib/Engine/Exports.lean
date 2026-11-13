@@ -7,6 +7,7 @@ public import EthLib.Engine.Exports.GetPayload
 public import EthLib.Engine.Exports.GetProof
 public import EthLib.Engine.Exports.Jwt
 public import EthLib.Engine.Exports.NewPayload
+public import EthLib.Engine.Exports.Params
 public import EthLib.Engine.Exports.PayloadBodies
 public import EthLib.Engine.Exports.PreparePayload
 

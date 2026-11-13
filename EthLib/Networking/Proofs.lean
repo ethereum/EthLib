@@ -2,6 +2,8 @@ module
 
 public import EthLib.Networking.Proofs.Noise
 public import EthLib.Networking.Proofs.Noise.Identity
+public import EthLib.Networking.Proofs.Noise.Handshake
+public import EthLib.Networking.Proofs.Noise.Libp2pHandshake
 
 public import EthLib.Networking.Proofs.Discv5.Distance
 public import EthLib.Networking.Proofs.Discv5.Handshake
@@ -11,6 +13,7 @@ public import EthLib.Networking.Proofs.Discv5.Packet
 public import EthLib.Networking.Proofs.Discv5.Session
 public import EthLib.Networking.Proofs.Devp2p.ForkId
 public import EthLib.Networking.Proofs.Devp2p.P2p
+public import EthLib.Networking.Proofs.Devp2p.Session
 public import EthLib.Networking.Proofs.Discv4.Packet
 public import EthLib.Networking.Proofs.Encoding.Protobuf
 public import EthLib.Networking.Proofs.Encoding.Uvarint
@@ -28,6 +31,7 @@ public import EthLib.Networking.Proofs.Gossip.Topic
 public import EthLib.Networking.Proofs.Gossip.Validation
 public import EthLib.Networking.Proofs.Libp2p.Mplex
 public import EthLib.Networking.Proofs.Libp2p.Multistream
+public import EthLib.Networking.Proofs.Libp2p.Upgrade
 public import EthLib.Networking.Proofs.Libp2p.PeerId
 public import EthLib.Networking.Proofs.Libp2p.Yamux
 public import EthLib.Networking.Proofs.ReqResp.Bounds

@@ -2,11 +2,12 @@ module
 
 public import EthLib.Consensus.Containers.BuilderApi
 public import EthLib.Consensus.Proofs.Containers.Block
+public import EthLib.Consensus.Proofs.DataAvailability.Blob
 
 /-!
 # Proofs: the containers of the Builder API are lawful at every fork
 
-The bid and the blinded body have distinct field names at every fork.
+The bid, the blinded body, the blobs bundle and a payload with its bundle have distinct fields.
 
 With distinct field names, every container of the Builder API decodes back from its bytes.
 
@@ -95,5 +96,22 @@ instance : LawfulSszType (BlindedBeaconBlock preset fork) :=
 
 instance : LawfulSszType (SignedBlindedBeaconBlock preset fork) :=
   .container ⟨rfl, by simp, by decide⟩ (fun _ => rfl) (fun _ => rfl)
+
+/-- The field names of a blobs bundle are distinct. -/
+theorem BuilderBlobsBundle.names_nodup : BuilderBlobsBundle.names.Nodup := by decide
+
+/-- The field names of a payload with its blobs bundle are distinct. -/
+theorem ExecutionPayloadAndBlobsBundle.names_nodup :
+    ExecutionPayloadAndBlobsBundle.names.Nodup := by
+  decide
+
+instance : LawfulSszType (BuilderBlobsBundle preset fork) :=
+  .container ⟨rfl, by simp [BuilderBlobsBundle.names],
+    firstDuplicate_of_nodup _ BuilderBlobsBundle.names_nodup⟩ (fun _ => rfl) (fun _ => rfl)
+
+instance : LawfulSszType (ExecutionPayloadAndBlobsBundle preset fork) :=
+  .container ⟨rfl, by simp [ExecutionPayloadAndBlobsBundle.names],
+    firstDuplicate_of_nodup _ ExecutionPayloadAndBlobsBundle.names_nodup⟩
+    (fun _ => rfl) (fun _ => rfl)
 
 end EthLib.Consensus

@@ -184,7 +184,7 @@ theorem valueOfSequence_jsonOfSequence (element : Desc) (spelling : Spelling)
     (wrote : jsonOfSequence element spelling elements = .ok document) :
     valueOfSequence element spelling document = .ok elements := by
   rw [jsonOfSequence] at wrote
-  by_cases alias? : spelling.isByte = true
+  by_cases alias? : (spelling.isByte && element.isOneByte) = true
   · rw [ite_eq_left alias?] at wrote
     cases run : byteRun elements <;> simp [run, Bind.bind, Except.bind, pure, Except.pure] at wrote
     subst wrote

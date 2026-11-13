@@ -69,6 +69,15 @@ theorem size_memoryReadBytes {memory : ByteArray} {start size : Nat}
   · simp only [ByteArray.size_extract]
     omega
 
+/-- A range read from memory has at most the size it asks for. -/
+theorem size_memoryReadBytes_le (memory : ByteArray) (start size : Nat) :
+    (memoryReadBytes memory start size).size ≤ size := by
+  unfold memoryReadBytes
+  split
+  · simp
+  · simp only [ByteArray.size_extract]
+    omega
+
 /-- A read of the range that a write covers gives the written bytes. -/
 theorem memoryReadBytes_memoryWrite {memory value : ByteArray} {start : Nat}
     (h : start + value.size ≤ memory.size) :

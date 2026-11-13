@@ -3,6 +3,7 @@
 import hashlib
 import json
 import struct
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -11,22 +12,21 @@ from py_ecc.bls import G2ProofOfPossession
 
 from ethlib import consensus
 from ethlib.errors import SszError
+from ethlib.networking import snappy
 from raising import raises
 
 ERROR = SszError
 # The examples of the builder specification, pinned in tests/sources.toml.
 EXAMPLES = Path(__file__).resolve().parents[4] / "tests/consensus/builder_api"
-# Each fork of the examples, with its name in Lean.
-FORKS = {
-    "bellatrix": "bellatrix",
-    "capella": "shapella",
-    "deneb": "dencun",
-    "electra": "pectra",
-    "fulu": "fusaka",
-}
+# The forks of the examples, by their consensus version names.
+VERSIONS = ["bellatrix", "capella", "deneb", "electra", "fulu"]
 # The offset of the value in a bid: 4 bytes per variable-size field before it.
 VALUE_AT = {"bellatrix": 4, "capella": 4, "deneb": 8, "electra": 12, "fulu": 12}
 ZERO = bytes(32)
+# The bytes of a blob, its field elements, and the bound on the blobs of a bundle, in mainnet.
+BLOB_SIZE = 131_072
+FIELD_ELEMENTS_PER_BLOB = 4096
+MAX_BLOBS = 4096
 SECRET_KEY = 42
 PUBKEY = G2ProofOfPossession.SkToPk(SECRET_KEY)
 
@@ -100,7 +100,7 @@ def _sign(message_root: bytes, domain: bytes) -> bytes:
     return G2ProofOfPossession.Sign(SECRET_KEY, _sha(message_root + domain))
 
 
-@pytest.mark.parametrize("source", FORKS)
+@pytest.mark.parametrize("source", VERSIONS)
 @pytest.mark.parametrize(
     ("example", "name", "message"),
     [
@@ -110,25 +110,27 @@ def _sign(message_root: bytes, domain: bytes) -> bytes:
     ids=["bid", "blinded block"],
 )
 def test_example(source: str, example: str, name: str, message: str):
+    fork = consensus.consensus_version_fork(source)
     data = _example(source, example)
-    root, again = consensus.ssz_static("mainnet", FORKS[source], name, data)
+    root, again = consensus.ssz_static("mainnet", fork, name, data)
     assert again == data
     body, signature = _split(data)
-    assert root == _sha(_message_root(message, FORKS[source], body) + _signature_root(signature))
+    assert root == _sha(_message_root(message, fork, body) + _signature_root(signature))
 
 
 @pytest.mark.parametrize("source", ["bellatrix", "capella"])
 def test_bid_root(source: str):
     # Before Deneb a bid has three fields: the header, the value and the key.
     message, _ = _split(_example(source, "signed_builder_bid"))
+    fork = consensus.consensus_version_fork(source)
     (offset,) = struct.unpack_from("<I", message, 0)
-    header = _message_root("ExecutionPayloadHeader", FORKS[source], message[offset:])
+    header = _message_root("ExecutionPayloadHeader", fork, message[offset:])
     value, pubkey = message[4:36], message[36:84]
     expected = _merkleize([header, value, _pubkey_root(pubkey)])
-    assert _message_root("BuilderBid", FORKS[source], message) == expected
+    assert _message_root("BuilderBid", fork, message) == expected
 
 
-@pytest.mark.parametrize("source", FORKS)
+@pytest.mark.parametrize("source", VERSIONS)
 def test_bid_fields(source: str):
     # The fixture bytes agree with the JSON form, so the offsets of the helpers are right.
     message, _ = _split(_example(source, "signed_builder_bid"))
@@ -138,7 +140,7 @@ def test_bid_fields(source: str):
     assert "0x" + message[at + 32 : at + 80].hex() == expected["pubkey"]
 
 
-@pytest.mark.parametrize("source", FORKS)
+@pytest.mark.parametrize("source", VERSIONS)
 def test_blinded_block_fields(source: str):
     # The fixture bytes agree with the JSON form; the root test reads the same bytes in Lean.
     message, _ = _split(_example(source, "signed_blinded_beacon_block"))
@@ -178,8 +180,9 @@ def _registration(gas_limit: int = 36_000_000, version: bytes | None = None) -> 
     return message + _sign(_registration_root(message), _builder_domain(version))
 
 
-@pytest.mark.parametrize("fork", FORKS.values())
-def test_registration_signature(fork: str):
+@pytest.mark.parametrize("source", VERSIONS)
+def test_registration_signature(source: str):
+    fork = consensus.consensus_version_fork(source)
     # The domain reads only the genesis fork version, so one signature holds at every fork.
     assert consensus.is_valid_builder_signature(
         "mainnet", fork, "SignedValidatorRegistrationV1", _registration()
@@ -228,23 +231,23 @@ def _bid(source: str, pubkey: bytes = PUBKEY) -> bytes:
     message, _ = _split(_example(source, "signed_builder_bid"))
     at = VALUE_AT[source] + 32
     message = message[:at] + pubkey + message[at + 48 :]
-    root = _message_root("BuilderBid", FORKS[source], message)
+    root = _message_root("BuilderBid", consensus.consensus_version_fork(source), message)
     return struct.pack("<I", 4 + 96) + _sign(root, _builder_domain()) + message
 
 
-@pytest.mark.parametrize("source", FORKS)
+@pytest.mark.parametrize("source", VERSIONS)
 def test_bid_signature(source: str):
     assert consensus.is_valid_builder_signature(
-        "mainnet", FORKS[source], "SignedBuilderBid", _bid(source)
+        "mainnet", consensus.consensus_version_fork(source), "SignedBuilderBid", _bid(source)
     )
 
 
-@pytest.mark.parametrize("source", FORKS)
+@pytest.mark.parametrize("source", VERSIONS)
 def test_bid_signature_of_another_builder(source: str):
     # The message names another key than the one that signed it.
     other = G2ProofOfPossession.SkToPk(SECRET_KEY + 1)
     assert not consensus.is_valid_builder_signature(
-        "mainnet", FORKS[source], "SignedBuilderBid", _bid(source, other)
+        "mainnet", consensus.consensus_version_fork(source), "SignedBuilderBid", _bid(source, other)
     )
 
 
@@ -261,6 +264,209 @@ def test_no_builder_api_messages_outside_bellatrix_to_fulu(fork: str):
 def test_no_container_at_gloas(name: str):
     with raises(ERROR, f"no container {name} at glamsterdam") as info:
         consensus.ssz_static("mainnet", "glamsterdam", name, b"")
+    assert info.value.code == 0
+
+
+def _list_root(roots: list[bytes], limit: int) -> bytes:
+    """The root of a list: its element roots in a tree of `limit` leaves, then its length."""
+    zero = ZERO
+    level = roots
+    width = 1
+    while width < limit:
+        if len(level) % 2:
+            level = [*level, zero]
+        level = [_sha(level[i] + level[i + 1]) for i in range(0, len(level), 2)]
+        zero = _sha(zero + zero)
+        width *= 2
+    node = level[0] if level else zero
+    return _sha(node + len(roots).to_bytes(32, "little"))
+
+
+def _items(data: bytes, start: int, end: int, size: int) -> list[bytes]:
+    """The fixed-size items of a list held between two offsets."""
+    assert (end - start) % size == 0
+    return [data[i : i + size] for i in range(start, end, size)]
+
+
+def _bundle_root(bundle: bytes, proofs_limit: int) -> bytes:
+    """The root of a blobs bundle, computed field by field in Python."""
+    first, second, third = struct.unpack_from("<III", bundle, 0)
+    commitments = _items(bundle, first, second, 48)
+    proofs = _items(bundle, second, third, 48)
+    blobs = _items(bundle, third, len(bundle), BLOB_SIZE)
+    # A commitment and a proof are 48-byte vectors, so their roots are those of a public key.
+    blob_roots = [_merkleize([blob[i : i + 32] for i in range(0, BLOB_SIZE, 32)]) for blob in blobs]
+    return _merkleize(
+        [
+            _list_root([_pubkey_root(c) for c in commitments], MAX_BLOBS),
+            _list_root([_pubkey_root(p) for p in proofs], proofs_limit),
+            _list_root(blob_roots, MAX_BLOBS),
+        ]
+    )
+
+
+@pytest.mark.parametrize("source", ["bellatrix", "capella"])
+def test_execution_payload_example(source: str):
+    # Before Deneb a builder reveals the payload alone; the example round-trips through Lean.
+    fork = consensus.consensus_version_fork(source)
+    data = _example(source, "execution_payload")
+    _, again = consensus.ssz_static("mainnet", fork, "ExecutionPayload", data)
+    assert again == data
+    envelope = _example_json(source, "execution_payload")
+    assert envelope["version"] == source
+    expected = envelope["data"]
+    # The block hash follows 472 bytes of fixed fields and offsets.
+    assert "0x" + data[472:504].hex() == expected["block_hash"]
+
+
+@pytest.mark.parametrize(
+    ("source", "proofs_limit", "size"),
+    [
+        ("deneb", MAX_BLOBS, 131_919),
+        ("electra", MAX_BLOBS, 131_919),
+        # From Fulu the bound is the field elements of every extended blob.
+        ("fulu", 2 * FIELD_ELEMENTS_PER_BLOB * MAX_BLOBS, 138_015),
+    ],
+)
+def test_revealed_payload_and_blobs_bundle(source: str, proofs_limit: int, size: int):
+    fork = consensus.consensus_version_fork(source)
+    data = _example(source, "execution_payload_and_blobs_bundle")
+    assert len(data) == size
+    root, again = consensus.ssz_static("mainnet", fork, "ExecutionPayloadAndBlobsBundle", data)
+    assert again == data
+    payload_at, bundle_at = struct.unpack_from("<II", data, 0)
+    payload, bundle = data[payload_at:bundle_at], data[bundle_at:]
+    bundle_root, again = consensus.ssz_static("mainnet", fork, "BlobsBundle", bundle)
+    assert again == bundle
+    assert bundle_root == _bundle_root(bundle, proofs_limit)
+    payload_root = _message_root("ExecutionPayload", fork, payload)
+    assert root == _sha(payload_root + bundle_root)
+    envelope = _example_json(source, "execution_payload_and_blobs_bundle")
+    assert envelope["version"] == source
+    expected = envelope["data"]["blobs_bundle"]
+    first, second, third = struct.unpack_from("<III", bundle, 0)
+    assert ["0x" + c.hex() for c in _items(bundle, first, second, 48)] == expected["commitments"]
+    assert ["0x" + p.hex() for p in _items(bundle, second, third, 48)] == expected["proofs"]
+    assert len(_items(bundle, third, len(bundle), BLOB_SIZE)) == len(expected["blobs"])
+
+
+def _bundle_of_proofs(count: int) -> bytes:
+    """A bundle with no commitment, no blob, and `count` zero proofs."""
+    proofs = 48 * count
+    return struct.pack("<III", 12, 12, 12 + proofs) + bytes(proofs)
+
+
+def test_blobs_bundle_proofs_over_bound():
+    # Before Fulu a bundle holds at most one proof per possible blob.
+    message = f"input rejected: EthLib.Serialization.Ssz.Err.overLimit {MAX_BLOBS} {MAX_BLOBS + 1}"
+    with raises(ERROR, message):
+        consensus.ssz_static("mainnet", "dencun", "BlobsBundle", _bundle_of_proofs(MAX_BLOBS + 1))
+
+
+def test_blobs_bundle_proofs_under_fulu_bound():
+    # From Fulu the same bundle decodes, under the larger bound of the source.
+    bundle = _bundle_of_proofs(MAX_BLOBS + 1)
+    root, again = consensus.ssz_static("mainnet", "fusaka", "BlobsBundle", bundle)
+    assert again == bundle
+    assert root == _bundle_root(bundle, 2 * FIELD_ELEMENTS_PER_BLOB * MAX_BLOBS)
+
+
+@pytest.mark.parametrize("fork", ["bellatrix", "shapella", "glamsterdam"])
+@pytest.mark.parametrize("name", ["BlobsBundle", "ExecutionPayloadAndBlobsBundle"])
+def test_no_blobs_bundle_outside_deneb_to_fulu(fork: str, name: str):
+    with raises(ERROR, f"no container {name} at {fork}") as info:
+        consensus.ssz_static("mainnet", fork, name, b"")
+    assert info.value.code == 0
+
+
+# The example of the payload that a builder reveals, by fork.
+REVEALED = {
+    "bellatrix": "execution_payload",
+    "capella": "execution_payload",
+    "deneb": "execution_payload_and_blobs_bundle",
+    "electra": "execution_payload_and_blobs_bundle",
+    "fulu": "execution_payload_and_blobs_bundle",
+}
+# The generalized index of the transactions root of a payload: 16 leaves before Deneb, 32 from it.
+TRANSACTIONS_AT = {"bellatrix": 29, "capella": 29, "deneb": 45, "electra": 45, "fulu": 45}
+# The header of a payload holds the transactions root after 504 bytes.
+# From Capella the withdrawals root follows it.
+HEADER_TRANSACTIONS_AT = 504
+
+
+def _payload(source: str) -> bytes:
+    """The payload alone of the example that a builder reveals at a fork."""
+    data = _example(source, REVEALED[source])
+    if source in ("bellatrix", "capella"):
+        return data
+    payload_at, bundle_at = struct.unpack_from("<II", data, 0)
+    return data[payload_at:bundle_at]
+
+
+def _header_at(signed: bytes) -> int:
+    """Where the header of the payload starts in a signed blinded block."""
+    (message_at,) = struct.unpack_from("<I", signed, 0)
+    (body_at,) = struct.unpack_from("<I", signed, message_at + 80)
+    # Before the header: the reveal, the eth1 vote, the graffiti, five offsets, the sync aggregate.
+    (header_at,) = struct.unpack_from("<I", signed, message_at + body_at + 96 + 72 + 32 + 20 + 160)
+    return message_at + body_at + header_at
+
+
+def _matching_blinded(source: str) -> bytes:
+    """The example blinded block, with the payload's transactions and withdrawals roots."""
+    fork = consensus.consensus_version_fork(source)
+    payload = _payload(source)
+    signed = bytearray(_example(source, "signed_blinded_beacon_block"))
+    at = _header_at(bytes(signed)) + HEADER_TRANSACTIONS_AT
+    for offset in range(2 if source != "bellatrix" else 1):
+        gindex = TRANSACTIONS_AT[source] + offset
+        node, _ = consensus.merkle_proof("mainnet", fork, "ExecutionPayload", payload, gindex)
+        signed[at + 32 * offset : at + 32 * offset + 32] = node
+    return bytes(signed)
+
+
+@pytest.mark.parametrize("source", VERSIONS)
+def test_unblind(source: str):
+    # A blinded block whose header is that of the payload unblinds to a block of the same root.
+    fork = consensus.consensus_version_fork(source)
+    blinded = _matching_blinded(source)
+    blinded_root, _ = consensus.ssz_static("mainnet", fork, "SignedBlindedBeaconBlock", blinded)
+    revealed = _example(source, REVEALED[source])
+    result = consensus.unblind_signed_blinded_block("mainnet", fork, blinded, revealed)
+    assert result is not None
+    root, full = result
+    assert consensus.ssz_static("mainnet", fork, "SignedBeaconBlock", full) == (root, full)
+    # The block has the root of the blinded block, keeps its signature and holds the payload.
+    assert root == blinded_root
+    assert full[4:100] == blinded[4:100]
+    assert _payload(source) in full
+
+
+@pytest.mark.parametrize("source", VERSIONS)
+def test_unblind_example_pair(source: str):
+    # The pinned blinded block carries placeholder roots, so its header is not that of the payload.
+    fork = consensus.consensus_version_fork(source)
+    blinded = _example(source, "signed_blinded_beacon_block")
+    revealed = _example(source, REVEALED[source])
+    assert consensus.unblind_signed_blinded_block("mainnet", fork, blinded, revealed) is None
+
+
+def test_unblind_changed_payload():
+    # One bit of the block hash changes the header, so the payload no longer matches.
+    blinded = _matching_blinded("deneb")
+    revealed = bytearray(_example("deneb", REVEALED["deneb"]))
+    (payload_at,) = struct.unpack_from("<I", revealed, 0)
+    revealed[payload_at + 472] ^= 1
+    assert (
+        consensus.unblind_signed_blinded_block("mainnet", "dencun", blinded, bytes(revealed))
+        is None
+    )
+
+
+@pytest.mark.parametrize("fork", ["altair", "glamsterdam"])
+def test_no_unblinding_outside_bellatrix_to_fulu(fork: str):
+    with raises(ERROR, f"no Builder API messages at {fork}") as info:
+        consensus.unblind_signed_blinded_block("mainnet", fork, b"", b"")
     assert info.value.code == 0
 
 
@@ -444,3 +650,99 @@ def test_builder_bid_value_out_of_range(value: int, position: int):
     with raises(consensus.ConsensusError, f"expected an int below {2**64}, got {value}") as info:
         consensus.builder_bid_value(*amounts)
     assert info.value.code == 0
+
+
+# A minimal Bellatrix state of the consensus tests, whose validator i has the secret key i + 1.
+STATE = (
+    Path(__file__).resolve().parents[4]
+    / "tests/consensus/light_client/minimal/bellatrix/light_client/single_merkle_proof"
+    / "BeaconState/current_sync_committee_merkle_proof/object.ssz_snappy"
+)
+# The validator of the registrations below, and its secret key.
+INDEX = 3
+# A registration message: fee recipient, gas limit, timestamp and key.
+MESSAGE_SIZE = 20 + 8 + 8 + 48
+REGISTRANT_KEY = INDEX + 1
+# The activation epoch follows the key, credentials, balance, slashed flag and eligibility.
+ACTIVATION_AFTER_KEY = 48 + 32 + 8 + 1 + 8
+FAR_FUTURE = 2**64 - 1
+
+
+def _state() -> bytes:
+    """The pinned state, which every registration below reads."""
+    return snappy.decompress(STATE.read_bytes())
+
+
+def _with_epochs(state: bytes, activation: int, exit_epoch: int) -> bytes:
+    """The state with new activation and exit epochs for the registering validator."""
+    at = state.index(G2ProofOfPossession.SkToPk(REGISTRANT_KEY)) + ACTIVATION_AFTER_KEY
+    return state[:at] + struct.pack("<QQ", activation, exit_epoch) + state[at + 16 :]
+
+
+def _signed_registration(timestamp: int, key: int = REGISTRANT_KEY) -> bytes:
+    """A registration of a key at a time, signed by that key under the Builder API domain."""
+    pubkey = G2ProofOfPossession.SkToPk(key)
+    message = bytes(20) + struct.pack("<QQ", 30_000_000, timestamp) + pubkey
+    # The minimal configuration has its own genesis fork version, which enters the domain.
+    version = bytes.fromhex(consensus.config("minimal")["GENESIS_FORK_VERSION"][2:])
+    root = _sha(_registration_root(message) + _builder_domain(version))
+    return message + G2ProofOfPossession.Sign(key, root)
+
+
+def _register(
+    signed: bytes, now: int, state: bytes | None = None, kept: Sequence[bytes] = ()
+) -> str | None:
+    """The rule that refuses a registration on the pinned state, or None when it is kept."""
+    state = _state() if state is None else state
+    return consensus.process_registration("minimal", "bellatrix", state, list(kept), signed, now)
+
+
+@pytest.mark.parametrize(
+    ("now", "expected"),
+    [(89, "too_far_in_future"), (90, None), (100, None)],
+    ids=["eleven seconds ahead", "ten seconds ahead", "on time"],
+)
+def test_registration_lookahead(now: int, expected: str | None):
+    # A registration may be at most ten seconds ahead of the builder's clock.
+    assert _register(_signed_registration(100), now) == expected
+
+
+def test_registration_older_than_kept():
+    kept = _signed_registration(101)[:MESSAGE_SIZE]
+    assert _register(_signed_registration(100), 100, kept=[kept]) == "older_than_previous"
+    assert _register(_signed_registration(101), 100, kept=[kept]) is None
+
+
+def test_registration_of_unknown_key():
+    assert _register(_signed_registration(100, key=10**6), 100) == "unknown_validator"
+
+
+def test_registration_of_exited_validator():
+    state = _with_epochs(_state(), 0, 0)
+    assert _register(_signed_registration(100), 100, state) == "not_eligible"
+
+
+def test_registration_of_pending_validator():
+    # A validator whose activation is still ahead may register.
+    state = _with_epochs(_state(), FAR_FUTURE, FAR_FUTURE)
+    assert _register(_signed_registration(100), 100, state) is None
+
+
+def test_registration_with_another_signature():
+    signed = _signed_registration(100)
+    other = _signed_registration(101)
+    assert _register(signed[:MESSAGE_SIZE] + other[MESSAGE_SIZE:], 100) == "bad_signature"
+
+
+def test_registration_clock_overflow():
+    # The source adds the lookahead to the clock as a 64-bit integer, which fails at the end.
+    assert _register(_signed_registration(100), 2**64 - 10) == "clock_overflow"
+    assert _register(_signed_registration(100), 2**64 - 11) is None
+
+
+def test_registration_rules_in_order():
+    # The first rule that fails names the refusal.
+    signed = _signed_registration(150, key=10**6)
+    assert _register(signed[:MESSAGE_SIZE] + bytes(96), 100) == "unknown_validator"
+    state = _with_epochs(_state(), 0, 0)
+    assert _register(_signed_registration(150), 100, state) == "not_eligible"
