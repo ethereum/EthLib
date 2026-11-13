@@ -139,7 +139,9 @@ private theorem noNewCandidate_foldlM_applyAuthorization {block : BlockState} {c
     exact noNewCandidate_foldlM_applyAuthorization h
       (noNewCandidate_applyAuthorization hinv hnext)
 
-/-- The authorizations of a transaction make no new deployment candidate. -/
+/-- The authorizations of a transaction, from a state with no new candidate, end with none.
+
+A new candidate is still allowed at an address whose storage was wiped. -/
 theorem applyAuthorizations_noNewCandidate {block : BlockState} {chainId : Nat}
     {state : TransactionState} {accessed : Std.ExtTreeSet Address} {meter : Meter}
     {paid : Std.ExtTreeSet Address} {auths : List Authorization} {done : Delegations Meter}
@@ -199,7 +201,9 @@ theorem noNewCandidate_prepareFirstFrame {block : BlockState} {chainId : Nat}
           cases h
           exact v2.recordAccountRead _
 
-/-- The message of a transaction makes no new deployment candidate. -/
+/-- The message of a transaction, from a state with no new candidate, ends with none.
+
+A new candidate is still allowed at an address whose storage was wiped. -/
 theorem processMessageCall_noNewCandidate [LawfulGasMeter Meter] {block : BlockState}
     {chainId : Nat} {message : Message fork} {state : TransactionState} {substate : Substate}
     {auths : List Authorization} {paid : Std.ExtTreeSet Address} {output : CallOutput}

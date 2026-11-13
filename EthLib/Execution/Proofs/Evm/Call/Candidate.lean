@@ -180,7 +180,8 @@ private theorem KeepsCandidates.touchAccount (tx : TransactionState) (address : 
       exact ⟨hn, hc⟩
 
 /-- Under the condition on candidates, a state that keeps them meets it too. -/
-theorem NoNewCandidate.of_keepsCandidates {block : BlockState}
+theorem _root_.EthLib.Execution.State.TransactionState.NoNewCandidate.of_keepsCandidates
+    {block : BlockState}
     {tx tx' : TransactionState} (hinv : NoNewCandidate block tx) (hk : KeepsCandidates tx tx') :
     NoNewCandidate block tx' := fun x hn hc =>
   (hk.2.2 x hn hc).elim .inl fun ⟨hn', hc'⟩ => (hinv x hn' hc').imp_left (hk.2.1 x)
@@ -260,12 +261,12 @@ def CandidateStep (a b : Evm fork Meter) : Prop :=
 
 omit [GasMeter Meter] in
 /-- A frame keeps its own candidates, message and code. -/
-private theorem CandidateStep.refl (evm : Evm fork Meter) : CandidateStep evm evm :=
+theorem CandidateStep.refl (evm : Evm fork Meter) : CandidateStep evm evm :=
   ⟨.refl _, rfl, rfl⟩
 
 omit [GasMeter Meter] in
 /-- Two steps that each keep the candidates, message and code keep them together. -/
-private theorem CandidateStep.trans {a b c : Evm fork Meter} (hab : CandidateStep a b)
+theorem CandidateStep.trans {a b c : Evm fork Meter} (hab : CandidateStep a b)
     (hbc : CandidateStep b c) : CandidateStep a c :=
   ⟨hab.1.trans hbc.1, hbc.2.1.trans hab.2.1, hbc.2.2.trans hab.2.2⟩
 
@@ -860,7 +861,7 @@ theorem processMessage_noNewCandidate [LawfulGasMeter Meter] {block : BlockState
     (hinv : NoNewCandidate block state)
     (h : processMessage fork message state substate meter held = .ok ended) :
     NoNewCandidate block ended.val.state :=
-  NoNewCandidate.of_keepsCandidates hinv (keepsCandidates_processMessage h)
+  hinv.of_keepsCandidates (keepsCandidates_processMessage h)
 
 /-- A creation that returns a frame, from a state with no new candidate, ends with none.
 
@@ -872,6 +873,6 @@ theorem processCreateMessage_noNewCandidate [LawfulGasMeter Meter] {block : Bloc
     (hinv : NoNewCandidate block state)
     (h : processCreateMessage fork message state substate meter held = .ok ended) :
     NoNewCandidate block ended.val.state :=
-  NoNewCandidate.of_keepsCandidates hinv (keepsCandidates_processCreateMessage h)
+  hinv.of_keepsCandidates (keepsCandidates_processCreateMessage h)
 
 end EthLib.Execution.Evm
