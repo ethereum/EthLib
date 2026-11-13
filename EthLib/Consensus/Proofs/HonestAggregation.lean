@@ -281,15 +281,15 @@ theorem fastAggregateVerify_getAggregateSignature
       Signatures.sign key message = .ok attestation.signature) attestations keys)
     (nonempty : keys ≠ []) (sum : (keys.map (·.val)).sum ≠ 0) :
     ∃ signature, getAggregateSignature attestations = .ok signature ∧
-      Signatures.fastAggregateVerify (keys.map Signatures.pkBytes).toArray message
-        (Signatures.sigBytes signature) = true := by
+      Signatures.fastAggregateVerify (keys.map Signatures.skToPk).toArray message
+        signature = true := by
   obtain ⟨signatures, signs, signature, aggregated, verifies⟩ :=
     Signatures.fastAggregateVerify_aggregate keys nonempty sum message
   -- Signing is a function, so the signatures of the keys are those of the attestations.
   rw [mapM_sign_eq_of_forall₂ signed, Except.ok.injEq] at signs
   subst signs
   refine ⟨signature, ?_, verifies⟩
-  simpa [getAggregateSignature, List.map_map, Function.comp_def, Base.packBytes] using aggregated
+  simpa [getAggregateSignature, List.map_map, Function.comp_def] using aggregated
 
 /-! ## Attesters -/
 
@@ -623,7 +623,7 @@ theorem constructAggregateOfSingleAttestations_spec {state : BeaconState preset 
           index.val.toUInt64 == committeeIndex⟩) ∧
       Signatures.aggregate ((singles.filter (fun single =>
           single.data = data ∧ single.committeeIndex = committeeIndex)).map
-            fun single => Base.packBytes single.signature).toArray =
+            (·.signature)).toArray =
         .ok aggregate.signature := by
   unfold constructAggregateOfSingleAttestations at built
   split at built

@@ -13,6 +13,8 @@ C-ABI exports for the BLS spec functions, callable from the Python C extension.
 
 Inputs are `ByteArray` or `Array ByteArray`, and a boolean comes back as `UInt8`.
 
+A public key or a signature is read here into its fixed-size type, before the operation runs.
+
 An operation returns its value, or the code and the message of its error.
 -/
 
@@ -21,6 +23,7 @@ public section
 namespace EthLib.Cryptography.Bls.Exports
 
 open EthLib.Exports (Result)
+open EthLib.Base (packBytes)
 
 open EthLib.Cryptography.Bls.Constants
 open EthLib.Cryptography.Bls
@@ -44,27 +47,67 @@ def constBytesPerPubkey (_ : Unit) : UInt64 :=
 def constBytesPerSignature (_ : Unit) : UInt64 :=
   UInt64.ofNat BYTES_PER_SIGNATURE
 
+/-! ## Reading keys and signatures -/
+
+/-- A Lean `Bool` as the `UInt8` that the C extension reads. -/
+def ofBool (b : Bool) : UInt8 := if b then 1 else 0
+
+/-- Bytes of an exact size, as a vector of that size. -/
+def exactBytes? (n : Nat) (bytes : ByteArray) : Option (Vector UInt8 n) :=
+  if h : bytes.size = n then some ⟨bytes.data, h⟩ else none
+
+/-- A public key of 48 bytes.
+
+It fails with the size of any other input. -/
+def readPubkey (bytes : ByteArray) : Except BlsError BLSPubkey :=
+  match exactBytes? 48 bytes with
+  | some pk => .ok pk
+  | none => .error (.badPubkeySize bytes.size)
+
+/-- A signature of 96 bytes.
+
+It fails on any other size, as the decoding of a `G2` point does. -/
+def readSignature (bytes : ByteArray) : Except BlsError BLSSignature :=
+  match exactBytes? 96 bytes with
+  | some sig => .ok sig
+  | none => .error .invalidG2Point
+
+/-- A check of public keys and a signature.
+
+It runs only when each key has 48 bytes and the signature 96.
+
+It is `0` on an input of another size, as no key or signature of that size verifies. -/
+def checkSized (pks : Array ByteArray) (sig : ByteArray)
+    (check : Array BLSPubkey → BLSSignature → Bool) : UInt8 :=
+  match pks.mapM (exactBytes? 48), exactBytes? 96 sig with
+  | some pks, some sig => ofBool (check pks sig)
+  | _, _ => 0
+
 /-! ## Operations -/
 
+/-- The aggregate of public keys, as 48 bytes.
+
+It reads every key before it sums any.
+
+So a key of the wrong size is reported before an earlier key that fails validation. -/
 @[export eth_bls_aggregate_pubkeys]
 def ethAggregatePubkeysExport
-    (pubkeys : Array ByteArray) : Result ByteArray :=
-  runBls (ethAggregatePubkeys pubkeys)
+    (pubkeys : Array ByteArray) : Result ByteArray := do
+  let pubkeys ← runBls (pubkeys.mapM readPubkey)
+  let pk ← runBls (ethAggregatePubkeys pubkeys)
+  return packBytes pk
 
 @[export eth_bls_fast_aggregate_verify]
 def ethFastAggregateVerifyExport
     (pubkeys : Array ByteArray) (msg : ByteArray) (sig : ByteArray)
     : Result UInt8 := do
-  return if ethFastAggregateVerify pubkeys msg sig then 1 else 0
+  return checkSized pubkeys sig (ethFastAggregateVerify · msg ·)
 
 /-! ## Draft operations
 
 Secret keys arrive as 32 big-endian bytes.
 
 EthLib makes no constant-time claim, so these exports can leak a secret key through timing. -/
-
-/-- A Lean `Bool` as the `UInt8` that the C extension reads. -/
-def ofBool (b : Bool) : UInt8 := if b then 1 else 0
 
 /-- A secret key from input keying material and key information, as 32 big-endian bytes. -/
 @[export eth_bls_key_gen]
@@ -80,21 +123,24 @@ def signExport (sk msg : ByteArray) : Result ByteArray := do
 
 @[export eth_bls_verify]
 def verifyExport (pk msg sig : ByteArray) : Result UInt8 :=
-  return ofBool (verify pk msg sig)
+  return match exactBytes? 48 pk, exactBytes? 96 sig with
+    | some pk, some sig => ofBool (verify pk msg sig)
+    | _, _ => 0
 
 @[export eth_bls_aggregate]
 def aggregateExport (sigs : Array ByteArray) : Result ByteArray := do
+  let sigs ← runBls (sigs.mapM readSignature)
   let sig ← runBls (aggregate sigs)
   return ⟨sig.toArray⟩
 
 @[export eth_bls_aggregate_verify]
 def aggregateVerifyExport (pks msgs : Array ByteArray) (sig : ByteArray) : Result UInt8 :=
-  return ofBool (aggregateVerify pks msgs sig)
+  return checkSized pks sig (aggregateVerify · msgs ·)
 
 /-- The draft's `FastAggregateVerify`, without the Ethereum rule for an empty key list. -/
 @[export eth_bls_fast_aggregate_verify_core]
 def fastAggregateVerifyExport (pks : Array ByteArray) (msg sig : ByteArray) : Result UInt8 :=
-  return ofBool (fastAggregateVerify pks msg sig)
+  return checkSized pks sig (fastAggregateVerify · msg ·)
 
 @[export eth_bls_pop_prove]
 def popProveExport (sk : ByteArray) : Result ByteArray := do
@@ -104,7 +150,9 @@ def popProveExport (sk : ByteArray) : Result ByteArray := do
 
 @[export eth_bls_pop_verify]
 def popVerifyExport (pk proof : ByteArray) : Result UInt8 :=
-  return ofBool (popVerify pk proof)
+  return match exactBytes? 48 pk, exactBytes? 96 proof with
+    | some pk, some proof => ofBool (popVerify pk proof)
+    | _, _ => 0
 
 /-! ## Point decoding
 
