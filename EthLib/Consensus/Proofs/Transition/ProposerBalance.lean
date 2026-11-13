@@ -75,16 +75,6 @@ private theorem BalanceStays.of_balances {index : Nat} (same : after.balances = 
     BalanceStays index state after :=
   fun _ found => by rw [same]; exact found
 
-/-- An exit keeps the balances. -/
-private theorem balances_initiateValidatorExit {position : ValidatorIndex}
-    (computed : initiateValidatorExit config state position = .ok after) :
-    after.balances = state.balances := by
-  obtain ⟨_, _, ⟨_, rfl⟩ | ⟨_, _, _, _, queue, _, set⟩⟩ := initiateValidatorExit_ok computed
-  · rfl
-  · obtain ⟨_, _, rfl⟩ := exitQueue_eq queue
-    obtain ⟨_, rfl⟩ := setValidator_ok set
-    rfl
-
 /-! ## The later operations -/
 
 /-- A deposit of a block to another key keeps the balance at the position of a validator.
