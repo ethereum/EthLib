@@ -75,6 +75,10 @@ The attributes at that fork keep every field.
 
 A fork that the version does not take, or no fork at all, gives `-38005`.
 
+A version takes the forks from Paris to Glamsterdam whose attribute structure it decodes.
+
+No version takes another fork.
+
 A structure that is not that of the fork, or a timestamp not above the head's, gives `-38003`.
 
 The decoders read back the state, the attributes and the parameters that the writers write.
@@ -876,18 +880,44 @@ theorem checkAttributes_eq_error_of_unsupportedFork {version : Nat} {head : Know
   | some fork =>
     simp [checkAttributes, hF, h fork hF, bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
 
+/-- A version takes exactly the forks from Paris to Glamsterdam whose attributes it decodes.
+
+The structure is that of the payload attributes at the fork.
+
+The source adds a field at Hegotá that these attributes lack, so the bound leaves Hegotá out. -/
+theorem attributesTakeFork_eq_true_iff (version : Nat) (fork : Fork) :
+    attributesTakeFork version fork = true ↔
+      .paris ≤ fork ∧ fork < .hegota ∧
+        attributesForkAt fork ∈ (attributesVersions version).map attributesFork := by
+  match version with
+  | 0 | 1 | 2 | 3 => cases fork <;> decide
+  | n + 4 => cases fork <;> simp [attributesTakeFork, attributesVersions, attributesFork] <;> decide
+
+/-- Some version of the method takes a fork exactly when the fork is from Paris to Glamsterdam. -/
+theorem exists_attributesTakeFork_iff (fork : Fork) :
+    (∃ version, attributesTakeFork version fork = true) ↔ .paris ≤ fork ∧ fork < .hegota := by
+  constructor
+  · rintro ⟨version, h⟩
+    obtain ⟨hLow, hHigh, -⟩ := (attributesTakeFork_eq_true_iff version fork).mp h
+    exact ⟨hLow, hHigh⟩
+  · intro ⟨hLow, hHigh⟩
+    cases fork <;> first
+      | exact absurd hLow (by decide)
+      | exact absurd hHigh (by decide)
+      | exact ⟨1, rfl⟩
+      | exact ⟨2, rfl⟩
+      | exact ⟨3, rfl⟩
+      | exact ⟨4, rfl⟩
+
 /-- A version other than 2 takes only forks whose structure is the one structure that it takes.
 
 So only version 2 can give `-38003` for the structure at the fork. -/
 theorem attributesForkAt_of_attributesTakeFork {version : Nat} (hv : version ≠ 2) {fork : Fork}
     (h : attributesTakeFork version fork = true) :
     attributesForkAt fork = attributesFork version := by
-  match version with
-  | 0 | 1 | 3 => revert h; cases fork <;> decide
-  | 2 => exact absurd rfl hv
-  | n + 4 =>
-    revert h
-    cases fork <;> simp [attributesTakeFork, attributesForkAt, attributesFork] <;> decide
+  have hmem := ((attributesTakeFork_eq_true_iff version fork).mp h).2.2
+  match version, hv with
+  | 0, _ | 1, _ | 3, _ | _ + 4, _ => simpa [attributesVersions] using hmem
 
 /-- Attributes of a fork of the version, whose structure is not that of the fork, give `-38003`.
 
@@ -1382,12 +1412,8 @@ theorem forkchoiceUpdatedResponseOfJson_call {version : Nat} {params : Lean.Json
 /-- A fork that a version of the method takes has the structure of a version that it takes. -/
 theorem exists_attributesVersions_of_attributesTakeFork {version : Nat} {fork : Fork}
     (h : attributesTakeFork version fork = true) :
-    ∃ v ∈ attributesVersions version, attributesFork v = attributesForkAt fork := by
-  rcases version with _ | _ | _ | _ | v
-  any_goals (revert h; cases fork <;> decide)
-  -- From version 4 the fork is Glamsterdam, whose structure is that of version 4.
-  have hf : fork = .glamsterdam := by simpa [attributesTakeFork] using h
-  exact ⟨v + 4, by simp [attributesVersions], by subst hf; simp only [attributesFork]; decide⟩
+    ∃ v ∈ attributesVersions version, attributesFork v = attributesForkAt fork :=
+  List.mem_map.mp ((attributesTakeFork_eq_true_iff version fork).mp h).2.2
 
 /-- Attributes sent with a head that the update applies come back at the fork of the next block.
 
