@@ -152,6 +152,8 @@ public import EthLib.Consensus.Proofs.Signing
 public import EthLib.Consensus.Proofs.Time
 public import EthLib.Consensus.Proofs.Transition.ActivationExitOrder
 public import EthLib.Consensus.Proofs.Transition.ActiveKept
+public import EthLib.Consensus.Proofs.Transition.BalanceCappedBlock
+public import EthLib.Consensus.Proofs.Transition.BalanceCappedWithdrawals
 public import EthLib.Consensus.Proofs.Transition.BalanceDrift
 public import EthLib.Consensus.Proofs.Transition.BalanceNotRaised
 public import EthLib.Consensus.Proofs.Transition.BalanceNotRaisedBlock
@@ -197,6 +199,7 @@ public import EthLib.Consensus.Proofs.Transition.InactivityLeakRun
 public import EthLib.Consensus.Proofs.Transition.InactivityLeakStake
 public import EthLib.Consensus.Proofs.Transition.InactivityLeakTrace
 public import EthLib.Consensus.Proofs.Transition.InactivityLeakVoter
+public import EthLib.Consensus.Proofs.Transition.InactivityLeakVoterRun
 public import EthLib.Consensus.Proofs.Transition.Invariants
 public import EthLib.Consensus.Proofs.Transition.MixesKept
 public import EthLib.Consensus.Proofs.Transition.Operations

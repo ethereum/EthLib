@@ -19,6 +19,7 @@ public import EthLib.Execution.Proofs.Blocks.Funded
 public import EthLib.Execution.Proofs.Blocks.Genesis
 public import EthLib.Execution.Proofs.Blocks.NoAccount
 public import EthLib.Execution.Proofs.Blocks.NoncesFit
+public import EthLib.Execution.Proofs.Blocks.Overflow
 public import EthLib.Execution.Proofs.Blocks.ProofOfWork
 public import EthLib.Execution.Proofs.Blocks.Header
 public import EthLib.Execution.Proofs.Blocks.History

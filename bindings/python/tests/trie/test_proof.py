@@ -1,7 +1,7 @@
 """Proof verification against one `eth_getProof` response of ethereum/execution-apis."""
 
 # The response proves one account in the state of block 60 of the test chain, and one of its slots.
-# `getproof/README.md` gives the origin of the file and its licence.
+# `rpc/fixtures/README.md` gives the origin of the file and its licence.
 
 import json
 from pathlib import Path
@@ -13,7 +13,13 @@ from ethlib.execution import trie
 from ethlib.serialization import rlp
 from raising import raises
 
-_FILE = Path(__file__).resolve().parent / "getproof" / "get-account-proof-with-storage.io"
+_FILE = (
+    Path(__file__).resolve().parents[1]
+    / "rpc"
+    / "fixtures"
+    / "eth_getProof"
+    / "get-account-proof-with-storage.io"
+)
 
 # The response is the line after `<< `.
 _RESPONSE = next(
