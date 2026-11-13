@@ -46,6 +46,10 @@ derive_py Prune
 derive_py_laws Prune
 derive_py IDontWant
 derive_py_laws IDontWant
+derive_py ControlExtensions
+derive_py_laws ControlExtensions
+derive_py PartialMessagesExtension
+derive_py_laws PartialMessagesExtension
 derive_py Control
 derive_py_laws Control
 derive_py Rpc
