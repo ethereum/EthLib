@@ -237,11 +237,15 @@ theorem decode_encode {key : Fn} {p : Packet} {packet : ByteArray} (h : encode k
   rename_i hsize
   cases h
   have hrec := Rlpx.recoverSigner_signatureBytes hsig
-  obtain ⟨w, hitem⟩ : ∃ w, decodeItem ⟨data.data.toList.toArray⟩ 0 data.data.toList.length =
+  obtain ⟨w, hitem⟩ : ∃ w,
+      decodeItem ⟨data.data.toList.toArray⟩ 0 data.data.toList.length
+        (by
+          change data.data.toList.length ≤ data.data.toList.toArray.size
+          rw [List.size_toArray]) =
       .ok (.list p.fields, w) := by
     obtain ⟨hw, h⟩ := decodeItem_encode _ _ hdata (input := data) (pos := 0) (rest := [])
       (Nat.le_refl _) (by simp)
-    rw [Array.toArray_toList, Array.length_toList, ByteArray.size_data]
+    simp only [Array.toArray_toList, Array.length_toList, ByteArray.size_data]
     exact ⟨_, h⟩
   -- Name the hash and the signature, so that no step computes them.
   generalize Rlpx.signatureBytes sig = S at hrec hsize ⊢

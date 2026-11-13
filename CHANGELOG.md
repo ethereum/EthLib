@@ -576,6 +576,13 @@ Not yet released.
   `hashToG2` no longer takes an `Inhabited` instance.
   `map_hashToG2` no longer takes the two instances, or the hypothesis that the map sends the default to the default.
   No C export or Python function changes.
+- In Lean, the RLP decoder reads only bytes inside its input ([#2211](https://github.com/ethereum/EthLib/pull/2211)).
+  `readPrefix`, `decodeItem`, `decodeItems` and `decodeItemsFrom` take a proof of `stop ≤ input.size`, which `omega` supplies by default.
+  `readBigEndian` takes a proof of `pos + k ≤ input.size`.
+  The proof helper `readItem` takes the same bound as `decodeItem`, also supplied by `omega` by default.
+  `readPrefix_short`, `decodeItemsFrom_eq` and `decodeItems_eq` take the same bound, and `decodeItem_of_readItem` takes it as an implicit argument.
+  `decode` keeps its type, the inputs it accepts, its values and its errors.
+  No C export or Python function changes.
 
 ## 0.3.0
 

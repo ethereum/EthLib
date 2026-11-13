@@ -261,7 +261,7 @@ def readBody (hash : Vector UInt8 32) (sig : Vector UInt8 65) (type : UInt8)
     (data : List UInt8) : Except Discv4Error Received := do
   let sender ← (Rlpx.recoverSigner (keccak (type :: data)) sig).mapError
     fun _ => .invalidSignature
-  let (item, _) ← (decodeItem ⟨data.toArray⟩ 0 data.length).mapError .rlp
+  let (item, _) ← (decodeItem ⟨data.toArray⟩ 0 data.length (by simp [ByteArray.size])).mapError .rlp
   let p ← Packet.ofItems type (← item.toItems.mapError .rlp)
   return ⟨p, sender, hash⟩
 
