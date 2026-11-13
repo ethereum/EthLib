@@ -385,6 +385,8 @@ PyObject* py_consensus_get_custody_groups                 (PyObject* self, PyObj
 PyObject* py_consensus_get_custody_column_bits            (PyObject* self, PyObject* args);
 PyObject* py_consensus_compute_columns_for_custody_group  (PyObject* self, PyObject* args);
 PyObject* py_consensus_ssz_static                         (PyObject* self, PyObject* args);
+PyObject* py_consensus_api_json                           (PyObject* self, PyObject* args);
+PyObject* py_consensus_api_ssz                            (PyObject* self, PyObject* args);
 PyObject* py_consensus_is_valid_builder_signature (PyObject* self, PyObject* args);
 PyObject* py_consensus_process_registration (PyObject* self, PyObject* args);
 PyObject* py_consensus_unblind_signed_blinded_block (PyObject* self, PyObject* args);

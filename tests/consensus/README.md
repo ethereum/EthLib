@@ -236,3 +236,26 @@ For Gloas they are every file of `examples/gloas/`: a signed request authenticat
 It checks signed roots against the roots of their message and signature, and Gloas roots with independent SSZ calculations.
 It also compares a few fields with the JSON form.
 The signatures of the examples are placeholders, so the tests of the signature checks sign their own messages.
+
+The directory `beacon_api/` holds the schemas of the Beacon API, from `ethereum/beacon-APIs` at commit `7911555e6a30c51f9b69bb168111a59f1ff8ee49`, release v5.0.0-beta.0.
+A schema says how the JSON of the API spells a container: the keys of each object, and the pattern of each string.
+The files are copied byte for byte under their paths in that repository.
+`beacon_api/SHA256SUMS` records the digest of each file.
+They are the files of `types/` that define the containers of the `ssz_static/` cases, and the files that the schemas of those containers refer to.
+Two of those references, in `types/altair/sync_committee.yaml`, pass through `beacon-node-oapi.yaml`, so the directory holds that file too.
+Some other references of these files point to files that the directory does not hold, and the tests follow none of them.
+
+`bindings/python/tests/consensus/test_beacon_api_json.py` writes the JSON of the `ssz_static/` cases through the bindings, and checks it against the schemas.
+It checks every case of a fork that has a consensus version, so it leaves out the Heze cases.
+It also leaves out the containers that no schema defines, such as `SigningData`, and it asserts that list of names.
+It reads the JSON back, in lowercase and in uppercase hex, and compares the bytes with the case.
+The schemas give the lengths of lists and strings for the mainnet preset, so the test checks them only on mainnet cases.
+
+A schema can give an example of a string.
+The test takes the case with the most compressed bytes of each container at each preset and fork.
+In it, the test takes one string of each type and shape of path, where the indices of lists do not count.
+It puts the example in place of that string, unless the string is hex of a fixed length that the example does not have.
+It then reads the document through the bindings.
+
+The examples of `builder_api/` also come with JSON forms.
+The test compares the JSON of the bindings with them, and reads them back to the same bytes.

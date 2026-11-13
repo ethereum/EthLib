@@ -1,0 +1,31 @@
+Gloas:
+  DataColumnSidecars:
+    type: array
+    items:
+      $ref: '#/Gloas/DataColumnSidecar'
+    minItems: 0
+    maxItems: 128
+
+  DataColumnSidecar:
+    type: object
+    description: "The [`DataColumnSidecar`](https://github.com/ethereum/consensus-specs/blob/v1.7.0-beta.0/specs/gloas/p2p-interface.md#modified-datacolumnsidecar) object from the CL Gloas spec."
+    required: [index, column, kzg_proofs, slot, beacon_block_root]
+    properties:
+      index:
+        $ref: "../primitive.yaml#/Uint64"
+      column:
+        type: array
+        maxItems: 4096
+        description: "Progressive list of cells."
+        items:
+          $ref: '../fulu/data_column_sidecar.yaml#/Fulu/DataColumn'
+      kzg_proofs:
+        type: array
+        maxItems: 4096
+        description: "Progressive list of KZG proofs."
+        items:
+          $ref: '../primitive.yaml#/KZGProof'
+      slot:
+        $ref: "../primitive.yaml#/Uint64"
+      beacon_block_root:
+        $ref: '../primitive.yaml#/Root'

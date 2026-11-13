@@ -419,6 +419,12 @@
 #define DOC_consensus_ssz_static \
   "The root of the value that the bytes encode, and the bytes of that value, as a pair."
 
+#define DOC_consensus_api_json \
+  "The JSON of the API for the value that SSZ bytes encode."
+
+#define DOC_consensus_api_ssz \
+  "The SSZ bytes of the value that a JSON document of the API holds."
+
 #define DOC_consensus_is_valid_builder_signature \
   "Whether the signature of a signed message of the Builder API verifies."
 

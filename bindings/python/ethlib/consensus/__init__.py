@@ -55,6 +55,21 @@ def ssz_static(name: str, fork: str, type_name: str, data: bytes) -> tuple[bytes
     return _native.consensus_ssz_static(name, fork, type_name, data)
 
 
+def api_json(name: str, fork: str, type_name: str, data: bytes) -> dict[str, Any]:
+    """The Beacon API JSON of the beacon container that SSZ bytes encode, or SszError."""
+    # A value is a dict, a list, a str or a bool, nested as the container is.
+    # The values are `Any`, so that a caller indexes nested values without narrowing them.
+    # The order of the keys of a dict carries no meaning.
+    return _native.consensus_api_json(name, fork, type_name, data)
+
+
+def api_ssz(name: str, fork: str, type_name: str, document: object) -> bytes:
+    """The SSZ bytes of the container that a Beacon API JSON document holds, or SszError."""
+    # A value that the bindings cannot pass to Lean, such as a float, raises TypeError.
+    # A negative or too large int, a nesting deeper than 64, or too many parts raise ValueError.
+    return _native.consensus_api_ssz(name, fork, type_name, document)
+
+
 def is_valid_builder_signature(
     name: str,
     fork: str,
@@ -1287,6 +1302,8 @@ __all__ = [
     "get_custody_column_bits",
     "compute_columns_for_custody_group",
     "ssz_static",
+    "api_json",
+    "api_ssz",
     "is_valid_builder_signature",
     "process_registration",
     "unblind_signed_blinded_block",

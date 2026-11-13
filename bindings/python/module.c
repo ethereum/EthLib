@@ -785,6 +785,8 @@ static PyMethodDef methods[] = {
   {"consensus_get_custody_column_bits", py_consensus_get_custody_column_bits, METH_VARARGS,
    DOC_consensus_get_custody_column_bits},
   {"consensus_ssz_static", py_consensus_ssz_static, METH_VARARGS, DOC_consensus_ssz_static},
+  {"consensus_api_json", py_consensus_api_json, METH_VARARGS, DOC_consensus_api_json},
+  {"consensus_api_ssz", py_consensus_api_ssz, METH_VARARGS, DOC_consensus_api_ssz},
   {"consensus_is_valid_builder_signature", py_consensus_is_valid_builder_signature,
    METH_VARARGS, DOC_consensus_is_valid_builder_signature},
   {"consensus_process_registration", py_consensus_process_registration,

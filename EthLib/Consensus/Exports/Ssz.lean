@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Consensus.BeaconApi.Spelling
 public import EthLib.Consensus.Containers.Attestation
 public import EthLib.Consensus.Containers.Bid
 public import EthLib.Consensus.Containers.Block
@@ -58,6 +59,19 @@ structure Container where
 
 attribute [instance] Container.codec
 
+/-- A container of the beacon chain, with its SSZ codec and its spelling in the Beacon API.
+
+Each container must declare its spelling, so none falls back to a default. -/
+structure BeaconContainer where
+  /-- The Lean type of the container. -/
+  type : Type
+  /-- Its SSZ codec. -/
+  [codec : SszType type]
+  /-- How the Beacon API writes it in JSON. -/
+  [spelling : BeaconApi.ApiSpelling type]
+
+attribute [instance] BeaconContainer.codec BeaconContainer.spelling
+
 /-- Whether EthLib holds the light client containers at a fork: from Altair. -/
 def lightClientAt (fork : Fork) : Bool := .altair ≤ fork
 
@@ -70,7 +84,7 @@ Capella stops adding historical batches, and adds historical summaries instead.
 Fulu carries blobs in data column sidecars instead of blob sidecars.
 
 The light client containers start at Altair; EthLib does not yet hold their Gloas form. -/
-def containerOf (preset : Preset) (fork : Fork) : String → Option Container
+def containerOf (preset : Preset) (fork : Fork) : String → Option BeaconContainer
   | "Fork" => some ⟨ForkVersions⟩
   | "ForkData" => some ⟨ForkData⟩
   | "SigningData" => some ⟨SigningData⟩

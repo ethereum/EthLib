@@ -98,6 +98,12 @@ eth_consensus_ssz_static(
 );
 
 extern lean_object*
+eth_consensus_api_json(lean_object* args);
+
+extern lean_object*
+eth_consensus_api_ssz(lean_object* args);
+
+extern lean_object*
 eth_pq_keys_ssz(
   lean_object* args
 );
@@ -555,6 +561,22 @@ py_consensus_ssz_static(
   PyObject* args
 ) {
   return call_pyvalue_export(eth_consensus_ssz_static, args, 4, SSZ_ERROR);
+}
+
+PyObject*
+py_consensus_api_json(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_json, args, 4, SSZ_ERROR);
+}
+
+PyObject*
+py_consensus_api_ssz(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_ssz, args, 4, SSZ_ERROR);
 }
 
 PyObject*
