@@ -227,64 +227,6 @@ private theorem getBlockRootAtSlot_advanceSlots :
         · exact .inl rooted
         · exact hashTreeRoot_latestBlockHeader_advanceSlots nextOk rest rooted
 
-/-- A block that the state transition accepts leaves the roots of the slots before it as follows.
-
-A root of an older slot is that of the state before.
-
-A root from the first slot of the transition on is the parent root of the block.
-
-Or the state before hashes to the zero root, and it is the root of the header before. -/
-private theorem getBlockRootAtSlot_stateTransition {signed : SignedBeaconBlock preset fork}
-    {validateResult : Bool}
-    (computed : stateTransition config checks engine state signed validateResult = .ok after)
-    {slot : Slot} {root : Root} (read : getBlockRootAtSlot after slot = .ok root) :
-    (slot < state.slot ∧ getBlockRootAtSlot state slot = .ok root) ∨
-      (state.slot ≤ slot ∧ (root = signed.message.parentRoot ∨
-        (hashTreeRoot state = .ok (Vector.replicate 32 0) ∧
-          hashTreeRoot state.latestBlockHeader = .ok root))) := by
-  obtain ⟨advanced, slotsOk, -, -, blockOk, -⟩ := stateTransition_ok computed
-  rw [getBlockRootAtSlot_congr (processBlock_slot blockOk) (processBlock_blockRoots blockOk)]
-    at read
-  simp only [processSlots, bind_ok_iff, ensure_ok_iff] at slotsOk
-  obtain ⟨-, -, slotsOk⟩ := slotsOk
-  rcases getBlockRootAtSlot_advanceSlots _ slotsOk read with older | ⟨later, rooted | zero⟩
-  · exact .inl older
-  · refine .inr ⟨later, .inl ?_⟩
-    have parent := (processBlock_parentRoot blockOk).2.2
-    rw [rooted] at parent
-    exact Except.ok.inj parent
-  · exact .inr ⟨later, .inr zero⟩
-
-/-- A root that a transition records from the slot of the state is the parent root of its block.
-
-The slot is at least the slot of the state, and the root is read in the state after the block.
-
-The other case is that the state before the transition hashes to the zero root.
-
-Then the first slot records the root of the latest block header as it was. -/
-theorem getBlockRootAtSlot_stateTransition_cases {signed : SignedBeaconBlock preset fork}
-    {validateResult : Bool}
-    (computed : stateTransition config checks engine state signed validateResult = .ok after)
-    {slot : Slot} {root : Root} (atLeast : state.slot ≤ slot)
-    (read : getBlockRootAtSlot after slot = .ok root) :
-    root = signed.message.parentRoot ∨
-      (hashTreeRoot state = .ok (Vector.replicate 32 0) ∧
-        hashTreeRoot state.latestBlockHeader = .ok root) := by
-  rcases getBlockRootAtSlot_stateTransition computed read with ⟨older, -⟩ | ⟨-, cases⟩
-  · exact absurd atLeast (UInt64.not_le.mpr older)
-  · exact cases
-
-/-- A block that the state transition accepts keeps the roots of the slots before the state. -/
-theorem getBlockRootAtSlot_stateTransition_of_lt {signed : SignedBeaconBlock preset fork}
-    {validateResult : Bool}
-    (computed : stateTransition config checks engine state signed validateResult = .ok after)
-    {slot : Slot} {root : Root} (before : slot < state.slot)
-    (read : getBlockRootAtSlot after slot = .ok root) :
-    getBlockRootAtSlot state slot = .ok root := by
-  rcases getBlockRootAtSlot_stateTransition computed read with ⟨-, older⟩ | ⟨later, -⟩
-  · exact older
-  · exact absurd before (UInt64.not_lt.mpr later)
-
 /-- A header that some slots leave with a zero state root is the header before them. -/
 private theorem advanceSlots_latestBlockHeader_of_eq :
     ∀ (count : Nat) {state after : BeaconState preset fork},
@@ -346,6 +288,58 @@ theorem getBlockRootAtSlot_advanceSlots_cases {count more : Nat}
       rw [← advanceSlots_latestBlockHeader_of_ne more rest filled] at rooted
       exact .inl (Except.ok.inj (rooted.symm.trans (processBlock_parentRoot processed).2.2))
   · exact .inr ⟨later, .inr zero⟩
+
+/-- A block that the state transition accepts leaves the roots of the slots before it as follows.
+
+A root of an older slot is that of the state before.
+
+A root from the first slot of the transition on is the parent root of the block.
+
+Or the state before hashes to the zero root, and it is the root of the header before. -/
+private theorem getBlockRootAtSlot_stateTransition {signed : SignedBeaconBlock preset fork}
+    {validateResult : Bool}
+    (computed : stateTransition config checks engine state signed validateResult = .ok after)
+    {slot : Slot} {root : Root} (read : getBlockRootAtSlot after slot = .ok root) :
+    (slot < state.slot ∧ getBlockRootAtSlot state slot = .ok root) ∨
+      (state.slot ≤ slot ∧ (root = signed.message.parentRoot ∨
+        (hashTreeRoot state = .ok (Vector.replicate 32 0) ∧
+          hashTreeRoot state.latestBlockHeader = .ok root))) := by
+  obtain ⟨advanced, slotsOk, -, -, blockOk, -⟩ := stateTransition_ok computed
+  rw [getBlockRootAtSlot_congr (processBlock_slot blockOk) (processBlock_blockRoots blockOk)]
+    at read
+  simp only [processSlots, bind_ok_iff, ensure_ok_iff] at slotsOk
+  obtain ⟨-, -, slotsOk⟩ := slotsOk
+  exact getBlockRootAtSlot_advanceSlots_cases slotsOk (more := 0) rfl blockOk read
+
+/-- A root that a transition records from the slot of the state is the parent root of its block.
+
+The slot is at least the slot of the state, and the root is read in the state after the block.
+
+The other case is that the state before the transition hashes to the zero root.
+
+Then the first slot records the root of the latest block header as it was. -/
+theorem getBlockRootAtSlot_stateTransition_cases {signed : SignedBeaconBlock preset fork}
+    {validateResult : Bool}
+    (computed : stateTransition config checks engine state signed validateResult = .ok after)
+    {slot : Slot} {root : Root} (atLeast : state.slot ≤ slot)
+    (read : getBlockRootAtSlot after slot = .ok root) :
+    root = signed.message.parentRoot ∨
+      (hashTreeRoot state = .ok (Vector.replicate 32 0) ∧
+        hashTreeRoot state.latestBlockHeader = .ok root) := by
+  rcases getBlockRootAtSlot_stateTransition computed read with ⟨older, -⟩ | ⟨-, cases⟩
+  · exact absurd atLeast (UInt64.not_le.mpr older)
+  · exact cases
+
+/-- A block that the state transition accepts keeps the roots of the slots before the state. -/
+theorem getBlockRootAtSlot_stateTransition_of_lt {signed : SignedBeaconBlock preset fork}
+    {validateResult : Bool}
+    (computed : stateTransition config checks engine state signed validateResult = .ok after)
+    {slot : Slot} {root : Root} (before : slot < state.slot)
+    (read : getBlockRootAtSlot after slot = .ok root) :
+    getBlockRootAtSlot state slot = .ok root := by
+  rcases getBlockRootAtSlot_stateTransition computed read with ⟨-, older⟩ | ⟨later, -⟩
+  · exact older
+  · exact absurd before (UInt64.not_lt.mpr later)
 
 end Transition
 
