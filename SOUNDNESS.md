@@ -3375,7 +3375,7 @@ They take two runs of the state transition from one genesis built from deposits,
 A run keeps the inputs of each step: the slots, and the blocks with their state roots checked (`Run`, `Consensus/Proofs/Transition/Trace.lean`).
 A key is accountable when the two runs accepted two of its votes that `isSlashableAttestationData` flags.
 It is also accountable when a block of either tail, after `x`, applied a slashing that names it (`Accountable`, `DirectSafety/Conflict.lean`).
-That slashing may be a proposer slashing: a proposer slashing lowers the weights only through behaviour that is slashable.
+That slashing may be a proposer slashing, since two signed headers for one slot are slashable too.
 The votes are those of the attestations that the blocks applied, read by public key in the registry before each block.
 The weights are effective balances.
 The reference set is the unslashed keys active at `x` (`unslashedKeys`), and the accountable keys are those of that set (`accountableKeys`).
@@ -3383,8 +3383,8 @@ A slashing in the shared prefix does not make a key accountable by itself.
 A key that it slashed leaves the reference set and the accountable set.
 The predicate `Accountable shared left right k` can still hold for such a key, but `accountableKeys` filters `unslashedKeys x`.
 A prefix attester slashing can name a key without slashing it, because `slashIfSlashable` skips it.
-Such a key stays in the reference set and can still count, through double votes or through evidence in a tail.
-The stake of a prefix-slashed key is absent from the later drift and support only because of forward persistence.
+Such a key can stay in the reference set, and it can still count through double votes or through evidence in a tail.
+The stake of a prefix-slashed key is absent from the later drift and support only while its slashed flag stays set.
 These theorems do not need that fact, because the drift is observed.
 Recent keys are unslashed too, and justification counts only unslashed voters, so the voters of each quorum stay inside the support (`quorum_voters_recent`, `DirectSafety/Core.lean`).
 A key slashed at a call and unslashed at `x` has evidence in the tail of the call (`Run.slashed_evidence`, `DirectSafety/Evidence.lean`).

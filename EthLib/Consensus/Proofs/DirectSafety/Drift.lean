@@ -21,7 +21,7 @@ variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 
 /-- Exact loss of the unslashed reference stake, outside keys already slashed at this state.
 
-A key slashed in the shared prefix is not in the reference set, so it is not charged here. -/
+A key already slashed at `x` is not in the reference set, so it is not charged here. -/
 noncomputable def referenceLoss (x y : ForkedBeaconState preset) : Nat := by
   classical
   exact ∑ k ∈ (unslashedKeys x.state).filter (¬ SlashedAt y.state ·),
@@ -32,7 +32,7 @@ noncomputable def referenceLoss (x y : ForkedBeaconState preset) : Nat := by
 
 Reference stake that just exited is not charged.
 
-A key slashed in the shared prefix is outside the reference set.
+A key already slashed at `x` is outside the reference set.
 
 It is absent from this sum only because a slashed flag stays set, which this file does not prove. -/
 noncomputable def referenceGain (x y : ForkedBeaconState preset) : Nat :=
@@ -40,7 +40,7 @@ noncomputable def referenceGain (x y : ForkedBeaconState preset) : Nat :=
     (effectiveWeight y.state k - Models.supported (unslashedKeys x.state)
       (effectiveWeight x.state) k)
 
-/-- Previous-epoch stake outside the current quorum denominator, at one boundary only. -/
+/-- Unslashed previous-epoch stake that is not active at the current epoch, at one boundary only. -/
 noncomputable def boundaryStake (y : ForkedBeaconState preset) : Nat :=
   Models.stake (effectiveWeight y.state) (recentKeys y.state \ activeKeys y.state)
 
