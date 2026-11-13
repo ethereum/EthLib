@@ -1070,6 +1070,15 @@
 #define DOC_quic_packet_keys \
   "Derive the payload key, IV and header-protection key, in that order, RFC 9001 §5.1."
 
+#define DOC_quic_tls_key_schedule \
+  "Return the early, handshake, master, two handshake traffic and two application traffic secrets."
+
+#define DOC_quic_tls_derive_secret \
+  "Derive a SHA-256 secret from encoded handshake messages, RFC 8446 §7.1."
+
+#define DOC_quic_tls_finished \
+  "Compute the Finished `verify_data` over the transcript that precedes it, RFC 8446 §4.4.4."
+
 #define DOC_quic_varint_encode \
   "Encode a value below `2^62` with its shortest QUIC representation, RFC 9000 §16."
 

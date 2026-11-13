@@ -3,10 +3,11 @@ module
 public import EthLib.Base.Exports.Proofs.PyValue
 public import EthLib.Cryptography.Exports.Tls13
 public import EthLib.Networking.Quic.Keys
+public import EthLib.Networking.Quic.Tls
 public import EthLib.Networking.Quic.Varint
 
 /-!
-# Exports: QUIC integers and packet keys
+# Exports: QUIC integers, packet keys and the TLS 1.3 key schedule
 
 The encoder rejects a value of `2^62` or more with code 0.
 
@@ -60,5 +61,31 @@ def packetExport (args : PyValue) : Result PyValue :=
     let suite ← readSuite suite
     let keys ← ofExcept (packetKeys suite secret)
     return (Base.packBytes keys.key, Base.packBytes keys.iv, Base.packBytes keys.hp)) args
+
+/-- Return the early, handshake, master, two handshake traffic and two application traffic secrets.
+
+Each pair gives the client secret first.
+
+The no-PSK schedule and transcript boundaries are those of RFC 8446 §7.1. -/
+@[export eth_quic_tls_key_schedule]
+def scheduleExport (args : PyValue) : Result PyValue :=
+  pyExport (fun (sharedSecret, helloTranscript, serverTranscript) => do
+    let s ← ofExcept (Tls.keySchedule sharedSecret helloTranscript serverTranscript)
+    return (s.early, s.handshake, s.master, s.clientHandshake, s.serverHandshake,
+      s.clientApplication, s.serverApplication)) args
+
+/-- Derive a SHA-256 secret from encoded handshake messages, RFC 8446 §7.1.
+
+The label excludes the `tls13 ` prefix. -/
+@[export eth_quic_tls_derive_secret]
+def deriveExport (args : PyValue) : Result PyValue :=
+  pyExport (fun (secret, label, messages) => ofExcept (Tls.deriveSecret secret label messages)) args
+
+/-- Compute the Finished `verify_data` over the transcript that precedes it, RFC 8446 §4.4.4.
+
+During the handshake the secret is the sender's handshake traffic secret. -/
+@[export eth_quic_tls_finished]
+def finishedExport (args : PyValue) : Result PyValue :=
+  pyExport (fun (secret, transcript) => ofExcept (Tls.finished secret transcript)) args
 
 end EthLib.Networking.Quic.Exports
