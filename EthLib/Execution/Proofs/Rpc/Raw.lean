@@ -2,6 +2,7 @@ module
 
 public import EthLib.Execution.Rpc.Raw
 public import EthLib.Execution.Rpc.Methods
+public import EthLib.Execution.Proofs.Rpc.Block
 public import EthLib.Execution.Proofs.Rpc.Header
 public import EthLib.Execution.Proofs.Rpc.TransactionInfo
 public import EthLib.Execution.Proofs.Blocks.Block
@@ -122,6 +123,15 @@ theorem Valid.rawHeader_eq_ok {v : ChainView} {checkSeal : Bool} (hv : v.Valid c
   obtain ⟨raw', hraw', hk, hd⟩ := hv.rawHeader (resolve_mem hr)
   obtain rfl : raw = raw' := Except.ok.inj (hraw.symm.trans hraw')
   exact ⟨r, hr, hk, hd⟩
+
+/-- In a valid view, the raw header of a block hashes to the hash of its block object. -/
+theorem Valid.hash_blockByNumber_rawHeader {v : ChainView} {checkSeal : Bool}
+    (hv : v.Valid checkSeal) {p : BlockParam} {raw : ByteArray} {full : Bool} {j : Lean.Json}
+    (h : v.rawHeader p = .ok raw) (hb : v.blockByNumber p full = .ok j) :
+    j.getObjVal? "hash" = .ok (hash32Json (keccak256 raw)) := by
+  obtain ⟨r, hr, hk, -⟩ := hv.rawHeader_eq_ok h
+  simp only [blockByNumber, hr, bind, Except.bind] at hb
+  rw [Rpc.getObjVal_blockJson hb (by simp [headerNames]), getObjVal_hash_headerObject, hk]
 
 /-- The roots of an output hold the receipts root of its receipts. -/
 private theorem outputRoots_receipts {fork : Fork} {transactions : List Transaction}

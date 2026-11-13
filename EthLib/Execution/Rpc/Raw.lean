@@ -24,13 +24,13 @@ No text says which error an unknown block or transaction gets.
 
 Here an unknown block or transaction gets `-32001`, "Resource not found".
 
+The getter of a block access list in the same file says that an unknown block MUST get `-32001`.
+
 The tag `pending` names the pending block of the view, and gets that error when there is none.
 
 A block below the lowest block that the node holds is unknown, so it gets that error too.
 
 Every getter also lists `4444` for pruned history, which the view never answers.
-
-The getter of a block access list in the same file says that an unknown block MUST get that code.
 
 An encoding fails only when a byte string or a list has a payload of `2^64` bytes or more.
 
