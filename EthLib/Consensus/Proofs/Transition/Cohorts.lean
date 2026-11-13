@@ -255,13 +255,6 @@ private theorem cohorts_attesterSlashing (early : fork < .pectra)
   exact foldlM_ok_invariant (fun s => CohortsKept (config := config) state s.1)
     (fun _ _ _ h ok => h.trans (cohorts_slashIf early ok)) (.refl state) folded
 
-private theorem cohorts_voluntaryExit (early : fork < .pectra) {signed : SignedVoluntaryExit}
-    (ok : processVoluntaryExit config checks state signed = .ok after) :
-    CohortsKept (config := config) state after := by
-  simp only [processVoluntaryExit, bind_ok_iff, ensure_ok_iff, liftAccessor_ok, liftSsz_ok] at ok
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, exited⟩ := ok
-  exact cohorts_exit early exited
-
 private theorem CohortsKept.append {v : Validator}
     (added : after.validators.data = state.validators.data.push v)
     (exit : v.exitEpoch = FAR_FUTURE_EPOCH)
@@ -340,43 +333,11 @@ private theorem cohorts_updateEntry (early : fork < .pectra) {i : Nat}
   · cases rest
     exact kept
 
-private theorem cohorts_sync {altair : .altair ≤ fork} {aggregate : SyncAggregate preset}
-    (ok : processSyncAggregate config checks state altair aggregate = .ok after) :
-    CohortsKept (config := config) state after := by
-  simp only [processSyncAggregate, bind_ok_iff] at ok
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, folded⟩ := ok
-  rw [← Array.foldlM_toList] at folded
-  refine CohortsKept.foldlM (fun _ _ _ ok => ?_) folded
-  unfold applySyncReward at ok
-  split at ok
-  · simp only [bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, raised, _, _, paid⟩ := ok
-    exact (CohortsKept.increaseBalance raised).trans (.increaseBalance paid)
-  · exact .decreaseBalance (liftAccessor_ok.mp ok)
-
 private theorem cohorts_credentials {signed : SignedBLSToExecutionChange}
     (ok : processBlsToExecutionChange config checks state signed = .ok after) :
     CohortsKept (config := config) state after := by
   obtain ⟨_, found, _, _, _, set⟩ := processBlsToExecutionChange_ok ok
   exact .setValidator found set rfl rfl
-
-private theorem cohorts_header {block : BeaconBlock preset fork}
-    (ok : processBlockHeader state block = .ok after) :
-    CohortsKept (config := config) state after := by
-  obtain ⟨_, _, rfl⟩ := processBlockHeader_eq ok
-  exact .of_data rfl
-
-private theorem cohorts_randao {body : BeaconBlockBody preset fork}
-    (ok : processRandao config checks state body = .ok after) :
-    CohortsKept (config := config) state after := by
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq ok
-  exact .of_data rfl
-
-private theorem cohorts_eth1 {before : fork < .hegota} {body : BeaconBlockBody preset fork}
-    (ok : processEth1Data before state body = .ok after) :
-    CohortsKept (config := config) state after := by
-  obtain ⟨_, _, rest⟩ := processEth1Data_eq ok
-  exact .of_data (by rw [← rest])
 
 /-- A pre-Electra block keeps the cohorts, read through master's decomposition of a block.
 
@@ -386,29 +347,24 @@ private theorem cohorts_block (early : fork < .pectra) {engine : ExecutionEngine
     (ok : processBlock config checks engine state block = .ok after) :
     CohortsKept (config := config) state after := by
   have noElectra : ¬ Fork.pectra ≤ fork := Nat.not_le_of_lt early
-  have noGloas : ¬ Fork.glamsterdam ≤ fork := Nat.not_le_of_lt (Nat.lt_trans early (by decide))
-  have keep {a b : BeaconState preset fork} (_ : BlockFrame a b)
-      (same : b.validators = a.validators) : CohortsKept (config := config) a b :=
-    .of_data (congrArg (·.data) same)
+  have before : fork < .glamsterdam := Nat.lt_trans early (by decide)
+  have noGloas : ¬ Fork.glamsterdam ≤ fork := Nat.not_le_of_lt before
   let Kept (a b : BeaconState preset fork) : Prop := CohortsKept (config := config) a b
   have trans {a b c : BeaconState preset fork} (one : CohortsKept (config := config) a b)
       (two : CohortsKept (config := config) b c) : CohortsKept (config := config) a c :=
     one.trans two
   obtain ⟨input, last, started, operated, -, synced⟩ := processBlock_operationsInput ok
   have head : CohortsKept (config := config) state input :=
-    OperationsInput.step_of Kept .refl trans (fun gloas _ => absurd gloas noGloas) cohorts_header
-      (fun _ executed => processBlockExecution_step_of Kept .refl trans keep
-        (fun withdrawn => .of_data (congrArg (·.data) (processWithdrawals_validators withdrawn)))
-        executed)
-      cohorts_randao (fun _ voted => cohorts_eth1 voted) started
+    .of_data (congrArg (·.data) (OperationsInput.validators_eq before started))
   obtain ⟨_, _, _, proposersOk, slashingsOk, attestedOk, rest⟩ :=
     processOperations_folds_of Kept .refl trans (cohorts_deposit early)
-      (cohorts_voluntaryExit early) cohorts_credentials
+      (fun exited => cohorts_exit early (processVoluntaryExit_initiates exited))
+      cohorts_credentials
       (fun {_ _ _ electra} _ => absurd electra.1 noElectra)
       (fun {_ _ gloas} _ => absurd gloas noGloas) operated
   have tail : CohortsKept (config := config) last after := by
     split at synced
-    · exact cohorts_sync synced
+    · exact .of_data (congrArg (·.data) (processSyncAggregate_validators synced))
     · cases synced
       exact .refl _
   exact head.trans <|
