@@ -31,13 +31,6 @@ section
 
 variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
-/-- A failure after a change of error comes from a failure before it. -/
-private theorem mapError_eq_error {ε ε' α : Type} {f : ε → ε'} {x : Except ε α} {e : ε'}
-    (h : x.mapError f = .error e) : ∃ e', x = .error e' ∧ f e' = e := by
-  cases x with
-  | error e' => exact ⟨e', rfl, by cases h; rfl⟩
-  | ok a => cases h
-
 /-- A read of code never fails for no account. -/
 theorem getCode_ne_noAccount (state : TransactionState) (codeHash : Hash32)
     (address : Address) : state.getCode codeHash ≠ .error (.noAccount address) := by
@@ -132,7 +125,7 @@ private theorem chargeAuthorization_ne_noAccount [LawfulGasMeter Meter]
     | cases h
     | cases LawfulGasMeter.charge_error h
     | cases LawfulGasMeter.chargeState_error h
-    | (obtain ⟨e', he', hee⟩ := mapError_eq_error h
+    | (obtain ⟨e', he', hee⟩ := Base.mapError_eq_error h
        cases hee
        exact getCode_ne_noAccount _ _ _ he')
 
@@ -150,7 +143,7 @@ private theorem applyAuthorization_ne_noAccount [LawfulGasMeter Meter] {chainId 
     | split at h
   all_goals first
     | cases h
-    | (obtain ⟨e', he', hee⟩ := mapError_eq_error h
+    | (obtain ⟨e', he', hee⟩ := Base.mapError_eq_error h
        simp only [Function.comp_apply, Prod.mk.injEq, EvmError.state.injEq] at hee
        obtain ⟨rfl, -⟩ := hee
        first
@@ -200,7 +193,7 @@ private theorem prepareFirstFrame_ne_noAccount [LawfulGasMeter Meter] {chainId :
   all_goals first
     | (cases h; done)
     | exact foldlM_applyAuthorization_ne_noAccount address read h
-    | (obtain ⟨e', he', hee⟩ := mapError_eq_error h
+    | (obtain ⟨e', he', hee⟩ := Base.mapError_eq_error h
        simp only [Prod.mk.injEq, EvmError.state.injEq] at hee
        obtain ⟨rfl, -⟩ := hee
        first
@@ -311,10 +304,10 @@ private theorem runTransaction_ne_noAccount [LawfulGasMeter Meter]
   · unfold messageTarget at h
     split at h
     · cases h
-    · obtain ⟨e, -, he⟩ := mapError_eq_error h
+    · obtain ⟨e, -, he⟩ := Base.mapError_eq_error h
       cases he
   rcases Base.bind_eq_error h with h | ⟨bought, -, h⟩
-  · obtain ⟨e, he, hee⟩ := mapError_eq_error h
+  · obtain ⟨e, he, hee⟩ := Base.mapError_eq_error h
     cases hee
     exact buyGas_ne_noAccount _ _ _ _ _ he
   rcases Base.bind_eq_error h with h | ⟨message, hmsg, h⟩
@@ -325,7 +318,7 @@ private theorem runTransaction_ne_noAccount [LawfulGasMeter Meter]
       cases x with
       | error e' =>
         cases h
-        obtain ⟨e'', he'', hee⟩ := mapError_eq_error hx
+        obtain ⟨e'', he'', hee⟩ := Base.mapError_eq_error hx
         cases hee
         exact getCode_ne_noAccount _ _ _ he''
       | ok _ => cases h
@@ -348,11 +341,11 @@ private theorem runTransaction_ne_noAccount [LawfulGasMeter Meter]
   · exact processMessageCall_ne_noAccount (message := { message with
       reservoir := (allocateGas fork tx included.intrinsicGas).reservoir }) own address h
   rcases Base.bind_eq_error h with h | ⟨⟨settled, used⟩, -, h⟩
-  · obtain ⟨e, he, hee⟩ := mapError_eq_error h
+  · obtain ⟨e, he, hee⟩ := Base.mapError_eq_error h
     cases hee
     exact settleGas_ne_noAccount _ _ _ _ _ _ _ he
   rcases Base.bind_eq_error h with h | ⟨deleted, -, h⟩
-  · obtain ⟨e, he, hee⟩ := mapError_eq_error h
+  · obtain ⟨e, he, hee⟩ := Base.mapError_eq_error h
     cases hee
     exact deleteAccounts_ne_noAccount _ _ _ he
   · cases h
