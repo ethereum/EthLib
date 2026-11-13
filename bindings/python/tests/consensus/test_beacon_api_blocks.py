@@ -191,10 +191,11 @@ def test_blinded_block_ssz_encodes_the_json_answer(fork: str) -> None:
     assert body == encoded
 
 
-def test_no_blinded_block_ssz_from_gloas() -> None:
+@pytest.mark.parametrize("fork", ["gloas", "heze"])
+def test_no_blinded_block_ssz_from_gloas(fork: str) -> None:
     message = "Blocks from Gloas on do not have a blinded form"
     with raises(consensus.ConsensusError, message) as error:
-        consensus.api_block_query_ssz("minimal", FORKS["gloas"], _signed("gloas"), "blinded_block")
+        consensus.api_block_query_ssz("minimal", FORKS[fork], _signed(fork), "blinded_block")
     assert error.value.code == 400
 
 
@@ -205,12 +206,16 @@ def test_attestations_have_no_ssz_body() -> None:
     assert error.value.code == 0
 
 
-# A Gloas case: a block at slot 1 on the anchor, then the envelope of its payload.
+GLOAS_CASES = Path(__file__).resolve().parents[4] / "tests/consensus/fork_choice/minimal/gloas"
+# A block at slot 1 on the anchor, then the envelope of its payload.
 ENVELOPE_CASE = (
-    Path(__file__).resolve().parents[4]
-    / "tests/consensus/fork_choice/minimal/gloas/fork_choice/on_execution_payload_envelope"
-    / "pyspec_tests/on_execution_payload_envelope_valid"
+    GLOAS_CASES
+    / "fork_choice/on_execution_payload_envelope/pyspec_tests/on_execution_payload_envelope_valid"
 )
+# The same block at slot 1, then two children of it: the head at slot 3, and a block at slot 2.
+FORK_CASE = GLOAS_CASES / "fork_choice/ex_ante/pyspec_tests/ex_ante_vanilla"
+HEAD_ROOT = "0x551ef523e59e967a78834e3e80fd3b71008e42b57ba768cfdc2ba43cec47b28a"
+SIDE_ROOT = "0x9a319e277bcad69ccdc06f393d93d54407fd6f7a414c2f6ae73c4432d1ebfc21"
 ANCHOR_ROOT = "0xde6ee16691ac31262a6bb5552e4854c07abb7a9ac8539c616ba4ed4e9aaa1adc"
 BLOCK_ROOT = "0x29874e204fad82a30293db7910390d39dc70d4e7c5a7302cfbc10a1b8f17dcf4"
 ENVELOPE = (
@@ -220,12 +225,12 @@ GLOAS = FORKS["gloas"]
 
 
 @cache
-def _store_case() -> tuple[str, str, bytes, bytes, list]:
-    """The arguments that build the store after every step of the envelope case."""
-    raw_steps = _load(ENVELOPE_CASE / "steps.yaml")
-    steps = [step for raw in raw_steps for step in _inputs(ENVELOPE_CASE, raw)]
-    anchor_state = _read(ENVELOPE_CASE, "anchor_state")
-    return "minimal", GLOAS, anchor_state, _read(ENVELOPE_CASE, "anchor_block"), steps
+def _store_case(
+    case: Path = ENVELOPE_CASE,
+) -> tuple[str, str, bytes, bytes, list[consensus.ForkChoiceStep]]:
+    """The arguments that build the store after every step of a Gloas fork choice case."""
+    steps = [step for raw in _load(case / "steps.yaml") for step in _inputs(case, raw)]
+    return "minimal", GLOAS, _read(case, "anchor_state"), _read(case, "anchor_block"), steps
 
 
 def _block_bytes() -> bytes:
@@ -268,7 +273,26 @@ def test_header_of_the_anchor_is_canonical() -> None:
 
 def test_header_of_an_unknown_block_is_not_canonical() -> None:
     answer = consensus.api_header(*_store_case(), _signed("gloas"))
-    assert answer["data"]["canonical"] is False
+    root = YAML(typ="safe").load((_case("gloas") / "roots.yaml").read_text())["root"]
+    _, header = _header(_signed("gloas"))
+    assert answer == {"data": {"root": root, "canonical": False, "header": header}}
+
+
+def test_headers_of_two_children() -> None:
+    head, head_json = _header(_read(FORK_CASE, f"block_{HEAD_ROOT}"))
+    side, side_json = _header(_read(FORK_CASE, f"block_{SIDE_ROOT}"))
+    # Both children have the block at slot 1 as parent, and neither is at that slot.
+    # The answer keeps the order of the input, and only the head is on the chain of the head.
+    held = [head, side]
+    answer = consensus.api_headers(*_store_case(FORK_CASE), held, parent_root=_hex(BLOCK_ROOT))
+    assert answer["data"] == [
+        {"root": HEAD_ROOT, "canonical": True, "header": head_json},
+        {"root": SIDE_ROOT, "canonical": False, "header": side_json},
+    ]
+    reversed_answer = consensus.api_headers(
+        *_store_case(FORK_CASE), held[::-1], parent_root=_hex(BLOCK_ROOT)
+    )
+    assert reversed_answer["data"] == answer["data"][::-1]
 
 
 def test_headers_filters() -> None:
@@ -284,6 +308,8 @@ def test_headers_filters() -> None:
     assert headers() == [on_block]
     assert headers(slot=0) == [on_anchor]
     assert headers(parent_root=_hex(ANCHOR_ROOT)) == [on_block]
+    # The anchor has the zero parent root, at slot 0 rather than the slot of the head.
+    assert headers(parent_root=bytes(32)) == [on_anchor]
     assert headers(slot=0, parent_root=_hex(ANCHOR_ROOT)) == []
     assert headers(slot=5) == []
 
@@ -331,10 +357,21 @@ def test_columns_with_the_requested_indices(fork: str) -> None:
 
     answer = consensus.api_columns("minimal", FORKS[fork], held)
     assert answer == {"version": fork, "data": documents([5, 2, 9])}
+    # The source allows any order; EthLib keeps the order of the input.
     chosen = consensus.api_columns("minimal", FORKS[fork], held, indices=[9, 2, 4])
-    assert sorted(chosen["data"], key=lambda d: int(d["index"])) == documents([2, 9])
+    assert chosen["data"] == documents([2, 9])
     assert consensus.api_columns("minimal", FORKS[fork], held, indices=[])["data"] == []
-    # A list of one variable-size sidecar: its four-byte offset, then the sidecar.
-    body = consensus.api_columns_ssz("minimal", FORKS[fork], held, indices=[2])
-    assert body == (4).to_bytes(4, "little") + _sidecar(fork, 2)
+    # A list of variable-size sidecars: one four-byte offset each, then the sidecars.
+    body = consensus.api_columns_ssz("minimal", FORKS[fork], held, indices=[2, 9])
+    first, second = _sidecar(fork, 2), _sidecar(fork, 9)
+    offsets = (8).to_bytes(4, "little") + (8 + len(first)).to_bytes(4, "little")
+    assert body == offsets + first + second
     assert consensus.api_columns_ssz("minimal", FORKS[fork], held, indices=[]) == b""
+
+
+def test_no_columns_before_fulu() -> None:
+    message = "Blocks before Fulu do not have data column sidecars"
+    for answer in (consensus.api_columns, consensus.api_columns_ssz):
+        with raises(consensus.ConsensusError, message) as error:
+            answer("minimal", FORKS["electra"], [])
+        assert error.value.code == 400

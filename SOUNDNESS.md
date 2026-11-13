@@ -3810,14 +3810,19 @@ The same module gives the headers, the data column sidecars and the payload enve
 `headerOf_ok` shows that a header answer carries its header and the root of its message, and `headerOf_blockRoot` that this root is the root of the block.
 `selectHeaders_mem` shows that each header of the headers answer is at the requested slot, with the requested parent root.
 `headersSlot_default` shows that without filters the headers answer reads the slot of the head.
-`IsColumnsAnswer` accepts any order of the requested sidecars, and `selectColumns_isColumnsAnswer` shows that the selection in input order is one.
-`IsColumnsAnswer.mem` shows that each sidecar of an answer is a sidecar of the block with a requested index, and `selectColumns_none` that without indices all are kept.
+`IsColumnsAnswer` accepts any order of the requested sidecars, so the selection in input order is one answer by definition.
+`IsColumnsAnswer.mem_iff` shows that a sidecar is in an answer exactly when the block has it and its index is requested.
+`selectColumns_none` shows that without indices all are kept, and `selectColumns_some_nil` that an empty list keeps none.
+`columnsResponse_before_fulu` shows that before Fulu the columns answer gets code 400.
 `payloadEnvelopeOf_ok` shows that the envelope answer is the given signed envelope, from Gloas, and that its message has the root of the envelope that the store holds for the block.
+`payloadEnvelopeOf_of_stored` shows the converse: such an envelope is the answer.
 `payloadEnvelopeOf_before_gloas` shows that before Gloas the answer gets code 404, and `blindedBlockSsz_gloas` that from Gloas the blinded block has no SSZ body either.
 The Python suite builds the store of a Gloas fork choice case with one block and its envelope.
 It checks the header and headers answers of that block and of the anchor, with each filter, against headers that it builds from the JSON of the blocks.
 It checks the envelope answer against the pinned envelope, and code 404 for the anchor and for another message.
-It checks the columns answer and its SSZ body for Fulu and Gloas, with and without indices.
+It checks the columns answer and its SSZ body for Fulu and Gloas, with and without indices, and code 400 before Fulu.
+It checks the SSZ bodies of the block and the blinded block against the JSON answers.
+It checks code 400 for the blinded block from Gloas, and that the attestations answer has no SSZ body.
 
 Points that remain open:
 
@@ -3875,15 +3880,22 @@ Points that remain open:
 - The block answers take the signed block as an input, since the store of the fork choice keeps blocks without their signatures.
 - The blobs answer takes the blobs of the block as an input, one for each commitment; another count gets code 500.
   Which blobs a node keeps, and whether it rebuilds them from columns, is its own matter.
-- The headers endpoint fetches "current head slot blocks" by default; EthLib reads the slot of the head only when neither filter is given.
+- The headers endpoint fetches "current head slot blocks" by default; EthLib reads this as the slot of the head block, not the slot of the clock.
+  It uses that slot only when neither filter is given.
   With only a parent root, it keeps every slot.
   A store without a head then gets code 500.
 - The headers answers take the signed headers that the node holds, of any fork, as an input.
   A block is canonical when it is the ancestor of the head at its own slot.
-- The columns answer takes the sidecars that the node holds for the block as an input, and names the consensus version of the block.
+  Canonicity is decided against the blocks of the store, so a block below the anchor is reported as not canonical.
+- The columns answer takes the sidecars that the node holds for the block as an input, and names the consensus version of the fork.
   It gives the order of the input, which the source leaves free.
+  An empty list of indices requests no sidecar, since the parameter is then specified.
+  The source lists the versions Fulu and Gloas only; EthLib gives code 400 before Fulu.
 - The envelope answer takes the signed envelope as an input, since the store keeps envelopes without their signatures.
   It compares the hash tree roots of the two messages, and gets code 404 when they differ.
+  It does not check the signature of the given envelope; the caller vouches for it.
+  Before Gloas it gets code 404, since no envelope exists; the source names only the version Gloas.
+- From Hegotá the envelope and columns answers carry no version, since the source names none for that fork yet.
 - The source gives no SSZ body for the attestations answer; EthLib gives none.
 
 ### Builder API

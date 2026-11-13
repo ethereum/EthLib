@@ -3140,7 +3140,7 @@
       {"constructor": "supportDiscountAboveMaximum", "code": 53}]}],
    "error_class": "ForkChoiceError",
    "docstring":
-   "The JSON response of the headers endpoint, as a `dict`.\n\nThe first arguments build the store as a fork choice case does.\n\nThen come the SSZ bytes of the signed headers that the node holds, and the two filters."},
+   "The JSON response of the headers endpoint, as a `dict`.\n\nThe first arguments build the store as a fork choice case does.\n\nThen come the SSZ bytes of the signed headers that the node holds, the slot and the parent root."},
   {"summary": "The JSON response of the columns endpoint, as a `dict`.",
    "signature":
    "(name: str, fork: str, sidecars: list[bytes], indices: list[int] | None) -> dict[str, Any]",
@@ -3149,7 +3149,7 @@
    "errors": [],
    "error_class": "ConsensusError",
    "docstring":
-   "The JSON response of the columns endpoint, as a `dict`.\n\nThe arguments are the name, the fork, the SSZ bytes of each sidecar that the node holds.\n\nThe last argument is the requested indices, or None for every sidecar."},
+   "The JSON response of the columns endpoint, as a `dict`.\n\nThe first arguments are the preset, the fork and the SSZ bytes of each sidecar that the node holds.\n\nThe last argument is the requested indices, or None for every sidecar."},
   {"summary": "The SSZ body of the columns answer, as `bytes`.",
    "signature":
    "(name: str, fork: str, sidecars: list[bytes], indices: list[int] | None) -> bytes",

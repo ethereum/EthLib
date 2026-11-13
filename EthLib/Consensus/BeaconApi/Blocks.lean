@@ -19,7 +19,7 @@ The [columns endpoint] gives the data column sidecars of a block, in any order.
 
 The [envelope endpoint] gives the signed payload envelope of a block, from Gloas.
 
-Each answer takes the blocks, blobs, sidecars or envelope as inputs.
+Each answer takes the blocks, headers, blobs, sidecars or envelope that it reads as inputs.
 
 Which of them a node keeps, and how it finds them, is its own matter.
 
@@ -116,8 +116,7 @@ def isCanonical (config : Config) (store : Store preset fork) (root : Root) : Bo
   | some block, some head => blockAtSlot store head block.slot == some root
   | _, _ => false
 
-/-- One header of the headers answers: the root of its block, and whether that block is canonical.
--/
+/-- One entry of the headers answers: a root, whether its block is canonical, and its header. -/
 structure HeaderResponse where
   /-- The root of the block, which is the root of its header. -/
   root : Root
@@ -173,7 +172,7 @@ def selectHeaders (headers : List SignedBeaconBlockHeader) (slot : Option Slot)
 
 /-- The answers of the headers endpoint, from the signed headers of the blocks that the node holds.
 
-The node gives the headers of all its blocks, of any fork. -/
+The input is the signed headers of the blocks that the node holds, of any fork. -/
 def headersOf (config : Config) (store : Store preset fork)
     (headers : List SignedBeaconBlockHeader) (slot : Option Slot) (parentRoot : Option Root) :
     Except ErrorMessage (List HeaderResponse) := do
@@ -238,7 +237,7 @@ def blobsSsz (block : SignedBeaconBlock preset fork) (blobs : List Blob)
 
 /-! ## Data column sidecars -/
 
-/-- The sidecars whose index is requested, in the order of the input, or all when none is given. -/
+/-- The sidecars with a requested index, in the order of the input; every one without a list. -/
 def selectColumns (sidecars : List (DataColumnSidecar preset fork))
     (indices : Option (List DataAvailability.ColumnIndex)) : List (DataColumnSidecar preset fork) :=
   sidecars.filter fun sidecar => indices.all (·.contains sidecar.index)
@@ -251,19 +250,31 @@ def IsColumnsAnswer (sidecars : List (DataColumnSidecar preset fork))
     (answer : List (DataColumnSidecar preset fork)) : Prop :=
   answer.Perm (selectColumns sidecars indices)
 
-/-- The response of the columns endpoint, without the two flags that come from the store.
+/-- The error of a block before Fulu, which has no data column sidecars, with code 400. -/
+def columnsBeforeFulu : ErrorMessage :=
+  { code := 400, message := "Blocks before Fulu do not have data column sidecars" }
 
-It names the consensus version of the block. -/
+/-- From Fulu: the response of the columns endpoint, without the two flags from the store.
+
+It names the consensus version of the fork.
+
+Before Fulu, the answer is the error with code 400. -/
 def columnsResponse (sidecars : List (DataColumnSidecar preset fork))
-    (indices : Option (List DataAvailability.ColumnIndex)) : Except ErrorMessage ApiEnvelope := do
-  let kept ← (selectColumns sidecars indices).mapM apiJsonOr500
-  return { version := fork.consensusVersion?, data := .arr kept.toArray }
+    (indices : Option (List DataAvailability.ColumnIndex)) : Except ErrorMessage ApiEnvelope :=
+  if .fusaka ≤ fork then do
+    let kept ← (selectColumns sidecars indices).mapM apiJsonOr500
+    return { version := fork.consensusVersion?, data := .arr kept.toArray }
+  else .error columnsBeforeFulu
 
-/-- The SSZ body of the columns answer: a list bounded by the number of columns. -/
+/-- From Fulu: the SSZ body of the columns answer, a list bounded by the number of columns.
+
+Before Fulu, the answer is the error with code 400. -/
 def columnsSsz (sidecars : List (DataColumnSidecar preset fork))
     (indices : Option (List DataAvailability.ColumnIndex)) : Except ErrorMessage ByteArray :=
   let kept := (selectColumns sidecars indices).toArray
-  if bound : kept.size ≤ preset.NUMBER_OF_COLUMNS.toNat then apiSszOr500 (SszList.mk kept bound)
+  if ¬ .fusaka ≤ fork then .error columnsBeforeFulu
+  else if bound : kept.size ≤ preset.NUMBER_OF_COLUMNS.toNat then
+    apiSszOr500 (SszList.mk kept bound)
   else .error (internalError "more sidecars than columns")
 
 /-! ## Payload envelopes -/
@@ -278,7 +289,9 @@ The store keeps envelopes without their signatures, so the signed envelope is an
 
 Its message must have the root of the envelope that the store holds for the block.
 
-Otherwise, and before Gloas, the answer is the error with code 404. -/
+Otherwise, and before Gloas, the answer is the error with code 404.
+
+A message without a hash tree root gives the error with code 500. -/
 def payloadEnvelopeOf (store : Store preset fork) (root : Root)
     (signed : SignedExecutionPayloadEnvelope preset fork) :
     Except ErrorMessage (SignedExecutionPayloadEnvelope preset fork) :=

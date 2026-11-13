@@ -17,6 +17,14 @@ The blobs answer keeps blobs in the order of the block.
 Each blob it gives has a commitment whose versioned hash is requested.
 
 When each blob of the block commits to its commitment, so does each blob of the answer.
+
+A known head is canonical, and a block that the store does not hold is not.
+
+Each header of the headers answer matches the requested slot and parent root.
+
+A columns answer holds exactly the requested sidecars of the block, in any order.
+
+From Gloas, the envelope answer is the given envelope when its message matches the stored one.
 -/
 
 @[expose] public section
@@ -233,25 +241,36 @@ theorem selectColumns_none (sidecars : List (DataColumnSidecar preset fork)) :
     selectColumns sidecars none = sidecars := by
   simp [selectColumns]
 
-/-- Each sidecar of an answer is a sidecar of the block, with a requested index. -/
-theorem IsColumnsAnswer.mem {sidecars : List (DataColumnSidecar preset fork)}
+/-- A sidecar is in an answer exactly when the block has it and its index is requested. -/
+theorem IsColumnsAnswer.mem_iff {sidecars : List (DataColumnSidecar preset fork)}
     {indices : Option (List DataAvailability.ColumnIndex)}
     {answer : List (DataColumnSidecar preset fork)}
-    (valid : IsColumnsAnswer sidecars indices answer)
-    {sidecar : DataColumnSidecar preset fork} (mem : sidecar ∈ answer) :
-    sidecar ∈ sidecars ∧ ∀ requested ∈ indices, sidecar.index ∈ requested := by
-  have kept := valid.mem_iff.1 mem
-  simp only [selectColumns, List.mem_filter] at kept
-  refine ⟨kept.1, ?_⟩
-  rintro requested rfl
-  simpa using kept.2
+    (valid : IsColumnsAnswer sidecars indices answer) {sidecar : DataColumnSidecar preset fork} :
+    sidecar ∈ answer ↔ sidecar ∈ sidecars ∧ ∀ requested ∈ indices, sidecar.index ∈ requested := by
+  rw [List.Perm.mem_iff valid]
+  simp only [selectColumns, List.mem_filter]
+  cases indices <;> simp
+
+/-- An empty list of indices requests no sidecar. -/
+theorem selectColumns_some_nil (sidecars : List (DataColumnSidecar preset fork)) :
+    selectColumns sidecars (some []) = [] := by
+  simp [selectColumns]
+
+/-- Before Fulu, the columns endpoint gives the error with code 400. -/
+theorem columnsResponse_before_fulu {sidecars : List (DataColumnSidecar preset fork)}
+    {indices : Option (List DataAvailability.ColumnIndex)} (early : fork < .fusaka) :
+    columnsResponse sidecars indices = .error columnsBeforeFulu := by
+  have notFulu : ¬ .fusaka ≤ fork := Nat.not_le.2 early
+  unfold columnsResponse
+  simp only [notFulu, ↓reduceIte]
 
 /-- An envelope answer is the given envelope, whose message has the root of the stored one. -/
 theorem payloadEnvelopeOf_ok {store : Store preset fork} {root : Root}
     {signed answer : SignedExecutionPayloadEnvelope preset fork}
     (computed : payloadEnvelopeOf store root signed = .ok answer) :
     answer = signed ∧ ∃ (gloas : .glamsterdam ≤ fork)
-      (stored : ExecutionPayloadEnvelope preset fork) (held : Root), (store.payloads gloas)[root]? = some stored ∧
+      (stored : ExecutionPayloadEnvelope preset fork) (held : Root),
+        (store.payloads gloas)[root]? = some stored ∧
         Serialization.Ssz.SszType.hashTreeRoot stored = .ok held ∧
         Serialization.Ssz.SszType.hashTreeRoot signed.message = .ok held := by
   unfold payloadEnvelopeOf at computed
@@ -269,6 +288,18 @@ theorem payloadEnvelopeOf_ok {store : Store preset fork} {root : Root}
       · cases computed
     · cases computed
   · cases computed
+
+/-- From Gloas, the envelope answer is the given envelope when the store holds its message.
+
+The two messages must have the same root. -/
+theorem payloadEnvelopeOf_of_stored {store : Store preset fork} {root : Root}
+    {signed : SignedExecutionPayloadEnvelope preset fork} (gloas : .glamsterdam ≤ fork)
+    {stored : ExecutionPayloadEnvelope preset fork} {held : Root}
+    (found : (store.payloads gloas)[root]? = some stored)
+    (storedRoot : Serialization.Ssz.SszType.hashTreeRoot stored = .ok held)
+    (givenRoot : Serialization.Ssz.SszType.hashTreeRoot signed.message = .ok held) :
+    payloadEnvelopeOf store root signed = .ok signed := by
+  simp [payloadEnvelopeOf, gloas, found, storedRoot, givenRoot]
 
 /-- Before Gloas, the envelope endpoint gives the error with code 404. -/
 theorem payloadEnvelopeOf_before_gloas {store : Store preset fork} {root : Root}

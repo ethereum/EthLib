@@ -16,7 +16,7 @@ A query is named after its endpoint, such as `attestations` or `blinded_block`.
 
 The JSON answer is the response without the two flags that come from the store.
 
-An error response of the API has its own code: 400 or 500.
+An error response of the API has its own code: 400, 404 or 500.
 
 An unknown name, query or fork, or an input that does not decode, has code 0.
 -/
@@ -62,7 +62,7 @@ def blockQuerySsz {preset : Preset} {fork : Fork} (block : SignedBeaconBlock pre
   | "blinded_block" => apiError (BeaconApi.blindedBlockSsz block)
   | _ => throw (0, s!"no block query with an SSZ body is named {query}")
 
-/-- The SSZ body of the answer to a query on a signed block. -/
+/-- The SSZ body of the answer to a query, from the preset, the fork and the SSZ of the block. -/
 def apiBlockQuerySszOf (args : String × String × ByteArray × String) : Result ByteArray := do
   let (name, fork, block, query) := args
   let (preset, fork) ← transitionPresetAndFork name.toUTF8 fork.toUTF8
@@ -140,7 +140,7 @@ def apiHeadersOf (args : StoreCaseArgs (List ByteArray × Option UInt64 × Optio
 
 The first arguments build the store as a fork choice case does.
 
-Then come the SSZ bytes of the signed headers that the node holds, and the two filters. -/
+Then come the SSZ bytes of the signed headers that the node holds, the slot and the parent root. -/
 @[export eth_consensus_api_headers]
 def apiHeadersExport (args : PyValue) : Result PyValue := pyExport apiHeadersOf args
 
@@ -155,7 +155,7 @@ def apiColumnsOf (args : String × String × List ByteArray × Option (List UInt
 
 /-- The JSON response of the columns endpoint, as a `dict`.
 
-The arguments are the name, the fork, the SSZ bytes of each sidecar that the node holds.
+The first arguments are the preset, the fork and the SSZ bytes of each sidecar that the node holds.
 
 The last argument is the requested indices, or None for every sidecar. -/
 @[export eth_consensus_api_columns]

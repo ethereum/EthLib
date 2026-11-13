@@ -971,12 +971,14 @@ def api_header(
     anchor_block: bytes,
     steps: list[ForkChoiceStep],
     block: bytes,
+    *,
     verify: bool = True,
 ) -> dict[str, Any]:
-    """The Beacon API header of a signed block, against the store of a fork choice case."""
+    """The Beacon API header of a signed block against a fork choice store, or ForkChoiceError."""
     # The steps are those of `fork_choice`; the block is the SSZ of a signed block.
     # The data holds the root, whether the block is on the chain of the head, and the header.
-    # The flags execution_optimistic and finalized come from the store and are absent.
+    # The flags execution_optimistic and finalized are not computed, so they are absent.
+    # An API error carries its HTTP code in `.code`.
     return _native.consensus_api_header(
         name, fork, anchor_state, anchor_block, steps, verify, block
     )
@@ -994,9 +996,11 @@ def api_headers(
     parent_root: bytes | None = None,
     verify: bool = True,
 ) -> dict[str, Any]:
-    """The Beacon API headers that match the filters, against the store of a fork choice case."""
+    """The Beacon API headers that match the filters, or ForkChoiceError."""
     # The headers are the SSZ of the signed headers that the node holds, kept in their order.
     # With neither filter, the slot is that of the head; with only a parent root, any slot.
+    # The store is built from the steps of a fork choice case.
+    # An API error carries its HTTP code in `.code`; a store without a head gives 500.
     return _native.consensus_api_headers(
         name, fork, anchor_state, anchor_block, steps, verify, list(headers), slot, parent_root
     )
@@ -1011,7 +1015,8 @@ def api_columns(
 ) -> dict[str, Any]:
     """The Beacon API data column sidecars with the requested indices, or ConsensusError."""
     # The sidecars are the SSZ of those that the node holds for the block, kept in their order.
-    # The source allows any order, so a caller compares answers as multisets.
+    # The source allows any order; this answer keeps the order of the input.
+    # Before Fulu it raises code 400.
     chosen = None if indices is None else list(indices)
     return _native.consensus_api_columns(name, fork, list(sidecars), chosen)
 
@@ -1036,12 +1041,13 @@ def api_payload_envelope(
     steps: list[ForkChoiceStep],
     root: bytes,
     envelope: bytes,
+    *,
     verify: bool = True,
 ) -> dict[str, Any]:
-    """The Beacon API signed payload envelope of a block, against the store of a case."""
+    """The Beacon API signed payload envelope of a block, or ForkChoiceError."""
     # The store keeps envelopes without signatures, so the signed envelope is an input.
     # It is answered when its message has the root of the envelope stored for the block.
-    # Otherwise, and before Gloas, it raises code 404.
+    # Otherwise, and before Gloas, it raises ForkChoiceError with code 404.
     return _native.consensus_api_payload_envelope(
         name, fork, anchor_state, anchor_block, steps, verify, root, envelope
     )
@@ -1055,9 +1061,10 @@ def api_payload_envelope_ssz(
     steps: list[ForkChoiceStep],
     root: bytes,
     envelope: bytes,
+    *,
     verify: bool = True,
 ) -> bytes:
-    """The Beacon API SSZ body of the signed payload envelope of a block."""
+    """The Beacon API SSZ body of the signed payload envelope of a block, or ForkChoiceError."""
     return _native.consensus_api_payload_envelope_ssz(
         name, fork, anchor_state, anchor_block, steps, verify, root, envelope
     )
