@@ -3588,6 +3588,22 @@ The head of the view is the head of the update (`head_hash_of_forkchoiceUpdated`
 The view resolves `safe` and `finalized` to the blocks that the update named, when their hashes are not zero (`resolve_safe_of_forkchoiceUpdated`, `resolve_finalized_of_forkchoiceUpdated`).
 A notification gets no response (`answerJson_notification`).
 
+`eth_config` reports the current, next and last scheduled configurations of EIP-7910 (`Execution/Rpc/Config.lean`).
+The reported fork checksum includes the genesis hash, the configured fork-ID blocks and the timestamp activations reached by that configuration (`configObject_forkId`, `Proofs/Rpc/Config.lean`).
+The block that represents the Merge in the fork ID is an explicit input, distinct from the actual Paris activation block.
+The report's precompile addresses are exactly those that transaction processing warms (`configObject_precompiles`).
+Its blob schedule is `chainBlobSchedule` at the configuration's activation (`configObject_blobSchedule`).
+The named BPO forks keep Osaka's precompile names and system contracts (`configPrecompiles_bpo`, `configSystemContracts_bpo`).
+
+The precompile names through Osaka and the system-contract sets through Prague follow EIP-7910 at the pinned EIPs commit.
+The Amsterdam set also lists the builder deposit and exit contracts of EIP-8282, whose constants name both addresses.
+No meta-EIP at that pin lists the system-contract set after Prague.
+
+The method declines reports before Cancun and after Amsterdam, and rejects a chain ID of zero.
+For reported forks and blob-schedule changes, it requires an activation timestamp or activation at genesis.
+It requires genesis context, which the export infers from block zero or reads as an input for a pruned chain.
+For a pruned chain that context is trusted, and no theorem ties it to the retained blocks.
+
 A signed transaction of every kind reads back from its JSON form (`transactionOfJson_transactionJson`, `Proofs/Rpc/Transaction.lean`).
 A typed transaction holds its parity as a 256-bit number, while the schema types it as a byte, so the round trip asks that parity to be below 256.
 That bound holds for every transaction whose signature names a sender (`parityIsByte_of_recoverSender`).

@@ -79,6 +79,7 @@ def chain_config(config: Mapping[str, Any]) -> dict[str, Any]:
         "depositContractAddress": config["depositContractAddress"],
         "activations": activations,
         "blobSchedules": schedules,
+        "mergeForkBlock": config["mergeNetsplitBlock"],
     }
 
 

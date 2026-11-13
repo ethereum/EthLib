@@ -196,6 +196,27 @@ Then come the head, safe and finalized hashes, the network ID and whether to che
 abbrev ViewInputs :=
   PyValue × ByteArray × List (String × ByteArray) × (Hash32 × Hash32 × Hash32) × Nat × Bool
 
+/-- An optional numeric field of the RPC configuration, with the uint64 bound of EIP-6122. -/
+def configNat (j : Json) (name : String) : Result (Option Nat) := do
+  match j.getObjVal? name with
+  | .error _ => return none
+  | .ok value =>
+    let some n := value.getNat?.toOption | throw (0, s!"config: {name} is not a number")
+    unless n < 2 ^ 64 do throw (0, s!"config: {name} is not below 2^64")
+    return some n
+
+/-- Explicit genesis context for a pruned view, or none when neither field is given.
+
+The hash and timestamp must be given together; a partial or malformed context is rejected. -/
+def configGenesis (j : Json) : Result (Option (Hash32 × Nat)) := do
+  let time ← configNat j "genesisTime"
+  match j.getObjVal? "genesisHash", time with
+  | .error _, none => return none
+  | .ok hash, some time =>
+    let hash ← (hash32 "genesisHash" hash).mapError fun reason => (0, reason)
+    return some (hash, time)
+  | _, _ => throw (0, "config: genesisHash and genesisTime must be given together")
+
 /-- The chain view that its inputs build, or why they build none.
 
 The lowest block is taken with its state, whose root must be the state root of its header.
@@ -209,7 +230,10 @@ Each block after it runs on the chain before it, without the history before the 
 The head must be the last block, and a zero safe or finalized hash names no block. -/
 def viewOf (inputs : ViewInputs) : Result ChainView := do
   let (config, state, blocks, (head, safeHash, finalizedHash), networkId, checkSeal) := inputs
-  let config ← ChainConfig.Exports.configOfJson config.toJson
+  let configJson := config.toJson
+  let genesis ← configGenesis configJson
+  let mergeForkBlock ← configNat configJson "mergeForkBlock"
+  let config ← ChainConfig.Exports.configOfJson configJson
   let state ← (State.Exports.ofInput state).mapError fun e => (0, e.message)
   let (first, rest) ← match blocks with
     | [] => .error (0, "no block")
@@ -223,6 +247,14 @@ def viewOf (inputs : ViewInputs) : Result ChainView := do
   unless lowest.transactions.isEmpty do
     .error (0, "the lowest block has transactions, whose receipts are not given")
   let lowest ← recordOf lowest state [] []
+  let genesis ← if lowest.block.header.number = 0 then do
+      let actual := (lowest.hash, lowest.block.header.timestamp.toNat)
+      match genesis with
+      | some given =>
+        unless given = actual do throw (0, "config: genesis context disagrees with block zero")
+        pure (some actual)
+      | none => pure (some actual)
+    else pure genesis
   let records ← rest.foldlM (init := [lowest]) fun records block => do
     let prev := records.getLast?.getD lowest
     return records ++ [← nextRecord config checkSeal records prev block]
@@ -236,7 +268,9 @@ def viewOf (inputs : ViewInputs) : Result ChainView := do
       nonempty := h
       safe := named safeHash
       finalized := named finalizedHash
-      networkId := networkId }
+      networkId := networkId
+      genesis := genesis
+      mergeForkBlock := mergeForkBlock }
     return view
 
 /-- The responses of the chain view that its inputs build, to the texts of requests, as text.
@@ -255,6 +289,12 @@ Each block is the name of its fork and its RLP form, the lowest block first.
 Then come the head, safe and finalized hashes, the network ID, and whether to check the seal.
 
 The last argument is the list of the texts of the requests.
+
+The configuration may give `mergeForkBlock`, the Merge fork-ID block of EIP-3675.
+
+For `eth_config`, a pruned chain also gives `genesisHash` and `genesisTime` in the configuration.
+
+When the lowest block is genesis, those two fields are inferred and checked if also supplied.
 
 It returns the text of the response to each request, in order, or none for a notification.
 
