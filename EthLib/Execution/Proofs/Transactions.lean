@@ -10,6 +10,7 @@ public import EthLib.Execution.Proofs.Transactions.LogsPaid
 public import EthLib.Execution.Proofs.Transactions.Network
 public import EthLib.Execution.Proofs.Transactions.NoncesFit
 public import EthLib.Execution.Proofs.Transactions.Process
+public import EthLib.Execution.Proofs.Transactions.Rebuild
 public import EthLib.Execution.Proofs.Transactions.Replay
 public import EthLib.Execution.Proofs.Transactions.Settlement
 public import EthLib.Execution.Proofs.Transactions.SettlementRebuild

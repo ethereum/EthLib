@@ -38,8 +38,8 @@ open EthLib.Execution.State
 open EthLib.Execution.Transactions
 
 /-- The access-list builder follows every state with the rebuild property on its block. -/
-theorem _root_.EthLib.Execution.Evm.RebuildState.followable {block : BlockState}
-    {tx : TransactionState} (valid : RebuildState block tx) : Followable block tx :=
+theorem _root_.EthLib.Execution.Evm.RebuildEnd.followable {block : BlockState}
+    {tx : TransactionState} (valid : RebuildEnd block tx) : Followable block tx :=
   ⟨valid.parent, fun _ _ hslot => valid.getStorage_of_slot_eq_none hslot,
     fun _ _ code _ hread => valid.code _ code hread⟩
 
