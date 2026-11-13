@@ -13,11 +13,13 @@ Not yet released.
   From Gloas the registry has no limit in its type, so a position may lie beyond every `ValidatorIndex`.
   `slashedFlag_initiateValidatorExit` takes a `position : Nat` in place of an index.
   The second conjunct of `slashValidator_slashedFlag` holds at each position other than `slashedIndex.toNat`.
-  A caller that read either at an index `i` reads it at `i.toNat`, and `getValidator_eq_ok_iff` converts the result.
-  `slashIfSlashable_ok` and `foldlM_slashIfSlashable` gain a last conjunct: no flag changes at a position that none of their indices names.
-  An `obtain` of their three parts binds a fourth.
-  `UpgradeFrame` gains the field `slashed`, since each upgrade keeps every slashed flag, and `ElectraKept` gains the same conjunct.
-  `UpgradeFrame.trans_blockFrame` takes the new premise `flags`: the steps after the upgrade keep every slashed flag.
+  A caller that read either at an index `i` reads it at `i.toNat`.
+  The new `slashedFlag_eq_of_slashed` turns equal flags there into equal values of `slashedFlag` at `i`.
+  `slashIfSlashable_ok` and `foldlM_slashIfSlashable` gain a last conjunct: no slashed flag changes at a position that their index, or none of their indices, names.
+  A pattern that takes them apart needs a fourth component.
+  `UpgradeFrame` gains the field `slashed`, since each upgrade keeps every slashed flag.
+  `ElectraKept` gains the same conjunct, so a pattern that takes it apart needs a fourth component too.
+  `UpgradeFrame.trans_blockFrame` takes the new premise `slashed`: the steps after the upgrade keep every slashed flag.
   A block frame alone may slash, so it cannot give the field.
   Compose the block frames of the steps first, and pass their flags once.
 
