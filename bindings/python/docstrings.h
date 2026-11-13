@@ -1220,6 +1220,9 @@
 #define DOC_engine_read_get_blobs_result \
   "The result of an `engine_getBlobs` method, read from its JSON and written back."
 
+#define DOC_engine_exchange_transition_configuration \
+  "The answer to an `engine_exchangeTransitionConfigurationV1` request, from a configuration."
+
 #define DOC_engine_rewrite_params \
   "The parameters of an Engine API request, read by the decoder and written by the writer."
 

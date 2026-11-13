@@ -11342,6 +11342,24 @@
    "docstring":
    "The result of an `engine_getBlobs` method, read from its JSON and written back.\n\nThe arguments are the method name and the result, as `json.loads` gives it.\n\nA result that does not decode is reported as invalid parameters, with code 32602.\n\nAn unknown method name has code 0."},
   {"summary":
+   "The answer to an `engine_exchangeTransitionConfigurationV1` request, from a configuration.",
+   "signature":
+   "(terminal_total_difficulty: int, terminal_block_hash: bytes, terminal_block_number: int, request: dict) -> dict[str, Any]",
+   "operation": "EthLib.Engine.Exports.exchangeTransitionConfigurationExport",
+   "method": "engine_exchange_transition_configuration",
+   "errors":
+   [{"type": "EthLib.Engine.EngineError",
+     "codes":
+     [{"constructor": "invalidParams", "code": 32602},
+      {"constructor": "unsupportedFork", "code": 38005},
+      {"constructor": "invalidForkchoiceState", "code": 38002},
+      {"constructor": "tooLargeRequest", "code": 38004},
+      {"constructor": "invalidPayloadAttributes", "code": 38003},
+      {"constructor": "unknownPayload", "code": 38001}]}],
+   "error_class": "EngineError",
+   "docstring":
+   "The answer to an `engine_exchangeTransitionConfigurationV1` request, from a configuration.\n\nThe arguments are the terminal total difficulty, block hash and block number, and the request."},
+  {"summary":
    "The parameters of an Engine API request, read by the decoder and written by the writer.",
    "signature": "(method: str, params: list[Any]) -> list[Any]",
    "operation": "EthLib.Engine.Exports.rewriteParamsExport",
