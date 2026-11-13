@@ -57,7 +57,7 @@ def consensusBlockValue (config : Config) (checks : SignatureChecks)
 
 The two values are in Wei, and the factor is in percent of the builder's value.
 
-The builder's value is first rounded down to a whole number of hundredths. -/
+The builder's value is first rounded down to a multiple of 100 Wei. -/
 def preferLocalV3 (localValue builderValue : Nat) (boost : UInt64) : Bool :=
   boost.toNat * (builderValue / 100) ≤ localValue
 
@@ -75,7 +75,9 @@ structure CandidateBid where
 
 /-- The candidate that a signed bid gives under some terms.
 
-Its signer is the builder that the bid names, from the registry of the state.
+Its signer is the key of the builder that the bid names, from the registry of the state.
+
+So the signature of the bid must have been checked first.
 
 It fails when the registry has no such builder. -/
 def CandidateBid.ofBid (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork)
@@ -84,7 +86,7 @@ def CandidateBid.ofBid (state : BeaconState preset fork) (gloas : .glamsterdam �
   let builder ← getBuilder state gloas signed.message.builderIndex
   return ⟨builder.pubkey, signed.message.value, signed.message.executionPayment, terms⟩
 
-/-- The value of a bid, in Gwei: its payment with the execution payment capped by its terms.
+/-- The value of a bid, in Gwei: its value plus its execution payment, counted up to its cap.
 
 The sum saturates at the largest 64-bit integer. -/
 def cappedBidValue (bid : CandidateBid) : Nat :=
@@ -120,7 +122,9 @@ The node drops the bids that their terms refuse, and keeps the first one of larg
 
 That bid wins only when its weight is above 100 times the local value.
 
-The two sides are compared in Wei, so the local payload wins a tie. -/
+Both sides are in hundredths of a Wei, and the bid must weigh strictly more.
+
+So the local payload wins a tie. -/
 def selectPayload (localValue : Nat) (bids : List CandidateBid) : Option CandidateBid :=
   (heaviestBid (bids.filter bidAccepted)).filter fun bid =>
     100 * localValue < bidWeight bid * GWEI_TO_WEI

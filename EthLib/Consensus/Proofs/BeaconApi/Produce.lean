@@ -16,9 +16,9 @@ Through Fulu, a factor of zero keeps the local payload.
 
 From Gloas, a chosen bid is accepted, has the largest weight and beats the local payload.
 
-No bid is chosen exactly when no accepted bid beats it, so the local payload wins a tie.
+No bid is chosen exactly when no accepted bid beats the local payload, so it wins a tie.
 
-An execution payment above its cap does not change the choice.
+Raising an execution payment that already reaches its cap does not change the choice.
 
 The weight of a bid fits in 128 bits.
 -/
@@ -268,7 +268,7 @@ theorem cappedBidValue_cap {bid : CandidateBid} {payment : Gwei}
   simp only [cappedBidValue, builderBidValue]
   rw [Nat.min_eq_right a, Nat.min_eq_right r]
 
-/-- Raising the execution payments that reach their caps keeps the choice.
+/-- Changing the execution payments that reach their caps keeps the choice.
 
 Each such bid takes a new payment, also at or above its cap. -/
 theorem selectPayload_cap {localValue : Nat} {bids : List CandidateBid}

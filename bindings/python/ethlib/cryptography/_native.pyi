@@ -717,12 +717,12 @@ def consensus_api_consensus_block_value(name: str, fork: str, state: bytes, bloc
     """The consensus value of a signed block, in Wei."""
     ...
 
-def consensus_api_prefer_local_v3(local_value: int, builder_value: int, boost: int) -> bool:
+def consensus_api_prefer_local_v3(local_value: int, builder_value: int, builder_boost_factor: int) -> bool:
     """From Bellatrix to Fulu: whether the node returns its local payload rather than the builder's."""
     ...
 
 def consensus_api_capped_bid_value(bid: dict[str, Any]) -> int:
-    """The value of a bid, in Gwei: its payment with the execution payment capped by its terms."""
+    """The value of a bid, in Gwei: its value plus its execution payment, counted up to its cap."""
     ...
 
 def consensus_api_bid_accepted(bid: dict[str, Any]) -> bool:
@@ -733,7 +733,7 @@ def consensus_api_select_payload(local_value: int, bids: list[dict[str, Any]]) -
     """From Gloas: the bid that the node commits to, or none for its local payload."""
     ...
 
-def consensus_api_builder_config_terms(data: bytes) -> tuple[dict[str, Any], list[dict[str, Any]]] | None:
+def consensus_api_builder_config_terms(data: bytes, slot: int) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """From Gloas, the terms that the SSZ bytes of a builder configuration give."""
     ...
 

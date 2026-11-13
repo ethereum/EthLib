@@ -71,13 +71,19 @@ instance : SszType BuilderConfig :=
     (fun c => (c.minBid, c.builderBoostFactor, c.builders))
     (fun (minBid, builderBoostFactor, builders) => ⟨minBid, builderBoostFactor, builders⟩)
 
-/-- Whether a builder entry is valid: its URL is not empty. -/
-def BuilderEntry.valid (entry : BuilderEntry) : Bool :=
-  entry.url.data.size != 0
+/-- Whether a builder entry serves a request for a slot.
 
-/-- Whether a builder configuration is valid: each of its entries is. -/
-def BuilderConfig.valid (config : BuilderConfig) : Bool :=
-  config.builders.data.all BuilderEntry.valid
+Its URL and its [authentication data] must not be empty, and its authentication must name the slot.
+
+[authentication data]: https://github.com/ethereum/beacon-APIs/blob/7911555e6a30c51f9b69bb168111a59f1ff8ee49/types/gloas/request_auth.yaml
+-/
+def BuilderEntry.serves (entry : BuilderEntry) (slot : Slot) : Bool :=
+  entry.url.data.size != 0 && entry.auth.message.data.data.size != 0 &&
+    entry.auth.message.slot == slot
+
+/-- Whether two builder entries share their URL and their authentication data. -/
+def BuilderEntry.sameRequest (a b : BuilderEntry) : Bool :=
+  a.url.data == b.url.data && a.auth.message.data.data == b.auth.message.data.data
 
 /-- From Gloas: the terms that apply to a bid.
 
@@ -99,6 +105,17 @@ structure BidTerms where
 def BuilderEntry.terms (entry : BuilderEntry) : BidTerms :=
   ⟨entry.builderPubkeys.data.toList, entry.maxExecutionPayment, entry.minBid,
     entry.builderBoostFactor⟩
+
+/-- The terms of the bids that a configuration asks for in a request for a slot, in order.
+
+An entry that does not serve the slot gives no bid, and does not fail the request.
+
+No two entries may share their URL and their authentication data, so the first one is kept. -/
+def BuilderConfig.entryTerms (config : BuilderConfig) (slot : Slot) : List BidTerms :=
+  let usable := config.builders.data.toList.filter (·.serves slot)
+  let distinct := usable.foldl (fun kept entry =>
+    if kept.any (·.sameRequest entry) then kept else kept ++ [entry]) []
+  distinct.map BuilderEntry.terms
 
 /-- The terms of a bid received on gossip.
 

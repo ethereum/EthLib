@@ -18,6 +18,8 @@ UINT64_MAX = 2**64 - 1
 GWEI = 10**9
 ALICE = bytes([0xA1]) * 48
 BOB = bytes([0xB0]) * 48
+# The slot of the block production requests below.
+SLOT = 7
 
 
 def _terms(
@@ -36,28 +38,36 @@ def _terms(
     }
 
 
-def _bid(value: int, payment: int = 0, *, signer: bytes = ALICE, **terms: Any) -> dict[str, Any]:
+def _bid(
+    value: int,
+    payment: int = 0,
+    *,
+    signer: bytes = ALICE,
+    pubkeys: Sequence[bytes] = (),
+    cap: int = UINT64_MAX,
+    min_bid: int = 0,
+    boost: int = PROFIT,
+) -> dict[str, Any]:
     """A candidate bid in Gwei, signed by one key, under the given terms."""
-    return {
-        "signer": signer,
-        "value": value,
-        "execution_payment": payment,
-        "terms": _terms(**terms),
-    }
+    terms = _terms(pubkeys=pubkeys, cap=cap, min_bid=min_bid, boost=boost)
+    return {"signer": signer, "value": value, "execution_payment": payment, "terms": terms}
 
 
 # The v3 rule, in Wei: the local payload wins when it pays at least the boosted builder value.
 @pytest.mark.parametrize(
     ("local", "builder", "boost", "expected"),
     [
-        # The example of the issue: 90 * (1.05e18 // 100) = 9.45e17 <= 1e18.
+        # 90 * (1.05e18 // 100) = 9.45e17 <= 1e18, so the local payload wins.
         (10**18, 105 * 10**16, 90, True),
+        # A factor of 90 at an exact tie keeps the local payload, and one Wei less loses it.
+        (9 * 10**17, 10**18, 90, True),
+        (9 * 10**17 - 1, 10**18, 90, False),
         # Factor 0 keeps the local payload whatever the builder pays, even against nothing.
         (0, 10**30, PREFER_LOCAL, True),
         # Factor 100 is profit maximization: the larger value wins, and the local one wins a tie.
         (10**18, 10**18, PROFIT, True),
         (10**18, 10**18 + 100, PROFIT, False),
-        # The builder value is rounded down to a hundredth before the factor applies.
+        # The builder value is rounded down to a multiple of 100 Wei before the factor applies.
         (10**18, 10**18 + 99, PROFIT, True),
         # Factor 2**64 - 1 on 100 Wei outweighs a local payload of 10**19 Wei.
         (10**19, 100, PREFER_BUILDER, False),
@@ -80,6 +90,7 @@ def test_prefer_local_v3_boost_out_of_range():
     [
         # The payment counts up to the cap, and adds nothing above it.
         (40_000_000, 5_000_000, 2_000_000, 42_000_000),
+        (40_000_000, 2_000_000, 2_000_000, 42_000_000),
         (40_000_000, 1_000_000, 2_000_000, 41_000_000),
         (40_000_000, 0, 0, 40_000_000),
         # The sum saturates at 2**64 - 1 instead of wrapping.
@@ -112,7 +123,7 @@ def test_bid_accepted(bid: dict[str, Any], expected: bool):
 
 
 def test_select_payload_example():
-    # The example of the issue, local values in Wei: bid A weighs 4.2e9, and bid B is refused.
+    # Local values in Wei: bid A weighs 4.2e9 hundredths of a Gwei, and bid B is below its floor.
     a = _bid(40_000_000, 5_000_000, cap=2_000_000, min_bid=30_000_000)
     b = _bid(45_000_000, min_bid=50_000_000)
     assert consensus.api_select_payload(41_000_000 * GWEI, [a, b]) == a
@@ -148,7 +159,7 @@ def test_select_payload_heaviest_and_first():
     # The heaviest bid wins, wherever it stands.
     assert consensus.api_select_payload(0, [light, heavy]) == heavy
     assert consensus.api_select_payload(0, [heavy, light]) == heavy
-    # Between two bids of one weight, the first one in the list wins.
+    # The source does not order two bids of one weight; EthLib keeps the first in the list.
     twin = _bid(11, signer=ALICE)
     assert consensus.api_select_payload(0, [heavy, twin]) == heavy
     assert consensus.api_select_payload(0, [twin, heavy]) == twin
@@ -165,12 +176,15 @@ def test_select_payload_factor_weighs_value():
 
 
 def test_select_payload_payment_above_cap():
-    # Raising a payment that is already above its cap does not change the choice.
-    capped = _bid(10, 5, cap=5, signer=ALICE)
+    # Capped at 5, both bids weigh 15 and the rival, first, wins; uncapped, the raised bid would.
     rival = _bid(15, signer=BOB)
-    assert consensus.api_select_payload(0, [capped, rival]) == capped
+    capped = _bid(10, 5, cap=5, signer=ALICE)
+    assert consensus.api_select_payload(0, [rival, capped]) == rival
     raised = _bid(10, UINT64_MAX, cap=5, signer=ALICE)
-    assert consensus.api_select_payload(0, [raised, rival]) == raised
+    assert consensus.api_select_payload(0, [rival, raised]) == rival
+    # Under gossip terms the whole payment counts, so the same payment wins.
+    gossip = _bid(10, UINT64_MAX, signer=ALICE)
+    assert consensus.api_select_payload(0, [rival, gossip]) == gossip
 
 
 def test_select_payload_rejects_bad_amount():
@@ -190,17 +204,25 @@ def _offsets(parts: Sequence[bytes]) -> bytes:
     return b"".join(offsets) + b"".join(parts)
 
 
-def _entry(url: bytes, pubkeys: Sequence[bytes], cap: int, min_bid: int, boost: int) -> bytes:
-    """The SSZ encoding of a builder entry, with authentication data b'auth' for slot 7."""
-    message = struct.pack("<IQ", 12, 7) + b"auth"
-    auth = struct.pack("<I", 100) + bytes(96) + message
+def _entry(
+    url: bytes,
+    pubkeys: Sequence[bytes],
+    cap: int,
+    min_bid: int,
+    boost: int,
+    auth: bytes = b"auth",
+    slot: int = SLOT,
+) -> bytes:
+    """The SSZ encoding of a builder entry, authenticated with some data for a slot."""
+    message = struct.pack("<IQ", 12, slot) + auth
+    signed = struct.pack("<I", 100) + bytes(96) + message
     fixed = 4 + 4 + 4 + 24
     keys = b"".join(pubkeys)
     return (
-        struct.pack("<III", fixed, fixed + len(url), fixed + len(url) + len(auth))
+        struct.pack("<III", fixed, fixed + len(url), fixed + len(url) + len(signed))
         + struct.pack("<QQQ", cap, min_bid, boost)
         + url
-        + auth
+        + signed
         + keys
     )
 
@@ -215,9 +237,9 @@ def test_builder_config_terms():
         _entry(b"https://a.example", [ALICE], 2_000_000, 30_000_000, PROFIT),
         _entry(b"https://b.example", [], 0, 0, PREFER_BUILDER),
     ]
-    read = consensus.api_builder_config_terms(_config(10_000_000, PREFER_LOCAL, entries))
-    assert read is not None
-    gossip, terms = read
+    gossip, terms = consensus.api_builder_config_terms(
+        _config(10_000_000, PREFER_LOCAL, entries), SLOT
+    )
     # Bids received on gossip accept any builder, and count their whole execution payment.
     assert gossip == _terms(cap=UINT64_MAX, min_bid=10_000_000, boost=PREFER_LOCAL)
     assert terms == [
@@ -227,19 +249,53 @@ def test_builder_config_terms():
 
 
 def test_builder_config_terms_empty():
-    read = consensus.api_builder_config_terms(_config(0, PROFIT, []))
-    assert read is not None
-    gossip, terms = read
+    gossip, terms = consensus.api_builder_config_terms(_config(0, PROFIT, []), SLOT)
     assert gossip == _terms(cap=UINT64_MAX, min_bid=0, boost=PROFIT)
     assert terms == []
 
 
-def test_builder_config_empty_url_is_invalid():
-    entries = [_entry(b"https://a.example", [], 0, 0, PROFIT), _entry(b"", [], 0, 0, PROFIT)]
-    assert consensus.api_builder_config_terms(_config(0, PROFIT, entries)) is None
+def test_builder_config_skips_malformed_entries():
+    # An empty URL or authentication data, or another slot, gives no bid and fails no request.
+    entries = [
+        _entry(b"", [], 0, 0, PROFIT),
+        _entry(b"https://a.example", [], 1, 2, 3),
+        _entry(b"https://b.example", [], 0, 0, PROFIT, auth=b""),
+        _entry(b"https://c.example", [], 0, 0, PROFIT, slot=SLOT + 1),
+        # A second request with the URL and data of an earlier one is dropped.
+        _entry(b"https://a.example", [], 4, 5, 6),
+        # The same URL with other data is another request.
+        _entry(b"https://a.example", [], 7, 8, 9, auth=b"other"),
+    ]
+    gossip, terms = consensus.api_builder_config_terms(_config(5, PROFIT, entries), SLOT)
+    assert gossip == _terms(cap=UINT64_MAX, min_bid=5, boost=PROFIT)
+    assert terms == [_terms(cap=1, min_bid=2, boost=3), _terms(cap=7, min_bid=8, boost=9)]
 
 
-def test_builder_config_rejects_truncated_bytes():
-    with pytest.raises(SszError) as info:
-        consensus.api_builder_config_terms(_config(0, PROFIT, [])[:-1])
-    assert info.value.code != 0
+@pytest.mark.parametrize(
+    ("data", "message"),
+    [
+        # Bytes cut short of the fixed part.
+        (
+            _config(0, PROFIT, [])[:-1],
+            "input rejected: EthLib.Serialization.Ssz.Err.scopeTooSmall 20 19",
+        ),
+        # A URL of 2049 bytes, one above the limit.
+        (
+            _config(0, PROFIT, [_entry(b"u" * 2049, [], 0, 0, PROFIT)]),
+            "input rejected: EthLib.Serialization.Ssz.Err.overLimit 2048 2049",
+        ),
+        # 65 keys in one entry, one above the limit.
+        (
+            _config(0, PROFIT, [_entry(b"u", [ALICE] * 65, 0, 0, PROFIT)]),
+            "input rejected: EthLib.Serialization.Ssz.Err.overLimit 64 65",
+        ),
+        # 65 entries, one above the limit.
+        (
+            _config(0, PROFIT, [_entry(b"u", [], 0, 0, PROFIT)] * 65),
+            "input rejected: EthLib.Serialization.Ssz.Err.overLimit 64 65",
+        ),
+    ],
+)
+def test_builder_config_rejects_bad_bytes(data: bytes, message: str):
+    with raises(SszError, message):
+        consensus.api_builder_config_terms(data, SLOT)

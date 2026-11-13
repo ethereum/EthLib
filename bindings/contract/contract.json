@@ -3869,22 +3869,23 @@
    "The consensus value of a signed block, in Wei.\n\nThe arguments are the name, the fork, and the SSZ bytes of the state and of the signed block.\n\nThe state is the one at the slot of the block, before the block.\n\nThen come the replacements of the configuration, or None.\n\nThe block was imported, so no signature is checked, and the execution layer accepts its payload."},
   {"summary":
    "From Bellatrix to Fulu: whether the node returns its local payload rather than the builder's.",
-   "signature": "(local_value: int, builder_value: int, boost: int) -> bool",
+   "signature":
+   "(local_value: int, builder_value: int, builder_boost_factor: int) -> bool",
    "operation": "EthLib.Consensus.BeaconApi.preferLocalV3",
    "method": "consensus_api_prefer_local_v3",
    "errors": [],
    "error_class": "ConsensusError",
    "docstring":
-   "From Bellatrix to Fulu: whether the node returns its local payload rather than the builder's.\n\nThe two values are in Wei, and the factor is in percent of the builder's value.\n\nThe builder's value is first rounded down to a whole number of hundredths."},
+   "From Bellatrix to Fulu: whether the node returns its local payload rather than the builder's.\n\nThe two values are in Wei, and the factor is in percent of the builder's value.\n\nThe builder's value is first rounded down to a multiple of 100 Wei."},
   {"summary":
-   "The value of a bid, in Gwei: its payment with the execution payment capped by its terms.",
+   "The value of a bid, in Gwei: its value plus its execution payment, counted up to its cap.",
    "signature": "(bid: dict[str, Any]) -> int",
    "operation": "EthLib.Consensus.BeaconApi.cappedBidValue",
    "method": "consensus_api_capped_bid_value",
    "errors": [],
    "error_class": "ConsensusError",
    "docstring":
-   "The value of a bid, in Gwei: its payment with the execution payment capped by its terms.\n\nThe sum saturates at the largest 64-bit integer."},
+   "The value of a bid, in Gwei: its value plus its execution payment, counted up to its cap.\n\nThe sum saturates at the largest 64-bit integer."},
   {"summary": "Whether the terms of a bid accept it.",
    "signature": "(bid: dict[str, Any]) -> bool",
    "operation": "EthLib.Consensus.BeaconApi.bidAccepted",
@@ -3902,11 +3903,11 @@
    "errors": [],
    "error_class": "ConsensusError",
    "docstring":
-   "From Gloas: the bid that the node commits to, or none for its local payload.\n\nThe local value is in Wei, the value of the local payload that the execution layer gives.\n\nThe node drops the bids that their terms refuse, and keeps the first one of largest weight.\n\nThat bid wins only when its weight is above 100 times the local value.\n\nThe two sides are compared in Wei, so the local payload wins a tie."},
+   "From Gloas: the bid that the node commits to, or none for its local payload.\n\nThe local value is in Wei, the value of the local payload that the execution layer gives.\n\nThe node drops the bids that their terms refuse, and keeps the first one of largest weight.\n\nThat bid wins only when its weight is above 100 times the local value.\n\nBoth sides are in hundredths of a Wei, and the bid must weigh strictly more.\n\nSo the local payload wins a tie."},
   {"summary":
    "From Gloas, the terms that the SSZ bytes of a builder configuration give.",
    "signature":
-   "(data: bytes) -> tuple[dict[str, Any], list[dict[str, Any]]] | None",
+   "(data: bytes, slot: int) -> tuple[dict[str, Any], list[dict[str, Any]]]",
    "operation": "EthLib.Consensus.Exports.apiBuilderConfigTermsExport",
    "method": "consensus_api_builder_config_terms",
    "errors":
@@ -3989,7 +3990,7 @@
       {"constructor": "undeclaredSelector", "code": 75}]}],
    "error_class": "SszError",
    "docstring":
-   "From Gloas, the terms that the SSZ bytes of a builder configuration give.\n\nThey are the terms of the bids received on gossip, then those of each entry, in order.\n\nNone when an entry has an empty URL."},
+   "From Gloas, the terms that the SSZ bytes of a builder configuration give.\n\nThe second argument is the slot of the request.\n\nThey are the terms of the bids received on gossip.\n\nThen come those of each entry that serves the slot, in order, without repeated requests."},
   {"summary":
    "The JSON response of the sync committee rewards endpoint, as a `dict`.",
    "signature":

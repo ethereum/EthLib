@@ -4193,15 +4193,23 @@ The choice between the local payload and a builder's payload is in the same modu
 Through Fulu, `preferLocalV3` is the rule of the v3 endpoint, and `preferLocalV3_zero` shows that a factor of zero keeps the local payload.
 From Gloas, the containers of the builder configuration of the v4 endpoint are in `Consensus/Containers/BuilderConfig.lean`, with the terms that each gives to a bid.
 `selectPayload` drops the bids that their terms refuse, keeps the first one of largest weight, and commits to it only when its weight beats 100 times the local value.
-`selectPayload_accepted`, `selectPayload_max` and `selectPayload_beats_local` show that a chosen bid is accepted, weighs the most and beats the local payload, and `selectPayload_eq_none_iff` that the local payload is kept exactly when no accepted bid beats it, so it wins a tie.
+`selectPayload_accepted`, `selectPayload_max` and `selectPayload_beats_local` show that a chosen bid is accepted, weighs the most and beats the local payload.
+`selectPayload_eq_none_iff` shows that the local payload is kept exactly when no accepted bid beats it, so it wins a tie.
 `selectPayload_map` and `selectPayload_cap` show that raising an execution payment at or above its cap keeps the choice, and `bidWeight_lt` that a weight fits in 128 bits.
 The Python tests check the factors 0, 100 and 2^64 - 1 that the source names, and the saturation of a bid's value at 2^64 - 1.
 Four points of the source are decided here, and a reviewer may question them:
+
 - The v4 rule compares a bid in Gwei with the local value that the Engine API gives in Wei; the comparison multiplies the bid's weight by 10^9, so no value is rounded.
 - A bid received on gossip has no cap in the source, so its terms count the whole execution payment, up to the saturation at 2^64 - 1.
-- The source does not order two bids of the same weight; the first one in the list wins.
+- The source does not order two bids of the same weight; the first one in the list wins, which the Python tests check.
 - What makes a builder payload safe in v3 is the node's choice, so the rule takes the two values once both are valid.
-The JSON form of a builder entry writes its URL as a string, which the JSON codec of the API cannot yet spell, so only the SSZ form is given.
+
+The JSON codec of the API has no form for a URL string, so a builder entry is given only in its SSZ form.
+An entry with an empty URL or empty authentication data, or whose authentication names another slot, gives no bid.
+The other entries and the gossip terms still apply, since the source says that one bad entry never fails the request.
+The source forbids two entries with one URL and one authentication data, and EthLib keeps the first of them.
+A candidate bid takes its signer from the registry, for the builder that the bid names, so its signature must have been checked first.
+The source limits a URL to 2048 characters in JSON and to 2048 bytes in SSZ, and EthLib follows the bytes.
 
 The topics and the messages of the event stream are in `Consensus/BeaconApi/Events.lean`, shared by the events of received objects (#2090) and of the fork choice (#2091).
 `EventTopic.ofName?_name` and `EventTopic.name_injective` (`Consensus/Proofs/BeaconApi/Events.lean`) show that each of the 24 topics of the source has its own name, which gives it back.

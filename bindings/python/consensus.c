@@ -432,7 +432,7 @@ py_consensus_api_builder_config_terms(
   PyObject* self,
   PyObject* args
 ) {
-  return call_pyvalue_export(eth_consensus_api_builder_config_terms, args, 1, SSZ_ERROR);
+  return call_pyvalue_export(eth_consensus_api_builder_config_terms, args, 2, SSZ_ERROR);
 }
 
 extern lean_object*

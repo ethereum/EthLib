@@ -1411,10 +1411,14 @@ def api_consensus_block_value(
     return _native.consensus_api_consensus_block_value(name, fork, state, block, config)
 
 
-def api_prefer_local_v3(local_value: int, builder_value: int, boost: int) -> bool:
+def api_prefer_local_v3(
+    exec_node_payload_value: int, builder_payload_value: int, builder_boost_factor: int
+) -> bool:
     """Whether the v3 block production rule returns the local payload rather than the builder's."""
-    # Both values are in Wei, and the boost is a 64-bit percentage of the builder's value.
-    return _native.consensus_api_prefer_local_v3(local_value, builder_value, boost)
+    # Both values are in Wei, and the factor is a 64-bit percentage of the builder's value.
+    return _native.consensus_api_prefer_local_v3(
+        exec_node_payload_value, builder_payload_value, builder_boost_factor
+    )
 
 
 def api_capped_bid_value(bid: dict[str, Any]) -> int:
@@ -1435,9 +1439,11 @@ def api_select_payload(local_value: int, bids: Sequence[dict[str, Any]]) -> dict
     return _native.consensus_api_select_payload(local_value, list(bids))
 
 
-def api_builder_config_terms(data: bytes) -> tuple[dict[str, Any], list[dict[str, Any]]] | None:
-    """The gossip terms and the entry terms of an SSZ builder configuration, None if invalid."""
-    return _native.consensus_api_builder_config_terms(data)
+def api_builder_config_terms(data: bytes, slot: int) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """The gossip and entry terms of an SSZ builder configuration for a slot, or SszError."""
+    # An entry with an empty URL or authentication data, or another slot, gives no terms.
+    # Of two entries with one URL and one authentication data, only the first gives terms.
+    return _native.consensus_api_builder_config_terms(data, slot)
 
 
 def api_duties(

@@ -59,7 +59,7 @@ derive_py_laws BidTerms
 derive_py CandidateBid
 derive_py_laws CandidateBid
 
-/-- Through Fulu, whether the node returns its local payload rather than the builder's. -/
+/-- From Bellatrix to Fulu, whether the node returns its local payload rather than the builder's. -/
 @[export eth_consensus_api_prefer_local_v3]
 def apiPreferLocalV3Export (args : PyValue) : Result PyValue :=
   pyExport (fun (localValue, builderValue, boost) =>
@@ -81,20 +81,19 @@ def apiSelectPayloadExport (args : PyValue) : Result PyValue :=
   pyExport (fun (localValue, bids) => .ok (selectPayload localValue bids) :
     Nat × List CandidateBid → Result (Option CandidateBid)) args
 
-/-- The terms that a builder configuration gives, or none when it is not valid.
-
-They are the terms of the bids received on gossip, then those of each entry, in order. -/
-def apiBuilderConfigTermsOf (data : ByteArray) : Result (Option (BidTerms × List BidTerms)) := do
+/-- The terms that a builder configuration gives: those of gossip, then those of its entries. -/
+def apiBuilderConfigTermsOf (args : ByteArray × Slot) : Result (BidTerms × List BidTerms) := do
+  let (data, slot) := args
   let config ← runSsz "input rejected" (SszType.deserialize BuilderConfig data)
-  return if config.valid then
-    some (config.gossipTerms, config.builders.data.toList.map BuilderEntry.terms)
-  else none
+  return (config.gossipTerms, config.entryTerms slot)
 
 /-- From Gloas, the terms that the SSZ bytes of a builder configuration give.
 
-They are the terms of the bids received on gossip, then those of each entry, in order.
+The second argument is the slot of the request.
 
-None when an entry has an empty URL. -/
+They are the terms of the bids received on gossip.
+
+Then come those of each entry that serves the slot, in order, without repeated requests. -/
 @[export eth_consensus_api_builder_config_terms]
 def apiBuilderConfigTermsExport (args : PyValue) : Result PyValue :=
   pyExport apiBuilderConfigTermsOf args

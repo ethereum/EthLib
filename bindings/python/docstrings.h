@@ -540,7 +540,7 @@
   "From Bellatrix to Fulu: whether the node returns its local payload rather than the builder's."
 
 #define DOC_consensus_api_capped_bid_value \
-  "The value of a bid, in Gwei: its payment with the execution payment capped by its terms."
+  "The value of a bid, in Gwei: its value plus its execution payment, counted up to its cap."
 
 #define DOC_consensus_api_bid_accepted \
   "Whether the terms of a bid accept it."
