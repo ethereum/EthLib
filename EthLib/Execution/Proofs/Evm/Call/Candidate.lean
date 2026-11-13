@@ -9,11 +9,11 @@ public import EthLib.Execution.Proofs.State.Frame
 
 A deployment candidate is an address with nonce 0 and no code, where a creation may deploy.
 
-Whether a creation succeeds there depends on the account, so the access list must name it.
+Whether a creation succeeds there depends on the account, so the block access list must name it.
 
 Take a transaction state where every candidate was one in the block, or had its storage wiped.
 
-Every call and every creation keeps that, whether it succeeds or fails.
+Every call and every creation keeps that, whether its frame ends with an error or not.
 
 A step never lowers a nonce, and gives code only to the address of a creation.
 
@@ -36,10 +36,10 @@ variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
 /-! ## A relation of states -/
 
-/-- The second state has the block of the first, and keeps each wiped storage of it.
+/-- The second state has the block of the first, and every address that the first wiped.
 
 Each address with nonce 0 and no code in it had both in the first, or had its storage wiped. -/
-private def KeepsCandidates (tx tx' : TransactionState) : Prop :=
+def KeepsCandidates (tx tx' : TransactionState) : Prop :=
   tx'.parent = tx.parent ∧ (∀ address, address ∈ tx.storageClears → address ∈ tx'.storageClears) ∧
     ∀ address, (tx'.getAccount address).nonce = 0 →
       (tx'.getAccount address).codeHash = EMPTY_CODE_HASH →
@@ -47,11 +47,11 @@ private def KeepsCandidates (tx tx' : TransactionState) : Prop :=
         ((tx.getAccount address).nonce = 0 ∧ (tx.getAccount address).codeHash = EMPTY_CODE_HASH)
 
 /-- A state keeps its own candidates. -/
-private theorem KeepsCandidates.refl (tx : TransactionState) : KeepsCandidates tx tx :=
+theorem KeepsCandidates.refl (tx : TransactionState) : KeepsCandidates tx tx :=
   ⟨rfl, fun _ h => h, fun _ hn hc => .inr ⟨hn, hc⟩⟩
 
 /-- Two states in a row that each keep the candidates keep them together. -/
-private theorem KeepsCandidates.trans {a b c : TransactionState} (hab : KeepsCandidates a b)
+theorem KeepsCandidates.trans {a b c : TransactionState} (hab : KeepsCandidates a b)
     (hbc : KeepsCandidates b c) : KeepsCandidates a c :=
   ⟨hbc.1.trans hab.1, fun x hx => hbc.2.1 x (hab.2.1 x hx), fun x hn hc =>
     (hbc.2.2 x hn hc).elim .inl fun ⟨hn', hc'⟩ => (hab.2.2 x hn' hc').imp_left (hbc.2.1 x)⟩
@@ -133,7 +133,7 @@ private theorem KeepsCandidates.incrementNonce {tx tx' : TransactionState} {addr
     (h : tx.incrementNonce fork address = .ok tx') : KeepsCandidates tx tx' :=
   .modifyState (fun _ hupd hn _ => by cases hupd; exact absurd hn (Nat.succ_ne_zero _)) h
 
-/-- A successful move of the balance of a destroyed account keeps the candidates. -/
+/-- A successful move of the balance of a self-destructing account keeps the candidates. -/
 private theorem KeepsCandidates.selfdestructTransfer {tx tx' : TransactionState}
     {originator beneficiary : Address}
     (h : selfdestructTransfer fork tx originator beneficiary = .ok tx') :
@@ -180,7 +180,7 @@ private theorem KeepsCandidates.touchAccount (tx : TransactionState) (address : 
       exact ⟨hn, hc⟩
 
 /-- Under the condition on candidates, a state that keeps them meets it too. -/
-private theorem NoNewCandidate.of_keepsCandidates {block : BlockState}
+theorem NoNewCandidate.of_keepsCandidates {block : BlockState}
     {tx tx' : TransactionState} (hinv : NoNewCandidate block tx) (hk : KeepsCandidates tx tx') :
     NoNewCandidate block tx' := fun x hn hc =>
   (hk.2.2 x hn hc).elim .inl fun ⟨hn', hc'⟩ => (hinv x hn' hc').imp_left (hk.2.1 x)
@@ -255,55 +255,56 @@ private theorem keepsCandidates_depositCode {state prepared : TransactionState} 
 /-! ## Steps of a frame -/
 
 /-- A step that keeps the candidates, the message and the code. -/
-private def CandStep (a b : Evm fork Meter) : Prop :=
+def CandidateStep (a b : Evm fork Meter) : Prop :=
   KeepsCandidates a.state b.state ∧ b.message = a.message ∧ b.code = a.code
 
 omit [GasMeter Meter] in
 /-- A frame keeps its own candidates, message and code. -/
-private theorem CandStep.refl (evm : Evm fork Meter) : CandStep evm evm :=
+private theorem CandidateStep.refl (evm : Evm fork Meter) : CandidateStep evm evm :=
   ⟨.refl _, rfl, rfl⟩
 
 omit [GasMeter Meter] in
 /-- Two steps that each keep the candidates, message and code keep them together. -/
-private theorem CandStep.trans {a b c : Evm fork Meter} (hab : CandStep a b)
-    (hbc : CandStep b c) : CandStep a c :=
+private theorem CandidateStep.trans {a b c : Evm fork Meter} (hab : CandidateStep a b)
+    (hbc : CandidateStep b c) : CandidateStep a c :=
   ⟨hab.1.trans hbc.1, hbc.2.1.trans hab.2.1, hbc.2.2.trans hab.2.2⟩
 
 omit [GasMeter Meter] in
 /-- A step with the writes and the block of the frame before keeps its candidates. -/
-private theorem CandStep.of_sameWrites {a b : Evm fork Meter}
+private theorem CandidateStep.of_sameWrites {a b : Evm fork Meter}
     (hsw : SameWrites b.state a.state) (hp : b.state.parent = a.state.parent)
-    (hm : b.message = a.message) (hc : b.code = a.code) : CandStep a b :=
+    (hm : b.message = a.message) (hc : b.code = a.code) : CandidateStep a b :=
   ⟨.of_sameWrites hsw hp, hm, hc⟩
 
 omit [GasMeter Meter] in
 /-- A step that keeps the message, state, substate and code keeps the candidates. -/
-private theorem CandStep.of_sameContext {a b : Evm fork Meter} (h : SameContext a b) :
-    CandStep a b :=
+private theorem CandidateStep.of_sameContext {a b : Evm fork Meter} (h : SameContext a b) :
+    CandidateStep a b :=
   ⟨by rw [h.state]; exact .refl _, h.message, h.code⟩
 
 omit [GasMeter Meter] in
 /-- A move of the program counter keeps the candidates. -/
-private theorem CandStep.advance {a b : Evm fork Meter} (h : CandStep a b) (n : Nat := 1) :
-    CandStep a (Evm.advance b n) :=
+private theorem CandidateStep.advance {a b : Evm fork Meter} (h : CandidateStep a b)
+    (n : Nat := 1) :
+    CandidateStep a (Evm.advance b n) :=
   h
 
 omit [GasMeter Meter] in
 /-- A record of an account read keeps the candidates. -/
 private theorem candStep_recordAccountRead (evm : Evm fork Meter) (address : Address) :
-    CandStep evm (recordAccountRead evm address) :=
+    CandidateStep evm (recordAccountRead evm address) :=
   .of_sameWrites (SameWrites.recordAccountRead evm.state address) rfl rfl rfl
 
 omit [GasMeter Meter] in
 /-- A record of a storage read keeps the candidates. -/
 private theorem candStep_recordStorageRead (evm : Evm fork Meter) (address : Address)
-    (key : Bytes32) : CandStep evm (recordStorageRead evm address key) :=
+    (key : Bytes32) : CandidateStep evm (recordStorageRead evm address key) :=
   .of_sameWrites (SameWrites.recordStorageRead evm.state address key) rfl rfl rfl
 
 omit [GasMeter Meter] in
 /-- An access to an address keeps the candidates. -/
 private theorem candStep_accessAddress (evm : Evm fork Meter) (address : Address) :
-    CandStep evm (accessAddress evm address).2 := by
+    CandidateStep evm (accessAddress evm address).2 := by
   obtain ⟨_, h⟩ := accessAddress_snd evm address
   rw [h]
   exact .refl _
@@ -311,25 +312,25 @@ private theorem candStep_accessAddress (evm : Evm fork Meter) (address : Address
 omit [GasMeter Meter] in
 /-- An access to a storage key keeps the candidates. -/
 private theorem candStep_accessStorageKey (evm : Evm fork Meter) (address : Address)
-    (key : Bytes32) : CandStep evm (accessStorageKey evm address key).2 := by
+    (key : Bytes32) : CandidateStep evm (accessStorageKey evm address key).2 := by
   obtain ⟨_, h⟩ := accessStorageKey_snd evm address key
   rw [h]
   exact .refl _
 
 /-- An exceptional halt keeps the candidates. -/
 private theorem candStep_exceptionalHalt (evm : Evm fork Meter) (e : EvmError) :
-    CandStep evm (exceptionalHalt evm e) :=
+    CandidateStep evm (exceptionalHalt evm e) :=
   .of_sameWrites ⟨rfl, rfl, rfl, rfl, rfl⟩ rfl rfl rfl
 
 /-- A call that runs no message keeps the candidates. -/
 private theorem candStep_skipCall {evm after : Evm fork Meter} {gas reservoir : Nat}
-    (h : skipCall evm gas reservoir = .ok after) : CandStep evm after := by
+    (h : skipCall evm gas reservoir = .ok after) : CandidateStep evm after := by
   obtain ⟨_, -, rfl⟩ := skipCall_eq_ok h
   exact .of_sameWrites ⟨rfl, rfl, rfl, rfl, rfl⟩ rfl rfl rfl
 
 /-- A precompile keeps the candidates. -/
 private theorem candStep_runPrecompile {address : Nat} {evm after : Evm fork Meter}
-    (h : runPrecompile fork address evm = some after) : CandStep evm after := by
+    (h : runPrecompile fork address evm = some after) : CandidateStep evm after := by
   unfold runPrecompile at h
   split at h
   · cases h
@@ -345,7 +346,7 @@ private theorem candStep_runPrecompile {address : Nat} {evm after : Evm fork Met
 private theorem candStep_returnOpStep {op : Op}
     {run : Evm fork Meter → Except EvmError (Evm fork Meter)}
     (hstep : returnOpStep fork op = some run) {evm after : Evm fork Meter}
-    (h : run evm = .ok after) : CandStep evm after := by
+    (h : run evm = .ok after) : CandidateStep evm after := by
   cases op <;> simp only [returnOpStep, Option.some.injEq, reduceCtorEq] at hstep
   case «return» =>
     subst hstep
@@ -360,7 +361,7 @@ private theorem candStep_returnOpStep {op : Op}
 private theorem candStep_accountStep {op : Op}
     {run : Evm fork Meter → Except EvmError (Evm fork Meter)}
     (hstep : accountStep fork op = some run) {evm after : Evm fork Meter}
-    (h : run evm = .ok after) : CandStep evm after := by
+    (h : run evm = .ok after) : CandidateStep evm after := by
   cases op <;> simp only [accountStep, Option.some.injEq, reduceCtorEq] at hstep
   case balance =>
     subst hstep
@@ -370,10 +371,10 @@ private theorem candStep_accountStep {op : Op}
     obtain ⟨e3, h3, h⟩ := Base.bind_ok_iff.mp h
     obtain ⟨e4, h4, h⟩ := Base.bind_ok_iff.mp h
     cases h
-    have ha : CandStep e1 e2 := by
+    have ha : CandidateStep e1 e2 := by
       have := candStep_accessAddress e1 (toAddressMasked w)
       rwa [hacc] at this
-    exact ((((CandStep.of_sameContext (popWord_sameContext h1)).trans ha).trans
+    exact ((((CandidateStep.of_sameContext (popWord_sameContext h1)).trans ha).trans
       (.of_sameContext (chargeGas_sameContext h3))).trans
       (candStep_recordAccountRead _ _)).trans
       (.of_sameContext (pushWord_sameContext h4)) |>.advance
@@ -386,10 +387,10 @@ private theorem candStep_accountStep {op : Op}
     obtain ⟨_, _, h⟩ := Base.bind_ok_iff.mp h
     obtain ⟨e5, h5, h⟩ := Base.bind_ok_iff.mp h
     cases h
-    have ha : CandStep e1 e2 := by
+    have ha : CandidateStep e1 e2 := by
       have := candStep_accessAddress e1 (toAddressMasked w)
       rwa [hacc] at this
-    exact ((((CandStep.of_sameContext (popWord_sameContext h1)).trans ha).trans
+    exact ((((CandidateStep.of_sameContext (popWord_sameContext h1)).trans ha).trans
       (.of_sameContext (chargeGas_sameContext h3))).trans
       (candStep_recordAccountRead _ _)).trans
       (.of_sameContext (pushWord_sameContext h5)) |>.advance
@@ -404,16 +405,16 @@ private theorem candStep_accountStep {op : Op}
     obtain ⟨e6, h6, h⟩ := Base.bind_ok_iff.mp h
     obtain ⟨_, _, h⟩ := Base.bind_ok_iff.mp h
     cases h
-    have ha : CandStep e4 e5 := by
+    have ha : CandidateStep e4 e5 := by
       have := candStep_accessAddress e4 (toAddressMasked w)
       rwa [hacc] at this
-    exact (((((((CandStep.of_sameContext (popWord_sameContext h1)).trans
+    exact (((((((CandidateStep.of_sameContext (popWord_sameContext h1)).trans
       (.of_sameContext (popWord_sameContext h2))).trans
       (.of_sameContext (popWord_sameContext h3))).trans
       (.of_sameContext (popWord_sameContext h4))).trans ha).trans
       (.of_sameContext (chargeGasAndMemory_sameContext h6))).trans
       (candStep_recordAccountRead _ _)).trans
-      (CandStep.of_sameWrites ⟨rfl, rfl, rfl, rfl, rfl⟩ rfl rfl rfl) |>.advance
+      (CandidateStep.of_sameWrites ⟨rfl, rfl, rfl, rfl, rfl⟩ rfl rfl rfl) |>.advance
   case selfbalance =>
     split at hstep
     · cases hstep
@@ -428,10 +429,10 @@ private theorem candStep_accountStep {op : Op}
       obtain ⟨e3, h3, h⟩ := Base.bind_ok_iff.mp h
       obtain ⟨e4, h4, h⟩ := Base.bind_ok_iff.mp h
       cases h
-      have ha : CandStep e1 e2 := by
+      have ha : CandidateStep e1 e2 := by
         have := candStep_accessAddress e1 (toAddressMasked w)
         rwa [hacc] at this
-      exact ((((CandStep.of_sameContext (popWord_sameContext h1)).trans ha).trans
+      exact ((((CandidateStep.of_sameContext (popWord_sameContext h1)).trans ha).trans
         (.of_sameContext (chargeGas_sameContext h3))).trans
         (candStep_recordAccountRead _ _)).trans
         (.of_sameContext (pushWord_sameContext h4)) |>.advance
@@ -439,7 +440,7 @@ private theorem candStep_accountStep {op : Op}
 
 /-- SLOAD keeps the candidates. -/
 private theorem candStep_sloadStep {evm after : Evm fork Meter}
-    (h : sloadStep evm = .ok after) : CandStep evm after := by
+    (h : sloadStep evm = .ok after) : CandidateStep evm after := by
   obtain ⟨⟨w, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
   dsimp only at h
   rcases hacc : accessStorageKey e1 e1.message.currentTarget (U256.toBeBytes w) with ⟨cold, e2⟩
@@ -447,30 +448,30 @@ private theorem candStep_sloadStep {evm after : Evm fork Meter}
   obtain ⟨e3, h3, h⟩ := Base.bind_ok_iff.mp h
   obtain ⟨e4, h4, h⟩ := Base.bind_ok_iff.mp h
   cases h
-  have ha : CandStep e1 e2 := by
+  have ha : CandidateStep e1 e2 := by
     have := candStep_accessStorageKey e1 e1.message.currentTarget (U256.toBeBytes w)
     rwa [hacc] at this
-  exact ((((CandStep.of_sameContext (popWord_sameContext h1)).trans ha).trans
+  exact ((((CandidateStep.of_sameContext (popWord_sameContext h1)).trans ha).trans
     (.of_sameContext (chargeGas_sameContext h3))).trans
     (candStep_recordStorageRead _ _ _)).trans
     (.of_sameContext (pushWord_sameContext h4)) |>.advance
 
 /-- SSTORE keeps the candidates. -/
 private theorem candStep_sstoreStep {evm after : Evm fork Meter}
-    (h : sstoreStep evm = .ok after) : CandStep evm after := by
+    (h : sstoreStep evm = .ok after) : CandidateStep evm after := by
   unfold Evm.sstoreStep at h
   split at h
   · simp [bind, Except.bind, throw, throwThe, MonadExceptOf.throw] at h
   obtain ⟨⟨k, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
   obtain ⟨⟨n, e2⟩, h2, h⟩ := Base.bind_ok_iff.mp h
-  have c2 : CandStep evm e2 :=
+  have c2 : CandidateStep evm e2 :=
     .of_sameContext ((popWord_sameContext h1).trans (popWord_sameContext h2))
   dsimp only at h
   split at h
   · simp [throw, throwThe, MonadExceptOf.throw] at h
   · rcases hpair : accessStorageKey e2 e2.message.currentTarget (U256.toBeBytes k) with
       ⟨cold, e3⟩
-    have ha : CandStep evm
+    have ha : CandidateStep evm
         (recordStorageRead e3 e2.message.currentTarget (U256.toBeBytes k)) := by
       have := candStep_accessStorageKey e2 e2.message.currentTarget (U256.toBeBytes k)
       rw [hpair] at this
@@ -479,7 +480,7 @@ private theorem candStep_sstoreStep {evm after : Evm fork Meter}
     rcases keepReads_eq_ok h with h | ⟨e, rfl⟩
     · obtain ⟨e4, h4, h⟩ := Base.bind_ok_iff.mp h
       obtain ⟨e5, h5, h⟩ := Base.bind_ok_iff.mp h
-      have m5 : CandStep evm e5 :=
+      have m5 : CandidateStep evm e5 :=
         ha.trans (.of_sameContext ((sameContext_refillStateGas _ _).trans
           ((chargeGas_sameContext h4).trans (chargeStateGas_sameContext h5))))
       split at h
@@ -491,24 +492,24 @@ private theorem candStep_sstoreStep {evm after : Evm fork Meter}
 
 /-- TSTORE keeps the candidates. -/
 private theorem candStep_tstoreStep {evm after : Evm fork Meter}
-    (h : tstoreStep evm = .ok after) : CandStep evm after := by
+    (h : tstoreStep evm = .ok after) : CandidateStep evm after := by
   obtain ⟨⟨_, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
   obtain ⟨⟨_, e2⟩, h2, h⟩ := Base.bind_ok_iff.mp h
   obtain ⟨e3, h3, h⟩ := Base.bind_ok_iff.mp h
   split at h
   · simp [throw, throwThe, MonadExceptOf.throw] at h
   · cases h
-    exact (CandStep.of_sameContext ((popWord_sameContext h1).trans
+    exact (CandidateStep.of_sameContext ((popWord_sameContext h1).trans
       ((popWord_sameContext h2).trans (chargeGas_sameContext h3)))).trans
       ⟨⟨rfl, fun _ hx => hx, fun _ hn hc => .inr ⟨hn, hc⟩⟩, rfl, rfl⟩
 
 /-- SELFDESTRUCT keeps the candidates, since it only moves ether. -/
 private theorem candStep_selfdestructStep {evm after : Evm fork Meter}
-    (h : selfdestructStep fork evm = .ok after) : CandStep evm after := by
+    (h : selfdestructStep fork evm = .ok after) : CandidateStep evm after := by
   obtain ⟨word, -, paid, -, hpaid_static, hpaid_state, -, ⟨refund, finished⟩ | ⟨error, rfl⟩⟩ :=
     selfdestructStep_eq_ok h
-  · have hpaid : CandStep evm paid :=
-      CandStep.of_sameWrites
+  · have hpaid : CandidateStep evm paid :=
+      CandidateStep.of_sameWrites
         (hpaid_state ▸ SameWrites.recordAccountRead evm.state (toAddressMasked word))
         (by rw [hpaid_state]; rfl) hpaid_static.message hpaid_static.code
     unfold finishSelfdestruct at finished
@@ -517,8 +518,8 @@ private theorem candStep_selfdestructStep {evm after : Evm fork Meter}
     · obtain ⟨state, hst, finished⟩ := Base.bind_ok_iff.mp finished
       cases finished
       exact hpaid.trans ⟨.selfdestructTransfer (Base.mapError_ok_iff.mp hst), rfl, rfl⟩
-  · have hpaid : CandStep evm paid :=
-      CandStep.of_sameWrites
+  · have hpaid : CandidateStep evm paid :=
+      CandidateStep.of_sameWrites
         (hpaid_state ▸ SameWrites.recordAccountRead evm.state (toAddressMasked word))
         (by rw [hpaid_state]; rfl) hpaid_static.message hpaid_static.code
     exact hpaid.trans (candStep_exceptionalHalt paid error)
@@ -526,7 +527,8 @@ private theorem candStep_selfdestructStep {evm after : Evm fork Meter}
 /-- Each instruction that gives the next frame keeps the candidates. -/
 private theorem candStep_instruction {op : Op}
     {run : Evm fork Meter → Except EvmError (Evm fork Meter)} {evm after : Evm fork Meter}
-    (hrun : instruction fork op = some run) (h : run evm = .ok after) : CandStep evm after := by
+    (hrun : instruction fork op = some run) (h : run evm = .ok after) :
+    CandidateStep evm after := by
   unfold Evm.instruction at hrun
   rcases orElse_eq_some hrun with hf | hrun
   · exact .of_sameContext (stackOnlyStep_sameContext hf h)
@@ -561,14 +563,14 @@ private theorem candStep_instruction {op : Op}
 /-! ## Calls and creations sent by a step -/
 
 /-- A child ends in a state that keeps the candidates of its caller. -/
-private def CandChild (caller : Evm fork Meter) (_message : Message fork)
+def CandidateChild (caller : Evm fork Meter) (_message : Message fork)
     (child : Evm fork Meter) : Prop :=
   KeepsCandidates caller.state child.state
 
 /-- Resolving a delegation keeps the candidates. -/
 private theorem candStep_accessDelegation {evm after : Evm fork Meter}
     {address : Address} {known : Nat} {callee : Callee}
-    (h : accessDelegation evm address known = .ok (callee, after)) : CandStep evm after := by
+    (h : accessDelegation evm address known = .ok (callee, after)) : CandidateStep evm after := by
   obtain ⟨code, -, h⟩ := Base.bind_ok_iff.mp h
   dsimp only at h
   split at h
@@ -583,14 +585,14 @@ private theorem candStep_accessDelegation {evm after : Evm fork Meter}
 private theorem candStep_payCall {kind : CallKind} {call : CallOperands}
     {memoryCost extraGas newAccount subCall : Nat} {evm after : Evm fork Meter}
     (h : payCall kind call memoryCost extraGas newAccount evm = .ok (subCall, after)) :
-    CandStep evm after := by
+    CandidateStep evm after := by
   unfold payCall at h
   split at h
   · obtain ⟨e1, h1, h⟩ := Base.bind_ok_iff.mp h
     obtain ⟨e2, h2, h⟩ := Base.bind_ok_iff.mp h
     obtain ⟨e3, h3, h⟩ := Base.bind_ok_iff.mp h
     cases h
-    exact ((CandStep.of_sameContext (chargeGas_sameContext h1)).trans
+    exact ((CandidateStep.of_sameContext (chargeGas_sameContext h1)).trans
       (.of_sameContext (chargeStateGas_sameContext h2))).trans
       (.of_sameContext (chargeGas_sameContext h3))
   · obtain ⟨e1, h1, h⟩ := Base.bind_ok_iff.mp h
@@ -601,15 +603,15 @@ omit [GasMeter Meter] in
 /-- Popping the operands of a call keeps the candidates. -/
 private theorem candStep_popCallOperands {kind : CallKind}
     {evm after : Evm fork Meter} {call : CallOperands}
-    (h : popCallOperands kind evm = .ok (call, after)) : CandStep evm after := by
+    (h : popCallOperands kind evm = .ok (call, after)) : CandidateStep evm after := by
   have hs := (staticStep_popCallOperands h).1
   have hst : after.state = evm.state := by rw [popCallOperands_eq_ok h]
   exact ⟨by rw [hst]; exact .refl _, hs.message, hs.code⟩
 
-/-- A caller that takes in a child that keeps its candidates keeps them too. -/
+/-- Taking in a child that keeps the candidates of the caller keeps them. -/
 private theorem candStep_incorporateChild {caller child : Evm fork Meter}
     (hc : KeepsCandidates caller.state child.state) :
-    CandStep caller (incorporateChild fork caller child) :=
+    CandidateStep caller (incorporateChild fork caller child) :=
   ⟨by rw [state_incorporateChild]; exact hc,
     message_incorporateChild caller child, code_incorporateChild caller child⟩
 
@@ -618,12 +620,12 @@ private theorem candStep_finishCall {kind : CallKind} {call : CallOperands}
     {callee : Callee} {subCall newAccount expandBy : Nat} {evm : Evm fork Meter}
     {result : StepResult fork Meter}
     (h : finishCall kind call callee subCall newAccount expandBy evm = .ok result) :
-    result.Keeps CandStep CandChild evm := by
+    result.Keeps CandidateStep CandidateChild evm := by
   unfold Evm.finishCall at h
   split at h
   · cases h
   dsimp only at h
-  have pre : CandStep evm (recordAccountRead { evm with
+  have pre : CandidateStep evm (recordAccountRead { evm with
       memory := memoryExtend evm.memory expandBy, gas := GasMeter.drain evm.gas }
       evm.message.currentTarget) :=
     .of_sameWrites (SameWrites.recordAccountRead evm.state evm.message.currentTarget) rfl rfl rfl
@@ -639,7 +641,7 @@ private theorem candStep_finishCall {kind : CallKind} {call : CallOperands}
         (.of_sameContext (sameContext_refillStateGas _ newAccount))).trans
         (candStep_skipCall hs))
     · cases h
-      have callerStep : CandStep evm _ :=
+      have callerStep : CandidateStep evm _ :=
         pre.trans (.of_sameContext (sameContext_returnData _ .empty))
       refine ⟨callerStep, fun child after hres hc => ?_⟩
       obtain ⟨e, h1, hpure⟩ := Base.bind_ok_iff.mp hres
@@ -652,30 +654,30 @@ private theorem candStep_finishCall {kind : CallKind} {call : CallOperands}
 /-- A call instruction keeps the candidates, when its child does. -/
 private theorem candStep_callStep {kind : CallKind} {evm : Evm fork Meter}
     {result : StepResult fork Meter} (h : callStep kind evm = .ok result) :
-    result.Keeps CandStep CandChild evm := by
+    result.Keeps CandidateStep CandidateChild evm := by
   unfold Evm.callStep at h
   obtain ⟨⟨call, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
-  have c1 : CandStep evm e1 := candStep_popCallOperands h1
+  have c1 : CandidateStep evm e1 := candStep_popCallOperands h1
   dsimp only at h
   split at h
   · simp only [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
     cases h
   rcases hacc : accessAddress e1 call.address with ⟨cold, e2⟩
   simp only [hacc] at h
-  have ha : CandStep e1 e2 := by
+  have ha : CandidateStep e1 e2 := by
     have := candStep_accessAddress e1 call.address
     rwa [hacc] at this
-  have s3 : CandStep evm (recordAccountRead e2 call.address) :=
+  have s3 : CandidateStep evm (recordAccountRead e2 call.address) :=
     (c1.trans ha).trans (candStep_recordAccountRead e2 call.address)
   obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
   rcases keepReads_eq_ok h with h | ⟨e, rfl⟩
   · obtain ⟨⟨callee, e4⟩, h4, h⟩ := Base.bind_ok_iff.mp h
-    have s4 : CandStep evm e4 := s3.trans (candStep_accessDelegation h4)
+    have s4 : CandidateStep evm e4 := s3.trans (candStep_accessDelegation h4)
     dsimp only at h
     rcases keepReads_eq_ok h with h | ⟨e, rfl⟩
     · obtain ⟨⟨subCall, e5⟩, h5, h⟩ := Base.bind_ok_iff.mp h
-      exact StepResult.Keeps.lift (R := CandStep) (C := CandChild)
-        CandStep.trans (s4.trans (candStep_payCall h5)) (candStep_finishCall h)
+      exact StepResult.Keeps.lift (R := CandidateStep) (C := CandidateChild)
+        CandidateStep.trans (s4.trans (candStep_payCall h5)) (candStep_finishCall h)
     · exact s4.trans (candStep_exceptionalHalt _ _)
   · exact s3.trans (candStep_exceptionalHalt _ _)
 
@@ -683,31 +685,31 @@ private theorem candStep_callStep {kind : CallKind} {evm : Evm fork Meter}
 private theorem candStep_launchCreate {evm : Evm fork Meter} {value : U256}
     {initCode : ByteArray} {salt : Option U256} {result : StepResult fork Meter}
     (h : launchCreate evm value initCode salt = .ok result) :
-    result.Keeps CandStep CandChild evm := by
+    result.Keeps CandidateStep CandidateChild evm := by
   unfold Evm.launchCreate at h
   dsimp only at h
-  have pre : CandStep evm
+  have pre : CandidateStep evm
       (recordAccountRead { evm with returnData := .empty } evm.message.currentTarget) :=
-    (CandStep.of_sameContext (sameContext_returnData evm .empty)).trans
+    (CandidateStep.of_sameContext (sameContext_returnData evm .empty)).trans
       (candStep_recordAccountRead _ _)
   split at h
   · obtain ⟨after, hs, rfl⟩ := Base.map_ok_iff.mp h
     exact pre.trans (candStep_skipCall hs)
   obtain ⟨address, -, h⟩ := Base.bind_ok_iff.mp h
-  have c0 : CandStep evm (recordAccountRead (accessAddress (recordAccountRead
+  have c0 : CandidateStep evm (recordAccountRead (accessAddress (recordAccountRead
       { evm with returnData := .empty } evm.message.currentTarget) address).2 address) :=
     (pre.trans (candStep_accessAddress _ address)).trans (candStep_recordAccountRead _ address)
   rcases keepReads_eq_ok h with hr | ⟨e, rfl⟩
   · obtain ⟨e1, h1, hr⟩ := Base.bind_ok_iff.mp hr
     obtain ⟨e2, h2, hr⟩ := Base.bind_ok_iff.mp hr
     obtain ⟨state, hst, hr⟩ := Base.bind_ok_iff.mp hr
-    have c2 : CandStep evm e2 := c0.trans (.of_sameContext
+    have c2 : CandidateStep evm e2 := c0.trans (.of_sameContext
       ((chargeStateGas_sameContext h1).trans (chargeGas_sameContext h2)))
-    have ms : CandStep evm { e2 with state } :=
+    have ms : CandidateStep evm { e2 with state } :=
       c2.trans ⟨.incrementNonce (Base.mapError_ok_iff.mp hst), rfl, rfl⟩
     split at hr
     · cases hr
-      have md : CandStep evm { e2 with state, gas := GasMeter.drain e2.gas } :=
+      have md : CandidateStep evm { e2 with state, gas := GasMeter.drain e2.gas } :=
         ms.trans (.of_sameContext ⟨rfl, rfl, rfl, rfl⟩)
       refine ⟨md, fun child after hres hc => ?_⟩
       obtain ⟨e, hpush, hpure⟩ := Base.bind_ok_iff.mp hres
@@ -725,16 +727,16 @@ private theorem candStep_launchCreate {evm : Evm fork Meter} {value : U256}
 /-- CREATE and CREATE2 keep the candidates, when their child does. -/
 private theorem candStep_createStep {create2 : Bool} {evm : Evm fork Meter}
     {result : StepResult fork Meter} (h : createStep create2 evm = .ok result) :
-    result.Keeps CandStep CandChild evm := by
+    result.Keeps CandidateStep CandidateChild evm := by
   obtain ⟨_, _, _, _, _, _, -, sc, -, -, -, launched⟩ := createStep_eq_ok h
-  exact StepResult.Keeps.lift (R := CandStep) (C := CandChild)
-    CandStep.trans (.of_sameContext sc) (candStep_launchCreate launched)
+  exact StepResult.Keeps.lift (R := CandidateStep) (C := CandidateChild)
+    CandidateStep.trans (.of_sameContext sc) (candStep_launchCreate launched)
 
-/-- An instruction that may send a message keeps them, when its child does. -/
+/-- An instruction that may send a message keeps the candidates, when its child does. -/
 private theorem candStep_messageInstruction {op : Op}
     {run : Evm fork Meter → Except EvmError (StepResult fork Meter)} {evm : Evm fork Meter}
     {result : StepResult fork Meter} (hrun : messageInstruction fork op = some run)
-    (h : run evm = .ok result) : result.Keeps CandStep CandChild evm := by
+    (h : run evm = .ok result) : result.Keeps CandidateStep CandidateChild evm := by
   unfold Evm.messageInstruction at hrun
   cases hc : callInstruction (Meter := Meter) fork op with
   | some call =>
@@ -759,9 +761,9 @@ private theorem candStep_messageInstruction {op : Op}
            exact candStep_createStep h
          · cases hrun)
 
-/-- Every step keeps the candidates, when the child it sends does. -/
-private theorem candStep_step {evm : Evm fork Meter} {result : StepResult fork Meter}
-    (h : step fork evm = .ok result) : result.Keeps CandStep CandChild evm := by
+/-- A step keeps the candidates, its message and its code, when the child it sends does. -/
+theorem step_keepsCandidates {evm : Evm fork Meter} {result : StepResult fork Meter}
+    (h : step fork evm = .ok result) : result.Keeps CandidateStep CandidateChild evm := by
   unfold Evm.step at h
   split at h
   · dsimp only at h
@@ -805,15 +807,15 @@ private theorem keepsCandidates_induction [LawfulGasMeter Meter] (n : Nat) :
       (held : GasMeter.gasHeld meter ≤ message.gas), message.gas = n →
       ∀ ended, processCreateMessage fork message state substate meter held = .ok ended →
         CreateKeeps message state substate meter ended.val) := by
-  refine processMessage_rel_byKind (R := CandStep) (Inv := fun _ => True)
+  refine processMessage_rel_byKind (R := CandidateStep) (Inv := fun _ => True)
     (Mcall := CallKeeps) (Mcreate := CreateKeeps)
-    CandStep.refl CandStep.trans (fun _ _ => trivial) ?_ ?_ ?_ ?_ ?_ ?_ n
+    CandidateStep.refl CandidateStep.trans (fun _ _ => trivial) ?_ ?_ ?_ ?_ ?_ ?_ n
   · intro evm error _
     exact candStep_exceptionalHalt evm error
   · intro evm result _ h
-    refine (candStep_step h).of_child fun {caller message child} hc => ?_
+    refine (step_keepsCandidates h).of_child fun {caller message child} hc => ?_
     unfold ChildRelByKind ChildRel at hc
-    unfold CandChild
+    unfold CandidateChild
     rcases ht : message.target with _ | target
     · simp only [ht] at hc
       exact hc
@@ -830,7 +832,27 @@ private theorem keepsCandidates_induction [LawfulGasMeter Meter] (n : Nat) :
   · intro message state prepared substate meter evm after hprep hmcall hdep
     exact keepsCandidates_depositCode hprep hmcall.1 (congrArg (·.currentTarget) hmcall.2) hdep
 
-/-- A call makes no new deployment candidate. -/
+/-- A call that returns a frame keeps the candidates of the state it starts from. -/
+theorem keepsCandidates_processMessage [LawfulGasMeter Meter] {message : Message fork}
+    {state : TransactionState} {substate : Substate} {meter : Meter}
+    {held : GasMeter.gasHeld meter ≤ message.gas}
+    {ended : { evm : Evm fork Meter // GasMeter.gasHeld evm.gas ≤ message.gas }}
+    (h : processMessage fork message state substate meter held = .ok ended) :
+    KeepsCandidates state ended.val.state :=
+  ((keepsCandidates_induction message.gas).1 message state substate meter held rfl ended h).1
+
+/-- A creation that returns a frame keeps the candidates of the state it starts from. -/
+theorem keepsCandidates_processCreateMessage [LawfulGasMeter Meter] {message : Message fork}
+    {state : TransactionState} {substate : Substate} {meter : Meter}
+    {held : GasMeter.gasHeld meter ≤ message.gas}
+    {ended : { evm : Evm fork Meter // GasMeter.gasHeld evm.gas ≤ message.gas }}
+    (h : processCreateMessage fork message state substate meter held = .ok ended) :
+    KeepsCandidates state ended.val.state :=
+  (keepsCandidates_induction message.gas).2 message state substate meter held rfl ended h
+
+/-- A call that returns a frame, from a state with no new candidate, ends with none.
+
+A new candidate is still allowed at an address whose storage was wiped. -/
 theorem processMessage_noNewCandidate [LawfulGasMeter Meter] {block : BlockState}
     {message : Message fork} {state : TransactionState} {substate : Substate} {meter : Meter}
     {held : GasMeter.gasHeld meter ≤ message.gas}
@@ -838,10 +860,11 @@ theorem processMessage_noNewCandidate [LawfulGasMeter Meter] {block : BlockState
     (hinv : NoNewCandidate block state)
     (h : processMessage fork message state substate meter held = .ok ended) :
     NoNewCandidate block ended.val.state :=
-  NoNewCandidate.of_keepsCandidates hinv
-    ((keepsCandidates_induction message.gas).1 message state substate meter held rfl ended h).1
+  NoNewCandidate.of_keepsCandidates hinv (keepsCandidates_processMessage h)
 
-/-- A creation makes no new deployment candidate. -/
+/-- A creation that returns a frame, from a state with no new candidate, ends with none.
+
+A new candidate is still allowed at an address whose storage was wiped. -/
 theorem processCreateMessage_noNewCandidate [LawfulGasMeter Meter] {block : BlockState}
     {message : Message fork} {state : TransactionState} {substate : Substate} {meter : Meter}
     {held : GasMeter.gasHeld meter ≤ message.gas}
@@ -849,7 +872,6 @@ theorem processCreateMessage_noNewCandidate [LawfulGasMeter Meter] {block : Bloc
     (hinv : NoNewCandidate block state)
     (h : processCreateMessage fork message state substate meter held = .ok ended) :
     NoNewCandidate block ended.val.state :=
-  NoNewCandidate.of_keepsCandidates hinv
-    ((keepsCandidates_induction message.gas).2 message state substate meter held rfl ended h)
+  NoNewCandidate.of_keepsCandidates hinv (keepsCandidates_processCreateMessage h)
 
 end EthLib.Execution.Evm

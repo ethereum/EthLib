@@ -11,13 +11,17 @@ A deployment candidate is an address with nonce 0 and no code, where a creation 
 
 A transaction makes none, except at an address whose storage it wiped.
 
-Buying gas raises the nonce of the sender, and settling it only moves ether.
+Buying gas raises the nonce of the sender.
 
-An authorization sets the code of its authority and then raises its nonce, by [EIP-7702][eip7702].
+Settling gas moves ether, or deletes an empty beneficiary and so wipes its storage.
+
+An authorization sets the code of its authority, then raises its nonce.
 
 Clearing the code of an authority with nonce 0 leaves a candidate only until the nonce rises.
 
 The message makes no new candidate, and the deletions at the end wipe the storage they delete.
+
+Source: [EIP-7702, Behavior][eip7702].
 
 [eip7702]: https://eips.ethereum.org/EIPS/eip-7702#behavior
 -/
@@ -79,7 +83,7 @@ private theorem noNewCandidate_creditEther {block : BlockState} {tx tx' : Transa
 
 /-- An authorization that sets the code of its authority keeps the condition on candidates.
 
-The authority ends with a nonce, so it is no candidate. -/
+The authority ends with a nonce above 0, so it is no candidate. -/
 private theorem noNewCandidate_delegate {block : BlockState} {state state' : TransactionState}
     {authority : Address} {auth : Authorization} {refund : Nat}
     (hinv : NoNewCandidate block state)
@@ -147,7 +151,7 @@ theorem applyAuthorizations_noNewCandidate {block : BlockState} {chainId : Nat}
 /-! ## The message -/
 
 /-- Preparing the first frame of a message keeps the condition on candidates. -/
-private theorem noNewCandidate_prepareFirstFrame {block : BlockState} {chainId : Nat}
+theorem noNewCandidate_prepareFirstFrame {block : BlockState} {chainId : Nat}
     {message : Message fork} {state : TransactionState} {substate : Substate}
     {auths : List Authorization} {paid : Std.ExtTreeSet Address} {first : FirstFrame fork Meter}
     (hinv : NoNewCandidate block state)
@@ -234,7 +238,7 @@ theorem processMessageCall_noNewCandidate [LawfulGasMeter Meter] {block : BlockS
 /-! ## The transaction -/
 
 /-- Buying gas keeps the condition on candidates, since it raises a nonce and takes a fee. -/
-private theorem noNewCandidate_buyGas {env : BlockEnvironment fork} {block : BlockState}
+theorem noNewCandidate_buyGas {env : BlockEnvironment fork} {block : BlockState}
     {state state' : TransactionState} {sender : Address} {tx : Transaction}
     (hinv : NoNewCandidate block state) (h : buyGas env state sender tx = .ok state') :
     NoNewCandidate block state' := by
@@ -248,7 +252,9 @@ private theorem noNewCandidate_buyGas {env : BlockEnvironment fork} {block : Blo
     exact ⟨rfl, rfl⟩
   · cases hupd
 
-/-- Settling gas keeps the condition on candidates, since it only moves ether or deletes. -/
+/-- Settling gas keeps the condition on candidates.
+
+It moves ether, or deletes an empty beneficiary. -/
 private theorem noNewCandidate_settleGas {env : BlockEnvironment fork} {block : BlockState}
     {state state' : TransactionState} {sender : Address} {tx : Transaction}
     {gasLeft refundCounter used : Nat} (hinv : NoNewCandidate block state)
@@ -328,7 +334,7 @@ private theorem runTransaction_noNewCandidate [LawfulGasMeter Meter]
   have vout := processMessageCall_noNewCandidate vb hOutput
   exact noNewCandidate_deleteAccounts (noNewCandidate_settleGas vout hSettle) hDeleted
 
-/-- A transaction on a block state makes no new deployment candidate for that block. -/
+/-- A transaction makes no candidate that its block lacked, except where it wiped storage. -/
 theorem processTransaction_noNewCandidate {env : BlockEnvironment fork} {block : BlockState}
     {included : Included} {tx : Transaction} {output : TransactionOutput}
     (h : processTransaction env block included tx = .ok output) :
