@@ -3552,6 +3552,20 @@ No theorem yet shows that every validator of a reachable state meets that hypoth
 `builderStatus_unique` shows that the status of a builder of the state is the only one whose condition holds.
 The Python suite (`bindings/python/tests/consensus/test_beacon_api_validators.py`) checks each of the nine statuses and the three builder statuses on hand-made inputs.
 
+The answers that read the registry of validators are in `Consensus/BeaconApi/Registries.lean`: the validators, their balances and their identities.
+`stateValidators_mem` (`Consensus/Proofs/BeaconApi/Registries.lean`) says which entries the validators answer holds.
+An entry is there exactly when the request names its index and its record and balance are those of the state.
+Its status must also be the status at the current epoch, and pass the filter.
+`resolveValidatorId_index` and `resolveValidatorId_pubkey` show that an identifier names an index below the size of the registry, or the first validator that holds a public key.
+`stateValidators_balance` restates the balance part, and `stateValidators_nodup` shows that each index appears at most once.
+`stateBalances_mem`, `stateIdentities_mem`, `stateBalances_nodup` and `stateIdentities_nodup` say the same of the two other answers, without the filter.
+An entry of the balances answer needs only a balance, and an entry of the identities answer only a record.
+`stateValidator_ok` says the same of the endpoint for one validator.
+`stateValidator_error_code` shows that it answers code 404 otherwise: when the identifier names no validator, or names one without a balance.
+The source gives no order, so the acceptance predicates take any permutation of the entries, and `IsValidatorsAnswer.mem_iff` and its two siblings show that such an answer has the same entries.
+The reader of a request refuses more than 64 identifiers in a query string with code 414 (`readValidatorIds_too_many`), and a text that is neither an index nor a public key with code 400.
+`StatusName.parse_status_name` and `StatusName.parse_group_name` show that the reader of a filter takes the name of each status and of each group.
+
 Points that remain open:
 
 - The reader refuses a key that a container does not declare, while the source says that a field may be added to the data without a new version.
@@ -3580,6 +3594,15 @@ Points that remain open:
 - The source names no consensus version for Heze, so the answers on a Heze state carry no version, although the schemas list it as required.
 - A value that the node cannot encode or compute has no error of its own in the source.
   EthLib gives code 500, the code of the source for an internal error.
+- A public key names the first validator of the registry that holds it; the source does not say which validator a key held twice names.
+  A deposit adds a validator only for a key that the registry does not hold, so this matters only for a state built by hand.
+- The schema marks the lists of identifiers and of statuses as unique, but gives no code for a repeated item.
+  EthLib accepts a repeated item, and gives each entry once.
+- The source names no epoch for the status in the validators answer; EthLib takes the current epoch of the state.
+- The source gives no list type for the SSZ body of the identities answer, so EthLib defines its JSON only, and no answer for a request of SSZ.
+- A state whose balances are fewer than its validators gives no entry for an index without a balance, in the validators and balances answers.
+  The transition keeps one balance per validator, so this too matters only for a state built by hand.
+- The reader of a request checks the count of identifiers before it reads them, so a long list with a bad identifier gets code 414; the source does not fix this order.
 
 ### Builder API
 
