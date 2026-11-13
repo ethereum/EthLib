@@ -1107,6 +1107,7 @@ static PyMethodDef methods[] = {
   {"snap_message_decode", py_snap_message_decode, METH_VARARGS, DOC_snap_message_decode},
   {"snap_codes_answer", py_snap_codes_answer, METH_VARARGS, DOC_snap_codes_answer},
   {"snap_access_lists_answer", py_snap_access_lists_answer, METH_VARARGS, DOC_snap_access_lists_answer},
+  {"snap_trie_nodes_answer", py_snap_trie_nodes_answer, METH_VARARGS, DOC_snap_trie_nodes_answer},
   {"snap_full_account", py_snap_full_account, METH_VARARGS, DOC_snap_full_account},
   {"snap_verify_account_range", py_snap_verify_account_range, METH_VARARGS, DOC_snap_verify_account_range},
   {"snap_verify_storage_ranges", py_snap_verify_storage_ranges, METH_VARARGS, DOC_snap_verify_storage_ranges},

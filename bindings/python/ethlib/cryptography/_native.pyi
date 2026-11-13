@@ -1305,6 +1305,10 @@ def snap_access_lists_answer(request: bytes, response: bytes, expected: list[byt
     """Whether `response` answers a GetBlockAccessLists `request`, given each block's access list hash."""
     ...
 
+def snap_trie_nodes_answer(request: bytes, response: bytes) -> bool:
+    """Whether the snap/1 TrieNodes data `response` answers the GetTrieNodes data `request`."""
+    ...
+
 def snap_full_account(slim: bytes) -> bytes:
     """The full RLP form of an account in slim form."""
     ...
