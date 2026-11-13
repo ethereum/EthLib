@@ -3530,10 +3530,10 @@ In a valid view, when that block is canonical, it is the object at that index am
 A block off the canonical chain is checked for its hash only, so a receipt found there has no such guarantee.
 A creation has the address that the sender makes at its nonce, and a call has none (`receiptInfo_contractAddress`).
 No text of a receipt or a log defines `logIndex`; the section "Log index" of the [notes of `eth_simulateV1`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/docs-api/docs/ethsimulatev1-notes.mdx) states the rule and says that receipts use it.
-These properties hold whenever the methods give an object.
+These properties hold whenever the receipt objects of a block are built.
 They fail with `-32603` when a block does not have one receipt for each transaction, or when the node cannot compute a sender, a hash or a contract address.
 No theorem yet shows that they succeed on the blocks of a valid view.
-From Byzantium, the outcome of a receipt object is a status, `true` exactly when the receipt is a success, which the object writes as `status` `0x1` (`outcomeOf_of_byzantium`); before Byzantium it is the state root, which the object writes as `root` (`outcomeOf_of_lt_byzantium`).
+From Byzantium, the outcome of a receipt object is a status, `true` exactly when the receipt is a success (`outcomeOf_of_byzantium`), which the object writes as `status` `0x1`; before Byzantium it is the state root, which the object writes as `root` (`outcomeOf_of_lt_byzantium`).
 In a valid view, take a canonical block after the lowest.
 Each receipt has the Bloom filter of its logs, and so does each receipt object (`Valid.bloom_receipts`, `Valid.logsBloom_receiptInfos`).
 The cumulative gas of its receipts never decreases (`Valid.cumulativeGasUsed_receipts`), so the gas of the receipt objects adds up to the last cumulative gas (`Valid.sum_gasUsed`).

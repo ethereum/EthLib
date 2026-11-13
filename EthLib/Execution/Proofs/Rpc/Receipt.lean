@@ -290,7 +290,7 @@ end BlockRecord
 
 /-- From Byzantium, the outcome of a receipt is a status.
 
-It is `true` exactly when the receipt is a success, and its field `status` is then `0x1`. -/
+It is `true` exactly when the receipt is a success. -/
 theorem outcomeOf_of_byzantium {fork : Fork} (h : .byzantium ≤ fork) (o : Outcome fork) :
     ∃ b, outcomeOf o = .inr b ∧ (b = true ↔ o = .status h true) := by
   cases o with
