@@ -820,7 +820,7 @@ extern lean_object* eth_consensus_get_data_column_sidecars_from_column_sidecar(l
 extern lean_object* eth_consensus_light_client_sync(lean_object* args);
 extern lean_object* eth_consensus_fork_choice(lean_object* args);
 extern lean_object* eth_consensus_gossip_validation(lean_object* args);
-extern lean_object* eth_consensus_api_pool(lean_object* args);
+extern lean_object* eth_consensus_api_post(lean_object* args);
 extern lean_object* eth_consensus_block_to_light_client_header(lean_object* args);
 extern lean_object* eth_consensus_light_client_update_proofs(lean_object* args);
 extern lean_object* eth_consensus_is_better_update(lean_object* args);
@@ -1755,11 +1755,11 @@ py_consensus_gossip_validation(
 }
 
 PyObject*
-py_consensus_api_pool(
+py_consensus_api_post(
   PyObject* self,
   PyObject* args
 ) {
-  return call_pyvalue_export(eth_consensus_api_pool, args, 9, FORK_CHOICE_ERROR);
+  return call_pyvalue_export(eth_consensus_api_post, args, 9, FORK_CHOICE_ERROR);
 }
 
 PyObject*

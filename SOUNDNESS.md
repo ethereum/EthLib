@@ -4324,7 +4324,7 @@ They call the same dispatch as gossip, `validateGossipMessage` (`Consensus/Gossi
 The Python suite (`bindings/python/tests/consensus/test_beacon_api_pool.py`) submits each object of the pinned gossip cases of the pool topics to its endpoint.
 It checks that the object fails exactly when gossip does not accept it, with the reason of the case.
 It leaves out the cases whose reason is a wrong subnet, since the node picks the subnet itself, and the cases that send objects of another topic.
-Every case of the bid topic also sends the envelopes of payloads, so no vector reaches the bid endpoint yet.
+Every case of the bid topic also sends the envelopes of payloads, so those cases run in the suite of the publish endpoints.
 
 The publish endpoints of blocks and of payload envelopes check an object at the level that the client asks, before the node broadcasts it (`Consensus/BeaconApi/Publish.lean`).
 The gossip checks of its topic run at every level, through the same dispatch as gossip.
@@ -4341,6 +4341,13 @@ The highest level also checks that the store holds no other block of the same sl
 `publishBlock_of_pass` shows the converse: a block that gossip accepts and that passes its level is broadcast, and integrated exactly when the handler succeeds.
 The envelope endpoint has the same theorems, from `publishEnvelope_refused_store` to `publishEnvelope_of_pass`, against the gossip checks and the handler of envelopes.
 `levelFailure_eq_none_iff` shows that an object passes its level exactly when its gossip checks pass and, above the gossip level, the later checks of its level pass.
+The Python suite (`bindings/python/tests/consensus/test_beacon_api_publish.py`) sends each object of the pinned gossip cases of blocks, envelopes and bids to its endpoint, in turn, against one store.
+It checks that a block or an envelope is refused exactly when gossip does not accept it, with the reason of the case, and that a bid fails exactly then.
+It checks that a valid block and a valid envelope get 200 at every level, and that a second copy is then refused as already seen.
+It checks that the consensus levels refuse a block with a wrong state root that gossip accepts, and that the default level is the gossip level.
+It checks that the highest level refuses a valid block whose rival the store holds, and that the consensus level does not.
+The export behind it (`Consensus/Exports/BeaconApiPost.lean`) runs a node whose clock reaches the time of each request, which holds no blobs, and whose execution layer accepts every payload.
+So a block with blobs before Fulu gets 202, while from Fulu the node takes the data on trust; it never integrates the block of the merge, and from Heze every payload satisfies the inclusion lists.
 
 Points that remain open:
 
