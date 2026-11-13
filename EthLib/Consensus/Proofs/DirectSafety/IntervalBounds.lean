@@ -5,6 +5,7 @@ public import EthLib.Consensus.Proofs.DirectSafety.IntervalFunding
 public import EthLib.Consensus.Proofs.Transition.Totality.Bound
 import EthLib.Consensus.Proofs.DirectSafety.FundingBlock
 import EthLib.Consensus.Proofs.DirectSafety.FundingSlot
+import EthLib.Consensus.Proofs.DirectSafety.Provenance
 import EthLib.Consensus.Proofs.Transition.ValidatorCaps
 
 /-!
@@ -49,7 +50,7 @@ private theorem active_stake_le_window {g x y : ForkedBeaconState preset}
       (shared.append tail).chainSteps).2) high endEpoch events replayed
   intro a b pre step before added addedOk
   have reachable := shared.append pre
-  have holds := reachable.invariant_of_genesis genesis
+  have holds := (run_justified_separated reachable genesis).1
   cases step with
   | slot ok =>
     exact funding_slot before delay holds.balancesMatch holds.exitsOrdered

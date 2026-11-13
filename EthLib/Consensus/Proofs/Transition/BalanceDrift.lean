@@ -1,7 +1,6 @@
 module
 
 public import EthLib.Consensus.Proofs.Transition.RegistryLifecycle
-import EthLib.Consensus.Proofs.Transition.ChainRoots
 import EthLib.Consensus.Proofs.Transition.Committees
 import EthLib.Consensus.Proofs.Transition.Requests
 import EthLib.Consensus.Proofs.Transition.Totality.EpochBeforeAltair
@@ -46,13 +45,6 @@ theorem CapOrder.mainnet : CapOrder Preset.mainnet := ⟨by decide, by decide⟩
 
 /-- The minimal preset orders its effective-balance caps. -/
 theorem CapOrder.minimal : CapOrder Preset.minimal := ⟨by decide, by decide⟩
-
-/-- A run from a genesis built from deposits ends in a state that satisfies the invariant. -/
-theorem Run.invariant_of_genesis {g x : ForkedBeaconState preset}
-    (run : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g) :
-    Invariant x.state := by
-  obtain ⟨_, _, _, ok⟩ := genesis
-  exact run.invariant (initializeBeaconStateFromEth1_invariant ok).2
 
 /-- Each validator of the first state keeps its effective balance in the second. -/
 def EffectiveKept {f h : Fork} (s : BeaconState preset f)
