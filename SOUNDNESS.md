@@ -3609,7 +3609,38 @@ The version header must name the fork of the body's type, and these bodies exist
 `preferencesFailures_of_passed` shows that preferences for a slot before the builder's current slot fail whenever the checks run, and `PreferencesStore.submit_of_passed` that such a submission leaves the store as it was.
 `PreferencesStore.submit_of_accepted` and `PreferencesStore.get_keep` show that a submission that fails no check keeps its preferences under the key of the path and the slot of the request, and that no other entry changes.
 `bidHonorsPreferences_keep` shows that a bid honors preferences kept for its proposer at its slot exactly when its execution payment is within their cap.
-The agreed data is an input: EthLib does not compute the default, the hostname of the builder's URL that the source derives.
+When no data was agreed out of band, `agreedData` takes the default data of the builder's URL, `defaultAuthData` (`Consensus/BuilderApi/AuthData.lean`).
+The source takes the host with Python's `urlsplit` in its pseudocode, not by a standard, so EthLib states the grammar that it reads:
+
+- The URL starts with a scheme by [RFC 3986 section 3.1](https://www.rfc-editor.org/rfc/rfc3986#section-3.1), a colon and two slashes; a URL without them has no host.
+- The authority runs to the first `/`, `?` or `#`, and the userinfo ends at its last `@`, as in [RFC 3986 section 3.2](https://www.rfc-editor.org/rfc/rfc3986#section-3.2).
+- A port is a colon and decimal digits, possibly none, by section 3.2.3.
+- A host in brackets must be an IPv6 address in the text of [RFC 4291 section 2.2](https://www.rfc-editor.org/rfc/rfc4291#section-2.2).
+  Its last two groups may be an IPv4 address in the dotted form of RFC 3986 section 3.2.2.
+  An IPvFuture literal or a zone identifier is refused.
+- Any other host must be non-empty, and hold only the unreserved characters and sub-delimiters of a registered name by RFC 3986 section 3.2.2, without percent-encoding.
+  A character that is not ASCII is refused, and EthLib then lowercases the ASCII letters.
+- The userinfo is dropped, and EthLib reads none of its characters.
+
+The seven examples of the source agree with this grammar.
+The source's `urlsplit` accepts some URLs that EthLib refuses, and for them it signs a host:
+
+- a URL with leading spaces or control characters, or a tab, CR or LF up to the end of its host, which it removes;
+- a host with other ASCII characters outside a registered name, such as a space, `"`, `\` or `{`, which it keeps;
+- a host with a percent sign, whose text after the sign it does not lowercase;
+- a port that is not decimal digits, which it ignores;
+- a host whose Unicode lowercase is ASCII, such as one with the Kelvin sign U+212A;
+- an IPvFuture literal, which it signs without brackets;
+- a URL without a scheme that starts with two slashes.
+
+EthLib refuses them, so that a proposer and a builder never sign different bytes without an error.
+For a zone identifier in brackets, `urlsplit` gives the host, but the source does not say how to compress it, and EthLib refuses it.
+In the other direction, recent versions of `urlsplit` raise an error on brackets in the userinfo, or on userinfo whose NFKC form holds `/`, `?`, `#`, `@` or `:`, while EthLib drops that userinfo and signs the host.
+The default data has no bound of its own, but a request carries at most 4096 bytes of data, so a longer host can never authenticate.
+`parseIpv6_compressIpv6` (`Consensus/Proofs/BuilderApi/AuthData.lean`) shows that the compressed text of an address reads back as that address.
+`defaultAuthData_eq_iff_of_ipv6` shows that two URLs whose hosts are IPv6 literals give the same data exactly when they name the same address, so every spelling that EthLib reads as an address signs the same bytes.
+`urlHost_eq_of_defaultAuthData_eq` shows that two URLs that give the same data have the same host.
+`defaultAuthData_nonempty` and `defaultAuthData_ascii` show that the default data is never empty, so it never fails the rule against empty data, and that each of its bytes is ASCII.
 The source leaves two points open:
 
 - When a request fails a check that gives 400 and the signature, which gives 401, the source does not say which status wins; `AllowedStatus` allows both.
@@ -3930,12 +3961,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 437 operations and 49 size constants.
-The Python extension calls 437 of the operations and 49 of the constants.
+Lean exports 438 operations and 49 size constants.
+The Python extension calls 438 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-10685 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2083), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (194), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (106), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (147), `module.c` (1495), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (41), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (58), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (726), `x25519.c` (21), `xmss.c` (134).
+10699 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2094), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (194), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (106), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (147), `module.c` (1497), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (41), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (58), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (727), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

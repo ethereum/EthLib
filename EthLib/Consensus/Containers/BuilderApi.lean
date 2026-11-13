@@ -60,7 +60,7 @@ def MAX_EXECUTION_PAYMENT : Gwei := UINT64_MAX
 
 /-- From Gloas: the agreed authentication data and the proposal slot of a builder request. -/
 structure BuilderRequestAuth where
-  /-- The data agreed with the builder, or by default the hostname of the builder's URL. -/
+  /-- The data agreed with the builder, or by default the data from the builder's URL. -/
   data : SszList UInt8 MAX_BUILDER_AUTH_DATA_SIZE
   /-- The proposal slot the request authenticates. -/
   slot : Slot

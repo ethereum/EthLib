@@ -412,6 +412,7 @@ PyObject* py_consensus_unblind_signed_blinded_block (PyObject* self, PyObject* a
 PyObject* py_consensus_verify_builder_request_auth_signature (PyObject* self, PyObject* args);
 PyObject* py_consensus_builder_request_auth_failures (PyObject* self, PyObject* args);
 PyObject* py_consensus_builder_preferences_failures (PyObject* self, PyObject* args);
+PyObject* py_consensus_default_auth_data (PyObject* self, PyObject* args);
 PyObject* py_consensus_builder_bid_value (PyObject* self, PyObject* args);
 PyObject* py_consensus_consensus_version (PyObject* self, PyObject* args);
 PyObject* py_consensus_consensus_version_fork (PyObject* self, PyObject* args);

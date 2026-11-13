@@ -220,6 +220,11 @@ def builder_preferences_failures(
     )
 
 
+def default_auth_data(url: str) -> bytes:
+    """From Gloas: a builder's default auth data, its URL's host lowercased, IPv6 compressed."""
+    return _native.consensus_default_auth_data(url)
+
+
 def builder_bid_value(value: int, execution_payment: int, max_execution_payment: int) -> int:
     """The bid's value in Gwei, with its execution payment capped, not reduced to 64 bits."""
     return _native.consensus_builder_bid_value(value, execution_payment, max_execution_payment)
@@ -1513,6 +1518,7 @@ __all__ = [
     "verify_builder_request_auth_signature",
     "builder_request_auth_failures",
     "builder_preferences_failures",
+    "default_auth_data",
     "builder_bid_value",
     "consensus_version",
     "consensus_version_fork",

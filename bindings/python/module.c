@@ -831,6 +831,8 @@ static PyMethodDef methods[] = {
    METH_VARARGS, DOC_consensus_builder_request_auth_failures},
   {"consensus_builder_preferences_failures", py_consensus_builder_preferences_failures,
    METH_VARARGS, DOC_consensus_builder_preferences_failures},
+  {"consensus_default_auth_data", py_consensus_default_auth_data,
+   METH_VARARGS, DOC_consensus_default_auth_data},
   {"consensus_builder_bid_value", py_consensus_builder_bid_value,
    METH_VARARGS, DOC_consensus_builder_bid_value},
   {"consensus_consensus_version", py_consensus_consensus_version,

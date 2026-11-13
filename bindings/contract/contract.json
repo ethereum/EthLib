@@ -4091,6 +4091,23 @@
    "docstring":
    "From Gloas: the failed checks of a request that submits preferences, by name, in order.\n\nThe arguments are the name of the preset and of the configuration, the fork and replacements.\n\nThen come the agreed data, the builder's current slot, the key of the path and the version header.\n\nThen come the SSZ bytes of the request."},
   {"summary":
+   "The default data that a proposer and a builder agree, from the builder's URL.",
+   "signature": "(url: str) -> bytes",
+   "operation": "EthLib.Consensus.BuilderApi.defaultAuthData",
+   "method": "consensus_default_auth_data",
+   "errors":
+   [{"type": "EthLib.Consensus.BuilderApi.AuthDataError",
+     "codes":
+     [{"constructor": "noAuthority", "code": 1},
+      {"constructor": "noHost", "code": 2},
+      {"constructor": "badPort", "code": 3},
+      {"constructor": "badIpv6", "code": 4},
+      {"constructor": "nonAscii", "code": 5},
+      {"constructor": "badName", "code": 6}]}],
+   "error_class": "ConsensusError",
+   "docstring":
+   "The default data that a proposer and a builder agree, from the builder's URL.\n\nIt is the host as ASCII bytes, with an IPv6 address compressed and in brackets.\n\nA host that is not ASCII gives an error, so an internationalized name must be in punycode."},
+  {"summary":
    "The value of a builder's bid from its two payments and the proposer's execution payment cap.",
    "signature":
    "(value: int, execution_payment: int, max_execution_payment: int) -> int",
