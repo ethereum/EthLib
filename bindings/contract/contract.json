@@ -12901,6 +12901,16 @@
    "error_class": "EngineError",
    "docstring":
    "The answer to a payload bodies request, from a store of bodies.\n\nThe arguments are the store's entries, the latest known block, the limit and the request.\n\nEach entry is the block hash, its canonical number or `None`, and its fork name.\n\nThen come its transactions, its withdrawals or `None`, and its block access list or `None`."},
+  {"summary":
+   "The payload request of the beacon chain through the method and through its execution layer.",
+   "signature":
+   "(config: dict, preset: str, fork: str, request: bytes) -> tuple[list | None, str | None, int | None, bool]",
+   "operation": "EthLib.Engine.Exports.newPayloadRoutesExport",
+   "method": "engine_new_payload_routes",
+   "errors": [],
+   "error_class": "EngineError",
+   "docstring":
+   "The payload request of the beacon chain through the method and through its execution layer.\n\nThe arguments are the chain configuration, the preset, the fork and the request in SSZ.\n\nThe result is the JSON parameters, then the status of the method or the code of its error.\n\nLast comes whether the layer accepts, with the state transition taken as passed.\n\nEach part that does not apply is `None`."},
   {"summary": "A payload status read from its JSON, as `json.loads` gives it.",
    "signature":
    "(status: dict[str, Any]) -> tuple[str, bytes | None, str | None]",
