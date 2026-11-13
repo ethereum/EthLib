@@ -225,32 +225,13 @@ theorem depositRequest {electra : .pectra ≤ fork} {request : DepositRequest}
   obtain ⟨_, _, rfl⟩ := ok
   rfl
 
-private theorem partialWithdrawal {electra : .pectra ≤ fork}
-    {index : ValidatorIndex} {validator : Validator} {amount owed : Gwei}
-    (ok : requestPartialWithdrawal config state electra index validator amount owed = .ok after) :
-    SamePendingQueue state after := by
-  simp only [requestPartialWithdrawal, bind_ok_iff, liftAccessor_ok, pure, Except.pure] at ok
-  obtain ⟨_, _, _, _, ok⟩ := ok
-  split at ok
-  · simp only [bind_ok_iff, liftAccessor_ok, Except.ok.injEq] at ok
-    obtain ⟨⟨_, _⟩, churned, _, _, _, _, rfl⟩ := ok
-    simp only [computeExitEpochAndUpdateChurn, bind_ok_iff, pure, Except.pure,
-      Except.ok.injEq] at churned
-    obtain ⟨_, _, _, _, _, _, final⟩ := churned
-    cases final; rfl
-  · cases ok; rfl
-
 theorem withdrawalRequest {electra : .pectra ≤ fork} {request : WithdrawalRequest}
     (ok : processWithdrawalRequest config state electra request = .ok after) :
     SamePendingQueue state after := by
-  unfold processWithdrawalRequest at ok
-  simp only [bind, Except.bind, pure, Except.pure] at ok
-  repeat' split at ok
-  all_goals first
-    | (cases ok; done)
-    | (cases ok; rfl)
-    | exact exit (liftAccessor_ok.mp ok)
-    | exact partialWithdrawal ok
+  rcases withdrawalRequest_cases ok with rfl | ⟨_, exited⟩ | ⟨_, _, _, withdrawn⟩
+  · rfl
+  · exact exit exited
+  · exact (requestPartialWithdrawal_kept withdrawn).2.2.1
 
 theorem attestation {attestation : Attestation preset fork} {parentSlot : Slot}
     (electra : .pectra ≤ fork)
@@ -660,32 +641,13 @@ private theorem depositRequest {electra : .pectra ≤ fork} {request : DepositRe
   obtain ⟨_, _, rfl⟩ := ok
   exact of_data
 
-private theorem partialWithdrawal {electra : .pectra ≤ fork}
-    {index : ValidatorIndex} {validator : Validator} {amount owed : Gwei}
-    (ok : requestPartialWithdrawal config state electra index validator amount owed = .ok after) :
-    WithdrawalKept state after := by
-  simp only [requestPartialWithdrawal, bind_ok_iff, liftAccessor_ok, pure, Except.pure] at ok
-  obtain ⟨_, _, _, _, ok⟩ := ok
-  split at ok
-  · simp only [bind_ok_iff, liftAccessor_ok, Except.ok.injEq] at ok
-    obtain ⟨⟨_, _⟩, churned, _, _, _, _, rfl⟩ := ok
-    simp only [computeExitEpochAndUpdateChurn, bind_ok_iff, pure, Except.pure,
-      Except.ok.injEq] at churned
-    obtain ⟨_, _, _, _, _, _, final⟩ := churned
-    cases final; exact of_data
-  · cases ok; exact of_data
-
 private theorem withdrawalRequest {electra : .pectra ≤ fork} {request : WithdrawalRequest}
     (ok : processWithdrawalRequest config state electra request = .ok after) :
     WithdrawalKept state after := by
-  unfold processWithdrawalRequest at ok
-  simp only [bind, Except.bind, pure, Except.pure] at ok
-  repeat' split at ok
-  all_goals first
-    | (cases ok; done)
-    | (cases ok; exact of_data)
-    | exact exit (liftAccessor_ok.mp ok)
-    | exact partialWithdrawal ok
+  rcases withdrawalRequest_cases ok with rfl | ⟨_, exited⟩ | ⟨_, _, _, withdrawn⟩
+  · exact of_data
+  · exact exit exited
+  · exact of_data (congrArg (·.data) (requestPartialWithdrawal_kept withdrawn).1)
 
 /-- The execution part of a block keeps the validators, so it keeps their withdrawal epochs. -/
 private theorem blockExecution {body : BeaconBlockBody preset fork} {bellatrix : .bellatrix ≤ fork}

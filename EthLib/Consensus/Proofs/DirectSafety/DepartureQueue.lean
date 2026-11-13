@@ -1489,22 +1489,6 @@ private theorem exitChurnLimit_le_cap {fork : Fork} {s : BeaconState preset fork
   obtain ⟨whole, _, rfl⟩ := ok
   exact UInt64.le_iff_toNat_le.mp Std.min_le_left
 
-/-- Withdrawal requests either do nothing, initiate an exit, or spend partial-withdrawal churn. -/
-private theorem withdrawalRequest_cases {fork : Fork} {s t : BeaconState preset fork}
-    {electra : .pectra ≤ fork} {request : WithdrawalRequest}
-    (ok : processWithdrawalRequest config s electra request = .ok t) :
-    t = s ∨ (∃ index, initiateValidatorExit config s index = .ok t) ∨
-      ∃ index v owed,
-        requestPartialWithdrawal config s electra index v request.amount owed = .ok t := by
-  unfold processWithdrawalRequest at ok
-  simp only [bind, Except.bind, pure, Except.pure] at ok
-  repeat' split at ok
-  all_goals first
-    | (cases ok; exact .inl rfl)
-    | (cases ok)
-    | exact .inr (.inl ⟨_, liftAccessor_ok.mp ok⟩)
-    | exact .inr (.inr ⟨_, _, _, ok⟩)
-
 /-- An exit trace tags its call and covers every newly assigned validator exit. -/
 private theorem initiateExit_indexedTrace {fork : Fork} {s t : BeaconState preset fork}
     (electra : .pectra ≤ fork) (early : fork < .glamsterdam) {index : ValidatorIndex}

@@ -242,19 +242,6 @@ private theorem switchToCompoundingValidator {electra : .pectra ≤ fork} {index
   obtain ⟨_, found, _, set, queued⟩ := ok
   exact (setValidator found set id).trans (queueExcessActiveBalance queued)
 
-private theorem requestPartialWithdrawal {electra : .pectra ≤ fork}
-    {index : ValidatorIndex} {validator : Validator} {amount owed : Gwei}
-    (ok : Consensus.requestPartialWithdrawal config state electra index validator amount owed =
-      .ok after) : Kept state after := by
-  simp only [Consensus.requestPartialWithdrawal, bind_ok_iff, liftAccessor_ok, pure,
-    Except.pure] at ok
-  obtain ⟨_, _, _, _, ok⟩ := ok
-  split at ok
-  · simp only [bind_ok_iff, liftAccessor_ok, Except.ok.injEq] at ok
-    obtain ⟨⟨_, _⟩, churned, _, _, _, _, rfl⟩ := ok
-    exact (of_data (by rw [(computeExitEpochAndUpdateChurn_earliest churned).2.1])).trans of_data
-  · cases ok; exact refl _
-
 private theorem processWithdrawalRequest {electra : .pectra ≤ fork} {request : WithdrawalRequest}
     (ok : Consensus.processWithdrawalRequest config state electra request = .ok after) :
     Kept state after := by
@@ -264,7 +251,7 @@ private theorem processWithdrawalRequest {electra : .pectra ≤ fork} {request :
   all_goals first
     | (cases ok; done)
     | (cases ok; exact refl _)
-    | exact requestPartialWithdrawal ok
+    | exact of_data (congrArg (·.data) (requestPartialWithdrawal_kept ok).1)
     | (apply initiateValidatorExit (config := config)
          (by rw [getValidator, getElem?_toNat_of_ofNatChecked (by assumption)])
          ?_ (liftAccessor_ok.mp ok)

@@ -277,29 +277,10 @@ private theorem kept_applyDeposit {pubkey : BLSPubkey} {credentials : Bytes32} {
 
 private theorem kept_withdrawalRequest {electra : .pectra ≤ fork} {request : WithdrawalRequest}
     (ok : processWithdrawalRequest config s electra request = .ok t) : Kept s t := by
-  have partialWithdrawal {s t : BeaconState preset fork} {index : ValidatorIndex} {v : Validator}
-      {amount owed : Gwei}
-      (ok : requestPartialWithdrawal config s electra index v amount owed = .ok t) :
-      Kept s t := by
-    simp only [requestPartialWithdrawal, bind_ok_iff, liftAccessor_ok, pure, Except.pure] at ok
-    obtain ⟨_, _, _, _, ok⟩ := ok
-    split at ok
-    · simp only [bind_ok_iff, liftAccessor_ok, Except.ok.injEq] at ok
-      obtain ⟨⟨_, _⟩, churned, _, _, _, _, rfl⟩ := ok
-      simp only [computeExitEpochAndUpdateChurn, bind_ok_iff, pure, Except.pure,
-        Except.ok.injEq] at churned
-      obtain ⟨_, _, _, _, _, _, churned⟩ := churned
-      cases churned
-      rfl
-    · cases ok; rfl
-  unfold processWithdrawalRequest at ok
-  simp only [bind, Except.bind, pure, Except.pure] at ok
-  repeat' split at ok
-  all_goals first
-    | (cases ok; done)
-    | (cases ok; rfl)
-    | exact kept_exit (liftAccessor_ok.mp ok)
-    | exact partialWithdrawal ok
+  rcases withdrawalRequest_cases ok with rfl | ⟨_, exited⟩ | ⟨_, _, _, withdrawn⟩
+  · rfl
+  · exact kept_exit exited
+  · exact (requestPartialWithdrawal_kept withdrawn).2.2.2
 
 private theorem kept_consolidationRequest {electra : .pectra ≤ fork}
     {request : ConsolidationRequest}

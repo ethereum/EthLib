@@ -1559,25 +1559,10 @@ theorem coverage_withdrawal_request {fork : Fork} {s t : BeaconState preset fork
     {electra : .pectra ≤ fork} {request : WithdrawalRequest}
     (ok : processWithdrawalRequest config s electra request = .ok t) :
     t.balances = s.balances := by
-  have partialRequest (s t : BeaconState preset fork) (index : ValidatorIndex) (v : Validator)
-      (amount owed : Gwei)
-      (ok : requestPartialWithdrawal config s electra index v amount owed = .ok t) :
-      t.balances = s.balances := by
-    simp only [requestPartialWithdrawal, bind_ok_iff] at ok
-    obtain ⟨_, _, _, _, ok⟩ := ok
-    split at ok
-    · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
-      obtain ⟨⟨u, epoch⟩, churned, _, _, _, _, rfl⟩ := ok
-      exact (computeExitEpochAndUpdateChurn_earliest (liftAccessor_ok.mp churned)).2.2
-    · cases ok; rfl
-  simp only [processWithdrawalRequest] at ok
-  repeat' first
-    | (exact partialRequest _ _ _ _ _ _ ok)
-    | (exact (initiateValidatorExit_balances_eq_and_pendingConsolidations_eq
-        (liftAccessor_ok.mp ok)).1)
-    | (cases ok; rfl)
-    | (split at ok)
-    | (rcases bind_ok_iff.mp ok with ⟨_, _, ok⟩)
+  rcases withdrawalRequest_cases ok with rfl | ⟨_, exited⟩ | ⟨_, _, _, withdrawn⟩
+  · rfl
+  · exact (initiateValidatorExit_balances_eq_and_pendingConsolidations_eq exited).1
+  · exact (requestPartialWithdrawal_kept withdrawn).2.1
 
 /-- The coverage of one event, summed over validators, is at most its credits or debits. -/
 theorem coverage_event_sum (event : BalanceEvent preset) (n : Nat) (debit : Bool) :
