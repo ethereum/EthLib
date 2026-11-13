@@ -4,26 +4,26 @@ public import EthLib.Cryptography.Proofs.EvalDistEq
 public import VCVio.OracleComp.QueryTracking.RandomOracle.Basic
 
 /-!
-# Proofs: a lazy random oracle as a uniform table
+# Proofs: lazy random oracles, uniform tables and independent draws
 
 A lazy random oracle samples an answer the first time it sees an input, and caches it.
 
-For a list of queries, its answers equal reads of one uniform table, behind the starting cache.
+For a list of queries, its answers are the cached ones, and otherwise reads of one uniform table.
 
-Independent uniform samples equal reads of a uniform table at distinct cells.
+Independent uniform samples are equal in distribution to reads of a uniform table at distinct cells.
 
-A uniform table of vectors, read at distinct cells and positions, gives a uniform table.
+A uniform table of vectors, read at distinct (cell, position) pairs, gives a uniform table.
 
-Independent computations hit a list of values with the product of their chances.
+Independent computations give a list of values with the product of their probabilities.
 -/
 
 @[expose] public section
 
 open OracleComp OracleSpec ENNReal
 
-/-- Reads through a lazy random oracle equal reads of a uniform table behind the cache.
+/-- Reads through a lazy random oracle equal cached answers, else reads of a uniform table.
 
-It needs two elements to query one input exactly when they share a cell. -/
+Two elements must query the same input exactly when they read the same cell. -/
 theorem run_mapM_query_evalDistEq {D R α β : Type} [DecidableEq D] [SampleableType R]
     {N : Nat} [SampleableType (Fin N → R)] (q : α → D) (g : α → Fin N) (f : α → R → β)
     (L : List α) (same : ∀ x ∈ L, ∀ y ∈ L, q x = q y ↔ g x = g y)
@@ -117,7 +117,7 @@ theorem mapM_uniformSample_evalDistEq {R α β : Type} [SampleableType R] {N : N
           (fun T => pure ((x :: L).map fun y => f y (T (g y))))
       _ = _ := by rw [map_eq_bind_pure_comp]; rfl
 
-/-- Reads of a uniform table of vectors at distinct cells and positions form a uniform table. -/
+/-- Reads of a uniform table of vectors at distinct (cell, position) pairs form a uniform table. -/
 theorem evalDistEq_uniformSample_table_reads {R A : Type} [Finite A] [SampleableType R]
     {B m : Nat} [SampleableType (Fin B → Vector R m)] [SampleableType (A → R)]
     {e : A → Fin B × Fin m} (he : Function.Injective e) :
@@ -135,7 +135,7 @@ theorem evalDistEq_uniformSample_table_reads {R A : Type} [Finite A] [Sampleable
       (SampleableType.map_uniformSample_evalDistEq_of_bijective flat.bijective).map _
     _ =ᵈ ($ᵗ (A → R)) := evalDistEq_uniformSample_map_comp_injective he
 
-/-- Independent computations give a list of outputs with the product of their chances. -/
+/-- Independent computations give a list of values with the product of their probabilities. -/
 theorem prEvent_mapM_eq_map {α γ : Type} (m : α → ProbComp γ) (v : α → γ) (L : List α) :
     Pr{let z ← L.mapM m}[z = L.map v] = (L.map fun x => Pr{let y ← m x}[y = v x]).prod := by
   induction L with
@@ -143,4 +143,3 @@ theorem prEvent_mapM_eq_map {α γ : Type} (m : α → ProbComp γ) (v : α → 
   | cons x L ih =>
     rw [List.mapM_cons, List.map_cons, List.map_cons, List.prod_cons, ← ih]
     simp [List.cons.injEq]
-
