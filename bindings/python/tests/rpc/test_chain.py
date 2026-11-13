@@ -33,6 +33,11 @@ RESULT_SCHEMAS: Final[dict[str, rpc.Schema | None]] = {
     "eth_getTransactionReceipt": None,
     "eth_getBlockReceipts": None,
     "eth_getLogs": None,
+    "eth_getBalance": "uint",
+    "eth_getTransactionCount": "uint",
+    "eth_getCode": "bytes",
+    "eth_getStorageAt": "bytes",
+    "eth_getStorageValues": None,
     "debug_getRawHeader": "bytes",
     "debug_getRawBlock": "bytes",
     "debug_getRawTransaction": "bytes",
@@ -359,6 +364,113 @@ def test_bad_filter(log_filter: dict[str, str], code: int) -> None:
     """The method rejects each bad filter with the expected error code."""
     request = {"jsonrpc": "2.0", "id": 1, "method": "eth_getLogs", "params": [log_filter]}
     assert _error(json.dumps(request))["error"]["code"] == code
+
+
+# A contract of the test chain with code and a storage word at key 0, as the fixtures show.
+CONTRACT: Final = "0x7dcd17433742f4c0ca53122ab541d0ba67fc27df"
+KEY: Final = "0x" + "00" * 32
+# An account of the test chain that sends one transaction, as the nonce fixtures show.
+SENDER: Final = "0x0300100f529a704d19736a8714837adbc934db7f"
+
+# Each account query that the view rejects, with the code and the data of its error.
+BAD_ACCOUNT_QUERIES = [
+    pytest.param("eth_getBalance", [CONTRACT, "0x3d"], -32001, "unknown block", id="unknown-block"),
+    pytest.param("eth_getCode", [CONTRACT, "pending"], -32001, "unknown block", id="pending"),
+    pytest.param(
+        "eth_getStorageAt",
+        [CONTRACT, KEY, {"blockHash": "0x" + "11" * 32}],
+        -32001,
+        "unknown block",
+        id="unknown-hash-object",
+    ),
+    pytest.param(
+        "eth_getStorageValues",
+        [{CONTRACT: ["0xasdf"]}],
+        -32602,
+        "key: not a hex digit",
+        id="bad-key",
+    ),
+    pytest.param("eth_getBalance", [], -32602, "missing parameter", id="no-address"),
+    pytest.param("eth_getStorageAt", [CONTRACT], -32602, "missing parameter", id="no-key"),
+    pytest.param(
+        "eth_getTransactionCount",
+        [CONTRACT, "latest", "latest"],
+        -32602,
+        "too many parameters",
+        id="extra",
+    ),
+    pytest.param(
+        "eth_getStorageValues",
+        [{CONTRACT: [KEY], CONTRACT.upper().replace("0X", "0x"): [KEY]}],
+        -32602,
+        "requests: an address twice",
+        id="address-twice",
+    ),
+    # The keys of an address are an array, so null is no request for that address.
+    pytest.param(
+        "eth_getStorageValues",
+        [{CONTRACT: [KEY], "0x" + "aa" * 20: None}],
+        -32602,
+        "keys: not an array",
+        id="null-keys",
+    ),
+]
+
+
+@pytest.mark.parametrize(("method", "params", "code", "data"), BAD_ACCOUNT_QUERIES)
+def test_bad_account_query(method: str, params: list[object], code: int, data: str) -> None:
+    """The view rejects each bad account query with the expected error."""
+    request = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
+    error = _error(json.dumps(request))["error"]
+    assert (error["code"], error["data"]) == (code, data)
+
+
+def test_account_queries_agree() -> None:
+    """At each block, the storage values are the words that eth_getStorageAt gives."""
+    chain = replay_chain()
+    blocks = [hex(number) for number in range(len(chain.blocks))]
+    requests = [
+        json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params})
+        for block in blocks
+        for method, params in [
+            ("eth_getStorageAt", [CONTRACT, KEY, block]),
+            # A short key reads as a number, so "0x0" is the key of 32 zero bytes.
+            ("eth_getStorageValues", [{CONTRACT: [KEY, "0x0"], SENDER: []}, block]),
+        ]
+    ]
+    results = [json.loads(text)["result"] for text in chain.serve(requests) if text is not None]
+    assert len(results) == len(requests)
+    words = results[0::2]
+    assert results[1::2] == [{CONTRACT: [word, word], SENDER: []} for word in words]
+    # Slot 0 of the contract counts up from zero along the chain, so each block is read.
+    counts = [int(word, 16) for word in words]
+    assert counts == sorted(counts)
+    assert (counts[0], counts[-1]) == (0, 0x33)
+
+
+def test_account_at_each_block() -> None:
+    """The nonce and the code of an account are those of the state after the named block."""
+    assert _call("eth_getTransactionCount", [SENDER, "0x0"]) == "0x0"
+    assert _call("eth_getTransactionCount", [SENDER, "latest"]) == "0x1"
+    # A contract that a transaction of the chain creates has no code before its block.
+    created = next(
+        (int(receipt["blockNumber"], 16), receipt["contractAddress"])
+        for number in range(len(replay_chain().blocks))
+        for receipt in _call("eth_getBlockReceipts", [hex(number)])
+        if receipt["contractAddress"] is not None
+    )
+    number, address = created
+    assert _call("eth_getCode", [address, hex(number - 1)]) == "0x"
+    assert _call("eth_getCode", [address, hex(number)]) != "0x"
+
+
+def test_storage_values_member_twice() -> None:
+    """A member name written twice in the text is one member, the last, as JSON is read."""
+    text = (
+        '{"jsonrpc":"2.0","id":1,"method":"eth_getStorageValues","params":'
+        f'[{{"{CONTRACT}":["0x1"],"{CONTRACT}":["{KEY}"]}},"latest"]}}'
+    )
+    assert _answer(text)["result"] == {CONTRACT: ["0x" + "00" * 31 + "33"]}
 
 
 def test_pending_header() -> None:

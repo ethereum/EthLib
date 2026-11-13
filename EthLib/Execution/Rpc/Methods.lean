@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Execution.Rpc.Account
 public import EthLib.Execution.Rpc.Block
 public import EthLib.Execution.Rpc.Filter
 public import EthLib.Execution.Rpc.Request
@@ -88,6 +89,12 @@ def twoParams (params : List Json) (f : Json → Json → Except RpcError Json) 
   | [] | [_] => .error (RpcError.invalidParams "missing parameter")
   | _ => .error (RpcError.invalidParams "the method takes two parameters")
 
+/-- The optional block parameter that follows the other parameters, `latest` when absent. -/
+def optionalBlock : List Json → Except RpcError BlockParam
+  | [] => .ok (.tag .latest)
+  | [b] => readParam (blockNumberOrTagOrHash "block") b
+  | _ => .error (RpcError.invalidParams "too many parameters")
+
 /-- A transaction of a block as JSON, or `null` when there is none. -/
 def transactionResult (r : Except RpcError (Option TransactionInfo)) : Except RpcError Json :=
   optionJson transactionInfoJson <$> r
@@ -166,6 +173,28 @@ def call (v : ChainView) (method : String) (params : List Json) : Except RpcErro
     optionJson (listJson receiptInfoJson) <$> v.blockReceipts block
   | "eth_getLogs" => oneParam params fun f => do
     listJson logInfoJson <$> v.getLogs (← readParam filterOfJson f)
+  | "eth_getBalance" => match params with
+    | a :: rest => do
+      quantityJson <$> (·.toNat) <$>
+        v.balance (← readParam (address "address") a) (← optionalBlock rest)
+    | [] => .error (RpcError.invalidParams "missing parameter")
+  | "eth_getTransactionCount" => match params with
+    | a :: rest => do
+      quantityJson <$> v.nonce (← readParam (address "address") a) (← optionalBlock rest)
+    | [] => .error (RpcError.invalidParams "missing parameter")
+  | "eth_getCode" => match params with
+    | a :: rest => do
+      (dataJson ·.toList) <$> v.code (← readParam (address "address") a) (← optionalBlock rest)
+    | [] => .error (RpcError.invalidParams "missing parameter")
+  | "eth_getStorageAt" => match params with
+    | a :: k :: rest => do
+      let a ← readParam (address "address") a
+      wordJson <$> v.storageAt a (← readParam (bytesMax32 "storage key") k) (← optionalBlock rest)
+    | _ => .error (RpcError.invalidParams "missing parameter")
+  | "eth_getStorageValues" => match params with
+    | m :: rest => do
+      storageValuesJson <$> v.storageValues (← readParam storageRequests m) (← optionalBlock rest)
+    | [] => .error (RpcError.invalidParams "missing parameter")
   | "debug_getRawHeader" => oneParam params fun b => do
     (dataJson ·.toList) <$> v.rawHeader (← readParam (blockNumberOrTag "block") b)
   | "debug_getRawBlock" => oneParam params fun b => do
