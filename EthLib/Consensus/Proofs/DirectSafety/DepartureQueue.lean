@@ -1954,18 +1954,6 @@ private theorem withdrawalRequests_indexedTrace {fork : Fork} {s t : BeaconState
   · intro a request b stepped
     exact effectiveKept_withdrawalRequest stepped
 
-/-- The validator-count churn is bounded by the registry size, not just active entries. -/
-private theorem validatorChurnLimit_le_cohortCap {fork : Fork} (s : BeaconState preset fork)
-    (bound : Nat) (bounded : s.validators.data.size ≤ bound) :
-    (getValidatorChurnLimit config s).toNat ≤ cohortCap config bound := by
-  have active : (getActiveValidatorIndices s (getCurrentEpoch s)).length ≤
-      s.validators.data.size := by
-    exact (List.length_filterMap_le _ _).trans (by simp)
-  have converted : (getActiveValidatorIndices s (getCurrentEpoch s)).length.toUInt64.toNat ≤
-      bound := (Nat.mod_le _ _).trans (active.trans bounded)
-  simp only [getValidatorChurnLimit, Uint64.toNat_max, UInt64.toNat_div, cohortCap]
-  exact max_le_max_left _ (Nat.div_le_div_right converted)
-
 /-- A finite pre-Electra exit is assigned only while its count cohort has room. -/
 private theorem exitQueue_count_room {fork : Fork} {s queued : BeaconState preset fork}
     (early : fork < .pectra) {amount : Gwei} {epoch : Epoch}

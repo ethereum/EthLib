@@ -33,18 +33,16 @@ private theorem cohortCap_mono {n m : Nat} (le : n ≤ m) :
   exact Nat.max_le.mpr ⟨Nat.le_max_left _ _,
     Nat.le_trans (Nat.div_le_div_right le) (Nat.le_max_right _ _)⟩
 
-private theorem validatorChurnLimit_le_cohortCap :
-    (getValidatorChurnLimit config state).toNat ≤
-      cohortCap config state.validators.data.size := by
-  have count : (getActiveValidatorIndices state (getCurrentEpoch state)).length ≤
-      state.validators.data.size := by
+/-- The validator-count churn is bounded by the registry size, not just active entries. -/
+theorem validatorChurnLimit_le_cohortCap {fork : Fork} (s : BeaconState preset fork)
+    (bound : Nat) (bounded : s.validators.data.size ≤ bound) :
+    (getValidatorChurnLimit config s).toNat ≤ cohortCap config bound := by
+  have active : (getActiveValidatorIndices s (getCurrentEpoch s)).length ≤
+      s.validators.data.size := by
     exact Nat.le_trans (List.length_filterMap_le _ _) (by simp)
-  have converted : (getActiveValidatorIndices state (getCurrentEpoch state)).length.toUInt64.toNat ≤
-      state.validators.data.size := by
-    change _ % 2 ^ 64 ≤ _
-    exact Nat.le_trans (Nat.mod_le _ _) count
-  unfold getValidatorChurnLimit cohortCap
-  rw [Uint64.toNat_max, UInt64.toNat_div]
+  have converted : (getActiveValidatorIndices s (getCurrentEpoch s)).length.toUInt64.toNat ≤
+      bound := Nat.le_trans (Nat.mod_le _ _) (Nat.le_trans active bounded)
+  simp only [getValidatorChurnLimit, Uint64.toNat_max, UInt64.toNat_div, cohortCap]
   exact Nat.max_le.mpr ⟨Nat.le_max_left _ _,
     Nat.le_trans (Nat.div_le_div_right converted) (Nat.le_max_right _ _)⟩
 
@@ -407,8 +405,8 @@ private theorem activationCohort_processRegistryUpdates (early : fork < .pectra)
   have limit : (if .dencun ≤ fork then getValidatorActivationChurnLimit config updated
       else getValidatorChurnLimit config updated).toNat ≤
       cohortCap config state.validators.data.size := by
-    have churn := validatorChurnLimit_le_cohortCap (config := config) (state := updated)
-    rw [sizes.1] at churn
+    have churn := validatorChurnLimit_le_cohortCap (config := config) updated _
+      (Nat.le_of_eq sizes.1)
     split
     · exact Nat.le_trans (getValidatorActivationChurnLimit_le).2 churn
     · exact churn
