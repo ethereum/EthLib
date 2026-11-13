@@ -1138,6 +1138,8 @@ def api_duties(
     # The kind is "attester", "proposer", "proposer_v2", "sync" or "ptc".
     # The proposer duties read no indices; the sync answer has no dependent root.
     # An epoch the state cannot answer for, or an index of no validator, raises code 400.
+    # So does an empty list of indices for the attester, sync and PTC duties.
+    # The first proposer version answers for the current epoch of the state only.
     # The flag execution_optimistic comes from the store and is absent.
     return _native.consensus_api_duties(
         name, fork, state, config, kind, epoch, list(indices), genesis_root

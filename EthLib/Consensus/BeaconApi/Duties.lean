@@ -122,6 +122,25 @@ def invalidEpoch (epoch : Epoch) : ErrorMessage :=
 def invalidIndex (index : ValidatorIndex) : ErrorMessage :=
   { code := 400, message := s!"Invalid validator index: {index.toNat}" }
 
+/-- The error of a request that names no validator, with code 400.
+
+The source asks for at least one index. -/
+def emptyIndices : ErrorMessage :=
+  { code := 400, message := "Empty validator index list" }
+
+/-- Whether the state can answer for the committees of an epoch, or the error with code 400.
+
+The epoch must be at most the next one.
+
+The mixes of the state must still hold its seed, as for the committees answer. -/
+def checkDutyEpoch (state : BeaconState preset fork) (epoch : Epoch) :
+    Except ErrorMessage Unit := do
+  let current := (getCurrentEpoch state).toNat
+  unless epoch.toNat ≤ current + 1 do throw (invalidEpoch epoch)
+  unless current + preset.MIN_SEED_LOOKAHEAD.toNat + 1 <
+      epoch.toNat + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat do
+    throw (invalidEpoch epoch)
+
 /-- The error body of a failed duty: code 400 for an epoch out of range, else code 500. -/
 def dutyError (epoch : Epoch) : ValidatorDutyError → ErrorMessage
   | .epochTooFar .. | .periodOutOfRange .. => invalidEpoch epoch
@@ -138,7 +157,7 @@ def requestedValidator (state : BeaconState preset fork) (index : ValidatorIndex
 
 The epoch must be at most the next one, or the answer is the error with code 400.
 
-So must the index name a validator of the state. -/
+The index must name a validator of the state, or the answer is the error with code 400. -/
 def attesterDuty (state : BeaconState preset fork) (epoch : Epoch) (index : ValidatorIndex) :
     Except ErrorMessage (Option AttesterDuty) := do
   let validator ← requestedValidator state index
@@ -156,9 +175,13 @@ def attesterDuty (state : BeaconState preset fork) (epoch : Epoch) (index : Vali
 
 /-- The attester duties of the requested validators in an epoch, in the order of the request.
 
-A validator in no committee of the epoch has no duty. -/
+A validator in no committee of the epoch has no duty.
+
+An empty request, or an epoch the state cannot answer for, gives the error with code 400. -/
 def attesterDuties (state : BeaconState preset fork) (epoch : Epoch)
     (indices : List ValidatorIndex) : Except ErrorMessage (List AttesterDuty) := do
+  if indices.isEmpty then throw emptyIndices
+  checkDutyEpoch state epoch
   return (← indices.mapM (attesterDuty state epoch)).filterMap id
 
 /-! ## Proposer duties -/
@@ -219,9 +242,12 @@ def syncDuty (state : BeaconState preset fork) (committee : SyncCommittee preset
 
 /-- From Altair: the sync duties of the requested validators in the period of an epoch.
 
-The period must be the current one or the next, or the answer is the error with code 400. -/
+The period must be the current one or the next, or the answer is the error with code 400.
+
+So does an empty request. -/
 def syncDuties (state : BeaconState preset fork) (altair : .altair ≤ fork) (epoch : Epoch)
     (indices : List ValidatorIndex) : Except ErrorMessage (List SyncDuty) := do
+  if indices.isEmpty then throw emptyIndices
   let committee ← syncCommitteeOf state altair epoch
   return (← indices.mapM (syncDuty state committee)).filterMap id
 
@@ -229,7 +255,7 @@ def syncDuties (state : BeaconState preset fork) (altair : .altair ≤ fork) (ep
 
 /-- From Gloas: the PTC duty of a validator in an epoch, or none when it sits in no committee.
 
-The epoch must be at most the seed lookahead after the current one, or the error is code 400. -/
+The epoch must be at most the seed lookahead after the current one, or the error has code 400. -/
 def ptcDuty (config : Config) (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork)
     (epoch : Epoch) (index : ValidatorIndex) : Except ErrorMessage (Option PtcDuty) := do
   let validator ← requestedValidator state index
@@ -237,16 +263,20 @@ def ptcDuty (config : Config) (state : BeaconState preset fork) (gloas : .glamst
   | none => return none
   | some slot => return some { pubkey := validator.pubkey, validatorIndex := index, slot }
 
-/-- From Gloas: the PTC duties of the requested validators in an epoch, in request order. -/
+/-- From Gloas: the PTC duties of the requested validators in an epoch, in request order.
+
+An empty request, or an epoch the state cannot answer for, gives the error with code 400. -/
 def ptcDuties (config : Config) (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork)
     (epoch : Epoch) (indices : List ValidatorIndex) : Except ErrorMessage (List PtcDuty) := do
+  if indices.isEmpty then throw emptyIndices
+  checkDutyEpoch state epoch
   return (← indices.mapM (ptcDuty config state gloas epoch)).filterMap id
 
 /-! ## Dependent roots -/
 
 /-- The root of the block that the duties of an epoch depend on.
 
-It is the root at the slot before the start of the epoch a lag before the given one.
+It is the root at the last slot before the epoch that lies a lag before the given one.
 
 On underflow, before the first epoch or slot, it is the root of the genesis block.
 
@@ -279,6 +309,8 @@ inductive DutyKind where
 
 The sync answer has no dependent root; the proposer answers take no indices.
 
+The first proposer answer is for the current epoch only, since its root is not known before.
+
 The sync answer needs Altair and the PTC answer Gloas, or the error has code 400. -/
 def dutiesResponse (config : Config) (state : BeaconState preset fork) (kind : DutyKind)
     (epoch : Epoch) (indices : List ValidatorIndex) (genesisRoot : Root) :
@@ -289,6 +321,7 @@ def dutiesResponse (config : Config) (state : BeaconState preset fork) (kind : D
     return { dependentRoot := some (← dependentRoot state 1 epoch genesisRoot),
              data := .arr (duties.map AttesterDuty.toJson).toArray }
   | .proposerV1 => do
+    unless epoch = getCurrentEpoch state do throw (invalidEpoch epoch)
     let duties ← proposerDuties state epoch
     return { dependentRoot := some (← dependentRoot state 0 epoch genesisRoot),
              data := .arr (duties.map ProposerDuty.toJson).toArray }

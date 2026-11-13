@@ -13,7 +13,7 @@ A requested validator in a committee of the epoch has exactly one duty.
 
 A request for an epoch after the next one is refused.
 
-In the current epoch, each proposer duty names the proposer of its slot.
+In the current epoch, each proposer duty from the slot of the state on names its proposer.
 
 Each seat of a sync duty holds the key of the validator.
 -/
@@ -33,7 +33,8 @@ private theorem attesterDuty_some {state : BeaconState preset fork} {epoch : Epo
     ∃ committee, getCommitteeAssignment state epoch index =
         .ok (some (committee, duty.committeeIndex, duty.slot)) ∧
       duty.validatorIndex = index ∧ duty.committeeLength = committee.size.toUInt64 ∧
-      duty.validatorCommitteeIndex = (committee.idxOf index).toUInt64 := by
+      duty.validatorCommitteeIndex = (committee.idxOf index).toUInt64 ∧
+      duty.committeesAtSlot = getCommitteeCountPerSlot state epoch := by
   unfold attesterDuty at computed
   obtain ⟨validator, -, computed⟩ := bind_ok_iff.mp computed
   obtain ⟨assignment, assigned, computed⟩ := bind_ok_iff.mp computed
@@ -42,7 +43,22 @@ private theorem attesterDuty_some {state : BeaconState preset fork} {epoch : Epo
   | some (committee, committeeIndex, slot), computed =>
     simp only [pure, Except.pure, Except.ok.injEq, Option.some.injEq] at computed
     subst computed
-    exact ⟨committee, assigned, rfl, rfl, rfl⟩
+    exact ⟨committee, assigned, rfl, rfl, rfl, rfl⟩
+
+/-- Attester duties pass the epoch check and keep the duties of the requested validators. -/
+private theorem attesterDuties_ok {state : BeaconState preset fork} {epoch : Epoch}
+    {indices : List ValidatorIndex} {duties : List AttesterDuty}
+    (computed : attesterDuties state epoch indices = .ok duties) :
+    checkDutyEpoch state epoch = .ok () ∧ ∃ found,
+      indices.mapM (attesterDuty state epoch) = .ok found ∧ duties = found.filterMap id := by
+  unfold attesterDuties at computed
+  by_cases empty : indices.isEmpty
+  · simp [empty, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at computed
+  · simp only [empty, Bool.false_eq_true, ↓reduceIte] at computed
+    obtain ⟨_, checked, computed⟩ := bind_ok_iff.mp computed
+    obtain ⟨found, mapped, computed⟩ := bind_ok_iff.mp computed
+    simp only [pure, Except.pure, Except.ok.injEq] at computed
+    exact ⟨checked, found, mapped, computed.symm⟩
 
 /-- Each attester duty comes from a requested validator. -/
 private theorem attesterDuties_mem {state : BeaconState preset fork} {epoch : Epoch}
@@ -50,10 +66,7 @@ private theorem attesterDuties_mem {state : BeaconState preset fork} {epoch : Ep
     (computed : attesterDuties state epoch indices = .ok duties) {duty : AttesterDuty}
     (mem : duty ∈ duties) :
     ∃ index ∈ indices, attesterDuty state epoch index = .ok (some duty) := by
-  unfold attesterDuties at computed
-  obtain ⟨found, mapped, computed⟩ := bind_ok_iff.mp computed
-  simp only [pure, Except.pure, Except.ok.injEq] at computed
-  subst computed
+  obtain ⟨-, found, mapped, rfl⟩ := attesterDuties_ok computed
   obtain ⟨_, member, rfl⟩ := List.mem_filterMap.mp mem
   exact mapM_ok_mem mapped _ member
 
@@ -70,7 +83,7 @@ theorem attesterDuties_committee {state : BeaconState preset fork} {epoch : Epoc
       duty.validatorCommitteeIndex = position.toUInt64 ∧
       committee[position]? = some duty.validatorIndex := by
   obtain ⟨index, -, made⟩ := attesterDuties_mem computed mem
-  obtain ⟨committee, assigned, named, length, position⟩ := attesterDuty_some made
+  obtain ⟨committee, assigned, named, length, position, -⟩ := attesterDuty_some made
   obtain ⟨-, -, read, member⟩ := getCommitteeAssignment_sound assigned
   refine ⟨committee, committee.idxOf index, read, length, position, ?_⟩
   rw [named]
@@ -89,10 +102,7 @@ theorem attesterDuties_complete {state : BeaconState preset fork} {epoch : Epoch
     (assigned :
       getCommitteeAssignment state epoch index = .ok (some (committee, committeeIndex, slot))) :
     (duties.filter (·.validatorIndex = index)).length = 1 := by
-  unfold attesterDuties at computed
-  obtain ⟨found, mapped, computed⟩ := bind_ok_iff.mp computed
-  simp only [pure, Except.pure, Except.ok.injEq] at computed
-  subst computed
+  obtain ⟨-, found, mapped, rfl⟩ := attesterDuties_ok computed
   clear computed
   induction indices generalizing found with
   | nil => simp at requested
@@ -124,46 +134,50 @@ theorem attesterDuties_complete {state : BeaconState preset fork} {epoch : Epoch
         obtain ⟨_, -, named, -⟩ := attesterDuty_some headOk
         simp [named, same]
 
-/-- A request for an epoch after the next one gets the error with code 400.
-
-The request must name at least one validator. -/
-theorem attesterDuties_epoch_bound {state : BeaconState preset fork} {epoch : Epoch}
-    {indices : List ValidatorIndex} (nonempty : indices ≠ [])
+/-- The epoch check refuses an epoch after the next one. -/
+private theorem checkDutyEpoch_far {state : BeaconState preset fork} {epoch : Epoch}
     (far : (getCurrentEpoch state).toNat + 1 < epoch.toNat) :
+    checkDutyEpoch state epoch = .error (invalidEpoch epoch) := by
+  simp [checkDutyEpoch, Nat.not_le.mpr far, throw, throwThe, MonadExceptOf.throw, bind,
+    Except.bind]
+
+/-- A request for an epoch after the next one gets the error with code 400. -/
+theorem attesterDuties_epoch_bound {state : BeaconState preset fork} {epoch : Epoch}
+    {indices : List ValidatorIndex} (far : (getCurrentEpoch state).toNat + 1 < epoch.toNat) :
     ∃ error, attesterDuties state epoch indices = .error error ∧ error.code = 400 := by
-  obtain ⟨first, rest, rfl⟩ := List.exists_cons_of_ne_nil nonempty
-  -- The next epoch fits in 64 bits, since the requested epoch is past it.
-  have fits : (getCurrentEpoch state).toNat + (1 : UInt64).toNat < 2 ^ 64 := by
-    have := epoch.toNat_lt
-    simp only [UInt64.toNat_one]
-    omega
-  have nextOk : Uint64.addChecked (getCurrentEpoch state) 1 = .ok (getCurrentEpoch state + 1) :=
-    Uint64.addChecked_ok_iff.mpr ⟨fits, by rw [UInt64.toNat_add, Nat.mod_eq_of_lt fits]⟩
-  have nextNat := (Uint64.addChecked_ok_iff.mp nextOk).2
-  have beyond : ¬epoch ≤ getCurrentEpoch state + 1 := by
-    rw [UInt64.le_iff_toNat_le, nextNat]
-    simp only [UInt64.toNat_one]
-    omega
-  have tooFar : getCommitteeAssignment state epoch first =
-      .error (.epochTooFar epoch (getCurrentEpoch state + 1)) := by
-    unfold getCommitteeAssignment
-    simp [nextOk, beyond, Except.mapError, bind, Except.bind, throw, throwThe,
-      MonadExceptOf.throw]
-  cases validatorOk : requestedValidator state first with
-  | error fault =>
-    refine ⟨fault, ?_, ?_⟩
-    · simp [attesterDuties, attesterDuty, validatorOk, List.mapM_cons, bind, Except.bind]
-    · unfold requestedValidator at validatorOk
-      cases found : getValidator state first with
-      | error _ =>
-        simp only [found, Except.mapError, Except.error.injEq] at validatorOk
-        rw [← validatorOk]
-        rfl
-      | ok _ => simp [found, Except.mapError] at validatorOk
-  | ok validator =>
-    refine ⟨invalidEpoch epoch, ?_, rfl⟩
-    simp [attesterDuties, attesterDuty, validatorOk, tooFar, List.mapM_cons, bind, Except.bind,
-      Except.mapError, dutyError]
+  unfold attesterDuties
+  by_cases empty : indices.isEmpty
+  · exact ⟨emptyIndices, by simp [empty, throw, throwThe, MonadExceptOf.throw, bind,
+      Except.bind], rfl⟩
+  · refine ⟨invalidEpoch epoch, ?_, rfl⟩
+    simp [empty, checkDutyEpoch_far far, bind, Except.bind]
+
+/-- From Gloas, a PTC request for an epoch after the next one gets the error with code 400. -/
+theorem ptcDuties_epoch_bound {config : Config} {state : BeaconState preset fork}
+    {gloas : .glamsterdam ≤ fork} {epoch : Epoch} {indices : List ValidatorIndex}
+    (far : (getCurrentEpoch state).toNat + 1 < epoch.toNat) :
+    ∃ error, ptcDuties config state gloas epoch indices = .error error ∧ error.code = 400 := by
+  unfold ptcDuties
+  by_cases empty : indices.isEmpty
+  · exact ⟨emptyIndices, by simp [empty, throw, throwThe, MonadExceptOf.throw, bind,
+      Except.bind], rfl⟩
+  · refine ⟨invalidEpoch epoch, ?_, rfl⟩
+    simp [empty, checkDutyEpoch_far far, bind, Except.bind]
+
+/-- Each attester duty is in the requested epoch, at a committee index below the count it gives.
+
+That count is the number of committees per slot of the epoch. -/
+theorem attesterDuties_epoch {state : BeaconState preset fork} {epoch : Epoch}
+    {indices : List ValidatorIndex} {duties : List AttesterDuty}
+    (computed : attesterDuties state epoch indices = .ok duties) {duty : AttesterDuty}
+    (mem : duty ∈ duties) :
+    computeEpochAtSlot preset duty.slot = epoch ∧
+      duty.committeesAtSlot = getCommitteeCountPerSlot state epoch ∧
+      duty.committeeIndex < duty.committeesAtSlot := by
+  obtain ⟨index, -, made⟩ := attesterDuties_mem computed mem
+  obtain ⟨committee, assigned, -, -, -, count⟩ := attesterDuty_some made
+  obtain ⟨slotEpoch, below, -, -⟩ := getCommitteeAssignment_sound assigned
+  exact ⟨slotEpoch, count, count ▸ below⟩
 
 /-- Each proposer duty names the proposer at its offset, at that offset from the first slot. -/
 private theorem proposerDuties_mem {state : BeaconState preset fork} {epoch : Epoch}
@@ -364,6 +378,9 @@ theorem syncDuties_seats {state : BeaconState preset fork} {altair : .altair ≤
       ∀ seat ∈ duty.validatorSyncCommitteeIndices,
         committee.pubkeys.toList[seat.toNat]? = some validator.pubkey := by
   unfold syncDuties at computed
+  by_cases empty : indices.isEmpty
+  · simp [empty, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at computed
+  simp only [empty, Bool.false_eq_true, ↓reduceIte] at computed
   obtain ⟨committee, committeeOk, computed⟩ := bind_ok_iff.mp computed
   obtain ⟨found, mapped, computed⟩ := bind_ok_iff.mp computed
   simp only [pure, Except.pure, Except.ok.injEq] at computed
@@ -399,10 +416,36 @@ theorem syncDuties_seats {state : BeaconState preset fork} {altair : .altair ≤
   rw [List.getElem?_eq_getElem inside, ← entry]
   exact congrArg some same
 
-/-- Before the second epoch, the dependent root of a lag of one is the genesis root. -/
+/-- In the first two epochs, the dependent root of a lag of one is the genesis root. -/
 theorem dependentRoot_genesis {state : BeaconState preset fork} {epoch : Epoch}
-    {genesisRoot : Root} (early : epoch.toNat < 1) :
+    {genesisRoot : Root} (early : epoch.toNat ≤ 1) :
     dependentRoot state 1 epoch genesisRoot = .ok genesisRoot := by
-  simp [dependentRoot, early, pure, Except.pure]
+  by_cases zero : epoch.toNat < 1
+  · simp [dependentRoot, zero, pure, Except.pure]
+  · have one : epoch = 1 := UInt64.toNat_inj.mp (by simp; omega)
+    subst one
+    have start : computeStartSlotAtEpoch preset 0 = .ok 0 :=
+      computeStartSlotAtEpoch_ok_iff.mpr ⟨by simp, by simp⟩
+    simp [dependentRoot, start, Except.mapError, bind, Except.bind, pure, Except.pure]
+
+/-- In the first epoch, the dependent root without a lag is the genesis root. -/
+theorem dependentRoot_genesis_zero {state : BeaconState preset fork} {genesisRoot : Root} :
+    dependentRoot state 0 0 genesisRoot = .ok genesisRoot := by
+  have start : computeStartSlotAtEpoch preset 0 = .ok 0 :=
+    computeStartSlotAtEpoch_ok_iff.mpr ⟨by simp, by simp⟩
+  simp [dependentRoot, start, Except.mapError, bind, Except.bind, pure, Except.pure]
+
+/-- Past the underflow, the dependent root is the block root at the slot before the start.
+
+The start is that of the epoch a lag before the given one, and must not be slot 0. -/
+theorem dependentRoot_eq {state : BeaconState preset fork} {lag : Nat} {epoch : Epoch}
+    {genesisRoot : Root} {start : Slot} (late : lag ≤ epoch.toNat)
+    (started : computeStartSlotAtEpoch preset (epoch - lag.toUInt64) = .ok start)
+    (positive : start ≠ 0) :
+    dependentRoot state lag epoch genesisRoot =
+      (getBlockRootAtSlot state (start - 1)).mapError fun fault =>
+        internalError (reprStr fault) := by
+  simp [dependentRoot, Nat.not_lt.mpr late, started, positive, Except.mapError, bind,
+    Except.bind]
 
 end EthLib.Consensus.BeaconApi
