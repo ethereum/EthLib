@@ -2482,7 +2482,11 @@ One slot from a leaking state ends in a leaking state, unless the finalized epoc
 `BalanceNotRaised.lean` proves the epoch part of that condition, from Altair (`balanceNotRaised_processEpochAltair`).
 From the rewards up to the update of the effective balances, the balance of a validator does not rise.
 This holds when no pending deposit carries its key and no pending consolidation targets it.
-No theorem yet derives the part of the blocks, nor the sequences over a run.
+`BalanceNotRaisedBlock.lean` proves the part of the blocks, at every fork (`balanceNotRaised_processBlock`).
+A block raises no balance of a validator that has a balance and is not its proposer.
+From Altair the validator must sign no sync aggregate, and no deposit of the block may carry its key.
+It needs more than `MIN_SEED_LOOKAHEAD + 2` epochs of RANDAO mixes.
+No theorem yet derives the sequences over a run.
 
 ### Fast confirmation rule
 
