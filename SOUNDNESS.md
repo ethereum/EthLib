@@ -4105,6 +4105,19 @@ Both assume that the balance covers the participant reward once per seat of the 
 The Python suite (`bindings/python/tests/consensus/test_beacon_api_sync_rewards.py`) checks each reward against the balances of the pinned sync aggregate vectors, the proposer with its share.
 It checks the selection of named members once each, by index or key, and code 400 for an invalid identifier and for a state before Altair.
 
+The block rewards are in the same module, read from the state at the slot of the block, before it.
+`blockRewards` runs the steps of the block before its operations, then the proposer slashings, the attester slashings and the attestations, as the block does.
+Each of these three parts is the rise of the proposer's balance over its step; from Altair the sync aggregate part is the share of the proposer that the sync aggregate step computes, times the number of signatures.
+`processBlock` itself runs these steps through `stateBeforeOperations`; `processBlock_stateBeforeOperations` shows that it then runs its operations and its sync aggregate on that state.
+`stateBeforeOperations_ok_iff` shows that this state is the input that `processBlock` gives its operations, and `blockRewardsResponse_ok` that an answer is the JSON of `blockRewards`.
+`blockRewards_total` shows that the total is the sum of the four parts and that the answer names the proposer of the block, as the source says.
+`blockRewards_syncAggregate` shows that from Altair the sync part is the share of the step times the number of signatures, and `blockRewards_of_lt_altair` that before Altair the sync and attestation parts are zero.
+`blockRewards_balance` shows that the operations and the sync aggregate raise the proposer's balance by exactly the total.
+It assumes that the proposer has a balance, and that the block does not slash it, holds no deposit to its key before Electra and, from Electra to Fulu, no consolidation request from its key; the last three change the balance by other amounts.
+It also assumes that the proposer holds no seat in the sync committee, whose reward or penalty its balance would add, and that the mixes span more than the seed lookahead plus two epochs, so that every step reads the same proposer.
+The Python suite (`bindings/python/tests/consensus/test_beacon_api_block_rewards.py`) runs the blocks of the pinned random, finality and sanity vectors.
+It checks the total, the sync part against a share computed from the active balance, and, up to Fulu, the change of the proposer's balance less its withdrawals under the hypotheses above.
+
 The debug answers show the tree of the fork choice and its leaves (`Consensus/BeaconApi/Debug.lean`).
 `mem_treeNodes` (`Consensus/Proofs/BeaconApi/Debug.lean`) shows that the listed nodes are exactly the nodes of the tree, and `nodeViews_nodes` shows that the views follow that list, by root and status as the API names them: one per block before Gloas, and from Gloas the pending and empty nodes of each block, with the full node once its payload is verified.
 `treeParent_eq_some_iff` shows that a node of the tree names another as its parent exactly when that node is in the tree and the store gives the first as one of its children.
@@ -4141,6 +4154,13 @@ Points that remain open:
   It does not check the signature of the aggregate, which the block passed.
 - The source does not say whether the reward of a member whose balance a penalty takes to zero is the nominal penalty or the change of the balance; EthLib reports the nominal amount, so the penalty in the entry of such a member can exceed what its balance lost.
 - The source answers for every member when no array is provided; EthLib cannot tell an absent body from an empty array, and answers both for every member.
+- The source does not say which state answers a query for the block rewards; EthLib takes the state at the slot of the block, before it, and does not check the signatures of the block, which was imported.
+- The source does not say what the attestations of a block before Altair pay; their proposer earns its share at the end of the epoch, so EthLib reports zero for them.
+- A slashing part is the rise of the proposer's balance; for a block that slashes its own proposer that rise can be less than the whistleblower reward, or zero.
+- The proposer is the whistleblower of the slashings of its block, so a slashing part holds the whole whistleblower reward, not only the share that the transition calls the proposer reward.
+- The source lists codes 400, 404 and 500 for the block rewards; EthLib answers a block that fails its steps with code 500, since the block was imported.
+- The block rewards run the block only up to its attestations, and from Altair its other operations; they do not run the sync aggregate step, so an aggregate that the step would refuse still gets a sync part.
+- From Gloas the block also records a payment to a builder; the source does not say whether the total includes it, and EthLib leaves it out, since it does not change the proposer's balance in the block.
 - The reward of a member that is also the proposer leaves out the proposer share of each signature, which the block rewards count.
 - The source does not say what a block before Altair, which has no sync aggregate, gives; EthLib answers with code 400 and the example message of the source.
 - The source does not order the entries of the sync committee rewards; EthLib lists them in increasing order of index.
@@ -4792,12 +4812,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 498 operations and 49 size constants.
-The Python extension calls 498 of the operations and 49 of the constants.
+Lean exports 499 operations and 49 size constants.
+The Python extension calls 499 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-11526 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2512), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (207), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1603), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (161), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (71), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (792), `x25519.c` (21), `xmss.c` (134).
+11540 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2523), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (207), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1605), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (161), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (71), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (793), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

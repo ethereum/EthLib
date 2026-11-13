@@ -4,6 +4,7 @@ public import EthLib.Consensus.BeaconApi.Committees
 public import EthLib.Consensus.BeaconApi.Registries
 public import EthLib.Consensus.Transition.EpochRewards
 public import EthLib.Consensus.Transition.EpochParticipation
+public import EthLib.Consensus.Transition.StateTransition
 public import EthLib.Consensus.Transition.SyncAggregate
 
 /-!
@@ -27,11 +28,18 @@ The [sync committee rewards] of a block give, for each member, what its seats ea
 
 They are read from the state that the sync aggregate step of the block reads.
 
+The [block rewards] give what the proposer of a block earned in it, by the kind of item that paid.
+
+Each other part is the rise of the proposer's balance in the step of the block that pays it.
+
+The sync aggregate part is the proposer's share of each signature, which the step computes.
+
 The response [types] fix the fields of each answer.
 
 SOUNDNESS.md records the points that the source leaves open.
 
 [attestation rewards]: https://github.com/ethereum/beacon-APIs/blob/7911555e6a30c51f9b69bb168111a59f1ff8ee49/apis/beacon/rewards/attestations.yaml
+[block rewards]: https://github.com/ethereum/beacon-APIs/blob/7911555e6a30c51f9b69bb168111a59f1ff8ee49/apis/beacon/rewards/blocks.yaml
 [sync committee rewards]: https://github.com/ethereum/beacon-APIs/blob/7911555e6a30c51f9b69bb168111a59f1ff8ee49/apis/beacon/rewards/sync_committee.yaml
 [types]: https://github.com/ethereum/beacon-APIs/blob/7911555e6a30c51f9b69bb168111a59f1ff8ee49/types/rewards.yaml
 -/
@@ -381,5 +389,91 @@ def syncCommitteeRewardsResponse (state : BeaconState preset fork)
       fun error => internalError (reprStr error)
     return { data := .arr (entries.map (·.toJson)).toArray }
   else throw invalidSyncRewardsRequest
+
+/-! ## Block rewards -/
+
+/-- What the proposer of a block earned in it, in Gwei, by the kind of item that paid it. -/
+structure BlockRewards where
+  /-- The index of the proposer in the registry. -/
+  proposerIndex : ValidatorIndex
+  /-- The sum of the four parts. -/
+  total : Gwei
+  /-- What the attestations of the block paid the proposer. -/
+  attestations : Gwei
+  /-- What the sync aggregate of the block paid the proposer. -/
+  syncAggregate : Gwei
+  /-- What the proposer slashings of the block paid the proposer. -/
+  proposerSlashings : Gwei
+  /-- What the attester slashings of the block paid the proposer. -/
+  attesterSlashings : Gwei
+  deriving DecidableEq, Repr
+
+/-- The JSON of the block rewards, as the API writes them. -/
+def BlockRewards.toJson (rewards : BlockRewards) : Json :=
+  .mkObj [("proposer_index", uintJson rewards.proposerIndex), ("total", uintJson rewards.total),
+    ("attestations", uintJson rewards.attestations),
+    ("sync_aggregate", uintJson rewards.syncAggregate),
+    ("proposer_slashings", uintJson rewards.proposerSlashings),
+    ("attester_slashings", uintJson rewards.attesterSlashings)]
+
+/-- How much the balance of a validator rose from one state to another, or zero if it did not. -/
+def balanceRise (index : ValidatorIndex) (state after : BeaconState preset fork) : Gwei :=
+  Uint64.saturatingSub (after.balances.data.getD index.toNat 0)
+    (state.balances.data.getD index.toNat 0)
+
+/-- What the proposer of a block earned in it, from the state of the slot of the block.
+
+The state runs the steps of the block before its operations, and the operations in their order.
+
+Each slashing part is the rise of the proposer's balance over the slashings of its kind.
+
+The attestation part is the rise over the attestations, which pay nothing before Altair.
+
+From Altair the sync aggregate part is the proposer's share times the number of signatures.
+
+That share is the one that the sync aggregate step computes after the operations.
+
+Before Altair only the three kinds of operations above run.
+
+The sync aggregate step itself never runs.
+
+A sum or product that overflows 64 bits is an error. -/
+def blockRewards (config : Config) (checks : SignatureChecks)
+    (engine : ExecutionEngine preset fork) (state : BeaconState preset fork)
+    (block : BeaconBlock preset fork) : Except TransitionError BlockRewards := do
+  let parentSlot := state.latestBlockHeader.slot
+  let proposer := block.proposerIndex
+  let body := block.body
+  let start ← stateBeforeOperations config checks engine state block
+  let slashed ← body.proposerSlashings.data.foldlM (processProposerSlashing config checks) start
+  let caught ← body.attesterSlashings.data.foldlM (processAttesterSlashing config checks) slashed
+  let attested ←
+    body.attestations.data.foldlM (processAttestation config checks · parentSlot ·) caught
+  let syncAggregate ← if altair : .altair ≤ fork then do
+      let operated ← processOperations config checks start body parentSlot
+      let share ← syncProposerReward (← syncParticipantReward operated)
+      let signed := (body.syncAggregate altair).syncCommitteeBits.bits.toArray.countP id
+      liftAccessor (liftArith (mulChecked share signed.toUInt64))
+    else pure 0
+  let proposerSlashings := balanceRise proposer start slashed
+  let attesterSlashings := balanceRise proposer slashed caught
+  let attestations := balanceRise proposer caught attested
+  let total ← liftAccessor (liftArith do
+    addChecked (← addChecked (← addChecked attestations syncAggregate) proposerSlashings)
+      attesterSlashings)
+  return { proposerIndex := proposer, total, attestations, syncAggregate, proposerSlashings,
+           attesterSlashings }
+
+/-- The response of the block rewards endpoint, without the flags of the store.
+
+The state is the one at the slot of the block, before the block.
+
+A failure of the steps it runs, or of the sums, gives the error with code 500. -/
+def blockRewardsResponse (config : Config) (checks : SignatureChecks)
+    (engine : ExecutionEngine preset fork) (state : BeaconState preset fork)
+    (block : BeaconBlock preset fork) : Except ErrorMessage ApiEnvelope := do
+  let rewards ← (blockRewards config checks engine state block).mapError
+    fun error => internalError (reprStr error)
+  return { data := rewards.toJson }
 
 end EthLib.Consensus.BeaconApi

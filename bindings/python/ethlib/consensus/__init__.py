@@ -1384,6 +1384,20 @@ def api_sync_committee_rewards(
     return _native.consensus_api_sync_committee_rewards(name, fork, state, aggregate, list(ids))
 
 
+def api_block_rewards(
+    name: str,
+    fork: str,
+    state: bytes,
+    block: bytes,
+    *,
+    config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """The Beacon API rewards of the proposer of a signed block, or ConsensusError."""
+    # The state is the one at the slot of the block, before it; a failure raises code 500.
+    # The flags execution_optimistic and finalized come from the store and are absent.
+    return _native.consensus_api_block_rewards(name, fork, state, block, config)
+
+
 def api_duties(
     name: str,
     fork: str,
@@ -2106,6 +2120,7 @@ __all__ = [
     "api_sync_committee_contribution",
     "api_attestation_rewards",
     "api_sync_committee_rewards",
+    "api_block_rewards",
     "api_duties",
     "api_committees",
     "api_sync_committees",

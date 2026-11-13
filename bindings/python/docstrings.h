@@ -530,6 +530,9 @@
 #define DOC_consensus_api_attestation_rewards \
   "The JSON response of the attestation rewards endpoint, as a `dict`."
 
+#define DOC_consensus_api_block_rewards \
+  "The JSON response of the block rewards endpoint, as a `dict`."
+
 #define DOC_consensus_api_sync_committee_rewards \
   "The JSON response of the sync committee rewards endpoint, as a `dict`."
 
