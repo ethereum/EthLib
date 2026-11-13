@@ -596,6 +596,21 @@ def bindings : List Binding := [
     `EthLib.Consensus.Exports.apiValidatorBalancesSszExport,
     "(name: str, fork: str, state: bytes, ids: list[str] | None, in_query: bool) -> bytes",
     [], some "ConsensusError"⟩,
+  ⟨"consensus_api_committees", `EthLib.Consensus.Exports.apiCommitteesExport,
+    "(name: str, fork: str, state: bytes, epoch: int | None, index: int | None, " ++
+      "slot: int | None) -> dict[str, Any]",
+    [], some "ConsensusError"⟩,
+  ⟨"consensus_api_sync_committees", `EthLib.Consensus.Exports.apiSyncCommitteesExport,
+    "(name: str, fork: str, state: bytes, epoch: int | None) -> dict[str, Any]",
+    [], some "ConsensusError"⟩,
+  ⟨"consensus_api_ptc", `EthLib.Consensus.Exports.apiPtcExport,
+    "(name: str, fork: str, state: bytes, config: dict[str, Any] | None, " ++
+      "slot: int | None) -> dict[str, Any]",
+    [], some "ConsensusError"⟩,
+  ⟨"consensus_api_ptc_ssz", `EthLib.Consensus.Exports.apiPtcSszExport,
+    "(name: str, fork: str, state: bytes, config: dict[str, Any] | None, " ++
+      "slot: int | None) -> bytes",
+    [], some "ConsensusError"⟩,
   ⟨"consensus_api_resolve", `EthLib.Consensus.Exports.apiResolveExport,
     "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, " ++
       "verify: bool, queries: list) -> list",

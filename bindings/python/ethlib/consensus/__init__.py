@@ -919,6 +919,56 @@ def api_validator_balances_ssz(
     return _native.consensus_api_validator_balances_ssz(name, fork, state, ids, in_query)
 
 
+def api_committees(
+    name: str,
+    fork: str,
+    state: bytes,
+    *,
+    epoch: int | None = None,
+    index: int | None = None,
+    slot: int | None = None,
+) -> dict[str, Any]:
+    """The Beacon API beacon committees of an epoch of a state, or ConsensusError."""
+    # The epoch defaults to that of the state; one after the next epoch raises code 400.
+    # A slot outside the epoch raises code 400; index and slot filter the committees.
+    return _native.consensus_api_committees(name, fork, state, epoch, index, slot)
+
+
+def api_sync_committees(
+    name: str, fork: str, state: bytes, *, epoch: int | None = None
+) -> dict[str, Any]:
+    """The Beacon API sync committee of a state by validator indices, or ConsensusError."""
+    # The epoch defaults to that of the state, and must be in its period or the next one.
+    # A state before Altair, or an epoch in another period, raises code 400.
+    return _native.consensus_api_sync_committees(name, fork, state, epoch)
+
+
+def api_ptc(
+    name: str,
+    fork: str,
+    state: bytes,
+    config: dict[str, Any] | None = None,
+    *,
+    slot: int | None = None,
+) -> dict[str, Any]:
+    """The Beacon API payload timeliness committee of a slot of a state, or ConsensusError."""
+    # The slot defaults to that of the state.
+    # A state before Gloas, or a slot outside the window of the state, raises code 400.
+    return _native.consensus_api_ptc(name, fork, state, config, slot)
+
+
+def api_ptc_ssz(
+    name: str,
+    fork: str,
+    state: bytes,
+    config: dict[str, Any] | None = None,
+    *,
+    slot: int | None = None,
+) -> bytes:
+    """The Beacon API SSZ body of the payload timeliness committee of a slot, or ConsensusError."""
+    return _native.consensus_api_ptc_ssz(name, fork, state, config, slot)
+
+
 def api_validator_status(validator: dict[str, Any], balance: int, epoch: int) -> tuple[str, str]:
     """The Beacon API status of a validator and the name of its group, or ConsensusError."""
     # The validator is the JSON of the API, as api_json writes a Validator.
@@ -1543,6 +1593,10 @@ __all__ = [
     "api_state_query_ssz",
     "api_registry_query",
     "api_validator_balances_ssz",
+    "api_committees",
+    "api_sync_committees",
+    "api_ptc",
+    "api_ptc_ssz",
     "api_validator_status",
     "api_builder_status",
     "is_valid_builder_signature",

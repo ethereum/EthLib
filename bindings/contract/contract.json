@@ -2976,6 +2976,42 @@
    "error_class": "ConsensusError",
    "docstring":
    "The SSZ body of the balances answer, as `bytes`.\n\nThe arguments are the name, the fork, the SSZ bytes of the state and the identifiers.\n\nThe last argument says whether the identifiers come in a query string."},
+  {"summary": "The JSON response of the committees endpoint, as a `dict`.",
+   "signature":
+   "(name: str, fork: str, state: bytes, epoch: int | None, index: int | None, slot: int | None) -> dict[str, Any]",
+   "operation": "EthLib.Consensus.Exports.apiCommitteesExport",
+   "method": "consensus_api_committees",
+   "errors": [],
+   "error_class": "ConsensusError",
+   "docstring":
+   "The JSON response of the committees endpoint, as a `dict`.\n\nThe arguments are the name, the fork, the SSZ bytes of the state, then the epoch, index and slot.\n\nEach of the last three is an `int` or None."},
+  {"summary": "The JSON response of the sync committees endpoint, as a `dict`.",
+   "signature":
+   "(name: str, fork: str, state: bytes, epoch: int | None) -> dict[str, Any]",
+   "operation": "EthLib.Consensus.Exports.apiSyncCommitteesExport",
+   "method": "consensus_api_sync_committees",
+   "errors": [],
+   "error_class": "ConsensusError",
+   "docstring":
+   "The JSON response of the sync committees endpoint, as a `dict`.\n\nThe arguments are the name, the fork, the SSZ bytes of the state, and an epoch or None."},
+  {"summary": "The JSON response of the PTC endpoint, as a `dict`.",
+   "signature":
+   "(name: str, fork: str, state: bytes, config: dict[str, Any] | None, slot: int | None) -> dict[str, Any]",
+   "operation": "EthLib.Consensus.Exports.apiPtcExport",
+   "method": "consensus_api_ptc",
+   "errors": [],
+   "error_class": "ConsensusError",
+   "docstring":
+   "The JSON response of the PTC endpoint, as a `dict`.\n\nThe arguments are the name, the fork, the SSZ bytes of the state and replacements or None.\n\nThe last argument is a slot or None."},
+  {"summary": "The SSZ body of the PTC answer, as `bytes`.",
+   "signature":
+   "(name: str, fork: str, state: bytes, config: dict[str, Any] | None, slot: int | None) -> bytes",
+   "operation": "EthLib.Consensus.Exports.apiPtcSszExport",
+   "method": "consensus_api_ptc_ssz",
+   "errors": [],
+   "error_class": "ConsensusError",
+   "docstring":
+   "The SSZ body of the PTC answer, as `bytes`.\n\nThe arguments are those of the JSON answer."},
   {"summary":
    "The answer to each query, against the store after the steps of a fork choice case.",
    "signature":
