@@ -2,6 +2,7 @@ module
 
 public import EthLib.Consensus.Accessors
 public import EthLib.Consensus.BeaconApi.Blocks
+public import EthLib.Consensus.BeaconApi.ChainEvents
 public import EthLib.Consensus.BeaconApi.Committees
 public import EthLib.Consensus.BeaconApi.Duties
 public import EthLib.Consensus.BeaconApi.Config

@@ -3796,9 +3796,15 @@ On each name of the header, the block object of a block holds what its header ob
 The block object lists the transactions by their hashes, or by their objects when they are hydrated (`transactions_blockJson_false`, `transactions_blockJson_true`).
 The objects carry those hashes in the same order (`transactionHashes_of_transactionInfos`).
 Each list has one entry per transaction of the block (`length_transactionInfos`, `length_transactionHashes`), and the transaction count methods return that length by definition.
+The `size` of the block object is the length of the RLP form of the block, in bytes, which the raw block method returns for the same block (`size_blockJson`).
+Its `uncles` lists the hashes of the headers of its ommers, in order (`uncles_blockJson`).
 These properties hold whenever the writer gives an object.
 The writer fails with `-32603` when the node cannot compute the RLP form of the block, the hash of an ommer or a transaction, or a sender in it.
-No theorem yet shows that it succeeds on the blocks of a valid view.
+In a valid view, the writer gives the object of a canonical block after the lowest exactly when that block has an RLP form (`Valid.exists_blockJson_eq_ok_iff`).
+Before Fusaka no check bounds the length of the RLP form of a block, and the RLP encoder fails on a payload of `2^64` bytes or more, so that form stays a hypothesis.
+From Fusaka the size check of the block gives that form, of at most `8 * 2^20` bytes (`Valid.exists_rawBlock_of_fusaka_le`, `Valid.exists_blockJson_of_fusaka_le`).
+A valid view does not run the lowest block, a block off the canonical chain or the pending block through the state transition.
+So no theorem says that the writer succeeds on them.
 For the tag `pending`, the header method answers `null`.
 The block and count methods read the pending block of the view instead, since only the header methods of [`block.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth/block.yaml) answer `null` for `pending`.
 The schema gives `size` only the title "Block size"; here it is the length of the RLP form of the block, which the fixtures pin.
@@ -3843,6 +3849,9 @@ Their logs are numbered `0, 1, 2, …` across the block (`logIndex_receiptInfos`
 In a valid view, when that block is canonical, it is the object at that index among the receipts of the number of the block, so both methods give each log the same `logIndex` (`Valid.transactionReceipt_blockReceipts`).
 A block off the canonical chain is checked for its hash only, so a receipt found there has no such guarantee.
 A creation has the address that the sender makes at its nonce, and a call has none (`receiptInfo_contractAddress`).
+A receipt object has `blobGasUsed` and `blobGasPrice` exactly for a blob transaction (`receiptInfo_blob`).
+It reports `2^17` blob gas for each versioned hash.
+From Dencun, its blob gas price is the base fee per blob gas that the blob schedule of the chain, at the fork, number and timestamp of the block, gives for the excess blob gas of its header.
 No text of a receipt or a log defines `logIndex`; the section "Log index" of the [notes of `eth_simulateV1`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/docs-api/docs/ethsimulatev1-notes.mdx) states the rule and says that receipts use it.
 These properties hold whenever the receipt objects of a block are built.
 They fail with `-32603` when a block does not have one receipt for each transaction, or when the node cannot compute a sender, a hash or a contract address.
@@ -3853,6 +3862,10 @@ Each receipt has the Bloom filter of its logs, and so does each receipt object (
 The cumulative gas of its receipts never decreases (`Valid.cumulativeGasUsed_receipts`), so the gas of the receipt objects adds up to the last cumulative gas (`Valid.sum_gasUsed`).
 The base fee of the block is at most the maximum fee of each transaction (`Valid.baseFee_le_maxFeePerGas`).
 So the effective gas price of each receipt object follows the formula of the description, read in integers (`Valid.effectiveGasPrice_receiptInfos`, `effectiveGasPrice_description`).
+The run of the block reaches each transaction, and on the state that the transaction starts from its sender can buy the gas (`Valid.buyGas_receiptInfos`).
+Buying it lowers the balance of the sender by exactly the gas limit of the transaction times `effectiveGasPrice`.
+A blob transaction also pays `blobGasUsed` times `blobGasPrice`; other types add nothing (`receiptInfo_blob`).
+The theorem states the purchase on that state; that the run of the transaction starts with it rests on the proof, not on the statement.
 From Glamsterdam, EIP-7778 makes the cumulative gas of a receipt the gas that the senders paid.
 As a choice of EthLib, the object copies it, so `gasUsed` is the gas that the sender paid, while the descriptions of `receipt.yaml` read "gas used".
 
@@ -3911,6 +3924,92 @@ They leave out the blocks of the history, and they are not the ancestors of a bl
 A revert has the message `"execution reverted"`, the only text that the source gives, though the fixtures append the reason.
 A halt that is not a revert has code 801 for a lack of gas, 4 for an invalid opcode, and `-32000` otherwise.
 The error groups of the source define these codes, but no text assigns them to `eth_call`.
+
+`eth_estimateGas` and `eth_createAccessList` run the same call as `eth_call`, with the same choices (`Execution/Rpc/Estimate.lean`).
+Their block parameter is `latest` by default, as for `eth_call`.
+Of the three methods, the source states that default only for `eth_call`.
+
+The source asks `eth_estimateGas` only for "an estimate of how much gas is necessary to allow the transaction to complete".
+EthLib answers a gas limit with which the call completes, which means that the call prepares and its message neither reverts nor halts (`Completes`).
+The method fails exactly when `eth_call` fails, with the same error, and this includes the revert of code 3 (`estimateGas_eq_error_iff`).
+Otherwise it runs a binary search below the gas limit of the request, or below the default one.
+The estimate has no cap from EIP-7825.
+When the request names a fee, the sender must hold the fee of its whole gas limit.
+
+The answer completes and is at most the gas limit of the request, or the default one (`estimateGas_completes`, `Proofs/Rpc/Estimate.lean`).
+It is the least positive limit that completes when the limits that complete form an interval (`estimateGas_least`).
+Code that reads the gas left can break that hypothesis, and the answer may then not be the least.
+Even without the hypothesis, the call does not complete with one gas less, unless the answer is at most 1 (`estimateGas_pred_not_completes`).
+A call completes with a gas limit exactly when `eth_call` answers data at that limit (`completes_iff`).
+
+The source fixes none of the contents of the result of `eth_createAccessList`.
+EthLib lists each address and storage key that the call read or wrote, as the state tracker records them, a revert included.
+It leaves out an address without a storage key that the transaction accesses from the start.
+These addresses are the sender, the recipient or the created contract, the precompiles and, from Shapella, the beneficiary.
+The list keeps the authorities and the delegate of EIP-7702, and the contracts that the code of the call creates.
+EIP-2929 and EIP-7702 make these addresses warm, but they stay in the list.
+
+The method then runs the call again with that list, as type 1 when the request has type 0.
+Before Berlin no transaction has an access list, so the list is empty and the call runs once.
+The result reports the gas used and the error message of that second call (`createAccessList_eq_ok`).
+A rejection of the second call, such as a gas limit that no longer covers the list, is the error of the method.
+The list is not iterated to a fixed point, so a call whose accesses change with its access list can report a list that the second call does not match.
+
+`eth_feeHistory` and `eth_baseFee` of [`fee_market.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth/fee_market.yaml) report base fees, gas ratios and tips (`Execution/Rpc/Fees.lean`).
+A history is the one of the blocks of its range, when its percentiles strictly increase and the node holds its newest block (`ChainView.feeHistory_eq_ok`, `Proofs/Rpc/Fees.lean`).
+The base fee of each block of the range is that of its header, or 0 before London (`ChainView.feeHistory_baseFeePerGas`).
+The last base fee is `expectedBaseFeeAcross` of the newest header, the rule that checks the base fee of a header, or 0 when the next block is before London.
+In a valid view, take a canonical block that is not the head, and a next block and next fork from London on.
+The last base fee is then the base fee in the header of the next block (`ChainView.Valid.nextBaseFee`).
+That covers the first London block, which takes the initial base fee, and every block after a London block (`ChainView.Valid.london_le_next`).
+`eth_baseFee` gives the last base fee of the history of the head alone (`ChainView.baseFee_eq_feeHistory`).
+The lists of base fees have one more entry than the list of gas ratios (`ChainView.feeHistory_length`).
+Each reward of a block with transactions, whose receipts match them, is the tip of one of them (`BlockRecord.mem_rewards`).
+A block without transactions has rewards of 0 (`BlockRecord.rewards_nil`), and the rewards of a block do not decrease along the percentiles (`BlockRecord.rewards_sorted`).
+
+The source leaves several points of the fee history open, and EthLib decides them.
+The next timestamp is unknown, so the fork and the blob schedule of the next block are taken one second after the newest block, its earliest time.
+That is exact for a fork that activates by number, as London does, but it misses a fork or a blob schedule that activates later than that.
+The next base fee per blob gas uses the excess blob gas that the header rule gives to that block.
+A percentile is a JSON number from 0 to 100, and the list must strictly increase; otherwise the request gets `-32602`.
+The range holds the blocks that the node has, so it is shorter than the count when the node holds fewer blocks, as the source allows.
+A count of 0 gives an empty range, whose oldest block follows the newest one, and an unknown newest block gets `-32001`.
+The tip at a percentile is that of the first transaction, by ascending tip, at which the gas used so far reaches that share of the gas that the receipts record.
+The comparison is exact.
+Before London the base fee is 0, so a tip is the whole gas price.
+A ratio is written with at most 18 decimal places, rounded down, and the rewards are left out when the request names no percentile.
+
+`eth_sendRawTransaction` of [`submit.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth/submit.yaml) submits a signed transaction in its raw form (`Execution/Rpc/Submit.lean`).
+A blob transaction must come in its network form at the fork of the next block.
+Before Fusaka that form has one proof per blob, and from Fusaka it has cell proofs.
+The hash of an accepted submission is the hash of the transaction that the raw form holds, without blobs, commitments or proofs (`ChainView.sendRawTransaction_hash`, `Proofs/Rpc/Submit.lean`).
+When the first byte is not 3, it is the Keccak-256 hash of the raw bytes (`ChainView.sendRawTransaction_keccak`).
+The dispatcher reads the raw bytes and answers with that hash (`ChainView.call_sendRawTransaction`).
+Each code that `rpcCode` gives is in a group that the method lists, within the range of that group (`rpcCode_mem`).
+Two errors with one code are of one kind (`rpcCode_injective`).
+The mapping is: `insufficientGas` to 800, `gasAllowanceExceeded` to 803, `priorityFeeGreaterThanMaxFee` to 804, `insufficientMaxFeePerGas` to 806, `insufficientBalance` to 809, `nonceTooLow` to 1, `nonceTooHigh` to 2, and `invalidSignature` to 1001.
+Two conditions are wider than their messages.
+The code 800 also covers a gas limit below the floor of EIP-7623.
+The cost behind 809 also counts the blob gas at its fee cap.
+The method checks a transaction with no gas used before it, so the allowance of the block is exceeded exactly when the gas limit is above the block's, the condition of 803.
+
+Which transactions a pool keeps is the choice of the node, and EthLib fixes one simple rule.
+The rule accepts a transaction whose raw form decodes, whose blob counts and versioned hashes match, and which passes the inclusion checks in the next block against the state of the head.
+That next block is one second after the head, its earliest time, as in the fee history.
+It takes the fork, the base fees and the blob schedule of the fee history, and the gas limit of the head.
+Its base fee is the last base fee of the fee history (`ChainView.baseFeeOf_nextEnvironment`).
+A nonce above that of the sender is a future transaction, which the rule accepts.
+The checks then read the head with the nonce of the sender raised to that of the transaction (`withFutureNonce_nonce`), so the code 2 never arises.
+The rule does not verify the KZG proofs yet.
+From Fusaka, the source lets a node accept proofs per blob and convert them to cell proofs; the rule takes the choice that this "may" leaves, and rejects that form.
+A raw form that does not decode, or whose blobs do not match its counts or versioned hashes, gets `-32000`.
+A failed inclusion check without a code gets `-32003`.
+The errors of EthLib without a code are `emptyTransaction`, `unsupportedType`, `decoding`, `encoding`, `initCodeTooLarge`, `gasLimitExceeded`, `nonceOverflow`, `wrongChainId`, `noBlobData`, `blobCountExceeded`, `invalidBlobVersionedHash`, `emptyAuthorizationList`, `blobGasLimitExceeded`, `insufficientMaxFeePerBlobGas`, `senderNotEoa` and `missingCode`.
+`intrinsicGasAboveLimit` also has none.
+The message of 800 is "Intrinsic gas too low / Intrinsic gas exceeds gas limit", and the cap of EIP-7825 is not a gas limit.
+The code 802 names a minimum that the node configures.
+The codes 805, 807 and 808 name values that the decoder already rejects.
+The code 1000 names a transaction that the node already knows, and the codes `-32000` to `-32006` name no single condition.
 
 The Python suite replays the official test chain into a view and answers the official fixtures of the methods that EthLib serves.
 That chain mines its blocks before the merge with a zero mix hash and a zero nonce, so the suite runs the transition without the proof-of-work check.
@@ -4165,10 +4264,16 @@ Before Altair they assume that the balance plus the reward covers the penalty, a
 From Altair the assumption bounds the sum of the penalties of the epoch, since the flags apply one after the other; it is sufficient, not necessary.
 `idealAttestationRewards_sorted` shows that the ideal rewards list distinct effective balances in increasing order.
 `attestationRewards_ideal_of_altair` shows that from Altair an eligible validator that set every flag earns the ideal parts of its effective balance.
-No theorem describes the ideal rewards before Altair.
+`idealAttestationRewards_mem` shows that each ideal entry is read at a validator of the registry with the effective balance of the entry.
+`idealRewardsOf_parts_of_lt_altair` gives each part of such an entry before Altair in closed form, from the base reward of that validator.
+Each vote earns the base reward in a leak, and otherwise the base reward times the matched unslashed increments over the active increments, rounded down.
+The inclusion earns the base reward less the proposer share.
+The inactivity part is minus four base rewards plus the proposer share in a leak, and zero otherwise.
+`attestationRewards_ideal_of_lt_altair` shows that before Altair an eligible validator whose three votes matched, first included one slot after its vote, earns those ideal parts.
 The Python suite (`bindings/python/tests/consensus/test_beacon_api_rewards.py`) reads the states of the pinned rewards vectors, at every fork from phase 0.
 It takes each state to the last slot of its epoch, and checks each part of each validator against EthLib's deltas of its kind, which the rewards vectors check, on the state after justification and the inactivity scores.
 It checks that a validator that earned a reward for every vote gets the ideal parts of its effective balance, and code 400 and 404, including a state that is not at the last slot of its epoch.
+Before Altair it checks the inclusion part only as at most the ideal one, so the ideal inclusion part rests on `idealRewardsOf_parts_of_lt_altair` and `attestationRewards_ideal_of_lt_altair`.
 
 The sync committee rewards of a block are in the same module, read from the state that the sync aggregate step of the block reads.
 `syncCommitteeRewards_reward` shows that the reward of a member is the sum over its seats of the participant reward that the transition computes, counted for a seat that signed and against a seat that did not.
@@ -4225,7 +4330,27 @@ A URL is checked only to be non-empty, not to be a valid URI.
 The topics and the messages of the event stream are in `Consensus/BeaconApi/Events.lean`, shared by the events of received objects (#2090) and of the fork choice (#2091).
 `EventTopic.ofName?_name` and `EventTopic.name_injective` (`Consensus/Proofs/BeaconApi/Events.lean`) show that each of the 24 topics of the source has its own name, which gives it back.
 `readEventTopics_names` and `readEventTopics_map_name` show that a request is read exactly as the topics that it names, and `eventStream_cons` that the stream is the message of the first event, if its topic was chosen, followed by the stream of the rest.
-No definition yet says when an event fires; the two issues add them.
+
+The events of the fork choice are in `Consensus/BeaconApi/ChainEvents.lean` (#2091).
+`chainEvents` compares two stores: a head event comes when the head block changes, or when it stays and its payload moves from empty to full; a reorganization comes when the old head block is not an ancestor of the new head; a finalized event comes when the finalized checkpoint changes.
+`chainEvents_head_iff` and `chainEvents_reorg_iff` (`Consensus/Proofs/BeaconApi/ChainEvents.lean`) show when a head event and a reorganization come.
+`chainEvents_head` shows that a head event names the head of the later store, and `chainEvents_dependent_roots_duties` that its two dependent roots are those of the attester duties of its epoch and of the next one, read from the head state; the second needs the next epoch to fit in 64 bits.
+`fastConfirmationEvent_block` shows that the event of a run of the fast confirmation rule names its confirmed block and that block's slot.
+The source leaves these points open, decided here:
+
+- `epoch_transition` is given only by example; it is true when the new head is in another epoch than the old head, later or earlier.
+- The `depth` of a reorganization is given only by example; it is the slot of the old head less the slot of the latest common ancestor of the two heads.
+- The `epoch` of a reorganization is given only by example; it is the epoch of the new head.
+- From Gloas, a reorganization compares blocks, not payloads: a new head built on the old head block without its payload is no reorganization.
+- The `state` of a finalized event is the state root of the checkpoint block, not the state of the checkpoint.
+- From Gloas, the `state` of a head event is the state root of the block, also when its payload is full.
+- Emission on other payload transitions is optional, so a head event comes only on the transition from empty to full that the source requires.
+
+The optimistic flag of each event is an input, since it depends on what the node has verified.
+The theorem that a finalized event raises the finalized epoch, the payload attributes event, the exports and their Python tests remain for #2091.
+The light client events and the event of an available payload depend on what the node has received, and are not defined here.
+
+No definition yet says when an event of a received object fires (#2090).
 
 The debug answers show the tree of the fork choice and its leaves (`Consensus/BeaconApi/Debug.lean`).
 `mem_treeNodes` (`Consensus/Proofs/BeaconApi/Debug.lean`) shows that the listed nodes are exactly the nodes of the tree, and `nodeViews_nodes` shows that the views follow that list, by root and status as the API names them: one per block before Gloas, and from Gloas the pending and empty nodes of each block, with the full node once its payload is verified.
@@ -4253,7 +4378,7 @@ They call the same dispatch as gossip, `validateGossipMessage` (`Consensus/Gossi
 The Python suite (`bindings/python/tests/consensus/test_beacon_api_pool.py`) submits each object of the pinned gossip cases of the pool topics to its endpoint.
 It checks that the object fails exactly when gossip does not accept it, with the reason of the case.
 It leaves out the cases whose reason is a wrong subnet, since the node picks the subnet itself, and the cases that send objects of another topic.
-Every case of the bid topic also sends the envelopes of payloads, so no vector reaches the bid endpoint yet.
+Every case of the bid topic also sends the envelopes of payloads, so those cases run in the suite of the publish endpoints.
 
 The publish endpoints of blocks and of payload envelopes check an object at the level that the client asks, before the node broadcasts it (`Consensus/BeaconApi/Publish.lean`).
 The gossip checks of its topic run at every level, through the same dispatch as gossip.
@@ -4270,6 +4395,13 @@ The highest level also checks that the store holds no other block of the same sl
 `publishBlock_of_pass` shows the converse: a block that gossip accepts and that passes its level is broadcast, and integrated exactly when the handler succeeds.
 The envelope endpoint has the same theorems, from `publishEnvelope_refused_store` to `publishEnvelope_of_pass`, against the gossip checks and the handler of envelopes.
 `levelFailure_eq_none_iff` shows that an object passes its level exactly when its gossip checks pass and, above the gossip level, the later checks of its level pass.
+The Python suite (`bindings/python/tests/consensus/test_beacon_api_publish.py`) sends each object of the pinned gossip cases of blocks, envelopes and bids to its endpoint, in turn, against one store.
+It checks that a block or an envelope is refused exactly when gossip does not accept it, with the reason of the case, and that a bid fails exactly then.
+It checks that a valid block and a valid envelope get 200 at every level, and that a second copy is then refused as already seen.
+It checks that the consensus levels refuse a block with a wrong state root that gossip accepts, and that the default level is the gossip level.
+It checks that the highest level refuses a valid block whose rival the store holds, and that the consensus level does not.
+The export behind it (`Consensus/Exports/BeaconApiPost.lean`) runs a node whose clock reaches the time of each request, which holds no blobs, and whose execution layer accepts every payload.
+So a block with blobs before Fulu gets 202, while from Fulu the node takes the data on trust; it never integrates the block of the merge, and from Heze every payload satisfies the inclusion lists.
 
 Points that remain open:
 

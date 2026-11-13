@@ -314,11 +314,19 @@ def callAnswer (o : CallOutput) : Except RpcError ByteArray :=
   | some .revert => .error (revertError o.output)
   | some e => .error (haltError e)
 
+/-- The call of a request on the state after a block, and the output of its message.
+
+It fails with the error that stops the call before its message, or that aborts the message. -/
+def ChainView.runCall (v : ChainView) (tx : GenericTransaction) (p : BlockParam)
+    (choices : CallChoices) : Except RpcError (CallSetup × CallOutput) := do
+  let s ← v.prepareCall tx p choices
+  let o ← s.run.mapError fun _ => callInternalError "the execution aborted"
+  return (s, o)
+
 /-- The answer of `eth_call` for a request on the state after the block that `p` names. -/
 def ChainView.ethCall (v : ChainView) (tx : GenericTransaction) (p : BlockParam)
     (choices : CallChoices) : Except RpcError ByteArray := do
-  let s ← v.prepareCall tx p choices
-  let o ← s.run.mapError fun _ => callInternalError "the execution aborted"
+  let (_, o) ← v.runCall tx p choices
   callAnswer o
 
 end EthLib.Execution.Rpc

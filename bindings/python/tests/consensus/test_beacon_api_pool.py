@@ -23,7 +23,7 @@ ENDPOINTS = {
     "gossip_sync_committee_contribution_and_proof": "contribution_and_proofs",
     "gossip_payload_attestation_message": "payload_attestations",
     "gossip_proposer_preferences": "proposer_preferences",
-    "gossip_execution_payload_bid": "execution_payload_bid",
+    "gossip_execution_payload_bid": "execution_payload_bids",
 }
 
 # The reasons of gossip for a message on a subnet other than its own.
@@ -71,11 +71,11 @@ def test_case(preset: str, fork: str, case: Path) -> None:
         (message.get("current_time_ms", 0), endpoint, [read(case, message["message"])])
         for message in meta["messages"]
     ]
-    answers = consensus.api_pool(
+    answers = consensus.api_post(
         name=preset, fork=FORKS[fork], requests=requests, **case_store(preset, fork, case, meta)
     )
     expected = [
-        [] if message["expected"] == "valid" else [(0, message["reason"])]
+        (200, []) if message["expected"] == "valid" else (400, [(0, message["reason"])])
         for message in meta["messages"]
     ]
     assert answers == expected
@@ -87,14 +87,14 @@ def test_list_reports_each_failure() -> None:
     meta = _YAML.load((case / "meta.yaml").read_text())
     message = meta["messages"][0]
     change = read(case, message["message"])
-    answers = consensus.api_pool(
+    answers = consensus.api_post(
         name="minimal",
         fork=FORKS["capella"],
         requests=[(message.get("current_time_ms", 0), "bls_to_execution_changes", [change] * 3)],
         **case_store("minimal", "capella", case, meta),
     )
     reason = "already seen BLS to execution change for this validator"
-    assert answers == [[(1, reason), (2, reason)]]
+    assert answers == [(400, [(1, reason), (2, reason)])]
 
 
 @pytest.mark.parametrize("count", [0, 2])
@@ -111,7 +111,7 @@ def test_one_object_per_request(endpoint: str, message: str, count: int) -> None
     case = valid_case("gossip_voluntary_exit")
     meta = _YAML.load((case / "meta.yaml").read_text())
     with raises(consensus.ForkChoiceError, message) as info:
-        consensus.api_pool(
+        consensus.api_post(
             name="minimal",
             fork=FORKS["capella"],
             requests=[(0, endpoint, [b""] * count)],
@@ -133,7 +133,7 @@ def test_one_object_per_request(endpoint: str, message: str, count: int) -> None
         ),
         ("payload_attestations", [], "the payload attestation endpoint serves only from Gloas"),
         ("proposer_preferences", [], "the proposer preferences endpoint serves only from Gloas"),
-        ("execution_payload_bid", [], "the bid endpoint serves only from Gloas"),
+        ("execution_payload_bids", [], "the bid endpoint serves only from Gloas"),
     ],
 )
 def test_endpoint_refused(endpoint: str, items: list[bytes], message: str) -> None:
@@ -142,7 +142,7 @@ def test_endpoint_refused(endpoint: str, items: list[bytes], message: str) -> No
     case /= "gossip_voluntary_exit__valid"
     meta = _YAML.load((case / "meta.yaml").read_text())
     with raises(consensus.ForkChoiceError, message) as info:
-        consensus.api_pool(
+        consensus.api_post(
             name="minimal",
             fork=FORKS["phase0"],
             requests=[(0, endpoint, items)],
@@ -157,10 +157,10 @@ def test_one_bid_per_request() -> None:
     case = next(path.parent for path in sorted(case.rglob("meta.yaml")))
     meta = _YAML.load((case / "meta.yaml").read_text())
     with raises(consensus.ForkChoiceError, "the bid endpoint takes one bid") as info:
-        consensus.api_pool(
+        consensus.api_post(
             name="minimal",
             fork=FORKS["gloas"],
-            requests=[(0, "execution_payload_bid", [])],
+            requests=[(0, "execution_payload_bids", [])],
             **case_store("minimal", "gloas", case, meta),
         )
     assert info.value.code == 0

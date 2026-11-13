@@ -134,7 +134,7 @@ theorem resolve_mem {v : ChainView} {p : BlockParam} {r : BlockRecord}
     exact .inl (List.mem_append_left _ (List.head_mem _))
 
 /-- The last recent block of the chain after the canonical block at index `i` is that block. -/
-private theorem chainAt_getLast {v : ChainView} (i : Nat) (hi : i < v.canonical.length) :
+theorem chainAt_getLast {v : ChainView} (i : Nat) (hi : i < v.canonical.length) :
     (v.chainAt i hi).recent.getLast? = some v.canonical[i].recent := by
   unfold ChainView.chainAt
   rw [List.take_add_one, List.map_append, ← List.append_assoc]
