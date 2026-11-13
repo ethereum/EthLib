@@ -659,6 +659,7 @@ PyObject* py_engine_read_forkchoice_response             (PyObject* self, PyObje
 PyObject* py_engine_read_get_payload_result              (PyObject* self, PyObject* args);
 PyObject* py_engine_read_payload_bodies_result           (PyObject* self, PyObject* args);
 PyObject* py_engine_read_get_blobs_result                (PyObject* self, PyObject* args);
+PyObject* py_engine_exchange_transition_configuration     (PyObject* self, PyObject* args);
 PyObject* py_engine_rewrite_params                       (PyObject* self, PyObject* args);
 PyObject* py_engine_prepare_execution_payload            (PyObject* self, PyObject* args);
 PyObject* py_engine_prepare_execution_payload_gloas      (PyObject* self, PyObject* args);

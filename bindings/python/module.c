@@ -1198,6 +1198,8 @@ static PyMethodDef methods[] = {
    DOC_engine_read_payload_bodies_result},
   {"engine_read_get_blobs_result", py_engine_read_get_blobs_result, METH_VARARGS,
    DOC_engine_read_get_blobs_result},
+  {"engine_exchange_transition_configuration", py_engine_exchange_transition_configuration,
+   METH_VARARGS, DOC_engine_exchange_transition_configuration},
   {"engine_rewrite_params", py_engine_rewrite_params, METH_VARARGS,
    DOC_engine_rewrite_params},
   {"engine_prepare_execution_payload", py_engine_prepare_execution_payload, METH_VARARGS,

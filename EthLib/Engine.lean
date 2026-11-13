@@ -12,6 +12,7 @@ public import EthLib.Engine.NewPayload
 public import EthLib.Engine.Payload
 public import EthLib.Engine.PayloadBodies
 public import EthLib.Engine.PreparePayload
+public import EthLib.Engine.TransitionConfiguration
 
 /-!
 # `EthLib.Engine`

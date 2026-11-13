@@ -1629,6 +1629,10 @@ def engine_read_get_blobs_result(method: str, result: Any) -> list[dict[str, Any
     """The result of an `engine_getBlobs` method, read from its JSON and written back."""
     ...
 
+def engine_exchange_transition_configuration(terminal_total_difficulty: int, terminal_block_hash: bytes, terminal_block_number: int, request: dict) -> dict[str, Any]:
+    """The answer to an `engine_exchangeTransitionConfigurationV1` request, from a configuration."""
+    ...
+
 def engine_rewrite_params(method: str, params: list[Any]) -> list[Any]:
     """The parameters of an Engine API request, read by the decoder and written by the writer."""
     ...

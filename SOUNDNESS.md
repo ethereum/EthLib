@@ -3179,6 +3179,15 @@ The writer keeps the rule by its type, which pairs each cell with its proof.
 The Engine API does not give the size of a cell, so EthLib takes 2048 bytes, the size of the cells of its KZG cell proofs.
 The Python tests read back every result example of `engine_getPayloadBodiesByHash` and `engine_getPayloadBodiesByRange`, versions 1 and 2, and of `engine_getBlobsV1` to `V4` in the OpenRPC method files.
 
+`engine_exchangeTransitionConfigurationV1` of Paris exchanges the three settings of EIP-3675 that end proof of work (`Engine/TransitionConfiguration.lean`).
+A configuration reads back from its JSON (`transitionConfigurationOfJson_json`, `Proofs/TransitionConfiguration.lean`).
+The method succeeds exactly when the request holds one parameter that decodes as a configuration, and then answers the configuration of the execution node (`exchangeTransitionConfiguration_eq_ok_iff`).
+So a successful answer never depends on the configuration in the request, as step 1 of the method says.
+What the method leaves to clients is not modelled: reporting a mismatch to the user, polling every 60 seconds, warning after 120 seconds without a request, and whether the method still answers after Cancun.
+The undecided terminal total difficulty of step 7, `2^256 - 2^10`, is a named constant.
+EIP-3675 gives the mainnet terminal total difficulty but no mainnet terminal block hash or number, so EthLib gives no mainnet configuration.
+The Python tests run the OpenRPC example, the undecided total difficulty, a block number of 0, malformed and missing fields, the wrong number of parameters, another method, and a configuration out of range.
+
 The theorems about `engine_forkchoiceUpdated` are in `Proofs/ForkchoiceUpdated.lean`.
 `forkchoiceUpdated_valid` shows that a valid answer selects a valid head that the execution layer holds, with its safe and finalized blocks on its chain.
 The exception is step 2 of the method, which `forkchoiceUpdated_of_belowFinalized` covers.
@@ -3678,12 +3687,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 417 operations and 49 size constants.
-The Python extension calls 417 of the operations and 49 of the constants.
+Lean exports 418 operations and 49 size constants.
+The Python extension calls 418 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-10409 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (1973), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (167), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (80), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (147), `module.c` (1462), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (21), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (58), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (140), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (705), `x25519.c` (21), `xmss.c` (134).
+10421 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (1973), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (176), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (80), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (147), `module.c` (1464), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (21), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (58), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (140), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (706), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

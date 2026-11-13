@@ -1512,6 +1512,11 @@ def bindings : List Binding := [
   ⟨"engine_read_get_blobs_result", `EthLib.Engine.Exports.readGetBlobsResultExport,
     "(method: str, result: Any) -> list[dict[str, Any] | None] | None",
     [`EthLib.Engine.EngineError], some "EngineError"⟩,
+  ⟨"engine_exchange_transition_configuration",
+    `EthLib.Engine.Exports.exchangeTransitionConfigurationExport,
+    "(terminal_total_difficulty: int, terminal_block_hash: bytes, terminal_block_number: int, " ++
+      "request: dict) -> dict[str, Any]",
+    [`EthLib.Engine.EngineError], some "EngineError"⟩,
   ⟨"engine_rewrite_params", `EthLib.Engine.Exports.rewriteParamsExport,
     "(method: str, params: list[Any]) -> list[Any]",
     [`EthLib.Engine.EngineError], some "EngineError"⟩,
