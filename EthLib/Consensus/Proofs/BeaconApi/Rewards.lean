@@ -2,6 +2,7 @@ module
 
 public import EthLib.Consensus.BeaconApi.Rewards
 public import EthLib.Consensus.Proofs.BeaconApi.Registries
+public import EthLib.Consensus.Proofs.Transition.BlockRewards
 public import EthLib.Consensus.Proofs.Transition.EpochRewards
 public import EthLib.Consensus.Proofs.Transition.RewardDeltas
 public import EthLib.Consensus.Proofs.Transition.Totality.Rewards
@@ -21,6 +22,16 @@ The parts add up to what the epoch transition applies to the balance, with the p
 When the penalties do not exhaust the balance, the balance moves by exactly that sum.
 
 The answer reads the state that the rewards step of the epoch transition reads.
+
+The sync committee rewards name each requested member once, in order of index.
+
+Each is the sum, over the seats of the member, of the participant reward of the transition.
+
+That reward counts for a seat that signed, and against a seat that did not.
+
+When the balance covers each seat of the member, it moves by that sum.
+
+The proposer also earns a share of the reward of each seat that signed.
 -/
 
 @[expose] public section
@@ -841,5 +852,239 @@ theorem attestationRewardsResponse_ok {config : Config} {epoch : Epoch}
     simp only [not_or, not_not] at unknown
     exact ⟨unknown.1, unknown.2.1, unknown.2.2, rewarded, ideal, entries, rewardedOk, idealOk,
       entriesOk, rfl⟩
+
+/-! ## Sync committee rewards -/
+
+/-- The sync aggregate steps move one balance by the net rewards of the seats it holds.
+
+The balance must cover the participant reward once per seat that the member holds.
+
+Then no penalty stops at zero.
+
+The proposer share is paid once per signed seat, and only when the proposer is the member. -/
+private theorem foldl_seats_balance (reward : Gwei) (proposerReward : Nat)
+    (chosen index : ValidatorIndex) (seats : List (ValidatorIndex × Bool)) (balance : Nat)
+    (covered : (seats.filter (·.1 == index)).length * reward.toNat ≤ balance) :
+    ((seats.foldl (fun balance member =>
+      if member.2 then balance + (if member.1.toNat = index.toNat then reward.toNat else 0) +
+        (if chosen.toNat = index.toNat then proposerReward else 0)
+      else if member.1.toNat = index.toNat then balance - reward.toNat else balance)
+        balance : Nat) : Int) = balance + seatsReward reward seats index +
+      (if chosen = index then (seats.filter (·.2)).length * proposerReward else 0 : Nat) := by
+  have chosenIff : chosen.toNat = index.toNat ↔ chosen = index := UInt64.toNat_inj
+  induction seats generalizing balance with
+  | nil => simp [seatsReward]
+  | cons seat rest ih =>
+    obtain ⟨member, signed⟩ := seat
+    have step : seatsReward reward ((member, signed) :: rest) index =
+        (if member = index then seatReward reward signed else 0) +
+          seatsReward reward rest index := by
+      unfold seatsReward
+      by_cases same : member = index <;> simp [same]
+    have lenStep : (((member, signed) :: rest).filter (·.1 == index)).length =
+        (rest.filter (·.1 == index)).length + if member = index then 1 else 0 := by
+      by_cases same : member = index <;> simp [same]
+    have signStep : (((member, signed) :: rest).filter (·.2)).length =
+        (rest.filter (·.2)).length + if signed then 1 else 0 := by
+      cases signed <;> simp
+    have sameIff : member.toNat = index.toNat ↔ member = index := UInt64.toNat_inj
+    rw [lenStep] at covered
+    rw [List.foldl_cons, step, ih _ ?_]
+    · by_cases same : member = index <;> by_cases ch : chosen = index <;> cases signed <;>
+        simp [same, ch, chosenIff, sameIff, seatReward, Nat.add_mul] at covered ⊢ <;> omega
+    · by_cases same : member = index <;> cases signed <;>
+        simp [same, sameIff, Nat.add_mul] at covered ⊢ <;> (try split_ifs) <;> omega
+
+/-- The answer names the members that the request selects, once each and in increasing order.
+
+The members are the validators that hold the seats of the sync committee. -/
+theorem syncCommitteeRewards_indices {altair : .altair ≤ fork} {aggregate : SyncAggregate preset}
+    {ids : List ValidatorId} {entries : List SyncCommitteeReward}
+    (answered : syncCommitteeRewards state altair aggregate ids = .ok entries) :
+    ∃ seats, syncRewardSeats state altair aggregate = .ok seats ∧
+      (entries.map (·.validatorIndex)).Pairwise (· < ·) ∧
+      ∀ index, index ∈ entries.map (·.validatorIndex) ↔
+        index ∈ seats.map (·.1) ∧ (ids ≠ [] → index ∈ selectValidators state ids) := by
+  unfold syncCommitteeRewards at answered
+  simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at answered
+  obtain ⟨seats, seatsOk, reward, rewardOk, rfl⟩ := answered
+  refine ⟨seats, seatsOk, ?_, ?_⟩
+  · simp only [List.map_map, Function.comp_def, List.map_id']
+    split
+    · exact sortedSet_sorted _
+    · exact (sortedSet_sorted _).filter _
+  · intro index
+    simp only [List.map_map, Function.comp_def, List.map_id']
+    split <;> rename_i h
+    · simp [List.isEmpty_iff] at h
+      simp [h, mem_sortedSet]
+    · simp [List.isEmpty_iff] at h
+      simp [h, mem_sortedSet, List.mem_filter, and_comm]
+
+/-- The reward of a member is the sum of its seats, at the participant reward of the transition.
+
+A seat that signed counts that reward, and a seat that did not counts minus it. -/
+theorem syncCommitteeRewards_reward {altair : .altair ≤ fork} {aggregate : SyncAggregate preset}
+    {ids : List ValidatorId} {entries : List SyncCommitteeReward}
+    (answered : syncCommitteeRewards state altair aggregate ids = .ok entries)
+    {entry : SyncCommitteeReward} (member : entry ∈ entries) :
+    ∃ seats reward, syncRewardSeats state altair aggregate = .ok seats ∧
+      syncParticipantReward state = .ok reward ∧
+      entry.reward = seatsReward reward seats entry.validatorIndex := by
+  unfold syncCommitteeRewards at answered
+  simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at answered
+  obtain ⟨seats, seatsOk, reward, rewardOk, rfl⟩ := answered
+  refine ⟨seats, reward, seatsOk, rewardOk, ?_⟩
+  split at member <;> simp only [List.mem_map] at member <;>
+    obtain ⟨index, _, rfl⟩ := member <;> rfl
+
+/-- A member of the answer has the reward of its seats, at the participant reward of the step. -/
+private theorem entry_reward_eq {altair : .altair ≤ fork} {aggregate : SyncAggregate preset}
+    {ids : List ValidatorId} {entries : List SyncCommitteeReward}
+    {seats : List (ValidatorIndex × Bool)} {reward : Gwei}
+    (answered : syncCommitteeRewards state altair aggregate ids = .ok entries)
+    {entry : SyncCommitteeReward} (member : entry ∈ entries)
+    (seated : syncRewardSeats state altair aggregate = .ok seats)
+    (rewarded : syncParticipantReward state = .ok reward) :
+    entry.reward = seatsReward reward seats entry.validatorIndex := by
+  obtain ⟨seats', reward', seatsOk, rewardOk, entryReward⟩ :=
+    syncCommitteeRewards_reward answered member
+  rw [seated, Except.ok.injEq] at seatsOk
+  rw [rewarded, Except.ok.injEq] at rewardOk
+  subst seatsOk rewardOk
+  exact entryReward
+
+/-- The sync aggregate step moves the balance of a member by its seats and its proposer shares.
+
+The proposer shares count once per signed seat, when the proposer is the member.
+
+The balance must cover the participant reward once per seat that the member holds. -/
+private theorem syncAggregate_member_balance {config : Config} {checks : SignatureChecks}
+    {altair : .altair ≤ fork} {aggregate : SyncAggregate preset}
+    {seats : List (ValidatorIndex × Bool)} {reward balance : Gwei} {index : ValidatorIndex}
+    (applied : processSyncAggregate config checks state altair aggregate = .ok after)
+    (seated : syncRewardSeats state altair aggregate = .ok seats)
+    (rewarded : syncParticipantReward state = .ok reward)
+    (found : state.balances.data[index.toNat]? = some balance)
+    (covered : (seats.filter (·.1 == index)).length * reward.toNat ≤ balance.toNat) :
+    ∃ final chosen, after.balances.data[index.toNat]? = some final ∧
+      ((∃ seat ∈ seats, seat.2 = true) → getBeaconProposerIndex state = .ok chosen) ∧
+      (final.toNat : Int) = balance.toNat + seatsReward reward seats index +
+        (if chosen = index then (seats.filter (·.2)).length *
+          (reward.toNat * PROPOSER_WEIGHT.toNat /
+            (WEIGHT_DENOMINATOR.toNat - PROPOSER_WEIGHT.toNat)) else 0 : Nat) := by
+  obtain ⟨computed, proposerReward, members, chosen, computedOk, shareEq, membersOk, chosenOk,
+    folded⟩ := processSyncAggregate_balance applied
+  rw [rewarded, Except.ok.injEq] at computedOk
+  subst computedOk
+  unfold syncRewardSeats at seated
+  simp only [bind_ok_iff, membersOk, pure, Except.pure, Except.ok.injEq] at seated
+  obtain ⟨members', membersOk', seatsEq⟩ := seated
+  have sameSeats : (members.zip aggregate.syncCommitteeBits.bits.toArray).toList = seats := by
+    rw [← seatsEq, ← membersOk']
+  rw [sameSeats] at chosenOk folded
+  obtain ⟨final, finalOk, finalValue⟩ := folded _ _ found
+  refine ⟨final, chosen, finalOk, chosenOk, ?_⟩
+  rw [finalValue, shareEq]
+  exact foldl_seats_balance _ _ chosen index seats _ covered
+
+/-- The sync aggregate step moves the balance of a member by exactly its reward in the answer.
+
+The member must not be the proposer of the slot, which also earns a share for each signature.
+
+Its balance must cover the participant reward once per seat that it holds.
+
+Then no penalty stops at zero. -/
+theorem syncCommitteeRewards_balance {config : Config} {checks : SignatureChecks}
+    {altair : .altair ≤ fork} {aggregate : SyncAggregate preset} {ids : List ValidatorId}
+    {entries : List SyncCommitteeReward} {seats : List (ValidatorIndex × Bool)}
+    {reward balance : Gwei}
+    (applied : processSyncAggregate config checks state altair aggregate = .ok after)
+    (answered : syncCommitteeRewards state altair aggregate ids = .ok entries)
+    {entry : SyncCommitteeReward} (member : entry ∈ entries)
+    (notProposer : getBeaconProposerIndex state ≠ .ok entry.validatorIndex)
+    (seated : syncRewardSeats state altair aggregate = .ok seats)
+    (rewarded : syncParticipantReward state = .ok reward)
+    (found : state.balances.data[entry.validatorIndex.toNat]? = some balance)
+    (covered : (seats.filter (·.1 == entry.validatorIndex)).length * reward.toNat ≤
+      balance.toNat) :
+    ∃ final, after.balances.data[entry.validatorIndex.toNat]? = some final ∧
+      (final.toNat : Int) = balance.toNat + entry.reward := by
+  obtain ⟨final, chosen, finalOk, chosenOk, finalValue⟩ :=
+    syncAggregate_member_balance applied seated rewarded found covered
+  refine ⟨final, finalOk, ?_⟩
+  rw [finalValue, entry_reward_eq answered member seated rewarded]
+  have none : ¬(∃ seat ∈ seats, seat.2 = true) → (seats.filter (·.2)).length = 0 := by
+    intro absent
+    simp only [List.length_eq_zero_iff, List.filter_eq_nil_iff]
+    intro seat mem
+    simpa using fun flag => absent ⟨seat, mem, flag⟩
+  by_cases signed : ∃ seat ∈ seats, seat.2 = true
+  · have differs : chosen ≠ entry.validatorIndex := fun same =>
+      notProposer (by rw [chosenOk signed, same])
+    simp [differs]
+  · simp [none signed]
+
+/-- The proposer of the slot, when it holds seats, moves by its reward and a share per signature.
+
+That share is the participant reward times the proposer weight, over the denominator less it.
+
+It rounds down, and the proposer earns it for every seat that signed, its own or not.
+
+Its balance must cover the participant reward once per seat that it holds. -/
+theorem syncCommitteeRewards_balance_of_proposer {config : Config} {checks : SignatureChecks}
+    {altair : .altair ≤ fork} {aggregate : SyncAggregate preset} {ids : List ValidatorId}
+    {entries : List SyncCommitteeReward} {seats : List (ValidatorIndex × Bool)}
+    {reward balance : Gwei}
+    (applied : processSyncAggregate config checks state altair aggregate = .ok after)
+    (answered : syncCommitteeRewards state altair aggregate ids = .ok entries)
+    {entry : SyncCommitteeReward} (member : entry ∈ entries)
+    (proposer : getBeaconProposerIndex state = .ok entry.validatorIndex)
+    (seated : syncRewardSeats state altair aggregate = .ok seats)
+    (rewarded : syncParticipantReward state = .ok reward)
+    (found : state.balances.data[entry.validatorIndex.toNat]? = some balance)
+    (covered : (seats.filter (·.1 == entry.validatorIndex)).length * reward.toNat ≤
+      balance.toNat) :
+    ∃ final, after.balances.data[entry.validatorIndex.toNat]? = some final ∧
+      (final.toNat : Int) = balance.toNat + entry.reward +
+        ((seats.filter (·.2)).length * (reward.toNat * PROPOSER_WEIGHT.toNat /
+          (WEIGHT_DENOMINATOR.toNat - PROPOSER_WEIGHT.toNat)) : Nat) := by
+  obtain ⟨final, chosen, finalOk, chosenOk, finalValue⟩ :=
+    syncAggregate_member_balance applied seated rewarded found covered
+  refine ⟨final, finalOk, ?_⟩
+  rw [finalValue, entry_reward_eq answered member seated rewarded]
+  by_cases signed : ∃ seat ∈ seats, seat.2 = true
+  · have same : chosen = entry.validatorIndex := by
+      have := (chosenOk signed).symm.trans proposer
+      exact Except.ok.inj this
+    simp [same, Int.add_assoc]
+  · have none : (seats.filter (·.2)).length = 0 := by
+      simp only [List.length_eq_zero_iff, List.filter_eq_nil_iff]
+      intro seat mem
+      simpa using fun flag => signed ⟨seat, mem, flag⟩
+    simp [none]
+
+/-- An answer comes only from Altair, and lists the sync committee rewards of the request. -/
+theorem syncCommitteeRewardsResponse_ok {aggregate : SyncAggregate preset}
+    {ids : List ValidatorId} {envelope : ApiEnvelope}
+    (answered : syncCommitteeRewardsResponse state aggregate ids = .ok envelope) :
+    ∃ (altair : .altair ≤ fork) (entries : List SyncCommitteeReward),
+      syncCommitteeRewards state altair aggregate ids = .ok entries ∧
+        envelope = { data := .arr (entries.map (·.toJson)).toArray } := by
+  unfold syncCommitteeRewardsResponse at answered
+  by_cases altair : .altair ≤ fork
+  · simp only [altair, ↓reduceDIte, bind_ok_iff, mapError_ok_iff, pure, Except.pure,
+      Except.ok.injEq] at answered
+    obtain ⟨entries, entriesOk, rfl⟩ := answered
+    exact ⟨altair, entries, entriesOk, rfl⟩
+  · simp [altair] at answered
+
+/-- Before Altair a block has no sync aggregate, and the answer is the error with code 400. -/
+theorem syncCommitteeRewardsResponse_of_lt_altair (before : fork < .altair)
+    (aggregate : SyncAggregate preset) (ids : List ValidatorId) :
+    syncCommitteeRewardsResponse state aggregate ids = .error invalidSyncRewardsRequest := by
+  have not : ¬.altair ≤ fork := Nat.not_le_of_lt before
+  simp [syncCommitteeRewardsResponse, not]
+  rfl
 
 end EthLib.Consensus.BeaconApi

@@ -11,6 +11,7 @@ public import EthLib.Execution.Proofs.Evm.Call.CreatedRead
 public import EthLib.Execution.Proofs.Evm.Call.Delegation
 public import EthLib.Execution.Proofs.Evm.Call.Fresh
 public import EthLib.Execution.Proofs.Evm.Call.Funded
+public import EthLib.Execution.Proofs.Evm.Call.Halts
 public import EthLib.Execution.Proofs.Evm.Call.Instructions
 public import EthLib.Execution.Proofs.Evm.Call.LogWeight
 public import EthLib.Execution.Proofs.Evm.Call.LogsPaid

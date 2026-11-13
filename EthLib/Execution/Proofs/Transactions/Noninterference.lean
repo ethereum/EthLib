@@ -74,12 +74,6 @@ section Helpers
 variable {account allStorage : Address → Prop} {slot : Address → Bytes32 → Prop}
   {code : Hash32 → Prop}
 
-/-- A state with fewer reads than one whose reads are in the sets has its reads in the sets. -/
-private theorem readsIn_of_readsLe {tx tx' : TransactionState} (h : tx.ReadsLe tx')
-    (hr : ReadsIn account slot tx') : ReadsIn account slot tx :=
-  ⟨fun a ha => hr.account a (h.accountReads a ha),
-    fun a k hk => hr.slot a k (h.storageReads a k hk)⟩
-
 /-- A record of an account read keeps every read. -/
 private theorem readsLe_recordAccountRead (tx : TransactionState) (address : Address) :
     tx.ReadsLe (tx.recordAccountRead address) :=
@@ -89,29 +83,6 @@ private theorem readsLe_recordAccountRead (tx : TransactionState) (address : Add
 private theorem mem_recordAccountRead (tx : TransactionState) (address : Address) :
     address ∈ (tx.recordAccountRead address).accountReads :=
   Std.ExtTreeSet.mem_insert_self
-
-/-- A change of one account keeps every read. -/
-private theorem readsLe_modifyState {tx tx' : TransactionState} {address : Address}
-    {f : Account → Except StateError Account} (h : tx.modifyState fork address f = .ok tx') :
-    tx.ReadsLe tx' := by
-  obtain ⟨_, _, hacc, hst⟩ := TransactionState.reads_modifyState h
-  refine ⟨fun x hx => ?_, fun x k hk => ?_⟩
-  · rw [hacc]
-    exact Std.ExtTreeSet.mem_insert.mpr (.inr hx)
-  · rw [hst]
-    split
-    · exact TransactionState.mem_storageReads_destroyStorage_of_mem hk
-    · exact hk
-
-/-- A write of code keeps every read. -/
-private theorem readsLe_setCode {tx tx' : TransactionState} {address : Address}
-    {bytes : ByteArray} (h : tx.setCode fork address bytes = .ok tx') : tx.ReadsLe tx' := by
-  unfold TransactionState.setCode at h
-  dsimp only at h
-  split at h
-  · exact readsLe_modifyState h
-  · have := readsLe_modifyState h
-    exact ⟨this.accountReads, this.storageReads⟩
 
 /-- An authorization that sets the code of its authority keeps every read. -/
 private theorem readsLe_delegate {state state' : TransactionState} {authority : Address}
@@ -249,7 +220,7 @@ private theorem applyAuthorization_agrees {block : BlockState}
           done.refund, done.meter, done.paidWrites, done.delegated⟩ : Delegations Meter) = d
           at hreads ⊢
         have ha : account authority := by
-          refine (readsIn_of_readsLe ?_ hreads).account _ hmem
+          refine (ReadsIn.of_readsLe ?_ hreads).account _ hmem
           cases hpay : payAuthorization fork d authority auth with
           | error e => exact .refl _
           | ok p =>
@@ -350,32 +321,6 @@ private theorem readsLe_foldlM_applyAuthorization {chainId : Nat} :
       rw [happ] at h1
       exact h1.trans (readsLe_foldlM_applyAuthorization rest next)
 
-/-- An authorization that sets the code of its authority keeps the origin of the code hashes. -/
-private theorem keepsCodeOrigin_delegate {state state' : TransactionState}
-    {authority : Address} {auth : Authorization} {refund : Nat}
-    (h : delegate fork state authority auth = .ok (state', refund)) :
-    KeepsCodeOrigin state state' := by
-  obtain ⟨coded, hcode, h⟩ := bind_ok_iff.mp h
-  obtain ⟨bumped, hnonce, h⟩ := bind_ok_iff.mp h
-  cases h
-  exact (KeepsCodeOrigin.setCode hcode).trans (KeepsCodeOrigin.incrementNonce hnonce)
-
-/-- One authorization keeps the origin of the code hashes. -/
-private theorem keepsCodeOrigin_applyAuthorization {chainId : Nat}
-    {done done' : Delegations Meter} {auth : Authorization}
-    (h : applyAuthorization fork chainId done auth = .ok done') :
-    KeepsCodeOrigin done.state done'.state := by
-  have hrecord (authority : Address) :
-      KeepsCodeOrigin done.state (done.state.recordAccountRead authority) :=
-    ⟨rfl, fun _ h => h, fun _ => .inr (.inr rfl)⟩
-  rcases applyAuthorization_cases h with rfl | ⟨authority, -, -, ⟨-, rfl⟩ |
-    ⟨-, paid, state, refund, hpay, hdelegate, rfl⟩⟩
-  · exact .refl _
-  · exact hrecord authority
-  · obtain ⟨hstate, -, -⟩ := state_payAuthorization hpay
-    rw [hstate] at hdelegate
-    exact (hrecord authority).trans (keepsCodeOrigin_delegate hdelegate)
-
 /-- The authorizations with their reads in the sets give the same result on an agreeing state. -/
 private theorem foldlM_applyAuthorization_agrees {block : BlockState}
     (covers : CoversBlock block account allStorage code) {chainId : Nat} :
@@ -407,7 +352,7 @@ private theorem foldlM_applyAuthorization_agrees {block : BlockState}
         exact hstep.elim
     | ok next =>
       rw [happ] at hstep hreads
-      have hnext := readsIn_of_readsLe (readsLe_foldlM_applyAuthorization rest next) hreads
+      have hnext := ReadsIn.of_readsLe (readsLe_foldlM_applyAuthorization rest next) hreads
       have hstep := hstep hnext
       cases happ2 : applyAuthorization fork chainId { start with state := other } auth with
       | error _ =>
@@ -526,7 +471,7 @@ private theorem callRest_framesAgree {block : BlockState}
       (callRest message target substate accessed refund other meter) := by
   have hrecord := hagree.recordAccountRead target
   have horigin' : CodeOrigin block (state.recordAccountRead target) := horigin
-  have ht : account target := (readsIn_of_readsLe (readsLe_callRest state meter) hreads).account
+  have ht : account target := (ReadsIn.of_readsLe (readsLe_callRest state meter) hreads).account
     _ (mem_recordAccountRead _ _)
   unfold callRest at hreads ⊢
   simp only [bind, Except.bind, Except.mapError, pure, Except.pure] at hreads ⊢
@@ -601,7 +546,7 @@ private theorem callFrame_framesAgree {block : BlockState}
     FramesAgree account allStorage slot code (callFrame message target substate done)
       (callFrame message target substate { done with state := other }) := by
   have ht : account target :=
-    (readsIn_of_readsLe (readsLe_callFrame done) hreads).account _ (mem_recordAccountRead _ _)
+    (ReadsIn.of_readsLe (readsLe_callFrame done) hreads).account _ (mem_recordAccountRead _ _)
   have hrecord := hagree.recordAccountRead target
   have horigin' : CodeOrigin block (done.state.recordAccountRead target) := horigin
   unfold callFrame at hreads ⊢
@@ -693,7 +638,7 @@ private theorem prepareFirstFrame_framesAgree {block : BlockState}
     | ok done =>
       rw [hf] at hreads hfold
       have hk : KeepsCodeOrigin state done.state := keepsCodeOrigin_applyAuthorizations hf
-      have hfold := hfold (readsIn_of_readsLe
+      have hfold := hfold (ReadsIn.of_readsLe
         ((readsLe_recordAccountRead _ target).trans (readsLe_callFrame done)) hreads)
       cases hf2 : List.foldlM (applyAuthorization fork chainId)
         (⟨other, substate.accessedAddresses, 0, GasMeter.start message.gas message.reservoir, paid,
@@ -869,7 +814,7 @@ theorem processMessageCall_agrees [LawfulGasMeter Meter] {block : BlockState}
       cases h
       rw [state_ofFrame] at hreads
       obtain ⟨first', h2, hsame, hfirst⟩ := prepareFirstFrame_agrees covers hagree hparent horigin
-        hcandidates hprep (readsIn_of_readsLe (readsLe_processCreateMessage hrun) hreads)
+        hcandidates hprep (ReadsIn.of_readsLe (readsLe_processCreateMessage hrun) hreads)
       obtain ⟨⟨evm', used'⟩, hrun', hrest, hstate⟩ := processCreateMessage_agrees covers hfirst
         horigin1 hcandidates1 hcurrent hrun hreads
       dsimp only at hrest hstate hreads
@@ -889,7 +834,7 @@ theorem processMessageCall_agrees [LawfulGasMeter Meter] {block : BlockState}
       rw [state_ofFrame] at hreads
       have hle := readsLe_processMessage hrun
       obtain ⟨first', h2, hsame, hfirst⟩ := prepareFirstFrame_agrees covers hagree hparent horigin
-        hcandidates hprep (readsIn_of_readsLe hle hreads)
+        hcandidates hprep (ReadsIn.of_readsLe hle hreads)
       obtain ⟨⟨evm', used'⟩, hrun', hrest, hstate⟩ := processMessage_agrees covers hfirst
         horigin1 hcandidates1 hcurrent hrun hreads
       dsimp only at hrest hstate hreads hle

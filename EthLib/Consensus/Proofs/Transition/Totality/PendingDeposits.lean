@@ -40,7 +40,7 @@ open Base Uint64 Serialization.Ssz
 variable {preset : Preset} {fork : Base.Fork}
 
 /-- The check of a deposit signature always succeeds, whatever its verdict. -/
-private theorem isValidDepositSignature_exists_ok (config : Config) (checks : SignatureChecks)
+theorem isValidDepositSignature_exists_ok (config : Config) (checks : SignatureChecks)
     (pubkey : Cryptography.Bls.BLSPubkey) (credentials : Bytes32) (amount : Gwei)
     (signature : Cryptography.Bls.BLSSignature) :
     ∃ valid, isValidDepositSignature config checks pubkey credentials amount signature =

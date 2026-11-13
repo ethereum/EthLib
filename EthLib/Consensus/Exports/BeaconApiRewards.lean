@@ -44,4 +44,26 @@ Then come the epoch and the identifiers of the validators. -/
 def apiAttestationRewardsExport (args : PyValue) : Result PyValue :=
   pyExport apiAttestationRewardsOf args
 
+/-- The JSON response of the sync committee rewards endpoint. -/
+def apiSyncCommitteeRewardsOf (args : String × String × ByteArray × ByteArray × List String) :
+    Result PyValue := do
+  let (name, fork, state, aggregate, ids) := args
+  let (preset, fork) ← transitionPresetAndFork name.toUTF8 fork.toUTF8
+  let state ← decodeInput (BeaconState preset fork) state
+  let aggregate ← decodeInput (SyncAggregate preset) aggregate
+  let ids ← apiError (BeaconApi.readValidatorIds false ids)
+  let envelope ← apiError (BeaconApi.syncCommitteeRewardsResponse state aggregate ids)
+  return PyValue.ofJson envelope.toJson
+
+/-- The JSON response of the sync committee rewards endpoint, as a `dict`.
+
+The arguments are the name, the fork, and the SSZ bytes of the state and of the sync aggregate.
+
+The state is the one that the sync aggregate step of the block reads.
+
+Then come the identifiers of the validators. -/
+@[export eth_consensus_api_sync_committee_rewards]
+def apiSyncCommitteeRewardsExport (args : PyValue) : Result PyValue :=
+  pyExport apiSyncCommitteeRewardsOf args
+
 end EthLib.Consensus.Exports

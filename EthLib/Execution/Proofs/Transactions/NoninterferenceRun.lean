@@ -46,13 +46,6 @@ variable {fork : Fork}
 
 section Reads
 
-/-- A state with fewer reads than one whose reads are in the sets has its reads in the sets. -/
-private theorem readsIn_of_readsLe {account : Address → Prop} {slot : Address → Bytes32 → Prop}
-    {tx tx' : TransactionState} (h : tx.ReadsLe tx') (hr : ReadsIn account slot tx') :
-    ReadsIn account slot tx :=
-  ⟨fun a ha => hr.account a (h.accountReads a ha),
-    fun a k hk => hr.slot a k (h.storageReads a k hk)⟩
-
 /-- A wipe of the storage of an account keeps every read. -/
 private theorem readsLe_destroyStorage (tx : TransactionState) (address : Address) :
     tx.ReadsLe (tx.destroyStorage address) :=
@@ -62,19 +55,6 @@ private theorem readsLe_destroyStorage (tx : TransactionState) (address : Addres
 private theorem readsLe_destroyAccount (tx : TransactionState) (address : Address) :
     tx.ReadsLe (tx.destroyAccount address) :=
   ⟨fun _ h => h, fun _ _ h => TransactionState.mem_storageReads_destroyStorage_of_mem h⟩
-
-/-- A change of one account keeps every read. -/
-private theorem readsLe_modifyState {tx tx' : TransactionState} {address : Address}
-    {f : Account → Except StateError Account} (h : tx.modifyState fork address f = .ok tx') :
-    tx.ReadsLe tx' := by
-  obtain ⟨_, _, hacc, hst⟩ := TransactionState.reads_modifyState h
-  refine ⟨fun x hx => ?_, fun x k hk => ?_⟩
-  · rw [hacc]
-    exact Std.ExtTreeSet.mem_insert.mpr (.inr hx)
-  · rw [hst]
-    split
-    · exact TransactionState.mem_storageReads_destroyStorage_of_mem hk
-    · exact hk
 
 /-- A credit of ether keeps every read. -/
 private theorem readsLe_creditEther {tx tx' : TransactionState} {address : Address}
@@ -434,9 +414,9 @@ theorem runTransaction_agrees {Meter : Type} [GasMeter Meter] [LawfulGasMeter Me
   have hsettle := mapError_ok_iff.mp hsettle
   have hfinal := mapError_ok_iff.mp hfinal
   -- The reads of the settled state and of the message are in the sets.
-  have hreadsSettled := readsIn_of_readsLe (readsLe_deleteAccounts hfinal) hreads
+  have hreadsSettled := ReadsIn.of_readsLe (readsLe_deleteAccounts hfinal) hreads
   obtain ⟨hleSettle, hsender, hcoinbase⟩ := reads_settleGas hfork hsettle
-  have hreadsOut := readsIn_of_readsLe hleSettle hreadsSettled
+  have hreadsOut := ReadsIn.of_readsLe hleSettle hreadsSettled
   have hs := hreadsSettled.account _ hsender
   have hc := hreadsSettled.account _ hcoinbase
   -- The target and the purchase of gas.
@@ -530,6 +510,32 @@ theorem processTransaction_agrees (hfork : .paris ≤ fork) {env : BlockEnvironm
   · rename_i hglam
     rw [ite_eq_right_of_eq_false _ _ (eq_false hglam)]
     exact runTransaction_agrees hfork covers hagree hcodes h hreads
+
+/-- From Paris, a transaction that succeeds has read its sender. -/
+theorem sender_mem_processTransaction (hfork : .paris ≤ fork) {env : BlockEnvironment fork}
+    {block : BlockState} {included : Included} {tx : Transaction} {output : TransactionOutput}
+    (h : processTransaction env block included tx = .ok output) :
+    included.sender ∈ output.state.accountReads := by
+  have run : ∀ {Meter : Type} [GasMeter Meter] [LawfulGasMeter Meter] {output : TransactionOutput},
+      runTransaction Meter env block included tx = .ok output →
+        included.sender ∈ output.state.accountReads := by
+    intro Meter _ _ output h
+    unfold runTransaction at h
+    obtain ⟨target, htarget, h⟩ := bind_ok_iff.mp h
+    obtain ⟨bought, hbought, h⟩ := bind_ok_iff.mp h
+    obtain ⟨message, hmessage, h⟩ := bind_ok_iff.mp h
+    obtain ⟨out, hout, h⟩ := bind_ok_iff.mp h
+    obtain ⟨⟨settled, used⟩, hsettle, h⟩ := bind_ok_iff.mp h
+    obtain ⟨final, hfinal, h⟩ := bind_ok_iff.mp h
+    cases h
+    exact (readsLe_deleteAccounts (mapError_ok_iff.mp hfinal)).accountReads _
+      (reads_settleGas hfork (mapError_ok_iff.mp hsettle)).2.1
+  unfold processTransaction at h
+  split at h
+  · cases h
+  split at h
+  · exact run h
+  · exact run h
 
 /-- A transaction that succeeds gives the same output on a block that agrees on what it recorded.
 
