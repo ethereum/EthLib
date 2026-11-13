@@ -2876,13 +2876,18 @@ The parent of that block need not be known, so a hash that names the payload und
 The walk assumes, as the execution layer promises, that the hash names a payload on the chain.
 When the hash names the payload of the block itself, nothing is removed, as `onInvalidPayload_of_gloas_self` shows.
 Otherwise the first invalid block is the earliest block of that walk whose payload is invalid; without a hash, or when the walk leaves the store first, it is the block itself.
-No theorem yet gives the result of the walk over a whole chain; the theorems below give each step.
+The theorems below give each step of the walk, and its result over a whole chain of known parents for a block in the store.
+For a block that the store does not hold, the step theorems reduce the walk to its parent, which the store holds when it is known.
 `removeFullDescendants_eq` shows that the removal drops exactly the known blocks that descend from the first invalid block with its payload, and never that block itself.
 `removeFullDescendants_self` shows that the first invalid block stays and loses its payload.
 `removeFullDescendants_of_empty` shows that every block built on the first invalid block without its payload stays.
 `removeFullDescendants_getSupportedNode` shows that no vote left supports the first invalid block with its payload.
 `onInvalidPayload_of_gloas_none` shows that without a hash the removal starts at the block itself.
 `firstInvalidPayload_of_named`, `firstInvalidPayload_of_orphan`, `firstInvalidPayload_of_full`, `firstInvalidPayload_of_empty` and `firstInvalidPayload_of_not_lower` give each step of the walk.
+For a block in the store, when every known block sits at a later slot than its known parent, `firstInvalidPayload_of_absent` shows that the walk finds nothing when no block of the chain builds on the hash.
+Otherwise take the nearest block of the chain that builds on the hash.
+`firstInvalidPayload_of_chain_full` shows that the walk returns the earliest block, from that block on, whose payload the chain builds on.
+`firstInvalidPayload_of_chain_empty` shows that, when the chain builds on no such payload, the walk returns its starting candidate, the block itself.
 `onInvalidPayload_of_gloas_self`, `onInvalidPayload_of_gloas_unnamed`, `onInvalidPayload_of_gloas_parent` and `onInvalidPayload_of_gloas_full_parent` give the removal for a latest valid hash.
 `onInvalidPayload_eq` shows that, at every fork, an invalid payload leaves the store as it was or applies the removal of its fork.
 `Linked.onInvalidPayload` shows that the removal keeps the store linked at every fork.
