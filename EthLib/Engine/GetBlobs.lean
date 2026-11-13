@@ -94,6 +94,8 @@ open EthLib.Base
 open EthLib.Cryptography.Kzg
 open EthLib.Cryptography.Kzg.Constants
 open EthLib.Engine.Json
+open EthLib.Serialization.JsonRpc
+open EthLib.Execution.Rpc (withdrawal)
 
 /-- The fewest versioned hashes that every pool must take in one request. -/
 def MIN_BLOBS_REQUEST_LIMIT : Nat := 128

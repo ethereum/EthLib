@@ -49,7 +49,8 @@ open Lean (Json)
 open EthLib.Exports (Result PyValue pyExport)
 open EthLib.Base
 open EthLib.Execution.Blocks (Withdrawal)
-open EthLib.Engine.Json (dataJson listJson optionJson withdrawalJson)
+open EthLib.Serialization.JsonRpc (dataJson listJson optionJson)
+open EthLib.Execution.Rpc (withdrawalJson)
 
 /-- A withdrawal as it crosses: the index, the validator index, the address and the amount. -/
 abbrev WithdrawalEntry := UInt64 × UInt64 × Address × UInt64
