@@ -98,7 +98,6 @@ def test_config_boundaries(
     chain = at_block(head)
     report = answer(chain)["result"]
     assert report["current"]["activationTime"] == current
-    assert report["current"]["chainId"] == hex(genesis_file()["config"]["chainId"])
     assert len(report["current"]["precompiles"]) == count
     for name, time in [("current", current), ("next", next_time), ("last", last_time)]:
         config = report[name]
@@ -106,6 +105,7 @@ def test_config_boundaries(
             assert config is None
             continue
         assert config["activationTime"] == time
+        assert config["chainId"] == hex(genesis_file()["config"]["chainId"])
         assert config["forkId"] == fork_hash(chain, time)
         assert list(config) == [
             "activationTime",
@@ -244,6 +244,25 @@ def test_merge_fork_id_block() -> None:
     assert current["forkId"] == f"0x{zlib.crc32(data):08x}"
 
 
+def test_fork_block_not_reached() -> None:
+    """A head below a fork block cannot report the fork IDs of its activations."""
+    chain = genesis_chain()
+    chain = replace(chain, config={**chain.config, "mergeForkBlock": 50})
+    assert error(chain) == {**INTERNAL_ERROR, "data": "eth_config: fork block not reached"}
+
+
+def test_matching_genesis_context() -> None:
+    """At block zero, a genesis context equal to the block is accepted and changes nothing."""
+    chain = genesis_chain()
+    context = {"genesisHash": "0x" + block_hash(chain.blocks[0]).hex(), "genesisTime": 100}
+    given = replace(chain, config={**chain.config, **context})
+    assert answer(given)["result"] == answer(chain)["result"]
+    late = replace(chain, config={**chain.config, **context, "genesisTime": 101})
+    with raises(rpc.RpcError, "config: genesis context disagrees with block zero") as caught:
+        answer(late)
+    assert caught.value.code == 0
+
+
 def test_unsupported_future_fork() -> None:
     """A configured fork beyond the implemented report range gets no invented contract set."""
     chain = genesis_chain()
@@ -325,5 +344,6 @@ def test_config_unknown_activation_time(changes: Mapping[str, object]) -> None:
 def test_bad_genesis_context(fields: Mapping[str, object], message: str) -> None:
     """Malformed or contradictory fork-ID context is rejected at the export boundary."""
     chain = genesis_chain()
-    with raises(rpc.RpcError, message):
+    with raises(rpc.RpcError, message) as caught:
         answer(replace(chain, config={**chain.config, **fields}))
+    assert caught.value.code == 0

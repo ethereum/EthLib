@@ -159,12 +159,16 @@ theorem ChainView.configReport_no_genesis (v : ChainView) (absent : v.genesis = 
 
 /-- A successful report comes from the view's schedule, with the configurations it selects.
 
+The schedule has timestamps and blob schedules at forks, and the head has passed its fork blocks.
+
 The current one is at the last fork time the head has reached.
 
 The next and last ones are at the first and last fork times after the head, or both absent. -/
 theorem ChainView.configReport_eq_ok {v : ChainView} {r : ConfigReport}
     (made : v.configReport = .ok r) :
     ∃ s, v.schedule? = some s ∧
+      configHasTimestamps s.config = true ∧ configBlobsAtForks s = true ∧
+      s.blocks.all (· ≤ v.head.block.header.number) = true ∧
       configObject s v.head.block.header.number
         (configCurrentTime s v.head.block.header.timestamp.toNat) = .ok r.current ∧
       ((s.times.filter (v.head.block.header.timestamp.toNat < ·) = [] ∧
@@ -178,11 +182,14 @@ theorem ChainView.configReport_eq_ok {v : ChainView} {r : ConfigReport}
   unfold ChainView.configReport at made
   rcases hs : v.schedule? with _ | s
   · simp [hs, throw, throwThe, MonadExceptOf.throw] at made
-  · refine ⟨s, rfl, ?_⟩
-    rw [hs] at made
+  · rw [hs] at made
     by_cases ht : configHasTimestamps s.config = true
     · by_cases hb : configBlobsAtForks s = true
-      · simp only [ht, hb, ite_true] at made
+      · by_cases hp : s.blocks.all (· ≤ v.head.block.header.number) = true
+        case neg =>
+          simp [ht, hb, hp, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at made
+        refine ⟨s, rfl, ht, hb, hp, ?_⟩
+        simp only [ht, hb, hp, ite_true] at made
         cases hc : configObject s v.head.block.header.number
             (configCurrentTime s v.head.block.header.timestamp.toNat) with
         | error e => simp [hc, bind, Except.bind] at made
@@ -210,7 +217,8 @@ theorem ChainView.configReport_eq_ok {v : ChainView} {r : ConfigReport}
 /-- The next and last configurations are both present or both absent. -/
 theorem ChainView.configReport_next_eq_none_iff {v : ChainView} {r : ConfigReport}
     (made : v.configReport = .ok r) : r.next = none ↔ r.last = none := by
-  obtain ⟨s, -, -, h | ⟨_, _, c, c', -, -, -, hn, hl⟩⟩ := ChainView.configReport_eq_ok made
+  obtain ⟨s, -, -, -, -, -, h | ⟨_, _, c, c', -, -, -, hn, hl⟩⟩ :=
+    ChainView.configReport_eq_ok made
   · simp [h.2.1, h.2.2]
   · simp [hn, hl]
 
@@ -228,7 +236,7 @@ theorem configCurrentTime_le (s : Schedule) (timestamp : Nat) :
 theorem ChainView.configReport_current_le {v : ChainView} {r : ConfigReport}
     (made : v.configReport = .ok r) :
     r.current.activationTime ≤ v.head.block.header.timestamp.toNat := by
-  obtain ⟨s, -, hc, -⟩ := ChainView.configReport_eq_ok made
+  obtain ⟨s, -, -, -, -, hc, -⟩ := ChainView.configReport_eq_ok made
   rw [(configObject_eq_ok hc).2.1]
   exact configCurrentTime_le s _
 
@@ -236,7 +244,7 @@ theorem ChainView.configReport_current_le {v : ChainView} {r : ConfigReport}
 theorem ChainView.configReport_next_after {v : ChainView} {r : ConfigReport} {c : ConfigObject}
     (made : v.configReport = .ok r) (next : r.next = some c) :
     v.head.block.header.timestamp.toNat < c.activationTime := by
-  obtain ⟨s, -, -, h | ⟨first, rest, c₁, c₂, hf, hn, -, hnext, -⟩⟩ :=
+  obtain ⟨s, -, -, -, -, -, h | ⟨first, rest, c₁, c₂, hf, hn, -, hnext, -⟩⟩ :=
     ChainView.configReport_eq_ok made
   · rw [h.2.1] at next
     cases next
@@ -252,7 +260,7 @@ theorem ChainView.configReport_next_after {v : ChainView} {r : ConfigReport} {c 
 theorem ChainView.configReport_last_after {v : ChainView} {r : ConfigReport} {c : ConfigObject}
     (made : v.configReport = .ok r) (last : r.last = some c) :
     v.head.block.header.timestamp.toNat < c.activationTime := by
-  obtain ⟨s, -, -, h | ⟨first, rest, c₁, c₂, hf, -, hl, -, hlast⟩⟩ :=
+  obtain ⟨s, -, -, -, -, -, h | ⟨first, rest, c₁, c₂, hf, -, hl, -, hlast⟩⟩ :=
     ChainView.configReport_eq_ok made
   · rw [h.2.2] at last
     cases last

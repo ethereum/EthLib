@@ -3662,6 +3662,8 @@ The method declines reports before Cancun, and fails when the head or a schedule
 It rejects a chain ID of zero.
 It requires every fork from Cancun on to activate by timestamp or at genesis, where EIP-7910 would leave out a fork with an unknown time.
 It requires each chain blob schedule to start at genesis or at a fork time, as EIP-7892 ties each schedule to a fork.
+It requires the head to have passed every fork block, so that each reported fork ID is the one of its activation.
+EIP-7910 makes `next` and `last` null when the node does not support a future fork, but this method fails instead, so that a report never hides a scheduled fork.
 It requires genesis context, which the export infers from block zero or reads as an input for a pruned chain.
 For a pruned chain that context is trusted, and no theorem ties it to the retained blocks.
 

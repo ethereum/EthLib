@@ -143,7 +143,7 @@ def serve(
     For eth_config, config may give mergeForkBlock, the FORK_NEXT_VALUE of EIP-3675.
     When the first block is not block zero, eth_config needs genesisHash and genesisTime in config.
     When it is block zero, serve reads both from it, and any given values must match.
-    A malformed value of these three keys raises RpcError with code 0.
+    A malformed, partial or mismatched value of these keys raises RpcError with code 0.
     """
     view = (config, state, list(blocks), forkchoice, network_id, check_seal)
     return _native.rpc_serve(view, requests)

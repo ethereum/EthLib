@@ -154,7 +154,9 @@ No active fork, a zero chain ID or a fork outside Dencun to Glamsterdam gives an
 
 So does a passed fork whose block or time is not below 2^64, which a fork ID cannot encode.
 
-The block number stays fixed for future timestamp forks, which do not depend on a future block. -/
+The block number stays fixed for future timestamp forks.
+
+The fork ID is then the one of that activation when the head has passed every fork block. -/
 def configObject (s : Schedule) (number activationTime : Nat) : Except RpcError ConfigObject := do
   let timestamp := max s.genesisTime activationTime
   let some fork := s.config.activeFork number timestamp
@@ -219,6 +221,8 @@ def schedule? (v : ChainView) : Option Schedule :=
 
 The genesis context is required even when the node has pruned its genesis block.
 
+The head must have passed every fork block, the Merge fork-ID block included.
+
 The current activation is the last fork time reached by the head, or zero for genesis.
 
 The next and last configurations are those of the first and last fork times after the head. -/
@@ -229,6 +233,8 @@ def configReport (v : ChainView) : Except RpcError ConfigReport := do
     throw (internalError.toRpcError (some (.str "eth_config: activation time is unknown")))
   unless configBlobsAtForks s do
     throw (internalError.toRpcError (some (.str "eth_config: blob schedule without a fork")))
+  unless s.blocks.all (· ≤ v.head.block.header.number) do
+    throw (internalError.toRpcError (some (.str "eth_config: fork block not reached")))
   let number := v.head.block.header.number
   let timestamp := v.head.block.header.timestamp.toNat
   let current ← configObject s number (configCurrentTime s timestamp)
