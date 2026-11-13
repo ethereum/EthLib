@@ -339,12 +339,12 @@ theorem Reachable.known_of_blockState
     rw [blocks]
     exact ih found
   | attestation _ attested ih =>
-    obtain ⟨-, blocks, states⟩ := onAttestation_frame attested
+    obtain ⟨-, blocks, states, -⟩ := onAttestation_frame attested
     rw [states] at found
     rw [blocks]
     exact ih found
   | attesterSlashing _ slashed ih =>
-    obtain ⟨-, blocks, states⟩ := onAttesterSlashing_frame slashed
+    obtain ⟨-, blocks, states, -⟩ := onAttesterSlashing_frame slashed
     rw [states] at found
     rw [blocks]
     exact ih found
@@ -398,10 +398,10 @@ theorem Reachable.linked (reachable : Reachable config anchorState anchorBlock s
     obtain ⟨-, -, blocks, states⟩ := onTick_frame ticked
     exact holds.imp (·.of_maps blocks states) (blocks ▸ ·)
   | attestation _ attested holds =>
-    obtain ⟨-, blocks, states⟩ := onAttestation_frame attested
+    obtain ⟨-, blocks, states, -⟩ := onAttestation_frame attested
     exact holds.imp (·.of_maps blocks states) (blocks ▸ ·)
   | attesterSlashing _ slashed holds =>
-    obtain ⟨-, blocks, states⟩ := onAttesterSlashing_frame slashed
+    obtain ⟨-, blocks, states, -⟩ := onAttesterSlashing_frame slashed
     exact holds.imp (·.of_maps blocks states) (blocks ▸ ·)
   | payloadAttestation _ voted holds =>
     obtain ⟨-, blocks, states⟩ := (onPayloadAttestationMessage_onlyPtcVotes voted).frame
@@ -429,6 +429,18 @@ theorem Reachable.linked (reachable : Reachable config anchorState anchorBlock s
         exact .inl (linked.insert new hits parentState earlier atSlot blocks states)
     · exact .inr (contains _ known)
 
+/-- A reachable store is linked under the parent root of the anchor, when it knows no such block.
+
+That needs the anchor block at or before the slot of the anchor state. -/
+theorem Reachable.linked_of_unknown (reachable : Reachable config anchorState anchorBlock store)
+    (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
+    (unknown : store.blocks[anchorBlock.parentRoot]? = none) :
+    store.Linked anchorBlock.parentRoot := by
+  rcases reachable.linked anchorSlot with linked | known
+  · exact linked
+  · rw [Std.TreeMap.contains_eq_isSome_getElem?, unknown] at known
+    cases known
+
 /-- In a reachable store, each known parent sits at an earlier slot than its child.
 
 That needs the anchor block at or before the slot of the anchor state.
@@ -436,11 +448,8 @@ That needs the anchor block at or before the slot of the anchor state.
 It also needs the parent root of the anchor to name no known block. -/
 theorem Reachable.parentsBelow (reachable : Reachable config anchorState anchorBlock store)
     (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
-    (unknown : store.blocks[anchorBlock.parentRoot]? = none) : store.ParentsBelow := by
-  rcases reachable.linked anchorSlot with linked | known
-  · exact linked.parentsBelow
-  · rw [Std.TreeMap.contains_eq_isSome_getElem?, unknown] at known
-    cases known
+    (unknown : store.blocks[anchorBlock.parentRoot]? = none) : store.ParentsBelow :=
+  (reachable.linked_of_unknown anchorSlot unknown).parentsBelow
 
 /-- All the states that the store keeps have one genesis time. -/
 def OneGenesisTime (store : Store preset fork) : Prop :=
@@ -491,9 +500,9 @@ theorem Reachable.oneGenesisTime (reachable : Reachable config anchorState ancho
     intro _ _ _ _ found otherFound
     rw [only found, only otherFound]
   | tick _ ticked holds => exact holds.of_states (onTick_frame ticked).2.2.2
-  | attestation _ attested holds => exact holds.of_states (onAttestation_frame attested).2.2
+  | attestation _ attested holds => exact holds.of_states (onAttestation_frame attested).2.2.1
   | attesterSlashing _ slashed holds =>
-    exact holds.of_states (onAttesterSlashing_frame slashed).2.2
+    exact holds.of_states (onAttesterSlashing_frame slashed).2.2.1
   | payloadAttestation _ voted holds =>
     exact holds.of_states (onPayloadAttestationMessage_onlyPtcVotes voted).frame.2.2
   | envelope _ accepted holds =>
@@ -551,10 +560,10 @@ theorem Reachable.statesKeepBids (reachable : Reachable config anchorState ancho
     obtain ⟨-, -, blocks, states⟩ := onTick_frame ticked
     exact holds.of_maps blocks states
   | attestation _ attested holds =>
-    obtain ⟨-, blocks, states⟩ := onAttestation_frame attested
+    obtain ⟨-, blocks, states, -⟩ := onAttestation_frame attested
     exact holds.of_maps blocks states
   | attesterSlashing _ slashed holds =>
-    obtain ⟨-, blocks, states⟩ := onAttesterSlashing_frame slashed
+    obtain ⟨-, blocks, states, -⟩ := onAttesterSlashing_frame slashed
     exact holds.of_maps blocks states
   | payloadAttestation _ voted holds =>
     obtain ⟨-, blocks, states⟩ := (onPayloadAttestationMessage_onlyPtcVotes voted).frame
@@ -636,10 +645,10 @@ private theorem Reachable.orphansLow (reachable : Reachable config anchorState a
     obtain ⟨-, -, blocks, states⟩ := onTick_frame ticked
     exact holds.of_maps blocks states
   | attestation _ attested holds =>
-    obtain ⟨-, blocks, states⟩ := onAttestation_frame attested
+    obtain ⟨-, blocks, states, -⟩ := onAttestation_frame attested
     exact holds.of_maps blocks states
   | attesterSlashing _ slashed holds =>
-    obtain ⟨-, blocks, states⟩ := onAttesterSlashing_frame slashed
+    obtain ⟨-, blocks, states, -⟩ := onAttesterSlashing_frame slashed
     exact holds.of_maps blocks states
   | payloadAttestation _ voted holds =>
     obtain ⟨-, blocks, states⟩ := (onPayloadAttestationMessage_onlyPtcVotes voted).frame
