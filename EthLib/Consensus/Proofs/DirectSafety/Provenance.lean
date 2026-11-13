@@ -38,12 +38,9 @@ theorem run_justified_separated {g a : ForkedBeaconState preset}
   induction run with
   | nil =>
     obtain ⟨hash, time, deposits, ok⟩ := genesis
-    refine ⟨(initializeBeaconStateFromEth1_invariant ok).2,
-      JustifiedEarly.of_initializeBeaconStateFromEth1 ok, ?_⟩
-    intro later
-    have slot := (initializeBeaconStateFromEth1_checkpoints ok).1
-    simp [getCurrentEpoch, slot, GENESIS_SLOT, GENESIS_EPOCH, computeEpochAtSlot,
-      UInt64.lt_iff_toNat_lt] at later
+    exact ⟨(initializeBeaconStateFromEth1_invariant ok).2,
+      JustifiedEarly.of_initializeBeaconStateFromEth1 ok,
+      JustifiedSeparated.of_initializeBeaconStateFromEth1 ok⟩
   | snoc pre step ih =>
     obtain ⟨holds, early, separated⟩ := ih
     exact invariant_justified_of_chainStep holds early separated step.chainStep
