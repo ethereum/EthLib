@@ -20,6 +20,10 @@ Two peers use Snappy exactly when both announce version 5 or more.
 
 The message IDs of the shared capabilities do not overlap, and none is below `0x10`.
 
+The shared capabilities, in alphabetic order, take adjacent blocks of message IDs from `0x10` on.
+
+So the IDs they use are exactly those from `0x10` on, below `0x10` plus the number they need.
+
 Of the versions of one name that both peers list, only the highest is negotiated.
 
 Both peers negotiate the same capabilities and message IDs, whichever of them asks.
@@ -232,6 +236,62 @@ theorem base_le_of_mem_negotiate {length : Capability → Nat} {ours theirs : Li
 theorem pairwise_negotiate (length : Capability → Nat) (ours theirs : List Capability) :
     (negotiate length ours theirs).Pairwise fun p q => p.2 + length p.1 ≤ q.2 :=
   pairwise_messageOffsets length _ _
+
+/--
+Each capability's first message ID is the start plus the number of IDs the ones before it need.
+
+So the blocks follow each other with no gap, in the order of the list.
+-/
+theorem messageOffsets_eq (length : Capability → Nat) :
+    ∀ (cs : List Capability) (start : Nat),
+      messageOffsets length cs start =
+        cs.mapIdx fun i c => (c, start + ((cs.take i).map length).sum)
+  | [], _ => rfl
+  | c :: cs, start => by
+    simp only [messageOffsets, List.mapIdx_cons, List.take_zero, List.map_nil, List.sum_nil,
+      Nat.add_zero, List.take_succ_cons, List.map_cons, List.sum_cons, messageOffsets_eq length cs,
+      Nat.add_assoc]
+
+/-- The blocks take exactly the message IDs from the start on, below the start plus their total. -/
+theorem exists_mem_messageOffsets_iff (length : Capability → Nat) (n : Nat) :
+    ∀ (cs : List Capability) (start : Nat),
+      (∃ p ∈ messageOffsets length cs start, p.2 ≤ n ∧ n < p.2 + length p.1) ↔
+        start ≤ n ∧ n < start + (cs.map length).sum
+  | [], _ => by simp [messageOffsets]
+  | c :: cs, start => by
+    simp only [messageOffsets, List.mem_cons, exists_eq_or_imp,
+      exists_mem_messageOffsets_iff length n cs, List.map_cons, List.sum_cons]
+    omega
+
+/--
+The shared capabilities take the message IDs from `0x10` on, in the order of their list.
+
+Each one's first ID is `0x10` plus the number of IDs of the shared capabilities before it.
+-/
+theorem negotiate_eq (length : Capability → Nat) (ours theirs : List Capability) :
+    negotiate length ours theirs =
+      (sharedCapabilities ours theirs).mapIdx fun i c =>
+        (c, 0x10 + (((sharedCapabilities ours theirs).take i).map length).sum) :=
+  messageOffsets_eq length _ _
+
+/-- The negotiated capabilities are the shared ones, in the order of their list. -/
+theorem map_fst_negotiate (length : Capability → Nat) (ours theirs : List Capability) :
+    (negotiate length ours theirs).map Prod.fst = sharedCapabilities ours theirs := by
+  rw [negotiate_eq]
+  exact List.ext_getElem (by simp) fun _ _ _ => by simp
+
+/--
+The shared capabilities use exactly the message IDs from `0x10` on, below `0x10` plus their total.
+
+Their total is the number of IDs that they need in all.
+
+So no ID in that range is left unused.
+-/
+theorem exists_mem_negotiate_iff (length : Capability → Nat) (ours theirs : List Capability)
+    (n : Nat) :
+    (∃ p ∈ negotiate length ours theirs, p.2 ≤ n ∧ n < p.2 + length p.1) ↔
+      0x10 ≤ n ∧ n < 0x10 + ((sharedCapabilities ours theirs).map length).sum :=
+  exists_mem_messageOffsets_iff length n _ _
 
 /--
 A capability is negotiated exactly when both peers list it and share no higher version of its name.
