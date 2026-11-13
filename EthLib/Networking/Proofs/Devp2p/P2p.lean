@@ -22,7 +22,7 @@ The message IDs of the shared capabilities do not overlap, and none is below `0x
 
 The shared capabilities, in alphabetic order, take adjacent blocks of message IDs from `0x10` on.
 
-So the IDs they use are exactly those from `0x10` up to `0x10` plus the number they need in all.
+So the IDs they use are exactly those from `0x10` on, below `0x10` plus the number they need.
 
 Of the versions of one name that both peers list, only the highest is negotiated.
 
@@ -238,7 +238,7 @@ theorem pairwise_negotiate (length : Capability → Nat) (ours theirs : List Cap
   pairwise_messageOffsets length _ _
 
 /--
-The first message ID of each capability is the start plus the IDs of the capabilities before it.
+Each capability's first message ID is the start plus the number of IDs the ones before it need.
 
 So the blocks follow each other with no gap, in the order of the list.
 -/
@@ -252,7 +252,7 @@ theorem messageOffsets_eq (length : Capability → Nat) :
       Nat.add_zero, List.take_succ_cons, List.map_cons, List.sum_cons, messageOffsets_eq length cs,
       Nat.add_assoc]
 
-/-- The blocks take exactly the message IDs from the start up to the start plus their total. -/
+/-- The blocks take exactly the message IDs from the start on, below the start plus their total. -/
 theorem exists_mem_messageOffsets_iff (length : Capability → Nat) (n : Nat) :
     ∀ (cs : List Capability) (start : Nat),
       (∃ p ∈ messageOffsets length cs start, p.2 ≤ n ∧ n < p.2 + length p.1) ↔
@@ -264,7 +264,7 @@ theorem exists_mem_messageOffsets_iff (length : Capability → Nat) (n : Nat) :
     omega
 
 /--
-The shared capabilities, in alphabetic order, take the message IDs from `0x10` on.
+The shared capabilities take the message IDs from `0x10` on, in the order of their list.
 
 Each one's first ID is `0x10` plus the number of IDs of the shared capabilities before it.
 -/
@@ -274,14 +274,16 @@ theorem negotiate_eq (length : Capability → Nat) (ours theirs : List Capabilit
         (c, 0x10 + (((sharedCapabilities ours theirs).take i).map length).sum) :=
   messageOffsets_eq length _ _
 
-/-- The capabilities that get message IDs are the shared ones, in alphabetic order. -/
+/-- The negotiated capabilities are the shared ones, in the order of their list. -/
 theorem map_fst_negotiate (length : Capability → Nat) (ours theirs : List Capability) :
     (negotiate length ours theirs).map Prod.fst = sharedCapabilities ours theirs := by
   rw [negotiate_eq]
   exact List.ext_getElem (by simp) fun _ _ _ => by simp
 
 /--
-The shared capabilities use exactly the message IDs from `0x10` up to `0x10` plus their total.
+The shared capabilities use exactly the message IDs from `0x10` on, below `0x10` plus their total.
+
+Their total is the number of IDs that they need in all.
 
 So no ID in that range is left unused.
 -/
