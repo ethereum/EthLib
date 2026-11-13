@@ -577,6 +577,14 @@ def consensus_process_registration(name: str, fork: str, config: dict[str, Any] 
     """None when a builder keeps a signed registration, or the name of the rule that refuses it."""
     ...
 
+def consensus_is_eligible_for_bid(name: str, fork: str, state: bytes, registry: list[bytes], slot: int, parent_hash: bytes, pubkey: bytes) -> bool:
+    """Whether a builder serves a request for a bid."""
+    ...
+
+def consensus_process_bid(name: str, fork: str, config: dict[str, Any] | None, state: bytes, signed: bytes, fee_recipient: bytes) -> str | None:
+    """None when a proposer accepts a signed bid, or the name of the rule that refuses it."""
+    ...
+
 def consensus_unblind_signed_blinded_block(name: str, fork: str, blinded: bytes, revealed: bytes) -> tuple[bytes, bytes] | None:
     """The root and the bytes of the signed block that a signed blinded block and a payload give."""
     ...

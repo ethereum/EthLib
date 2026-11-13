@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.BuilderApi
+public import EthLib.Consensus.BuilderApi.Bid
 public import EthLib.Consensus.BuilderApi.Registration
 public import EthLib.Consensus.Exports.Parameters
 public import EthLib.Serialization.Exports.Ssz
@@ -8,7 +9,9 @@ public import EthLib.Serialization.Exports.Ssz
 /-!
 # `Exports.BuilderApi`
 
-C-ABI exports for Builder API signature checks, registrations, unblinding and capped bid valuation.
+C-ABI exports for Builder API signature checks, registrations, bids, unblinding and bid valuation.
+
+The value of a bid is capped by the proposer's cap on the execution payment.
 
 From Bellatrix to Fulu, a signed registration or bid carries the key that signed it.
 
@@ -134,6 +137,69 @@ The time is that of the builder's clock, in seconds. -/
 @[export eth_consensus_process_registration]
 def processRegistrationExport (args : PyValue) : Result PyValue :=
   pyExport processRegistrationOf args
+
+/-- Whether a builder serves a request for a bid, on its state transitioned to the slot. -/
+def isEligibleForBidOf
+    (args : String × String × ByteArray × List ByteArray × UInt64 × Hash32 ×
+      Cryptography.Bls.BLSPubkey) : Result Bool := do
+  let (name, fork, state, kept, slot, parentHash, pubkey) := args
+  let preset ← presetOf name
+  let fork ← forkOf fork.toUTF8
+  if range : HasBuilderApi fork then
+    let decode {α : Type} [SszType α] (what : String) (bytes : ByteArray) : Result α :=
+      (SszType.deserialize α bytes).mapError fun e => (0, s!"{what} rejected: {reprStr e}")
+    let state ← decode (α := BeaconState preset fork) "state" state
+    let entries ← kept.mapM (decode (α := ValidatorRegistrationV1) "registry")
+    (liftAccessor (BuilderApi.isEligibleForBid state range ⟨entries⟩ slot parentHash
+      pubkey)).mapError fun e => (e.code, reprStr e)
+  else throw (0, s!"no Builder API messages at {fork.name}")
+
+/-- Whether a builder serves a request for a bid.
+
+The arguments are the name of the preset, the fork, the state and the registrations kept.
+
+Then come the slot, the parent hash and the key of the request.
+
+The state is the builder's state, transitioned to the slot.
+
+Bytes that do not decode have code 0, and a state with no proposer keeps the code of its error. -/
+@[export eth_consensus_is_eligible_for_bid]
+def isEligibleForBidExport (args : PyValue) : Result PyValue :=
+  pyExport isEligibleForBidOf args
+
+/-- The name of the rule that refuses a bid. -/
+def BidError.reason : BuilderApi.BidError → String
+  | .wrongParentHash => "wrong_parent_hash"
+  | .wrongFeeRecipient => "wrong_fee_recipient"
+  | .badSignature => "bad_signature"
+  | .root _ => "root"
+
+/-- None when a proposer accepts a signed bid, or the rule that refuses it. -/
+def processBidOf
+    (args : String × String × Option PyValue × ByteArray × ByteArray × ExecutionAddress) :
+    Result (Option String) := do
+  let (name, fork, replacements, state, data, feeRecipient) := args
+  let preset ← presetOf name
+  let fork ← forkOf fork.toUTF8
+  if range : HasBuilderApi fork then
+    let config ← configWithValue name replacements
+    let state ← runSsz "state rejected" (SszType.deserialize (BeaconState preset fork) state)
+    let signed ← runSsz "input rejected"
+      (SszType.deserialize (SignedBuilderBid preset fork) data)
+    match BuilderApi.processBid config .bls state range signed feeRecipient with
+    | .ok () => return none
+    | .error (.root fault) => runSsz "root rejected" (.error fault)
+    | .error e => return some (BidError.reason e)
+  else throw (0, s!"no Builder API messages at {fork.name}")
+
+/-- None when a proposer accepts a signed bid, or the name of the rule that refuses it.
+
+The arguments are the name of the preset and of the configuration, the fork and replacements.
+
+Then come the state of the proposal, the signed bid and the fee recipient that was registered. -/
+@[export eth_consensus_process_bid]
+def processBidExport (args : PyValue) : Result PyValue :=
+  pyExport processBidOf args
 
 /-- Whether a proposer key signed a Gloas request authentication. -/
 def verifyBuilderRequestAuthSignatureOf
