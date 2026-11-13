@@ -78,6 +78,19 @@ A total balance of the step is at most one increment or the budget, so it has at
 def Preset.budgetIncrements (preset : Preset) (budget : Nat) : Nat :=
   max preset.EFFECTIVE_BALANCE_INCREMENT.toNat budget / preset.EFFECTIVE_BALANCE_INCREMENT.toNat
 
+/-- From Altair, a ceiling on the balances after the rewards of one epoch.
+
+It is the budget plus a bound on the rewards of the three flags for one validator.
+
+Each flag earns at most the base reward bound, times its weight and the increments of the budget.
+
+The sum of these products over the three flags is then divided by the weight denominator, 64.
+
+The inactivity deltas carry no rewards, so they add nothing. -/
+def Preset.rewardsCeiling (preset : Preset) (budget : Nat) : Nat :=
+  budget + preset.baseRewardCeiling * (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum *
+    preset.budgetIncrements budget / WEIGHT_DENOMINATOR.toNat
+
 /-- From Altair, the bounds under which the rewards and penalties fit in 64 bits.
 
 The budget bounds the balances and the sum of the effective balances.
@@ -103,9 +116,7 @@ structure RewardsFit (preset : Preset) (config : Config) (budget scoreBound : Na
   activeIncrements : preset.budgetIncrements budget * WEIGHT_DENOMINATOR.toNat < 2 ^ 64
   flagNumerator : ∀ weight ∈ PARTICIPATION_FLAG_WEIGHTS,
     preset.baseRewardCeiling * weight.toNat * preset.budgetIncrements budget < 2 ^ 64
-  flagRewards : budget + preset.baseRewardCeiling *
-      (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum * preset.budgetIncrements budget /
-        WEIGHT_DENOMINATOR.toNat < 2 ^ 64
+  flagRewards : preset.rewardsCeiling budget < 2 ^ 64
   scorePenalty : preset.largestEffectiveBalance * scoreBound < 2 ^ 64
   penaltyQuotient : ∀ fork : Base.Fork, config.INACTIVITY_SCORE_BIAS.toNat *
     (parameters preset fork).INACTIVITY_PENALTY_QUOTIENT.toNat < 2 ^ 64
@@ -130,12 +141,30 @@ theorem rewardsFit_mainnet : RewardsFit Preset.mainnet Config.mainnet (2 ^ 57) (
     simp only [PARTICIPATION_FLAG_WEIGHTS, List.mem_cons, List.not_mem_nil, or_false] at member
     simp only [Preset.baseRewardCeiling, root]
     rcases member with rfl | rfl | rfl <;> decide
-  · simp only [Preset.baseRewardCeiling, root]
+  · simp only [Preset.rewardsCeiling, Preset.baseRewardCeiling, root]
     decide
   · decide
   · intro fork
     simp only [parameters]
     split_ifs <;> decide
+
+/-- On mainnet, the ceiling on the balances after the rewards is below 2^63.
+
+The budget is 2^57 Gwei. -/
+theorem rewardsCeiling_mainnet : Preset.mainnet.rewardsCeiling (2 ^ 57) < 2 ^ 63 := by
+  have root : (Preset.mainnet.EFFECTIVE_BALANCE_INCREMENT.toNat).sqrt = 31622 :=
+    (Nat.eq_sqrt.mpr ⟨by decide, by decide⟩).symm
+  simp only [Preset.rewardsCeiling, Preset.baseRewardCeiling, root]
+  decide
+
+/-- On minimal, the ceiling on the balances after the rewards is below 2^63.
+
+The budget is 2^57 Gwei. -/
+theorem rewardsCeiling_minimal : Preset.minimal.rewardsCeiling (2 ^ 57) < 2 ^ 63 := by
+  have root : (Preset.minimal.EFFECTIVE_BALANCE_INCREMENT.toNat).sqrt = 31622 :=
+    (Nat.eq_sqrt.mpr ⟨by decide, by decide⟩).symm
+  simp only [Preset.rewardsCeiling, Preset.baseRewardCeiling, root]
+  decide
 
 /-- The rewards of minimal fit under a budget of 2^57 Gwei and scores up to 2^23. -/
 theorem rewardsFit_minimal : RewardsFit Preset.minimal Config.minimal (2 ^ 57) (2 ^ 23) := by
@@ -148,7 +177,7 @@ theorem rewardsFit_minimal : RewardsFit Preset.minimal Config.minimal (2 ^ 57) (
     simp only [PARTICIPATION_FLAG_WEIGHTS, List.mem_cons, List.not_mem_nil, or_false] at member
     simp only [Preset.baseRewardCeiling, root]
     rcases member with rfl | rfl | rfl <;> decide
-  · simp only [Preset.baseRewardCeiling, root]
+  · simp only [Preset.rewardsCeiling, Preset.baseRewardCeiling, root]
     decide
   · decide
   · intro fork
@@ -351,37 +380,59 @@ theorem applyAllDeltas_exists_ok {rewards penalties : Array Gwei}
 
 /-- A list of deltas applies in turn when each balance plus all its rewards fits in 64 bits.
 
-The registry must have one balance for each validator, and fewer than 2^64 validators. -/
-private theorem foldlM_applyAllDeltas_exists_ok :
+The registry must have one balance for each validator, and fewer than 2^64 validators.
+
+When each balance plus all its rewards is at most a bound, so is each balance after the deltas. -/
+private theorem foldlM_applyAllDeltas_exists_ok {cap : Nat} :
     ∀ (deltas : List (Array Gwei × Array Gwei)) (state : BeaconState preset fork),
       BalancesMatch state → state.validators.data.size < 2 ^ 64 →
       (∀ i (inside : i < state.balances.data.size), state.balances.data[i].toNat +
         (deltas.map fun delta => (delta.1.getD i 0).toNat).sum < 2 ^ 64) →
-      ∃ after, deltas.foldlM applyAllDeltas state = .ok after
-  | [], state, _, _, _ => ⟨state, rfl⟩
-  | (rewards, penalties) :: rest, state, matched, small, fits => by
-    simp only [List.map_cons, List.sum_cons] at fits
+      (∀ i (inside : i < state.balances.data.size), state.balances.data[i].toNat +
+        (deltas.map fun delta => (delta.1.getD i 0).toNat).sum ≤ cap) →
+      ∃ after, deltas.foldlM applyAllDeltas state = .ok after ∧
+        ∀ balance ∈ after.balances.data, balance.toNat ≤ cap
+  | [], state, _, _, _, bounded =>
+    ⟨state, rfl, fun balance member => by
+      obtain ⟨i, inside, rfl⟩ := Array.getElem_of_mem member
+      simpa using bounded i inside⟩
+  | (rewards, penalties) :: rest, state, matched, small, fits, bounded => by
+    simp only [List.map_cons, List.sum_cons] at fits bounded
     obtain ⟨middle, applied⟩ := applyAllDeltas_exists_ok (rewards := rewards)
       (penalties := penalties) matched small fun i inside => by have := fits i inside; omega
     have sizes := sameSizes_applyAllDeltas applied
     have matchedMiddle := balancesMatch_of_sameSizes sizes matched
-    obtain ⟨out, folded⟩ := foldlM_applyAllDeltas_exists_ok rest middle matchedMiddle
-      (by rw [sizes.1]; exact small) fun i inside => by
-        have inRegistry : i < state.validators.data.size := by
-          unfold BalancesMatch at matchedMiddle
-          rw [← sizes.1, ← matchedMiddle]
-          exact inside
-        obtain ⟨balance, found, fit, raised⟩ := (applyAllDeltas_balances applied i).1 inRegistry
-        have old : state.balances.data[i]'(by unfold BalancesMatch at matched; omega) =
-            balance := Option.some.inj ((Array.getElem?_eq_getElem _).symm.trans found)
-        have new : middle.balances.data[i] =
-            saturatingSub (balance + rewards.getD i 0) (penalties.getD i 0) := by
-          simpa [Array.getElem?_eq_getElem inside] using raised
-        have := fits i (by unfold BalancesMatch at matched; omega)
-        rw [old] at this
-        rw [new, toNat_saturatingSub, toNat_add_of_lt fit]
+    have grown : ∀ i (old : i < state.balances.data.size) (new : i < middle.balances.data.size),
+        middle.balances.data[i].toNat ≤ state.balances.data[i].toNat +
+          (rewards.getD i 0).toNat := by
+      intro i old new
+      have inRegistry : i < state.validators.data.size := by
+        unfold BalancesMatch at matched
         omega
-    exact ⟨out, by rw [List.foldlM_cons, applied]; exact folded⟩
+      obtain ⟨balance, found, fit, raised⟩ := (applyAllDeltas_balances applied i).1 inRegistry
+      have oldEq : state.balances.data[i] = balance :=
+        Option.some.inj ((Array.getElem?_eq_getElem _).symm.trans found)
+      have newEq : middle.balances.data[i] =
+          saturatingSub (balance + rewards.getD i 0) (penalties.getD i 0) := by
+        simpa [Array.getElem?_eq_getElem new] using raised
+      rw [newEq, oldEq, toNat_saturatingSub, toNat_add_of_lt fit]
+      omega
+    have inside_of : ∀ i, i < middle.balances.data.size → i < state.balances.data.size := by
+      intro i inside
+      have := sizes.1
+      unfold BalancesMatch at matched matchedMiddle
+      omega
+    obtain ⟨out, folded, outBounded⟩ := foldlM_applyAllDeltas_exists_ok (cap := cap) rest middle
+      matchedMiddle (by rw [sizes.1]; exact small)
+      (fun i inside => by
+        have := fits i (inside_of i inside)
+        have := grown i (inside_of i inside) inside
+        omega)
+      (fun i inside => by
+        have := bounded i (inside_of i inside)
+        have := grown i (inside_of i inside) inside
+        omega)
+    exact ⟨out, by rw [List.foldlM_cons, applied]; exact folded, outBounded⟩
 
 /-- The whole increments of a budget are at least one, for a positive increment. -/
 theorem one_le_budgetIncrements (positive : preset.EFFECTIVE_BALANCE_INCREMENT ≠ 0)
@@ -623,7 +674,9 @@ The divisors of the preset and of the configuration must be positive.
 
 The hypotheses are read on the state that the update of the inactivity scores returns.
 
-A run must show that they hold there. -/
+A run must show that they hold there.
+
+Each balance after the step is then at most the ceiling on the balances after the rewards. -/
 theorem processRewardsAndPenalties_total {config : Config} {budget scoreBound : Nat}
     (altair : .altair ≤ fork) (positive : preset.DivisorsPositive)
     (configPositive : config.DivisorsPositive) (fit : RewardsFit preset config budget scoreBound)
@@ -635,9 +688,13 @@ theorem processRewardsAndPenalties_total {config : Config} {budget scoreBound : 
     (scored : ∀ score ∈ (state.inactivityScores altair).data, score.toNat ≤ scoreBound)
     (finalized : FinalizedSettled state) (scoresMatch : InactivityScoresMatch state)
     (sized : ParticipationMatches state) :
-    ∃ after, processRewardsAndPenalties config state = .ok after := by
+    ∃ after, processRewardsAndPenalties config state = .ok after ∧
+      ∀ balance ∈ after.balances.data, balance.toNat ≤ preset.rewardsCeiling budget := by
   by_cases genesis : getCurrentEpoch state = GENESIS_EPOCH
-  · exact ⟨state, processRewardsAndPenalties_genesis config genesis⟩
+  · refine ⟨state, processRewardsAndPenalties_genesis config genesis, fun balance member => ?_⟩
+    have := funded balance member
+    have : budget ≤ preset.rewardsCeiling budget := Nat.le_add_right _ _
+    omega
   have budgetLt : budget < 2 ^ 64 := fit.budget_lt
   obtain ⟨total, totalOk, low, highCases⟩ :=
     getTotalActiveBalance_exists_ok within (Nat.lt_of_le_of_lt summed budgetLt)
@@ -671,8 +728,9 @@ theorem processRewardsAndPenalties_total {config : Config} {budget scoreBound : 
       scored scoresMatch sized
   have small : state.validators.data.size < 2 ^ 64 :=
     Nat.lt_of_le_of_lt within preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt
-  obtain ⟨after, applied⟩ := foldlM_applyAllDeltas_exists_ok
-    (flagDeltas ++ [(inactivityRewards, inactivityPenalties)]) state matched small
+  have ceiled : ∀ i (inside : i < state.balances.data.size), state.balances.data[i].toNat +
+      ((flagDeltas ++ [(inactivityRewards, inactivityPenalties)]).map
+        fun delta => (delta.1.getD i 0).toNat).sum ≤ preset.rewardsCeiling budget :=
     fun i inside => by
       have inRegistry : i < state.validators.data.size := by
         unfold BalancesMatch at matched
@@ -698,9 +756,13 @@ theorem processRewardsAndPenalties_total {config : Config} {budget scoreBound : 
         List.sum_nil, inactive, UInt64.toNat_zero]
       have quotient := (Nat.le_div_iff_mul_le (by decide : 0 < WEIGHT_DENOMINATOR.toNat)).mpr
         rewards
-      have := fit.flagRewards
+      unfold Preset.rewardsCeiling
       omega
-  refine ⟨after, ?_⟩
+  obtain ⟨after, applied, afterBounded⟩ := foldlM_applyAllDeltas_exists_ok
+    (cap := preset.rewardsCeiling budget) (flagDeltas ++ [(inactivityRewards, inactivityPenalties)])
+    state matched small (fun i inside => Nat.lt_of_le_of_lt (ceiled i inside) fit.flagRewards)
+    ceiled
+  refine ⟨after, ?_, afterBounded⟩
   simp only [processRewardsAndPenalties, genesis, altair, ↓reduceIte, ↓reduceDIte, flagOk,
     inactivityOk, bind, Except.bind]
   exact applied
