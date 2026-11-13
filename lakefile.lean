@@ -131,3 +131,10 @@ lean_exe «check-accessors» where
   supportInterpreter := true
   -- The checker loads private definition bodies to find the accessors they call.
   allowNonModules := true
+
+/-- Sites the accessor check must count, and sites it must skip.
+
+Not a default target: `scripts/test_check_accessors.sh` builds and checks it. -/
+lean_lib «CheckAccessorsTest» where
+  srcDir := "scripts"
+  roots := #[`CheckAccessorsTest]

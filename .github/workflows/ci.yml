@@ -158,6 +158,11 @@ jobs:
         if: ${{ !cancelled() }}
         run: scripts/test_check_decls.sh
 
+      # The accessor check must report exactly the sites its fixtures plant.
+      - name: accessor check fixtures
+        if: ${{ !cancelled() }}
+        run: scripts/test_check_accessors.sh
+
       - name: module system regression
         if: ${{ !cancelled() }}
         run: bash scripts/test_module_system.sh

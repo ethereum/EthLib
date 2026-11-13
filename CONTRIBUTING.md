@@ -402,6 +402,8 @@ It lists each use of a `!` accessor, such as `xs[i]!`, `get!` or `set!`, or of `
 A pull request that removes a site lowers or removes its entry, or the check fails on the stale entry.
 A new site is fixed, never added to the list.
 
+When you change the check, also run `scripts/test_check_accessors.sh`.
+
 Then check that `SOUNDNESS.md` still holds:
 
 ```bash
