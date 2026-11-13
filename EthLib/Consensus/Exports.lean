@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.Exports.BeaconApi
+public import EthLib.Consensus.Exports.BeaconApiIdentifiers
 public import EthLib.Consensus.Exports.BuilderApi
 public import EthLib.Consensus.Exports.Column
 public import EthLib.Consensus.Exports.ConsensusVersion

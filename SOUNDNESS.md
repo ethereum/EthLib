@@ -3235,6 +3235,20 @@ It reads the JSON back to the same bytes, with its hex in lowercase and in upper
 In one case of each container, it puts an example of the `types` files in place of one string of each type and shape, and reads the result.
 It skips a hex string whose fixed length the example does not have.
 It also reads the JSON examples of the builder specification to the bytes of those examples.
+It checks that each integer string is the plain decimal form of a value in range.
+It checks values against an oracle written apart from EthLib: a Gloas payload written by hand in SSZ and in JSON, and chosen participation flags of an Altair state.
+
+A path names a state, a block or a validator by an identifier (`Consensus/BeaconApi/Identifiers.lean`).
+`parseStateId_print`, `parseBlockId_print` and `parseValidatorId_print` (`Consensus/Proofs/BeaconApi/Identifiers.lean`) show that each identifier reads back from its text.
+`parseStateId_error_code`, `parseBlockId_error_code` and `parseValidatorId_error_code` show that a text that is no identifier gets code 400.
+`resolveBlockId_head` shows that the head of the API is the head of the fork choice, `getHead`.
+`resolveBlockId_slot` shows that a slot names a known block at that slot, the ancestor of that head at the slot.
+`isFinalizedRoot_of_slot_le` shows that a block of the chain of a head, at or below the finalized block of that chain, is reported finalized.
+`parseUInt64_print_of_some` shows that a slot or an index reads only from its plain decimal text, so a sign or a leading zero is refused.
+A state root names the state after the block whose `state_root` field it is.
+That rests on the store, which checks the field of each block that it imports and of its anchor; no theorem states it.
+The Python suite (`bindings/python/tests/consensus/test_beacon_api_identifiers.py`) checks the resolvers against a Capella fork choice vector of the minimal preset, not by a proof.
+The `execution_optimistic` flag reads the optimistic store; nothing exports or tests it.
 
 Points that remain open:
 
@@ -3243,6 +3257,11 @@ Points that remain open:
 - The source writes each integer leaf as a string, and its pattern for `Uint8` admits leading zeros; the JSON mapping of SSZ also reads a bare number, and refuses leading zeros.
 - The source defines no schema for Heze, or for containers such as `SigningData`, so their spellings are checked by review only.
 - The API defines no inclusion list yet, so the hex form of its transactions follows the form of a transaction in the API.
+- The source does not say whether `finalized` and `justified` name the state after the checkpoint block or the checkpoint state; EthLib reads the state after the block, which may sit before the checkpoint epoch.
+- The source does not say which state a slot without a block names; EthLib names none, so such a request gets no state, and the root of such a state names none.
+- The source does not say whether a slot or an index may carry a sign or leading zeros; EthLib refuses both.
+- The source does not say whether blocks outside the fork choice store are canonical; EthLib resolves only the blocks that the store holds.
+- A store anchored after genesis names no block at genesis, or below its anchor; a head that cannot be computed makes the head, genesis and slot identifiers name nothing.
 
 ### Builder API
 
@@ -3607,12 +3626,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 410 operations and 49 size constants.
-The Python extension calls 410 of the operations and 49 of the constants.
+Lean exports 411 operations and 49 size constants.
+The Python extension calls 411 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-10316 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (1940), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (149), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (80), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (147), `module.c` (1449), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (58), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (140), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (697), `x25519.c` (21), `xmss.c` (134).
+10329 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (1951), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (149), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (80), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (147), `module.c` (1450), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (58), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (140), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (698), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

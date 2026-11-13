@@ -425,6 +425,9 @@
 #define DOC_consensus_api_ssz \
   "The SSZ bytes of the value that a JSON document of the API holds."
 
+#define DOC_consensus_api_resolve \
+  "The answer to each query, against the store after the steps of a fork choice case."
+
 #define DOC_consensus_is_valid_builder_signature \
   "Whether the signature of a signed message of the Builder API verifies."
 
