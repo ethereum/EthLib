@@ -14,7 +14,9 @@ The finalized ancestor, the proofs of the data and the expected proposer complet
 
 Before the header, each topic checks the seen keys, the shape or index, and the subnet.
 
-The shape check of a column sidecar passes exactly when its counts and its index are right.
+The shape check of a column sidecar passes exactly when its index names a column.
+
+Its cells, proofs and commitments must also agree in one nonzero count, within the blob limit.
 
 From the chain follows which sidecars each topic accepts, ignores and rejects.
 
@@ -453,7 +455,7 @@ end Blob
 
 Its index names a column, and it answers to one or more commitments.
 
-From Gloas those commitments come from the bid of its block.
+From Gloas they are the commitments given with it, which gossip takes from the bid of its block.
 
 Before Gloas their count stays within the blob limit at the epoch of the slot of its header.
 
