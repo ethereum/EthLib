@@ -117,7 +117,7 @@ def moduleOf? (env : Environment) (n : Name) : Option Name := do
   let idx ← env.getModuleIdxFor? n
   return (← env.header.modules[idx.toNat]?).module
 
-/-- Whether `m` is a module of the specification, whose modules are under `scope`.
+/-- Whether `m` is a module of the specification.
 
 It is under `scope`, which is `EthLib` unless `--root` names another directory.
 
@@ -217,11 +217,11 @@ def displayName (n : Name) : Name :=
     | _ => n
   privateToUserName n
 
-/-- The modules of the specification, whose modules are under `scope`.
+/-- The modules of the specification under the root directory.
 
 They are the `.lean` files under the root directory, outside the proof and export trees.
 
-The directory is read, not the imports of `EthLib.lean`.
+The directory is read, not the imports of the root file of the library.
 
 So a module that the library does not import is not skipped: the build leaves it out, and its import fails. -/
 partial def specModules (scope : Name) (dir : System.FilePath) (pre : Name) : IO (Array Name) := do
@@ -252,6 +252,7 @@ def readBaseline (path : System.FilePath) : IO (List (Name × Name × Nat)) := d
 - Otherwise the sites, summed over each declaration, must match the baseline exactly.
 - `--root` reads the modules under `DIR` in place of `EthLib`.
   The last part of `DIR` is the prefix of their names.
+  A `DIR` with no last part, such as `dir/`, exits with 2.
   `scripts/test_check_accessors.sh` points it at the fixtures in `scripts/CheckAccessorsTest`.
 
 It is `unsafe` because loading the environment extensions runs their initializers. -/
@@ -262,7 +263,11 @@ unsafe def run (args : List String) : IO UInt32 := do
   let root : System.FilePath := match args.dropWhile (· != "--root") with
     | _ :: p :: _ => p
     | _ => "EthLib"
-  let scope : Name := .mkSimple (root.fileName.getD "EthLib")
+  -- A root such as `dir/` has no last part, and would scan under a wrong prefix.
+  let some last := root.fileName
+    | IO.eprintln s!"check-accessors: the root {root} has no last part to name its modules"
+      return 2
+  let scope : Name := .mkSimple last
   initSearchPath (← findSysroot)
   enableInitializersExecution
   let mods ← specModules scope root scope

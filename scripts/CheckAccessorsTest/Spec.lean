@@ -27,24 +27,47 @@ def twice (xs : Array Nat) : Nat := xs[0]! + xs[1]!
 
 /-- `GetElem?.getElem!`, once.
 
-The condition is copied into the instance that decides it, which is an implicit argument. -/
+The condition is copied into the instance that decides it, an argument the check does not search. -/
 def cond (xs : Array Nat) : Nat := if xs[0]! ≠ 0 then 1 else 2
 
 /-- `GetElem?.getElem!`, once.
 
-The kernel's copy of the recursion, `sumFirsts._f`, holds the site.
+The kernel's copy of the recursion holds the site.
 
-The check reports it as `sumFirsts`.
-
-The equation lemmas that Lean generates for the recursion repeat the site, and are skipped. -/
+The check reports it under the name of this definition. -/
 def sumFirsts : List (Array Nat) → Nat
   | [] => 0
   | xs :: rest => xs[0]! + sumFirsts rest
+
+/-- The proof makes Lean generate the equation lemmas of the recursion above.
+
+They repeat its site, and the check skips them, so this theorem adds no entry. -/
+theorem sumFirsts_cons (xs : Array Nat) (rest : List (Array Nat)) :
+    sumFirsts (xs :: rest) = sumFirsts [xs] + sumFirsts rest := by
+  simp [sumFirsts]
 
 /-- A theorem is searched in its statement: `GetElem?.getElem!`, once.
 
 Its proof computes nothing, so it is not searched. -/
 theorem first_eq (xs : Array Nat) : first xs = xs[0]! := rfl
+
+/-- A site in a hypothesis of a statement: `GetElem?.getElem!`, once. -/
+theorem first_of_zero (xs : Array Nat) (h : xs[0]! = 0) : first xs = 0 := h
+
+/-- A site in a proof only is not searched, so this theorem has no entry. -/
+theorem inProof (xs : Array Nat) : True := (fun _ => trivial) xs[0]!
+
+/-- A site in a local definition: `GetElem?.getElem!`, once. -/
+def withLet (xs : Array Nat) : Nat :=
+  let a := xs[0]!
+  a + a
+
+/-- `ByteArray.get!`, once.
+
+The site is in the type, and Lean copies it into the value as an explicit argument.
+
+The check counts the larger of the two counts, not their sum. -/
+def isOne (b : ByteArray) : Decidable (b.get! 0 = 1) := decEq _ _
 
 /-- A wrapper whose name has no `!`: `GetElem?.getElem!`, once, here. -/
 def at0 (xs : Array Nat) : Nat := xs[0]!

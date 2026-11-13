@@ -1,7 +1,7 @@
 module
 
 /-!
-# Sites that only the private level of a module shows
+# A site in a hidden body, and one that the check cannot see
 
 The body of a definition that is not exposed is not in the public part of its module.
 
