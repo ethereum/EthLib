@@ -213,6 +213,10 @@ class YamuxError(EthLibError, ValueError):
     """
 
 
+class TlsCertificateError(EthLibError, ValueError):
+    """A libp2p TLS certificate or its peer authentication was rejected."""
+
+
 class Libp2pIdentityError(EthLibError, ValueError):
     """A secp256k1 key, peer ID or secret of a libp2p identity was rejected."""
 
@@ -374,6 +378,7 @@ __all__ = [
     "MplexError",
     "YamuxError",
     "Libp2pIdentityError",
+    "TlsCertificateError",
     "GossipError",
     "Discv5Error",
     "RlpxError",
