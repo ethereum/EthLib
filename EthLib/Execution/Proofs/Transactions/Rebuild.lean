@@ -5,7 +5,7 @@ public import EthLib.Execution.Proofs.Transactions.Deletion
 public import EthLib.Execution.Proofs.Transactions.SettlementRebuild
 
 /-!
-# Proofs: a transaction from Dencun keeps the property used to rebuild a block state
+# Proofs: a transaction from Dencun keeps what rebuilding its block state needs
 
 A transaction buys its gas, applies its authorizations, runs its message and settles its gas.
 
@@ -15,21 +15,23 @@ An authorization sets the code of its authority and then raises its nonce, by [E
 
 From Paris, setting the code deletes an account that it leaves empty, with its storage.
 
-That can happen only to an account with nonce 0, balance 0 and no code, or with a delegation.
+That can happen only to an account with nonce 0 and balance 0, whose code is empty or a delegation.
 
 An empty account holds no storage, and no account with nonce 0 holds a delegation.
 
 So setting the code wipes no nonzero word.
 
-At the end, it deletes its accounts to delete, which it created, by [EIP-6780][eip6780].
+At the end, the transaction deletes the accounts that destroyed themselves, by [EIP-6780][eip6780].
+
+Each was created in the same transaction.
 
 Each held no storage in the block, so their deletion wipes no nonzero word either.
 
-From Paris, it touches no account, so it deletes no other account.
+From Paris, its message touches no account, so the transaction deletes no other account.
 
 The deletion keeps less than the rebuild property, since an account it deletes may lose its balance.
 
-It keeps the block, the code under each hash, the storage of empty accounts and of wiped accounts.
+It keeps the block, each code under its hash, and no nonzero word at an empty or wiped account.
 
 It also keeps every account with nonce 0 off delegations.
 
@@ -47,68 +49,6 @@ open EthLib.Execution.Evm
 open EthLib.Execution.State
 
 variable {fork : Fork} {Meter : Type} [GasMeter Meter]
-
-/-! ## What the end of a transaction keeps -/
-
-/-- What a transaction state on `block` keeps of the rebuild property once its accounts go.
-
-The state runs on `block`, and each returned code has the hash under which it is read.
-
-An empty or missing account holds no nonzero storage word.
-
-Every wiped storage held no nonzero word in `block`.
-
-No account with nonce 0 has the code hash of a delegation indicator. -/
-structure RebuildEnd (block : BlockState) (tx : TransactionState) : Prop where
-  /-- The state runs on `block`. -/
-  parent : tx.parent = block
-  /-- Each returned code has the hash under which it is read. -/
-  code : ∀ hash code, tx.getCode hash = .ok code → keccak256 code = hash
-  /-- Empty and missing accounts hold no nonzero storage word. -/
-  emptyStorage : ∀ address, tx.getAccount address = EMPTY_ACCOUNT →
-    ∀ key, tx.getStorage address key = 0
-  /-- Every wiped storage held no nonzero word in `block`. -/
-  clears : ∀ address, address ∈ tx.storageClears →
-    ∀ key, (TransactionState.ofBlock block).getStorage address key = 0
-  /-- No account with nonce 0 has the code hash of a delegation indicator. -/
-  delegations : DelegationsHaveNonce tx
-
-/-- The rebuild property gives what the end of a transaction keeps. -/
-theorem _root_.EthLib.Execution.Evm.RebuildState.toRebuildEnd {block : BlockState}
-    {tx : TransactionState} (valid : RebuildState block tx) : RebuildEnd block tx :=
-  ⟨valid.parent, valid.code, valid.emptyStorage, valid.clears, valid.delegations⟩
-
-/-- What the end of a transaction keeps implies the property of code and empty accounts. -/
-theorem RebuildEnd.toRebuildInvariant {block : BlockState} {tx : TransactionState}
-    (valid : RebuildEnd block tx) : RebuildInvariant tx :=
-  ⟨valid.code, valid.emptyStorage⟩
-
-/-- At the end of a transaction, an unwritten storage slot reads its value in the block. -/
-theorem RebuildEnd.getStorage_of_slot_eq_none {block : BlockState} {tx : TransactionState}
-    (valid : RebuildEnd block tx) {address : Address} {key : Bytes32}
-    (hslot : tx.storageWrites.slot address key = none) :
-    tx.getStorage address key = (TransactionState.ofBlock block).getStorage address key := by
-  have hof : ∀ addr k, (TransactionState.ofBlock block).getStorage addr k =
-      match block.storageWrites.slot addr k with
-      | some value => value
-      | none =>
-        if addr ∈ block.storageClears then 0 else block.preState.getStorage addr k := by
-    intro addr k
-    unfold TransactionState.getStorage TransactionState.ofBlock
-    dsimp only
-    have hempty : (∅ : StorageMap).slot addr k = none := rfl
-    have hnot : addr ∉ (∅ : Std.ExtTreeSet Address) := Std.ExtTreeSet.not_mem_empty
-    simp only [hempty, hnot, ↓reduceIte]
-    rfl
-  rw [hof address key]
-  unfold TransactionState.getStorage
-  simp only [hslot, valid.parent]
-  split
-  · rename_i hmem
-    have h0 := valid.clears address hmem key
-    rw [hof address key] at h0
-    exact h0.symm
-  · rfl
 
 /-! ## Helpers for one delegation -/
 
@@ -190,7 +130,7 @@ private theorem code_setCode {tx tx' : TransactionState} {address : Address} {co
   · rw [TransactionState.getCode_setCode_of_ne h heq] at hread
     exact hvalid hash bytes hread
 
-/-- An account with nonce 0 and no code that takes a code with an empty hash is empty. -/
+/-- An account with nonce 0 and no code that is empty once it takes a code was empty before. -/
 private theorem eq_empty_of_setCodeHash {account : Account} {hash : Hash32}
     (hn : account.nonce = 0) (hc : account.codeHash = EMPTY_CODE_HASH)
     (he : { account with codeHash := hash } = EMPTY_ACCOUNT) : account = EMPTY_ACCOUNT := by
@@ -260,7 +200,7 @@ private theorem rebuildState_delegate_of_plain {block : BlockState} {tx tx' : Tr
     · by_cases hne : other = authority
       · exact hne ▸ hnc_self
       · exact (HasNonceOrCode.congr (hacc other hne)).mpr hc
-  refine ⟨⟨hp.trans valid.parent, ?_, ?_, ?_, ?_, ?_, ?_⟩, hk⟩
+  refine ⟨⟨⟨hp.trans valid.parent, ?_, ?_, ?_, ?_⟩, ?_, ?_⟩, hk⟩
   · intro hash bytes hread
     rw [TransactionState.getCode_modifyState hnonce] at hread
     exact code_setCode valid.code hcode hash bytes hread
@@ -275,6 +215,13 @@ private theorem rebuildState_delegate_of_plain {block : BlockState} {tx tx' : Tr
       rcases hmem with rfl | hmem
       · exact valid.blockStorage_of_empty hempty key
       · exact valid.clears other hmem key
+  · intro other code hn hc hv
+    have hne : other ≠ authority := by
+      rintro rfl
+      rw [hself] at hn
+      exact Nat.succ_ne_zero _ hn
+    rw [hacc other hne] at hn hc ⊢
+    exact valid.delegations other code hn hc hv
   · intro other hnot
     have hne : other ≠ authority := fun heq => hnot (heq ▸ hnc_self)
     have hnot' : ¬HasNonceOrCode tx other :=
@@ -287,13 +234,6 @@ private theorem rebuildState_delegate_of_plain {block : BlockState} {tx tx' : Tr
       exact hslot key
   · intro other hmem key
     exact valid.created other (hcreated ▸ hmem) key
-  · intro other code hn hc hv
-    have hne : other ≠ authority := by
-      rintro rfl
-      rw [hself] at hn
-      exact Nat.succ_ne_zero _ hn
-    rw [hacc other hne] at hn hc ⊢
-    exact valid.delegations other code hn hc hv
 
 /-- An authority that takes an authorization and has nonce 0 has no nonce or code.
 
@@ -370,9 +310,7 @@ private theorem foldlM_applyAuthorization_rebuildState {block : BlockState} {cha
 
 /-- Applying the authorizations of a transaction keeps the rebuild property.
 
-It lowers no nonce, and keeps a nonce or code wherever there was one.
-
-A failure keeps the writes of the state before, with the reads made so far. -/
+It lowers no nonce, and keeps a nonce or code wherever there was one. -/
 theorem applyAuthorizations_rebuildState {block : BlockState} {chainId : Nat}
     {state : TransactionState} {accessed : Std.ExtTreeSet Address} {meter : Meter}
     {paid : Std.ExtTreeSet Address} {auths : List Authorization} {done : Delegations Meter}
@@ -383,7 +321,7 @@ theorem applyAuthorizations_rebuildState {block : BlockState} {chainId : Nat}
 
 /-! ## The message -/
 
-/-- Preparing the first frame of a message keeps the rebuild property and the nonce of the caller.
+/-- Preparing the first frame of a message keeps the rebuild property and a caller's nonce or code.
 
 A call that runs code runs it at a target with a nonce or code. -/
 private theorem prepareFirstFrame_rebuildState {block : BlockState} {chainId : Nat}
@@ -531,7 +469,8 @@ theorem processMessageCall_rebuildState [LawfulGasMeter Meter]
 /-- A wipe of one account whose storage was zero in the block keeps what the end needs.
 
 The account is left with no code, and every other account and its storage stay. -/
-private theorem RebuildEnd.of_wipe {block : BlockState} {tx tx' : TransactionState}
+private theorem _root_.EthLib.Execution.Evm.RebuildEnd.of_wipe
+    {block : BlockState} {tx tx' : TransactionState}
     {address : Address} (valid : RebuildEnd block tx)
     (hblock : ∀ key, (TransactionState.ofBlock block).getStorage address key = 0)
     (hp : tx'.parent = tx.parent) (hcode : tx'.getCode = tx.getCode)
@@ -560,7 +499,8 @@ private theorem RebuildEnd.of_wipe {block : BlockState} {tx tx' : TransactionSta
     exact valid.delegations other code hn hc hv
 
 /-- Deleting an account whose storage was zero in the block keeps what the end needs. -/
-private theorem RebuildEnd.destroyAccount {block : BlockState} {tx : TransactionState}
+private theorem _root_.EthLib.Execution.Evm.RebuildEnd.destroyAccount
+    {block : BlockState} {tx : TransactionState}
     {address : Address} (valid : RebuildEnd block tx)
     (hblock : ∀ key, (TransactionState.ofBlock block).getStorage address key = 0) :
     RebuildEnd block (tx.destroyAccount address) := by
@@ -578,7 +518,8 @@ private theorem RebuildEnd.destroyAccount {block : BlockState} {tx : Transaction
     · exact .inr hmem
 
 /-- Clearing an account whose storage was zero in the block keeps what the end needs. -/
-private theorem RebuildEnd.clearAccountPreservingBalance {block : BlockState}
+private theorem _root_.EthLib.Execution.Evm.RebuildEnd.clearAccountPreservingBalance
+    {block : BlockState}
     {tx tx' : TransactionState} {address : Address} (valid : RebuildEnd block tx)
     (hblock : ∀ key, (TransactionState.ofBlock block).getStorage address key = 0)
     (h : tx.clearAccountPreservingBalance fork address = .ok tx') :
