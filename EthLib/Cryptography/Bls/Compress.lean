@@ -98,8 +98,8 @@ def tailAllZero (bytes : ByteArray) (start : Nat) : Bool :=
 theorem Fp.size_toBytesBE (x : Fp) : (Fp.toBytesBE x).size = 48 :=
   Montgomery.toBytesBE_size x
 
-private theorem size_set! (b : ByteArray) (j : Nat) (v : UInt8) : (b.set! j v).size = b.size :=
-  Array.size_setIfInBounds
+private theorem size_set (b : ByteArray) (j : Nat) (v : UInt8) (h : j < b.size) :
+    (b.set j v h).size = b.size := Array.size_set h
 
 namespace G1
 
@@ -111,20 +111,22 @@ def infinityBytes : ByteArray :=
 def compress (p : G1) : ByteArray := Id.run do
   if p.isInfinity then return infinityBytes
   let (x, y) := p.toAffine
-  -- 48 big-endian bytes for `x`. We then OR the flag bits into byte 0.
+  -- `x` as 48 big-endian bytes, with the flag bits ORed into byte 0.
   let xBytes := x.toBytesBE
-  let mut bytes := xBytes.set! 0 ((xBytes.get! 0) ||| 0x80)
+  have hHead : 0 < xBytes.size := by rw [Fp.size_toBytesBE]; decide
+  let mut bytes := xBytes.set 0 (xBytes[0] ||| 0x80)
   if Fp.signBit y then
-    bytes := bytes.set! 0 ((bytes.get! 0) ||| 0x20)
+    have hBytes : 0 < bytes.size := by rw [size_set]; exact hHead
+    bytes := bytes.set 0 (bytes[0] ||| 0x20)
   return bytes
 
 /-- Decompress 48 bytes into a point of `G1`.
 
 It fails on a malformed input and on a point off the curve. -/
 def uncompress (bytes : ByteArray) : Except BlsError G1 :=
-  if bytes.size ≠ 48 then .error .invalidG1Point
+  if hSize : bytes.size ≠ 48 then .error .invalidG1Point
   else
-    let head := bytes.get! 0
+    let head := bytes[0]'(by omega)
     let isCompressed := (head &&& 0x80) ≠ 0
     let isInfinity   := (head &&& 0x40) ≠ 0
     let ySign        := (head &&& 0x20) ≠ 0
@@ -135,7 +137,7 @@ def uncompress (bytes : ByteArray) : Except BlsError G1 :=
       else .ok G1.zero
     else
       -- Strip flag bits from the high byte before decoding `x`.
-      let xBytes := bytes.set! 0 (head &&& 0x1f)
+      let xBytes := bytes.set 0 (head &&& 0x1f) (by omega)
       match Fp.fromBytesBE xBytes with
       | .error _ => .error .invalidG1Point
       | .ok x =>
@@ -154,8 +156,8 @@ theorem size_compress (p : G1) : (compress p).size = 48 := by
   split
   · rfl
   · split
-    · exact (size_set! ..).trans ((size_set! ..).trans (Fp.size_toBytesBE _))
-    · exact (size_set! ..).trans (Fp.size_toBytesBE _)
+    · exact (size_set ..).trans ((size_set ..).trans (Fp.size_toBytesBE _))
+    · exact (size_set ..).trans (Fp.size_toBytesBE _)
 
 /-- Subgroup-membership check by the endomorphism `σ(x, y) = (β x, y)`.
 
@@ -210,47 +212,39 @@ def infinityBytes : ByteArray :=
 def fp2ToBytes (x : Fp2) : ByteArray :=
   x.c1.toBytesBE ++ x.c0.toBytesBE
 
+/-- An `Fp2` element encodes as `c1` then `c0`, `48 + 48 = 96` bytes. -/
+@[simp] theorem size_fp2ToBytes (x : Fp2) : (fp2ToBytes x).size = 96 := by
+  rw [fp2ToBytes, ByteArray.size_append, Fp.size_toBytesBE, Fp.size_toBytesBE]
+
 /-- Compressed 96-byte serialization. -/
 def compress (p : G2) : ByteArray := Id.run do
   if p.isInfinity then return infinityBytes
   let (x, y) := p.toAffine
   let xBytes := fp2ToBytes x
-  let mut bytes := xBytes.set! 0 ((xBytes.get! 0) ||| 0x80)
+  have hHead : 0 < xBytes.size := by rw [size_fp2ToBytes]; decide
+  let mut bytes := xBytes.set 0 (xBytes[0] ||| 0x80)
   if Fp2.signBit y then
-    bytes := bytes.set! 0 ((bytes.get! 0) ||| 0x20)
+    have hBytes : 0 < bytes.size := by rw [size_set]; exact hHead
+    bytes := bytes.set 0 (bytes[0] ||| 0x20)
   return bytes
-
-/-- An `Fp2` element encodes as `c1` then `c0`, `48 + 48 = 96` bytes. -/
-@[simp] theorem size_fp2ToBytes (x : Fp2) : (fp2ToBytes x).size = 96 := by
-  rw [fp2ToBytes, ByteArray.size_append, Fp.size_toBytesBE, Fp.size_toBytesBE]
 
 /-- A compressed `G2` point has 96 bytes. -/
 theorem size_compress (p : G2) : (compress p).size = 96 := by
-  rcases hpa : p.toAffine with ⟨xa, ya⟩
-  by_cases h : p.isInfinity = true
-  · have he : compress p = infinityBytes := by
-      unfold compress
-      simp only [Id.run, h, ↓reduceIte]
-      rfl
-    rw [he]
-    rfl
-  · have he : compress p =
-        (let base := (fp2ToBytes xa).set! 0 ((fp2ToBytes xa).get! 0 ||| 0x80)
-         if Fp2.signBit ya then base.set! 0 (base.get! 0 ||| 0x20) else base) := by
-      unfold compress
-      simp only [Id.run, h, hpa]
-      rfl
-    rw [he]
-    dsimp only
-    split <;> simp only [size_set!, size_fp2ToBytes]
+  unfold compress
+  simp only [Id.run]
+  split
+  · rfl
+  · split
+    · exact (size_set ..).trans ((size_set ..).trans (size_fp2ToBytes _))
+    · exact (size_set ..).trans (size_fp2ToBytes _)
 
 /-- Decompress 96 bytes into a point of `G2`.
 
 It fails on a malformed input and on a point off the curve. -/
 def uncompress (bytes : ByteArray) : Except BlsError G2 :=
-  if bytes.size ≠ 96 then .error .invalidG2Point
+  if hSize : bytes.size ≠ 96 then .error .invalidG2Point
   else
-    let head := bytes.get! 0
+    let head := bytes[0]'(by omega)
     let isCompressed := (head &&& 0x80) ≠ 0
     let isInfinity   := (head &&& 0x40) ≠ 0
     let ySign        := (head &&& 0x20) ≠ 0
@@ -259,7 +253,7 @@ def uncompress (bytes : ByteArray) : Except BlsError G2 :=
       if ySign || head ≠ 0xc0 || !tailAllZero bytes 1 then .error .invalidG2Point
       else .ok G2.zero
     else
-      let cleared := bytes.set! 0 (head &&& 0x1f)
+      let cleared := bytes.set 0 (head &&& 0x1f) (by omega)
       let c1Bytes := cleared.extract 0 48
       let c0Bytes := cleared.extract 48 96
       match Fp.fromBytesBE c1Bytes, Fp.fromBytesBE c0Bytes with
