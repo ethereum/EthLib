@@ -3531,6 +3531,15 @@ From Deneb, the block of the payload reads the parent root of the latest block h
 From Deneb, the blob transactions must carry the versioned hashes of the commitments of the block, in the order of the commitments.
 The consensus test vectors fix the answer of the execution layer, so none of them checks the versioned hashes or the parent root that a block puts in its request.
 
+Between the two clients of a node, the consensus layer sends its payload attributes as JSON.
+`forkchoiceUpdatedCall_payloadAttributesJson` (`Proofs/ForkchoiceUpdated.lean`) shows that the execution layer reads back the values sent.
+It holds for any attributes, given a forkchoice update that applies the head of its forkchoice state.
+The method then answers with that head and with attributes at the fork of the next block, which carry every value of the attributes sent.
+The hypotheses are the checks of the attributes against the head: the active fork at the next number and the timestamp is a fork that the version takes.
+That fork must have the structure of the fork of the attributes, and the timestamp must be above the head's.
+The fork of the attributes and that of the next block can differ, as Bellatrix and Paris do, so the theorem compares their structures.
+`forkchoiceUpdatedCall_payloadAttributesJson_of_gloas` states the same from Gloas at version 4, where the checks reduce to the next block being of Glamsterdam and the timestamp being above the head's.
+
 The tree of known payloads and the known finalized block are inputs of each call, not state that the model keeps between calls.
 
 ### Execution JSON-RPC API
