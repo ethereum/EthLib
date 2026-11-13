@@ -772,7 +772,6 @@ The QUIC proofs (`Networking/Proofs/Quic/Keys.lean`) state the Initial and packe
 The keys have their required lengths in their types for AES-128-GCM and ChaCha20-Poly1305 with SHA-256.
 The Python suite checks the secrets, keys and labels of RFC 9001 Appendix A.1, and the keys of Appendix A.5.
 Anyone who sees the client's first Destination Connection ID can compute the Initial secrets, as RFC 9001 §5.2 says.
-Packet encryption, header protection and Retry integrity remain unspecified.
 These results establish neither cryptographic security nor constant-time execution.
 
 ### TLS 1.3 key schedule
@@ -786,6 +785,23 @@ No result covers message parsing, negotiation, peer authentication or the Diffie
 The schedule does not check the shared secret, and the SHA-384 schedule of TLS_AES_256_GCM_SHA384 is absent.
 The certificate, group and signature policy questions of [#2163](https://github.com/ethereum/EthLib/issues/2163) remain open.
 These results establish neither cryptographic security nor constant-time execution.
+
+### QUIC v1 packet protection
+
+`unprotect_protect` (`Networking/Proofs/Quic/Protection.lean`) proves the wire-packet round trip for AES-128-GCM and ChaCha20-Poly1305.
+The round trip assumes that the receiver reconstructs the sent packet number.
+RFC 9001 §5.5 notes that a long delay can break that reconstruction, and authentication then fails.
+`removeHeaderProtection_applyMask` proves that header removal restores the fields under the mask of the unchanged ciphertext sample.
+`unprotect_ok_iff` unfolds acceptance into header removal, packet-number reconstruction, AEAD authentication and the authenticated header checks.
+
+The decoder checks reserved bits only after authentication, and checks a long header's Length against the isolated payload.
+`unprotect_eq_error_of_decryptPayload` proves that an AEAD failure is reported before the checks of the authenticated header.
+Nonzero reserved bits in an authenticated header give their own error, since RFC 9000 §§17.2 and 17.3.1 make them a connection error.
+The other failures reject only this packet.
+`unprotect_eq_reservedBits_iff` proves that this error comes only from a packet whose payload authenticates.
+Initial packets require AES-128-GCM, as RFC 9001 §5 specifies.
+The Python suite compares complete packets and Retry tags with RFC 9001 Appendices A.2 to A.5.
+These operations do not track nonce reuse, key updates or AEAD usage limits, and the proofs establish no cryptographic security or constant-time execution.
 
 ### Noise XX and libp2p identities
 
@@ -2491,7 +2507,7 @@ The Python suite checks the periods against the three tables of the rule, except
 
 `Consensus/Proofs/Transition/InactivityLeakBound.lean` bounds the number of epochs after which a leak brings the effective balance of an absent validator to a threshold.
 `InactivityLeakStake.lean` deduces that the voters then hold two thirds of the active stake.
-Both take the balance, the score and the effective balance of each epoch as given sequences, not derived from the state transition.
+Both take the balance, the score and the effective balance of each epoch as given sequences.
 
 `InactivityLeakEpoch.lean` proves one link of that derivation: the leak lasts from one slot or epoch transition to the next, unless finality advances.
 In an epoch transition from a leaking state, the state that justification returns still leaks, unless the finalized epoch rises (`processEpoch_finalized_lt_or_isInInactivityLeak`).
@@ -2504,7 +2520,14 @@ This holds when no pending deposit carries its key and no pending consolidation 
 A block raises no balance of a validator that has a balance and is not its proposer.
 From Altair the validator must sign no sync aggregate, and no deposit of the block may carry its key.
 It needs more than `MIN_SEED_LOOKAHEAD + 2` epochs of RANDAO mixes.
-No theorem yet derives the sequences over a run.
+`InactivityLeakRun.lean` derives those sequences for one validator from a run of the chain, from Altair, and so discharges the hypotheses of the bound (`effectiveBalance_le_of_leakRun`).
+The run is a series of slots that end an epoch, each followed by slots and blocks that credit nothing to the validator.
+It assumes that every epoch leaks, that the largest effective balance of the validator stays fixed, and that the validator is eligible and misses the target while above the threshold.
+`twoThirds_of_leakRun` applies that run to each absent validator.
+Either some epoch of the run does not leak or raises the finalized epoch, or the voters hold two thirds of the active stake at the end.
+The first case is the expected one on mainnet when the voters vote: they should reach two thirds before the bound, and finality should resume; no theorem shows this.
+It reads the balance of the voters in the final state.
+No theorem yet bounds that balance from below by the one at the start of the run.
 
 ### Fast confirmation rule
 
@@ -3339,7 +3362,7 @@ This covers one chain; `accountable_safety` (`Consensus/Proofs/DirectSafety/Safe
 These theorems have one other case, an anchor state that hashes to the zero root.
 `Store.Reachable.finalized_ancestor_or_accountable` (`Consensus/Proofs/ForkChoice/CheckpointAncestry.lean`) ties together the two checkpoints of the store, which may come from the states of different blocks.
 The finalized epoch is at or before the anchor epoch, or the finalized checkpoint is on the chain of the justified checkpoint at the first slot of its epoch.
-Otherwise two runs from the anchor to the held states behind the two checkpoints bound the accountable stake at the anchor state, or show hash evidence.
+Otherwise two runs from the anchor to the held states behind the two checkpoints bound the unslashed active stake at the anchor state by the accountable stake, or show hash evidence.
 A checkpoint may come from one justification and finalization step on a held state, as fork choice runs it; `accountable_safety_justified_terminal` (`Safety.lean`) states direct accountable safety for such views.
 The drift of that bound is counted from the anchor, so the bound loosens as the justified epoch moves away from the anchor epoch.
 The theorem assumes that every block was imported with the setting of the signature checks of the run from genesis, and that no upgrade is due at a held slot.
@@ -3366,19 +3389,28 @@ The direct theorems of `Consensus/Proofs/DirectSafety/Safety.lean` do not go thr
 They take two runs of the state transition from one genesis built from deposits, which share a prefix up to a state `x`.
 A run keeps the inputs of each step: the slots, and the blocks with their state roots checked (`Run`, `Consensus/Proofs/Transition/Trace.lean`).
 A key is accountable when the two runs accepted two of its votes that `isSlashableAttestationData` flags.
-It is also accountable when a block of either run applied a slashing that names it.
-That slashing may be a proposer slashing, and it may be in the shared prefix, before `x`.
-So a key slashed before `x` and still active at `x` counts as accountable, although justification no longer counts its votes, and the bound is weaker by that stake.
+It is also accountable when a block of either tail, after `x`, applied a slashing that names it (`Accountable`, `DirectSafety/Conflict.lean`).
+That slashing may be a proposer slashing, since two signed headers for one slot are slashable too.
 The votes are those of the attestations that the blocks applied, read by public key in the registry before each block.
 The weights are effective balances.
+The reference set is the unslashed keys active at `x` (`unslashedKeys`), and the accountable keys are those of that set (`accountableKeys`).
+A slashing in the shared prefix does not make a key accountable by itself.
+A key that it slashed leaves the reference set and the accountable set.
+The predicate `Accountable shared left right k` can still hold for such a key, but `accountableKeys` filters `unslashedKeys x`.
+A prefix attester slashing can name a key without slashing it, because `slashIfSlashable` skips it.
+Such a key can stay in the reference set, and it can still count through double votes or through evidence in a tail.
+The stake of a prefix-slashed key is absent from the later drift and support only while its slashed flag stays set.
+These theorems do not need that fact, because the drift is observed.
+Recent keys are unslashed too, and justification counts only unslashed voters, so the voters of each quorum stay inside the support (`quorum_voters_recent`, `DirectSafety/Core.lean`).
+A key slashed at a call and unslashed at `x` has evidence in the tail of the call (`Run.slashed_evidence`, `DirectSafety/Evidence.lean`).
 Two checkpoints conflict when the runs applied different block headers up to the first slot of the earlier of their two epochs (`Conflict`, `DirectSafety/Execution.lean`).
 So, unless the roots of their headers collide, the runs disagree on the checkpoint of that epoch, even when one of the two finalized blocks is an ancestor of the other.
 `accountable_safety` takes conflicting finalized checkpoints of the two last states.
 The conflict implies that `x` is no later than the first slot of the earlier finalized epoch (`Run.slot_le_of_checkpointPath_ne`, `DirectSafety/Hashes.lean`).
 So the theorem takes no separate premise on `x`.
-Then the active stake at `x` is at most three times the accountable stake at `x`, plus twice the larger drift of the two tails.
+Then the unslashed active stake at `x` is at most three times the accountable stake at `x`, plus twice the larger drift of the two tails.
 The drift is zero when the active validators and their effective balances stay the same from the epoch before `x` to one epoch past the later finalized epoch.
-Then the accountable keys hold at least one third of the active stake at `x`.
+Then the accountable keys hold at least one third of the unslashed active stake at `x`.
 Otherwise the runs show evidence about the hash (`HashEvidence`), so no theorem assumes that the hash is injective.
 The evidence is what two searches find among the objects of the runs.
 `findMessageCollision` returns two different inputs of the SHA-256 node hash with one digest, read in the roots of the headers of the runs.
@@ -3386,8 +3418,9 @@ The evidence is what two searches find among the objects of the runs.
 `hashEvidence_iff` says that the searches find something exactly when such inputs exist or such an object exists.
 `findZeroRoot_valid` and `findZeroRoot_eq_none_iff` show that the zero search returns only such an object, and fails on runs that have none.
 The drift of a tail is the largest over its states up to one epoch past the later finalized epoch.
-At a state, it charges twice the stake at `x` that the state no longer supports, outside the keys slashed by then.
-It charges once the recent stake of the state that `x` did not hold, and twice the stake active at the previous epoch of the state but not at its current epoch.
+At a state, it charges twice the unslashed stake at `x` that the state no longer supports, outside the keys slashed by then.
+It charges once the recent stake of the state that the unslashed keys at `x` did not hold.
+It charges twice the recent stake that is not active at the current epoch of the state.
 It is observed, not bounded in closed form.
 The theorems need at least one slot per epoch, a buffer of roots of four epochs and more than `MIN_SEED_LOOKAHEAD + 2` epochs of RANDAO mixes.
 Each run also needs an active stake above one and a half increments at epoch calls after epoch 1 through one epoch past the target horizon (`EnoughStake run high`).
@@ -3570,6 +3603,19 @@ From Electra, the request lists are those of the requests of the block.
 From Deneb, the block of the payload reads the parent root of the latest block header of the state.
 From Deneb, the blob transactions must carry the versioned hashes of the commitments of the block, in the order of the commitments.
 The consensus test vectors fix the answer of the execution layer, so none of them checks the versioned hashes or the parent root that a block puts in its request.
+
+Between the two clients of a node, a payload request travels as the JSON parameters of `engine_newPayload`, which `newPayloadRequestJson` writes.
+It writes the payload with the fields of the structure for the fork of the beacon chain, then the values of the version that the beacon chain calls there.
+`newPayloadOnChain_valid_iff_accepts` (`Proofs/ConsensusRoute.lean`) shows that, from Bellatrix to Gloas, the method on a chain answers `VALID` for that JSON exactly when the execution engine of the beacon chain accepts the request.
+Besides the fork range, its one hypothesis is that the last block of the chain passes the terminal block check, which only the method makes.
+The chain needs no hypothesis on the parent: without the parent as its last block, the method answers `SYNCING` or refuses earlier, and the state transition of the execution engine fails, so neither route accepts.
+An execution that aborts gives `SYNCING` on one route and a refusal on the other, so it is not accepted either.
+The JSON is part of the statement, so the execution engine accepts no request that has none.
+The Python tests take the 175 vectors of `tests/engine/new_payload.json` that expect no JSON-RPC error.
+They stop before execution, since the vectors hold no parent state.
+Of these, 155 are requests that the beacon chain can form, and the JSON that EthLib writes for each is the vector itself.
+For each, the method passes the checks before execution exactly when the execution engine accepts with the state transition taken as passed.
+The 20 others hold request lists that the beacon chain never sends: empty, of an unknown type, out of order or repeated, or of a length that is no whole number of requests.
 
 Between the two clients of a node, the consensus layer sends its payload attributes as JSON.
 `forkchoiceUpdatedCall_payloadAttributesJson` (`Proofs/ForkchoiceUpdated.lean`) shows that the execution layer reads back the values sent.
@@ -3894,6 +3940,24 @@ It checks the sync duties against the keys of the committees in the JSON of the 
 It gives the state a different block root at each place, and checks each dependent root against it.
 It checks code 400 for an empty request, a repeated PTC index, a PTC epoch before the previous one, and an attester epoch too old for the block roots; no theorem states these refusals.
 
+The answers that hand a validator its data are in `Consensus/BeaconApi/ValidatorData.lean`: attestation data, payload attestation data, aggregates and sync committee contributions.
+`produceAttestationData_head` (`Consensus/Proofs/BeaconApi/ValidatorData.lean`) shows that the attestation data votes for the head of the store, at the requested slot, and that the head is not optimistic.
+`produceAttestationData_index` shows that for a store in Electra or Fulu the index of the data is 0.
+`producePayloadAttestationData_block` shows that the payload attestation data names the block of its slot on the chain of the head, with the two flags given.
+`aggregateAttestation_matching` shows that an aggregate has the requested data root and slot, and that its block is not optimistic.
+`aggregateAttestation_construct_of_lt_electra` and `aggregateAttestation_construct_of_electra` show that an aggregate is the honest aggregate of the guide, over the messages with its data.
+`aggregateAttestation_bits_of_lt_electra` shows that before Electra a bit of an aggregate is set exactly when that bit of an attestation with its data is.
+`aggregateAttestation_attesters_of_electra` shows that from Electra the attesters of an aggregate are those of the single attestations with its data and committee.
+`aggregateAttestation_committeeBits_of_electra` shows that from Electra its committee bits mark the requested committee alone.
+`aggregateAttestation_valid_of_lt_electra` and `aggregateAttestation_valid_of_electra` show that an aggregate of distinct honest messages passes the check of an indexed attestation, when the registry holds each signer's key and the secret keys do not sum to zero.
+`produceSyncCommitteeContribution_bits` shows that a bit of a contribution is set exactly when a message of the slot and root comes from a validator with the key of that seat.
+The Python suite (`bindings/python/tests/consensus/test_beacon_api_validator_data.py`) builds stores from the pinned Gloas fork choice cases.
+It checks the attestation data at the slot of the head and after it, where the index signals the payload, and codes 400 and 503.
+It checks the payload attestation data of a slot with a block, and none for a slot without one.
+It checks the attestation data index of Deneb, Electra and Fulu stores, and code 400 for payload attestation data before Gloas.
+It checks the aggregates and contributions against bytes it builds itself, and codes 400, 404 and 503; no theorem states these error codes.
+The issue's single matching and validity theorems are split by fork; from Electra the union of bits is stated as the set of attesters.
+
 Points that remain open:
 
 - The reader refuses a key that a container does not declare, while the source says that a field may be added to the data without a new version.
@@ -3986,6 +4050,25 @@ Points that remain open:
   The PTC request asks for distinct indices, so a repeated one gets code 400.
   The attester and sync requests do not, so a repeated index gives its duty once for each time it is named.
 - The sync duties answer for the current period or the next, since the state holds only those committees; another period gets code 400.
+- The attestation data takes the status of the head payload from the fork choice, as the guide does, since the source leaves it to the node.
+  The deprecated committee index is read before Electra only, and a request without one passes 0.
+- The source does not say which slots the attestation data accepts; EthLib takes the state of the head through the empty slots.
+  It gives code 400 for a slot before the head, or after the current slot of the store.
+  A head whose payload is not yet verified gets code 503 before the slot is checked against the current slot.
+- The payload attestation data takes its two flags as inputs, since they record what the node has seen; its 503 for a syncing node is out of scope.
+- The aggregate and contribution answers take the collected messages and the state as inputs; which messages a node keeps is its own matter.
+  The aggregate takes the data of the first matching message, and joins every message with that data, and from Electra with the requested committee.
+  Before Electra, overlapping aggregates in the pool give an aggregate whose signature does not verify.
+  Each fork reads one of the two lists of messages: the attestations before Electra, the single attestations from Electra.
+- The store of the fork choice holds one fork, so a slot of a later fork gets attestation data under the rule of the store's fork.
+- Before Electra the attestation data does not check the committee index against the count of committees of the slot.
+- The payload attestation data does not check that its block is verified.
+- The payload attestation data answers code 204 when the chain of the head has no block at the slot, even if the store holds one off that chain.
+- From Electra a committee index out of range with no matching message gets code 404, since the match comes before the range check of the aggregate.
+- The source names no code for a subcommittee index that names no subnet; EthLib gives code 400.
+- The contribution answer requires the slot of the state, and joins the messages of the sync committee of the next slot, as gossip checks them.
+  It keeps only the messages of validators with a key of the requested subcommittee, so the messages of other subcommittees do not refuse the request.
+  A message of a validator that the state does not know is left out too.
 
 ### Builder API
 
@@ -4203,13 +4286,14 @@ The source of delivered payloads says so ("Query arguments are used as filters")
 A query may sort delivered payloads by value, lowest or highest first ([`misc.yaml`](https://github.com/flashbots/relay-specs/blob/a4e0a50d9d46bfe881fd74cc7e0db366371f4eed/types/misc.yaml)).
 `sortBy_descending` shows that a sort by `-value` gives the payloads with values that never increase, and keeps every payload.
 `sortBy_ascending` shows the same for `value`, with values that never decrease.
+`sortBy_stable` shows that, in either order, payloads of equal value keep their input order.
 
 The source leaves three points about the data API open, and EthLib specifies none of them:
 
 - What `cursor` means, beyond "A starting slot for multiple results", and in which direction it reads.
   EthLib models neither the cursor nor the limit of a query.
 - The order of the results without `order_by`, and the order of payloads of equal value with it.
-  EthLib's sort keeps payloads of equal value in their input order, as a merge sort does; no theorem states this yet.
+  EthLib's sort keeps payloads of equal value in their input order, as stated above.
 - Which field of a payload `block_number` and `num_tx` come from.
   Their names suggest the number of the block and the count of its transactions, but the source does not say so.
   So they are fields of the entry, not values computed from the payload.
@@ -4515,12 +4599,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 479 operations and 49 size constants.
-The Python extension calls 479 of the operations and 49 of the constants.
+Lean exports 487 operations and 49 size constants.
+The Python extension calls 487 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-11258 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2358), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (194), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1566), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (131), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (58), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (771), `x25519.c` (21), `xmss.c` (134).
+11370 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2402), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (207), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1581), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (161), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (58), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (781), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.
@@ -4673,6 +4757,7 @@ The files named `Proofs.lean` are roots that gather the proofs of a domain, so t
 - `EthLib/Cryptography/Proofs/Merkle/`
 - `EthLib/Cryptography/Proofs/ProgrammedPermutation.lean`
 - `EthLib/Cryptography/Proofs/QueryAvoidance.lean`
+- `EthLib/Cryptography/Proofs/RandomOracleTable.lean`
 - `EthLib/Cryptography/Proofs/Secp256k1/`
 - `EthLib/Cryptography/Proofs/Sphincs/`
 - `EthLib/Cryptography/Proofs/TaggedLazyPermutation.lean`

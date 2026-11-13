@@ -633,6 +633,29 @@ def bindings : List Binding := [
     "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, " ++
       "verify: bool, root: bytes, envelope: bytes) -> bytes",
     [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
+  ⟨"consensus_api_attestation_data", `EthLib.Consensus.Exports.apiAttestationDataExport,
+    "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, " ++
+      "verify: bool, optimistic_roots: list[bytes], slot: int, " ++
+      "committee_index: int) -> dict[str, Any]",
+    [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
+  ⟨"consensus_api_payload_attestation_data",
+    `EthLib.Consensus.Exports.apiPayloadAttestationDataExport,
+    "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, " ++
+      "verify: bool, slot: int, payload_present: bool, " ++
+      "blob_data_available: bool) -> dict[str, Any] | None",
+    [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
+  ⟨"consensus_api_aggregate_attestation",
+    `EthLib.Consensus.Exports.apiAggregateAttestationExport,
+    "(name: str, fork: str, state: bytes, attestations: list[bytes], singles: list[bytes], " ++
+      "optimistic_roots: list[bytes], data_root: bytes, slot: int, " ++
+      "committee_index: int) -> dict[str, Any]",
+    [], some "ConsensusError"⟩,
+  ⟨"consensus_api_sync_committee_contribution",
+    `EthLib.Consensus.Exports.apiSyncCommitteeContributionExport,
+    "(name: str, fork: str, state: bytes, messages: list[bytes], " ++
+      "optimistic_roots: list[bytes], slot: int, subcommittee_index: int, " ++
+      "root: bytes) -> dict[str, Any]",
+    [], some "ConsensusError"⟩,
   ⟨"consensus_api_duties", `EthLib.Consensus.Exports.apiDutiesExport,
     "(name: str, fork: str, state: bytes, replacements: dict[str, Any] | None, kind: str, " ++
       "epoch: int, indices: list[int], genesis_root: bytes) -> dict[str, Any]",
@@ -1432,6 +1455,16 @@ def bindings : List Binding := [
   ⟨"quic_tls_finished", `EthLib.Networking.Quic.Exports.finishedExport,
     "(secret: bytes, transcript: bytes) -> bytes",
     [`EthLib.Cryptography.Hash.Tls13.Error], some "Tls13Error"⟩,
+  ⟨"quic_protect", `EthLib.Networking.Quic.ProtectionExports.protectExport,
+    "(suite: str, secret: bytes, number: int, offset: int, " ++
+      "header: bytes, plaintext: bytes) -> bytes",
+    [`EthLib.Networking.Quic.Protection.Error], some "QuicProtectionError"⟩,
+  ⟨"quic_unprotect", `EthLib.Networking.Quic.ProtectionExports.unprotectExport,
+    "(suite: str, secret: bytes, expected: int, offset: int, packet: bytes) -> tuple[bytes, bytes]",
+    [`EthLib.Networking.Quic.Protection.Error], some "QuicProtectionError"⟩,
+  ⟨"quic_retry_tag", `EthLib.Networking.Quic.ProtectionExports.retryExport,
+    "(original_dcid: bytes, retry: bytes) -> bytes",
+    [`EthLib.Networking.Quic.Protection.Error], some "QuicProtectionError"⟩,
   ⟨"quic_varint_encode", `EthLib.Networking.Quic.Exports.encodeExport,
     "(value: int) -> bytes",
     [], some "QuicVarintError"⟩,
@@ -1710,6 +1743,10 @@ def bindings : List Binding := [
       "list[tuple[int, int, bytes, int]] | None, bytes | None]], latest: int, " ++
       "max_request: int, request: dict) -> list[dict | None]",
     [`EthLib.Engine.EngineError], some "EngineError"⟩,
+  ⟨"engine_new_payload_routes", `EthLib.Engine.Exports.newPayloadRoutesExport,
+    "(config: dict, preset: str, fork: str, request: bytes) -> " ++
+      "tuple[list | None, str | None, int | None, bool]",
+    [], some "EngineError"⟩,
   ⟨"engine_read_payload_status", `EthLib.Engine.Exports.readPayloadStatusExport,
     "(status: dict[str, Any]) -> tuple[str, bytes | None, str | None]",
     [`EthLib.Engine.EngineError], some "EngineError"⟩,

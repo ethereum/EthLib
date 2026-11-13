@@ -1381,25 +1381,12 @@ private theorem Down.balanceNotRaised {index : Nat} (down : Down index state aft
   subst atFinal
   exact ⟨_, Array.getElem?_eq_getElem held, low⟩
 
-/-- A block raises no balance of a validator that it does not credit.
-
-This holds when the block succeeds, at every fork.
-
-The validator has a balance, and it is not the proposer of the block.
-
-From Altair, no member that signs the sync aggregate has its key.
-
-No deposit of the block carries its key; there are none from Heze.
-
-Only the deposits before Electra credit a balance at once.
-
-The mixes must span more than the seed lookahead plus two epochs. -/
-theorem balanceNotRaised_processBlock
+/-- A block keeps the balance of a validator that it does not credit, and does not raise it. -/
+private theorem down_processBlock
     (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
     {block : BeaconBlock preset fork}
     (computed : processBlock config checks engine state block = .ok after) {index : Nat}
     {validator : Validator} (found : state.validators.data[index]? = some validator)
-    (held : index < state.balances.data.size)
     (notProposer : block.proposerIndex.toNat ≠ index)
     (unsigned : ∀ altair : .altair ≤ fork,
       ∀ member ∈ ((state.currentSyncCommittee altair).value.pubkeys.toArray.zip
@@ -1407,7 +1394,7 @@ theorem balanceNotRaised_processBlock
         member.2 = true → member.1 ≠ validator.pubkey)
     (undeposited : ∀ before : fork < .hegota, ∀ deposit ∈ (block.body.deposits before).data,
       deposit.data.pubkey ≠ validator.pubkey) :
-    BalanceNotRaised index state after := by
+    Down index state after := by
   obtain ⟨input, last, started, operated, -, synced⟩ := processBlock_operationsInput computed
   obtain ⟨parented, headed, executed, revealed, paidOk, headerOk, executionOk, randaoOk,
     eth1Ok⟩ := started
@@ -1438,7 +1425,7 @@ theorem balanceNotRaised_processBlock
   have kept := before.trans (kept_processOperations apart operated
     ((Steady.proposer apart before.2.1).trans read) notProposer atNow
     (by rw [sameKey]; exact undeposited))
-  refine (paid.1.trans (kept.1.trans ?_)).balanceNotRaised held
+  refine paid.1.trans (kept.1.trans ?_)
   -- From Altair the sync aggregate reads the committee and the proposer of the state before.
   split at synced
   · rename_i altair
@@ -1452,6 +1439,57 @@ theorem balanceNotRaised_processBlock
     exact unsigned altair
   · cases synced
     exact Down.refl _ _
+
+/-- A block raises no balance of a validator that it does not credit.
+
+This holds when the block succeeds, at every fork.
+
+The validator has a balance, and it is not the proposer of the block.
+
+From Altair, no member that signs the sync aggregate has its key.
+
+No deposit of the block carries its key; there are none from Heze.
+
+Only the deposits before Electra credit a balance at once.
+
+The mixes must span more than the seed lookahead plus two epochs. -/
+theorem balanceNotRaised_processBlock
+    (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    {block : BeaconBlock preset fork}
+    (computed : processBlock config checks engine state block = .ok after) {index : Nat}
+    {validator : Validator} (found : state.validators.data[index]? = some validator)
+    (held : index < state.balances.data.size)
+    (notProposer : block.proposerIndex.toNat ≠ index)
+    (unsigned : ∀ altair : .altair ≤ fork,
+      ∀ member ∈ ((state.currentSyncCommittee altair).value.pubkeys.toArray.zip
+        (block.body.syncAggregate altair).syncCommitteeBits.bits.toArray).toList,
+        member.2 = true → member.1 ≠ validator.pubkey)
+    (undeposited : ∀ before : fork < .hegota, ∀ deposit ∈ (block.body.deposits before).data,
+      deposit.data.pubkey ≠ validator.pubkey) :
+    BalanceNotRaised index state after :=
+  (down_processBlock apart computed found notProposer unsigned undeposited).balanceNotRaised held
+
+/-- A block keeps a balance at the position of a validator that it does not credit.
+
+The hypotheses are the ones under which the block raises no balance of that validator. -/
+theorem balance_lt_size_processBlock
+    (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    {block : BeaconBlock preset fork}
+    (computed : processBlock config checks engine state block = .ok after) {index : Nat}
+    {validator : Validator} (found : state.validators.data[index]? = some validator)
+    (held : index < state.balances.data.size)
+    (notProposer : block.proposerIndex.toNat ≠ index)
+    (unsigned : ∀ altair : .altair ≤ fork,
+      ∀ member ∈ ((state.currentSyncCommittee altair).value.pubkeys.toArray.zip
+        (block.body.syncAggregate altair).syncCommitteeBits.bits.toArray).toList,
+        member.2 = true → member.1 ≠ validator.pubkey)
+    (undeposited : ∀ before : fork < .hegota, ∀ deposit ∈ (block.body.deposits before).data,
+      deposit.data.pubkey ≠ validator.pubkey) :
+    index < after.balances.data.size := by
+  obtain ⟨later, atLater, -⟩ :=
+    down_processBlock apart computed found notProposer unsigned undeposited _
+      (Array.getElem?_eq_getElem held)
+  exact (Array.getElem?_eq_some_iff.mp atLater).1
 
 /-! ## The inactivity scores -/
 

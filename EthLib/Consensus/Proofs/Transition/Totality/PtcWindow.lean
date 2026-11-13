@@ -556,4 +556,123 @@ theorem ptcRoom_presets {size : Nat} (few : size ≤ 2 ^ 40) :
   rw [mainPtc, mainCommittees, mainSlots, miniPtc, miniCommittees, miniSlots]
   omega
 
+/-- The first window of payload timeliness committees succeeds under bounds.
+
+The upgrade to Gloas computes it.
+
+The committees of the previous epoch hold only index zero, and need no bound.
+
+The window then covers the current epoch and each epoch of the seed lookahead after it.
+
+Each of these epochs meets the assumptions of the draw.
+
+The last epoch drawn plus the length of the history of mixes stays below `2^64`.
+
+The seed lookahead is shorter than that history.
+
+The first slot of the epoch after the last one drawn is at most `2^64`.
+
+So every slot drawn fits in 64 bits.
+
+An epoch has at least one slot, and the products of the draw fit in 64 bits. -/
+theorem initializePtcWindow_ok {state : BeaconState preset fork}
+    (fits : DrawFits preset fork)
+    (seedRoom : (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat +
+      preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat < 2 ^ 64)
+    (lookahead : preset.MIN_SEED_LOOKAHEAD.toNat < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    (slotRoom : ((getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat + 1) *
+      preset.SLOTS_PER_EPOCH.toNat ≤ 2 ^ 64)
+    (perEpoch : preset.SLOTS_PER_EPOCH ≠ 0)
+    (drawable : ∀ offset ≤ preset.MIN_SEED_LOOKAHEAD.toNat,
+      PtcDrawable state (getCurrentEpoch state + offset.toUInt64)) :
+    ∃ window, initializePtcWindow state = .ok window := by
+  have slotsSmall := preset.SLOTS_PER_EPOCH.toNat_lt
+  have epochPos : 0 < preset.SLOTS_PER_EPOCH.toNat := by
+    refine Nat.pos_of_ne_zero fun zero => perEpoch ?_
+    exact UInt64.toNat_inj.mp zero
+  have size : UInt64.size = 2 ^ 64 := rfl
+  -- Each position after the previous epoch names a slot of the current epoch or of the lookahead.
+  have slotOk : ∀ rest < (preset.MIN_SEED_LOOKAHEAD.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat,
+      ∃ slot, ptcWindowSlot preset (getCurrentEpoch state) rest = .ok slot := by
+    intro rest lt
+    have quotLe : rest / preset.SLOTS_PER_EPOCH.toNat ≤ preset.MIN_SEED_LOOKAHEAD.toNat :=
+      Nat.lt_succ_iff.mp ((Nat.div_lt_iff_lt_mul epochPos).mpr lt)
+    have quotNat : (rest / preset.SLOTS_PER_EPOCH.toNat).toUInt64.toNat =
+        rest / preset.SLOTS_PER_EPOCH.toNat := by
+      rw [Nat.toUInt64_eq, UInt64.toNat_ofNat_of_lt' (by
+        have := preset.MIN_SEED_LOOKAHEAD.toNat_lt
+        omega)]
+    have epochFits : (getCurrentEpoch state).toNat +
+        (rest / preset.SLOTS_PER_EPOCH.toNat).toUInt64.toNat < 2 ^ 64 := by
+      rw [quotNat]
+      omega
+    have sumNat := Base.Uint64.toNat_add_of_lt epochFits
+    rw [quotNat] at sumNat
+    have below : ((getCurrentEpoch state).toNat + rest / preset.SLOTS_PER_EPOCH.toNat) *
+        preset.SLOTS_PER_EPOCH.toNat + preset.SLOTS_PER_EPOCH.toNat ≤ 2 ^ 64 := by
+      rw [← Nat.succ_mul]
+      exact Nat.le_trans (Nat.mul_le_mul_right _ (by omega)) slotRoom
+    have productFits : (getCurrentEpoch state +
+        (rest / preset.SLOTS_PER_EPOCH.toNat).toUInt64).toNat *
+        preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64 := by
+      rw [sumNat]
+      omega
+    have productNat := UInt64.toNat_mul (getCurrentEpoch state +
+      (rest / preset.SLOTS_PER_EPOCH.toNat).toUInt64) preset.SLOTS_PER_EPOCH
+    rw [Nat.mod_eq_of_lt productFits, sumNat] at productNat
+    have restLt := Nat.mod_lt rest epochPos
+    have restNat : (rest % preset.SLOTS_PER_EPOCH.toNat).toUInt64.toNat =
+        rest % preset.SLOTS_PER_EPOCH.toNat := by
+      rw [Nat.toUInt64_eq, UInt64.toNat_ofNat_of_lt' (by omega)]
+    have sumFits : ((getCurrentEpoch state + (rest / preset.SLOTS_PER_EPOCH.toNat).toUInt64) *
+        preset.SLOTS_PER_EPOCH).toNat +
+        (rest % preset.SLOTS_PER_EPOCH.toNat).toUInt64.toNat < 2 ^ 64 := by
+      rw [productNat, restNat]
+      omega
+    refine ⟨(getCurrentEpoch state + (rest / preset.SLOTS_PER_EPOCH.toNat).toUInt64) *
+      preset.SLOTS_PER_EPOCH + (rest % preset.SLOTS_PER_EPOCH.toNat).toUInt64, ?_⟩
+    simp only [ptcWindowSlot, liftArith, Base.Uint64.addChecked_of_lt epochFits,
+      computeStartSlotAtEpoch, Base.Uint64.mulChecked_of_lt productFits, bind, Except.bind,
+      Except.mapError, Base.Uint64.addChecked_of_lt sumFits]
+  rw [initializePtcWindow_eq]
+  have each : ∀ position ∈ (Vector.range ((preset.MIN_SEED_LOOKAHEAD.toNat + 2) *
+      preset.SLOTS_PER_EPOCH.toNat)).toList, ∃ y,
+      (do
+        if position < preset.SLOTS_PER_EPOCH.toNat then return Vector.replicate _ 0
+        computePtc state (← ptcWindowSlot preset (getCurrentEpoch state)
+          (position - preset.SLOTS_PER_EPOCH.toNat)) :
+        Except AccessorError (PayloadTimelinessCommittee preset)) = .ok y := by
+    intro position member
+    have lt : position < (preset.MIN_SEED_LOOKAHEAD.toNat + 2) * preset.SLOTS_PER_EPOCH.toNat :=
+      by simpa using member
+    by_cases before : position < preset.SLOTS_PER_EPOCH.toNat
+    · exact ⟨_, by simp only [before, ↓reduceIte]; rfl⟩
+    have sizes : (preset.MIN_SEED_LOOKAHEAD.toNat + 2) * preset.SLOTS_PER_EPOCH.toNat =
+        (preset.MIN_SEED_LOOKAHEAD.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat +
+          preset.SLOTS_PER_EPOCH.toNat := Nat.succ_mul _ _
+    have restLt : position - preset.SLOTS_PER_EPOCH.toNat <
+        (preset.MIN_SEED_LOOKAHEAD.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat := by omega
+    obtain ⟨slot, slotEq⟩ := slotOk _ restLt
+    have epochEq := computeEpochAtSlot_ptcWindowSlot_eq_add epochPos slotEq
+    have quotLe : (position - preset.SLOTS_PER_EPOCH.toNat) / preset.SLOTS_PER_EPOCH.toNat ≤
+        preset.MIN_SEED_LOOKAHEAD.toNat :=
+      Nat.lt_succ_iff.mp ((Nat.div_lt_iff_lt_mul epochPos).mpr restLt)
+    have quotNat : ((position - preset.SLOTS_PER_EPOCH.toNat) /
+        preset.SLOTS_PER_EPOCH.toNat).toUInt64.toNat =
+        (position - preset.SLOTS_PER_EPOCH.toNat) / preset.SLOTS_PER_EPOCH.toNat := by
+      rw [Nat.toUInt64_eq, UInt64.toNat_ofNat_of_lt' (by
+        have := preset.MIN_SEED_LOOKAHEAD.toNat_lt
+        omega)]
+    have drawn := drawable _ quotLe
+    rw [← epochEq] at drawn
+    obtain ⟨committee, ok⟩ := computePtc_ok (state := state) (slot := slot) fits
+      (by rw [epochEq, Base.Uint64.toNat_add_of_lt (by rw [quotNat]; omega), quotNat]; omega)
+      lookahead perEpoch drawn.capped (drawn.full slot rfl) drawn.few drawn.room
+      drawn.committeeRoom
+    exact ⟨committee, by simp only [before, ↓reduceIte, slotEq, bind, Except.bind, ok]⟩
+  choose! out outOk using each
+  refine ⟨_, congrArg (Serialization.Ssz.RootedVector.ofVector <$> ·) (vector_mapM_eq_ok_iff
+    (ys := Vector.ofFn fun i => out i.val) |>.mpr fun i hi => ?_)⟩
+  simpa using outOk i (by simpa using hi)
+
 end EthLib.Consensus

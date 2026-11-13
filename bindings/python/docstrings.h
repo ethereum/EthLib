@@ -491,6 +491,18 @@
 #define DOC_consensus_api_payload_envelope_ssz \
   "The SSZ body of the envelope answer, as `bytes`."
 
+#define DOC_consensus_api_attestation_data \
+  "The JSON response of the attestation data endpoint, as a `dict`."
+
+#define DOC_consensus_api_payload_attestation_data \
+  "The JSON response of the payload attestation data endpoint, as a `dict`, or None for 204."
+
+#define DOC_consensus_api_aggregate_attestation \
+  "The JSON response of the aggregate endpoint, as a `dict`."
+
+#define DOC_consensus_api_sync_committee_contribution \
+  "The JSON response of the contribution endpoint, as a `dict`."
+
 #define DOC_consensus_api_duties \
   "The JSON response of a duties endpoint, as a `dict`."
 
@@ -1151,6 +1163,15 @@
 #define DOC_quic_tls_finished \
   "Compute the Finished `verify_data` over the transcript that precedes it, RFC 8446 §4.4.4."
 
+#define DOC_quic_protect \
+  "Protect a QUIC v1 header and payload using a SHA-256 traffic secret, RFC 9001 §§5.1 to 5.4."
+
+#define DOC_quic_unprotect \
+  "Authenticate one isolated QUIC v1 packet, RFC 9001 §§5.3 to 5.4."
+
+#define DOC_quic_retry_tag \
+  "Compute a QUIC v1 Retry tag from the original destination ID and untagged Retry, RFC 9001 §5.8."
+
 #define DOC_quic_varint_encode \
   "Encode a value below `2^62` with its shortest QUIC representation, RFC 9000 §16."
 
@@ -1381,6 +1402,9 @@
 
 #define DOC_engine_get_payload_bodies \
   "The answer to a payload bodies request, from a store of bodies."
+
+#define DOC_engine_new_payload_routes \
+  "The payload request of the beacon chain through the method and through its execution layer."
 
 #define DOC_engine_read_payload_status \
   "A payload status read from its JSON, as `json.loads` gives it."

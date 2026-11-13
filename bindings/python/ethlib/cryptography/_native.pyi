@@ -657,6 +657,22 @@ def consensus_api_payload_envelope_ssz(name: str, fork: str, anchor_state: bytes
     """The SSZ body of the envelope answer, as `bytes`."""
     ...
 
+def consensus_api_attestation_data(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, optimistic_roots: list[bytes], slot: int, committee_index: int) -> dict[str, Any]:
+    """The JSON response of the attestation data endpoint, as a `dict`."""
+    ...
+
+def consensus_api_payload_attestation_data(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, slot: int, payload_present: bool, blob_data_available: bool) -> dict[str, Any] | None:
+    """The JSON response of the payload attestation data endpoint, as a `dict`, or None for 204."""
+    ...
+
+def consensus_api_aggregate_attestation(name: str, fork: str, state: bytes, attestations: list[bytes], singles: list[bytes], optimistic_roots: list[bytes], data_root: bytes, slot: int, committee_index: int) -> dict[str, Any]:
+    """The JSON response of the aggregate endpoint, as a `dict`."""
+    ...
+
+def consensus_api_sync_committee_contribution(name: str, fork: str, state: bytes, messages: list[bytes], optimistic_roots: list[bytes], slot: int, subcommittee_index: int, root: bytes) -> dict[str, Any]:
+    """The JSON response of the contribution endpoint, as a `dict`."""
+    ...
+
 def consensus_api_duties(name: str, fork: str, state: bytes, replacements: dict[str, Any] | None, kind: str, epoch: int, indices: list[int], genesis_root: bytes) -> dict[str, Any]:
     """The JSON response of a duties endpoint, as a `dict`."""
     ...
@@ -1537,6 +1553,18 @@ def quic_tls_finished(secret: bytes, transcript: bytes) -> bytes:
     """Compute the Finished `verify_data` over the transcript that precedes it, RFC 8446 §4.4.4."""
     ...
 
+def quic_protect(suite: str, secret: bytes, number: int, offset: int, header: bytes, plaintext: bytes) -> bytes:
+    """Protect a QUIC v1 header and payload using a SHA-256 traffic secret, RFC 9001 §§5.1 to 5.4."""
+    ...
+
+def quic_unprotect(suite: str, secret: bytes, expected: int, offset: int, packet: bytes) -> tuple[bytes, bytes]:
+    """Authenticate one isolated QUIC v1 packet, RFC 9001 §§5.3 to 5.4."""
+    ...
+
+def quic_retry_tag(original_dcid: bytes, retry: bytes) -> bytes:
+    """Compute a QUIC v1 Retry tag from the original destination ID and untagged Retry, RFC 9001 §5.8."""
+    ...
+
 def quic_varint_encode(value: int) -> bytes:
     """Encode a value below `2^62` with its shortest QUIC representation, RFC 9000 §16."""
     ...
@@ -1843,6 +1871,10 @@ def engine_get_payload(config: dict, store: list[tuple[bytes, str, bytes, bytes,
 
 def engine_get_payload_bodies(store: list[tuple[bytes, int | None, str, list[bytes], list[tuple[int, int, bytes, int]] | None, bytes | None]], latest: int, max_request: int, request: dict) -> list[dict | None]:
     """The answer to a payload bodies request, from a store of bodies."""
+    ...
+
+def engine_new_payload_routes(config: dict, preset: str, fork: str, request: bytes) -> tuple[list | None, str | None, int | None, bool]:
+    """The payload request of the beacon chain through the method and through its execution layer."""
     ...
 
 def engine_read_payload_status(status: dict[str, Any]) -> tuple[str, bytes | None, str | None]:

@@ -13,6 +13,7 @@ public import EthLib.Consensus.Proofs.BeaconApi.Identifiers
 public import EthLib.Consensus.Proofs.BeaconApi.Registries
 public import EthLib.Consensus.Proofs.BeaconApi.StateQueries
 public import EthLib.Consensus.Proofs.BeaconApi.Validators
+public import EthLib.Consensus.Proofs.BeaconApi.ValidatorData
 public import EthLib.Consensus.Proofs.BuilderApi
 public import EthLib.Consensus.Proofs.BuilderApi.AuthData
 public import EthLib.Consensus.Proofs.BuilderApi.Bid
@@ -178,8 +179,10 @@ public import EthLib.Consensus.Proofs.Transition.FfgVotes
 public import EthLib.Consensus.Proofs.Transition.ForkBoundary
 public import EthLib.Consensus.Proofs.Transition.Genesis
 public import EthLib.Consensus.Proofs.Transition.InactivityLeak
+public import EthLib.Consensus.Proofs.Transition.InactivityLeakBetween
 public import EthLib.Consensus.Proofs.Transition.InactivityLeakBound
 public import EthLib.Consensus.Proofs.Transition.InactivityLeakEpoch
+public import EthLib.Consensus.Proofs.Transition.InactivityLeakRun
 public import EthLib.Consensus.Proofs.Transition.InactivityLeakStake
 public import EthLib.Consensus.Proofs.Transition.InactivityLeakTrace
 public import EthLib.Consensus.Proofs.Transition.Invariants

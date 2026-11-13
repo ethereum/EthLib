@@ -18,22 +18,6 @@ The others cover one range, and two disjoint ranges of any lengths.
 
 open OracleComp ENNReal
 
-/-- Reading a uniform vector at distinct positions, indexed by any finite type, is uniform. -/
-private theorem evalDistEq_uniformSample_vector_map_getElem_injective' {R A : Type} {m : Nat}
-    [Finite A] [Finite R] [Nonempty R] [SampleableType (Vector R m)] [SampleableType (A → R)]
-    {e : A → Fin m} (he : Function.Injective e) :
-    ((fun v : Vector R m => fun s => v[(e s).val]) <$> ($ᵗ (Vector R m))) =ᵈ ($ᵗ (A → R)) :=
-  letI : SampleableType (Fin m → R) := SampleableType.ofEquiv (arrayVectorEquivFin R m)
-  calc
-    _ =ᵈ ((fun g : Fin m → R => g ∘ e) <$>
-        (arrayVectorEquivFin R m <$> ($ᵗ (Vector R m)))) := by
-      simp only [Functor.map_map]
-      exact EvalDistEq.rfl
-    _ =ᵈ ((fun g : Fin m → R => g ∘ e) <$> ($ᵗ (Fin m → R))) :=
-      (SampleableType.map_uniformSample_evalDistEq_of_bijective
-        (arrayVectorEquivFin R m).bijective).map _
-    _ =ᵈ ($ᵗ (A → R)) := evalDistEq_uniformSample_map_comp_injective he
-
 /-- A bijection maps a computation with a uniform law to one with a uniform law. -/
 private theorem EvalDistEq.map_uniformSample_of_bijective {α β : Type} [SampleableType α]
     [SampleableType β] {mx : ProbComp α} (h : mx =ᵈ ($ᵗ α)) {f : α → β}
@@ -53,7 +37,7 @@ theorem evalDistEq_uniformSample_vector_map_disjoint_reads {R ι : Type} {m k : 
       ($ᵗ (ι → Fin k → R)) := by
   let : SampleableType (ι × Fin k → R) := SampleableType.ofEquiv (Equiv.curry ι (Fin k) R).symm
   have h := EvalDistEq.map_uniformSample_of_bijective
-    (evalDistEq_uniformSample_vector_map_getElem_injective'
+    (evalDistEq_uniformSample_vector_map_getElem_injective
       (e := fun q : ι × Fin k => p q.1 q.2) disjoint) (Equiv.curry ι (Fin k) R).bijective
   rw [Functor.map_map] at h
   exact h
@@ -66,7 +50,7 @@ theorem evalDistEq_uniformSample_vector_range {R : Type} [Finite R] [Nonempty R]
     ((fun v : Vector R m => Vector.ofFn fun j : Fin k => v[a + j.val]) <$>
       ($ᵗ (Vector R m))) =ᵈ ($ᵗ (Vector R k)) := by
   have h := EvalDistEq.map_uniformSample_of_bijective
-    (evalDistEq_uniformSample_vector_map_getElem_injective'
+    (evalDistEq_uniformSample_vector_map_getElem_injective
       (e := fun j : Fin k => (⟨a + j.val, by omega⟩ : Fin m))
       fun x y hxy => Fin.ext (by simpa using hxy)) (arrayVectorEquivFin R k).symm.bijective
   rw [Functor.map_map] at h
@@ -89,7 +73,7 @@ theorem evalDistEq_uniformSample_vector_two_ranges {R : Type} [Finite R] [Nonemp
   let split := Equiv.sumArrowEquivProdArrow (Fin k) (Fin l) R
   let : SampleableType (Fin k ⊕ Fin l → R) := SampleableType.ofEquiv split.symm
   have h := EvalDistEq.map_uniformSample_of_bijective
-    (evalDistEq_uniformSample_vector_map_getElem_injective'
+    (evalDistEq_uniformSample_vector_map_getElem_injective
       (e := Sum.elim (fun j : Fin k => (⟨a + j.val, by omega⟩ : Fin m))
         fun j : Fin l => (⟨b + j.val, by omega⟩ : Fin m))
       (by rintro (x | x) (y | y) hxy <;> simp [Fin.ext_iff] at hxy ⊢ <;> omega))

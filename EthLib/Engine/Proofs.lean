@@ -3,6 +3,7 @@ module
 public import EthLib.Engine.Proofs.Block
 public import EthLib.Engine.Proofs.BuildPayload
 public import EthLib.Engine.Proofs.Capabilities
+public import EthLib.Engine.Proofs.ConsensusRoute
 public import EthLib.Engine.Proofs.ExecutionEngine
 public import EthLib.Engine.Proofs.ForkchoiceUpdated
 public import EthLib.Engine.Proofs.GetBlobs

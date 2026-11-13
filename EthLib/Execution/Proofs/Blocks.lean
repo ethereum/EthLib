@@ -14,6 +14,8 @@ public import EthLib.Execution.Proofs.Blocks.Burn
 public import EthLib.Execution.Proofs.Blocks.Codes
 public import EthLib.Execution.Proofs.Blocks.DaoFork
 public import EthLib.Execution.Proofs.Blocks.Difficulty
+public import EthLib.Execution.Proofs.Blocks.Failures
+public import EthLib.Execution.Proofs.Blocks.Funded
 public import EthLib.Execution.Proofs.Blocks.Genesis
 public import EthLib.Execution.Proofs.Blocks.NoncesFit
 public import EthLib.Execution.Proofs.Blocks.ProofOfWork
@@ -25,6 +27,7 @@ public import EthLib.Execution.Proofs.Blocks.Replay
 public import EthLib.Execution.Proofs.Blocks.Rewards
 public import EthLib.Execution.Proofs.Blocks.Requests
 public import EthLib.Execution.Proofs.Blocks.Roots
+public import EthLib.Execution.Proofs.Blocks.StateAborts
 public import EthLib.Execution.Proofs.Blocks.Supply
 public import EthLib.Execution.Proofs.Blocks.SystemCall
 public import EthLib.Execution.Proofs.Blocks.SystemCall.BeaconRoots
