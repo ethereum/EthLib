@@ -162,6 +162,43 @@ theorem decreaseBalance {index : ValidatorIndex} {delta : Gwei}
 
 end RegistryLifecycle
 
+/-- Slashing penalties change balances only, so they keep the validators. -/
+theorem processSlashings_validators {s t : BeaconState preset fork}
+    (ok : processSlashings s = .ok t) : t.validators = s.validators := by
+  -- A fold whose steps keep the validators keeps them.
+  have fold {step : BeaconState preset fork → Nat → Except TransitionError _} {xs : List Nat}
+      (kept : ∀ a i b, step a i = .ok b → b.validators = a.validators)
+      (ok : xs.foldlM step s = .ok t) : t.validators = s.validators :=
+    foldlM_ok_invariant (fun t => t.validators = s.validators)
+      (fun _ _ _ previous ok => (kept _ _ _ ok).trans previous) rfl ok
+  unfold processSlashings at ok
+  simp only [bind_ok_iff] at ok
+  obtain ⟨_, _, _, _, _, _, ok⟩ := ok
+  split at ok
+  · obtain ⟨_, _, applied⟩ := bind_ok_iff.mp ok
+    refine fold (fun _ _ _ ok => ?_) applied
+    simp only [applySlashingPenaltyElectra, bind_ok_iff, liftAccessor_ok] at ok
+    obtain ⟨_, _, ok⟩ := ok
+    split at ok
+    · obtain ⟨_, _, ok⟩ := bind_ok_iff.mp ok
+      split at ok
+      · simp only [bind_ok_iff, liftAccessor_ok] at ok
+        obtain ⟨_, _, _, _, lowered⟩ := ok
+        exact decreaseBalance_validators lowered
+      · cases ok; rfl
+    · cases ok; rfl
+  · refine fold (fun _ _ _ ok => ?_) ok
+    simp only [applySlashingPenalty, bind_ok_iff, liftAccessor_ok] at ok
+    obtain ⟨_, _, ok⟩ := ok
+    split at ok
+    · obtain ⟨_, _, ok⟩ := bind_ok_iff.mp ok
+      split at ok
+      · simp only [bind_ok_iff, liftAccessor_ok] at ok
+        obtain ⟨_, _, _, _, _, _, lowered⟩ := ok
+        exact decreaseBalance_validators lowered
+      · cases ok; rfl
+    · cases ok; rfl
+
 /-- An epoch stage keeps the validators, unless it is one of three stages.
 
 Those are registry updates, pending deposits and effective-balance updates. -/
@@ -169,12 +206,6 @@ theorem EpochStage.Edge.validators_eq {stage : EpochStage} {s t : BeaconState pr
     (edge : EpochStage.Edge config checks stage s t)
     (other : stage ≠ .registry ∧ stage ≠ .pendingDeposits ∧ stage ≠ .effectiveBalances) :
     t.validators = s.validators := by
-  -- A fold whose steps keep the validators keeps them.
-  have fold {step : BeaconState preset fork → Nat → Except TransitionError _} {xs : List Nat}
-      (kept : ∀ a i b, step a i = .ok b → b.validators = a.validators)
-      (ok : xs.foldlM step s = .ok t) : t.validators = s.validators :=
-    foldlM_ok_invariant (fun t => t.validators = s.validators)
-      (fun _ _ _ previous ok => (kept _ _ _ ok).trans previous) rfl ok
   cases stage <;> simp only [EpochStage.Edge] at edge
   case justification => exact (processJustificationAndFinalization_keeps edge).2.2.2.2.2.1
   case inactivity =>
@@ -182,34 +213,7 @@ theorem EpochStage.Edge.validators_eq {stage : EpochStage} {s t : BeaconState pr
     · rw [processInactivityUpdates_frame edge]
     · exact edge ▸ rfl
   case rewards => rw [processRewardsAndPenalties_frame edge]
-  case slashings =>
-    unfold processSlashings at edge
-    simp only [bind_ok_iff] at edge
-    obtain ⟨_, _, _, _, _, _, edge⟩ := edge
-    split at edge
-    · obtain ⟨_, _, applied⟩ := bind_ok_iff.mp edge
-      refine fold (fun _ _ _ ok => ?_) applied
-      simp only [applySlashingPenaltyElectra, bind_ok_iff, liftAccessor_ok] at ok
-      obtain ⟨_, _, ok⟩ := ok
-      split at ok
-      · obtain ⟨_, _, ok⟩ := bind_ok_iff.mp ok
-        split at ok
-        · simp only [bind_ok_iff, liftAccessor_ok] at ok
-          obtain ⟨_, _, _, _, lowered⟩ := ok
-          exact decreaseBalance_validators lowered
-        · cases ok; rfl
-      · cases ok; rfl
-    · refine fold (fun _ _ _ ok => ?_) edge
-      simp only [applySlashingPenalty, bind_ok_iff, liftAccessor_ok] at ok
-      obtain ⟨_, _, ok⟩ := ok
-      split at ok
-      · obtain ⟨_, _, ok⟩ := bind_ok_iff.mp ok
-        split at ok
-        · simp only [bind_ok_iff, liftAccessor_ok] at ok
-          obtain ⟨_, _, _, _, _, _, lowered⟩ := ok
-          exact decreaseBalance_validators lowered
-        · cases ok; rfl
-      · cases ok; rfl
+  case slashings => exact processSlashings_validators edge
   case eth1Reset =>
     split at edge
     · simp only [processEth1DataReset, bind_ok_iff, liftAccessor_ok] at edge

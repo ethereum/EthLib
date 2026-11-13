@@ -1527,11 +1527,11 @@ private theorem balanceDrift_indexOfPubkey_lt {f : Fork} {s : BeaconState preset
 
 private theorem balanceDrift_old_key {f h : Fork} {s : BeaconState preset f}
     {t : BeaconState preset h} {key : Cryptography.Bls.BLSPubkey}
-    (identity : RegistryIdentity s t) (member : key ∈ validatorKeys s) :
+    (kept : validatorKeys s <+: validatorKeys t) (member : key ∈ validatorKeys s) :
     ∃ j, j < s.validators.data.size ∧ ∃ v,
       t.validators.data[j]? = some v ∧ v.pubkey = key := by
   obtain ⟨j, inside, value⟩ := List.mem_iff_getElem.mp member
-  have later := (List.prefix_iff_getElem?.mp identity.kept) j inside
+  have later := (List.prefix_iff_getElem?.mp kept) j inside
   rw [value] at later
   simp only [validatorKeys, List.getElem?_map, Array.getElem?_toList] at later
   cases found : t.validators.data[j]? with
@@ -1935,10 +1935,10 @@ private theorem admissionFunded_block {f : Fork} {s t : BeaconState preset f}
       split at executedOk
       · exact balanceDrift_execution_sizes early executedOk
       · cases executedOk; exact .refl _
-    have executionKeys : RegistryIdentity headed executed := by
+    have executionKeys : validatorKeys headed <+: validatorKeys executed := by
       split at executedOk
-      · exact (frame_processBlockExecution executedOk).toFrame.registryIdentity
-      · cases executedOk; exact .refl _
+      · exact (frame_processBlockExecution executedOk).pubkeysPrefix
+      · cases executedOk; exact List.prefix_refl _
     have executionCommittee : executed.currentSyncCommittee altair =
         headed.currentSyncCommittee altair := by
       split at executedOk
@@ -1948,10 +1948,10 @@ private theorem admissionFunded_block {f : Fork} {s t : BeaconState preset f}
       split at votedOk
       · exact sameSizes_processEth1Data votedOk
       · cases votedOk; exact .refl _
-    have votedKeys : RegistryIdentity revealed voted := by
+    have votedKeys : validatorKeys revealed <+: validatorKeys voted := by
       split at votedOk
-      · exact (frame_processEth1Data votedOk).toFrame.registryIdentity
-      · cases votedOk; exact .refl _
+      · exact (frame_processEth1Data votedOk).pubkeysPrefix
+      · cases votedOk; exact List.prefix_refl _
     have votedCommittee : voted.currentSyncCommittee = revealed.currentSyncCommittee := by
       split at votedOk
       · exact vote votedOk
@@ -1965,9 +1965,9 @@ private theorem admissionFunded_block {f : Fork} {s t : BeaconState preset f}
     intro key member index indexed
     apply balanceDrift_indexOfPubkey_lt ?_ indexed
     apply balanceDrift_old_key
-      ((frame_processBlockHeader headedOk).toFrame.registryIdentity.trans (executionKeys.trans
-        ((frame_processRandao revealedOk).toFrame.registryIdentity.trans (votedKeys.trans
-          (frame_processOperations operatedOk).registryIdentity))))
+      ((frame_processBlockHeader headedOk).pubkeysPrefix.trans (executionKeys.trans
+        ((frame_processRandao revealedOk).pubkeysPrefix.trans (votedKeys.trans
+          (frame_processOperations operatedOk).pubkeysPrefix))))
     apply keys altair key
     have same : operated.currentSyncCommittee altair = s.currentSyncCommittee altair := by
       rw [processOperations_currentSyncCommittee altair operatedOk, votedCommittee,

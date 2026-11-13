@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Consensus.Proofs.Transition.RegistryIdentity
+public import EthLib.Consensus.Proofs.Transition.Invariants
 public import EthLib.Consensus.Proofs.Transition.Committees
 public import EthLib.Consensus.Proofs.Transition.Genesis
 public import EthLib.Consensus.Proofs.Transition.Trace
@@ -859,17 +859,17 @@ private theorem queueCompoundingExcess {electra : .pectra ≤ fork} {index : Nat
 end SameSyncCommittees
 
 private theorem SyncCommitteeKeys.transfer (holds : SyncCommitteeKeys state)
-    (same : SameSyncCommittees state after) (keys : RegistryIdentity state after) :
+    (same : SameSyncCommittees state after) (keys : validatorKeys state <+: validatorKeys after) :
     SyncCommitteeKeys after := by
   intro altair
   obtain ⟨current, next⟩ := holds altair
   constructor
   · intro key member
     rw [same.1] at member
-    exact keys.kept.subset (current key member)
+    exact keys.subset (current key member)
   · intro key member
     rw [same.2] at member
-    exact keys.kept.subset (next key member)
+    exact keys.subset (next key member)
 
 namespace SyncCommitteeKeys
 
@@ -921,70 +921,72 @@ private theorem processEpoch (holds : SyncCommitteeKeys state)
   cases k <;> simp only [EpochStage.Edge, altair, ↓reduceDIte] at edge
   case justification =>
     exact held.transfer (SameSyncCommittees.processJustificationAndFinalization edge)
-      (.of_validators (by rw [(processJustificationAndFinalization_keeps edge).2.2.2.2.2.1]))
+      (by
+        simp only [validatorKeys, (processJustificationAndFinalization_keeps edge).2.2.2.2.2.1]
+        exact List.prefix_refl _)
   case inactivity =>
     exact held.transfer (SameSyncCommittees.processInactivityUpdates edge)
-      (frame_processInactivityUpdates edge).toFrame.registryIdentity
+      (frame_processInactivityUpdates edge).pubkeysPrefix
   case rewards =>
     exact held.transfer (SameSyncCommittees.processRewardsAndPenalties edge)
-      (frame_processRewardsAndPenalties edge).toFrame.registryIdentity
+      (frame_processRewardsAndPenalties edge).pubkeysPrefix
   case registry =>
     exact held.transfer (SameSyncCommittees.processRegistryUpdates edge)
-      (frame_processRegistryUpdates edge).toFrame.registryIdentity
+      (frame_processRegistryUpdates edge).pubkeysPrefix
   case slashings =>
     exact held.transfer (SameSyncCommittees.processSlashings edge)
-      (frame_processSlashings edge).toFrame.registryIdentity
+      (frame_processSlashings edge).pubkeysPrefix
   case eth1Reset =>
     split at edge
     · exact held.transfer (SameSyncCommittees.processEth1DataReset edge)
-        (frame_processEth1DataReset edge).toFrame.registryIdentity
+        (frame_processEth1DataReset edge).pubkeysPrefix
     · exact edge ▸ held
   case pendingDeposits =>
     split at edge
     · exact held.transfer (SameSyncCommittees.processPendingDeposits edge)
-        (frame_processPendingDeposits edge).toFrame.registryIdentity
+        (frame_processPendingDeposits edge).pubkeysPrefix
     · exact edge ▸ held
   case pendingConsolidations =>
     split at edge
     · exact held.transfer (SameSyncCommittees.processPendingConsolidations edge)
-        (frame_processPendingConsolidations edge).toFrame.registryIdentity
+        (frame_processPendingConsolidations edge).pubkeysPrefix
     · exact edge ▸ held
   case payments =>
     split at edge
     · rw [processBuilderPendingPayments_eq edge]
-      exact held.transfer ⟨rfl, rfl⟩ .of_validators
+      exact held.transfer ⟨rfl, rfl⟩ (List.prefix_refl _)
     · exact edge ▸ held
   case effectiveBalances =>
     exact held.transfer (SameSyncCommittees.processEffectiveBalanceUpdates edge)
-      (frame_processEffectiveBalanceUpdates edge).toFrame.registryIdentity
+      (frame_processEffectiveBalanceUpdates edge).pubkeysPrefix
   case slashingsReset =>
     exact held.transfer (SameSyncCommittees.processSlashingsReset edge)
-      (frame_processSlashingsReset edge).toFrame.registryIdentity
+      (frame_processSlashingsReset edge).pubkeysPrefix
   case randaoReset =>
     exact held.transfer (SameSyncCommittees.processRandaoMixesReset edge)
-      (frame_processRandaoMixesReset edge).toFrame.registryIdentity
+      (frame_processRandaoMixesReset edge).pubkeysPrefix
   case history =>
     split at edge
     · exact held.transfer (SameSyncCommittees.processHistoricalSummariesUpdate edge)
-        (frame_processHistoricalSummariesUpdate edge).toFrame.registryIdentity
+        (frame_processHistoricalSummariesUpdate edge).pubkeysPrefix
     · exact held.transfer (SameSyncCommittees.processHistoricalRootsUpdate edge)
-        (frame_processHistoricalRootsUpdate edge).toFrame.registryIdentity
+        (frame_processHistoricalRootsUpdate edge).pubkeysPrefix
   case participation =>
     subst edge
-    exact held.transfer ⟨rfl, rfl⟩ .of_validators
+    exact held.transfer ⟨rfl, rfl⟩ (List.prefix_refl _)
   case syncCommittees => exact processSyncCommitteeUpdates held edge
   case proposerLookahead =>
     split at edge
     · simp only [processProposerLookahead, bind_ok_iff, pure, Except.pure,
         Except.ok.injEq] at edge
       obtain ⟨_, _, _, _, rfl⟩ := edge
-      exact held.transfer ⟨rfl, rfl⟩ .of_validators
+      exact held.transfer ⟨rfl, rfl⟩ (List.prefix_refl _)
     · exact edge ▸ held
   case ptcWindow =>
     split at edge
     · simp only [processPtcWindow, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at edge
       obtain ⟨_, _, _, _, rfl⟩ := edge
-      exact held.transfer ⟨rfl, rfl⟩ .of_validators
+      exact held.transfer ⟨rfl, rfl⟩ (List.prefix_refl _)
     · exact edge ▸ held
 
 /-- A slot updates committees only through the epoch transition. -/
@@ -1005,7 +1007,7 @@ private theorem processBlock {block : BeaconBlock preset fork}
     {engine : ExecutionEngine preset fork} (holds : SyncCommitteeKeys state)
     (ok : Consensus.processBlock config checks engine state block = .ok after) :
     SyncCommitteeKeys after :=
-  holds.transfer (SameSyncCommittees.processBlock ok) (frame_processBlock ok).registryIdentity
+  holds.transfer (SameSyncCommittees.processBlock ok) (frame_processBlock ok).pubkeysPrefix
 
 private theorem carryFields {post : Fork} (upgrade : fork < post)
     (before : post < .glamsterdam) (altair : .altair ≤ fork)
@@ -1026,7 +1028,7 @@ private theorem upgradeToElectra {pre : BeaconState preset .dencun}
       compounded)
   have keys := ((BlockFrame.foldlM (fun _ _ _ ok => frame_queuePreActivation ok) queued).trans
     (BlockFrame.foldlM (fun _ _ _ ok => frame_queueCompoundingExcess ok)
-      compounded)).toFrame.registryIdentity
+      compounded)).pubkeysPrefix
   apply transfer ?_ same keys
   have carried := carryFields (config := config) (post := .pectra)
     (by decide) (by decide) (by decide) holds

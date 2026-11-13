@@ -1415,9 +1415,7 @@ theorem registry (holds : PendingConsolidationInvariant config state)
 
 theorem slashings (holds : PendingConsolidationInvariant config state)
     (ok : processSlashings state = .ok after) : PendingConsolidationInvariant config after := by
-  -- The slashings stage reads no signature checks, so any checks give its edge.
-  have same := congrArg (·.data) (EpochStage.Edge.validators_eq (stage := .slashings)
-    (config := config) (checks := .acceptAll) ok ⟨nofun, nofun, nofun⟩)
+  have same := congrArg (·.data) (processSlashings_validators ok)
   apply holds.kept (SamePendingQueue.slashings ok) (.of_data same) (WithdrawalKept.of_data same)
   rw [show getCurrentEpoch after = getCurrentEpoch state from
     congrArg (computeEpochAtSlot preset) (frame_processSlashings ok).slot]
