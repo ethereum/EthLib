@@ -3149,6 +3149,22 @@ Every code of a group that declares a range lies in that range (`code_mem_range`
 No code appears twice (`codes_nodup`), and the code `4444` of pruned history is in no group (`prunedHistoryUnavailable_not_mem`).
 The messages of the groups are not fixed: the official fixtures show other texts.
 
+A query reads a *chain view* (`Execution/Rpc/View.lean`): the blocks that a node holds, with their states, receipts and logs.
+`ChainView.Valid` says that the view follows the state transition.
+Each block's hash is the hash of its header, and each canonical block after the lowest is what the transition and the body give on the chain before it.
+The state of the lowest block and the recent blocks before it are inputs.
+`Valid` asks only that this state have the state root of the lowest header, and that the last recent block be its parent.
+The blocks off the canonical chain are checked for their hash and their fork only, so their states are trusted inputs.
+The pending block is checked for its hash, its parent, its number and its fork; its contents are the node's choice.
+A number resolves only to a canonical block of that number, and a hash only to a block of that hash (`resolve_number`, `resolve_hash`); with `requireCanonical`, only to a canonical one (`resolve_hash_canonical`).
+In a valid view, every number from the lowest block to the head resolves (`Valid.resolve_number`), and the state of each canonical block has the state root of its header (`Valid.stateRoot_eq`).
+Take a forkchoice update that sets a new head, and a view whose canonical chain is the chain of that head.
+The head of the view is the head of the update (`head_hash_of_forkchoiceUpdated`, `Engine/Proofs/RpcView.lean`).
+The view resolves `safe` and `finalized` to the blocks that the update named, when their hashes are not zero (`resolve_safe_of_forkchoiceUpdated`, `resolve_finalized_of_forkchoiceUpdated`).
+A notification gets no response (`answerJson_notification`).
+The Python suite replays the official test chain into a view and answers the official fixtures of the methods that EthLib serves.
+That chain mines its blocks before the merge with a zero mix hash and a zero nonce, so the suite runs the transition without the proof-of-work check.
+
 ### Beacon API
 
 The Beacon API is the HTTP interface of a consensus client, as release `v5.0.0-beta.0` of `ethereum/beacon-APIs` defines it.
@@ -3560,12 +3576,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 408 operations and 49 size constants.
-The Python extension calls 408 of the operations and 49 of the constants.
+Lean exports 409 operations and 49 size constants.
+The Python extension calls 409 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-10290 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (1940), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (149), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (80), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (138), `module.c` (1447), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (45), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (140), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (695), `x25519.c` (21), `xmss.c` (134).
+10305 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (1940), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (149), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (80), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (138), `module.c` (1448), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (58), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (140), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (696), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

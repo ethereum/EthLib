@@ -1217,6 +1217,9 @@
 #define DOC_rpc_pruned_history_unavailable \
   "The code of history that the node pruned, with its message."
 
+#define DOC_rpc_serve \
+  "Answer requests of the execution JSON-RPC API from the chain that the arguments build."
+
 #define DOC_pyvalue_echo \
   "The value that Python passes, back to Python, with each failure tuple read as a failure."
 
