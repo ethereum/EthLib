@@ -35,7 +35,7 @@ namespace EthLib.Engine
 open EthLib.Base
 open EthLib.Cryptography.Kzg
 open EthLib.Cryptography.Kzg.Constants
-open EthLib.Execution.Blocks (Block)
+open EthLib.Execution.Blocks (Block MAX_EXTRA_DATA_BYTES)
 open EthLib.Execution.Transactions
 
 /-- A missing build process returns unknown payload, before any fork or bundle check. -/
@@ -247,7 +247,8 @@ theorem blobsBundleOfJson_json (version : Nat) (b : BlobsBundle)
 
 /-- A payload form of a block holds at most 32 bytes of extra data. -/
 theorem payloadOfBlock_extraData {fork : Fork} {block : Block fork Transaction}
-    {p : ExecutionPayload fork} (h : payloadOfBlock block = some p) : p.extraData.size ≤ 32 := by
+    {p : ExecutionPayload fork} (h : payloadOfBlock block = some p) :
+    p.extraData.size ≤ MAX_EXTRA_DATA_BYTES := by
   unfold payloadOfBlock at h
   split at h
   · exact of_decide_eq_true (Option.filter_eq_some_iff.mp h).2
@@ -282,7 +283,8 @@ theorem getPayloadResultJson_bundle {r : GetPayloadResponse}
 
 /-- The payload of a result reads back with its access list and slot, in the form of its fork. -/
 private theorem resultPayloadOfJson_payloadJson {fork : Fork} (r : GetPayloadResult fork)
-    (extra : r.payload.extraData.size ≤ 32) (v4 : Bool) (hv4 : v4 = true ↔ .glamsterdam ≤ fork) :
+    (extra : r.payload.extraData.size ≤ MAX_EXTRA_DATA_BYTES) (v4 : Bool)
+    (hv4 : v4 = true ↔ .glamsterdam ≤ fork) :
     resultPayloadOfJson v4 fork r.payloadJson =
       .ok (r.payload, r.blockAccessList, r.slotNumber) := by
   by_cases hg : Fork.glamsterdam ≤ fork
