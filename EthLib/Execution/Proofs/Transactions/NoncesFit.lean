@@ -116,7 +116,7 @@ private theorem noncesFit_foldlM_applyAuthorization {chainId : Nat} :
     exact noncesFit_foldlM_applyAuthorization h (noncesFit_applyAuthorization hnext hfit)
 
 /-- The first frame of a transaction keeps every nonce within the bound. -/
-private theorem noncesFit_prepareFirstFrame {chainId : Nat} {message : Message fork}
+theorem noncesFit_prepareFirstFrame {chainId : Nat} {message : Message fork}
     {state : TransactionState} {substate : Substate} {auths : List Authorization}
     {paid : Std.ExtTreeSet Address} {first : FirstFrame fork Meter}
     (h : prepareFirstFrame (Meter := Meter) chainId message state substate auths paid =
@@ -132,7 +132,7 @@ private theorem noncesFit_prepareFirstFrame {chainId : Nat} {message : Message f
       (noncesFit_foldlM_applyAuthorization hdone hfit)
 
 /-- The first frame of a creation runs at an address with nonce 0. -/
-private theorem prepareFirstFrame_create_nonce {chainId : Nat} {message : Message fork}
+theorem prepareFirstFrame_create_nonce {chainId : Nat} {message : Message fork}
     {state : TransactionState} {substate : Substate} {auths : List Authorization}
     {paid : Std.ExtTreeSet Address} {first : FirstFrame fork Meter}
     (h : prepareFirstFrame (Meter := Meter) chainId message state substate auths paid =

@@ -9,6 +9,20 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the results on slashed flags state them at each position of the registry, as `(state.validators.data[position]?).map (·.slashed)` ([#2187](https://github.com/ethereum/EthLib/issues/2187)).
+  From Gloas the registry has no limit in its type, so a position may lie beyond every `ValidatorIndex`.
+  `slashedFlag_initiateValidatorExit` takes a `position : Nat` in place of an index.
+  The second conjunct of `slashValidator_slashedFlag` holds at each position other than `slashedIndex.toNat`.
+  A caller that read either at an index `i` reads it at `i.toNat`.
+  The new `slashedFlag_eq_of_slashed` turns equal flags there into equal values of `slashedFlag` at `i`.
+  `slashIfSlashable_ok` and `foldlM_slashIfSlashable` gain a last conjunct: no slashed flag changes at a position other than that of their index, or that none of their indices names.
+  A pattern that takes them apart needs a fourth component.
+  `UpgradeFrame` gains the field `slashed`, since each upgrade keeps every slashed flag.
+  `ElectraKept` gains the same conjunct, so a pattern that takes it apart needs a fourth component too.
+  `UpgradeFrame.trans_blockFrame` takes the new premise `slashed`: the steps after the upgrade keep every slashed flag.
+  A block frame alone may slash, so it cannot give the field.
+  Compose the block frames of the steps first, and pass their slashed flags once.
+
 - `engine_forkchoiceUpdated` checks that the most recent block of proof of work on the chain of the head is terminal, as step 3 of the method and step 2 of payload validation of Paris require.
   A head whose chain fails the check is `INVALID`, with the zero hash, and the head does not change.
   Once the known finalized block is a payload of the tree, a zero safe or finalized hash gives `-38002`.
