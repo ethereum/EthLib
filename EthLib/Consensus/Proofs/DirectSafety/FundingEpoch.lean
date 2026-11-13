@@ -155,10 +155,10 @@ private theorem funding_slashings {fork : Fork} {s t : BeaconState preset fork}
 private theorem funding_stage {fork : Fork} {k : EpochStage} {s t : BeaconState preset fork}
     (edge : EpochStage.Edge config checks k s t)
     (other : k ≠ .rewards ∧ k ≠ .registry ∧ k ≠ .slashings ∧ k ≠ .pendingDeposits ∧
-      k ≠ .pendingConsolidations ∧ k ≠ .effectiveBalances) (slot : t.slot = s.slot) :
+      k ≠ .pendingConsolidations ∧ k ≠ .effectiveBalances) :
     fundedStake ⟨fork, t⟩ = fundedStake ⟨fork, s⟩ :=
-  have kept := edge.validators_balances_pendingConsolidations_eq other
-  funding_same kept.1 kept.2.1 slot kept.2.2
+  have kept := edge.records other
+  funding_same kept.1 kept.2.1 kept.2.2.2.2 kept.2.2.1
 
 /-- The stages before the payments, before Gloas.
 
@@ -186,14 +186,11 @@ private theorem funding_before {fork : Fork} {s t : BeaconState preset fork}
     consolidatedOk, rewardReplay, equal⟩ := funding_epoch_site ok replayed
   -- Justification, inactivity and the eth1 reset keep the funding, as epoch stages.
   have justifiedFunding := funding_stage justifiedOk ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩
-    (epochStage_slot justifiedOk)
   have scoredFunding := funding_stage scoredOk ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩
-    (epochStage_slot scoredOk)
   have rewardFunding := funding_rewards rewardedOk rewardReplay
   have registryFunding := funding_registry registeredOk
   have slashFunding := funding_slashings early slashedOk
   have resetFunding := funding_stage resetOk ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩
-    (epochStage_slot resetOk)
   rw [equal]
   simp only [List.map_append, List.sum_append, List.map_cons, List.map_nil, List.sum_cons,
     List.sum_nil, fundingCredit, Nat.add_zero]
@@ -276,12 +273,11 @@ private theorem funding_late {fork : Fork} {s t : BeaconState preset fork}
     intro k member a b computed
     have edge := EpochStage.action_cases.mp computed
     simp only [List.mem_cons, List.not_mem_nil, or_false] at member
-    -- Each late stage keeps the slot; the shared stage facts give the rest of the funding.
-    exact ⟨funding_stage edge
-      (by rcases member with rfl | rfl | rfl | rfl | rfl | rfl | rfl <;>
-            exact ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩) (epochStage_slot edge),
-      edge.depositCarry (by rcases member with rfl | rfl | rfl | rfl | rfl | rfl | rfl
-        <;> exact nofun)⟩
+    have other : k ≠ .rewards ∧ k ≠ .registry ∧ k ≠ .slashings ∧ k ≠ .pendingDeposits ∧
+        k ≠ .pendingConsolidations ∧ k ≠ .effectiveBalances := by
+      rcases member with rfl | rfl | rfl | rfl | rfl | rfl | rfl <;>
+        exact ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩
+    exact ⟨funding_stage edge other, (edge.records other).2.2.2.1⟩
   simp only [funding_carry, same.1, same.2]
 
 /-- The epoch passes conserve funding apart from churn and the recorded external credits.

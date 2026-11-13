@@ -515,8 +515,7 @@ theorem balanceDrift_late {f : Fork} {s t : BeaconState preset f}
   case rewards | registry | slashings | pendingDeposits | pendingConsolidations
     | effectiveBalances => simp at member
   all_goals
-    have kept := edge.validators_balances_pendingConsolidations_eq
-      ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩
+    have kept := edge.records ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩
     exact ⟨kept.1, kept.2.1⟩
 
 

@@ -612,9 +612,9 @@ private theorem chainStep {first last : ForkedBeaconState preset}
     exact Kept.processBlock (applySignedBlock_ok ok).2.1 holds
 
 /-- Every epoch stage keeps the order. -/
-theorem _root_.EthLib.Consensus.EpochStage.Edge.activationExitOrder {stage : EpochStage}
-    (edge : EpochStage.Edge config checks stage state after) (holds : ActivationExitOrder state) :
-    ActivationExitOrder after :=
+theorem _root_.EthLib.Consensus.EpochStage.Edge.activationExitOrder {k : EpochStage}
+    {s t : BeaconState preset fork} (edge : EpochStage.Edge config checks k s t)
+    (holds : ActivationExitOrder s) : ActivationExitOrder t :=
   Kept.edge edge holds
 
 theorem applyPendingDeposit {deposit : PendingDeposit} (holds : ActivationExitOrder state)

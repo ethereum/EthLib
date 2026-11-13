@@ -4,7 +4,6 @@ public import EthLib.Consensus.Proofs.Transition.Trace
 public import EthLib.Consensus.Proofs.Transition.RegistryLifecycle
 public import EthLib.Consensus.Proofs.Transition.Genesis
 import EthLib.Consensus.Proofs.Transition.BalanceDrift
-import EthLib.Consensus.Proofs.Transition.Committees
 import EthLib.Consensus.Proofs.Transition.EpochPending
 import EthLib.Consensus.Proofs.Transition.Totality.EpochBeforeAltair
 
@@ -142,8 +141,7 @@ theorem EpochStage.Edge.samePendingQueue {f : Fork} {stage : EpochStage}
   case effectiveBalances =>
     show t.pendingConsolidations = s.pendingConsolidations
     rw [processEffectiveBalanceUpdates_frame edge]
-  all_goals exact (edge.validators_balances_pendingConsolidations_eq
-    ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩).2.2
+  all_goals exact (edge.records ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩).2.2.1
 
 variable {fork : Fork} {state after : BeaconState preset fork}
   {engine : ExecutionEngine preset fork}
@@ -839,11 +837,13 @@ Registry updates, pending deposits and pending consolidations have their own lem
 
 Effective-balance updates keep the queue and the slot, and no withdrawal epoch decreases.
 
+Rewards and slashings change only balances.
+
 Each other stage keeps the queue, the validators and the slot. -/
 theorem _root_.EthLib.Consensus.EpochStage.Edge.pendingConsolidationInvariant
-    {stage : EpochStage} (edge : EpochStage.Edge config checks stage state after)
-    (holds : PendingConsolidationInvariant config state) :
-    PendingConsolidationInvariant config after := by
+    {stage : EpochStage} {s t : BeaconState preset fork}
+    (edge : EpochStage.Edge config checks stage s t)
+    (holds : PendingConsolidationInvariant config s) : PendingConsolidationInvariant config t := by
   cases stage
   case registry => exact holds.registry edge
   case pendingDeposits | pendingConsolidations =>
@@ -857,31 +857,18 @@ theorem _root_.EthLib.Consensus.EpochStage.Edge.pendingConsolidationInvariant
     exact holds.framed (edge.samePendingQueue nofun)
       (registryLifecycle_processEffectiveBalanceUpdates edge)
       (WithdrawalKept.effectiveUpdates edge) (frame_processEffectiveBalanceUpdates edge).slot
-  all_goals
-    have same := congrArg (·.data) (edge.validators_eq ⟨nofun, nofun, nofun⟩)
-    refine holds.framed (edge.samePendingQueue nofun) (.of_data same)
-      (WithdrawalKept.of_data same) ?_
+  case rewards =>
     simp only [EpochStage.Edge] at edge
-    first
-      | exact (randaoMixes_slot_processJustificationAndFinalization edge).2
-      | exact (frame_processRewardsAndPenalties edge).slot
-      | exact (frame_processSlashings edge).slot
-      | exact (frame_processSlashingsReset edge).slot
-      | exact (frame_processRandaoMixesReset edge).slot
-      | split at edge
-        · first
-          | exact (frame_processInactivityUpdates edge).slot
-          | exact (frame_processEth1DataReset edge).slot
-          | exact (frame_processBuilderPendingPayments edge).slot
-          | exact (frame_processHistoricalSummariesUpdate edge).slot
-          | exact (frame_processSyncCommitteeUpdates edge).slot
-          | exact (frame_processProposerLookahead edge).slot
-          | exact (frame_processPtcWindow edge).slot
-          | (subst edge; rfl)
-        · first
-          | exact (frame_processHistoricalRootsUpdate edge).slot
-          | exact (frame_processParticipationRecordUpdates edge).slot
-          | exact edge ▸ rfl
+    rw [processRewardsAndPenalties_frame edge]
+    exact holds
+  case slashings =>
+    simp only [EpochStage.Edge] at edge
+    rw [processSlashings_frame edge]
+    exact holds
+  all_goals
+    have kept := edge.records ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩
+    have same := congrArg (·.data) kept.1
+    exact holds.framed kept.2.2.1 (.of_data same) (WithdrawalKept.of_data same) kept.2.2.2.2
 
 private theorem epoch (holds : PendingConsolidationInvariant config state)
     (ok : processEpoch config checks state = .ok after) :
