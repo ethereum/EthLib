@@ -4222,6 +4222,22 @@ It checks that the object fails exactly when gossip does not accept it, with the
 It leaves out the cases whose reason is a wrong subnet, since the node picks the subnet itself, and the cases that send objects of another topic.
 Every case of the bid topic also sends the envelopes of payloads, so no vector reaches the bid endpoint yet.
 
+The publish endpoints of blocks and of payload envelopes check an object at the level that the client asks, before the node broadcasts it (`Consensus/BeaconApi/Publish.lean`).
+The gossip checks of its topic run at every level, through the same dispatch as gossip.
+The consensus level adds the checks of the object against the state before it, with its signatures.
+For a block that is the state transition, with no verdict of the execution layer on the payload; for an envelope, the checks of the envelope with that verdict.
+The highest level also checks that the store holds no other block of the same slot and proposer.
+`publishBlock_refused_store` (`Consensus/Proofs/BeaconApi/Publish.lean`) shows that a refused block leaves the fork choice store and the messages seen as they were.
+`publishBlock_gossip` shows that every other answer means that gossip validation accepts the block, with its slot and proposer seen after it.
+`publishBlock_consensus` shows that above the gossip level such an answer also means that the consensus checks of the block pass.
+`publishBlock_noRival` shows that at the highest level the store then holds no other root with the slot and proposer of the block.
+`hasRival_iff` describes such a rival exactly.
+`publishBlock_integrated` shows that an integrated block gives the store of the block handler of the fork choice.
+`publishBlock_broadcastNotIntegrated` shows that a block broadcast but not integrated fails that handler, and that the node keeps its store.
+`publishBlock_of_pass` shows the converse: a block that gossip accepts and that passes its level is broadcast, and integrated exactly when the handler succeeds.
+The envelope endpoint has the same theorems, from `publishEnvelope_refused_store` to `publishEnvelope_of_pass`, against the gossip checks and the handler of envelopes.
+`levelFailure_eq_none_iff` shows that an object passes its level exactly when its gossip checks pass and, above the gossip level, the later checks of its level pass.
+
 Points that remain open:
 
 - The reader refuses a key that a container does not declare, while the source says that a field may be added to the data without a new version.
@@ -4385,6 +4401,21 @@ Points that remain open:
 - A sync committee message is validated on every subnet, and each subnet where it passes keeps its keys; the item fails with the reason of the first subnet where it fails.
 - An error of the fork choice on one message, such as a slot whose time leaves the 64-bit range, fails that message alone, with the keys seen before it, so the other items keep their answers.
   The source names no code for it; EthLib reports it among the failures of the 400 answer.
+- The source excludes the transactions of a payload from the consensus checks of a block, and does not say which checks of the payload that removes.
+  EthLib keeps the checks of the payload hash and of the versioned hashes, and the refusal of an empty transaction.
+  It skips the verdict of the execution layer on the payload, and assumes that the layer answers from its checks.
+- The source does not say whether the consensus level adds to the gossip checks or replaces them; EthLib runs both, since a success means that the gossip checks passed.
+- The source does not say which blocks the equivocation check compares against; EthLib compares against the blocks of the fork choice store, by slot and proposer.
+  For a block, the gossip check that it is the first of its slot and proposer covers the blocks that the node saw on gossip.
+  For an envelope, a rival block that gossip ignored, and that the store does not hold, goes undetected.
+- The source does not say how the node answers an object that gossip ignores; EthLib refuses it with 400, as the source ties a success to passing gossip validation.
+  So an object that the node already holds, and saw on gossip, is refused.
+  An error of the fork choice during the gossip checks refuses the object too.
+- Some checks run only when the node integrates the object, so their failure gives 202, not 400.
+  For a block, these include the verdict of the execution layer, the clock of the store, the availability of its data, its terminal block at the merge, and from Gloas the payload of a full parent; for an envelope, they include the data of its payload.
+- The source says to integrate the block into the state; EthLib runs the block handler alone, so the votes and the slashings that the block carries do not decide its answer.
+- The bodies of the endpoints may carry the blobs and the proofs of the object; EthLib reads them through the sources of the node, and leaves their broadcast out.
+  The 400 for an envelope sent without its blob data, to a node that holds none, is out of scope too.
 - The endpoints of attester slashings, proposer slashings, voluntary exits and bids take one object, and the others take a list.
   The source answers a failure of a single object with a plain error body; EthLib reports it at position 0.
   The source bounds the SSZ form of each list; EthLib does not enforce these bounds.
