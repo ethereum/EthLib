@@ -10283,6 +10283,52 @@
    "docstring":
    "Derive the payload key, IV and header-protection key, in that order, RFC 9001 §5.1."},
   {"summary":
+   "Return the early, handshake, master, two handshake traffic and two application traffic secrets.",
+   "signature":
+   "(shared_secret: bytes, hello_transcript: bytes, server_transcript: bytes) -> tuple[bytes, bytes, bytes, bytes, bytes, bytes, bytes]",
+   "operation": "EthLib.Networking.Quic.Exports.scheduleExport",
+   "method": "quic_tls_key_schedule",
+   "errors":
+   [{"type": "EthLib.Cryptography.Hash.Tls13.Error",
+     "codes":
+     [{"constructor": "labelLength", "code": 1},
+      {"constructor": "contextLength", "code": 2},
+      {"constructor": "lengthOverflow", "code": 3},
+      {"constructor": "hkdf", "code": 4}]}],
+   "error_class": "Tls13Error",
+   "docstring":
+   "Return the early, handshake, master, two handshake traffic and two application traffic secrets.\n\nEach pair gives the client secret first.\n\nThe no-PSK schedule and transcript boundaries are those of RFC 8446 §7.1."},
+  {"summary":
+   "Derive a SHA-256 secret from encoded handshake messages, RFC 8446 §7.1.",
+   "signature": "(secret: bytes, label: bytes, messages: bytes) -> bytes",
+   "operation": "EthLib.Networking.Quic.Exports.deriveExport",
+   "method": "quic_tls_derive_secret",
+   "errors":
+   [{"type": "EthLib.Cryptography.Hash.Tls13.Error",
+     "codes":
+     [{"constructor": "labelLength", "code": 1},
+      {"constructor": "contextLength", "code": 2},
+      {"constructor": "lengthOverflow", "code": 3},
+      {"constructor": "hkdf", "code": 4}]}],
+   "error_class": "Tls13Error",
+   "docstring":
+   "Derive a SHA-256 secret from encoded handshake messages, RFC 8446 §7.1.\n\nThe label excludes the `tls13 ` prefix."},
+  {"summary":
+   "Compute the Finished `verify_data` over the transcript that precedes it, RFC 8446 §4.4.4.",
+   "signature": "(secret: bytes, transcript: bytes) -> bytes",
+   "operation": "EthLib.Networking.Quic.Exports.finishedExport",
+   "method": "quic_tls_finished",
+   "errors":
+   [{"type": "EthLib.Cryptography.Hash.Tls13.Error",
+     "codes":
+     [{"constructor": "labelLength", "code": 1},
+      {"constructor": "contextLength", "code": 2},
+      {"constructor": "lengthOverflow", "code": 3},
+      {"constructor": "hkdf", "code": 4}]}],
+   "error_class": "Tls13Error",
+   "docstring":
+   "Compute the Finished `verify_data` over the transcript that precedes it, RFC 8446 §4.4.4.\n\nDuring the handshake the secret is the sender's handshake traffic secret."},
+  {"summary":
    "Encode a value below `2^62` with its shortest QUIC representation, RFC 9000 §16.",
    "signature": "(value: int) -> bytes",
    "operation": "EthLib.Networking.Quic.Exports.encodeExport",
