@@ -1481,6 +1481,14 @@ def gossip_rpc_encode(rpc: dict[str, Any]) -> bytes:
     """The bytes of an RPC."""
     ...
 
+def gossip_parameters(slot_duration_ms: int, slots_per_epoch: int) -> dict[str, Any]:
+    """The gossipsub parameters, given the slot duration in milliseconds and the slots per epoch."""
+    ...
+
+def gossip_receive_rpc(fork: str, params: dict[str, Any], backoff_ms: int, prune_backoff_ms: int, standing: list[tuple[bytes, dict[str, Any]]], validation: list[tuple[bytes, str | tuple[str, str]]], now: int, src: bytes, rpc: dict[str, Any], state: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    """What the router does with one RPC, with its client choices given as tables."""
+    ...
+
 def receipt_reencode(fork: str, receipt: bytes) -> bytes:
     """The bytes of a receipt, decoded at the fork and encoded again with its transaction type."""
     ...

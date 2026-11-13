@@ -1377,6 +1377,15 @@ def bindings : List Binding := [
   ⟨"gossip_rpc_encode", `EthLib.Networking.Gossip.Rpc.encode,
     "(rpc: dict[str, Any]) -> bytes",
     [], some "GossipError"⟩,
+  ⟨"gossip_parameters", `EthLib.Networking.Gossip.gossipsubParameters,
+    "(slot_duration_ms: int, slots_per_epoch: int) -> dict[str, Any]",
+    [], some "GossipError"⟩,
+  ⟨"gossip_receive_rpc", `EthLib.Networking.Gossip.Exports.receiveRpcOf,
+    "(fork: str, params: dict[str, Any], backoff_ms: int, prune_backoff_ms: int, " ++
+      "standing: list[tuple[bytes, dict[str, Any]]], " ++
+      "validation: list[tuple[bytes, str | tuple[str, str]]], now: int, src: bytes, " ++
+      "rpc: dict[str, Any], state: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]",
+    [], some "GossipError"⟩,
   ⟨"receipt_reencode", `EthLib.Execution.Blocks.Exports.receiptReencodeExport,
     "(fork: str, receipt: bytes) -> bytes",
     [`EthLib.Serialization.Rlp.RlpError, `EthLib.Execution.Blocks.ReceiptError], some "BlockError"⟩,
