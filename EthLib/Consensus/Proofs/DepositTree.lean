@@ -938,7 +938,7 @@ theorem getProof_ok {tree : DepositTree} {index : Nat} {leaf : Root}
 /--
 A proof that the tree gives passes the Merkle check of a deposit against its deposit root.
 
-The tree holds at most `2^32` deposits.
+It needs the tree to hold at most `2^32` deposits.
 -/
 theorem isValidMerkleBranch_getProof {tree : DepositTree} {index : Nat} {leaf : Root}
     {proof : Vector Root (DEPOSIT_CONTRACT_TREE_DEPTH.toNat + 1)}
