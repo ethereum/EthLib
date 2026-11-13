@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Consensus.BeaconApi.Spelling
 public import EthLib.Consensus.BuilderApi.Bid
 public import EthLib.Consensus.Containers.RelayApi
 
@@ -20,9 +21,22 @@ From Deneb the bid carries the commitments to the blobs, by the [Deneb relaying 
 
 From Electra it also carries the requests of the submission, by the [Electra bid].
 
+A relay lists for builders the registered proposers of the current and next epoch.
+
+Each entry holds a slot, the index of its proposer and its signed registration: [`responses.yaml`].
+
+A slot whose proposer has no registration has no entry, by [`validators.yaml`].
+
+The source says "scheduled to propose", but not how a relay learns that schedule.
+
+So the rule here holds for any schedule, and from Fulu the lookahead gives one: [EIP-7917].
+
 [submission endpoint]: https://github.com/flashbots/relay-specs/blob/a4e0a50d9d46bfe881fd74cc7e0db366371f4eed/apis/relay/builder/blocks.yaml
 [Deneb relaying rules]: https://github.com/ethereum/builder-specs/blob/fce64468a81a87892d7cb9b4858272bb3d010e50/specs/deneb/builder.md#bidding
 [Electra bid]: https://github.com/ethereum/builder-specs/blob/fce64468a81a87892d7cb9b4858272bb3d010e50/specs/electra/builder.md#builderbid
+[`validators.yaml`]: https://github.com/flashbots/relay-specs/blob/a4e0a50d9d46bfe881fd74cc7e0db366371f4eed/apis/relay/builder/validators.yaml
+[`responses.yaml`]: https://github.com/flashbots/relay-specs/blob/a4e0a50d9d46bfe881fd74cc7e0db366371f4eed/types/responses.yaml
+[EIP-7917]: https://eips.ethereum.org/EIPS/eip-7917#specification
 -/
 
 @[expose] public section
@@ -61,6 +75,97 @@ def submit (store : SubmissionStore preset fork) (request : SubmitBlockRequest p
   else store
 
 end SubmissionStore
+
+/-! ## The validators that a relay lists -/
+
+/-- An entry of the list of validators that a relay serves to builders.
+
+It names a slot, the index of its proposer and the signed registration of that proposer. -/
+structure ValidatorsResponseEntry where
+  /-- The slot. -/
+  slot : Slot
+  /-- The index of the validator that proposes in the slot. -/
+  validatorIndex : ValidatorIndex
+  /-- The signed registration of that validator. -/
+  entry : SignedValidatorRegistrationV1
+  deriving DecidableEq
+
+instance : SszType ValidatorsResponseEntry :=
+  .container ["slot", "validator_index", "entry"]
+    (fun e => (e.slot, e.validatorIndex, e.entry))
+    (fun (slot, validatorIndex, entry) => ⟨slot, validatorIndex, entry⟩)
+
+/-- The JSON writes the slot and the index as decimal strings, as `Uint64` values of the API. -/
+instance : BeaconApi.ApiSpelling ValidatorsResponseEntry := .unmarked
+
+/-- The list of validators that a relay serves to builders. -/
+abbrev ValidatorsResponse := List ValidatorsResponseEntry
+
+/-- Whether a slot lies in an epoch or in the next one. -/
+def InTwoEpochs (preset : Preset) (epoch : Epoch) (slot : Slot) : Prop :=
+  epoch.toNat * preset.SLOTS_PER_EPOCH.toNat ≤ slot.toNat ∧
+    slot.toNat < (epoch.toNat + 2) * preset.SLOTS_PER_EPOCH.toNat
+
+/-- Whether a list is what a relay serves for an epoch and the next, by a schedule of proposers.
+
+The schedule gives the proposer of a slot, and the key map gives the key of a validator.
+
+Every entry lies in the two epochs, and names the proposer of its slot and its registration.
+
+Every slot of the two epochs whose proposer has a registration has exactly one entry. -/
+structure ValidatorsResponse.Sound (preset : Preset) (schedule : Slot → Option ValidatorIndex)
+    (keyOf : ValidatorIndex → Option BLSPubkey) (registry : Registry) (epoch : Epoch)
+    (response : ValidatorsResponse) : Prop where
+  /-- Each entry lies in the two epochs and names the proposer of its slot and its registration. -/
+  listed : ∀ entry ∈ response, InTwoEpochs preset epoch entry.slot ∧
+    schedule entry.slot = some entry.validatorIndex ∧
+    ∃ key, keyOf entry.validatorIndex = some key ∧ registry.find? key = some entry.entry
+  /-- Each slot of the two epochs whose proposer has a registration has exactly one entry. -/
+  complete : ∀ slot index key signed, InTwoEpochs preset epoch slot →
+    schedule slot = some index → keyOf index = some key → registry.find? key = some signed →
+    response.countP (·.slot = slot) = 1
+
+/-- The entries of a schedule for a count of slots from a first slot, in the order of the slots.
+
+A slot number of 2^64 or more, or a slot whose proposer has no key or registration, has no entry. -/
+def scheduledEntries (schedule : Slot → Option ValidatorIndex)
+    (keyOf : ValidatorIndex → Option BLSPubkey) (registry : Registry) (first count : Nat) :
+    ValidatorsResponse :=
+  (List.range count).filterMap fun offset =>
+    if fits : first + offset < 2 ^ 64 then do
+      let slot : Slot := ⟨⟨first + offset, fits⟩⟩
+      let index ← schedule slot
+      let key ← keyOf index
+      let entry ← registry.find? key
+      some ⟨slot, index, entry⟩
+    else none
+
+/-- The key of the validator at an index of a state, if there is one. -/
+def validatorPubkey? (state : BeaconState preset fork) (index : ValidatorIndex) :
+    Option BLSPubkey :=
+  state.validators.data[index.toNat]?.map (·.pubkey)
+
+/-- The first slot of the current epoch of a state, as a natural number. -/
+def currentEpochStart (state : BeaconState preset fork) : Nat :=
+  (getCurrentEpoch state).toNat * preset.SLOTS_PER_EPOCH.toNat
+
+/-- From Fulu: the proposer of a slot of the current or next epoch, by the lookahead of a state.
+
+Other slots, and slots past the end of the lookahead, have none. -/
+def lookaheadSchedule (state : BeaconState preset fork) (fulu : .fusaka ≤ fork) (slot : Slot) :
+    Option ValidatorIndex :=
+  if currentEpochStart state ≤ slot.toNat ∧
+      slot.toNat < currentEpochStart state + 2 * preset.SLOTS_PER_EPOCH.toNat then
+    (state.proposerLookahead fulu)[slot.toNat - currentEpochStart state]?
+  else none
+
+/-- From Fulu: the list of validators that a relay serves, by the lookahead of its state.
+
+It covers the current and next epoch, in the order of the slots. -/
+def validatorsResponse (state : BeaconState preset fork) (fulu : .fusaka ≤ fork)
+    (registry : Registry) : ValidatorsResponse :=
+  scheduledEntries (lookaheadSchedule state fulu) (validatorPubkey? state) registry
+    (currentEpochStart state) (2 * preset.SLOTS_PER_EPOCH.toNat)
 
 end RelayApi
 

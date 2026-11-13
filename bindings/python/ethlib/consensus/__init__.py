@@ -230,6 +230,13 @@ def relay_submission_bid(name: str, fork: str, data: bytes, pubkey: bytes) -> by
     return _native.consensus_relay_submission_bid(name, fork, data, pubkey)
 
 
+def relay_validators(
+    name: str, fork: str, state: bytes, registry: list[bytes]
+) -> list[dict[str, Any]]:
+    """At Fulu only: the JSON entries of the validators that a relay lists, from SSZ bytes."""
+    return _native.consensus_relay_validators(name, fork, state, registry)
+
+
 def builder_bid_value(value: int, execution_payment: int, max_execution_payment: int) -> int:
     """The bid's value in Gwei, with its execution payment capped, not reduced to 64 bits."""
     return _native.consensus_builder_bid_value(value, execution_payment, max_execution_payment)
@@ -1772,6 +1779,7 @@ __all__ = [
     "builder_preferences_failures",
     "default_auth_data",
     "relay_submission_bid",
+    "relay_validators",
     "builder_bid_value",
     "consensus_version",
     "consensus_version_fork",

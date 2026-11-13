@@ -733,6 +733,10 @@ def consensus_relay_submission_bid(name: str, fork: str, data: bytes, pubkey: by
     """The SSZ bytes of the bid that a relay serves from a submission, under a key."""
     ...
 
+def consensus_relay_validators(name: str, fork: str, state: bytes, registry: list[bytes]) -> list[dict[str, Any]]:
+    """At Fulu only: the list of validators that a relay serves, as a `list` of `dict`."""
+    ...
+
 def consensus_builder_bid_value(value: int, execution_payment: int, max_execution_payment: int) -> int:
     """The value of a builder's bid from its two payments and the proposer's execution payment cap."""
     ...
