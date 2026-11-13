@@ -39,6 +39,8 @@ They also keep the genesis time, and they keep the first two properties.
 
 They keep the fork versions and the genesis validators root, and they never shrink the registry.
 
+They never clear a slashed flag: a validator that is slashed before a step is slashed after it.
+
 Let the largest effective balances of the preset be whole numbers of increments.
 
 These steps then keep each effective balance of the registry a whole number of increments.
@@ -80,6 +82,8 @@ The public keys of the validators before it are a prefix of the public keys afte
 
 When no two validators share a key before it, none share a key after it.
 
+A validator that is slashed before it is still slashed after it, at the same position.
+
 When each validator has one balance before it, each has one after it.
 
 It then also keeps each exit no later than its withdrawal.
@@ -99,27 +103,39 @@ structure Frame (state after : BeaconState preset fork) : Prop where
   registryGrows : state.validators.data.size ≤ after.validators.data.size
   pubkeysPrefix : validatorKeys state <+: validatorKeys after
   pubkeysDistinct : PubkeysDistinct state → PubkeysDistinct after
+  slashed : ∀ (position : Nat) (old validator : Validator),
+    state.validators.data[position]? = some old →
+    after.validators.data[position]? = some validator →
+    old.slashed = true → validator.slashed = true
   balancesMatch : BalancesMatch state → BalancesMatch after
   exitsOrdered : ExitsOrdered state → ExitsOrdered after
   aligned : MaxEffectiveBalancesAligned preset → EffectiveBalancesAligned state →
     EffectiveBalancesAligned after
 
 theorem Frame.refl (state : BeaconState preset fork) : Frame state state :=
-  ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, Nat.le_refl _, List.prefix_refl _, id, id, id,
+  ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, Nat.le_refl _, List.prefix_refl _, id,
+    fun _ _ _ old found => by cases old.symm.trans found; exact id, id, id,
     fun _ => id⟩
 
 theorem Frame.trans {first second third : BeaconState preset fork} (one : Frame first second)
-    (two : Frame second third) : Frame first third :=
-  ⟨two.slot.trans one.slot, two.finalized.trans one.finalized,
+    (two : Frame second third) : Frame first third := by
+  refine ⟨two.slot.trans one.slot, two.finalized.trans one.finalized,
     two.previousJustified.trans one.previousJustified,
     two.currentJustified.trans one.currentJustified,
     two.justificationBits.trans one.justificationBits, two.genesisTime.trans one.genesisTime,
     two.forkVersions.trans one.forkVersions,
     two.genesisValidatorsRoot.trans one.genesisValidatorsRoot,
     Nat.le_trans one.registryGrows two.registryGrows,
-    one.pubkeysPrefix.trans two.pubkeysPrefix, two.pubkeysDistinct ∘ one.pubkeysDistinct,
+    one.pubkeysPrefix.trans two.pubkeysPrefix, two.pubkeysDistinct ∘ one.pubkeysDistinct, ?_,
     two.balancesMatch ∘ one.balancesMatch, two.exitsOrdered ∘ one.exitsOrdered,
     fun maxAligned => two.aligned maxAligned ∘ one.aligned maxAligned⟩
+  -- The registry never shrinks, so a position before both steps is a position between them.
+  intro position old validator before after slashed
+  have inside := (Array.getElem?_eq_some_iff.mp before).1
+  have middle : position < second.validators.data.size :=
+    Nat.lt_of_lt_of_le inside one.registryGrows
+  exact two.slashed position _ validator (Array.getElem?_eq_getElem middle) after
+    (one.slashed position old _ before (Array.getElem?_eq_getElem middle) slashed)
 
 /-- A step that keeps the slot, the checkpoints, the justification bits and the registry.
 
@@ -143,6 +159,7 @@ theorem Frame.of_validators (sizes : SameSizes state after)
     forkVersions, genesisValidatorsRoot, by rw [validators]; exact Nat.le_refl _,
     by rw [validatorKeys, validatorKeys, validators]; exact List.prefix_refl _,
     by unfold PubkeysDistinct validatorKeys; rw [validators]; exact id,
+    fun _ _ _ old found => by rw [validators, old] at found; cases found; exact id,
     balancesMatch_of_sameSizes sizes,
     fun ordered => by rw [ExitsOrdered, validators]; exact ordered,
     fun _ holds => by rw [EffectiveBalancesAligned, validators]; exact holds⟩
@@ -330,6 +347,8 @@ theorem ExitsOrdered.putValidator {index : Nat} {validator : Validator}
 
 The new one must keep the public key of the old one.
 
+It must be slashed when the old one is.
+
 It must exit no later than it withdraws.
 
 Let the largest values of the preset and the effective balances before be aligned.
@@ -339,6 +358,7 @@ theorem frame_setValidatorAt_of_whole {position : Nat} {validator old : Validato
     (set : state.setValidatorAt position validator = .ok after)
     (found : getValidatorAt state position = .ok old)
     (key : validator.pubkey = old.pubkey)
+    (slashed : old.slashed = true → validator.slashed = true)
     (le : ExitsOrdered state → validator.exitEpoch ≤ validator.withdrawableEpoch)
     (whole : MaxEffectiveBalancesAligned preset → EffectiveBalancesAligned state →
       validator.effectiveBalance % preset.EFFECTIVE_BALANCE_INCREMENT = 0) :
@@ -357,17 +377,31 @@ theorem frame_setValidatorAt_of_whole {position : Nat} {validator old : Validato
         state.validators.data[position].pubkey := by simp
     rw [← atKey]
     exact List.set_getElem_self _
-  exact ⟨⟨⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, Nat.le_of_eq sizes.1.symm,
-    by rw [keys]; exact List.prefix_refl _, by unfold PubkeysDistinct; rw [keys]; exact id,
+  refine ⟨⟨⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, Nat.le_of_eq sizes.1.symm,
+    by rw [keys]; exact List.prefix_refl _, by unfold PubkeysDistinct; rw [keys]; exact id, ?_,
     balancesMatch_of_sameSizes sizes,
     fun ordered => ordered.putValidator inside (le ordered),
     fun maxAligned holds =>
       effectiveBalancesAligned_setValidatorAt holds (whole maxAligned holds) set⟩,
     rfl, rfl, rfl, rfl⟩, .of_eq rfl rfl⟩
+  -- Only the written position changes, and the new validator there is slashed if the old one was.
+  intro i previous next before after marked
+  simp only [BeaconState.putValidator, RootedForkList.data_set, Array.getElem?_set] at after
+  split at after
+  · rename_i equal
+    subst i
+    have same : previous = old := (Option.some.inj
+      (before.symm.trans (Array.getElem?_eq_getElem inside))).trans oldEq
+    cases after
+    exact slashed (same ▸ marked)
+  · cases before.symm.trans after
+    exact marked
 
 /-- Replacing a validator forms a mutator frame, if the new one exits no later than it withdraws.
 
 The new one must keep the public key of the old one.
+
+It must be slashed when the old one is.
 
 Let the largest values of the preset and the effective balances before be aligned.
 
@@ -376,26 +410,30 @@ theorem frame_setValidator_of_whole {index : ValidatorIndex} {validator old : Va
     (set : state.setValidator index validator = .ok after)
     (found : getValidator state index = .ok old)
     (key : validator.pubkey = old.pubkey)
+    (slashed : old.slashed = true → validator.slashed = true)
     (le : ExitsOrdered state → validator.exitEpoch ≤ validator.withdrawableEpoch)
     (whole : MaxEffectiveBalancesAligned preset → EffectiveBalancesAligned state →
       validator.effectiveBalance % preset.EFFECTIVE_BALANCE_INCREMENT = 0) :
     MutatorFrame state after :=
   frame_setValidatorAt_of_whole (by rwa [← setValidator_eq_setValidatorAt])
-    (by rwa [← getValidator_eq_getValidatorAt]) key le whole
+    (by rwa [← getValidator_eq_getValidatorAt]) key slashed le whole
 
 /-- Replacing a validator by one with the same effective balance forms a mutator frame.
 
 The new one must keep the public key of the old one.
+
+It must be slashed when the old one is.
 
 It must exit no later than it withdraws. -/
 theorem frame_setValidator {index : ValidatorIndex} {validator old : Validator}
     (set : state.setValidator index validator = .ok after)
     (found : getValidator state index = .ok old)
     (key : validator.pubkey = old.pubkey)
+    (slashed : old.slashed = true → validator.slashed = true)
     (le : ExitsOrdered state → validator.exitEpoch ≤ validator.withdrawableEpoch)
     (balance : validator.effectiveBalance = old.effectiveBalance := by rfl) :
     MutatorFrame state after :=
-  frame_setValidator_of_whole set found key le fun _ holds => by
+  frame_setValidator_of_whole set found key slashed le fun _ holds => by
     rw [balance]
     exact holds old (mem_of_getValidator found)
 
@@ -438,7 +476,7 @@ theorem frame_initiateValidatorExit {index : ValidatorIndex}
   · exact MutatorFrame.refl _
   · have same := (exitQueue_validators queue).1
     refine (frame_exitQueue queue).trans (frame_setValidator (old := validator) set
-      (by rw [getValidator, same]; exact found) rfl fun _ => ?_)
+      (by rw [getValidator, same]; exact found) rfl id fun _ => ?_)
     have sum := (addChecked_ok_iff.mp summed).2
     exact UInt64.le_iff_toNat_le.mpr (by simp only at sum ⊢; omega)
 
@@ -465,7 +503,7 @@ theorem frame_slashValidator {slashedIndex : ValidatorIndex}
   obtain ⟨_, validator, _, _, _, _, _, _, _, _, _, last, exitedOk, found, -, markedOk, -, -, -,
     loweredOk, -, -, raisedOk, lastOk, done⟩ := slashValidator_ok computed
   refine (frame_initiateValidatorExit exitedOk).trans <|
-    ((frame_setValidator markedOk found rfl
+    ((frame_setValidator markedOk found rfl (fun _ => rfl)
       fun ordered => ?_).trans
       (frame_slashings _ _)).trans <|
     (frame_decreaseBalance loweredOk).trans <| (frame_increaseBalance raisedOk).trans <|
@@ -598,7 +636,9 @@ The key must be one that no validator has.
 
 It goes at the end of the registry, so the keys before stay a prefix.
 
-Distinct keys stay distinct. -/
+Distinct keys stay distinct.
+
+Each validator before stays where it was, and so stays slashed. -/
 theorem frame_addValidatorToRegistry {pubkey : BLSPubkey}
     {withdrawalCredentials : Bytes32} {amount : Gwei}
     (computed : addValidatorToRegistry state pubkey withdrawalCredentials amount = .ok after)
@@ -618,6 +658,16 @@ theorem frame_addValidatorToRegistry {pubkey : BLSPubkey}
     intro a member b equal same
     have eq : b = pubkey := List.mem_singleton.mp equal
     exact fresh (eq ▸ same ▸ member)
+  have slashed : ∀ (position : Nat) (old validator : Validator),
+      state.validators.data[position]? = some old →
+      after.validators.data[position]? = some validator →
+      old.slashed = true → validator.slashed = true := by
+    intro position old validator found next marked
+    have inside := (Array.getElem?_eq_some_iff.mp found).1
+    rw [addValidatorToRegistry_validators_eq_push computed, Array.getElem?_push_lt inside] at next
+    rw [Array.getElem?_eq_getElem inside] at found
+    cases found.symm.trans next
+    exact marked
   have balances := balancesMatch_addValidatorToRegistry computed
   have exits : ExitsOrdered state → ExitsOrdered after := fun ordered validator member => by
     obtain ⟨_, found⟩ := Array.getElem?_of_mem member
@@ -637,8 +687,9 @@ theorem frame_addValidatorToRegistry {pubkey : BLSPubkey}
       Except.ok.injEq] at computed
     obtain ⟨_, _, _, _, _, _, previous, previousOk, current, currentOk, _, _, rfl⟩ := computed
     -- The new validator gets a zero byte of flags, and each other byte stays.
-    refine ⟨⟨⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, grows, kept, distinct, balances, exits,
-      aligned⟩, rfl, rfl, rfl, rfl⟩, fun _ position flags => ⟨fun found => ?_, fun found => ?_⟩⟩
+    refine ⟨⟨⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, grows, kept, distinct, slashed, balances,
+      exits, aligned⟩, rfl, rfl, rfl, rfl⟩,
+      fun _ position flags => ⟨fun found => ?_, fun found => ?_⟩⟩
     · rw [setOrAppendList_getElem? previousOk] at found
       split at found
       · exact .inr (Option.some.inj found).symm
@@ -649,8 +700,8 @@ theorem frame_addValidatorToRegistry {pubkey : BLSPubkey}
       · exact .inl found
   split at computed
   · cases computed
-    exact ⟨⟨⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, grows, kept, distinct, balances, exits,
-      aligned⟩, rfl, rfl, rfl, rfl⟩, .of_eq rfl rfl⟩
+    exact ⟨⟨⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, grows, kept, distinct, slashed, balances,
+      exits, aligned⟩, rfl, rfl, rfl, rfl⟩, .of_eq rfl rfl⟩
   · cases computed
 
 /-- The laws that carry a reflexive, transitive relation through most steps of an epoch.
@@ -725,8 +776,8 @@ structure EpochFrameLaws (R : BeaconState preset fork → BeaconState preset for
 theorem mutatorEpochFrameLaws : EpochFrameLaws (@MutatorFrame preset fork) where
   refl := MutatorFrame.refl
   trans := MutatorFrame.trans
-  setValidatorAt := fun set found key _ le whole =>
-    frame_setValidatorAt_of_whole set found key le whole
+  setValidatorAt := fun set found key flag le whole =>
+    frame_setValidatorAt_of_whole set found key (fun marked => flag.trans marked) le whole
   increaseBalance := frame_increaseBalance
   decreaseBalance := frame_decreaseBalance
   initiateValidatorExit := frame_initiateValidatorExit

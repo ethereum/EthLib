@@ -165,6 +165,17 @@ structure BodyOutput (fork : Fork) where
 def BodyOutput.block {fork : Fork} (output : BodyOutput fork) : BlockState :=
   output.body.block
 
+/-- What a simulation changes in the run of a body.
+
+By default nothing changes, as in a real block.
+
+The system calls of the block keep every precompile at its own address. -/
+structure BodyOverrides where
+  /-- The sender of the transaction at each index, given in place of its signature. -/
+  senders : Nat → Option Address := fun _ => none
+  /-- The address of the precompile that a call to each address runs, if any. -/
+  precompiles : Address → Option Address := some
+
 /-- Run the transaction `tx`, the `index`-th of its block, after the transactions before it.
 
 It fails when the transaction cannot enter the block.
@@ -177,10 +188,12 @@ Its receipt adds up the gas used after the refunds, as EIP-8037 keeps it.
 
 Before Byzantium, its receipt holds the state root after it. -/
 def applyTransaction {fork : Fork} (env : BlockEnvironment fork) (index : Nat)
-    (before : BodyOutput fork) (tx : Transaction) : Except BlockError (BodyOutput fork) := do
+    (before : BodyOutput fork) (tx : Transaction) (overrides : BodyOverrides := {}) :
+    Except BlockError (BodyOutput fork) := do
   let included ← (checkInclusion env.chainId env before.gas
-    (.ofBlock before.block) tx).mapError (.invalidTransaction index)
-  let out ← (processTransaction env before.block included tx).mapError .aborted
+    (.ofBlock before.block) tx (overrides.senders index)).mapError (.invalidTransaction index)
+  let out ← (processTransaction env before.block included tx overrides.precompiles).mapError
+    .aborted
   let body ← ((before.body.beginIndex (index + 1)).join out.state).mapError .state
   let gas := before.gas.add out.blockGas
   let cumulativeGasUsed := before.cumulativeGasUsed + out.gasUsed
@@ -194,8 +207,10 @@ def applyTransaction {fork : Fork} (env : BlockEnvironment fork) (index : Nat)
 
 /-- Run the transactions of a block in order, from the body so far. -/
 def applyTransactions {fork : Fork} (env : BlockEnvironment fork) (body : BodyState)
-    (transactions : List Transaction) : Except BlockError (BodyOutput fork) :=
-  transactions.zipIdx.foldlM (fun before (tx, index) => applyTransaction env index before tx)
+    (transactions : List Transaction) (overrides : BodyOverrides := {}) :
+    Except BlockError (BodyOutput fork) :=
+  transactions.zipIdx.foldlM
+    (fun before (tx, index) => applyTransaction env index before tx overrides)
     ⟨body, .zero, 0, [], []⟩
 
 /-- Run a writing step on a block state, as a transaction of its own. -/
@@ -260,13 +275,15 @@ The system calls at the start run at position 0 of the block access list.
 
 The withdrawals and the requests run at position `n + 1`, after the last of `n` transactions.
 
-From Glamsterdam, the body then builds its block access list, which must fit the gas limit. -/
+From Glamsterdam, the body then builds its block access list, which must fit the gas limit.
+
+A simulation runs the transactions with its overrides. -/
 def applyBody {fork : Fork} (config : ChainConfig) (env : BlockEnvironment fork)
-    (block : Block fork Transaction) (start : BlockState) :
+    (block : Block fork Transaction) (start : BlockState) (overrides : BodyOverrides := {}) :
     Except BlockError (BlockOutput fork) := do
   let state ← daoTransfer config fork block.header.number start
   let body ← (startSystemCalls env block.header.parentHash (.init state)).mapError .aborted
-  let output ← applyTransactions env body block.transactions
+  let output ← applyTransactions env body block.transactions overrides
   let body := output.body.beginIndex (block.transactions.length + 1)
   let body ← if h : .shapella ≤ fork then do
       let tx ← (withdrawalState fork body.block (block.withdrawals h)).mapError .state

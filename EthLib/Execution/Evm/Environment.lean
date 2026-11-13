@@ -84,5 +84,11 @@ structure TransactionEnvironment (fork : Fork) where
   gasPrice : Nat
   /-- The versioned hashes of the blobs of the transaction, from Dencun. -/
   blobVersionedHashes : Since .dencun fork (List Hash32)
+  /-- The address of the precompile that a call to each address runs, if any.
+
+  By default a call runs the precompile at its own address.
+
+  A simulation can move a precompile to another address. -/
+  precompiles : Address → Option Address := some
 
 end EthLib.Execution.Evm

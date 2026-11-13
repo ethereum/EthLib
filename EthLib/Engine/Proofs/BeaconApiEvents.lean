@@ -130,9 +130,9 @@ theorem payloadAttributesEvent_prepareExecutionPayload {config : Config}
 
 /-- From Gloas, the event of the update of a proposer and its attributes name one parent.
 
-The event reads the state of the attributes, the one on which the proposer builds.
+It takes the event made from the state that the attributes read, on which the proposer builds.
 
-Its parent block hash is the execution block on which the proposer builds.
+Its parent block hash is the hash of the execution block on which the proposer builds.
 
 Its safe and finalized block hashes are those given.
 

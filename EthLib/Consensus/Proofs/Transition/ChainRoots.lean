@@ -3,6 +3,7 @@ module
 public import EthLib.Consensus.Proofs.Transition.ForkBoundary
 public import EthLib.Consensus.Proofs.Transition.RootLinks
 public import EthLib.Consensus.Proofs.Transition.Trace
+import EthLib.Consensus.Proofs.Transition.Genesis
 
 /-!
 # Proofs: each checkpoint of a beacon state names a block of its own chain
@@ -519,6 +520,13 @@ private theorem Run.invariant {first last : ForkedBeaconState preset}
     | slot computed => exact (advanceSlotAcross_invariant ih computed).1
     | block engine signed due applied =>
       exact (frame_processBlock (applySignedBlock_ok applied).2.1).invariant ih
+
+/-- A state reached from genesis has one balance for each validator. -/
+theorem reachable_balancesMatch {g x : ForkedBeaconState preset}
+    (run : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g) :
+    BalancesMatch x.state := by
+  obtain ⟨_, _, _, ok⟩ := genesis
+  exact (run.invariant (initializeBeaconStateFromEth1_invariant ok).2).balancesMatch
 
 /-- The last state of a run agrees with the roots that the run records, above its first slot.
 

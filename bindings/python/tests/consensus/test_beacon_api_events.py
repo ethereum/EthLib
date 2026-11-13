@@ -231,11 +231,12 @@ def test_published_block_already_held() -> None:
 
 def test_every_example_is_covered() -> None:
     """Each event of a received object in the source has a test here."""
+    # The events of the fork choice and of a proposal have their tests in other files.
     chain = {"head", "head_v2", "finalized_checkpoint", "chain_reorg", "fast_confirmation"}
+    chain |= {"payload_attributes"}
     later = {
         "light_client_finality_update",
         "light_client_optimistic_update",
-        "payload_attributes",
         "execution_payload_available",
     }
     tested = set(OBJECT_EVENTS) | {

@@ -18,6 +18,15 @@ Not yet released.
   `slashedFlagAt_processProposerSlashing` and `slashedFlagAt_processAttesterSlashing` state that a slashing changes flags only at the positions that it names.
   `slashedFlagAt_foldlM` states the same for a fold of such steps.
 
+- In Lean, the transaction environment gains the field `precompiles` ([#2108](https://github.com/ethereum/EthLib/issues/2108)).
+  It gives the address of the precompile that a call to each address runs.
+  Its default `some` keeps each precompile at its own address, so a real block is unchanged.
+  Supply that field in positional constructors, or use structure notation with its default.
+  The checks of a transaction, its run and the body of a block take optional simulation overrides.
+  A simulation can give the sender in place of the signature, and that sender may have code.
+  The sender check gains a flag for that case.
+  Nothing breaks in Python.
+
 - The execution RPC checks the requests of `eth_simulateV1` before their blocks run ([#2107](https://github.com/ethereum/EthLib/issues/2107)).
   A request that passes the checks gets `-32603` until the simulated blocks are specified.
   In Lean, `call_unknown` requires the method name to differ from `eth_simulateV1`.
@@ -30,6 +39,13 @@ Not yet released.
   `call_unknown` requires the method name to differ from both access-list method names.
   Nothing breaks in Python: `rpc.serve` takes the new optional argument `pruned_access_lists` for block numbers whose lists are unavailable.
   `rpc.encode_block_access_list` encodes a JSON list as its EIP-7928 RLP bytes.
+
+- In Lean, `Frame` gains the field `slashed`, after `pubkeysDistinct` ([#1451](https://github.com/ethereum/EthLib/issues/1451)).
+  A validator slashed before a step, at a registry position, is slashed after it at the same position.
+  A proof that builds a `Frame` with an anonymous constructor adds that field.
+  `frame_setValidatorAt_of_whole`, `frame_setValidator_of_whole` and `frame_setValidator` take a new premise `old.slashed = true → validator.slashed = true` after the proof of the key.
+  A caller passes `id` when the new validator copies the flag of the old one, and `fun _ => rfl` when it is slashed.
+  `initiateValidatorExit_balances_eq_and_pendingConsolidations_eq` moves to `Consensus/Proofs/Transition/PendingConsolidations.lean`, which `BalanceDrift.lean` imports publicly.
 
 - In Lean, the results on slashed flags state them at each position of the registry, as `(state.validators.data[position]?).map (·.slashed)` ([#2187](https://github.com/ethereum/EthLib/issues/2187)).
   From Gloas the registry has no limit in its type, so a position may lie beyond every `ValidatorIndex`.
