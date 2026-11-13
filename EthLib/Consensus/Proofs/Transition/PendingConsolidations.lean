@@ -205,33 +205,8 @@ private theorem SamePendingQueue.registry {f : Fork} {s t : BeaconState preset f
 
 private theorem SamePendingQueue.slashings {f : Fork} {s t : BeaconState preset f}
     (ok : processSlashings s = .ok t) : SamePendingQueue s t := by
-  unfold processSlashings at ok
-  simp only [bind_ok_iff] at ok
-  obtain ⟨_, _, _, _, _, _, ok⟩ := ok
-  split at ok
-  · obtain ⟨_, _, applied⟩ := bind_ok_iff.mp ok
-    refine fold (fun _ _ _ ok => ?_) applied
-    simp only [applySlashingPenaltyElectra, bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, ok⟩ := ok
-    split at ok
-    · obtain ⟨_, _, ok⟩ := bind_ok_iff.mp ok
-      split at ok
-      · simp only [bind_ok_iff, liftAccessor_ok] at ok
-        obtain ⟨_, _, _, _, lowered⟩ := ok
-        exact decrease lowered
-      · cases ok; rfl
-    · cases ok; rfl
-  · refine fold (fun _ _ _ ok => ?_) ok
-    simp only [applySlashingPenalty, bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, ok⟩ := ok
-    split at ok
-    · obtain ⟨_, _, ok⟩ := bind_ok_iff.mp ok
-      split at ok
-      · simp only [bind_ok_iff, liftAccessor_ok] at ok
-        obtain ⟨_, _, _, _, _, _, lowered⟩ := ok
-        exact decrease lowered
-      · cases ok; rfl
-    · cases ok; rfl
+  obtain ⟨_, rfl⟩ := processSlashings_eq ok
+  rfl
 
 private theorem SamePendingQueue.effectiveUpdates {f : Fork} {s t : BeaconState preset f}
     (ok : processEffectiveBalanceUpdates s = .ok t) : SamePendingQueue s t := by

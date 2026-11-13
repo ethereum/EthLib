@@ -163,15 +163,16 @@ theorem decreaseBalance {index : ValidatorIndex} {delta : Gwei}
 
 end RegistryLifecycle
 
-/-- Slashing penalties change balances only, so they keep the validators. -/
-theorem processSlashings_validators {s t : BeaconState preset fork}
-    (ok : processSlashings s = .ok t) : t.validators = s.validators := by
-  -- A fold whose steps keep the validators keeps them.
+/-- Slashing penalties change only the balances. -/
+theorem processSlashings_eq {s t : BeaconState preset fork}
+    (ok : processSlashings s = .ok t) : ∃ balances, t = { s with balances } := by
   have fold {step : BeaconState preset fork → Nat → Except TransitionError _} {xs : List Nat}
-      (kept : ∀ a i b, step a i = .ok b → b.validators = a.validators)
-      (ok : xs.foldlM step s = .ok t) : t.validators = s.validators :=
-    foldlM_ok_invariant (fun t => t.validators = s.validators)
-      (fun _ _ _ previous ok => (kept _ _ _ ok).trans previous) rfl ok
+      (kept : ∀ a i b, step a i = .ok b → ∃ balances, b = { a with balances })
+      (ok : xs.foldlM step s = .ok t) : ∃ balances, t = { s with balances } := by
+    refine foldlM_ok_invariant (fun t => ∃ balances, t = { s with balances }) ?_ ⟨_, rfl⟩ ok
+    rintro _ _ _ ⟨_, rfl⟩ stepped
+    obtain ⟨_, rfl⟩ := kept _ _ _ stepped
+    exact ⟨_, rfl⟩
   unfold processSlashings at ok
   simp only [bind_ok_iff] at ok
   obtain ⟨_, _, _, _, _, _, ok⟩ := ok
@@ -185,9 +186,10 @@ theorem processSlashings_validators {s t : BeaconState preset fork}
       split at ok
       · simp only [bind_ok_iff, liftAccessor_ok] at ok
         obtain ⟨_, _, _, _, lowered⟩ := ok
-        exact decreaseBalance_validators lowered
-      · cases ok; rfl
-    · cases ok; rfl
+        obtain ⟨_, _, rfl⟩ := decreaseBalance_eq_ok_iff.mp lowered
+        exact ⟨_, rfl⟩
+      · cases ok; exact ⟨_, rfl⟩
+    · cases ok; exact ⟨_, rfl⟩
   · refine fold (fun _ _ _ ok => ?_) ok
     simp only [applySlashingPenalty, bind_ok_iff, liftAccessor_ok] at ok
     obtain ⟨_, _, ok⟩ := ok
@@ -196,9 +198,16 @@ theorem processSlashings_validators {s t : BeaconState preset fork}
       split at ok
       · simp only [bind_ok_iff, liftAccessor_ok] at ok
         obtain ⟨_, _, _, _, _, _, lowered⟩ := ok
-        exact decreaseBalance_validators lowered
-      · cases ok; rfl
-    · cases ok; rfl
+        obtain ⟨_, _, rfl⟩ := decreaseBalance_eq_ok_iff.mp lowered
+        exact ⟨_, rfl⟩
+      · cases ok; exact ⟨_, rfl⟩
+    · cases ok; exact ⟨_, rfl⟩
+
+/-- Slashing penalties change balances only, so they keep the validators. -/
+theorem processSlashings_validators {s t : BeaconState preset fork}
+    (ok : processSlashings s = .ok t) : t.validators = s.validators := by
+  obtain ⟨_, rfl⟩ := processSlashings_eq ok
+  rfl
 
 /-- An epoch stage keeps the validators, unless it is one of three stages.
 

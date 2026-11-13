@@ -580,28 +580,8 @@ private theorem processEffectiveBalanceUpdates
 
 private theorem slashings (ok : processSlashings state = .ok after) :
     Kept state after := by
-  unfold processSlashings at ok
-  simp only [bind_ok_iff] at ok
-  obtain ⟨_, _, _, _, _, _, ok⟩ := ok
-  split at ok
-  · simp only [bind_ok_iff] at ok
-    obtain ⟨_, _, applied⟩ := ok
-    refine foldlM (fun _ _ _ ok => ?_) applied
-    unfold applySlashingPenaltyElectra at ok
-    simp only [bind, Except.bind, pure, Except.pure] at ok
-    repeat' split at ok
-    all_goals first
-      | (cases ok; done)
-      | (cases ok; exact refl _)
-      | exact decreaseBalance (liftAccessor_ok.mp ok)
-  · refine foldlM (fun _ _ _ ok => ?_) ok
-    unfold applySlashingPenalty at ok
-    simp only [bind, Except.bind, pure, Except.pure] at ok
-    repeat' split at ok
-    all_goals first
-      | (cases ok; done)
-      | (cases ok; exact refl _)
-      | exact decreaseBalance (liftAccessor_ok.mp ok)
+  obtain ⟨_, rfl⟩ := processSlashings_eq ok
+  exact refl _
 
 private theorem eth1Reset {before : fork < .hegota}
     (ok : processEth1DataReset before state = .ok after) : Kept state after := by

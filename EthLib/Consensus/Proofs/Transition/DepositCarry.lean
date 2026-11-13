@@ -142,36 +142,8 @@ theorem depositCarry_processRegistryUpdates
 
 theorem depositCarry_processSlashings (ok : processSlashings s = .ok t) :
     t.depositBalanceToConsume = s.depositBalanceToConsume := by
-  unfold processSlashings at ok
-  simp only [bind_ok_iff] at ok
-  obtain ⟨_, _, _, _, _, _, ok⟩ := ok
-  split at ok
-  · simp only [bind_ok_iff] at ok
-    obtain ⟨_, _, applied⟩ := ok
-    refine kept_fold (fun _ _ _ ok => ?_) applied
-    simp only [applySlashingPenaltyElectra, bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, ok⟩ := ok
-    split at ok
-    · simp only [bind_ok_iff] at ok
-      obtain ⟨_, _, ok⟩ := ok
-      split at ok
-      · simp only [bind_ok_iff, liftAccessor_ok] at ok
-        obtain ⟨_, _, _, _, lowered⟩ := ok
-        exact kept_decrease lowered
-      · cases ok; rfl
-    · cases ok; rfl
-  · refine kept_fold (fun _ _ _ ok => ?_) ok
-    simp only [applySlashingPenalty, bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, ok⟩ := ok
-    split at ok
-    · simp only [bind_ok_iff] at ok
-      obtain ⟨_, _, ok⟩ := ok
-      split at ok
-      · simp only [bind_ok_iff, liftAccessor_ok] at ok
-        obtain ⟨_, _, _, _, _, _, lowered⟩ := ok
-        exact kept_decrease lowered
-      · cases ok; rfl
-    · cases ok; rfl
+  obtain ⟨_, rfl⟩ := processSlashings_eq ok
+  rfl
 
 theorem depositCarry_processEth1DataReset {before : fork < .hegota}
     (ok : processEth1DataReset before s = .ok t) :
