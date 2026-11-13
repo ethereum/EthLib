@@ -850,13 +850,13 @@ Making a payload fails on the zero secret or when signing fails, so its success 
 Each read of message 2 or 3 then succeeds, so, by `readLibp2p_authenticates`, it verified the signature of the other peer's identity key.
 Completion returns, on each side, the static key, the identity key and the extensions of the other peer, with swapped ciphers.
 
-The chaining key of each peer has its own theorems in the same file.
-For each message of XX, one theorem names the X25519 outputs that the chaining key mixes, in order, and message 1 mixes none.
+The chaining key of each peer has its own theorems (`Networking/Proofs/Noise/Handshake.lean`).
+For each message of XX, one theorem for writing it and one for reading it name the X25519 outputs that the chaining key mixes, in order; message 1 mixes none.
 `chainingKey_writeMessage_readMessage_writeMessage` and `chainingKey_readMessage_writeMessage_readMessage` compose them for the initiator and the responder.
 After message 3, each chaining key is the one that the protocol name sets, with `ee`, `es` and `se` mixed in that order.
-Each of the three takes the keys that Noise §7.5 names, and a remote static key is the one that the state then stores.
-If both peers compute a token from the wrong keys, they still agree and the statement of `handshake_complete` still holds, but these theorems do not.
-No theorem ties a stored remote ephemeral key to the bytes of the message that carried it.
+Each token takes the local key that Noise §5.3 assigns to its role, and each remote key is the one that the final state stores.
+If both peers computed `es` or `se` from their two ephemeral keys, they would still agree and `handshake_complete` would still hold, but these theorems would not.
+No theorem ties a stored remote ephemeral key to the bytes of the message that carried it, and none states the cipher key that each mix sets.
 Only the libp2p read verifies an identity, and completion checks that the stored remote has the remote static key of the handshake.
 The raw transport split of an XX state checks neither.
 The Python tests compare the raw XX handshake with a published test vector.

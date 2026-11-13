@@ -53,33 +53,6 @@ private theorem authenticatePayload_of_makePayload {k : Fn} {staticKey : Key}
   simp [authenticatePayload, decodePayload_encodePayload he, hv, hd, bind, Except.bind, pure,
     Except.pure]
 
-/-- Writing a handshake message keeps the local static key. -/
-private theorem staticKey_of_writeMessage {s next : HandshakeState} {payload message : ByteArray}
-    (h : writeMessage s payload = .ok (next, message)) : next.staticKey = s.staticKey := by
-  dsimp only [writeMessage, Bind.bind, Pure.pure, Except.bind, Except.pure, throw, throwThe,
-    MonadExceptOf.throw] at h
-  split at h
-  · cases h
-  split at h
-  · cases h
-  cases h
-  rfl
-
-/-- Reading a handshake message keeps the local static key. -/
-private theorem staticKey_of_readMessage {s next : HandshakeState} {message payload : ByteArray}
-    (h : readMessage s message = .ok (next, payload)) : next.staticKey = s.staticKey := by
-  dsimp only [readMessage, Bind.bind, Pure.pure, Except.bind, Except.pure, throw, throwThe,
-    MonadExceptOf.throw] at h
-  split at h
-  · cases h
-  split at h
-  · cases h
-  rename_i v hv
-  split at h
-  · cases h
-  cases h
-  split at hv <;> (repeat' split at hv) <;> cases hv <;> rfl
-
 /-- Two honest libp2p peers complete XX, and each returns the identity of the other.
 
 The secrets `si`, `ei` and the identity secret `ki` are those of the initiator.
@@ -135,9 +108,9 @@ theorem libp2p_complete (si ei sr er : Key) (ki kr : Fn)
   have f₁ : R₁.step = 1 := by rw [sR₁]; rfl
   have f₂ : R₂.step = 2 := by rw [sR₂, f₁]
   have f₃ : R₃.step = 3 := by rw [sR₃, f₂]
-  have kR₁ : R₁.staticKey = sr := staticKey_of_readMessage hr₁
+  have kR₁ : R₁.staticKey = sr := (keys_of_readMessage hr₁).1
   have kI₂ : I₂.staticKey = si :=
-    (staticKey_of_readMessage hr₂).trans (staticKey_of_writeMessage hw₁)
+    (keys_of_readMessage hr₂).1.trans (keys_of_writeMessage hw₁).1
   have hdec : decodePayload .empty = .ok {} := rfl
   let remoteR : Remote := ⟨X25519.publicKey sr, Point.mul kr .generator, g₂, x₂⟩
   let remoteI : Remote := ⟨X25519.publicKey si, Point.mul ki .generator, g₃, x₃⟩

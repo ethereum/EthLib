@@ -24,6 +24,8 @@ Both peers end with the same symmetric state, and each learns the static public 
 
 The send cipher of each peer is then the receive cipher of the other.
 
+For each message, the chaining key mixes the X25519 outputs that the token rules name.
+
 [noise]: https://noiseprotocol.org/noise_rev34.pdf
 -/
 
@@ -224,21 +226,20 @@ theorem handshake_complete (si ei sr er : Key) (prologue p₁ p₂ p₃ : ByteAr
       hx₂, decryptAndHash_encryptAndHash hep₃]
   exact ⟨_, _, _, _, _, _, _, _, _, _, _, hw₁, hr₁, hw₂, hr₂, hw₃, hr₃, rfl, rfl, rfl, rfl, rfl⟩
 
-
 /-! ## The chaining key of each message
 
-Each token `ee`, `es` and `se` of Noise §5.3 mixes one X25519 output into the chaining key.
+For each message of XX, the theorems below name the X25519 outputs that the chaining key mixes.
 
-For each message of XX, the theorems below name the outputs that the chaining key takes, in order.
+They give the local key of each token, and the field of the state that holds its remote key.
 
-A token computed from the wrong pair of keys therefore fails them, even when both peers agree on it.
+A token that used another local key or another remote field would make them false.
 -/
 
-/-- Mixing a key replaces the chaining key by the first HKDF output. -/
+/-- Mixing a key sets the chaining key to the first HKDF output of the chaining key and that key. -/
 private theorem chainingKey_mixKey (s : SymmetricState) (input : Key) :
     (mixKey s input).chainingKey = ⟨(hkdf2 s.chainingKey (packBytes input)).1⟩ := rfl
 
-/-- Encrypting and hashing leaves the chaining key. -/
+/-- Encrypting and hashing keeps the chaining key. -/
 private theorem chainingKey_of_encryptAndHash {s next : SymmetricState} {p c : ByteArray}
     (h : encryptAndHash s p = .ok (next, c)) : next.chainingKey = s.chainingKey := by
   unfold encryptAndHash at h
@@ -249,7 +250,7 @@ private theorem chainingKey_of_encryptAndHash {s next : SymmetricState} {p c : B
     rw [← h.1]
     rfl
 
-/-- Decrypting and hashing leaves the chaining key. -/
+/-- Decrypting and hashing keeps the chaining key. -/
 private theorem chainingKey_of_decryptAndHash {s next : SymmetricState} {c p : ByteArray}
     (h : decryptAndHash s c = .ok (next, p)) : next.chainingKey = s.chainingKey := by
   unfold decryptAndHash at h
@@ -260,40 +261,7 @@ private theorem chainingKey_of_decryptAndHash {s next : SymmetricState} {c p : B
     rw [← h.1]
     rfl
 
-/-- Writing keeps the local keys and the remote ephemeral key. -/
-private theorem keys_of_writeMessage {s next : HandshakeState} {payload message : ByteArray}
-    (h : writeMessage s payload = .ok (next, message)) :
-    next.staticKey = s.staticKey ∧ next.ephemeralKey = s.ephemeralKey ∧
-      next.remoteEphemeral = s.remoteEphemeral := by
-  dsimp only [writeMessage, Bind.bind, Pure.pure, Except.bind, Except.pure, throw, throwThe,
-    MonadExceptOf.throw] at h
-  split at h
-  · cases h
-  rename_i v hv
-  split at h
-  · cases h
-  rename_i w hw
-  cases h
-  exact ⟨rfl, rfl, rfl⟩
-
-/-- Reading keeps the local keys. -/
-private theorem keys_of_readMessage {s next : HandshakeState} {message payload : ByteArray}
-    (h : readMessage s message = .ok (next, payload)) :
-    next.staticKey = s.staticKey ∧ next.ephemeralKey = s.ephemeralKey := by
-  dsimp only [readMessage, Bind.bind, Pure.pure, Except.bind, Except.pure, throw, throwThe,
-    MonadExceptOf.throw] at h
-  split at h
-  · cases h
-  split at h
-  · cases h
-  rename_i v hv
-  split at h
-  · cases h
-  rename_i w hw
-  cases h
-  split at hv <;> (repeat' split at hv) <;> cases hv <;> exact ⟨rfl, rfl⟩
-
-/-- Writing message 1 leaves the chaining key, since its one token `e` mixes only the hash. -/
+/-- Writing message 1 keeps the chaining key, since its one token `e` mixes only into the hash. -/
 theorem chainingKey_writeMessage_of_step_eq_zero {s next : HandshakeState}
     {payload message : ByteArray} (h : writeMessage s payload = .ok (next, message))
     (hs : s.step = 0) : next.symmetric.chainingKey = s.symmetric.chainingKey := by
@@ -314,7 +282,7 @@ theorem chainingKey_writeMessage_of_step_eq_zero {s next : HandshakeState}
       rfl
   all_goals first | omega | cases hv
 
-/-- Reading message 1 leaves the chaining key, since its one token `e` mixes only the hash. -/
+/-- Reading message 1 keeps the chaining key, since its one token `e` mixes only into the hash. -/
 theorem chainingKey_readMessage_of_step_eq_zero {s next : HandshakeState}
     {message payload : ByteArray} (h : readMessage s message = .ok (next, payload))
     (hs : s.step = 0) : next.symmetric.chainingKey = s.symmetric.chainingKey := by
@@ -337,7 +305,7 @@ theorem chainingKey_readMessage_of_step_eq_zero {s next : HandshakeState}
     · cases hv
   all_goals first | omega | cases hv
 
-/-- Writing message 2 mixes `ee`, then `es`, into the chaining key, Noise §7.5.
+/-- Writing message 2 mixes `ee`, then `es`, into the chaining key, Noise §§5.3, 7.5.
 
 The responder computes `ee` from its ephemeral key and `es` from its static key.
 
@@ -375,11 +343,13 @@ theorem chainingKey_writeMessage_of_step_eq_one {s next : HandshakeState}
       rfl
   all_goals first | omega | cases hv
 
-/-- Reading message 2 mixes `ee`, then `es`, into the chaining key, Noise §7.5.
+/-- Reading message 2 mixes `ee`, then `es`, into the chaining key, Noise §§5.3, 7.5.
 
 The initiator computes both from its ephemeral key.
 
-`ee` takes the remote ephemeral key and `es` the remote static key, which the state then stores. -/
+`ee` takes the remote ephemeral key and `es` the remote static key.
+
+The new state stores both. -/
 theorem chainingKey_readMessage_of_step_eq_one {s next : HandshakeState}
     {message payload : ByteArray} (h : readMessage s message = .ok (next, payload))
     (hs : s.step = 1) :
@@ -414,9 +384,9 @@ theorem chainingKey_readMessage_of_step_eq_one {s next : HandshakeState}
     · cases hv
   all_goals first | omega | cases hv
 
-/-- Writing message 3 mixes `se` into the chaining key, Noise §7.5.
+/-- Writing message 3 mixes `se` into the chaining key, Noise §§5.3, 7.5.
 
-The initiator computes it from its static key and the remote ephemeral key. -/
+The initiator computes it from its static key and the remote ephemeral key that the state holds. -/
 theorem chainingKey_writeMessage_of_step_eq_two {s next : HandshakeState}
     {payload message : ByteArray} (h : writeMessage s payload = .ok (next, message))
     (hs : s.step = 2) :
@@ -449,7 +419,7 @@ theorem chainingKey_writeMessage_of_step_eq_two {s next : HandshakeState}
       rw [chainingKey_mixKey, chainingKey_of_encryptAndHash hu]
   · cases hv
 
-/-- Reading message 3 mixes `se` into the chaining key, Noise §7.5.
+/-- Reading message 3 mixes `se` into the chaining key, Noise §§5.3, 7.5.
 
 The responder computes it from its ephemeral key and the remote static key, which it then stores.
 
@@ -491,9 +461,11 @@ theorem chainingKey_readMessage_of_step_eq_two {s next : HandshakeState}
 
 The first chaining key is the one that the protocol name sets, Noise §5.2.
 
-`ee` and `es` take its ephemeral key, with the remote ephemeral key and the remote static key.
+`ee` and `es` pair the ephemeral key of the initiator with the remote ephemeral and static keys.
 
-`se` takes its static key and the remote ephemeral key. -/
+`se` pairs the static key of the initiator with the remote ephemeral key.
+
+These remote keys are the ones that the final state stores. -/
 theorem chainingKey_writeMessage_readMessage_writeMessage {si ei : Key}
     {prologue p₁ p₂ p₃ m₁ m₂ m₃ : ByteArray} {i₁ i₂ i₃ : HandshakeState}
     (h₁ : writeMessage (initializeHandshake true si ei prologue) p₁ = .ok (i₁, m₁))
@@ -521,9 +493,11 @@ theorem chainingKey_writeMessage_readMessage_writeMessage {si ei : Key}
 
 The first chaining key is the one that the protocol name sets, Noise §5.2.
 
-`ee` and `es` take the remote ephemeral key, with its ephemeral key and its static key.
+`ee` and `es` pair the ephemeral and static keys of the responder with the remote ephemeral key.
 
-`se` takes its ephemeral key and the remote static key. -/
+`se` pairs the ephemeral key of the responder with the remote static key.
+
+These remote keys are the ones that the final state stores. -/
 theorem chainingKey_readMessage_writeMessage_readMessage {sr er : Key}
     {prologue p₁ p₂ p₃ m₁ m₂ m₃ : ByteArray} {r₁ r₂ r₃ : HandshakeState}
     (h₁ : readMessage (initializeHandshake false sr er prologue) m₁ = .ok (r₁, p₁))
