@@ -42,24 +42,6 @@ open Base
 
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 
-/-- The proposers of an epoch stay drawable on a state with the same validators.
-
-The cap of the draw must agree, and the other state is before Gloas. -/
-private theorem ProposersDrawable.of_validators {fork fork' : Fork}
-    {state : BeaconState preset fork} {state' : BeaconState preset fork'} {epoch : Epoch}
-    (data : state'.validators.data = state.validators.data)
-    (cap : drawCap preset fork' = drawCap preset fork) (early : ¬ .glamsterdam ≤ fork')
-    (drawable : ProposersDrawable state epoch) : ProposersDrawable state' epoch := by
-  obtain ⟨capped, full, few⟩ := drawable
-  refine ⟨?_, ?_, ?_⟩
-  · intro validator member
-    rw [cap]
-    exact capped validator (data ▸ member)
-  · obtain ⟨validator, member, active, -, atCap⟩ := full
-    exact ⟨validator, data ▸ member, active, fun later => absurd later early, cap ▸ atCap⟩
-  · rw [data]
-    exact few
-
 /-- The upgrade to Fulu succeeds when the first lookahead of proposers can be drawn.
 
 It draws the proposers of the current epoch and of each epoch of the seed lookahead.
@@ -235,44 +217,6 @@ theorem onboardBuildersFromPendingDeposits_ok {state : BeaconState preset .glams
   dsimp only [onboardBuildersFromPendingDeposits]
   rw [foldedOk]
   exact ⟨_, rfl⟩
-
-/-- Two states with the same registry and mixes have the same beacon committee members in a slot. -/
-private theorem slotCommitteeMembers_eq_of_eq {fork fork' : Fork}
-    {state : BeaconState preset fork} {other : BeaconState preset fork'}
-    (validators : other.validators.data = state.validators.data)
-    (mixes : other.randaoMixes.elements = state.randaoMixes.elements) (slot : Slot) :
-    slotCommitteeMembers other slot = slotCommitteeMembers state slot := by
-  unfold slotCommitteeMembers attesterShuffle getCommitteeCountPerSlot getActiveValidatorIndices
-    getActiveValidatorIndicesChecked getSeed getRandaoMix
-  simp only [validators, mixes]
-
-/-- The committees of an epoch stay drawable on a state with the same registry and mixes.
-
-The cap of the draw must agree. -/
-private theorem PtcDrawable.of_eq {fork fork' : Fork}
-    {state : BeaconState preset fork} {other : BeaconState preset fork'} {epoch : Epoch}
-    (validators : other.validators.data = state.validators.data)
-    (mixes : other.randaoMixes.elements = state.randaoMixes.elements)
-    (cap : drawCap preset fork' = drawCap preset fork)
-    (drawable : PtcDrawable state epoch) : PtcDrawable other epoch := by
-  obtain ⟨capped, full, few, room, committeeRoom⟩ := drawable
-  refine ⟨?_, ?_, ?_, ?_, ?_⟩
-  · intro validator member
-    rw [cap]
-    exact capped validator (validators ▸ member)
-  · intro slot inEpoch members computed
-    rw [slotCommitteeMembers_eq_of_eq validators mixes] at computed
-    obtain ⟨index, member, validator, got, atCap⟩ := full slot inEpoch members computed
-    refine ⟨index, member, validator, ?_, cap ▸ atCap⟩
-    unfold getValidator at got ⊢
-    rw [validators]
-    exact got
-  · rw [validators]
-    exact few
-  · rw [validators]
-    exact room
-  · rw [validators]
-    exact committeeRoom
 
 /-- The upgrade to Gloas succeeds when the first window of payload committees can be drawn.
 

@@ -27,7 +27,7 @@ Before Electra the count is the size of the registry alone, so the upgrade at mo
 
 The upgrade to Gloas moves the pending deposits of builders to the builders, or drops them.
 
-[EIP-8282] keeps that onboarding at the fork.
+[EIP-7732] specifies that onboarding at the fork, and [EIP-8282] keeps it.
 
 That only removes pending deposits, and the upgrade to Heze carries the queue over unchanged.
 
@@ -36,6 +36,7 @@ So a slot across forks raises the count only when it crosses Electra, and then a
 Before Electra the count is the size of the registry, so the rise is at most that size.
 
 [EIP-7251]: https://eips.ethereum.org/EIPS/eip-7251#consensus-layer-1
+[EIP-7732]: https://eips.ethereum.org/EIPS/eip-7732#fork-transition
 [EIP-8282]: https://eips.ethereum.org/EIPS/eip-8282#fork-transition-onboarding
 -/
 

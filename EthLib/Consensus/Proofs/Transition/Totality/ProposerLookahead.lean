@@ -89,6 +89,24 @@ structure ProposersDrawable (state : BeaconState preset fork) (epoch : Epoch) : 
   /-- The registry holds at most `2^40` validators. -/
   few : state.validators.data.size ≤ 2 ^ 40
 
+/-- The proposers of an epoch stay drawable on a state with the same validators.
+
+The cap of the draw must agree, and the other state is before Gloas. -/
+theorem ProposersDrawable.of_validators {fork' : Fork}
+    {state : BeaconState preset fork} {state' : BeaconState preset fork'} {epoch : Epoch}
+    (data : state'.validators.data = state.validators.data)
+    (cap : drawCap preset fork' = drawCap preset fork) (early : ¬ .glamsterdam ≤ fork')
+    (drawable : ProposersDrawable state epoch) : ProposersDrawable state' epoch := by
+  obtain ⟨capped, full, few⟩ := drawable
+  refine ⟨?_, ?_, ?_⟩
+  · intro validator member
+    rw [cap]
+    exact capped validator (data ▸ member)
+  · obtain ⟨validator, member, active, -, atCap⟩ := full
+    exact ⟨validator, data ▸ member, active, fun later => absurd later early, cap ▸ atCap⟩
+  · rw [data]
+    exact few
+
 /-- The proposers of an epoch are drawn under bounds, with a validator at the cap of the draw.
 
 The epoch plus the length of the history of mixes stays below `2^64`.
