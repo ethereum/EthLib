@@ -322,11 +322,8 @@ theorem effectiveKept_attesterSlashing {f : Fork} {s t : BeaconState preset f}
 
 theorem effectiveKept_voluntaryExit {f : Fork} {s t : BeaconState preset f}
     {signed : SignedVoluntaryExit}
-    (ok : processVoluntaryExit config checks s signed = .ok t) : EffectiveKept s t := by
-  unfold processVoluntaryExit at ok
-  simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok, liftSsz_ok] at ok
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, exited⟩ := ok
-  exact effectiveKept_exit exited
+    (ok : processVoluntaryExit config checks s signed = .ok t) : EffectiveKept s t :=
+  effectiveKept_exit (processVoluntaryExit_initiates ok)
 
 theorem effectiveKept_blsChange {f : Fork} {s t : BeaconState preset f}
     {signed : SignedBLSToExecutionChange}

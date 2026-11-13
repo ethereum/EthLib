@@ -2002,16 +2002,6 @@ private theorem exitQueue_count_room {fork : Fork} {s queued : BeaconState prese
   exact ⟨rfl, (exitQueueEpoch_churn scheduled finite).trans_le
     (max_le_max_left _ (validatorChurnLimit_le_cohortCap s bound bounded))⟩
 
-/-- A successful voluntary exit reaches the exit scheduler with the original state. -/
-private theorem voluntaryExit_initiates {fork : Fork} {s t : BeaconState preset fork}
-    {signed : SignedVoluntaryExit}
-    (ok : processVoluntaryExit config checks s signed = .ok t) :
-    initiateValidatorExit config s signed.message.validatorIndex = .ok t := by
-  unfold processVoluntaryExit at ok
-  simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok, liftSsz_ok] at ok
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, exited⟩ := ok
-  exact exited
-
 /-- Voluntary exits retain concrete charge coverage across their entire operation fold. -/
 private theorem voluntaryExits_indexedTrace {fork : Fork} {s t : BeaconState preset fork}
     (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
@@ -2028,7 +2018,7 @@ private theorem voluntaryExits_indexedTrace {fork : Fork} {s t : BeaconState pre
     (fun _ _ _ ok => (frame_processVoluntaryExit ok).slot) ok
   · intro a signed b stepped
     obtain ⟨calls, firsts, trace, rates, covered⟩ :=
-      initiateExit_indexedTrace electra early (voluntaryExit_initiates stepped)
+      initiateExit_indexedTrace electra early (processVoluntaryExit_initiates stepped)
     exact ⟨calls, firsts, trace, DepartureCoverage.of_accessor early covered, rates⟩
   · intro a signed b stepped
     exact effectiveKept_voluntaryExit stepped
@@ -2771,7 +2761,7 @@ private theorem block_indexedTrace_sites {fork : Fork} (electra : .pectra ≤ fo
     have five := foldlM_ok_invariant
       (fun t => (departureQueues electra t).2.2 = (departureQueues electra voted).2.2)
       (fun _ _ _ kept ok =>
-        (initiateExit_consolidationFrame electra (voluntaryExit_initiates ok)).trans kept)
+        (initiateExit_consolidationFrame electra (processVoluntaryExit_initiates ok)).trans kept)
       four exitedOk
     simp only [processBlsToExecutionChanges, capella, ↓reduceDIte,
       ← Array.foldlM_toList] at changedOk
@@ -3381,7 +3371,7 @@ private theorem CountCohortStep.block {f : Fork} {s t : BeaconState preset f}
   obtain ⟨_, _, _, proposersOk, slashingsOk, attestedOk, rest⟩ :=
     processOperations_folds_of (CountCohortStep config bound) (fun a => .refl a bound)
       (fun one two => one.trans two) (CountCohortStep.processDeposit early bound)
-      (fun exited => .exit early bound (voluntaryExit_initiates exited))
+      (fun exited => .exit early bound (processVoluntaryExit_initiates exited))
       (CountCohortStep.blsChange bound)
       (fun {_ _ _ electra} _ => absurd electra.1 notElectra)
       (fun {_ _ gloas _} _ => absurd gloas notGloas) operated

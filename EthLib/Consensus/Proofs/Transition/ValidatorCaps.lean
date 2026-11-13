@@ -443,14 +443,6 @@ private theorem CapStep.attesterSlashing {f : Fork} {s t : BeaconState preset f}
     exact previous.trans (CapStep.slash slashed)
   · cases ok; exact previous
 
-private theorem CapStep.voluntaryExit {f : Fork} {s t : BeaconState preset f}
-    {signed : SignedVoluntaryExit}
-    (ok : processVoluntaryExit config checks s signed = .ok t) : CapStep s t := by
-  unfold processVoluntaryExit at ok
-  simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok, liftSsz_ok] at ok
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, exited⟩ := ok
-  exact CapStep.exit exited
-
 private theorem CapStep.block {f : Fork} {s t : BeaconState preset f}
     {engine : ExecutionEngine preset f} {block : BeaconBlock preset f}
     (early : f < .glamsterdam)
@@ -463,7 +455,8 @@ private theorem CapStep.block {f : Fork} {s t : BeaconState preset f}
   have head : CapStep s input := same (started.validators_eq early)
   obtain ⟨_, _, _, proposersOk, slashingsOk, attestedOk, rest⟩ :=
     processOperations_folds_of CapStep CapStep.refl (fun one two => one.trans two)
-      CapStep.processDeposit CapStep.voluntaryExit CapStep.blsChange (CapStep.requests order)
+      CapStep.processDeposit (fun exited => CapStep.exit (processVoluntaryExit_initiates exited))
+      CapStep.blsChange (CapStep.requests order)
       (fun attested => same (by rw [processPayloadAttestation_eq attested])) operated
   have tail : CapStep last t := by
     split at synced

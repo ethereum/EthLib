@@ -441,13 +441,19 @@ theorem registryLifecycle_processDeposit {before : fork < .hegota} {deposit : De
     (after := { state with eth1DepositIndex := fun _ => next }) rfl).trans
     (registryLifecycle_applyDeposit applied)
 
-theorem registryLifecycle_processVoluntaryExit {signed : SignedVoluntaryExit}
+/-- A successful voluntary exit is the exit call on the state before it. -/
+theorem processVoluntaryExit_initiates {signed : SignedVoluntaryExit}
     (computed : processVoluntaryExit config checks state signed = .ok after) :
-    RegistryLifecycle state after := by
+    initiateValidatorExit config state signed.message.validatorIndex = .ok after := by
   unfold processVoluntaryExit at computed
   simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok, liftSsz_ok] at computed
   obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, exited⟩ := computed
-  exact registryLifecycle_initiateValidatorExit exited
+  exact exited
+
+theorem registryLifecycle_processVoluntaryExit {signed : SignedVoluntaryExit}
+    (computed : processVoluntaryExit config checks state signed = .ok after) :
+    RegistryLifecycle state after :=
+  registryLifecycle_initiateValidatorExit (processVoluntaryExit_initiates computed)
 
 /-! ## Requests of the execution layer -/
 
