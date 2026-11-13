@@ -23,7 +23,7 @@ open EthLib.Exports (Result PyValue pyExport)
 def ofExcept {α : Type} (r : Except Error α) : Result α :=
   r.mapError fun e => (e.code, reprStr e)
 
-/-- Serialize the checked TLS 1.3 HKDF label, RFC 8446 §7.1. -/
+/-- The HkdfLabel of RFC 8446 §7.1, for a label without its `tls13 ` prefix. -/
 @[export eth_tls13_hkdf_label]
 def labelExport (args : PyValue) : Result PyValue :=
   pyExport (fun (label, context, length) => ofExcept (hkdfLabel label context length)) args

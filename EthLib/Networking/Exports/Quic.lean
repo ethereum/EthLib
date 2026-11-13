@@ -12,7 +12,9 @@ The encoder rejects a value of `2^62` or more with code 0.
 
 The decoder accepts the longer forms of RFC 9000 §16.
 
-The packet-key export rejects a cipher suite outside the two it covers with code 0.
+The QUIC key exports reject a cipher suite outside the two they cover with code 0.
+
+They reject a secret of the wrong size with code 0 too.
 
 Traffic secrets are secret, and EthLib makes no constant-time claim (SOUNDNESS.md A3).
 -/

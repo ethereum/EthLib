@@ -2,7 +2,7 @@
 
 import pytest
 
-from ethlib.cryptography.kdf import hkdf_extract
+from ethlib.cryptography.kdf import hkdf_extract, tls13_expand_label
 from ethlib.networking import quic
 from raising import raises
 
@@ -50,19 +50,22 @@ def test_initial_secret() -> None:
     assert hkdf_extract(INITIAL_SALT, DCID) == bytes.fromhex(INITIAL_SECRET)
 
 
+@pytest.mark.parametrize("dcid", [DCID, b"", bytes(20)])
+def test_initial_secrets_compose(dcid: bytes) -> None:
+    # RFC 9001 §5.2 expands the extracted secret with "client in" and "server in".
+    # RFC 9000 §17.2 allows connection IDs of 0 to 20 bytes.
+    initial = hkdf_extract(INITIAL_SALT, dcid)
+    assert quic.initial_secrets(dcid) == (
+        tls13_expand_label(initial, b"client in", b"", 32),
+        tls13_expand_label(initial, b"server in", b"", 32),
+    )
+
+
 def test_initial_secrets() -> None:
     assert quic.initial_secrets(DCID) == (
         bytes.fromhex(CLIENT_SECRET),
         bytes.fromhex(SERVER_SECRET),
     )
-
-
-@pytest.mark.parametrize("size", [0, 20])
-def test_initial_secrets_any_connection_id(size: int) -> None:
-    # RFC 9000 §17.2 allows connection IDs of 0 to 20 bytes, and the derivation always succeeds.
-    client, server = quic.initial_secrets(bytes(size))
-    assert len(client) == len(server) == 32
-    assert client != server
 
 
 @pytest.mark.parametrize(("secret", "suite", "keys"), PACKET_KEYS)

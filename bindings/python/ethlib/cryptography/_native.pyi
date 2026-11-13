@@ -282,7 +282,7 @@ def hkdf_sha256(salt: bytes, ikm: bytes, info: bytes, length: int) -> bytes:
     ...
 
 def tls13_hkdf_label(label: bytes, context: bytes, length: int) -> bytes:
-    """Serialize the checked TLS 1.3 HKDF label, RFC 8446 §7.1."""
+    """The HkdfLabel of RFC 8446 §7.1, for a label without its `tls13 ` prefix."""
     ...
 
 def tls13_expand_label(secret: bytes, label: bytes, context: bytes, length: int) -> bytes:

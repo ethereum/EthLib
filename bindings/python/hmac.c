@@ -26,6 +26,10 @@ eth_concat_kdf_sha256(
   uint64_t length
 );
 
+extern lean_object* eth_tls13_hkdf_label(lean_object* args);
+
+extern lean_object* eth_tls13_expand_label(lean_object* args);
+
 /* ---- Helpers ---------------------------------------------------------- */
 
 /* Copy a `bytes` argument into a Lean ByteArray, or raise `TypeError` and return 1. */
@@ -101,8 +105,6 @@ py_concat_kdf_sha256(
     eth_concat_kdf_sha256(z, info, (uint64_t) length), CONCAT_KDF_ERROR);
 }
 
-extern lean_object* eth_tls13_hkdf_label(lean_object* args);
-
 PyObject*
 py_tls13_hkdf_label(
   PyObject* self,
@@ -110,8 +112,6 @@ py_tls13_hkdf_label(
 ) {
   return call_pyvalue_export(eth_tls13_hkdf_label, args, 3, TLS13_ERROR);
 }
-
-extern lean_object* eth_tls13_expand_label(lean_object* args);
 
 PyObject*
 py_tls13_expand_label(

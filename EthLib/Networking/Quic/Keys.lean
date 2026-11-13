@@ -43,7 +43,7 @@ def initialSecrets (dcid : ByteArray) : Except Tls13.Error (Tls13.Secret × Tls1
   let server ← Tls13.expandLabel initial "server in".toUTF8 .empty 32
   return (client, server)
 
-/-- The SHA-256 cipher suites covered by this key derivation, RFC 9001 §5.3. -/
+/-- The two SHA-256 cipher suites of RFC 9001 §5.3 that this derivation covers. -/
 inductive CipherSuite where
   | aes128GcmSha256
   | chacha20Poly1305Sha256

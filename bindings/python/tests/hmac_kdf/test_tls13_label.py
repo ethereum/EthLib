@@ -68,7 +68,13 @@ def test_output_lengths() -> None:
             f"{PREFIX}.hkdf (EthLib.Cryptography.Hash.Hkdf.HkdfError.outputTooLong 8161)",
             HKDF,
         ),
+        (
+            lambda: tls13_expand_label(bytes(32), b"", b"", 32),
+            f"{PREFIX}.labelLength 0",
+            LABEL_LENGTH,
+        ),
         (lambda: tls13_expand_label(bytes(31), b"x", b"", 32), "expected 32 bytes, got 31", 0),
+        (lambda: tls13_expand_label(bytes(33), b"x", b"", 32), "expected 32 bytes, got 33", 0),
     ],
 )
 def test_rejected(call: Callable[[], bytes], message: str, code: int) -> None:

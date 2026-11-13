@@ -1,4 +1,4 @@
-"""Key derivation with SHA-256: HKDF with its TLS 1.3 labels, Concatenation KDF, PBKDF2, scrypt."""
+"""Key derivation with SHA-256: HKDF, TLS 1.3 labels, the Concatenation KDF, PBKDF2, scrypt."""
 
 from ethlib.cryptography._native import (
     PBKDF2_HASH_LEN,
@@ -17,7 +17,7 @@ from ethlib.cryptography._native import (
 )
 from ethlib.errors import ConcatKdfError, HkdfError, Pbkdf2Error, ScryptError, Tls13Error
 
-# The input keying material, the shared secret and the password are secret.
+# The input keying material, the TLS secret, the shared secret and the password are secret.
 # EthLib makes no constant-time claim.
 
 

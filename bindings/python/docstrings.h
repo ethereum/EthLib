@@ -210,7 +210,7 @@
   "HKDF, RFC 5869 §2: extract, then expand."
 
 #define DOC_tls13_hkdf_label \
-  "Serialize the checked TLS 1.3 HKDF label, RFC 8446 §7.1."
+  "The HkdfLabel of RFC 8446 §7.1, for a label without its `tls13 ` prefix."
 
 #define DOC_tls13_expand_label \
   "Expand a SHA-256 secret with a TLS 1.3 label and context, RFC 8446 §7.1."
