@@ -95,7 +95,8 @@ theorem processPendingDeposits_pendingConsolidations {f : Fork} {s t : BeaconSta
   repeat' (split at ok <;> try cases ok)
   all_goals exact pass ‹_›
 
-private def PendingSources {f : Fork} (s : BeaconState preset f) : Prop :=
+/-- Every pending consolidation names a source inside the registry. -/
+def PendingSources {f : Fork} (s : BeaconState preset f) : Prop :=
   ∀ electra : .pectra ≤ f, ∀ entry ∈ (s.pendingConsolidations electra).data.toList,
     entry.sourceIndex.toNat < s.validators.data.size
 

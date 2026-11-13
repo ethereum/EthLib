@@ -1835,10 +1835,6 @@ private theorem admissionFunded_consolidations {f : Fork} {s t : BeaconState pre
   simpa only [effectiveAt, actualBalanceAt, (processPendingConsolidations_kept ok).1,
     (passPendingConsolidations_kept passed).1, balances] using funded i large
 
-private def PendingSources {f : Fork} (s : BeaconState preset f) : Prop :=
-  ∀ electra : .pectra ≤ f, ∀ entry ∈ (s.pendingConsolidations electra).data.toList,
-    entry.sourceIndex.toNat < s.validators.data.size
-
 /-- Validators admitted by an epoch start with an effective balance funded by their balance.
 
 Before pending deposits the registry, the balances and the consolidation queue keep their sizes.
