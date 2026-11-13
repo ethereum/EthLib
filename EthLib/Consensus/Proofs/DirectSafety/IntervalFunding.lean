@@ -2170,22 +2170,6 @@ private theorem coverage_path_last {x y : ForkedBeaconState preset}
       exact ⟨pre.balancePath ++ [middle, ⟨middle.fork, advanced⟩], by
         simp [Run.balancePath, Step.balancePath, advanceOk, Except.toOption, List.append_assoc]⟩
 
-theorem coverage_step_epoch {x y : ForkedBeaconState preset}
-    (step : Step config checks x y) :
-    (getCurrentEpoch x.state).toNat ≤ (getCurrentEpoch y.state).toNat := by
-  have slots : x.state.slot.toNat ≤ y.state.slot.toNat := by
-    cases step with
-    | slot ok =>
-      obtain ⟨advanced, advanceOk, upgradeOk⟩ := bind_ok_iff.mp ok
-      rw [processUpgrades_slot upgradeOk]
-      obtain ⟨_, _, _, next, _, _, rfl⟩ := advanceSlot_ok advanceOk
-      dsimp only
-      omega
-    | block engine signed due ok =>
-      rw [(frame_processBlock (applySignedBlock_ok ok).2.1).slot]
-  rw [getCurrentEpoch_toNat, getCurrentEpoch_toNat]
-  exact Nat.div_le_div_right slots
-
 theorem coverage_run {x y : ForkedBeaconState preset} (run : Run config checks x y)
     (early : y.fork < .glamsterdam) (high : Nat)
     (endEpoch : (getCurrentEpoch y.state).toNat ≤ high + 1)
@@ -2198,7 +2182,7 @@ theorem coverage_run {x y : ForkedBeaconState preset} (run : Run config checks x
     intro debit i
     cases debit <;> simp [coveragePath, Run.balancePath, pathCredits, pathDebits]
   | @snoc middle last pre step ih =>
-    have selected := (coverage_step_epoch step).trans endEpoch
+    have selected := (UInt64.le_iff_toNat_le.mp step.chainStep.currentEpoch_le).trans endEpoch
     simp only [Run.balanceEvents, bind_ok_iff] at replayed
     obtain ⟨prior, priorOk, rest⟩ := replayed
     simp only [selected, ↓reduceIte, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at rest
@@ -3938,7 +3922,7 @@ private theorem funding_run_capacity {x y : ForkedBeaconState preset}
   | @snoc middle last pre step ih =>
     have beforeEarly : middle.fork < .glamsterdam :=
       Nat.lt_of_le_of_lt step.chainStep.fork_le early
-    have beforeEpoch := coverage_step_epoch step
+    have beforeEpoch := UInt64.le_iff_toNat_le.mp step.chainStep.currentEpoch_le
     have within := beforeEpoch.trans endEpoch
     simp only [Run.balanceEvents, bind_ok_iff] at replayed
     obtain ⟨prior, priorOk, rest⟩ := replayed
@@ -3946,14 +3930,8 @@ private theorem funding_run_capacity {x y : ForkedBeaconState preset}
     obtain ⟨added, addedOk, rfl⟩ := rest
     have previous := ih beforeEarly within prior priorOk
     have latest := stepBound pre step early added addedOk
-    have start : (getCurrentEpoch x.state).toNat ≤
-        (getCurrentEpoch middle.state).toNat := by
-      have monotone {a b : ForkedBeaconState preset} (run : Run config checks a b) :
-          (getCurrentEpoch a.state).toNat ≤ (getCurrentEpoch b.state).toNat := by
-        induction run with
-        | nil => exact Nat.le_refl _
-        | snoc run step induction => exact induction.trans (coverage_step_epoch step)
-      exact monotone pre
+    have start : (getCurrentEpoch x.state).toNat ≤ (getCurrentEpoch middle.state).toNat :=
+      UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps pre.chainSteps)
     have count : (getCurrentEpoch last.state).toNat - (getCurrentEpoch x.state).toNat =
         ((getCurrentEpoch middle.state).toNat - (getCurrentEpoch x.state).toNat) +
         ((getCurrentEpoch last.state).toNat - (getCurrentEpoch middle.state).toNat) := by omega
@@ -3980,7 +3958,7 @@ private theorem funding_run_funded {x y : ForkedBeaconState preset}
   | @snoc middle last pre step ih =>
     have beforeEarly : middle.fork < .glamsterdam :=
       Nat.lt_of_le_of_lt step.chainStep.fork_le early
-    have beforeEpoch := coverage_step_epoch step
+    have beforeEpoch := UInt64.le_iff_toNat_le.mp step.chainStep.currentEpoch_le
     have within := beforeEpoch.trans endEpoch
     simp only [Run.balanceEvents, bind_ok_iff] at replayed
     obtain ⟨prior, priorOk, rest⟩ := replayed
@@ -3988,14 +3966,8 @@ private theorem funding_run_funded {x y : ForkedBeaconState preset}
     obtain ⟨added, addedOk, rfl⟩ := rest
     have previous := ih beforeEarly within prior priorOk
     have latest := stepBound pre step early added addedOk
-    have start : (getCurrentEpoch x.state).toNat ≤
-        (getCurrentEpoch middle.state).toNat := by
-      have monotone {a b : ForkedBeaconState preset} (run : Run config checks a b) :
-          (getCurrentEpoch a.state).toNat ≤ (getCurrentEpoch b.state).toNat := by
-        induction run with
-        | nil => exact Nat.le_refl _
-        | snoc run next induction => exact induction.trans (coverage_step_epoch next)
-      exact monotone pre
+    have start : (getCurrentEpoch x.state).toNat ≤ (getCurrentEpoch middle.state).toNat :=
+      UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps pre.chainSteps)
     have count : (getCurrentEpoch last.state).toNat - (getCurrentEpoch x.state).toNat =
         ((getCurrentEpoch middle.state).toNat - (getCurrentEpoch x.state).toNat) +
         ((getCurrentEpoch last.state).toNat - (getCurrentEpoch middle.state).toNat) := by omega

@@ -87,13 +87,7 @@ private theorem funding_assemble {g x y : ForkedBeaconState preset}
   intro a b pre step before added addedOk
   have reachable := shared.append pre
   have holds := reachable.invariant_of_genesis genesis
-  have forkOrder : x.fork ≤ a.fork := by
-    have monotone {u v : ForkedBeaconState preset} (run : Run config checks u v) :
-        u.fork ≤ v.fork := by
-      induction run with
-      | nil => exact Nat.le_refl _
-      | snoc run next ih => exact Nat.le_trans ih next.chainStep.fork_le
-    exact monotone pre
+  have forkOrder : x.fork ≤ a.fork := fork_le_of_chainSteps pre.chainSteps
   have startElectra : .pectra ≤ a.fork := Nat.le_trans electra forkOrder
   cases step with
   | slot ok =>
@@ -942,7 +936,7 @@ private theorem intervalLoss_step_sites {x y : ForkedBeaconState preset}
       rw [cachedEq]
       exact ⟨.of_data rfl, rfl, id, id, Nat.le_refl _, .of_data rfl⟩
     have advanceLife := registryLifecycle_advanceSlot advanceOk
-    have advanceEpoch := coverage_step_epoch (Step.slot ok)
+    have advanceEpoch := UInt64.le_iff_toNat_le.mp (Step.slot ok).chainStep.currentEpoch_le
     have advancedHolds := (advanceSlot_invariant holds advanceOk).1
     have crossingBound : ∀ e ∈ crossings,
         intervalLoss_EventBetween (config := config) (checks := checks) x y e := by
@@ -1005,14 +999,12 @@ private theorem replay_event_provenance {g x y : ForkedBeaconState preset}
       (getCurrentEpoch x.state).toNat ≤ (getCurrentEpoch event.before.state).toNat ∧
       (getCurrentEpoch event.before.state).toNat ≤ (getCurrentEpoch y.state).toNat := by
   have runEpoch {a b : ForkedBeaconState preset} (run : Run config checks a b) :
-      (getCurrentEpoch a.state).toNat ≤ (getCurrentEpoch b.state).toNat := by
-    induction run with
-    | nil => exact Nat.le_refl _
-    | snoc pre step ih => exact ih.trans (coverage_step_epoch step)
+      (getCurrentEpoch a.state).toNat ≤ (getCurrentEpoch b.state).toNat :=
+    UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps run.chainSteps)
   induction tail generalizing events with
   | nil => cases replayed; simp at member
   | @snoc middle last pre step ih =>
-    have selected := (coverage_step_epoch step).trans endEpoch
+    have selected := (UInt64.le_iff_toNat_le.mp step.chainStep.currentEpoch_le).trans endEpoch
     simp only [Run.balanceEvents, bind_ok_iff] at replayed
     obtain ⟨prior, priorOk, rest⟩ := replayed
     simp only [selected, ↓reduceIte, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at rest
@@ -1021,7 +1013,7 @@ private theorem replay_event_provenance {g x y : ForkedBeaconState preset}
     · obtain ⟨first, during, final, ordered, matched, lo, hi⟩ :=
         ih (Nat.lt_of_le_of_lt step.chainStep.fork_le early) selected prior priorOk old
       exact ⟨first, during, final.trans (RegistryLifecycle.chainStep step.chainStep),
-        ordered, matched, lo, hi.trans (coverage_step_epoch step)⟩
+        ordered, matched, lo, hi.trans (UInt64.le_iff_toNat_le.mp step.chainStep.currentEpoch_le)⟩
     · obtain ⟨first, during, final, ordered, matched, lo, hi, _⟩ :=
         intervalLoss_step_sites step early ((shared.append pre).invariant_of_genesis genesis)
           addedOk event added
@@ -1043,7 +1035,7 @@ private theorem intervalLoss_event_slashed {g x y : ForkedBeaconState preset}
   induction tail generalizing events with
   | nil => cases replayed; simp at member
   | @snoc middle last pre step ih =>
-    have selected := (coverage_step_epoch step).trans endEpoch
+    have selected := (UInt64.le_iff_toNat_le.mp step.chainStep.currentEpoch_le).trans endEpoch
     simp only [Run.balanceEvents, bind_ok_iff] at replayed
     obtain ⟨prior, priorOk, rest⟩ := replayed
     simp only [selected, ↓reduceIte, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at rest
@@ -1067,7 +1059,7 @@ private theorem replay_event_fork_le {g x y : ForkedBeaconState preset}
   induction tail generalizing events with
   | nil => cases replayed; simp at member
   | @snoc middle last pre step ih =>
-    have selected := (coverage_step_epoch step).trans endEpoch
+    have selected := (UInt64.le_iff_toNat_le.mp step.chainStep.currentEpoch_le).trans endEpoch
     simp only [Run.balanceEvents, bind_ok_iff] at replayed
     obtain ⟨prior, priorOk, rest⟩ := replayed
     simp only [selected, ↓reduceIte, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at rest
@@ -1174,7 +1166,7 @@ private theorem replay_electra_deposit_epoch {g x y : ForkedBeaconState preset}
   induction tail generalizing events with
   | nil => cases replayed; simp at member
   | @snoc middle last pre step ih =>
-    have selected := (coverage_step_epoch step).trans endEpoch
+    have selected := (UInt64.le_iff_toNat_le.mp step.chainStep.currentEpoch_le).trans endEpoch
     simp only [Run.balanceEvents, bind_ok_iff] at replayed
     obtain ⟨prior, priorOk, rest⟩ := replayed
     simp only [selected, ↓reduceIte, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at rest
@@ -1183,7 +1175,7 @@ private theorem replay_electra_deposit_epoch {g x y : ForkedBeaconState preset}
     · rcases ih (Nat.lt_of_le_of_lt step.chainStep.fork_le early) selected prior priorOk old with
         zero | strict
       · exact Or.inl zero
-      · exact Or.inr (strict.trans_le (coverage_step_epoch step))
+      · exact Or.inr (strict.trans_le (UInt64.le_iff_toNat_le.mp step.chainStep.currentEpoch_le))
     · exact intervalLoss_step_deposit_epoch step early
         ((shared.append pre).invariant_of_genesis genesis) addedOk event added deposit electra
 
@@ -1972,10 +1964,8 @@ private theorem intervalLoss_departing {g x y : ForkedBeaconState preset}
   let rest := (Run.nil.snoc step).append post
   have earlyA := Nat.lt_of_le_of_lt (fork_le_of_chainSteps rest.chainSteps) early
   have epochs (p q : ForkedBeaconState preset) (run : Run config checks p q) :
-      (getCurrentEpoch p.state).toNat ≤ (getCurrentEpoch q.state).toNat := by
-    induction run with
-    | nil => exact le_rfl
-    | snoc pre step ih => exact ih.trans (coverage_step_epoch step)
+      (getCurrentEpoch p.state).toNat ≤ (getCurrentEpoch q.state).toNat :=
+    UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps run.chainSteps)
   have lastEpoch := (epochs a y rest).trans endEpoch
   obtain ⟨w, located, life⟩ := pre.registryLifecycle.validators i.toNat v found
   have same := Option.some.inj (located.symm.trans before)
@@ -2040,11 +2030,8 @@ private theorem intervalLoss_pointwise {g x y : ForkedBeaconState preset}
       (slashings y tail .nil rfl events replayed) unslashed
     dsimp only at bound ⊢
     omega
-  · have epochs : (getCurrentEpoch x.state).toNat ≤ (getCurrentEpoch y.state).toNat := by
-      clear early endEpoch replayed slashings located recent unslashed
-      induction tail with
-      | nil => exact le_rfl
-      | snoc pre step ih => exact ih.trans (coverage_step_epoch step)
+  · have epochs : (getCurrentEpoch x.state).toNat ≤ (getCurrentEpoch y.state).toNat :=
+      UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps tail.chainSteps)
     obtain ⟨assigned, exited⟩ :=
       intervalLoss_exit_of_not_recent x.state y.state v w life epochs active recent
     have baseline := tail.departure_baseline i.toNat (Array.getElem?_eq_some_iff.mp found).1 w
@@ -2117,11 +2104,8 @@ private theorem intervalLoss_departure_bound {g x y : ForkedBeaconState preset}
   intro a pre post equal prior priorOk event eventMember source
   have earlyA := Nat.lt_of_le_of_lt (fork_le_of_chainSteps post.chainSteps) early
   have epochBound : (getCurrentEpoch a.state).toNat ≤ high + 1 := by
-    have monotone : (getCurrentEpoch a.state).toNat ≤ (getCurrentEpoch y.state).toNat := by
-      clear tail early endEpoch replayed unslashed located key finalFlag equal
-      induction post with
-      | nil => exact le_rfl
-      | snoc pre step ih => exact ih.trans (coverage_step_epoch step)
+    have monotone : (getCurrentEpoch a.state).toNat ≤ (getCurrentEpoch y.state).toNat :=
+      UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps post.chainSteps)
     omega
   obtain ⟨middle, middleFound, _⟩ := pre.registryLifecycle.validators i.toNat v found
   have middleFlag : middle.slashed = false := by
@@ -2349,11 +2333,8 @@ private theorem intervalGain_carry_cases {x y : ForkedBeaconState preset}
       isActiveValidator w (getPreviousEpoch y.state) = true) :
     isActiveValidator v (getPreviousEpoch x.state) = true ∨
       getCurrentEpoch x.state < v.activationEpoch := by
-  have epochs : (getCurrentEpoch x.state).toNat ≤ (getCurrentEpoch y.state).toNat := by
-    clear after recent
-    induction tail with
-    | nil => exact Nat.le_refl _
-    | snoc pre step ih => exact ih.trans (coverage_step_epoch step)
+  have epochs : (getCurrentEpoch x.state).toNat ≤ (getCurrentEpoch y.state).toNat :=
+    UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps tail.chainSteps)
   obtain ⟨last, found, lifecycle⟩ := tail.registryLifecycle.validators i v before
   have same : last = w := Option.some.inj (found.symm.trans after)
   subst last
