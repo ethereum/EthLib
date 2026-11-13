@@ -251,6 +251,7 @@ public import EthLib.Consensus.Proofs.Transition.Totality.Rewards
 public import EthLib.Consensus.Proofs.Transition.Totality.RewardsBeforeAltair
 public import EthLib.Consensus.Proofs.Transition.Totality.Slashings
 public import EthLib.Consensus.Proofs.Transition.Totality.Slot
+public import EthLib.Consensus.Proofs.Transition.Totality.Supply
 public import EthLib.Consensus.Proofs.Transition.Totality.SyncCommittee
 public import EthLib.Consensus.Proofs.Transition.Totality.Upgrades
 public import EthLib.Consensus.Proofs.Transition.Upgrade
