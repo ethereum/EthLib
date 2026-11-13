@@ -3616,6 +3616,39 @@ theorem funding_epoch_site {fork : Fork} {s t : BeaconState preset fork}
       Prod.mk.injEq] at replayed
     simp [← replayed.2]
 
+/-- From Electra, the six stages before the pending deposits keep the deposit carry.
+
+After the justification they are mutator frames, so the reset keeps the balances matched. -/
+theorem funding_epoch_prefix {fork : Fork}
+    {s justified scored rewarded registered slashed reset : BeaconState preset fork}
+    (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
+    (trace : EpochTrace (EpochStage.action config checks)
+      [.justification, .inactivity, .rewards, .registry, .slashings, .eth1Reset] s reset)
+    (justifiedOk : EpochStage.Edge config checks .justification s justified)
+    (scoredOk : EpochStage.Edge config checks .inactivity justified scored)
+    (rewardedOk : processRewardsAndPenalties config scored = .ok rewarded)
+    (registeredOk : processRegistryUpdates config rewarded = .ok registered)
+    (slashedOk : processSlashings registered = .ok slashed)
+    (resetOk : EpochStage.Edge config checks .eth1Reset slashed reset)
+    (matched : BalancesMatch s) :
+    reset.depositBalanceToConsume = s.depositBalanceToConsume ∧ MutatorFrame justified reset ∧
+      BalancesMatch reset := by
+  have altair : .altair ≤ fork := Nat.le_trans (by decide) electra
+  have before : fork < .hegota := Nat.lt_trans early (by decide)
+  have carry : reset.depositBalanceToConsume = s.depositBalanceToConsume :=
+    trace.transport (fun a b => b.depositBalanceToConsume = a.depositBalanceToConsume)
+      (fun _ => rfl) (by intro _ _ _ one two; exact two.trans one)
+      (fun _ member _ _ computed => (EpochStage.action_cases.mp computed).depositCarry
+        (by simp only [List.mem_cons, List.not_mem_nil, or_false] at member
+            rcases member with rfl | rfl | rfl | rfl | rfl | rfl <;> exact nofun))
+  simp only [EpochStage.Edge, altair, before, ↓reduceDIte] at scoredOk resetOk
+  have frame := (frame_processInactivityUpdates scoredOk).trans <|
+    (frame_processRewardsAndPenalties rewardedOk).trans <|
+    (frame_processRegistryUpdates registeredOk).trans <|
+    (frame_processSlashings slashedOk).trans (frame_processEth1DataReset resetOk)
+  exact ⟨carry, frame, frame.balancesMatch <|
+    balancesMatch_of_sameSizes (sameSizes_processJustificationAndFinalization justifiedOk) matched⟩
+
 private theorem funding_epoch_capacity {fork : Fork} {s t : BeaconState preset fork}
     (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
     (ok : epochBeforePayments config checks s = .ok t)
@@ -3628,22 +3661,9 @@ private theorem funding_epoch_capacity {fork : Fork} {s t : BeaconState preset f
   obtain ⟨justified, scored, rewarded, registered, slashed, reset, deposited, rewardEvents, limit,
     trace, justifiedOk, scoredOk, rewardedOk, registeredOk, slashedOk, resetOk, depositedOk,
     consolidatedOk, rewardReplay, equal⟩ := funding_epoch_site ok replayed
-  have altair : .altair ≤ fork := Nat.le_trans (by decide) electra
-  have before : fork < .hegota := Nat.lt_trans early (by decide)
-  have carry : reset.depositBalanceToConsume = s.depositBalanceToConsume :=
-    trace.transport (fun a b => b.depositBalanceToConsume = a.depositBalanceToConsume)
-      (fun _ => rfl) (by intro _ _ _ one two; exact two.trans one)
-      (fun _ member _ _ computed => (EpochStage.action_cases.mp computed).depositCarry
-        (by simp only [List.mem_cons, List.not_mem_nil, or_false] at member
-            rcases member with rfl | rfl | rfl | rfl | rfl | rfl <;> exact nofun))
-  simp only [EpochStage.Edge, altair, before, ↓reduceDIte] at scoredOk resetOk
+  obtain ⟨carry, -, resetMatch⟩ := funding_epoch_prefix electra early trace justifiedOk scoredOk
+    rewardedOk registeredOk slashedOk resetOk matched
   simp only [EpochStage.Edge, electra, ↓reduceDIte] at depositedOk consolidatedOk
-  have frame := (frame_processInactivityUpdates scoredOk).trans <|
-    (frame_processRewardsAndPenalties rewardedOk).trans <|
-    (frame_processRegistryUpdates registeredOk).trans <|
-    (frame_processSlashings slashedOk).trans (frame_processEth1DataReset resetOk)
-  have resetMatch : BalancesMatch reset := frame.balancesMatch <|
-    balancesMatch_of_sameSizes (sameSizes_processJustificationAndFinalization justifiedOk) matched
   have rewardsZero := funding_rewards_events (by simp [funding_no_deposits]) rewardReplay
   have rewardsBound := replayRewards_bounded (by simp [EventsBounded]) rewardReplay
   have rewardsSum := funding_no_deposit_credit rewardsBound rewardsZero
