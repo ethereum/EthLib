@@ -572,7 +572,7 @@ def forkchoiceUpdatedResponse
 
 /-- Whether a status is one that a forkchoice update answers: valid, invalid or syncing.
 
-The schema `RestrictedPayloadStatusV1` of [`payload.yaml`][schema] and [step 9][fcu] allow only these.
+`RestrictedPayloadStatusV1` of [`payload.yaml`][schema] and [step 9][fcu] allow only these.
 
 [schema]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/openrpc/schemas/payload.yaml
 [fcu]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#engine_forkchoiceupdatedv1 -/

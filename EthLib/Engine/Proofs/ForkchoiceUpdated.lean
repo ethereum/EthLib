@@ -533,6 +533,32 @@ theorem exists_lookup_of_forkchoiceUpdated {status : PayloadStatus} {head : Hash
           exact ⟨p, hf.2 ▸ hp⟩
         · simp [throw, throwThe, MonadExceptOf.throw] at hf
 
+/-- An update applies only the head that it names, with its safe and finalized blocks on its chain.
+
+Each of the two blocks may instead be the zero hash. -/
+theorem onChain_of_forkchoiceUpdated {status : PayloadStatus} {head : Hash32}
+    (hf : forkchoiceUpdated tree finalized state = .ok (status, some head)) :
+    head = state.headBlockHash ∧ onChain tree head state.safeBlockHash = true ∧
+      onChain tree head state.finalizedBlockHash = true := by
+  unfold forkchoiceUpdated at hf
+  split at hf
+  · simp [pure, Except.pure] at hf
+  · split at hf
+    · simp [pure, Except.pure] at hf
+    · split at hf
+      · simp [pure, Except.pure] at hf
+      · split at hf
+        · next hc =>
+          simp only [pure, Except.pure, Except.ok.injEq, Prod.mk.injEq, Option.some.injEq] at hf
+          rw [← hf.2]
+          simpa using hc
+        · simp [throw, throwThe, MonadExceptOf.throw] at hf
+
+/-- A block that is on the chain of a head and is not the zero hash is a block of that chain. -/
+theorem mem_chainOf_of_onChain {head hash : Hash32} (h : onChain tree head hash = true)
+    (nonzero : hash ≠ ZERO_HASH) : hash ∈ chainOf tree head := by
+  simpa [onChain, nonzero] using h
+
 /-- On an applied valid head, decoded attributes give the answer of their checks against it.
 
 When they pass, the answer is the status, the head, and the attributes at their fork.
@@ -1133,5 +1159,16 @@ theorem forkchoiceUpdatedResponseOfJson_json (s : PayloadStatus) (e : Option Str
   unfold forkchoiceUpdatedResponseOfJson forkchoiceUpdatedResponseJson
   simp only [hfs, liftM_ok, ok_bind, hall, ite_true, hf, l2, Json.payloadStatusOfJson_json, h]
   cases id <;> simp [Json.lift, fixed_dataJson, Option.mapM] <;> rfl
+
+/-- The decoder reads back the response of every call, with any validation error. -/
+theorem forkchoiceUpdatedResponseOfJson_call {version : Nat} {params : Lean.Json}
+    {r : PayloadStatus × Option Hash32 × Option (Σ fork, PayloadAttributes fork)}
+    (h : forkchoiceUpdatedCall config version tree finalized params = .ok r) (e : Option String) :
+    forkchoiceUpdatedResponseOfJson (forkchoiceUpdatedResponseJson (forkchoiceUpdatedResponse r).1
+      e (forkchoiceUpdatedResponse r).2) =
+      .ok ((forkchoiceUpdatedResponse r).1, e, (forkchoiceUpdatedResponse r).2) :=
+  forkchoiceUpdatedResponseOfJson_json _ _ _ (by
+    rcases forkchoiceUpdatedCall_status h with hs | hs | hs <;>
+      simp [forkchoiceUpdatedResponse, hs, Status.restricted])
 
 end EthLib.Engine

@@ -3048,6 +3048,7 @@ The answers have a JSON form too, written and read back.
 The decoder of a payload status reads back what its writer writes, for every status and validation error (`payloadStatusOfJson_json`, `Proofs/Json.lean`).
 The decoder of the response of `engine_forkchoiceUpdated` does the same for each status that the method answers (`forkchoiceUpdatedResponseOfJson_json`, `Proofs/ForkchoiceUpdated.lean`).
 Every answer of that method is `VALID`, `INVALID` or `SYNCING`, the restriction of step 9 of the method (`forkchoiceUpdatedCall_status`).
+So the decoder reads back the response of every call (`forkchoiceUpdatedResponseOfJson_call`).
 Its response names a build exactly when the update applies a head and the attributes pass their checks (`forkchoiceUpdatedResponse_payloadId`).
 The ID is then that of the head and the attributes.
 The Python tests read the status examples of `engine_newPayload` and the response examples of `engine_forkchoiceUpdated` in the OpenRPC method files.
@@ -3056,6 +3057,7 @@ They also read back the status that EthLib answers to each request of `new_paylo
 The theorems about `engine_forkchoiceUpdated` are in `Proofs/ForkchoiceUpdated.lean`.
 `forkchoiceUpdated_valid` shows that a valid answer selects a valid head that the execution layer holds, with its safe and finalized blocks on its chain.
 The exception is step 2 of the method, which `forkchoiceUpdated_of_belowFinalized` covers.
+`onChain_of_forkchoiceUpdated` shows that an applied head is the head that the state names, and `mem_chainOf_of_onChain` that a nonzero safe or finalized hash then names a block of its chain.
 A valid head below the finalized block that the execution layer knows is `VALID` there, and the head does not change.
 `forkchoiceUpdated_of_invalid` gives the answer for an invalid head, and `latestValid_eq_some_iff` with `getElem?_succ_chainOf` shows that its latest valid hash is the valid ancestor nearest the head.
 In version 4, custody columns that decode never change the answer (`forkchoiceUpdatedCall_custody`), and without payload attributes every version gives the same answer (`forkchoiceUpdatedCall_of_null`).
