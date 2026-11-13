@@ -897,7 +897,7 @@ theorem _root_.EthLib.Consensus.Run.balanceEvents_prefix {x m y : ForkedBeaconSt
 def EventsBounded (events : List (BalanceEvent preset)) : Prop :=
   ∀ event ∈ events, event.credits ≤ event.creditLimit ∧ event.debits ≤ event.debitLimit
 
-theorem eventsBounded_append {left right : List (BalanceEvent preset)}
+private theorem eventsBounded_append {left right : List (BalanceEvent preset)}
     (first : EventsBounded left) (last : EventsBounded right) :
     EventsBounded (left ++ right) := by
   intro event member
@@ -1631,7 +1631,7 @@ theorem upgradeBalanceReplay_bounded {s t : ForkedBeaconState preset}
     rw [upgradeBalanceReplay]
     simp [due, pure, Except.pure]
 
-theorem stepBalanceEvents_bounded {x y : ForkedBeaconState preset}
+private theorem stepBalanceEvents_bounded {x y : ForkedBeaconState preset}
     (step : Step config checks x y) (matched : BalancesMatch x.state)
     (early : y.fork < .glamsterdam) :
     ∃ events, step.balanceEvents = .ok events ∧ EventsBounded events := by
