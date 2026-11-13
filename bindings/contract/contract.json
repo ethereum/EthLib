@@ -3893,7 +3893,7 @@
    "errors": [],
    "error_class": "ConsensusError",
    "docstring":
-   "Whether the terms of a bid accept it.\n\nA signer must be among the keys of the terms, when they name some.\n\nThe value of the bid must reach the smallest value of the terms."},
+   "Whether the terms of a bid accept it.\n\nThe signer must be among the keys of the terms, when they name some.\n\nThe value of the bid must reach the smallest value of the terms."},
   {"summary":
    "From Gloas: the bid that the node commits to, or none for its local payload.",
    "signature":
