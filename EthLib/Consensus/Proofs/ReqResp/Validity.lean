@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Consensus.ReqResp.Validity
-public import Mathlib.Data.List.SplitBy
+import Mathlib.Data.List.SplitBy
 
 /-!
 # `Consensus.Proofs.ReqResp.Validity`
@@ -186,8 +186,7 @@ theorem blockRoot_eq_of_pairwise_before {sidecars : List ResponseSidecar}
   · exact absurd slot (UInt64.ne_of_lt lower)
   · exact ⟨root, index⟩
 
-/-- If each sidecar of a list comes before the later ones, two members at one slot name one block.
--/
+/-- When each sidecar of a list comes before the later ones, any two at one slot name one block. -/
 private theorem blockRoot_eq_of_mem {sidecars : List ResponseSidecar}
     (ordered : sidecars.Pairwise ResponseSidecar.Before) {a b : ResponseSidecar}
     (memA : a ∈ sidecars) (memB : b ∈ sidecars) (slot : a.slot = b.slot) :
@@ -269,31 +268,20 @@ theorem pairwise_of_isValidDataColumnSidecarsByRangeResponse {preset : Preset} {
   · exact Or.inr ⟨slot, root.symm, index⟩
   · exact Or.inl slot
 
-/-- In a run of sidecars in which each has the slot of the next, each has the slot of the first. -/
-private theorem slot_eq_of_isChain {first : ResponseSidecar} {rest : List ResponseSidecar}
-    (chain : (first :: rest).IsChain fun a b => (a.slot == b.slot) = true) :
-    ∀ sidecar ∈ first :: rest, sidecar.slot = first.slot := by
-  induction rest generalizing first with
-  | nil => simp
-  | cons next rest ih =>
-    rw [List.isChain_cons_cons, beq_iff_eq] at chain
-    intro sidecar mem
-    rcases List.mem_cons.mp mem with rfl | mem
-    · rfl
-    · rw [ih chain.2 sidecar mem, chain.1]
-
-/-- Two sidecars of one group of `groupBySlot` have one slot. -/
+/-- Two sidecars in one group of a response grouped by slot have one slot. -/
 private theorem slot_eq_of_mem_groupBySlot {sidecars block : List ResponseSidecar}
     (group : block ∈ ResponseSidecar.groupBySlot sidecars) {a b : ResponseSidecar}
     (memA : a ∈ block) (memB : b ∈ block) : a.slot = b.slot := by
-  have chain := List.isChain_of_mem_splitBy group
   cases block with
   | nil => simp at memA
   | cons first rest =>
-    rw [slot_eq_of_isChain chain a memA, slot_eq_of_isChain chain b memB]
+    have same := (List.isChain_of_mem_splitBy group).induction (fun s => s.slot = first.slot) _
+      (fun _ _ step slot => (beq_iff_eq.mp step).symm.trans slot) (fun _ => rfl)
+    rw [same a memA, same b memB]
 
-/-- Each block that a valid response for column sidecars by range serves has every requested column.
--/
+/-- A valid response to a request for column sidecars by range serves whole blocks.
+
+Each block it serves has every requested column. -/
 theorem exists_column_of_isValidDataColumnSidecarsByRangeResponse {preset : Preset}
     {config : Config} {request : DataColumnSidecarsByRangeRequest preset}
     {sidecars : List ResponseSidecar}
