@@ -2730,7 +2730,19 @@ Since no limit carries a signing root, no imported message can be signed again.
 `checkAttestationSigning_of_foldl_importFile` does so for a vote and conditions 3, 4 and 5.
 Both include the initial held file, allow repeated imports and duplicate-key entries, and assume only that the final check passes.
 These two theorems cover a record built by imports alone.
-The theorems on one import take any held record, but no theorem chains imports with messages recorded between them.
+The theorems on one import take any held record.
+
+`importAndSignBlocks` models a signer of blocks that also imports files, from any starting file.
+`signingRoot_eq_of_importAndSignBlocks` and `lt_slot_of_importAndSignBlocks` state `signingRoot_eq_of_signBlocks` and `lt_slot_of_signBlocks` for it.
+`signingRoot_eq_of_importAndSignBlocks_of_processProposerSlashing` and `processProposerSlashing_ne_ok_of_importAndSignBlocks` are their proposer slashing corollaries.
+Each holds whatever files the signer imports.
+`signingRoot_eq_some_of_importAndSignBlocks` shows that a block of the starting file holds the signing root of each header that the signer signs at that slot.
+So the signer signs nothing at the slot of a block of that file without a signing root, as condition 1 asks.
+`lt_slot_of_importAndSignBlocks_of_importFile` shows that a header signed after an import is after every block of the file and of the starting file.
+`checkBlockSigning_of_importAndSignBlocks` concludes that each header that the signer signs meets conditions 1 and 2 of the starting file, and of each file imported before it.
+A prune with the minimal strategy is the import of an empty file.
+So these theorems also cover a signer of blocks that prunes as it goes.
+No theorem chains imports with votes recorded between them.
 
 `readUInt64_uint64Json` and `readBytes_bytesJson` show that each integer and each byte string of a file reads back as written.
 `ofJson_toJson` shows that a whole file reads back as itself from the document that `toJson` writes, whatever its records.
