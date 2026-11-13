@@ -370,6 +370,72 @@ py_consensus_api_block_rewards(
 }
 
 extern lean_object*
+eth_consensus_api_consensus_block_value(lean_object* args);
+
+PyObject*
+py_consensus_api_consensus_block_value(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_consensus_block_value, args, 5, TRANSITION_ERROR);
+}
+
+extern lean_object*
+eth_consensus_api_prefer_local_v3(lean_object* args);
+
+PyObject*
+py_consensus_api_prefer_local_v3(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_prefer_local_v3, args, 3, CONSENSUS_ERROR);
+}
+
+extern lean_object*
+eth_consensus_api_capped_bid_value(lean_object* args);
+
+PyObject*
+py_consensus_api_capped_bid_value(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_capped_bid_value, args, 1, CONSENSUS_ERROR);
+}
+
+extern lean_object*
+eth_consensus_api_bid_accepted(lean_object* args);
+
+PyObject*
+py_consensus_api_bid_accepted(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_bid_accepted, args, 1, CONSENSUS_ERROR);
+}
+
+extern lean_object*
+eth_consensus_api_select_payload(lean_object* args);
+
+PyObject*
+py_consensus_api_select_payload(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_select_payload, args, 2, CONSENSUS_ERROR);
+}
+
+extern lean_object*
+eth_consensus_api_builder_config_terms(lean_object* args);
+
+PyObject*
+py_consensus_api_builder_config_terms(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_builder_config_terms, args, 1, SSZ_ERROR);
+}
+
+extern lean_object*
 eth_consensus_api_duties(lean_object* args);
 
 extern lean_object*

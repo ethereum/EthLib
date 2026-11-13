@@ -432,6 +432,12 @@ PyObject* py_consensus_api_sync_committee_contribution(PyObject* self, PyObject*
 PyObject* py_consensus_api_attestation_rewards(PyObject* self, PyObject* args);
 PyObject* py_consensus_api_sync_committee_rewards(PyObject* self, PyObject* args);
 PyObject* py_consensus_api_block_rewards(PyObject* self, PyObject* args);
+PyObject* py_consensus_api_consensus_block_value(PyObject* self, PyObject* args);
+PyObject* py_consensus_api_prefer_local_v3(PyObject* self, PyObject* args);
+PyObject* py_consensus_api_capped_bid_value(PyObject* self, PyObject* args);
+PyObject* py_consensus_api_bid_accepted(PyObject* self, PyObject* args);
+PyObject* py_consensus_api_select_payload(PyObject* self, PyObject* args);
+PyObject* py_consensus_api_builder_config_terms(PyObject* self, PyObject* args);
 PyObject* py_consensus_api_duties                (PyObject* self, PyObject* args);
 PyObject* py_consensus_api_committees              (PyObject* self, PyObject* args);
 PyObject* py_consensus_api_sync_committees         (PyObject* self, PyObject* args);

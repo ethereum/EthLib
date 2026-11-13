@@ -1398,6 +1398,48 @@ def api_block_rewards(
     return _native.consensus_api_block_rewards(name, fork, state, block, config)
 
 
+def api_consensus_block_value(
+    name: str,
+    fork: str,
+    state: bytes,
+    block: bytes,
+    *,
+    config: dict[str, Any] | None = None,
+) -> int:
+    """The consensus value of a signed block, in Wei, or TransitionError."""
+    # The state is the one at the slot of the block, before it.
+    return _native.consensus_api_consensus_block_value(name, fork, state, block, config)
+
+
+def api_prefer_local_v3(local_value: int, builder_value: int, boost: int) -> bool:
+    """Whether the v3 block production rule returns the local payload rather than the builder's."""
+    # Both values are in Wei, and the boost is a 64-bit percentage of the builder's value.
+    return _native.consensus_api_prefer_local_v3(local_value, builder_value, boost)
+
+
+def api_capped_bid_value(bid: dict[str, Any]) -> int:
+    """The Gwei value of a candidate bid, its execution payment capped, saturated at 2**64 - 1."""
+    # A bid has the keys signer, value, execution_payment and terms.
+    # Its terms have the keys builder_pubkeys, max_execution_payment, min_bid, builder_boost_factor.
+    return _native.consensus_api_capped_bid_value(bid)
+
+
+def api_bid_accepted(bid: dict[str, Any]) -> bool:
+    """Whether the terms of a candidate bid accept its signer and its value."""
+    return _native.consensus_api_bid_accepted(bid)
+
+
+def api_select_payload(local_value: int, bids: Sequence[dict[str, Any]]) -> dict[str, Any] | None:
+    """The bid that the v4 block production rule commits to, or None for the local payload."""
+    # The local value is in Wei, as the execution layer gives it; bid values are in Gwei.
+    return _native.consensus_api_select_payload(local_value, list(bids))
+
+
+def api_builder_config_terms(data: bytes) -> tuple[dict[str, Any], list[dict[str, Any]]] | None:
+    """The gossip terms and the entry terms of an SSZ builder configuration, None if invalid."""
+    return _native.consensus_api_builder_config_terms(data)
+
+
 def api_duties(
     name: str,
     fork: str,
@@ -2151,6 +2193,12 @@ __all__ = [
     "api_attestation_rewards",
     "api_sync_committee_rewards",
     "api_block_rewards",
+    "api_consensus_block_value",
+    "api_prefer_local_v3",
+    "api_capped_bid_value",
+    "api_bid_accepted",
+    "api_select_payload",
+    "api_builder_config_terms",
     "api_duties",
     "api_committees",
     "api_sync_committees",

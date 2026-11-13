@@ -37,6 +37,7 @@ public import EthLib.Consensus.Containers.Attestation
 public import EthLib.Consensus.Containers.Bid
 public import EthLib.Consensus.Containers.Block
 public import EthLib.Consensus.Containers.BuilderApi
+public import EthLib.Consensus.Containers.BuilderConfig
 public import EthLib.Consensus.Containers.Builder
 public import EthLib.Consensus.Containers.Execution
 public import EthLib.Consensus.Containers.InclusionList

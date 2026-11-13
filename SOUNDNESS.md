@@ -4187,7 +4187,21 @@ It checks the total, the sync part against a share computed from the active bala
 The consensus value of a produced block is in `Consensus/BeaconApi/Produce.lean`: the total of its block rewards, at 10^9 Wei per Gwei, as the source describes the value "in Wei paid to the proposer".
 `consensusBlockValue_ok_iff` (`Consensus/Proofs/BeaconApi/Produce.lean`) shows that it is that total, and `consensusBlockValue_balance` that, under the hypotheses of `blockRewards_balance`, it is the rise of the proposer's balance over the operations and the sync aggregate, in Wei.
 One Gwei is 10^9 Wei through one constant that the execution layer shares, in `Base/Denominations.lean`.
-No export or Python test covers it yet; the selection between the local payload and builder bids of #2086 remains.
+Its export is tested against the block rewards of the pinned random, finality and sanity blocks.
+
+The choice between the local payload and a builder's payload is in the same module.
+Through Fulu, `preferLocalV3` is the rule of the v3 endpoint, and `preferLocalV3_zero` shows that a factor of zero keeps the local payload.
+From Gloas, the containers of the builder configuration of the v4 endpoint are in `Consensus/Containers/BuilderConfig.lean`, with the terms that each gives to a bid.
+`selectPayload` drops the bids that their terms refuse, keeps the first one of largest weight, and commits to it only when its weight beats 100 times the local value.
+`selectPayload_accepted`, `selectPayload_max` and `selectPayload_beats_local` show that a chosen bid is accepted, weighs the most and beats the local payload, and `selectPayload_eq_none_iff` that the local payload is kept exactly when no accepted bid beats it, so it wins a tie.
+`selectPayload_map` and `selectPayload_cap` show that raising an execution payment at or above its cap keeps the choice, and `bidWeight_lt` that a weight fits in 128 bits.
+The Python tests check the factors 0, 100 and 2^64 - 1 that the source names, and the saturation of a bid's value at 2^64 - 1.
+Four points of the source are decided here, and a reviewer may question them:
+- The v4 rule compares a bid in Gwei with the local value that the Engine API gives in Wei; the comparison multiplies the bid's weight by 10^9, so no value is rounded.
+- A bid received on gossip has no cap in the source, so its terms count the whole execution payment, up to the saturation at 2^64 - 1.
+- The source does not order two bids of the same weight; the first one in the list wins.
+- What makes a builder payload safe in v3 is the node's choice, so the rule takes the two values once both are valid.
+The JSON form of a builder entry writes its URL as a string, which the JSON codec of the API cannot yet spell, so only the SSZ form is given.
 
 The topics and the messages of the event stream are in `Consensus/BeaconApi/Events.lean`, shared by the events of received objects (#2090) and of the fork choice (#2091).
 `EventTopic.ofName?_name` and `EventTopic.name_injective` (`Consensus/Proofs/BeaconApi/Events.lean`) show that each of the 24 topics of the source has its own name, which gives it back.
