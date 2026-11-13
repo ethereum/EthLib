@@ -250,7 +250,8 @@ So the types that cross a module boundary are fixed here, and `EthLib/Base/` def
 - Bytes of a fixed length `n` are a `Vector UInt8 n`.
   The length is then part of the type, as `CONTRIBUTING.md` asks, and a 48-byte commitment cannot be passed where a 96-byte signature is expected.
   Such a value crosses a module boundary in its typed form, not as a `ByteArray`.
-  The exceptions today are `kzgCommitmentToVersionedHash` and `Bls.Signatures.verify`, which later pull requests convert.
+  Some functions still take or return such a value as a `ByteArray`.
+  [#2189](https://github.com/ethereum/EthLib/issues/2189) lists those found so far, and each pull request that converts one removes it there.
   At an external interface, one parser turns the bytes into the typed value or a typed error.
   A C export, EVM call data and a wire format are such interfaces.
 - A fixed-size type keeps the name its source gives it, defined once by the layer that owns the concept.
@@ -538,8 +539,8 @@ EthLib is one Lake package, and three libraries hold its code.
 - The library `Exports` holds the C exports that the Python bindings call.
 
 The package also builds three executables: `check-decls`, which checks the compiled declarations, `check-accessors`, which lists the defaulting accessors of the specification, and `gen-bindings`, which writes the binding contract from Lean.
-A fourth library, `CheckDeclsTest`, holds the test cases of `check-decls`, in `scripts/`.
-It is not a default target, and `scripts/test_check_decls.sh` builds it.
+Two more libraries hold test cases, in `scripts/`: `CheckDeclsTest` for `check-decls`, and `CheckAccessorsTest` for `check-accessors`.
+They are not default targets, and `scripts/test_check_decls.sh` and `scripts/test_check_accessors.sh` build them.
 
 The package requires Mathlib and VCVio, a library of probabilistic computations.
 Only the properties and the models may import them, or Batteries.

@@ -36,6 +36,10 @@ A known block leaves the store as it was.
 
 An attestation leaves each voter not marked as an equivocator a vote at its target epoch or later.
 
+An attestation from the wire passes only with its target at the current epoch or the one before.
+
+An accepted attester slashing adds to the equivocators exactly the validators in both attestations.
+
 From Gloas the vote of an attestation on the payload passes exactly in the three allowed cases.
 
 From Gloas a block also records whether it came before the votes of the payload committee.
@@ -516,6 +520,83 @@ theorem onAttesterSlashing_sameClock {checks : SignatureChecks}
   obtain ⟨_, _, slashed⟩ := slashed
   subst slashed
   exact ⟨rfl, rfl⟩
+
+/-- Adding indices one at a time, each only when missing, keeps the known ones and adds the rest. -/
+private theorem mem_foldl_addMissing {i : ValidatorIndex} :
+    ∀ (indices known : List ValidatorIndex),
+      i ∈ indices.foldl (fun known j => if known.contains j then known else known ++ [j]) known ↔
+        i ∈ known ∨ i ∈ indices
+  | [], known => by simp
+  | j :: indices, known => by
+    rw [List.foldl_cons, mem_foldl_addMissing indices]
+    by_cases found : j ∈ known <;> simp [found] <;> grind
+
+/-- Adding indices one at a time, each only when missing, keeps a list without repeats. -/
+private theorem nodup_foldl_addMissing :
+    ∀ (indices known : List ValidatorIndex), known.Nodup →
+      (indices.foldl (fun known j => if known.contains j then known else known ++ [j])
+        known).Nodup
+  | [], _, nodup => nodup
+  | j :: indices, known, nodup => by
+    rw [List.foldl_cons]
+    apply nodup_foldl_addMissing indices
+    by_cases found : j ∈ known
+    · simpa [found] using nodup
+    · simpa [found, List.nodup_append] using ⟨nodup, fun a mem same => found (same ▸ mem)⟩
+
+/-- After a slashing a validator equivocates exactly when it did, or is in both attestations. -/
+theorem mem_addEquivocators {slashing : AttesterSlashing preset fork} {i : ValidatorIndex} :
+    i ∈ (store.addEquivocators slashing).equivocatingIndices ↔
+      i ∈ store.equivocatingIndices ∨ (i ∈ slashing.attestation1.attestingIndices.data ∧
+        i ∈ slashing.attestation2.attestingIndices.data) := by
+  simp only [addEquivocators]
+  rw [mem_foldl_addMissing]
+  simp
+
+/-- A slashing lists no equivocator twice when the store listed none twice. -/
+theorem nodup_addEquivocators {slashing : AttesterSlashing preset fork}
+    (nodup : store.equivocatingIndices.Nodup) :
+    (store.addEquivocators slashing).equivocatingIndices.Nodup :=
+  nodup_foldl_addMissing _ _ nodup
+
+/-- An attester slashing passes exactly when its votes are slashable together and both are valid.
+
+Each attestation is checked in the state of the justified block.
+
+The store then adds the validators in both attestations to the equivocators. -/
+theorem onAttesterSlashing_eq_ok_iff {checks : SignatureChecks}
+    {slashing : AttesterSlashing preset fork} {after : Store preset fork} :
+    store.onAttesterSlashing config checks slashing = .ok after ↔
+      isSlashableAttestationData slashing.attestation1.data slashing.attestation2.data = true ∧
+      (∃ state, store.blockState store.justifiedCheckpoint.root = .ok state ∧
+        isValidIndexedAttestation config checks state slashing.attestation1 = .ok true ∧
+        isValidIndexedAttestation config checks state slashing.attestation2 = .ok true) ∧
+      after = store.addEquivocators slashing := by
+  unfold onAttesterSlashing validateOnAttesterSlashing
+  cases slashable : isSlashableAttestationData slashing.attestation1.data
+    slashing.attestation2.data <;>
+    simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind, pure, Except.pure]
+  cases found : store.blockState store.justifiedCheckpoint.root with
+  | error _ => simp
+  | ok state =>
+    simp only [Except.ok.injEq, exists_eq_left']
+    cases first : isValidIndexedAttestation config checks state slashing.attestation1 with
+    | error _ => simp [Except.mapError]
+    | ok b =>
+      cases b <;> simp [Except.mapError]
+      cases second : isValidIndexedAttestation config checks state slashing.attestation2 with
+      | error _ => simp
+      | ok b => cases b <;> simp [eq_comm]
+
+/-- After an attester slashing a validator equivocates exactly when it did, or is in both votes. -/
+theorem mem_equivocatingIndices_of_onAttesterSlashing {checks : SignatureChecks}
+    {slashing : AttesterSlashing preset fork} {after : Store preset fork} {i : ValidatorIndex}
+    (slashed : store.onAttesterSlashing config checks slashing = .ok after) :
+    i ∈ after.equivocatingIndices ↔
+      i ∈ store.equivocatingIndices ∨ (i ∈ slashing.attestation1.attestingIndices.data ∧
+        i ∈ slashing.attestation2.attestingIndices.data) := by
+  rw [(onAttesterSlashing_eq_ok_iff.mp slashed).2.2]
+  exact mem_addEquivocators
 
 /-- Recording the timeliness of a block changes only the timeliness, and keeps the clock.
 
@@ -1355,6 +1436,52 @@ theorem validateOnAttestation_ok {attestation : Attestation preset fork} {isFrom
       due, dueOk, current, currentOk, notLate⟩ := valid
     exact validateOnAttestation_facts epoch votedOk notFuture checkpointOk same dueOk currentOk
       notLate
+
+/-- The check of the target epoch of an attestation against the clock, at a current epoch.
+
+It passes exactly when the target is that epoch, or the one just before it.
+
+Otherwise it fails with the target epoch as not recent.
+
+So at epoch 0 only a target at epoch 0 passes. -/
+theorem validateTargetEpochAgainstCurrentTime_eq {attestation : Attestation preset fork}
+    {epoch : Epoch} (current : store.getCurrentStoreEpoch config = .ok epoch) :
+    store.validateTargetEpochAgainstCurrentTime config attestation =
+      if attestation.data.target.epoch = epoch ∨
+          attestation.data.target.epoch.toNat + 1 = epoch.toNat then .ok ()
+      else .error (.targetEpochNotRecent attestation.data.target.epoch) := by
+  have recent : (attestation.data.target.epoch = epoch ∨
+      attestation.data.target.epoch = saturatingSub epoch 1) ↔
+      (attestation.data.target.epoch = epoch ∨
+        attestation.data.target.epoch.toNat + 1 = epoch.toNat) := by
+    have sub := toNat_saturatingSub epoch 1
+    simp only [← UInt64.toNat_inj, sub, UInt64.toNat_one]
+    omega
+  unfold validateTargetEpochAgainstCurrentTime
+  rw [current]
+  simp only [bind, Except.bind, pure, Except.pure, ← recent]
+  split <;> simp_all [throw, throwThe, MonadExceptOf.throw]
+
+/-- An attestation from the wire that passes its checks has a target in a recent epoch.
+
+That epoch is the current epoch of the store, or the one just before it. -/
+theorem validateOnAttestation_targetEpoch {attestation : Attestation preset fork}
+    (valid : store.validateOnAttestation config attestation false = .ok ()) :
+    ∃ epoch, store.getCurrentStoreEpoch config = .ok epoch ∧
+      (attestation.data.target.epoch = epoch ∨
+        attestation.data.target.epoch.toNat + 1 = epoch.toNat) := by
+  unfold validateOnAttestation at valid
+  simp only [Bool.false_eq_true, ↓reduceIte, bind_ok_iff] at valid
+  obtain ⟨_, checked, -⟩ := valid
+  cases current : store.getCurrentStoreEpoch config with
+  | error e =>
+    simp [validateTargetEpochAgainstCurrentTime, current, bind, Except.bind] at checked
+  | ok epoch =>
+    rw [validateTargetEpochAgainstCurrentTime_eq current] at checked
+    refine ⟨epoch, rfl, ?_⟩
+    split at checked
+    · assumption
+    · simp at checked
 
 /-- An attestation that the store takes has the committees of its slot, as in a block.
 

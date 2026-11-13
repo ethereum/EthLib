@@ -119,9 +119,11 @@ def moduleOf? (env : Environment) (n : Name) : Option Name := do
 
 /-- Whether `m` is a module of the specification.
 
-It is under `EthLib`, and outside every proof and export tree. -/
-def isSpecModule (m : Name) : Bool :=
-  (`EthLib).isPrefixOf m && !m.components.contains `Proofs && !m.components.contains `Exports
+It is under `scope`, which is `EthLib` unless `--root` names another directory.
+
+It is also outside every proof and export tree. -/
+def isSpecModule (scope m : Name) : Bool :=
+  scope.isPrefixOf m && !m.components.contains `Proofs && !m.components.contains `Exports
 
 /-- Whether `n` is a declaration Lean generates from another one, which repeats its source.
 
@@ -176,11 +178,11 @@ A copy that Lean makes inside the value, from an expected type there, still coun
 A theorem is searched in its statement only: its proof computes nothing.
 
 Generated declarations, such as equation lemmas, repeat their source and are skipped. -/
-def sites (env : Environment) : Array (Name × Site) := Id.run do
+def sites (env : Environment) (scope : Name) : Array (Name × Site) := Id.run do
   let mut out := #[]
   for (n, c) in env.constants.toList do
     let some m := moduleOf? env n | continue
-    unless isSpecModule m do continue
+    unless isSpecModule scope m do continue
     if isGenerated n then continue
     let found : Option (String × NameMap Nat) := match c with
       | .defnInfo v =>
@@ -215,22 +217,22 @@ def displayName (n : Name) : Name :=
     | _ => n
   privateToUserName n
 
-/-- The modules of the specification.
+/-- The modules of the specification under the root directory.
 
-They are the `.lean` files under `EthLib/`, outside the proof and export trees.
+They are the `.lean` files under the root directory, outside the proof and export trees.
 
-The directory is read, not the imports of `EthLib.lean`.
+The directory is read, not the imports of the root file of the library.
 
 So a module that the library does not import is not skipped: the build leaves it out, and its import fails. -/
-partial def specModules (dir : System.FilePath) (pre : Name) : IO (Array Name) := do
+partial def specModules (scope : Name) (dir : System.FilePath) (pre : Name) : IO (Array Name) := do
   let mut out := #[]
   for entry in ← dir.readDir do
     let path := entry.path
     if ← path.isDir then
-      out := out ++ (← specModules path (pre.str entry.fileName))
+      out := out ++ (← specModules scope path (pre.str entry.fileName))
     else if path.extension == some "lean" then
       let m := pre.str (path.fileStem.getD "")
-      if isSpecModule m then out := out.push m
+      if isSpecModule scope m then out := out.push m
   return out
 
 /-- The baseline: one `accessor declaration count` per line.
@@ -243,30 +245,42 @@ def readBaseline (path : System.FilePath) : IO (List (Name × Name × Nat)) := d
     | [a, d, k] => k.toNat?.map fun k => (a.toName, d.toName, k)
     | _ => none
 
-/-- Entry point: `check-accessors [--list | --print] [--baseline FILE]`.
+/-- Entry point: `check-accessors [--list | --print] [--baseline FILE] [--root DIR]`.
 
 - `--list` prints every site as `module part accessor declaration count first-line last-line`.
 - `--print` prints the sites in the format of the baseline, to create it once.
 - Otherwise the sites, summed over each declaration, must match the baseline exactly.
+- `--root` reads the modules under `DIR` in place of `EthLib`.
+  The last part of `DIR` is the prefix of their names.
+  A `DIR` with no last part, such as `dir/`, exits with 2.
+  `scripts/test_check_accessors.sh` points it at the fixtures in `scripts/CheckAccessorsTest`.
 
 It is `unsafe` because loading the environment extensions runs their initializers. -/
 unsafe def run (args : List String) : IO UInt32 := do
   let baselinePath : System.FilePath := match args.dropWhile (· != "--baseline") with
     | _ :: p :: _ => p
     | _ => "scripts/check_accessors_baseline.txt"
+  let root : System.FilePath := match args.dropWhile (· != "--root") with
+    | _ :: p :: _ => p
+    | _ => "EthLib"
+  -- A root such as `dir/` has no last part, and would scan under a wrong prefix.
+  let some last := root.fileName
+    | IO.eprintln s!"check-accessors: the root {root} has no last part to name its modules"
+      return 2
+  let scope : Name := .mkSimple last
   initSearchPath (← findSysroot)
   enableInitializersExecution
-  let mods ← specModules "EthLib" `EthLib
+  let mods ← specModules scope root scope
   -- `.private` loads the bodies of private and non-exposed definitions too.
   let env ← importModules (mods.map fun m => { module := m }) {} (trustLevel := 1024)
     (loadExts := true) (level := .private)
   -- A scan that sees no definition would pass once the baseline is empty, so it fails.
   let scanned := env.constants.toList.countP fun (n, c) =>
-    c matches .defnInfo _ && (moduleOf? env n).any isSpecModule
+    c matches .defnInfo _ && (moduleOf? env n).any (isSpecModule scope)
   if scanned == 0 then
     IO.eprintln "check-accessors: no definition of the specification was loaded"
     return 3
-  let found := sites env
+  let found := sites env scope
   if args.contains "--list" then
     for (m, s) in found do
       let (a, b) := (lines? env s.decl).getD (0, 0)

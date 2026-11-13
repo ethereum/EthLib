@@ -3,6 +3,7 @@ module
 public import EthLib.Networking.Noise.Identity
 public import EthLib.Networking.Proofs.Noise
 public import EthLib.Networking.Proofs.Libp2p.PeerId
+public import EthLib.Networking.Proofs.Encoding.Protobuf
 
 /-!
 # Proofs: libp2p Noise authentication
@@ -243,5 +244,157 @@ theorem Produced.complete_authenticates {s : Libp2pState} {remote : Remote}
   obtain ⟨hrem, -, ht⟩ := complete_ok h
   obtain ⟨h1, h2, h3⟩ := hs.remote_ok hrem
   exact ⟨ht, h1, h2, h3⟩
+
+/-! ## The handshake payload
+
+The payload of [noise-libp2p, "The libp2p Handshake Payload"][payload] is a protobuf message.
+
+Field 1 holds the identity key, field 2 its signature of the static key, and field 4 the extensions.
+
+A reader keeps the last value of a singular field, and merges an embedded message by concatenation.
+
+A value of fields 1, 2 or 4 with another wire type is skipped, like an unknown field.
+
+So the reader is not strict: many byte strings decode to one payload.
+
+[payload]: https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/noise/README.md#the-libp2p-handshake-payload
+-/
+
+open EthLib.Networking.Encoding.Protobuf (Record Value valuesOf records)
+open EthLib.Networking.Proofs.Encoding.Protobuf (lenValues lenValues_append
+  lenValues_singleton_self lenValues_singleton_of_ne records_serialize)
+
+/-- The fold of the decoder keeps the last identity key and signature, and joins the extensions. -/
+private theorem foldl_payload (rs : List Record) :
+    rs.foldl (init := ({} : Payload)) (fun payload record =>
+      match record with
+      | ⟨1, .len value⟩ => { payload with publicKey := value }
+      | ⟨2, .len value⟩ => { payload with signature := value }
+      | ⟨4, .len value⟩ =>
+        { payload with extensions := some (payload.extensions.getD .empty ++ value) }
+      | _ => payload) =
+    ⟨(lenValues rs 1).getLast?.getD .empty, (lenValues rs 2).getLast?.getD .empty,
+      if lenValues rs 4 = [] then none else some ((lenValues rs 4).foldl (· ++ ·) .empty)⟩ := by
+  induction rs using List.reverseRecOn with
+  | nil => rfl
+  | append_singleton rs r ih =>
+    rw [List.foldl_append, ih]
+    simp only [List.foldl_cons, List.foldl_nil, lenValues_append]
+    have hgetD : (if lenValues rs 4 = [] then none
+        else some ((lenValues rs 4).foldl (· ++ ·) ByteArray.empty)).getD ByteArray.empty =
+        (lenValues rs 4).foldl (· ++ ·) ByteArray.empty := by
+      by_cases h : lenValues rs 4 = [] <;> simp [h]
+    rcases r with ⟨f, v⟩
+    split
+    · rename_i heq; simp only [Record.mk.injEq] at heq; obtain ⟨rfl, rfl⟩ := heq
+      simp [lenValues_singleton_self, lenValues_singleton_of_ne]
+    · rename_i heq; simp only [Record.mk.injEq] at heq; obtain ⟨rfl, rfl⟩ := heq
+      simp [lenValues_singleton_self, lenValues_singleton_of_ne]
+    · rename_i heq; simp only [Record.mk.injEq] at heq; obtain ⟨rfl, rfl⟩ := heq
+      simp [lenValues_singleton_self, lenValues_singleton_of_ne, hgetD]
+    · rename_i h1 h2 h4
+      have hn : ∀ n, (∀ b, (⟨f, v⟩ : Record) ≠ ⟨n, .len b⟩) → lenValues [⟨f, v⟩] n = [] := by
+        intro n hn
+        cases v with
+        | len b => exact lenValues_singleton_of_ne _ (fun h => hn b (by rw [h]))
+        | _ => simp [lenValues, valuesOf]
+      rw [hn 1 h1, hn 2 h2, hn 4 h4]
+      simp
+
+/-- The decoder accepts exactly the protobuf messages of at most 65535 bytes.
+
+The identity key and the signature are the last length-delimited values of fields 1 and 2.
+
+Each is empty when its field has no such value.
+
+With no such value in field 4 there are no extensions.
+
+Otherwise the extensions are the values of field 4 joined in wire order. -/
+theorem decodePayload_eq_ok_iff {bytes : ByteArray} {p : Payload} :
+    decodePayload bytes = .ok p ↔ bytes.size ≤ 65535 ∧ ∃ rs, records bytes.data.toList = .ok rs ∧
+      p = ⟨(lenValues rs 1).getLast?.getD .empty, (lenValues rs 2).getLast?.getD .empty,
+        if lenValues rs 4 = [] then none else some ((lenValues rs 4).foldl (· ++ ·) .empty)⟩ := by
+  by_cases hs : 65535 < bytes.size
+  · simp [decodePayload, hs, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
+  · cases hr : records bytes.data.toList with
+    | error e => simp [decodePayload, hs, hr, bind, Except.bind, Except.mapError]
+    | ok rs =>
+      have key : decodePayload bytes = .ok ⟨(lenValues rs 1).getLast?.getD .empty,
+          (lenValues rs 2).getLast?.getD .empty, if lenValues rs 4 = [] then none
+            else some ((lenValues rs 4).foldl (· ++ ·) .empty)⟩ := by
+        simp only [decodePayload, hs, hr, ite_false, bind, Except.bind, Except.mapError, pure,
+          Except.pure]
+        exact congrArg Except.ok (foldl_payload rs)
+      rw [key]
+      constructor
+      · intro h; cases h; exact ⟨by omega, rs, rfl, rfl⟩
+      · rintro ⟨-, rs', h, rfl⟩; cases h; rfl
+
+/-- Each field is written as its protobuf tag byte, its length as a varint, then its bytes.
+
+Fields 1 and 2 are always written, in that order, and field 4 only when there are extensions.
+
+An encoding longer than 65535 bytes is refused. -/
+theorem encodePayload_eq_ok_iff {p : Payload} {bytes : ByteArray} :
+    encodePayload p = .ok bytes ↔
+      bytes.data.toList =
+        0x0a :: Encoding.Varint.encode (UInt64.ofNat p.publicKey.size) ++ p.publicKey.data.toList ++
+          0x12 :: Encoding.Varint.encode (UInt64.ofNat p.signature.size) ++
+          p.signature.data.toList ++
+          p.extensions.toList.flatMap (fun e =>
+            0x22 :: Encoding.Varint.encode (UInt64.ofNat e.size) ++ e.data.toList) ∧
+        bytes.size ≤ 65535 := by
+  have k1 : Encoding.Protobuf.encodeKey 1 2 = [0x0a] := by decide
+  have k2 : Encoding.Protobuf.encodeKey 2 2 = [0x12] := by decide
+  have k4 : Encoding.Protobuf.encodeKey 4 2 = [0x22] := by decide
+  have hb : ∀ l : List UInt8, (Except.ok (⟨l.toArray⟩ : ByteArray) = (.ok bytes :
+      Except NoiseError ByteArray)) ↔ bytes.data.toList = l := by
+    intro l
+    constructor
+    · intro h; injection h with h; subst h; rfl
+    · intro h; rcases bytes with ⟨d⟩; simp only at h; subst h; rfl
+  have hs : bytes.size = bytes.data.toList.length := by rw [Array.length_toList]; rfl
+  rcases p with ⟨pk, sig, _ | e⟩
+  all_goals
+    simp only [encodePayload, Encoding.Protobuf.serialize, Encoding.Protobuf.encodeRecords,
+      Encoding.Protobuf.encodeRecord, Encoding.Protobuf.encodeValue,
+      Encoding.Protobuf.Value.wireType, List.flatMap_cons, List.flatMap_nil, k1, k2, k4,
+      Option.toList, Option.map, Option.getD,
+      List.append_nil, List.append_assoc, List.cons_append, List.nil_append]
+    split
+    · rename_i h1
+      simp only [throw, throwThe, MonadExceptOf.throw, bind, Except.bind, reduceCtorEq,
+        false_iff, not_and]
+      intro h; rw [hs, h]
+      simp only [List.length_cons, List.length_append, ByteArray.size, Array.length_toList] at h1 ⊢
+      omega
+    split
+    · rename_i h2
+      simp only [pure, Except.pure, hb]
+      constructor
+      · intro h; refine ⟨h, ?_⟩; rw [hs, h]
+        simp only [ByteArray.size, List.size_toArray] at h2; exact h2
+      · exact fun h => h.1
+    · rename_i h2
+      simp only [throw, throwThe, MonadExceptOf.throw, reduceCtorEq, false_iff, not_and]
+      intro h; rw [hs, h]
+      simp only [ByteArray.size, List.size_toArray] at h2; exact h2
+
+/-- Decoding an encoded payload returns that payload. -/
+theorem decodePayload_encodePayload {p : Payload} {bytes : ByteArray}
+    (h : encodePayload p = .ok bytes) : decodePayload bytes = .ok p := by
+  rcases p with ⟨pk, sig, _ | e⟩
+  all_goals
+    simp only [encodePayload] at h
+    split at h
+    · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
+    split at h
+    · rename_i hs
+      simp only [pure, Except.pure, Except.ok.injEq] at h
+      subst h
+      refine decodePayload_eq_ok_iff.mpr ⟨hs, _, records_serialize ?_ (by omega), ?_⟩
+      · simp [Encoding.Protobuf.maxField]
+      · simp [lenValues, valuesOf]
+    · simp [throw, throwThe, MonadExceptOf.throw] at h
 
 end EthLib.Networking.Noise

@@ -715,6 +715,17 @@ The raw transport split of an XX state checks neither.
 The Python tests compare the raw XX handshake with a published test vector.
 No published vector covers the libp2p payload, so its tests check the keys and signatures with independent code.
 
+The payload codec of noise-libp2p "The libp2p Handshake Payload" has its own theorems (`Networking/Proofs/Noise/Identity.lean`).
+`decodePayload_eq_ok_iff` proves that the decoder accepts exactly the protobuf messages of at most 65535 bytes, and gives the payload that it returns.
+The identity key and the signature are the last length-delimited values of fields 1 and 2, or empty when there is none.
+The extensions are absent when field 4 has no such value, and otherwise are those values joined in wire order.
+A value of fields 1, 2 or 4 with another wire type is skipped, like an unknown field.
+`encodePayload_eq_ok_iff` proves that the encoder writes fields 1 and 2, then field 4 only when there are extensions.
+It returns the encoding exactly when it has at most 65535 bytes.
+`decodePayload_encodePayload` proves that decoding an encoded payload returns that payload.
+The decoder is not strict, so many byte strings decode to one payload, and no theorem says that an accepted string is an encoding.
+No theorem reads the fields of the extension message.
+
 The DER signature of an identity has its own theorems (`Networking/Proofs/Libp2p/PeerId.lean`).
 `derInteger_eq` proves that the content of the DER INTEGER of a number below `2 ^ 256` is that number in big-endian bytes, on the fewest bytes such that the first has its top bit clear.
 `exists_derByteCount` shows that such a byte count, from 1 to 33, exists for every number below `2 ^ 256`.
