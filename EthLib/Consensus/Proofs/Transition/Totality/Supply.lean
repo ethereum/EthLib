@@ -37,6 +37,12 @@ The effective balances follow the balances within the hysteresis band.
 If each positive effective balance is a whole number of increments, the band is a fraction of it.
 
 So their sum stays at most a fixed multiple of the sum of the balances, 4/3 on mainnet.
+
+From Electra, the pending deposits do not raise the effective balances plus the pending amounts.
+
+A new validator takes at most the amount of its deposit as effective balance.
+
+The pending consolidations keep both sums.
 -/
 
 @[expose] public section
@@ -255,7 +261,7 @@ private theorem balanceSum_processSlashings_le (computed : processSlashings stat
 /-- A step from the registry updates to the effective balances raises no supply.
 
 The supply is the sum of the balances and of the amounts of the pending deposits. -/
-private theorem supply_le_of_action {config : Config} {checks : SignatureChecks}
+theorem supply_le_of_action {config : Config} {checks : SignatureChecks}
     {stage : EpochStage}
     (member : stage ∈ [.registry, .slashings, .eth1Reset, .pendingDeposits,
       .pendingConsolidations, .payments, .effectiveBalances])
@@ -328,16 +334,16 @@ private theorem supply_le_of_tail {config : Config} {checks : SignatureChecks}
   rw [balances, pendingDepositSum_eq_of_pendingDeposits queue.2]
   exact raised
 
-/-- From Altair, the epoch transition raises the supply by at most the issuance bound.
+/-- From Altair, the first three steps of the epoch raise the supply by at most the issuance bound.
 
-The supply is the sum of the balances and of the amounts of the pending deposits.
+They are justification and finalization, the update of the inactivity scores, and the rewards.
 
 The bound reads the active balance of the state before the epoch.
 
 No flag of the previous epoch may have been set by more balance than is active.
 
 The registry must be within its limit, the increment positive, and the base reward fit. -/
-theorem processEpoch_supply_le {config : Config} {checks : SignatureChecks}
+theorem supply_le_of_head {config : Config} {checks : SignatureChecks}
     (altair : .altair ≤ fork) (within : state.RegistryWithinLimit)
     (increment : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
     (perIncrement :
@@ -349,21 +355,20 @@ theorem processEpoch_supply_le {config : Config} {checks : SignatureChecks}
           (getPreviousEpoch state) = .ok indices ∧
         getTotalBalance state indices = .ok (participatingBalance flagIndex))
     (kept : ∀ flagIndex, participatingBalance flagIndex ≤ total)
-    (computed : processEpoch config checks state = .ok after) :
+    (trace : EpochTrace (action config checks) [.justification, .inactivity, .rewards]
+      state after) :
     balanceSum after + pendingDepositSum after ≤
       balanceSum state + pendingDepositSum state + preset.epochIssuance total.toNat := by
-  have trace := processEpoch_trace computed
-  change EpochTrace _ (.justification :: .inactivity :: .rewards :: _) _ _ at trace
   obtain _ | ⟨justifiedOk, trace⟩ := trace
   obtain _ | ⟨scoredOk, trace⟩ := trace
   obtain _ | ⟨rewardedOk, trace⟩ := trace
-  rename_i justified scored rewarded
-  have tail := supply_le_of_tail altair trace
+  cases trace
+  rename_i justified scored
   have justifiedEq : processJustificationAndFinalization state = .ok justified :=
     action_cases.mp justifiedOk
   have scoredEq := action_cases.mp scoredOk
   simp only [Edge, altair, ↓reduceDIte] at scoredEq
-  have rewardedEq : processRewardsAndPenalties config scored = .ok rewarded :=
+  have rewardedEq : processRewardsAndPenalties config scored = .ok after :=
     action_cases.mp rewardedOk
   have pendingRewarded := (loadKeptLaws.processRewardsAndPenalties rewardedEq).2
   -- Justification changes only the checkpoints and their bits, and the scores only the scores.
@@ -407,9 +412,124 @@ theorem processEpoch_supply_le {config : Config} {checks : SignatureChecks}
   -- The scores and justification keep the balances and the queue of pending deposits.
   have balances : balanceSum scored = balanceSum state :=
     balanceSum_eq_of_balances ((field _ fun _ => rfl).trans kept1.1)
-  have pending : pendingDepositSum rewarded = pendingDepositSum state :=
+  have pending : pendingDepositSum after = pendingDepositSum state :=
     pendingDepositSum_eq_of_pendingDeposits
       (pendingRewarded.trans ((field _ fun _ => rfl).trans kept1.2))
+  omega
+
+/-- A deposit raises the sum of the effective balances by at most its amount.
+
+A new validator takes the amount rounded down to an increment, capped by its largest one. -/
+private theorem effectiveBalanceSum_applyPendingDeposit_le {config : Config}
+    {checks : SignatureChecks} {deposit : PendingDeposit}
+    (computed : applyPendingDeposit config checks state deposit = .ok after) :
+    effectiveBalanceSum after ≤ effectiveBalanceSum state + deposit.amount.toNat := by
+  rcases applyPendingDeposit_cases computed with rfl | ⟨_, raised⟩ | ⟨_, added⟩
+  · exact Nat.le_add_right _ _
+  · unfold effectiveBalanceSum
+    rw [increaseBalance_validators raised]
+    exact Nat.le_add_right _ _
+  · unfold effectiveBalanceSum
+    rw [addValidatorToRegistry_validators_eq_push added, Array.toList_push, List.map_append,
+      List.sum_append_nat]
+    refine Nat.add_le_add_left ?_ _
+    simp only [List.map_cons, List.map_nil, List.sum_cons, List.sum_nil, Nat.add_zero,
+      getValidatorFromDeposit]
+    rw [← UInt64.le_iff_toNat_le]
+    have mod : deposit.amount % preset.EFFECTIVE_BALANCE_INCREMENT ≤ deposit.amount := by
+      rw [UInt64.le_iff_toNat_le, UInt64.toNat_mod]
+      exact Nat.mod_le _ _
+    exact UInt64.le_trans Std.min_le_left (UInt64.sub_le mod)
+
+/-- Deposits applied in order raise the sum of the effective balances by at most their amounts. -/
+private theorem effectiveBalanceSum_foldlM_applyPendingDeposit_le {config : Config}
+    {checks : SignatureChecks} :
+    ∀ {deposits : List PendingDeposit} {state after : BeaconState preset fork},
+      deposits.foldlM (applyPendingDeposit config checks) state = .ok after →
+      effectiveBalanceSum after ≤ effectiveBalanceSum state + pendingAmount deposits
+  | [], _, _, computed => by
+    simp only [List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at computed
+    subst computed
+    simp [pendingAmount]
+  | deposit :: rest, state, after, computed => by
+    simp only [List.foldlM_cons, bind, Except.bind] at computed
+    split at computed
+    · cases computed
+    rename_i next applied
+    have first := effectiveBalanceSum_applyPendingDeposit_le applied
+    have later := effectiveBalanceSum_foldlM_applyPendingDeposit_le computed
+    simp only [pendingAmount, List.map_cons, List.sum_cons] at later ⊢
+    omega
+
+/-- From Electra, the pending deposits do not raise the effective balances plus the pending amounts.
+
+A deposit to a known validator raises only its balance.
+
+A new validator takes an effective balance at most the amount of its deposit.
+
+A postponed deposit stays in the queue, and a dropped one leaves it. -/
+theorem processPendingDeposits_effectiveSupply_le {config : Config} {checks : SignatureChecks}
+    {electra : .pectra ≤ fork}
+    (computed : processPendingDeposits config checks state electra = .ok after) :
+    effectiveBalanceSum after + pendingDepositSum after ≤
+      effectiveBalanceSum state + pendingDepositSum state := by
+  obtain ⟨read, rest, applied, postponed, next, pending, carried, queue, kept, _, _, _, perm,
+    later, rfl⟩ := processPendingDeposits_applied computed
+  have raised := effectiveBalanceSum_foldlM_applyPendingDeposit_le later
+  have amounts := (perm.map (·.amount.toNat)).sum_nat
+  change effectiveBalanceSum next + pendingDepositSum { next with
+    pendingDeposits := fun _ => pending, depositBalanceToConsume := fun _ => carried } ≤ _
+  unfold pendingDepositSum
+  simp only [electra, ↓reduceDIte]
+  rw [queue, kept]
+  simp only [pendingAmount, List.map_append, List.sum_append_nat] at amounts raised ⊢
+  omega
+
+/-- From Electra, the pending consolidations keep the sum of the effective balances.
+
+They also keep the sum of the pending deposits.
+
+They move balances, and only the next update of the effective balances reads them. -/
+theorem processPendingConsolidations_effectiveSupply_eq {electra : .pectra ≤ fork}
+    (computed : processPendingConsolidations state electra = .ok after) :
+    effectiveBalanceSum after = effectiveBalanceSum state ∧
+      pendingDepositSum after = pendingDepositSum state := by
+  obtain ⟨validators, -, -, -, pending, -⟩ := processPendingConsolidations_fields computed
+  exact ⟨by unfold effectiveBalanceSum; rw [validators],
+    pendingDepositSum_eq_of_pendingDeposits pending⟩
+
+/-- From Altair, the epoch transition raises the supply by at most the issuance bound.
+
+The supply is the sum of the balances and of the amounts of the pending deposits.
+
+The bound reads the active balance of the state before the epoch.
+
+No flag of the previous epoch may have been set by more balance than is active.
+
+The registry must be within its limit, the increment positive, and the base reward fit. -/
+theorem processEpoch_supply_le {config : Config} {checks : SignatureChecks}
+    (altair : .altair ≤ fork) (within : state.RegistryWithinLimit)
+    (increment : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
+    (perIncrement :
+      preset.EFFECTIVE_BALANCE_INCREMENT.toNat * preset.BASE_REWARD_FACTOR.toNat < 2 ^ 64)
+    {total : Gwei} (active : getTotalActiveBalance state = .ok total)
+    {participatingBalance : Fin PARTICIPATION_FLAG_WEIGHTS.length → Gwei}
+    (weighed : ∀ flagIndex, ∃ indices,
+      getUnslashedParticipatingIndices state altair flagIndex.val.toUInt64
+          (getPreviousEpoch state) = .ok indices ∧
+        getTotalBalance state indices = .ok (participatingBalance flagIndex))
+    (kept : ∀ flagIndex, participatingBalance flagIndex ≤ total)
+    (computed : processEpoch config checks state = .ok after) :
+    balanceSum after + pendingDepositSum after ≤
+      balanceSum state + pendingDepositSum state + preset.epochIssuance total.toNat := by
+  have trace := processEpoch_trace computed
+  change EpochTrace _ ([.justification, .inactivity, .rewards] ++ [.registry, .slashings,
+    .eth1Reset, .pendingDeposits, .pendingConsolidations, .payments, .effectiveBalances,
+    .slashingsReset, .randaoReset, .history, .participation, .syncCommittees,
+    .proposerLookahead, .ptcWindow]) _ _ at trace
+  obtain ⟨middle, head, tail⟩ := append_iff.mp trace
+  have raised := supply_le_of_head altair within increment perIncrement active weighed kept head
+  have lowered := supply_le_of_tail altair tail
   omega
 
 /-- From Altair, when no flag is set, no flag has more participating balance than is active.

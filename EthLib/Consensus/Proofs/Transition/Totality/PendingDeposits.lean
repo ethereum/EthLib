@@ -325,7 +325,7 @@ private theorem passPendingConsolidations_fields {nextEpoch : Epoch} :
     exact (passPendingConsolidations_fields (consolidations := rest) recur :)
 
 /-- The pending consolidations change only the balances and their own queue. -/
-private theorem processPendingConsolidations_fields {electra : .pectra ≤ fork}
+theorem processPendingConsolidations_fields {electra : .pectra ≤ fork}
     {state after : BeaconState preset fork}
     (computed : processPendingConsolidations state electra = .ok after) :
     after.validators = state.validators ∧
