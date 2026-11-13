@@ -5,6 +5,7 @@ public import EthLib.Consensus.Proofs.Transition.Committees
 public import EthLib.Consensus.Proofs.Transition.Genesis
 public import EthLib.Consensus.Proofs.Transition.Trace
 public import EthLib.Consensus.Proofs.SyncCommittee
+import EthLib.Consensus.Proofs.Transition.RegistryLifecycle
 
 /-!
 # Registry provenance of sync committees
@@ -432,14 +433,6 @@ private theorem processAttestation {attestation : Attestation preset fork} {pare
     rw [← rest]
     exact ⟨rfl, rfl⟩
 
-private theorem processVoluntaryExit {signed : SignedVoluntaryExit}
-    (ok : Consensus.processVoluntaryExit config checks state signed = .ok after) :
-    SameSyncCommittees state after := by
-  unfold Consensus.processVoluntaryExit at ok
-  simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok, liftSsz_ok] at ok
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, exited⟩ := ok
-  exact initiateValidatorExit exited
-
 private theorem processBlsToExecutionChange {signed : SignedBLSToExecutionChange}
     (ok : Consensus.processBlsToExecutionChange config checks state signed = .ok after) :
     SameSyncCommittees state after := by
@@ -452,7 +445,8 @@ private theorem processOperations {body : BeaconBlockBody preset fork} {parentSl
     SameSyncCommittees state after := by
   obtain ⟨_, _, _, proposersOk, slashingsOk, attestedOk, rest⟩ :=
     processOperations_folds_of SameSyncCommittees .refl (fun one two => one.trans two)
-      processDeposit processVoluntaryExit processBlsToExecutionChange processExecutionRequests
+      processDeposit (fun exited => initiateValidatorExit (processVoluntaryExit_initiates exited))
+      processBlsToExecutionChange processExecutionRequests
       (fun paid => by rw [processPayloadAttestation_eq paid]; exact .refl _) ok
   exact (foldlM (fun _ _ _ ok => processProposerSlashing ok) proposersOk).trans <|
     (foldlM (fun _ _ _ ok => processAttesterSlashing ok) slashingsOk).trans <|
