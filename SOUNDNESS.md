@@ -2354,10 +2354,29 @@ The charges whose exit epoch is at most `high + 1` fit the unspent capacity of t
 The cap is `MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT` plus `consolidationCap`.
 If `x` is before Electra, there is no carry, and the cap also adds the churn of validators for a bound on the size of the registry, at least 1, times `MAX_EFFECTIVE_BALANCE`.
 `consolidationCap` is an assumption: it bounds the consolidation churn of the state where each step of the second run starts, from Electra.
-That churn follows the total active balance, and no theorem yet bounds how the churn changes between slots, so the assumption keeps the bound close to the churn that the chain actually has.
+That churn follows the total active balance, so the assumption keeps the bound close to the churn that the chain actually has.
 The theorem also assumes that the preset orders its caps, `MAX_EFFECTIVE_BALANCE` at most `MIN_ACTIVATION_BALANCE` at most `MAX_EFFECTIVE_BALANCE_ELECTRA`; `CapOrder.mainnet` and `CapOrder.minimal` show that both presets do.
 The bound counts exits at their assigned exit epochs, so it does not bound the exits that the blocks of one epoch initiate.
 It does not bound activations, and no theorem yet derives the change of the active set or puts this bound into `accountable_safety_of_change`.
+
+`departure_charges_le_funded_window` (`Consensus/Proofs/DirectSafety/IntervalBounds.lean`) derives `consolidationCap` instead of assuming it.
+It reads `departure_charges_le_window` with the consolidation churn of a bound on the active balance, the funded window.
+The funded window starts from the funded stake at `x`.
+That stake counts the larger of the effective and the actual balance of each validator that is active, not yet active, or the source of a pending consolidation.
+The window adds the deposit balance left to consume at `x` and `MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT` for each epoch of the window.
+It also adds the credits that the second run records.
+The window bounds the active balance at the state where each step of the second run starts, from Electra.
+So the derived cap is at least the consolidation churn of each of those states.
+It assumes that the second run ends at an epoch of at most `high + 1`, and that `tail.balanceEvents high` replays the balance events of the run.
+These events record each change of balance with the limit that the transition computes for it.
+The recorded credits are the rewards and the deposits that the deposit churn does not limit.
+Those are the deposits before Electra and the Electra deposits to withdrawn sources of consolidations.
+They raise the bound, so it is only as tight as the credits of the run.
+The theorem charges `MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT` and the consolidation churn only if the window reaches `ELECTRA_FORK_EPOCH`, so it also covers a window that crosses the fork.
+With a withdrawal delay below two epochs, the theorem uses the registry window times `MAX_EFFECTIVE_BALANCE_ELECTRA` instead.
+The mainnet delay of 256 epochs never reaches that case.
+The theorem also assumes the order of the caps and that the divisors of the preset are positive.
+`Preset.divisorsPositive_mainnet` and `Preset.divisorsPositive_minimal` show the second for both presets.
 
 From Phase 0 to Deneb, `accountable_safety_of_weakSubjectivityPeriod_of_lt_electra` covers the period in part.
 The rule counts `N` active validators of average balance `t` ether, rounded down, a largest effective balance `T` ether, a churn of `delta` validators and `Delta` top-ups per epoch.
