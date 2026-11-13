@@ -2005,6 +2005,14 @@ def engine_prepare_execution_payload_gloas(name: str, fork: str, anchor_state: b
     """From Gloas: the forkchoice update of a proposer, as the value of its JSON."""
     ...
 
+def engine_payload_attributes_event(name: str, fork: str, state: bytes, config: dict | None, safe_block_hash: bytes, finalized_block_hash: bytes, suggested_fee_recipient: bytes, pow_chain: list[bytes], terminal_number: int) -> tuple[str, str] | None:
+    """From Bellatrix to Fulu: the event of the payload attributes of a proposer."""
+    ...
+
+def engine_payload_attributes_event_gloas(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, head_root: bytes, head_status: int, state: bytes, safe_block_hash: bytes, suggested_fee_recipient: bytes, target_gas_limit: int, verify: bool, config: dict | None) -> tuple[str, str]:
+    """Gloas: the event of the payload attributes of a proposer."""
+    ...
+
 def engine_finalized_execution_block_hash(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, config: dict | None) -> bytes:
     """From Bellatrix: the 32 bytes of the finalized block hash of a store."""
     ...

@@ -1502,6 +1502,12 @@
 #define DOC_engine_prepare_execution_payload_gloas \
   "From Gloas: the forkchoice update of a proposer, as the value of its JSON."
 
+#define DOC_engine_payload_attributes_event \
+  "From Bellatrix to Fulu: the event of the payload attributes of a proposer."
+
+#define DOC_engine_payload_attributes_event_gloas \
+  "Gloas: the event of the payload attributes of a proposer."
+
 #define DOC_engine_finalized_execution_block_hash \
   "From Bellatrix: the 32 bytes of the finalized block hash of a store."
 
