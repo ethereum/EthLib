@@ -176,7 +176,7 @@ For an epoch in that range, a repeated index gets code 400 too.
 
 Else the answer runs the duty of each requested validator in turn, in request order.
 
-It keeps the validators in the PTC; an index that names no validator makes the answer code 400. -/
+It keeps the validators in the PTC; the first index that fails ends the answer. -/
 theorem ptcDuties_eq {config : Config} {state : BeaconState preset fork}
     {gloas : .glamsterdam ≤ fork} {epoch : Epoch} {indices : List ValidatorIndex} :
     ptcDuties config state gloas epoch indices =
