@@ -1064,9 +1064,7 @@ private theorem withdrawalValidatorIndex_departureQueues {fork : Fork}
   · cases ok
   · cases ok; rfl
 
-/-- Paying withdrawals removes balances and pending entries without resetting churn.
-
-It also keeps the validators. -/
+/-- Paying withdrawals removes balances and pending entries without resetting churn. -/
 private theorem withdrawals_departureQueues {fork : Fork} {s t : BeaconState preset fork}
     (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
     {capella : .shapella ≤ fork} {payload : Until .glamsterdam fork (ExecutionPayload preset fork)}
@@ -4237,13 +4235,17 @@ The bound is the carry at `x` plus `H` times the per-epoch caps, where `H = high
 
 Here `e` is the current epoch of `x`, so `H` counts the epochs from `e` to `high + 1` inclusively.
 
-From Electra the carry is the unspent capacity of the exit and consolidation queues at `x`.
+If `.pectra ≤ x.fork`, the carry is the unspent capacity of the exit and consolidation queues.
+
+Otherwise the carry is zero.
 
 The carry is unspent queue capacity, not departures that are already assigned.
 
 The caps are `MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT` and `consolidationCap`.
 
-If `x` is before Electra, the caps add the count-limited cohort cap times `MAX_EFFECTIVE_BALANCE`.
+Only if `x.fork < .pectra`, the caps also add the legacy cap `L * MAX_EFFECTIVE_BALANCE`.
+
+Here `L = max 1 (cohortCap config registryBound)` is the count-limited cohort cap.
 
 The cohort cap reads `registryBound`, which bounds the size of the registry at `y`.
 
