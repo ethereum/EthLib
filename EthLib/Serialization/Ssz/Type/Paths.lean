@@ -162,9 +162,9 @@ def Desc.mixesIn : Desc → PathStep → Bool
 
 /-- One path step's relative node index and child type, or no child for a terminal mixing word.
 
-A declared union selector without a corresponding option returns `badDeclaration`.
+A union declares one type per selector, so a selector without an option is a malformed declaration.
 
-Source: [EIP-8016, `CompatibleUnion({selector: type})`][union].
+Source: union declarations in [EIP-8016, `CompatibleUnion({selector: type})`][union].
 
 [union]: https://eips.ethereum.org/EIPS/eip-8016#compatibleunionselector-type
 -/
