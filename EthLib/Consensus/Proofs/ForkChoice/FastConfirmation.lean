@@ -28,6 +28,12 @@ The update keeps the confirmed block.
 
 A restart keeps the old confirmed block or takes the one confirmed before the restart.
 
+A block is due for finality two epochs after the first epoch that starts at or after its slot.
+
+A restart takes the block confirmed before it only when that block is newer than the confirmed one.
+
+That block must also be not yet due for finality, and in the chain of the head.
+
 From Gloas the payload status of the head does not change which blocks are in its chain.
 
 The fast confirmation of a slot records the head of the store, at every fork.
@@ -474,6 +480,123 @@ theorem getRestartResilientConfirmedRoot_eq_or {fcr : FastConfirmationStore}
         exact Or.inl restarted.symm
       · simp only [pure, Except.pure, Except.ok.injEq] at restarted
         exact Or.inr restarted.symm
+
+/-- Whether a block is due for finality, once the block and the current slot are known.
+
+The next checkpoint is at the first epoch that starts at or after the slot of the block.
+
+The block is due from the first slot two epochs after that one.
+
+It fails when its slot plus the length of an epoch, or that first slot, is `2^64` or more. -/
+theorem blockShouldBeFinalized_eq_ok_iff {root : Root} {block : BeaconBlock preset fork}
+    {currentSlot : Slot} {due : Bool} (positive : 0 < preset.SLOTS_PER_EPOCH)
+    (stored : store.blocks[root]? = some block)
+    (now : store.getCurrentSlot config = .ok currentSlot) :
+    store.blockShouldBeFinalized config root = .ok due ↔
+      block.slot.toNat + preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64 ∧
+        ((block.slot.toNat + preset.SLOTS_PER_EPOCH.toNat - 1) / preset.SLOTS_PER_EPOCH.toNat +
+          2) * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64 ∧
+        (due = true ↔
+          ((block.slot.toNat + preset.SLOTS_PER_EPOCH.toNat - 1) / preset.SLOTS_PER_EPOCH.toNat +
+            2) * preset.SLOTS_PER_EPOCH.toNat ≤ currentSlot.toNat) := by
+  have spe : 0 < preset.SLOTS_PER_EPOCH.toNat := UInt64.lt_iff_toNat_lt.mp positive
+  unfold blockShouldBeFinalized
+  simp only [Store.block, stored, now, bind, Except.bind, pure, Except.pure, Except.mapError]
+  by_cases sumFits : block.slot.toNat + preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64
+  case neg => simp [Uint64.addChecked, sumFits]
+  have oneLe : (1 : UInt64) ≤ block.slot + preset.SLOTS_PER_EPOCH :=
+    UInt64.le_iff_toNat_le.mpr (by rw [Uint64.toNat_add_of_lt sumFits]; simp; omega)
+  have lastValue : (block.slot + preset.SLOTS_PER_EPOCH - 1).toNat =
+      block.slot.toNat + preset.SLOTS_PER_EPOCH.toNat - 1 := by
+    rw [UInt64.toNat_sub_of_le _ _ oneLe, Uint64.toNat_add_of_lt sumFits]
+    rfl
+  simp only [Uint64.addChecked_of_lt sumFits, Uint64.subChecked, oneLe, ↓reduceIte, sumFits,
+    true_and]
+  generalize block.slot + preset.SLOTS_PER_EPOCH - 1 = last at lastValue ⊢
+  have epochValue : (computeEpochAtSlot preset last).toNat =
+      (block.slot.toNat + preset.SLOTS_PER_EPOCH.toNat - 1) / preset.SLOTS_PER_EPOCH.toNat := by
+    rw [computeEpochAtSlot, UInt64.toNat_div, lastValue]
+  generalize computeEpochAtSlot preset last = epoch at epochValue ⊢
+  rw [← epochValue]
+  by_cases epochFits : epoch.toNat + 2 < 2 ^ 64
+  case neg =>
+    have tooLarge : 2 ^ 64 ≤ (epoch.toNat + 2) * preset.SLOTS_PER_EPOCH.toNat :=
+      Nat.le_trans (by omega) (Nat.le_mul_of_pos_right _ spe)
+    simp [Uint64.addChecked, epochFits, Nat.not_lt.mpr tooLarge]
+  have twoFits : epoch.toNat + (2 : UInt64).toNat < 2 ^ 64 := epochFits
+  have nextValue : (epoch + 2).toNat = epoch.toNat + 2 := Uint64.toNat_add_of_lt twoFits
+  simp only [Uint64.addChecked_of_lt twoFits, computeStartSlotAtEpoch]
+  by_cases productFits : (epoch.toNat + 2) * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64
+  case neg => simp [Uint64.mulChecked, nextValue, productFits]
+  rw [← nextValue] at productFits
+  rw [Uint64.mulChecked_of_lt productFits]
+  have startValue : ((epoch + 2) * preset.SLOTS_PER_EPOCH).toNat =
+      (epoch + 2).toNat * preset.SLOTS_PER_EPOCH.toNat := by
+    rw [UInt64.toNat_mul, Nat.mod_eq_of_lt productFits]
+  rw [nextValue] at startValue productFits
+  simp only [UInt64.le_iff_toNat_le, startValue, Except.ok.injEq, productFits, true_and]
+  cases due <;> simp
+
+/-- The confirmed block after a restart, once the two blocks and the current slot are known.
+
+The block confirmed before the restart replaces the confirmed block exactly when three things hold.
+
+It is at a later slot than the confirmed block.
+
+It is not yet due for finality: the slot from which it is due is still ahead.
+
+It is in the chain of the head.
+
+Otherwise the confirmed block stays.
+
+For a newer block, the restart fails when the test of finality overflows.
+
+For a newer block not yet due, it also fails when the test of the chain fails. -/
+theorem getRestartResilientConfirmedRoot_eq_ok_iff {fcr : FastConfirmationStore}
+    {head rootBeforeRestart root : Root} {before confirmed : BeaconBlock preset fork}
+    {currentSlot : Slot} (positive : 0 < preset.SLOTS_PER_EPOCH)
+    (storedBefore : store.blocks[rootBeforeRestart]? = some before)
+    (storedConfirmed : store.blocks[fcr.confirmedRoot]? = some confirmed)
+    (now : store.getCurrentSlot config = .ok currentSlot) :
+    store.getRestartResilientConfirmedRoot config fcr head rootBeforeRestart = .ok root ↔
+      if before.slot.toNat ≤ confirmed.slot.toNat then root = fcr.confirmedRoot
+      else before.slot.toNat + preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64 ∧
+        ((before.slot.toNat + preset.SLOTS_PER_EPOCH.toNat - 1) / preset.SLOTS_PER_EPOCH.toNat +
+          2) * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64 ∧
+        if ((before.slot.toNat + preset.SLOTS_PER_EPOCH.toNat - 1) / preset.SLOTS_PER_EPOCH.toNat +
+            2) * preset.SLOTS_PER_EPOCH.toNat ≤ currentSlot.toNat then root = fcr.confirmedRoot
+        else ∃ onChain,
+          store.isAncestor ⟨head, .pending⟩ ⟨rootBeforeRestart, .pending⟩ = .ok onChain ∧
+            root = if onChain then rootBeforeRestart else fcr.confirmedRoot := by
+  unfold getRestartResilientConfirmedRoot
+  simp only [Store.block, storedBefore, storedConfirmed, bind, Except.bind, pure, Except.pure]
+  by_cases older : before.slot.toNat ≤ confirmed.slot.toNat
+  · have older' : before.slot ≤ confirmed.slot := UInt64.le_iff_toNat_le.mpr older
+    simp only [older', older, ↓reduceIte, Except.ok.injEq]
+    exact eq_comm
+  have newer : ¬before.slot ≤ confirmed.slot := mt UInt64.le_iff_toNat_le.mp older
+  simp only [newer, older, ↓reduceIte]
+  cases finalized : store.blockShouldBeFinalized config rootBeforeRestart with
+  | error e =>
+    simp only [reduceCtorEq, false_iff]
+    rintro ⟨sumFits, startFits, -⟩
+    have computed := (blockShouldBeFinalized_eq_ok_iff positive storedBefore now).mpr
+      ⟨sumFits, startFits, decide_eq_true_iff⟩
+    rw [finalized] at computed
+    cases computed
+  | ok due =>
+    obtain ⟨sumFits, startFits, value⟩ :=
+      (blockShouldBeFinalized_eq_ok_iff positive storedBefore now).mp finalized
+    simp only [sumFits, startFits, true_and]
+    by_cases late : ((before.slot.toNat + preset.SLOTS_PER_EPOCH.toNat - 1) /
+        preset.SLOTS_PER_EPOCH.toNat + 2) * preset.SLOTS_PER_EPOCH.toNat ≤ currentSlot.toNat
+    · simp only [late, value.mpr late, ↓reduceIte, Except.ok.injEq]
+      exact eq_comm
+    · have notDue : due = false := by simpa [late] using value
+      simp only [late, notDue, Bool.false_eq_true, ↓reduceIte]
+      cases ancestor : store.isAncestor ⟨head, .pending⟩ ⟨rootBeforeRestart, .pending⟩ with
+      | error e => simp
+      | ok onChain => cases onChain <;> simp [eq_comm]
 
 /-- From Gloas the payload status of the head does not change whether a block is in its chain.
 
