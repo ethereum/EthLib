@@ -3589,7 +3589,8 @@ The view resolves `safe` and `finalized` to the blocks that the update named, wh
 A notification gets no response (`answerJson_notification`).
 
 `eth_config` reports the current, next and last scheduled configurations of EIP-7910 (`Execution/Rpc/Config.lean`).
-The reported fork checksum includes the genesis hash, the configured fork-ID blocks and the timestamp activations reached by that configuration (`configObject_forkId`, `Proofs/Rpc/Config.lean`).
+The reported fork ID is the EIP-2124 `FORK_HASH` that the node announces at that configuration's activation (`configObject_forkId`, `Proofs/Rpc/Config.lean`).
+A blob schedule that the chain sets without a fork therefore keeps the fork ID of the fork before it.
 The block that represents the Merge in the fork ID is an explicit input, distinct from the actual Paris activation block.
 The report's precompile addresses are exactly those that transaction processing warms (`configObject_precompiles`).
 Its blob schedule is `chainBlobSchedule` at the configuration's activation (`configObject_blobSchedule`).

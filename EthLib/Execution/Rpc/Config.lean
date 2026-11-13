@@ -13,6 +13,10 @@ Each configuration has the parameters at its activation, rather than at the head
 
 Blob-only activations include the chain's own blob schedules, as well as the named BPO forks.
 
+The fork ID is the `FORK_HASH` that the node announces at that activation, by EIP-2124.
+
+So a blob schedule that the chain sets without a fork keeps the fork ID of the fork before it.
+
 The checksum uses the Merge fork-ID block, not the block where Paris actually activated.
 
 The method requires the genesis hash and timestamp, and supports Dencun through Glamsterdam.
@@ -89,12 +93,6 @@ def configHasTimestamps (config : ChainConfig) : Bool :=
     | .block n => n == 0
     | .time _ => true
 
-/-- The activations included in a post-Merge configuration's checksum.
-
-Every configured fork block precedes the timestamp forks, as EIP-6122 requires. -/
-def configForks (s : Schedule) (timestamp : Nat) : List Activation :=
-  s.blocks.map .block ++ ((configTimes s).takeWhile (· ≤ timestamp)).map .time
-
 /-- The parameters of one reported configuration.
 
 The fork and its lower bound are internal, and are not members of the JSON object. -/
@@ -133,7 +131,7 @@ def configObject (s : Schedule) (number activationTime : Nat) : Except RpcError 
         some (.str "eth_config: unsupported fork")⟩ : RpcError)
     unless s.config.chainId ≠ 0 do
       throw (internalError.toRpcError (some (.str "eth_config: zero chain ID")))
-    unless (configForks s timestamp).all (fun a => activationValue a < 2 ^ 64) do
+    unless (s.passed number timestamp).all (fun a => activationValue a < 2 ^ 64) do
       throw (internalError.toRpcError (some (.str "eth_config: activation is not below 2^64")))
     return {
       fork := fork
@@ -141,7 +139,7 @@ def configObject (s : Schedule) (number activationTime : Nat) : Except RpcError 
       activationTime := activationTime
       blobSchedule := chainBlobSchedule s.config fork number timestamp h
       chainId := s.config.chainId
-      forkId := Schedule.checksum s.genesisHash (configForks s timestamp)
+      forkId := (s.forkId number timestamp).hash
       precompiles := configPrecompiles fork
       systemContracts := configSystemContracts s.config fork }
   else

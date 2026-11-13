@@ -37,7 +37,7 @@ def at_block(number: int) -> ReplayChain:
     )
 
 
-def checksum(chain: ReplayChain, timestamp: int, extra_times: tuple[int, ...] = ()) -> str:
+def checksum(chain: ReplayChain, timestamp: int) -> str:
     """The post-Merge checksum, computed independently from the pinned genesis configuration."""
     config = json.loads((FIXTURES / "genesis.json").read_text())["config"]
     # EIP-3675 uses mergeNetsplitBlock, rather than the actual Paris activation block.
@@ -46,7 +46,6 @@ def checksum(chain: ReplayChain, timestamp: int, extra_times: tuple[int, ...] = 
     )
     times = sorted(
         {value for name, value in config.items() if name.endswith("Time") and value <= timestamp}
-        | {time for time in extra_times if time <= timestamp}
     )
     data = block_hash(chain.blocks[0]) + b"".join(
         number.to_bytes(8, "big") for number in heights + times
@@ -115,7 +114,7 @@ def test_bpo_configurations() -> None:
 
 
 def test_chain_specific_blob_activation() -> None:
-    """A blob-only activation without a named fork gets its own report and checksum."""
+    """A blob-only activation without a named fork gets its own report and keeps the fork ID."""
     chain = at_block(54)
     schedule = ["time", 555, 14, 22, 11684671]
     chain = replace(
@@ -127,12 +126,12 @@ def test_chain_specific_blob_activation() -> None:
     assert report["current"]["blobSchedule"]["max"] == 21
     assert report["next"]["activationTime"] == 555
     assert report["next"]["blobSchedule"]["max"] == 22
-    assert report["next"]["forkId"] == checksum(chain, 555, (555,))
+    assert report["next"]["forkId"] == report["current"]["forkId"] == checksum(chain, 555)
     assert report["next"]["precompiles"] == report["current"]["precompiles"]
     assert report["next"]["systemContracts"] == report["current"]["systemContracts"]
     assert report["last"]["activationTime"] == 570
     assert report["last"]["blobSchedule"]["max"] == 22
-    assert report["last"]["forkId"] == checksum(chain, 570, (555,))
+    assert report["last"]["forkId"] == checksum(chain, 570)
 
 
 def genesis_chain() -> ReplayChain:

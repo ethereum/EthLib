@@ -39,7 +39,7 @@ theorem configObject_exists {s : Schedule} {number time : Nat} {fork : Fork}
     (active : s.config.activeFork number (max s.genesisTime time) = some fork)
     (since : .dencun ≤ fork) (supported : fork ≤ .glamsterdam)
     (nonzero : s.config.chainId ≠ 0)
-    (bounded : (configForks s (max s.genesisTime time)).all
+    (bounded : (s.passed number (max s.genesisTime time)).all
       (fun a => activationValue a < 2 ^ 64) = true) :
     ∃ c, configObject s number time = .ok c ∧ c.fork = fork := by
   simp [configObject, active, since, supported, nonzero, bounded, pure, Except.pure]
@@ -49,7 +49,7 @@ theorem configObject_eq_ok {s : Schedule} {number time : Nat} {c : ConfigObject}
     (made : configObject s number time = .ok c) :
     s.config.activeFork number (max s.genesisTime time) = some c.fork ∧
       c.activationTime = time ∧ c.chainId = s.config.chainId ∧
-      c.forkId = Schedule.checksum s.genesisHash (configForks s (max s.genesisTime time)) ∧
+      c.forkId = (s.forkId number (max s.genesisTime time)).hash ∧
       c.blobSchedule =
         chainBlobSchedule s.config c.fork number (max s.genesisTime time) c.sinceDencun ∧
       c.precompiles = configPrecompiles c.fork ∧
@@ -61,7 +61,7 @@ theorem configObject_eq_ok {s : Schedule} {number time : Nat} {c : ConfigObject}
     by_cases since : .dencun ≤ fork
     · by_cases supported : fork ≤ .glamsterdam
       · by_cases nonzero : s.config.chainId ≠ 0
-        · by_cases bounded : (configForks s (max s.genesisTime time)).all
+        · by_cases bounded : (s.passed number (max s.genesisTime time)).all
               (fun a => activationValue a < 2 ^ 64) = true
           · simp [configObject, active, since, supported, nonzero, bounded,
               pure, Except.pure] at made
@@ -75,10 +75,10 @@ theorem configObject_eq_ok {s : Schedule} {number time : Nat} {c : ConfigObject}
           throw, throwThe, MonadExceptOf.throw] at made
     · simp [configObject, active, since, throw, throwThe, MonadExceptOf.throw] at made
 
-/-- The report's fork ID is the checksum of genesis and the activations it has reached. -/
+/-- The report's fork ID is the `FORK_HASH` that the node announces at the activation. -/
 theorem configObject_forkId {s : Schedule} {number time : Nat} {c : ConfigObject}
     (made : configObject s number time = .ok c) :
-    c.forkId = Schedule.checksum s.genesisHash (configForks s (max s.genesisTime time)) :=
+    c.forkId = (s.forkId number (max s.genesisTime time)).hash :=
   (configObject_eq_ok made).2.2.2.1
 
 /-- A reported precompile list contains every active address and no other address. -/
@@ -95,12 +95,11 @@ theorem configObject_blobSchedule {s : Schedule} {number time : Nat} {c : Config
       chainBlobSchedule s.config c.fork number (max s.genesisTime time) c.sinceDencun :=
   (configObject_eq_ok made).2.2.2.2.1
 
-/-- The JSON fork ID is the four-byte checksum of the configuration's passed activations. -/
+/-- The JSON fork ID is the four-byte `FORK_HASH` that the node announces at the activation. -/
 theorem getObjVal_configObject_forkId {s : Schedule} {number time : Nat} {c : ConfigObject}
     (made : configObject s number time = .ok c) :
-    c.toJson.getObjVal? "forkId" = .ok
-      (dataJson (Schedule.checksum s.genesisHash
-        (configForks s (max s.genesisTime time))).toList) := by
+    c.toJson.getObjVal? "forkId" =
+      .ok (dataJson (s.forkId number (max s.genesisTime time)).hash.toList) := by
   have field : c.toJson.getObjVal? "forkId" = .ok (dataJson c.forkId.toList) := by
     unfold ConfigObject.toJson
     exact EthLib.Serialization.Ssz.getObjVal?_mkObj (by simp) (by simp)
