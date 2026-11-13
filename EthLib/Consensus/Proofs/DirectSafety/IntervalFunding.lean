@@ -1919,10 +1919,8 @@ private theorem coverage_epoch {fork : Fork} {s : BeaconState preset fork}
 /-- A voluntary exit keeps the balances. -/
 theorem coverage_voluntary {fork : Fork} {s t : BeaconState preset fork}
     {signed : SignedVoluntaryExit} (ok : processVoluntaryExit config checks s signed = .ok t) :
-    t.balances = s.balances := by
-  simp only [processVoluntaryExit, bind_ok_iff] at ok
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, exited⟩ := ok
-  exact coverage_exit (liftAccessor_ok.mp exited)
+    t.balances = s.balances :=
+  coverage_exit (processVoluntaryExit_initiates ok)
 
 /-- A BLS-to-execution change keeps the balances. -/
 theorem coverage_bls {fork : Fork} {s t : BeaconState preset fork}
