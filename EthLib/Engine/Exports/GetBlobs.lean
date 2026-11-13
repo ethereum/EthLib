@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Exports.Proofs.PyValue
+public import EthLib.Engine.Capabilities
 public import EthLib.Engine.GetBlobs
 
 /-!
@@ -29,6 +30,8 @@ A JSON-RPC error has the code of its Engine API error, without the sign: 32602, 
 A malformed pool, limit or fork has code 0.
 
 So do an unknown method and an argument that Lean cannot read.
+
+A second export reads the JSON result of any version, and writes it back.
 -/
 
 public section
@@ -40,7 +43,6 @@ open EthLib.Exports (Result PyValue pyExport)
 open EthLib.Base
 open EthLib.Cryptography.Kzg
 open EthLib.Cryptography.Kzg.Constants
-open EthLib.Serialization.JsonRpc (dataJson listJson optionJson)
 
 /-- One entry of the pool: the hash, the blob, the blob proof and the cells with their proofs. -/
 abbrev PoolEntry :=
@@ -57,26 +59,7 @@ def pooledOf (entry : PoolEntry) : Result (Bytes32 × PooledBlob) := do
   return (hash, ⟨blob, proof, cells⟩)
 
 /-- The version of a method name `engine_getBlobsV1` to `engine_getBlobsV4`. -/
-def getBlobsVersion (method : String) : Option Nat :=
-  ["engine_getBlobsV1", "engine_getBlobsV2", "engine_getBlobsV3",
-    "engine_getBlobsV4"].idxOf? method |>.map (· + 1)
-
-/-- Fixed bytes as Engine API data. -/
-def hexJson {n : Nat} (bytes : Vector UInt8 n) : Json := dataJson bytes.toList
-
-/-- The JSON of a blob and its proof. -/
-def blobAndProofV1Json (x : BlobAndProofV1) : Json :=
-  Json.mkObj [("blob", hexJson x.blob), ("proof", hexJson x.proof)]
-
-/-- The JSON of a blob and the proofs of its cells. -/
-def blobAndProofV2Json (x : BlobAndProofV2) : Json :=
-  Json.mkObj [("blob", hexJson x.blob), ("proofs", .arr (x.proofs.toArray.map hexJson))]
-
-/-- The JSON of the selected cells of a blob: the cells, then their proofs, `null` where absent. -/
-def blobCellsJson (x : BlobCellsAndProofsV1) : Json :=
-  Json.mkObj [
-    ("blob_cells", .arr (x.cells.toArray.map (optionJson (hexJson ·.1)))),
-    ("proofs", .arr (x.cells.toArray.map (optionJson (hexJson ·.2))))]
+def getBlobsVersion (method : String) : Option Nat := methodVersion "getBlobs" method
 
 /-- The answer to an `engine_getBlobs` request, from a blob pool.
 
@@ -104,16 +87,16 @@ def getBlobsOf (args : List PoolEntry × Bool × Nat × String × PyValue) : Res
   let answer : Json ← match version, bits with
     | 1, _ =>
       let blobs ← engine (getBlobsV1 pool fork hashes)
-      pure (listJson (optionJson blobAndProofV1Json) blobs)
+      pure (getBlobsV1Json blobs)
     | 2, _ =>
       let blobs ← engine (getBlobsV2 pool hashes)
-      pure (optionJson (listJson blobAndProofV2Json) blobs)
+      pure (getBlobsV2Json blobs)
     | 3, _ =>
       let blobs ← engine (getBlobsV3 pool hashes)
-      pure (optionJson (listJson (optionJson blobAndProofV2Json)) blobs)
+      pure (getBlobsV3Json blobs)
     | _, some bits =>
       let cells ← engine (getBlobsV4 pool hashes bits)
-      pure (optionJson (listJson (optionJson blobCellsJson)) cells)
+      pure (getBlobsV4Json cells)
     -- The parameters of version 4 always hold a bitarray, so this case never happens.
     | _, none => throw (0, "params: no bitarray")
   return .ofJson answer
@@ -128,5 +111,30 @@ Any of the last three may be `None`, and so may each cell. -/
 @[export eth_engine_get_blobs]
 def getBlobsExport (args : PyValue) : Result PyValue :=
   pyExport getBlobsOf args
+
+/-- A result of `engine_getBlobs`, read at the version of the method name and written back. -/
+def readGetBlobsResultOf (args : String × PyValue) : Result PyValue := do
+  let (method, result) := args
+  let some version := getBlobsVersion method | throw (0, s!"no method {method}")
+  let engine {α : Type} (act : Except EngineError α) : Result α :=
+    act.mapError fun e => (e.code, s!"engine error: {reprStr e}")
+  let result := result.toJson
+  let answer : Json ← match version with
+    | 1 => getBlobsV1Json <$> engine (getBlobsV1OfJson result)
+    | 2 => getBlobsV2Json <$> engine (getBlobsV2OfJson result)
+    | 3 => getBlobsV3Json <$> engine (getBlobsV3OfJson result)
+    | _ => getBlobsV4Json <$> engine (getBlobsV4OfJson result)
+  return .ofJson answer
+
+/-- The result of an `engine_getBlobs` method, read from its JSON and written back.
+
+The arguments are the method name and the result, as `json.loads` gives it.
+
+A result that does not decode is reported as invalid parameters, with code 32602.
+
+An unknown method name has code 0. -/
+@[export eth_engine_read_get_blobs_result]
+def readGetBlobsResultExport (args : PyValue) : Result PyValue :=
+  pyExport readGetBlobsResultOf args
 
 end EthLib.Engine.Exports

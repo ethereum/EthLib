@@ -8,11 +8,13 @@ public import EthLib.Consensus.Proofs.Transition.TargetUpgrades
 /-!
 # Slashed validators come from evidence on the selected history
 
-A slashed flag in a reachable registry must originate in a slashing operation of the run.
+A slashed flag at the end of a run was set at its start or comes from a slashing of the run.
 
 The walk follows the state transition operation by operation; no abstract protocol is an input.
 
-The steps of an epoch use the generic traversal of the epoch laws.
+The steps of an epoch use the generic splits of the epoch laws.
+
+Slashings and upgrades use the slashed flags that their shared results state at each position.
 -/
 
 @[expose] public section
@@ -98,35 +100,63 @@ private theorem SlashedKept.foldlM {fork : Fork} {α ε : Type}
   foldlM_ok_invariant (SlashedKept state)
     (fun _ _ _ before computed => before.trans (keeps _ _ _ computed)) (.refl state) ok
 
+/-- A step keeps the keys before it and changes slashed flags only at its targets.
+
+A target inside the registry after the step was inside it before, with a key that has evidence.
+
+If each slashed key before the step has evidence, so does each slashed key after it. -/
+private theorem SlashedBacked.of_flags {fork post : Fork} {state : BeaconState preset fork}
+    {after : BeaconState preset post} {evidence : BLSPubkey → Prop} (target : Nat → Prop)
+    (kept : validatorKeys state <+: validatorKeys after)
+    (flags : ∀ position : Nat, ¬ target position →
+      (after.validators.data[position]?).map (·.slashed) =
+        (state.validators.data[position]?).map (·.slashed))
+    (inside : ∀ position, target position → position < after.validators.data.size →
+      position < state.validators.data.size)
+    (selected : ∀ position, target position → ∀ old,
+      state.validators.data[position]? = some old → evidence old.pubkey)
+    (backed : SlashedBacked evidence state) : SlashedBacked evidence after := by
+  intro v member slashed
+  obtain ⟨position, found⟩ := List.mem_iff_getElem?.mp member
+  rw [Array.getElem?_toList] at found
+  -- The validator before the step at the same position has evidence for its key.
+  obtain ⟨old, foundOld, evidenced⟩ :
+      ∃ old, state.validators.data[position]? = some old ∧ evidence old.pubkey := by
+    by_cases aimed : target position
+    · have small := inside position aimed (Array.getElem?_eq_some_iff.mp found).1
+      exact ⟨_, Array.getElem?_eq_getElem small,
+        selected position aimed _ (Array.getElem?_eq_getElem small)⟩
+    · have flag := flags position aimed
+      rw [found, Option.map_some] at flag
+      obtain ⟨old, foundOld, oldFlag⟩ := Option.map_eq_some_iff.mp flag.symm
+      exact ⟨old, foundOld, backed old (Array.mem_toList_iff.mpr (Array.mem_of_getElem? foundOld))
+        (oldFlag.trans slashed)⟩
+  -- The step keeps that key at its position.
+  obtain ⟨current, foundCurrent, same⟩ := validators_getElem?_of_validatorKeys_prefix kept foundOld
+  obtain rfl : current = v := Option.some.inj (foundCurrent.symm.trans found)
+  exact same ▸ evidenced
+
+/-- A step that keeps the keys before it and every slashed flag keeps the evidence of each one. -/
+private theorem SlashedKept.of_flags {fork post : Fork} {state : BeaconState preset fork}
+    {after : BeaconState preset post} (kept : validatorKeys state <+: validatorKeys after)
+    (flags : ∀ position : Nat, (after.validators.data[position]?).map (·.slashed) =
+      (state.validators.data[position]?).map (·.slashed)) : SlashedKept state after :=
+  fun _ backed => .of_flags (fun _ => False) kept (fun position _ => flags position)
+    (fun _ => False.elim) (fun _ => False.elim) backed
+
 namespace SlashedKept
 
 variable {fork : Fork} {state after : BeaconState preset fork}
 
 private theorem setValidatorAt {position : Nat} {v old : Validator}
+    (set : state.setValidatorAt position v = .ok after)
     (found : getValidatorAt state position = .ok old)
     (key : v.pubkey = old.pubkey) (flag : v.slashed = old.slashed)
-    (set : state.setValidatorAt position v = .ok after) : SlashedKept state after := by
-  obtain ⟨inside, rfl⟩ := setValidatorAt_ok set
-  have oldEq : state.validators.data[position] = old := by
-    simpa [getValidatorAt, inside] using found
-  intro evidence backed current member slashed
-  simp only [BeaconState.putValidator, Serialization.Ssz.RootedForkList.data_set,
-    Array.toList_set] at member
-  rcases List.mem_or_eq_of_mem_set member with member | equal
-  · exact backed current member slashed
-  · subst current
-    rw [key]
-    apply backed old
-    · rw [← oldEq]
-      simp
-    · rwa [flag] at slashed
-
-private theorem setValidator {index : ValidatorIndex} {v old : Validator}
-    (found : getValidator state index = .ok old)
-    (key : v.pubkey = old.pubkey) (flag : v.slashed = old.slashed)
-    (set : state.setValidator index v = .ok after) : SlashedKept state after :=
-  setValidatorAt (by rwa [← getValidator_eq_getValidatorAt]) key flag
-    (by rwa [← setValidator_eq_setValidatorAt])
+    (le : ExitsOrdered state → v.exitEpoch ≤ v.withdrawableEpoch)
+    (whole : MaxEffectiveBalancesAligned preset → EffectiveBalancesAligned state →
+      v.effectiveBalance % preset.EFFECTIVE_BALANCE_INCREMENT = 0) : SlashedKept state after :=
+  SlashedKept.of_flags (frame_setValidatorAt_of_whole set found key le whole).pubkeysPrefix
+    (slashed_setValidatorAt found set flag)
 
 private theorem increaseBalance {index : ValidatorIndex} {amount : Gwei}
     (ok : Consensus.increaseBalance state index amount = .ok after) : SlashedKept state after :=
@@ -138,15 +168,9 @@ private theorem decreaseBalance {index : ValidatorIndex} {amount : Gwei}
 
 private theorem initiateValidatorExit {index : ValidatorIndex}
     (ok : Consensus.initiateValidatorExit config state index = .ok after) :
-    SlashedKept state after := by
-  obtain ⟨v, found, unchanged | ⟨_, queued, epoch, withdrawal, queue, _, set⟩⟩ :=
-    initiateValidatorExit_ok ok
-  · rw [unchanged.2]; exact refl _
-  · have same := (exitQueue_validators queue).1
-    exact (of_validators (congrArg (·.data) same)).trans
-      (setValidator (old := v) (v := { v with exitEpoch := epoch, withdrawableEpoch := withdrawal })
-        (by rw [getValidator_of_validators_eq same]; exact found)
-        rfl rfl set)
+    SlashedKept state after :=
+  SlashedKept.of_flags (frame_initiateValidatorExit ok).pubkeysPrefix
+    (slashedFlag_initiateValidatorExit ok)
 
 private theorem append {v : Validator}
     (added : after.validators.data = state.validators.data.push v) (flag : v.slashed = false) :
@@ -167,7 +191,7 @@ private theorem slashedKeptLaws :
     EpochFrameLaws (preset := preset) (fork := fork) fun s t => SlashedKept s t where
   refl := refl
   trans := trans
-  setValidatorAt := fun set found key flag _ _ => setValidatorAt found key flag set
+  setValidatorAt := setValidatorAt
   increaseBalance := increaseBalance
   decreaseBalance := decreaseBalance
   initiateValidatorExit := initiateValidatorExit
@@ -191,39 +215,24 @@ private theorem keep {after : BeaconState preset fork} (_ : BlockFrame state aft
     (same : after.validators = state.validators) : SlashedKept state after :=
   of_validators (congrArg (·.data) same)
 
-private theorem genesis {hash : Hash32} {time : UInt64} {deposits : Array Deposit}
-    (ok : initializeBeaconStateFromEth1 config checks hash time deposits = .ok after) :
-    SlashedBacked (fun _ => False) after := by
-  obtain ⟨before, genesisTime, root, deposited, activated, finalRoot, depositedOk, activatedOk,
-    rfl⟩ := initializeBeaconStateFromEth1_ok ok
-  have first := foldlM (fun _ _ _ ok => slashedKeptLaws.genesisDeposit keep ok) depositedOk
-  have second := foldlM (fun _ _ _ ok => slashedKeptLaws.activateAtGenesis ok) activatedOk
-  exact (first.trans second) (fun _ => False) (by simp [SlashedBacked, emptyGenesisState])
-
 private theorem processJustificationAndFinalization
     (ok : Consensus.processJustificationAndFinalization state = .ok after) :
     SlashedKept state after :=
   of_validators (by rw [(processJustificationAndFinalization_keeps ok).2.2.2.2.2.1])
 
+-- From Altair the splits leave justification, the builder payments and the flag rotation to us.
 private theorem processEpoch (ok : Consensus.processEpoch config checks state = .ok after) :
     SlashedKept state after := by
-  by_cases altair : .altair ≤ fork
-  · unfold Consensus.processEpoch at ok
-    simp only [altair, ↓reduceDIte] at ok
-    obtain ⟨pending, paid, rooted, pendingOk, paidOk, middle, tail⟩ :=
-      slashedKeptLaws.processEpochAltair_paymentSplit ok
-    obtain ⟨justified, justifiedOk, head⟩ := slashedKeptLaws.epochBeforePayments_split pendingOk
-    have paidStep : SlashedKept pending paid := by
-      split at paidOk
-      · rw [processBuilderPendingPayments_eq (liftAccessor_ok.mp paidOk)]
-        exact of_validators
-      · cases paidOk; exact refl _
+  by_cases altair : Fork.altair ≤ fork
+  · simp only [Consensus.processEpoch, altair, ↓reduceDIte] at ok
+    obtain ⟨justified, rooted, justifiedOk, head, tail⟩ :=
+      slashedKeptLaws.processEpochAltair_rotationSplit
+        (fun _ paid => by rw [processBuilderPendingPayments_eq paid]; exact of_validators) ok
     exact (processJustificationAndFinalization justifiedOk).trans <| head.trans <|
-      paidStep.trans <| middle.trans <| (of_validators (state := rooted)).trans tail
-  · obtain ⟨justified, justifiedOk, tail⟩ :=
+      (of_validators (state := rooted)).trans tail
+  · obtain ⟨justified, justifiedOk, rest⟩ :=
       slashedKeptLaws.processEpoch_split_of_lt_altair (Nat.lt_of_not_le altair) ok
-    exact (processJustificationAndFinalization justifiedOk).trans tail
-
+    exact (processJustificationAndFinalization justifiedOk).trans rest
 
 private theorem advanceSlot (ok : Consensus.advanceSlot config checks state = .ok after) :
     SlashedKept state after := by
@@ -237,47 +246,12 @@ private theorem advanceSlot (ok : Consensus.advanceSlot config checks state = .o
     · cases epochedOk; exact refl _
   exact (first.trans second).trans of_validators
 
-private theorem upgradeToElectra {pre : BeaconState preset .dencun}
-    {post : BeaconState preset .pectra}
-    (ok : Consensus.upgradeToElectra config pre = .ok post) : SlashedKept pre post := by
-  simp only [Consensus.upgradeToElectra, bind_ok_iff] at ok
-  obtain ⟨_, _, _, _, _, _, _, _, _, queued, compounded⟩ := ok
-  exact (of_validators (state := pre)).trans <|
-    (foldlM (fun _ _ _ ok => slashedKeptLaws.queuePreActivation keep ok) queued).trans
-      (foldlM (fun _ _ _ ok => slashedKeptLaws.queueCompoundingExcess keep ok) compounded)
-
 private theorem upgradeNext {pre : ForkedBeaconState preset}
     {post : {post : ForkedBeaconState preset // pre.fork < post.fork}}
     (ok : Consensus.upgradeNext config checks pre = .ok post) :
-    SlashedKept pre.state post.val.state := by
-  obtain ⟨fork, state⟩ := pre
-  cases fork
-  case phase0 =>
-    simp only [Consensus.upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
-    obtain ⟨_, upgraded, rfl⟩ := ok
-    exact of_validators (upgradeToAltair_spec upgraded).1
-  case altair | bellatrix | shapella =>
-    simp only [Consensus.upgradeNext, pure, Except.pure, Except.ok.injEq] at ok
-    subst ok
-    exact of_validators
-  case dencun =>
-    simp only [Consensus.upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
-    obtain ⟨_, upgraded, rfl⟩ := ok
-    exact upgradeToElectra upgraded
-  case pectra =>
-    simp only [Consensus.upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
-    obtain ⟨_, upgraded, rfl⟩ := ok
-    exact of_validators (upgradeToFulu_spec upgraded).1
-  case fusaka =>
-    simp only [Consensus.upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
-    obtain ⟨_, upgraded, rfl⟩ := ok
-    exact of_validators (upgradeToGloas_spec upgraded).1
-  case glamsterdam =>
-    simp only [Consensus.upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
-    obtain ⟨_, upgraded, rfl⟩ := ok
-    obtain ⟨_, rfl⟩ := upgradeToHeze_ok_iff.mp upgraded
-    exact of_validators (upgradeHezeFields_lists _).1
-  all_goals simp only [Consensus.upgradeNext] at ok; cases ok
+    SlashedKept pre.state post.val.state :=
+  have frame := upgradeFrame_upgradeNext ok
+  SlashedKept.of_flags frame.pubkeysPrefix frame.slashed
 
 private theorem advanceSlotAcross {pre post : ForkedBeaconState preset}
     (ok : Consensus.advanceSlotAcross config checks pre = .ok post) :
@@ -303,35 +277,16 @@ private theorem key_of_same_size {fork : Fork} {state after : BeaconState preset
   obtain rfl : current = v := Option.some.inj (foundCurrent.symm.trans found)
   exact ⟨_, atOld, same.symm⟩
 
+-- Only the slashed validator can acquire a flag.
 private theorem slashValidator_backed {fork : Fork} {state after : BeaconState preset fork}
     {index : ValidatorIndex} {whistleblower : Option ValidatorIndex}
     (ok : slashValidator config state index whistleblower = .ok after)
     (evidence : BLSPubkey → Prop) (backed : SlashedBacked evidence state)
     (selected : ∀ old, state.validators.data[index.toNat]? = some old → evidence old.pubkey) :
-    SlashedBacked evidence after := by
-  obtain ⟨exited, validator, withdrawable, marked, _, _, slashings, lowered, _, _, raised, last,
-    exitedOk, found, _, markedOk, _, _, _, loweredOk, _, _, raisedOk, lastOk, done⟩ :=
-    slashValidator_ok ok
-  have oldBacked := SlashedKept.initiateValidatorExit exitedOk evidence backed
-  -- Only the selected validator can acquire a flag at this write.
-  have markedBacked : SlashedBacked evidence marked := by
-    obtain ⟨inside, rfl⟩ := setValidator_ok markedOk
-    intro v member flag
-    simp only [BeaconState.putValidator, Serialization.Ssz.RootedForkList.data_set,
-      Array.toList_set] at member
-    rcases List.mem_or_eq_of_mem_set member with member | rfl
-    · exact oldBacked v member flag
-    · obtain ⟨old, atOld, same⟩ := key_of_same_size
-        (frame_initiateValidatorExit exitedOk).pubkeysPrefix
-        (sameSizes_initiateValidatorExit exitedOk).1 (getValidator_eq_ok_iff.mp found)
-      exact same ▸ selected old atOld
-  have rest : SlashedKept marked last :=
-    (SlashedKept.of_validators (after := { marked with slashings })).trans <|
-    (SlashedKept.decreaseBalance loweredOk).trans <|
-    (SlashedKept.increaseBalance raisedOk).trans (SlashedKept.increaseBalance lastOk)
-  have lastBacked := rest evidence markedBacked
-  rw [done]
-  split <;> exact lastBacked
+    SlashedBacked evidence after :=
+  .of_flags (· = index.toNat) (frame_slashValidator ok).pubkeysPrefix
+    (slashValidator_slashedFlag ok).2 (fun _ _ small => (sameSizes_slashValidator ok).1 ▸ small)
+    (fun _ aimed => aimed ▸ selected) backed
 
 private theorem proposerSlashing_backed {fork : Fork} {state after : BeaconState preset fork}
     {slashing : ProposerSlashing}
@@ -351,38 +306,16 @@ private theorem attesterSlashing_backed {fork : Fork} {state after : BeaconState
     (selected : ∀ i ∈ slashingIndices slashing, ∀ old,
       state.validators.data[i.toNat]? = some old → evidence old.pubkey) :
     SlashedBacked evidence after := by
-  have traverse (indices : List ValidatorIndex)
-      (allowed : ∀ i ∈ indices, ∀ old,
-        state.validators.data[i.toNat]? = some old → evidence old.pubkey)
-      {start finish : BeaconState preset fork × Bool}
-      (identity : validatorKeys state <+: validatorKeys start.1)
-      (size : start.1.validators.data.size = state.validators.data.size)
-      (backed : SlashedBacked evidence start.1)
-      (ok : indices.foldlM (slashIfSlashable config) start = .ok finish) :
-      SlashedBacked evidence finish.1 := by
-    induction indices generalizing start with
-    | nil => cases ok; exact backed
-    | cons index rest ih =>
-      obtain ⟨middle, first, tail⟩ := bind_ok_iff.mp ok
-      obtain ⟨s, anySlashed⟩ := start
-      simp only [slashIfSlashable, bind_ok_iff, liftAccessor_ok] at first
-      obtain ⟨_, _, first⟩ := first
-      split at first
-      · simp only [bind_ok_iff, liftAccessor_ok, pure, Except.pure, Except.ok.injEq] at first
-        obtain ⟨next, slashed, rfl⟩ := first
-        refine ih (fun i member => allowed i (by simp [member]))
-          (identity.trans (frame_slashValidator slashed).pubkeysPrefix)
-          ((sameSizes_slashValidator slashed).1.trans size) ?_ tail
-        apply slashValidator_backed slashed evidence backed
-        intro old found
-        obtain ⟨original, originalAt, same⟩ := key_of_same_size identity size found
-        exact same ▸ allowed index (by simp) original originalAt
-      · cases first
-        exact ih (fun i member => allowed i (by simp [member])) identity size backed tail
+  have kept := (frame_processAttesterSlashing ok).pubkeysPrefix
+  have size := (sameSizes_processAttesterSlashing ok).1
   simp only [processAttesterSlashing, bind_ok_iff, ensure_ok_iff, pure, Except.pure,
     Except.ok.injEq] at ok
   obtain ⟨_, _, _, _, _, _, _, _, _, _, _, folded, _, _, rfl⟩ := ok
-  exact traverse _ selected (List.prefix_refl _) rfl backed folded
+  -- The fold changes flags only at the positions of the indices of the slashing.
+  have flags := (foldlM_slashIfSlashable _ folded).2.2.2
+  exact .of_flags (fun position => ∃ i ∈ slashingIndices slashing, i.toNat = position) kept
+    (fun position outside => flags position fun i member named => outside ⟨i, member, named⟩)
+    (fun _ _ small => size ▸ small) (fun _ ⟨i, member, named⟩ => named ▸ selected i member) backed
 
 private theorem fold_slashings_backed {fork : Fork} {α : Type}
     {step : BeaconState preset fork → α → Except TransitionError (BeaconState preset fork)}
@@ -521,37 +454,43 @@ private theorem block_backed {fork : Fork} {state after : BeaconState preset for
   · cases synced
     exact operatedBacked
 
-/-- A slashed validator of the last state has a slashing in a block of the run that names its key.
+/-- A validator of the state with the key is slashed. -/
+def SlashedAt {fork : Fork} (state : BeaconState preset fork) (key : BLSPubkey) : Prop :=
+  ∃ v ∈ state.validators.data.toList, v.pubkey = key ∧ v.slashed = true
+
+/-- A slashed validator of the last state has a slashed key at the first state of the run.
+
+Otherwise a block of the run carries a slashing that names its key.
 
 The key is read in the registry before that block.
 
-The run starts at a genesis built from deposits. -/
-theorem _root_.EthLib.Consensus.Run.slashed_evidence {g a : ForkedBeaconState preset}
-    (run : Run config checks g a) (genesis : Genesis config checks g)
+The run can start at any state. -/
+theorem _root_.EthLib.Consensus.Run.slashed_evidence {x a : ForkedBeaconState preset}
+    (run : Run config checks x a)
     (v : Validator) (member : v ∈ a.state.validators.data.toList) (slashed : v.slashed = true) :
-    run.SlashingEvidence v.pubkey := by
-  have backed : SlashedBacked run.SlashingEvidence a.state := by
+    SlashedAt x.state v.pubkey ∨ run.SlashingEvidence v.pubkey := by
+  have backed : SlashedBacked (fun k => SlashedAt x.state k ∨ run.SlashingEvidence k)
+      a.state := by
     clear member slashed v
     induction run with
-    | nil =>
-      obtain ⟨_, _, _, ok⟩ := genesis
-      intro current member flag
-      exact False.elim (SlashedKept.genesis ok current member flag)
+    | nil => exact fun current member flag => .inl ⟨current, member, rfl, flag⟩
     | snoc pre step ih =>
       rename_i middle last
-      have inherited : SlashedBacked (pre.snoc step).SlashingEvidence middle.state := by
+      have inherited : SlashedBacked
+          (fun k => SlashedAt x.state k ∨ (pre.snoc step).SlashingEvidence k) middle.state := by
         intro current member flag
-        obtain ⟨x, y, occurrence, contained, evidence⟩ := ih current member flag
-        exact ⟨x, y, occurrence, .earlier contained step, evidence⟩
+        refine (ih current member flag).imp_right ?_
+        rintro ⟨u, w, occurrence, contained, evidence⟩
+        exact ⟨u, w, occurrence, .earlier contained step, evidence⟩
       cases step with
       | slot ok => exact SlashedKept.advanceSlotAcross ok _ inherited
       | block engine signed due ok =>
         apply block_backed (applySignedBlock_ok ok).2.1 _ inherited
         · intro sl member old found
-          exact ⟨_, _, .block engine signed due ok, .last pre _,
+          exact .inr ⟨_, _, .block engine signed due ok, .last pre _,
             Or.inl ⟨sl, member, old, found, rfl⟩⟩
         · intro sl member i inIndices old found
-          exact ⟨_, _, .block engine signed due ok, .last pre _,
+          exact .inr ⟨_, _, .block engine signed due ok, .last pre _,
             Or.inr ⟨sl, member, i, inIndices, old, found, rfl⟩⟩
   exact backed v member slashed
 

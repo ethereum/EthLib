@@ -1201,19 +1201,30 @@ private theorem processEpoch_kept (before : fork < .altair)
         MixesKeptBut next state after) ∧
       after.previousEpochAttestations before = state.currentEpochAttestations before ∧
       (after.currentEpochAttestations before).data = #[] := by
-  have notAltair : ¬Fork.altair ≤ fork := Nat.not_le_of_lt before
-  unfold processEpoch at computed
-  simp only [notAltair, ↓reduceDIte, bind_ok_iff] at computed
-  obtain ⟨_, justifiedOk, _, rewardedOk, _, registeredOk, _, slashedOk, _, resetOk, _,
-    balancedOk, cleared, clearedOk, _, mixedOk, rooted, rootedOk, rotated⟩ := computed
-  have head : Keeps state cleared :=
-    (keeps_processJustificationAndFinalization justifiedOk).trans <|
-    (keeps_processRewardsAndPenalties rewardedOk).trans <|
-    (keeps_processRegistryUpdates (Nat.lt_trans before (by decide)) registeredOk).trans <|
-    (keeps_processSlashings slashedOk).trans <|
-    (keeps_processEth1DataReset resetOk).trans <|
-    (keeps_processEffectiveBalanceUpdates balancedOk).trans <|
-    keeps_processSlashingsReset clearedOk
+  obtain ⟨cleared, mixed, rooted, rotatedState, synced, looked, initial, mixedOk, rootedOk,
+    rotated, syncedOk, lookedOk, windowed⟩ := processEpoch_randaoCut computed
+  -- Every fork guard from Altair on is false, and the eth1 reset runs.
+  have later {g : Fork} (h : Fork.altair ≤ g) : ¬g ≤ fork :=
+    fun h' => Nat.not_le_of_lt before (Nat.le_trans h h')
+  have preHeze : fork < .hegota := Nat.lt_trans before (by decide)
+  simp (disch := decide) only [EpochStage.Edge, later, ↓reduceDIte]
+    at rootedOk rotated syncedOk lookedOk windowed
+  subst syncedOk lookedOk windowed
+  have head : Keeps state cleared := by
+    apply initial.transport Keeps Keeps.refl (fun a b => a.trans b)
+    intro k member a b ok
+    have edge := EpochStage.action_cases.mp ok
+    cases k <;> simp (disch := decide) only [EpochStage.Edge, later, preHeze, ↓reduceDIte] at edge
+    all_goals first
+      | exact keeps_processJustificationAndFinalization edge
+      | exact keeps_processRewardsAndPenalties edge
+      | exact keeps_processRegistryUpdates (Nat.lt_trans before (by decide)) edge
+      | exact keeps_processSlashings edge
+      | exact keeps_processEth1DataReset edge
+      | exact keeps_processEffectiveBalanceUpdates edge
+      | exact keeps_processSlashingsReset edge
+      | exact edge ▸ Keeps.refl _
+      | simp [EpochStage.prefixStages] at member
   have epoch : getCurrentEpoch cleared = getCurrentEpoch state := by
     simp only [getCurrentEpoch, head.2.2]
   obtain ⟨next, mix, randaoMixes, nextEq, -, written, rfl⟩ := processRandaoMixesReset_eq mixedOk
@@ -1230,7 +1241,7 @@ private theorem processEpoch_kept (before : fork < .altair)
   · intro other apart
     have plain := writeCircularRooted_elements cleared.randaoMixes next mix
     rw [written] at plain
-    have mixesEq : after.randaoMixes = rooted.randaoMixes := by rw [← rest]
+    have mixesEq : rotatedState.randaoMixes = rooted.randaoMixes := by rw [← rest]
     rw [mixesEq, tail.1.1]
     exact (readCircular_writeCircular_of_ne plain.symm (Ne.symm apart)).trans
       (by rw [head.1.1])

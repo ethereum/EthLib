@@ -16,7 +16,14 @@ from raising import raises
 # That repository is pinned at commit bc2f346991e20631ed0a884e345110738228bfae.
 # Its section "Message Structure" makes a key the varint of 8 * field number + wire type.
 # Wire type 0 is a varint, 1 eight bytes, 2 a length and bytes, 3 and 4 a group, 5 four bytes.
+# The fields of the partial message extension are in the same repository and commit.
+# ControlExtensions is in pubsub/gossipsub/extensions/extensions.proto.
+# So are the extensions field 6 of ControlMessage and the fields 3 and 4 of SubOpts.
+# The field `partial` (10) of RPC and PartialMessagesExtension are in the same file.
+# So is the experimental field 6492434, `optional bool testExtension` in ControlExtensions.
+# In RPC, that field is `optional TestExtension testExtension`, a message.
 
+TOPIC = "/eth2/b5303f2a/data_column_sidecar_3/ssz_snappy"
 PREFIX = "gossip RPC rejected: EthLib.Networking.Gossip.RpcError."
 PROTOBUF = PREFIX + "protobuf (EthLib.Networking.Encoding.Protobuf.ProtobufError."
 
@@ -58,13 +65,15 @@ def _control(*records: bytes) -> bytes:
 
 
 # One RPC with every field, each written in the order and form of the encoder of EthLib.
-# Every singular field is written, even at its default, so the bytes are also its encoding.
+# Every singular field is written, even at its default, except the flags and the optional fields.
+# A flag is written only when true, and an optional field only when present.
+# So the bytes are also its encoding.
 # Each top-level list, control list and inner list of a first entry has two distinct entries.
 # So a reversed or shuffled list shows.
 FULL_BYTES = b"".join(
     [
-        _len(1, _uint(1, 1) + _str(2, "a")),
-        _len(1, _uint(1, 0) + _str(2, "")),
+        _len(1, _uint(1, 1) + _str(2, "a") + _uint(3, 1)),
+        _len(1, _uint(1, 0) + _str(2, "") + _uint(4, 1)),
         _message(_len(2, b"\x01\x02"), _str(4, "t")),
         _message(_len(2, b""), _str(4, "u")),
         _control(
@@ -84,11 +93,16 @@ FULL_BYTES = b"".join(
             _len(4, _str(1, "q") + _uint(3, 2**64 - 1)),
             _len(5, _len(1, b"m4") + _len(1, b"m7")),
             _len(5, _len(1, b"m8")),
+            _len(6, _uint(10, 1)),
         ),
+        _len(10, _len(1, b"t") + _len(2, b"g") + _len(3, b"cells") + _len(4, b"")),
     ]
 )
 FULL = rpc.Rpc(
-    subscriptions=(rpc.SubOpts(subscribe=True, topic_id="a"), rpc.SubOpts()),
+    subscriptions=(
+        rpc.SubOpts(subscribe=True, topic_id="a", requests_partial=True),
+        rpc.SubOpts(supports_sending_partial=True),
+    ),
     publish=(rpc.Message(data=b"\x01\x02", topic="t"), rpc.Message(topic="u")),
     control=rpc.Control(
         ihave=(rpc.IHave(topic_id="t", message_ids=(b"m1", b"m2")), rpc.IHave(topic_id="u")),
@@ -106,6 +120,10 @@ FULL = rpc.Rpc(
             rpc.Prune(topic_id="q", backoff=2**64 - 1),
         ),
         idontwant=(rpc.IDontWant(message_ids=(b"m4", b"m7")), rpc.IDontWant(message_ids=(b"m8",))),
+        extensions=rpc.ControlExtensions(partial_messages=True),
+    ),
+    partial_message=rpc.PartialMessagesExtension(
+        topic_id=b"t", group_id=b"g", partial_message=b"cells", parts_metadata=b""
     ),
 )
 
@@ -114,7 +132,16 @@ def _reference(value: rpc.Rpc) -> bytes:
     """The bytes of an RPC, written field by field from the schemas, in the order of FULL_BYTES."""
     control = value.control
     records = [
-        *(_len(1, _uint(1, int(s.subscribe)) + _str(2, s.topic_id)) for s in value.subscriptions),
+        *(
+            _len(
+                1,
+                _uint(1, int(s.subscribe))
+                + _str(2, s.topic_id)
+                + (_uint(3, 1) if s.requests_partial else b"")
+                + (_uint(4, 1) if s.supports_sending_partial else b""),
+            )
+            for s in value.subscriptions
+        ),
         *(_message(_len(2, m.data), _str(4, m.topic)) for m in value.publish),
     ]
     inner = [
@@ -137,8 +164,21 @@ def _reference(value: rpc.Rpc) -> bytes:
         ),
         *(_len(5, b"".join(_len(1, i) for i in m.message_ids)) for m in control.idontwant),
     ]
+    if control.extensions is not None:
+        flag = _uint(10, 1) if control.extensions.partial_messages else b""
+        inner.append(_len(6, flag))
     if inner:
         records.append(_control(*inner))
+    if (partial := value.partial_message) is not None:
+        records.append(
+            _len(
+                10,
+                _len(1, partial.topic_id)
+                + _len(2, partial.group_id)
+                + (b"" if partial.partial_message is None else _len(3, partial.partial_message))
+                + (b"" if partial.parts_metadata is None else _len(4, partial.parts_metadata)),
+            )
+        )
     return b"".join(records)
 
 
@@ -194,11 +234,6 @@ def test_encode_omits_an_empty_control() -> None:
 )
 def test_missing_fields_read_as_defaults(data: bytes, expected: rpc.Rpc) -> None:
     assert rpc.decode(data) == expected
-
-
-def test_any_nonzero_subscribe_reads_as_true() -> None:
-    # A bool is written as 0 or 1; EthLib reads any other value as true.
-    assert rpc.decode(_len(1, _uint(1, 2))) == rpc.Rpc(subscriptions=(rpc.SubOpts(subscribe=True),))
 
 
 @pytest.mark.parametrize("field", [1, 3, 5, 6])
@@ -340,6 +375,15 @@ def test_unknown_fields_are_skipped(data: bytes, expected: rpc.Rpc) -> None:
         (_control(_len(3, _uint(1, 0))), "1 0"),
         (_control(_len(4, _uint(1, 0))), "1 0"),
         (_control(_len(5, _uint(1, 0))), "1 0"),
+        # The two partial flags of a subscription and the flag of the extensions are varints.
+        (_len(1, _len(3, b"")), "3 2"),
+        (_len(1, _len(4, b"")), "4 2"),
+        (_control(_len(6, _len(10, b""))), "10 2"),
+        # The extensions and the partial message are length-delimited, and so are its fields.
+        (_control(_uint(6, 0)), "6 0"),
+        (_uint(10, 0), "10 0"),
+        (_len(10, _uint(1, 0)), "1 0"),
+        (_len(10, _uint(4, 0)), "4 0"),
         # A group in place of an IHAVE.
         (_control(_varint(1 << 3 | 3) + _varint(1 << 3 | 4)), "1 3"),
     ],
@@ -517,7 +561,14 @@ _peers = st.builds(
 RPCS = st.builds(
     rpc.Rpc,
     subscriptions=st.lists(
-        st.builds(rpc.SubOpts, subscribe=st.booleans(), topic_id=_topics), max_size=2
+        st.builds(
+            rpc.SubOpts,
+            subscribe=st.booleans(),
+            topic_id=_topics,
+            requests_partial=st.booleans(),
+            supports_sending_partial=st.booleans(),
+        ),
+        max_size=2,
     ).map(tuple),
     publish=st.lists(
         st.builds(rpc.Message, data=st.binary(max_size=4), topic=_topics), max_size=2
@@ -539,6 +590,15 @@ RPCS = st.builds(
             max_size=2,
         ).map(tuple),
         idontwant=st.lists(st.builds(rpc.IDontWant, message_ids=_ids), max_size=2).map(tuple),
+        extensions=st.none() | st.builds(rpc.ControlExtensions, partial_messages=st.booleans()),
+    ),
+    partial_message=st.none()
+    | st.builds(
+        rpc.PartialMessagesExtension,
+        topic_id=st.binary(max_size=4),
+        group_id=st.binary(max_size=4),
+        partial_message=st.none() | st.binary(max_size=4),
+        parts_metadata=st.none() | st.binary(max_size=4),
     ),
 )
 
@@ -551,3 +611,214 @@ def test_encode_matches_the_reference(value: rpc.Rpc) -> None:
 @given(RPCS)
 def test_decode_reads_the_reference(value: rpc.Rpc) -> None:
     assert rpc.decode(_reference(value)) == value
+
+
+@pytest.mark.parametrize(
+    ("data", "value"),
+    [
+        # A subscription to a data column sidecar topic: subscribe, the topic, then both flags.
+        (
+            _len(1, _uint(1, 1) + _str(2, TOPIC) + _uint(3, 1) + _uint(4, 1)),
+            rpc.Rpc(
+                subscriptions=(
+                    rpc.SubOpts(
+                        subscribe=True,
+                        topic_id=TOPIC,
+                        requests_partial=True,
+                        supports_sending_partial=True,
+                    ),
+                )
+            ),
+        ),
+        (
+            _len(1, _uint(1, 1) + _str(2, TOPIC) + _uint(3, 1)),
+            rpc.Rpc(
+                subscriptions=(rpc.SubOpts(subscribe=True, topic_id=TOPIC, requests_partial=True),)
+            ),
+        ),
+        # Control field 3, holding extensions field 6, holding field 10 with the varint 1.
+        (
+            bytes.fromhex("1a0432025001"),
+            rpc.Rpc(control=rpc.Control(extensions=rpc.ControlExtensions(partial_messages=True))),
+        ),
+        # Extensions that support nothing are still present.
+        (
+            bytes.fromhex("1a023200"),
+            rpc.Rpc(control=rpc.Control(extensions=rpc.ControlExtensions())),
+        ),
+        (
+            _len(10, _len(1, b"t") + _len(2, b"\x00g") + _len(3, b"cells") + _len(4, b"\x01")),
+            rpc.Rpc(
+                partial_message=rpc.PartialMessagesExtension(
+                    topic_id=b"t",
+                    group_id=b"\x00g",
+                    partial_message=b"cells",
+                    parts_metadata=b"\x01",
+                )
+            ),
+        ),
+        # An optional field that is present and empty is not an absent one.
+        (
+            _len(10, _len(1, b"t") + _len(2, b"g") + _len(4, b"")),
+            rpc.Rpc(
+                partial_message=rpc.PartialMessagesExtension(
+                    topic_id=b"t", group_id=b"g", parts_metadata=b""
+                )
+            ),
+        ),
+    ],
+)
+def test_partial_message_fields(data: bytes, value: rpc.Rpc) -> None:
+    assert rpc.decode(data) == value
+    assert rpc.encode(value) == data
+
+
+def test_partial_flags_written_only_when_set() -> None:
+    assert rpc.encode(rpc.Rpc(subscriptions=(rpc.SubOpts(subscribe=True, topic_id="a"),))) == (
+        _len(1, _uint(1, 1) + _str(2, "a"))
+    )
+
+
+@pytest.mark.parametrize(
+    ("extension", "data"),
+    [
+        pytest.param(
+            rpc.PartialMessagesExtension(topic_id=b"t", group_id=b"g"),
+            _len(10, _len(1, b"t") + _len(2, b"g")),
+            id="topic-and-group-only",
+        ),
+        pytest.param(
+            rpc.PartialMessagesExtension(),
+            _len(10, _len(1, b"") + _len(2, b"")),
+            id="empty-topic-and-group-are-written",
+        ),
+        pytest.param(
+            rpc.PartialMessagesExtension(
+                topic_id=b"t", group_id=b"g", partial_message=b"x", parts_metadata=b"y"
+            ),
+            _len(10, _len(1, b"t") + _len(2, b"g") + _len(3, b"x") + _len(4, b"y")),
+            id="all-four-fields",
+        ),
+    ],
+)
+def test_encode_writes_the_optional_fields_only_when_present(
+    extension: rpc.PartialMessagesExtension, data: bytes
+) -> None:
+    assert rpc.encode(rpc.Rpc(partial_message=extension)) == data
+
+
+def test_partial_message_fields_default_when_missing() -> None:
+    value = rpc.decode(_len(10, b""))
+    assert value == rpc.Rpc(partial_message=rpc.PartialMessagesExtension())
+
+
+@pytest.mark.parametrize(
+    ("data", "expected"),
+    [
+        pytest.param(
+            _len(1, _uint(1, 2)),
+            rpc.Rpc(subscriptions=(rpc.SubOpts(subscribe=True),)),
+            id="subscribe",
+        ),
+        pytest.param(
+            _len(1, _uint(3, 2)),
+            rpc.Rpc(subscriptions=(rpc.SubOpts(requests_partial=True),)),
+            id="requests-partial",
+        ),
+        pytest.param(
+            _len(1, _uint(4, 2)),
+            rpc.Rpc(subscriptions=(rpc.SubOpts(supports_sending_partial=True),)),
+            id="supports-sending-partial",
+        ),
+        pytest.param(
+            _control(_len(6, _uint(10, 2))),
+            rpc.Rpc(control=rpc.Control(extensions=rpc.ControlExtensions(partial_messages=True))),
+            id="extensions-partial-messages",
+        ),
+    ],
+)
+def test_any_nonzero_flag_reads_as_true(data: bytes, expected: rpc.Rpc) -> None:
+    # A bool is written as 0 or 1; EthLib reads any other value as true.
+    assert rpc.decode(data) == expected
+
+
+@pytest.mark.parametrize(
+    ("data", "expected"),
+    [
+        pytest.param(
+            _len(10, _len(1, b"a") + _len(3, b"x")) + _len(10, _len(2, b"b")),
+            rpc.Rpc(partial_message=rpc.PartialMessagesExtension(group_id=b"b")),
+            id="partial-message-kept-whole",
+        ),
+        pytest.param(
+            _len(10, _len(3, b"a") + _len(3, b"b") + _len(4, b"c") + _len(4, b"d")),
+            rpc.Rpc(
+                partial_message=rpc.PartialMessagesExtension(
+                    partial_message=b"b", parts_metadata=b"d"
+                )
+            ),
+            id="optional-fields-of-a-partial-message",
+        ),
+        pytest.param(
+            _control(_len(6, _uint(10, 1)), _len(6, b"")),
+            rpc.Rpc(control=rpc.Control(extensions=rpc.ControlExtensions())),
+            id="extensions-within-one-control-record",
+        ),
+        pytest.param(
+            _len(1, _uint(3, 1) + _uint(3, 0) + _uint(4, 0) + _uint(4, 1)),
+            rpc.Rpc(subscriptions=(rpc.SubOpts(supports_sending_partial=True),)),
+            id="flags-of-a-subscription",
+        ),
+        pytest.param(
+            _control(_len(6, _uint(10, 1) + _uint(10, 0))),
+            rpc.Rpc(control=rpc.Control(extensions=rpc.ControlExtensions())),
+            id="flag-of-the-extensions",
+        ),
+    ],
+)
+def test_last_occurrence_wins_for_the_partial_fields(data: bytes, expected: rpc.Rpc) -> None:
+    assert rpc.decode(data) == expected
+
+
+@pytest.mark.parametrize(
+    ("data", "fault"),
+    [
+        pytest.param(_uint(10, 0) + _len(10, b""), "10 0", id="partial-message"),
+        pytest.param(
+            _len(10, _uint(3, 0) + _len(3, b"x")), "3 0", id="payload-of-a-partial-message"
+        ),
+        pytest.param(
+            _control(_len(6, _len(10, b"")), _len(6, b"")), "10 2", id="extensions-in-one-record"
+        ),
+        pytest.param(
+            _control(_uint(6, 0)) + _control(_len(6, b"")), "6 0", id="extensions-across-records"
+        ),
+    ],
+)
+def test_an_earlier_partial_field_must_still_be_well_formed(data: bytes, fault: str) -> None:
+    with raises(rpc.GossipError, PREFIX + "wireType " + fault) as info:
+        rpc.decode(data)
+    assert info.value.code == 104
+
+
+def test_last_extensions_win_across_control_records() -> None:
+    data = _control(_len(6, _uint(10, 1))) + _control(_len(6, b""))
+    assert rpc.decode(data) == rpc.Rpc(control=rpc.Control(extensions=rpc.ControlExtensions()))
+
+
+def test_extensions_kept_when_a_later_control_record_has_none() -> None:
+    data = _control(_len(6, _uint(10, 1))) + _control(_len(3, _str(1, "g")))
+    assert rpc.decode(data) == rpc.Rpc(
+        control=rpc.Control(
+            graft=(rpc.Graft(topic_id="g"),),
+            extensions=rpc.ControlExtensions(partial_messages=True),
+        )
+    )
+
+
+def test_experimental_extension_fields_are_skipped() -> None:
+    # testExtension is field 6492434: a bool in ControlExtensions, a message in RPC.
+    data = _control(_len(6, _uint(10, 1) + _uint(6492434, 1))) + _len(6492434, b"")
+    assert rpc.decode(data) == rpc.Rpc(
+        control=rpc.Control(extensions=rpc.ControlExtensions(partial_messages=True))
+    )

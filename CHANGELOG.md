@@ -9,9 +9,48 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the results on slashed flags state them at each position of the registry, as `(state.validators.data[position]?).map (·.slashed)` ([#2187](https://github.com/ethereum/EthLib/issues/2187)).
+  From Gloas the registry has no limit in its type, so a position may lie beyond every `ValidatorIndex`.
+  `slashedFlag_initiateValidatorExit` takes a `position : Nat` in place of an index.
+  The second conjunct of `slashValidator_slashedFlag` holds at each position other than `slashedIndex.toNat`.
+  A caller that read either at an index `i` reads it at `i.toNat`.
+  The new `slashedFlag_eq_of_slashed` turns equal flags there into equal values of `slashedFlag` at `i`.
+  `slashIfSlashable_ok` and `foldlM_slashIfSlashable` gain a last conjunct: no slashed flag changes at a position other than that of their index, or that none of their indices names.
+  A pattern that takes them apart needs a fourth component.
+  `UpgradeFrame` gains the field `slashed`, since each upgrade keeps every slashed flag.
+  `ElectraKept` gains the same conjunct, so a pattern that takes it apart needs a fourth component too.
+  `UpgradeFrame.trans_blockFrame` takes the new premise `slashed`: the steps after the upgrade keep every slashed flag.
+  A block frame alone may slash, so it cannot give the field.
+  Compose the block frames of the steps first, and pass their slashed flags once.
+
+- `engine_forkchoiceUpdated` checks that the most recent block of proof of work on the chain of the head is terminal, as step 3 of the method and step 2 of payload validation of Paris require.
+  A head whose chain fails the check is `INVALID`, with the zero hash, and the head does not change.
+  Once the known finalized block is a payload of the tree, a zero safe or finalized hash gives `-38002`.
+  The latest valid hash of an invalid head is zero when its latest valid block is of proof of work.
+  In Lean, `KnownPayload` has the new field `powTotalDifficulty`, `none` for a payload, so its anonymous constructor takes a fifth value.
+  `forkchoiceUpdated` takes a `TransitionConfiguration` first, and `forkchoiceUpdatedCall` takes one after the chain configuration.
+  `forkchoiceUpdated_valid`, `forkchoiceUpdated_of_belowFinalized`, `forkchoiceUpdated_valid_none_iff`, `forkchoiceUpdated_of_invalid`, `forkchoiceUpdated_of_onChain` and `forkchoiceUpdated_eq_error_iff` state the terminal block check.
+  `forkchoiceUpdated_valid`, `forkchoiceUpdated_of_onChain` and `forkchoiceUpdated_eq_error_iff` also state the rule on zero hashes, and `forkchoiceUpdated_of_invalid` answers `latestValidHash` in place of `latestValid`.
+  In Python, a block of the tree of `engine.forkchoice_updated` may carry `totalDifficulty` and `parentTotalDifficulty`.
+  The function takes the required keyword-only argument `terminal_total_difficulty`, as `engine.new_payload_on_chain` does.
+  A tree with no block of proof of work passes the check whatever that value, which must be below `2^256`.
+  The native `engine_forkchoice_updated` takes that value after the finalized block.
+- `engine_newPayload` on a chain checks that a parent of proof of work is a terminal block, as step 2 of payload validation of Paris requires.
+  A parent that fails the check makes the payload `INVALID`, with the zero hash and the new reason code 407.
+  In Lean, `PayloadError` has the new constructor `invalidTerminalBlock`, with that code.
+  `newPayloadOnChain` takes two new arguments before the chain: a `TransitionConfiguration`, and the total difficulty of the last block of the chain.
+  Its theorems take both values, and `newPayloadOnChain_of_stateTransition_ok`, `newPayloadOnChain_of_stateTransition_error` and `newPayloadOnChain_of_buildPayload` take the hypothesis that the parent passes the check.
+  In Python, `engine.new_payload_on_chain` takes the required keyword-only arguments `terminal_total_difficulty` and `total_difficulty`, and the native `engine_new_payload_on_chain` takes them after the recent blocks.
+  A last block from Paris on passes the check, so then any total difficulty, and any terminal total difficulty below `2^256`, do.
+- In Lean, the bound on the extra data of an Engine payload is the named constant `Execution.Blocks.MAX_EXTRA_DATA_BYTES`, in place of the literal `32`.
+  The statements of `anyPayload_executionPayloadJson`, `payloadV4_executionPayloadV4Json`, `payloadOfBlock_extraData` and `newPayloadParams_json` change only by that name, and so do `payloadOfBlock` and `anyPayload`.
+  The constant is `32`, so a proof that used `omega` on the bound first unfolds it, as in `simp only [MAX_EXTRA_DATA_BYTES]; omega`.
 - In Lean, `EpochFrameLaws` now extends `EpochStepLaws`, which holds every law except those for a new validator and for the queue of pending deposits.
   The theorems that need neither law moved from the `EpochFrameLaws` namespace to the `EpochStepLaws` namespace, with the same statements, and they now take the smaller structure.
   Dot notation on a value of either structure still finds them; a full name such as `EpochFrameLaws.processSyncAggregate` becomes `EpochStepLaws.processSyncAggregate`.
+- In Lean, `processEpoch_split_of_lt_altair` moved from the `EpochFrameLaws` namespace to the `EpochStepLaws` namespace, with the same statement, and it now takes the smaller structure.
+  Dot notation on an `EpochFrameLaws` value still finds it.
+  A call by the full name `EpochFrameLaws.processEpoch_split_of_lt_altair laws` becomes `EpochStepLaws.processEpoch_split_of_lt_altair laws.toEpochStepLaws`.
 - In Lean, the JSON readers and writers of the base types moved from `EthLib.Engine.Json` to `EthLib.Serialization.JsonRpc`, with their theorems.
   They are `hexValue`, `hexDigits`, `bytesOf`, `bytes`, `fixed`, `address`, `quantity`, `bytesMax`, `uint64`, `paramsArray`, `array`, `fields`, `hasExactly`, `field`, `dataJson`, `quantityJson`, `listJson` and `optionJson`.
   Their namespace is now `EthLib.Serialization.JsonRpc`.
@@ -28,6 +67,20 @@ Not yet released.
   Remove the `starts` argument from `accountable_safety` and `accountable_safety_justified`, but keep it for `accountable_justified_unique`.
   `conflict` and `ordered` imply the removed bound on the slot of `x`, so the theorems cover the same runs as before.
   The drift horizon in the conclusion of `accountable_safety` is the finalized epoch of `b`, not the larger of the two finalized epochs; `ordered` makes them equal.
+
+- In Lean, the direct safety endpoints bound the unslashed active stake at `x`, `unslashedKeys x.state`, in place of `activeKeys x.state` ([#2187](https://github.com/ethereum/EthLib/issues/2187)).
+  `Accountable` takes the shared prefix and the two tails, `shared left right`, in place of the two full runs, and `accountableKeys` takes them in place of the two full runs and the reference state.
+  Slashing evidence counts only in the tails; double votes still count over the full runs, and proposer slashings in the tails still count.
+  `accountableKeys` keeps only the unslashed keys active at `x`.
+  `recentKeys` keeps only unslashed keys, `referenceLoss` sums over `unslashedKeys x`, and `referenceGain` subtracts the support of `unslashedKeys x`.
+  So `boundaryStake`, and through it `stateDrift` and `derivedDrift`, count only unslashed recent stake.
+  `Run.slashed_evidence` holds for a run from any state, with no `genesis` argument, and concludes `SlashedAt x.state v.pubkey ∨ run.SlashingEvidence v.pubkey`.
+  `SlashedAt` names the predicate that `referenceLoss` stated inline before.
+  `verifiedConflict_of_accountable` takes `shared left right` and concludes `VerifiedConflict (shared.append left) (shared.append right) key`.
+  Pass `shared left right` where a caller passed `shared.append left`, `shared.append right` and `x`.
+  `DirectSafety.accountable_safety_justified_terminal` and `Store.Reachable.finalized_ancestor_or_accountable` change the same way: their stake alternative bounds the unslashed active stake, at `x` or at the anchor state, by `accountableKeys` of the shared prefix and the two tails.
+  The new Lean declarations are `DirectSafety.SlashedAt`, `DirectSafety.unslashedKeys`, `DirectSafety.EpochCall.pubkeysDistinct` and `Run.pubkeysDistinct`.
+  `Run.pubkeysDistinct` gives distinct keys at the end of a run from genesis; `EpochCall.pubkeysDistinct`, `view_quorum_count` and `view_voters_recent` read it.
 
 - In Lean, `DirectSafety.HashEvidence objects` is stated through the searches `findMessageCollision` and the new `findZeroRoot`, in place of a bounded existential ([#2187](https://github.com/ethereum/EthLib/issues/2187)).
   No C export or Python function changes, and every theorem that mentions `HashEvidence` keeps its statement.

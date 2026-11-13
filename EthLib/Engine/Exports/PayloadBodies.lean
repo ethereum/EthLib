@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Exports.Proofs.PyValue
+public import EthLib.Engine.Capabilities
 public import EthLib.Engine.PayloadBodies
 
 /-!
@@ -39,6 +40,8 @@ A JSON-RPC error has the code of its Engine API error, without the sign: 32602 o
 A malformed store, block number or limit has code 0.
 
 So do a request without a method, an unknown method, and an argument that Lean cannot read.
+
+A second export reads the JSON result of any version, and writes it back.
 -/
 
 public section
@@ -49,8 +52,6 @@ open Lean (Json)
 open EthLib.Exports (Result PyValue pyExport)
 open EthLib.Base
 open EthLib.Execution.Blocks (Withdrawal)
-open EthLib.Serialization.JsonRpc (dataJson listJson optionJson)
-open EthLib.Execution.Rpc (withdrawalJson)
 
 /-- A withdrawal as it crosses: the index, the validator index, the address and the amount. -/
 abbrev WithdrawalEntry := UInt64 × UInt64 × Address × UInt64
@@ -82,23 +83,8 @@ def storedOf (entry : BodyEntry) : Result (Bytes32 × Option Nat × StoredBody) 
 
 /-- The method of a name, as the version and whether it is by range. -/
 def bodiesMethod (method : String) : Option (Nat × Bool) :=
-  match method with
-  | "engine_getPayloadBodiesByHashV1" => some (1, false)
-  | "engine_getPayloadBodiesByHashV2" => some (2, false)
-  | "engine_getPayloadBodiesByRangeV1" => some (1, true)
-  | "engine_getPayloadBodiesByRangeV2" => some (2, true)
-  | _ => none
-
-/-- The JSON of a body of version 1. -/
-def bodyV1Json (b : ExecutionPayloadBodyV1) : Json :=
-  Json.mkObj [
-    ("transactions", listJson (dataJson ·.toList) b.transactions),
-    ("withdrawals", optionJson (listJson withdrawalJson) b.withdrawals)]
-
-/-- The JSON of a body of version 2. -/
-def bodyV2Json (b : ExecutionPayloadBodyV2) : Json :=
-  (bodyV1Json b.toExecutionPayloadBodyV1).setObjVal! "blockAccessList"
-    (optionJson (dataJson ·.toList) b.blockAccessList)
+  ((methodVersion "getPayloadBodiesByHash" method).map (·, false)).or
+    ((methodVersion "getPayloadBodiesByRange" method).map (·, true))
 
 /-- The answer to a payload bodies request, from a store of bodies.
 
@@ -131,18 +117,18 @@ def payloadBodiesOf (args : List BodyEntry × Nat × Nat × PyValue) : Result Py
   let answer : Json ← match version, byRange with
     | 1, false =>
       let hashes ← engine (bodiesByHashParams params)
-      pure (listJson (optionJson bodyV1Json) (← engine (getPayloadBodiesByHashV1 store hashes)))
+      pure (payloadBodiesV1Json (← engine (getPayloadBodiesByHashV1 store hashes)))
     | 1, true =>
       let (start, count) ← engine (bodiesByRangeParams params)
       let bodies ← engine (getPayloadBodiesByRangeV1 store start count)
-      pure (listJson (optionJson bodyV1Json) bodies)
+      pure (payloadBodiesV1Json bodies)
     | _, false =>
       let hashes ← engine (bodiesByHashParams params)
-      pure (listJson (optionJson bodyV2Json) (← engine (getPayloadBodiesByHashV2 store hashes)))
+      pure (payloadBodiesV2Json (← engine (getPayloadBodiesByHashV2 store hashes)))
     | _, true =>
       let (start, count) ← engine (bodiesByRangeParams params)
       let bodies ← engine (getPayloadBodiesByRangeV2 store start count)
-      pure (listJson (optionJson bodyV2Json) bodies)
+      pure (payloadBodiesV2Json bodies)
   return .ofJson answer
 
 /-- The answer to a payload bodies request, from a store of bodies.
@@ -155,5 +141,28 @@ Then come its transactions, its withdrawals or `None`, and its block access list
 @[export eth_engine_get_payload_bodies]
 def payloadBodiesExport (args : PyValue) : Result PyValue :=
   pyExport payloadBodiesOf args
+
+/-- A result of a payload bodies method, read at the version of its name and written back. -/
+def readPayloadBodiesResultOf (args : String × PyValue) : Result PyValue := do
+  let (method, result) := args
+  let some (version, _) := bodiesMethod method | throw (0, s!"no method {method}")
+  let engine {α : Type} (act : Except EngineError α) : Result α :=
+    act.mapError fun e => (e.code, s!"engine error: {reprStr e}")
+  let result := result.toJson
+  let answer : Json ← if version = 1 then
+      payloadBodiesV1Json <$> engine (payloadBodiesV1OfJson result)
+    else payloadBodiesV2Json <$> engine (payloadBodiesV2OfJson result)
+  return .ofJson answer
+
+/-- The result of an `engine_getPayloadBodiesByHash` or `ByRange` method, read and written back.
+
+The arguments are the method name and the result, as `json.loads` gives it.
+
+A result that does not decode is reported as invalid parameters, with code 32602.
+
+An unknown method name has code 0. -/
+@[export eth_engine_read_payload_bodies_result]
+def readPayloadBodiesResultExport (args : PyValue) : Result PyValue :=
+  pyExport readPayloadBodiesResultOf args
 
 end EthLib.Engine.Exports

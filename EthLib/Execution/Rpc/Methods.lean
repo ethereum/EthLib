@@ -1,7 +1,9 @@
 module
 
+public import EthLib.Execution.Rpc.Block
+public import EthLib.Execution.Rpc.Filter
 public import EthLib.Execution.Rpc.Request
-public import EthLib.Execution.Rpc.View
+public import EthLib.Execution.Rpc.TransactionInfo
 
 /-!
 # `Execution.Rpc.Methods`
@@ -28,6 +30,12 @@ A batch, an array of requests, gets the array of the responses to its requests, 
 
 An empty batch is an invalid request, and a batch of notifications gets no response.
 
+A missing parameter, or a parameter that its reader rejects, also gets `-32602`.
+
+A transaction whose sender or hash the node cannot compute gets `-32603`.
+
+So does a block whose RLP form, or the hash of one of its ommers, the node cannot compute.
+
 [rpc]: https://www.jsonrpc.org/specification#error_object
 [eth]: https://github.com/ethereum/execution-apis/tree/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth
 -/
@@ -37,6 +45,7 @@ An empty batch is an invalid request, and a batch of notifications gets no respo
 namespace EthLib.Execution.Rpc
 
 open Lean (Json)
+open EthLib.Base (Hash32)
 open EthLib.Serialization.JsonRpc
 
 namespace ChainView
@@ -60,12 +69,112 @@ def noParams (params : List Json) (result : Json) : Except RpcError Json :=
   if params.isEmpty then .ok result
   else .error (RpcError.invalidParams "the method takes no parameter")
 
+/-- A parameter that a reader reads, or the error of invalid parameters. -/
+def readParam {α : Type} (reader : Json → Read α) (j : Json) : Except RpcError α :=
+  (reader j).mapError RpcError.invalidParams
+
+/-- The result of a method with one parameter, or the error of a missing or extra parameter. -/
+def oneParam (params : List Json) (f : Json → Except RpcError Json) : Except RpcError Json :=
+  match params with
+  | [a] => f a
+  | [] => .error (RpcError.invalidParams "missing parameter")
+  | _ => .error (RpcError.invalidParams "the method takes one parameter")
+
+/-- The result of a method with two parameters, or the error of a missing or extra parameter. -/
+def twoParams (params : List Json) (f : Json → Json → Except RpcError Json) :
+    Except RpcError Json :=
+  match params with
+  | [a, b] => f a b
+  | [] | [_] => .error (RpcError.invalidParams "missing parameter")
+  | _ => .error (RpcError.invalidParams "the method takes two parameters")
+
+/-- A transaction of a block as JSON, or `null` when there is none. -/
+def transactionResult (r : Except RpcError (Option TransactionInfo)) : Except RpcError Json :=
+  optionJson transactionInfoJson <$> r
+
+/-- The header object of a block that the node holds, with the hash that the node keeps for it. -/
+def headerObject (r : BlockRecord) : Json :=
+  Json.mkObj (headerFields r.hash r.block.header)
+
+/-- The header of the block of a hash, canonical or not, or `null` when the node holds none. -/
+def headerByHash (v : ChainView) (hash : Hash32) : Json :=
+  optionJson headerObject (v.byHash hash)
+
+/-- The header of the block that a number or a tag names, or `null` when there is none.
+
+The tag `pending` gives `null`, as the method says. -/
+def headerByNumber (v : ChainView) : BlockParam → Except RpcError Json
+  | .tag .pending => .ok notFound
+  | p => optionJson headerObject <$> v.resolve p
+
+/-- The block object of the block of a hash, canonical or not, or `null` when there is none. -/
+def blockByHash (v : ChainView) (hash : Hash32) (full : Bool) : Except RpcError Json :=
+  match v.byHash hash with
+  | none => .ok notFound
+  | some r => r.blockJson full
+
+/-- The block object of the block that a number or a tag names, or `null` when there is none.
+
+The tag `pending` names the pending block of the view, or gives `null` when there is none. -/
+def blockByNumber (v : ChainView) (p : BlockParam) (full : Bool) : Except RpcError Json := do
+  match ← v.resolve p with
+  | none => return notFound
+  | some r => r.blockJson full
+
+/-- The number of transactions of a block as JSON. -/
+def transactionCount (r : BlockRecord) : Json :=
+  quantityJson r.block.transactions.length
+
+/-- The number of transactions of the block of a hash, or `null` when the node holds none. -/
+def transactionCountByHash (v : ChainView) (hash : Hash32) : Json :=
+  optionJson transactionCount (v.byHash hash)
+
+/-- The number of transactions of the block that a number or a tag names, or `null` for none. -/
+def transactionCountByNumber (v : ChainView) (p : BlockParam) : Except RpcError Json :=
+  optionJson transactionCount <$> v.resolve p
+
 /-- The outcome of a method of the view, with its parameters by position. -/
 def call (v : ChainView) (method : String) (params : List Json) : Except RpcError Json :=
   match method with
   | "eth_blockNumber" => noParams params v.blockNumber
   | "eth_chainId" => noParams params v.chainId
   | "net_version" => noParams params v.netVersion
+  | "eth_getTransactionByHash" => oneParam params fun h => do
+    transactionResult (v.transactionByHash (← readParam (hash32 "transaction hash") h))
+  | "eth_getTransactionByBlockHashAndIndex" => twoParams params fun h i => do
+    let block := BlockParam.hash (← readParam (hash32 "block hash") h) false
+    transactionResult (v.transactionByBlockAndIndex block (← readParam (uint "index") i))
+  | "eth_getTransactionByBlockNumberAndIndex" => twoParams params fun b i => do
+    let block ← readParam (blockNumberOrTag "block") b
+    transactionResult (v.transactionByBlockAndIndex block (← readParam (uint "index") i))
+  | "eth_getHeaderByHash" => oneParam params fun h => do
+    return v.headerByHash (← readParam (hash32 "block hash") h)
+  | "eth_getHeaderByNumber" => oneParam params fun b => do
+    v.headerByNumber (← readParam (blockNumberOrTag "block") b)
+  | "eth_getBlockByHash" => twoParams params fun h f => do
+    v.blockByHash (← readParam (hash32 "block hash") h) (← readParam (bool "hydrated") f)
+  | "eth_getBlockByNumber" => twoParams params fun b f => do
+    v.blockByNumber (← readParam (blockNumberOrTag "block") b) (← readParam (bool "hydrated") f)
+  | "eth_getBlockTransactionCountByHash" => oneParam params fun h => do
+    return v.transactionCountByHash (← readParam (hash32 "block hash") h)
+  | "eth_getBlockTransactionCountByNumber" => oneParam params fun b => do
+    v.transactionCountByNumber (← readParam (blockNumberOrTag "block") b)
+  | "eth_getTransactionReceipt" => oneParam params fun h => do
+    optionJson receiptInfoJson <$> v.transactionReceipt (← readParam (hash32 "transaction hash") h)
+  | "eth_getBlockReceipts" => oneParam params fun b => do
+    let block ← readParam (blockNumberOrTagOrHash "block") b
+    optionJson (listJson receiptInfoJson) <$> v.blockReceipts block
+  | "eth_getLogs" => oneParam params fun f => do
+    listJson logInfoJson <$> v.getLogs (← readParam filterOfJson f)
+  | "debug_getRawHeader" => oneParam params fun b => do
+    (dataJson ·.toList) <$> v.rawHeader (← readParam (blockNumberOrTag "block") b)
+  | "debug_getRawBlock" => oneParam params fun b => do
+    (dataJson ·.toList) <$> v.rawBlock (← readParam (blockNumberOrTag "block") b)
+  | "debug_getRawTransaction" => oneParam params fun h => do
+    (dataJson ·.toList) <$> v.rawTransaction (← readParam (hash32 "transaction hash") h)
+  | "debug_getRawReceipts" => oneParam params fun b => do
+    let block ← readParam (blockNumberOrTagOrHash "block") b
+    listJson (dataJson ·.toList) <$> v.rawReceipts block
   | _ => .error (methodNotFound.toRpcError (some (.str method)))
 
 /-- The response of the view to a request. -/

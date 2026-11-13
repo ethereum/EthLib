@@ -26,6 +26,36 @@ eth_gossip_rpc_encode(
   lean_object* args
 );
 
+extern lean_object*
+eth_gossip_parameters(
+  lean_object* args
+);
+
+extern lean_object*
+eth_gossip_receive_rpc(
+  lean_object* args
+);
+
+extern lean_object*
+eth_gossip_join(
+  lean_object* args
+);
+
+extern lean_object*
+eth_gossip_leave(
+  lean_object* args
+);
+
+extern lean_object*
+eth_gossip_publish(
+  lean_object* args
+);
+
+extern lean_object*
+eth_gossip_heartbeat(
+  lean_object* args
+);
+
 /* ---- Wrappers --------------------------------------------------------- */
 
 /* The bytes of a `bytes` object, or NULL with a TypeError set. */
@@ -77,4 +107,52 @@ py_gossip_rpc_encode(
   PyObject* args
 ) {
   return call_pyvalue_export(eth_gossip_rpc_encode, args, 1, GOSSIP_ERROR);
+}
+
+PyObject*
+py_gossip_parameters(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_gossip_parameters, args, 2, GOSSIP_ERROR);
+}
+
+PyObject*
+py_gossip_receive_rpc(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_gossip_receive_rpc, args, 10, GOSSIP_ERROR);
+}
+
+PyObject*
+py_gossip_join(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_gossip_join, args, 5, GOSSIP_ERROR);
+}
+
+PyObject*
+py_gossip_leave(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_gossip_leave, args, 5, GOSSIP_ERROR);
+}
+
+PyObject*
+py_gossip_publish(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_gossip_publish, args, 7, GOSSIP_ERROR);
+}
+
+PyObject*
+py_gossip_heartbeat(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_gossip_heartbeat, args, 6, GOSSIP_ERROR);
 }

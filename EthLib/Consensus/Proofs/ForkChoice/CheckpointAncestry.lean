@@ -333,7 +333,7 @@ The third gives the runs from the anchor to the held states of the two fields.
 
 Each field is that of its held state, or of the justification step that fork choice runs on it.
 
-The bound is that of direct accountable safety at the anchor state.
+The bound is that of direct accountable safety on the unslashed active stake at the anchor state.
 
 Its drift observes the runs up to one epoch past the justified epoch.
 
@@ -381,10 +381,9 @@ theorem Store.Reachable.finalized_ancestor_or_accountable {config : Config}
       va.state.finalizedCheckpoint = store.finalizedCheckpoint ∧
       vb.state.currentJustifiedCheckpoint = store.justifiedCheckpoint ∧
       (Models.stake (DirectSafety.effectiveWeight anchorState)
-          (DirectSafety.activeKeys anchorState) ≤
+          (DirectSafety.unslashedKeys anchorState) ≤
         3 * Models.stake (DirectSafety.effectiveWeight anchorState)
-          (DirectSafety.accountableKeys (pre.append left) (pre.append right)
-            ⟨fork, anchorState⟩) +
+          (DirectSafety.accountableKeys pre left right) +
         2 * max (DirectSafety.derivedDrift store.justifiedCheckpoint.epoch.toNat left)
           (DirectSafety.derivedDrift store.justifiedCheckpoint.epoch.toNat right) ∨
       DirectSafety.HashEvidence ((pre.append left).hashObjects ++

@@ -4,15 +4,19 @@ public import EthLib.Consensus.ForkChoice.Optimistic
 public import EthLib.Consensus.Proofs.ForkChoice.Reachable
 
 /-!
-# Proofs: an invalid payload removes a block and its descendants
+# Proofs: what an invalid payload removes from the store
 
 When the execution layer finds a payload invalid, the store drops some blocks.
 
-The dropped blocks are exactly the known blocks that descend from one known block.
+Before Gloas the dropped blocks are exactly the known blocks that descend from one known block.
+
+From Gloas they are the known blocks that descend from one known block with its payload.
+
+That block stays without its payload, and no vote left supports it with that payload.
 
 So a block that stays never has a dropped parent.
 
-A linked store therefore stays linked, and its head is still the head of LMD-GHOST.
+A linked store therefore stays linked, and before Gloas its head is still the head of LMD-GHOST.
 
 The latest valid hash decides where the removal starts.
 -/
@@ -102,6 +106,50 @@ theorem removeBlocks_blocks (roots : List Root) (root : Root) :
       if roots.contains root then none else store.blocks[root]? := by
   simp only [removeBlocks, Std.TreeMap.getElem?_filter']
   cases store.blocks[root]? <;> by_cases removed : root ∈ roots <;> simp [removed]
+
+/-- From Gloas, the payload of a block stays after a removal unless its root is removed. -/
+theorem removeBlocks_payloads (roots : List Root) (gloas : .glamsterdam ≤ fork) (root : Root) :
+    ((store.removeBlocks roots).payloads gloas)[root]? =
+      if roots.contains root then none else (store.payloads gloas)[root]? := by
+  simp only [removeBlocks, Std.TreeMap.getElem?_filter']
+  cases (store.payloads gloas)[root]? <;> by_cases removed : root ∈ roots <;> simp [removed]
+
+/-- From Gloas, the timeliness of a block for its committee stays unless its root is removed. -/
+theorem removeBlocks_ptcTimeliness (roots : List Root) (gloas : .glamsterdam ≤ fork)
+    (root : Root) :
+    ((store.removeBlocks roots).ptcTimeliness gloas)[root]? =
+      if roots.contains root then none else (store.ptcTimeliness gloas)[root]? := by
+  simp only [removeBlocks, Std.TreeMap.getElem?_filter']
+  cases (store.ptcTimeliness gloas)[root]? <;> by_cases removed : root ∈ roots <;>
+    simp [removed]
+
+/-- From Gloas, the timeliness votes for a block stay after a removal unless its root is removed. -/
+theorem removeBlocks_payloadTimelinessVote (roots : List Root) (gloas : .glamsterdam ≤ fork)
+    (root : Root) :
+    ((store.removeBlocks roots).payloadTimelinessVote gloas)[root]? =
+      if roots.contains root then none else (store.payloadTimelinessVote gloas)[root]? := by
+  simp only [removeBlocks, Std.TreeMap.getElem?_filter']
+  cases (store.payloadTimelinessVote gloas)[root]? <;> by_cases removed : root ∈ roots <;>
+    simp [removed]
+
+/-- From Gloas, the availability votes for a block stay unless its root is removed. -/
+theorem removeBlocks_payloadDataAvailabilityVote (roots : List Root)
+    (gloas : .glamsterdam ≤ fork) (root : Root) :
+    ((store.removeBlocks roots).payloadDataAvailabilityVote gloas)[root]? =
+      if roots.contains root then none else (store.payloadDataAvailabilityVote gloas)[root]? := by
+  simp only [removeBlocks, Std.TreeMap.getElem?_filter']
+  cases (store.payloadDataAvailabilityVote gloas)[root]? <;> by_cases removed : root ∈ roots <;>
+    simp [removed]
+
+/-- From Heze, the record of the inclusion lists for a block stays unless its root is removed. -/
+theorem removeBlocks_payloadInclusionListSatisfaction (roots : List Root)
+    (heze : .hegota ≤ fork) (root : Root) :
+    ((store.removeBlocks roots).payloadInclusionListSatisfaction heze)[root]? =
+      if roots.contains root then none
+      else (store.payloadInclusionListSatisfaction heze)[root]? := by
+  simp only [removeBlocks, Std.TreeMap.getElem?_filter']
+  cases (store.payloadInclusionListSatisfaction heze)[root]? <;>
+    by_cases removed : root ∈ roots <;> simp [removed]
 
 /-- A state stays after a removal unless the root of its block is removed. -/
 theorem removeBlocks_blockStates (roots : List Root) (root : Root) :
@@ -256,28 +304,372 @@ theorem Reachable.removeDescendants_ok {config : Config} {anchorState : BeaconSt
     (fun _ _ _ _ found parentUnknown otherFound =>
       reachable.orphans_le anchorSlot found parentUnknown otherFound) first
 
-/-- The store after an invalid payload is the store as it was, or a removal of descendants. -/
+/-- From a known block above the slot, the walk does not depend on the payload status of the start.
+
+Both walks step to the same parent node. -/
+private theorem getAncestor_status_of_gt {root : Root} {slot : Slot}
+    {block : BeaconBlock preset fork} (found : store.blocks[root]? = some block)
+    (above : ¬ block.slot ≤ slot) (status other : PayloadStatus) :
+    store.getAncestor ⟨root, status⟩ slot = store.getAncestor ⟨root, other⟩ slot := by
+  conv => lhs; rw [getAncestor]
+  conv => rhs; rw [getAncestor]
+  repeat' split
+  all_goals (simp_all [UInt64.lt_iff_toNat_lt, UInt64.le_iff_toNat_le]; try omega)
+
+/-- From Gloas, a known block does not descend from its own node with the payload. -/
+private theorem isAncestor_full_self {root : Root} {block : BeaconBlock preset fork}
+    (gloas : .glamsterdam ≤ fork) (found : store.blocks[root]? = some block) :
+    store.isAncestor ⟨root, .pending⟩ ⟨root, .full⟩ = .ok false := by
+  simp [isAncestor, block_ok_iff.mpr found,
+    getAncestor_of_le (node := ⟨root, .pending⟩) found (UInt64.le_refl _), gloas, bind,
+    Except.bind, pure, Except.pure]
+
+/-- A block whose parent descends from a node with its payload descends from that node too.
+
+That needs the parent at an earlier slot than the block. -/
+private theorem isAncestor_full_of_parent {root first : Root}
+    {block parent : BeaconBlock preset fork} (found : store.blocks[root]? = some block)
+    (parentFound : store.blocks[block.parentRoot]? = some parent)
+    (lower : parent.slot < block.slot)
+    (descends : store.isAncestor ⟨block.parentRoot, .pending⟩ ⟨first, .full⟩ = .ok true) :
+    store.isAncestor ⟨root, .pending⟩ ⟨first, .full⟩ = .ok true := by
+  by_cases gloas : .glamsterdam ≤ fork
+  swap
+  · exact isAncestor_of_parent (Nat.lt_of_not_le gloas) found parentFound lower descends
+  simp only [isAncestor, gloas, ↓reduceIte, bind, Except.bind] at descends ⊢
+  cases known : store.block first with
+  | error e => simp [known] at descends
+  | ok firstBlock =>
+    simp only [known] at descends ⊢
+    -- The parent sits above the node with the payload, or its own walk would stop at it, pending.
+    by_cases le : parent.slot ≤ firstBlock.slot
+    · rw [getAncestor_of_le parentFound le] at descends
+      simp [pure, Except.pure] at descends
+    · have aboveBlock : ¬ block.slot ≤ firstBlock.slot := fun h =>
+        le (UInt64.le_of_lt (UInt64.lt_of_lt_of_le lower h))
+      rw [getAncestor_step found aboveBlock parentFound lower,
+        getAncestor_status_of_gt parentFound le _ .pending]
+      exact descends
+
+/-- The blocks that a removal from Gloas drops are those built on the payload of its root.
+
+They are the known blocks that descend from the root with its payload.
+
+The root itself is never among them, and it loses its payload, with every dropped block.
+
+An unknown root leaves the store as it was. -/
+theorem removeFullDescendants_eq {gloas : .glamsterdam ≤ fork} {first : Root}
+    {after : Store preset fork} (removed : store.removeFullDescendants gloas first = .ok after) :
+    (store.blocks.contains first = false ∧ after = store) ∨
+      ∃ roots, store.blocks.contains first ∧
+        (∀ root, root ∈ roots ↔ store.blocks.contains root ∧
+          store.isAncestor ⟨root, .pending⟩ ⟨first, .full⟩ = .ok true) ∧
+        first ∉ roots ∧
+        after = { store.removeBlocks roots with
+          latestMessages := (store.removeBlocks roots).latestMessages.filter fun _ message =>
+            !(message.root == first && message.payloadPresent gloas)
+          payloads := fun _ => ((store.removeBlocks roots).payloads gloas).filter fun root _ =>
+            root != first } := by
+  unfold removeFullDescendants at removed
+  by_cases known : store.blocks.contains first
+  · simp only [known, Bool.not_true, Bool.false_eq_true, ↓reduceIte, bind_ok_iff] at removed
+    obtain ⟨roots, mapped, rest⟩ := removed
+    simp only [pure, Except.pure, Except.ok.injEq] at rest
+    have member : ∀ root, root ∈ roots ↔ store.blocks.contains root ∧
+        store.isAncestor ⟨root, .pending⟩ ⟨first, .full⟩ = .ok true := fun root => by
+      rw [mem_filterMapM_ok mapped]
+      constructor
+      · rintro ⟨x, mem, ok⟩
+        rw [bind_ok_iff] at ok
+        obtain ⟨descends, ancestor, ok⟩ := ok
+        cases descends <;> simp only [pure, Except.pure, Except.ok.injEq, Bool.false_eq_true,
+          ↓reduceIte, reduceCtorEq, Option.some.injEq] at ok
+        subst ok
+        exact ⟨by simpa using mem, ancestor⟩
+      · rintro ⟨contains, ancestor⟩
+        refine ⟨root, by simpa using contains, ?_⟩
+        simp [ancestor, bind, Except.bind, pure, Except.pure]
+    refine .inr ⟨roots, known, member, fun mem => ?_, rest.symm⟩
+    -- The root itself stops its own walk while pending, so it does not descend from its payload.
+    obtain ⟨-, descends⟩ := (member first).mp mem
+    rw [Std.TreeMap.contains_eq_isSome_getElem?] at known
+    obtain ⟨firstBlock, firstFound⟩ := Option.isSome_iff_exists.mp known
+    rw [isAncestor_full_self gloas firstFound] at descends
+    cases descends
+  · simp only [known, Bool.not_false, ↓reduceIte, pure, Except.pure, Except.ok.injEq] at removed
+    exact .inl ⟨Bool.eq_false_iff.mpr known, removed.symm⟩
+
+/-- From Gloas, a known block loses its payload when the payload is found invalid.
+
+The block itself stays. -/
+theorem removeFullDescendants_self {gloas : .glamsterdam ≤ fork} {first : Root}
+    {after : Store preset fork} (removed : store.removeFullDescendants gloas first = .ok after)
+    (known : store.blocks.contains first) :
+    after.blocks[first]? = store.blocks[first]? ∧
+      (after.payloads gloas).contains first = false := by
+  rcases removeFullDescendants_eq removed with ⟨unknown, -⟩ | ⟨roots, -, -, notMem, rest⟩
+  · simp [unknown] at known
+  subst rest
+  refine ⟨?_, ?_⟩
+  · exact (removeBlocks_blocks roots first).trans (by simp [notMem])
+  · simp only [Std.TreeMap.contains_eq_isSome_getElem?, Std.TreeMap.getElem?_filter']
+    simp
+
+/-- A vote for a node with its payload names a known block, and says the payload is present. -/
+private theorem getSupportedNode_full {gloas : .glamsterdam ≤ fork} {message : LatestMessage fork}
+    {root : Root} (supported : store.getSupportedNode message = .ok ⟨root, .full⟩) :
+    root = message.root ∧ message.payloadPresent gloas = true ∧
+      ∃ block, store.blocks[message.root]? = some block := by
+  unfold getSupportedNode at supported
+  simp only [gloas, ↓reduceDIte, bind_ok_iff] at supported
+  obtain ⟨block, found, rest⟩ := supported
+  by_cases lt : block.slot < message.slot gloas
+  · simp only [lt, ↓reduceIte, pure, Except.pure, Except.ok.injEq,
+      ForkChoiceNode.mk.injEq] at rest
+    obtain ⟨same, status⟩ := rest
+    refine ⟨same.symm, ?_, block, block_ok_iff.mp found⟩
+    cases present : message.payloadPresent gloas
+    · simp [present] at status
+    · rfl
+  · simp [lt, pure, Except.pure] at rest
+
+/-- From Gloas, no vote left after a removal supports the block of its root with its payload.
+
+So no vote left adds weight to that node, or through that node to its ancestors. -/
+theorem removeFullDescendants_getSupportedNode {gloas : .glamsterdam ≤ fork} {first : Root}
+    {after : Store preset fork} (removed : store.removeFullDescendants gloas first = .ok after)
+    {validator : ValidatorIndex} {message : LatestMessage fork}
+    (voted : after.latestMessages[validator]? = some message) :
+    after.getSupportedNode message ≠ .ok ⟨first, .full⟩ := by
+  intro supported
+  obtain ⟨same, present, block, found⟩ := getSupportedNode_full (gloas := gloas) supported
+  subst same
+  rcases removeFullDescendants_eq removed with ⟨unknown, rfl⟩ | ⟨roots, -, -, -, rfl⟩
+  · have : after.blocks.contains message.root = true := by
+      simp [Std.TreeMap.contains_eq_isSome_getElem?, found]
+    rw [this] at unknown
+    cases unknown
+  · simp only [Std.TreeMap.getElem?_filter'] at voted
+    cases inner : (store.removeBlocks roots).latestMessages[validator]? with
+    | none => simp [inner] at voted
+    | some m =>
+      simp only [inner, Option.filter] at voted
+      split at voted
+      · rename_i kept
+        cases voted
+        simp [present] at kept
+      · cases voted
+
+/-- From Gloas, a removal keeps every block built on its root without the payload.
+
+Such a block descends from the node of the root without its payload. -/
+theorem removeFullDescendants_of_empty {gloas : .glamsterdam ≤ fork} {first root : Root}
+    {after : Store preset fork} (removed : store.removeFullDescendants gloas first = .ok after)
+    (onEmpty : store.isAncestor ⟨root, .pending⟩ ⟨first, .empty⟩ = .ok true) :
+    after.blocks[root]? = store.blocks[root]? := by
+  rcases removeFullDescendants_eq removed with ⟨-, rfl⟩ | ⟨roots, -, mem, -, rfl⟩
+  · rfl
+  show (store.removeBlocks roots).blocks[root]? = _
+  rw [removeBlocks_blocks]
+  have outside : roots.contains root = false := by
+    rw [Bool.eq_false_iff]
+    intro inside
+    obtain ⟨-, onFull⟩ := (mem root).mp (List.contains_iff_mem.mp inside)
+    simp only [isAncestor, gloas, ↓reduceIte, bind, Except.bind] at onFull onEmpty
+    rcases blockEq : store.block first with e | firstBlock
+    · simp [blockEq] at onFull
+    · rcases walk : store.getAncestor ⟨root, .pending⟩ firstBlock.slot with e | found
+      · simp [blockEq, walk] at onFull
+      · simp only [blockEq, walk, pure, Except.pure, Except.ok.injEq, Bool.and_eq_true,
+          Bool.or_eq_true, beq_iff_eq] at onFull onEmpty
+        obtain ⟨-, full | pending⟩ := onFull <;> obtain ⟨-, empty | pending'⟩ := onEmpty <;>
+          simp_all
+  rw [outside]
+  rfl
+
+/-- The walk from Gloas stops at once when the block builds on the latest valid payload. -/
+theorem firstInvalidPayload_of_named {gloas : .glamsterdam ≤ fork} {hash : Hash32}
+    {candidate : Root} {child : BeaconBlock preset fork}
+    (named : (child.body.signedExecutionPayloadBid gloas).message.parentBlockHash = hash) :
+    store.firstInvalidPayload gloas hash candidate child = .ok (some candidate) := by
+  rw [firstInvalidPayload]
+  simp [named, pure, Except.pure]
+
+/-- The walk from Gloas ends at a block with an unknown parent that does not build on the hash. -/
+theorem firstInvalidPayload_of_orphan {gloas : .glamsterdam ≤ fork} {hash : Hash32}
+    {candidate : Root} {child : BeaconBlock preset fork}
+    (unnamed : (child.body.signedExecutionPayloadBid gloas).message.parentBlockHash ≠ hash)
+    (parentFound : store.blocks[child.parentRoot]? = none) :
+    store.firstInvalidPayload gloas hash candidate child = .ok none := by
+  rw [firstInvalidPayload]
+  simp only [unnamed, ↓reduceIte]
+  split
+  · rfl
+  · simp_all
+
+/-- The walk from Gloas makes the parent the candidate when the block builds on its payload.
+
+That needs the parent known, at a lower slot, and the block not built on the hash. -/
+theorem firstInvalidPayload_of_full {gloas : .glamsterdam ≤ fork} {hash : Hash32}
+    {candidate : Root} {child parent : BeaconBlock preset fork}
+    (unnamed : (child.body.signedExecutionPayloadBid gloas).message.parentBlockHash ≠ hash)
+    (parentFound : store.blocks[child.parentRoot]? = some parent)
+    (parentLower : parent.slot < child.slot) (full : parentPayloadStatus child parent = .full) :
+    store.firstInvalidPayload gloas hash candidate child =
+      store.firstInvalidPayload gloas hash child.parentRoot parent := by
+  conv => lhs; rw [firstInvalidPayload]
+  simp only [unnamed, ↓reduceIte]
+  split
+  · simp_all
+  · rename_i p same
+    rw [parentFound, Option.some.injEq] at same
+    subst same
+    simp [parentLower, full]
+
+/-- The walk from Gloas keeps its candidate when the block builds on its parent without payload.
+
+That needs the parent known, at a lower slot, and the block not built on the hash. -/
+theorem firstInvalidPayload_of_empty {gloas : .glamsterdam ≤ fork} {hash : Hash32}
+    {candidate : Root} {child parent : BeaconBlock preset fork}
+    (unnamed : (child.body.signedExecutionPayloadBid gloas).message.parentBlockHash ≠ hash)
+    (parentFound : store.blocks[child.parentRoot]? = some parent)
+    (parentLower : parent.slot < child.slot) (empty : parentPayloadStatus child parent ≠ .full) :
+    store.firstInvalidPayload gloas hash candidate child =
+      store.firstInvalidPayload gloas hash candidate parent := by
+  conv => lhs; rw [firstInvalidPayload]
+  simp only [unnamed, ↓reduceIte]
+  split
+  · simp_all
+  · rename_i p same
+    rw [parentFound, Option.some.injEq] at same
+    subst same
+    simp [parentLower, empty]
+
+/-- The walk from Gloas fails at a known parent that is not at a lower slot.
+
+That needs the block not built on the hash. -/
+theorem firstInvalidPayload_of_not_lower {gloas : .glamsterdam ≤ fork} {hash : Hash32}
+    {candidate : Root} {child parent : BeaconBlock preset fork}
+    (unnamed : (child.body.signedExecutionPayloadBid gloas).message.parentBlockHash ≠ hash)
+    (parentFound : store.blocks[child.parentRoot]? = some parent)
+    (notLower : ¬ parent.slot < child.slot) :
+    store.firstInvalidPayload gloas hash candidate child =
+      .error (.parentSlotNotLower child.parentRoot) := by
+  rw [firstInvalidPayload]
+  simp only [unnamed, ↓reduceIte]
+  split
+  · simp_all
+  · rename_i p same
+    rw [parentFound, Option.some.injEq] at same
+    subst same
+    simp only [notLower, ↓reduceDIte]
+    rfl
+
+/-- The store after an invalid payload is the store as it was, or a removal.
+
+Before Gloas the removal takes a block and its descendants.
+
+From Gloas it takes the payload of a block, and the blocks built on that payload. -/
 theorem onInvalidPayload_eq {block : BeaconBlock preset fork} {latestValidHash : Option Hash32}
     {after : Store preset fork}
     (invalidated : store.onInvalidPayload block latestValidHash = .ok after) :
-    after = store ∨ ∃ first, store.removeDescendants first = .ok after := by
+    after = store ∨ (fork < .glamsterdam ∧ ∃ first, store.removeDescendants first = .ok after) ∨
+      ∃ (gloas : .glamsterdam ≤ fork) (first : Root),
+        store.removeFullDescendants gloas first = .ok after := by
   unfold onInvalidPayload at invalidated
-  by_cases gloas : .glamsterdam ≤ fork
-  · simp [gloas, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at invalidated
-  simp only [gloas, ↓reduceIte, bind_ok_iff] at invalidated
+  rw [bind_ok_iff] at invalidated
   obtain ⟨root, -, rest⟩ := invalidated
-  cases latestValidHash with
-  | none =>
-    simp only [pure_bind] at rest
-    exact .inr ⟨root, rest⟩
-  | some hash =>
-    by_cases marks : marksLatestValid hash block
-    · simp only [marks, ↓reduceIte, pure_bind] at rest
-      simp only [pure, Except.pure, Except.ok.injEq] at rest
-      exact .inl rest.symm
-    · simp only [marks, Bool.false_eq_true, ↓reduceIte, pure_bind, bind_ok_iff] at rest
-      obtain ⟨found, -, rest⟩ := rest
-      exact .inr ⟨_, rest⟩
+  by_cases gloas : .glamsterdam ≤ fork
+  · simp only [gloas, ↓reduceDIte] at rest
+    cases latestValidHash with
+    | none =>
+      simp only [pure_bind, bind_pure] at rest
+      exact .inr (.inr ⟨gloas, root, rest⟩)
+    | some hash =>
+      by_cases same : (block.body.signedExecutionPayloadBid gloas).message.blockHash = hash
+      · simp only [same, ↓reduceIte, pure_bind, bind_pure] at rest
+        simp only [pure, Except.pure, Except.ok.injEq] at rest
+        exact .inl rest.symm
+      · simp only [same, ↓reduceIte, pure_bind, bind_pure, bind_ok_iff] at rest
+        obtain ⟨found, -, rest⟩ := rest
+        exact .inr (.inr ⟨gloas, _, rest⟩)
+  · simp only [gloas, ↓reduceDIte] at rest
+    have before : fork < .glamsterdam := Nat.lt_of_not_le gloas
+    cases latestValidHash with
+    | none =>
+      simp only [pure_bind] at rest
+      exact .inr (.inl ⟨before, root, rest⟩)
+    | some hash =>
+      by_cases marks : marksLatestValid hash block
+      · simp only [marks, ↓reduceIte, pure_bind] at rest
+        simp only [pure, Except.pure, Except.ok.injEq] at rest
+        exact .inl rest.symm
+      · simp only [marks, Bool.false_eq_true, ↓reduceIte, pure_bind, bind_ok_iff] at rest
+        obtain ⟨found, -, rest⟩ := rest
+        exact .inr (.inl ⟨before, _, rest⟩)
+
+/-- From Gloas, without a latest valid hash, the payload of the block itself is the invalid one. -/
+theorem onInvalidPayload_of_gloas_none {block : BeaconBlock preset fork} {root : Root}
+    (gloas : .glamsterdam ≤ fork) (rooted : SszType.hashTreeRoot block = .ok root) :
+    store.onInvalidPayload block none = store.removeFullDescendants gloas root := by
+  cases removed : store.removeFullDescendants gloas root <;>
+    simp [onInvalidPayload, gloas, rooted, removed, bind, Except.bind, Except.mapError, pure,
+      Except.pure]
+
+/-- From Gloas, when the hash names the payload of the block itself, no block is invalid. -/
+theorem onInvalidPayload_of_gloas_self {hash : Hash32} {block : BeaconBlock preset fork}
+    {root : Root} (gloas : .glamsterdam ≤ fork) (rooted : SszType.hashTreeRoot block = .ok root)
+    (named : (block.body.signedExecutionPayloadBid gloas).message.blockHash = hash) :
+    store.onInvalidPayload block (some hash) = .ok store := by
+  simp [onInvalidPayload, gloas, rooted, named, bind, Except.bind, Except.mapError, pure,
+    Except.pure]
+
+/-- From Gloas, when the hash does not name the payload of the block, the walk from it decides.
+
+The block is its first candidate, and it stays the answer when the walk leaves the store. -/
+theorem onInvalidPayload_of_gloas_unnamed {hash : Hash32} {block : BeaconBlock preset fork}
+    {root : Root} (gloas : .glamsterdam ≤ fork) (rooted : SszType.hashTreeRoot block = .ok root)
+    (unnamed : (block.body.signedExecutionPayloadBid gloas).message.blockHash ≠ hash) :
+    store.onInvalidPayload block (some hash) = (do
+      let found ← store.firstInvalidPayload gloas hash root block
+      store.removeFullDescendants gloas (found.getD root)) := by
+  cases walk : store.firstInvalidPayload gloas hash root block
+  · simp [onInvalidPayload, gloas, rooted, unnamed, walk, bind, Except.bind, Except.mapError]
+  · cases removed : store.removeFullDescendants gloas (‹Option Root›.getD root) <;>
+      simp [onInvalidPayload, gloas, rooted, unnamed, walk, removed, bind, Except.bind,
+        Except.mapError, pure, Except.pure]
+
+/-- From Gloas, the payload of the block is the first invalid one if the block builds on the hash.
+
+The parent of the block need not be known, so this covers a block on the anchor of the store. -/
+theorem onInvalidPayload_of_gloas_parent {hash : Hash32} {block : BeaconBlock preset fork}
+    {root : Root} (gloas : .glamsterdam ≤ fork) (rooted : SszType.hashTreeRoot block = .ok root)
+    (unnamed : (block.body.signedExecutionPayloadBid gloas).message.blockHash ≠ hash)
+    (named : (block.body.signedExecutionPayloadBid gloas).message.parentBlockHash = hash) :
+    store.onInvalidPayload block (some hash) = store.removeFullDescendants gloas root := by
+  rw [onInvalidPayload_of_gloas_unnamed gloas rooted unnamed,
+    firstInvalidPayload_of_named named]
+  rfl
+
+/-- From Gloas, the payload of the parent is the first invalid one when the block builds on it.
+
+That needs the parent known at a lower slot and built on the latest valid payload.
+
+The block itself must not build on that payload, and the hash must not name its own. -/
+theorem onInvalidPayload_of_gloas_full_parent {hash : Hash32}
+    {block parent : BeaconBlock preset fork} {root : Root} (gloas : .glamsterdam ≤ fork)
+    (rooted : SszType.hashTreeRoot block = .ok root)
+    (unnamed : (block.body.signedExecutionPayloadBid gloas).message.blockHash ≠ hash)
+    (notParent : (block.body.signedExecutionPayloadBid gloas).message.parentBlockHash ≠ hash)
+    (parentFound : store.blocks[block.parentRoot]? = some parent)
+    (parentLower : parent.slot < block.slot) (full : parentPayloadStatus block parent = .full)
+    (named : (parent.body.signedExecutionPayloadBid gloas).message.parentBlockHash = hash) :
+    store.onInvalidPayload block (some hash) =
+      store.removeFullDescendants gloas block.parentRoot := by
+  rw [onInvalidPayload_of_gloas_unnamed gloas rooted unnamed,
+    firstInvalidPayload_of_full notParent parentFound parentLower full,
+    firstInvalidPayload_of_named named]
+  rfl
 
 /-- A removal keeps a store linked when it takes every known child of a removed root. -/
 theorem Linked.removeBlocks {orphanParent : Root} {roots : List Root}
@@ -308,34 +700,38 @@ theorem Linked.removeBlocks {orphanParent : Root} {roots : List Root}
     simp only [List.contains_iff_mem, removed, parentRemoved, ↓reduceIte] at found parentOf
     exact linked.parentsBelow r b p found parentOf
 
-/-- From Gloas the rule for an invalid payload is not yet specified here, so it fails. -/
-theorem onInvalidPayload_of_gloas {block : BeaconBlock preset fork}
-    {latestValidHash : Option Hash32} (gloas : .glamsterdam ≤ fork) :
-    store.onInvalidPayload block latestValidHash = .error (.forkNotYetSpecified fork) := by
-  simp [onInvalidPayload, gloas, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
-
 /-- An invalid payload keeps a store linked. -/
 theorem Linked.onInvalidPayload {orphanParent : Root} {block : BeaconBlock preset fork}
     {latestValidHash : Option Hash32} {after : Store preset fork}
     (linked : store.Linked orphanParent)
     (invalidated : store.onInvalidPayload block latestValidHash = .ok after) :
     after.Linked orphanParent := by
-  have before : fork < .glamsterdam := Nat.lt_of_not_le fun gloas => by
-    rw [onInvalidPayload_of_gloas gloas] at invalidated
-    cases invalidated
-  rcases onInvalidPayload_eq invalidated with same | ⟨first, removed⟩
+  rcases onInvalidPayload_eq invalidated with same | ⟨before, first, removed⟩ |
+    ⟨gloas, first, removed⟩
   · exact same ▸ linked
-  rcases removeDescendants_eq removed with ⟨-, same⟩ | ⟨roots, -, member, rest⟩
-  · exact same ▸ linked
-  subst rest
-  refine linked.removeBlocks fun r b found parentRemoved => ?_
-  obtain ⟨contains, descends⟩ := (member _).mp parentRemoved
-  rw [Std.TreeMap.contains_eq_isSome_getElem?] at contains
-  obtain ⟨parent, parentFound⟩ := Option.isSome_iff_exists.mp contains
-  refine (member r).mpr ⟨?_, isAncestor_of_parent before found parentFound
-    (linked.parentsBelow r b parent found parentFound) descends⟩
-  rw [Std.TreeMap.contains_eq_isSome_getElem?, found]
-  rfl
+  · rcases removeDescendants_eq removed with ⟨-, same⟩ | ⟨roots, -, member, rest⟩
+    · exact same ▸ linked
+    subst rest
+    refine linked.removeBlocks fun r b found parentRemoved => ?_
+    obtain ⟨contains, descends⟩ := (member _).mp parentRemoved
+    rw [Std.TreeMap.contains_eq_isSome_getElem?] at contains
+    obtain ⟨parent, parentFound⟩ := Option.isSome_iff_exists.mp contains
+    refine (member r).mpr ⟨?_, isAncestor_of_parent before found parentFound
+      (linked.parentsBelow r b parent found parentFound) descends⟩
+    rw [Std.TreeMap.contains_eq_isSome_getElem?, found]
+    rfl
+  · -- The blocks and states are those of a removal, and the dropped payloads play no part.
+    rcases removeFullDescendants_eq removed with ⟨-, same⟩ | ⟨roots, -, member, -, rest⟩
+    · exact same ▸ linked
+    subst rest
+    refine (linked.removeBlocks fun r b found parentRemoved => ?_).of_maps rfl rfl
+    obtain ⟨contains, descends⟩ := (member _).mp parentRemoved
+    rw [Std.TreeMap.contains_eq_isSome_getElem?] at contains
+    obtain ⟨parent, parentFound⟩ := Option.isSome_iff_exists.mp contains
+    refine (member r).mpr ⟨?_, isAncestor_full_of_parent found parentFound
+      (linked.parentsBelow r b parent found parentFound) descends⟩
+    rw [Std.TreeMap.contains_eq_isSome_getElem?, found]
+    rfl
 
 /-- Before Gloas and without a boost, an invalid payload leaves the head of LMD-GHOST.
 
@@ -557,6 +953,201 @@ theorem firstInvalidBlock_of_chain {hash : Hash32} {child root first : Root}
         between x known stored below (ancestor_of_parent lower rootFound onChain)
   | case5 child root block rootFound unnamed parent parentFound notLower =>
     exact absurd (lower root block parent rootFound parentFound) notLower
+
+/-- The walk from Gloas finds nothing when no block of its chain builds on the hash.
+
+The chain starts at the block of the walk, which the store holds, and follows its known parents.
+
+That needs each known parent at a lower slot, or the walk can fail. -/
+theorem firstInvalidPayload_of_absent {gloas : .glamsterdam ≤ fork} {hash : Hash32}
+    {candidate root : Root} {child : BeaconBlock preset fork} (lower : store.ParentsBelow)
+    (found : store.blocks[root]? = some child)
+    (absent : ∀ x block, store.blocks[x]? = some block →
+      (blockTree lower).Ancestor (some x) (some root) →
+      (block.body.signedExecutionPayloadBid gloas).message.parentBlockHash ≠ hash) :
+    store.firstInvalidPayload gloas hash candidate child = .ok none := by
+  induction candidate, child using firstInvalidPayload.induct (store := store) (gloas := gloas)
+    (latestValidHash := hash) generalizing root with
+  | case1 candidate child named => exact absurd named (absent root child found (.refl _))
+  | case2 candidate child unnamed parentFound =>
+    exact firstInvalidPayload_of_orphan unnamed parentFound
+  | case3 candidate child unnamed parent parentFound parentLower full ih =>
+    rw [firstInvalidPayload_of_full unnamed parentFound parentLower full]
+    exact ih parentFound fun x block stored above =>
+      absent x block stored (ancestor_of_parent lower found above)
+  | case4 candidate child unnamed parent parentFound parentLower empty ih =>
+    rw [firstInvalidPayload_of_empty unnamed parentFound parentLower empty]
+    exact ih parentFound fun x block stored above =>
+      absent x block stored (ancestor_of_parent lower found above)
+  | case5 candidate child unnamed parent parentFound notLower =>
+    exact absurd (lower root child parent found parentFound) notLower
+
+/-- The walk from Gloas keeps its candidate when its chain builds on no payload newer than the hash.
+
+The walk starts at a block that the store holds.
+
+The named block is the nearest block of the chain that builds on the hash.
+
+No block that descends from the named block, up to the start, builds on its parent's payload.
+
+That needs each known parent at a lower slot. -/
+theorem firstInvalidPayload_of_chain_empty {gloas : .glamsterdam ≤ fork} {hash : Hash32}
+    {candidate root named : Root} {child namedBlock : BeaconBlock preset fork}
+    (lower : store.ParentsBelow) (found : store.blocks[root]? = some child)
+    (namedFound : store.blocks[named]? = some namedBlock)
+    (names : (namedBlock.body.signedExecutionPayloadBid gloas).message.parentBlockHash = hash)
+    (descends : (blockTree lower).Ancestor (some named) (some root))
+    (between : ∀ x block, store.blocks[x]? = some block →
+      (blockTree lower).Ancestor (some named) (some x) →
+      (blockTree lower).Ancestor (some x) (some root) → x ≠ named →
+      (block.body.signedExecutionPayloadBid gloas).message.parentBlockHash ≠ hash)
+    (empty : ∀ x block parent, store.blocks[x]? = some block →
+      store.blocks[block.parentRoot]? = some parent →
+      (blockTree lower).Ancestor (some named) (some block.parentRoot) →
+      (blockTree lower).Ancestor (some x) (some root) → parentPayloadStatus block parent ≠ .full) :
+    store.firstInvalidPayload gloas hash candidate child = .ok (some candidate) := by
+  induction candidate, child using firstInvalidPayload.induct (store := store) (gloas := gloas)
+    (latestValidHash := hash) generalizing root with
+  | case1 candidate child named => exact firstInvalidPayload_of_named named
+  | case2 candidate child unnamed parentFound =>
+    rcases descends.eq_or_parent with same | above
+    · -- The named block builds on the hash, so the walk does not start there.
+      rw [Option.some.injEq] at same
+      subst same
+      rw [found, Option.some.injEq] at namedFound
+      subst namedFound
+      exact absurd names unnamed
+    · -- The chain of an unknown parent holds no known block.
+      rw [blockTree_parent_of found] at above
+      obtain ⟨_, known⟩ := known_of_ancestor lower namedFound above
+      simp_all
+  | case3 candidate child unnamed parent parentFound parentLower full ih =>
+    rcases descends.eq_or_parent with same | above
+    · rw [Option.some.injEq] at same
+      subst same
+      rw [found, Option.some.injEq] at namedFound
+      subst namedFound
+      exact absurd names unnamed
+    · rw [blockTree_parent_of found] at above
+      exact absurd full (empty root child parent found parentFound above (.refl _))
+  | case4 candidate child unnamed parent parentFound parentLower notFull ih =>
+    rw [firstInvalidPayload_of_empty unnamed parentFound parentLower notFull]
+    rcases descends.eq_or_parent with same | above
+    · rw [Option.some.injEq] at same
+      subst same
+      rw [found, Option.some.injEq] at namedFound
+      subst namedFound
+      exact absurd names unnamed
+    · rw [blockTree_parent_of found] at above
+      exact ih parentFound above
+        (fun x block stored below onChain =>
+          between x block stored below (ancestor_of_parent lower found onChain))
+        (fun x block grand stored grandFound below onChain =>
+          empty x block grand stored grandFound below (ancestor_of_parent lower found onChain))
+  | case5 candidate child unnamed parent parentFound notLower =>
+    exact absurd (lower root child parent found parentFound) notLower
+
+/-- The walk from Gloas finds the block of its chain with the earliest payload newer than the hash.
+
+The walk starts at a block that the store holds.
+
+The named block is the nearest block of the chain that builds on the hash.
+
+The found block is the named block or descends from it.
+
+Its child on the chain builds on its payload.
+
+No block that descends from the named block, up to the found block, builds on its parent's payload.
+
+So the payload of the found block is the first on the chain after the latest valid payload.
+
+That needs each known parent at a lower slot. -/
+theorem firstInvalidPayload_of_chain_full {gloas : .glamsterdam ≤ fork} {hash : Hash32}
+    {candidate root named first link : Root}
+    {child namedBlock firstBlock linkBlock : BeaconBlock preset fork}
+    (lower : store.ParentsBelow) (found : store.blocks[root]? = some child)
+    (namedFound : store.blocks[named]? = some namedBlock)
+    (names : (namedBlock.body.signedExecutionPayloadBid gloas).message.parentBlockHash = hash)
+    (between : ∀ x block, store.blocks[x]? = some block →
+      (blockTree lower).Ancestor (some named) (some x) →
+      (blockTree lower).Ancestor (some x) (some root) → x ≠ named →
+      (block.body.signedExecutionPayloadBid gloas).message.parentBlockHash ≠ hash)
+    (firstFound : store.blocks[first]? = some firstBlock)
+    (reaches : (blockTree lower).Ancestor (some named) (some first))
+    (linkFound : store.blocks[link]? = some linkBlock) (linked : linkBlock.parentRoot = first)
+    (descends : (blockTree lower).Ancestor (some link) (some root))
+    (full : parentPayloadStatus linkBlock firstBlock = .full)
+    (emptyAbove : ∀ x block parent, store.blocks[x]? = some block →
+      store.blocks[block.parentRoot]? = some parent →
+      (blockTree lower).Ancestor (some named) (some block.parentRoot) →
+      (blockTree lower).Ancestor (some x) (some first) → parentPayloadStatus block parent ≠ .full) :
+    store.firstInvalidPayload gloas hash candidate child = .ok (some first) := by
+  -- The named block is an ancestor of the parent of the link, so never the link or a descendant.
+  have below : ∀ {x : Root}, (blockTree lower).Ancestor (some link) (some x) → x ≠ named := by
+    rintro x onChain rfl
+    have step : (blockTree lower).IsChild (some link) (some first) :=
+      blockTree_isChild_iff.mpr ⟨linkBlock, linkFound, linked⟩
+    have := step.height_lt
+    have := reaches.height_le
+    have := onChain.height_le
+    omega
+  induction candidate, child using firstInvalidPayload.induct (store := store) (gloas := gloas)
+    (latestValidHash := hash) generalizing root with
+  | case1 candidate child named =>
+    exact absurd named (between root child found
+      (reaches.trans ((blockTree_isChild_iff.mpr ⟨linkBlock, linkFound, linked⟩).ancestor.trans
+        descends)) (.refl _) (below descends))
+  | case2 candidate child unnamed parentFound =>
+    rcases descends.eq_or_parent with same | above
+    · -- The link has a known parent, so it is not this block.
+      rw [Option.some.injEq] at same
+      subst same
+      rw [found, Option.some.injEq] at linkFound
+      subst linkFound
+      simp_all
+    · -- The chain of an unknown parent holds no known block.
+      rw [blockTree_parent_of found] at above
+      obtain ⟨_, known⟩ := known_of_ancestor lower linkFound above
+      simp_all
+  | case3 candidate child unnamed parent parentFound parentLower full ih =>
+    rw [firstInvalidPayload_of_full unnamed parentFound parentLower full]
+    rcases descends.eq_or_parent with same | above
+    · -- The walk is at the link, so the candidate becomes the parent of the link.
+      rw [Option.some.injEq] at same
+      subst same
+      rw [found, Option.some.injEq] at linkFound
+      subst linkFound
+      subst linked
+      rw [firstFound, Option.some.injEq] at parentFound
+      subst parentFound
+      exact firstInvalidPayload_of_chain_empty lower firstFound namedFound names reaches
+        (fun x block stored above onChain =>
+          between x block stored above (ancestor_of_parent lower found onChain))
+        emptyAbove
+    · rw [blockTree_parent_of found] at above
+      exact ih parentFound
+        (fun x block stored above onChain =>
+          between x block stored above (ancestor_of_parent lower found onChain))
+        above
+  | case4 candidate child unnamed parent parentFound parentLower notFull ih =>
+    rw [firstInvalidPayload_of_empty unnamed parentFound parentLower notFull]
+    rcases descends.eq_or_parent with same | above
+    · -- The link builds on the payload of its parent.
+      rw [Option.some.injEq] at same
+      subst same
+      rw [found, Option.some.injEq] at linkFound
+      subst linkFound
+      subst linked
+      rw [firstFound, Option.some.injEq] at parentFound
+      subst parentFound
+      exact absurd full notFull
+    · rw [blockTree_parent_of found] at above
+      exact ih parentFound
+        (fun x block stored above onChain =>
+          between x block stored above (ancestor_of_parent lower found onChain))
+        above
+  | case5 candidate child unnamed parent parentFound notLower =>
+    exact absurd (lower root child parent found parentFound) notLower
 
 /-- A removal from an unknown root changes nothing. -/
 theorem removeDescendants_of_unknown {first : Root} (unknown : store.blocks[first]? = none) :

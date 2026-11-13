@@ -176,6 +176,8 @@ inductive PayloadError where
   | invalidBlock (error : Execution.Blocks.BlockError)
   /-- The block access list is not the RLP encoding of a block access list. -/
   | invalidBlockAccessList
+  /-- The parent is a block of proof of work that is not terminal. -/
+  | invalidTerminalBlock
   deriving DecidableEq, Repr
 
 /-- The stable code of a reason, one per constructor, for the C exports.
@@ -190,5 +192,6 @@ def PayloadError.code : PayloadError → UInt32
   | .wrongVersionedHashes => 404
   | .invalidBlock _ => 405
   | .invalidBlockAccessList => 406
+  | .invalidTerminalBlock => 407
 
 end EthLib.Engine

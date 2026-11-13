@@ -181,20 +181,25 @@ theorem requestsHash_of_buildPayload
 
 The payload must pass the checks of the method before execution, with the built block.
 
+The last block of the chain must pass the terminal block check, as one from Paris on always does.
+
 The latest valid hash is the block's own hash, and the state after it is the state of the build.
 -/
-theorem newPayloadOnChain_of_buildPayload {version : Nat} {params : Lean.Json}
+theorem newPayloadOnChain_of_buildPayload {transition : TransitionConfiguration}
+    {totalDifficulty : Nat} {version : Nat} {params : Lean.Json}
     {checked : CheckedBlock version} {attributes : PayloadAttributes checked.fork}
     {built : BuiltPayload checked.fork}
     (hCheck : checkNewPayload chain.config version params = .ok (.ok checked))
     (h : buildPayload chain attributes choices transactions = .ok built)
-    (hBlock : built.block = checked.block) :
-    newPayloadOnChain chain version params =
+    (hBlock : built.block = checked.block)
+    (hTerminal : ∀ parent, chain.recent.getLast? = some parent →
+      passesTerminalCheck transition totalDifficulty parent = true) :
+    newPayloadOnChain transition totalDifficulty chain version params =
       .ok (⟨.valid, checked.block.header.hash.toOption⟩, none,
         some (⟨checked.fork, checked.block.header, []⟩, built.state)) := by
   obtain ⟨-, -, -, -, -, -, -, -, parent, hP, hHash, -⟩ := buildPayload_fields h
   rw [hBlock] at hHash
-  exact newPayloadOnChain_of_stateTransition_ok hCheck hP hHash
+  exact newPayloadOnChain_of_stateTransition_ok hCheck hP hHash (hTerminal parent hP)
     (hBlock ▸ stateTransition_of_buildPayload h)
 
 /-- A build on a chain from decoded attributes is a build of a payload, at the fork it gives.
@@ -211,7 +216,7 @@ theorem buildPayload_of_buildPayloadOnChain {version : Nat}
       chain.recent.getLast? = some parent ∧
       checkAttributes chain.config version
         ⟨parent.header.parentHash, true, UInt64.ofNat parent.header.number,
-          UInt64.ofNat parent.header.timestamp.toNat⟩ decoded = .ok ⟨fork, attributes⟩ ∧
+          UInt64.ofNat parent.header.timestamp.toNat, none⟩ decoded = .ok ⟨fork, attributes⟩ ∧
       decodeTransactions fork 0 encoded = .ok transactions ∧
       buildPayload chain attributes choices transactions = .ok built := by
   unfold buildPayloadOnChain at h
@@ -310,7 +315,7 @@ theorem buildPayloadOnChain_eq_error_of_checkAttributes_eq_error {version : Nat}
     {error : EngineError} (hp : chain.recent.getLast? = some parent)
     (ha : checkAttributes chain.config version
       ⟨parent.header.parentHash, true, UInt64.ofNat parent.header.number,
-        UInt64.ofNat parent.header.timestamp.toNat⟩ decoded = .error error) :
+        UInt64.ofNat parent.header.timestamp.toNat, none⟩ decoded = .error error) :
     buildPayloadOnChain chain version decoded choices encoded = .error (.attributes error) := by
   simp [buildPayloadOnChain, hp, ha, bind, Except.bind, Except.mapError]
 
@@ -320,7 +325,7 @@ theorem buildPayloadOnChain_eq_error_of_decodeTransactions_eq_error {version : N
     {error : PayloadError} (hp : chain.recent.getLast? = some parent)
     (ha : checkAttributes chain.config version
       ⟨parent.header.parentHash, true, UInt64.ofNat parent.header.number,
-        UInt64.ofNat parent.header.timestamp.toNat⟩ decoded = .ok ⟨fork, attributes⟩)
+        UInt64.ofNat parent.header.timestamp.toNat, none⟩ decoded = .ok ⟨fork, attributes⟩)
     (ht : decodeTransactions fork 0 encoded = .error error) :
     buildPayloadOnChain chain version decoded choices encoded = .error (.transaction error) := by
   simp [buildPayloadOnChain, hp, ha, ht, bind, Except.bind, Except.mapError]
@@ -331,7 +336,7 @@ theorem buildPayloadOnChain_eq_error_of_buildPayload_eq_error {version : Nat}
     {error : BlockError} (hp : chain.recent.getLast? = some parent)
     (ha : checkAttributes chain.config version
       ⟨parent.header.parentHash, true, UInt64.ofNat parent.header.number,
-        UInt64.ofNat parent.header.timestamp.toNat⟩ decoded = .ok ⟨fork, attributes⟩)
+        UInt64.ofNat parent.header.timestamp.toNat, none⟩ decoded = .ok ⟨fork, attributes⟩)
     (ht : decodeTransactions fork 0 encoded = .ok transactions)
     (hb : buildPayload chain attributes choices transactions = .error error) :
     buildPayloadOnChain chain version decoded choices encoded = .error (.block error) := by

@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.Containers.Block
+public import EthLib.Serialization.Ssz.Typed.Choice
 
 /-!
 # `Consensus.Containers.BuilderApi`
@@ -59,7 +60,7 @@ def MAX_EXECUTION_PAYMENT : Gwei := UINT64_MAX
 
 /-- From Gloas: the agreed authentication data and the proposal slot of a builder request. -/
 structure BuilderRequestAuth where
-  /-- The data agreed with the builder, or by default the hostname of the builder's URL. -/
+  /-- The data agreed with the builder, or by default the data from the builder's URL. -/
   data : SszList UInt8 MAX_BUILDER_AUTH_DATA_SIZE
   /-- The proposal slot the request authenticates. -/
   slot : Slot
@@ -244,6 +245,43 @@ instance : SszType (ExecutionPayloadAndBlobsBundle preset fork) :=
     (fun (executionPayload, blobsBundle) => ⟨executionPayload, blobsBundle⟩)
 
 end ExecutionPayloadAndBlobsBundle
+
+/-- From Bellatrix to Fulu: the payload that a builder reveals for a signed blinded block.
+
+Before Deneb it is the payload alone, and from Deneb to Fulu the payload with its blobs bundle.
+
+[`blinded_blocks.yaml`] gives it as the response.
+
+Its response schema names no Electra form, and its Electra example has the fields of the Deneb form.
+
+Outside Bellatrix to Fulu the type still has a form, which no rule reads.
+
+[`blinded_blocks.yaml`]: https://github.com/ethereum/builder-specs/blob/fce64468a81a87892d7cb9b4858272bb3d010e50/apis/builder/blinded_blocks.yaml
+-/
+def RevealedPayload (preset : Preset) (fork : Fork) : Type :=
+  if .dencun ≤ fork then ExecutionPayloadAndBlobsBundle preset fork
+  else ExecutionPayload preset fork
+
+instance : SszType (RevealedPayload preset fork) :=
+  inferInstanceAs (SszType (if .dencun ≤ fork then _ else _))
+
+/-- From Deneb: the revealed payload that a payload with its blobs bundle is. -/
+def RevealedPayload.ofBundle (deneb : .dencun ≤ fork)
+    (bundle : ExecutionPayloadAndBlobsBundle preset fork) : RevealedPayload preset fork :=
+  cast (ite_eq_left deneb).symm bundle
+
+/-- Before Deneb: the revealed payload that a payload alone is. -/
+def RevealedPayload.ofPayload (early : ¬.dencun ≤ fork) (payload : ExecutionPayload preset fork) :
+    RevealedPayload preset fork :=
+  cast (ite_eq_right early).symm payload
+
+/-- The execution payload that a builder reveals, without its blobs bundle. -/
+def RevealedPayload.executionPayload (revealed : RevealedPayload preset fork) :
+    ExecutionPayload preset fork :=
+  if deneb : .dencun ≤ fork then
+    let bundle : ExecutionPayloadAndBlobsBundle preset fork := cast (ite_eq_left deneb) revealed
+    bundle.executionPayload
+  else cast (ite_eq_right deneb) revealed
 
 /-- A beacon block body with the header of its payload in place of the payload.
 

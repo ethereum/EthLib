@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Networking.Libp2p.Tls
 public import EthLib.Networking.Discv5.Distance
 public import EthLib.Networking.Devp2p.ForkId
 public import EthLib.Networking.Devp2p.P2p
@@ -22,6 +23,7 @@ public import EthLib.Networking.Gossip.Cache
 public import EthLib.Networking.Gossip.MessageId
 public import EthLib.Networking.Gossip.Parameters
 public import EthLib.Networking.Gossip.Payload
+public import EthLib.Networking.Gossip.Router
 public import EthLib.Networking.Gossip.Rpc
 public import EthLib.Networking.Gossip.Subnet
 public import EthLib.Networking.Gossip.Topic
@@ -32,6 +34,10 @@ public import EthLib.Networking.Libp2p.Multistream
 public import EthLib.Networking.Libp2p.Upgrade
 public import EthLib.Networking.Libp2p.Yamux
 public import EthLib.Networking.Libp2p.YamuxSession
+public import EthLib.Networking.Quic.Keys
+public import EthLib.Networking.Quic.Protection
+public import EthLib.Networking.Quic.Tls
+public import EthLib.Networking.Quic.Varint
 public import EthLib.Networking.ReqResp.Bounds
 public import EthLib.Networking.ReqResp.Encoding
 public import EthLib.Networking.Rlpx.Ecies
@@ -42,6 +48,8 @@ public import EthLib.Networking.Snappy.Compress
 public import EthLib.Networking.Snappy.Encode
 public import EthLib.Networking.Snappy.Frame
 public import EthLib.Networking.Snappy.FrameEncode
+
+public import EthLib.Networking.Quic.Frame
 
 /-!
 # `EthLib.Networking`

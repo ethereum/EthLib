@@ -125,6 +125,10 @@ class HkdfError(EthLibError, ValueError):
     """HKDF rejected its input."""
 
 
+class Tls13Error(EthLibError, ValueError):
+    """A TLS 1.3 key derivation rejected its input."""
+
+
 class Pbkdf2Error(EthLibError, ValueError):
     """PBKDF2 rejected its input."""
 
@@ -185,6 +189,18 @@ class UvarintError(EthLibError, ValueError):
     """The bytes do not start with a multiformats unsigned varint, or a value is out of range."""
 
 
+class QuicError(EthLibError, ValueError):
+    """A QUIC header, packet number or frame is malformed, out of range, or not allowed there."""
+
+
+class QuicProtectionError(EthLibError, ValueError):
+    """A QUIC packet or Retry fails a check; code 8 is a reserved bit in an authenticated packet."""
+
+
+class QuicVarintError(EthLibError, ValueError):
+    """The bytes end before the QUIC integer they start, or a value is not below 2^62."""
+
+
 class MultistreamError(EthLibError, ValueError):
     """The bytes do not start with a multistream-select message."""
 
@@ -203,6 +219,10 @@ class YamuxError(EthLibError, ValueError):
 
     Stream errors have codes from 101.
     """
+
+
+class TlsCertificateError(EthLibError, ValueError):
+    """A libp2p TLS certificate or its peer authentication was rejected."""
 
 
 class Libp2pIdentityError(EthLibError, ValueError):
@@ -346,6 +366,7 @@ __all__ = [
     "LightClientError",
     "ForkChoiceError",
     "HkdfError",
+    "Tls13Error",
     "Pbkdf2Error",
     "ScryptError",
     "X25519Error",
@@ -360,10 +381,14 @@ __all__ = [
     "SszError",
     "VarintError",
     "UvarintError",
+    "QuicVarintError",
+    "QuicProtectionError",
+    "QuicError",
     "MultistreamError",
     "MplexError",
     "YamuxError",
     "Libp2pIdentityError",
+    "TlsCertificateError",
     "GossipError",
     "Discv5Error",
     "RlpxError",

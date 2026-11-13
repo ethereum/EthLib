@@ -259,3 +259,27 @@ It then reads the document through the bindings.
 
 The examples of `builder_api/` also come with JSON forms.
 The test compares the JSON of the bindings with them, and reads them back to the same bytes.
+
+The directory `relay_api/` holds files of the Relay API, from `flashbots/relay-specs` at commit `a4e0a50d9d46bfe881fd74cc7e0db366371f4eed`.
+The source has no tag and no release; this commit is its Fulu update.
+The files are copied byte for byte under their paths in that repository.
+`examples/<fork>/submit_block_request.json` is the JSON example of a block submission, from Bellatrix to Fulu.
+`specs/<fork>/builder.md` is the document that defines the containers of the submission at that fork.
+
+`bindings/python/tests/consensus/test_relay_api.py` reads the payload of each example through the bindings, and from Deneb its blobs bundle, from Electra its requests.
+The bid traces of the examples lack the key of the proposer, so the test checks that the bindings refuse them.
+The blobs of the Deneb and Electra examples hold 32 bytes, not the 131,072 bytes of a blob.
+The test checks that the bindings refuse those bundles too.
+It then adds the key and pads each blob with zeros, and checks the bytes and the root of the whole submission.
+It also reads the containers of the documents, and computes their roots in Python from the completed examples.
+They agree with the roots of EthLib, except for the requests.
+The Electra document bounds the consolidation requests of a payload by 1, and Fulu keeps that bound.
+The mainnet preset bounds them by 2, so the trees of the two lists have different depths.
+The test checks that the roots differ, and that they agree when the bound of the preset replaces that of the documents.
+Another test builds the bid that a relay serves from each completed example, and from a generated submission.
+It checks the header against the payload, with the roots of its lists computed in Python.
+It also checks the value, the key, and from Deneb the commitments and from Electra the requests.
+Two more tests build the list of validators that a relay serves from the minimal Fulu state of `light_client/minimal/fulu/light_client/single_merkle_proof/BeaconState/current_sync_committee_merkle_proof`.
+The first registers every validator and compares the list with the proposer lookahead of the state, read from its JSON; with no registration the list is empty.
+The second moves the state inside an epoch, replaces the lookahead, registers one validator, and checks that only the slots of that validator have entries.
+A last test checks that the list is refused at the forks before and after Fulu.

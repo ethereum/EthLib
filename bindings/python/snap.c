@@ -27,6 +27,12 @@ eth_snap_access_lists_answer(
 );
 
 extern lean_object*
+eth_snap_trie_nodes_answer(
+  lean_object* request,
+  lean_object* response
+);
+
+extern lean_object*
 eth_snap_full_account(
   lean_object* slim
 );
@@ -109,6 +115,19 @@ py_snap_access_lists_answer(
   PyMem_Free(hashes);
   return except_into_pybool(
     eth_snap_access_lists_answer(request, response, expected), SNAP_ERROR);
+}
+
+PyObject*
+py_snap_trie_nodes_answer(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *request_obj, *response_obj;
+  if (!PyArg_ParseTuple(args, "OO", &request_obj, &response_obj)) return NULL;
+  lean_object *request, *response;
+  if (parse_bytes(request_obj, "request", &request)) return NULL;
+  if (parse_bytes(response_obj, "response", &response)) { lean_dec(request); return NULL; }
+  return except_into_pybool(eth_snap_trie_nodes_answer(request, response), SNAP_ERROR);
 }
 
 PyObject*
