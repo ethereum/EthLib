@@ -1393,6 +1393,10 @@ def yamux_decode(data: bytes) -> tuple[dict[str, Any], bytes]:
     """The yamux frame at the start of the bytes, and the bytes after it."""
     ...
 
+def yamux_session(is_client: bool, events: list[tuple[bool, bytes]]) -> tuple[list[tuple[int, str, int, int]], bool, list[bytes]]:
+    """One side of a yamux session after the frames it receives and sends, from no stream."""
+    ...
+
 def libp2p_public_key(secret: bytes) -> bytes:
     """The public-key protobuf of a 32-byte big-endian secp256k1 secret in [1, n)."""
     ...

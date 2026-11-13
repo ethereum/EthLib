@@ -9834,6 +9834,33 @@
    "docstring":
    "The yamux frame at the start of the bytes, and the bytes after it."},
   {"summary":
+   "One side of a yamux session after the frames it receives and sends, from no stream.",
+   "signature":
+   "(is_client: bool, events: list[tuple[bool, bytes]]) -> tuple[list[tuple[int, str, int, int]], bool, list[bytes]]",
+   "operation": "EthLib.Networking.Libp2p.Exports.yamuxSessionExport",
+   "method": "yamux_session",
+   "errors":
+   [{"type": "EthLib.Networking.Libp2p.Yamux.YamuxError",
+     "codes":
+     [{"constructor": "shortHeader", "code": 1},
+      {"constructor": "version", "code": 2},
+      {"constructor": "unknownKind", "code": 3},
+      {"constructor": "truncated", "code": 4}]},
+    {"type": "EthLib.Networking.Libp2p.Yamux.YamuxSessionError",
+     "codes":
+     [{"constructor": "sessionStream", "code": 101},
+      {"constructor": "wrongParity", "code": 102},
+      {"constructor": "reusedId", "code": 103},
+      {"constructor": "unknownStream", "code": 104},
+      {"constructor": "unexpectedAck", "code": 105},
+      {"constructor": "missingAck", "code": 109},
+      {"constructor": "afterReset", "code": 106},
+      {"constructor": "afterFin", "code": 107},
+      {"constructor": "windowExceeded", "code": 108}]}],
+   "error_class": "YamuxError",
+   "docstring":
+   "One side of a yamux session after the frames it receives and sends, from no stream.\n\nThe first argument says whether this side is the client.\n\nEach event says whether this side receives its bytes, and holds whole frames.\n\nThe streams come as their ID, their state, and the windows to send and to receive.\n\nThen come whether the side received Go Away, and the bytes of the frames it sends back.\n\nA frame that does not decode, or that the side refuses, raises its error.\n\nThe error names the index of the event."},
+  {"summary":
    "The public-key protobuf of a 32-byte big-endian secp256k1 secret in [1, n).",
    "signature": "(secret: bytes) -> bytes",
    "operation": "EthLib.Networking.Libp2p.Exports.publicKeyExport",
