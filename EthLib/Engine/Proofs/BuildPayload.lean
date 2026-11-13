@@ -3,7 +3,6 @@ module
 public import EthLib.Engine.BuildPayload
 public import EthLib.Engine.Proofs.NewPayload
 public import EthLib.Execution.Proofs.Blocks.Transition
-public import EthLib.Execution.Proofs.Transactions.Process
 
 /-!
 # Proofs: the payload that the execution layer builds
@@ -18,7 +17,7 @@ The built block carries the timestamp, RANDAO mix, withdrawals, beacon root, slo
 
 From Pectra, its header commits to the requests that the build gives.
 
-Its value is what its transactions pay its fee recipient, each at the gas of its own run.
+Its value sums the priority fee of each of its transactions, at the gas that its run uses.
 
 A build on a chain from the attributes of a forkchoice update is such a build, at their fork.
 
@@ -32,7 +31,8 @@ namespace EthLib.Engine
 open EthLib.Base
 open EthLib.Execution.Blocks
 open EthLib.Execution.Evm (BlockEnvironment)
-open EthLib.Execution.Transactions
+open EthLib.Execution.Transactions (Transaction TransactionOutput checkInclusion
+  processTransaction priorityFeeOf baseFeeOf)
 
 variable {fork : Fork} {chain : BlockChain} {attributes : PayloadAttributes fork}
   {choices : BuildChoices} {transactions : List Transaction} {built : BuiltPayload fork}
@@ -206,20 +206,6 @@ private theorem applyTransactions_append {env : BlockEnvironment fork} {body : B
       applyTransactions env body l >>= fun before => applyTransaction env l.length before tx := by
   simp [applyTransactions, List.zipIdx_append, List.foldlM_append]
 
-/-- A transaction that enters the body adds one receipt, with the new cumulative gas. -/
-private theorem applyTransaction_receipts {env : BlockEnvironment fork} {index : Nat}
-    {before after : BodyOutput fork} {tx : Transaction}
-    (h : applyTransaction env index before tx = .ok after) :
-    ∃ outcome logs, after.receipts =
-      before.receipts ++ [(tx.type, makeReceipt outcome after.cumulativeGasUsed logs)] := by
-  unfold applyTransaction at h
-  obtain ⟨included, -, h⟩ := bind_ok_iff.mp h
-  obtain ⟨out, -, h⟩ := bind_ok_iff.mp h
-  obtain ⟨body, -, h⟩ := bind_ok_iff.mp h
-  dsimp only at h
-  split at h <;>
-    (obtain ⟨_, -, h⟩ := bind_ok_iff.mp h; cases h; exact ⟨_, _, rfl⟩)
-
 /-- A property of every list follows from the empty list and from adding one value at the end. -/
 private theorem appendInduction {α : Type} {motive : List α → Prop} (nil : motive [])
     (append_singleton : ∀ l a, motive l → motive (l ++ [a])) (l : List α) : motive l := by
@@ -230,7 +216,9 @@ private theorem appendInduction {α : Type} {motive : List α → Prop} (nil : m
     rw [List.reverse_cons]
     exact append_singleton _ _ ih
 
-/-- The priority fees of a run of transactions sum those of the run of each, at its own gas.
+/-- A run of transactions adds one receipt each, the last with the cumulative gas of the run.
+
+Its priority fees sum those of the output of each transaction, at the gas that output used.
 
 The run of each transaction follows the run of those before it. -/
 private theorem applyTransactions_priorityFees {env : BlockEnvironment fork} {body : BodyState}
@@ -286,61 +274,13 @@ private theorem applyTransactions_priorityFees {env : BlockEnvironment fork} {bo
         · simpa using hInc
         · simpa using hProc
 
-/-- A run of a transaction settles its gas, which gives the gas used of the run. -/
-private theorem processTransaction_settleGas {env : BlockEnvironment fork}
-    {block : Execution.State.BlockState} {included : Included} {tx : Transaction}
-    {out : TransactionOutput} (h : processTransaction env block included tx = .ok out) :
-    ∃ state gasLeft refund settled,
-      settleGas env state included.sender tx gasLeft refund = .ok (settled, out.gasUsed) := by
-  unfold processTransaction at h
-  split at h
-  · cases h
-  · split at h <;>
-      (obtain ⟨_, _, _, _, settled, -, -, -, -, -, hs, -⟩ := runTransaction_eq_ok h
-       exact ⟨_, _, _, settled, hs⟩)
-
-/-- A body that runs takes the DAO transfer, then the system calls, then its transactions.
-
-Its receipts are those of the run of its transactions. -/
-private theorem applyBody_receipts {config : ChainConfig} {env : BlockEnvironment fork}
-    {block : Block fork Transaction} {start : Execution.State.BlockState}
-    {output : BlockOutput fork} (h : applyBody config env block start = .ok output) :
-    ∃ state body txs, daoTransfer config fork block.header.number start = .ok state ∧
-      startSystemCalls env block.header.parentHash (.init state) = .ok body ∧
-      applyTransactions env body block.transactions = .ok txs ∧
-      output.receipts = txs.receipts := by
-  unfold applyBody at h
-  dsimp only at h
-  obtain ⟨state, hState, h⟩ := bind_ok_iff.mp h
-  obtain ⟨body, hBody, h⟩ := bind_ok_iff.mp h
-  obtain ⟨txs, hTxs, h⟩ := bind_ok_iff.mp h
-  refine ⟨state, body, txs, hState, mapError_ok_iff.mp hBody, hTxs, ?_⟩
-  split at h
-  · obtain ⟨tx, -, h⟩ := bind_ok_iff.mp h
-    obtain ⟨withdrawn, -, h⟩ := bind_ok_iff.mp h
-    obtain ⟨⟨requested, requests⟩, -, h⟩ := bind_ok_iff.mp h
-    dsimp only at h
-    obtain ⟨rewarded, -, h⟩ := bind_ok_iff.mp h
-    obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-    cases h
-    rfl
-  · obtain ⟨withdrawn, -, h⟩ := bind_ok_iff.mp h
-    obtain ⟨⟨requested, requests⟩, -, h⟩ := bind_ok_iff.mp h
-    dsimp only at h
-    obtain ⟨rewarded, -, h⟩ := bind_ok_iff.mp h
-    obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-    cases h
-    rfl
-
-/-- The value of a built block is what its transactions pay its fee recipient, each at its own gas.
+/-- The value of a built block sums the priority fee of each transaction, at the gas its run uses.
 
 The body runs in the environment of the block, after the DAO transfer and the system calls.
 
-Each transaction runs after those before it, and settles its gas.
+Each transaction runs after those before it.
 
-The settlement pays the fee recipient the gas used of that run times the price above the base fee.
-
-The value is the sum of those payments, one for each transaction. -/
+The priority fee is the gas used times the price above the base fee. -/
 theorem blockValue_of_buildPayload
     (h : buildPayload chain attributes choices transactions = .ok built) :
     ∃ hashes state body outs,
@@ -360,14 +300,7 @@ theorem blockValue_of_buildPayload
           (blockEnvironment chain.config hashes built.block.header) before.gas
           (.ofBlock before.block) transactions[i] = .ok included ∧
         processTransaction (blockEnvironment chain.config hashes built.block.header)
-          before.block included transactions[i] = .ok out ∧
-        ∃ state gasLeft refund settled,
-          settleGas (blockEnvironment chain.config hashes built.block.header) state
-            included.sender transactions[i] gasLeft refund = .ok (settled, out.gasUsed) ∧
-          (settlement fork (baseFeeOf (blockEnvironment chain.config hashes built.block.header))
-            included.sender transactions[i] gasLeft refund).priorityFee =
-            priorityFeeOf (baseFeeOf (blockEnvironment chain.config hashes built.block.header))
-              out.gasUsed transactions[i] := by
+          before.block included transactions[i] = .ok out := by
   obtain ⟨-, parent, parentHash, result, -, -, -, hR, -, -, hBlock, -, -, hValue⟩ :=
     buildPayload_spec h
   obtain ⟨hashes, hHashes, hApply, -⟩ := runBody_eq_ok.mp hR
@@ -379,11 +312,7 @@ theorem blockValue_of_buildPayload
   refine ⟨hashes, state, body, outs, hHashes, hDao, hStart, hOuts, ?_, fun i hi => ?_⟩
   · rw [hValue, hReceipts]
     exact hSum
-  · obtain ⟨before, included, out, ho, hb, hinc, hproc⟩ := hRuns i hi
-    obtain ⟨st, gasLeft, refund, settled, hs⟩ := processTransaction_settleGas hproc
-    refine ⟨before, included, out, ho, hb, hinc, hproc, st, gasLeft, refund, settled, hs, ?_⟩
-    rw [settleGas_gasUsed hs]
-    rfl
+  · exact hRuns i hi
 
 /-- `engine_newPayload` answers that a built block is valid, on the chain that it was built on.
 
