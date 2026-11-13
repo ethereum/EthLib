@@ -10,12 +10,15 @@ public import EthLib.Consensus.Proofs.BeaconApi.Duties
 public import EthLib.Consensus.Proofs.BeaconApi.Config
 public import EthLib.Consensus.Proofs.BeaconApi.Debug
 public import EthLib.Consensus.Proofs.BeaconApi.Encoding
+public import EthLib.Consensus.Proofs.BeaconApi.Events
 public import EthLib.Consensus.Proofs.BeaconApi.Identifiers
 public import EthLib.Consensus.Proofs.BeaconApi.LightClient
 public import EthLib.Consensus.Proofs.BeaconApi.LightClientBootstrap
+public import EthLib.Consensus.Proofs.BeaconApi.Produce
 public import EthLib.Consensus.Proofs.BeaconApi.Registries
 public import EthLib.Consensus.Proofs.BeaconApi.Rewards
 public import EthLib.Consensus.Proofs.BeaconApi.StateQueries
+public import EthLib.Consensus.Proofs.BeaconApi.Submit
 public import EthLib.Consensus.Proofs.BeaconApi.Validators
 public import EthLib.Consensus.Proofs.BeaconApi.ValidatorData
 public import EthLib.Consensus.Proofs.BuilderApi
@@ -214,6 +217,7 @@ public import EthLib.Consensus.Proofs.Transition.PaymentReleaseInvariants
 public import EthLib.Consensus.Proofs.Transition.PaymentReleaseRun
 public import EthLib.Consensus.Proofs.Transition.PaymentReleaseWithdrawals
 public import EthLib.Consensus.Proofs.Transition.PendingConsolidations
+public import EthLib.Consensus.Proofs.Transition.ProposerBalance
 public import EthLib.Consensus.Proofs.Transition.RegistryLifecycle
 public import EthLib.Consensus.Proofs.Transition.Requests
 public import EthLib.Consensus.Proofs.Transition.RewardDeltas
@@ -249,6 +253,7 @@ public import EthLib.Consensus.Proofs.Transition.Totality.Rewards
 public import EthLib.Consensus.Proofs.Transition.Totality.RewardsBeforeAltair
 public import EthLib.Consensus.Proofs.Transition.Totality.Slashings
 public import EthLib.Consensus.Proofs.Transition.Totality.Slot
+public import EthLib.Consensus.Proofs.Transition.Totality.Supply
 public import EthLib.Consensus.Proofs.Transition.Totality.SyncCommittee
 public import EthLib.Consensus.Proofs.Transition.Totality.Upgrades
 public import EthLib.Consensus.Proofs.Transition.Upgrade

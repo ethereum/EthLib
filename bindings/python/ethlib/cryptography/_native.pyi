@@ -709,6 +709,10 @@ def consensus_api_attestation_rewards(name: str, fork: str, state: bytes, replac
     """The JSON response of the attestation rewards endpoint, as a `dict`."""
     ...
 
+def consensus_api_block_rewards(name: str, fork: str, state: bytes, block: bytes, replacements: dict[str, Any] | None) -> dict[str, Any]:
+    """The JSON response of the block rewards endpoint, as a `dict`."""
+    ...
+
 def consensus_api_sync_committee_rewards(name: str, fork: str, state: bytes, aggregate: bytes, ids: list[str]) -> dict[str, Any]:
     """The JSON response of the sync committee rewards endpoint, as a `dict`."""
     ...
@@ -1091,6 +1095,10 @@ def consensus_fork_choice(name: str, fork: str, anchor_state: bytes, anchor_bloc
 
 def consensus_gossip_validation(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, blocks: list[tuple[int, int | None, bytes] | tuple[int, int | None, bytes, bytes | None]], finalized: tuple[int, bytes] | None, topic: str, messages: list[tuple[int, int, bytes] | tuple[int, int, bytes, str]], config: dict[str, Any] | None, verify: bool) -> list[tuple[str, str | None]]:
     """Validate the messages of a topic in turn, against the store of an anchor and later blocks."""
+    ...
+
+def consensus_api_pool(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, blocks: list[tuple[int, int | None, bytes] | tuple[int, int | None, bytes, bytes | None]], finalized: tuple[int, bytes] | None, requests: list[tuple[int, str, list[bytes]]], config: dict[str, Any] | None, verify: bool) -> list[list[tuple[int, str]]]:
+    """Answer the requests to pool endpoints in turn, against the store of an anchor and later blocks."""
     ...
 
 def consensus_light_client_sync(name: str, fork: str, bootstrap_fork: str, config: dict[str, Any] | None, trusted: bytes, genesis_validators_root: bytes, bootstrap: bytes, steps: list[tuple[str, str, int, bytes] | tuple[str, int] | tuple[str, str]]) -> list[tuple[tuple[int, bytes, bytes], tuple[int, bytes, bytes]]]:

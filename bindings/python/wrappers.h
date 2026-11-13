@@ -431,6 +431,7 @@ PyObject* py_consensus_api_aggregate_attestation (PyObject* self, PyObject* args
 PyObject* py_consensus_api_sync_committee_contribution(PyObject* self, PyObject* args);
 PyObject* py_consensus_api_attestation_rewards(PyObject* self, PyObject* args);
 PyObject* py_consensus_api_sync_committee_rewards(PyObject* self, PyObject* args);
+PyObject* py_consensus_api_block_rewards(PyObject* self, PyObject* args);
 PyObject* py_consensus_api_duties                (PyObject* self, PyObject* args);
 PyObject* py_consensus_api_committees              (PyObject* self, PyObject* args);
 PyObject* py_consensus_api_sync_committees         (PyObject* self, PyObject* args);
@@ -472,6 +473,7 @@ PyObject* py_consensus_state_transitions (PyObject* self, PyObject* args);
 PyObject* py_consensus_state_transitions_across (PyObject* self, PyObject* args);
 PyObject* py_consensus_fork_choice (PyObject* self, PyObject* args);
 PyObject* py_consensus_gossip_validation (PyObject* self, PyObject* args);
+PyObject* py_consensus_api_pool (PyObject* self, PyObject* args);
 PyObject* py_consensus_initialize_genesis (PyObject* self, PyObject* args);
 PyObject* py_consensus_is_valid_genesis_state (PyObject* self, PyObject* args);
 PyObject* py_consensus_deposit_tree_new (PyObject* self, PyObject* args);

@@ -698,6 +698,10 @@ def bindings : List Binding := [
     "(name: str, fork: str, state: bytes, replacements: dict[str, Any] | None, epoch: int, " ++
       "ids: list[str]) -> dict[str, Any]",
     [], some "ConsensusError"⟩,
+  ⟨"consensus_api_block_rewards", `EthLib.Consensus.Exports.apiBlockRewardsExport,
+    "(name: str, fork: str, state: bytes, block: bytes, replacements: dict[str, Any] | None) " ++
+      "-> dict[str, Any]",
+    [], some "ConsensusError"⟩,
   ⟨"consensus_api_sync_committee_rewards",
     `EthLib.Consensus.Exports.apiSyncCommitteeRewardsExport,
     "(name: str, fork: str, state: bytes, aggregate: bytes, ids: list[str]) -> dict[str, Any]",
@@ -1071,6 +1075,14 @@ def bindings : List Binding := [
       "finalized: tuple[int, bytes] | None, topic: str, " ++
       "messages: list[tuple[int, int, bytes] | tuple[int, int, bytes, str]], " ++
       "config: dict[str, Any] | None, verify: bool) -> list[tuple[str, str | None]]",
+    [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
+  ⟨"consensus_api_pool", `EthLib.Consensus.Exports.apiPoolExport,
+    "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, " ++
+      "blocks: list[tuple[int, int | None, bytes] | " ++
+      "tuple[int, int | None, bytes, bytes | None]], " ++
+      "finalized: tuple[int, bytes] | None, " ++
+      "requests: list[tuple[int, str, list[bytes]]], " ++
+      "config: dict[str, Any] | None, verify: bool) -> list[list[tuple[int, str]]]",
     [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
   ⟨"consensus_light_client_sync", `EthLib.Consensus.Exports.lightClientSyncExport,
     "(name: str, fork: str, bootstrap_fork: str, config: dict[str, Any] | None, " ++

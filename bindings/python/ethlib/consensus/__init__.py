@@ -1384,6 +1384,20 @@ def api_sync_committee_rewards(
     return _native.consensus_api_sync_committee_rewards(name, fork, state, aggregate, list(ids))
 
 
+def api_block_rewards(
+    name: str,
+    fork: str,
+    state: bytes,
+    block: bytes,
+    *,
+    config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """The Beacon API rewards of the proposer of a signed block, or ConsensusError."""
+    # The state is the one at the slot of the block, before it; a failure raises code 500.
+    # The flags execution_optimistic and finalized come from the store and are absent.
+    return _native.consensus_api_block_rewards(name, fork, state, block, config)
+
+
 def api_duties(
     name: str,
     fork: str,
@@ -1497,6 +1511,36 @@ def gossip_validation(
         finalized,
         topic,
         list(messages),
+        config,
+        verify,
+    )
+
+
+def api_pool(
+    name: str,
+    fork: str,
+    anchor_state: bytes,
+    anchor_block: bytes,
+    requests: Sequence[tuple[int, str, Sequence[bytes]]],
+    verify: bool = True,
+    config: dict[str, Any] | None = None,
+    blocks: Sequence[tuple[int, int | None, bytes] | tuple[int, int | None, bytes, bytes | None]]
+    | None = None,
+    finalized: tuple[int, bytes] | None = None,
+) -> list[list[tuple[int, str]]]:
+    """The failed items of each request to a Beacon API pool endpoint, with their messages."""
+    # The store is built as for gossip_validation, from the anchor and the later blocks.
+    # A request is (time in milliseconds, endpoint name such as "attestations", SSZ items).
+    # The requests share the keys of the messages seen, which each accepted item extends.
+    # An item that gossip ignores or rejects fails, with the reason of gossip.
+    return _native.consensus_api_pool(
+        name,
+        fork,
+        anchor_state,
+        anchor_block,
+        list(blocks or []),
+        finalized,
+        [(time, endpoint, list(items)) for time, endpoint, items in requests],
         config,
         verify,
     )
@@ -2106,6 +2150,7 @@ __all__ = [
     "api_sync_committee_contribution",
     "api_attestation_rewards",
     "api_sync_committee_rewards",
+    "api_block_rewards",
     "api_duties",
     "api_committees",
     "api_sync_committees",
@@ -2185,6 +2230,7 @@ __all__ = [
     "LightClientError",
     "ForkChoiceError",
     "fork_choice",
+    "api_pool",
     "gossip_validation",
     "light_client_sync",
     "SyncStep",

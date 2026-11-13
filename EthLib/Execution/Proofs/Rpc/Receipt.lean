@@ -325,20 +325,6 @@ theorem effectiveGasPrice_description {baseFee : Nat} {tx : Transaction}
     simp only [Transaction.maxFeePerGas] at h <;>
     simp only [effectiveGasPrice, effectiveGasPrice.feeMarket] <;> omega
 
-/-- A transaction that enters the body adds one receipt, with the new cumulative gas. -/
-private theorem applyTransaction_receipts {fork : Fork} {env : Evm.BlockEnvironment fork}
-    {index : Nat} {before after : BodyOutput fork} {tx : Transaction}
-    (h : applyTransaction env index before tx = .ok after) :
-    ∃ outcome logs, after.receipts =
-      before.receipts ++ [(tx.type, makeReceipt outcome after.cumulativeGasUsed logs)] := by
-  unfold applyTransaction at h
-  obtain ⟨included, -, h⟩ := bind_ok_iff.mp h
-  obtain ⟨out, -, h⟩ := bind_ok_iff.mp h
-  obtain ⟨body, -, h⟩ := bind_ok_iff.mp h
-  dsimp only at h
-  split at h <;>
-    (obtain ⟨_, -, h⟩ := bind_ok_iff.mp h; cases h; exact ⟨_, _, rfl⟩)
-
 /-- The receipts of the transactions of a body have the Bloom filters of their logs.
 
 Their cumulative gas never decreases, and stays at most the cumulative gas of the output. -/
@@ -395,35 +381,6 @@ private theorem applyTransactions_receipts {fork : Fork} {env : Evm.BlockEnviron
     (fun _ => id) (fun h₁ h₂ x => h₂ (h₁ x)) step h
   exact hR (by simp)
 
-/-- A body that runs keeps the receipts of its transactions, which run on some starting body. -/
-private theorem applyBody_receipts {fork : Fork} {config : ChainConfig}
-    {env : Evm.BlockEnvironment fork} {block : Block fork Transaction} {start : State.BlockState}
-    {output : BlockOutput fork} (h : applyBody config env block start = .ok output) :
-    ∃ body txs, applyTransactions env body block.transactions = .ok txs ∧
-      output.receipts = txs.receipts := by
-  unfold applyBody at h
-  dsimp only at h
-  obtain ⟨state, -, h⟩ := bind_ok_iff.mp h
-  obtain ⟨body, -, h⟩ := bind_ok_iff.mp h
-  obtain ⟨txs, hTxs, h⟩ := bind_ok_iff.mp h
-  refine ⟨body, txs, hTxs, ?_⟩
-  split at h
-  · obtain ⟨tx, -, h⟩ := bind_ok_iff.mp h
-    obtain ⟨withdrawn, -, h⟩ := bind_ok_iff.mp h
-    obtain ⟨⟨requested, requests⟩, -, h⟩ := bind_ok_iff.mp h
-    dsimp only at h
-    obtain ⟨rewarded, -, h⟩ := bind_ok_iff.mp h
-    obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-    cases h
-    rfl
-  · obtain ⟨withdrawn, -, h⟩ := bind_ok_iff.mp h
-    obtain ⟨⟨requested, requests⟩, -, h⟩ := bind_ok_iff.mp h
-    dsimp only at h
-    obtain ⟨rewarded, -, h⟩ := bind_ok_iff.mp h
-    obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-    cases h
-    rfl
-
 namespace ChainView
 
 /-- In a valid view, the receipts of a canonical block after the lowest are those of its run. -/
@@ -433,7 +390,7 @@ private theorem Valid.receipts_run {v : ChainView} {checkSeal : Bool} (hv : v.Va
       txs.receipts = v.canonical[i + 1].receipts := by
   obtain ⟨-, result, hrun, hrec, -⟩ := hv.follows i hi
   obtain ⟨hashes, -, happly, -⟩ := Blocks.runBody_eq_ok.mp hrun
-  obtain ⟨body, txs, htxs, hr⟩ := applyBody_receipts happly
+  obtain ⟨-, body, txs, -, -, htxs, hr⟩ := applyBody_receipts happly
   exact ⟨_, body, txs, htxs, hr ▸ hrec⟩
 
 /-- The receipt of a transaction is the object at its index among those of its block. -/

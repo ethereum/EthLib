@@ -52,7 +52,7 @@ open Base
 variable {preset : Preset} {fork : Base.Fork} {config : Config} {checks : SignatureChecks}
   {engine : ExecutionEngine preset fork} {state after : BeaconState preset fork}
 
-/-! ## Balances that only fall -/
+/-! ## Balances that fall, rise or stay -/
 
 /-- The balance at a position stays, and does not rise, from one state to another.
 
@@ -60,6 +60,16 @@ Unlike the shared relation of a balance not raised, the position must keep a bal
 def BalanceDown (index : Nat) (state after : BeaconState preset fork) : Prop :=
   ∀ earlier, state.balances.data[index]? = some earlier →
     ∃ later, after.balances.data[index]? = some later ∧ later ≤ earlier
+
+/-- The balance at a position stays, and does not fall, from one state to another. -/
+def BalanceRises (index : Nat) (state after : BeaconState preset fork) : Prop :=
+  ∀ earlier, state.balances.data[index]? = some earlier →
+    ∃ later, after.balances.data[index]? = some later ∧ earlier ≤ later
+
+/-- The balance at a position stays the same from one state to another. -/
+def BalanceStays (index : Nat) (state after : BeaconState preset fork) : Prop :=
+  ∀ earlier, state.balances.data[index]? = some earlier →
+    after.balances.data[index]? = some earlier
 
 /-- A state keeps each of its balances. -/
 private theorem BalanceDown.refl (index : Nat) (state : BeaconState preset fork) :
@@ -918,7 +928,7 @@ private theorem down_applyPendingDeposit {index : Nat} {validator : Validator}
     exact other (beq_iff_eq.mp keyed.1).symm
 
 /-- A deposit of a block to another key keeps the balance at the position of a validator. -/
-private theorem down_processDeposit {before : fork < .hegota} {deposit : Deposit} {index : Nat}
+theorem down_processDeposit {before : fork < .hegota} {deposit : Deposit} {index : Nat}
     {validator : Validator}
     (computed : processDeposit config checks before state deposit = .ok after)
     (found : state.validators.data[index]? = some validator)
@@ -1586,5 +1596,113 @@ theorem scoreKept_processBlock {block : BeaconBlock preset fork}
     · cases synced
       exact BlockScored.refl _
   exact ((before.trans (fixed_processOperations operated).2.2.2.2).trans synced).2 index inside
+
+/-! ## The proposer through the steps of a block -/
+
+/-- A proposer slashing keeps what the proposer of the slot reads. -/
+private theorem steady_processProposerSlashing {slashing : ProposerSlashing}
+    (computed : processProposerSlashing config checks state slashing = .ok after) :
+    Steady state after := by
+  simp only [processProposerSlashing, bind_ok_iff, ensure_ok_iff, liftAccessor_ok] at computed
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, slashed⟩ := computed
+  exact steady_slashValidator slashed
+
+/-- An attester slashing keeps what the proposer of the slot reads. -/
+private theorem steady_processAttesterSlashing {slashing : AttesterSlashing preset fork}
+    (computed : processAttesterSlashing config checks state slashing = .ok after) :
+    Steady state after := by
+  simp only [processAttesterSlashing, bind_ok_iff, ensure_ok_iff, pure, Except.pure,
+    Except.ok.injEq] at computed
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, folded, _, _, rfl⟩ := computed
+  refine foldlM_ok_invariant (fun step => Steady state step.1) (fun step _ next held ok => ?_)
+    (show Steady state (state, false).1 from Steady.refl state) folded
+  obtain ⟨middle, slashedAny⟩ := step
+  simp only [slashIfSlashable, bind_ok_iff, liftAccessor_ok] at ok
+  obtain ⟨_, _, ok⟩ := ok
+  split at ok
+  · simp only [bind_ok_iff, liftAccessor_ok, pure, Except.pure, Except.ok.injEq] at ok
+    obtain ⟨_, slashed, rfl⟩ := ok
+    exact held.trans (steady_slashValidator slashed)
+  · simp only [pure, Except.pure, Except.ok.injEq] at ok
+    exact ok ▸ held
+
+/-- An attestation keeps what the proposer of the slot reads. -/
+private theorem steady_processAttestation {attestation : Attestation preset fork}
+    {parentSlot : Slot}
+    (computed : processAttestation config checks state parentSlot attestation = .ok after) :
+    Steady state after :=
+  Steady.of_validators (fixed_processAttestation computed)
+    (congrArg (·.data) (processAttestation_registry computed).1)
+
+/-- A deposit of a block keeps what the proposer of the slot reads. -/
+private theorem steady_processDeposit {before : fork < .hegota} {deposit : Deposit}
+    (computed : processDeposit config checks before state deposit = .ok after) :
+    Steady state after :=
+  Steady.of_parts (fixed_processDeposit computed) (activeStep_processDeposit computed)
+    (effectiveKept_processDeposit computed) (frame_processDeposit computed).registryGrows
+
+/-- The operations of a block keep the proposer of the slot and the current sync committee.
+
+The mixes must span more than the seed lookahead plus two epochs. -/
+theorem processOperations_proposer
+    (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    {body : BeaconBlockBody preset fork} {parentSlot : Slot}
+    (computed : processOperations config checks state body parentSlot = .ok after) :
+    getBeaconProposerIndex after = getBeaconProposerIndex state ∧
+      after.currentSyncCommittee = state.currentSyncCommittee := by
+  obtain ⟨_, _, _, proposersOk, attestersOk, attestedOk, rest⟩ :=
+    processOperations_folds_of Steady Steady.refl Steady.trans steady_processDeposit
+      (fun ok => (kept_processVoluntaryExit (index := 0) ok).2.1)
+      (fun ok => (kept_processBlsToExecutionChange (index := 0) ok).2.1)
+      (fun ok => (kept_processExecutionRequests (index := 0) ok).2.1)
+      (fun ok => by
+        rw [processPayloadAttestation_eq ok]
+        exact Steady.refl _) computed
+  have steady : Steady state after :=
+    (foldlM_ok_steps Steady Steady.refl Steady.trans
+      (fun _ _ _ ok => steady_processProposerSlashing ok) proposersOk).1.trans <|
+    (foldlM_ok_steps Steady Steady.refl Steady.trans
+      (fun _ _ _ ok => steady_processAttesterSlashing ok) attestersOk).1.trans <|
+    (foldlM_ok_steps Steady Steady.refl Steady.trans
+      (fun _ _ _ ok => steady_processAttestation ok) attestedOk).1.trans rest
+  exact ⟨Steady.proposer apart steady, steady.1.2.2⟩
+
+/-- The steps of a block before its operations end at a state whose proposer is that of the block.
+
+They keep the current sync committee, and keep each balance from rising.
+
+The mixes must span more than the seed lookahead plus two epochs. -/
+theorem operationsInput_proposer
+    (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    {block : BeaconBlock preset fork} {input : BeaconState preset fork}
+    (started : OperationsInput config checks engine state block input) :
+    getBeaconProposerIndex input = .ok block.proposerIndex ∧
+      input.currentSyncCommittee = state.currentSyncCommittee ∧
+      ∀ index, BalanceDown index state input := by
+  obtain ⟨parented, headed, executed, revealed, paidOk, headerOk, executionOk, randaoOk,
+    eth1Ok⟩ := started
+  -- From Gloas the payload of the parent runs first, and keeps the fields.
+  have paid : (∀ index, BalanceDown index state parented) ∧ BlockFixed state parented := by
+    split at paidOk
+    · exact ⟨fun index => (down_processParentExecutionPayload (index := index) paidOk).1,
+        (down_processParentExecutionPayload (index := 0) paidOk).2⟩
+    · cases paidOk
+      exact ⟨fun index => BalanceDown.refl _ _, BlockFixed.refl _⟩
+  -- The header reads the proposer of the block, and the later steps keep it.
+  have read := processBlockHeader_proposer headerOk
+  have before : ∀ index, Kept index parented input := by
+    intro index
+    refine (kept_processBlockHeader headerOk).trans (Kept.trans ?_
+      ((kept_processRandao randaoOk).trans ?_))
+    · split at executionOk
+      · exact kept_processBlockExecution executionOk
+      · cases executionOk
+        exact Kept.refl _ _
+    · split at eth1Ok
+      · exact kept_processEth1Data eth1Ok
+      · cases eth1Ok
+        exact Kept.refl _ _
+  exact ⟨(Steady.proposer apart (before 0).2.1).trans read,
+    (before 0).2.1.1.2.2.trans paid.2.2.2.1, fun index => (paid.1 index).trans (before index).1⟩
 
 end EthLib.Consensus
