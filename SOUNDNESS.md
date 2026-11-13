@@ -708,6 +708,26 @@ No theorem relates ChaCha20-Poly1305 to an independent model of RFC 8439.
 The Python tests compare the bindings with the RFC 7748 and RFC 8439 vectors.
 The million-iteration X25519 vector requires `ETHLIB_SLOW_VECTORS=1`.
 
+### libp2p TLS certificates
+
+`authenticate` (`Networking/Libp2p/Tls.lean`) checks one certificate's validity, self-signature, libp2p extension and host-key signature.
+The caller explicitly chooses accepted host and certificate algorithms and whether to reject unique IDs.
+No default application profile is defined.
+
+The concrete backends cover secp256k1 and P-256 host keys and P-256/SHA-256 certificate signatures.
+P-256 keys use uncompressed named-curve SubjectPublicKeyInfo encodings.
+Other key types and certificate algorithms, including Ed25519 and RSA, are not implemented here.
+Unknown critical extensions are rejected, and unknown non-critical extensions are ignored.
+Certificate names are retained without distinguished-name comparison or PKIX certification-path validation.
+Name values support UTF8String, PrintableString, IA5String, BMPString and UniversalString.
+Other string types, including TeletexString, are outside the DER reader's subset.
+
+`authenticate_ok_iff` and `authenticateCertificate_ok_iff` (`Networking/Proofs/Libp2p/Tls.lean`) expose the singleton chain, parsed certificate, validity interval and concrete signature checks required by success.
+`authenticate_peerId` ties the result to the parsed certificate key and its host-signature check.
+`authenticatePeer_peerId` proves that a successful dialler returns its intended peer ID.
+These are correctness properties of the checks, not an unforgeability theorem.
+The algorithm profile and treatment of deprecated unique IDs remain application decisions, as issue #2160 requests.
+
 ### QUIC integers
 
 RFC 9000 §16 writes an integer below `2^62` in 1, 2, 4 or 8 bytes, and the two high bits of the first byte give the length.
@@ -4093,12 +4113,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 443 operations and 49 size constants.
-The Python extension calls 443 of the operations and 49 of the constants.
+Lean exports 447 operations and 49 size constants.
+The Python extension calls 447 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-10763 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2116), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (194), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (106), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (147), `module.c` (1504), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (71), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (58), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (732), `x25519.c` (21), `xmss.c` (134).
+10815 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2116), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (194), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (106), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1510), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (71), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (58), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (738), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

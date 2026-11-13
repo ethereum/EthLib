@@ -168,6 +168,7 @@ extern PyObject* MULTISTREAM_ERROR;
 extern PyObject* MPLEX_ERROR;
 extern PyObject* YAMUX_ERROR;
 extern PyObject* LIBP2P_IDENTITY_ERROR;
+extern PyObject* TLS_CERTIFICATE_ERROR;
 extern PyObject* GOSSIP_ERROR;
 extern PyObject* DISCV5_ERROR;
 extern PyObject* RLPX_ERROR;
@@ -728,5 +729,10 @@ call_pyvalue_export(
 );
 
 PyObject* py_pyvalue_echo                                 (PyObject* self, PyObject* args);
+
+PyObject* py_tls_certificate_read(PyObject* self, PyObject* args);
+PyObject* py_tls_certificate_authenticate(PyObject* self, PyObject* args);
+PyObject* py_tls_certificate_authenticate_peer(PyObject* self, PyObject* args);
+PyObject* py_tls_certificate_verify_p256(PyObject* self, PyObject* args);
 
 #endif /* ETHCS_WRAPPERS_H */

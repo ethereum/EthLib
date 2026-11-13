@@ -1124,6 +1124,18 @@
 #define DOC_yamux_session \
   "One side of a yamux session after the frames it receives and sends, from no stream."
 
+#define DOC_tls_certificate_read \
+  "The certificate's signed bytes, SPKI, validity, extensions, signature and unique-ID flags."
+
+#define DOC_tls_certificate_authenticate \
+  "The authenticated peer ID of a chain of exactly one certificate."
+
+#define DOC_tls_certificate_authenticate_peer \
+  "The peer ID of one authenticated certificate, checked against the intended peer ID."
+
+#define DOC_tls_certificate_verify_p256 \
+  "Verify DER ECDSA/SHA-256 under an uncompressed P-256 SubjectPublicKeyInfo."
+
 #define DOC_libp2p_public_key \
   "The public-key protobuf of a 32-byte big-endian secp256k1 secret in [1, n)."
 

@@ -145,3 +145,43 @@ py_libp2p_decode_peer_id(
 ) {
   return call_pyvalue_export(eth_libp2p_decode_peer_id, args, 1, LIBP2P_IDENTITY_ERROR);
 }
+
+extern lean_object* eth_tls_certificate_read(lean_object* args);
+
+PyObject*
+py_tls_certificate_read(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_tls_certificate_read, args, 1, TLS_CERTIFICATE_ERROR);
+}
+
+extern lean_object* eth_tls_certificate_authenticate(lean_object* args);
+
+PyObject*
+py_tls_certificate_authenticate(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_tls_certificate_authenticate, args, 3, TLS_CERTIFICATE_ERROR);
+}
+
+extern lean_object* eth_tls_certificate_authenticate_peer(lean_object* args);
+
+PyObject*
+py_tls_certificate_authenticate_peer(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_tls_certificate_authenticate_peer, args, 4, TLS_CERTIFICATE_ERROR);
+}
+
+extern lean_object* eth_tls_certificate_verify_p256(lean_object* args);
+
+PyObject*
+py_tls_certificate_verify_p256(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_tls_certificate_verify_p256, args, 3, TLS_CERTIFICATE_ERROR);
+}

@@ -1,5 +1,7 @@
 module
 
+public import EthLib.Serialization.Der
+
 public import EthLib.Serialization.E2store
 public import EthLib.Serialization.JsonRpc
 public import EthLib.Serialization.Rlp

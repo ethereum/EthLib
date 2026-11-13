@@ -100,6 +100,7 @@ PyObject* MULTISTREAM_ERROR;
 PyObject* MPLEX_ERROR;
 PyObject* YAMUX_ERROR;
 PyObject* LIBP2P_IDENTITY_ERROR;
+PyObject* TLS_CERTIFICATE_ERROR;
 PyObject* GOSSIP_ERROR;
 PyObject* DISCV5_ERROR;
 PyObject* RLPX_ERROR;
@@ -1169,6 +1170,10 @@ static PyMethodDef methods[] = {
   {"yamux_decode", py_yamux_decode, METH_VARARGS, DOC_yamux_decode},
   {"yamux_session", py_yamux_session, METH_VARARGS, DOC_yamux_session},
   {"libp2p_public_key", py_libp2p_public_key, METH_VARARGS, DOC_libp2p_public_key},
+  {"tls_certificate_read", py_tls_certificate_read, METH_VARARGS, DOC_tls_certificate_read},
+  {"tls_certificate_authenticate", py_tls_certificate_authenticate, METH_VARARGS, DOC_tls_certificate_authenticate},
+  {"tls_certificate_authenticate_peer", py_tls_certificate_authenticate_peer, METH_VARARGS, DOC_tls_certificate_authenticate_peer},
+  {"tls_certificate_verify_p256", py_tls_certificate_verify_p256, METH_VARARGS, DOC_tls_certificate_verify_p256},
   {"libp2p_peer_id", py_libp2p_peer_id, METH_VARARGS, DOC_libp2p_peer_id},
   {"libp2p_decode_peer_id", py_libp2p_decode_peer_id, METH_VARARGS, DOC_libp2p_decode_peer_id},
   {"gossip_message_id", py_gossip_message_id, METH_VARARGS, DOC_gossip_message_id},
@@ -1309,6 +1314,7 @@ PyInit__native(void) {
     MULTISTREAM_ERROR = PyObject_GetAttrString(errors, "MultistreamError");
     MPLEX_ERROR = PyObject_GetAttrString(errors, "MplexError");
     YAMUX_ERROR = PyObject_GetAttrString(errors, "YamuxError");
+    TLS_CERTIFICATE_ERROR = PyObject_GetAttrString(errors, "TlsCertificateError");
     LIBP2P_IDENTITY_ERROR = PyObject_GetAttrString(errors, "Libp2pIdentityError");
     GOSSIP_ERROR = PyObject_GetAttrString(errors, "GossipError");
     DISCV5_ERROR = PyObject_GetAttrString(errors, "Discv5Error");
