@@ -2,6 +2,7 @@ module
 
 public import EthLib.Base.Exports.PyDerive
 public import EthLib.Base.Exports.Proofs.PyValue
+public import EthLib.Cryptography.Exports.Kzg
 public import EthLib.Execution.Rpc.BlockParam
 public import EthLib.Execution.Rpc.Errors
 public import EthLib.Execution.Rpc.Methods
@@ -33,6 +34,8 @@ A chain view crosses as the inputs that build it, and answers a list of requests
 Its blocks are the lowest block and the blocks after it, each with the name of its fork.
 
 Each block after the lowest runs through the state transition, as a valid view asks.
+
+A chain view reads the embedded KZG trusted setup, which the KZG exports decode once.
 
 An unknown schema, or an argument that Lean cannot read, has code 0.
 
@@ -238,6 +241,7 @@ def viewOf (inputs : ViewInputs) : Result ChainView := do
   let genesis ← configGenesis configJson
   let mergeForkBlock ← configNat configJson "mergeForkBlock"
   let config ← ChainConfig.Exports.configOfJson configJson
+  let setup ← Cryptography.Kzg.Exports.runKzg Cryptography.Kzg.Exports.embeddedSetup
   let state ← (State.Exports.ofInput state).mapError fun e => (0, e.message)
   let (first, rest) ← match blocks with
     | [] => .error (0, "no block")
@@ -274,7 +278,8 @@ def viewOf (inputs : ViewInputs) : Result ChainView := do
       finalized := named finalizedHash
       networkId := networkId
       genesis := genesis
-      mergeForkBlock := mergeForkBlock }
+      mergeForkBlock := mergeForkBlock
+      setup := setup }
     return view
 
 /-- The responses of the chain view that its inputs build, to the texts of requests, as text.

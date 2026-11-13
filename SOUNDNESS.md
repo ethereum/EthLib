@@ -4002,6 +4002,7 @@ Before Fusaka that form has one proof per blob, and from Fusaka it has cell proo
 The hash of an accepted submission is the hash of the transaction that the raw form holds, without blobs, commitments or proofs (`ChainView.sendRawTransaction_hash`, `Proofs/Rpc/Submit.lean`).
 When the first byte is not 3, it is the Keccak-256 hash of the raw bytes (`ChainView.sendRawTransaction_keccak`).
 The dispatcher reads the raw bytes and answers with that hash (`ChainView.call_sendRawTransaction`).
+A network form is accepted only when its KZG proofs verify against the trusted setup of the view (`ChainView.proofsVerify_of_sendRawTransaction`).
 Each code that `rpcCode` gives is in a group that the method lists, within the range of that group (`rpcCode_mem`).
 Two errors with one code are of one kind (`rpcCode_injective`).
 The mapping is: `insufficientGas` to 800, `gasAllowanceExceeded` to 803, `priorityFeeGreaterThanMaxFee` to 804, `insufficientMaxFeePerGas` to 806, `insufficientBalance` to 809, `nonceTooLow` to 1, `nonceTooHigh` to 2, and `invalidSignature` to 1001.
@@ -4011,15 +4012,15 @@ The cost behind 809 also counts the blob gas at its fee cap.
 The method checks a transaction with no gas used before it, so the allowance of the block is exceeded exactly when the gas limit is above the block's, the condition of 803.
 
 Which transactions a pool keeps is the choice of the node, and EthLib fixes one simple rule.
-The rule accepts a transaction whose raw form decodes, whose blob counts and versioned hashes match, and which passes the inclusion checks in the next block against the state of the head.
+The rule accepts a transaction whose raw form decodes and whose blob counts, versioned hashes and KZG proofs are valid (`ChainView.validateNetwork_of_sendRawTransaction`).
+The transaction must also pass the inclusion checks in the next block, against the state of the head.
 That next block is one second after the head, its earliest time, as in the fee history.
 It takes the fork, the base fees and the blob schedule of the fee history, and the gas limit of the head.
 Its base fee is the last base fee of the fee history (`ChainView.baseFeeOf_nextEnvironment`).
 A nonce above that of the sender is a future transaction, which the rule accepts.
 The checks then read the head with the nonce of the sender raised to that of the transaction (`withFutureNonce_nonce`), so the code 2 never arises.
-The rule does not verify the KZG proofs yet.
 From Fusaka, the source lets a node accept proofs per blob and convert them to cell proofs; the rule takes the choice that this "may" leaves, and rejects that form.
-A raw form that does not decode, or whose blobs do not match its counts or versioned hashes, gets `-32000`.
+A raw form that does not decode, or whose blobs fail their counts, their versioned hashes or their proofs, gets `-32000`.
 A failed inclusion check without a code gets `-32003`.
 The errors of EthLib without a code are `emptyTransaction`, `unsupportedType`, `decoding`, `encoding`, `initCodeTooLarge`, `gasLimitExceeded`, `nonceOverflow`, `wrongChainId`, `noBlobData`, `blobCountExceeded`, `invalidBlobVersionedHash`, `emptyAuthorizationList`, `blobGasLimitExceeded`, `insufficientMaxFeePerBlobGas`, `senderNotEoa` and `missingCode`.
 `intrinsicGasAboveLimit` also has none.
