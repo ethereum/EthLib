@@ -19,6 +19,10 @@ It then gives the validator credentials that name the address of the change.
 
 A validator can withdraw its whole balance exactly when its credentials, epoch and balance allow it.
 
+Its credentials name an address exactly when their first byte is `0x01`, or `0x02` from Electra.
+
+Before Electra, a validator with any other first byte is neither fully nor partially withdrawable.
+
 A full payload starts the next sweep after its last withdrawal, before the wrap at the registry.
 
 Otherwise the next sweep starts one sweep after the start of the last one.
@@ -1281,6 +1285,31 @@ theorem isFullyWithdrawableValidator_eq_true_iff {fork : Base.Fork} {validator :
       hasWithdrawalAddress fork validator = true ∧ validator.withdrawableEpoch ≤ epoch ∧
         0 < balance := by
   simp [isFullyWithdrawableValidator, and_assoc]
+
+/-- Whether the credentials of a validator name an address depends on their first byte and the fork.
+
+The byte `0x01` names one before and after Electra, and the byte `0x02` only from Electra.
+
+No other byte names one. -/
+theorem hasWithdrawalAddress_eq_true_iff {validator : Validator} :
+    hasWithdrawalAddress fork validator = true ↔
+      validator.withdrawalCredentials[0] = 0x01 ∨
+        (.pectra ≤ fork ∧ validator.withdrawalCredentials[0] = 0x02) := by
+  unfold hasWithdrawalAddress hasExecutionWithdrawalCredential hasEth1WithdrawalCredential
+    hasCompoundingWithdrawalCredential isCompoundingWithdrawalCredential
+  split <;> simp_all [ETH1_ADDRESS_WITHDRAWAL_PREFIX, COMPOUNDING_WITHDRAWAL_PREFIX]
+
+/-- Before Electra, a validator whose credentials do not start with `0x01` is not withdrawable.
+
+It is neither fully withdrawable nor partially withdrawable, whatever its balance and the epoch. -/
+theorem not_withdrawable_of_lt_pectra (before : fork < .pectra) {validator : Validator}
+    (other : validator.withdrawalCredentials[0] ≠ 0x01) (balance : Gwei) (epoch : Epoch) :
+    isFullyWithdrawableValidator fork validator balance epoch = false ∧
+      isPartiallyWithdrawableValidator preset fork validator balance = false := by
+  have noAddress : hasWithdrawalAddress fork validator = false := by
+    rw [Bool.eq_false_iff, ne_eq, hasWithdrawalAddress_eq_true_iff]
+    exact fun h => h.elim other fun h => absurd h.1 (Nat.not_le_of_lt before)
+  simp [isFullyWithdrawableValidator, isPartiallyWithdrawableValidator, noAddress]
 
 /-! ## The latest block header -/
 
