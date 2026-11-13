@@ -97,8 +97,8 @@ namespace ChainView
 
 /-- The logs that the method returns are the matching ones among the receipt objects of the blocks.
 
-They are those of the objects that one call per block gives. -/
-private theorem getLogs_eq_ok {v : ChainView} {f : Filter} {logs : List LogInfo}
+They come in the order of the blocks, then of the logs in each block, with no log twice. -/
+theorem getLogs_eq_ok {v : ChainView} {f : Filter} {logs : List LogInfo}
     (h : v.getLogs f = .ok logs) :
     ∃ blocks infos, v.filterBlocks f.blocks = .ok blocks ∧
       blocks.mapM (·.receiptInfos v.config) = .ok infos ∧
@@ -141,6 +141,25 @@ theorem filterBlocks_aboveHead {v : ChainView} {fromBlock toBlock : Option Block
     rcases hb with rfl | rfl <;> simp [aboveHead, hn]
   unfold filterBlocks
   simp [hA, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
+
+/-- A range whose bounds resolve above the head or out of order is invalid.
+
+No tag that names no block, and no pruned block, changes that error. -/
+theorem filterBlocks_invalid {v : ChainView} {fromBlock toBlock : Option BlockParam}
+    {first last : Nat} (h1 : v.boundNumber fromBlock = .ok first)
+    (h2 : v.boundNumber toBlock = .ok last)
+    (hl : v.head.block.header.number < last ∨ last < first) :
+    ∃ reason, v.filterBlocks (.range fromBlock toBlock) = .error (invalidRange reason) := by
+  unfold filterBlocks
+  by_cases hA : (v.aboveHead fromBlock || v.aboveHead toBlock) = true
+  · refine ⟨"beyond the head", ?_⟩
+    simp [hA, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
+  · by_cases hh : v.head.block.header.number < last
+    · refine ⟨"beyond the head", ?_⟩
+      simp [hA, h1, h2, hh, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
+    · have hl : last < first := hl.resolve_left hh
+      refine ⟨"the first bound is above the last", ?_⟩
+      simp [hA, h1, h2, hh, hl, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
 
 /-- A range reads exactly the canonical blocks between its two bounds.
 
