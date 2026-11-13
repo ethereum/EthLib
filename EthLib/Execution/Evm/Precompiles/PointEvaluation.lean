@@ -18,9 +18,9 @@ The call data names the blob by the versioned hash of its commitment.
 
 namespace EthLib.Execution.Evm.Precompiles.PointEvaluation
 
-open EthLib.Base (natToBytes)
+open EthLib.Base (Bytes32 natToBytes packBytes readBytes)
 open EthLib.Cryptography.Bls (G2 Fr)
-open EthLib.Cryptography.Kzg (kzgCommitmentToVersionedHash parseBytes validateKzgG1Point
+open EthLib.Cryptography.Kzg (Bytes48 kzgCommitmentToVersionedHash validateKzgG1Point
   verifyKzgProofWith)
 
 /-- The size of the call data: a versioned hash, two field elements and two compressed G1 points. -/
@@ -85,15 +85,13 @@ def PointEvaluationError.code : PointEvaluationError → UInt32
 It decodes the inputs and `[tau]_2`, then runs the KZG check with `[tau]_2` alone.
 
 The check holds when the quotient `(p(X) - y) / (X - z)` is a polynomial. -/
-def verifyKzgProof (commitment z y proof : ByteArray) : Except PointEvaluationError Bool := do
+def verifyKzgProof (commitment : Bytes48) (z y : Bytes32) (proof : Bytes48) :
+    Except PointEvaluationError Bool := do
   -- The inputs are decoded in the order of EIP-4844.
-  let commitmentPoint ←
-    (parseBytes 48 .badCommitmentSize commitment >>= validateKzgG1Point).mapError
-      fun _ => .invalidCommitment
-  let zField ← (Fr.fromBytesBE z).mapError fun _ => .invalidFieldElement
-  let yField ← (Fr.fromBytesBE y).mapError fun _ => .invalidFieldElement
-  let proofPoint ←
-    (parseBytes 48 .badProofSize proof >>= validateKzgG1Point).mapError fun _ => .invalidProof
+  let commitmentPoint ← (validateKzgG1Point commitment).mapError fun _ => .invalidCommitment
+  let zField ← (Fr.fromBytesBE (packBytes z)).mapError fun _ => .invalidFieldElement
+  let yField ← (Fr.fromBytesBE (packBytes y)).mapError fun _ => .invalidFieldElement
+  let proofPoint ← (validateKzgG1Point proof).mapError fun _ => .invalidProof
   let tau ← (G2.uncompress KZG_SETUP_G2_MONOMIAL_1).mapError fun _ => .invalidTrustedSetup
   return verifyKzgProofWith tau commitmentPoint zField yField proofPoint
 
@@ -103,21 +101,23 @@ They are the number of field elements in a blob, then the order of the scalar fi
 def output : ByteArray :=
   ⟨(natToBytes 32 FIELD_ELEMENTS_PER_BLOB ++ natToBytes 32 Fr.modulus).toArray⟩
 
-/-- The call: it checks the length, charges the gas, then checks the hash and the proof. -/
-def pointEvaluation (data : ByteArray) (gas : Nat) : Except PointEvaluationError ByteArray := do
-  if data.size ≠ INPUT_BYTES then
-    throw (.invalidInputLength data.size)
-  if gas < GAS_POINT_EVALUATION then
-    throw (.outOfGas GAS_POINT_EVALUATION gas)
-  let versionedHash := data.extract 0 32
-  let z := data.extract 32 64
-  let y := data.extract 64 96
-  let commitment := data.extract 96 144
-  let proof := data.extract 144 192
-  if (kzgCommitmentToVersionedHash commitment).toArray ≠ versionedHash.data then
-    throw .versionedHashMismatch
-  if !(← verifyKzgProof commitment z y proof) then
-    throw .proofRejected
-  return output
+/-- The call: it checks the length, charges the gas, then checks the hash and the proof.
+
+Once the length is checked, the call data splits into fields of 32, 32, 32, 48 and 48 bytes. -/
+def pointEvaluation (data : ByteArray) (gas : Nat) : Except PointEvaluationError ByteArray :=
+  if fits : data.size = INPUT_BYTES then do
+    if gas < GAS_POINT_EVALUATION then
+      throw (.outOfGas GAS_POINT_EVALUATION gas)
+    let versionedHash := readBytes data 0 32 (by simp [fits, INPUT_BYTES])
+    let z := readBytes data 32 32 (by simp [fits, INPUT_BYTES])
+    let y := readBytes data 64 32 (by simp [fits, INPUT_BYTES])
+    let commitment := readBytes data 96 48 (by simp [fits, INPUT_BYTES])
+    let proof := readBytes data 144 48 (by simp [fits, INPUT_BYTES])
+    if kzgCommitmentToVersionedHash commitment ≠ versionedHash then
+      throw .versionedHashMismatch
+    if !(← verifyKzgProof commitment z y proof) then
+      throw .proofRejected
+    return output
+  else .error (.invalidInputLength data.size)
 
 end EthLib.Execution.Evm.Precompiles.PointEvaluation

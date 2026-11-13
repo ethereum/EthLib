@@ -131,7 +131,7 @@ def decodeNetwork (fork : Fork) (bytes : ByteArray) :
 
 /-- The versioned hash of a commitment: `0x01`, then the last 31 bytes of its SHA-256 hash. -/
 def versionedHash (commitment : KZGCommitment) : Bytes32 :=
-  Cryptography.Kzg.kzgCommitmentToVersionedHash ⟨commitment.toArray⟩
+  Cryptography.Kzg.kzgCommitmentToVersionedHash commitment
 
 /-- Whether each commitment hashes to the versioned hash at its position. -/
 def hashesMatch (hashes : List Bytes32) (commitments : List KZGCommitment) : Bool :=
