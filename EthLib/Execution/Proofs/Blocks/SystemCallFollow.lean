@@ -235,7 +235,9 @@ theorem exists_rebuildable_systemCall {fork : Fork} (hfork : .paris ≤ fork)
 
 /-- From Spurious Dragon, a system call keeps the delegation property.
 
-No account with nonce 0 has the code hash of a delegation indicator. -/
+No account with nonce 0 has the code hash of a delegation indicator.
+
+It assumes that the block state before the call can be rebuilt. -/
 theorem systemCall_delegationsHaveNonce {fork : Fork} (hfork : .spuriousDragon ≤ fork)
     {env : BlockEnvironment fork} {block : BlockState} {target : Address} {data : ByteArray}
     {out : SystemCallOutput} (valid : Rebuildable block)

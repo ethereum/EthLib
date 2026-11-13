@@ -99,7 +99,7 @@ An authorization sets an indicator and then raises the nonce of its authority.
 
 From Spurious Dragon, a creation raises the nonce of its address before it deposits code.
 
-So only a contract created before Spurious Dragon could break it, with an indicator as its code.
+So only a contract created before Spurious Dragon or placed at genesis could break it.
 
 No contract on mainnet started with the byte 0xef in May 2021, by [EIP-3541][eip3541].
 
