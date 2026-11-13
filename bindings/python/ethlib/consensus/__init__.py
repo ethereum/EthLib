@@ -67,6 +67,13 @@ def is_valid_builder_signature(
     return _native.consensus_is_valid_builder_signature(name, fork, config, type_name, data)
 
 
+def unblind_signed_blinded_block(
+    name: str, fork: str, blinded: bytes, revealed: bytes
+) -> tuple[bytes, bytes] | None:
+    """The root and bytes of the signed block that a signed blinded block and a payload give."""
+    return _native.consensus_unblind_signed_blinded_block(name, fork, blinded, revealed)
+
+
 def verify_builder_request_auth_signature(
     name: str,
     fork: str,
@@ -1267,6 +1274,7 @@ __all__ = [
     "compute_columns_for_custody_group",
     "ssz_static",
     "is_valid_builder_signature",
+    "unblind_signed_blinded_block",
     "verify_builder_request_auth_signature",
     "builder_bid_value",
     "consensus_version",

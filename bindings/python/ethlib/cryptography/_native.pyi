@@ -565,6 +565,10 @@ def consensus_is_valid_builder_signature(name: str, fork: str, config: dict[str,
     """Whether the signature of a signed message of the Builder API verifies."""
     ...
 
+def consensus_unblind_signed_blinded_block(name: str, fork: str, blinded: bytes, revealed: bytes) -> tuple[bytes, bytes] | None:
+    """The root and the bytes of the signed block that a signed blinded block and a payload give."""
+    ...
+
 def consensus_verify_builder_request_auth_signature(name: str, fork: str, config: dict[str, Any] | None, pubkey: bytes, data: bytes) -> bool:
     """Whether a proposer key signed a Gloas request authentication given in SSZ."""
     ...

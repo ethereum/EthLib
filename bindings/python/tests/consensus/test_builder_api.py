@@ -377,6 +377,97 @@ def test_no_blobs_bundle_outside_deneb_to_fulu(fork: str, name: str):
     assert info.value.code == 0
 
 
+# The example of the payload that a builder reveals, by fork.
+REVEALED = {
+    "bellatrix": "execution_payload",
+    "capella": "execution_payload",
+    "deneb": "execution_payload_and_blobs_bundle",
+    "electra": "execution_payload_and_blobs_bundle",
+    "fulu": "execution_payload_and_blobs_bundle",
+}
+# The generalized index of the transactions root of a payload: 16 leaves before Deneb, 32 from it.
+TRANSACTIONS_AT = {"bellatrix": 29, "capella": 29, "deneb": 45, "electra": 45, "fulu": 45}
+# The header of a payload holds the transactions root after 504 bytes.
+# From Capella the withdrawals root follows it.
+HEADER_TRANSACTIONS_AT = 504
+
+
+def _payload(source: str) -> bytes:
+    """The payload alone of the example that a builder reveals at a fork."""
+    data = _example(source, REVEALED[source])
+    if source in ("bellatrix", "capella"):
+        return data
+    payload_at, bundle_at = struct.unpack_from("<II", data, 0)
+    return data[payload_at:bundle_at]
+
+
+def _header_at(signed: bytes) -> int:
+    """Where the header of the payload starts in a signed blinded block."""
+    (message_at,) = struct.unpack_from("<I", signed, 0)
+    (body_at,) = struct.unpack_from("<I", signed, message_at + 80)
+    # Before the header: the reveal, the eth1 vote, the graffiti, five offsets, the sync aggregate.
+    (header_at,) = struct.unpack_from("<I", signed, message_at + body_at + 96 + 72 + 32 + 20 + 160)
+    return message_at + body_at + header_at
+
+
+def _matching_blinded(source: str) -> bytes:
+    """The example blinded block, with the payload's transactions and withdrawals roots."""
+    fork = consensus.consensus_version_fork(source)
+    payload = _payload(source)
+    signed = bytearray(_example(source, "signed_blinded_beacon_block"))
+    at = _header_at(bytes(signed)) + HEADER_TRANSACTIONS_AT
+    for offset in range(2 if source != "bellatrix" else 1):
+        gindex = TRANSACTIONS_AT[source] + offset
+        node, _ = consensus.merkle_proof("mainnet", fork, "ExecutionPayload", payload, gindex)
+        signed[at + 32 * offset : at + 32 * offset + 32] = node
+    return bytes(signed)
+
+
+@pytest.mark.parametrize("source", VERSIONS)
+def test_unblind(source: str):
+    # A blinded block whose header is that of the payload unblinds to a block of the same root.
+    fork = consensus.consensus_version_fork(source)
+    blinded = _matching_blinded(source)
+    blinded_root, _ = consensus.ssz_static("mainnet", fork, "SignedBlindedBeaconBlock", blinded)
+    revealed = _example(source, REVEALED[source])
+    result = consensus.unblind_signed_blinded_block("mainnet", fork, blinded, revealed)
+    assert result is not None
+    root, full = result
+    assert consensus.ssz_static("mainnet", fork, "SignedBeaconBlock", full) == (root, full)
+    # The block has the root of the blinded block, keeps its signature and holds the payload.
+    assert root == blinded_root
+    assert full[4:100] == blinded[4:100]
+    assert _payload(source) in full
+
+
+@pytest.mark.parametrize("source", VERSIONS)
+def test_unblind_example_pair(source: str):
+    # The pinned blinded block carries placeholder roots, so its header is not that of the payload.
+    fork = consensus.consensus_version_fork(source)
+    blinded = _example(source, "signed_blinded_beacon_block")
+    revealed = _example(source, REVEALED[source])
+    assert consensus.unblind_signed_blinded_block("mainnet", fork, blinded, revealed) is None
+
+
+def test_unblind_changed_payload():
+    # One bit of the block hash changes the header, so the payload no longer matches.
+    blinded = _matching_blinded("deneb")
+    revealed = bytearray(_example("deneb", REVEALED["deneb"]))
+    (payload_at,) = struct.unpack_from("<I", revealed, 0)
+    revealed[payload_at + 472] ^= 1
+    assert (
+        consensus.unblind_signed_blinded_block("mainnet", "dencun", blinded, bytes(revealed))
+        is None
+    )
+
+
+@pytest.mark.parametrize("fork", ["altair", "glamsterdam"])
+def test_no_unblinding_outside_bellatrix_to_fulu(fork: str):
+    with raises(ERROR, f"no Builder API messages at {fork}") as info:
+        consensus.unblind_signed_blinded_block("mainnet", fork, b"", b"")
+    assert info.value.code == 0
+
+
 def test_unknown_message():
     with raises(ERROR, "no signed message SignedBlindedBeaconBlock in the Builder API") as info:
         consensus.is_valid_builder_signature(

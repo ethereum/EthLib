@@ -422,6 +422,9 @@
 #define DOC_consensus_is_valid_builder_signature \
   "Whether the signature of a signed message of the Builder API verifies."
 
+#define DOC_consensus_unblind_signed_blinded_block \
+  "The root and the bytes of the signed block that a signed blinded block and a payload give."
+
 #define DOC_consensus_verify_builder_request_auth_signature \
   "Whether a proposer key signed a Gloas request authentication given in SSZ."
 

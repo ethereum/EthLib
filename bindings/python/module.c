@@ -786,6 +786,8 @@ static PyMethodDef methods[] = {
   {"consensus_ssz_static", py_consensus_ssz_static, METH_VARARGS, DOC_consensus_ssz_static},
   {"consensus_is_valid_builder_signature", py_consensus_is_valid_builder_signature,
    METH_VARARGS, DOC_consensus_is_valid_builder_signature},
+  {"consensus_unblind_signed_blinded_block", py_consensus_unblind_signed_blinded_block,
+   METH_VARARGS, DOC_consensus_unblind_signed_blinded_block},
   {"consensus_verify_builder_request_auth_signature",
    py_consensus_verify_builder_request_auth_signature,
    METH_VARARGS, DOC_consensus_verify_builder_request_auth_signature},
