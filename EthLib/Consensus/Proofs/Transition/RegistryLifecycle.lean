@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Consensus.Proofs.Transition.EpochParticipation
 public import EthLib.Consensus.Proofs.Transition.Invariants
 public import EthLib.Consensus.Proofs.Transition.Trace
 
@@ -158,6 +159,120 @@ theorem decreaseBalance {index : ValidatorIndex} {delta : Gwei}
   of_data (by rw [decreaseBalance_validators computed])
 
 end RegistryLifecycle
+
+/-- An epoch stage keeps the validators, unless it is one of three stages.
+
+Those are registry updates, pending deposits and effective-balance updates. -/
+theorem EpochStage.Edge.validators_eq {stage : EpochStage} {s t : BeaconState preset fork}
+    (edge : EpochStage.Edge config checks stage s t)
+    (other : stage ≠ .registry ∧ stage ≠ .pendingDeposits ∧ stage ≠ .effectiveBalances) :
+    t.validators = s.validators := by
+  -- A fold whose steps keep the validators keeps them.
+  have fold {step : BeaconState preset fork → Nat → Except TransitionError _} {xs : List Nat}
+      (kept : ∀ a i b, step a i = .ok b → b.validators = a.validators)
+      (ok : xs.foldlM step s = .ok t) : t.validators = s.validators :=
+    foldlM_ok_invariant (fun t => t.validators = s.validators)
+      (fun _ _ _ previous ok => (kept _ _ _ ok).trans previous) rfl ok
+  cases stage <;> simp only [EpochStage.Edge] at edge
+  case justification => exact (processJustificationAndFinalization_keeps edge).2.2.2.2.2.1
+  case inactivity =>
+    split at edge
+    · rw [processInactivityUpdates_frame edge]
+    · exact edge ▸ rfl
+  case rewards => rw [processRewardsAndPenalties_frame edge]
+  case slashings =>
+    unfold processSlashings at edge
+    simp only [bind_ok_iff] at edge
+    obtain ⟨_, _, _, _, _, _, edge⟩ := edge
+    split at edge
+    · obtain ⟨_, _, applied⟩ := bind_ok_iff.mp edge
+      refine fold (fun _ _ _ ok => ?_) applied
+      simp only [applySlashingPenaltyElectra, bind_ok_iff, liftAccessor_ok] at ok
+      obtain ⟨_, _, ok⟩ := ok
+      split at ok
+      · obtain ⟨_, _, ok⟩ := bind_ok_iff.mp ok
+        split at ok
+        · simp only [bind_ok_iff, liftAccessor_ok] at ok
+          obtain ⟨_, _, _, _, lowered⟩ := ok
+          exact decreaseBalance_validators lowered
+        · cases ok; rfl
+      · cases ok; rfl
+    · refine fold (fun _ _ _ ok => ?_) edge
+      simp only [applySlashingPenalty, bind_ok_iff, liftAccessor_ok] at ok
+      obtain ⟨_, _, ok⟩ := ok
+      split at ok
+      · obtain ⟨_, _, ok⟩ := bind_ok_iff.mp ok
+        split at ok
+        · simp only [bind_ok_iff, liftAccessor_ok] at ok
+          obtain ⟨_, _, _, _, _, _, lowered⟩ := ok
+          exact decreaseBalance_validators lowered
+        · cases ok; rfl
+      · cases ok; rfl
+  case eth1Reset =>
+    split at edge
+    · simp only [processEth1DataReset, bind_ok_iff, liftAccessor_ok] at edge
+      obtain ⟨_, _, edge⟩ := edge
+      split at edge <;> cases edge <;> rfl
+    · exact edge ▸ rfl
+  case pendingConsolidations =>
+    split at edge
+    · exact (processPendingConsolidations_kept edge).1
+    · exact edge ▸ rfl
+  case payments =>
+    split at edge
+    · rw [processBuilderPendingPayments_eq edge]
+    · exact edge ▸ rfl
+  case slashingsReset =>
+    obtain ⟨_, _, _, _, rfl⟩ := processSlashingsReset_eq edge
+    rfl
+  case randaoReset =>
+    obtain ⟨_, _, _, _, _, _, rfl⟩ := processRandaoMixesReset_eq edge
+    rfl
+  case history =>
+    split at edge
+    · unfold processHistoricalSummariesUpdate at edge
+      simp only [bind, Except.bind, pure, Except.pure] at edge
+      repeat' (split at edge <;> try cases edge)
+      all_goals rfl
+    · unfold processHistoricalRootsUpdate at edge
+      split at edge
+      · cases edge
+      simp only [bind_ok_iff, liftAccessor_ok] at edge
+      obtain ⟨_, _, edge⟩ := edge
+      split at edge
+      · simp only [bind_ok_iff, liftSsz_ok, pure, Except.pure, Except.ok.injEq] at edge
+        obtain ⟨_, _, _, _, rfl⟩ := edge
+        rfl
+      · cases edge; rfl
+  case participation =>
+    split at edge
+    · subst edge
+      rfl
+    · unfold processParticipationRecordUpdates at edge
+      split at edge
+      · cases edge
+      · cases edge; rfl
+  case syncCommittees =>
+    split at edge
+    · unfold processSyncCommitteeUpdates at edge
+      simp only [bind, Except.bind, pure, Except.pure] at edge
+      repeat' (split at edge <;> try cases edge)
+      all_goals rfl
+    · exact edge ▸ rfl
+  case proposerLookahead =>
+    split at edge
+    · simp only [processProposerLookahead, bind_ok_iff, pure, Except.pure,
+        Except.ok.injEq] at edge
+      obtain ⟨_, _, _, _, rfl⟩ := edge
+      rfl
+    · exact edge ▸ rfl
+  case ptcWindow =>
+    split at edge
+    · simp only [processPtcWindow, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at edge
+      obtain ⟨_, _, _, _, rfl⟩ := edge
+      rfl
+    · exact edge ▸ rfl
+  all_goals simp at other
 
 /-! ## Mutators -/
 
@@ -887,31 +1002,6 @@ theorem registryLifecycle_processEffectiveBalanceUpdates
   obtain ⟨validator, found, _, _, _, _, set⟩ := ok
   exact .setValidatorAt found set ⟨fun _ => rfl, fun _ => rfl⟩
 
-private theorem registryLifecycle_processHistoricalRootsUpdate
-    (computed : processHistoricalRootsUpdate state = .ok after) :
-    RegistryLifecycle state after := by
-  unfold processHistoricalRootsUpdate at computed
-  split at computed
-  · cases computed
-  simp only [bind_ok_iff, liftAccessor_ok] at computed
-  obtain ⟨_, _, computed⟩ := computed
-  split at computed
-  · simp only [bind_ok_iff, liftSsz_ok, pure, Except.pure, Except.ok.injEq] at computed
-    obtain ⟨_, _, _, _, rfl⟩ := computed
-    exact .of_data rfl
-  · simp only [pure, Except.pure, Except.ok.injEq] at computed
-    exact computed ▸ .refl _
-
-private theorem registryLifecycle_processParticipationRecordUpdates
-    (computed : processParticipationRecordUpdates state = .ok after) :
-    RegistryLifecycle state after := by
-  unfold processParticipationRecordUpdates at computed
-  split at computed
-  · cases computed
-  simp only [pure, Except.pure, Except.ok.injEq] at computed
-  subst computed
-  exact .of_data rfl
-
 /-! ## The steps of an epoch from Altair -/
 
 theorem registryLifecycle_processInactivityUpdates {altair : .altair ≤ fork}
@@ -1034,61 +1124,15 @@ theorem registryLifecycle_processEpoch
   apply (processEpoch_trace computed).transport RegistryLifecycle .refl (fun a b => a.trans b)
   intro k _ a b ok
   have edge := EpochStage.action_cases.mp ok
-  cases k <;> simp only [EpochStage.Edge] at edge
-  · exact registryLifecycle_processJustificationAndFinalization edge
-  · split at edge
-    · exact registryLifecycle_processInactivityUpdates edge
-    · exact edge ▸ .refl _
-  · exact registryLifecycle_processRewardsAndPenalties edge
-  · exact registryLifecycle_processRegistryUpdates edge
-  · exact registryLifecycle_processSlashings edge
-  · split at edge
-    · exact registryLifecycle_processEth1DataReset edge
-    · exact edge ▸ .refl _
-  · split at edge
+  cases k
+  case registry => exact registryLifecycle_processRegistryUpdates edge
+  case pendingDeposits =>
+    simp only [EpochStage.Edge] at edge
+    split at edge
     · exact registryLifecycle_processPendingDeposits edge
     · exact edge ▸ .refl _
-  · split at edge
-    · exact registryLifecycle_processPendingConsolidations edge
-    · exact edge ▸ .refl _
-  · split at edge
-    · rw [processBuilderPendingPayments_eq edge]
-      exact .of_data rfl
-    · exact edge ▸ .refl _
-  · exact registryLifecycle_processEffectiveBalanceUpdates edge
-  · obtain ⟨_, _, _, _, rfl⟩ := processSlashingsReset_eq edge
-    exact .of_data rfl
-  · obtain ⟨_, _, _, _, _, _, rfl⟩ := processRandaoMixesReset_eq edge
-    exact .of_data rfl
-  · split at edge
-    · unfold processHistoricalSummariesUpdate at edge
-      simp only [bind, Except.bind, pure, Except.pure] at edge
-      repeat' (split at edge <;> try cases edge)
-      all_goals first
-        | exact .refl _
-        | exact .of_data rfl
-    · exact registryLifecycle_processHistoricalRootsUpdate edge
-  · split at edge
-    · subst edge
-      exact .of_data rfl
-    · exact registryLifecycle_processParticipationRecordUpdates edge
-  · split at edge
-    · unfold processSyncCommitteeUpdates at edge
-      simp only [bind, Except.bind, pure, Except.pure] at edge
-      repeat' (split at edge <;> try cases edge)
-      all_goals exact .of_data rfl
-    · exact edge ▸ .refl _
-  · split at edge
-    · simp only [processProposerLookahead, bind_ok_iff, pure, Except.pure,
-        Except.ok.injEq] at edge
-      obtain ⟨_, _, _, _, rfl⟩ := edge
-      exact .of_data rfl
-    · exact edge ▸ .refl _
-  · split at edge
-    · simp only [processPtcWindow, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at edge
-      obtain ⟨_, _, _, _, rfl⟩ := edge
-      exact .of_data rfl
-    · exact edge ▸ .refl _
+  case effectiveBalances => exact registryLifecycle_processEffectiveBalanceUpdates edge
+  all_goals exact .of_data (congrArg (·.data) (edge.validators_eq ⟨nofun, nofun, nofun⟩))
 
 /-! ## Slots, upgrades and chains -/
 
@@ -1551,27 +1595,6 @@ private theorem upgradeNext {pre : ForkedBeaconState preset}
     obtain ⟨_, rfl⟩ := upgradeToHeze_ok_iff.mp upgraded
     exact of_data (upgradeHezeFields_lists _).1
 
-private theorem historicalRoots
-    (ok : processHistoricalRootsUpdate state = .ok after) : UnassignedKept state after := by
-  unfold processHistoricalRootsUpdate at ok
-  split at ok
-  · cases ok
-  simp only [bind_ok_iff, liftAccessor_ok] at ok
-  obtain ⟨_, _, ok⟩ := ok
-  split at ok
-  · simp only [bind_ok_iff, liftSsz_ok, pure, Except.pure, Except.ok.injEq] at ok
-    obtain ⟨_, _, _, _, rfl⟩ := ok
-    exact of_data
-  · cases ok; exact refl _
-
-private theorem historicalSummaries {capella : .shapella ≤ fork}
-    (ok : processHistoricalSummariesUpdate state capella = .ok after) :
-    UnassignedKept state after := by
-  unfold processHistoricalSummariesUpdate at ok
-  simp only [bind, Except.bind, pure, Except.pure] at ok
-  repeat' (split at ok <;> try cases ok)
-  all_goals exact of_data
-
 end UnassignedKept
 
 -- Before the admission phase, no operation changes the length of the validator registry.
@@ -1595,22 +1618,6 @@ private theorem foldlM {α ε : Type} {step : BeaconState preset fork → α →
     (ok : xs.foldlM step state = .ok after) : RegistrySize state after :=
   foldlM_ok_invariant (RegistrySize state)
     (fun _ _ _ h ok => h.trans (keeps _ _ _ ok)) (refl state) ok
-
-private theorem inactivity {altair : .altair ≤ fork}
-    (ok : processInactivityUpdates config state altair = .ok after) :
-    RegistrySize state after := by
-  unfold processInactivityUpdates at ok
-  split at ok
-  · cases ok; rfl
-  · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
-    obtain ⟨_, _, _, _, rfl⟩ := ok
-    rfl
-
-private theorem eth1Reset {before : fork < .hegota}
-    (ok : processEth1DataReset before state = .ok after) : RegistrySize state after := by
-  simp only [processEth1DataReset, bind_ok_iff, liftAccessor_ok] at ok
-  obtain ⟨_, _, ok⟩ := ok
-  split at ok <;> cases ok <;> rfl
 
 private theorem executionPayload {body : BeaconBlockBody preset fork}
     {bellatrix : .bellatrix ≤ fork ∧ fork < .glamsterdam}
@@ -1702,18 +1709,10 @@ private theorem newUnassigned_processEpoch
     apply head.transport RegistrySize RegistrySize.refl (fun a b => a.trans b)
     intro k member a b computed
     have edge := EpochStage.action_cases.mp computed
-    cases k <;> simp only [EpochStage.Edge] at edge
-    · exact (sameSizes_processJustificationAndFinalization edge).1
-    · split at edge
-      · exact RegistrySize.inactivity edge
-      · exact edge ▸ RegistrySize.refl _
-    · exact (processRewardsAndPenalties_sameSizes edge).1
-    · exact (sameSizes_processRegistryUpdates edge).1
-    · exact (sameSizes_processSlashings edge).1
-    · split at edge
-      · exact RegistrySize.eth1Reset edge
-      · exact edge ▸ RegistrySize.refl _
-    all_goals simp at member
+    cases k
+    case registry => exact (sameSizes_processRegistryUpdates edge).1
+    case pendingDeposits | effectiveBalances => simp at member
+    all_goals exact congrArg (·.data.size) (edge.validators_eq ⟨nofun, nofun, nofun⟩)
   -- All assignments precede pending deposits, so this suffix is empty at admission's start.
   have atReset : UnassignedFrom state.validators.data.size reset := by
     rw [← before]
@@ -1721,60 +1720,16 @@ private theorem newUnassigned_processEpoch
   refine tail.transport UnassignedKept UnassignedKept.refl (fun a b => a.trans b) ?_ _ atReset
   intro k member a b computed
   have edge := EpochStage.action_cases.mp computed
-  cases k <;> simp only [EpochStage.Edge] at edge
+  cases k
+  case registry => simp [EpochStage.middleStages, EpochStage.tailStages] at member
   case pendingDeposits =>
+    simp only [EpochStage.Edge] at edge
     split at edge
     · exact UnassignedKept.processPendingDeposits edge
     · exact edge ▸ UnassignedKept.refl _
-  case pendingConsolidations =>
-    split at edge
-    · exact UnassignedKept.of_data (by rw [(processPendingConsolidations_kept edge).1])
-    · exact edge ▸ UnassignedKept.refl _
-  case payments =>
-    split at edge
-    · rw [processBuilderPendingPayments_eq edge]
-      exact UnassignedKept.of_data
-    · exact edge ▸ UnassignedKept.refl _
   case effectiveBalances => exact UnassignedKept.processEffectiveBalanceUpdates edge
-  case slashingsReset =>
-    obtain ⟨_, _, _, _, rfl⟩ := processSlashingsReset_eq edge
-    exact UnassignedKept.of_data
-  case randaoReset =>
-    obtain ⟨_, _, _, _, _, _, rfl⟩ := processRandaoMixesReset_eq edge
-    exact UnassignedKept.of_data
-  case history =>
-    split at edge
-    · exact UnassignedKept.historicalSummaries edge
-    · exact UnassignedKept.historicalRoots edge
-  case participation =>
-    split at edge
-    · subst edge
-      exact UnassignedKept.of_data
-    · unfold processParticipationRecordUpdates at edge
-      split at edge
-      · cases edge
-      · cases edge; exact UnassignedKept.of_data
-  case syncCommittees =>
-    split at edge
-    · unfold processSyncCommitteeUpdates at edge
-      simp only [bind, Except.bind, pure, Except.pure] at edge
-      repeat' (split at edge <;> try cases edge)
-      all_goals exact UnassignedKept.of_data
-    · exact edge ▸ UnassignedKept.refl _
-  case proposerLookahead =>
-    split at edge
-    · simp only [processProposerLookahead, bind_ok_iff, pure, Except.pure,
-        Except.ok.injEq] at edge
-      obtain ⟨_, _, _, _, rfl⟩ := edge
-      exact UnassignedKept.of_data
-    · exact edge ▸ UnassignedKept.refl _
-  case ptcWindow =>
-    split at edge
-    · simp only [processPtcWindow, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at edge
-      obtain ⟨_, _, _, _, rfl⟩ := edge
-      exact UnassignedKept.of_data
-    · exact edge ▸ UnassignedKept.refl _
-  all_goals simp [EpochStage.middleStages, EpochStage.tailStages] at member
+  all_goals
+    exact UnassignedKept.of_data (congrArg (·.data) (edge.validators_eq ⟨nofun, nofun, nofun⟩))
 
 private theorem newUnassigned_advanceSlot
     (ok : advanceSlot config checks state = .ok after) :
