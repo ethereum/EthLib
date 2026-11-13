@@ -402,7 +402,8 @@ private theorem effectiveKept_requests {f : Fork} {s t : BeaconState preset f}
       (fun _ _ _ ok => (registryLifecycle_processConsolidationRequest ok).size_le) consolidations)
     grows'.size_le) grows.size_le
 
-private theorem effectiveKept_sync {f : Fork} {s t : BeaconState preset f}
+/-- The sync aggregate changes balances only, so it keeps every effective balance. -/
+theorem effectiveKept_sync {f : Fork} {s t : BeaconState preset f}
     {altair : .altair ≤ f} {aggregate : SyncAggregate preset}
     (ok : processSyncAggregate config checks s altair aggregate = .ok t) : EffectiveKept s t := by
   unfold processSyncAggregate at ok

@@ -1446,7 +1446,7 @@ private theorem recordBalance_matched {fork : Fork} (source : BalanceSource)
   exact bound pre.1 after credit debit initial.1 limitOk actionOk
 
 /-- Every event of a block replay is bounded by its recorded limits. -/
-private theorem blockBalanceReplay_bounded {fork : Fork} {s : BeaconState preset fork}
+theorem blockBalanceReplay_bounded {fork : Fork} {s : BeaconState preset fork}
     (early : fork < .glamsterdam) (engine : ExecutionEngine preset fork)
     (block : BeaconBlock preset fork) {post : BalanceReplay preset fork}
     (matched : BalancesMatch s)
@@ -1917,7 +1917,7 @@ private theorem coverage_epoch {fork : Fork} {s : BeaconState preset fork}
   all_goals simp [EpochStage.prefixStages] at member
 
 /-- A voluntary exit keeps the balances. -/
-private theorem coverage_voluntary {fork : Fork} {s t : BeaconState preset fork}
+theorem coverage_voluntary {fork : Fork} {s t : BeaconState preset fork}
     {signed : SignedVoluntaryExit} (ok : processVoluntaryExit config checks s signed = .ok t) :
     t.balances = s.balances := by
   simp only [processVoluntaryExit, bind_ok_iff] at ok
@@ -1925,7 +1925,7 @@ private theorem coverage_voluntary {fork : Fork} {s t : BeaconState preset fork}
   exact coverage_exit (liftAccessor_ok.mp exited)
 
 /-- A BLS-to-execution change keeps the balances. -/
-private theorem coverage_bls {fork : Fork} {s t : BeaconState preset fork}
+theorem coverage_bls {fork : Fork} {s t : BeaconState preset fork}
     {signed : SignedBLSToExecutionChange}
     (ok : processBlsToExecutionChange config checks s signed = .ok t) :
     t.balances = s.balances := by
@@ -1935,7 +1935,7 @@ private theorem coverage_bls {fork : Fork} {s t : BeaconState preset fork}
   rfl
 
 /-- A withdrawal request keeps the balances. -/
-private theorem coverage_withdrawal_request {fork : Fork} {s t : BeaconState preset fork}
+theorem coverage_withdrawal_request {fork : Fork} {s t : BeaconState preset fork}
     {electra : .pectra ≤ fork} {request : WithdrawalRequest}
     (ok : processWithdrawalRequest config s electra request = .ok t) :
     t.balances = s.balances := by
@@ -2632,7 +2632,7 @@ private theorem funding_append {fork : Fork} {s t : BeaconState preset fork}
   split <;> omega
 
 /-- Adding a validator raises the potential by at most its amount. -/
-private theorem funding_registration {fork : Fork} {s t : BeaconState preset fork}
+theorem funding_registration {fork : Fork} {s t : BeaconState preset fork}
     (queue : List PendingConsolidation) {key : Cryptography.Bls.BLSPubkey}
     {credentials : Bytes32} {amount : Gwei}
     (matched : BalancesMatch s)
