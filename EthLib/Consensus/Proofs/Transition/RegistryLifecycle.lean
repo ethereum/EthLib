@@ -3,6 +3,7 @@ module
 public import EthLib.Consensus.Proofs.Transition.EpochParticipation
 public import EthLib.Consensus.Proofs.Transition.Invariants
 public import EthLib.Consensus.Proofs.Transition.Trace
+import EthLib.Consensus.Proofs.Transition.Withdrawals
 
 /-!
 # Proofs: the lifecycle of a validator, at every fork
@@ -446,13 +447,19 @@ theorem registryLifecycle_processDeposit {before : fork < .hegota} {deposit : De
     (after := { state with eth1DepositIndex := fun _ => next }) rfl).trans
     (registryLifecycle_applyDeposit applied)
 
-theorem registryLifecycle_processVoluntaryExit {signed : SignedVoluntaryExit}
+/-- A successful voluntary exit is the exit call on the state before it. -/
+theorem processVoluntaryExit_initiates {signed : SignedVoluntaryExit}
     (computed : processVoluntaryExit config checks state signed = .ok after) :
-    RegistryLifecycle state after := by
+    initiateValidatorExit config state signed.message.validatorIndex = .ok after := by
   unfold processVoluntaryExit at computed
   simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok, liftSsz_ok] at computed
   obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, exited⟩ := computed
-  exact registryLifecycle_initiateValidatorExit exited
+  exact exited
+
+theorem registryLifecycle_processVoluntaryExit {signed : SignedVoluntaryExit}
+    (computed : processVoluntaryExit config checks state signed = .ok after) :
+    RegistryLifecycle state after :=
+  registryLifecycle_initiateValidatorExit (processVoluntaryExit_initiates computed)
 
 /-! ## Requests of the execution layer -/
 
@@ -613,12 +620,8 @@ theorem processWithdrawals_validators {capella : .shapella ≤ fork}
       rw [← Array.foldlM_toList] at appliedOk
       refine foldlM_ok_invariant (fun t => t.validators = state.validators) ?_ rfl appliedOk
       intro _ _ _ kept stepped
-      unfold applyWithdrawal at stepped
-      split at stepped
-      · obtain ⟨_, _, set⟩ := bind_ok_iff.mp stepped
-        obtain ⟨_, rfl⟩ := setBuilder_ok set
-        exact kept
-      · exact (decreaseBalance_validators stepped).trans kept
+      rw [applyWithdrawal_eq stepped]
+      exact kept
     have moved : indexed.validators = applied.validators := by
       unfold updateNextWithdrawalIndex at indexedOk
       split at indexedOk
@@ -679,6 +682,46 @@ theorem processWithdrawals_validators {capella : .shapella ≤ fork}
     obtain ⟨_, _, _, _, applied⟩ := computed
     exact expected applied
 
+/-- The sync aggregate changes balances only, never the validators. -/
+theorem processSyncAggregate_validators {altair : .altair ≤ fork}
+    {aggregate : SyncAggregate preset}
+    (computed : processSyncAggregate config checks state altair aggregate = .ok after) :
+    after.validators = state.validators := by
+  unfold processSyncAggregate at computed
+  simp only [bind_ok_iff] at computed
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, folded⟩ := computed
+  rw [← Array.foldlM_toList] at folded
+  refine foldlM_ok_invariant (fun t => t.validators = state.validators) ?_ rfl folded
+  intro _ _ _ kept stepped
+  unfold applySyncReward at stepped
+  split at stepped
+  · simp only [bind_ok_iff, liftAccessor_ok] at stepped
+    obtain ⟨_, raised, _, _, paid⟩ := stepped
+    exact (increaseBalance_validators paid).trans ((increaseBalance_validators raised).trans kept)
+  · exact (decreaseBalance_validators (liftAccessor_ok.mp stepped)).trans kept
+
+/-- Before Gloas, the steps of a block before its operations keep the validators.
+
+From Gloas the payload of the parent runs first, and its requests can start exits. -/
+theorem OperationsInput.validators_eq {block : BeaconBlock preset fork}
+    {input : BeaconState preset fork} (early : fork < .glamsterdam)
+    (started : OperationsInput config checks engine state block input) :
+    input.validators = state.validators :=
+  started.step_of (fun a b => b.validators = a.validators) (fun _ => rfl)
+    (fun one two => two.trans one) (fun gloas _ => absurd gloas (Nat.not_le_of_lt early))
+    (fun headed => by
+      obtain ⟨_, _, rfl⟩ := processBlockHeader_eq headed
+      rfl)
+    (fun _ executed => processBlockExecution_step_of (fun a b => b.validators = a.validators)
+      (fun _ => rfl) (fun one two => two.trans one) (fun _ same => same)
+      processWithdrawals_validators executed)
+    (fun revealed => by
+      obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq revealed
+      rfl)
+    (fun _ voted => by
+      obtain ⟨_, _, rest⟩ := processEth1Data_eq voted
+      rw [← rest])
+
 /-- A change to an execution address changes only the withdrawal credentials of the validator. -/
 theorem registryLifecycle_processBlsToExecutionChange {signed : SignedBLSToExecutionChange}
     (computed : processBlsToExecutionChange config checks state signed = .ok after) :
@@ -698,22 +741,6 @@ theorem registryLifecycle_processBlockExecution {body : BeaconBlockBody preset f
     (fun ok => .of_data (congrArg (·.data) (processWithdrawals_validators ok))) computed
 
 /-! ## The sync aggregate -/
-
-theorem registryLifecycle_processSyncAggregate {altair : .altair ≤ fork}
-    {aggregate : SyncAggregate preset}
-    (computed : processSyncAggregate config checks state altair aggregate = .ok after) :
-    RegistryLifecycle state after := by
-  unfold processSyncAggregate at computed
-  simp only [bind_ok_iff] at computed
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, folded⟩ := computed
-  rw [← Array.foldlM_toList] at folded
-  refine RegistryLifecycle.foldlM (fun _ _ _ ok => ?_) folded
-  unfold applySyncReward at ok
-  split at ok
-  · simp only [bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, raised, _, _, paid⟩ := ok
-    exact (RegistryLifecycle.increaseBalance raised).trans (.increaseBalance paid)
-  · exact .decreaseBalance (liftAccessor_ok.mp ok)
 
 /-! ## Blocks -/
 
@@ -739,7 +766,7 @@ private theorem registryLifecycle_processBlock {block : BeaconBlock preset fork}
       (fun ok => by rw [processPayloadAttestation_eq ok]; exact .refl _) operated
   have tail : RegistryLifecycle last after := by
     split at synced
-    · exact registryLifecycle_processSyncAggregate synced
+    · exact .of_data (congrArg (·.data) (processSyncAggregate_validators synced))
     · cases synced
       exact .refl _
   exact head.trans <|

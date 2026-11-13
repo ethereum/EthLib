@@ -3,6 +3,7 @@ module
 public import EthLib.Networking.Discv5.Distance
 public import EthLib.Networking.Devp2p.ForkId
 public import EthLib.Networking.Devp2p.P2p
+public import EthLib.Networking.Devp2p.Session
 public import EthLib.Networking.Discv4.Packet
 public import EthLib.Networking.Discv5.Handshake
 public import EthLib.Networking.Discv5.Identity
@@ -26,6 +27,7 @@ public import EthLib.Networking.Gossip.Topic
 public import EthLib.Networking.Gossip.Validation
 public import EthLib.Networking.Libp2p.Mplex
 public import EthLib.Networking.Libp2p.Multistream
+public import EthLib.Networking.Libp2p.Upgrade
 public import EthLib.Networking.Libp2p.Yamux
 public import EthLib.Networking.ReqResp.Bounds
 public import EthLib.Networking.ReqResp.Encoding

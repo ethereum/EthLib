@@ -180,6 +180,7 @@ def _make_extension() -> Extension:
             "bindings/python/gossip.c",
             "bindings/python/transactions.c",
             "bindings/python/chain.c",
+            "bindings/python/rpc.c",
             "bindings/python/pyvalue.c",
         ],
         include_dirs=["bindings/python"],

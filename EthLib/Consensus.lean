@@ -1,13 +1,18 @@
 module
 
 public import EthLib.Consensus.Accessors
+public import EthLib.Consensus.BeaconApi.Encoding
+public import EthLib.Consensus.BeaconApi.Spelling
 public import EthLib.Consensus.BuilderApi
+public import EthLib.Consensus.BuilderApi.Encoding
+public import EthLib.Consensus.BuilderApi.Registration
 public import EthLib.Consensus.Builders
 public import EthLib.Consensus.Churn
 public import EthLib.Consensus.Mutators
 public import EthLib.Consensus.Participation
 public import EthLib.Consensus.PayloadTimeliness
 public import EthLib.Consensus.Config
+public import EthLib.Consensus.ConsensusVersion
 public import EthLib.Consensus.Constants
 public import EthLib.Consensus.Containers.Attestation
 public import EthLib.Consensus.Containers.Bid
@@ -39,6 +44,7 @@ public import EthLib.Consensus.ForkChoice.OptimisticSync
 public import EthLib.Consensus.ForkChoice.PayloadVotes
 public import EthLib.Consensus.ForkChoice.ProposerHead
 public import EthLib.Consensus.ForkChoice.Store
+public import EthLib.Consensus.ForkDigest
 public import EthLib.Consensus.ForkSchedule
 public import EthLib.Consensus.Gossip.Attestation
 public import EthLib.Consensus.Gossip.Bid

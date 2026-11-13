@@ -426,9 +426,9 @@ private theorem funding_block_replay {fork : Fork} {s : BeaconState preset fork}
           (funding_request_support ok)) h ok) withdrawalsBound consolidations
   exact record (by decide) (by decide)
     (fun _ _ ok => (frame_processSyncAggregate ok).toFrame)
-    (fun _ _ ok => registryLifecycle_processSyncAggregate ok)
+    (fun _ _ ok => .of_data (congrArg (·.data) (processSyncAggregate_validators ok)))
     (fun _ _ ok => (sameSizes_processSyncAggregate ok).1)
-    (fun _ _ ok => effectiveKept_sync ok)
+    (fun _ _ ok => effectiveKept_data (congrArg (·.data) (processSyncAggregate_validators ok)))
     (fun _ _ ok => SamePendingQueue.syncAggregate ok) requestedBound synced
 
 /-- A block preserves funding except for its recorded external credits.

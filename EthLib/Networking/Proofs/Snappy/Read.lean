@@ -25,6 +25,23 @@ open EthLib.Base (bytesToUint uintToBytes)
 
 /-! ## One chunk -/
 
+/-- With fuel left, the reader reads the first chunk of a stream that is not empty.
+
+It reads on only when that chunk does not hold the bytes still needed. -/
+theorem readChunks_cons_succ (need : Nat) (b : UInt8) (l : List UInt8) (fuel : Nat) :
+    readChunks need (b :: l) (fuel + 1) =
+      match readChunk (b :: l) with
+      | .error e => .error e
+      | .ok (out, rest) =>
+        if need ≤ out.length then .ok (out, rest)
+        else (readChunks (need - out.length) rest fuel).map
+          fun read => (out ++ read.1, read.2) := by
+  cases hr : readChunk (b :: l) with
+  | error e => simp [readChunks, hr, bind, Except.bind]
+  | ok c =>
+    obtain ⟨o, r⟩ := c
+    simp [readChunks, hr, bind, Except.bind]
+
 /-- A chunk that decodes stops the reader when its output holds the bytes still needed.
 
 Otherwise the reader goes on after it, for the bytes that remain. -/
@@ -35,9 +52,9 @@ theorem readChunks_chunk_ok {type : UInt8} {body out : List UInt8} (need : Nat)
       if need ≤ out.length then .ok (out, rest)
       else (readChunks (need - out.length) rest fuel).map
         fun read => (out ++ read.1, read.2) := by
-  obtain ⟨a, b, c, habc, hv⟩ := uintToBytes_three h
-  rw [habc]
-  simp [readChunks, hv, hc, show ¬ body.length + rest.length < body.length by omega]
+  have := readChunk_chunk_ok rest h hc
+  simp only [List.cons_append] at this ⊢
+  rw [readChunks_cons_succ, this]
 
 /-- A reader that succeeds with some fuel succeeds the same with more. -/
 theorem readChunks_of_le {need f g : Nat} {bs : List UInt8} {r : List UInt8 × List UInt8}
@@ -46,27 +63,25 @@ theorem readChunks_of_le {need f g : Nat} {bs : List UInt8} {r : List UInt8 × L
   | zero =>
     match bs with
     | [] => cases g <;> simpa [readChunks] using h
-    | [_] | [_, _] | [_, _, _] | _ :: _ :: _ :: _ :: _ => simp [readChunks] at h
+    | _ :: _ => simp [readChunks] at h
   | succ f ih =>
     obtain ⟨g, rfl⟩ : ∃ g', g = g' + 1 := ⟨g - 1, by omega⟩
     match bs with
     | [] => simpa [readChunks] using h
-    | [_] | [_, _] | [_, _, _] => simp [readChunks] at h
-    | type :: l0 :: l1 :: l2 :: body =>
-      by_cases hl : body.length < bytesToUint #v[l0, l1, l2]
-      · simp [readChunks, hl] at h
-      · cases hc : decodeChunk type (body.take (bytesToUint #v[l0, l1, l2])) with
-        | error e => simp [readChunks, hl, hc] at h
-        | ok o =>
-          by_cases hn : need ≤ o.length
-          · simpa [readChunks, hl, hc, hn] using h
-          · cases hr : readChunks (need - o.length) (body.drop (bytesToUint #v[l0, l1, l2]))
-                f with
-            | error e => simp [readChunks, hl, hc, hn, hr, Except.map] at h
-            | ok v =>
-              simp only [readChunks, hl, hc, hn, hr, ite_false] at h ⊢
-              rw [ih hr (by omega)]
-              exact h
+    | b :: l =>
+      rw [readChunks_cons_succ] at h ⊢
+      cases hr : readChunk (b :: l) with
+      | error e => simp [hr] at h
+      | ok c =>
+        obtain ⟨o, rest⟩ := c
+        by_cases hn : need ≤ o.length
+        · simpa [hr, hn] using h
+        · cases hd : readChunks (need - o.length) rest f with
+          | error e => simp [hr, hn, hd, Except.map] at h
+          | ok v =>
+            simp only [hr, hn, hd, ite_false, Except.map] at h
+            simp only [hn, ih (g := g) hd (by omega), ite_false, Except.map]
+            exact h
 
 /-! ## The chunks read form a stream -/
 
@@ -81,55 +96,37 @@ theorem readChunks_sound {need fuel : Nat} {bs out rest : List UInt8}
       simp only [readChunks, Except.ok.injEq, Prod.mk.injEq] at h
       obtain ⟨rfl, rfl⟩ := h
       exact ⟨[], rfl, by simp [decodeChunks]⟩
-    | [_] | [_, _] | [_, _, _] | _ :: _ :: _ :: _ :: _ => simp [readChunks] at h
+    | _ :: _ => simp [readChunks] at h
   | succ fuel ih =>
     match bs with
     | [] =>
       simp only [readChunks, Except.ok.injEq, Prod.mk.injEq] at h
       obtain ⟨rfl, rfl⟩ := h
       exact ⟨[], rfl, by simp [decodeChunks]⟩
-    | [_] | [_, _] | [_, _, _] => simp [readChunks] at h
-    | type :: l0 :: l1 :: l2 :: body =>
-      by_cases hl : body.length < bytesToUint #v[l0, l1, l2]
-      · simp [readChunks, hl] at h
-      · cases hc : decodeChunk type (body.take (bytesToUint #v[l0, l1, l2])) with
-        | error e => simp [readChunks, hl, hc] at h
-        | ok o =>
-          by_cases hn : need ≤ o.length
-          · simp only [readChunks, hl, hc, hn, ite_false, ite_true, Except.ok.injEq,
+    | b :: l =>
+      rw [readChunks_cons_succ] at h
+      cases hr : readChunk (b :: l) with
+      | error e => simp [hr] at h
+      | ok c =>
+        obtain ⟨o, rest'⟩ := c
+        obtain ⟨chunk, hbs, -, hch⟩ := readChunk_ok_split hr
+        by_cases hn : need ≤ o.length
+        · simp only [hr, hn, ite_true, Except.ok.injEq, Prod.mk.injEq] at h
+          obtain ⟨rfl, rfl⟩ := h
+          refine ⟨chunk, hbs, ?_⟩
+          rw [decodeChunks_of_readChunk fuel hch]
+          simp [decodeChunks, Except.map]
+        · cases hd : readChunks (need - o.length) rest' fuel with
+          | error e => simp [hr, hn, hd, Except.map] at h
+          | ok c' =>
+            simp only [hr, hn, hd, ite_false, Except.map, Except.ok.injEq,
               Prod.mk.injEq] at h
             obtain ⟨rfl, rfl⟩ := h
-            refine ⟨type :: l0 :: l1 :: l2 :: body.take (bytesToUint #v[l0, l1, l2]), ?_, ?_⟩
-            · simp
-            · have hlen : (body.take (bytesToUint #v[l0, l1, l2])).length =
-                  bytesToUint #v[l0, l1, l2] := List.length_take_of_le (by omega)
-              simp [decodeChunks, hlen, hc, List.take_of_length_le, Except.map]
-          · cases hr : readChunks (need - o.length) (body.drop (bytesToUint #v[l0, l1, l2]))
-                fuel with
-            | error e => simp [readChunks, hl, hc, hn, hr, Except.map] at h
-            | ok r =>
-              simp only [readChunks, hl, hc, hn, hr, ite_false, Except.map, Except.ok.injEq,
-                Prod.mk.injEq] at h
-              obtain ⟨rfl, rfl⟩ := h
-              obtain ⟨read, hread, hdec⟩ := ih hr
-              refine ⟨type :: l0 :: l1 :: l2 ::
-                (body.take (bytesToUint #v[l0, l1, l2]) ++ read), ?_, ?_⟩
-              · have hb : body = body.take (bytesToUint #v[l0, l1, l2]) ++ (read ++ r.2) := by
-                  rw [← hread, List.take_append_drop]
-                simp only [List.cons_append, List.append_assoc]
-                rw [← hb]
-              · have hlen : (body.take (bytesToUint #v[l0, l1, l2])).length =
-                    bytesToUint #v[l0, l1, l2] := List.length_take_of_le (by omega)
-                have htake : (body.take (bytesToUint #v[l0, l1, l2]) ++ read).take
-                    (bytesToUint #v[l0, l1, l2]) = body.take (bytesToUint #v[l0, l1, l2]) :=
-                  List.take_left' hlen
-                have hdrop : (body.take (bytesToUint #v[l0, l1, l2]) ++ read).drop
-                    (bytesToUint #v[l0, l1, l2]) = read := List.drop_left' hlen
-                have hl' : ¬ (body.take (bytesToUint #v[l0, l1, l2]) ++ read).length <
-                    bytesToUint #v[l0, l1, l2] := by
-                  simp only [List.length_append, hlen]
-                  omega
-                simp only [decodeChunks, hl', ite_false, htake, hc, hdrop, hdec, Except.map]
+            obtain ⟨read, hread, hdec⟩ := ih hd
+            refine ⟨chunk ++ read, ?_, ?_⟩
+            · rw [hbs, hread, List.append_assoc]
+            · rw [decodeChunks_of_readChunk fuel (by simpa using readChunk_append read hch), hdec]
+              rfl
 
 /-- A stream that the reader reads whole decodes to the reader's output. -/
 theorem decodeFramesList_of_readFrames {n : Nat} {bs out : List UInt8}
@@ -159,52 +156,43 @@ theorem readChunks_append {need fuel : Nat} {a b out : List UInt8} (ha : a ≠ [
   | zero =>
     match a with
     | [] => contradiction
-    | [_] | [_, _] | [_, _, _] | _ :: _ :: _ :: _ :: _ => simp [readChunks] at h
+    | _ :: _ => simp [readChunks] at h
   | succ fuel ih =>
     match a with
     | [] => contradiction
-    | [_] | [_, _] | [_, _, _] => simp [readChunks] at h
-    | type :: l0 :: l1 :: l2 :: body =>
-      by_cases hl : body.length < bytesToUint #v[l0, l1, l2]
-      · simp [readChunks, hl] at h
-      · have hl' : ¬ (body ++ b).length < bytesToUint #v[l0, l1, l2] := by
-          simp only [List.length_append]
-          omega
-        have htake : (body ++ b).take (bytesToUint #v[l0, l1, l2]) =
-            body.take (bytesToUint #v[l0, l1, l2]) := List.take_append_of_le_length (by omega)
-        have hdrop : (body ++ b).drop (bytesToUint #v[l0, l1, l2]) =
-            body.drop (bytesToUint #v[l0, l1, l2]) ++ b :=
-          List.drop_append_of_le_length (by omega)
-        cases hc : decodeChunk type (body.take (bytesToUint #v[l0, l1, l2])) with
-        | error e => simp [readChunks, hl, hc] at h
-        | ok o =>
-          by_cases hno : need ≤ o.length
-          · simp only [readChunks, hl, hc, hno, ite_false, ite_true, Except.ok.injEq,
+    | x :: l =>
+      rw [readChunks_cons_succ] at h
+      cases hr : readChunk (x :: l) with
+      | error e => simp [hr] at h
+      | ok c =>
+        obtain ⟨o, rest⟩ := c
+        have hra := readChunk_append b hr
+        by_cases hno : need ≤ o.length
+        · simp only [hr, hno, ite_true, Except.ok.injEq,
+            Prod.mk.injEq] at h
+          obtain ⟨rfl, rfl⟩ := h
+          rw [List.cons_append, readChunks_cons_succ, ← List.cons_append, hra]
+          simp [hno]
+        · cases hd : readChunks (need - o.length) rest fuel with
+          | error e => simp [hr, hno, hd, Except.map] at h
+          | ok c' =>
+            obtain ⟨o', r'⟩ := c'
+            simp only [hr, hno, hd, ite_false, Except.map, Except.ok.injEq,
               Prod.mk.injEq] at h
-            obtain ⟨rfl, hrest⟩ := h
-            simp only [List.cons_append, readChunks, hl', ite_false, htake, hc, hno, ite_true,
-              hdrop, hrest, List.nil_append]
-          · cases hr : readChunks (need - o.length) (body.drop (bytesToUint #v[l0, l1, l2]))
-                fuel with
-            | error e => simp [readChunks, hl, hc, hno, hr, Except.map] at h
-            | ok r =>
-              obtain ⟨o', r'⟩ := r
-              simp only [readChunks, hl, hc, hno, hr, ite_false, Except.map, Except.ok.injEq,
-                Prod.mk.injEq] at h
-              obtain ⟨rfl, rfl⟩ := h
-              simp only [List.length_append] at hn
-              -- The chunks after the first one hold the bytes still needed, so there are some.
-              have hne : body.drop (bytesToUint #v[l0, l1, l2]) ≠ [] := by
-                intro hnil
-                rw [hnil] at hr
-                cases fuel <;>
-                · simp only [readChunks, Except.ok.injEq, Prod.mk.injEq] at hr
-                  obtain ⟨rfl, -⟩ := hr
-                  simp only [List.length_nil, Nat.add_zero] at hn
-                  omega
-              have := ih hne hr (by omega)
-              simp only [List.cons_append, readChunks, hl', ite_false, htake, hc, hno, hdrop,
-                this, Except.map]
+            obtain ⟨rfl, rfl⟩ := h
+            simp only [List.length_append] at hn
+            -- The chunks after the first one hold the bytes still needed, so there are some.
+            have hne : rest ≠ [] := by
+              intro hnil
+              rw [hnil] at hd
+              cases fuel <;>
+              · simp only [readChunks, Except.ok.injEq, Prod.mk.injEq] at hd
+                obtain ⟨rfl, -⟩ := hd
+                simp only [List.length_nil, Nat.add_zero] at hn
+                omega
+            have := ih hne hd (by omega)
+            rw [List.cons_append, readChunks_cons_succ, ← List.cons_append, hra]
+            simp [hno, this, Except.map]
 
 /-- A stream that the reader reads whole, with the bytes it needs, leaves the bytes after it. -/
 theorem readFrames_append {n : Nat} {a b out : List UInt8}

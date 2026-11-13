@@ -191,7 +191,9 @@ Each list is sorted: the slots and the read keys by value, and the changes by po
 
 A read key that is also written is left out of the reads.
 
-A nonce is below 2^64 by EIP-2681, so it fits its field. -/
+EIP-2681 bounds a nonce by 2^64 - 1, so it fits its field.
+
+A block that passes its transition keeps that bound when the state before it meets it. -/
 def AccountRecord.toChanges (address : Address) (r : AccountRecord) : AccountChanges :=
   let slots := (r.storageChanges.toList.filter fun (_, values) => !values.isEmpty).map
     fun (key, values) =>

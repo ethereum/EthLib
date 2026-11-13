@@ -1,0 +1,37 @@
+Electra:
+  WithdrawalRequest:
+    type: object
+    description: "The [`WithdrawalRequest`](https://github.com/ethereum/consensus-specs/blob/v1.5.0/specs/electra/beacon-chain.md#withdrawalrequest) object from the CL Electra spec."
+    required: [source_address, validator_pubkey, amount]
+    properties:
+      source_address:
+        $ref: "../primitive.yaml#/ExecutionAddress"
+        description: "Execution address which sent the request."
+      validator_pubkey:
+        $ref: "../primitive.yaml#/Pubkey"
+        description: "BLS public key of validator."
+      amount:
+        $ref: "../primitive.yaml#/Gwei"
+        description: "The value to be withdrawn (gwei)."
+
+  PendingPartialWithdrawal:
+    type: object
+    description: "The [`PendingPartialWithdrawal`](https://github.com/ethereum/consensus-specs/blob/v1.5.0/specs/electra/beacon-chain.md#pendingpartialwithdrawal) object from the CL Electra spec."
+    required: [validator_index, amount, withdrawable_epoch]
+    properties:
+      validator_index:
+        $ref: "../primitive.yaml#/Uint64"
+        description: "Index of validator in validator registry."
+      amount:
+        $ref: "../primitive.yaml#/Uint64"
+        description: "The value to be withdrawn (gwei)."
+      withdrawable_epoch:
+        $ref: "../primitive.yaml#/Uint64"
+        description: "The epoch when the amount is withdrawable."
+
+  PendingPartialWithdrawals:
+    type: array
+    description: "List of pending partial withdrawals."
+    items:
+      $ref: "#/Electra/PendingPartialWithdrawal"
+    maxItems: 134217728

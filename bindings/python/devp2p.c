@@ -17,6 +17,10 @@ eth_devp2p_encode_message(
   lean_object* plain
 );
 
+extern lean_object* eth_devp2p_route(lean_object* args);
+
+extern lean_object* eth_devp2p_session(lean_object* args);
+
 /* ---- Wrappers --------------------------------------------------------- */
 
 /* Parse `(snappy: bool, data: bytes)`, or return NULL with a TypeError set. */
@@ -56,4 +60,20 @@ py_devp2p_encode_message(
   lean_object* data = parse_snappy_and_bytes(args, &snappy);
   if (!data) return NULL;
   return except_into_pybytes(eth_devp2p_encode_message(snappy, data), DEVP2P_ERROR);
+}
+
+PyObject*
+py_devp2p_route(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_devp2p_route, args, 3, DEVP2P_ERROR);
+}
+
+PyObject*
+py_devp2p_session(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_devp2p_session, args, 2, DEVP2P_ERROR);
 }

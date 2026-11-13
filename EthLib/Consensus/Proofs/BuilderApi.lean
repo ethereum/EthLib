@@ -23,6 +23,10 @@ So a signature over a blinded block is a signature over the full block.
 
 When the block names the proposer of the state, the two checks of a signature agree.
 
+Unblinding with a payload of the same header undoes blinding, and blinding undoes unblinding.
+
+So the signature of the proposer checks the same on the full block as on the blinded block.
+
 From Gloas, a bid's execution payment adds at most the proposer's cap to its value.
 
 A payment at or above the cap adds the cap, and a payment at or below it adds itself.
@@ -186,6 +190,109 @@ private theorem BeaconBlockBody.root_blind [NeZero preset.BYTES_PER_LOGS_BLOOM.t
       simp +decide only [SszFields.roots, rooted, dite_true, dite_false]
       exact congrArg (_ >>= ·) (funext fun roots => summaryRoot_container_names _ _ roots)
 
+/-- From Bellatrix to Fulu, a body that unblinds blinds back to the blinded body it came from. -/
+theorem BlindedBeaconBlockBody.unblind_blind {body : BlindedBeaconBlockBody preset fork}
+    {range : HasBuilderApi fork} {payload : ExecutionPayload preset fork}
+    {full : BeaconBlockBody preset fork} (made : body.unblind range payload = .ok full) :
+    full.blind range = .ok body := by
+  unfold BlindedBeaconBlockBody.unblind at made
+  split at made
+  · simp at made
+  · rename_i header computed
+    split at made
+    · rename_i same
+      simp only [Except.ok.injEq] at made
+      subst made
+      simp only [BeaconBlockBody.blind, computed, bind, Except.bind, pure, Except.pure]
+      cases body
+      congr
+      funext h
+      exact same
+    · simp at made
+
+/-- From Bellatrix to Fulu, a blinded body unblinds with the payload of its body, to that body. -/
+theorem BeaconBlockBody.blind_unblind {full : BeaconBlockBody preset fork}
+    {range : HasBuilderApi fork} {body : BlindedBeaconBlockBody preset fork}
+    (made : full.blind range = .ok body) :
+    body.unblind range (full.executionPayload range) = .ok full := by
+  cases computed : (full.executionPayload range).header with
+  | error e => simp [BeaconBlockBody.blind, computed, bind, Except.bind] at made
+  | ok header =>
+    simp only [BeaconBlockBody.blind, computed, bind, Except.bind, pure, Except.pure,
+      Except.ok.injEq] at made
+    subst made
+    simp only [BlindedBeaconBlockBody.unblind, computed, ite_true]
+    cases full
+    congr
+    all_goals funext h
+    all_goals exact absurd h (Nat.not_le_of_lt range.2)
+
+/-- From Bellatrix to Fulu, a blinded body fails on its header exactly when the payload's differs.
+-/
+theorem BlindedBeaconBlockBody.unblind_eq_headerMismatch_iff
+    {body : BlindedBeaconBlockBody preset fork} {range : HasBuilderApi fork}
+    {payload : ExecutionPayload preset fork} :
+    body.unblind range payload = .error .headerMismatch ↔
+      ∃ header, payload.header = .ok header ∧ header ≠ body.executionPayloadHeader range := by
+  unfold BlindedBeaconBlockBody.unblind
+  constructor
+  · intro failed
+    split at failed
+    · simp at failed
+    · rename_i header computed
+      split at failed
+      · simp at failed
+      · exact ⟨header, computed, by assumption⟩
+  · rintro ⟨header, computed, differs⟩
+    simp [computed, differs]
+
+/-- From Bellatrix to Fulu, a blinded body never fails for want of the header of the payload.
+
+The header of a payload always computes, so no other failure occurs. -/
+theorem BlindedBeaconBlockBody.unblind_ne_header {body : BlindedBeaconBlockBody preset fork}
+    {range : HasBuilderApi fork} {payload : ExecutionPayload preset fork} (fault : Err) :
+    body.unblind range payload ≠ .error (.header fault) := by
+  obtain ⟨header, computed⟩ := ExecutionPayload.header_total payload
+  simp only [BlindedBeaconBlockBody.unblind, computed]
+  split <;> simp
+
+/-- From Bellatrix to Fulu, a block that unblinds blinds back to the blinded block it came from. -/
+theorem BlindedBeaconBlock.unblind_blind {block : BlindedBeaconBlock preset fork}
+    {range : HasBuilderApi fork} {payload : ExecutionPayload preset fork}
+    {full : BeaconBlock preset fork} (made : block.unblind range payload = .ok full) :
+    full.blind range = .ok block := by
+  cases body : block.body.unblind range payload with
+  | error e => simp [BlindedBeaconBlock.unblind, body, bind, Except.bind] at made
+  | ok fullBody =>
+    simp only [BlindedBeaconBlock.unblind, body, bind, Except.bind, pure, Except.pure,
+      Except.ok.injEq] at made
+    subst made
+    simp [BeaconBlock.blind, BlindedBeaconBlockBody.unblind_blind body, bind, Except.bind, pure,
+      Except.pure]
+
+/-- From Bellatrix to Fulu, a signed blinded block that unblinds keeps its proposer and signature.
+
+The block it gives blinds back to the blinded block. -/
+theorem SignedBlindedBeaconBlock.unblind_blind {signed : SignedBlindedBeaconBlock preset fork}
+    {range : HasBuilderApi fork} {payload : ExecutionPayload preset fork}
+    {full : SignedBeaconBlock preset fork} (made : signed.unblind range payload = .ok full) :
+    full.message.blind range = .ok signed.message ∧ full.signature = signed.signature ∧
+      full.message.proposerIndex = signed.message.proposerIndex := by
+  cases block : signed.message.unblind range payload with
+  | error e => simp [SignedBlindedBeaconBlock.unblind, block, bind, Except.bind] at made
+  | ok fullBlock =>
+    simp only [SignedBlindedBeaconBlock.unblind, block, bind, Except.bind, pure, Except.pure,
+      Except.ok.injEq] at made
+    subst made
+    refine ⟨BlindedBeaconBlock.unblind_blind block, rfl, ?_⟩
+    cases body : signed.message.body.unblind range payload with
+    | error e => simp [BlindedBeaconBlock.unblind, body, bind, Except.bind] at block
+    | ok fullBody =>
+      simp only [BlindedBeaconBlock.unblind, body, bind, Except.bind, pure, Except.pure,
+        Except.ok.injEq] at block
+      subst block
+      rfl
+
 variable [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat]
 
 /-- From Bellatrix to Fulu, a blinded body has the root of its body.
@@ -239,5 +346,26 @@ theorem verifyBlindedBlockSignature_blind {config : Config} {checks : SignatureC
       verifyBlockSignature config checks state ⟨block, signature⟩ := by
   simp [verifyBlindedBlockSignature, verifyBlockSignature, proposer, liftAccessor,
     BeaconBlock.computeSigningRoot_blind made, bind, Except.bind, Except.mapError]
+
+/-- From Bellatrix to Fulu, the proposer's signature checks the same on the unblinded block.
+
+The check on the unblinded block is the check on the blinded block.
+
+The block must name the proposer of the state. -/
+theorem verifyBlockSignature_unblind {config : Config} {checks : SignatureChecks}
+    {state : BeaconState preset fork} {signed : SignedBlindedBeaconBlock preset fork}
+    {range : HasBuilderApi fork} {payload : ExecutionPayload preset fork}
+    {full : SignedBeaconBlock preset fork} (made : signed.unblind range payload = .ok full)
+    (proposer : getBeaconProposerIndex state = .ok signed.message.proposerIndex) :
+    verifyBlockSignature config checks state full =
+      verifyBlindedBlockSignature config checks state signed := by
+  obtain ⟨blinds, signature, index⟩ := SignedBlindedBeaconBlock.unblind_blind made
+  have same := verifyBlindedBlockSignature_blind (config := config) (checks := checks) blinds
+    (index ▸ proposer) full.signature
+  cases full
+  cases signed
+  simp only at signature
+  subst signature
+  exact same.symm
 
 end EthLib.Consensus

@@ -5,6 +5,7 @@ public import EthLib.Base.Exports.Proofs.PyValue
 public import EthLib.Networking.Libp2p.Mplex
 public import EthLib.Networking.Libp2p.Multistream
 public import EthLib.Networking.Libp2p.PeerId
+public import EthLib.Networking.Libp2p.Upgrade
 public import EthLib.Networking.Libp2p.Yamux
 
 /-!
@@ -13,6 +14,16 @@ public import EthLib.Networking.Libp2p.Yamux
 C-ABI exports for the libp2p codecs, callable from the Python C extension.
 
 They cover multistream-select messages, mplex and yamux frames, and secp256k1 peer IDs.
+
+They also run each peer of a multistream-select negotiation, and the upgrade of a TCP connection.
+
+A peer of a negotiation reads the messages at the start of its input until it stops.
+
+It returns its state, its protocol, the bytes it sent from its start, and the unread bytes.
+
+The state crosses as its name in snake case, such as `await_proposal`.
+
+The protocol is the agreed one, or the reply that a dialer did not expect, else empty.
 
 A decoder returns the value at the start of its input and the bytes after it.
 
@@ -71,6 +82,89 @@ def multistreamDecodeExport (args : PyValue) : Result PyValue :=
     let (message, rest) ← (Multistream.decode data.data.toList).mapError
       fun e => (e.code, s!"multistream message rejected: {reprStr e}")
     return (message, (⟨rest.toArray⟩ : ByteArray))) args
+
+/-- The bytes of a list of messages, each encoded in turn. -/
+def encodeAll (messages : List ByteArray) : ByteArray :=
+  ⟨(messages.flatMap Multistream.encode).toArray⟩
+
+/-- The name and the protocol of a listener state. -/
+def listenerView : Multistream.Listener → String × ByteArray
+  | .awaitHeader _ => ("await_header", .empty)
+  | .awaitProposal _ => ("await_proposal", .empty)
+  | .agreed protocol => ("agreed", protocol)
+  | .aborted => ("aborted", .empty)
+
+/-- The name and the protocol of a dialer state. -/
+def dialerView : Multistream.Dialer → String × ByteArray
+  | .awaitHeader _ _ => ("await_header", .empty)
+  | .awaitAnswer _ _ => ("await_answer", .empty)
+  | .agreed protocol => ("agreed", protocol)
+  | .failed => ("failed", .empty)
+  | .unexpected reply => ("unexpected", reply)
+  | .aborted => ("aborted", .empty)
+
+/-- A peer of a negotiation that reads the messages at the start of the bytes in turn.
+
+It stops when its state is not waiting, or when the bytes end.
+
+Each message is at least two bytes long, so the size of the input bounds the steps. -/
+def runPeer {σ : Type} (step : σ → ByteArray → σ × List ByteArray) (waiting : σ → Bool)
+    (view : σ → String × ByteArray) (start : σ × List ByteArray) (data : ByteArray) :
+    Result (String × ByteArray × ByteArray × ByteArray) := do
+  let (first, opening) := start
+  let mut state := first
+  let mut sent := opening
+  let mut rest := data.data.toList
+  for index in List.range data.size do
+    if !waiting state || rest.isEmpty then break
+    let (message, after) ← (Multistream.decode rest).mapError
+      fun e => (e.code, s!"message {index} rejected: {reprStr e}")
+    let (next, out) := step state message
+    state := next
+    sent := sent ++ out
+    rest := after
+  let (name, protocol) := view state
+  return (name, protocol, encodeAll sent, ⟨rest.toArray⟩)
+
+/-- What a listener does with the bytes it receives, from its start.
+
+It returns its state, the agreed protocol or empty, the bytes it sent, and the unread bytes.
+
+A message that does not decode raises its error, and names its index. -/
+@[export eth_multistream_listen]
+def multistreamListenExport (args : PyValue) : Result PyValue :=
+  pyExport (fun ((supported, data) : List ByteArray × ByteArray) =>
+    runPeer Multistream.listen
+      (fun | .awaitHeader _ | .awaitProposal _ => true | _ => false)
+      listenerView (Multistream.Listener.start supported) data) args
+
+/-- What a dialer does with the bytes it receives, from its start.
+
+It proposes the protocols in order.
+
+It returns its state, its protocol, the bytes it sent, and the unread bytes.
+
+The protocol is the agreed one, or an answer that is neither its proposal nor `na`, else empty.
+
+A message that does not decode raises its error, and names its index. -/
+@[export eth_multistream_dial]
+def multistreamDialExport (args : PyValue) : Result PyValue :=
+  pyExport (fun ((proposals, data) : List ByteArray × ByteArray) =>
+    runPeer Multistream.dial
+      (fun | .awaitHeader _ _ | .awaitAnswer _ _ => true | _ => false)
+      dialerView (Multistream.Dialer.start proposals) data) args
+
+/-- The security protocol and the multiplexer of a TCP connection between consensus nodes.
+
+Each node says whether it supports yamux, the dialer first.
+
+Two such nodes always agree, so the upgrade never fails. -/
+@[export eth_libp2p_upgrade]
+def upgradeExport (args : PyValue) : Result PyValue :=
+  pyExport (fun ((dialer, listener) : Bool × Bool) => do
+    let some agreed := Upgrade.upgrade ⟨dialer⟩ ⟨listener⟩
+      | throw (0, "the upgrade found no common protocol")
+    return agreed) args
 
 /-- The bytes of a valid mplex frame. -/
 @[export eth_mplex_encode]

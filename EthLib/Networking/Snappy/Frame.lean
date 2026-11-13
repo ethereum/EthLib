@@ -154,6 +154,19 @@ def decodeChunk (type : UInt8) (body : List UInt8) : Except FrameError (List UIn
   else
     .ok []
 
+/-- Read the chunk at the front of a stream, and return its decoded bytes and the bytes after it.
+
+Its header is a type byte and a length of three bytes, little-endian (§1).
+-/
+def readChunk : List UInt8 → Except FrameError (List UInt8 × List UInt8)
+  | type :: l0 :: l1 :: l2 :: rest =>
+      let len := bytesToUint #v[l0, l1, l2]
+      if rest.length < len then
+        .error .chunkPastEnd
+      else
+        (decodeChunk type (rest.take len)).map fun out => (out, rest.drop len)
+  | _ => .error .headerTruncated
+
 /-- Decode the chunks of a stream, one after the other.
 
 The fuel bounds the number of chunks.
@@ -162,16 +175,11 @@ Each chunk takes at least its four header bytes, so the input length is enough f
 -/
 def decodeChunks : List UInt8 → Nat → Except FrameError (List UInt8)
   | [], _ => .ok []
-  | type :: l0 :: l1 :: l2 :: rest, fuel + 1 =>
-      let len := bytesToUint #v[l0, l1, l2]
-      if rest.length < len then
-        .error .chunkPastEnd
-      else
-        match decodeChunk type (rest.take len) with
-        | .error e => .error e
-        | .ok out => (decodeChunks (rest.drop len) fuel).map (out ++ ·)
-  -- A header cut short, or out of fuel: the second is unreachable with enough fuel.
-  | _, _ => .error .headerTruncated
+  -- Out of fuel: unreachable with enough fuel.
+  | _ :: _, 0 => .error .headerTruncated
+  | bs@(_ :: _), fuel + 1 => do
+      let (out, rest) ← readChunk bs
+      (decodeChunks rest fuel).map (out ++ ·)
 
 /-- The bytes a framed stream decodes to, or why it is not a valid stream. -/
 def decodeFramesList (bs : List UInt8) : Except FrameError (List UInt8) :=
@@ -200,19 +208,12 @@ The fuel bounds the number of chunks. -/
 def readChunks (need : Nat) : List UInt8 → Nat →
     Except FrameError (List UInt8 × List UInt8)
   | [], _ => .ok ([], [])
-  | type :: l0 :: l1 :: l2 :: rest, fuel + 1 =>
-      let len := bytesToUint #v[l0, l1, l2]
-      if rest.length < len then
-        .error .chunkPastEnd
-      else
-        match decodeChunk type (rest.take len) with
-        | .error e => .error e
-        | .ok out =>
-          if need ≤ out.length then .ok (out, rest.drop len)
-          else (readChunks (need - out.length) (rest.drop len) fuel).map
-            fun read => (out ++ read.1, read.2)
-  -- A header cut short, or out of fuel: the second is unreachable with enough fuel.
-  | _, _ => .error .headerTruncated
+  -- Out of fuel: unreachable with enough fuel.
+  | _ :: _, 0 => .error .headerTruncated
+  | bs@(_ :: _), fuel + 1 => do
+      let (out, rest) ← readChunk bs
+      if need ≤ out.length then .ok (out, rest)
+      else (readChunks (need - out.length) rest fuel).map fun read => (out ++ read.1, read.2)
 
 /-- Read a framed stream until it holds `n` bytes, and return its output with the bytes after.
 

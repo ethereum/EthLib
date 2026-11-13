@@ -33,6 +33,8 @@ The file also names two sums of a state that the bounds of the steps use.
 
 They are the sum of the effective balances and the sum of the recent slashed balances.
 
+It names a count too: the validators plus the pending deposits, which bounds the registry.
+
 It shows that a checked sum of a list and the total active balance succeed under such bounds.
 
 It then names the bounds on the amounts of a state that a run of slots needs.
@@ -265,6 +267,15 @@ def stakeSum (state : BeaconState preset fork) : Nat :=
 def pendingDepositSum (state : BeaconState preset fork) : Nat :=
   if electra : .pectra ≤ fork then pendingAmount (state.pendingDeposits electra).data.toList
   else 0
+
+/-- The number of validators plus, from Electra, the number of pending deposits.
+
+Each pending deposit can add at most one validator, when it is applied and leaves the queue.
+
+So this count bounds the registry after every pending deposit is applied. -/
+def registryLoad (state : BeaconState preset fork) : Nat :=
+  state.validators.data.size +
+    if electra : .pectra ≤ fork then (state.pendingDeposits electra).data.size else 0
 
 /-- The bounds on the amounts of a state that a run of slots needs.
 

@@ -719,7 +719,7 @@ private theorem block (early : fork < .glamsterdam) (holds : PendingSources stat
   have tail : Kept last after := by
     split at synced
     · exact fun h => h.kept (SamePendingQueue.syncAggregate synced)
-        (registryLifecycle_processSyncAggregate synced).size_le
+        (Nat.le_of_eq (congrArg (·.data.size) (processSyncAggregate_validators synced)).symm)
     · cases synced
       exact id
   have p := fold (fun _ _ _ h ok => h.kept (SamePendingQueue.proposer ok)
@@ -1605,7 +1605,8 @@ private theorem block (early : fork < .glamsterdam)
   have tail : Kept last after := by
     split at synced
     · exact fun h => h.framed (SamePendingQueue.syncAggregate synced)
-        (registryLifecycle_processSyncAggregate synced) (WithdrawalKept.syncAggregate synced)
+        (.of_data (congrArg (·.data) (processSyncAggregate_validators synced)))
+        (WithdrawalKept.syncAggregate synced)
         (frame_processSyncAggregate synced).slot
     · cases synced
       exact id

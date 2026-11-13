@@ -191,27 +191,27 @@ theorem mod_eq_slot (n : U256) : mod n 8191#256 = slot n.toNat := by
   simp [mod, slot, HISTORY_SERVE_WINDOW]
 
 /-- JUMPDEST, PUSH0, PUSH0 and REVERT, at byte 66, revert with no output. -/
-private theorem get_revert {stack : List U256} (hfork : .shapella ≤ fork)
+private theorem get_revertG {stack : List U256} (hfork : .shapella ≤ fork)
     (hstack : stack.length ≤ 4) (hgas : 10 ≤ gas) :
-    Spec fork (At CODE message 66 stack .empty gas state substate returnData)
+    SpecG fork (At CODE message 66 stack .empty gas state substate returnData)
       (Answer state none) := by
-  evm_step [CODE, CODE_NUMBER]
-  exact revertEmpty hfork (by evm_code [CODE, CODE_NUMBER]) (by evm_code [CODE, CODE_NUMBER])
+  evm_stepG [CODE, CODE_NUMBER]
+  exact revertEmptyG hfork (by evm_code [CODE, CODE_NUMBER]) (by evm_code [CODE, CODE_NUMBER])
     (by evm_code [CODE, CODE_NUMBER]) (by evm_code [CODE, CODE_NUMBER])
     (by simp only [STACK_LIMIT]; omega) (by omega)
 
 /-- From byte 54, the code reads the slot of the number `n` and returns its word. -/
-private theorem get_load {n : U256} (hfork : .shapella ≤ fork) (hgas : 2300 ≤ gas) :
-    Spec fork (At CODE message 54 [n] .empty gas state substate returnData)
+private theorem get_loadG {n : U256} (hfork : .shapella ≤ fork) (hgas : 2300 ≤ gas) :
+    SpecG fork (At CODE message 54 [n] .empty gas state substate returnData)
       (Answer state (some (storageOf state message.currentTarget (slot n.toNat)))) := by
-  evm_step [CODE, CODE_NUMBER]
-  evm_step [CODE, CODE_NUMBER]
-  evm_step [CODE, CODE_NUMBER]
+  evm_stepG [CODE, CODE_NUMBER]
+  evm_stepG [CODE, CODE_NUMBER]
+  evm_stepG [CODE, CODE_NUMBER]
   rw [mod_eq_slot]
-  refine Triple.seq (sload (code := CODE) (pc := 59) (gas := gas - 11) (key := slot n.toNat)
+  refine SpecG.seq (sloadG (code := CODE) (pc := 59) (gas := gas - 11) (key := slot n.toNat)
     (rest := []) (Nat.le_trans (by decide) hfork) (by evm_code [CODE, CODE_NUMBER])
     (by evm_code [CODE, CODE_NUMBER]) rfl (Nat.le_trans (sloadPrice_le _) (by omega))) ?_
-  refine Spec.consequence (returnWord hfork (by evm_code [CODE, CODE_NUMBER])
+  refine SpecG.consequence (returnWordG hfork (by evm_code [CODE, CODE_NUMBER])
     (by evm_code [CODE, CODE_NUMBER]) (by evm_code [CODE, CODE_NUMBER])
     (by evm_code [CODE, CODE_NUMBER]) (by evm_code [CODE, CODE_NUMBER])
     (by evm_code [CODE, CODE_NUMBER]) (by evm_code [CODE, CODE_NUMBER])
@@ -230,6 +230,107 @@ theorem getHash_eq (number : Nat) (read : U256 → U256) (input : ByteArray) :
   unfold getHash
   by_cases h1 : input.size = 32 <;> by_cases h2 : (inputWord input).toNat < number <;>
     by_cases h3 : number ≤ (inputWord input).toNat + HISTORY_SERVE_WINDOW <;> simp [h1, h2, h3]
+
+/-- A call from an address other than the system address gets a hash.
+
+It holds over the steps that are monotone in gas.
+
+It holds from Shapella, with at least 5,000 gas and fewer than `2^256` bytes of input.
+
+The block number is at least 1 and less than `2^256`.
+
+The frame returns the hash that the storage holds for the input, or reverts with no output.
+
+Its state reads as the state it starts from. -/
+theorem specG_get (hfork : .shapella ≤ fork)
+    (hcaller : message.caller ≠ SYSTEM_ADDRESS)
+    (hnumber : 1 ≤ message.blockEnv.number) (hbound : message.blockEnv.number < 2 ^ 256)
+    (hsize : message.data.size < 2 ^ 256) (hgas : 5000 ≤ gas) :
+    SpecG fork (At CODE message 0 [] .empty gas state substate returnData)
+      (Answer state (getHash message.blockEnv.number
+        (storageOf state message.currentTarget) message.data)) := by
+  have hc : equal (BitVec.ofNat 256 0xfffffffffffffffffffffffffffffffffffffffe)
+      message.caller.toU256 = 0 := by
+    rw [equal, ite_eq_right_iff]
+    exact fun e => absurd e.symm (toU256_ne_of_ne_SYSTEM_ADDRESS hcaller)
+  evm_stepG [CODE, CODE_NUMBER]
+  evm_stepG [CODE, CODE_NUMBER]
+  evm_stepG [CODE, CODE_NUMBER]
+  evm_stepG [CODE, CODE_NUMBER]
+  evm_stepG [CODE, CODE_NUMBER]
+  evm_stepG [CODE, CODE_NUMBER]
+  evm_stepG [CODE, CODE_NUMBER]
+  evm_stepG [CODE, CODE_NUMBER]
+  evm_stepG [CODE, CODE_NUMBER]
+  rw [getHash_eq]
+  simp only [inputWord]
+  by_cases h : message.data.size = 32
+  · have hs : sub (BitVec.ofNat 256 message.data.size) 32#256 = 0 := by rw [h]; rfl
+    evm_stepG [CODE, CODE_NUMBER]
+    evm_stepG [CODE, CODE_NUMBER]
+    evm_stepG [CODE, CODE_NUMBER]
+    evm_stepG [CODE, CODE_NUMBER]
+    evm_stepG [CODE, CODE_NUMBER]
+    evm_stepG [CODE, CODE_NUMBER]
+    evm_stepG [CODE, CODE_NUMBER]
+    evm_stepG [CODE, CODE_NUMBER]
+    have hpar : (sub (BitVec.ofNat 256 message.blockEnv.number) 1#256).toNat =
+        message.blockEnv.number - 1 := toNat_sub_of_le (by simpa using hnumber) hbound
+    simp only [h, ite_true]
+    by_cases hlt : (loadWord message.data 0 32).toNat < message.blockEnv.number
+    · have hc1 : greaterThan (loadWord message.data 0 32)
+          (sub (BitVec.ofNat 256 message.blockEnv.number) 1#256) = 0 := by
+        rw [greaterThan, ite_eq_right_iff, hpar]
+        intro e
+        exact absurd e (by omega)
+      evm_stepG [CODE, CODE_NUMBER]
+      evm_stepG [CODE, CODE_NUMBER]
+      evm_stepG [CODE, CODE_NUMBER]
+      evm_stepG [CODE, CODE_NUMBER]
+      evm_stepG [CODE, CODE_NUMBER]
+      evm_stepG [CODE, CODE_NUMBER]
+      evm_stepG [CODE, CODE_NUMBER]
+      evm_stepG [CODE, CODE_NUMBER]
+      have hdiff := toNat_sub_of_le (n := loadWord message.data 0 32) (Nat.le_of_lt hlt) hbound
+      simp only [hlt, ite_true]
+      by_cases hle : message.blockEnv.number ≤
+          (loadWord message.data 0 32).toNat + HISTORY_SERVE_WINDOW
+      · have hc2 : greaterThan (sub (BitVec.ofNat 256 message.blockEnv.number)
+            (loadWord message.data 0 32)) 8191#256 = 0 := by
+          rw [greaterThan, ite_eq_right_iff, hdiff]
+          simp only [BitVec.toNat_ofNat, HISTORY_SERVE_WINDOW] at hle ⊢
+          omega
+        evm_stepG [CODE, CODE_NUMBER]
+        simp only [hle, ite_true]
+        refine get_loadG hfork ?_
+        omega
+      · have hc2 : greaterThan (sub (BitVec.ofNat 256 message.blockEnv.number)
+            (loadWord message.data 0 32)) 8191#256 ≠ 0 := by
+          rw [greaterThan, hdiff]
+          simp only [BitVec.toNat_ofNat, HISTORY_SERVE_WINDOW] at hle ⊢
+          have hgt : message.blockEnv.number - (loadWord message.data 0 32).toNat >
+              8191 % 2 ^ 256 := by omega
+          simp [hgt]
+        evm_stepG [CODE, CODE_NUMBER]
+        simp only [hle, ite_false]
+        exact get_revertG hfork (by simp) (by omega)
+    · have hc1 : greaterThan (loadWord message.data 0 32)
+          (sub (BitVec.ofNat 256 message.blockEnv.number) 1#256) ≠ 0 := by
+        rw [greaterThan, hpar]
+        have hgt : (loadWord message.data 0 32).toNat > message.blockEnv.number - 1 := by omega
+        simp [hgt]
+      evm_stepG [CODE, CODE_NUMBER]
+      evm_stepG [CODE, CODE_NUMBER]
+      simp only [hlt, ite_false]
+      exact get_revertG hfork (by simp) (by omega)
+  · have hs : sub (BitVec.ofNat 256 message.data.size) 32#256 ≠ 0 := by
+      intro e
+      have := congrArg BitVec.toNat e
+      simp [sub, BitVec.toNat_sub, Nat.mod_eq_of_lt hsize] at this
+      omega
+    evm_stepG [CODE, CODE_NUMBER]
+    simp only [h, ite_false]
+    exact get_revertG hfork (by simp) (by omega)
 
 /-- A call from an address other than the system address gets a hash, as EIP-2935 describes.
 
@@ -250,89 +351,8 @@ theorem spec_get (hfork : .shapella ≤ fork) (_hglam : fork < .glamsterdam)
     (hsize : message.data.size < 2 ^ 256) (hgas : 5000 ≤ gas) :
     Spec fork (At CODE message 0 [] .empty gas state substate returnData)
       (Answer state (getHash message.blockEnv.number (storageOf state message.currentTarget)
-        message.data)) := by
-  have hc : equal (BitVec.ofNat 256 0xfffffffffffffffffffffffffffffffffffffffe)
-      message.caller.toU256 = 0 := by
-    rw [equal, ite_eq_right_iff]
-    exact fun e => absurd e.symm (toU256_ne_of_ne_SYSTEM_ADDRESS hcaller)
-  evm_step [CODE, CODE_NUMBER]
-  evm_step [CODE, CODE_NUMBER]
-  evm_step [CODE, CODE_NUMBER]
-  evm_step [CODE, CODE_NUMBER]
-  evm_step [CODE, CODE_NUMBER]
-  evm_step [CODE, CODE_NUMBER]
-  evm_step [CODE, CODE_NUMBER]
-  evm_step [CODE, CODE_NUMBER]
-  evm_step [CODE, CODE_NUMBER]
-  rw [getHash_eq]
-  simp only [inputWord]
-  by_cases h : message.data.size = 32
-  · have hs : sub (BitVec.ofNat 256 message.data.size) 32#256 = 0 := by rw [h]; rfl
-    evm_step [CODE, CODE_NUMBER]
-    evm_step [CODE, CODE_NUMBER]
-    evm_step [CODE, CODE_NUMBER]
-    evm_step [CODE, CODE_NUMBER]
-    evm_step [CODE, CODE_NUMBER]
-    evm_step [CODE, CODE_NUMBER]
-    evm_step [CODE, CODE_NUMBER]
-    evm_step [CODE, CODE_NUMBER]
-    have hpar : (sub (BitVec.ofNat 256 message.blockEnv.number) 1#256).toNat =
-        message.blockEnv.number - 1 := toNat_sub_of_le (by simpa using hnumber) hbound
-    simp only [h, ite_true]
-    by_cases hlt : (loadWord message.data 0 32).toNat < message.blockEnv.number
-    · have hc1 : greaterThan (loadWord message.data 0 32)
-          (sub (BitVec.ofNat 256 message.blockEnv.number) 1#256) = 0 := by
-        rw [greaterThan, ite_eq_right_iff, hpar]
-        intro e
-        exact absurd e (by omega)
-      evm_step [CODE, CODE_NUMBER]
-      evm_step [CODE, CODE_NUMBER]
-      evm_step [CODE, CODE_NUMBER]
-      evm_step [CODE, CODE_NUMBER]
-      evm_step [CODE, CODE_NUMBER]
-      evm_step [CODE, CODE_NUMBER]
-      evm_step [CODE, CODE_NUMBER]
-      evm_step [CODE, CODE_NUMBER]
-      have hdiff := toNat_sub_of_le (n := loadWord message.data 0 32) (Nat.le_of_lt hlt) hbound
-      simp only [hlt, ite_true]
-      by_cases hle : message.blockEnv.number ≤
-          (loadWord message.data 0 32).toNat + HISTORY_SERVE_WINDOW
-      · have hc2 : greaterThan (sub (BitVec.ofNat 256 message.blockEnv.number)
-            (loadWord message.data 0 32)) 8191#256 = 0 := by
-          rw [greaterThan, ite_eq_right_iff, hdiff]
-          simp only [BitVec.toNat_ofNat, HISTORY_SERVE_WINDOW] at hle ⊢
-          omega
-        evm_step [CODE, CODE_NUMBER]
-        simp only [hle, ite_true]
-        refine get_load hfork ?_
-        omega
-      · have hc2 : greaterThan (sub (BitVec.ofNat 256 message.blockEnv.number)
-            (loadWord message.data 0 32)) 8191#256 ≠ 0 := by
-          rw [greaterThan, hdiff]
-          simp only [BitVec.toNat_ofNat, HISTORY_SERVE_WINDOW] at hle ⊢
-          have hgt : message.blockEnv.number - (loadWord message.data 0 32).toNat >
-              8191 % 2 ^ 256 := by omega
-          simp [hgt]
-        evm_step [CODE, CODE_NUMBER]
-        simp only [hle, ite_false]
-        exact get_revert hfork (by simp) (by omega)
-    · have hc1 : greaterThan (loadWord message.data 0 32)
-          (sub (BitVec.ofNat 256 message.blockEnv.number) 1#256) ≠ 0 := by
-        rw [greaterThan, hpar]
-        have hgt : (loadWord message.data 0 32).toNat > message.blockEnv.number - 1 := by omega
-        simp [hgt]
-      evm_step [CODE, CODE_NUMBER]
-      evm_step [CODE, CODE_NUMBER]
-      simp only [hlt, ite_false]
-      exact get_revert hfork (by simp) (by omega)
-  · have hs : sub (BitVec.ofNat 256 message.data.size) 32#256 ≠ 0 := by
-      intro e
-      have := congrArg BitVec.toNat e
-      simp [sub, BitVec.toNat_sub, Nat.mod_eq_of_lt hsize] at this
-      omega
-    evm_step [CODE, CODE_NUMBER]
-    simp only [h, ite_false]
-    exact get_revert hfork (by simp) (by omega)
+        message.data)) :=
+  (specG_get hfork hcaller hnumber hbound hsize hgas).toSpec
 
 /-! ## The system call -/
 
