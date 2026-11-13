@@ -129,3 +129,33 @@ py_quic_packet_number_decode(
 ) {
   return call_pyvalue_export(eth_quic_packet_number_decode, args, 3, QUIC_ERROR);
 }
+
+extern lean_object* eth_quic_protect(lean_object* args);
+
+PyObject*
+py_quic_protect(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_quic_protect, args, 6, QUIC_PROTECTION_ERROR);
+}
+
+extern lean_object* eth_quic_unprotect(lean_object* args);
+
+PyObject*
+py_quic_unprotect(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_quic_unprotect, args, 5, QUIC_PROTECTION_ERROR);
+}
+
+extern lean_object* eth_quic_retry_tag(lean_object* args);
+
+PyObject*
+py_quic_retry_tag(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_quic_retry_tag, args, 2, QUIC_PROTECTION_ERROR);
+}

@@ -193,6 +193,10 @@ class QuicError(EthLibError, ValueError):
     """A QUIC header, packet number or frame is malformed, out of range, or not allowed there."""
 
 
+class QuicProtectionError(EthLibError, ValueError):
+    """A QUIC packet has a malformed header, an insufficient sample or a failed AEAD check."""
+
+
 class QuicVarintError(EthLibError, ValueError):
     """The bytes end before the QUIC integer they start, or a value is not below 2^62."""
 
@@ -378,6 +382,7 @@ __all__ = [
     "VarintError",
     "UvarintError",
     "QuicVarintError",
+    "QuicProtectionError",
     "QuicError",
     "MultistreamError",
     "MplexError",
