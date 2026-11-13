@@ -423,6 +423,18 @@ theorem Reachable.linked (reachable : Reachable config anchorState anchorBlock s
         exact .inl (linked.insert new hits parentState earlier atSlot blocks states)
     · exact .inr (contains _ known)
 
+/-- A reachable store is linked under the parent root of the anchor, when it knows no such block.
+
+That needs the anchor block at or before the slot of the anchor state. -/
+theorem Reachable.linked_of_unknown (reachable : Reachable config anchorState anchorBlock store)
+    (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
+    (unknown : store.blocks[anchorBlock.parentRoot]? = none) :
+    store.Linked anchorBlock.parentRoot := by
+  rcases reachable.linked anchorSlot with linked | known
+  · exact linked
+  · rw [Std.TreeMap.contains_eq_isSome_getElem?, unknown] at known
+    cases known
+
 /-- In a reachable store, each known parent sits at an earlier slot than its child.
 
 That needs the anchor block at or before the slot of the anchor state.
@@ -430,11 +442,8 @@ That needs the anchor block at or before the slot of the anchor state.
 It also needs the parent root of the anchor to name no known block. -/
 theorem Reachable.parentsBelow (reachable : Reachable config anchorState anchorBlock store)
     (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
-    (unknown : store.blocks[anchorBlock.parentRoot]? = none) : store.ParentsBelow := by
-  rcases reachable.linked anchorSlot with linked | known
-  · exact linked.parentsBelow
-  · rw [Std.TreeMap.contains_eq_isSome_getElem?, unknown] at known
-    cases known
+    (unknown : store.blocks[anchorBlock.parentRoot]? = none) : store.ParentsBelow :=
+  (reachable.linked_of_unknown anchorSlot unknown).parentsBelow
 
 /-- All the states that the store keeps have one genesis time. -/
 def OneGenesisTime (store : Store preset fork) : Prop :=
