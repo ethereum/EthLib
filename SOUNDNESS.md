@@ -1909,6 +1909,14 @@ That check follows "Cells (0x15)" in [`caps/eth.md`](https://github.com/ethereum
 `checkCells_eq_ok_iff` (`Execution/Proofs/Network/Cells.lean`) states the rules of those cells.
 The caller gives the number of blobs of each transaction, and the check trusts it.
 
+`CellMask.has_eq_true_iff` states which index a bitmap marks: index `i` exactly when `i < 128` and bit `i % 8` of byte `i / 8` is set, counting from the least significant bit.
+"Cells (0x15)" fixes no bit order, and the check reads the bitmaps only through the subset rule and the count.
+`CellMask.subset_eq_true_iff` states the subset rule in those marks: one bitmap is a subset of another exactly when the other marks each index that it marks.
+`CellMask.count_eq_sum` states that the count of a bitmap, the `popcount` of "Cells (0x15)", is the number of set bits of its 16 bytes.
+`CellMask.count_le_count_of_subset` states that a subset counts no more indices than the bitmap that holds it.
+Together, `checkCells_eq_ok_iff` and `CellMask.count_le_count_of_subset` give that a response that passes has no more cells for each blob than the request asks for.
+No export calls the cells check, so no test of the bindings runs it.
+
 ### Weak subjectivity
 
 A node that starts from a recent checkpoint trusts it only for a limited time, the weak subjectivity period.
