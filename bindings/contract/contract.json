@@ -9415,6 +9415,29 @@
    "error_class": "MplexError",
    "docstring":
    "The mplex frame at the start of the bytes, and the bytes after it."},
+  {"summary":
+   "The streams of one side after the frames it receives and sends, from an empty table.",
+   "signature":
+   "(events: list[tuple[bool, bytes]]) -> list[tuple[int, bool, str]]",
+   "operation": "EthLib.Networking.Libp2p.Exports.mplexSessionExport",
+   "method": "mplex_session",
+   "errors":
+   [{"type": "EthLib.Networking.Libp2p.Mplex.MplexError",
+     "codes":
+     [{"constructor": "header", "code": 1},
+      {"constructor": "unknownFlag", "code": 2},
+      {"constructor": "length", "code": 3},
+      {"constructor": "tooLong", "code": 4},
+      {"constructor": "dataOnEnd", "code": 5},
+      {"constructor": "truncated", "code": 6}]},
+    {"type": "EthLib.Networking.Libp2p.Mplex.MplexSessionError",
+     "codes":
+     [{"constructor": "reusedId", "code": 101},
+      {"constructor": "unknownStream", "code": 102},
+      {"constructor": "writeAfterClose", "code": 103}]}],
+   "error_class": "MplexError",
+   "docstring":
+   "The streams of one side after the frames it receives and sends, from an empty table.\n\nEach event says whether this side receives its bytes, and holds whole frames.\n\nThe streams come as their ID, whether this side opened them, and their state.\n\nA frame that does not decode, or that the side refuses, raises its error.\n\nThe error names the index of the event."},
   {"summary": "The bytes of a valid yamux frame.",
    "signature": "(frame: dict[str, Any]) -> bytes",
    "operation": "EthLib.Networking.Libp2p.Exports.yamuxEncodeExport",

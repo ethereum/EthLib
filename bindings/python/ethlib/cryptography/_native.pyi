@@ -1365,6 +1365,10 @@ def mplex_decode(data: bytes) -> tuple[dict[str, Any], bytes]:
     """The mplex frame at the start of the bytes, and the bytes after it."""
     ...
 
+def mplex_session(events: list[tuple[bool, bytes]]) -> list[tuple[int, bool, str]]:
+    """The streams of one side after the frames it receives and sends, from an empty table."""
+    ...
+
 def yamux_encode(frame: dict[str, Any]) -> bytes:
     """The bytes of a valid yamux frame."""
     ...
