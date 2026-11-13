@@ -934,7 +934,7 @@ def api_blobs(
     *,
     hashes: Sequence[bytes] | None = None,
 ) -> dict[str, Any]:
-    """The Beacon API blobs of a signed block, in the order of its commitments, or ConsensusError."""
+    """The Beacon API blobs of a signed block, in commitment order, or ConsensusError."""
     # The blobs are those of the commitments of the block, one each, in order; else code 500.
     # With hashes, only the blobs whose commitment has one of these versioned hashes remain.
     chosen = None if hashes is None else list(hashes)
