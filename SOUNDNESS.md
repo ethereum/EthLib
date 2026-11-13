@@ -2540,7 +2540,9 @@ It becomes the attested header when that header is newer and more members signed
 That threshold is half the larger count of signers, of the previous period and of the current one with the update.
 A newer finalized header signed by two thirds of the committee then replaces it if that header is newer still.
 `processLightClientUpdate_finalizedHeader` gives the finalized header after an update, which moves only with two thirds of the committee.
-`processLightClientUpdate_maxActiveParticipants` gives both counts of signers, and their move back a period when a newer finalized header enters the next period.
+`processLightClientUpdate_maxActiveParticipants` gives both counts of signers after an update.
+They move back a period when a newer finalized header enters the next period.
+That needs two thirds of the committee, and a store that knows the next committee.
 `SyncAggregate.participants_le` bounds the signers by the size of the committee, so their count fits in 64 bits.
 No theorem links an honest signer to the canonical chain; that is a property of the validators, not of the protocol text.
 

@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.Uint64
 public import EthLib.Consensus.LightClient.Sync
 
 /-!
@@ -23,13 +24,15 @@ A new store starts with one header for both.
 
 The finalized slot then stays at or below the optimistic slot.
 
-An update moves the optimistic header when more than the safety threshold signed.
+An update can make its attested header the optimistic header.
 
-That threshold is half the larger count of signers, of the previous and the current period.
+That needs a newer attested header, and more signers than the safety threshold.
+
+That threshold is half the larger of the two counts of signers, rounded down.
 
 An update moves the finalized header only with two thirds of the committee.
 
-Both counts of signers take their values too, and move back a period at a new period.
+The two counts of signers move back a period when such a header opens the next period.
 -/
 
 @[expose] public section
@@ -564,9 +567,6 @@ private theorem processLightClientUpdate_fields {config : Config} {checks : Sign
         (if rotated then current else store.previousMaxActiveParticipants.toNat) := by
   have small : update.syncAggregate.participants < 2 ^ 64 :=
     Nat.lt_of_le_of_lt (SyncAggregate.participants_le _) (UInt64.toNat_lt _)
-  have hmax (a b : UInt64) : (max a b).toNat = max a.toNat b.toNat := by
-    simp only [UInt64.max_def, UInt64.le_iff_toNat_le]
-    split <;> omega
   unfold processLightClientUpdate at computed
   simp only [bind, Except.bind, pure, Except.pure] at computed
   repeat' split at computed
@@ -575,8 +575,8 @@ private theorem processLightClientUpdate_fields {config : Config} {checks : Sign
     cases computed
     try dsimp only at *
     try simp_all [LightClientStore.safetyThreshold, LightClientStore.isNextSyncCommitteeKnown,
-      Nat.toUInt64, UInt64.toNat_ofNat, Nat.mod_eq_of_lt small, apply_ite UInt64.toNat,
-      ← UInt64.not_le]
+      Nat.toUInt64, UInt64.toNat_ofNat, Nat.mod_eq_of_lt small, Base.Uint64.toNat_max,
+      apply_ite UInt64.toNat, ← UInt64.not_le]
   all_goals
     repeat' split
     all_goals simp_all
@@ -629,9 +629,9 @@ theorem processLightClientUpdate_finalizedHeader {config : Config} {checks : Sig
       else store.finalizedHeader :=
   (processLightClientUpdate_fields computed).1
 
-/-- After an update, the current count of signers is the larger of the stored count and its signers.
+/-- After an update, the current count of signers first takes the signers of the update, if more.
 
-The counts move back a period when a newer finalized header falls in the next period.
+The counts then move back a period when a newer finalized header falls in the next period.
 
 That needs two thirds of the committee, and a store that knows the next committee.
 
