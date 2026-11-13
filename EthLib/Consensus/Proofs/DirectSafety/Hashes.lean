@@ -66,13 +66,49 @@ def _root_.EthLib.Consensus.Run.hashObjects {first last : ForkedBeaconState pres
   | .nil => [.state first, .header first.state.latestBlockHeader]
   | .snoc pre step => pre.hashObjects ++ step.hashObjects
 
+/-- The first object of the list whose root is zero, if any. -/
+def findZeroRoot (objects : List (HashObject preset)) : Option (HashObject preset) :=
+  objects.find? fun object => decide (object.root = some (Vector.replicate 32 0))
+
+/-- An object that the zero search returns is one of the objects, and its root is zero. -/
+theorem findZeroRoot_valid {objects : List (HashObject preset)} {object : HashObject preset}
+    (found : findZeroRoot objects = some object) :
+    object ∈ objects ∧ object.root = some (Vector.replicate 32 0) :=
+  ⟨List.mem_of_find?_eq_some found, by simpa using List.find?_some found⟩
+
+/-- The zero search fails exactly when no object has root zero. -/
+theorem findZeroRoot_eq_none_iff {objects : List (HashObject preset)} :
+    findZeroRoot objects = none ↔
+      ∀ object ∈ objects, object.root ≠ some (Vector.replicate 32 0) := by
+  simp [findZeroRoot, List.find?_eq_none]
+
 /-- Two different inputs of the SHA-256 node hash with one digest, or an object whose root is zero.
 
-Both are read among the given objects. -/
+Both are read among the given objects.
+
+Each alternative says that a search over those objects returns one. -/
 def HashEvidence (objects : List (HashObject preset)) : Prop :=
-  (∃ x ∈ objects.flatMap HashObject.messages, ∃ y ∈ objects.flatMap HashObject.messages,
-    MessageCollision x y) ∨
-  ∃ object ∈ objects, object.root = some (Vector.replicate 32 0)
+  (∃ x y, findMessageCollision (objects.flatMap HashObject.messages)
+      (objects.flatMap HashObject.messages) = some (x, y)) ∨
+    ∃ object, findZeroRoot objects = some object
+
+/-- The searches find evidence exactly when that evidence exists.
+
+Two different inputs of the node hash share a digest, or an object has root zero. -/
+theorem hashEvidence_iff {objects : List (HashObject preset)} :
+    HashEvidence objects ↔
+      (∃ x ∈ objects.flatMap HashObject.messages, ∃ y ∈ objects.flatMap HashObject.messages,
+        MessageCollision x y) ∨
+      ∃ object ∈ objects, object.root = some (Vector.replicate 32 0) := by
+  constructor
+  · rintro (⟨x, y, found⟩ | ⟨object, found⟩)
+    · obtain ⟨xMember, yMember, collision⟩ := findMessageCollision_valid found
+      exact .inl ⟨x, xMember, y, yMember, collision⟩
+    · exact .inr ⟨object, findZeroRoot_valid found⟩
+  · rintro (⟨x, xMember, y, yMember, collision⟩ | ⟨object, member, zero⟩)
+    · exact .inl (findMessageCollision_of_collision xMember yMember collision)
+    · refine .inr (Option.isSome_iff_exists.mp (Option.isSome_iff_ne_none.mpr fun none => ?_))
+      exact findZeroRoot_eq_none_iff.mp none object member zero
 
 private theorem header_binding (objects : List (HashObject preset)) (a b : BeaconBlockHeader)
     (one : .header a ∈ objects) (two : .header b ∈ objects) (root : Root)
@@ -89,9 +125,8 @@ private theorem header_binding (objects : List (HashObject preset)) (a b : Beaco
   · obtain ⟨leftTree, rightTree, leftOk, rightOk, x, y, _, leftMem, rightMem, collided⟩ :=
       collision
     right
-    left
-    refine ⟨x, List.mem_flatMap.mpr ⟨.header a, one, ?_⟩,
-      y, List.mem_flatMap.mpr ⟨.header b, two, ?_⟩, collided⟩
+    refine hashEvidence_iff.mpr (.inl ⟨x, List.mem_flatMap.mpr ⟨.header a, one, ?_⟩,
+      y, List.mem_flatMap.mpr ⟨.header b, two, ?_⟩, collided⟩)
     · simpa [HashObject.messages, leftOk, Except.toOption] using leftMem
     · simpa [HashObject.messages, rightOk, Except.toOption] using rightMem
 
@@ -423,7 +458,7 @@ private theorem checkpoint_binding {g a b : ForkedBeaconState preset}
   have nonzero : ∀ object ∈ left.hashObjects ++ right.hashObjects,
       object.root ≠ some (Vector.replicate 32 0) := by
     intro object member zero
-    exact evidence (.inr ⟨object, member, zero⟩)
+    exact evidence (hashEvidence_iff.mpr (.inr ⟨object, member, zero⟩))
   obtain ⟨slot₁, start₁, read₁⟩ := getBlockRoot_ok_iff.mp one
   obtain ⟨slot₂, start₂, read₂⟩ := getBlockRoot_ok_iff.mp two
   have sameSlot : slot₁ = slot₂ := Except.ok.inj (start₁.symm.trans start₂)
@@ -452,6 +487,7 @@ private theorem hashObjects_append_subset {g a b : ForkedBeaconState preset}
 
 private theorem hashEvidence_mono {one two : List (HashObject preset)}
     (subset : one ⊆ two) (evidence : HashEvidence one) : HashEvidence two := by
+  rw [hashEvidence_iff] at evidence ⊢
   rcases evidence with ⟨x, xm, y, ym, collision⟩ | ⟨object, member, zero⟩
   · left
     have mem {z} (member : z ∈ one.flatMap HashObject.messages) :
