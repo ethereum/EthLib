@@ -12,7 +12,7 @@ A valid header binds that data to any body whose root is its body root, or names
 
 Before Gloas the data is the payload root at node 25, and from Gloas a block hash.
 
-From Gloas, a header of an earlier block rebuilds the root of its execution header from that hash.
+From Gloas, a header of a slot from Capella to Fulu climbs from that hash to its execution root.
 
 From Deneb the binding reaches the blob gas fields of [EIP-4844].
 
@@ -936,13 +936,17 @@ theorem isValidLightClientHeader_executionBlockHash {config : Config}
 omit [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat] [NeZero preset.SYNC_COMMITTEE_SIZE.toNat]
   [NeZero preset.MAX_COMMITTEES_PER_SLOT.toNat] [NeZero preset.PTC_SIZE.toNat]
   [NeZero preset.INCLUSION_LIST_COMMITTEE_SIZE.toNat] in
-/-- The root that a Gloas header rebuilds for the execution header of an earlier block.
+/-- The root that a Gloas header rebuilds for an execution header, for every slot, branch and fork.
 
 At the genesis slot it is the root of the empty execution header of the given fork.
 
-Otherwise the block hash climbs to it at index 12, by the nodes of the branch before its last 4.
+Otherwise the block hash climbs to it as field 12 of the execution header, by a slice of the branch.
 
-From Deneb it takes the 5 nodes before those, and before Deneb the 4 nodes before those. -/
+The slice ends before the last 4 nodes, which climb from the payload at node 25 to the body root.
+
+It has the 5 nodes before those when the given fork is from Deneb, and 4 nodes otherwise.
+
+A branch too short for that slice gives an error. -/
 theorem rebuildLcExecutionRoot_eq {slot : Slot} {blockHash : Hash32} {branch : List Bytes32}
     {payloadFork : Fork} :
     rebuildLcExecutionRoot (preset := preset) slot blockHash branch payloadFork =
@@ -971,9 +975,9 @@ omit [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat] [NeZero preset.SYNC_COMMITTEE_SI
   [NeZero preset.INCLUSION_LIST_COMMITTEE_SIZE.toNat] in
 /-- From Gloas, the execution root of a header is rebuilt for a slot before Gloas.
 
-The slot must be from Capella or from Deneb.
+The slot must be from Capella or from Deneb, since the configuration does not order these forks.
 
-The fork of the rebuilt execution header is Deneb from Deneb, and Capella before Deneb. -/
+The rebuilt execution header is that of Deneb for a slot from Deneb, and of Capella otherwise. -/
 theorem getLcExecutionRoot_rebuild {config : Config} (gloas : .glamsterdam ≤ fork)
     {header : LightClientHeader preset fork}
     (earlier : computeEpochAtSlot preset header.beacon.slot < config.GLOAS_FORK_EPOCH)

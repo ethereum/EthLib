@@ -2513,11 +2513,12 @@ The search is over the two branch climbs, or over the hash inputs of two executi
 From Gloas, `isValidLightClientHeader_parentBlockHash` binds the block hash of a header at a slot from Gloas to the parent block hash of the bid of a Gloas body.
 `isValidLightClientHeader_executionBlockHash` binds it, for an earlier slot from Capella, to the block hash of the payload of a body from Capella to Fulu that is from Deneb exactly when the slot is.
 For such a slot, `getLcExecutionRoot_rebuild` shows that the execution root is rebuilt from the block hash.
-The rebuilt execution header is of Deneb from Deneb, and of Capella before.
+The rebuilt execution header is a Deneb header for a slot from Deneb, and a Capella header before Deneb.
 `rebuildLcExecutionRoot_eq` states the rebuilt root on every input.
 At the genesis slot it is the root of the empty execution header of that fork.
-Otherwise the block hash climbs at index 12 through a slice of the branch, which ends before its last 4 nodes.
-The slice has 5 nodes from Deneb and 4 before Deneb.
+Otherwise the block hash climbs as field 12 of the execution header, through a slice of the branch that ends before its last 4 nodes.
+The slice has the 5 nodes before them from Deneb, and the 4 before them before Deneb; a shorter branch gives a length error.
+These two are rewrite lemmas: no theorem yet binds the rebuilt root to the payload of a body.
 The headers that the client checks are valid: `initializeLightClientStore_header_valid`, `validateLightClientUpdate_attestedHeader_valid`, and `validateLightClientUpdate_finalizedHeader_valid` after the genesis slot.
 The index theorems `executionPayloadGindex_eq`, `payloadHeaderBlockHashGindex_eq`, `executionBlockHashGindex_eq` and `executionBlockHashGindexGloas_eq` hold at every preset.
 
