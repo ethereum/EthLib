@@ -416,6 +416,20 @@ def runBody (chain : BlockChain) {fork : Fork} (block : Block fork Transaction)
   let roots ← outputRoots block.transactions block.withdrawals output output.block.applyChanges
   return ⟨output, roots⟩
 
+/-- A header with the fields that the body of its block gives, as after a build or a simulation. -/
+def fillHeader {fork : Fork} (header : Header fork) (output : BlockOutput fork)
+    (roots : OutputRoots) : Header fork :=
+  { header with
+    stateRoot := roots.state
+    transactionsRoot := roots.transactions
+    receiptRoot := roots.receipts
+    bloom := logsBloom output.logs
+    gasUsed := output.gas.gasUsed
+    withdrawalsRoot := fun _ => roots.withdrawals.getD 0
+    blobGasUsed := fun _ => output.gas.blob.toUInt64
+    requestsHash := fun _ => requestsHash output.requests
+    blockAccessListHash := fun _ => output.accessListHash.getD 0 }
+
 /-! ## The transition -/
 
 /-- Run the state transition of `block` at `fork` on the chain `chain`, and give the state after.
