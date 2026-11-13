@@ -185,6 +185,10 @@ class UvarintError(EthLibError, ValueError):
     """The bytes do not start with a multiformats unsigned varint, or a value is out of range."""
 
 
+class Tls13Error(EthLibError, ValueError):
+    """A TLS 1.3 key derivation rejected its input."""
+
+
 class QuicVarintError(EthLibError, ValueError):
     """The bytes end before the QUIC integer they start, or a value is not below 2^62."""
 
@@ -365,6 +369,7 @@ __all__ = [
     "VarintError",
     "UvarintError",
     "QuicVarintError",
+    "Tls13Error",
     "MultistreamError",
     "MplexError",
     "YamuxError",

@@ -1385,6 +1385,22 @@ def uvarint_decode(data: bytes) -> tuple[int, bytes]:
     """The value of the unsigned varint at the start of the bytes, and the bytes after it."""
     ...
 
+def tls13_hkdf_label(label: bytes, context: bytes, length: int) -> bytes:
+    """Serialize the checked TLS 1.3 HKDF label, RFC 8446 §7.1."""
+    ...
+
+def tls13_expand_label(secret: bytes, label: bytes, context: bytes, length: int) -> bytes:
+    """Expand a SHA-256 secret with a TLS 1.3 label and context, RFC 8446 §7.1."""
+    ...
+
+def quic_initial_secrets(dcid: bytes) -> tuple[bytes, bytes]:
+    """Derive the client and server Initial secrets for QUIC v1, RFC 9001 §5.2."""
+    ...
+
+def quic_packet_keys(suite: str, secret: bytes) -> tuple[bytes, bytes, bytes]:
+    """Derive the payload key, IV and header-protection key, in that order, RFC 9001 §5.1."""
+    ...
+
 def quic_varint_encode(value: int) -> bytes:
     """Encode a value below `2^62` with its shortest QUIC representation, RFC 9000 §16."""
     ...

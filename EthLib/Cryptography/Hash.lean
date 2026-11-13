@@ -1,5 +1,7 @@
 module
 
+public import EthLib.Cryptography.Hash.Tls13
+
 public import EthLib.Cryptography.Hash.Sha256
 public import EthLib.Cryptography.Hash.Keccak
 public import EthLib.Cryptography.Hash.Ripemd160

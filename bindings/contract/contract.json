@@ -9995,6 +9995,65 @@
    "error_class": "UvarintError",
    "docstring":
    "The value of the unsigned varint at the start of the bytes, and the bytes after it."},
+  {"summary": "Serialize the checked TLS 1.3 HKDF label, RFC 8446 §7.1.",
+   "signature": "(label: bytes, context: bytes, length: int) -> bytes",
+   "operation": "EthLib.Networking.Quic.KeysExports.labelExport",
+   "method": "tls13_hkdf_label",
+   "errors":
+   [{"type": "EthLib.Cryptography.Hash.Tls13.Error",
+     "codes":
+     [{"constructor": "labelLength", "code": 1},
+      {"constructor": "contextLength", "code": 2},
+      {"constructor": "lengthOverflow", "code": 3},
+      {"constructor": "hkdf", "code": 4}]}],
+   "error_class": "Tls13Error",
+   "docstring": "Serialize the checked TLS 1.3 HKDF label, RFC 8446 §7.1."},
+  {"summary":
+   "Expand a SHA-256 secret with a TLS 1.3 label and context, RFC 8446 §7.1.",
+   "signature":
+   "(secret: bytes, label: bytes, context: bytes, length: int) -> bytes",
+   "operation": "EthLib.Networking.Quic.KeysExports.expandExport",
+   "method": "tls13_expand_label",
+   "errors":
+   [{"type": "EthLib.Cryptography.Hash.Tls13.Error",
+     "codes":
+     [{"constructor": "labelLength", "code": 1},
+      {"constructor": "contextLength", "code": 2},
+      {"constructor": "lengthOverflow", "code": 3},
+      {"constructor": "hkdf", "code": 4}]}],
+   "error_class": "Tls13Error",
+   "docstring":
+   "Expand a SHA-256 secret with a TLS 1.3 label and context, RFC 8446 §7.1."},
+  {"summary":
+   "Derive the client and server Initial secrets for QUIC v1, RFC 9001 §5.2.",
+   "signature": "(dcid: bytes) -> tuple[bytes, bytes]",
+   "operation": "EthLib.Networking.Quic.KeysExports.initialExport",
+   "method": "quic_initial_secrets",
+   "errors":
+   [{"type": "EthLib.Cryptography.Hash.Tls13.Error",
+     "codes":
+     [{"constructor": "labelLength", "code": 1},
+      {"constructor": "contextLength", "code": 2},
+      {"constructor": "lengthOverflow", "code": 3},
+      {"constructor": "hkdf", "code": 4}]}],
+   "error_class": "Tls13Error",
+   "docstring":
+   "Derive the client and server Initial secrets for QUIC v1, RFC 9001 §5.2."},
+  {"summary":
+   "Derive the payload key, IV and header-protection key, in that order, RFC 9001 §5.1.",
+   "signature": "(suite: str, secret: bytes) -> tuple[bytes, bytes, bytes]",
+   "operation": "EthLib.Networking.Quic.KeysExports.packetExport",
+   "method": "quic_packet_keys",
+   "errors":
+   [{"type": "EthLib.Cryptography.Hash.Tls13.Error",
+     "codes":
+     [{"constructor": "labelLength", "code": 1},
+      {"constructor": "contextLength", "code": 2},
+      {"constructor": "lengthOverflow", "code": 3},
+      {"constructor": "hkdf", "code": 4}]}],
+   "error_class": "Tls13Error",
+   "docstring":
+   "Derive the payload key, IV and header-protection key, in that order, RFC 9001 §5.1."},
   {"summary":
    "Encode a value below `2^62` with its shortest QUIC representation, RFC 9000 §16.",
    "signature": "(value: int) -> bytes",
