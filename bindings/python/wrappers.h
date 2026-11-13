@@ -750,6 +750,7 @@ PyObject* py_rpc_error_groups                            (PyObject* self, PyObje
 PyObject* py_rpc_pruned_history_unavailable              (PyObject* self, PyObject* args);
 PyObject* py_rpc_serve                                   (PyObject* self, PyObject* args);
 PyObject* py_rpc_encode_block_access_list                (PyObject* self, PyObject* args);
+PyObject* py_rpc_apply_overrides                         (PyObject* self, PyObject* args);
 
 /* ---- Typed values (`pyvalue.c`) --------------------------------------- */
 

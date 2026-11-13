@@ -1364,6 +1364,8 @@ static PyMethodDef methods[] = {
   {"rpc_serve", py_rpc_serve, METH_VARARGS, DOC_rpc_serve},
   {"rpc_encode_block_access_list", py_rpc_encode_block_access_list, METH_VARARGS,
    DOC_rpc_encode_block_access_list},
+  {"rpc_apply_overrides", py_rpc_apply_overrides, METH_VARARGS,
+   DOC_rpc_apply_overrides},
   {"pyvalue_echo", py_pyvalue_echo, METH_VARARGS, DOC_pyvalue_echo},
   {NULL, NULL, 0, NULL},
 };

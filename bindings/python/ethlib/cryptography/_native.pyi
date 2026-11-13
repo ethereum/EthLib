@@ -2017,6 +2017,10 @@ def rpc_encode_block_access_list(value: object) -> bytes:
     """Encode a block access-list JSON value as its EIP-7928 RLP bytes."""
     ...
 
+def rpc_apply_overrides(state: bytes, overrides: object) -> bytes:
+    """The state root after the account overrides of one block of `eth_simulateV1`."""
+    ...
+
 def pyvalue_echo(value: object) -> object:
     """The value that Python passes, back to Python, with each failure tuple read as a failure."""
     ...

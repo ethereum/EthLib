@@ -164,6 +164,19 @@ def encode_block_access_list(value: object) -> bytes:
     return _native.rpc_encode_block_access_list(value)
 
 
+def apply_overrides(state: bytes, overrides: object) -> bytes:
+    """
+    The state root after the account overrides of one block of eth_simulateV1.
+
+    The state is in the input form of state_root.
+    The overrides are the JSON object stateOverrides.
+    Moves of precompiles are not checked, and change no state.
+    An object outside its schema raises RpcError with code 32602, and the reason as message.
+    A state that does not decode raises RpcError with the code of its state error.
+    """
+    return _native.rpc_apply_overrides(state, overrides)
+
+
 __all__ = [
     "BlockParam",
     "BlockSchema",
@@ -175,6 +188,7 @@ __all__ = [
     "NumberSchema",
     "RpcError",
     "Schema",
+    "apply_overrides",
     "encode_block_access_list",
     "error_groups",
     "pruned_history_unavailable",

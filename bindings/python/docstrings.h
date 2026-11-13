@@ -1511,6 +1511,9 @@
 #define DOC_rpc_encode_block_access_list \
   "Encode a block access-list JSON value as its EIP-7928 RLP bytes."
 
+#define DOC_rpc_apply_overrides \
+  "The state root after the account overrides of one block of `eth_simulateV1`."
+
 #define DOC_pyvalue_echo \
   "The value that Python passes, back to Python, with each failure tuple read as a failure."
 

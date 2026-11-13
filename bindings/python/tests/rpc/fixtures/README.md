@@ -37,6 +37,9 @@ The view also serves the submission `eth_sendRawTransaction`.
 The two block access-list methods run against the same chain and the `bal` files, since the pin has no `.io` fixture for them.
 The files of the other methods run through the readers of the parameters, without a chain.
 
+The files of `eth_simulateV1` are those that fail before the simulated blocks run, which the view checks.
+The other files of the method need the simulated blocks, which EthLib does not yet specify.
+
 The trie suite also checks each answer of `eth_getProof` against the state root of block 60.
 
 Two files of `eth_getStorageAt` and one of `debug_traceBlockByNumber` answer with an error, because a reader rejects a parameter.
