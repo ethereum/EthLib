@@ -2,7 +2,9 @@
 
 import json
 import zlib
+from collections.abc import Mapping
 from dataclasses import replace
+from functools import cache
 from typing import Any
 
 import pytest
@@ -20,11 +22,28 @@ REQUEST = '{"jsonrpc":"2.0","id":1,"method":"eth_config"}'
 ZERO = bytes(32)
 
 
+INTERNAL_ERROR = {"code": -32603, "message": "Internal error"}
+NOT_SUPPORTED = {"code": -32004, "message": "Method not supported"}
+
+
 def answer(chain: ReplayChain, request: str = REQUEST) -> dict[str, Any]:
     """The response to one configuration request."""
     (text,) = chain.serve([request])
     assert text is not None
     return json.loads(text)
+
+
+def error(chain: ReplayChain, request: str = REQUEST) -> dict[str, Any]:
+    """The error object of the response to one configuration request."""
+    response = answer(chain, request)
+    assert set(response) == {"jsonrpc", "id", "error"}
+    return response["error"]
+
+
+@cache
+def genesis_file() -> dict[str, Any]:
+    """The pinned genesis file of the test chain."""
+    return json.loads((FIXTURES / "genesis.json").read_text())
 
 
 def at_block(number: int) -> ReplayChain:
@@ -37,15 +56,20 @@ def at_block(number: int) -> ReplayChain:
     )
 
 
-def checksum(chain: ReplayChain, timestamp: int) -> str:
-    """The post-Merge checksum, computed independently from the pinned genesis configuration."""
-    config = json.loads((FIXTURES / "genesis.json").read_text())["config"]
-    # EIP-3675 uses mergeNetsplitBlock, rather than the actual Paris activation block.
+def fork_hash(chain: ReplayChain, timestamp: int) -> str:
+    """The post-Merge FORK_HASH, computed independently from the pinned genesis configuration."""
+    config = genesis_file()["config"]
+    genesis_time = int(genesis_file()["timestamp"], 16)
+    # Each positive block key counts once; mergeNetsplitBlock is the FORK_NEXT_VALUE of EIP-3675.
     heights = sorted(
         {value for name, value in config.items() if name.endswith("Block") and value > 0}
     )
     times = sorted(
-        {value for name, value in config.items() if name.endswith("Time") and value <= timestamp}
+        {
+            value
+            for name, value in config.items()
+            if name.endswith("Time") and genesis_time < value <= timestamp
+        }
     )
     data = block_hash(chain.blocks[0]) + b"".join(
         number.to_bytes(8, "big") for number in heights + times
@@ -74,7 +98,7 @@ def test_config_boundaries(
     chain = at_block(head)
     report = answer(chain)["result"]
     assert report["current"]["activationTime"] == current
-    assert report["current"]["chainId"] == "0xc72dd9d5e883e"
+    assert report["current"]["chainId"] == hex(genesis_file()["config"]["chainId"])
     assert len(report["current"]["precompiles"]) == count
     for name, time in [("current", current), ("next", next_time), ("last", last_time)]:
         config = report[name]
@@ -82,7 +106,7 @@ def test_config_boundaries(
             assert config is None
             continue
         assert config["activationTime"] == time
-        assert config["forkId"] == checksum(chain, time)
+        assert config["forkId"] == fork_hash(chain, time)
         assert list(config) == [
             "activationTime",
             "blobSchedule",
@@ -113,25 +137,30 @@ def test_bpo_configurations() -> None:
     assert osaka["precompiles"]["P256VERIFY"] == "0x" + "00" * 18 + "0100"
 
 
-def test_chain_specific_blob_activation() -> None:
-    """A blob-only activation without a named fork gets its own report and keeps the fork ID."""
+def test_chain_blob_schedule_at_fork() -> None:
+    """A chain blob schedule at a fork time sets the blob parameters of that configuration."""
+    chain = at_block(54)
+    schedule = ["time", 570, 14, 22, 11684671]
+    chain = replace(
+        chain,
+        config={**chain.config, "blobSchedules": [*chain.config["blobSchedules"], schedule]},
+    )
+    report = answer(chain)["result"]
+    assert report["current"]["blobSchedule"]["max"] == 21
+    assert report["next"]["activationTime"] == 570
+    assert report["next"]["blobSchedule"]["max"] == 22
+    assert report["next"]["forkId"] == fork_hash(chain, 570)
+
+
+def test_chain_blob_schedule_without_fork() -> None:
+    """EIP-7892 ties each blob schedule to a fork, so a schedule at no fork time is refused."""
     chain = at_block(54)
     schedule = ["time", 555, 14, 22, 11684671]
     chain = replace(
         chain,
         config={**chain.config, "blobSchedules": [*chain.config["blobSchedules"], schedule]},
     )
-    report = answer(chain)["result"]
-    assert report["current"]["activationTime"] == 540
-    assert report["current"]["blobSchedule"]["max"] == 21
-    assert report["next"]["activationTime"] == 555
-    assert report["next"]["blobSchedule"]["max"] == 22
-    assert report["next"]["forkId"] == report["current"]["forkId"] == checksum(chain, 555)
-    assert report["next"]["precompiles"] == report["current"]["precompiles"]
-    assert report["next"]["systemContracts"] == report["current"]["systemContracts"]
-    assert report["last"]["activationTime"] == 570
-    assert report["last"]["blobSchedule"]["max"] == 22
-    assert report["last"]["forkId"] == checksum(chain, 570)
+    assert error(chain) == {**INTERNAL_ERROR, "data": "eth_config: blob schedule without a fork"}
 
 
 def genesis_chain() -> ReplayChain:
@@ -180,16 +209,17 @@ def pruned_chain() -> ReplayChain:
     """A retained empty block at number 100, with its state supplied as an input."""
     chain = genesis_chain()
     item = rlp.decode(chain.blocks[0][1])
-    item[0][8] = b"\x64"
+    # The number is the ninth field of the header.
+    item[0][8] = (100).to_bytes(1, "big")
     first = ("dencun", rlp.encode(item))
     return replace(chain, blocks=(first,), forkchoice=(block_hash(first), ZERO, ZERO))
 
 
 def test_pruned_genesis_context() -> None:
-    """A pruned view needs explicit genesis context to report the correct checksum."""
+    """A pruned view answers only with explicit genesis context, and then as from genesis."""
     original = genesis_chain()
     chain = pruned_chain()
-    assert answer(chain)["error"]["data"] == "eth_config: genesis context unavailable"
+    assert error(chain) == {**INTERNAL_ERROR, "data": "eth_config: genesis context unavailable"}
     context = {"genesisHash": "0x" + block_hash(original.blocks[0]).hex(), "genesisTime": 100}
     chain = replace(chain, config={**chain.config, **context})
     assert answer(chain)["result"] == answer(original)["result"]
@@ -199,14 +229,17 @@ def test_merge_fork_id_block() -> None:
     """The Merge fork-ID block enters the checksum, and the actual Paris activation does not."""
     chain = pruned_chain()
     genesis_hash = block_hash(genesis_chain().blocks[0])
+    # A synthetic genesis context: time 0 makes Dencun at time 100 a fork, not a genesis rule.
     config = {
         **chain.config,
         "genesisHash": "0x" + genesis_hash.hex(),
         "genesisTime": 0,
-        "mergeForkBlock": 90,
         "activations": [["frontier", "block", 0], ["paris", "block", 80], ["dencun", "time", 100]],
     }
     current = answer(replace(chain, config=config))["result"]["current"]
+    data = genesis_hash + (100).to_bytes(8, "big")
+    assert current["forkId"] == f"0x{zlib.crc32(data):08x}"
+    current = answer(replace(chain, config={**config, "mergeForkBlock": 90}))["result"]["current"]
     data = genesis_hash + (90).to_bytes(8, "big") + (100).to_bytes(8, "big")
     assert current["forkId"] == f"0x{zlib.crc32(data):08x}"
 
@@ -221,25 +254,29 @@ def test_unsupported_future_fork() -> None:
             "activations": [*chain.config["activations"], ["hegota", "time", 400]],
         },
     )
-    assert answer(chain)["error"]["data"] == "eth_config: unsupported fork"
+    assert error(chain) == {**NOT_SUPPORTED, "data": "eth_config: unsupported fork"}
 
 
 def test_config_extra_parameters() -> None:
     """The method rejects parameters before computing its configuration."""
     request = '{"jsonrpc":"2.0","id":1,"method":"eth_config","params":[1]}'
-    assert answer(at_block(41), request)["error"]["code"] == -32602
+    assert error(at_block(41), request) == {
+        "code": -32602,
+        "message": "Invalid params",
+        "data": "the method takes no parameter",
+    }
 
 
 def test_config_before_cancun() -> None:
     """EthLib declines the nonstandard reports that EIP-7910 permits before Cancun."""
-    assert answer(at_block(41))["error"]["code"] == -32004
+    assert error(at_block(41)) == {**NOT_SUPPORTED, "data": "eth_config: before Cancun"}
 
 
 def test_config_zero_chain_id() -> None:
     """EIP-7910 excludes a chain ID of zero."""
     chain = genesis_chain()
     chain = replace(chain, config={**chain.config, "chainId": 0})
-    assert answer(chain)["error"]["data"] == "eth_config: zero chain ID"
+    assert error(chain) == {**INTERNAL_ERROR, "data": "eth_config: zero chain ID"}
 
 
 def test_config_activation_overflow() -> None:
@@ -249,21 +286,23 @@ def test_config_activation_overflow() -> None:
         chain,
         config={**chain.config, "activations": [["dencun", "block", 0], ["pectra", "time", 2**64]]},
     )
-    assert answer(chain)["error"]["data"] == "eth_config: activation is not below 2^64"
+    assert error(chain) == {**INTERNAL_ERROR, "data": "eth_config: activation is not below 2^64"}
 
 
-@pytest.mark.parametrize("blob_only", [False, True])
-def test_config_unknown_activation_time(blob_only: bool) -> None:
+@pytest.mark.parametrize(
+    "changes",
+    [
+        pytest.param({"activations": [["dencun", "block", 0], ["pectra", "block", 10]]}, id="fork"),
+        pytest.param({"blobSchedules": [["block", 10, 3, 6, 3338477]]}, id="blob-schedule"),
+    ],
+)
+def test_config_unknown_activation_time(changes: Mapping[str, object]) -> None:
     """A positive block activation cannot be reported as a fork active at genesis."""
     chain = genesis_chain()
-    changes = (
-        {"blobSchedules": [["block", 10, 3, 6, 3338477]]}
-        if blob_only
-        else {"activations": [["dencun", "block", 0], ["pectra", "block", 10]]}
-    )
-    assert answer(replace(chain, config={**chain.config, **changes}))["error"]["data"] == (
-        "eth_config: activation time is unknown"
-    )
+    assert error(replace(chain, config={**chain.config, **changes})) == {
+        **INTERNAL_ERROR,
+        "data": "eth_config: activation time is unknown",
+    }
 
 
 @pytest.mark.parametrize(
@@ -271,6 +310,7 @@ def test_config_unknown_activation_time(blob_only: bool) -> None:
     [
         ({"mergeForkBlock": "36"}, "config: mergeForkBlock is not a number"),
         ({"mergeForkBlock": 2**64}, "config: mergeForkBlock is not below 2^64"),
+        ({"genesisTime": 2**64}, "config: genesisTime is not below 2^64"),
         ({"genesisTime": 100}, "config: genesisHash and genesisTime must be given together"),
         (
             {"genesisHash": "0x" + "00" * 32},
@@ -282,7 +322,7 @@ def test_config_unknown_activation_time(blob_only: bool) -> None:
         ),
     ],
 )
-def test_bad_genesis_context(fields: dict[str, Any], message: str) -> None:
+def test_bad_genesis_context(fields: Mapping[str, object], message: str) -> None:
     """Malformed or contradictory fork-ID context is rejected at the export boundary."""
     chain = genesis_chain()
     with raises(rpc.RpcError, message):

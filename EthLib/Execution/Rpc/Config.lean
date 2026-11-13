@@ -11,26 +11,21 @@ The configuration report of [EIP-7910][eip], from the configuration and head of 
 
 Each configuration has the parameters at its activation, rather than at the head's timestamp.
 
-Blob-only activations include the chain's own blob schedules, as well as the named BPO forks.
+The configurations are those of the forks by timestamp, the named BPO forks included.
 
-The fork ID is the `FORK_HASH` that the node announces at that activation, by EIP-2124.
+A chain blob schedule that starts at no fork time makes the method fail.
 
-So a blob schedule that the chain sets without a fork keeps the fork ID of the fork before it.
+The fork ID is the `FORK_HASH` of [EIP-6122][eip-6122] that the node announces at that activation.
 
-The checksum uses the Merge fork-ID block, not the block where Paris actually activated.
+The method requires the genesis hash and timestamp.
 
-The method requires the genesis hash and timestamp, and supports Dencun through Glamsterdam.
+It supports Dencun (Cancun) through Glamsterdam (Amsterdam), for the head and every future fork.
 
-Before Cancun, EIP-7910 permits nonstandard reports; this definition declines to report one.
-
-EIP-7910 names every precompile through Osaka and the system contracts through Prague.
-
-No meta-EIP at the pin lists the system contracts after Prague.
-
-The Amsterdam report also lists the builder contracts named by [EIP-8282][builders].
+Before Cancun, EIP-7910 [permits nonstandard reports][compat]; this definition gives none.
 
 [eip]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-7910.md#specification
-[builders]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-8282.md#constants
+[compat]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-7910.md#backwards-compatibility
+[eip-6122]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-6122.md#specification
 -/
 
 @[expose] public section
@@ -42,23 +37,50 @@ open EthLib.Base
 open EthLib.Networking.Devp2p (Schedule activationValue)
 open EthLib.Serialization.JsonRpc (RpcError quantityJson dataJson optionJson)
 open EthLib.Execution.Blocks
-open EthLib.Execution.Transactions (precompileAddresses)
 open EthLib.Execution.Fees.BlobBaseFee (chainBlobSchedule)
 
-/-- Names and numeric addresses, from EIP-7910, in the order of the precompile table. -/
-def precompileNames : List (String × Nat) :=
-  [("ECREC", 1), ("SHA256", 2), ("RIPEMD160", 3), ("ID", 4), ("MODEXP", 5),
-    ("BN254_ADD", 6), ("BN254_MUL", 7), ("BN254_PAIRING", 8), ("BLAKE2F", 9),
-    ("KZG_POINT_EVALUATION", 10), ("BLS12_G1ADD", 11), ("BLS12_G1MSM", 12),
-    ("BLS12_G2ADD", 13), ("BLS12_G2MSM", 14), ("BLS12_PAIRING_CHECK", 15),
-    ("BLS12_MAP_FP_TO_G1", 16), ("BLS12_MAP_FP2_TO_G2", 17), ("P256VERIFY", 256)]
+/-- The name that EIP-7910 gives the precompile at an address of the precompile table.
+
+EIP-7910 names every precompile through Osaka.
+
+Any other address has the empty name, and no report uses it. -/
+def precompileName : Nat → String
+  | 0x01 => "ECREC"
+  | 0x02 => "SHA256"
+  | 0x03 => "RIPEMD160"
+  | 0x04 => "ID"
+  | 0x05 => "MODEXP"
+  | 0x06 => "BN254_ADD"
+  | 0x07 => "BN254_MUL"
+  | 0x08 => "BN254_PAIRING"
+  | 0x09 => "BLAKE2F"
+  | 0x0a => "KZG_POINT_EVALUATION"
+  | 0x0b => "BLS12_G1ADD"
+  | 0x0c => "BLS12_G1MSM"
+  | 0x0d => "BLS12_G2ADD"
+  | 0x0e => "BLS12_G2MSM"
+  | 0x0f => "BLS12_PAIRING_CHECK"
+  | 0x10 => "BLS12_MAP_FP_TO_G1"
+  | 0x11 => "BLS12_MAP_FP2_TO_G2"
+  | 0x100 => "P256VERIFY"
+  | _ => ""
 
 /-- The names of the active precompiles, paired with their addresses. -/
 def configPrecompiles (fork : Fork) : List (String × Address) :=
-  (precompileNames.filter fun entry => Evm.Precompiles.isPrecompile fork entry.2).map
-    fun (name, address) => (name, toAddressMasked (BitVec.ofNat 256 address))
+  (Evm.Precompiles.ADDRESSES.filter (Evm.Precompiles.isPrecompile fork)).map
+    fun address => (precompileName address, toAddressMasked (BitVec.ofNat 256 address))
 
-/-- The system contracts, using the deposit contract of the configured chain. -/
+/-- The system contracts, using the deposit contract of the configured chain.
+
+EIP-7910 lists them through Prague, and no meta-EIP at the pinned commit lists them after Prague.
+
+From Amsterdam they also hold the builder contracts named by [EIP-8282][builders].
+
+[EIP-7773][eip-7773] schedules EIP-8282 for Amsterdam.
+
+[builders]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-8282.md#constants
+[eip-7773]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-7773.md
+-/
 def configSystemContracts (config : ChainConfig) (fork : Fork) : List (String × Address) :=
   (if .dencun ≤ fork then [("BEACON_ROOTS_ADDRESS", BEACON_ROOTS_ADDRESS)] else []) ++
   (if .glamsterdam ≤ fork then
@@ -70,19 +92,11 @@ def configSystemContracts (config : ChainConfig) (fork : Fork) : List (String ×
       ("HISTORY_STORAGE_ADDRESS", HISTORY_STORAGE_ADDRESS),
       ("WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS", WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS)] else [])
 
-/-- Configured fork times after genesis, including changes of only the blob schedule.
+/-- Every fork from Dencun on and every chain blob schedule activate by timestamp or at block 0.
 
-Sorting and removing duplicates makes a simultaneous fork and blob change one activation. -/
-def configTimes (s : Schedule) : List Nat :=
-  let blobTimes := s.config.blobSchedules.filterMap fun (activation, _) =>
-    match activation with
-    | .time t => if s.genesisTime < t then some t else none
-    | .block _ => none
-  (s.times ++ blobTimes).mergeSort.eraseDups
+EIP-7910 omits a fork whose activation time is unknown, and assumes a post-Merge chain.
 
-/-- Every reported activation has a timestamp, except a rule already active at genesis.
-
-EIP-7910 omits unknown activation times and makes no accommodation for proof of work. -/
+This definition refuses such a chain instead, so that a report never silently drops a fork. -/
 def configHasTimestamps (config : ChainConfig) : Bool :=
   (config.activations.all fun (fork, activation) =>
     match activation with
@@ -93,13 +107,31 @@ def configHasTimestamps (config : ChainConfig) : Bool :=
     | .block n => n == 0
     | .time _ => true
 
+/-- Every chain blob schedule by timestamp starts at genesis or at the time of a fork.
+
+[EIP-7892][eip-7892] ties each blob schedule to the time of a fork.
+
+[eip-7892]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-7892.md#execution-layer-configuration
+-/
+def configBlobsAtForks (s : Schedule) : Bool :=
+  s.config.blobSchedules.all fun (activation, _) =>
+    match activation with
+    | .block _ => true
+    | .time t => t ≤ s.genesisTime || s.times.contains t
+
+/-- The activation time of the configuration at a head: the last fork time it has reached.
+
+It is zero when the head has reached no fork time after genesis. -/
+def configCurrentTime (s : Schedule) (timestamp : Nat) : Nat :=
+  (0 :: s.times.filter (· ≤ timestamp)).getLast (by simp)
+
 /-- The parameters of one reported configuration.
 
 The fork and its lower bound are internal, and are not members of the JSON object. -/
 structure ConfigObject where
   /-- The execution rules at this activation. -/
   fork : Fork
-  /-- EIP-7910 requires standard reports from Cancun on. -/
+  /-- The fork is Dencun or later, from where EIP-7910 requires standard reports. -/
   sinceDencun : .dencun ≤ fork
   /-- The activation timestamp, or zero for a configuration active at genesis. -/
   activationTime : Nat
@@ -116,9 +148,11 @@ structure ConfigObject where
 
 /-- A configuration at its activation, using the block number of a post-Merge head.
 
-Zero denotes genesis, whose actual timestamp can be nonzero.
+An activation time of zero stands for genesis, whose timestamp can be nonzero.
 
-A chain ID of zero, missing activation, or rules outside the supported range gives an error.
+No active fork, a zero chain ID or a fork outside Dencun to Glamsterdam gives an error.
+
+So does a passed fork whose block or time is not below 2^64, which a fork ID cannot encode.
 
 The block number stays fixed for future timestamp forks, which do not depend on a future block. -/
 def configObject (s : Schedule) (number activationTime : Nat) : Except RpcError ConfigObject := do
@@ -127,8 +161,7 @@ def configObject (s : Schedule) (number activationTime : Nat) : Except RpcError 
     | throw (resourceNotFound.toRpcError (some (.str "eth_config: no active fork")))
   if h : .dencun ≤ fork then
     unless fork ≤ .glamsterdam do
-      throw (⟨-32004, "Method not supported",
-        some (.str "eth_config: unsupported fork")⟩ : RpcError)
+      throw (methodNotSupported.toRpcError (some (.str "eth_config: unsupported fork")))
     unless s.config.chainId ≠ 0 do
       throw (internalError.toRpcError (some (.str "eth_config: zero chain ID")))
     unless (s.passed number timestamp).all (fun a => activationValue a < 2 ^ 64) do
@@ -143,9 +176,9 @@ def configObject (s : Schedule) (number activationTime : Nat) : Except RpcError 
       precompiles := configPrecompiles fork
       systemContracts := configSystemContracts s.config fork }
   else
-    throw (⟨-32004, "Method not supported", some (.str "eth_config: before Cancun")⟩ : RpcError)
+    throw (methodNotSupported.toRpcError (some (.str "eth_config: before Cancun")))
 
-/-- A named address table as JSON, with the names sorted alphabetically. -/
+/-- A named address table as a JSON object, which orders its names alphabetically. -/
 def configAddressesJson (entries : List (String × Address)) : Json :=
   Json.mkObj (entries.map fun (name, address) => (name, dataJson address.toList))
 
@@ -177,27 +210,33 @@ def ConfigReport.toJson (r : ConfigReport) : Json :=
 
 namespace ChainView
 
-/-- The configuration report at the head, computed afresh for each request.
+/-- The fork-ID schedule of the view, when the view knows its genesis hash and timestamp. -/
+def schedule? (v : ChainView) : Option Schedule :=
+  v.genesis.map fun (genesisHash, genesisTime) =>
+    ⟨genesisHash, genesisTime, v.config, v.mergeForkBlock⟩
+
+/-- The configuration report at the head, which EIP-7910 requires to reflect the latest header.
 
 The genesis context is required even when the node has pruned its genesis block.
 
-The current activation is the last configured time reached by the head, or zero for genesis. -/
+The current activation is the last fork time reached by the head, or zero for genesis.
+
+The next and last configurations are those of the first and last fork times after the head. -/
 def configReport (v : ChainView) : Except RpcError ConfigReport := do
-  let some (genesisHash, genesisTime) := v.genesis
+  let some s := v.schedule?
     | throw (internalError.toRpcError (some (.str "eth_config: genesis context unavailable")))
-  unless configHasTimestamps v.config do
+  unless configHasTimestamps s.config do
     throw (internalError.toRpcError (some (.str "eth_config: activation time is unknown")))
-  let s : Schedule := ⟨genesisHash, genesisTime, v.config, v.mergeForkBlock⟩
+  unless configBlobsAtForks s do
+    throw (internalError.toRpcError (some (.str "eth_config: blob schedule without a fork")))
+  let number := v.head.block.header.number
   let timestamp := v.head.block.header.timestamp.toNat
-  let times := configTimes s
-  let reached := 0 :: times.filter (· ≤ timestamp)
-  let current ← configObject s v.head.block.header.number (reached.getLast (by simp [reached]))
-  match times.filter (timestamp < ·) with
+  let current ← configObject s number (configCurrentTime s timestamp)
+  match s.times.filter (timestamp < ·) with
   | [] => return ⟨current, none, none⟩
   | first :: rest =>
-    let next ← configObject s v.head.block.header.number first
-    let last ← configObject s v.head.block.header.number
-      ((first :: rest).getLast (by simp))
+    let next ← configObject s number first
+    let last ← configObject s number ((first :: rest).getLast (by simp))
     return ⟨current, some next, some last⟩
 
 /-- The JSON result of `eth_config`. -/

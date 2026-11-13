@@ -3646,8 +3646,9 @@ The view resolves `safe` and `finalized` to the blocks that the update named, wh
 A notification gets no response (`answerJson_notification`).
 
 `eth_config` reports the current, next and last scheduled configurations of EIP-7910 (`Execution/Rpc/Config.lean`).
-The reported fork ID is the EIP-2124 `FORK_HASH` that the node announces at that configuration's activation (`configObject_forkId`, `Proofs/Rpc/Config.lean`).
-A blob schedule that the chain sets without a fork therefore keeps the fork ID of the fork before it.
+The current configuration is the last one the head has reached.
+The next and last are those of the first and last fork times after the head, or both null (`ChainView.configReport_eq_ok`, `ChainView.configReport_next_eq_none_iff`, `ChainView.configReport_current_le`, `ChainView.configReport_next_after`, `ChainView.configReport_last_after`).
+The reported fork ID is the EIP-6122 `FORK_HASH` that the node announces at that configuration's activation (`configObject_forkId`, `Proofs/Rpc/Config.lean`).
 The block that represents the Merge in the fork ID is an explicit input, distinct from the actual Paris activation block.
 The report's precompile addresses are exactly those that transaction processing warms (`configObject_precompiles`).
 Its blob schedule is `chainBlobSchedule` at the configuration's activation (`configObject_blobSchedule`).
@@ -3657,8 +3658,10 @@ The precompile names through Osaka and the system-contract sets through Prague f
 The Amsterdam set also lists the builder deposit and exit contracts of EIP-8282, whose constants name both addresses.
 No meta-EIP at that pin lists the system-contract set after Prague.
 
-The method declines reports before Cancun and after Amsterdam, and rejects a chain ID of zero.
-For reported forks and blob-schedule changes, it requires an activation timestamp or activation at genesis.
+The method declines reports before Cancun, and fails when the head or a scheduled fork is after Amsterdam, since no meta-EIP defines that report.
+It rejects a chain ID of zero.
+It requires every fork from Cancun on to activate by timestamp or at genesis, where EIP-7910 would leave out a fork with an unknown time.
+It requires each chain blob schedule to start at genesis or at a fork time, as EIP-7892 ties each schedule to a fork.
 It requires genesis context, which the export infers from block zero or reads as an input for a pruned chain.
 For a pruned chain that context is trusted, and no theorem ties it to the retained blocks.
 

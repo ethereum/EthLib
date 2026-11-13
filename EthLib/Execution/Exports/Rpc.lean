@@ -196,7 +196,7 @@ Then come the head, safe and finalized hashes, the network ID and whether to che
 abbrev ViewInputs :=
   PyValue × ByteArray × List (String × ByteArray) × (Hash32 × Hash32 × Hash32) × Nat × Bool
 
-/-- An optional numeric field of the RPC configuration, with the uint64 bound of EIP-6122. -/
+/-- An optional numeric field of the chain configuration, below 2^64 as EIP-6122 requires. -/
 def configNat (j : Json) (name : String) : Result (Option Nat) := do
   match j.getObjVal? name with
   | .error _ => return none
@@ -227,7 +227,9 @@ It must hold no transaction, since its receipts are not given.
 
 Each block after it runs on the chain before it, without the history before the lowest block.
 
-The head must be the last block, and a zero safe or finalized hash names no block. -/
+The head must be the last block, and a zero safe or finalized hash names no block.
+
+When the lowest block is block zero, any given genesis hash and timestamp must match it. -/
 def viewOf (inputs : ViewInputs) : Result ChainView := do
   let (config, state, blocks, (head, safeHash, finalizedHash), networkId, checkSeal) := inputs
   let configJson := config.toJson
@@ -290,11 +292,11 @@ Then come the head, safe and finalized hashes, the network ID, and whether to ch
 
 The last argument is the list of the texts of the requests.
 
-The configuration may give `mergeForkBlock`, the Merge fork-ID block of EIP-3675.
+The configuration may give `mergeForkBlock`, the `FORK_NEXT_VALUE` of EIP-3675.
 
-For `eth_config`, a pruned chain also gives `genesisHash` and `genesisTime` in the configuration.
+When the lowest block is not block zero, `eth_config` needs `genesisHash` and `genesisTime` there.
 
-When the lowest block is genesis, those two fields are inferred and checked if also supplied.
+When it is block zero, both are read from it, and any given values must match.
 
 It returns the text of the response to each request, in order, or none for a notification.
 

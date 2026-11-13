@@ -91,7 +91,7 @@ structure ChainView where
   networkId : Nat
   /-- The genesis hash and timestamp, when the node has that fork-ID context. -/
   genesis : Option (Hash32 × Nat) := none
-  /-- The optional Merge fork-ID block of EIP-3675, distinct from the Paris activation block. -/
+  /-- `FORK_NEXT_VALUE` of EIP-3675, the block that stands for Paris in the fork ID, if set. -/
   mergeForkBlock : Option Nat := none
 
 namespace ChainView

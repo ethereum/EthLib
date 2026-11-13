@@ -1,7 +1,6 @@
 module
 
 public import EthLib.Execution.Rpc.Config
-public import EthLib.Base.Except
 public import EthLib.Serialization.Proofs.Ssz.Codec.JsonLaws
 
 /-!
@@ -12,6 +11,8 @@ The precompile names cover exactly the addresses that transaction execution warm
 A reported configuration uses the checksum and blob schedule of its activation.
 
 The BPO forks keep Osaka's precompiles and system contracts.
+
+The current configuration is the last the head reached, and the next and last come after it.
 -/
 
 public section
@@ -19,7 +20,6 @@ public section
 namespace EthLib.Execution.Rpc
 
 open EthLib.Base
-open EthLib.Serialization.JsonRpc (RpcError)
 open EthLib.Networking.Devp2p (Schedule activationValue)
 open EthLib.Execution.Fees.BlobBaseFee (chainBlobSchedule)
 open EthLib.Serialization.JsonRpc (dataJson)
@@ -27,14 +27,21 @@ open EthLib.Serialization.JsonRpc (dataJson)
 /-- The named precompiles have exactly the addresses that transaction processing uses. -/
 theorem configPrecompiles_addresses (fork : Fork) :
     (configPrecompiles fork).map Prod.snd = Transactions.precompileAddresses fork := by
-  cases fork <;> rfl
+  simp [configPrecompiles, Transactions.precompileAddresses, Function.comp_def]
+
+/-- The precompiles of the table have pairwise different names. -/
+theorem precompileName_pairwise :
+    Evm.Precompiles.ADDRESSES.Pairwise (fun a b => precompileName a ≠ precompileName b) := by
+  decide
 
 /-- No active precompile name can overwrite another name in the JSON object. -/
 theorem configPrecompiles_distinct (fork : Fork) :
     (configPrecompiles fork).Pairwise (fun a b => a.1 ≠ b.1) := by
-  cases fork <;> decide
+  unfold configPrecompiles
+  rw [List.pairwise_map]
+  exact precompileName_pairwise.filter _
 
-/-- A configured supported fork with an encodable checksum always has a report. -/
+/-- A supported fork with a nonzero chain ID and activations below 2^64 always has a report. -/
 theorem configObject_exists {s : Schedule} {number time : Nat} {fork : Fork}
     (active : s.config.activeFork number (max s.genesisTime time) = some fork)
     (since : .dencun ≤ fork) (supported : fork ≤ .glamsterdam)
@@ -44,7 +51,8 @@ theorem configObject_exists {s : Schedule} {number time : Nat} {fork : Fork}
     ∃ c, configObject s number time = .ok c ∧ c.fork = fork := by
   simp [configObject, active, since, supported, nonzero, bounded, pure, Except.pure]
 
-/-- A successful configuration fixes its fork, activation, checksum, blob schedule and addresses. -/
+/-- A successful report fixes its fork, activation, chain ID, checksum, blob schedule and addresses.
+-/
 theorem configObject_eq_ok {s : Schedule} {number time : Nat} {c : ConfigObject}
     (made : configObject s number time = .ok c) :
     s.config.activeFork number (max s.genesisTime time) = some c.fork ∧
@@ -105,7 +113,7 @@ theorem getObjVal_configObject_forkId {s : Schedule} {number time : Nat} {c : Co
     exact EthLib.Serialization.Ssz.getObjVal?_mkObj (by simp) (by simp)
   rw [field, configObject_forkId made]
 
-/-- The JSON blob schedule has the three numbers that the reported chain schedule gives. -/
+/-- The JSON blob schedule has the three numbers of the object's blob schedule. -/
 theorem getObjVal_configObject_blobSchedule (c : ConfigObject) :
     c.toJson.getObjVal? "blobSchedule" = .ok (Lean.Json.mkObj [
       ("baseFeeUpdateFraction", Lean.toJson c.blobSchedule.baseFeeUpdateFraction),
@@ -142,10 +150,119 @@ theorem configSystemContracts_bpo (config : ChainConfig) {fork : Fork}
     configSystemContracts config fork = configSystemContracts config .fusaka := by
   cases fork <;> first | rfl | contradiction
 
-/-- A view without genesis context cannot invent a configuration checksum. -/
+/-- A view without the genesis hash and timestamp answers with an internal error. -/
 theorem ChainView.configReport_no_genesis (v : ChainView) (absent : v.genesis = none) :
     v.configReport = .error
       (internalError.toRpcError (some (.str "eth_config: genesis context unavailable"))) := by
-  simp [ChainView.configReport, absent, throw, throwThe, MonadExceptOf.throw]
+  simp [ChainView.configReport, ChainView.schedule?, absent, throw, throwThe,
+    MonadExceptOf.throw]
+
+/-- A successful report comes from the view's schedule, with the configurations it selects.
+
+The current one is at the last fork time the head has reached.
+
+The next and last ones are at the first and last fork times after the head, or both absent. -/
+theorem ChainView.configReport_eq_ok {v : ChainView} {r : ConfigReport}
+    (made : v.configReport = .ok r) :
+    ∃ s, v.schedule? = some s ∧
+      configObject s v.head.block.header.number
+        (configCurrentTime s v.head.block.header.timestamp.toNat) = .ok r.current ∧
+      ((s.times.filter (v.head.block.header.timestamp.toNat < ·) = [] ∧
+          r.next = none ∧ r.last = none) ∨
+        ∃ first rest c c', s.times.filter (v.head.block.header.timestamp.toNat < ·) =
+            first :: rest ∧
+          configObject s v.head.block.header.number first = .ok c ∧
+          configObject s v.head.block.header.number ((first :: rest).getLast (by simp)) =
+            .ok c' ∧
+          r.next = some c ∧ r.last = some c') := by
+  unfold ChainView.configReport at made
+  rcases hs : v.schedule? with _ | s
+  · simp [hs, throw, throwThe, MonadExceptOf.throw] at made
+  · refine ⟨s, rfl, ?_⟩
+    rw [hs] at made
+    by_cases ht : configHasTimestamps s.config = true
+    · by_cases hb : configBlobsAtForks s = true
+      · simp only [ht, hb, ite_true] at made
+        cases hc : configObject s v.head.block.header.number
+            (configCurrentTime s v.head.block.header.timestamp.toNat) with
+        | error e => simp [hc, bind, Except.bind] at made
+        | ok cur =>
+          simp only [hc, bind, Except.bind] at made
+          split at made
+          · next heq =>
+            simp only [pure, Except.pure, Except.ok.injEq] at made
+            subst made
+            exact ⟨rfl, .inl ⟨heq, rfl, rfl⟩⟩
+          · next first rest heq =>
+            cases hn : configObject s v.head.block.header.number first with
+            | error e => simp [hn] at made
+            | ok c =>
+              cases hl : configObject s v.head.block.header.number
+                  ((first :: rest).getLast (by simp)) with
+              | error e => simp [hn, hl] at made
+              | ok c' =>
+                simp only [hn, hl, pure, Except.pure, Except.ok.injEq] at made
+                subst made
+                exact ⟨rfl, .inr ⟨first, rest, c, c', heq, hn, hl, rfl, rfl⟩⟩
+      · simp [ht, hb, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at made
+    · simp [ht, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at made
+
+/-- The next and last configurations are both present or both absent. -/
+theorem ChainView.configReport_next_eq_none_iff {v : ChainView} {r : ConfigReport}
+    (made : v.configReport = .ok r) : r.next = none ↔ r.last = none := by
+  obtain ⟨s, -, -, h | ⟨_, _, c, c', -, -, -, hn, hl⟩⟩ := ChainView.configReport_eq_ok made
+  · simp [h.2.1, h.2.2]
+  · simp [hn, hl]
+
+/-- The activation time of the current configuration is at most the head's timestamp. -/
+theorem configCurrentTime_le (s : Schedule) (timestamp : Nat) :
+    configCurrentTime s timestamp ≤ timestamp := by
+  unfold configCurrentTime
+  have mem := List.getLast_mem (l := 0 :: s.times.filter (· ≤ timestamp)) (by simp)
+  rcases List.mem_cons.1 mem with h | h
+  · rw [h]
+    exact Nat.zero_le _
+  · simpa using (List.mem_filter.1 h).2
+
+/-- The current configuration activates no later than the head. -/
+theorem ChainView.configReport_current_le {v : ChainView} {r : ConfigReport}
+    (made : v.configReport = .ok r) :
+    r.current.activationTime ≤ v.head.block.header.timestamp.toNat := by
+  obtain ⟨s, -, hc, -⟩ := ChainView.configReport_eq_ok made
+  rw [(configObject_eq_ok hc).2.1]
+  exact configCurrentTime_le s _
+
+/-- The next configuration activates after the head. -/
+theorem ChainView.configReport_next_after {v : ChainView} {r : ConfigReport} {c : ConfigObject}
+    (made : v.configReport = .ok r) (next : r.next = some c) :
+    v.head.block.header.timestamp.toNat < c.activationTime := by
+  obtain ⟨s, -, -, h | ⟨first, rest, c₁, c₂, hf, hn, -, hnext, -⟩⟩ :=
+    ChainView.configReport_eq_ok made
+  · rw [h.2.1] at next
+    cases next
+  · rw [hnext, Option.some.injEq] at next
+    subst next
+    rw [(configObject_eq_ok hn).2.1]
+    have mem : first ∈ s.times.filter (v.head.block.header.timestamp.toNat < ·) := by
+      rw [hf]
+      exact List.mem_cons_self
+    simpa using (List.mem_filter.1 mem).2
+
+/-- The last configuration activates after the head. -/
+theorem ChainView.configReport_last_after {v : ChainView} {r : ConfigReport} {c : ConfigObject}
+    (made : v.configReport = .ok r) (last : r.last = some c) :
+    v.head.block.header.timestamp.toNat < c.activationTime := by
+  obtain ⟨s, -, -, h | ⟨first, rest, c₁, c₂, hf, -, hl, -, hlast⟩⟩ :=
+    ChainView.configReport_eq_ok made
+  · rw [h.2.2] at last
+    cases last
+  · rw [hlast, Option.some.injEq] at last
+    subst last
+    rw [(configObject_eq_ok hl).2.1]
+    have mem : (first :: rest).getLast (by simp) ∈
+        s.times.filter (v.head.block.header.timestamp.toNat < ·) := by
+      rw [hf]
+      exact List.getLast_mem _
+    simpa using (List.mem_filter.1 mem).2
 
 end EthLib.Execution.Rpc
