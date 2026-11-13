@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.List
 public import EthLib.Base.Proofs.Uint64
 public import EthLib.Consensus.Accessors
 public import EthLib.Consensus.Credentials
@@ -507,15 +508,6 @@ theorem getTotalActiveBalance_ne_indexOutOfRange {state : BeaconState preset for
     · simp [big, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
     · simp [big, pure, Except.pure]
 
-/-- A sum of a value where a test holds, and zero elsewhere, is its sum over the passing entries. -/
-private theorem sum_map_ite_eq_sum_filter {α : Type} (test : α → Prop) [DecidablePred test]
-    (value : α → Nat) (entries : List α) :
-    (entries.map fun entry => if test entry then value entry else 0).sum =
-      ((entries.filter fun entry => test entry).map value).sum := by
-  induction entries with
-  | nil => rfl
-  | cons entry rest ih => by_cases passes : test entry <;> simp [passes, ih]
-
 /-- From Electra, the pending balance of a validator succeeds exactly when its sum is below `2^64`.
 
 The sum runs over the amounts of the pending partial withdrawals of that validator alone.
@@ -529,7 +521,7 @@ theorem getPendingBalanceToWithdraw_ok_iff {state : BeaconState preset fork}
         amount.toNat = (((state.pendingPartialWithdrawals electra).data.toList.filter
           (·.validatorIndex = index)).map (·.amount.toNat)).sum := by
   unfold getPendingBalanceToWithdraw
-  simp only [sum_map_ite_eq_sum_filter
+  simp only [EthLib.Base.sum_map_ite_eq_sum_filter
     fun withdrawal : PendingPartialWithdrawal => withdrawal.validatorIndex = index]
   split
   · rename_i small
@@ -553,7 +545,7 @@ theorem getPendingBalanceToWithdraw_eq_error_iff {state : BeaconState preset for
           (·.validatorIndex = index)).map (·.amount.toNat)).sum ∧
         error = .balanceOverflow := by
   unfold getPendingBalanceToWithdraw
-  simp only [sum_map_ite_eq_sum_filter
+  simp only [EthLib.Base.sum_map_ite_eq_sum_filter
     fun withdrawal : PendingPartialWithdrawal => withdrawal.validatorIndex = index]
   split
   · simp only [reduceCtorEq, false_iff, not_and]
@@ -573,12 +565,8 @@ theorem getPendingBalanceToWithdraw_eq_ok_zero_iff {state : BeaconState preset f
     getPendingBalanceToWithdraw state electra index = .ok 0 ↔
       ∀ withdrawal ∈ (state.pendingPartialWithdrawals electra).data.toList,
         withdrawal.validatorIndex = index → withdrawal.amount = 0 := by
-  have zero : ∀ amounts : List Nat, amounts.sum = 0 ↔ ∀ amount ∈ amounts, amount = 0 := by
-    intro amounts
-    induction amounts with
-    | nil => simp
-    | cons amount rest ih => simp [ih]
-  rw [getPendingBalanceToWithdraw_ok_iff, UInt64.toNat_zero, eq_comm (a := 0), zero]
+  rw [getPendingBalanceToWithdraw_ok_iff, UInt64.toNat_zero, eq_comm (a := 0),
+    List.sum_eq_zero_iff_forall_eq_nat]
   simp only [List.mem_map, List.mem_filter, decide_eq_true_eq]
   constructor
   · rintro ⟨-, vanish⟩ withdrawal member owned
@@ -590,7 +578,7 @@ theorem getPendingBalanceToWithdraw_eq_ok_zero_iff {state : BeaconState preset f
       rintro amount ⟨withdrawal, ⟨member, owned⟩, rfl⟩
       simp [vanish withdrawal member owned]
     refine ⟨?_, each⟩
-    rw [(zero _).mpr (by simpa using each)]
+    rw [List.sum_eq_zero_iff_forall_eq_nat.mpr (by simpa using each)]
     omega
 
 
