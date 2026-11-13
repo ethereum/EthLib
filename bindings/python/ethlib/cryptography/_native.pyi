@@ -585,6 +585,14 @@ def consensus_process_bid(name: str, fork: str, config: dict[str, Any] | None, s
     """None when a proposer accepts a signed bid, or the name of the rule that refuses it."""
     ...
 
+def consensus_is_eligible_for_bid_gloas(name: str, fork: str, state: bytes, preferences: list[bytes], slot: int, parent_hash: bytes, parent_root: bytes, pubkey: bytes) -> bool:
+    """From Gloas: whether a builder serves a request for a bid."""
+    ...
+
+def consensus_validate_bid(name: str, fork: str, config: dict[str, Any] | None, state: bytes, preferences: bytes, parent_gas_limit: int, signed: bytes, fee_recipient: bytes) -> str | None:
+    """From Gloas: None when a proposer accepts a fetched bid, or the name of the rule that refuses it."""
+    ...
+
 def consensus_unblind_signed_blinded_block(name: str, fork: str, blinded: bytes, revealed: bytes) -> tuple[bytes, bytes] | None:
     """The root and the bytes of the signed block that a signed blinded block and a payload give."""
     ...

@@ -574,6 +574,14 @@ def bindings : List Binding := [
     "(name: str, fork: str, config: dict[str, Any] | None, state: bytes, signed: bytes, " ++
       "fee_recipient: bytes) -> str | None",
     [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
+  ⟨"consensus_is_eligible_for_bid_gloas", `EthLib.Consensus.Exports.isEligibleForBidGloasExport,
+    "(name: str, fork: str, state: bytes, preferences: list[bytes], slot: int, " ++
+      "parent_hash: bytes, parent_root: bytes, pubkey: bytes) -> bool",
+    [`EthLib.Consensus.TransitionError], some "TransitionError"⟩,
+  ⟨"consensus_validate_bid", `EthLib.Consensus.Exports.validateBidExport,
+    "(name: str, fork: str, config: dict[str, Any] | None, state: bytes, preferences: bytes, " ++
+      "parent_gas_limit: int, signed: bytes, fee_recipient: bytes) -> str | None",
+    [`EthLib.Consensus.TransitionError], some "TransitionError"⟩,
   ⟨"consensus_unblind_signed_blinded_block", `EthLib.Consensus.Exports.unblindExport,
     "(name: str, fork: str, blinded: bytes, revealed: bytes) -> tuple[bytes, bytes] | None",
     [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
