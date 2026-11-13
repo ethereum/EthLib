@@ -30,6 +30,10 @@ RESULT_SCHEMAS: Final[dict[str, rpc.Schema | None]] = {
     "eth_getBlockByNumber": None,
     "eth_getBlockTransactionCountByHash": "uint",
     "eth_getBlockTransactionCountByNumber": "uint",
+    "debug_getRawHeader": "bytes",
+    "debug_getRawBlock": "bytes",
+    "debug_getRawTransaction": "bytes",
+    "debug_getRawReceipts": None,
 }
 
 # Every fixture of a method that the view serves.
@@ -187,6 +191,61 @@ def test_blocks() -> None:
         assert {key: full[key] for key in header} == header
         assert [entry["hash"] for entry in full["transactions"]] == short["transactions"]
         assert count == hex(len(short["transactions"]))
+
+
+def test_raw_getters() -> None:
+    """Each block reads back as its RLP form, with its header, receipts and transactions."""
+    chain = replay_chain()
+    transactions = [
+        "0x" + _transaction_hash(block, index).hex()
+        for block in chain.blocks
+        for index in range(len(rlp.decode(block[1])[1]))
+    ]
+    calls = [
+        call
+        for number in range(len(chain.blocks))
+        for call in [
+            ("debug_getRawBlock", [hex(number)]),
+            ("debug_getRawHeader", [hex(number)]),
+            ("debug_getRawReceipts", [hex(number)]),
+        ]
+    ] + [("debug_getRawTransaction", [transaction]) for transaction in transactions]
+    requests = [
+        json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params})
+        for method, params in calls
+    ]
+    texts = chain.serve(requests)
+    results = [json.loads(text)["result"] for text in texts if text is not None]
+    assert len(results) == len(calls)
+    for number, block in enumerate(chain.blocks):
+        raw_block, raw_header, raw_receipts = results[3 * number : 3 * number + 3]
+        _, raw = block
+        assert raw_block == "0x" + raw.hex()
+        assert keccak256(bytes.fromhex(raw_header[2:])) == block_hash(block)
+        # One receipt for each transaction of the block.
+        assert len(raw_receipts) == len(rlp.decode(raw)[1])
+    # The bytes of each transaction hash to the hash that asked for them.
+    raw_transactions = results[3 * len(chain.blocks) :]
+    assert len(raw_transactions) == len(transactions) > 0
+    for transaction, raw_transaction in zip(transactions, raw_transactions, strict=True):
+        assert "0x" + keccak256(bytes.fromhex(raw_transaction[2:])).hex() == transaction
+
+
+# Each raw getter asked for a block or a transaction that the view does not hold.
+UNKNOWN = [
+    pytest.param("debug_getRawHeader", ["0x3e8"], "unknown block", id="header"),
+    pytest.param("debug_getRawBlock", ["0x3e8"], "unknown block", id="block"),
+    pytest.param("debug_getRawReceipts", ["0x" + "11" * 32], "unknown block", id="receipts"),
+    pytest.param("debug_getRawTransaction", ["0x" + "11" * 32], "unknown transaction", id="tx"),
+]
+
+
+@pytest.mark.parametrize(("method", "params", "data"), UNKNOWN)
+def test_raw_unknown(method: str, params: list[object], data: str) -> None:
+    """A raw getter has the code -32001 for what the view does not hold."""
+    request = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
+    answer = _error(json.dumps(request))
+    assert answer["error"] == {"code": -32001, "message": "Resource not found", "data": data}
 
 
 def test_pending_header() -> None:

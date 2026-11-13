@@ -2,7 +2,7 @@ module
 
 public import EthLib.Execution.Rpc.Header
 public import EthLib.Execution.Rpc.Json
-public import EthLib.Execution.Rpc.TransactionInfo
+public import EthLib.Execution.Rpc.Raw
 
 /-!
 # `Execution.Rpc.Block`
@@ -56,10 +56,6 @@ def blockNames (fork : Fork) : List String :=
 
 namespace BlockRecord
 
-/-- The error of a value of a block that the node cannot compute. -/
-def encodingError (what : String) : RpcError :=
-  internalError.toRpcError (some (.str s!"{what}: cannot be encoded"))
-
 /-- The hashes of the transactions of a block, in order. -/
 def transactionHashes (r : BlockRecord) : Except RpcError (List Hash32) :=
   r.block.transactions.mapM fun tx =>
@@ -70,10 +66,8 @@ def transactionInfos (r : BlockRecord) : Except RpcError (List TransactionInfo) 
   r.block.transactions.zipIdx.mapM fun (tx, index) => r.transactionInfo index tx
 
 /-- The length of the RLP form of a block, in bytes. -/
-def size (r : BlockRecord) : Except RpcError Nat := do
-  let block ← (bodyItems r.block).mapError fun _ => encodingError "block"
-  let bytes ← block.encode.mapError fun _ => encodingError "block"
-  return bytes.size
+def size (r : BlockRecord) : Except RpcError Nat :=
+  (·.size) <$> r.rawBlock
 
 /-- The block object of a block, with the objects of its transactions when they are hydrated.
 

@@ -158,6 +158,15 @@ def call (v : ChainView) (method : String) (params : List Json) : Except RpcErro
     return v.transactionCountByHash (← readParam (hash32 "block hash") h)
   | "eth_getBlockTransactionCountByNumber" => oneParam params fun b => do
     v.transactionCountByNumber (← readParam (blockNumberOrTag "block") b)
+  | "debug_getRawHeader" => oneParam params fun b => do
+    (dataJson ·.toList) <$> v.rawHeader (← readParam (blockNumberOrTag "block") b)
+  | "debug_getRawBlock" => oneParam params fun b => do
+    (dataJson ·.toList) <$> v.rawBlock (← readParam (blockNumberOrTag "block") b)
+  | "debug_getRawTransaction" => oneParam params fun h => do
+    (dataJson ·.toList) <$> v.rawTransaction (← readParam (hash32 "transaction hash") h)
+  | "debug_getRawReceipts" => oneParam params fun b => do
+    let block ← readParam (blockNumberOrTagOrHash "block") b
+    listJson (dataJson ·.toList) <$> v.rawReceipts block
   | _ => .error (methodNotFound.toRpcError (some (.str method)))
 
 /-- The response of the view to a request. -/

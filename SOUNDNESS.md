@@ -3464,6 +3464,14 @@ For the tag `pending`, the header method answers `null`.
 The block and count methods read the pending block of the view instead, since only the header methods of [`block.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth/block.yaml) answer `null` for `pending`.
 The schema gives `size` only the title "Block size"; here it is the length of the RLP form of the block, which the fixtures pin.
 
+The raw getters of [`getters.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/debug/getters.yaml) return the consensus encodings of a header, a block, a transaction and the receipts of a block (`Execution/Rpc/Raw.lean`).
+The bytes of a transaction hash to the hash that asked for them (`keccak256_rawTransaction`, `Proofs/Rpc/Raw.lean`).
+In a valid view, every block that the node holds has a raw header, which hashes to the hash that the header and block objects report and decodes back to the header (`Valid.rawHeader`, `getObjVal_hash_headerObject`).
+The raw block decodes back to the block, with each transaction as its item in a body, when each ommer is at the fork that the decoder gives its own number (`decode_rawBlock`).
+In a valid view, the raw receipts of a canonical block after the lowest have the receipts root of its header (`Valid.rawReceipts_root`).
+The receipts of the lowest block are an input of the view, so no theorem ties them to its header.
+No result schema of the getters allows `null`, so an unknown block or transaction gets `-32001`, the code that the getter of a block access list in the same file requires for an unknown block.
+
 The Python suite replays the official test chain into a view and answers the official fixtures of the methods that EthLib serves.
 That chain mines its blocks before the merge with a zero mix hash and a zero nonce, so the suite runs the transition without the proof-of-work check.
 
