@@ -1917,6 +1917,26 @@ The caller gives the number of blobs of each transaction, and the check trusts i
 Together, `checkCells_eq_ok_iff` and `CellMask.count_le_count_of_subset` give that a response that passes has no more cells for each blob than the request asks for.
 No export calls the cells check, so no test of the bindings runs it.
 
+### Fork digests
+
+A peer names the fork of a response chunk, and of a gossip topic, by a fork digest of four bytes.
+`forkOfDigest` (`Consensus/ForkDigest.lean`) finds an epoch with the digest, and the receiver takes the fork at it.
+It searches the epochs at which the digest can change.
+These are epoch 0, the first epoch of each consensus fork, and, from Fulu, the first epoch of each blob schedule entry.
+
+`computeForkDigest_digestStart` and `Config.forkAtEpoch_digestStart` (`Consensus/Proofs/ForkDigest.lean`) state that the digest and the fork at each epoch are those at the latest of these epochs at or before it.
+`forkOfDigest_sound` states that an epoch that the search finds has the digest, with no hypothesis.
+`forkOfDigest_recovers` states that the search reads back the fork at which a digest was computed, at every epoch.
+It needs `digestsIdentify`, a check of the chain's configuration and genesis validators root.
+A digest is four bytes of a hash, so two forks of one chain could share one, and nothing rules this out in general.
+`digestsIdentify_sharedVersion` shows that the hypothesis is needed: on mainnet with Altair given the version of genesis, the check fails.
+There `forkOfDigest_sharedVersion_altair` shows that the search reads Phase 0 from the digest of Altair.
+The check depends only on the configuration and the genesis validators root, so a chain runs it once.
+It reads at most nine epochs, plus one for each entry of the blob schedule.
+It also reads the epoch of a fork left at the far future, which no message carries, so it can ask more than recovery needs.
+No test of the bindings runs it on a chain yet.
+`decodeResponseChunk_forkOfDigest` (`Consensus/Proofs/ReqResp/ResponseBounds.lean`) draws the consequence for req/resp: on a chain that passes the check, the receiver reads a chunk at the type of the sender's fork.
+
 ### Weak subjectivity
 
 A node that starts from a recent checkpoint trusts it only for a limited time, the weak subjectivity period.
