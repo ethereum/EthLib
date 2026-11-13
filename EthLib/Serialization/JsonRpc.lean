@@ -19,7 +19,7 @@ A number is lowercase hex behind `0x`, without leading zeros, and `0x0` for zero
 
 The base types state the patterns in [`base-types.yaml`][types].
 
-Readers of objects require exactly the named fields, as step 1 of [`engine_newPayloadV3`][v3] asks.
+Object readers require exactly the named fields, as step 1 of [`engine_newPayloadV3`][v3] asks.
 
 They count a field whose value is `null` as absent, as that step also asks.
 
@@ -29,11 +29,14 @@ A caller turns that reason into its own error, such as an invalid parameter of t
 
 The writers write the canonical form: lowercase hex, and numbers without leading zeros.
 
-A failed request answers with an error object of JSON-RPC 2.0: a code, a message and optional data.
+A failed request answers with an error object of [JSON-RPC 2.0][rpc]: a code, a message and data.
 
-Each API keeps its own table of codes and messages.
+Its data is optional, and a member `data` set to `null` holds the data `null`.
+
+JSON-RPC 2.0 reserves the codes from `-32768` to `-32000`; each API keeps its own table of the rest.
 
 [v3]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/cancun.md#specification
+[rpc]: https://www.jsonrpc.org/specification#error_object
 [types]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/schemas/base-types.yaml
 -/
 
@@ -157,9 +160,10 @@ def quantityJson (n : Nat) : Json :=
 
 /-! ## The error object -/
 
-/-- An integer: a number that Lean holds with no decimal places, such as `-32602` but not `1.0`. -/
+/-- An integer: a JSON number whose value is an integer, such as `-32602`, `1e3` or `1.0`. -/
 def integer (what : String) : Json → Read Int
-  | .num ⟨m, 0⟩ => pure m
+  | .num ⟨m, e⟩ =>
+    if m % 10 ^ e = 0 then pure (m / 10 ^ e) else reject s!"{what}: not an integer"
   | _ => reject s!"{what}: not an integer"
 
 /-- A JSON string. -/
@@ -197,9 +201,13 @@ def rpcErrorJson (e : RpcError) : Json :=
     | some d => [("data", d)]
     | none => [])
 
-/-- An error object: a code and a message, and data or not, with no other member.
+/-- An error object: a code, a message and optional data.
 
-A member `data` whose value is `null` is data, the JSON `null`. -/
+It rejects any other member, a stricter rule than section 5.1 of [JSON-RPC 2.0][rpc] states.
+
+A member `data` set to `null` reads as the data `null`, not as absent data.
+
+[rpc]: https://www.jsonrpc.org/specification#error_object -/
 def rpcErrorOfJson : Json → Read RpcError
   | .obj kvs => do
     let members := kvs.toList

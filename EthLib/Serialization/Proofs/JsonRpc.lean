@@ -1132,6 +1132,12 @@ theorem lookup_of_mem {fs : List (String × Lean.Json)} {k : String} {v : Lean.J
 
 /-! ## The error object -/
 
+/-- The integer reader reads back the number that an integer writes. -/
+theorem integer_fromInt (what : String) (c : Int) :
+    integer what (.num (.fromInt c)) = .ok c := by
+  simp [integer, Lean.JsonNumber.fromInt]
+  rfl
+
 /-- The reader of error objects reads back the error object that the writer writes for any error.
 
 That holds for data of any value, the JSON `null` among them. -/
@@ -1160,7 +1166,7 @@ theorem rpcErrorOfJson_json (e : RpcError) : rpcErrorOfJson (rpcErrorJson e) = .
       rcases this with rfl | rfl <;> simp
     have hobj' : rpcErrorJson ⟨c, m, none⟩ = .obj kvs := hobj
     rw [hobj']
-    simp only [rpcErrorOfJson, hall, field, hc, hm, hdata]
+    simp only [rpcErrorOfJson, hall, field, hc, hm, hdata, ite_true, pure_bind, integer_fromInt]
     rfl
   | some v =>
     obtain ⟨kvs, hobj, -, hmem, hd⟩ := toList_mkObj (pairs :=
@@ -1180,7 +1186,7 @@ theorem rpcErrorOfJson_json (e : RpcError) : rpcErrorOfJson (rpcErrorJson e) = .
       rcases this with rfl | rfl | rfl <;> simp
     have hobj' : rpcErrorJson ⟨c, m, some v⟩ = .obj kvs := hobj
     rw [hobj']
-    simp only [rpcErrorOfJson, hall, field, hc, hm, hdata]
+    simp only [rpcErrorOfJson, hall, field, hc, hm, hdata, ite_true, pure_bind, integer_fromInt]
     rfl
 
 end EthLib.Serialization.JsonRpc
