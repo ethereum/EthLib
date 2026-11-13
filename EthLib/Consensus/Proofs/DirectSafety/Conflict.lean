@@ -189,7 +189,7 @@ theorem view_conflicting_fields_quorums {g a b : ForkedBeaconState preset}
     have zero : f.epoch.toNat = 0 := by rw [equal]; rfl
     omega
   obtain ⟨crossing, below, above, upper⟩ :=
-    view_field_crossing right parameters genesis vb j field f.epoch.toNat positive orderedNat
+    view_field_crossing right genesis vb j field f.epoch.toNat positive orderedNat
   -- Equal targets bind the selected paths at every earlier checkpoint boundary.
   have pair (one : ViewQuorum left va)
       (epoch : one.target.epoch = crossing.target.epoch)
@@ -211,7 +211,7 @@ theorem view_conflicting_fields_quorums {g a b : ForkedBeaconState preset}
     · exact .inl ⟨one, crossing, lower, by rw [epoch]; exact upper, above, upper,
         view_same_epoch left right parameters genesis one crossing epoch same⟩
   obtain initial | ⟨outgoing, source, distance, ⟨incoming, incomingTarget⟩, middle⟩ :=
-    view_finalized_quorums left parameters genesis va
+    view_finalized_quorums left genesis va
   · exact False.elim (notGenesis initial)
   change outgoing.target.epoch.toNat = f.epoch.toNat + 1 ∨
     outgoing.target.epoch.toNat = f.epoch.toNat + 2 at distance

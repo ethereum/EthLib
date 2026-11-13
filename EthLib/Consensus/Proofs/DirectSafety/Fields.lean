@@ -1280,16 +1280,15 @@ The call's source is before the epoch, and its target is from the epoch up to th
 
 The call is a quorum call of the run, or the test of the step of the view.
 
-The run starts at a genesis built from deposits, and the preset meets the parameters. -/
+The run starts at a genesis built from deposits. -/
 theorem view_field_crossing {g a : ForkedBeaconState preset} (run : Run config checks g a)
-    (parameters : Parameters preset) (genesis : Genesis (config := config) (checks := checks) g)
+    (genesis : Genesis (config := config) (checks := checks) g)
     (view : TerminalView a) (j : Checkpoint)
     (field : j = view.state.previousJustifiedCheckpoint ∨
       j = view.state.currentJustifiedCheckpoint ∨ j = view.state.finalizedCheckpoint)
     (epoch : Nat) (positive : 0 < epoch) (reached : epoch ≤ j.epoch.toNat) :
     ∃ crossing : ViewQuorum run view, crossing.source.epoch.toNat < epoch ∧
       epoch ≤ crossing.target.epoch.toNat ∧ crossing.target.epoch.toNat ≤ j.epoch.toNat := by
-  have _ := parameters
   -- A checkpoint with a history of the run is crossed by one of the calls of that history.
   have historical (k : Checkpoint)
       (history : k = ⟨GENESIS_EPOCH, Vector.replicate 32 0⟩ ∨
@@ -1351,9 +1350,9 @@ A quorum also targets it, and with a gap of two, another quorum targets the epoc
 
 Each quorum is a call of the run, or the test of the step of the view.
 
-The run starts at a genesis built from deposits, and the preset meets the parameters. -/
+The run starts at a genesis built from deposits. -/
 theorem view_finalized_quorums {g a : ForkedBeaconState preset} (run : Run config checks g a)
-    (parameters : Parameters preset) (genesis : Genesis (config := config) (checks := checks) g)
+    (genesis : Genesis (config := config) (checks := checks) g)
     (view : TerminalView a) :
     let f := view.state.finalizedCheckpoint
     f = ⟨GENESIS_EPOCH, Vector.replicate 32 0⟩ ∨
@@ -1364,7 +1363,6 @@ theorem view_finalized_quorums {g a : ForkedBeaconState preset} (run : Run confi
         (outgoing.target.epoch.toNat = f.epoch.toNat + 2 →
           ∃ incoming : ViewQuorum run view,
             incoming.target.epoch.toNat = f.epoch.toNat + 1) := by
-  have _ := parameters
   dsimp only
   -- The source of an outgoing quorum is genesis, or the last call of its history targets it.
   have finish {view : TerminalView a} {f : Checkpoint} (outgoing : ViewQuorum run view)
