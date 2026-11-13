@@ -2037,6 +2037,14 @@ The theorems state these properties.
 - No explicit peer enters a mesh.
 - An IWANT is answered only with messages that it named and that the message cache holds after the RPC.
 - A graylisted peer that is not explicit changes nothing.
+- A GRAFT for a joined topic within the backoff of its sender puts the sender out of the mesh.
+  This holds for a sender that is neither explicit nor graylisted.
+- No RPC removes an entry of the seen cache.
+- A forwarded or delivered message has its ID in the seen cache, with the time of the RPC.
+- So after a message is forwarded or delivered, no later RPC forwards or delivers its ID.
+  This holds within the lifetime of the seen cache, whatever RPCs come between, with any parameters, standing and validation.
+  The first and the last RPC use the same parameters and the same message ID function.
+  No theorem covers two messages with the same ID in one RPC: a lifetime of zero lets both through.
 
 The sources leave these points open, and the router takes one reading of each.
 

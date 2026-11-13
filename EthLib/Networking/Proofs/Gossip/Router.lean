@@ -19,6 +19,13 @@ For every standing, message ID and validation that a client passes:
 - Every message sent in answer to an IWANT goes to the sender of the RPC.
   The IWANT named it, and the message cache after the RPC holds it.
 - The RPC of a graylisted peer that is not explicit changes nothing and sends nothing.
+- A GRAFT within the backoff of its sender puts the sender out of the mesh of a joined topic.
+  This needs a sender that is neither explicit nor graylisted.
+- No RPC removes an entry of the seen cache.
+- A forwarded or delivered message has its ID in the seen cache, with the time of the RPC.
+- So after an RPC forwards or delivers a message, no later RPC forwards or delivers its ID.
+  This holds within the lifetime of the seen cache, whatever RPCs come between.
+  The later RPC uses the same parameters and the same message ID function.
 -/
 
 @[expose] public section
@@ -320,6 +327,40 @@ private theorem message_step :
     | reject r =>
       exact ⟨⟨_, s.mcache, rfl, mono⟩, fun x hx => Or.inl hx, fun x hx => Or.inl hx, rfl, rfl⟩
 
+/-- Receiving a message keeps the entries of the seen cache.
+
+A message that it forwards or delivers has its ID there, with the current time. -/
+private theorem message_step_seen :
+    (∀ e ∈ s.seen.entries, e ∈ (receiveMessage p msgId validate now (s, out) m).1.seen.entries) ∧
+    (∀ x ∈ (receiveMessage p msgId validate now (s, out) m).2.forward, x ∈ out.forward ∨
+      (x.2 = m ∧ (msgId m, now) ∈
+        (receiveMessage p msgId validate now (s, out) m).1.seen.entries)) ∧
+    (∀ y ∈ (receiveMessage p msgId validate now (s, out) m).2.delivered, y ∈ out.delivered ∨
+      (y = m ∧ (msgId m, now) ∈
+        (receiveMessage p msgId validate now (s, out) m).1.seen.entries)) := by
+  unfold receiveMessage
+  by_cases hs : m.topic ∉ s.topics ∨ s.seen.contains now (p.seen_ttl * 1000) (msgId m) = true
+  · simp only [hs, ↓reduceIte]
+    exact ⟨fun e he => he, fun x hx => Or.inl hx, fun y hy => Or.inl hy⟩
+  · simp only [hs, ↓reduceIte]
+    cases hv : validate m with
+    | accept =>
+      refine ⟨fun e he => by simp [SeenCache.insert, he], fun x hx => ?_, fun y hy => ?_⟩
+      · simp only [List.mem_append, List.mem_map] at hx
+        rcases hx with hx | ⟨a, _, rfl⟩
+        · exact Or.inl hx
+        · exact Or.inr ⟨rfl, by simp [SeenCache.insert]⟩
+      · simp only [List.mem_append, List.mem_singleton] at hy
+        rcases hy with hy | rfl
+        · exact Or.inl hy
+        · exact Or.inr ⟨rfl, by simp [SeenCache.insert]⟩
+    | ignore r =>
+      exact ⟨fun e he => by simp [SeenCache.insert, he], fun x hx => Or.inl hx,
+        fun y hy => Or.inl hy⟩
+    | reject r =>
+      exact ⟨fun e he => by simp [SeenCache.insert, he], fun x hx => Or.inl hx,
+        fun y hy => Or.inl hy⟩
+
 end Message
 
 section Prune
@@ -500,6 +541,75 @@ private theorem graft_fold_prune {g : Graft} (l : List Graft) (hg : g ∈ l)
       rcases h with h | ⟨h1, h2⟩
       · exact Or.inl h
       · exact Or.inr ⟨h1, Nat.lt_of_lt_of_le h2 (graft_backoff_mono p backoffMs now src s o x _)⟩
+
+/-- The fold of the messages keeps the seen entries, and records the ID of each message it sends.
+
+The ID is recorded with the time of the RPC. -/
+private theorem message_fold_seen (msgId : Message → MessageId)
+    (validate : Message → ValidationResult) (s0 : RouterState) (l : List Message) :
+    (∀ e ∈ s0.seen.entries,
+      e ∈ (l.foldl (receiveMessage p msgId validate now) (s0, {})).1.seen.entries) ∧
+    (∀ x ∈ (l.foldl (receiveMessage p msgId validate now) (s0, {})).2.forward,
+      (msgId x.2, now) ∈
+        (l.foldl (receiveMessage p msgId validate now) (s0, {})).1.seen.entries) ∧
+    (∀ y ∈ (l.foldl (receiveMessage p msgId validate now) (s0, {})).2.delivered,
+      (msgId y, now) ∈
+        (l.foldl (receiveMessage p msgId validate now) (s0, {})).1.seen.entries) := by
+  refine foldl_inv l (fun a : RouterState × Out =>
+    (∀ e ∈ s0.seen.entries, e ∈ a.1.seen.entries) ∧
+    (∀ x ∈ a.2.forward, (msgId x.2, now) ∈ a.1.seen.entries) ∧
+    (∀ y ∈ a.2.delivered, (msgId y, now) ∈ a.1.seen.entries))
+    (receiveMessage p msgId validate now) ?_ ⟨fun e he => he, by simp, by simp⟩
+  rintro ⟨s, o⟩ m _ ⟨h1, h2, h3⟩
+  obtain ⟨k1, k2, k3⟩ := message_step_seen p msgId validate now s o m
+  refine ⟨fun e he => k1 e (h1 e he), fun x hx => ?_, fun y hy => ?_⟩
+  · rcases k2 x hx with h | ⟨rfl, h⟩
+    · exact k1 _ (h2 x h)
+    · exact h
+  · rcases k3 y hy with h | ⟨rfl, h⟩
+    · exact k1 _ (h3 y h)
+    · exact h
+
+/-- A GRAFT for a joined topic within the backoff of its sender puts the sender out of the mesh.
+
+The later GRAFTs of the fold keep it out, since none of them ends the backoff. -/
+private theorem graft_fold_leave (t : String) (l : List Graft) (acc : RouterState × Out)
+    (hb : now < backoffEnd acc.1.backoff t src) (hx : src ∉ acc.1.explicit)
+    (ht : t ∈ acc.1.topics) (h : src ∉ peersOf acc.1.mesh t ∨ ∃ g ∈ l, g.topicId = t) :
+    src ∉ peersOf (l.foldl (receiveGraft p backoffMs now src) acc).1.mesh t := by
+  induction l generalizing acc with
+  | nil =>
+    rcases h with h | ⟨g, hg, -⟩
+    · exact h
+    · simp at hg
+  | cons g l ih =>
+    obtain ⟨s, o⟩ := acc
+    simp only [List.foldl]
+    obtain ⟨f1, f2, -⟩ := graft_fields p backoffMs now src s o g
+    have bm := graft_backoff_mono p backoffMs now src s o g t
+    apply ih _ (Nat.lt_of_lt_of_le hb bm) (by rw [f2]; exact hx) (by rw [f1]; exact ht)
+    by_cases hg : g.topicId = t
+    · left
+      subst hg
+      rcases graft_cases p backoffMs now src s o g with
+        ⟨h1, -⟩ | ⟨-, -, -, e⟩ | ⟨-, h2, -⟩ | ⟨-, -, h3, -⟩
+      · exact absurd h1 hx
+      · rw [e]
+        simp [peersOf_setPeers]
+      · rcases h2 with h2 | h2
+        · exact absurd ht h2
+        · exact absurd hb h2
+      · exact absurd hb h3
+    · rcases h with h | ⟨g', hg', ht'⟩
+      · left
+        intro hm
+        rcases graft_step_mesh p backoffMs now src s o g t src hm with h' | ⟨-, -, -, -, h', -⟩
+        · exact h h'
+        · simp only at hb
+          omega
+      · rcases List.mem_cons.mp hg' with rfl | hg'
+        · exact absurd ht' hg
+        · exact Or.inr ⟨g', hg', ht'⟩
 
 /-- The fold of the PRUNEs only removes mesh peers, and keeps the rest that matters. -/
 private theorem prune_fold (s : RouterState) (l : List Prune) :
@@ -735,6 +845,56 @@ private theorem receiveRpc_facts (hn : ¬ ((standing src).belowGraylist = true �
       simp at h
     · exact h
 
+/-- An RPC that the graylist does not drop keeps the seen entries.
+
+It records the ID of each message it forwards or delivers, with the time of the RPC. -/
+private theorem receiveRpc_seen_facts
+    (hn : ¬ ((standing src).belowGraylist = true ∧ src ∉ s.explicit)) (r : RouterState × Out)
+    (hr : receiveRpc p backoffMs pruneBackoffMs standing msgId validate now src rpc s = r) :
+    (∀ e ∈ s.seen.entries, e ∈ r.1.seen.entries) ∧
+    (∀ x ∈ r.2.forward, (msgId x.2, now) ∈ r.1.seen.entries) ∧
+    (∀ y ∈ r.2.delivered, (msgId y, now) ∈ r.1.seen.entries) := by
+  obtain ⟨pt, s1, a1, a2, s3, -, hs1, ha1, ha2, hs3, hr1, hr2⟩ :=
+    receiveRpc_eq p backoffMs pruneBackoffMs standing msgId validate now src rpc s hn
+  rw [hr] at hr1 hr2
+  subst hs1
+  obtain ⟨S1, S2, S3⟩ := message_fold_seen p now msgId validate { s with peerTopics := pt }
+    rpc.publish
+  rw [← ha1] at S1 S2 S3
+  have G := graft_fold p backoffMs now src a1 rpc.control.graft
+  dsimp only at G
+  rw [← ha2] at G
+  obtain ⟨-, -, -, -, G5, G6, -, -, G9, -⟩ := G
+  obtain ⟨-, -, -, P4, -⟩ := prune_fold pruneBackoffMs now src a2.1 rpc.control.prune
+  rw [← hs3] at P4
+  obtain ⟨T1, T2, -⟩ := tail_props p now src _ a2.2 _ s3 rpc.control hr2
+  rw [hr1, P4, G9, T1, G5, T2, G6]
+  exact ⟨S1, S2, S3⟩
+
+/-- A GRAFT for a joined topic within the backoff of its sender puts the sender out of the mesh.
+
+This needs a sender that is not explicit, in an RPC that the graylist does not drop. -/
+private theorem receiveRpc_leave_facts
+    (hn : ¬ ((standing src).belowGraylist = true ∧ src ∉ s.explicit)) {g : Graft}
+    (hg : g ∈ rpc.control.graft) (hx : src ∉ s.explicit) (ht : g.topicId ∈ s.topics)
+    (hb : now < backoffEnd s.backoff g.topicId src) :
+    src ∉ peersOf
+      (receiveRpc p backoffMs pruneBackoffMs standing msgId validate now src rpc s).1.mesh
+        g.topicId := by
+  obtain ⟨pt, s1, a1, a2, s3, -, hs1, ha1, ha2, hs3, hr1, -⟩ :=
+    receiveRpc_eq p backoffMs pruneBackoffMs standing msgId validate now src rpc s hn
+  subst hs1
+  obtain ⟨⟨se, mc, e1, -⟩, -⟩ := message_fold p now msgId validate { s with peerTopics := pt }
+    rpc.publish
+  rw [← ha1] at e1
+  have L := graft_fold_leave p backoffMs now src g.topicId rpc.control.graft a1
+    (by rw [e1]; exact hb) (by rw [e1]; exact hx) (by rw [e1]; exact ht) (Or.inr ⟨g, hg, rfl⟩)
+  rw [← ha2] at L
+  obtain ⟨-, -, -, -, P5⟩ := prune_fold pruneBackoffMs now src a2.1 rpc.control.prune
+  rw [← hs3] at P5
+  rw [hr1]
+  exact fun h => L (P5 _ _ h)
+
 end Rpc
 
 variable (p : GossipsubParameters) (backoffMs pruneBackoffMs : Nat)
@@ -882,5 +1042,113 @@ theorem receiveRpc_gossip (hg : (standing src).belowGossip = true) (hx : src ∉
   · obtain ⟨-, -, -, -, -, -, -, K⟩ := receiveRpc_facts p backoffMs pruneBackoffMs standing msgId
       validate now src rpc s hn _ rfl
     exact K hg hx
+
+/-- A GRAFT within the backoff of its sender puts the sender out of the mesh of its topic.
+
+This needs a joined topic and a sender that is neither explicit nor graylisted. -/
+theorem receiveRpc_graft_backoff_leave {g : Graft} (hg : g ∈ rpc.control.graft)
+    (hl : (standing src).belowGraylist = false) (hx : src ∉ s.explicit)
+    (ht : g.topicId ∈ s.topics) (hb : now < backoffEnd s.backoff g.topicId src) :
+    src ∉ peersOf
+      (receiveRpc p backoffMs pruneBackoffMs standing msgId validate now src rpc s).1.mesh
+        g.topicId :=
+  receiveRpc_leave_facts p backoffMs pruneBackoffMs standing msgId validate now src rpc s
+    (by simp [hl]) hg hx ht hb
+
+/-- Every entry of the seen cache before an RPC is in it after the RPC. -/
+theorem receiveRpc_seen (e : MessageId × Nat) (he : e ∈ s.seen.entries) :
+    e ∈ (receiveRpc p backoffMs pruneBackoffMs standing msgId validate now src rpc s).1.seen.entries
+    := by
+  by_cases hn : (standing src).belowGraylist = true ∧ src ∉ s.explicit
+  · rw [receiveRpc_graylist p backoffMs pruneBackoffMs standing msgId validate now src rpc s hn.1
+      hn.2]
+    exact he
+  · exact (receiveRpc_seen_facts p backoffMs pruneBackoffMs standing msgId validate now src rpc s
+      hn _ rfl).1 e he
+
+/-- A message that an RPC forwards or delivers has its ID in the seen cache after the RPC.
+
+The entry carries the time of the RPC. -/
+theorem receiveRpc_forward_seen {q : PeerId} {m : Message}
+    (h : (q, m) ∈
+        (receiveRpc p backoffMs pruneBackoffMs standing msgId validate now src rpc s).2.forward ∨
+      m ∈
+        (receiveRpc p backoffMs pruneBackoffMs standing msgId validate now src rpc s).2.delivered) :
+    (msgId m, now) ∈
+      (receiveRpc p backoffMs pruneBackoffMs standing msgId validate now src rpc s).1.seen.entries
+    := by
+  by_cases hn : (standing src).belowGraylist = true ∧ src ∉ s.explicit
+  · rw [receiveRpc_graylist p backoffMs pruneBackoffMs standing msgId validate now src rpc s hn.1
+      hn.2] at h
+    simp at h
+  · obtain ⟨-, F, D⟩ := receiveRpc_seen_facts p backoffMs pruneBackoffMs standing msgId validate
+      now src rpc s hn _ rfl
+    rcases h with h | h
+    · exact F _ h
+    · exact D _ h
+
+/-- An RPC neither forwards nor delivers a message whose ID is in the seen cache.
+
+This holds while the entry of the ID is younger than the lifetime of the cache. -/
+theorem receiveRpc_seen_skip {id : MessageId} {t₀ : Nat} (he : (id, t₀) ∈ s.seen.entries)
+    (ht : now < t₀ + p.seen_ttl * 1000) {q : PeerId} {m : Message} (hid : msgId m = id) :
+    (q, m) ∉
+        (receiveRpc p backoffMs pruneBackoffMs standing msgId validate now src rpc s).2.forward ∧
+      m ∉
+        (receiveRpc p backoffMs pruneBackoffMs standing msgId validate now src rpc s).2.delivered
+    := by
+  have hc : s.seen.contains now (p.seen_ttl * 1000) (msgId m) = true := by
+    simp only [SeenCache.contains, List.any_eq_true, Bool.and_eq_true, decide_eq_true_eq]
+    exact ⟨(id, t₀), he, hid.symm, ht⟩
+  refine ⟨fun h => ?_, fun h => ?_⟩
+  · have := (receiveRpc_forward_accept p backoffMs pruneBackoffMs standing msgId validate now src
+      rpc s (Or.inl h)).2.2.1
+    simp [hc] at this
+  · have := (receiveRpc_forward_accept p backoffMs pruneBackoffMs standing msgId validate now src
+      rpc s (q := q) (Or.inr h)).2.2.1
+    simp [hc] at this
+
+/-- After an RPC forwards or delivers a message, no later RPC forwards or delivers its ID.
+
+Any RPCs may come between, with any sender, parameters, message ID and validation.
+
+Say the last RPC uses the same parameters and the same message ID function as the first.
+
+Then it neither forwards nor delivers a message with that ID.
+
+This holds while the last RPC comes less than the lifetime of the seen cache after the first. -/
+theorem receiveRpc_forward_once {q : PeerId} {m : Message}
+    (h : (q, m) ∈
+        (receiveRpc p backoffMs pruneBackoffMs standing msgId validate now src rpc s).2.forward ∨
+      m ∈
+        (receiveRpc p backoffMs pruneBackoffMs standing msgId validate now src rpc s).2.delivered)
+    (steps : List (RouterState → RouterState))
+    (hsteps : ∀ f ∈ steps, ∃ (p' : GossipsubParameters) (backoffMs' pruneBackoffMs' : Nat)
+      (standing' : PeerId → Standing) (msgId' : Message → MessageId)
+      (validate' : Message → ValidationResult) (now' : Nat) (src' : PeerId) (rpc' : Rpc),
+      f = fun r => (receiveRpc p' backoffMs' pruneBackoffMs' standing' msgId' validate' now' src'
+        rpc' r).1)
+    {s' : RouterState} (hs' : s' = steps.foldl (fun r f => f r)
+      (receiveRpc p backoffMs pruneBackoffMs standing msgId validate now src rpc s).1)
+    (backoffMs' pruneBackoffMs' : Nat) (standing' : PeerId → Standing)
+    (validate' : Message → ValidationResult) (now' : Nat) (src' : PeerId) (rpc' : Rpc)
+    (ht : now' < now + p.seen_ttl * 1000) {q' : PeerId} {m' : Message}
+    (hid : msgId m' = msgId m) :
+    (q', m') ∉
+        (receiveRpc p backoffMs' pruneBackoffMs' standing' msgId validate' now' src' rpc'
+          s').2.forward ∧
+      m' ∉
+        (receiveRpc p backoffMs' pruneBackoffMs' standing' msgId validate' now' src' rpc'
+          s').2.delivered := by
+  have he := receiveRpc_forward_seen p backoffMs pruneBackoffMs standing msgId validate now src rpc
+    s h
+  have he' : (msgId m, now) ∈ s'.seen.entries := by
+    rw [hs']
+    exact foldl_inv steps (fun r : RouterState => (msgId m, now) ∈ r.seen.entries)
+      (fun r f => f r) (fun r f hf hr => by
+        obtain ⟨p', b', pb', st', mi', v', n', sr', r', rfl⟩ := hsteps f hf
+        exact receiveRpc_seen p' b' pb' st' mi' v' n' sr' r' r _ hr) he
+  exact receiveRpc_seen_skip p backoffMs' pruneBackoffMs' standing' msgId validate' now' src' rpc'
+    _ he' ht hid
 
 end EthLib.Networking.Proofs.Gossip.Router
