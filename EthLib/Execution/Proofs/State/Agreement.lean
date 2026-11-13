@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.ExceptRel
 public import EthLib.Execution.Proofs.State.Tracker
 
 /-!
@@ -16,6 +17,8 @@ That means the same writes, wipes, created accounts, transient storage and reads
 Lookups inside those sets, or at what the tracker wrote, give the same value in both.
 
 Tracker writes, recorded reads, rollback and the end of a transaction keep that agreement.
+
+A transaction that makes no new deployment candidate keeps deployability in agreement.
 
 The sets that matter are those a transaction read and wrote.
 
@@ -169,42 +172,10 @@ structure AgreesOn (account allStorage : Address → Prop) (slot : Address → B
   tracker : SameTracker tx other
 
 /-- Two results agree when both fail with the same error or both succeed with agreeing states. -/
-def AgreesOnExcept {ε : Type} (account allStorage : Address → Prop)
-    (slot : Address → Bytes32 → Prop) (code : Hash32 → Prop)
-    (res res' : Except ε TransactionState) : Prop :=
-  match res, res' with
-  | .error e, .error e' => e = e'
-  | .ok tx, .ok other => AgreesOn account allStorage slot code tx other
-  | _, _ => False
-
-namespace AgreesOnExcept
-
-variable {ε δ : Type} {account allStorage : Address → Prop} {slot : Address → Bytes32 → Prop}
-  {code : Hash32 → Prop} {res res' : Except ε TransactionState}
-
-/-- Mapping an error function across agreeing results preserves agreement. -/
-theorem mapError (f : ε → δ) (h : AgreesOnExcept account allStorage slot code res res') :
-    AgreesOnExcept account allStorage slot code (res.mapError f) (res'.mapError f) := by
-  cases res <;> cases res' <;> simp_all [AgreesOnExcept, Except.mapError]
-
-/-- Chaining two steps that keep agreement keeps agreement of the results. -/
-theorem bind {k k' : TransactionState → Except ε TransactionState}
-    (h : AgreesOnExcept account allStorage slot code res res')
-    (hk : ∀ {tx other}, AgreesOn account allStorage slot code tx other →
-      res = .ok tx → res' = .ok other →
-      AgreesOnExcept account allStorage slot code (k tx) (k' other)) :
-    AgreesOnExcept account allStorage slot code (res >>= k) (res' >>= k') := by
-  cases res with
-  | error _ =>
-    cases res' with
-    | error _ => simpa [AgreesOnExcept, Bind.bind, Except.bind] using h
-    | ok _ => simp [AgreesOnExcept] at h
-  | ok tx =>
-    cases res' with
-    | error _ => simp [AgreesOnExcept] at h
-    | ok other => exact hk h rfl rfl
-
-end AgreesOnExcept
+abbrev AgreesOnExcept {ε : Type} (account allStorage : Address → Prop)
+    (slot : Address → Bytes32 → Prop) (code : Hash32 → Prop) :
+    Except ε TransactionState → Except ε TransactionState → Prop :=
+  ExceptRel (AgreesOn account allStorage slot code)
 
 namespace AgreesOn
 
@@ -362,14 +333,11 @@ theorem getCode_eq (h : AgreesOn account allStorage slot code tx other) {codeHas
 /-- At an address whose whole storage agrees, or that was wiped, storage emptiness agrees. -/
 theorem accountHasStorage_eq (h : AgreesOn account allStorage slot code tx other)
     {address : Address} (he : address ∈ tx.storageClears ∨ allStorage address) :
-    other.accountHasStorage address = tx.accountHasStorage address := by
-  have hkey : ∀ key, other.getStorage address key = tx.getStorage address key := by
-    intro key
+    other.accountHasStorage address = tx.accountHasStorage address :=
+  accountHasStorage_congr fun _ => by
     rcases he with hc | he
     · exact h.getStorage_eq (.inr (.inl hc))
     · exact h.getStorage_eq (.inr (.inr (.inl he)))
-  rw [Bool.eq_iff_iff, accountHasStorage_eq_true_iff, accountHasStorage_eq_true_iff]
-  simp only [hkey]
 
 /--
 At a written or agreed address, deployability agrees when a candidate's storage agrees.
@@ -507,7 +475,7 @@ theorem setStorage (h : AgreesOn account allStorage slot code tx other) {address
     (ha : address ∈ tx.accountWrites ∨ account address) (key : Bytes32) (value : U256) :
     AgreesOnExcept account allStorage slot code (tx.setStorage address key value)
       (other.setStorage address key value) := by
-  unfold AgreesOnExcept TransactionState.setStorage
+  unfold AgreesOnExcept ExceptRel TransactionState.setStorage
   rw [h.getAccountOptional_eq ha]
   by_cases hnone : (tx.getAccountOptional address).isNone = true
   · simp [hnone]
@@ -521,7 +489,7 @@ theorem modifyState (h : AgreesOn account allStorage slot code tx other) (fork :
     (f : Account → Except StateError Account) :
     AgreesOnExcept account allStorage slot code (tx.modifyState fork address f)
       (other.modifyState fork address f) := by
-  unfold AgreesOnExcept TransactionState.modifyState
+  unfold AgreesOnExcept ExceptRel TransactionState.modifyState
   simp only [getAccount_recordAccountRead, h.getAccount_eq ha]
   cases f (tx.getAccount address) with
   | error _ => rfl
@@ -701,6 +669,140 @@ theorem AgreesOn.ofTracker {block other : BlockState} {endState : TransactionSta
       (accessedCode block endState)
       (.ofBlock block) (.ofBlock other) :=
   .ofBlock h
+
+/-! ## Deployment candidates -/
+
+/-- Every address with nonce 0 and no code had both in the block, or was wiped.
+
+So the transaction made no new deployment candidate, except at an address whose storage it wiped. -/
+def NoNewCandidate (block : BlockState) (tx : TransactionState) : Prop :=
+  ∀ address, (tx.getAccount address).nonce = 0 →
+    (tx.getAccount address).codeHash = EMPTY_CODE_HASH →
+    address ∈ tx.storageClears ∨
+      (((TransactionState.ofBlock block).getAccount address).nonce = 0 ∧
+        ((TransactionState.ofBlock block).getAccount address).codeHash = EMPTY_CODE_HASH)
+
+/-- The fresh state of a block meets the condition on candidates for that block. -/
+theorem NoNewCandidate.ofBlock (block : BlockState) :
+    NoNewCandidate block (.ofBlock block) :=
+  fun _ hnonce hcode => .inr ⟨hnonce, hcode⟩
+
+namespace NoNewCandidate
+
+variable {block : BlockState} {tx : TransactionState}
+
+/-- A record of an account read keeps the condition on candidates. -/
+theorem recordAccountRead (hinv : NoNewCandidate block tx) (address : Address) :
+    NoNewCandidate block (tx.recordAccountRead address) :=
+  hinv
+
+/-- A record of a storage read keeps the condition on candidates. -/
+theorem recordStorageRead (hinv : NoNewCandidate block tx) (address : Address) (key : Bytes32) :
+    NoNewCandidate block (tx.recordStorageRead address key) :=
+  hinv
+
+/-- A wipe of storage keeps the condition on candidates. -/
+theorem destroyStorage (hinv : NoNewCandidate block tx) (address : Address) :
+    NoNewCandidate block (tx.destroyStorage address) := by
+  intro a hnonce hcode
+  rcases hinv a hnonce hcode with hc | hc
+  · exact .inl (by simp [TransactionState.destroyStorage, hc])
+  · exact .inr hc
+
+/-- Setting an account keeps the condition on candidates when it makes no new candidate there.
+
+The new account has a nonce or code, or the address was wiped, or the old account had neither. -/
+theorem setAccount (hinv : NoNewCandidate block tx) {address : Address} {account : Account}
+    (hnew : account.nonce = 0 → account.codeHash = EMPTY_CODE_HASH →
+      address ∈ tx.storageClears ∨
+        ((tx.getAccount address).nonce = 0 ∧
+          (tx.getAccount address).codeHash = EMPTY_CODE_HASH)) :
+    NoNewCandidate block (tx.setAccount address (some account)) := by
+  intro a hnonce hcode
+  by_cases ha : a = address
+  · subst ha
+    simp only [TransactionState.getAccount, getAccountOptional_setAccount_self,
+      Option.getD_some] at hnonce hcode
+    rcases hnew hnonce hcode with hw | ⟨hn, hc⟩
+    · exact .inl hw
+    · exact hinv a hn hc
+  · simp only [TransactionState.getAccount, getAccountOptional_setAccount_of_ne _ _ ha]
+      at hnonce hcode
+    exact hinv a hnonce hcode
+
+/-- Deleting an account keeps the condition on candidates, since it wipes the storage too. -/
+theorem destroyAccount (hinv : NoNewCandidate block tx) (address : Address) :
+    NoNewCandidate block (tx.destroyAccount address) := by
+  intro a hnonce hcode
+  by_cases ha : a = address
+  · subst ha
+    exact .inl (by simp [TransactionState.destroyAccount, TransactionState.setAccount,
+      TransactionState.destroyStorage])
+  · have hd := hinv.destroyStorage address
+    simp only [TransactionState.destroyAccount, TransactionState.getAccount,
+      getAccountOptional_setAccount_of_ne _ _ ha] at hnonce hcode
+    exact hd a hnonce hcode
+
+/-- A write of storage keeps the condition on candidates. -/
+theorem setStorage (hinv : NoNewCandidate block tx) {address : Address} {key : Bytes32}
+    {value : U256} {tx' : TransactionState} (h : tx.setStorage address key value = .ok tx') :
+    NoNewCandidate block tx' := by
+  unfold TransactionState.setStorage at h
+  split at h
+  · cases h
+  · cases h
+    exact hinv
+
+/-- A change of an account keeps the condition on candidates when the change makes none.
+
+A new account with neither a nonce nor code needs a wiped address or an old account with neither. -/
+theorem modifyState (hinv : NoNewCandidate block tx) {fork : Fork} {address : Address}
+    {f : Account → Except StateError Account}
+    (hf : ∀ updated, f (tx.getAccount address) = .ok updated → updated.nonce = 0 →
+      updated.codeHash = EMPTY_CODE_HASH →
+      address ∈ tx.storageClears ∨
+        ((tx.getAccount address).nonce = 0 ∧
+          (tx.getAccount address).codeHash = EMPTY_CODE_HASH))
+    {tx' : TransactionState} (h : tx.modifyState fork address f = .ok tx') :
+    NoNewCandidate block tx' := by
+  obtain ⟨updated, hupd, rfl⟩ := modifyState_eq_ok_iff.mp h
+  have hset := (hinv.recordAccountRead address).setAccount (account := updated)
+    (address := address) (hf _ hupd)
+  split
+  · exact hset.destroyAccount address
+  · exact hset
+
+/-- A rollback to a snapshot that meets the condition on candidates keeps it.
+
+The two states must share the block before the transaction. -/
+theorem restoreTxState {snapshot : TransactionState} (hinv : NoNewCandidate block snapshot)
+    (hparent : tx.parent = snapshot.parent) :
+    NoNewCandidate block (tx.restoreTxState snapshot) := by
+  intro a hnonce hcode
+  simp only [TransactionState.getAccount, getAccountOptional_restoreTxState hparent] at hnonce hcode
+  exact hinv a hnonce hcode
+
+end NoNewCandidate
+
+/-- An accessed address with nonce 0 and no code was wiped, or is a candidate of the block. -/
+theorem NoNewCandidate.candidateStorage {block : BlockState} {tx endState : TransactionState}
+    (hinv : NoNewCandidate block tx) {address : Address} (hacc : accessedAccount endState address)
+    (hnonce : (tx.getAccount address).nonce = 0)
+    (hcode : (tx.getAccount address).codeHash = EMPTY_CODE_HASH) :
+    address ∈ tx.storageClears ∨ candidateStorage block endState address :=
+  (hinv address hnonce hcode).imp_right fun ⟨hn, hc⟩ => ⟨hacc, hn, hc⟩
+
+/-- States that agree on the accesses of a transaction agree where a contract may be deployed.
+
+This holds at every accessed address when the transaction made no new deployment candidate. -/
+theorem AgreesOn.accountDeployable_eq_of_tracker {block : BlockState}
+    {endState tx other : TransactionState}
+    (h : AgreesOn (accessedAccount endState) (candidateStorage block endState)
+      (accessedSlot endState) (accessedCode block endState) tx other)
+    (hinv : NoNewCandidate block tx) {address : Address}
+    (hacc : accessedAccount endState address) :
+    other.accountDeployable address = tx.accountDeployable address :=
+  h.accountDeployable_eq (.inr hacc) (hinv.candidateStorage hacc)
 
 /-! ## Satisfiability witness -/
 
