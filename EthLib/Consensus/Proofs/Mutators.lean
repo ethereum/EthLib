@@ -28,7 +28,9 @@ From Gloas, slashing a validator cancels exactly the builder payments of the blo
 
 From Altair the proposer takes one eighth of the whistleblower reward of a slashing.
 
-A slashing changes the balances of the validator, the proposer and the whistleblower, and no other.
+A slashing changes the balance of the validator, of the whistleblower and of one more index.
+
+From Fulu that index is the proposer of the slot.
 
 From Electra, the balance of a validator above the activation balance moves to the pending deposits.
 
@@ -825,9 +827,9 @@ theorem switchToCompoundingValidator_compounding {state after : BeaconState pres
 
 From Altair it is one eighth of the reward.
 
-It fails exactly when eight times the reward reaches `2^64`.
+From Altair it fails exactly when eight times the reward reaches `2^64`.
 
-Before Altair it is the reward over the proposer reward quotient of the preset. -/
+Before Altair it is the reward over the proposer reward quotient of the preset, and never fails. -/
 theorem proposerShare_eq_ok_iff {reward share : Gwei} :
     proposerShare preset fork reward = .ok share ↔
       if .altair ≤ fork then reward.toNat * 8 < 2 ^ 64 ∧ share.toNat = reward.toNat / 8
@@ -862,10 +864,21 @@ theorem proposerShare_le {reward share : Gwei}
   · rw [value]
     exact Nat.div_le_self _ _
 
+/-- Starting an exit keeps the balances. -/
+theorem balances_initiateValidatorExit {config : Config} {state after : BeaconState preset fork}
+    {position : ValidatorIndex}
+    (computed : initiateValidatorExit config state position = .ok after) :
+    after.balances = state.balances := by
+  obtain ⟨_, _, ⟨_, rfl⟩ | ⟨_, _, _, _, queue, _, set⟩⟩ := initiateValidatorExit_ok computed
+  · rfl
+  · obtain ⟨_, _, rfl⟩ := exitQueue_eq queue
+    obtain ⟨_, rfl⟩ := setValidator_ok set
+    rfl
+
 /-- Starting an exit keeps the balances, the slot and the proposer lookahead.
 
-It keeps the effective balance of each validator. -/
-private theorem initiateValidatorExit_frame {config : Config}
+It keeps the effective balance of the validator that exits. -/
+theorem effectiveBalance_initiateValidatorExit {config : Config}
     {state after : BeaconState preset fork} {index : ValidatorIndex} {validator : Validator}
     (found : getValidator state index = .ok validator)
     (computed : initiateValidatorExit config state index = .ok after) :
@@ -883,19 +896,19 @@ private theorem initiateValidatorExit_frame {config : Config}
     obtain ⟨_, rfl⟩ := setValidator_ok set
     exact ⟨rfl, rfl, rfl, _, self, rfl⟩
 
-/--
-Consider a slashing that succeeds, with a whistleblower that is by default the proposer.
+/-- The balances after a slashing, with a whistleblower that is by default the proposer.
 
-The whistleblower reward is the effective balance of the validator over its quotient.
+The reward is the effective balance of the validator over the whistleblower reward quotient.
 
 The validator first loses its effective balance over the slashing penalty quotient, down to zero.
 
-The proposer then gains its share of the reward, and the whistleblower gains the rest.
+One index then gains the proposer's share of the reward, and the whistleblower gains the rest.
 
 Every other balance stays.
 
-From Fulu the proposer is the proposer of the slot in the state before the slashing.
--/
+From Fulu that index is the proposer of the slot in the state before the slashing.
+
+Before Fulu this theorem does not say which index it is. -/
 theorem balance_slashValidator {config : Config} {state after : BeaconState preset fork}
     {slashedIndex : ValidatorIndex} {whistleblowerIndex : Option ValidatorIndex}
     {validator : Validator} (found : getValidator state slashedIndex = .ok validator)
@@ -921,7 +934,7 @@ theorem balance_slashValidator {config : Config} {state after : BeaconState pres
     exitedOk, readOk, _, markedOk, _, _, _, loweredOk, proposerOk, shareOk, raisedOk, lastOk,
     done⟩ := slashValidator_ok computed
   obtain ⟨balances, slot, lookahead, exitedValidator, exitedFound, effective⟩ :=
-    initiateValidatorExit_frame found exitedOk
+    effectiveBalance_initiateValidatorExit found exitedOk
   rw [readOk, Except.ok.injEq] at exitedFound
   subst exitedFound
   rw [effective] at shareOk lastOk loweredOk
