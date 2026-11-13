@@ -479,7 +479,7 @@ PyObject* py_consensus_state_transitions (PyObject* self, PyObject* args);
 PyObject* py_consensus_state_transitions_across (PyObject* self, PyObject* args);
 PyObject* py_consensus_fork_choice (PyObject* self, PyObject* args);
 PyObject* py_consensus_gossip_validation (PyObject* self, PyObject* args);
-PyObject* py_consensus_api_pool (PyObject* self, PyObject* args);
+PyObject* py_consensus_api_post (PyObject* self, PyObject* args);
 PyObject* py_consensus_initialize_genesis (PyObject* self, PyObject* args);
 PyObject* py_consensus_is_valid_genesis_state (PyObject* self, PyObject* args);
 PyObject* py_consensus_deposit_tree_new (PyObject* self, PyObject* args);

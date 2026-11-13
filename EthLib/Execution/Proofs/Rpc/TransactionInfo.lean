@@ -194,6 +194,35 @@ theorem transactionByBlockAndIndex_none {v : ChainView} {p : BlockParam} {index 
     · have : index < r.block.transactions.length := (List.getElem?_eq_some_iff.mp ht).1
       cases hi : r.transactionInfo index tx <;> simp [hi, Functor.map, Except.map] <;> omega
 
+/-- In a valid view, the run of a canonical block after the lowest applied each transaction.
+
+It ran on the state of the block before, and reached the transaction after those before it. -/
+theorem Valid.applyTransaction_at {v : ChainView} {checkSeal : Bool}
+    (hv : v.Valid checkSeal) {i : Nat} (hi : i + 1 < v.canonical.length) {index : Nat}
+    {tx : Transaction} (htx : v.canonical[i + 1].block.transactions[index]? = some tx) :
+    ∃ hashes state body, ∃ before next : BodyOutput v.canonical[i + 1].fork,
+      recentHashes (v.chainAt i (by omega)).recent = .ok hashes ∧
+      daoTransfer v.config v.canonical[i + 1].fork v.canonical[i + 1].block.header.number
+        ⟨v.canonical[i].state, ∅, ∅, ∅, ∅⟩ = .ok state ∧
+      startSystemCalls (blockEnvironment v.config hashes v.canonical[i + 1].block.header)
+        v.canonical[i + 1].block.header.parentHash (.init state) = .ok body ∧
+      applyTransactions (blockEnvironment v.config hashes v.canonical[i + 1].block.header) body
+        (v.canonical[i + 1].block.transactions.take index) = .ok before ∧
+      Blocks.applyTransaction (blockEnvironment v.config hashes v.canonical[i + 1].block.header)
+        index before tx = .ok next := by
+  obtain ⟨-, result, hrun, -⟩ := hv.follows i hi
+  obtain ⟨hashes, hrec, happly, -⟩ := Blocks.runBody_eq_ok.mp hrun
+  obtain ⟨state, body, txs, -, -, hdao, hstart, htxs, -⟩ := Blocks.applyBody_eq_ok happly
+  have hlt : index < v.canonical[i + 1].block.transactions.length :=
+    (List.getElem?_eq_some_iff.mp htx).1
+  obtain ⟨-, hsteps⟩ := Blocks.applyTransactions_steps (fun _ _ => True) (fun _ => trivial)
+    (fun _ _ => trivial) (fun _ => trivial) htxs
+  obtain ⟨before, next, hbefore, hnext, -⟩ := hsteps index hlt
+  have hget : v.canonical[i + 1].block.transactions[index] = tx :=
+    Option.some.inj ((List.getElem?_eq_getElem hlt).symm.trans htx)
+  rw [hget] at hnext
+  exact ⟨hashes, state, body, before, next, hrec, hdao, hstart, hbefore, hnext⟩
+
 /-- In a valid view, the run of a canonical block after the lowest checked each transaction.
 
 It ran on the state of the block before, and reached the transaction after those before it.
@@ -216,17 +245,8 @@ theorem Valid.transactionInfo_inclusion {v : ChainView} {checkSeal : Bool}
         (blockEnvironment v.config hashes v.canonical[i + 1].block.header) before.gas
         (.ofBlock before.block) tx = .ok inc ∧
       info.sender = inc.sender ∧ info.gasPrice = inc.gasPrice := by
-  obtain ⟨-, result, hrun, -⟩ := hv.follows i hi
-  obtain ⟨hashes, hrec, happly, -⟩ := Blocks.runBody_eq_ok.mp hrun
-  obtain ⟨state, body, txs, -, -, hdao, hstart, htxs, -⟩ := Blocks.applyBody_eq_ok happly
-  have hlt : index < v.canonical[i + 1].block.transactions.length :=
-    (List.getElem?_eq_some_iff.mp htx).1
-  obtain ⟨-, hsteps⟩ := Blocks.applyTransactions_steps (fun _ _ => True) (fun _ => trivial)
-    (fun _ _ => trivial) (fun _ => trivial) htxs
-  obtain ⟨before, next, hbefore, hnext, -⟩ := hsteps index hlt
-  have hget : v.canonical[i + 1].block.transactions[index] = tx :=
-    Option.some.inj ((List.getElem?_eq_getElem hlt).symm.trans htx)
-  rw [hget] at hnext
+  obtain ⟨hashes, state, body, before, next, hrec, hdao, hstart, hbefore, hnext⟩ :=
+    hv.applyTransaction_at hi htx
   obtain ⟨inc, -, hinc, -⟩ := Blocks.applyTransaction_eq_ok hnext
   obtain ⟨hsender, -, -, -, -, -, -, hprice, -⟩ := checkInclusion_ok hinc
   obtain ⟨sender, hash, hs, -, rfl⟩ := BlockRecord.transactionInfo_eq_ok.mp h
