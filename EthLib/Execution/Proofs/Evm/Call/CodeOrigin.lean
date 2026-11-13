@@ -248,7 +248,7 @@ theorem stepRules_keepsCodeOrigin :
 /-! ## Messages -/
 
 /-- The state that a message enters keeps the origin of the code hashes of its sender state. -/
-private theorem keepsCodeOrigin_entered {message : Message fork}
+theorem keepsCodeOrigin_entered {message : Message fork}
     {state entry : TransactionState} {substate entrySubstate : Substate}
     (hentry : Entered fork message state substate entry entrySubstate) :
     KeepsCodeOrigin state entry := by
@@ -271,7 +271,7 @@ private theorem keepsCodeOrigin_rollbackOnError {snapshot : TransactionState}
   · exact hk
 
 /-- A preparation of a creation keeps the origin of the code hashes. -/
-private theorem keepsCodeOrigin_prepareCreation {state prepared : TransactionState}
+theorem keepsCodeOrigin_prepareCreation {state prepared : TransactionState}
     {address : Address} (hp : prepareCreation fork state address = .ok prepared) :
     KeepsCodeOrigin state prepared := by
   have hwipe :

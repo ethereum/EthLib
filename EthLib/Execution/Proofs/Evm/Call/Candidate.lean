@@ -195,7 +195,7 @@ theorem _root_.EthLib.Execution.State.TransactionState.NoNewCandidate.of_keepsCa
 /-! ## Starts, rollbacks and creations -/
 
 /-- The state that a message enters keeps the candidates of the state it is sent from. -/
-private theorem keepsCandidates_entered {message : Message fork} {state entry : TransactionState}
+theorem keepsCandidates_entered {message : Message fork} {state entry : TransactionState}
     {substate entrySubstate : Substate}
     (hentry : Entered fork message state substate entry entrySubstate) :
     KeepsCandidates state entry := by
@@ -218,7 +218,7 @@ private theorem keepsCandidates_rollbackOnError {snapshot : TransactionState}
   · exact hk
 
 /-- A preparation of a creation keeps the candidates, and wipes the storage of its address. -/
-private theorem keepsCandidates_prepareCreation {state prepared : TransactionState}
+theorem keepsCandidates_prepareCreation {state prepared : TransactionState}
     {address : Address} (hp : prepareCreation fork state address = .ok prepared) :
     KeepsCandidates state prepared ∧ address ∈ prepared.storageClears := by
   have hwipe : KeepsCandidates state ((state.destroyStorage address).markAccountCreated address) :=

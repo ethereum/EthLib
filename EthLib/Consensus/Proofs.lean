@@ -10,9 +10,13 @@ public import EthLib.Consensus.Proofs.BeaconApi.Duties
 public import EthLib.Consensus.Proofs.BeaconApi.Config
 public import EthLib.Consensus.Proofs.BeaconApi.Encoding
 public import EthLib.Consensus.Proofs.BeaconApi.Identifiers
+public import EthLib.Consensus.Proofs.BeaconApi.LightClient
+public import EthLib.Consensus.Proofs.BeaconApi.LightClientBootstrap
 public import EthLib.Consensus.Proofs.BeaconApi.Registries
+public import EthLib.Consensus.Proofs.BeaconApi.Rewards
 public import EthLib.Consensus.Proofs.BeaconApi.StateQueries
 public import EthLib.Consensus.Proofs.BeaconApi.Validators
+public import EthLib.Consensus.Proofs.BeaconApi.ValidatorData
 public import EthLib.Consensus.Proofs.BuilderApi
 public import EthLib.Consensus.Proofs.BuilderApi.AuthData
 public import EthLib.Consensus.Proofs.BuilderApi.Bid
@@ -141,6 +145,8 @@ public import EthLib.Consensus.Proofs.ShufflePermutation
 public import EthLib.Consensus.Proofs.Signing
 public import EthLib.Consensus.Proofs.Time
 public import EthLib.Consensus.Proofs.Transition.ActiveKept
+public import EthLib.Consensus.Proofs.Transition.BalanceCappedBlock
+public import EthLib.Consensus.Proofs.Transition.BalanceCappedWithdrawals
 public import EthLib.Consensus.Proofs.Transition.BalanceDrift
 public import EthLib.Consensus.Proofs.Transition.BalanceNotRaised
 public import EthLib.Consensus.Proofs.Transition.BalanceNotRaisedBlock
@@ -181,8 +187,11 @@ public import EthLib.Consensus.Proofs.Transition.InactivityLeak
 public import EthLib.Consensus.Proofs.Transition.InactivityLeakBetween
 public import EthLib.Consensus.Proofs.Transition.InactivityLeakBound
 public import EthLib.Consensus.Proofs.Transition.InactivityLeakEpoch
+public import EthLib.Consensus.Proofs.Transition.InactivityLeakRun
 public import EthLib.Consensus.Proofs.Transition.InactivityLeakStake
 public import EthLib.Consensus.Proofs.Transition.InactivityLeakTrace
+public import EthLib.Consensus.Proofs.Transition.InactivityLeakVoter
+public import EthLib.Consensus.Proofs.Transition.InactivityLeakVoterRun
 public import EthLib.Consensus.Proofs.Transition.Invariants
 public import EthLib.Consensus.Proofs.Transition.MixesKept
 public import EthLib.Consensus.Proofs.Transition.Operations

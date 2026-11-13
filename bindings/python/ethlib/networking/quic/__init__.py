@@ -1,4 +1,4 @@
-"""QUIC v1: wire codecs (RFC 9000), packet keys (RFC 9001 §5) and the TLS 1.3 key schedule."""
+"""QUIC v1: wire codecs (RFC 9000), packet keys and protection (RFC 9001) and TLS 1.3 secrets."""
 
 from typing import Literal, NamedTuple, TypeAlias, TypedDict
 
@@ -7,6 +7,7 @@ from typing import Literal, NamedTuple, TypeAlias, TypedDict
 from ethlib.cryptography import _native
 from ethlib.errors import (
     QuicError as QuicError,
+    QuicProtectionError as QuicProtectionError,
     QuicVarintError as QuicVarintError,
     Tls13Error as Tls13Error,
 )
@@ -152,6 +153,25 @@ def decode_packet_number(width: int, truncated: int, expected: int) -> int:
     return _native.quic_packet_number_decode(width, truncated, expected)
 
 
+def protect(
+    suite: CipherSuite, secret: bytes, number: int, offset: int, header: bytes, plaintext: bytes
+) -> bytes:
+    """Seal a header that ends at its packet number; a payload too short to sample raises."""
+    return _native.quic_protect(suite, secret, number, offset, header, plaintext)
+
+
+def unprotect(
+    suite: CipherSuite, secret: bytes, expected: int, offset: int, packet: bytes
+) -> tuple[bytes, bytes]:
+    """Return header and plaintext; expected is 1 + the largest authenticated number, or 0."""
+    return _native.quic_unprotect(suite, secret, expected, offset, packet)
+
+
+def retry_tag(original_dcid: bytes, retry: bytes) -> bytes:
+    """Compute the integrity tag of a Retry packet given without its tag, RFC 9001 §5.8."""
+    return _native.quic_retry_tag(original_dcid, retry)
+
+
 __all__ = [
     "Ack",
     "CipherSuite",
@@ -160,6 +180,7 @@ __all__ = [
     "KeySchedule",
     "PacketType",
     "QuicError",
+    "QuicProtectionError",
     "QuicVarintError",
     "Tls13Error",
     "decode_frame",
@@ -172,7 +193,10 @@ __all__ = [
     "encode_varint",
     "initial_secrets",
     "packet_keys",
+    "protect",
+    "retry_tag",
     "tls_derive_secret",
     "tls_finished",
     "tls_key_schedule",
+    "unprotect",
 ]

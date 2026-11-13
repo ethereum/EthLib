@@ -88,7 +88,7 @@ theorem scoreBias_mul_inactivityPenaltyQuotient_mainnet (altair : .altair ≤ fo
 /-- From Altair and after the first epoch, a successful step finds a balance for each validator.
 
 The registry is that of the state before the step. -/
-private theorem balances_present_of_altair {config : Config} (altair : .altair ≤ fork)
+theorem balances_present_of_altair {config : Config} (altair : .altair ≤ fork)
     (later : getCurrentEpoch state ≠ GENESIS_EPOCH)
     (computed : processRewardsAndPenalties config state = .ok after) :
     ∀ j < state.validators.data.size, ∃ balance, state.balances.data[j]? = some balance := by

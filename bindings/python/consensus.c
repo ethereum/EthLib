@@ -205,6 +205,127 @@ extern lean_object*
 eth_consensus_api_payload_envelope_ssz(lean_object* args);
 
 extern lean_object*
+eth_consensus_api_light_client_bootstrap(lean_object* args);
+
+PyObject*
+py_consensus_api_light_client_bootstrap(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_light_client_bootstrap, args, 8, FORK_CHOICE_ERROR);
+}
+
+extern lean_object*
+eth_consensus_api_light_client_bootstrap_ssz(lean_object* args);
+
+PyObject*
+py_consensus_api_light_client_bootstrap_ssz(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_light_client_bootstrap_ssz, args, 8, FORK_CHOICE_ERROR);
+}
+
+extern lean_object*
+eth_consensus_api_light_client_updates(lean_object* args);
+
+PyObject*
+py_consensus_api_light_client_updates(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_light_client_updates, args, 5, CONSENSUS_ERROR);
+}
+
+extern lean_object*
+eth_consensus_api_light_client_updates_ssz(lean_object* args);
+
+PyObject*
+py_consensus_api_light_client_updates_ssz(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_light_client_updates_ssz, args, 6, CONSENSUS_ERROR);
+}
+
+extern lean_object*
+eth_consensus_api_light_client_decode_updates(lean_object* args);
+
+PyObject*
+py_consensus_api_light_client_decode_updates(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_light_client_decode_updates, args, 4, CONSENSUS_ERROR);
+}
+
+extern lean_object*
+eth_consensus_api_light_client_latest(lean_object* args);
+
+PyObject*
+py_consensus_api_light_client_latest(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_light_client_latest, args, 4, CONSENSUS_ERROR);
+}
+
+extern lean_object*
+eth_consensus_api_attestation_data(lean_object* args);
+
+PyObject*
+py_consensus_api_attestation_data(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_attestation_data, args, 9, FORK_CHOICE_ERROR);
+}
+
+extern lean_object*
+eth_consensus_api_payload_attestation_data(lean_object* args);
+
+PyObject*
+py_consensus_api_payload_attestation_data(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_payload_attestation_data, args, 9, FORK_CHOICE_ERROR);
+}
+
+extern lean_object*
+eth_consensus_api_aggregate_attestation(lean_object* args);
+
+PyObject*
+py_consensus_api_aggregate_attestation(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_aggregate_attestation, args, 9, CONSENSUS_ERROR);
+}
+
+extern lean_object*
+eth_consensus_api_sync_committee_contribution(lean_object* args);
+
+PyObject*
+py_consensus_api_sync_committee_contribution(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_sync_committee_contribution, args, 8, CONSENSUS_ERROR);
+}
+
+extern lean_object*
+eth_consensus_api_attestation_rewards(lean_object* args);
+
+PyObject*
+py_consensus_api_attestation_rewards(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_attestation_rewards, args, 6, CONSENSUS_ERROR);
+}
+
+extern lean_object*
 eth_consensus_api_duties(lean_object* args);
 
 extern lean_object*

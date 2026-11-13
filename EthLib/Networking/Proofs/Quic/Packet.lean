@@ -67,7 +67,7 @@ theorem decode_initial (d s t rest : List UInt8) (w : PacketNumberLength)
   have hf16 : (192 + w.val) / 16 % 4 = 0 := by omega
   have hf4 : (192 + w.val) / 4 % 4 = 0 := by omega
   simp only [show (1 : Nat) ≠ 0 by decide, show (0 : Nat) ≠ 3 by decide,
-    decode, longPrefix, List.append_assoc, List.cons_append, List.nil_append,
+    decode, widthOfFirst, longPrefix, List.append_assoc, List.cons_append, List.nil_append,
     bind, pure, StateT.bind, StateT.pure,
     Except.bind, Except.pure, byte, hf, hm, hf128, ↓reduceIte,
     uint_encode, Nat.one_mod, connectionId_encode _ _ 20 hd (by decide),
@@ -92,7 +92,7 @@ theorem decode_zeroRtt (d s rest : List UInt8) (w : PacketNumberLength)
   have hf16 : (208 + w.val) / 16 % 4 = 1 := by omega
   have hf4 : (208 + w.val) / 4 % 4 = 0 := by omega
   simp only [show (1 : Nat) ≠ 0 by decide, show (1 : Nat) ≠ 3 by decide,
-    decode, longPrefix, List.append_assoc, List.cons_append, List.nil_append,
+    decode, widthOfFirst, longPrefix, List.append_assoc, List.cons_append, List.nil_append,
     bind, pure, StateT.bind, StateT.pure,
     Except.bind, Except.pure, byte, hf, hm, hf128, ↓reduceIte,
     uint_encode, Nat.one_mod, connectionId_encode _ _ 20 hd (by decide),
@@ -118,7 +118,7 @@ theorem decode_handshake (d s rest : List UInt8) (w : PacketNumberLength)
   have hf4 : (224 + w.val) / 4 % 4 = 0 := by omega
   simp only [show (1 : Nat) ≠ 0 by decide, show (2 : Nat) ≠ 3 by decide,
     show (2 : Nat) ≠ 0 by decide, show (2 : Nat) ≠ 1 by decide,
-    decode, longPrefix, List.append_assoc, List.cons_append, List.nil_append,
+    decode, widthOfFirst, longPrefix, List.append_assoc, List.cons_append, List.nil_append,
     bind, pure, StateT.bind, StateT.pure,
     Except.bind, Except.pure, byte, hf, hm, hf128, ↓reduceIte,
     uint_encode, Nat.one_mod, connectionId_encode _ _ 20 hd (by decide),
@@ -168,7 +168,7 @@ theorem decode_oneRtt (d rest : List UInt8) (spin keyPhase : Bool)
       omega
   change decode d.length ([UInt8.ofNat first] ++ d ++
     Base.natToBytes (numberLength w) n ++ rest) = _
-  simp only [decode, List.append_assoc, List.cons_append, List.nil_append,
+  simp only [decode, widthOfFirst, List.append_assoc, List.cons_append, List.nil_append,
     bind, pure, StateT.bind, StateT.pure, Except.bind, Except.pure, byte,
     hfirst, hm, hf128, ↓reduceIte, Fin.eta, require, hf64, hf8, hd,
     bytes_append, uint_encode, Nat.mod_eq_of_lt hn, hspin, hkey]

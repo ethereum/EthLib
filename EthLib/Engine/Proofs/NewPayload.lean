@@ -534,25 +534,6 @@ theorem newPayloadOnChain_of_stateTransition_error {transition : TransitionConfi
 
 /-! ## The writer of the parameters -/
 
-/-- A payload at a fork that a version below 5 takes has a structure that the version takes. -/
-private theorem acceptsStructure_of_atFork {version : Nat} {fork : Fork} {j : Lean.Json}
-    {any : Json.AnyPayload} {p : ExecutionPayload fork} (hv : version < 5)
-    (accepts : acceptsFork version fork = true) (hj : Json.anyPayload j = .ok any)
-    (hat : any.atFork fork = .ok p) : acceptsStructure version any.version = true := by
-  obtain ⟨hver, hw, hb, -⟩ := Json.shape_of_anyPayload hj
-  simp only [Json.AnyPayload.atFork, bind_ok_iff] at hat
-  obtain ⟨w, hw', b, hb', -⟩ := hat
-  -- The fields present fix the version of the structure from the fork.
-  have hw'' := Json.exists_since_iff.mp ⟨w, hw'⟩
-  have hb'' := Json.exists_since_iff.mp ⟨b, hb'⟩
-  rw [hw] at hw''
-  rw [hb] at hb''
-  obtain rfl | rfl | rfl | rfl | rfl :
-      version = 0 ∨ version = 1 ∨ version = 2 ∨ version = 3 ∨ version = 4 := by omega
-  all_goals
-    rcases hver with h | h | h <;> rw [h] at hw'' hb'' ⊢ <;> cases fork <;>
-      revert accepts hw'' hb'' <;> decide
-
 open EthLib.Serialization.JsonRpc (listJson dataJson array fixed bytes array_listJson
   fixed_dataJson bytes_hexString isNull_arr isNull_str) in
 /-- The decoder reads back an array of a decodable payload, then the values of the version. -/
@@ -590,6 +571,77 @@ private theorem newPayloadParams_arr {version : Nat} {pj : Lean.Json} {any : Jso
     simp [newPayloadParams, paramCount, hnull, hp, hh, hr, hb, nh, nr, nb]
     rfl
 
+/-- A decoded payload that gives a payload at a fork has the structure version of that fork.
+
+It is version 3 from Dencun, version 2 at Shapella, and version 1 before. -/
+private theorem version_of_atFork {fork : Fork} {j : Lean.Json} {any : Json.AnyPayload}
+    {p : ExecutionPayload fork} (hj : Json.anyPayload j = .ok any)
+    (hat : any.atFork fork = .ok p) :
+    any.version = if .dencun ≤ fork then 3 else if .shapella ≤ fork then 2 else 1 := by
+  obtain ⟨hver, hw, hb, -⟩ := Json.shape_of_anyPayload hj
+  simp only [Json.AnyPayload.atFork, bind_ok_iff] at hat
+  obtain ⟨w, hw', b, hb', -⟩ := hat
+  -- The fields present fix the version of the structure from the fork.
+  have hw'' := Json.exists_since_iff.mp ⟨w, hw'⟩
+  have hb'' := Json.exists_since_iff.mp ⟨b, hb'⟩
+  rw [hw] at hw''
+  rw [hb] at hb''
+  rcases hver with h | h | h <;> rw [h] at hw'' hb'' ⊢ <;> cases fork <;>
+    revert hw'' hb'' <;> decide
+
+/-- The decoder of the parameters reads back their JSON when the version takes the structure.
+
+The version must be one of 1 to 5.
+
+Below version 5 it must take the structure version of the fork of the payload.
+
+From version 5 that fork must be from Dencun on.
+
+The extra data of the payload must hold at most 32 bytes.
+
+The access list and the slot are given exactly from version 5.
+
+The hashes and the root read back from version 3, and the requests from version 4.
+
+The payload reads back as one whose form at its fork is the given payload. -/
+theorem newPayloadParams_json_of_structure {fork : Fork} {version : Nat}
+    (payload : ExecutionPayload fork) (amsterdam : Option (ByteArray × UInt64))
+    (hashes : List Hash32) (beaconRoot : Hash32) (requests : List ByteArray)
+    (hv : 1 ≤ version ∧ version ≤ 5)
+    (layout : version < 5 → acceptsStructure version
+      (if .dencun ≤ fork then 3 else if .shapella ≤ fork then 2 else 1) = true)
+    (dencun : 5 ≤ version → .dencun ≤ fork)
+    (extra : payload.extraData.size ≤ MAX_EXTRA_DATA_BYTES)
+    (five : amsterdam.isSome ↔ 5 ≤ version) :
+    ∃ any, newPayloadParams version
+        (newPayloadParamsJson version payload amsterdam hashes beaconRoot requests) =
+        .ok (any, amsterdam, if 3 ≤ version then some hashes else none,
+          if 3 ≤ version then some beaconRoot else none,
+          if 4 ≤ version then some requests else none) ∧
+      any.atFork fork = .ok payload := by
+  unfold newPayloadParamsJson
+  cases amsterdam with
+  | none =>
+    -- Below version 5 the payload has the structure of its fork.
+    have hlt : version < 5 := by simpa using five
+    obtain ⟨any, hj, hat⟩ := Json.anyPayload_executionPayloadJson payload extra
+    have hs : acceptsStructure version any.version = true := by
+      rw [version_of_atFork hj hat]
+      exact layout hlt
+    have hp : payloadParam version (Json.executionPayloadJson payload) = .ok (any, none) :=
+      (payloadParam_eq_ok_iff_of_lt hlt).mpr ⟨hj, hs, rfl⟩
+    exact ⟨any, newPayloadParams_arr hv rfl hp hashes beaconRoot requests, hat⟩
+  | some x =>
+    -- Version 5 reads the structure of version 4, from Dencun on.
+    obtain ⟨accessList, slot⟩ := x
+    have h5 : 5 ≤ version := five.mp rfl
+    obtain ⟨any, hj, hat⟩ :=
+      Json.payloadV4_executionPayloadV4Json payload accessList slot (dencun h5) extra
+    have hp : payloadParam version (Json.executionPayloadV4Json payload accessList slot) =
+        .ok (any, some (accessList, slot)) :=
+      (payloadParam_eq_ok_iff_of_le h5).mpr ⟨accessList, slot, hj, rfl⟩
+    exact ⟨any, newPayloadParams_arr hv rfl hp hashes beaconRoot requests, hat⟩
+
 /-- The decoder of the parameters reads back the JSON of the parameters of a version.
 
 The version must take the fork of the payload, whose extra data holds at most 32 bytes.
@@ -614,27 +666,57 @@ theorem newPayloadParams_json {fork : Fork} {version : Nat} (payload : Execution
   have hv : 1 ≤ version ∧ version ≤ 5 := by
     unfold acceptsFork at accepts
     split at accepts <;> first | omega | simp at accepts
-  unfold newPayloadParamsJson
+  -- The fork fixes the structure that the version takes, and version 5 takes Glamsterdam alone.
+  refine newPayloadParams_json_of_structure payload amsterdam hashes beaconRoot requests hv
+    (fun h => ?_) (fun h => ?_) extra five
+  all_goals
+    revert h
+    obtain rfl | rfl | rfl | rfl | rfl :
+        version = 1 ∨ version = 2 ∨ version = 3 ∨ version = 4 ∨ version = 5 := by omega
+    all_goals (cases fork <;> revert accepts <;> decide)
+
+/-- Decoded parameters whose first value is a payload decode that payload. -/
+private theorem payloadParam_of_newPayloadParams {version : Nat} {pj : Lean.Json}
+    {rest : List Lean.Json}
+    {x : Json.AnyPayload × Option (ByteArray × UInt64) × Option (List Hash32) × Option Hash32 ×
+      Option (List ByteArray)}
+    (h : newPayloadParams version (.arr (pj :: rest).toArray) = .ok x) :
+    ∃ a, payloadParam version pj = .ok a := by
+  unfold newPayloadParams at h
+  obtain ⟨l, hl, h⟩ := bind_ok_iff.mp h
+  cases hl
+  dsimp only [List.getElem?_cons_zero] at h
+  -- Walk every step: a failing step contradicts the result, and each value read is kept.
+  repeat' (first
+    | (cases h; done)
+    | (obtain ⟨_, step, h⟩ := bind_ok_iff.mp h
+       first | cases step | skip)
+    | split at h)
+  all_goals exact ⟨_, ‹payloadParam _ _ = _›⟩
+
+/-- Decoded parameters written from a payload hold its extra data within 32 bytes.
+
+The structure of version 4 must come exactly from version 5, and only from Dencun on. -/
+theorem extraData_le_of_newPayloadParams_json {fork : Fork} {version : Nat}
+    {payload : ExecutionPayload fork} {amsterdam : Option (ByteArray × UInt64)}
+    {hashes : List Hash32} {beaconRoot : Hash32} {requests : List ByteArray}
+    (five : amsterdam.isSome ↔ 5 ≤ version) (dencun : amsterdam.isSome → .dencun ≤ fork)
+    {x : Json.AnyPayload × Option (ByteArray × UInt64) × Option (List Hash32) × Option Hash32 ×
+      Option (List ByteArray)}
+    (h : newPayloadParams version
+      (newPayloadParamsJson version payload amsterdam hashes beaconRoot requests) = .ok x) :
+    payload.extraData.size ≤ MAX_EXTRA_DATA_BYTES := by
+  unfold newPayloadParamsJson at h
+  obtain ⟨a, ha⟩ := payloadParam_of_newPayloadParams h
   cases amsterdam with
   | none =>
-    -- Below version 5 the payload has the structure of its fork.
+    -- Below version 5 the payload decodes as a structure of version 1, 2 or 3.
     have hlt : version < 5 := by simpa using five
-    obtain ⟨any, hj, hat⟩ := Json.anyPayload_executionPayloadJson payload extra
-    have hp : payloadParam version (Json.executionPayloadJson payload) = .ok (any, none) :=
-      (payloadParam_eq_ok_iff_of_lt hlt).mpr
-        ⟨hj, acceptsStructure_of_atFork hlt accepts hj hat, rfl⟩
-    exact ⟨any, newPayloadParams_arr hv rfl hp hashes beaconRoot requests, hat⟩
+    exact Json.extraData_le_of_anyPayload_executionPayloadJson
+      ((payloadParam_eq_ok_iff_of_lt hlt).mp ha).1
   | some x =>
-    -- Version 5 takes Glamsterdam alone, whose payload has the structure of version 4.
-    obtain ⟨accessList, slot⟩ := x
-    have h5 : version = 5 := by have := five.mp rfl; omega
-    subst h5
-    obtain rfl := (acceptsFork_five_iff fork).mp accepts
-    obtain ⟨any, hj, hat⟩ :=
-      Json.payloadV4_executionPayloadV4Json payload accessList slot (by decide) extra
-    have hp : payloadParam 5 (Json.executionPayloadV4Json payload accessList slot) =
-        .ok (any, some (accessList, slot)) :=
-      (payloadParam_eq_ok_iff_of_le (Nat.le_refl 5)).mpr ⟨accessList, slot, hj, rfl⟩
-    exact ⟨any, newPayloadParams_arr hv rfl hp hashes beaconRoot requests, hat⟩
+    -- From version 5 it decodes as a payload of version 4.
+    obtain ⟨_, _, hj, -⟩ := (payloadParam_eq_ok_iff_of_le (five.mp rfl)).mp ha
+    exact Json.extraData_le_of_payloadV4_executionPayloadV4Json (dencun rfl) hj
 
 end EthLib.Engine

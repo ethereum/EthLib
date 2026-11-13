@@ -6,9 +6,12 @@ public import EthLib.Consensus.Exports.BeaconApiCommittees
 public import EthLib.Consensus.Exports.BeaconApiDuties
 public import EthLib.Consensus.Exports.BeaconApiConfig
 public import EthLib.Consensus.Exports.BeaconApiIdentifiers
+public import EthLib.Consensus.Exports.BeaconApiLightClient
 public import EthLib.Consensus.Exports.BeaconApiRegistries
+public import EthLib.Consensus.Exports.BeaconApiRewards
 public import EthLib.Consensus.Exports.BeaconApiStateQueries
 public import EthLib.Consensus.Exports.BeaconApiValidators
+public import EthLib.Consensus.Exports.BeaconApiValidatorData
 public import EthLib.Consensus.Exports.BuilderApi
 public import EthLib.Consensus.Exports.Column
 public import EthLib.Consensus.Exports.ConsensusVersion

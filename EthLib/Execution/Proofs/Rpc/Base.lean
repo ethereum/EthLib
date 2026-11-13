@@ -208,7 +208,7 @@ private theorem foldl_byteHexDigits (data : List UInt8) (acc : Nat) :
     omega
 
 /-- Byte `i` of a number written on `len` bytes is its digit worth `256 ^ (len - 1 - i)`. -/
-private theorem getElem_natToBytes {len n i : Nat} (hi : i < len) :
+theorem getElem_natToBytes {len n i : Nat} (hi : i < len) :
     (natToBytes len n)[i]'(by rw [natToBytes_length]; exact hi) =
       UInt8.ofNat (n / 256 ^ (len - 1 - i) % 256) := by
   have hsplit := natToBytes_add (i + 1) (len - 1 - i) n
@@ -219,7 +219,7 @@ private theorem getElem_natToBytes {len n i : Nat} (hi : i < len) :
   simp [natToBytes_length]
 
 /-- A loop whose step multiplies by sixteen and adds the value of a digit computes the fold. -/
-private theorem forIn_hex {ds : List UInt8}
+theorem forIn_hex {ds : List UInt8}
     {f : UInt8 → Nat → Except String (ForInStep Nat)}
     (h : ∀ c ∈ ds, ∀ s, f c s = .ok (.yield (16 * s + ((hexValue false c).getD 0).toNat)))
     (acc : Nat) :

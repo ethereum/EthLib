@@ -68,6 +68,20 @@ Not yet released.
   `conflict` and `ordered` imply the removed bound on the slot of `x`, so the theorems cover the same runs as before.
   The drift horizon in the conclusion of `accountable_safety` is the finalized epoch of `b`, not the larger of the two finalized epochs; `ordered` makes them equal.
 
+- In Lean, the direct safety endpoints bound the unslashed active stake at `x`, `unslashedKeys x.state`, in place of `activeKeys x.state` ([#2187](https://github.com/ethereum/EthLib/issues/2187)).
+  `Accountable` takes the shared prefix and the two tails, `shared left right`, in place of the two full runs, and `accountableKeys` takes them in place of the two full runs and the reference state.
+  Slashing evidence counts only in the tails; double votes still count over the full runs, and proposer slashings in the tails still count.
+  `accountableKeys` keeps only the unslashed keys active at `x`.
+  `recentKeys` keeps only unslashed keys, `referenceLoss` sums over `unslashedKeys x`, and `referenceGain` subtracts the support of `unslashedKeys x`.
+  So `boundaryStake`, and through it `stateDrift` and `derivedDrift`, count only unslashed recent stake.
+  `Run.slashed_evidence` holds for a run from any state, with no `genesis` argument, and concludes `SlashedAt x.state v.pubkey ∨ run.SlashingEvidence v.pubkey`.
+  `SlashedAt` names the predicate that `referenceLoss` stated inline before.
+  `verifiedConflict_of_accountable` takes `shared left right` and concludes `VerifiedConflict (shared.append left) (shared.append right) key`.
+  Pass `shared left right` where a caller passed `shared.append left`, `shared.append right` and `x`.
+  `DirectSafety.accountable_safety_justified_terminal` and `Store.Reachable.finalized_ancestor_or_accountable` change the same way: their stake alternative bounds the unslashed active stake, at `x` or at the anchor state, by `accountableKeys` of the shared prefix and the two tails.
+  The new Lean declarations are `DirectSafety.SlashedAt`, `DirectSafety.unslashedKeys`, `DirectSafety.EpochCall.pubkeysDistinct` and `Run.pubkeysDistinct`.
+  `Run.pubkeysDistinct` gives distinct keys at the end of a run from genesis; `EpochCall.pubkeysDistinct`, `view_quorum_count` and `view_voters_recent` read it.
+
 - In Lean, `DirectSafety.HashEvidence objects` is stated through the searches `findMessageCollision` and the new `findZeroRoot`, in place of a bounded existential ([#2187](https://github.com/ethereum/EthLib/issues/2187)).
   No C export or Python function changes, and every theorem that mentions `HashEvidence` keeps its statement.
   `hashEvidence_iff` proves that the new body is equivalent to the old one, for every list of objects and with no hypothesis.
@@ -673,6 +687,21 @@ Not yet released.
   `readPrefix_short`, `decodeItemsFrom_eq` and `decodeItems_eq` take the same bound, and `decodeItem_of_readItem` takes it as an implicit argument.
   `decode` keeps its type, the inputs it accepts, its values and its errors.
   No C export or Python function changes.
+- In Lean, the reader of an `eth_getProof` answer moves into the specification ([#2099](https://github.com/ethereum/EthLib/issues/2099)).
+  `accountProofOfJson`, `storageProofOfJson` and `proofNodes` move from `EthLib.Engine.Exports` to `EthLib.Execution.Rpc`, in `Execution/Rpc/Proof.lean`.
+  They keep their types and their errors.
+  No C export or Python function changes.
+- The chain view serves `eth_getProof`, with the answer that `AccountProof.ofState` builds from the state after the block.
+
+- `eth_config` reports the current, next and last scheduled configurations from Dencun through Glamsterdam.
+  As EIP-7910 says, the report leaves out a future fork after Glamsterdam, and `next` and `last` are null when no supported fork remains.
+  A fork at a block after genesis is never a next or last configuration.
+  In Lean, `ChainView` adds `genesis` and `mergeForkBlock` for the fork checksum.
+  Supply both fields in positional constructors, or use structure notation with their `none` defaults.
+  `call_unknown` also requires that the method name differ from `eth_config`.
+  The configuration given to `rpc_serve` takes the optional keys `mergeForkBlock`, `genesisHash` and `genesisTime`.
+  It rejects a malformed value of these keys, one of the genesis pair without the other, and a genesis pair that disagrees with block zero.
+  The C and Python function signatures stay the same.
 
 ## 0.3.0
 

@@ -7,10 +7,13 @@ public import EthLib.Consensus.BeaconApi.Duties
 public import EthLib.Consensus.BeaconApi.Config
 public import EthLib.Consensus.BeaconApi.Encoding
 public import EthLib.Consensus.BeaconApi.Identifiers
+public import EthLib.Consensus.BeaconApi.LightClient
 public import EthLib.Consensus.BeaconApi.Registries
+public import EthLib.Consensus.BeaconApi.Rewards
 public import EthLib.Consensus.BeaconApi.Spelling
 public import EthLib.Consensus.BeaconApi.StateQueries
 public import EthLib.Consensus.BeaconApi.Validators
+public import EthLib.Consensus.BeaconApi.ValidatorData
 public import EthLib.Consensus.BuilderApi
 public import EthLib.Consensus.BuilderApi.AuthData
 public import EthLib.Consensus.BuilderApi.Bid

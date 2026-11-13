@@ -35,6 +35,7 @@ public import EthLib.Networking.Libp2p.Upgrade
 public import EthLib.Networking.Libp2p.Yamux
 public import EthLib.Networking.Libp2p.YamuxSession
 public import EthLib.Networking.Quic.Keys
+public import EthLib.Networking.Quic.Protection
 public import EthLib.Networking.Quic.Tls
 public import EthLib.Networking.Quic.Varint
 public import EthLib.Networking.ReqResp.Bounds

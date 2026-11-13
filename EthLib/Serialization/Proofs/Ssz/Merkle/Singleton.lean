@@ -96,18 +96,6 @@ theorem getHelperIndices_singleton (index : Nat) :
       List.filter_eq_self.mpr (fun node member => by simpa using outside node member),
       List.mergeSort_of_pairwise (decreasing.imp fun ordered => by simpa using Nat.le_of_lt ordered)]
 
-/-- Climbing one more node adds one hash at the top of the climb. -/
-private theorem climbBranch_append (index : Nat) : ∀ (level : Nat) (node last : Bytes)
-    (siblings : List Bytes), climbBranch index level node (siblings ++ [last]) =
-      if gindexBit index (level + siblings.length)
-      then combine last (climbBranch index level node siblings)
-      else combine (climbBranch index level node siblings) last
-  | _, _, _, [] => by simp [climbBranch_nil, climbBranch_cons]
-  | level, node, last, sibling :: rest => by
-    simp only [List.cons_append, climbBranch_cons, List.length_cons]
-    rw [climbBranch_append index (level + 1)]
-    simp [Nat.add_assoc, Nat.add_comm 1]
-
 /-- With one claim, the multiproof fold rebuilds the root the single-item climb reaches. -/
 theorem calculateMultiMerkleRootUnchecked_singleton {leaf root : Bytes} {proof : List Bytes}
     {index : Nat} (single : calculateMerkleRootUnchecked leaf proof index = .ok root) :
@@ -177,6 +165,7 @@ theorem calculateMultiMerkleRootUnchecked_singleton {leaf root : Bytes} {proof :
         exact List.mem_iff_getElem.mpr ⟨step, by simp [branch, count]; omega, by simp [branch]⟩
       rw [show height - Nat.log2 index + (step + 1) = height - Nat.log2 index + step + 1 by omega,
         List.take_add_one, List.getElem?_eq_getElem (by omega), Option.toList_some, climbBranch_append,
+        climbBranch_cons, climbBranch_nil,
         gindexBit_parity]
       rw [shiftRight_succ] at absent
       simp only [proofTree, absent, shiftRight_succ, List.length_take, count,
