@@ -11610,6 +11610,41 @@
    "docstring":
    "The answer to an `engine_exchangeTransitionConfigurationV1` request, from a configuration.\n\nThe arguments are the terminal total difficulty, block hash and block number, and the request."},
   {"summary":
+   "The answer to an `engine_exchangeCapabilities` request: the methods that EthLib defines.",
+   "signature": "(request: dict) -> list[str]",
+   "operation": "EthLib.Engine.Exports.exchangeCapabilitiesExport",
+   "method": "engine_exchange_capabilities",
+   "errors":
+   [{"type": "EthLib.Engine.EngineError",
+     "codes":
+     [{"constructor": "invalidParams", "code": 32602},
+      {"constructor": "unsupportedFork", "code": 38005},
+      {"constructor": "invalidForkchoiceState", "code": 38002},
+      {"constructor": "tooLargeRequest", "code": 38004},
+      {"constructor": "invalidPayloadAttributes", "code": 38003},
+      {"constructor": "unknownPayload", "code": 38001}]}],
+   "error_class": "EngineError",
+   "docstring":
+   "The answer to an `engine_exchangeCapabilities` request: the methods that EthLib defines.\n\nThe argument is the request."},
+  {"summary":
+   "The answer to an `engine_getClientVersionV1` request, from a version object.",
+   "signature":
+   "(code: str, name: str, version: str, commit: bytes, request: dict) -> list[dict[str, str]]",
+   "operation": "EthLib.Engine.Exports.getClientVersionExport",
+   "method": "engine_get_client_version",
+   "errors":
+   [{"type": "EthLib.Engine.EngineError",
+     "codes":
+     [{"constructor": "invalidParams", "code": 32602},
+      {"constructor": "unsupportedFork", "code": 38005},
+      {"constructor": "invalidForkchoiceState", "code": 38002},
+      {"constructor": "tooLargeRequest", "code": 38004},
+      {"constructor": "invalidPayloadAttributes", "code": 38003},
+      {"constructor": "unknownPayload", "code": 38001}]}],
+   "error_class": "EngineError",
+   "docstring":
+   "The answer to an `engine_getClientVersionV1` request, from a version object.\n\nThe arguments are the code, name, version and commit of the object, and the request."},
+  {"summary":
    "The parameters of an Engine API request, read by the decoder and written by the writer.",
    "signature": "(method: str, params: list[Any]) -> list[Any]",
    "operation": "EthLib.Engine.Exports.rewriteParamsExport",
