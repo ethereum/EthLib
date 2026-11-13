@@ -3758,9 +3758,12 @@ Here an unknown block or transaction gets `-32001`, the code that the getter of 
 The block access-list methods of those same API files return the JSON list or its EIP-7928 RLP bytes (`Execution/Rpc/AccessList.lean`).
 The JSON writer keeps all six account fields, including empty arrays, and writes storage keys and values as 32-byte data.
 Every list reads back from its JSON form (`blockAccessListOfJson_blockAccessListJson`, `Proofs/Rpc/AccessList.lean`).
+`ChainView.blockAccessList_eq_ok_iff` identifies the resolved record and its retained list for every successful non-pending JSON query, or the unknown block that gives `null`.
+`ChainView.rawBlockAccessList_eq_ok_iff` identifies the resolved record, its retained list and its RLP encoding for every successful raw query.
 For a non-pending query, successful JSON and raw answers decode to the same retained list (`ChainView.blockAccessList_forms`).
 In a valid view, the raw answer for a canonical block after the lowest hashes to the `blockAccessListHash` of its header (`Valid.rawBlockAccessList_hash`).
 The proof uses the list built by execution and the state transition's check of its hash.
+`Valid.blockAccessList_answers` proves that both methods succeed when a non-pending query resolves to such a block with a retained list.
 The lowest block and side blocks are inputs, so that hash guarantee does not cover their retained lists.
 
 An unknown block gives `null` to `eth_getBlockAccessList` and `-32001` to `debug_getRawBlockAccessList`.

@@ -9,6 +9,14 @@ Not yet released.
 
 ### Changes that break callers
 
+- The execution RPC serves `eth_getBlockAccessList` and `debug_getRawBlockAccessList`.
+  In Lean, `BlockRecord` gains the optional field `accessList` for the retained list.
+  Supply that field in positional constructors, or use structure notation with its `none` default.
+  `Follows` requires each retained list to equal the execution builder's list.
+  `call_unknown` requires the method name to differ from both access-list method names.
+  In Python, `rpc.serve` takes the optional argument `pruned_access_lists` for block numbers whose lists are unavailable.
+  `rpc.encode_block_access_list` encodes a JSON list as its EIP-7928 RLP bytes.
+
 - In Lean, the results on slashed flags state them at each position of the registry, as `(state.validators.data[position]?).map (·.slashed)` ([#2187](https://github.com/ethereum/EthLib/issues/2187)).
   From Gloas the registry has no limit in its type, so a position may lie beyond every `ValidatorIndex`.
   `slashedFlag_initiateValidatorExit` takes a `position : Nat` in place of an index.

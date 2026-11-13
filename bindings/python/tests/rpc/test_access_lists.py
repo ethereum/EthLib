@@ -3,6 +3,7 @@
 import json
 from collections.abc import Sequence
 from copy import deepcopy
+from dataclasses import replace
 from typing import Any
 
 import pytest
@@ -16,13 +17,24 @@ from .chain import FIXTURES, block_hash, replay_chain
 METHODS = ("eth_getBlockAccessList", "debug_getRawBlockAccessList")
 UNKNOWN = "0x" + "11" * 32
 ADDRESS = "0x" + "00" * 20
-BAD_PARAMS: list[list[object]] = [
-    [],
-    ["latest", "extra"],
-    [True],
-    ["0x03c"],
-    [{"blockNumber": "0x3c", "blockHash": UNKNOWN}],
+BAD_PARAMS: list[tuple[list[object], str]] = [
+    ([], "missing parameter"),
+    (["latest", "extra"], "the method takes one parameter"),
+    ([UNKNOWN, "extra"], "the method takes one parameter"),
+    ([True], "block: not a string or an object"),
+    (["0x03c"], "block: not a block number, tag or hash"),
+    (
+        [{"blockNumber": "0x3c", "blockHash": UNKNOWN}],
+        "block: not one block number or one block hash",
+    ),
+    (
+        [{"blockHash": UNKNOWN, "requireCanonical": None}],
+        "block: requireCanonical is not a boolean",
+    ),
 ]
+NOT_FOUND = {"code": -32001, "message": "Resource not found"}
+PRUNED = {"code": 4444, "message": "Pruned history unavailable"}
+INVALID_PARAMS = {"code": -32602, "message": "Invalid params"}
 
 
 def _request(method: str, params: Sequence[object]) -> str:
@@ -45,15 +57,20 @@ def answers() -> dict[str, dict[str, Any]]:
     ]
     calls = [(method, [block]) for method in METHODS for block in blocks]
     calls += [("eth_getHeaderByNumber", [hex(n)]) for n in range(57, 61)]
-    calls += [(method, params) for method in METHODS for params in BAD_PARAMS]
+    calls += [(method, params) for method in METHODS for params, _ in BAD_PARAMS]
     requests = [_request(method, params) for method, params in calls]
     texts = chain.serve(requests)
     assert all(text is not None for text in texts)
-    return {
-        request: json.loads(text)
-        for request, text in zip(requests, texts, strict=True)
-        if text is not None
-    }
+    parsed = {}
+    for request, text in zip(requests, texts, strict=True):
+        assert text is not None
+        response = json.loads(text)
+        assert response["jsonrpc"] == "2.0"
+        assert response["id"] == 1
+        kind = "error" if "error" in response else "result"
+        assert set(response) == {"jsonrpc", "id", kind}
+        parsed[request] = response
+    return parsed
 
 
 def _word(value: str) -> str:
@@ -121,33 +138,80 @@ def test_lookup_forms(method: str, answers: dict[str, dict[str, Any]]) -> None:
         assert answers[_request(method, [block])]["result"] == expected
 
 
+def test_future_schedule_keeps_past_answers(answers: dict[str, dict[str, Any]]) -> None:
+    """A fork after the head cannot change the access list of a block already executed."""
+    chain = replay_chain()
+    chain = replace(
+        chain,
+        config={
+            **chain.config,
+            "activations": [*chain.config["activations"], ["hegota", "time", 700]],
+        },
+    )
+    requests = [_request(method, ["0x3c"]) for method in METHODS]
+    responses = chain.serve(requests)
+    for request, text in zip(requests, responses, strict=True):
+        assert text is not None
+        assert json.loads(text) == answers[request]
+
+
+def test_unsupported_block_fork_is_rejected() -> None:
+    """A block at an unspecified fork cannot be read under the last supported fork's rules."""
+    chain = replay_chain()
+    chain = replace(chain, blocks=(("hegota", chain.blocks[0][1]), *chain.blocks[1:]))
+    with raises(rpc.RpcError, "fork hegota not yet specified") as error:
+        chain.serve([_request(METHODS[0], ["latest"])])
+    assert error.value.code == 0
+
+
+def test_unknown_after_pre_amsterdam_head() -> None:
+    """A head before Amsterdam does not turn an unknown block into a known pre-fork block."""
+    chain = replay_chain()
+    zero = bytes(32)
+    chain = replace(
+        chain,
+        blocks=chain.blocks[:57],
+        forkchoice=(block_hash(chain.blocks[56]), zero, zero),
+    )
+    requests = [_request(method, ["0x39"]) for method in METHODS]
+    responses = chain.serve(requests)
+    parsed = [json.loads(text) for text in responses if text is not None]
+    assert parsed == [
+        {"jsonrpc": "2.0", "id": 1, "result": None},
+        {"jsonrpc": "2.0", "id": 1, "error": {**NOT_FOUND, "data": "unknown block"}},
+    ]
+
+
 @pytest.mark.parametrize("block", ["0x3d", UNKNOWN])
 def test_unknown(block: str, answers: dict[str, dict[str, Any]]) -> None:
     assert answers[_request(METHODS[0], [block])]["result"] is None
-    assert answers[_request(METHODS[1], [block])]["error"]["code"] == -32001
+    assert answers[_request(METHODS[1], [block])]["error"] == {**NOT_FOUND, "data": "unknown block"}
 
 
 @pytest.mark.parametrize("method", METHODS)
 @pytest.mark.parametrize("block", ["0x0", "0x1b", "0x38", "earliest"])
 def test_before_amsterdam(method: str, block: str, answers: dict[str, dict[str, Any]]) -> None:
-    assert answers[_request(method, [block])]["error"]["code"] == -32001
+    assert answers[_request(method, [block])]["error"] == {
+        **NOT_FOUND,
+        "data": "block predates Amsterdam",
+    }
 
 
 def test_pending(answers: dict[str, dict[str, Any]]) -> None:
     assert answers[_request(METHODS[0], ["pending"])]["result"] is None
     # The source leaves the raw getter's pending policy open; this view has no pending block.
-    assert answers[_request(METHODS[1], ["pending"])]["error"]["code"] == -32001
+    assert answers[_request(METHODS[1], ["pending"])]["error"] == {
+        **NOT_FOUND,
+        "data": "unknown block",
+    }
 
 
 @pytest.mark.parametrize("method", METHODS)
-@pytest.mark.parametrize(
-    "params",
-    [[], ["latest", "extra"], [True], ["0x03c"], [{"blockNumber": "0x3c", "blockHash": UNKNOWN}]],
-)
+@pytest.mark.parametrize(("params", "reason"), BAD_PARAMS)
 def test_bad_parameters(
-    method: str, params: list[object], answers: dict[str, dict[str, Any]]
+    method: str, params: list[object], reason: str, answers: dict[str, dict[str, Any]]
 ) -> None:
-    assert answers[_request(method, params)]["error"]["code"] == -32602
+    assert answers[_request(method, params)]["error"] == {**INVALID_PARAMS, "data": reason}
 
 
 def test_pruning(answers: dict[str, dict[str, Any]]) -> None:
@@ -172,7 +236,12 @@ def test_pruning(answers: dict[str, dict[str, Any]]) -> None:
     )
     parsed = [json.loads(text) for text in responses if text is not None]
     assert len(parsed) == len(requests)
-    assert [answer["error"]["code"] for answer in parsed[:4]] == [4444, 4444, -32001, -32001]
+    assert [answer["error"] for answer in parsed[:4]] == [
+        PRUNED,
+        PRUNED,
+        {**NOT_FOUND, "data": "block predates Amsterdam"},
+        {**NOT_FOUND, "data": "block predates Amsterdam"},
+    ]
     assert parsed[4]["result"] is None
     for request, answer in zip(requests[5:], parsed[5:], strict=True):
         assert answer == answers[request]
@@ -208,6 +277,13 @@ def test_code_change_encoding() -> None:
         ("extra", [], "block access list: wrong fields"),
         ("extra", None, "block access list: wrong fields"),
         ("storageReads", ["0x00"], "storage word: 1 bytes, not 32"),
+        ("storageChanges", [{"key": "0x00", "changes": []}], "storage word: 1 bytes, not 32"),
+        ("balanceChanges", [{"index": "0x0", "value": hex(2**256)}], "value: above 2^256"),
+        (
+            "codeChanges",
+            [{"index": "0x0", "code": b"\x60\x00"}],
+            "block access list: not a JSON value",
+        ),
         ("codeChanges", [{"index": "0x100000000", "code": "0x"}], "index: above 2^32"),
         ("nonceChanges", [{"index": "0x0", "value": "0x10000000000000000"}], "value: above 2^64"),
     ],

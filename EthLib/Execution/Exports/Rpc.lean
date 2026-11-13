@@ -180,14 +180,13 @@ def recordOf {fork : Fork} (block : Block fork Execution.Transactions.Transactio
 /-- The record of a block after the last record of a chain, by the state transition. -/
 def nextRecord (config : ChainConfig) (checkSeal : Bool) (records : List BlockRecord)
     (prev : BlockRecord) (block : String × ByteArray) : Result BlockRecord := do
-  let ⟨fork, block⟩ ← blockOf config block.1 block.2
+  let ⟨_, block⟩ ← blockOf config block.1 block.2
   let chain : BlockChain := ⟨config, prev.state, records.map BlockRecord.recent⟩
   let failed := fun (e : BlockError) =>
     (e.code, s!"block {block.header.number}: {blockErrorMessage e}")
   let state ← (stateTransition chain block checkSeal).mapError failed
   let result ← (runBody chain block).mapError failed
-  let accessList := if fork ≥ Fork.glamsterdam then
-    some result.output.body.builder.build else none
+  let accessList := result.output.accessListHash.map fun _ => result.output.body.builder.build
   recordOf block state result.output.receipts result.output.logs accessList
 
 /-- The hash of thirty-two zero bytes, which a forkchoice state gives for no block. -/

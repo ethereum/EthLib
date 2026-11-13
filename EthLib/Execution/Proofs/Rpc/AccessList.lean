@@ -234,6 +234,32 @@ theorem retainedAccessList_eq_ok {r : BlockRecord} {bal : BlockAccessList} :
     have hf : .glamsterdam ≤ r.fork := Nat.le_of_not_lt h
     cases r.accessList <;> simp [hf]
 
+/-- A JSON answer is exactly the JSON form of an available list from Glamsterdam. -/
+theorem blockAccessList_eq_ok_iff {r : BlockRecord} {j : Json} :
+    r.blockAccessList = .ok j ↔ ∃ bal, .glamsterdam ≤ r.fork ∧
+      r.accessList = some bal ∧ j = blockAccessListJson bal := by
+  unfold blockAccessList
+  rw [map_ok_iff]
+  constructor
+  · rintro ⟨bal, hb, hj⟩
+    exact ⟨bal, (retainedAccessList_eq_ok.mp hb).1,
+      (retainedAccessList_eq_ok.mp hb).2, hj.symm⟩
+  · rintro ⟨bal, hf, hb, hj⟩
+    exact ⟨bal, retainedAccessList_eq_ok.mpr ⟨hf, hb⟩, hj.symm⟩
+
+/-- A raw answer is exactly an encoding of an available list from Glamsterdam. -/
+theorem rawBlockAccessList_eq_ok_iff {r : BlockRecord} {raw : ByteArray} :
+    r.rawBlockAccessList = .ok raw ↔ ∃ bal, .glamsterdam ≤ r.fork ∧
+      r.accessList = some bal ∧ Codec.encode bal = .ok raw := by
+  unfold rawBlockAccessList
+  rw [bind_ok_iff]
+  constructor
+  · rintro ⟨bal, hb, he⟩
+    exact ⟨bal, (retainedAccessList_eq_ok.mp hb).1,
+      (retainedAccessList_eq_ok.mp hb).2, mapError_ok_iff.mp he⟩
+  · rintro ⟨bal, hf, hb, he⟩
+    exact ⟨bal, retainedAccessList_eq_ok.mpr ⟨hf, hb⟩, mapError_ok_iff.mpr he⟩
+
 /-- Decoding a successful raw answer recovers the retained list. -/
 theorem rawBlockAccessList_eq_ok {r : BlockRecord} {raw : ByteArray}
     (h : r.rawBlockAccessList = .ok raw) :
@@ -275,6 +301,49 @@ namespace ChainView
 @[simp] theorem blockAccessList_pending (v : ChainView) :
     v.blockAccessList (.tag .pending) = .ok .null := rfl
 
+/-- A non-pending query uses the existing block resolver before reading a retained list. -/
+theorem blockAccessList_of_ne {v : ChainView} {p : BlockParam} (hp : p ≠ .tag .pending) :
+    v.blockAccessList p = v.resolve p >>= fun
+      | none => .ok .null
+      | some r => r.blockAccessList := by
+  unfold blockAccessList
+  split
+  · exact absurd rfl hp
+  · rfl
+
+/-- A successful non-pending JSON query names either no block or the record supplying its list. -/
+theorem blockAccessList_eq_ok_iff {v : ChainView} {p : BlockParam} {j : Json}
+    (hp : p ≠ .tag .pending) :
+    v.blockAccessList p = .ok j ↔
+      (v.resolve p = .ok none ∧ j = .null) ∨
+      ∃ r bal, v.resolve p = .ok (some r) ∧ .glamsterdam ≤ r.fork ∧
+        r.accessList = some bal ∧ j = blockAccessListJson bal := by
+  rw [blockAccessList_of_ne hp, bind_ok_iff]
+  constructor
+  · rintro ⟨found, hr, hj⟩
+    cases found with
+    | none => exact .inl ⟨hr, (Except.ok.inj hj).symm⟩
+    | some r =>
+      obtain ⟨bal, hf, hb, hj⟩ := BlockRecord.blockAccessList_eq_ok_iff.mp hj
+      exact .inr ⟨r, bal, hr, hf, hb, hj⟩
+  · rintro (⟨hr, rfl⟩ | ⟨r, bal, hr, hf, hb, hj⟩)
+    · exact ⟨none, hr, rfl⟩
+    · exact ⟨some r, hr, BlockRecord.blockAccessList_eq_ok_iff.mpr ⟨bal, hf, hb, hj⟩⟩
+
+/-- A successful raw query encodes the retained list of the record that the resolver selects. -/
+theorem rawBlockAccessList_eq_ok_iff {v : ChainView} {p : BlockParam} {raw : ByteArray} :
+    v.rawBlockAccessList p = .ok raw ↔ ∃ r bal,
+      v.resolve p = .ok (some r) ∧ .glamsterdam ≤ r.fork ∧
+        r.accessList = some bal ∧ Codec.encode bal = .ok raw := by
+  change v.ofBlock p BlockRecord.rawBlockAccessList = .ok raw ↔ _
+  rw [ofBlock_eq_ok]
+  constructor
+  · rintro ⟨r, hr, hraw⟩
+    obtain ⟨bal, hf, hb, he⟩ := BlockRecord.rawBlockAccessList_eq_ok_iff.mp hraw
+    exact ⟨r, bal, hr, hf, hb, he⟩
+  · rintro ⟨r, bal, hr, hf, hb, he⟩
+    exact ⟨r, hr, BlockRecord.rawBlockAccessList_eq_ok_iff.mpr ⟨bal, hf, hb, he⟩⟩
+
 /-- A successful query for a known non-pending block reads that block's retained list. -/
 theorem blockAccessList_of_resolve {v : ChainView} {p : BlockParam} {r : BlockRecord}
     (hp : p ≠ .tag .pending) (hr : v.resolve p = .ok (some r)) :
@@ -311,6 +380,26 @@ theorem Valid.accessList_hash {v : ChainView} {checkSeal : Bool} (hv : v.Valid c
     Option.some.inj (hvalue.symm.trans hheader)
   rw [← hkept bal hb, heq] at hhash
   exact hhash
+
+/-- A valid executed canonical block with a retained list has both answers, bound to its header. -/
+theorem Valid.blockAccessList_answers {v : ChainView} {checkSeal : Bool} (hv : v.Valid checkSeal)
+    {p : BlockParam} (hne : p ≠ .tag .pending) {i : Nat} (hi : i + 1 < v.canonical.length)
+    (hp : v.resolve p = .ok (some v.canonical[i + 1]))
+    (hf : .glamsterdam ≤ v.canonical[i + 1].fork) {bal : BlockAccessList}
+    (hb : v.canonical[i + 1].accessList = some bal) :
+    ∃ raw, v.blockAccessList p = .ok (blockAccessListJson bal) ∧
+      v.rawBlockAccessList p = .ok raw ∧ Codec.decode raw = .ok bal ∧
+      keccak256 raw = v.canonical[i + 1].block.header.blockAccessListHash hf := by
+  have hhash := hv.accessList_hash hi hf hb
+  -- The checked transition already computed these same RLP bytes, so encoding succeeds.
+  unfold BlockAccessList.hash at hhash
+  obtain ⟨raw, he, hk⟩ := bind_ok_iff.mp hhash
+  refine ⟨raw, ?_, ?_, Codec.decode_encode he, Except.ok.inj hk⟩
+  · rw [blockAccessList_of_resolve hne hp]
+    exact BlockRecord.blockAccessList_eq_ok_iff.mpr ⟨bal, hf, hb, rfl⟩
+  · apply ofBlock_eq_ok.mpr
+    exact ⟨v.canonical[i + 1], hp,
+      BlockRecord.rawBlockAccessList_eq_ok_iff.mpr ⟨bal, hf, hb, he⟩⟩
 
 /-- A raw answer for a checked canonical block hashes to that block's header field. -/
 theorem Valid.rawBlockAccessList_hash {v : ChainView} {checkSeal : Bool} (hv : v.Valid checkSeal)
