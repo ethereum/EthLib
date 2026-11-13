@@ -7,6 +7,7 @@ public import EthLib.Execution.Proofs.Blocks.AccessListFollow
 public import EthLib.Execution.Proofs.Blocks.AccessListRebuild
 public import EthLib.Execution.Proofs.Blocks.Block
 public import EthLib.Execution.Proofs.Blocks.BlockAccessList
+public import EthLib.Execution.Proofs.Blocks.BodyFollow
 public import EthLib.Execution.Proofs.Blocks.BodyGas
 public import EthLib.Execution.Proofs.Blocks.Bloom
 public import EthLib.Execution.Proofs.Blocks.Burn
