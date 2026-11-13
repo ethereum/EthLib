@@ -125,7 +125,7 @@ theorem updatedEffectiveBalance_split {largest balance effectiveBalance result :
       exact .inl ⟨computed.symm, by omega, by omega⟩
 
 /-- The balance rounded down to an increment is that balance less the remainder. -/
-private theorem toNat_rounded {balance : Gwei} :
+theorem toNat_rounded {balance : Gwei} :
     (balance - balance % preset.EFFECTIVE_BALANCE_INCREMENT).toNat =
       balance.toNat - balance.toNat % preset.EFFECTIVE_BALANCE_INCREMENT.toNat := by
   have le : balance % preset.EFFECTIVE_BALANCE_INCREMENT ≤ balance :=

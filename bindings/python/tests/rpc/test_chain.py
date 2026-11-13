@@ -39,6 +39,7 @@ RESULT_SCHEMAS: Final[dict[str, rpc.Schema | None]] = {
     "eth_getCode": "bytes",
     "eth_getStorageAt": "bytes",
     "eth_getStorageValues": None,
+    "eth_getProof": None,
     "debug_getRawHeader": "bytes",
     "debug_getRawBlock": "bytes",
     "debug_getRawTransaction": "bytes",
@@ -415,6 +416,17 @@ BAD_ACCOUNT_QUERIES = [
         "keys: not an array",
         id="null-keys",
     ),
+    pytest.param("eth_getProof", [CONTRACT], -32602, "missing parameter", id="proof-no-keys"),
+    pytest.param(
+        "eth_getProof",
+        [CONTRACT, KEY],
+        -32602,
+        "storage keys: not an array",
+        id="proof-keys-not-array",
+    ),
+    pytest.param(
+        "eth_getProof", [CONTRACT, [], "0x3d"], -32001, "unknown block", id="proof-unknown-block"
+    ),
 ]
 
 
@@ -447,6 +459,52 @@ def test_account_queries_agree() -> None:
     counts = [int(word, 16) for word in words]
     assert counts == sorted(counts)
     assert (counts[0], counts[-1]) == (0, 0x33)
+
+
+# An address with no account in the test chain.
+NOBODY: Final = "0x" + "ab" * 20
+
+
+# The queries of the proof test, each without its block parameter.
+PROOF_QUERIES: Final[list[tuple[str, list[object]]]] = [
+    ("eth_getHeaderByNumber", []),
+    ("eth_getBalance", [CONTRACT]),
+    ("eth_getTransactionCount", [CONTRACT]),
+    ("eth_getStorageAt", [CONTRACT, KEY]),
+    # Slot 6 of the contract is never set, so its proof shows it absent.
+    ("eth_getProof", [CONTRACT, [KEY, "0x6"]]),
+    ("eth_getProof", [NOBODY, ["0x1"]]),
+]
+
+
+def test_proof_at_each_block() -> None:
+    """At each block, the proofs hold against the header's state root and match the queries."""
+    chain = replay_chain()
+    requests = [
+        json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": [*params, hex(number)]})
+        for number in range(len(chain.blocks))
+        for method, params in PROOF_QUERIES
+    ]
+    results = [json.loads(text)["result"] for text in chain.serve(requests) if text is not None]
+    assert len(results) == len(requests)
+    size = len(PROOF_QUERIES)
+    for index in range(0, len(results), size):
+        header, balance, nonce, word, proof, absent = results[index : index + size]
+        root = bytes.fromhex(header["stateRoot"][2:])
+        # Slot 0 is set once it holds a word other than zero.
+        assert trie.verify_account_proof(root, proof) == [int(word, 16) != 0, False]
+        assert (proof["balance"], proof["nonce"]) == (balance, nonce)
+        assert [slot["key"] for slot in proof["storageProof"]] == ["0x0", "0x6"]
+        # The storage query gives a word on 32 bytes, and the proof a quantity.
+        assert [slot["value"] for slot in proof["storageProof"]] == [hex(int(word, 16)), "0x0"]
+        assert trie.verify_account_proof(root, absent) is None
+        slot = absent["storageProof"][0]
+        assert (absent["balance"], absent["nonce"], slot["key"], slot["value"]) == (
+            "0x0",
+            "0x0",
+            "0x1",
+            "0x0",
+        )
 
 
 def test_account_at_each_block() -> None:

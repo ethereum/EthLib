@@ -4,6 +4,7 @@ public import EthLib.Execution.Rpc.Account
 public import EthLib.Execution.Rpc.Block
 public import EthLib.Execution.Rpc.Config
 public import EthLib.Execution.Rpc.Filter
+public import EthLib.Execution.Rpc.Proof
 public import EthLib.Execution.Rpc.Request
 public import EthLib.Execution.Rpc.TransactionInfo
 
@@ -197,6 +198,12 @@ def call (v : ChainView) (method : String) (params : List Json) : Except RpcErro
     | m :: rest => do
       storageValuesJson <$> v.storageValues (← readParam storageRequests m) (← optionalBlock rest)
     | [] => .error (RpcError.invalidParams "missing parameter")
+  | "eth_getProof" => match params with
+    | a :: ks :: rest => do
+      let a ← readParam (address "address") a
+      let keys ← readParam (array "storage keys" (bytesMax32 "storage key")) ks
+      accountProofJson <$> v.accountProof a keys (← optionalBlock rest)
+    | _ => .error (RpcError.invalidParams "missing parameter")
   | "debug_getRawHeader" => oneParam params fun b => do
     (dataJson ·.toList) <$> v.rawHeader (← readParam (blockNumberOrTag "block") b)
   | "debug_getRawBlock" => oneParam params fun b => do

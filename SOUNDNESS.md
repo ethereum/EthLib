@@ -1995,6 +1995,21 @@ The storage value of a slot that is not set is 0, so the answer must give that w
 EIP-1186 does not say which fields the answer holds for an address without an account.
 So the check judges no field of an absent account, and reports the absence.
 
+The node's side is `AccountProof.ofState`: the answer that a state gives, with the proofs of its own tries.
+For an address with no account it gives the fields of the empty account and the root of the empty trie, one of the two readings that the check accepts.
+`ChainView.accountProof` (`Execution/Rpc/Proof.lean`) serves it as `eth_getProof` at the block that the parameter names.
+`verify_ofState` (`Execution/Proofs/State/AccountProofOfState.lean`) proves completeness: the answer passes the check against the state root.
+It reports the account present exactly when the state has it, and, for a present account, each slot set exactly when its word is not zero.
+The theorem does not assume distinct key hashes.
+When the answer does not pass, the search `findAnswerCollision` returns two keys with one hash.
+It reads the address, the addresses of the state, the slots asked for and the storage keys of the address.
+It assumes that an address with no account has the word zero at each slot asked for.
+No theorem shows that the state transition keeps that property, though the fixtures expect the word zero there.
+`Valid.verify_accountProof` applies it to a canonical block of a valid view, against the state root of its header.
+An answer at the pending block or at a block off the canonical chain is not covered, since the view does not check their states.
+`accountProof_agree` proves that the balance, the nonce and the words of the answer are those of `eth_getBalance`, `eth_getTransactionCount` and `eth_getStorageAt` at the same block.
+`accountProofOfJson_accountProofJson` proves that the reader reads back what the writer writes, for a nonce below `2^64`.
+
 ### The RLPx session
 
 `receive` (`Networking/Devp2p/Session.lean`) follows an RLPx session after the handshake, frame by frame.
@@ -3466,6 +3481,12 @@ Step 2 also says that every descendant of an invalid terminal block must be `INV
 The model keeps no invalid block, so a child of a payload rejected by the check is `SYNCING` instead.
 A chain whose last block is from Paris on is taken as valid, its terminal block included.
 
+Payload attributes of `engine_forkchoiceUpdated` answer by the version of the method and the fork of their timestamp.
+`exists_attributesTakeFork_iff` (`Proofs/ForkchoiceUpdated.lean`) shows that some version takes a fork exactly when the fork is from Paris to Glamsterdam.
+`attributesTakeFork_eq_true_iff` shows that a version takes such a fork exactly when it decodes the structure of the attributes at that fork.
+So version 1 takes Paris, version 2 Paris and Shapella, version 3 the forks from Dencun before Glamsterdam, and version 4 Glamsterdam.
+Version 0 reads as version 1, and a version above 4 as version 4.
+
 The Engine API reads its base types with the readers that it shares with the execution JSON-RPC API.
 The readers live below the Execution layer, in `Serialization/JsonRpc.lean`, and their proofs in `Serialization/Proofs/JsonRpc.lean`.
 The readers read back the hex encoding of any bytes (`bytesOf_hexString`).
@@ -3672,7 +3693,7 @@ A notification gets no response (`answerJson_notification`).
 
 `eth_config` reports the current, next and last scheduled configurations of EIP-7910 (`Execution/Rpc/Config.lean`).
 The current configuration is the last one the head has reached.
-The next and last are those of the first and last fork times after the head, or both null (`ChainView.configReport_eq_ok`, `ChainView.configReport_next_eq_none_iff`, `ChainView.configReport_current_le`, `ChainView.configReport_next_after`, `ChainView.configReport_last_after`).
+The next and last are those of the first and last fork times after the head whose forks the node supports, or both null when there is none (`ChainView.configReport_eq_ok`, `mem_configFutureTimes`, `ChainView.configReport_next_eq_none_iff`, `ChainView.configReport_current_le`, `ChainView.configReport_next_after`, `ChainView.configReport_last_after`).
 The reported fork ID is the EIP-6122 `FORK_HASH` that the node announces at that configuration's activation (`configObject_forkId`, `Proofs/Rpc/Config.lean`).
 The block that represents the Merge in the fork ID is an explicit input, distinct from the actual Paris activation block.
 The report's precompile addresses are exactly those that transaction processing warms (`configObject_precompiles`).
@@ -3683,12 +3704,14 @@ The precompile names through Osaka and the system-contract sets through Prague f
 The Amsterdam set also lists the builder deposit and exit contracts of EIP-8282, whose constants name both addresses.
 No meta-EIP at that pin lists the system-contract set after Prague.
 
-The method declines reports before Cancun, and fails when the head or a scheduled fork is after Amsterdam, since no meta-EIP defines that report.
+The method declines reports before Cancun, and fails when the head is after Amsterdam, since no meta-EIP defines that report.
+A fork scheduled after Amsterdam is one that the node does not support, so the report leaves it out.
+When no supported fork remains, `next` and `last` are null, as EIP-7910 says.
 It rejects a chain ID of zero.
-It requires every fork from Cancun on to activate by timestamp or at genesis, where EIP-7910 would leave out a fork with an unknown time.
+A fork from Cancun on that activates at a block after genesis has no known time, so it is never a next or last configuration, as EIP-7910 says.
+The method fails when such a fork is the current one, which cannot be left out, or when the head has not reached its block, on which the fork IDs depend.
 It requires each chain blob schedule to start at genesis or at a fork time, as EIP-7892 ties each schedule to a fork.
 It requires the head to have passed every fork block, so that each reported fork ID is the one of its activation.
-EIP-7910 makes `next` and `last` null when the node does not support a future fork, but this method fails instead, so that a report never hides a scheduled fork.
 It requires genesis context, which the export infers from block zero or reads as an input for a pruned chain.
 For a pruned chain that context is trusted, and no theorem ties it to the retained blocks.
 

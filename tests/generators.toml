@@ -628,10 +628,6 @@ generator = "rpctestgen on go-ethereum"
 cases = ["error-groups/*.yaml"]
 generator = "execution-apis error groups"
 
-[[directories."bindings/python/tests/trie/getproof"]]
-cases = ["**"]
-generator = "rpctestgen on go-ethereum"
-
 [[directories."bindings/python/tests/consensus/deposit_tree"]]
 cases = ["**"]
 generator = "not established"

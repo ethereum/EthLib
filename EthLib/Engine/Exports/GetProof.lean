@@ -2,9 +2,7 @@ module
 
 public import EthLib.Base.Exports.Proofs.PyValue
 public import EthLib.Cryptography.Hash.Keccak
-public import EthLib.Engine.Json
-public import EthLib.Execution.Rpc.Base
-public import EthLib.Execution.State.AccountProof
+public import EthLib.Execution.Rpc.Proof
 
 /-!
 # `Exports.GetProof`
@@ -13,23 +11,9 @@ The C export that checks an answer of `eth_getProof` against a state root.
 
 The answer crosses as the typed value of its JSON: the `result` object of the response.
 
-Its fields are those of `AccountProof` in the execution API, each in the pattern of its base type.
-
-So an address is 20 bytes of hex, a nonce a 64-bit number and a balance or a slot value a word.
-
-A code hash or a storage root is 32 bytes, and each node of a proof a byte string.
-
-A storage key has at most 64 hex digits, as its type `bytesMax32` allows.
-
-It is read as a number on 32 bytes.
+It is read as the answer of the JSON-RPC method, each field in the pattern of its type.
 
 A field that is missing or out of its pattern, or a root that is not 32 bytes, has code 0.
-
-The export reads the answer with the readers of the base types that the JSON-RPC APIs share.
-
-The base types are those of [`base-types.yaml`][types].
-
-[types]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/schemas/base-types.yaml
 -/
 
 public section
@@ -39,32 +23,7 @@ namespace EthLib.Engine.Exports
 open Lean (Json)
 open EthLib.Exports (Result PyValue pyExport)
 open EthLib.Base
-open EthLib.Serialization.JsonRpc (Read address array bytes field fields fixed quantity)
-open EthLib.Execution.Rpc (bytesMax32)
-
-/-- The nodes of a proof, each a byte string. -/
-def proofNodes (what : String) (j : Json) : Read (List ByteArray) :=
-  array what (bytes what) j
-
-/-- One slot of an answer: its key, its value and the nodes of its proof. -/
-def storageProofOfJson (j : Json) : Read Execution.State.StorageProof := do
-  let fs ← fields "slot" j
-  return ⟨← bytesMax32 "key" (← field "slot" fs "key"),
-    BitVec.ofNat 256 (← quantity "value" 256 (← field "slot" fs "value")),
-    ← proofNodes "proof" (← field "slot" fs "proof")⟩
-
-/-- An answer of `eth_getProof`, from the value of its JSON. -/
-def accountProofOfJson (j : Json) : Read Execution.State.AccountProof := do
-  let fs ← fields "answer" j
-  let field := field "answer" fs
-  return {
-    address := ← address "address" (← field "address")
-    nonce := ← quantity "nonce" 64 (← field "nonce")
-    balance := BitVec.ofNat 256 (← quantity "balance" 256 (← field "balance"))
-    codeHash := ← fixed "codeHash" 32 (← field "codeHash")
-    storageHash := ← fixed "storageHash" 32 (← field "storageHash")
-    accountProof := ← proofNodes "accountProof" (← field "accountProof")
-    storageProof := ← array "storageProof" storageProofOfJson (← field "storageProof") }
+open EthLib.Execution.Rpc (accountProofOfJson)
 
 /-- Check an answer of `eth_getProof` against a 32-byte state root, with Keccak-256.
 

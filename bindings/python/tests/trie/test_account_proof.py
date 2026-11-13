@@ -11,9 +11,9 @@ from ethlib.execution import trie
 from ethlib.serialization import rlp
 from raising import raises
 
-# `getproof/README.md` gives the origin of the files and their licence.
+# `rpc/fixtures/README.md` gives the origin of the files and their licence.
 
-_DIRECTORY = Path(__file__).resolve().parent / "getproof"
+_DIRECTORY = Path(__file__).resolve().parents[1] / "rpc" / "fixtures" / "eth_getProof"
 _FILES = sorted(_DIRECTORY.glob("*.io"))
 
 # The state root of block 60 of `tests/chain.rlp`, from which every account proof starts.
