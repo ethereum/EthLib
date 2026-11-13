@@ -14,13 +14,13 @@ import all Lean.Data.Json.Basic
 
 The JSON reader gives back every value that the writer writes.
 
-Without a byte alias, the writer never fails on a value of a lawful type.
+The writer never fails on a value of a lawful type.
 
 An envelope reads back as written, so a response reads as its data under its version.
 
 A response read under one version names it, so data of one fork never reads as data of another.
 
-Hex reads the same in either case, as the patterns of the source allow.
+A document reads the same with any hex digits in uppercase, as the patterns of the source allow.
 
 The error bodies read back as written.
 -/
@@ -39,21 +39,17 @@ theorem ofApiJson_toApiJson {α : Type} [SszType α] [LawfulSszType α] [ApiSpel
   simp only [ofApiJson, back]
   exact LawfulSszType.ofValue_toValue x
 
-/-- Without a byte alias, the writer never fails on a value of a lawful type. -/
-theorem toApiJson_total {α : Type} [SszType α] [LawfulSszType α] [ApiSpelling α]
-    (plain : ApiSpelling.spelling α = .opaque) (x : α) :
-    ∃ document, toApiJson x = .ok document := by
-  unfold toApiJson
-  rw [plain]
-  exact jsonOf_opaque_ok LawfulSszType.wellFormed (LawfulSszType.fits x)
+/-- The writer never fails on a value of a lawful type, whatever its spelling. -/
+theorem toApiJson_total {α : Type} [SszType α] [LawfulSszType α] [ApiSpelling α] (x : α) :
+    ∃ document, toApiJson x = .ok document :=
+  jsonOf_ok LawfulSszType.wellFormed (LawfulSszType.fits x) _
 
-/-- A value of bytes reads the same from its hex in uppercase. -/
-theorem ofApiJson_uppercase {α : Type} [SszType α] [ApiSpelling α] {length : Nat}
-    (bytes : SszType.desc α = .byteVector length ∨ SszType.desc α = .byteList length)
-    (digits : String) :
-    ofApiJson α (.str ("0x" ++ digits.map Char.toUpper)) = ofApiJson α (.str ("0x" ++ digits)) := by
-  rcases bytes with shape | shape <;>
-    simp [ofApiJson, shape, valueOf, collectionHex, bind, Except.bind, ofHex_uppercase]
+/-- A document reads the same with some hex digits of its strings in uppercase.
+
+It holds for a refusal as well as a value. -/
+theorem ofApiJson_uppercase {α : Type} [SszType α] [ApiSpelling α] {left right : Json}
+    (same : SameUpToCase left right) : ofApiJson α left = ofApiJson α right := by
+  simp only [ofApiJson, valueOf_sameUpToCase _ _ same]
 
 /-- A metadata key that was written reads back, and one that was not written reads as absent. -/
 theorem readKey_mkObj {β : Type} {pairs : List (String × Json)}
