@@ -2382,7 +2382,10 @@ Both take the balance, the score and the effective balance of each epoch as give
 In an epoch transition from a leaking state, the state that justification returns still leaks, unless the finalized epoch rises (`processEpoch_finalized_lt_or_isInInactivityLeak`).
 The steps after justification read the leak test on that state, or on a later one with the same slot and finalized checkpoint.
 One slot from a leaking state ends in a leaking state, unless the finalized epoch rises (`advanceSlot_finalized_lt_or_isInInactivityLeak`).
-No theorem yet derives the sequences themselves, such as the condition that the balance of an absent validator never rises.
+`BalanceNotRaised.lean` proves the epoch part of that condition, from Altair (`balanceNotRaised_processEpochAltair`).
+From the rewards up to the update of the effective balances, the balance of a validator does not rise.
+This holds when no pending deposit carries its key and no pending consolidation targets it.
+No theorem yet derives the part of the blocks, nor the sequences over a run.
 
 ### Fast confirmation rule
 
