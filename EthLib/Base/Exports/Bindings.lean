@@ -1710,6 +1710,10 @@ def bindings : List Binding := [
       "list[tuple[int, int, bytes, int]] | None, bytes | None]], latest: int, " ++
       "max_request: int, request: dict) -> list[dict | None]",
     [`EthLib.Engine.EngineError], some "EngineError"⟩,
+  ⟨"engine_new_payload_routes", `EthLib.Engine.Exports.newPayloadRoutesExport,
+    "(config: dict, preset: str, fork: str, request: bytes) -> " ++
+      "tuple[list | None, str | None, int | None, bool]",
+    [], some "EngineError"⟩,
   ⟨"engine_read_payload_status", `EthLib.Engine.Exports.readPayloadStatusExport,
     "(status: dict[str, Any]) -> tuple[str, bytes | None, str | None]",
     [`EthLib.Engine.EngineError], some "EngineError"⟩,

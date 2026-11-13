@@ -3556,6 +3556,19 @@ From Deneb, the block of the payload reads the parent root of the latest block h
 From Deneb, the blob transactions must carry the versioned hashes of the commitments of the block, in the order of the commitments.
 The consensus test vectors fix the answer of the execution layer, so none of them checks the versioned hashes or the parent root that a block puts in its request.
 
+Between the two clients of a node, a payload request travels as the JSON parameters of `engine_newPayload`, which `newPayloadRequestJson` writes.
+It writes the payload with the fields of the structure for the fork of the beacon chain, then the values of the version that the beacon chain calls there.
+`newPayloadOnChain_valid_iff_accepts` (`Proofs/ConsensusRoute.lean`) shows that, from Bellatrix to Gloas, the method on a chain answers `VALID` for that JSON exactly when the execution engine of the beacon chain accepts the request.
+Besides the fork range, its one hypothesis is that the last block of the chain passes the terminal block check, which only the method makes.
+The chain needs no hypothesis on the parent: without the parent as its last block, the method answers `SYNCING` or refuses earlier, and the state transition of the execution engine fails, so neither route accepts.
+An execution that aborts gives `SYNCING` on one route and a refusal on the other, so it is not accepted either.
+The JSON is part of the statement, so the execution engine accepts no request that has none.
+The Python tests take the 175 vectors of `tests/engine/new_payload.json` that expect no JSON-RPC error.
+They stop before execution, since the vectors hold no parent state.
+Of these, 155 are requests that the beacon chain can form, and the JSON that EthLib writes for each is the vector itself.
+For each, the method passes the checks before execution exactly when the execution engine accepts with the state transition taken as passed.
+The 20 others hold request lists that the beacon chain never sends: empty, of an unknown type, out of order or repeated, or of a length that is no whole number of requests.
+
 Between the two clients of a node, the consensus layer sends its payload attributes as JSON.
 `forkchoiceUpdatedCall_payloadAttributesJson` (`Proofs/ForkchoiceUpdated.lean`) shows that the execution layer reads back the values sent.
 It holds for any attributes, given a forkchoice update that applies the head of its forkchoice state.
@@ -4500,12 +4513,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 479 operations and 49 size constants.
-The Python extension calls 479 of the operations and 49 of the constants.
+Lean exports 480 operations and 49 size constants.
+The Python extension calls 480 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-11258 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2358), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (194), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1566), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (131), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (58), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (771), `x25519.c` (21), `xmss.c` (134).
+11274 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2358), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (207), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1568), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (131), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (58), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (772), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.
