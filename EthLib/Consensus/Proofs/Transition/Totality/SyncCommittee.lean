@@ -243,7 +243,7 @@ theorem computeBalanceWeightedSelection_ok {state : BeaconState preset fork}
 /-- The seed of an epoch exists when the epoch plus the length of the history of mixes fits.
 
 The seed lookahead must also be shorter than that history. -/
-private theorem getSeed_ok {state : BeaconState preset fork} {epoch : Epoch}
+theorem getSeed_ok {state : BeaconState preset fork} {epoch : Epoch}
     (domain : DomainType)
     (epochRoom : epoch.toNat + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat < 2 ^ 64)
     (lookahead : preset.MIN_SEED_LOOKAHEAD.toNat < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat) :
@@ -264,7 +264,7 @@ private theorem getSeed_ok {state : BeaconState preset fork} {epoch : Epoch}
   exact ⟨_, rfl⟩
 
 /-- No more validators are active in an epoch than the registry holds. -/
-private theorem length_getActiveValidatorIndices_le (state : BeaconState preset fork)
+theorem length_getActiveValidatorIndices_le (state : BeaconState preset fork)
     (epoch : Epoch) :
     (getActiveValidatorIndices state epoch).length ≤ state.validators.data.size := by
   unfold getActiveValidatorIndices
