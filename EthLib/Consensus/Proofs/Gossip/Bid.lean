@@ -24,9 +24,9 @@ A compatible gas limit moves from the parent's limit by less than a 1024th of it
 
 The check of the inclusion lists of Heze accepts before Heze, and never rejects.
 
-A bid on the parent of the head block, and on the parent payload of the head, is on the head branch.
+A bid on the parent of the head block, and on the payload it builds on, is on the head branch.
 
-Otherwise a bid on the head branch builds on the head block, with a payload that the head decides.
+Otherwise it must build on the head block, with the payload that a proposer would build on.
 
 So a valid bid builds on the head block, or on its parent and the payload that the head builds on.
 -/
@@ -160,17 +160,17 @@ theorem bidInclusionListOutcome_ne_reject {state : BeaconState preset fork}
 
 /-! ## The head branch -/
 
-/-- Whether a bid builds on the branch of the head, once the head and its block are known.
+/-- The check of the head branch, once the head and its block are known.
 
-A bid on the parent of the head block, and on the payload that the head block builds on, does.
+A bid on the parent of the head block, and on the payload that the head block builds on, passes.
 
-Otherwise a bid on a block other than the head block does not.
+Otherwise a bid on a block other than the head block fails.
 
-A bid on the head block needs the decision to build on the full or the empty head.
+Otherwise a bid on the head block needs the decision whether to build on the full head.
 
-It does when its parent payload is the head's own payload after a full head.
+If it would, the bid passes exactly when its parent payload is the head's own payload.
 
-After an empty head, that parent payload must be the one that the head block builds on.
+If not, it passes exactly when that parent payload is the one that the head block builds on.
 
 A failure of that decision is a failure of the check. -/
 theorem isBidCompatibleWithHead_eq_ok_iff {bid : ExecutionPayloadBid preset fork}
@@ -202,15 +202,24 @@ theorem isBidCompatibleWithHead_eq_ok_iff {bid : ExecutionPayloadBid preset fork
       | ok full => cases full <;> cases compatible <;> simp [onHead]
     · cases compatible <;> simp [onHead]
 
-/-- A bid on the head branch builds on the head block, or on its parent and its parent payload.
+/-- A bid on the head branch builds on the head block, or on the parent of the head block.
+
+On the head block, its parent payload is the head's own payload or the one the head builds on.
+
+On the parent, its parent payload is the one that the head block builds on.
 
 The head and its block are then known. -/
-theorem eq_head_or_of_isBidCompatibleWithHead {bid : ExecutionPayloadBid preset fork}
+theorem exists_head_of_isBidCompatibleWithHead {bid : ExecutionPayloadBid preset fork}
     (compatible : store.isBidCompatibleWithHead config gloas bid = .ok true) :
     ∃ head headBlock, store.getHead config = .ok head ∧ store.blocks[head.root]? = some headBlock ∧
-      (bid.parentBlockRoot = head.root ∨ bid.parentBlockRoot = headBlock.parentRoot ∧
-        bid.parentBlockHash =
-          (headBlock.body.signedExecutionPayloadBid gloas).message.parentBlockHash) := by
+      (bid.parentBlockRoot = head.root ∧
+          (bid.parentBlockHash =
+              (headBlock.body.signedExecutionPayloadBid gloas).message.blockHash ∨
+            bid.parentBlockHash =
+              (headBlock.body.signedExecutionPayloadBid gloas).message.parentBlockHash) ∨
+        bid.parentBlockRoot = headBlock.parentRoot ∧
+          bid.parentBlockHash =
+            (headBlock.body.signedExecutionPayloadBid gloas).message.parentBlockHash) := by
   cases chosen : store.getHead config with
   | error e => simp [Store.isBidCompatibleWithHead, chosen, bind, Except.bind] at compatible
   | ok head =>
@@ -226,10 +235,15 @@ theorem eq_head_or_of_isBidCompatibleWithHead {bid : ExecutionPayloadBid preset 
       · exact Or.inr onParent
       · rw [ite_eq_right_of_eq_false _ _ (eq_false onParent)] at value
         by_cases onHead : bid.parentBlockRoot = head.root
-        · exact Or.inl onHead
+        · simp only [onHead, ne_eq, not_true_eq_false, ↓reduceIte, true_iff] at value
+          obtain ⟨full, -, hash⟩ := value
+          refine Or.inl ⟨onHead, ?_⟩
+          cases full
+          · exact Or.inr (by simpa using hash)
+          · exact Or.inl (by simpa using hash)
         · simp [onHead] at value
 
-/-- A valid bid passed the check of the head branch. -/
+/-- A valid bid passes the check of the head branch. -/
 theorem isBidCompatibleWithHead_of_validateExecutionPayloadBid_eq_accept
     (valid : validateExecutionPayloadBid config checks seen store gloas signed currentTimeMs =
       .ok accept) :
@@ -249,16 +263,24 @@ theorem isBidCompatibleWithHead_of_validateExecutionPayloadBid_eq_accept
     repeat' split at valid
     all_goals simp at valid
 
-/-- A valid bid builds on the head block, or on its parent and the payload that the head builds on.
--/
-theorem eq_head_or_of_validateExecutionPayloadBid_eq_accept
+/-- A valid bid builds on the head block, or on the parent of the head block.
+
+On the head block, its parent payload is the head's own payload or the one the head builds on.
+
+On the parent, its parent payload is the one that the head block builds on. -/
+theorem exists_head_of_validateExecutionPayloadBid_eq_accept
     (valid : validateExecutionPayloadBid config checks seen store gloas signed currentTimeMs =
       .ok accept) :
     ∃ head headBlock, store.getHead config = .ok head ∧ store.blocks[head.root]? = some headBlock ∧
-      (signed.message.parentBlockRoot = head.root ∨
-        signed.message.parentBlockRoot = headBlock.parentRoot ∧ signed.message.parentBlockHash =
-          (headBlock.body.signedExecutionPayloadBid gloas).message.parentBlockHash) :=
-  eq_head_or_of_isBidCompatibleWithHead
+      (signed.message.parentBlockRoot = head.root ∧
+          (signed.message.parentBlockHash =
+              (headBlock.body.signedExecutionPayloadBid gloas).message.blockHash ∨
+            signed.message.parentBlockHash =
+              (headBlock.body.signedExecutionPayloadBid gloas).message.parentBlockHash) ∨
+        signed.message.parentBlockRoot = headBlock.parentRoot ∧
+          signed.message.parentBlockHash =
+            (headBlock.body.signedExecutionPayloadBid gloas).message.parentBlockHash) :=
+  exists_head_of_isBidCompatibleWithHead
     (isBidCompatibleWithHead_of_validateExecutionPayloadBid_eq_accept valid)
 
 /-! ## The chain of checks -/
