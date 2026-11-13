@@ -16,6 +16,8 @@ Each container has distinct field names, and converts to and from its fields.
 
 So its bytes decode back to it.
 
+A sidecar of a valid shape has one or more commitments, and one cell and one proof for each.
+
 The largest size of a sidecar covers the blob limit at every epoch.
 
 Two sidecars whose branches verify for one body root carry one root of commitments.
@@ -250,6 +252,41 @@ theorem kzgCommitmentsInclusionProofDepth_eq {preset : Preset} {fork : Fork}
     · rcases named with rfl | rfl <;> rfl
   rcases named with rfl | rfl <;> cases fork <;> first
     | exact absurd fulu (by decide) | exact absurd beforeGloas (by decide) | decide +kernel
+
+/-- The shape check of a sidecar passes exactly when the following hold.
+
+Its index names a column, and it has one or more commitments.
+
+Before Gloas the count of commitments stays within the blob limit at the epoch of its header.
+
+It has one cell and one proof for each commitment. -/
+theorem verifyDataColumnSidecar_eq_true_iff {preset : Preset} {config : Config} {fork : Fork}
+    {sidecar : DataColumnSidecar preset fork}
+    {bidCommitments : Since .glamsterdam fork (BlobKZGCommitments preset fork)} :
+    verifyDataColumnSidecar preset config sidecar bidCommitments = true ↔
+      sidecar.index < preset.NUMBER_OF_COLUMNS ∧
+        (sidecar.commitments bidCommitments).data.size ≠ 0 ∧
+        (∀ beforeGloas : fork < .glamsterdam,
+          (sidecar.commitments bidCommitments).data.size ≤
+            (config.getBlobParameters (computeEpochAtSlot preset
+              (sidecar.signedBlockHeader beforeGloas).message.slot)).maxBlobsPerBlock.toNat) ∧
+        sidecar.column.data.size = (sidecar.commitments bidCommitments).data.size ∧
+        sidecar.kzgProofs.data.size = (sidecar.commitments bidCommitments).data.size := by
+  by_cases beforeGloas : fork < .glamsterdam
+  · simp only [verifyDataColumnSidecar, dite_eq_left beforeGloas, Bool.and_eq_true,
+      decide_eq_true_eq, bne_iff_ne, ne_eq, beq_iff_eq]
+    constructor
+    · rintro ⟨⟨⟨⟨index, nonzero⟩, limit⟩, column⟩, proofs⟩
+      exact ⟨index, nonzero, fun _ => limit, column, by omega⟩
+    · rintro ⟨index, nonzero, limit, column, proofs⟩
+      exact ⟨⟨⟨⟨index, nonzero⟩, limit beforeGloas⟩, column⟩, by omega⟩
+  · simp only [verifyDataColumnSidecar, dite_eq_right beforeGloas, Bool.and_eq_true,
+      decide_eq_true_eq, bne_iff_ne, ne_eq, beq_iff_eq, and_true]
+    constructor
+    · rintro ⟨⟨⟨index, nonzero⟩, column⟩, proofs⟩
+      exact ⟨index, nonzero, fun before => absurd before beforeGloas, column, by omega⟩
+    · rintro ⟨index, nonzero, -, column, proofs⟩
+      exact ⟨⟨⟨index, nonzero⟩, column⟩, by omega⟩
 
 open Cryptography.Kzg.Constants in
 /-- The largest size of a sidecar, as a natural number, held to the largest 64-bit integer.

@@ -1002,6 +1002,9 @@ Its §3.2 explains how it follows from the two lemmas.
 The steps are §3.2 of ePrint 2024/1362, for many blobs, and the framework of Hall-Andersen, Simkin and Wagner, ePrint 2023/1079.
 2025/1683 does not prove these steps again, and EthLib does not formalize them.
 
+`verifyDataColumnSidecar_eq_true_iff` (`Consensus/Proofs/DataAvailability/Column.lean`) states exactly when a sidecar passes its shape check.
+A passing sidecar has one cell and one proof for each commitment, and before Gloas no more commitments than the blob limit of its epoch.
+
 `findSdh_valid_bytes` (`Proofs/Kzg/Binding.lean`) is the evaluation binding of single proofs.
 Let the check accept one commitment at one point with two different values.
 Then a search over the two openings returns a strong Diffie–Hellman solution for the secret.
