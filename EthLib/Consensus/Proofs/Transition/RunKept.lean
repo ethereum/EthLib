@@ -200,6 +200,20 @@ theorem RunKept.committeesKept (run : RunKept state after)
   exact Nat.mod_ne_of_sub_lt (low := written.toNat) (high := shifted.toNat)
     (length := preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat) (by omega) (by omega) same.symm
 
+/-- A run keeps the committees of an epoch, and their count per slot.
+
+The count needs no bound beyond those the committees need. -/
+theorem RunKept.committees_count (run : RunKept state after) {epoch : Epoch}
+    (final : epoch.toNat ≤ (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat)
+    (fixed : epoch ≤ activityFixedEpoch state)
+    (inRing : (getCurrentEpoch after).toNat + preset.MIN_SEED_LOOKAHEAD.toNat + 1 <
+      epoch.toNat + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat) :
+    CommitteesKept epoch state after ∧
+      getCommitteeCountPerSlot after epoch = getCommitteeCountPerSlot state epoch := by
+  refine ⟨run.committeesKept final fixed inRing, ?_⟩
+  unfold getCommitteeCountPerSlot
+  rw [run.active.getActiveValidatorIndices_eq fixed]
+
 /-- Two runs from one state agree on the committees of an epoch, and on their count per slot.
 
 The epoch must be at most the current epoch of the common state plus `MIN_SEED_LOOKAHEAD`.
@@ -217,10 +231,9 @@ theorem RunKept.committees_agree {common other : BeaconState preset fork}
       epoch.toNat + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat) :
     CommitteesKept epoch state other ∧
       getCommitteeCountPerSlot other epoch = getCommitteeCountPerSlot state epoch := by
-  refine ⟨fun slot index inside =>
-    (two.committeesKept final fixed otherInRing slot index inside).trans
-      (one.committeesKept final fixed inRing slot index inside).symm, ?_⟩
-  unfold getCommitteeCountPerSlot
-  rw [two.active.getActiveValidatorIndices_eq fixed, one.active.getActiveValidatorIndices_eq fixed]
+  obtain ⟨keptOne, countOne⟩ := one.committees_count final fixed inRing
+  obtain ⟨keptTwo, countTwo⟩ := two.committees_count final fixed otherInRing
+  exact ⟨fun slot index inside => (keptTwo slot index inside).trans
+    (keptOne slot index inside).symm, countTwo.trans countOne.symm⟩
 
 end EthLib.Consensus

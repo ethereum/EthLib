@@ -4,7 +4,7 @@ public import EthLib.Consensus.Proofs.ForkChoice.BlockRuns
 public import EthLib.Consensus.Proofs.ForkChoice.VoteOrigins
 
 /-!
-# Proofs: the target state of a vote and the head state agree on the committees of its slot
+# Proofs: the target state of a vote and the head state agree on the committees of its epoch
 
 A vote passed the committee check in the state of its target.
 
@@ -14,13 +14,7 @@ Take a block that both the voted block and the head descend from.
 
 When the vote is at most one epoch after that block, the two states agree on those committees.
 
-They also agree on the count of committees per slot of that epoch.
-
-The proof finds a state from which both run on.
-
-It is the state of the block when the target block descends from it.
-
-Otherwise it is the target state, which then lies on the chain of the head.
+They also agree on the count of committees per slot of the epoch of the vote.
 
 The store must run every handler with one setting of the signature checks.
 -/
@@ -35,7 +29,9 @@ variable {preset : Preset} {fork : Fork} {config : Config}
   {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
   {store : Store preset fork}
 
-/-- A node that descends from a pending known node walks back to its root at its slot. -/
+/-- A node that descends from a known pending node walks back to its root.
+
+The walk stops at the slot of the block of that root. -/
 private theorem Store.getAncestor_of_isAncestor {node : ForkChoiceNode} {root : Root}
     {block : BeaconBlock preset fork} (found : store.blocks[root]? = some block)
     (descends : store.isAncestor node ⟨root, .pending⟩ = .ok true) :
@@ -94,21 +90,6 @@ private theorem le_activityFixedEpoch {state : BeaconState preset fork} {epoch :
   have := epoch.toNat_lt
   omega
 
-/-- A run keeps the committees of an epoch, and their count per slot.
-
-The bounds are those of the committees alone. -/
-private theorem RunKept.committees_count {state after : BeaconState preset fork}
-    (run : RunKept state after) {epoch : Epoch}
-    (final : epoch.toNat ≤ (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat)
-    (fixed : epoch ≤ activityFixedEpoch state)
-    (inRing : (getCurrentEpoch after).toNat + preset.MIN_SEED_LOOKAHEAD.toNat + 1 <
-      epoch.toNat + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat) :
-    CommitteesKept epoch state after ∧
-      getCommitteeCountPerSlot after epoch = getCommitteeCountPerSlot state epoch := by
-  refine ⟨run.committeesKept final fixed inRing, ?_⟩
-  unfold getCommitteeCountPerSlot
-  rw [run.active.getActiveValidatorIndices_eq fixed]
-
 /-- The target state of a vote and the state of the head agree on the committees of its epoch.
 
 They also agree on the count of committees per slot of that epoch.
@@ -120,6 +101,8 @@ The epoch of the vote is at most one after the epoch of that block.
 The store is built with one setting of the checks, and the anchor block is not after its state.
 
 Both lookaheads of the seed are at least one epoch.
+
+The ring of mixes is longer than the minimum lookahead plus one epoch.
 
 The head state must be before the mix that the seed of the epoch reads is written again. -/
 theorem Store.ForwardReachableWith.committeesKept_of_voteOrigin {checks : SignatureChecks}
