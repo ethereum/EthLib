@@ -1340,6 +1340,9 @@ static PyMethodDef methods[] = {
   {"rpc_pruned_history_unavailable", py_rpc_pruned_history_unavailable, METH_VARARGS,
    DOC_rpc_pruned_history_unavailable},
   {"rpc_serve", py_rpc_serve, METH_VARARGS, DOC_rpc_serve},
+  {"rpc_serve_pruned", py_rpc_serve_pruned, METH_VARARGS, DOC_rpc_serve_pruned},
+  {"rpc_encode_block_access_list", py_rpc_encode_block_access_list, METH_VARARGS,
+   DOC_rpc_encode_block_access_list},
   {"pyvalue_echo", py_pyvalue_echo, METH_VARARGS, DOC_pyvalue_echo},
   {NULL, NULL, 0, NULL},
 };

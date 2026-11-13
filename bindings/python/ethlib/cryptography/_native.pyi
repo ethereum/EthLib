@@ -1969,6 +1969,14 @@ def rpc_serve(view: tuple[dict[str, Any], bytes, list[tuple[str, bytes]], tuple[
     """Answer requests of the execution JSON-RPC API from the chain that the arguments build."""
     ...
 
+def rpc_serve_pruned(view: tuple[dict[str, Any], bytes, list[tuple[str, bytes]], tuple[bytes, bytes, bytes], int, bool], numbers: list[int], requests: list[str]) -> list[str | None]:
+    """Answer requests after pruning the block access lists of the named block numbers."""
+    ...
+
+def rpc_encode_block_access_list(value: object) -> bytes:
+    """Encode a block access-list JSON value as its EIP-7928 RLP bytes."""
+    ...
+
 def pyvalue_echo(value: object) -> object:
     """The value that Python passes, back to Python, with each failure tuple read as a failure."""
     ...

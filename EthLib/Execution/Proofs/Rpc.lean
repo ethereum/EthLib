@@ -13,6 +13,7 @@ public import EthLib.Execution.Proofs.Rpc.Methods
 public import EthLib.Execution.Proofs.Rpc.Raw
 public import EthLib.Execution.Proofs.Rpc.Account
 public import EthLib.Execution.Proofs.Rpc.Proof
+public import EthLib.Execution.Proofs.Rpc.AccessList
 public import EthLib.Execution.Proofs.Rpc.Receipt
 public import EthLib.Execution.Proofs.Rpc.Filter
 public import EthLib.Execution.Proofs.Rpc.Transaction

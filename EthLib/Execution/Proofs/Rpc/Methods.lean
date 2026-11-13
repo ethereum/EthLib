@@ -38,11 +38,9 @@ theorem call_unknown (v : ChainView) {method : String} (params : List Json)
       "eth_getTransactionReceipt", "eth_getBlockReceipts", "eth_getLogs", "eth_getBalance",
       "eth_getTransactionCount", "eth_getCode", "eth_getStorageAt", "eth_getStorageValues",
       "eth_getProof", "debug_getRawHeader", "debug_getRawBlock", "debug_getRawTransaction",
-      "debug_getRawReceipts"]) :
+      "debug_getRawReceipts", "eth_getBlockAccessList", "debug_getRawBlockAccessList"]) :
     v.call method params = .error (methodNotFound.toRpcError (some (.str method))) := by
   simp only [List.mem_cons, List.not_mem_nil, or_false, not_or] at h
-  obtain ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13, h14, h15, h16, h17, h18,
-    h19, h20, h21, h22, h23, h24, h25, h26⟩ := h
   unfold call
   split <;> simp_all
 

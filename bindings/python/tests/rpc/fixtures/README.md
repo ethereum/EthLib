@@ -9,6 +9,12 @@ The directory `error-groups` holds the groups of error codes of the API, from `s
 - Authors: the contributors of `ethereum/execution-apis`.
 - Licence: CC0 1.0 Universal.
 
+The directory `bal` holds `block-00057.json` through `block-00060.json` from `tools/chain/bal/` of the same pin.
+They give the access lists and their hashes for the four Amsterdam blocks of the test chain.
+Their JSON uses `null` for empty lists, `slot` and `slotChanges` for storage, and `postBalance` and `postNonce` for field changes.
+The tests convert these fields to the API schema, compare the JSON answer, and check the raw answer against the pinned hash.
+The files name no generator or version, as `tests/generators.toml` records.
+
 The files are copied byte for byte, and `SHA256SUMS` pins them.
 To check the pins, run this from the directory:
 
@@ -23,6 +29,7 @@ They compare a result as a JSON value, and an error by its code, and by its data
 A file marked `speconly` is checked against the schema of the result only, as `docs-api/docs/tests.md` of the source says.
 
 The view serves `eth_blockNumber`, `eth_chainId`, `eth_config`, `net_version`, `eth_getTransactionByHash`, `eth_getTransactionByBlockHashAndIndex`, `eth_getTransactionByBlockNumberAndIndex`, `eth_getHeaderByHash`, `eth_getHeaderByNumber`, `eth_getBlockByHash`, `eth_getBlockByNumber`, `eth_getBlockTransactionCountByHash`, `eth_getBlockTransactionCountByNumber`, `eth_getTransactionReceipt`, `eth_getBlockReceipts`, `eth_getLogs`, the account queries `eth_getBalance`, `eth_getTransactionCount`, `eth_getCode`, `eth_getStorageAt` and `eth_getStorageValues`, the proof `eth_getProof`, and the four raw getters `debug_getRawHeader`, `debug_getRawBlock`, `debug_getRawTransaction` and `debug_getRawReceipts`.
+The two block access-list methods run against the same chain and the `bal` files, since the pin has no `.io` fixture for them.
 The files of the other methods run through the readers of the parameters, without a chain.
 
 The trie suite also checks each answer of `eth_getProof` against the state root of block 60.

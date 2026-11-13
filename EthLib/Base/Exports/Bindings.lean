@@ -1840,6 +1840,12 @@ def bindings : List Binding := [
     "(view: tuple[dict[str, Any], bytes, list[tuple[str, bytes]], tuple[bytes, bytes, bytes], " ++
       "int, bool], requests: list[str]) -> list[str | None]",
     [`EthLib.Execution.Blocks.BlockError], some "RpcError"⟩,
+  ⟨"rpc_serve_pruned", `EthLib.Execution.Rpc.Exports.servePrunedExport,
+    "(view: tuple[dict[str, Any], bytes, list[tuple[str, bytes]], tuple[bytes, bytes, bytes], " ++
+      "int, bool], numbers: list[int], requests: list[str]) -> list[str | None]",
+    [`EthLib.Execution.Blocks.BlockError], some "RpcError"⟩,
+  ⟨"rpc_encode_block_access_list", `EthLib.Execution.Rpc.Exports.encodeBlockAccessListExport,
+    "(value: object) -> bytes", [], some "RpcError"⟩,
   ⟨"pyvalue_echo", `EthLib.Exports.pyValueEcho,
     "(value: object) -> object",
     [], some "BindingError"⟩

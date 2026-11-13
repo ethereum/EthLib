@@ -128,6 +128,7 @@ def serve(
     requests: list[str],
     *,
     check_seal: bool = True,
+    pruned_access_lists: Sequence[int] = (),
 ) -> list[str | None]:
     """
     Answer the texts of JSON-RPC requests from a chain, with the text of each response.
@@ -144,9 +145,18 @@ def serve(
     When the first block is not block zero, eth_config needs genesisHash and genesisTime in config.
     When it is block zero, serve reads both from it, and any given values must match.
     A malformed, partial or mismatched value of these keys raises RpcError with code 0.
+
+    From Glamsterdam, pruned_access_lists names block numbers whose lists give code 4444.
     """
     view = (config, state, list(blocks), forkchoice, network_id, check_seal)
+    if pruned_access_lists:
+        return _native.rpc_serve_pruned(view, list(pruned_access_lists), requests)
     return _native.rpc_serve(view, requests)
+
+
+def encode_block_access_list(value: object) -> bytes:
+    """Encode a block access-list JSON value as its EIP-7928 RLP bytes."""
+    return _native.rpc_encode_block_access_list(value)
 
 
 __all__ = [
@@ -160,6 +170,7 @@ __all__ = [
     "NumberSchema",
     "RpcError",
     "Schema",
+    "encode_block_access_list",
     "error_groups",
     "pruned_history_unavailable",
     "read_param",

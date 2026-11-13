@@ -172,20 +172,23 @@ open EthLib.Cryptography.Hash.Keccak (keccak256)
 /-- The record of a block, with its hash, from the state after it and the body that it ran. -/
 def recordOf {fork : Fork} (block : Block fork Execution.Transactions.Transaction)
     (state : Execution.State.State) (receipts : List (UInt8 × Receipt fork))
-    (logs : List Log) : Result BlockRecord := do
+    (logs : List Log) (accessList : Option Blocks.BlockAccessList := none) :
+    Result BlockRecord := do
   let hash ← block.header.hash.mapError fun e => (0, s!"block hash: {reprStr e}")
-  return ⟨fork, block, hash, state, receipts, logs⟩
+  return ⟨fork, block, hash, state, receipts, logs, accessList⟩
 
 /-- The record of a block after the last record of a chain, by the state transition. -/
 def nextRecord (config : ChainConfig) (checkSeal : Bool) (records : List BlockRecord)
     (prev : BlockRecord) (block : String × ByteArray) : Result BlockRecord := do
-  let ⟨_, block⟩ ← blockOf config block.1 block.2
+  let ⟨fork, block⟩ ← blockOf config block.1 block.2
   let chain : BlockChain := ⟨config, prev.state, records.map BlockRecord.recent⟩
   let failed := fun (e : BlockError) =>
     (e.code, s!"block {block.header.number}: {blockErrorMessage e}")
   let state ← (stateTransition chain block checkSeal).mapError failed
   let result ← (runBody chain block).mapError failed
-  recordOf block state result.output.receipts result.output.logs
+  let accessList := if fork ≥ Fork.glamsterdam then
+    some result.output.body.builder.build else none
+  recordOf block state result.output.receipts result.output.logs accessList
 
 /-- The hash of thirty-two zero bytes, which a forkchoice state gives for no block. -/
 def zeroHash : Hash32 := Vector.replicate 32 (0 : UInt8)
@@ -306,5 +309,43 @@ Any other bad input has code 0. -/
 @[export eth_rpc_serve]
 def serveExport (args : PyValue) : Result PyValue :=
   pyExport serveOf args
+
+/-- The responses of a chain view after pruning the access lists of the named block numbers. -/
+def servePrunedOf (args : ViewInputs × List Nat × List String) : Result (List (Option String)) := do
+  let view ← viewOf args.1
+  let view := view.pruneAccessLists args.2.1
+  return args.2.2.map fun text => (view.serve text).map (·.compress)
+
+/-- Answer requests after pruning the block access lists of the named block numbers.
+
+The first argument is the chain input of `eth_rpc_serve`.
+
+Next come the block numbers whose lists are pruned and the request texts.
+
+The blocks remain available.
+
+From Glamsterdam, the access-list methods report code 4444 for a pruned list.
+
+Input failures have the codes of `eth_rpc_serve`. -/
+@[export eth_rpc_serve_pruned]
+def servePrunedExport (args : PyValue) : Result PyValue :=
+  pyExport servePrunedOf args
+
+/-- Encode a JSON access list with the same reader and RLP codec as the query methods. -/
+def encodeBlockAccessListOf (value : PyValue) : Result ByteArray := do
+  let bal ← (if containsBytes value then reject "block access list: not a JSON value"
+    else blockAccessListOfJson value.toJson).mapError fun reason => (32602, reason)
+  (Serialization.Rlp.Codec.encode bal).mapError fun _ => (32603, "cannot encode block access list")
+
+/-- Encode a block access-list JSON value as its EIP-7928 RLP bytes.
+
+The argument is the JSON value returned by `eth_getBlockAccessList`.
+
+The empty list encodes as `0xc0`.
+
+A value outside the JSON schema has code 32602, and an encoding failure has code 32603. -/
+@[export eth_rpc_encode_block_access_list]
+def encodeBlockAccessListExport (args : PyValue) : Result PyValue :=
+  pyExport encodeBlockAccessListOf args
 
 end EthLib.Execution.Rpc.Exports

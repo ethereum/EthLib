@@ -23,6 +23,16 @@ eth_rpc_serve(
   lean_object* args
 );
 
+extern lean_object*
+eth_rpc_serve_pruned(
+  lean_object* args
+);
+
+extern lean_object*
+eth_rpc_encode_block_access_list(
+  lean_object* args
+);
+
 /* ---- Wrappers --------------------------------------------------------- */
 
 PyObject*
@@ -55,4 +65,20 @@ py_rpc_serve(
   PyObject* args
 ) {
   return call_pyvalue_export(eth_rpc_serve, args, 2, RPC_ERROR);
+}
+
+PyObject*
+py_rpc_serve_pruned(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_rpc_serve_pruned, args, 3, RPC_ERROR);
+}
+
+PyObject*
+py_rpc_encode_block_access_list(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_rpc_encode_block_access_list, args, 1, RPC_ERROR);
 }
