@@ -276,13 +276,13 @@ Then the active stake at `x` is at most three times the accountable stake at `x`
 
 Twice the larger drift of the two tails is added.
 
-The drift of a tail is the largest over its states up to one epoch past the later finalized epoch.
+The drift of a tail is the largest over its states up to one epoch past the right finalized epoch.
 
 Otherwise SHA-256 collides in the root of a header of the runs, or a header or state has root zero.
 
 The runs start at one genesis built from deposits, and the preset meets the parameters.
 
-The floor covers epoch calls after epoch 1 through one epoch past the finalized epoch of `b`.
+The floor covers epoch calls after epoch 1 through one epoch past the right finalized epoch.
 
 Each run has active stake above 1.5 increments at each covered call. -/
 theorem accountable_safety {g x a b : ForkedBeaconState preset}
@@ -316,7 +316,7 @@ theorem accountable_safety {g x a b : ForkedBeaconState preset}
 
 The justified field is at the finalized epoch or later.
 
-The conflict puts `x` no later than the first slot of the finalized epoch.
+With that order, the conflict puts `x` no later than the first slot of the finalized epoch.
 
 Then the active stake at `x` is at most three times the accountable stake at `x`.
 

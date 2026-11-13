@@ -15,8 +15,8 @@ Not yet released.
   An existing unbounded floor proof adapts as `fun call _ => oldEnough call`.
   Pass a target-epoch bound as the new `within` argument of `quorum_count`.
   Remove the `starts` argument from `accountable_safety` and `accountable_safety_justified`, but keep it for `accountable_justified_unique`.
-  Removing `starts` is an equivalent restatement under `conflict`, not a strengthening.
-  `accountable_safety` uses the finalized epoch of `b` instead of the maximum, which is equal under `ordered`.
+  `conflict` and `ordered` imply the removed bound on the slot of `x`, so the theorems cover the same runs as before.
+  The drift horizon in the conclusion of `accountable_safety` is the finalized epoch of `b`, not the larger of the two finalized epochs; `ordered` makes them equal.
 
 - In Lean, `DirectSafety.HashEvidence objects` is stated through the searches `findMessageCollision` and the new `findZeroRoot`, in place of a bounded existential ([#2187](https://github.com/ethereum/EthLib/issues/2187)).
   No C export or Python function changes, and every theorem that mentions `HashEvidence` keeps its statement.
@@ -576,6 +576,13 @@ Not yet released.
   In Lean, `resolveStep_compatibleUnion` takes the selected child and a proof of `options[slot]? = some child`, and concludes with that child.
   `union_options_share_one_tree` quantifies over that child in the same way.
   `resolveStep_compatibleUnion_of_wellFormed` gives the child for a well-formed union.
+- In Lean, the hash of a message to elements of `Fp2` has its count in its type ([#2210](https://github.com/ethereum/EthLib/pull/2210)).
+  `hashToFieldFp2` returns `Vector (Fp2 F) count`, where it returned an `Array`, so a caller that needs an array takes `.toArray`.
+  The elements, the errors and the points of the hash to `G2` are the same.
+  `map_hashToFieldFp2` maps with `Vector.map`, and `hashToFieldFp2_eq_spec` states the same equation over the vector.
+  `hashToG2` no longer takes an `Inhabited` instance.
+  `map_hashToG2` no longer takes the two instances, or the hypothesis that the map sends the default to the default.
+  No C export or Python function changes.
 
 ## 0.3.0
 
