@@ -1,13 +1,15 @@
 module
 
 public import EthLib.Base.Exports.Proofs.PyValue
+public import EthLib.Base.Exports.PyDerive
+public import EthLib.Networking.Quic.Frame
 public import EthLib.Cryptography.Exports.Tls13
 public import EthLib.Networking.Quic.Keys
 public import EthLib.Networking.Quic.Tls
 public import EthLib.Networking.Quic.Varint
 
 /-!
-# Exports: QUIC integers, packet keys and the TLS 1.3 key schedule
+# Exports: QUIC wire encodings, packet keys and the TLS 1.3 key schedule
 
 The encoder rejects a value of `2^62` or more with code 0.
 
@@ -87,5 +89,78 @@ During the handshake the secret is the sender's handshake traffic secret. -/
 @[export eth_quic_tls_finished]
 def finishedExport (args : PyValue) : Result PyValue :=
   pyExport (fun (secret, transcript) => ofExcept (Tls.finished secret transcript)) args
+
+open EthLib.Exports (ToPy FromPy LawfulPy PlainPy toPy fromPy)
+
+local instance (n : Nat) : ToPy (Fin n) := ⟨fun value => .int value.val⟩
+local instance (n : Nat) : FromPy (Fin n) := ⟨fun value => do
+  let bounded ← EthLib.Exports.fromPyBelow n value
+  return ⟨bounded.val, bounded.property⟩⟩
+local instance (n : Nat) : PlainPy (Fin n) := ⟨fun _ => rfl⟩
+local instance (n : Nat) : LawfulPy (Fin n) where
+  fromPy_toPy value := by
+    show (do
+      let bounded ← EthLib.Exports.fromPyBelow n (.int value.val)
+      pure (⟨bounded.val, bounded.property⟩ : Fin n)) = .ok value
+    simp [EthLib.Exports.fromPyBelow, fromPy, value.isLt, bind, Except.bind,
+      pure, Except.pure]
+
+derive_py Packet.PacketType
+derive_py_laws Packet.PacketType
+derive_py Packet.Header
+derive_py_laws Packet.Header
+derive_py Frame.Ack
+derive_py_laws Frame.Ack
+derive_py Frame.Frame
+derive_py_laws Frame.Frame
+
+/-- Encode a QUIC header, with checked lengths and packet-number bounds (RFC 9000 §17). -/
+@[export eth_quic_header_encode]
+def headerEncodeExport (args : PyValue) : Result PyValue :=
+  pyExport (fun (header : Packet.Header) => do
+    let encoded ← (Packet.encode header).mapError
+      fun e => (e.code, s!"QUIC header rejected: {reprStr e}")
+    return (⟨encoded.toArray⟩ : ByteArray)) args
+
+/-- Read an authenticated header and return its fields and remaining bytes (RFC 9000 §17). -/
+@[export eth_quic_header_decode]
+def headerDecodeExport (args : PyValue) : Result PyValue :=
+  pyExport (fun (input : Nat × ByteArray) => do
+    let (shortConnectionIdLength, data) := input
+    let (header, rest) ← (Packet.decode shortConnectionIdLength data.toList).mapError
+      fun e => (e.code, s!"QUIC header rejected: {reprStr e}")
+    return (header, (⟨rest.toArray⟩ : ByteArray))) args
+
+/-- Encode one well-formed QUIC frame (RFC 9000 §19). -/
+@[export eth_quic_frame_encode]
+def frameEncodeExport (args : PyValue) : Result PyValue :=
+  pyExport (fun (frame : Frame.Frame) => do
+    let encoded ← (Frame.encode frame).mapError
+      fun e => (e.code, s!"QUIC frame rejected: {reprStr e}")
+    return (⟨encoded.toArray⟩ : ByteArray)) args
+
+/-- Read one frame allowed in the given packet type (RFC 9000 §12.4). -/
+@[export eth_quic_frame_decode]
+def frameDecodeExport (args : PyValue) : Result PyValue :=
+  pyExport (fun (input : Packet.PacketType × ByteArray) => do
+    let (packet, data) := input
+    let (frame, rest) ← (Frame.decode packet data.toList).mapError
+      fun e => (e.code, s!"QUIC frame rejected: {reprStr e}")
+    return (frame, (⟨rest.toArray⟩ : ByteArray))) args
+
+/-- Write the low packet-number bytes (RFC 9000 §17.1). -/
+@[export eth_quic_packet_number_encode]
+def packetNumberEncodeExport (args : PyValue) : Result PyValue :=
+  pyExport (fun (input : Fin 4 × Fin (2 ^ 62)) => do
+    let (width, number) := input
+    pure (⟨(Packet.encodePacketNumber width number).toArray⟩ : ByteArray)) args
+
+/-- Reconstruct a packet number from its low bytes (RFC 9000 Appendix A.3). -/
+@[export eth_quic_packet_number_decode]
+def packetNumberDecodeExport (args : PyValue) : Result PyValue :=
+  pyExport (fun (input : Fin 4 × Nat × Nat) => do
+    let (width, truncated, expected) := input
+    (Packet.decodePacketNumber width truncated expected).mapError
+      fun e => (e.code, s!"QUIC packet number rejected: {reprStr e}")) args
 
 end EthLib.Networking.Quic.Exports

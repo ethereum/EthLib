@@ -1545,6 +1545,30 @@ def quic_varint_decode(data: bytes) -> tuple[int, bytes]:
     """Read a QUIC integer and return its value and the trailing bytes, RFC 9000 §16."""
     ...
 
+def quic_header_encode(header: Any) -> bytes:
+    """Encode a QUIC header, with checked lengths and packet-number bounds (RFC 9000 §17)."""
+    ...
+
+def quic_header_decode(short_connection_id_length: int, data: bytes) -> tuple[Any, bytes]:
+    """Read an authenticated header and return its fields and remaining bytes (RFC 9000 §17)."""
+    ...
+
+def quic_frame_encode(frame: Any) -> bytes:
+    """Encode one well-formed QUIC frame (RFC 9000 §19)."""
+    ...
+
+def quic_frame_decode(packet: str, data: bytes) -> tuple[Any, bytes]:
+    """Read one frame allowed in the given packet type (RFC 9000 §12.4)."""
+    ...
+
+def quic_packet_number_encode(width: int, number: int) -> bytes:
+    """Write the low packet-number bytes (RFC 9000 §17.1)."""
+    ...
+
+def quic_packet_number_decode(width: int, truncated: int, expected: int) -> int:
+    """Reconstruct a packet number from its low bytes (RFC 9000 Appendix A.3)."""
+    ...
+
 def multistream_encode(message: bytes) -> bytes:
     """The bytes of one multistream-select message: its length, its bytes, then a newline."""
     ...

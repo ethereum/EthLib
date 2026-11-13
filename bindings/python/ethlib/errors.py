@@ -189,6 +189,10 @@ class UvarintError(EthLibError, ValueError):
     """The bytes do not start with a multiformats unsigned varint, or a value is out of range."""
 
 
+class QuicError(EthLibError, ValueError):
+    """A QUIC header, packet number or frame is malformed, out of range, or not allowed there."""
+
+
 class QuicVarintError(EthLibError, ValueError):
     """The bytes end before the QUIC integer they start, or a value is not below 2^62."""
 
@@ -374,6 +378,7 @@ __all__ = [
     "VarintError",
     "UvarintError",
     "QuicVarintError",
+    "QuicError",
     "MultistreamError",
     "MplexError",
     "YamuxError",
