@@ -45,6 +45,7 @@ directories = [
 [repositories."ethereum/beacon-APIs"]
 commit = "7911555e6a30c51f9b69bb168111a59f1ff8ee49"
 release = "v5.0.0-beta.0"
+directories = ["tests/consensus/beacon_api"]
 
 [repositories."ethereum/builder-specs"]
 commit = "fce64468a81a87892d7cb9b4858272bb3d010e50"

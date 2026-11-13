@@ -1,0 +1,630 @@
+openapi: "3.1.0"
+
+info:
+  title: "Eth Beacon Node API"
+  description: |
+    API specification for the beacon node, which enables users to query and participate in Ethereum 2.0 phase 0 beacon chain.
+
+    The schemas in this specification assume the `mainnet` preset from the consensus specifications.
+
+    All requests by default send and receive JSON, and as such should have either or both of the "Content-Type: application/json"
+    and "Accept: application/json" headers.  In addition, some requests can send and receive data in the SSZ format.  The header
+    "Content-Type: application/octet-stream" should be set in requests that contain SSZ data; a preference to receive SSZ data in
+    response can be indicated by setting the "Accept: application/octet-stream;q=1.0,application/json;q=0.9" header.  Note that
+    only a subset of requests can respond with data in SSZ format; these are noted in each individual request.
+
+    When handling requests, the server should return a 415 status code if the "Content-Type" header in the request specifies a format
+    that is not supported.  Similarly, it should return a 406 status code if it cannot produce a response in the format accepted by
+    the client as specified in the "Accept" header; if no "Accept" header is provided then it is assumed to be "application/json".
+    In any case, the server should indicate the format of the response by setting the corresponding "Content-Type" header.
+
+    API endpoints are individually versioned.  As such, there is no direct relationship between all v1 endpoints, all v2 endpoints,
+    _etc._ and no such relationship should be inferred.  All JSON responses return the requested data under a `data` key in the top
+    level of their response.  Additional metadata may or may not be present in other keys at the top level of the response, dependent
+    on the endpoint.  The rules that require an increase in version number are as follows:
+
+      - no field that is listed in an endpoint shall be removed without an increase in the version number
+      - no field that is listed in an endpoint shall be altered in terms of format (_e.g._ from a string to an array) without an
+        increase in the version number
+
+    Note that it is possible for a field to be added to an endpoint's data or metadata without an increase in the version number.
+
+  version: "Dev - Ethereum Proof-of-Stake Consensus Specification v1.7.0-beta.0"
+  contact:
+    name: Ethereum Github
+    url: https://github.com/ethereum/beacon-apis/issues
+  license:
+    name: "CC0-1.0"
+    url: "https://creativecommons.org/publicdomain/zero/1.0/"
+
+servers:
+  - url: "{server_url}"
+    variables:
+      server_url:
+        description: "Beacon node API url"
+        default: "http://localhost/"
+
+tags:
+  - name: Beacon
+    description: Set of endpoints to query beacon chain.
+  - name: Config
+    description: Endpoints to query chain configuration, specification, and fork schedules.
+  - name: Debug
+    description: Set of endpoints to debug chain and shouldn't be exposed publicly.
+  - name: Events
+    description: Set of endpoints for event subscription.
+  - name: Node
+    description: Endpoints to query node related information.
+  - name: Validator
+    description: Endpoints intended for validator clients.
+  - name: ValidatorRequiredApi
+    description: |
+      Minimal set of endpoints to enable a working validator implementation.
+
+      [Checkout validator flow](./validator-flow.md) to learn how to use this api.
+  - name: Rewards
+    description: Endpoints to query rewards and penalties for validators.
+
+paths:
+
+  /eth/v1/beacon/genesis:
+    $ref: "./apis/beacon/genesis.yaml"
+  /eth/v1/beacon/states/{state_id}/root:
+    $ref: "./apis/beacon/states/root.yaml"
+  /eth/v1/beacon/states/{state_id}/fork:
+    $ref: "./apis/beacon/states/fork.yaml"
+  /eth/v1/beacon/states/{state_id}/finality_checkpoints:
+    $ref: "./apis/beacon/states/finality_checkpoints.yaml"
+  /eth/v1/beacon/states/{state_id}/validators:
+    $ref: "./apis/beacon/states/validators.yaml"
+  /eth/v1/beacon/states/{state_id}/validators/{validator_id}:
+    $ref: "./apis/beacon/states/validator.yaml"
+  /eth/v1/beacon/states/{state_id}/validator_balances:
+    $ref: "./apis/beacon/states/validator_balances.yaml"
+  /eth/v1/beacon/states/{state_id}/validator_identities:
+    $ref: "./apis/beacon/states/validator_identities.yaml"
+  /eth/v1/beacon/states/{state_id}/builders:
+    $ref: "./apis/beacon/states/builders.yaml"
+  /eth/v1/beacon/states/{state_id}/committees:
+    $ref: "./apis/beacon/states/committee.yaml"
+  /eth/v1/beacon/states/{state_id}/sync_committees:
+    $ref: "./apis/beacon/states/sync_committees.yaml"
+  /eth/v1/beacon/states/{state_id}/ptc:
+    $ref: "./apis/beacon/states/ptc.yaml"
+  /eth/v1/beacon/states/{state_id}/randao:
+    $ref: "./apis/beacon/states/randao.yaml"
+  /eth/v1/beacon/states/{state_id}/pending_consolidations:
+    $ref: "./apis/beacon/states/pending_consolidations.yaml"
+  /eth/v1/beacon/states/{state_id}/pending_deposits:
+    $ref: "./apis/beacon/states/pending_deposits.yaml"
+  /eth/v1/beacon/states/{state_id}/pending_partial_withdrawals:
+    $ref: "./apis/beacon/states/pending_partial_withdrawals.yaml"
+  /eth/v1/beacon/states/{state_id}/proposer_lookahead:
+    $ref: "./apis/beacon/states/proposer_lookahead.yaml"
+  /eth/v1/beacon/states/{state_id}/builder_pending_withdrawals:
+    $ref: "./apis/beacon/states/builder_pending_withdrawals.yaml"
+  /eth/v1/beacon/states/{state_id}/builder_pending_payments:
+    $ref: "./apis/beacon/states/builder_pending_payments.yaml"
+
+  /eth/v1/beacon/headers:
+    $ref: "./apis/beacon/blocks/headers.yaml"
+  /eth/v1/beacon/headers/{block_id}:
+    $ref: "./apis/beacon/blocks/header.yaml"
+  /eth/v2/beacon/blinded_blocks:
+    $ref: "./apis/beacon/blocks/blinded_blocks.v2.yaml"
+  /eth/v2/beacon/blocks:
+    $ref: "./apis/beacon/blocks/blocks.v2.yaml"
+  /eth/v1/beacon/execution_payload_bids:
+    $ref: "./apis/beacon/execution_payload/bid.yaml"
+  /eth/v1/beacon/execution_payload_envelopes:
+    $ref: "./apis/beacon/execution_payload/envelope_post.yaml"
+  /eth/v1/beacon/execution_payload_envelopes/{block_id}:
+    $ref: "./apis/beacon/execution_payload/envelope_get.yaml"
+  /eth/v1/beacon/proposer_preferences:
+    $ref: "./apis/beacon/proposer_preferences.yaml"
+  /eth/v2/beacon/blocks/{block_id}:
+    $ref: "./apis/beacon/blocks/block.v2.yaml"
+  /eth/v1/beacon/blocks/{block_id}/root:
+    $ref: "./apis/beacon/blocks/root.yaml"
+  /eth/v2/beacon/blocks/{block_id}/attestations:
+    $ref: "./apis/beacon/blocks/attestations.v2.yaml"
+  /eth/v1/beacon/blobs/{block_id}:
+    $ref: "./apis/beacon/blobs/blobs.yaml"
+  /eth/v1/debug/beacon/data_column_sidecars/{block_id}:
+    $ref: "./apis/debug/data_column_sidecars.yaml"
+  /eth/v1/beacon/rewards/sync_committee/{block_id}:
+    $ref: "./apis/beacon/rewards/sync_committee.yaml"
+  /eth/v1/beacon/rewards/blocks/{block_id}:
+    $ref: "./apis/beacon/rewards/blocks.yaml"
+  /eth/v1/beacon/rewards/attestations/{epoch}:
+    $ref: "./apis/beacon/rewards/attestations.yaml"
+  /eth/v1/beacon/blinded_blocks/{block_id}:
+    $ref: "./apis/beacon/blocks/blinded_block.yaml"
+  /eth/v1/beacon/light_client/bootstrap/{block_root}:
+    $ref: "./apis/beacon/light_client/bootstrap.yaml"
+  /eth/v1/beacon/light_client/updates:
+    $ref: "./apis/beacon/light_client/updates.yaml"
+  /eth/v1/beacon/light_client/finality_update:
+    $ref: "./apis/beacon/light_client/finality_update.yaml"
+  /eth/v1/beacon/light_client/optimistic_update:
+    $ref: "./apis/beacon/light_client/optimistic_update.yaml"
+  /eth/v2/beacon/pool/attestations:
+    $ref: "./apis/beacon/pool/attestations.v2.yaml"
+  /eth/v1/beacon/pool/payload_attestations:
+    $ref: "./apis/beacon/pool/payload_attestations.yaml"
+  /eth/v2/beacon/pool/attester_slashings:
+    $ref: "./apis/beacon/pool/attester_slashings.v2.yaml"
+  /eth/v1/beacon/pool/proposer_slashings:
+    $ref: "./apis/beacon/pool/proposer_slashings.yaml"
+  /eth/v1/beacon/pool/sync_committees:
+    $ref: "./apis/beacon/pool/sync_committees.yaml"
+  /eth/v1/beacon/pool/voluntary_exits:
+    $ref: "./apis/beacon/pool/voluntary_exits.yaml"
+  /eth/v1/beacon/pool/bls_to_execution_changes:
+    $ref: "./apis/beacon/pool/bls_to_execution_changes.yaml"
+
+  /eth/v2/debug/beacon/states/{state_id}:
+    $ref: './apis/debug/state.v2.yaml'
+  /eth/v2/debug/beacon/heads:
+    $ref: './apis/debug/heads.v2.yaml'
+  /eth/v1/debug/fork_choice:
+    $ref: './apis/debug/fork_choice.yaml'
+  /eth/v2/debug/fork_choice:
+    $ref: './apis/debug/fork_choice.v2.yaml'
+
+  /eth/v1/node/identity:
+    $ref: "./apis/node/identity.yaml"
+  /eth/v1/node/peers:
+    $ref: "./apis/node/peers.yaml"
+  /eth/v1/node/peers/{peer_id}:
+    $ref: "./apis/node/peer.yaml"
+  /eth/v1/node/peer_count:
+    $ref: "./apis/node/peer_count.yaml"
+  /eth/v1/node/version:
+    $ref: "./apis/node/version.yaml"
+  /eth/v2/node/version:
+    $ref: "./apis/node/version.v2.yaml"
+  /eth/v1/node/syncing:
+    $ref: "./apis/node/syncing.yaml"
+  /eth/v1/node/health:
+    $ref: "./apis/node/health.yaml"
+
+  /eth/v1/config/fork_schedule:
+    $ref: "./apis/config/fork_schedule.yaml"
+  /eth/v1/config/spec:
+    $ref: "./apis/config/spec.yaml"
+  /eth/v1/config/deposit_contract:
+    $ref: "./apis/config/deposit_contract.yaml"
+
+  /eth/v1/validator/duties/attester/{epoch}:
+    $ref: "./apis/validator/duties/attester.yaml"
+  /eth/v1/validator/duties/proposer/{epoch}:
+    $ref: "./apis/validator/duties/proposer.yaml"
+  /eth/v2/validator/duties/proposer/{epoch}:
+    $ref: "./apis/validator/duties/proposer.v2.yaml"
+  /eth/v1/validator/duties/sync/{epoch}:
+    $ref: "./apis/validator/duties/sync.yaml"
+  /eth/v1/validator/duties/ptc/{epoch}:
+    $ref: "./apis/validator/duties/ptc.yaml"
+  /eth/v3/validator/blocks/{slot}:
+    $ref: "./apis/validator/block.v3.yaml"
+  /eth/v4/validator/blocks/{slot}:
+    $ref: "./apis/validator/block.v4.yaml"
+  /eth/v1/validator/attestation_data:
+    $ref: "./apis/validator/attestation_data.yaml"
+  /eth/v1/validator/payload_attestation_data:
+    $ref: "./apis/validator/payload_attestation_data.yaml"
+  /eth/v2/validator/aggregate_attestation:
+    $ref: "./apis/validator/aggregate_attestation.v2.yaml"
+  /eth/v2/validator/aggregate_and_proofs:
+    $ref: "./apis/validator/aggregate_and_proofs.v2.yaml"
+  /eth/v1/validator/beacon_committee_subscriptions:
+    $ref: "./apis/validator/beacon_committee_subscriptions.yaml"
+  /eth/v1/validator/sync_committee_subscriptions:
+    $ref: "./apis/validator/sync_committee_subscriptions.yaml"
+  /eth/v1/validator/beacon_committee_selections:
+    $ref: "./apis/validator/beacon_committee_selections.yaml"
+  /eth/v1/validator/sync_committee_contribution:
+    $ref: "./apis/validator/sync_committee_contribution.yaml"
+  /eth/v1/validator/sync_committee_selections:
+    $ref: "./apis/validator/sync_committee_selections.yaml"
+  /eth/v1/validator/contribution_and_proofs:
+    $ref: "./apis/validator/sync_committee_contribution_and_proof.yaml"
+  /eth/v1/validator/prepare_beacon_proposer:
+    $ref: "./apis/validator/prepare_beacon_proposer.yaml"
+  /eth/v1/validator/register_validator:
+    $ref: "./apis/validator/register_validator.yaml"
+  /eth/v1/validator/proposer_preferences:
+    $ref: "./apis/validator/proposer_preferences.yaml"
+  /eth/v1/validator/builder_preferences:
+    $ref: "./apis/validator/builder_preferences.yaml"
+  /eth/v1/validator/liveness/{epoch}:
+    $ref: "./apis/validator/liveness.yaml"
+  /eth/v1/validator/execution_payload_envelopes/{slot}/{beacon_block_root}:
+    $ref: "./apis/validator/execution_payload_envelope.yaml"
+
+  /eth/v1/events:
+    $ref: "./apis/eventstream/index.yaml"
+
+
+components:
+  schemas:
+    BroadcastValidation:
+      $ref: './types/api.yaml#/BroadcastValidation'
+    ValidatorResponse:
+      $ref: './types/api.yaml#/ValidatorResponse'
+    ValidatorBalanceResponse:
+      $ref: './types/api.yaml#/ValidatorBalanceResponse'
+    ValidatorIdentityResponse:
+      $ref: './types/api.yaml#/ValidatorIdentityResponse'
+    BuilderResponse:
+      $ref: './types/api.yaml#/BuilderResponse'
+    ValidatorStatus:
+      $ref: './types/api.yaml#/ValidatorStatus'
+    BuilderStatus:
+      $ref: './types/api.yaml#/BuilderStatus'
+    Committee:
+      $ref: './types/api.yaml#/Committee'
+    AttesterDuty:
+      $ref: './types/duty.yaml#/AttesterDuty'
+    ProposerDuty:
+      $ref: './types/duty.yaml#/ProposerDuty'
+    PtcDuty:
+      $ref: './types/duty.yaml#/PtcDuty'
+    Altair.SyncDuty:
+      $ref: './types/duty.yaml#/Altair/SyncDuty'
+    BeaconCommitteeSelection:
+      $ref: './types/selection.yaml#/BeaconCommitteeSelection'
+    SyncCommitteeSelection:
+      $ref: './types/selection.yaml#/SyncCommitteeSelection'
+    Fork:
+      $ref: './types/misc.yaml#/Fork'
+    Checkpoint:
+      $ref: './types/misc.yaml#/Checkpoint'
+    Uint64:
+      $ref: './types/primitive.yaml#/Uint64'
+    NetworkIdentity:
+      $ref: './types/p2p.yaml#/NetworkIdentity'
+    Peer:
+      $ref: './types/p2p.yaml#/Peer'
+    PeerId:
+      $ref: './types/p2p.yaml#/PeerId'
+    PeerConnectionState:
+      $ref: './types/p2p.yaml#/PeerConnectionState'
+    PeerConnectionDirection:
+      $ref: './types/p2p.yaml#/PeerConnectionDirection'
+    GenesisTime:
+      $ref: './types/primitive.yaml#/GenesisTime'
+    Version:
+      $ref: './types/primitive.yaml#/Version'
+    ClientVersionV1:
+      $ref: './types/node.yaml#/ClientVersionV1'
+    ForkVersion:
+      $ref: './types/primitive.yaml#/ForkVersion'
+    DependentRoot:
+      $ref: './types/primitive.yaml#/DependentRoot'
+    ExecutionOptimistic:
+      $ref: './types/primitive.yaml#/ExecutionOptimistic'
+    Finalized:
+      $ref: './types/primitive.yaml#/Finalized'
+    Root:
+      $ref: './types/primitive.yaml#/Root'
+    Graffiti:
+      $ref: './types/primitive.yaml#/Graffiti'
+    Signature:
+      $ref: './types/primitive.yaml#/Signature'
+    ErrorMessage:
+      $ref: './types/http.yaml#/ErrorMessage'
+    IndexedErrorMessage:
+      $ref: './types/http.yaml#/IndexedErrorMessage'
+    Phase0.BeaconState:
+      $ref: './types/phase0/state.yaml#/Phase0/BeaconState'
+    Phase0.BeaconBlock:
+      $ref: './types/phase0/block.yaml#/Phase0/BeaconBlock'
+    Phase0.SignedBeaconBlock:
+      $ref: './types/phase0/block.yaml#/Phase0/SignedBeaconBlock'
+    Phase0.SignedBeaconBlockHeader:
+      $ref: './types/phase0/block.yaml#/Phase0/SignedBeaconBlockHeader'
+    Phase0.AttesterSlashing:
+      $ref: './types/phase0/attester_slashing.yaml#/Phase0/AttesterSlashing'
+    Phase0.ProposerSlashing:
+      $ref: './types/phase0/proposer_slashing.yaml#/Phase0/ProposerSlashing'
+    Phase0.SignedVoluntaryExit:
+      $ref: './types/phase0/voluntary_exit.yaml#/Phase0/SignedVoluntaryExit'
+    Phase0.SignedAggregateAndProof:
+      $ref: './types/phase0/validator.yaml#/Phase0/SignedAggregateAndProof'
+    Phase0.Attestation:
+      $ref: './types/phase0/attestation.yaml#/Phase0/Attestation'
+    Phase0.AttestationData:
+      $ref: './types/phase0/attestation_data.yaml#/Phase0/AttestationData'
+    Altair.BeaconBlock:
+      $ref: './types/altair/block.yaml#/Altair/BeaconBlock'
+    Altair.SignedBeaconBlock:
+      $ref: './types/altair/block.yaml#/Altair/SignedBeaconBlock'
+    Altair.LightClientBootstrap:
+      $ref: './types/altair/light_client.yaml#/Altair/LightClientBootstrap'
+    Altair.LightClientUpdate:
+      $ref: './types/altair/light_client.yaml#/Altair/LightClientUpdate'
+    Altair.LightClientFinalityUpdate:
+      $ref: './types/altair/light_client.yaml#/Altair/LightClientFinalityUpdate'
+    Altair.LightClientOptimisticUpdate:
+      $ref: './types/altair/light_client.yaml#/Altair/LightClientOptimisticUpdate'
+    Altair.BeaconState:
+      $ref: './types/altair/state.yaml#/Altair/BeaconState'
+    Altair.SyncCommitteeSignature:
+      $ref: './types/altair/sync_committee.yaml#/Altair/SyncCommitteeSignature'
+    Altair.SyncCommitteeSubscription:
+      $ref: './types/altair/sync_committee.yaml#/Altair/SyncCommitteeSubscription'
+    Altair.ContributionAndProof:
+      $ref: './types/altair/sync_committee.yaml#/Altair/ContributionAndProof'
+    Altair.SignedContributionAndProof:
+      $ref: './types/altair/sync_committee.yaml#/Altair/SignedContributionAndProof'
+    Altair.SyncCommitteeContribution:
+      $ref: './types/altair/sync_committee.yaml#/Altair/SyncCommitteeContribution'
+    Altair.SyncCommittee:
+      $ref: './types/altair/sync_committee.yaml#/Altair/SyncCommitteeByValidatorIndices'
+    ExecutionAddress:
+      $ref: './types/primitive.yaml#/ExecutionAddress'
+    Bellatrix.BeaconState:
+      $ref: './types/bellatrix/state.yaml#/Bellatrix/BeaconState'
+    Bellatrix.BeaconBlock:
+      $ref: './types/bellatrix/block.yaml#/Bellatrix/BeaconBlock'
+    Bellatrix.SignedBeaconBlock:
+      $ref: './types/bellatrix/block.yaml#/Bellatrix/SignedBeaconBlock'
+    Bellatrix.BlindedBeaconBlock:
+      $ref: './types/bellatrix/block.yaml#/Bellatrix/BlindedBeaconBlock'
+    Bellatrix.SignedBlindedBeaconBlock:
+      $ref: './types/bellatrix/block.yaml#/Bellatrix/SignedBlindedBeaconBlock'
+    ConsensusVersion:
+      type: string
+      enum: [phase0, altair, bellatrix, capella, deneb, electra, fulu, gloas]
+      example: "gloas"
+    SignedValidatorRegistration:
+      $ref: './types/registration.yaml#/SignedValidatorRegistration'
+    Capella.BeaconState:
+      $ref: './types/capella/state.yaml#/Capella/BeaconState'
+    Capella.BeaconBlock:
+      $ref: './types/capella/block.yaml#/Capella/BeaconBlock'
+    Capella.SignedBeaconBlock:
+      $ref: './types/capella/block.yaml#/Capella/SignedBeaconBlock'
+    Capella.BlindedBeaconBlock:
+      $ref: './types/capella/block.yaml#/Capella/BlindedBeaconBlock'
+    Capella.SignedBlindedBeaconBlock:
+      $ref: './types/capella/block.yaml#/Capella/SignedBlindedBeaconBlock'
+    Capella.LightClientBootstrap:
+      $ref: './types/capella/light_client.yaml#/Capella/LightClientBootstrap'
+    Capella.LightClientUpdate:
+      $ref: './types/capella/light_client.yaml#/Capella/LightClientUpdate'
+    Capella.LightClientFinalityUpdate:
+      $ref: './types/capella/light_client.yaml#/Capella/LightClientFinalityUpdate'
+    Capella.LightClientOptimisticUpdate:
+      $ref: './types/capella/light_client.yaml#/Capella/LightClientOptimisticUpdate'
+    Capella.SignedBLSToExecutionChange:
+      $ref: './types/capella/bls_to_execution_change.yaml#/Capella/SignedBLSToExecutionChange'
+    Capella.Withdrawal:
+      $ref: './types/capella/withdrawal.yaml#/Capella/Withdrawal'
+    Deneb.BeaconState:
+      $ref: './types/deneb/state.yaml#/Deneb/BeaconState'
+    Deneb.BeaconBlock:
+      $ref: './types/deneb/block.yaml#/Deneb/BeaconBlock'
+    Deneb.BlockContents:
+      $ref: './types/deneb/block_contents.yaml#/Deneb/BlockContents'
+    Deneb.SignedBeaconBlock:
+      $ref: './types/deneb/block.yaml#/Deneb/SignedBeaconBlock'
+    Deneb.SignedBlockContents:
+      $ref: './types/deneb/block_contents.yaml#/Deneb/SignedBlockContents'
+    Deneb.BlindedBeaconBlock:
+      $ref: './types/deneb/block.yaml#/Deneb/BlindedBeaconBlock'
+    Deneb.SignedBlindedBeaconBlock:
+      $ref: './types/deneb/block.yaml#/Deneb/SignedBlindedBeaconBlock'
+    Deneb.LightClientBootstrap:
+      $ref: './types/deneb/light_client.yaml#/Deneb/LightClientBootstrap'
+    Deneb.LightClientUpdate:
+      $ref: './types/deneb/light_client.yaml#/Deneb/LightClientUpdate'
+    Deneb.LightClientFinalityUpdate:
+      $ref: './types/deneb/light_client.yaml#/Deneb/LightClientFinalityUpdate'
+    Deneb.LightClientOptimisticUpdate:
+      $ref: './types/deneb/light_client.yaml#/Deneb/LightClientOptimisticUpdate'
+    Blob:
+      $ref: './types/primitive.yaml#/Blob'
+    Blobs:
+      $ref: './types/deneb/block_contents.yaml#/Deneb/Blobs'
+    VersionedHash:
+      $ref: './types/primitive.yaml#/VersionedHash'
+    Electra.BeaconState:
+      $ref: './types/electra/state.yaml#/Electra/BeaconState'
+    Electra.BlockContents:
+      $ref: './types/electra/block_contents.yaml#/Electra/BlockContents'
+    Electra.SignedBeaconBlock:
+      $ref: './types/electra/block.yaml#/Electra/SignedBeaconBlock'
+    Electra.SignedBlockContents:
+      $ref: './types/electra/block_contents.yaml#/Electra/SignedBlockContents'
+    Electra.BlindedBeaconBlock:
+      $ref: './types/electra/block.yaml#/Electra/BlindedBeaconBlock'
+    Electra.SignedBlindedBeaconBlock:
+      $ref: './types/electra/block.yaml#/Electra/SignedBlindedBeaconBlock'
+    Electra.Attestation:
+      $ref: './types/electra/attestation.yaml#/Electra/Attestation'
+    Electra.SingleAttestation:
+      $ref: './types/electra/attestation.yaml#/Electra/SingleAttestation'
+    Electra.AttesterSlashing:
+      $ref: './types/electra/attester_slashing.yaml#/Electra/AttesterSlashing'
+    Electra.SignedAggregateAndProof:
+      $ref: './types/electra/validator.yaml#/Electra/SignedAggregateAndProof'
+    Electra.LightClientBootstrap:
+      $ref: './types/electra/light_client.yaml#/Electra/LightClientBootstrap'
+    Electra.LightClientUpdate:
+      $ref: './types/electra/light_client.yaml#/Electra/LightClientUpdate'
+    Electra.LightClientFinalityUpdate:
+      $ref: './types/electra/light_client.yaml#/Electra/LightClientFinalityUpdate'
+    Electra.LightClientOptimisticUpdate:
+      $ref: './types/electra/light_client.yaml#/Electra/LightClientOptimisticUpdate'
+    Electra.PendingDeposit:
+      $ref: './types/electra/deposit.yaml#/Electra/PendingDeposit'
+    Electra.PendingDeposits:
+      $ref: './types/electra/deposit.yaml#/Electra/PendingDeposits'
+    Electra.PendingConsolidation:
+      $ref: './types/electra/consolidation.yaml#/Electra/PendingConsolidation'
+    Electra.PendingConsolidations:
+      $ref: './types/electra/consolidation.yaml#/Electra/PendingConsolidations'
+    Electra.PendingPartialWithdrawal:
+      $ref: './types/electra/withdrawal.yaml#/Electra/PendingPartialWithdrawal'
+    Electra.PendingPartialWithdrawals:
+      $ref: './types/electra/withdrawal.yaml#/Electra/PendingPartialWithdrawals'
+    Fulu.BeaconState:
+      $ref: './types/fulu/state.yaml#/Fulu/BeaconState'
+    Gloas.PendingDeposits:
+      $ref: './types/gloas/deposit.yaml#/Gloas/PendingDeposits'
+    Gloas.PendingPartialWithdrawals:
+      $ref: './types/gloas/withdrawal.yaml#/Gloas/PendingPartialWithdrawals'
+    Gloas.PendingConsolidations:
+      $ref: './types/gloas/consolidation.yaml#/Gloas/PendingConsolidations'
+    Gloas.BeaconState:
+      $ref: './types/gloas/state.yaml#/Gloas/BeaconState'
+    Gloas.LightClientBootstrap:
+      $ref: './types/gloas/light_client.yaml#/Gloas/LightClientBootstrap'
+    Gloas.LightClientUpdate:
+      $ref: './types/gloas/light_client.yaml#/Gloas/LightClientUpdate'
+    Gloas.LightClientFinalityUpdate:
+      $ref: './types/gloas/light_client.yaml#/Gloas/LightClientFinalityUpdate'
+    Gloas.LightClientOptimisticUpdate:
+      $ref: './types/gloas/light_client.yaml#/Gloas/LightClientOptimisticUpdate'
+    Gloas.BeaconBlock:
+      $ref: "./types/gloas/block.yaml#/Gloas/BeaconBlock"
+    Gloas.SignedBeaconBlock:
+      $ref: "./types/gloas/block.yaml#/Gloas/SignedBeaconBlock"
+    Gloas.Builder:
+      $ref: "./types/gloas/builder.yaml#/Gloas/Builder"
+    Gloas.BlockContents:
+      $ref: "./types/gloas/block_contents.yaml#/Gloas/BlockContents"
+    Gloas.ExecutionPayloadBid:
+      $ref: "./types/gloas/execution_payload_bid.yaml#/Gloas/ExecutionPayloadBid"
+    Gloas.SignedExecutionPayloadBid:
+      $ref: "./types/gloas/execution_payload_bid.yaml#/Gloas/SignedExecutionPayloadBid"
+    Gloas.ExecutionPayload:
+      $ref: "./types/gloas/execution_payload.yaml#/Gloas/ExecutionPayload"
+    Gloas.ExecutionPayloadEnvelope:
+      $ref: "./types/gloas/execution_payload_envelope.yaml#/Gloas/ExecutionPayloadEnvelope"
+    Gloas.SignedExecutionPayloadEnvelope:
+      $ref: "./types/gloas/execution_payload_envelope.yaml#/Gloas/SignedExecutionPayloadEnvelope"
+    Gloas.SignedExecutionPayloadEnvelopeContents:
+      $ref: "./types/gloas/execution_payload_envelope.yaml#/Gloas/SignedExecutionPayloadEnvelopeContents"
+    Gloas.PayloadAttestationData:
+      $ref: "./types/gloas/payload_attestation.yaml#/Gloas/PayloadAttestationData"
+    Gloas.PayloadTimelinessCommittee:
+      $ref: "./types/gloas/payload_timeliness_committee.yaml#/Gloas/PayloadTimelinessCommittee"
+    Gloas.PayloadAttestation:
+      $ref: "./types/gloas/payload_attestation.yaml#/Gloas/PayloadAttestation"
+    Gloas.PayloadAttestationMessage:
+      $ref: "./types/gloas/payload_attestation.yaml#/Gloas/PayloadAttestationMessage"
+    Gloas.Attestation:
+      $ref: "./types/gloas/attestation.yaml#/Gloas/Attestation"
+    Gloas.AttesterSlashing:
+      $ref: "./types/gloas/attester_slashing.yaml#/Gloas/AttesterSlashing"
+    Gloas.SignedAggregateAndProof:
+      $ref: "./types/gloas/validator.yaml#/Gloas/SignedAggregateAndProof"
+    Gloas.ProposerPreferences:
+      $ref: "./types/gloas/proposer_preferences.yaml#/Gloas/ProposerPreferences"
+    Gloas.SignedProposerPreferences:
+      $ref: "./types/gloas/proposer_preferences.yaml#/Gloas/SignedProposerPreferences"
+    Fulu.BlockContents:
+      $ref: "./types/fulu/block_contents.yaml#/Fulu/BlockContents"
+    Fulu.SignedBlockContents:
+      $ref: "./types/fulu/block_contents.yaml#/Fulu/SignedBlockContents"
+    Fulu.DataColumnSidecars:
+      $ref: "./types/fulu/data_column_sidecar.yaml#/Fulu/DataColumnSidecars"
+    Gloas.DataColumnSidecars:
+      $ref: "./types/gloas/data_column_sidecar.yaml#/Gloas/DataColumnSidecars"
+    Gloas.BuilderRequestAuth:
+      $ref: "./types/gloas/request_auth.yaml#/Gloas/BuilderRequestAuth"
+    Gloas.SignedBuilderRequestAuth:
+      $ref: "./types/gloas/request_auth.yaml#/Gloas/SignedBuilderRequestAuth"
+    Gloas.BuilderEntry:
+      $ref: "./types/gloas/builder_entry.yaml#/Gloas/BuilderEntry"
+    Gloas.BuilderConfig:
+      $ref: "./types/gloas/builder_entry.yaml#/Gloas/BuilderConfig"
+    Gloas.BuilderPreferencesEntry:
+      $ref: "./types/gloas/builder_preferences_entry.yaml#/Gloas/BuilderPreferencesEntry"
+    Gloas.BuilderPendingWithdrawal:
+      $ref: "./types/gloas/builder.yaml#/Gloas/BuilderPendingWithdrawal"
+    Gloas.BuilderPendingWithdrawals:
+      $ref: "./types/gloas/builder.yaml#/Gloas/BuilderPendingWithdrawals"
+    Gloas.BuilderPendingPayment:
+      $ref: "./types/gloas/builder.yaml#/Gloas/BuilderPendingPayment"
+    Gloas.BuilderPendingPayments:
+      $ref: "./types/gloas/builder.yaml#/Gloas/BuilderPendingPayments"
+    Node:
+      $ref: './types/fork_choice.yaml#/Node'
+    ExtraData:
+      $ref: './types/fork_choice.yaml#/ExtraData'
+    NodeV2:
+      $ref: './types/fork_choice.yaml#/NodeV2'
+    SyncCommitteeRewards:
+      $ref: './types/rewards.yaml#/SyncCommitteeRewards'
+    BlockRewards:
+      $ref: './types/rewards.yaml#/BlockRewards'
+    AttestationsRewards:
+      $ref: './types/rewards.yaml#/AttestationsRewards'
+
+  parameters:
+    StateId:
+      $ref: './params/index.yaml#/StateId'
+    BlockId:
+      $ref: './params/index.yaml#/BlockId'
+    BlockRoot:
+      $ref: './params/index.yaml#/BlockRoot'
+    SkipRandaoVerification:
+      $ref: './params/index.yaml#/SkipRandaoVerification'
+
+  responses:
+    InvalidRequest:
+      $ref: './types/http.yaml#/InvalidRequest'
+    NotFound:
+      $ref: './types/http.yaml#/NotFound'
+    NotAcceptable:
+      $ref: './types/http.yaml#/NotAcceptable'
+    UnsupportedMediaType:
+      $ref: './types/http.yaml#/UnsupportedMediaType'
+    InternalError:
+      $ref: './types/http.yaml#/InternalError'
+    NotImplementedError:
+      $ref: './types/http.yaml#/NotImplementedError'
+    CurrentlySyncing:
+      $ref: './types/http.yaml#/CurrentlySyncing'
+
+  headers:
+    Eth-Consensus-Version:
+      description: |
+        The active consensus version to which the data belongs. Required in response so client can deserialize returned json or ssz data
+        more effectively.
+      required: true
+      schema:
+        $ref: '#/components/schemas/ConsensusVersion'
+    Eth-Execution-Payload-Blinded:
+      description: Required in response so client can deserialize returned json or ssz data to the correct object.
+      required: true
+      schema:
+        type: boolean
+    Eth-Execution-Payload-Value:
+      description: |
+        Execution payload value in Wei. Required in response so client can determine relative value
+        of execution payloads.
+      required: true
+      schema:
+        $ref: './types/primitive.yaml#/Wei'
+    Eth-Consensus-Block-Value:
+      description: |
+        Consensus rewards for this block in Wei paid to the proposer. The
+        rewards value is the sum of values of the proposer rewards from
+        attestations, sync committees and slashings included in the proposal.
+        Required in response so client can determine relative value of
+        consensus blocks.
+      required: true
+      schema:
+        $ref: './types/primitive.yaml#/Wei'
+    Eth-Execution-Payload-Included:
+      description: |
+        Indicates whether the execution payload envelope, blobs, and KZG proofs are included in the response. Required in response so client can deserialize returned data.
+      required: true
+      schema:
+        type: boolean
