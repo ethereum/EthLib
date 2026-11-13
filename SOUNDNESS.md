@@ -3986,6 +3986,15 @@ They are the root, the fork, the finality checkpoints, the RANDAO mix, the three
 `stateRoot_blockStates` (`Consensus/Proofs/BeaconApi/StateQueries.lean`) shows that, in a store that the handlers reach, the root of the state kept for a known block is the state root of that block.
 `stateRoot_resolveStateId_root` follows from it: a state named by its root has that root, as the source requires.
 `finalityCheckpoints_genesis` shows that the genesis state that deposits build, which exists only at Phase 0, has its three checkpoints at epoch 0 with the zero root.
+`finalityCheckpoints_of_genesis_chainSteps` extends this to each state that a chain from that genesis state reaches, across forks.
+A state before finalization, whose finalized epoch is still 0, reports a finalized checkpoint of epoch 0 and the zero root, as the source requires.
+A justified checkpoint at epoch 0 is reported with the zero root too.
+Both follow from `GenesisCheckpointsZero.of_chainSteps`, which shows that along a chain each checkpoint at epoch 0 keeps the zero root.
+Justification returns the state unchanged when `getCurrentEpoch state ≤ GENESIS_EPOCH + 1`, as `processJustificationAndFinalization_reads` states.
+Later it justifies only the previous or the current epoch, and copies the other checkpoints, by `weighJustificationAndFinalization_checkpoints`.
+The current epoch is then at least 2, so both epochs are after epoch 0, by `getPreviousEpoch_toNat`.
+The slot step, the rest of the epoch transition, each block and each upgrade copy the three checkpoints.
+Their frames say so: `frame_processSlot`, `processEpoch_frame`, `frame_processBlock` and `upgradeFrame_upgradeNext`.
 `pendingDeposits_error_iff` and the five theorems beside it show that each field that a fork adds gives the error with code 400 exactly when the state is before that fork.
 The Python suite (`bindings/python/tests/consensus/test_beacon_api_state_queries.py`) checks the root against the hash tree root of the state.
 It checks each other answer against the JSON of the whole state, on one state of the minimal preset per fork, with a distinct value in each field that a query reads.
@@ -4303,7 +4312,6 @@ Points that remain open:
 - The source has the `randao` query answer "Invalid state ID or epoch" with code 400, and its example message is "Epoch is out of range for the `randao_mixes` of the state", but it names no range.
   EthLib reads the circular buffer at the epoch modulo its length and refuses no epoch.
   So an epoch outside the window that the buffer holds gives the mix of another epoch.
-- The source says that a state before finalization reports epoch 0 and the zero root; `finalityCheckpoints_genesis` covers only the genesis state, and no theorem yet covers the later states before finalization.
 - The source puts the `Eth-Consensus-Version` header on the SSZ answers too; the SSZ export gives the bytes only, and the version is the one of the JSON answer.
 - The source fixes the proposer lookahead at 64 items, the mainnet value; EthLib follows the preset, as the SSZ type of the source does, so the minimal preset gives 16.
 - The schema describes the nine validator statuses in words only.
