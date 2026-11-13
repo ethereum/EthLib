@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.Proofs.ForkChoice.BlockStates
+public import EthLib.Consensus.Proofs.DirectSafety.Hashes
 public import EthLib.Consensus.Proofs.ForkChoice.Checkpoints
 public import EthLib.Consensus.Proofs.Transition.RootLinks
 
@@ -828,5 +829,284 @@ theorem Store.Reachable.postState_finalized_ancestor {config : Config}
         Store.getCheckpointBlock_ok_iff.mpr ⟨startF, startedF, walk⟩⟩
     · exact .inr bad
   · exact .inr bad
+
+/-! ## Runs of the held states -/
+
+/-- The last state of a run is one of its hashed objects. -/
+private theorem state_mem_hashObjects {config : Config} {checks : SignatureChecks}
+    {first last : ForkedBeaconState preset} (run : Run config checks first last) :
+    DirectSafety.HashObject.state last ∈ run.hashObjects := by
+  cases run with
+  | nil => simp [Run.hashObjects]
+  | snoc pre step =>
+    exact List.mem_append.mpr (.inr (List.mem_append.mpr (.inl (by simp))))
+
+/-- Slots of one fork before its next fork extend a run with slot steps.
+
+They add no header and keep every hashed object of the run. -/
+private theorem exists_run_of_advanceSlots {config : Config} {checks : SignatureChecks}
+    {g x : ForkedBeaconState preset} {bound : Nat} (pre : Run config checks g x)
+    (early : ∀ next ∈ config.nextFork fork,
+      bound < next.2.toNat * preset.SLOTS_PER_EPOCH.toNat) :
+    ∀ (count : Nat) {state after : BeaconState preset fork}
+      (tail : Run config checks x ⟨fork, state⟩),
+      advanceSlots config checks count state = .ok after → state.slot.toNat + count ≤ bound →
+      ∃ next : Run config checks x ⟨fork, after⟩,
+        (pre.append next).headers = (pre.append tail).headers ∧
+        (pre.append tail).hashObjects ⊆ (pre.append next).hashObjects
+  | 0, state, after, tail, computed, _ => by
+    simp only [advanceSlots, pure, Except.pure, Except.ok.injEq] at computed
+    subst computed
+    exact ⟨tail, rfl, List.Subset.refl _⟩
+  | count + 1, state, after, tail, computed, within => by
+    simp only [advanceSlots, bind_ok_iff] at computed
+    obtain ⟨middle, stepOk, rest⟩ := computed
+    have slot := advanceSlot_slot stepOk
+    have across : advanceSlotAcross config checks ⟨fork, state⟩ = .ok ⟨fork, middle⟩ := by
+      rw [advanceSlotAcross_of_before fun next scheduled => by
+        have := early next scheduled
+        omega, stepOk]
+      rfl
+    obtain ⟨next, headers, objects⟩ :=
+      exists_run_of_advanceSlots pre early count (tail.snoc (.slot across)) rest (by omega)
+    refine ⟨next, headers.trans ?_, fun object member => objects ?_⟩
+    · simp [Run.append, Run.headers, Step.headers]
+    · simp [Run.append, Run.hashObjects, member]
+
+/-- A held state on the chain of a held block is hashed by the run of that block.
+
+The run hashes the state of each block that a walk from the held block reaches. -/
+private theorem state_mem_hashObjects_of_isAncestor {config : Config}
+    {checks : SignatureChecks} {store : Store preset fork} {g a : ForkedBeaconState preset}
+    {run : Run config checks g a} {root bad : Root} {badState : BeaconState preset fork}
+    (reachedHeld : ∀ (slot : Slot) (reached : Root),
+      (·.root) <$> store.getAncestor ⟨root, .pending⟩ slot = .ok reached →
+      ∃ reachedState : BeaconState preset fork, store.blockStates[reached]? = some reachedState ∧
+        DirectSafety.HashObject.state ⟨fork, reachedState⟩ ∈ run.hashObjects)
+    (badHeld : store.blockStates[bad]? = some badState)
+    (descends : store.isAncestor ⟨root, .pending⟩ ⟨bad, .pending⟩ = .ok true) :
+    DirectSafety.HashObject.state ⟨fork, badState⟩ ∈ run.hashObjects := by
+  -- A pending ancestor is the root that the walk reaches at the slot of its block.
+  obtain ⟨slot, walk⟩ : ∃ slot : Slot,
+      (·.root) <$> store.getAncestor ⟨root, .pending⟩ slot = .ok bad := by
+    unfold Store.isAncestor at descends
+    cases known : store.block bad with
+    | error e => simp [known, bind, Except.bind] at descends
+    | ok badBlock =>
+      cases walk : store.getAncestor ⟨root, .pending⟩ badBlock.slot with
+      | error e => simp [known, walk, bind, Except.bind] at descends
+      | ok node =>
+        refine ⟨badBlock.slot, ?_⟩
+        by_cases gloas : .glamsterdam ≤ fork <;>
+          simp_all [bind, Except.bind, pure, Except.pure, Functor.map, Except.map]
+  obtain ⟨reachedState, reachedHeld', member⟩ := reachedHeld slot bad walk
+  rw [badHeld, Option.some.injEq] at reachedHeld'
+  exact reachedHeld' ▸ member
+
+/-- Two held blocks whose runs share their headers up to an epoch share its checkpoint block.
+
+The runs extend one run to the anchor, and the epoch starts at or after the anchor block. -/
+private theorem getCheckpointBlock_eq_of_checkpointPath {config : Config}
+    {checks : SignatureChecks} {store : Store preset fork}
+    {anchorBlock : BeaconBlock preset fork} {g x a b : ForkedBeaconState preset}
+    {pre : Run config checks g x} {left : Run config checks x a} {right : Run config checks x b}
+    {extraLeft extraRight : List BeaconBlockHeader} {rootLeft rootRight : Root}
+    {epoch : Epoch} {start : Slot} {checkpoint : Root}
+    (headersLeft : (pre.append left).headers = pre.headers ++ extraLeft)
+    (headersRight : (pre.append right).headers = pre.headers ++ extraRight)
+    (lastLeft : ∀ slot : Slot, anchorBlock.slot ≤ slot → ∃ reached : Root,
+      (·.root) <$> store.getAncestor ⟨rootLeft, .pending⟩ slot = .ok reached ∧
+      (((extraLeft.filter fun header => header.slot.toNat ≤ slot.toNat).getLast? = none ∧
+          SszType.hashTreeRoot anchorBlock = .ok reached) ∨
+        ∃ header, (extraLeft.filter fun header => header.slot.toNat ≤ slot.toNat).getLast? =
+            some header ∧ SszType.hashTreeRoot header = .ok reached))
+    (lastRight : ∀ slot : Slot, anchorBlock.slot ≤ slot → ∃ reached : Root,
+      (·.root) <$> store.getAncestor ⟨rootRight, .pending⟩ slot = .ok reached ∧
+      (((extraRight.filter fun header => header.slot.toNat ≤ slot.toNat).getLast? = none ∧
+          SszType.hashTreeRoot anchorBlock = .ok reached) ∨
+        ∃ header, (extraRight.filter fun header => header.slot.toNat ≤ slot.toNat).getLast? =
+            some header ∧ SszType.hashTreeRoot header = .ok reached))
+    (startOk : computeStartSlotAtEpoch preset epoch = .ok start)
+    (later : anchorBlock.slot ≤ start)
+    (paths : (pre.append left).checkpointPath epoch = (pre.append right).checkpointPath epoch)
+    (found : store.getCheckpointBlock rootLeft epoch = .ok checkpoint) :
+    store.getCheckpointBlock rootRight epoch = .ok checkpoint := by
+  have startEq := (computeStartSlotAtEpoch_ok_iff.mp startOk).2
+  -- Past the shared run to the anchor, the two runs have the same headers up to the epoch.
+  have same : (extraLeft.filter fun header => header.slot.toNat ≤ start.toNat) =
+      extraRight.filter fun header => header.slot.toNat ≤ start.toNat := by
+    unfold Run.checkpointPath at paths
+    rw [headersLeft, headersRight, List.filter_append, List.filter_append] at paths
+    simpa only [startEq] using List.append_cancel_left paths
+  obtain ⟨start', startOk', walkLeft⟩ := Store.getCheckpointBlock_ok_iff.mp found
+  rw [startOk, Except.ok.injEq] at startOk'
+  subst start'
+  obtain ⟨reachedLeft, walkLeft', casesLeft⟩ := lastLeft start later
+  rw [walkLeft, Except.ok.injEq] at walkLeft'
+  subst reachedLeft
+  obtain ⟨reachedRight, walkRight, casesRight⟩ := lastRight start later
+  refine Store.getCheckpointBlock_ok_iff.mpr ⟨start, startOk, ?_⟩
+  rw [walkRight, Except.ok.injEq]
+  rw [← same] at casesRight
+  rcases casesLeft with ⟨noneLeft, hashLeft⟩ | ⟨header, lastLeft, hashLeft⟩ <;>
+    rcases casesRight with ⟨noneRight, hashRight⟩ | ⟨header', lastRight, hashRight⟩
+  · exact Except.ok.inj (hashRight.symm.trans hashLeft)
+  · rw [noneLeft] at lastRight
+    cases lastRight
+  · rw [lastLeft] at noneRight
+    cases noneRight
+  · rw [lastLeft, Option.some.injEq] at lastRight
+    subst lastRight
+    exact Except.ok.inj (hashRight.symm.trans hashLeft)
+
+section StoreRuns
+
+variable [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat] [NeZero preset.SYNC_COMMITTEE_SIZE.toNat]
+  [NeZero preset.MAX_COMMITTEES_PER_SLOT.toNat] [NeZero preset.PTC_SIZE.toNat]
+  [NeZero preset.INCLUSION_LIST_COMMITTEE_SIZE.toNat]
+
+/-- A held state follows from the anchor state by a run whose blocks are those of its chain.
+
+Every block of the store was imported with one set of signature checks.
+
+No upgrade is due at any held slot, so the in-fork transition of the store is a run of steps.
+
+The run adds the headers of the blocks on the chain to the headers of the run to the anchor.
+
+A walk from the held block reaches a held state whose state the run hashes.
+
+From the slot of the anchor block on, it reaches the last block of the chain at or below the slot.
+
+That block is the anchor block when the chain has no later block at or below the slot. -/
+private theorem Store.Reachable.exists_run_of_blockState {config : Config}
+    {checks : SignatureChecks} {anchorState : BeaconState preset fork}
+    {anchorBlock : BeaconBlock preset fork} {store : Store preset fork}
+    {g : ForkedBeaconState preset}
+    (reachable : Store.Reachable config anchorState anchorBlock store)
+    (linked : store.Linked anchorBlock.parentRoot)
+    (unknownParent : store.blocks[anchorBlock.parentRoot]? = none)
+    (imported : ∀ ⦃root : Root⦄ ⦃block : BeaconBlock preset fork⦄
+      ⦃state : BeaconState preset fork⦄, store.blocks[root]? = some block →
+      store.blockStates[root]? = some state → block ≠ anchorBlock →
+      ∃ (parent : BeaconState preset fork) (engine : ExecutionEngine preset fork)
+        (signed : SignedBeaconBlock preset fork), signed.message = block ∧
+        store.blockStates[block.parentRoot]? = some parent ∧
+        stateTransition config checks engine parent signed true = .ok state)
+    (early : ∀ next ∈ config.nextFork fork, ∀ ⦃root : Root⦄ ⦃state : BeaconState preset fork⦄,
+      store.blockStates[root]? = some state →
+      state.slot.toNat < next.2.toNat * preset.SLOTS_PER_EPOCH.toNat)
+    (pre : Run config checks g ⟨fork, anchorState⟩)
+    {root : Root} {state : BeaconState preset fork}
+    (held : store.blockStates[root]? = some state) :
+    ∃ (tail : Run config checks ⟨fork, anchorState⟩ ⟨fork, state⟩)
+      (extra : List BeaconBlockHeader),
+      (pre.append tail).headers = pre.headers ++ extra ∧
+      (∀ (slot : Slot) (reached : Root),
+        (·.root) <$> store.getAncestor ⟨root, .pending⟩ slot = .ok reached →
+        ∃ reachedState : BeaconState preset fork, store.blockStates[reached]? = some reachedState ∧
+          DirectSafety.HashObject.state ⟨fork, reachedState⟩ ∈ (pre.append tail).hashObjects) ∧
+      ∀ slot : Slot, anchorBlock.slot ≤ slot → ∃ reached : Root,
+        (·.root) <$> store.getAncestor ⟨root, .pending⟩ slot = .ok reached ∧
+        (((extra.filter fun header => header.slot.toNat ≤ slot.toNat).getLast? = none ∧
+            SszType.hashTreeRoot anchorBlock = .ok reached) ∨
+          ∃ header, (extra.filter fun header => header.slot.toNat ≤ slot.toNat).getLast? =
+              some header ∧ SszType.hashTreeRoot header = .ok reached) := by
+  obtain ⟨block, found⟩ := reachable.known_of_blockState held
+  obtain ⟨post, postOk, anchored, -⟩ := reachable.blockStatesFromParents found
+  rw [held, Option.some.injEq] at postOk
+  subst post
+  by_cases same : block = anchorBlock
+  · -- The anchor state ends the run to the anchor, and every walk from it stays at its block.
+    obtain rfl := anchored same
+    subst same
+    refine ⟨.nil, [], by simp [Run.append], fun slot reached walk => ?_, fun slot later =>
+      ⟨root, ?_, .inl ⟨by simp, reachable.root found⟩⟩⟩
+    · refine ⟨state, ?_, state_mem_hashObjects (pre.append .nil)⟩
+      by_cases below : block.slot ≤ slot
+      · rw [Store.getAncestor_of_le found below] at walk
+        cases walk
+        exact held
+      · -- Below the anchor block the walk needs the parent of the anchor, which the store lacks.
+        obtain ⟨node, walkNode, -⟩ : ∃ node, store.getAncestor ⟨root, .pending⟩ slot = .ok node ∧
+            node.root = reached := by
+          cases reaching : store.getAncestor ⟨root, .pending⟩ slot <;>
+            simp_all [Functor.map, Except.map]
+        rw [Store.getAncestor] at walkNode
+        split at walkNode
+        · simp_all
+        · rename_i known same
+          rw [found, Option.some.injEq] at same
+          subst same
+          simp only [below, ↓reduceIte] at walkNode
+          split at walkNode
+          · simp [throw, throwThe, MonadExceptOf.throw] at walkNode
+          · rename_i parentKnown
+            rw [unknownParent] at parentKnown
+            cases parentKnown
+    · rw [Store.getAncestor_of_le found later]
+      rfl
+  obtain ⟨parent, engine, signed, message, parentHeld, transitioned⟩ :=
+    imported found held same
+  subst message
+  obtain ⟨parentBlock, parentFound, -⟩ := linked.stateAfter _ _ parentHeld
+  have lower := linked.parentsBelow _ _ _ found parentFound
+  obtain ⟨tailP, extraP, headersP, reachedP, lastP⟩ :=
+    reachable.exists_run_of_blockState linked unknownParent imported early pre parentHeld
+  have bounds := stateTransition_slot transitioned
+  obtain ⟨_, _, _, _, blockOk, _⟩ := stateTransition_ok transitioned
+  obtain ⟨bodyRoot, bodyHashed, -⟩ := latestBlockHeader_processBlock blockOk
+  have unfolded := transitioned
+  simp only [stateTransition, bind_ok_iff] at unfolded
+  obtain ⟨advanced, slotsOk, applied⟩ := unfolded
+  have advancedSlot := (processSlots_slot slotsOk).2
+  simp only [processSlots, bind_ok_iff, ensure_ok_iff] at slotsOk
+  obtain ⟨-, -, run⟩ := slotsOk
+  have bound : ∀ next ∈ config.nextFork fork,
+      signed.message.slot.toNat < next.2.toNat * preset.SLOTS_PER_EPOCH.toNat :=
+    fun next scheduled => bounds.2 ▸ early next scheduled held
+  -- The slots up to the block extend the run of the parent, and the block step follows.
+  obtain ⟨tailA, headersA, objectsA⟩ := exists_run_of_advanceSlots pre bound _ tailP run
+    (by have := UInt64.lt_iff_toNat_lt.mp bounds.1; omega)
+  have due : upgradeDue config ⟨fork, advanced⟩ = false :=
+    upgradeDue_of_before fun next scheduled => advancedSlot ▸ bound next scheduled
+  let header : BeaconBlockHeader := ⟨signed.message.slot, signed.message.proposerIndex,
+    signed.message.parentRoot, signed.message.stateRoot, bodyRoot⟩
+  have headerOk : DirectSafety.blockHeader signed.message = some header := by
+    simp [DirectSafety.blockHeader, bodyHashed, Except.toOption, header]
+  have headerRoot : SszType.hashTreeRoot header = .ok root :=
+    (BeaconBlock.hashTreeRoot_header bodyHashed).trans (reachable.root found)
+  let tail := tailA.snoc (.block engine signed due applied)
+  have objects : (pre.append tailP).hashObjects ⊆ (pre.append tail).hashObjects :=
+    fun object member => List.mem_append.mpr (.inl (objectsA member))
+  refine ⟨tail, extraP ++ [header], ?_, fun slot reached walk => ?_, fun slot later => ?_⟩
+  · show (pre.append tailA).headers ++ (DirectSafety.blockHeader signed.message).toList = _
+    rw [headersA, headersP, headerOk]
+    simp
+  · by_cases above : signed.message.slot ≤ slot
+    · rw [Store.getAncestor_of_le found above] at walk
+      cases walk
+      exact ⟨state, held, state_mem_hashObjects (pre.append tail)⟩
+    · rw [Store.getAncestor_root_of_parent found parentFound lower (UInt64.not_le.mp above)]
+        at walk
+      obtain ⟨reachedState, reachedHeld, member⟩ := reachedP slot reached walk
+      exact ⟨reachedState, reachedHeld, objects member⟩
+  · by_cases above : signed.message.slot ≤ slot
+    · refine ⟨root, by rw [Store.getAncestor_of_le found above]; rfl, .inr ⟨header, ?_, headerRoot⟩⟩
+      have : header.slot.toNat ≤ slot.toNat := UInt64.le_iff_toNat_le.mp above
+      simp [List.filter_append, this]
+    · rw [Store.getAncestor_root_of_parent found parentFound lower (UInt64.not_le.mp above)]
+      obtain ⟨reached, walk, cases⟩ := lastP slot later
+      refine ⟨reached, walk, ?_⟩
+      have : ¬ header.slot.toNat ≤ slot.toNat := fun le =>
+        above (UInt64.le_iff_toNat_le.mpr le)
+      simpa [List.filter_append, this] using cases
+termination_by state.slot.toNat
+decreasing_by
+  have bounds := stateTransition_slot transitioned
+  rw [bounds.2]
+  exact UInt64.lt_iff_toNat_lt.mp bounds.1
+
+
+end StoreRuns
 
 end EthLib.Consensus
