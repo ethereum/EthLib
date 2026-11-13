@@ -14,13 +14,13 @@ Node B accepts what node A sends in a handshake, and both sides derive the same 
 
 - The ECDH of the discv5 handshake is symmetric between two multiples of `G`.
 - When step 3 succeeds for node A, step 4 succeeds for node B with the keys of node A.
-- Step 4 succeeds exactly when the ID signature verifies and the ephemeral key is compressed.
+- Step 4 succeeds exactly when the ID signature, the compressed key and the ECDH pass.
 - The session keys convert to AES keys byte for byte.
 - Node B reads node A's handshake message packet back: the ID, the record, the message, the keys.
-- Node B reads a handshake message packet exactly when step 4 succeeds and the message opens.
+- Node B reads a handshake packet exactly when it decodes, step 4 succeeds and the message opens.
 - Two errors with one code come from one constructor.
 
-The round trip of step 4 assumes only that step 3 succeeded.
+The theorem that step 4 follows step 3 assumes only that step 3 succeeded.
 
 That success already holds the key agreement, the key derivation and the ID signature.
 
@@ -105,8 +105,8 @@ theorem acceptHandshake_initiateHandshake {e a b : Fn} {challengeData : ByteArra
 
 /-! ## What node B accepts -/
 
-/-- A key agreement with a point that succeeds takes a point of the curve other than `O`. -/
-theorem isOnCurve_of_ecdh_eq_ok {sk : Fn} {q : Point} {secret : ByteArray}
+/-- When the key agreement with a point succeeds, the point is on the curve and is not `O`. -/
+theorem isOnCurve_and_ne_infinity_of_ecdh_eq_ok {sk : Fn} {q : Point} {secret : ByteArray}
     (h : Discv5.ecdh sk q = .ok secret) : q.isOnCurve = true ∧ q ≠ infinity := by
   unfold Discv5.ecdh at h
   split at h
@@ -144,14 +144,14 @@ theorem acceptHandshake_eq_ok_iff {sk : Fn} {challengeData : ByteArray}
           | infinity => exact absurd rfl hinf
           | affine x y => rw [hu, size_encodeUncompressed] at hs; cases hs
       · rintro ⟨q, secret, rfl, he, hk⟩
-        obtain ⟨hon, hinf⟩ := isOnCurve_of_ecdh_eq_ok he
+        obtain ⟨hon, hinf⟩ := isOnCurve_and_ne_infinity_of_ecdh_eq_ok he
         exact ⟨q, decode_encodeCompressed hon hinf, secret, he, hk⟩
     · -- A compressed encoding of a point other than `O` has 33 bytes.
       simp only [acceptHandshake, hv, hs, true_and, ite_true, ite_false, throw, throwThe,
         MonadExceptOf.throw, bind, Except.bind, reduceCtorEq, false_iff, not_exists, not_and]
       rintro q secret rfl he -
       cases q with
-      | infinity => exact absurd rfl (isOnCurve_of_ecdh_eq_ok he).2
+      | infinity => exact absurd rfl (isOnCurve_and_ne_infinity_of_ecdh_eq_ok he).2
       | affine x y => exact hs (size_encodeCompressed x y)
   · simp [acceptHandshake, hv, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
 
