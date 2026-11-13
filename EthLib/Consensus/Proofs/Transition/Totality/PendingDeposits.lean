@@ -258,7 +258,7 @@ def depositChurnCap (config : Config) (fork : Base.Fork) : Nat :=
 The registry must stay within its limit.
 
 The churn is then at most the cap of its fork. -/
-private theorem depositChurnLimit_exists_ok (config : Config) {state : BeaconState preset fork}
+theorem depositChurnLimit_exists_ok (config : Config) {state : BeaconState preset fork}
     (within : state.RegistryWithinLimit) (summed : effectiveBalanceSum state < 2 ^ 64) :
     ∃ churn, depositChurnLimit config state = .ok churn ∧
       churn.toNat ≤ depositChurnCap config fork := by
@@ -307,11 +307,12 @@ private theorem passPendingConsolidations_fields {nextEpoch : Epoch} :
         result.1.previousEpochParticipation = state.previousEpochParticipation ∧
         result.1.currentEpochParticipation = state.currentEpochParticipation ∧
         result.1.inactivityScores = state.inactivityScores ∧
-        result.1.pendingDeposits = state.pendingDeposits
+        result.1.pendingDeposits = state.pendingDeposits ∧
+        result.1.depositBalanceToConsume = state.depositBalanceToConsume
   | [], _, _, computed => by
     simp only [passPendingConsolidations, pure, Except.pure, Except.ok.injEq] at computed
     subst computed
-    exact ⟨rfl, rfl, rfl, rfl, rfl⟩
+    exact ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
   | consolidation :: rest, state, result, computed => by
     unfold passPendingConsolidations at computed
     simp only [bind, Except.bind, pure, Except.pure] at computed
@@ -325,7 +326,7 @@ private theorem passPendingConsolidations_fields {nextEpoch : Epoch} :
       exact (passPendingConsolidations_fields (consolidations := rest) recur :)
     split at computed
     · cases computed
-      exact ⟨rfl, rfl, rfl, rfl, rfl⟩
+      exact ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
     split at computed
     · cases computed
     split at computed
@@ -351,7 +352,8 @@ private theorem processPendingConsolidations_fields {electra : .pectra ≤ fork}
       after.previousEpochParticipation = state.previousEpochParticipation ∧
       after.currentEpochParticipation = state.currentEpochParticipation ∧
       after.inactivityScores = state.inactivityScores ∧
-      after.pendingDeposits = state.pendingDeposits := by
+      after.pendingDeposits = state.pendingDeposits ∧
+      after.depositBalanceToConsume = state.depositBalanceToConsume := by
   simp only [processPendingConsolidations, bind, Except.bind, pure, Except.pure] at computed
   split at computed
   · cases computed
@@ -360,6 +362,36 @@ private theorem processPendingConsolidations_fields {electra : .pectra ≤ fork}
   rename_i passed
   cases computed
   exact passPendingConsolidations_fields passed
+
+/-- A validator from a deposit has an effective balance at most its largest one.
+
+Its largest one reads only its credentials, which it shares with the record it starts from. -/
+private theorem getValidatorFromDeposit_capped (pubkey : Cryptography.Bls.BLSPubkey)
+    (credentials : Bytes32) (amount : Gwei) :
+    (getValidatorFromDeposit preset fork pubkey credentials amount).effectiveBalance ≤
+      withdrawalMaxEffectiveBalance preset fork
+        (getValidatorFromDeposit preset fork pubkey credentials amount) := by
+  simp only [getValidatorFromDeposit, withdrawalMaxEffectiveBalance, getMaxEffectiveBalance,
+    hasCompoundingWithdrawalCredential]
+  exact Std.min_le_right
+
+/-- A pending deposit keeps each effective balance at most the largest one of its validator. -/
+private theorem applyPendingDeposit_capped {config : Config} {checks : SignatureChecks}
+    {state after : BeaconState preset fork} {deposit : PendingDeposit}
+    (computed : applyPendingDeposit config checks state deposit = .ok after)
+    (capped : ∀ validator ∈ state.validators.data,
+      validator.effectiveBalance ≤ withdrawalMaxEffectiveBalance preset fork validator) :
+    ∀ validator ∈ after.validators.data,
+      validator.effectiveBalance ≤ withdrawalMaxEffectiveBalance preset fork validator := by
+  rcases applyPendingDeposit_cases computed with rfl | ⟨_, raised⟩ | ⟨_, added⟩
+  · exact capped
+  · rw [increaseBalance_validators raised]
+    exact capped
+  · rw [addValidatorToRegistry_validators_eq_push added]
+    intro validator member
+    rcases Array.mem_push.mp member with old | rfl
+    · exact capped validator old
+    · exact getValidatorFromDeposit_capped _ _ _
 
 /-- From Electra, the pending deposits succeed under bounds on the registry and the amounts.
 
@@ -477,9 +509,13 @@ theorem processPendingDeposits_total (config : Config) (checks : SignatureChecks
     have value := (addChecked_ok_iff.mp (mapError_ok_iff.mp availableOk')).2
     rw [carriedEq]
     split <;> omega
+  have bounded := foldlM_ok_invariant
+    (fun s : BeaconState preset fork => ∀ validator ∈ s.validators.data,
+      validator.effectiveBalance ≤ withdrawalMaxEffectiveBalance preset fork validator)
+    (fun _ _ _ before step => applyPendingDeposit_capped step before) capped applies
   refine ⟨after, computed, (processPendingDeposits_registryLoad_le computed).trans loaded,
     balancesMatch_processPendingDeposits computed matched, ?_, frame.registryGrows, ?_, ?_,
-    ?_, ?_, carried⟩
+    ?_, ?_, carried, ?_⟩
   · have total := processPendingDeposits_total_le computed
     unfold pendingDepositSum
     simpa only [electra, ↓reduceDIte] using total
@@ -493,6 +529,8 @@ theorem processPendingDeposits_total (config : Config) (checks : SignatureChecks
     exact flags.1
   · subst rest
     exact flags.2
+  · subst rest
+    exact bounded
 
 /-- From Electra, the pending deposits and then the pending consolidations succeed under bounds.
 
@@ -540,20 +578,20 @@ theorem processPendingBalances_total (config : Config) (checks : SignatureChecks
   split
   · rename_i electra
     obtain ⟨deposited, depositedOk, loaded', matched', sums, grown, consolidations, epoch,
-      sized', scored', -⟩ :=
-      processPendingDeposits_total config checks state electra loaded matched sized scored funded
-        summed (churned electra) fits finalized
+      sized', scored', carried, bounded⟩ :=
+      processPendingDeposits_total config checks state electra loaded matched sized scored capped
+        funded summed (churned electra) fits finalized
     obtain ⟨after, afterOk⟩ := processPendingConsolidations_total deposited electra matched'
       (by omega) (by
         rw [consolidations]
         intro consolidation member
         have := inside electra consolidation member
         omega) (by rw [epoch]; exact fits)
-    obtain ⟨validators, previous, current, scores, pending⟩ :=
+    obtain ⟨validators, previous, current, scores, pending, churn⟩ :=
       processPendingConsolidations_fields afterOk
     have summedAfter := (processPendingConsolidations_kept afterOk).2
     refine ⟨after, by simp only [depositedOk, afterOk, bind, Except.bind], ?_,
-      (frame_processPendingConsolidations afterOk).balancesMatch matched', ?_, ?_, ?_⟩
+      (frame_processPendingConsolidations afterOk).balancesMatch matched', ?_, ?_, ?_, ?_, ?_⟩
     · unfold registryLoad at loaded' ⊢
       rw [validators, pending]
       exact loaded'
@@ -566,6 +604,13 @@ theorem processPendingBalances_total (config : Config) (checks : SignatureChecks
     · unfold pendingDepositSum at sums ⊢
       rw [summedAfter, pending]
       exact sums
-  · exact ⟨state, rfl, loaded, matched, sized, scored, Nat.le_refl _⟩
+    · intro _
+      rw [churn]
+      exact carried
+    · rw [validators]
+      exact bounded
+  · rename_i before
+    exact ⟨state, rfl, loaded, matched, sized, scored, Nat.le_refl _,
+      fun electra => absurd electra before, capped⟩
 
 end EthLib.Consensus
