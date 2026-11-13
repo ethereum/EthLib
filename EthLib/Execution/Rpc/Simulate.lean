@@ -187,6 +187,46 @@ def simulatePayload (j : Json) : Read SimulatePayload := do
     validation := ← flag "validation"
     returnFullTransactions := ← flag "returnFullTransactions" }
 
+/-! ## The defaults of a call -/
+
+namespace GenericTransaction
+
+/-- The type of a call of a simulation: its own, else type 2, as the notes say.
+
+It replaces the kind that a call infers from its fields, which reads a blob fee cap as type 3.
+
+Blob hashes make type 3, as the fixtures show, and a blob fee cap alone does not.
+
+The source is silent on the other kinds, which type 2 cannot carry.
+
+So EthLib makes authorizations type 4, and a gas price type 0, or type 1 with an access list. -/
+def simulateType (tx : GenericTransaction) : UInt8 :=
+  match tx.type with
+  | some t => t
+  | none =>
+    if tx.authorizationList.any (!·.isEmpty) then 4
+    else if tx.blobVersionedHashes.any (!·.isEmpty) then 3
+    else if tx.gasPrice.isSome then if tx.accessList.isSome then 1 else 0
+    else 2
+
+/-- A call of a simulation with its defaults filled in.
+
+The nonce is that of the sender, its default included, after the earlier calls.
+
+The gas is what the block has left.
+
+The sender is the zero address, as the notes say.
+
+The other fields keep their defaults of a call: no value, no data and no fee. -/
+def withDefaults (tx : GenericTransaction) (nonce gas : Nat) : GenericTransaction :=
+  { tx with
+    type := some tx.simulateType
+    nonce := some (tx.nonce.getD nonce)
+    gas := some (tx.gas.getD gas)
+    sender := some (tx.sender.getD (Vector.replicate 20 0)) }
+
+end GenericTransaction
+
 /-! ## The sequence of blocks -/
 
 /-- The choices that the source leaves to the node, for a simulation. -/

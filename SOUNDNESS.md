@@ -3989,15 +3989,20 @@ It passes exactly when the numbers and the times strictly increase from the base
 An account override sets each field that it gives, and keeps the others (`applyAccountOverride_nonce` and the lemmas after it).
 `stateDiff` keeps the slots that it does not name, and `state` clears them (`applyAccountOverride_stateDiff`, `applyAccountOverride_state`).
 The overrides of a block keep every account that they do not name (`applyOverrides_not_mem`), and act on each account they name as its override alone (`applyOverrides_mem`).
-The defaults of a call come with the simulated blocks.
+A call fills its defaults: its type, its nonce, its gas and the zero address as sender.
+Filling them keeps every field that the call gives, and changes no other field (`GenericTransaction.withDefaults_type` and the lemmas after it).
+The nonce is that of the sender after the earlier calls, and the gas is what the block has left.
 The execution core takes two exceptions of a simulated block as optional overrides, whose defaults leave a real block unchanged.
 They are a sender given in place of the signature, and the precompile that a call to each address runs.
 A known sender that the signature names, and that passes the rule on its code, gives the same check of the transaction (`checkInclusion_of_knownSender`, `Proofs/Transactions/Overrides.lean`).
 With the default map, a call runs the precompile at the address of its code (`precompileAddress_of_default`).
 A move leaves the addresses that are warm at the start of a transaction unchanged, as the notes say.
 
-Where the source is silent or conflicts with itself, EthLib follows the fixtures:
+Where the source is silent or conflicts with itself, EthLib follows the fixtures, else decides:
 
+- a call without a type is type 2, and type 3 with blob hashes, as the fixtures show; a blob fee cap alone keeps type 2;
+- the source is silent on a call without a type that type 2 cannot carry, so EthLib makes authorizations type 4, and a gas price type 0, or type 1 with an access list;
+- a call without `from` comes from the zero address and one without `to` creates, as the notes say, though the schema gives the reverse;
 - times strictly increase, as the notes say, though the schema lets a time stay the same;
 - a block without a time comes 12 seconds after the block before it, as the notes say, though the schema says one second;
 - a gap block comes a block time after the block before it, 12 seconds by default, and counts toward the limit of 256 blocks;
