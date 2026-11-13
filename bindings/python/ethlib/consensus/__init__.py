@@ -115,7 +115,7 @@ def is_eligible_for_bid(
     parent_hash: bytes,
     pubkey: bytes,
 ) -> bool:
-    """Whether a builder serves a request for a bid on its state at the slot, or TransitionError."""
+    """Whether a builder serves a request for a bid, given its signed registrations."""
     return _native.consensus_is_eligible_for_bid(
         name, fork, state, registry, slot, parent_hash, pubkey
     )
