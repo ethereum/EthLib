@@ -30,6 +30,7 @@ public import EthLib.Networking.Proofs.Gossip.Subnet
 public import EthLib.Networking.Proofs.Gossip.Topic
 public import EthLib.Networking.Proofs.Gossip.Validation
 public import EthLib.Networking.Proofs.Libp2p.Mplex
+public import EthLib.Networking.Proofs.Libp2p.MplexSession
 public import EthLib.Networking.Proofs.Libp2p.Multistream
 public import EthLib.Networking.Proofs.Libp2p.Upgrade
 public import EthLib.Networking.Proofs.Libp2p.PeerId

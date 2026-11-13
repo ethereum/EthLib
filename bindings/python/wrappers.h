@@ -555,6 +555,7 @@ PyObject* py_multistream_dial                             (PyObject* self, PyObj
 PyObject* py_libp2p_upgrade                               (PyObject* self, PyObject* args);
 PyObject* py_mplex_encode                                 (PyObject* self, PyObject* args);
 PyObject* py_mplex_decode                                 (PyObject* self, PyObject* args);
+PyObject* py_mplex_session                                (PyObject* self, PyObject* args);
 PyObject* py_yamux_encode                                 (PyObject* self, PyObject* args);
 PyObject* py_yamux_decode                                 (PyObject* self, PyObject* args);
 PyObject* py_libp2p_public_key                            (PyObject* self, PyObject* args);

@@ -1985,6 +1985,30 @@ The consensus layer names only Noise for TCP, and does not say whether a node ma
 The profile proposes Noise alone.
 Which messages share a packet is not modelled; the recommendation to send the header with the first proposal or answer changes no message.
 
+### The streams of an mplex connection
+
+`step`, `receive` and `send` (`Networking/Libp2p/MplexSession.lean`) check each mplex frame against the streams of one side.
+`run` checks a list of frames in turn.
+They follow [mplex, "Protocol"](https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/mplex/README.md#protocol).
+A stream is known by its ID and by whether this side opened it, since "Both parties can open a substream with the same ID".
+The flag of a frame says whether its writer opened the stream, so a received Initiator flag names a stream that the peer opened.
+A close closes the stream for its writer, and a reset closes both directions.
+A side's writes after its own close or reset, or after a reset it received, are refused as "a protocol violation".
+`step_find?_of_ne` (`Networking/Proofs/Libp2p/MplexSession.lean`) proves that an accepted frame changes the state of its own stream only.
+`run_receive_writeAfterClose` proves that once the peer has closed or reset a stream, this side refuses its later data on it.
+
+The source leaves three cases open.
+A NewStream on an ID and opener already in the table is `reusedId`: the source says only that reusing an ID after a close "may result in undefined behaviour".
+A frame on a stream not in the table is `unknownStream`, and the source fixes no reaction.
+A second close or a second reset by one side gets no error of its own, and is refused as a write after a close or a reset.
+A closed or reset stream stays in the table, so a later NewStream with its ID and opener is `reusedId`.
+Each side has its own close and its own reset, and a side may reset a stream after it closed it.
+This side writes nothing after it has received a reset, but the peer's reset may cross one that this side sent.
+Frames that the peer wrote before it learned of a reset by this side may also still arrive, so this side accepts and drops them until the peer closes or resets.
+The export decodes every frame first, and the decoder refuses data over 1 MiB and data on a close or a reset.
+So the table does not check them again.
+The stream name of a NewStream is not read, since the source says that the protocol does not consider it.
+
 ### The block headers of the eth protocol
 
 `checkHeaders` (`Execution/Network/Blocks.lean`) checks an answer to a GetBlockHeaders request of the eth protocol.
@@ -3488,12 +3512,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 402 operations and 49 size constants.
-The Python extension calls 402 of the operations and 49 of the constants.
+Lean exports 403 operations and 49 size constants.
+The Python extension calls 403 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-10203 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (1888), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (140), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (80), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (129), `module.c` (1436), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (45), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (140), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (689), `x25519.c` (21), `xmss.c` (134).
+10214 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (1888), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (140), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (80), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (138), `module.c` (1437), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (45), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (140), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (690), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

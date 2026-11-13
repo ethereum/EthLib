@@ -1022,6 +1022,9 @@
 #define DOC_mplex_decode \
   "The mplex frame at the start of the bytes, and the bytes after it."
 
+#define DOC_mplex_session \
+  "The streams of one side after the frames it receives and sends, from an empty table."
+
 #define DOC_yamux_encode \
   "The bytes of a valid yamux frame."
 
