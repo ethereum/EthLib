@@ -421,7 +421,7 @@ private theorem processBlsToExecutionChange {signed : SignedBLSToExecutionChange
   obtain ⟨_, _, _, _, _, set⟩ := processBlsToExecutionChange_ok ok
   exact setValidator set
 
-/-- Block operations keep both committees, read through master's folds of the operations. -/
+/-- Block operations keep both committees, one fold of the operations at a time. -/
 private theorem processOperations {body : BeaconBlockBody preset fork} {parentSlot : Slot}
     (ok : Consensus.processOperations config checks state body parentSlot = .ok after) :
     SameSyncCommittees state after := by
@@ -491,7 +491,7 @@ private theorem processEth1Data {before : fork < .hegota} {body : BeaconBlockBod
   rw [← rest]
   exact ⟨rfl, rfl⟩
 
-/-- A block keeps both committees, read through master's decomposition of a block.
+/-- A block keeps both committees, through each step of the block.
 
 A block frame does not carry the committees.
 

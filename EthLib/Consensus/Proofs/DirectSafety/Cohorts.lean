@@ -253,7 +253,7 @@ private theorem cohorts_credentials {signed : SignedBLSToExecutionChange}
   obtain ⟨_, found, _, _, _, set⟩ := processBlsToExecutionChange_ok ok
   exact .setValidator found set rfl
 
-/-- A pre-Electra block keeps the cohorts, read through master's decomposition of a block.
+/-- A pre-Electra block keeps the cohorts, through each step of the block.
 
 Cohorts depend only on the validators, so every step that keeps them keeps the cohorts. -/
 private theorem cohorts_block (early : fork < .pectra) {engine : ExecutionEngine preset fork}

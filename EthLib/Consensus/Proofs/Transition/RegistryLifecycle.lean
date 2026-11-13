@@ -1335,7 +1335,7 @@ end UnassignedKept
 
 The three folds before the deposits keep the registry size, so the suffix is empty after them.
 
-The remaining operations, read through master's folds, keep that suffix unassigned. -/
+The remaining operations keep that suffix unassigned, one fold at a time. -/
 private theorem newUnassigned_processOperations {body : BeaconBlockBody preset fork}
     {parentSlot : Slot} (ok : processOperations config checks state body parentSlot = .ok after) :
     UnassignedFrom state.validators.data.size after := by

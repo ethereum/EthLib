@@ -444,7 +444,7 @@ private theorem executionRequests {body : BeaconBlockBody preset fork}
     (registryLifecycle_processWithdrawalRequest ok).size_le) first withdrawals
   exact fold (fun _ _ _ h ok => h.request ok) second consolidations
 
-/-- A block keeps the sources inside the registry, read through master's decomposition.
+/-- A block keeps the sources inside the registry, through each step of the block.
 
 A block frame does not carry the queue, so each step reads its own queue lemma. -/
 private theorem block (early : fork < .glamsterdam) (holds : PendingSources state)
