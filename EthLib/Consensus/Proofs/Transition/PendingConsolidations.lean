@@ -483,11 +483,8 @@ theorem attester {slashing : AttesterSlashing preset fork}
 
 theorem voluntary {signed : SignedVoluntaryExit}
     (ok : processVoluntaryExit config checks state signed = .ok after) :
-    SamePendingQueue state after := by
-  unfold processVoluntaryExit at ok
-  simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok, liftSsz_ok] at ok
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, exited⟩ := ok
-  exact exit exited
+    SamePendingQueue state after :=
+  exit (processVoluntaryExit_initiates ok)
 
 theorem bls {signed : SignedBLSToExecutionChange}
     (ok : processBlsToExecutionChange config checks state signed = .ok after) :
@@ -943,10 +940,6 @@ private theorem increase {i : ValidatorIndex} {amount : Gwei}
     (ok : increaseBalance state i amount = .ok after) : WithdrawalKept state after :=
   of_data (congrArg (·.data) (increaseBalance_validators ok))
 
-private theorem decrease {i : ValidatorIndex} {amount : Gwei}
-    (ok : decreaseBalance state i amount = .ok after) : WithdrawalKept state after :=
-  of_data (congrArg (·.data) (decreaseBalance_validators ok))
-
 private theorem slash {i : ValidatorIndex} {whistleblower : Option ValidatorIndex}
     (ok : slashValidator config state i whistleblower = .ok after) :
     WithdrawalKept state after := by
@@ -1136,14 +1129,6 @@ private theorem attester {slashing : AttesterSlashing preset fork}
       ⟨of_data, .refl _⟩) folded
   exact both.1
 
-private theorem voluntary {signed : SignedVoluntaryExit}
-    (ok : processVoluntaryExit config checks state signed = .ok after) :
-    WithdrawalKept state after := by
-  unfold processVoluntaryExit at ok
-  simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok, liftSsz_ok] at ok
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, exited⟩ := ok
-  exact exit exited
-
 private theorem bls {signed : SignedBLSToExecutionChange}
     (ok : processBlsToExecutionChange config checks state signed = .ok after) :
     WithdrawalKept state after := by
@@ -1235,25 +1220,6 @@ private theorem blockExecution {body : BeaconBlockBody preset fork} {bellatrix :
   of_data (congrArg (·.data) (processBlockExecution_step_of (fun a b => b.validators = a.validators)
     (fun _ => rfl) (fun one two => two.trans one) (fun _ same => same)
     processWithdrawals_validators ok))
-
-private theorem syncAggregate {altair : .altair ≤ fork} {aggregate : SyncAggregate preset}
-    (ok : processSyncAggregate config checks state altair aggregate = .ok after) :
-    WithdrawalKept state after := by
-  have same : after.validators = state.validators := by
-    unfold processSyncAggregate at ok
-    simp only [bind_ok_iff] at ok
-    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, folded⟩ := ok
-    rw [← Array.foldlM_toList] at folded
-    exact foldlM_ok_invariant (fun s => s.validators = state.validators)
-      (fun _ _ _ prior ok => by
-        unfold applySyncReward at ok
-        split at ok
-        · simp only [bind_ok_iff, liftAccessor_ok] at ok
-          obtain ⟨_, raised, _, _, paid⟩ := ok
-          exact (increaseBalance_validators paid).trans
-            ((increaseBalance_validators raised).trans prior)
-        · exact (decreaseBalance_validators (liftAccessor_ok.mp ok)).trans prior) rfl folded
-  exact of_data (congrArg (·.data) same)
 
 end WithdrawalKept
 
@@ -1595,7 +1561,8 @@ private theorem block (early : fork < .glamsterdam)
         (registryLifecycle_processDeposit deposited) (WithdrawalKept.blockDeposit electra deposited)
         (frame_processDeposit deposited).slot)
       (fun exited h => h.framed (SamePendingQueue.voluntary exited)
-        (registryLifecycle_processVoluntaryExit exited) (WithdrawalKept.voluntary exited)
+        (registryLifecycle_processVoluntaryExit exited)
+        (WithdrawalKept.exit (processVoluntaryExit_initiates exited))
         (frame_processVoluntaryExit exited).slot)
       (fun changed h => h.framed (SamePendingQueue.bls changed)
         (registryLifecycle_processBlsToExecutionChange changed) (WithdrawalKept.bls changed)
@@ -1604,10 +1571,9 @@ private theorem block (early : fork < .glamsterdam)
       (fun {_ _ gloas} _ => absurd gloas noGloas) operated
   have tail : Kept last after := by
     split at synced
-    · exact fun h => h.framed (SamePendingQueue.syncAggregate synced)
-        (.of_data (congrArg (·.data) (processSyncAggregate_validators synced)))
-        (WithdrawalKept.syncAggregate synced)
-        (frame_processSyncAggregate synced).slot
+    · have same := congrArg (·.data) (processSyncAggregate_validators synced)
+      exact fun h => h.framed (SamePendingQueue.syncAggregate synced) (.of_data same)
+        (.of_data same) (frame_processSyncAggregate synced).slot
     · cases synced
       exact id
   have p := fold (fun _ _ _ h ok => h.framed (SamePendingQueue.proposer ok)
