@@ -49,18 +49,16 @@ private theorem active_stake_le_window {g x y : ForkedBeaconState preset}
   intro a b pre step before added addedOk
   have reachable := shared.append pre
   have holds := reachable.invariant_of_genesis genesis
-  have startElectra : .pectra ≤ a.fork :=
-    Nat.le_trans electra (fork_le_of_chainSteps pre.chainSteps)
   cases step with
   | slot ok =>
-    exact funding_slot startElectra before delay holds.balancesMatch holds.exitsOrdered
+    exact funding_slot before delay holds.balancesMatch holds.exitsOrdered
       (reachable.activationExitOrder genesis)
       (fun witness => reachable.pendingConsolidation_invariant genesis
         (Nat.lt_of_le_of_lt (Step.slot ok).chainStep.fork_le before) witness (by omega))
       ok added addedOk
   | block engine signed due ok =>
     have processed := (applySignedBlock_ok ok).2.1
-    have bound := funding_block startElectra before holds.balancesMatch engine signed.message
+    have bound := funding_block before holds.balancesMatch engine signed.message
       processed added (Step.balanceEvents_block before addedOk)
     have slot := (frame_processBlock processed).slot
     simpa only [getCurrentEpoch, slot, Nat.sub_self, Nat.zero_mul, Nat.add_zero] using bound
@@ -514,6 +512,8 @@ The caps add `MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT` and the consolidation r
 They add these Electra caps only if the window reaches the Electra fork epoch.
 
 The consolidation rate is computed from the active stake that the funded window allows.
+
+Before Electra at `x`, or with a delay below two epochs, that stake is the registry window.
 
 The window reads the balance events that the run replays up to `high`. -/
 theorem departure_charges_le_funded_window {g x y : ForkedBeaconState preset}

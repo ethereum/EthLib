@@ -1353,7 +1353,7 @@ private theorem inactivity_departureQueues {fork : Fork} {s t : BeaconState pres
     rfl
 
 /-- Every epoch stage keeps the slot. -/
-private theorem epochStage_slot {fork : Fork} {stage : EpochStage} {s t : BeaconState preset fork}
+theorem epochStage_slot {fork : Fork} {stage : EpochStage} {s t : BeaconState preset fork}
     (edge : EpochStage.Edge config checks stage s t) : t.slot = s.slot := by
   cases stage <;> simp only [EpochStage.Edge] at edge
   case justification => exact (activeStep_processJustificationAndFinalization edge).1
