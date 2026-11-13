@@ -2256,6 +2256,28 @@ theorem epochBeforePayments_split
     laws.trans (laws.processSlashings slashedOk) <|
     laws.trans resetFrame (laws.processPendingBalances pendingOk)⟩
 
+/-- Before Altair, the epoch transition is justification, then steps in the relation. -/
+theorem processEpoch_split_of_lt_altair (before : fork < .altair)
+    (computed : Consensus.processEpoch config checks state = .ok after) :
+    ∃ justified, processJustificationAndFinalization state = .ok justified ∧
+      R justified after := by
+  have notAltair : ¬ .altair ≤ fork := Nat.not_le_of_lt before
+  unfold Consensus.processEpoch at computed
+  simp only [notAltair, ↓reduceDIte, bind_ok_iff] at computed
+  obtain ⟨justified, justifiedOk, rewarded, rewardedOk, registered, registeredOk, slashed,
+    slashedOk, reset, resetOk, balanced, balancedOk, cleared, clearedOk, mixed, mixedOk, rooted,
+    rootedOk, rotated⟩ := computed
+  exact ⟨justified, justifiedOk,
+    laws.trans (laws.processRewardsAndPenalties rewardedOk) <|
+    laws.trans (laws.processRegistryUpdates registeredOk) <|
+    laws.trans (laws.processSlashings slashedOk) <|
+    laws.trans (laws.processEth1DataReset resetOk) <|
+    laws.trans (laws.processEffectiveBalanceUpdates balancedOk) <|
+    laws.trans (laws.processSlashingsReset clearedOk) <|
+    laws.trans (laws.processRandaoMixesReset mixedOk) <|
+    laws.trans (laws.processHistoricalRootsUpdate rootedOk)
+      (laws.processParticipationRecordUpdates rotated)⟩
+
 end EpochFrameLaws
 
 /-! ## The steps of an epoch -/
@@ -2433,23 +2455,13 @@ This holds at every fork. -/
 theorem processEpoch_frame (computed : processEpoch config checks state = .ok after) :
     ∃ justified, processJustificationAndFinalization state = .ok justified ∧
       EpochFrame justified after := by
-  unfold processEpoch at computed
-  split at computed
-  · exact processEpochAltair_frame computed
-  simp only [bind_ok_iff] at computed
-  obtain ⟨justified, justifiedOk, rewarded, rewardedOk, registered, registeredOk, slashed,
-    slashedOk, reset, resetOk, balanced, balancedOk, cleared, clearedOk, mixed, mixedOk, rooted,
-    rootedOk, rotated⟩ := computed
-  exact ⟨justified, justifiedOk,
-    ((frame_processRewardsAndPenalties rewardedOk).trans <|
-    (frame_processRegistryUpdates registeredOk).trans <|
-    (frame_processSlashings slashedOk).trans <|
-    (frame_processEth1DataReset resetOk).trans <|
-    (frame_processEffectiveBalanceUpdates balancedOk).trans <|
-    (frame_processSlashingsReset clearedOk).trans <|
-    (frame_processRandaoMixesReset mixedOk).trans <|
-    (frame_processHistoricalRootsUpdate rootedOk).trans <|
-    frame_processParticipationRecordUpdates rotated).toEpochFrame⟩
+  by_cases altair : .altair ≤ fork
+  · unfold processEpoch at computed
+    simp only [altair, ↓reduceDIte] at computed
+    exact processEpochAltair_frame computed
+  obtain ⟨justified, justifiedOk, frame⟩ :=
+    mutatorEpochFrameLaws.processEpoch_split_of_lt_altair (Nat.lt_of_not_le altair) computed
+  exact ⟨justified, justifiedOk, frame.toEpochFrame⟩
 
 /-! ## Justification and the epoch transition -/
 
