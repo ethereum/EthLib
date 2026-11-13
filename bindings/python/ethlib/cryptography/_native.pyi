@@ -1585,6 +1585,22 @@ def gossip_receive_rpc(fork: str, params: dict[str, Any], backoff_ms: int, prune
     """What the router does with one RPC, with its client choices given as tables."""
     ...
 
+def gossip_join(params: dict[str, Any], standing: list[tuple[bytes, dict[str, Any]]], now: int, topic: str, state: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    """The router after this node joins a topic, and the GRAFTs it sends."""
+    ...
+
+def gossip_leave(params: dict[str, Any], choices: dict[str, Any], now: int, topic: str, state: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    """The router after this node leaves a topic, and the PRUNEs it sends."""
+    ...
+
+def gossip_publish(fork: str, params: dict[str, Any], choices: dict[str, Any], standing: list[tuple[bytes, dict[str, Any]]], now: int, message: dict[str, Any], state: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    """The router after this node publishes a message, and where the message goes."""
+    ...
+
+def gossip_heartbeat(params: dict[str, Any], choices: dict[str, Any], ranking: list[bytes], standing: list[tuple[bytes, dict[str, Any]]], now: int, state: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    """The router after one heartbeat, and the control messages it sends."""
+    ...
+
 def receipt_reencode(fork: str, receipt: bytes) -> bytes:
     """The bytes of a receipt, decoded at the fork and encoded again with its transaction type."""
     ...

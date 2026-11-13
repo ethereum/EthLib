@@ -2154,6 +2154,75 @@ The sources leave these points open, and the router takes one reading of each.
 - The `peers.floodsub` set of v1.0 is left out: the consensus layer fixes `/meshsub/1.1.0` and names no floodsub peer.
 - A message ID that is not 20 bytes is never requested and never answered, since no consensus message has one.
 
+### The gossipsub heartbeat, topic membership and publishing
+
+`join`, `leave`, `publish` and `heartbeat` (`Networking/Gossip/Router.lean`) follow [gossipsub v1.0, "Topic Membership"](https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/pubsub/gossipsub/gossipsub-v1.0.md#topic-membership), the list on publishing at the end of ["Message Processing"](https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/pubsub/gossipsub/gossipsub-v1.0.md#message-processing), and ["Heartbeat"](https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/pubsub/gossipsub/gossipsub-v1.0.md#heartbeat).
+They add these rules of gossipsub v1.1: ["Heartbeat Maintenance"](https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/pubsub/gossipsub/gossipsub-v1.1.md#heartbeat-maintenance), ["Outbound Mesh Quotas"](https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/pubsub/gossipsub/gossipsub-v1.1.md#outbound-mesh-quotas), ["Adaptive Gossip Dissemination"](https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/pubsub/gossipsub/gossipsub-v1.1.md#adaptive-gossip-dissemination) and ["Flood Publishing"](https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/pubsub/gossipsub/gossipsub-v1.1.md#flood-publishing).
+Each is a pure function of the parameters, the router state, the time, its topic or message, and the choices of the client.
+
+The client choices are arguments, so every theorem holds for each choice that meets its hypotheses.
+
+- The choice among candidate peers, which gossipsub makes at random, is a function of a count and the candidates.
+  The theorems that need it ask for a lawful one: a sublist of the candidates, of the count or of all of them.
+- The order of the peers by score, which v1.1 uses to keep the best peers of a pruned mesh.
+- The standing of each peer, as for a received RPC.
+- The values that v1.1 leaves open and the consensus layer does not fix.
+  They are `D_score`, `D_out`, the gossip factor and its rounding, flood publishing, and the backoffs of a pruned mesh and of an unsubscribe.
+
+`ClientChoices.Valid` states the bounds of v1.1 on `D_out`: `D_out < D_low` and `2 · D_out ≤ D`.
+It adds a gossip factor in `[0, 1]` and positive backoffs, since a PRUNE with no backoff asks its receiver for the default.
+No theorem assumes it: each takes the bounds it needs as hypotheses.
+
+The theorems in `Networking/Proofs/Gossip/Heartbeat.lean` state these properties.
+
+- After a heartbeat, every mesh has at most `D_high + D_out` peers, at most `D_high` of them not outbound, and none twice.
+  The two bounds need `D ≤ D_high`, as the consensus layer sets it.
+- A mesh of a joined topic below `D_low`, once its negative peers leave, fills up to `D`, or takes every peer that it may GRAFT.
+- No mesh holds a peer with a negative score.
+- A mesh of a joined topic pruned for oversubscription keeps `D_out` outbound peers, or all the outbound peers it held once its negative peers left.
+  This needs `D ≤ D_high` and `D_out ≤ D`.
+- Every peer added to a mesh gets a GRAFT.
+- Every peer removed from the mesh of a joined topic gets a PRUNE with the backoff of a pruned mesh.
+  The backoff of this node for that peer then ends no earlier than that backoff from now.
+- No IHAVE goes to a peer below the gossip threshold, or in the mesh or fanout of its topic after the heartbeat.
+- When the gossip windows of a topic hold message IDs, the gossip of any state reaches `max D_lazy (share of the candidates)` of them, or all of them when there are fewer.
+  The heartbeat sends that gossip for the state after the mesh and fanout are maintained.
+- A fanout topic not published to for more than `fanout_ttl` is gone.
+
+The theorems in `Networking/Proofs/Gossip/Membership.lean` cover joining, leaving and publishing.
+Joining a topic not yet joined sends one GRAFT per peer of the new mesh.
+With a lawful choice, that mesh has at most `D` peers, each one that the node could GRAFT before.
+Leaving sends a PRUNE with the unsubscribe backoff to each mesh peer, and sets that backoff on this node.
+A published message goes only to explicit peers and to peers not below the publish threshold.
+With flood publishing, a message not in the seen cache goes to every such peer of the mesh and of the topic.
+`publish_receiveRpc` proves that a message this node published is not forwarded or delivered again within the lifetime of the seen cache.
+It holds when only received RPCs come after the publish, and the last of them uses the parameters and the message ID function of the publish.
+
+The exports `gossip_join`, `gossip_leave`, `gossip_publish` and `gossip_heartbeat` fix the choice among candidates to the first ones, in candidate order.
+`Select.first_lawful` proves that this choice is lawful.
+So the theorems hold for the exports, under the hypotheses that each states on the parameters.
+The exports take the order of the peers as a list, the best first, with every unlisted peer after them.
+A pruned mesh keeps its `D_score` best-ranked peers, then the first other peers in mesh order.
+The exports reject client choices outside `ClientChoices.Valid`.
+`gossip_publish` computes the message ID by the rule of one named fork, as `gossip_receive_rpc` does.
+
+The sources leave these points open, and EthLib takes one reading of each.
+
+- The rounding of the gossip factor times the number of candidates is a client choice.
+  The gossip share counts the peers of the topic outside its mesh and fanout that are neither explicit nor below the gossip threshold.
+- Outbound grafts may take a mesh past `D_high`.
+  So `heartbeat_mesh_le` bounds a mesh by `D_high + D_out`, and `heartbeat_mesh_le_inbound` bounds its peers that are not outbound by `D_high`.
+- Opportunistic grafting, a "may" of v1.1 with a count that the application sets, is left out.
+- Joining again within the backoff of a leave is allowed: the peers still in backoff are skipped, so the mesh may be smaller.
+  v1.1 says only that the backoff "should be finished" first.
+- The mesh steps run in order: negative peers leave, then the low bound, the high bound, and the outbound quota.
+  When pruning keeps too few outbound peers, the last kept peers that are not outbound give way to the best-ranked outbound peers left out.
+- The heartbeat drops the meshes of topics not joined, with no PRUNE.
+- Peers below the publish threshold leave the fanout, and fanout top-ups take neither them nor explicit peers.
+- A published message goes to every explicit peer, whatever its topics, and is not published again while its ID is in the seen cache.
+- The heartbeat drops the expired entries of the seen cache and keeps ended backoffs, which are read by time.
+- PRUNEs that this node sends offer no peers.
+
 ### The streams of an mplex connection
 
 `step`, `receive` and `send` (`Networking/Libp2p/MplexSession.lean`) check each mplex frame against the streams of one side.
@@ -4263,12 +4332,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 455 operations and 49 size constants.
-The Python extension calls 455 of the operations and 49 of the constants.
+Lean exports 459 operations and 49 size constants.
+The Python extension calls 459 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-10927 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2204), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (194), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (106), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1526), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (71), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (58), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (746), `x25519.c` (21), `xmss.c` (134).
+10987 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2204), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (194), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1530), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (71), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (58), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (750), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

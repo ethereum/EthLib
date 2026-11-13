@@ -1469,6 +1469,25 @@ def bindings : List Binding := [
       "validation: list[tuple[bytes, str | tuple[str, str]]], now: int, src: bytes, " ++
       "rpc: dict[str, Any], state: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]",
     [], some "GossipError"⟩,
+  ⟨"gossip_join", `EthLib.Networking.Gossip.Exports.joinOf,
+    "(params: dict[str, Any], standing: list[tuple[bytes, dict[str, Any]]], now: int, " ++
+      "topic: str, state: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]",
+    [], some "GossipError"⟩,
+  ⟨"gossip_leave", `EthLib.Networking.Gossip.Exports.leaveOf,
+    "(params: dict[str, Any], choices: dict[str, Any], now: int, topic: str, " ++
+      "state: dict[str, Any]) -> " ++
+      "tuple[dict[str, Any], dict[str, Any]]",
+    [], some "GossipError"⟩,
+  ⟨"gossip_publish", `EthLib.Networking.Gossip.Exports.publishOf,
+    "(fork: str, params: dict[str, Any], choices: dict[str, Any], " ++
+      "standing: list[tuple[bytes, dict[str, Any]]], now: int, message: dict[str, Any], " ++
+      "state: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]",
+    [], some "GossipError"⟩,
+  ⟨"gossip_heartbeat", `EthLib.Networking.Gossip.Exports.heartbeatOf,
+    "(params: dict[str, Any], choices: dict[str, Any], ranking: list[bytes], " ++
+      "standing: list[tuple[bytes, dict[str, Any]]], now: int, state: dict[str, Any]) -> " ++
+      "tuple[dict[str, Any], dict[str, Any]]",
+    [], some "GossipError"⟩,
   ⟨"receipt_reencode", `EthLib.Execution.Blocks.Exports.receiptReencodeExport,
     "(fork: str, receipt: bytes) -> bytes",
     [`EthLib.Serialization.Rlp.RlpError, `EthLib.Execution.Blocks.ReceiptError], some "BlockError"⟩,
