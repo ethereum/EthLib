@@ -89,7 +89,9 @@ class GasMeter (Meter : Type) where
 
 /-- The laws of a gas meter.
 
-They bound the execution gas that a frame holds, which makes the execution end. -/
+They bound the execution gas that a frame holds, which makes the execution end.
+
+They also say that a charge fails only with the out-of-gas error. -/
 class LawfulGasMeter (Meter : Type) [GasMeter Meter] : Prop where
   /-- A frame holds at least its execution gas left. -/
   gasLeft_le_gasHeld (meter : Meter) : GasMeter.gasLeft meter ≤ GasMeter.gasHeld meter
@@ -100,6 +102,12 @@ class LawfulGasMeter (Meter : Type) [GasMeter Meter] : Prop where
   /-- A charge of state gas does not raise the gas held. -/
   gasHeld_chargeState {meter after : Meter} {amount : Nat} :
     GasMeter.chargeState meter amount = .ok after → GasMeter.gasHeld after ≤ GasMeter.gasHeld meter
+  /-- A charge of execution gas fails only with the out-of-gas error. -/
+  charge_error {meter : Meter} {amount : Nat} {e : EvmError} :
+    GasMeter.charge meter amount = .error e → e = .outOfGas
+  /-- A charge of state gas fails only with the out-of-gas error. -/
+  chargeState_error {meter : Meter} {amount : Nat} {e : EvmError} :
+    GasMeter.chargeState meter amount = .error e → e = .outOfGas
   /-- A refill of state gas does not raise the gas held. -/
   gasHeld_refill (meter : Meter) (amount : Nat) :
     GasMeter.gasHeld (GasMeter.refill meter amount) ≤ GasMeter.gasHeld meter
@@ -159,6 +167,14 @@ instance : LawfulGasMeter Nat where
     · cases h
       simp only [GasMeter.gasHeld]
       omega
+  charge_error {gas amount e} h := by
+    simp only [GasMeter.charge] at h
+    split at h <;> cases h
+    rfl
+  chargeState_error {gas amount e} h := by
+    simp only [GasMeter.chargeState] at h
+    split at h <;> cases h
+    rfl
   gasHeld_refill _ _ := Nat.le_refl _
   gasHeld_exhaust _ := rfl
   gasHeld_rollback _ := Nat.le_refl _
@@ -212,6 +228,14 @@ instance : LawfulGasMeter StateGasMeter where
         simp only [GasMeter.gasHeld, StateGasMeter.gasHeld]
         omega
       · cases h
+  charge_error {meter amount e} h := by
+    simp only [GasMeter.charge, StateGasMeter.charge] at h
+    split at h <;> cases h
+    rfl
+  chargeState_error {meter amount e} h := by
+    simp only [GasMeter.chargeState, StateGasMeter.chargeState] at h
+    repeat' split at h
+    all_goals first | (cases h; rfl) | cases h
   gasHeld_refill meter amount := by
     simp only [GasMeter.gasHeld, GasMeter.refill, StateGasMeter.gasHeld, StateGasMeter.refill]
     omega
