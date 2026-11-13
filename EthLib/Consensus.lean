@@ -86,6 +86,7 @@ public import EthLib.Consensus.PqKeys.Gossip
 public import EthLib.Consensus.PqKeys.Possession
 public import EthLib.Consensus.Preset
 public import EthLib.Consensus.Proposers
+public import EthLib.Consensus.RelayApi
 public import EthLib.Consensus.ReqResp.Bounds
 public import EthLib.Consensus.ReqResp.Messages
 public import EthLib.Consensus.ReqResp.ResponseBounds

@@ -649,6 +649,9 @@ def bindings : List Binding := [
     [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
   ⟨"consensus_default_auth_data", `EthLib.Consensus.BuilderApi.defaultAuthData,
     "(url: str) -> bytes", [`EthLib.Consensus.BuilderApi.AuthDataError], some "ConsensusError"⟩,
+  ⟨"consensus_relay_submission_bid", `EthLib.Consensus.Exports.relaySubmissionBidExport,
+    "(name: str, fork: str, data: bytes, pubkey: bytes) -> bytes",
+    [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
   ⟨"consensus_builder_bid_value", `EthLib.Consensus.Exports.builderBidValueExport,
     "(value: int, execution_payment: int, max_execution_payment: int) -> int",
     [], some "ConsensusError"⟩,
@@ -1588,7 +1591,8 @@ def bindings : List Binding := [
     [`EthLib.Engine.EngineError, `EthLib.Engine.PayloadError,
       `EthLib.Execution.Blocks.BlockError], some "EngineError"⟩,
   ⟨"engine_forkchoice_updated", `EthLib.Engine.Exports.forkchoiceUpdatedExport,
-    "(config: dict, tree: list, finalized: str | None, request: dict) -> dict",
+    "(config: dict, tree: list, finalized: str | None, terminal_total_difficulty: int, " ++
+      "request: dict) -> dict",
     [`EthLib.Engine.EngineError], some "EngineError"⟩,
   ⟨"engine_get_blobs", `EthLib.Engine.Exports.getBlobsExport,
     "(pool: list[tuple[bytes, bytes | None, bytes | None, " ++

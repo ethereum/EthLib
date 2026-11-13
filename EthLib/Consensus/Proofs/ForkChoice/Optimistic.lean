@@ -954,6 +954,201 @@ theorem firstInvalidBlock_of_chain {hash : Hash32} {child root first : Root}
   | case5 child root block rootFound unnamed parent parentFound notLower =>
     exact absurd (lower root block parent rootFound parentFound) notLower
 
+/-- The walk from Gloas finds nothing when no block of its chain builds on the hash.
+
+The chain starts at the block of the walk, which the store holds, and follows its known parents.
+
+That needs each known parent at a lower slot, or the walk can fail. -/
+theorem firstInvalidPayload_of_absent {gloas : .glamsterdam ≤ fork} {hash : Hash32}
+    {candidate root : Root} {child : BeaconBlock preset fork} (lower : store.ParentsBelow)
+    (found : store.blocks[root]? = some child)
+    (absent : ∀ x block, store.blocks[x]? = some block →
+      (blockTree lower).Ancestor (some x) (some root) →
+      (block.body.signedExecutionPayloadBid gloas).message.parentBlockHash ≠ hash) :
+    store.firstInvalidPayload gloas hash candidate child = .ok none := by
+  induction candidate, child using firstInvalidPayload.induct (store := store) (gloas := gloas)
+    (latestValidHash := hash) generalizing root with
+  | case1 candidate child named => exact absurd named (absent root child found (.refl _))
+  | case2 candidate child unnamed parentFound =>
+    exact firstInvalidPayload_of_orphan unnamed parentFound
+  | case3 candidate child unnamed parent parentFound parentLower full ih =>
+    rw [firstInvalidPayload_of_full unnamed parentFound parentLower full]
+    exact ih parentFound fun x block stored above =>
+      absent x block stored (ancestor_of_parent lower found above)
+  | case4 candidate child unnamed parent parentFound parentLower empty ih =>
+    rw [firstInvalidPayload_of_empty unnamed parentFound parentLower empty]
+    exact ih parentFound fun x block stored above =>
+      absent x block stored (ancestor_of_parent lower found above)
+  | case5 candidate child unnamed parent parentFound notLower =>
+    exact absurd (lower root child parent found parentFound) notLower
+
+/-- The walk from Gloas keeps its candidate when its chain builds on no payload newer than the hash.
+
+The walk starts at a block that the store holds.
+
+The named block is the nearest block of the chain that builds on the hash.
+
+No block that descends from the named block, up to the start, builds on its parent's payload.
+
+That needs each known parent at a lower slot. -/
+theorem firstInvalidPayload_of_chain_empty {gloas : .glamsterdam ≤ fork} {hash : Hash32}
+    {candidate root named : Root} {child namedBlock : BeaconBlock preset fork}
+    (lower : store.ParentsBelow) (found : store.blocks[root]? = some child)
+    (namedFound : store.blocks[named]? = some namedBlock)
+    (names : (namedBlock.body.signedExecutionPayloadBid gloas).message.parentBlockHash = hash)
+    (descends : (blockTree lower).Ancestor (some named) (some root))
+    (between : ∀ x block, store.blocks[x]? = some block →
+      (blockTree lower).Ancestor (some named) (some x) →
+      (blockTree lower).Ancestor (some x) (some root) → x ≠ named →
+      (block.body.signedExecutionPayloadBid gloas).message.parentBlockHash ≠ hash)
+    (empty : ∀ x block parent, store.blocks[x]? = some block →
+      store.blocks[block.parentRoot]? = some parent →
+      (blockTree lower).Ancestor (some named) (some block.parentRoot) →
+      (blockTree lower).Ancestor (some x) (some root) → parentPayloadStatus block parent ≠ .full) :
+    store.firstInvalidPayload gloas hash candidate child = .ok (some candidate) := by
+  induction candidate, child using firstInvalidPayload.induct (store := store) (gloas := gloas)
+    (latestValidHash := hash) generalizing root with
+  | case1 candidate child named => exact firstInvalidPayload_of_named named
+  | case2 candidate child unnamed parentFound =>
+    rcases descends.eq_or_parent with same | above
+    · -- The named block builds on the hash, so the walk does not start there.
+      rw [Option.some.injEq] at same
+      subst same
+      rw [found, Option.some.injEq] at namedFound
+      subst namedFound
+      exact absurd names unnamed
+    · -- The chain of an unknown parent holds no known block.
+      rw [blockTree_parent_of found] at above
+      obtain ⟨_, known⟩ := known_of_ancestor lower namedFound above
+      simp_all
+  | case3 candidate child unnamed parent parentFound parentLower full ih =>
+    rcases descends.eq_or_parent with same | above
+    · rw [Option.some.injEq] at same
+      subst same
+      rw [found, Option.some.injEq] at namedFound
+      subst namedFound
+      exact absurd names unnamed
+    · rw [blockTree_parent_of found] at above
+      exact absurd full (empty root child parent found parentFound above (.refl _))
+  | case4 candidate child unnamed parent parentFound parentLower notFull ih =>
+    rw [firstInvalidPayload_of_empty unnamed parentFound parentLower notFull]
+    rcases descends.eq_or_parent with same | above
+    · rw [Option.some.injEq] at same
+      subst same
+      rw [found, Option.some.injEq] at namedFound
+      subst namedFound
+      exact absurd names unnamed
+    · rw [blockTree_parent_of found] at above
+      exact ih parentFound above
+        (fun x block stored below onChain =>
+          between x block stored below (ancestor_of_parent lower found onChain))
+        (fun x block grand stored grandFound below onChain =>
+          empty x block grand stored grandFound below (ancestor_of_parent lower found onChain))
+  | case5 candidate child unnamed parent parentFound notLower =>
+    exact absurd (lower root child parent found parentFound) notLower
+
+/-- The walk from Gloas finds the block of its chain with the earliest payload newer than the hash.
+
+The walk starts at a block that the store holds.
+
+The named block is the nearest block of the chain that builds on the hash.
+
+The found block is the named block or descends from it.
+
+Its child on the chain builds on its payload.
+
+No block that descends from the named block, up to the found block, builds on its parent's payload.
+
+So the payload of the found block is the first on the chain after the latest valid payload.
+
+That needs each known parent at a lower slot. -/
+theorem firstInvalidPayload_of_chain_full {gloas : .glamsterdam ≤ fork} {hash : Hash32}
+    {candidate root named first link : Root}
+    {child namedBlock firstBlock linkBlock : BeaconBlock preset fork}
+    (lower : store.ParentsBelow) (found : store.blocks[root]? = some child)
+    (namedFound : store.blocks[named]? = some namedBlock)
+    (names : (namedBlock.body.signedExecutionPayloadBid gloas).message.parentBlockHash = hash)
+    (between : ∀ x block, store.blocks[x]? = some block →
+      (blockTree lower).Ancestor (some named) (some x) →
+      (blockTree lower).Ancestor (some x) (some root) → x ≠ named →
+      (block.body.signedExecutionPayloadBid gloas).message.parentBlockHash ≠ hash)
+    (firstFound : store.blocks[first]? = some firstBlock)
+    (reaches : (blockTree lower).Ancestor (some named) (some first))
+    (linkFound : store.blocks[link]? = some linkBlock) (linked : linkBlock.parentRoot = first)
+    (descends : (blockTree lower).Ancestor (some link) (some root))
+    (full : parentPayloadStatus linkBlock firstBlock = .full)
+    (emptyAbove : ∀ x block parent, store.blocks[x]? = some block →
+      store.blocks[block.parentRoot]? = some parent →
+      (blockTree lower).Ancestor (some named) (some block.parentRoot) →
+      (blockTree lower).Ancestor (some x) (some first) → parentPayloadStatus block parent ≠ .full) :
+    store.firstInvalidPayload gloas hash candidate child = .ok (some first) := by
+  -- The named block is an ancestor of the parent of the link, so never the link or a descendant.
+  have below : ∀ {x : Root}, (blockTree lower).Ancestor (some link) (some x) → x ≠ named := by
+    rintro x onChain rfl
+    have step : (blockTree lower).IsChild (some link) (some first) :=
+      blockTree_isChild_iff.mpr ⟨linkBlock, linkFound, linked⟩
+    have := step.height_lt
+    have := reaches.height_le
+    have := onChain.height_le
+    omega
+  induction candidate, child using firstInvalidPayload.induct (store := store) (gloas := gloas)
+    (latestValidHash := hash) generalizing root with
+  | case1 candidate child named =>
+    exact absurd named (between root child found
+      (reaches.trans ((blockTree_isChild_iff.mpr ⟨linkBlock, linkFound, linked⟩).ancestor.trans
+        descends)) (.refl _) (below descends))
+  | case2 candidate child unnamed parentFound =>
+    rcases descends.eq_or_parent with same | above
+    · -- The link has a known parent, so it is not this block.
+      rw [Option.some.injEq] at same
+      subst same
+      rw [found, Option.some.injEq] at linkFound
+      subst linkFound
+      simp_all
+    · -- The chain of an unknown parent holds no known block.
+      rw [blockTree_parent_of found] at above
+      obtain ⟨_, known⟩ := known_of_ancestor lower linkFound above
+      simp_all
+  | case3 candidate child unnamed parent parentFound parentLower full ih =>
+    rw [firstInvalidPayload_of_full unnamed parentFound parentLower full]
+    rcases descends.eq_or_parent with same | above
+    · -- The walk is at the link, so the candidate becomes the parent of the link.
+      rw [Option.some.injEq] at same
+      subst same
+      rw [found, Option.some.injEq] at linkFound
+      subst linkFound
+      subst linked
+      rw [firstFound, Option.some.injEq] at parentFound
+      subst parentFound
+      exact firstInvalidPayload_of_chain_empty lower firstFound namedFound names reaches
+        (fun x block stored above onChain =>
+          between x block stored above (ancestor_of_parent lower found onChain))
+        emptyAbove
+    · rw [blockTree_parent_of found] at above
+      exact ih parentFound
+        (fun x block stored above onChain =>
+          between x block stored above (ancestor_of_parent lower found onChain))
+        above
+  | case4 candidate child unnamed parent parentFound parentLower notFull ih =>
+    rw [firstInvalidPayload_of_empty unnamed parentFound parentLower notFull]
+    rcases descends.eq_or_parent with same | above
+    · -- The link builds on the payload of its parent.
+      rw [Option.some.injEq] at same
+      subst same
+      rw [found, Option.some.injEq] at linkFound
+      subst linkFound
+      subst linked
+      rw [firstFound, Option.some.injEq] at parentFound
+      subst parentFound
+      exact absurd full notFull
+    · rw [blockTree_parent_of found] at above
+      exact ih parentFound
+        (fun x block stored above onChain =>
+          between x block stored above (ancestor_of_parent lower found onChain))
+        above
+  | case5 candidate child unnamed parent parentFound notLower =>
+    exact absurd (lower root child parent found parentFound) notLower
+
 /-- A removal from an unknown root changes nothing. -/
 theorem removeDescendants_of_unknown {first : Root} (unknown : store.blocks[first]? = none) :
     store.removeDescendants first = .ok store := by
