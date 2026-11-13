@@ -12,6 +12,7 @@ def main(methods: Path, out: Path) -> None:
     examples = []
     for path in sorted(methods.glob("*.yaml")):
         for method in yaml.safe_load(path.read_text()):
+            # Some methods have no example.
             for example in method.get("examples", []):
                 examples.append(
                     {

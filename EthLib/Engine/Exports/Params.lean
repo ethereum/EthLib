@@ -93,7 +93,7 @@ def rewriteParamsOf (args : String × PyValue) : Result PyValue := do
         bodiesByRangeParams params)
     | none => throw (0, s!"no method {method}")
 
-/-- The parameters of an Engine API request, read by the decoder and written back by the writer.
+/-- The parameters of an Engine API request, read by the decoder and written by the writer.
 
 The arguments are the full name of the method and its parameters.
 

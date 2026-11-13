@@ -169,8 +169,9 @@ def get_payload(
 
 
 def rewrite_params(method: str, params: list[Any]) -> list[Any]:
-    """The parameters of an Engine API call, read by its decoder and written back by its writer."""
-    # The writer writes lowercase hex, quantities without leading zeros, and every optional value.
+    """The parameters of an Engine API request, read by the decoder and written by the writer."""
+    # The writer writes lowercase hex and quantities without leading zeros.
+    # From version 4 of engine_forkchoiceUpdated it writes the custody columns, as `null` if absent.
     return _native.engine_rewrite_params(method, params)
 
 

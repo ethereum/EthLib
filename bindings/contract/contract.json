@@ -10275,7 +10275,7 @@
    "docstring":
    "The answer to a payload bodies request, from a store of bodies.\n\nThe arguments are the store's entries, the latest known block, the limit and the request.\n\nEach entry is the block hash, its canonical number or `None`, and its fork name.\n\nThen come its transactions, its withdrawals or `None`, and its block access list or `None`."},
   {"summary":
-   "The parameters of an Engine API request, read by the decoder and written back by the writer.",
+   "The parameters of an Engine API request, read by the decoder and written by the writer.",
    "signature": "(method: str, params: list[Any]) -> list[Any]",
    "operation": "EthLib.Engine.Exports.rewriteParamsExport",
    "method": "engine_rewrite_params",
@@ -10290,7 +10290,7 @@
       {"constructor": "unknownPayload", "code": 38001}]}],
    "error_class": "EngineError",
    "docstring":
-   "The parameters of an Engine API request, read by the decoder and written back by the writer.\n\nThe arguments are the full name of the method and its parameters.\n\nThe parameters are the value of their JSON, as `json.loads` gives it."},
+   "The parameters of an Engine API request, read by the decoder and written by the writer.\n\nThe arguments are the full name of the method and its parameters.\n\nThe parameters are the value of their JSON, as `json.loads` gives it."},
   {"summary":
    "From Bellatrix to Fulu: the forkchoice update of a proposer, as the value of its JSON.",
    "signature":

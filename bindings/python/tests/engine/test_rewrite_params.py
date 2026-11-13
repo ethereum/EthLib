@@ -1,4 +1,4 @@
-"""The writers of Engine API parameters, against the requests of execution-specs and the OpenRPC."""
+"""The writers of Engine API parameters, against the requests of `tests/engine`."""
 
 import json
 from collections import Counter
@@ -19,10 +19,11 @@ _INVALID = "engine error: EthLib.Engine.EngineError.invalidParams "
 # The examples that the decoder rejects, by name, with the message of the rejection.
 REJECTED = {
     # The payload ID of these examples has 15 hex digits, not the 16 of 8 bytes.
-    **{
-        f"engine_getPayloadV{v} example": _INVALID + '"payloadId: odd number of hex digits"'
-        for v in range(2, 7)
-    },
+    "engine_getPayloadV2 example": _INVALID + '"payloadId: odd number of hex digits"',
+    "engine_getPayloadV3 example": _INVALID + '"payloadId: odd number of hex digits"',
+    "engine_getPayloadV4 example": _INVALID + '"payloadId: odd number of hex digits"',
+    "engine_getPayloadV5 example": _INVALID + '"payloadId: odd number of hex digits"',
+    "engine_getPayloadV6 example": _INVALID + '"payloadId: odd number of hex digits"',
     # The payload of this example has no `slotNumber`, which ExecutionPayloadV4 requires.
     "engine_newPayloadV5 example": _INVALID + '"payload: not the fields of version 4"',
     # EthLib does not specify these two methods.
@@ -59,11 +60,12 @@ def _rejected(case: dict) -> bool:
 
 def test_new_payload_counts() -> None:
     """Of the 250 requests, 239 decode, and the decoder rejects the 11 others."""
+    # 75 fixtures expect invalid parameters; 64 of them decode, and a later check rejects them.
     assert Counter(_rejected(c) for c in PAYLOADS) == {False: 239, True: 11}
 
 
 def _updates(chain: dict) -> list[tuple[str, list]]:
-    # The requests of the head test of engine_forkchoiceUpdated: each payload as the head.
+    # Each payload as the head, with the genesis block as safe and finalized, and no attributes.
     genesis = chain["genesisHash"]
     return [
         (
@@ -133,19 +135,15 @@ def test_custody_columns() -> None:
 
 
 def test_canonical_form() -> None:
-    """Uppercase address hex is written in lowercase."""
-    example = next(c for c in EXAMPLES if c["method"] == "engine_forkchoiceUpdatedV1")
-    state, attributes = example["params"]
-    recipient = attributes["suggestedFeeRecipient"]
-    upper = {**attributes, "suggestedFeeRecipient": "0x" + recipient[2:].upper()}
-    assert engine.rewrite_params("engine_forkchoiceUpdatedV1", [state, upper]) == [
-        state,
-        attributes,
-    ]
+    """Address hex in mixed case is written in lowercase."""
+    attributes = {"timestamp": "0x5", "prevRandao": "0x" + "00" * 32}
+    mixed = {**attributes, "suggestedFeeRecipient": "0xA94f5374Fce5edBC8E2a8697C15331677e6EbF0B"}
+    lower = {**attributes, "suggestedFeeRecipient": "0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b"}
+    assert engine.rewrite_params("engine_forkchoiceUpdatedV1", [_STATE, mixed]) == [_STATE, lower]
 
 
 def test_leading_zero() -> None:
-    """A quantity with a leading zero is no quantity, so the decoder rejects it."""
+    """The decoder rejects a quantity with a leading zero."""
     with raises(
         engine.EngineError,
         'engine error: EthLib.Engine.EngineError.invalidParams "start: leading zero"',
