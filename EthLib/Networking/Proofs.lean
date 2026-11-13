@@ -55,6 +55,8 @@ public import EthLib.Networking.Proofs.Snappy.Frame
 public import EthLib.Networking.Proofs.Snappy.FrameEncode
 public import EthLib.Networking.Proofs.Snappy.Read
 
+public import EthLib.Networking.Proofs.Quic.Frame
+
 /-!
 # `EthLib.Networking.Proofs`
 

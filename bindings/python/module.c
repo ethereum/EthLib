@@ -96,6 +96,7 @@ PyObject* SNAPPY_ERROR;
 PyObject* VARINT_ERROR;
 PyObject* UVARINT_ERROR;
 PyObject* QUIC_VARINT_ERROR;
+PyObject* QUIC_ERROR;
 PyObject* MULTISTREAM_ERROR;
 PyObject* MPLEX_ERROR;
 PyObject* YAMUX_ERROR;
@@ -1157,6 +1158,12 @@ static PyMethodDef methods[] = {
   {"quic_tls_finished", py_quic_tls_finished, METH_VARARGS, DOC_quic_tls_finished},
   {"quic_varint_encode", py_quic_varint_encode, METH_VARARGS, DOC_quic_varint_encode},
   {"quic_varint_decode", py_quic_varint_decode, METH_VARARGS, DOC_quic_varint_decode},
+  {"quic_header_encode", py_quic_header_encode, METH_VARARGS, DOC_quic_header_encode},
+  {"quic_header_decode", py_quic_header_decode, METH_VARARGS, DOC_quic_header_decode},
+  {"quic_frame_encode", py_quic_frame_encode, METH_VARARGS, DOC_quic_frame_encode},
+  {"quic_frame_decode", py_quic_frame_decode, METH_VARARGS, DOC_quic_frame_decode},
+  {"quic_packet_number_encode", py_quic_packet_number_encode, METH_VARARGS, DOC_quic_packet_number_encode},
+  {"quic_packet_number_decode", py_quic_packet_number_decode, METH_VARARGS, DOC_quic_packet_number_decode},
   {"multistream_encode", py_multistream_encode, METH_VARARGS, DOC_multistream_encode},
   {"multistream_decode", py_multistream_decode, METH_VARARGS, DOC_multistream_decode},
   {"multistream_listen", py_multistream_listen, METH_VARARGS, DOC_multistream_listen},
@@ -1306,6 +1313,7 @@ PyInit__native(void) {
     VARINT_ERROR = PyObject_GetAttrString(errors, "VarintError");
     UVARINT_ERROR = PyObject_GetAttrString(errors, "UvarintError");
     QUIC_VARINT_ERROR = PyObject_GetAttrString(errors, "QuicVarintError");
+    QUIC_ERROR = PyObject_GetAttrString(errors, "QuicError");
     MULTISTREAM_ERROR = PyObject_GetAttrString(errors, "MultistreamError");
     MPLEX_ERROR = PyObject_GetAttrString(errors, "MplexError");
     YAMUX_ERROR = PyObject_GetAttrString(errors, "YamuxError");

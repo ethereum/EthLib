@@ -708,17 +708,29 @@ No theorem relates ChaCha20-Poly1305 to an independent model of RFC 8439.
 The Python tests compare the bindings with the RFC 7748 and RFC 8439 vectors.
 The million-iteration X25519 vector requires `ETHLIB_SLOW_VECTORS=1`.
 
-### QUIC integers
+### QUIC wire encodings
 
 RFC 9000 §16 writes an integer below `2^62` in 1, 2, 4 or 8 bytes, and the two high bits of the first byte give the length.
 `Varint.decode_encodeWith` (`Networking/Proofs/Quic/Varint.lean`) proves the round trip for every value and every width that holds it, with arbitrary trailing bytes.
 `Varint.eq_encodeWith_of_decode` proves the converse: every input that decodes is the encoding of its value at the width its first byte selects, followed by the rest.
 `Varint.minWidth_le` and `Varint.length_encode_le` prove that the encoder picks the shortest width.
 `Varint.decode_nil` and `Varint.decode_error_iff` prove that the decoder fails, always as truncated, exactly when the input ends before the selected integer does.
-The decoder accepts longer forms, so the minimal frame types of §12.4 are left to a frame decoder.
+The integer decoder accepts longer forms, and `Frame.decode` accepts only shortest frame types (§12.4).
 The Python suite checks the examples of RFC 9000 Appendix A.1, the bounds of Table 4 and the rejection of `2^62`.
 It also checks three longer forms of 37 and every proper prefix of one encoding of each width.
-Packet headers, packet numbers and frames remain unspecified.
+
+`Packet.decode_encode` proves the round trip for well-formed headers, with arbitrary trailing bytes after a protected header.
+Retry and Version Negotiation consume the whole datagram.
+`Packet.decodePacketNumber_closest` proves that a successfully reconstructed packet number minimizes distance to the expected number among values below `2^62` with the same truncated bytes.
+
+`Frame.decode_encode` proves the round trip for an encoded frame permitted in its packet type.
+A STREAM frame without LEN consumes the remaining packet, so its round trip has no trailing bytes.
+`Frame.decode_ne_ok_of_not_allowed` proves that a frame forbidden by Table 3 cannot be accepted.
+The format checks cover ACK range underflow, offset limits, stream-count limits, token lengths and connection-ID lengths.
+
+The Python cases include the RFC 9000 Appendix A.3 packet number and RFC 9001 Appendix A header bytes, alongside hand-derived layouts of every frame type.
+The header decoder expects both header and payload authentication before checking reserved bits.
+These codecs do not implement transport state, flow-control credit, sender-role checks or packet protection.
 
 ### QUIC v1 key derivation
 

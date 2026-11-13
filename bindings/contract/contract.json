@@ -10368,6 +10368,123 @@
    "docstring":
    "Read a QUIC integer and return its value and the trailing bytes, RFC 9000 §16."},
   {"summary":
+   "Encode a QUIC header, with checked lengths and packet-number bounds (RFC 9000 §17).",
+   "signature": "(header: Any) -> bytes",
+   "operation": "EthLib.Networking.Quic.Exports.headerEncodeExport",
+   "method": "quic_header_encode",
+   "errors":
+   [{"type": "EthLib.Networking.Quic.Wire.Error",
+     "codes":
+     [{"constructor": "truncated", "code": 1},
+      {"constructor": "connectionIdLength", "code": 2},
+      {"constructor": "fixedBit", "code": 3},
+      {"constructor": "version", "code": 4},
+      {"constructor": "reservedBits", "code": 5},
+      {"constructor": "packetLength", "code": 6},
+      {"constructor": "packetNumber", "code": 7},
+      {"constructor": "frameEncoding", "code": 8},
+      {"constructor": "protocolViolation", "code": 9}]}],
+   "error_class": "QuicError",
+   "docstring":
+   "Encode a QUIC header, with checked lengths and packet-number bounds (RFC 9000 §17)."},
+  {"summary":
+   "Read an authenticated header and return its fields and remaining bytes (RFC 9000 §17).",
+   "signature":
+   "(short_connection_id_length: int, data: bytes) -> tuple[Any, bytes]",
+   "operation": "EthLib.Networking.Quic.Exports.headerDecodeExport",
+   "method": "quic_header_decode",
+   "errors":
+   [{"type": "EthLib.Networking.Quic.Wire.Error",
+     "codes":
+     [{"constructor": "truncated", "code": 1},
+      {"constructor": "connectionIdLength", "code": 2},
+      {"constructor": "fixedBit", "code": 3},
+      {"constructor": "version", "code": 4},
+      {"constructor": "reservedBits", "code": 5},
+      {"constructor": "packetLength", "code": 6},
+      {"constructor": "packetNumber", "code": 7},
+      {"constructor": "frameEncoding", "code": 8},
+      {"constructor": "protocolViolation", "code": 9}]}],
+   "error_class": "QuicError",
+   "docstring":
+   "Read an authenticated header and return its fields and remaining bytes (RFC 9000 §17)."},
+  {"summary": "Encode one well-formed QUIC frame (RFC 9000 §19).",
+   "signature": "(frame: Any) -> bytes",
+   "operation": "EthLib.Networking.Quic.Exports.frameEncodeExport",
+   "method": "quic_frame_encode",
+   "errors":
+   [{"type": "EthLib.Networking.Quic.Wire.Error",
+     "codes":
+     [{"constructor": "truncated", "code": 1},
+      {"constructor": "connectionIdLength", "code": 2},
+      {"constructor": "fixedBit", "code": 3},
+      {"constructor": "version", "code": 4},
+      {"constructor": "reservedBits", "code": 5},
+      {"constructor": "packetLength", "code": 6},
+      {"constructor": "packetNumber", "code": 7},
+      {"constructor": "frameEncoding", "code": 8},
+      {"constructor": "protocolViolation", "code": 9}]}],
+   "error_class": "QuicError",
+   "docstring": "Encode one well-formed QUIC frame (RFC 9000 §19)."},
+  {"summary":
+   "Read one frame allowed in the given packet type (RFC 9000 §12.4).",
+   "signature": "(packet: str, data: bytes) -> tuple[Any, bytes]",
+   "operation": "EthLib.Networking.Quic.Exports.frameDecodeExport",
+   "method": "quic_frame_decode",
+   "errors":
+   [{"type": "EthLib.Networking.Quic.Wire.Error",
+     "codes":
+     [{"constructor": "truncated", "code": 1},
+      {"constructor": "connectionIdLength", "code": 2},
+      {"constructor": "fixedBit", "code": 3},
+      {"constructor": "version", "code": 4},
+      {"constructor": "reservedBits", "code": 5},
+      {"constructor": "packetLength", "code": 6},
+      {"constructor": "packetNumber", "code": 7},
+      {"constructor": "frameEncoding", "code": 8},
+      {"constructor": "protocolViolation", "code": 9}]}],
+   "error_class": "QuicError",
+   "docstring":
+   "Read one frame allowed in the given packet type (RFC 9000 §12.4)."},
+  {"summary": "Write the low packet-number bytes (RFC 9000 §17.1).",
+   "signature": "(width: int, number: int) -> bytes",
+   "operation": "EthLib.Networking.Quic.Exports.packetNumberEncodeExport",
+   "method": "quic_packet_number_encode",
+   "errors":
+   [{"type": "EthLib.Networking.Quic.Wire.Error",
+     "codes":
+     [{"constructor": "truncated", "code": 1},
+      {"constructor": "connectionIdLength", "code": 2},
+      {"constructor": "fixedBit", "code": 3},
+      {"constructor": "version", "code": 4},
+      {"constructor": "reservedBits", "code": 5},
+      {"constructor": "packetLength", "code": 6},
+      {"constructor": "packetNumber", "code": 7},
+      {"constructor": "frameEncoding", "code": 8},
+      {"constructor": "protocolViolation", "code": 9}]}],
+   "error_class": "QuicError",
+   "docstring": "Write the low packet-number bytes (RFC 9000 §17.1)."},
+  {"summary":
+   "Reconstruct a packet number from its low bytes (RFC 9000 Appendix A.3).",
+   "signature": "(width: int, truncated: int, expected: int) -> int",
+   "operation": "EthLib.Networking.Quic.Exports.packetNumberDecodeExport",
+   "method": "quic_packet_number_decode",
+   "errors":
+   [{"type": "EthLib.Networking.Quic.Wire.Error",
+     "codes":
+     [{"constructor": "truncated", "code": 1},
+      {"constructor": "connectionIdLength", "code": 2},
+      {"constructor": "fixedBit", "code": 3},
+      {"constructor": "version", "code": 4},
+      {"constructor": "reservedBits", "code": 5},
+      {"constructor": "packetLength", "code": 6},
+      {"constructor": "packetNumber", "code": 7},
+      {"constructor": "frameEncoding", "code": 8},
+      {"constructor": "protocolViolation", "code": 9}]}],
+   "error_class": "QuicError",
+   "docstring":
+   "Reconstruct a packet number from its low bytes (RFC 9000 Appendix A.3)."},
+  {"summary":
    "The bytes of one multistream-select message: its length, its bytes, then a newline.",
    "signature": "(message: bytes) -> bytes",
    "operation": "EthLib.Networking.Libp2p.Exports.multistreamEncodeExport",

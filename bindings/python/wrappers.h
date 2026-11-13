@@ -164,6 +164,7 @@ extern PyObject* SNAPPY_ERROR;
 extern PyObject* VARINT_ERROR;
 extern PyObject* UVARINT_ERROR;
 extern PyObject* QUIC_VARINT_ERROR;
+extern PyObject* QUIC_ERROR;
 extern PyObject* MULTISTREAM_ERROR;
 extern PyObject* MPLEX_ERROR;
 extern PyObject* YAMUX_ERROR;
@@ -728,5 +729,12 @@ call_pyvalue_export(
 );
 
 PyObject* py_pyvalue_echo                                 (PyObject* self, PyObject* args);
+
+PyObject* py_quic_header_encode(PyObject* self, PyObject* args);
+PyObject* py_quic_header_decode(PyObject* self, PyObject* args);
+PyObject* py_quic_frame_encode(PyObject* self, PyObject* args);
+PyObject* py_quic_frame_decode(PyObject* self, PyObject* args);
+PyObject* py_quic_packet_number_encode(PyObject* self, PyObject* args);
+PyObject* py_quic_packet_number_decode(PyObject* self, PyObject* args);
 
 #endif /* ETHCS_WRAPPERS_H */

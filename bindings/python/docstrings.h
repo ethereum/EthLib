@@ -1091,6 +1091,24 @@
 #define DOC_quic_varint_decode \
   "Read a QUIC integer and return its value and the trailing bytes, RFC 9000 §16."
 
+#define DOC_quic_header_encode \
+  "Encode a QUIC header, with checked lengths and packet-number bounds (RFC 9000 §17)."
+
+#define DOC_quic_header_decode \
+  "Read an authenticated header and return its fields and remaining bytes (RFC 9000 §17)."
+
+#define DOC_quic_frame_encode \
+  "Encode one well-formed QUIC frame (RFC 9000 §19)."
+
+#define DOC_quic_frame_decode \
+  "Read one frame allowed in the given packet type (RFC 9000 §12.4)."
+
+#define DOC_quic_packet_number_encode \
+  "Write the low packet-number bytes (RFC 9000 §17.1)."
+
+#define DOC_quic_packet_number_decode \
+  "Reconstruct a packet number from its low bytes (RFC 9000 Appendix A.3)."
+
 #define DOC_multistream_encode \
   "The bytes of one multistream-select message: its length, its bytes, then a newline."
 

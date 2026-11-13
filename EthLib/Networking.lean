@@ -47,6 +47,8 @@ public import EthLib.Networking.Snappy.Encode
 public import EthLib.Networking.Snappy.Frame
 public import EthLib.Networking.Snappy.FrameEncode
 
+public import EthLib.Networking.Quic.Frame
+
 /-!
 # `EthLib.Networking`
 

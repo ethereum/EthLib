@@ -1,11 +1,15 @@
 """QUIC v1: integers (RFC 9000 §16), packet keys (RFC 9001 §5) and the TLS 1.3 key schedule."""
 
-from typing import Literal, NamedTuple, TypeAlias
+from typing import Any, Literal, NamedTuple, TypeAlias
 
 # Every domain links into one extension module.
 # That module lives in the `cryptography` package.
 from ethlib.cryptography import _native
-from ethlib.errors import QuicVarintError as QuicVarintError, Tls13Error as Tls13Error
+from ethlib.errors import (
+    QuicError as QuicError,
+    QuicVarintError as QuicVarintError,
+    Tls13Error as Tls13Error,
+)
 
 # The two SHA-256 cipher suites whose packet keys EthLib derives.
 CipherSuite: TypeAlias = Literal["TLS_AES_128_GCM_SHA256", "TLS_CHACHA20_POLY1305_SHA256"]
@@ -77,7 +81,44 @@ def tls_finished(secret: bytes, transcript: bytes) -> bytes:
     return _native.quic_tls_finished(secret, transcript)
 
 
+def encode_header(header: Any) -> bytes:
+    """Encode a constructor tuple in the field order of Packet.Header, with width bits 0–3."""
+    return _native.quic_header_encode(header)
+
+
+def decode_header(short_connection_id_length: int, data: bytes) -> tuple[Any, bytes]:
+    """Read an authenticated header and return its constructor tuple and remaining bytes."""
+    return _native.quic_header_decode(short_connection_id_length, data)
+
+
+def encode_frame(frame: Any) -> bytes:
+    """Encode a constructor tuple in the field order of Frame.Frame, or a nullary name."""
+    return _native.quic_frame_encode(frame)
+
+
+def decode_frame(packet: str, data: bytes) -> tuple[Any, bytes]:
+    """Read a frame allowed in initial, zero_rtt, handshake or one_rtt packets."""
+    return _native.quic_frame_decode(packet, data)
+
+
+def encode_packet_number(width: int, number: int) -> bytes:
+    """Write the low 1–4 packet-number bytes, with width bits 0–3."""
+    return _native.quic_packet_number_encode(width, number)
+
+
+def decode_packet_number(width: int, truncated: int, expected: int) -> int:
+    """Reconstruct the packet number closest to expected, with width bits 0–3."""
+    return _native.quic_packet_number_decode(width, truncated, expected)
+
+
 __all__ = [
+    "QuicError",
+    "encode_header",
+    "decode_header",
+    "encode_frame",
+    "decode_frame",
+    "encode_packet_number",
+    "decode_packet_number",
     "CipherSuite",
     "KeySchedule",
     "QuicVarintError",
