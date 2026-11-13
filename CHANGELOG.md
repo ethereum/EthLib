@@ -9,6 +9,15 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the transaction environment gains the field `precompiles` ([#2108](https://github.com/ethereum/EthLib/issues/2108)).
+  It gives the address of the precompile that a call to each address runs.
+  Its default `some` keeps each precompile at its own address, so a real block is unchanged.
+  Supply that field in positional constructors, or use structure notation with its default.
+  The checks of a transaction, its run and the body of a block take optional simulation overrides.
+  A simulation can give the sender in place of the signature, and that sender may have code.
+  The sender check gains a flag for that case.
+  Nothing breaks in Python.
+
 - The execution RPC checks the requests of `eth_simulateV1` before their blocks run ([#2107](https://github.com/ethereum/EthLib/issues/2107)).
   A request that passes the checks gets `-32603` until the simulated blocks are specified.
   In Lean, `call_unknown` requires the method name to differ from `eth_simulateV1`.
@@ -102,6 +111,13 @@ Not yet released.
   The two bodies are not definitionally equal.
   A proof that unfolds `HashEvidence` to take it apart first rewrites with `hashEvidence_iff`, or applies `hashEvidence_iff.mp`.
   A proof that builds the evidence as an `Or` of the old form applies `hashEvidence_iff.mpr`.
+
+- In Lean, the four rules by which one justification step finalizes a checkpoint have one definition, `FinalizationStepRule state after checkpoint` ([#2187](https://github.com/ethereum/EthLib/issues/2187)).
+  The bits come from the state after the step, the epoch and the justified checkpoints from the state before it.
+  `weighJustificationAndFinalization_finalized` states its second disjunct as `FinalizationStepRule state after after.finalizedCheckpoint`, with the same unfolded body.
+  `DirectSafety.FinalizationRule call checkpoint` is `FinalizationStepRule call.cached call.weighed checkpoint`, with the same unfolded body.
+  A proof that took either apart by name first unfolds `FinalizationStepRule`.
+  No C export or Python function changes.
 
 - `verify_kzg_proof` checks its inputs in the order of EIP-4844: the commitment, `z`, `y`, then the proof.
   When more than one input is invalid, the first in that order gives the error.

@@ -397,17 +397,19 @@ The checks of the transaction gave `included`.
 
 The gas past the intrinsic gas splits into the execution gas and the reservoir of the message.
 
-The sender gets back the gas left and the reservoir left, with its refund. -/
+The sender gets back the gas left and the reservoir left, with its refund.
+
+Each call runs the precompile that the given map assigns to its code address. -/
 def runTransaction {fork : Fork} (Meter : Type) [GasMeter Meter] [LawfulGasMeter Meter]
-    (env : BlockEnvironment fork) (block : BlockState) (included : Included) (tx : Transaction) :
-    Except EvmError TransactionOutput := do
+    (env : BlockEnvironment fork) (block : BlockState) (included : Included) (tx : Transaction)
+    (precompiles : Address → Option Address := some) : Except EvmError TransactionOutput := do
   let state := TransactionState.ofBlock block
   let sender := included.sender
   let target ← messageTarget sender (state.getAccount sender).nonce tx
   let state ← (buyGas env state sender tx).mapError .state
   let txEnv : TransactionEnvironment fork :=
     { origin := sender, gasPrice := included.gasPrice,
-      blobVersionedHashes := fun _ => tx.blobHashes }
+      blobVersionedHashes := fun _ => tx.blobHashes, precompiles }
   let gas := allocateGas fork tx included.intrinsicGas
   let message ← transactionMessage env txEnv state sender target gas.execution tx
   let output ← processMessageCall (Meter := Meter) env.chainId.toNat
@@ -431,15 +433,20 @@ It also returns the gas used, the gas it adds to its block, the logs, and the er
 
 It fails only with an error that aborts the whole execution, such as missing code.
 
+By default a call runs the precompile at its own address.
+
+A simulation can move a precompile to another address.
+
 Up to BPO5, the gas meter is one counter of the gas left.
 
 From Glamsterdam, the meter of EIP-8037 also meters state gas.
 
 From Hegotá it fails, since the rules of that fork are not yet specified here. -/
 def processTransaction {fork : Fork} (env : BlockEnvironment fork) (block : BlockState)
-    (included : Included) (tx : Transaction) : Except EvmError TransactionOutput :=
+    (included : Included) (tx : Transaction) (precompiles : Address → Option Address := some) :
+    Except EvmError TransactionOutput :=
   if .hegota ≤ fork then .error (.forkNotYetSpecified fork)
-  else if fork ≥ .glamsterdam then runTransaction StateGasMeter env block included tx
-  else runTransaction Nat env block included tx
+  else if fork ≥ .glamsterdam then runTransaction StateGasMeter env block included tx precompiles
+  else runTransaction Nat env block included tx precompiles
 
 end EthLib.Execution.Transactions

@@ -251,17 +251,12 @@ private theorem history_of_call {g a : ForkedBeaconState preset}
         have indexEq : history.calls.length - 1 = i := by omega
         simpa [List.getElem?_append, small, indexEq] using one
 
-/-- The four rules by which justification finalizes a checkpoint, read from the bits of a call. -/
+/-- The four rules by which justification finalizes a checkpoint, read from the bits of a call.
+
+It is the step rule for the state after caching the slot and the state after justification. -/
 def FinalizationRule {g a : ForkedBeaconState preset} {run : Run config checks g a}
     (call : EpochCall run) (checkpoint : Checkpoint) : Prop :=
-  let bits := call.weighed.justificationBits.bits
-  let e := (getCurrentEpoch call.cached).toNat
-  (checkpoint = call.cached.previousJustifiedCheckpoint ∧
-    ((bits[1] = true ∧ bits[2] = true ∧ bits[3] = true ∧ checkpoint.epoch.toNat + 3 = e) ∨
-      (bits[1] = true ∧ bits[2] = true ∧ checkpoint.epoch.toNat + 2 = e))) ∨
-  (checkpoint = call.cached.currentJustifiedCheckpoint ∧
-    ((bits[0] = true ∧ bits[1] = true ∧ bits[2] = true ∧ checkpoint.epoch.toNat + 2 = e) ∨
-      (bits[0] = true ∧ bits[1] = true ∧ checkpoint.epoch.toNat + 1 = e)))
+  FinalizationStepRule call.cached call.weighed checkpoint
 
 /-- The keys that a test of the run counts hold two thirds of the active stake at its state.
 
@@ -810,22 +805,10 @@ private theorem quorum_source_history {g a : ForkedBeaconState preset} (run : Ru
       ⟨history.extend tail⟩
     exact .inr (Eq.mp (by rw [← same]) result)
 
-/-- The four rules by which one justification step finalizes a checkpoint, read from its bits. -/
-private def StepRule {fork : Fork} (state after : BeaconState preset fork)
-    (checkpoint : Checkpoint) : Prop :=
-  let bits := after.justificationBits.bits
-  let e := (getCurrentEpoch state).toNat
-  (checkpoint = state.previousJustifiedCheckpoint ∧
-    ((bits[1] = true ∧ bits[2] = true ∧ bits[3] = true ∧ checkpoint.epoch.toNat + 3 = e) ∨
-      (bits[1] = true ∧ bits[2] = true ∧ checkpoint.epoch.toNat + 2 = e))) ∨
-  (checkpoint = state.currentJustifiedCheckpoint ∧
-    ((bits[0] = true ∧ bits[1] = true ∧ bits[2] = true ∧ checkpoint.epoch.toNat + 2 = e) ∨
-      (bits[0] = true ∧ bits[1] = true ∧ checkpoint.epoch.toNat + 1 = e)))
-
 private theorem step_rule {fork : Fork} {state after : BeaconState preset fork}
     (computed : processJustificationAndFinalization state = .ok after) :
     after.finalizedCheckpoint = state.finalizedCheckpoint ∨
-      StepRule state after after.finalizedCheckpoint := by
+      FinalizationStepRule state after after.finalizedCheckpoint := by
   rcases processJustificationAndFinalization_ok computed with same |
     ⟨total, previous, current, ok⟩
   · exact .inl (congrArg BeaconState.finalizedCheckpoint same)
@@ -877,7 +860,7 @@ The caller supplies the quorums behind the bits of the step, fresh or kept from 
 With a target two epochs ahead, a checkpoint of the epoch between them satisfies the predicate. -/
 private theorem rule_quorums {fork : Fork} {state after : BeaconState preset fork} {Q : Type}
     (source target : Q → Checkpoint) (H : Checkpoint → Prop) {c : Checkpoint}
-    (rule : StepRule state after c)
+    (rule : FinalizationStepRule state after c)
     (current : after.justificationBits.bits[0] = true → ∃ q : Q,
       source q = state.currentJustifiedCheckpoint ∧ (target q).epoch = getCurrentEpoch state)
     (previous : after.justificationBits.bits[1] = true → ∃ q : Q,
@@ -1133,8 +1116,7 @@ private theorem link_source_lt {fork : Fork} {state : BeaconState preset fork}
     have laterNat := UInt64.lt_iff_toNat_lt.mp later
     apply UInt64.lt_iff_toNat_lt.mpr
     simp only [getPreviousEpoch_toNat] at settledNat
-    have one : (GENESIS_EPOCH + 1 : Epoch).toNat = 1 := by decide
-    rw [one] at laterNat
+    rw [toNat_genesisEpoch_add_one] at laterNat
     simp only [↓reduceIte]
     omega
 

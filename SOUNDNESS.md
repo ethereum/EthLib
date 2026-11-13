@@ -2262,6 +2262,9 @@ The theorems in `Networking/Proofs/Gossip/Heartbeat.lean` state these properties
 - After a heartbeat, every mesh has at most `D_high + D_out` peers, at most `D_high` of them not outbound, and none twice.
   The two bounds need `D ≤ D_high`, as the consensus layer sets it.
 - A mesh of a joined topic below `D_low`, once its negative peers leave, fills up to `D`, or takes every peer that it may GRAFT.
+- A mesh of a joined topic between `D_low` and `D_high`, once its negative peers leave, keeps those peers in their order.
+  It takes only outbound peers that it may GRAFT, until it holds `D_out` outbound peers or runs out of them.
+  So a mesh at `D_low` takes no peer to reach `D`, and one that holds at least `D_out` outbound peers is unchanged.
 - No mesh holds a peer with a negative score.
 - A mesh of a joined topic pruned for oversubscription keeps `D_out` outbound peers, or all the outbound peers it held once its negative peers left.
   This needs `D ≤ D_high` and `D_out ≤ D`.
@@ -3988,6 +3991,11 @@ An account override sets each field that it gives, and keeps the others (`applyA
 `stateDiff` keeps the slots that it does not name, and `state` clears them (`applyAccountOverride_stateDiff`, `applyAccountOverride_state`).
 The overrides of a block keep every account that they do not name (`applyOverrides_not_mem`), and act on each account they name as its override alone (`applyOverrides_mem`).
 The defaults of a call come with the simulated blocks.
+The execution core takes two exceptions of a simulated block as optional overrides, whose defaults leave a real block unchanged.
+They are a sender given in place of the signature, and the precompile that a call to each address runs.
+A known sender that the signature names, and that passes the rule on its code, gives the same check of the transaction (`checkInclusion_of_knownSender`, `Proofs/Transactions/Overrides.lean`).
+With the default map, a call runs the precompile at the address of its code (`precompileAddress_of_default`).
+A move leaves the addresses that are warm at the start of a transaction unchanged, as the notes say.
 
 Where the source is silent or conflicts with itself, EthLib follows the fixtures:
 
@@ -4476,9 +4484,17 @@ They call the same dispatch as gossip, `validateGossipMessage` (`Consensus/Gossi
 `submitList_failures` shows that the entry of the answer at a position is the failure of its item, given the keys after the items before it.
 `submitList_failures_pairwise` shows that the answer names the failed positions in increasing order, so each once, and `submitList_failures_lt_length` that each lies within the list.
 `submitList_accepted_iff` shows that the answer is a success exactly when no item fails, and `submitList_failed_ne_nil` that a failed answer names at least one item.
+`PoolRequest.ne_nil_of_mem_items` shows that every item of a request has at least one message.
+`syncSubnets_pairwise` shows that the subnets of a sync committee message come once each, in increasing order.
+`mem_syncSubnets_of_seat` shows that a validator that holds a seat gets the subnets of its seats.
+`syncSubnets_of_no_seat` shows that any other validator gets subnet 0 alone, as does a message whose head state, validator or sync committee cannot be read.
+`validateItem_syncSubnets_seat` shows that an item of a sync committee message passes only if its validator holds a seat in the sync committee of the slot after the head state.
+It rests on `seat_of_validateSyncCommitteeMessage_accept` (`Consensus/Proofs/Gossip/SyncCommittee.lean`): gossip accepts a message only on a subnet of a seat of its validator.
+`submitPool_syncCommitteeMessages_seat` shows the same for each message of an accepted request.
 The Python suite (`bindings/python/tests/consensus/test_beacon_api_pool.py`) submits each object of the pinned gossip cases of the pool topics to its endpoint.
 It checks that the object fails exactly when gossip does not accept it, with the reason of the case.
 It leaves out the cases whose reason is a wrong subnet, since the node picks the subnet itself, and the cases that send objects of another topic.
+No case submits a sync committee message from a validator with no seat; only the theorems above cover it.
 Every case of the bid topic also sends the envelopes of payloads, so those cases run in the suite of the publish endpoints.
 
 The publish endpoints of blocks and of payload envelopes check an object at the level that the client asks, before the node broadcasts it (`Consensus/BeaconApi/Publish.lean`).
@@ -4663,7 +4679,9 @@ Points that remain open:
 - The pool endpoints take the items in order, and the keys of a valid item apply to the next ones, so a list that repeats an object fails at each copy after the first.
 - The node picks the subnet of an attestation from its head state, and validates a sync committee message once on each subnet that holds a seat of its validator.
   When it finds no subnet, it validates the object on subnet 0, where gossip fails at or before its check of the subnet.
-  The order of the checks of the validators gives this; no theorem states it yet.
+  The order of the checks of the validators gives this.
+  For a sync committee message, `syncSubnets_of_no_seat` and `validateItem_syncSubnets_seat` state that such an item goes on subnet 0 alone and fails.
+  No theorem states which check fails, and none covers an attestation.
   For a sync committee message, the first check of gossip reads the keys seen on that subnet.
   So with keys seen under another head, the reason on subnet 0 can be "already seen" where another subnet would give a wrong subnet.
 - A sync committee message is validated on every subnet, and each subnet where it passes keeps its keys; the item fails with the reason of the first subnet where it fails.

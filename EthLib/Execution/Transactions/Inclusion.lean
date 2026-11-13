@@ -20,6 +20,8 @@ The rules alone need no state, and these rules add what the block and the state 
 - The sender holds the most that the transaction can cost, with the value it sends.
 - The sender has no code, and from Pectra it may have a delegation indicator.
 
+A sender given by a simulation, with no signature, may have code.
+
 The checks run in the order that decides which error a transaction gets.
 
 Section 6.2 of the Yellow Paper, Shanghai version, states the rules on gas, nonce and balance.
@@ -132,7 +134,7 @@ def InclusionError.code : InclusionError → UInt32
 
 /-- What a transaction that may enter its block brings to its run. -/
 structure Included where
-  /-- The sender that the signature names. -/
+  /-- The sender, from the signature or given by a simulation. -/
   sender : Address
   /-- The intrinsic gas of the transaction. -/
   intrinsicGas : Nat
@@ -167,17 +169,21 @@ def checkBlockGas {fork : Fork} (env : BlockEnvironment fork) (used : BlockGas)
 
 - The nonce is the nonce of the sender.
 - The sender holds the most that the transaction can cost, with the value it sends.
-- The sender has no code, and from Pectra it may have a delegation indicator. -/
-def checkSender (fork : Fork) (state : TransactionState) (sender : Address) (tx : Transaction) :
-    Except InclusionError Unit := do
+- The sender has no code, and from Pectra it may have a delegation indicator.
+
+A sender that no signature names, as in a simulation, may have code, which is then not read.
+-/
+def checkSender (fork : Fork) (state : TransactionState) (sender : Address) (tx : Transaction)
+    (signed : Bool := true) : Except InclusionError Unit := do
   let account := state.getAccount sender
   failIf (tx.nonce.toNat < account.nonce) (.nonceTooLow account.nonce tx.nonce.toNat)
   failIf (account.nonce < tx.nonce.toNat) (.nonceTooHigh account.nonce tx.nonce.toNat)
   let cost := tx.maxGasFee + tx.value.toNat
   failIf (account.balance.toNat < cost) (.insufficientBalance account.balance.toNat cost)
-  let code ← (state.getCode account.codeHash).mapError fun _ => .missingCode account.codeHash
-  failIf (account.codeHash ≠ EMPTY_CODE_HASH ∧ !(fork ≥ .pectra ∧ isValidDelegation code))
-    .senderNotEoa
+  if signed then
+    let code ← (state.getCode account.codeHash).mapError fun _ => .missingCode account.codeHash
+    failIf (account.codeHash ≠ EMPTY_CODE_HASH ∧ !(fork ≥ .pectra ∧ isValidDelegation code))
+      .senderNotEoa
 
 /-- Check that a transaction may enter its block at `fork`, on the chain `chainId`.
 
@@ -197,17 +203,28 @@ From Glamsterdam:
 - the rules alone, which check the blobs and the authorizations too;
 - the gas of the block and the base fee.
 
-At every fork, the fee per blob gas and the sender come last. -/
+At every fork, the fee per blob gas and the sender come last.
+
+A simulation may give the sender, which skips the signature and the rule on the sender's code.
+
+A legacy transaction then names no chain, since only its signature does. -/
 def checkInclusion {fork : Fork} (chainId : UInt64) (env : BlockEnvironment fork)
-    (used : BlockGas) (state : TransactionState) (tx : Transaction) :
-    Except InclusionError Included := do
+    (used : BlockGas) (state : TransactionState) (tx : Transaction)
+    (knownSender : Option Address := none) : Except InclusionError Included := do
   let baseFee := baseFeeOf env
   let coversBaseFee := failIf (tx.maxFeePerGas < baseFee)
     (.insufficientMaxFeePerGas tx.maxFeePerGas baseFee)
+  let recover : Except InclusionError Address :=
+    match knownSender with
+    | some sender => pure sender
+    | none => (recoverSender fork tx).mapError .transaction
+  let checkChain : Except InclusionError Unit :=
+    if knownSender.isSome && tx.type == 0 then pure ()
+    else (checkChainId fork chainId tx).mapError .transaction
   let (sender, intrinsic) ←
     if fork ≥ .glamsterdam then do
-      (checkChainId fork chainId tx).mapError .transaction
-      let sender ← (recoverSender fork tx).mapError .transaction
+      checkChain
+      let sender ← recover
       let intrinsic ← (validateTransaction fork sender tx).mapError .transaction
       checkBlockGas env used tx
       coversBaseFee
@@ -215,8 +232,8 @@ def checkInclusion {fork : Fork} (chainId : UInt64) (env : BlockEnvironment fork
     else do
       let intrinsic ← (validateTransaction fork default tx).mapError .transaction
       checkBlockGas env used tx
-      (checkChainId fork chainId tx).mapError .transaction
-      let sender ← (recoverSender fork tx).mapError .transaction
+      checkChain
+      let sender ← recover
       coversBaseFee
       (checkContents fork tx).mapError .transaction
       pure (sender, intrinsic)
@@ -224,7 +241,7 @@ def checkInclusion {fork : Fork} (chainId : UInt64) (env : BlockEnvironment fork
   let blobGasPrice := blobGasPriceOf env
   failIf (0 < blobGas ∧ tx.maxFeePerBlobGas < blobGasPrice)
     (.insufficientMaxFeePerBlobGas tx.maxFeePerBlobGas blobGasPrice)
-  checkSender fork state sender tx
+  checkSender fork state sender tx knownSender.isNone
   return ⟨sender, intrinsic, effectiveGasPrice baseFee tx, blobGas⟩
 
 end EthLib.Execution.Transactions

@@ -514,11 +514,11 @@ theorem initializeBeaconStateFromEth1_slackChainInvariant {fork : Fork}
     SlackChainInvariant V U W (block (Vector.replicate 32 0)) attested block
       ⟨fork, state⟩ := by
   obtain ⟨before, holds⟩ := initializeBeaconStateFromEth1_invariant computed
-  obtain ⟨slot, previous, current⟩ := initializeBeaconStateFromEth1_checkpoints computed
-  refine ⟨holds, JustifiedEarly.of_initializeBeaconStateFromEth1 computed, fun later => ?_,
+  obtain ⟨-, previous, current⟩ := initializeBeaconStateFromEth1_checkpoints computed
+  refine ⟨holds, JustifiedEarly.of_initializeBeaconStateFromEth1 computed,
+    JustifiedSeparated.of_initializeBeaconStateFromEth1 computed,
     fun altair => absurd altair (Nat.not_le_of_lt before), fun _ current pending member => ?_,
     RootsAbove.of_initializeBeaconStateFromEth1 computed, ?_⟩
-  · simp [getCurrentEpoch, slot, computeEpochAtSlot, GENESIS_SLOT, GENESIS_EPOCH] at later
   · rw [initializeBeaconStateFromEth1_pending computed] at member
     simp at member
   · unfold SlackJustifiedCheckpoints
