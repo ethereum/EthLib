@@ -38,7 +38,7 @@ An attestation leaves each voter not marked as an equivocator a vote at its targ
 
 An attestation from the wire passes only with its target at the current epoch or the one before.
 
-An attester slashing adds to the equivocators exactly the validators in both of its attestations.
+An accepted attester slashing adds to the equivocators exactly the validators in both attestations.
 
 From Gloas the vote of an attestation on the payload passes exactly in the three allowed cases.
 
@@ -457,7 +457,7 @@ private theorem mem_foldl_addMissing {i : ValidatorIndex} :
     rw [List.foldl_cons, mem_foldl_addMissing indices]
     by_cases found : j ∈ known <;> simp [found] <;> grind
 
-/-- Adding indices one at a time, each only when missing, lists none of them twice. -/
+/-- Adding indices one at a time, each only when missing, keeps a list without repeats. -/
 private theorem nodup_foldl_addMissing :
     ∀ (indices known : List ValidatorIndex), known.Nodup →
       (indices.foldl (fun known j => if known.contains j then known else known ++ [j])
@@ -485,9 +485,9 @@ theorem nodup_addEquivocators {slashing : AttesterSlashing preset fork}
     (store.addEquivocators slashing).equivocatingIndices.Nodup :=
   nodup_foldl_addMissing _ _ nodup
 
-/-- An attester slashing passes exactly when its two votes are slashable together.
+/-- An attester slashing passes exactly when its votes are slashable together and both are valid.
 
-Both attestations must then be valid in the state of the justified block.
+Each attestation is checked in the state of the justified block.
 
 The store then adds the validators in both attestations to the equivocators. -/
 theorem onAttesterSlashing_eq_ok_iff {checks : SignatureChecks}
@@ -514,9 +514,7 @@ theorem onAttesterSlashing_eq_ok_iff {checks : SignatureChecks}
       | error _ => simp
       | ok b => cases b <;> simp [eq_comm]
 
-/-- After an attester slashing a validator equivocates exactly when it did before.
-
-Or it is among the attesters of both attestations of the slashing. -/
+/-- After an attester slashing a validator equivocates exactly when it did, or is in both votes. -/
 theorem mem_equivocatingIndices_of_onAttesterSlashing {checks : SignatureChecks}
     {slashing : AttesterSlashing preset fork} {after : Store preset fork} {i : ValidatorIndex}
     (slashed : store.onAttesterSlashing config checks slashing = .ok after) :
@@ -1358,9 +1356,9 @@ theorem validateOnAttestation_ok {attestation : Attestation preset fork} {isFrom
 
 It passes exactly when the target is that epoch, or the one just before it.
 
-So at epoch 0 only a target at epoch 0 passes.
+Otherwise it fails with the target epoch as not recent.
 
-Otherwise it fails with the target epoch as not recent. -/
+So at epoch 0 only a target at epoch 0 passes. -/
 theorem validateTargetEpochAgainstCurrentTime_eq {attestation : Attestation preset fork}
     {epoch : Epoch} (current : store.getCurrentStoreEpoch config = .ok epoch) :
     store.validateTargetEpochAgainstCurrentTime config attestation =
