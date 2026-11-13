@@ -132,6 +132,11 @@ def array {α : Type} (what : String) (f : Json → Read α) : Json → Read (Li
   | .arr items => items.toList.mapM f
   | _ => reject s!"{what}: not an array"
 
+/-- A value read by the given reader, or no value for `null`. -/
+def nullable {α : Type} (f : Json → Read α) : Json → Read (Option α)
+  | .null => pure none
+  | j => some <$> f j
+
 /-- The fields of an object with a value other than `null`, by name. -/
 def fields (what : String) : Json → Read (List (String × Json))
   | .obj kvs => pure (kvs.toList.filter fun (_, v) => !v.isNull)
@@ -140,6 +145,10 @@ def fields (what : String) : Json → Read (List (String × Json))
 /-- Whether a list of fields holds exactly the named fields. -/
 def hasExactly (fs : List (String × Json)) (names : List String) : Bool :=
   fs.length == names.length && names.all fun name => fs.any (·.1 == name)
+
+/-- Whether each of a list of fields has one of the names. -/
+def hasOnly (fs : List (String × Json)) (names : List String) : Bool :=
+  fs.all fun (name, _) => names.contains name
 
 /-- The value of a field that an object holds. -/
 def field (what : String) (fs : List (String × Json)) (name : String) : Read Json :=
@@ -170,6 +179,11 @@ def integer (what : String) : Json → Read Int
   | .num ⟨m, e⟩ =>
     if m % 10 ^ e = 0 then pure (m / 10 ^ e) else reject s!"{what}: not an integer"
   | _ => reject s!"{what}: not an integer"
+
+/-- A JSON boolean. -/
+def bool (what : String) : Json → Read Bool
+  | .bool b => pure b
+  | _ => reject s!"{what}: not a boolean"
 
 /-- A JSON string. -/
 def string (what : String) : Json → Read String

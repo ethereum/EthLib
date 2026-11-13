@@ -1621,6 +1621,14 @@ def engine_read_get_payload_result(method: str, fork: str, result: dict[str, Any
     """The result of an `engine_getPayload` method at a fork, read from its JSON and written back."""
     ...
 
+def engine_read_payload_bodies_result(method: str, result: Any) -> list[dict[str, Any] | None]:
+    """The result of an `engine_getPayloadBodiesByHash` or `ByRange` method, read and written back."""
+    ...
+
+def engine_read_get_blobs_result(method: str, result: Any) -> list[dict[str, Any] | None] | None:
+    """The result of an `engine_getBlobs` method, read from its JSON and written back."""
+    ...
+
 def engine_rewrite_params(method: str, params: list[Any]) -> list[Any]:
     """The parameters of an Engine API request, read by the decoder and written by the writer."""
     ...
