@@ -2,7 +2,7 @@ module
 
 public import EthLib.Consensus.Proofs.Transition.RegistryLifecycle
 public import EthLib.Consensus.Proofs.Churn
-public import EthLib.Consensus.Proofs.Transition.Cohorts
+public import EthLib.Consensus.Proofs.DirectSafety.Cohorts
 public import EthLib.Consensus.Proofs.DirectSafety.Drift
 public import EthLib.Consensus.Proofs.Transition.BalanceDrift
 import EthLib.Consensus.Proofs.Transition.ActiveKept

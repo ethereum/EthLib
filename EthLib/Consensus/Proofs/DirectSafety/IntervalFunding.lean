@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Consensus.Proofs.Transition.BalanceSources
+public import EthLib.Consensus.Proofs.DirectSafety.BalanceSources
 public import EthLib.Consensus.Proofs.DirectSafety.ChurnBounds
 public import EthLib.Consensus.Proofs.DirectSafety.Identity
 public import EthLib.Consensus.Proofs.Transition.RewardDeltas

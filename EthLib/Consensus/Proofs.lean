@@ -13,7 +13,9 @@ public import EthLib.Consensus.Proofs.BuilderApi.Registration
 public import EthLib.Consensus.Proofs.Builders
 public import EthLib.Consensus.Proofs.Churn
 public import EthLib.Consensus.Proofs.ChurnReservations
+public import EthLib.Consensus.Proofs.DirectSafety.BalanceSources
 public import EthLib.Consensus.Proofs.DirectSafety.ChurnBounds
+public import EthLib.Consensus.Proofs.DirectSafety.Cohorts
 public import EthLib.Consensus.Proofs.DirectSafety.DepartureQueue
 public import EthLib.Consensus.Proofs.DirectSafety.FundingBlock
 public import EthLib.Consensus.Proofs.DirectSafety.FundingEpoch
@@ -135,7 +137,6 @@ public import EthLib.Consensus.Proofs.Time
 public import EthLib.Consensus.Proofs.Transition.ActivationExitOrder
 public import EthLib.Consensus.Proofs.Transition.ActiveKept
 public import EthLib.Consensus.Proofs.Transition.BalanceDrift
-public import EthLib.Consensus.Proofs.Transition.BalanceSources
 public import EthLib.Consensus.Proofs.Transition.Block
 public import EthLib.Consensus.Proofs.Transition.BlockRewards
 public import EthLib.Consensus.Proofs.Transition.BuilderDebt
@@ -149,7 +150,6 @@ public import EthLib.Consensus.Proofs.Transition.BuilderPayments
 public import EthLib.Consensus.Proofs.Transition.BuilderRequests
 public import EthLib.Consensus.Proofs.Transition.Chain
 public import EthLib.Consensus.Proofs.Transition.ChainRoots
-public import EthLib.Consensus.Proofs.Transition.Cohorts
 public import EthLib.Consensus.Proofs.Transition.Committees
 public import EthLib.Consensus.Proofs.Transition.ConsolidationWindow
 public import EthLib.Consensus.Proofs.Transition.DepositCarry
