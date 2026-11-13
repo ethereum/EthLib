@@ -1985,6 +1985,25 @@ The consensus layer names only Noise for TCP, and does not say whether a node ma
 The profile proposes Noise alone.
 Which messages share a packet is not modelled; the recommendation to send the header with the first proposal or answer changes no message.
 
+### The gossipsub caches
+
+`MessageCache` and `SeenCache` (`Networking/Gossip/Cache.lean`) are the two caches of [gossipsub v1.0, "Message Cache"](https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/pubsub/gossipsub/gossipsub-v1.0.md#message-cache).
+The message cache keeps history windows, the newest first, with `put`, `get`, `gossipIds` and `shift`, one per operation of the source.
+`shift len` starts a new window and keeps at most `len` windows.
+So a message put into the current window stays for `len` heartbeats, and `gossipIds gossip` reads at most the newest `gossip` windows.
+`get_shift_iterate` and `gossipIds_shift_iterate` (`Networking/Proofs/Gossip/Cache.lean`) prove these lifetimes for a history of at least one window.
+The second one also needs an ID that the cache did not hold before the put.
+`gossipIds_subset_get` proves that every ID told of in gossip is found by `get`.
+It needs no bound between the two window counts, since gossip reads only the newest of the windows that `get` searches.
+The seen cache keeps each ID with the time in milliseconds when it was inserted.
+`contains`, `insert` and `expire` read, add and remove entries for a lifetime in milliseconds.
+The consensus layer sets `seen_ttl` in seconds (`gossipsubParameters`), so a caller passes it times 1000 as the lifetime.
+
+The source calls the seen cache "a timed least-recently-used cache", and does not say whether a lookup refreshes the time of an entry.
+Here an entry keeps the time when it was inserted, and a lookup changes nothing.
+The source gives no bound on the size of either cache, so none is modelled.
+The caches take the 20-byte message IDs of the consensus layer, where gossipsub allows any bytes.
+
 ### The streams of an mplex connection
 
 `step`, `receive` and `send` (`Networking/Libp2p/MplexSession.lean`) check each mplex frame against the streams of one side.

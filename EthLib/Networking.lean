@@ -18,6 +18,7 @@ public import EthLib.Networking.Enr.Consensus
 public import EthLib.Networking.Enr.Eth
 public import EthLib.Networking.Enr.Record
 public import EthLib.Networking.Enr.V4
+public import EthLib.Networking.Gossip.Cache
 public import EthLib.Networking.Gossip.MessageId
 public import EthLib.Networking.Gossip.Parameters
 public import EthLib.Networking.Gossip.Payload
