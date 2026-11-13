@@ -141,28 +141,20 @@ private theorem checkDutyEpoch_far {state : BeaconState preset fork} {epoch : Ep
   simp [checkDutyEpoch, Nat.not_le.mpr far, throw, throwThe, MonadExceptOf.throw, bind,
     Except.bind]
 
-/-- A request for an epoch after the next one gets the error with code 400. -/
+/-- A request for an epoch after the next one gets the error of an invalid epoch, code 400. -/
 theorem attesterDuties_epoch_bound {state : BeaconState preset fork} {epoch : Epoch}
-    {indices : List ValidatorIndex} (far : (getCurrentEpoch state).toNat + 1 < epoch.toNat) :
-    ∃ error, attesterDuties state epoch indices = .error error ∧ error.code = 400 := by
-  unfold attesterDuties
-  by_cases empty : indices.isEmpty
-  · exact ⟨emptyIndices, by simp [empty, throw, throwThe, MonadExceptOf.throw, bind,
-      Except.bind], rfl⟩
-  · refine ⟨invalidEpoch epoch, ?_, rfl⟩
-    simp [empty, checkDutyEpoch_far far, bind, Except.bind]
-
-/-- From Gloas, a PTC request for an epoch after the next one gets the error with code 400. -/
-theorem ptcDuties_epoch_bound {config : Config} {state : BeaconState preset fork}
-    {gloas : .glamsterdam ≤ fork} {epoch : Epoch} {indices : List ValidatorIndex}
+    {index : ValidatorIndex} {rest : List ValidatorIndex}
     (far : (getCurrentEpoch state).toNat + 1 < epoch.toNat) :
-    ∃ error, ptcDuties config state gloas epoch indices = .error error ∧ error.code = 400 := by
-  unfold ptcDuties
-  by_cases empty : indices.isEmpty
-  · exact ⟨emptyIndices, by simp [empty, throw, throwThe, MonadExceptOf.throw, bind,
-      Except.bind], rfl⟩
-  · refine ⟨invalidEpoch epoch, ?_, rfl⟩
-    simp [empty, checkDutyEpoch_far far, bind, Except.bind]
+    attesterDuties state epoch (index :: rest) = .error (invalidEpoch epoch) := by
+  simp [attesterDuties, checkDutyEpoch_far far, bind, Except.bind]
+
+/-- From Gloas, a PTC request for an epoch after the next one gets the error of an invalid epoch.
+-/
+theorem ptcDuties_epoch_bound {config : Config} {state : BeaconState preset fork}
+    {gloas : .glamsterdam ≤ fork} {epoch : Epoch} {index : ValidatorIndex}
+    {rest : List ValidatorIndex} (far : (getCurrentEpoch state).toNat + 1 < epoch.toNat) :
+    ptcDuties config state gloas epoch (index :: rest) = .error (invalidEpoch epoch) := by
+  simp [ptcDuties, checkDutyEpoch_far far, bind, Except.bind]
 
 /-- Each attester duty is in the requested epoch, at a committee index below the count it gives.
 
@@ -443,8 +435,7 @@ theorem dependentRoot_eq {state : BeaconState preset fork} {lag : Nat} {epoch : 
     (started : computeStartSlotAtEpoch preset (epoch - lag.toUInt64) = .ok start)
     (positive : start ≠ 0) :
     dependentRoot state lag epoch genesisRoot =
-      (getBlockRootAtSlot state (start - 1)).mapError fun fault =>
-        internalError (reprStr fault) := by
+      (getBlockRootAtSlot state (start - 1)).mapError fun _ => invalidEpoch epoch := by
   simp [dependentRoot, Nat.not_lt.mpr late, started, positive, Except.mapError, bind,
     Except.bind]
 

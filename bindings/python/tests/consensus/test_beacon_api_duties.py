@@ -243,6 +243,21 @@ def test_duties_before_their_fork(fork: str, kind: str, message: str) -> None:
     assert error.value.code == 400
 
 
+@pytest.mark.parametrize(("kind", "epoch"), [("attester", 11), ("ptc", 18)])
+def test_duties_too_old(kind: str, epoch: int) -> None:
+    # The block roots of the minimal state span 64 slots, so the root at slot 79 is gone.
+    # The PTC window of the state starts at the previous epoch.
+    with raises(consensus.ConsensusError, f"Invalid epoch: {epoch}") as error:
+        _duties("gloas", kind, epoch, indices=[0])
+    assert error.value.code == 400
+
+
+def test_ptc_duties_refuse_a_repeated_index() -> None:
+    with raises(consensus.ConsensusError, "Repeated validator index") as error:
+        _duties("gloas", "ptc", EPOCH, indices=[1, 1])
+    assert error.value.code == 400
+
+
 @pytest.mark.parametrize("kind", ["attester", "sync", "ptc"])
 def test_empty_request(kind: str) -> None:
     with raises(consensus.ConsensusError, "Empty validator index list") as error:

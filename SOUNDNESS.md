@@ -3844,12 +3844,13 @@ The duty answers are in `Consensus/BeaconApi/Duties.lean`: attester, proposer, s
 The committee has the length of the duty and holds the validator at the position of the duty.
 `attesterDuties_complete` shows that a requested validator with a committee assignment has exactly one duty, when the request repeats no index.
 `attesterDuties_epoch` shows that each attester duty is in the requested epoch, with the count of committees per slot of the epoch and an index below it.
-`attesterDuties_epoch_bound` and `ptcDuties_epoch_bound` show that a request for an epoch after the next one gets code 400.
+`attesterDuties_epoch_bound` and `ptcDuties_epoch_bound` show that a request for an epoch after the next one gets the error of an invalid epoch, code 400.
 `proposerDuties_beaconProposer` shows that in the current epoch each proposer duty names the proposer of the state advanced to its slot.
 `proposerDuties_current_slot` shows the same at the slot of the state itself.
 `syncDuties_seats` shows that each seat of a sync duty holds the key of the validator, in the committee of the period, and that a duty has a seat.
 `dependentRoot_genesis` shows that the dependent root of the first two epochs, with a lag of one, is the genesis root.
-`dependentRoot_genesis_zero` shows the same for epoch 0 without a lag, and `dependentRoot_eq` that past the underflow it is the block root of the formula.
+`dependentRoot_genesis_zero` shows the same for epoch 0 without a lag.
+`dependentRoot_eq` unfolds the case past the underflow: the block root at the slot before the start of the epoch a lag before.
 The Python suite (`bindings/python/tests/consensus/test_beacon_api_duties.py`) reads the minimal states of the committee tests.
 It checks the attester duties against the committees answer, and the PTC duties against the assignments of the guide.
 It checks the proposer duties against the lookahead of the state from Fulu, and against the proposer of each slot before Fulu.
@@ -3934,16 +3935,19 @@ Points that remain open:
 - The attester epoch "Should only be allowed 1 epoch ahead"; EthLib refuses a later epoch with code 400.
   The PTC epoch "Must not be greater than the next epoch"; EthLib refuses a later one with code 400 too.
   Both answers also refuse an epoch whose seed the mixes of the state do not hold, as the committees answer does.
+  The PTC answer also refuses an epoch before the previous one, or before Gloas, which the window of the state does not hold.
+  An epoch too old for the block roots of the state gets code 400 when its dependent root is read.
 - The source asks for at least one index in the attester, sync and PTC requests; an empty request gets code 400.
 - The proposer duties read the lookahead of the state from Fulu, for the current epoch and the seed lookahead.
   Before Fulu they are drawn for the current epoch only, since later effective balances are not known yet.
   Another epoch gets code 400.
 - The second version of the proposer endpoint uses a lag of one for its dependent root at every fork, as the source writes it.
 - The first version of the proposer endpoint answers for the current epoch only, since the root at the last slot before a later epoch is not known yet.
-- The dependent root is read from the block roots of the state, which must be past that slot; otherwise it gets code 500.
+- The dependent root is read from the block roots of the state, which must be past that slot and still hold it; otherwise it gets code 400.
   The caller supplies the genesis block root, which EthLib does not check.
 - An index that names no validator of the state gets code 400; a validator with no duty in the epoch is left out.
-  A repeated index gives its duty once for each time it is named.
+  The PTC request asks for distinct indices, so a repeated one gets code 400.
+  The attester and sync requests do not, so a repeated index gives its duty once for each time it is named.
 - The sync duties answer for the current period or the next, since the state holds only those committees; another period gets code 400.
 
 ### Builder API

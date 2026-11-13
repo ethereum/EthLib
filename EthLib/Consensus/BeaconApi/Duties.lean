@@ -265,11 +265,18 @@ def ptcDuty (config : Config) (state : BeaconState preset fork) (gloas : .glamst
 
 /-- From Gloas: the PTC duties of the requested validators in an epoch, in request order.
 
-An empty request, or an epoch the state cannot answer for, gives the error with code 400. -/
+An empty request, or an epoch the state cannot answer for, gives the error with code 400.
+
+The window of the state holds the committees from the previous epoch on, from Gloas.
+
+The source asks for distinct indices, so a repeated one gives the error with code 400 too. -/
 def ptcDuties (config : Config) (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork)
     (epoch : Epoch) (indices : List ValidatorIndex) : Except ErrorMessage (List PtcDuty) := do
   if indices.isEmpty then throw emptyIndices
   checkDutyEpoch state epoch
+  if epoch.toNat + 1 < (getCurrentEpoch state).toNat ∨ epoch < config.GLOAS_FORK_EPOCH then
+    throw (invalidEpoch epoch)
+  unless indices.Nodup do throw { code := 400, message := "Repeated validator index" }
   return (← indices.mapM (ptcDuty config state gloas epoch)).filterMap id
 
 /-! ## Dependent roots -/
@@ -280,14 +287,18 @@ It is the root at the last slot before the epoch that lies a lag before the give
 
 On underflow, before the first epoch or slot, it is the root of the genesis block.
 
-The state must be past that slot and still hold its root, or the error has code 500. -/
+The state must be past that slot and still hold its root, or the error has code 400.
+
+For the epochs that the answers accept, only an epoch too old for the roots of the state fails.
+
+A start slot past 64 bits gives the error with code 500. -/
 def dependentRoot (state : BeaconState preset fork) (lag : Nat) (epoch : Epoch)
     (genesisRoot : Root) : Except ErrorMessage Root := do
   if epoch.toNat < lag then return genesisRoot
   let start ← (computeStartSlotAtEpoch preset (epoch - lag.toUInt64)).mapError fun fault =>
     internalError (reprStr fault)
   if start = 0 then return genesisRoot
-  (getBlockRootAtSlot state (start - 1)).mapError fun fault => internalError (reprStr fault)
+  (getBlockRootAtSlot state (start - 1)).mapError fun _ => invalidEpoch epoch
 
 /-! ## Responses -/
 
@@ -309,7 +320,9 @@ inductive DutyKind where
 
 The sync answer has no dependent root; the proposer answers take no indices.
 
-The first proposer answer is for the current epoch only, since its root is not known before.
+The first proposer answer is for the current epoch only.
+
+The root of a later epoch is that of a slot the state has not reached.
 
 The sync answer needs Altair and the PTC answer Gloas, or the error has code 400. -/
 def dutiesResponse (config : Config) (state : BeaconState preset fork) (kind : DutyKind)
