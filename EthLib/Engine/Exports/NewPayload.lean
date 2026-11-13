@@ -53,14 +53,24 @@ def reasonMessage : PayloadError → String
 
 /-- The JSON of a payload status, with the code of its reason first in the error. -/
 def statusJson (status : PayloadStatus) (reason : Option PayloadError) : Json :=
-  let latest := match status.latestValidHash with
-    | some h => Json.str (hexString h.toList)
-    | none => .null
-  let error := match reason with
-    | some e => Json.str s!"{e.code}: {reasonMessage e}"
-    | none => .null
-  (Json.mkObj [("status", status.status.name), ("latestValidHash", latest),
-    ("validationError", error)])
+  Json.payloadStatusJson status (reason.map fun e => s!"{e.code}: {reasonMessage e}")
+
+/-- A payload status read from its JSON: the name of the status, the latest valid hash, the error.
+
+The hash and the error are `None` in Python when the JSON has no value for them. -/
+def readPayloadStatusOf (status : PyValue) :
+    Result (String × Option ByteArray × Option String) := do
+  let (s, e) ← (Json.payloadStatusOfJson status.toJson).mapError
+    fun e => (e.code, s!"engine error: {reprStr e}")
+  return (s.status.name, s.latestValidHash.map (⟨·.toArray⟩), e)
+
+/-- A payload status read from its JSON, as `json.loads` gives it.
+
+The result is the name of the status, the latest valid hash and the validation error.
+
+A status that does not decode is an invalid parameter, with code 32602. -/
+@[export eth_engine_read_payload_status]
+def readPayloadStatusExport (args : PyValue) : Result PyValue := pyExport readPayloadStatusOf args
 
 /-- The version of a method name `engine_newPayloadV1` to `engine_newPayloadV5`. -/
 def newPayloadVersion (method : String) : Option Nat :=

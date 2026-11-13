@@ -30,11 +30,13 @@ With these sets, Lemmas 4 and 3 of the paper hold for a block that the store con
 
 They need each supporter to be a member of the committees of the range.
 
-No theorem yet proves it.
-
 The store checks a vote against the committees in the state of its target.
 
 The rule reads them in the state of the head, and the two must agree on the slot of the vote.
+
+For a range with part of an epoch, they agree when the head descends from the block.
+
+That proof needs the history of the store, so another file holds it.
 
 A range with a whole epoch is weighed by the total active balance of the source of balances.
 

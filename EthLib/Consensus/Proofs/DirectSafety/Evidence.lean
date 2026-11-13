@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Consensus.Proofs.DirectSafety.Attestations
-public import EthLib.Consensus.Proofs.DirectSafety.Fields
+public import EthLib.Consensus.Proofs.Transition.Invariants
 public import EthLib.Consensus.Proofs.Transition.Block
 public import EthLib.Consensus.Proofs.Transition.TargetUpgrades
 
@@ -239,7 +239,8 @@ private theorem processEpoch (ok : Consensus.processEpoch config checks state = 
         (fun _ paid => by rw [processBuilderPendingPayments_eq paid]; exact of_validators) ok
     exact (processJustificationAndFinalization justifiedOk).trans <| head.trans <|
       (of_validators (state := rooted)).trans tail
-  · obtain ⟨justified, justifiedOk, rest⟩ := slashedKeptLaws.processEpoch_beforeAltair altair ok
+  · obtain ⟨justified, justifiedOk, rest⟩ :=
+      slashedKeptLaws.processEpoch_split_of_lt_altair (Nat.lt_of_not_le altair) ok
     exact (processJustificationAndFinalization justifiedOk).trans rest
 
 private theorem advanceSlot (ok : Consensus.advanceSlot config checks state = .ok after) :
@@ -468,7 +469,7 @@ The key is read in the registry before that block.
 
 The run starts at a genesis built from deposits. -/
 theorem _root_.EthLib.Consensus.Run.slashed_evidence {g a : ForkedBeaconState preset}
-    (run : Run config checks g a) (genesis : Genesis (config := config) (checks := checks) g)
+    (run : Run config checks g a) (genesis : Genesis config checks g)
     (v : Validator) (member : v ∈ a.state.validators.data.toList) (slashed : v.slashed = true) :
     run.SlashingEvidence v.pubkey := by
   have backed : SlashedBacked run.SlashingEvidence a.state := by

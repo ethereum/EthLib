@@ -14,6 +14,8 @@ This file places the slot of the vote of each supporter in that range.
 
 That is the first step towards placing each supporter in those committees.
 
+Another file shows that the state of the target and the state of the head agree on them.
+
 A supporter of a block votes for a node that descends from it.
 
 That node is a known block, from the slot of the block or later.

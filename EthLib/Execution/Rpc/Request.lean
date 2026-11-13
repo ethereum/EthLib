@@ -13,7 +13,9 @@ The identifier is a string, a number or `null`; the response carries the same on
 
 A request without an identifier is a notification, which gets no response.
 
-Notifications are out of scope, and the reader rejects them.
+The reader rejects a request without an identifier.
+
+A server tells a notification apart before it reads a request.
 
 The execution API passes the parameters by position, as an array.
 

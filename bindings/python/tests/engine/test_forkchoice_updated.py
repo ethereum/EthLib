@@ -57,7 +57,10 @@ def _update(
 
 @pytest.mark.parametrize("chain", CHAINS, ids=lambda c: f"{c['network']}-{c['test'][-60:]}")
 def test_chain(chain: dict) -> None:
-    """Each valid payload becomes the head, and the last head is the fixture's last block."""
+    """Each valid payload becomes the head, and the last head is the fixture's last block.
+
+    Each response also reads back as its status and no payload ID.
+    """
     genesis = chain["genesisHash"]
     chain_config = config(chain["network"])
     tree = [_known(genesis, ZERO, chain["genesisNumber"], chain["genesisTimestamp"])]
@@ -68,6 +71,7 @@ def test_chain(chain: dict) -> None:
             # An invalid payload never joins the tree, so a head on it is unknown.
             response = _update(chain_config, tree, payload["blockHash"], method=method)
             assert response["payloadStatus"]["status"] == "SYNCING"
+            assert engine.read_forkchoice_response(response) == ("SYNCING", None, None, None)
             continue
         tree.append(
             _known(
@@ -84,6 +88,8 @@ def test_chain(chain: dict) -> None:
             },
             "payloadId": None,
         }
+        block_hash = bytes.fromhex(payload["blockHash"].removeprefix("0x"))
+        assert engine.read_forkchoice_response(response) == ("VALID", block_hash, None, None)
         head = payload["blockHash"]
     assert head == chain["lastblockhash"]
 

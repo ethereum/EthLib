@@ -5,6 +5,7 @@ import hashlib
 import json
 import posixpath
 import re
+import struct
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -82,6 +83,13 @@ NO_SCHEMA = {
 # The strings whose SSZ type has a variable length, by the name of their type in the types files.
 # An example of another type replaces a string of the same length only.
 VARIABLE_LENGTH = {"BitList", "Transaction", "ExtraData", "BlockAccessList"}
+
+# The unsigned integer types of the types files, with their width in bits.
+# No container uses Int64, the only signed one.
+# The files give Uint64 and Uint256 no pattern, and let Uint8 carry a leading zero.
+# EthLib writes, and requires, the plain decimal form of a value in range.
+INTEGER_BITS = {"Uint8": 8, "Uint64": 64, "Uint256": 256}
+DECIMAL = re.compile(r"(0|[1-9][0-9]*)\Z", re.ASCII)
 
 # A checkpoint in the JSON of the API, which the tests of the validator change.
 CHECKPOINT = {"epoch": "1", "root": "0x" + "00" * 32}
@@ -353,7 +361,7 @@ def _conform(
             raise SchemaError(f"{where}: {value!r} is no string")
         if bounds:
             _check_length(value, node, where)
-        # Some strings, such as Uint64, have no pattern, so that any string conforms.
+        # Some strings, such as Uint64, have no pattern; the integer check below covers them.
         source = node.get("pattern")
         if source is not None:
             if not isinstance(source, str):
@@ -362,6 +370,10 @@ def _conform(
             _require(bool(pattern.search(value)), f"{where}: {value!r} against {source}")
             if example is not None:
                 _require(bool(pattern.search(example)), f"{where}: the example {example!r}")
+        bits = INTEGER_BITS.get(type_name)
+        if bits is not None:
+            plain = DECIMAL.match(value) is not None and int(value) < 1 << bits
+            _require(plain, f"{where}: {value!r} is no plain decimal {type_name}")
         leaves.append(Leaf(path, type_name, example))
     elif kind == "boolean":
         _require(isinstance(value, bool), f"{where}: {value!r} is no boolean")
@@ -573,6 +585,55 @@ def test_containers_without_a_schema():
             id="flag-out-of-range",
         ),
         pytest.param(
+            "types/altair/epoch_participation.yaml#/Altair/EpochParticipation",
+            ["07"],
+            False,
+            "types/primitive.yaml at (0,): '07' is no plain decimal Uint8",
+            id="flag-leading-zero",
+        ),
+        pytest.param(
+            "types/misc.yaml#/Checkpoint",
+            {**CHECKPOINT, "epoch": "01"},
+            False,
+            "types/primitive.yaml at ('epoch',): '01' is no plain decimal Uint64",
+            id="leading-zero",
+        ),
+        pytest.param(
+            "types/misc.yaml#/Checkpoint",
+            {**CHECKPOINT, "epoch": "+1"},
+            False,
+            "types/primitive.yaml at ('epoch',): '+1' is no plain decimal Uint64",
+            id="sign",
+        ),
+        pytest.param(
+            "types/misc.yaml#/Checkpoint",
+            {**CHECKPOINT, "epoch": "0x01"},
+            False,
+            "types/primitive.yaml at ('epoch',): '0x01' is no plain decimal Uint64",
+            id="hex-integer",
+        ),
+        pytest.param(
+            "types/misc.yaml#/Checkpoint",
+            {**CHECKPOINT, "epoch": str(1 << 64)},
+            False,
+            "types/primitive.yaml at ('epoch',): '18446744073709551616' is no plain decimal Uint64",
+            id="uint64-overflow",
+        ),
+        pytest.param(
+            "types/misc.yaml#/Checkpoint",
+            {**CHECKPOINT, "epoch": "1\n"},
+            False,
+            "types/primitive.yaml at ('epoch',): '1\\n' is no plain decimal Uint64",
+            id="integer-final-newline",
+        ),
+        pytest.param(
+            "types/primitive.yaml#/Wei",
+            str(1 << 256),
+            False,
+            f"types/primitive.yaml at (): '{1 << 256}' is no plain decimal Uint256",
+            id="uint256-overflow",
+        ),
+        pytest.param(
             "types/altair/sync_committee.yaml#/Altair/SyncCommittee",
             {"pubkeys": ["0x" + "00" * 48], "aggregate_pubkey": "0x" + "00" * 48},
             True,
@@ -606,7 +667,11 @@ def test_json_conforms_to_the_types(preset, fork, container, case):
     schema = _schema(container, fork)
     assert schema is not None
     document = consensus.api_json(preset, FORKS[fork], container, _data(case))
-    _leaves(document, schema, bounds=preset == "mainnet")
+    # Each string starts with 0x, or is an integer of a type whose decimal form _conform checks.
+    for leaf in _leaves(document, schema, bounds=preset == "mainnet"):
+        value = _at(document, leaf.path)
+        assert isinstance(value, str)
+        assert value.startswith("0x") or leaf.type_name in INTEGER_BITS, leaf
 
 
 @pytest.mark.parametrize("preset, fork, container, case", _with_schema(), ids=_identify)
@@ -748,3 +813,132 @@ def test_wrong_documents_are_refused(fork, container, edit, message):
 def test_wrong_bytes_are_refused(fork, container, data, message):
     with raises_shape(SszError, message):
         consensus.api_json("minimal", fork, container, data)
+
+
+def _hand_built_payload() -> tuple[bytes, dict[str, Any]]:
+    """A Gloas payload of the mainnet preset, as SSZ bytes and as JSON, both written by hand."""
+    base_fee = (1 << 255) + 7
+    extra_data = bytes.fromhex("abcd")
+    # An empty transaction, one of two bytes, and one with the highest byte.
+    transactions = [b"", bytes.fromhex("02f8"), bytes.fromhex("ffffff")]
+    address = bytes.fromhex("66" * 20)
+    block_access_list = bytes.fromhex("c0")
+    # SSZ writes each variable-size field as a 4-byte offset in the fixed part.
+    # The offsets of a list of transactions count from the start of that list.
+    starts = [4 * len(transactions)]
+    for transaction in transactions[:-1]:
+        starts.append(starts[-1] + len(transaction))
+    transaction_list = b"".join(struct.pack("<I", start) for start in starts) + b"".join(
+        transactions
+    )
+    withdrawal = struct.pack("<QQ", 5, 9) + address + struct.pack("<Q", 32_000_000_000)
+    # The fixed part holds, in order: a hash, the address, two roots, the bloom and the RANDAO mix.
+    # Then four Uint64, an offset, the base fee, the block hash and two offsets.
+    # Then two Uint64 of blob gas, an offset and the slot number.
+    fixed_size = 32 + 20 + 32 + 32 + 256 + 32 + 4 * 8 + 4 + 32 + 32 + 4 + 4 + 2 * 8 + 4 + 8
+    transactions_start = fixed_size + len(extra_data)
+    withdrawals_start = transactions_start + len(transaction_list)
+    list_start = withdrawals_start + len(withdrawal)
+    data = b"".join(
+        [
+            bytes.fromhex("11" * 32),
+            bytes(range(20)),
+            bytes.fromhex("22" * 32),
+            bytes.fromhex("33" * 32),
+            bytes(range(256)),
+            bytes.fromhex("44" * 32),
+            struct.pack("<QQQQ", (1 << 64) - 1, 30_000_000, 21_000, 1_700_000_000),
+            struct.pack("<I", fixed_size),
+            base_fee.to_bytes(32, "little"),
+            bytes.fromhex("55" * 32),
+            struct.pack("<II", transactions_start, withdrawals_start),
+            struct.pack("<QQ", 131_072, 0),
+            struct.pack("<I", list_start),
+            struct.pack("<Q", 12_345),
+            extra_data,
+            transaction_list,
+            withdrawal,
+            block_access_list,
+        ]
+    )
+    assert len(data) == list_start + len(block_access_list)
+    document = {
+        "parent_hash": "0x" + "11" * 32,
+        "fee_recipient": "0x000102030405060708090a0b0c0d0e0f10111213",
+        "state_root": "0x" + "22" * 32,
+        "receipts_root": "0x" + "33" * 32,
+        "logs_bloom": "0x" + bytes(range(256)).hex(),
+        "prev_randao": "0x" + "44" * 32,
+        "block_number": "18446744073709551615",
+        "gas_limit": "30000000",
+        "gas_used": "21000",
+        "timestamp": "1700000000",
+        "extra_data": "0xabcd",
+        "base_fee_per_gas": str(base_fee),
+        "block_hash": "0x" + "55" * 32,
+        "transactions": ["0x", "0x02f8", "0xffffff"],
+        "withdrawals": [
+            {
+                "index": "5",
+                "validator_index": "9",
+                "address": "0x" + "66" * 20,
+                "amount": "32000000000",
+            }
+        ],
+        "blob_gas_used": "131072",
+        "excess_blob_gas": "0",
+        "block_access_list": "0xc0",
+        "slot_number": "12345",
+    }
+    return data, document
+
+
+def test_hand_built_gloas_payload():
+    # The bytes and the JSON are written apart from EthLib, so this checks values as well as shape.
+    data, document = _hand_built_payload()
+    fork = FORKS["gloas"]
+    assert consensus.api_json("mainnet", fork, "ExecutionPayload", data) == document
+    assert consensus.api_ssz("mainnet", fork, "ExecutionPayload", document) == data
+    schema = _schema("ExecutionPayload", "gloas")
+    assert schema is not None
+    _leaves(document, schema, bounds=True)
+
+
+def _window(before: bytes, after: bytes, old: bytes, new: bytes) -> int:
+    """The one start at which the bytes hold the old run before and the new run after."""
+    starts = [
+        start
+        for start in range(len(before) - len(old) + 1)
+        if before[start : start + len(old)] == old and after[start : start + len(new)] == new
+    ]
+    assert len(starts) == 1, starts
+    return starts[0]
+
+
+def test_hand_chosen_participation_flags():
+    # The flags of a vendored Altair state are replaced by chosen values.
+    # 255 sets bits above the three flags that a state uses, and SSZ still reads it as a Uint8.
+    document = _largest_document("minimal", "altair", "BeaconState")
+    data = consensus.api_ssz("minimal", FORKS["altair"], "BeaconState", document)
+    runs = {}
+    for key, values in [
+        ("previous_epoch_participation", [3, 5, 6, 128, 254, 9]),
+        ("current_epoch_participation", [0, 1, 2, 4, 7, 255]),
+    ]:
+        old = bytes(int(flag) for flag in document[key])
+        runs[key] = old, bytes(values[index % len(values)] for index in range(len(old)))
+    edited = {**document, **{key: [str(flag) for flag in new] for key, (_, new) in runs.items()}}
+    changed_data = consensus.api_ssz("minimal", FORKS["altair"], "BeaconState", edited)
+    assert len(changed_data) == len(data)
+    # Each list holds its chosen bytes where it held its old ones, the previous list first.
+    starts = {key: _window(data, changed_data, old, new) for key, (old, new) in runs.items()}
+    assert starts["previous_epoch_participation"] < starts["current_epoch_participation"]
+    # No other byte changes.
+    windows = {
+        index
+        for key, (old, _) in runs.items()
+        for index in range(starts[key], starts[key] + len(old))
+    }
+    assert {index for index in range(len(data)) if data[index] != changed_data[index]} <= windows
+    read_back = consensus.api_json("minimal", FORKS["altair"], "BeaconState", changed_data)
+    assert read_back == edited
