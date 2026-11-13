@@ -687,8 +687,15 @@ Not yet released.
   `readPrefix_short`, `decodeItemsFrom_eq` and `decodeItems_eq` take the same bound, and `decodeItem_of_readItem` takes it as an implicit argument.
   `decode` keeps its type, the inputs it accepts, its values and its errors.
   No C export or Python function changes.
+- In Lean, the reader of an `eth_getProof` answer moves into the specification ([#2099](https://github.com/ethereum/EthLib/issues/2099)).
+  `accountProofOfJson`, `storageProofOfJson` and `proofNodes` move from `EthLib.Engine.Exports` to `EthLib.Execution.Rpc`, in `Execution/Rpc/Proof.lean`.
+  They keep their types and their errors.
+  No C export or Python function changes.
+- The chain view serves `eth_getProof`, with the answer that `AccountProof.ofState` builds from the state after the block.
 
 - `eth_config` reports the current, next and last scheduled configurations from Dencun through Glamsterdam.
+  As EIP-7910 says, the report leaves out a future fork after Glamsterdam, and `next` and `last` are null when no supported fork remains.
+  A fork at a block after genesis is never a next or last configuration.
   In Lean, `ChainView` adds `genesis` and `mergeForkBlock` for the fork checksum.
   Supply both fields in positional constructors, or use structure notation with their `none` defaults.
   `call_unknown` also requires that the method name differ from `eth_config`.

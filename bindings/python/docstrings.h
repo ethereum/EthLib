@@ -524,6 +524,9 @@
 #define DOC_consensus_api_attestation_rewards \
   "The JSON response of the attestation rewards endpoint, as a `dict`."
 
+#define DOC_consensus_api_sync_committee_rewards \
+  "The JSON response of the sync committee rewards endpoint, as a `dict`."
+
 #define DOC_consensus_api_duties \
   "The JSON response of a duties endpoint, as a `dict`."
 

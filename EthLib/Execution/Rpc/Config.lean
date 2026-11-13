@@ -13,13 +13,25 @@ Each configuration has the parameters at its activation, rather than at the head
 
 The configurations are those of the forks by timestamp, the named BPO forks included.
 
-A chain blob schedule that starts at no fork time makes the method fail.
+A fork from Dencun on that activates at a block after genesis has no known activation time.
+
+It is never a next or last configuration, as EIP-7910 leaves such a fork out.
+
+The method fails when the head has not reached that block, or when that fork is the current one.
+
+A chain blob schedule that starts neither at genesis nor at a fork time makes the method fail.
 
 The fork ID is the `FORK_HASH` of [EIP-6122][eip-6122] that the node announces at that activation.
 
 The method requires the genesis hash and timestamp.
 
-It supports Dencun (Cancun) through Glamsterdam (Amsterdam), for the head and every future fork.
+It supports Dencun (Cancun) through Glamsterdam (Amsterdam).
+
+A head after Glamsterdam makes the method fail.
+
+A future fork after Glamsterdam is one that the node does not support, so the report leaves it out.
+
+When no supported fork is scheduled after the head, the next and last configurations are null.
 
 Before Cancun, EIP-7910 [permits nonstandard reports][compat]; this definition gives none.
 
@@ -92,22 +104,9 @@ def configSystemContracts (config : ChainConfig) (fork : Fork) : List (String ×
       ("HISTORY_STORAGE_ADDRESS", HISTORY_STORAGE_ADDRESS),
       ("WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS", WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS)] else [])
 
-/-- Every fork from Dencun on and every chain blob schedule activate by timestamp or at block 0.
+/-- Every chain blob schedule starts at genesis or at the time of a fork.
 
-EIP-7910 omits a fork whose activation time is unknown, and assumes a post-Merge chain.
-
-This definition refuses such a chain instead, so that a report never silently drops a fork. -/
-def configHasTimestamps (config : ChainConfig) : Bool :=
-  (config.activations.all fun (fork, activation) =>
-    match activation with
-    | .block n => fork < .dencun || n == 0
-    | .time _ => true) &&
-  config.blobSchedules.all fun (activation, _) =>
-    match activation with
-    | .block n => n == 0
-    | .time _ => true
-
-/-- Every chain blob schedule by timestamp starts at genesis or at the time of a fork.
+A schedule by block must start at block zero.
 
 [EIP-7892][eip-7892] ties each blob schedule to the time of a fork.
 
@@ -116,8 +115,15 @@ def configHasTimestamps (config : ChainConfig) : Bool :=
 def configBlobsAtForks (s : Schedule) : Bool :=
   s.config.blobSchedules.all fun (activation, _) =>
     match activation with
-    | .block _ => true
+    | .block n => n == 0
     | .time t => t ≤ s.genesisTime || s.times.contains t
+
+/-- Whether the activation time of a fork is known: it activates by time or at block zero. -/
+def configTimeKnown (config : ChainConfig) (fork : Fork) : Bool :=
+  config.activations.all fun (f, activation) =>
+    match activation with
+    | .block n => f != fork || n == 0
+    | .time _ => true
 
 /-- The activation time of the configuration at a head: the last fork time it has reached.
 
@@ -180,6 +186,18 @@ def configObject (s : Schedule) (number activationTime : Nat) : Except RpcError 
   else
     throw (methodNotSupported.toRpcError (some (.str "eth_config: before Cancun")))
 
+/-- Whether the node supports the fork that is active at a fork time, at a head's block number.
+
+The supported forks run up to Glamsterdam. -/
+def configSupported (s : Schedule) (number time : Nat) : Bool :=
+  match s.config.activeFork number (max s.genesisTime time) with
+  | some fork => decide (fork ≤ .glamsterdam)
+  | none => false
+
+/-- The fork times after a head whose forks the node supports, in ascending order. -/
+def configFutureTimes (s : Schedule) (number timestamp : Nat) : List Nat :=
+  s.times.filter fun time => timestamp < time && configSupported s number time
+
 /-- A named address table as a JSON object, which orders its names alphabetically. -/
 def configAddressesJson (entries : List (String × Address)) : Json :=
   Json.mkObj (entries.map fun (name, address) => (name, dataJson address.toList))
@@ -225,12 +243,14 @@ The head must have passed every fork block, the Merge fork-ID block included.
 
 The current activation is the last fork time reached by the head, or zero for genesis.
 
-The next and last configurations are those of the first and last fork times after the head. -/
+The next and last configurations are those of the first and last supported fork times after it.
+
+A fork that activates at a block after genesis has no time, so it is never a next or last one.
+
+The current configuration cannot be left out, so the method fails when its time is unknown. -/
 def configReport (v : ChainView) : Except RpcError ConfigReport := do
   let some s := v.schedule?
     | throw (internalError.toRpcError (some (.str "eth_config: genesis context unavailable")))
-  unless configHasTimestamps s.config do
-    throw (internalError.toRpcError (some (.str "eth_config: activation time is unknown")))
   unless configBlobsAtForks s do
     throw (internalError.toRpcError (some (.str "eth_config: blob schedule without a fork")))
   unless s.blocks.all (· ≤ v.head.block.header.number) do
@@ -238,7 +258,9 @@ def configReport (v : ChainView) : Except RpcError ConfigReport := do
   let number := v.head.block.header.number
   let timestamp := v.head.block.header.timestamp.toNat
   let current ← configObject s number (configCurrentTime s timestamp)
-  match s.times.filter (timestamp < ·) with
+  unless configTimeKnown s.config current.fork do
+    throw (internalError.toRpcError (some (.str "eth_config: activation time is unknown")))
+  match configFutureTimes s number timestamp with
   | [] => return ⟨current, none, none⟩
   | first :: rest =>
     let next ← configObject s number first

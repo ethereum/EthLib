@@ -1125,11 +1125,11 @@ end
 /-! ## The withdrawals that a balance allows -/
 
 /-- Withdrawals that each name a builder. -/
-private def AllBuilders (withdrawals : Array Withdrawal) : Prop :=
+def AllBuilders (withdrawals : Array Withdrawal) : Prop :=
   ∀ withdrawal ∈ withdrawals.toList, isBuilderIndex withdrawal.validatorIndex = true
 
 /-- Withdrawals of builders take nothing from an index that names no builder. -/
-private theorem withdrawnFrom_of_allBuilders {withdrawals : Array Withdrawal}
+theorem withdrawnFrom_of_allBuilders {withdrawals : Array Withdrawal}
     {index : ValidatorIndex}
     (builders : AllBuilders withdrawals) (notBuilder : isBuilderIndex index = false) :
     withdrawnFrom withdrawals index = 0 := by
