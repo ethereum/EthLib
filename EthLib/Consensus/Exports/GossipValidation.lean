@@ -314,6 +314,25 @@ def recordGossipInclusionList {preset : Preset} {fork : Fork} (store : Store pre
       return { store with inclusionLists := fun _ => lists }
   return store
 
+/-- The store of a case and the statuses of its payloads, from its anchor and its later blocks.
+
+An optional checkpoint replaces the finalized checkpoint, in the store and in each state. -/
+def gossipCaseStore {preset : Preset} {fork : Fork} (config : Config) (checks : SignatureChecks)
+    (anchorState anchorBlock : ByteArray) (blocks : List GossipBlockInput)
+    (finalized : Option (UInt64 × Root)) : Result (Store preset fork × PayloadStatuses) := do
+  let anchorState ← decodeInput (BeaconState preset fork) anchorState
+  let anchorBlock ← decodeInput (SignedBeaconBlock preset fork) anchorBlock
+  let mut store ← runForkChoice (getForkchoiceStore config anchorState anchorBlock.message)
+  let mut statuses : PayloadStatuses := {}
+  for input in blocks do
+    (store, statuses) ← importGossipBlock config checks store statuses input
+  if let some (epoch, root) := finalized then
+    let checkpoint : Checkpoint := { epoch, root }
+    let blockStates := store.blockStates.map fun _ state =>
+      { state with finalizedCheckpoint := checkpoint }
+    store := { store with finalizedCheckpoint := checkpoint, blockStates }
+  return (store, statuses)
+
 /-- Validate the messages of a topic in turn, against the store of an anchor and later blocks.
 
 Every topic is specified here up to Heze. -/
@@ -328,17 +347,9 @@ def gossipValidationOf (args : String × String × ByteArray × ByteArray × Lis
   let checks := if verify then SignatureChecks.bls else SignatureChecks.acceptAll
   unless gossipValidationSpecified fork topic do
     throw (0, s!"gossip validation of the topic {topic} at {fork.name} is not yet specified")
-  let anchorState ← decodeInput (BeaconState preset fork) anchorState
-  let anchorBlock ← decodeInput (SignedBeaconBlock preset fork) anchorBlock
-  let mut store ← runForkChoice (getForkchoiceStore config anchorState anchorBlock.message)
-  let mut statuses : PayloadStatuses := {}
-  for input in blocks do
-    (store, statuses) ← importGossipBlock config checks store statuses input
-  if let some (epoch, root) := finalized then
-    let checkpoint : Checkpoint := { epoch, root }
-    let blockStates := store.blockStates.map fun _ state =>
-      { state with finalizedCheckpoint := checkpoint }
-    store := { store with finalizedCheckpoint := checkpoint, blockStates }
+  let (store, statuses) ← gossipCaseStore (preset := preset) (fork := fork) config checks
+    anchorState anchorBlock blocks finalized
+  let mut store := store
   if topic = "partial_data_column_sidecar" then
     return ← validatePartialInputs config checks store inputs
   let mut seen : Seen := {}

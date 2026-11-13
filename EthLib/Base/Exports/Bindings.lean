@@ -1076,6 +1076,14 @@ def bindings : List Binding := [
       "messages: list[tuple[int, int, bytes] | tuple[int, int, bytes, str]], " ++
       "config: dict[str, Any] | None, verify: bool) -> list[tuple[str, str | None]]",
     [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
+  ⟨"consensus_api_pool", `EthLib.Consensus.Exports.apiPoolExport,
+    "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, " ++
+      "blocks: list[tuple[int, int | None, bytes] | " ++
+      "tuple[int, int | None, bytes, bytes | None]], " ++
+      "finalized: tuple[int, bytes] | None, " ++
+      "requests: list[tuple[int, str, list[bytes]]], " ++
+      "config: dict[str, Any] | None, verify: bool) -> list[list[tuple[int, str]]]",
+    [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
   ⟨"consensus_light_client_sync", `EthLib.Consensus.Exports.lightClientSyncExport,
     "(name: str, fork: str, bootstrap_fork: str, config: dict[str, Any] | None, " ++
       "trusted: bytes, genesis_validators_root: bytes, bootstrap: bytes, " ++
