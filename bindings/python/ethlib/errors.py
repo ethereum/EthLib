@@ -181,6 +181,10 @@ class VarintError(EthLibError, ValueError):
     """The bytes are not one minimal varint."""
 
 
+class QuicVarIntError(EthLibError, ValueError):
+    """A QUIC variable-length integer was rejected."""
+
+
 class UvarintError(EthLibError, ValueError):
     """The bytes do not start with a multiformats unsigned varint, or a value is out of range."""
 
@@ -344,6 +348,7 @@ __all__ = [
     "SszError",
     "VarintError",
     "UvarintError",
+    "QuicVarIntError",
     "MultistreamError",
     "MplexError",
     "YamuxError",

@@ -1317,6 +1317,14 @@ def varint_decode(data: bytes) -> int:
     """The 64-bit value a varint denotes, or why it is not a valid varint."""
     ...
 
+def quic_varint_encode(value: int) -> bytes:
+    """Encode a value below `2^62` with its shortest QUIC representation, RFC 9000 §16."""
+    ...
+
+def quic_varint_decode(data: bytes) -> tuple[int, bytes]:
+    """Read a QUIC integer and return its value and the trailing bytes, RFC 9000 §16."""
+    ...
+
 def uvarint_encode(value: int) -> bytes:
     """The unsigned varint of a value below `2^63`."""
     ...

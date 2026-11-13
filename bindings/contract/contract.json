@@ -9048,6 +9048,32 @@
    "error_class": "VarintError",
    "docstring":
    "The 64-bit value a varint denotes, or why it is not a valid varint.\n\nThe rules are checked in this order:\n\n1. The ten-byte cap, while reading, so the work stays bounded.\n2. Minimal encoding.\n3. The 64-bit range.\n\n# Why minimality is enforced\n\nThe specification only says SHOULD.\n\nRejecting padding means each length has exactly one encoding.\n\nSo a message cannot be re-sent with a different prefix that differs only in padding."},
+  {"summary":
+   "Encode a value below `2^62` with its shortest QUIC representation, RFC 9000 §16.",
+   "signature": "(value: int) -> bytes",
+   "operation": "EthLib.Networking.Quic.Exports.encodeExport",
+   "method": "quic_varint_encode",
+   "errors":
+   [{"type": "EthLib.Networking.Quic.VarInt.Error",
+     "codes":
+     [{"constructor": "tooLarge", "code": 1},
+      {"constructor": "truncated", "code": 2}]}],
+   "error_class": "QuicVarIntError",
+   "docstring":
+   "Encode a value below `2^62` with its shortest QUIC representation, RFC 9000 §16."},
+  {"summary":
+   "Read a QUIC integer and return its value and the trailing bytes, RFC 9000 §16.",
+   "signature": "(data: bytes) -> tuple[int, bytes]",
+   "operation": "EthLib.Networking.Quic.Exports.decodeExport",
+   "method": "quic_varint_decode",
+   "errors":
+   [{"type": "EthLib.Networking.Quic.VarInt.Error",
+     "codes":
+     [{"constructor": "tooLarge", "code": 1},
+      {"constructor": "truncated", "code": 2}]}],
+   "error_class": "QuicVarIntError",
+   "docstring":
+   "Read a QUIC integer and return its value and the trailing bytes, RFC 9000 §16."},
   {"summary": "The unsigned varint of a value below `2^63`.",
    "signature": "(value: int) -> bytes",
    "operation": "EthLib.Networking.Encoding.Uvarint.Exports.encodeExport",

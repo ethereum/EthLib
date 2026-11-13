@@ -1,5 +1,7 @@
 module
 
+public import EthLib.Networking.Exports.Quic
+
 public import EthLib.Networking.Exports.Devp2p
 public import EthLib.Networking.Exports.Discv4
 public import EthLib.Networking.Exports.Discv5

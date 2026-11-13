@@ -94,6 +94,7 @@ PyObject* SSZ_ERROR;
 PyObject* SNAPPY_ERROR;
 PyObject* VARINT_ERROR;
 PyObject* UVARINT_ERROR;
+PyObject* QUIC_VARINT_ERROR;
 PyObject* MULTISTREAM_ERROR;
 PyObject* MPLEX_ERROR;
 PyObject* YAMUX_ERROR;
@@ -1101,6 +1102,8 @@ static PyMethodDef methods[] = {
   {"snappy_masked_crc", py_snappy_masked_crc, METH_VARARGS, DOC_snappy_masked_crc},
   {"varint_encode", py_varint_encode, METH_VARARGS, DOC_varint_encode},
   {"varint_decode", py_varint_decode, METH_VARARGS, DOC_varint_decode},
+  {"quic_varint_encode", py_quic_varint_encode, METH_VARARGS, DOC_quic_varint_encode},
+  {"quic_varint_decode", py_quic_varint_decode, METH_VARARGS, DOC_quic_varint_decode},
   {"uvarint_encode", py_uvarint_encode, METH_VARARGS, DOC_uvarint_encode},
   {"uvarint_decode", py_uvarint_decode, METH_VARARGS, DOC_uvarint_decode},
   {"multistream_encode", py_multistream_encode, METH_VARARGS, DOC_multistream_encode},
@@ -1221,6 +1224,7 @@ PyInit__native(void) {
     SSZ_ERROR = PyObject_GetAttrString(errors, "SszError");
     SNAPPY_ERROR = PyObject_GetAttrString(errors, "SnappyError");
     VARINT_ERROR = PyObject_GetAttrString(errors, "VarintError");
+    QUIC_VARINT_ERROR = PyObject_GetAttrString(errors, "QuicVarIntError");
     UVARINT_ERROR = PyObject_GetAttrString(errors, "UvarintError");
     MULTISTREAM_ERROR = PyObject_GetAttrString(errors, "MultistreamError");
     MPLEX_ERROR = PyObject_GetAttrString(errors, "MplexError");

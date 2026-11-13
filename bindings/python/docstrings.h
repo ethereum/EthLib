@@ -986,6 +986,12 @@
 #define DOC_varint_decode \
   "The 64-bit value a varint denotes, or why it is not a valid varint."
 
+#define DOC_quic_varint_encode \
+  "Encode a value below `2^62` with its shortest QUIC representation, RFC 9000 §16."
+
+#define DOC_quic_varint_decode \
+  "Read a QUIC integer and return its value and the trailing bytes, RFC 9000 §16."
+
 #define DOC_uvarint_encode \
   "The unsigned varint of a value below `2^63`."
 

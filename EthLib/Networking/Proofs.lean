@@ -1,5 +1,7 @@
 module
 
+public import EthLib.Networking.Proofs.Quic.VarInt
+
 public import EthLib.Networking.Proofs.Noise
 public import EthLib.Networking.Proofs.Noise.Identity
 public import EthLib.Networking.Proofs.Noise.Handshake
