@@ -2,6 +2,7 @@ module
 
 public import EthLib.Consensus.Proofs.DirectSafety.IntervalFunding
 import EthLib.Consensus.Proofs.DirectSafety.DepartureQueue
+import EthLib.Consensus.Proofs.Transition.Totality.EpochBeforeAltair
 
 /-!
 # Funding across an epoch
@@ -159,9 +160,7 @@ private theorem funding_slashings {fork : Fork} {s t : BeaconState preset fork}
     (early : fork < .glamsterdam)
     (ok : processSlashings s = .ok t) : fundedStake ⟨fork, t⟩ ≤ fundedStake ⟨fork, s⟩ := by
   obtain ⟨_, _, credits, _⟩ := delayed_slashing_bounds s t (s.validators.bound early) ok
-  have registry : t.validators = s.validators := by
-    obtain ⟨_, written⟩ := processSlashings_eq ok
-    rw [written]
+  have registry : t.validators = s.validators := by rw [processSlashings_frame ok]
   have bound := funding_kept_prefix 0 (sameSizes_processSlashings ok).1
     (.of_data (congrArg (·.data) registry)) (frame_processSlashings ok).slot
     (processSlashings_pendingConsolidations ok)

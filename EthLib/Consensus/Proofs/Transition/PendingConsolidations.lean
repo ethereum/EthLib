@@ -4,6 +4,7 @@ public import EthLib.Consensus.Proofs.Transition.Trace
 public import EthLib.Consensus.Proofs.Transition.RegistryLifecycle
 public import EthLib.Consensus.Proofs.Transition.Genesis
 import EthLib.Consensus.Proofs.Transition.EpochPending
+import EthLib.Consensus.Proofs.Transition.Totality.EpochBeforeAltair
 
 /-!
 # Pending consolidation sources and lifecycle
@@ -103,21 +104,8 @@ private theorem SamePendingQueue.exit {f : Fork} {s t : BeaconState preset f}
 
 private theorem SamePendingQueue.rewards {f : Fork} {s t : BeaconState preset f}
     (ok : processRewardsAndPenalties config s = .ok t) : SamePendingQueue s t := by
-  have all {a b : BeaconState preset f} {deltas : Array Gwei × Array Gwei}
-      (ok : applyAllDeltas a deltas = .ok b) : SamePendingQueue a b := by
-    apply fold (fun _ _ _ ok => ?_) ok
-    simp only [applyDeltas, bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, _, raised, lowered⟩ := ok
-    exact (increase raised).trans (decrease lowered)
-  unfold processRewardsAndPenalties at ok
-  split at ok
-  · cases ok; rfl
-  split at ok
-  · simp only [bind_ok_iff] at ok
-    obtain ⟨_, _, _, _, applied⟩ := ok
-    exact fold (fun _ _ _ => all) applied
-  · obtain ⟨_, _, applied⟩ := bind_ok_iff.mp ok
-    exact all applied
+  show t.pendingConsolidations = s.pendingConsolidations
+  rw [processRewardsAndPenalties_frame ok]
 
 private theorem SamePendingQueue.registry {f : Fork} {s t : BeaconState preset f}
     (ok : processRegistryUpdates config s = .ok t) : SamePendingQueue s t := by
@@ -160,25 +148,19 @@ private theorem SamePendingQueue.registry {f : Fork} {s t : BeaconState preset f
 
 private theorem SamePendingQueue.slashings {f : Fork} {s t : BeaconState preset f}
     (ok : processSlashings s = .ok t) : SamePendingQueue s t := by
-  obtain ⟨_, rfl⟩ := processSlashings_eq ok
-  rfl
+  show t.pendingConsolidations = s.pendingConsolidations
+  rw [processSlashings_frame ok]
 
 private theorem SamePendingQueue.effectiveUpdates {f : Fork} {s t : BeaconState preset f}
     (ok : processEffectiveBalanceUpdates s = .ok t) : SamePendingQueue s t := by
-  apply fold (fun _ _ _ ok => ?_) ok
-  simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at ok
-  obtain ⟨_, _, _, _, _, _, set⟩ := ok
-  exact setValidatorAt set
+  show t.pendingConsolidations = s.pendingConsolidations
+  rw [processEffectiveBalanceUpdates_frame ok]
 
 private theorem SamePendingQueue.inactivity {f : Fork} {s t : BeaconState preset f}
     {altair : .altair ≤ f} (ok : processInactivityUpdates config s altair = .ok t) :
     SamePendingQueue s t := by
-  unfold processInactivityUpdates at ok
-  split at ok
-  · cases ok; rfl
-  · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
-    obtain ⟨_, _, _, _, rfl⟩ := ok
-    rfl
+  show t.pendingConsolidations = s.pendingConsolidations
+  rw [processInactivityUpdates_frame ok]
 
 private theorem SamePendingQueue.justification {f : Fork} {s t : BeaconState preset f}
     (ok : processJustificationAndFinalization s = .ok t) : SamePendingQueue s t := by
@@ -191,9 +173,8 @@ private theorem SamePendingQueue.justification {f : Fork} {s t : BeaconState pre
 private theorem SamePendingQueue.eth1Reset {f : Fork} {s t : BeaconState preset f}
     {before : f < .hegota} (ok : processEth1DataReset before s = .ok t) :
     SamePendingQueue s t := by
-  simp only [processEth1DataReset, bind_ok_iff, liftAccessor_ok] at ok
-  obtain ⟨_, _, ok⟩ := ok
-  split at ok <;> cases ok <;> rfl
+  show t.pendingConsolidations = s.pendingConsolidations
+  rw [processEth1DataReset_frame ok]
 
 theorem SamePendingQueue.compounding {f : Fork} {s t : BeaconState preset f}
     {electra : .pectra ≤ f} {index : ValidatorIndex}
@@ -895,22 +876,14 @@ theorem justification (holds : PendingConsolidationInvariant config state)
 theorem inactivity (holds : PendingConsolidationInvariant config state) {altair : .altair ≤ fork}
     (ok : processInactivityUpdates config state altair = .ok after) :
     PendingConsolidationInvariant config after := by
-  unfold processInactivityUpdates at ok
-  split at ok
-  · cases ok; exact holds
-  · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
-    obtain ⟨_, _, _, _, rfl⟩ := ok
-    exact holds
+  rw [processInactivityUpdates_frame ok]
+  exact holds
 
 theorem rewards (holds : PendingConsolidationInvariant config state)
     (ok : processRewardsAndPenalties config state = .ok after) :
     PendingConsolidationInvariant config after := by
-  have same : after.validators.data = state.validators.data := by
-    rw [processRewardsAndPenalties_frame ok]
-  apply holds.kept (SamePendingQueue.rewards ok) (.of_data same) (WithdrawalKept.of_data same)
-  rw [show getCurrentEpoch after = getCurrentEpoch state from
-    congrArg (computeEpochAtSlot preset) (frame_processRewardsAndPenalties ok).slot]
-  exact UInt64.le_refl _
+  rw [processRewardsAndPenalties_frame ok]
+  exact holds
 
 theorem registry (holds : PendingConsolidationInvariant config state)
     (ok : processRegistryUpdates config state = .ok after) :
@@ -925,19 +898,14 @@ theorem registry (holds : PendingConsolidationInvariant config state)
 
 theorem slashings (holds : PendingConsolidationInvariant config state)
     (ok : processSlashings state = .ok after) : PendingConsolidationInvariant config after := by
-  obtain ⟨_, written⟩ := processSlashings_eq ok
-  have same : after.validators.data = state.validators.data := by rw [written]
-  apply holds.kept (SamePendingQueue.slashings ok) (.of_data same) (WithdrawalKept.of_data same)
-  rw [show getCurrentEpoch after = getCurrentEpoch state from
-    congrArg (computeEpochAtSlot preset) (frame_processSlashings ok).slot]
-  exact UInt64.le_refl _
+  rw [processSlashings_frame ok]
+  exact holds
 
 theorem eth1Reset (holds : PendingConsolidationInvariant config state) {before : fork < .hegota}
     (ok : processEth1DataReset before state = .ok after) :
     PendingConsolidationInvariant config after := by
-  simp only [processEth1DataReset, bind_ok_iff, liftAccessor_ok] at ok
-  obtain ⟨_, _, ok⟩ := ok
-  split at ok <;> cases ok <;> exact holds
+  rw [processEth1DataReset_frame ok]
+  exact holds
 
 theorem pendingDeposits (holds : PendingConsolidationInvariant config state)
     {electra : .pectra ≤ fork}

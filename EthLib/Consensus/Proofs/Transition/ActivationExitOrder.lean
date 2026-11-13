@@ -4,6 +4,7 @@ public import EthLib.Consensus.Proofs.Transition.Committees
 public import EthLib.Consensus.Proofs.Transition.Genesis
 public import EthLib.Consensus.Proofs.Transition.RegistryLifecycle
 import EthLib.Consensus.Proofs.Transition.EpochPending
+import EthLib.Consensus.Proofs.Transition.Totality.EpochBeforeAltair
 
 /-!
 # Activation before exit
@@ -521,15 +522,12 @@ private theorem processEffectiveBalanceUpdates
   exact setValidatorAt found set id
 
 private theorem slashings (ok : processSlashings state = .ok after) :
-    Kept state after := by
-  obtain ⟨_, rfl⟩ := processSlashings_eq ok
-  exact refl _
+    Kept state after :=
+  of_data (by rw [processSlashings_frame ok])
 
 private theorem eth1Reset {before : fork < .hegota}
-    (ok : processEth1DataReset before state = .ok after) : Kept state after := by
-  simp only [processEth1DataReset, bind_ok_iff, liftAccessor_ok] at ok
-  obtain ⟨_, _, ok⟩ := ok
-  split at ok <;> cases ok <;> exact of_data
+    (ok : processEth1DataReset before state = .ok after) : Kept state after :=
+  of_data (by rw [processEth1DataReset_frame ok])
 
 /-- An epoch keeps the order; only three of its stages change the validators. -/
 private theorem processEpoch (ok : Consensus.processEpoch config checks state = .ok after) :
