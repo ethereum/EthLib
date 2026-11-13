@@ -4425,7 +4425,11 @@ The event covers Bellatrix to Gloas (the forks before Heze), and these gaps rema
 - The parent root is the root of the latest block header of the state, which is right only for a state at the slot of the proposal, after its empty slots; the event takes that state as given.
 - How often the event is sent may depend on the node, so only its content is specified.
 
-The exports of the events and their Python tests remain for #2091.
+The Python suite (`bindings/python/tests/consensus/test_beacon_api_chain_events.py`) compares the events between two checks of the head in five pinned fork choice cases, from Capella to Gloas, with the events that the checks call for.
+A case with more than 20 checks of the head compares only the pairs of checks that call for an event, and the first pair without an event after them.
+It works out the dependent roots, the reorganization depth and the state roots from the blocks of the case.
+It also checks the event of each run of the fast confirmation rule in three pinned cases against the confirmed root and the clock of the checks, also when the clock moves on after the run.
+The export of the event of the payload attributes and its Python tests remain for #2091.
 The light client events and the event of an available payload depend on what the node has received, and are not defined here.
 
 The events of received objects are in `Consensus/BeaconApi/ObjectEvents.lean` (#2090).
@@ -5236,12 +5240,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 508 operations and 49 size constants.
-The Python extension calls 508 of the operations and 49 of the constants.
+Lean exports 510 operations and 49 size constants.
+The Python extension calls 510 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-11666 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2607), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (207), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1625), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (161), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (802), `x25519.c` (21), `xmss.c` (134).
+11695 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2630), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (207), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1629), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (161), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (804), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.
