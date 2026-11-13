@@ -837,53 +837,25 @@ private theorem intervalLoss_sites_fold {fork : Fork} {α : Type}
   exact foldlM_ok_invariant (fun t => intervalLoss_SiteStep ⟨fork, s⟩ ⟨fork, t⟩)
     (fun _ item _ prior ok => prior.trans (preserves _ item _ ok)) (.refl _) ok
 
-private theorem intervalLoss_sites_deltas {fork : Fork}
-    {start : ForkedBeaconState preset} (source : BalanceSource)
-    (notSlashing : source ≠ .slashings)
-    (deltas : Array Gwei × Array Gwei) {pre post : BalanceReplay preset fork}
-    (initial : intervalLoss_ReplaySites (config := config) (checks := checks) start pre)
-    (ok : replayDeltas source deltas pre = .ok post) :
-    intervalLoss_ReplaySites (config := config) (checks := checks) start post := by
-  apply foldlM_ok_invariant
-    (intervalLoss_ReplaySites (config := config) (checks := checks) start) _ initial ok
-  intro pre i post prior ok
-  simp only [bind_ok_iff] at ok
-  obtain ⟨index, _, rewarded, rewardOk, penaltyOk⟩ := ok
-  have raised := intervalLoss_sites_record (fun s t computed => by
-    have computed := liftAccessor_ok.mp computed
-    apply intervalLoss_SiteStep.of_frame _ (frame_increaseBalance computed).toFrame
-    obtain ⟨_, set⟩ := increaseBalance_ok computed
-    obtain ⟨_, rfl⟩ := setBalance_ok set
-    exact .of_data rfl) prior (fun _ _ _ h => by cases h) rewardOk
-  apply intervalLoss_sites_record (fun s t computed => ?_) raised
-    (fun _ _ _ h => False.elim (notSlashing h)) penaltyOk
-  have computed := liftAccessor_ok.mp computed
-  apply intervalLoss_SiteStep.of_frame _ (frame_decreaseBalance computed).toFrame
-  obtain ⟨_, set⟩ := decreaseBalance_ok computed
-  obtain ⟨_, rfl⟩ := setBalance_ok set
-  exact .of_data rfl
-
 private theorem intervalLoss_sites_rewards {fork : Fork}
     {start : ForkedBeaconState preset} {pre post : BalanceReplay preset fork}
     (initial : intervalLoss_ReplaySites (config := config) (checks := checks) start pre)
     (ok : replayRewards (config := config) pre = .ok post) :
-    intervalLoss_ReplaySites (config := config) (checks := checks) start post := by
-  unfold replayRewards at ok
-  split at ok
-  · cases ok; exact initial
-  · simp only [bind_ok_iff] at ok
-    obtain ⟨ordinary, _, inactivity, _, ok⟩ := ok
-    split at ok
-    · obtain ⟨middle, folded, last⟩ := bind_ok_iff.mp ok
-      exact intervalLoss_sites_deltas _ (by decide) _
-        (foldlM_ok_invariant (intervalLoss_ReplaySites (config := config) (checks := checks) start)
-          (fun _ _ _ h ok => intervalLoss_sites_deltas _ (by decide) _ h ok) initial folded) last
-    · simp only [bind_ok_iff] at ok
-      obtain ⟨rewards, _, rewarded, rewardOk, middle, folded, last⟩ := ok
-      exact intervalLoss_sites_deltas _ (by decide) _
-        (foldlM_ok_invariant (intervalLoss_ReplaySites (config := config) (checks := checks) start)
-          (fun _ _ _ h ok => intervalLoss_sites_deltas _ (by decide) _ h ok)
-          (intervalLoss_sites_deltas _ (by decide) _ initial rewardOk) folded) last
+    intervalLoss_ReplaySites (config := config) (checks := checks) start post :=
+  replayRewards_induction (intervalLoss_ReplaySites (config := config) (checks := checks) start)
+    (fun prior ok => intervalLoss_sites_record (fun s t computed => by
+      have computed := liftAccessor_ok.mp computed
+      apply intervalLoss_SiteStep.of_frame _ (frame_increaseBalance computed).toFrame
+      obtain ⟨_, set⟩ := increaseBalance_ok computed
+      obtain ⟨_, rfl⟩ := setBalance_ok set
+      exact .of_data rfl) prior (fun _ _ _ h => by cases h) ok)
+    (fun penalty prior ok => intervalLoss_sites_record (fun s t computed => by
+      have computed := liftAccessor_ok.mp computed
+      apply intervalLoss_SiteStep.of_frame _ (frame_decreaseBalance computed).toFrame
+      obtain ⟨_, set⟩ := decreaseBalance_ok computed
+      obtain ⟨_, rfl⟩ := setBalance_ok set
+      exact .of_data rfl) prior (fun _ _ _ h => by rcases penalty with rfl | rfl <;> cases h) ok)
+    initial ok
 
 private theorem intervalLoss_sites_justification {fork : Fork}
     {s t : BeaconState preset fork}

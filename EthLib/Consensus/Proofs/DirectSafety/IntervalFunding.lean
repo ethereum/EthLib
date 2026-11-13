@@ -3494,38 +3494,13 @@ private theorem funding_block_credit {fork : Fork} {s : BeaconState preset fork}
   funding_no_deposit_credit (blockBalanceReplay_bounded early engine block matched ok)
     (funding_block_events early engine block ok)
 
-private theorem funding_deltas_events {fork : Fork} (source : BalanceSource)
-    (notDeposit : source ≠ .deposits) (deltas : Array Gwei × Array Gwei)
-    {pre post : BalanceReplay preset fork} (initial : funding_no_deposits pre.2)
-    (ok : replayDeltas source deltas pre = .ok post) : funding_no_deposits post.2 := by
-  apply foldlM_ok_invariant (fun p => funding_no_deposits p.2) _ initial ok
-  intro pre i post initial ok
-  simp only [bind_ok_iff] at ok
-  obtain ⟨_, _, rewarded, rewardOk, penaltyOk⟩ := ok
-  have rewardZero := funding_record_events initial
-    (fun _ _ _ eq _ => by cases eq) rewardOk
-  exact funding_record_events rewardZero
-    (fun _ _ _ eq _ => False.elim (notDeposit eq)) penaltyOk
-
 private theorem funding_rewards_events {fork : Fork} {pre post : BalanceReplay preset fork}
     (initial : funding_no_deposits pre.2)
-    (ok : replayRewards (config := config) pre = .ok post) : funding_no_deposits post.2 := by
-  unfold replayRewards at ok
-  split at ok
-  · cases ok; exact initial
-  · simp only [bind_ok_iff] at ok
-    obtain ⟨ordinary, _, inactivity, _, ok⟩ := ok
-    split at ok
-    · obtain ⟨middle, folded, last⟩ := bind_ok_iff.mp ok
-      exact funding_deltas_events _ (by decide) _
-        (foldlM_ok_invariant (fun p => funding_no_deposits p.2)
-          (fun _ _ _ h ok => funding_deltas_events _ (by decide) _ h ok) initial folded) last
-    · simp only [bind_ok_iff] at ok
-      obtain ⟨rewards, _, rewarded, rewardOk, middle, folded, last⟩ := ok
-      exact funding_deltas_events _ (by decide) _
-        (foldlM_ok_invariant (fun p => funding_no_deposits p.2)
-          (fun _ _ _ h ok => funding_deltas_events _ (by decide) _ h ok)
-          (funding_deltas_events _ (by decide) _ initial rewardOk) folded) last
+    (ok : replayRewards (config := config) pre = .ok post) : funding_no_deposits post.2 :=
+  replayRewards_induction (fun pre => funding_no_deposits pre.2)
+    (fun prior ok => funding_record_events prior (fun _ _ _ eq _ => by cases eq) ok)
+    (fun penalty prior ok => funding_record_events prior
+      (fun _ _ _ eq _ => by rcases penalty with rfl | rfl <;> cases eq) ok) initial ok
 
 /-- Before Electra, the epoch replay records no deposit credit.
 
