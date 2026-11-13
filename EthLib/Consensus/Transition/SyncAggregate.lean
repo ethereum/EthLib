@@ -44,29 +44,30 @@ Otherwise: the keys of the members that signed, in committee order.
 A key that does not decode, or a sum of no valid key, is an error. -/
 def syncParticipantPubkeys (committee : SyncCommittee preset)
     (bits : Serialization.Ssz.Bitvector preset.SYNC_COMMITTEE_SIZE.toNat) :
-    Except TransitionError (Array ByteArray) := do
+    Except TransitionError (Array BLSPubkey) := do
   let signed := bits.bits.toArray.countP id
   let size := preset.SYNC_COMMITTEE_SIZE.toNat
   let pairs := committee.pubkeys.toArray.zip bits.bits.toArray
   if signed = size then
-    return #[packBytes committee.aggregatePubkey]
+    return #[committee.aggregatePubkey]
   else if size / 2 < signed then
-    let absent := (pairs.filter (!·.2)).map (packBytes ·.1)
+    let absent := (pairs.filter (!·.2)).map (·.1)
     let absentSum ← (Signatures.ethAggregatePubkeys absent).mapError
       fun _ => .invalidSyncCommitteeKey
     let total ← (G1.uncompress (packBytes committee.aggregatePubkey)).mapError
       fun _ => .invalidSyncCommitteeKey
-    let absentPoint ← (G1.uncompress absentSum).mapError fun _ => .invalidSyncCommitteeKey
-    return #[G1.compress (G1.add total (G1.neg absentPoint))]
+    let absentPoint ← (G1.uncompress (packBytes absentSum)).mapError
+      fun _ => .invalidSyncCommitteeKey
+    return #[Signatures.pointToPubkey (G1.add total (G1.neg absentPoint))]
   else
-    return (pairs.filter (·.2)).map (packBytes ·.1)
+    return (pairs.filter (·.2)).map (·.1)
 
 /-- From Altair: the check of the signature of a sync aggregate, as the Ethereum wrapper does it.
 
 No key and the signature of the point at infinity pass; otherwise the fast aggregate check runs. -/
-def syncAggregateVerify (checks : SignatureChecks) (pubkeys : Array ByteArray)
-    (message signature : ByteArray) : Bool :=
-  (pubkeys.isEmpty && decide (signature = Signatures.G2_POINT_AT_INFINITY)) ||
+def syncAggregateVerify (checks : SignatureChecks) (pubkeys : Array BLSPubkey)
+    (message : ByteArray) (signature : BLSSignature) : Bool :=
+  (pubkeys.isEmpty && decide (signature = Signatures.infinitySignature)) ||
     checks.fastAggregateVerify pubkeys message signature
 
 /-- From Altair: the reward of each member of the sync committee that signs, for one slot.
@@ -132,7 +133,7 @@ def processSyncAggregate (config : Config) (checks : SignatureChecks)
   let root ← liftAccessor (getBlockRootAtSlot state previousSlot)
   let signingRoot ← liftSsz (computeSigningRoot root domain)
   ensure (syncAggregateVerify checks pubkeys (packBytes signingRoot)
-    (packBytes aggregate.syncCommitteeSignature) = true) .invalidSyncAggregate
+    aggregate.syncCommitteeSignature = true) .invalidSyncAggregate
   let reward ← syncParticipantReward state
   let proposerReward ← liftAccessor (liftArith do
     divChecked (← mulChecked reward PROPOSER_WEIGHT) (WEIGHT_DENOMINATOR - PROPOSER_WEIGHT))

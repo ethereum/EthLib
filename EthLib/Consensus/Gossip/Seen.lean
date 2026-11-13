@@ -171,7 +171,7 @@ def isValidSignatureAtEpoch {α : Type} [Serialization.Ssz.SszType α] (config :
     (signature : Cryptography.Bls.BLSSignature) : Except ForkChoiceError Bool := do
   let domain ← (getDomain config state domainType (some epoch)).mapError .accessor
   let signingRoot ← (computeSigningRoot object domain).mapError .ssz
-  return checks.verify (packBytes pubkey) (packBytes signingRoot) (packBytes signature)
+  return checks.verify pubkey (packBytes signingRoot) signature
 
 /-- Whether a key signed an object under a domain type, at the epoch of a slot. -/
 def isValidSignatureAtSlot {α : Type} [Serialization.Ssz.SszType α] (config : Config)

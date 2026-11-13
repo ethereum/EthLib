@@ -27,6 +27,9 @@ open EthLib.Execution.Network
 def snapMessage : SnapError → String
   | .unknownId id => s!"message ID {id} is not used by this snap version"
   | .rlp _ => "message data is not RLP of the expected shape"
+  | .pathLength size => s!"a trie node path has {size} bytes, more than 32"
+  | .compactPath _ => "a partial trie node path is not a valid compact encoding"
+  | .emptyPathGroup => "a list of trie node paths is empty"
 
 /-- The version with a number, or code 0 when EthLib does not specify it. -/
 def readVersion (number : UInt64) : Result SnapVersion :=
@@ -74,6 +77,20 @@ def accessListsAnswerExport (request response : ByteArray) (expected : Array Byt
   | .blockAccessLists _ lists =>
     return SnapMessage.answers req resp && accessListsAnswer hashes lists
   | _ => return false
+
+/-- Whether the snap/1 TrieNodes data `response` answers the GetTrieNodes data `request`.
+
+It must repeat the request ID, and hold at most one node per requested node.
+
+A path that cannot be read is an error. -/
+@[export eth_snap_trie_nodes_answer]
+def trieNodesAnswerExport (request response : ByteArray) : Result Bool := do
+  let req ← run (SnapMessage.decode .snap1 0x06 request)
+  let resp ← run (SnapMessage.decode .snap1 0x07 response)
+  match req, resp with
+  | .getTrieNodes _ _ paths _, .trieNodes _ nodes =>
+    return SnapMessage.answers req resp && trieNodesAnswer (← run (readGroups paths)) nodes
+  | _, _ => return false
 
 /-- The full RLP form of an account in slim form. -/
 @[export eth_snap_full_account]

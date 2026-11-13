@@ -1201,18 +1201,20 @@ private theorem processEpoch_kept (before : fork < .altair)
         MixesKeptBut next state after) ∧
       after.previousEpochAttestations before = state.currentEpochAttestations before ∧
       (after.currentEpochAttestations before).data = #[] := by
-  obtain ⟨cleared, mixed, initial, mixedOk, final⟩ := processEpoch_randaoCut computed
+  obtain ⟨cleared, mixed, rooted, rotatedState, synced, looked, initial, mixedOk, rootedOk,
+    rotated, syncedOk, lookedOk, windowed⟩ := processEpoch_randaoCut computed
+  -- Every fork guard from Altair on is false, and the eth1 reset runs.
+  have later {g : Fork} (h : Fork.altair ≤ g) : ¬g ≤ fork :=
+    fun h' => Nat.not_le_of_lt before (Nat.le_trans h h')
+  have preHeze : fork < .hegota := Nat.lt_trans before (by decide)
+  simp (disch := decide) only [EpochStage.Edge, later, ↓reduceDIte]
+    at rootedOk rotated syncedOk lookedOk windowed
+  subst syncedOk lookedOk windowed
   have head : Keeps state cleared := by
     apply initial.transport Keeps Keeps.refl (fun a b => a.trans b)
     intro k member a b ok
     have edge := EpochStage.action_cases.mp ok
-    cases k <;> simp only [EpochStage.Edge] at edge
-    all_goals try (split at edge <;> rename_i guard)
-    all_goals try
-      have bound : fork.ctorIdx < Fork.altair.ctorIdx := before
-      have lower : _ ≤ fork.ctorIdx := guard
-      simp only [Fork.ctorIdx] at bound lower
-      omega
+    cases k <;> simp (disch := decide) only [EpochStage.Edge, later, preHeze, ↓reduceDIte] at edge
     all_goals first
       | exact keeps_processJustificationAndFinalization edge
       | exact keeps_processRewardsAndPenalties edge
@@ -1223,37 +1225,6 @@ private theorem processEpoch_kept (before : fork < .altair)
       | exact keeps_processSlashingsReset edge
       | exact edge ▸ Keeps.refl _
       | simp [EpochStage.prefixStages] at member
-  cases final
-  rename_i rooted rootedOk final
-  cases final
-  rename_i rotatedState rotated final
-  cases final
-  rename_i syncedState synced final
-  cases final
-  rename_i lookedState looked final
-  cases final
-  rename_i windowedState windowed final
-  cases final
-  have rootedOk := EpochStage.action_cases.mp rootedOk
-  have rotated := EpochStage.action_cases.mp rotated
-  have synced := EpochStage.action_cases.mp synced
-  have looked := EpochStage.action_cases.mp looked
-  have windowed := EpochStage.action_cases.mp windowed
-  simp only [EpochStage.Edge] at rootedOk rotated synced looked windowed
-  split at rootedOk
-  · exact False.elim ((Nat.not_le_of_lt before)
-      (Nat.le_trans (show Fork.altair ≤ .shapella by decide) ‹Fork.shapella ≤ fork›))
-  split at rotated
-  · exact False.elim ((Nat.not_le_of_lt before) ‹Fork.altair ≤ fork›)
-  split at synced
-  · exact False.elim ((Nat.not_le_of_lt before) ‹Fork.altair ≤ fork›)
-  split at looked
-  · exact False.elim ((Nat.not_le_of_lt before)
-      (Nat.le_trans (show Fork.altair ≤ .fusaka by decide) ‹Fork.fusaka ≤ fork›))
-  split at windowed
-  · exact False.elim ((Nat.not_le_of_lt before)
-      (Nat.le_trans (show Fork.altair ≤ .glamsterdam by decide) ‹Fork.glamsterdam ≤ fork›))
-  subst synced looked windowed
   have epoch : getCurrentEpoch cleared = getCurrentEpoch state := by
     simp only [getCurrentEpoch, head.2.2]
   obtain ⟨next, mix, randaoMixes, nextEq, -, written, rfl⟩ := processRandaoMixesReset_eq mixedOk

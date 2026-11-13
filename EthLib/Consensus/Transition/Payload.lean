@@ -58,8 +58,8 @@ def verifyExecutionPayloadBidSignature (config : Config) (checks : SignatureChec
     (signed : SignedExecutionPayloadBid preset fork) : Except TransitionError Bool := do
   let builder ← liftAccessor (getBuilder state gloas signed.message.builderIndex)
   let signingRoot ← builderSigningRoot config state signed.message
-  return checks.verify (packBytes builder.pubkey) (packBytes signingRoot)
-    (packBytes signed.signature)
+  return checks.verify builder.pubkey (packBytes signingRoot)
+    signed.signature
 
 /-- The key that signs an envelope.
 
@@ -76,7 +76,7 @@ def verifyExecutionPayloadEnvelopeSignature (config : Config) (checks : Signatur
     (signed : SignedExecutionPayloadEnvelope preset fork) : Except TransitionError Bool := do
   let pubkey ← envelopeSignerKey state gloas signed.message.builderIndex
   let signingRoot ← builderSigningRoot config state signed.message
-  return checks.verify (packBytes pubkey) (packBytes signingRoot) (packBytes signed.signature)
+  return checks.verify pubkey (packBytes signingRoot) signed.signature
 
 /-- From Gloas: the payload request of an envelope, for the execution layer.
 

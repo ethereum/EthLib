@@ -1262,6 +1262,57 @@ theorem lookup_of_perm_filter {fs pairs : List (String × Lean.Json)}
     · simp only [Option.filter_some, hn, Bool.not_false, ↓reduceIte]
       exact lookup_of_mem hd (h.mem_iff.mpr (List.mem_filter.mpr ⟨hv, by simpa using hn⟩))
 
+/-- A list reads back from its encoding when each item reads back from its own. -/
+theorem array_listJson_of {α : Type} (what : String) {f : Lean.Json → Read α}
+    {g : α → Lean.Json} (h : ∀ x, f (g x) = .ok x) (items : List α) :
+    array what f (listJson g items) = .ok items := by
+  rw [array_listJson]
+  simp only [h]
+  induction items with
+  | nil => rfl
+  | cons x xs ih => simp only [List.mapM_cons, ih]; rfl
+
+/-- The decoder of byte strings reads back a byte string that holds its bytes as data. -/
+theorem bytes_dataJson (what : String) (b : ByteArray) :
+    bytes what (dataJson b.data.toList) = .ok b := by
+  rw [dataJson, bytes_hexString]
+  congr 1
+  apply ByteArray.ext
+  apply Array.toList_inj.mp
+  simp
+
+/-- The decoder of lists of byte strings reads back a list written as data. -/
+theorem array_bytes_listJson (what w : String) (l : List ByteArray) :
+    array what (bytes w) (listJson (dataJson ·.data.toList) l) = .ok l :=
+  array_listJson_of what (bytes_dataJson w) l
+
+/-- The decoder of lists of byte strings of a size reads back a list written as data. -/
+theorem array_fixed_listJson {n : Nat} (what w : String) (l : List (Vector UInt8 n)) :
+    array what (fixed w n) (listJson (dataJson ·.toList) l) = .ok l :=
+  array_listJson_of what (fun v => fixed_dataJson w v false) l
+
+/-- A value or `null` reads back from its encoding, when no value is written as `null`. -/
+theorem nullable_optionJson {α : Type} {f : Lean.Json → Read α} {g : α → Lean.Json}
+    (h : ∀ x, f (g x) = .ok x) (present : ∀ x, (g x).isNull = false) (o : Option α) :
+    nullable f (optionJson g o) = .ok o := by
+  cases o with
+  | none => rfl
+  | some x =>
+    have hx := present x
+    have hn : nullable f (g x) = some <$> f (g x) := by
+      cases hg : g x with
+      | null => rw [hg] at hx; cases hx
+      | _ => rfl
+    simp only [optionJson, hn, h]
+    rfl
+
+/-- Fields that are some pairs in another order hold only the names of those pairs. -/
+theorem hasOnly_of_perm {fs pairs : List (String × Lean.Json)} {names : List String}
+    (h : fs.Perm pairs) (hn : ∀ p ∈ pairs, p.1 ∈ names) : hasOnly fs names = true := by
+  simp only [hasOnly, List.all_eq_true]
+  intro p hp
+  simpa using hn p (h.mem_iff.mp hp)
+
 /-! ## The error object -/
 
 /-- The integer reader reads back the number that an integer writes. -/

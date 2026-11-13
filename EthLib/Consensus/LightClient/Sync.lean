@@ -485,8 +485,8 @@ def validateLightClientUpdate (config : Config) (checks : SignatureChecks)
     validateNextSyncCommitteeBranch config update
   let keys := (store.signatureCommittee update).participantKeys aggregate
   let signingRoot ← syncCommitteeSigningRoot config update genesisValidatorsRoot
-  require (checks.fastAggregateVerify (keys.map packBytes) (packBytes signingRoot)
-    (packBytes aggregate.syncCommitteeSignature) = true) .invalidSignature
+  require (checks.fastAggregateVerify keys (packBytes signingRoot)
+    aggregate.syncCommitteeSignature = true) .invalidSignature
 
 /-- The store after it applies an update that it has checked.
 

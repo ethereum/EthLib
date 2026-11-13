@@ -2146,21 +2146,27 @@ theorem processEpoch_split_of_lt_altair (before : fork < .altair)
     ∃ justified, processJustificationAndFinalization state = .ok justified ∧
       R justified after := by
   have notAltair : ¬ .altair ≤ fork := Nat.not_le_of_lt before
-  unfold Consensus.processEpoch at computed
-  simp only [notAltair, ↓reduceDIte, bind_ok_iff] at computed
-  obtain ⟨justified, justifiedOk, rewarded, rewardedOk, registered, registeredOk, slashed,
-    slashedOk, reset, resetOk, balanced, balancedOk, cleared, clearedOk, mixed, mixedOk, rooted,
-    rootedOk, rotated⟩ := computed
-  exact ⟨justified, justifiedOk,
-    laws.trans (laws.processRewardsAndPenalties rewardedOk) <|
-    laws.trans (laws.processRegistryUpdates registeredOk) <|
-    laws.trans (laws.processSlashings slashedOk) <|
-    laws.trans (laws.processEth1DataReset resetOk) <|
-    laws.trans (laws.processEffectiveBalanceUpdates balancedOk) <|
-    laws.trans (laws.processSlashingsReset clearedOk) <|
-    laws.trans (laws.processRandaoMixesReset mixedOk) <|
-    laws.trans (laws.processHistoricalRootsUpdate rootedOk)
-      (laws.processParticipationRecordUpdates rotated)⟩
+  have later (stage : Fork) (ordered : Fork.altair ≤ stage) : ¬ stage ≤ fork :=
+    fun h => notAltair (Nat.le_trans ordered h)
+  have trace := processEpoch_trace computed
+  change EpochTrace _ (.justification :: _) _ _ at trace
+  cases trace with
+  | cons first rest =>
+    refine ⟨_, first, rest.transport R laws.refl laws.trans fun k member _ _ ok => ?_⟩
+    -- Before Altair the payments and the deposits change nothing, and the rotation is Phase 0's.
+    have edge := EpochStage.action_cases.mp ok
+    cases k
+    case justification => simp [EpochStage.middleStages, EpochStage.tailStages] at member
+    case payments =>
+      simp only [EpochStage.Edge, later .glamsterdam (by decide), ↓reduceDIte] at edge
+      exact edge ▸ laws.refl _
+    case participation =>
+      simp only [EpochStage.Edge, notAltair, ↓reduceDIte] at edge
+      exact laws.processParticipationRecordUpdates edge
+    case pendingDeposits =>
+      simp only [EpochStage.Edge, later .pectra (by decide), ↓reduceDIte] at edge
+      exact edge ▸ laws.refl _
+    all_goals exact laws.epochEdge (by simp) ok
 
 end EpochStepLaws
 
@@ -2261,7 +2267,9 @@ theorem epochBeforePayments_split
     refine laws.toEpochStepLaws.epochEdge ⟨?_, ?_, ?_, deposits⟩ ok <;> rintro rfl <;>
       simp at member
 
-/-- The two ordinary intervals around participation rotation compose through payments. -/
+/-- From Altair, the epoch is justification, then steps in the relation, then the flag rotation.
+
+Then steps in the relation follow it, assuming the builder payments are in the relation. -/
 theorem processEpochAltair_rotationSplit
     (payments : ∀ {state after : BeaconState preset fork} (gloas : .glamsterdam ≤ fork),
       processBuilderPendingPayments state gloas = .ok after → R state after)

@@ -13,6 +13,7 @@ extern lean_object* eth_mplex_decode(lean_object* args);
 extern lean_object* eth_mplex_session(lean_object* args);
 extern lean_object* eth_yamux_encode(lean_object* args);
 extern lean_object* eth_yamux_decode(lean_object* args);
+extern lean_object* eth_yamux_session(lean_object* args);
 extern lean_object* eth_libp2p_public_key(lean_object* args);
 extern lean_object* eth_libp2p_peer_id(lean_object* args);
 extern lean_object* eth_libp2p_decode_peer_id(lean_object* args);
@@ -111,6 +112,14 @@ py_yamux_decode(
   PyObject* args
 ) {
   return call_pyvalue_export(eth_yamux_decode, args, 1, YAMUX_ERROR);
+}
+
+PyObject*
+py_yamux_session(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_yamux_session, args, 2, YAMUX_ERROR);
 }
 
 PyObject*

@@ -52,7 +52,7 @@ inductive SnapRangeError where
 
 A failed range check keeps the code of its own error, from 201 on.
 
-The two other codes follow the codes of a snap message error, so the two kinds never meet.
+The two other codes, 3 and 4, are not codes of a snap message error, so the two kinds never meet.
 
 A new constructor takes a new code, so that each code keeps its meaning. -/
 def SnapRangeError.code : SnapRangeError → UInt32

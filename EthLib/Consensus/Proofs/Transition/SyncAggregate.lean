@@ -35,14 +35,14 @@ variable {preset : Preset} {fork : Base.Fork} {config : Config} {checks : Signat
 /-- With no key, the check passes exactly for the signature of the point at infinity.
 
 That holds for every signature checks that reject an empty key list, as BLS does. -/
-theorem syncAggregateVerify_empty {message signature : ByteArray}
+theorem syncAggregateVerify_empty {message : ByteArray} {signature : BLSSignature}
     (rejectsEmpty : checks.fastAggregateVerify #[] message signature = false) :
     syncAggregateVerify checks #[] message signature = true ↔
-      signature = Signatures.G2_POINT_AT_INFINITY := by
+      signature = Signatures.infinitySignature := by
   simp [syncAggregateVerify, rejectsEmpty]
 
 /-- The checks of BLS reject an empty key list. -/
-theorem bls_fastAggregateVerify_empty (message signature : ByteArray) :
+theorem bls_fastAggregateVerify_empty (message : ByteArray) (signature : BLSSignature) :
     SignatureChecks.bls.fastAggregateVerify #[] message signature = false := by
   simp [SignatureChecks.bls, Signatures.fastAggregateVerify]
   rfl
@@ -70,7 +70,7 @@ theorem processSyncAggregate_signed {altair : .altair ≤ fork} {aggregate : Syn
       getBlockRootAtSlot state (saturatingSub state.slot 1) = .ok root ∧
       computeSigningRoot root domain = .ok signingRoot ∧
       syncAggregateVerify checks pubkeys (packBytes signingRoot)
-        (Base.packBytes aggregate.syncCommitteeSignature) = true := by
+        aggregate.syncCommitteeSignature = true := by
   unfold processSyncAggregate at computed
   simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok, liftSsz_ok] at computed
   obtain ⟨pubkeys, found, domain, inDomain, root, atSlot, signingRoot, signed, _, verified, _⟩ :=

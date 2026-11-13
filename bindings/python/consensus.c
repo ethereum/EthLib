@@ -102,6 +102,15 @@ eth_consensus_verify_builder_request_auth_signature(
 );
 
 extern lean_object*
+eth_consensus_builder_request_auth_failures(lean_object* args);
+
+extern lean_object*
+eth_consensus_builder_preferences_failures(lean_object* args);
+
+extern lean_object*
+eth_consensus_default_auth_data(lean_object* args);
+
+extern lean_object*
 eth_consensus_builder_bid_value(
   lean_object* args
 );
@@ -122,6 +131,39 @@ eth_consensus_api_json(lean_object* args);
 
 extern lean_object*
 eth_consensus_api_ssz(lean_object* args);
+
+extern lean_object*
+eth_consensus_api_resolve(lean_object* args);
+
+extern lean_object*
+eth_consensus_builder_api_json(lean_object* args);
+
+extern lean_object*
+eth_consensus_builder_api_ssz(lean_object* args);
+
+extern lean_object*
+eth_consensus_api_spec(lean_object* args);
+
+extern lean_object*
+eth_consensus_api_fork_schedule(lean_object* args);
+
+extern lean_object*
+eth_consensus_api_deposit_contract(lean_object* args);
+
+extern lean_object*
+eth_consensus_api_genesis(lean_object* args);
+
+extern lean_object*
+eth_consensus_api_state_query(lean_object* args);
+
+extern lean_object*
+eth_consensus_api_state_query_ssz(lean_object* args);
+
+extern lean_object*
+eth_consensus_api_validator_status(lean_object* args);
+
+extern lean_object*
+eth_consensus_api_builder_status(lean_object* args);
 
 extern lean_object*
 eth_pq_keys_ssz(
@@ -600,6 +642,94 @@ py_consensus_api_ssz(
 }
 
 PyObject*
+py_consensus_api_resolve(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_resolve, args, 7, FORK_CHOICE_ERROR);
+}
+
+PyObject*
+py_consensus_builder_api_json(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_builder_api_json, args, 4, SSZ_ERROR);
+}
+
+PyObject*
+py_consensus_builder_api_ssz(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_builder_api_ssz, args, 4, SSZ_ERROR);
+}
+
+PyObject*
+py_consensus_api_spec(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_spec, args, 2, CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_api_fork_schedule(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_fork_schedule, args, 2, CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_api_deposit_contract(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_deposit_contract, args, 2, CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_api_genesis(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_genesis, args, 4, CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_api_state_query(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_state_query, args, 5, CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_api_state_query_ssz(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_state_query_ssz, args, 4, CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_api_validator_status(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_validator_status, args, 3, CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_api_builder_status(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_builder_status, args, 4, CONSENSUS_ERROR);
+}
+
+PyObject*
 py_consensus_is_valid_builder_signature(
   PyObject* self,
   PyObject* args
@@ -661,6 +791,30 @@ py_consensus_verify_builder_request_auth_signature(
   PyObject* args
 ) {
   return call_pyvalue_export(eth_consensus_verify_builder_request_auth_signature, args, 5, SSZ_ERROR);
+}
+
+PyObject*
+py_consensus_builder_request_auth_failures(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_builder_request_auth_failures, args, 8, SSZ_ERROR);
+}
+
+PyObject*
+py_consensus_builder_preferences_failures(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_builder_preferences_failures, args, 8, SSZ_ERROR);
+}
+
+PyObject*
+py_consensus_default_auth_data(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_default_auth_data, args, 1, CONSENSUS_ERROR);
 }
 
 PyObject*

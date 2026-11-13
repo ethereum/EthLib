@@ -42,9 +42,7 @@ From Gloas a full head reads its own payload, and an empty one the payload it bu
 
 A node whose head is optimistic is an optimistic node, at every fork.
 
-Otherwise, before Gloas, it needs a dropped block at or above the justified block.
-
-From Gloas that second case is not yet specified, and fails.
+Otherwise, at every fork, it needs a dropped block at or above the justified block.
 
 An optimistic validator may not sign exactly under seven domain types.
 
@@ -1111,28 +1109,19 @@ theorem isOptimisticNode_of_isHeadOptimistic_error {config : Config}
     isOptimisticNode config optimistic store = .error error := by
   simp only [isOptimisticNode, failed, bind, Except.bind]
 
-/-- From Gloas, when the head is not optimistic, the second case is not yet specified, and fails. -/
-theorem isOptimisticNode_of_glamsterdam {config : Config}
-    {optimistic : OptimisticStore preset fork} (store : Store preset fork)
-    (gloas : .glamsterdam ≤ fork) (head : optimistic.isHeadOptimistic = .ok false) :
-    isOptimisticNode config optimistic store = .error (.forkNotYetSpecified fork) := by
-  simp only [isOptimisticNode, head, bind, Except.bind, Bool.false_eq_true, ↓reduceIte, gloas]
-  rfl
-
-/-- Before Gloas, a node whose head is not optimistic is optimistic exactly in the second case.
+/-- At every fork, a node whose head is not optimistic is optimistic exactly in the second case.
 
 That case needs a dropped block at or above the justified block, then no viable branch. -/
 theorem isOptimisticNode_of_not_isHeadOptimistic {config : Config}
     {optimistic : OptimisticStore preset fork} (store : Store preset fork)
-    (head : optimistic.isHeadOptimistic = .ok false) (before : fork < .glamsterdam)
+    (head : optimistic.isHeadOptimistic = .ok false)
     {dropped : Bool} (found : optimistic.invalidatedAbove store = .ok dropped) :
     isOptimisticNode config optimistic store =
       if dropped then store.hasNoViableBranch config else .ok false := by
-  have notGloas : ¬(Fork.glamsterdam ≤ fork) := Nat.not_le_of_lt before
   cases dropped
-  · simp [isOptimisticNode, head, notGloas, found, bind, Except.bind]
+  · simp [isOptimisticNode, head, found, bind, Except.bind]
     rfl
-  · simp [isOptimisticNode, head, notGloas, found, bind, Except.bind]
+  · simp [isOptimisticNode, head, found, bind, Except.bind]
 
 /-- The execution layer of the sources of a payload whose status is not valid.
 

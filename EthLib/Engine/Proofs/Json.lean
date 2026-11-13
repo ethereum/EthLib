@@ -42,6 +42,7 @@ namespace EthLib.Engine.Json
 
 open EthLib.Base
 open EthLib.Serialization.JsonRpc
+open EthLib.Execution.Blocks (MAX_EXTRA_DATA_BYTES)
 
 /-- A failure with an invalid parameter is that error, never a value. -/
 @[simp] theorem invalid_eq {α : Type} (reason : String) :
@@ -214,24 +215,6 @@ private abbrev commonOf {fork : Fork} (p : ExecutionPayload fork) : ExecutionPay
   blobGasUsed := fun h => absurd h (by decide)
   excessBlobGas := fun h => absurd h (by decide)
 
-/-- The decoder of byte strings reads back a byte string that holds its bytes as data. -/
-private theorem bytes_dataJson (what : String) (b : ByteArray) :
-    bytes what (dataJson b.data.toList) = .ok b := by
-  rw [dataJson, bytes_hexString]
-  congr 1
-  apply ByteArray.ext
-  apply Array.toList_inj.mp
-  simp
-
-/-- The decoder of lists of transactions reads back a list of transactions written as data. -/
-private theorem array_transactions (ts : List ByteArray) :
-    array "transactions" (bytes "transaction") (listJson (dataJson ·.data.toList) ts) = .ok ts := by
-  rw [array_listJson]
-  simp only [bytes_dataJson]
-  induction ts with
-  | nil => rfl
-  | cons t ts ih => simp only [List.mapM_cons, ih]; rfl
-
 /-- The decoder of numbers of 256 bits reads back a number of 256 bits written as a quantity. -/
 private theorem quantity_baseFee (what : String) (x : BitVec 256) :
     quantity what 256 (quantityJson x.toNat) = .ok x.toNat :=
@@ -244,7 +227,8 @@ private theorem bytesMax_dataJson (what : String) (n : Nat) (b : ByteArray) (h :
 
 /-- Fields that are those of a payload decode as a payload that reads back at its fork. -/
 private theorem anyPayload_of_perm {fork : Fork} (p : ExecutionPayload fork)
-    (extra : p.extraData.size ≤ 32) {j : Lean.Json} {fs : List (String × Lean.Json)}
+    (extra : p.extraData.size ≤ MAX_EXTRA_DATA_BYTES) {j : Lean.Json}
+    {fs : List (String × Lean.Json)}
     (hfs : fields "payload" j = .ok fs) (hp : fs.Perm (executionPayloadFields p)) :
     ∃ any, anyPayload j = .ok any ∧ any.atFork fork = .ok p := by
   have hd := names_distinct p
@@ -306,7 +290,7 @@ private theorem anyPayload_of_perm {fork : Fork} (p : ExecutionPayload fork)
       rw [ite_eq_right ne1, ite_eq_right ne2, ite_eq_left hex]
       simp only [r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13, r14, r15, r16, r17,
         liftM_ok, ok_bind, fixed_dataJson, address_dataJson, uint64_toDigits, quantity_baseFee,
-        bytesMax_dataJson _ _ _ extra, array_transactions, ge_iff_le, Nat.reduceLeDiff,
+        bytesMax_dataJson _ _ _ extra, array_bytes_listJson, ge_iff_le, Nat.reduceLeDiff,
         reduceIte, map_ok, Execution.Rpc.array_withdrawal_listJson, hbase, sinceValue, h1, h2,
         dite_true]
       rfl
@@ -325,7 +309,7 @@ private theorem anyPayload_of_perm {fork : Fork} (p : ExecutionPayload fork)
       rw [ite_eq_right ne1, ite_eq_left hex]
       simp only [r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13, r14, r15,
         liftM_ok, ok_bind, fixed_dataJson, address_dataJson, uint64_toDigits, quantity_baseFee,
-        bytesMax_dataJson _ _ _ extra, array_transactions, ge_iff_le, Nat.reduceLeDiff,
+        bytesMax_dataJson _ _ _ extra, array_bytes_listJson, ge_iff_le, Nat.reduceLeDiff,
         reduceIte, map_ok, Execution.Rpc.array_withdrawal_listJson, hbase, sinceValue, h1, h2,
         dite_true, dite_false]
       rfl
@@ -341,7 +325,7 @@ private theorem anyPayload_of_perm {fork : Fork} (p : ExecutionPayload fork)
       rw [ite_eq_left hex]
       simp only [r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13, r14,
         liftM_ok, ok_bind, fixed_dataJson, address_dataJson, uint64_toDigits, quantity_baseFee,
-        bytesMax_dataJson _ _ _ extra, array_transactions, ge_iff_le, Nat.reduceLeDiff,
+        bytesMax_dataJson _ _ _ extra, array_bytes_listJson, ge_iff_le, Nat.reduceLeDiff,
         reduceIte, hbase, sinceValue, h1, h2, dite_false]
       rfl
   obtain ⟨v, hv⟩ := key
@@ -354,7 +338,7 @@ private theorem anyPayload_of_perm {fork : Fork} (p : ExecutionPayload fork)
 
 The extra data must hold at most 32 bytes, the bound of its type in the Engine API. -/
 theorem anyPayload_executionPayloadJson {fork : Fork} (p : ExecutionPayload fork)
-    (extra : p.extraData.size ≤ 32) :
+    (extra : p.extraData.size ≤ MAX_EXTRA_DATA_BYTES) :
     ∃ any, anyPayload (executionPayloadJson p) = .ok any ∧ any.atFork fork = .ok p := by
   obtain ⟨fs, hfs, hp⟩ := fields_mkObj "payload" (names_distinct p) (fields_present p)
   exact anyPayload_of_perm p extra hfs hp
@@ -366,7 +350,7 @@ It reads the payload at its fork, the block access list and the slot number.
 The extra data must hold at most 32 bytes, the bound of its type in the Engine API. -/
 theorem payloadV4_executionPayloadV4Json {fork : Fork} (p : ExecutionPayload fork)
     (blockAccessList : ByteArray) (slotNumber : UInt64) (dencun : .dencun ≤ fork)
-    (extra : p.extraData.size ≤ 32) :
+    (extra : p.extraData.size ≤ MAX_EXTRA_DATA_BYTES) :
     ∃ any, payloadV4 (executionPayloadV4Json p blockAccessList slotNumber) =
       .ok (any, blockAccessList, slotNumber) ∧ any.atFork fork = .ok p := by
   have h1 : Fork.shapella ≤ fork := Std.le_trans (by decide) dencun

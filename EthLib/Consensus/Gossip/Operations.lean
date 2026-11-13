@@ -44,7 +44,7 @@ def isValidHeaderSignature (config : Config) (checks : SignatureChecks)
   let domain ← (getDomain config state DOMAIN_BEACON_PROPOSER
     (some (computeEpochAtSlot preset signed.message.slot))).mapError .accessor
   let signingRoot ← (computeSigningRoot signed.message domain).mapError .ssz
-  return checks.verify (packBytes pubkey) (packBytes signingRoot) (packBytes signed.signature)
+  return checks.verify pubkey (packBytes signingRoot) signed.signature
 
 /-- Whether the validator key signed a voluntary exit, under the domain of exits. -/
 def isValidVoluntaryExitSignature (config : Config) (checks : SignatureChecks)
@@ -52,7 +52,7 @@ def isValidVoluntaryExitSignature (config : Config) (checks : SignatureChecks)
     Except ForkChoiceError Bool := do
   let domain ← (voluntaryExitDomain config state signed.message.epoch).mapError .transition
   let signingRoot ← (computeSigningRoot signed.message domain).mapError .ssz
-  return checks.verify (packBytes pubkey) (packBytes signingRoot) (packBytes signed.signature)
+  return checks.verify pubkey (packBytes signingRoot) signed.signature
 
 /-- Whether the BLS key in a change of credentials signed it, on the chain of the state.
 
@@ -63,8 +63,8 @@ def isValidBlsToExecutionChangeSignature (config : Config) (checks : SignatureCh
   let domain ← (computeDomain config DOMAIN_BLS_TO_EXECUTION_CHANGE
     (genesisValidatorsRoot := state.genesisValidatorsRoot)).mapError .ssz
   let signingRoot ← (computeSigningRoot signed.message domain).mapError .ssz
-  return checks.verify (packBytes signed.message.fromBlsPubkey) (packBytes signingRoot)
-    (packBytes signed.signature)
+  return checks.verify signed.message.fromBlsPubkey (packBytes signingRoot)
+    signed.signature
 
 /-! ## Attester slashings -/
 

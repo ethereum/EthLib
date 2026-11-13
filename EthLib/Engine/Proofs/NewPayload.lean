@@ -49,7 +49,7 @@ public section
 namespace EthLib.Engine
 
 open EthLib.Base
-open EthLib.Execution.Blocks (BlockChain RecentBlock stateTransition)
+open EthLib.Execution.Blocks (BlockChain RecentBlock stateTransition MAX_EXTRA_DATA_BYTES)
 open EthLib.Serialization.JsonRpc (fields hasExactly)
 
 /-- Two errors with one code come from one constructor. -/
@@ -348,10 +348,12 @@ theorem status_of_newPayloadWithoutState {config : ChainConfig} {version : Nat}
 /-- A payload that gives back a block and a state is valid.
 
 It passed the checks before execution, and its block passed the transition to that state. -/
-theorem of_newPayloadOnChain_some {chain : BlockChain} {version : Nat} {params : Lean.Json}
+theorem of_newPayloadOnChain_some {transition : TransitionConfiguration}
+    {totalDifficulty : Nat} {chain : BlockChain} {version : Nat} {params : Lean.Json}
     {status : PayloadStatus} {reason : Option PayloadError} {block : RecentBlock}
     {post : Execution.State.State}
-    (h : newPayloadOnChain chain version params = .ok (status, reason, some (block, post))) :
+    (h : newPayloadOnChain transition totalDifficulty chain version params =
+      .ok (status, reason, some (block, post))) :
     status.status = .valid ∧ ∃ checked, checkNewPayload chain.config version params =
       .ok (.ok checked) ∧ stateTransition chain checked.block false = .ok post ∧
         block = ⟨checked.fork, checked.block.header, []⟩ := by
@@ -366,22 +368,54 @@ theorem of_newPayloadOnChain_some {chain : BlockChain} {version : Nat} {params :
       split at h
       · split at h
         · split at h
-          · rename_i post' hRun
-            simp only [pure, Except.pure, Except.ok.injEq, Prod.mk.injEq, Option.some.injEq] at h
-            obtain ⟨rfl, -, rfl, rfl⟩ := h
-            exact ⟨rfl, checked, rfl, hRun, rfl⟩
-          · simp [pure, Except.pure] at h
+          · split at h
+            · rename_i post' hRun
+              simp only [pure, Except.pure, Except.ok.injEq, Prod.mk.injEq,
+                Option.some.injEq] at h
+              obtain ⟨rfl, -, rfl, rfl⟩ := h
+              exact ⟨rfl, checked, rfl, hRun, rfl⟩
+            · simp [pure, Except.pure] at h
+            · simp [pure, Except.pure] at h
           · simp [pure, Except.pure] at h
         · simp [pure, Except.pure] at h
       · simp [pure, Except.pure] at h
 
+/-- A payload that gives back a block and a state has a parent that passes the terminal check.
+
+So a valid answer never follows a block of proof of work that is not terminal. -/
+theorem passesTerminalCheck_of_newPayloadOnChain_some {transition : TransitionConfiguration}
+    {totalDifficulty : Nat} {chain : BlockChain} {version : Nat} {params : Lean.Json}
+    {status : PayloadStatus} {reason : Option PayloadError} {block : RecentBlock}
+    {post : Execution.State.State}
+    (h : newPayloadOnChain transition totalDifficulty chain version params =
+      .ok (status, reason, some (block, post))) :
+    ∃ parent, chain.recent.getLast? = some parent ∧
+      passesTerminalCheck transition totalDifficulty parent = true := by
+  unfold newPayloadOnChain at h
+  cases hC : checkNewPayload chain.config version params with
+  | error e => simp [hC, bind, Except.bind] at h
+  | ok r =>
+    cases r with
+    | error p => simp [hC, bind, Except.bind, pure, Except.pure] at h
+    | ok checked =>
+      cases hL : chain.recent.getLast? with
+      | none => simp [hC, hL, bind, Except.bind, pure, Except.pure] at h
+      | some parent =>
+        refine ⟨parent, rfl, ?_⟩
+        cases hT : passesTerminalCheck transition totalDifficulty parent
+        · simp only [hC, hL, hT, bind, Except.bind] at h
+          split at h <;> simp [pure, Except.pure] at h
+        · rfl
+
 /-- A payload on a chain is valid exactly when a block and a state come back.
 
 So a valid answer always comes from a block that passed the state transition. -/
-theorem valid_iff_of_newPayloadOnChain {chain : BlockChain} {version : Nat} {params : Lean.Json}
+theorem valid_iff_of_newPayloadOnChain {transition : TransitionConfiguration}
+    {totalDifficulty : Nat} {chain : BlockChain} {version : Nat} {params : Lean.Json}
     {status : PayloadStatus} {reason : Option PayloadError}
     {next : Option (RecentBlock × Execution.State.State)}
-    (h : newPayloadOnChain chain version params = .ok (status, reason, next)) :
+    (h : newPayloadOnChain transition totalDifficulty chain version params =
+      .ok (status, reason, next)) :
     status.status = .valid ↔ ∃ block post, next = some (block, post) := by
   constructor
   · intro hValid
@@ -410,12 +444,14 @@ theorem valid_iff_of_newPayloadOnChain {chain : BlockChain} {version : Nat} {par
 /-- A payload that passes the checks before execution is syncing without its parent.
 
 The chain lacks the parent when its last block is another block, or when it has no block. -/
-theorem newPayloadOnChain_of_not_parent {chain : BlockChain} {version : Nat} {params : Lean.Json}
+theorem newPayloadOnChain_of_not_parent {transition : TransitionConfiguration}
+    {totalDifficulty : Nat} {chain : BlockChain} {version : Nat} {params : Lean.Json}
     {checked : CheckedBlock version}
     (hCheck : checkNewPayload chain.config version params = .ok (.ok checked))
     (hParent : ∀ parent, chain.recent.getLast? = some parent →
       parent.header.hash ≠ .ok checked.block.header.parentHash) :
-    newPayloadOnChain chain version params = .ok (⟨.syncing, none⟩, none, none) := by
+    newPayloadOnChain transition totalDifficulty chain version params =
+      .ok (⟨.syncing, none⟩, none, none) := by
   cases hLast : chain.recent.getLast? with
   | none => simp [newPayloadOnChain, hCheck, hLast, bind, Except.bind, pure, Except.pure]
   | some parent =>
@@ -423,43 +459,78 @@ theorem newPayloadOnChain_of_not_parent {chain : BlockChain} {version : Nat} {pa
     cases hP : parent.header.hash <;>
       simp_all [newPayloadOnChain, bind, Except.bind, pure, Except.pure, Except.toOption]
 
+/-- A payload that passes the checks before execution is invalid on a parent that is not terminal.
+
+The parent is a block of proof of work.
+
+It fails the conditions of a terminal block, or has a total difficulty below its difficulty.
+
+The latest valid hash is zero, as step 2 of payload validation requires. -/
+theorem newPayloadOnChain_of_not_terminal {transition : TransitionConfiguration}
+    {totalDifficulty : Nat} {chain : BlockChain} {version : Nat} {params : Lean.Json}
+    {checked : CheckedBlock version} {parent : RecentBlock}
+    (hCheck : checkNewPayload chain.config version params = .ok (.ok checked))
+    (hParent : chain.recent.getLast? = some parent)
+    (hHash : parent.header.hash = .ok checked.block.header.parentHash)
+    (hPow : parent.fork < .paris)
+    (hTerminal : parent.header.difficulty ≤ totalDifficulty → isTerminalPowBlock transition
+      totalDifficulty (totalDifficulty - parent.header.difficulty) = false) :
+    newPayloadOnChain transition totalDifficulty chain version params =
+      .ok (⟨.invalid, some 0⟩, some .invalidTerminalBlock, none) := by
+  have hFail : passesTerminalCheck transition totalDifficulty parent = false := by
+    have hp : decide (Fork.paris ≤ parent.fork) = false := decide_eq_false (Nat.not_le.mpr hPow)
+    rw [passesTerminalCheck, hp, Bool.false_or]
+    by_cases hd : parent.header.difficulty ≤ totalDifficulty
+    · rw [hTerminal hd, Bool.and_false]
+    · simp [hd]
+  simp [newPayloadOnChain, hCheck, hParent, hHash, hFail, bind, Except.bind, pure, Except.pure,
+    Except.toOption]
+
 /-- A payload that passes the checks on its parent, and whose block passes the transition, is valid.
 
+Its parent passes the terminal block check.
+
 Its latest valid hash is its own block hash. -/
-theorem newPayloadOnChain_of_stateTransition_ok {chain : BlockChain} {version : Nat}
+theorem newPayloadOnChain_of_stateTransition_ok {transition : TransitionConfiguration}
+    {totalDifficulty : Nat} {chain : BlockChain} {version : Nat}
     {params : Lean.Json} {checked : CheckedBlock version} {parent : RecentBlock}
     {post : Execution.State.State}
     (hCheck : checkNewPayload chain.config version params = .ok (.ok checked))
     (hParent : chain.recent.getLast? = some parent)
     (hHash : parent.header.hash = .ok checked.block.header.parentHash)
+    (hTerminal : passesTerminalCheck transition totalDifficulty parent = true)
     (hRun : stateTransition chain checked.block false = .ok post) :
-    newPayloadOnChain chain version params =
+    newPayloadOnChain transition totalDifficulty chain version params =
       .ok (⟨.valid, checked.block.header.hash.toOption⟩, none,
         some (⟨checked.fork, checked.block.header, []⟩, post)) := by
-  simp [newPayloadOnChain, hCheck, hParent, hHash, hRun, bind, Except.bind, pure, Except.pure,
-    Except.toOption]
+  simp [newPayloadOnChain, hCheck, hParent, hHash, hTerminal, hRun, bind, Except.bind, pure,
+    Except.pure, Except.toOption]
 
 /-- A payload that passes the checks on its parent is invalid when its block fails the transition.
+
+Its parent passes the terminal block check.
 
 The failure is not an abort, and the reason of the status carries its error.
 
 Its latest valid hash is its parent's hash, or zero for a parent before Paris. -/
-theorem newPayloadOnChain_of_stateTransition_error {chain : BlockChain} {version : Nat}
+theorem newPayloadOnChain_of_stateTransition_error {transition : TransitionConfiguration}
+    {totalDifficulty : Nat} {chain : BlockChain} {version : Nat}
     {params : Lean.Json} {checked : CheckedBlock version} {parent : RecentBlock}
     {e : Execution.Blocks.BlockError}
     (hCheck : checkNewPayload chain.config version params = .ok (.ok checked))
     (hParent : chain.recent.getLast? = some parent)
     (hHash : parent.header.hash = .ok checked.block.header.parentHash)
+    (hTerminal : passesTerminalCheck transition totalDifficulty parent = true)
     (hRun : stateTransition chain checked.block false = .error e)
     (hAbort : ∀ cause, e ≠ .aborted cause) :
-    newPayloadOnChain chain version params =
+    newPayloadOnChain transition totalDifficulty chain version params =
       .ok (⟨.invalid, some (if parent.fork < .paris then 0 else checked.block.header.parentHash)⟩,
         some (.invalidBlock e), none) := by
   cases e with
   | aborted cause => exact absurd rfl (hAbort cause)
   | _ =>
-    simp [newPayloadOnChain, hCheck, hParent, hHash, hRun, bind, Except.bind, pure, Except.pure,
-      Except.toOption]
+    simp [newPayloadOnChain, hCheck, hParent, hHash, hTerminal, hRun, bind, Except.bind, pure,
+      Except.pure, Except.toOption]
 
 /-! ## The writer of the parameters -/
 
@@ -531,7 +602,8 @@ The payload reads back as one whose form at its fork is the given payload. -/
 theorem newPayloadParams_json {fork : Fork} {version : Nat} (payload : ExecutionPayload fork)
     (amsterdam : Option (ByteArray × UInt64)) (hashes : List Hash32) (beaconRoot : Hash32)
     (requests : List ByteArray) (accepts : acceptsFork version fork = true)
-    (extra : payload.extraData.size ≤ 32) (five : amsterdam.isSome ↔ 5 ≤ version) :
+    (extra : payload.extraData.size ≤ MAX_EXTRA_DATA_BYTES)
+    (five : amsterdam.isSome ↔ 5 ≤ version) :
     ∃ any, newPayloadParams version
         (newPayloadParamsJson version payload amsterdam hashes beaconRoot requests) =
         .ok (any, amsterdam, if 3 ≤ version then some hashes else none,

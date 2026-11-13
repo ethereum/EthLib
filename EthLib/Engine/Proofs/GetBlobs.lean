@@ -3,6 +3,8 @@ module
 public import EthLib.Base.Proofs.MapM
 public import EthLib.Engine.GetBlobs
 public import EthLib.Engine.Proofs.Json
+-- Showing that a written value is not `null` unfolds the null test of Lean's JSON.
+import all Lean.Data.Json.Basic
 
 /-!
 # Proofs: `engine_getBlobs`, versions 1 to 4
@@ -30,6 +32,10 @@ Otherwise it holds the selected cells of its blob, in increasing order of index.
 Cell `i` is selected exactly when bit `i mod 8` of byte `i / 8` of the bitarray is set.
 
 The decoder reads back the parameters that the writer writes.
+
+Each structure of the answer reads back from its JSON, and so does the answer of each version.
+
+The cells of version 4 decode only from two arrays of one length, with `null` at the same positions.
 -/
 
 public section
@@ -338,5 +344,218 @@ theorem getBlobsParams_json {version : Nat} (hashes : List Bytes32)
     simp [getBlobsParams, getBlobsParamsJson, getBlobsParamCount, four,
       Serialization.JsonRpc.paramsArray, pure, Except.pure, bind, Except.bind,
       Serialization.JsonRpc.array_listJson, Serialization.JsonRpc.fixed_dataJson, hl]
+
+/-! ## The answer as JSON -/
+
+/-- A blob and its proof read back from their JSON. -/
+theorem blobAndProofV1OfJson_json (x : BlobAndProofV1) :
+    blobAndProofV1OfJson (blobAndProofV1Json x) = .ok x := by
+  have hd : [("blob", Serialization.JsonRpc.dataJson x.blob.toList),
+      ("proof", Serialization.JsonRpc.dataJson x.proof.toList)].Pairwise
+      fun a b => a.1 ≠ b.1 := by simp
+  obtain ⟨fs, hfs, hp⟩ := Serialization.JsonRpc.fields_mkObj "blobAndProof" hd
+    (by simp [Serialization.JsonRpc.isNull_str, Serialization.JsonRpc.dataJson])
+  have hex : Serialization.JsonRpc.hasExactly fs ["blob", "proof"] = true :=
+    Serialization.JsonRpc.hasExactly_of_perm hp
+  have r1 := Serialization.JsonRpc.field_of_perm (what := "blobAndProof") hp hd
+    (List.mem_cons_self ..)
+  have r2 := Serialization.JsonRpc.field_of_perm (what := "blobAndProof") hp hd
+    (List.mem_cons_of_mem _ (List.mem_cons_self ..))
+  unfold blobAndProofV1OfJson blobAndProofV1Json
+  simp only [bind, Except.bind, hfs, hex, ite_true, r1, r2, Serialization.JsonRpc.fixed_dataJson,
+    pure, Except.pure]
+
+/-- A blob and the proofs of its cells read back from their JSON. -/
+theorem blobAndProofV2OfJson_json (x : BlobAndProofV2) :
+    blobAndProofV2OfJson (blobAndProofV2Json x) = .ok x := by
+  have hd : [("blob", Serialization.JsonRpc.dataJson x.blob.toList),
+      ("proofs", Serialization.JsonRpc.listJson (Serialization.JsonRpc.dataJson ·.toList)
+        x.proofs.toList)].Pairwise fun a b => a.1 ≠ b.1 := by simp
+  obtain ⟨fs, hfs, hp⟩ := Serialization.JsonRpc.fields_mkObj "blobAndProof" hd
+    (by simp [Serialization.JsonRpc.isNull_str, Serialization.JsonRpc.isNull_arr,
+      Serialization.JsonRpc.dataJson, Serialization.JsonRpc.listJson])
+  have hex : Serialization.JsonRpc.hasExactly fs ["blob", "proofs"] = true :=
+    Serialization.JsonRpc.hasExactly_of_perm hp
+  have r1 := Serialization.JsonRpc.field_of_perm (what := "blobAndProof") hp hd
+    (List.mem_cons_self ..)
+  have r2 := Serialization.JsonRpc.field_of_perm (what := "blobAndProof") hp hd
+    (List.mem_cons_of_mem _ (List.mem_cons_self ..))
+  unfold blobAndProofV2OfJson blobAndProofV2Json
+  simp only [bind, Except.bind, hfs, hex, ite_true, r1, r2, Serialization.JsonRpc.fixed_dataJson,
+    Serialization.JsonRpc.array_fixed_listJson, pure, Except.pure]
+  have hl : x.proofs.toList.length = CELLS_PER_EXT_BLOB := by simp
+  simp only [hl, ↓reduceDIte]
+  rcases x with ⟨b, ⟨⟨l⟩, h⟩⟩
+  rfl
+
+/-- A list of optional byte strings of a size reads back from its encoding as data. -/
+private theorem array_nullable_fixed_listJson {n : Nat} (what w : String)
+    (l : List (Option (Vector UInt8 n))) :
+    Serialization.JsonRpc.array what (Serialization.JsonRpc.nullable
+      (Serialization.JsonRpc.fixed w n))
+      (Serialization.JsonRpc.listJson (Serialization.JsonRpc.optionJson
+        (Serialization.JsonRpc.dataJson ·.toList)) l) = .ok l :=
+  Serialization.JsonRpc.array_listJson_of what (Serialization.JsonRpc.nullable_optionJson
+    (fun v => Serialization.JsonRpc.fixed_dataJson w v false)
+    (fun _ => Serialization.JsonRpc.isNull_str _)) l
+
+/-- Encoding the images of a list encodes each item through the composite encoder. -/
+private theorem listJson_map_option {α β : Type} (g : α → Lean.Json) (h : β → α)
+    (l : List β) {g' : β → Lean.Json} (hg : ∀ x, g' x = g (h x)) :
+    Serialization.JsonRpc.listJson g' l = Serialization.JsonRpc.listJson g (l.map h) := by
+  unfold Serialization.JsonRpc.listJson
+  congr 1
+  apply Array.toList_inj.mp
+  simp only [Array.toList_map, List.map_map]
+  exact List.map_congr_left fun x _ => by simp [hg]
+
+/-- Reading the cells and the proofs that a list of entries splits into gives back the entries. -/
+private theorem mapM_cellAndProof (l : List (Option (Cell × KZGProof))) :
+    ((l.map (·.map Prod.fst)).zip (l.map (·.map Prod.snd))).mapM cellAndProof = .ok l := by
+  induction l with
+  | nil => rfl
+  | cons o l ih =>
+    cases o <;> simp only [List.map_cons, List.zip_cons_cons, List.mapM_cons, Option.map_none,
+      Option.map_some, cellAndProof, ih, bind, Except.bind, pure, Except.pure]
+
+/-- The selected cells of a blob read back from their JSON, with `null` at the same positions. -/
+theorem blobCellsOfJson_json (x : BlobCellsAndProofsV1) :
+    blobCellsOfJson (blobCellsJson x) = .ok x := by
+  have c1 : Serialization.JsonRpc.listJson
+      (Serialization.JsonRpc.optionJson (Serialization.JsonRpc.dataJson ·.1.toList)) x.cells =
+      Serialization.JsonRpc.listJson (Serialization.JsonRpc.optionJson
+        (Serialization.JsonRpc.dataJson ·.toList)) (x.cells.map (·.map Prod.fst)) :=
+    listJson_map_option _ _ _ (fun o => by cases o <;> rfl)
+  have c2 : Serialization.JsonRpc.listJson
+      (Serialization.JsonRpc.optionJson (Serialization.JsonRpc.dataJson ·.2.toList)) x.cells =
+      Serialization.JsonRpc.listJson (Serialization.JsonRpc.optionJson
+        (Serialization.JsonRpc.dataJson ·.toList)) (x.cells.map (·.map Prod.snd)) :=
+    listJson_map_option _ _ _ (fun o => by cases o <;> rfl)
+  have hd : [("blob_cells", Serialization.JsonRpc.listJson (Serialization.JsonRpc.optionJson
+      (Serialization.JsonRpc.dataJson ·.toList)) (x.cells.map (·.map Prod.fst))),
+      ("proofs", Serialization.JsonRpc.listJson (Serialization.JsonRpc.optionJson
+      (Serialization.JsonRpc.dataJson ·.toList)) (x.cells.map (·.map Prod.snd)))
+      ].Pairwise fun a b => a.1 ≠ b.1 := by simp
+  obtain ⟨fs, hfs, hp⟩ := Serialization.JsonRpc.fields_mkObj "blobCells" hd
+    (by simp [Serialization.JsonRpc.isNull_arr, Serialization.JsonRpc.listJson])
+  have hex : Serialization.JsonRpc.hasExactly fs ["blob_cells", "proofs"] = true :=
+    Serialization.JsonRpc.hasExactly_of_perm hp
+  have r1 := Serialization.JsonRpc.field_of_perm (what := "blobCells") hp hd
+    (List.mem_cons_self ..)
+  have r2 := Serialization.JsonRpc.field_of_perm (what := "blobCells") hp hd
+    (List.mem_cons_of_mem _ (List.mem_cons_self ..))
+  unfold blobCellsOfJson blobCellsJson
+  rw [c1, c2]
+  simp only [bind, Except.bind, hfs, hex, ite_true, r1, r2,
+    array_nullable_fixed_listJson, List.length_map, pure, Except.pure, mapM_cellAndProof]
+
+/-- A value that reads as optional is `null` exactly when it reads as absent. -/
+private theorem isNull_of_nullable {α : Type} {f : Lean.Json → Serialization.JsonRpc.Read α}
+    {j : Lean.Json} {o : Option α} (h : Serialization.JsonRpc.nullable f j = .ok o) :
+    j.isNull = o.isNone := by
+  cases j with
+  | null => simp only [Serialization.JsonRpc.nullable, pure, Except.pure, Except.ok.injEq] at h
+            subst h; rfl
+  | _ =>
+    revert h
+    simp only [Serialization.JsonRpc.nullable]
+    cases f _ <;> simp [Functor.map, Except.map] <;> rintro rfl <;> rfl
+
+/-- A cell and its proof that read as one entry are both absent or both present, as the entry is.
+-/
+private theorem isNone_of_cellAndProof {c : Option Cell} {p : Option KZGProof}
+    {r : Option (Cell × KZGProof)} (h : cellAndProof (c, p) = .ok r) :
+    c.isNone = p.isNone ∧ r.isNone = c.isNone := by
+  cases c <;> cases p <;> simp_all [cellAndProof, pure, Except.pure] <;> subst h <;> rfl
+
+/-- Cells decode only from two arrays of one length, with `null` at the same positions.
+
+Their number is the length of the arrays, and a decoded entry is absent exactly at a `null` cell.
+
+Step 4 of `engine_getBlobsV4` asks for one direction of this rule, and EthLib requires both. -/
+theorem blobCellsOfJson_nulls {j : Lean.Json} {x : BlobCellsAndProofsV1}
+    (h : blobCellsOfJson j = .ok x) :
+    ∃ fs cells proofs, Serialization.JsonRpc.fields "blobCells" j = .ok fs ∧
+      fs.lookup "blob_cells" = some (.arr cells) ∧ fs.lookup "proofs" = some (.arr proofs) ∧
+      cells.size = proofs.size ∧ x.cells.length = cells.size ∧
+      (∀ i (hc : i < cells.size) (hp : i < proofs.size), cells[i].isNull = proofs[i].isNull) ∧
+      ∀ i (hx : i < x.cells.length) (hc : i < cells.size), x.cells[i].isNone = cells[i].isNull := by
+  unfold blobCellsOfJson at h
+  rcases hf : Serialization.JsonRpc.fields "blobCells" j with e | fs
+  · simp [hf, bind, Except.bind] at h
+  by_cases hex : Serialization.JsonRpc.hasExactly fs ["blob_cells", "proofs"] = true
+  case neg => simp [hf, hex, bind, Except.bind] at h
+  rcases hc : Serialization.JsonRpc.field "blobCells" fs "blob_cells" with e | cj
+  · simp [hf, hex, hc, bind, Except.bind] at h
+  rcases hc2 : Serialization.JsonRpc.array "blob_cells"
+    (Serialization.JsonRpc.nullable (Serialization.JsonRpc.fixed "cell" BYTES_PER_CELL)) cj with
+    e | cl
+  · simp [hf, hex, hc, hc2, bind, Except.bind] at h
+  rcases hp : Serialization.JsonRpc.field "blobCells" fs "proofs" with e | pj
+  · simp [hf, hex, hc, hc2, hp, bind, Except.bind] at h
+  rcases hp2 : Serialization.JsonRpc.array "proofs"
+    (Serialization.JsonRpc.nullable (Serialization.JsonRpc.fixed "proof" 48)) pj with e | pl
+  · simp [hf, hex, hc, hc2, hp, hp2, bind, Except.bind] at h
+  by_cases hlen : cl.length = pl.length
+  case neg => simp [hf, hex, hc, hc2, hp, hp2, hlen, bind, Except.bind] at h
+  rcases hm : (cl.zip pl).mapM cellAndProof with e | ys
+  · simp [hf, hex, hc, hc2, hp, hp2, hlen, hm, bind, Except.bind] at h
+  simp only [hf, hex, hc, hc2, hp, hp2, hlen, hm, bind, Except.bind, pure, Except.pure,
+    ↓reduceIte, Except.ok.injEq] at h
+  subst h
+  obtain ⟨cs, rfl, hcl, hcg⟩ := Serialization.JsonRpc.array_eq_ok_iff.mp hc2
+  obtain ⟨ps, rfl, hpl, hpg⟩ := Serialization.JsonRpc.array_eq_ok_iff.mp hp2
+  have hsz : cs.size = ps.size := by omega
+  refine ⟨fs, cs, ps, rfl, Serialization.JsonRpc.field_eq_ok_iff.mp hc,
+    Serialization.JsonRpc.field_eq_ok_iff.mp hp, hsz, ?_, ?_, ?_⟩
+  · rw [mapM_ok_length hm, List.length_zip]
+    omega
+  · intro i hi hi'
+    have hz : i < (cl.zip pl).length := by rw [List.length_zip]; omega
+    have h1 := mapM_ok_getElem hm i hz
+    simp only [List.getElem_zip] at h1
+    rw [isNull_of_nullable (hcg i hi), isNull_of_nullable (hpg i hi')]
+    exact (isNone_of_cellAndProof h1).1
+  · intro i hx hi
+    have hz : i < (cl.zip pl).length := by rw [List.length_zip]; omega
+    have h1 := mapM_ok_getElem hm i hz
+    simp only [List.getElem_zip] at h1
+    rw [isNull_of_nullable (hcg i hi)]
+    exact (isNone_of_cellAndProof h1).2
+
+/-- An answer of version 1 reads back from its JSON, with `null` at the same entries. -/
+theorem getBlobsV1OfJson_json (blobs : List (Option BlobAndProofV1)) :
+    getBlobsV1OfJson (getBlobsV1Json blobs) = .ok blobs := by
+  unfold getBlobsV1OfJson getBlobsV1Json
+  rw [Serialization.JsonRpc.array_listJson_of _
+    (Serialization.JsonRpc.nullable_optionJson blobAndProofV1OfJson_json fun _ => rfl)]
+  rfl
+
+/-- An answer of version 2 reads back from its JSON, a list or `null` alone. -/
+theorem getBlobsV2OfJson_json (blobs : Option (List BlobAndProofV2)) :
+    getBlobsV2OfJson (getBlobsV2Json blobs) = .ok blobs := by
+  unfold getBlobsV2OfJson getBlobsV2Json
+  rw [Serialization.JsonRpc.nullable_optionJson
+    (Serialization.JsonRpc.array_listJson_of _ blobAndProofV2OfJson_json)
+    (fun _ => Serialization.JsonRpc.isNull_arr _)]
+  rfl
+
+/-- An answer of version 3 reads back from its JSON, a list or `null` alone. -/
+theorem getBlobsV3OfJson_json (blobs : Option (List (Option BlobAndProofV2))) :
+    getBlobsV3OfJson (getBlobsV3Json blobs) = .ok blobs := by
+  unfold getBlobsV3OfJson getBlobsV3Json
+  rw [Serialization.JsonRpc.nullable_optionJson (Serialization.JsonRpc.array_listJson_of _
+    (Serialization.JsonRpc.nullable_optionJson
+    blobAndProofV2OfJson_json fun _ => rfl)) (fun _ => Serialization.JsonRpc.isNull_arr _)]
+  rfl
+
+/-- An answer of version 4 reads back from its JSON, a list or `null` alone. -/
+theorem getBlobsV4OfJson_json (blobs : Option (List (Option BlobCellsAndProofsV1))) :
+    getBlobsV4OfJson (getBlobsV4Json blobs) = .ok blobs := by
+  unfold getBlobsV4OfJson getBlobsV4Json
+  rw [Serialization.JsonRpc.nullable_optionJson (Serialization.JsonRpc.array_listJson_of _
+    (Serialization.JsonRpc.nullable_optionJson
+    blobCellsOfJson_json fun _ => rfl)) (fun _ => Serialization.JsonRpc.isNull_arr _)]
+  rfl
 
 end EthLib.Engine
