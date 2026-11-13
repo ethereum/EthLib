@@ -310,11 +310,22 @@ private theorem processEpochAltair_mixesKeptBut {altair : .altair ≤ fork}
       exact ⟨rfl, rfl⟩
     all_goals simp [EpochStage.prefixStages] at member
   have tail : Kept mixed after := by
-    have tailRun := EpochTrace.run_ok_iff.mpr final
-    simp only [EpochTrace.run, EpochStage.tailStages, List.foldlM_cons,
-      List.foldlM_nil, EpochStage.action, altair, ↓reduceDIte, pure_bind,
-      bind_pure, bind_ok_iff] at tailRun
-    obtain ⟨rooted, rootedOk, synced, syncedOk, looked, lookedOk, windowed⟩ := tailRun
+    cases final
+    rename_i rooted rootedOk final
+    cases final
+    rename_i rotatedState rotated final
+    cases final
+    rename_i synced syncedOk final
+    cases final
+    rename_i looked lookedOk final
+    cases final
+    rename_i windowedState windowed final
+    cases final
+    have rootedOk := EpochStage.action_cases.mp rootedOk
+    have rotation := EpochStage.action_cases.mp rotated
+    have syncedOk := EpochStage.action_cases.mp syncedOk
+    simp only [EpochStage.Edge, altair, ↓reduceDIte] at rootedOk rotation syncedOk
+    subst rotation
     split at rootedOk
     · exact (kept_processHistoricalSummariesUpdate rootedOk).trans
         (kept_epochTail syncedOk lookedOk windowed)

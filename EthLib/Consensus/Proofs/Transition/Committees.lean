@@ -1201,24 +1201,18 @@ private theorem processEpoch_kept (before : fork < .altair)
         MixesKeptBut next state after) ∧
       after.previousEpochAttestations before = state.currentEpochAttestations before ∧
       (after.currentEpochAttestations before).data = #[] := by
-  have notAltair : ¬Fork.altair ≤ fork := Nat.not_le_of_lt before
-  have notElectra : ¬Fork.pectra ≤ fork :=
-    fun h => notAltair (Nat.le_trans (by decide) h)
-  have notGloas : ¬Fork.glamsterdam ≤ fork :=
-    fun h => notAltair (Nat.le_trans (by decide) h)
-  have notFulu : ¬Fork.fusaka ≤ fork :=
-    fun h => notAltair (Nat.le_trans (by decide) h)
-  have notCapella : ¬Fork.shapella ≤ fork :=
-    fun h => notAltair (Nat.le_trans (by decide) h)
-  have preHeze : fork < .hegota := Nat.lt_trans before (by decide)
   obtain ⟨cleared, mixed, initial, mixedOk, final⟩ := processEpoch_randaoCut computed
   have head : Keeps state cleared := by
     apply initial.transport Keeps Keeps.refl (fun a b => a.trans b)
     intro k member a b ok
     have edge := EpochStage.action_cases.mp ok
-    cases k <;>
-      simp only [EpochStage.Edge, notAltair, notElectra, notGloas, preHeze,
-        ↓reduceDIte] at edge
+    cases k <;> simp only [EpochStage.Edge] at edge
+    all_goals try (split at edge <;> rename_i guard)
+    all_goals try
+      have bound : fork.ctorIdx < Fork.altair.ctorIdx := before
+      have lower : _ ≤ fork.ctorIdx := guard
+      simp only [Fork.ctorIdx] at bound lower
+      omega
     all_goals first
       | exact keeps_processJustificationAndFinalization edge
       | exact keeps_processRewardsAndPenalties edge
@@ -1229,11 +1223,37 @@ private theorem processEpoch_kept (before : fork < .altair)
       | exact keeps_processSlashingsReset edge
       | exact edge ▸ Keeps.refl _
       | simp [EpochStage.prefixStages] at member
-  have tailRun := EpochTrace.run_ok_iff.mpr final
-  simp only [EpochTrace.run, EpochStage.tailStages, List.foldlM_cons,
-    List.foldlM_nil, EpochStage.action, notAltair, notGloas, notFulu, notCapella,
-    ↓reduceDIte, bind_pure, bind_ok_iff] at tailRun
-  obtain ⟨rooted, rootedOk, rotated⟩ := tailRun
+  cases final
+  rename_i rooted rootedOk final
+  cases final
+  rename_i rotatedState rotated final
+  cases final
+  rename_i syncedState synced final
+  cases final
+  rename_i lookedState looked final
+  cases final
+  rename_i windowedState windowed final
+  cases final
+  have rootedOk := EpochStage.action_cases.mp rootedOk
+  have rotated := EpochStage.action_cases.mp rotated
+  have synced := EpochStage.action_cases.mp synced
+  have looked := EpochStage.action_cases.mp looked
+  have windowed := EpochStage.action_cases.mp windowed
+  simp only [EpochStage.Edge] at rootedOk rotated synced looked windowed
+  split at rootedOk
+  · exact False.elim ((Nat.not_le_of_lt before)
+      (Nat.le_trans (show Fork.altair ≤ .shapella by decide) ‹Fork.shapella ≤ fork›))
+  split at rotated
+  · exact False.elim ((Nat.not_le_of_lt before) ‹Fork.altair ≤ fork›)
+  split at synced
+  · exact False.elim ((Nat.not_le_of_lt before) ‹Fork.altair ≤ fork›)
+  split at looked
+  · exact False.elim ((Nat.not_le_of_lt before)
+      (Nat.le_trans (show Fork.altair ≤ .fusaka by decide) ‹Fork.fusaka ≤ fork›))
+  split at windowed
+  · exact False.elim ((Nat.not_le_of_lt before)
+      (Nat.le_trans (show Fork.altair ≤ .glamsterdam by decide) ‹Fork.glamsterdam ≤ fork›))
+  subst synced looked windowed
   have epoch : getCurrentEpoch cleared = getCurrentEpoch state := by
     simp only [getCurrentEpoch, head.2.2]
   obtain ⟨next, mix, randaoMixes, nextEq, -, written, rfl⟩ := processRandaoMixesReset_eq mixedOk
@@ -1250,7 +1270,7 @@ private theorem processEpoch_kept (before : fork < .altair)
   · intro other apart
     have plain := writeCircularRooted_elements cleared.randaoMixes next mix
     rw [written] at plain
-    have mixesEq : after.randaoMixes = rooted.randaoMixes := by rw [← rest]
+    have mixesEq : rotatedState.randaoMixes = rooted.randaoMixes := by rw [← rest]
     rw [mixesEq, tail.1.1]
     exact (readCircular_writeCircular_of_ne plain.symm (Ne.symm apart)).trans
       (by rw [head.1.1])

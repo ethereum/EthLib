@@ -1,6 +1,5 @@
 module
 
-public import EthLib.Base.Proofs.MapM
 public import EthLib.Consensus.Proofs.Transition.Block
 public import EthLib.Consensus.Transition.StateTransition
 
@@ -17,6 +16,8 @@ A successful trace retains the intermediate states and the equation of each oper
 namespace EthLib.Consensus
 
 open Base
+
+variable {preset : Preset} {fork : Base.Fork}
 
 /-- The operations of an epoch, in specification order. -/
 inductive EpochStage where

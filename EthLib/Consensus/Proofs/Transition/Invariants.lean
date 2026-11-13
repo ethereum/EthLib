@@ -2125,7 +2125,7 @@ private theorem epochEdge {stage : EpochStage}
     (computed : EpochStage.action config checks stage state = .ok after) : R state after := by
   have edge := EpochStage.action_cases.mp computed
   cases stage <;> simp only [EpochStage.Edge] at edge
-  all_goals try simp_all
+  case justification | payments | participation => simp at ordinary
   all_goals first
     | exact laws.processRewardsAndPenalties edge
     | exact laws.processRegistryUpdates edge
