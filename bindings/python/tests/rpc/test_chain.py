@@ -308,16 +308,19 @@ def test_logs_of_whole_chain() -> None:
         ("eth_getBlockReceipts", [hex(number)]) for number in range(len(chain.blocks))
     ]
     calls.append(("eth_getLogs", [{"fromBlock": "earliest", "toBlock": "latest"}]))
+    # An empty list of addresses takes any address, as an empty list of topics does.
+    calls.append(("eth_getLogs", [{"fromBlock": "earliest", "address": [], "topics": [[]]}]))
     requests = [
         json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params})
         for method, params in calls
     ]
     results = [json.loads(text)["result"] for text in chain.serve(requests) if text is not None]
     assert len(results) == len(calls)
-    *blocks, logs = results
+    *blocks, logs, empty_lists = results
     expected = [log for receipts in blocks for receipt in receipts for log in receipt["logs"]]
     assert expected
     assert logs == expected
+    assert empty_lists == expected
 
 
 # Each filter that the method rejects, with the code of its error.
@@ -332,7 +335,7 @@ BAD_FILTERS = [
 
 @pytest.mark.parametrize(("log_filter", "code"), BAD_FILTERS)
 def test_bad_filter(log_filter: dict[str, str], code: int) -> None:
-    """A filter that the method rejects has the code of its error."""
+    """The method rejects each bad filter with the expected error code."""
     request = {"jsonrpc": "2.0", "id": 1, "method": "eth_getLogs", "params": [log_filter]}
     assert _error(json.dumps(request))["error"]["code"] == code
 

@@ -22,6 +22,7 @@ A log matches when its address and its topic at each position of the list are ta
 The source leaves several cases open, and each choice here follows the fixtures where they decide:
 
 - An empty list at a position takes any topic, as `topic-wildcard.io` expects.
+- An empty list of addresses takes any address, as an empty list of topics does.
 - A log with no topic at a position matches only when that position takes any topic.
 - A filter with a block hash and a bound is invalid, though the schema allows it.
   The fixture `filter-error-invalid-blockHash-and-range.io` expects that.
@@ -34,11 +35,13 @@ A bound above the head, or a first bound above the last, is an invalid parameter
 
 The method MUST NOT clamp the range to the head or return part of the logs.
 
-A number below the lowest block that the node holds gets `4444`, for pruned history.
+Here a number below the lowest block that the node holds gets `4444`, for pruned history.
 
 The method lists that code without saying when it applies.
 
-For a tag that names no block, [`block.yaml`][block] points to the answer for an unknown block.
+A `safe` or `finalized` tag can name no block.
+
+For that case, [`block.yaml`][block] points to the answer for an unknown block.
 
 The method defines no such answer.
 
@@ -89,7 +92,7 @@ def takesTopic : Option (List Hash32) → Option Hash32 → Bool
 def selects (f : Filter) (log : Log) : Bool :=
   (match f.address with
     | none => true
-    | some addresses => addresses.contains log.address) &&
+    | some addresses => addresses.isEmpty || addresses.contains log.address) &&
   f.topics.zipIdx.all fun (taken, k) => takesTopic taken log.topics[k]?
 
 end Filter
@@ -137,14 +140,11 @@ def invalidRange (reason : String) : RpcError :=
 
 /-- The number of the block that a bound of a range names, the head for an omitted bound.
 
-A number above the head is an invalid range, and a number below the lowest block is pruned. -/
+A number above the head is an invalid range, and a tag that names no block is an unknown block. -/
 def boundNumber (v : ChainView) : Option BlockParam → Except RpcError Nat
   | none => .ok v.head.block.header.number
   | some (.number n) =>
-    if v.head.block.header.number < n then .error (invalidRange "beyond the head")
-    else if n < v.lowest.block.header.number then
-      .error (prunedHistoryUnavailable.toRpcError (some (.str s!"block {n}")))
-    else .ok n
+    if v.head.block.header.number < n then .error (invalidRange "beyond the head") else .ok n
   | some p => do
     match ← v.resolve p with
     | some r => return r.block.header.number
@@ -152,7 +152,9 @@ def boundNumber (v : ChainView) : Option BlockParam → Except RpcError Nat
 
 /-- The blocks that a filter reads, in order.
 
-For a range, they are the canonical blocks from its first bound to its last. -/
+For a range, they are the canonical blocks from its first bound to its last.
+
+A range is checked against the head and for its order before it is checked for pruned blocks. -/
 def filterBlocks (v : ChainView) : FilterBlocks → Except RpcError (List BlockRecord)
   | .hash h =>
     match v.byHash h with
@@ -162,6 +164,8 @@ def filterBlocks (v : ChainView) : FilterBlocks → Except RpcError (List BlockR
     let first ← v.boundNumber fromBlock
     let last ← v.boundNumber toBlock
     if last < first then throw (invalidRange "the first bound is above the last")
+    if first < v.lowest.block.header.number then
+      throw (prunedHistoryUnavailable.toRpcError (some (.str s!"block {first}")))
     return v.canonical.filter fun r =>
       first ≤ r.block.header.number && r.block.header.number ≤ last
 

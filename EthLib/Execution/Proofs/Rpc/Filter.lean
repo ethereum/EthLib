@@ -11,7 +11,9 @@ The logs that a filter returns match it, and lie in the blocks that it reads.
 
 Each log of those blocks that matches the filter is returned.
 
-A range reads the canonical blocks between its bounds, and a number bound lies within the chain.
+A range reads the canonical blocks between its bounds.
+
+A number bound lies between the lowest block that the node holds and the head.
 
 In a valid view, take a canonical block after the lowest.
 
@@ -105,32 +107,58 @@ private theorem getLogs_eq_ok {v : ChainView} {f : Filter} {logs : List LogInfo}
   obtain ⟨infos, hi, h⟩ := bind_ok_iff.mp h
   exact ⟨blocks, infos, hb, hi, by simpa [pure, Except.pure] using h.symm⟩
 
+/-- Each log object of a receipt object of a block has the hash of that block. -/
+private theorem receiptInfo_blockHash {r : BlockRecord} {config : ChainConfig}
+    {index before firstLog : Nat} {tx : Transaction} {receipt : Receipt r.fork}
+    {info : ReceiptInfo} (h : r.receiptInfo config index before firstLog tx receipt = .ok info) :
+    ∀ l ∈ info.logs, l.blockHash = r.hash := by
+  unfold BlockRecord.receiptInfo at h
+  obtain ⟨ti, hti, h⟩ := bind_ok_iff.mp h
+  obtain ⟨sender, hash, -, -, rfl⟩ := BlockRecord.transactionInfo_eq_ok.mp hti
+  rcases hto : tx.to with _ | a
+  · rcases hc : (Evm.createAddress sender tx.nonce.toNat) with e | ca
+    · simp [hto, hc, bind, Except.bind, Functor.map, Except.map, Except.mapError] at h
+    · simp [hto, hc, bind, Except.bind, pure, Except.pure, Functor.map, Except.map,
+        Except.mapError] at h
+      subst h
+      simp only [List.mem_map, Prod.exists]
+      rintro l ⟨x, i, -, rfl⟩
+      rfl
+  · simp [hto, bind, Except.bind, pure, Except.pure] at h
+    subst h
+    simp only [List.mem_map, Prod.exists]
+    rintro l ⟨x, i, -, rfl⟩
+    rfl
+
 /-- A number bound resolves to itself, between the lowest block and the head. -/
 theorem boundNumber_number {v : ChainView} {n m : Nat}
     (h : v.boundNumber (some (.number n)) = .ok m) :
-    m = n ∧ v.lowest.block.header.number ≤ n ∧ n ≤ v.head.block.header.number := by
+    m = n ∧ n ≤ v.head.block.header.number := by
   unfold boundNumber at h
   by_cases h1 : v.head.block.header.number < n
   · simp [h1] at h
-  · by_cases h2 : n < v.lowest.block.header.number
-    · simp [h1, h2] at h
-    · simp only [h1, h2, ite_false] at h
-      cases h
-      omega
+  · simp only [h1, ite_false] at h
+    cases h
+    omega
 
-/-- A range reads exactly the canonical blocks between its two bounds, which are in order. -/
+/-- A range reads exactly the canonical blocks between its two bounds.
+
+Its first bound is at most its last. -/
 theorem filterBlocks_range {v : ChainView} {fromBlock toBlock : Option BlockParam}
     {blocks : List BlockRecord} (h : v.filterBlocks (.range fromBlock toBlock) = .ok blocks) :
     ∃ first last, v.boundNumber fromBlock = .ok first ∧ v.boundNumber toBlock = .ok last ∧
-      first ≤ last ∧ blocks = v.canonical.filter fun r =>
+      first ≤ last ∧ v.lowest.block.header.number ≤ first ∧ blocks = v.canonical.filter fun r =>
         first ≤ r.block.header.number && r.block.header.number ≤ last := by
   unfold filterBlocks at h
   obtain ⟨first, h1, h⟩ := bind_ok_iff.mp h
   obtain ⟨last, h2, h⟩ := bind_ok_iff.mp h
   by_cases hl : last < first
   · simp [hl, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
-  · simp only [hl, ite_false, pure, Except.pure, bind, Except.bind, Except.ok.injEq] at h
-    exact ⟨first, last, h1, h2, by omega, h.symm⟩
+  · by_cases hp : first < v.lowest.block.header.number
+    · simp [hl, hp, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
+    · simp only [hl, hp, ite_false, pure, Except.pure, bind, Except.bind] at h
+      cases h
+      exact ⟨first, last, h1, h2, by omega, by omega, rfl⟩
 
 /-- A block hash reads the one block of that hash that the node holds. -/
 theorem filterBlocks_hash {v : ChainView} {hash : Hash32} {blocks : List BlockRecord}
@@ -177,6 +205,33 @@ theorem getLogs_complete {v : ChainView} {f : Filter} {logs : List LogInfo}
   refine List.mem_filter.mpr ⟨List.mem_flatMap.mpr
     ⟨info, List.mem_flatten.mpr ⟨infos, his, hinfo⟩, hl⟩, by simpa using hs⟩
 
+/-- Completeness for the logs of a block: each log of its receipts that matches is returned.
+
+It comes as an object of the block that it is a log of.
+
+That holds whenever the method returns logs. -/
+theorem getLogs_complete_log {v : ChainView} {f : Filter} {logs : List LogInfo}
+    (h : v.getLogs f = .ok logs) {blocks : List BlockRecord}
+    (hb : v.filterBlocks f.blocks = .ok blocks) {r : BlockRecord} (hr : r ∈ blocks) {log : Log}
+    (hl : log ∈ r.receipts.flatMap (·.2.logs)) (hs : f.selects log = true) :
+    ∃ l ∈ logs, l.log = log ∧ l.blockHash = r.hash := by
+  obtain ⟨blocks', infos', hb', hi', -⟩ := getLogs_eq_ok h
+  obtain rfl : blocks = blocks' := Except.ok.inj (hb.symm.trans hb')
+  obtain ⟨is, -, hris⟩ := exists_mem_of_mapM_ok hi' hr
+  obtain ⟨hlen, -, hall⟩ := BlockRecord.receiptInfos_eq_ok hris
+  obtain ⟨p, hp, hlp⟩ := List.mem_flatMap.mp hl
+  obtain ⟨k, hk, rfl⟩ := List.mem_iff_getElem.mp hp
+  have hk' : k < is.length := by omega
+  obtain ⟨tx, receipt, -, hrec, hri⟩ := hall k hk'
+  obtain ⟨-, -, -, -, -, hlogs, -⟩ := BlockRecord.receiptInfo_eq_ok hri
+  have hrp : receipt = r.receipts[k].2 := by
+    simp [List.getElem?_eq_getElem hk] at hrec
+    exact hrec.symm
+  rw [hrp] at hlogs
+  obtain ⟨l, hlmem, hll⟩ := List.mem_map.mp (hlogs ▸ hlp : log ∈ is[k].logs.map (·.log))
+  refine ⟨l, getLogs_complete h hb hr hris (List.getElem_mem hk') hlmem
+    (by rw [hll]; exact hs), hll, receiptInfo_blockHash hri l hlmem⟩
+
 /-- In a valid view, the logs of the receipts of a canonical block after the lowest are its logs. -/
 theorem Valid.logs_receipts {v : ChainView} {checkSeal : Bool} (hv : v.Valid checkSeal) {i : Nat}
     (hi : i + 1 < v.canonical.length) :
@@ -210,7 +265,7 @@ Then no log of the block matches the filter. -/
 theorem Valid.not_selects_of_bloom {v : ChainView} {checkSeal : Bool} (hv : v.Valid checkSeal)
     {i : Nat} (hi : i + 1 < v.canonical.length) {f : Filter} {bloom : BitVec 2048}
     (hb : Bloom.toBytes bloom = v.canonical[i + 1].block.header.bloom)
-    (hex : (∃ addresses, f.address = some addresses ∧
+    (hex : (∃ addresses, f.address = some addresses ∧ addresses ≠ [] ∧
         ∀ a : Address, a ∈ addresses → Bloom.mayContain bloom ⟨a.toArray⟩ = false) ∨
       ∃ (k : Nat) (ts : List Hash32), f.topics[k]? = some (some ts) ∧ ts ≠ [] ∧
         ∀ t : Hash32, t ∈ ts → Bloom.mayContain bloom ⟨t.toArray⟩ = false) :
@@ -219,12 +274,13 @@ theorem Valid.not_selects_of_bloom {v : ChainView} {checkSeal : Bool} (hv : v.Va
   have hbloom : bloom = Bloom.ofLogs v.canonical[i + 1].logs :=
     Bloom.toBytes_injective (hb.trans (hv.logsBloom_eq hi).symm)
   subst hbloom
-  rcases hex with ⟨addresses, hf, hno⟩ | ⟨k, ts, hk, hne, hno⟩
+  rcases hex with ⟨addresses, hf, hne, hno⟩ | ⟨k, ts, hk, hne, hno⟩
   · have hnot : log.address ∉ addresses := fun hmem => by
       have := hno _ hmem
       rw [Bloom.mayContain_address hlog] at this
       exact absurd this (by simp)
-    simp [Filter.selects, hf, hnot]
+    have hemp : addresses.isEmpty = false := by simpa using hne
+    simp [Filter.selects, hf, hnot, hemp]
   · have hk' : (some ts, k) ∈ f.topics.zipIdx := by
       obtain ⟨hlt, hget⟩ := List.getElem?_eq_some_iff.mp hk
       exact List.mem_iff_getElem?.mpr ⟨k, by simp [hk]⟩
