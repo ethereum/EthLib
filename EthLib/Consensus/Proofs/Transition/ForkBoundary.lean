@@ -338,7 +338,9 @@ theorem processUpgrades_upgradeDue {forked after : ForkedBeaconState preset}
     simpa using notDue
 
 /--
-When the upgrades at the first slot of an epoch succeed, the next fork does not start at that epoch.
+Consider upgrades that succeed at the first slot of an epoch.
+
+The next fork of the state they reach does not start at that epoch.
 
 So the upgrades do not stop early when several forks share the epoch.
 -/
