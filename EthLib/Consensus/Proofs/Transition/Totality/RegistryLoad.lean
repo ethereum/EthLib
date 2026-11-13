@@ -30,7 +30,7 @@ So a slot never raises the count, at every fork.
 
 The upgrades between forks have their own statements.
 
-The blocks are left to other statements.
+The blocks have their own statements.
 -/
 
 @[expose] public section
@@ -43,14 +43,44 @@ variable {preset : Preset} {fork : Base.Fork} {config : Config} {checks : Signat
   {state after : BeaconState preset fork}
 
 /-- A step that keeps the size of the registry and the queue of pending deposits. -/
-private def LoadKept (state after : BeaconState preset fork) : Prop :=
+def LoadKept (state after : BeaconState preset fork) : Prop :=
   after.validators.data.size = state.validators.data.size ∧
     after.pendingDeposits = state.pendingDeposits
 
-/-- The steps of an epoch other than the pending deposits keep the registry size and the queue. -/
-private theorem loadKeptLaws : EpochStepLaws (@LoadKept preset fork) where
-  refl _ := ⟨rfl, rfl⟩
-  trans first second := ⟨second.1.trans first.1, second.2.trans first.2⟩
+/-- Each state keeps its registry size and its queue. -/
+theorem LoadKept.refl (state : BeaconState preset fork) : LoadKept state state :=
+  ⟨rfl, rfl⟩
+
+/-- Two steps that keep the count chain. -/
+theorem LoadKept.trans {first second third : BeaconState preset fork}
+    (one : LoadKept first second) (two : LoadKept second third) : LoadKept first third :=
+  ⟨two.1.trans one.1, two.2.trans one.2⟩
+
+/-- A step that leaves the registry and the queue unchanged keeps both sizes. -/
+theorem LoadKept.of_validators
+    (validators : after.validators = state.validators := by rfl)
+    (pending : after.pendingDeposits = state.pendingDeposits := by rfl) : LoadKept state after :=
+  ⟨by rw [validators], pending⟩
+
+/-- A step that keeps both sizes leaves the validators plus the pending deposits unchanged. -/
+theorem LoadKept.registryLoad_eq (same : LoadKept state after) :
+    registryLoad after = registryLoad state := by
+  unfold registryLoad
+  rw [same.1, same.2]
+
+/-- A fold whose every step keeps the count keeps it. -/
+theorem LoadKept.foldlM {α ε : Type} {step : BeaconState preset fork → α → Except ε _}
+    (same : ∀ s x s', step s x = .ok s' → LoadKept s s') {items : List α}
+    (computed : items.foldlM step state = .ok after) : LoadKept state after :=
+  foldlM_ok_invariant (LoadKept state) (fun _ _ _ before ok => before.trans (same _ _ _ ok))
+    (LoadKept.refl state) computed
+
+/-- The steps of an epoch other than the pending deposits keep the registry size and the queue.
+
+Writes to a balance or to a validator, and the start of an exit, keep them too. -/
+theorem loadKeptLaws : EpochStepLaws (@LoadKept preset fork) where
+  refl := LoadKept.refl
+  trans := LoadKept.trans
   setValidatorAt set _ _ _ _ _ := by
     obtain ⟨inside, rfl⟩ := setValidatorAt_ok set
     exact ⟨(sameSizes_putValidator _ inside _).1, rfl⟩
@@ -80,11 +110,6 @@ private theorem loadKeptLaws : EpochStepLaws (@LoadKept preset fork) where
   syncCommittees _ _ _ := ⟨rfl, rfl⟩
   proposerLookahead _ _ := ⟨rfl, rfl⟩
   ptcWindow _ _ := ⟨rfl, rfl⟩
-
-private theorem registryLoad_eq_of_loadKept (kept : LoadKept state after) :
-    registryLoad after = registryLoad state := by
-  unfold registryLoad
-  rw [kept.1, kept.2]
 
 /-- Applying a list of pending deposits adds at most one validator for each of them. -/
 private theorem foldlM_applyPendingDeposit_size :
@@ -140,7 +165,7 @@ private theorem processPendingBalances_registryLoad_le
   split at computed
   · simp only [bind_ok_iff] at computed
     obtain ⟨_, deposited, consolidated⟩ := computed
-    rw [registryLoad_eq_of_loadKept (loadKeptLaws.processPendingConsolidations consolidated)]
+    rw [LoadKept.registryLoad_eq (loadKeptLaws.processPendingConsolidations consolidated)]
     exact processPendingDeposits_registryLoad_le deposited
   · simp only [pure, Except.pure, Except.ok.injEq] at computed
     exact computed ▸ Nat.le_refl _
@@ -163,12 +188,12 @@ private theorem epochBeforePayments_registryLoad_le
     · simp only [pure, Except.pure, Except.ok.injEq] at resetOk
       exact resetOk ▸ ⟨rfl, rfl⟩
   refine Nat.le_trans (processPendingBalances_registryLoad_le pendingOk) (Nat.le_of_eq ?_)
-  rw [registryLoad_eq_of_loadKept resetKept,
-    registryLoad_eq_of_loadKept (loadKeptLaws.processSlashings slashedOk),
-    registryLoad_eq_of_loadKept (loadKeptLaws.processRegistryUpdates registeredOk),
-    registryLoad_eq_of_loadKept (loadKeptLaws.processRewardsAndPenalties rewardedOk),
-    registryLoad_eq_of_loadKept scoredKept,
-    registryLoad_eq_of_loadKept (loadKept_justification justifiedOk)]
+  rw [LoadKept.registryLoad_eq resetKept,
+    LoadKept.registryLoad_eq (loadKeptLaws.processSlashings slashedOk),
+    LoadKept.registryLoad_eq (loadKeptLaws.processRegistryUpdates registeredOk),
+    LoadKept.registryLoad_eq (loadKeptLaws.processRewardsAndPenalties rewardedOk),
+    LoadKept.registryLoad_eq scoredKept,
+    LoadKept.registryLoad_eq (loadKept_justification justifiedOk)]
 
 /-- The epoch transition never raises the validators plus the pending deposits, at every fork. -/
 theorem processEpoch_registryLoad_le (computed : processEpoch config checks state = .ok after) :
@@ -185,22 +210,22 @@ theorem processEpoch_registryLoad_le (computed : processEpoch config checks stat
         exact paidOk ▸ ⟨rfl, rfl⟩
     have rotated : LoadKept rooted (processParticipationFlagUpdates rooted altair) := ⟨rfl, rfl⟩
     refine Nat.le_trans (Nat.le_of_eq ?_) (epochBeforePayments_registryLoad_le pendingOk)
-    rw [registryLoad_eq_of_loadKept tail, registryLoad_eq_of_loadKept rotated,
-      registryLoad_eq_of_loadKept middle, registryLoad_eq_of_loadKept paidKept]
+    rw [LoadKept.registryLoad_eq tail, LoadKept.registryLoad_eq rotated,
+      LoadKept.registryLoad_eq middle, LoadKept.registryLoad_eq paidKept]
   · simp only [bind_ok_iff] at computed
     obtain ⟨_, justified, _, rewarded, _, registered, _, slashed, _, reset, _, balanced, _,
       cleared, _, mixed, _, rooted, records⟩ := computed
     refine Nat.le_of_eq ?_
-    rw [registryLoad_eq_of_loadKept (loadKeptLaws.processParticipationRecordUpdates records),
-      registryLoad_eq_of_loadKept (loadKeptLaws.processHistoricalRootsUpdate rooted),
-      registryLoad_eq_of_loadKept (loadKeptLaws.processRandaoMixesReset mixed),
-      registryLoad_eq_of_loadKept (loadKeptLaws.processSlashingsReset cleared),
-      registryLoad_eq_of_loadKept (loadKeptLaws.processEffectiveBalanceUpdates balanced),
-      registryLoad_eq_of_loadKept (loadKeptLaws.processEth1DataReset reset),
-      registryLoad_eq_of_loadKept (loadKeptLaws.processSlashings slashed),
-      registryLoad_eq_of_loadKept (loadKeptLaws.processRegistryUpdates registered),
-      registryLoad_eq_of_loadKept (loadKeptLaws.processRewardsAndPenalties rewarded),
-      registryLoad_eq_of_loadKept (loadKept_justification justified)]
+    rw [LoadKept.registryLoad_eq (loadKeptLaws.processParticipationRecordUpdates records),
+      LoadKept.registryLoad_eq (loadKeptLaws.processHistoricalRootsUpdate rooted),
+      LoadKept.registryLoad_eq (loadKeptLaws.processRandaoMixesReset mixed),
+      LoadKept.registryLoad_eq (loadKeptLaws.processSlashingsReset cleared),
+      LoadKept.registryLoad_eq (loadKeptLaws.processEffectiveBalanceUpdates balanced),
+      LoadKept.registryLoad_eq (loadKeptLaws.processEth1DataReset reset),
+      LoadKept.registryLoad_eq (loadKeptLaws.processSlashings slashed),
+      LoadKept.registryLoad_eq (loadKeptLaws.processRegistryUpdates registered),
+      LoadKept.registryLoad_eq (loadKeptLaws.processRewardsAndPenalties rewarded),
+      LoadKept.registryLoad_eq (loadKept_justification justified)]
 
 /-- A slot never raises the validators plus the pending deposits, at every fork.
 
@@ -210,13 +235,13 @@ theorem advanceSlot_registryLoad_le (computed : advanceSlot config checks state 
   obtain ⟨next, cached, epoched, _, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok computed
   obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
   have slotKept : LoadKept epoched { epoched with slot := next } := ⟨rfl, rfl⟩
-  rw [registryLoad_eq_of_loadKept slotKept]
+  rw [LoadKept.registryLoad_eq slotKept]
   unfold epochIfLast at epochedOk
   split at epochedOk
   · refine Nat.le_trans (processEpoch_registryLoad_le epochedOk) (Nat.le_of_eq ?_)
-    exact registryLoad_eq_of_loadKept ⟨rfl, rfl⟩
+    exact LoadKept.registryLoad_eq ⟨rfl, rfl⟩
   · simp only [pure, Except.pure, Except.ok.injEq] at epochedOk
-    exact epochedOk ▸ Nat.le_of_eq (registryLoad_eq_of_loadKept ⟨rfl, rfl⟩)
+    exact epochedOk ▸ Nat.le_of_eq (LoadKept.registryLoad_eq ⟨rfl, rfl⟩)
 
 /-- A run of slots never raises the validators plus the pending deposits, at every fork. -/
 theorem advanceSlots_registryLoad_le {count : Nat}
