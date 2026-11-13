@@ -617,6 +617,22 @@ def consensus_api_validator_balances_ssz(name: str, fork: str, state: bytes, ids
     """The SSZ body of the balances answer, as `bytes`."""
     ...
 
+def consensus_api_committees(name: str, fork: str, state: bytes, epoch: int | None, index: int | None, slot: int | None) -> dict[str, Any]:
+    """The JSON response of the committees endpoint, as a `dict`."""
+    ...
+
+def consensus_api_sync_committees(name: str, fork: str, state: bytes, epoch: int | None) -> dict[str, Any]:
+    """The JSON response of the sync committees endpoint, as a `dict`."""
+    ...
+
+def consensus_api_ptc(name: str, fork: str, state: bytes, config: dict[str, Any] | None, slot: int | None) -> dict[str, Any]:
+    """The JSON response of the PTC endpoint, as a `dict`."""
+    ...
+
+def consensus_api_ptc_ssz(name: str, fork: str, state: bytes, config: dict[str, Any] | None, slot: int | None) -> bytes:
+    """The SSZ body of the PTC answer, as `bytes`."""
+    ...
+
 def consensus_api_resolve(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, queries: list) -> list:
     """The answer to each query, against the store after the steps of a fork choice case."""
     ...

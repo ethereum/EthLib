@@ -461,6 +461,18 @@
 #define DOC_consensus_api_validator_balances_ssz \
   "The SSZ body of the balances answer, as `bytes`."
 
+#define DOC_consensus_api_committees \
+  "The JSON response of the committees endpoint, as a `dict`."
+
+#define DOC_consensus_api_sync_committees \
+  "The JSON response of the sync committees endpoint, as a `dict`."
+
+#define DOC_consensus_api_ptc \
+  "The JSON response of the PTC endpoint, as a `dict`."
+
+#define DOC_consensus_api_ptc_ssz \
+  "The SSZ body of the PTC answer, as `bytes`."
+
 #define DOC_consensus_api_resolve \
   "The answer to each query, against the store after the steps of a fork choice case."
 
