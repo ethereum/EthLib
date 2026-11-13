@@ -21,7 +21,7 @@ Every item of a request has at least one message.
 
 A sync committee message goes on the subnets of the seats of its validator, else on subnet 0 alone.
 
-Its item passes only if its validator holds a seat in the committee of the slot after the head state.
+Its item passes only if its validator sits in the committee of the slot after the head state.
 -/
 
 @[expose] public section
