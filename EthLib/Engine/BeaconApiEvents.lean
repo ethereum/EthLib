@@ -61,7 +61,7 @@ def withdrawalFields (w : Execution.Blocks.Withdrawal) : List (String × Attribu
   [("index", .quantity w.index.toNat), ("validatorIndex", .quantity w.validatorIndex.toNat),
     ("address", .data w.address.toList), ("amount", .quantity w.amount.toNat)]
 
-/-- The fields of payload attributes, with the names and in the order of the Engine API.
+/-- The fields of payload attributes, with the names of the Engine API.
 
 Each fork has the fields of its version of the structure. -/
 def attributeFields (a : PayloadAttributes fork) : List (String × AttributeValue) :=
