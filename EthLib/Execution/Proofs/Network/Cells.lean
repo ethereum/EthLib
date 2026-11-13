@@ -18,7 +18,7 @@ A bitmap marks index `i` exactly when `i < 128` and bit `i % 8` of byte `i / 8` 
 
 Bits count from the least significant bit.
 
-The source fixes no bit order, and the check does not depend on one.
+The source fixes no bit order.
 
 A bitmap is a subset of another exactly when the other marks each index that it marks.
 
