@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Execution.State.Account
+public import EthLib.Execution.State.Root
 public import EthLib.Execution.Trie.Proof
 
 /-!
@@ -55,6 +56,14 @@ The tests give such an address the [empty code][code], whose hash is the hash of
 EIP-1186 also gives that code hash for an account without code.
 
 The storage root of an account without storage is the root of the empty trie.
+
+A node builds its answer from a state, with the proofs that the tries of the state give.
+
+For an address with no account, it gives the fields of the empty account.
+
+That is the reading of an account with no code and no storage.
+
+It agrees with the empty code that the tests expect.
 
 [eip-1186]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-1186.md
 [schema]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/schemas/state.yaml
@@ -238,6 +247,31 @@ def verify (hash : ByteArray → Hash32) (stateRoot : Hash32) (p : AccountProof)
   else
     verifyAbsentSlots 0 p.storageProof
     return .absent
+
+/-- The answer of `eth_getProof` that a state gives for an address and some slots.
+
+The account proof is the proof of the address in the state trie.
+
+An address with no account has the fields of the empty account, and the root of the empty trie.
+
+Each slot gives its word in the storage of the address, and its proof in the storage trie.
+
+The words of an address with no account are read from the state as well.
+
+It fails when a trie of the state cannot be encoded. -/
+def ofState (hash : ByteArray → Hash32) (state : State) (address : Address)
+    (keys : List Bytes32) : Except TrieError AccountProof := do
+  let accountProof ← getProof hash ⟨true, ← stateEntries hash state⟩ ⟨address.toArray⟩
+  let storage := state.storage.getD address ∅
+  let storageTrie : Trie := ⟨true, ← (storageEntries storage).mapError .rlp⟩
+  let account := state.accounts[address]?.getD EMPTY_ACCOUNT
+  let storageHash ← match state.accounts[address]? with
+    | some _ => root hash storageTrie
+    | none => pure (emptyTrieRoot hash)
+  let storageProof ← keys.mapM fun key => do
+    return (⟨key, storage.getD key 0, ← getProof hash storageTrie ⟨key.toArray⟩⟩ : StorageProof)
+  return ⟨address, account.nonce, account.balance, account.codeHash, storageHash, accountProof,
+    storageProof⟩
 
 end AccountProof
 

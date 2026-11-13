@@ -171,7 +171,7 @@ theorem storageRoot_eq_ok_iff {hash : ByteArray → Hash32}
 /-- The storage entry of a key holds the encoding of its word, which is nonzero.
 
 A key whose word is zero or unset has no entry. -/
-private theorem find_storageEntries {storage : Std.ExtTreeMap Bytes32 U256}
+theorem find_storageEntries {storage : Std.ExtTreeMap Bytes32 U256}
     {entries : List (ByteArray × ByteArray)} (h : storageEntries storage = .ok entries)
     (key : Bytes32) :
     match (entries.find? fun entry => entry.1 = ⟨key.toArray⟩).map Prod.snd with
@@ -326,7 +326,7 @@ theorem stateRoot_eq_ok_iff {hash : ByteArray → Hash32} {state : State} {root'
 /-- The state entry of an address holds the encoding of its account and storage root.
 
 No entry holds an address without an account. -/
-private theorem find_stateEntries {hash : ByteArray → Hash32} {state : State}
+theorem find_stateEntries {hash : ByteArray → Hash32} {state : State}
     {entries : List (ByteArray × ByteArray)} (h : stateEntries hash state = .ok entries)
     (address : Address) :
     match (entries.find? fun entry => entry.1 = ⟨address.toArray⟩).map Prod.snd with

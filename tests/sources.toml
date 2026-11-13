@@ -128,7 +128,7 @@ directories = ["bindings/python/tests/ethash/spec"]
 
 [repositories."ethereum/execution-apis"]
 commit = "3284ee80c3da3e516c53782dde75157cccf1ebdc"
-directories = ["bindings/python/tests/rpc/fixtures", "bindings/python/tests/trie/getproof", "tests/engine"]
+directories = ["bindings/python/tests/rpc/fixtures", "tests/engine"]
 
 [repositories."ethereum/yellowpaper"]
 commit = "efc5f9a1f356cba376c978eedb63cb0363c2aa85"
