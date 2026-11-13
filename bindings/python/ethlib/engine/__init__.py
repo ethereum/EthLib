@@ -209,6 +209,20 @@ def exchange_transition_configuration(
     )
 
 
+def exchange_capabilities(method: str, params: list[Any]) -> list[str]:
+    """The answer to an `engine_exchangeCapabilities` call: the methods that EthLib defines."""
+    request = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
+    return _native.engine_exchange_capabilities(request)
+
+
+def get_client_version(
+    code: str, name: str, version: str, commit: bytes, method: str, params: list[Any]
+) -> list[dict[str, str]]:
+    """The answer to an `engine_getClientVersionV1` call at a node with a 4-byte commit."""
+    request = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
+    return _native.engine_get_client_version(code, name, version, commit, request)
+
+
 def rewrite_params(method: str, params: list[Any]) -> list[Any]:
     """The parameters of an Engine API request, read by the decoder and written by the writer."""
     # The writer writes lowercase hex and quantities without leading zeros.
@@ -315,6 +329,8 @@ __all__ = [
     "read_payload_bodies_result",
     "read_get_blobs_result",
     "exchange_transition_configuration",
+    "exchange_capabilities",
+    "get_client_version",
     "WithdrawalEntry",
     "prepare_execution_payload",
     "prepare_execution_payload_gloas",

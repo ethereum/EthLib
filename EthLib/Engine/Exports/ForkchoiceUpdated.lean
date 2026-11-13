@@ -61,8 +61,7 @@ def knownOfJson (j : Json) : Result (Hash32 × KnownPayload) := do
 
 /-- The version of a method name `engine_forkchoiceUpdatedV1` to `engine_forkchoiceUpdatedV4`. -/
 def forkchoiceUpdatedVersion (method : String) : Option Nat :=
-  ["engine_forkchoiceUpdatedV1", "engine_forkchoiceUpdatedV2",
-    "engine_forkchoiceUpdatedV3", "engine_forkchoiceUpdatedV4"].idxOf? method |>.map (· + 1)
+  methodVersion "forkchoiceUpdated" method
 
 /-- The response to an `engine_forkchoiceUpdated` request, against a tree of payloads.
 

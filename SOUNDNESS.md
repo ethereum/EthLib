@@ -3274,6 +3274,20 @@ The undecided terminal total difficulty of step 7, `2^256 - 2^10`, is a named co
 EIP-3675 gives the mainnet terminal total difficulty but no mainnet terminal block hash or number, so EthLib gives no mainnet configuration.
 The Python tests run the OpenRPC example, the undecided total difficulty, a block number of 0, malformed and missing fields, the wrong number of parameters, another method, and a configuration out of range.
 
+`engine_exchangeCapabilities` and `engine_getClientVersionV1` tell each layer which methods and which program the other runs (`Engine/Capabilities.lean`).
+Each method succeeds exactly when its one parameter decodes, and then answers what the execution node holds, whatever the request says (`exchangeCapabilities_eq_ok_iff` and `getClientVersion_eq_ok_iff`, `Proofs/Capabilities.lean`).
+The parameters of `engine_exchangeCapabilities`, and a version object with a two-letter code, read back from their JSON (`exchangeCapabilitiesParams_json` and `clientVersionOfJson_json`).
+A version object decodes only with a code of two ASCII letters (`isClientCode_of_clientVersionOfJson`), in either case, since the source states no rule on the case.
+Which methods a node supports is its own choice, so the method takes the list to answer.
+EthLib fixes one table, the last version of each method that it defines, and builds from it the list of every version of each; the C exports read the versions of their methods from it (`methodVersion_eq_some_iff`).
+Every name in it has the form `engine_`, a method, `V` and a positive version, and no name appears twice (`isVersionedMethod_specifiedMethods`).
+So it does not hold `engine_exchangeCapabilities`, as step 3 of that method requires (`exchangeCapabilities_not_mem_specifiedMethods`).
+It holds a method at a version exactly when EthLib defines that method up to that version (`mem_specifiedMethods` and its corollaries for each method).
+The decoder of `engine_exchangeCapabilities` takes any string as a name, since the source does not say how to treat a request name without a version.
+What the methods leave to clients is not modelled: when to call them, logging, the reserved client codes, and the arrays that a multiplexer joins.
+The Python tests check the shape of the answer to the OpenRPC request of `engine_exchangeCapabilities`, whose example result is one client's list, and the full list that EthLib answers.
+They also run the example version and commit of `ClientVersionV1`, codes in either case, malformed and missing fields, and the wrong number of parameters.
+
 The theorems about `engine_forkchoiceUpdated` are in `Proofs/ForkchoiceUpdated.lean`.
 `forkchoiceUpdated_valid` shows that a valid answer selects a valid head that the execution layer holds, with its safe and finalized blocks on its chain.
 The exception is step 2 of the method, which `forkchoiceUpdated_of_belowFinalized` covers.
@@ -3855,12 +3869,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 427 operations and 49 size constants.
-The Python extension calls 427 of the operations and 49 of the constants.
+Lean exports 429 operations and 49 size constants.
+The Python extension calls 429 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-10552 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2061), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (176), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (80), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (147), `module.c` (1479), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (21), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (58), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (715), `x25519.c` (21), `xmss.c` (134).
+10576 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2061), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (194), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (80), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (147), `module.c` (1483), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (21), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (58), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (717), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

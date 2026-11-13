@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Exports.Proofs.PyValue
+public import EthLib.Engine.Capabilities
 public import EthLib.Engine.PayloadBodies
 
 /-!
@@ -82,12 +83,8 @@ def storedOf (entry : BodyEntry) : Result (Bytes32 × Option Nat × StoredBody) 
 
 /-- The method of a name, as the version and whether it is by range. -/
 def bodiesMethod (method : String) : Option (Nat × Bool) :=
-  match method with
-  | "engine_getPayloadBodiesByHashV1" => some (1, false)
-  | "engine_getPayloadBodiesByHashV2" => some (2, false)
-  | "engine_getPayloadBodiesByRangeV1" => some (1, true)
-  | "engine_getPayloadBodiesByRangeV2" => some (2, true)
-  | _ => none
+  ((methodVersion "getPayloadBodiesByHash" method).map (·, false)).or
+    ((methodVersion "getPayloadBodiesByRange" method).map (·, true))
 
 /-- The answer to a payload bodies request, from a store of bodies.
 

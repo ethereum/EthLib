@@ -3,6 +3,7 @@ module
 public import EthLib.Base.Exports
 public import EthLib.Base.Exports.ChainConfig
 public import EthLib.Base.Hex
+public import EthLib.Engine.Capabilities
 public import EthLib.Engine.NewPayload
 public import EthLib.Execution.Exports.Transition
 
@@ -73,9 +74,7 @@ A status that does not decode is an invalid parameter, with code 32602. -/
 def readPayloadStatusExport (args : PyValue) : Result PyValue := pyExport readPayloadStatusOf args
 
 /-- The version of a method name `engine_newPayloadV1` to `engine_newPayloadV5`. -/
-def newPayloadVersion (method : String) : Option Nat :=
-  ["engine_newPayloadV1", "engine_newPayloadV2", "engine_newPayloadV3",
-    "engine_newPayloadV4", "engine_newPayloadV5"].idxOf? method |>.map (· + 1)
+def newPayloadVersion (method : String) : Option Nat := methodVersion "newPayload" method
 
 /-- The payload status of an `engine_newPayload` request, without the parent's state.
 
