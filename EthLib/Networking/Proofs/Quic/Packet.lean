@@ -30,7 +30,7 @@ theorem length_encodePacketNumber (width : PacketNumberLength) (number : Varint)
 /-- Unsigned distance between packet numbers. -/
 def distance (a b : Nat) : Nat := a - b + (b - a)
 
-/-- Reading the connection-ID prefix recovers both byte strings and the following bytes. -/
+/-- Reading a length-prefixed connection ID recovers it and the following bytes. -/
 theorem connectionId_encode (cid rest : List UInt8) (maximum : Nat)
     (hcid : cid.length ≤ maximum) (hmaximum : maximum < 256) :
     connectionId maximum (UInt8.ofNat cid.length :: (cid ++ rest)) = .ok (cid, rest) := by
@@ -74,7 +74,7 @@ theorem decode_initial (d s t rest : List UInt8) (w : PacketNumberLength)
     connectionId_encode _ _ 20 hs (by decide), require, hf64, hf16, hf4,
     Fin.eta, blob_encode, lengthAndNumber_encode _ _ _ _ hl hn]
 
-/-- Reading a zeroRtt header recovers its fields and leaves the payload untouched. -/
+/-- Reading a 0-RTT header recovers its fields and leaves the payload untouched. -/
 theorem decode_zeroRtt (d s rest : List UInt8) (w : PacketNumberLength)
     (l : Varint) (n : Nat) (hd : d.length ≤ 20) (hs : s.length ≤ 20)
     (hl : numberLength w ≤ l.val)
@@ -99,7 +99,7 @@ theorem decode_zeroRtt (d s rest : List UInt8) (w : PacketNumberLength)
     connectionId_encode _ _ 20 hs (by decide), require, hf64, hf16, hf4,
     Fin.eta, lengthAndNumber_encode _ _ _ _ hl hn, ↓reduceIte]
 
-/-- Reading a handshake header recovers its fields and leaves the payload untouched. -/
+/-- Reading a Handshake header recovers its fields and leaves the payload untouched. -/
 theorem decode_handshake (d s rest : List UInt8) (w : PacketNumberLength)
     (l : Varint) (n : Nat) (hd : d.length ≤ 20) (hs : s.length ≤ 20)
     (hl : numberLength w ≤ l.val)
@@ -226,8 +226,7 @@ theorem versions_encode (values : List UInt32) :
 
 /-- Version Negotiation decoding preserves arbitrary unused bits and both connection IDs. -/
 theorem decode_versionNegotiation (d s : List UInt8) (unused : Fin 128)
-    (vs : List UInt32) (hd : d.length ≤ 255) (hs : s.length ≤ 255)
-    (hv : vs ≠ []) (shortLength : Nat) :
+    (vs : List UInt32) (hd : d.length ≤ 255) (hs : s.length ≤ 255) (shortLength : Nat) :
     decode shortLength (longPrefix (UInt8.ofNat (128 + unused.val)) 0 d s ++
       vs.flatMap (fun v => Base.natToBytes 4 v.toNat)) =
       .ok (.versionNegotiation d s unused vs, []) := by
@@ -238,10 +237,9 @@ theorem decode_versionNegotiation (d s : List UInt8) (unused : Fin 128)
   have hm : (128 + unused.val) % 128 = unused.val := by omega
   simp only [decode, longPrefix, List.append_assoc, List.cons_append, List.nil_append,
     bind, pure, StateT.bind, StateT.pure, Except.bind, Except.pure, byte, hf,
-    hf128, ↓reduceIte, uint_encode, Nat.zero_mod,
+    hf128, ↓reduceIte, uint_encode, Nat.zero_mod, show (0 : Nat) ≠ 1 by decide,
     connectionId_encode _ _ 255 hd (by decide), connectionId_encode _ _ 255 hs (by decide),
-    remainder, StateT.lift, versions_encode, require, hm, Fin.eta]
-  rw [ite_eq_left hv]
+    remainder, StateT.lift, versions_encode, hm, Fin.eta]
 
 /-- The connection supplies only a short header's destination-ID length. -/
 def shortConnectionIdLength : Header → Nat
@@ -294,13 +292,13 @@ theorem decode_encode (header : Header) (encoded rest : List UInt8)
     simpa only [List.append_nil, shortConnectionIdLength] using
       decode_retry d s t tag unused hd hs ht 0
   | versionNegotiation d s unused vs =>
-    rcases valid with ⟨hd, hs, hv⟩
+    rcases valid with ⟨hd, hs⟩
     simp only [encode, checked, ↓reduceIte, pure, Except.pure,
       Except.ok.injEq] at written
     subst encoded
     subst rest
     simpa only [List.append_nil, shortConnectionIdLength] using
-      decode_versionNegotiation d s unused vs hd hs hv 0
+      decode_versionNegotiation d s unused vs hd hs 0
 
 /-- A reconstructed number is at least as close to the expectation as any valid alternative.
 
@@ -319,5 +317,24 @@ theorem decodePacketNumber_closest (w : PacketNumberLength) (truncated expected 
       bind, pure, Except.bind, Except.pure] at decoded sameBytes
     repeat' (split_ifs at decoded <;> simp_all [throw, throwThe])
     all_goals unfold distance; omega
+
+/-- A reconstructed packet number keeps the received low bytes (Appendix A.3). -/
+theorem decodePacketNumber_mod (w : PacketNumberLength) (truncated expected result : Nat)
+    (decoded : decodePacketNumber w truncated expected = .ok result) :
+    result % 256 ^ numberLength w = truncated := by
+  rcases w with ⟨w, hw⟩
+  have casesWidth : w = 0 ∨ w = 1 ∨ w = 2 ∨ w = 3 := by omega
+  rcases casesWidth with rfl | rfl | rfl | rfl
+  all_goals
+    simp only [decodePacketNumber, numberLength, Nat.reduceAdd, Nat.reducePow,
+      bind, pure, Except.bind, Except.pure] at decoded ⊢
+    repeat' (split_ifs at decoded <;> simp_all [throw, throwThe])
+    all_goals omega
+
+/-- A reconstructed packet number is below `2^62` (§12.3). -/
+theorem decodePacketNumber_lt (w : PacketNumberLength) (truncated expected result : Nat)
+    (decoded : decodePacketNumber w truncated expected = .ok result) : result < 2 ^ 62 := by
+  simp only [decodePacketNumber, bind, pure, Except.bind, Except.pure] at decoded
+  repeat' (split_ifs at decoded <;> simp_all)
 
 end EthLib.Networking.Quic.Packet

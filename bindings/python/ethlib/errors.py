@@ -190,7 +190,7 @@ class UvarintError(EthLibError, ValueError):
 
 
 class QuicError(EthLibError, ValueError):
-    """A QUIC header, packet number or frame violates its wire format."""
+    """A QUIC header, packet number or frame is malformed, out of range, or not allowed there."""
 
 
 class QuicVarintError(EthLibError, ValueError):

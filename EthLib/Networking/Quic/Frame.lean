@@ -102,9 +102,9 @@ def Frame.type : Frame → Nat
   | .connectionClose _ frameType _ => if frameType.isSome then 28 else 29
   | .handshakeDone => 30
 
-/-- Format constraints whose violation is FRAME_ENCODING_ERROR (§19).
+/-- Format constraints that RFC 9000 §19 lets a receiver reject as FRAME_ENCODING_ERROR.
 
-NEW_CONNECTION_ID's retirement order is checked separately as PROTOCOL_VIOLATION (§19.15).
+The count and length bounds also keep each encoded length below `2^62`.
 -/
 def Frame.Valid : Frame → Prop
   | .ack a => a.ranges.length < 2 ^ 62 ∧ a.firstRange.val ≤ a.largest.val ∧
@@ -113,7 +113,8 @@ def Frame.Valid : Frame → Prop
   | .newToken token => token ≠ [] ∧ token.length < 2 ^ 62
   | .stream _ offset _ _ data => (offset.map Fin.val).getD 0 + data.length < 2 ^ 62
   | .maxStreams _ maximum | .streamsBlocked _ maximum => maximum.val ≤ 2 ^ 60
-  | .newConnectionId _ _ cid _ => 1 ≤ cid.length ∧ cid.length ≤ 20
+  | .newConnectionId seq retire cid _ =>
+      1 ≤ cid.length ∧ cid.length ≤ 20 ∧ retire.val ≤ seq.val
   | .connectionClose _ _ reason => reason.length < 2 ^ 62
   | _ => True
 
@@ -129,13 +130,9 @@ def Frame.allowed (frame : Frame) (packet : Packet.PacketType) : Bool :=
   | .connectionClose _ none _ => packet == .zeroRtt || packet == .oneRtt
   | _ => packet == .zeroRtt || packet == .oneRtt
 
-/-- Check the malformed-field and retirement-order constraints. -/
-def validate (frame : Frame) : Except Error Unit := do
-  if ¬frame.Valid then throw .frameEncoding
-  match frame with
-  | .newConnectionId sequenceNumber retirePriorTo _ _ =>
-    if retirePriorTo.val > sequenceNumber.val then throw .protocolViolation
-  | _ => pure ()
+/-- Reject a malformed frame as FRAME_ENCODING_ERROR, RFC 9000 §§19 and 20.1. -/
+def validate (frame : Frame) : Except Error Unit :=
+  if frame.Valid then .ok () else .error .frameEncoding
 
 /-- Encode an optional integer without a presence marker. -/
 def encodeOptional : Option Varint → List UInt8
@@ -252,7 +249,7 @@ def decodeBody (kind : Nat) : Reader Frame := do
   | 24 =>
     let seq ← varint
     let retire ← varint
-    let cid ← Packet.connectionId 20
+    let cid ← Packet.connectionId 255
     return .newConnectionId seq retire cid (← vector 16)
   | 25 => return .retireConnectionId (← varint)
   | 26 => return .pathChallenge (← vector 8)
@@ -266,13 +263,15 @@ def decodeBody (kind : Nat) : Reader Frame := do
 
 /-- Read one frame and enforce its packet type (§12.4, Table 3).
 
-All standard frame types are below 64, so a longer type encoding is malformed.
+All version 1 frame types are below 64, so a type in a longer form is rejected as unknown.
+
+A body that ends early or breaks a field bound is FRAME_ENCODING_ERROR (§20.1).
 
 A STREAM frame without LEN consumes all remaining packet bytes (§19.8).
 -/
 def decode (packet : Packet.PacketType) : Reader Frame := do
   let kind ← byte
-  let frame ← decodeBody kind.toNat
+  let frame ← fun input => (decodeBody kind.toNat input).mapError fun _ => .frameEncoding
   let _ ← StateT.lift (validate frame)
   require (frame.allowed packet = true) .protocolViolation
   return frame

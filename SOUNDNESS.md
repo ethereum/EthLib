@@ -719,17 +719,21 @@ The integer decoder accepts longer forms, and `Frame.decode` accepts only shorte
 The Python suite checks the examples of RFC 9000 Appendix A.1, the bounds of Table 4 and the rejection of `2^62`.
 It also checks three longer forms of 37 and every proper prefix of one encoding of each width.
 
-`Packet.decode_encode` proves the round trip for well-formed headers, with arbitrary trailing bytes after a protected header.
-Retry and Version Negotiation consume the whole datagram.
-`Packet.decodePacketNumber_closest` proves that a successfully reconstructed packet number minimizes distance to the expected number among values below `2^62` with the same truncated bytes.
+`Packet.decode_encode` (`Networking/Proofs/Quic/Packet.lean`) proves the round trip for well-formed headers, with arbitrary trailing bytes after a protected header.
+Retry and Version Negotiation consume the rest of the datagram, since neither has a Length field (RFC 9000 §12.2).
+`Packet.decodePacketNumber_mod` and `Packet.decodePacketNumber_lt` prove that a reconstructed packet number keeps the received low bytes and stays below `2^62`.
+`Packet.decodePacketNumber_closest` proves that no other such value is closer to the expected number, as RFC 9000 Appendix A.3 intends.
+The sender's choice of width from its unacknowledged range (§17.1, Appendix A.2) is left to the caller.
 
-`Frame.decode_encode` proves the round trip for an encoded frame permitted in its packet type.
+`Frame.decode_encode` (`Networking/Proofs/Quic/Frame.lean`) proves the round trip for an encoded frame permitted in its packet type.
 A STREAM frame without LEN consumes the remaining packet, so its round trip has no trailing bytes.
 `Frame.decode_ne_ok_of_not_allowed` proves that a frame forbidden by Table 3 cannot be accepted.
-The format checks cover ACK range underflow, offset limits, stream-count limits, token lengths and connection-ID lengths.
+The format checks cover ACK range underflow, offset limits, stream-count limits, token lengths, connection-ID lengths and the retirement order of §19.15.
+A frame body that ends early or breaks one of these checks is FRAME_ENCODING_ERROR (§20.1).
 
-The Python cases include the RFC 9000 Appendix A.3 packet number and RFC 9001 Appendix A header bytes, alongside hand-derived layouts of every frame type.
-The header decoder expects both header and payload authentication before checking reserved bits.
+The Python cases include the RFC 9000 Appendix A.3 packet number and the header bytes of RFC 9001 Appendices A.2, A.4 and A.5, alongside hand-derived layouts of every frame type.
+The header decoder expects its caller to remove header protection and authenticate the payload first, so a reserved-bit error comes only after authentication (RFC 9000 §17.2).
+The caller also checks a long header's Length against the bytes that follow it.
 These codecs do not implement transport state, flow-control credit, sender-role checks or packet protection.
 
 ### QUIC v1 key derivation

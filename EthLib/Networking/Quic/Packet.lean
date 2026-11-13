@@ -7,11 +7,13 @@ public import EthLib.Networking.Quic.Wire
 
 RFC 9000 §17 defines the QUIC version 1 headers and the version-independent negotiation packet.
 
-For protected packets, remove header protection and authenticate the payload before decoding.
+For protected packets, remove header protection (RFC 9001 §5.4) and authenticate the payload first.
 
 In particular, reserved-bit errors must not be exposed before authentication (RFC 9000 §17.2).
 
-Retry and Version Negotiation consume the whole packet, since neither has a Length field.
+Retry and Version Negotiation consume the rest of the datagram, since neither has a Length field.
+
+The caller checks a long header's Length against the bytes that follow it (§12.2).
 -/
 
 @[expose] public section
@@ -20,13 +22,15 @@ namespace EthLib.Networking.Quic.Packet
 
 open Wire
 
-/-- The two-bit packet-number length, interpreted as one through four bytes (§17.1). -/
+/-- The two-bit packet-number length, read as one through four bytes (§§17.2, 17.3.1). -/
 abbrev PacketNumberLength := Fin 4
 
 /-- The number of bytes selected by the packet-number length bits. -/
 def numberLength (width : PacketNumberLength) : Nat := width.val + 1
 
-/-- Encode the low packet-number bytes, as RFC 9000 §17.1 requires. -/
+/-- Keep the low packet-number bytes of the chosen width (§17.1).
+
+The sender chooses a width that covers more than twice its unacknowledged range (§17.1). -/
 def encodePacketNumber (width : PacketNumberLength) (number : Varint) : List UInt8 :=
   Base.natToBytes (numberLength width) number.val
 
@@ -57,11 +61,11 @@ inductive PacketType where
   | oneRtt
   deriving Repr, DecidableEq
 
-/-- Headers through the packet-number field, or the whole unprotected special packet.
+/-- Headers through the packet-number field, or a whole Retry or Version Negotiation packet.
 
-Connection IDs and variable byte strings are checked by `Header.Valid` at encoding and decoding.
+The encoder checks the bounds on connection IDs and byte strings, and the decoder checks each field.
 
-A long header's `length` counts the packet-number bytes and the encrypted payload (§17.2).
+The Length field of a long header counts the packet-number bytes and the encrypted payload (§17.2).
 
 Version Negotiation permits connection IDs through 255 bytes, independently of version 1 (§17.2.1).
 -/
@@ -88,7 +92,7 @@ def Header.Valid : Header → Prop
       n < 256 ^ numberLength w
   | .oneRtt d _ _ w n => d.length ≤ 20 ∧ n < 256 ^ numberLength w
   | .retry d s t _ _ => d.length ≤ 20 ∧ s.length ≤ 20 ∧ t ≠ []
-  | .versionNegotiation d s _ vs => d.length ≤ 255 ∧ s.length ≤ 255 ∧ vs ≠ []
+  | .versionNegotiation d s _ _ => d.length ≤ 255 ∧ s.length ≤ 255
 
 instance (header : Header) : Decidable header.Valid := by
   cases header <;> unfold Header.Valid <;> infer_instance
@@ -138,7 +142,7 @@ def lengthAndNumber (width : PacketNumberLength) : Reader (Varint × Nat) := do
   let number ← uint (numberLength width)
   return (length, number)
 
-/-- Read a Version Negotiation packet's nonempty sequence of 32-bit versions (§17.2.1). -/
+/-- Read the 32-bit versions of a Version Negotiation packet, zero or more (§17.2.1). -/
 def versions : List UInt8 → Except Error (List UInt32)
   | [] => .ok []
   | a :: b :: c :: d :: rest => do
@@ -165,13 +169,12 @@ def decode (shortConnectionIdLength : Nat) : Reader Header := do
       (first.toNat / 4 % 2 = 1) width number
   else
     let version ← uint 4
-    let maximum := if version = 0 then 255 else 20
+    let maximum := if version = 1 then 20 else 255
     let destination ← connectionId maximum
     let source ← connectionId maximum
     if version = 0 then
       let rest ← remainder
       let vs ← StateT.lift (versions rest)
-      require (vs ≠ []) .packetLength
       return .versionNegotiation destination source
         ⟨first.toNat % 128, Nat.mod_lt _ (by decide)⟩ vs
     else

@@ -7,7 +7,9 @@ public import EthLib.Networking.Quic.Varint
 
 The readers consume one field and return the bytes after it.
 
-RFC 9000 §§16–19 specify the integer and byte-string fields.
+RFC 9000 §16 defines the integer encoding.
+
+Headers (§17) and frames (§19) use it to prefix byte strings with their length.
 -/
 
 @[expose] public section
@@ -68,11 +70,11 @@ def require (condition : Prop) [Decidable condition] (error : Error) : Reader Un
 /-- Read every remaining byte of a packet. -/
 def remainder : Reader (List UInt8) := fun input => .ok (input, [])
 
-/-- Read a natural number as a bounded QUIC integer. -/
+/-- Convert a length to a QUIC integer, rejecting `2^62` or more. -/
 def checkedVarint (n : Nat) : Except Error Varint :=
   if h : n < 2 ^ 62 then .ok ⟨n, h⟩ else .error .frameEncoding
 
-/-- Read a byte string whose length is a QUIC integer, RFC 9000 §16. -/
+/-- Read a byte string prefixed by its length as a QUIC integer. -/
 def blob : Reader (List UInt8) := do
   let n ← varint
   bytes n.val

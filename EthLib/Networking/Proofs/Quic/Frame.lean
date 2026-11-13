@@ -54,10 +54,10 @@ theorem allowed_of_decode {packet : Packet.PacketType} {input rest : List UInt8}
     rcases first with ⟨kind, tail⟩
     simp only [hb] at h
     cases hd : decodeBody kind.toNat tail with
-    | error e => simp [hd] at h
+    | error e => simp [hd, Except.mapError] at h
     | ok decoded =>
       rcases decoded with ⟨f, tail'⟩
-      simp only [hd] at h
+      simp only [hd, Except.mapError] at h
       cases hv : validate f with
       | error e =>
         simp only [StateT.lift, bind, hv, Except.bind] at h
@@ -127,7 +127,8 @@ theorem decodeBody_encodeBody (frame : Frame) (rest : List UInt8) (valid : frame
   | streamsBlocked u n => cases u <;> simp
   | newConnectionId seq retire cid token =>
     simp only [encodeBody, Frame.type, decodeBody]
-    simp [Packet.connectionId_encode _ _ 20 valid.2 (by decide)]
+    have hcid : cid.length ≤ 255 := by have := valid.2.1; omega
+    simp [Packet.connectionId_encode cid _ 255 hcid (by decide)]
   | retireConnectionId n => simp
   | pathChallenge data => simp
   | pathResponse data => simp
@@ -173,7 +174,7 @@ theorem decode_encode (frame : Frame) (packet : Packet.PacketType) (encoded rest
       have kind : (UInt8.ofNat frame.type).toNat = frame.type :=
         UInt8.toNat_ofNat_of_lt' (by have := type_lt frame; simp only [UInt8.size]; omega)
       simp only [decode, bind, pure, StateT.bind, StateT.pure, Except.bind, Except.pure,
-        List.cons_append, byte, kind, fields, StateT.lift, checked,
+        List.cons_append, byte, kind, fields, Except.mapError, StateT.lift, checked,
         require, allowed, ↓reduceIte]
 
 end EthLib.Networking.Quic.Frame

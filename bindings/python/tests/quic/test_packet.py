@@ -20,6 +20,8 @@ RETRY = "ff000000010008f067a5502a4262b5746f6b656e04a265ba2eff4d829058fb3f0f2496b
         (("handshake", [], [], 0, 1, 1), "e00000000100000101", 0),
         # RFC 9001 Appendix A.5: the unprotected short header.
         (("one_rtt", [], False, False, 2, 49140), "4200bff4", 0),
+        # Fixed, spin and key-phase bits, an 8-byte connection ID known from the connection.
+        (("one_rtt", [1] * 8, True, True, 0, 7), "64" + "01" * 8 + "07", 8),
         (
             (
                 "retry",
@@ -33,9 +35,11 @@ RETRY = "ff000000010008f067a5502a4262b5746f6b656e04a265ba2eff4d829058fb3f0f2496b
             0,
         ),
         (("version_negotiation", [], [], 0, [1]), "8000000000000000000001", 0),
+        # Figure 14 repeats Supported Version zero or more times.
+        (("version_negotiation", [], [], 0, []), "80000000000000", 0),
     ],
 )
-def test_headers(header, encoded: str, short_length: int) -> None:
+def test_headers(header: quic.Header, encoded: str, short_length: int) -> None:
     data = bytes.fromhex(encoded)
     assert quic.encode_header(header) == data
     assert quic.decode_header(short_length, data) == (header, b"")
@@ -76,18 +80,57 @@ def test_packet_number_window_edges(expected: int, truncated: int, number: int) 
 
 
 @pytest.mark.parametrize(
-    ("encoded", "error"),
+    ("encoded", "error", "code"),
     [
-        ("800000000100000100", "fixedBit"),
-        ("c4000000010000000100", "reservedBits"),
-        ("4800", "reservedBits"),
-        ("c00000000200000100", "version"),
-        ("c00000000115", "connectionIdLength"),
-        ("c3000000010000000300000000", "packetLength"),
+        ("800000000100000100", "fixedBit", 3),
+        ("c4000000010000000100", "reservedBits", 5),
+        ("4800", "reservedBits", 5),
+        ("c00000000200000100", "version", 4),
+        # Only version 1 limits connection IDs to 20 bytes (§17.2).
+        ("c00000000215" + "00" * 21 + "00", "version", 4),
+        ("c00000000115", "connectionIdLength", 2),
+        # A Length shorter than the packet-number field.
+        ("c3000000010000000300000000", "packetLength", 6),
     ],
 )
-def test_malformed_headers(encoded: str, error: str) -> None:
-    # RFC 9000 §§17.2–17.3: fixed/reserved bits, supported version, CID bound and PN length.
+def test_malformed_headers(encoded: str, error: str, code: int) -> None:
+    # RFC 9000 §17.2 and §17.3.1: fixed and reserved bits, version and connection IDs.
     message = f"QUIC header rejected: EthLib.Networking.Quic.Wire.Error.{error}"
-    with raises(quic.QuicError, message):
+    with raises(quic.QuicError, message) as info:
         quic.decode_header(0, bytes.fromhex(encoded))
+    assert info.value.code == code
+
+
+@pytest.mark.parametrize(
+    "header",
+    [
+        ("one_rtt", [0] * 21, False, False, 0, 0),
+        ("one_rtt", [], False, False, 0, 256),
+        ("handshake", [], [], 1, 1, 0),
+        ("retry", [], [], [], bytes(16), 0),
+    ],
+)
+def test_encoder_rejects_invalid_headers(header: quic.Header) -> None:
+    # A long connection ID, a number wider than its field, a short Length and an empty token.
+    message = "QUIC header rejected: EthLib.Networking.Quic.Wire.Error.packetLength"
+    with raises(quic.QuicError, message) as info:
+        quic.encode_header(header)
+    assert info.value.code == 6
+
+
+def test_short_connection_id_length_bound() -> None:
+    message = "QUIC header rejected: EthLib.Networking.Quic.Wire.Error.connectionIdLength"
+    with raises(quic.QuicError, message) as info:
+        quic.decode_header(21, bytes.fromhex("40" + "00" * 22))
+    assert info.value.code == 2
+
+
+@pytest.mark.parametrize(
+    ("width", "truncated", "expected"), [(0, 256, 0), (0, 0, 2**62 + 1), (0, 0, 2**62)]
+)
+def test_packet_number_rejections(width: int, truncated: int, expected: int) -> None:
+    # A truncated value wider than its field, an expectation past 2^62, and a result of 2^62.
+    message = "QUIC packet number rejected: EthLib.Networking.Quic.Wire.Error.packetNumber"
+    with raises(quic.QuicError, message) as info:
+        quic.decode_packet_number(width, truncated, expected)
+    assert info.value.code == 7
