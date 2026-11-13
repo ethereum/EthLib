@@ -1009,6 +1009,9 @@ That game does not model several such batches, each with its own challenge.
 There the adversary outputs a commitment, openings and `m` columns, and the verifier makes one oracle query per column.
 A column holds an opening when one of its entries has the commitment, the cell and the proof of the opening, at the cell index of the column.
 `verifyDataColumnSidecarKzgProofs_eq_verify` (`Consensus/Proofs/DataAvailability/Column.lean`) shows that the client's check of a sidecar is the batch check of such a column.
+`verifyDataColumnSidecar_eq_true_iff` (`Consensus/Proofs/Gossip/Sidecar.lean`) states exactly when a sidecar passes its shape check.
+A passing sidecar has one cell and one proof for each commitment it answers to, which from Gloas are the commitments given with it (those of the bid, when gossip checks it).
+Before Gloas it also answers to no more commitments than the blob limit at the epoch of its header.
 Let each column have at most `n` cells, and let the adversary make at most `q` queries.
 `columnPositionBindingAdvantage_le` bounds position-binding by the advantage of a BSDH reduction plus `(q + m)(n - 1)/r`.
 `columnCodeBindingAdvantage_le` bounds code-binding by the advantages of a BSDH reduction and an ARSDH reduction plus the same term.
