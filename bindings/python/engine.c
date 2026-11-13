@@ -70,7 +70,7 @@ py_engine_forkchoice_updated(
   PyObject* self,
   PyObject* args
 ) {
-  return call_pyvalue_export(eth_engine_forkchoice_updated, args, 4, ENGINE_ERROR);
+  return call_pyvalue_export(eth_engine_forkchoice_updated, args, 5, ENGINE_ERROR);
 }
 
 PyObject*

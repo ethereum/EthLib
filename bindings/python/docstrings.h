@@ -503,6 +503,9 @@
 #define DOC_consensus_default_auth_data \
   "The default data that a proposer and a builder agree, from the builder's URL."
 
+#define DOC_consensus_relay_submission_bid \
+  "The SSZ bytes of the bid that a relay serves from a submission, under a key."
+
 #define DOC_consensus_builder_bid_value \
   "The value of a builder's bid from its two payments and the proposer's execution payment cap."
 
@@ -1275,7 +1278,7 @@
   "Build a payload on a chain, from attributes, the builder's choices and transactions."
 
 #define DOC_engine_forkchoice_updated \
-  "The response to an `engine_forkchoiceUpdated` request, against a tree of payloads."
+  "The response to an `engine_forkchoiceUpdated` request, against a tree of known blocks."
 
 #define DOC_engine_get_blobs \
   "The answer to an `engine_getBlobs` request, from a blob pool."

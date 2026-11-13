@@ -673,6 +673,10 @@ def consensus_default_auth_data(url: str) -> bytes:
     """The default data that a proposer and a builder agree, from the builder's URL."""
     ...
 
+def consensus_relay_submission_bid(name: str, fork: str, data: bytes, pubkey: bytes) -> bytes:
+    """The SSZ bytes of the bid that a relay serves from a submission, under a key."""
+    ...
+
 def consensus_builder_bid_value(value: int, execution_payment: int, max_execution_payment: int) -> int:
     """The value of a builder's bid from its two payments and the proposer's execution payment cap."""
     ...
@@ -1701,8 +1705,8 @@ def engine_build_payload(config: dict, state: bytes, recent: list[tuple[str, byt
     """Build a payload on a chain, from attributes, the builder's choices and transactions."""
     ...
 
-def engine_forkchoice_updated(config: dict, tree: list, finalized: str | None, request: dict) -> dict:
-    """The response to an `engine_forkchoiceUpdated` request, against a tree of payloads."""
+def engine_forkchoice_updated(config: dict, tree: list, finalized: str | None, terminal_total_difficulty: int, request: dict) -> dict:
+    """The response to an `engine_forkchoiceUpdated` request, against a tree of known blocks."""
     ...
 
 def engine_get_blobs(pool: list[tuple[bytes, bytes | None, bytes | None, list[tuple[bytes, bytes] | None] | None]], serving: bool, max_request: int, fork: str, request: dict) -> list | None:
