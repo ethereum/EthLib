@@ -162,7 +162,7 @@ structure RebuildEnd (block : BlockState) (tx : TransactionState) : Prop where
 
 /-- The property of a transaction state on `block` that execution from Spurious Dragon keeps.
 
-It adds two facts to the property above, about accounts with no nonce or code and created ones. -/
+It adds to what the end of a transaction keeps two facts: on plain accounts and created ones. -/
 structure RebuildState (block : BlockState) (tx : TransactionState) : Prop
     extends RebuildEnd block tx where
   /-- An account with no nonce or code had none in `block`, lost no balance, wrote no storage. -/
