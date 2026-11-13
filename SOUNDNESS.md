@@ -2512,6 +2512,13 @@ The search is over the two branch climbs, or over the hash inputs of two executi
 
 From Gloas, `isValidLightClientHeader_parentBlockHash` binds the block hash of a header at a slot from Gloas to the parent block hash of the bid of a Gloas body.
 `isValidLightClientHeader_executionBlockHash` binds it, for an earlier slot from Capella, to the block hash of the payload of a body from Capella to Fulu that is from Deneb exactly when the slot is.
+For such a slot, `getLcExecutionRoot_rebuild` shows that the execution root is rebuilt from the block hash.
+The rebuilt execution header is a Deneb header for a slot from Deneb, and a Capella header before Deneb.
+`rebuildLcExecutionRoot_eq` states the rebuilt root on every input.
+At the genesis slot it is the root of the empty execution header of that fork.
+Otherwise the block hash climbs as field 12 of the execution header, through a slice of the branch that ends before its last 4 nodes.
+The slice has the 5 nodes before them from Deneb, and the 4 before them before Deneb; a shorter branch gives a length error.
+These two are rewrite lemmas: no theorem yet binds the rebuilt root to the payload of a body.
 The headers that the client checks are valid: `initializeLightClientStore_header_valid`, `validateLightClientUpdate_attestedHeader_valid`, and `validateLightClientUpdate_finalizedHeader_valid` after the genesis slot.
 The index theorems `executionPayloadGindex_eq`, `payloadHeaderBlockHashGindex_eq`, `executionBlockHashGindex_eq` and `executionBlockHashGindexGloas_eq` hold at every preset.
 
@@ -2784,6 +2791,11 @@ The OpenRPC description of the method makes the payload attributes optional, but
 The request lists must be well formed, and the payload must have a block at the active fork of the chain, which must be before Glamsterdam.
 From Deneb, the blob transactions of that block must carry the versioned hashes of the request.
 The block must pass the state transition.
+`executionEngine_accepts_newPayloadRequest_iff` states the same for the payload request of a block, from Bellatrix to Fulu, in terms of the block and the state.
+From Electra, the request lists are those of the requests of the block.
+From Deneb, the block of the payload reads the parent root of the latest block header of the state.
+From Deneb, the blob transactions must carry the versioned hashes of the commitments of the block, in the order of the commitments.
+The consensus test vectors fix the answer of the execution layer, so none of them checks the versioned hashes or the parent root that a block puts in its request.
 
 No payload build is specified, so `engine_getPayload` has no definition, and the export refuses payload attributes on a new valid head.
 The tree of known payloads and the known finalized block are inputs of each call, not state that the model keeps between calls.

@@ -10,6 +10,8 @@ What a successful filter over a list in `Except` returns: only elements of the l
 
 It keeps each element of the list that passes the test, and only those, in their order.
 
+It succeeds only when the test succeeds on each element.
+
 Lean core states no lemma about such a filter, so this module reads its definition.
 -/
 
@@ -152,5 +154,37 @@ theorem filterM_exists_ok {test : α → Except ε Bool} {list : List α}
     ∃ out, list.filterM test = .ok out := by
   obtain ⟨out, computed⟩ := filterAuxM_exists_ok tested []
   exact ⟨out.reverse, by simp only [List.filterM, computed]; rfl⟩
+
+/-- A filter started with any kept list succeeds only when the test succeeds on each element. -/
+private theorem filterAuxM_ok_of_mem {test : α → Except ε Bool} :
+    ∀ {list kept out : List α}, List.filterAuxM test list kept = .ok out →
+      ∀ value ∈ list, ∃ passes, test value = .ok passes
+  | [], _, _, _ => fun _ member => absurd member List.not_mem_nil
+  | first :: rest, kept, out, computed => by
+    simp only [List.filterAuxM, bind_ok_iff] at computed
+    obtain ⟨chosen, chosenOk, computed⟩ := computed
+    intro value member
+    rcases List.mem_cons.mp member with rfl | later
+    · exact ⟨chosen, chosenOk⟩
+    · exact filterAuxM_ok_of_mem computed value later
+
+/-- A filter that a computation runs succeeds only when the test succeeds on each element. -/
+theorem filterM_ok_of_mem {test : α → Except ε Bool} {list out : List α}
+    (computed : list.filterM test = .ok out) :
+    ∀ value ∈ list, ∃ passes, test value = .ok passes := by
+  simp only [List.filterM, bind_ok_iff] at computed
+  obtain ⟨reversed, filtered, -⟩ := computed
+  exact filterAuxM_ok_of_mem filtered
+
+/-- A filter that a computation runs keeps nothing exactly when no element passes the test. -/
+theorem eq_nil_iff_of_filterM_ok {test : α → Except ε Bool} {list out : List α}
+    (computed : list.filterM test = .ok out) :
+    out = [] ↔ ∀ value ∈ list, test value ≠ .ok true := by
+  rw [List.eq_nil_iff_forall_not_mem]
+  constructor
+  · intro none value member passes
+    exact none value (mem_filterM_ok_of_test computed member passes)
+  · intro none value member
+    exact none value (mem_of_filterM_ok computed member) (passes_of_mem_filterM_ok computed member)
 
 end EthLib.Base

@@ -160,7 +160,14 @@ def Desc.mixesIn : Desc → PathStep → Bool
   | .compatibleUnion _ _, .selector => true
   | _, _ => false
 
-/-- One path step's relative node index and child type, or no child for a terminal mixing word. -/
+/-- One path step's relative node index and child type, or no child for a terminal mixing word.
+
+A union declares one type per selector, so a selector without an option is a malformed declaration.
+
+Source: union declarations in [EIP-8016, `CompatibleUnion({selector: type})`][union].
+
+[union]: https://eips.ethereum.org/EIPS/eip-8016#compatibleunionselector-type
+-/
 def Desc.resolveStep (shape : Desc) (step : PathStep) : Except Err (Nat × Option Desc) := do
   match shape with
   | .bool | .uint _ => throw .noParts
@@ -175,8 +182,11 @@ def Desc.resolveStep (shape : Desc) (step : PathStep) : Except Err (Nat × Optio
       match selectors.idxOf? ordinal with
       | none => throw (.noSuchOption ordinal)
       | some slot =>
-        -- Every selected option occupies the contents child, opposite the selector word.
-        return (2, some options[slot]!)
+        match options[slot]? with
+        | none => throw .badDeclaration
+        | some child =>
+          -- Every selected option occupies the contents child, opposite the selector word.
+          return (2, some child)
     | .progressiveContainer _ _ _ | .progressiveList _ _ | .progressiveBitList _ =>
       -- Progressive chunks retain their positions as the right-hand spine grows.
       let placed ← shape.chunkPosition step
