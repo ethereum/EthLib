@@ -6,7 +6,7 @@ public import EthLib.Consensus.Proofs.Transition.Totality.Registry
 /-!
 # Proofs: registry updates from Electra succeed
 
-From Electra, one pass over the registry marks validators eligible, ejects some and activates others.
+From Electra, one pass over the registry queues, ejects or activates each validator in turn.
 
 An ejection starts an exit, which takes its place in a queue of balance.
 
@@ -587,7 +587,9 @@ private theorem foldlM_updateRegistryEntryElectra_kept {config : Config}
 
 The registry must be within its limit, and the sum of its effective balances below `2^64`.
 
-The increment must be positive, and the least churn and the largest shared churn at least one increment.
+The increment must be positive.
+
+The least churn and the largest shared churn must each be at least one increment.
 
 A ceiling bounds the first epoch an exit may take, the end of the exit queue, and each exit epoch.
 
