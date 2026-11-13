@@ -17,7 +17,7 @@ CipherSuite: TypeAlias = Literal["TLS_AES_128_GCM_SHA256", "TLS_CHACHA20_POLY130
 # The packet types that carry frames, RFC 9000 §12.4, Table 3.
 PacketType: TypeAlias = Literal["initial", "zero_rtt", "handshake", "one_rtt"]
 
-# A header is a tuple: its packet type, then its fields in wire order.
+# A header is a tuple: its packet type, then its connection IDs and other fields.
 # Width is the two-bit packet-number length, 0 to 3 for 1 to 4 bytes.
 # The number is the truncated packet number, and the Length counts it and the payload.
 Header: TypeAlias = (

@@ -756,7 +756,8 @@ The sender's choice of width from its unacknowledged range (§17.1, Appendix A.2
 `Frame.decode_encode` (`Networking/Proofs/Quic/Frame.lean`) proves the round trip for an encoded frame permitted in its packet type.
 A STREAM frame without LEN consumes the remaining packet, so its round trip has no trailing bytes.
 `Frame.decode_ne_ok_of_not_allowed` proves that a frame forbidden by Table 3 cannot be accepted.
-The format checks cover ACK range underflow, offset limits, stream-count limits, token lengths, connection-ID lengths and the retirement order of §19.15.
+`Frame.valid_of_decode` proves that a decoded frame meets the format checks.
+They cover ACK range underflow, offset limits, stream-count limits, token lengths, connection-ID lengths and the retirement order of §19.15.
 A frame body that ends early or breaks one of these checks is FRAME_ENCODING_ERROR (§20.1).
 
 The Python cases include the RFC 9000 Appendix A.3 packet number and the header bytes of RFC 9001 Appendices A.2, A.4 and A.5, alongside hand-derived layouts of every frame type.

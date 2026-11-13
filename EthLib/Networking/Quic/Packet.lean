@@ -39,6 +39,8 @@ def encodePacketNumber (width : PacketNumberLength) (number : Varint) : List UIn
 `expected` is one greater than the largest authenticated number, or zero before any packet arrives.
 
 The addition form of the first comparison avoids natural-number subtraction below zero.
+
+A result of `2^62` or more is rejected, which can happen only when the expected number is `2^62`.
 -/
 def decodePacketNumber (width : PacketNumberLength) (truncated : Nat) (expected : Nat) :
     Except Error Nat := do

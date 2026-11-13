@@ -146,6 +146,36 @@ theorem valid_of_validate {frame : Frame} (accepted : validate frame = .ok ()) :
   · exact valid
   · simp [validate, valid] at accepted
 
+/-- A decoded frame meets every format constraint, RFC 9000 §19. -/
+theorem valid_of_decode {packet : Packet.PacketType} {input rest : List UInt8}
+    {frame : Frame} (h : decode packet input = .ok (frame, rest)) : frame.Valid := by
+  simp only [decode, bind, pure, StateT.bind, StateT.pure, Except.bind, Except.pure] at h
+  cases hb : byte input with
+  | error e => simp [hb] at h
+  | ok first =>
+    rcases first with ⟨kind, tail⟩
+    simp only [hb] at h
+    cases hd : decodeBody kind.toNat tail with
+    | error e =>
+      simp only [hd, Except.mapError] at h
+      simp at h
+    | ok decoded =>
+      rcases decoded with ⟨f, tail'⟩
+      simp only [hd, Except.mapError] at h
+      cases hv : validate f with
+      | error e =>
+        simp only [StateT.lift, bind, hv, Except.bind] at h
+        contradiction
+      | ok u =>
+        cases u
+        simp only [StateT.lift, bind, pure, hv, Except.bind, Except.pure] at h
+        by_cases allowed : f.allowed packet = true
+        · simp only [require, allowed, ↓reduceIte, Except.ok.injEq, Prod.mk.injEq] at h
+          obtain ⟨rfl, rfl⟩ := h
+          exact valid_of_validate hv
+        · simp only [require, allowed] at h
+          contradiction
+
 /-- Decoding a permitted encoded frame recovers that frame and the following bytes.
 
 A STREAM without LEN must be the last frame in the packet, as RFC 9000 §19.8 requires.
