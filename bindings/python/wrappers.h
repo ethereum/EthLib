@@ -769,8 +769,8 @@ PyObject* py_tls_certificate_authenticate(PyObject* self, PyObject* args);
 PyObject* py_tls_certificate_authenticate_peer(PyObject* self, PyObject* args);
 PyObject* py_tls_certificate_verify_p256(PyObject* self, PyObject* args);
 
-#endif /* ETHCS_WRAPPERS_H */
-
 PyObject* py_quic_protect(PyObject* self, PyObject* args);
 PyObject* py_quic_unprotect(PyObject* self, PyObject* args);
 PyObject* py_quic_retry_tag(PyObject* self, PyObject* args);
+
+#endif /* ETHCS_WRAPPERS_H */

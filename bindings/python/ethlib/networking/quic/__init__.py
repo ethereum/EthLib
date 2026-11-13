@@ -1,4 +1,4 @@
-"""QUIC v1: wire codecs (RFC 9000), packet keys (RFC 9001 §5) and the TLS 1.3 key schedule."""
+"""QUIC v1: wire codecs (RFC 9000), packet keys and protection (RFC 9001) and TLS 1.3 secrets."""
 
 from typing import Literal, NamedTuple, TypeAlias, TypedDict
 
@@ -154,21 +154,21 @@ def decode_packet_number(width: int, truncated: int, expected: int) -> int:
 
 
 def protect(
-    suite: str, secret: bytes, number: int, offset: int, header: bytes, plaintext: bytes
+    suite: CipherSuite, secret: bytes, number: int, offset: int, header: bytes, plaintext: bytes
 ) -> bytes:
-    """Protect a header and payload. Add PADDING frames if the ciphertext sample is too short."""
+    """Seal a header ending at its packet number at offset; pad a payload too short to sample."""
     return _native.quic_protect(suite, secret, number, offset, header, plaintext)
 
 
 def unprotect(
-    suite: str, secret: bytes, expected: int, offset: int, packet: bytes
+    suite: CipherSuite, secret: bytes, expected: int, offset: int, packet: bytes
 ) -> tuple[bytes, bytes]:
-    """Authenticate one isolated packet, using zero or the largest authenticated number plus one."""
+    """Return the header and plaintext of one packet; expected is 1 + the largest seen, or 0."""
     return _native.quic_unprotect(suite, secret, expected, offset, packet)
 
 
 def retry_tag(original_dcid: bytes, retry: bytes) -> bytes:
-    """Compute the integrity tag for a QUIC v1 Retry packet without its tag."""
+    """Compute the integrity tag of a Retry packet given without its tag, RFC 9001 §5.8."""
     return _native.quic_retry_tag(original_dcid, retry)
 
 

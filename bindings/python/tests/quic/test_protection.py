@@ -5,11 +5,12 @@ from pathlib import Path
 
 import pytest
 
+from ethlib.cryptography import aes
 from ethlib.networking import quic
 from raising import raises
 
-AES = "TLS_AES_128_GCM_SHA256"
-CHACHA = "TLS_CHACHA20_POLY1305_SHA256"
+AES: quic.CipherSuite = "TLS_AES_128_GCM_SHA256"
+CHACHA: quic.CipherSuite = "TLS_CHACHA20_POLY1305_SHA256"
 VECTORS = json.loads(Path(__file__).with_name("packet_vectors.json").read_text())
 
 
@@ -69,7 +70,7 @@ def test_retry_integrity() -> None:
 
 
 @pytest.mark.parametrize("suite", [AES, CHACHA])
-def test_sample_and_header_boundaries(suite: str) -> None:
+def test_sample_and_header_boundaries(suite: quic.CipherSuite) -> None:
     # RFC 9001 §5.4.2 requires three plaintext bytes for a one-byte encoded number.
     secret = bytes(32)
     with raises(quic.QuicProtectionError, "EthLib.Networking.Quic.Protection.Error.sample"):
@@ -78,11 +79,11 @@ def test_sample_and_header_boundaries(suite: str) -> None:
     assert quic.unprotect(suite, secret, 0, 1, packet) == (b"\x40\x00", bytes(3))
     with raises(quic.QuicProtectionError, "EthLib.Networking.Quic.Protection.Error.sample"):
         quic.unprotect(suite, secret, 0, 1, packet[:-1])
-    # RFC 9000 §17.3 requires the fixed bit and zero reserved bits.
+    # RFC 9000 §17.3.1 requires the fixed bit and zero reserved bits.
     for header in (b"\x00\x00", b"\x48\x00"):
         with raises(quic.QuicProtectionError, "EthLib.Networking.Quic.Protection.Error.header"):
             quic.protect(suite, secret, 0, 1, header, bytes(3))
-    # The header's low byte must match the full number passed to nonce construction.
+    # The truncated number in the header must equal the low byte of the full number.
     with raises(quic.QuicProtectionError, "EthLib.Networking.Quic.Protection.Error.packetNumber"):
         quic.protect(suite, secret, 1, 1, b"\x40\x00", bytes(3))
 
@@ -107,3 +108,59 @@ def test_initial_requires_aes() -> None:
         "  (EthLib.Cryptography.ChaCha20Poly1305.ChaCha20Poly1305Error.authenticationFailed)",
     ):
         quic.unprotect(CHACHA, secret, 0, 9, corrupted)
+
+
+def test_reserved_bits_fail_after_authentication() -> None:
+    # A short header with a reserved bit set, sealed directly (RFC 9001 §§5.3, 5.4.3).
+    # Authentication succeeds, so the reserved bit is reported, as RFC 9000 §17.3.1 requires.
+    key, iv, hp = quic.packet_keys(AES, bytes(32))
+    header = b"\x48\x00"
+    sealed = header + aes.gcm_encrypt(key, iv, bytes(3), header)
+    mask = aes.encrypt_block(hp, sealed[5:21])
+    packet = bytes([sealed[0] ^ (mask[0] & 0x1F), sealed[1] ^ mask[1]]) + sealed[2:]
+    with raises(quic.QuicProtectionError, "EthLib.Networking.Quic.Protection.Error.header") as info:
+        quic.unprotect(AES, bytes(32), 0, 1, packet)
+    assert info.value.code == 1
+
+
+def test_unknown_suite() -> None:
+    suite: str = "TLS_AES_256_GCM"
+    expected = (
+        "expected TLS_AES_128_GCM_SHA256 or TLS_CHACHA20_POLY1305_SHA256, got TLS_AES_256_GCM"
+    )
+    with raises(quic.QuicProtectionError, expected) as info:
+        # The runtime check of the suite is under test, so the call bypasses its type.
+        quic.unprotect(suite, bytes(32), 0, 1, bytes(21))  # ty: ignore[invalid-argument-type]
+    assert info.value.code == 0
+
+
+def test_number_out_of_range() -> None:
+    with raises(
+        quic.QuicProtectionError, "EthLib.Networking.Quic.Protection.Error.packetNumber"
+    ) as info:
+        quic.protect(AES, bytes(32), 2**62, 1, b"\x40\x00", bytes(3))
+    assert info.value.code == 3
+
+
+@pytest.mark.parametrize("offset", [0, 21])
+def test_offset_outside_packet(offset: int) -> None:
+    with raises(quic.QuicProtectionError, "EthLib.Networking.Quic.Protection.Error.header") as info:
+        quic.unprotect(AES, bytes(32), 0, offset, bytes(21))
+    assert info.value.code == 1
+
+
+def test_retry_connection_id_bound() -> None:
+    # RFC 9001 §5.8: the Original Destination Connection ID holds at most 160 bits.
+    retry = bytes.fromhex("ff000000010008f067a5502a4262b5746f6b656e")
+    assert len(quic.retry_tag(bytes(20), retry)) == 16
+    with raises(
+        quic.QuicProtectionError, "EthLib.Networking.Quic.Protection.Error.connectionId"
+    ) as info:
+        quic.retry_tag(bytes(21), retry)
+    assert info.value.code == 7
+
+
+def test_retry_tag_binds_original_connection_id() -> None:
+    retry = bytes.fromhex("ff000000010008f067a5502a4262b5746f6b656e")
+    tag = bytes.fromhex("04a265ba2eff4d829058fb3f0f2496ba")
+    assert quic.retry_tag(bytes.fromhex("8394c8f03e515709"), retry) != tag

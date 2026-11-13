@@ -1538,11 +1538,11 @@ def quic_tls_finished(secret: bytes, transcript: bytes) -> bytes:
     ...
 
 def quic_protect(suite: str, secret: bytes, number: int, offset: int, header: bytes, plaintext: bytes) -> bytes:
-    """Protect a QUIC v1 header and payload using a SHA-256 traffic secret, RFC 9001 §§5.1–5.4."""
+    """Protect a QUIC v1 header and payload using a SHA-256 traffic secret, RFC 9001 §§5.1 to 5.4."""
     ...
 
 def quic_unprotect(suite: str, secret: bytes, expected: int, offset: int, packet: bytes) -> tuple[bytes, bytes]:
-    """Authenticate one isolated QUIC v1 packet, RFC 9001 §§5.3–5.4."""
+    """Authenticate one isolated QUIC v1 packet, RFC 9001 §§5.3 to 5.4."""
     ...
 
 def quic_retry_tag(original_dcid: bytes, retry: bytes) -> bytes:

@@ -10,17 +10,15 @@ public import EthLib.Base.BigEndian
 /-!
 # QUIC v1 packet protection
 
-Payload protection and header protection follow RFC 9001 §§5.3 to 5.4.
+Payload protection and header protection follow [RFC 9001 §§5.3 to 5.4][rfc].
 
-The caller isolates one packet and supplies its packet-number offset.
+The caller isolates one packet and supplies its packet-number offset from the clear header.
 
-The offset comes from the clear header fields and connection context.
+Nothing here tracks nonce reuse, key updates or the usage limits of §6.6.
 
-Packet-number reconstruction belongs to the header codec.
+Nothing here claims constant-time execution.
 
-These pure operations do not track nonce reuse, key updates or the usage limits of §6.6.
-
-The AES and ChaCha20 specifications make no constant-time claim.
+[rfc]: https://www.rfc-editor.org/rfc/rfc9001#section-5.3
 -/
 
 @[expose] public section
@@ -29,13 +27,10 @@ namespace EthLib.Networking.Quic.Protection
 
 open EthLib.Base EthLib.Cryptography
 
-/-- Packet numbers have at most 62 bits, RFC 9000 §12.3. -/
-abbrev PacketNumber := Fin (2 ^ 62)
+/-- A full packet number, a QUIC integer below `2^62` (RFC 9000 §12.3). -/
+abbrev PacketNumber := Varint
 
-/-- Encoded packet numbers occupy one to four bytes, RFC 9000 §17.1. -/
-abbrev NumberLength := Fin 4
-
-/-- Malformed headers, insufficient samples, or an AEAD failure. -/
+/-- Failures of packet protection and Retry integrity: header, sample, number, tag, AEAD or ID. -/
 inductive Error where
   | header
   | sample
@@ -102,7 +97,7 @@ def decryptPayload (suite : CipherSuite) (keys : PacketKeys suite) (number : Pac
 /-- One byte's mask, with four low first-byte bits for long headers and five for short ones.
 
 The offset and width select only the encoded packet number, RFC 9001 §5.4.1. -/
-def maskByte (longHeader : Bool) (offset : Nat) (width : NumberLength)
+def maskByte (longHeader : Bool) (offset : Nat) (width : Packet.PacketNumberLength)
     (mask : Vector UInt8 5) (i : Nat) : UInt8 :=
   if i = 0 then mask[0] &&& (if longHeader then 0x0f else 0x1f)
   else if h : offset ≤ i ∧ i < offset + (width.val + 1) then
@@ -110,7 +105,7 @@ def maskByte (longHeader : Bool) (offset : Nat) (width : NumberLength)
   else 0
 
 /-- Apply the header mask without changing the ciphertext, RFC 9001 §5.4.1. -/
-def applyMask (longHeader : Bool) (offset : Nat) (width : NumberLength)
+def applyMask (longHeader : Bool) (offset : Nat) (width : Packet.PacketNumberLength)
     (mask : Vector UInt8 5) (bytes : ByteArray) : ByteArray :=
   ⟨(bytes.data.toList.mapIdx fun i b => b ^^^ maskByte longHeader offset width mask i).toArray⟩
 
@@ -126,18 +121,14 @@ structure Unmasked where
   ciphertext : ByteArray
   tag : ByteArray
   truncatedNumber : Nat
-  width : NumberLength
+  width : Packet.PacketNumberLength
   deriving DecidableEq
-
-/-- Read the packet-number field width from the unprotected first byte, RFC 9000 §17.1. -/
-def numberLength (first : UInt8) : NumberLength :=
-  ⟨first.toNat % 4, Nat.mod_lt _ (by decide)⟩
 
 /-- Remove header protection from one isolated packet, RFC 9001 §§5.4.1 to 5.4.2.
 
 The caller obtains the offset from the unprotected portion of the header.
 
-Reserved bits are checked only after successful authentication by `unprotect`. -/
+Reserved bits are checked only after the payload authenticates. -/
 def removeHeaderProtection (suite : CipherSuite) (hp : Vector UInt8 suite.keyLength)
     (offset : Nat) (packet : ByteArray) : Except Error Unmasked := do
   ensure (0 < offset ∧ offset < packet.size) .header
@@ -147,7 +138,7 @@ def removeHeaderProtection (suite : CipherSuite) (hp : Vector UInt8 suite.keyLen
     let first := packet[0]
     let longHeader := first &&& 0x80 != 0
     let first := first ^^^ (mask[0] &&& (if longHeader then 0x0f else 0x1f))
-    let width := numberLength first
+    let width := Packet.widthOfFirst first
     ensure (offset + width.val + 1 + 16 ≤ packet.size) .header
     let bytes := applyMask longHeader offset width mask packet
     let endHeader := offset + width.val + 1
@@ -156,7 +147,7 @@ def removeHeaderProtection (suite : CipherSuite) (hp : Vector UInt8 suite.keyLen
       bytesToNat (bytes.extract offset endHeader).data.toList, width⟩
   else throw .header
 
-/-- Check the fixed bit and the reserved bits after authentication, RFC 9000 §§17.2 and 17.3. -/
+/-- Check the fixed bit and the reserved bits after authentication, RFC 9000 §§17.2, 17.3.1. -/
 def checkAuthenticatedHeader (header : ByteArray) : Except Error Unit :=
   if h : 0 < header.size then
     let first := header[0]
@@ -171,14 +162,14 @@ def checkSuite (suite : CipherSuite) : Packet.Header → Except Error Unit
 
 /-- Check an authenticated header against the wire codec and isolated payload length.
 
-Long-header Length fields include the encoded number and authentication tag, RFC 9000 §17.2.
+A long header's Length counts the packet number and the protected payload, RFC 9000 §17.2.
 
-Retry and Version Negotiation use different protection and cannot enter this path. -/
+Retry and Version Negotiation packets carry no protected payload and fail here. -/
 def checkHeader (suite : CipherSuite) (header : ByteArray) (protectedLength : Nat) :
     Except Error Unit := do
   checkAuthenticatedHeader header
   if h : 0 < header.size then
-    let width := numberLength header[0]
+    let width := Packet.widthOfFirst header[0]
     let (decoded, trailing) ← (Packet.decode (header.size - (width.val + 1) - 1)
       header.data.toList).mapError fun _ => .header
     ensure (trailing = []) .header
@@ -200,7 +191,7 @@ def protect (suite : CipherSuite) (keys : PacketKeys suite) (number : PacketNumb
   checkHeader suite header (plaintext.size + 16)
   if h : 0 < header.size then
     let first := header[0]
-    let width := numberLength first
+    let width := Packet.widthOfFirst first
     ensure (0 < offset ∧ header.size = offset + width.val + 1) .header
     ensure (bytesToNat (header.extract offset header.size).data.toList =
       number.val % 256 ^ (width.val + 1)) .packetNumber
@@ -213,7 +204,7 @@ def protect (suite : CipherSuite) (keys : PacketKeys suite) (number : PacketNumb
 /-- Reconstruct a full packet number for the receiver's packet-number space, RFC 9000 Appendix A.3.
 
 `expected` is one greater than the largest authenticated packet number, or zero initially. -/
-def reconstructNumber (width : NumberLength) (truncated expected : Nat) :
+def reconstructNumber (width : Packet.PacketNumberLength) (truncated expected : Nat) :
     Except Error PacketNumber := do
   let number ← (Packet.decodePacketNumber width truncated expected).mapError fun _ => .packetNumber
   if h : number < 2 ^ 62 then return ⟨number, h⟩ else throw .packetNumber

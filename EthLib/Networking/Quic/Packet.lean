@@ -25,6 +25,10 @@ open Wire
 /-- The two-bit packet-number length, read as one through four bytes (§§17.2, 17.3.1). -/
 abbrev PacketNumberLength := Fin 4
 
+/-- The packet-number length bits of an unprotected first byte (§§17.2, 17.3.1). -/
+def widthOfFirst (first : UInt8) : PacketNumberLength :=
+  ⟨first.toNat % 4, Nat.mod_lt _ (by decide)⟩
+
 /-- The number of bytes selected by the packet-number length bits. -/
 def numberLength (width : PacketNumberLength) : Nat := width.val + 1
 
@@ -160,7 +164,7 @@ Retry and Version Negotiation consume the remaining datagram.
 -/
 def decode (shortConnectionIdLength : Nat) : Reader Header := do
   let first ← byte
-  let width : PacketNumberLength := ⟨first.toNat % 4, Nat.mod_lt _ (by decide)⟩
+  let width := widthOfFirst first
   if first.toNat < 128 then
     require (first.toNat / 64 = 1) .fixedBit
     require (first.toNat / 8 % 4 = 0) .reservedBits

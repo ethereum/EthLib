@@ -20,7 +20,7 @@ open EthLib.Cryptography.Hash
 def result {α : Type} (r : Except Protection.Error α) : Result α :=
   r.mapError fun e => (e.code, reprStr e)
 
-/-- Protect a QUIC v1 header and payload using a SHA-256 traffic secret, RFC 9001 §§5.1–5.4. -/
+/-- Protect a QUIC v1 header and payload using a SHA-256 traffic secret, RFC 9001 §§5.1 to 5.4. -/
 @[export eth_quic_protect]
 def protectExport (args : PyValue) : Result PyValue :=
   pyExport (fun (suite, secret, number, offset, header, plaintext) => do
@@ -30,7 +30,7 @@ def protectExport (args : PyValue) : Result PyValue :=
       result (Protection.protect suite keys ⟨number, h⟩ offset header plaintext)
     else result (.error .packetNumber : Except Protection.Error ByteArray)) args
 
-/-- Authenticate one isolated QUIC v1 packet, RFC 9001 §§5.3–5.4.
+/-- Authenticate one isolated QUIC v1 packet, RFC 9001 §§5.3 to 5.4.
 
 `expected` is zero initially, or one greater than the largest authenticated packet number. -/
 @[export eth_quic_unprotect]

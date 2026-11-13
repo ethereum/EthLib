@@ -1152,10 +1152,10 @@
   "Compute the Finished `verify_data` over the transcript that precedes it, RFC 8446 §4.4.4."
 
 #define DOC_quic_protect \
-  "Protect a QUIC v1 header and payload using a SHA-256 traffic secret, RFC 9001 §§5.1–5.4."
+  "Protect a QUIC v1 header and payload using a SHA-256 traffic secret, RFC 9001 §§5.1 to 5.4."
 
 #define DOC_quic_unprotect \
-  "Authenticate one isolated QUIC v1 packet, RFC 9001 §§5.3–5.4."
+  "Authenticate one isolated QUIC v1 packet, RFC 9001 §§5.3 to 5.4."
 
 #define DOC_quic_retry_tag \
   "Compute a QUIC v1 Retry tag from the original destination ID and untagged Retry, RFC 9001 §5.8."

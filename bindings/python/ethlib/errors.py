@@ -194,7 +194,7 @@ class QuicError(EthLibError, ValueError):
 
 
 class QuicProtectionError(EthLibError, ValueError):
-    """A QUIC packet has a malformed header, an insufficient sample or a failed AEAD check."""
+    """A QUIC packet or Retry fails a header, sample, packet-number, tag, AEAD or ID check."""
 
 
 class QuicVarintError(EthLibError, ValueError):

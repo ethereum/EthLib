@@ -49,13 +49,13 @@ theorem decryptPayload_encryptPayload (suite : CipherSuite) (keys : PacketKeys s
       rfl
 
 /-- Header protection preserves every packet's length, RFC 9001 §5.4.1. -/
-@[simp] theorem size_applyMask (longHeader : Bool) (offset : Nat) (width : NumberLength)
-    (mask : Vector UInt8 5) (bytes : ByteArray) :
+@[simp] theorem size_applyMask (longHeader : Bool) (offset : Nat)
+    (width : Packet.PacketNumberLength) (mask : Vector UInt8 5) (bytes : ByteArray) :
     (applyMask longHeader offset width mask bytes).size = bytes.size := by
   simp only [applyMask, ByteArray.size, List.size_toArray, List.length_mapIdx, Array.length_toList]
 
 /-- Applying one header mask twice restores every byte, RFC 9001 §5.4.1. -/
-theorem applyMask_applyMask (longHeader : Bool) (offset : Nat) (width : NumberLength)
+theorem applyMask_applyMask (longHeader : Bool) (offset : Nat) (width : Packet.PacketNumberLength)
     (mask : Vector UInt8 5) (bytes : ByteArray) :
     applyMask longHeader offset width mask
       (applyMask longHeader offset width mask bytes) = bytes := by
@@ -69,7 +69,7 @@ theorem applyMask_applyMask (longHeader : Bool) (offset : Nat) (width : NumberLe
 
 
 /-- Each header-protection byte is the input byte XOR its selected mask byte. -/
-theorem getElem_applyMask (longHeader : Bool) (offset : Nat) (width : NumberLength)
+theorem getElem_applyMask (longHeader : Bool) (offset : Nat) (width : Packet.PacketNumberLength)
     (mask : Vector UInt8 5) (bytes : ByteArray) (i : Nat) (hi : i < bytes.size) :
     (applyMask longHeader offset width mask bytes)[i]'(by simpa using hi) =
       bytes[i] ^^^ maskByte longHeader offset width mask i := by
@@ -77,7 +77,7 @@ theorem getElem_applyMask (longHeader : Bool) (offset : Nat) (width : NumberLeng
     List.getElem_mapIdx, Array.getElem_toList]
 
 /-- Header masking never changes the ciphertext sample, RFC 9001 §5.4.2. -/
-theorem sample_applyMask (longHeader : Bool) (offset : Nat) (width : NumberLength)
+theorem sample_applyMask (longHeader : Bool) (offset : Nat) (width : Packet.PacketNumberLength)
     (mask : Vector UInt8 5) (bytes : ByteArray) :
     sample (applyMask longHeader offset width mask bytes) offset = sample bytes offset := by
   unfold sample
@@ -120,7 +120,7 @@ theorem removeHeaderProtection_applyMask (suite : CipherSuite)
     (hoff : 0 < offset) (hsize : offset + 20 ≤ bytes.size)
     (s : Vector UInt8 16) (hs : sample bytes offset = .ok s) :
     let first := bytes[0]'(by omega)
-    let width := numberLength first
+    let width := Packet.widthOfFirst first
     let masked := applyMask (first &&& 0x80 != 0) offset width (headerMask suite hp s) bytes
     removeHeaderProtection suite hp offset masked = .ok
       ⟨bytes.extract 0 (offset + width.val + 1),
@@ -129,7 +129,7 @@ theorem removeHeaderProtection_applyMask (suite : CipherSuite)
         bytesToNat (bytes.extract offset (offset + width.val + 1)).data.toList, width⟩ := by
   dsimp only
   let first := bytes[0]'(by omega)
-  let width := numberLength first
+  let width := Packet.widthOfFirst first
   let longHeader := first &&& 0x80 != 0
   let mask := headerMask suite hp s
   have hfirst : (applyMask longHeader offset width mask bytes)[0]'(by simp; omega) =
@@ -140,7 +140,7 @@ theorem removeHeaderProtection_applyMask (suite : CipherSuite)
       ((applyMask longHeader offset width mask bytes)[0]'(by simp; omega) &&& 0x80 != 0) =
         longHeader := by
     rw [hfirst, headerForm_xor]
-  have hwidth : numberLength
+  have hwidth : Packet.widthOfFirst
       ((applyMask longHeader offset width mask bytes)[0]'(by simp; omega) ^^^
         (mask[0] &&& (if longHeader then 0x0f else 0x1f))) = width := by
     rw [hfirst, UInt8.xor_assoc, UInt8.xor_self, UInt8.xor_zero]
@@ -209,8 +209,8 @@ The explicit reconstruction hypothesis is therefore necessary. -/
 theorem unprotect_protect (suite : CipherSuite) (keys : PacketKeys suite)
     (number : PacketNumber) (expected offset : Nat) (header plaintext packet : ByteArray)
     (hheader : 0 < header.size)
-    (hreconstruct : reconstructNumber (numberLength header[0])
-      (number.val % 256 ^ ((numberLength header[0]).val + 1)) expected = .ok number)
+    (hreconstruct : reconstructNumber (Packet.widthOfFirst header[0])
+      (number.val % 256 ^ ((Packet.widthOfFirst header[0]).val + 1)) expected = .ok number)
     (hprotect : protect suite keys number offset header plaintext = .ok packet) :
     unprotect suite keys expected offset packet = .ok (header, plaintext) := by
   unfold protect at hprotect
@@ -221,7 +221,7 @@ theorem unprotect_protect (suite : CipherSuite) (keys : PacketKeys suite)
       simpa only [Subsingleton.elim u ()] using hc
     simp only [hc, bind, Except.bind] at hprotect
     rw [dite_eq_left hheader] at hprotect
-    generalize hw : numberLength header[0] = width at hprotect
+    generalize hw : Packet.widthOfFirst header[0] = width at hprotect
     rw [hw] at hreconstruct
     cases ho : ensure (0 < offset ∧ header.size = offset + width.val + 1) Error.header with
     | error e => rw [ho] at hprotect; cases hprotect
