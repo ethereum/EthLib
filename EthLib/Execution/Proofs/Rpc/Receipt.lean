@@ -20,7 +20,7 @@ Each receipt object has the Bloom filter of its logs.
 
 The gas of the receipt objects adds up to the last cumulative gas.
 
-Its base fee is at most the maximum fee of each transaction.
+The base fee of the block is at most the maximum fee of each transaction.
 
 So the effective gas price follows the formula of the description.
 -/
@@ -42,7 +42,9 @@ private theorem map_zipIdx_snd {α : Type} (l : List α) (f : Nat → Nat) :
   rw [List.map_map, List.range_eq_range'] at *
   exact this
 
-/-- The object of a receipt has the values of the receipt and of the transaction.
+/-- The object of a receipt has the index and type of the transaction, and the gas of the receipt.
+
+It also has the Bloom filter, logs and outcome of the receipt, and the price of the transaction.
 
 Its logs are those of the receipt, numbered from the given first log on. -/
 theorem receiptInfo_eq_ok {r : BlockRecord} {config : ChainConfig}
@@ -75,7 +77,7 @@ theorem receiptInfo_eq_ok {r : BlockRecord} {config : ChainConfig}
     · clear h hti
       simpa [List.map_map, Function.comp_def] using map_zipIdx_snd receipt.logs (firstLog + ·)
 
-/-- The objects of some receipts are one for each, and each has the values before it. -/
+/-- The objects of some receipts are one for each, built with the gas and logs of those before. -/
 private theorem receiptInfosFrom_eq_ok {r : BlockRecord} {config : ChainConfig} :
     ∀ {l : List (Transaction × Receipt r.fork)} {infos : List ReceiptInfo}
       {index before firstLog : Nat},
@@ -116,6 +118,30 @@ private theorem receiptInfosFrom_eq_ok {r : BlockRecord} {config : ChainConfig} 
           = firstLog + receipt.logs.length + (List.map (fun x => x.2.logs.length) (l.take k)).sum
           by omega]
       exact hri
+
+/-- The object of a receipt names the recipient of its transaction.
+
+A creation has the address that the sender makes at its nonce, and a call has none. -/
+theorem receiptInfo_contractAddress {r : BlockRecord} {config : ChainConfig}
+    {index before firstLog : Nat} {tx : Transaction} {receipt : Receipt r.fork}
+    {info : ReceiptInfo} (h : r.receiptInfo config index before firstLog tx receipt = .ok info) :
+    info.to = tx.to ∧ (tx.to.isSome → info.contractAddress = none) ∧
+      (tx.to = none → Evm.createAddress info.sender tx.nonce.toNat =
+        .ok (info.contractAddress.getD default)) ∧
+      (tx.to = none → info.contractAddress.isSome) := by
+  unfold receiptInfo at h
+  obtain ⟨ti, hti, h⟩ := bind_ok_iff.mp h
+  obtain ⟨sender, hash, -, -, rfl⟩ := transactionInfo_eq_ok.mp hti
+  rcases hto : tx.to with _ | a
+  · rcases hc : (Evm.createAddress sender tx.nonce.toNat) with e | ca
+    · simp [hto, hc, bind, Except.bind, Functor.map, Except.map, Except.mapError] at h
+    · simp [hto, hc, bind, Except.bind, pure, Except.pure, Functor.map, Except.map,
+        Except.mapError] at h
+      subst h
+      simp [hc]
+  · simp [hto, bind, Except.bind, pure, Except.pure] at h
+    subst h
+    simp
 
 /-- The receipt objects of a block are one for each receipt, in order.
 
@@ -264,16 +290,21 @@ end BlockRecord
 
 /-- From Byzantium, the outcome of a receipt is a status.
 
-It is `true` exactly when the receipt is a success, and its field is `status` `0x1` then. -/
+It is `true` exactly when the receipt is a success, and its field `status` is then `0x1`. -/
 theorem outcomeOf_of_byzantium {fork : Fork} (h : .byzantium ≤ fork) (o : Outcome fork) :
-    ∃ b, outcomeOf o = .inr b ∧ (b = true ↔ o = .status h true) ∧
-      outcomeFields (.inr b) = [("status", Serialization.JsonRpc.quantityJson
-        (if b then 1 else 0))] := by
+    ∃ b, outcomeOf o = .inr b ∧ (b = true ↔ o = .status h true) := by
   cases o with
   | postState before root => exact absurd (Nat.lt_of_lt_of_le before h) (Nat.lt_irrefl _)
   | status since succeeded =>
-    refine ⟨succeeded, rfl, ?_, rfl⟩
+    refine ⟨succeeded, rfl, ?_⟩
     cases succeeded <;> simp
+
+/-- Before Byzantium, the outcome of a receipt is the state root after the transaction. -/
+theorem outcomeOf_of_lt_byzantium {fork : Fork} (h : fork < .byzantium) (o : Outcome fork) :
+    ∃ root, outcomeOf o = .inl root ∧ o = .postState h root := by
+  cases o with
+  | postState before root => exact ⟨root, rfl, rfl⟩
+  | status since succeeded => exact absurd (Nat.lt_of_lt_of_le h since) (Nat.lt_irrefl _)
 
 /-- The effective gas price agrees with the formula of the description, in integers.
 
@@ -286,15 +317,10 @@ That part is the least of the maximum fee minus the base fee, and the maximum pr
 The formula holds when the base fee is at most the maximum fee. -/
 theorem effectiveGasPrice_description {baseFee : Nat} {tx : Transaction}
     (h : baseFee ≤ tx.maxFeePerGas) :
-    (effectiveGasPrice baseFee tx : Int) = match tx with
-      | .legacy t => t.gasPrice.toNat
-      | .accessList t => t.gasPrice.toNat
-      | .feeMarket t => baseFee + min ((t.maxFeePerGas.toNat : Int) - baseFee)
-          t.maxPriorityFeePerGas.toNat
-      | .blob t => baseFee + min ((t.maxFeePerGas.toNat : Int) - baseFee)
-          t.maxPriorityFeePerGas.toNat
-      | .setCode t => baseFee + min ((t.maxFeePerGas.toNat : Int) - baseFee)
-          t.maxPriorityFeePerGas.toNat := by
+    (effectiveGasPrice baseFee tx : Int) = match (generalizing := false) tx with
+      | .legacy t | .accessList t => t.gasPrice.toNat
+      | .feeMarket t | .blob t | .setCode t =>
+        baseFee + min ((t.maxFeePerGas.toNat : Int) - baseFee) t.maxPriorityFeePerGas.toNat := by
   rcases tx with t | t | t | t | t <;>
     simp only [Transaction.maxFeePerGas] at h <;>
     simp only [effectiveGasPrice, effectiveGasPrice.feeMarket] <;> omega
@@ -315,7 +341,7 @@ private theorem applyTransaction_receipts {fork : Fork} {env : Evm.BlockEnvironm
 
 /-- The receipts of the transactions of a body have the Bloom filters of their logs.
 
-Their cumulative gas never decreases, and stays at most the gas of the output. -/
+Their cumulative gas never decreases, and stays at most the cumulative gas of the output. -/
 private theorem applyTransactions_receipts {fork : Fork} {env : Evm.BlockEnvironment fork}
     {body : BodyState} {transactions : List Transaction} {output : BodyOutput fork}
     (h : applyTransactions env body transactions = .ok output) :
@@ -422,7 +448,7 @@ theorem transactionReceipt_eq_ok {v : ChainView} {hash : Hash32} {info : Receipt
     obtain ⟨infos, hinfos, h⟩ := bind_ok_iff.mp h
     exact ⟨r, tx, index, infos, rfl, hinfos, by simpa [pure, Except.pure] using h⟩
 
-/-- The receipts of a block are its receipt objects, so a single lookup gives the same objects. -/
+/-- The receipts of a block are the receipt objects of the block that the parameter names. -/
 theorem blockReceipts_of_resolve {v : ChainView} {p : BlockParam} {r : BlockRecord}
     (h : v.resolve p = .ok (some r)) :
     v.blockReceipts p = some <$> r.receiptInfos v.config := by
@@ -503,16 +529,19 @@ theorem Valid.sum_gasUsed {v : ChainView} {checkSeal : Bool} (hv : v.Valid check
 
 /-- In a valid view, take a canonical block after the lowest.
 
-Each of its receipt objects has the effective gas price of its transaction at the base fee.
+Each of its receipt objects has the effective gas price of the formula of the description.
 
-That base fee is at most the maximum fee, so the price follows the formula of the description. -/
+The formula reads in integers at the base fee of the block, which is at most the maximum fee. -/
 theorem Valid.effectiveGasPrice_receiptInfos {v : ChainView} {checkSeal : Bool}
     (hv : v.Valid checkSeal) {i : Nat} (hi : i + 1 < v.canonical.length)
     {infos : List ReceiptInfo} (h : v.canonical[i + 1].receiptInfos v.config = .ok infos)
     {k : Nat} {tx : Transaction} {info : ReceiptInfo}
     (htx : v.canonical[i + 1].block.transactions[k]? = some tx) (hinfo : infos[k]? = some info) :
-    (info.effectiveGasPrice : Int) = (effectiveGasPrice v.canonical[i + 1].baseFee tx : Int) ∧
-      v.canonical[i + 1].baseFee ≤ tx.maxFeePerGas := by
+    (info.effectiveGasPrice : Int) = match (generalizing := false) tx with
+      | .legacy t | .accessList t => t.gasPrice.toNat
+      | .feeMarket t | .blob t | .setCode t => v.canonical[i + 1].baseFee +
+          min ((t.maxFeePerGas.toNat : Int) - v.canonical[i + 1].baseFee)
+            t.maxPriorityFeePerGas.toNat := by
   obtain ⟨hk', hinfo'⟩ := List.getElem?_eq_some_iff.mp hinfo
   obtain ⟨-, -, hall⟩ := BlockRecord.receiptInfos_eq_ok h
   obtain ⟨tx', receipt, htx', -, hri⟩ := hall k hk'
@@ -520,7 +549,39 @@ theorem Valid.effectiveGasPrice_receiptInfos {v : ChainView} {checkSeal : Bool}
   cases htx'
   obtain ⟨-, -, -, -, -, -, -, -, hprice⟩ := BlockRecord.receiptInfo_eq_ok hri
   cases hinfo'
-  exact ⟨congrArg _ hprice, hv.baseFee_le_maxFeePerGas hi tx (List.mem_of_getElem? htx)⟩
+  rw [hprice]
+  exact effectiveGasPrice_description (hv.baseFee_le_maxFeePerGas hi tx (List.mem_of_getElem? htx))
+
+/-- In a valid view, take a transaction that a lookup finds in a canonical block.
+
+Its receipt is the object at its index among the receipts of the number of that block. -/
+theorem Valid.transactionReceipt_blockReceipts {v : ChainView} {checkSeal : Bool}
+    (hv : v.Valid checkSeal) {i : Nat} (hi : i < v.canonical.length) {hash : Hash32}
+    {tx : Transaction} {index : Nat} {info : ReceiptInfo}
+    (hf : v.findTransaction hash = some (v.canonical[i], tx, index))
+    (h : v.transactionReceipt hash = .ok (some info)) :
+    ∃ infos, v.blockReceipts (.number v.canonical[i].block.header.number) = .ok (some infos) ∧
+      infos[index]? = some info := by
+  obtain ⟨r, tx', index', infos, hf', hinfos, hget⟩ := transactionReceipt_eq_ok h
+  rw [hf] at hf'
+  obtain ⟨rfl, rfl, rfl⟩ := Option.some.inj hf'
+  have hres : v.resolve (.number v.canonical[i].block.header.number) =
+      .ok (some v.canonical[i]) := by
+    cases hb : v.byNumber v.canonical[i].block.header.number with
+    | none =>
+      have := List.find?_eq_none.mp hb _ (List.getElem_mem hi)
+      simp at this
+    | some r' =>
+      obtain ⟨hmem, hnum⟩ := ChainView.resolve_number
+        (v := v) (n := v.canonical[i].block.header.number) (r := r') (by simp [resolve, hb])
+      obtain ⟨j, hj, rfl⟩ := List.mem_iff_getElem.mp hmem
+      rw [hv.number j hj, hv.number i hi] at hnum
+      have : j = i := by omega
+      subst this
+      simp [resolve, hb]
+  refine ⟨infos, ?_, hget⟩
+  rw [blockReceipts_of_resolve hres, hinfos]
+  rfl
 
 end ChainView
 

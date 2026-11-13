@@ -15,16 +15,20 @@ It adds to the receipt of the block the values that the node computes from the b
 
 - `gasUsed` is the cumulative gas of the receipt minus that of the receipt before it.
 - `contractAddress` is the address that a creation makes from the sender and its nonce.
-- `effectiveGasPrice` is the effective gas price at the base fee of the block.
+- `effectiveGasPrice` is what the sender pays per gas, at the base fee of the block.
 - A blob transaction also has `blobGasUsed` and `blobGasPrice`.
 - Before Byzantium the receipt has `root`, the state root after the transaction.
 - From Byzantium it has `status`, `0x1` for a success and `0x0` for a failure.
 
-From Glamsterdam, the cumulative gas of a receipt counts the gas that the senders paid.
+From Glamsterdam, [EIP-7778][eip-7778] makes the cumulative gas the gas that senders paid.
 
-The descriptions still read "gas used", and the object keeps the field of the receipt.
+The object copies that cumulative gas, so `gasUsed` is the gas that the sender paid.
 
-The schema requires no field, and makes `type` and `to` optional.
+The descriptions of the schema read "gas used" for both fields.
+
+The schema requires ten fields of a receipt and only the transaction hash of a log.
+
+It leaves `type`, `to`, `contractAddress`, `root`, `status` and the blob fields optional.
 
 The object writes every field of its fork and type, as the fixtures of the source do.
 
@@ -32,16 +36,23 @@ A log has the position `logIndex` among all the logs of its block, from 0.
 
 No text of a receipt or a log defines it.
 
-The notes of [`eth_simulateV1`][simulate] state the rule, and add that receipts use this numbering.
+The section "Log index" of the notes of [`eth_simulateV1`][simulate] states the rule.
 
-The schema allows `removed` in a log, which only the text of subscriptions explains.
+It adds that receipts use this numbering.
+
+The schema allows `removed` in a log, which only the text of subscriptions explains, for reorgs.
 
 A log of a block that the node holds is not removed, and the object gives `false`.
 
 The fixtures do the same.
 
+A transaction found only in a block off the canonical chain gets the receipt of that block.
+
+An unknown transaction or block gets `null`, and the view never answers `4444` for pruned history.
+
 [receipt]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/schemas/receipt.yaml
-[simulate]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/docs-api/docs/ethsimulatev1-notes.md
+[eip-7778]: https://eips.ethereum.org/EIPS/eip-7778#specification
+[simulate]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/docs-api/docs/ethsimulatev1-notes.mdx
 -/
 
 @[expose] public section
