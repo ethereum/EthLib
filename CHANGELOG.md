@@ -18,6 +18,13 @@ Not yet released.
   Removing `starts` is an equivalent restatement under `conflict`, not a strengthening.
   `accountable_safety` uses the right finalized epoch instead of the maximum, which is equal under `ordered`.
 
+- In Lean, `DirectSafety.HashEvidence objects` is stated through the searches `findMessageCollision` and the new `findZeroRoot`, in place of a bounded existential.
+  No C export or Python function changes, and every theorem that mentions `HashEvidence` keeps its statement.
+  `hashEvidence_iff` proves that the new body is equivalent to the old one, for every list of objects and with no hypothesis.
+  The two bodies are not definitionally equal.
+  A proof that unfolds `HashEvidence` to take it apart first rewrites with `hashEvidence_iff`, or applies `hashEvidence_iff.mp`.
+  A proof that builds the evidence as an `Or` of the old form applies `hashEvidence_iff.mpr`, as `header_binding` and `checkpoint_binding` do.
+
 - `verify_kzg_proof` checks its inputs in the order of EIP-4844: the commitment, `z`, `y`, then the proof.
   When more than one input is invalid, the first in that order gives the error.
   Before, it checked the proof second, so an input with an invalid `z` and an invalid proof raised the error of the proof.
