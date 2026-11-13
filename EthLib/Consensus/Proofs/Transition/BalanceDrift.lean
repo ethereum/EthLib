@@ -15,7 +15,7 @@ import EthLib.Consensus.Proofs.Transition.PendingConsolidations
 
 A block operation keeps the effective balance of every validator that existed before it.
 
-Before Gloas a whole block keeps them.
+A whole block keeps them, at every fork.
 
 Loss uses initial slack, balance debits and rounding; gain uses initial excess and credits.
 
@@ -437,11 +437,12 @@ theorem effectiveKept_blsChange {f : Fork} {s t : BeaconState preset f}
   obtain ⟨_, found, _, _, _, set⟩ := processBlsToExecutionChange_ok ok
   exact effectiveKept_setValidator found set rfl
 
-/-- Before Gloas, a block keeps the effective balance of every existing validator. -/
-theorem effectiveKept_block {f : Fork} {s t : BeaconState preset f}
+/-- A block keeps the effective balance of every existing validator, at every fork.
+
+From Gloas the payload of the parent runs first, and its requests keep these balances too. -/
+theorem effectiveKept_processBlock {f : Fork} {s t : BeaconState preset f}
     {engine : ExecutionEngine preset f} {block : BeaconBlock preset f}
-    (early : f < .glamsterdam) (ok : processBlock config checks engine s block = .ok t) :
-    EffectiveKept s t := by
+    (ok : processBlock config checks engine s block = .ok t) : EffectiveKept s t := by
   -- Composing two steps needs the registry growth of the first.
   let Kept (a b : BeaconState preset f) : Prop :=
     EffectiveKept a b ∧ a.validators.data.size ≤ b.validators.data.size
@@ -457,7 +458,25 @@ theorem effectiveKept_block {f : Fork} {s t : BeaconState preset f}
     foldlM_ok_invariant (Kept a) (fun _ _ _ before stepped => trans before (each _ _ _ stepped))
       (refl a) computed
   obtain ⟨input, last, started, operated, -, synced⟩ := processBlock_operationsInput ok
-  have head : Kept s input := same (started.validators_eq early)
+  have head : Kept s input :=
+    started.step_of Kept refl trans
+      (fun _ paid => processParentExecutionPayload_step_of Kept refl trans
+        (fun _ validators => same validators)
+        (fun requested => ⟨effectiveKept_withdrawalRequest requested,
+          (registryLifecycle_processWithdrawalRequest requested).size_le⟩)
+        (fun requested => ⟨effectiveKept_consolidationRequest requested,
+          (registryLifecycle_processConsolidationRequest requested).size_le⟩) paid)
+      (fun headed => by
+        obtain ⟨_, _, rfl⟩ := processBlockHeader_eq headed
+        exact same rfl)
+      (fun _ executed => same (processBlockExecution_validators executed))
+      (fun revealed => by
+        obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq revealed
+        exact same rfl)
+      (fun _ voted => by
+        obtain ⟨_, _, rest⟩ := processEth1Data_eq voted
+        rw [← rest]
+        exact same rfl)
   obtain ⟨_, _, _, proposersOk, slashingsOk, attestedOk, rest⟩ :=
     processOperations_folds_of Kept refl trans
       (fun deposited => ⟨effectiveKept_processDeposit deposited,
@@ -483,6 +502,15 @@ theorem effectiveKept_block {f : Fork} {s t : BeaconState preset f}
         (by rw [(processAttestation_registry attested).1]),
       (frame_processAttestation attested).registryGrows⟩) attestedOk) <|
     trans rest tail).1
+
+/-- A block keeps the effective balance of every existing validator.
+
+The fork bound is not needed. -/
+theorem effectiveKept_block {f : Fork} {s t : BeaconState preset f}
+    {engine : ExecutionEngine preset f} {block : BeaconBlock preset f}
+    (_early : f < .glamsterdam) (ok : processBlock config checks engine s block = .ok t) :
+    EffectiveKept s t :=
+  effectiveKept_processBlock ok
 
 private theorem effectiveKept_pendingDeposits {f : Fork} {s t : BeaconState preset f}
     {electra : .pectra ≤ f}
@@ -750,7 +778,7 @@ theorem Run.effectiveAt_le_of_same_epoch {x y : ForkedBeaconState preset}
     have early' : last.fork < .glamsterdam := Nat.lt_trans early (by decide)
     cases step with
     | block engine signed due ok =>
-      rw [effectiveKept_block early' (applySignedBlock_ok ok).2.1 i inside]
+      rw [effectiveKept_processBlock (applySignedBlock_ok ok).2.1 i inside]
       exact prior
     | slot ok =>
       obtain ⟨next, advanced, upgraded⟩ := bind_ok_iff.mp ok
@@ -817,7 +845,7 @@ private theorem balanceDrift_gain {x y : ForkedBeaconState preset}
     obtain ⟨initial, path⟩ := balanceDrift_path_last pre
     cases step with
     | @block fork before after engine signed due ok =>
-      have kept := effectiveKept_block early (applySignedBlock_ok ok).2.1 i inside
+      have kept := effectiveKept_processBlock (applySignedBlock_ok ok).2.1 i inside
       have credits : pathCredits i (pre.snoc (.block engine signed due ok)).balancePath =
           pathCredits i pre.balancePath +
             (actualBalanceAt ⟨fork, after⟩ i - actualBalanceAt ⟨fork, before⟩ i) := by
@@ -1124,7 +1152,7 @@ private theorem balanceDrift_reference_run {x y : ForkedBeaconState preset}
         simp [pathDebits]
       rw [debits] at funded ⊢
       have prior := ih middleEarly (by omega)
-      have kept := effectiveKept_block early (applySignedBlock_ok ok).2.1 i
+      have kept := effectiveKept_processBlock (applySignedBlock_ok ok).2.1 i
         (Array.getElem?_eq_some_iff.mp located).1
       exact ⟨by rw [kept]; exact prior.1, by omega⟩
     | slot ok =>

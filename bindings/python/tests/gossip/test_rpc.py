@@ -17,11 +17,11 @@ from raising import raises
 # Its section "Message Structure" makes a key the varint of 8 * field number + wire type.
 # Wire type 0 is a varint, 1 eight bytes, 2 a length and bytes, 3 and 4 a group, 5 four bytes.
 # The fields of the partial message extension are in the same repository and commit.
-# ControlExtensions, the extensions field 6 of ControlMessage, and SubOpts with its fields 3
-# and 4 are in pubsub/gossipsub/extensions/extensions.proto.
+# ControlExtensions is in pubsub/gossipsub/extensions/extensions.proto.
+# So are the extensions field 6 of ControlMessage and the fields 3 and 4 of SubOpts.
 # The field `partial` (10) of RPC and PartialMessagesExtension are in the same file.
-# So is the experimental field 6492434, `optional bool testExtension` in ControlExtensions
-# and `optional TestExtension testExtension`, a message, in RPC.
+# So is the experimental field 6492434, `optional bool testExtension` in ControlExtensions.
+# In RPC, that field is `optional TestExtension testExtension`, a message.
 
 TOPIC = "/eth2/b5303f2a/data_column_sidecar_3/ssz_snappy"
 PREFIX = "gossip RPC rejected: EthLib.Networking.Gossip.RpcError."
@@ -65,8 +65,8 @@ def _control(*records: bytes) -> bytes:
 
 
 # One RPC with every field, each written in the order and form of the encoder of EthLib.
-# Every singular field is written, even at its default, except the flags, which are written only
-# when true, and the optional fields, which are written only when present.
+# Every singular field is written, even at its default, except the flags and the optional fields.
+# A flag is written only when true, and an optional field only when present.
 # So the bytes are also its encoding.
 # Each top-level list, control list and inner list of a first entry has two distinct entries.
 # So a reversed or shuffled list shows.

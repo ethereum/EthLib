@@ -48,6 +48,17 @@ def new_payload_on_chain(
     )
 
 
+def new_payload_routes(
+    config: dict[str, Any], preset: str, fork: str, request: bytes
+) -> tuple[list[Any] | None, str | None, int | None, bool]:
+    """Run a beacon payload request in SSZ through the JSON method and the beacon engine."""
+    # The result is the JSON parameters, then the status of the method or the code of its error.
+    # Last comes whether the beacon engine accepts, with the state transition taken as passed.
+    # Neither route holds the parent's state, so both stop before execution.
+    # The parameters are None only for a preset whose logs Bloom filter is not 256 bytes.
+    return _native.engine_new_payload_routes(config, preset, fork, request)
+
+
 def build_payload(
     config: dict,
     state: bytes,
@@ -77,13 +88,23 @@ def build_payload(
 
 
 def forkchoice_updated(
-    config: dict, tree: list, method: str, params: list, finalized: str | None = None
+    config: dict,
+    tree: list,
+    method: str,
+    params: list,
+    finalized: str | None = None,
+    *,
+    terminal_total_difficulty: int,
 ) -> dict:
-    """The response to an `engine_forkchoiceUpdated` call, against a tree of known payloads."""
-    # Each payload of the tree has a block hash, a parent hash, a validity, a number and a time.
+    """The response to an `engine_forkchoiceUpdated` call, against a tree of known blocks."""
+    # Each block of the tree has a block hash, a parent hash, a validity, a number and a time.
+    # A block of proof of work also has `totalDifficulty` and `parentTotalDifficulty`.
+    # The most recent one on the chain of the head must be terminal for `terminal_total_difficulty`.
     # The execution layer may know a finalized block, the latest one an earlier update named.
     request = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
-    return _native.engine_forkchoice_updated(config, tree, finalized, request)
+    return _native.engine_forkchoice_updated(
+        config, tree, finalized, terminal_total_difficulty, request
+    )
 
 
 # One entry of a blob pool: the versioned hash, the blob, the blob proof, and the 128 cells.
@@ -326,6 +347,7 @@ __all__ = [
     "jwt_check",
     "new_payload",
     "new_payload_on_chain",
+    "new_payload_routes",
     "forkchoice_updated",
     "get_blobs",
     "PoolEntry",

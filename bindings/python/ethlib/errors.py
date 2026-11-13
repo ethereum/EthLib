@@ -189,6 +189,14 @@ class UvarintError(EthLibError, ValueError):
     """The bytes do not start with a multiformats unsigned varint, or a value is out of range."""
 
 
+class QuicError(EthLibError, ValueError):
+    """A QUIC header, packet number or frame is malformed, out of range, or not allowed there."""
+
+
+class QuicProtectionError(EthLibError, ValueError):
+    """A QUIC packet or Retry fails a check; code 8 is a reserved bit in an authenticated packet."""
+
+
 class QuicVarintError(EthLibError, ValueError):
     """The bytes end before the QUIC integer they start, or a value is not below 2^62."""
 
@@ -211,6 +219,10 @@ class YamuxError(EthLibError, ValueError):
 
     Stream errors have codes from 101.
     """
+
+
+class TlsCertificateError(EthLibError, ValueError):
+    """A libp2p TLS certificate or its peer authentication was rejected."""
 
 
 class Libp2pIdentityError(EthLibError, ValueError):
@@ -370,10 +382,13 @@ __all__ = [
     "VarintError",
     "UvarintError",
     "QuicVarintError",
+    "QuicProtectionError",
+    "QuicError",
     "MultistreamError",
     "MplexError",
     "YamuxError",
     "Libp2pIdentityError",
+    "TlsCertificateError",
     "GossipError",
     "Discv5Error",
     "RlpxError",

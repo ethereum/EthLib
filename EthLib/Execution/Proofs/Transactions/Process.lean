@@ -354,6 +354,37 @@ theorem gas_prepareFirstFrame {chainId : Nat} {message : Message fork}
     subst h
     rfl
 
+omit [LawfulGasMeter Meter] refl trans charge chargeState in
+/-- The state of the first frame has read the address that the message runs at.
+
+A creation reads the address it creates, and a call reads its recipient.
+
+This holds when the recipient of a call is the address that its message runs at. -/
+theorem currentRead_prepareFirstFrame {chainId : Nat} {message : Message fork}
+    {state : State.TransactionState} {substate : Substate} {auths : List Authorization}
+    {paid : Std.ExtTreeSet Address} {first : FirstFrame fork Meter}
+    (recipient : ∀ target, message.target = some target → target = message.currentTarget)
+    (h : prepareFirstFrame chainId message state substate auths paid = .ok first) :
+    message.currentTarget ∈ first.state.accountReads := by
+  unfold prepareFirstFrame at h
+  dsimp only [bind, Except.bind, pure, Except.pure] at h
+  split at h
+  · repeat' split at h
+    all_goals first | (cases h; done) | skip
+    all_goals
+      simp only [Except.ok.injEq] at h
+      subst h
+      exact Std.ExtTreeSet.mem_insert_self
+  · rename_i target htarget
+    obtain rfl := recipient target htarget
+    repeat' split at h
+    all_goals first | (cases h; done) | skip
+    all_goals
+      simp only [Except.ok.injEq] at h
+      subst h
+      simp [FirstFrame.ofMeter, State.TransactionState.recordAccountRead,
+        Std.ExtTreeSet.mem_insert]
+
 end Meter
 
 /-! ## The gas used -/

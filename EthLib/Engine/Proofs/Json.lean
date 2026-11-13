@@ -343,16 +343,21 @@ theorem anyPayload_executionPayloadJson {fork : Fork} (p : ExecutionPayload fork
   obtain ⟨fs, hfs, hp⟩ := fields_mkObj "payload" (names_distinct p) (fields_present p)
   exact anyPayload_of_perm p extra hfs hp
 
-/-- The decoder of payloads of version 4 reads back the JSON of a payload from Dencun on.
+/-- The object of a payload of version 4 from Dencun on, and that object without its two new fields.
 
-It reads the payload at its fork, the block access list and the slot number.
+The first holds the pairs of the payload, then the access list and the slot.
 
-The extra data must hold at most 32 bytes, the bound of its type in the Engine API. -/
-theorem payloadV4_executionPayloadV4Json {fork : Fork} (p : ExecutionPayload fork)
-    (blockAccessList : ByteArray) (slotNumber : UInt64) (dencun : .dencun ≤ fork)
-    (extra : p.extraData.size ≤ MAX_EXTRA_DATA_BYTES) :
-    ∃ any, payloadV4 (executionPayloadV4Json p blockAccessList slotNumber) =
-      .ok (any, blockAccessList, slotNumber) ∧ any.atFork fork = .ok p := by
+The second holds the pairs of the payload alone. -/
+private theorem fields_executionPayloadV4Json {fork : Fork} (p : ExecutionPayload fork)
+    (blockAccessList : ByteArray) (slotNumber : UInt64) (dencun : .dencun ≤ fork) :
+    ∃ fs, fields "payload" (executionPayloadV4Json p blockAccessList slotNumber) = .ok fs ∧
+      fs.Perm (executionPayloadFields p ++ [("blockAccessList",
+        dataJson blockAccessList.data.toList), ("slotNumber", quantityJson slotNumber.toNat)]) ∧
+      (executionPayloadFields p ++ [("blockAccessList", dataJson blockAccessList.data.toList),
+        ("slotNumber", quantityJson slotNumber.toNat)]).Pairwise (fun a b => a.1 ≠ b.1) ∧
+      ∃ fs', fields "payload" (Lean.Json.mkObj
+          (fs.filter fun (name, _) => !amsterdamFields.contains name)) = .ok fs' ∧
+        fs'.Perm (executionPayloadFields p) := by
   have h1 : Fork.shapella ≤ fork := Std.le_trans (by decide) dencun
   have hn : (executionPayloadFields p).map Prod.fst = payloadFieldsV3 := by
     simp [executionPayloadFields, h1, dencun, payloadFieldsV3, payloadFieldsV2, payloadFieldsV1]
@@ -378,8 +383,6 @@ theorem payloadV4_executionPayloadV4Json {fork : Fork} (p : ExecutionPayload for
       rcases hx with rfl | rfl <;> exact isNull_str _
   obtain ⟨fs, hfs, hp⟩ := fields_mkObj "payload" hdist hpres
   have hfsd := (hp.pairwise_iff fun hab => Ne.symm hab).mpr hdist
-  have hex := hasExactly_of_perm hp
-  rw [List.map_append, hn] at hex
   -- The pairs of version 3 are those that keep their name when the two new names are dropped.
   have hflt : (executionPayloadFields p ++ [("blockAccessList",
       dataJson blockAccessList.data.toList), ("slotNumber", quantityJson slotNumber.toNat)]).filter
@@ -395,8 +398,27 @@ theorem payloadV4_executionPayloadV4Json {fork : Fork} (p : ExecutionPayload for
   obtain ⟨fs', hfs', hp'⟩ := fields_mkObj "payload"
     (hfsd.sublist (List.filter_sublist ..))
     (fun x hx => hpres x (hp.mem_iff.mp (List.mem_filter.mp hx).1))
-  obtain ⟨any, hany, hat⟩ := anyPayload_of_perm p extra hfs'
-    (hp'.trans (hflt ▸ hp.filter _))
+  exact ⟨fs, hfs, hp, hdist, fs', hfs', hp'.trans (hflt ▸ hp.filter _)⟩
+
+/-- The decoder of payloads of version 4 reads back the JSON of a payload from Dencun on.
+
+It reads the payload at its fork, the block access list and the slot number.
+
+The extra data must hold at most 32 bytes, the bound of its type in the Engine API. -/
+theorem payloadV4_executionPayloadV4Json {fork : Fork} (p : ExecutionPayload fork)
+    (blockAccessList : ByteArray) (slotNumber : UInt64) (dencun : .dencun ≤ fork)
+    (extra : p.extraData.size ≤ MAX_EXTRA_DATA_BYTES) :
+    ∃ any, payloadV4 (executionPayloadV4Json p blockAccessList slotNumber) =
+      .ok (any, blockAccessList, slotNumber) ∧ any.atFork fork = .ok p := by
+  have h1 : Fork.shapella ≤ fork := Std.le_trans (by decide) dencun
+  have hn : (executionPayloadFields p).map Prod.fst = payloadFieldsV3 := by
+    simp [executionPayloadFields, h1, dencun, payloadFieldsV3, payloadFieldsV2, payloadFieldsV1]
+  obtain ⟨fs, hfs, hp, hdist, fs', hfs', hp'⟩ :=
+    fields_executionPayloadV4Json p blockAccessList slotNumber dencun
+  have hfsd := (hp.pairwise_iff fun hab => Ne.symm hab).mpr hdist
+  have hex := hasExactly_of_perm hp
+  rw [List.map_append, hn] at hex
+  obtain ⟨any, hany, hat⟩ := anyPayload_of_perm p extra hfs' hp'
   refine ⟨any, payloadV4_eq_ok_iff.mpr ⟨fs, hfs, ?_, hany,
     dataJson blockAccessList.data.toList, quantityJson slotNumber.toNat, ?_, ?_, ?_, ?_⟩, hat⟩
   · simpa [payloadFieldsV4, amsterdamFields] using hex
@@ -404,6 +426,64 @@ theorem payloadV4_executionPayloadV4Json {fork : Fork} (p : ExecutionPayload for
   · exact lookup_of_mem hfsd (hp.mem_iff.mpr (by simp))
   · exact bytes_dataJson _ _
   · exact uint64_toDigits _ _
+
+/-- A decoded payload holds the extra data that its field decodes to, within 32 bytes. -/
+private theorem extraData_of_anyPayload {j : Lean.Json} {any : AnyPayload}
+    (h : anyPayload j = .ok any) :
+    ∃ fs, fields "payload" j = .ok fs ∧ ∃ v, field "payload" fs "extraData" = .ok v ∧
+      bytesMax "extraData" MAX_EXTRA_DATA_BYTES v = .ok any.common.extraData := by
+  unfold anyPayload at h
+  dsimp only at h
+  repeat' (first
+    | (simp only [invalid_eq] at h; cases h; done)
+    | (obtain ⟨_, step, h⟩ := bind_ok_iff.mp h
+       first | cases step | obtain ⟨_, -, rfl⟩ := map_ok_iff.mp step | skip)
+    | split at h)
+  -- The extra data of the result is the value that its field decoded to.
+  all_goals
+    cases h
+    exact ⟨_, liftM_eq_ok_iff.mp ‹liftM (fields _ _) = _›, _,
+      liftM_eq_ok_iff.mp ‹liftM (field _ _ "extraData") = _›,
+      liftM_eq_ok_iff.mp ‹liftM (bytesMax _ _ _) = _›⟩
+
+/-- Fields that are those of a payload decode only when its extra data holds at most 32 bytes. -/
+private theorem extraData_le_of_perm {fork : Fork} (p : ExecutionPayload fork) {j : Lean.Json}
+    {fs : List (String × Lean.Json)} (hfs : fields "payload" j = .ok fs)
+    (hp : fs.Perm (executionPayloadFields p)) {any : AnyPayload} (h : anyPayload j = .ok any) :
+    p.extraData.size ≤ MAX_EXTRA_DATA_BYTES := by
+  obtain ⟨fs', hfs', v, hv, hb⟩ := extraData_of_anyPayload h
+  obtain rfl := Except.ok.inj (hfs.symm.trans hfs')
+  rw [field_of_perm hp (names_distinct p)
+    (by simp [executionPayloadFields] :
+      ("extraData", dataJson p.extraData.data.toList) ∈ executionPayloadFields p)] at hv
+  obtain rfl := Except.ok.inj hv
+  obtain ⟨hb, hs⟩ := bytesMax_eq_ok_iff.mp hb
+  rw [bytes_dataJson] at hb
+  rwa [Except.ok.inj hb]
+
+/-- The decoder of payloads of versions 1 to 3 reads the JSON of a payload only when it fits.
+
+Its extra data must hold at most 32 bytes. -/
+theorem extraData_le_of_anyPayload_executionPayloadJson {fork : Fork} {p : ExecutionPayload fork}
+    {any : AnyPayload} (h : anyPayload (executionPayloadJson p) = .ok any) :
+    p.extraData.size ≤ MAX_EXTRA_DATA_BYTES := by
+  obtain ⟨fs, hfs, hp⟩ := fields_mkObj "payload" (names_distinct p) (fields_present p)
+  exact extraData_le_of_perm p hfs hp h
+
+/-- The decoder of version 4 reads the JSON of a payload from Dencun on only when it fits.
+
+Its extra data must hold at most 32 bytes. -/
+theorem extraData_le_of_payloadV4_executionPayloadV4Json {fork : Fork} {p : ExecutionPayload fork}
+    {blockAccessList : ByteArray} {slotNumber : UInt64} (dencun : .dencun ≤ fork)
+    {x : AnyPayload × ByteArray × UInt64}
+    (h : payloadV4 (executionPayloadV4Json p blockAccessList slotNumber) = .ok x) :
+    p.extraData.size ≤ MAX_EXTRA_DATA_BYTES := by
+  obtain ⟨any, list, slot⟩ := x
+  obtain ⟨fs, hfs, -, -, fs', hfs', hp'⟩ :=
+    fields_executionPayloadV4Json p blockAccessList slotNumber dencun
+  obtain ⟨fs₀, hfs₀, -, hany, -⟩ := payloadV4_eq_ok_iff.mp h
+  obtain rfl := Except.ok.inj (hfs.symm.trans hfs₀)
+  exact extraData_le_of_perm p hfs' hp' hany
 
 /-- The name of every status reads back as that status. -/
 theorem statusOfName_name (s : Status) : statusOfName s.name = some s := by

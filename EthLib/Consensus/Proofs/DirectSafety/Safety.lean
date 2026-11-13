@@ -27,22 +27,15 @@ The weights are the effective balances at the states of the runs.
 
 A slashing in the shared prefix does not make a key accountable by itself.
 
-A key that it slashed leaves the reference set and the accountable set.
+A key slashed by `x` is outside the reference set and outside the accountable keys.
 
-`Accountable` can still hold for such a key, but `accountableKeys` keeps only `unslashedKeys x`.
+A prefix slashing can name a key without slashing it, so that key can stay in the reference set.
 
-A key that a prefix attester slashing named without slashing it stays in the reference set.
+Such a key is accountable only through double votes or through evidence in a tail.
 
-`slashIfSlashable` skips such a key.
+A key slashed by `x` stays out of the later drift only while its slashed flag stays set.
 
-It can still count, through double votes or through evidence in a tail.
-
-The stake of a prefix-slashed key is absent from the later drift and support.
-
-That holds only because of forward persistence: a slashed flag stays set.
-
-The proofs here do not need that fact, because the drift is observed, not bounded.
-
+The proofs do not need that fact, because the drift is observed, not bounded.
 
 The drift charges twice the stake that leaves or loses balance after `x`.
 
@@ -89,13 +82,15 @@ noncomputable def accountableKeys {g x a b : ForkedBeaconState preset}
   classical
   exact (unslashedKeys x.state).filter (Accountable shared left right)
 
-/-- Two quorums with slashable common voters bound the unslashed stake at `x` by accountable stake.
+/-- Two quorums with slashable common voters bound the unslashed active stake at `x`.
+
+The bound is three times the accountable stake.
 
 The drift at the state of each quorum is added.
 
 Each quorum is a quorum call of its run, or the test of the step of its view.
 
-Both are in the tails, because they target epoch `low` or later.
+Both are in the tails: they target epoch `low` or later, and `x` is no later than its first slot.
 
 A key slashed at a quorum and unslashed at `x` has slashing evidence in the tail of the quorum. -/
 private theorem view_pair_bound {g x a b : ForkedBeaconState preset}
@@ -212,9 +207,9 @@ private theorem view_pair_bound {g x a b : ForkedBeaconState preset}
   dsimp only [stateDrift]
   omega
 
-/-- A conflict at a finalized epoch puts `x` no later than the first slot of that epoch.
+/-- A conflict between two checkpoints puts `x` no later than the first slot of the earlier epoch.
 
-The other checkpoint has that epoch or a later one. -/
+The first checkpoint has the earlier epoch. -/
 private theorem conflict_starts {g x a b : ForkedBeaconState preset}
     (shared : Run config checks g x) (left : Run config checks x a) (right : Run config checks x b)
     (f j : Checkpoint) (ordered : f.epoch ≤ j.epoch)

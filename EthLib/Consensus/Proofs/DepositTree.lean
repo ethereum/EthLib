@@ -6,6 +6,7 @@ public import EthLib.Consensus.Transition.Genesis
 public import EthLib.Serialization.Proofs.Ssz.Merkle.Tree
 public import EthLib.Serialization.Proofs.Ssz.Typed.RootedList
 public import EthLib.Serialization.Proofs.Ssz.Typed.Root
+import EthLib.Serialization.Proofs.Ssz.Merkle.Branch
 
 /-!
 # Proofs: the deposit tree computes the SSZ deposit root
@@ -15,6 +16,10 @@ Pushing deposits one at a time builds the tree that holds them all from the left
 Its root is the SSZ root of the list of their data, which the chain votes on.
 
 Finalization keeps the root, and a snapshot rebuilds a tree with the same later roots.
+
+A proof that the tree gives is at an index past its finalized deposits and below its count.
+
+It passes the Merkle check of a deposit against the deposit root, for at most `2^32` deposits.
 -/
 
 @[expose] public section
@@ -557,6 +562,106 @@ theorem root_fromSnapshotParts {roots : List Root} {count height : Nat}
           obtain ⟨left, rebuilt, rfl⟩ := parts
           simp [root, ih half low rebuilt]
 
+/--
+A walk down to a leaf gives a branch that climbs back to the root of the subtree.
+
+The rest of a longer branch then climbs on from that root.
+-/
+private theorem climbBranch_generateProof {index : Nat} :
+    ∀ {height : Nat} {tree : DepositMerkleTree} {reached : Root} {branch : Vector Root height},
+      tree.generateProof index height = some (reached, branch) → ∀ rest : List Bytes,
+        climbBranch index 0 reached.toArray (branch.toList.map Vector.toArray ++ rest)
+          = climbBranch index height tree.root.toArray rest
+  | 0, tree, reached, branch, walked, rest => by
+    simp only [generateProof, Option.some.injEq, Prod.mk.injEq] at walked
+    obtain ⟨rfl, rfl⟩ := walked
+    simp
+  | height + 1, .node left right, reached, branch, walked, rest => by
+    simp only [generateProof] at walked
+    generalize picked : (if index.testBit height then (right, left) else (left, right)) = pair
+      at walked
+    obtain ⟨below, sibling⟩ := pair
+    cases walkedBelow : below.generateProof index height with
+    | none => simp [walkedBelow] at walked
+    | some found =>
+      obtain ⟨found, belowBranch⟩ := found
+      simp only [walkedBelow] at walked
+      obtain ⟨rfl, rfl⟩ := walked
+      simp only [Vector.toList_push, List.map_append, List.map_cons, List.map_nil,
+        List.append_assoc, List.singleton_append]
+      rw [climbBranch_generateProof walkedBelow, climbBranch_cons]
+      cases bit : index.testBit height <;> simp only [bit] at picked <;> cases picked <;>
+        simp [gindexBit, bit, root]
+  | _ + 1, .zero _, _, _, walked, _ | _ + 1, .leaf _, _, _, walked, _
+  | _ + 1, .finalized .., _, _, walked, _ => by simp [generateProof] at walked
+
+/--
+A walk down to a leaf finds the leaf that the subtree holds at the index modulo `2^height`.
+
+The walk reads only the bits of the index below the height.
+-/
+theorem Holds.getElem?_generateProof {height : Nat} {tree : DepositMerkleTree}
+    {leaves : List Root} (holds : Holds height tree leaves) {index : Nat} {leaf : Root}
+    {branch : Vector Root height} (walked : tree.generateProof index height = some (leaf, branch))
+    (inside : index % 2 ^ height < leaves.length) :
+    leaves[index % 2 ^ height]? = some leaf := by
+  induction holds generalizing index leaf with
+  | zero => simp at inside
+  | leaf hash =>
+    simp only [generateProof, Option.some.injEq, Prod.mk.injEq] at walked
+    simp [← walked.1, root]
+    rw [Nat.mod_one]
+    rfl
+  | @finalized h leaves full =>
+    cases h with
+    | zero =>
+      have one : leaves.length = 1 := by simpa using full
+      match leaves, one with
+      | [hash], _ =>
+        simp only [generateProof, Option.some.injEq, Prod.mk.injEq] at walked
+        have := walked.1
+        simp [create, root] at this
+        simp [← this]
+        rw [Nat.mod_one]
+        rfl
+    | succ h => simp [generateProof] at walked
+  | @node h left right leftLeaves rightLeaves hl hr packed ihl ihr =>
+    have split : index % 2 ^ (h + 1) = index % 2 ^ h + 2 ^ h * (index / 2 ^ h % 2) := by
+      simpa using Nat.mod_pow_succ (x := index) (b := 2) (k := h)
+    have bit : index.testBit h = decide (index / 2 ^ h % 2 = 1) := by
+      simp [Nat.testBit_eq_decide_div_mod_eq]
+    have lt := Nat.mod_lt index (Nat.two_pow_pos h)
+    have lenl := hl.length_le
+    have lenr := hr.length_le
+    simp only [List.length_append] at inside
+    cases hb : index.testBit h
+    · simp only [generateProof, hb, Bool.false_eq_true, ↓reduceIte, Option.bind_eq_bind,
+        Option.bind_eq_some_iff, Option.pure_def, Option.some.injEq, Prod.exists] at walked
+      obtain ⟨_, _, w, rfl, -⟩ := walked
+      have zero : index / 2 ^ h % 2 = 0 := by
+        rw [hb] at bit; simpa using bit
+      rw [split, zero, Nat.mul_zero, Nat.add_zero] at inside ⊢
+      have : index % 2 ^ h < leftLeaves.length := by
+        rcases packed with rfl | full
+        · simp at inside; omega
+        · omega
+      rw [List.getElem?_append_left this]
+      exact ihl w this
+    · simp only [generateProof, hb, ↓reduceIte, Option.bind_eq_bind,
+        Option.bind_eq_some_iff, Option.pure_def, Option.some.injEq, Prod.exists] at walked
+      obtain ⟨_, _, w, rfl, -⟩ := walked
+      have one : index / 2 ^ h % 2 = 1 := by
+        rw [hb] at bit; simpa using bit
+      rw [split, one, Nat.mul_one] at inside ⊢
+      have full : leftLeaves.length = 2 ^ h := by
+        rcases packed with rfl | full
+        · simp at inside; omega
+        · exact full
+      rw [Nat.add_comm, List.getElem?_append_right (by omega)]
+      have e : 2 ^ h + index % 2 ^ h - leftLeaves.length = index % 2 ^ h := by omega
+      rw [e]
+      exact ihr w (by omega)
+
 end DepositMerkleTree
 
 namespace DepositTree
@@ -870,6 +975,70 @@ theorem getRoot_fromSnapshot_eq {snapshot : DepositTreeSnapshot} {rebuilt : Depo
     rw [getRoot, root_fromSnapshotParts (Nat.lt_of_not_le fits) climbed parts]
     exact (Decidable.of_not_not same).symm
   · cases built
+
+/-! ## The proof of a deposit -/
+
+/--
+A proof that the tree gives is at an index past its finalized deposits and below its count.
+
+The count is below `2^32`, the number of leaves of the tree.
+
+Its nodes are the siblings on the walk down to that index, from the leaf up, then the count.
+-/
+theorem getProof_ok {tree : DepositTree} {index : Nat} {leaf : Root}
+    {proof : Vector Root (DEPOSIT_CONTRACT_TREE_DEPTH.toNat + 1)}
+    (proved : tree.getProof index = .ok (leaf, proof)) :
+    tree.mixInLength < 2 ^ DEPOSIT_CONTRACT_TREE_DEPTH.toNat
+      ∧ tree.tree.getFinalized.2 ≤ index ∧ index < tree.mixInLength
+      ∧ ∃ branch, tree.tree.generateProof index DEPOSIT_CONTRACT_TREE_DEPTH.toNat
+          = some (leaf, branch) ∧ proof = branch.push (uintToBytes 32 tree.mixInLength) := by
+  simp only [getProof, bind, Except.bind, throw, throwThe, MonadExceptOf.throw, pure,
+    Except.pure] at proved
+  split at proved
+  · cases proved
+  split at proved
+  · cases proved
+  split at proved
+  · cases proved
+  split at proved
+  · rename_i found branch walked
+    simp only [Except.ok.injEq, Prod.mk.injEq] at proved
+    obtain ⟨rfl, rfl⟩ := proved
+    exact ⟨by omega, by omega, by omega, branch, walked, rfl⟩
+  · cases proved
+
+/-- A proof that the tree gives passes the Merkle check of a deposit against its deposit root. -/
+theorem isValidMerkleBranch_getProof {tree : DepositTree} {index : Nat} {leaf : Root}
+    {proof : Vector Root (DEPOSIT_CONTRACT_TREE_DEPTH.toNat + 1)}
+    (proved : tree.getProof index = .ok (leaf, proof)) :
+    isValidMerkleBranch leaf proof.toList (DEPOSIT_CONTRACT_TREE_DEPTH.toNat + 1) index
+      tree.getRoot = true := by
+  obtain ⟨fits, -, below, branch, walked, rfl⟩ := getProof_ok proved
+  rw [isValidMerkleBranch_eq_true_iff]
+  refine ⟨by simp, ?_⟩
+  rw [Vector.toList_push, List.map_append, climbBranch_generateProof walked]
+  -- The index is below `2^32`, so the count joins on the right at the top.
+  have top : index.testBit DEPOSIT_CONTRACT_TREE_DEPTH.toNat = false :=
+    Nat.testBit_lt_two_pow (Nat.lt_trans below fits)
+  simp [climbBranch_cons, gindexBit, top, getRoot, mixInCount]
+
+/--
+The leaf of a proof that the tree gives is the deposit at that index.
+
+The tree must hold its deposits in order and count them.
+-/
+theorem getProof_leaf {tree : DepositTree} {held : List Root} {index : Nat} {leaf : Root}
+    {proof : Vector Root (DEPOSIT_CONTRACT_TREE_DEPTH.toNat + 1)}
+    (holds : Holds DEPOSIT_CONTRACT_TREE_DEPTH.toNat tree.tree held)
+    (counted : tree.mixInLength = held.length)
+    (proved : tree.getProof index = .ok (leaf, proof)) :
+    held[index]? = some leaf := by
+  obtain ⟨fits, -, below, branch, walked, -⟩ := getProof_ok proved
+  have inside : index % 2 ^ DEPOSIT_CONTRACT_TREE_DEPTH.toNat < held.length := by
+    rw [Nat.mod_eq_of_lt (Nat.lt_trans below fits)]
+    omega
+  have := holds.getElem?_generateProof walked inside
+  rwa [Nat.mod_eq_of_lt (Nat.lt_trans below fits)] at this
 
 end DepositTree
 

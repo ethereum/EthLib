@@ -13,18 +13,32 @@ Not yet released.
   A proof that builds a `Frame` with an anonymous constructor adds that field.
   `frame_setValidatorAt_of_whole`, `frame_setValidator_of_whole` and `frame_setValidator` take a new premise `old.slashed = true → validator.slashed = true` after the proof of the key.
   A caller passes `id` when the new validator copies the flag of the old one, and `fun _ => rfl` when it is slashed.
-- In Lean, the results on slashed flags state them at each position of the registry, as `(state.validators.data[position]?).map (·.slashed)`.
+- In Lean, the results on slashed flags state them at each position of the registry, as `(state.validators.data[position]?).map (·.slashed)` ([#2187](https://github.com/ethereum/EthLib/issues/2187)).
   From Gloas the registry has no limit in its type, so a position may lie beyond every `ValidatorIndex`.
   `slashedFlag_initiateValidatorExit` takes a `position : Nat` in place of an index.
   The second conjunct of `slashValidator_slashedFlag` holds at each position other than `slashedIndex.toNat`.
-  A caller that read either at an index `i` reads it at `i.toNat`, and `getValidator_eq_ok_iff` converts the result.
-  `slashIfSlashable_ok` and `foldlM_slashIfSlashable` gain a last conjunct: no flag changes at a position that none of their indices names.
-  An `obtain` of their three parts binds a fourth.
-  `UpgradeFrame` gains the field `slashed`, since each upgrade keeps every slashed flag, and `ElectraKept` gains the same conjunct.
-  `UpgradeFrame.trans_blockFrame` takes the new premise `flags`: the steps after the upgrade keep every slashed flag.
+  A caller that read either at an index `i` reads it at `i.toNat`.
+  The new `slashedFlag_eq_of_slashed` turns equal flags there into equal values of `slashedFlag` at `i`.
+  `slashIfSlashable_ok` and `foldlM_slashIfSlashable` gain a last conjunct: no slashed flag changes at a position other than that of their index, or that none of their indices names.
+  A pattern that takes them apart needs a fourth component.
+  `UpgradeFrame` gains the field `slashed`, since each upgrade keeps every slashed flag.
+  `ElectraKept` gains the same conjunct, so a pattern that takes it apart needs a fourth component too.
+  `UpgradeFrame.trans_blockFrame` takes the new premise `slashed`: the steps after the upgrade keep every slashed flag.
   A block frame alone may slash, so it cannot give the field.
-  Compose the block frames of the steps first, and pass their flags once.
+  Compose the block frames of the steps first, and pass their slashed flags once.
 
+- `engine_forkchoiceUpdated` checks that the most recent block of proof of work on the chain of the head is terminal, as step 3 of the method and step 2 of payload validation of Paris require.
+  A head whose chain fails the check is `INVALID`, with the zero hash, and the head does not change.
+  Once the known finalized block is a payload of the tree, a zero safe or finalized hash gives `-38002`.
+  The latest valid hash of an invalid head is zero when its latest valid block is of proof of work.
+  In Lean, `KnownPayload` has the new field `powTotalDifficulty`, `none` for a payload, so its anonymous constructor takes a fifth value.
+  `forkchoiceUpdated` takes a `TransitionConfiguration` first, and `forkchoiceUpdatedCall` takes one after the chain configuration.
+  `forkchoiceUpdated_valid`, `forkchoiceUpdated_of_belowFinalized`, `forkchoiceUpdated_valid_none_iff`, `forkchoiceUpdated_of_invalid`, `forkchoiceUpdated_of_onChain` and `forkchoiceUpdated_eq_error_iff` state the terminal block check.
+  `forkchoiceUpdated_valid`, `forkchoiceUpdated_of_onChain` and `forkchoiceUpdated_eq_error_iff` also state the rule on zero hashes, and `forkchoiceUpdated_of_invalid` answers `latestValidHash` in place of `latestValid`.
+  In Python, a block of the tree of `engine.forkchoice_updated` may carry `totalDifficulty` and `parentTotalDifficulty`.
+  The function takes the required keyword-only argument `terminal_total_difficulty`, as `engine.new_payload_on_chain` does.
+  A tree with no block of proof of work passes the check whatever that value, which must be below `2^256`.
+  The native `engine_forkchoice_updated` takes that value after the finalized block.
 - `engine_newPayload` on a chain checks that a parent of proof of work is a terminal block, as step 2 of payload validation of Paris requires.
   A parent that fails the check makes the payload `INVALID`, with the zero hash and the new reason code 407.
   In Lean, `PayloadError` has the new constructor `invalidTerminalBlock`, with that code.
@@ -59,10 +73,11 @@ Not yet released.
   The drift horizon in the conclusion of `accountable_safety` is the finalized epoch of `b`, not the larger of the two finalized epochs; `ordered` makes them equal.
 
 - In Lean, the direct safety endpoints bound the unslashed active stake at `x`, `unslashedKeys x.state`, in place of `activeKeys x.state` ([#2187](https://github.com/ethereum/EthLib/issues/2187)).
-  `Accountable` and `accountableKeys` take the shared prefix and the two tails, `shared left right`, in place of the two full runs and the reference state.
+  `Accountable` takes the shared prefix and the two tails, `shared left right`, in place of the two full runs, and `accountableKeys` takes them in place of the two full runs and the reference state.
   Slashing evidence counts only in the tails; double votes still count over the full runs, and proposer slashings in the tails still count.
   `accountableKeys` keeps only the unslashed keys active at `x`.
   `recentKeys` keeps only unslashed keys, `referenceLoss` sums over `unslashedKeys x`, and `referenceGain` subtracts the support of `unslashedKeys x`.
+  So `boundaryStake`, and through it `stateDrift` and `derivedDrift`, count only unslashed recent stake.
   `Run.slashed_evidence` holds for a run from any state, with no `genesis` argument, and concludes `SlashedAt x.state v.pubkey ∨ run.SlashingEvidence v.pubkey`.
   `SlashedAt` names the predicate that `referenceLoss` stated inline before.
   `verifiedConflict_of_accountable` takes `shared left right` and concludes `VerifiedConflict (shared.append left) (shared.append right) key`.

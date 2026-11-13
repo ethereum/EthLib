@@ -26,9 +26,9 @@ open Base Cryptography.Bls Serialization.Ssz
 
 variable {preset : Preset} {fork : Fork}
 
-/-- A registry finds the registration it has just kept for its key. -/
-theorem Registry.find?_insert_self (registry : Registry) (registration : ValidatorRegistrationV1) :
-    (registry.insert registration).find? registration.pubkey = some registration := by
+/-- A registry finds the signed registration it has just kept for its key. -/
+theorem Registry.find?_insert_self (registry : Registry) (signed : SignedValidatorRegistrationV1) :
+    (registry.insert signed).find? signed.message.pubkey = some signed := by
   simp [Registry.insert, Registry.find?]
 
 /-- A registration passes exactly when the five rules hold. -/
@@ -41,7 +41,7 @@ theorem processRegistration_ok_iff {config : Config} {checks : SignatureChecks}
       now.toNat + MAX_REGISTRATION_LOOKAHEAD.toNat < 2 ^ 64 ∧
       signed.message.timestamp.toNat ≤ now.toNat + MAX_REGISTRATION_LOOKAHEAD.toNat ∧
       (∀ previous, registry.find? signed.message.pubkey = some previous →
-        previous.timestamp ≤ signed.message.timestamp) ∧
+        previous.message.timestamp ≤ signed.message.timestamp) ∧
       verifyRegistrationSignature config checks signed = .ok true := by
   unfold processRegistration
   cases hv : validatorOfPubkey? state signed.message.pubkey with
@@ -51,7 +51,7 @@ theorem processRegistration_ok_iff {config : Config} {checks : SignatureChecks}
     by_cases hc : now.toNat + MAX_REGISTRATION_LOOKAHEAD.toNat < 2 ^ 64 <;>
     by_cases ht : signed.message.timestamp.toNat ≤ now.toNat + MAX_REGISTRATION_LOOKAHEAD.toNat <;>
     cases hp : registry.find? signed.message.pubkey <;>
-    (try rename_i previous; by_cases ho : previous.timestamp ≤ signed.message.timestamp) <;>
+    (try rename_i previous; by_cases ho : previous.message.timestamp ≤ signed.message.timestamp) <;>
     cases hs : verifyRegistrationSignature config checks signed <;>
     (try rename_i b; cases b) <;>
     simp [*, bind, Except.bind, throw, throwThe, MonadExceptOf.throw, pure,
@@ -70,10 +70,10 @@ theorem processRegistration_monotone {config : Config} {checks : SignatureChecks
     {state : BeaconState preset fork} {registry : Registry}
     {signed : SignedValidatorRegistrationV1} {now : UInt64}
     (kept : processRegistration config checks state registry signed now = .ok ())
-    {previous : ValidatorRegistrationV1}
+    {previous : SignedValidatorRegistrationV1}
     (before : registry.find? signed.message.pubkey = some previous) :
-    (registry.insert signed.message).find? signed.message.pubkey = some signed.message ∧
-      previous.timestamp ≤ signed.message.timestamp :=
+    (registry.insert signed).find? signed.message.pubkey = some signed ∧
+      previous.message.timestamp ≤ signed.message.timestamp :=
   ⟨Registry.find?_insert_self _ _, (processRegistration_ok_iff.1 kept).2.2.2.1 previous before⟩
 
 /-- A validator that has activated and exited by the current epoch is refused as not eligible. -/

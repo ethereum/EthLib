@@ -12,6 +12,7 @@ public import EthLib.Consensus.Containers.Operations
 public import EthLib.Consensus.Containers.PayloadAttestation
 public import EthLib.Consensus.Containers.PowBlock
 public import EthLib.Consensus.Containers.ProposerPreferences
+public import EthLib.Consensus.Containers.RelayApi
 public import EthLib.Consensus.Containers.Requests
 public import EthLib.Consensus.Containers.Signing
 public import EthLib.Consensus.Containers.State
@@ -119,6 +120,17 @@ instance : ApiSpelling (ExecutionPayloadAndBlobsBundle preset fork) :=
   .ofFields (ExecutionPayloadAndBlobsBundle preset fork)
     [("execution_payload", ApiSpelling.spelling (ExecutionPayload preset fork))]
 
+/-- A submission to a relay holds a payload. -/
+instance : ApiSpelling (SubmitBlockRequest preset fork) :=
+  .ofFields (SubmitBlockRequest preset fork)
+    [("execution_payload", ApiSpelling.spelling (ExecutionPayload preset fork))]
+
+/-- The one field of a wrapped submission holds a submission. -/
+instance : ApiSpelling (BuilderSubmitNewBlockRequest preset fork) :=
+  .ofFields (BuilderSubmitNewBlockRequest preset fork)
+    ((BuilderSubmitNewBlockRequest.names fork).map
+      (·, ApiSpelling.spelling (SubmitBlockRequest preset fork)))
+
 /-- From Heze, the transactions of an inclusion list are hex.
 
 The API defines no inclusion list yet, so this follows its form of a transaction. -/
@@ -213,5 +225,6 @@ instance : ApiSpelling BuilderRequestAuth := .unmarked
 instance : ApiSpelling SignedBuilderRequestAuth := .unmarked
 instance : ApiSpelling BuilderPreferences := .unmarked
 instance : ApiSpelling BuilderPreferencesRequest := .unmarked
+instance : ApiSpelling BidTrace := .unmarked
 
 end EthLib.Consensus.BeaconApi
