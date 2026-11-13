@@ -40,6 +40,7 @@ public import EthLib.Networking.Proofs.Libp2p.PeerId
 public import EthLib.Networking.Proofs.Libp2p.Yamux
 public import EthLib.Networking.Proofs.Libp2p.YamuxSession
 public import EthLib.Networking.Proofs.Quic.Keys
+public import EthLib.Networking.Proofs.Quic.Protection
 public import EthLib.Networking.Proofs.Quic.Tls
 public import EthLib.Networking.Proofs.Quic.Varint
 public import EthLib.Networking.Proofs.ReqResp.Bounds
@@ -73,4 +74,3 @@ The proofs build in their own Lake library.
 
 The runtime code never imports them, so nothing here is linked into the Python extension.
 -/
-public import EthLib.Networking.Proofs.Quic.Protection

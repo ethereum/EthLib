@@ -25,7 +25,7 @@ def result {α : Type} (r : Except Protection.Error α) : Result α :=
 def protectExport (args : PyValue) : Result PyValue :=
   pyExport (fun (suite, secret, number, offset, header, plaintext) => do
     let suite ← Exports.readSuite suite
-    let keys ← EthLib.Cryptography.Hash.Tls13.Exports.ofExcept (packetKeys suite (secret : Tls13.Secret))
+    let keys ← Tls13.Exports.ofExcept (packetKeys suite (secret : Tls13.Secret))
     if h : number < 2 ^ 62 then
       result (Protection.protect suite keys ⟨number, h⟩ offset header plaintext)
     else result (.error .packetNumber : Except Protection.Error ByteArray)) args
@@ -37,7 +37,7 @@ def protectExport (args : PyValue) : Result PyValue :=
 def unprotectExport (args : PyValue) : Result PyValue :=
   pyExport (fun (suite, secret, expected, offset, packet) => do
     let suite ← Exports.readSuite suite
-    let keys ← EthLib.Cryptography.Hash.Tls13.Exports.ofExcept (packetKeys suite (secret : Tls13.Secret))
+    let keys ← Tls13.Exports.ofExcept (packetKeys suite (secret : Tls13.Secret))
     result (Protection.unprotect suite keys expected offset packet)) args
 
 /--

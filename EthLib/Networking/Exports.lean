@@ -9,6 +9,7 @@ public import EthLib.Networking.Exports.Noise
 public import EthLib.Networking.Exports.Gossip
 public import EthLib.Networking.Exports.Libp2p
 public import EthLib.Networking.Exports.Quic
+public import EthLib.Networking.Exports.QuicProtection
 public import EthLib.Networking.Exports.ReqResp
 public import EthLib.Networking.Exports.Rlpx
 public import EthLib.Networking.Exports.Snappy
@@ -25,4 +26,3 @@ The specification does not import them.
 
 So a Lean project that imports `EthLib` gets no `@[export]` symbol.
 -/
-public import EthLib.Networking.Exports.QuicProtection
