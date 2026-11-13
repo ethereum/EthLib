@@ -1169,6 +1169,14 @@ def devp2p_encode_message(snappy: bool, plain: bytes) -> bytes:
     """The frame data of the message in the uncompressed frame data `plain`."""
     ...
 
+def devp2p_route(ours: list[tuple[bytes, int]], theirs: list[tuple[bytes, int]], message_id: int) -> tuple[bytes, int, int] | None:
+    """The shared capability that holds a message ID, given both lists of capabilities."""
+    ...
+
+def devp2p_session(hello: bytes, frames: list[bytes]) -> list[tuple[str, str, bytes, int, int, bytes, bool]]:
+    """The outcomes of the frames a session receives in turn, from before the peer's Hello."""
+    ...
+
 def discv4_decode(packet: bytes) -> bytes:
     """The hash, the sender's key and the content of the packet in the bytes `packet`."""
     ...

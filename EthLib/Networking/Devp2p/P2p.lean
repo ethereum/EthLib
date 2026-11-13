@@ -158,23 +158,43 @@ def encodeMessage (snappy : Bool) (m : Message) : Except P2pError ByteArray := d
   let data ← (encode m.toItem).mapError .rlp
   return id ++ if snappy && m.id != 0x00 then Snappy.compress data else data
 
+/-- The message ID at the start of the frame data `msg-id || msg-data`, and `msg-data`. -/
+def splitFrame (frameData : ByteArray) : Except P2pError (Nat × ByteArray) := do
+  -- The ID is one RLP item at the start, and the message is the bytes after it.
+  let (idItem, next) ← ((decodeItem frameData 0 frameData.size).map fun r => (r.1, r.2.1)).mapError
+    .rlp
+  let id ← idItem.toScalar.mapError .rlp
+  return (id, frameData.extract next frameData.size)
+
+/--
+The bytes of `msg-data` before compression, given whether they are compressed.
+
+A compressed message is rejected before decompression when its declared size exceeds 16 MiB.
+-/
+def messageData (compressed : Bool) (rest : ByteArray) : Except P2pError ByteArray :=
+  if compressed then do
+    let (size, _) ← (Snappy.readPreamble rest.data.toList).mapError .snappy
+    if MAX_MESSAGE_SIZE < size then throw (.tooLarge size)
+    (Snappy.decompress rest).mapError .snappy
+  else pure rest
+
+/--
+The message of the "p2p" capability with an ID and the bytes `msg-data`.
+
+When the session uses Snappy, every message but Hello is compressed.
+-/
+def decodeBody (snappy : Bool) (id : Nat) (rest : ByteArray) : Except P2pError Message := do
+  let data ← messageData (snappy && id != 0x00) rest
+  Message.ofItem id (← (decode data).mapError .rlp)
+
 /--
 The message in the frame data `msg-id || msg-data`.
 
 A compressed message is rejected before decompression when its declared size exceeds 16 MiB.
 -/
 def decodeMessage (snappy : Bool) (frameData : ByteArray) : Except P2pError Message := do
-  -- The ID is one RLP item at the start, and the message is the bytes after it.
-  let (idItem, next) ← ((decodeItem frameData 0 frameData.size).map fun r => (r.1, r.2.1)).mapError
-    .rlp
-  let id ← idItem.toScalar.mapError .rlp
-  let rest := frameData.extract next frameData.size
-  let data ← if snappy && id != 0x00 then do
-      let (size, _) ← (Snappy.readPreamble rest.data.toList).mapError .snappy
-      if MAX_MESSAGE_SIZE < size then throw (.tooLarge size)
-      (Snappy.decompress rest).mapError .snappy
-    else pure rest
-  Message.ofItem id (← (decode data).mapError .rlp)
+  let (id, rest) ← splitFrame frameData
+  decodeBody snappy id rest
 
 /-- Whether both peers use Snappy: both Hello messages carry version 5 or more, by EIP-706. -/
 def snappyEnabled (ours theirs : Nat) : Bool :=
