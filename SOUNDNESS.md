@@ -3907,9 +3907,11 @@ As a choice of EthLib, the object copies it, so `gasUsed` is the gas that the se
 
 `eth_getLogs` reads the logs that a filter of [`filter.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/schemas/filter.yaml) selects (`Execution/Rpc/Filter.lean`).
 A filter names one block by its hash, or a range of canonical blocks by its bounds, and then the addresses and the topics at each position that it takes.
-A range reads exactly the canonical blocks between its bounds, whose two bounds are in order, the first at least the lowest block and the last at most the head (`filterBlocks_range`).
+A range is valid exactly when its bounds resolve to numbers in order, the first at least the lowest block and the last at most the head (`filterBlocks_range_eq_ok_iff`).
+It then reads exactly the canonical blocks between its bounds.
 A number bound above the head makes the range invalid, whatever the other bound, as the method requires (`filterBlocks_aboveHead`).
 So do bounds that resolve above the head or out of order, whatever the pruned history (`filterBlocks_invalid`).
+So two equal bounds between the lowest block and the head are valid, and so is a last bound at the head, as the inclusive range of the method requires.
 A block hash reads the one block of that hash (`filterBlocks_hash`).
 The returned logs are the matching logs of the receipt objects of those blocks, in block order, then in their order in each block (`getLogs_eq_ok`).
 Every returned log matches the filter and is a log of a receipt object of a block that the filter reads (`getLogs_sound`).
@@ -4003,10 +4005,20 @@ It passes exactly when the numbers and the times strictly increase from the base
 An account override sets each field that it gives, and keeps the others (`applyAccountOverride_nonce` and the lemmas after it).
 `stateDiff` keeps the slots that it does not name, and `state` clears them (`applyAccountOverride_stateDiff`, `applyAccountOverride_state`).
 The overrides of a block keep every account that they do not name (`applyOverrides_not_mem`), and act on each account they name as its override alone (`applyOverrides_mem`).
-The defaults of a call come with the simulated blocks.
+A call fills its defaults: its type, its nonce, its gas and the zero address as sender.
+Filling them keeps every field that the call gives, and changes no other field (`GenericTransaction.withDefaults_type` and the lemmas after it).
+The nonce is that of the sender after the earlier calls, and the gas is what the block has left.
+The execution core takes two exceptions of a simulated block as optional overrides, whose defaults leave a real block unchanged.
+They are a sender given in place of the signature, and the precompile that a call to each address runs.
+A known sender that the signature names, and that passes the rule on its code, gives the same check of the transaction (`checkInclusion_of_knownSender`, `Proofs/Transactions/Overrides.lean`).
+With the default map, a call runs the precompile at the address of its code (`precompileAddress_of_default`).
+A move leaves the addresses that are warm at the start of a transaction unchanged, as the notes say.
 
-Where the source is silent or conflicts with itself, EthLib follows the fixtures:
+Where the source is silent or conflicts with itself, EthLib follows the fixtures, else decides:
 
+- a call without a type is type 2, and type 3 with blob hashes, as the fixtures show; a blob fee cap alone keeps type 2;
+- the source is silent on a call without a type that type 2 cannot carry, so EthLib makes authorizations type 4, and a gas price type 0, or type 1 with an access list;
+- a call without `from` comes from the zero address and one without `to` creates, as the notes say, though the schema gives the reverse;
 - times strictly increase, as the notes say, though the schema lets a time stay the same;
 - a block without a time comes 12 seconds after the block before it, as the notes say, though the schema says one second;
 - a gap block comes a block time after the block before it, 12 seconds by default, and counts toward the limit of 256 blocks;
@@ -4434,7 +4446,11 @@ The event covers Bellatrix to Gloas (the forks before Heze), and these gaps rema
 - The parent root is the root of the latest block header of the state, which is right only for a state at the slot of the proposal, after its empty slots; the event takes that state as given.
 - How often the event is sent may depend on the node, so only its content is specified.
 
-The exports of the events and their Python tests remain for #2091.
+The Python suite (`bindings/python/tests/consensus/test_beacon_api_chain_events.py`) compares the events between two checks of the head in five pinned fork choice cases, from Capella to Gloas, with the events that the checks call for.
+A case with more than 20 checks of the head compares only the pairs of checks that call for an event, and the first pair without an event after them.
+It works out the dependent roots, the reorganization depth and the state roots from the blocks of the case.
+It also checks the event of each run of the fast confirmation rule in three pinned cases against the confirmed root and the clock of the checks, also when the clock moves on after the run.
+The export of the event of the payload attributes and its Python tests remain for #2091.
 The light client events and the event of an available payload depend on what the node has received, and are not defined here.
 
 The events of received objects are in `Consensus/BeaconApi/ObjectEvents.lean` (#2090).
@@ -4492,9 +4508,17 @@ They call the same dispatch as gossip, `validateGossipMessage` (`Consensus/Gossi
 `submitList_failures` shows that the entry of the answer at a position is the failure of its item, given the keys after the items before it.
 `submitList_failures_pairwise` shows that the answer names the failed positions in increasing order, so each once, and `submitList_failures_lt_length` that each lies within the list.
 `submitList_accepted_iff` shows that the answer is a success exactly when no item fails, and `submitList_failed_ne_nil` that a failed answer names at least one item.
+`PoolRequest.ne_nil_of_mem_items` shows that every item of a request has at least one message.
+`syncSubnets_pairwise` shows that the subnets of a sync committee message come once each, in increasing order.
+`mem_syncSubnets_of_seat` shows that a validator that holds a seat gets the subnets of its seats.
+`syncSubnets_of_no_seat` shows that any other validator gets subnet 0 alone, as does a message whose head state, validator or sync committee cannot be read.
+`validateItem_syncSubnets_seat` shows that an item of a sync committee message passes only if its validator holds a seat in the sync committee of the slot after the head state.
+It rests on `seat_of_validateSyncCommitteeMessage_accept` (`Consensus/Proofs/Gossip/SyncCommittee.lean`): gossip accepts a message only on a subnet of a seat of its validator.
+`submitPool_syncCommitteeMessages_seat` shows the same for each message of an accepted request.
 The Python suite (`bindings/python/tests/consensus/test_beacon_api_pool.py`) submits each object of the pinned gossip cases of the pool topics to its endpoint.
 It checks that the object fails exactly when gossip does not accept it, with the reason of the case.
 It leaves out the cases whose reason is a wrong subnet, since the node picks the subnet itself, and the cases that send objects of another topic.
+No case submits a sync committee message from a validator with no seat; only the theorems above cover it.
 Every case of the bid topic also sends the envelopes of payloads, so those cases run in the suite of the publish endpoints.
 
 The publish endpoints of blocks and of payload envelopes check an object at the level that the client asks, before the node broadcasts it (`Consensus/BeaconApi/Publish.lean`).
@@ -4679,7 +4703,9 @@ Points that remain open:
 - The pool endpoints take the items in order, and the keys of a valid item apply to the next ones, so a list that repeats an object fails at each copy after the first.
 - The node picks the subnet of an attestation from its head state, and validates a sync committee message once on each subnet that holds a seat of its validator.
   When it finds no subnet, it validates the object on subnet 0, where gossip fails at or before its check of the subnet.
-  The order of the checks of the validators gives this; no theorem states it yet.
+  The order of the checks of the validators gives this.
+  For a sync committee message, `syncSubnets_of_no_seat` and `validateItem_syncSubnets_seat` state that such an item goes on subnet 0 alone and fails.
+  No theorem states which check fails, and none covers an attestation.
   For a sync committee message, the first check of gossip reads the keys seen on that subnet.
   So with keys seen under another head, the reason on subnet 0 can be "already seen" where another subnet would give a wrong subnet.
 - A sync committee message is validated on every subnet, and each subnet where it passes keeps its keys; the item fails with the reason of the first subnet where it fails.
@@ -5235,12 +5261,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 508 operations and 49 size constants.
-The Python extension calls 508 of the operations and 49 of the constants.
+Lean exports 510 operations and 49 size constants.
+The Python extension calls 510 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-11666 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2607), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (207), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1625), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (161), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (802), `x25519.c` (21), `xmss.c` (134).
+11695 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2630), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (207), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1629), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (161), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (804), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

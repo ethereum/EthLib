@@ -90,8 +90,8 @@ theorem levelFailure_eq_none_iff {gossip : Option String} :
     levelFailure level gossip consensus rival = none ↔
       gossip = none ∧ (level ≠ .gossip → consensus () = none) ∧
         (level = .consensusAndEquivocation → rival () = false) := by
-  cases gossip <;> cases level <;> simp [levelFailure] <;>
-    cases consensus () <;> cases rival () <;> simp
+  cases gossip <;> cases level <;> cases passes : consensus () <;>
+    cases rivals : rival () <;> simp [levelFailure, passes, rivals]
 
 /-- A refused object leaves the store and the messages seen as they were. -/
 theorem publish_refused {reason : String}

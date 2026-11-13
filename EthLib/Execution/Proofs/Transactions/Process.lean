@@ -463,8 +463,8 @@ def TransactionRun (Meter : Type) [GasMeter Meter] [LawfulGasMeter Meter]
   messageTarget included.sender
       ((State.TransactionState.ofBlock block).getAccount included.sender).nonce tx = .ok target ∧
     buyGas env (State.TransactionState.ofBlock block) included.sender tx = .ok bought ∧
-    transactionMessage env ⟨included.sender, included.gasPrice, fun _ => tx.blobHashes⟩ bought
-        included.sender target gas.execution tx = .ok message ∧
+    transactionMessage env ⟨included.sender, included.gasPrice, fun _ => tx.blobHashes, some⟩
+        bought included.sender target gas.execution tx = .ok message ∧
     processMessageCall (Meter := Meter) env.chainId.toNat
         { message with reservoir := gas.reservoir } bought
         (startSubstate fork env.coinbase included.sender target tx) tx.authorizations
@@ -537,8 +537,8 @@ private theorem processTransaction_eq_ok_of_lt {env : BlockEnvironment fork}
           ((State.TransactionState.ofBlock block).getAccount included.sender).nonce tx =
         .ok target ∧
       buyGas env (State.TransactionState.ofBlock block) included.sender tx = .ok bought ∧
-      transactionMessage env ⟨included.sender, included.gasPrice, fun _ => tx.blobHashes⟩ bought
-          included.sender target (tx.gas.toNat - included.intrinsicGas) tx = .ok message ∧
+      transactionMessage env ⟨included.sender, included.gasPrice, fun _ => tx.blobHashes, some⟩
+          bought included.sender target (tx.gas.toNat - included.intrinsicGas) tx = .ok message ∧
       processMessageCall (Meter := Nat) env.chainId.toNat { message with reservoir := 0 } bought
           (startSubstate fork env.coinbase included.sender target tx) tx.authorizations
           (paidWrites included.sender target tx) = .ok output ∧
@@ -576,8 +576,8 @@ theorem processTransaction_gasUsed_of_lt_london {env : BlockEnvironment fork}
           ((State.TransactionState.ofBlock block).getAccount included.sender).nonce tx =
         .ok target ∧
       buyGas env (State.TransactionState.ofBlock block) included.sender tx = .ok bought ∧
-      transactionMessage env ⟨included.sender, included.gasPrice, fun _ => tx.blobHashes⟩ bought
-          included.sender target (tx.gas.toNat - included.intrinsicGas) tx = .ok message ∧
+      transactionMessage env ⟨included.sender, included.gasPrice, fun _ => tx.blobHashes, some⟩
+          bought included.sender target (tx.gas.toNat - included.intrinsicGas) tx = .ok message ∧
       processMessageCall (Meter := Nat) env.chainId.toNat { message with reservoir := 0 } bought
           (startSubstate fork env.coinbase included.sender target tx) tx.authorizations
           (paidWrites included.sender target tx) = .ok output ∧
@@ -621,8 +621,8 @@ theorem processTransaction_gasUsed_of_london_of_lt_pectra {env : BlockEnvironmen
           ((State.TransactionState.ofBlock block).getAccount included.sender).nonce tx =
         .ok target ∧
       buyGas env (State.TransactionState.ofBlock block) included.sender tx = .ok bought ∧
-      transactionMessage env ⟨included.sender, included.gasPrice, fun _ => tx.blobHashes⟩ bought
-          included.sender target (tx.gas.toNat - included.intrinsicGas) tx = .ok message ∧
+      transactionMessage env ⟨included.sender, included.gasPrice, fun _ => tx.blobHashes, some⟩
+          bought included.sender target (tx.gas.toNat - included.intrinsicGas) tx = .ok message ∧
       processMessageCall (Meter := Nat) env.chainId.toNat { message with reservoir := 0 } bought
           (startSubstate fork env.coinbase included.sender target tx) tx.authorizations
           (paidWrites included.sender target tx) = .ok output ∧
@@ -667,8 +667,8 @@ theorem processTransaction_gasUsed {env : BlockEnvironment fork} {block : State.
           ((State.TransactionState.ofBlock block).getAccount included.sender).nonce tx =
         .ok target ∧
       buyGas env (State.TransactionState.ofBlock block) included.sender tx = .ok bought ∧
-      transactionMessage env ⟨included.sender, included.gasPrice, fun _ => tx.blobHashes⟩ bought
-          included.sender target (tx.gas.toNat - included.intrinsicGas) tx = .ok message ∧
+      transactionMessage env ⟨included.sender, included.gasPrice, fun _ => tx.blobHashes, some⟩
+          bought included.sender target (tx.gas.toNat - included.intrinsicGas) tx = .ok message ∧
       processMessageCall (Meter := Nat) env.chainId.toNat { message with reservoir := 0 } bought
           (startSubstate fork env.coinbase included.sender target tx) tx.authorizations
           (paidWrites included.sender target tx) = .ok output ∧
@@ -719,8 +719,8 @@ theorem processTransaction_gasUsed_of_glamsterdam {env : BlockEnvironment fork}
           ((State.TransactionState.ofBlock block).getAccount included.sender).nonce tx =
         .ok target ∧
       buyGas env (State.TransactionState.ofBlock block) included.sender tx = .ok bought ∧
-      transactionMessage env ⟨included.sender, included.gasPrice, fun _ => tx.blobHashes⟩ bought
-          included.sender target gas.execution tx = .ok message ∧
+      transactionMessage env ⟨included.sender, included.gasPrice, fun _ => tx.blobHashes, some⟩
+          bought included.sender target gas.execution tx = .ok message ∧
       processMessageCall (Meter := StateGasMeter) env.chainId.toNat
           { message with reservoir := gas.reservoir } bought
           (startSubstate fork env.coinbase included.sender target tx) tx.authorizations
