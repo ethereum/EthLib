@@ -36,40 +36,6 @@ private theorem peersOf_filter (m : List (String × List PeerId)) (t : String) :
     rw [bne_comm]; exact this
   simp [this]
 
-/-- Extending a backoff never lowers any end. -/
-private theorem backoffEnd_fold_mono (t : String) (ends : Nat) (l : List PeerId)
-    (q : PeerId) :
-    ∀ b : List ((String × PeerId) × Nat), backoffEnd b t q ≤
-      backoffEnd (l.foldl (fun b q => extendBackoff b t q ends) b) t q := by
-  induction l with
-  | nil => intro b; exact Nat.le_refl _
-  | cons x l ih =>
-    intro b
-    refine Nat.le_trans ?_ (ih _)
-    simp only [extendBackoff, Router.backoffEnd_setBackoff]
-    simp only [true_and]
-    by_cases h : q = x
-    · subst h
-      simp only [↓reduceIte]
-      exact Nat.le_max_left _ _
-    · simp only [h, ↓reduceIte]
-      exact Nat.le_refl _
-
-/-- A peer of the list has its backoff end extended to the given end. -/
-private theorem backoffEnd_fold_mem (t : String) (ends : Nat) (l : List PeerId)
-    (q : PeerId) (hq : q ∈ l) :
-    ∀ b : List ((String × PeerId) × Nat),
-      ends ≤ backoffEnd (l.foldl (fun b q => extendBackoff b t q ends) b) t q := by
-  induction l with
-  | nil => simp at hq
-  | cons x l ih =>
-    intro b
-    rcases List.mem_cons.mp hq with rfl | hq'
-    · refine Nat.le_trans ?_ (backoffEnd_fold_mono t ends l q _)
-      simp only [extendBackoff, Router.backoffEnd_setBackoff, true_and, ↓reduceIte]
-      exact Nat.le_max_right _ _
-    · exact ih hq' _
-
 /-- Publishing to peers keeps the seen cache and the explicit peers. -/
 private theorem publishPeers_keep (p : GossipsubParameters) (c : ClientChoices) (sel : Select)
     (standing : PeerId → Standing) (now : Nat) (topic : String) (s : RouterState) :
@@ -160,7 +126,7 @@ theorem leave_backoff (h : topic ∈ s.topics) {q : PeerId} (hq : q ∈ peersOf 
     now + c.unsubscribeBackoffS.toNat * 1000 ≤
       backoffEnd (leave c now topic s).1.backoff topic q := by
   simp only [leave, h, not_true_eq_false, ↓reduceIte]
-  exact backoffEnd_fold_mem _ _ _ _ hq _
+  exact Router.backoffEnd_fold_mem _ _ _ _ hq _
 
 /-- A publish forwards only the message it publishes. -/
 theorem publish_forward_message {m m' : Message} {q : PeerId}
@@ -248,5 +214,9 @@ theorem publish_receiveRpc {m : Message}
         exact Router.receiveRpc_seen p' b' pb' st' mi' v' n' sr' r' r _ hr) he
   exact Router.receiveRpc_seen_skip p backoffMs pruneBackoffMs standing' msgId validate now' src
     rpc _ he' ht hid
+
+/-- The choice of the first candidates is lawful, so every result holds for it. -/
+theorem Select.first_lawful : Select.first.Lawful := fun n l =>
+  ⟨List.take_sublist n l, by simp [Select.first, List.length_take]⟩
 
 end EthLib.Networking.Proofs.Gossip.Membership

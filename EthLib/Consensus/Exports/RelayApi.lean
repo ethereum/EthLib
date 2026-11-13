@@ -8,9 +8,13 @@ public import EthLib.Consensus.RelayApi
 
 C-ABI exports for the Relay API: the bid that a relay serves from a block submission.
 
-An unknown preset or fork, a fork outside Bellatrix to Fulu, or a malformed key has code 0.
+At Fulu they also give the list of validators that a relay serves to builders.
 
-A submission that does not decode keeps its SSZ code.
+An unknown preset or fork, or a malformed key, has code 0.
+
+So does a fork outside Bellatrix to Fulu for the bid, and a fork other than Fulu for the list.
+
+A submission, a state or a registration that does not decode keeps its SSZ code.
 -/
 
 public section
@@ -39,5 +43,33 @@ def relaySubmissionBidOf (args : String × String × ByteArray × Cryptography.B
 The arguments are the name of the preset, the fork, the SSZ bytes of the submission and the key. -/
 @[export eth_consensus_relay_submission_bid]
 def relaySubmissionBidExport (args : PyValue) : Result PyValue := pyExport relaySubmissionBidOf args
+
+/-- At Fulu only: the list of validators that a relay serves, as a `list` of `dict`. -/
+def relayValidatorsOf (args : String × String × ByteArray × List ByteArray) :
+    Result PyValue := do
+  let (name, fork, state, kept) := args
+  let preset ← presetOf name
+  let fork ← forkOf fork.toUTF8
+  if fulu : .fusaka ≤ fork ∧ fork < .glamsterdam then
+    let state ← runSsz "state rejected" (SszType.deserialize (BeaconState preset fork) state)
+    let entries ← kept.mapM fun bytes =>
+      runSsz "registry rejected" (SszType.deserialize SignedValidatorRegistrationV1 bytes)
+    let response := RelayApi.validatorsResponse state fulu.1 ⟨entries⟩
+    let documents ← response.mapM fun entry =>
+      runSsz "value rejected" (BeaconApi.toApiJson entry)
+    return PyValue.ofJson (Lean.Json.arr documents.toArray)
+  else throw (0, s!"no Relay API list of validators at {fork.name}")
+
+/-- At Fulu only: the list of validators that a relay serves, as a `list` of `dict`.
+
+The arguments are the name of the preset, the fork, the state and the signed registrations kept.
+
+When two registrations share a key, the first one counts.
+
+The list covers the current and next epoch of the state, by its lookahead of proposers.
+
+So the state must first be advanced to the current slot of the relay. -/
+@[export eth_consensus_relay_validators]
+def relayValidatorsExport (args : PyValue) : Result PyValue := pyExport relayValidatorsOf args
 
 end EthLib.Consensus.Exports

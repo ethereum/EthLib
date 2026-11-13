@@ -1,4 +1,4 @@
-"""The Relay API block submissions against the examples and documents of the relay specification."""
+"""The Relay API: submissions against the relay specification, and the list of validators."""
 
 import hashlib
 import json
@@ -14,6 +14,7 @@ import pytest
 
 from ethlib import consensus
 from ethlib.errors import SszError
+from ethlib.networking import snappy
 from raising import raises
 
 # The examples and the fork documents of the relay specification, pinned in tests/sources.toml.
@@ -517,3 +518,98 @@ def test_served_bid(version: str):
 def test_served_bid_outside_relay_forks(fork: str):
     with raises(SszError, f"no Relay API submissions at {fork}"):
         consensus.relay_submission_bid("mainnet", fork, b"", RELAY_KEY)
+
+
+# The pinned minimal Fulu state, whose lookahead names the proposers of two epochs.
+FULU_STATE = (
+    Path(__file__).resolve().parents[4]
+    / "tests/consensus/light_client/minimal/fulu/light_client/single_merkle_proof"
+    / "BeaconState/current_sync_committee_merkle_proof/object.ssz_snappy"
+)
+# Two validators of that state: one that registers, one that does not.
+REGISTERED = 7
+UNREGISTERED = 9
+# The slots of an epoch in the minimal preset.
+SLOTS_PER_EPOCH = 8
+# A slot inside an epoch, neither its first slot nor slot 0.
+INNER_SLOT = 3 * SLOTS_PER_EPOCH + 2
+
+
+@cache
+def _fulu_state() -> bytes:
+    """The SSZ bytes of the pinned Fulu state."""
+    return snappy.decompress(FULU_STATE.read_bytes())
+
+
+def _state_json(state: bytes) -> dict[str, Any]:
+    """The JSON of a minimal Fulu state."""
+    return consensus.api_json("minimal", _fork("fulu"), "BeaconState", state)
+
+
+def _registration(pubkey: str) -> dict[str, Any]:
+    """The JSON of a signed registration of a key; the list does not check the signature."""
+    message = {
+        "fee_recipient": "0x" + "11" * 20,
+        "gas_limit": "30000000",
+        "timestamp": "100",
+        "pubkey": pubkey,
+    }
+    return {"message": message, "signature": "0x" + "cd" * 96}
+
+
+def _listed(state: bytes, registrations: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The entries that a relay lists from a minimal Fulu state and signed registrations."""
+    fork = _fork("fulu")
+    registry = [
+        consensus.api_ssz("minimal", fork, "SignedValidatorRegistrationV1", registration)
+        for registration in registrations
+    ]
+    return consensus.relay_validators("minimal", fork, state, registry)
+
+
+def _first_slot(document: dict[str, Any]) -> int:
+    """The first slot of the current epoch of a state."""
+    return int(document["slot"]) // SLOTS_PER_EPOCH * SLOTS_PER_EPOCH
+
+
+def test_relay_validators_follow_the_lookahead():
+    state = _fulu_state()
+    document = _state_json(state)
+    lookahead = [int(index) for index in document["proposer_lookahead"]]
+    assert len(lookahead) == 2 * SLOTS_PER_EPOCH
+    registrations = [_registration(validator["pubkey"]) for validator in document["validators"]]
+    first = _first_slot(document)
+    # With every validator registered, each slot of the two epochs lists its proposer.
+    assert _listed(state, registrations) == [
+        {"slot": str(first + offset), "validator_index": str(index), "entry": registrations[index]}
+        for offset, index in enumerate(lookahead)
+    ]
+    # With no registration, the list is empty.
+    assert _listed(state, []) == []
+
+
+def test_relay_validators_omit_unregistered_slots():
+    document = _state_json(_fulu_state())
+    per_epoch = SLOTS_PER_EPOCH
+    # One validator proposes every slot, except the second slot of each epoch.
+    lookahead = [UNREGISTERED] * (2 * per_epoch)
+    lookahead[1] = lookahead[per_epoch + 1] = REGISTERED
+    # An index with no validator names no key, so its slot has no entry either.
+    lookahead[3] = len(document["validators"])
+    document["proposer_lookahead"] = [str(index) for index in lookahead]
+    # Inside an epoch, so the list starts at the first slot of that epoch, not at the state's.
+    document["slot"] = str(INNER_SLOT)
+    state = consensus.api_ssz("minimal", _fork("fulu"), "BeaconState", document)
+    registration = _registration(document["validators"][REGISTERED]["pubkey"])
+    first = _first_slot(document)
+    # Only the slots of the registered validator have an entry, both within the two epochs.
+    assert _listed(state, [registration]) == [
+        {"slot": str(slot), "validator_index": str(REGISTERED), "entry": registration}
+        for slot in (first + 1, first + per_epoch + 1)
+    ]
+
+
+@pytest.mark.parametrize("fork", ["pectra", "glamsterdam"])
+def test_relay_validators_outside_fulu(fork: str):
+    with raises(SszError, f"no Relay API list of validators at {fork}"):
+        consensus.relay_validators("minimal", fork, b"", [])
