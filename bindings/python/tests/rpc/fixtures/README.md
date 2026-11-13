@@ -33,6 +33,7 @@ Its test still checks every value: those of the header of block 27, the next bas
 The result of `eth_createAccessList` is an object, which the tests check against its schema in `src/eth/execute.yaml`.
 
 The view serves `eth_blockNumber`, `eth_chainId`, `eth_config`, `net_version`, `eth_getTransactionByHash`, `eth_getTransactionByBlockHashAndIndex`, `eth_getTransactionByBlockNumberAndIndex`, `eth_getHeaderByHash`, `eth_getHeaderByNumber`, `eth_getBlockByHash`, `eth_getBlockByNumber`, `eth_getBlockTransactionCountByHash`, `eth_getBlockTransactionCountByNumber`, `eth_getTransactionReceipt`, `eth_getBlockReceipts`, `eth_getLogs`, the account queries `eth_getBalance`, `eth_getTransactionCount`, `eth_getCode`, `eth_getStorageAt` and `eth_getStorageValues`, the proof `eth_getProof`, the calls `eth_call`, `eth_estimateGas` and `eth_createAccessList`, the fee methods `eth_feeHistory` and `eth_baseFee`, and the four raw getters `debug_getRawHeader`, `debug_getRawBlock`, `debug_getRawTransaction` and `debug_getRawReceipts`.
+The view also serves the submission `eth_sendRawTransaction`.
 The two block access-list methods run against the same chain and the `bal` files, since the pin has no `.io` fixture for them.
 The files of the other methods run through the readers of the parameters, without a chain.
 

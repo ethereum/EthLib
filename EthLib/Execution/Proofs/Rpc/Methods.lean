@@ -38,9 +38,9 @@ theorem call_unknown (v : ChainView) {method : String} (params : List Json)
       "eth_getTransactionReceipt", "eth_getBlockReceipts", "eth_getLogs", "eth_getBalance",
       "eth_getTransactionCount", "eth_getCode", "eth_getStorageAt", "eth_getStorageValues",
       "eth_getProof", "eth_call", "eth_estimateGas", "eth_createAccessList",
-      "eth_feeHistory", "eth_baseFee", "debug_getRawHeader", "debug_getRawBlock",
-      "debug_getRawTransaction", "debug_getRawReceipts", "eth_getBlockAccessList",
-      "debug_getRawBlockAccessList"]) :
+      "eth_feeHistory", "eth_baseFee", "eth_sendRawTransaction", "debug_getRawHeader",
+      "debug_getRawBlock", "debug_getRawTransaction", "debug_getRawReceipts",
+      "eth_getBlockAccessList", "debug_getRawBlockAccessList"]) :
     v.call method params = .error (methodNotFound.toRpcError (some (.str method))) := by
   simp only [List.mem_cons, List.not_mem_nil, or_false, not_or] at h
   unfold call

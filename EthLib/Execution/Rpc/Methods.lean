@@ -5,6 +5,7 @@ public import EthLib.Execution.Rpc.Block
 public import EthLib.Execution.Rpc.Estimate
 public import EthLib.Execution.Rpc.Config
 public import EthLib.Execution.Rpc.Fees
+public import EthLib.Execution.Rpc.Submit
 public import EthLib.Execution.Rpc.AccessList
 public import EthLib.Execution.Rpc.Filter
 public import EthLib.Execution.Rpc.Proof
@@ -236,6 +237,8 @@ def call (v : ChainView) (method : String) (params : List Json) : Except RpcErro
       let tx ← readParam genericTransaction t
       accessListResultJson <$> v.createAccessList tx (← optionalBlock rest) {}
     | [] => .error (RpcError.invalidParams "missing parameter")
+  | "eth_sendRawTransaction" => oneParam params fun b => do
+    hash32Json <$> v.sendRawTransaction (← readParam (bytes "transaction") b)
   | "debug_getRawHeader" => oneParam params fun b => do
     (dataJson ·.toList) <$> v.rawHeader (← readParam (blockNumberOrTag "block") b)
   | "debug_getRawBlock" => oneParam params fun b => do
